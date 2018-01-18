@@ -20,6 +20,8 @@
 #include "llvm/ADT/PointerIntPair.h"
 
 using namespace clang;
+typedef ParserEclipseHack Parser;
+typedef ParenBraceBracketBalancerEclipseHack ParenBraceBracketBalancer;
 
 //===----------------------------------------------------------------------===//
 // OpenMP declarative directives.
