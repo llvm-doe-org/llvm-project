@@ -2992,4 +2992,6 @@ private:
 
 }  // end namespace clang
 
+typedef clang::Parser ParserEclipseHack;
+
 #endif
