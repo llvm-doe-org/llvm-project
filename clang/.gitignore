@@ -41,3 +41,5 @@ test/debuginfo-tests
 .vscode
 .vs
 
+/.ptp-sync/
+.ptp-sync-folder
