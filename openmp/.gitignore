@@ -40,3 +40,6 @@ runtime/exports
 
 # Nested build directory
 /build
+
+/.ptp-sync/
+.ptp-sync-folder
