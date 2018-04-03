@@ -35,3 +35,5 @@ docs/_build
 docs/analyzer/_build
 # debug info testsuite
 test/debuginfo-tests
+/.ptp-sync/
+.ptp-sync-folder
