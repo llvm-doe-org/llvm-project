@@ -1,0 +1,4 @@
+// RUN: %data foo {
+// RUN:   (a=foo"'"bar  b=foo"'"bar)
+// RUN:   (a=foo"()"bar b=foo")\"\a"bar)
+// RUN:   (a=foo""bar   b=foo"

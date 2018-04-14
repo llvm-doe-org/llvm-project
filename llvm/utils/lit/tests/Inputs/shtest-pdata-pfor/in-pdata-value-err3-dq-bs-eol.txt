@@ -1,0 +1,2 @@
+# RUN: %data foo {
+# RUN:   (a="\"" b=foo"\
