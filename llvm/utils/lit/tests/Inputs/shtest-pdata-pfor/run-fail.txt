@@ -1,0 +1,28 @@
+# RUN: %data cmds {
+# RUN:   (cmd=echo)
+# RUN:   (cmd=true)
+# RUN:   (cmd=false)
+# RUN:   (cmd=echo)
+# RUN: }
+# RUN: %data ops0 {
+# RUN:   (op0=foo)
+# RUN:   (op0=bar)
+# RUN: }
+# RUN: %data ops1 {
+# RUN:   (op1=abc)
+# RUN:   (op1=xyz)
+# RUN: }
+
+# RUN: echo start
+# RUN: %for ops0 {
+# RUN:   echo %[op0] start
+# RUN:   %for ops1 {
+# RUN:     echo %[op1] start
+# RUN:     %for cmds {
+# RUN:       %[cmd] %[op0] %[op1]
+# RUN:     }
+# RUN:     echo %[op1] end
+# RUN:   }
+# RUN:   echo %[op0] end
+# RUN: }
+# RUN: echo end

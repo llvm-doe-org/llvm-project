@@ -1,0 +1,7 @@
+# RUN: echo \
+
+Non-RUN lines.
+
+# RUN: %data foo {
+# RUN:   (a=3)
+# RUN: }
