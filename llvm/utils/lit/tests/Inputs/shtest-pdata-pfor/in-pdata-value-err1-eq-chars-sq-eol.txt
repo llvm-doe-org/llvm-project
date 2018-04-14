@@ -1,0 +1,5 @@
+// RUN: %data foo {
+// RUN:   (a=foo'"'bar  b={'"'bar)
+// RUN:   (a=foo'()'bar b=foo')'b}r)
+// RUN:   (a={}o''bar   b=foo'
+// RUN: }

@@ -1,0 +1,3 @@
+# RUN: %data bar {
+# RUN:   (a=2 b3)
+# RUN: }

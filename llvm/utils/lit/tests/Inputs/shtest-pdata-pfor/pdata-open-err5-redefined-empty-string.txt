@@ -1,0 +1,6 @@
+# RUN: %data {
+# RUN:   (a=1)
+# RUN: }
+# RUN: %data {
+# RUN:   (a=1)
+# RUN: }

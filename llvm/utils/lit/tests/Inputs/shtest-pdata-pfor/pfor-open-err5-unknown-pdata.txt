@@ -1,0 +1,15 @@
+# RUN: %data fff {
+# RUN:   (a=3)
+# RUN: }
+# RUN: %data ff {
+# RUN:   (a=3)
+# RUN: }
+# RUN: %for fff {
+# RUN:   echo %[a]
+# RUN: }
+# RUN: %for ff {
+# RUN:   echo %[a]
+# RUN: }
+# RUN: %for f {
+# RUN:   echo %[a]
+# RUN: }

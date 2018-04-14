@@ -1,0 +1,7 @@
+# RUN: %data foo {
+# RUN:   (a=1)
+# RUN:   (a=2)
+# RUN: }
+# RUN: %for %for {
+# RUN:   echo %[a]
+# RUN: }
