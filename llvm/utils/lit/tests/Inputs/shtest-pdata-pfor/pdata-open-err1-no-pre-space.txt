@@ -1,0 +1,4 @@
+# RUN: %data%clang {
+# RUN:   (a=1)
+# RUN:   (a=2)
+# RUN: }

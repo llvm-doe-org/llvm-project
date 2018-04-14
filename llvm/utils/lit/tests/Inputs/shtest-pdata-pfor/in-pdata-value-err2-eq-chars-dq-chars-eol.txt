@@ -1,0 +1,3 @@
+// RUN: %data foo {
+// RUN:   (a=chars:"() 	'\"\\
+// RUN: }
