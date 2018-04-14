@@ -1,0 +1,15 @@
+# RUN: %data foo {
+# RUN:   (a=1)
+# RUN: }
+# RUN: %data bar {
+# RUN:   (a=1)
+# RUN: }
+# RUN: %data foo.bar {
+# RUN:   (a=1)
+# RUN: }
+# RUN: %data {
+# RUN:   (a=1)
+# RUN: }
+# RUN: %data bar.foo {
+# RUN:   (a=1)
+# RUN: }

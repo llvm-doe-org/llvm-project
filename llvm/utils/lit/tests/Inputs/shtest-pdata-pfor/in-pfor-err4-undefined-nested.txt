@@ -1,0 +1,21 @@
+# RUN: %data foo {
+# RUN:   (a=3 b=4)
+# RUN:   (a=3 b=4)
+# RUN: }
+# RUN: %data bar {
+# RUN:   (c=3 d=4)
+# RUN:   (c=3 d=4)
+# RUN: }
+# RUN: %data foo.bar {
+# RUN:   (e=3 f=4)
+# RUN:   (e=3 f=4)
+# RUN: }
+# RUN: %for foo {
+# RUN:   %for bar {
+# RUN:     %for foo.bar {
+# RUN:       echo %[a] %[b] %[c] %[d] %[e] %[f]
+# RUN:     }
+# RUN:     echo %[a] %[b] %[c] %[d] \
+# RUN:          %[e] %[f]
+# RUN:   }
+# RUN: }
