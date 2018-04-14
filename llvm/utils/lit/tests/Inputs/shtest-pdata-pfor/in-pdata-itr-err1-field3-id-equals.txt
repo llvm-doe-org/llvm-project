@@ -1,0 +1,4 @@
+# RUN: %data foo {
+# RUN:   (a=1 b=2 c=3)
+# RUN:   (a=2 b=1 =3)
+# RUN: }

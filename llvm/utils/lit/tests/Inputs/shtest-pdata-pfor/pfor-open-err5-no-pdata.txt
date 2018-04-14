@@ -1,0 +1,3 @@
+# RUN: %for foo {
+# RUN:   echo %[a]
+# RUN: }

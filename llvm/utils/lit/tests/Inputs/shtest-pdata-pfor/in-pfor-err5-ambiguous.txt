@@ -1,0 +1,29 @@
+# RUN: %data 0 {
+# RUN:   (a=3 b=4)
+# RUN:   (a=3 b=4)
+# RUN: }
+# RUN: %data 1 {
+# RUN:   (c=3 d=4)
+# RUN:   (c=3 d=4)
+# RUN: }
+# RUN: %data 2 {
+# RUN:   (a=3 b=4 x=5)
+# RUN:   (a=3 b=4 x=5)
+# RUN: }
+# RUN: %data 3 {
+# RUN:   (c=3 d=4)
+# RUN:   (c=3 d=4)
+# RUN: }
+# RUN: %for 0 {
+# RUN:   echo %[a] %[b]
+# RUN:   %for 1 {
+# RUN:     echo %[a] %[b] %[c] %[d]
+# RUN:     %for 2 {
+# RUN:       echo %[x] %[c] %[d]
+# RUN:       %for 3 {
+# RUN:         echo %[x] \
+# RUN:              %[a] %[b]
+# RUN:       }
+# RUN:     }
+# RUN:   }
+# RUN: }
