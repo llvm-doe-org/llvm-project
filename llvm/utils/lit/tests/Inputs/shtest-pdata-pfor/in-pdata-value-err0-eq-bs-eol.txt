@@ -1,0 +1,9 @@
+// RUN: %data foo {
+// RUN:   (stu=70 pqr=60 mno=50 jkl=40 ghi=30 def=\' abc=\")
+// RUN:   (stu=71 pqr=61 mno=51 jkl=41 ghi=31 def=21 abc=11\ 11)
+// RUN:   (stu=72 pqr=62 mno=52 jkl=42 ghi=32 def=22 abc=\(12\))
+// RUN:   (stu=73 pqr=63 mno=53 jkl=43 ghi=\
+// RUN:    33 def=23 abc=13 )
+// RUN:   (stu=74 pqr=64 mno=54 jkl=44 ghi=34 def=24 abc=14)
+// RUN:   (stu=75 pqr=65 mno=55 jkl=45 ghi=35 def=25 abc=15)
+// RUN: }

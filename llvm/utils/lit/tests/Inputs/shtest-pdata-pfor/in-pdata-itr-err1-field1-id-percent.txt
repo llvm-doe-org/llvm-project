@@ -1,0 +1,4 @@
+# RUN: %data foo {
+# RUN:   (t=1)
+# RUN:   (%t=2)
+# RUN: }

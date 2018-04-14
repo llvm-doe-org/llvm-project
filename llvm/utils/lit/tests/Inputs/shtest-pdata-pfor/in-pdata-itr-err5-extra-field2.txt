@@ -1,0 +1,6 @@
+// RUN: %data foo {
+// RUN:   (a=0 c=1)
+// RUN:   (a=1 c=2)
+// RUN:   (a=2 b=3 c=4)
+// RUN:   (a=3 b=4 c=5)
+// RUN: }
