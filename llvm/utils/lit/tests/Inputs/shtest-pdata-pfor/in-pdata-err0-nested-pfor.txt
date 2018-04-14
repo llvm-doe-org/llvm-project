@@ -1,0 +1,5 @@
+# RUN: %data foo {
+# RUN:   (a=1)
+# RUN:   %for foo {
+# RUN:   }
+# RUN: }

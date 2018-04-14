@@ -1,0 +1,88 @@
+# CHECK-NOT:  {{.}}
+
+# RUN: %data bar {
+# RUN:   (a='hello  world'
+# RUN:    b='quotes in'' single quotes: (", '"'"', \)')
+# RUN:   (a=goodbye\ \world\ 
+# RUN:    b="quotes in"" double quotes: (\", ', \\)")
+# RUN: }
+# RUN: %data foo {
+# RUN:   (a=1 b=2 c=3)
+# RUN:   (a=4 b=5 c=6)
+# RUN: }
+
+# RUN: rm -f %t && touch %t
+# RUN: %for foo {
+# RUN:   echo cmd 0: %[a] \
+# RUN:               %[b] %[c] >> %t
+# RUN:   echo cmd 1: %[c] %[b] %[a] >> %t
+# RUN: }
+
+# CHECK:      cmd 0: 1 2 3
+# CHECK-NEXT: cmd 1: 3 2 1
+# CHECK-NEXT: cmd 0: 4 5 6
+# CHECK-NEXT: cmd 1: 6 5 4
+
+# RUN: %for foo {
+# RUN:   echo %[a] >> %t
+# RUN: }
+
+# CHECK-NEXT: 1
+# CHECK-NEXT: 4
+
+# RUN: %for bar {
+# RUN:   echo %[a] %'b' >> %t
+# RUN:   echo \
+# RUN:        %'a' %'b' >> %t
+# RUN: }
+
+# CHECK-NEXT: hello world quotes in single quotes: (", ', \)
+# CHECK-NEXT: hello  world quotes in single quotes: (", ', \)
+# CHECK-NEXT: goodbye world quotes in double quotes: (", ', \)
+# CHECK-NEXT: goodbye world  quotes in double quotes: (", ', \)
+
+# RUN: %data foo.nest1 {
+# RUN:   (x=%[a])
+# RUN:   (x=%[b])
+# RUN: }
+# RUN: %data foo.nest2 {
+# RUN:   (y=10)
+# RUN:   (y=11)
+# RUN: }
+# RUN: %for foo {
+# RUN:   echo foo start: %[a] >> %t
+# RUN:   %for foo.nest1 {
+# RUN:     echo foo.nest1 start: %[a] %[x] >> %t
+# RUN:     %for foo.nest2 {
+# RUN:       echo foo.nest2: %[a] %[x] %[y] >> %t
+# RUN:     }
+# RUN:     echo foo.nest1 end: %[a] %[x] >> %t
+# RUN:   }
+# RUN:   echo foo end: %[a] >> %t
+# RUN: }
+
+# CHECK-NEXT: foo start: 1
+# CHECK-NEXT: foo.nest1 start: 1 1
+# CHECK-NEXT: foo.nest2: 1 1 10
+# CHECK-NEXT: foo.nest2: 1 1 11
+# CHECK-NEXT: foo.nest1 end: 1 1
+# CHECK-NEXT: foo.nest1 start: 1 2
+# CHECK-NEXT: foo.nest2: 1 2 10
+# CHECK-NEXT: foo.nest2: 1 2 11
+# CHECK-NEXT: foo.nest1 end: 1 2
+# CHECK-NEXT: foo end: 1
+
+# CHECK-NEXT: foo start: 4
+# CHECK-NEXT: foo.nest1 start: 4 4
+# CHECK-NEXT: foo.nest2: 4 4 10
+# CHECK-NEXT: foo.nest2: 4 4 11
+# CHECK-NEXT: foo.nest1 end: 4 4
+# CHECK-NEXT: foo.nest1 start: 4 5
+# CHECK-NEXT: foo.nest2: 4 5 10
+# CHECK-NEXT: foo.nest2: 4 5 11
+# CHECK-NEXT: foo.nest1 end: 4 5
+# CHECK-NEXT: foo end: 4
+
+# RUN: FileCheck %s --match-full-lines --input-file %t
+
+# CHECK-NOT:  {{.}}

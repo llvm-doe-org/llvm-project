@@ -1,0 +1,5 @@
+# RUN: echo foo
+# RUN: %data foo {
+# RUN:   (a=1 b=2)
+# RUN:   (a=2 b=3)
+

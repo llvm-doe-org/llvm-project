@@ -1,0 +1,4 @@
+# RUN: echo \
+# RUN: %data foo {
+# RUN:   (a=3)
+# RUN: }

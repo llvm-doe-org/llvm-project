@@ -1,0 +1,10 @@
+# RUN: true
+# RUN: %data {
+# RUN:   (a=1)
+# RUN: }
+# RUN: %data foo {
+# RUN:   (a=1)
+# RUN: }
+# RUN: %data bar {
+# RUN:   (a=1)
+# RUN: }
