@@ -21,8 +21,6 @@
 #include "clang/Sema/Sema.h"
 
 namespace clang {
-  typedef ParserEclipseHack Parser;
-
   // TODO: move ParsingClassDefinition here.
   // TODO: move TentativeParsingAction here.
 
@@ -463,7 +461,5 @@ namespace clang {
     }
   };
 } // end namespace clang
-
-typedef clang::ParenBraceBracketBalancer ParenBraceBracketBalancerEclipseHack;
 
 #endif
