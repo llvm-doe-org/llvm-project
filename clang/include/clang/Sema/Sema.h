@@ -33,6 +33,7 @@
 #include "clang/AST/TypeOrdering.h"
 #include "clang/Basic/ExpressionTraits.h"
 #include "clang/Basic/Module.h"
+#include "clang/Basic/OpenACCKinds.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/PragmaKinds.h"
 #include "clang/Basic/Specifiers.h"
@@ -69,6 +70,7 @@ namespace llvm {
 }
 
 namespace clang {
+  class ACCClause;
   class ADLResult;
   class ASTConsumer;
   class ASTContext;
@@ -9290,6 +9292,123 @@ public:
                                           SourceLocation StartLoc,
                                           SourceLocation LParenLoc,
                                           SourceLocation EndLoc);
+
+  //===--------------------------------------------------------------------===//
+  // OpenACC directives and clauses.
+  //
+private:
+  void *OpenACCDataSharingAttributesStack;
+  /// Initialization of data-sharing attributes stack.
+  void InitOpenACCDataSharingAttributesStack();
+  void DestroyOpenACCDataSharingAttributesStack();
+
+public:
+  /// Called on start of new data sharing attribute block.
+  void StartOpenACCDSABlock(OpenACCDirectiveKind K, SourceLocation Loc);
+  /// Start analysis of clauses.
+  void StartOpenACCClause(OpenACCClauseKind K);
+  /// End analysis of clauses.
+  void EndOpenACCClause();
+  /// Called on end of data sharing attribute block.
+  void EndOpenACCDSABlock();
+
+  /// Check if the current region is an OpenACC loop region and if it
+  /// is, mark loop control variable, used in \p Init for loop initialization,
+  /// as private by default.
+  /// \param Init First part of the for loop.
+  void ActOnOpenACCLoopInitialization(SourceLocation ForLoc, Stmt *Init);
+  /// Record a break statement appearing in the scope of an OpenACC loop
+  /// directive.
+  void ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
+                                      Scope *CurScope);
+
+  /// Initialization of captured region for OpenACC region.
+  bool ActOnOpenACCRegionStart(OpenACCDirectiveKind DKind,
+                               ArrayRef<ACCClause *> Clauses, Scope *CurScope,
+                               SourceLocation StarLoc, SourceLocation EndLoc);
+  /// End of OpenACC region.
+  ///
+  /// \param S Statement associated with the current OpenACC region.
+  ///
+  /// \returns Statement for finished OpenACC region.
+  StmtResult ActOnOpenACCRegionEnd(StmtResult S);
+  StmtResult ActOnOpenACCExecutableDirective(
+      OpenACCDirectiveKind Kind, ArrayRef<ACCClause *> Clauses, Stmt *AStmt,
+      SourceLocation StartLoc, SourceLocation EndLoc);
+  /// Called on well-formed '\#pragma acc parallel' after parsing
+  /// of the associated statement.
+  StmtResult ActOnOpenACCParallelDirective(ArrayRef<ACCClause *> Clasues,
+                                           Stmt *AStmt,
+                                           SourceLocation StartLoc,
+                                           SourceLocation EndLoc);
+  /// Called on well-formed '\#pragma acc loop' after parsing
+  /// of the associated statement.
+  StmtResult ActOnOpenACCLoopDirective(
+      ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
+      SourceLocation EndLoc, VarDecl *LCVar);
+
+  ACCClause *ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
+                                          Expr *Expr,
+                                          SourceLocation StartLoc,
+                                          SourceLocation LParenLoc,
+                                          SourceLocation EndLoc);
+  ACCClause *ActOnOpenACCClause(OpenACCClauseKind Kind,
+                                SourceLocation StartLoc,
+                                SourceLocation EndLoc);
+  /// Called on well-formed 'seq' clause.
+  ACCClause *ActOnOpenACCSeqClause(SourceLocation StartLoc,
+                                   SourceLocation EndLoc);
+  /// Called on well-formed 'independent' clause.
+  ACCClause *ActOnOpenACCIndependentClause(SourceLocation StartLoc,
+                                           SourceLocation EndLoc);
+  /// Called on well-formed 'auto' clause.
+  ACCClause *ActOnOpenACCAutoClause(SourceLocation StartLoc,
+                                    SourceLocation EndLoc);
+  /// Called on well-formed 'gang' clause.
+  ACCClause *ActOnOpenACCGangClause(SourceLocation StartLoc,
+                                    SourceLocation EndLoc);
+  /// Called on well-formed 'worker' clause.
+  ACCClause *ActOnOpenACCWorkerClause(SourceLocation StartLoc,
+                                      SourceLocation EndLoc);
+  /// Called on well-formed 'vector' clause.
+  ACCClause *ActOnOpenACCVectorClause(SourceLocation StartLoc,
+                                      SourceLocation EndLoc);
+  ACCClause *ActOnOpenACCVarListClause(
+      OpenACCClauseKind Kind, ArrayRef<Expr *> Vars,
+      SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation ColonLoc, SourceLocation EndLoc,
+      const DeclarationNameInfo &ReductionId);
+  /// Called for implicit 'shared' clause.
+  ACCClause *ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList);
+  /// Called on well-formed 'private' clause.
+  ACCClause *ActOnOpenACCPrivateClause(ArrayRef<Expr *> VarList,
+                                       SourceLocation StartLoc,
+                                       SourceLocation LParenLoc,
+                                       SourceLocation EndLoc);
+  /// Called on well-formed 'firstprivate' clause.
+  ACCClause *ActOnOpenACCFirstprivateClause(ArrayRef<Expr *> VarList,
+                                            SourceLocation StartLoc,
+                                            SourceLocation LParenLoc,
+                                            SourceLocation EndLoc);
+  /// Called on well-formed 'reduction' clause.
+  ACCClause *ActOnOpenACCReductionClause(
+      ArrayRef<Expr *> VarList, SourceLocation StartLoc,
+      SourceLocation LParenLoc, SourceLocation ColonLoc, SourceLocation EndLoc,
+      const DeclarationNameInfo &ReductionId);
+  /// Called on well-formed 'num_gangs' clause.
+  ACCClause *ActOnOpenACCNumGangsClause(Expr *NumGangs,
+                                        SourceLocation StartLoc,
+                                        SourceLocation LParenLoc,
+                                        SourceLocation EndLoc);
+
+  /// Transform OpenACC region to OpenMP, and return true if an error occurred.
+  ///
+  /// If \a D is not enclosed in another OpenACC region, transforms \a D and
+  /// all nested OpenACC executable directives such that, for each such
+  /// directive, \c getOMPNode then returns the corresponding OpenMP directive.
+  /// Otherwise, does nothing so that we only transform each OpenACC region to
+  /// OpenMP once, in its entirety.
+  bool transformACCToOMP(ACCExecutableDirective *D);
 
   /// The kind of conversion being performed.
   enum CheckedConversionKind {

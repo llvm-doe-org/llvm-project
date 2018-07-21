@@ -9006,6 +9006,55 @@ def warn_omp_non_trivial_type_mapped : Warning<
   InGroup<OpenMPTarget>;
 } // end of OpenMP category
 
+let CategoryName = "OpenACC Issue" in {
+// OpenACC support.
+def err_acc_private_incomplete_type : Error<
+  "a private variable with incomplete type %0">;
+def err_acc_firstprivate_incomplete_type : Error<
+  "a firstprivate variable with incomplete type %0">;
+def err_acc_expected_var_name_expr : Error<
+  "expected variable name">;
+def err_acc_wrong_dsa : Error<
+  "%0 variable cannot be %1">;
+def note_acc_explicit_dsa : Note<
+  "defined as %0">;
+def err_acc_const_private : Error<
+  "const variable cannot be private because initialization is impossible">;
+def note_acc_const_private : Note<
+  "variable %0 declared const here">;
+def err_acc_negative_expression_in_clause : Error<
+  "argument to '%0' clause must be a strictly positive integer value">;
+def err_acc_loop_outside_parallel : Error<
+  "OpenACC loop outside of OpenACC parallel is not yet supported">;
+def err_acc_loop_cannot_use_stmt : Error<
+  "'%0' statement cannot be used in partitionable OpenACC for loop">;
+def err_acc_loop_bad_nested_partitioning : Error<
+  "'#pragma acc loop' with '%1' clause cannot be directly nested within"
+  " '#pragma acc loop' with '%0' clause">;
+def note_acc_loop_bad_nested_partitioning : Note<
+  "parent '#pragma acc loop' is here">;
+def err_acc_not_for : Error<
+  "statement after '#pragma acc loop' must be a for loop">;
+def err_acc_once_referenced : Error<
+  "variable can appear only once in OpenACC '%0' clause">;
+def note_acc_referenced : Note<
+  "previously referenced here">;
+def err_acc_unknown_reduction_operator : Error<
+  "unknown reduction operator">;
+def err_acc_reduction_incomplete_type : Error<
+  "a reduction list item with incomplete type %0">;
+def err_acc_const_reduction_list_item : Error<
+  "const-qualified list item cannot be reduction">;
+def err_acc_reduction_not_integer_type : Error<
+  "OpenACC reduction operator '%0' argument must be of integer type">;
+def err_acc_reduction_not_arithmetic_type : Error<
+  "OpenACC reduction operator '%0' argument must be of arithmetic type">;
+def err_acc_reduction_not_scalar_type : Error<
+  "OpenACC reduction operator '%0' argument must be of scalar type">;
+def err_acc_reduction_not_real_or_pointer_type : Error<
+  "OpenACC reduction operator '%0' argument must be of real or pointer type">;
+} // end of OpenACC category
+
 let CategoryName = "Related Result Type Issue" in {
 // Objective-C related result type compatibility
 def warn_related_result_type_compatibility_class : Warning<

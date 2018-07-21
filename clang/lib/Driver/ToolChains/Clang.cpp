@@ -3987,6 +3987,11 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_version_EQ);
   }
 
+  // Forward flags for OpenACC.
+  if (Args.hasFlag(options::OPT_fopenacc, options::OPT_fno_openacc, false))
+    CmdArgs.push_back("-fopenacc");
+  Args.AddLastArg(CmdArgs, options::OPT_fopenacc_print_EQ);
+
   const SanitizerArgs &Sanitize = getToolChain().getSanitizerArgs();
   Sanitize.addArgs(getToolChain(), Args, CmdArgs, InputType);
 

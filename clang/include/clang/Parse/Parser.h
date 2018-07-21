@@ -166,6 +166,7 @@ class Parser : public CodeCompletionHandler {
   std::unique_ptr<PragmaHandler> FPContractHandler;
   std::unique_ptr<PragmaHandler> OpenCLExtensionHandler;
   std::unique_ptr<PragmaHandler> OpenMPHandler;
+  std::unique_ptr<PragmaHandler> OpenACCHandler;
   std::unique_ptr<PragmaHandler> PCSectionHandler;
   std::unique_ptr<PragmaHandler> MSCommentHandler;
   std::unique_ptr<PragmaHandler> MSDetectMismatchHandler;
@@ -2858,6 +2859,59 @@ public:
                           ParsedType ObjectType,
                           SourceLocation *TemplateKWLoc,
                           UnqualifiedId &Result);
+
+  //===--------------------------------------------------------------------===//
+  // OpenACC: Directives and clauses.
+
+  /// Parses declarative or executable directive.
+  StmtResult
+  ParseOpenACCDeclarativeOrExecutableDirective(AllowedConstructsKind Allowed);
+  /// Parses clause of kind \a CKind for directive of a kind \a Kind.
+  ///
+  /// \param DKind Kind of current directive.
+  /// \param CKind Kind of current clause.
+  /// \param FirstClauses Each entry is true if the corresponding member of
+  ///        \c OpenACCClauseKind has already been seen in the current
+  ///        directive.
+  ///
+  ACCClause *ParseOpenACCClause(OpenACCDirectiveKind DKind,
+                                OpenACCClauseKind CKind,
+                                const SmallVectorImpl<bool> &FirstClauses);
+  /// Parses clause with a single expression of a kind \a Kind.
+  ///
+  /// \param Kind Kind of current clause.
+  /// \param ParseOnly true to skip the clause's semantic actions and return
+  /// nullptr.
+  ///
+  ACCClause *ParseOpenACCSingleExprClause(OpenACCClauseKind Kind,
+                                          bool ParseOnly);
+  /// Parses clause without any additional arguments.
+  ///
+  /// \param Kind Kind of current clause.
+  /// \param ParseOnly true to skip the clause's semantic actions and return
+  /// nullptr.
+  ///
+  ACCClause *ParseOpenACCClause(OpenACCClauseKind Kind, bool ParseOnly);
+  /// Parses clause with the list of variables of a kind \a Kind.
+  ///
+  /// \param Kind Kind of current clause.
+  /// \param ParseOnly true to skip the clause's semantic actions and return
+  /// nullptr.
+  ///
+  ACCClause *ParseOpenACCVarListClause(OpenACCDirectiveKind DKind,
+                                       OpenACCClauseKind Kind, bool ParseOnly);
+
+public:
+  /// Parses simple expression in parens for single-expression clauses of OpenACC
+  /// constructs.
+  /// \param RLoc Returned location of right paren.
+  ExprResult ParseOpenACCParensExpr(StringRef ClauseName, SourceLocation &RLoc);
+
+  /// Parses clauses with list.
+  bool ParseOpenACCVarList(OpenACCDirectiveKind DKind, OpenACCClauseKind Kind,
+                           SmallVectorImpl<Expr *> &Vars,
+                           SourceLocation &ColonLoc,
+                           DeclarationNameInfo &ReductionId);
 
 private:
   //===--------------------------------------------------------------------===//

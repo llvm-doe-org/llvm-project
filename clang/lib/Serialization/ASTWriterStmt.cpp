@@ -2663,6 +2663,109 @@ void ASTStmtWriter::VisitOMPTargetTeamsDistributeSimdDirective(
 }
 
 //===----------------------------------------------------------------------===//
+// OpenACC Clauses.
+//===----------------------------------------------------------------------===//
+
+namespace clang {
+class ACCClauseWriter : public ACCClauseVisitor<ACCClauseWriter> {
+  ASTRecordWriter &Record;
+public:
+  ACCClauseWriter(ASTRecordWriter &Record) : Record(Record) {}
+#define OPENACC_CLAUSE(Name, Class)    \
+  void Visit##Class(Class *S);
+#include "clang/Basic/OpenACCKinds.def"
+  void writeClause(ACCClause *C);
+};
+}
+
+void ACCClauseWriter::writeClause(ACCClause *C) {
+  Record.push_back(C->getClauseKind());
+  Visit(C);
+  Record.AddSourceLocation(C->getLocStart());
+  Record.AddSourceLocation(C->getLocEnd());
+}
+
+void ACCClauseWriter::VisitACCSharedClause(ACCSharedClause *C) {
+  Record.push_back(C->varlist_size());
+  Record.AddSourceLocation(C->getLParenLoc());
+  for (auto *VE : C->varlists())
+    Record.AddStmt(VE);
+}
+
+void ACCClauseWriter::VisitACCPrivateClause(ACCPrivateClause *C) {
+  Record.push_back(C->varlist_size());
+  Record.AddSourceLocation(C->getLParenLoc());
+  for (auto *VE : C->varlists()) {
+    Record.AddStmt(VE);
+  }
+}
+
+void ACCClauseWriter::VisitACCFirstprivateClause(ACCFirstprivateClause *C) {
+  Record.push_back(C->varlist_size());
+  Record.AddSourceLocation(C->getLParenLoc());
+  for (auto *VE : C->varlists()) {
+    Record.AddStmt(VE);
+  }
+}
+
+void ACCClauseWriter::VisitACCReductionClause(ACCReductionClause *C) {
+  Record.push_back(C->varlist_size());
+  Record.AddSourceLocation(C->getLParenLoc());
+  Record.AddSourceLocation(C->getColonLoc());
+  Record.AddDeclarationNameInfo(C->getNameInfo());
+  for (auto *VE : C->varlists())
+    Record.AddStmt(VE);
+}
+
+void ACCClauseWriter::VisitACCNumGangsClause(ACCNumGangsClause *C) {
+  Record.AddStmt(C->getNumGangs());
+  Record.AddSourceLocation(C->getLParenLoc());
+}
+
+void ACCClauseWriter::VisitACCSeqClause(ACCSeqClause *) {}
+void ACCClauseWriter::VisitACCIndependentClause(ACCIndependentClause *) {}
+void ACCClauseWriter::VisitACCAutoClause(ACCAutoClause *) {}
+void ACCClauseWriter::VisitACCGangClause(ACCGangClause *) {}
+void ACCClauseWriter::VisitACCWorkerClause(ACCWorkerClause *) {}
+void ACCClauseWriter::VisitACCVectorClause(ACCVectorClause *) {}
+
+//===----------------------------------------------------------------------===//
+// OpenACC Directives.
+//===----------------------------------------------------------------------===//
+
+void ASTStmtWriter::VisitACCExecutableDirective(ACCExecutableDirective *E) {
+  Record.AddSourceLocation(E->getLocStart());
+  Record.AddSourceLocation(E->getLocEnd());
+  ACCClauseWriter ClauseWriter(Record);
+  for (unsigned i = 0; i < E->getNumClauses(); ++i) {
+    ClauseWriter.writeClause(E->getClause(i));
+  }
+  if (E->hasAssociatedStmt())
+    Record.AddStmt(E->getAssociatedStmt());
+  if (E->hasOMPNode()) {
+    Record.AddStmt(E->getOMPNode());
+    Record.push_back(E->directiveDiscardedForOMP());
+  }
+  else
+    Record.AddStmt(nullptr);
+}
+
+void ASTStmtWriter::VisitACCParallelDirective(ACCParallelDirective *D) {
+  VisitStmt(D);
+  Record.push_back(D->getNumClauses());
+  VisitACCExecutableDirective(D);
+  Code = serialization::STMT_ACC_PARALLEL_DIRECTIVE;
+}
+
+void ASTStmtWriter::VisitACCLoopDirective(ACCLoopDirective *D) {
+  VisitStmt(D);
+  Record.push_back(D->getNumClauses());
+  VisitACCExecutableDirective(D);
+  Record.AddDeclRef(D->getLoopControlVariable());
+  Code = serialization::STMT_ACC_LOOP_DIRECTIVE;
+}
+
+//===----------------------------------------------------------------------===//
 // ASTWriter Implementation
 //===----------------------------------------------------------------------===//
 

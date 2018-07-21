@@ -1398,6 +1398,7 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
     case OPT_ast_dump_lookups:
       Opts.ProgramAction = frontend::ASTDump; break;
     case OPT_ast_print:
+    case OPT_fopenacc_print_EQ:
       Opts.ProgramAction = frontend::ASTPrint; break;
     case OPT_ast_view:
       Opts.ProgramAction = frontend::ASTView; break;
@@ -1463,6 +1464,20 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
     case OPT_Eonly:
       Opts.ProgramAction = frontend::RunPreprocessorOnly; break;
     }
+  }
+
+  if (Arg *A = Args.getLastArg(OPT_fopenacc_print_EQ)) {
+    StringRef Val = A->getValue();
+    if (Val == "acc")
+      Opts.OpenACCPrint = OpenACCPrint_ACC;
+    else if (Val == "omp")
+      Opts.OpenACCPrint = OpenACCPrint_OMP;
+    else if (Val == "acc-omp")
+      Opts.OpenACCPrint = OpenACCPrint_ACC_OMP;
+    else if (Val == "omp-acc")
+      Opts.OpenACCPrint = OpenACCPrint_OMP_ACC;
+    else
+      Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
   }
 
   if (const Arg* A = Args.getLastArg(OPT_plugin)) {
@@ -2584,8 +2599,16 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     }
   }
 
+  // Check if -fopenacc is specified.
+  Opts.OpenACC = Args.hasArg(OPT_fopenacc) ||
+                 Args.hasArg(OPT_fopenacc_print_EQ);
+  if (Opts.OpenACC && Opts.CPlusPlus)
+    Diags.Report(clang::diag::err_drv_acc_cxx_not_supported);
+
   // Check if -fopenmp is specified.
-  Opts.OpenMP = Args.hasArg(options::OPT_fopenmp) ? 1 : 0;
+  // FIXME: We need a way to enable OpenMP sema for the sake of OpenACC without
+  // enabling OpenMP directive parsing.
+  Opts.OpenMP = (Args.hasArg(options::OPT_fopenmp) || Opts.OpenACC) ? 1 : 0;
   // Check if -fopenmp-simd is specified.
   bool IsSimdSpecified =
       Args.hasFlag(options::OPT_fopenmp_simd, options::OPT_fno_openmp_simd,

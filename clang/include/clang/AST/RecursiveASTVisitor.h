@@ -33,12 +33,14 @@
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtCXX.h"
 #include "clang/AST/StmtObjC.h"
+#include "clang/AST/StmtOpenACC.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/AST/TemplateBase.h"
 #include "clang/AST/TemplateName.h"
 #include "clang/AST/Type.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/Basic/LLVM.h"
+#include "clang/Basic/OpenACCKinds.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/Specifiers.h"
 #include "llvm/ADT/PointerIntPair.h"
@@ -534,6 +536,12 @@ private:
   /// Process clauses with pre-initis.
   bool VisitOMPClauseWithPreInit(OMPClauseWithPreInit *Node);
   bool VisitOMPClauseWithPostUpdate(OMPClauseWithPostUpdate *Node);
+  bool TraverseACCExecutableDirective(ACCExecutableDirective *S);
+  bool TraverseACCClause(ACCClause *C);
+#define OPENACC_CLAUSE(Name, Class) bool Visit##Class(Class *C);
+#include "clang/Basic/OpenACCKinds.def"
+  /// Process clauses with list of variables.
+  template <typename T> bool VisitACCClauseList(T *Node);
 
   bool dataTraverseNode(Stmt *S, DataRecursionQueue *Queue);
   bool PostVisitStmt(Stmt *S);
@@ -3213,6 +3221,113 @@ template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitOMPIsDevicePtrClause(
     OMPIsDevicePtrClause *C) {
   TRY_TO(VisitOMPClauseList(C));
+  return true;
+}
+
+// OpenACC directives.
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::TraverseACCExecutableDirective(
+    ACCExecutableDirective *S) {
+  for (auto *C : S->clauses()) {
+    TRY_TO(TraverseACCClause(C));
+  }
+  return true;
+}
+
+DEF_TRAVERSE_STMT(ACCParallelDirective,
+                  { TRY_TO(TraverseACCExecutableDirective(S)); })
+
+DEF_TRAVERSE_STMT(ACCLoopDirective,
+                  { TRY_TO(TraverseACCExecutableDirective(S)); })
+
+// OpenACC clauses.
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::TraverseACCClause(ACCClause *C) {
+  if (!C)
+    return true;
+  switch (C->getClauseKind()) {
+#define OPENACC_CLAUSE(Name, Class)                                             \
+  case ACCC_##Name:                                                            \
+    TRY_TO(Visit##Class(static_cast<Class *>(C)));                             \
+    break;
+#include "clang/Basic/OpenACCKinds.def"
+  case ACCC_unknown:
+    break;
+  }
+  return true;
+}
+
+template <typename Derived>
+template <typename T>
+bool RecursiveASTVisitor<Derived>::VisitACCClauseList(T *Node) {
+  for (auto *E : Node->varlists()) {
+    TRY_TO(TraverseStmt(E));
+  }
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCSharedClause(ACCSharedClause *C) {
+  TRY_TO(VisitACCClauseList(C));
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCPrivateClause(ACCPrivateClause *C) {
+  TRY_TO(VisitACCClauseList(C));
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCFirstprivateClause(
+    ACCFirstprivateClause *C) {
+  TRY_TO(VisitACCClauseList(C));
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCReductionClause(
+    ACCReductionClause *C) {
+  TRY_TO(TraverseDeclarationNameInfo(C->getNameInfo()));
+  TRY_TO(VisitACCClauseList(C));
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCNumGangsClause(
+    ACCNumGangsClause *C) {
+  TRY_TO(TraverseStmt(C->getNumGangs()));
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCSeqClause(ACCSeqClause *) {
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCIndependentClause(
+    ACCIndependentClause *) {
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCAutoClause(ACCAutoClause *) {
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCGangClause(ACCGangClause *) {
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCWorkerClause(ACCWorkerClause *) {
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCVectorClause(ACCVectorClause *) {
   return true;
 }
 

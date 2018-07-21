@@ -26,6 +26,7 @@
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtCXX.h"
 #include "clang/AST/StmtObjC.h"
+#include "clang/AST/StmtOpenACC.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/Sema/Designator.h"
 #include "clang/Sema/Lookup.h"
@@ -339,6 +340,16 @@ public:
   ///
   /// \returns the transformed OpenMP clause.
   OMPClause *TransformOMPClause(OMPClause *S);
+
+  /// Transform the given statement.
+  ///
+  /// By default, this routine transforms a statement by delegating to the
+  /// appropriate TransformACCXXXClause function to transform a specific kind
+  /// of clause. Subclasses may override this function to transform statements
+  /// using some other mechanism.
+  ///
+  /// \returns the transformed OpenACC clause.
+  ACCClause *TransformACCClause(ACCClause *S);
 
   /// Transform the given attribute.
   ///
@@ -667,6 +678,7 @@ public:
       TypeSourceInfo **RecoveryTSI);
 
   StmtResult TransformOMPExecutableDirective(OMPExecutableDirective *S);
+  StmtResult TransformACCExecutableDirective(ACCExecutableDirective *S);
 
 // FIXME: We use LLVM_ATTRIBUTE_NOINLINE because inlining causes a ridiculous
 // amount of stack usage with clang.
@@ -683,6 +695,11 @@ public:
   LLVM_ATTRIBUTE_NOINLINE \
   OMPClause *Transform ## Class(Class *S);
 #include "clang/Basic/OpenMPKinds.def"
+
+#define OPENACC_CLAUSE(Name, Class)                       \
+  LLVM_ATTRIBUTE_NOINLINE \
+  ACCClause *Transform ## Class(Class *S);
+#include "clang/Basic/OpenACCKinds.def"
 
   /// Build a new qualified type given its unqualified type and type
   /// qualifiers.
@@ -1932,6 +1949,75 @@ public:
                                          SourceLocation EndLoc) {
     return getSema().ActOnOpenMPIsDevicePtrClause(VarList, StartLoc, LParenLoc,
                                                   EndLoc);
+  }
+
+  /// Build a new OpenACC executable directive.
+  ///
+  /// By default, performs semantic analysis to build the new statement.
+  /// Subclasses may override this routine to provide different behavior.
+  StmtResult RebuildACCExecutableDirective(OpenACCDirectiveKind Kind,
+                                           ArrayRef<ACCClause *> Clauses,
+                                           Stmt *AStmt, SourceLocation StartLoc,
+                                           SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCExecutableDirective(Kind, Clauses, AStmt,
+                                                     StartLoc, EndLoc);
+  }
+
+  /// Build a new OpenACC 'num_gangs' clause.
+  ///
+  /// By default, performs semantic analysis to build the new statement.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCNumGangsClause(Expr *NumGangs,
+                                      SourceLocation StartLoc,
+                                      SourceLocation LParenLoc,
+                                      SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCNumGangsClause(NumGangs, StartLoc, LParenLoc,
+                                                EndLoc);
+  }
+
+  /// Build a new OpenACC 'shared' clause.
+  ///
+  /// By default, performs semantic analysis to build the new OpenACC clause.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCSharedClause(ArrayRef<Expr *> VarList) {
+    return getSema().ActOnOpenACCSharedClause(VarList);
+  }
+
+  /// Build a new OpenACC 'private' clause.
+  ///
+  /// By default, performs semantic analysis to build the new OpenACC clause.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCPrivateClause(ArrayRef<Expr *> VarList,
+                                     SourceLocation StartLoc,
+                                     SourceLocation LParenLoc,
+                                     SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCPrivateClause(VarList, StartLoc, LParenLoc,
+                                               EndLoc);
+  }
+
+  /// Build a new OpenACC 'firstprivate' clause.
+  ///
+  /// By default, performs semantic analysis to build the new OpenACC clause.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCFirstprivateClause(ArrayRef<Expr *> VarList,
+                                          SourceLocation StartLoc,
+                                          SourceLocation LParenLoc,
+                                          SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCFirstprivateClause(VarList, StartLoc, LParenLoc,
+                                                    EndLoc);
+  }
+
+  /// Build a new OpenACC 'reduction' clause.
+  ///
+  /// By default, performs semantic analysis to build the new OpenACC clause.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCReductionClause(
+      ArrayRef<Expr *> VarList, SourceLocation StartLoc,
+      SourceLocation LParenLoc, SourceLocation ColonLoc, SourceLocation EndLoc,
+      const DeclarationNameInfo &ReductionId) {
+    return getSema().ActOnOpenACCReductionClause(VarList, StartLoc, LParenLoc,
+                                                 ColonLoc, EndLoc,
+                                                 ReductionId);
   }
 
   /// Rebuild the operand to an Objective-C \@synchronized statement.
@@ -3312,6 +3398,22 @@ OMPClause *TreeTransform<Derived>::TransformOMPClause(OMPClause *S) {
   return S;
 }
 
+template<typename Derived>
+ACCClause *TreeTransform<Derived>::TransformACCClause(ACCClause *S) {
+  if (!S)
+    return S;
+
+  switch (S->getClauseKind()) {
+  default: break;
+  // Transform individual clause nodes
+#define OPENACC_CLAUSE(Name, Class)                                            \
+  case ACCC_ ## Name :                                                         \
+    return getDerived().Transform ## Class(cast<Class>(S));
+#include "clang/Basic/OpenACCKinds.def"
+  }
+
+  return S;
+}
 
 template<typename Derived>
 ExprResult TreeTransform<Derived>::TransformExpr(Expr *E) {
@@ -8869,6 +8971,193 @@ TreeTransform<Derived>::TransformOMPIsDevicePtrClause(OMPIsDevicePtrClause *C) {
 }
 
 //===----------------------------------------------------------------------===//
+// OpenACC directive transformation
+//===----------------------------------------------------------------------===//
+
+template <typename Derived>
+StmtResult TreeTransform<Derived>::TransformACCExecutableDirective(
+    ACCExecutableDirective *D) {
+  // Transform the clauses
+  llvm::SmallVector<ACCClause *, 16> TClauses;
+  ArrayRef<ACCClause *> Clauses = D->clauses();
+  TClauses.reserve(Clauses.size());
+  for (ArrayRef<ACCClause *>::iterator I = Clauses.begin(), E = Clauses.end();
+       I != E; ++I) {
+    if (*I) {
+      getDerived().getSema().StartOpenACCClause((*I)->getClauseKind());
+      ACCClause *Clause = getDerived().TransformACCClause(*I);
+      getDerived().getSema().EndOpenACCClause();
+      if (Clause)
+        TClauses.push_back(Clause);
+    } else {
+      TClauses.push_back(nullptr);
+    }
+  }
+  StmtResult AssociatedStmt;
+  {
+    if (getDerived().getSema().ActOnOpenACCRegionStart(
+            D->getDirectiveKind(), TClauses, /*CurScope=*/nullptr,
+            D->getLocStart(), D->getLocEnd()))
+      return StmtError();
+    StmtResult Body;
+    {
+      Sema::CompoundScopeRAII CompoundScope(getSema());
+      Stmt *CS = D->getAssociatedStmt();
+      Body = getDerived().TransformStmt(CS);
+    }
+    AssociatedStmt = getDerived().getSema().ActOnOpenACCRegionEnd(Body);
+    if (AssociatedStmt.isInvalid()) {
+      return StmtError();
+    }
+  }
+  if (TClauses.size() != Clauses.size())
+    return StmtError();
+
+  return getDerived().RebuildACCExecutableDirective(
+      D->getDirectiveKind(), TClauses, AssociatedStmt.get(), D->getLocStart(),
+      D->getLocEnd());
+}
+
+template <typename Derived>
+StmtResult
+TreeTransform<Derived>::TransformACCParallelDirective(ACCParallelDirective *D) {
+  getDerived().getSema().StartOpenACCDSABlock(ACCD_parallel, D->getLocStart());
+  StmtResult Res = getDerived().TransformACCExecutableDirective(D);
+  getDerived().getSema().EndOpenACCDSABlock();
+  return Res;
+}
+
+template <typename Derived>
+StmtResult
+TreeTransform<Derived>::TransformACCLoopDirective(ACCLoopDirective *D) {
+  getDerived().getSema().StartOpenACCDSABlock(ACCD_loop, D->getLocStart());
+  StmtResult Res = getDerived().TransformACCExecutableDirective(D);
+  getDerived().getSema().EndOpenACCDSABlock();
+  return Res;
+}
+
+//===----------------------------------------------------------------------===//
+// OpenACC clause transformation
+//===----------------------------------------------------------------------===//
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCNumGangsClause(ACCNumGangsClause *C) {
+  ExprResult E = getDerived().TransformExpr(C->getNumGangs());
+  if (E.isInvalid())
+    return nullptr;
+  return getDerived().RebuildACCNumGangsClause(
+      E.get(), C->getLocStart(), C->getLParenLoc(), C->getLocEnd());
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCSharedClause(ACCSharedClause *C) {
+  llvm::SmallVector<Expr *, 16> Vars;
+  Vars.reserve(C->varlist_size());
+  for (auto *VE : C->varlists()) {
+    ExprResult EVar = getDerived().TransformExpr(cast<Expr>(VE));
+    if (EVar.isInvalid())
+      return nullptr;
+    Vars.push_back(EVar.get());
+  }
+  return getDerived().RebuildACCSharedClause(Vars);
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCPrivateClause(ACCPrivateClause *C) {
+  llvm::SmallVector<Expr *, 16> Vars;
+  Vars.reserve(C->varlist_size());
+  for (auto *VE : C->varlists()) {
+    ExprResult EVar = getDerived().TransformExpr(cast<Expr>(VE));
+    if (EVar.isInvalid())
+      return nullptr;
+    Vars.push_back(EVar.get());
+  }
+  return getDerived().RebuildACCPrivateClause(
+      Vars, C->getLocStart(), C->getLParenLoc(), C->getLocEnd());
+}
+
+template <typename Derived>
+ACCClause *TreeTransform<Derived>::TransformACCFirstprivateClause(
+    ACCFirstprivateClause *C) {
+  llvm::SmallVector<Expr *, 16> Vars;
+  Vars.reserve(C->varlist_size());
+  for (auto *VE : C->varlists()) {
+    ExprResult EVar = getDerived().TransformExpr(cast<Expr>(VE));
+    if (EVar.isInvalid())
+      return nullptr;
+    Vars.push_back(EVar.get());
+  }
+  return getDerived().RebuildACCFirstprivateClause(
+      Vars, C->getLocStart(), C->getLParenLoc(), C->getLocEnd());
+}
+
+template <typename Derived>
+ACCClause *TreeTransform<Derived>::TransformACCReductionClause(
+    ACCReductionClause *C) {
+  llvm::SmallVector<Expr *, 16> Vars;
+  Vars.reserve(C->varlist_size());
+  for (auto *VE : C->varlists()) {
+    ExprResult EVar = getDerived().TransformExpr(cast<Expr>(VE));
+    if (EVar.isInvalid())
+      return nullptr;
+    Vars.push_back(EVar.get());
+  }
+  DeclarationNameInfo NameInfo = C->getNameInfo();
+  if (NameInfo.getName()) {
+    NameInfo = getDerived().TransformDeclarationNameInfo(NameInfo);
+    if (!NameInfo.getName())
+      return nullptr;
+  }
+  return getDerived().RebuildACCReductionClause(
+      Vars, C->getLocStart(), C->getLParenLoc(), C->getColonLoc(),
+      C->getLocEnd(), NameInfo);
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCSeqClause(ACCSeqClause *C) {
+  // No need to rebuild this clause, no parameters.
+  return C;
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCIndependentClause(ACCIndependentClause *C) {
+  // No need to rebuild this clause, no parameters.
+  return C;
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCAutoClause(ACCAutoClause *C) {
+  // No need to rebuild this clause, no parameters.
+  return C;
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCGangClause(ACCGangClause *C) {
+  // No need to rebuild this clause, no parameters.
+  return C;
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCWorkerClause(ACCWorkerClause *C) {
+  // No need to rebuild this clause, no parameters.
+  return C;
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCVectorClause(ACCVectorClause *C) {
+  // No need to rebuild this clause, no parameters.
+  return C;
+}
+
+//===----------------------------------------------------------------------===//
 // Expression transformation
 //===----------------------------------------------------------------------===//
 template<typename Derived>
@@ -12827,6 +13116,61 @@ TreeTransform<Derived>::TransformCapturedStmt(CapturedStmt *S) {
 
   return getSema().ActOnCapturedRegionEnd(Body.get());
 }
+
+/// Like TreeTransform but rebuilds every contained definition to update its
+/// DeclContext.
+///
+/// FIXME: Far from a complete implementation.  So far this is driven by the
+/// implementation for translating OpenACC to OpenMP, but it's intended to be
+/// more generally reusable.
+template<typename Derived>
+class TransformContext : public TreeTransform<Derived> {
+  typedef TreeTransform<Derived> BaseTransform;
+public:
+  TransformContext(Sema &SemaRef) : BaseTransform(SemaRef) {}
+  // FIXME: What does this really do?  Is TransformDefintiion needed when we
+  // have this?
+  bool AlwaysRebuild() { return true; }
+  // If there might be an existing mapping for D and you want to push a new
+  // mapping, don't just call TransformDefinition, which will just reuse the
+  // existing mapping.  Instead:
+  // 1. Call TransformDecl to get the existing mapping, E, and store it
+  //    somewhere.
+  // 2. Call transformedLocalDecl(D, D).
+  // 3. Call TransformDefinition, which will now create the new mapping.
+  // 4. Call transformedLocalDecl(D, E) once the new mapping goes out of scope.
+  // FIXME: Does this handle declarations that are not definitions?
+  Decl *TransformDefinition(SourceLocation Loc, Decl *D,
+                            bool DropInit = false) {
+    Decl *T = this->getDerived().TransformDecl(Loc, D);
+    if (T != D)
+      return T;
+    if (isa<FunctionDecl>(D)) {
+      assert(D->isDefinedOutsideFunctionOrMethod()
+             && "nested FunctionDecl not yet handled");
+      return D;
+    }
+    assert(isa<VarDecl>(D) && "only VarDecl and FunctionDecl handled so far");
+    VarDecl *VDOld = cast<VarDecl>(D);
+    // Would we have to rebuild the type or anything else in order to change
+    // the ASTContext?
+    assert(&VDOld->getASTContext() == &this->getSema().getASTContext()
+           && "changing ASTContext not handled");
+    VarDecl *VDNew = VarDecl::Create(
+        VDOld->getASTContext(), this->getSema().CurContext,
+        VDOld->getLocStart(), VDOld->getLocation(), VDOld->getIdentifier(),
+        VDOld->getType(), VDOld->getTypeSourceInfo(),
+        VDOld->getStorageClass());
+    if (!DropInit && VDOld->hasInit()) {
+      ExprResult Init = this->getDerived().TransformInitializer(
+          VDOld->getInit(), /*NotCopyInit*/false);
+      assert(!Init.isInvalid() && "Failed to transform VarDecl initializer");
+      this->getSema().AddInitializerToDecl(VDNew, Init.get(), false);
+    }
+    this->getDerived().transformedLocalDecl(VDOld, VDNew);
+    return VDNew;
+  }
+};
 
 } // end namespace clang
 

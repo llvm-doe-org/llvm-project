@@ -36,9 +36,11 @@ namespace {
   public:
     enum Kind { DumpFull, Dump, Print, None };
     ASTPrinter(std::unique_ptr<raw_ostream> Out, Kind K, StringRef FilterString,
-               bool DumpLookups = false)
+               bool DumpLookups = false,
+               OpenACCPrintKind OpenACCPrint = OpenACCPrint_ACC)
         : Out(Out ? *Out : llvm::outs()), OwnedOut(std::move(Out)),
-          OutputKind(K), FilterString(FilterString), DumpLookups(DumpLookups) {}
+          OutputKind(K), FilterString(FilterString), DumpLookups(DumpLookups),
+          OpenACCPrint(OpenACCPrint) {}
 
     void HandleTranslationUnit(ASTContext &Context) override {
       TranslationUnitDecl *D = Context.getTranslationUnitDecl();
@@ -89,6 +91,7 @@ namespace {
           Out << "Not a DeclContext\n";
       } else if (OutputKind == Print) {
         PrintingPolicy Policy(D->getASTContext().getLangOpts());
+        Policy.OpenACCPrint = OpenACCPrint;
         D->print(Out, Policy, /*Indentation=*/0, /*PrintInstantiation=*/true);
       } else if (OutputKind != None)
         D->dump(Out, OutputKind == DumpFull);
@@ -107,6 +110,9 @@ namespace {
     /// results will be output with a format determined by OutputKind. This is
     /// incompatible with OutputKind == Print.
     bool DumpLookups;
+
+    /// How to print OpenACC nodes.
+    OpenACCPrintKind OpenACCPrint;
   };
 
   class ASTDeclNodeLister : public ASTConsumer,
@@ -134,9 +140,10 @@ namespace {
 
 std::unique_ptr<ASTConsumer>
 clang::CreateASTPrinter(std::unique_ptr<raw_ostream> Out,
-                        StringRef FilterString) {
+                        StringRef FilterString,
+                        OpenACCPrintKind OpenACCPrint) {
   return llvm::make_unique<ASTPrinter>(std::move(Out), ASTPrinter::Print,
-                                       FilterString);
+                                       FilterString, false, OpenACCPrint);
 }
 
 std::unique_ptr<ASTConsumer>

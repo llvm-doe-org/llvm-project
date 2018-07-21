@@ -247,3 +247,8 @@ def OMPTargetTeamsDistributeDirective : DStmt<OMPLoopDirective>;
 def OMPTargetTeamsDistributeParallelForDirective : DStmt<OMPLoopDirective>;
 def OMPTargetTeamsDistributeParallelForSimdDirective : DStmt<OMPLoopDirective>;
 def OMPTargetTeamsDistributeSimdDirective : DStmt<OMPLoopDirective>;
+
+// OpenACC Directives.
+def ACCExecutableDirective : Stmt<1>;
+def ACCParallelDirective : DStmt<ACCExecutableDirective>;
+def ACCLoopDirective : DStmt<ACCExecutableDirective>;

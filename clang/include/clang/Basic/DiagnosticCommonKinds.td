@@ -245,4 +245,8 @@ def err_openclcxx_not_supported : Error<
 // OpenMP
 def err_omp_more_one_clause : Error<
   "directive '#pragma omp %0' cannot contain more than one '%1' clause%select{| with '%3' name modifier| with 'source' dependence}2">;
+
+// OpenACC
+def err_acc_more_one_clause : Error<
+  "directive '#pragma acc %0' cannot contain more than one '%1' clause">;
 }

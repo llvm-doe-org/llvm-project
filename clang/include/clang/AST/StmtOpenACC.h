@@ -1,0 +1,362 @@
+//===- StmtOpenACC.h - Classes for OpenACC directives  ----------*- C++ -*-===//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+/// \file
+/// This file defines OpenACC AST classes for executable directives and
+/// clauses.
+///
+//===----------------------------------------------------------------------===//
+
+#ifndef LLVM_CLANG_AST_STMTOPENACC_H
+#define LLVM_CLANG_AST_STMTOPENACC_H
+
+#include "clang/AST/Expr.h"
+#include "clang/AST/OpenACCClause.h"
+#include "clang/AST/Stmt.h"
+#include "clang/AST/StmtOpenMP.h"
+#include "clang/Basic/OpenACCKinds.h"
+#include "clang/Basic/SourceLocation.h"
+
+namespace clang {
+
+//===----------------------------------------------------------------------===//
+// AST classes for directives.
+//===----------------------------------------------------------------------===//
+
+/// This is a basic class for representing single OpenACC executable
+/// directive.
+///
+class ACCExecutableDirective : public Stmt {
+  friend class ASTStmtReader;
+  /// Kind of the directive.
+  OpenACCDirectiveKind Kind;
+  /// Starting location of the directive (directive keyword).
+  SourceLocation StartLoc;
+  /// Ending location of the directive.
+  SourceLocation EndLoc;
+  /// Number of clauses.
+  const unsigned NumClauses;
+  /// Number of child expressions/stmts.
+  const unsigned NumChildren;
+  /// Offset from this to the start of clauses.
+  /// There are NumClauses pointers to clauses, they are followed by
+  /// NumChildren pointers to child stmts/exprs (if the directive type
+  /// requires an associated stmt, then it has to be the first of them).
+  const unsigned ClausesOffset;
+  Stmt *OMPNode;
+  bool DirectiveDiscardedForOMP;
+
+  /// Get the clauses storage.
+  MutableArrayRef<ACCClause *> getClauses() {
+    ACCClause **ClauseStorage = reinterpret_cast<ACCClause **>(
+        reinterpret_cast<char *>(this) + ClausesOffset);
+    return MutableArrayRef<ACCClause *>(ClauseStorage, NumClauses);
+  }
+
+protected:
+  /// Build instance of directive of class \a K.
+  ///
+  /// \param SC Statement class.
+  /// \param K Kind of OpenACC directive.
+  /// \param StartLoc Starting location of the directive (directive keyword).
+  /// \param EndLoc Ending location of the directive.
+  ///
+  template <typename T>
+  ACCExecutableDirective(const T *, StmtClass SC, OpenACCDirectiveKind K,
+                         SourceLocation StartLoc, SourceLocation EndLoc,
+                         unsigned NumClauses, unsigned NumChildren)
+      : Stmt(SC), Kind(K), StartLoc(std::move(StartLoc)),
+        EndLoc(std::move(EndLoc)), NumClauses(NumClauses),
+        NumChildren(NumChildren),
+        ClausesOffset(llvm::alignTo(sizeof(T), alignof(ACCClause *))),
+        OMPNode(nullptr), DirectiveDiscardedForOMP(false) {}
+
+  /// Sets the list of variables for this clause.
+  ///
+  /// \param Clauses The list of clauses for the directive.
+  ///
+  void setClauses(ArrayRef<ACCClause *> Clauses);
+
+  /// Set the associated statement for the directive.
+  ///
+  /// \param S Associated statement.
+  ///
+  void setAssociatedStmt(Stmt *S) {
+    assert(hasAssociatedStmt() && "no associated statement.");
+    *child_begin() = S;
+  }
+
+public:
+  /// Set the statement to which this directive has been translated for OpenMP.
+  /// In most cases, it's an OpenMP directive.  In some cases, it's a compound
+  /// statement that contains an OpenMP directive.  If the OpenACC directive
+  /// was discarded rather than translated to an OpenMP directive, set
+  /// DirectiveDiscardedForOMP to true.
+  ///
+  /// \param OMPNode The statement.
+  /// \param DirectiveDiscardedForOMP Whether the OpenACC directive was simply
+  ///        discarded for translation to OpenMP.
+  void setOMPNode(Stmt *OMPNode, bool DirectiveDiscardedForOMP = false) {
+    assert(this->OMPNode == nullptr && !this->DirectiveDiscardedForOMP &&
+           "expected OMPNode not to be set already");
+    assert(OMPNode != nullptr && "expected OMPNode");
+    assert((!DirectiveDiscardedForOMP || !isa<OMPExecutableDirective>(OMPNode)) &&
+           "expected OMPNode not to be an OpenMP directive when OpenMP"
+           " directive discarded");
+    this->OMPNode = OMPNode;
+    this->DirectiveDiscardedForOMP = DirectiveDiscardedForOMP;
+  }
+
+  /// Has this directive been translated to OpenMP?
+  bool hasOMPNode() const { return OMPNode; }
+
+  /// Get the statement to which this directive has been translated for OpenMP.
+  Stmt *getOMPNode() const {
+    assert(OMPNode && "expected to have OMPNode already");
+    return OMPNode;
+  }
+
+  /// Was the OpenACC directive discarded rather than translated to an OpenMP
+  /// directive?
+  bool directiveDiscardedForOMP() const {
+    assert(OMPNode && "expected to have OMPNode already");
+    return DirectiveDiscardedForOMP;
+  }
+
+  /// Iterates over a filtered subrange of clauses applied to a
+  /// directive.
+  ///
+  /// This iterator visits only clauses of type SpecificClause.
+  template <typename SpecificClause>
+  class specific_clause_iterator
+      : public llvm::iterator_adaptor_base<
+            specific_clause_iterator<SpecificClause>,
+            ArrayRef<ACCClause *>::const_iterator, std::forward_iterator_tag,
+            SpecificClause *, ptrdiff_t, SpecificClause *,
+            SpecificClause *> {
+    ArrayRef<ACCClause *>::const_iterator End;
+
+    void SkipToNextClause() {
+      while (this->I != End && !isa<SpecificClause>(*this->I))
+        ++this->I;
+    }
+
+  public:
+    explicit specific_clause_iterator(ArrayRef<ACCClause *> Clauses)
+        : specific_clause_iterator::iterator_adaptor_base(Clauses.begin()),
+          End(Clauses.end()) {
+      SkipToNextClause();
+    }
+
+    SpecificClause *operator*() const {
+      return cast<SpecificClause>(*this->I);
+    }
+    SpecificClause *operator->() const { return **this; }
+
+    specific_clause_iterator &operator++() {
+      ++this->I;
+      SkipToNextClause();
+      return *this;
+    }
+  };
+
+  template <typename SpecificClause>
+  static llvm::iterator_range<specific_clause_iterator<SpecificClause>>
+  getClausesOfKind(ArrayRef<ACCClause *> Clauses) {
+    return {specific_clause_iterator<SpecificClause>(Clauses),
+            specific_clause_iterator<SpecificClause>(
+                llvm::makeArrayRef(Clauses.end(), 0))};
+  }
+
+  template <typename SpecificClause>
+  llvm::iterator_range<specific_clause_iterator<SpecificClause>>
+  getClausesOfKind() const {
+    return getClausesOfKind<SpecificClause>(clauses());
+  }
+
+  /// Returns true if the current directive has one or more clauses of a
+  /// specific kind.
+  template <typename SpecificClause>
+  bool hasClausesOfKind() {
+    auto Clauses = getClausesOfKind<SpecificClause>();
+    return Clauses.begin() != Clauses.end();
+  }
+
+  /// Returns starting location of directive kind.
+  SourceLocation getLocStart() const { return StartLoc; }
+  /// Returns ending location of directive.
+  SourceLocation getLocEnd() const { return EndLoc; }
+
+  /// Set starting location of directive kind.
+  ///
+  /// \param Loc New starting location of directive.
+  ///
+  void setLocStart(SourceLocation Loc) { StartLoc = Loc; }
+  /// Set ending location of directive.
+  ///
+  /// \param Loc New ending location of directive.
+  ///
+  void setLocEnd(SourceLocation Loc) { EndLoc = Loc; }
+
+  /// Get number of clauses.
+  unsigned getNumClauses() const { return NumClauses; }
+
+  /// Returns specified clause.
+  ///
+  /// \param i Number of clause.
+  ///
+  ACCClause *getClause(unsigned i) const { return clauses()[i]; }
+
+  /// Returns true if directive has associated statement.
+  bool hasAssociatedStmt() const { return NumChildren > 0; }
+
+  /// Returns statement associated with the directive.
+  Stmt *getAssociatedStmt() const {
+    assert(hasAssociatedStmt() && "no associated statement.");
+    return const_cast<Stmt *>(*child_begin());
+  }
+
+  OpenACCDirectiveKind getDirectiveKind() const { return Kind; }
+
+  static bool classof(const Stmt *S) {
+    return S->getStmtClass() >= firstACCExecutableDirectiveConstant &&
+           S->getStmtClass() <= lastACCExecutableDirectiveConstant;
+  }
+
+  child_range children() {
+    if (!hasAssociatedStmt())
+      return child_range(child_iterator(), child_iterator());
+    Stmt **ChildStorage = reinterpret_cast<Stmt **>(getClauses().end());
+    return child_range(ChildStorage, ChildStorage + NumChildren);
+  }
+
+  ArrayRef<ACCClause *> clauses() { return getClauses(); }
+
+  ArrayRef<ACCClause *> clauses() const {
+    return const_cast<ACCExecutableDirective *>(this)->getClauses();
+  }
+};
+
+/// This represents '#pragma acc parallel' directive.
+///
+class ACCParallelDirective : public ACCExecutableDirective {
+  friend class ASTStmtReader;
+
+  /// Build directive with the given start and end location.
+  ///
+  /// \param StartLoc Starting location of the directive (directive keyword).
+  /// \param EndLoc Ending Location of the directive.
+  ///
+  ACCParallelDirective(SourceLocation StartLoc, SourceLocation EndLoc,
+                       unsigned NumClauses)
+      : ACCExecutableDirective(this, ACCParallelDirectiveClass, ACCD_parallel,
+                               StartLoc, EndLoc, NumClauses, 1)
+        {}
+
+  /// Build an empty directive.
+  explicit ACCParallelDirective(unsigned NumClauses)
+      : ACCExecutableDirective(this, ACCParallelDirectiveClass, ACCD_parallel,
+                               SourceLocation(), SourceLocation(), NumClauses,
+                               1)
+        {}
+
+public:
+  /// Creates directive.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the directive kind.
+  /// \param EndLoc Ending Location of the directive.
+  /// \param Clauses List of clauses.
+  /// \param AssociatedStmt Statement associated with the directive.
+  ///
+  static ACCParallelDirective *
+  Create(const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
+         ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt);
+
+  /// Creates an empty directive.
+  ///
+  /// \param C AST context.
+  /// \param NumClauses Number of clauses.
+  ///
+  static ACCParallelDirective *CreateEmpty(const ASTContext &C,
+                                           unsigned NumClauses, EmptyShell);
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == ACCParallelDirectiveClass;
+  }
+};
+
+/// This represents '#pragma acc loop' directive.
+///
+/// \code
+/// #pragma acc loop private(a,b) reduction(+: c,d)
+/// \endcode
+/// In this example directive '#pragma acc loop' has clauses 'private'
+/// with the variables 'a' and 'b' and 'reduction' with operator '+' and
+/// variables 'c' and 'd'.
+///
+class ACCLoopDirective : public ACCExecutableDirective {
+  friend class ASTStmtReader;
+  VarDecl *LCVar = nullptr;
+
+  /// Build directive with the given start and end location.
+  ///
+  /// \param StartLoc Starting location of the directive (directive keyword).
+  /// \param EndLoc Ending Location of the directive.
+  ///
+  ACCLoopDirective(SourceLocation StartLoc, SourceLocation EndLoc,
+                   unsigned NumClauses)
+      : ACCExecutableDirective(this, ACCLoopDirectiveClass, ACCD_loop, StartLoc,
+                               EndLoc, NumClauses, 1) {}
+
+  /// Build an empty directive.
+  explicit ACCLoopDirective(unsigned NumClauses)
+      : ACCExecutableDirective(this, ACCLoopDirectiveClass, ACCD_loop,
+                               SourceLocation(), SourceLocation(), NumClauses,
+                               1) {}
+
+public:
+  /// Creates directive.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the directive kind.
+  /// \param EndLoc Ending Location of the directive.
+  /// \param Clauses List of clauses.
+  /// \param AssociatedStmt Statement associated with the directive.
+  /// \param LCVar Loop control variable that is assigned but not declared in
+  ///        the init of the for loop associated with the directive.
+  ///
+  static ACCLoopDirective *Create(const ASTContext &C, SourceLocation StartLoc,
+                                  SourceLocation EndLoc,
+                                  ArrayRef<ACCClause *> Clauses,
+                                  Stmt *AssociatedStmt, VarDecl *LCVar);
+
+  /// Creates an empty directive.
+  ///
+  /// \param C AST context.
+  /// \param NumClauses Number of clauses.
+  ///
+  static ACCLoopDirective *CreateEmpty(const ASTContext &C, unsigned NumClauses,
+                                       EmptyShell);
+
+  /// Set the loop control variable that is assigned but not declared in the
+  /// init of the for loop associated with the directive.
+  void setLoopControlVariable(VarDecl *LCVar) { this->LCVar = LCVar; }
+  /// Get the loop control variable that is assigned but not declared in the
+  /// init of the for loop associated with the directive, or return nullptr if
+  /// none.
+  VarDecl *getLoopControlVariable() const { return LCVar; }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == ACCLoopDirectiveClass;
+  }
+};
+
+} // end namespace clang
+
+#endif

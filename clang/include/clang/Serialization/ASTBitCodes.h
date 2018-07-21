@@ -1953,6 +1953,10 @@ namespace serialization {
       STMT_OMP_TARGET_TEAMS_DISTRIBUTE_SIMD_DIRECTIVE,
       EXPR_OMP_ARRAY_SECTION,
 
+      // OpenACC directives
+      STMT_ACC_PARALLEL_DIRECTIVE,
+      STMT_ACC_LOOP_DIRECTIVE,
+
       // ARC
       EXPR_OBJC_BRIDGED_CAST,     // ObjCBridgedCastExpr
 

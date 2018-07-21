@@ -30,6 +30,17 @@ public:
   virtual bool handledStmt(Stmt* E, raw_ostream& OS) = 0;
 };
 
+enum OpenACCPrintKind {
+  /// Print original OpenACC without OpenMP translation.
+  OpenACCPrint_ACC,
+  /// Print OpenMP translation without original OpenACC.
+  OpenACCPrint_OMP,
+  /// Print original OpenACC plus OpenMP translation in comments.
+  OpenACCPrint_ACC_OMP,
+  /// Print OpenMP translation plus original OpenACC in comments.
+  OpenACCPrint_OMP_ACC
+};
+
 /// Describes how types, statements, expressions, and declarations should be
 /// printed.
 ///
@@ -52,7 +63,7 @@ struct PrintingPolicy {
       Half(LO.Half), MSWChar(LO.MicrosoftExt && !LO.WChar),
       IncludeNewlines(true), MSVCFormatting(false),
       ConstantsAsWritten(false), SuppressImplicitBase(false),
-      FullyQualifiedName(false) { }
+      FullyQualifiedName(false), OpenACCPrint(OpenACCPrint_ACC) { }
 
   /// Adjust this printing policy for cases where it's known that we're
   /// printing C++ code (for instance, if AST dumping reaches a C++-only
@@ -225,6 +236,9 @@ struct PrintingPolicy {
   /// When true, print the fully qualified name of function declarations.
   /// This is the opposite of SuppressScope and thus overrules it.
   bool FullyQualifiedName : 1;
+
+  /// How to print OpenACC nodes.
+  OpenACCPrintKind OpenACCPrint;
 };
 
 } // end namespace clang

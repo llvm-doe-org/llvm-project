@@ -59,6 +59,7 @@ add_clang_library(clangBasic
   MemoryBufferCache.cpp
   Module.cpp
   ObjCRuntime.cpp
+  OpenACCKinds.cpp
   OpenMPKinds.cpp
   OperatorPrecedence.cpp
   SanitizerBlacklist.cpp

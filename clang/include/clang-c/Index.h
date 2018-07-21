@@ -2522,7 +2522,15 @@ enum CXCursorKind {
    */
   CXCursor_OMPTargetTeamsDistributeSimdDirective = 279,
 
-  CXCursor_LastStmt = CXCursor_OMPTargetTeamsDistributeSimdDirective,
+  /** OpenACC parallel directive.
+   */
+  CXCursor_ACCParallelDirective = 280,
+
+  /** OpenACC loop directive.
+   */
+  CXCursor_ACCLoopDirective = 281,
+
+  CXCursor_LastStmt = CXCursor_ACCLoopDirective,
 
   /**
    * Cursor that represents the translation unit itself.

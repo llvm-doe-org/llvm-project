@@ -980,6 +980,75 @@ void StmtProfiler::VisitOMPTargetTeamsDistributeSimdDirective(
   VisitOMPLoopDirective(S);
 }
 
+namespace {
+class ACCClauseProfiler : public ConstACCClauseVisitor<ACCClauseProfiler> {
+  StmtProfiler *Profiler;
+  /// Process clauses with list of variables.
+  template <typename T>
+  void VisitACCClauseList(T *Node);
+
+public:
+  ACCClauseProfiler(StmtProfiler *P) : Profiler(P) { }
+#define OPENACC_CLAUSE(Name, Class)                                             \
+  void Visit##Class(const Class *C);
+#include "clang/Basic/OpenACCKinds.def"
+};
+
+template<typename T>
+void ACCClauseProfiler::VisitACCClauseList(T *Node) {
+  for (auto *E : Node->varlists()) {
+    if (E)
+      Profiler->VisitStmt(E);
+  }
+}
+
+void ACCClauseProfiler::VisitACCSharedClause(const ACCSharedClause *C) {
+  VisitACCClauseList(C);
+}
+void ACCClauseProfiler::VisitACCPrivateClause(const ACCPrivateClause *C) {
+  VisitACCClauseList(C);
+}
+void
+ACCClauseProfiler::VisitACCFirstprivateClause(const ACCFirstprivateClause *C) {
+  VisitACCClauseList(C);
+}
+void ACCClauseProfiler::VisitACCReductionClause(
+                                         const ACCReductionClause *C) {
+  Profiler->VisitName(C->getNameInfo().getName());
+  VisitACCClauseList(C);
+}
+void ACCClauseProfiler::VisitACCNumGangsClause(const ACCNumGangsClause *C) {
+  if (C->getNumGangs())
+    Profiler->VisitStmt(C->getNumGangs());
+}
+void ACCClauseProfiler::VisitACCSeqClause(const ACCSeqClause *) {}
+void ACCClauseProfiler::VisitACCIndependentClause(
+    const ACCIndependentClause *) {}
+void ACCClauseProfiler::VisitACCAutoClause(const ACCAutoClause *) {}
+}
+void ACCClauseProfiler::VisitACCGangClause(const ACCGangClause *) {}
+void ACCClauseProfiler::VisitACCWorkerClause(const ACCWorkerClause *) {}
+void ACCClauseProfiler::VisitACCVectorClause(const ACCVectorClause *) {}
+
+void
+StmtProfiler::VisitACCExecutableDirective(const ACCExecutableDirective *S) {
+  VisitStmt(S);
+  ACCClauseProfiler P(this);
+  ArrayRef<ACCClause *> Clauses = S->clauses();
+  for (ArrayRef<ACCClause *>::iterator I = Clauses.begin(), E = Clauses.end();
+       I != E; ++I)
+    if (*I)
+      P.Visit(*I);
+}
+
+void StmtProfiler::VisitACCParallelDirective(const ACCParallelDirective *S) {
+  VisitACCExecutableDirective(S);
+}
+
+void StmtProfiler::VisitACCLoopDirective(const ACCLoopDirective *S) {
+  VisitACCExecutableDirective(S);
+}
+
 void StmtProfiler::VisitExpr(const Expr *S) {
   VisitStmt(S);
 }

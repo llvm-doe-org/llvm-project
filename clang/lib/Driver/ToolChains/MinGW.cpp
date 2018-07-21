@@ -220,7 +220,8 @@ void tools::MinGW::Linker::ConstructJob(Compilation &C, const JobAction &JA,
         CmdArgs.push_back("-lssp_nonshared");
         CmdArgs.push_back("-lssp");
       }
-      if (Args.hasArg(options::OPT_fopenmp))
+      if (Args.hasArg(options::OPT_fopenmp)
+          || Args.hasArg(options::OPT_fopenacc))
         CmdArgs.push_back("-lgomp");
 
       AddLibGCC(Args, CmdArgs);

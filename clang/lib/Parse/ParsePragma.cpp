@@ -151,6 +151,18 @@ struct PragmaOpenMPHandler : public PragmaHandler {
                     Token &FirstToken) override;
 };
 
+struct PragmaNoOpenACCHandler : public PragmaHandler {
+  PragmaNoOpenACCHandler() : PragmaHandler("acc") { }
+  void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
+                    Token &FirstToken) override;
+};
+
+struct PragmaOpenACCHandler : public PragmaHandler {
+  PragmaOpenACCHandler() : PragmaHandler("acc") { }
+  void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
+                    Token &FirstToken) override;
+};
+
 /// PragmaCommentHandler - "\#pragma comment ...".
 struct PragmaCommentHandler : public PragmaHandler {
   PragmaCommentHandler(Sema &Actions)
@@ -300,6 +312,11 @@ void Parser::initializePragmaHandlers() {
   else
     OpenMPHandler.reset(new PragmaNoOpenMPHandler());
   PP.AddPragmaHandler(OpenMPHandler.get());
+  if (getLangOpts().OpenACC)
+    OpenACCHandler.reset(new PragmaOpenACCHandler());
+  else
+    OpenACCHandler.reset(new PragmaNoOpenACCHandler());
+  PP.AddPragmaHandler(OpenACCHandler.get());
 
   if (getLangOpts().MicrosoftExt ||
       getTargetInfo().getTriple().isOSBinFormatELF()) {
@@ -385,6 +402,8 @@ void Parser::resetPragmaHandlers() {
   }
   PP.RemovePragmaHandler(OpenMPHandler.get());
   OpenMPHandler.reset();
+  PP.RemovePragmaHandler(OpenACCHandler.get());
+  OpenACCHandler.reset();
 
   if (getLangOpts().MicrosoftExt ||
       getTargetInfo().getTriple().isOSBinFormatELF()) {
@@ -2145,6 +2164,49 @@ PragmaOpenMPHandler::HandlePragma(Preprocessor &PP,
   SourceLocation EodLoc = Tok.getLocation();
   Tok.startToken();
   Tok.setKind(tok::annot_pragma_openmp_end);
+  Tok.setLocation(EodLoc);
+  Pragma.push_back(Tok);
+
+  auto Toks = llvm::make_unique<Token[]>(Pragma.size());
+  std::copy(Pragma.begin(), Pragma.end(), Toks.get());
+  PP.EnterTokenStream(std::move(Toks), Pragma.size(),
+                      /*DisableMacroExpansion=*/false);
+}
+
+/// Handle '#pragma acc ...' when OpenACC is disabled.
+///
+void
+PragmaNoOpenACCHandler::HandlePragma(Preprocessor &PP,
+                                     PragmaIntroducerKind Introducer,
+                                     Token &FirstTok) {
+  if (!PP.getDiagnostics().isIgnored(diag::warn_pragma_acc_ignored,
+                                     FirstTok.getLocation())) {
+    PP.Diag(FirstTok, diag::warn_pragma_acc_ignored);
+    PP.getDiagnostics().setSeverity(diag::warn_pragma_acc_ignored,
+                                    diag::Severity::Ignored, SourceLocation());
+  }
+  PP.DiscardUntilEndOfDirective();
+}
+
+/// Handle '#pragma acc ...' when OpenACC is enabled.
+///
+void
+PragmaOpenACCHandler::HandlePragma(Preprocessor &PP,
+                                   PragmaIntroducerKind Introducer,
+                                   Token &FirstTok) {
+  SmallVector<Token, 16> Pragma;
+  Token Tok;
+  Tok.startToken();
+  Tok.setKind(tok::annot_pragma_openacc);
+  Tok.setLocation(FirstTok.getLocation());
+
+  while (Tok.isNot(tok::eod)) {
+    Pragma.push_back(Tok);
+    PP.Lex(Tok);
+  }
+  SourceLocation EodLoc = Tok.getLocation();
+  Tok.startToken();
+  Tok.setKind(tok::annot_pragma_openacc_end);
   Tok.setLocation(EodLoc);
   Pragma.push_back(Tok);
 

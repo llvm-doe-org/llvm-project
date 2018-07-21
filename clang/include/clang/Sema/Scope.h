@@ -114,23 +114,29 @@ public:
     /// This flag is propagated to children scopes.
     OpenMPSimdDirectiveScope = 0x20000,
 
+    /// This is the scope of OpenACC executable directive.
+    OpenACCDirectiveScope = 0x40000,
+
+    /// This is the scope of some OpenACC loop directive.
+    OpenACCLoopDirectiveScope = 0x80000,
+
     /// This scope corresponds to an enum.
-    EnumScope = 0x40000,
+    EnumScope = 0x100000,
 
     /// This scope corresponds to an SEH try.
-    SEHTryScope = 0x80000,
+    SEHTryScope = 0x200000,
 
     /// This scope corresponds to an SEH except.
-    SEHExceptScope = 0x100000,
+    SEHExceptScope = 0x400000,
 
     /// We are currently in the filter expression of an SEH except block.
-    SEHFilterScope = 0x200000,
+    SEHFilterScope = 0x800000,
 
     /// This is a compound statement scope.
-    CompoundStmtScope = 0x400000,
+    CompoundStmtScope = 0x1000000,
 
     /// We are between inheritance colon and the real class/struct definition scope.
-    ClassInheritanceScope = 0x800000,
+    ClassInheritanceScope = 0x2000000,
   };
 
 private:
@@ -428,6 +434,29 @@ public:
   bool isOpenMPLoopScope() const {
     const Scope *P = getParent();
     return P && P->isOpenMPLoopDirectiveScope();
+  }
+
+  /// Determines whether this scope is the OpenACC directive scope
+  bool isOpenACCDirectiveScope() const {
+    return (getFlags() & Scope::OpenACCDirectiveScope);
+  }
+
+  /// Determine whether this scope is some OpenACC loop directive scope
+  /// (that is, 'acc loop').
+  bool isOpenACCLoopDirectiveScope() const {
+    if (getFlags() & Scope::OpenACCLoopDirectiveScope) {
+      assert(isOpenACCDirectiveScope() &&
+             "OpenACC loop directive scope is not a directive scope");
+      return true;
+    }
+    return false;
+  }
+
+  /// Determine whether this scope is a loop having OpenACC loop
+  /// directive attached.
+  bool isOpenACCLoopScope() const {
+    const Scope *P = getParent();
+    return P && P->isOpenACCLoopDirectiveScope();
   }
 
   /// Determine whether this scope is a C++ 'try' block.

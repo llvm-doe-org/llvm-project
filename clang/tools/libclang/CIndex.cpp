@@ -5420,6 +5420,10 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
         "OMPTargetTeamsDistributeParallelForSimdDirective");
   case CXCursor_OMPTargetTeamsDistributeSimdDirective:
     return cxstring::createRef("OMPTargetTeamsDistributeSimdDirective");
+  case CXCursor_ACCParallelDirective:
+    return cxstring::createRef("ACCParallelDirective");
+  case CXCursor_ACCLoopDirective:
+    return cxstring::createRef("ACCLoopDirective");
   case CXCursor_OverloadCandidate:
       return cxstring::createRef("OverloadCandidate");
   case CXCursor_TypeAliasTemplateDecl:

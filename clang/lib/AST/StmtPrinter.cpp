@@ -107,6 +107,13 @@ namespace {
     void PrintRawSEHFinallyStmt(SEHFinallyStmt *S);
     void PrintOMPExecutableDirective(OMPExecutableDirective *S,
                                      bool ForceNoStmt = false);
+    void PrintOMPExecutableDirectiveHead(Stmt *S, bool Com);
+    void PrintACCExecutableDirectiveHead(ACCExecutableDirective *S,
+                                         bool ComACC,
+                                         bool ComDirectiveDiscardedForOMP);
+    void PrintOMPExecutableDirectiveBody(Stmt *S);
+    void PrintACCExecutableDirectiveBody(ACCExecutableDirective *S);
+    void PrintACCExecutableDirective(ACCExecutableDirective *S);
 
     void PrintExpr(Expr *E) {
       if (E)
@@ -1333,6 +1340,290 @@ void StmtPrinter::VisitOMPTargetTeamsDistributeSimdDirective(
     OMPTargetTeamsDistributeSimdDirective *Node) {
   Indent() << "#pragma omp target teams distribute simd";
   PrintOMPExecutableDirective(Node);
+}
+
+//===----------------------------------------------------------------------===//
+//  OpenACC clauses printing methods
+//===----------------------------------------------------------------------===//
+
+namespace {
+class ACCClausePrinter : public ACCClauseVisitor<ACCClausePrinter> {
+  raw_ostream &OS;
+  const PrintingPolicy &Policy;
+  /// Process clauses with list of variables.
+  template <typename T>
+  void VisitACCClauseList(T *Node, char StartSym);
+public:
+  ACCClausePrinter(raw_ostream &OS, const PrintingPolicy &Policy)
+    : OS(OS), Policy(Policy) { }
+#define OPENACC_CLAUSE(Name, Class)                              \
+  void Visit##Class(Class *S);
+#include "clang/Basic/OpenACCKinds.def"
+};
+
+template<typename T>
+void ACCClausePrinter::VisitACCClauseList(T *Node, char StartSym) {
+  for (typename T::varlist_iterator I = Node->varlist_begin(),
+                                    E = Node->varlist_end();
+       I != E; ++I) {
+    assert(*I && "Expected non-null Stmt");
+    OS << (I == Node->varlist_begin() ? StartSym : ',');
+    DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(*I);
+    assert(DRE); // see VisitOMPClauseList for how to handle other cases
+    DRE->getDecl()->printQualifiedName(OS);
+  }
+}
+
+void ACCClausePrinter::VisitACCSharedClause(ACCSharedClause *Node) {
+  if (!Node->varlist_empty()) {
+    OS << "shared";
+    VisitACCClauseList(Node, '(');
+    OS << ")";
+  }
+}
+
+void ACCClausePrinter::VisitACCPrivateClause(ACCPrivateClause *Node) {
+  if (!Node->varlist_empty()) {
+    OS << "private";
+    VisitACCClauseList(Node, '(');
+    OS << ")";
+  }
+}
+
+void ACCClausePrinter::VisitACCFirstprivateClause(ACCFirstprivateClause *Node) {
+  if (!Node->varlist_empty()) {
+    OS << "firstprivate";
+    VisitACCClauseList(Node, '(');
+    OS << ")";
+  }
+}
+
+void ACCClausePrinter::VisitACCReductionClause(ACCReductionClause *Node) {
+  if (!Node->varlist_empty()) {
+    OS << "reduction(";
+    Node->printReductionOperator(OS);
+    OS << ":";
+    VisitACCClauseList(Node, ' ');
+    OS << ")";
+  }
+}
+
+void ACCClausePrinter::VisitACCNumGangsClause(ACCNumGangsClause *Node) {
+  OS << "num_gangs(";
+  Node->getNumGangs()->printPretty(OS, nullptr, Policy, 0);
+  OS << ")";
+}
+
+void ACCClausePrinter::VisitACCSeqClause(ACCSeqClause *Node) {
+  OS << "seq";
+}
+
+void ACCClausePrinter::VisitACCIndependentClause(ACCIndependentClause *Node) {
+  OS << "independent";
+}
+
+void ACCClausePrinter::VisitACCAutoClause(ACCAutoClause *Node) {
+  OS << "auto";
+}
+
+void ACCClausePrinter::VisitACCGangClause(ACCGangClause *Node) {
+  OS << "gang";
+}
+
+void ACCClausePrinter::VisitACCWorkerClause(ACCWorkerClause *Node) {
+  OS << "worker";
+}
+
+void ACCClausePrinter::VisitACCVectorClause(ACCVectorClause *Node) {
+  OS << "vector";
+}
+}
+
+//===----------------------------------------------------------------------===//
+//  OpenACC directives printing methods
+//===----------------------------------------------------------------------===//
+
+void StmtPrinter::PrintOMPExecutableDirectiveHead(Stmt *S, bool Com) {
+  auto OMPDir = dyn_cast<OMPExecutableDirective>(S);
+  if (!OMPDir)
+    return;
+  Indent() << (Com?"// ":"") << "#pragma omp "
+           << getOpenMPDirectiveName(OMPDir->getDirectiveKind());
+  OMPClausePrinter Printer(OS, Policy);
+  ArrayRef<OMPClause *> Clauses = OMPDir->clauses();
+  for (ArrayRef<OMPClause *>::iterator I = Clauses.begin(), E = Clauses.end();
+       I != E; ++I)
+    if (*I && !(*I)->isImplicit()) {
+      OS << ' ';
+      Printer.Visit(*I);
+    }
+  OS << "\n";
+}
+
+void StmtPrinter::PrintACCExecutableDirectiveHead(
+    ACCExecutableDirective *S, bool ComACC, bool ComDirectiveDiscardedForOMP) {
+  Indent() << (ComACC?"// ":"") << "#pragma acc "
+           << getOpenACCDirectiveName(S->getDirectiveKind());
+  ACCClausePrinter Printer(OS, Policy);
+  ArrayRef<ACCClause *> Clauses = S->clauses();
+  for (ArrayRef<ACCClause *>::iterator I = Clauses.begin(), E = Clauses.end();
+       I != E; ++I)
+    if (*I && !(*I)->isImplicit()) {
+      OS << ' ';
+      Printer.Visit(*I);
+    }
+  if (ComDirectiveDiscardedForOMP && S->directiveDiscardedForOMP())
+    OS << " // discarded in OpenMP translation";
+  OS << "\n";
+}
+
+void StmtPrinter::PrintOMPExecutableDirectiveBody(Stmt *S) {
+  auto OMPDir = dyn_cast<OMPExecutableDirective>(S);
+  if (!OMPDir) {
+    PrintStmt(S, 0);
+    return;
+  }
+  if (OMPDir->hasAssociatedStmt()) {
+    assert(isa<CapturedStmt>(OMPDir->getAssociatedStmt()) &&
+           "Expected captured statement!");
+    Stmt *CS = cast<CapturedStmt>(OMPDir->getInnermostCapturedStmt())
+               ->getCapturedStmt();
+    PrintStmt(CS);
+  }
+}
+
+void StmtPrinter::PrintACCExecutableDirectiveBody(ACCExecutableDirective *S) {
+  if (S->hasAssociatedStmt())
+    PrintStmt(S->getAssociatedStmt());
+}
+
+// Are the OpenACC and OpenMP versions of an OpenACC region different enough
+// that, when printing both versions, StmtPrinter must print the associated
+// statements separately?
+//
+// StmtPrinter prints both versions (one within comments) when
+// Policy.OpenACCPrint is OpenACCPrint_ACC_OMP or OpenACCPrint_OMP_ACC.  When
+// the result of mustSplitACCExecutableDirective is true, StmtPrinter must
+// print the OpenACC directive plus its associated statement completely
+// separately (one within comments) from the OpenMP directive plus its
+// associated statement.  When the result is false, StmtPrinter prints the
+// OpenACC directive separately (one within comments) from the OpenMP directive
+// but prints the associated statement once afterward.
+//
+// mustSplitACCExecutableDirective makes the determination by checking whether
+// all portions of the associated statements except nested OpenACC regions
+// (and their OpenMP versions) are identical when printed.  The reason it
+// doesn't check nested OpenACC regions is that they can be split if necessary
+// within this region (it checks them for the need to split when its reaches
+// them while printing this region).  A degenerate case is when there is no
+// associated statement at all (standalone directive), and then it returns
+// false because there's nothing to split.  Another special case is when the
+// OpenMP version is not an OpenMP directive (OpenACC directive was dropped but
+// perhaps some new code was inserted into a new compound statement enclosing
+// the possibly transformed associated statement), and then it just compares
+// the entire OpenMP version with the OpenACC version's associated statement.
+//
+// The implementation of this check works as follows.  First, it prints the
+// associated statements to strings using Policy.OpenACCPrint =
+// OpenACCPrint_OMP.  That policy shouldn't matter for the OpenMP version
+// because it contains no OpenACC because all OpenACC regions are transformed
+// to OpenMP along with the outermost OpenACC region.  For the OpenACC version,
+// that policy makes the nested OpenACC regions look the same as in the OpenMP
+// version.  Second, it compares the two strings and returns the result.
+//
+// TODO: The implementation could be more efficient.  It has to print each
+// OpenACC region 2N+1 times where N is the number of directives enclosing it.
+// Without nesting, that means it prints a region 3 times (N=1).  With
+// two-levels, it prints the code that is only in the outer region 3 times
+// (N=1), and it prints the code that is only in the inner region 5 times
+// (N=2).  This poor efficiency probably doesn't matter much if a user is using
+// printing for just a manual inspection of the code (command-line -ast-print),
+// but it might if users use printing as part of their compilation process.  A
+// more efficient way probably amounts to some sort of AST diff (I believe I've
+// read somewhere about a clang mechanism or extension for that) so that large
+// strings wouldn't need to be generated and so that nested OpenACC regions
+// could be skipped entirely during the diff.
+static bool mustSplitACCExecutableDirective(ACCExecutableDirective *S,
+                                            const PrintingPolicy &Policy,
+                                            const ASTContext *Context) {
+  if (!S->hasAssociatedStmt())
+    return false;
+  Stmt *ACCStmt = S->getAssociatedStmt();
+  Stmt *OMPStmt = S->getOMPNode();
+  if (auto *OMPDir = dyn_cast<OMPExecutableDirective>(OMPStmt))
+    OMPStmt = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
+  if (ACCStmt == OMPStmt) // we probably will never implement such a case
+    return false;
+  PrintingPolicy PolicyOMP = Policy;
+  PolicyOMP.OpenACCPrint = OpenACCPrint_OMP;
+  std::string ACCStr, OMPStr;
+  llvm::raw_string_ostream ACCStrStr(ACCStr), OMPStrStr(OMPStr);
+  ACCStmt->printPretty(ACCStrStr, nullptr, PolicyOMP, 0, Context);
+  OMPStmt->printPretty(OMPStrStr, nullptr, PolicyOMP, 0, Context);
+  ACCStrStr.flush();
+  OMPStrStr.flush();
+  //llvm::errs() << "\n<<<<\n" << ACCStr << "\n----\n" << OMPStr << "\n>>>>\n";
+  return ACCStr != OMPStr;
+}
+
+void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
+  if (!S->hasOMPNode()) {
+    PrintACCExecutableDirectiveHead(S, false, false);
+    PrintACCExecutableDirectiveBody(S);
+    return;
+  }
+  assert(S->hasAssociatedStmt() ==
+         (isa<OMPExecutableDirective>(S->getOMPNode())
+          ? cast<OMPExecutableDirective>(S->getOMPNode())->hasAssociatedStmt()
+          : true)
+         && "ACCExecutableDirective and its OMP node must either both or"
+            " neither have an associated statement");
+  switch (Policy.OpenACCPrint) {
+  case OpenACCPrint_ACC:
+    PrintACCExecutableDirectiveHead(S, false, false);
+    PrintACCExecutableDirectiveBody(S);
+    break;
+  case OpenACCPrint_OMP:
+    PrintOMPExecutableDirectiveHead(S->getOMPNode(), false);
+    PrintOMPExecutableDirectiveBody(S->getOMPNode());
+    break;
+  case OpenACCPrint_ACC_OMP:
+    PrintACCExecutableDirectiveHead(S, false, true);
+    if (mustSplitACCExecutableDirective(S, Policy, Context)) {
+      PrintACCExecutableDirectiveBody(S);
+      Indent() << "/*\n";
+      PrintOMPExecutableDirectiveHead(S->getOMPNode(), false);
+      PrintOMPExecutableDirectiveBody(S->getOMPNode());
+      Indent() << " */\n";
+    }
+    else {
+      PrintOMPExecutableDirectiveHead(S->getOMPNode(), true);
+      PrintACCExecutableDirectiveBody(S);
+    }
+    break;
+  case OpenACCPrint_OMP_ACC:
+    PrintOMPExecutableDirectiveHead(S->getOMPNode(), false);
+    if (mustSplitACCExecutableDirective(S, Policy, Context)) {
+      PrintOMPExecutableDirectiveBody(S->getOMPNode());
+      Indent() << "/*\n";
+      PrintACCExecutableDirectiveHead(S, false, true);
+      PrintACCExecutableDirectiveBody(S);
+      Indent() << " */\n";
+    }
+    else {
+      PrintACCExecutableDirectiveHead(S, true, true);
+      PrintACCExecutableDirectiveBody(S);
+    }
+    break;
+  }
+}
+
+void StmtPrinter::VisitACCParallelDirective(ACCParallelDirective *Node) {
+  PrintACCExecutableDirective(Node);
+}
+
+void StmtPrinter::VisitACCLoopDirective(ACCLoopDirective *Node) {
+  PrintACCExecutableDirective(Node);
 }
 
 //===----------------------------------------------------------------------===//

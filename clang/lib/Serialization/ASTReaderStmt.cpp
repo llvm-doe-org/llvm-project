@@ -68,6 +68,7 @@ namespace clang {
 
   class ASTStmtReader : public StmtVisitor<ASTStmtReader> {
     friend class OMPClauseReader;
+    friend class ACCClauseReader;
 
     ASTRecordReader &Record;
     llvm::BitstreamCursor &DeclsCursor;
@@ -3048,6 +3049,159 @@ void ASTStmtReader::VisitOMPTargetTeamsDistributeSimdDirective(
 }
 
 //===----------------------------------------------------------------------===//
+// OpenACC Clauses.
+//===----------------------------------------------------------------------===//
+
+namespace clang {
+class ACCClauseReader : public ACCClauseVisitor<ACCClauseReader> {
+  ASTStmtReader *Reader;
+  ASTContext &Context;
+public:
+  ACCClauseReader(ASTStmtReader *R, ASTRecordReader &Record)
+      : Reader(R), Context(Record.getContext()) {}
+#define OPENACC_CLAUSE(Name, Class) void Visit##Class(Class *C);
+#include "clang/Basic/OpenACCKinds.def"
+  ACCClause *readClause();
+};
+}
+
+ACCClause *ACCClauseReader::readClause() {
+  ACCClause *C;
+  switch ((OpenACCClauseKind)Reader->Record.readInt()) {
+  case ACCC_shared:
+    C = ACCSharedClause::CreateEmpty(Context, Reader->Record.readInt());
+    break;
+  case ACCC_private:
+    C = ACCPrivateClause::CreateEmpty(Context, Reader->Record.readInt());
+    break;
+  case ACCC_firstprivate:
+    C = ACCFirstprivateClause::CreateEmpty(Context, Reader->Record.readInt());
+    break;
+  case ACCC_reduction:
+    C = ACCReductionClause::CreateEmpty(Context, Reader->Record.readInt());
+    break;
+  case ACCC_num_gangs:
+    C = new (Context) ACCNumGangsClause();
+    break;
+  case ACCC_seq:
+    C = new (Context) ACCSeqClause();
+    break;
+  case ACCC_independent:
+    C = new (Context) ACCIndependentClause();
+    break;
+  case ACCC_auto:
+    C = new (Context) ACCAutoClause();
+    break;
+  case ACCC_gang:
+    C = new (Context) ACCGangClause();
+    break;
+  case ACCC_worker:
+    C = new (Context) ACCWorkerClause();
+    break;
+  case ACCC_vector:
+    C = new (Context) ACCVectorClause();
+    break;
+  case ACCC_unknown:
+    llvm_unreachable("Clause is not known");
+  }
+  Visit(C);
+  C->setLocStart(Reader->ReadSourceLocation());
+  C->setLocEnd(Reader->ReadSourceLocation());
+
+  return C;
+}
+
+void ACCClauseReader::VisitACCSharedClause(ACCSharedClause *C) {
+  C->setLParenLoc(Reader->ReadSourceLocation());
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Reader->Record.readSubExpr());
+  C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCPrivateClause(ACCPrivateClause *C) {
+  C->setLParenLoc(Reader->ReadSourceLocation());
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Reader->Record.readSubExpr());
+  C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCFirstprivateClause(ACCFirstprivateClause *C) {
+  C->setLParenLoc(Reader->ReadSourceLocation());
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Reader->Record.readSubExpr());
+  C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCReductionClause(ACCReductionClause *C) {
+  C->setLParenLoc(Reader->ReadSourceLocation());
+  C->setColonLoc(Reader->ReadSourceLocation());
+  DeclarationNameInfo DNI;
+  Reader->ReadDeclarationNameInfo(DNI);
+  C->setNameInfo(DNI);
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Reader->Record.readSubExpr());
+  C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCNumGangsClause(ACCNumGangsClause *C) {
+  C->setNumGangs(Reader->Record.readSubExpr());
+  C->setLParenLoc(Reader->ReadSourceLocation());
+}
+
+void ACCClauseReader::VisitACCSeqClause(ACCSeqClause *) {}
+void ACCClauseReader::VisitACCIndependentClause(ACCIndependentClause *) {}
+void ACCClauseReader::VisitACCAutoClause(ACCAutoClause *) {}
+void ACCClauseReader::VisitACCGangClause(ACCGangClause *) {}
+void ACCClauseReader::VisitACCWorkerClause(ACCWorkerClause *) {}
+void ACCClauseReader::VisitACCVectorClause(ACCVectorClause *) {}
+
+//===----------------------------------------------------------------------===//
+// OpenACC Directives.
+//===----------------------------------------------------------------------===//
+
+void ASTStmtReader::VisitACCExecutableDirective(ACCExecutableDirective *E) {
+  E->setLocStart(ReadSourceLocation());
+  E->setLocEnd(ReadSourceLocation());
+  ACCClauseReader ClauseReader(this, Record);
+  SmallVector<ACCClause *, 5> Clauses;
+  for (unsigned i = 0; i < E->getNumClauses(); ++i)
+    Clauses.push_back(ClauseReader.readClause());
+  E->setClauses(Clauses);
+  if (E->hasAssociatedStmt())
+    E->setAssociatedStmt(Record.readSubStmt());
+  Stmt *OMPNode = Record.readSubStmt();
+  bool DirectiveDiscardedForOMP = OMPNode && Record.readInt();
+  E->setOMPNode(OMPNode, DirectiveDiscardedForOMP);
+}
+
+void ASTStmtReader::VisitACCParallelDirective(ACCParallelDirective *D) {
+  VisitStmt(D);
+  // The NumClauses field was read in ReadStmtFromStream.
+  Record.skipInts(1);
+  VisitACCExecutableDirective(D);
+}
+
+void ASTStmtReader::VisitACCLoopDirective(ACCLoopDirective *D) {
+  VisitStmt(D);
+  // The NumClauses field was read in ReadStmtFromStream.
+  Record.skipInts(1);
+  VisitACCExecutableDirective(D);
+  D->setLoopControlVariable(Record.readDeclAs<VarDecl>());
+}
+
+//===----------------------------------------------------------------------===//
 // ASTReader Implementation
 //===----------------------------------------------------------------------===//
 
@@ -3867,6 +4021,18 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       auto CollapsedNum = Record[ASTStmtReader::NumStmtFields + 1];
       S = OMPTargetTeamsDistributeSimdDirective::CreateEmpty(
           Context, NumClauses, CollapsedNum, Empty);
+      break;
+    }
+
+    case STMT_ACC_PARALLEL_DIRECTIVE: {
+      unsigned NumClauses = Record[ASTStmtReader::NumStmtFields];
+      S = ACCParallelDirective::CreateEmpty(Context, NumClauses, Empty);
+      break;
+    }
+
+    case STMT_ACC_LOOP_DIRECTIVE: {
+      unsigned NumClauses = Record[ASTStmtReader::NumStmtFields];
+      S = ACCLoopDirective::CreateEmpty(Context, NumClauses, Empty);
       break;
     }
 

@@ -225,7 +225,7 @@ namespace  {
     void setDeserialize(bool D) { Deserialize = D; }
 
     void dumpDecl(const Decl *D);
-    void dumpStmt(const Stmt *S);
+    void dumpStmt(const Stmt *S, StringRef Prefix = "");
     void dumpFullComment(const FullComment *C);
 
     // Utilities
@@ -517,6 +517,9 @@ namespace  {
 
     // OpenMP
     void VisitOMPExecutableDirective(const OMPExecutableDirective *Node);
+
+    // OpenACC
+    void VisitACCExecutableDirective(const ACCExecutableDirective *Node);
 
     // Exprs
     void VisitExpr(const Expr *Node);
@@ -1939,13 +1942,15 @@ void ASTDumper::VisitBlockDecl(const BlockDecl *D) {
 //  Stmt dumping methods.
 //===----------------------------------------------------------------------===//
 
-void ASTDumper::dumpStmt(const Stmt *S) {
+void ASTDumper::dumpStmt(const Stmt *S, StringRef Prefix) {
   dumpChild([=] {
     if (!S) {
       ColorScope Color(*this, NullColor);
       OS << "<<<NULL>>>";
       return;
     }
+
+    OS << Prefix;
 
     // Some statements have custom mechanisms for dumping their children.
     if (const DeclStmt *DS = dyn_cast<DeclStmt>(S)) {
@@ -2038,6 +2043,43 @@ void ASTDumper::VisitOMPExecutableDirective(
         dumpStmt(S);
     });
   }
+}
+
+//===----------------------------------------------------------------------===//
+//  OpenACC dumping methods.
+//===----------------------------------------------------------------------===//
+
+void ASTDumper::VisitACCExecutableDirective(
+    const ACCExecutableDirective *Node) {
+  VisitStmt(Node);
+  for (auto *C : Node->clauses()) {
+    dumpChild([=] {
+      if (!C) {
+        ColorScope Color(*this, NullColor);
+        OS << "<<<NULL>>> ACCClause";
+        return;
+      }
+      {
+        ColorScope Color(*this, AttrColor);
+        StringRef ClauseName(getOpenACCClauseName(C->getClauseKind()));
+        OS << "ACC" << ClauseName.substr(/*Start=*/0, /*N=*/1).upper()
+           << ClauseName.drop_front() << "Clause";
+      }
+      dumpPointer(C);
+      dumpSourceRange(SourceRange(C->getLocStart(), C->getLocEnd()));
+      if (C->isImplicit())
+        OS << " <implicit>";
+      if (auto Reduction = dyn_cast<ACCReductionClause>(C)) {
+        OS << " '";
+        Reduction->printReductionOperator(OS);
+        OS << "'";
+      }
+      for (auto *S : C->children())
+        dumpStmt(S);
+    });
+  }
+  if (Node->hasOMPNode())
+    dumpStmt(Node->getOMPNode(), "impl: ");
 }
 
 //===----------------------------------------------------------------------===//

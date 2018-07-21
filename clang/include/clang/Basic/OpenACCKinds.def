@@ -1,0 +1,66 @@
+//===--- OpenACCKinds.def - OpenACC directives and clauses list --*- C++ -*-==//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+/// \file
+/// This file defines the list of supported OpenACC directives and
+/// clauses.
+///
+//===----------------------------------------------------------------------===//
+
+#ifndef OPENACC_DIRECTIVE
+#  define OPENACC_DIRECTIVE(Name)
+#endif
+#ifndef OPENACC_CLAUSE
+#  define OPENACC_CLAUSE(Name, Class)
+#endif
+#ifndef OPENACC_PARALLEL_CLAUSE
+#  define OPENACC_PARALLEL_CLAUSE(Name)
+#endif
+#ifndef OPENACC_LOOP_CLAUSE
+#  define OPENACC_LOOP_CLAUSE(Name)
+#endif
+
+// OpenACC directives.
+OPENACC_DIRECTIVE(parallel)
+OPENACC_DIRECTIVE(loop)
+
+// OpenACC clauses.
+// ACCSharedClause is predetermined or implicit only.
+OPENACC_CLAUSE(shared, ACCSharedClause)
+OPENACC_CLAUSE(private, ACCPrivateClause)
+OPENACC_CLAUSE(firstprivate, ACCFirstprivateClause)
+OPENACC_CLAUSE(reduction, ACCReductionClause)
+OPENACC_CLAUSE(num_gangs, ACCNumGangsClause)
+OPENACC_CLAUSE(seq, ACCSeqClause)
+OPENACC_CLAUSE(independent, ACCIndependentClause)
+OPENACC_CLAUSE(auto, ACCAutoClause)
+OPENACC_CLAUSE(gang, ACCGangClause)
+OPENACC_CLAUSE(worker, ACCWorkerClause)
+OPENACC_CLAUSE(vector, ACCVectorClause)
+
+// Clauses allowed for OpenACC directive 'parallel'.
+// OpenACC does not define an explicit shared clause, so it's not listed here
+// for parsing.
+OPENACC_PARALLEL_CLAUSE(private)
+OPENACC_PARALLEL_CLAUSE(firstprivate)
+OPENACC_PARALLEL_CLAUSE(reduction)
+OPENACC_PARALLEL_CLAUSE(num_gangs)
+
+// Clauses allowed for OpenACC directive 'loop'.
+OPENACC_LOOP_CLAUSE(seq)
+OPENACC_LOOP_CLAUSE(independent)
+OPENACC_LOOP_CLAUSE(auto)
+OPENACC_LOOP_CLAUSE(gang)
+OPENACC_LOOP_CLAUSE(worker)
+OPENACC_LOOP_CLAUSE(vector)
+OPENACC_LOOP_CLAUSE(private)
+
+#undef OPENACC_DIRECTIVE
+#undef OPENACC_CLAUSE
+#undef OPENACC_PARALLEL_CLAUSE
+#undef OPENACC_LOOP_CLAUSE

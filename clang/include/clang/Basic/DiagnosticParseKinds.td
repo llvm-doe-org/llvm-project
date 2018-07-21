@@ -1126,6 +1126,23 @@ def err_expected_end_declare_target : Error<
 def err_omp_declare_target_unexpected_clause: Error<
   "unexpected '%0' clause, only 'to' or 'link' clauses expected">;
 
+// OpenACC support.
+def warn_pragma_acc_ignored : Warning<
+  "unexpected '#pragma acc ...' in program">, InGroup<SourceUsesOpenACC>, DefaultIgnore;
+def warn_acc_extra_tokens_at_eol : Warning<
+  "extra tokens at the end of '#pragma acc %0' are ignored">,
+  InGroup<ExtraTokens>;
+def err_acc_unknown_directive : Error<
+  "expected an OpenACC directive">;
+def err_acc_expected_punc : Error<
+  "expected ',' or ')' in '%0' clause">;
+def err_acc_unexpected_clause : Error<
+  "unexpected OpenACC clause '%0' in directive '#pragma acc %1'">;
+def err_acc_mutually_exclusive_clauses : Error<
+  "unexpected OpenACC '%0' clause, '%1' is specified already">;
+def err_acc_expected_reduction_operator : Error<
+  "expected reduction operator">;
+
 // Pragma loop support.
 def err_pragma_loop_missing_argument : Error<
   "missing argument; expected %select{an integer value|"

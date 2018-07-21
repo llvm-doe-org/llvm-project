@@ -68,7 +68,8 @@ std::unique_ptr<ASTConsumer>
 ASTPrintAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
   if (std::unique_ptr<raw_ostream> OS =
           CI.createDefaultOutputFile(false, InFile))
-    return CreateASTPrinter(std::move(OS), CI.getFrontendOpts().ASTDumpFilter);
+    return CreateASTPrinter(std::move(OS), CI.getFrontendOpts().ASTDumpFilter,
+                            CI.getFrontendOpts().OpenACCPrint);
   return nullptr;
 }
 

@@ -10,6 +10,7 @@
 #ifndef LLVM_CLANG_FRONTEND_FRONTENDOPTIONS_H
 #define LLVM_CLANG_FRONTEND_FRONTENDOPTIONS_H
 
+#include "clang/AST/PrettyPrinter.h"
 #include "clang/Frontend/CommandLineSourceLoc.h"
 #include "clang/Serialization/ModuleFileExtension.h"
 #include "clang/Sema/CodeCompleteOptions.h"
@@ -307,6 +308,9 @@ public:
   unsigned IncludeTimestamps : 1;
 
   CodeCompleteOptions CodeCompleteOpts;
+
+  /// How to print OpenACC code.
+  OpenACCPrintKind OpenACCPrint = OpenACCPrint_ACC;
 
   enum {
     ARCMT_None,

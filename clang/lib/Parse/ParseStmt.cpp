@@ -361,6 +361,10 @@ Retry:
     ProhibitAttributes(Attrs);
     return ParseOpenMPDeclarativeOrExecutableDirective(Allowed);
 
+  case tok::annot_pragma_openacc:
+    ProhibitAttributes(Attrs);
+    return ParseOpenACCDeclarativeOrExecutableDirective(Allowed);
+
   case tok::annot_pragma_ms_pointers_to_members:
     ProhibitAttributes(Attrs);
     HandlePragmaMSPointersToMembers();
@@ -1781,6 +1785,10 @@ StmtResult Parser::ParseForStatement(SourceLocation *TrailingElseLoc) {
     if (getLangOpts().OpenMP && FirstPart.isUsable()) {
       Actions.ActOnOpenMPLoopInitialization(ForLoc, FirstPart.get());
     }
+    // In OpenACC loop region, loop control variable must be private.
+    if (getLangOpts().OpenACC && FirstPart.isUsable()) {
+      Actions.ActOnOpenACCLoopInitialization(ForLoc, FirstPart.get());
+    }
   }
 
   // C99 6.8.5p5 - In C99, the body of the for statement is a scope, even if
@@ -1882,6 +1890,8 @@ StmtResult Parser::ParseContinueStatement() {
 ///
 StmtResult Parser::ParseBreakStatement() {
   SourceLocation BreakLoc = ConsumeToken();  // eat the 'break'.
+  if (getLangOpts().OpenACC)
+    Actions.ActOnOpenACCLoopBreakStatement(BreakLoc, getCurScope());
   return Actions.ActOnBreakStmt(BreakLoc, getCurScope());
 }
 
