@@ -26,10 +26,6 @@ We have implemented the following features:
               (integer types and floating types except complex types)
               and pointer types.
             * `&`, `|`, and `^` support exactly C11's integer types.
-            * temporary limitations:
-                * Complex types as operands currently produce linking
-                  errors due to problems in clang's OpenMP
-                  implementation.
             * deviations from OpenACC 2.6:
                 * OpenACC 2.6 sec. 2.5.12p774 mistypes `^` as `%`.
                   The latter would be nonsense as a reduction

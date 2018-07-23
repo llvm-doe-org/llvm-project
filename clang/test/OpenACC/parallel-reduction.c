@@ -33,14 +33,14 @@
 
 // Can we -ast-print the OpenMP source code, compile, and run it successfully?
 //
-// RUN: %clang -Xclang -verify -fopenacc-print=omp %s -DCOMPILE > %t-omp.c
+// RUN: %clang -Xclang -verify -fopenacc-print=omp %s > %t-omp.c
 // RUN: echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN: %clang -Xclang -verify -fopenmp -o %t %t-omp.c
 // RUN: %t 2 2>&1 | FileCheck -check-prefix=EXE %s
 
 // Check execution with normal compilation.
 //
-// RUN: %clang -Xclang -verify -fopenacc %s -o %t -DCOMPILE
+// RUN: %clang -Xclang -verify -fopenacc %s -o %t
 // RUN: %t 2 2>&1 | FileCheck -check-prefix=EXE %s
 
 // END.
@@ -543,10 +543,6 @@ int main() {
   // Complex argument type
   //--------------------------------------------------
 
-  // FIXME: OpenMP fails to link the generated code, which does appear to be
-  // correct, so we suppress full compilation for now.  Be sure to change XEXE
-  // below to EXE when adding this back.
-#if !COMPILE
   // PRT-NEXT: {
   {
     // PRT-NEXT: _Complex float acc
@@ -580,11 +576,10 @@ int main() {
     acc += val;
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // XEXE-NEXT: acc = 18.0 + 13.0i
+    // EXE-NEXT: acc = 18.0 + 13.0i
     printf("acc = %.1f + %.1fi\n", creal(acc), cimag(acc));
   }
   // PRT-NEXT: }
-#endif
 
   // PRT-NEXT: return 0;
   return 0;
