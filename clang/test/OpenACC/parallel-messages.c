@@ -288,12 +288,12 @@ int main() {
   ;
 
 #pragma acc parallel reduction(&&:i,i,jk,d) reduction(&&:jk) reduction(max:d)
-  // expected-error@-1 {{variable can appear only once in OpenACC 'reduction' clause}}
-  // expected-note@-2 {{previously referenced here}}
-  // expected-error@-3 {{variable can appear only once in OpenACC 'reduction' clause}}
-  // expected-note@-4 {{previously referenced here}}
-  // expected-error@-5 {{variable can appear only once in OpenACC 'reduction' clause}}
-  // expected-note@-6 {{previously referenced here}}
+  // expected-error@-1 {{redundant '&&' reduction for variable 'i'}}
+  // expected-note@-2 {{previous '&&' reduction here}}
+  // expected-error@-3 {{redundant '&&' reduction for variable 'jk'}}
+  // expected-note@-4 {{previous '&&' reduction here}}
+  // expected-error@-5 {{conflicting 'max' reduction for variable 'd'}}
+  // expected-note@-6 {{previous '&&' reduction here}}
   ;
 #pragma acc parallel private(i) firstprivate(i,jk) private(jk)
   // expected-error@-1 {{private variable cannot be firstprivate}}

@@ -81,7 +81,6 @@ We have implemented the following features:
               variable is the same as the `reduction` operator.
             * See `reduction` clause for `parallel` directive for
               general details about operand types and limitations.
-            * Not yet implemented for partitioned loops.
     * detection of `break` statement for the associated loop:
         * compile error if implicit/explicit `independent`
         * no error if `seq` or `auto`

@@ -384,6 +384,11 @@ For clauses and data attributes, we use the following notations:
   of the following mappings:
     * `lab1 clause1 -> lab3 clause2`
     * `lab2 clause1 -> lab4 clause2`
+* The notation `(lab1|lab2)|lab3 clause1 -> lab4|lab5 clause2`
+  specifies all of the following mappings:
+    * `lab1 clause1 -> lab4 clause2`
+    * `lab2 clause1 -> lab4 clause2`
+    * `lab3 clause1 -> lab5 clause2`
 
 Mappings
 --------
@@ -392,13 +397,56 @@ For now, we implement a prescriptive interpretation of OpenACC without
 loop analysis and thus with only a safe mapping to OpenMP.
 
 * `acc parallel` -> `omp target teams`:
-    * imp `shared` -> exp `shared`
-    * imp|exp `firstprivate` -> exp `firstprivate`
-    * exp `private` -> exp `private`
+    * Data sharing semantics:
+        * It is an error if a variable has more than one of exp
+          `firstprivate`, exp `private`, or exp `reduction`.  Notes:
+            * These have contradictory specifications for
+              initialization of the local copy of the variable.
+            * Relative to `firstprivate` and `private`, `reduction`
+              has a contradictory specification for storing data back
+              to the original variable.
+        * exp `firstprivate`, exp `private`, or exp `reduction` for a
+          variable of incomplete type is an error:
+            * Note that a local copy must be allocated in each of
+              these case, but allocation is impossible for incomplete
+              types.
+        * exp `private` or `reduction` for a `const` variable is an
+          error.  Notes:
+            * The local copy of a const private variable would remain
+              uninitialized throughout its lifetime.
+            * A reduction intends to assign to both the original
+              variable and a local copy after its initialization, and
+              that's impossible if it's const.
+            * `firstprivate` is fine for a `const` variable.  The
+              local copy will have the original variable's value
+              throughout its lifetime.
+        * OpenACC's rules to add imp `shared` and imp `firstprivate`
+          are ignored for a variable `v` if the following rule
+          produces an imp `reduction` for `v` on `acc parallel`.
+        * If (1) neither exp `firstprivate` nor exp `private` for a
+          variable `v` that is declared outside this `acc parallel`,
+          and (2) on any contained `acc loop`, exp `gang` and exp
+          `reduction` with a reduction operator `op` for `v`, then
+          this `acc parallel` has imp `reduction` with `op` for `v`.
+            * Note that we are not applying to an `acc parallel` any
+              loop-specified gang reduction if exp `firstprivate` or
+              exp `private` for that variable on `acc parallel`.  gcc
+              7.2.0 and pgcc 18.4-0 also appear to have this behavior.
+              Our justification is simple: where the reduction is
+              specified (at `acc loop`), only the local copy of the
+              variable is visible, so it's a gang-local variable.
+        * It is an error if, on this `acc parallel`, there exist
+          multiple imp|exp `reduction` with different reduction
+          operators for a single variable `v`.
+        * Variable type restrictions for `reduction` are specified in
+          README-OpenACC-status.md as that is a highly user-visible
+          issue.
+    * Data sharing mapping:
+        * imp|not `shared` -> exp|not `shared`
+        * (imp|exp)|not `firstprivate` -> exp|not `firstprivate`
+        * exp|not `private` -> exp|not `private`
+        * (imp|exp)|not `reduction` -> exp|not `reduction`
     * exp|not `num_gangs` -> exp|not `num_teams`
-    * exp `reduction` -> exp `reduction`
-    * not `reduction` here and not `reduction` on every `acc loop`
-      with `gang` -> not `reduction`
 * `acc loop` within `acc parallel`:
     * if exp `seq`, then:
         * Discard the directive.
@@ -413,6 +461,10 @@ loop analysis and thus with only a safe mapping to OpenMP.
               declared outside the loop, the variable is imp `shared`.
             * exp `reduction` is not permitted on a loop control
               variable.
+            * For exp `firstprivate`, exp `private`, and exp
+              `reduction`, the restrictions for more than one of these
+              per variable, for variables of incomplete type, and for
+              `const` variables are the same as on `acc parallel`.
         * Data sharing mapping:
             * pre `private` and imp `shared` are discarded during
               translation.
@@ -628,6 +680,11 @@ loop analysis and thus with only a safe mapping to OpenMP.
                       different predetermined data sharing attribute.
                     * For OpenACC, gcc 7.2.0 also enforces this
                       constraint, but pgcc 18.4-0 does not enforce it.
+                * For exp `firstprivate`, exp `private`, and exp
+                  `reduction`, the restrictions for more than one of
+                  these per variable, for variables of incomplete
+                  type, and for `const` variables are the same as on
+                  `acc parallel`.
             * Data sharing mapping:
                 * if exp `worker` or not `gang`, then pre|imp `shared`
                   -> exp `shared`
@@ -669,12 +726,13 @@ loop analysis and thus with only a safe mapping to OpenMP.
                           implementation to extract it for us).
                 * in all other cases, pre|exp `private` -> exp
                   `private`
-                * if exp `gang`, then:
-                    * if exp `reduction`, then merge that into `omp
-                      target teams`, which might already have
-                      `reduction` from `acc parallel`
-                * if exp `worker` or exp `vector`, then:
-                    * if exp `reduction`, then merge that into exp
-                      `reduction` here
-                * not `reduction` or (exp `gang` and not `worker` and
-                  not `vector`) -> not `reduction`
+                * if exp `worker` or exp `vector`, then exp
+                  `reduction` -> exp `reduction`
+                * not `reduction` or (not `worker` and not `vector`)
+                  -> not `reduction`
+                * Notes:
+                    * A gang reduction for a gang-local variable is
+                      useless and so is discarded during translation.
+                    * Gang reductions for other variables are
+                      addressed in the data sharing semantics on `acc
+                      parallel`.

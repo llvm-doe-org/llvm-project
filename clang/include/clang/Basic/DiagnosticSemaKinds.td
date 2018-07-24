@@ -9035,10 +9035,6 @@ def note_acc_loop_bad_nested_partitioning : Note<
   "parent '#pragma acc loop' is here">;
 def err_acc_not_for : Error<
   "statement after '#pragma acc loop' must be a for loop">;
-def err_acc_once_referenced : Error<
-  "variable can appear only once in OpenACC '%0' clause">;
-def note_acc_referenced : Note<
-  "previously referenced here">;
 def err_acc_unknown_reduction_operator : Error<
   "unknown reduction operator">;
 def err_acc_reduction_incomplete_type : Error<
@@ -9055,8 +9051,12 @@ def err_acc_reduction_not_real_or_pointer_type : Error<
   "OpenACC reduction operator '%0' argument must be of real or pointer type">;
 def err_acc_reduction_on_loop_control_var : Error<
   "OpenACC loop control variable cannot have reduction">;
-def err_acc_reduction_on_partitioned_loop : Error<
-  "OpenACC reductions are not yet supported on partitioned loops">;
+def err_acc_conflicting_reduction : Error<
+  "%select{conflicting|redundant}0 '%1' reduction for variable %2">;
+def note_acc_gang_reduction_apply : Note<
+  "while applying gang reduction to '%0' directive here">;
+def note_acc_previous_reduction : Note<
+  "previous '%0' reduction here">;
 } // end of OpenACC category
 
 let CategoryName = "Related Result Type Issue" in {

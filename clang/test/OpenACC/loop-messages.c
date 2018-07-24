@@ -31,7 +31,7 @@ int incomplete[];
 
 void fn() {
   _Bool b;
-  enum { E1, E2 } e;
+  enum E { E1, E2 } e;
   int i, jk, a[2], *p; // expected-note 9 {{'a' defined here}}
                        // expected-note@-1 7 {{'p' defined here}}
   float f; // expected-note 3 {{'f' defined here}}
@@ -509,44 +509,50 @@ void fn() {
     }
 
     // private and reduction clauses
+    //
+    // We sprinkle seq, auto, independent, gang, worker, and vector clauses
+    // throughout these tests as the validation of the private and reduction
+    // clauses should be independent of those clauses.  The only exception is
+    // gang reductions, which interact with the parent parallel directive, so
+    // we test that case more carefully at the end.
 
     #pragma acc loop private // expected-error {{expected '(' after 'private'}}
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop reduction // expected-error {{expected '(' after 'reduction'}}
+    #pragma acc loop gang reduction // expected-error {{expected '(' after 'reduction'}}
     for (int i = 0; i < 5; ++i)
       ;
 
     // expected-error@+3 {{expected expression}}
     // expected-error@+2 {{expected ')'}}
     // expected-note@+1 {{to match this '('}}
-    #pragma acc loop private(
+    #pragma acc loop worker private(
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+4 {{expected reduction operator}}
     // expected-warning@+3 {{missing ':' after reduction operator - ignoring}}
     // expected-error@+2 {{expected ')'}}
     // expected-note@+1 {{to match this '('}}
-    #pragma acc loop reduction(
+    #pragma acc loop vector reduction(
     for (int i = 0; i < 5; ++i)
       ;
 
     // expected-error@+1 {{expected expression}}
-    #pragma acc loop private()
+    #pragma acc loop gang worker private()
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+2 {{expected reduction operator}}
     // expected-warning@+1 {{missing ':' after reduction operator - ignoring}}
-    #pragma acc loop reduction( )
+    #pragma acc loop gang vector reduction( )
     for (int i = 0; i < 5; ++i)
       ;
 
     // expected-error@+1 {{expected reduction operator}}
-    #pragma acc loop reduction( : )
+    #pragma acc loop worker vector reduction( : )
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{expected reduction operator}}
-    #pragma acc loop reduction(: i)
+    #pragma acc loop gang worker vector reduction(: i)
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+2 {{expected reduction operator}}
@@ -557,35 +563,35 @@ void fn() {
 
     // expected-error@+2 {{expected reduction operator}}
     // expected-warning@+1 {{missing ':' after reduction operator - ignoring}}
-    #pragma acc loop reduction(-)
+    #pragma acc loop reduction(-) gang
     for (int i = 0; i < 5; ++i)
       ;
     // expected-warning@+2 {{missing ':' after reduction operator - ignoring}}
     // expected-error@+1 {{expected expression}}
-    #pragma acc loop reduction(i)
+    #pragma acc loop reduction(i) worker
     for (int i = 0; i < 5; ++i)
       ;
     // expected-warning@+2 {{missing ':' after reduction operator - ignoring}}
     // expected-error@+1 {{expected expression}}
-    #pragma acc loop reduction(foo)
+    #pragma acc loop reduction(foo) vector
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{expected reduction operator}}
-    #pragma acc loop reduction(-:)
+    #pragma acc loop reduction(-:) worker gang
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{expected expression}}
-    #pragma acc loop reduction(foo:)
+    #pragma acc loop reduction(foo:) vector gang
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{expected reduction operator}}
-    #pragma acc loop reduction(-:i)
+    #pragma acc loop reduction(-:i) vector worker
     for (int i = 0; i < 5; ++i)
       ;
     // OpenACC 2.6 sec. 2.5.12 line 774 mistypes "^" as "%", which is nonsense as a
     // reduction operator.
     // expected-error@+1 {{expected reduction operator}}
-    #pragma acc loop reduction(% :i)
+    #pragma acc loop reduction(% :i) gang vector worker
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{unknown reduction operator}}
@@ -593,66 +599,74 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{use of undeclared identifier 'bar'}}
-    #pragma acc loop reduction(foo:bar)
+    #pragma acc loop gang reduction(foo:bar)
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{unknown reduction operator}}
-    #pragma acc loop reduction(foo : a[3])
+    #pragma acc loop worker reduction(foo : a[3])
     for (int i = 0; i < 5; ++i)
       ;
 
     // expected-warning@+2 {{missing ':' after reduction operator - ignoring}}
     // expected-error@+1 {{expected expression}}
-    #pragma acc parallel reduction(*)
+    #pragma acc loop vector reduction(*)
     for (int i = 0; i < 5; ++i)
       ;
     // expected-warning@+2 {{missing ':' after reduction operator - ignoring}}
     // expected-error@+1 {{expected expression}}
-    #pragma acc parallel reduction(max)
+    #pragma acc loop gang reduction(max) worker
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc parallel reduction(*:) // expected-error {{expected expression}}
+    // expected-error@+1 {{expected expression}}
+    #pragma acc loop gang reduction(*:) vector
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc parallel reduction(min:) // expected-error {{expected expression}}
-    for (int i = 0; i < 5; ++i)
-      ;
-
-    #pragma acc loop private(jk i) // expected-error {{expected ',' or ')' in 'private' clause}}
-    for (int i = 0; i < 5; ++i)
-      ;
-    #pragma acc loop reduction(*:jk i) // expected-error {{expected ',' or ')' in 'reduction' clause}}
+    // expected-error@+1 {{expected expression}}
+    #pragma acc loop worker reduction(min:) vector
     for (int i = 0; i < 5; ++i)
       ;
 
-    #pragma acc loop private(foo ) // expected-error {{use of undeclared identifier 'foo'}}
+    // expected-error@+1 {{expected ',' or ')' in 'private' clause}}
+    #pragma acc loop worker private(jk i) gang vector
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop reduction(*: bar ) // expected-error {{use of undeclared identifier 'bar'}}
+    // expected-error@+1 {{expected ',' or ')' in 'reduction' clause}}
+    #pragma acc loop reduction(*:jk i)
     for (int i = 0; i < 5; ++i)
       ;
 
-    #pragma acc loop private(jk ,) // expected-error {{expected expression}}
+    // expected-error@+1 {{use of undeclared identifier 'foo'}}
+    #pragma acc loop private(foo ) gang
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop reduction(+:i, ) // expected-error {{expected expression}}
+    // expected-error@+1 {{use of undeclared identifier 'bar'}}
+    #pragma acc loop reduction(*: bar ) worker
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // expected-error@+1 {{expected expression}}
+    #pragma acc loop private(jk ,) vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{expected expression}}
+    #pragma acc loop worker reduction(+:i, ) gang
     for (int i = 0; i < 5; ++i)
       ;
 
     // expected-error@+2 {{expected variable name}}
     // expected-error@+1 {{expected variable name}}
-    #pragma acc loop private(a[9], a[0:1])
+    #pragma acc loop vector private(a[9], a[0:1]) gang
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+2 {{expected variable name}}
     // expected-error@+1 {{expected variable name}}
-    #pragma acc loop reduction(*:a[3:5], a[10])
+    #pragma acc loop vector reduction(*:a[3:5], a[10]) worker
     for (int i = 0; i < 5; ++i)
       ;
 
     // expected-error@+2 {{private variable cannot have incomplete type 'int []'}}
     // expected-error@+1 {{reduction variable cannot have incomplete type 'int []'}}
-    #pragma acc loop private(incomplete) reduction(|:incomplete)
+    #pragma acc loop worker private(incomplete) vector reduction(|:incomplete) gang
     for (int i = 0; i < 5; ++i)
       ;
 
@@ -663,8 +677,10 @@ void fn() {
     #pragma acc loop private(constI, constIDecl) reduction(+: constI, constIDecl)
     for (int i = 0; i < 5; ++i)
       ;
-
-    #pragma acc loop reduction(max:b,e,i,jk,f,d,p)
+  }
+  #pragma acc parallel
+  {
+    #pragma acc loop gang reduction(max:b,e,i,jk,f,d,p)
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+6 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
@@ -673,10 +689,13 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
     // expected-error@+2 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
     // expected-error@+1 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
-    #pragma acc loop reduction(max:fc,dc,a,s,u,sDecl)
+    #pragma acc loop worker reduction(max:fc,dc,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop reduction(min:b,e,i,jk,f,d,p)
+  }
+  #pragma acc parallel
+  {
+    #pragma acc loop vector reduction(min:b,e,i,jk,f,d,p)
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+6 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
@@ -685,10 +704,13 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
     // expected-error@+2 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
     // expected-error@+1 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
-    #pragma acc loop reduction(min:fc,dc,a,s,u,sDecl)
+    #pragma acc loop worker gang reduction(min:fc,dc,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop reduction(+:b,e,i,jk,f,d,fc,dc)
+  }
+  #pragma acc parallel
+  {
+    #pragma acc loop vector gang reduction(+:b,e,i,jk,f,d,fc,dc)
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+5 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
@@ -696,10 +718,13 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
     // expected-error@+2 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
     // expected-error@+1 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
-    #pragma acc loop reduction(+:p,a,s,u,sDecl)
+    #pragma acc loop vector worker reduction(+:p,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop reduction(*:b,e,i,jk,f,d,fc,dc)
+  }
+  #pragma acc parallel
+  {
+    #pragma acc loop vector gang reduction(*:b,e,i,jk,f,d,fc,dc) worker
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+5 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
@@ -710,7 +735,10 @@ void fn() {
     #pragma acc loop reduction(*:p,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop reduction(&&:b,e,i,jk,f,d,fc,dc)
+  }
+  #pragma acc parallel
+  {
+    #pragma acc loop reduction(&&:b,e,i,jk,f,d,fc,dc) gang
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+5 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
@@ -718,10 +746,13 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
     // expected-error@+2 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
     // expected-error@+1 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
-    #pragma acc loop reduction(&&:p,a,s,u,sDecl)
+    #pragma acc loop reduction(&&:p,a,s,u,sDecl) worker
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop reduction(||:b,e,i,jk,f,d,fc,dc)
+  }
+  #pragma acc parallel
+  {
+    #pragma acc loop reduction(||:b,e,i,jk,f,d,fc,dc) vector
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+5 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
@@ -729,10 +760,13 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
     // expected-error@+2 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
     // expected-error@+1 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
-    #pragma acc loop reduction(||:p,a,s,u,sDecl)
+    #pragma acc loop gang reduction(||:p,a,s,u,sDecl) worker
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop reduction(&:b,e,i,jk)
+  }
+  #pragma acc parallel
+  {
+    #pragma acc loop gang reduction(&:b,e,i,jk) vector
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+9 {{OpenACC reduction operator '&' argument must be of integer type}}
@@ -744,9 +778,12 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator '&' argument must be of integer type}}
     // expected-error@+2 {{OpenACC reduction operator '&' argument must be of integer type}}
     // expected-error@+1 {{OpenACC reduction operator '&' argument must be of integer type}}
-    #pragma acc loop reduction(&:f,d,fc,dc,p,a,s,u,sDecl)
+    #pragma acc loop vector worker reduction(&:f,d,fc,dc,p,a,s,u,sDecl) gang
     for (int i = 0; i < 5; ++i)
       ;
+  }
+  #pragma acc parallel
+  {
     #pragma acc loop reduction(|:b,e,i,jk)
     for (int i = 0; i < 5; ++i)
       ;
@@ -759,10 +796,13 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator '|' argument must be of integer type}}
     // expected-error@+2 {{OpenACC reduction operator '|' argument must be of integer type}}
     // expected-error@+1 {{OpenACC reduction operator '|' argument must be of integer type}}
-    #pragma acc loop reduction(|:f,d,fc,dc,p,a,s,u,sDecl)
+    #pragma acc loop gang reduction(|:f,d,fc,dc,p,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop reduction(^:b,e,i,jk)
+  }
+  #pragma acc parallel
+  {
+    #pragma acc loop worker reduction(^:b,e,i,jk)
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+9 {{OpenACC reduction operator '^' argument must be of integer type}}
@@ -774,27 +814,145 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator '^' argument must be of integer type}}
     // expected-error@+2 {{OpenACC reduction operator '^' argument must be of integer type}}
     // expected-error@+1 {{OpenACC reduction operator '^' argument must be of integer type}}
-    #pragma acc loop reduction(^:f,d,fc,dc,p,a,s,u,sDecl)
+    #pragma acc loop vector reduction(^:f,d,fc,dc,p,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
-
-    // expected-error@+6 {{variable can appear only once in OpenACC 'reduction' clause}}
-    // expected-note@+5 {{previously referenced here}}
-    // expected-error@+4 {{variable can appear only once in OpenACC 'reduction' clause}}
-    // expected-note@+3 {{previously referenced here}}
-    // expected-error@+2 {{variable can appear only once in OpenACC 'reduction' clause}}
-    // expected-note@+1 {{previously referenced here}}
-    #pragma acc loop reduction(max:i,i,jk,d) reduction(max:jk) reduction(*:d)
+  }
+  #pragma acc parallel
+  {
+    // expected-error@+6 {{redundant 'max' reduction for variable 'i'}}
+    // expected-note@+5 {{previous 'max' reduction here}}
+    // expected-error@+4 {{redundant 'max' reduction for variable 'jk'}}
+    // expected-note@+3 {{previous 'max' reduction here}}
+    // expected-error@+2 {{conflicting '*' reduction for variable 'd'}}
+    // expected-note@+1 {{previous 'max' reduction here}}
+    #pragma acc loop gang reduction(max:i,i,jk,d) worker reduction(max:jk) reduction(*:d)
     for (int i = 0; i < 5; ++i)
       ;
+  }
+  #pragma acc parallel reduction(+:jk)
+  {
+    #pragma acc loop gang reduction(+:jk)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+2 {{redundant '+' reduction for variable 'jk'}}
+    // expected-note@+1 {{previous '+' reduction here}}
+    #pragma acc loop gang reduction(+:jk) reduction(+:jk)
+    for (int j = 0; j < 5; ++j)
+      ;
+  }
+  // expected-note@+2 2 {{while applying gang reduction to 'parallel' directive here}}
+  // expected-note@+1 2 {{previous '+' reduction here}}
+  #pragma acc parallel reduction(+:f)
+  {
+    // expected-error@+1 {{conflicting '*' reduction for variable 'f'}}
+    #pragma acc loop gang reduction(*:f)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+3 {{redundant '*' reduction for variable 'f'}}
+    // expected-note@+2 {{previous '*' reduction here}}
+    // expected-error@+1 {{conflicting '*' reduction for variable 'f'}}
+    #pragma acc loop gang worker reduction(*:f,f)
+    for (int j = 0; j < 5; ++j)
+      ;
+  }
+  #pragma acc parallel
+  {
+    #pragma acc loop gang vector reduction(max:d)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+2 {{redundant 'max' reduction for variable 'd'}}
+    // expected-note@+1 {{previous 'max' reduction here}}
+    #pragma acc loop gang worker vector reduction(max:d,d)
+    for (int j = 0; j < 5; ++j)
+      ;
+  }
+  // expected-note@+1 {{while applying gang reduction to 'parallel' directive here}}
+  #pragma acc parallel
+  {
+    // expected-note@+1 {{previous 'max' reduction here}}
+    #pragma acc loop reduction(max:p) gang
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+1 {{conflicting 'min' reduction for variable 'p'}}
+    #pragma acc loop worker reduction(min:p) gang
+    for (int j = 0; j < 5; ++j)
+      ;
+  }
+  // expected-note@+1 {{while applying gang reduction to 'parallel' directive here}}
+  #pragma acc parallel
+  {
+    #pragma acc loop
+    for (int i0 = 0; i0 < 5; ++i0) {
+      #pragma acc loop seq
+      for (int i1 = 0; i1 < 5; ++i1) {
+        #pragma acc loop independent
+        for (int i2 = 0; i2 < 5; ++i2) {
+          #pragma acc loop auto
+          for (int i3 = 0; i3 < 5; ++i3) {
+            // expected-note@+1 {{previous '&' reduction here}}
+            #pragma acc loop vector reduction(&:b) gang
+            for (int j = 0; j < 5; ++j)
+              ;
+          }
+        }
+      }
+    }
+    #pragma acc loop seq
+    for (int i = 0; i < 5; ++i) {
+      // expected-error@+1 {{conflicting '|' reduction for variable 'b'}}
+      #pragma acc loop worker reduction(|:b) vector gang
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+  }
+  // expected-note@+2 2 {{while applying gang reduction to 'parallel' directive here}}
+  // expected-note@+1 {{previous '^' reduction here}}
+  #pragma acc parallel reduction(^:e)
+  {
+    #pragma acc loop
+    for (int i0 = 0; i0 < 5; ++i0) {
+      enum E e;
+      #pragma acc loop seq
+      for (int i1 = 0; i1 < 5; ++i1) {
+        #pragma acc loop independent
+        for (int i2 = 0; i2 < 5; ++i2) {
+          #pragma acc loop auto
+          for (int i3 = 0; i3 < 5; ++i3) {
+            double d, localOnly;
+            #pragma acc loop gang reduction(&&:e,d,localOnly)
+            for (int j = 0; j < 5; ++j)
+              ;
+          }
+        }
+      }
+    }
+    #pragma acc loop seq
+    for (int i = 0; i < 5; ++i) {
+      // expected-error@+2 {{conflicting '||' reduction for variable 'e'}}
+      // expected-note@+1 {{previous '||' reduction here}}
+      #pragma acc loop gang reduction(||:e,d)
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+    #pragma acc loop seq
+    for (int i = 0; i < 5; ++i) {
+      // expected-error@+1 {{conflicting '+' reduction for variable 'd'}}
+      #pragma acc loop gang reduction(+:d)
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+  }
+  #pragma acc parallel
+  {
     // expected-error@+2 {{private variable cannot be reduction}}
     // expected-note@+1 {{defined as private}}
-    #pragma acc loop private(i) reduction(&:i)
+    #pragma acc loop private(i) gang reduction(&:i) vector
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+2 {{reduction variable cannot be private}}
     // expected-note@+1 {{defined as reduction}}
-    #pragma acc loop reduction(&&:i) private(i)
+    #pragma acc loop gang reduction(&&:i) worker private(i) vector
     for (int i = 0; i < 5; ++i)
       ;
 
@@ -803,24 +961,11 @@ void fn() {
     for (i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{OpenACC loop control variable cannot have reduction}}
-    #pragma acc loop reduction(^:jk, i)
+    #pragma acc loop reduction(^:jk, i) gang
     for (i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{OpenACC loop control variable cannot have reduction}}
-    #pragma acc loop reduction(^:jk) reduction(+:i)
-    for (i = 0; i < 5; ++i)
-      ;
-
-    // expected-error@+1 {{OpenACC reductions are not yet supported on partitioned loops}}
-    #pragma acc loop gang reduction(+:jk)
-    for (i = 0; i < 5; ++i)
-      ;
-    // expected-error@+1 {{OpenACC reductions are not yet supported on partitioned loops}}
-    #pragma acc loop worker reduction(+:jk)
-    for (i = 0; i < 5; ++i)
-      ;
-    // expected-error@+1 {{OpenACC reductions are not yet supported on partitioned loops}}
-    #pragma acc loop vector reduction(+:jk)
+    #pragma acc loop reduction(^:jk) reduction(+:i) worker
     for (i = 0; i < 5; ++i)
       ;
   }

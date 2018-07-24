@@ -9394,7 +9394,8 @@ public:
   ACCClause *ActOnOpenACCReductionClause(
       ArrayRef<Expr *> VarList, SourceLocation StartLoc,
       SourceLocation LParenLoc, SourceLocation ColonLoc, SourceLocation EndLoc,
-      const DeclarationNameInfo &ReductionId);
+      const DeclarationNameInfo &ReductionId,
+      bool CopiedGangReduction = false);
   /// Called on well-formed 'num_gangs' clause.
   ACCClause *ActOnOpenACCNumGangsClause(Expr *NumGangs,
                                         SourceLocation StartLoc,
