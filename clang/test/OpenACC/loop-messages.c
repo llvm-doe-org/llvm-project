@@ -30,7 +30,21 @@
 int incomplete[];
 
 void fn() {
-  int i, jk, a[2];
+  _Bool b;
+  enum { E1, E2 } e;
+  int i, jk, a[2], *p; // expected-note 9 {{'a' defined here}}
+                       // expected-note@-1 7 {{'p' defined here}}
+  float f; // expected-note 3 {{'f' defined here}}
+  double d; // expected-note 3 {{'d' defined here}}
+  float _Complex fc; // expected-note 5 {{'fc' defined here}}
+  double _Complex dc; // expected-note 5 {{'dc' defined here}}
+  const int constI = 5; // expected-note {{variable 'constI' declared const here}}
+                        // expected-note@-1 {{'constI' defined here}}
+  const extern int constIDecl; // expected-note {{variable 'constIDecl' declared const here}}
+                               // expected-note@-1 {{'constIDecl' declared here}}
+  struct S { int i; } s; // expected-note 9 {{'s' defined here}}
+  union U { int i; } u; // expected-note 9 {{'u' defined here}}
+  extern struct S sDecl; // expected-note 9 {{'sDecl' declared here}}
   #pragma acc parallel
   {
     // invalid clauses
@@ -438,35 +452,320 @@ void fn() {
       }
     }
 
-    // private clause
+    // private and reduction clauses
+
     #pragma acc loop private // expected-error {{expected '(' after 'private'}}
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop private( ) // expected-error {{expected expression}}
+    #pragma acc loop reduction // expected-error {{expected '(' after 'reduction'}}
     for (int i = 0; i < 5; ++i)
       ;
+
+    // expected-error@+3 {{expected expression}}
+    // expected-error@+2 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc loop private(
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+4 {{expected reduction operator}}
+    // expected-warning@+3 {{missing ':' after reduction operator - ignoring}}
+    // expected-error@+2 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc loop reduction(
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // expected-error@+1 {{expected expression}}
+    #pragma acc loop private()
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expected reduction operator}}
+    // expected-warning@+1 {{missing ':' after reduction operator - ignoring}}
+    #pragma acc loop reduction( )
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // expected-error@+1 {{expected reduction operator}}
+    #pragma acc loop reduction( : )
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{expected reduction operator}}
+    #pragma acc loop reduction(: i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expected reduction operator}}
+    // expected-error@+1 {{use of undeclared identifier 'foo'}}
+    #pragma acc loop reduction(:foo )
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // expected-error@+2 {{expected reduction operator}}
+    // expected-warning@+1 {{missing ':' after reduction operator - ignoring}}
+    #pragma acc loop reduction(-)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-warning@+2 {{missing ':' after reduction operator - ignoring}}
+    // expected-error@+1 {{expected expression}}
+    #pragma acc loop reduction(i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-warning@+2 {{missing ':' after reduction operator - ignoring}}
+    // expected-error@+1 {{expected expression}}
+    #pragma acc loop reduction(foo)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{expected reduction operator}}
+    #pragma acc loop reduction(-:)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{expected expression}}
+    #pragma acc loop reduction(foo:)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{expected reduction operator}}
+    #pragma acc loop reduction(-:i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // OpenACC 2.6 sec. 2.5.12 line 774 mistypes "^" as "%", which is nonsense as a
+    // reduction operator.
+    // expected-error@+1 {{expected reduction operator}}
+    #pragma acc loop reduction(% :i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{unknown reduction operator}}
+    #pragma acc loop reduction(foo:i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{use of undeclared identifier 'bar'}}
+    #pragma acc loop reduction(foo:bar)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{unknown reduction operator}}
+    #pragma acc loop reduction(foo : a[3])
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // expected-warning@+2 {{missing ':' after reduction operator - ignoring}}
+    // expected-error@+1 {{expected expression}}
+    #pragma acc parallel reduction(*)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-warning@+2 {{missing ':' after reduction operator - ignoring}}
+    // expected-error@+1 {{expected expression}}
+    #pragma acc parallel reduction(max)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc parallel reduction(*:) // expected-error {{expected expression}}
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc parallel reduction(min:) // expected-error {{expected expression}}
+    for (int i = 0; i < 5; ++i)
+      ;
+
     #pragma acc loop private(jk i) // expected-error {{expected ',' or ')' in 'private' clause}}
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop private(jk, ) // expected-error {{expected expression}}
+    #pragma acc loop reduction(*:jk i) // expected-error {{expected ',' or ')' in 'reduction' clause}}
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop private( f) // expected-error {{use of undeclared identifier 'f'}}
+
+    #pragma acc loop private(foo ) // expected-error {{use of undeclared identifier 'foo'}}
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop private( f) // expected-error {{use of undeclared identifier 'f'}}
-    for (int f = 0; f < 5; ++f)
-      ;
-    #pragma acc loop private(a[3:5], a[10])
-      // expected-error@-1 {{expected variable name}}
-      // expected-error@-2 {{expected variable name}}
+    #pragma acc loop reduction(*: bar ) // expected-error {{use of undeclared identifier 'bar'}}
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop private(incomplete) // expected-error {{private variable cannot have incomplete type 'int []'}}
+
+    #pragma acc loop private(jk ,) // expected-error {{expected expression}}
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop private(j) // expected-error {{use of undeclared identifier 'j'}}
-    for (int j = 0; j < 5; ++j)
+    #pragma acc loop reduction(+:i, ) // expected-error {{expected expression}}
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // expected-error@+2 {{expected variable name}}
+    // expected-error@+1 {{expected variable name}}
+    #pragma acc loop private(a[9], a[0:1])
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expected variable name}}
+    // expected-error@+1 {{expected variable name}}
+    #pragma acc loop reduction(*:a[3:5], a[10])
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // expected-error@+2 {{private variable cannot have incomplete type 'int []'}}
+    // expected-error@+1 {{reduction variable cannot have incomplete type 'int []'}}
+    #pragma acc loop private(incomplete) reduction(|:incomplete)
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // expected-error@+4 {{const variable cannot be private because initialization is impossible}}
+    // expected-error@+3 {{const variable cannot be private because initialization is impossible}}
+    // expected-error@+2 {{reduction variable cannot be const}}
+    // expected-error@+1 {{reduction variable cannot be const}}
+    #pragma acc loop private(constI, constIDecl) reduction(+: constI, constIDecl)
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    #pragma acc loop reduction(max:b,e,i,jk,f,d,p)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+6 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
+    // expected-error@+5 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
+    // expected-error@+4 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
+    // expected-error@+3 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
+    // expected-error@+2 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
+    // expected-error@+1 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
+    #pragma acc loop reduction(max:fc,dc,a,s,u,sDecl)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc loop reduction(min:b,e,i,jk,f,d,p)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+6 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
+    // expected-error@+5 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
+    // expected-error@+4 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
+    // expected-error@+3 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
+    // expected-error@+2 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
+    // expected-error@+1 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
+    #pragma acc loop reduction(min:fc,dc,a,s,u,sDecl)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc loop reduction(+:b,e,i,jk,f,d,fc,dc)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+5 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
+    // expected-error@+4 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
+    // expected-error@+3 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
+    // expected-error@+2 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
+    // expected-error@+1 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
+    #pragma acc loop reduction(+:p,a,s,u,sDecl)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc loop reduction(*:b,e,i,jk,f,d,fc,dc)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+5 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
+    // expected-error@+4 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
+    // expected-error@+3 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
+    // expected-error@+2 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
+    // expected-error@+1 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
+    #pragma acc loop reduction(*:p,a,s,u,sDecl)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc loop reduction(&&:b,e,i,jk,f,d,fc,dc)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+5 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
+    // expected-error@+4 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
+    // expected-error@+3 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
+    // expected-error@+2 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
+    // expected-error@+1 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
+    #pragma acc loop reduction(&&:p,a,s,u,sDecl)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc loop reduction(||:b,e,i,jk,f,d,fc,dc)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+5 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
+    // expected-error@+4 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
+    // expected-error@+3 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
+    // expected-error@+2 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
+    // expected-error@+1 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
+    #pragma acc loop reduction(||:p,a,s,u,sDecl)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc loop reduction(&:b,e,i,jk)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+9 {{OpenACC reduction operator '&' argument must be of integer type}}
+    // expected-error@+8 {{OpenACC reduction operator '&' argument must be of integer type}}
+    // expected-error@+7 {{OpenACC reduction operator '&' argument must be of integer type}}
+    // expected-error@+6 {{OpenACC reduction operator '&' argument must be of integer type}}
+    // expected-error@+5 {{OpenACC reduction operator '&' argument must be of integer type}}
+    // expected-error@+4 {{OpenACC reduction operator '&' argument must be of integer type}}
+    // expected-error@+3 {{OpenACC reduction operator '&' argument must be of integer type}}
+    // expected-error@+2 {{OpenACC reduction operator '&' argument must be of integer type}}
+    // expected-error@+1 {{OpenACC reduction operator '&' argument must be of integer type}}
+    #pragma acc loop reduction(&:f,d,fc,dc,p,a,s,u,sDecl)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc loop reduction(|:b,e,i,jk)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+9 {{OpenACC reduction operator '|' argument must be of integer type}}
+    // expected-error@+8 {{OpenACC reduction operator '|' argument must be of integer type}}
+    // expected-error@+7 {{OpenACC reduction operator '|' argument must be of integer type}}
+    // expected-error@+6 {{OpenACC reduction operator '|' argument must be of integer type}}
+    // expected-error@+5 {{OpenACC reduction operator '|' argument must be of integer type}}
+    // expected-error@+4 {{OpenACC reduction operator '|' argument must be of integer type}}
+    // expected-error@+3 {{OpenACC reduction operator '|' argument must be of integer type}}
+    // expected-error@+2 {{OpenACC reduction operator '|' argument must be of integer type}}
+    // expected-error@+1 {{OpenACC reduction operator '|' argument must be of integer type}}
+    #pragma acc loop reduction(|:f,d,fc,dc,p,a,s,u,sDecl)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc loop reduction(^:b,e,i,jk)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+9 {{OpenACC reduction operator '^' argument must be of integer type}}
+    // expected-error@+8 {{OpenACC reduction operator '^' argument must be of integer type}}
+    // expected-error@+7 {{OpenACC reduction operator '^' argument must be of integer type}}
+    // expected-error@+6 {{OpenACC reduction operator '^' argument must be of integer type}}
+    // expected-error@+5 {{OpenACC reduction operator '^' argument must be of integer type}}
+    // expected-error@+4 {{OpenACC reduction operator '^' argument must be of integer type}}
+    // expected-error@+3 {{OpenACC reduction operator '^' argument must be of integer type}}
+    // expected-error@+2 {{OpenACC reduction operator '^' argument must be of integer type}}
+    // expected-error@+1 {{OpenACC reduction operator '^' argument must be of integer type}}
+    #pragma acc loop reduction(^:f,d,fc,dc,p,a,s,u,sDecl)
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // expected-error@+6 {{variable can appear only once in OpenACC 'reduction' clause}}
+    // expected-note@+5 {{previously referenced here}}
+    // expected-error@+4 {{variable can appear only once in OpenACC 'reduction' clause}}
+    // expected-note@+3 {{previously referenced here}}
+    // expected-error@+2 {{variable can appear only once in OpenACC 'reduction' clause}}
+    // expected-note@+1 {{previously referenced here}}
+    #pragma acc loop reduction(max:i,i,jk,d) reduction(max:jk) reduction(*:d)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{private variable cannot be reduction}}
+    // expected-note@+1 {{defined as private}}
+    #pragma acc loop private(i) reduction(&:i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{reduction variable cannot be private}}
+    // expected-note@+1 {{defined as reduction}}
+    #pragma acc loop reduction(&&:i) private(i)
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // expected-error@+1 {{OpenACC loop control variable cannot have reduction}}
+    #pragma acc loop reduction(^:i)
+    for (i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{OpenACC loop control variable cannot have reduction}}
+    #pragma acc loop reduction(^:jk, i)
+    for (i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{OpenACC loop control variable cannot have reduction}}
+    #pragma acc loop reduction(^:jk) reduction(+:i)
+    for (i = 0; i < 5; ++i)
+      ;
+
+    // expected-error@+1 {{OpenACC reductions are not yet supported on partitioned loops}}
+    #pragma acc loop gang reduction(+:jk)
+    for (i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{OpenACC reductions are not yet supported on partitioned loops}}
+    #pragma acc loop worker reduction(+:jk)
+    for (i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{OpenACC reductions are not yet supported on partitioned loops}}
+    #pragma acc loop vector reduction(+:jk)
+    for (i = 0; i < 5; ++i)
       ;
   }
   #pragma acc loop // expected-error {{OpenACC loop outside of OpenACC parallel is not yet supported}}

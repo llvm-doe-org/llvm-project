@@ -176,10 +176,6 @@ public:
   /// Get the canonical declaration for the loop control variable that is
   /// assigned but not declared in the init of the for loop associated with the
   /// current directive, or return nullptr if none.
-  ///
-  /// Must be called only after the point where \c setLoopPartitioning would be
-  /// called, which is after explicit clauses for the current directive have
-  /// been parsed.
   VarDecl *getLoopControlVariable() const {
     assert(!isStackEmpty() && "Data-sharing attributes stack is empty");
     return Stack.back().LCV;
@@ -190,6 +186,10 @@ public:
     Stack.back().LoopDirectiveKind = Kind;
   }
   /// Get the current directive's loop partitioning kind.
+  ///
+  /// Must be called only after the point where \c setLoopPartitioning would be
+  /// called, which is after explicit clauses for the current directive have
+  /// been parsed.
   PartitioningKind getLoopPartitioning() const {
     assert(!isStackEmpty() && "Data-sharing attributes stack is empty");
     return Stack.back().LoopDirectiveKind;
@@ -466,6 +466,7 @@ bool Sema::ActOnOpenACCRegionStart(
   bool ErrorFound = false;
   if (DKind == ACCD_loop) {
     bool HasSeqOrAuto = false;
+    bool HasReduction = false;
     PartitioningKind LoopKind;
     for (ACCClause *C : Clauses) {
       OpenACCClauseKind CKind = C->getClauseKind();
@@ -479,6 +480,8 @@ bool Sema::ActOnOpenACCRegionStart(
         LoopKind.setWorker();
       else if (CKind == ACCC_vector)
         LoopKind.setVector();
+      else if (CKind == ACCC_reduction)
+        HasReduction = true;
     }
     assert((!HasSeqOrAuto || !LoopKind.hasExplicitIndependent()) &&
            "Expected parser to reject combinations of seq, independent, and"
@@ -527,6 +530,14 @@ bool Sema::ActOnOpenACCRegionStart(
       LoopKind.setImplicitIndependent();
     if (!LoopKind.hasIndependent())
       LoopKind = PartitioningKind();
+    // TODO: Remove this, HasReduction variable, and
+    // diag::err_acc_reduction_on_partitioned_loop when reductions are
+    // implemented for partitioned loops.
+    if (HasReduction &&
+        (LoopKind.hasGang() || LoopKind.hasWorker() || LoopKind.hasVector())) {
+      Diag(StartLoc, diag::err_acc_reduction_on_partitioned_loop);
+      ErrorFound = true;
+    }
     DSAStack->setLoopPartitioning(LoopKind);
   }
   return ErrorFound;
@@ -661,6 +672,21 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
     return StmtError();
   }
   assert(For->getBody());
+
+  // Complain if we have an acc loop control variable.
+  for (ACCClause *C : Clauses) {
+    if (ACCReductionClause *RC = dyn_cast_or_null<ACCReductionClause>(C)) {
+      for (Expr *VR : RC->varlists()) {
+        VarDecl *VD = cast<VarDecl>(cast<DeclRefExpr>(VR)->getDecl())
+                      ->getCanonicalDecl();
+        if (VD == DSAStack->getLoopControlVariable()) {
+           Diag(VR->getLocEnd(), diag::err_acc_reduction_on_loop_control_var)
+               << VR->getSourceRange();
+           return StmtError();
+        }
+      }
+    }
+  }
 
   // FIXME: Much more validation of the for statement should be performed.  To
   // save implementation time, for now we just depend on the OpenMP
@@ -976,7 +1002,7 @@ static bool actOnACCReductionKindClause(
     assert(II && "expected identifier for reduction operator");
     if (!II->isStr("max") && !II->isStr("min")) {
       S.Diag(EndLoc, diag::err_acc_unknown_reduction_operator);
-      return false;
+      return true;
     }
     RedOpType = RedOpRealOrPointer;
     break;

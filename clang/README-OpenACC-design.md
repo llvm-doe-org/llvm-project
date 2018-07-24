@@ -411,13 +411,15 @@ loop analysis and thus with only a safe mapping to OpenMP.
               loop control variable is imp `shared`.
             * For any other variable referenced within the loop but
               declared outside the loop, the variable is imp `shared`.
+            * exp `reduction` is not permitted on a loop control
+              variable.
         * Data sharing mapping:
             * pre `private` and imp `shared` are discarded during
               translation.
             * exp `private` -> wrap associated loop in a compound
               statement and declare an uninitialized local copy of the
               variable.
-            * exp `reduction` is mapped the same as exp `private`.
+            * exp `reduction` is discarded during translation.
         * Notes:
             * This is gang-redundant, worker-single, vector-single
               mode.  Thus, as far as partitioning is concerned, a
@@ -432,9 +434,42 @@ loop analysis and thus with only a safe mapping to OpenMP.
             * exp `private` just needs to be local to the one thread
               executing the loop, and so creating a new local variable
               is sufficient.
-            * exp `reduction` implies `private` but doesn't require
-              any reduction because there's only one thread, so it can
-              implemented exactly the same as exp `private`.
+            * There are a few considerations related to the decision
+              to drop the `reduction` clause:
+                * `reduction` implies a private copy of the variable
+                  per thread, but in this case there's only one thread
+                  involved in the reduction.  Thus, the only reason to
+                  create a private copy would be to avoid races with
+                  other threads for other redundant gangs or for
+                  partitioned parent loops.  However, the final value
+                  must be copied back to the original at the end of
+                  this loop, so there's a race anyway, so privacy
+                  doesn't help.
+                * If the specified `reduction` operator is not the
+                  same as the operator that the loop body effectively
+                  performs on the variable, then the result is
+                  affected by dropping the clause.  However, in the
+                  case of non-sequential loops for which we don't drop
+                  the clause, such a discrepancy means that the way in
+                  which the compiler or runtime choose to partition
+                  the loop also affects the result.  Thus, in general,
+                  the app developer shouldn't create such `reduction`
+                  discrepancies, even though the OpenACC 2.6 spec
+                  doesn't appear to say so.  For example, assume we
+                  have `x=2` initially, `reduction(*:x)`, loop has 2
+                  iterations, and loop body performs `++x`.  The final
+                  `x` is 4, 6, or 8 when dropping the reduction,
+                  partitioning with 1 thread (sequential execution),
+                  or partitioning with 2 threads.
+                * If we have such a `reduction` discrepancy, the
+                  result value from my experiments with pgcc 18.4-0
+                  and gcc 7.2.0 seem to indicate that they drop the
+                  `reduction` clause in the case of sequential loops
+                  except pgcc when targeting multicore.  We choose to
+                  go with the majority here and just drop it.
+            * The decision not to permit `reduction` on a loop control
+              variable is for consistency with the non-sequential loop
+              case, for which a `reduction` isn't discarded.
             * We considered mapping `acc loop seq` to various OpenMP
               directives so that `private` and `reduction` clauses
               could simply be translated to OpenMP clauses.  To
@@ -574,6 +609,25 @@ loop analysis and thus with only a safe mapping to OpenMP.
                           writing) and gcc 7.2.0 complain when the
                           variable is private to the `acc parallel`
                           (that is, `omp target teams`).
+                * exp `reduction` is not permitted on a loop control
+                  variable.  Notes:
+                    * We have not identified anything in the OpenACC
+                      2.6 specification that requires this constraint.
+                      However, it's hard to imagine what the effect of
+                      a reduction on a loop control variable should
+                      be.  For example, given one thread per iteration
+                      and a `+` reduction operator, the local copy
+                      should always have initial value 1 when treated
+                      as a reduction variable, but its value should
+                      vary across iterations when treated as a loop
+                      control variable.
+                    * Clang's OpenMP implementation also enforces this
+                      constraint.  That makes sense by the OpenMP spec
+                      because an OpenMP `reduction` is a data sharing
+                      attribute and a loop control variable has a
+                      different predetermined data sharing attribute.
+                    * For OpenACC, gcc 7.2.0 also enforces this
+                      constraint, but pgcc 18.4-0 does not enforce it.
             * Data sharing mapping:
                 * if exp `worker` or not `gang`, then pre|imp `shared`
                   -> exp `shared`

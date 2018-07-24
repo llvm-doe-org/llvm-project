@@ -74,6 +74,14 @@ We have implemented the following features:
             * implicit `private` otherwise
         * implicit `shared` for other referenced variables
         * `private` clause
+        * `reduction` clause:
+            * Discarded in the case of sequential loops.  This
+              decision should not impact behavior as long as the
+              operator that the loop body effectively performs on the
+              variable is the same as the `reduction` operator.
+            * See `reduction` clause for `parallel` directive for
+              general details about operand types and limitations.
+            * Not yet implemented for partitioned loops.
     * detection of `break` statement for the associated loop:
         * compile error if implicit/explicit `independent`
         * no error if `seq` or `auto`

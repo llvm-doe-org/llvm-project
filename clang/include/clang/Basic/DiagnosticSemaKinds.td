@@ -9053,6 +9053,10 @@ def err_acc_reduction_not_scalar_type : Error<
   "OpenACC reduction operator '%0' argument must be of scalar type">;
 def err_acc_reduction_not_real_or_pointer_type : Error<
   "OpenACC reduction operator '%0' argument must be of real or pointer type">;
+def err_acc_reduction_on_loop_control_var : Error<
+  "OpenACC loop control variable cannot have reduction">;
+def err_acc_reduction_on_partitioned_loop : Error<
+  "OpenACC reductions are not yet supported on partitioned loops">;
 } // end of OpenACC category
 
 let CategoryName = "Related Result Type Issue" in {

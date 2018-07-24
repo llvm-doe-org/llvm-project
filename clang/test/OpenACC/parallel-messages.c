@@ -125,6 +125,9 @@ int main() {
 #pragma acc parallel reduction(foo:bar)
   // expected-error@-1 {{use of undeclared identifier 'bar'}}
   ;
+#pragma acc parallel reduction(foo:a[5])
+  // expected-error@-1 {{unknown reduction operator}}
+  ;
 
 #pragma acc parallel reduction(+)
   // expected-warning@-1 {{missing ':' after reduction operator - ignoring}}
