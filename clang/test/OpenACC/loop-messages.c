@@ -462,7 +462,7 @@ void fn() {
       // expected-error@-2 {{expected variable name}}
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop private(incomplete) // expected-error {{a private variable with incomplete type 'int []'}}
+    #pragma acc loop private(incomplete) // expected-error {{private variable cannot have incomplete type 'int []'}}
     for (int i = 0; i < 5; ++i)
       ;
     #pragma acc loop private(j) // expected-error {{use of undeclared identifier 'j'}}

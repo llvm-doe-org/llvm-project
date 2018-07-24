@@ -9009,9 +9009,9 @@ def warn_omp_non_trivial_type_mapped : Warning<
 let CategoryName = "OpenACC Issue" in {
 // OpenACC support.
 def err_acc_private_incomplete_type : Error<
-  "a private variable with incomplete type %0">;
+  "private variable cannot have incomplete type %0">;
 def err_acc_firstprivate_incomplete_type : Error<
-  "a firstprivate variable with incomplete type %0">;
+  "firstprivate variable cannot have incomplete type %0">;
 def err_acc_expected_var_name_expr : Error<
   "expected variable name">;
 def err_acc_wrong_dsa : Error<
@@ -9042,9 +9042,9 @@ def note_acc_referenced : Note<
 def err_acc_unknown_reduction_operator : Error<
   "unknown reduction operator">;
 def err_acc_reduction_incomplete_type : Error<
-  "a reduction list item with incomplete type %0">;
+  "reduction variable cannot have incomplete type %0">;
 def err_acc_const_reduction_list_item : Error<
-  "const-qualified list item cannot be reduction">;
+  "reduction variable cannot be const">;
 def err_acc_reduction_not_integer_type : Error<
   "OpenACC reduction operator '%0' argument must be of integer type">;
 def err_acc_reduction_not_arithmetic_type : Error<

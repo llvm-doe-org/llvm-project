@@ -174,9 +174,9 @@ int main() {
   ;
 
 #pragma acc parallel firstprivate(incomplete) private(incomplete) reduction(&:incomplete)
-  // expected-error@-1 {{a firstprivate variable with incomplete type 'int []'}}
-  // expected-error@-2 {{a private variable with incomplete type 'int []'}}
-  // expected-error@-3 {{a reduction list item with incomplete type 'int []'}}
+  // expected-error@-1 {{firstprivate variable cannot have incomplete type 'int []'}}
+  // expected-error@-2 {{private variable cannot have incomplete type 'int []'}}
+  // expected-error@-3 {{reduction variable cannot have incomplete type 'int []'}}
   ;
 
 #pragma acc parallel firstprivate(constI, constIDecl)
@@ -184,8 +184,8 @@ int main() {
 #pragma acc parallel private(constI, constIDecl) reduction(max: constI, constIDecl)
   // expected-error@-1 {{const variable cannot be private because initialization is impossible}}
   // expected-error@-2 {{const variable cannot be private because initialization is impossible}}
-  // expected-error@-3 {{const-qualified list item cannot be reduction}}
-  // expected-error@-4 {{const-qualified list item cannot be reduction}}
+  // expected-error@-3 {{reduction variable cannot be const}}
+  // expected-error@-4 {{reduction variable cannot be const}}
   ;
 
 #pragma acc parallel reduction(max:b,e,i,jk,f,d,p)
