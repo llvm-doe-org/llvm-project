@@ -191,7 +191,7 @@ void fn() {
     // nesting of acc loops: 2 levels
     #pragma acc loop gang // expected-note 4 {{parent '#pragma acc loop' is here}}
     for (int i = 0; i < 5; ++i) {
-      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
       #pragma acc loop worker
@@ -200,160 +200,160 @@ void fn() {
       #pragma acc loop vector
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop gang worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop gang worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop vector gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop vector gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
       #pragma acc loop worker vector
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop gang worker vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop gang worker vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
     }
     #pragma acc loop worker // expected-note 6 {{parent '#pragma acc loop' is here}}
     for (int i = 0; i < 5; ++i) {
-      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
       #pragma acc loop vector
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop worker gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop worker gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop gang vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop gang vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop vector worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop vector worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop gang vector worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop gang vector worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
     }
     #pragma acc loop vector // expected-note 7 {{parent '#pragma acc loop' is here}}
     for (int i = 0; i < 5; ++i) {
-      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+      #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop gang worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+      #pragma acc loop gang worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop vector gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+      #pragma acc loop vector gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop worker vector // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+      #pragma acc loop worker vector // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop worker gang vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+      #pragma acc loop worker gang vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
       for (int j = 0; j < 5; ++j)
         ;
     }
     #pragma acc loop gang worker // expected-note 6 {{parent '#pragma acc loop' is here}}
     for (int i = 0; i < 5; ++i) {
-      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
       #pragma acc loop vector
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop worker gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop worker gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop gang vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop gang vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop vector worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop vector worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop worker vector gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop worker vector gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
     }
     #pragma acc loop gang vector // expected-note 7 {{parent '#pragma acc loop' is here}}
     for (int i = 0; i < 5; ++i) {
-      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+      #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop gang worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop gang worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop vector gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop vector gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop worker vector // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+      #pragma acc loop worker vector // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop vector gang worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop vector gang worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
     }
     #pragma acc loop worker vector // expected-note 7 {{parent '#pragma acc loop' is here}}
     for (int i = 0; i < 5; ++i) {
-      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+      #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop worker gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop worker gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop gang vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop gang vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop vector worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop vector worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop vector worker gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop vector worker gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
     }
     #pragma acc loop gang worker vector // expected-note 7 {{parent '#pragma acc loop' is here}}
     for (int i = 0; i < 5; ++i) {
-      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+      #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop gang worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop gang worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop vector gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop vector gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop worker vector // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+      #pragma acc loop worker vector // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop gang worker vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'gang' clause}}
+      #pragma acc loop gang worker vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
       for (int j = 0; j < 5; ++j)
         ;
     }
@@ -363,10 +363,10 @@ void fn() {
     for (int i = 0; i < 5; ++i) {
       #pragma acc loop worker // expected-note 2 {{parent '#pragma acc loop' is here}}
       for (int j = 0; j < 5; ++j) {
-        #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+        #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
         for (int k = 0; k < 5; ++k)
           ;
-        #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+        #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
         for (int k = 0; k < 5; ++k)
           ;
         #pragma acc loop vector
@@ -375,13 +375,13 @@ void fn() {
       }
       #pragma acc loop vector // expected-note 3 {{parent '#pragma acc loop' is here}}
       for (int j = 0; j < 5; ++j) {
-        #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+        #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
         for (int k = 0; k < 5; ++k)
           ;
-        #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+        #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
         for (int k = 0; k < 5; ++k)
           ;
-        #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+        #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
         for (int k = 0; k < 5; ++k)
           ;
       }
@@ -390,13 +390,13 @@ void fn() {
     for (int i = 0; i < 5; ++i) {
       #pragma acc loop vector // expected-note 3 {{parent '#pragma acc loop' is here}}
       for (int j = 0; j < 5; ++j) {
-        #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+        #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
         for (int k = 0; k < 5; ++k)
           ;
-        #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+        #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
         for (int k = 0; k < 5; ++k)
           ;
-        #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+        #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
         for (int k = 0; k < 5; ++k)
           ;
       }
@@ -405,13 +405,13 @@ void fn() {
     for (int i = 0; i < 5; ++i) {
       #pragma acc loop vector // expected-note 3 {{parent '#pragma acc loop' is here}}
       for (int j = 0; j < 5; ++j) {
-        #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+        #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
         for (int k = 0; k < 5; ++k)
           ;
-        #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+        #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
         for (int k = 0; k < 5; ++k)
           ;
-        #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+        #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
         for (int k = 0; k < 5; ++k)
           ;
       }
@@ -420,13 +420,13 @@ void fn() {
     for (int i = 0; i < 5; ++i) {
       #pragma acc loop worker vector // expected-note 3 {{parent '#pragma acc loop' is here}}
       for (int j = 0; j < 5; ++j) {
-        #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+        #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
         for (int k = 0; k < 5; ++k)
           ;
-        #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'worker' clause}}
+        #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
         for (int k = 0; k < 5; ++k)
           ;
-        #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+        #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
         for (int k = 0; k < 5; ++k)
           ;
       }
@@ -439,15 +439,71 @@ void fn() {
       for (int j = 0; j < 5; ++j) {
         #pragma acc loop vector // expected-note 3 {{parent '#pragma acc loop' is here}}
         for (int k = 0; k < 5; ++k) {
-          #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+          #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
           for (int l = 0; l < 5; ++l)
             ;
-          #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+          #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
           for (int l = 0; l < 5; ++l)
             ;
-          #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be directly nested within '#pragma acc loop' with 'vector' clause}}
+          #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
           for (int l = 0; l < 5; ++l)
             ;
+        }
+      }
+    }
+
+    // nesting of acc loops: other loops in between
+    #pragma acc loop gang
+    for (int i = 0; i < 5; ++i) {
+      #pragma acc loop
+      for (int i1 = 0; i1 < 5; ++i1) {
+        #pragma acc loop worker
+        for (int j = 0; j < 5; ++j) {
+          #pragma acc loop independent
+          for (int j1 = 0; j1 < 5; ++j1) {
+            #pragma acc loop auto
+            for (int j2 = 0; j2 < 5; ++j2) {
+              #pragma acc loop seq
+              for (int j3 = 0; j3 < 5; ++j3) {
+                #pragma acc loop vector
+                for (int k = 0; k < 5; ++k)
+                  ;
+              }
+            }
+          }
+        }
+      }
+    }
+    #pragma acc loop worker // expected-note 2 {{parent '#pragma acc loop' is here}}
+    for (int i = 0; i < 5; ++i) {
+      #pragma acc loop
+      for (int i1 = 0; i1 < 5; ++i1) {
+        #pragma acc loop independent
+        for (int i2 = 0; i2 < 5; ++i2) {
+          #pragma acc loop auto
+          for (int i3 = 0; i3 < 5; ++i3) {
+            #pragma acc loop seq
+            for (int i4 = 0; i4 < 5; ++i4) {
+              #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+                for (int j = 0; j < 5; ++j)
+                  ;
+            }
+          }
+        }
+      }
+      #pragma acc loop
+      for (int i1 = 0; i1 < 5; ++i1) {
+        #pragma acc loop independent
+        for (int i2 = 0; i2 < 5; ++i2) {
+          #pragma acc loop auto
+          for (int i3 = 0; i3 < 5; ++i3) {
+            #pragma acc loop seq
+            for (int i4 = 0; i4 < 5; ++i4) {
+              #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+                for (int j = 0; j < 5; ++j)
+                  ;
+            }
+          }
         }
       }
     }

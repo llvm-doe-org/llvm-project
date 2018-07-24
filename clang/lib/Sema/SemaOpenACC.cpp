@@ -194,12 +194,22 @@ public:
     assert(!isStackEmpty() && "Data-sharing attributes stack is empty");
     return Stack.back().LoopDirectiveKind;
   }
-  /// Get the parent directive's loop partitioning kind and location.
+  /// Iterate through the ancestor directives until finding either (1) an acc
+  /// loop directive with gang, worker, or vector partitioning, (2) an acc
+  /// parallel directive, or (3) or the start of the stack.  In case 1, return
+  /// that directive's loop partitioning kind, and record its location.  In
+  /// cases 2 and 3, return no partitioning, and don't record a location.
   PartitioningKind getParentLoopPartitioning(SourceLocation &ParentLoc) const {
-    // If there's no parent acc directive, we get the dummy Stack entry.
-    assert(Stack.size() > 1 && "Data-sharing attributes stack is empty");
-    ParentLoc = Stack[Stack.size() - 2].ConstructLoc;
-    return Stack[Stack.size() - 2].LoopDirectiveKind;
+    auto StartI = std::next(Stack.rbegin());
+    auto EndI = Stack.rend();
+    for (auto I = StartI, E = EndI; I != E; ++I) {
+      const PartitioningKind &ParentKind = I->LoopDirectiveKind;
+      ParentLoc = I->ConstructLoc;
+      if (I->Directive == ACCD_parallel || ParentKind.hasGang() ||
+          ParentKind.hasWorker() || ParentKind.hasVector())
+        return ParentKind;
+    }
+    return PartitioningKind();
   }
 
   /// Adds explicit data sharing attribute to the specified declaration.

@@ -9029,8 +9029,8 @@ def err_acc_loop_outside_parallel : Error<
 def err_acc_loop_cannot_use_stmt : Error<
   "'%0' statement cannot be used in partitionable OpenACC for loop">;
 def err_acc_loop_bad_nested_partitioning : Error<
-  "'#pragma acc loop' with '%1' clause cannot be directly nested within"
-  " '#pragma acc loop' with '%0' clause">;
+  "'#pragma acc loop' with '%1' clause cannot be nested within '#pragma"
+  " acc loop' with '%0' clause">;
 def note_acc_loop_bad_nested_partitioning : Note<
   "parent '#pragma acc loop' is here">;
 def err_acc_not_for : Error<
