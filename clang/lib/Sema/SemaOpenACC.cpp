@@ -848,8 +848,6 @@ ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
   SmallVector<Expr *, 8> Vars;
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC implicit shared clause.");
-    SourceLocation ELoc;
-    SourceRange ERange;
     auto *DE = dyn_cast_or_null<DeclRefExpr>(RefExpr->IgnoreParens());
     assert(DE && "OpenACC implicit shared clause for non-DeclRefExpr");
     auto *VD = dyn_cast_or_null<VarDecl>(DE->getDecl());
