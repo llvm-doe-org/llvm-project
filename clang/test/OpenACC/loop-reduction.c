@@ -897,17 +897,14 @@ int main() {
           // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'int'
           // DMP-NEXT:     DeclRefExpr {{.*}} 'in' 'int'
           // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-          // DMP-NEXT:   impl: OMPParallelForSimdDirective
-          // DMP-NEXT:     OMPNum_threadsClause
-          // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+          // DMP-NEXT:   impl: OMPSimdDirective
           // DMP-NEXT:     OMPReductionClause
           // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'int'
           // DMP-NEXT:       DeclRefExpr {{.*}} 'in' 'int'
           //
-          // FIXME: parallel for num_threads shouldn't be here
           // PRT-A-NEXT:  {{^ *}}#pragma acc loop vector reduction(+: out,in){{$}}
-          // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(1) reduction(+: out,in){{$}}
-          // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(1) reduction(+: out,in){{$}}
+          // PRT-AO-NEXT: {{^ *}}// #pragma omp simd reduction(+: out,in){{$}}
+          // PRT-O-NEXT:  {{^ *}}#pragma omp simd reduction(+: out,in){{$}}
           // PRT-OA-NEXT: {{^ *}}// #pragma acc loop vector reduction(+: out,in){{$}}
           #pragma acc loop vector reduction(+:out,in)
           // PRT-NEXT: for ({{.*}}) {

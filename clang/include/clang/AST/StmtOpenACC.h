@@ -303,6 +303,7 @@ public:
 class ACCLoopDirective : public ACCExecutableDirective {
   friend class ASTStmtReader;
   VarDecl *LCVar = nullptr;
+  OpenACCClauseKind ParentLoopPartitioning = ACCC_unknown;
 
   /// Build directive with the given start and end location.
   ///
@@ -330,11 +331,14 @@ public:
   /// \param AssociatedStmt Statement associated with the directive.
   /// \param LCVar Loop control variable that is assigned but not declared in
   ///        the init of the for loop associated with the directive.
+  /// \param ParentLoopPartitioning The loop partitioning that immediately
+  ///        parents this directive.
   ///
   static ACCLoopDirective *Create(const ASTContext &C, SourceLocation StartLoc,
                                   SourceLocation EndLoc,
                                   ArrayRef<ACCClause *> Clauses,
-                                  Stmt *AssociatedStmt, VarDecl *LCVar);
+                                  Stmt *AssociatedStmt, VarDecl *LCVar,
+                                  OpenACCClauseKind ParentLoopPartitioning);
 
   /// Creates an empty directive.
   ///
@@ -351,6 +355,20 @@ public:
   /// init of the for loop associated with the directive, or return nullptr if
   /// none.
   VarDecl *getLoopControlVariable() const { return LCVar; }
+
+  /// Set the loop partitioning that immediately parents this directive.
+  void setParentLoopPartitioning(OpenACCClauseKind V) {
+    ParentLoopPartitioning = V;
+  }
+  /// Get the loop partitioning that immediately parents this directive.  That
+  /// is, search upward, skip sequential loops, and stop at the first compute
+  /// directive or partitioned loop.  If stopping on a compute directive,
+  /// return ACCC_unknown.  If stopping on a partitioned loop, return
+  /// ACCC_vector, ACCC_worker, or ACCC_gang, in that order of preference where
+  /// the loop is partitioned by more than one of these.
+  OpenACCClauseKind getParentLoopPartitioning() const {
+    return ParentLoopPartitioning;
+  }
 
   static bool classof(const Stmt *T) {
     return T->getStmtClass() == ACCLoopDirectiveClass;

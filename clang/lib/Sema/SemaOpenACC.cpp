@@ -76,6 +76,12 @@ public:
   bool hasExplicitIndependent() const { return ExplicitIndependent; }
   /// True if there's no explicit auto, seq, or independent clause.
   bool hasImplicitIndependent() const { return ImplicitIndependent; }
+  /// Return the first of vector, worker, and then gang that is set here.
+  OpenACCClauseKind getInnermost() const {
+    return hasGang() ? ACCC_gang
+                     : hasWorker() ? ACCC_worker
+                                   : hasVector() ? ACCC_vector : ACCC_unknown;
+  }
 };
 
 /// Stack for tracking declarations used in OpenACC directives and
@@ -215,6 +221,10 @@ public:
         return ParentKind;
     }
     return PartitioningKind();
+  }
+  PartitioningKind getParentLoopPartitioning() const {
+    SourceLocation Loc;
+    return getParentLoopPartitioning(Loc);
   }
 
   /// Adds explicit data sharing attribute to the specified declaration.
@@ -717,7 +727,9 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     break;
   case ACCD_loop:
     Res = ActOnOpenACCLoopDirective(ClausesWithImplicit, AStmt, StartLoc,
-                                    EndLoc, DSAStack->getLoopControlVariable());
+                                    EndLoc, DSAStack->getLoopControlVariable(),
+                                    DSAStack->getParentLoopPartitioning()
+                                        .getInnermost());
     break;
   case ACCD_unknown:
     llvm_unreachable("Unknown OpenACC directive");
@@ -772,7 +784,8 @@ void Sema::ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
 
 StmtResult Sema::ActOnOpenACCLoopDirective(
     ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-    SourceLocation EndLoc, VarDecl *LCVar) {
+    SourceLocation EndLoc, VarDecl *LCVar,
+    OpenACCClauseKind ParentLoopPartitioning) {
   if (!AStmt)
     return StmtError();
 
@@ -816,7 +829,7 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
   }
 
   return ACCLoopDirective::Create(Context, StartLoc, EndLoc, Clauses, AStmt,
-                                  LCVar);
+                                  LCVar, ParentLoopPartitioning);
 }
 
 ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr,
@@ -1503,8 +1516,12 @@ public:
           TDKind = OMPD_unknown;
           AddScopeWithAllPrivates = true;
         } else { // HasVector
-          TDKind = OMPD_parallel_for_simd;
-          AddNumThreads1 = true;
+          if (D->getParentLoopPartitioning() == ACCC_unknown) {
+            TDKind = OMPD_parallel_for_simd;
+            AddNumThreads1 = true;
+          }
+          else
+            TDKind = OMPD_simd;
           AddScopeWithLCVPrivate = true;
         }
       } else { // HasWorker
@@ -1699,10 +1716,11 @@ public:
   OMPClauseResult TransformACCSharedClause(ACCExecutableDirective *D,
                                            OpenMPDirectiveKind TDKind,
                                            ACCSharedClause *C) {
-    // OpenMP distribute directives without parallel do not accept shared
-    // clauses, so let our implicit OpenACC shared clauses stay implicit in
-    // OpenMP.
-    bool RequireImplicit = isOpenMPDistributeDirective(TDKind) &&
+    // OpenMP distribute or simd directives without parallel do not accept
+    // shared clauses, so let our implicit OpenACC shared clauses stay implicit
+    // in OpenMP.
+    bool RequireImplicit = (isOpenMPDistributeDirective(TDKind) ||
+                            isOpenMPSimdDirective(TDKind)) &&
                            !isOpenMPParallelDirective(TDKind);
     // Currently, there's no such thing as an explicit OpenACC shared clause.
     // If there were and RequireImplicit=true, we would need to complain to the

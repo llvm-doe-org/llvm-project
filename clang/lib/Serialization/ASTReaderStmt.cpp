@@ -3199,6 +3199,8 @@ void ASTStmtReader::VisitACCLoopDirective(ACCLoopDirective *D) {
   Record.skipInts(1);
   VisitACCExecutableDirective(D);
   D->setLoopControlVariable(Record.readDeclAs<VarDecl>());
+  D->setParentLoopPartitioning(
+      static_cast<OpenACCClauseKind>(Record.readInt()));
 }
 
 //===----------------------------------------------------------------------===//

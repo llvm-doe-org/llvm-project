@@ -51,7 +51,8 @@ ACCParallelDirective *ACCParallelDirective::CreateEmpty(const ASTContext &C,
 ACCLoopDirective *
 ACCLoopDirective::Create(const ASTContext &C, SourceLocation StartLoc,
                          SourceLocation EndLoc, ArrayRef<ACCClause *> Clauses,
-                         Stmt *AssociatedStmt, VarDecl *LCVar) {
+                         Stmt *AssociatedStmt, VarDecl *LCVar,
+                         OpenACCClauseKind ParentLoopPartitioning) {
   unsigned Size = llvm::alignTo(sizeof(ACCLoopDirective), alignof(ACCClause *));
   void *Mem =
       C.Allocate(Size + sizeof(ACCClause *) * Clauses.size() + sizeof(Stmt *));
@@ -60,6 +61,7 @@ ACCLoopDirective::Create(const ASTContext &C, SourceLocation StartLoc,
   Dir->setClauses(Clauses);
   Dir->setAssociatedStmt(AssociatedStmt);
   Dir->setLoopControlVariable(LCVar);
+  Dir->setParentLoopPartitioning(ParentLoopPartitioning);
   return Dir;
 }
 

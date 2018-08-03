@@ -27,17 +27,17 @@
 // RUN: %data loop-clauses {
 // RUN:   (accc0=gang                                accc1=worker                                  accc2=vector
 // RUN:    itrs0=2                                   itrs1=2                                       itrs2=2
-// RUN:    ompdd0=OMPDistributeDirective             ompdd1=OMPParallelForDirective                ompdd2=OMPParallelForSimdDirective
-// RUN:    ompdp0=distribute                         ompdp1='parallel for'                         ompdp2='parallel for simd num_threads(1)'
-// RUN:    ompdk0=OPRG ompsk0=OSIMP                  ompdk1=OPRG ompsk1=OSEXP                      ompdk2=OPRG ompsk2=OSEXP
-// RUN:    dmp0=DMP0-AIMP,DMP0-AG                    dmp1=DMP1-AIMP,DMP1-AW                        dmp2=DMP2-AIMP,DMP2-AV,DMP2-ONT1
+// RUN:    ompdd0=OMPDistributeDirective             ompdd1=OMPParallelForDirective                ompdd2=OMPSimdDirective
+// RUN:    ompdp0=distribute                         ompdp1='parallel for'                         ompdp2='simd'
+// RUN:    ompdk0=OPRG ompsk0=OSIMP                  ompdk1=OPRG ompsk1=OSEXP                      ompdk2=OPRG ompsk2=OSIMP
+// RUN:    dmp0=DMP0-AIMP,DMP0-AG                    dmp1=DMP1-AIMP,DMP1-AW                        dmp2=DMP2-AIMP,DMP2-AV
 // RUN:    exe=EXE222)
 // RUN:   (accc0='gang worker'                       accc1=seq                                     accc2=vector
 // RUN:    itrs0=4                                   itrs1=2                                       itrs2=2
-// RUN:    ompdd0=OMPDistributeParallelForDirective  ompdd1=                                       ompdd2=OMPParallelForSimdDirective
-// RUN:    ompdp0='distribute parallel for'          ompdp1=                                       ompdp2='parallel for simd num_threads(1)'
-// RUN:    ompdk0=OPRG ompsk0=OSEXP                  ompdk1=OSEQ ompsk1=OSIMP                      ompdk2=OPRG ompsk2=OSEXP
-// RUN:    dmp0=DMP0-AIMP,DMP0-AG,DMP0-AW            dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AV,DMP2-ONT1
+// RUN:    ompdd0=OMPDistributeParallelForDirective  ompdd1=                                       ompdd2=OMPSimdDirective
+// RUN:    ompdp0='distribute parallel for'          ompdp1=                                       ompdp2='simd'
+// RUN:    ompdk0=OPRG ompsk0=OSEXP                  ompdk1=OSEQ ompsk1=OSIMP                      ompdk2=OPRG ompsk2=OSIMP
+// RUN:    dmp0=DMP0-AIMP,DMP0-AG,DMP0-AW            dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AV
 // RUN:    exe=EXE,EXE422)
 // RUN:   (accc0=gang                                accc1=seq                                     accc2='worker vector'
 // RUN:    itrs0=2                                   itrs1=2                                       itrs2=4
@@ -69,10 +69,10 @@
 // RUN:    exe=EXE,EXE242)
 // RUN:   (accc0=gang                                accc1=seq                                     accc2=vector
 // RUN:    itrs0=2                                   itrs1=2                                       itrs2=2
-// RUN:    ompdd0=OMPDistributeDirective             ompdd1=                                       ompdd2=OMPParallelForSimdDirective
-// RUN:    ompdp0=distribute                         ompdp1=                                       ompdp2='parallel for simd num_threads(1)'
-// RUN:    ompdk0=OPRG ompsk0=OSIMP                  ompdk1=OSEQ ompsk1=OSIMP                      ompdk2=OPRG ompsk2=OSEXP
-// RUN:    dmp0=DMP0-AIMP,DMP0-AG                    dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AV,DMP2-ONT1
+// RUN:    ompdd0=OMPDistributeDirective             ompdd1=                                       ompdd2=OMPSimdDirective
+// RUN:    ompdp0=distribute                         ompdp1=                                       ompdp2='simd'
+// RUN:    ompdk0=OPRG ompsk0=OSIMP                  ompdk1=OSEQ ompsk1=OSIMP                      ompdk2=OPRG ompsk2=OSIMP
+// RUN:    dmp0=DMP0-AIMP,DMP0-AG                    dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AV
 // RUN:    exe=EXE,EXE222)
 // RUN:   (accc0=seq                                 accc1='gang vector'                           accc2=seq
 // RUN:    itrs0=2                                   itrs1=4                                       itrs2=2
@@ -83,10 +83,10 @@
 // RUN:    exe=EXE,EXE242)
 // RUN:   (accc0=worker                              accc1=seq                                     accc2=vector
 // RUN:    itrs0=2                                   itrs1=2                                       itrs2=2
-// RUN:    ompdd0=OMPParallelForDirective            ompdd1=                                       ompdd2=OMPParallelForSimdDirective
-// RUN:    ompdp0='parallel for'                     ompdp1=                                       ompdp2='parallel for simd num_threads(1)'
-// RUN:    ompdk0=OPRG ompsk0=OSEXP                  ompdk1=OSEQ ompsk1=OSIMP                      ompdk2=OPRG ompsk2=OSEXP
-// RUN:    dmp0=DMP0-AIMP,DMP0-AW                    dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AV,DMP2-ONT1
+// RUN:    ompdd0=OMPParallelForDirective            ompdd1=                                       ompdd2=OMPSimdDirective
+// RUN:    ompdp0='parallel for'                     ompdp1=                                       ompdp2='simd'
+// RUN:    ompdk0=OPRG ompsk0=OSEXP                  ompdk1=OSEQ ompsk1=OSIMP                      ompdk2=OPRG ompsk2=OSIMP
+// RUN:    dmp0=DMP0-AIMP,DMP0-AW                    dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AV
 // RUN:    exe=EXE,EXE222,EXEGR222)
 // RUN:   (accc0=seq                                 accc1='worker vector'                         accc2=seq
 // RUN:    itrs0=2                                   itrs1=4                                       itrs2=2
