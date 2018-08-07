@@ -357,6 +357,20 @@ int main() {
   int arrNoSize[]; // expected-noacc-error {{definition of variable with array type needs an explicit size or an initializer}}
 #pragma acc parallel
   arrNoSize;
+
+  // Bad nesting.
+  #pragma acc parallel // expected-note {{enclosing '#pragma acc parallel' here}}
+  #pragma acc parallel // expected-error {{'#pragma acc parallel' cannot be nested within '#pragma acc parallel'}}
+    ;
+  #pragma acc parallel
+  {
+    #pragma acc loop seq // expected-note {{enclosing '#pragma acc loop' here}}
+    for (int i = 0; i < 2; ++i) {
+      #pragma acc parallel // expected-error {{'#pragma acc parallel' cannot be nested within '#pragma acc loop'}}
+        ;
+    }
+  }
+
   return 0;
 }
 

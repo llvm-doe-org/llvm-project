@@ -9024,6 +9024,10 @@ def note_acc_const_private : Note<
   "variable %0 declared const here">;
 def err_acc_negative_expression_in_clause : Error<
   "argument to '%0' clause must be a strictly positive integer value">;
+def err_acc_directive_bad_nesting : Error<
+  "'#pragma acc %0' cannot be nested within '#pragma acc %1'">;
+def note_acc_enclosing_directive : Note<
+  "enclosing '#pragma acc %0' here">;
 def err_acc_loop_outside_parallel : Error<
   "OpenACC loop outside of OpenACC parallel is not yet supported">;
 def err_acc_loop_cannot_use_stmt : Error<

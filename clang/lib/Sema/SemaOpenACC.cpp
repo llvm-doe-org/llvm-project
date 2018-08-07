@@ -246,6 +246,18 @@ public:
     return isStackEmpty() ? ACCD_unknown : Stack.back().Directive;
   }
 
+  /// Returns directive for construct enclosing currently analyzed directive
+  /// or returns ACCD_unknown if none.  In the former case only, set ParentLoc
+  /// as the returned directive's location.
+  OpenACCDirectiveKind getParentDirective(SourceLocation &ParentLoc) const {
+    if (getNestingLevel() > 1) {
+      auto ParentI = std::next(Stack.rbegin());
+      ParentLoc = ParentI->ConstructLoc;
+      return ParentI->Directive;
+    }
+    return ACCD_unknown;
+  }
+
   /// Set collapse value for the region.
   void setAssociatedLoops(unsigned Val) {
     assert(!isStackEmpty());
@@ -586,7 +598,25 @@ bool Sema::ActOnOpenACCRegionStart(
     OpenACCDirectiveKind DKind, ArrayRef<ACCClause *> Clauses, Scope *CurScope,
     SourceLocation StartLoc, SourceLocation EndLoc) {
   bool ErrorFound = false;
-  if (DKind == ACCD_loop) {
+  switch (DKind) {
+  case ACCD_parallel: {
+    // The OpenACC 2.6 spec doesn't say, as far as I know, that an acc parallel
+    // cannot be nested within another acc construct, but gcc 7.3.0 and
+    // pgcc 18.4-0 don't permit that for simple cases I've tried.
+    if (DSAStack->getNestingLevel() > 1) {
+      SourceLocation ParentLoc;
+      OpenACCDirectiveKind ParentDKind =
+          DSAStack->getParentDirective(ParentLoc);
+      Diag(StartLoc, diag::err_acc_directive_bad_nesting)
+          << getOpenACCDirectiveName(DKind)
+          << getOpenACCDirectiveName(ParentDKind);
+      Diag(ParentLoc, diag::note_acc_enclosing_directive)
+          << getOpenACCDirectiveName(ParentDKind);
+      ErrorFound = true;
+    }
+    break;
+  }
+  case ACCD_loop: {
     bool HasSeqOrAuto = false;
     PartitioningKind LoopKind;
     for (ACCClause *C : Clauses) {
@@ -650,6 +680,10 @@ bool Sema::ActOnOpenACCRegionStart(
     if (!LoopKind.hasIndependent())
       LoopKind = PartitioningKind();
     DSAStack->setLoopPartitioning(LoopKind);
+    break;
+  }
+  case ACCD_unknown:
+    llvm_unreachable("expected OpenACC directive");
   }
   return ErrorFound;
 }
@@ -682,7 +716,8 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
       ErrorFound = true;
     }
     // TODO: In the case of auto, break statements will force sequential
-    // execution, probably with a warning, or is an error better for that case?
+    // execution, probably with a warning, or is an error better for that
+    // case?
   }
   if (AStmt) {
     // Check default data sharing attributes for referenced variables.
