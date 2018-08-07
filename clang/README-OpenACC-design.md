@@ -362,14 +362,13 @@ Notation
 
 For clauses and data attributes, we use the following notations:
 
-* *pre* labels a data attribute that was predetermined and not
+* *pre* labels a data attribute that is predetermined and not
   specified by an explicit clause.
-* *imp* labels a data attribute or clause that was implicitly
+* *imp* labels a data attribute or clause that is implicitly
   determined and not specified by an explicit clause.
-* *exp* labels a clause (possibly specifying a data attribute) that
-  was explicitly specified.
-* *not* labels a clause that was not explicitly specified on a
-  directive.
+* *exp* labels a clause (possibly specifying a data attribute) that is
+  explicitly specified.
+* *not* labels a clause that is not explicitly specified.
 * Mappings for data attributes and for clauses that are specified per
   variable should be interpreted per variable.
 * Mappings for other clauses should be interpreted per directive.
@@ -384,11 +383,6 @@ For clauses and data attributes, we use the following notations:
   of the following mappings:
     * `lab1 clause1 -> lab3 clause2`
     * `lab2 clause1 -> lab4 clause2`
-* The notation `(lab1|lab2)|lab3 clause1 -> lab4|lab5 clause2`
-  specifies all of the following mappings:
-    * `lab1 clause1 -> lab4 clause2`
-    * `lab2 clause1 -> lab4 clause2`
-    * `lab3 clause1 -> lab5 clause2`
 
 Mappings
 --------
@@ -442,11 +436,17 @@ loop analysis and thus with only a safe mapping to OpenMP.
           README-OpenACC-status.md as that is a highly user-visible
           issue.
     * Data sharing mapping:
-        * imp|not `shared` -> exp|not `shared`
-        * (imp|exp)|not `firstprivate` -> exp|not `firstprivate`
-        * exp|not `private` -> exp|not `private`
-        * (imp|exp)|not `reduction` -> exp|not `reduction`
-    * exp|not `num_gangs` -> exp|not `num_teams`
+        * imp `shared` -> exp `shared`
+        * imp|exp `firstprivate` -> exp `firstprivate`
+        * exp `private` -> exp `private`
+        * imp|exp `reduction` -> exp `reduction`
+    * exp `num_gangs` -> exp `num_teams`
+    * exp `num_workers` is discarded here during translation
+        * Note that `num_workers` might be used by a nested `acc
+          loop`.
+    * exp `vector_length` is discarded here during translation
+        * Note that `vector_length` might be used by a nested `acc
+          loop`.
 * `acc loop` within `acc parallel`:
     * if exp `seq`, then:
         * Discard the directive.
@@ -493,9 +493,9 @@ loop analysis and thus with only a safe mapping to OpenMP.
                   involved in the reduction.  Thus, the only reason to
                   create a private copy would be to avoid races with
                   other threads for other redundant gangs or for
-                  partitioned parent loops.  However, the final value
-                  must be copied back to the original at the end of
-                  this loop, so there's a race anyway, so privacy
+                  partitioned ancestor loops.  However, the final
+                  value must be copied back to the original at the end
+                  of this loop, so there's a race anyway, so privacy
                   doesn't help.
                 * If the specified `reduction` operator is not the
                   same as the operator that the loop body effectively
@@ -563,43 +563,32 @@ loop analysis and thus with only a safe mapping to OpenMP.
           safe mapping implemented.
         * if not `gang`, not `worker`, and not `vector`, then same
           mapping as for exp `seq`
-        * else, then -> `omp`:
-            * exp|not `gang` -> exp|not `distribute`
-            * exp `worker` -> expr `parallel for`
+        * else, -> `omp`:
+            * exp `gang` -> exp `distribute`
+            * exp `worker` -> exp `parallel for`
             * if, for this and all ancestor `acc loop` until the
               ancestor `acc parallel`, not `gang` and not `worker`,
-              then -> exp `parallel for`
-                * Note that we add `parallel for` for this case
-                  because OpenMP does not permit `omp simd` directly
-                  inside `omp target teams`.  An alternative might be
-                  to translate to `omp simd` directly inside `omp
-                  parallel`, but OpenMP does not have a combined `omp
-                  parallel simd` directive, leading us to question the
-                  semantics.
-            * not `worker` and, for this or any ancestor `acc loop`
-              until the ancestor `acc parallel`, exp `gang` or exp
-              `worker` -> not `parallel for`
-            * exp|not `vector` -> exp|not `simd`
+              then -> exp `parallel for` and exp `num_threads(1)`.
+              Notes:
+                * We add `parallel for` for this case because OpenMP
+                  does not permit `omp simd` directly inside `omp
+                  target teams`.  An alternative might be to translate
+                  to `omp simd` directly inside `omp parallel`, but
+                  OpenMP does not have a combined `omp parallel simd`
+                  directive, leading us to question the semantics.
+                * We are assuming that, if worker parallelism is not
+                  specified but vector parallelism is, then vector
+                  operations within a single worker are the intention.
+            * exp `vector` -> exp `simd`
             * The output `distribute`, `parallel for`, and `simd`
               OpenMP directive components are sorted in the above
-              order before all clauses regardless of the input OpenACC
-              clause order.
-            * if exp `gang`, then:
-                * not `worker` -> not `num_threads`
-            * if exp `worker`, then:
-                * exp|not `num_workers` from parent `acc parallel` ->
-                  exp|not `num_threads`
-            * if exp `vector`, then
-                * if, for this and all ancestor `acc loop` until the
-                  ancestor `acc parallel`, not `gang` and not
-                  `worker`, then -> exp `num_threads(1)`
-                    * Note that we are assuming that, if worker
-                      parallelism is not specified but vector
-                      parallelism is, then vector operations within a
-                      single worker are the intention.
-                * else, not `worker` -> not `num_threads`
-                * exp|not `vector_length` from parent `acc parallel`
-                  -> exp|not `simdlen`
+              order before all clauses (including the above
+              `num_threads(1)`) regardless of the input OpenACC clause
+              order.
+            * if exp `worker`, then exp `num_workers` from ancestor
+              `acc parallel` -> exp `num_threads`
+            * if exp `vector`, then exp `vector_length` from ancestor
+              `acc parallel` -> exp `simdlen`
             * Data sharing semantics:
                 * Whether just assigned or declared in the init of the
                   attached `for` loop, the loop control variable is:
@@ -696,15 +685,13 @@ loop analysis and thus with only a safe mapping to OpenMP.
                   loop` until the ancestor `acc parallel`, not `gang`
                   and not `worker`, then pre|imp `shared` -> exp
                   `shared`
-                * if not `worker` and, for this or any ancestor `acc
-                  loop` until the ancestor `acc parallel`, exp `gang`
-                  or exp `worker`, then pre|imp `shared` -> imp
-                  `shared`
+                * else, pre|imp `shared` -> imp `shared`
                     * Note that OpenMP `distribute` or `simd` without
-                      `parallel for` (which we add to be able to nest
-                      `simd` directly within `target teams`) does not
-                      support a `shared` clause, so we must rely on
-                      OpenMP implicit data sharing rules here.
+                      `parallel for` (which we add for `worker` or to
+                      be able to nest `simd` directly within `target
+                      teams`) does not support a `shared` clause, so
+                      we must rely on OpenMP implicit data sharing
+                      rules then.
                 * pre `private` for a loop control variable that is
                   declared in the init of the attached `for` loop ->
                   pre `private`
@@ -739,9 +726,8 @@ loop analysis and thus with only a safe mapping to OpenMP.
                   `private`
                 * if exp `worker` or exp `vector`, then exp
                   `reduction` -> exp `reduction`
-                * not `reduction` or (not `worker` and not `vector`)
-                  -> not `reduction`
-                * Notes:
+                * else, exp `reduction` is discarded here during
+                  translation.  Notes:
                     * A gang reduction for a gang-local variable is
                       useless and so is discarded during translation.
                     * Gang reductions for other variables are
