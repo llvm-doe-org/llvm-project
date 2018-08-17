@@ -9022,7 +9022,7 @@ def err_acc_const_private : Error<
   "const variable cannot be private because initialization is impossible">;
 def note_acc_const_private : Note<
   "variable %0 declared const here">;
-def err_acc_negative_expression_in_clause : Error<
+def err_acc_clause_not_positive_ice : Error<
   "argument to '%0' clause must be a strictly positive integer value">;
 def err_acc_directive_bad_nesting : Error<
   "'#pragma acc %0' cannot be nested within '#pragma acc %1'">;

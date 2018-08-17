@@ -340,6 +340,9 @@ int main() {
 #pragma acc parallel num_gangs(0)
   // expected-error@-1 {{argument to 'num_gangs' clause must be a strictly positive integer value}}
   ;
+#pragma acc parallel num_gangs(0u)
+  // expected-error@-1 {{argument to 'num_gangs' clause must be a strictly positive integer value}}
+  ;
 #pragma acc parallel num_gangs(-1)
   // expected-error@-1 {{argument to 'num_gangs' clause must be a strictly positive integer value}}
   ;

@@ -1273,8 +1273,8 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
                                     EndLoc, Vars, ReductionId);
 }
 
-static bool IsNonNegativeIntegerValue(Expr *&ValExpr, Sema &SemaRef,
-                                      OpenACCClauseKind CKind) {
+static bool IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
+                                   OpenACCClauseKind CKind, bool IsConstant) {
   SourceLocation Loc = ValExpr->getExprLoc();
   // This uses err_omp_* diagnostics, but none currently mention OpenMP or
   // OpenMP-specific constructs, so they should work fine for OpenACC.
@@ -1287,8 +1287,8 @@ static bool IsNonNegativeIntegerValue(Expr *&ValExpr, Sema &SemaRef,
   // The expression must evaluate to a non-negative integer value.
   llvm::APSInt Result;
   if (ValExpr->isIntegerConstantExpr(Result, SemaRef.Context) &&
-      Result.isSigned() && !Result.isStrictlyPositive()) {
-    SemaRef.Diag(Loc, diag::err_acc_negative_expression_in_clause)
+      !Result.isStrictlyPositive()) {
+    SemaRef.Diag(Loc, diag::err_acc_clause_not_positive_ice)
         << getOpenACCClauseName(CKind) << ValExpr->getSourceRange();
     return false;
   }
@@ -1367,7 +1367,7 @@ ACCClause *Sema::ActOnOpenACCNumGangsClause(Expr *NumGangs,
   // OpenMP says num_teams must evaluate to a positive integer value.
   // OpenACC doesn't specify such a restriction that I see for num_gangs, but
   // it seems reasonable.
-  if (!IsNonNegativeIntegerValue(NumGangs, *this, ACCC_num_gangs))
+  if (!IsPositiveIntegerValue(NumGangs, *this, ACCC_num_gangs, false))
     return nullptr;
   return new (Context) ACCNumGangsClause(NumGangs, StartLoc, LParenLoc,
                                          EndLoc);
