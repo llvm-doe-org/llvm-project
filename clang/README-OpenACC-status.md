@@ -108,7 +108,7 @@ the following features for now:
 * all directives:
     * clauses not listed in the previous section
     * nesting (other than `loop` directives within `loop` directives
-      or `parallel` directives)
+      or within `parallel` directives)
 * `loop` directive:
     * outside a `parallel` directive
     * `gang`, `worker`, and `vector` clause arguments

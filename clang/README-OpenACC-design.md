@@ -419,7 +419,7 @@ loop analysis and thus with only a safe mapping to OpenMP.
           produces an imp `reduction` for `v` on `acc parallel`.
         * If (1) neither exp `firstprivate` nor exp `private` for a
           variable `v` that is declared outside this `acc parallel`,
-          and (2) on any contained `acc loop`, exp `gang` and exp
+          and (2) on any contained gang-partitioned `acc loop`, exp
           `reduction` with a reduction operator `op` for `v`, then
           this `acc parallel` has imp `reduction` with `op` for `v`.
             * Note that we are not applying to an `acc parallel` any
@@ -565,11 +565,14 @@ loop analysis and thus with only a safe mapping to OpenMP.
           mapping as for exp `seq`
         * else, -> `omp`:
             * exp `gang` -> exp `distribute`
+                * This is currently the only case of a
+                  gang-partitioned `acc loop`.
             * exp `worker` -> exp `parallel for`
-            * if, for this and all ancestor `acc loop` until the
-              ancestor `acc parallel`, not `gang` and not `worker`,
-              then -> exp `parallel for` and exp `num_threads(1)`.
-              Notes:
+                * This is currently the only case of a
+                  worker-partitioned `acc loop`.
+            * if, neither this nor any ancestor `acc loop` is
+              gang-partitioned or worker-partitioned, then -> exp
+              `parallel for` and exp `num_threads(1)`.  Notes:
                 * We add `parallel for` for this case because OpenMP
                   does not permit `omp simd` directly inside `omp
                   target teams`.  An alternative might be to translate
@@ -580,6 +583,8 @@ loop analysis and thus with only a safe mapping to OpenMP.
                   specified but vector parallelism is, then vector
                   operations within a single worker are the intention.
             * exp `vector` -> exp `simd`
+                * This is currently the only case of a
+                  vector-partitioned `acc loop`.
             * The output `distribute`, `parallel for`, and `simd`
               OpenMP directive components are sorted in the above
               order before all clauses (including the above
@@ -681,10 +686,10 @@ loop analysis and thus with only a safe mapping to OpenMP.
                   type, and for `const` variables are the same as on
                   `acc parallel`.
             * Data sharing mapping:
-                * if exp `worker` or, for this and all ancestor `acc
-                  loop` until the ancestor `acc parallel`, not `gang`
-                  and not `worker`, then pre|imp `shared` -> exp
-                  `shared`
+                * if exp `worker` or, this and every ancestor `acc
+                  loop` until the ancestor `acc parallel` is not
+                  gang-partitioned and not worker-partitioned, then
+                  pre|imp `shared` -> exp `shared`
                 * else, pre|imp `shared` -> imp `shared`
                     * Note that OpenMP `distribute` or `simd` without
                       `parallel for` (which we add for `worker` or to
