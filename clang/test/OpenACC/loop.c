@@ -384,7 +384,6 @@ int main() {
   // DMP: CompoundStmt
   // PRT-NEXT: {
   {
-
     // PRT-NEXT: int j = 0;
     // PRT-NEXT: int k = 0;
     int j = 0;
@@ -572,19 +571,17 @@ int main() {
     //
     // Print commented directive and attached statement when attached
     // statements are different.
-    // PRT-AOX-OPLC-NEXT:      /*
-    // PRT-AO-OPLC-NEXT:       {
-    // PRT-AO-OPLC-NEXT:         int j;
-    // PRT-AO-OPLC-OSIMP-NEXT:   {{^ *}}#pragma omp [[OMPDP]]{{$}}
-    // PRT-AO-OPLC-OSEXP-NEXT:   {{^ *}}#pragma omp [[OMPDP]] shared(k){{$}}
-    // PRT-OA-OPLC-NEXT:         {{^ *}}#pragma acc loop[[ACCC]]{{$}}
-    // PRT-AOX-OPLC-NEXT:        for (j ={{.*}}) {
-    // PRT-AOX-OPLC-NEXT:          printf
-    // PRT-AOX-OPLC-NEXT:          for (k ={{.*}})
-    // PRT-AOX-OPLC-NEXT:            ;
-    // PRT-AOX-OPLC-NEXT:        }
-    // PRT-AO-OPLC-NEXT:       }
-    // PRT-AOX-OPLC-NEXT:      */
+    // PRT-AO-OPLC-NEXT:       // {
+    // PRT-AO-OPLC-NEXT:       //   int j;
+    // PRT-AO-OPLC-OSIMP-NEXT: //   #pragma omp [[OMPDP]]{{$}}
+    // PRT-AO-OPLC-OSEXP-NEXT: //   #pragma omp [[OMPDP]] shared(k){{$}}
+    // PRT-OA-OPLC-NEXT:       //   #pragma acc loop[[ACCC]]{{$}}
+    // PRT-AOX-OPLC-NEXT:      //   for (j ={{.*}}) {
+    // PRT-AOX-OPLC-NEXT:      //     printf
+    // PRT-AOX-OPLC-NEXT:      //     for (k ={{.*}})
+    // PRT-AOX-OPLC-NEXT:      //       ;
+    // PRT-AOX-OPLC-NEXT:      //   }
+    // PRT-AO-OPLC-NEXT:       // }
     #pragma acc loop ACCC
     for (j = 1; j < 3; ++j) {
       // EXE-NEXT:        hello world
@@ -900,16 +897,14 @@ int main() {
     //
     // Print commented directive and attached statement when attached
     // statements are different.
-    // PRT-AOX-OPLC-NEXT: /*
-    // PRT-AO-OPLC-NEXT:  {
-    // PRT-AO-OPLC-NEXT:    int j;
-    // PRT-AO-OPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
-    // PRT-OA-OPLC-NEXT:    {{^ *}}#pragma acc loop[[ACCC]]{{$}}
-    // PRT-AOX-OPLC-NEXT:   for (j ={{.*}}) {
-    // PRT-AOX-OPLC-NEXT:     printf
-    // PRT-AOX-OPLC-NEXT:   }
-    // PRT-AO-OPLC-NEXT:  }
-    // PRT-AOX-OPLC-NEXT: */
+    // PRT-AO-OPLC-NEXT:  // {
+    // PRT-AO-OPLC-NEXT:  //   int j;
+    // PRT-AO-OPLC-NEXT:  //   #pragma omp [[OMPDP]]{{$}}
+    // PRT-OA-OPLC-NEXT:  //   #pragma acc loop[[ACCC]]{{$}}
+    // PRT-AOX-OPLC-NEXT: //   for (j ={{.*}}) {
+    // PRT-AOX-OPLC-NEXT: //     printf
+    // PRT-AOX-OPLC-NEXT: //   }
+    // PRT-AO-OPLC-NEXT:  // }
     #pragma acc loop ACCC
     for (j = 7; j > -2; j -= 2) {
       // EXE-DAG: 7

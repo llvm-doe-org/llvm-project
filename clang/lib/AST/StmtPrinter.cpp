@@ -53,6 +53,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
+#include "CommentedStream.h"
 #include <cassert>
 #include <string>
 
@@ -1591,10 +1592,10 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
     PrintACCExecutableDirectiveHead(S, false, true);
     if (mustSplitACCExecutableDirective(S, Policy, Context)) {
       PrintACCExecutableDirectiveBody(S);
-      Indent() << "/*\n";
-      PrintOMPExecutableDirectiveHead(S->getOMPNode(), false);
-      PrintOMPExecutableDirectiveBody(S->getOMPNode());
-      Indent() << " */\n";
+      clang::commented_raw_ostream ComStream(OS, IndentLevel*2, 1, true);
+      StmtPrinter ComPrinter(ComStream, Helper, Policy, 0, Context);
+      ComPrinter.PrintOMPExecutableDirectiveHead(S->getOMPNode(), false);
+      ComPrinter.PrintOMPExecutableDirectiveBody(S->getOMPNode());
     }
     else {
       PrintOMPExecutableDirectiveHead(S->getOMPNode(), true);
@@ -1605,10 +1606,12 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
     PrintOMPExecutableDirectiveHead(S->getOMPNode(), false);
     if (mustSplitACCExecutableDirective(S, Policy, Context)) {
       PrintOMPExecutableDirectiveBody(S->getOMPNode());
-      Indent() << "/*\n";
-      PrintACCExecutableDirectiveHead(S, false, true);
-      PrintACCExecutableDirectiveBody(S);
-      Indent() << " */\n";
+      clang::commented_raw_ostream ComStream(OS, IndentLevel*2, 1, true);
+      PrintingPolicy ComPolicy(Policy);
+      ComPolicy.OpenACCPrint = OpenACCPrint_ACC_OMP;
+      StmtPrinter ComPrinter(ComStream, Helper, ComPolicy, 0, Context);
+      ComPrinter.PrintACCExecutableDirectiveHead(S, false, true);
+      ComPrinter.PrintACCExecutableDirectiveBody(S);
     }
     else {
       PrintACCExecutableDirectiveHead(S, true, true);
