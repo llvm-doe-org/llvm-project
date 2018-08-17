@@ -738,3 +738,32 @@ loop analysis and thus with only a safe mapping to OpenMP.
                     * Gang reductions for other variables are
                       addressed in the data sharing semantics on `acc
                       parallel`.
+
+Unmappable Features
+-------------------
+
+It might prove to be impossible to map some OpenACC features to
+standard OpenMP.  For such features, our plan is to map to OpenMP
+language or runtime extensions, which we will implement as necessary.
+
+When source-to-source translation (as opposed to normal full
+compilation) is enabled, we will implement diagnostics to identify
+uses of such features unless those diagnostics are inexact and prove
+to have too many false positives.  In the worst cases, we would
+identify such features at run time.
+
+The following is a list of OpenACC features we have identified that
+might not be possible to map to OpenMP:
+
+* `vector_length` with a non-constant expression argument because
+  `simdlen`, to which `vector_length` is translated, requires a
+  constant expression.
+* A gang reduction specified on an orphaned `acc loop` directive
+  because the enclosing compute construct to which the reduction would
+  normally be applied during translation is not statically visible.
+* `acc loop` directive that observes `num_workers` and `vector_length`
+  because the enclosing compute construct from which those clauses
+  would normally be applied during translation is not statically
+  visible.
+* Multiple reference counters because OpenMP has just one reference
+  counter.
