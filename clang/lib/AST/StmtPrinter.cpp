@@ -1415,6 +1415,18 @@ void ACCClausePrinter::VisitACCNumGangsClause(ACCNumGangsClause *Node) {
   OS << ")";
 }
 
+void ACCClausePrinter::VisitACCNumWorkersClause(ACCNumWorkersClause *Node) {
+  OS << "num_workers(";
+  Node->getNumWorkers()->printPretty(OS, nullptr, Policy, 0);
+  OS << ")";
+}
+
+void ACCClausePrinter::VisitACCVectorLengthClause(ACCVectorLengthClause *Node) {
+  OS << "vector_length(";
+  Node->getVectorLength()->printPretty(OS, nullptr, Policy, 0);
+  OS << ")";
+}
+
 void ACCClausePrinter::VisitACCSeqClause(ACCSeqClause *Node) {
   OS << "seq";
 }

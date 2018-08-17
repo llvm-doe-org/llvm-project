@@ -484,6 +484,124 @@ public:
   }
 };
 
+/// This represents 'num_workers' clause in the '#pragma acc ...'
+/// directive.
+///
+/// \code
+/// #pragma acc parallel num_workers(n)
+/// \endcode
+/// In this example directive '#pragma acc parallel' has clause 'num_workers'
+/// with single expression 'n'.
+class ACCNumWorkersClause : public ACCClause {
+  friend class ACCClauseReader;
+
+  /// Location of '('.
+  SourceLocation LParenLoc;
+
+  /// Original NumWorkers expression.
+  Stmt *NumWorkers = nullptr;
+
+  /// Set the original NumWorkers expression.
+  ///
+  /// \param E NumWorkers expression.
+  void setNumWorkers(Expr *E) { NumWorkers = E; }
+
+public:
+  /// Build 'num_workers' clause.
+  ///
+  /// \param E Original expression associated with this clause.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  ACCNumWorkersClause(Expr *E, SourceLocation StartLoc, SourceLocation LParenLoc,
+                      SourceLocation EndLoc)
+      : ACCClause(ACCC_num_workers, StartLoc, EndLoc), LParenLoc(LParenLoc),
+        NumWorkers(E) {
+  }
+
+  /// Build an empty clause.
+  ACCNumWorkersClause()
+      : ACCClause(ACCC_num_workers, SourceLocation(), SourceLocation()) {}
+
+  /// Sets the location of '('.
+  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
+
+  /// Returns the location of '('.
+  SourceLocation getLParenLoc() const { return LParenLoc; }
+
+  /// Return the original NumWorkers expression.
+  Expr *getNumWorkers() { return cast<Expr>(NumWorkers); }
+
+  /// Return the original NumWorkers expression.
+  Expr *getNumWorkers() const { return cast<Expr>(NumWorkers); }
+
+  child_range children() { return child_range(&NumWorkers, &NumWorkers + 1); }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_num_workers;
+  }
+};
+
+/// This represents 'vector_length' clause in the '#pragma acc ...'
+/// directive.
+///
+/// \code
+/// #pragma acc parallel vector_length(n)
+/// \endcode
+/// In this example directive '#pragma acc parallel' has clause 'vector_length'
+/// with single expression 'n'.
+class ACCVectorLengthClause : public ACCClause {
+  friend class ACCClauseReader;
+
+  /// Location of '('.
+  SourceLocation LParenLoc;
+
+  /// Original VectorLength expression.
+  Stmt *VectorLength = nullptr;
+
+  /// Set the original VectorLength expression.
+  ///
+  /// \param E VectorLength expression.
+  void setVectorLength(Expr *E) { VectorLength = E; }
+
+public:
+  /// Build 'vector_length' clause.
+  ///
+  /// \param E Original expression associated with this clause.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  ACCVectorLengthClause(Expr *E, SourceLocation StartLoc, SourceLocation LParenLoc,
+                        SourceLocation EndLoc)
+      : ACCClause(ACCC_vector_length, StartLoc, EndLoc), LParenLoc(LParenLoc),
+        VectorLength(E) {
+  }
+
+  /// Build an empty clause.
+  ACCVectorLengthClause()
+      : ACCClause(ACCC_vector_length, SourceLocation(), SourceLocation()) {}
+
+  /// Sets the location of '('.
+  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
+
+  /// Returns the location of '('.
+  SourceLocation getLParenLoc() const { return LParenLoc; }
+
+  /// Return the original VectorLength expression.
+  Expr *getVectorLength() { return cast<Expr>(VectorLength); }
+
+  /// Return the original VectorLength expression.
+  Expr *getVectorLength() const { return cast<Expr>(VectorLength); }
+
+  child_range children() {
+    return child_range(&VectorLength, &VectorLength + 1);
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_vector_length;
+  }
+};
+
 /// This represents 'seq' clause in the '#pragma acc ...'
 /// directive.
 ///

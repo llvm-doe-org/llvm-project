@@ -3301,6 +3301,20 @@ bool RecursiveASTVisitor<Derived>::VisitACCNumGangsClause(
 }
 
 template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCNumWorkersClause(
+    ACCNumWorkersClause *C) {
+  TRY_TO(TraverseStmt(C->getNumWorkers()));
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCVectorLengthClause(
+    ACCVectorLengthClause *C) {
+  TRY_TO(TraverseStmt(C->getVectorLength()));
+  return true;
+}
+
+template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCSeqClause(ACCSeqClause *) {
   return true;
 }

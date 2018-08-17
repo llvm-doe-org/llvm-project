@@ -1975,6 +1975,30 @@ public:
                                                 EndLoc);
   }
 
+  /// Build a new OpenACC 'num_workers' clause.
+  ///
+  /// By default, performs semantic analysis to build the new statement.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCNumWorkersClause(Expr *NumWorkers,
+                                        SourceLocation StartLoc,
+                                        SourceLocation LParenLoc,
+                                        SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCNumWorkersClause(NumWorkers, StartLoc,
+                                                  LParenLoc, EndLoc);
+  }
+
+  /// Build a new OpenACC 'vector_length' clause.
+  ///
+  /// By default, performs semantic analysis to build the new statement.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCVectorLengthClause(Expr *VectorLength,
+                                          SourceLocation StartLoc,
+                                          SourceLocation LParenLoc,
+                                          SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCVectorLengthClause(VectorLength, StartLoc,
+                                                    LParenLoc, EndLoc);
+  }
+
   /// Build a new OpenACC 'shared' clause.
   ///
   /// By default, performs semantic analysis to build the new OpenACC clause.
@@ -9046,6 +9070,26 @@ TreeTransform<Derived>::TransformACCNumGangsClause(ACCNumGangsClause *C) {
   if (E.isInvalid())
     return nullptr;
   return getDerived().RebuildACCNumGangsClause(
+      E.get(), C->getLocStart(), C->getLParenLoc(), C->getLocEnd());
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCNumWorkersClause(ACCNumWorkersClause *C) {
+  ExprResult E = getDerived().TransformExpr(C->getNumWorkers());
+  if (E.isInvalid())
+    return nullptr;
+  return getDerived().RebuildACCNumWorkersClause(
+      E.get(), C->getLocStart(), C->getLParenLoc(), C->getLocEnd());
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCVectorLengthClause(ACCVectorLengthClause *C) {
+  ExprResult E = getDerived().TransformExpr(C->getVectorLength());
+  if (E.isInvalid())
+    return nullptr;
+  return getDerived().RebuildACCVectorLengthClause(
       E.get(), C->getLocStart(), C->getLParenLoc(), C->getLocEnd());
 }
 

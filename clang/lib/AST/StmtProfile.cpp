@@ -1021,6 +1021,14 @@ void ACCClauseProfiler::VisitACCNumGangsClause(const ACCNumGangsClause *C) {
   if (C->getNumGangs())
     Profiler->VisitStmt(C->getNumGangs());
 }
+void ACCClauseProfiler::VisitACCNumWorkersClause(const ACCNumWorkersClause *C) {
+  if (C->getNumWorkers())
+    Profiler->VisitStmt(C->getNumWorkers());
+}
+void ACCClauseProfiler::VisitACCVectorLengthClause(const ACCVectorLengthClause *C) {
+  if (C->getVectorLength())
+    Profiler->VisitStmt(C->getVectorLength());
+}
 void ACCClauseProfiler::VisitACCSeqClause(const ACCSeqClause *) {}
 void ACCClauseProfiler::VisitACCIndependentClause(
     const ACCIndependentClause *) {}

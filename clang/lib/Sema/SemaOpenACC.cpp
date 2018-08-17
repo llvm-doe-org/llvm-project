@@ -86,6 +86,9 @@ public:
 
 /// Stack for tracking declarations used in OpenACC directives and
 /// clauses and their data-sharing attributes.
+///
+/// FIXME: This is no longer about just data sharing attributes.  We should
+/// probably rename it to something more general.
 class DSAStackTy final {
 public:
   /// There are four cases:
@@ -135,6 +138,12 @@ private:
     // putting it here.
     SourceLocation LoopBreakLoc; // invalid if no break statement or not loop
     unsigned AssociatedLoops = 1;
+    // Each of these is non-nullptr if Directive = ACCD_parallel and the
+    // directive actually has the clause.
+    Expr *NumWorkers = nullptr;
+    Expr *VectorLength = nullptr;
+    // True if this has a nested acc loop directive with worker partitioning.
+    bool NestedWorkerPartitioning = false;
     SharingMapTy(OpenACCDirectiveKind DKind, SourceLocation Loc)
         : Directive(DKind), ConstructLoc(Loc) {}
     SharingMapTy() {}
@@ -274,6 +283,62 @@ public:
     assert(!isStackEmpty());
     return Stack.size() - 1;
   }
+
+  void setNumWorkers(Expr *NumWorkers) {
+    assert(!isStackEmpty());
+    assert(Stack.back().Directive == ACCD_parallel &&
+           "expected acc parallel directive for num_workers");
+    Stack.back().NumWorkers = NumWorkers;
+  }
+  Expr *getNumWorkers() const {
+    for (auto I = Stack.rbegin(), E = Stack.rend(); I != E; ++I) {
+      switch (I->Directive) {
+      case ACCD_parallel:
+        return I->NumWorkers;
+      case ACCD_loop:
+      case ACCD_unknown:
+        break;
+      }
+    }
+    return nullptr;
+  }
+  void setVectorLength(Expr *VectorLength) {
+    assert(!isStackEmpty());
+    assert(Stack.back().Directive == ACCD_parallel &&
+           "expected acc parallel directive for vector_length");
+    Stack.back().VectorLength = VectorLength;
+  }
+  Expr *getVectorLength() const {
+    for (auto I = Stack.rbegin(), E = Stack.rend(); I != E; ++I) {
+      switch (I->Directive) {
+      case ACCD_parallel:
+        return I->VectorLength;
+      case ACCD_loop:
+      case ACCD_unknown:
+        break;
+      }
+    }
+    return nullptr;
+  }
+  /// Mark all ancestor directives as containing worker partitioning.
+  void setWorkerPartitioning() {
+    assert(getCurrentDirective() == ACCD_loop &&
+           "expected worker partitioning to be on acc loop directive");
+    assert(getNestingLevel() > 1 && "unexpected orphaned acc loop directive");
+    for (auto I = std::next(Stack.rbegin()), E = std::prev(Stack.rend());
+         I != E; ++I) {
+      assert((I->Directive == ACCD_loop || I->Directive == ACCD_parallel) &&
+             "expected worker partitioning to be nested in acc loop or"
+             " parallel directive");
+      I->NestedWorkerPartitioning = true;
+    }
+  }
+  /// Does this directive have a nested acc loop directive with worker
+  /// partitioning?
+  bool getNestedWorkerPartitioning() const {
+    assert(!isStackEmpty());
+    return Stack.back().NestedWorkerPartitioning;
+  }
 };
 } // namespace
 
@@ -408,6 +473,8 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
     break;
   case ACCC_shared:
   case ACCC_num_gangs:
+  case ACCC_num_workers:
+  case ACCC_vector_length:
   case ACCC_seq:
   case ACCC_independent:
   case ACCC_auto:
@@ -519,6 +586,8 @@ public:
           switch (DVar.CKind) {
           case ACCC_shared:
           case ACCC_num_gangs:
+          case ACCC_num_workers:
+          case ACCC_vector_length:
           case ACCC_seq:
           case ACCC_independent:
           case ACCC_auto:
@@ -757,14 +826,16 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
 
   switch (DKind) {
   case ACCD_parallel:
-    Res = ActOnOpenACCParallelDirective(ClausesWithImplicit, AStmt, StartLoc,
-                                        EndLoc);
+    Res = ActOnOpenACCParallelDirective(
+        ClausesWithImplicit, AStmt, StartLoc, EndLoc,
+        DSAStack->getNestedWorkerPartitioning());
     break;
   case ACCD_loop:
-    Res = ActOnOpenACCLoopDirective(ClausesWithImplicit, AStmt, StartLoc,
-                                    EndLoc, DSAStack->getLoopControlVariable(),
-                                    DSAStack->getParentLoopPartitioning()
-                                        .getInnermost());
+    Res = ActOnOpenACCLoopDirective(
+        ClausesWithImplicit, AStmt, StartLoc, EndLoc,
+        DSAStack->getLoopControlVariable(),
+        DSAStack->getParentLoopPartitioning().getInnermost(),
+        DSAStack->getNumWorkers(), DSAStack->getVectorLength());
     break;
   case ACCD_unknown:
     llvm_unreachable("Unknown OpenACC directive");
@@ -775,17 +846,16 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
   return Res;
 }
 
-StmtResult Sema::ActOnOpenACCParallelDirective(ArrayRef<ACCClause *> Clauses,
-                                               Stmt *AStmt,
-                                               SourceLocation StartLoc,
-                                               SourceLocation EndLoc) {
+StmtResult Sema::ActOnOpenACCParallelDirective(
+    ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
+    SourceLocation EndLoc, bool NestedWorkerPartitioning) {
   if (!AStmt)
     return StmtError();
 
   getCurFunction()->setHasBranchProtectedScope();
 
   return ACCParallelDirective::Create(Context, StartLoc, EndLoc, Clauses,
-                                      AStmt);
+                                      AStmt, NestedWorkerPartitioning);
 }
 
 void Sema::ActOnOpenACCLoopInitialization(SourceLocation ForLoc, Stmt *Init) {
@@ -820,7 +890,8 @@ void Sema::ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
 StmtResult Sema::ActOnOpenACCLoopDirective(
     ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
     SourceLocation EndLoc, VarDecl *LCVar,
-    OpenACCClauseKind ParentLoopPartitioning) {
+    OpenACCClauseKind ParentLoopPartitioning, Expr *NumWorkers,
+    Expr *VectorLength) {
   if (!AStmt)
     return StmtError();
 
@@ -832,7 +903,8 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
   }
   assert(For->getBody());
 
-  // Complain if we have a reduction on an acc loop control variable.
+  // Complain if we have a reduction on an acc loop control variable.  Record
+  // for parent construct any worker partitioning here.
   for (ACCClause *C : Clauses) {
     if (ACCReductionClause *RC = dyn_cast_or_null<ACCReductionClause>(C)) {
       for (Expr *VR : RC->varlists()) {
@@ -845,6 +917,8 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
         }
       }
     }
+    else if (dyn_cast_or_null<ACCWorkerClause>(C))
+      DSAStack->setWorkerPartitioning();
   }
 
   // FIXME: Much more validation of the for statement should be performed.  To
@@ -864,7 +938,8 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
   }
 
   return ACCLoopDirective::Create(Context, StartLoc, EndLoc, Clauses, AStmt,
-                                  LCVar, ParentLoopPartitioning);
+                                  LCVar, ParentLoopPartitioning, NumWorkers,
+                                  VectorLength);
 }
 
 ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr,
@@ -875,6 +950,12 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr
   switch (Kind) {
   case ACCC_num_gangs:
     Res = ActOnOpenACCNumGangsClause(Expr, StartLoc, LParenLoc, EndLoc);
+    break;
+  case ACCC_num_workers:
+    Res = ActOnOpenACCNumWorkersClause(Expr, StartLoc, LParenLoc, EndLoc);
+    break;
+  case ACCC_vector_length:
+    Res = ActOnOpenACCVectorLengthClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
   case ACCC_shared:
   case ACCC_private:
@@ -1286,8 +1367,13 @@ static bool IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
   ValExpr = Value.get();
   // The expression must evaluate to a non-negative integer value.
   llvm::APSInt Result;
-  if (ValExpr->isIntegerConstantExpr(Result, SemaRef.Context) &&
-      !Result.isStrictlyPositive()) {
+  if (!ValExpr->isIntegerConstantExpr(Result, SemaRef.Context)) {
+    if (IsConstant) {
+      SemaRef.Diag(Loc, diag::err_acc_clause_not_ice)
+          << getOpenACCClauseName(CKind) << ValExpr->getSourceRange();
+      return false;
+    }
+  } else if (!Result.isStrictlyPositive()) {
     SemaRef.Diag(Loc, diag::err_acc_clause_not_positive_ice)
         << getOpenACCClauseName(CKind) << ValExpr->getSourceRange();
     return false;
@@ -1324,6 +1410,8 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
   case ACCC_firstprivate:
   case ACCC_reduction:
   case ACCC_num_gangs:
+  case ACCC_num_workers:
+  case ACCC_vector_length:
   case ACCC_unknown:
     llvm_unreachable("Clause is not allowed.");
   }
@@ -1373,9 +1461,47 @@ ACCClause *Sema::ActOnOpenACCNumGangsClause(Expr *NumGangs,
                                          EndLoc);
 }
 
+ACCClause *Sema::ActOnOpenACCNumWorkersClause(Expr *NumWorkers,
+                                              SourceLocation StartLoc,
+                                              SourceLocation LParenLoc,
+                                              SourceLocation EndLoc) {
+  // OpenMP says num_threads must evaluate to a positive integer value.
+  // OpenACC doesn't specify such a restriction that I see for num_workers, but
+  // it seems reasonable.
+  if (!IsPositiveIntegerValue(NumWorkers, *this, ACCC_num_workers, false))
+    return nullptr;
+  DSAStack->setNumWorkers(NumWorkers);
+  return new (Context) ACCNumWorkersClause(NumWorkers, StartLoc, LParenLoc,
+                                           EndLoc);
+}
+
+ACCClause *Sema::ActOnOpenACCVectorLengthClause(Expr *VectorLength,
+                                                SourceLocation StartLoc,
+                                                SourceLocation LParenLoc,
+                                                SourceLocation EndLoc) {
+  // OpenMP says simdlen must be a constant positive integer.
+  // OpenACC doesn't specify such a restriction that I see for vector_length.
+  // It seems reasonable for it to be a positive integer, but I'm not sure why
+  // it needs to be constant.
+  if (!IsPositiveIntegerValue(VectorLength, *this, ACCC_vector_length, true))
+    return nullptr;
+  DSAStack->setVectorLength(VectorLength);
+  return new (Context) ACCVectorLengthClause(VectorLength, StartLoc, LParenLoc,
+                                             EndLoc);
+}
+
 namespace {
 class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
   typedef TransformContext<TransformACCToOMP> BaseTransform;
+  /// Before translating the associated statement of an acc parallel directive,
+  /// if that directive has a num_workers clause with a non-constant
+  /// expression, NumWorkersVarDecl is set to the declaration of a constant
+  /// variable generated for the sake of OpenMP and initialized with the
+  /// num_workers value.  NumWorkersVarDecl is set back to nullptr after the
+  /// translation of the associated statement.  Nested acc parallel directives
+  /// are not permitted, so we don't need a stack of these declarations.
+  VarDecl *NumWorkersVarDecl = nullptr;
+
 public:
   TransformACCToOMP(Sema &SemaRef) : BaseTransform(SemaRef) {}
 
@@ -1416,24 +1542,6 @@ private:
     return getSema().ActOnOpenMPRegionEnd(Body, TClauses);
   }
 
-  StmtResult transformACCExecutableDirective(ACCExecutableDirective *D,
-                                             OpenMPDirectiveKind TDKind) {
-    llvm::SmallVector<OMPClause *, 16> TClauses;
-    size_t TClausesEmptyCount;
-    transformACCClauses(D, TDKind, TClauses, TClausesEmptyCount);
-    StmtResult AssociatedStmt = transformACCAssociatedStmt(D, TDKind,
-                                                           TClauses);
-    if (AssociatedStmt.isInvalid() ||
-        TClauses.size() != D->clauses().size() - TClausesEmptyCount)
-      return StmtError();
-    StmtResult Res = getDerived().RebuildOMPExecutableDirective(
-        TDKind, DeclarationNameInfo(), OMPD_unknown, TClauses,
-        AssociatedStmt.get(), D->getLocStart(), D->getLocEnd());
-    if (!Res.isInvalid())
-      D->setOMPNode(Res.get());
-    return Res;
-  }
-
   /// A RAII object to conditionally build a compound scope and statement.
   class ConditionalCompoundStmtRAII {
     TransformACCToOMP &Tx;
@@ -1445,7 +1553,7 @@ private:
   public:
     ConditionalCompoundStmtRAII(TransformACCToOMP &Tx)
         : Tx(Tx), Started(false), Finalized(false), Err(false) {}
-    void addPrivateDecl(SourceLocation StartLoc, SourceLocation EndLoc,
+    void addPrivateDecl(SourceLocation RefStartLoc, SourceLocation RefEndLoc,
                         VarDecl *VD) {
       VarDecl *Def = VD->getDefinition();
       assert(Def && "expected private variable to have definition");
@@ -1456,20 +1564,43 @@ private:
       // Record old transformation for Def.  If we've already done that, that
       // means Def appeared multiple times in private clauses.  Once is enough,
       // and we don't want to lose the old transformation.
-      Decl *OldDeclTx = Tx.getDerived().TransformDecl(StartLoc, Def);
+      Decl *OldDeclTx = Tx.getDerived().TransformDecl(RefStartLoc, Def);
       if (!OldDeclTxs.try_emplace(Def, OldDeclTx).second)
         return;
-      // Revert the old transformation for D so we can create a new one.
+      // Revert the old transformation for Def so we can create a new one.
       Tx.getDerived().transformedLocalDecl(Def, Def);
-      // Transform D and create a declaration statement for it.
-      Decl *DPrivate = Tx.getDerived().TransformDefinition(StartLoc, Def,
+      // Transform Def and create a declaration statement for it.
+      Decl *DPrivate = Tx.getDerived().TransformDefinition(RefStartLoc, Def,
                                                            /*DropInit*/true);
       StmtResult Res = Tx.getSema().ActOnDeclStmt(
-          Tx.getSema().ConvertDeclToDeclGroup(DPrivate), StartLoc, EndLoc);
+          Tx.getSema().ConvertDeclToDeclGroup(DPrivate), RefStartLoc,
+          RefEndLoc);
       if (Res.isInvalid())
         Err = true;
       else
         Stmts.push_back(Res.get());
+    }
+    VarDecl *addNewPrivateDecl(StringRef Name, QualType Ty, Expr *Init,
+                               SourceLocation Loc) {
+      if (!Started) {
+        Tx.getSema().ActOnStartOfCompoundStmt(false);
+        Started = true;
+      }
+      ASTContext &Ctxt = Tx.getSema().getASTContext();
+      DeclContext *DC = Tx.getSema().CurContext;
+      IdentifierInfo *II = &Tx.getSema().PP.getIdentifierTable().get(Name);
+      TypeSourceInfo *TInfo = Ctxt.getTrivialTypeSourceInfo(Ty, Loc);
+      VarDecl *VD = VarDecl::Create(Ctxt, DC, Loc, Loc, II, Ty, TInfo,
+                                    SC_None);
+      Tx.getSema().AddInitializerToDecl(VD, Init, false);
+      StmtResult Res = Tx.getSema().ActOnDeclStmt(
+          Tx.getSema().ConvertDeclToDeclGroup(VD), VD->getLocStart(),
+          VD->getLocEnd());
+      if (Res.isInvalid())
+        Err = true;
+      else
+        Stmts.push_back(Res.get());
+      return VD;
     }
     void finalize(StmtResult &S) {
       assert(!Finalized && "expected only one finalization");
@@ -1508,15 +1639,61 @@ private:
 
 public:
   StmtResult TransformACCParallelDirective(ACCParallelDirective *D) {
+    ConditionalCompoundStmtRAII EnclosingCompoundStmt(*this);
+
+    // Declare a num_workers variable in an enclosing compound statement, if
+    // needed.
+    assert(NumWorkersVarDecl == nullptr &&
+           "unexpected nested acc parallel directive");
+    if (D->getNestedWorkerPartitioning()) {
+      auto NumWorkersClauses = D->getClausesOfKind<ACCNumWorkersClause>();
+      if (NumWorkersClauses.begin() != NumWorkersClauses.end()) {
+        Expr *NumWorkers = NumWorkersClauses.begin()->getNumWorkers();
+        if (!NumWorkers->isIntegerConstantExpr(this->getSema()
+                                                   .getASTContext()))
+          NumWorkersVarDecl = EnclosingCompoundStmt.addNewPrivateDecl(
+              "__clang_acc_num_workers__", NumWorkers->getType().withConst(),
+              NumWorkers, NumWorkers->getLocStart());
+      }
+    }
+
+    // Start OpenMP DSA block.
     getSema().StartOpenMPDSABlock(OMPD_target_teams, DeclarationNameInfo(),
                                   /*CurScope=*/nullptr, D->getLocStart());
-    StmtResult Res = getDerived().transformACCExecutableDirective(
-        D, OMPD_target_teams);
+
+    // Transform OpenACC clauses.
+    llvm::SmallVector<OMPClause *, 16> TClauses;
+    size_t TClausesEmptyCount;
+    size_t NumClausesAdded = 0;
+    transformACCClauses(D, OMPD_target_teams, TClauses, TClausesEmptyCount);
+
+    // Transform associated statement.
+    StmtResult AssociatedStmt = transformACCAssociatedStmt(D, OMPD_target_teams,
+                                                           TClauses);
+    NumWorkersVarDecl = nullptr;
+
+    // Build OpenMP directive and finalize enclosing compound statement, if
+    // any.
+    StmtResult Res;
+    if (AssociatedStmt.isInvalid() ||
+        TClauses.size() != D->clauses().size() - TClausesEmptyCount +
+                           NumClausesAdded)
+      Res = StmtError();
+    else
+      Res = getDerived().RebuildOMPExecutableDirective(
+          OMPD_target_teams, DeclarationNameInfo(), OMPD_unknown, TClauses,
+          AssociatedStmt.get(), D->getLocStart(), D->getLocEnd());
     getSema().EndOpenMPDSABlock(Res.get());
+    EnclosingCompoundStmt.finalize(Res);
+    if (!Res.isInvalid())
+      D->setOMPNode(Res.get());
     return Res;
   }
 
   StmtResult TransformACCLoopDirective(ACCLoopDirective *D) {
+    Sema &SemaRef = this->getSema();
+    ASTContext &Ctxt = SemaRef.getASTContext();
+
     // What OpenACC clauses do we have?
     bool HasIndependent = false;
     bool HasGang = false;
@@ -1538,49 +1715,54 @@ public:
     // OMPD_unknown means none (so sequential).
     OpenMPDirectiveKind TDKind;
     bool AddNumThreads1 = false;
+    Expr *AddNumThreadsExpr = nullptr;
+    Expr *AddSimdlenExpr = nullptr;
     bool AddScopeWithLCVPrivate = false;
     bool AddScopeWithAllPrivates = false;
     if (!HasIndependent) {
       // sequential loop
       TDKind = OMPD_unknown;
       AddScopeWithAllPrivates = true;
-    } else if (!HasGang) {
-      if (!HasWorker) {
-        if (!HasVector) {
-          // sequential loop
-          TDKind = OMPD_unknown;
-          AddScopeWithAllPrivates = true;
-        } else { // HasVector
-          if (D->getParentLoopPartitioning() == ACCC_unknown) {
-            TDKind = OMPD_parallel_for_simd;
-            AddNumThreads1 = true;
-          }
-          else
-            TDKind = OMPD_simd;
-          AddScopeWithLCVPrivate = true;
-        }
-      } else { // HasWorker
-        if (!HasVector)
-          TDKind = OMPD_parallel_for;
-        else { // HasVector
-          TDKind = OMPD_parallel_for_simd;
-          AddScopeWithLCVPrivate = true;
-        }
+    } else {
+      if (HasWorker)
+        AddNumThreadsExpr = D->getNumWorkers();
+      if (HasVector) {
+        AddSimdlenExpr = D->getVectorLength();
+        AddScopeWithLCVPrivate = true;
       }
-    } else { // HasGang
-      if (!HasWorker) {
-        if (!HasVector)
-          TDKind = OMPD_distribute;
-        else { // HasVector
-          TDKind = OMPD_distribute_simd;
-          AddScopeWithLCVPrivate = true;
+      if (!HasGang) {
+        if (!HasWorker) {
+          if (!HasVector) {
+            // sequential loop
+            TDKind = OMPD_unknown;
+            AddScopeWithAllPrivates = true;
+          } else { // HasVector
+            if (D->getParentLoopPartitioning() == ACCC_unknown) {
+              TDKind = OMPD_parallel_for_simd;
+              AddNumThreads1 = true;
+            }
+            else
+              TDKind = OMPD_simd;
+          }
+        } else { // HasWorker
+          if (!HasVector)
+            TDKind = OMPD_parallel_for;
+          else // HasVector
+            TDKind = OMPD_parallel_for_simd;
         }
-      } else { // HasWorker
-        if (!HasVector)
-          TDKind = OMPD_distribute_parallel_for;
-        else { // HasVector
-          TDKind = OMPD_distribute_parallel_for_simd;
-          AddScopeWithLCVPrivate = true;
+      } else { // HasGang
+        if (!HasWorker) {
+          if (!HasVector)
+            TDKind = OMPD_distribute;
+          else { // HasVector
+            TDKind = OMPD_distribute_simd;
+          }
+        } else { // HasWorker
+          if (!HasVector)
+            TDKind = OMPD_distribute_parallel_for;
+          else { // HasVector
+            TDKind = OMPD_distribute_parallel_for_simd;
+          }
         }
       }
     }
@@ -1611,34 +1793,73 @@ public:
       return Res;
     }
 
-    // Build OpenMP construct.
+    // Start OpenMP DSA block.
     getSema().StartOpenMPDSABlock(TDKind, DeclarationNameInfo(),
                                   /*CurScope=*/nullptr, D->getLocStart());
+
+    // Add num_threads and simdlen clauses, as needed.
     llvm::SmallVector<OMPClause *, 16> TClauses;
+    assert((!AddNumThreads1 || !AddNumThreadsExpr) &&
+           "did not expect to add conflicting num_threads clauses");
+    size_t NumClausesAdded = 0;
     if (AddNumThreads1) {
       OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_num_threads);
       ExprResult One = getSema().ActOnIntegerConstant(D->getLocEnd(), 1);
       assert(!One.isInvalid());
       TClauses.push_back(getDerived().RebuildOMPNumThreadsClause(
           One.get(), D->getLocEnd(), D->getLocEnd(), D->getLocEnd()));
+      ++NumClausesAdded;
+    } else if (AddNumThreadsExpr) {
+      if (!AddNumThreadsExpr->isIntegerConstantExpr(Ctxt)) {
+        assert(NumWorkersVarDecl && "expected variable declaration for"
+                                    " non-constant num_workers");
+        ExprResult Res = getSema().BuildDeclRefExpr(
+            NumWorkersVarDecl,
+            NumWorkersVarDecl->getType().getNonReferenceType(), VK_RValue,
+            D->getLocEnd());
+        assert(!Res.isInvalid() &&
+               "expected valid reference to num_workers variable");
+        AddNumThreadsExpr = Res.get();
+      } else
+        assert(!NumWorkersVarDecl && "unexpected variable declaration for"
+                                     " constant num_workers");
+      OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_num_threads);
+      TClauses.push_back(getDerived().RebuildOMPNumThreadsClause(
+          AddNumThreadsExpr, AddNumThreadsExpr->getLocStart(),
+          AddNumThreadsExpr->getLocStart(), AddNumThreadsExpr->getLocEnd()));
+      ++NumClausesAdded;
     }
+    if (AddSimdlenExpr) {
+      OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_simdlen);
+      TClauses.push_back(getDerived().RebuildOMPSimdlenClause(
+          AddSimdlenExpr, AddSimdlenExpr->getLocStart(),
+          AddSimdlenExpr->getLocStart(), AddSimdlenExpr->getLocEnd()));
+      ++NumClausesAdded;
+    }
+
+    // Transform OpenACC clauses.
     size_t TClausesEmptyCount;
     transformACCClauses(D, TDKind, TClauses, TClausesEmptyCount);
+
+    // Transform associated statement.
     StmtResult AssociatedStmt = transformACCAssociatedStmt(D, TDKind,
                                                            TClauses);
+
+    // Build OpenMP directive and finalize enclosing compound statement, if
+    // any.
     StmtResult Res;
     if (AssociatedStmt.isInvalid() ||
         TClauses.size() != D->clauses().size() - TClausesEmptyCount +
-                           AddNumThreads1)
+                           NumClausesAdded)
       Res = StmtError();
     else
       Res = getDerived().RebuildOMPExecutableDirective(
           TDKind, DeclarationNameInfo(), OMPD_unknown, TClauses,
           AssociatedStmt.get(), D->getLocStart(), D->getLocEnd());
+    getSema().EndOpenMPDSABlock(Res.get());
     EnclosingCompoundStmt.finalize(Res);
     if (!Res.isInvalid())
       D->setOMPNode(Res.get());
-    getSema().EndOpenMPDSABlock(Res.get());
     return Res;
   }
 
@@ -1748,6 +1969,18 @@ public:
         E.get(), L.LocStart, L.LParenLoc, L.LocEnd);
   }
 
+  OMPClauseResult TransformACCNumWorkersClause(ACCExecutableDirective *D,
+                                               OpenMPDirectiveKind TDKind,
+                                               ACCNumWorkersClause *C) {
+    return OMPClauseEmpty();
+  }
+
+  OMPClauseResult TransformACCVectorLengthClause(ACCExecutableDirective *D,
+                                                 OpenMPDirectiveKind TDKind,
+                                                 ACCVectorLengthClause *C) {
+    return OMPClauseEmpty();
+  }
+
   OMPClauseResult TransformACCSharedClause(ACCExecutableDirective *D,
                                            OpenMPDirectiveKind TDKind,
                                            ACCSharedClause *C) {
@@ -1847,7 +2080,7 @@ public:
   }
 
   OMPClauseResult TransformACCWorkerClause(ACCExecutableDirective *D,
-                                          OpenMPDirectiveKind TDKind,
+                                           OpenMPDirectiveKind TDKind,
                                            ACCWorkerClause *C) {
     return OMPClauseEmpty();
   }

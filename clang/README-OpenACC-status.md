@@ -50,7 +50,29 @@ We have implemented the following features:
                   support for OpenMP reductions.  Some operand types
                   might not be supported when compiling the generated
                   OpenMP using a different compiler.
-    * `num_gangs` clause
+    * `num_gangs`, `num_workers`, `vector_length` clause:
+        * The argument in all cases must be a positive integer
+          expression.
+        * The `vector_length` argument must also be a constant.
+        * Notes:
+            * OpenACC 2.6 specifies only that the arguments must be
+              integer expressions.  However, OpenMP specifies the
+              stricter requirements above for `num_teams`,
+              `num_threads`, and `simdlen`, to which clacc translates
+              the above clauses.
+            * A non-positive value here probably doesn't make sense
+              anyway.  Moreover, if the argument is an integer
+              constant (so that it can be statically analyzed), gcc
+              7.3.0 warns if it's non-positive.  However, pgcc 18.4-0
+              doesn't warn even if it's negative.
+            * It's not clear to me yet why OpenMP requires `simdlen`
+              to have a constant expression.  Neither gcc 7.3.0 nor
+              pgcc 18.4-0 warn if `vector_length` receives a
+              non-constant expression.  However, we're stuck with this
+              restriction because we translate to OpenMP.  OpenACC
+              does permit the compiler to ignore `vector_length` as a
+              hint, so we could choose to ignore it in the case of a
+              non-constant expression.
 * `loop` directive within a `parallel` directive:
     * use without clauses
     * partitionability:

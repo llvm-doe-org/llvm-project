@@ -2722,6 +2722,16 @@ void ACCClauseWriter::VisitACCNumGangsClause(ACCNumGangsClause *C) {
   Record.AddSourceLocation(C->getLParenLoc());
 }
 
+void ACCClauseWriter::VisitACCNumWorkersClause(ACCNumWorkersClause *C) {
+  Record.AddStmt(C->getNumWorkers());
+  Record.AddSourceLocation(C->getLParenLoc());
+}
+
+void ACCClauseWriter::VisitACCVectorLengthClause(ACCVectorLengthClause *C) {
+  Record.AddStmt(C->getVectorLength());
+  Record.AddSourceLocation(C->getLParenLoc());
+}
+
 void ACCClauseWriter::VisitACCSeqClause(ACCSeqClause *) {}
 void ACCClauseWriter::VisitACCIndependentClause(ACCIndependentClause *) {}
 void ACCClauseWriter::VisitACCAutoClause(ACCAutoClause *) {}
@@ -2755,6 +2765,7 @@ void ASTStmtWriter::VisitACCParallelDirective(ACCParallelDirective *D) {
   Record.push_back(D->getNumClauses());
   VisitACCExecutableDirective(D);
   Code = serialization::STMT_ACC_PARALLEL_DIRECTIVE;
+  Record.push_back(D->getNestedWorkerPartitioning());
 }
 
 void ASTStmtWriter::VisitACCLoopDirective(ACCLoopDirective *D) {
@@ -2763,6 +2774,8 @@ void ASTStmtWriter::VisitACCLoopDirective(ACCLoopDirective *D) {
   VisitACCExecutableDirective(D);
   Record.AddDeclRef(D->getLoopControlVariable());
   Record.push_back(D->getParentLoopPartitioning());
+  Record.AddStmt(D->getNumWorkers());
+  Record.AddStmt(D->getVectorLength());
   Code = serialization::STMT_ACC_LOOP_DIRECTIVE;
 }
 

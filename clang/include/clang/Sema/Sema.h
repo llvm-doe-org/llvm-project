@@ -9337,16 +9337,16 @@ public:
       SourceLocation StartLoc, SourceLocation EndLoc);
   /// Called on well-formed '\#pragma acc parallel' after parsing
   /// of the associated statement.
-  StmtResult ActOnOpenACCParallelDirective(ArrayRef<ACCClause *> Clasues,
-                                           Stmt *AStmt,
-                                           SourceLocation StartLoc,
-                                           SourceLocation EndLoc);
+  StmtResult ActOnOpenACCParallelDirective(
+      ArrayRef<ACCClause *> Clasues, Stmt *AStmt, SourceLocation StartLoc,
+      SourceLocation EndLoc, bool NestedWorkerPartitioning);
   /// Called on well-formed '\#pragma acc loop' after parsing
   /// of the associated statement.
   StmtResult ActOnOpenACCLoopDirective(
       ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
       SourceLocation EndLoc, VarDecl *LCVar,
-      OpenACCClauseKind ParentLoopPartitioning);
+      OpenACCClauseKind ParentLoopPartitioning, Expr *NumWorkers,
+      Expr *VectorLength);
 
   ACCClause *ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
                                           Expr *Expr,
@@ -9402,6 +9402,16 @@ public:
                                         SourceLocation StartLoc,
                                         SourceLocation LParenLoc,
                                         SourceLocation EndLoc);
+  /// Called on well-formed 'num_workers' clause.
+  ACCClause *ActOnOpenACCNumWorkersClause(Expr *NumWorkers,
+                                          SourceLocation StartLoc,
+                                          SourceLocation LParenLoc,
+                                          SourceLocation EndLoc);
+  /// Called on well-formed 'vector_length' clause.
+  ACCClause *ActOnOpenACCVectorLengthClause(Expr *VectorLength,
+                                            SourceLocation StartLoc,
+                                            SourceLocation LParenLoc,
+                                            SourceLocation EndLoc);
 
   /// Transform OpenACC region to OpenMP, and return true if an error occurred.
   ///

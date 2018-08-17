@@ -3083,6 +3083,12 @@ ACCClause *ACCClauseReader::readClause() {
   case ACCC_num_gangs:
     C = new (Context) ACCNumGangsClause();
     break;
+  case ACCC_num_workers:
+    C = new (Context) ACCNumWorkersClause();
+    break;
+  case ACCC_vector_length:
+    C = new (Context) ACCVectorLengthClause();
+    break;
   case ACCC_seq:
     C = new (Context) ACCSeqClause();
     break;
@@ -3160,6 +3166,16 @@ void ACCClauseReader::VisitACCNumGangsClause(ACCNumGangsClause *C) {
   C->setLParenLoc(Reader->ReadSourceLocation());
 }
 
+void ACCClauseReader::VisitACCNumWorkersClause(ACCNumWorkersClause *C) {
+  C->setNumWorkers(Reader->Record.readSubExpr());
+  C->setLParenLoc(Reader->ReadSourceLocation());
+}
+
+void ACCClauseReader::VisitACCVectorLengthClause(ACCVectorLengthClause *C) {
+  C->setVectorLength(Reader->Record.readSubExpr());
+  C->setLParenLoc(Reader->ReadSourceLocation());
+}
+
 void ACCClauseReader::VisitACCSeqClause(ACCSeqClause *) {}
 void ACCClauseReader::VisitACCIndependentClause(ACCIndependentClause *) {}
 void ACCClauseReader::VisitACCAutoClause(ACCAutoClause *) {}
@@ -3191,6 +3207,7 @@ void ASTStmtReader::VisitACCParallelDirective(ACCParallelDirective *D) {
   // The NumClauses field was read in ReadStmtFromStream.
   Record.skipInts(1);
   VisitACCExecutableDirective(D);
+  D->setNestedWorkerPartitioning(Record.readInt());
 }
 
 void ASTStmtReader::VisitACCLoopDirective(ACCLoopDirective *D) {
@@ -3201,6 +3218,8 @@ void ASTStmtReader::VisitACCLoopDirective(ACCLoopDirective *D) {
   D->setLoopControlVariable(Record.readDeclAs<VarDecl>());
   D->setParentLoopPartitioning(
       static_cast<OpenACCClauseKind>(Record.readInt()));
+  D->setNumWorkers(Record.readSubExpr());
+  D->setVectorLength(Record.readSubExpr());
 }
 
 //===----------------------------------------------------------------------===//

@@ -51,7 +51,10 @@ void fn() {
     #pragma acc loop 500 // expected-warning {{extra tokens at the end of '#pragma acc loop' are ignored}}
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop num_gangs(3) // expected-error {{unexpected OpenACC clause 'num_gangs' in directive '#pragma acc loop'}}
+    // expected-error@+3 {{unexpected OpenACC clause 'num_gangs' in directive '#pragma acc loop'}}
+    // expected-error@+2 {{unexpected OpenACC clause 'num_workers' in directive '#pragma acc loop'}}
+    // expected-error@+1 {{unexpected OpenACC clause 'vector_length' in directive '#pragma acc loop'}}
+    #pragma acc loop num_gangs(3) num_workers(3) vector_length(3)
     for (int i = 0; i < 5; ++i)
       ;
 

@@ -441,12 +441,21 @@ loop analysis and thus with only a safe mapping to OpenMP.
         * exp `private` -> exp `private`
         * imp|exp `reduction` -> exp `reduction`
     * exp `num_gangs` -> exp `num_teams`
-    * exp `num_workers` is discarded here during translation
-        * Note that `num_workers` might be used by a nested `acc
-          loop`.
+    * if exp `num_workers` with a constant-expression argument, and if
+      there is a contained worker-partitioned `acc loop`, then exp
+      `num_workers` -> wrap the `acc parallel` in a compound statement
+      and declare a local const variable with the same type and value
+      as the exp `num_workers` argument
+    * else, exp `num_workers` is discarded here during translation
+        * Note that a constant-expression argument here might be used
+          by a nested worker-partitioned `acc loop`.
     * exp `vector_length` is discarded here during translation
-        * Note that `vector_length` might be used by a nested `acc
-          loop`.
+        * Notes:
+            * Clacc does not support non-constant expressions for
+              `vector_length`.  See README-OpenACC-status.md for
+              details.
+            * The constant expression argument here might be used by a
+              nested vector-partitioned `acc loop`.
 * `acc loop` within `acc parallel`:
     * if exp `seq`, then:
         * Discard the directive.
@@ -591,9 +600,29 @@ loop analysis and thus with only a safe mapping to OpenMP.
               `num_threads(1)`) regardless of the input OpenACC clause
               order.
             * if exp `worker`, then exp `num_workers` from ancestor
-              `acc parallel` -> exp `num_threads`
+              `acc parallel` -> exp `num_threads` where the argument
+              is either:
+                * the original exp `num_workers` argument if it is a
+                  constant expression
+                * an expression containing only a reference to the
+                  local const variable generated for that exp
+                  `num_workers`
+                    * Note that on the ancestor `acc parallel` and on
+                      all OpenACC directives nested between it and
+                      this `acc loop`, the OpenMP data sharing
+                      attribute for the local const variable for
+                      `num_workers` is implicit.  Because the variable
+                      is const, private copies are not useful, so
+                      sharing is probably most efficient, but not all
+                      OpenMP directives permit an exp `shared` clause.
+                      Thus, relying on the implicit data sharing
+                      attribute throughout simplifies the
+                      implementation.  (For variables appearing in the
+                      original OpenACC source, we make a greater
+                      effort to be explicit about data sharing.)
             * if exp `vector`, then exp `vector_length` from ancestor
-              `acc parallel` -> exp `simdlen`
+              `acc parallel` -> exp `simdlen` (with the exp
+              `vector_length` constant-expression argument)
             * Data sharing semantics:
                 * Whether just assigned or declared in the init of the
                   attached `for` loop, the loop control variable is:

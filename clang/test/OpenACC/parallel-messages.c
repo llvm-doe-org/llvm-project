@@ -314,46 +314,77 @@ int main() {
   // expected-note@-4 {{defined as reduction}}
   ;
 
-#pragma acc parallel num_gangs
+#pragma acc parallel num_gangs num_workers vector_length
   // expected-error@-1 {{expected '(' after 'num_gangs'}}
+  // expected-error@-2 {{expected '(' after 'num_workers'}}
+  // expected-error@-3 {{expected '(' after 'vector_length'}}
   ;
 #pragma acc parallel num_gangs(1
   // expected-error@-1 {{expected ')'}}
   // expected-note@-2 {{to match this '('}}
   ;
-#pragma acc parallel num_gangs(1) num_gangs( 1)
+#pragma acc parallel num_workers( i
+  // expected-error@-1 {{expected ')'}}
+  // expected-note@-2 {{to match this '('}}
+  ;
+#pragma acc parallel vector_length (3 + 5
+  // expected-error@-1 {{expected ')'}}
+  // expected-note@-2 {{to match this '('}}
+  ;
+#pragma acc parallel num_gangs(i) num_gangs( i)
   // expected-error@-1 {{directive '#pragma acc parallel' cannot contain more than one 'num_gangs' clause}}
   ;
-#pragma acc parallel num_gangs(1) num_gangs(2 ) num_gangs(3)
-  // expected-error@-1 {{directive '#pragma acc parallel' cannot contain more than one 'num_gangs' clause}}
-  // expected-error@-2 {{directive '#pragma acc parallel' cannot contain more than one 'num_gangs' clause}}
+#pragma acc parallel num_workers(1) num_workers(1 ) num_workers(i+3)
+  // expected-error@-1 {{directive '#pragma acc parallel' cannot contain more than one 'num_workers' clause}}
+  // expected-error@-2 {{directive '#pragma acc parallel' cannot contain more than one 'num_workers' clause}}
   ;
-#pragma acc parallel num_gangs(bogus)
-  // expected-error@-1 {{use of undeclared identifier 'bogus'}}
+#pragma acc parallel vector_length(1) vector_length(2 ) vector_length(3)
+  // expected-error@-1 {{directive '#pragma acc parallel' cannot contain more than one 'vector_length' clause}}
+  // expected-error@-2 {{directive '#pragma acc parallel' cannot contain more than one 'vector_length' clause}}
   ;
-#pragma acc parallel num_gangs(i)
+#pragma acc parallel num_gangs(bogusg) num_workers(bogusw) vector_length(bogusv)
+  // expected-error@-1 {{use of undeclared identifier 'bogusg'}}
+  // expected-error@-2 {{use of undeclared identifier 'bogusw'}}
+  // expected-error@-3 {{use of undeclared identifier 'bogusv'}}
   ;
-#pragma acc parallel num_gangs(31)
+#pragma acc parallel num_gangs(i*1) num_workers(i+3) vector_length(i)
+  // expected-error@-1 {{argument to 'vector_length' clause must be an integer constant expression}}
   ;
-#pragma acc parallel num_gangs(1)
+#pragma acc parallel num_gangs(31 * 3 + 1) num_workers(10 + 5) vector_length(5 * 2)
   ;
-#pragma acc parallel num_gangs(0)
+#pragma acc parallel num_gangs(1) num_workers(1) vector_length(1)
+  ;
+#pragma acc parallel num_gangs(0) num_workers(0) vector_length(0)
   // expected-error@-1 {{argument to 'num_gangs' clause must be a strictly positive integer value}}
+  // expected-error@-2 {{argument to 'num_workers' clause must be a strictly positive integer value}}
+  // expected-error@-3 {{argument to 'vector_length' clause must be a strictly positive integer value}}
   ;
-#pragma acc parallel num_gangs(0u)
+#pragma acc parallel num_gangs(0u) num_workers(0u) vector_length(0u)
   // expected-error@-1 {{argument to 'num_gangs' clause must be a strictly positive integer value}}
+  // expected-error@-2 {{argument to 'num_workers' clause must be a strictly positive integer value}}
+  // expected-error@-3 {{argument to 'vector_length' clause must be a strictly positive integer value}}
   ;
-#pragma acc parallel num_gangs(-1)
+#pragma acc parallel num_gangs(-1) num_workers(-1) vector_length(-1)
   // expected-error@-1 {{argument to 'num_gangs' clause must be a strictly positive integer value}}
+  // expected-error@-2 {{argument to 'num_workers' clause must be a strictly positive integer value}}
+  // expected-error@-3 {{argument to 'vector_length' clause must be a strictly positive integer value}}
   ;
-#pragma acc parallel num_gangs(-5)
+#pragma acc parallel num_gangs(-5) num_workers(-5) vector_length(-5)
   // expected-error@-1 {{argument to 'num_gangs' clause must be a strictly positive integer value}}
+  // expected-error@-2 {{argument to 'num_workers' clause must be a strictly positive integer value}}
+  // expected-error@-3 {{argument to 'vector_length' clause must be a strictly positive integer value}}
   ;
-#pragma acc parallel num_gangs(d)
+#pragma acc parallel num_gangs(d) num_workers(f) vector_length(fc)
   // expected-error@-1 {{expression must have integral or unscoped enumeration type, not 'double'}}
+  // expected-error@-2 {{expression must have integral or unscoped enumeration type, not 'float'}}
+  // expected-error@-3 {{expression must have integral or unscoped enumeration type, not '_Complex float'}}
+  // expected-error@-4 {{argument to 'vector_length' clause must be an integer constant expression}}
   ;
-#pragma acc parallel num_gangs(1.0)
-  // expected-error@-1 {{expression must have integral or unscoped enumeration type, not 'double'}}
+#pragma acc parallel num_gangs(1.0f) num_workers(2e3) vector_length(1.3l)
+  // expected-error@-1 {{expression must have integral or unscoped enumeration type, not 'float'}}
+  // expected-error@-2 {{expression must have integral or unscoped enumeration type, not 'double'}}
+  // expected-error@-3 {{expression must have integral or unscoped enumeration type, not 'long double'}}
+  // expected-error@-4 {{argument to 'vector_length' clause must be an integer constant expression}}
   ;
 
   // At one time, an assert failed due to the use of arrNoSize.
