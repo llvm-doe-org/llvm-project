@@ -314,8 +314,6 @@ class ACCLoopDirective : public ACCExecutableDirective {
   friend class ASTStmtReader;
   VarDecl *LCVar = nullptr;
   OpenACCClauseKind ParentLoopPartitioning = ACCC_unknown;
-  Expr *NumWorkers = nullptr;
-  Expr *VectorLength = nullptr;
 
   /// Build directive with the given start and end location.
   ///
@@ -345,15 +343,10 @@ public:
   ///        the init of the for loop associated with the directive.
   /// \param ParentLoopPartitioning The loop partitioning that immediately
   ///        parents this directive.
-  /// \param NumWorkers The num_workers argument from the ancestor parallel
-  ///        directive, or nullptr if none.
-  /// \param VectorLength The vector_length argument from the ancestor parallel
-  ///        directive, or nullptr if none.
   static ACCLoopDirective *Create(
       const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
       ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt, VarDecl *LCVar,
-      OpenACCClauseKind ParentLoopPartitioning, Expr *NumWorkers,
-      Expr *VectorLength);
+      OpenACCClauseKind ParentLoopPartitioning);
 
   /// Creates an empty directive.
   ///
@@ -383,28 +376,6 @@ public:
   /// the loop is partitioned by more than one of these.
   OpenACCClauseKind getParentLoopPartitioning() const {
     return ParentLoopPartitioning;
-  }
-
-  /// Set the num_workers from the ancestor parallel directive, or nullptr if
-  /// none.
-  void setNumWorkers(Expr *V) {
-    NumWorkers = V;
-  }
-  /// Get the num_workers from the ancestor parallel directive, or nullptr if
-  /// none.
-  Expr *getNumWorkers() const {
-    return NumWorkers;
-  }
-
-  /// Set the vector_length from the ancestor parallel directive, or nullptr if
-  /// none.
-  void setVectorLength(Expr *V) {
-    VectorLength = V;
-  }
-  /// Get the vector_length from the ancestor parallel directive, or nullptr if
-  /// none.
-  Expr *getVectorLength() const {
-    return VectorLength;
   }
 
   static bool classof(const Stmt *T) {

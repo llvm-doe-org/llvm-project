@@ -9345,8 +9345,7 @@ public:
   StmtResult ActOnOpenACCLoopDirective(
       ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
       SourceLocation EndLoc, VarDecl *LCVar,
-      OpenACCClauseKind ParentLoopPartitioning, Expr *NumWorkers,
-      Expr *VectorLength);
+      OpenACCClauseKind ParentLoopPartitioning);
 
   ACCClause *ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
                                           Expr *Expr,

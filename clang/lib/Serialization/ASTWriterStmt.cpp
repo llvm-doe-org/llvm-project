@@ -2774,8 +2774,6 @@ void ASTStmtWriter::VisitACCLoopDirective(ACCLoopDirective *D) {
   VisitACCExecutableDirective(D);
   Record.AddDeclRef(D->getLoopControlVariable());
   Record.push_back(D->getParentLoopPartitioning());
-  Record.AddStmt(D->getNumWorkers());
-  Record.AddStmt(D->getVectorLength());
   Code = serialization::STMT_ACC_LOOP_DIRECTIVE;
 }
 

@@ -3218,8 +3218,6 @@ void ASTStmtReader::VisitACCLoopDirective(ACCLoopDirective *D) {
   D->setLoopControlVariable(Record.readDeclAs<VarDecl>());
   D->setParentLoopPartitioning(
       static_cast<OpenACCClauseKind>(Record.readInt()));
-  D->setNumWorkers(Record.readSubExpr());
-  D->setVectorLength(Record.readSubExpr());
 }
 
 //===----------------------------------------------------------------------===//
