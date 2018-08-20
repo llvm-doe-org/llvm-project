@@ -92,11 +92,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
       // The body is a block scope like in Lambdas and Blocks.
       ErrorFound |= Actions.ActOnOpenACCRegionStart(
           DKind, Clauses, getCurScope(), Loc, EndLoc);
-      // FIXME: We create a bogus CompoundStmt scope to hold the contents of
-      // the captured region. Code elsewhere assumes that any FunctionScopeInfo
-      // should have at least one compound statement scope within it.
-      AssociatedStmt = (Sema::CompoundScopeRAII(Actions), ParseStatement());
-      AssociatedStmt = Actions.ActOnOpenACCRegionEnd(AssociatedStmt);
+      AssociatedStmt = Actions.ActOnOpenACCRegionEnd(ParseStatement());
     }
     Directive = Actions.ActOnOpenACCExecutableDirective(
         DKind, Clauses, AssociatedStmt.get(), Loc, EndLoc);
