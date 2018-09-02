@@ -782,11 +782,48 @@ to have too many false positives.  In the worst cases, we would
 identify such features at run time.
 
 The following is a list of OpenACC features we have identified that
-might not be possible to map to OpenMP:
+might not be possible to map to OpenMP, but we are still investigating
+possible solutions:
 
 * `vector_length` with a non-constant expression argument because
   `simdlen`, to which `vector_length` is translated, requires a
   constant expression.
+* If a variable is gang-shared within an `acc parallel` due to, for
+  example, a `copy` clause there, and if that variable is also
+  involved in a gang reduction specified on a nested `acc loop`, that
+  variable becomes gang-private throughout that `acc parallel` when
+  translated to OpenMP, where the reduction must be specified at the
+  level of the `acc parallel` (`omp target teams`):
+    * This discrepancy is mostly relevant to accesses to that variable
+      within that `acc parallel` before that `acc loop`.  Within that
+      `acc parallel` after that `acc loop`, it's probably not
+      reasonable to access the variable in either version because the
+      reduction doesn't happen until the end of the `acc parallel`.
+    * It's possible we could fix this by generating some other
+      gang-reduced variable that replaces the original variable within
+      the `acc loop gang`, but the original gang-shared variable
+      remains elsewhere in the `acc parallel`.  The gang-reduced
+      variable would be initialized as all its private copies are
+      initialized (e.g., 1 in the case of `*`), and we would need some
+      way to combine (just one multiply in the case of `*`) its
+      reduced value back into the shared copy.  To declare the
+      gang-reduced variable and combine it back into the gang-shared
+      variable, perhaps we'd break `omp target teams` into two
+      directives and add the additional code outside the `omp teams`.
+    * Anyway, to get this right, we first have to understand exactly
+      what OpenACC says about how a gang-shared variable interacts
+      with multiple `acc loop` directives that have gang-reductions
+      for that variable within a single `acc parallel`.  Does it
+      correspond to the above behavior?  Experimenting with pgcc
+      18.4-0, it doesn't seem to.  Actually, with -ta:tesla, it seems
+      to do exactly what clacc does now when there's no `copy` clause
+      specified: there's a gang reduction implied on `acc parallel`,
+      and the variable is gang-private within.
+    * Because we have not yet implemented explicit or implicit `copy`
+      clauses, and because OpenACC 2.6 only permits reductions for
+      scalars, such a reduction variable will be `firstprivate` or
+      `private` and thus gang-private, so this issue doesn't affect us
+      yet.
 * A gang reduction specified on an orphaned `acc loop` directive
   because the enclosing compute construct to which the reduction would
   normally be applied during translation is not statically visible.
