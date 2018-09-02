@@ -54,7 +54,7 @@
 
 // PRT: int main() {
 int main() {
-  // PRT: printf
+  // PRT-NEXT: printf
   // EXE: start
   printf("start\n");
 
@@ -1152,7 +1152,7 @@ int main() {
         for (int i1 = 0; i1 < 2; ++i1) {
           // DMP:      ACCLoopDirective
           // DMP-NEXT:   ACCIndependentClause
-          // DMP-NOT:    <implicit>
+          // DMP-NOT:      <implicit>
           // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
           // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'int'
           // DMP-NEXT:   impl: ForStmt

@@ -47,15 +47,14 @@
 // -fopenacc-print output is thoroughly checked for more complex directives in
 // directive-specific tests.
 
-// PRT: {{^}}int main() {{[{]$}}
+// PRT: int main() {
 int main() {
   // PRT-A-NEXT:  {{^ *}}#pragma acc parallel{{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams{{$}}
   // PRT-O-NEXT:  {{^ *}}#pragma omp target teams{{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel{{$}}
   #pragma acc parallel
-  // PRT-NEXT: {{^ *;$}}
+    // PRT-NEXT: ;
     ;
-// PRT-NEXT: {{^[}]$}}
-}
+}// PRT-NEXT: }
 // PRT-NOT: {{.}}

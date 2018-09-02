@@ -157,7 +157,7 @@ int main() {
     int i = 99;
     // DMP:           ACCLoopDirective
     // DMP-ASEQ-NEXT:   ACCSeqClause
-    // DMP-ASEQ-NOT:    <implicit>
+    // DMP-ASEQ-NOT:      <implicit>
     // DMP-AG-NEXT:     ACCGangClause
     // DMP-AW-NEXT:     ACCWorkerClause
     // DMP-AV-NEXT:     ACCVectorClause
@@ -240,7 +240,7 @@ int main() {
     int i = 99;
     // DMP:           ACCLoopDirective
     // DMP-ASEQ-NEXT:   ACCSeqClause
-    // DMP-ASEQ-NOT:    <implicit>
+    // DMP-ASEQ-NOT:      <implicit>
     // DMP-AG-NEXT:     ACCGangClause
     // DMP-AW-NEXT:     ACCWorkerClause
     // DMP-AV-NEXT:     ACCVectorClause
@@ -320,7 +320,7 @@ int main() {
     int i = 99;
     // DMP:           ACCLoopDirective
     // DMP-ASEQ-NEXT:   ACCSeqClause
-    // DMP-ASEQ-NOT:    <implicit>
+    // DMP-ASEQ-NOT:      <implicit>
     // DMP-AG-NEXT:     ACCGangClause
     // DMP-AW-NEXT:     ACCWorkerClause
     // DMP-AV-NEXT:     ACCVectorClause
@@ -416,7 +416,7 @@ int main() {
     int k = 77;
     // DMP:           ACCLoopDirective
     // DMP-ASEQ-NEXT:   ACCSeqClause
-    // DMP-ASEQ-NOT:    <implicit>
+    // DMP-ASEQ-NOT:      <implicit>
     // DMP-AG-NEXT:     ACCGangClause
     // DMP-AW-NEXT:     ACCWorkerClause
     // DMP-AV-NEXT:     ACCVectorClause
