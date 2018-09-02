@@ -3,7 +3,6 @@
 //   AO    = commented OpenMP is printed after OpenACC
 //   O     = OpenMP
 //   OA    = commented OpenACC is printed after OpenMP
-//   AOX   = either AO or OA
 //   AIMP  = OpenACC implicit independent
 //   ASEQ  = OpenACC seq clause
 //   AG    = OpenACC gang clause
@@ -142,8 +141,8 @@
 // RUN:   (print='-Xclang -ast-print -fsyntax-only -fopenacc' prt=PRT,PRT-A)
 // RUN:   (print=-fopenacc-print=acc     prt=PRT,PRT-A)
 // RUN:   (print=-fopenacc-print=omp     prt=PRT,PRT-O,PRT-O-%[ompdk0]0,PRT-O-%[ompdk0]0-%[ompsk0]0,PRT-O-%[ompdk1]1,PRT-O-%[ompdk1]1-%[ompsk1]1,PRT-O-%[ompdk2]2,PRT-O-%[ompdk2]2-%[ompsk2]2)
-// RUN:   (print=-fopenacc-print=acc-omp prt=PRT,PRT-A,PRT-AOX,PRT-AOX-%[ompdk0]0,PRT-AOX-%[ompdk0]0-%[ompsk0]0,PRT-AOX-%[ompdk1]1,PRT-AOX-%[ompdk1]1-%[ompsk1]1,PRT-AOX-%[ompdk2]2,PRT-AOX-%[ompdk2]2-%[ompsk2]2,PRT-AO,PRT-AO-%[ompdk0]0,PRT-AO-%[ompdk0]0-%[ompsk0]0,PRT-AO-%[ompdk1]1,PRT-AO-%[ompdk1]1-%[ompsk1]1,PRT-AO-%[ompdk2]2,PRT-AO-%[ompdk2]2-%[ompsk2]2)
-// RUN:   (print=-fopenacc-print=omp-acc prt=PRT,PRT-O,PRT-O-%[ompdk0]0,PRT-O-%[ompdk0]0-%[ompsk0]0,PRT-O-%[ompdk1]1,PRT-O-%[ompdk1]1-%[ompsk1]1,PRT-O-%[ompdk2]2,PRT-O-%[ompdk2]2-%[ompsk2]2,PRT-AOX,PRT-AOX-%[ompdk0]0,PRT-AOX-%[ompdk0]0-%[ompsk0]0,PRT-AOX-%[ompdk1]1,PRT-AOX-%[ompdk1]1-%[ompsk1]1,PRT-AOX-%[ompdk2]2,PRT-AOX-%[ompdk2]2-%[ompsk2]2,PRT-OA,PRT-OA-%[ompdk0]0,PRT-OA-%[ompdk0]0-%[ompsk0]0,PRT-OA-%[ompdk1]1,PRT-OA-%[ompdk1]1-%[ompsk1]1,PRT-OA-%[ompdk2]2,PRT-OA-%[ompdk2]2-%[ompsk2]2)
+// RUN:   (print=-fopenacc-print=acc-omp prt=PRT,PRT-A,PRT-AO,PRT-AO-%[ompdk0]0,PRT-AO-%[ompdk0]0-%[ompsk0]0,PRT-AO-%[ompdk1]1,PRT-AO-%[ompdk1]1-%[ompsk1]1,PRT-AO-%[ompdk2]2,PRT-AO-%[ompdk2]2-%[ompsk2]2)
+// RUN:   (print=-fopenacc-print=omp-acc prt=PRT,PRT-O,PRT-O-%[ompdk0]0,PRT-O-%[ompdk0]0-%[ompsk0]0,PRT-O-%[ompdk1]1,PRT-O-%[ompdk1]1-%[ompsk1]1,PRT-O-%[ompdk2]2,PRT-O-%[ompdk2]2-%[ompsk2]2,PRT-OA,PRT-OA-%[ompdk0]0,PRT-OA-%[ompdk0]0-%[ompsk0]0,PRT-OA-%[ompdk1]1,PRT-OA-%[ompdk1]1-%[ompsk1]1,PRT-OA-%[ompdk2]2,PRT-OA-%[ompdk2]2-%[ompsk2]2)
 // RUN: }
 // RUN: %for loop-clauses {
 // RUN:   %for prints {
@@ -253,19 +252,16 @@ int main() {
     // DMP0-OPRG:          ForStmt
     // DMP0-OSEQ-NEXT:   impl: ForStmt
     //
-    // Print uncommented directive.
     // PRT-A-NEXT:        {{^ *}}#pragma acc loop [[ACCC0]]
     // PRT-AO-OSEQ0-SAME: {{^}} // discarded in OpenMP translation
     // PRT-A-SAME:        {{^$}}
-    // PRT-O-OPRG0-NEXT:  {{^ *}}#pragma omp [[OMPDP0]]{{$}}
-    //
-    // Print commented directive.
     // PRT-AO-OPRG0-NEXT: {{^ *}}// #pragma omp [[OMPDP0]]{{$}}
+    //
+    // PRT-O-OPRG0-NEXT:  {{^ *}}#pragma omp [[OMPDP0]]{{$}}
     // PRT-OA-NEXT:       {{^ *}}// #pragma acc loop [[ACCC0]]
     // PRT-OA-OSEQ0-SAME: {{^}} // discarded in OpenMP translation
     // PRT-OA-SAME:       {{^$}}
     //
-    // Print attached statement.
     // PRT-NEXT: for (int i = 0; i < {{.*}}; ++i) {
     #pragma acc loop ACCC0
     for (int i = 0; i < ITRS0; ++i) {
@@ -287,21 +283,18 @@ int main() {
       // DMP1-OPRG:                ForStmt
       // DMP1-OSEQ-NEXT:         impl: ForStmt
       //
-      // Print uncommented directive.
       // PRT-A-NEXT:              {{^ *}}#pragma acc loop [[ACCC1]]
       // PRT-AO-OSEQ1-SAME:       {{^}} // discarded in OpenMP translation
       // PRT-A-SAME:              {{^$}}
-      // PRT-O-OPRG1-OSIMP1-NEXT: {{^ *}}#pragma omp [[OMPDP1]]{{$}}
-      // PRT-O-OPRG1-OSEXP1-NEXT: {{^ *}}#pragma omp [[OMPDP1]] shared(i){{$}}
-      //
-      // Print commented directive.
       // PRT-AO-OPRG1-OSIMP1-NEXT: {{^ *}}// #pragma omp [[OMPDP1]]{{$}}
       // PRT-AO-OPRG1-OSEXP1-NEXT: {{^ *}}// #pragma omp [[OMPDP1]] shared(i){{$}}
+      //
+      // PRT-O-OPRG1-OSIMP1-NEXT: {{^ *}}#pragma omp [[OMPDP1]]{{$}}
+      // PRT-O-OPRG1-OSEXP1-NEXT: {{^ *}}#pragma omp [[OMPDP1]] shared(i){{$}}
       // PRT-OA-NEXT:              {{^ *}}// #pragma acc loop [[ACCC1]]
       // PRT-OA-OSEQ1-SAME:        {{^}} // discarded in OpenMP translation
       // PRT-OA-SAME:              {{^$}}
       //
-      // Print attached statement.
       // PRT-NEXT: for (int j = 0; j < {{.*}}; ++j) {
       #pragma acc loop ACCC1
       for (int j = 0; j < ITRS1; ++j) {
@@ -325,21 +318,18 @@ int main() {
         // DMP2-OPRG:                ForStmt
         // DMP2-OSEQ-NEXT:         impl: ForStmt
         //
-        // Print uncommented directive.
         // PRT-A-NEXT:              {{^ *}}#pragma acc loop [[ACCC2]]
         // PRT-AO-OSEQ2-SAME:       {{^}} // discarded in OpenMP translation
         // PRT-A-SAME:              {{^$}}
-        // PRT-O-OPRG2-OSIMP2-NEXT: {{^ *}}#pragma omp [[OMPDP2]]{{$}}
-        // PRT-O-OPRG2-OSEXP2-NEXT: {{^ *}}#pragma omp [[OMPDP2]] shared(i,j){{$}}
-        //
-        // Print commented directive.
         // PRT-AO-OPRG2-OSIMP2-NEXT: {{^ *}}// #pragma omp [[OMPDP2]]{{$}}
         // PRT-AO-OPRG2-OSEXP2-NEXT: {{^ *}}// #pragma omp [[OMPDP2]] shared(i,j){{$}}
+        //
+        // PRT-O-OPRG2-OSIMP2-NEXT: {{^ *}}#pragma omp [[OMPDP2]]{{$}}
+        // PRT-O-OPRG2-OSEXP2-NEXT: {{^ *}}#pragma omp [[OMPDP2]] shared(i,j){{$}}
         // PRT-OA-NEXT:              {{^ *}}// #pragma acc loop [[ACCC2]]
         // PRT-OA-OSEQ2-SAME:        {{^}} // discarded in OpenMP translation
         // PRT-OA-SAME:              {{^$}}
         //
-        // Print attached statement.
         // PRT-NEXT: for (int k = 0; k < {{.*}}; ++k) {
         #pragma acc loop ACCC2
         for (int k = 0; k < ITRS2; ++k) {
@@ -481,14 +471,10 @@ int main() {
           // EXE422-DAG: 3, 1, 0
           // EXE422-DAG: 3, 1, 1
           printf("%d, %d, %d\n", i, j, k);
-        // PRT-NEXT: }
-        }
-      // PRT-NEXT: }
-      }
-    // PRT-NEXT: }
-    }
-  // PRT-NEXT: }
-  }
+        } // PRT-NEXT: }
+      } // PRT-NEXT: }
+    } // PRT-NEXT: }
+  } // PRT-NEXT: }
 
   // Close off EXE*-DAGs.
   // PRT-NEXT: printf
@@ -499,6 +485,5 @@ int main() {
   // PRT-NEXT: return 0;
   return 0;
 
+} // PRT-NEXT: }
 // EXE-NOT: {{.}}
-// PRT-NEXT: }
-}

@@ -3,7 +3,6 @@
 //   AO      = commented OpenMP is printed after OpenACC
 //   O       = OpenMP
 //   OA      = commented OpenACC is printed after OpenMP
-//   AOX     = either AO or OA
 //   AIMP    = OpenACC implicit independent
 //   AIND    = OpenACC explicit independent clause
 //   ASEQ    = OpenACC seq clause
@@ -263,8 +262,8 @@
 // RUN:   (print='-Xclang -ast-print -fsyntax-only -fopenacc' prt=PRT,PRT-A)
 // RUN:   (print=-fopenacc-print=acc     prt=PRT,PRT-A)
 // RUN:   (print=-fopenacc-print=omp     prt=PRT,PRT-O,PRT-O-%[ompdk],PRT-O-%[ompdk]-%[ompsk])
-// RUN:   (print=-fopenacc-print=acc-omp prt=PRT,PRT-A,PRT-AOX,PRT-AOX-%[ompdk],PRT-AOX-%[ompdk]-%[ompsk],PRT-AO,PRT-AO-%[ompdk],PRT-AO-%[ompdk]-%[ompsk])
-// RUN:   (print=-fopenacc-print=omp-acc prt=PRT,PRT-O,PRT-O-%[ompdk],PRT-O-%[ompdk]-%[ompsk],PRT-AOX,PRT-AOX-%[ompdk],PRT-AOX-%[ompdk]-%[ompsk],PRT-OA,PRT-OA-%[ompdk],PRT-OA-%[ompdk]-%[ompsk])
+// RUN:   (print=-fopenacc-print=acc-omp prt=PRT,PRT-A,PRT-AO,PRT-AO-%[ompdk],PRT-AO-%[ompdk]-%[ompsk])
+// RUN:   (print=-fopenacc-print=omp-acc prt=PRT,PRT-O,PRT-O-%[ompdk],PRT-O-%[ompdk]-%[ompsk],PRT-OA,PRT-OA-%[ompdk],PRT-OA-%[ompdk]-%[ompsk])
 // RUN: }
 // RUN: %for loop-clauses {
 // RUN:   %for prints {
@@ -417,25 +416,22 @@ int main() {
       // DMP-OPLC:              ForStmt
       // DMP-OSEQ-NEXT:       impl: ForStmt
       //
-      // Print uncommented directive.
-      // PRT-A-NEXT:            {{^ *}}#pragma acc loop[[ACCC]]
-      // PRT-AO-OSEQ-SAME:      {{^}} // discarded in OpenMP translation
-      // PRT-A-SAME:            {{^$}}
-      // PRT-O-OPRG-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
-      // PRT-O-OPLC-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
-      // PRT-O-OPRG-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
-      // PRT-O-OPLC-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
-      //
-      // Print commented directive.
+      // PRT-A-NEXT:             {{^ *}}#pragma acc loop[[ACCC]]
+      // PRT-AO-OSEQ-SAME:       {{^}} // discarded in OpenMP translation
+      // PRT-A-SAME:             {{^$}}
       // PRT-AO-OPRG-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
       // PRT-AO-OPLC-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
       // PRT-AO-OPRG-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
       // PRT-AO-OPLC-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
-      // PRT-OA-NEXT:            {{^ *}}// #pragma acc loop[[ACCC]]
-      // PRT-OA-OSEQ-SAME:       {{^}} // discarded in OpenMP translation
-      // PRT-OA-SAME:            {{^$}}
       //
-      // Print attached statement.
+      // PRT-O-OPRG-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
+      // PRT-O-OPLC-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
+      // PRT-O-OPRG-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
+      // PRT-O-OPLC-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
+      // PRT-OA-NEXT:           {{^ *}}// #pragma acc loop[[ACCC]]
+      // PRT-OA-OSEQ-SAME:      {{^}} // discarded in OpenMP translation
+      // PRT-OA-SAME:           {{^$}}
+      //
       // PRT-NEXT: for ({{.*}}) {
       #pragma acc loop ACCC
       for (int i = 0; i < 2; ++i) {
@@ -602,44 +598,47 @@ int main() {
       // DMP-OPLC:               ForStmt
       // DMP-OSEQ-NEXT:      impl: ForStmt
       //
-      // Print uncommented directive.
-      // PRT-A-NEXT:            {{^ *}}#pragma acc loop[[ACCC]]
-      // PRT-AO-OSEQ-SAME:      {{^}} // discarded in OpenMP translation
-      // PRT-A-SAME:            {{^$}}
-      // PRT-O-OPRG-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
-      // PRT-O-OPRG-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(k) private(j){{$}}
-      //
-      // Print commented directive when attached statements are the same.
-      // PRT-AO-OPRG-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(j){{$}}
-      // PRT-AO-OPRG-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(k) private(j){{$}}
-      // PRT-OA-OPRG-NEXT:       {{^ *}}// #pragma acc loop[[ACCC]]{{$}}
-      // PRT-OA-OSEQ-NEXT:       {{^ *}}// #pragma acc loop[[ACCC]] // discarded in OpenMP translation{{$}}
-      //
-      // Print uncommented attached statement.
-      // PRT-O-OPLC-NEXT:       {
-      // PRT-O-OPLC-NEXT:         int j;
-      // PRT-O-OPLC-OSIMP-NEXT:   {{^ *}}#pragma omp [[OMPDP]]{{$}}
-      // PRT-O-OPLC-OSEXP-NEXT:   {{^ *}}#pragma omp [[OMPDP]] shared(k){{$}}
-      // PRT-NEXT:                for (j ={{.*}}) {
-      // PRT-NEXT:                  printf
-      // PRT-NEXT:                  for (k ={{.*}})
-      // PRT-NEXT:                    ;
-      // PRT-NEXT:                }
-      // PRT-O-OPLC-NEXT:       }
-      //
-      // Print commented directive and attached statement when attached
-      // statements are different.
+      // PRT-A-NEXT:             {{^ *}}#pragma acc loop[[ACCC]]
+      // PRT-AO-OSEQ-SAME:       {{^}} // discarded in OpenMP translation
+      // PRT-A-SAME:             {{^$}}
+      // PRT-AO-OPRG-OSIMP-NEXT: // #pragma omp [[OMPDP]] private(j){{$}}
+      // PRT-AO-OPRG-OSEXP-NEXT: // #pragma omp [[OMPDP]] shared(k) private(j){{$}}
+      // PRT-A-NEXT:             for (j ={{.*}}) {
+      // PRT-A-NEXT:               printf
+      // PRT-A-NEXT:               for (k ={{.*}})
+      // PRT-A-NEXT:                 ;
+      // PRT-A-NEXT:             }
       // PRT-AO-OPLC-NEXT:       // {
       // PRT-AO-OPLC-NEXT:       //   int j;
       // PRT-AO-OPLC-OSIMP-NEXT: //   #pragma omp [[OMPDP]]{{$}}
       // PRT-AO-OPLC-OSEXP-NEXT: //   #pragma omp [[OMPDP]] shared(k){{$}}
-      // PRT-OA-OPLC-NEXT:       //   #pragma acc loop[[ACCC]]{{$}}
-      // PRT-AOX-OPLC-NEXT:      //   for (j ={{.*}}) {
-      // PRT-AOX-OPLC-NEXT:      //     printf
-      // PRT-AOX-OPLC-NEXT:      //     for (k ={{.*}})
-      // PRT-AOX-OPLC-NEXT:      //       ;
-      // PRT-AOX-OPLC-NEXT:      //   }
+      // PRT-AO-OPLC-NEXT:       //   for (j ={{.*}}) {
+      // PRT-AO-OPLC-NEXT:       //     printf
+      // PRT-AO-OPLC-NEXT:       //     for (k ={{.*}})
+      // PRT-AO-OPLC-NEXT:       //       ;
+      // PRT-AO-OPLC-NEXT:       //   }
       // PRT-AO-OPLC-NEXT:       // }
+      //
+      // PRT-O-OPRG-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
+      // PRT-O-OPRG-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(k) private(j){{$}}
+      // PRT-OA-OPRG-NEXT:      // #pragma acc loop[[ACCC]]{{$}}
+      // PRT-OA-OSEQ-NEXT:      // #pragma acc loop[[ACCC]] // discarded in OpenMP translation{{$}}
+      // PRT-O-OPLC-NEXT:       {
+      // PRT-O-OPLC-NEXT:         int j;
+      // PRT-O-OPLC-OSIMP-NEXT:   {{^ *}}#pragma omp [[OMPDP]]{{$}}
+      // PRT-O-OPLC-OSEXP-NEXT:   {{^ *}}#pragma omp [[OMPDP]] shared(k){{$}}
+      // PRT-O-NEXT:              for (j ={{.*}}) {
+      // PRT-O-NEXT:                printf
+      // PRT-O-NEXT:                for (k ={{.*}})
+      // PRT-O-NEXT:                  ;
+      // PRT-O-NEXT:              }
+      // PRT-O-OPLC-NEXT:       }
+      // PRT-OA-OPLC-NEXT:      // #pragma acc loop[[ACCC]]{{$}}
+      // PRT-OA-OPLC-NEXT:      // for (j ={{.*}}) {
+      // PRT-OA-OPLC-NEXT:      //   printf
+      // PRT-OA-OPLC-NEXT:      //   for (k ={{.*}})
+      // PRT-OA-OPLC-NEXT:      //     ;
+      // PRT-OA-OPLC-NEXT:      // }
       #pragma acc loop ACCC
       for (j = 1; j < 3; ++j) {
         // EXE-NEXT:        hello world
@@ -765,25 +764,22 @@ int main() {
       // DMP-OPLC:              ForStmt
       // DMP-OSEQ-NEXT:       impl: ForStmt
       //
-      // Print uncommented directive.
-      // PRT-A-NEXT:            {{^ *}}#pragma acc loop[[ACCC]]
-      // PRT-AO-OSEQ-SAME:      {{^}} // discarded in OpenMP translation
-      // PRT-A-SAME:            {{^$}}
-      // PRT-O-OPRG-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
-      // PRT-O-OPLC-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
-      // PRT-O-OPRG-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,save){{$}}
-      // PRT-O-OPLC-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,save){{$}}
-      //
-      // Print commented directive.
+      // PRT-A-NEXT:             {{^ *}}#pragma acc loop[[ACCC]]
+      // PRT-AO-OSEQ-SAME:       {{^}} // discarded in OpenMP translation
+      // PRT-A-SAME:             {{^$}}
       // PRT-AO-OPRG-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
       // PRT-AO-OPLC-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
       // PRT-AO-OPRG-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,save){{$}}
       // PRT-AO-OPLC-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,save){{$}}
-      // PRT-OA-NEXT:            {{^ *}}// #pragma acc loop[[ACCC]]
-      // PRT-OA-OSEQ-SAME:       {{^}} // discarded in OpenMP translation
-      // PRT-OA-SAME:            {{^$}}
       //
-      // Print attached statement.
+      // PRT-O-OPRG-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
+      // PRT-O-OPLC-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
+      // PRT-O-OPRG-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,save){{$}}
+      // PRT-O-OPLC-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,save){{$}}
+      // PRT-OA-NEXT:           {{^ *}}// #pragma acc loop[[ACCC]]
+      // PRT-OA-OSEQ-SAME:      {{^}} // discarded in OpenMP translation
+      // PRT-OA-SAME:           {{^$}}
+      //
       // PRT-NEXT: for ({{.*}}) {
       #pragma acc loop ACCC
       for (int i = 0; i < 2; ++i) {
@@ -869,21 +865,18 @@ int main() {
   // DMP-OPLC:            ForStmt
   // DMP-OSEQ-NEXT:     impl: ForStmt
   //
-  // Print uncommented directive.
   // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]]
   // PRT-AO-OSEQ-SAME: {{^}} // discarded in OpenMP translation
   // PRT-A-SAME:       {{^$}}
-  // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]]{{$}}
-  // PRT-O-OPLC-NEXT:  {{^ *}}#pragma omp [[OMPDP]]{{$}}
-  //
-  // Print commented directive.
   // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
   // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+  //
+  // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]]{{$}}
+  // PRT-O-OPLC-NEXT:  {{^ *}}#pragma omp [[OMPDP]]{{$}}
   // PRT-OA-NEXT:      {{^ *}}// #pragma acc loop[[ACCC]]
   // PRT-OA-OSEQ-SAME: {{^}} // discarded in OpenMP translation
   // PRT-OA-SAME:      {{^$}}
   //
-  // Print attached statement.
   // PRT-NEXT: for ({{.*}}) {
   #pragma acc loop ACCC
   for (int i = 0; i < 2; ++i) {
@@ -937,37 +930,35 @@ int main() {
     // DMP-OPLC:                ForStmt
     // DMP-OSEQ-NEXT:       impl: ForStmt
     //
-    // Print uncommented directive.
     // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]]
     // PRT-AO-OSEQ-SAME: {{^}} // discarded in OpenMP translation
     // PRT-A-SAME:       {{^$}}
-    // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
-    //
-    // Print commented directive and attached statement when attached
-    // statements are different.
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(j){{$}}
+    // PRT-A-NEXT:       for (j ={{.*}}) {
+    // PRT-A-NEXT:         printf
+    // PRT-A-NEXT:       }
+    // PRT-AO-OPLC-NEXT: // {
+    // PRT-AO-OPLC-NEXT: //   int j;
+    // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
+    // PRT-AO-OPLC-NEXT: //   for (j ={{.*}}) {
+    // PRT-AO-OPLC-NEXT: //     printf
+    // PRT-AO-OPLC-NEXT: //   }
+    // PRT-AO-OPLC-NEXT: // }
+    //
+    // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
     // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]]{{$}}
     // PRT-OA-OSEQ-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] // discarded in OpenMP translation{{$}}
-    //
-    // Print uncommented attached statement.
-    // PRT-O-OPLC-NEXT: {
-    // PRT-O-OPLC-NEXT:   int j;
-    // PRT-O-OPLC-NEXT:   {{^ *}}#pragma omp [[OMPDP]]{{$}}
-    // PRT-NEXT:          for (j ={{.*}}) {
-    // PRT-NEXT:            printf
-    // PRT-NEXT:          }
-    // PRT-O-OPLC-NEXT: }
-    //
-    // Print commented directive and attached statement when attached
-    // statements are different.
-    // PRT-AO-OPLC-NEXT:  // {
-    // PRT-AO-OPLC-NEXT:  //   int j;
-    // PRT-AO-OPLC-NEXT:  //   #pragma omp [[OMPDP]]{{$}}
-    // PRT-OA-OPLC-NEXT:  //   #pragma acc loop[[ACCC]]{{$}}
-    // PRT-AOX-OPLC-NEXT: //   for (j ={{.*}}) {
-    // PRT-AOX-OPLC-NEXT: //     printf
-    // PRT-AOX-OPLC-NEXT: //   }
-    // PRT-AO-OPLC-NEXT:  // }
+    // PRT-O-OPLC-NEXT:  {
+    // PRT-O-OPLC-NEXT:    int j;
+    // PRT-O-OPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
+    // PRT-O-NEXT:         for (j ={{.*}}) {
+    // PRT-O-NEXT:           printf
+    // PRT-O-NEXT:         }
+    // PRT-O-OPLC-NEXT:  }
+    // PRT-OA-OPLC-NEXT: // #pragma acc loop[[ACCC]]{{$}}
+    // PRT-OA-OPLC-NEXT: // for (j ={{.*}}) {
+    // PRT-OA-OPLC-NEXT: //   printf
+    // PRT-OA-OPLC-NEXT: // }
     #pragma acc loop ACCC
     for (j = 7; j > -2; j -= 2) {
       // EXE-DAG: 7
