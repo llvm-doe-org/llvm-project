@@ -2752,6 +2752,7 @@ void ASTStmtWriter::VisitACCExecutableDirective(ACCExecutableDirective *E) {
   }
   if (E->hasAssociatedStmt())
     Record.AddStmt(E->getAssociatedStmt());
+  Record.AddStmt(E->getEffectiveDirective());
   if (E->hasOMPNode()) {
     Record.AddStmt(E->getOMPNode());
     Record.push_back(E->directiveDiscardedForOMP());
@@ -2775,6 +2776,14 @@ void ASTStmtWriter::VisitACCLoopDirective(ACCLoopDirective *D) {
   Record.AddDeclRef(D->getLoopControlVariable());
   Record.push_back(D->getParentLoopPartitioning());
   Code = serialization::STMT_ACC_LOOP_DIRECTIVE;
+}
+
+void ASTStmtWriter::VisitACCParallelLoopDirective(
+    ACCParallelLoopDirective *D) {
+  VisitStmt(D);
+  Record.push_back(D->getNumClauses());
+  VisitACCExecutableDirective(D);
+  Code = serialization::STMT_ACC_PARALLEL_LOOP_DIRECTIVE;
 }
 
 //===----------------------------------------------------------------------===//

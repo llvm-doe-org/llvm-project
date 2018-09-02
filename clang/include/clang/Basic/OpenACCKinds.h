@@ -24,6 +24,8 @@ namespace clang {
 enum OpenACCDirectiveKind {
 #define OPENACC_DIRECTIVE(Name) \
   ACCD_##Name,
+#define OPENACC_DIRECTIVE_EXT(Name, Str) \
+  ACCD_##Name,
 #include "clang/Basic/OpenACCKinds.def"
   ACCD_unknown
 };
@@ -42,15 +44,35 @@ const char *getOpenACCDirectiveName(OpenACCDirectiveKind Kind);
 OpenACCClauseKind getOpenACCClauseKind(llvm::StringRef Str);
 const char *getOpenACCClauseName(OpenACCClauseKind Kind);
 
+/// Is CKind allowed as a clause for DKind?  Must not be ACCD_unknown or
+/// ACCC_unknown.
 bool isAllowedClauseForDirective(OpenACCDirectiveKind DKind,
                                  OpenACCClauseKind CKind);
 
-/// Checks if the specified directive is a directive with an associated
-/// loop construct.
-/// \param DKind Specified directive.
-/// \return true - the directive is a loop-associated directive like 'acc loop'
-/// directive, otherwise - false.
+/// Is ParentDKind allowed as a real parent directive for DKind?  DKind must
+/// not be ACCD_unknown, but ParentDKind = ACCCD_unknown checks if DKind can
+/// have no parent.
+bool isAllowedParentForDirective(OpenACCDirectiveKind DKind,
+                                 OpenACCDirectiveKind ParentDKind);
+
+/// How many effective directives does this directive represent?  Always 1
+/// for non-combined directive.
+int getOpenACCEffectiveDirectives(OpenACCDirectiveKind DKind);
+
+/// Is the specified directive an 'acc parallel' or 'acc parallel loop'
+/// directive?
+bool isOpenACCParallelDirective(OpenACCDirectiveKind DKind);
+
+/// Is the specified directive an 'acc loop' or 'acc parallel loop' directive?
 bool isOpenACCLoopDirective(OpenACCDirectiveKind DKind);
+
+/// Is the specified directive a compute directive or combined compute
+/// directive?
+bool isOpenACCComputeDirective(OpenACCDirectiveKind DKind);
+
+/// Is the specified directive a combined directive?
+bool isOpenACCCombinedDirective(OpenACCDirectiveKind DKind);
+
 }
 
 #endif

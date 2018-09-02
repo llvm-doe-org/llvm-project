@@ -3240,6 +3240,9 @@ DEF_TRAVERSE_STMT(ACCParallelDirective,
 DEF_TRAVERSE_STMT(ACCLoopDirective,
                   { TRY_TO(TraverseACCExecutableDirective(S)); })
 
+DEF_TRAVERSE_STMT(ACCParallelLoopDirective,
+                  { TRY_TO(TraverseACCExecutableDirective(S)); })
+
 // OpenACC clauses.
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseACCClause(ACCClause *C) {

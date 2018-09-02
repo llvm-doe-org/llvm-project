@@ -9027,20 +9027,18 @@ def err_acc_clause_not_ice : Error<
 def err_acc_clause_not_positive_ice : Error<
   "argument to '%0' clause must be a strictly positive integer value">;
 def err_acc_directive_bad_nesting : Error<
-  "'#pragma acc %0' cannot be nested within '#pragma acc %1'">;
+  "'#pragma acc %1' cannot be nested within '#pragma acc %0'">;
 def note_acc_enclosing_directive : Note<
   "enclosing '#pragma acc %0' here">;
-def err_acc_loop_outside_parallel : Error<
-  "OpenACC loop outside of OpenACC parallel is not yet supported">;
+def err_acc_loop_bad_nested_partitioning : Error<
+  "'#pragma acc %2' with '%3' clause cannot be nested within '#pragma acc %0'"
+  " with '%1' clause">;
+def err_acc_orphaned_directive : Error<
+  "'#pragma acc %0' cannot be orphaned">;
 def err_acc_loop_cannot_use_stmt : Error<
   "'%0' statement cannot be used in partitionable OpenACC for loop">;
-def err_acc_loop_bad_nested_partitioning : Error<
-  "'#pragma acc loop' with '%1' clause cannot be nested within '#pragma"
-  " acc loop' with '%0' clause">;
-def note_acc_loop_bad_nested_partitioning : Note<
-  "parent '#pragma acc loop' is here">;
 def err_acc_not_for : Error<
-  "statement after '#pragma acc loop' must be a for loop">;
+  "statement after '#pragma acc %0' must be a for loop">;
 def err_acc_unknown_reduction_operator : Error<
   "unknown reduction operator">;
 def err_acc_reduction_incomplete_type : Error<
@@ -9060,7 +9058,7 @@ def err_acc_reduction_on_loop_control_var : Error<
 def err_acc_conflicting_reduction : Error<
   "%select{conflicting|redundant}0 '%1' reduction for variable %2">;
 def note_acc_gang_reduction_apply : Note<
-  "while applying gang reduction to '%0' directive here">;
+  "while applying gang reduction to '#pragma acc %0' here">;
 def note_acc_previous_reduction : Note<
   "previous '%0' reduction here">;
 } // end of OpenACC category

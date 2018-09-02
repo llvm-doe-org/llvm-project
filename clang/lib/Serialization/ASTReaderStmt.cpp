@@ -3197,6 +3197,9 @@ void ASTStmtReader::VisitACCExecutableDirective(ACCExecutableDirective *E) {
   E->setClauses(Clauses);
   if (E->hasAssociatedStmt())
     E->setAssociatedStmt(Record.readSubStmt());
+  Stmt *EffectiveDirective = Record.readSubStmt();
+  if (EffectiveDirective)
+    E->setEffectiveDirective(cast<ACCExecutableDirective>(EffectiveDirective));
   Stmt *OMPNode = Record.readSubStmt();
   bool DirectiveDiscardedForOMP = OMPNode && Record.readInt();
   E->setOMPNode(OMPNode, DirectiveDiscardedForOMP);
@@ -3218,6 +3221,14 @@ void ASTStmtReader::VisitACCLoopDirective(ACCLoopDirective *D) {
   D->setLoopControlVariable(Record.readDeclAs<VarDecl>());
   D->setParentLoopPartitioning(
       static_cast<OpenACCClauseKind>(Record.readInt()));
+}
+
+void ASTStmtReader::VisitACCParallelLoopDirective(ACCParallelLoopDirective *D)
+{
+  VisitStmt(D);
+  // The NumClauses field was read in ReadStmtFromStream.
+  Record.skipInts(1);
+  VisitACCExecutableDirective(D);
 }
 
 //===----------------------------------------------------------------------===//
@@ -4052,6 +4063,12 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
     case STMT_ACC_LOOP_DIRECTIVE: {
       unsigned NumClauses = Record[ASTStmtReader::NumStmtFields];
       S = ACCLoopDirective::CreateEmpty(Context, NumClauses, Empty);
+      break;
+    }
+
+    case STMT_ACC_PARALLEL_LOOP_DIRECTIVE: {
+      unsigned NumClauses = Record[ASTStmtReader::NumStmtFields];
+      S = ACCParallelLoopDirective::CreateEmpty(Context, NumClauses, Empty);
       break;
     }
 

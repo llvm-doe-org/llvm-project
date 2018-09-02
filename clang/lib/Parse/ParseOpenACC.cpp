@@ -21,19 +21,37 @@
 
 using namespace clang;
 
-// Map token string to extended ACC token kind that are
-// OpenACCDirectiveKind + OpenACCDirectiveKindEx.
-static unsigned getOpenACCDirectiveKindEx(StringRef S) {
-  auto DKind = getOpenACCDirectiveKind(S);
-  return DKind;
-}
-
-static OpenACCDirectiveKind ParseOpenACCDirectiveKind(Parser &P) {
+static OpenACCDirectiveKind parseOpenACCDirectiveKind(Parser &P) {
+  // Array of foldings: F[i][0] F[i][1] ===> F[i][2].
+  // E.g.: ACCD_parallel ACCD_loop ===> ACCD_parallel_loop
+  // TODO: add other combined directives in topological order.
+  static const unsigned F[][3] = {
+      {ACCD_parallel, ACCD_loop, ACCD_parallel_loop}};
   auto Tok = P.getCurToken();
   unsigned DKind =
       Tok.isAnnotation()
           ? static_cast<unsigned>(ACCD_unknown)
-          : getOpenACCDirectiveKindEx(P.getPreprocessor().getSpelling(Tok));
+          : getOpenACCDirectiveKind(P.getPreprocessor().getSpelling(Tok));
+  if (DKind == ACCD_unknown)
+    return ACCD_unknown;
+
+  for (unsigned I = 0; I < llvm::array_lengthof(F); ++I) {
+    if (DKind != F[I][0])
+      continue;
+
+    Tok = P.getPreprocessor().LookAhead(0);
+    unsigned SDKind =
+        Tok.isAnnotation()
+            ? static_cast<unsigned>(ACCD_unknown)
+            : getOpenACCDirectiveKind(P.getPreprocessor().getSpelling(Tok));
+    if (SDKind == ACCD_unknown)
+      continue;
+
+    if (SDKind == F[I][1]) {
+      P.ConsumeToken();
+      DKind = F[I][2];
+    }
+  }
   return DKind < ACCD_unknown ? static_cast<OpenACCDirectiveKind>(DKind)
                               : ACCD_unknown;
 }
@@ -41,7 +59,7 @@ static OpenACCDirectiveKind ParseOpenACCDirectiveKind(Parser &P) {
 ///  Parsing of declarative or executable OpenACC directives.
 ///
 ///       executable-directive:
-///         annot_pragma_openacc 'parallel' | 'loop' {clause}
+///         annot_pragma_openacc 'parallel' | 'loop' | 'parallel loop' {clause}
 ///         annot_pragma_openacc_end
 ///
 StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
@@ -53,12 +71,13 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
   unsigned ScopeFlags =
       Scope::FnScope | Scope::DeclScope | Scope::OpenACCDirectiveScope;
   SourceLocation Loc = ConsumeAnnotationToken(), EndLoc;
-  auto DKind = ParseOpenACCDirectiveKind(*this);
+  OpenACCDirectiveKind DKind = parseOpenACCDirectiveKind(*this);
   StmtResult Directive = StmtError();
 
   switch (DKind) {
   case ACCD_parallel:
-  case ACCD_loop: {
+  case ACCD_loop:
+  case ACCD_parallel_loop: {
     ConsumeToken();
 
     if (isOpenACCLoopDirective(DKind))

@@ -23,6 +23,7 @@ using namespace clang;
 OpenACCDirectiveKind clang::getOpenACCDirectiveKind(StringRef Str) {
   return llvm::StringSwitch<OpenACCDirectiveKind>(Str)
 #define OPENACC_DIRECTIVE(Name) .Case(#Name, ACCD_##Name)
+#define OPENACC_DIRECTIVE_EXT(Name, Str) .Case(Str, ACCD_##Name)
 #include "clang/Basic/OpenACCKinds.def"
       .Default(ACCD_unknown);
 }
@@ -66,7 +67,6 @@ const char *clang::getOpenACCClauseName(OpenACCClauseKind Kind) {
 
 bool clang::isAllowedClauseForDirective(OpenACCDirectiveKind DKind,
                                         OpenACCClauseKind CKind) {
-  assert(DKind <= ACCD_unknown);
   assert(CKind <= ACCC_unknown);
   switch (DKind) {
   case ACCD_parallel:
@@ -89,12 +89,85 @@ bool clang::isAllowedClauseForDirective(OpenACCDirectiveKind DKind,
       break;
     }
     break;
-  case ACCD_unknown:
+  case ACCD_parallel_loop:
+    switch (CKind) {
+#define OPENACC_PARALLEL_LOOP_CLAUSE(Name)                                    \
+  case ACCC_##Name:                                                           \
+    return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      break;
+    }
     break;
+  case ACCD_unknown:
+    llvm_unreachable("unexpected unknown directive");
   }
   return false;
 }
 
+bool clang::isAllowedParentForDirective(OpenACCDirectiveKind DKind,
+                                        OpenACCDirectiveKind ParentDKind) {
+  switch (DKind) {
+  case ACCD_parallel:
+    switch (ParentDKind) {
+#define OPENACC_PARALLEL_PARENT(Name)                                         \
+    case ACCD_##Name:                                                         \
+      return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      break;
+    }
+    break;
+  case ACCD_loop:
+    switch (ParentDKind) {
+#define OPENACC_LOOP_PARENT(Name)                                             \
+  case ACCD_##Name:                                                           \
+    return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      break;
+    }
+    break;
+  case ACCD_parallel_loop:
+    switch (ParentDKind) {
+#define OPENACC_PARALLEL_LOOP_PARENT(Name)                                    \
+  case ACCD_##Name:                                                           \
+    return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      break;
+    }
+    break;
+  case ACCD_unknown:
+    llvm_unreachable("unexpected unknown directive");
+  }
+  return false;
+}
+
+int clang::getOpenACCEffectiveDirectives(OpenACCDirectiveKind DKind) {
+  switch (DKind) {
+  case ACCD_parallel:
+  case ACCD_loop:
+    return 1;
+  case ACCD_parallel_loop:
+    return 2;
+  case ACCD_unknown:
+    llvm_unreachable("unexpected unknown directive");
+  }
+}
+
+bool clang::isOpenACCParallelDirective(OpenACCDirectiveKind DKind) {
+  return DKind == ACCD_parallel || DKind == ACCD_parallel_loop;
+}
+
 bool clang::isOpenACCLoopDirective(OpenACCDirectiveKind DKind) {
-  return DKind == ACCD_loop;
+  return DKind == ACCD_loop || DKind == ACCD_parallel_loop;
+}
+
+bool clang::isOpenACCComputeDirective(OpenACCDirectiveKind DKind) {
+  return isOpenACCParallelDirective(DKind);
+}
+
+bool clang::isOpenACCCombinedDirective(OpenACCDirectiveKind DKind) {
+  return DKind == ACCD_parallel_loop;
 }

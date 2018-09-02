@@ -108,7 +108,8 @@ namespace {
     void PrintRawSEHFinallyStmt(SEHFinallyStmt *S);
     void PrintOMPExecutableDirective(OMPExecutableDirective *S,
                                      bool ForceNoStmt = false);
-    void PrintOMPExecutableDirectiveHead(Stmt *S, bool Com);
+    Stmt *PrintOMPExecutableDirectiveHead(Stmt *S, bool Com,
+                                          int EffectiveDirectives);
     void PrintACCExecutableDirectiveHead(ACCExecutableDirective *S,
                                          bool ComACC,
                                          bool ComDirectiveDiscardedForOMP);
@@ -1456,10 +1457,12 @@ void ACCClausePrinter::VisitACCVectorClause(ACCVectorClause *Node) {
 //  OpenACC directives printing methods
 //===----------------------------------------------------------------------===//
 
-void StmtPrinter::PrintOMPExecutableDirectiveHead(Stmt *S, bool Com) {
-  auto OMPDir = dyn_cast<OMPExecutableDirective>(S);
+Stmt *StmtPrinter::PrintOMPExecutableDirectiveHead(Stmt *S, bool Com,
+                                                   int EffectiveDirectives) {
+  assert(EffectiveDirectives && "expected at least one effective directive");
+  OMPExecutableDirective *OMPDir = dyn_cast<OMPExecutableDirective>(S);
   if (!OMPDir)
-    return;
+    return S;
   Indent() << (Com?"// ":"") << "#pragma omp "
            << getOpenMPDirectiveName(OMPDir->getDirectiveKind());
   OMPClausePrinter Printer(OS, Policy);
@@ -1471,6 +1474,11 @@ void StmtPrinter::PrintOMPExecutableDirectiveHead(Stmt *S, bool Com) {
       Printer.Visit(*I);
     }
   OS << "\n";
+  if (EffectiveDirectives == 1)
+    return OMPDir;
+  return PrintOMPExecutableDirectiveHead(
+      OMPDir->getInnermostCapturedStmt()->getCapturedStmt(), Com,
+      EffectiveDirectives - 1);
 }
 
 void StmtPrinter::PrintACCExecutableDirectiveHead(
@@ -1499,8 +1507,7 @@ void StmtPrinter::PrintOMPExecutableDirectiveBody(Stmt *S) {
   if (OMPDir->hasAssociatedStmt()) {
     assert(isa<CapturedStmt>(OMPDir->getAssociatedStmt()) &&
            "Expected captured statement!");
-    Stmt *CS = cast<CapturedStmt>(OMPDir->getInnermostCapturedStmt())
-               ->getCapturedStmt();
+    Stmt *CS = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
     PrintStmt(CS);
   }
 }
@@ -1563,8 +1570,11 @@ static bool mustSplitACCExecutableDirective(ACCExecutableDirective *S,
     return false;
   Stmt *ACCStmt = S->getAssociatedStmt();
   Stmt *OMPStmt = S->getOMPNode();
-  if (auto *OMPDir = dyn_cast<OMPExecutableDirective>(OMPStmt))
-    OMPStmt = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
+  for (int i = 0, e = getOpenACCEffectiveDirectives(S->getDirectiveKind());
+       i < e; ++i) {
+    if (auto *OMPDir = dyn_cast<OMPExecutableDirective>(OMPStmt))
+      OMPStmt = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
+  }
   if (ACCStmt == OMPStmt) // we probably will never implement such a case
     return false;
   PrintingPolicy PolicyOMP = Policy;
@@ -1591,33 +1601,40 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
           : true)
          && "ACCExecutableDirective and its OMP node must either both or"
             " neither have an associated statement");
+  int EffectiveDirectives =
+      getOpenACCEffectiveDirectives(S->getDirectiveKind());
   switch (Policy.OpenACCPrint) {
   case OpenACCPrint_ACC:
     PrintACCExecutableDirectiveHead(S, false, false);
     PrintACCExecutableDirectiveBody(S);
     break;
-  case OpenACCPrint_OMP:
-    PrintOMPExecutableDirectiveHead(S->getOMPNode(), false);
-    PrintOMPExecutableDirectiveBody(S->getOMPNode());
+  case OpenACCPrint_OMP: {
+    Stmt *OMPInnerDir = PrintOMPExecutableDirectiveHead(S->getOMPNode(), false,
+                                                        EffectiveDirectives);
+    PrintOMPExecutableDirectiveBody(OMPInnerDir);
     break;
+  }
   case OpenACCPrint_ACC_OMP:
     PrintACCExecutableDirectiveHead(S, false, true);
     if (mustSplitACCExecutableDirective(S, Policy, Context)) {
       PrintACCExecutableDirectiveBody(S);
       clang::commented_raw_ostream ComStream(OS, IndentLevel*2, 1, true);
       StmtPrinter ComPrinter(ComStream, Helper, Policy, 0, Context);
-      ComPrinter.PrintOMPExecutableDirectiveHead(S->getOMPNode(), false);
-      ComPrinter.PrintOMPExecutableDirectiveBody(S->getOMPNode());
+      Stmt *OMPInnerDir = ComPrinter.PrintOMPExecutableDirectiveHead(
+          S->getOMPNode(), false, EffectiveDirectives);
+      ComPrinter.PrintOMPExecutableDirectiveBody(OMPInnerDir);
     }
     else {
-      PrintOMPExecutableDirectiveHead(S->getOMPNode(), true);
+      PrintOMPExecutableDirectiveHead(S->getOMPNode(), true,
+                                      EffectiveDirectives);
       PrintACCExecutableDirectiveBody(S);
     }
     break;
   case OpenACCPrint_OMP_ACC:
-    PrintOMPExecutableDirectiveHead(S->getOMPNode(), false);
+    Stmt *OMPInnerDir = PrintOMPExecutableDirectiveHead(
+        S->getOMPNode(), false, EffectiveDirectives);
     if (mustSplitACCExecutableDirective(S, Policy, Context)) {
-      PrintOMPExecutableDirectiveBody(S->getOMPNode());
+      PrintOMPExecutableDirectiveBody(OMPInnerDir);
       clang::commented_raw_ostream ComStream(OS, IndentLevel*2, 1, true);
       PrintingPolicy ComPolicy(Policy);
       ComPolicy.OpenACCPrint = OpenACCPrint_ACC_OMP;
@@ -1638,6 +1655,11 @@ void StmtPrinter::VisitACCParallelDirective(ACCParallelDirective *Node) {
 }
 
 void StmtPrinter::VisitACCLoopDirective(ACCLoopDirective *Node) {
+  PrintACCExecutableDirective(Node);
+}
+
+void StmtPrinter::VisitACCParallelLoopDirective(
+    ACCParallelLoopDirective *Node) {
   PrintACCExecutableDirective(Node);
 }
 

@@ -15,6 +15,9 @@
 #ifndef OPENACC_DIRECTIVE
 #  define OPENACC_DIRECTIVE(Name)
 #endif
+#ifndef OPENACC_DIRECTIVE_EXT
+#define OPENACC_DIRECTIVE_EXT(Name, Str)
+#endif
 #ifndef OPENACC_CLAUSE
 #  define OPENACC_CLAUSE(Name, Class)
 #endif
@@ -24,10 +27,23 @@
 #ifndef OPENACC_LOOP_CLAUSE
 #  define OPENACC_LOOP_CLAUSE(Name)
 #endif
+#ifndef OPENACC_PARALLEL_LOOP_CLAUSE
+#  define OPENACC_PARALLEL_LOOP_CLAUSE(Name)
+#endif
+#ifndef OPENACC_PARALLEL_PARENT
+#  define OPENACC_PARALLEL_PARENT(Name)
+#endif
+#ifndef OPENACC_LOOP_PARENT
+#  define OPENACC_LOOP_PARENT(Name)
+#endif
+#ifndef OPENACC_PARALLEL_LOOP_PARENT
+#  define OPENACC_PARALLEL_LOOP_PARENT(Name)
+#endif
 
 // OpenACC directives.
 OPENACC_DIRECTIVE(parallel)
 OPENACC_DIRECTIVE(loop)
+OPENACC_DIRECTIVE_EXT(parallel_loop, "parallel loop")
 
 // OpenACC clauses.
 // ACCSharedClause is predetermined or implicit only.
@@ -65,7 +81,37 @@ OPENACC_LOOP_CLAUSE(vector)
 OPENACC_LOOP_CLAUSE(private)
 OPENACC_LOOP_CLAUSE(reduction)
 
+// Clauses allowed for OpenACC directive 'parallel loop'.
+OPENACC_PARALLEL_LOOP_CLAUSE(private)
+OPENACC_PARALLEL_LOOP_CLAUSE(firstprivate)
+OPENACC_PARALLEL_LOOP_CLAUSE(reduction)
+OPENACC_PARALLEL_LOOP_CLAUSE(num_gangs)
+OPENACC_PARALLEL_LOOP_CLAUSE(num_workers)
+OPENACC_PARALLEL_LOOP_CLAUSE(vector_length)
+OPENACC_PARALLEL_LOOP_CLAUSE(seq)
+OPENACC_PARALLEL_LOOP_CLAUSE(independent)
+OPENACC_PARALLEL_LOOP_CLAUSE(auto)
+OPENACC_PARALLEL_LOOP_CLAUSE(gang)
+OPENACC_PARALLEL_LOOP_CLAUSE(worker)
+OPENACC_PARALLEL_LOOP_CLAUSE(vector)
+
+// Parent directives allowed for 'parallel'.
+OPENACC_PARALLEL_PARENT(unknown)
+
+// Parent directives allowed for 'loop'.
+OPENACC_LOOP_PARENT(parallel)
+OPENACC_LOOP_PARENT(loop)
+OPENACC_LOOP_PARENT(parallel_loop)
+
+// Parent directives allowed for 'parallel_loop'.
+OPENACC_PARALLEL_LOOP_PARENT(unknown)
+
 #undef OPENACC_DIRECTIVE
+#undef OPENACC_DIRECTIVE_EXT
 #undef OPENACC_CLAUSE
 #undef OPENACC_PARALLEL_CLAUSE
 #undef OPENACC_LOOP_CLAUSE
+#undef OPENACC_PARALLEL_LOOP_CLAUSE
+#undef OPENACC_PARALLEL_PARENT
+#undef OPENACC_LOOP_PARENT
+#undef OPENACC_PARALLEL_LOOP_PARENT

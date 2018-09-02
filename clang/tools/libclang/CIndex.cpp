@@ -5424,6 +5424,8 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
     return cxstring::createRef("ACCParallelDirective");
   case CXCursor_ACCLoopDirective:
     return cxstring::createRef("ACCLoopDirective");
+  case CXCursor_ACCParallelLoopDirective:
+    return cxstring::createRef("ACCParallelLoopDirective");
   case CXCursor_OverloadCandidate:
       return cxstring::createRef("OverloadCandidate");
   case CXCursor_TypeAliasTemplateDecl:

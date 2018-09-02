@@ -75,3 +75,30 @@ ACCLoopDirective *ACCLoopDirective::CreateEmpty(const ASTContext &C,
       C.Allocate(Size + sizeof(ACCClause *) * NumClauses + sizeof(Stmt *));
   return new (Mem) ACCLoopDirective(NumClauses);
 }
+
+ACCParallelLoopDirective *
+ACCParallelLoopDirective::Create(
+    const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
+    ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
+    ACCParallelDirective *ParallelDir)
+{
+  unsigned Size = llvm::alignTo(sizeof(ACCParallelLoopDirective),
+                                alignof(ACCClause *));
+  void *Mem =
+      C.Allocate(Size + sizeof(ACCClause *) * Clauses.size() + sizeof(Stmt *));
+  ACCParallelLoopDirective *Dir =
+      new (Mem) ACCParallelLoopDirective(StartLoc, EndLoc, Clauses.size());
+  Dir->setClauses(Clauses);
+  Dir->setAssociatedStmt(AssociatedStmt);
+  Dir->setEffectiveDirective(ParallelDir);
+  return Dir;
+}
+
+ACCParallelLoopDirective *ACCParallelLoopDirective::CreateEmpty(
+    const ASTContext &C, unsigned NumClauses, EmptyShell) {
+  unsigned Size = llvm::alignTo(sizeof(ACCParallelLoopDirective),
+                                alignof(ACCClause *));
+  void *Mem =
+      C.Allocate(Size + sizeof(ACCClause *) * NumClauses + sizeof(Stmt *));
+  return new (Mem) ACCParallelLoopDirective(NumClauses);
+}

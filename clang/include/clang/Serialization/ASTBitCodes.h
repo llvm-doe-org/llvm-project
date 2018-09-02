@@ -1956,6 +1956,7 @@ namespace serialization {
       // OpenACC directives
       STMT_ACC_PARALLEL_DIRECTIVE,
       STMT_ACC_LOOP_DIRECTIVE,
+      STMT_ACC_PARALLEL_LOOP_DIRECTIVE,
 
       // ARC
       EXPR_OBJC_BRIDGED_CAST,     // ObjCBridgedCastExpr

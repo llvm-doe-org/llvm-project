@@ -767,6 +767,30 @@ loop analysis and thus with only a safe mapping to OpenMP.
                     * Gang reductions for other variables are
                       addressed in the data sharing semantics on `acc
                       parallel`.
+* Combined directives:
+    * The translation of combined directives is performed in two
+      stages:
+        * Translation from the combined OpenACC directive to separate
+          OpenACC directives: This stage is performed during the parse
+          by sema.  Sema builds the effective AST subtree containing
+          the separate OpenACC directives, and then it stores a
+          pointer to the AST node for the outermost of those
+          directives as a member (not a normal AST child) of the
+          combined directive's AST node.
+        * Translation from the separate OpenACC directives to OpenMP:
+          This stage is performed using the `TreeTransform` facility
+          just as it normally would be for the separate directives.
+    * Mappings from the combined OpenACC directives to the separate
+      OpenACC directives are as follows:
+        * `acc parallel loop` -> `acc parallel`, whose associated
+          statement is an `acc loop`, whose associated statement is
+          the associated statement from the `acc parallel loop`:
+            * `private` -> `private` on the `acc loop`
+            * `reduction` -> `reduction` on both the `acc parallel`
+              and `acc loop`
+            * Each remaining clause is permitted on only one of the
+              separate OpenACC directives, and so it is mapped to that
+              directive.
 
 Unmappable Features
 -------------------

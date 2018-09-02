@@ -2078,7 +2078,9 @@ void ASTDumper::VisitACCExecutableDirective(
         dumpStmt(S);
     });
   }
-  if (Node->hasOMPNode())
+  if (ACCExecutableDirective *Effect = Node->getEffectiveDirective())
+    dumpStmt(Effect, "effect: ");
+  else if (Node->hasOMPNode())
     dumpStmt(Node->getOMPNode(), "impl: ");
 }
 

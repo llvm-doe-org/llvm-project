@@ -1057,6 +1057,11 @@ void StmtProfiler::VisitACCLoopDirective(const ACCLoopDirective *S) {
   VisitACCExecutableDirective(S);
 }
 
+void StmtProfiler::VisitACCParallelLoopDirective(
+    const ACCParallelLoopDirective *S) {
+  VisitACCExecutableDirective(S);
+}
+
 void StmtProfiler::VisitExpr(const Expr *S) {
   VisitStmt(S);
 }

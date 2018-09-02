@@ -9060,6 +9060,17 @@ TreeTransform<Derived>::TransformACCLoopDirective(ACCLoopDirective *D) {
   return Res;
 }
 
+template <typename Derived>
+StmtResult
+TreeTransform<Derived>::TransformACCParallelLoopDirective(
+    ACCParallelLoopDirective *D) {
+  getDerived().getSema().StartOpenACCDSABlock(ACCD_parallel_loop,
+                                              D->getLocStart());
+  StmtResult Res = getDerived().TransformACCExecutableDirective(D);
+  getDerived().getSema().EndOpenACCDSABlock();
+  return Res;
+}
+
 //===----------------------------------------------------------------------===//
 // OpenACC clause transformation
 //===----------------------------------------------------------------------===//

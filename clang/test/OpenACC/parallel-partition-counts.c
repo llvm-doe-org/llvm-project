@@ -1,6 +1,7 @@
-// This checks correct usage of num_workers and vector_length.  Correct usage
-// of num_gangs is checked in parallel.c and loop.c.
-//
+// Check correct usage of num_workers and vector_length on "acc parallel" and
+// "acc parallel loop".  Correct usage of num_gangs is checked in parallel.c
+// and loop.c.
+
 // Check ASTDumper.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
@@ -12,11 +13,11 @@
 // RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
 //
 // RUN: %data prints {
-// RUN:   (print='-Xclang -ast-print -fsyntax-only -fopenacc' prt=PRT-A,PRT)
-// RUN:   (print=-fopenacc-print=acc                          prt=PRT-A,PRT)
-// RUN:   (print=-fopenacc-print=omp                          prt=PRT-O,PRT)
-// RUN:   (print=-fopenacc-print=acc-omp                      prt=PRT-A,PRT-AO,PRT)
-// RUN:   (print=-fopenacc-print=omp-acc                      prt=PRT-O,PRT-OA,PRT)
+// RUN:   (print='-Xclang -ast-print -fsyntax-only -fopenacc' prt=PRT,PRT-A)
+// RUN:   (print=-fopenacc-print=acc                          prt=PRT,PRT-A)
+// RUN:   (print=-fopenacc-print=omp                          prt=PRT,PRT-O)
+// RUN:   (print=-fopenacc-print=acc-omp                      prt=PRT,PRT-A,PRT-AO)
+// RUN:   (print=-fopenacc-print=omp-acc                      prt=PRT,PRT-O,PRT-OA)
 // RUN: }
 // RUN: %for prints {
 // RUN:   %clang -Xclang -verify %[print] %s \
@@ -50,12 +51,17 @@
 
 // expected-no-diagnostics
 
+#include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 int foo() { return 5; }
 
-// PRT: int main() {
-int main() {
+// PRT: int main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
+  // PRT-NEXT: argc == 2
+  assert(argc == 2);
+
   // PRT: printf
   // EXE: start
   printf("start\n");
@@ -136,6 +142,127 @@ int main() {
         // EXE-NEXT: 6
         // EXE-NEXT: 7
         printf("%d\n", i);
+      } // PRT-NEXT: }
+    } // PRT-NEXT: }
+  } // PRT-NEXT: }
+
+  // PRT-NEXT: {
+  {
+    // DMP:      ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+    // DMP:          ACCLoopDirective
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    //
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(1) num_workers(2) vector_length(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(1) num_workers(2) vector_length(2){{$}}
+    #pragma acc parallel loop num_gangs(1) num_workers(2) vector_length(2)
+    // DMP-NEXT: impl: ForStmt
+    // PRT-NEXT: for ({{.*}}) {
+    for (int i = 0; i < 2; ++i) {
+      // DMP:      ACCLoopDirective
+      // DMP-NEXT:   ACCGangClause
+      // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:   impl: OMPDistributeDirective
+      // DMP-NOT:      OMP
+      //
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop gang{{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
+      // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang{{$}}
+      #pragma acc loop gang
+      // PRT-NEXT: for ({{.*}}) {
+      for (int j = 0; j < 4; ++j) {
+        // sequential as partitioned only across 1 gang
+        // DMP: CallExpr
+        // PRT-NEXT: printf
+        // EXE-NEXT: 0
+        // EXE-NEXT: 1
+        // EXE-NEXT: 2
+        // EXE-NEXT: 3
+        // EXE-NEXT: 0
+        // EXE-NEXT: 1
+        // EXE-NEXT: 2
+        // EXE-NEXT: 3
+        printf("%d\n", j);
+      } // PRT-NEXT: }
+    } // PRT-NEXT: }
+  } // PRT-NEXT: }
+
+  // PRT-NEXT: {
+  {
+    // DMP:      ACCParallelLoopDirective
+    // DMP-NEXT:   ACCGangClause
+    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+    // DMP:          ACCLoopDirective
+    // DMP-NEXT:       ACCGangClause
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPDistributeDirective
+    //
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop gang num_gangs(1) num_workers(2) vector_length(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop gang num_gangs(1) num_workers(2) vector_length(2){{$}}
+    #pragma acc parallel loop gang num_gangs(1) num_workers(2) vector_length(2)
+    // DMP: ForStmt
+    // PRT-NEXT: for ({{.*}}) {
+    for (int i = 0; i < 2; ++i) {
+      // DMP:      ACCLoopDirective
+      // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:   impl: ForStmt
+      //
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop
+      // PRT-AO-SAME: {{^}} // discarded in OpenMP translation
+      // PRT-A-SAME:  {{^$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop // discarded in OpenMP translation{{$}}
+      #pragma acc loop
+      // PRT-NEXT: for ({{.*}}) {
+      for (int j = 0; j < 4; ++j) {
+        // sequential, so order is deterministic
+        // DMP: CallExpr
+        // PRT-NEXT: printf
+        // EXE-NEXT: 0
+        // EXE-NEXT: 1
+        // EXE-NEXT: 2
+        // EXE-NEXT: 3
+        // EXE-NEXT: 0
+        // EXE-NEXT: 1
+        // EXE-NEXT: 2
+        // EXE-NEXT: 3
+        printf("%d\n", j);
       } // PRT-NEXT: }
     } // PRT-NEXT: }
   } // PRT-NEXT: }
@@ -356,6 +483,140 @@ int main() {
     } // PRT-NEXT: }
   } // PRT-NEXT: }
 
+  // PRT-NEXT: {
+  {
+    // DMP:      ACCParallelLoopDirective
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+    // DMP:          ACCLoopDirective
+    // DMP-NEXT:       ACCWorkerClause
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPParallelForDirective
+    // DMP-NEXT:         OMPNum_threadsClause
+    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
+    //
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop worker num_gangs(1) num_workers(1) vector_length(1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for num_threads(1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for num_threads(1){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop worker num_gangs(1) num_workers(1) vector_length(1){{$}}
+    #pragma acc parallel loop worker num_gangs(1) num_workers(1) vector_length(1)
+    // DMP: ForStmt
+    // PRT-NEXT: for ({{.*}}) {
+    for (int i = 0; i < 2; ++i) {
+      // DMP:      ACCLoopDirective
+      // DMP-NEXT:   ACCVectorClause
+      // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:   impl: OMPSimdDirective
+      // DMP-NEXT:     OMPSimdlenClause
+      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+      // DMP-NOT:      OMP
+      //
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop vector{{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp simd simdlen(1){{$}}
+      // PRT-O-NEXT:  {{^ *}}#pragma omp simd simdlen(1){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop vector{{$}}
+      #pragma acc loop vector
+      // PRT-NEXT: for ({{.*}}) {
+      for (int i = 0; i < 4; ++i) {
+        // sequential as partitioned only across 1 vector lane
+        // DMP: CallExpr
+        // PRT-NEXT: printf
+        // EXE-NEXT: 0
+        // EXE-NEXT: 1
+        // EXE-NEXT: 2
+        // EXE-NEXT: 3
+        // EXE-NEXT: 0
+        // EXE-NEXT: 1
+        // EXE-NEXT: 2
+        // EXE-NEXT: 3
+        printf("%d\n", i);
+      } // PRT-NEXT: }
+    } // PRT-NEXT: }
+  } // PRT-NEXT: }
+
+  // PRT-NEXT: {
+  {
+    // DMP:      ACCParallelLoopDirective
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+    // DMP:          ACCLoopDirective
+    // DMP-NEXT:       ACCVectorClause
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPParallelForSimdDirective
+    // DMP-NEXT:         OMPNum_threadsClause
+    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:         OMPSimdlenClause
+    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
+    //
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop vector num_gangs(1) num_workers(1) vector_length(1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(1) simdlen(1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(1) simdlen(1){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop vector num_gangs(1) num_workers(1) vector_length(1){{$}}
+    #pragma acc parallel loop vector num_gangs(1) num_workers(1) vector_length(1)
+    // DMP: ForStmt
+    // PRT-NEXT: for ({{.*}}) {
+    for (int i = 0; i < 2; ++i) {
+      // DMP:      ACCLoopDirective
+      // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:   impl: ForStmt
+      //
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop
+      // PRT-AO-SAME: {{^}} // discarded in OpenMP translation
+      // PRT-A-SAME:  {{^$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop // discarded in OpenMP translation{{$}}
+      #pragma acc loop
+      // PRT-NEXT: for ({{.*}}) {
+      for (int i = 0; i < 4; ++i) {
+        // sequential as partitioned only across 1 vector lane
+        // DMP: CallExpr
+        // PRT-NEXT: printf
+        // EXE-NEXT: 0
+        // EXE-NEXT: 1
+        // EXE-NEXT: 2
+        // EXE-NEXT: 3
+        // EXE-NEXT: 0
+        // EXE-NEXT: 1
+        // EXE-NEXT: 2
+        // EXE-NEXT: 3
+        printf("%d\n", i);
+      } // PRT-NEXT: }
+    } // PRT-NEXT: }
+  } // PRT-NEXT: }
+
   //--------------------------------------------------
   // num_workers ice>1, vector_length ice>1, used together
   //--------------------------------------------------
@@ -457,8 +718,9 @@ int main() {
       // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang{{$}}
       #pragma acc loop gang
+      // DMP: ForStmt
+      // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 2; ++i) {
-        // PRT-NEXT: for ({{.*}}) {
         // DMP:      ACCLoopDirective
         // DMP-NEXT:   ACCWorkerClause
         // DMP-NEXT:   ACCVectorClause
@@ -494,6 +756,193 @@ int main() {
           // EXE-DAG: 1, 3
           printf("%d, %d\n", i, j);
         } // PRT-NEXT: }
+      } // PRT-NEXT: }
+    } // PRT-NEXT: }
+  } // PRT-NEXT: }
+
+  // PRT-NEXT: {
+  {
+    // DMP:      ACCParallelLoopDirective
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+    // DMP:          ACCLoopDirective
+    // DMP-NEXT:       ACCWorkerClause
+    // DMP-NEXT:       ACCVectorClause
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPParallelForSimdDirective
+    // DMP-NEXT:         OMPNum_threadsClause
+    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:         OMPSimdlenClause
+    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 3
+    //
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop worker vector num_gangs(1) num_workers(2) vector_length(3){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(2) simdlen(3){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(2) simdlen(3){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop worker vector num_gangs(1) num_workers(2) vector_length(3){{$}}
+    #pragma acc parallel loop worker vector num_gangs(1) num_workers(2) vector_length(3)
+    // DMP: ForStmt
+    // PRT-NEXT: for ({{.*}}) {
+    for (int i = 0; i < 8; ++i) {
+      // not sequential
+      // DMP: CallExpr
+      // PRT-NEXT: printf
+      // EXE-DAG: 0
+      // EXE-DAG: 1
+      // EXE-DAG: 2
+      // EXE-DAG: 3
+      // EXE-DAG: 4
+      // EXE-DAG: 5
+      // EXE-DAG: 6
+      // EXE-DAG: 7
+      printf("%d\n", i);
+    } // PRT-NEXT: }
+  } // PRT-NEXT: }
+
+  // PRT-NEXT: {
+  {
+    // DMP:      ACCParallelLoopDirective
+    // DMP-NEXT:   ACCGangClause
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+    // DMP:          ACCLoopDirective
+    // DMP-NEXT:       ACCGangClause
+    // DMP-NEXT:       ACCWorkerClause
+    // DMP-NEXT:       ACCVectorClause
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPDistributeParallelForSimdDirective
+    // DMP-NEXT:         OMPNum_threadsClause
+    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:         OMPSimdlenClause
+    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 3
+    //
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop gang worker vector num_gangs(1) num_workers(2) vector_length(3){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(2) simdlen(3){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp distribute parallel for simd num_threads(2) simdlen(3){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop gang worker vector num_gangs(1) num_workers(2) vector_length(3){{$}}
+    #pragma acc parallel loop gang worker vector num_gangs(1) num_workers(2) vector_length(3)
+    // DMP: ForStmt
+    // PRT-NEXT: for ({{.*}}) {
+    for (int i = 0; i < 8; ++i) {
+      // not sequential
+      // DMP: CallExpr
+      // PRT-NEXT: printf
+      // EXE-DAG: 0
+      // EXE-DAG: 1
+      // EXE-DAG: 2
+      // EXE-DAG: 3
+      // EXE-DAG: 4
+      // EXE-DAG: 5
+      // EXE-DAG: 6
+      // EXE-DAG: 7
+      printf("%d\n", i);
+    } // PRT-NEXT: }
+  } // PRT-NEXT: }
+
+  // PRT-NEXT: {
+  {
+    // DMP:      ACCParallelLoopDirective
+    // DMP-NEXT:   ACCGangClause
+    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+    // DMP:          ACCLoopDirective
+    // DMP-NEXT:       ACCGangClause
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPDistributeDirective
+    //
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop gang num_gangs(1) num_workers(2) vector_length(3){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop gang num_gangs(1) num_workers(2) vector_length(3){{$}}
+    #pragma acc parallel loop gang num_gangs(1) num_workers(2) vector_length(3)
+    // DMP: ForStmt
+    // PRT-NEXT: for ({{.*}}) {
+    for (int i = 0; i < 2; ++i) {
+      // DMP:      ACCLoopDirective
+      // DMP-NEXT:   ACCWorkerClause
+      // DMP-NEXT:   ACCVectorClause
+      // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+      // DMP-NEXT:   impl: OMPParallelForSimdDirective
+      // DMP-NEXT:     OMPNum_threadsClause
+      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+      // DMP-NEXT:     OMPSimdlenClause
+      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
+      // DMP-NEXT:     OMPSharedClause {{.*}}
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+      // DMP-NOT:      OMP
+      //
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker vector{{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(2) simdlen(3) shared(i){{$}}
+      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(2) simdlen(3) shared(i){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector{{$}}
+      #pragma acc loop worker vector
+      // PRT-NEXT: for ({{.*}}) {
+      for (int j = 0; j < 4; ++j) {
+        // not sequential
+        // DMP: CallExpr
+        // PRT-NEXT: printf
+        // EXE-DAG: 0, 0
+        // EXE-DAG: 0, 1
+        // EXE-DAG: 0, 2
+        // EXE-DAG: 0, 3
+        // EXE-DAG: 1, 0
+        // EXE-DAG: 1, 1
+        // EXE-DAG: 1, 2
+        // EXE-DAG: 1, 3
+        printf("%d, %d\n", i, j);
       } // PRT-NEXT: }
     } // PRT-NEXT: }
   } // PRT-NEXT: }
@@ -612,6 +1061,111 @@ int main() {
     } // PRT-NEXT: }
   } // PRT-NEXT: }
 
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int nw = 2;
+    int nw = 2;
+
+    // DMP:      ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCNum_workersClause
+    // DMP:          DeclRefExpr {{.*}} 'nw' 'int'
+    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     ACCNum_workersClause
+    // DMP:            DeclRefExpr {{.*}} 'nw' 'int'
+    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+    // DMP:          ACCLoopDirective
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    //
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(1) num_workers(nw) vector_length(1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(1) num_workers(nw) vector_length(1){{$}}
+    #pragma acc parallel loop num_gangs(1) num_workers(nw) vector_length(1)
+    // DMP-NEXT: impl: ForStmt
+    // PRT-NEXT: for ({{.*}}) {
+    for (int i = 0; i < 8; ++i) {
+      // sequential, so order is deterministic
+      // DMP: CallExpr
+      // PRT-NEXT: printf
+      // EXE-NEXT: 0
+      // EXE-NEXT: 1
+      // EXE-NEXT: 2
+      // EXE-NEXT: 3
+      // EXE-NEXT: 4
+      // EXE-NEXT: 5
+      // EXE-NEXT: 6
+      // EXE-NEXT: 7
+      printf("%d\n", i);
+    } // PRT-NEXT: }
+  } // PRT-NEXT: }
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int nw = 2;
+    int nw = 2;
+
+    // DMP:      ACCParallelLoopDirective
+    // DMP-NEXT:   ACCGangClause
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCNum_workersClause
+    // DMP:          DeclRefExpr {{.*}} 'nw' 'int'
+    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     ACCNum_workersClause
+    // DMP:            DeclRefExpr {{.*}} 'nw' 'int'
+    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+    // DMP:          ACCLoopDirective
+    // DMP-NEXT:       ACCGangClause
+    // DMP-NEXT:       ACCVectorClause
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPDistributeSimdDirective
+    // DMP-NEXT:         OMPSimdlenClause
+    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
+    //
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop gang vector num_gangs(1) num_workers(nw) vector_length(1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute simd simdlen(1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp distribute simd simdlen(1){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop gang vector num_gangs(1) num_workers(nw) vector_length(1){{$}}
+    #pragma acc parallel loop gang vector num_gangs(1) num_workers(nw) vector_length(1)
+    // DMP: ForStmt
+    // PRT-NEXT: for ({{.*}}) {
+    for (int i = 0; i < 8; ++i) {
+      // sequential, so order is deterministic
+      // DMP: CallExpr
+      // PRT-NEXT: printf
+      // EXE-NEXT: 0
+      // EXE-NEXT: 1
+      // EXE-NEXT: 2
+      // EXE-NEXT: 3
+      // EXE-NEXT: 4
+      // EXE-NEXT: 5
+      // EXE-NEXT: 6
+      // EXE-NEXT: 7
+      printf("%d\n", i);
+    } // PRT-NEXT: }
+  } // PRT-NEXT: }
+
   //--------------------------------------------------
   // num_workers non-constant>1, used
   //--------------------------------------------------
@@ -701,6 +1255,115 @@ int main() {
         // EXE-DAG: 6
         // EXE-DAG: 7
         printf("%d\n", i);
+      }
+    }
+  } // PRT-NEXT: }
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int nw = {{.*}};
+    int nw = atoi(argv[1]);
+
+    // DMP:      ACCParallelLoopDirective
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCNum_workersClause
+    // DMP:          DeclRefExpr {{.*}} 'nw' 'int'
+    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     ACCNum_workersClause
+    // DMP:            DeclRefExpr {{.*}} 'nw' 'int'
+    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     impl: CompoundStmt
+    // DMP-NEXT:       DeclStmt
+    // DMP-NEXT:         VarDecl {{.*}} __clang_acc_num_workers__ 'const int'
+    // DMP:                DeclRefExpr {{.*}} 'nw' 'int'
+    // DMP-NEXT:       OMPTargetTeamsDirective
+    // DMP-NEXT:         OMPNum_teamsClause
+    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
+    // DMP:          ACCLoopDirective
+    // DMP-NEXT:       ACCWorkerClause
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPParallelForDirective
+    // DMP-NEXT:         OMPNum_threadsClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} '__clang_acc_num_workers__' 'const int'
+    // DMP:            ForStmt
+    // DMP:              ACCLoopDirective
+    // DMP-NEXT:           ACCVectorClause
+    // DMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:           ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:           impl: OMPSimdDirective
+    // DMP-NEXT:             OMPSimdlenClause
+    // DMP-NEXT:               IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:             OMPSharedClause {{.*}} <implicit>
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NOT:              OMP
+    // DMP:                  ForStmt
+    // DMP:                    CallExpr
+    //
+    // PRT-NOACC-NEXT: for ({{.*}}) {
+    // PRT-NOACC-NEXT:   for ({{.*}}) {
+    // PRT-NOACC-NEXT:     printf
+    // PRT-NOACC-NEXT:   }
+    // PRT-NOACC-NEXT: }
+    // PRT-A-NEXT:     {{^ *}}#pragma acc parallel loop worker num_gangs(1) num_workers(nw) vector_length(1){{$}}
+    // PRT-A-NEXT:     for ({{.*}}) {
+    // PRT-A-NEXT:       {{^ *}}#pragma acc loop vector{{$}}
+    // PRT-AO-NEXT:      {{^ *}}// #pragma omp simd simdlen(1){{$}}
+    // PRT-A-NEXT:       for ({{.*}}) {
+    // PRT-A-NEXT:         printf
+    // PRT-A-NEXT:       }
+    // PRT-A-NEXT:     }
+    // PRT-AO-NEXT:    // {
+    // PRT-AO-NEXT:    //   const int __clang_acc_num_workers__ = nw;
+    // PRT-AO-NEXT:    //   #pragma omp target teams num_teams(1){{$}}
+    // PRT-AO-NEXT:    //   #pragma omp parallel for num_threads(__clang_acc_num_workers__){{$}}
+    // PRT-AO-NEXT:    //   for ({{.*}}) {
+    // PRT-AO-NEXT:    //     #pragma omp simd simdlen(1){{$}}
+    // PRT-AO-NEXT:    //     for ({{.*}}) {
+    // PRT-AO-NEXT:    //       printf
+    // PRT-AO-NEXT:    //     }
+    // PRT-AO-NEXT:    //   }
+    // PRT-AO-NEXT:    // }
+    // PRT-O-NEXT:     {
+    // PRT-O-NEXT:       const int __clang_acc_num_workers__ = nw;
+    // PRT-O-NEXT:       {{^ *}}#pragma omp target teams num_teams(1){{$}}
+    // PRT-O-NEXT:       {{^ *}}#pragma omp parallel for num_threads(__clang_acc_num_workers__){{$}}
+    // PRT-O-NEXT:       {
+    // PRT-O-NEXT:         {{^ *}}#pragma omp simd simdlen(1){{$}}
+    // PRT-O-NEXT:         for ({{.*}}) {
+    // PRT-O-NEXT:           printf
+    // PRT-O-NEXT:         }
+    // PRT-O-NEXT:       }
+    // PRT-O-NEXT:     }
+    // PRT-OA-NEXT:    // #pragma acc parallel loop worker num_gangs(1) num_workers(nw) vector_length(1){{$}}
+    // PRT-OA-NEXT:    // for ({{.*}}) {
+    // PRT-OA-NEXT:    //   #pragma acc loop vector{{$}}
+    // PRT-OA-NEXT:    //   // #pragma omp simd simdlen(1){{$}}
+    // PRT-OA-NEXT:    //   for ({{.*}}) {
+    // PRT-OA-NEXT:    //     printf
+    // PRT-OA-NEXT:    //   }
+    // PRT-OA-NEXT:    // }
+    #pragma acc parallel loop worker num_gangs(1) num_workers(nw) vector_length(1)
+    for (int i = 0; i < 2; ++i) {
+      #pragma acc loop vector
+      for (int j = 0; j < 4; ++j) {
+        // sequential as partitioned only across 1 vector lane
+        // EXE-DAG: 0, 0
+        // EXE-DAG: 0, 1
+        // EXE-DAG: 0, 2
+        // EXE-DAG: 0, 3
+        // EXE-DAG: 1, 0
+        // EXE-DAG: 1, 1
+        // EXE-DAG: 1, 2
+        // EXE-DAG: 1, 3
+        printf("%d, %d\n", i, j);
       }
     }
   } // PRT-NEXT: }

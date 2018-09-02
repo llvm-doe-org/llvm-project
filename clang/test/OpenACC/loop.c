@@ -1,3 +1,6 @@
+// Check correct loop partitioning and implicit data sharing on "acc loop"
+// and "acc parallel loop".
+//
 // Abbreviations:
 //   A       = OpenACC
 //   AO      = commented OpenMP is printed after OpenACC
@@ -256,7 +259,7 @@
 // Check -ast-print and -fopenacc-print.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
-// RUN: | FileCheck -check-prefixes=PRT %s
+// RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
 //
 // RUN: %data prints {
 // RUN:   (print='-Xclang -ast-print -fsyntax-only -fopenacc' prt=PRT,PRT-A)
@@ -511,7 +514,207 @@ int main() {
 
     // EXE-NEXT: loopOnly=88
     printf("loopOnly=%d\n", loopOnly);
+    // EXE-NEXT: loopOnlyArr[0]=77
+    printf("loopOnlyArr[0]=%d\n", loopOnlyArr[0]);
+  } // PRT: }
 
+  // Repeat that but with acc parallel and acc loop combined.  Then, j cannot
+  // be within acc parallel and outside acc loop, so we declare it outside acc
+  // parallel and check it inside acc loop.
+  //
+  // PRT-NEXT: {
+  {
+    // Accessed in acc loop but not otherwise in acc parallel.
+    // PRT-NEXT: int loopOnly = 88;
+    // PRT-NEXT: int loopOnlyArr[1] = {88};
+    int loopOnly = 88;
+    int loopOnlyArr[1] = {88};
+
+    // PRT-NEXT: struct {
+    struct {
+      bool readLoopOnlyOld;
+      bool readLoopOnlyNew;
+      bool readLoopOnlyErr;
+
+      bool readLoopOnlyArrOld;
+      bool readLoopOnlyArrNew;
+      bool readLoopOnlyArrErr;
+
+      bool declNestedLoopOld;
+      bool declNestedLoopNew;
+      bool declNestedLoopErr;
+    } save; // PRT: } save;
+
+    // PRT-NEXT: int j = 0;
+    int j = 0;
+
+    // PRT-NEXT: memset
+    memset(&save, 0, sizeof(save));
+
+    // DMP:            ACCParallelLoopDirective
+    // DMP-NEXT:         ACCNum_gangsClause
+    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 3
+    // DMP-ASEQ-NEXT:    ACCSeqClause
+    // DMP-AIND-NEXT:    ACCIndependentClause
+    // DMP-AAUTO-NEXT:   ACCAutoClause
+    // DMP-ASEQ-NOT:     <implicit>
+    // DMP-AIND-NOT:     <implicit>
+    // DMP-AAUTO-NOT:    <implicit>
+    // DMP-AG-NEXT:      ACCGangClause
+    // DMP-AW-NEXT:      ACCWorkerClause
+    // DMP-AV-NEXT:      ACCVectorClause
+    // DMP-NEXT:         effect: ACCParallelDirective
+    // DMP-NEXT:           ACCNum_gangsClause
+    // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:           ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'save'
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:           ACCFirstprivateClause {{.*}} <implicit>
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'loopOnly' 'int'
+    // DMP-NEXT:           impl: OMPTargetTeamsDirective
+    // DMP-NEXT:             OMPNum_teamsClause
+    // DMP-NEXT:               IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:             OMPSharedClause
+    // DMP-NOT:                <implicit>
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'save'
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:             OMPFirstprivateClause
+    // DMP-NOT:                <implicit>
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'loopOnly' 'int'
+    // DMP:                ACCLoopDirective
+    // DMP-ASEQ-NEXT:        ACCSeqClause
+    // DMP-AIND-NEXT:        ACCIndependentClause
+    // DMP-AAUTO-NEXT:       ACCAutoClause
+    // DMP-ASEQ-NOT:         <implicit>
+    // DMP-AIND-NOT:         <implicit>
+    // DMP-AAUTO-NOT:        <implicit>
+    // DMP-AG-NEXT:          ACCGangClause
+    // DMP-AW-NEXT:          ACCWorkerClause
+    // DMP-AV-NEXT:          ACCVectorClause
+    // DMP-AIMP-NEXT:        ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'loopOnly' 'int'
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'save'
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-OPRG-NEXT:        impl: [[OMPDD]]
+    // DMP-OPRG-NEXT:          OMPSharedClause
+    // DMP-OPRG-OSIMP-SAME:      <implicit>
+    // DMP-OPRG-OSEXP-NOT:       <implicit>
+    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'loopOnly' 'int'
+    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'save'
+    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-OPRG:               ForStmt
+    // DMP-OPLC-NEXT:        impl: [[OMPDD]]
+    // DMP-ONT1-NEXT:          OMPNum_threadsClause
+    // DMP-ONT1-NEXT:            IntegerLiteral {{.*}} 'int' 1
+    // DMP-OPLC-NEXT:          OMPSharedClause
+    // DMP-OPLC-OSIMP-SAME:      <implicit>
+    // DMP-OPLC-OSEXP-NOT:       <implicit>
+    // DMP-OPLC-NEXT:            DeclRefExpr {{.*}} 'j'
+    // DMP-OPLC-NEXT:            DeclRefExpr {{.*}} 'loopOnly' 'int'
+    // DMP-OPLC-NEXT:            DeclRefExpr {{.*}} 'save'
+    // DMP-OPLC-NEXT:            DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-OPLC:               ForStmt
+    // DMP-OSEQ-NEXT:        impl: ForStmt
+    //
+    // PRT-A-NEXT:             {{^ *}}#pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
+    // PRT-AO-NEXT:            {{^ *}}// #pragma omp target teams num_teams(3) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    // PRT-AO-OPRG-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+    // PRT-AO-OPLC-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+    // PRT-AO-OPRG-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
+    // PRT-AO-OPLC-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
+    //
+    // PRT-O-NEXT:            {{^ *}}#pragma omp target teams num_teams(3) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    // PRT-O-OPRG-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
+    // PRT-O-OPLC-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
+    // PRT-O-OPRG-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
+    // PRT-O-OPLC-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
+    // PRT-OA-NEXT:           {{^ *}}// #pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
+    //
+    // PRT-NEXT: for ({{.*}}) {
+    #pragma acc parallel loop num_gangs(3) ACCC
+    for (int i = 0; i < 2; ++i) {
+      // EXE:             hello world
+      // EXE-NEXT:        hello world
+      // EXE-GREDUN-NEXT: hello world
+      // EXE-GREDUN-NEXT: hello world
+      // EXE-GREDUN-NEXT: hello world
+      // EXE-GREDUN-NEXT: hello world
+      printf("hello world\n");
+      for (j = 0; j < 2; ++j)
+        ;
+
+      // If gang-redundant, every gang should see old value at i = 0, new value
+      // at i = 1 if sequential, and either value at i = 1 if otherwise
+      // partitioned.  If gang-partitioned, each of two gangs should see old
+      // value at the gang's one assigned iteration, and one gang shouldn't see
+      // anything.
+      if (loopOnly == 88) // check old before new in case assign between
+        save.readLoopOnlyOld = true;
+      else if (loopOnly == 77 && i == 1)
+        save.readLoopOnlyNew = true;
+      else
+        save.readLoopOnlyErr = true;
+      if (i == 0)
+        loopOnly = 77;
+
+      // At least one gang should see old value at i = 0, every gang should see
+      // new value at i = 1 if sequential, and gangs can see either value (or
+      // no value in case of the gang not assigned an iteration under gang
+      // partitioning) at i = 1 if partitioned in any way.
+      if (loopOnlyArr[0] == 88) // check old before new in case assign between
+        save.readLoopOnlyArrOld = true;
+      else if (loopOnlyArr[0] == 77)
+        save.readLoopOnlyArrNew = true;
+      else
+        save.readLoopOnlyArrErr = true;
+      if (i == 0)
+        loopOnlyArr[0] = 77;
+
+      // If gang-redundant, each gang should see the j value assigned by the
+      // loop above.  If gang-partitioned but not otherwise partitioned, each
+      // gang that is assigned an i iteration will see the j value assigned by
+      // the loop above, and remaining gangs will not.  If gang-partitioned and
+      // otherwise partitioned, there's a race.
+      if (j == 0)
+        save.declNestedLoopOld = true;
+      else if (j == 2)
+        save.declNestedLoopNew = true;
+      else
+        save.declNestedLoopErr = true;
+    } // PRT: }
+
+    // EXE-NEXT: save.readLoopOnlyOld=1
+    printf("save.readLoopOnlyOld=%d\n", save.readLoopOnlyOld);
+    // EXE-NOPART-NEXT: save.readLoopOnlyNew=1
+    // EXE-GPART-NEXT:  save.readLoopOnlyNew=0
+    // We don't have a prefix for gang-redundant but partitioned, and the value
+    // is indeterminate there anyway, so we skip that case.
+    printf("save.readLoopOnlyNew=%d\n", save.readLoopOnlyNew);
+    // EXE: save.readLoopOnlyErr=0
+    printf("save.readLoopOnlyErr=%d\n", save.readLoopOnlyErr);
+
+    // EXE-NEXT: save.readLoopOnlyArrOld=1
+    printf("save.readLoopOnlyArrOld=%d\n", save.readLoopOnlyArrOld);
+    // EXE-NOPART-NEXT: save.readLoopOnlyArrNew=1
+    // EXE-PART-NEXT: save.readLoopOnlyArrNew={{[01]}}
+    printf("save.readLoopOnlyArrNew=%d\n", save.readLoopOnlyArrNew);
+    // EXE-NEXT: save.readLoopOnlyArrErr=0
+    printf("save.readLoopOnlyArrErr=%d\n", save.readLoopOnlyArrErr);
+
+    // EXE-GREDUN-NEXT: save.declNestedLoopOld=0
+    printf("save.declNestedLoopOld=%d\n", save.declNestedLoopOld);
+    // EXE-GREDUN-NEXT: save.declNestedLoopNew=1
+    printf("save.declNestedLoopNew=%d\n", save.declNestedLoopNew);
+    // EXE-GREDUN-NEXT: save.declNestedLoopErr=0
+    printf("save.declNestedLoopErr=%d\n", save.declNestedLoopErr);
+
+    // EXE:      loopOnly=88
+    printf("loopOnly=%d\n", loopOnly);
     // EXE-NEXT: loopOnlyArr[0]=77
     printf("loopOnlyArr[0]=%d\n", loopOnlyArr[0]);
   } // PRT: }
@@ -534,6 +737,14 @@ int main() {
       bool assignNestedLoopOld;
       bool assignNestedLoopNew;
       bool assignNestedLoopErr;
+
+      bool readInLaterLoopOld;
+      bool readInLaterLoopNew;
+      bool readInLaterLoopErr;
+
+      bool writeInLaterLoopOld;
+      bool writeInLaterLoopNew;
+      bool writeInLaterLoopErr;
     } save; // PRT: } save;
 
     // PRT-NEXT: memset
@@ -639,6 +850,12 @@ int main() {
       // PRT-OA-OPLC-NEXT:      //   for (k ={{.*}})
       // PRT-OA-OPLC-NEXT:      //     ;
       // PRT-OA-OPLC-NEXT:      // }
+      //
+      // PRT-NOACC-NEXT:        for (j ={{.*}}) {
+      // PRT-NOACC-NEXT:          printf
+      // PRT-NOACC-NEXT:          for (k ={{.*}})
+      // PRT-NOACC-NEXT:            ;
+      // PRT-NOACC-NEXT:        }
       #pragma acc loop ACCC
       for (j = 1; j < 3; ++j) {
         // EXE-NEXT:        hello world
@@ -670,68 +887,14 @@ int main() {
         save.assignNestedLoopNew = true;
       else
         save.assignNestedLoopErr = true;
-    } // PRT: }
 
-    // EXE-SLC-NEXT:        save.assignLoopOld=0
-    // EXE-PLC-NEXT:        save.assignLoopOld=1
-    printf("save.assignLoopOld=%d\n", save.assignLoopOld);
-    // EXE-SLC-NEXT:        save.assignLoopNew=1
-    // EXE-PLC-NEXT:        save.assignLoopNew=0
-    printf("save.assignLoopNew=%d\n", save.assignLoopNew);
-    // EXE-NEXT: save.assignLoopErr=0
-    printf("save.assignLoopErr=%d\n", save.assignLoopErr);
+      // PRT: j = 999;
+      j = 999;
 
-    // EXE-GREDUN-NEXT: save.assignNestedLoopOld=0
-    // EXE-GPART-NEXT:  save.assignNestedLoopOld=1
-    printf("save.assignNestedLoopOld=%d\n", save.assignNestedLoopOld);
-    // EXE-NEXT: save.assignNestedLoopNew=1
-    printf("save.assignNestedLoopNew=%d\n", save.assignNestedLoopNew);
-    // EXE-NEXT: save.assignNestedLoopErr=0
-    printf("save.assignNestedLoopErr=%d\n", save.assignNestedLoopErr);
-  } // PRT: }
-
-  // j is used here but it should have been dropped from the loop control
-  // variable list, so it should now be implicitly shared in all cases.
-  //
-  // PRT: {
-  {
-    // PRT: struct {
-    struct {
-      bool readInLaterLoopOld;
-      bool readInLaterLoopNew;
-      bool readInLaterLoopErr;
-
-      bool writeInLaterLoopOld;
-      bool writeInLaterLoopNew;
-      bool writeInLaterLoopErr;
-    } save; // PRT: } save;
-
-    // PRT-NEXT: memset
-    memset(&save, 0, sizeof(save));
-
-    // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
-    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
-    // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:   impl: OMPTargetTeamsDirective
-    // DMP-NEXT:     OMPNum_teamsClause
-    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
-    // DMP-NEXT:     OMPSharedClause
-    // DMP-NOT:        <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-    //
-    // PRT-A:       {{^ *}}#pragma acc parallel num_gangs(3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) shared(save){{$}}
-    // PRT-O:       {{^ *}}#pragma omp target teams num_teams(3) shared(save){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(3){{$}}
-    #pragma acc parallel num_gangs(3)
-    // DMP: CompoundStmt
-    // PRT-NEXT: {
-    {
-      // PRT: int j = 888;
-      int j = 888;
-
+      // j is used here but it should have been dropped from the loop
+      // control variable list, so it should now be implicitly shared in all
+      // cases.
+      //
       // DMP:               ACCLoopDirective
       // DMP-ASEQ-NEXT:       ACCSeqClause
       // DMP-AIND-NEXT:       ACCIndependentClause
@@ -788,7 +951,7 @@ int main() {
         // otherwise partitioned.  If gang-partitioned, each of two gangs should
         // see old j value at the gang's one assigned iteration, and one gang
         // shouldn't see anything.
-        if (j == 888) // check old before new in case assign between
+        if (j == 999) // check old before new in case assign between
           save.readInLaterLoopOld = true;
         else if (j == 9999 && i == 1)
           save.readInLaterLoopNew = true;
@@ -807,13 +970,30 @@ int main() {
 
       // Should see j value assigned inside loop except that, if
       // gang-partitioned, one of the three gangs won't run it.
-      if (j == 888)
+      if (j == 999)
         save.writeInLaterLoopOld = true;
       else if (j == 9999)
         save.writeInLaterLoopNew = true;
       else
         save.writeInLaterLoopErr = true;
     } // PRT: }
+
+    // EXE-SLC-NEXT:        save.assignLoopOld=0
+    // EXE-PLC-NEXT:        save.assignLoopOld=1
+    printf("save.assignLoopOld=%d\n", save.assignLoopOld);
+    // EXE-SLC-NEXT:        save.assignLoopNew=1
+    // EXE-PLC-NEXT:        save.assignLoopNew=0
+    printf("save.assignLoopNew=%d\n", save.assignLoopNew);
+    // EXE-NEXT: save.assignLoopErr=0
+    printf("save.assignLoopErr=%d\n", save.assignLoopErr);
+
+    // EXE-GREDUN-NEXT: save.assignNestedLoopOld=0
+    // EXE-GPART-NEXT:  save.assignNestedLoopOld=1
+    printf("save.assignNestedLoopOld=%d\n", save.assignNestedLoopOld);
+    // EXE-NEXT: save.assignNestedLoopNew=1
+    printf("save.assignNestedLoopNew=%d\n", save.assignNestedLoopNew);
+    // EXE-NEXT: save.assignNestedLoopErr=0
+    printf("save.assignNestedLoopErr=%d\n", save.assignNestedLoopErr);
 
     // EXE-NEXT: save.readInLaterLoopOld=1
     printf("save.readInLaterLoopOld=%d\n", save.readInLaterLoopOld);
@@ -832,6 +1012,280 @@ int main() {
     printf("save.writeInLaterLoopNew=%d\n", save.writeInLaterLoopNew);
     // EXE-NEXT: save.writeInLaterLoopErr=0
     printf("save.writeInLaterLoopErr=%d\n", save.writeInLaterLoopErr);
+  } // PRT: }
+
+  // Repeat that but with acc parallel and acc loop combined.  Then, j and k
+  // cannot be within acc parallel and outside acc loop, so we declare them
+  // outside acc parallel and don't try to check their runtime visibility.
+  // Dumps and prints should be sufficient at this point.
+  //
+  // PRT: {
+  {
+    // PRT-NEXT: int j = 999;
+    int j = 999;
+    // PRT-NEXT: int k = 888;
+    int k = 888;
+
+    // DMP:            ACCParallelLoopDirective
+    // DMP-ASEQ-NEXT:    ACCSeqClause
+    // DMP-AIND-NEXT:    ACCIndependentClause
+    // DMP-AAUTO-NEXT:   ACCAutoClause
+    // DMP-ASEQ-NOT:     <implicit>
+    // DMP-AIND-NOT:     <implicit>
+    // DMP-AAUTO-NOT:    <implicit>
+    // DMP-AG-NEXT:      ACCGangClause
+    // DMP-AW-NEXT:      ACCWorkerClause
+    // DMP-AV-NEXT:      ACCVectorClause
+    // DMP-NEXT:         ACCNum_gangsClause
+    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:         effect: ACCParallelDirective
+    // DMP-NEXT:           ACCNum_gangsClause
+    // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:           ACCFirstprivateClause {{.*}} <implicit>
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:           impl: OMPTargetTeamsDirective
+    // DMP-NEXT:             OMPNum_teamsClause
+    // DMP-NEXT:               IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:             OMPFirstprivateClause
+    // DMP-NOT:                <implicit>
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
+    // DMP:                ACCLoopDirective
+    // DMP-ASEQ-NEXT:        ACCSeqClause
+    // DMP-AIND-NEXT:        ACCIndependentClause
+    // DMP-AAUTO-NEXT:       ACCAutoClause
+    // DMP-ASEQ-NOT:         <implicit>
+    // DMP-AIND-NOT:         <implicit>
+    // DMP-AAUTO-NOT:        <implicit>
+    // DMP-AG-NEXT:          ACCGangClause
+    // DMP-AW-NEXT:          ACCWorkerClause
+    // DMP-AV-NEXT:          ACCVectorClause
+    // DMP-AIMP-NEXT:        ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
+    // DMP-ASLC-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-APLC-NEXT:        ACCPrivateClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPRG-NEXT:        impl: [[OMPDD]]
+    // DMP-OPRG-NEXT:          OMPSharedClause
+    // DMP-OPRG-OSIMP-SAME:      <implicit>
+    // DMP-OPRG-OSEXP-NOT:       <implicit>
+    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-OPRG-NEXT:          OMPPrivateClause
+    // DMP-OPRG-NOT:             <implicit>
+    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPRG:               ForStmt
+    // DMP-OPLC-NEXT:        impl: CompoundStmt
+    // DMP-OPLC-NEXT:          DeclStmt
+    // DMP-OPLC-NEXT:            VarDecl {{.*}} j 'int'
+    // DMP-OPLC-NEXT:          [[OMPDD]]
+    // DMP-ONT1-NEXT:            OMPNum_threadsClause
+    // DMP-ONT1-NEXT:              IntegerLiteral {{.*}} 'int' 1
+    // DMP-OPLC:                 ForStmt
+    // DMP-OSEQ-NEXT:        impl: ForStmt
+    //
+    // PRT-A:                  {{^ *}}#pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
+    // PRT-AO-OSEQ-NEXT:       // #pragma omp target teams num_teams(3) firstprivate(j,k){{$}}
+    // PRT-AO-OPRG-NEXT:       // #pragma omp target teams num_teams(3) firstprivate(j,k){{$}}
+    // PRT-AO-OPRG-OSIMP-NEXT: // #pragma omp [[OMPDP]] private(j){{$}}
+    // PRT-AO-OPRG-OSEXP-NEXT: // #pragma omp [[OMPDP]] shared(k) private(j){{$}}
+    // PRT-A-NEXT:             for (j ={{.*}}) {
+    // PRT-A-NEXT:               printf
+    // PRT-A-NEXT:               for (k ={{.*}})
+    // PRT-A-NEXT:                 ;
+    // PRT-A-NEXT:             }
+    // PRT-AO-OPLC-NEXT:       // #pragma omp target teams num_teams(3) firstprivate(j,k){{$}}
+    // PRT-AO-OPLC-NEXT:       // {
+    // PRT-AO-OPLC-NEXT:       //   int j;
+    // PRT-AO-OPLC-OSIMP-NEXT: //   #pragma omp [[OMPDP]]{{$}}
+    // PRT-AO-OPLC-OSEXP-NEXT: //   #pragma omp [[OMPDP]] shared(k){{$}}
+    // PRT-AO-OPLC-NEXT:       //   for (j ={{.*}}) {
+    // PRT-AO-OPLC-NEXT:       //     printf
+    // PRT-AO-OPLC-NEXT:       //     for (k ={{.*}})
+    // PRT-AO-OPLC-NEXT:       //       ;
+    // PRT-AO-OPLC-NEXT:       //   }
+    // PRT-AO-OPLC-NEXT:       // }
+    //
+    // PRT-O:                 {{^ *}}#pragma omp target teams num_teams(3) firstprivate(j,k){{$}}
+    // PRT-O-OPRG-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
+    // PRT-O-OPRG-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(k) private(j){{$}}
+    // PRT-OA-OSEQ-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
+    // PRT-OA-OPRG-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
+    // PRT-O-OPLC-NEXT:       {
+    // PRT-O-OPLC-NEXT:         int j;
+    // PRT-O-OPLC-OSIMP-NEXT:   {{^ *}}#pragma omp [[OMPDP]]{{$}}
+    // PRT-O-OPLC-OSEXP-NEXT:   {{^ *}}#pragma omp [[OMPDP]] shared(k){{$}}
+    // PRT-O-NEXT:              for (j ={{.*}}) {
+    // PRT-O-NEXT:                printf
+    // PRT-O-NEXT:                for (k ={{.*}})
+    // PRT-O-NEXT:                  ;
+    // PRT-O-NEXT:              }
+    // PRT-O-OPLC-NEXT:       }
+    // PRT-OA-OPLC-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
+    // PRT-OA-OPLC-NEXT:      // for (j ={{.*}}) {
+    // PRT-OA-OPLC-NEXT:      //   printf
+    // PRT-OA-OPLC-NEXT:      //   for (k ={{.*}})
+    // PRT-OA-OPLC-NEXT:      //     ;
+    // PRT-OA-OPLC-NEXT:      // }
+    //
+    // PRT-NOACC-NEXT:        for (j ={{.*}}) {
+    // PRT-NOACC-NEXT:          printf
+    // PRT-NOACC-NEXT:          for (k ={{.*}})
+    // PRT-NOACC-NEXT:            ;
+    // PRT-NOACC-NEXT:        }
+    #pragma acc parallel loop ACCC num_gangs(3)
+    for (j = 1; j < 3; ++j) {
+      // EXE-NEXT:        hello world
+      // EXE-NEXT:        hello world
+      // EXE-GREDUN-NEXT: hello world
+      // EXE-GREDUN-NEXT: hello world
+      // EXE-GREDUN-NEXT: hello world
+      // EXE-GREDUN-NEXT: hello world
+      printf("hello world\n");
+      for (k = 0; k < 2; ++k)
+        ;
+    }
+  } // PRT: }
+
+  // Repeat that but explicitly declare the loop control variable firstprivate
+  // to check that clause validation doesn't somehow think it conflicts with
+  // the predetermined private on the effective acc loop.
+
+  // PRT: {
+  {
+    // PRT-NEXT: int j = 999;
+    int j = 999;
+    // PRT-NEXT: int k = 888;
+    int k = 888;
+
+    // DMP:            ACCParallelLoopDirective
+    // DMP-ASEQ-NEXT:    ACCSeqClause
+    // DMP-AIND-NEXT:    ACCIndependentClause
+    // DMP-AAUTO-NEXT:   ACCAutoClause
+    // DMP-ASEQ-NOT:     <implicit>
+    // DMP-AIND-NOT:     <implicit>
+    // DMP-AAUTO-NOT:    <implicit>
+    // DMP-AG-NEXT:      ACCGangClause
+    // DMP-AW-NEXT:      ACCWorkerClause
+    // DMP-AV-NEXT:      ACCVectorClause
+    // DMP-NEXT:         ACCNum_gangsClause
+    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:         ACCFirstprivateClause
+    // DMP-NOT:            <implicit>
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:         effect: ACCParallelDirective
+    // DMP-NEXT:           ACCNum_gangsClause
+    // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:           ACCFirstprivateClause
+    // DMP-NOT:              <implicit>
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:           ACCFirstprivateClause {{.*}} <implicit>
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:           impl: OMPTargetTeamsDirective
+    // DMP-NEXT:             OMPNum_teamsClause
+    // DMP-NEXT:               IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:             OMPFirstprivateClause
+    // DMP-NOT:                <implicit>
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:             OMPFirstprivateClause
+    // DMP-NOT:                <implicit>
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
+    // DMP:                ACCLoopDirective
+    // DMP-ASEQ-NEXT:        ACCSeqClause
+    // DMP-AIND-NEXT:        ACCIndependentClause
+    // DMP-AAUTO-NEXT:       ACCAutoClause
+    // DMP-ASEQ-NOT:         <implicit>
+    // DMP-AIND-NOT:         <implicit>
+    // DMP-AAUTO-NOT:        <implicit>
+    // DMP-AG-NEXT:          ACCGangClause
+    // DMP-AW-NEXT:          ACCWorkerClause
+    // DMP-AV-NEXT:          ACCVectorClause
+    // DMP-AIMP-NEXT:        ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
+    // DMP-ASLC-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-APLC-NEXT:        ACCPrivateClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPRG-NEXT:        impl: [[OMPDD]]
+    // DMP-OPRG-NEXT:          OMPSharedClause
+    // DMP-OPRG-OSIMP-SAME:      <implicit>
+    // DMP-OPRG-OSEXP-NOT:       <implicit>
+    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-OPRG-NEXT:          OMPPrivateClause
+    // DMP-OPRG-NOT:             <implicit>
+    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPRG:               ForStmt
+    // DMP-OPLC-NEXT:        impl: CompoundStmt
+    // DMP-OPLC-NEXT:          DeclStmt
+    // DMP-OPLC-NEXT:            VarDecl {{.*}} j 'int'
+    // DMP-OPLC-NEXT:          [[OMPDD]]
+    // DMP-ONT1-NEXT:            OMPNum_threadsClause
+    // DMP-ONT1-NEXT:              IntegerLiteral {{.*}} 'int' 1
+    // DMP-OPLC:                 ForStmt
+    // DMP-OSEQ-NEXT:        impl: ForStmt
+    //
+    // PRT-A:                  {{^ *}}#pragma acc parallel loop[[ACCC]] num_gangs(3) firstprivate(j){{$}}
+    // PRT-AO-OSEQ-NEXT:       // #pragma omp target teams num_teams(3) firstprivate(j) firstprivate(k){{$}}
+    // PRT-AO-OPRG-NEXT:       // #pragma omp target teams num_teams(3) firstprivate(j) firstprivate(k){{$}}
+    // PRT-AO-OPRG-OSIMP-NEXT: // #pragma omp [[OMPDP]] private(j){{$}}
+    // PRT-AO-OPRG-OSEXP-NEXT: // #pragma omp [[OMPDP]] shared(k) private(j){{$}}
+    // PRT-A-NEXT:             for (j ={{.*}}) {
+    // PRT-A-NEXT:               printf
+    // PRT-A-NEXT:               for (k ={{.*}})
+    // PRT-A-NEXT:                 ;
+    // PRT-A-NEXT:             }
+    // PRT-AO-OPLC-NEXT:       // #pragma omp target teams num_teams(3) firstprivate(j) firstprivate(k){{$}}
+    // PRT-AO-OPLC-NEXT:       // {
+    // PRT-AO-OPLC-NEXT:       //   int j;
+    // PRT-AO-OPLC-OSIMP-NEXT: //   #pragma omp [[OMPDP]]{{$}}
+    // PRT-AO-OPLC-OSEXP-NEXT: //   #pragma omp [[OMPDP]] shared(k){{$}}
+    // PRT-AO-OPLC-NEXT:       //   for (j ={{.*}}) {
+    // PRT-AO-OPLC-NEXT:       //     printf
+    // PRT-AO-OPLC-NEXT:       //     for (k ={{.*}})
+    // PRT-AO-OPLC-NEXT:       //       ;
+    // PRT-AO-OPLC-NEXT:       //   }
+    // PRT-AO-OPLC-NEXT:       // }
+    //
+    // PRT-O:                 {{^ *}}#pragma omp target teams num_teams(3) firstprivate(j) firstprivate(k){{$}}
+    // PRT-O-OPRG-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
+    // PRT-O-OPRG-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(k) private(j){{$}}
+    // PRT-OA-OSEQ-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3) firstprivate(j){{$}}
+    // PRT-OA-OPRG-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3) firstprivate(j){{$}}
+    // PRT-O-OPLC-NEXT:       {
+    // PRT-O-OPLC-NEXT:         int j;
+    // PRT-O-OPLC-OSIMP-NEXT:   {{^ *}}#pragma omp [[OMPDP]]{{$}}
+    // PRT-O-OPLC-OSEXP-NEXT:   {{^ *}}#pragma omp [[OMPDP]] shared(k){{$}}
+    // PRT-O-NEXT:              for (j ={{.*}}) {
+    // PRT-O-NEXT:                printf
+    // PRT-O-NEXT:                for (k ={{.*}})
+    // PRT-O-NEXT:                  ;
+    // PRT-O-NEXT:              }
+    // PRT-O-OPLC-NEXT:       }
+    // PRT-OA-OPLC-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3) firstprivate(j){{$}}
+    // PRT-OA-OPLC-NEXT:      // for (j ={{.*}}) {
+    // PRT-OA-OPLC-NEXT:      //   printf
+    // PRT-OA-OPLC-NEXT:      //   for (k ={{.*}})
+    // PRT-OA-OPLC-NEXT:      //     ;
+    // PRT-OA-OPLC-NEXT:      // }
+    //
+    // PRT-NOACC-NEXT:        for (j ={{.*}}) {
+    // PRT-NOACC-NEXT:          printf
+    // PRT-NOACC-NEXT:          for (k ={{.*}})
+    // PRT-NOACC-NEXT:            ;
+    // PRT-NOACC-NEXT:        }
+    #pragma acc parallel loop ACCC num_gangs(3) firstprivate(j)
+    for (j = 1; j < 3; ++j) {
+      // EXE-NEXT:        hello world
+      // EXE-NEXT:        hello world
+      // EXE-GREDUN-NEXT: hello world
+      // EXE-GREDUN-NEXT: hello world
+      // EXE-GREDUN-NEXT: hello world
+      // EXE-GREDUN-NEXT: hello world
+      printf("hello world\n");
+      for (k = 0; k < 2; ++k)
+        ;
+    }
   } // PRT: }
 
   // A sequential loop should be able to affect its number of iterations when
@@ -886,6 +1340,58 @@ int main() {
     i = 2;
   } // PRT: }
 
+  // Repeat that but with acc parallel and acc loop combined.
+  //
+  // DMP:             ACCParallelLoopDirective
+  // DMP-ASEQ-NEXT:     ACCSeqClause
+  // DMP-AIND-NEXT:     ACCIndependentClause
+  // DMP-AAUTO-NEXT:    ACCAutoClause
+  // DMP-ASEQ-NOT:      <implicit>
+  // DMP-AIND-NOT:      <implicit>
+  // DMP-AAUTO-NOT:     <implicit>
+  // DMP-AG-NEXT:       ACCGangClause
+  // DMP-AW-NEXT:       ACCWorkerClause
+  // DMP-AV-NEXT:       ACCVectorClause
+  // DMP-NEXT:          effect: ACCParallelDirective
+  // DMP-NEXT:            impl: OMPTargetTeamsDirective
+  // DMP:                 ACCLoopDirective
+  // DMP-ASEQ-NEXT:         ACCSeqClause
+  // DMP-AIND-NEXT:         ACCIndependentClause
+  // DMP-AAUTO-NEXT:        ACCAutoClause
+  // DMP-ASEQ-NOT:          <implicit>
+  // DMP-AIND-NOT:          <implicit>
+  // DMP-AAUTO-NOT:         <implicit>
+  // DMP-AG-NEXT:           ACCGangClause
+  // DMP-AW-NEXT:           ACCWorkerClause
+  // DMP-AV-NEXT:           ACCVectorClause
+  // DMP-AIMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
+  // DMP-OPRG-NEXT:         impl: [[OMPDD]]
+  // DMP-OPRG:                ForStmt
+  // DMP-OPLC-NEXT:         impl: [[OMPDD]]
+  // DMP-ONT1-NEXT:           OMPNum_threadsClause
+  // DMP-ONT1-NEXT:             IntegerLiteral {{.*}} 'int' 1
+  // DMP-OPLC:                ForStmt
+  // DMP-OSEQ-NEXT:         impl: ForStmt
+  //
+  // PRT-A-NEXT:       {{^ *}}#pragma acc parallel loop[[ACCC]]{{$}}
+  // PRT-AO-NEXT:      {{^ *}}// #pragma omp target teams{{$}}
+  // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+  // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+  //
+  // PRT-O-NEXT:       {{^ *}}#pragma omp target teams{{$}}
+  // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]]{{$}}
+  // PRT-O-OPLC-NEXT:  {{^ *}}#pragma omp [[OMPDP]]{{$}}
+  // PRT-OA-NEXT:      {{^ *}}// #pragma acc parallel loop[[ACCC]]{{$}}
+  //
+  // PRT-NEXT: for ({{.*}}) {
+  #pragma acc parallel loop ACCC
+  for (int i = 0; i < 2; ++i) {
+    // EXE-NEXT:      just once
+    // EXE-PART-NEXT: just once
+    printf("just once\n");
+    i = 2;
+  } // PRT: }
+
   // Make sure that an init!=0 or inc!=1 work correctly.
   // The latter is specifically relevant to simd directives, which depend on
   // OpenMP's predetermined linear attribute with a step that is the loop inc.
@@ -898,8 +1404,9 @@ int main() {
   // PRT-O-NEXT:  {{^ *}}#pragma omp target teams{{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel{{$}}
   #pragma acc parallel
+  // PRT-NEXT: {
   {
-    // PRT: int j;
+    // PRT-NEXT: int j;
     int j;
     // DMP:               ACCLoopDirective
     // DMP-ASEQ-NEXT:       ACCSeqClause
@@ -959,6 +1466,10 @@ int main() {
     // PRT-OA-OPLC-NEXT: // for (j ={{.*}}) {
     // PRT-OA-OPLC-NEXT: //   printf
     // PRT-OA-OPLC-NEXT: // }
+    //
+    // PRT-NOACC-NEXT:   for (j ={{.*}}) {
+    // PRT-NOACC-NEXT:     printf
+    // PRT-NOACC-NEXT:   }
     #pragma acc loop ACCC
     for (j = 7; j > -2; j -= 2) {
       // EXE-DAG: 7
@@ -968,9 +1479,107 @@ int main() {
       // EXE-DAG: -1
       printf("%d\n", j);
     }
-  }
+  } // PRT-NEXT: }
 
+  // Repeat that but with acc parallel and acc loop combined.
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int j;
+    int j;
+    // DMP:           ACCParallelLoopDirective
+    // DMP-ASEQ-NEXT:   ACCSeqClause
+    // DMP-AIND-NEXT:   ACCIndependentClause
+    // DMP-AAUTO-NEXT:  ACCAutoClause
+    // DMP-ASEQ-NOT:    <implicit>
+    // DMP-AIND-NOT:    <implicit>
+    // DMP-AAUTO-NOT:   <implicit>
+    // DMP-AG-NEXT:     ACCGangClause
+    // DMP-AW-NEXT:     ACCWorkerClause
+    // DMP-AV-NEXT:     ACCVectorClause
+    // DMP-NEXT:        effect: ACCParallelDirective
+    // DMP-NEXT:          ACCFirstprivateClause {{.*}} <implicit>
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:          impl: OMPTargetTeamsDirective
+    // DMP-NEXT:            OMPFirstprivateClause
+    // DMP-NOT:                <implicit>
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
+    // DMP:               ACCLoopDirective
+    // DMP-ASEQ-NEXT:       ACCSeqClause
+    // DMP-AIND-NEXT:       ACCIndependentClause
+    // DMP-AAUTO-NEXT:      ACCAutoClause
+    // DMP-ASEQ-NOT:        <implicit>
+    // DMP-AIND-NOT:        <implicit>
+    // DMP-AAUTO-NOT:       <implicit>
+    // DMP-AG-NEXT:         ACCGangClause
+    // DMP-AW-NEXT:         ACCWorkerClause
+    // DMP-AV-NEXT:         ACCVectorClause
+    // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-ASLC-NEXT:       ACCSharedClause {{.*}} <implicit>
+    // DMP-ASLC-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-APLC-NEXT:       ACCPrivateClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPRG-NEXT:       impl: [[OMPDD]]
+    // DMP-OPRG-NEXT:         OMPPrivateClause
+    // DMP-OPRG-NOT:            <implicit>
+    // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPRG:              ForStmt
+    // DMP-OPLC-NEXT:       impl: CompoundStmt
+    // DMP-OPLC-NEXT:         DeclStmt
+    // DMP-OPLC-NEXT:           VarDecl {{.*}} j 'int'
+    // DMP-OPLC-NEXT:         [[OMPDD]]
+    // DMP-ONT1-NEXT:           OMPNum_threadsClause
+    // DMP-ONT1-NEXT:             IntegerLiteral {{.*}} 'int' 1
+    // DMP-OPLC:                ForStmt
+    // DMP-OSEQ-NEXT:       impl: ForStmt
+    //
+    // PRT-A-NEXT:       {{^ *}}#pragma acc parallel loop[[ACCC]]{{$}}
+    // PRT-AO-OPRG-NEXT: // #pragma omp target teams firstprivate(j){{$}}
+    // PRT-AO-OSEQ-NEXT: // #pragma omp target teams firstprivate(j){{$}}
+    // PRT-AO-OPRG-NEXT: // #pragma omp [[OMPDP]] private(j){{$}}
+    // PRT-A-NEXT:       for (j ={{.*}}) {
+    // PRT-A-NEXT:         printf
+    // PRT-A-NEXT:       }
+    // PRT-AO-OPLC-NEXT: // #pragma omp target teams firstprivate(j){{$}}
+    // PRT-AO-OPLC-NEXT: // {
+    // PRT-AO-OPLC-NEXT: //   int j;
+    // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
+    // PRT-AO-OPLC-NEXT: //   for (j ={{.*}}) {
+    // PRT-AO-OPLC-NEXT: //     printf
+    // PRT-AO-OPLC-NEXT: //   }
+    // PRT-AO-OPLC-NEXT: // }
+    //
+    // PRT-O-NEXT:       {{^ *}}#pragma omp target teams firstprivate(j){{$}}
+    // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
+    // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop[[ACCC]]{{$}}
+    // PRT-OA-OSEQ-NEXT: {{^ *}}// #pragma acc parallel loop[[ACCC]]{{$}}
+    // PRT-O-OPLC-NEXT:  {
+    // PRT-O-OPLC-NEXT:    int j;
+    // PRT-O-OPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
+    // PRT-O-NEXT:         for (j ={{.*}}) {
+    // PRT-O-NEXT:           printf
+    // PRT-O-NEXT:         }
+    // PRT-O-OPLC-NEXT:  }
+    // PRT-OA-OPLC-NEXT: // #pragma acc parallel loop[[ACCC]]{{$}}
+    // PRT-OA-OPLC-NEXT: // for (j ={{.*}}) {
+    // PRT-OA-OPLC-NEXT: //   printf
+    // PRT-OA-OPLC-NEXT: // }
+    //
+    // PRT-NOACC-NEXT:   for (j ={{.*}}) {
+    // PRT-NOACC-NEXT:     printf
+    // PRT-NOACC-NEXT:   }
+    #pragma acc parallel loop ACCC
+    for (j = 7; j > -2; j -= 2) {
+      // EXE-DAG: 7
+      // EXE-DAG: 5
+      // EXE-DAG: 3
+      // EXE-DAG: {{^1}}
+      // EXE-DAG: -1
+      printf("%d\n", j);
+    }
+  } // PRT-NEXT: }
+
+  // PRT-NEXT: return 0;
   return 0;
-} // PRT: }
+} // PRT-NEXT: }
 
 // EXE-NOT: {{.}}

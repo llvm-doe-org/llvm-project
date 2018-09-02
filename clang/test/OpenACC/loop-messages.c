@@ -1,3 +1,14 @@
+// Check diagnostics for "acc loop".
+//
+// When CMB is not set, this file check diagnostics for "acc loop" nested
+// within "acc parallel".
+//
+// When CMB is set, it combines those "acc parallel" and "acc loop" directives
+// in order to check the same diagnostics but for combined "acc parallel loop"
+// directives.  In some cases (gang reduction inter-directive conflicts),
+// combining them would defeat the purpose of the test, so it instead adds
+// "loop" and a for loop to the outer "acc parallel"
+
 // RUN: %data {
 // RUN:   (c=ERR_ACC     )
 // RUN:   (c=ERR_OMP_INIT)
@@ -7,8 +18,13 @@
 // RUN:   (c=ERR_OMP_VAR )
 // RUN: }
 // RUN: %for {
-// RUN:   %clang_cc1 -verify -fsyntax-only -fopenacc -DERR=%[c] %s
+// RUN:   %clang_cc1 -fsyntax-only -fopenacc -DERR=%[c] %s \
+// RUN:              -verify=expected,sep
+// RUN:   %clang_cc1 -fsyntax-only -fopenacc -DERR=%[c] %s \
+// RUN:              -verify=expected,cmb -DCMB
 // RUN: }
+//
+// END.
 
 #include <stdint.h>
 
@@ -18,6 +34,16 @@
 #define ERR_OMP_INC   4
 #define ERR_OMP_INC0  5
 #define ERR_OMP_VAR   6
+
+#if !CMB
+# define CMB_PAR
+# define CMB_LOOP
+# define CMB_FORLOOP_HEAD
+#else
+# define CMB_PAR parallel
+# define CMB_LOOP loop
+# define CMB_FORLOOP_HEAD for (int fli = 0; fli < 2; ++fli)
+#endif
 
 #ifdef __SIZEOF_INT128__
 # define HAS_UINT128 1
@@ -45,141 +71,208 @@ void fn() {
   struct S { int i; } s; // expected-note 9 {{'s' defined here}}
   union U { int i; } u; // expected-note 9 {{'u' defined here}}
   extern struct S sDecl; // expected-note 9 {{'sDecl' declared here}}
+
+  //--------------------------------------------------
+  // Basic clause syntax
+  //--------------------------------------------------
+
+#if !CMB
   #pragma acc parallel
+#endif
   {
-    // invalid clauses
-    #pragma acc loop 500 // expected-warning {{extra tokens at the end of '#pragma acc loop' are ignored}}
+    // sep-warning@+2 {{extra tokens at the end of '#pragma acc loop' are ignored}}
+    // cmb-warning@+1 {{extra tokens at the end of '#pragma acc parallel loop' are ignored}}
+    #pragma acc CMB_PAR loop 500
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+3 {{unexpected OpenACC clause 'num_gangs' in directive '#pragma acc loop'}}
-    // expected-error@+2 {{unexpected OpenACC clause 'num_workers' in directive '#pragma acc loop'}}
-    // expected-error@+1 {{unexpected OpenACC clause 'vector_length' in directive '#pragma acc loop'}}
-    #pragma acc loop num_gangs(3) num_workers(3) vector_length(3)
+    // sep-error@+3 {{unexpected OpenACC clause 'num_gangs' in directive '#pragma acc loop'}}
+    // sep-error@+2 {{unexpected OpenACC clause 'num_workers' in directive '#pragma acc loop'}}
+    // sep-error@+1 {{unexpected OpenACC clause 'vector_length' in directive '#pragma acc loop'}}
+    #pragma acc CMB_PAR loop num_gangs(3) num_workers(3) vector_length(3)
     for (int i = 0; i < 5; ++i)
       ;
+  }
 
-    // partitionability clauses
-    #pragma acc loop seq
-    for (int i = 0; i < 5; ++i)
-      ;
-    #pragma acc loop independent
-    for (int i = 0; i < 5; ++i)
-      ;
-    #pragma acc loop auto
-    for (int i = 0; i < 5; ++i)
-      ;
-    #pragma acc loop seq() // expected-warning {{extra tokens at the end of '#pragma acc loop' are ignored}}
-    for (int i = 0; i < 5; ++i)
-      ;
-    #pragma acc loop independent() // expected-warning {{extra tokens at the end of '#pragma acc loop' are ignored}}
-    for (int i = 0; i < 5; ++i)
-      ;
-    #pragma acc loop auto() // expected-warning {{extra tokens at the end of '#pragma acc loop' are ignored}}
-    for (int i = 0; i < 5; ++i)
-      ;
-    #pragma acc loop seq seq // expected-error {{directive '#pragma acc loop' cannot contain more than one 'seq' clause}}
-    for (int i = 0; i < 5; ++i)
-      ;
-    #pragma acc loop independent independent // expected-error {{directive '#pragma acc loop' cannot contain more than one 'independent' clause}}
-    for (int i = 0; i < 5; ++i)
-      ;
-    #pragma acc loop auto auto // expected-error {{directive '#pragma acc loop' cannot contain more than one 'auto' clause}}
-    for (int i = 0; i < 5; ++i)
-      ;
-    #pragma acc loop seq independent // expected-error {{unexpected OpenACC 'independent' clause, 'seq' is specified already}}
-    for (int i = 0; i < 5; ++i)
-      ;
-    #pragma acc loop auto seq // expected-error {{unexpected OpenACC 'seq' clause, 'auto' is specified already}}
-    for (int i = 0; i < 5; ++i)
-      ;
-    #pragma acc loop independent auto // expected-error {{unexpected OpenACC 'auto' clause, 'independent' is specified already}}
-    for (int i = 0; i < 5; ++i)
-      ;
-    #pragma acc loop auto seq independent // expected-error {{unexpected OpenACC 'seq' clause, 'auto' is specified already}}
-                                          // expected-error@-1 {{unexpected OpenACC 'independent' clause, 'seq' is specified already}}
-    for (int i = 0; i < 5; ++i)
-      ;
+  //--------------------------------------------------
+  // Partitionability clauses
+  //--------------------------------------------------
 
-    // partitioning clauses
-    #pragma acc loop gang
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    #pragma acc CMB_PAR loop seq
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop worker
+    #pragma acc CMB_PAR loop independent
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop vector
+    #pragma acc CMB_PAR loop auto
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop gang() // expected-warning {{extra tokens at the end of '#pragma acc loop' are ignored}}
+    // sep-warning@+2 {{extra tokens at the end of '#pragma acc loop' are ignored}}
+    // cmb-warning@+1 {{extra tokens at the end of '#pragma acc parallel loop' are ignored}}
+    #pragma acc CMB_PAR loop seq()
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop worker() // expected-warning {{extra tokens at the end of '#pragma acc loop' are ignored}}
+    // sep-warning@+2 {{extra tokens at the end of '#pragma acc loop' are ignored}}
+    // cmb-warning@+1 {{extra tokens at the end of '#pragma acc parallel loop' are ignored}}
+    #pragma acc CMB_PAR loop independent()
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop vector() // expected-warning {{extra tokens at the end of '#pragma acc loop' are ignored}}
+    // sep-warning@+2 {{extra tokens at the end of '#pragma acc loop' are ignored}}
+    // cmb-warning@+1 {{extra tokens at the end of '#pragma acc parallel loop' are ignored}}
+    #pragma acc CMB_PAR loop auto()
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop gang gang // expected-error {{directive '#pragma acc loop' cannot contain more than one 'gang' clause}}
+    // sep-error@+2 {{directive '#pragma acc loop' cannot contain more than one 'seq' clause}}
+    // cmb-error@+1 {{directive '#pragma acc parallel loop' cannot contain more than one 'seq' clause}}
+    #pragma acc CMB_PAR loop seq seq
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop independent worker worker // expected-error {{directive '#pragma acc loop' cannot contain more than one 'worker' clause}}
+    // sep-error@+2 {{directive '#pragma acc loop' cannot contain more than one 'independent' clause}}
+    // cmb-error@+1 {{directive '#pragma acc parallel loop' cannot contain more than one 'independent' clause}}
+    #pragma acc CMB_PAR loop independent independent
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop vector auto vector // expected-error {{directive '#pragma acc loop' cannot contain more than one 'vector' clause}}
+    // sep-error@+2 {{directive '#pragma acc loop' cannot contain more than one 'auto' clause}}
+    // cmb-error@+1 {{directive '#pragma acc parallel loop' cannot contain more than one 'auto' clause}}
+    #pragma acc CMB_PAR loop auto auto
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop gang worker vector
+    // expected-error@+1 {{unexpected OpenACC 'independent' clause, 'seq' is specified already}}
+    #pragma acc CMB_PAR loop seq independent
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop independent gang worker vector
+    // expected-error@+1 {{unexpected OpenACC 'seq' clause, 'auto' is specified already}}
+    #pragma acc CMB_PAR loop auto seq
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop gang worker vector auto
+    // expected-error@+1 {{unexpected OpenACC 'auto' clause, 'independent' is specified already}}
+    #pragma acc CMB_PAR loop independent auto
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop seq gang // expected-error {{unexpected OpenACC 'gang' clause, 'seq' is specified already}}
+    // expected-error@+2 {{unexpected OpenACC 'seq' clause, 'auto' is specified already}}
+    // expected-error@+1 {{unexpected OpenACC 'independent' clause, 'seq' is specified already}}
+    #pragma acc CMB_PAR loop auto seq independent
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop worker seq // expected-error {{unexpected OpenACC 'seq' clause, 'worker' is specified already}}
-    for (int i = 0; i < 5; ++i)
-      ;
-    #pragma acc loop vector seq vector // expected-error {{unexpected OpenACC 'seq' clause, 'vector' is specified already}}
-                                       // expected-error@-1 {{directive '#pragma acc loop' cannot contain more than one 'vector' clause}}
-    for (int i = 0; i < 5; ++i)
-      ;
+  }
 
+  //--------------------------------------------------
+  // Partitioning clauses
+  //--------------------------------------------------
+
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    #pragma acc CMB_PAR loop gang
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc CMB_PAR loop worker
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc CMB_PAR loop vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    // sep-warning@+2 {{extra tokens at the end of '#pragma acc loop' are ignored}}
+    // cmb-warning@+1 {{extra tokens at the end of '#pragma acc parallel loop' are ignored}}
+    #pragma acc CMB_PAR loop gang()
+    for (int i = 0; i < 5; ++i)
+      ;
+    // sep-warning@+2 {{extra tokens at the end of '#pragma acc loop' are ignored}}
+    // cmb-warning@+1 {{extra tokens at the end of '#pragma acc parallel loop' are ignored}}
+    #pragma acc CMB_PAR loop worker()
+    for (int i = 0; i < 5; ++i)
+      ;
+    // sep-warning@+2 {{extra tokens at the end of '#pragma acc loop' are ignored}}
+    // cmb-warning@+1 {{extra tokens at the end of '#pragma acc parallel loop' are ignored}}
+    #pragma acc CMB_PAR loop vector()
+    for (int i = 0; i < 5; ++i)
+      ;
+    // sep-error@+2 {{directive '#pragma acc loop' cannot contain more than one 'gang' clause}}
+    // cmb-error@+1 {{directive '#pragma acc parallel loop' cannot contain more than one 'gang' clause}}
+    #pragma acc CMB_PAR loop gang gang
+    for (int i = 0; i < 5; ++i)
+      ;
+    // sep-error@+2 {{directive '#pragma acc loop' cannot contain more than one 'worker' clause}}
+    // cmb-error@+1 {{directive '#pragma acc parallel loop' cannot contain more than one 'worker' clause}}
+    #pragma acc CMB_PAR loop independent worker worker
+    for (int i = 0; i < 5; ++i)
+      ;
+    // sep-error@+2 {{directive '#pragma acc loop' cannot contain more than one 'vector' clause}}
+    // cmb-error@+1 {{directive '#pragma acc parallel loop' cannot contain more than one 'vector' clause}}
+    #pragma acc CMB_PAR loop vector auto vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc CMB_PAR loop gang worker vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc CMB_PAR loop independent gang worker vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc CMB_PAR loop gang worker vector auto
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{unexpected OpenACC 'gang' clause, 'seq' is specified already}}
+    #pragma acc CMB_PAR loop seq gang
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{unexpected OpenACC 'seq' clause, 'worker' is specified already}}
+    #pragma acc CMB_PAR loop worker seq
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+3 {{unexpected OpenACC 'seq' clause, 'vector' is specified already}}
+    // sep-error@+2 {{directive '#pragma acc loop' cannot contain more than one 'vector' clause}}
+    // cmb-error@+1 {{directive '#pragma acc parallel loop' cannot contain more than one 'vector' clause}}
+    #pragma acc CMB_PAR loop vector seq vector
+    for (int i = 0; i < 5; ++i)
+      ;
+  }
+
+  //--------------------------------------------------
+  // Associated for loop
+  //--------------------------------------------------
+
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
     // for loop
-    #pragma acc loop
-      ; // expected-error {{statement after '#pragma acc loop' must be a for loop}}
+    #pragma acc CMB_PAR loop
+      // sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      ;
 
     // break is fine when loop is executed sequentially.
-    #pragma acc loop seq
+    #pragma acc CMB_PAR loop seq
     for (int i = 0; i < 5; ++i)
       break;
 
     // break forces sequential execution in the case of auto
-    #pragma acc loop auto
+    #pragma acc CMB_PAR loop auto
     for (int i = 0; i < 5; ++i)
       break;
 
     // break is not permitted for implicit independent
-    #pragma acc loop
+    #pragma acc CMB_PAR loop
     for (int i = 0; i < 5; ++i)
       break; // expected-error {{'break' statement cannot be used in partitionable OpenACC for loop}}
 
     // break is not permitted for explicit independent
-    #pragma acc loop independent
+    #pragma acc CMB_PAR loop independent
     for (int i = 0; i < 5; ++i)
       break; // expected-error {{'break' statement cannot be used in partitionable OpenACC for loop}}
 
     // break is permitted in nested loops that are not partitioned
-    #pragma acc loop independent
+    #pragma acc CMB_PAR loop independent
     for (int i = 0; i < 5; ++i)
       for (int j = 0; j < 5; ++j)
         break;
 
     // break is permitted in nested switches
-    #pragma acc loop independent
+    #pragma acc CMB_PAR loop independent
     for (int i = 0; i < 5; ++i) {
       switch (i) {
       case 0:
@@ -190,11 +283,23 @@ void fn() {
         break;
       }
     }
+  }
 
-    // nesting of acc loops: 2 levels
-    #pragma acc loop gang // expected-note 4 {{parent '#pragma acc loop' is here}}
+  //--------------------------------------------------
+  // nesting of acc loops: 2 levels
+  //--------------------------------------------------
+
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    // sep-note@+2 4 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 4 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop gang
     for (int i = 0; i < 5; ++i) {
-      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang
       for (int j = 0; j < 5; ++j)
         ;
       #pragma acc loop worker
@@ -203,168 +308,280 @@ void fn() {
       #pragma acc loop vector
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop gang worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang worker
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop vector gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop vector gang
       for (int j = 0; j < 5; ++j)
         ;
       #pragma acc loop worker vector
       for (int j = 0; j < 5; ++j)
         ;
-      #pragma acc loop gang worker vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-    }
-    #pragma acc loop worker // expected-note 6 {{parent '#pragma acc loop' is here}}
-    for (int i = 0; i < 5; ++i) {
-      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop vector
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop worker gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop gang vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop vector worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop gang vector worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-    }
-    #pragma acc loop vector // expected-note 7 {{parent '#pragma acc loop' is here}}
-    for (int i = 0; i < 5; ++i) {
-      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop gang worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop vector gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop worker vector // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop worker gang vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-    }
-    #pragma acc loop gang worker // expected-note 6 {{parent '#pragma acc loop' is here}}
-    for (int i = 0; i < 5; ++i) {
-      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop vector
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop worker gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop gang vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop vector worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop worker vector gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-    }
-    #pragma acc loop gang vector // expected-note 7 {{parent '#pragma acc loop' is here}}
-    for (int i = 0; i < 5; ++i) {
-      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop gang worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop vector gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop worker vector // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop vector gang worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-    }
-    #pragma acc loop worker vector // expected-note 7 {{parent '#pragma acc loop' is here}}
-    for (int i = 0; i < 5; ++i) {
-      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop worker gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop gang vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop vector worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop vector worker gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-    }
-    #pragma acc loop gang worker vector // expected-note 7 {{parent '#pragma acc loop' is here}}
-    for (int i = 0; i < 5; ++i) {
-      #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop vector // expected-error {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop gang worker // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop vector gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop worker vector // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
-      for (int j = 0; j < 5; ++j)
-        ;
-      #pragma acc loop gang worker vector // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang worker vector
       for (int j = 0; j < 5; ++j)
         ;
     }
 
-    // nesting of acc loops: 3 levels
-    #pragma acc loop gang
+    // sep-note@+2 6 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 6 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop worker
     for (int i = 0; i < 5; ++i) {
-      #pragma acc loop worker // expected-note 2 {{parent '#pragma acc loop' is here}}
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      #pragma acc loop vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop gang vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop vector worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop gang vector worker
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 7 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 7 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop vector
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop gang worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop vector gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop worker vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop worker gang vector
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 6 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 6 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop gang worker
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      #pragma acc loop vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop worker gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop vector worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop worker vector gang
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 7 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 7 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop gang vector
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop vector gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop worker vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop vector gang worker
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 7 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 7 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop worker vector
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop gang vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop vector worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop vector worker gang
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 7 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 7 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop gang worker vector
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop vector gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang worker vector
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+  }
+
+  //--------------------------------------------------
+  // nesting of acc loops: 3 levels
+  //--------------------------------------------------
+
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    #pragma acc CMB_PAR loop gang
+    for (int i = 0; i < 5; ++i) {
+      #pragma acc loop worker // expected-note 2 {{enclosing '#pragma acc loop' here}}
       for (int j = 0; j < 5; ++j) {
         #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
         for (int k = 0; k < 5; ++k)
@@ -376,7 +593,7 @@ void fn() {
         for (int k = 0; k < 5; ++k)
           ;
       }
-      #pragma acc loop vector // expected-note 3 {{parent '#pragma acc loop' is here}}
+      #pragma acc loop vector // expected-note 3 {{enclosing '#pragma acc loop' here}}
       for (int j = 0; j < 5; ++j) {
         #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
         for (int k = 0; k < 5; ++k)
@@ -389,9 +606,9 @@ void fn() {
           ;
       }
     }
-    #pragma acc loop worker
+    #pragma acc CMB_PAR loop worker
     for (int i = 0; i < 5; ++i) {
-      #pragma acc loop vector // expected-note 3 {{parent '#pragma acc loop' is here}}
+      #pragma acc loop vector // expected-note 3 {{enclosing '#pragma acc loop' here}}
       for (int j = 0; j < 5; ++j) {
         #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
         for (int k = 0; k < 5; ++k)
@@ -404,9 +621,9 @@ void fn() {
           ;
       }
     }
-    #pragma acc loop gang worker
+    #pragma acc CMB_PAR loop gang worker
     for (int i = 0; i < 5; ++i) {
-      #pragma acc loop vector // expected-note 3 {{parent '#pragma acc loop' is here}}
+      #pragma acc loop vector // expected-note 3 {{enclosing '#pragma acc loop' here}}
       for (int j = 0; j < 5; ++j) {
         #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
         for (int k = 0; k < 5; ++k)
@@ -419,9 +636,9 @@ void fn() {
           ;
       }
     }
-    #pragma acc loop gang
+    #pragma acc CMB_PAR loop gang
     for (int i = 0; i < 5; ++i) {
-      #pragma acc loop worker vector // expected-note 3 {{parent '#pragma acc loop' is here}}
+      #pragma acc loop worker vector // expected-note 3 {{enclosing '#pragma acc loop' here}}
       for (int j = 0; j < 5; ++j) {
         #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
         for (int k = 0; k < 5; ++k)
@@ -434,13 +651,21 @@ void fn() {
           ;
       }
     }
+  }
 
-    // nesting of acc loops: 4 levels
-    #pragma acc loop gang
+  //--------------------------------------------------
+  // nesting of acc loops: 4 levels
+  //--------------------------------------------------
+
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    #pragma acc CMB_PAR loop gang
     for (int i = 0; i < 5; ++i) {
       #pragma acc loop worker
       for (int j = 0; j < 5; ++j) {
-        #pragma acc loop vector // expected-note 3 {{parent '#pragma acc loop' is here}}
+        #pragma acc loop vector // expected-note 3 {{enclosing '#pragma acc loop' here}}
         for (int k = 0; k < 5; ++k) {
           #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
           for (int l = 0; l < 5; ++l)
@@ -454,9 +679,17 @@ void fn() {
         }
       }
     }
+  }
 
-    // nesting of acc loops: other loops in between
-    #pragma acc loop gang
+  //--------------------------------------------------
+  // nesting of acc loops: other loops in between
+  //--------------------------------------------------
+
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    #pragma acc CMB_PAR loop gang
     for (int i = 0; i < 5; ++i) {
       #pragma acc loop
       for (int i1 = 0; i1 < 5; ++i1) {
@@ -477,7 +710,9 @@ void fn() {
         }
       }
     }
-    #pragma acc loop worker // expected-note 2 {{parent '#pragma acc loop' is here}}
+    // sep-note@+2 2 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 2 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop worker
     for (int i = 0; i < 5; ++i) {
       #pragma acc loop
       for (int i1 = 0; i1 < 5; ++i1) {
@@ -487,7 +722,9 @@ void fn() {
           for (int i3 = 0; i3 < 5; ++i3) {
             #pragma acc loop seq
             for (int i4 = 0; i4 < 5; ++i4) {
-              #pragma acc loop gang // expected-error {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+              // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+              // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+              #pragma acc loop gang
                 for (int j = 0; j < 5; ++j)
                   ;
             }
@@ -502,7 +739,9 @@ void fn() {
           for (int i3 = 0; i3 < 5; ++i3) {
             #pragma acc loop seq
             for (int i4 = 0; i4 < 5; ++i4) {
-              #pragma acc loop worker // expected-error {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+              // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+              // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+              #pragma acc loop worker
                 for (int j = 0; j < 5; ++j)
                   ;
             }
@@ -510,166 +749,185 @@ void fn() {
         }
       }
     }
+  }
 
-    // private and reduction clauses
-    //
-    // We sprinkle seq, auto, independent, gang, worker, and vector clauses
-    // throughout these tests as the validation of the private and reduction
-    // clauses should be independent of those clauses.  The only exception is
-    // gang reductions, which interact with the parent parallel directive, so
-    // we test that case more carefully at the end.
+  //--------------------------------------------------
+  // We sprinkle seq, auto, independent, gang, worker, and vector clauses
+  // throughout the following tests as the validation of the private and
+  // reduction clauses should be independent of those clauses.  The only
+  // exception is gang reductions, which interact with the parent parallel
+  // directive, so we test that case more carefully at the end.
+  //--------------------------------------------------
 
-    #pragma acc loop private // expected-error {{expected '(' after 'private'}}
+  //--------------------------------------------------
+  // Data sharing attributes clauses: syntax
+  //--------------------------------------------------
+
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    #pragma acc CMB_PAR loop private // expected-error {{expected '(' after 'private'}}
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop gang reduction // expected-error {{expected '(' after 'reduction'}}
+    #pragma acc CMB_PAR loop gang reduction // expected-error {{expected '(' after 'reduction'}}
     for (int i = 0; i < 5; ++i)
       ;
 
     // expected-error@+3 {{expected expression}}
     // expected-error@+2 {{expected ')'}}
     // expected-note@+1 {{to match this '('}}
-    #pragma acc loop worker private(
+    #pragma acc CMB_PAR loop worker private(
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+4 {{expected reduction operator}}
     // expected-warning@+3 {{missing ':' after reduction operator - ignoring}}
     // expected-error@+2 {{expected ')'}}
     // expected-note@+1 {{to match this '('}}
-    #pragma acc loop vector reduction(
+    #pragma acc CMB_PAR loop vector reduction(
     for (int i = 0; i < 5; ++i)
       ;
 
     // expected-error@+1 {{expected expression}}
-    #pragma acc loop gang worker private()
+    #pragma acc CMB_PAR loop gang worker private()
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+2 {{expected reduction operator}}
     // expected-warning@+1 {{missing ':' after reduction operator - ignoring}}
-    #pragma acc loop gang vector reduction( )
+    #pragma acc CMB_PAR loop gang vector reduction( )
     for (int i = 0; i < 5; ++i)
       ;
 
     // expected-error@+1 {{expected reduction operator}}
-    #pragma acc loop worker vector reduction( : )
+    #pragma acc CMB_PAR loop worker vector reduction( : )
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{expected reduction operator}}
-    #pragma acc loop gang worker vector reduction(: i)
+    #pragma acc CMB_PAR loop gang worker vector reduction(: i)
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+2 {{expected reduction operator}}
     // expected-error@+1 {{use of undeclared identifier 'foo'}}
-    #pragma acc loop reduction(:foo )
+    #pragma acc CMB_PAR loop reduction(:foo )
     for (int i = 0; i < 5; ++i)
       ;
 
     // expected-error@+2 {{expected reduction operator}}
     // expected-warning@+1 {{missing ':' after reduction operator - ignoring}}
-    #pragma acc loop reduction(-) gang
+    #pragma acc CMB_PAR loop reduction(-) gang
     for (int i = 0; i < 5; ++i)
       ;
     // expected-warning@+2 {{missing ':' after reduction operator - ignoring}}
     // expected-error@+1 {{expected expression}}
-    #pragma acc loop reduction(i) worker
+    #pragma acc CMB_PAR loop reduction(i) worker
     for (int i = 0; i < 5; ++i)
       ;
     // expected-warning@+2 {{missing ':' after reduction operator - ignoring}}
     // expected-error@+1 {{expected expression}}
-    #pragma acc loop reduction(foo) vector
+    #pragma acc CMB_PAR loop reduction(foo) vector
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{expected reduction operator}}
-    #pragma acc loop reduction(-:) worker gang
+    #pragma acc CMB_PAR loop reduction(-:) worker gang
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{expected expression}}
-    #pragma acc loop reduction(foo:) vector gang
+    #pragma acc CMB_PAR loop reduction(foo:) vector gang
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{expected reduction operator}}
-    #pragma acc loop reduction(-:i) vector worker
+    #pragma acc CMB_PAR loop reduction(-:i) vector worker
     for (int i = 0; i < 5; ++i)
       ;
     // OpenACC 2.6 sec. 2.5.12 line 774 mistypes "^" as "%", which is nonsense as a
     // reduction operator.
     // expected-error@+1 {{expected reduction operator}}
-    #pragma acc loop reduction(% :i) gang vector worker
-    for (int i = 0; i < 5; ++i)
-      ;
-    // expected-error@+1 {{unknown reduction operator}}
-    #pragma acc loop reduction(foo:i)
-    for (int i = 0; i < 5; ++i)
-      ;
-    // expected-error@+1 {{use of undeclared identifier 'bar'}}
-    #pragma acc loop gang reduction(foo:bar)
-    for (int i = 0; i < 5; ++i)
-      ;
-    // expected-error@+1 {{unknown reduction operator}}
-    #pragma acc loop worker reduction(foo : a[3])
+    #pragma acc CMB_PAR loop reduction(% :i) gang vector worker
     for (int i = 0; i < 5; ++i)
       ;
 
     // expected-warning@+2 {{missing ':' after reduction operator - ignoring}}
     // expected-error@+1 {{expected expression}}
-    #pragma acc loop vector reduction(*)
+    #pragma acc CMB_PAR loop vector reduction(*)
     for (int i = 0; i < 5; ++i)
       ;
     // expected-warning@+2 {{missing ':' after reduction operator - ignoring}}
     // expected-error@+1 {{expected expression}}
-    #pragma acc loop gang reduction(max) worker
+    #pragma acc CMB_PAR loop gang reduction(max) worker
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{expected expression}}
-    #pragma acc loop gang reduction(*:) vector
+    #pragma acc CMB_PAR loop gang reduction(*:) vector
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{expected expression}}
-    #pragma acc loop worker reduction(min:) vector
+    #pragma acc CMB_PAR loop worker reduction(min:) vector
     for (int i = 0; i < 5; ++i)
       ;
 
     // expected-error@+1 {{expected ',' or ')' in 'private' clause}}
-    #pragma acc loop worker private(jk i) gang vector
+    #pragma acc CMB_PAR loop worker private(jk i) gang vector
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{expected ',' or ')' in 'reduction' clause}}
-    #pragma acc loop reduction(*:jk i)
+    #pragma acc CMB_PAR loop reduction(*:jk i)
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // expected-error@+1 {{expected expression}}
+    #pragma acc CMB_PAR loop private(jk ,) vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{expected expression}}
+    #pragma acc CMB_PAR loop worker reduction(+:i, ) gang
+    for (int i = 0; i < 5; ++i)
+      ;
+  }
+
+  //--------------------------------------------------
+  // Data sharing attribute clauses: arg semantics
+  //--------------------------------------------------
+
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    // expected-error@+1 {{unknown reduction operator}}
+    #pragma acc CMB_PAR loop reduction(foo:i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{use of undeclared identifier 'bar'}}
+    #pragma acc CMB_PAR loop gang reduction(foo:bar)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{unknown reduction operator}}
+    #pragma acc CMB_PAR loop worker reduction(foo : a[3])
     for (int i = 0; i < 5; ++i)
       ;
 
     // expected-error@+1 {{use of undeclared identifier 'foo'}}
-    #pragma acc loop private(foo ) gang
+    #pragma acc CMB_PAR loop private(foo ) gang
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{use of undeclared identifier 'bar'}}
-    #pragma acc loop reduction(*: bar ) worker
-    for (int i = 0; i < 5; ++i)
-      ;
-
-    // expected-error@+1 {{expected expression}}
-    #pragma acc loop private(jk ,) vector
-    for (int i = 0; i < 5; ++i)
-      ;
-    // expected-error@+1 {{expected expression}}
-    #pragma acc loop worker reduction(+:i, ) gang
+    #pragma acc CMB_PAR loop reduction(*: bar ) worker
     for (int i = 0; i < 5; ++i)
       ;
 
     // expected-error@+2 {{expected variable name}}
     // expected-error@+1 {{expected variable name}}
-    #pragma acc loop vector private(a[9], a[0:1]) gang
+    #pragma acc CMB_PAR loop vector private(a[9], a[0:1]) gang
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+2 {{expected variable name}}
     // expected-error@+1 {{expected variable name}}
-    #pragma acc loop vector reduction(*:a[3:5], a[10]) worker
+    #pragma acc CMB_PAR loop vector reduction(*:a[3:5], a[10]) worker
     for (int i = 0; i < 5; ++i)
       ;
 
     // expected-error@+2 {{private variable cannot have incomplete type 'int []'}}
     // expected-error@+1 {{reduction variable cannot have incomplete type 'int []'}}
-    #pragma acc loop worker private(incomplete) vector reduction(|:incomplete) gang
+    #pragma acc CMB_PAR loop worker private(incomplete) vector reduction(|:incomplete) gang
     for (int i = 0; i < 5; ++i)
       ;
 
@@ -677,13 +935,16 @@ void fn() {
     // expected-error@+3 {{const variable cannot be private because initialization is impossible}}
     // expected-error@+2 {{reduction variable cannot be const}}
     // expected-error@+1 {{reduction variable cannot be const}}
-    #pragma acc loop private(constI, constIDecl) reduction(+: constI, constIDecl)
+    #pragma acc CMB_PAR loop private(constI, constIDecl) reduction(+: constI, constIDecl)
     for (int i = 0; i < 5; ++i)
       ;
   }
+
+#if !CMB
   #pragma acc parallel
+#endif
   {
-    #pragma acc loop gang reduction(max:b,e,i,jk,f,d,p)
+    #pragma acc CMB_PAR loop gang reduction(max:b,e,i,jk,f,d,p)
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+6 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
@@ -692,13 +953,16 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
     // expected-error@+2 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
     // expected-error@+1 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
-    #pragma acc loop worker reduction(max:fc,dc,a,s,u,sDecl)
+    #pragma acc CMB_PAR loop worker reduction(max:fc,dc,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
   }
+
+#if !CMB
   #pragma acc parallel
+#endif
   {
-    #pragma acc loop vector reduction(min:b,e,i,jk,f,d,p)
+    #pragma acc CMB_PAR loop vector reduction(min:b,e,i,jk,f,d,p)
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+6 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
@@ -707,13 +971,16 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
     // expected-error@+2 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
     // expected-error@+1 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
-    #pragma acc loop worker gang reduction(min:fc,dc,a,s,u,sDecl)
+    #pragma acc CMB_PAR loop worker gang reduction(min:fc,dc,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
   }
+
+#if !CMB
   #pragma acc parallel
+#endif
   {
-    #pragma acc loop vector gang reduction(+:b,e,i,jk,f,d,fc,dc)
+    #pragma acc CMB_PAR loop vector gang reduction(+:b,e,i,jk,f,d,fc,dc)
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+5 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
@@ -721,13 +988,16 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
     // expected-error@+2 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
     // expected-error@+1 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
-    #pragma acc loop vector worker reduction(+:p,a,s,u,sDecl)
+    #pragma acc CMB_PAR loop vector worker reduction(+:p,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
   }
+
+#if !CMB
   #pragma acc parallel
+#endif
   {
-    #pragma acc loop vector gang reduction(*:b,e,i,jk,f,d,fc,dc) worker
+    #pragma acc CMB_PAR loop vector gang reduction(*:b,e,i,jk,f,d,fc,dc) worker
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+5 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
@@ -735,13 +1005,16 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
     // expected-error@+2 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
     // expected-error@+1 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
-    #pragma acc loop reduction(*:p,a,s,u,sDecl)
+    #pragma acc CMB_PAR loop reduction(*:p,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
   }
+
+#if !CMB
   #pragma acc parallel
+#endif
   {
-    #pragma acc loop reduction(&&:b,e,i,jk,f,d,fc,dc) gang
+    #pragma acc CMB_PAR loop reduction(&&:b,e,i,jk,f,d,fc,dc) gang
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+5 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
@@ -749,13 +1022,16 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
     // expected-error@+2 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
     // expected-error@+1 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
-    #pragma acc loop reduction(&&:p,a,s,u,sDecl) worker
+    #pragma acc CMB_PAR loop reduction(&&:p,a,s,u,sDecl) worker
     for (int i = 0; i < 5; ++i)
       ;
   }
+
+#if !CMB
   #pragma acc parallel
+#endif
   {
-    #pragma acc loop reduction(||:b,e,i,jk,f,d,fc,dc) vector
+    #pragma acc CMB_PAR loop reduction(||:b,e,i,jk,f,d,fc,dc) vector
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+5 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
@@ -763,13 +1039,16 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
     // expected-error@+2 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
     // expected-error@+1 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
-    #pragma acc loop gang reduction(||:p,a,s,u,sDecl) worker
+    #pragma acc CMB_PAR loop gang reduction(||:p,a,s,u,sDecl) worker
     for (int i = 0; i < 5; ++i)
       ;
   }
+
+#if !CMB
   #pragma acc parallel
+#endif
   {
-    #pragma acc loop gang reduction(&:b,e,i,jk) vector
+    #pragma acc CMB_PAR loop gang reduction(&:b,e,i,jk) vector
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+9 {{OpenACC reduction operator '&' argument must be of integer type}}
@@ -781,13 +1060,16 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator '&' argument must be of integer type}}
     // expected-error@+2 {{OpenACC reduction operator '&' argument must be of integer type}}
     // expected-error@+1 {{OpenACC reduction operator '&' argument must be of integer type}}
-    #pragma acc loop vector worker reduction(&:f,d,fc,dc,p,a,s,u,sDecl) gang
+    #pragma acc CMB_PAR loop vector worker reduction(&:f,d,fc,dc,p,a,s,u,sDecl) gang
     for (int i = 0; i < 5; ++i)
       ;
   }
+
+#if !CMB
   #pragma acc parallel
+#endif
   {
-    #pragma acc loop reduction(|:b,e,i,jk)
+    #pragma acc CMB_PAR loop reduction(|:b,e,i,jk)
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+9 {{OpenACC reduction operator '|' argument must be of integer type}}
@@ -799,13 +1081,16 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator '|' argument must be of integer type}}
     // expected-error@+2 {{OpenACC reduction operator '|' argument must be of integer type}}
     // expected-error@+1 {{OpenACC reduction operator '|' argument must be of integer type}}
-    #pragma acc loop gang reduction(|:f,d,fc,dc,p,a,s,u,sDecl)
+    #pragma acc CMB_PAR loop gang reduction(|:f,d,fc,dc,p,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
   }
+
+#if !CMB
   #pragma acc parallel
+#endif
   {
-    #pragma acc loop worker reduction(^:b,e,i,jk)
+    #pragma acc CMB_PAR loop worker reduction(^:b,e,i,jk)
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+9 {{OpenACC reduction operator '^' argument must be of integer type}}
@@ -817,11 +1102,14 @@ void fn() {
     // expected-error@+3 {{OpenACC reduction operator '^' argument must be of integer type}}
     // expected-error@+2 {{OpenACC reduction operator '^' argument must be of integer type}}
     // expected-error@+1 {{OpenACC reduction operator '^' argument must be of integer type}}
-    #pragma acc loop vector reduction(^:f,d,fc,dc,p,a,s,u,sDecl)
+    #pragma acc CMB_PAR loop vector reduction(^:f,d,fc,dc,p,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
   }
+
+#if !CMB
   #pragma acc parallel
+#endif
   {
     // expected-error@+6 {{redundant 'max' reduction for variable 'i'}}
     // expected-note@+5 {{previous 'max' reduction here}}
@@ -829,11 +1117,17 @@ void fn() {
     // expected-note@+3 {{previous 'max' reduction here}}
     // expected-error@+2 {{conflicting '*' reduction for variable 'd'}}
     // expected-note@+1 {{previous 'max' reduction here}}
-    #pragma acc loop gang reduction(max:i,i,jk,d) worker reduction(max:jk) reduction(*:d)
+    #pragma acc CMB_PAR loop gang reduction(max:i,i,jk,d) worker reduction(max:jk) reduction(*:d)
     for (int i = 0; i < 5; ++i)
       ;
   }
-  #pragma acc parallel reduction(+:jk)
+
+  //--------------------------------------------------
+  // Data sharing attribute clauses: gang reduction inter-directive conflicts
+  //--------------------------------------------------
+
+  #pragma acc parallel CMB_LOOP reduction(+:jk)
+  CMB_FORLOOP_HEAD
   {
     #pragma acc loop gang reduction(+:jk)
     for (int j = 0; j < 5; ++j)
@@ -844,9 +1138,11 @@ void fn() {
     for (int j = 0; j < 5; ++j)
       ;
   }
-  // expected-note@+2 2 {{while applying gang reduction to 'parallel' directive here}}
+  // sep-note@+3 2 {{while applying gang reduction to '#pragma acc parallel' here}}
+  // cmb-note@+2 2 {{while applying gang reduction to '#pragma acc parallel loop' here}}
   // expected-note@+1 2 {{previous '+' reduction here}}
-  #pragma acc parallel reduction(+:f)
+  #pragma acc parallel CMB_LOOP reduction(+:f)
+  CMB_FORLOOP_HEAD
   {
     // expected-error@+1 {{conflicting '*' reduction for variable 'f'}}
     #pragma acc loop gang reduction(*:f)
@@ -859,7 +1155,8 @@ void fn() {
     for (int j = 0; j < 5; ++j)
       ;
   }
-  #pragma acc parallel
+  #pragma acc parallel CMB_LOOP
+  CMB_FORLOOP_HEAD
   {
     #pragma acc loop gang vector reduction(max:d)
     for (int j = 0; j < 5; ++j)
@@ -870,8 +1167,10 @@ void fn() {
     for (int j = 0; j < 5; ++j)
       ;
   }
-  // expected-note@+1 {{while applying gang reduction to 'parallel' directive here}}
-  #pragma acc parallel
+  // sep-note@+2 {{while applying gang reduction to '#pragma acc parallel' here}}
+  // cmb-note@+1 {{while applying gang reduction to '#pragma acc parallel loop' here}}
+  #pragma acc parallel CMB_LOOP
+  CMB_FORLOOP_HEAD
   {
     // expected-note@+1 {{previous 'max' reduction here}}
     #pragma acc loop reduction(max:p) gang
@@ -882,8 +1181,10 @@ void fn() {
     for (int j = 0; j < 5; ++j)
       ;
   }
-  // expected-note@+1 {{while applying gang reduction to 'parallel' directive here}}
-  #pragma acc parallel
+  // sep-note@+2 {{while applying gang reduction to '#pragma acc parallel' here}}
+  // cmb-note@+1 {{while applying gang reduction to '#pragma acc parallel loop' here}}
+  #pragma acc parallel CMB_LOOP
+  CMB_FORLOOP_HEAD
   {
     #pragma acc loop
     for (int i0 = 0; i0 < 5; ++i0) {
@@ -909,9 +1210,11 @@ void fn() {
         ;
     }
   }
-  // expected-note@+2 2 {{while applying gang reduction to 'parallel' directive here}}
+  // sep-note@+3 2 {{while applying gang reduction to '#pragma acc parallel' here}}
+  // cmb-note@+2 2 {{while applying gang reduction to '#pragma acc parallel loop' here}}
   // expected-note@+1 {{previous '^' reduction here}}
-  #pragma acc parallel reduction(^:e)
+  #pragma acc parallel CMB_LOOP reduction(^:e)
+  CMB_FORLOOP_HEAD
   {
     #pragma acc loop
     for (int i0 = 0; i0 < 5; ++i0) {
@@ -946,7 +1249,8 @@ void fn() {
         ;
     }
   }
-  #pragma acc parallel
+  #pragma acc parallel CMB_LOOP
+  CMB_FORLOOP_HEAD
   {
     // expected-error@+2 {{private variable cannot be reduction}}
     // expected-note@+1 {{defined as private}}
@@ -972,7 +1276,12 @@ void fn() {
     for (i = 0; i < 5; ++i)
       ;
   }
-  #pragma acc loop // expected-error {{OpenACC loop outside of OpenACC parallel is not yet supported}}
+
+  //--------------------------------------------------
+  // Orphaned acc loop
+  //--------------------------------------------------
+
+  #pragma acc loop // expected-error {{'#pragma acc loop' cannot be orphaned}}
   for (int i = 0; i < 5; ++i)
     ;
   ;
@@ -990,19 +1299,21 @@ void fn() {
 #elif ERR == ERR_OMP_INIT
 
 void fn(int k) {
+#if !CMB
   #pragma acc parallel
+#endif
   {
     int j;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (j = 0; j < 5; ++j)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (k = 0; k < 5; ++k)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i; i < 5; ++i) // expected-error {{initialization clause of OpenMP for loop is not in canonical form ('var = init' or 'T var = init')}}
       ;
   }
@@ -1011,33 +1322,35 @@ void fn(int k) {
 #elif ERR == ERR_OMP_COND
 
 void fn(int j) {
+#if !CMB
   #pragma acc parallel
+#endif
   {
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 0; 5 > i; ++i)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 0; i <= 5; ++i)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 0; 5 >= i; ++i)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 5; i > 0; --i)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 5; 0 < i; --i)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 5; i >= 0; --i)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 5; 0 <= i; --i)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 5; i && j; --i) // expected-error {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'i'}}
       ;
   }
@@ -1046,33 +1359,35 @@ void fn(int j) {
 #elif ERR == ERR_OMP_INC
 
 void fn(int j) {
+#if !CMB
   #pragma acc parallel
+#endif
   {
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 0; i < 5; i++)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 0; i < 5; i += 2)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 0; i < 5; i = i + 3)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 5; i > 0; --i)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 5; i > 0; i--)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 5; i > 0; i -= 4)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 5; i > 0; i = i - 5)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 0; i < 5; i *= 2) // expected-error {{increment clause of OpenMP for loop must perform simple addition or subtraction on loop variable 'i'}}
       ;
   }
@@ -1081,11 +1396,14 @@ void fn(int j) {
 #elif ERR == ERR_OMP_INC0
 
 void fn(int j) {
+#if !CMB
   #pragma acc parallel
+#endif
   {
-    #pragma acc loop independent gang
-    for (int i = 0; i < 5; i += 0) // expected-error {{increment expression must cause 'i' to increase on each iteration of OpenMP for loop}}
-                                   // expected-note@-1 {{loop step is expected to be positive due to this condition}}
+    #pragma acc CMB_PAR loop independent gang
+    // expected-error@+2 {{increment expression must cause 'i' to increase on each iteration of OpenMP for loop}}
+    // expected-note@+1 {{loop step is expected to be positive due to this condition}}
+    for (int i = 0; i < 5; i += 0)
       ;
   }
 }
@@ -1093,21 +1411,23 @@ void fn(int j) {
 #elif ERR == ERR_OMP_VAR
 
 void fn() {
+#if !CMB
   #pragma acc parallel
+#endif
   {
     int a[5];
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int i = 0; i < 5; ++i)
       ;
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (int *p = a; p < a+5; ++p)
       ;
 # if HAS_UINT128
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (__uint128_t i = 0; i < 5; ++i) // expected-warning {{OpenMP loop iteration variable cannot have more than 64 bits size and will be narrowed}}
       ;
 # endif
-    #pragma acc loop independent gang
+    #pragma acc CMB_PAR loop independent gang
     for (float f = 0; f < 5; ++f) // expected-error {{variable must be of integer or pointer type}}
       ;
   }

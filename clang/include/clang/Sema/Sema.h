@@ -9304,7 +9304,8 @@ private:
 
 public:
   /// Called on start of new data sharing attribute block.
-  void StartOpenACCDSABlock(OpenACCDirectiveKind K, SourceLocation Loc);
+  void StartOpenACCDSABlock(OpenACCDirectiveKind RealDKind,
+                            SourceLocation Loc);
   /// Start analysis of clauses.
   void StartOpenACCClause(OpenACCClauseKind K);
   /// End analysis of clauses.
@@ -9346,6 +9347,11 @@ public:
       ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
       SourceLocation EndLoc, VarDecl *LCVar,
       OpenACCClauseKind ParentLoopPartitioning);
+  /// Called on well-formed '\#pragma acc parallel loop' after parsing
+  /// of the associated statement.
+  StmtResult ActOnOpenACCParallelLoopDirective(
+      ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
+      SourceLocation EndLoc);
 
   ACCClause *ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
                                           Expr *Expr,

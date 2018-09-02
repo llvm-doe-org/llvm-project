@@ -695,6 +695,10 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::ACCLoopDirectiveClass:
     K = CXCursor_ACCLoopDirective;
     break;
+
+  case Stmt::ACCParallelLoopDirectiveClass:
+    K = CXCursor_ACCParallelLoopDirective;
+    break;
   }
 
   CXCursor C = { K, 0, { Parent, S, TU } };

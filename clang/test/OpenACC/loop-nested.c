@@ -1,3 +1,12 @@
+// Check nested acc loops.
+//
+// When CMB is not set, this file checks cases when the outermost "acc loop"
+// is separate from the enclosing "acc parallel".
+//
+// When CMB is set, it combines each "acc parallel" with its outermost "acc
+// loop" directive in order to check the same cases but for combined "acc
+// parallel loop" directives.
+//
 // Abbreviations:
 //   A     = OpenACC
 //   AO    = commented OpenMP is printed after OpenACC
@@ -23,135 +32,152 @@
 //   dmp   = additional FileCheck prefixes for dump
 //   exe   = additional FileCheck prefixes for execution
 //
+// RUN: %data cmbs {
+// RUN:   (cmb-cflags=      cmb=SEP)
+// RUN:   (cmb-cflags=-DCMB cmb=CMB)
+// RUN: }
 // RUN: %data loop-clauses {
 // RUN:   (accc0=gang                                accc1=worker                                  accc2=vector
 // RUN:    itrs0=2                                   itrs1=2                                       itrs2=2
 // RUN:    ompdd0=OMPDistributeDirective             ompdd1=OMPParallelForDirective                ompdd2=OMPSimdDirective
 // RUN:    ompdp0=distribute                         ompdp1='parallel for'                         ompdp2='simd'
 // RUN:    ompdk0=OPRG ompsk0=OSIMP                  ompdk1=OPRG ompsk1=OSEXP                      ompdk2=OPRG ompsk2=OSIMP
-// RUN:    dmp0=DMP0-AIMP,DMP0-AG                    dmp1=DMP1-AIMP,DMP1-AW                        dmp2=DMP2-AIMP,DMP2-AV
+// RUN:    dmp0=DMP0-AIMP,DMP0-AG,DMP0-%[cmb]-AIMP,DMP0-%[cmb]-AG
+// RUN:                                              dmp1=DMP1-AIMP,DMP1-AW                        dmp2=DMP2-AIMP,DMP2-AV
 // RUN:    exe=EXE222)
 // RUN:   (accc0='gang worker'                       accc1=seq                                     accc2=vector
 // RUN:    itrs0=4                                   itrs1=2                                       itrs2=2
 // RUN:    ompdd0=OMPDistributeParallelForDirective  ompdd1=                                       ompdd2=OMPSimdDirective
 // RUN:    ompdp0='distribute parallel for'          ompdp1=                                       ompdp2='simd'
 // RUN:    ompdk0=OPRG ompsk0=OSEXP                  ompdk1=OSEQ ompsk1=OSIMP                      ompdk2=OPRG ompsk2=OSIMP
-// RUN:    dmp0=DMP0-AIMP,DMP0-AG,DMP0-AW            dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AV
+// RUN:    dmp0=DMP0-AIMP,DMP0-AG,DMP0-AW,DMP0-%[cmb]-AIMP,DMP0-%[cmb]-AG,DMP0-%[cmb]-AW
+// RUN:                                              dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AV
 // RUN:    exe=EXE,EXE422)
 // RUN:   (accc0=gang                                accc1=seq                                     accc2='worker vector'
 // RUN:    itrs0=2                                   itrs1=2                                       itrs2=4
 // RUN:    ompdd0=OMPDistributeDirective             ompdd1=                                       ompdd2=OMPParallelForSimdDirective
 // RUN:    ompdp0=distribute                         ompdp1=                                       ompdp2='parallel for simd'
 // RUN:    ompdk0=OPRG ompsk0=OSIMP                  ompdk1=OSEQ ompsk1=OSIMP                      ompdk2=OPRG ompsk2=OSEXP
-// RUN:    dmp0=DMP0-AIMP,DMP0-AG                    dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AW,DMP2-AV
+// RUN:    dmp0=DMP0-AIMP,DMP0-AG,DMP0-%[cmb]-AIMP,DMP0-%[cmb]-AG
+// RUN:                                              dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AW,DMP2-AV
 // RUN:    exe=EXE,EXE224)
 // RUN:   (accc0=seq                                 accc1='gang worker vector'                    accc2=seq
 // RUN:    itrs0=2                                   itrs1=6                                       itrs2=2
 // RUN:    ompdd0=                                   ompdd1=OMPDistributeParallelForSimdDirective  ompdd2=
 // RUN:    ompdp0=                                   ompdp1='distribute parallel for simd'         ompdp2=
 // RUN:    ompdk0=OSEQ ompsk0=OSIMP                  ompdk1=OPRG ompsk1=OSEXP                      ompdk2=OSEQ ompsk2=OSIMP
-// RUN:    dmp0=DMP0-ASEQ                            dmp1=DMP1-AIMP,DMP1-AG,DMP1-AW,DMP1-AV        dmp2=DMP2-ASEQ
+// RUN:    dmp0=DMP0-ASEQ,DMP0-%[cmb]-ASEQ           dmp1=DMP1-AIMP,DMP1-AG,DMP1-AW,DMP1-AV        dmp2=DMP2-ASEQ
 // RUN:    exe=EXE,EXE262)
 // RUN:   (accc0=gang                                accc1=seq                                     accc2=worker
 // RUN:    itrs0=2                                   itrs1=2                                       itrs2=2
 // RUN:    ompdd0=OMPDistributeDirective             ompdd1=                                       ompdd2=OMPParallelForDirective
 // RUN:    ompdp0=distribute                         ompdp1=                                       ompdp2='parallel for'
 // RUN:    ompdk0=OPRG ompsk0=OSIMP                  ompdk1=OSEQ ompsk1=OSIMP                      ompdk2=OPRG ompsk2=OSEXP
-// RUN:    dmp0=DMP0-AIMP,DMP0-AG                    dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AW
+// RUN:    dmp0=DMP0-AIMP,DMP0-AG,DMP0-%[cmb]-AIMP,DMP0-%[cmb]-AG
+// RUN:                                              dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AW
 // RUN:    exe=EXE,EXE222)
 // RUN:   (accc0=seq                                 accc1='gang worker'                           accc2=seq
 // RUN:    itrs0=2                                   itrs1=4                                       itrs2=2
 // RUN:    ompdd0=                                   ompdd1=OMPDistributeParallelForDirective      ompdd2=
 // RUN:    ompdp0=                                   ompdp1='distribute parallel for'              ompdp2=
 // RUN:    ompdk0=OSEQ ompsk0=OSIMP                  ompdk1=OPRG ompsk1=OSEXP                      ompdk2=OSEQ ompsk2=OSIMP
-// RUN:    dmp0=DMP0-ASEQ                            dmp1=DMP1-AIMP,DMP1-AG,DMP1-AW                dmp2=DMP2-ASEQ
+// RUN:    dmp0=DMP0-ASEQ,DMP0-%[cmb]-ASEQ           dmp1=DMP1-AIMP,DMP1-AG,DMP1-AW                dmp2=DMP2-ASEQ
 // RUN:    exe=EXE,EXE242)
 // RUN:   (accc0=gang                                accc1=seq                                     accc2=vector
 // RUN:    itrs0=2                                   itrs1=2                                       itrs2=2
 // RUN:    ompdd0=OMPDistributeDirective             ompdd1=                                       ompdd2=OMPSimdDirective
 // RUN:    ompdp0=distribute                         ompdp1=                                       ompdp2='simd'
 // RUN:    ompdk0=OPRG ompsk0=OSIMP                  ompdk1=OSEQ ompsk1=OSIMP                      ompdk2=OPRG ompsk2=OSIMP
-// RUN:    dmp0=DMP0-AIMP,DMP0-AG                    dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AV
+// RUN:    dmp0=DMP0-AIMP,DMP0-AG,DMP0-%[cmb]-AIMP,DMP0-%[cmb]-AG
+// RUN:                                              dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AV
 // RUN:    exe=EXE,EXE222)
 // RUN:   (accc0=seq                                 accc1='gang vector'                           accc2=seq
 // RUN:    itrs0=2                                   itrs1=4                                       itrs2=2
 // RUN:    ompdd0=                                   ompdd1=OMPDistributeSimdDirective             ompdd2=
 // RUN:    ompdp0=                                   ompdp1='distribute simd'                      ompdp2=
 // RUN:    ompdk0=OSEQ ompsk0=OSIMP                  ompdk1=OPRG ompsk1=OSIMP                      ompdk2=OSEQ ompsk2=OSIMP
-// RUN:    dmp0=DMP0-ASEQ                            dmp1=DMP1-AIMP,DMP1-AG,DMP1-AV                dmp2=DMP2-ASEQ
+// RUN:    dmp0=DMP0-ASEQ,DMP0-%[cmb]-ASEQ           dmp1=DMP1-AIMP,DMP1-AG,DMP1-AV                dmp2=DMP2-ASEQ
 // RUN:    exe=EXE,EXE242)
 // RUN:   (accc0=worker                              accc1=seq                                     accc2=vector
 // RUN:    itrs0=2                                   itrs1=2                                       itrs2=2
 // RUN:    ompdd0=OMPParallelForDirective            ompdd1=                                       ompdd2=OMPSimdDirective
 // RUN:    ompdp0='parallel for'                     ompdp1=                                       ompdp2='simd'
 // RUN:    ompdk0=OPRG ompsk0=OSEXP                  ompdk1=OSEQ ompsk1=OSIMP                      ompdk2=OPRG ompsk2=OSIMP
-// RUN:    dmp0=DMP0-AIMP,DMP0-AW                    dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AV
+// RUN:    dmp0=DMP0-AIMP,DMP0-AW,DMP0-%[cmb]-AIMP,DMP0-%[cmb]-AW
+// RUN:                                              dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AV
 // RUN:    exe=EXE,EXE222,EXEGR222)
 // RUN:   (accc0=seq                                 accc1='worker vector'                         accc2=seq
 // RUN:    itrs0=2                                   itrs1=4                                       itrs2=2
 // RUN:    ompdd0=                                   ompdd1=OMPParallelForSimdDirective            ompdd2=
 // RUN:    ompdp0=                                   ompdp1='parallel for simd'                    ompdp2=
 // RUN:    ompdk0=OSEQ ompsk0=OSIMP                  ompdk1=OPRG ompsk1=OSEXP                      ompdk2=OSEQ ompsk2=OSIMP
-// RUN:    dmp0=DMP0-ASEQ                            dmp1=DMP1-AIMP,DMP1-AW,DMP1-AV                dmp2=DMP2-ASEQ
+// RUN:    dmp0=DMP0-ASEQ,DMP0-%[cmb]-ASEQ           dmp1=DMP1-AIMP,DMP1-AW,DMP1-AV                dmp2=DMP2-ASEQ
 // RUN:    exe=EXE,EXE242,EXEGR242)
 // RUN:   (accc0=seq                                 accc1=gang                                    accc2=seq
 // RUN:    itrs0=2                                   itrs1=2                                       itrs2=2
 // RUN:    ompdd0=                                   ompdd1=OMPDistributeDirective                 ompdd2=
 // RUN:    ompdp0=                                   ompdp1=distribute                             ompdp2=
 // RUN:    ompdk0=OSEQ ompsk0=OSIMP                  ompdk1=OPRG ompsk1=OSIMP                      ompdk2=OSEQ ompsk2=OSIMP
-// RUN:    dmp0=DMP0-ASEQ                            dmp1=DMP1-AIMP,DMP1-AG                        dmp2=DMP2-ASEQ
+// RUN:    dmp0=DMP0-ASEQ,DMP0-%[cmb]-ASEQ           dmp1=DMP1-AIMP,DMP1-AG                        dmp2=DMP2-ASEQ
 // RUN:    exe=EXE,EXE222)
 // RUN:   (accc0=seq                                 accc1=worker                                  accc2=seq
 // RUN:    itrs0=2                                   itrs1=2                                       itrs2=2
 // RUN:    ompdd0=                                   ompdd1=OMPParallelForDirective                ompdd2=
 // RUN:    ompdp0=                                   ompdp1='parallel for'                         ompdp2=
 // RUN:    ompdk0=OSEQ ompsk0=OSIMP                  ompdk1=OPRG ompsk1=OSEXP                      ompdk2=OSEQ ompsk2=OSIMP
-// RUN:    dmp0=DMP0-ASEQ                            dmp1=DMP1-AIMP,DMP1-AW                        dmp2=DMP2-ASEQ
+// RUN:    dmp0=DMP0-ASEQ,DMP0-%[cmb]-ASEQ           dmp1=DMP1-AIMP,DMP1-AW                        dmp2=DMP2-ASEQ
 // RUN:    exe=EXE,EXE222,EXEGR222)
 // RUN:   (accc0=seq                                 accc1=vector                                  accc2=seq
 // RUN:    itrs0=2                                   itrs1=2                                       itrs2=2
 // RUN:    ompdd0=                                   ompdd1=OMPParallelForSimdDirective            ompdd2=
 // RUN:    ompdp0=                                   ompdp1='parallel for simd num_threads(1)'     ompdp2=
 // RUN:    ompdk0=OSEQ ompsk0=OSIMP                  ompdk1=OPRG ompsk1=OSEXP                      ompdk2=OSEQ ompsk2=OSIMP
-// RUN:    dmp0=DMP0-ASEQ                            dmp1=DMP1-AIMP,DMP1-AV,DMP1-ONT1              dmp2=DMP2-ASEQ
+// RUN:    dmp0=DMP0-ASEQ,DMP0-%[cmb]-ASEQ           dmp1=DMP1-AIMP,DMP1-AV,DMP1-ONT1              dmp2=DMP2-ASEQ
 // RUN:    exe=EXE,EXE222,EXEGR222)
 // RUN: }
 
 // Check ASTDumper.
 //
-// RUN: %for loop-clauses {
-// RUN:   %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
-// RUN:          -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
-// RUN:          -DITRS0=%[itrs0] -DITRS1=%[itrs1] -DITRS2=%[itrs2] \
-// RUN:   | FileCheck %s \
-// RUN:       -check-prefixes=DMP \
-// RUN:       -check-prefixes=DMP0-%[ompdk0],DMP0-%[ompdk0]-%[ompsk0],%[dmp0] \
-// RUN:       -check-prefixes=DMP1-%[ompdk1],DMP1-%[ompdk1]-%[ompsk1],%[dmp1] \
-// RUN:       -check-prefixes=DMP2-%[ompdk2],DMP2-%[ompdk2]-%[ompsk2],%[dmp2] \
-// RUN:       -DOMPDD0=%'ompdd0' -DOMPDD1=%'ompdd1' -DOMPDD2=%'ompdd2'
+// RUN: %for cmbs {
+// RUN:   %for loop-clauses {
+// RUN:     %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
+// RUN:            -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
+// RUN:            -DITRS0=%[itrs0] -DITRS1=%[itrs1] -DITRS2=%[itrs2] \
+// RUN:            %[cmb-cflags] \
+// RUN:     | FileCheck %s \
+// RUN:         -check-prefixes=DMP,DMP-%[cmb] \
+// RUN:         -check-prefixes=%[dmp0],DMP0-%[ompdk0],DMP0-%[ompdk0]-%[ompsk0] \
+// RUN:         -check-prefixes=DMP0-%[cmb]-%[ompdk0],DMP0-%[cmb]-%[ompdk0]-%[cmb]-%[ompsk0] \
+// RUN:         -check-prefixes=%[dmp1],DMP1-%[ompdk1],DMP1-%[ompdk1]-%[ompsk1] \
+// RUN:         -check-prefixes=%[dmp2],DMP2-%[ompdk2],DMP2-%[ompdk2]-%[ompsk2] \
+// RUN:         -DOMPDD0=%'ompdd0' -DOMPDD1=%'ompdd1' -DOMPDD2=%'ompdd2'
+// RUN:   }
 // RUN: }
 
 // Check -ast-print and -fopenacc-print.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
 // RUN:        -DITRS0=2 -DITRS1=2 -DITRS2=2 \
-// RUN: | FileCheck -check-prefixes=PRT %s
+// RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
 //
 // RUN: %data prints {
-// RUN:   (print='-Xclang -ast-print -fsyntax-only -fopenacc' prt=PRT,PRT-A)
-// RUN:   (print=-fopenacc-print=acc     prt=PRT,PRT-A)
-// RUN:   (print=-fopenacc-print=omp     prt=PRT,PRT-O,PRT-O-%[ompdk0]0,PRT-O-%[ompdk0]0-%[ompsk0]0,PRT-O-%[ompdk1]1,PRT-O-%[ompdk1]1-%[ompsk1]1,PRT-O-%[ompdk2]2,PRT-O-%[ompdk2]2-%[ompsk2]2)
-// RUN:   (print=-fopenacc-print=acc-omp prt=PRT,PRT-A,PRT-AO,PRT-AO-%[ompdk0]0,PRT-AO-%[ompdk0]0-%[ompsk0]0,PRT-AO-%[ompdk1]1,PRT-AO-%[ompdk1]1-%[ompsk1]1,PRT-AO-%[ompdk2]2,PRT-AO-%[ompdk2]2-%[ompsk2]2)
-// RUN:   (print=-fopenacc-print=omp-acc prt=PRT,PRT-O,PRT-O-%[ompdk0]0,PRT-O-%[ompdk0]0-%[ompsk0]0,PRT-O-%[ompdk1]1,PRT-O-%[ompdk1]1-%[ompsk1]1,PRT-O-%[ompdk2]2,PRT-O-%[ompdk2]2-%[ompsk2]2,PRT-OA,PRT-OA-%[ompdk0]0,PRT-OA-%[ompdk0]0-%[ompsk0]0,PRT-OA-%[ompdk1]1,PRT-OA-%[ompdk1]1-%[ompsk1]1,PRT-OA-%[ompdk2]2,PRT-OA-%[ompdk2]2-%[ompsk2]2)
+// RUN:   (print='-Xclang -ast-print -fsyntax-only -fopenacc' prt=PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb])
+// RUN:   (print=-fopenacc-print=acc     prt=PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb])
+// RUN:   (print=-fopenacc-print=omp     prt=PRT,PRT-%[cmb],PRT-O,PRT-O-%[cmb],PRT-O-%[ompdk0]0,PRT-O-%[ompdk0]0-%[ompsk0]0,PRT-O-%[cmb]-%[ompdk0]0,PRT-O-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-O-%[ompdk1]1,PRT-O-%[ompdk1]1-%[ompsk1]1,PRT-O-%[ompdk2]2,PRT-O-%[ompdk2]2-%[ompsk2]2)
+// RUN:   (print=-fopenacc-print=acc-omp prt=PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb],PRT-AO,PRT-AO-%[cmb],PRT-AO-%[ompdk0]0,PRT-AO-%[ompdk0]0-%[ompsk0]0,PRT-AO-%[cmb]-%[ompdk0]0,PRT-AO-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-AO-%[ompdk1]1,PRT-AO-%[ompdk1]1-%[ompsk1]1,PRT-AO-%[ompdk2]2,PRT-AO-%[ompdk2]2-%[ompsk2]2)
+// RUN:   (print=-fopenacc-print=omp-acc prt=PRT,PRT-%[cmb],PRT-O,PRT-O-%[cmb],PRT-O-%[ompdk0]0,PRT-O-%[ompdk0]0-%[ompsk0]0,PRT-O-%[cmb]-%[ompdk0]0,PRT-O-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-O-%[ompdk1]1,PRT-O-%[ompdk1]1-%[ompsk1]1,PRT-O-%[ompdk2]2,PRT-O-%[ompdk2]2-%[ompsk2]2,PRT-OA,PRT-OA-%[cmb],PRT-OA-%[ompdk0]0,PRT-OA-%[ompdk0]0-%[ompsk0]0,PRT-OA-%[cmb]-%[ompdk0]0,PRT-OA-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-OA-%[ompdk1]1,PRT-OA-%[ompdk1]1-%[ompsk1]1,PRT-OA-%[ompdk2]2,PRT-OA-%[ompdk2]2-%[ompsk2]2)
 // RUN: }
-// RUN: %for loop-clauses {
-// RUN:   %for prints {
-// RUN:     %clang -Xclang -verify %[print] %s \
-// RUN:            -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
-// RUN:            -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2' \
-// RUN:     | FileCheck -check-prefixes=%[prt] %s \
-// RUN:                 -DACCC0=%'accc0'   -DACCC1=%'accc1'   -DACCC2=%'accc2' \
-// RUN:                 -DOMPDP0=%'ompdp0' -DOMPDP1=%'ompdp1' -DOMPDP2=%'ompdp2'
+// RUN: %for cmbs {
+// RUN:   %for loop-clauses {
+// RUN:     %for prints {
+// RUN:       %clang -Xclang -verify %[print] %s \
+// RUN:              -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
+// RUN:              -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2' \
+// RUN:              %[cmb-cflags] \
+// RUN:       | FileCheck -check-prefixes=%[prt] %s \
+// RUN:                   -DACCC0=%'accc0'   -DACCC1=%'accc1'   -DACCC2=%'accc2' \
+// RUN:                   -DOMPDP0=%'ompdp0' -DOMPDP1=%'ompdp1' -DOMPDP2=%'ompdp2'
+// RUN:     }
 // RUN:   }
 // RUN: }
 
@@ -160,39 +186,48 @@
 // printing (where to print comments about discarded directives) is serialized
 // and deserialized, so it's worthwhile to try all OpenACC printing modes.
 //
-// RUN: %for loop-clauses {
-// RUN:   %clang -Xclang -verify -fopenacc -emit-ast %s -o %t.ast \
-// RUN:          -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
-// RUN:          -DITRS0=%[itrs0] -DITRS1=%[itrs1] -DITRS2=%[itrs2]
-// RUN:   %for prints {
-// RUN:     %clang_cc1 -ast-print %t.ast 2>&1 \
-// RUN:     | FileCheck -check-prefixes=PRT,PRT-A %s \
-// RUN:                 -DACCC0=%'accc0'   -DACCC1=%'accc1'   -DACCC2=%'accc2' \
-// RUN:                 -DOMPDP0=%'ompdp0' -DOMPDP1=%'ompdp1' -DOMPDP2=%'ompdp2'
+// RUN: %for cmbs {
+// RUN:   %for loop-clauses {
+// RUN:     %clang -Xclang -verify -fopenacc -emit-ast %s -o %t.ast \
+// RUN:            -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
+// RUN:            -DITRS0=%[itrs0] -DITRS1=%[itrs1] -DITRS2=%[itrs2] \
+// RUN:            %[cmb-cflags]
+// RUN:     %for prints {
+// RUN:       %clang_cc1 -ast-print %t.ast 2>&1 \
+// RUN:       | FileCheck -check-prefixes=PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb] %s \
+// RUN:                   -DACCC0=%'accc0'   -DACCC1=%'accc1'   -DACCC2=%'accc2' \
+// RUN:                   -DOMPDP0=%'ompdp0' -DOMPDP1=%'ompdp1' -DOMPDP2=%'ompdp2'
+// RUN:     }
 // RUN:   }
 // RUN: }
 
 // Can we -ast-print the OpenMP source code, compile, and run it successfully?
 //
-// RUN: %for loop-clauses {
-// RUN:   %clang -Xclang -verify -fopenacc-print=omp %s > %t-omp.c \
-// RUN:          -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
-// RUN:          -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2'
-// RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:   %clang -Xclang -verify -fopenmp -o %t %t-omp.c
-// RUN:   %t | FileCheck -check-prefixes=%'exe' %s \
-// RUN:        -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2'
+// RUN: %for cmbs {
+// RUN:   %for loop-clauses {
+// RUN:     %clang -Xclang -verify -fopenacc-print=omp %s > %t-omp.c \
+// RUN:            -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
+// RUN:            -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2' \
+// RUN:             %[cmb-cflags]
+// RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
+// RUN:     %clang -Xclang -verify -fopenmp -o %t %t-omp.c
+// RUN:     %t | FileCheck -check-prefixes=%'exe' %s \
+// RUN:          -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2'
+// RUN:   }
 // RUN: }
 
 // Check execution with normal compilation.
 //
-// RUN: %for loop-clauses {
-// RUN:   %clang -Xclang -verify -fopenacc %s -o %t \
-// RUN:          -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
-// RUN:          -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2'
-// RUN:   %t 2 2>&1 \
-// RUN:   | FileCheck -check-prefixes=%'exe' %s \
-// RUN:               -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2'
+// RUN: %for cmbs {
+// RUN:   %for loop-clauses {
+// RUN:     %clang -Xclang -verify -fopenacc %s -o %t \
+// RUN:            -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
+// RUN:            -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2' \
+// RUN:            %[cmb-cflags]
+// RUN:     %t 2 2>&1 \
+// RUN:     | FileCheck -check-prefixes=%'exe' %s \
+// RUN:                 -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2'
+// RUN:   }
 // RUN: }
 
 // END.
@@ -226,44 +261,65 @@ int main() {
   // EXE: [[ACCC0]] > [[ACCC1]] > [[ACCC2]]
   printf("%s > %s > %s\n", XSTR(ACCC0), XSTR(ACCC1), XSTR(ACCC2));
 
-  // DMP:      ACCParallelDirective
-  // DMP-NEXT:   ACCNum_gangsClause
-  // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-  // DMP-NEXT:   impl: OMPTargetTeamsDirective
-  // DMP-NEXT:     OMPNum_teamsClause
-  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-CMB:            ACCParallelLoopDirective
+  // DMP-CMB-NEXT:         ACCNum_gangsClause
+  // DMP-CMB-NEXT:           IntegerLiteral {{.*}} 'int' 2
+  // DMP0-CMB-AG-NEXT:     ACCGangClause
+  // DMP0-CMB-AW-NEXT:     ACCWorkerClause
+  // DMP0-CMB-AV-NEXT:     ACCVectorClause
+  // DMP0-CMB-ASEQ-NEXT:   ACCSeqClause
+  // DMP-SEP:              {{^[^a-z]*}}ACCParallelDirective
+  // DMP-CMB-NEXT:         effect: ACCParallelDirective
+  // DMP-NEXT:               ACCNum_gangsClause
+  // DMP-NEXT:                 IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:               impl: OMPTargetTeamsDirective
+  // DMP-NEXT:                 OMPNum_teamsClause
+  // DMP-NEXT:                   IntegerLiteral {{.*}} 'int' 2
+  // DMP:                    ACCLoopDirective
+  // DMP0-AG-NEXT:             ACCGangClause
+  // DMP0-AW-NEXT:             ACCWorkerClause
+  // DMP0-AV-NEXT:             ACCVectorClause
+  // DMP0-ASEQ-NEXT:           ACCSeqClause
+  // DMP0-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
+  // DMP0-OPRG-NEXT:           impl: [[OMPDD0]]
+  // DMP0-ONT1-NEXT:             OMPNum_threadsClause
+  // DMP0-ONT1-NEXT:               IntegerLiteral {{.*}} 'int' 1
+  // DMP0-OPRG:                  ForStmt
+  // DMP0-OSEQ-NEXT:           impl: ForStmt
   //
-  // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2){{$}}
-  // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2){{$}}
+  // PRT-A-SEP-NEXT:        {{^ *}}#pragma acc parallel num_gangs(2){{$}}
+  // PRT-AO-SEP-NEXT:       {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  // PRT-A-SEP-NEXT:        {
+  // PRT-A-SEP-NEXT:          {{^ *}}#pragma acc loop [[ACCC0]]
+  // PRT-AO-SEP-OSEQ0-SAME:   {{^}} // discarded in OpenMP translation
+  // PRT-A-SEP-SAME:          {{^$}}
+  // PRT-AO-SEP-OPRG0-NEXT:   {{^ *}}// #pragma omp [[OMPDP0]]{{$}}
+  //
+  // PRT-O-SEP-NEXT:        {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-OA-SEP-NEXT:       {{^ *}}// #pragma acc parallel num_gangs(2){{$}}
+  // PRT-O-SEP-NEXT:        {
+  // PRT-O-SEP-OPRG0-NEXT:    {{^ *}}#pragma omp [[OMPDP0]]{{$}}
+  // PRT-OA-SEP-NEXT:         {{^ *}}// #pragma acc loop [[ACCC0]]
+  // PRT-OA-SEP-OSEQ0-SAME:   {{^}} // discarded in OpenMP translation
+  // PRT-OA-SEP-SAME:         {{^$}}
+  //
+  // PRT-A-CMB-NEXT:        {{^ *}}#pragma acc parallel loop num_gangs(2) [[ACCC0]]{{$}}
+  // PRT-AO-CMB-NEXT:       {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-CMB-OPRG0-NEXT: {{^ *}}// #pragma omp [[OMPDP0]]{{$}}
+  //
+  // PRT-O-CMB-NEXT:        {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-O-CMB-OPRG0-NEXT:  {{^ *}}#pragma omp [[OMPDP0]]{{$}}
+  // PRT-OA-CMB-NEXT:       {{^ *}}// #pragma acc parallel loop num_gangs(2) [[ACCC0]]{{$}}
+  //
+  // PRT-NOACC:             {
+#if !CMB
   #pragma acc parallel num_gangs(2)
-  // PRT-NEXT: {
   {
-    // DMP:            ACCLoopDirective
-    // DMP0-AG-NEXT:     ACCGangClause
-    // DMP0-AW-NEXT:     ACCWorkerClause
-    // DMP0-AV-NEXT:     ACCVectorClause
-    // DMP0-ASEQ-NEXT:   ACCSeqClause
-    // DMP0-AIMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-    // DMP0-OPRG-NEXT:   impl: [[OMPDD0]]
-    // DMP0-ONT1-NEXT:     OMPNum_threadsClause
-    // DMP0-ONT1-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP0-OPRG:          ForStmt
-    // DMP0-OSEQ-NEXT:   impl: ForStmt
-    //
-    // PRT-A-NEXT:        {{^ *}}#pragma acc loop [[ACCC0]]
-    // PRT-AO-OSEQ0-SAME: {{^}} // discarded in OpenMP translation
-    // PRT-A-SAME:        {{^$}}
-    // PRT-AO-OPRG0-NEXT: {{^ *}}// #pragma omp [[OMPDP0]]{{$}}
-    //
-    // PRT-O-OPRG0-NEXT:  {{^ *}}#pragma omp [[OMPDP0]]{{$}}
-    // PRT-OA-NEXT:       {{^ *}}// #pragma acc loop [[ACCC0]]
-    // PRT-OA-OSEQ0-SAME: {{^}} // discarded in OpenMP translation
-    // PRT-OA-SAME:       {{^$}}
-    //
-    // PRT-NEXT: for (int i = 0; i < {{.*}}; ++i) {
     #pragma acc loop ACCC0
+#else
+    #pragma acc parallel loop num_gangs(2) ACCC0
+#endif
+    // PRT-NEXT: for (int i = 0; i < {{.*}}; ++i) {
     for (int i = 0; i < ITRS0; ++i) {
       // DMP:                  ACCLoopDirective
       // DMP1-AG-NEXT:           ACCGangClause
@@ -474,7 +530,12 @@ int main() {
         } // PRT-NEXT: }
       } // PRT-NEXT: }
     } // PRT-NEXT: }
-  } // PRT-NEXT: }
+#if !CMB
+  }
+#endif
+  // PRT-NOACC-NEXT: }
+  // PRT-O-SEP-NEXT: }
+  // PRT-A-SEP-NEXT: }
 
   // Close off EXE*-DAGs.
   // PRT-NEXT: printf

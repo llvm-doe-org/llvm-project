@@ -48,6 +48,7 @@ class ACCExecutableDirective : public Stmt {
   /// NumChildren pointers to child stmts/exprs (if the directive type
   /// requires an associated stmt, then it has to be the first of them).
   const unsigned ClausesOffset;
+  ACCExecutableDirective *EffectiveDirective = nullptr;
   Stmt *OMPNode;
   bool DirectiveDiscardedForOMP;
 
@@ -91,7 +92,23 @@ protected:
     *child_begin() = S;
   }
 
+  /// Set the outermost effective directive.  Non-combined directives must not
+  /// call this.
+  ///
+  /// \param D Effective directive.
+  ///
+  void setEffectiveDirective(ACCExecutableDirective *D) {
+    assert(isOpenACCCombinedDirective(Kind) &&
+           "expected combined OpenACC directive");
+    EffectiveDirective = D;
+  }
+
 public:
+  static bool classof(const Stmt *S) {
+    return S->getStmtClass() >= firstACCExecutableDirectiveConstant &&
+           S->getStmtClass() <= lastACCExecutableDirectiveConstant;
+  }
+
   /// Set the statement to which this directive has been translated for OpenMP.
   /// In most cases, it's an OpenMP directive.  In some cases, it's a compound
   /// statement that contains an OpenMP directive.  If the OpenACC directive
@@ -221,12 +238,14 @@ public:
     return const_cast<Stmt *>(*child_begin());
   }
 
-  OpenACCDirectiveKind getDirectiveKind() const { return Kind; }
-
-  static bool classof(const Stmt *S) {
-    return S->getStmtClass() >= firstACCExecutableDirectiveConstant &&
-           S->getStmtClass() <= lastACCExecutableDirectiveConstant;
+  /// Returns the outermost effective directive (whose associated statement is
+  /// the nested effective directive, etc.) if this is a combined directive,
+  /// and returns nullptr otherwise.
+  ACCExecutableDirective *getEffectiveDirective() const {
+    return EffectiveDirective;
   }
+
+  OpenACCDirectiveKind getDirectiveKind() const { return Kind; }
 
   child_range children() {
     if (!hasAssociatedStmt())
@@ -274,8 +293,9 @@ public:
   /// \param EndLoc Ending Location of the directive.
   /// \param Clauses List of clauses.
   /// \param AssociatedStmt Statement associated with the directive.
-  /// \param NestedWorkerPartitioning Whether an acc loop directive with worker
-  ///        partitioning is nested here.
+  /// \param NestedWorkerPartitioning Whether a (separate or combined with this
+  ///        directive) acc loop directive with worker partitioning is nested
+  ///        here.
   static ACCParallelDirective *
   Create(const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
          ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
@@ -289,16 +309,16 @@ public:
   static ACCParallelDirective *CreateEmpty(const ASTContext &C,
                                            unsigned NumClauses, EmptyShell);
 
-  /// Record whether an acc loop directive with worker partitioning is nested
-  /// here.
-  void setNestedWorkerPartitioning(bool V) { NestedWorkerPartitioning = V; }
-  /// Return true if an acc loop directive with worker partitioning is nested
-  /// here.
-  bool getNestedWorkerPartitioning() const { return NestedWorkerPartitioning; }
-
   static bool classof(const Stmt *T) {
     return T->getStmtClass() == ACCParallelDirectiveClass;
   }
+
+  /// Record whether a (separate or combined with this directive) acc loop
+  /// directive with worker partitioning is nested here.
+  void setNestedWorkerPartitioning(bool V) { NestedWorkerPartitioning = V; }
+  /// Return true if a (separate or combined with this directive) acc loop
+  /// directive with worker partitioning is nested here.
+  bool getNestedWorkerPartitioning() const { return NestedWorkerPartitioning; }
 };
 
 /// This represents '#pragma acc loop' directive.
@@ -356,6 +376,10 @@ public:
   static ACCLoopDirective *CreateEmpty(const ASTContext &C, unsigned NumClauses,
                                        EmptyShell);
 
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == ACCLoopDirectiveClass;
+  }
+
   /// Set the loop control variable that is assigned but not declared in the
   /// init of the for loop associated with the directive.
   void setLoopControlVariable(VarDecl *LCVar) { this->LCVar = LCVar; }
@@ -370,17 +394,68 @@ public:
   }
   /// Get the loop partitioning that immediately parents this directive.  That
   /// is, search upward, skip sequential loops, and stop at the first compute
-  /// directive or partitioned loop.  If stopping on a compute directive,
-  /// return ACCC_unknown.  If stopping on a partitioned loop, return
-  /// ACCC_vector, ACCC_worker, or ACCC_gang, in that order of preference where
-  /// the loop is partitioned by more than one of these.
+  /// directive or partitioned loop directive.  If stopping on a partitioned
+  /// loop directive (including a combined compute and partitioned loop
+  /// directive), return ACCC_vector, ACCC_worker, or ACCC_gang, in that order
+  /// of preference where the loop is partitioned by more than one of these.
+  /// Else, if stopping on a compute directive, return ACCC_unknown.
   OpenACCClauseKind getParentLoopPartitioning() const {
     return ParentLoopPartitioning;
   }
+};
+
+/// This represents '#pragma acc parallel loop' directive.
+///
+/// \code
+/// #pragma acc parallel loop private(a,b) reduction(+: c,d)
+/// \endcode
+/// In this example directive '#pragma acc parallel loop' has clauses 'private'
+/// with the variables 'a' and 'b' and 'reduction' with operator '+' and
+/// variables 'c' and 'd'.
+///
+class ACCParallelLoopDirective : public ACCExecutableDirective {
+  /// Build directive with the given start and end location.
+  ///
+  /// \param StartLoc Starting location of the directive (directive keyword).
+  /// \param EndLoc Ending Location of the directive.
+  ///
+  ACCParallelLoopDirective(SourceLocation StartLoc, SourceLocation EndLoc,
+                           unsigned NumClauses)
+      : ACCExecutableDirective(this, ACCParallelLoopDirectiveClass,
+                               ACCD_parallel_loop, StartLoc, EndLoc,
+                               NumClauses, 1) {}
+
+  /// Build an empty directive.
+  explicit ACCParallelLoopDirective(unsigned NumClauses)
+      : ACCExecutableDirective(this, ACCParallelLoopDirectiveClass,
+                               ACCD_parallel_loop, SourceLocation(),
+                               SourceLocation(), NumClauses, 1) {}
+
+public:
+  /// Creates directive.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the directive kind.
+  /// \param EndLoc Ending Location of the directive.
+  /// \param Clauses List of clauses.
+  /// \param AssociatedStmt Statement associated with the directive.
+  /// \param ParallelDir The effective acc parallel directive.
+  static ACCParallelLoopDirective *Create(
+      const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
+      ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
+      ACCParallelDirective *ParallelDir);
 
   static bool classof(const Stmt *T) {
-    return T->getStmtClass() == ACCLoopDirectiveClass;
+    return T->getStmtClass() == ACCParallelLoopDirectiveClass;
   }
+
+  /// Creates an empty directive.
+  ///
+  /// \param C AST context.
+  /// \param NumClauses Number of clauses.
+  ///
+  static ACCParallelLoopDirective *CreateEmpty(
+      const ASTContext &C, unsigned NumClauses, EmptyShell);
 };
 
 } // end namespace clang
