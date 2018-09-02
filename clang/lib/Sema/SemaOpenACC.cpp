@@ -1697,22 +1697,21 @@ private:
         : Tx(Tx), Started(false), Finalized(false), Err(false) {}
     void addPrivateDecl(SourceLocation RefStartLoc, SourceLocation RefEndLoc,
                         VarDecl *VD) {
-      VarDecl *Def = VD->getDefinition();
-      assert(Def && "expected private variable to have definition");
+      VD = VD->getCanonicalDecl();
       if (!Started) {
         Tx.getSema().ActOnStartOfCompoundStmt(false);
         Started = true;
       }
-      // Record old transformation for Def.  If we've already done that, that
-      // means Def appeared multiple times in private clauses.  Once is enough,
+      // Record old transformation for VD.  If we've already done that, that
+      // means VD appeared multiple times in private clauses.  Once is enough,
       // and we don't want to lose the old transformation.
-      Decl *OldDeclTx = Tx.getDerived().TransformDecl(RefStartLoc, Def);
-      if (!OldDeclTxs.try_emplace(Def, OldDeclTx).second)
+      Decl *OldDeclTx = Tx.getDerived().TransformDecl(RefStartLoc, VD);
+      if (!OldDeclTxs.try_emplace(VD, OldDeclTx).second)
         return;
-      // Revert the old transformation for Def so we can create a new one.
-      Tx.getDerived().transformedLocalDecl(Def, Def);
+      // Revert the old transformation for VD so we can create a new one.
+      Tx.getDerived().transformedLocalDecl(VD, VD);
       // Transform Def and create a declaration statement for it.
-      Decl *DPrivate = Tx.getDerived().TransformDefinition(RefStartLoc, Def,
+      Decl *DPrivate = Tx.getDerived().TransformDefinition(RefStartLoc, VD,
                                                            /*DropInit*/true);
       StmtResult Res = Tx.getSema().ActOnDeclStmt(
           Tx.getSema().ConvertDeclToDeclGroup(DPrivate), RefStartLoc,

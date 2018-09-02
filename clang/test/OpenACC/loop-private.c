@@ -145,10 +145,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-// PRT: int main() {
+// PRT: int tentativeDef;
+int tentativeDef;
+
+// PRT-NEXT: int main() {
 int main() {
+
+  //--------------------------------------------------
   // Check private for scalar that is local to enclosing "acc parallel".
-  //
+  //--------------------------------------------------
+
   // PRT-NEXT: printf
   // EXE: parallel-local loop-private scalar
   printf("parallel-local loop-private scalar\n");
@@ -238,9 +244,9 @@ int main() {
     printf("after loop: %d\n", i);
   } // PRT-NEXT: }
 
-  // Repeat that but "acc parallel loop", so scalar is firstprivate instead of
-  // local for effective enclosing "acc parallel"
-  //
+  // Repeat that but for "acc parallel loop", so scalar is firstprivate instead
+  // of local for effective enclosing "acc parallel"
+
   // PRT-NEXT: printf
   // EXE-NEXT: parallel-firstprivate loop-private scalar
   printf("parallel-firstprivate loop-private scalar\n");
@@ -347,9 +353,212 @@ int main() {
     printf("after loop: %d\n", i);
   } // PRT-NEXT: }
 
+  //--------------------------------------------------
+  // Check private for scalar that, so far, has only a tentative definition.
+  //
+  // Inserting a local definition to make that scalar variable private for a
+  // sequential loop used to fail an assert because VarDecl::getDefinition
+  // returned nullptr for the tentative definition.
+  //--------------------------------------------------
+
+  // PRT-NEXT: printf
+  // EXE-NEXT: tentatively defined loop-private scalar
+  printf("tentatively defined loop-private scalar\n");
+  // PRT-A-NEXT:  #pragma acc parallel
+  // PRT-AO-NEXT: // #pragma omp target teams
+  // PRT-O-NEXT:  #pragma omp target teams
+  // PRT-OA-NEXT: // #pragma acc parallel
+  #pragma acc parallel num_gangs(2)
+  // PRT-NEXT: {
+  {
+    // DMP:           ACCLoopDirective
+    // DMP-ASEQ-NEXT:   ACCSeqClause
+    // DMP-ASEQ-NOT:      <implicit>
+    // DMP-AG-NEXT:     ACCGangClause
+    // DMP-AW-NEXT:     ACCWorkerClause
+    // DMP-AV-NEXT:     ACCVectorClause
+    // DMP-NEXT:        ACCPrivateClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-AIMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-OPRG-NEXT:   impl: [[OMPDD]]
+    // DMP-OPRG-NEXT:     OMPPrivateClause
+    // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-OPRG:          ForStmt
+    // DMP-OPLC-NEXT:   impl: [[OMPDD]]
+    // DMP-ONT1-NEXT:     OMPNum_threadsClause
+    // DMP-ONT1-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-OPLC-NEXT:     OMPPrivateClause
+    // DMP-OPLC-NEXT:       DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-OPLC:          ForStmt
+    // DMP-OSEQ-NEXT:   impl: CompoundStmt
+    // DMP-OSEQ-NEXT:     DeclStmt
+    // DMP-OSEQ-NEXT:       VarDecl {{.*}} tentativeDef 'int'
+    // DMP-OSEQ-NEXT:     ForStmt
+    //
+    // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(tentativeDef)
+    // PRT-AO-OSEQ-SAME: {{^}} // discarded in OpenMP translation
+    // PRT-A-SAME:       {{^$}}
+    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(tentativeDef){{$}}
+    // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(tentativeDef){{$}}
+    // PRT-A-NEXT:       for (int j = 0; j < 2; ++j) {
+    // PRT-A-NEXT:         tentativeDef = j;
+    // PRT-A-NEXT:         printf
+    // PRT-A-NEXT:       }
+    // PRT-AO-OSEQ-NEXT: // {
+    // PRT-AO-OSEQ-NEXT: //   int tentativeDef;
+    // PRT-AO-OSEQ-NEXT: //   for (int j = 0; j < 2; ++j) {
+    // PRT-AO-OSEQ-NEXT: //     tentativeDef = j;
+    // PRT-AO-OSEQ-NEXT: //     printf
+    // PRT-AO-OSEQ-NEXT: //   }
+    // PRT-AO-OSEQ-NEXT: // }
+    //
+    // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
+    // PRT-O-OPLC-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
+    // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(tentativeDef){{$}}
+    // PRT-OA-OPLC-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(tentativeDef){{$}}
+    // PRT-O-OSEQ-NEXT:  {
+    // PRT-O-OSEQ-NEXT:    int tentativeDef;
+    // PRT-O-NEXT:         for (int j = 0; j < 2; ++j) {
+    // PRT-O-NEXT:           tentativeDef = j;
+    // PRT-O-NEXT:           printf
+    // PRT-O-NEXT:         }
+    // PRT-O-OSEQ-NEXT:  }
+    // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(tentativeDef) // discarded in OpenMP translation{{$}}
+    // PRT-OA-OSEQ-NEXT: // for (int j = 0; j < 2; ++j) {
+    // PRT-OA-OSEQ-NEXT: //   tentativeDef = j;
+    // PRT-OA-OSEQ-NEXT: //   printf
+    // PRT-OA-OSEQ-NEXT: // }
+    //
+    // PRT-NOACC-NEXT:   for (int j = 0; j < 2; ++j) {
+    // PRT-NOACC-NEXT:     tentativeDef = j;
+    // PRT-NOACC-NEXT:     printf
+    // PRT-NOACC-NEXT:   }
+    #pragma acc loop ACCC private(tentativeDef)
+    for (int j = 0; j < 2; ++j) {
+      tentativeDef = j;
+      // EXE-DAG:        in loop: 0
+      // EXE-DAG:        in loop: 1
+      // EXE-GREDUN-DAG: in loop: 0
+      // EXE-GREDUN-DAG: in loop: 1
+      printf("in loop: %d\n", tentativeDef);
+    }
+    // PRT-NEXT:      printf
+    // EXE-DAG: after loop: 99
+    // EXE-DAG: after loop: 99
+    printf("after loop: %d\n", tentativeDef);
+  } // PRT-NEXT: }
+
+  // Repeat that but for "acc parallel loop".
+
+  // PRT-NEXT: printf
+  // EXE-NEXT: tentatively defined loop-private scalar (combined directive)
+  printf("tentatively defined loop-private scalar (combined directive)\n");
+  // PRT-NEXT: {
+  {
+    // DMP:           ACCParallelLoopDirective
+    // DMP-NEXT:        ACCNum_gangsClause
+    // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
+    // DMP-ASEQ-NEXT:   ACCSeqClause
+    // DMP-ASEQ-NOT:      <implicit>
+    // DMP-AG-NEXT:     ACCGangClause
+    // DMP-AW-NEXT:     ACCWorkerClause
+    // DMP-AV-NEXT:     ACCVectorClause
+    // DMP-NEXT:        ACCPrivateClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP:             effect: ACCParallelDirective
+    // DMP-NEXT:          ACCNum_gangsClause
+    // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:          ACCFirstprivateClause {{.*}} <implicit>
+    // DMP-NEXT:            DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-NEXT:          impl: OMPTargetTeamsDirective
+    // DMP-NEXT:            OMPNum_teamsClause
+    // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:            OMPFirstprivateClause
+    // DMP-NOT:               <implicit>
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP:               ACCLoopDirective
+    // DMP-ASEQ-NEXT:       ACCSeqClause
+    // DMP-ASEQ-NOT:          <implicit>
+    // DMP-AG-NEXT:         ACCGangClause
+    // DMP-AW-NEXT:         ACCWorkerClause
+    // DMP-AV-NEXT:         ACCVectorClause
+    // DMP-NEXT:            ACCPrivateClause
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-OPRG-NEXT:       impl: [[OMPDD]]
+    // DMP-OPRG-NEXT:         OMPPrivateClause
+    // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-OPRG:              ForStmt
+    // DMP-OPLC-NEXT:       impl: [[OMPDD]]
+    // DMP-ONT1-NEXT:         OMPNum_threadsClause
+    // DMP-ONT1-NEXT:           IntegerLiteral {{.*}} 'int' 1
+    // DMP-OPLC-NEXT:         OMPPrivateClause
+    // DMP-OPLC-NEXT:           DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-OPLC:              ForStmt
+    // DMP-OSEQ-NEXT:       impl: CompoundStmt
+    // DMP-OSEQ-NEXT:         DeclStmt
+    // DMP-OSEQ-NEXT:           VarDecl {{.*}} tentativeDef 'int'
+    // DMP-OSEQ-NEXT:         ForStmt
+    //
+    // PRT-A-NEXT:       {{^ *}}#pragma acc parallel loop num_gangs(2)[[ACCC]] private(tentativeDef){{$}}
+    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(tentativeDef){{$}}
+    // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(tentativeDef){{$}}
+    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(tentativeDef){{$}}
+    // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(tentativeDef){{$}}
+    // PRT-A-NEXT:       for (int j = 0; j < 2; ++j) {
+    // PRT-A-NEXT:         tentativeDef = j;
+    // PRT-A-NEXT:         printf
+    // PRT-A-NEXT:       }
+    // PRT-AO-OSEQ-NEXT: // #pragma omp target teams num_teams(2) firstprivate(tentativeDef){{$}}
+    // PRT-AO-OSEQ-NEXT: // {
+    // PRT-AO-OSEQ-NEXT: //   int tentativeDef;
+    // PRT-AO-OSEQ-NEXT: //   for (int j = 0; j < 2; ++j) {
+    // PRT-AO-OSEQ-NEXT: //     tentativeDef = j;
+    // PRT-AO-OSEQ-NEXT: //     printf
+    // PRT-AO-OSEQ-NEXT: //   }
+    // PRT-AO-OSEQ-NEXT: // }
+    //
+    // PRT-O-NEXT:       {{^ *}}#pragma omp target teams num_teams(2) firstprivate(tentativeDef){{$}}
+    // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
+    // PRT-O-OPLC-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
+    // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2)[[ACCC]] private(tentativeDef){{$}}
+    // PRT-OA-OPLC-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2)[[ACCC]] private(tentativeDef){{$}}
+    // PRT-O-OSEQ-NEXT:  {
+    // PRT-O-OSEQ-NEXT:    int tentativeDef;
+    // PRT-O-NEXT:         for (int j = 0; j < 2; ++j) {
+    // PRT-O-NEXT:           tentativeDef = j;
+    // PRT-O-NEXT:           printf
+    // PRT-O-NEXT:         }
+    // PRT-O-OSEQ-NEXT:  }
+    // PRT-OA-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(tentativeDef){{$}}
+    // PRT-OA-OSEQ-NEXT: // for (int j = 0; j < 2; ++j) {
+    // PRT-OA-OSEQ-NEXT: //   tentativeDef = j;
+    // PRT-OA-OSEQ-NEXT: //   printf
+    // PRT-OA-OSEQ-NEXT: // }
+    //
+    // PRT-NOACC-NEXT:   for (int j = 0; j < 2; ++j) {
+    // PRT-NOACC-NEXT:     tentativeDef = j;
+    // PRT-NOACC-NEXT:     printf
+    // PRT-NOACC-NEXT:   }
+    #pragma acc parallel loop num_gangs(2) ACCC private(tentativeDef)
+    for (int j = 0; j < 2; ++j) {
+      tentativeDef = j;
+      // EXE-DAG:        in loop: 0
+      // EXE-DAG:        in loop: 1
+      // EXE-GREDUN-DAG: in loop: 0
+      // EXE-GREDUN-DAG: in loop: 1
+      printf("in loop: %d\n", tentativeDef);
+    }
+    // PRT-NEXT: printf
+    // EXE-NEXT: after loop: 99
+    printf("after loop: %d\n", tentativeDef);
+  } // PRT-NEXT: }
+
+  //--------------------------------------------------
   // Check private for loop control variable that is declared not assigned in
   // init of attached for loop.
-  //
+  //--------------------------------------------------
+
   // PRT-NEXT: printf
   // EXE-NEXT: parallel-local loop-private declared loop control
   printf("parallel-local loop-private declared loop control\n");
@@ -434,7 +643,7 @@ int main() {
   } // PRT-NEXT: }
 
   // Repeat that but with "acc parallel loop".
-  //
+
   // PRT-NEXT: printf
   // EXE-NEXT: parallel-firstprivate loop-private declared loop control
   printf("parallel-firstprivate loop-private declared loop control\n");
@@ -530,9 +739,11 @@ int main() {
     printf("after loop: %d\n", i);
   } // PRT-NEXT: }
 
+  //--------------------------------------------------
   // Check private for loop control variable that is assigned not declared in
   // init of attached for loop.
-  //
+  //--------------------------------------------------
+
   // PRT-NEXT: printf
   // EXE-NEXT: parallel-local loop-private assigned loop control
   printf("parallel-local loop-private assigned loop control\n");
@@ -636,7 +847,7 @@ int main() {
   } // PRT-NEXT: }
 
   // Repeat that but with "acc parallel loop".
-  //
+
   // PRT-NEXT: printf
   // EXE-NEXT: parallel-firstprivate loop-private assigned loop control
   printf("parallel-firstprivate loop-private assigned loop control\n");
@@ -756,11 +967,13 @@ int main() {
     printf("after loop: %d\n", i);
   } // PRT-NEXT: }
 
+  //--------------------------------------------------
   // Check multiple privates in same clause and different clauses, including
   // private parallel-local scalar, private assigned loop control variable, and
   // private clauses that become empty or just smaller in translation to
   // OpenMP.
-  //
+  //--------------------------------------------------
+
   // PRT-NEXT: printf
   // EXE-NEXT: multiple privates on acc loop
   printf("multiple privates on acc loop\n");
@@ -897,7 +1110,7 @@ int main() {
   } // PRT-NEXT: }
 
   // Repeat that but with "acc parallel loop".
-  //
+
   // PRT-NEXT: printf
   // EXE-NEXT: multiple privates on acc parallel loop
   printf("multiple privates on acc parallel loop\n");
@@ -1062,3 +1275,5 @@ int main() {
   return 0;
 } // PRT-NEXT: }
 // EXE-NOT: {{.}}
+
+int tentativeDef = 99;
