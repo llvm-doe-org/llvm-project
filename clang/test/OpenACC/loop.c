@@ -47,7 +47,7 @@
 // RUN:    ompdk=OSEQ
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIMP,DMP-ASLC
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-SLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-SLC)
 // RUN:   (accc=seq
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -55,7 +55,7 @@
 // RUN:    ompdk=OSEQ
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-ASEQ,DMP-ASLC
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-SLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-SLC)
 // RUN:   (accc=independent
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -63,7 +63,7 @@
 // RUN:    ompdk=OSEQ
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIND,DMP-ASLC
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-SLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-SLC)
 // RUN:   (accc=auto
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -71,7 +71,7 @@
 // RUN:    ompdk=OSEQ
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-ASLC
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-SLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-SLC)
 //
 //        gang, worker, vector with each of the above except seq
 // RUN:   (accc=gang
@@ -89,7 +89,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AW
-// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
 // RUN:   (accc=vector
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPParallelForSimdDirective
@@ -97,7 +97,7 @@
 // RUN:    ompdk=OPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AV,DMP-ONT1
-// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
 // RUN:   (accc='independent gang'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPDistributeDirective
@@ -113,7 +113,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AW
-// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
 // RUN:   (accc='independent vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPParallelForSimdDirective
@@ -121,7 +121,7 @@
 // RUN:    ompdk=OPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AV,DMP-ONT1
-// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
 // RUN:   (accc='auto gang'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -129,7 +129,7 @@
 // RUN:    ompdk=OSEQ
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-ASLC,DMP-AG
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-SLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-SLC)
 // RUN:   (accc='auto worker'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -137,7 +137,7 @@
 // RUN:    ompdk=OSEQ
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-ASLC,DMP-AW
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-SLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-SLC)
 // RUN:   (accc='auto vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -145,7 +145,7 @@
 // RUN:    ompdk=OSEQ
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-ASLC,DMP-AV
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-SLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-SLC)
 //
 //        combinations of gang, worker, vector
 // RUN:   (accc='gang worker'
@@ -187,7 +187,7 @@
 // RUN:    ompdk=OPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AW,DMP-AV
-// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
 // RUN:   (accc='independent worker vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPParallelForSimdDirective
@@ -195,7 +195,7 @@
 // RUN:    ompdk=OPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AW,DMP-AV
-// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
 // RUN:   (accc='gang worker vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPDistributeParallelForSimdDirective
@@ -219,7 +219,7 @@
 // RUN:    ompdk=OSEQ
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-ASLC,DMP-AG,DMP-AW
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-SLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-SLC)
 // RUN:   (accc='auto gang vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -227,7 +227,7 @@
 // RUN:    ompdk=OSEQ
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-ASLC,DMP-AG,DMP-AV
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-SLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-SLC)
 // RUN:   (accc='auto worker vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -235,7 +235,7 @@
 // RUN:    ompdk=OSEQ
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-ASLC,DMP-AW,DMP-AV
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-SLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-SLC)
 // RUN:   (accc='auto gang worker vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -243,7 +243,7 @@
 // RUN:    ompdk=OSEQ
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-ASLC,DMP-AG,DMP-AW,DMP-AV
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-SLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-SLC)
 // RUN: }
 
 // Check ASTDumper.
@@ -494,10 +494,9 @@ int main() {
 
     // EXE-NEXT: save.readLoopOnlyOld=1
     printf("save.readLoopOnlyOld=%d\n", save.readLoopOnlyOld);
-    // EXE-NOPART-NEXT: save.readLoopOnlyNew=1
-    // EXE-GPART-NEXT:  save.readLoopOnlyNew=0
-    // We don't have a prefix for gang-redundant but partitioned, and the value
-    // is indeterminate there anyway, so we skip that case.
+    // EXE-NOPART-NEXT:       save.readLoopOnlyNew=1
+    // EXE-GPART-NEXT:        save.readLoopOnlyNew=0
+    // EXE-PART-GREDUN-NEXT:  save.readLoopOnlyNew={{[01]}}
     printf("save.readLoopOnlyNew=%d\n", save.readLoopOnlyNew);
     // EXE: save.readLoopOnlyErr=0
     printf("save.readLoopOnlyErr=%d\n", save.readLoopOnlyErr);
@@ -681,11 +680,11 @@ int main() {
       if (i == 0)
         loopOnlyArr[0] = 77;
 
-      // If gang-redundant, each gang should see the j value assigned by the
-      // loop above.  If gang-partitioned but not otherwise partitioned, each
-      // gang that is assigned an i iteration will see the j value assigned by
-      // the loop above, and remaining gangs will not.  If gang-partitioned and
-      // otherwise partitioned, there's a race.
+      // If gang-redundant and not otherwise partitioned, each gang should see
+      // the j value assigned by the loop above.  If gang-partitioned but not
+      // otherwise partitioned, each gang that is assigned an i iteration will
+      // see the j value assigned by the loop above, and remaining gangs will
+      // not.  If otherwise partitioned, there's a race.
       if (j == 0)
         save.declNestedLoopOld = true;
       else if (j == 2)
@@ -696,10 +695,9 @@ int main() {
 
     // EXE-NEXT: save.readLoopOnlyOld=1
     printf("save.readLoopOnlyOld=%d\n", save.readLoopOnlyOld);
-    // EXE-NOPART-NEXT: save.readLoopOnlyNew=1
-    // EXE-GPART-NEXT:  save.readLoopOnlyNew=0
-    // We don't have a prefix for gang-redundant but partitioned, and the value
-    // is indeterminate there anyway, so we skip that case.
+    // EXE-NOPART-NEXT:       save.readLoopOnlyNew=1
+    // EXE-GPART-NEXT:        save.readLoopOnlyNew=0
+    // EXE-PART-GREDUN-NEXT:  save.readLoopOnlyNew={{[01]}}
     printf("save.readLoopOnlyNew=%d\n", save.readLoopOnlyNew);
     // EXE: save.readLoopOnlyErr=0
     printf("save.readLoopOnlyErr=%d\n", save.readLoopOnlyErr);
@@ -712,11 +710,11 @@ int main() {
     // EXE-NEXT: save.readLoopOnlyArrErr=0
     printf("save.readLoopOnlyArrErr=%d\n", save.readLoopOnlyArrErr);
 
-    // EXE-GREDUN-NEXT: save.declNestedLoopOld=0
+    // EXE-NOPART-GREDUN-NEXT: save.declNestedLoopOld=0
     printf("save.declNestedLoopOld=%d\n", save.declNestedLoopOld);
-    // EXE-GREDUN-NEXT: save.declNestedLoopNew=1
+    // EXE-NOPART-GREDUN-NEXT: save.declNestedLoopNew=1
     printf("save.declNestedLoopNew=%d\n", save.declNestedLoopNew);
-    // EXE-GREDUN-NEXT: save.declNestedLoopErr=0
+    // EXE-NOPART-GREDUN-NEXT: save.declNestedLoopErr=0
     printf("save.declNestedLoopErr=%d\n", save.declNestedLoopErr);
 
     // EXE:      loopOnly=88
@@ -1005,10 +1003,9 @@ int main() {
 
     // EXE-NEXT: save.readInLaterLoopOld=1
     printf("save.readInLaterLoopOld=%d\n", save.readInLaterLoopOld);
-    // EXE-NOPART-NEXT: save.readInLaterLoopNew=1
-    // EXE-GPART-NEXT:  save.readInLaterLoopNew=0
-    // We don't have a prefix for gang-redundant but partitioned, and the value
-    // is indeterminate there anyway, so we skip that case.
+    // EXE-NOPART-NEXT:       save.readInLaterLoopNew=1
+    // EXE-GPART-NEXT:        save.readInLaterLoopNew=0
+    // EXE-PART-GREDUN-NEXT:  save.readInLaterLoopNew={{[01]}}
     printf("save.readInLaterLoopNew=%d\n", save.readInLaterLoopNew);
     // EXE: save.readInLaterLoopErr=0
     printf("save.readInLaterLoopErr=%d\n", save.readInLaterLoopErr);
