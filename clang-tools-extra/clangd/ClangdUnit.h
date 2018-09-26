@@ -1,11 +1,11 @@
-//===--- ClangdUnit.h -------------------------------------------*- C++-*-===//
+//===--- ClangdUnit.h --------------------------------------------*- C++-*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_CLANGDUNIT_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_CLANGDUNIT_H
@@ -68,7 +68,7 @@ public:
   /// Attempts to run Clang and store parsed AST. If \p Preamble is non-null
   /// it is reused during parsing.
   static llvm::Optional<ParsedAST>
-  Build(std::unique_ptr<clang::CompilerInvocation> CI,
+  build(std::unique_ptr<clang::CompilerInvocation> CI,
         std::shared_ptr<const PreambleData> Preamble,
         std::unique_ptr<llvm::MemoryBuffer> Buffer,
         std::shared_ptr<PCHContainerOperations> PCHs,
@@ -127,8 +127,8 @@ private:
   IncludeStructure Includes;
 };
 
-using PreambleParsedCallback = std::function<void(
-    PathRef Path, ASTContext &, std::shared_ptr<clang::Preprocessor>)>;
+using PreambleParsedCallback =
+    std::function<void(ASTContext &, std::shared_ptr<clang::Preprocessor>)>;
 
 /// Builds compiler invocation that could be used to build AST or preamble.
 std::unique_ptr<CompilerInvocation>
@@ -168,4 +168,5 @@ void dumpAST(ParsedAST &AST, llvm::raw_ostream &OS);
 
 } // namespace clangd
 } // namespace clang
-#endif
+
+#endif // LLVM_CLANG_TOOLS_EXTRA_CLANGD_CLANGDUNIT_H

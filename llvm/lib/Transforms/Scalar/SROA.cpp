@@ -3046,6 +3046,42 @@ private:
     return true;
   }
 
+  void fixLoadStoreAlign(Instruction &Root) {
+    // This algorithm implements the same visitor loop as
+    // hasUnsafePHIOrSelectUse, and fixes the alignment of each load
+    // or store found.
+    SmallPtrSet<Instruction *, 4> Visited;
+    SmallVector<Instruction *, 4> Uses;
+    Visited.insert(&Root);
+    Uses.push_back(&Root);
+    do {
+      Instruction *I = Uses.pop_back_val();
+
+      if (LoadInst *LI = dyn_cast<LoadInst>(I)) {
+        unsigned LoadAlign = LI->getAlignment();
+        if (!LoadAlign)
+          LoadAlign = DL.getABITypeAlignment(LI->getType());
+        LI->setAlignment(std::min(LoadAlign, getSliceAlign()));
+        continue;
+      }
+      if (StoreInst *SI = dyn_cast<StoreInst>(I)) {
+        unsigned StoreAlign = SI->getAlignment();
+        if (!StoreAlign) {
+          Value *Op = SI->getOperand(0);
+          StoreAlign = DL.getABITypeAlignment(Op->getType());
+        }
+        SI->setAlignment(std::min(StoreAlign, getSliceAlign()));
+        continue;
+      }
+
+      assert(isa<BitCastInst>(I) || isa<PHINode>(I) ||
+             isa<SelectInst>(I) || isa<GetElementPtrInst>(I));
+      for (User *U : I->users())
+        if (Visited.insert(cast<Instruction>(U)).second)
+          Uses.push_back(cast<Instruction>(U));
+    } while (!Uses.empty());
+  }
+
   bool visitPHINode(PHINode &PN) {
     LLVM_DEBUG(dbgs() << "    original: " << PN << "\n");
     assert(BeginOffset >= NewAllocaBeginOffset && "PHIs are unsplittable");
@@ -3068,6 +3104,9 @@ private:
 
     LLVM_DEBUG(dbgs() << "          to: " << PN << "\n");
     deleteIfTriviallyDead(OldPtr);
+
+    // Fix the alignment of any loads or stores using this PHI node.
+    fixLoadStoreAlign(PN);
 
     // PHIs can't be promoted on their own, but often can be speculated. We
     // check the speculation outside of the rewriter so that we see the
@@ -3092,6 +3131,9 @@ private:
 
     LLVM_DEBUG(dbgs() << "          to: " << SI << "\n");
     deleteIfTriviallyDead(OldPtr);
+
+    // Fix the alignment of any loads or stores using this select.
+    fixLoadStoreAlign(SI);
 
     // Selects can't be promoted on their own, but often can be speculated. We
     // check the speculation outside of the rewriter so that we see the
@@ -3730,7 +3772,7 @@ bool SROA::presplitLoadsAndStores(AllocaInst &AI, AllocaSlices &AS) {
                          PartPtrTy, BasePtr->getName() + "."),
           getAdjustedAlignment(LI, PartOffset, DL), /*IsVolatile*/ false,
           LI->getName());
-      PLoad->copyMetadata(*LI, LLVMContext::MD_mem_parallel_loop_access); 
+      PLoad->copyMetadata(*LI, LLVMContext::MD_mem_parallel_loop_access);
 
       // Append this load onto the list of split loads so we can find it later
       // to rewrite the stores.
@@ -4212,7 +4254,7 @@ bool SROA::splitAlloca(AllocaInst &AI, AllocaSlices &AS) {
 
   // Migrate debug information from the old alloca to the new alloca(s)
   // and the individual partitions.
-  TinyPtrVector<DbgInfoIntrinsic *> DbgDeclares = FindDbgAddrUses(&AI);
+  TinyPtrVector<DbgVariableIntrinsic *> DbgDeclares = FindDbgAddrUses(&AI);
   if (!DbgDeclares.empty()) {
     auto *Var = DbgDeclares.front()->getVariable();
     auto *Expr = DbgDeclares.front()->getExpression();
@@ -4264,7 +4306,7 @@ bool SROA::splitAlloca(AllocaInst &AI, AllocaSlices &AS) {
       }
 
       // Remove any existing intrinsics describing the same alloca.
-      for (DbgInfoIntrinsic *OldDII : FindDbgAddrUses(Fragment.Alloca))
+      for (DbgVariableIntrinsic *OldDII : FindDbgAddrUses(Fragment.Alloca))
         OldDII->eraseFromParent();
 
       DIB.insertDeclare(Fragment.Alloca, Var, FragmentExpr,
@@ -4379,7 +4421,7 @@ bool SROA::deleteDeadInstructions(
     // not be able to find it.
     if (AllocaInst *AI = dyn_cast<AllocaInst>(I)) {
       DeletedAllocas.insert(AI);
-      for (DbgInfoIntrinsic *OldDII : FindDbgAddrUses(AI))
+      for (DbgVariableIntrinsic *OldDII : FindDbgAddrUses(AI))
         OldDII->eraseFromParent();
     }
 

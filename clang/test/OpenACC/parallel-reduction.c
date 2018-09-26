@@ -61,20 +61,23 @@
 // RUN:   }
 // RUN: }
 
+// For some Linux platforms, -latomic is required for OpenMP support for
+// reductions on complex types.
+
 // Can we -ast-print the OpenMP source code, compile, and run it successfully?
 //
 // RUN: %for directives {
 // RUN:   %clang -Xclang -verify -fopenacc-print=omp %[dir-cflags] %s \
 // RUN:          > %t-omp.c
 // RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:   %clang -Xclang -verify -fopenmp -o %t %t-omp.c
+// RUN:   %clang -Xclang -verify -fopenmp -o %t %t-omp.c %libatomic
 // RUN:   %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-%[dir] %s
 // RUN: }
 
 // Check execution with normal compilation.
 //
 // RUN: %for directives {
-// RUN:   %clang -Xclang -verify -fopenacc %[dir-cflags] %s -o %t
+// RUN:   %clang -Xclang -verify -fopenacc %[dir-cflags] %s -o %t %libatomic
 // RUN:   %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-%[dir] %s
 // RUN: }
 

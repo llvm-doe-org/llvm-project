@@ -26,7 +26,6 @@
 #include <math.h>
 
 // local includes
-#include "counter_group.h"
 #include "debug.h"     // debug
 #include "interface.h" // interfaces with omp, compiler, and user
 #include "option.h"    // choices we have
@@ -114,6 +113,8 @@ enum DATA_SHARING_SIZES {
   DS_Worker_Warp_Slot_Size = WARPSIZE * DS_Slot_Size,
   // The maximum number of warps in use
   DS_Max_Warp_Number = 32,
+  // The size of the preallocated shared memory buffer per team
+  DS_Shared_Memory_Size = 128,
 };
 
 // Data structure to keep in shared memory that traces the current slot, stack,
@@ -242,15 +243,10 @@ class omptarget_nvptx_WorkDescr {
 
 public:
   // access to data
-  INLINE omptarget_nvptx_CounterGroup &CounterGroup() { return cg; }
   INLINE omptarget_nvptx_TaskDescr *WorkTaskDescr() { return &masterTaskICV; }
-  // init
-  INLINE void InitWorkDescr();
 
 private:
-  omptarget_nvptx_CounterGroup cg; // for barrier (no other needed)
   omptarget_nvptx_TaskDescr masterTaskICV;
-  bool hasCancel;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -347,9 +343,6 @@ public:
   INLINE uint16_t &SimdLimitForNextSimd(int tid) {
     return nextRegion.slim[tid];
   }
-  // sync
-  INLINE Counter &Priv(int tid) { return priv[tid]; }
-  INLINE void IncrementPriv(int tid, Counter val) { priv[tid] += val; }
   // schedule (for dispatch)
   INLINE kmp_sched_t &ScheduleType(int tid) { return schedule[tid]; }
   INLINE int64_t &Chunk(int tid) { return chunk[tid]; }
@@ -377,8 +370,6 @@ private:
     // simd limit
     uint16_t slim[MAX_THREADS_PER_TEAM];
   } nextRegion;
-  // sync
-  Counter priv[MAX_THREADS_PER_TEAM];
   // schedule (for dispatch)
   kmp_sched_t schedule[MAX_THREADS_PER_TEAM]; // remember schedule type for #for
   int64_t chunk[MAX_THREADS_PER_TEAM];
@@ -395,6 +386,41 @@ struct omptarget_device_environmentTy {
   int32_t debug_level;
 };
 
+class omptarget_nvptx_SimpleThreadPrivateContext {
+  uint16_t par_level[MAX_THREADS_PER_TEAM];
+
+public:
+  INLINE void Init() {
+    ASSERT0(LT_FUSSY, isSPMDMode() && isRuntimeUninitialized(),
+            "Expected SPMD + uninitialized runtime modes.");
+    par_level[GetThreadIdInBlock()] = 0;
+  }
+  static INLINE void *Allocate(size_t DataSize);
+  static INLINE void Deallocate(void *Ptr);
+  INLINE void IncParLevel() {
+    ASSERT0(LT_FUSSY, isSPMDMode() && isRuntimeUninitialized(),
+            "Expected SPMD + uninitialized runtime modes.");
+    ++par_level[GetThreadIdInBlock()];
+  }
+  INLINE void DecParLevel() {
+    ASSERT0(LT_FUSSY, isSPMDMode() && isRuntimeUninitialized(),
+            "Expected SPMD + uninitialized runtime modes.");
+    ASSERT0(LT_FUSSY, par_level[GetThreadIdInBlock()] > 0,
+            "Expected parallel level >0.");
+    --par_level[GetThreadIdInBlock()];
+  }
+  INLINE bool InL2OrHigherParallelRegion() const {
+    ASSERT0(LT_FUSSY, isSPMDMode() && isRuntimeUninitialized(),
+            "Expected SPMD + uninitialized runtime modes.");
+    return par_level[GetThreadIdInBlock()] > 0;
+  }
+  INLINE uint16_t GetParallelLevel() const {
+    ASSERT0(LT_FUSSY, isSPMDMode() && isRuntimeUninitialized(),
+            "Expected SPMD + uninitialized runtime modes.");
+    return par_level[GetThreadIdInBlock()] + 1;
+  }
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 // global device envrionment
 ////////////////////////////////////////////////////////////////////////////////
@@ -409,6 +435,9 @@ extern __device__ omptarget_device_environmentTy omptarget_device_environment;
 
 extern __device__ __shared__
     omptarget_nvptx_ThreadPrivateContext *omptarget_nvptx_threadPrivateContext;
+extern __device__ __shared__ omptarget_nvptx_SimpleThreadPrivateContext
+    *omptarget_nvptx_simpleThreadPrivateContext;
+
 extern __device__ __shared__ uint32_t execution_param;
 extern __device__ __shared__ void *ReductionScratchpadPtr;
 
@@ -434,7 +463,6 @@ INLINE omptarget_nvptx_TaskDescr *getMyTopTaskDescriptor(int globalThreadId);
 // inlined implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-#include "counter_groupi.h"
 #include "omptarget-nvptxi.h"
 #include "supporti.h"
 

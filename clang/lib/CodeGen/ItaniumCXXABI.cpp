@@ -31,6 +31,7 @@
 #include "clang/AST/StmtCXX.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Value.h"
@@ -181,8 +182,7 @@ public:
   emitTerminateForUnexpectedException(CodeGenFunction &CGF,
                                       llvm::Value *Exn) override;
 
-  void EmitFundamentalRTTIDescriptor(QualType Type, bool DLLExport);
-  void EmitFundamentalRTTIDescriptors(bool DLLExport);
+  void EmitFundamentalRTTIDescriptors(const CXXRecordDecl *RD);
   llvm::Constant *getAddrOfRTTIDescriptor(QualType Ty) override;
   CatchTypeInfo
   getAddrOfCXXCatchHandlerType(QualType Ty,
@@ -634,7 +634,7 @@ CGCallee ItaniumCXXABI::EmitLoadOfMemberFunctionPointer(
   if (ShouldEmitCFICheck) {
     CodeGenFunction::SanitizerScope SanScope(&CGF);
 
-    CheckSourceLocation = CGF.EmitCheckSourceLocation(E->getLocStart());
+    CheckSourceLocation = CGF.EmitCheckSourceLocation(E->getBeginLoc());
     CheckTypeDesc = CGF.EmitCheckTypeDescriptor(QualType(MPT, 0));
     llvm::Constant *StaticData[] = {
         llvm::ConstantInt::get(CGF.Int8Ty, CodeGenFunction::CFITCK_VMFCall),
@@ -1598,12 +1598,6 @@ void ItaniumCXXABI::emitVTableDefinitions(CodeGenVTables &CGVT,
   // Set the right visibility.
   CGM.setGVProperties(VTable, RD);
 
-  // Use pointer alignment for the vtable. Otherwise we would align them based
-  // on the size of the initializer which doesn't make sense as only single
-  // values are read.
-  unsigned PAlign = CGM.getTarget().getPointerAlign(0);
-  VTable->setAlignment(getContext().toCharUnitsFromBits(PAlign).getQuantity());
-
   // If this is the magic class __cxxabiv1::__fundamental_type_info,
   // we will emit the typeinfo for the fundamental types. This is the
   // same behaviour as GCC.
@@ -1613,7 +1607,7 @@ void ItaniumCXXABI::emitVTableDefinitions(CodeGenVTables &CGVT,
       isa<NamespaceDecl>(DC) && cast<NamespaceDecl>(DC)->getIdentifier() &&
       cast<NamespaceDecl>(DC)->getIdentifier()->isStr("__cxxabiv1") &&
       DC->getParent()->isTranslationUnit())
-    EmitFundamentalRTTIDescriptors(RD->hasAttr<DLLExportAttr>());
+    EmitFundamentalRTTIDescriptors(RD);
 
   if (!VTable->isDeclarationForLinker())
     CGM.EmitVTableTypeMetadata(VTable, VTLayout);
@@ -1703,8 +1697,14 @@ llvm::GlobalVariable *ItaniumCXXABI::getAddrOfVTable(const CXXRecordDecl *RD,
       CGM.getItaniumVTableContext().getVTableLayout(RD);
   llvm::Type *VTableType = CGM.getVTables().getVTableType(VTLayout);
 
+  // Use pointer alignment for the vtable. Otherwise we would align them based
+  // on the size of the initializer which doesn't make sense as only single
+  // values are read.
+  unsigned PAlign = CGM.getTarget().getPointerAlign(0);
+
   VTable = CGM.CreateOrReplaceCXXRuntimeVariable(
-      Name, VTableType, llvm::GlobalValue::ExternalLinkage);
+      Name, VTableType, llvm::GlobalValue::ExternalLinkage,
+      getContext().toCharUnitsFromBits(PAlign).getQuantity());
   VTable->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
 
   CGM.setGVProperties(VTable, RD);
@@ -2342,6 +2342,9 @@ void ItaniumCXXABI::registerGlobalDtor(CodeGenFunction &CGF,
                                        const VarDecl &D,
                                        llvm::Constant *dtor,
                                        llvm::Constant *addr) {
+  if (D.isNoDestroy(CGM.getContext()))
+    return;
+
   // Use __cxa_atexit if available.
   if (CGM.getCodeGenOpts().CXAAtExit)
     return emitGlobalDtorWithCXAAtExit(CGF, dtor, addr, D.getTLSKind());
@@ -2698,12 +2701,16 @@ public:
     BCTI_Public = 0x2
   };
 
+  /// BuildTypeInfo - Build the RTTI type info struct for the given type, or
+  /// link to an existing RTTI descriptor if one already exists.
+  llvm::Constant *BuildTypeInfo(QualType Ty);
+
   /// BuildTypeInfo - Build the RTTI type info struct for the given type.
-  ///
-  /// \param Force - true to force the creation of this RTTI value
-  /// \param DLLExport - true to mark the RTTI value as DLLExport
-  llvm::Constant *BuildTypeInfo(QualType Ty, bool Force = false,
-                                bool DLLExport = false);
+  llvm::Constant *BuildTypeInfo(
+      QualType Ty,
+      llvm::GlobalVariable::LinkageTypes Linkage,
+      llvm::GlobalValue::VisibilityTypes Visibility,
+      llvm::GlobalValue::DLLStorageClassTypes DLLStorageClass);
 };
 }
 
@@ -2718,9 +2725,10 @@ llvm::GlobalVariable *ItaniumRTTIBuilder::GetAddrOfTypeName(
   // get the mangled name of the type.
   llvm::Constant *Init = llvm::ConstantDataArray::getString(VMContext,
                                                             Name.substr(4));
+  auto Align = CGM.getContext().getTypeAlignInChars(CGM.getContext().CharTy);
 
-  llvm::GlobalVariable *GV =
-    CGM.CreateOrReplaceCXXRuntimeVariable(Name, Init->getType(), Linkage);
+  llvm::GlobalVariable *GV = CGM.CreateOrReplaceCXXRuntimeVariable(
+      Name, Init->getType(), Linkage, Align.getQuantity());
 
   GV->setInitializer(Init);
 
@@ -3172,8 +3180,7 @@ static llvm::GlobalVariable::LinkageTypes getTypeInfoLinkage(CodeGenModule &CGM,
   llvm_unreachable("Invalid linkage!");
 }
 
-llvm::Constant *ItaniumRTTIBuilder::BuildTypeInfo(QualType Ty, bool Force,
-                                                  bool DLLExport) {
+llvm::Constant *ItaniumRTTIBuilder::BuildTypeInfo(QualType Ty) {
   // We want to operate on the canonical type.
   Ty = Ty.getCanonicalType();
 
@@ -3191,17 +3198,41 @@ llvm::Constant *ItaniumRTTIBuilder::BuildTypeInfo(QualType Ty, bool Force,
   }
 
   // Check if there is already an external RTTI descriptor for this type.
-  bool IsStdLib = IsStandardLibraryRTTIDescriptor(Ty);
-  if (!Force && (IsStdLib || ShouldUseExternalRTTIDescriptor(CGM, Ty)))
+  if (IsStandardLibraryRTTIDescriptor(Ty) ||
+      ShouldUseExternalRTTIDescriptor(CGM, Ty))
     return GetAddrOfExternalRTTIDescriptor(Ty);
 
   // Emit the standard library with external linkage.
-  llvm::GlobalVariable::LinkageTypes Linkage;
-  if (IsStdLib)
-    Linkage = llvm::GlobalValue::ExternalLinkage;
-  else
-    Linkage = getTypeInfoLinkage(CGM, Ty);
+  llvm::GlobalVariable::LinkageTypes Linkage = getTypeInfoLinkage(CGM, Ty);
 
+  // Give the type_info object and name the formal visibility of the
+  // type itself.
+  llvm::GlobalValue::VisibilityTypes llvmVisibility;
+  if (llvm::GlobalValue::isLocalLinkage(Linkage))
+    // If the linkage is local, only default visibility makes sense.
+    llvmVisibility = llvm::GlobalValue::DefaultVisibility;
+  else if (CXXABI.classifyRTTIUniqueness(Ty, Linkage) ==
+           ItaniumCXXABI::RUK_NonUniqueHidden)
+    llvmVisibility = llvm::GlobalValue::HiddenVisibility;
+  else
+    llvmVisibility = CodeGenModule::GetLLVMVisibility(Ty->getVisibility());
+
+  llvm::GlobalValue::DLLStorageClassTypes DLLStorageClass =
+      llvm::GlobalValue::DefaultStorageClass;
+  if (CGM.getTriple().isWindowsItaniumEnvironment()) {
+    auto RD = Ty->getAsCXXRecordDecl();
+    if (RD && RD->hasAttr<DLLExportAttr>())
+      DLLStorageClass = llvm::GlobalValue::DLLExportStorageClass;
+  }
+
+  return BuildTypeInfo(Ty, Linkage, llvmVisibility, DLLStorageClass);
+}
+
+llvm::Constant *ItaniumRTTIBuilder::BuildTypeInfo(
+      QualType Ty,
+      llvm::GlobalVariable::LinkageTypes Linkage,
+      llvm::GlobalValue::VisibilityTypes Visibility,
+      llvm::GlobalValue::DLLStorageClassTypes DLLStorageClass) {
   // Add the vtable pointer.
   BuildVTablePointer(cast<Type>(Ty));
 
@@ -3315,7 +3346,11 @@ llvm::Constant *ItaniumRTTIBuilder::BuildTypeInfo(QualType Ty, bool Force,
 
   llvm::Constant *Init = llvm::ConstantStruct::getAnon(Fields);
 
+  SmallString<256> Name;
+  llvm::raw_svector_ostream Out(Name);
+  CGM.getCXXABI().getMangleContext().mangleCXXRTTI(Ty, Out);
   llvm::Module &M = CGM.getModule();
+  llvm::GlobalVariable *OldGV = M.getNamedGlobal(Name);
   llvm::GlobalVariable *GV =
       new llvm::GlobalVariable(M, Init->getType(),
                                /*Constant=*/true, Linkage, Init, Name);
@@ -3332,6 +3367,10 @@ llvm::Constant *ItaniumRTTIBuilder::BuildTypeInfo(QualType Ty, bool Force,
   if (CGM.supportsCOMDAT() && GV->isWeakForLinker())
     GV->setComdat(M.getOrInsertComdat(GV->getName()));
 
+  CharUnits Align =
+      CGM.getContext().toCharUnitsFromBits(CGM.getTarget().getPointerAlign(0));
+  GV->setAlignment(Align.getQuantity());
+
   // The Itanium ABI specifies that type_info objects must be globally
   // unique, with one exception: if the type is an incomplete class
   // type or a (possibly indirect) pointer to one.  That exception
@@ -3347,40 +3386,14 @@ llvm::Constant *ItaniumRTTIBuilder::BuildTypeInfo(QualType Ty, bool Force,
   // All of this is to say that it's important that both the type_info
   // object and the type_info name be uniqued when weakly emitted.
 
-  // Give the type_info object and name the formal visibility of the
-  // type itself.
-  llvm::GlobalValue::VisibilityTypes llvmVisibility;
-  if (llvm::GlobalValue::isLocalLinkage(Linkage))
-    // If the linkage is local, only default visibility makes sense.
-    llvmVisibility = llvm::GlobalValue::DefaultVisibility;
-  else if (RTTIUniqueness == ItaniumCXXABI::RUK_NonUniqueHidden)
-    llvmVisibility = llvm::GlobalValue::HiddenVisibility;
-  else
-    llvmVisibility = CodeGenModule::GetLLVMVisibility(Ty->getVisibility());
-
-  TypeName->setVisibility(llvmVisibility);
+  TypeName->setVisibility(Visibility);
   CGM.setDSOLocal(TypeName);
 
-  GV->setVisibility(llvmVisibility);
+  GV->setVisibility(Visibility);
   CGM.setDSOLocal(GV);
 
-  if (CGM.getTriple().isWindowsItaniumEnvironment()) {
-    auto RD = Ty->getAsCXXRecordDecl();
-    if (DLLExport || (RD && RD->hasAttr<DLLExportAttr>())) {
-      TypeName->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
-      GV->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
-    } else if (RD && RD->hasAttr<DLLImportAttr>() &&
-               ShouldUseExternalRTTIDescriptor(CGM, Ty)) {
-      TypeName->setDLLStorageClass(llvm::GlobalValue::DLLImportStorageClass);
-      GV->setDLLStorageClass(llvm::GlobalValue::DLLImportStorageClass);
-
-      // Because the typename and the typeinfo are DLL import, convert them to
-      // declarations rather than definitions.  The initializers still need to
-      // be constructed to calculate the type for the declarations.
-      TypeName->setInitializer(nullptr);
-      GV->setInitializer(nullptr);
-    }
-  }
+  TypeName->setDLLStorageClass(DLLStorageClass);
+  GV->setDLLStorageClass(DLLStorageClass);
 
   return llvm::ConstantExpr::getBitCast(GV, CGM.Int8PtrTy);
 }
@@ -3655,18 +3668,7 @@ llvm::Constant *ItaniumCXXABI::getAddrOfRTTIDescriptor(QualType Ty) {
   return ItaniumRTTIBuilder(*this).BuildTypeInfo(Ty);
 }
 
-void ItaniumCXXABI::EmitFundamentalRTTIDescriptor(QualType Type,
-                                                  bool DLLExport) {
-  QualType PointerType = getContext().getPointerType(Type);
-  QualType PointerTypeConst = getContext().getPointerType(Type.withConst());
-  ItaniumRTTIBuilder(*this).BuildTypeInfo(Type, /*Force=*/true, DLLExport);
-  ItaniumRTTIBuilder(*this).BuildTypeInfo(PointerType, /*Force=*/true,
-                                          DLLExport);
-  ItaniumRTTIBuilder(*this).BuildTypeInfo(PointerTypeConst, /*Force=*/true,
-                                          DLLExport);
-}
-
-void ItaniumCXXABI::EmitFundamentalRTTIDescriptors(bool DLLExport) {
+void ItaniumCXXABI::EmitFundamentalRTTIDescriptors(const CXXRecordDecl *RD) {
   // Types added here must also be added to TypeInfoIsInStandardLibrary.
   QualType FundamentalTypes[] = {
       getContext().VoidTy,             getContext().NullPtrTy,
@@ -3683,8 +3685,21 @@ void ItaniumCXXABI::EmitFundamentalRTTIDescriptors(bool DLLExport) {
       getContext().Char8Ty,            getContext().Char16Ty,
       getContext().Char32Ty
   };
-  for (const QualType &FundamentalType : FundamentalTypes)
-    EmitFundamentalRTTIDescriptor(FundamentalType, DLLExport);
+  llvm::GlobalValue::DLLStorageClassTypes DLLStorageClass =
+      RD->hasAttr<DLLExportAttr>()
+      ? llvm::GlobalValue::DLLExportStorageClass
+      : llvm::GlobalValue::DefaultStorageClass;
+  llvm::GlobalValue::VisibilityTypes Visibility =
+      CodeGenModule::GetLLVMVisibility(RD->getVisibility());
+  for (const QualType &FundamentalType : FundamentalTypes) {
+    QualType PointerType = getContext().getPointerType(FundamentalType);
+    QualType PointerTypeConst = getContext().getPointerType(
+        FundamentalType.withConst());
+    for (QualType Type : {FundamentalType, PointerType, PointerTypeConst})
+      ItaniumRTTIBuilder(*this).BuildTypeInfo(
+          Type, llvm::GlobalValue::ExternalLinkage,
+          Visibility, DLLStorageClass);
+  }
 }
 
 /// What sort of uniqueness rules should we use for the RTTI for the
@@ -3737,22 +3752,12 @@ static StructorCodegen getCodegenToUse(CodeGenModule &CGM,
   }
   llvm::GlobalValue::LinkageTypes Linkage = CGM.getFunctionLinkage(AliasDecl);
 
-  // All discardable structors can be RAUWed, but we don't want to do that in
-  // unoptimized code, as that makes complete structor symbol disappear
-  // completely, which degrades debugging experience.
-  // Symbols with private linkage can be safely aliased, so we special case them
-  // here.
-  if (llvm::GlobalValue::isLocalLinkage(Linkage))
-    return CGM.getCodeGenOpts().OptimizationLevel > 0 ? StructorCodegen::RAUW
-                                                      : StructorCodegen::Alias;
+  if (llvm::GlobalValue::isDiscardableIfUnused(Linkage))
+    return StructorCodegen::RAUW;
 
-  // Linkonce structors cannot be aliased nor placed in a comdat, so these need
-  // to be emitted separately.
   // FIXME: Should we allow available_externally aliases?
-  if (llvm::GlobalValue::isDiscardableIfUnused(Linkage) ||
-      !llvm::GlobalAlias::isValidLinkage(Linkage))
-    return CGM.getCodeGenOpts().OptimizationLevel > 0 ? StructorCodegen::RAUW
-                                                      : StructorCodegen::Emit;
+  if (!llvm::GlobalAlias::isValidLinkage(Linkage))
+    return StructorCodegen::RAUW;
 
   if (llvm::GlobalValue::isWeakForLinker(Linkage)) {
     // Only ELF and wasm support COMDATs with arbitrary names (C5/D5).
@@ -4149,7 +4154,7 @@ void ItaniumCXXABI::emitBeginCatch(CodeGenFunction &CGF,
 
   // Emit the local.
   CodeGenFunction::AutoVarEmission var = CGF.EmitAutoVarAlloca(*CatchParam);
-  InitCatchParam(CGF, *CatchParam, var.getObjectAddress(CGF), S->getLocStart());
+  InitCatchParam(CGF, *CatchParam, var.getObjectAddress(CGF), S->getBeginLoc());
   CGF.EmitAutoVarCleanups(var);
 }
 

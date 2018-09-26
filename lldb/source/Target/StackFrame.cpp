@@ -17,7 +17,6 @@
 #include "lldb/Core/FormatEntity.h"
 #include "lldb/Core/Mangled.h"
 #include "lldb/Core/Module.h"
-#include "lldb/Core/RegisterValue.h"
 #include "lldb/Core/Value.h"
 #include "lldb/Core/ValueObjectConstResult.h"
 #include "lldb/Core/ValueObjectMemory.h"
@@ -34,6 +33,7 @@
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
+#include "lldb/Utility/RegisterValue.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -1707,6 +1707,41 @@ lldb::ValueObjectSP StackFrame::GuessValueForRegisterAndOffset(ConstString reg,
 
   return DoGuessValueAt(*this, reg, offset, *disassembler_sp, *variables,
                         GetFrameCodeAddress());
+}
+
+lldb::ValueObjectSP StackFrame::FindVariable(ConstString name) {
+  ValueObjectSP value_sp;
+
+  if (!name)
+    return value_sp;
+
+  TargetSP target_sp = CalculateTarget();
+  ProcessSP process_sp = CalculateProcess();
+
+  if (!target_sp && !process_sp)
+    return value_sp;
+
+  VariableList variable_list;
+  VariableSP var_sp;
+  SymbolContext sc(GetSymbolContext(eSymbolContextBlock));
+
+  if (sc.block) {
+    const bool can_create = true;
+    const bool get_parent_variables = true;
+    const bool stop_if_block_is_inlined_function = true;
+
+    if (sc.block->AppendVariables(
+            can_create, get_parent_variables, stop_if_block_is_inlined_function,
+            [this](Variable *v) { return v->IsInScope(this); },
+            &variable_list)) {
+      var_sp = variable_list.FindVariable(name);
+    }
+
+    if (var_sp)
+      value_sp = GetValueObjectForFrameVariable(var_sp, eNoDynamicValues);
+  }
+
+  return value_sp;
 }
 
 TargetSP StackFrame::CalculateTarget() {

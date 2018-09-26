@@ -100,6 +100,8 @@ public:
 ///
 /// Here 'omp_out += omp_in' is a combiner and 'omp_priv = 0' is an initializer.
 class OMPDeclareReductionDecl final : public ValueDecl, public DeclContext {
+  // This class stores some data in DeclContext::OMPDeclareReductionDeclBits
+  // to save some space. Use the provided accessors to access it.
 public:
   enum InitKind {
     CallInit,   // Initialized by function call.
@@ -110,11 +112,17 @@ public:
 private:
   friend class ASTDeclReader;
   /// Combiner for declare reduction construct.
-  Expr *Combiner;
+  Expr *Combiner = nullptr;
   /// Initializer for declare reduction construct.
-  Expr *Initializer;
-  /// Kind of initializer - function call or omp_priv<init_expr> initializtion.
-  InitKind InitializerKind = CallInit;
+  Expr *Initializer = nullptr;
+  /// In parameter of the combiner.
+  Expr *In = nullptr;
+  /// Out parameter of the combiner.
+  Expr *Out = nullptr;
+  /// Priv parameter of the initializer.
+  Expr *Priv = nullptr;
+  /// Orig parameter of the initializer.
+  Expr *Orig = nullptr;
 
   /// Reference to the previous declare reduction construct in the same
   /// scope with the same name. Required for proper templates instantiation if
@@ -125,10 +133,7 @@ private:
 
   OMPDeclareReductionDecl(Kind DK, DeclContext *DC, SourceLocation L,
                           DeclarationName Name, QualType Ty,
-                          OMPDeclareReductionDecl *PrevDeclInScope)
-      : ValueDecl(DK, DC, L, Name, Ty), DeclContext(DK), Combiner(nullptr),
-        Initializer(nullptr), InitializerKind(CallInit),
-        PrevDeclInScope(PrevDeclInScope) {}
+                          OMPDeclareReductionDecl *PrevDeclInScope);
 
   void setPrevDeclInScope(OMPDeclareReductionDecl *Prev) {
     PrevDeclInScope = Prev;
@@ -146,19 +151,43 @@ public:
   /// Get combiner expression of the declare reduction construct.
   Expr *getCombiner() { return Combiner; }
   const Expr *getCombiner() const { return Combiner; }
+  /// Get In variable of the combiner.
+  Expr *getCombinerIn() { return In; }
+  const Expr *getCombinerIn() const { return In; }
+  /// Get Out variable of the combiner.
+  Expr *getCombinerOut() { return Out; }
+  const Expr *getCombinerOut() const { return Out; }
   /// Set combiner expression for the declare reduction construct.
   void setCombiner(Expr *E) { Combiner = E; }
+  /// Set combiner In and Out vars.
+  void setCombinerData(Expr *InE, Expr *OutE) {
+    In = InE;
+    Out = OutE;
+  }
 
   /// Get initializer expression (if specified) of the declare reduction
   /// construct.
   Expr *getInitializer() { return Initializer; }
   const Expr *getInitializer() const { return Initializer; }
   /// Get initializer kind.
-  InitKind getInitializerKind() const { return InitializerKind; }
+  InitKind getInitializerKind() const {
+    return static_cast<InitKind>(OMPDeclareReductionDeclBits.InitializerKind);
+  }
+  /// Get Orig variable of the initializer.
+  Expr *getInitOrig() { return Orig; }
+  const Expr *getInitOrig() const { return Orig; }
+  /// Get Priv variable of the initializer.
+  Expr *getInitPriv() { return Priv; }
+  const Expr *getInitPriv() const { return Priv; }
   /// Set initializer expression for the declare reduction construct.
   void setInitializer(Expr *E, InitKind IK) {
     Initializer = E;
-    InitializerKind = IK;
+    OMPDeclareReductionDeclBits.InitializerKind = IK;
+  }
+  /// Set initializer Orig and Priv vars.
+  void setInitializerData(Expr *OrigE, Expr *PrivE) {
+    Orig = OrigE;
+    Priv = PrivE;
   }
 
   /// Get reference to previous declare reduction construct in the same

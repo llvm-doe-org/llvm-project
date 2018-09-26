@@ -19,19 +19,23 @@ namespace clangd {
 using namespace llvm;
 
 IntrusiveRefCntPtr<vfs::FileSystem>
-buildTestFS(StringMap<std::string> const &Files) {
+buildTestFS(llvm::StringMap<std::string> const &Files,
+            llvm::StringMap<time_t> const &Timestamps) {
   IntrusiveRefCntPtr<vfs::InMemoryFileSystem> MemFS(
       new vfs::InMemoryFileSystem);
   for (auto &FileAndContents : Files) {
-    MemFS->addFile(FileAndContents.first(), time_t(),
-                   MemoryBuffer::getMemBufferCopy(FileAndContents.second,
-                                                  FileAndContents.first()));
+    StringRef File = FileAndContents.first();
+    MemFS->addFile(
+        File, Timestamps.lookup(File),
+        MemoryBuffer::getMemBufferCopy(FileAndContents.second, File));
   }
   return MemFS;
 }
 
-MockCompilationDatabase::MockCompilationDatabase(bool UseRelPaths)
-    : ExtraClangFlags({"-ffreestanding"}), UseRelPaths(UseRelPaths) {
+MockCompilationDatabase::MockCompilationDatabase(StringRef Directory,
+                                                 StringRef RelPathPrefix)
+    : ExtraClangFlags({"-ffreestanding"}), Directory(Directory),
+      RelPathPrefix(RelPathPrefix) {
   // -ffreestanding avoids implicit stdc-predef.h.
 }
 
@@ -40,12 +44,24 @@ MockCompilationDatabase::getCompileCommand(PathRef File) const {
   if (ExtraClangFlags.empty())
     return None;
 
-  auto CommandLine = ExtraClangFlags;
   auto FileName = sys::path::filename(File);
+
+  // Build the compile command.
+  auto CommandLine = ExtraClangFlags;
   CommandLine.insert(CommandLine.begin(), "clang");
-  CommandLine.insert(CommandLine.end(), UseRelPaths ? FileName : File);
-  return {tooling::CompileCommand(sys::path::parent_path(File), FileName,
-                                  std::move(CommandLine), "")};
+  if (RelPathPrefix.empty()) {
+    // Use the absolute path in the compile command.
+    CommandLine.push_back(File);
+  } else {
+    // Build a relative path using RelPathPrefix.
+    SmallString<32> RelativeFilePath(RelPathPrefix);
+    llvm::sys::path::append(RelativeFilePath, FileName);
+    CommandLine.push_back(RelativeFilePath.str());
+  }
+
+  return {tooling::CompileCommand(
+      Directory != StringRef() ? Directory : sys::path::parent_path(File),
+      FileName, std::move(CommandLine), "")};
 }
 
 const char *testRoot() {

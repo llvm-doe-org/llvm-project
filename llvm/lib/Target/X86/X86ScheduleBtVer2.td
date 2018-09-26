@@ -164,12 +164,24 @@ def : WriteRes<WriteRMW, [JSAGU]>;
 
 defm : JWriteResIntPair<WriteALU,    [JALU01], 1>;
 defm : JWriteResIntPair<WriteADC,    [JALU01], 1, [2]>;
-defm : JWriteResIntPair<WriteIMul,   [JALU1, JMul], 3, [1, 1], 2>; // i8/i16/i32 multiplication
-defm : JWriteResIntPair<WriteIMul64, [JALU1, JMul], 6, [1, 4], 2>; // i64 multiplication
-defm : X86WriteRes<WriteIMulH,       [JALU1], 6, [4], 1>;
 
-defm : JWriteResIntPair<WriteBSWAP32,[JALU01], 1>;
-defm : JWriteResIntPair<WriteBSWAP64,[JALU01], 1>;
+defm : X86WriteRes<WriteBSWAP32, [JALU01], 1, [1], 1>;
+defm : X86WriteRes<WriteBSWAP64, [JALU01], 1, [1], 1>;
+defm : X86WriteRes<WriteCMPXCHG,[JALU01], 1, [1], 1>;
+defm : X86WriteRes<WriteCMPXCHGRMW,[JALU01, JSAGU, JLAGU], 4, [1, 1, 1], 2>;
+defm : X86WriteRes<WriteXCHG,        [JALU01], 1, [1], 1>;
+
+defm : JWriteResIntPair<WriteIMul8,     [JALU1, JMul], 3, [1, 1], 2>;
+defm : JWriteResIntPair<WriteIMul16,    [JALU1, JMul], 3, [1, 1], 2>;
+defm : JWriteResIntPair<WriteIMul16Imm, [JALU1, JMul], 3, [1, 1], 2>;
+defm : JWriteResIntPair<WriteIMul16Reg, [JALU1, JMul], 3, [1, 1], 2>;
+defm : JWriteResIntPair<WriteIMul32,    [JALU1, JMul], 3, [1, 1], 2>;
+defm : JWriteResIntPair<WriteIMul32Imm, [JALU1, JMul], 3, [1, 1], 2>;
+defm : JWriteResIntPair<WriteIMul32Reg, [JALU1, JMul], 3, [1, 1], 2>;
+defm : JWriteResIntPair<WriteIMul64,    [JALU1, JMul], 6, [1, 4], 2>;
+defm : JWriteResIntPair<WriteIMul64Imm, [JALU1, JMul], 6, [1, 4], 2>;
+defm : JWriteResIntPair<WriteIMul64Reg, [JALU1, JMul], 6, [1, 4], 2>;
+defm : X86WriteRes<WriteIMulH,          [JALU1], 6, [4], 1>;
 
 defm : JWriteResIntPair<WriteDiv8,   [JALU1, JDiv], 12, [1, 12], 1>;
 defm : JWriteResIntPair<WriteDiv16,  [JALU1, JDiv], 17, [1, 17], 2>;
@@ -188,6 +200,7 @@ defm : X86WriteRes<WriteFCMOV, [JFPU0, JFPA], 3, [1,1], 1>; // x87 conditional m
 def  : WriteRes<WriteSETCC, [JALU01]>; // Setcc.
 def  : WriteRes<WriteSETCCStore, [JALU01,JSAGU]>;
 def  : WriteRes<WriteLAHFSAHF, [JALU01]>;
+def  : WriteRes<WriteBitTest,[JALU01]>;
 
 // This is for simple LEAs with one or two input operands.
 def : WriteRes<WriteLEA, [JALU01]>;
@@ -199,43 +212,25 @@ defm : JWriteResIntPair<WritePOPCNT,         [JALU01], 1>;
 defm : JWriteResIntPair<WriteLZCNT,          [JALU01], 1>;
 defm : JWriteResIntPair<WriteTZCNT,          [JALU01], 2, [2]>;
 
-// BMI1 BEXTR, BMI2 BZHI
+// BMI1 BEXTR/BLS, BMI2 BZHI
 defm : JWriteResIntPair<WriteBEXTR, [JALU01], 1>;
+defm : JWriteResIntPair<WriteBLS,   [JALU01], 2, [2]>;
 defm : X86WriteResPairUnsupported<WriteBZHI>;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Integer shifts and rotates.
 ////////////////////////////////////////////////////////////////////////////////
 
-defm : JWriteResIntPair<WriteShift, [JALU01], 1>;
+defm : JWriteResIntPair<WriteShift,    [JALU01], 1>;
+defm : JWriteResIntPair<WriteShiftCL,  [JALU01], 1>;
+defm : JWriteResIntPair<WriteRotate,   [JALU01], 1>;
+defm : JWriteResIntPair<WriteRotateCL, [JALU01], 1>;
 
-defm : JWriteResIntPair<WriteShiftDouble, [JALU01], 1>;
-
-def JWriteSHLDrri : SchedWriteRes<[JALU01]> {
-  let Latency = 3;
-  let ResourceCycles = [6];
-  let NumMicroOps = 6;
-}
-def: InstRW<[JWriteSHLDrri], (instrs SHLD16rri8, SHLD32rri8, SHLD64rri8,
-                                     SHRD16rri8, SHRD32rri8, SHRD64rri8)>;
-
-def JWriteSHLDrrCL : SchedWriteRes<[JALU01]> {
-  let Latency = 4;
-  let ResourceCycles = [8];
-  let NumMicroOps = 7;
-}
-def: InstRW<[JWriteSHLDrrCL], (instrs SHLD16rrCL, SHLD32rrCL, SHLD64rrCL,
-                                      SHRD16rrCL, SHRD32rrCL, SHRD64rrCL)>;
-
-def JWriteSHLDm : SchedWriteRes<[JLAGU, JALU01]> {
-  let Latency = 9;
-  let ResourceCycles = [1, 22];
-  let NumMicroOps = 8;
-}
-def: InstRW<[JWriteSHLDm],(instrs SHLD16mri8, SHLD32mri8, SHLD64mri8,
-                                  SHLD16mrCL, SHLD32mrCL, SHLD64mrCL,
-                                  SHRD16mri8, SHRD32mri8, SHRD64mri8,
-                                  SHRD16mrCL, SHRD32mrCL, SHRD64mrCL)>;
+// SHLD/SHRD.
+defm : X86WriteRes<WriteSHDrri, [JALU01], 3, [6], 6>;
+defm : X86WriteRes<WriteSHDrrcl,[JALU01], 4, [8], 7>;
+defm : X86WriteRes<WriteSHDmri, [JLAGU, JALU01], 9, [1, 22], 8>;
+defm : X86WriteRes<WriteSHDmrcl,[JLAGU, JALU01], 9, [1, 22], 8>;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Loads, stores, and moves, not folded with other operations.
@@ -388,7 +383,7 @@ defm : X86WriteResPairUnsupported<WriteFBlendZ>;
 defm : JWriteResFpuPair<WriteFVarBlend,   [JFPU01, JFPX],  2, [1, 4], 3>;
 defm : JWriteResYMMPair<WriteFVarBlendY,  [JFPU01, JFPX],  3, [2, 6], 6>;
 defm : X86WriteResPairUnsupported<WriteFVarBlendZ>;
-defm : JWriteResFpuPair<WriteFShuffle256, [JFPU01, JFPX],  1>;
+defm : JWriteResFpuPair<WriteFShuffle256, [JFPU01, JFPX],  1, [2, 2], 2>;
 defm : X86WriteResPairUnsupported<WriteFVarShuffle256>;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -580,13 +575,17 @@ def : InstRW<[JWriteINSERTQ], (instrs INSERTQ, INSERTQI)>;
 // AVX instructions.
 ////////////////////////////////////////////////////////////////////////////////
 
+def JWriteVecExtractF128: SchedWriteRes<[JFPU01, JFPX]>;
+def : InstRW<[JWriteVecExtractF128], (instrs VEXTRACTF128rr)>;
+
 def JWriteVBROADCASTYLd: SchedWriteRes<[JLAGU, JFPU01, JFPX]> {
   let Latency = 6;
   let ResourceCycles = [1, 2, 4];
   let NumMicroOps = 2;
 }
-def : InstRW<[JWriteVBROADCASTYLd, ReadAfterLd], (instrs VBROADCASTSDYrm,
-                                                         VBROADCASTSSYrm)>;
+def : InstRW<[JWriteVBROADCASTYLd], (instrs VBROADCASTSDYrm,
+                                            VBROADCASTSSYrm,
+                                            VBROADCASTF128)>;
 
 def JWriteJVZEROALL: SchedWriteRes<[]> {
   let Latency = 90;
@@ -608,6 +607,10 @@ def JWriteZeroLatency : SchedWriteRes<[]> {
   let Latency = 0;
 }
 
+def JWriteZeroIdiomYmm : SchedWriteRes<[JFPU01, JFPX]> {
+  let NumMicroOps = 2;
+}
+
 // Certain instructions that use the same register for both source
 // operands do not have a real dependency on the previous contents of the
 // register, and thus, do not have to wait before completing. They can be
@@ -619,35 +622,42 @@ def JWriteZeroLatency : SchedWriteRes<[]> {
 
 def JWriteZeroIdiom : SchedWriteVariant<[
     SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [JWriteZeroLatency]>,
-    SchedVar<MCSchedPredicate<TruePred>,           [WriteALU]>
+    SchedVar<NoSchedPred,                          [WriteALU]>
 ]>;
 def : InstRW<[JWriteZeroIdiom], (instrs SUB32rr, SUB64rr,
                                         XOR32rr, XOR64rr)>;
 
 def JWriteFZeroIdiom : SchedWriteVariant<[
     SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [JWriteZeroLatency]>,
-    SchedVar<MCSchedPredicate<TruePred>,           [WriteFLogic]>
+    SchedVar<NoSchedPred,                          [WriteFLogic]>
 ]>;
 def : InstRW<[JWriteFZeroIdiom], (instrs XORPSrr, VXORPSrr, XORPDrr, VXORPDrr,
                                          ANDNPSrr, VANDNPSrr,
                                          ANDNPDrr, VANDNPDrr)>;
 
+def JWriteFZeroIdiomY : SchedWriteVariant<[
+    SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [JWriteZeroIdiomYmm]>,
+    SchedVar<NoSchedPred,                          [WriteFLogicY]>
+]>;
+def : InstRW<[JWriteFZeroIdiomY], (instrs VXORPSYrr, VXORPDYrr,
+                                          VANDNPSYrr, VANDNPDYrr)>;
+
 def JWriteVZeroIdiomLogic : SchedWriteVariant<[
     SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [JWriteZeroLatency]>,
-    SchedVar<MCSchedPredicate<TruePred>,           [WriteVecLogic]>
+    SchedVar<NoSchedPred,                          [WriteVecLogic]>
 ]>;
 def : InstRW<[JWriteVZeroIdiomLogic], (instrs MMX_PXORirr, MMX_PANDNirr)>;
 
 def JWriteVZeroIdiomLogicX : SchedWriteVariant<[
     SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [JWriteZeroLatency]>,
-    SchedVar<MCSchedPredicate<TruePred>,           [WriteVecLogicX]>
+    SchedVar<NoSchedPred,                          [WriteVecLogicX]>
 ]>;
 def : InstRW<[JWriteVZeroIdiomLogicX], (instrs PXORrr, VPXORrr,
                                                PANDNrr, VPANDNrr)>;
 
 def JWriteVZeroIdiomALU : SchedWriteVariant<[
     SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [JWriteZeroLatency]>,
-    SchedVar<MCSchedPredicate<TruePred>,           [WriteVecALU]>
+    SchedVar<NoSchedPred,                          [WriteVecALU]>
 ]>;
 def : InstRW<[JWriteVZeroIdiomALU], (instrs MMX_PSUBBirr, MMX_PSUBDirr,
                                             MMX_PSUBQirr, MMX_PSUBWirr,
@@ -656,7 +666,7 @@ def : InstRW<[JWriteVZeroIdiomALU], (instrs MMX_PSUBBirr, MMX_PSUBDirr,
 
 def JWriteVZeroIdiomALUX : SchedWriteVariant<[
     SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [JWriteZeroLatency]>,
-    SchedVar<MCSchedPredicate<TruePred>,           [WriteVecALUX]>
+    SchedVar<NoSchedPred,                          [WriteVecALUX]>
 ]>;
 def : InstRW<[JWriteVZeroIdiomALUX], (instrs PSUBBrr, VPSUBBrr,
                                              PSUBDrr, VPSUBDrr,
@@ -687,8 +697,8 @@ def JSlowLEAPredicate : MCSchedPredicate<
 >;
 
 def JWriteLEA : SchedWriteVariant<[
-    SchedVar<JSlowLEAPredicate,          [JWrite3OpsLEA]>,
-    SchedVar<MCSchedPredicate<TruePred>, [WriteLEA]>
+    SchedVar<JSlowLEAPredicate, [JWrite3OpsLEA]>,
+    SchedVar<NoSchedPred,       [WriteLEA]>
 ]>;
 
 def : InstRW<[JWriteLEA], (instrs LEA32r, LEA64r, LEA64_32r)>;
@@ -699,5 +709,67 @@ def JSlowLEA16r : SchedWriteRes<[JALU01]> {
 }
 
 def : InstRW<[JSlowLEA16r], (instrs LEA16r)>;
+
+///////////////////////////////////////////////////////////////////////////////
+// Dependency breaking instructions.
+///////////////////////////////////////////////////////////////////////////////
+
+def : IsZeroIdiomFunction<[
+  // GPR Zero-idioms.
+  DepBreakingClass<[ SUB32rr, SUB64rr, XOR32rr, XOR64rr ], ZeroIdiomPredicate>,
+
+  // MMX Zero-idioms.
+  DepBreakingClass<[
+    MMX_PXORirr, MMX_PANDNirr, MMX_PSUBBirr,
+    MMX_PSUBDirr, MMX_PSUBQirr, MMX_PSUBWirr,
+    MMX_PCMPGTBirr, MMX_PCMPGTDirr, MMX_PCMPGTWirr
+  ], ZeroIdiomPredicate>,
+
+  // SSE Zero-idioms.
+  DepBreakingClass<[
+    // fp variants.
+    XORPSrr, XORPDrr, ANDNPSrr, ANDNPDrr,
+
+    // int variants.
+    PXORrr, PANDNrr,
+    PSUBBrr, PSUBWrr, PSUBDrr, PSUBQrr,
+    PCMPGTBrr, PCMPGTDrr, PCMPGTQrr, PCMPGTWrr
+  ], ZeroIdiomPredicate>,
+
+  // AVX Zero-idioms.
+  DepBreakingClass<[
+    // xmm fp variants.
+    VXORPSrr, VXORPDrr, VANDNPSrr, VANDNPDrr,
+
+    // xmm int variants.
+    VPXORrr, VPANDNrr,
+    VPSUBBrr, VPSUBWrr, VPSUBDrr, VPSUBQrr,
+    VPCMPGTBrr, VPCMPGTWrr, VPCMPGTDrr, VPCMPGTQrr,
+
+    // ymm variants.
+    VXORPSYrr, VXORPDYrr, VANDNPSYrr, VANDNPDYrr
+  ], ZeroIdiomPredicate>
+]>;
+
+def : IsDepBreakingFunction<[
+  // GPR
+  DepBreakingClass<[ SBB32rr, SBB64rr ], ZeroIdiomPredicate>,
+  DepBreakingClass<[ CMP32rr, CMP64rr ], CheckSameRegOperand<0, 1> >,
+
+  // MMX
+  DepBreakingClass<[
+    MMX_PCMPEQBirr, MMX_PCMPEQDirr, MMX_PCMPEQWirr
+  ], ZeroIdiomPredicate>,
+
+  // SSE
+  DepBreakingClass<[ 
+    PCMPEQBrr, PCMPEQWrr, PCMPEQDrr, PCMPEQQrr
+  ], ZeroIdiomPredicate>,
+
+  // AVX
+  DepBreakingClass<[
+    VPCMPEQBrr, VPCMPEQWrr, VPCMPEQDrr, VPCMPEQQrr
+  ], ZeroIdiomPredicate>
+]>;
 
 } // SchedModel

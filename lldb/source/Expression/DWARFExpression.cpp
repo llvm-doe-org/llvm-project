@@ -16,12 +16,12 @@
 #include <vector>
 
 #include "lldb/Core/Module.h"
-#include "lldb/Core/RegisterValue.h"
-#include "lldb/Core/Scalar.h"
 #include "lldb/Core/Value.h"
 #include "lldb/Core/dwarf.h"
 #include "lldb/Utility/DataEncoder.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/RegisterValue.h"
+#include "lldb/Utility/Scalar.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/VMRange.h"
 
@@ -2382,7 +2382,7 @@ bool DWARFExpression::Evaluate(
     case DW_OP_lit29:
     case DW_OP_lit30:
     case DW_OP_lit31:
-      stack.push_back(Scalar(op - DW_OP_lit0));
+      stack.push_back(Scalar((uint64_t)(op - DW_OP_lit0)));
       break;
 
     //----------------------------------------------------------------------

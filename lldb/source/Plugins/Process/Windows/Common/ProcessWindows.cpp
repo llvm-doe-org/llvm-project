@@ -18,7 +18,6 @@
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/Section.h"
-#include "lldb/Core/State.h"
 #include "lldb/Host/HostNativeProcessBase.h"
 #include "lldb/Host/HostProcess.h"
 #include "lldb/Host/windows/HostThreadWindows.h"
@@ -28,6 +27,7 @@
 #include "lldb/Target/MemoryRegionInfo.h"
 #include "lldb/Target/StopInfo.h"
 #include "lldb/Target/Target.h"
+#include "lldb/Utility/State.h"
 
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/Format.h"
@@ -837,7 +837,7 @@ void ProcessWindows::OnDebuggerConnected(lldb::addr_t image_base) {
       return;
     }
 
-    GetTarget().SetExecutableModule(module, false);
+    GetTarget().SetExecutableModule(module, eLoadDependentsNo);
   }
 
   bool load_addr_changed;

@@ -15,7 +15,6 @@
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/Section.h"
-#include "lldb/Core/State.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Host/Symbols.h"
 #include "lldb/Interpreter/OptionValueProperties.h"
@@ -29,6 +28,7 @@
 #include "lldb/Utility/DataBuffer.h"
 #include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/State.h"
 
 #include "DynamicLoaderDarwinKernel.h"
 
@@ -652,11 +652,12 @@ bool DynamicLoaderDarwinKernel::KextImageInfo::ReadMemoryModule(
 
   llvm::MachO::mach_header mh;
   size_t size_to_read = 512;
-  if (ReadMachHeader (m_load_address, process, mh)) {
-    if (mh.magic == llvm::MachO::MH_CIGAM || llvm::MachO::MH_MAGIC)
-      size_to_read = sizeof (llvm::MachO::mach_header) + mh.sizeofcmds;
-    if (mh.magic == llvm::MachO::MH_CIGAM_64 || llvm::MachO::MH_MAGIC_64)
-      size_to_read = sizeof (llvm::MachO::mach_header_64) + mh.sizeofcmds;
+  if (ReadMachHeader(m_load_address, process, mh)) {
+    if (mh.magic == llvm::MachO::MH_CIGAM || mh.magic == llvm::MachO::MH_MAGIC)
+      size_to_read = sizeof(llvm::MachO::mach_header) + mh.sizeofcmds;
+    if (mh.magic == llvm::MachO::MH_CIGAM_64 ||
+        mh.magic == llvm::MachO::MH_MAGIC_64)
+      size_to_read = sizeof(llvm::MachO::mach_header_64) + mh.sizeofcmds;
   }
 
   ModuleSP memory_module_sp =
@@ -847,7 +848,7 @@ bool DynamicLoaderDarwinKernel::KextImageInfo::LoadImageUsingMemoryModule(
         target.GetImages().AppendIfNeeded(m_module_sp);
         if (IsKernel() &&
             target.GetExecutableModulePointer() != m_module_sp.get()) {
-          target.SetExecutableModule(m_module_sp, false);
+          target.SetExecutableModule(m_module_sp, eLoadDependentsNo);
         }
       }
     }

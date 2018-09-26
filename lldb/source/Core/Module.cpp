@@ -162,9 +162,13 @@ Module::Module(const ModuleSpec &module_spec)
   // fill any ivars in so we don't accidentally grab the wrong file later since
   // they don't match...
   ModuleSpec matching_module_spec;
-  if (modules_specs.FindMatchingModuleSpec(module_spec, matching_module_spec) ==
-      0)
+  if (!modules_specs.FindMatchingModuleSpec(module_spec,
+                                            matching_module_spec)) {
+    if (log) {
+      log->Printf("Found local object file but the specs didn't match");
+    }
     return;
+  }
 
   if (module_spec.GetFileSpec())
     m_mod_time = FileSystem::GetModificationTime(module_spec.GetFileSpec());
@@ -367,15 +371,13 @@ void Module::ParseAllDebugSymbols() {
 
       symbols->ParseCompileUnitFunctions(sc);
 
-      for (size_t func_idx = 0;
-           (sc.function = sc.comp_unit->GetFunctionAtIndex(func_idx).get()) !=
-           nullptr;
-           ++func_idx) {
+      sc.comp_unit->ForeachFunction([&sc, &symbols](const FunctionSP &f) {
+        sc.function = f.get();
         symbols->ParseFunctionBlocks(sc);
-
         // Parse the variables for this function and all its blocks
         symbols->ParseVariablesForContext(sc);
-      }
+        return false;
+      });
 
       // Parse all types for this compile unit
       sc.function = nullptr;

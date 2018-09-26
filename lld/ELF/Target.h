@@ -13,6 +13,7 @@
 #include "InputSection.h"
 #include "lld/Common/ErrorHandler.h"
 #include "llvm/Object/ELF.h"
+#include "llvm/Support/MathExtras.h"
 
 namespace lld {
 std::string toString(elf::RelType Type);
@@ -60,6 +61,11 @@ public:
                           const InputFile *File, uint64_t BranchAddr,
                           const Symbol &S) const;
 
+  // On systems with range extensions we place collections of Thunks at
+  // regular spacings that enable the majority of branches reach the Thunks.
+  // a value of 0 means range extension thunks are not supported.
+  virtual uint32_t getThunkSectionSpacing() const { return 0; }
+
   // The function with a prologue starting at Loc was compiled with
   // -fsplit-stack and it calls a function compiled without. Adjust the prologue
   // to do the right thing. See https://gcc.gnu.org/wiki/SplitStacks.
@@ -86,10 +92,6 @@ public:
   uint64_t GotBaseSymOff = 0;
   // True if _GLOBAL_OFFSET_TABLE_ is relative to .got.plt, false if .got.
   bool GotBaseSymInGotPlt = true;
-
-  // On systems with range extensions we place collections of Thunks at
-  // regular spacings that enable the majority of branches reach the Thunks.
-  uint32_t ThunkSectionSpacing = 0;
 
   RelType CopyRel;
   RelType GotRel;
@@ -150,6 +152,7 @@ TargetInfo *getAVRTargetInfo();
 TargetInfo *getHexagonTargetInfo();
 TargetInfo *getPPC64TargetInfo();
 TargetInfo *getPPCTargetInfo();
+TargetInfo *getRISCVTargetInfo();
 TargetInfo *getSPARCV9TargetInfo();
 TargetInfo *getX32TargetInfo();
 TargetInfo *getX86TargetInfo();
@@ -167,6 +170,15 @@ ErrorPlace getErrorPlace(const uint8_t *Loc);
 static inline std::string getErrorLocation(const uint8_t *Loc) {
   return getErrorPlace(Loc).Loc;
 }
+
+// In the PowerPC64 Elf V2 abi a function can have 2 entry points.  The first is
+// a global entry point (GEP) which typically is used to intiailzie the TOC
+// pointer in general purpose register 2.  The second is a local entry
+// point (LEP) which bypasses the TOC pointer initialization code. The
+// offset between GEP and LEP is encoded in a function's st_other flags.
+// This function will return the offset (in bytes) from the global entry-point
+// to the local entry-point.
+unsigned getPPC64GlobalEntryToLocalEntryOffset(uint8_t StOther);
 
 uint64_t getPPC64TocBase();
 uint64_t getAArch64Page(uint64_t Expr);
@@ -189,14 +201,9 @@ static inline void reportRangeError(uint8_t *Loc, RelType Type, const Twine &V,
         Twine(Max).str() + "]" + Hint);
 }
 
-// Sign-extend Nth bit all the way to MSB.
-inline int64_t signExtend(uint64_t V, int N) {
-  return int64_t(V << (64 - N)) >> (64 - N);
-}
-
 // Make sure that V can be represented as an N bit signed integer.
 inline void checkInt(uint8_t *Loc, int64_t V, int N, RelType Type) {
-  if (V != signExtend(V, N))
+  if (V != llvm::SignExtend64(V, N))
     reportRangeError(Loc, Type, Twine(V), llvm::minIntN(N), llvm::maxIntN(N));
 }
 
@@ -210,7 +217,7 @@ inline void checkUInt(uint8_t *Loc, uint64_t V, int N, RelType Type) {
 inline void checkIntUInt(uint8_t *Loc, uint64_t V, int N, RelType Type) {
   // For the error message we should cast V to a signed integer so that error
   // messages show a small negative value rather than an extremely large one
-  if (V != (uint64_t)signExtend(V, N) && (V >> N) != 0)
+  if (V != (uint64_t)llvm::SignExtend64(V, N) && (V >> N) != 0)
     reportRangeError(Loc, Type, Twine((int64_t)V), llvm::minIntN(N),
                      llvm::maxIntN(N));
 }

@@ -60,7 +60,7 @@ enum BlockLiteralFlags {
   BLOCK_IS_GLOBAL =         (1 << 28),
   BLOCK_USE_STRET =         (1 << 29),
   BLOCK_HAS_SIGNATURE  =    (1 << 30),
-  BLOCK_HAS_EXTENDED_LAYOUT = (1 << 31)
+  BLOCK_HAS_EXTENDED_LAYOUT = (1u << 31)
 };
 class BlockFlags {
   uint32_t flags;
@@ -70,7 +70,7 @@ public:
   BlockFlags() : flags(0) {}
   BlockFlags(BlockLiteralFlags flag) : flags(flag) {}
   BlockFlags(BlockByrefFlags flag) : flags(flag) {}
-  
+
   uint32_t getBitMask() const { return flags; }
   bool empty() const { return flags == 0; }
 
@@ -131,6 +131,9 @@ public:
   }
   friend bool operator&(BlockFieldFlags l, BlockFieldFlags r) {
     return (l.flags & r.flags);
+  }
+  bool operator==(BlockFieldFlags Other) const {
+    return flags == Other.flags;
   }
 };
 inline BlockFieldFlags operator|(BlockFieldFlag_t l, BlockFieldFlag_t r) {
@@ -208,7 +211,7 @@ public:
       Capture v;
       v.Data = reinterpret_cast<uintptr_t>(value);
       return v;
-    }    
+    }
   };
 
   /// CanBeGlobal - True if the block can be global, i.e. it has
@@ -226,13 +229,18 @@ public:
   /// UsesStret : True if the block uses an stret return.  Mutable
   /// because it gets set later in the block-creation process.
   mutable bool UsesStret : 1;
-  
+
   /// HasCapturedVariableLayout : True if block has captured variables
   /// and their layout meta-data has been generated.
   bool HasCapturedVariableLayout : 1;
 
+  /// Indicates whether an object of a non-external C++ class is captured. This
+  /// bit is used to determine the linkage of the block copy/destroy helper
+  /// functions.
+  bool CapturesNonExternalType : 1;
+
   /// The mapping of allocated indexes within the block.
-  llvm::DenseMap<const VarDecl*, Capture> Captures;  
+  llvm::DenseMap<const VarDecl*, Capture> Captures;
 
   Address LocalAddress;
   llvm::StructType *StructureType;
@@ -241,7 +249,7 @@ public:
   CharUnits BlockSize;
   CharUnits BlockAlign;
   CharUnits CXXThisOffset;
-  
+
   // Offset of the gap caused by block header having a smaller
   // alignment than the alignment of the block descriptor. This
   // is the gap offset before the first capturued field.

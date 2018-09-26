@@ -524,6 +524,7 @@ namespace  {
     // Exprs
     void VisitExpr(const Expr *Node);
     void VisitCastExpr(const CastExpr *Node);
+    void VisitImplicitCastExpr(const ImplicitCastExpr *Node);
     void VisitDeclRefExpr(const DeclRefExpr *Node);
     void VisitPredefinedExpr(const PredefinedExpr *Node);
     void VisitCharacterLiteral(const CharacterLiteral *Node);
@@ -999,7 +1000,7 @@ void ASTDumper::dumpTemplateArgument(const TemplateArgument &A, SourceRange R) {
       A.getAsTemplate().dump(OS);
       break;
     case TemplateArgument::TemplateExpansion:
-      OS << " template expansion";
+      OS << " template expansion ";
       A.getAsTemplateOrTemplatePattern().dump(OS);
       break;
     case TemplateArgument::Expression:
@@ -1643,6 +1644,9 @@ void ASTDumper::VisitTemplateTypeParmDecl(const TemplateTypeParmDecl *D) {
   dumpName(D);
   if (D->hasDefaultArgument())
     dumpTemplateArgument(D->getDefaultArgument());
+  if (auto *From = D->getDefaultArgStorage().getInheritedFrom())
+    dumpDeclRef(From, D->defaultArgumentWasInherited() ? "inherited from"
+                                                       : "previous");
 }
 
 void ASTDumper::VisitNonTypeTemplateParmDecl(const NonTypeTemplateParmDecl *D) {
@@ -1653,6 +1657,9 @@ void ASTDumper::VisitNonTypeTemplateParmDecl(const NonTypeTemplateParmDecl *D) {
   dumpName(D);
   if (D->hasDefaultArgument())
     dumpTemplateArgument(D->getDefaultArgument());
+  if (auto *From = D->getDefaultArgStorage().getInheritedFrom())
+    dumpDeclRef(From, D->defaultArgumentWasInherited() ? "inherited from"
+                                                       : "previous");
 }
 
 void ASTDumper::VisitTemplateTemplateParmDecl(
@@ -1664,6 +1671,9 @@ void ASTDumper::VisitTemplateTemplateParmDecl(
   dumpTemplateParameters(D->getTemplateParameters());
   if (D->hasDefaultArgument())
     dumpTemplateArgumentLoc(D->getDefaultArgument());
+  if (auto *From = D->getDefaultArgStorage().getInheritedFrom())
+    dumpDeclRef(From, D->defaultArgumentWasInherited() ? "inherited from"
+                                                       : "previous");
 }
 
 void ASTDumper::VisitUsingDecl(const UsingDecl *D) {
@@ -1970,7 +1980,7 @@ void ASTDumper::dumpStmt(const Stmt *S, StringRef Prefix) {
 }
 
 void ASTDumper::VisitStmt(const Stmt *Node) {
-  {   
+  {
     ColorScope Color(*this, StmtColor);
     OS << Node->getStmtClassName();
   }
@@ -2036,7 +2046,7 @@ void ASTDumper::VisitOMPExecutableDirective(
            << ClauseName.drop_front() << "Clause";
       }
       dumpPointer(C);
-      dumpSourceRange(SourceRange(C->getLocStart(), C->getLocEnd()));
+      dumpSourceRange(SourceRange(C->getBeginLoc(), C->getEndLoc()));
       if (C->isImplicit())
         OS << " <implicit>";
       for (auto *S : C->children())
@@ -2066,7 +2076,7 @@ void ASTDumper::VisitACCExecutableDirective(
            << ClauseName.drop_front() << "Clause";
       }
       dumpPointer(C);
-      dumpSourceRange(SourceRange(C->getLocStart(), C->getLocEnd()));
+      dumpSourceRange(SourceRange(C->getBeginLoc(), C->getEndLoc()));
       if (C->isImplicit())
         OS << " <implicit>";
       if (auto Reduction = dyn_cast<ACCReductionClause>(C)) {
@@ -2161,6 +2171,12 @@ void ASTDumper::VisitCastExpr(const CastExpr *Node) {
   }
   dumpBasePath(OS, Node);
   OS << ">";
+}
+
+void ASTDumper::VisitImplicitCastExpr(const ImplicitCastExpr *Node) {
+  VisitCastExpr(Node);
+  if (Node->isPartOfExplicitCast())
+    OS << " part_of_explicit_cast";
 }
 
 void ASTDumper::VisitDeclRefExpr(const DeclRefExpr *Node) {

@@ -16,6 +16,7 @@
 #define LLVM_IR_MODULE_H
 
 #include "llvm-c/Types.h"
+#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
@@ -256,9 +257,16 @@ public:
   /// versions when the pass does not change.
   std::unique_ptr<RandomNumberGenerator> createRNG(const Pass* P) const;
 
-/// @}
-/// @name Module Level Mutators
-/// @{
+  /// Return true if size-info optimization remark is enabled, false
+  /// otherwise.
+  bool shouldEmitInstrCountChangedRemark() {
+    return getContext().getDiagHandlerPtr()->isAnalysisRemarkEnabled(
+        "size-info");
+  }
+
+  /// @}
+  /// @name Module Level Mutators
+  /// @{
 
   /// Set the module identifier.
   void setModuleIdentifier(StringRef ID) { ModuleID = ID; }
@@ -832,6 +840,17 @@ public:
   /// Set the PIE level (small or large model)
   void setPIELevel(PIELevel::Level PL);
 /// @}
+
+  /// @}
+  /// @name Utility function for querying and setting code model
+  /// @{
+
+  /// Returns the code model (tiny, small, kernel, medium or large model)
+  Optional<CodeModel::Model> getCodeModel() const;
+
+  /// Set the code model (tiny, small, kernel, medium or large)
+  void setCodeModel(CodeModel::Model CL);
+  /// @}
 
   /// @name Utility functions for querying and setting PGO summary
   /// @{

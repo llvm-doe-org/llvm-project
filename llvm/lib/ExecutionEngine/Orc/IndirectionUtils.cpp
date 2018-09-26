@@ -36,10 +36,10 @@ private:
     SymbolMap Result;
     Result[Name] = JITEvaluatedSymbol(Compile(), JITSymbolFlags::Exported);
     R.resolve(Result);
-    R.finalize();
+    R.emit();
   }
 
-  void discard(const VSO &V, SymbolStringPtr Name) {
+  void discard(const JITDylib &JD, SymbolStringPtr Name) {
     llvm_unreachable("Discard should never occur on a LMU?");
   }
 
@@ -63,7 +63,7 @@ JITCompileCallbackManager::getCompileCallback(CompileFunction Compile) {
 
     std::lock_guard<std::mutex> Lock(CCMgrMutex);
     AddrToSymbol[*TrampolineAddr] = CallbackName;
-    cantFail(CallbacksVSO.define(
+    cantFail(CallbacksJD.define(
         llvm::make_unique<CompileCallbackMaterializationUnit>(
             std::move(CallbackName), std::move(Compile))));
     return *TrampolineAddr;
@@ -97,7 +97,7 @@ JITTargetAddress JITCompileCallbackManager::executeCompileCallback(
       Name = I->second;
   }
 
-  if (auto Sym = lookup({&CallbacksVSO}, Name))
+  if (auto Sym = lookup({&CallbacksJD}, Name))
     return Sym->getAddress();
   else {
     // If anything goes wrong materializing Sym then report it to the session
@@ -123,6 +123,21 @@ createLocalCompileCallbackManager(const Triple &T, ExecutionSession &ES,
       return llvm::make_unique<CCMgrT>(ES, ErrorHandlerAddress);
     }
 
+    case Triple::mips: {
+      typedef orc::LocalJITCompileCallbackManager<orc::OrcMips32Be> CCMgrT;
+      return llvm::make_unique<CCMgrT>(ES, ErrorHandlerAddress);
+    }
+    case Triple::mipsel: {
+      typedef orc::LocalJITCompileCallbackManager<orc::OrcMips32Le> CCMgrT;
+      return llvm::make_unique<CCMgrT>(ES, ErrorHandlerAddress);
+    }
+ 
+    case Triple::mips64:
+    case Triple::mips64el: {
+      typedef orc::LocalJITCompileCallbackManager<orc::OrcMips64> CCMgrT;
+      return llvm::make_unique<CCMgrT>(ES, ErrorHandlerAddress);
+    }
+ 
     case Triple::x86_64: {
       if ( T.getOS() == Triple::OSType::Win32 ) {
         typedef orc::LocalJITCompileCallbackManager<orc::OrcX86_64_Win32> CCMgrT;
@@ -157,6 +172,25 @@ createLocalIndirectStubsManagerBuilder(const Triple &T) {
                        orc::LocalIndirectStubsManager<orc::OrcI386>>();
       };
 
+    case Triple::mips:
+      return [](){
+          return llvm::make_unique<
+                      orc::LocalIndirectStubsManager<orc::OrcMips32Be>>();
+      };
+
+    case Triple::mipsel:
+      return [](){
+          return llvm::make_unique<
+                      orc::LocalIndirectStubsManager<orc::OrcMips32Le>>();
+      };
+
+    case Triple::mips64:
+    case Triple::mips64el:
+      return [](){
+          return llvm::make_unique<
+                      orc::LocalIndirectStubsManager<orc::OrcMips64>>();
+      };
+      
     case Triple::x86_64:
       if (T.getOS() == Triple::OSType::Win32) {
         return [](){

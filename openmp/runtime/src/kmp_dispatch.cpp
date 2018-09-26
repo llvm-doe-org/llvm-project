@@ -97,7 +97,6 @@ void __kmp_dispatch_init_algorithm(ident_t *loc, int gtid,
                                    typename traits_t<T>::signed_t chunk,
                                    T nproc, T tid) {
   typedef typename traits_t<T>::unsigned_t UT;
-  typedef typename traits_t<T>::signed_t ST;
   typedef typename traits_t<T>::floating_t DBL;
 
   int active;
@@ -106,6 +105,7 @@ void __kmp_dispatch_init_algorithm(ident_t *loc, int gtid,
   kmp_team_t *team;
 
 #ifdef KMP_DEBUG
+  typedef typename traits_t<T>::signed_t ST;
   {
     char *buff;
     // create format specifiers before the debug output
@@ -321,7 +321,7 @@ void __kmp_dispatch_init_algorithm(ident_t *loc, int gtid,
 
     ntc = (tc % chunk ? 1 : 0) + tc / chunk;
     if (nproc > 1 && ntc >= nproc) {
-      KMP_COUNT_BLOCK(OMP_FOR_static_steal);
+      KMP_COUNT_BLOCK(OMP_LOOP_STATIC_STEAL);
       T id = tid;
       T small_chunk, extras;
 
@@ -731,8 +731,6 @@ __kmp_dispatch_init(ident_t *loc, int gtid, enum sched_type schedule, T lb,
                     T ub, typename traits_t<T>::signed_t st,
                     typename traits_t<T>::signed_t chunk, int push_ws) {
   typedef typename traits_t<T>::unsigned_t UT;
-  typedef typename traits_t<T>::signed_t ST;
-  typedef typename traits_t<T>::floating_t DBL;
 
   int active;
   kmp_info_t *th;
@@ -753,6 +751,7 @@ __kmp_dispatch_init(ident_t *loc, int gtid, enum sched_type schedule, T lb,
   SSC_MARK_DISPATCH_INIT();
 #endif
 #ifdef KMP_DEBUG
+  typedef typename traits_t<T>::signed_t ST;
   {
     char *buff;
     // create format specifiers before the debug output
@@ -769,6 +768,15 @@ __kmp_dispatch_init(ident_t *loc, int gtid, enum sched_type schedule, T lb,
   team = th->th.th_team;
   active = !team->t.t_serialized;
   th->th.th_ident = loc;
+
+  // Any half-decent optimizer will remove this test when the blocks are empty
+  // since the macros expand to nothing
+  // when statistics are disabled.
+  if (schedule == __kmp_static) {
+    KMP_COUNT_BLOCK(OMP_LOOP_STATIC);
+  } else {
+    KMP_COUNT_BLOCK(OMP_LOOP_DYNAMIC);
+  }
 
 #if KMP_USE_HIER_SCHED
   // Initialize the scheduling hierarchy if requested in OMP_SCHEDULE envirable
@@ -844,17 +852,6 @@ __kmp_dispatch_init(ident_t *loc, int gtid, enum sched_type schedule, T lb,
       th->th.th_dispatch->th_deo_fcn = __kmp_dispatch_deo<UT>;
       th->th.th_dispatch->th_dxo_fcn = __kmp_dispatch_dxo<UT>;
     }
-  }
-
-  // Any half-decent optimizer will remove this test when the blocks are empty
-  // since the macros expand to nothing
-  // when statistics are disabled.
-  if (schedule == __kmp_static) {
-    KMP_COUNT_BLOCK(OMP_FOR_static);
-    KMP_COUNT_VALUE(FOR_static_iterations, pr->u.p.tc);
-  } else {
-    KMP_COUNT_BLOCK(OMP_FOR_dynamic);
-    KMP_COUNT_VALUE(FOR_dynamic_iterations, pr->u.p.tc);
   }
 
   if (active) {
@@ -962,6 +959,7 @@ __kmp_dispatch_init(ident_t *loc, int gtid, enum sched_type schedule, T lb,
         &(task_info->task_data), pr->u.p.tc, OMPT_LOAD_RETURN_ADDRESS(gtid));
   }
 #endif
+  KMP_PUSH_PARTITIONED_TIMER(OMP_loop_dynamic);
 }
 
 /* For ordered loops, either __kmp_dispatch_finish() should be called after
@@ -1229,11 +1227,11 @@ int __kmp_dispatch_next_algorithm(int gtid,
           // by 1
           if (remaining > 3) {
             // steal 1/4 of remaining
-            KMP_COUNT_VALUE(FOR_static_steal_stolen, remaining >> 2);
+            KMP_COUNT_DEVELOPER_VALUE(FOR_static_steal_stolen, remaining >> 2);
             init = (victim->u.p.ub -= (remaining >> 2));
           } else {
             // steal 1 chunk of 2 or 3 remaining
-            KMP_COUNT_VALUE(FOR_static_steal_stolen, 1);
+            KMP_COUNT_DEVELOPER_VALUE(FOR_static_steal_stolen, 1);
             init = (victim->u.p.ub -= 1);
           }
           __kmp_release_lock(lck, gtid);
@@ -1333,7 +1331,8 @@ int __kmp_dispatch_next_algorithm(int gtid,
                     *VOLATILE_CAST(kmp_int64 *) & vold.b,
                     *VOLATILE_CAST(kmp_int64 *) & vnew.b)) {
               // stealing succedded
-              KMP_COUNT_VALUE(FOR_static_steal_stolen, vold.p.ub - vnew.p.ub);
+              KMP_COUNT_DEVELOPER_VALUE(FOR_static_steal_stolen,
+                                        vold.p.ub - vnew.p.ub);
               status = 1;
               while_index = 0;
               // now update own count and ub
@@ -1361,7 +1360,7 @@ int __kmp_dispatch_next_algorithm(int gtid,
       init *= chunk;
       limit = chunk + init - 1;
       incr = pr->u.p.st;
-      KMP_COUNT_VALUE(FOR_static_steal_chunks, 1);
+      KMP_COUNT_DEVELOPER_VALUE(FOR_static_steal_chunks, 1);
 
       KMP_DEBUG_ASSERT(init <= trip);
       if ((last = (limit >= trip)) != 0)
@@ -1823,6 +1822,38 @@ int __kmp_dispatch_next_algorithm(int gtid,
 #define OMPT_LOOP_END // no-op
 #endif
 
+#if KMP_STATS_ENABLED
+#define KMP_STATS_LOOP_END                                                     \
+  {                                                                            \
+    kmp_int64 u, l, t, i;                                                      \
+    l = (kmp_int64)(*p_lb);                                                    \
+    u = (kmp_int64)(*p_ub);                                                    \
+    i = (kmp_int64)(pr->u.p.st);                                               \
+    if (status == 0) {                                                         \
+      t = 0;                                                                   \
+      KMP_POP_PARTITIONED_TIMER();                                             \
+    } else if (i == 1) {                                                       \
+      if (u >= l)                                                              \
+        t = u - l + 1;                                                         \
+      else                                                                     \
+        t = 0;                                                                 \
+    } else if (i < 0) {                                                        \
+      if (l >= u)                                                              \
+        t = (l - u) / (-i) + 1;                                                \
+      else                                                                     \
+        t = 0;                                                                 \
+    } else {                                                                   \
+      if (u >= l)                                                              \
+        t = (u - l) / i + 1;                                                   \
+      else                                                                     \
+        t = 0;                                                                 \
+    }                                                                          \
+    KMP_COUNT_VALUE(OMP_loop_dynamic_iterations, t);                           \
+  }
+#else
+#define KMP_STATS_LOOP_END /* Nothing */
+#endif
+
 template <typename T>
 static int __kmp_dispatch_next(ident_t *loc, int gtid, kmp_int32 *p_last,
                                T *p_lb, T *p_ub,
@@ -1835,12 +1866,11 @@ static int __kmp_dispatch_next(ident_t *loc, int gtid, kmp_int32 *p_last,
 
   typedef typename traits_t<T>::unsigned_t UT;
   typedef typename traits_t<T>::signed_t ST;
-  typedef typename traits_t<T>::floating_t DBL;
   // This is potentially slightly misleading, schedule(runtime) will appear here
   // even if the actual runtme schedule is static. (Which points out a
   // disadavantage of schedule(runtime): even when static scheduling is used it
   // costs more than a compile time choice to use static scheduling would.)
-  KMP_TIME_PARTITIONED_BLOCK(FOR_dynamic_scheduling);
+  KMP_TIME_PARTITIONED_BLOCK(OMP_loop_dynamic_scheduling);
 
   int status;
   dispatch_private_info_template<T> *pr;
@@ -1964,6 +1994,7 @@ static int __kmp_dispatch_next(ident_t *loc, int gtid, kmp_int32 *p_last,
     SSC_MARK_DISPATCH_NEXT();
 #endif
     OMPT_LOOP_END;
+    KMP_STATS_LOOP_END;
     return status;
   } else {
     kmp_int32 last = 0;
@@ -2081,6 +2112,7 @@ static int __kmp_dispatch_next(ident_t *loc, int gtid, kmp_int32 *p_last,
   SSC_MARK_DISPATCH_NEXT();
 #endif
   OMPT_LOOP_END;
+  KMP_STATS_LOOP_END;
   return status;
 }
 
@@ -2089,7 +2121,6 @@ static void __kmp_dist_get_bounds(ident_t *loc, kmp_int32 gtid,
                                   kmp_int32 *plastiter, T *plower, T *pupper,
                                   typename traits_t<T>::signed_t incr) {
   typedef typename traits_t<T>::unsigned_t UT;
-  typedef typename traits_t<T>::signed_t ST;
   kmp_uint32 team_id;
   kmp_uint32 nteams;
   UT trip_count;
@@ -2099,6 +2130,7 @@ static void __kmp_dist_get_bounds(ident_t *loc, kmp_int32 gtid,
   KMP_DEBUG_ASSERT(plastiter && plower && pupper);
   KE_TRACE(10, ("__kmpc_dist_get_bounds called (%d)\n", gtid));
 #ifdef KMP_DEBUG
+  typedef typename traits_t<T>::signed_t ST;
   {
     char *buff;
     // create format specifiers before the debug output
@@ -2136,7 +2168,7 @@ static void __kmp_dist_get_bounds(ident_t *loc, kmp_int32 gtid,
   nteams = th->th.th_teams_size.nteams;
 #endif
   team_id = team->t.t_master_tid;
-  KMP_DEBUG_ASSERT(nteams == team->t.t_parent->t.t_nproc);
+  KMP_DEBUG_ASSERT(nteams == (kmp_uint32)team->t.t_parent->t.t_nproc);
 
   // compute global trip count
   if (incr == 1) {

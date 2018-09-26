@@ -23,6 +23,7 @@
 #include "clang/Lex/CodeCompletionHandler.h"
 #include "clang/Lex/DirectoryLookup.h"
 #include "clang/Lex/ExternalPreprocessorSource.h"
+#include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/LexDiagnostic.h"
 #include "clang/Lex/MacroArgs.h"
 #include "clang/Lex/MacroInfo.h"
@@ -1186,7 +1187,7 @@ static bool EvaluateHasIncludeCommon(Token &Tok,
   SmallString<128> FilenameBuffer;
   StringRef Filename;
   SourceLocation EndLoc;
-  
+
   switch (Tok.getKind()) {
   case tok::eod:
     // If the token kind is EOD, the error has already been diagnosed.
@@ -1242,6 +1243,13 @@ static bool EvaluateHasIncludeCommon(Token &Tok,
       PP.LookupFile(FilenameLoc, Filename, isAngled, LookupFrom, LookupFromFile,
                     CurDir, nullptr, nullptr, nullptr, nullptr);
 
+  if (PPCallbacks *Callbacks = PP.getPPCallbacks()) {
+    SrcMgr::CharacteristicKind FileType = SrcMgr::C_User;
+    if (File)
+      FileType = PP.getHeaderSearchInfo().getFileDirFlavor(File);
+    Callbacks->HasInclude(FilenameLoc, Filename, isAngled, File, FileType);
+  }
+
   // Get the result value.  A result of true means the file exists.
   return File != nullptr;
 }
@@ -1260,7 +1268,7 @@ static bool EvaluateHasIncludeNext(Token &Tok,
   // __has_include_next is like __has_include, except that we start
   // searching after the current found directory.  If we can't do this,
   // issue a diagnostic.
-  // FIXME: Factor out duplication with 
+  // FIXME: Factor out duplication with
   // Preprocessor::HandleIncludeNextDirective.
   const DirectoryLookup *Lookup = PP.GetCurDirLookup();
   const FileEntry *LookupFromFile = nullptr;
@@ -1510,7 +1518,7 @@ void Preprocessor::ExpandBuiltinMacro(Token &Tok) {
         PLoc = SourceMgr.getPresumedLoc(NextLoc);
         if (PLoc.isInvalid())
           break;
-        
+
         NextLoc = PLoc.getIncludeLoc();
       }
     }

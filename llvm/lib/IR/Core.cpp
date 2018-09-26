@@ -706,6 +706,10 @@ LLVMBool LLVMIsOpaqueStruct(LLVMTypeRef StructTy) {
   return unwrap<StructType>(StructTy)->isOpaque();
 }
 
+LLVMBool LLVMIsLiteralStruct(LLVMTypeRef StructTy) {
+  return unwrap<StructType>(StructTy)->isLiteral();
+}
+
 LLVMTypeRef LLVMGetTypeByName(LLVMModuleRef M, const char *Name) {
   return wrap(unwrap(M)->getTypeByName(Name));
 }
@@ -1063,6 +1067,54 @@ unsigned LLVMGetMDNodeNumOperands(LLVMValueRef V) {
   if (isa<ValueAsMetadata>(MD->getMetadata()))
     return 1;
   return cast<MDNode>(MD->getMetadata())->getNumOperands();
+}
+
+LLVMNamedMDNodeRef LLVMGetFirstNamedMetadata(LLVMModuleRef M) {
+  Module *Mod = unwrap(M);
+  Module::named_metadata_iterator I = Mod->named_metadata_begin();
+  if (I == Mod->named_metadata_end())
+    return nullptr;
+  return wrap(&*I);
+}
+
+LLVMNamedMDNodeRef LLVMGetLastNamedMetadata(LLVMModuleRef M) {
+  Module *Mod = unwrap(M);
+  Module::named_metadata_iterator I = Mod->named_metadata_end();
+  if (I == Mod->named_metadata_begin())
+    return nullptr;
+  return wrap(&*--I);
+}
+
+LLVMNamedMDNodeRef LLVMGetNextNamedMetadata(LLVMNamedMDNodeRef NMD) {
+  NamedMDNode *NamedNode = unwrap<NamedMDNode>(NMD);
+  Module::named_metadata_iterator I(NamedNode);
+  if (++I == NamedNode->getParent()->named_metadata_end())
+    return nullptr;
+  return wrap(&*I);
+}
+
+LLVMNamedMDNodeRef LLVMGetPreviousNamedMetadata(LLVMNamedMDNodeRef NMD) {
+  NamedMDNode *NamedNode = unwrap<NamedMDNode>(NMD);
+  Module::named_metadata_iterator I(NamedNode);
+  if (I == NamedNode->getParent()->named_metadata_begin())
+    return nullptr;
+  return wrap(&*--I);
+}
+
+LLVMNamedMDNodeRef LLVMGetNamedMetadata(LLVMModuleRef M,
+                                        const char *Name, size_t NameLen) {
+  return wrap(unwrap(M)->getNamedMetadata(StringRef(Name, NameLen)));
+}
+
+LLVMNamedMDNodeRef LLVMGetOrInsertNamedMetadata(LLVMModuleRef M,
+                                                const char *Name, size_t NameLen) {
+  return wrap(unwrap(M)->getOrInsertNamedMetadata({Name, NameLen}));
+}
+
+const char *LLVMGetNamedMetadataName(LLVMNamedMDNodeRef NMD, size_t *NameLen) {
+  NamedMDNode *NamedNode = unwrap<NamedMDNode>(NMD);
+  *NameLen = NamedNode->getName().size();
+  return NamedNode->getName().data();
 }
 
 void LLVMGetMDNodeOperands(LLVMValueRef V, LLVMValueRef *Dest) {
@@ -2584,6 +2636,8 @@ unsigned LLVMGetNumIndices(LLVMValueRef Inst) {
     return EV->getNumIndices();
   if (auto *IV = dyn_cast<InsertValueInst>(I))
     return IV->getNumIndices();
+  if (auto *CE = dyn_cast<ConstantExpr>(I))
+    return CE->getIndices().size();
   llvm_unreachable(
     "LLVMGetNumIndices applies only to extractvalue and insertvalue!");
 }
@@ -2594,6 +2648,8 @@ const unsigned *LLVMGetIndices(LLVMValueRef Inst) {
     return EV->getIndices().data();
   if (auto *IV = dyn_cast<InsertValueInst>(I))
     return IV->getIndices().data();
+  if (auto *CE = dyn_cast<ConstantExpr>(I))
+    return CE->getIndices().data();
   llvm_unreachable(
     "LLVMGetIndices applies only to extractvalue and insertvalue!");
 }

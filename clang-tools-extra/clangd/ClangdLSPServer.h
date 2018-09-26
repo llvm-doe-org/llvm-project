@@ -5,7 +5,7 @@
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_CLANGDLSPSERVER_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_CLANGDLSPSERVER_H
@@ -26,8 +26,11 @@ namespace clangd {
 class JSONOutput;
 class SymbolIndex;
 
-/// This class provides implementation of an LSP server, glueing the JSON
-/// dispatch and ClangdServer together.
+/// This class exposes ClangdServer's capabilities via Language Server Protocol.
+///
+/// JSONRPCDispatcher binds the implemented ProtocolCallbacks methods
+/// (e.g. onInitialize) to corresponding JSON-RPC methods ("initialize").
+/// The server also supports $/cancelRequest (JSONRPCDispatcher provides this).
 class ClangdLSPServer : private DiagnosticsConsumer, private ProtocolCallbacks {
 public:
   /// If \p CompileCommandsDir has a value, compile_commands.json will be
@@ -35,7 +38,7 @@ public:
   /// for compile_commands.json in all parent directories of each file.
   ClangdLSPServer(JSONOutput &Out, const clangd::CodeCompleteOptions &CCOpts,
                   llvm::Optional<Path> CompileCommandsDir,
-                  const ClangdServer::Options &Opts);
+                  bool ShouldUseInMemoryCDB, const ClangdServer::Options &Opts);
 
   /// Run LSP server loop, receiving input for it from \p In. \p In must be
   /// opened in binary mode. Output will be written using Out variable passed to
@@ -67,6 +70,7 @@ private:
   void onCompletion(TextDocumentPositionParams &Params) override;
   void onSignatureHelp(TextDocumentPositionParams &Params) override;
   void onGoToDefinition(TextDocumentPositionParams &Params) override;
+  void onReference(ReferenceParams &Params) override;
   void onSwitchSourceHeader(TextDocumentIdentifier &Params) override;
   void onDocumentHighlight(TextDocumentPositionParams &Params) override;
   void onFileEvent(DidChangeWatchedFilesParams &Params) override;
@@ -82,6 +86,7 @@ private:
   /// may be very expensive.  This method is normally called when the
   /// compilation database is changed.
   void reparseOpenedFiles();
+  void applyConfiguration(const ClangdConfigurationParamsChange &Settings);
 
   JSONOutput &Out;
   /// Used to indicate that the 'shutdown' request was received from the
@@ -99,14 +104,63 @@ private:
   /// Caches FixIts per file and diagnostics
   llvm::StringMap<DiagnosticToReplacementMap> FixItsMap;
 
+  /// Encapsulates the directory-based or the in-memory compilation database
+  /// that's used by the LSP server.
+  class CompilationDB {
+  public:
+    static CompilationDB makeInMemory();
+    static CompilationDB
+    makeDirectoryBased(llvm::Optional<Path> CompileCommandsDir);
+
+    void invalidate(PathRef File);
+
+    /// Sets the compilation command for a particular file.
+    /// Only valid for in-memory CDB, no-op and error log on DirectoryBasedCDB.
+    ///
+    /// \returns True if the File had no compilation command before.
+    bool
+    setCompilationCommandForFile(PathRef File,
+                                 tooling::CompileCommand CompilationCommand);
+
+    /// Adds extra compilation flags to the compilation command for a particular
+    /// file. Only valid for directory-based CDB, no-op and error log on
+    /// InMemoryCDB;
+    void setExtraFlagsForFile(PathRef File,
+                              std::vector<std::string> ExtraFlags);
+
+    /// Set the compile commands directory to \p P.
+    /// Only valid for directory-based CDB, no-op and error log on InMemoryCDB;
+    void setCompileCommandsDir(Path P);
+
+    /// Returns a CDB that should be used to get compile commands for the
+    /// current instance of ClangdLSPServer.
+    GlobalCompilationDatabase &getCDB();
+
+  private:
+    CompilationDB(std::unique_ptr<GlobalCompilationDatabase> CDB,
+                  std::unique_ptr<CachingCompilationDb> CachingCDB,
+                  bool IsDirectoryBased)
+        : CDB(std::move(CDB)), CachingCDB(std::move(CachingCDB)),
+          IsDirectoryBased(IsDirectoryBased) {}
+
+    // if IsDirectoryBased is true, an instance of InMemoryCDB.
+    // If IsDirectoryBased is false, an instance of DirectoryBasedCDB.
+    // unique_ptr<GlobalCompilationDatabase> CDB;
+    std::unique_ptr<GlobalCompilationDatabase> CDB;
+    // Non-null only for directory-based CDB
+    std::unique_ptr<CachingCompilationDb> CachingCDB;
+    bool IsDirectoryBased;
+  };
+
   // Various ClangdServer parameters go here. It's important they're created
   // before ClangdServer.
-  DirectoryBasedGlobalCompilationDatabase NonCachedCDB;
-  CachingCompilationDb CDB;
+  CompilationDB CDB;
 
   RealFileSystemProvider FSProvider;
   /// Options used for code completion
   clangd::CodeCompleteOptions CCOpts;
+  /// Options used for diagnostics.
+  ClangdDiagnosticOptions DiagOpts;
   /// The supported kinds of the client.
   SymbolKindBitset SupportedSymbolKinds;
 
@@ -118,8 +172,7 @@ private:
   // destructed instance of ClangdLSPServer.
   ClangdServer Server;
 };
-
 } // namespace clangd
 } // namespace clang
 
-#endif
+#endif // LLVM_CLANG_TOOLS_EXTRA_CLANGD_CLANGDLSPSERVER_H

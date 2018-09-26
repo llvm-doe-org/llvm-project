@@ -29,7 +29,22 @@
 // CHECK-COVERAGE-WIN64: "--dependent-lib={{[^"]*}}ubsan_standalone-x86_64.lib"
 
 // RUN: %clang -target x86_64-linux-gnu -fsanitize=integer %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-INTEGER -implicit-check-not="-fsanitize-address-use-after-scope"
-// CHECK-INTEGER: "-fsanitize={{((signed-integer-overflow|unsigned-integer-overflow|integer-divide-by-zero|shift-base|shift-exponent),?){5}"}}
+// CHECK-INTEGER: "-fsanitize={{((signed-integer-overflow|unsigned-integer-overflow|integer-divide-by-zero|shift-base|shift-exponent|implicit-integer-truncation),?){6}"}}
+
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=implicit-conversion %s -### 2>&1 | FileCheck %s --check-prefixes=CHECK-implicit-conversion,CHECK-implicit-conversion-RECOVER
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=implicit-conversion -fsanitize-recover=implicit-conversion %s -### 2>&1 | FileCheck %s --check-prefixes=CHECK-implicit-conversion,CHECK-implicit-conversion-RECOVER
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=implicit-conversion -fno-sanitize-recover=implicit-conversion %s -### 2>&1 | FileCheck %s --check-prefixes=CHECK-implicit-conversion,CHECK-implicit-conversion-NORECOVER
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=implicit-conversion -fsanitize-trap=implicit-conversion %s -### 2>&1 | FileCheck %s --check-prefixes=CHECK-implicit-conversion,CHECK-implicit-conversion-TRAP
+// CHECK-implicit-conversion: "-fsanitize={{((implicit-integer-truncation),?){1}"}}
+// CHECK-implicit-conversion-RECOVER: "-fsanitize-recover={{((implicit-integer-truncation),?){1}"}}
+// CHECK-implicit-conversion-RECOVER-NOT: "-fno-sanitize-recover={{((implicit-integer-truncation),?){1}"}}
+// CHECK-implicit-conversion-RECOVER-NOT: "-fsanitize-trap={{((implicit-integer-truncation),?){1}"}}
+// CHECK-implicit-conversion-NORECOVER-NOT: "-fno-sanitize-recover={{((implicit-integer-truncation),?){1}"}} // ???
+// CHECK-implicit-conversion-NORECOVER-NOT: "-fsanitize-recover={{((implicit-integer-truncation),?){1}"}}
+// CHECK-implicit-conversion-NORECOVER-NOT: "-fsanitize-trap={{((implicit-integer-truncation),?){1}"}}
+// CHECK-implicit-conversion-TRAP: "-fsanitize-trap={{((implicit-integer-truncation),?){1}"}}
+// CHECK-implicit-conversion-TRAP-NOT: "-fsanitize-recover={{((implicit-integer-truncation),?){1}"}}
+// CHECK-implicit-conversion-TRAP-NOT: "-fno-sanitize-recover={{((implicit-integer-truncation),?){1}"}}
 
 // RUN: %clang -fsanitize=bounds -### -fsyntax-only %s 2>&1 | FileCheck %s --check-prefix=CHECK-BOUNDS
 // CHECK-BOUNDS: "-fsanitize={{((array-bounds|local-bounds),?){2}"}}
@@ -73,6 +88,27 @@
 
 // RUN: %clang -target x86_64-linux-gnu -fsanitize=leak,memory -pie -fno-rtti %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-SANL-SANM
 // CHECK-SANL-SANM: '-fsanitize=leak' not allowed with '-fsanitize=memory'
+
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=kernel-memory,address -pie -fno-rtti %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-KMSAN-ASAN
+// CHECK-KMSAN-ASAN: '-fsanitize=kernel-memory' not allowed with '-fsanitize=address'
+
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=kernel-memory,hwaddress -pie -fno-rtti %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-KMSAN-HWASAN
+// CHECK-KMSAN-HWASAN: '-fsanitize=kernel-memory' not allowed with '-fsanitize=hwaddress'
+
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=kernel-memory,leak -pie -fno-rtti %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-KMSAN-LSAN
+// CHECK-KMSAN-LSAN: '-fsanitize=kernel-memory' not allowed with '-fsanitize=leak'
+
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=kernel-memory,thread -pie -fno-rtti %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-KMSAN-TSAN
+// CHECK-KMSAN-TSAN: '-fsanitize=kernel-memory' not allowed with '-fsanitize=thread'
+
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=kernel-memory,kernel-address -pie -fno-rtti %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-KMSAN-KASAN
+// CHECK-KMSAN-KASAN: '-fsanitize=kernel-memory' not allowed with '-fsanitize=kernel-address'
+
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=kernel-memory,memory -pie -fno-rtti %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-KMSAN-MSAN
+// CHECK-KMSAN-MSAN: '-fsanitize=kernel-memory' not allowed with '-fsanitize=memory'
+
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=kernel-memory,safe-stack -pie -fno-rtti %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-KMSAN-SAFESTACK
+// CHECK-KMSAN-SAFESTACK: '-fsanitize=kernel-memory' not allowed with '-fsanitize=safe-stack'
 
 // RUN: %clang -target x86_64-linux-gnu -fsanitize=kernel-address,thread -fno-rtti %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-SANKA-SANT
 // CHECK-SANKA-SANT: '-fsanitize=kernel-address' not allowed with '-fsanitize=thread'
@@ -128,6 +164,10 @@
 // RUN: %clang -target x86_64-linux-gnu -fsanitize=efficiency-cache-frag,memory -pie -fno-rtti %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-SANE-SANM
 // RUN: %clang -target x86_64-linux-gnu -fsanitize=efficiency-working-set,memory -pie -fno-rtti %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-SANE-SANM
 // CHECK-SANE-SANM: '-fsanitize=efficiency-{{.*}}' not allowed with '-fsanitize=memory'
+
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=efficiency-cache-frag,kernel-memory -pie -fno-rtti %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-SANE-SANKM
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=efficiency-working-set,kernel-memory -pie -fno-rtti %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-SANE-SANKM
+// CHECK-SANE-SANKM: '-fsanitize=kernel-memory' not allowed with '-fsanitize=efficiency-{{.*}}'
 
 // RUN: %clang -target x86_64-linux-gnu -fsanitize=efficiency-cache-frag,kernel-address -pie -fno-rtti %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-SANE-SANKA
 // RUN: %clang -target x86_64-linux-gnu -fsanitize=efficiency-working-set,kernel-address -pie -fno-rtti %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-SANE-SANKA
@@ -408,6 +448,15 @@
 // RUN: %clang -target x86_64-apple-darwin10 -mmacosx-version-min=10.8 -fsanitize=vptr %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-VPTR-DARWIN-OLD
 // CHECK-VPTR-DARWIN-OLD: unsupported option '-fsanitize=vptr' for target 'x86_64-apple-darwin10'
 
+// RUN: %clang -target arm-apple-ios4 -fsanitize=vptr %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-VPTR-IOS-OLD
+// CHECK-VPTR-IOS-OLD: unsupported option '-fsanitize=vptr' for target 'arm-apple-ios4'
+
+// RUN: %clang -target aarch64-apple-darwin15.0.0 -fsanitize=vptr %s -### 2>&1
+// OK
+
+// RUN: %clang -target x86_64-apple-darwin15.0.0-simulator -fsanitize=vptr %s -### 2>&1
+// OK
+
 // RUN: %clang -target x86_64-apple-darwin10 -mmacosx-version-min=10.9 -fsanitize=alignment,vptr %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-VPTR-DARWIN-NEW
 // CHECK-VPTR-DARWIN-NEW: -fsanitize=alignment,vptr
 
@@ -456,7 +505,7 @@
 
 // RUN: %clang -target i686-linux-gnu -fsanitize=efficiency-cache-frag %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-ESAN-X86
 // RUN: %clang -target i686-linux-gnu -fsanitize=efficiency-working-set %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-ESAN-X86
-// CHECK-ESAN-X86: error: unsupported option '-fsanitize=efficiency-{{.*}}' for target 'i686--linux-gnu'
+// CHECK-ESAN-X86: error: unsupported option '-fsanitize=efficiency-{{.*}}' for target 'i686-unknown-linux-gnu'
 
 // RUN: %clang -target x86_64-apple-darwin10 -fsanitize=efficiency-cache-frag %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-ESAN-DARWIN
 // RUN: %clang -target x86_64-apple-darwin10 -fsanitize=efficiency-working-set %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-ESAN-DARWIN
@@ -709,3 +758,6 @@
 // CHECK-SCUDO-TSAN: error: invalid argument '-fsanitize=scudo' not allowed with '-fsanitize=thread'
 // RUN: %clang -target x86_64-linux-gnu -fsanitize=scudo,hwaddress  %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-SCUDO-HWASAN
 // CHECK-SCUDO-HWASAN: error: invalid argument '-fsanitize=scudo' not allowed with '-fsanitize=hwaddress'
+//
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=scudo,kernel-memory  %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-SCUDO-KMSAN
+// CHECK-SCUDO-KMSAN: error: invalid argument '-fsanitize=kernel-memory' not allowed with '-fsanitize=scudo'

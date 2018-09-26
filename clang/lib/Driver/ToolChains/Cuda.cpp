@@ -59,6 +59,8 @@ static CudaVersion ParseCudaVersionFile(llvm::StringRef V) {
     return CudaVersion::CUDA_91;
   if (Major == 9 && Minor == 2)
     return CudaVersion::CUDA_92;
+  if (Major == 10 && Minor == 0)
+    return CudaVersion::CUDA_100;
   return CudaVersion::UNKNOWN;
 }
 
@@ -165,7 +167,7 @@ CudaInstallationDetector::CudaInstallationDetector(
       if (FS.exists(FilePath)) {
         for (const char *GpuArchName :
              {"sm_30", "sm_32", "sm_35", "sm_37", "sm_50", "sm_52", "sm_53",
-              "sm_60", "sm_61", "sm_62", "sm_70", "sm_72"}) {
+              "sm_60", "sm_61", "sm_62", "sm_70", "sm_72", "sm_75"}) {
           const CudaArch GpuArch = StringToCudaArch(GpuArchName);
           if (Version >= MinVersionForCudaArch(GpuArch) &&
               Version <= MaxVersionForCudaArch(GpuArch))
@@ -621,13 +623,16 @@ void CudaToolChain::addClangTargetOptions(
     return;
   }
 
-  CC1Args.push_back("-mlink-cuda-bitcode");
+  CC1Args.push_back("-mlink-builtin-bitcode");
   CC1Args.push_back(DriverArgs.MakeArgString(LibDeviceFile));
 
   // Libdevice in CUDA-7.0 requires PTX version that's more recent than LLVM
   // defaults to. Use PTX4.2 by default, which is the PTX version that came with
   // CUDA-7.0.
   const char *PtxFeature = "+ptx42";
+  // TODO(tra): CUDA-10+ needs PTX 6.3 to support new features. However that
+  // requires fair amount of work on LLVM side. We'll keep using PTX 6.1 until
+  // all prerequisites are in place.
   if (CudaInstallation.version() >= CudaVersion::CUDA_91) {
     // CUDA-9.1 uses new instructions that are only available in PTX6.1+
     PtxFeature = "+ptx61";
@@ -667,7 +672,7 @@ void CudaToolChain::addClangTargetOptions(
       SmallString<128> LibOmpTargetFile(LibraryPath);
       llvm::sys::path::append(LibOmpTargetFile, LibOmpTargetName);
       if (llvm::sys::fs::exists(LibOmpTargetFile)) {
-        CC1Args.push_back("-mlink-cuda-bitcode");
+        CC1Args.push_back("-mlink-builtin-bitcode");
         CC1Args.push_back(DriverArgs.MakeArgString(LibOmpTargetFile));
         FoundBCLibrary = true;
         break;
@@ -677,6 +682,18 @@ void CudaToolChain::addClangTargetOptions(
       getDriver().Diag(diag::warn_drv_omp_offload_target_missingbcruntime)
           << LibOmpTargetName;
   }
+}
+
+bool CudaToolChain::supportsDebugInfoOption(const llvm::opt::Arg *A) const {
+  const Option &O = A->getOption();
+  return (O.matches(options::OPT_gN_Group) &&
+          !O.matches(options::OPT_gmodules)) ||
+         O.matches(options::OPT_g_Flag) ||
+         O.matches(options::OPT_ggdbN_Group) || O.matches(options::OPT_ggdb) ||
+         O.matches(options::OPT_gdwarf) || O.matches(options::OPT_gdwarf_2) ||
+         O.matches(options::OPT_gdwarf_3) || O.matches(options::OPT_gdwarf_4) ||
+         O.matches(options::OPT_gdwarf_5) ||
+         O.matches(options::OPT_gcolumn_info);
 }
 
 void CudaToolChain::AddCudaIncludeArgs(const ArgList &DriverArgs,

@@ -448,7 +448,7 @@ void Sema::diagnoseNullableToNonnullConversion(QualType DstType,
 
 void Sema::diagnoseZeroToNullptrConversion(CastKind Kind, const Expr* E) {
   if (Diags.isIgnored(diag::warn_zero_as_null_pointer_constant,
-                      E->getLocStart()))
+                      E->getBeginLoc()))
     return;
   // nullptr only exists from C++11 on, so don't warn on its absence earlier.
   if (!getLangOpts().CPlusPlus11)
@@ -461,13 +461,13 @@ void Sema::diagnoseZeroToNullptrConversion(CastKind Kind, const Expr* E) {
 
   // If it is a macro from system header, and if the macro name is not "NULL",
   // do not warn.
-  SourceLocation MaybeMacroLoc = E->getLocStart();
+  SourceLocation MaybeMacroLoc = E->getBeginLoc();
   if (Diags.getSuppressSystemWarnings() &&
       SourceMgr.isInSystemMacro(MaybeMacroLoc) &&
       !findMacroSpelling(MaybeMacroLoc, "NULL"))
     return;
 
-  Diag(E->getLocStart(), diag::warn_zero_as_null_pointer_constant)
+  Diag(E->getBeginLoc(), diag::warn_zero_as_null_pointer_constant)
       << FixItHint::CreateReplacement(E->getSourceRange(), "nullptr");
 }
 
@@ -495,7 +495,7 @@ ExprResult Sema::ImpCastExprToType(Expr *E, QualType Ty,
   assert((VK == VK_RValue || !E->isRValue()) && "can't cast rvalue to lvalue");
 #endif
 
-  diagnoseNullableToNonnullConversion(Ty, E->getType(), E->getLocStart());
+  diagnoseNullableToNonnullConversion(Ty, E->getType(), E->getBeginLoc());
   diagnoseZeroToNullptrConversion(Kind, E);
 
   QualType ExprTy = Context.getCanonicalType(E->getType());
@@ -834,7 +834,9 @@ void Sema::emitAndClearUnusedLocalTypedefWarnings() {
 /// is parsed. Note that the ASTContext may have already injected some
 /// declarations.
 void Sema::ActOnStartOfTranslationUnit() {
-  if (getLangOpts().ModulesTS) {
+  if (getLangOpts().ModulesTS &&
+      (getLangOpts().getCompilingModule() == LangOptions::CMK_ModuleInterface ||
+       getLangOpts().getCompilingModule() == LangOptions::CMK_None)) {
     SourceLocation StartOfTU =
         SourceMgr.getLocForStartOfFile(SourceMgr.getMainFileID());
 
@@ -929,10 +931,9 @@ void Sema::ActOnEndOfTranslationUnit() {
 
   // All delayed member exception specs should be checked or we end up accepting
   // incompatible declarations.
-  // FIXME: This is wrong for TUKind == TU_Prefix. In that case, we need to
-  // write out the lists to the AST file (if any).
+  assert(DelayedOverridingExceptionSpecChecks.empty());
+  assert(DelayedEquivalentExceptionSpecChecks.empty());
   assert(DelayedDefaultedMemberExceptionSpecs.empty());
-  assert(DelayedExceptionSpecChecks.empty());
 
   // All dllexport classes should have been processed already.
   assert(DelayedDllExportClasses.empty());
@@ -985,7 +986,8 @@ void Sema::ActOnEndOfTranslationUnit() {
     // module declaration by now.
     if (getLangOpts().getCompilingModule() ==
             LangOptions::CMK_ModuleInterface &&
-        ModuleScopes.back().Module->Kind != Module::ModuleInterfaceUnit) {
+        (ModuleScopes.empty() ||
+         ModuleScopes.back().Module->Kind != Module::ModuleInterfaceUnit)) {
       // FIXME: Make a better guess as to where to put the module declaration.
       Diag(getSourceManager().getLocForStartOfFile(
                getSourceManager().getMainFileID()),
@@ -1507,7 +1509,7 @@ LambdaScopeInfo *Sema::getCurLambda(bool IgnoreNonLambdaCapturingScope) {
 
   return CurLSI;
 }
-// We have a generic lambda if we parsed auto parameters, or we have 
+// We have a generic lambda if we parsed auto parameters, or we have
 // an associated template parameter list.
 LambdaScopeInfo *Sema::getCurGenericLambda() {
   if (LambdaScopeInfo *LSI =  getCurLambda()) {
@@ -1896,6 +1898,14 @@ bool Sema::checkOpenCLDisabledTypeDeclSpec(const DeclSpec &DS, QualType QT) {
   if (auto TagT = dyn_cast<TagType>(QT.getCanonicalType().getTypePtr()))
     Decl = TagT->getDecl();
   auto Loc = DS.getTypeSpecTypeLoc();
+
+  // Check extensions for vector types.
+  // e.g. double4 is not allowed when cl_khr_fp64 is absent.
+  if (QT->isExtVectorType()) {
+    auto TypePtr = QT->castAs<ExtVectorType>()->getElementType().getTypePtr();
+    return checkOpenCLDisabledTypeOrDecl(TypePtr, Loc, QT, OpenCLTypeExtMap);
+  }
+
   if (checkOpenCLDisabledTypeOrDecl(Decl, Loc, QT, OpenCLDeclExtMap))
     return true;
 
@@ -1906,6 +1916,6 @@ bool Sema::checkOpenCLDisabledTypeDeclSpec(const DeclSpec &DS, QualType QT) {
 
 bool Sema::checkOpenCLDisabledDecl(const NamedDecl &D, const Expr &E) {
   IdentifierInfo *FnName = D.getIdentifier();
-  return checkOpenCLDisabledTypeOrDecl(&D, E.getLocStart(), FnName,
+  return checkOpenCLDisabledTypeOrDecl(&D, E.getBeginLoc(), FnName,
                                        OpenCLDeclExtMap, 1, D.getSourceRange());
 }

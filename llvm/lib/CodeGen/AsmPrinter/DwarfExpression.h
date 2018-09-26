@@ -112,7 +112,7 @@ protected:
   uint64_t OffsetInBits = 0;
   unsigned DwarfVersion;
 
-  /// Sometimes we need to add a DW_OP_bit_piece to describe a subregister. 
+  /// Sometimes we need to add a DW_OP_bit_piece to describe a subregister.
   unsigned SubRegisterSizeInBits = 0;
   unsigned SubRegisterOffsetInBits = 0;
 
@@ -137,6 +137,9 @@ protected:
 
   /// Emit a raw unsigned value.
   virtual void emitUnsigned(uint64_t Value) = 0;
+
+  /// Emit a normalized unsigned constant.
+  void emitConstu(uint64_t Value);
 
   /// Return whether the given machine register is the frame register in the
   /// current function.

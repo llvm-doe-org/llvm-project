@@ -28,7 +28,6 @@
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/Scalar.h"
 #include "lldb/Core/Section.h"
 #include "lldb/Core/ValueObjectVariable.h"
 #include "lldb/Expression/DiagnosticManager.h"
@@ -52,6 +51,7 @@
 #include "lldb/Target/Thread.h"
 #include "lldb/Utility/ConstString.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/Scalar.h"
 #include "lldb/Utility/Status.h"
 #include "lldb/Utility/Stream.h"
 #include "lldb/Utility/StreamString.h"
@@ -1409,6 +1409,7 @@ AppleObjCRuntimeV2::UpdateISAToDescriptorMapDynamic(
     options.SetStopOthers(true);
     options.SetIgnoreBreakpoints(true);
     options.SetTimeout(g_utility_function_timeout);
+    options.SetIsForUtilityExpr(true);
 
     Value return_value;
     return_value.SetValueType(Value::eValueTypeScalar);
@@ -1659,6 +1660,7 @@ AppleObjCRuntimeV2::UpdateISAToDescriptorMapSharedCache() {
     options.SetStopOthers(true);
     options.SetIgnoreBreakpoints(true);
     options.SetTimeout(g_utility_function_timeout);
+    options.SetIsForUtilityExpr(true);
 
     Value return_value;
     return_value.SetValueType(Value::eValueTypeScalar);

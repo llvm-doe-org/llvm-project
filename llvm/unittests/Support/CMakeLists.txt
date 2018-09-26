@@ -20,6 +20,7 @@ add_llvm_unittest(SupportTests
   ConvertUTFTest.cpp
   DataExtractorTest.cpp
   DebugTest.cpp
+  DebugCounterTest.cpp
   DJBTest.cpp
   EndianStreamTest.cpp
   EndianTest.cpp
@@ -30,6 +31,7 @@ add_llvm_unittest(SupportTests
   FormatVariadicTest.cpp
   GlobPatternTest.cpp
   Host.cpp
+  ItaniumManglingCanonicalizerTest.cpp
   JSONTest.cpp
   LEB128Test.cpp
   LineIteratorTest.cpp
@@ -52,6 +54,7 @@ add_llvm_unittest(SupportTests
   SpecialCaseListTest.cpp
   StringPool.cpp
   SwapByteOrderTest.cpp
+  SymbolRemappingReaderTest.cpp
   TarWriterTest.cpp
   TargetParserTest.cpp
   TaskQueueTest.cpp

@@ -288,7 +288,7 @@ static void addHeaderInclude(StringRef HeaderName,
     Includes += "}\n";
 }
 
-/// Collect the set of header includes needed to construct the given 
+/// Collect the set of header includes needed to construct the given
 /// module and update the TopHeaders file set of the module.
 ///
 /// \param Module The module we're collecting includes from.
@@ -345,27 +345,27 @@ static std::error_code collectModuleHeaderIncludes(
     vfs::FileSystem &FS = *FileMgr.getVirtualFileSystem();
     for (vfs::recursive_directory_iterator Dir(FS, DirNative, EC), End;
          Dir != End && !EC; Dir.increment(EC)) {
-      // Check whether this entry has an extension typically associated with 
+      // Check whether this entry has an extension typically associated with
       // headers.
-      if (!llvm::StringSwitch<bool>(llvm::sys::path::extension(Dir->getName()))
-          .Cases(".h", ".H", ".hh", ".hpp", true)
-          .Default(false))
+      if (!llvm::StringSwitch<bool>(llvm::sys::path::extension(Dir->path()))
+               .Cases(".h", ".H", ".hh", ".hpp", true)
+               .Default(false))
         continue;
 
-      const FileEntry *Header = FileMgr.getFile(Dir->getName());
+      const FileEntry *Header = FileMgr.getFile(Dir->path());
       // FIXME: This shouldn't happen unless there is a file system race. Is
       // that worth diagnosing?
       if (!Header)
         continue;
 
-      // If this header is marked 'unavailable' in this module, don't include 
+      // If this header is marked 'unavailable' in this module, don't include
       // it.
       if (ModMap.isHeaderUnavailableInModule(Header, Module))
         continue;
 
       // Compute the relative path from the directory to this file.
       SmallVector<StringRef, 16> Components;
-      auto PathIt = llvm::sys::path::rbegin(Dir->getName());
+      auto PathIt = llvm::sys::path::rbegin(Dir->path());
       for (int I = 0; I != Dir.level() + 1; ++I, ++PathIt)
         Components.push_back(*PathIt);
       SmallString<128> RelativeHeader(UmbrellaDir.NameAsWritten);
@@ -431,7 +431,7 @@ static Module *prepareToBuildModule(CompilerInstance &CI,
     CI.getDiagnostics().Report(diag::err_missing_module_name);
 
     // FIXME: Eventually, we could consider asking whether there was just
-    // a single module described in the module map, and use that as a 
+    // a single module described in the module map, and use that as a
     // default. Then it would be fairly trivial to just "compile" a module
     // map with a single module (the common case).
     return nullptr;
@@ -523,7 +523,6 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
   setCurrentInput(Input);
   setCompilerInstance(&CI);
 
-  StringRef InputFile = Input.getFile();
   bool HasBegunSourceFile = false;
   bool ReplayASTFile = Input.getKind().getFormat() == InputKind::Precompiled &&
                        usesPreprocessorOnly();
@@ -540,6 +539,9 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
         new DiagnosticsEngine(Diags->getDiagnosticIDs(),
                               &Diags->getDiagnosticOptions()));
     ASTDiags->setClient(Diags->getClient(), /*OwnsClient*/false);
+
+    // FIXME: What if the input is a memory buffer?
+    StringRef InputFile = Input.getFile();
 
     std::unique_ptr<ASTUnit> AST = ASTUnit::LoadFromASTFile(
         InputFile, CI.getPCHContainerReader(), ASTUnit::LoadPreprocessorOnly,
@@ -585,12 +587,12 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
       assert(ASTModule && "module file does not define its own module");
       Input = FrontendInputFile(ASTModule->PresumedModuleMapFile, Kind);
     } else {
-      auto &SM = CI.getSourceManager();
-      FileID ID = SM.getMainFileID();
-      if (auto *File = SM.getFileEntryForID(ID))
+      auto &OldSM = AST->getSourceManager();
+      FileID ID = OldSM.getMainFileID();
+      if (auto *File = OldSM.getFileEntryForID(ID))
         Input = FrontendInputFile(File->getName(), Kind);
       else
-        Input = FrontendInputFile(SM.getBuffer(ID), Kind);
+        Input = FrontendInputFile(OldSM.getBuffer(ID), Kind);
     }
     setCurrentInput(Input, std::move(AST));
   }
@@ -603,6 +605,9 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
            "This action does not have AST file support!");
 
     IntrusiveRefCntPtr<DiagnosticsEngine> Diags(&CI.getDiagnostics());
+
+    // FIXME: What if the input is a memory buffer?
+    StringRef InputFile = Input.getFile();
 
     std::unique_ptr<ASTUnit> AST = ASTUnit::LoadFromASTFile(
         InputFile, CI.getPCHContainerReader(), ASTUnit::LoadEverything, Diags,
@@ -696,10 +701,10 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
            Dir != DirEnd && !EC; Dir.increment(EC)) {
         // Check whether this is an acceptable AST file.
         if (ASTReader::isAcceptableASTFile(
-                Dir->getName(), FileMgr, CI.getPCHContainerReader(),
+                Dir->path(), FileMgr, CI.getPCHContainerReader(),
                 CI.getLangOpts(), CI.getTargetOpts(), CI.getPreprocessorOpts(),
                 SpecificModuleCachePath)) {
-          PPOpts.ImplicitPCHInclude = Dir->getName();
+          PPOpts.ImplicitPCHInclude = Dir->path();
           Found = true;
           break;
         }
@@ -791,7 +796,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
 
     // For preprocessed files, check if the first line specifies the original
     // source file name with a linemarker.
-    std::string PresumedInputFile = InputFile;
+    std::string PresumedInputFile = getCurrentFileOrBufferName();
     if (Input.isPreprocessed())
       ReadOriginalFileName(CI, PresumedInputFile);
 

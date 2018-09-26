@@ -665,7 +665,7 @@ void DevirtModule::buildTypeIdentifierMap(
   for (GlobalVariable &GV : M.globals()) {
     Types.clear();
     GV.getMetadata(LLVMContext::MD_type, Types);
-    if (Types.empty())
+    if (GV.isDeclaration() || Types.empty())
       continue;
 
     VTableBits *&BitsPtr = GVToBits[&GV];
@@ -755,7 +755,8 @@ void DevirtModule::applySingleImplDevirt(VTableSlotInfo &SlotInfo,
   auto Apply = [&](CallSiteInfo &CSInfo) {
     for (auto &&VCallSite : CSInfo.CallSites) {
       if (RemarksEnabled)
-        VCallSite.emitRemark("single-impl", TheFn->getName(), OREGetter);
+        VCallSite.emitRemark("single-impl",
+                             TheFn->stripPointerCasts()->getName(), OREGetter);
       VCallSite.CS.setCalledFunction(ConstantExpr::getBitCast(
           TheFn, VCallSite.CS.getCalledValue()->getType()));
       // This use is no longer unsafe.
@@ -891,7 +892,8 @@ void DevirtModule::applyICallBranchFunnel(VTableSlotInfo &SlotInfo,
         continue;
 
       if (RemarksEnabled)
-        VCallSite.emitRemark("branch-funnel", JT->getName(), OREGetter);
+        VCallSite.emitRemark("branch-funnel",
+                             JT->stripPointerCasts()->getName(), OREGetter);
 
       // Pass the address of the vtable in the nest register, which is r10 on
       // x86_64.
@@ -1323,15 +1325,14 @@ void DevirtModule::rebuildGlobal(VTableBits &B) {
 
 bool DevirtModule::areRemarksEnabled() {
   const auto &FL = M.getFunctionList();
-  if (FL.empty())
-    return false;
-  const Function &Fn = FL.front();
-
-  const auto &BBL = Fn.getBasicBlockList();
-  if (BBL.empty())
-    return false;
-  auto DI = OptimizationRemark(DEBUG_TYPE, "", DebugLoc(), &BBL.front());
-  return DI.isEnabled();
+  for (const Function &Fn : FL) {
+    const auto &BBL = Fn.getBasicBlockList();
+    if (BBL.empty())
+      continue;
+    auto DI = OptimizationRemark(DEBUG_TYPE, "", DebugLoc(), &BBL.front());
+    return DI.isEnabled();
+  }
+  return false;
 }
 
 void DevirtModule::scanTypeTestUsers(Function *TypeTestFunc,

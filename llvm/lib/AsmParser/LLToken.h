@@ -139,6 +139,7 @@ enum Kind {
   kw_arm_apcscc,
   kw_arm_aapcscc,
   kw_arm_aapcs_vfpcc,
+  kw_aarch64_vector_pcs,
   kw_msp430_intrcc,
   kw_avr_intrcc,
   kw_avr_signalcc,
@@ -219,6 +220,7 @@ enum Kind {
   kw_sret,
   kw_sanitize_thread,
   kw_sanitize_memory,
+  kw_speculative_load_hardening,
   kw_strictfp,
   kw_swifterror,
   kw_swiftself,
@@ -434,6 +436,7 @@ enum Kind {
   DwarfLang,        // DW_LANG_foo
   DwarfCC,          // DW_CC_foo
   EmissionKind,     // lineTablesOnly
+  NameTableKind,    // GNU
   DwarfOp,          // DW_OP_foo
   DIFlag,           // DIFlagFoo
   DwarfMacinfo,     // DW_MACINFO_foo

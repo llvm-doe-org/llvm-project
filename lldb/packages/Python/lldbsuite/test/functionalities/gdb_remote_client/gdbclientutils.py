@@ -130,6 +130,8 @@ class MockGDBServerResponder:
             return self.QEnableErrorStrings()
         if packet == "?":
             return self.haltReason()
+        if packet == "s":
+            return self.haltReason()
         if packet[0] == "H":
             return self.selectThread(packet[1], int(packet[2:], 16))
         if packet[0:6] == "qXfer:":
@@ -144,6 +146,9 @@ class MockGDBServerResponder:
             return self.vAttach(int(pid, 16))
         if packet[0] == "Z":
             return self.setBreakpoint(packet)
+        if packet.startswith("qThreadStopInfo"):
+            threadnum = int (packet[15:], 16)
+            return self.threadStopInfo(threadnum)
         return self.other(packet)
 
     def interrupt(self):
@@ -204,6 +209,9 @@ class MockGDBServerResponder:
     def setBreakpoint(self, packet):
         raise self.UnexpectedPacketException()
 
+    def threadStopInfo(self, threadnum):
+        return ""
+
     def other(self, packet):
         # empty string means unsupported
         return ""
@@ -246,7 +254,7 @@ class MockGDBServer:
         addr = ("127.0.0.1", self.port)
         self._socket.bind(addr)
         self.port = self._socket.getsockname()[1]
-        self._socket.listen(0)
+        self._socket.listen(1)
         self._thread = threading.Thread(target=self._run)
         self._thread.start()
 
@@ -467,7 +475,7 @@ class GDBRemoteTestBase(TestBase):
         i = 0
         j = 0
         log = self.server.responder.packetLog
-        
+
         while i < len(packets) and j < len(log):
             if log[j] == packets[i]:
                 i += 1

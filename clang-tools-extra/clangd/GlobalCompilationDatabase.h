@@ -1,11 +1,11 @@
-//===--- GlobalCompilationDatabase.h ----------------------------*- C++-*-===//
+//===--- GlobalCompilationDatabase.h -----------------------------*- C++-*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_GLOBALCOMPILATIONDATABASE_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_GLOBALCOMPILATIONDATABASE_H
@@ -113,7 +113,30 @@ private:
       Cached; /* GUARDED_BY(Mut) */
 };
 
+/// Gets compile args from an in-memory mapping based on a filepath. Typically
+/// used by clients who provide the compile commands themselves.
+class InMemoryCompilationDb : public GlobalCompilationDatabase {
+public:
+  /// Gets compile command for \p File from the stored mapping.
+  llvm::Optional<tooling::CompileCommand>
+  getCompileCommand(PathRef File) const override;
+
+  /// Sets the compilation command for a particular file.
+  ///
+  /// \returns True if the File had no compilation command before.
+  bool setCompilationCommandForFile(PathRef File,
+                                    tooling::CompileCommand CompilationCommand);
+
+  /// Removes the compilation command for \p File if it's present in the
+  /// mapping.
+  void invalidate(PathRef File);
+
+private:
+  mutable std::mutex Mutex;
+  llvm::StringMap<tooling::CompileCommand> Commands; /* GUARDED_BY(Mut) */
+};
+
 } // namespace clangd
 } // namespace clang
 
-#endif
+#endif // LLVM_CLANG_TOOLS_EXTRA_CLANGD_GLOBALCOMPILATIONDATABASE_H

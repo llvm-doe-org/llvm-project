@@ -11,6 +11,7 @@
 #include "MCTargetDesc/AArch64MCExpr.h"
 #include "MCTargetDesc/AArch64MCTargetDesc.h"
 #include "MCTargetDesc/AArch64TargetStreamer.h"
+#include "AArch64InstrInfo.h"
 #include "Utils/AArch64BaseInfo.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
@@ -38,6 +39,7 @@
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/MC/SubtargetFeature.h"
+#include "llvm/MC/MCValue.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -79,6 +81,67 @@ private:
   // Map of register aliases registers via the .req directive.
   StringMap<std::pair<RegKind, unsigned>> RegisterReqs;
 
+  class PrefixInfo {
+  public:
+    static PrefixInfo CreateFromInst(const MCInst &Inst, uint64_t TSFlags) {
+      PrefixInfo Prefix;
+      switch (Inst.getOpcode()) {
+      case AArch64::MOVPRFX_ZZ:
+        Prefix.Active = true;
+        Prefix.Dst = Inst.getOperand(0).getReg();
+        break;
+      case AArch64::MOVPRFX_ZPmZ_B:
+      case AArch64::MOVPRFX_ZPmZ_H:
+      case AArch64::MOVPRFX_ZPmZ_S:
+      case AArch64::MOVPRFX_ZPmZ_D:
+        Prefix.Active = true;
+        Prefix.Predicated = true;
+        Prefix.ElementSize = TSFlags & AArch64::ElementSizeMask;
+        assert(Prefix.ElementSize != AArch64::ElementSizeNone &&
+               "No destructive element size set for movprfx");
+        Prefix.Dst = Inst.getOperand(0).getReg();
+        Prefix.Pg = Inst.getOperand(2).getReg();
+        break;
+      case AArch64::MOVPRFX_ZPzZ_B:
+      case AArch64::MOVPRFX_ZPzZ_H:
+      case AArch64::MOVPRFX_ZPzZ_S:
+      case AArch64::MOVPRFX_ZPzZ_D:
+        Prefix.Active = true;
+        Prefix.Predicated = true;
+        Prefix.ElementSize = TSFlags & AArch64::ElementSizeMask;
+        assert(Prefix.ElementSize != AArch64::ElementSizeNone &&
+               "No destructive element size set for movprfx");
+        Prefix.Dst = Inst.getOperand(0).getReg();
+        Prefix.Pg = Inst.getOperand(1).getReg();
+        break;
+      default:
+        break;
+      }
+
+      return Prefix;
+    }
+
+    PrefixInfo() : Active(false), Predicated(false) {}
+    bool isActive() const { return Active; }
+    bool isPredicated() const { return Predicated; }
+    unsigned getElementSize() const {
+      assert(Predicated);
+      return ElementSize;
+    }
+    unsigned getDstReg() const { return Dst; }
+    unsigned getPgReg() const {
+      assert(Predicated);
+      return Pg;
+    }
+
+  private:
+    bool Active;
+    bool Predicated;
+    unsigned ElementSize;
+    unsigned Dst;
+    unsigned Pg;
+  } NextPrefix;
+
   AArch64TargetStreamer &getTargetStreamer() {
     MCTargetStreamer &TS = *getParser().getStreamer().getTargetStreamer();
     return static_cast<AArch64TargetStreamer &>(TS);
@@ -113,7 +176,8 @@ private:
   bool parseDirectiveReq(StringRef Name, SMLoc L);
   bool parseDirectiveUnreq(SMLoc L);
 
-  bool validateInstruction(MCInst &Inst, SmallVectorImpl<SMLoc> &Loc);
+  bool validateInstruction(MCInst &Inst, SMLoc &IDLoc,
+                           SmallVectorImpl<SMLoc> &Loc);
   bool MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                                OperandVector &Operands, MCStreamer &Out,
                                uint64_t &ErrorInfo,
@@ -595,7 +659,7 @@ public:
     return DiagnosticPredicateTy::NearMatch;
   }
 
-  bool isSymbolicUImm12Offset(const MCExpr *Expr, unsigned Scale) const {
+  bool isSymbolicUImm12Offset(const MCExpr *Expr) const {
     AArch64MCExpr::VariantKind ELFRefKind;
     MCSymbolRefExpr::VariantKind DarwinRefKind;
     int64_t Addend;
@@ -620,7 +684,7 @@ public:
       // Note that we don't range-check the addend. It's adjusted modulo page
       // size when converted, so there is no "out of range" condition when using
       // @pageoff.
-      return Addend >= 0 && (Addend % Scale) == 0;
+      return true;
     } else if (DarwinRefKind == MCSymbolRefExpr::VK_GOTPAGEOFF ||
                DarwinRefKind == MCSymbolRefExpr::VK_TLVPPAGEOFF) {
       // @gotpageoff/@tlvppageoff can only be used directly, not with an addend.
@@ -636,7 +700,7 @@ public:
 
     const MCConstantExpr *MCE = dyn_cast<MCConstantExpr>(getImm());
     if (!MCE)
-      return isSymbolicUImm12Offset(getImm(), Scale);
+      return isSymbolicUImm12Offset(getImm());
 
     int64_t Val = MCE->getValue();
     return (Val % Scale) == 0 && Val >= 0 && (Val / Scale) < 0x1000;
@@ -838,7 +902,7 @@ public:
 
     for (unsigned i = 0; i != AllowedModifiers.size(); ++i) {
       if (ELFRefKind == AllowedModifiers[i])
-        return Addend == 0;
+        return true;
     }
 
     return false;
@@ -2390,17 +2454,34 @@ AArch64AsmParser::tryParseAdrLabel(OperandVector &Operands) {
   SMLoc S = getLoc();
   const MCExpr *Expr;
 
-  const AsmToken &Tok = getParser().getTok();
-  if (parseOptionalToken(AsmToken::Hash) || Tok.is(AsmToken::Integer)) {
-    if (getParser().parseExpression(Expr))
+  // Leave anything with a bracket to the default for SVE
+  if (getParser().getTok().is(AsmToken::LBrac))
+    return MatchOperand_NoMatch;
+
+  if (getParser().getTok().is(AsmToken::Hash))
+    getParser().Lex(); // Eat hash token.
+
+  if (parseSymbolicImmVal(Expr))
+    return MatchOperand_ParseFail;
+
+  AArch64MCExpr::VariantKind ELFRefKind;
+  MCSymbolRefExpr::VariantKind DarwinRefKind;
+  int64_t Addend;
+  if (classifySymbolRef(Expr, ELFRefKind, DarwinRefKind, Addend)) {
+    if (DarwinRefKind == MCSymbolRefExpr::VK_None &&
+        ELFRefKind == AArch64MCExpr::VK_INVALID) {
+      // No modifier was specified at all; this is the syntax for an ELF basic
+      // ADR relocation (unfortunately).
+      Expr = AArch64MCExpr::create(Expr, AArch64MCExpr::VK_ABS, getContext());
+    } else {
+      Error(S, "unexpected adr label");
       return MatchOperand_ParseFail;
-
-    SMLoc E = SMLoc::getFromPointer(getLoc().getPointer() - 1);
-    Operands.push_back(AArch64Operand::CreateImm(Expr, S, E, getContext()));
-
-    return MatchOperand_Success;
+    }
   }
-  return MatchOperand_NoMatch;
+
+  SMLoc E = SMLoc::getFromPointer(getLoc().getPointer() - 1);
+  Operands.push_back(AArch64Operand::CreateImm(Expr, S, E, getContext()));
+  return MatchOperand_Success;
 }
 
 /// tryParseFPImm - A floating point immediate expression operand.
@@ -3665,12 +3746,89 @@ bool AArch64AsmParser::ParseInstruction(ParseInstructionInfo &Info,
   return false;
 }
 
+static inline bool isMatchingOrAlias(unsigned ZReg, unsigned Reg) {
+  assert((ZReg >= AArch64::Z0) && (ZReg <= AArch64::Z31));
+  return (ZReg == ((Reg - AArch64::B0) + AArch64::Z0)) ||
+         (ZReg == ((Reg - AArch64::H0) + AArch64::Z0)) ||
+         (ZReg == ((Reg - AArch64::S0) + AArch64::Z0)) ||
+         (ZReg == ((Reg - AArch64::D0) + AArch64::Z0)) ||
+         (ZReg == ((Reg - AArch64::Q0) + AArch64::Z0)) ||
+         (ZReg == ((Reg - AArch64::Z0) + AArch64::Z0));
+}
+
 // FIXME: This entire function is a giant hack to provide us with decent
 // operand range validation/diagnostics until TableGen/MC can be extended
 // to support autogeneration of this kind of validation.
-bool AArch64AsmParser::validateInstruction(MCInst &Inst,
-                                         SmallVectorImpl<SMLoc> &Loc) {
+bool AArch64AsmParser::validateInstruction(MCInst &Inst, SMLoc &IDLoc,
+                                           SmallVectorImpl<SMLoc> &Loc) {
   const MCRegisterInfo *RI = getContext().getRegisterInfo();
+  const MCInstrDesc &MCID = MII.get(Inst.getOpcode());
+
+  // A prefix only applies to the instruction following it.  Here we extract
+  // prefix information for the next instruction before validating the current
+  // one so that in the case of failure we don't erronously continue using the
+  // current prefix.
+  PrefixInfo Prefix = NextPrefix;
+  NextPrefix = PrefixInfo::CreateFromInst(Inst, MCID.TSFlags);
+
+  // Before validating the instruction in isolation we run through the rules
+  // applicable when it follows a prefix instruction.
+  // NOTE: brk & hlt can be prefixed but require no additional validation.
+  if (Prefix.isActive() &&
+      (Inst.getOpcode() != AArch64::BRK) &&
+      (Inst.getOpcode() != AArch64::HLT)) {
+
+    // Prefixed intructions must have a destructive operand.
+    if ((MCID.TSFlags & AArch64::DestructiveInstTypeMask) ==
+        AArch64::NotDestructive)
+      return Error(IDLoc, "instruction is unpredictable when following a"
+                   " movprfx, suggest replacing movprfx with mov");
+
+    // Destination operands must match.
+    if (Inst.getOperand(0).getReg() != Prefix.getDstReg())
+      return Error(Loc[0], "instruction is unpredictable when following a"
+                   " movprfx writing to a different destination");
+
+    // Destination operand must not be used in any other location.
+    for (unsigned i = 1; i < Inst.getNumOperands(); ++i) {
+      if (Inst.getOperand(i).isReg() &&
+          (MCID.getOperandConstraint(i, MCOI::TIED_TO) == -1) &&
+          isMatchingOrAlias(Prefix.getDstReg(), Inst.getOperand(i).getReg()))
+        return Error(Loc[0], "instruction is unpredictable when following a"
+                     " movprfx and destination also used as non-destructive"
+                     " source");
+    }
+
+    auto PPRRegClass = AArch64MCRegisterClasses[AArch64::PPRRegClassID];
+    if (Prefix.isPredicated()) {
+      int PgIdx = -1;
+
+      // Find the instructions general predicate.
+      for (unsigned i = 1; i < Inst.getNumOperands(); ++i)
+        if (Inst.getOperand(i).isReg() &&
+            PPRRegClass.contains(Inst.getOperand(i).getReg())) {
+          PgIdx = i;
+          break;
+        }
+
+      // Instruction must be predicated if the movprfx is predicated.
+      if (PgIdx == -1 ||
+          (MCID.TSFlags & AArch64::ElementSizeMask) == AArch64::ElementSizeNone)
+        return Error(IDLoc, "instruction is unpredictable when following a"
+                     " predicated movprfx, suggest using unpredicated movprfx");
+
+      // Instruction must use same general predicate as the movprfx.
+      if (Inst.getOperand(PgIdx).getReg() != Prefix.getPgReg())
+        return Error(IDLoc, "instruction is unpredictable when following a"
+                     " predicated movprfx using a different general predicate");
+
+      // Instruction element type must match the movprfx.
+      if ((MCID.TSFlags & AArch64::ElementSizeMask) != Prefix.getElementSize())
+        return Error(IDLoc, "instruction is unpredictable when following a"
+                     " predicated movprfx with a different element size");
+    }
+  }
+
   // Check for indexed addressing modes w/ the base register being the
   // same as a destination/source register or pair load where
   // the Rt == Rt2. All of those are undefined behaviour.
@@ -4516,7 +4674,7 @@ bool AArch64AsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
     NumOperands = Operands.size();
     for (unsigned i = 1; i < NumOperands; ++i)
       OperandLocs.push_back(Operands[i]->getStartLoc());
-    if (validateInstruction(Inst, OperandLocs))
+    if (validateInstruction(Inst, IDLoc, OperandLocs))
       return true;
 
     Inst.setLoc(IDLoc);
@@ -4719,7 +4877,6 @@ bool AArch64AsmParser::ParseDirective(AsmToken DirectiveID) {
   const MCObjectFileInfo::Environment Format =
     getContext().getObjectFileInfo()->getObjectFileType();
   bool IsMachO = Format == MCObjectFileInfo::IsMachO;
-  bool IsCOFF = Format == MCObjectFileInfo::IsCOFF;
 
   StringRef IDVal = DirectiveID.getIdentifier();
   SMLoc Loc = DirectiveID.getLoc();
@@ -4733,14 +4890,14 @@ bool AArch64AsmParser::ParseDirective(AsmToken DirectiveID) {
     parseDirectiveLtorg(Loc);
   else if (IDVal == ".unreq")
     parseDirectiveUnreq(Loc);
-  else if (!IsMachO && !IsCOFF) {
-    if (IDVal == ".inst")
-      parseDirectiveInst(Loc);
+  else if (IDVal == ".inst")
+    parseDirectiveInst(Loc);
+  else if (IsMachO) {
+    if (IDVal == MCLOHDirectiveName())
+      parseDirectiveLOH(IDVal, Loc);
     else
       return true;
-  } else if (IDVal == MCLOHDirectiveName())
-    parseDirectiveLOH(IDVal, Loc);
-  else
+  } else
     return true;
   return false;
 }
@@ -4749,7 +4906,11 @@ static const struct {
   const char *Name;
   const FeatureBitset Features;
 } ExtensionMap[] = {
-  { "crc", {AArch64::FeatureCRC} },
+  { "crc",  {AArch64::FeatureCRC} },
+  { "sm4",  {AArch64::FeatureSM4} },
+  { "sha3", {AArch64::FeatureSHA3} },
+  { "sha2", {AArch64::FeatureSHA2} },
+  { "aes",  {AArch64::FeatureAES} },
   { "crypto", {AArch64::FeatureCrypto} },
   { "fp", {AArch64::FeatureFPARMv8} },
   { "simd", {AArch64::FeatureNEON} },
@@ -4762,6 +4923,54 @@ static const struct {
   { "rdma", {} },
   { "profile", {} },
 };
+
+static void ExpandCryptoAEK(AArch64::ArchKind ArchKind,
+                            SmallVector<StringRef, 4> &RequestedExtensions) {
+  const bool NoCrypto =
+      (std::find(RequestedExtensions.begin(), RequestedExtensions.end(),
+                 "nocrypto") != std::end(RequestedExtensions));
+  const bool Crypto =
+      (std::find(RequestedExtensions.begin(), RequestedExtensions.end(),
+                 "crypto") != std::end(RequestedExtensions));
+
+  if (!NoCrypto && Crypto) {
+    switch (ArchKind) {
+    default:
+      // Map 'generic' (and others) to sha2 and aes, because
+      // that was the traditional meaning of crypto.
+    case AArch64::ArchKind::ARMV8_1A:
+    case AArch64::ArchKind::ARMV8_2A:
+    case AArch64::ArchKind::ARMV8_3A:
+      RequestedExtensions.push_back("sha2");
+      RequestedExtensions.push_back("aes");
+      break;
+    case AArch64::ArchKind::ARMV8_4A:
+      RequestedExtensions.push_back("sm4");
+      RequestedExtensions.push_back("sha3");
+      RequestedExtensions.push_back("sha2");
+      RequestedExtensions.push_back("aes");
+      break;
+    }
+  } else if (NoCrypto) {
+    switch (ArchKind) {
+    default:
+      // Map 'generic' (and others) to sha2 and aes, because
+      // that was the traditional meaning of crypto.
+    case AArch64::ArchKind::ARMV8_1A:
+    case AArch64::ArchKind::ARMV8_2A:
+    case AArch64::ArchKind::ARMV8_3A:
+      RequestedExtensions.push_back("nosha2");
+      RequestedExtensions.push_back("noaes");
+      break;
+    case AArch64::ArchKind::ARMV8_4A:
+      RequestedExtensions.push_back("nosm4");
+      RequestedExtensions.push_back("nosha3");
+      RequestedExtensions.push_back("nosha2");
+      RequestedExtensions.push_back("noaes");
+      break;
+    }
+  }
+}
 
 /// parseDirectiveArch
 ///   ::= .arch token
@@ -4792,6 +5001,8 @@ bool AArch64AsmParser::parseDirectiveArch(SMLoc L) {
   SmallVector<StringRef, 4> RequestedExtensions;
   if (!ExtensionString.empty())
     ExtensionString.split(RequestedExtensions, '+');
+
+  ExpandCryptoAEK(ID, RequestedExtensions);
 
   FeatureBitset Features = STI.getFeatureBits();
   for (auto Name : RequestedExtensions) {
@@ -4851,6 +5062,8 @@ bool AArch64AsmParser::parseDirectiveCPU(SMLoc L) {
   MCSubtargetInfo &STI = copySTI();
   STI.setDefaultFeatures(CPU, "");
   CurLoc = incrementLoc(CurLoc, CPU.size());
+
+  ExpandCryptoAEK(llvm::AArch64::getCPUArchKind(CPU), RequestedExtensions);
 
   FeatureBitset Features = STI.getFeatureBits();
   for (auto Name : RequestedExtensions) {
@@ -5093,28 +5306,14 @@ AArch64AsmParser::classifySymbolRef(const MCExpr *Expr,
     return true;
   }
 
-  const MCBinaryExpr *BE = dyn_cast<MCBinaryExpr>(Expr);
-  if (!BE)
+  // Check that it looks like a symbol + an addend
+  MCValue Res;
+  bool Relocatable = Expr->evaluateAsRelocatable(Res, nullptr, nullptr);
+  if (!Relocatable || !Res.getSymA() || Res.getSymB())
     return false;
 
-  SE = dyn_cast<MCSymbolRefExpr>(BE->getLHS());
-  if (!SE)
-    return false;
-  DarwinRefKind = SE->getKind();
-
-  if (BE->getOpcode() != MCBinaryExpr::Add &&
-      BE->getOpcode() != MCBinaryExpr::Sub)
-    return false;
-
-  // See if the addend is a constant, otherwise there's more going
-  // on here than we can deal with.
-  auto AddendExpr = dyn_cast<MCConstantExpr>(BE->getRHS());
-  if (!AddendExpr)
-    return false;
-
-  Addend = AddendExpr->getValue();
-  if (BE->getOpcode() == MCBinaryExpr::Sub)
-    Addend = -Addend;
+  DarwinRefKind = Res.getSymA()->getKind();
+  Addend = Res.getConstant();
 
   // It's some symbol reference + a constant addend, but really
   // shouldn't use both Darwin and ELF syntax.

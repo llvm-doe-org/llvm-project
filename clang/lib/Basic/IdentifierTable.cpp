@@ -319,7 +319,7 @@ tok::PPKeywordKind IdentifierInfo::getPPKeywordID() const {
   CASE( 6, 'i', 'n', ifndef);
   CASE( 6, 'i', 'p', import);
   CASE( 6, 'p', 'a', pragma);
-      
+
   CASE( 7, 'd', 'f', defined);
   CASE( 7, 'i', 'c', include);
   CASE( 7, 'w', 'r', warning);
@@ -328,7 +328,7 @@ tok::PPKeywordKind IdentifierInfo::getPPKeywordID() const {
   CASE(12, 'i', 'c', include_next);
 
   CASE(14, '_', 'p', __public_macro);
-      
+
   CASE(15, '_', 'p', __private_macro);
 
   CASE(16, '_', 'i', __include_macros);
@@ -382,24 +382,23 @@ unsigned llvm::DenseMapInfo<clang::Selector>::getHashValue(clang::Selector S) {
 
 namespace clang {
 
-/// MultiKeywordSelector - One of these variable length records is kept for each
+/// One of these variable length records is kept for each
 /// selector containing more than one keyword. We use a folding set
 /// to unique aggregate names (keyword selectors in ObjC parlance). Access to
 /// this class is provided strictly through Selector.
-class MultiKeywordSelector
-  : public DeclarationNameExtra, public llvm::FoldingSetNode {
-  MultiKeywordSelector(unsigned nKeys) {
-    ExtraKindOrNumArgs = NUM_EXTRA_KINDS + nKeys;
-  }
+class alignas(IdentifierInfoAlignment) MultiKeywordSelector
+    : public detail::DeclarationNameExtra,
+      public llvm::FoldingSetNode {
+  MultiKeywordSelector(unsigned nKeys) : DeclarationNameExtra(nKeys) {}
 
 public:
   // Constructor for keyword selectors.
-  MultiKeywordSelector(unsigned nKeys, IdentifierInfo **IIV) {
+  MultiKeywordSelector(unsigned nKeys, IdentifierInfo **IIV)
+      : DeclarationNameExtra(nKeys) {
     assert((nKeys > 1) && "not a multi-keyword selector");
-    ExtraKindOrNumArgs = NUM_EXTRA_KINDS + nKeys;
 
     // Fill in the trailing keyword array.
-    IdentifierInfo **KeyInfo = reinterpret_cast<IdentifierInfo **>(this+1);
+    IdentifierInfo **KeyInfo = reinterpret_cast<IdentifierInfo **>(this + 1);
     for (unsigned i = 0; i != nKeys; ++i)
       KeyInfo[i] = IIV[i];
   }
@@ -407,16 +406,16 @@ public:
   // getName - Derive the full selector name and return it.
   std::string getName() const;
 
-  unsigned getNumArgs() const { return ExtraKindOrNumArgs - NUM_EXTRA_KINDS; }
+  using DeclarationNameExtra::getNumArgs;
 
   using keyword_iterator = IdentifierInfo *const *;
 
   keyword_iterator keyword_begin() const {
-    return reinterpret_cast<keyword_iterator>(this+1);
+    return reinterpret_cast<keyword_iterator>(this + 1);
   }
 
   keyword_iterator keyword_end() const {
-    return keyword_begin()+getNumArgs();
+    return keyword_begin() + getNumArgs();
   }
 
   IdentifierInfo *getIdentifierInfoForSlot(unsigned i) const {
@@ -424,8 +423,8 @@ public:
     return keyword_begin()[i];
   }
 
-  static void Profile(llvm::FoldingSetNodeID &ID,
-                      keyword_iterator ArgTys, unsigned NumArgs) {
+  static void Profile(llvm::FoldingSetNodeID &ID, keyword_iterator ArgTys,
+                      unsigned NumArgs) {
     ID.AddInteger(NumArgs);
     for (unsigned i = 0; i != NumArgs; ++i)
       ID.AddPointer(ArgTys[i]);
@@ -462,7 +461,7 @@ IdentifierInfo *Selector::getIdentifierInfoForSlot(unsigned argIndex) const {
 
 StringRef Selector::getNameForSlot(unsigned int argIndex) const {
   IdentifierInfo *II = getIdentifierInfoForSlot(argIndex);
-  return II? II->getName() : StringRef();
+  return II ? II->getName() : StringRef();
 }
 
 std::string MultiKeywordSelector::getName() const {
@@ -566,9 +565,9 @@ ObjCMethodFamily Selector::getMethodFamilyImpl(Selector sel) {
 ObjCInstanceTypeFamily Selector::getInstTypeMethodFamily(Selector sel) {
   IdentifierInfo *first = sel.getIdentifierInfoForSlot(0);
   if (!first) return OIT_None;
-  
+
   StringRef name = first->getName();
-  
+
   if (name.empty()) return OIT_None;
   switch (name.front()) {
     case 'a':
@@ -593,22 +592,22 @@ ObjCInstanceTypeFamily Selector::getInstTypeMethodFamily(Selector sel) {
 ObjCStringFormatFamily Selector::getStringFormatFamilyImpl(Selector sel) {
   IdentifierInfo *first = sel.getIdentifierInfoForSlot(0);
   if (!first) return SFF_None;
-  
+
   StringRef name = first->getName();
-  
+
   switch (name.front()) {
     case 'a':
       if (name == "appendFormat") return SFF_NSString;
       break;
-      
+
     case 'i':
       if (name == "initWithFormat") return SFF_NSString;
       break;
-      
+
     case 'l':
       if (name == "localizedStringWithFormat") return SFF_NSString;
       break;
-      
+
     case 's':
       if (name == "stringByAppendingFormat" ||
           name == "stringWithFormat") return SFF_NSString;

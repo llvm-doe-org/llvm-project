@@ -51,6 +51,7 @@ if(LLDB_BUILD_FRAMEWORK)
     message(FATAL_ERROR "LLDB.framework can only be generated when targeting Apple platforms")
   endif()
 
+  add_custom_target(lldb-framework)
   # These are used to fill out LLDB-Info.plist. These are relevant when building
   # the framework, and must be defined before building liblldb.
   set(PRODUCT_NAME "LLDB")
@@ -60,6 +61,7 @@ if(LLDB_BUILD_FRAMEWORK)
 
   set(LLDB_FRAMEWORK_DIR
     ${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}/${LLDB_FRAMEWORK_INSTALL_DIR})
+  include(LLDBFramework)
 endif()
 
 add_subdirectory(docs)
@@ -91,11 +93,15 @@ option(LLDB_TEST_USE_CUSTOM_C_COMPILER "Use the C compiler provided via LLDB_TES
 option(LLDB_TEST_USE_CUSTOM_CXX_COMPILER "Use the C++ compiler provided via LLDB_TEST_CXX_COMPILER for building test inferiors (instead of the just-built compiler). Defaults to OFF." OFF)
 if(LLDB_INCLUDE_TESTS)
 
-  # The difference between the following two paths is significant. The path to
-  # LLDB will point to LLDB's binary directory, while the other will point to
-  # LLVM's binary directory in case the two differ.
+  # Set the path to the default lldb test executable. Make the path relative to
+  # LLVM_RUNTIME_OUTPUT_INTDIR: this will be correct even when LLVM and LLDB
+  # have separate binary directories.
   set(LLDB_DEFAULT_TEST_EXECUTABLE "${LLVM_RUNTIME_OUTPUT_INTDIR}/lldb${CMAKE_EXECUTABLE_SUFFIX}")
+
+  # Set the paths to default llvm tools. Make these paths relative to the LLVM
+  # binary directory.
   set(LLDB_DEFAULT_TEST_DSYMUTIL "${LLVM_BINARY_DIR}/${CMAKE_CFG_INTDIR}/bin/dsymutil${CMAKE_EXECUTABLE_SUFFIX}")
+  set(LLDB_DEFAULT_TEST_FILECHECK "${LLVM_BINARY_DIR}/${CMAKE_CFG_INTDIR}/bin/FileCheck${CMAKE_EXECUTABLE_SUFFIX}")
 
   if (NOT LLDB_TEST_USE_CUSTOM_C_COMPILER AND TARGET clang)
     set(LLDB_DEFAULT_TEST_C_COMPILER "${LLVM_BINARY_DIR}/${CMAKE_CFG_INTDIR}/bin/clang${CMAKE_EXECUTABLE_SUFFIX}")
@@ -113,6 +119,7 @@ if(LLDB_INCLUDE_TESTS)
   set(LLDB_TEST_C_COMPILER "${LLDB_DEFAULT_TEST_C_COMPILER}" CACHE PATH "C Compiler to use for building LLDB test inferiors")
   set(LLDB_TEST_CXX_COMPILER "${LLDB_DEFAULT_TEST_CXX_COMPILER}" CACHE PATH "C++ Compiler to use for building LLDB test inferiors")
   set(LLDB_TEST_DSYMUTIL "${LLDB_DEFAULT_TEST_DSYMUTIL}" CACHE PATH "dsymutil used for generating dSYM bundles")
+  set(LLDB_TEST_FILECHECK "${LLDB_DEFAULT_TEST_FILECHECK}" CACHE PATH "FileCheck used for testing purposes")
 
   if (("${LLDB_TEST_C_COMPILER}" STREQUAL "") OR
       ("${LLDB_TEST_CXX_COMPILER}" STREQUAL ""))
@@ -162,10 +169,6 @@ if(LLDB_INCLUDE_TESTS)
   add_subdirectory(utils/lldb-dotest)
 endif()
 
-if (LLDB_BUILD_FRAMEWORK)
-  add_custom_target(lldb-framework)
-  include(LLDBFramework)
-endif()
 
 if (NOT LLDB_DISABLE_PYTHON)
     # Add a Post-Build Event to copy over Python files and create the symlink

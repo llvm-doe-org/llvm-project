@@ -13,7 +13,7 @@
 // an instruction. Each MCInstPredicate class has a well-known semantic, and it
 // is used by a PredicateExpander to generate code for MachineInstr and/or
 // MCInst.
-// 
+//
 // MCInstPredicate definitions can be used to construct MCSchedPredicate
 // definitions. An MCSchedPredicate can be used in place of a SchedPredicate
 // when defining SchedReadVariant and SchedWriteVariant used by a processor
@@ -63,11 +63,12 @@
 //
 // New MCInstPredicate classes must be added to this file. For each new class
 // XYZ, an "expandXYZ" method must be added to the PredicateExpander.
-// 
+//
 //===----------------------------------------------------------------------===//
 
 // Forward declarations.
 class Instruction;
+class SchedMachineModel;
 
 // A generic machine instruction predicate.
 class MCInstPredicate;
@@ -169,18 +170,53 @@ class CheckAll<list<MCInstPredicate> Sequence>
 class CheckAny<list<MCInstPredicate> Sequence>
     : CheckPredicateSequence<Sequence>;
 
+
+// Used to expand the body of a function predicate. See the definition of
+// TIIPredicate below.
+class MCStatement;
+
+// Expands to a return statement. The return expression is a boolean expression
+// described by a MCInstPredicate.
+class MCReturnStatement<MCInstPredicate predicate> : MCStatement {
+  MCInstPredicate Pred = predicate;
+}
+
+// Used to automatically construct cases of a switch statement where the switch
+// variable is an instruction opcode. There is a 'case' for every opcode in the
+// `opcodes` list, and each case is associated with MCStatement `caseStmt`.
+class MCOpcodeSwitchCase<list<Instruction> opcodes, MCStatement caseStmt> {
+  list<Instruction> Opcodes = opcodes;
+  MCStatement CaseStmt = caseStmt;
+}
+
+// Expands to a switch statement. The switch variable is an instruction opcode.
+// The auto-generated switch is populated by a number of cases based on the
+// `cases` list in input. A default case is automatically generated, and it
+// evaluates to `default`.
+class MCOpcodeSwitchStatement<list<MCOpcodeSwitchCase> cases,
+                              MCStatement default> : MCStatement {
+  list<MCOpcodeSwitchCase> Cases = cases;
+  MCStatement DefaultCase = default;
+}
+
+// Base class for function predicates.
+class FunctionPredicateBase<string name, MCStatement body> {
+  string FunctionName = name;
+  MCStatement Body = body;
+}
+
 // Check that a call to method `Name` in class "XXXGenInstrInfo" (where XXX is
-// the `Target` name) returns true.
+// the name of a target) returns true.
 //
 // TIIPredicate definitions are used to model calls to the target-specific
 // InstrInfo. A TIIPredicate is treated specially by the InstrInfoEmitter
 // tablegen backend, which will use it to automatically generate a definition in
 // the target specific `GenInstrInfo` class.
-class TIIPredicate<string Target, string Name, MCInstPredicate P> : MCInstPredicate {
-  string TargetName = Target;
-  string FunctionName = Name;
-  MCInstPredicate Pred = P;
-}
+//
+// There cannot be multiple TIIPredicate definitions with the same name for the
+// same target.
+class TIIPredicate<string Name, MCStatement body>
+    : FunctionPredicateBase<Name, body>, MCInstPredicate;
 
 // A function predicate that takes as input a machine instruction, and returns
 // a boolean value.
@@ -195,3 +231,100 @@ class CheckFunctionPredicate<string MCInstFn, string MachineInstrFn> : MCInstPre
   string MCInstFnName = MCInstFn;
   string MachineInstrFnName = MachineInstrFn;
 }
+
+// Used to classify machine instructions based on a machine instruction
+// predicate.
+//
+// Let IC be an InstructionEquivalenceClass definition, and MI a machine
+// instruction.  We say that MI belongs to the equivalence class described by IC
+// if and only if the following two conditions are met:
+//  a) MI's opcode is in the `opcodes` set, and
+//  b) `Predicate` evaluates to true when applied to MI.
+//
+// Instances of this class can be used by processor scheduling models to
+// describe instructions that have a property in common.  For example,
+// InstructionEquivalenceClass definitions can be used to identify the set of
+// dependency breaking instructions for a processor model.
+//
+// An (optional) list of operand indices can be used to further describe
+// properties that apply to instruction operands. For example, it can be used to
+// identify register uses of a dependency breaking instructions that are not in
+// a RAW dependency.
+class InstructionEquivalenceClass<list<Instruction> opcodes,
+                                  MCInstPredicate pred,
+                                  list<int> operands = []> {
+  list<Instruction> Opcodes = opcodes;
+  MCInstPredicate Predicate = pred;
+  list<int> OperandIndices = operands;
+}
+
+// Used by processor models to describe dependency breaking instructions.
+//
+// This is mainly an alias for InstructionEquivalenceClass.  Input operand
+// `BrokenDeps` identifies the set of "broken dependencies". There is one bit
+// per each implicit and explicit input operand.  An empty set of broken
+// dependencies means: "explicit input register operands are independent."
+class DepBreakingClass<list<Instruction> opcodes, MCInstPredicate pred,
+                       list<int> BrokenDeps = []>
+    : InstructionEquivalenceClass<opcodes, pred, BrokenDeps>;
+
+// A function descriptor used to describe the signature of a predicate methods
+// which will be expanded by the STIPredicateExpander into a tablegen'd
+// XXXGenSubtargetInfo class member definition (here, XXX is a target name).
+//
+// It describes the signature of a TargetSubtarget hook, as well as a few extra
+// properties. Examples of extra properties are:
+//  - The default return value for the auto-generate function hook.
+//  - A list of subtarget hooks (Delegates) that are called from this function.
+//
+class STIPredicateDecl<string name, MCInstPredicate default = FalsePred,
+                       bit overrides = 1, bit expandForMC = 1,
+                       bit updatesOpcodeMask = 0,
+                       list<STIPredicateDecl> delegates = []> {
+  string Name = name;
+
+  MCInstPredicate DefaultReturnValue = default;
+
+  // True if this method is declared as virtual in class TargetSubtargetInfo.
+  bit OverridesBaseClassMember = overrides;
+
+  // True if we need an equivalent predicate function in the MC layer.
+  bit ExpandForMC = expandForMC;
+
+  // True if the autogenerated method has a extra in/out APInt param used as a
+  // mask of operands.
+  bit UpdatesOpcodeMask = updatesOpcodeMask;
+
+  // A list of STIPredicates used by this definition to delegate part of the
+  // computation. For example, STIPredicateFunction `isDependencyBreaking()`
+  // delegates to `isZeroIdiom()` part of its computation.
+  list<STIPredicateDecl> Delegates = delegates;
+}
+
+// A predicate function definition member of class `XXXGenSubtargetInfo`.
+//
+// If `Declaration.ExpandForMC` is true, then SubtargetEmitter
+// will also expand another definition of this method that accepts a MCInst.
+class STIPredicate<STIPredicateDecl declaration,
+                   list<InstructionEquivalenceClass> classes> {
+  STIPredicateDecl Declaration = declaration;
+  list<InstructionEquivalenceClass> Classes = classes;
+  SchedMachineModel SchedModel = ?;
+}
+
+// Convenience classes and definitions used by processor scheduling models to
+// describe dependency breaking instructions.
+let UpdatesOpcodeMask = 1 in {
+
+def IsZeroIdiomDecl : STIPredicateDecl<"isZeroIdiom">;
+
+let Delegates = [IsZeroIdiomDecl] in
+def IsDepBreakingDecl : STIPredicateDecl<"isDependencyBreaking">;
+
+} // UpdatesOpcodeMask
+
+class IsZeroIdiomFunction<list<DepBreakingClass> classes>
+    : STIPredicate<IsZeroIdiomDecl, classes>;
+
+class IsDepBreakingFunction<list<DepBreakingClass> classes>
+    : STIPredicate<IsDepBreakingDecl, classes>;

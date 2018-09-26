@@ -1026,7 +1026,7 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
 
   auto *For = dyn_cast_or_null<ForStmt>(AStmt);
   if (!For) {
-    Diag(AStmt->getLocStart(), diag::err_acc_not_for)
+    Diag(AStmt->getBeginLoc(), diag::err_acc_not_for)
         << getOpenACCDirectiveName(DSAStack->getRealDirective());
     return StmtError();
   }
@@ -1040,7 +1040,7 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
         VarDecl *VD = cast<VarDecl>(cast<DeclRefExpr>(VR)->getDecl())
                       ->getCanonicalDecl();
         if (VD == DSAStack->getLoopControlVariable()) {
-           Diag(VR->getLocEnd(), diag::err_acc_reduction_on_loop_control_var)
+           Diag(VR->getEndLoc(), diag::err_acc_reduction_on_loop_control_var)
                << VR->getSourceRange();
            return StmtError();
         }
@@ -1735,8 +1735,8 @@ private:
                                     SC_None);
       Tx.getSema().AddInitializerToDecl(VD, Init, false);
       StmtResult Res = Tx.getSema().ActOnDeclStmt(
-          Tx.getSema().ConvertDeclToDeclGroup(VD), VD->getLocStart(),
-          VD->getLocEnd());
+          Tx.getSema().ConvertDeclToDeclGroup(VD), VD->getBeginLoc(),
+          VD->getEndLoc());
       if (Res.isInvalid())
         Err = true;
       else
@@ -1758,8 +1758,8 @@ private:
         return;
       }
       Stmts.push_back(S.get());
-      S = Tx.getSema().ActOnCompoundStmt(Stmts.front()->getLocStart(),
-                                         Stmts.back()->getLocEnd(), Stmts,
+      S = Tx.getSema().ActOnCompoundStmt(Stmts.front()->getBeginLoc(),
+                                         Stmts.back()->getEndLoc(), Stmts,
                                          false);
     }
     ~ConditionalCompoundStmtRAII() {
@@ -1796,7 +1796,7 @@ public:
           NumWorkersVarDecl = EnclosingCompoundStmt.addNewPrivateDecl(
               "__clang_acc_num_workers__",
               NumWorkersExpr->getType().withConst(), NumWorkersExpr,
-              NumWorkersExpr->getLocStart());
+              NumWorkersExpr->getBeginLoc());
       }
     }
     auto VectorLengthClauses = D->getClausesOfKind<ACCVectorLengthClause>();
@@ -1805,7 +1805,7 @@ public:
 
     // Start OpenMP DSA block.
     getSema().StartOpenMPDSABlock(OMPD_target_teams, DeclarationNameInfo(),
-                                  /*CurScope=*/nullptr, D->getLocStart());
+                                  /*CurScope=*/nullptr, D->getBeginLoc());
 
     // Transform OpenACC clauses.
     llvm::SmallVector<OMPClause *, 16> TClauses;
@@ -1830,7 +1830,7 @@ public:
     else
       Res = getDerived().RebuildOMPExecutableDirective(
           OMPD_target_teams, DeclarationNameInfo(), OMPD_unknown, TClauses,
-          AssociatedStmt.get(), D->getLocStart(), D->getLocEnd());
+          AssociatedStmt.get(), D->getBeginLoc(), D->getEndLoc());
     getSema().EndOpenMPDSABlock(Res.get());
     EnclosingCompoundStmt.finalize(Res);
     if (!Res.isInvalid())
@@ -1874,7 +1874,7 @@ public:
           ExprResult Res = getSema().BuildDeclRefExpr(
               NumWorkersVarDecl,
               NumWorkersVarDecl->getType().getNonReferenceType(), VK_RValue,
-              D->getLocEnd());
+              D->getEndLoc());
           assert(!Res.isInvalid() &&
                  "expected valid reference to num_workers variable");
           AddNumThreadsExpr = Res.get();
@@ -1931,8 +1931,8 @@ public:
                         ->getCanonicalDecl();
           if ((AddScopeWithLCVPrivate && D->getLoopControlVariable() == VD) ||
               AddScopeWithAllPrivates)
-            EnclosingCompoundStmt.addPrivateDecl(VR->getLocStart(),
-                                                 VR->getLocEnd(), VD);
+            EnclosingCompoundStmt.addPrivateDecl(VR->getBeginLoc(),
+                                                 VR->getEndLoc(), VD);
         }
       }
     }
@@ -1950,7 +1950,7 @@ public:
 
     // Start OpenMP DSA block.
     getSema().StartOpenMPDSABlock(TDKind, DeclarationNameInfo(),
-                                  /*CurScope=*/nullptr, D->getLocStart());
+                                  /*CurScope=*/nullptr, D->getBeginLoc());
 
     // Add num_threads and simdlen clauses, as needed.
     llvm::SmallVector<OMPClause *, 16> TClauses;
@@ -1959,23 +1959,23 @@ public:
     size_t NumClausesAdded = 0;
     if (AddNumThreads1) {
       OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_num_threads);
-      ExprResult One = getSema().ActOnIntegerConstant(D->getLocEnd(), 1);
+      ExprResult One = getSema().ActOnIntegerConstant(D->getEndLoc(), 1);
       assert(!One.isInvalid());
       TClauses.push_back(getDerived().RebuildOMPNumThreadsClause(
-          One.get(), D->getLocEnd(), D->getLocEnd(), D->getLocEnd()));
+          One.get(), D->getEndLoc(), D->getEndLoc(), D->getEndLoc()));
       ++NumClausesAdded;
     } else if (AddNumThreadsExpr) {
       OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_num_threads);
       TClauses.push_back(getDerived().RebuildOMPNumThreadsClause(
-          AddNumThreadsExpr, AddNumThreadsExpr->getLocStart(),
-          AddNumThreadsExpr->getLocStart(), AddNumThreadsExpr->getLocEnd()));
+          AddNumThreadsExpr, AddNumThreadsExpr->getBeginLoc(),
+          AddNumThreadsExpr->getBeginLoc(), AddNumThreadsExpr->getEndLoc()));
       ++NumClausesAdded;
     }
     if (AddSimdlenExpr) {
       OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_simdlen);
       TClauses.push_back(getDerived().RebuildOMPSimdlenClause(
-          AddSimdlenExpr, AddSimdlenExpr->getLocStart(),
-          AddSimdlenExpr->getLocStart(), AddSimdlenExpr->getLocEnd()));
+          AddSimdlenExpr, AddSimdlenExpr->getBeginLoc(),
+          AddSimdlenExpr->getBeginLoc(), AddSimdlenExpr->getEndLoc()));
       ++NumClausesAdded;
     }
 
@@ -1997,7 +1997,7 @@ public:
     else
       Res = getDerived().RebuildOMPExecutableDirective(
           TDKind, DeclarationNameInfo(), OMPD_unknown, TClauses,
-          AssociatedStmt.get(), D->getLocStart(), D->getLocEnd());
+          AssociatedStmt.get(), D->getBeginLoc(), D->getEndLoc());
     getSema().EndOpenMPDSABlock(Res.get());
     EnclosingCompoundStmt.finalize(Res);
     if (!Res.isInvalid())
@@ -2059,18 +2059,18 @@ private:
                        SourceLocation ColonLoc = SourceLocation())
       // So far, it appears that only LocStart is used to decide if the
       // directive is implicit.
-      : LocStart(D && C->getLocStart().isInvalid() ? D->getLocEnd()
-                                                   : C->getLocStart()),
-        LParenLoc(LParenLoc), ColonLoc(ColonLoc), LocEnd(C->getLocEnd())
+      : LocStart(D && C->getBeginLoc().isInvalid() ? D->getEndLoc()
+                                                   : C->getBeginLoc()),
+        LParenLoc(LParenLoc), ColonLoc(ColonLoc), LocEnd(C->getEndLoc())
     {
       // So far, we have found that, if the clause's LocStart is invalid, all
       // the clause's locations are invalid.  Otherwise, setting LocStart to
       // the directive end might produce locations that are out of order.
-      assert((!C->getLocStart().isInvalid() ||
+      assert((!C->getBeginLoc().isInvalid() ||
               (LParenLoc.isInvalid() && ColonLoc.isInvalid() &&
-               C->getLocEnd().isInvalid())) &&
+               C->getEndLoc().isInvalid())) &&
               "Inconsistent location validity");
-      assert((!D || !D->getLocEnd().isInvalid()) &&
+      assert((!D || !D->getEndLoc().isInvalid()) &&
              "Invalid directive location");
     }
   };
@@ -2144,7 +2144,7 @@ public:
     // If there were and RequireImplicit=true, we would need to complain to the
     // user as the OpenMP implementation might not complain unless we print the
     // generated OpenMP and recompile it.
-    assert(C->getLocStart().isInvalid()
+    assert(C->getBeginLoc().isInvalid()
            && "Unexpected explicit OpenACC shared clause");
     return transformACCVarListClause<ACCSharedClause>(
         RequireImplicit ? nullptr : D, C, OMPC_shared, nullptr,

@@ -1632,8 +1632,8 @@ static void removePunyEdges(PathPieces &path, SourceManager &SM,
     if (isConditionForTerminator(end, endParent))
       continue;
 
-    SourceLocation FirstLoc = start->getLocStart();
-    SourceLocation SecondLoc = end->getLocStart();
+    SourceLocation FirstLoc = start->getBeginLoc();
+    SourceLocation SecondLoc = end->getBeginLoc();
 
     if (!SM.isWrittenInSameFile(FirstLoc, SecondLoc))
       continue;
@@ -1881,6 +1881,22 @@ static void dropFunctionEntryEdge(PathPieces &Path, LocationContextMap &LCM,
 using VisitorsDiagnosticsTy = llvm::DenseMap<const ExplodedNode *,
                    std::vector<std::shared_ptr<PathDiagnosticPiece>>>;
 
+/// Populate executes lines with lines containing at least one diagnostics.
+static void updateExecutedLinesWithDiagnosticPieces(
+  PathDiagnostic &PD) {
+
+  PathPieces path = PD.path.flatten(/*ShouldFlattenMacros=*/true);
+  FilesToLineNumsMap &ExecutedLines = PD.getExecutedLines();
+
+  for (const auto &P : path) {
+    FullSourceLoc Loc = P->getLocation().asLocation().getExpansionLoc();
+    FileID FID = Loc.getFileID();
+    unsigned LineNo = Loc.getLineNumber();
+    assert(FID.isValid());
+    ExecutedLines[FID].insert(LineNo);
+  }
+}
+
 /// This function is responsible for generating diagnostic pieces that are
 /// *not* provided by bug report visitors.
 /// These diagnostics may differ depending on the consumer's settings,
@@ -2006,8 +2022,6 @@ static std::unique_ptr<PathDiagnostic> generatePathDiagnosticForConsumer(
 //===----------------------------------------------------------------------===//
 
 void BugType::anchor() {}
-
-void BugType::FlushReports(BugReporter &BR) {}
 
 void BuiltinBug::anchor() {}
 
@@ -2236,14 +2250,6 @@ BugReporter::~BugReporter() {
 void BugReporter::FlushReports() {
   if (BugTypes.isEmpty())
     return;
-
-  // First flush the warnings for each BugType.  This may end up creating new
-  // warnings and new BugTypes.
-  // FIXME: Only NSErrorChecker needs BugType's FlushReports.
-  // Turn NSErrorChecker into a proper checker and remove this.
-  SmallVector<const BugType *, 16> bugTypes(BugTypes.begin(), BugTypes.end());
-  for (const auto I : bugTypes)
-    const_cast<BugType*>(I)->FlushReports(*this);
 
   // We need to flush reports in deterministic order to ensure the order
   // of the reports is consistent between runs.
@@ -2605,8 +2611,6 @@ std::pair<BugReport*, std::unique_ptr<VisitorsDiagnosticsTy>> findValidReport(
     // Register refutation visitors first, if they mark the bug invalid no
     // further analysis is required
     R->addVisitor(llvm::make_unique<LikelyFalsePositiveSuppressionBRVisitor>());
-    if (Opts.shouldCrosscheckWithZ3())
-      R->addVisitor(llvm::make_unique<FalsePositiveRefutationBRVisitor>());
 
     // Register additional node visitors.
     R->addVisitor(llvm::make_unique<NilReceiverBRVisitor>());
@@ -2619,9 +2623,24 @@ std::pair<BugReport*, std::unique_ptr<VisitorsDiagnosticsTy>> findValidReport(
     std::unique_ptr<VisitorsDiagnosticsTy> visitorNotes =
         generateVisitorsDiagnostics(R, ErrorNode, BRC);
 
-    if (R->isValid())
-      return std::make_pair(R, std::move(visitorNotes));
+    if (R->isValid()) {
+      if (Opts.shouldCrosscheckWithZ3()) {
+        // If crosscheck is enabled, remove all visitors, add the refutation
+        // visitor and check again
+        R->clearVisitors();
+        R->addVisitor(llvm::make_unique<FalsePositiveRefutationBRVisitor>());
+
+        // We don't overrite the notes inserted by other visitors because the
+        // refutation manager does not add any new note to the path
+        generateVisitorsDiagnostics(R, ErrorGraph.ErrorNode, BRC);
+      }
+
+      // Check if the bug is still valid
+      if (R->isValid())
+        return std::make_pair(R, std::move(visitorNotes));
+    }
   }
+
   return std::make_pair(nullptr, llvm::make_unique<VisitorsDiagnosticsTy>());
 }
 
@@ -2793,16 +2812,15 @@ static bool isInevitablySinking(const ExplodedNode *N) {
     DFSWorkList.pop_back();
     Visited.insert(Blk);
 
+    // If at least one path reaches the CFG exit, it means that control is
+    // returned to the caller. For now, say that we are not sure what
+    // happens next. If necessary, this can be improved to analyze
+    // the parent StackFrameContext's call site in a similar manner.
+    if (Blk == &Cfg.getExit())
+      return false;
+
     for (const auto &Succ : Blk->succs()) {
       if (const CFGBlock *SuccBlk = Succ.getReachableBlock()) {
-        if (SuccBlk == &Cfg.getExit()) {
-          // If at least one path reaches the CFG exit, it means that control is
-          // returned to the caller. For now, say that we are not sure what
-          // happens next. If necessary, this can be improved to analyze
-          // the parent StackFrameContext's call site in a similar manner.
-          return false;
-        }
-
         if (!isImmediateSinkBlock(SuccBlk) && !Visited.count(SuccBlk)) {
           // If the block has reachable child blocks that aren't no-return,
           // add them to the worklist.
@@ -2972,6 +2990,7 @@ void BugReporter::FlushReport(BugReportEquivClass& EQ) {
     for (const auto &i : Meta)
       PD->addMeta(i);
 
+    updateExecutedLinesWithDiagnosticPieces(*PD);
     Consumer->HandlePathDiagnostic(std::move(PD));
   }
 }
@@ -2980,7 +2999,7 @@ void BugReporter::FlushReport(BugReportEquivClass& EQ) {
 /// into \p ExecutedLines.
 static void populateExecutedLinesWithFunctionSignature(
     const Decl *Signature, SourceManager &SM,
-    std::unique_ptr<FilesToLineNumsMap> &ExecutedLines) {
+    FilesToLineNumsMap &ExecutedLines) {
   SourceRange SignatureSourceRange;
   const Stmt* Body = Signature->getBody();
   if (const auto FD = dyn_cast<FunctionDecl>(Signature)) {
@@ -2993,22 +3012,26 @@ static void populateExecutedLinesWithFunctionSignature(
   SourceLocation Start = SignatureSourceRange.getBegin();
   SourceLocation End = Body ? Body->getSourceRange().getBegin()
     : SignatureSourceRange.getEnd();
+  if (!Start.isValid() || !End.isValid())
+    return;
   unsigned StartLine = SM.getExpansionLineNumber(Start);
   unsigned EndLine = SM.getExpansionLineNumber(End);
 
   FileID FID = SM.getFileID(SM.getExpansionLoc(Start));
   for (unsigned Line = StartLine; Line <= EndLine; Line++)
-    ExecutedLines->operator[](FID.getHashValue()).insert(Line);
+    ExecutedLines[FID].insert(Line);
 }
 
 static void populateExecutedLinesWithStmt(
     const Stmt *S, SourceManager &SM,
-    std::unique_ptr<FilesToLineNumsMap> &ExecutedLines) {
+    FilesToLineNumsMap &ExecutedLines) {
   SourceLocation Loc = S->getSourceRange().getBegin();
+  if (!Loc.isValid())
+    return;
   SourceLocation ExpansionLoc = SM.getExpansionLoc(Loc);
   FileID FID = SM.getFileID(ExpansionLoc);
   unsigned LineNo = SM.getExpansionLineNumber(ExpansionLoc);
-  ExecutedLines->operator[](FID.getHashValue()).insert(LineNo);
+  ExecutedLines[FID].insert(LineNo);
 }
 
 /// \return all executed lines including function signatures on the path
@@ -3021,13 +3044,13 @@ findExecutedLines(SourceManager &SM, const ExplodedNode *N) {
     if (N->getFirstPred() == nullptr) {
       // First node: show signature of the entrance point.
       const Decl *D = N->getLocationContext()->getDecl();
-      populateExecutedLinesWithFunctionSignature(D, SM, ExecutedLines);
+      populateExecutedLinesWithFunctionSignature(D, SM, *ExecutedLines);
     } else if (auto CE = N->getLocationAs<CallEnter>()) {
       // Inlined function: show signature.
       const Decl* D = CE->getCalleeContext()->getDecl();
-      populateExecutedLinesWithFunctionSignature(D, SM, ExecutedLines);
+      populateExecutedLinesWithFunctionSignature(D, SM, *ExecutedLines);
     } else if (const Stmt *S = PathDiagnosticLocation::getStmt(N)) {
-      populateExecutedLinesWithStmt(S, SM, ExecutedLines);
+      populateExecutedLinesWithStmt(S, SM, *ExecutedLines);
 
       // Show extra context for some parent kinds.
       const Stmt *P = N->getParentMap().getParent(S);
@@ -3036,12 +3059,12 @@ findExecutedLines(SourceManager &SM, const ExplodedNode *N) {
       // return statement is generated, but we do want to show the whole
       // return.
       if (const auto *RS = dyn_cast_or_null<ReturnStmt>(P)) {
-        populateExecutedLinesWithStmt(RS, SM, ExecutedLines);
+        populateExecutedLinesWithStmt(RS, SM, *ExecutedLines);
         P = N->getParentMap().getParent(RS);
       }
 
       if (P && (isa<SwitchCase>(P) || isa<LabelStmt>(P)))
-        populateExecutedLinesWithStmt(P, SM, ExecutedLines);
+        populateExecutedLinesWithStmt(P, SM, *ExecutedLines);
     }
 
     N = N->getFirstPred();

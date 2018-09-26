@@ -78,6 +78,7 @@ protected:
   bool HasRDM = false;
   bool HasPerfMon = false;
   bool HasFullFP16 = false;
+  bool HasFP16FML = false;
   bool HasSPE = false;
 
   // ARMv8.4 Crypto extensions
@@ -122,6 +123,7 @@ protected:
   bool HasArithmeticCbzFusion = false;
   bool HasFuseAddress = false;
   bool HasFuseAES = false;
+  bool HasFuseCryptoEOR = false;
   bool HasFuseCCSelect = false;
   bool HasFuseLiterals = false;
   bool DisableLatencySchedHeuristic = false;
@@ -137,11 +139,11 @@ protected:
   unsigned MaxJumpTableSize = 0;
   unsigned WideningBaseCost = 0;
 
-  // ReserveX18 - X18 is not available as a general purpose register.
-  bool ReserveX18;
+  // ReserveXRegister[i] - X#i is not available as a general purpose register.
+  BitVector ReserveXRegister;
 
-  // ReserveX20 - X20 is not available as a general purpose register.
-  bool ReserveX20 = false;
+  // CustomCallUsedXRegister[i] - X#i call saved.
+  BitVector CustomCallSavedXRegs;
 
   bool IsLittle;
 
@@ -228,8 +230,12 @@ public:
     return MinVectorRegisterBitWidth;
   }
 
-  bool isX18Reserved() const { return ReserveX18; }
-  bool isX20Reserved() const { return ReserveX20; }
+  bool isXRegisterReserved(size_t i) const { return ReserveXRegister[i]; }
+  unsigned getNumXRegisterReserved() const { return ReserveXRegister.count(); }
+  bool isXRegCustomCalleeSaved(size_t i) const {
+    return CustomCallSavedXRegs[i];
+  }
+  bool hasCustomCallingConv() const { return CustomCallSavedXRegs.any(); }
   bool hasFPARMv8() const { return HasFPARMv8; }
   bool hasNEON() const { return HasNEON; }
   bool hasCrypto() const { return HasCrypto; }
@@ -258,6 +264,7 @@ public:
   bool hasArithmeticCbzFusion() const { return HasArithmeticCbzFusion; }
   bool hasFuseAddress() const { return HasFuseAddress; }
   bool hasFuseAES() const { return HasFuseAES; }
+  bool hasFuseCryptoEOR() const { return HasFuseCryptoEOR; }
   bool hasFuseCCSelect() const { return HasFuseCCSelect; }
   bool hasFuseLiterals() const { return HasFuseLiterals; }
 
@@ -291,6 +298,7 @@ public:
 
   bool hasPerfMon() const { return HasPerfMon; }
   bool hasFullFP16() const { return HasFullFP16; }
+  bool hasFP16FML() const { return HasFP16FML; }
   bool hasSPE() const { return HasSPE; }
   bool hasLSLFast() const { return HasLSLFast; }
   bool hasSVE() const { return HasSVE; }

@@ -347,35 +347,6 @@ TEST(Support, HomeDirectoryWithNoEnv) {
 }
 #endif
 
-TEST(Support, UserCacheDirectory) {
-  SmallString<13> CacheDir;
-  SmallString<20> CacheDir2;
-  auto Status = path::user_cache_directory(CacheDir, "");
-  EXPECT_TRUE(Status ^ CacheDir.empty());
-
-  if (Status) {
-    EXPECT_TRUE(path::user_cache_directory(CacheDir2, "")); // should succeed
-    EXPECT_EQ(CacheDir, CacheDir2); // and return same paths
-
-    EXPECT_TRUE(path::user_cache_directory(CacheDir, "A", "B", "file.c"));
-    auto It = path::rbegin(CacheDir);
-    EXPECT_EQ("file.c", *It);
-    EXPECT_EQ("B", *++It);
-    EXPECT_EQ("A", *++It);
-    auto ParentDir = *++It;
-
-    // Test Unicode: "<user_cache_dir>/(pi)r^2/aleth.0"
-    EXPECT_TRUE(path::user_cache_directory(CacheDir2, "\xCF\x80r\xC2\xB2",
-                                           "\xE2\x84\xB5.0"));
-    auto It2 = path::rbegin(CacheDir2);
-    EXPECT_EQ("\xE2\x84\xB5.0", *It2);
-    EXPECT_EQ("\xCF\x80r\xC2\xB2", *++It2);
-    auto ParentDir2 = *++It2;
-
-    EXPECT_EQ(ParentDir, ParentDir2);
-  }
-}
-
 TEST(Support, TempDirectory) {
   SmallString<32> TempDir;
   path::system_temp_directory(false, TempDir);
@@ -679,6 +650,37 @@ TEST_F(FileSystemTest, TempFiles) {
   ASSERT_NO_ERROR(fs::createTemporaryFile(Path216, "", TempPath));
   ASSERT_NO_ERROR(fs::remove(Twine(TempPath)));
 #endif
+}
+
+TEST_F(FileSystemTest, TempFileCollisions) {
+  SmallString<128> TestDirectory;
+  ASSERT_NO_ERROR(
+      fs::createUniqueDirectory("CreateUniqueFileTest", TestDirectory));
+  FileRemover Cleanup(TestDirectory);
+  SmallString<128> Model = TestDirectory;
+  path::append(Model, "%.tmp");
+  SmallString<128> Path;
+  std::vector<fs::TempFile> TempFiles;
+
+  auto TryCreateTempFile = [&]() {
+    Expected<fs::TempFile> T = fs::TempFile::create(Model);
+    if (T) {
+      TempFiles.push_back(std::move(*T));
+      return true;
+    } else {
+      logAllUnhandledErrors(T.takeError(), errs(),
+                            "Failed to create temporary file: ");
+      return false;
+    }
+  };
+
+  // We should be able to create exactly 16 temporary files.
+  for (int i = 0; i < 16; ++i)
+    EXPECT_TRUE(TryCreateTempFile());
+  EXPECT_FALSE(TryCreateTempFile());
+
+  for (fs::TempFile &T : TempFiles)
+    cantFail(T.discard());
 }
 
 TEST_F(FileSystemTest, CreateDir) {
@@ -1266,7 +1268,7 @@ TEST_F(FileSystemTest, OpenFileForRead) {
   ASSERT_NO_ERROR(sys::fs::openFileForWrite(Twine(TempPath), FileDescriptor,
                                             fs::CD_OpenExisting));
   TimePoint<> Epoch(std::chrono::milliseconds(0));
-  ASSERT_NO_ERROR(fs::setLastModificationAndAccessTime(FileDescriptor, Epoch));
+  ASSERT_NO_ERROR(fs::setLastAccessAndModificationTime(FileDescriptor, Epoch));
   ::close(FileDescriptor);
 
   // Open the file and ensure access time is updated, when forced.

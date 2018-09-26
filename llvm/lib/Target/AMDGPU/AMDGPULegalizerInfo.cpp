@@ -32,8 +32,6 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST,
     return LLT::pointer(AS, TM.getPointerSizeInBits(AS));
   };
 
-  auto AMDGPUAS = ST.getAMDGPUAS();
-
   const LLT S1 = LLT::scalar(1);
   const LLT V2S16 = LLT::vector(2, 16);
 
@@ -44,8 +42,8 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST,
   const LLT GlobalPtr = GetAddrSpacePtr(AMDGPUAS::GLOBAL_ADDRESS);
   const LLT ConstantPtr = GetAddrSpacePtr(AMDGPUAS::CONSTANT_ADDRESS);
   const LLT LocalPtr = GetAddrSpacePtr(AMDGPUAS::LOCAL_ADDRESS);
-  const LLT FlatPtr = GetAddrSpacePtr(AMDGPUAS.FLAT_ADDRESS);
-  const LLT PrivatePtr = GetAddrSpacePtr(AMDGPUAS.PRIVATE_ADDRESS);
+  const LLT FlatPtr = GetAddrSpacePtr(AMDGPUAS::FLAT_ADDRESS);
+  const LLT PrivatePtr = GetAddrSpacePtr(AMDGPUAS::PRIVATE_ADDRESS);
 
   const LLT AddrSpaces[] = {
     GlobalPtr,
@@ -172,10 +170,7 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST,
   }
 
   // FIXME: Doesn't handle extract of illegal sizes.
-  getActionDefinitionsBuilder(G_EXTRACT)
-    .unsupportedIf([=](const LegalityQuery &Query) {
-        return Query.Types[0].getSizeInBits() >= Query.Types[1].getSizeInBits();
-      })
+  getActionDefinitionsBuilder({G_EXTRACT, G_INSERT})
     .legalIf([=](const LegalityQuery &Query) {
         const LLT &Ty0 = Query.Types[0];
         const LLT &Ty1 = Query.Types[1];

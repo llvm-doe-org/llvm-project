@@ -99,6 +99,9 @@ static const char *getPropertyName(MachineFunctionProperties::Property Prop) {
   llvm_unreachable("Invalid machine function property");
 }
 
+// Pin the vtable to this file.
+void MachineFunction::Delegate::anchor() {}
+
 void MachineFunctionProperties::print(raw_ostream &OS) const {
   const char *Separator = "";
   for (BitVector::size_type I = 0; I < Properties.size(); ++I) {
@@ -133,6 +136,16 @@ MachineFunction::MachineFunction(const Function &F, const TargetMachine &Target,
     : F(F), Target(Target), STI(&STI), Ctx(mmi.getContext()), MMI(mmi) {
   FunctionNumber = FunctionNum;
   init();
+}
+
+void MachineFunction::handleInsertion(const MachineInstr &MI) {
+  if (TheDelegate)
+    TheDelegate->MF_HandleInsertion(MI);
+}
+
+void MachineFunction::handleRemoval(const MachineInstr &MI) {
+  if (TheDelegate)
+    TheDelegate->MF_HandleRemoval(MI);
 }
 
 void MachineFunction::init() {
@@ -406,77 +419,12 @@ MachineFunction::getMachineMemOperand(const MachineMemOperand *MMO,
                                MMO->getOrdering(), MMO->getFailureOrdering());
 }
 
-MachineInstr::mmo_iterator
-MachineFunction::allocateMemRefsArray(unsigned long Num) {
-  return Allocator.Allocate<MachineMemOperand *>(Num);
-}
-
-std::pair<MachineInstr::mmo_iterator, MachineInstr::mmo_iterator>
-MachineFunction::extractLoadMemRefs(MachineInstr::mmo_iterator Begin,
-                                    MachineInstr::mmo_iterator End) {
-  // Count the number of load mem refs.
-  unsigned Num = 0;
-  for (MachineInstr::mmo_iterator I = Begin; I != End; ++I)
-    if ((*I)->isLoad())
-      ++Num;
-
-  // Allocate a new array and populate it with the load information.
-  MachineInstr::mmo_iterator Result = allocateMemRefsArray(Num);
-  unsigned Index = 0;
-  for (MachineInstr::mmo_iterator I = Begin; I != End; ++I) {
-    if ((*I)->isLoad()) {
-      if (!(*I)->isStore())
-        // Reuse the MMO.
-        Result[Index] = *I;
-      else {
-        // Clone the MMO and unset the store flag.
-        MachineMemOperand *JustLoad =
-          getMachineMemOperand((*I)->getPointerInfo(),
-                               (*I)->getFlags() & ~MachineMemOperand::MOStore,
-                               (*I)->getSize(), (*I)->getBaseAlignment(),
-                               (*I)->getAAInfo(), nullptr,
-                               (*I)->getSyncScopeID(), (*I)->getOrdering(),
-                               (*I)->getFailureOrdering());
-        Result[Index] = JustLoad;
-      }
-      ++Index;
-    }
-  }
-  return std::make_pair(Result, Result + Num);
-}
-
-std::pair<MachineInstr::mmo_iterator, MachineInstr::mmo_iterator>
-MachineFunction::extractStoreMemRefs(MachineInstr::mmo_iterator Begin,
-                                     MachineInstr::mmo_iterator End) {
-  // Count the number of load mem refs.
-  unsigned Num = 0;
-  for (MachineInstr::mmo_iterator I = Begin; I != End; ++I)
-    if ((*I)->isStore())
-      ++Num;
-
-  // Allocate a new array and populate it with the store information.
-  MachineInstr::mmo_iterator Result = allocateMemRefsArray(Num);
-  unsigned Index = 0;
-  for (MachineInstr::mmo_iterator I = Begin; I != End; ++I) {
-    if ((*I)->isStore()) {
-      if (!(*I)->isLoad())
-        // Reuse the MMO.
-        Result[Index] = *I;
-      else {
-        // Clone the MMO and unset the load flag.
-        MachineMemOperand *JustStore =
-          getMachineMemOperand((*I)->getPointerInfo(),
-                               (*I)->getFlags() & ~MachineMemOperand::MOLoad,
-                               (*I)->getSize(), (*I)->getBaseAlignment(),
-                               (*I)->getAAInfo(), nullptr,
-                               (*I)->getSyncScopeID(), (*I)->getOrdering(),
-                               (*I)->getFailureOrdering());
-        Result[Index] = JustStore;
-      }
-      ++Index;
-    }
-  }
-  return std::make_pair(Result, Result + Num);
+MachineInstr::ExtraInfo *
+MachineFunction::createMIExtraInfo(ArrayRef<MachineMemOperand *> MMOs,
+                                   MCSymbol *PreInstrSymbol,
+                                   MCSymbol *PostInstrSymbol) {
+  return MachineInstr::ExtraInfo::create(Allocator, MMOs, PreInstrSymbol,
+                                         PostInstrSymbol);
 }
 
 const char *MachineFunction::createExternalSymbolName(StringRef Name) {
@@ -484,6 +432,14 @@ const char *MachineFunction::createExternalSymbolName(StringRef Name) {
   std::copy(Name.begin(), Name.end(), Dest);
   Dest[Name.size()] = 0;
   return Dest;
+}
+
+uint32_t *MachineFunction::allocateRegMask() {
+  unsigned NumRegs = getSubtarget().getRegisterInfo()->getNumRegs();
+  unsigned Size = MachineOperand::getRegMaskSize(NumRegs);
+  uint32_t *Mask = Allocator.Allocate<uint32_t>(Size);
+  memset(Mask, 0, Size * sizeof(Mask[0]));
+  return Mask;
 }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)

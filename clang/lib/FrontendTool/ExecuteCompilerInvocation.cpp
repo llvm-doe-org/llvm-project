@@ -61,6 +61,8 @@ CreateFrontendBaseAction(CompilerInstance &CI) {
     return llvm::make_unique<GenerateModuleFromModuleMapAction>();
   case GenerateModuleInterface:
     return llvm::make_unique<GenerateModuleInterfaceAction>();
+  case GenerateHeaderModule:
+    return llvm::make_unique<GenerateHeaderModuleAction>();
   case GeneratePCH:            return llvm::make_unique<GeneratePCHAction>();
   case GeneratePTH:            return llvm::make_unique<GeneratePTHAction>();
   case InitOnly:               return llvm::make_unique<InitOnlyAction>();
@@ -139,7 +141,7 @@ CreateFrontendAction(CompilerInstance &CI) {
   if (FEOpts.FixAndRecompile) {
     Act = llvm::make_unique<FixItRecompile>(std::move(Act));
   }
-  
+
 #if CLANG_ENABLE_ARCMT
   if (CI.getFrontendOpts().ProgramAction != frontend::MigrateSource &&
       CI.getFrontendOpts().ProgramAction != frontend::GeneratePCH) {
@@ -260,4 +262,4 @@ bool ExecuteCompilerInvocation(CompilerInstance *Clang) {
   return Success;
 }
 
-} // namespace clang 
+} // namespace clang

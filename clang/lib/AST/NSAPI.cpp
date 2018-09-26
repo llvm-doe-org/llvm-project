@@ -432,7 +432,7 @@ NSAPI::getNSNumberFactoryMethodKind(QualType T) const {
     return NSAPI::NSNumberWithDouble;
   case BuiltinType::Bool:
     return NSAPI::NSNumberWithBool;
-    
+
   case BuiltinType::Void:
   case BuiltinType::WChar_U:
   case BuiltinType::WChar_S:
@@ -491,7 +491,7 @@ NSAPI::getNSNumberFactoryMethodKind(QualType T) const {
   case BuiltinType::OMPArraySection:
     break;
   }
-  
+
   return None;
 }
 
@@ -511,7 +511,7 @@ bool NSAPI::isObjCNSUIntegerType(QualType T) const {
 StringRef NSAPI::GetNSIntegralKind(QualType T) const {
   if (!Ctx.getLangOpts().ObjC1 || T.isNull())
     return StringRef();
-  
+
   while (const TypedefType *TDT = T->getAs<TypedefType>()) {
     StringRef NSIntegralResust =
       llvm::StringSwitch<StringRef>(
@@ -604,6 +604,14 @@ Selector NSAPI::getOrInitSelector(ArrayRef<StringRef> Ids,
            I = Ids.begin(), E = Ids.end(); I != E; ++I)
       Idents.push_back(&Ctx.Idents.get(*I));
     Sel = Ctx.Selectors.getSelector(Idents.size(), Idents.data());
+  }
+  return Sel;
+}
+
+Selector NSAPI::getOrInitNullarySelector(StringRef Id, Selector &Sel) const {
+  if (Sel.isNull()) {
+    IdentifierInfo *Ident = &Ctx.Idents.get(Id);
+    Sel = Ctx.Selectors.getSelector(0, &Ident);
   }
   return Sel;
 }

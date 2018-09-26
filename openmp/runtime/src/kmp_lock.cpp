@@ -20,6 +20,7 @@
 #include "kmp_itt.h"
 #include "kmp_lock.h"
 #include "kmp_wait_release.h"
+#include "kmp_wrapper_getpid.h"
 
 #include "tsan_annotations.h"
 
@@ -196,10 +197,6 @@ void __kmp_init_tas_lock(kmp_tas_lock_t *lck) {
   lck->lk.poll = KMP_LOCK_FREE(tas);
 }
 
-static void __kmp_init_tas_lock_with_checks(kmp_tas_lock_t *lck) {
-  __kmp_init_tas_lock(lck);
-}
-
 void __kmp_destroy_tas_lock(kmp_tas_lock_t *lck) { lck->lk.poll = 0; }
 
 static void __kmp_destroy_tas_lock_with_checks(kmp_tas_lock_t *lck) {
@@ -294,10 +291,6 @@ static int __kmp_release_nested_tas_lock_with_checks(kmp_tas_lock_t *lck,
 void __kmp_init_nested_tas_lock(kmp_tas_lock_t *lck) {
   __kmp_init_tas_lock(lck);
   lck->lk.depth_locked = 0; // >= 0 for nestable locks, -1 for simple locks
-}
-
-static void __kmp_init_nested_tas_lock_with_checks(kmp_tas_lock_t *lck) {
-  __kmp_init_nested_tas_lock(lck);
 }
 
 void __kmp_destroy_nested_tas_lock(kmp_tas_lock_t *lck) {
@@ -509,10 +502,6 @@ void __kmp_init_futex_lock(kmp_futex_lock_t *lck) {
   TCW_4(lck->lk.poll, KMP_LOCK_FREE(futex));
 }
 
-static void __kmp_init_futex_lock_with_checks(kmp_futex_lock_t *lck) {
-  __kmp_init_futex_lock(lck);
-}
-
 void __kmp_destroy_futex_lock(kmp_futex_lock_t *lck) { lck->lk.poll = 0; }
 
 static void __kmp_destroy_futex_lock_with_checks(kmp_futex_lock_t *lck) {
@@ -607,10 +596,6 @@ static int __kmp_release_nested_futex_lock_with_checks(kmp_futex_lock_t *lck,
 void __kmp_init_nested_futex_lock(kmp_futex_lock_t *lck) {
   __kmp_init_futex_lock(lck);
   lck->lk.depth_locked = 0; // >= 0 for nestable locks, -1 for simple locks
-}
-
-static void __kmp_init_nested_futex_lock_with_checks(kmp_futex_lock_t *lck) {
-  __kmp_init_nested_futex_lock(lck);
 }
 
 void __kmp_destroy_nested_futex_lock(kmp_futex_lock_t *lck) {
@@ -799,10 +784,6 @@ void __kmp_init_ticket_lock(kmp_ticket_lock_t *lck) {
                              std::memory_order_release);
 }
 
-static void __kmp_init_ticket_lock_with_checks(kmp_ticket_lock_t *lck) {
-  __kmp_init_ticket_lock(lck);
-}
-
 void __kmp_destroy_ticket_lock(kmp_ticket_lock_t *lck) {
   std::atomic_store_explicit(&lck->lk.initialized, false,
                              std::memory_order_release);
@@ -954,10 +935,6 @@ void __kmp_init_nested_ticket_lock(kmp_ticket_lock_t *lck) {
   // >= 0 for nestable locks, -1 for simple locks
 }
 
-static void __kmp_init_nested_ticket_lock_with_checks(kmp_ticket_lock_t *lck) {
-  __kmp_init_nested_ticket_lock(lck);
-}
-
 void __kmp_destroy_nested_ticket_lock(kmp_ticket_lock_t *lck) {
   __kmp_destroy_ticket_lock(lck);
   std::atomic_store_explicit(&lck->lk.depth_locked, 0,
@@ -985,12 +962,6 @@ __kmp_destroy_nested_ticket_lock_with_checks(kmp_ticket_lock_t *lck) {
 }
 
 // access functions to fields which don't exist for all lock kinds.
-
-static int __kmp_is_ticket_lock_initialized(kmp_ticket_lock_t *lck) {
-  return std::atomic_load_explicit(&lck->lk.initialized,
-                                   std::memory_order_relaxed) &&
-         (lck->lk.self == lck);
-}
 
 static const ident_t *__kmp_get_ticket_lock_location(kmp_ticket_lock_t *lck) {
   return lck->lk.location;
@@ -1576,10 +1547,6 @@ void __kmp_init_queuing_lock(kmp_queuing_lock_t *lck) {
   KA_TRACE(1000, ("__kmp_init_queuing_lock: lock %p initialized\n", lck));
 }
 
-static void __kmp_init_queuing_lock_with_checks(kmp_queuing_lock_t *lck) {
-  __kmp_init_queuing_lock(lck);
-}
-
 void __kmp_destroy_queuing_lock(kmp_queuing_lock_t *lck) {
   lck->lk.initialized = NULL;
   lck->lk.location = NULL;
@@ -1705,11 +1672,6 @@ void __kmp_init_nested_queuing_lock(kmp_queuing_lock_t *lck) {
   lck->lk.depth_locked = 0; // >= 0 for nestable locks, -1 for simple locks
 }
 
-static void
-__kmp_init_nested_queuing_lock_with_checks(kmp_queuing_lock_t *lck) {
-  __kmp_init_nested_queuing_lock(lck);
-}
-
 void __kmp_destroy_nested_queuing_lock(kmp_queuing_lock_t *lck) {
   __kmp_destroy_queuing_lock(lck);
   lck->lk.depth_locked = 0;
@@ -1731,10 +1693,6 @@ __kmp_destroy_nested_queuing_lock_with_checks(kmp_queuing_lock_t *lck) {
 }
 
 // access functions to fields which don't exist for all lock kinds.
-
-static int __kmp_is_queuing_lock_initialized(kmp_queuing_lock_t *lck) {
-  return lck == lck->lk.initialized;
-}
 
 static const ident_t *__kmp_get_queuing_lock_location(kmp_queuing_lock_t *lck) {
   return lck->lk.location;
@@ -1870,13 +1828,15 @@ static kmp_adaptive_lock_statistics_t destroyedStats;
 static kmp_adaptive_lock_info_t liveLocks;
 
 // A lock so we can safely update the list of locks.
-static kmp_bootstrap_lock_t chain_lock;
+static kmp_bootstrap_lock_t chain_lock =
+    KMP_BOOTSTRAP_LOCK_INITIALIZER(chain_lock);
 
 // Initialize the list of stats.
 void __kmp_init_speculative_stats() {
   kmp_adaptive_lock_info_t *lck = &liveLocks;
 
-  memset((void *)&(lck->stats), 0, sizeof(lck->stats));
+  memset(CCAST(kmp_adaptive_lock_statistics_t *, &(lck->stats)), 0,
+         sizeof(lck->stats));
   lck->stats.next = lck;
   lck->stats.prev = lck;
 
@@ -1914,7 +1874,8 @@ static void __kmp_forget_lock(kmp_adaptive_lock_info_t *lck) {
 }
 
 static void __kmp_zero_speculative_stats(kmp_adaptive_lock_info_t *lck) {
-  memset((void *)&lck->stats, 0, sizeof(lck->stats));
+  memset(CCAST(kmp_adaptive_lock_statistics_t *, &lck->stats), 0,
+         sizeof(lck->stats));
   __kmp_remember_lock(lck);
 }
 
@@ -1931,8 +1892,6 @@ static void __kmp_add_stats(kmp_adaptive_lock_statistics_t *t,
 }
 
 static void __kmp_accumulate_speculative_stats(kmp_adaptive_lock_info_t *lck) {
-  kmp_adaptive_lock_statistics_t *t = &destroyedStats;
-
   __kmp_acquire_bootstrap_lock(&chain_lock);
 
   __kmp_add_stats(&destroyedStats, lck);
@@ -1960,11 +1919,6 @@ static FILE *__kmp_open_stats_file() {
 }
 
 void __kmp_print_speculative_stats() {
-  if (__kmp_user_lock_kind != lk_adaptive)
-    return;
-
-  FILE *statsFile = __kmp_open_stats_file();
-
   kmp_adaptive_lock_statistics_t total = destroyedStats;
   kmp_adaptive_lock_info_t *lck;
 
@@ -1977,6 +1931,10 @@ void __kmp_print_speculative_stats() {
   kmp_uint32 totalSpeculations = t->successfulSpeculations +
                                  t->hardFailedSpeculations +
                                  t->softFailedSpeculations;
+  if (totalSections <= 0)
+    return;
+
+  FILE *statsFile = __kmp_open_stats_file();
 
   fprintf(statsFile, "Speculative lock statistics (all approximate!)\n");
   fprintf(statsFile, " Lock parameters: \n"
@@ -2249,10 +2207,6 @@ static void __kmp_init_adaptive_lock(kmp_adaptive_lock_t *lck) {
   __kmp_zero_speculative_stats(&lck->lk.adaptive);
 #endif
   KA_TRACE(1000, ("__kmp_init_adaptive_lock: lock %p initialized\n", lck));
-}
-
-static void __kmp_init_adaptive_lock_with_checks(kmp_adaptive_lock_t *lck) {
-  __kmp_init_adaptive_lock(lck);
 }
 
 static void __kmp_destroy_adaptive_lock(kmp_adaptive_lock_t *lck) {
@@ -2552,10 +2506,6 @@ void __kmp_init_drdpa_lock(kmp_drdpa_lock_t *lck) {
   KA_TRACE(1000, ("__kmp_init_drdpa_lock: lock %p initialized\n", lck));
 }
 
-static void __kmp_init_drdpa_lock_with_checks(kmp_drdpa_lock_t *lck) {
-  __kmp_init_drdpa_lock(lck);
-}
-
 void __kmp_destroy_drdpa_lock(kmp_drdpa_lock_t *lck) {
   lck->lk.initialized = NULL;
   lck->lk.location = NULL;
@@ -2688,10 +2638,6 @@ void __kmp_init_nested_drdpa_lock(kmp_drdpa_lock_t *lck) {
   lck->lk.depth_locked = 0; // >= 0 for nestable locks, -1 for simple locks
 }
 
-static void __kmp_init_nested_drdpa_lock_with_checks(kmp_drdpa_lock_t *lck) {
-  __kmp_init_nested_drdpa_lock(lck);
-}
-
 void __kmp_destroy_nested_drdpa_lock(kmp_drdpa_lock_t *lck) {
   __kmp_destroy_drdpa_lock(lck);
   lck->lk.depth_locked = 0;
@@ -2712,10 +2658,6 @@ static void __kmp_destroy_nested_drdpa_lock_with_checks(kmp_drdpa_lock_t *lck) {
 }
 
 // access functions to fields which don't exist for all lock kinds.
-
-static int __kmp_is_drdpa_lock_initialized(kmp_drdpa_lock_t *lck) {
-  return lck == lck->lk.initialized;
-}
 
 static const ident_t *__kmp_get_drdpa_lock_location(kmp_drdpa_lock_t *lck) {
   return lck->lk.location;
@@ -2796,6 +2738,10 @@ static inline kmp_uint32 swap4(kmp_uint32 volatile *p, kmp_uint32 v) {
 
 static void __kmp_destroy_hle_lock(kmp_dyna_lock_t *lck) { TCW_4(*lck, 0); }
 
+static void __kmp_destroy_hle_lock_with_checks(kmp_dyna_lock_t *lck) {
+  TCW_4(*lck, 0);
+}
+
 static void __kmp_acquire_hle_lock(kmp_dyna_lock_t *lck, kmp_int32 gtid) {
   // Use gtid for KMP_LOCK_BUSY if necessary
   if (swap4(lck, KMP_LOCK_BUSY(1, hle)) != KMP_LOCK_FREE(hle)) {
@@ -2843,6 +2789,10 @@ static void __kmp_init_rtm_lock(kmp_queuing_lock_t *lck) {
 
 static void __kmp_destroy_rtm_lock(kmp_queuing_lock_t *lck) {
   __kmp_destroy_queuing_lock(lck);
+}
+
+static void __kmp_destroy_rtm_lock_with_checks(kmp_queuing_lock_t *lck) {
+  __kmp_destroy_queuing_lock_with_checks(lck);
 }
 
 static void __kmp_acquire_rtm_lock(kmp_queuing_lock_t *lck, kmp_int32 gtid) {
@@ -2933,7 +2883,12 @@ void (*__kmp_direct_init[])(kmp_dyna_lock_t *, kmp_dyna_lockseq_t) = {
 
 // destroy functions
 #define expand(l, op) 0, (void (*)(kmp_dyna_lock_t *))__kmp_##op##_##l##_lock,
-void (*__kmp_direct_destroy[])(kmp_dyna_lock_t *) = {
+static void (*direct_destroy[])(kmp_dyna_lock_t *) = {
+    __kmp_destroy_indirect_lock, 0, KMP_FOREACH_D_LOCK(expand, destroy)};
+#undef expand
+#define expand(l, op)                                                          \
+  0, (void (*)(kmp_dyna_lock_t *))__kmp_destroy_##l##_lock_with_checks,
+static void (*direct_destroy_check[])(kmp_dyna_lock_t *) = {
     __kmp_destroy_indirect_lock, 0, KMP_FOREACH_D_LOCK(expand, destroy)};
 #undef expand
 
@@ -2968,6 +2923,7 @@ static int (*direct_test_check[])(kmp_dyna_lock_t *, kmp_int32) = {
 #undef expand
 
 // Exposes only one set of jump tables (*lock or *lock_with_checks).
+void (*(*__kmp_direct_destroy))(kmp_dyna_lock_t *) = 0;
 int (*(*__kmp_direct_set))(kmp_dyna_lock_t *, kmp_int32) = 0;
 int (*(*__kmp_direct_unset))(kmp_dyna_lock_t *, kmp_int32) = 0;
 int (*(*__kmp_direct_test))(kmp_dyna_lock_t *, kmp_int32) = 0;
@@ -2976,7 +2932,15 @@ int (*(*__kmp_direct_test))(kmp_dyna_lock_t *, kmp_int32) = 0;
 #define expand(l, op) (void (*)(kmp_user_lock_p)) __kmp_##op##_##l##_##lock,
 void (*__kmp_indirect_init[])(kmp_user_lock_p) = {
     KMP_FOREACH_I_LOCK(expand, init)};
-void (*__kmp_indirect_destroy[])(kmp_user_lock_p) = {
+#undef expand
+
+#define expand(l, op) (void (*)(kmp_user_lock_p)) __kmp_##op##_##l##_##lock,
+static void (*indirect_destroy[])(kmp_user_lock_p) = {
+    KMP_FOREACH_I_LOCK(expand, destroy)};
+#undef expand
+#define expand(l, op)                                                          \
+  (void (*)(kmp_user_lock_p)) __kmp_##op##_##l##_##lock_with_checks,
+static void (*indirect_destroy_check[])(kmp_user_lock_p) = {
     KMP_FOREACH_I_LOCK(expand, destroy)};
 #undef expand
 
@@ -3009,6 +2973,7 @@ static int (*indirect_test_check[])(kmp_user_lock_p, kmp_int32) = {
 #undef expand
 
 // Exposes only one jump tables (*lock or *lock_with_checks).
+void (*(*__kmp_indirect_destroy))(kmp_user_lock_p) = 0;
 int (*(*__kmp_indirect_set))(kmp_user_lock_p, kmp_int32) = 0;
 int (*(*__kmp_indirect_unset))(kmp_user_lock_p, kmp_int32) = 0;
 int (*(*__kmp_indirect_test))(kmp_user_lock_p, kmp_int32) = 0;
@@ -3238,16 +3203,20 @@ void __kmp_init_dynamic_user_locks() {
     __kmp_direct_set = direct_set_check;
     __kmp_direct_unset = direct_unset_check;
     __kmp_direct_test = direct_test_check;
+    __kmp_direct_destroy = direct_destroy_check;
     __kmp_indirect_set = indirect_set_check;
     __kmp_indirect_unset = indirect_unset_check;
     __kmp_indirect_test = indirect_test_check;
+    __kmp_indirect_destroy = indirect_destroy_check;
   } else {
     __kmp_direct_set = direct_set;
     __kmp_direct_unset = direct_unset;
     __kmp_direct_test = direct_test;
+    __kmp_direct_destroy = direct_destroy;
     __kmp_indirect_set = indirect_set;
     __kmp_indirect_unset = indirect_unset;
     __kmp_indirect_test = indirect_test;
+    __kmp_indirect_destroy = indirect_destroy;
   }
   // If the user locks have already been initialized, then return. Allow the
   // switch between different KMP_CONSISTENCY_CHECK values, but do not allocate
@@ -3368,6 +3337,67 @@ enum kmp_lock_kind __kmp_user_lock_kind = lk_default;
 int __kmp_num_locks_in_block = 1; // FIXME - tune this value
 
 #else // KMP_USE_DYNAMIC_LOCK
+
+static void __kmp_init_tas_lock_with_checks(kmp_tas_lock_t *lck) {
+  __kmp_init_tas_lock(lck);
+}
+
+static void __kmp_init_nested_tas_lock_with_checks(kmp_tas_lock_t *lck) {
+  __kmp_init_nested_tas_lock(lck);
+}
+
+#if KMP_USE_FUTEX
+static void __kmp_init_futex_lock_with_checks(kmp_futex_lock_t *lck) {
+  __kmp_init_futex_lock(lck);
+}
+
+static void __kmp_init_nested_futex_lock_with_checks(kmp_futex_lock_t *lck) {
+  __kmp_init_nested_futex_lock(lck);
+}
+#endif
+
+static int __kmp_is_ticket_lock_initialized(kmp_ticket_lock_t *lck) {
+  return lck == lck->lk.initialized;
+}
+
+static void __kmp_init_ticket_lock_with_checks(kmp_ticket_lock_t *lck) {
+  __kmp_init_ticket_lock(lck);
+}
+
+static void __kmp_init_nested_ticket_lock_with_checks(kmp_ticket_lock_t *lck) {
+  __kmp_init_nested_ticket_lock(lck);
+}
+
+static int __kmp_is_queuing_lock_initialized(kmp_queuing_lock_t *lck) {
+  return lck == lck->lk.initialized;
+}
+
+static void __kmp_init_queuing_lock_with_checks(kmp_queuing_lock_t *lck) {
+  __kmp_init_queuing_lock(lck);
+}
+
+static void
+__kmp_init_nested_queuing_lock_with_checks(kmp_queuing_lock_t *lck) {
+  __kmp_init_nested_queuing_lock(lck);
+}
+
+#if KMP_USE_ADAPTIVE_LOCKS
+static void __kmp_init_adaptive_lock_with_checks(kmp_adaptive_lock_t *lck) {
+  __kmp_init_adaptive_lock(lck);
+}
+#endif
+
+static int __kmp_is_drdpa_lock_initialized(kmp_drdpa_lock_t *lck) {
+  return lck == lck->lk.initialized;
+}
+
+static void __kmp_init_drdpa_lock_with_checks(kmp_drdpa_lock_t *lck) {
+  __kmp_init_drdpa_lock(lck);
+}
+
+static void __kmp_init_nested_drdpa_lock_with_checks(kmp_drdpa_lock_t *lck) {
+  __kmp_init_nested_drdpa_lock(lck);
+}
 
 /* user locks
  * They are implemented as a table of function pointers which are set to the

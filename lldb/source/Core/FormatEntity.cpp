@@ -12,8 +12,8 @@
 #include "lldb/Core/Address.h"
 #include "lldb/Core/AddressRange.h" // for AddressRange
 #include "lldb/Core/Debugger.h"
+#include "lldb/Core/DumpRegisterValue.h"
 #include "lldb/Core/Module.h"
-#include "lldb/Core/RegisterValue.h" // for RegisterValue
 #include "lldb/Core/ValueObject.h"
 #include "lldb/Core/ValueObjectVariable.h"
 #include "lldb/DataFormatters/DataVisualization.h"
@@ -44,9 +44,10 @@
 #include "lldb/Utility/ArchSpec.h"    // for ArchSpec
 #include "lldb/Utility/ConstString.h" // for ConstString, oper...
 #include "lldb/Utility/FileSpec.h"
-#include "lldb/Utility/Log.h"        // for Log
-#include "lldb/Utility/Logging.h"    // for GetLogIfAllCatego...
-#include "lldb/Utility/SharingPtr.h" // for SharingPtr
+#include "lldb/Utility/Log.h"           // for Log
+#include "lldb/Utility/Logging.h"       // for GetLogIfAllCatego...
+#include "lldb/Utility/RegisterValue.h" // for RegisterValue
+#include "lldb/Utility/SharingPtr.h"    // for SharingPtr
 #include "lldb/Utility/Stream.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/StringList.h"     // for StringList
@@ -145,6 +146,7 @@ static FormatEntity::Entry::Definition g_function_child_entries[] = {
 static FormatEntity::Entry::Definition g_line_child_entries[] = {
     ENTRY_CHILDREN("file", LineEntryFile, None, g_file_child_entries),
     ENTRY("number", LineEntryLineNumber, UInt32),
+    ENTRY("column", LineEntryColumn, UInt32),
     ENTRY("start-addr", LineEntryStartAddress, UInt64),
     ENTRY("end-addr", LineEntryEndAddress, UInt64),
 };
@@ -371,6 +373,7 @@ const char *FormatEntity::Entry::TypeToCString(Type t) {
     ENUM_TO_CSTR(FunctionIsOptimized);
     ENUM_TO_CSTR(LineEntryFile);
     ENUM_TO_CSTR(LineEntryLineNumber);
+    ENUM_TO_CSTR(LineEntryColumn);
     ENUM_TO_CSTR(LineEntryStartAddress);
     ENUM_TO_CSTR(LineEntryEndAddress);
     ENUM_TO_CSTR(CurrentPCArrow);
@@ -621,7 +624,7 @@ static bool DumpRegister(Stream &s, StackFrame *frame, RegisterKind reg_kind,
         if (reg_info) {
           RegisterValue reg_value;
           if (reg_ctx->ReadRegister(reg_info, reg_value)) {
-            reg_value.Dump(&s, reg_info, false, false, format);
+            DumpRegisterValue(reg_value, &s, reg_info, false, false, format);
             return true;
           }
         }
@@ -1018,7 +1021,7 @@ static bool DumpRegister(Stream &s, StackFrame *frame, const char *reg_name,
       if (reg_info) {
         RegisterValue reg_value;
         if (reg_ctx->ReadRegister(reg_info, reg_value)) {
-          reg_value.Dump(&s, reg_info, false, false, format);
+          DumpRegisterValue(reg_value, &s, reg_info, false, false, format);
           return true;
         }
       }
@@ -1813,6 +1816,16 @@ bool FormatEntity::Format(const Entry &entry, Stream &s,
     }
     return false;
 
+  case Entry::Type::LineEntryColumn:
+    if (sc && sc->line_entry.IsValid() && sc->line_entry.column) {
+      const char *format = "%" PRIu32;
+      if (!entry.printf_format.empty())
+        format = entry.printf_format.c_str();
+      s.Printf(format, sc->line_entry.column);
+      return true;
+    }
+    return false;
+
   case Entry::Type::LineEntryStartAddress:
   case Entry::Type::LineEntryEndAddress:
     if (sc && sc->line_entry.range.GetBaseAddress().IsValid()) {
@@ -2349,7 +2362,6 @@ size_t FormatEntity::AutoComplete(CompletionRequest &request) {
 
   request.SetWordComplete(false);
   str = str.drop_front(request.GetMatchStartPoint());
-  request.GetMatches().Clear();
 
   const size_t dollar_pos = str.rfind('$');
   if (dollar_pos == llvm::StringRef::npos)
@@ -2359,7 +2371,7 @@ size_t FormatEntity::AutoComplete(CompletionRequest &request) {
   if (dollar_pos == str.size() - 1) {
     std::string match = str.str();
     match.append("{");
-    request.GetMatches().AppendString(match);
+    request.AddCompletion(match);
     return 1;
   }
 
@@ -2377,8 +2389,10 @@ size_t FormatEntity::AutoComplete(CompletionRequest &request) {
   llvm::StringRef partial_variable(str.substr(dollar_pos + 2));
   if (partial_variable.empty()) {
     // Suggest all top level entites as we are just past "${"
-    AddMatches(&g_root, str, llvm::StringRef(), request.GetMatches());
-    return request.GetMatches().GetSize();
+    StringList new_matches;
+    AddMatches(&g_root, str, llvm::StringRef(), new_matches);
+    request.AddCompletions(new_matches);
+    return request.GetNumberOfMatches();
   }
 
   // We have a partially specified variable, find it
@@ -2394,19 +2408,23 @@ size_t FormatEntity::AutoComplete(CompletionRequest &request) {
     // Exact match
     if (n > 0) {
       // "${thread.info" <TAB>
-      request.GetMatches().AppendString(MakeMatch(str, "."));
+      request.AddCompletion(MakeMatch(str, "."));
     } else {
       // "${thread.id" <TAB>
-      request.GetMatches().AppendString(MakeMatch(str, "}"));
+      request.AddCompletion(MakeMatch(str, "}"));
       request.SetWordComplete(true);
     }
   } else if (remainder.equals(".")) {
     // "${thread." <TAB>
-    AddMatches(entry_def, str, llvm::StringRef(), request.GetMatches());
+    StringList new_matches;
+    AddMatches(entry_def, str, llvm::StringRef(), new_matches);
+    request.AddCompletions(new_matches);
   } else {
     // We have a partial match
     // "${thre" <TAB>
-    AddMatches(entry_def, str, remainder, request.GetMatches());
+    StringList new_matches;
+    AddMatches(entry_def, str, remainder, new_matches);
+    request.AddCompletions(new_matches);
   }
-  return request.GetMatches().GetSize();
+  return request.GetNumberOfMatches();
 }

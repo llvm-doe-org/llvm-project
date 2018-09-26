@@ -1390,7 +1390,7 @@ ObjectFileELF::RefineModuleDetailsFromNote(lldb_private::DataExtractor &data,
             arch_spec.GetTriple().getOS() == llvm::Triple::OSType::UnknownOS)
           // In case of MIPSR6, the LLDB_NT_OWNER_GNU note is missing for some
           // cases (e.g. compile with -nostdlib) Hence set OS to Linux
-          arch_spec.GetTriple().setOS(llvm::Triple::OSType::Linux); 
+          arch_spec.GetTriple().setOS(llvm::Triple::OSType::Linux);
       }
     }
 
@@ -1494,7 +1494,7 @@ size_t ObjectFileELF::GetSectionHeaderInfo(SectionHeaderColl &section_headers,
     const uint32_t sub_type = subTypeFromElfHeader(header);
     arch_spec.SetArchitecture(eArchTypeELF, header.e_machine, sub_type,
                               header.e_ident[EI_OSABI]);
-    
+
     // Validate if it is ok to remove GetOsFromOSABI. Note, that now the OS is
     // determined based on EI_OSABI flag and the info extracted from ELF notes
     // (see RefineModuleDetailsFromNote). However in some cases that still
@@ -1788,6 +1788,7 @@ void ObjectFileELF::CreateSections(SectionList &unified_section_list) {
       static ConstString g_sect_name_dwarf_debug_frame(".debug_frame");
       static ConstString g_sect_name_dwarf_debug_info(".debug_info");
       static ConstString g_sect_name_dwarf_debug_line(".debug_line");
+      static ConstString g_sect_name_dwarf_debug_line_str(".debug_line_str");
       static ConstString g_sect_name_dwarf_debug_loc(".debug_loc");
       static ConstString g_sect_name_dwarf_debug_macinfo(".debug_macinfo");
       static ConstString g_sect_name_dwarf_debug_macro(".debug_macro");
@@ -1802,6 +1803,7 @@ void ObjectFileELF::CreateSections(SectionList &unified_section_list) {
           ".debug_abbrev.dwo");
       static ConstString g_sect_name_dwarf_debug_info_dwo(".debug_info.dwo");
       static ConstString g_sect_name_dwarf_debug_line_dwo(".debug_line.dwo");
+      static ConstString g_sect_name_dwarf_debug_line_str_dwo(".debug_line_str.dwo");
       static ConstString g_sect_name_dwarf_debug_macro_dwo(".debug_macro.dwo");
       static ConstString g_sect_name_dwarf_debug_loc_dwo(".debug_loc.dwo");
       static ConstString g_sect_name_dwarf_debug_str_dwo(".debug_str.dwo");
@@ -1861,6 +1863,8 @@ void ObjectFileELF::CreateSections(SectionList &unified_section_list) {
         sect_type = eSectionTypeDWARFDebugInfo;
       else if (name == g_sect_name_dwarf_debug_line)
         sect_type = eSectionTypeDWARFDebugLine;
+      else if (name == g_sect_name_dwarf_debug_line_str)
+        sect_type = eSectionTypeDWARFDebugLineStr;
       else if (name == g_sect_name_dwarf_debug_loc)
         sect_type = eSectionTypeDWARFDebugLoc;
       else if (name == g_sect_name_dwarf_debug_macinfo)
@@ -1887,6 +1891,8 @@ void ObjectFileELF::CreateSections(SectionList &unified_section_list) {
         sect_type = eSectionTypeDWARFDebugInfo;
       else if (name == g_sect_name_dwarf_debug_line_dwo)
         sect_type = eSectionTypeDWARFDebugLine;
+      else if (name == g_sect_name_dwarf_debug_line_str_dwo)
+        sect_type = eSectionTypeDWARFDebugLineStr;
       else if (name == g_sect_name_dwarf_debug_macro_dwo)
         sect_type = eSectionTypeDWARFDebugMacro;
       else if (name == g_sect_name_dwarf_debug_loc_dwo)
@@ -2697,15 +2703,20 @@ unsigned ObjectFileELF::ApplyRelocations(
         break;
       }
       case R_X86_64_32:
-      case R_X86_64_32S: {
+      case R_X86_64_32S:
+      case R_AARCH64_ABS32: {
         symbol = symtab->FindSymbolByID(reloc_symbol(rel));
         if (symbol) {
           addr_t value = symbol->GetAddressRef().GetFileAddress();
           value += ELFRelocation::RelocAddend32(rel);
-          assert(
-              (reloc_type(rel) == R_X86_64_32 && (value <= UINT32_MAX)) ||
+          if ((reloc_type(rel) == R_X86_64_32 && (value <= UINT32_MAX)) ||
               (reloc_type(rel) == R_X86_64_32S &&
-               ((int64_t)value <= INT32_MAX && (int64_t)value >= INT32_MIN)));
+               ((int64_t)value <= INT32_MAX && (int64_t)value >= INT32_MIN)) ||
+              (reloc_type(rel) == R_AARCH64_ABS32 && (value <= UINT32_MAX))) {
+            Log *log =
+                lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_MODULES);
+            log->Printf("Failed to apply debug info relocations");
+          }
           uint32_t truncated_addr = (value & 0xFFFFFFFF);
           DataBufferSP &data_buffer_sp = debug_data.GetSharedDataBuffer();
           uint32_t *dst = reinterpret_cast<uint32_t *>(
@@ -3385,8 +3396,6 @@ size_t ObjectFileELF::ReadSectionData(Section *section,
   if (section->GetObjectFile() != this)
     return section->GetObjectFile()->ReadSectionData(section, section_data);
 
-  Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_MODULES);
-
   size_t result = ObjectFile::ReadSectionData(section, section_data);
   if (result == 0 || !section->Test(SHF_COMPRESSED))
     return result;
@@ -3397,20 +3406,27 @@ size_t ObjectFileELF::ReadSectionData(Section *section,
        size_t(section_data.GetByteSize())},
       GetByteOrder() == eByteOrderLittle, GetAddressByteSize() == 8);
   if (!Decompressor) {
-    LLDB_LOG_ERROR(log, Decompressor.takeError(),
-                   "Unable to initialize decompressor for section {0}",
-                   section->GetName());
-    return result;
+    GetModule()->ReportWarning(
+        "Unable to initialize decompressor for section '%s': %s",
+        section->GetName().GetCString(),
+        llvm::toString(Decompressor.takeError()).c_str());
+    section_data.Clear();
+    return 0;
   }
+
   auto buffer_sp =
       std::make_shared<DataBufferHeap>(Decompressor->getDecompressedSize(), 0);
-  if (auto Error = Decompressor->decompress(
+  if (auto error = Decompressor->decompress(
           {reinterpret_cast<char *>(buffer_sp->GetBytes()),
            size_t(buffer_sp->GetByteSize())})) {
-    LLDB_LOG_ERROR(log, std::move(Error), "Decompression of section {0} failed",
-                   section->GetName());
-    return result;
+    GetModule()->ReportWarning(
+        "Decompression of section '%s' failed: %s",
+        section->GetName().GetCString(),
+        llvm::toString(std::move(error)).c_str());
+    section_data.Clear();
+    return 0;
   }
+
   section_data.SetData(buffer_sp);
   return buffer_sp->GetByteSize();
 }

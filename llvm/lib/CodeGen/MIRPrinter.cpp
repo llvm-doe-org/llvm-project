@@ -50,6 +50,7 @@
 #include "llvm/IR/ModuleSlotTracker.h"
 #include "llvm/IR/Value.h"
 #include "llvm/MC/LaneBitmask.h"
+#include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCDwarf.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/AtomicOrdering.h"
@@ -694,6 +695,12 @@ void MIPrinter::print(const MachineInstr &MI) {
     OS << "afn ";
   if (MI.getFlag(MachineInstr::FmReassoc))
     OS << "reassoc ";
+  if (MI.getFlag(MachineInstr::NoUWrap))
+    OS << "nuw ";
+  if (MI.getFlag(MachineInstr::NoSWrap))
+    OS << "nsw ";
+  if (MI.getFlag(MachineInstr::IsExact))
+    OS << "exact ";
 
   OS << TII->getName(MI.getOpcode());
   if (I < E)
@@ -705,6 +712,23 @@ void MIPrinter::print(const MachineInstr &MI) {
       OS << ", ";
     print(MI, I, TRI, ShouldPrintRegisterTies,
           MI.getTypeToPrint(I, PrintedTypes, MRI));
+    NeedComma = true;
+  }
+
+  // Print any optional symbols attached to this instruction as-if they were
+  // operands.
+  if (MCSymbol *PreInstrSymbol = MI.getPreInstrSymbol()) {
+    if (NeedComma)
+      OS << ',';
+    OS << " pre-instr-symbol ";
+    MachineOperand::printSymbol(OS, *PreInstrSymbol);
+    NeedComma = true;
+  }
+  if (MCSymbol *PostInstrSymbol = MI.getPostInstrSymbol()) {
+    if (NeedComma)
+      OS << ',';
+    OS << " post-instr-symbol ";
+    MachineOperand::printSymbol(OS, *PostInstrSymbol);
     NeedComma = true;
   }
 

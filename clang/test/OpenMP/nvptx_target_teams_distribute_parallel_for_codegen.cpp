@@ -8,7 +8,7 @@
 #ifndef HEADER
 #define HEADER
 
-// Check that the execution mode of all 2 target regions on the gpu is set to SPMD Mode.
+// Check that the execution mode of all 5 target regions on the gpu is set to SPMD Mode.
 // CHECK-DAG: {{@__omp_offloading_.+l32}}_exec_mode = weak constant i8 0
 // CHECK-DAG: {{@__omp_offloading_.+l38}}_exec_mode = weak constant i8 0
 // CHECK-DAG: {{@__omp_offloading_.+l43}}_exec_mode = weak constant i8 0
@@ -67,10 +67,12 @@ int bar(int n){
   return a;
 }
 
-// CHECK-LABEL: define {{.*}}void {{@__omp_offloading_.+}}(
+// CHECK-LABEL: define {{.*}}void {{@__omp_offloading_.+}}_l32(
 // CHECK-DAG: [[THREAD_LIMIT:%.+]] = call i32 @llvm.nvvm.read.ptx.sreg.ntid.x()
-// CHECK: call void @__kmpc_spmd_kernel_init(i32 [[THREAD_LIMIT]],
-// CHECK: call void @__kmpc_data_sharing_init_stack_spmd
+// CHECK: call void @__kmpc_spmd_kernel_init(i32 [[THREAD_LIMIT]], i16 0, i16 0)
+// CHECK: [[TEAM_ALLOC:%.+]] = call i8* @__kmpc_data_sharing_push_stack(i{{[0-9]+}} 4, i16 0)
+// CHECK: [[BC:%.+]] = bitcast i8* [[TEAM_ALLOC]] to [[REC:%.+]]*
+// CHECK: getelementptr inbounds [[REC]], [[REC]]* [[BC]], i{{[0-9]+}} 0, i{{[0-9]+}} 0
 // CHECK: call void @__kmpc_for_static_init_4({{.+}}, {{.+}}, {{.+}} 91,
 // CHECK: {{call|invoke}} void [[OUTL1:@.+]](
 // CHECK: call void @__kmpc_for_static_fini(
@@ -84,8 +86,7 @@ int bar(int n){
 
 // CHECK-LABEL: define {{.*}}void {{@__omp_offloading_.+}}(
 // CHECK-DAG: [[THREAD_LIMIT:%.+]] = call i32 @llvm.nvvm.read.ptx.sreg.ntid.x()
-// CHECK: call void @__kmpc_spmd_kernel_init(i32 [[THREAD_LIMIT]],
-// CHECK: call void @__kmpc_data_sharing_init_stack_spmd
+// CHECK: call void @__kmpc_spmd_kernel_init(i32 [[THREAD_LIMIT]], i16 0, i16 0)
 // CHECK: call void @__kmpc_for_static_init_4({{.+}}, {{.+}}, {{.+}} 92,
 // CHECK: {{call|invoke}} void [[OUTL2:@.+]](
 // CHECK: call void @__kmpc_for_static_fini(
@@ -99,8 +100,7 @@ int bar(int n){
 
 // CHECK-LABEL: define {{.*}}void {{@__omp_offloading_.+}}(
 // CHECK-DAG: [[THREAD_LIMIT:%.+]] = call i32 @llvm.nvvm.read.ptx.sreg.ntid.x()
-// CHECK: call void @__kmpc_spmd_kernel_init(i32 [[THREAD_LIMIT]],
-// CHECK: call void @__kmpc_data_sharing_init_stack_spmd
+// CHECK: call void @__kmpc_spmd_kernel_init(i32 [[THREAD_LIMIT]], i16 0, i16 0)
 // CHECK: call void @__kmpc_for_static_init_4({{.+}}, {{.+}}, {{.+}} 92,
 // CHECK: {{call|invoke}} void [[OUTL3:@.+]](
 // CHECK: call void @__kmpc_for_static_fini(
@@ -115,8 +115,7 @@ int bar(int n){
 // CHECK: define {{.*}}void {{@__omp_offloading_.+}}({{.+}}, i{{32|64}} [[F_IN:%.+]])
 // CHECK: store {{.+}} [[F_IN]], {{.+}}* {{.+}},
 // CHECK-DAG: [[THREAD_LIMIT:%.+]] = call i32 @llvm.nvvm.read.ptx.sreg.ntid.x()
-// CHECK: call void @__kmpc_spmd_kernel_init(i32 [[THREAD_LIMIT]],
-// CHECK: call void @__kmpc_data_sharing_init_stack_spmd
+// CHECK: call void @__kmpc_spmd_kernel_init(i32 [[THREAD_LIMIT]], i16 0, i16 0)
 // CHECK: store {{.+}} 99, {{.+}}* [[COMB_UB:%.+]], align
 // CHECK: call void @__kmpc_for_static_init_4({{.+}}, {{.+}}, {{.+}} 92, {{.+}}, {{.+}}, {{.+}}* [[COMB_UB]],
 // CHECK: {{call|invoke}} void [[OUTL4:@.+]](

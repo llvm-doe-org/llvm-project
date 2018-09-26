@@ -451,7 +451,7 @@ void AArch64Err843419Patcher::init() {
         continue;
       if (!IsCodeMapSymbol(Def) && !IsDataMapSymbol(Def))
         continue;
-      if (auto *Sec = dyn_cast<InputSection>(Def->Section))
+      if (auto *Sec = dyn_cast_or_null<InputSection>(Def->Section))
         if (Sec->Flags & SHF_EXECINSTR)
           SectionMap[Sec].push_back(Def);
     }
@@ -487,7 +487,7 @@ void AArch64Err843419Patcher::insertPatches(
     InputSectionDescription &ISD, std::vector<Patch843419Section *> &Patches) {
   uint64_t ISLimit;
   uint64_t PrevISLimit = ISD.Sections.front()->OutSecOff;
-  uint64_t PatchUpperBound = PrevISLimit + Target->ThunkSectionSpacing;
+  uint64_t PatchUpperBound = PrevISLimit + Target->getThunkSectionSpacing();
 
   // Set the OutSecOff of patches to the place where we want to insert them.
   // We use a similar strategy to Thunk placement. Place patches roughly
@@ -503,7 +503,7 @@ void AArch64Err843419Patcher::insertPatches(
         (*PatchIt)->OutSecOff = PrevISLimit;
         ++PatchIt;
       }
-      PatchUpperBound = PrevISLimit + Target->ThunkSectionSpacing;
+      PatchUpperBound = PrevISLimit + Target->getThunkSectionSpacing();
     }
     PrevISLimit = ISLimit;
   }

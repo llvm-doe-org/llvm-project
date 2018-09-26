@@ -78,7 +78,7 @@ PlatformSP PlatformWindows::CreateInstance(bool force,
       create = true;
       break;
 
-    case llvm::Triple::UnknownArch:
+    case llvm::Triple::UnknownVendor:
       create = !arch->TripleVendorWasSpecified();
       break;
 
@@ -470,8 +470,8 @@ lldb::ProcessSP PlatformWindows::Attach(ProcessAttachInfo &attach_info,
     FileSpec emptyFileSpec;
     ArchSpec emptyArchSpec;
 
-    error = debugger.GetTargetList().CreateTarget(debugger, "", "", false,
-                                                  nullptr, new_target_sp);
+    error = debugger.GetTargetList().CreateTarget(
+        debugger, "", "", eLoadDependentsNo, nullptr, new_target_sp);
     target = new_target_sp.get();
   }
 

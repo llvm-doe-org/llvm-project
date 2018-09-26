@@ -213,6 +213,7 @@ public:
   void addSourceLine(DIE &Die, const DILocalVariable *V);
   void addSourceLine(DIE &Die, const DIGlobalVariable *G);
   void addSourceLine(DIE &Die, const DISubprogram *SP);
+  void addSourceLine(DIE &Die, const DILabel *L);
   void addSourceLine(DIE &Die, const DIType *Ty);
   void addSourceLine(DIE &Die, const DIObjCProperty *Ty);
 
@@ -297,6 +298,9 @@ public:
 
   /// Add the DW_AT_rnglists_base attribute to the unit DIE.
   void addRnglistsBase();
+
+  /// Add the DW_AT_addr_base attribute to the unit DIE.
+  void addAddrTableBase();
 
   virtual DwarfCompileUnit &getCU() = 0;
 

@@ -15,7 +15,6 @@
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/Section.h"
-#include "lldb/Core/State.h"
 #include "lldb/Expression/DiagnosticManager.h"
 #include "lldb/Host/FileSystem.h"
 #include "lldb/Symbol/ClangASTContext.h"
@@ -32,6 +31,7 @@
 #include "lldb/Utility/DataBuffer.h"
 #include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/State.h"
 
 //#define ENABLE_DEBUG_PRINTF // COMMENT THIS LINE OUT PRIOR TO CHECKIN
 #ifdef ENABLE_DEBUG_PRINTF
@@ -555,8 +555,7 @@ void DynamicLoaderDarwin::UpdateSpecialBinariesFromNewImageInfos(
       target.GetImages().AppendIfNeeded(exe_module_sp);
       UpdateImageLoadAddress(exe_module_sp.get(), image_infos[exe_idx]);
       if (exe_module_sp.get() != target.GetExecutableModulePointer()) {
-        const bool get_dependent_images = false;
-        target.SetExecutableModule(exe_module_sp, get_dependent_images);
+        target.SetExecutableModule(exe_module_sp, eLoadDependentsNo);
       }
     }
   }

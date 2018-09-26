@@ -315,10 +315,6 @@ private:
                          SmallVector<const OMPDeclareReductionDecl *, 4>>
       FunctionUDRMapTy;
   FunctionUDRMapTy FunctionUDRMap;
-  IdentifierInfo *In = nullptr;
-  IdentifierInfo *Out = nullptr;
-  IdentifierInfo *Priv = nullptr;
-  IdentifierInfo *Orig = nullptr;
   /// Type kmp_critical_name, originally defined as typedef kmp_int32
   /// kmp_critical_name[8];
   llvm::ArrayType *KmpCriticalNameTy;
@@ -600,7 +596,11 @@ private:
   OffloadEntriesInfoManagerTy OffloadEntriesInfoManager;
 
   bool ShouldMarkAsGlobal = true;
-  llvm::SmallDenseSet<const FunctionDecl *> AlreadyEmittedTargetFunctions;
+  llvm::SmallDenseSet<const Decl *> AlreadyEmittedTargetFunctions;
+
+  /// List of variables that can become declare target implicitly and, thus,
+  /// must be emitted.
+  llvm::SmallDenseSet<const VarDecl *> DeferredGlobalVariables;
 
   /// Creates and registers offloading binary descriptor for the current
   /// compilation unit. The function that does the registration is returned.
@@ -1465,8 +1465,8 @@ public:
 
   /// Emit initialization for doacross loop nesting support.
   /// \param D Loop-based construct used in doacross nesting construct.
-  virtual void emitDoacrossInit(CodeGenFunction &CGF,
-                                const OMPLoopDirective &D);
+  virtual void emitDoacrossInit(CodeGenFunction &CGF, const OMPLoopDirective &D,
+                                ArrayRef<Expr *> NumIterations);
 
   /// Emit code for doacross ordered directive with 'depend' clause.
   /// \param C 'depend' clause with 'sink|source' dependency kind.
@@ -1509,6 +1509,8 @@ public:
   /// true, if it was marked already, and false, otherwise.
   bool markAsGlobalTarget(GlobalDecl GD);
 
+  /// Emit deferred declare target variables marked for deferred emission.
+  void emitDeferredTargetDecls() const;
 };
 
 /// Class supports emissionof SIMD-only code.
@@ -2051,8 +2053,8 @@ public:
 
   /// Emit initialization for doacross loop nesting support.
   /// \param D Loop-based construct used in doacross nesting construct.
-  void emitDoacrossInit(CodeGenFunction &CGF,
-                        const OMPLoopDirective &D) override;
+  void emitDoacrossInit(CodeGenFunction &CGF, const OMPLoopDirective &D,
+                        ArrayRef<Expr *> NumIterations) override;
 
   /// Emit code for doacross ordered directive with 'depend' clause.
   /// \param C 'depend' clause with 'sink|source' dependency kind.

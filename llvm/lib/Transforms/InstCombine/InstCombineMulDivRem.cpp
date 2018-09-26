@@ -171,14 +171,13 @@ Instruction *InstCombiner::visitMul(BinaryOperator &I) {
     if (match(&I, m_Mul(m_Value(NewOp), m_Constant(C1)))) {
       // Replace X*(2^C) with X << C, where C is either a scalar or a vector.
       if (Constant *NewCst = getLogBase2(NewOp->getType(), C1)) {
-        unsigned Width = NewCst->getType()->getPrimitiveSizeInBits();
         BinaryOperator *Shl = BinaryOperator::CreateShl(NewOp, NewCst);
 
         if (I.hasNoUnsignedWrap())
           Shl->setHasNoUnsignedWrap();
         if (I.hasNoSignedWrap()) {
           const APInt *V;
-          if (match(NewCst, m_APInt(V)) && *V != Width - 1)
+          if (match(NewCst, m_APInt(V)) && *V != V->getBitWidth() - 1)
             Shl->setHasNoSignedWrap();
         }
 
@@ -323,77 +322,8 @@ Instruction *InstCombiner::visitMul(BinaryOperator &I) {
   if (match(Op1, m_LShr(m_Value(X), m_APInt(C))) && *C == C->getBitWidth() - 1)
     return BinaryOperator::CreateAnd(Builder.CreateAShr(X, *C), Op0);
 
-  // Check for (mul (sext x), y), see if we can merge this into an
-  // integer mul followed by a sext.
-  if (SExtInst *Op0Conv = dyn_cast<SExtInst>(Op0)) {
-    // (mul (sext x), cst) --> (sext (mul x, cst'))
-    if (ConstantInt *Op1C = dyn_cast<ConstantInt>(Op1)) {
-      if (Op0Conv->hasOneUse()) {
-        Constant *CI =
-            ConstantExpr::getTrunc(Op1C, Op0Conv->getOperand(0)->getType());
-        if (ConstantExpr::getSExt(CI, I.getType()) == Op1C &&
-            willNotOverflowSignedMul(Op0Conv->getOperand(0), CI, I)) {
-          // Insert the new, smaller mul.
-          Value *NewMul =
-              Builder.CreateNSWMul(Op0Conv->getOperand(0), CI, "mulconv");
-          return new SExtInst(NewMul, I.getType());
-        }
-      }
-    }
-
-    // (mul (sext x), (sext y)) --> (sext (mul int x, y))
-    if (SExtInst *Op1Conv = dyn_cast<SExtInst>(Op1)) {
-      // Only do this if x/y have the same type, if at last one of them has a
-      // single use (so we don't increase the number of sexts), and if the
-      // integer mul will not overflow.
-      if (Op0Conv->getOperand(0)->getType() ==
-              Op1Conv->getOperand(0)->getType() &&
-          (Op0Conv->hasOneUse() || Op1Conv->hasOneUse()) &&
-          willNotOverflowSignedMul(Op0Conv->getOperand(0),
-                                   Op1Conv->getOperand(0), I)) {
-        // Insert the new integer mul.
-        Value *NewMul = Builder.CreateNSWMul(
-            Op0Conv->getOperand(0), Op1Conv->getOperand(0), "mulconv");
-        return new SExtInst(NewMul, I.getType());
-      }
-    }
-  }
-
-  // Check for (mul (zext x), y), see if we can merge this into an
-  // integer mul followed by a zext.
-  if (auto *Op0Conv = dyn_cast<ZExtInst>(Op0)) {
-    // (mul (zext x), cst) --> (zext (mul x, cst'))
-    if (ConstantInt *Op1C = dyn_cast<ConstantInt>(Op1)) {
-      if (Op0Conv->hasOneUse()) {
-        Constant *CI =
-            ConstantExpr::getTrunc(Op1C, Op0Conv->getOperand(0)->getType());
-        if (ConstantExpr::getZExt(CI, I.getType()) == Op1C &&
-            willNotOverflowUnsignedMul(Op0Conv->getOperand(0), CI, I)) {
-          // Insert the new, smaller mul.
-          Value *NewMul =
-              Builder.CreateNUWMul(Op0Conv->getOperand(0), CI, "mulconv");
-          return new ZExtInst(NewMul, I.getType());
-        }
-      }
-    }
-
-    // (mul (zext x), (zext y)) --> (zext (mul int x, y))
-    if (auto *Op1Conv = dyn_cast<ZExtInst>(Op1)) {
-      // Only do this if x/y have the same type, if at last one of them has a
-      // single use (so we don't increase the number of zexts), and if the
-      // integer mul will not overflow.
-      if (Op0Conv->getOperand(0)->getType() ==
-              Op1Conv->getOperand(0)->getType() &&
-          (Op0Conv->hasOneUse() || Op1Conv->hasOneUse()) &&
-          willNotOverflowUnsignedMul(Op0Conv->getOperand(0),
-                                     Op1Conv->getOperand(0), I)) {
-        // Insert the new integer mul.
-        Value *NewMul = Builder.CreateNUWMul(
-            Op0Conv->getOperand(0), Op1Conv->getOperand(0), "mulconv");
-        return new ZExtInst(NewMul, I.getType());
-      }
-    }
-  }
+  if (Instruction *Ext = narrowMathIfNoOverflow(I))
+    return Ext;
 
   bool Changed = false;
   if (!I.hasNoSignedWrap() && willNotOverflowSignedMul(Op0, Op1, I)) {
@@ -972,6 +902,21 @@ Instruction *InstCombiner::visitUDiv(BinaryOperator &I) {
 
   if (Instruction *NarrowDiv = narrowUDivURem(I, Builder))
     return NarrowDiv;
+
+  // If the udiv operands are non-overflowing multiplies with a common operand,
+  // then eliminate the common factor:
+  // (A * B) / (A * X) --> B / X (and commuted variants)
+  // TODO: The code would be reduced if we had m_c_NUWMul pattern matching.
+  // TODO: If -reassociation handled this generally, we could remove this.
+  Value *A, *B;
+  if (match(Op0, m_NUWMul(m_Value(A), m_Value(B)))) {
+    if (match(Op1, m_NUWMul(m_Specific(A), m_Value(X))) ||
+        match(Op1, m_NUWMul(m_Value(X), m_Specific(A))))
+      return BinaryOperator::CreateUDiv(B, X);
+    if (match(Op1, m_NUWMul(m_Specific(B), m_Value(X))) ||
+        match(Op1, m_NUWMul(m_Value(X), m_Specific(B))))
+      return BinaryOperator::CreateUDiv(A, X);
+  }
 
   // (LHS udiv (select (select (...)))) -> (LHS >> (select (select (...))))
   SmallVector<UDivFoldAction, 6> UDivActions;

@@ -36,6 +36,12 @@ def CallSeqEnd   : SDNode<"ISD::CALLSEQ_END", SDT_RISCVCallSeqEnd,
                           [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
 def RetFlag      : SDNode<"RISCVISD::RET_FLAG", SDTNone,
                           [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
+def URetFlag     : SDNode<"RISCVISD::URET_FLAG", SDTNone,
+                          [SDNPHasChain, SDNPOptInGlue]>;
+def SRetFlag     : SDNode<"RISCVISD::SRET_FLAG", SDTNone,
+                          [SDNPHasChain, SDNPOptInGlue]>;
+def MRetFlag     : SDNode<"RISCVISD::MRET_FLAG", SDTNone,
+                          [SDNPHasChain, SDNPOptInGlue]>;
 def SelectCC     : SDNode<"RISCVISD::SELECT_CC", SDT_RISCVSelectCC,
                           [SDNPInGlue]>;
 def Tail         : SDNode<"RISCVISD::TAIL", SDT_RISCVCall,
@@ -137,8 +143,7 @@ def simm13_lsb0 : Operand<OtherVT> {
   }];
 }
 
-def uimm20 : Operand<XLenVT> {
-  let ParserMatchClass = UImmAsmOperand<20>;
+class UImm20Operand : Operand<XLenVT> {
   let EncoderMethod = "getImmOpValue";
   let DecoderMethod = "decodeUImmOperand<20>";
   let MCOperandPredicate = [{
@@ -149,9 +154,20 @@ def uimm20 : Operand<XLenVT> {
   }];
 }
 
+def uimm20_lui : UImm20Operand {
+  let ParserMatchClass = UImmAsmOperand<20, "LUI">;
+}
+def uimm20_auipc : UImm20Operand {
+  let ParserMatchClass = UImmAsmOperand<20, "AUIPC">;
+}
+
+def Simm21Lsb0JALAsmOperand : SImmAsmOperand<21, "Lsb0JAL"> {
+  let ParserMethod = "parseJALOffset";
+}
+
 // A 21-bit signed immediate where the least significant bit is zero.
-def simm21_lsb0 : Operand<OtherVT> {
-  let ParserMatchClass = SImmAsmOperand<21, "Lsb0">;
+def simm21_lsb0_jal : Operand<OtherVT> {
+  let ParserMatchClass = Simm21Lsb0JALAsmOperand;
   let EncoderMethod = "getImmOpValueAsr1";
   let DecoderMethod = "decodeSImmOperandAndLsl1<21>";
   let MCOperandPredicate = [{
@@ -166,14 +182,12 @@ def BareSymbol : AsmOperandClass {
   let Name = "BareSymbol";
   let RenderMethod = "addImmOperands";
   let DiagnosticType = "InvalidBareSymbol";
+  let ParserMethod = "parseBareSymbol";
 }
 
 // A bare symbol.
 def bare_symbol : Operand<XLenVT> {
   let ParserMatchClass = BareSymbol;
-  let MCOperandPredicate = [{
-     return MCOp.isBareSymbolRef();
-  }];
 }
 
 // A parameterized register class alternative to i32imm/i64imm from Target.td.
@@ -279,14 +293,14 @@ class Priv<string opcodestr, bits<7> funct7>
 //===----------------------------------------------------------------------===//
 
 let hasSideEffects = 0, isReMaterializable = 1, mayLoad = 0, mayStore = 0 in {
-def LUI : RVInstU<OPC_LUI, (outs GPR:$rd), (ins uimm20:$imm20),
+def LUI : RVInstU<OPC_LUI, (outs GPR:$rd), (ins uimm20_lui:$imm20),
                   "lui", "$rd, $imm20">;
 
-def AUIPC : RVInstU<OPC_AUIPC, (outs GPR:$rd), (ins uimm20:$imm20),
+def AUIPC : RVInstU<OPC_AUIPC, (outs GPR:$rd), (ins uimm20_auipc:$imm20),
                     "auipc", "$rd, $imm20">;
 
 let isCall = 1 in
-def JAL : RVInstJ<OPC_JAL, (outs GPR:$rd), (ins simm21_lsb0:$imm20),
+def JAL : RVInstJ<OPC_JAL, (outs GPR:$rd), (ins simm21_lsb0_jal:$imm20),
                   "jal", "$rd, $imm20">;
 
 let isCall = 1 in
@@ -510,8 +524,8 @@ def : InstAlias<"bleu $rs, $rt, $offset",
                 (BGEU GPR:$rt, GPR:$rs, simm13_lsb0:$offset), 0>;
 
 // "ret" has more weight since "ret" and "jr" alias the same "jalr" instruction.
-def : InstAlias<"j $offset",   (JAL  X0, simm21_lsb0:$offset)>;
-def : InstAlias<"jal $offset", (JAL  X1, simm21_lsb0:$offset)>;
+def : InstAlias<"j $offset",   (JAL  X0, simm21_lsb0_jal:$offset)>;
+def : InstAlias<"jal $offset", (JAL  X1, simm21_lsb0_jal:$offset)>;
 def : InstAlias<"jr $rs",      (JALR X0, GPR:$rs, 0)>;
 def : InstAlias<"jalr $rs",    (JALR X1, GPR:$rs, 0)>;
 def : InstAlias<"ret",         (JALR X0,      X1, 0), 2>;
@@ -544,6 +558,45 @@ def : InstAlias<"csrci $csr, $imm", (CSRRCI X0, uimm12:$csr, uimm5:$imm)>;
 def : InstAlias<"sfence.vma",     (SFENCE_VMA      X0, X0)>;
 def : InstAlias<"sfence.vma $rs", (SFENCE_VMA GPR:$rs, X0)>;
 
+let EmitPriority = 0 in {
+def : InstAlias<"add $rd, $rs1, $imm12",
+                (ADDI  GPR:$rd, GPR:$rs1, simm12:$imm12)>;
+def : InstAlias<"and $rd, $rs1, $imm12",
+                (ANDI  GPR:$rd, GPR:$rs1, simm12:$imm12)>;
+def : InstAlias<"xor $rd, $rs1, $imm12",
+                (XORI  GPR:$rd, GPR:$rs1, simm12:$imm12)>;
+def : InstAlias<"or $rd, $rs1, $imm12",
+                (ORI  GPR:$rd, GPR:$rs1, simm12:$imm12)>;
+def : InstAlias<"sll $rd, $rs1, $shamt",
+                (SLLI  GPR:$rd, GPR:$rs1, uimmlog2xlen:$shamt)>;
+def : InstAlias<"srl $rd, $rs1, $shamt",
+                (SRLI  GPR:$rd, GPR:$rs1, uimmlog2xlen:$shamt)>;
+def : InstAlias<"sra $rd, $rs1, $shamt",
+                (SRAI  GPR:$rd, GPR:$rs1, uimmlog2xlen:$shamt)>;
+let Predicates = [IsRV64] in {
+def : InstAlias<"addw $rd, $rs1, $imm12",
+                (ADDIW  GPR:$rd, GPR:$rs1, simm12:$imm12)>;
+def : InstAlias<"sllw $rd, $rs1, $shamt",
+                (SLLIW  GPR:$rd, GPR:$rs1, uimm5:$shamt)>;
+def : InstAlias<"srlw $rd, $rs1, $shamt",
+                (SRLIW  GPR:$rd, GPR:$rs1, uimm5:$shamt)>;
+def : InstAlias<"sraw $rd, $rs1, $shamt",
+                (SRAIW  GPR:$rd, GPR:$rs1, uimm5:$shamt)>;
+} // Predicates = [IsRV64]
+def : InstAlias<"slt $rd, $rs1, $imm12",
+                (SLTI  GPR:$rd, GPR:$rs1, simm12:$imm12)>;
+def : InstAlias<"sltu $rd, $rs1, $imm12",
+                (SLTIU  GPR:$rd, GPR:$rs1, simm12:$imm12)>;
+}
+
+def : MnemonicAlias<"move", "mv">;
+
+// The SCALL and SBREAK instructions wererenamed to ECALL and EBREAK in
+// version 2.1 of the user-level ISA. Like the GNU toolchain, we still accept
+// the old name for backwards compatibility.
+def : MnemonicAlias<"scall", "ecall">;
+def : MnemonicAlias<"sbreak", "ebreak">;
+
 //===----------------------------------------------------------------------===//
 // Pseudo-instructions and codegen patterns
 //
@@ -554,7 +607,7 @@ def : InstAlias<"sfence.vma $rs", (SFENCE_VMA GPR:$rs, X0)>;
 
 /// Generic pattern classes
 
-class PatGprGpr<SDPatternOperator OpNode, RVInstR Inst>
+class PatGprGpr<SDPatternOperator OpNode, RVInst Inst>
     : Pat<(OpNode GPR:$rs1, GPR:$rs2), (Inst GPR:$rs1, GPR:$rs2)>;
 class PatGprSimm12<SDPatternOperator OpNode, RVInstI Inst>
     : Pat<(OpNode GPR:$rs1, simm12:$imm12), (Inst GPR:$rs1, simm12:$imm12)>;
@@ -658,8 +711,8 @@ def : BccSwapPat<setule, BGEU>;
 def : Pat<(brcond GPR:$cond, bb:$imm12), (BNE GPR:$cond, X0, bb:$imm12)>;
 
 let isBarrier = 1, isBranch = 1, isTerminator = 1 in
-def PseudoBR : Pseudo<(outs), (ins simm21_lsb0:$imm20), [(br bb:$imm20)]>,
-               PseudoInstExpansion<(JAL X0, simm21_lsb0:$imm20)>;
+def PseudoBR : Pseudo<(outs), (ins simm21_lsb0_jal:$imm20), [(br bb:$imm20)]>,
+               PseudoInstExpansion<(JAL X0, simm21_lsb0_jal:$imm20)>;
 
 let isCall = 1, Defs=[X1] in
 let isBarrier = 1, isBranch = 1, isIndirectBranch = 1, isTerminator = 1 in
@@ -683,6 +736,10 @@ def PseudoCALL : Pseudo<(outs), (ins bare_symbol:$func),
 }
 
 def : Pat<(Call texternalsym:$func), (PseudoCALL texternalsym:$func)>;
+
+def : Pat<(URetFlag), (URET X0, X0)>;
+def : Pat<(SRetFlag), (SRET X0, X0)>;
+def : Pat<(MRetFlag), (MRET X0, X0)>;
 
 let isCall = 1, Defs = [X1] in
 def PseudoCALLIndirect : Pseudo<(outs), (ins GPR:$rs1), [(Call GPR:$rs1)]>,
@@ -709,6 +766,11 @@ def : Pat<(Tail (iPTR tglobaladdr:$dst)),
           (PseudoTAIL texternalsym:$dst)>;
 def : Pat<(Tail (iPTR texternalsym:$dst)),
           (PseudoTAIL texternalsym:$dst)>;
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, isCodeGenOnly = 0,
+    isAsmParserOnly = 1 in
+def PseudoLLA : Pseudo<(outs GPR:$dst), (ins bare_symbol:$src), [],
+                       "lla", "$dst, $src">;
 
 /// Loads
 

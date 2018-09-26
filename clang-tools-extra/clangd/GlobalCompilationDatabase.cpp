@@ -1,11 +1,11 @@
-//===--- GlobalCompilationDatabase.cpp --------------------------*- C++-*-===//
+//===--- GlobalCompilationDatabase.cpp ---------------------------*- C++-*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 
 #include "GlobalCompilationDatabase.h"
 #include "Logger.h"
@@ -95,8 +95,6 @@ DirectoryBasedGlobalCompilationDatabase::getCDBInDirLocked(PathRef Dir) const {
     return CachedIt->second.get();
   std::string Error = "";
   auto CDB = tooling::CompilationDatabase::loadFromDirectory(Dir, Error);
-  if (CDB)
-    CDB = tooling::inferMissingCompileCommands(std::move(CDB));
   auto Result = CDB.get();
   CompilationDatabases.insert(std::make_pair(Dir, std::move(CDB)));
   return Result;
@@ -150,6 +148,30 @@ void CachingCompilationDb::invalidate(PathRef File) {
 void CachingCompilationDb::clear() {
   std::unique_lock<std::mutex> Lock(Mut);
   Cached.clear();
+}
+
+llvm::Optional<tooling::CompileCommand>
+InMemoryCompilationDb::getCompileCommand(PathRef File) const {
+  std::lock_guard<std::mutex> Lock(Mutex);
+  auto It = Commands.find(File);
+  if (It == Commands.end())
+    return None;
+  return It->second;
+}
+
+bool InMemoryCompilationDb::setCompilationCommandForFile(
+    PathRef File, tooling::CompileCommand CompilationCommand) {
+  std::unique_lock<std::mutex> Lock(Mutex);
+  auto ItInserted = Commands.insert(std::make_pair(File, CompilationCommand));
+  if (ItInserted.second)
+    return true;
+  ItInserted.first->setValue(std::move(CompilationCommand));
+  return false;
+}
+
+void InMemoryCompilationDb::invalidate(PathRef File) {
+  std::unique_lock<std::mutex> Lock(Mutex);
+  Commands.erase(File);
 }
 
 } // namespace clangd

@@ -348,6 +348,11 @@ Retry:
     ConsumeAnnotationToken();
     return StmtError();
 
+  case tok::annot_pragma_fenv_access:
+    ProhibitAttributes(Attrs);
+    HandlePragmaFEnvAccess();
+    return StmtEmpty();
+
   case tok::annot_pragma_opencl_extension:
     ProhibitAttributes(Attrs);
     HandlePragmaOpenCLExtension();
@@ -689,20 +694,12 @@ StmtResult Parser::ParseCaseStatement(bool MissingCase, ExprResult Expr) {
 
     ExprResult LHS;
     if (!MissingCase) {
-      LHS = ParseConstantExpression();
-      if (!getLangOpts().CPlusPlus11) {
-        LHS = Actions.CorrectDelayedTyposInExpr(LHS, [this](class Expr *E) {
-          return Actions.VerifyIntegerConstantExpression(E);
-        });
-      }
+      LHS = ParseCaseExpression(CaseLoc);
       if (LHS.isInvalid()) {
         // If constant-expression is parsed unsuccessfully, recover by skipping
         // current case statement (moving to the colon that ends it).
-        if (SkipUntil(tok::colon, tok::r_brace, StopAtSemi | StopBeforeMatch)) {
-          TryConsumeToken(tok::colon, ColonLoc);
-          continue;
-        }
-        return StmtError();
+        if (!SkipUntil(tok::colon, tok::r_brace, StopAtSemi | StopBeforeMatch))
+          return StmtError();
       }
     } else {
       LHS = Expr;
@@ -714,13 +711,10 @@ StmtResult Parser::ParseCaseStatement(bool MissingCase, ExprResult Expr) {
     ExprResult RHS;
     if (TryConsumeToken(tok::ellipsis, DotDotDotLoc)) {
       Diag(DotDotDotLoc, diag::ext_gnu_case_range);
-      RHS = ParseConstantExpression();
+      RHS = ParseCaseExpression(CaseLoc);
       if (RHS.isInvalid()) {
-        if (SkipUntil(tok::colon, tok::r_brace, StopAtSemi | StopBeforeMatch)) {
-          TryConsumeToken(tok::colon, ColonLoc);
-          continue;
-        }
-        return StmtError();
+        if (!SkipUntil(tok::colon, tok::r_brace, StopAtSemi | StopBeforeMatch))
+          return StmtError();
       }
     }
 
@@ -742,8 +736,7 @@ StmtResult Parser::ParseCaseStatement(bool MissingCase, ExprResult Expr) {
     }
 
     StmtResult Case =
-      Actions.ActOnCaseStmt(CaseLoc, LHS.get(), DotDotDotLoc,
-                            RHS.get(), ColonLoc);
+        Actions.ActOnCaseStmt(CaseLoc, LHS, DotDotDotLoc, RHS, ColonLoc);
 
     // If we had a sema error parsing this case, then just ignore it and
     // continue parsing the sub-stmt.
@@ -917,6 +910,9 @@ void Parser::ParseCompoundStatementLeadingPragmas() {
       break;
     case tok::annot_pragma_fp:
       HandlePragmaFP();
+      break;
+    case tok::annot_pragma_fenv_access:
+      HandlePragmaFEnvAccess();
       break;
     case tok::annot_pragma_ms_pointers_to_members:
       HandlePragmaMSPointersToMembers();
@@ -1919,10 +1915,11 @@ StmtResult Parser::ParseReturnStatement() {
     if (Tok.is(tok::l_brace) && getLangOpts().CPlusPlus) {
       R = ParseInitializer();
       if (R.isUsable())
-        Diag(R.get()->getLocStart(), getLangOpts().CPlusPlus11 ?
-             diag::warn_cxx98_compat_generalized_initializer_lists :
-             diag::ext_generalized_initializer_lists)
-          << R.get()->getSourceRange();
+        Diag(R.get()->getBeginLoc(),
+             getLangOpts().CPlusPlus11
+                 ? diag::warn_cxx98_compat_generalized_initializer_lists
+                 : diag::ext_generalized_initializer_lists)
+            << R.get()->getSourceRange();
     } else
       R = ParseExpression();
     if (R.isInvalid()) {

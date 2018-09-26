@@ -170,6 +170,7 @@ bool X86TargetInfo::initFeatureMap(
       setFeatureEnabledImpl(Features, "sgx", true);
     setFeatureEnabledImpl(Features, "clflushopt", true);
     setFeatureEnabledImpl(Features, "rtm", true);
+    setFeatureEnabledImpl(Features, "aes", true);
     LLVM_FALLTHROUGH;
   case CK_Broadwell:
     setFeatureEnabledImpl(Features, "rdseed", true);
@@ -196,7 +197,6 @@ bool X86TargetInfo::initFeatureMap(
     setFeatureEnabledImpl(Features, "xsaveopt", true);
     LLVM_FALLTHROUGH;
   case CK_Westmere:
-    setFeatureEnabledImpl(Features, "aes", true);
     setFeatureEnabledImpl(Features, "pclmul", true);
     LLVM_FALLTHROUGH;
   case CK_Nehalem:
@@ -248,10 +248,10 @@ bool X86TargetInfo::initFeatureMap(
     setFeatureEnabledImpl(Features, "clflushopt", true);
     setFeatureEnabledImpl(Features, "mpx", true);
     setFeatureEnabledImpl(Features, "fsgsbase", true);
+    setFeatureEnabledImpl(Features, "aes", true);
     LLVM_FALLTHROUGH;
   case CK_Silvermont:
     setFeatureEnabledImpl(Features, "rdrnd", true);
-    setFeatureEnabledImpl(Features, "aes", true);
     setFeatureEnabledImpl(Features, "pclmul", true);
     setFeatureEnabledImpl(Features, "sse4.2", true);
     setFeatureEnabledImpl(Features, "prfchw", true);
@@ -796,8 +796,6 @@ bool X86TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
       HasCLDEMOTE = true;
     } else if (Feature == "+rdpid") {
       HasRDPID = true;
-    } else if (Feature == "+retpoline") {
-      HasRetpoline = true;
     } else if (Feature == "+retpoline-external-thunk") {
       HasRetpolineExternalThunk = true;
     } else if (Feature == "+sahf") {
@@ -1397,7 +1395,6 @@ bool X86TargetInfo::hasFeature(StringRef Feature) const {
       .Case("rdpid", HasRDPID)
       .Case("rdrnd", HasRDRND)
       .Case("rdseed", HasRDSEED)
-      .Case("retpoline", HasRetpoline)
       .Case("retpoline-external-thunk", HasRetpolineExternalThunk)
       .Case("rtm", HasRTM)
       .Case("sahf", HasLAHFSAHF)
@@ -1757,7 +1754,7 @@ void X86TargetInfo::fillValidCPUList(SmallVectorImpl<StringRef> &Values) const {
 #define PROC(ENUM, STRING, IS64BIT)                                            \
   if (IS64BIT || getTriple().getArch() == llvm::Triple::x86)                   \
     Values.emplace_back(STRING);
-  // Go through CPUKind checking to ensure that the alias is de-aliased and 
+  // Go through CPUKind checking to ensure that the alias is de-aliased and
   // 64 bit-ness is checked.
 #define PROC_ALIAS(ENUM, ALIAS)                                                \
   if (checkCPUKind(getCPUKind(ALIAS)))                                         \

@@ -434,7 +434,7 @@ static Type *getWiderType(const DataLayout &DL, Type *Ty0, Type *Ty1) {
 /// identified reduction variable.
 static bool hasOutsideLoopUser(const Loop *TheLoop, Instruction *Inst,
                                SmallPtrSetImpl<Value *> &AllowedExit) {
-  // Reduction and Induction instructions are allowed to have exit users. All
+  // Reductions, Inductions and non-header phis are allowed to have exit users. All
   // other instructions must not have external users.
   if (!AllowedExit.count(Inst))
     // Check that all of the users of the loop are inside the BB.
@@ -516,6 +516,18 @@ bool LoopVectorizationLegality::canVectorizeOuterLoop() {
       return false;
   }
 
+  // Check whether we are able to set up outer loop induction.
+  if (!setupOuterLoopInductions()) {
+    LLVM_DEBUG(
+        dbgs() << "LV: Not vectorizing: Unsupported outer loop Phi(s).\n");
+    ORE->emit(createMissedAnalysis("UnsupportedPhi")
+              << "Unsupported outer loop Phi(s)");
+    if (DoExtraAnalysis)
+      Result = false;
+    else
+      return false;
+  }
+
   return Result;
 }
 
@@ -561,13 +573,40 @@ void LoopVectorizationLegality::addInductionPhi(
   // back into the PHI node may have external users.
   // We can allow those uses, except if the SCEVs we have for them rely
   // on predicates that only hold within the loop, since allowing the exit
-  // currently means re-using this SCEV outside the loop.
+  // currently means re-using this SCEV outside the loop (see PR33706 for more
+  // details).
   if (PSE.getUnionPredicate().isAlwaysTrue()) {
     AllowedExit.insert(Phi);
     AllowedExit.insert(Phi->getIncomingValueForBlock(TheLoop->getLoopLatch()));
   }
 
   LLVM_DEBUG(dbgs() << "LV: Found an induction variable.\n");
+}
+
+bool LoopVectorizationLegality::setupOuterLoopInductions() {
+  BasicBlock *Header = TheLoop->getHeader();
+
+  // Returns true if a given Phi is a supported induction.
+  auto isSupportedPhi = [&](PHINode &Phi) -> bool {
+    InductionDescriptor ID;
+    if (InductionDescriptor::isInductionPHI(&Phi, TheLoop, PSE, ID) &&
+        ID.getKind() == InductionDescriptor::IK_IntInduction) {
+      addInductionPhi(&Phi, ID, AllowedExit);
+      return true;
+    } else {
+      // Bail out for any Phi in the outer loop header that is not a supported
+      // induction.
+      LLVM_DEBUG(
+          dbgs()
+          << "LV: Found unsupported PHI for outer loop vectorization.\n");
+      return false;
+    }
+  };
+
+  if (llvm::all_of(Header->phis(), isSupportedPhi))
+    return true;
+  else
+    return false;
 }
 
 bool LoopVectorizationLegality::canVectorizeInstrs() {
@@ -597,14 +636,12 @@ bool LoopVectorizationLegality::canVectorizeInstrs() {
         // can convert it to select during if-conversion. No need to check if
         // the PHIs in this block are induction or reduction variables.
         if (BB != Header) {
-          // Check that this instruction has no outside users or is an
-          // identified reduction value with an outside user.
-          if (!hasOutsideLoopUser(TheLoop, Phi, AllowedExit))
-            continue;
-          ORE->emit(createMissedAnalysis("NeitherInductionNorReduction", Phi)
-                    << "value could not be identified as "
-                       "an induction or reduction variable");
-          return false;
+          // Non-header phi nodes that have outside uses can be vectorized. Add
+          // them to the list of allowed exits.
+          // Unsafe cyclic dependencies with header phis are identified during
+          // legalization for reduction, induction and first order
+          // recurrences.
+          continue;
         }
 
         // We only allow if-converted PHIs with exactly two incoming values.
@@ -625,6 +662,20 @@ bool LoopVectorizationLegality::canVectorizeInstrs() {
           continue;
         }
 
+        // TODO: Instead of recording the AllowedExit, it would be good to record the
+        // complementary set: NotAllowedExit. These include (but may not be
+        // limited to):
+        // 1. Reduction phis as they represent the one-before-last value, which
+        // is not available when vectorized 
+        // 2. Induction phis and increment when SCEV predicates cannot be used
+        // outside the loop - see addInductionPhi
+        // 3. Non-Phis with outside uses when SCEV predicates cannot be used
+        // outside the loop - see call to hasOutsideLoopUser in the non-phi
+        // handling below
+        // 4. FirstOrderRecurrence phis that can possibly be handled by
+        // extraction.
+        // By recording these, we can then reason about ways to vectorize each
+        // of these NotAllowedExit. 
         InductionDescriptor ID;
         if (InductionDescriptor::isInductionPHI(Phi, TheLoop, PSE, ID)) {
           addInductionPhi(Phi, ID, AllowedExit);
@@ -717,6 +768,14 @@ bool LoopVectorizationLegality::canVectorizeInstrs() {
       // Reduction instructions are allowed to have exit users.
       // All other instructions must not have external users.
       if (hasOutsideLoopUser(TheLoop, &I, AllowedExit)) {
+        // We can safely vectorize loops where instructions within the loop are
+        // used outside the loop only if the SCEV predicates within the loop is
+        // same as outside the loop. Allowing the exit means reusing the SCEV
+        // outside the loop.
+        if (PSE.getUnionPredicate().isAlwaysTrue()) {
+          AllowedExit.insert(&I);
+          continue;
+        }
         ORE->emit(createMissedAnalysis("ValueUsedOutsideLoop", &I)
                   << "value cannot be used outside the loop");
         return false;
@@ -729,6 +788,10 @@ bool LoopVectorizationLegality::canVectorizeInstrs() {
     if (Inductions.empty()) {
       ORE->emit(createMissedAnalysis("NoInductionVariable")
                 << "loop induction variable could not be identified");
+      return false;
+    } else if (!WidestIndTy) {
+      ORE->emit(createMissedAnalysis("NoIntegerInductionVariable")
+                << "integer loop induction variable could not be identified");
       return false;
     }
   }

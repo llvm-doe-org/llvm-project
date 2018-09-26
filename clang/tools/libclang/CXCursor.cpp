@@ -61,6 +61,24 @@ static CXCursorKind GetCursorKind(const Attr *A) {
     case attr::Visibility: return CXCursor_VisibilityAttr;
     case attr::DLLExport: return CXCursor_DLLExport;
     case attr::DLLImport: return CXCursor_DLLImport;
+    case attr::NSReturnsRetained: return CXCursor_NSReturnsRetained;
+    case attr::NSReturnsNotRetained: return CXCursor_NSReturnsNotRetained;
+    case attr::NSReturnsAutoreleased: return CXCursor_NSReturnsAutoreleased;
+    case attr::NSConsumesSelf: return CXCursor_NSConsumesSelf;
+    case attr::NSConsumed: return CXCursor_NSConsumed;
+    case attr::ObjCException: return CXCursor_ObjCException;
+    case attr::ObjCNSObject: return CXCursor_ObjCNSObject;
+    case attr::ObjCIndependentClass: return CXCursor_ObjCIndependentClass;
+    case attr::ObjCPreciseLifetime: return CXCursor_ObjCPreciseLifetime;
+    case attr::ObjCReturnsInnerPointer: return CXCursor_ObjCReturnsInnerPointer;
+    case attr::ObjCRequiresSuper: return CXCursor_ObjCRequiresSuper;
+    case attr::ObjCRootClass: return CXCursor_ObjCRootClass;
+    case attr::ObjCSubclassingRestricted: return CXCursor_ObjCSubclassingRestricted;
+    case attr::ObjCExplicitProtocolImpl: return CXCursor_ObjCExplicitProtocolImpl;
+    case attr::ObjCDesignatedInitializer: return CXCursor_ObjCDesignatedInitializer;
+    case attr::ObjCRuntimeVisible: return CXCursor_ObjCRuntimeVisible;
+    case attr::ObjCBoxable: return CXCursor_ObjCBoxable;
+    case attr::FlagEnum: return CXCursor_FlagEnum;
   }
 
   return CXCursor_UnexposedAttr;
@@ -1406,16 +1424,16 @@ CXCompletionString clang_getCursorCompletionString(CXCursor cursor) {
     }
   } else if (kind == CXCursor_MacroDefinition) {
     const MacroDefinitionRecord *definition = getCursorMacroDefinition(cursor);
-    const IdentifierInfo *MacroInfo = definition->getName();
+    const IdentifierInfo *Macro = definition->getName();
     ASTUnit *unit = getCursorASTUnit(cursor);
-    CodeCompletionResult Result(MacroInfo);
-    CodeCompletionString *String
-      = Result.CreateCodeCompletionString(unit->getASTContext(),
-                                          unit->getPreprocessor(),
-                                          CodeCompletionContext::CCC_Other,
-                                 unit->getCodeCompletionTUInfo().getAllocator(),
-                                 unit->getCodeCompletionTUInfo(),
-                                 false);
+    CodeCompletionResult Result(
+        Macro,
+        unit->getPreprocessor().getMacroDefinition(Macro).getMacroInfo());
+    CodeCompletionString *String = Result.CreateCodeCompletionString(
+        unit->getASTContext(), unit->getPreprocessor(),
+        CodeCompletionContext::CCC_Other,
+        unit->getCodeCompletionTUInfo().getAllocator(),
+        unit->getCodeCompletionTUInfo(), false);
     return String;
   }
   return nullptr;

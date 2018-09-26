@@ -255,12 +255,14 @@ size_t ArchSpec::AutoComplete(CompletionRequest &request) {
     for (uint32_t i = 0; i < llvm::array_lengthof(g_core_definitions); ++i) {
       if (NameMatches(g_core_definitions[i].name, NameMatch::StartsWith,
                       request.GetCursorArgumentPrefix()))
-        request.GetMatches().AppendString(g_core_definitions[i].name);
+        request.AddCompletion(g_core_definitions[i].name);
     }
   } else {
-    ListSupportedArchNames(request.GetMatches());
+    StringList matches;
+    ListSupportedArchNames(matches);
+    request.AddCompletions(matches);
   }
-  return request.GetMatches().GetSize();
+  return request.GetNumberOfMatches();
 }
 
 #define CPU_ANY (UINT32_MAX)
@@ -813,6 +815,7 @@ bool ArchSpec::CharIsSignedByDefault() const {
   case llvm::Triple::ppc64le:
   case llvm::Triple::systemz:
   case llvm::Triple::xcore:
+  case llvm::Triple::arc:
     return false;
   }
 }
@@ -1475,7 +1478,10 @@ bool ArchSpec::IsAlwaysThumbInstructions() const {
 
     if (GetCore() == ArchSpec::Core::eCore_arm_armv7m ||
         GetCore() == ArchSpec::Core::eCore_arm_armv7em ||
-        GetCore() == ArchSpec::Core::eCore_arm_armv6m) {
+        GetCore() == ArchSpec::Core::eCore_arm_armv6m ||
+        GetCore() == ArchSpec::Core::eCore_thumbv7m ||
+        GetCore() == ArchSpec::Core::eCore_thumbv7em ||
+        GetCore() == ArchSpec::Core::eCore_thumbv6m) {
       return true;
     }
   }

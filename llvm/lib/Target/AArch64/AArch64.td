@@ -71,6 +71,9 @@ def FeaturePerfMon : SubtargetFeature<"perfmon", "HasPerfMon", "true",
 def FeatureFullFP16 : SubtargetFeature<"fullfp16", "HasFullFP16", "true",
   "Full FP16", [FeatureFPARMv8]>;
 
+def FeatureFP16FML : SubtargetFeature<"fp16fml", "HasFP16FML", "true",
+  "Enable FP16 FML instructions", [FeatureFullFP16]>;
+
 def FeatureSPE : SubtargetFeature<"spe", "HasSPE", "true",
   "Enable Statistical Profiling extension">;
 
@@ -96,13 +99,14 @@ def FeatureStrictAlign : SubtargetFeature<"strict-align",
                                           "Disallow all unaligned memory "
                                           "access">;
 
-def FeatureReserveX18 : SubtargetFeature<"reserve-x18", "ReserveX18", "true",
-                                         "Reserve X18, making it unavailable "
-                                         "as a GPR">;
+foreach i = {1-7,18,20} in
+    def FeatureReserveX#i : SubtargetFeature<"reserve-x"#i, "ReserveXRegister["#i#"]", "true",
+                                             "Reserve X"#i#", making it unavailable "
+                                             "as a GPR">;
 
-def FeatureReserveX20 : SubtargetFeature<"reserve-x20", "ReserveX20", "true",
-                                         "Reserve X20, making it unavailable "
-                                         "as a GPR">;
+foreach i = {8-15,18} in
+    def FeatureCallSavedX#i : SubtargetFeature<"call-saved-x"#i,
+         "CustomCallSavedXRegs["#i#"]", "true", "Make X"#i#" callee saved.">;
 
 def FeatureUseAA : SubtargetFeature<"use-aa", "UseAA", "true",
                                     "Use alias analysis during codegen">;
@@ -155,6 +159,10 @@ def FeatureFuseAddress : SubtargetFeature<
 def FeatureFuseAES : SubtargetFeature<
     "fuse-aes", "HasFuseAES", "true",
     "CPU fuses AES crypto operations">;
+
+def FeatureFuseCryptoEOR : SubtargetFeature<
+    "fuse-crypto-eor", "HasFuseCryptoEOR", "true",
+    "CPU fuses AES/PMULL and EOR operations">;
 
 def FeatureFuseCCSelect : SubtargetFeature<
     "fuse-csel", "HasFuseCCSelect", "true",
@@ -343,6 +351,7 @@ def ProcCyclone : SubtargetFeature<"cyclone", "ARMProcFamily", "Cyclone",
                                    FeatureDisableLatencySchedHeuristic,
                                    FeatureFPARMv8,
                                    FeatureFuseAES,
+                                   FeatureFuseCryptoEOR,
                                    FeatureNEON,
                                    FeaturePerfMon,
                                    FeatureZCRegMove,

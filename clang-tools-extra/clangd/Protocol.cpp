@@ -178,6 +178,16 @@ bool fromJSON(const json::Value &Params, CompletionClientCapabilities &R) {
   return true;
 }
 
+bool fromJSON(const llvm::json::Value &Params,
+              PublishDiagnosticsClientCapabilities &R) {
+  json::ObjectMapper O(Params);
+  if (!O)
+    return false;
+  O.map("clangdFixSupport", R.clangdFixSupport);
+  O.map("categorySupport", R.categorySupport);
+  return true;
+}
+
 bool fromJSON(const json::Value &E, SymbolKind &Out) {
   if (auto T = E.getAsInteger()) {
     if (*T < static_cast<int>(SymbolKind::File) ||
@@ -208,10 +218,10 @@ bool fromJSON(const json::Value &Params, SymbolKindCapabilities &R) {
 }
 
 SymbolKind adjustKindToCapability(SymbolKind Kind,
-                                  SymbolKindBitset &supportedSymbolKinds) {
+                                  SymbolKindBitset &SupportedSymbolKinds) {
   auto KindVal = static_cast<size_t>(Kind);
-  if (KindVal >= SymbolKindMin && KindVal <= supportedSymbolKinds.size() &&
-      supportedSymbolKinds[KindVal])
+  if (KindVal >= SymbolKindMin && KindVal <= SupportedSymbolKinds.size() &&
+      SupportedSymbolKinds[KindVal])
     return Kind;
 
   switch (Kind) {
@@ -240,6 +250,7 @@ bool fromJSON(const json::Value &Params, TextDocumentClientCapabilities &R) {
   if (!O)
     return false;
   O.map("completion", R.completion);
+  O.map("publishDiagnostics", R.publishDiagnostics);
   return true;
 }
 
@@ -263,7 +274,7 @@ bool fromJSON(const json::Value &Params, InitializeParams &R) {
   O.map("rootPath", R.rootPath);
   O.map("capabilities", R.capabilities);
   O.map("trace", R.trace);
-  // initializationOptions, capabilities unused
+  O.map("initializationOptions", R.initializationOptions);
   return true;
 }
 
@@ -506,6 +517,8 @@ json::Value toJSON(const CompletionItem &CI) {
     Result["textEdit"] = *CI.textEdit;
   if (!CI.additionalTextEdits.empty())
     Result["additionalTextEdits"] = json::Array(CI.additionalTextEdits);
+  if (CI.deprecated)
+    Result["deprecated"] = CI.deprecated;
   return std::move(Result);
 }
 
@@ -591,10 +604,23 @@ bool fromJSON(const json::Value &Params, DidChangeConfigurationParams &CCP) {
   return O && O.map("settings", CCP.settings);
 }
 
+bool fromJSON(const llvm::json::Value &Params,
+              ClangdCompileCommand &CDbUpdate) {
+  json::ObjectMapper O(Params);
+  return O && O.map("workingDirectory", CDbUpdate.workingDirectory) &&
+         O.map("compilationCommand", CDbUpdate.compilationCommand);
+}
+
 bool fromJSON(const json::Value &Params,
               ClangdConfigurationParamsChange &CCPC) {
   json::ObjectMapper O(Params);
-  return O && O.map("compilationDatabasePath", CCPC.compilationDatabasePath);
+  return O && O.map("compilationDatabasePath", CCPC.compilationDatabasePath) &&
+         O.map("compilationDatabaseChanges", CCPC.compilationDatabaseChanges);
+}
+
+bool fromJSON(const json::Value &Params, ReferenceParams &R) {
+  TextDocumentPositionParams &Base = R;
+  return fromJSON(Params, Base);
 }
 
 } // namespace clangd

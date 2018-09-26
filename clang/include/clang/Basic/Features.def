@@ -37,6 +37,9 @@ FEATURE(address_sanitizer,
 FEATURE(hwaddress_sanitizer,
         LangOpts.Sanitize.hasOneOf(SanitizerKind::HWAddress |
                                    SanitizerKind::KernelHWAddress))
+FEATURE(xray_instrument, LangOpts.XRayInstrument)
+FEATURE(undefined_behavior_sanitizer,
+        LangOpts.Sanitize.hasOneOf(SanitizerKind::Undefined))
 FEATURE(assume_nonnull, true)
 FEATURE(attribute_analyzer_noreturn, true)
 FEATURE(attribute_availability, true)
@@ -72,7 +75,9 @@ FEATURE(cxx_rtti, LangOpts.RTTI &&LangOpts.RTTIData)
 FEATURE(enumerator_attributes, true)
 FEATURE(nullability, true)
 FEATURE(nullability_on_arrays, true)
-FEATURE(memory_sanitizer, LangOpts.Sanitize.has(SanitizerKind::Memory))
+FEATURE(memory_sanitizer,
+        LangOpts.Sanitize.hasOneOf(SanitizerKind::Memory |
+                                   SanitizerKind::KernelMemory))
 FEATURE(thread_sanitizer, LangOpts.Sanitize.has(SanitizerKind::Thread))
 FEATURE(dataflow_sanitizer, LangOpts.Sanitize.has(SanitizerKind::DataFlow))
 FEATURE(efficiency_sanitizer,

@@ -247,7 +247,7 @@ static void combineKnownMetadata(Instruction *ReplInst, Instruction *I) {
       LLVMContext::MD_noalias,        LLVMContext::MD_range,
       LLVMContext::MD_fpmath,         LLVMContext::MD_invariant_load,
       LLVMContext::MD_invariant_group};
-  combineMetadata(ReplInst, I, KnownIDs);
+  combineMetadata(ReplInst, I, KnownIDs, true);
 }
 
 // This pass hoists common computations across branches sharing common
@@ -365,7 +365,7 @@ private:
 
   // Return true when a successor of BB dominates A.
   bool successorDominate(const BasicBlock *BB, const BasicBlock *A) {
-    for (const BasicBlock *Succ : BB->getTerminator()->successors())
+    for (const BasicBlock *Succ : successors(BB))
       if (DT->dominates(Succ, A))
         return true;
 
@@ -534,7 +534,7 @@ private:
 
     if (NewBB == DBB && !MSSA->isLiveOnEntryDef(D))
       if (auto *UD = dyn_cast<MemoryUseOrDef>(D))
-        if (firstInBB(NewPt, UD->getMemoryInst()))
+        if (!firstInBB(UD->getMemoryInst(), NewPt))
           // Cannot move the load or store to NewPt above its definition in D.
           return false;
 
@@ -584,8 +584,8 @@ private:
     for (auto CHI : C) {
       BasicBlock *Dest = CHI.Dest;
       // Find if all the edges have values flowing out of BB.
-      bool Found = llvm::any_of(TI->successors(), [Dest](const BasicBlock *BB) {
-          return BB == Dest; });
+      bool Found = llvm::any_of(
+          successors(TI), [Dest](const BasicBlock *BB) { return BB == Dest; });
       if (!Found)
         return false;
     }
@@ -784,6 +784,7 @@ private:
       // which currently have dead terminators that are control
       // dependence sources of a block which is in NewLiveBlocks.
       IDFs.setDefiningBlocks(VNBlocks);
+      IDFBlocks.clear();
       IDFs.calculate(IDFBlocks);
 
       // Make a map of BB vs instructions to be hoisted.
@@ -792,7 +793,7 @@ private:
       }
       // Insert empty CHI node for this VN. This is used to factor out
       // basic blocks where the ANTIC can potentially change.
-      for (auto IDFB : IDFBlocks) { // TODO: Prune out useless CHI insertions.
+      for (auto IDFB : IDFBlocks) {
         for (unsigned i = 0; i < V.size(); ++i) {
           CHIArg C = {VN, nullptr, nullptr};
            // Ignore spurious PDFs.
@@ -1100,7 +1101,7 @@ private:
           break;
 
         // Do not value number terminator instructions.
-        if (isa<TerminatorInst>(&I1))
+        if (I1.isTerminator())
           break;
 
         if (auto *Load = dyn_cast<LoadInst>(&I1))

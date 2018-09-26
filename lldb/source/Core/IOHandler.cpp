@@ -26,7 +26,7 @@
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Host/File.h"            // for File
-#include "lldb/Host/Predicate.h"       // for Predicate, ::eBroad...
+#include "lldb/Utility/Predicate.h"    // for Predicate, ::eBroad...
 #include "lldb/Utility/Status.h"       // for Status
 #include "lldb/Utility/StreamString.h" // for StreamString
 #include "lldb/Utility/StringList.h"   // for StringList
@@ -40,7 +40,6 @@
 #ifndef LLDB_DISABLE_CURSES
 #include "lldb/Breakpoint/BreakpointLocation.h"
 #include "lldb/Core/Module.h"
-#include "lldb/Core/State.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/Core/ValueObjectRegister.h"
 #include "lldb/Symbol/Block.h"
@@ -53,6 +52,7 @@
 #include "lldb/Target/StopInfo.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
+#include "lldb/Utility/State.h"
 #endif
 
 #include "llvm/ADT/StringRef.h" // for StringRef
@@ -172,12 +172,10 @@ IOHandlerConfirm::IOHandlerConfirm(Debugger &debugger, llvm::StringRef prompt,
 
 IOHandlerConfirm::~IOHandlerConfirm() = default;
 
-int IOHandlerConfirm::IOHandlerComplete(IOHandler &io_handler,
-                                        const char *current_line,
-                                        const char *cursor,
-                                        const char *last_char,
-                                        int skip_first_n_matches,
-                                        int max_matches, StringList &matches) {
+int IOHandlerConfirm::IOHandlerComplete(
+    IOHandler &io_handler, const char *current_line, const char *cursor,
+    const char *last_char, int skip_first_n_matches, int max_matches,
+    StringList &matches, StringList &descriptions) {
   if (current_line == cursor) {
     if (m_default_response) {
       matches.AppendString("y");
@@ -223,12 +221,10 @@ void IOHandlerConfirm::IOHandlerInputComplete(IOHandler &io_handler,
   }
 }
 
-int IOHandlerDelegate::IOHandlerComplete(IOHandler &io_handler,
-                                         const char *current_line,
-                                         const char *cursor,
-                                         const char *last_char,
-                                         int skip_first_n_matches,
-                                         int max_matches, StringList &matches) {
+int IOHandlerDelegate::IOHandlerComplete(
+    IOHandler &io_handler, const char *current_line, const char *cursor,
+    const char *last_char, int skip_first_n_matches, int max_matches,
+    StringList &matches, StringList &descriptions) {
   switch (m_completion) {
   case Completion::None:
     break;
@@ -236,19 +232,21 @@ int IOHandlerDelegate::IOHandlerComplete(IOHandler &io_handler,
   case Completion::LLDBCommand:
     return io_handler.GetDebugger().GetCommandInterpreter().HandleCompletion(
         current_line, cursor, last_char, skip_first_n_matches, max_matches,
-        matches);
-
+        matches, descriptions);
   case Completion::Expression: {
+    CompletionResult result;
     CompletionRequest request(current_line, current_line - cursor,
-                              skip_first_n_matches, max_matches, matches);
+                              skip_first_n_matches, max_matches, result);
     CommandCompletions::InvokeCommonCompletionCallbacks(
         io_handler.GetDebugger().GetCommandInterpreter(),
         CommandCompletions::eVariablePathCompletion, request, nullptr);
+    result.GetMatches(matches);
+    result.GetDescriptions(descriptions);
 
-    size_t num_matches = request.GetMatches().GetSize();
+    size_t num_matches = request.GetNumberOfMatches();
     if (num_matches > 0) {
       std::string common_prefix;
-      request.GetMatches().LongestCommonPrefix(common_prefix);
+      matches.LongestCommonPrefix(common_prefix);
       const size_t partial_name_len = request.GetCursorArgumentPrefix().size();
 
       // If we matched a unique single command, add a space... Only do this if
@@ -432,17 +430,15 @@ int IOHandlerEditline::FixIndentationCallback(Editline *editline,
       *editline_reader, lines, cursor_position);
 }
 
-int IOHandlerEditline::AutoCompleteCallback(const char *current_line,
-                                            const char *cursor,
-                                            const char *last_char,
-                                            int skip_first_n_matches,
-                                            int max_matches,
-                                            StringList &matches, void *baton) {
+int IOHandlerEditline::AutoCompleteCallback(
+    const char *current_line, const char *cursor, const char *last_char,
+    int skip_first_n_matches, int max_matches, StringList &matches,
+    StringList &descriptions, void *baton) {
   IOHandlerEditline *editline_reader = (IOHandlerEditline *)baton;
   if (editline_reader)
     return editline_reader->m_delegate.IOHandlerComplete(
         *editline_reader, current_line, cursor, last_char, skip_first_n_matches,
-        max_matches, matches);
+        max_matches, matches, descriptions);
   return 0;
 }
 #endif
@@ -4340,6 +4336,7 @@ public:
               m_file_sp->GetFileSpec(), // Source file
               m_selected_line +
                   1, // Source line number (m_selected_line is zero based)
+              0,     // Unspecified column.
               0,     // No offset
               eLazyBoolCalculate,  // Check inlines using global setting
               eLazyBoolCalculate,  // Skip prologue using global setting,
@@ -4379,6 +4376,7 @@ public:
               m_file_sp->GetFileSpec(), // Source file
               m_selected_line +
                   1, // Source line number (m_selected_line is zero based)
+              0,     // No column specified.
               0,     // No offset
               eLazyBoolCalculate,  // Check inlines using global setting
               eLazyBoolCalculate,  // Skip prologue using global setting,

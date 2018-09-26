@@ -232,6 +232,8 @@ void HIPToolChain::addClangTargetOptions(
   assert(DeviceOffloadingKind == Action::OFK_HIP &&
          "Only HIP offloading kinds are supported for GPUs.");
 
+  CC1Args.push_back("-target-cpu");
+  CC1Args.push_back(DriverArgs.MakeArgStringRef(GpuArch));
   CC1Args.push_back("-fcuda-is-device");
 
   if (DriverArgs.hasFlag(options::OPT_fcuda_flush_denormals_to_zero,
@@ -245,6 +247,12 @@ void HIPToolChain::addClangTargetOptions(
   if (DriverArgs.hasFlag(options::OPT_fcuda_rdc, options::OPT_fno_cuda_rdc,
                          false))
     CC1Args.push_back("-fcuda-rdc");
+
+  // Default to "hidden" visibility, as object level linking will not be
+  // supported for the foreseeable future.
+  if (!DriverArgs.hasArg(options::OPT_fvisibility_EQ,
+                         options::OPT_fvisibility_ms_compat))
+    CC1Args.append({"-fvisibility", "hidden"});
 }
 
 llvm::opt::DerivedArgList *

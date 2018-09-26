@@ -53,12 +53,14 @@ set(LLVM_TEST_DEPENDS
           llvm-cvtres
           llvm-cxxdump
           llvm-cxxfilt
+          llvm-cxxmap
           llvm-diff
           llvm-dis
           llvm-dlltool
           dsymutil
           llvm-dwarfdump
           llvm-dwp
+          llvm-exegesis
           llvm-extract
           llvm-isel-fuzzer
           llvm-lib

@@ -27,22 +27,23 @@ using namespace clang::driver;
 using namespace llvm::opt;
 
 enum : SanitizerMask {
-  NeedsUbsanRt = Undefined | Integer | Nullability | CFI,
+  NeedsUbsanRt = Undefined | Integer | ImplicitConversion | Nullability | CFI,
   NeedsUbsanCxxRt = Vptr | CFI,
   NotAllowedWithTrap = Vptr,
   NotAllowedWithMinimalRuntime = Vptr,
   RequiresPIE = DataFlow | HWAddress | Scudo,
   NeedsUnwindTables = Address | HWAddress | Thread | Memory | DataFlow,
   SupportsCoverage = Address | HWAddress | KernelAddress | KernelHWAddress |
-                     Memory | Leak | Undefined | Integer | Nullability |
-                     DataFlow | Fuzzer | FuzzerNoLink,
-  RecoverableByDefault = Undefined | Integer | Nullability,
+                     Memory | KernelMemory | Leak | Undefined | Integer |
+                     ImplicitConversion | Nullability | DataFlow | Fuzzer |
+                     FuzzerNoLink,
+  RecoverableByDefault = Undefined | Integer | ImplicitConversion | Nullability,
   Unrecoverable = Unreachable | Return,
   AlwaysRecoverable = KernelAddress | KernelHWAddress,
   LegacyFsanitizeRecoverMask = Undefined | Integer,
   NeedsLTO = CFI,
   TrappingSupported = (Undefined & ~Vptr) | UnsignedIntegerOverflow |
-                      Nullability | LocalBounds | CFI,
+                      ImplicitConversion | Nullability | LocalBounds | CFI,
   TrappingDefault = CFI,
   CFIClasses =
       CFIVCall | CFINVCall | CFIMFCall | CFIDerivedCast | CFIUnrelatedCast,
@@ -321,7 +322,7 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
           D.Diag(diag::err_drv_argument_not_allowed_with)
               << "-fsanitize=vptr" << NoRTTIArg->getAsString(Args);
         } else {
-          // The vptr sanitizer requires RTTI, but RTTI is disabled (by 
+          // The vptr sanitizer requires RTTI, but RTTI is disabled (by
           // default). Warn that the vptr sanitizer is being disabled.
           D.Diag(diag::warn_drv_disabling_vptr_no_rtti_default);
         }
@@ -380,8 +381,10 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
                                           SafeStack),
       std::make_pair(KernelHWAddress, Address | HWAddress | Leak | Thread |
                                           Memory | KernelAddress | Efficiency |
-                                          SafeStack | ShadowCallStack)};
-
+                                          SafeStack | ShadowCallStack),
+      std::make_pair(KernelMemory, Address | HWAddress | Leak | Thread |
+                                       Memory | KernelAddress | Efficiency |
+                                       Scudo | SafeStack)};
   // Enable toolchain specific default sanitizers if not explicitly disabled.
   SanitizerMask Default = TC.getDefaultSanitizers() & ~AllRemove;
 

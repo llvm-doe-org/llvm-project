@@ -23,6 +23,7 @@
 #include <set>
 #include <string>
 
+#include "llvm/ADT/BitmaskEnum.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Error.h"
 
@@ -32,7 +33,7 @@ class GlobalValue;
 
 namespace object {
 
-class BasicSymbolRef;
+class SymbolRef;
 
 } // end namespace object
 
@@ -52,8 +53,10 @@ public:
     Common = 1U << 2,
     Absolute = 1U << 3,
     Exported = 1U << 4,
-    Lazy = 1U << 5,
-    Materializing = 1U << 6
+    Callable = 1U << 5,
+    Lazy = 1U << 6,
+    Materializing = 1U << 7,
+    LLVM_MARK_AS_BITMASK_ENUM(/* LargestValue = */ Materializing)
   };
 
   static JITSymbolFlags stripTransientFlags(JITSymbolFlags Orig) {
@@ -70,6 +73,26 @@ public:
   ///        flags.
   JITSymbolFlags(FlagNames Flags, TargetFlagsType TargetFlags)
     : Flags(Flags), TargetFlags(TargetFlags) {}
+
+  /// Implicitly convert to bool. Returs true if any flag is set.
+  explicit operator bool() const { return Flags != None || TargetFlags != 0; }
+
+  /// Compare for equality.
+  bool operator==(const JITSymbolFlags &RHS) const {
+    return Flags == RHS.Flags && TargetFlags == RHS.TargetFlags;
+  }
+
+  /// Bitwise AND-assignment for FlagNames.
+  JITSymbolFlags &operator&=(const FlagNames &RHS) {
+    Flags &= RHS;
+    return *this;
+  }
+
+  /// Bitwise OR-assignment for FlagNames.
+  JITSymbolFlags &operator|=(const FlagNames &RHS) {
+    Flags |= RHS;
+    return *this;
+  }
 
   /// Return true if there was an error retrieving this symbol.
   bool hasError() const {
@@ -109,11 +132,13 @@ public:
     return (Flags & Exported) == Exported;
   }
 
-  /// Implicitly convert to the underlying flags type.
-  operator UnderlyingType&() { return Flags; }
+  /// Returns true if the given symbol is known to be callable.
+  bool isCallable() const { return (Flags & Callable) == Callable; }
 
-  /// Implicitly convert to the underlying flags type.
-  operator const UnderlyingType&() const { return Flags; }
+  /// Get the underlying flags value as an integer.
+  UnderlyingType getRawFlagsValue() const {
+    return static_cast<UnderlyingType>(Flags);
+  }
 
   /// Return a reference to the target-specific flags.
   TargetFlagsType& getTargetFlags() { return TargetFlags; }
@@ -127,12 +152,27 @@ public:
 
   /// Construct a JITSymbolFlags value based on the flags of the given libobject
   /// symbol.
-  static JITSymbolFlags fromObjectSymbol(const object::BasicSymbolRef &Symbol);
+  static Expected<JITSymbolFlags>
+  fromObjectSymbol(const object::SymbolRef &Symbol);
 
 private:
-  UnderlyingType Flags = None;
+  FlagNames Flags = None;
   TargetFlagsType TargetFlags = 0;
 };
+
+inline JITSymbolFlags operator&(const JITSymbolFlags &LHS,
+                                const JITSymbolFlags::FlagNames &RHS) {
+  JITSymbolFlags Tmp = LHS;
+  Tmp &= RHS;
+  return Tmp;
+}
+
+inline JITSymbolFlags operator|(const JITSymbolFlags &LHS,
+                                const JITSymbolFlags::FlagNames &RHS) {
+  JITSymbolFlags Tmp = LHS;
+  Tmp |= RHS;
+  return Tmp;
+}
 
 /// ARM-specific JIT symbol flags.
 /// FIXME: This should be moved into a target-specific header.
@@ -147,8 +187,8 @@ public:
 
   operator JITSymbolFlags::TargetFlagsType&() { return Flags; }
 
-  static ARMJITSymbolFlags fromObjectSymbol(
-                                           const object::BasicSymbolRef &Symbol);
+  static ARMJITSymbolFlags fromObjectSymbol(const object::SymbolRef &Symbol);
+
 private:
   JITSymbolFlags::TargetFlagsType Flags = 0;
 };
@@ -293,7 +333,6 @@ class JITSymbolResolver {
 public:
   using LookupSet = std::set<StringRef>;
   using LookupResult = std::map<StringRef, JITEvaluatedSymbol>;
-  using LookupFlagsResult = std::map<StringRef, JITSymbolFlags>;
 
   virtual ~JITSymbolResolver() = default;
 
@@ -304,11 +343,11 @@ public:
   /// resolved, or if the resolution process itself triggers an error.
   virtual Expected<LookupResult> lookup(const LookupSet &Symbols) = 0;
 
-  /// Returns the symbol flags for each of the given symbols.
-  ///
-  /// This method does NOT return an error if any of the given symbols is
-  /// missing. Instead, that symbol will be left out of the result map.
-  virtual Expected<LookupFlagsResult> lookupFlags(const LookupSet &Symbols) = 0;
+  /// Returns the subset of the given symbols that should be materialized by
+  /// the caller. Only weak/common symbols should be looked up, as strong
+  /// definitions are implicitly always part of the caller's responsibility.
+  virtual Expected<LookupSet>
+  getResponsibilitySet(const LookupSet &Symbols) = 0;
 
 private:
   virtual void anchor();
@@ -324,7 +363,7 @@ public:
 
   /// Performs flags lookup by calling findSymbolInLogicalDylib and
   ///        returning the flags value for that symbol.
-  Expected<LookupFlagsResult> lookupFlags(const LookupSet &Symbols) final;
+  Expected<LookupSet> getResponsibilitySet(const LookupSet &Symbols) final;
 
   /// This method returns the address of the specified symbol if it exists
   /// within the logical dynamic library represented by this JITSymbolResolver.

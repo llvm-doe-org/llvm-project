@@ -30,6 +30,7 @@
 #include "clang/Basic/TargetInfo.h"
 #include "clang/CodeGen/CGFunctionInfo.h"
 #include "clang/Frontend/CodeGenOptions.h"
+#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/Intrinsics.h"
@@ -846,11 +847,10 @@ void CodeGenFunction::EmitScalarInit(const Expr *init, const ValueDecl *D,
   EmitStoreOfScalar(value, lvalue, /* isInitialization */ true);
 }
 
-/// canEmitInitWithFewStoresAfterMemset - Decide whether we can emit the
-/// non-zero parts of the specified initializer with equal or fewer than
-/// NumStores scalar stores.
-static bool canEmitInitWithFewStoresAfterMemset(llvm::Constant *Init,
-                                                unsigned &NumStores) {
+/// Decide whether we can emit the non-zero parts of the specified initializer
+/// with equal or fewer than NumStores scalar stores.
+static bool canEmitInitWithFewStoresAfterBZero(llvm::Constant *Init,
+                                               unsigned &NumStores) {
   // Zero and Undef never requires any extra stores.
   if (isa<llvm::ConstantAggregateZero>(Init) ||
       isa<llvm::ConstantPointerNull>(Init) ||
@@ -865,7 +865,7 @@ static bool canEmitInitWithFewStoresAfterMemset(llvm::Constant *Init,
   if (isa<llvm::ConstantArray>(Init) || isa<llvm::ConstantStruct>(Init)) {
     for (unsigned i = 0, e = Init->getNumOperands(); i != e; ++i) {
       llvm::Constant *Elt = cast<llvm::Constant>(Init->getOperand(i));
-      if (!canEmitInitWithFewStoresAfterMemset(Elt, NumStores))
+      if (!canEmitInitWithFewStoresAfterBZero(Elt, NumStores))
         return false;
     }
     return true;
@@ -875,7 +875,7 @@ static bool canEmitInitWithFewStoresAfterMemset(llvm::Constant *Init,
         dyn_cast<llvm::ConstantDataSequential>(Init)) {
     for (unsigned i = 0, e = CDS->getNumElements(); i != e; ++i) {
       llvm::Constant *Elt = CDS->getElementAsConstant(i);
-      if (!canEmitInitWithFewStoresAfterMemset(Elt, NumStores))
+      if (!canEmitInitWithFewStoresAfterBZero(Elt, NumStores))
         return false;
     }
     return true;
@@ -885,15 +885,13 @@ static bool canEmitInitWithFewStoresAfterMemset(llvm::Constant *Init,
   return false;
 }
 
-/// emitStoresForInitAfterMemset - For inits that
-/// canEmitInitWithFewStoresAfterMemset returned true for, emit the scalar
-/// stores that would be required.
-static void emitStoresForInitAfterMemset(CodeGenModule &CGM,
-                                         llvm::Constant *Init, Address Loc,
-                                         bool isVolatile,
-                                         CGBuilderTy &Builder) {
+/// For inits that canEmitInitWithFewStoresAfterBZero returned true for, emit
+/// the scalar stores that would be required.
+static void emitStoresForInitAfterBZero(CodeGenModule &CGM,
+                                        llvm::Constant *Init, Address Loc,
+                                        bool isVolatile, CGBuilderTy &Builder) {
   assert(!Init->isNullValue() && !isa<llvm::UndefValue>(Init) &&
-         "called emitStoresForInitAfterMemset for zero or undef value.");
+         "called emitStoresForInitAfterBZero for zero or undef value.");
 
   if (isa<llvm::ConstantInt>(Init) || isa<llvm::ConstantFP>(Init) ||
       isa<llvm::ConstantVector>(Init) || isa<llvm::BlockAddress>(Init) ||
@@ -909,7 +907,7 @@ static void emitStoresForInitAfterMemset(CodeGenModule &CGM,
 
       // If necessary, get a pointer to the element and emit it.
       if (!Elt->isNullValue() && !isa<llvm::UndefValue>(Elt))
-        emitStoresForInitAfterMemset(
+        emitStoresForInitAfterBZero(
             CGM, Elt,
             Builder.CreateConstInBoundsGEP2_32(Loc, 0, i, CGM.getDataLayout()),
             isVolatile, Builder);
@@ -925,20 +923,19 @@ static void emitStoresForInitAfterMemset(CodeGenModule &CGM,
 
     // If necessary, get a pointer to the element and emit it.
     if (!Elt->isNullValue() && !isa<llvm::UndefValue>(Elt))
-      emitStoresForInitAfterMemset(
+      emitStoresForInitAfterBZero(
           CGM, Elt,
           Builder.CreateConstInBoundsGEP2_32(Loc, 0, i, CGM.getDataLayout()),
           isVolatile, Builder);
   }
 }
 
-/// shouldUseMemSetPlusStoresToInitialize - Decide whether we should use memset
-/// plus some stores to initialize a local variable instead of using a memcpy
-/// from a constant global.  It is beneficial to use memset if the global is all
-/// zeros, or mostly zeros and large.
-static bool shouldUseMemSetPlusStoresToInitialize(llvm::Constant *Init,
-                                                  uint64_t GlobalSize) {
-  // If a global is all zeros, always use a memset.
+/// Decide whether we should use bzero plus some stores to initialize a local
+/// variable instead of using a memcpy from a constant global.  It is beneficial
+/// to use bzero if the global is all zeros, or mostly zeros and large.
+static bool shouldUseBZeroPlusStoresToInitialize(llvm::Constant *Init,
+                                                 uint64_t GlobalSize) {
+  // If a global is all zeros, always use a bzero.
   if (isa<llvm::ConstantAggregateZero>(Init)) return true;
 
   // If a non-zero global is <= 32 bytes, always use a memcpy.  If it is large,
@@ -949,7 +946,80 @@ static bool shouldUseMemSetPlusStoresToInitialize(llvm::Constant *Init,
   uint64_t SizeLimit = 32;
 
   return GlobalSize > SizeLimit &&
-         canEmitInitWithFewStoresAfterMemset(Init, StoreBudget);
+         canEmitInitWithFewStoresAfterBZero(Init, StoreBudget);
+}
+
+/// Decide whether we should use memset to initialize a local variable instead
+/// of using a memcpy from a constant global. Assumes we've already decided to
+/// not user bzero.
+/// FIXME We could be more clever, as we are for bzero above, and generate
+///       memset followed by stores. It's unclear that's worth the effort.
+static llvm::Value *shouldUseMemSetToInitialize(llvm::Constant *Init,
+                                                uint64_t GlobalSize) {
+  uint64_t SizeLimit = 32;
+  if (GlobalSize <= SizeLimit)
+    return nullptr;
+  return llvm::isBytewiseValue(Init);
+}
+
+static void emitStoresForConstant(CodeGenModule &CGM, const VarDecl &D,
+                                  Address Loc, bool isVolatile,
+                                  CGBuilderTy &Builder,
+                                  llvm::Constant *constant) {
+  auto *Int8Ty = llvm::IntegerType::getInt8Ty(CGM.getLLVMContext());
+  auto *IntPtrTy = CGM.getDataLayout().getIntPtrType(CGM.getLLVMContext());
+
+  // If the initializer is all or mostly the same, codegen with bzero / memset
+  // then do a few stores afterward.
+  uint64_t ConstantSize =
+      CGM.getDataLayout().getTypeAllocSize(constant->getType());
+  auto *SizeVal = llvm::ConstantInt::get(IntPtrTy, ConstantSize);
+  if (shouldUseBZeroPlusStoresToInitialize(constant, ConstantSize)) {
+    Builder.CreateMemSet(Loc, llvm::ConstantInt::get(Int8Ty, 0), SizeVal,
+                         isVolatile);
+
+    bool valueAlreadyCorrect =
+        constant->isNullValue() || isa<llvm::UndefValue>(constant);
+    if (!valueAlreadyCorrect) {
+      Loc = Builder.CreateBitCast(
+          Loc, constant->getType()->getPointerTo(Loc.getAddressSpace()));
+      emitStoresForInitAfterBZero(CGM, constant, Loc, isVolatile, Builder);
+    }
+    return;
+  }
+
+  llvm::Value *Pattern = shouldUseMemSetToInitialize(constant, ConstantSize);
+  if (Pattern) {
+    uint64_t Value = 0x00;
+    if (!isa<llvm::UndefValue>(Pattern)) {
+      const llvm::APInt &AP = cast<llvm::ConstantInt>(Pattern)->getValue();
+      assert(AP.getBitWidth() <= 8);
+      Value = AP.getLimitedValue();
+    }
+    Builder.CreateMemSet(Loc, llvm::ConstantInt::get(Int8Ty, Value), SizeVal,
+                         isVolatile);
+    return;
+  }
+
+  // Otherwise, create a temporary global with the initializer then memcpy from
+  // the global to the alloca.
+  std::string Name = getStaticDeclName(CGM, D);
+  unsigned AS = CGM.getContext().getTargetAddressSpace(
+      CGM.getStringLiteralAddressSpace());
+  llvm::Type *BP = llvm::PointerType::getInt8PtrTy(CGM.getLLVMContext(), AS);
+
+  llvm::GlobalVariable *GV = new llvm::GlobalVariable(
+      CGM.getModule(), constant->getType(), true,
+      llvm::GlobalValue::PrivateLinkage, constant, Name, nullptr,
+      llvm::GlobalValue::NotThreadLocal, AS);
+  GV->setAlignment(Loc.getAlignment().getQuantity());
+  GV->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+
+  Address SrcPtr = Address(GV, Loc.getAlignment());
+  if (SrcPtr.getType() != BP)
+    SrcPtr = Builder.CreateBitCast(SrcPtr, BP);
+
+  Builder.CreateMemCpy(Loc, SrcPtr, SizeVal, isVolatile);
 }
 
 /// EmitAutoVarDecl - Emit code and set up an entry in LocalDeclMap for a
@@ -1397,48 +1467,11 @@ void CodeGenFunction::EmitAutoVarInit(const AutoVarEmission &emission) {
   // in various ways.
   bool isVolatile = type.isVolatileQualified();
 
-  llvm::Value *SizeVal =
-    llvm::ConstantInt::get(IntPtrTy,
-                           getContext().getTypeSizeInChars(type).getQuantity());
-
   llvm::Type *BP = CGM.Int8Ty->getPointerTo(Loc.getAddressSpace());
   if (Loc.getType() != BP)
     Loc = Builder.CreateBitCast(Loc, BP);
 
-  // If the initializer is all or mostly zeros, codegen with memset then do
-  // a few stores afterward.
-  if (shouldUseMemSetPlusStoresToInitialize(constant,
-                CGM.getDataLayout().getTypeAllocSize(constant->getType()))) {
-    Builder.CreateMemSet(Loc, llvm::ConstantInt::get(Int8Ty, 0), SizeVal,
-                         isVolatile);
-    // Zero and undef don't require a stores.
-    if (!constant->isNullValue() && !isa<llvm::UndefValue>(constant)) {
-      Loc = Builder.CreateBitCast(Loc,
-        constant->getType()->getPointerTo(Loc.getAddressSpace()));
-      emitStoresForInitAfterMemset(CGM, constant, Loc, isVolatile, Builder);
-    }
-  } else {
-    // Otherwise, create a temporary global with the initializer then
-    // memcpy from the global to the alloca.
-    std::string Name = getStaticDeclName(CGM, D);
-    unsigned AS = CGM.getContext().getTargetAddressSpace(
-        CGM.getStringLiteralAddressSpace());
-    BP = llvm::PointerType::getInt8PtrTy(getLLVMContext(), AS);
-
-    llvm::GlobalVariable *GV =
-      new llvm::GlobalVariable(CGM.getModule(), constant->getType(), true,
-                               llvm::GlobalValue::PrivateLinkage,
-                               constant, Name, nullptr,
-                               llvm::GlobalValue::NotThreadLocal, AS);
-    GV->setAlignment(Loc.getAlignment().getQuantity());
-    GV->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
-
-    Address SrcPtr = Address(GV, Loc.getAlignment());
-    if (SrcPtr.getType() != BP)
-      SrcPtr = Builder.CreateBitCast(SrcPtr, BP);
-
-    Builder.CreateMemCpy(Loc, SrcPtr, SizeVal, isVolatile);
-  }
+  emitStoresForConstant(CGM, D, Loc, isVolatile, Builder, constant);
 }
 
 /// Emit an expression as an initializer for an object (variable, field, etc.)
@@ -1598,9 +1631,16 @@ void CodeGenFunction::EmitAutoVarCleanups(const AutoVarEmission &emission) {
   }
 
   // If this is a block variable, call _Block_object_destroy
-  // (on the unforwarded address).
-  if (emission.IsByRef)
-    enterByrefCleanup(emission);
+  // (on the unforwarded address). Don't enter this cleanup if we're in pure-GC
+  // mode.
+  if (emission.IsByRef && CGM.getLangOpts().getGC() != LangOptions::GCOnly) {
+    BlockFieldFlags Flags = BLOCK_FIELD_IS_BYREF;
+    if (emission.Variable->getType().isObjCGCWeak())
+      Flags |= BLOCK_FIELD_IS_WEAK;
+    enterByrefCleanup(NormalAndEHCleanup, emission.Addr, Flags,
+                      /*LoadBlockVarAddr*/ false,
+                      cxxDestructorCanThrow(emission.Variable->getType()));
+  }
 }
 
 CodeGenFunction::Destroyer *
@@ -1654,9 +1694,6 @@ void CodeGenFunction::pushStackRestore(CleanupKind Kind, Address SPMem) {
 void CodeGenFunction::pushLifetimeExtendedDestroy(
     CleanupKind cleanupKind, Address addr, QualType type,
     Destroyer *destroyer, bool useEHCleanupForArray) {
-  assert(!isInConditionalBranch() &&
-         "performing lifetime extension from within conditional");
-
   // Push an EH-only cleanup for the object now.
   // FIXME: When popping normal cleanups, we need to keep this EH cleanup
   // around in case a temporary's destructor throws an exception.

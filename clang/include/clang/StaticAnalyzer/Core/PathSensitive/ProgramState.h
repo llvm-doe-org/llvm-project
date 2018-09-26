@@ -36,6 +36,7 @@ class ASTContext;
 
 namespace ento {
 
+class AnalysisManager;
 class CallEvent;
 class CallEventManager;
 
@@ -106,10 +107,14 @@ public:
 
   ~ProgramState();
 
+  int64_t getID() const;
+
   /// Return the ProgramStateManager associated with this state.
   ProgramStateManager &getStateManager() const {
     return *stateMgr;
   }
+
+  AnalysisManager &getAnalysisManager() const;
 
   /// Return the ConstraintManager.
   ConstraintManager &getConstraintManager() const;

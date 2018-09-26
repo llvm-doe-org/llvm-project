@@ -50,6 +50,7 @@
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/ScopedPrinter.h"
+#include "llvm/Support/LEB128.h"
 #include "llvm/Support/Win64EH.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -83,7 +84,6 @@ public:
   void printSymbols() override;
   void printDynamicSymbols() override;
   void printUnwindInfo() override;
-  void printSectionAsHex(StringRef StringName) override;
 
   void printNeededLibraries() override;
 
@@ -99,6 +99,7 @@ public:
   mergeCodeViewTypes(llvm::codeview::MergingTypeTableBuilder &CVIDs,
                      llvm::codeview::MergingTypeTableBuilder &CVTypes) override;
   void printStackMap() const override;
+  void printAddrsig() override;
 private:
   void printSymbol(const SymbolRef &Sym);
   void printRelocation(const SectionRef &Section, const RelocationRef &Reloc,
@@ -177,6 +178,10 @@ private:
   DebugChecksumsSubsectionRef CVFileChecksumTable;
 
   DebugStringTableSubsectionRef CVStringTable;
+
+  /// Track the compilation CPU type. S_COMPILE3 symbol records typically come
+  /// first, but if we don't see one, just assume an X64 CPU type. It is common.
+  CPUType CompilationCPUType = CPUType::X64;
 
   ScopedPrinter &Writer;
   BinaryByteStream TypeContents;
@@ -655,28 +660,6 @@ void COFFDumper::printFileHeaders() {
     printDOSHeader(DH);
 }
 
-void COFFDumper::printSectionAsHex(StringRef SectionName) {
-  char *StrPtr;
-  long SectionIndex = strtol(SectionName.data(), &StrPtr, 10);
-  const coff_section *Sec;
-  if (*StrPtr)
-    error(Obj->getSection(SectionName, Sec));
-  else {
-    error(Obj->getSection((int)SectionIndex, Sec));
-    if (!Sec)
-      return error(object_error::parse_failed);
-  }
-
-  StringRef SecName;
-  error(Obj->getSectionName(Sec, SecName));
-
-  ArrayRef<uint8_t> Content;
-  error(Obj->getSectionContents(Sec, Content));
-  const uint8_t *SecContent = Content.data();
-
-  SectionHexDump(SecName, SecContent, Content.size());
-}
-
 void COFFDumper::printDOSHeader(const dos_header *DH) {
   DictScope D(W, "DOSHeader");
   W.printString("Magic", StringRef(DH->Magic, sizeof(DH->Magic)));
@@ -772,7 +755,7 @@ void COFFDumper::printCOFFDebugDirectory() {
         W.printNumber("PDBAge", DebugInfo->PDB70.Age);
         W.printString("PDBFileName", PDBFileName);
       }
-    } else {
+    } else if (D.SizeOfData != 0) {
       // FIXME: Type values of 12 and 13 are commonly observed but are not in
       // the documented type enum.  Figure out what they mean.
       ArrayRef<uint8_t> RawData;
@@ -1083,10 +1066,28 @@ void COFFDumper::printCodeViewSymbolSection(StringRef SectionName,
         W.printHex("LocalSize", FD.LocalSize);
         W.printHex("ParamsSize", FD.ParamsSize);
         W.printHex("MaxStackSize", FD.MaxStackSize);
-        W.printString("FrameFunc", FrameFunc);
         W.printHex("PrologSize", FD.PrologSize);
         W.printHex("SavedRegsSize", FD.SavedRegsSize);
         W.printFlags("Flags", FD.Flags, makeArrayRef(FrameDataFlags));
+
+        // The FrameFunc string is a small RPN program. It can be broken up into
+        // statements that end in the '=' operator, which assigns the value on
+        // the top of the stack to the previously pushed variable. Variables can
+        // be temporary values ($T0) or physical registers ($esp). Print each
+        // assignment on its own line to make these programs easier to read.
+        {
+          ListScope FFS(W, "FrameFunc");
+          while (!FrameFunc.empty()) {
+            size_t EqOrEnd = FrameFunc.find('=');
+            if (EqOrEnd == StringRef::npos)
+              EqOrEnd = FrameFunc.size();
+            else
+              ++EqOrEnd;
+            StringRef Stmt = FrameFunc.substr(0, EqOrEnd);
+            W.printString(Stmt);
+            FrameFunc = FrameFunc.drop_front(EqOrEnd).trim();
+          }
+        }
       }
       break;
     }
@@ -1153,7 +1154,7 @@ void COFFDumper::printCodeViewSymbolsSubsection(StringRef Subsection,
   auto CODD = llvm::make_unique<COFFObjectDumpDelegate>(*this, Section, Obj,
                                                         SectionContents);
   CVSymbolDumper CVSD(W, Types, CodeViewContainer::ObjectFile, std::move(CODD),
-                      opts::CodeViewSubsectionBytes);
+                      CompilationCPUType, opts::CodeViewSubsectionBytes);
   CVSymbolArray Symbols;
   BinaryStreamReader Reader(BinaryData, llvm::support::little);
   if (auto EC = Reader.readArray(Symbols, Reader.getLength())) {
@@ -1166,6 +1167,7 @@ void COFFDumper::printCodeViewSymbolsSubsection(StringRef Subsection,
     W.flush();
     error(std::move(EC));
   }
+  CompilationCPUType = CVSD.getCompilationCPUType();
   W.flush();
 }
 
@@ -1851,6 +1853,49 @@ void COFFDumper::printStackMap() const {
   else
     prettyPrintStackMap(W,
                         StackMapV2Parser<support::big>(StackMapContentsArray));
+}
+
+void COFFDumper::printAddrsig() {
+  object::SectionRef AddrsigSection;
+  for (auto Sec : Obj->sections()) {
+    StringRef Name;
+    Sec.getName(Name);
+    if (Name == ".llvm_addrsig") {
+      AddrsigSection = Sec;
+      break;
+    }
+  }
+
+  if (AddrsigSection == object::SectionRef())
+    return;
+
+  StringRef AddrsigContents;
+  AddrsigSection.getContents(AddrsigContents);
+  ArrayRef<uint8_t> AddrsigContentsArray(
+      reinterpret_cast<const uint8_t*>(AddrsigContents.data()),
+      AddrsigContents.size());
+
+  ListScope L(W, "Addrsig");
+  auto *Cur = reinterpret_cast<const uint8_t *>(AddrsigContents.begin());
+  auto *End = reinterpret_cast<const uint8_t *>(AddrsigContents.end());
+  while (Cur != End) {
+    unsigned Size;
+    const char *Err;
+    uint64_t SymIndex = decodeULEB128(Cur, &Size, End, &Err);
+    if (Err)
+      reportError(Err);
+
+    Expected<COFFSymbolRef> Sym = Obj->getSymbol(SymIndex);
+    StringRef SymName;
+    std::error_code EC = errorToErrorCode(Sym.takeError());
+    if (EC || (EC = Obj->getSymbolName(*Sym, SymName))) {
+      SymName = "";
+      error(EC);
+    }
+
+    W.printNumber("Sym", SymName, SymIndex);
+    Cur += Size;
+  }
 }
 
 void llvm::dumpCodeViewMergedTypes(

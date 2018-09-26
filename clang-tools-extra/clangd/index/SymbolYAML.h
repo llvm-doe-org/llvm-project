@@ -13,7 +13,7 @@
 //
 // This is for **experimental** only. Don't use it in the production code.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_SYMBOL_FROM_YAML_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_SYMBOL_FROM_YAML_H
@@ -27,12 +27,11 @@ namespace clang {
 namespace clangd {
 
 // Read symbols from a YAML-format string.
-SymbolSlab SymbolsFromYAML(llvm::StringRef YAMLContent);
+SymbolSlab symbolsFromYAML(llvm::StringRef YAMLContent);
 
 // Read one symbol from a YAML-stream.
-// The arena must be the Input's context! (i.e. yaml::Input Input(Text, &Arena))
-// The returned symbol is backed by both Input and Arena.
-Symbol SymbolFromYAML(llvm::yaml::Input &Input, llvm::BumpPtrAllocator &Arena);
+// The returned symbol is backed by Input.
+Symbol SymbolFromYAML(llvm::yaml::Input &Input);
 
 // Convert a single symbol to YAML-format string.
 // The YAML result is safe to concatenate.
@@ -41,6 +40,13 @@ std::string SymbolToYAML(Symbol Sym);
 // Convert symbols to a YAML-format string.
 // The YAML result is safe to concatenate if you have multiple symbol slabs.
 void SymbolsToYAML(const SymbolSlab &Symbols, llvm::raw_ostream &OS);
+
+// Build an in-memory static index for global symbols from a symbol file.
+// The size of global symbols should be relatively small, so that all symbols
+// can be managed in memory.
+std::unique_ptr<SymbolIndex> loadIndex(llvm::StringRef SymbolFilename,
+                                       llvm::ArrayRef<std::string> URISchemes,
+                                       bool UseDex = true);
 
 } // namespace clangd
 } // namespace clang

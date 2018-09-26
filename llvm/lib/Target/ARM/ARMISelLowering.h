@@ -389,6 +389,9 @@ class VectorType;
                                        const SelectionDAG &DAG,
                                        unsigned Depth) const override;
 
+    bool targetShrinkDemandedConstant(SDValue Op, const APInt &Demanded,
+                                      TargetLoweringOpt &TLO) const override;
+
 
     bool ExpandInlineAsm(CallInst *CI) const override;
 
@@ -535,7 +538,8 @@ class VectorType;
     bool shouldExpandAtomicStoreInIR(StoreInst *SI) const override;
     TargetLoweringBase::AtomicExpansionKind
     shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const override;
-    bool shouldExpandAtomicCmpXchgInIR(AtomicCmpXchgInst *AI) const override;
+    TargetLoweringBase::AtomicExpansionKind
+    shouldExpandAtomicCmpXchgInIR(AtomicCmpXchgInst *AI) const override;
 
     bool useLoadStackGuardNode() const override;
 
@@ -572,6 +576,8 @@ class VectorType;
     bool isLegalInterleavedAccessType(VectorType *VecTy,
                                       const DataLayout &DL) const;
 
+    bool alignLoopsWithOptSize() const override;
+
     /// Returns the number of interleaved accesses that will be generated when
     /// lowering accesses of the given type.
     unsigned getNumInterleavedAccesses(VectorType *VecTy,
@@ -582,6 +588,9 @@ class VectorType;
     /// Return the correct alignment for the current calling convention.
     unsigned getABIAlignmentForCallingConv(Type *ArgTy,
                                            DataLayout DL) const override;
+
+    bool isDesirableToCommuteWithShift(const SDNode *N,
+                                       CombineLevel Level) const override;
 
   protected:
     std::pair<const TargetRegisterClass *, uint8_t>
@@ -763,6 +772,8 @@ class VectorType;
     bool isUsedByReturnOnly(SDNode *N, SDValue &Chain) const override;
 
     bool mayBeEmittedAsTailCall(const CallInst *CI) const override;
+
+    bool shouldConsiderGEPOffsetSplit() const override { return true; }
 
     SDValue getCMOV(const SDLoc &dl, EVT VT, SDValue FalseVal, SDValue TrueVal,
                     SDValue ARMcc, SDValue CCR, SDValue Cmp,

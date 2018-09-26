@@ -292,7 +292,7 @@ uptr ThreadDescriptorSize() {
       val = FIRST_32_SECOND_64(1168, 1776);
     else if (minor == 11 || (minor == 12 && patch == 1))
       val = FIRST_32_SECOND_64(1168, 2288);
-    else if (minor <= 13)
+    else if (minor <= 14)
       val = FIRST_32_SECOND_64(1168, 2304);
     else
       val = FIRST_32_SECOND_64(1216, 2304);
@@ -652,10 +652,10 @@ u32 GetNumberOfCPUs() {
 #if SANITIZER_FREEBSD || SANITIZER_NETBSD || SANITIZER_OPENBSD
   u32 ncpu;
   int req[2];
-  size_t len = sizeof(ncpu);
+  uptr len = sizeof(ncpu);
   req[0] = CTL_HW;
   req[1] = HW_NCPU;
-  CHECK_EQ(sysctl(req, 2, &ncpu, &len, NULL, 0), 0);
+  CHECK_EQ(internal_sysctl(req, 2, &ncpu, &len, NULL, 0), 0);
   return ncpu;
 #elif SANITIZER_ANDROID && !defined(CPU_COUNT) && !defined(__aarch64__)
   // Fall back to /sys/devices/system/cpu on Android when cpu_set_t doesn't

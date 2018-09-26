@@ -80,8 +80,18 @@ UUID MinidumpParser::GetModuleUUID(const MinidumpModule *module) {
     // PDB70 record
     const CvRecordPdb70 *pdb70_uuid = nullptr;
     Status error = consumeObject(cv_record, pdb70_uuid);
-    if (!error.Fail())
-      return UUID::fromData(pdb70_uuid, sizeof(*pdb70_uuid));
+    if (!error.Fail()) {
+      auto arch = GetArchitecture();
+      // For Apple targets we only need a 16 byte UUID so that we can match
+      // the UUID in the Module to actual UUIDs from the built binaries. The
+      // "Age" field is zero in breakpad minidump files for Apple targets, so
+      // we restrict the UUID to the "Uuid" field so we have a UUID we can use
+      // to match.
+      if (arch.GetTriple().getVendor() == llvm::Triple::Apple)
+        return UUID::fromData(pdb70_uuid->Uuid, sizeof(pdb70_uuid->Uuid));
+      else
+        return UUID::fromData(pdb70_uuid, sizeof(*pdb70_uuid));
+    }
   } else if (cv_signature == CvSignature::ElfBuildId)
     return UUID::fromData(cv_record);
 
@@ -146,11 +156,14 @@ const MinidumpSystemInfo *MinidumpParser::GetSystemInfo() {
 }
 
 ArchSpec MinidumpParser::GetArchitecture() {
-  ArchSpec arch_spec;
+  if (m_arch.IsValid())
+    return m_arch;
+
+  // Set the architecture in m_arch
   const MinidumpSystemInfo *system_info = GetSystemInfo();
 
   if (!system_info)
-    return arch_spec;
+    return m_arch;
 
   // TODO what to do about big endiand flavors of arm ?
   // TODO set the arm subarch stuff if the minidump has info about it
@@ -196,19 +209,28 @@ ArchSpec MinidumpParser::GetArchitecture() {
     break;
   case MinidumpOSPlatform::MacOSX:
     triple.setOS(llvm::Triple::OSType::MacOSX);
+    triple.setVendor(llvm::Triple::Apple);
+    break;
+  case MinidumpOSPlatform::IOS:
+    triple.setOS(llvm::Triple::OSType::IOS);
+    triple.setVendor(llvm::Triple::Apple);
     break;
   case MinidumpOSPlatform::Android:
     triple.setOS(llvm::Triple::OSType::Linux);
     triple.setEnvironment(llvm::Triple::EnvironmentType::Android);
     break;
-  default:
+  default: {
     triple.setOS(llvm::Triple::OSType::UnknownOS);
+    std::string csd_version;
+    if (auto s = GetMinidumpString(system_info->csd_version_rva))
+      csd_version = *s;
+    if (csd_version.find("Linux") != std::string::npos)
+      triple.setOS(llvm::Triple::OSType::Linux);
     break;
+    }
   }
-
-  arch_spec.SetTriple(triple);
-
-  return arch_spec;
+  m_arch.SetTriple(triple);
+  return m_arch;
 }
 
 const MinidumpMiscInfo *MinidumpParser::GetMiscInfo() {

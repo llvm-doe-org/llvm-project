@@ -422,7 +422,7 @@ public:
     int TempFD;
     llvm::sys::path::remove_filename(CachePath);
     sys::path::append(TempFilename, CachePath, "Thin-%%%%%%.tmp.o");
-    std::error_code EC = 
+    std::error_code EC =
       sys::fs::createUniqueFile(TempFilename, TempFD, TempFilename);
     if (EC) {
       errs() << "Error: " << EC.message() << "\n";
@@ -432,7 +432,7 @@ public:
       raw_fd_ostream OS(TempFD, /* ShouldClose */ true);
       OS << OutputBuffer.getBuffer();
     }
-    // Rename temp file to final destination; rename is atomic 
+    // Rename temp file to final destination; rename is atomic
     EC = sys::fs::rename(TempFilename, EntryPath);
     if (EC)
       sys::fs::remove(TempFilename);
@@ -818,14 +818,6 @@ void ThinLTOCodeGenerator::optimize(Module &TheModule) {
   optimizeModule(TheModule, *TMBuilder.create(), OptLevel, Freestanding);
 }
 
-/**
- * Perform ThinLTO CodeGen.
- */
-std::unique_ptr<MemoryBuffer> ThinLTOCodeGenerator::codegen(Module &TheModule) {
-  initTMBuilder(TMBuilder, Triple(TheModule.getTargetTriple()));
-  return codegenModule(TheModule, *TMBuilder.create());
-}
-
 /// Write out the generated object file, either from CacheEntryPath or from
 /// OutputBuffer, preferring hard-link when possible.
 /// Returns the path to the generated file in SavedObjectsDirectoryPath.
@@ -893,7 +885,7 @@ void ThinLTOCodeGenerator::run() {
                                  /*IsImporting*/ false);
 
         // CodeGen
-        auto OutputBuffer = codegen(*TheModule);
+        auto OutputBuffer = codegenModule(*TheModule, *TMBuilder.create());
         if (SavedObjectsDirectoryPath.empty())
           ProducedBinaries[count] = std::move(OutputBuffer);
         else
@@ -958,11 +950,15 @@ void ThinLTOCodeGenerator::run() {
   // Changes are made in the index, consumed in the ThinLTO backends.
   internalizeAndPromoteInIndex(ExportLists, GUIDPreservedSymbols, *Index);
 
-  // Make sure that every module has an entry in the ExportLists and
-  // ResolvedODR maps to enable threaded access to these maps below.
-  for (auto &DefinedGVSummaries : ModuleToDefinedGVSummaries) {
-    ExportLists[DefinedGVSummaries.first()];
-    ResolvedODR[DefinedGVSummaries.first()];
+  // Make sure that every module has an entry in the ExportLists, ImportList,
+  // GVSummary and ResolvedODR maps to enable threaded access to these maps
+  // below.
+  for (auto &Module : Modules) {
+    auto ModuleIdentifier = Module.getBufferIdentifier();
+    ExportLists[ModuleIdentifier];
+    ImportLists[ModuleIdentifier];
+    ResolvedODR[ModuleIdentifier];
+    ModuleToDefinedGVSummaries[ModuleIdentifier];
   }
 
   // Compute the ordering we will process the inputs: the rough heuristic here
@@ -1048,10 +1044,10 @@ void ThinLTOCodeGenerator::run() {
         if (SavedObjectsDirectoryPath.empty()) {
           // We need to generated a memory buffer for the linker.
           if (!CacheEntryPath.empty()) {
-            // When cache is enabled, reload from the cache if possible. 
+            // When cache is enabled, reload from the cache if possible.
             // Releasing the buffer from the heap and reloading it from the
-            // cache file with mmap helps us to lower memory pressure. 
-            // The freed memory can be used for the next input file. 
+            // cache file with mmap helps us to lower memory pressure.
+            // The freed memory can be used for the next input file.
             // The final binary link will read from the VFS cache (hopefully!)
             // or from disk (if the memory pressure was too high).
             auto ReloadedBufferOrErr = CacheEntry.tryLoadingBuffer();

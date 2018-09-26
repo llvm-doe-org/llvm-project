@@ -88,8 +88,18 @@ class WalkAST: public StmtVisitor<WalkAST> {
   ///   size_t cpy = 4;
   ///   strlcpy(dst, "abcd", sizeof("abcd") - 1);
   ///   strlcpy(dst, "abcd", 4);
+  ///   strlcpy(dst + 3, "abcd", 2);
   ///   strlcpy(dst, "abcd", cpy);
-  bool containsBadStrlcpyPattern(const CallExpr *CE);
+  /// Identify erroneous patterns in the last argument to strlcat - the number
+  /// of bytes to copy.
+  /// The bad pattern checked is when the last argument is basically
+  /// pointing to the destination buffer size or argument larger or
+  /// equal to.
+  ///   char dst[2];
+  ///   strlcat(dst, src2, sizeof(dst));
+  ///   strlcat(dst, src2, 2);
+  ///   strlcat(dst, src2, 10);
+  bool containsBadStrlcpyStrlcatPattern(const CallExpr *CE);
 
 public:
   WalkAST(const CheckerBase *Checker, BugReporter &BR, AnalysisDeclContext *AC)
@@ -141,14 +151,19 @@ bool WalkAST::containsBadStrncatPattern(const CallExpr *CE) {
   return false;
 }
 
-bool WalkAST::containsBadStrlcpyPattern(const CallExpr *CE) {
+bool WalkAST::containsBadStrlcpyStrlcatPattern(const CallExpr *CE) {
   if (CE->getNumArgs() != 3)
     return false;
+  const FunctionDecl *FD = CE->getDirectCallee();
+  bool Append = CheckerContext::isCLibraryFunction(FD, "strlcat");
   const Expr *DstArg = CE->getArg(0);
   const Expr *LenArg = CE->getArg(2);
 
-  const auto *DstArgDecl = dyn_cast<DeclRefExpr>(DstArg->IgnoreParenCasts());
+  const auto *DstArgDecl = dyn_cast<DeclRefExpr>(DstArg->IgnoreParenImpCasts());
   const auto *LenArgDecl = dyn_cast<DeclRefExpr>(LenArg->IgnoreParenLValueCasts());
+  uint64_t DstOff = 0;
+  if (isSizeof(LenArg, DstArg))
+    return false;
   // - size_t dstlen = sizeof(dst)
   if (LenArgDecl) {
     const auto *LenArgVal = dyn_cast<VarDecl>(LenArgDecl->getDecl());
@@ -158,15 +173,36 @@ bool WalkAST::containsBadStrlcpyPattern(const CallExpr *CE) {
 
   // - integral value
   // We try to figure out if the last argument is possibly longer
-  // than the destination can possibly handle if its size can be defined
-  if (const auto *IL = dyn_cast<IntegerLiteral>(LenArg->IgnoreParenCasts())) {
+  // than the destination can possibly handle if its size can be defined.
+  if (const auto *IL = dyn_cast<IntegerLiteral>(LenArg->IgnoreParenImpCasts())) {
     uint64_t ILRawVal = IL->getValue().getZExtValue();
-    if (const auto *Buffer = dyn_cast<ConstantArrayType>(DstArgDecl->getType())) {
-      ASTContext &C = BR.getContext();
-      uint64_t Usize = C.getTypeSizeInChars(DstArg->getType()).getQuantity();
-      uint64_t BufferLen = BR.getContext().getTypeSize(Buffer) / Usize;
-      if (BufferLen < ILRawVal)
-        return true;
+
+    // Case when there is pointer arithmetic on the destination buffer
+    // especially when we offset from the base decreasing the
+    // buffer length accordingly.
+    if (!DstArgDecl) {
+      if (const auto *BE = dyn_cast<BinaryOperator>(DstArg->IgnoreParenImpCasts())) {
+        DstArgDecl = dyn_cast<DeclRefExpr>(BE->getLHS()->IgnoreParenImpCasts());
+        if (BE->getOpcode() == BO_Add) {
+          if ((IL = dyn_cast<IntegerLiteral>(BE->getRHS()->IgnoreParenImpCasts()))) {
+            DstOff = IL->getValue().getZExtValue();
+          }
+        }
+      }
+    }
+    if (DstArgDecl) {
+      if (const auto *Buffer = dyn_cast<ConstantArrayType>(DstArgDecl->getType())) {
+        ASTContext &C = BR.getContext();
+        uint64_t BufferLen = C.getTypeSize(Buffer) / 8;
+        auto RemainingBufferLen = BufferLen - DstOff;
+        if (Append) {
+          if (RemainingBufferLen <= ILRawVal)
+            return true;
+        } else {
+          if (RemainingBufferLen < ILRawVal)
+            return true;
+        }
+      }
     }
   }
 
@@ -202,8 +238,9 @@ void WalkAST::VisitCallExpr(CallExpr *CE) {
                          "C String API", os.str(), Loc,
                          LenArg->getSourceRange());
     }
-  } else if (CheckerContext::isCLibraryFunction(FD, "strlcpy")) {
-    if (containsBadStrlcpyPattern(CE)) {
+  } else if (CheckerContext::isCLibraryFunction(FD, "strlcpy") ||
+             CheckerContext::isCLibraryFunction(FD, "strlcat")) {
+    if (containsBadStrlcpyStrlcatPattern(CE)) {
       const Expr *DstArg = CE->getArg(0);
       const Expr *LenArg = CE->getArg(2);
       PathDiagnosticLocation Loc =
@@ -213,13 +250,17 @@ void WalkAST::VisitCallExpr(CallExpr *CE) {
 
       SmallString<256> S;
       llvm::raw_svector_ostream os(S);
-      os << "The third argument is larger than the size of the input buffer. ";
+      os << "The third argument allows to potentially copy more bytes than it should. ";
+      os << "Replace with the value ";
       if (!DstName.empty())
-        os << "Replace with the value 'sizeof(" << DstName << ")` or lower";
+          os << "sizeof(" << DstName << ")";
+      else
+          os << "sizeof(<destination buffer>)";
+      os << " or lower";
 
       BR.EmitBasicReport(FD, Checker, "Anti-pattern in the argument",
-                         "C String API", os.str(), Loc,
-                         LenArg->getSourceRange());
+              "C String API", os.str(), Loc,
+              LenArg->getSourceRange());
     }
   }
 

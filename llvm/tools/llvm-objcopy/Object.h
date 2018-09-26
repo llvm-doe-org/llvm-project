@@ -26,6 +26,7 @@
 #include <vector>
 
 namespace llvm {
+enum class DebugCompressionType;
 namespace objcopy {
 
 class Buffer;
@@ -39,6 +40,7 @@ class DynamicRelocationSection;
 class GnuDebugLinkSection;
 class GroupSection;
 class SectionIndexSection;
+class CompressedSection;
 class Segment;
 class Object;
 struct Symbol;
@@ -64,6 +66,15 @@ public:
 
 enum ElfType { ELFT_ELF32LE, ELFT_ELF64LE, ELFT_ELF32BE, ELFT_ELF64BE };
 
+// This type keeps track of the machine info for various architectures. This
+// lets us map architecture names to ELF types and the e_machine value of the
+// ELF file.
+struct MachineInfo {
+  uint16_t EMachine;
+  bool Is64Bit;
+  bool IsLittleEndian;
+};
+
 class SectionVisitor {
 public:
   virtual ~SectionVisitor();
@@ -77,6 +88,7 @@ public:
   virtual void visit(const GnuDebugLinkSection &Sec) = 0;
   virtual void visit(const GroupSection &Sec) = 0;
   virtual void visit(const SectionIndexSection &Sec) = 0;
+  virtual void visit(const CompressedSection &Sec) = 0;
 };
 
 class SectionWriter : public SectionVisitor {
@@ -95,6 +107,7 @@ public:
   virtual void visit(const GnuDebugLinkSection &Sec) override = 0;
   virtual void visit(const GroupSection &Sec) override = 0;
   virtual void visit(const SectionIndexSection &Sec) override = 0;
+  virtual void visit(const CompressedSection &Sec) override = 0;
 
   explicit SectionWriter(Buffer &Buf) : Out(Buf) {}
 };
@@ -104,6 +117,7 @@ private:
   using Elf_Word = typename ELFT::Word;
   using Elf_Rel = typename ELFT::Rel;
   using Elf_Rela = typename ELFT::Rela;
+  using Elf_Sym = typename ELFT::Sym;
 
 public:
   virtual ~ELFSectionWriter() {}
@@ -112,6 +126,7 @@ public:
   void visit(const GnuDebugLinkSection &Sec) override;
   void visit(const GroupSection &Sec) override;
   void visit(const SectionIndexSection &Sec) override;
+  void visit(const CompressedSection &Sec) override;
 
   explicit ELFSectionWriter(Buffer &Buf) : SectionWriter(Buf) {}
 };
@@ -129,6 +144,7 @@ public:
   void visit(const GnuDebugLinkSection &Sec) override;
   void visit(const GroupSection &Sec) override;
   void visit(const SectionIndexSection &Sec) override;
+  void visit(const CompressedSection &Sec) override;
 
   explicit BinarySectionWriter(Buffer &Buf) : SectionWriter(Buf) {}
 };
@@ -190,9 +206,12 @@ public:
 
 template <class ELFT> class ELFWriter : public Writer {
 private:
+  using Elf_Addr = typename ELFT::Addr;
   using Elf_Shdr = typename ELFT::Shdr;
   using Elf_Phdr = typename ELFT::Phdr;
   using Elf_Ehdr = typename ELFT::Ehdr;
+
+  void initEhdrSegment();
 
   void writeEhdr();
   void writePhdr(const Segment &Seg);
@@ -233,7 +252,7 @@ public:
 
 class SectionBase {
 public:
-  StringRef Name;
+  std::string Name;
   Segment *ParentSegment = nullptr;
   uint64_t HeaderOffset;
   uint64_t OriginalOffset = std::numeric_limits<uint64_t>::max();
@@ -250,6 +269,10 @@ public:
   uint64_t Offset = 0;
   uint64_t Size = 0;
   uint64_t Type = ELF::SHT_NULL;
+  ArrayRef<uint8_t> OriginalData;
+
+  SectionBase() = default;
+  SectionBase(const SectionBase &) = default;
 
   virtual ~SectionBase() = default;
 
@@ -327,13 +350,27 @@ class OwnedDataSection : public SectionBase {
 public:
   OwnedDataSection(StringRef SecName, ArrayRef<uint8_t> Data)
       : Data(std::begin(Data), std::end(Data)) {
-    Name = SecName;
+    Name = SecName.str();
     Type = ELF::SHT_PROGBITS;
     Size = Data.size();
     OriginalOffset = std::numeric_limits<uint64_t>::max();
   }
 
   void accept(SectionVisitor &Sec) const override;
+};
+
+class CompressedSection : public SectionBase {
+  MAKE_SEC_WRITER_FRIEND
+
+  DebugCompressionType CompressionType;
+  uint64_t DecompressedSize;
+  uint64_t DecompressedAlign;
+  SmallVector<char, 128> CompressedData;
+
+public:
+  CompressedSection(const SectionBase &Sec,
+                    DebugCompressionType CompressionType);
+  void accept(SectionVisitor &Visitor) const override;
 };
 
 // There are two types of string tables that can exist, dynamic and not dynamic.
@@ -386,7 +423,7 @@ struct Symbol {
   SectionBase *DefinedIn = nullptr;
   SymbolShndxType ShndxType;
   uint32_t Index;
-  StringRef Name;
+  std::string Name;
   uint32_t NameIndex;
   uint64_t Size;
   uint8_t Type;
@@ -437,9 +474,11 @@ protected:
   using SymPtr = std::unique_ptr<Symbol>;
 
 public:
-  void addSymbol(StringRef Name, uint8_t Bind, uint8_t Type,
-                 SectionBase *DefinedIn, uint64_t Value, uint8_t Visibility,
-                 uint16_t Shndx, uint64_t Sz);
+  SymbolTableSection() { Type = ELF::SHT_SYMTAB; }
+
+  void addSymbol(Twine Name, uint8_t Bind, uint8_t Type, SectionBase *DefinedIn,
+                 uint64_t Value, uint8_t Visibility, uint16_t Shndx,
+                 uint64_t Size);
   void prepareForLayout();
   // An 'empty' symbol table still contains a null symbol.
   bool empty() const { return Symbols.size() == 1; }
@@ -623,11 +662,31 @@ using object::ELFFile;
 using object::ELFObjectFile;
 using object::OwningBinary;
 
+template <class ELFT> class BinaryELFBuilder {
+  using Elf_Sym = typename ELFT::Sym;
+
+  uint16_t EMachine;
+  MemoryBuffer *MemBuf;
+  std::unique_ptr<Object> Obj;
+
+  void initFileHeader();
+  void initHeaderSegment();
+  StringTableSection *addStrTab();
+  SymbolTableSection *addSymTab(StringTableSection *StrTab);
+  void addData(SymbolTableSection *SymTab);
+  void initSections();
+
+public:
+  BinaryELFBuilder(uint16_t EM, MemoryBuffer *MB)
+      : EMachine(EM), MemBuf(MB), Obj(llvm::make_unique<Object>()) {}
+
+  std::unique_ptr<Object> build();
+};
+
 template <class ELFT> class ELFBuilder {
 private:
   using Elf_Addr = typename ELFT::Addr;
   using Elf_Shdr = typename ELFT::Shdr;
-  using Elf_Ehdr = typename ELFT::Ehdr;
   using Elf_Word = typename ELFT::Word;
 
   const ELFFile<ELFT> &ElfFile;
@@ -647,13 +706,22 @@ public:
   void build();
 };
 
+class BinaryReader : public Reader {
+  const MachineInfo &MInfo;
+  MemoryBuffer *MemBuf;
+
+public:
+  BinaryReader(const MachineInfo &MI, MemoryBuffer *MB)
+      : MInfo(MI), MemBuf(MB) {}
+  std::unique_ptr<Object> create() const override;
+};
+
 class ELFReader : public Reader {
   Binary *Bin;
 
 public:
-  ElfType getElfType() const;
   std::unique_ptr<Object> create() const override;
-  explicit ELFReader(Binary *B) : Bin(B){};
+  explicit ELFReader(Binary *B) : Bin(B) {}
 };
 
 class Object {
@@ -682,7 +750,6 @@ public:
   Segment ElfHdrSegment;
   Segment ProgramHdrSegment;
 
-  uint8_t Ident[16];
   uint64_t Entry;
   uint64_t SHOffset;
   uint32_t Type;
@@ -708,6 +775,7 @@ public:
     auto Sec = llvm::make_unique<T>(std::forward<Ts>(Args)...);
     auto Ptr = Sec.get();
     Sections.emplace_back(std::move(Sec));
+    Ptr->Index = Sections.size();
     return *Ptr;
   }
   Segment &addSegment(ArrayRef<uint8_t> Data) {

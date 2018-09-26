@@ -82,10 +82,10 @@ bool Preprocessor::EnterSourceFile(FileID FID, const DirectoryLookup *CurDir,
       return false;
     }
   }
-  
+
   // Get the MemoryBuffer for this FID, if it fails, we fail.
   bool Invalid = false;
-  const llvm::MemoryBuffer *InputFile = 
+  const llvm::MemoryBuffer *InputFile =
     getSourceManager().getBuffer(FID, Loc, &Invalid);
   if (Invalid) {
     SourceLocation FileStart = SourceMgr.getLocForStartOfFile(FID);
@@ -145,7 +145,7 @@ void Preprocessor::EnterSourceFileWithPTH(PTHLexer *PL,
   CurLexerSubmodule = nullptr;
   if (CurLexerKind != CLK_LexAfterModuleImport)
     CurLexerKind = CLK_PTHLexer;
-  
+
   // Notify the client, if desired, that we are in a new source file.
   if (Callbacks) {
     FileID FID = CurPPLexer->getFileID();
@@ -240,15 +240,15 @@ static void computeRelativePath(FileManager &FM, const DirectoryEntry *Dir,
     if (const DirectoryEntry *CurDir = FM.getDirectory(Path)) {
       if (CurDir == Dir) {
         Result = FilePath.substr(Path.size());
-        llvm::sys::path::append(Result, 
+        llvm::sys::path::append(Result,
                                 llvm::sys::path::filename(File->getName()));
         return;
       }
     }
-    
+
     Path = llvm::sys::path::parent_path(Path);
   }
-  
+
   Result = File->getName();
 }
 
@@ -312,12 +312,12 @@ void Preprocessor::diagnoseMissingHeaderInUmbrellaDir(const Module &Mod) {
 
     // Check whether this entry has an extension typically associated with
     // headers.
-    if (!StringSwitch<bool>(llvm::sys::path::extension(Entry->getName()))
+    if (!StringSwitch<bool>(llvm::sys::path::extension(Entry->path()))
              .Cases(".h", ".H", ".hh", ".hpp", true)
              .Default(false))
       continue;
 
-    if (const FileEntry *Header = getFileManager().getFile(Entry->getName()))
+    if (const FileEntry *Header = getFileManager().getFile(Entry->path()))
       if (!getSourceManager().hasFileInfo(Header)) {
         if (!ModMap.isHeaderInUnavailableModule(Header)) {
           // Find the relative path that would access this header.
@@ -553,7 +553,7 @@ bool Preprocessor::HandleEndOfFile(Token &Result, bool isEndOfMacro) {
     CurPTHLexer->getEOF(Result);
     CurPTHLexer.reset();
   }
-  
+
   if (!isIncrementalProcessingEnabled())
     CurPPLexer = nullptr;
 

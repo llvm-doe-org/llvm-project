@@ -77,8 +77,8 @@ int ARMTTIImpl::getIntImmCost(const APInt &Imm, Type *Ty) {
       return 1;
     return ST->hasV6T2Ops() ? 2 : 3;
   }
-  // Thumb1.
-  if (SImmVal >= 0 && SImmVal < 256)
+  // Thumb1, any i8 imm cost 1.
+  if (Bits == 8 || (SImmVal >= 0 && SImmVal < 256))
     return 1;
   if ((~SImmVal < 256) || ARM_AM::isThumbImmShiftedVal(ZImmVal))
     return 2;
@@ -389,7 +389,7 @@ int ARMTTIImpl::getAddressComputationCost(Type *Ty, ScalarEvolution *SE,
   unsigned NumVectorInstToHideOverhead = 10;
   int MaxMergeDistance = 64;
 
-  if (Ty->isVectorTy() && SE && 
+  if (Ty->isVectorTy() && SE &&
       !BaseT::isConstantStridedAccessLessThan(SE, Ptr, MaxMergeDistance + 1))
     return NumVectorInstToHideOverhead;
 

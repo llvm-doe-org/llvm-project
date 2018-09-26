@@ -325,6 +325,14 @@ struct FormatToken {
   }
   template <typename T> bool isNot(T Kind) const { return !is(Kind); }
 
+  bool closesScopeAfterBlock() const {
+    if (BlockKind == BK_Block)
+      return true;
+    if (closesScope())
+      return Previous->closesScopeAfterBlock();
+    return false;
+  }
+
   /// \c true if this token starts a sequence with the given tokens in order,
   /// following the ``Next`` pointers, ignoring comments.
   template <typename A, typename... Ts>
@@ -520,8 +528,8 @@ struct FormatToken {
     const FormatToken *NamespaceTok = this;
     if (is(tok::comment))
       NamespaceTok = NamespaceTok->getNextNonComment();
-    // Detect "(inline)? namespace" in the beginning of a line.
-    if (NamespaceTok && NamespaceTok->is(tok::kw_inline))
+    // Detect "(inline|export)? namespace" in the beginning of a line.
+    if (NamespaceTok && NamespaceTok->isOneOf(tok::kw_inline, tok::kw_export))
       NamespaceTok = NamespaceTok->getNextNonComment();
     return NamespaceTok && NamespaceTok->is(tok::kw_namespace) ? NamespaceTok
                                                                : nullptr;

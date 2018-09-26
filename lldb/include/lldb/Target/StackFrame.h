@@ -19,11 +19,11 @@
 // Project includes
 #include "lldb/Utility/Flags.h"
 
-#include "lldb/Core/Scalar.h"
 #include "lldb/Core/ValueObjectList.h"
 #include "lldb/Symbol/SymbolContext.h"
 #include "lldb/Target/ExecutionContextScope.h"
 #include "lldb/Target/StackID.h"
+#include "lldb/Utility/Scalar.h"
 #include "lldb/Utility/Status.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/UserID.h"
@@ -502,6 +502,21 @@ public:
   //------------------------------------------------------------------
   lldb::ValueObjectSP GuessValueForRegisterAndOffset(ConstString reg,
                                                      int64_t offset);
+
+  //------------------------------------------------------------------
+  /// Attempt to reconstruct the ValueObject for a variable with a given \a name
+  /// from within the current StackFrame, within the current block. The search
+  /// for the variable starts in the deepest block corresponding to the current
+  /// PC in the stack frame and traverse through all parent blocks stopping at
+  /// inlined function boundaries.
+  ///
+  /// @params [in] name
+  ///   The name of the variable.
+  ///
+  /// @return
+  ///   The ValueObject if found.
+  //------------------------------------------------------------------
+  lldb::ValueObjectSP FindVariable(ConstString name);
 
   //------------------------------------------------------------------
   // lldb::ExecutionContextScope pure virtual functions

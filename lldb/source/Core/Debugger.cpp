@@ -12,11 +12,10 @@
 #include "lldb/Breakpoint/Breakpoint.h" // for Breakpoint, Brea...
 #include "lldb/Core/Event.h"            // for Event, EventData...
 #include "lldb/Core/FormatEntity.h"
-#include "lldb/Core/Listener.h" // for Listener
-#include "lldb/Core/Mangled.h"  // for Mangled
-#include "lldb/Core/ModuleList.h"  // for Mangled
+#include "lldb/Core/Listener.h"   // for Listener
+#include "lldb/Core/Mangled.h"    // for Mangled
+#include "lldb/Core/ModuleList.h" // for Mangled
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/State.h"
 #include "lldb/Core/StreamAsynchronousIO.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/DataFormatters/DataVisualization.h"
@@ -43,13 +42,15 @@
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/ThreadList.h" // for ThreadList
 #include "lldb/Utility/AnsiTerminal.h"
-#include "lldb/Utility/Log.h"    // for LLDB_LOG_OPTION_...
+#include "lldb/Utility/Log.h" // for LLDB_LOG_OPTION_...
+#include "lldb/Utility/State.h"
 #include "lldb/Utility/Stream.h" // for Stream
 #include "lldb/Utility/StreamCallback.h"
 #include "lldb/Utility/StreamString.h"
 
 #if defined(_WIN32)
 #include "lldb/Host/windows/PosixApi.h" // for PATH_MAX
+#include "lldb/Host/windows/windows.h"
 #endif
 
 #include "llvm/ADT/None.h"      // for None
@@ -58,6 +59,7 @@
 #include "llvm/ADT/iterator.h" // for iterator_facade_...
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Process.h"
 #include "llvm/Support/Threading.h"
 #include "llvm/Support/raw_ostream.h" // for raw_fd_ostream
 
@@ -119,7 +121,8 @@ OptionEnumValueElement g_language_enumerators[] = {
   "${module.file.basename}{`${function.name-without-args}"                     \
   "{${frame.no-debug}${function.pc-offset}}}}"
 
-#define FILE_AND_LINE "{ at ${line.file.basename}:${line.number}}"
+#define FILE_AND_LINE                                                          \
+  "{ at ${line.file.basename}:${line.number}{:${line.column}}}"
 #define IS_OPTIMIZED "{${function.is-optimized} [opt]}"
 
 #define DEFAULT_THREAD_FORMAT                                                  \
@@ -177,9 +180,6 @@ OptionEnumValueElement g_language_enumerators[] = {
 // args}}:\n}{${function.changed}\n{${module.file.basename}`}{${function.name-
 // without-args}}:\n}{${current-pc-arrow} }{${addr-file-or-load}}:
 
-#define DEFAULT_STOP_SHOW_COLUMN_ANSI_PREFIX "${ansi.underline}"
-#define DEFAULT_STOP_SHOW_COLUMN_ANSI_SUFFIX "${ansi.normal}"
-
 static OptionEnumValueElement s_stop_show_column_values[] = {
     {eStopShowColumnAnsiOrCaret, "ansi-or-caret",
      "Highlight the stop column with ANSI terminal codes when color/ANSI mode "
@@ -233,17 +233,19 @@ static PropertyDefinition g_properties[] = {
      nullptr,
      "The number of sources lines to display that come before the "
      "current source line when displaying a stopped context."},
+    {"highlight-source", OptionValue::eTypeBoolean, true, true, nullptr,
+     nullptr, "If true, LLDB will highlight the displayed source code."},
     {"stop-show-column", OptionValue::eTypeEnum, false,
      eStopShowColumnAnsiOrCaret, nullptr, s_stop_show_column_values,
      "If true, LLDB will use the column information from the debug info to "
      "mark the current position when displaying a stopped context."},
-    {"stop-show-column-ansi-prefix", OptionValue::eTypeFormatEntity, true, 0,
-     DEFAULT_STOP_SHOW_COLUMN_ANSI_PREFIX, nullptr,
+    {"stop-show-column-ansi-prefix", OptionValue::eTypeString, true, 0,
+     "${ansi.underline}", nullptr,
      "When displaying the column marker in a color-enabled (i.e. ANSI) "
      "terminal, use the ANSI terminal code specified in this format at the "
      "immediately before the column to be marked."},
-    {"stop-show-column-ansi-suffix", OptionValue::eTypeFormatEntity, true, 0,
-     DEFAULT_STOP_SHOW_COLUMN_ANSI_SUFFIX, nullptr,
+    {"stop-show-column-ansi-suffix", OptionValue::eTypeString, true, 0,
+     "${ansi.normal}", nullptr,
      "When displaying the column marker in a color-enabled (i.e. ANSI) "
      "terminal, use the ANSI terminal code specified in this format "
      "immediately after the column to be marked."},
@@ -296,6 +298,7 @@ enum {
   ePropertyStopDisassemblyDisplay,
   ePropertyStopLineCountAfter,
   ePropertyStopLineCountBefore,
+  ePropertyHighlightSource,
   ePropertyStopShowColumn,
   ePropertyStopShowColumnAnsiPrefix,
   ePropertyStopShowColumnAnsiSuffix,
@@ -470,20 +473,26 @@ bool Debugger::SetUseColor(bool b) {
   return ret;
 }
 
+bool Debugger::GetHighlightSource() const {
+  const uint32_t idx = ePropertyHighlightSource;
+  return m_collection_sp->GetPropertyAtIndexAsBoolean(
+      nullptr, idx, g_properties[idx].default_uint_value);
+}
+
 StopShowColumn Debugger::GetStopShowColumn() const {
   const uint32_t idx = ePropertyStopShowColumn;
   return (lldb::StopShowColumn)m_collection_sp->GetPropertyAtIndexAsEnumeration(
       nullptr, idx, g_properties[idx].default_uint_value);
 }
 
-const FormatEntity::Entry *Debugger::GetStopShowColumnAnsiPrefix() const {
+llvm::StringRef Debugger::GetStopShowColumnAnsiPrefix() const {
   const uint32_t idx = ePropertyStopShowColumnAnsiPrefix;
-  return m_collection_sp->GetPropertyAtIndexAsFormatEntity(nullptr, idx);
+  return m_collection_sp->GetPropertyAtIndexAsString(nullptr, idx, "");
 }
 
-const FormatEntity::Entry *Debugger::GetStopShowColumnAnsiSuffix() const {
+llvm::StringRef Debugger::GetStopShowColumnAnsiSuffix() const {
   const uint32_t idx = ePropertyStopShowColumnAnsiSuffix;
-  return m_collection_sp->GetPropertyAtIndexAsFormatEntity(nullptr, idx);
+  return m_collection_sp->GetPropertyAtIndexAsString(nullptr, idx, "");
 }
 
 uint32_t Debugger::GetStopSourceLineCount(bool before) const {
@@ -795,6 +804,15 @@ Debugger::Debugger(lldb::LogOutputCallback log_callback, void *baton)
   const char *term = getenv("TERM");
   if (term && !strcmp(term, "dumb"))
     SetUseColor(false);
+  // Turn off use-color if we don't write to a terminal with color support.
+  if (!m_output_file_sp->GetFile().GetIsTerminalWithColors())
+    SetUseColor(false);
+
+#if defined(_WIN32) && defined(ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+  // Enabling use of ANSI color codes because LLDB is using them to highlight
+  // text.
+  llvm::sys::Process::UseANSIEscapeCodes(true);
+#endif
 }
 
 Debugger::~Debugger() { Clear(); }
@@ -1068,7 +1086,8 @@ void Debugger::AdoptTopIOHandlerFilesIfInvalid(StreamFileSP &in,
   }
 }
 
-void Debugger::PushIOHandler(const IOHandlerSP &reader_sp) {
+void Debugger::PushIOHandler(const IOHandlerSP &reader_sp,
+                             bool cancel_top_handler) {
   if (!reader_sp)
     return;
 
@@ -1089,7 +1108,8 @@ void Debugger::PushIOHandler(const IOHandlerSP &reader_sp) {
   // this new input reader take over
   if (top_reader_sp) {
     top_reader_sp->Deactivate();
-    top_reader_sp->Cancel();
+    if (cancel_top_handler)
+      top_reader_sp->Cancel();
   }
 }
 

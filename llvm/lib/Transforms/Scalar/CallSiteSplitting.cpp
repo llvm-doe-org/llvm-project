@@ -191,6 +191,17 @@ static bool canSplitCallSite(CallSite CS, TargetTransformInfo &TTI) {
     return false;
 
   BasicBlock *CallSiteBB = Instr->getParent();
+  // Need 2 predecessors and cannot split an edge from an IndirectBrInst.
+  SmallVector<BasicBlock *, 2> Preds(predecessors(CallSiteBB));
+  if (Preds.size() != 2 || isa<IndirectBrInst>(Preds[0]->getTerminator()) ||
+      isa<IndirectBrInst>(Preds[1]->getTerminator()))
+    return false;
+
+  // BasicBlock::canSplitPredecessors is more agressive, so checking for
+  // BasicBlock::isEHPad as well.
+  if (!CallSiteBB->canSplitPredecessors() || CallSiteBB->isEHPad())
+    return false;
+
   // Allow splitting a call-site only when the CodeSize cost of the
   // instructions before the call is less then DuplicationThreshold. The
   // instructions before the call will be duplicated in the split blocks and
@@ -204,19 +215,7 @@ static bool canSplitCallSite(CallSite CS, TargetTransformInfo &TTI) {
       return false;
   }
 
-  // Need 2 predecessors and cannot split an edge from an IndirectBrInst.
-  SmallVector<BasicBlock *, 2> Preds(predecessors(CallSiteBB));
-  if (Preds.size() != 2 || isa<IndirectBrInst>(Preds[0]->getTerminator()) ||
-      isa<IndirectBrInst>(Preds[1]->getTerminator()))
-    return false;
-
-  // Do not split a call-site in an exception handling block. This check
-  // prevents triggering an assertion in SplitEdge used via
-  // DuplicateInstructionsInSplitBetween. 
-  if (CallSiteBB->isEHPad())
-    return false;
-
-  return CallSiteBB->canSplitPredecessors();
+  return true;
 }
 
 static Instruction *cloneInstForMustTail(Instruction *I, Instruction *Before,
@@ -313,8 +312,10 @@ static void splitCallSite(
   // `musttail` calls must be followed by optional `bitcast`, and `ret`. The
   // split blocks will be terminated right after that so there're no users for
   // this phi in a `TailBB`.
-  if (!IsMustTailCall && !Instr->use_empty())
+  if (!IsMustTailCall && !Instr->use_empty()) {
     CallPN = PHINode::Create(Instr->getType(), Preds.size(), "phi.call");
+    CallPN->setDebugLoc(Instr->getDebugLoc());
+  }
 
   LLVM_DEBUG(dbgs() << "split call-site : " << *Instr << " into \n");
 
@@ -395,6 +396,7 @@ static void splitCallSite(
       if (isa<PHINode>(CurrentI))
         continue;
       PHINode *NewPN = PHINode::Create(CurrentI->getType(), Preds.size());
+      NewPN->setDebugLoc(CurrentI->getDebugLoc());
       for (auto &Mapping : ValueToValueMaps)
         NewPN->addIncoming(Mapping[CurrentI],
                            cast<Instruction>(Mapping[CurrentI])->getParent());

@@ -23,7 +23,6 @@
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/RangeMap.h"
-#include "lldb/Core/RegisterValue.h"
 #include "lldb/Core/Section.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Host/Host.h"
@@ -41,12 +40,13 @@
 #include "lldb/Utility/DataBuffer.h"
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/RegisterValue.h"
 #include "lldb/Utility/Status.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/Timer.h"
 #include "lldb/Utility/UUID.h"
 
-#include "lldb/Utility/SafeMachO.h"
+#include "lldb/Host/SafeMachO.h"
 
 #include "llvm/Support/MemoryBuffer.h"
 
@@ -1197,6 +1197,7 @@ AddressClass ObjectFileMachO::GetAddressClass(lldb::addr_t file_addr) {
           case eSectionTypeDWARFDebugFrame:
           case eSectionTypeDWARFDebugInfo:
           case eSectionTypeDWARFDebugLine:
+          case eSectionTypeDWARFDebugLineStr:
           case eSectionTypeDWARFDebugLoc:
           case eSectionTypeDWARFDebugMacInfo:
           case eSectionTypeDWARFDebugMacro:
@@ -2331,14 +2332,6 @@ size_t ObjectFileMachO::ParseSymtab() {
             if (nlist_data_sp)
               nlist_data.SetData(nlist_data_sp, 0,
                                  nlist_data_sp->GetByteSize());
-            // Load strings individually from memory when loading from memory
-            // since shared cache string tables contain strings for all symbols
-            // from all shared cached libraries DataBufferSP strtab_data_sp
-            // (ReadMemory (process_sp, strtab_addr,
-            // strtab_data_byte_size));
-            // if (strtab_data_sp)
-            //    strtab_data.SetData (strtab_data_sp, 0,
-            //    strtab_data_sp->GetByteSize());
             if (m_dysymtab.nindirectsyms != 0) {
               const addr_t indirect_syms_addr = linkedit_load_addr +
                                                 m_dysymtab.indirectsymoff -
@@ -2350,8 +2343,25 @@ size_t ObjectFileMachO::ParseSymtab() {
                 indirect_symbol_index_data.SetData(
                     indirect_syms_data_sp, 0,
                     indirect_syms_data_sp->GetByteSize());
+              // If this binary is outside the shared cache, 
+              // cache the string table.
+              // Binaries in the shared cache all share a giant string table, and
+              // we can't share the string tables across multiple ObjectFileMachO's,
+              // so we'd end up re-reading this mega-strtab for every binary
+              // in the shared cache - it would be a big perf problem.
+              // For binaries outside the shared cache, it's faster to read the
+              // entire strtab at once instead of piece-by-piece as we process
+              // the nlist records.
+              if ((m_header.flags & 0x80000000u) == 0) {
+                DataBufferSP strtab_data_sp (ReadMemory (process_sp, strtab_addr, 
+                      strtab_data_byte_size));
+                if (strtab_data_sp) {
+                  strtab_data.SetData (strtab_data_sp, 0, strtab_data_sp->GetByteSize());
+                }
+              }
             }
-          } else if (memory_module_load_level >=
+          }
+          if (memory_module_load_level >=
                      eMemoryModuleLoadLevelPartial) {
             if (function_starts_load_command.cmd) {
               const addr_t func_start_addr =

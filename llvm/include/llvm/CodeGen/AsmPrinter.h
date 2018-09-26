@@ -201,6 +201,10 @@ public:
   /// Return a unique ID for the current function.
   unsigned getFunctionNumber() const;
 
+  /// Return symbol for the function pseudo stack if the stack frame is not a
+  /// register based.
+  virtual const MCSymbol *getFunctionFrameSymbol() const { return nullptr; }
+
   MCSymbol *getFunctionBegin() const { return CurrentFnBegin; }
   MCSymbol *getFunctionEnd() const { return CurrentFnEnd; }
   MCSymbol *getCurExceptionSym();
@@ -626,6 +630,11 @@ private:
   /// This method formats and emits the specified machine instruction that is an
   /// inline asm.
   void EmitInlineAsm(const MachineInstr *MI) const;
+
+  /// Add inline assembly info to the diagnostics machinery, so we can
+  /// emit file and position info. Returns SrcMgr memory buffer position.
+  unsigned addInlineAsmDiagBuffer(StringRef AsmStr,
+                                  const MDNode *LocMDNode) const;
 
   //===------------------------------------------------------------------===//
   // Internal Implementation Details

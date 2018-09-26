@@ -25,7 +25,6 @@
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/State.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Expression/DiagnosticManager.h"
 #include "lldb/Expression/IRDynamicChecks.h"
@@ -70,6 +69,7 @@
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/NameMatches.h"
 #include "lldb/Utility/SelectHelper.h"
+#include "lldb/Utility/State.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -1729,6 +1729,10 @@ void Process::SetRunningUserExpression(bool on) {
   m_mod_id.SetRunningUserExpression(on);
 }
 
+void Process::SetRunningUtilityFunction(bool on) {
+  m_mod_id.SetRunningUtilityFunction(on);
+}
+
 addr_t Process::GetImageInfoAddress() { return LLDB_INVALID_ADDRESS; }
 
 const lldb::ABISP &Process::GetABI() {
@@ -3211,7 +3215,8 @@ void Process::CompleteAttach() {
     }
   }
   if (new_executable_module_sp) {
-    GetTarget().SetExecutableModule(new_executable_module_sp, false);
+    GetTarget().SetExecutableModule(new_executable_module_sp,
+                                    eLoadDependentsNo);
     if (log) {
       ModuleSP exe_module_sp = GetTarget().GetExecutableModule();
       log->Printf(
@@ -4685,7 +4690,12 @@ bool Process::PushProcessIOHandler() {
       log->Printf("Process::%s pushing IO handler", __FUNCTION__);
 
     io_handler_sp->SetIsDone(false);
-    GetTarget().GetDebugger().PushIOHandler(io_handler_sp);
+    // If we evaluate an utility function, then we don't cancel the current
+    // IOHandler. Our IOHandler is non-interactive and shouldn't disturb the
+    // existing IOHandler that potentially provides the user interface (e.g.
+    // the IOHandler for Editline).
+    bool cancel_top_handler = !m_mod_id.IsRunningUtilityFunction();
+    GetTarget().GetDebugger().PushIOHandler(io_handler_sp, cancel_top_handler);
     return true;
   }
   return false;
@@ -4874,6 +4884,11 @@ Process::RunThreadPlan(ExecutionContext &exe_ctx,
 
   thread_plan_sp->SetIsMasterPlan(true);
   thread_plan_sp->SetOkayToDiscard(false);
+
+  // If we are running some utility expression for LLDB, we now have to mark
+  // this in the ProcesModID of this process. This RAII takes care of marking
+  // and reverting the mark it once we are done running the expression.
+  UtilityFunctionScope util_scope(options.IsForUtilityExpr() ? this : nullptr);
 
   if (m_private_state.GetValue() != eStateStopped) {
     diagnostic_manager.PutString(
@@ -5842,7 +5857,7 @@ void Process::ModulesDidLoad(ModuleList &module_list) {
   // that loaded.
 
   // Iterate over a copy of this language runtime list in case the language
-  // runtime ModulesDidLoad somehow causes the language riuntime to be
+  // runtime ModulesDidLoad somehow causes the language runtime to be
   // unloaded.
   LanguageRuntimeCollection language_runtimes(m_language_runtimes);
   for (const auto &pair : language_runtimes) {
@@ -6095,7 +6110,7 @@ void Process::MapSupportedStructuredDataPlugins(
   // For each StructuredDataPlugin, if the plugin handles any of the types in
   // the supported_type_names, map that type name to that plugin. Stop when
   // we've consumed all the type names.
-  // FIXME: should we return an error if there are type names nobody 
+  // FIXME: should we return an error if there are type names nobody
   // supports?
   for (uint32_t plugin_index = 0; !const_type_names.empty(); plugin_index++) {
     auto create_instance =
@@ -6103,7 +6118,7 @@ void Process::MapSupportedStructuredDataPlugins(
                plugin_index);
     if (!create_instance)
       break;
-      
+
     // Create the plugin.
     StructuredDataPluginSP plugin_sp = (*create_instance)(*this);
     if (!plugin_sp) {

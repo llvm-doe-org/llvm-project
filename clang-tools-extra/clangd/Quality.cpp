@@ -1,17 +1,19 @@
-//===--- Quality.cpp --------------------------------------------*- C++-*-===//
+//===--- Quality.cpp ---------------------------------------------*- C++-*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 #include "Quality.h"
 #include "FileDistance.h"
 #include "URI.h"
 #include "index/Index.h"
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
+#include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DeclVisitor.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/Basic/SourceManager.h"
@@ -25,7 +27,7 @@
 namespace clang {
 namespace clangd {
 using namespace llvm;
-static bool IsReserved(StringRef Name) {
+static bool isReserved(StringRef Name) {
   // FIXME: Should we exclude _Bool and others recognized by the standard?
   return Name.size() >= 2 && Name[0] == '_' &&
          (isUppercase(Name[1]) || Name[1] == '_');
@@ -65,6 +67,7 @@ static SymbolQualitySignals::SymbolCategory categorize(const NamedDecl &ND) {
     MAP(TypeDecl, Type);
     MAP(TypeAliasTemplateDecl, Type);
     MAP(ClassTemplateDecl, Type);
+    MAP(CXXConstructorDecl, Constructor);
     MAP(ValueDecl, Variable);
     MAP(VarTemplateDecl, Variable);
     MAP(FunctionDecl, Function);
@@ -94,6 +97,8 @@ categorize(const CodeCompletionResult &R) {
     return SymbolQualitySignals::Type;
   case CXCursor_MemberRef:
     return SymbolQualitySignals::Variable;
+  case CXCursor_Constructor:
+    return SymbolQualitySignals::Constructor;
   default:
     return SymbolQualitySignals::Keyword;
   }
@@ -122,10 +127,11 @@ categorize(const index::SymbolInfo &D) {
   case index::SymbolKind::InstanceProperty:
   case index::SymbolKind::ClassProperty:
   case index::SymbolKind::StaticProperty:
-  case index::SymbolKind::Constructor:
   case index::SymbolKind::Destructor:
   case index::SymbolKind::ConversionFunction:
     return SymbolQualitySignals::Function;
+  case index::SymbolKind::Constructor:
+    return SymbolQualitySignals::Constructor;
   case index::SymbolKind::Variable:
   case index::SymbolKind::Field:
   case index::SymbolKind::EnumConstant:
@@ -139,23 +145,43 @@ categorize(const index::SymbolInfo &D) {
   llvm_unreachable("Unknown index::SymbolKind");
 }
 
-void SymbolQualitySignals::merge(const CodeCompletionResult &SemaCCResult) {
-  if (SemaCCResult.Availability == CXAvailability_Deprecated)
-    Deprecated = true;
+static bool isInstanceMember(const NamedDecl *ND) {
+  if (!ND)
+    return false;
+  if (const auto *TP = dyn_cast<FunctionTemplateDecl>(ND))
+    ND = TP->TemplateDecl::getTemplatedDecl();
+  if (const auto *CM = dyn_cast<CXXMethodDecl>(ND))
+    return !CM->isStatic();
+  return isa<FieldDecl>(ND); // Note that static fields are VarDecl.
+}
 
+static bool isInstanceMember(const index::SymbolInfo &D) {
+  switch (D.Kind) {
+  case index::SymbolKind::InstanceMethod:
+  case index::SymbolKind::InstanceProperty:
+  case index::SymbolKind::Field:
+    return true;
+  default:
+    return false;
+  }
+}
+
+void SymbolQualitySignals::merge(const CodeCompletionResult &SemaCCResult) {
+  Deprecated |= (SemaCCResult.Availability == CXAvailability_Deprecated);
   Category = categorize(SemaCCResult);
 
   if (SemaCCResult.Declaration) {
     if (auto *ID = SemaCCResult.Declaration->getIdentifier())
-      ReservedName = ReservedName || IsReserved(ID->getName());
+      ReservedName = ReservedName || isReserved(ID->getName());
   } else if (SemaCCResult.Kind == CodeCompletionResult::RK_Macro)
-    ReservedName = ReservedName || IsReserved(SemaCCResult.Macro->getName());
+    ReservedName = ReservedName || isReserved(SemaCCResult.Macro->getName());
 }
 
 void SymbolQualitySignals::merge(const Symbol &IndexResult) {
+  Deprecated |= (IndexResult.Flags & Symbol::Deprecated);
   References = std::max(IndexResult.References, References);
   Category = categorize(IndexResult.SymInfo);
-  ReservedName = ReservedName || IsReserved(IndexResult.Name);
+  ReservedName = ReservedName || isReserved(IndexResult.Name);
 }
 
 float SymbolQualitySignals::evaluate() const {
@@ -163,8 +189,18 @@ float SymbolQualitySignals::evaluate() const {
 
   // This avoids a sharp gradient for tail symbols, and also neatly avoids the
   // question of whether 0 references means a bad symbol or missing data.
-  if (References >= 10)
-    Score *= std::log10(References);
+  if (References >= 10) {
+    // Use a sigmoid style boosting function, which flats out nicely for large
+    // numbers (e.g. 2.58 for 1M refererences).
+    // The following boosting function is equivalent to:
+    //   m = 0.06
+    //   f = 12.0
+    //   boost = f * sigmoid(m * std::log(References)) - 0.5 * f + 0.59
+    // Sample data points: (10, 1.00), (100, 1.41), (1000, 1.82),
+    //                     (10K, 2.21), (100K, 2.58), (1M, 2.94)
+    float S = std::pow(References, -0.06);
+    Score *= 6.0 * (1 - S) / (1 + S) + 0.59;
+  }
 
   if (Deprecated)
     Score *= 0.1f;
@@ -184,9 +220,10 @@ float SymbolQualitySignals::evaluate() const {
     Score *= 0.8f;
     break;
   case Macro:
-    Score *= 0.2f;
+    Score *= 0.5f;
     break;
   case Unknown:
+  case Constructor: // No boost constructors so they are after class types.
     break;
   }
 
@@ -203,7 +240,7 @@ raw_ostream &operator<<(raw_ostream &OS, const SymbolQualitySignals &S) {
 }
 
 static SymbolRelevanceSignals::AccessibleScope
-ComputeScope(const NamedDecl *D) {
+computeScope(const NamedDecl *D) {
   // Injected "Foo" within the class "Foo" has file scope, not class scope.
   const DeclContext *DC = D->getDeclContext();
   if (auto *R = dyn_cast_or_null<RecordDecl>(D))
@@ -231,6 +268,7 @@ void SymbolRelevanceSignals::merge(const Symbol &IndexResult) {
   // relevant to non-completion requests, we should recognize class members etc.
 
   SymbolURI = IndexResult.CanonicalDeclaration.FileURI;
+  IsInstanceMember |= isInstanceMember(IndexResult.SymInfo);
 }
 
 void SymbolRelevanceSignals::merge(const CodeCompletionResult &SemaCCResult) {
@@ -247,11 +285,14 @@ void SymbolRelevanceSignals::merge(const CodeCompletionResult &SemaCCResult) {
                               ? 1.0
                               : 0.6;
     SemaProximityScore = std::max(DeclProximity, SemaProximityScore);
+    IsInstanceMember |= isInstanceMember(SemaCCResult.Declaration);
   }
 
   // Declarations are scoped, others (like macros) are assumed global.
   if (SemaCCResult.Declaration)
-    Scope = std::min(Scope, ComputeScope(SemaCCResult.Declaration));
+    Scope = std::min(Scope, computeScope(SemaCCResult.Declaration));
+
+  NeedsFixIts = !SemaCCResult.FixIts.empty();
 }
 
 static std::pair<float, unsigned> proximityScore(llvm::StringRef SymbolURI,
@@ -296,6 +337,17 @@ float SymbolRelevanceSignals::evaluate() const {
     }
   }
 
+  // Penalize non-instance members when they are accessed via a class instance.
+  if (!IsInstanceMember &&
+      (Context == CodeCompletionContext::CCC_DotMemberAccess ||
+       Context == CodeCompletionContext::CCC_ArrowMemberAccess)) {
+    Score *= 0.5;
+  }
+
+  // Penalize for FixIts.
+  if (NeedsFixIts)
+    Score *= 0.5;
+
   return Score;
 }
 
@@ -303,6 +355,9 @@ raw_ostream &operator<<(raw_ostream &OS, const SymbolRelevanceSignals &S) {
   OS << formatv("=== Symbol relevance: {0}\n", S.evaluate());
   OS << formatv("\tName match: {0}\n", S.NameMatch);
   OS << formatv("\tForbidden: {0}\n", S.Forbidden);
+  OS << formatv("\tNeedsFixIts: {0}\n", S.NeedsFixIts);
+  OS << formatv("\tIsInstanceMember: {0}\n", S.IsInstanceMember);
+  OS << formatv("\tContext: {0}\n", getCompletionKindString(S.Context));
   OS << formatv("\tSymbol URI: {0}\n", S.SymbolURI);
   if (S.FileProximityMatch) {
     auto Score = proximityScore(S.SymbolURI, S.FileProximityMatch);
@@ -343,6 +398,18 @@ std::string sortText(float Score, llvm::StringRef Name) {
   OS << Name;
   OS.flush();
   return S;
+}
+
+llvm::raw_ostream &operator<<(llvm::raw_ostream &OS,
+                              const SignatureQualitySignals &S) {
+  OS << formatv("=== Signature Quality:\n");
+  OS << formatv("\tNumber of parameters: {0}\n", S.NumberOfParameters);
+  OS << formatv("\tNumber of optional parameters: {0}\n",
+                S.NumberOfOptionalParameters);
+  OS << formatv("\tContains active parameter: {0}\n",
+                S.ContainsActiveParameter);
+  OS << formatv("\tKind: {0}\n", S.Kind);
+  return OS;
 }
 
 } // namespace clangd

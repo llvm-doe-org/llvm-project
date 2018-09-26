@@ -61,6 +61,12 @@ typedef enum LoadCWDlldbinitFile {
   eLoadCWDlldbinitWarn
 } LoadCWDlldbinitFile;
 
+typedef enum LoadDependentFiles {
+  eLoadDependentsDefault,
+  eLoadDependentsYes,
+  eLoadDependentsNo,
+} LoadDependentFiles;
+
 //----------------------------------------------------------------------
 // TargetProperties
 //----------------------------------------------------------------------
@@ -375,6 +381,10 @@ public:
 
   bool GetAutoApplyFixIts() const { return m_auto_apply_fixits; }
 
+  bool IsForUtilityExpr() const { return m_running_utility_expression; }
+
+  void SetIsForUtilityExpr(bool b) { m_running_utility_expression = b; }
+
 private:
   ExecutionPolicy m_execution_policy = default_execution_policy;
   lldb::LanguageType m_language = lldb::eLanguageTypeUnknown;
@@ -392,6 +402,10 @@ private:
   bool m_ansi_color_errors = false;
   bool m_result_is_internal = false;
   bool m_auto_apply_fixits = true;
+  /// True if the executed code should be treated as utility code that is only
+  /// used by LLDB internally.
+  bool m_running_utility_expression = false;
+
   lldb::DynamicValueType m_use_dynamic = lldb::eNoDynamicValues;
   Timeout<std::micro> m_timeout = default_timeout;
   Timeout<std::micro> m_one_thread_timeout = llvm::None;
@@ -549,7 +563,7 @@ public:
   // module it is nullptr
   lldb::BreakpointSP CreateBreakpoint(const FileSpecList *containingModules,
                                       const FileSpec &file, uint32_t line_no,
-                                      lldb::addr_t offset,
+                                      uint32_t column, lldb::addr_t offset,
                                       LazyBool check_inlines,
                                       LazyBool skip_prologue, bool internal,
                                       bool request_hardware,
@@ -609,6 +623,15 @@ public:
                             Args *additional_args = nullptr,
                             Status *additional_args_error = nullptr);
 
+  lldb::BreakpointSP
+  CreateScriptedBreakpoint(const llvm::StringRef class_name,
+                           const FileSpecList *containingModules,
+                           const FileSpecList *containingSourceFiles,
+                           bool internal,
+                           bool request_hardware,
+                           StructuredData::ObjectSP extra_args_sp,
+                           Status *creation_error = nullptr);
+
   // This is the same as the func_name breakpoint except that you can specify a
   // vector of names.  This is cheaper than a regular expression breakpoint in
   // the case where you just want to set a breakpoint on a set of names you
@@ -665,7 +688,6 @@ public:
                                const BreakpointOptions &options,
                                const BreakpointName::Permissions &permissions);
  void ApplyNameToBreakpoints(BreakpointName &bp_name);
-   
   
   // This takes ownership of the name obj passed in.
   void AddBreakpointName(BreakpointName *bp_name);
@@ -753,9 +775,9 @@ public:
   /// that doesn't have code in it, LLDB_INVALID_ADDRESS will be
   /// returned.
   //------------------------------------------------------------------
-  lldb::addr_t GetOpcodeLoadAddress(
-      lldb::addr_t load_addr,
-      AddressClass addr_class = AddressClass::eInvalid) const;
+  lldb::addr_t
+  GetOpcodeLoadAddress(lldb::addr_t load_addr,
+                       AddressClass addr_class = AddressClass::eInvalid) const;
 
   // Get load_addr as breakable load address for this target. Take a addr and
   // check if for any reason there is a better address than this to put a
@@ -826,14 +848,16 @@ public:
   ///     A shared pointer reference to the module that will become
   ///     the main executable for this process.
   ///
-  /// @param[in] get_dependent_files
+  /// @param[in] load_dependent_files
   ///     If \b true then ask the object files to track down any
   ///     known dependent files.
   ///
   /// @see ObjectFile::GetDependentModules (FileSpecList&)
   /// @see Process::GetImages()
   //------------------------------------------------------------------
-  void SetExecutableModule(lldb::ModuleSP &module_sp, bool get_dependent_files);
+  void SetExecutableModule(
+      lldb::ModuleSP &module_sp,
+      LoadDependentFiles load_dependent_files = eLoadDependentsDefault);
 
   bool LoadScriptingResources(std::list<Status> &errors,
                               Stream *feedback_stream = nullptr,
@@ -913,28 +937,30 @@ public:
   /// Set the architecture for this target.
   ///
   /// If the current target has no Images read in, then this just sets the
-  /// architecture, which will
-  /// be used to select the architecture of the ExecutableModule when that is
-  /// set.
-  /// If the current target has an ExecutableModule, then calling
-  /// SetArchitecture with a different
+  /// architecture, which will be used to select the architecture of the
+  /// ExecutableModule when that is set. If the current target has an
+  /// ExecutableModule, then calling SetArchitecture with a different
   /// architecture from the currently selected one will reset the
-  /// ExecutableModule to that slice
-  /// of the file backing the ExecutableModule.  If the file backing the
-  /// ExecutableModule does not
-  /// contain a fork of this architecture, then this code will return false, and
-  /// the architecture
-  /// won't be changed.
-  /// If the input arch_spec is the same as the already set architecture, this
-  /// is a no-op.
+  /// ExecutableModule to that slice of the file backing the ExecutableModule.
+  /// If the file backing the ExecutableModule does not contain a fork of this
+  /// architecture, then this code will return false, and the architecture
+  /// won't be changed. If the input arch_spec is the same as the already set
+  /// architecture, this is a no-op.
   ///
   /// @param[in] arch_spec
   ///     The new architecture.
   ///
+  /// @param[in] set_platform
+  ///     If \b true, then the platform will be adjusted if the currently
+  ///     selected platform is not compatible with the archicture being set.
+  ///     If \b false, then just the architecture will be set even if the
+  ///     currently selected platform isn't compatible (in case it might be
+  ///     manually set following this function call).
+  ///
   /// @return
   ///     \b true if the architecture was successfully set, \bfalse otherwise.
   //------------------------------------------------------------------
-  bool SetArchitecture(const ArchSpec &arch_spec);
+  bool SetArchitecture(const ArchSpec &arch_spec, bool set_platform = false);
 
   bool MergeArchitecture(const ArchSpec &arch_spec);
 

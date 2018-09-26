@@ -63,6 +63,7 @@ using namespace llvm;
 using namespace llvm::ELF;
 using namespace llvm::object;
 using namespace llvm::sys;
+using namespace llvm::support;
 
 using namespace lld;
 using namespace lld::elf;
@@ -74,7 +75,7 @@ static void setConfigs(opt::InputArgList &Args);
 
 bool elf::link(ArrayRef<const char *> Args, bool CanExitEarly,
                raw_ostream &Error) {
-  errorHandler().LogName = Args[0];
+  errorHandler().LogName = args::getFilenameWithoutExe(Args[0]);
   errorHandler().ErrorLimitExceededMsg =
       "too many errors emitted, stopping now (use "
       "-error-limit=0 to see all errors)";
@@ -125,9 +126,11 @@ static std::tuple<ELFKind, uint16_t, uint8_t> parseEmulation(StringRef Emul) {
           .Case("elf32_x86_64", {ELF32LEKind, EM_X86_64})
           .Cases("elf32btsmip", "elf32btsmipn32", {ELF32BEKind, EM_MIPS})
           .Cases("elf32ltsmip", "elf32ltsmipn32", {ELF32LEKind, EM_MIPS})
+          .Case("elf32lriscv", {ELF32LEKind, EM_RISCV})
           .Case("elf32ppc", {ELF32BEKind, EM_PPC})
           .Case("elf64btsmip", {ELF64BEKind, EM_MIPS})
           .Case("elf64ltsmip", {ELF64LEKind, EM_MIPS})
+          .Case("elf64lriscv", {ELF64LEKind, EM_RISCV})
           .Case("elf64ppc", {ELF64BEKind, EM_PPC64})
           .Case("elf64lppc", {ELF64LEKind, EM_PPC64})
           .Cases("elf_amd64", "elf_x86_64", {ELF64LEKind, EM_X86_64})
@@ -183,7 +186,7 @@ void LinkerDriver::addFile(StringRef Path, bool WithLOption) {
     return;
   MemoryBufferRef MBRef = *Buffer;
 
-  if (InBinary) {
+  if (Config->FormatBinary) {
     Files.push_back(make<BinaryFile>(MBRef));
     return;
   }
@@ -278,6 +281,9 @@ static void checkOptions(opt::InputArgList &Args) {
   if (Config->FixCortexA53Errata843419 && Config->EMachine != EM_AARCH64)
     error("--fix-cortex-a53-843419 is only supported on AArch64 targets.");
 
+  if (Config->TocOptimize && Config->EMachine != EM_PPC64)
+      error("--toc-optimize is only supported on the PowerPC64 target.");
+
   if (Config->Pie && Config->Shared)
     error("-shared and -pie may not be used together");
 
@@ -301,6 +307,14 @@ static void checkOptions(opt::InputArgList &Args) {
       error("-r and --icf may not be used together");
     if (Config->Pie)
       error("-r and -pie may not be used together");
+  }
+
+  if (Config->ExecuteOnly) {
+    if (Config->EMachine != EM_AARCH64)
+      error("-execute-only is only supported on AArch64 targets");
+
+    if (Config->SingleRoRx && !Script->HasSectionsCommand)
+      error("-execute-only and -no-rosegment cannot be used together");
   }
 }
 
@@ -328,9 +342,10 @@ static bool getZFlag(opt::InputArgList &Args, StringRef K1, StringRef K2,
   return Default;
 }
 
-static bool isKnown(StringRef S) {
+static bool isKnownZFlag(StringRef S) {
   return S == "combreloc" || S == "copyreloc" || S == "defs" ||
-         S == "execstack" || S == "hazardplt" || S == "initfirst" ||
+         S == "execstack" || S == "global" || S == "hazardplt" ||
+         S == "initfirst" || S == "interpose" ||
          S == "keep-text-section-prefix" || S == "lazy" || S == "muldefs" ||
          S == "nocombreloc" || S == "nocopyreloc" || S == "nodelete" ||
          S == "nodlopen" || S == "noexecstack" ||
@@ -343,7 +358,7 @@ static bool isKnown(StringRef S) {
 // Report an error for an unknown -z option.
 static void checkZOptions(opt::InputArgList &Args) {
   for (auto *Arg : Args.filtered(OPT_z))
-    if (!isKnown(Arg->getValue()))
+    if (!isKnownZFlag(Arg->getValue()))
       error("unknown -z value: " + StringRef(Arg->getValue()));
 }
 
@@ -440,9 +455,6 @@ static std::string getRpath(opt::InputArgList &Args) {
 // Determines what we should do if there are remaining unresolved
 // symbols after the name resolution.
 static UnresolvedPolicy getUnresolvedSymbolPolicy(opt::InputArgList &Args) {
-  if (Args.hasArg(OPT_relocatable))
-    return UnresolvedPolicy::IgnoreAll;
-
   UnresolvedPolicy ErrorOrWarn = Args.hasFlag(OPT_error_unresolved_symbols,
                                               OPT_warn_unresolved_symbols, true)
                                      ? UnresolvedPolicy::ReportError
@@ -489,12 +501,11 @@ static Target2Policy getTarget2(opt::InputArgList &Args) {
 }
 
 static bool isOutputFormatBinary(opt::InputArgList &Args) {
-  if (auto *Arg = Args.getLastArg(OPT_oformat)) {
-    StringRef S = Arg->getValue();
-    if (S == "binary")
-      return true;
+  StringRef S = Args.getLastArgValue(OPT_oformat, "elf");
+  if (S == "binary")
+    return true;
+  if (!S.startswith("elf"))
     error("unknown --oformat value: " + S);
-  }
   return false;
 }
 
@@ -640,33 +651,28 @@ static void readCallGraph(MemoryBufferRef MB) {
     for (Symbol *Sym : File->getSymbols())
       SymbolNameToSymbol[Sym->getName()] = Sym;
 
+  auto FindSection = [&](StringRef SymName) -> InputSectionBase * {
+    const Symbol *Sym = SymbolNameToSymbol.lookup(SymName);
+    if (Sym)
+      warnUnorderableSymbol(Sym);
+    else if (Config->WarnSymbolOrdering)
+      warn(MB.getBufferIdentifier() + ": no such symbol: " + SymName);
+
+    if (const Defined *DR = dyn_cast_or_null<Defined>(Sym))
+      return dyn_cast_or_null<InputSectionBase>(DR->Section);
+    return nullptr;
+  };
+
   for (StringRef L : args::getLines(MB)) {
     SmallVector<StringRef, 3> Fields;
     L.split(Fields, ' ');
     uint64_t Count;
     if (Fields.size() != 3 || !to_integer(Fields[2], Count))
       fatal(MB.getBufferIdentifier() + ": parse error");
-    const Symbol *FromSym = SymbolNameToSymbol.lookup(Fields[0]);
-    const Symbol *ToSym = SymbolNameToSymbol.lookup(Fields[1]);
-    if (Config->WarnSymbolOrdering) {
-      if (!FromSym)
-        warn(MB.getBufferIdentifier() + ": no such symbol: " + Fields[0]);
-      if (!ToSym)
-        warn(MB.getBufferIdentifier() + ": no such symbol: " + Fields[1]);
-    }
-    if (!FromSym || !ToSym || Count == 0)
-      continue;
-    warnUnorderableSymbol(FromSym);
-    warnUnorderableSymbol(ToSym);
-    const Defined *FromSymD = dyn_cast<Defined>(FromSym);
-    const Defined *ToSymD = dyn_cast<Defined>(ToSym);
-    if (!FromSymD || !ToSymD)
-      continue;
-    const auto *FromSB = dyn_cast_or_null<InputSectionBase>(FromSymD->Section);
-    const auto *ToSB = dyn_cast_or_null<InputSectionBase>(ToSymD->Section);
-    if (!FromSB || !ToSB)
-      continue;
-    Config->CallGraphProfile[std::make_pair(FromSB, ToSB)] += Count;
+
+    if (const InputSectionBase *FromSB = FindSection(Fields[0]))
+      if (const InputSectionBase *ToSB = FindSection(Fields[1]))
+        Config->CallGraphProfile[std::make_pair(FromSB, ToSB)] += Count;
   }
 }
 
@@ -747,6 +753,8 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   Config->EnableNewDtags =
       Args.hasFlag(OPT_enable_new_dtags, OPT_disable_new_dtags, true);
   Config->Entry = Args.getLastArgValue(OPT_entry);
+  Config->ExecuteOnly =
+      Args.hasFlag(OPT_execute_only, OPT_no_execute_only, false);
   Config->ExportDynamic =
       Args.hasFlag(OPT_export_dynamic, OPT_no_export_dynamic, false);
   Config->FilterList = args::getStrings(Args, OPT_filter);
@@ -830,8 +838,10 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   Config->ZCombreloc = getZFlag(Args, "combreloc", "nocombreloc", true);
   Config->ZCopyreloc = getZFlag(Args, "copyreloc", "nocopyreloc", true);
   Config->ZExecstack = getZFlag(Args, "execstack", "noexecstack", false);
+  Config->ZGlobal = hasZOption(Args, "global");
   Config->ZHazardplt = hasZOption(Args, "hazardplt");
   Config->ZInitfirst = hasZOption(Args, "initfirst");
+  Config->ZInterpose = hasZOption(Args, "interpose");
   Config->ZKeepTextSectionPrefix = getZFlag(
       Args, "keep-text-section-prefix", "nokeep-text-section-prefix", false);
   Config->ZNodelete = hasZOption(Args, "nodelete");
@@ -939,8 +949,12 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
     Config->Undefined.push_back(Arg->getValue());
 
   for (auto *Arg : Args.filtered(OPT_version_script))
-    if (Optional<MemoryBufferRef> Buffer = readFile(Arg->getValue()))
-      readVersionScript(*Buffer);
+    if (Optional<std::string> Path = searchScript(Arg->getValue())) {
+      if (Optional<MemoryBufferRef> Buffer = readFile(*Path))
+        readVersionScript(*Buffer);
+    } else {
+      error(Twine("cannot find version script ") + Arg->getValue());
+    }
 }
 
 // Some Config members do not directly correspond to any particular
@@ -948,21 +962,16 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
 // This function initialize such members. See Config.h for the details
 // of these values.
 static void setConfigs(opt::InputArgList &Args) {
-  ELFKind Kind = Config->EKind;
-  uint16_t Machine = Config->EMachine;
+  ELFKind K = Config->EKind;
+  uint16_t M = Config->EMachine;
 
   Config->CopyRelocs = (Config->Relocatable || Config->EmitRelocs);
-  Config->Is64 = (Kind == ELF64LEKind || Kind == ELF64BEKind);
-  Config->IsLE = (Kind == ELF32LEKind || Kind == ELF64LEKind);
-  Config->Endianness =
-      Config->IsLE ? support::endianness::little : support::endianness::big;
-  Config->IsMips64EL = (Kind == ELF64LEKind && Machine == EM_MIPS);
+  Config->Is64 = (K == ELF64LEKind || K == ELF64BEKind);
+  Config->IsLE = (K == ELF32LEKind || K == ELF64LEKind);
+  Config->Endianness = Config->IsLE ? endianness::little : endianness::big;
+  Config->IsMips64EL = (K == ELF64LEKind && M == EM_MIPS);
   Config->Pic = Config->Pie || Config->Shared;
   Config->Wordsize = Config->Is64 ? 8 : 4;
-
-  // There is an ILP32 ABI for x86-64, although it's not very popular.
-  // It is called the x32 ABI.
-  bool IsX32 = (Kind == ELF32LEKind && Machine == EM_X86_64);
 
   // ELF defines two different ways to store relocation addends as shown below:
   //
@@ -977,8 +986,8 @@ static void setConfigs(opt::InputArgList &Args) {
   // You cannot choose which one, Rel or Rela, you want to use. Instead each
   // ABI defines which one you need to use. The following expression expresses
   // that.
-  Config->IsRela =
-      (Config->Is64 || IsX32 || Machine == EM_PPC) && Machine != EM_MIPS;
+  Config->IsRela = M == EM_AARCH64 || M == EM_AMDGPU || M == EM_PPC ||
+                   M == EM_PPC64 || M == EM_RISCV || M == EM_X86_64;
 
   // If the output uses REL relocations we must store the dynamic relocation
   // addends to the output sections. We also store addends for RELA relocations
@@ -988,10 +997,13 @@ static void setConfigs(opt::InputArgList &Args) {
   Config->WriteAddends = Args.hasFlag(OPT_apply_dynamic_relocs,
                                       OPT_no_apply_dynamic_relocs, false) ||
                          !Config->IsRela;
+
+  Config->TocOptimize =
+      Args.hasFlag(OPT_toc_optimize, OPT_no_toc_optimize, M == EM_PPC64);
 }
 
 // Returns a value of "-format" option.
-static bool getBinaryOption(StringRef S) {
+static bool isFormatBinary(StringRef S) {
   if (S == "binary")
     return true;
   if (S == "elf" || S == "default")
@@ -1018,11 +1030,14 @@ void LinkerDriver::createFiles(opt::InputArgList &Args) {
       StringRef From;
       StringRef To;
       std::tie(From, To) = StringRef(Arg->getValue()).split('=');
-      readDefsym(From, MemoryBufferRef(To, "-defsym"));
+      if (From.empty() || To.empty())
+        error("-defsym: syntax error: " + StringRef(Arg->getValue()));
+      else
+        readDefsym(From, MemoryBufferRef(To, "-defsym"));
       break;
     }
     case OPT_script:
-      if (Optional<std::string> Path = searchLinkerScript(Arg->getValue())) {
+      if (Optional<std::string> Path = searchScript(Arg->getValue())) {
         if (Optional<MemoryBufferRef> MB = readFile(*Path))
           readLinkerScript(*MB);
         break;
@@ -1033,7 +1048,7 @@ void LinkerDriver::createFiles(opt::InputArgList &Args) {
       Config->AsNeeded = true;
       break;
     case OPT_format:
-      InBinary = getBinaryOption(Arg->getValue());
+      Config->FormatBinary = isFormatBinary(Arg->getValue());
       break;
     case OPT_no_as_needed:
       Config->AsNeeded = false;
@@ -1204,45 +1219,47 @@ template <class ELFT> static void handleUndefined(StringRef Name) {
     Symtab->fetchLazy<ELFT>(Sym);
 }
 
-template <class ELFT> static bool shouldDemote(Symbol &Sym) {
-  // If all references to a DSO happen to be weak, the DSO is not added to
-  // DT_NEEDED. If that happens, we need to eliminate shared symbols created
-  // from the DSO. Otherwise, they become dangling references that point to a
-  // non-existent DSO.
-  if (auto *S = dyn_cast<SharedSymbol>(&Sym))
-    return !S->getFile<ELFT>().IsNeeded;
+template <class ELFT> static void handleLibcall(StringRef Name) {
+  Symbol *Sym = Symtab->find(Name);
+  if (!Sym || !Sym->isLazy())
+    return;
 
-  // We are done processing archives, so lazy symbols that were used but not
-  // found can be converted to undefined. We could also just delete the other
-  // lazy symbols, but that seems to be more work than it is worth.
-  return Sym.isLazy() && Sym.IsUsedInRegularObj;
+  MemoryBufferRef MB;
+  if (auto *LO = dyn_cast<LazyObject>(Sym))
+    MB = LO->File->MB;
+  else
+    MB = cast<LazyArchive>(Sym)->getMemberBuffer();
+
+  if (isBitcode(MB))
+    Symtab->fetchLazy<ELFT>(Sym);
 }
 
-// Some files, such as .so or files between -{start,end}-lib may be removed
-// after their symbols are added to the symbol table. If that happens, we
-// need to remove symbols that refer files that no longer exist, so that
-// they won't appear in the symbol table of the output file.
-//
-// We remove symbols by demoting them to undefined symbol.
-template <class ELFT> static void demoteSymbols() {
+// If all references to a DSO happen to be weak, the DSO is not added
+// to DT_NEEDED. If that happens, we need to eliminate shared symbols
+// created from the DSO. Otherwise, they become dangling references
+// that point to a non-existent DSO.
+template <class ELFT> static void demoteSharedSymbols() {
   for (Symbol *Sym : Symtab->getSymbols()) {
-    if (shouldDemote<ELFT>(*Sym)) {
-      bool Used = Sym->Used;
-      replaceSymbol<Undefined>(Sym, nullptr, Sym->getName(), Sym->Binding,
-                               Sym->StOther, Sym->Type);
-      Sym->Used = Used;
+    if (auto *S = dyn_cast<SharedSymbol>(Sym)) {
+      if (!S->getFile<ELFT>().IsNeeded) {
+        bool Used = S->Used;
+        replaceSymbol<Undefined>(S, nullptr, S->getName(), STB_WEAK, S->StOther,
+                                 S->Type);
+        S->Used = Used;
+      }
     }
   }
 }
 
-static bool keepUnique(Symbol *S) {
-  if (auto *D = dyn_cast_or_null<Defined>(S)) {
-    if (D->Section) {
-      D->Section->KeepUnique = true;
-      return true;
-    }
-  }
-  return false;
+// The section referred to by S is considered address-significant. Set the
+// KeepUnique flag on the section if appropriate.
+static void markAddrsig(Symbol *S) {
+  if (auto *D = dyn_cast_or_null<Defined>(S))
+    if (D->Section)
+      // We don't need to keep text sections unique under --icf=all even if they
+      // are address-significant.
+      if (Config->ICF == ICFLevel::Safe || !(D->Section->Flags & SHF_EXECINSTR))
+        D->Section->KeepUnique = true;
 }
 
 // Record sections that define symbols mentioned in --keep-unique <symbol>
@@ -1252,44 +1269,131 @@ template <class ELFT>
 static void findKeepUniqueSections(opt::InputArgList &Args) {
   for (auto *Arg : Args.filtered(OPT_keep_unique)) {
     StringRef Name = Arg->getValue();
-    if (!keepUnique(Symtab->find(Name)))
+    auto *D = dyn_cast_or_null<Defined>(Symtab->find(Name));
+    if (!D || !D->Section) {
       warn("could not find symbol " + Name + " to keep unique");
+      continue;
+    }
+    D->Section->KeepUnique = true;
   }
 
-  if (Config->ICF == ICFLevel::Safe) {
-    // Symbols in the dynsym could be address-significant in other executables
-    // or DSOs, so we conservatively mark them as address-significant.
-    for (Symbol *S : Symtab->getSymbols())
-      if (S->includeInDynsym())
-        keepUnique(S);
+  // --icf=all --ignore-data-address-equality means that we can ignore
+  // the dynsym and address-significance tables entirely.
+  if (Config->ICF == ICFLevel::All && Config->IgnoreDataAddressEquality)
+    return;
 
-    // Visit the address-significance table in each object file and mark each
-    // referenced symbol as address-significant.
-    for (InputFile *F : ObjectFiles) {
-      auto *Obj = cast<ObjFile<ELFT>>(F);
-      ArrayRef<Symbol *> Syms = Obj->getSymbols();
-      if (Obj->AddrsigSec) {
-        ArrayRef<uint8_t> Contents =
-            check(Obj->getObj().getSectionContents(Obj->AddrsigSec));
-        const uint8_t *Cur = Contents.begin();
-        while (Cur != Contents.end()) {
-          unsigned Size;
-          const char *Err;
-          uint64_t SymIndex = decodeULEB128(Cur, &Size, Contents.end(), &Err);
-          if (Err)
-            fatal(toString(F) + ": could not decode addrsig section: " + Err);
-          keepUnique(Syms[SymIndex]);
-          Cur += Size;
-        }
-      } else {
-        // If an object file does not have an address-significance table,
-        // conservatively mark all of its symbols as address-significant.
-        for (Symbol *S : Syms)
-          keepUnique(S);
+  // Symbols in the dynsym could be address-significant in other executables
+  // or DSOs, so we conservatively mark them as address-significant.
+  for (Symbol *S : Symtab->getSymbols())
+    if (S->includeInDynsym())
+      markAddrsig(S);
+
+  // Visit the address-significance table in each object file and mark each
+  // referenced symbol as address-significant.
+  for (InputFile *F : ObjectFiles) {
+    auto *Obj = cast<ObjFile<ELFT>>(F);
+    ArrayRef<Symbol *> Syms = Obj->getSymbols();
+    if (Obj->AddrsigSec) {
+      ArrayRef<uint8_t> Contents =
+          check(Obj->getObj().getSectionContents(Obj->AddrsigSec));
+      const uint8_t *Cur = Contents.begin();
+      while (Cur != Contents.end()) {
+        unsigned Size;
+        const char *Err;
+        uint64_t SymIndex = decodeULEB128(Cur, &Size, Contents.end(), &Err);
+        if (Err)
+          fatal(toString(F) + ": could not decode addrsig section: " + Err);
+        markAddrsig(Syms[SymIndex]);
+        Cur += Size;
       }
+    } else {
+      // If an object file does not have an address-significance table,
+      // conservatively mark all of its symbols as address-significant.
+      for (Symbol *S : Syms)
+        markAddrsig(S);
     }
   }
 }
+
+// The --wrap option is a feature to rename symbols so that you can write
+// wrappers for existing functions. If you pass `-wrap=foo`, all
+// occurrences of symbol `foo` are resolved to `wrap_foo` (so, you are
+// expected to write `wrap_foo` function as a wrapper). The original
+// symbol becomes accessible as `real_foo`, so you can call that from your
+// wrapper.
+//
+// This data structure is instantiated for each -wrap option.
+struct WrappedSymbol {
+  Symbol *Sym;
+  Symbol *Real;
+  Symbol *Wrap;
+};
+
+// Handles -wrap option.
+//
+// This function instantiates wrapper symbols. At this point, they seem
+// like they are not being used at all, so we explicitly set some flags so
+// that LTO won't eliminate them.
+template <class ELFT>
+static std::vector<WrappedSymbol> addWrappedSymbols(opt::InputArgList &Args) {
+  std::vector<WrappedSymbol> V;
+  DenseSet<StringRef> Seen;
+
+  for (auto *Arg : Args.filtered(OPT_wrap)) {
+    StringRef Name = Arg->getValue();
+    if (!Seen.insert(Name).second)
+      continue;
+
+    Symbol *Sym = Symtab->find(Name);
+    if (!Sym)
+      continue;
+
+    Symbol *Real = Symtab->addUndefined<ELFT>(Saver.save("__real_" + Name));
+    Symbol *Wrap = Symtab->addUndefined<ELFT>(Saver.save("__wrap_" + Name));
+    V.push_back({Sym, Real, Wrap});
+
+    // We want to tell LTO not to inline symbols to be overwritten
+    // because LTO doesn't know the final symbol contents after renaming.
+    Real->CanInline = false;
+    Sym->CanInline = false;
+
+    // Tell LTO not to eliminate these symbols.
+    Sym->IsUsedInRegularObj = true;
+    Wrap->IsUsedInRegularObj = true;
+  }
+  return V;
+}
+
+// Do renaming for -wrap by updating pointers to symbols.
+//
+// When this function is executed, only InputFiles and symbol table
+// contain pointers to symbol objects. We visit them to replace pointers,
+// so that wrapped symbols are swapped as instructed by the command line.
+template <class ELFT> static void wrapSymbols(ArrayRef<WrappedSymbol> Wrapped) {
+  DenseMap<Symbol *, Symbol *> Map;
+  for (const WrappedSymbol &W : Wrapped) {
+    Map[W.Sym] = W.Wrap;
+    Map[W.Real] = W.Sym;
+  }
+
+  // Update pointers in input files.
+  parallelForEach(ObjectFiles, [&](InputFile *File) {
+    std::vector<Symbol *> &Syms = File->getMutableSymbols();
+    for (size_t I = 0, E = Syms.size(); I != E; ++I)
+      if (Symbol *S = Map.lookup(Syms[I]))
+        Syms[I] = S;
+  });
+
+  // Update pointers in the symbol table.
+  for (const WrappedSymbol &W : Wrapped)
+    Symtab->wrap(W.Sym, W.Real, W.Wrap);
+}
+
+static const char *LibcallRoutineNames[] = {
+#define HANDLE_LIBCALL(code, name) name,
+#include "llvm/IR/RuntimeLibcalls.def"
+#undef HANDLE_LIBCALL
+};
 
 // Do actual linking. Note that when this function is called,
 // all linker scripts have already been parsed.
@@ -1357,10 +1461,29 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
   for (StringRef S : Config->Undefined)
     handleUndefined<ELFT>(S);
 
-  // If an entry symbol is in a static archive, pull out that file now
-  // to complete the symbol table. After this, no new names except a
-  // few linker-synthesized ones will be added to the symbol table.
+  // If an entry symbol is in a static archive, pull out that file now.
   handleUndefined<ELFT>(Config->Entry);
+
+  // If any of our inputs are bitcode files, the LTO code generator may create
+  // references to certain library functions that might not be explicit in the
+  // bitcode file's symbol table. If any of those library functions are defined
+  // in a bitcode file in an archive member, we need to arrange to use LTO to
+  // compile those archive members by adding them to the link beforehand.
+  //
+  // However, adding all libcall symbols to the link can have undesired
+  // consequences. For example, the libgcc implementation of
+  // __sync_val_compare_and_swap_8 on 32-bit ARM pulls in an .init_array entry
+  // that aborts the program if the Linux kernel does not support 64-bit
+  // atomics, which would prevent the program from running even if it does not
+  // use 64-bit atomics.
+  //
+  // Therefore, we only add libcall symbols to the link before LTO if we have
+  // to, i.e. if the symbol's definition is in bitcode. Any other required
+  // libcall symbols will be added to the link after LTO when we add the LTO
+  // object file to the link.
+  if (!BitcodeFiles.empty())
+    for (const char *S : LibcallRoutineNames)
+      handleLibcall<ELFT>(S);
 
   // Return if there were name resolution errors.
   if (errorCount())
@@ -1397,11 +1520,13 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
     Symtab->scanVersionScript();
 
   // Create wrapped symbols for -wrap option.
-  for (auto *Arg : Args.filtered(OPT_wrap))
-    Symtab->addSymbolWrap<ELFT>(Arg->getValue());
+  std::vector<WrappedSymbol> Wrapped = addWrappedSymbols<ELFT>(Args);
 
   // Do link-time optimization if given files are LLVM bitcode files.
   // This compiles bitcode files into real object files.
+  //
+  // With this the symbol table should be complete. After this, no new names
+  // except a few linker-synthesized ones will be added to the symbol table.
   Symtab->addCombinedLTOObject<ELFT>();
   if (errorCount())
     return;
@@ -1413,7 +1538,8 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
     return;
 
   // Apply symbol renames for -wrap.
-  Symtab->applySymbolWrap();
+  if (!Wrapped.empty())
+    wrapSymbols<ELFT>(Wrapped);
 
   // Now that we have a complete list of input files.
   // Beyond this point, no new files are added.
@@ -1442,12 +1568,6 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
     if (Config->ARMHasBlx == false)
       warn("lld uses blx instruction, no object with architecture supporting "
            "feature detected.");
-    if (Config->ARMJ1J2BranchEncoding == false)
-      warn("lld uses extended branch encoding, no object with architecture "
-           "supporting feature detected.");
-    if (Config->ARMHasMovtMovw == false)
-      warn("lld may use movt/movw, no object with architecture supporting "
-           "feature detected.");
   }
 
   // This adds a .comment section containing a version string. We have to add it
@@ -1461,7 +1581,7 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
   decompressSections();
   splitSections<ELFT>();
   markLive<ELFT>();
-  demoteSymbols<ELFT>();
+  demoteSharedSymbols<ELFT>();
   mergeSections();
   if (Config->ICF != ICFLevel::None) {
     findKeepUniqueSections<ELFT>(Args);

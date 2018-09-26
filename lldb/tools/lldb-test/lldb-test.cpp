@@ -103,6 +103,7 @@ static cl::list<std::string> InputFilenames(cl::Positional,
 enum class FindType {
   None,
   Function,
+  Block,
   Namespace,
   Type,
   Variable,
@@ -112,6 +113,7 @@ static cl::opt<FindType> Find(
     cl::values(
         clEnumValN(FindType::None, "none", "No search, just dump the module."),
         clEnumValN(FindType::Function, "function", "Find functions."),
+        clEnumValN(FindType::Block, "block", "Find blocks."),
         clEnumValN(FindType::Namespace, "namespace", "Find namespaces."),
         clEnumValN(FindType::Type, "type", "Find types."),
         clEnumValN(FindType::Variable, "variable", "Find global variables.")),
@@ -146,6 +148,10 @@ static FunctionNameType getFunctionNameFlags() {
   return Result;
 }
 
+static cl::opt<bool> DumpAST("dump-ast",
+                             cl::desc("Dump AST restored from symbols."),
+                             cl::sub(SymbolsSubcommand));
+
 static cl::opt<bool> Verify("verify", cl::desc("Verify symbol information."),
                             cl::sub(SymbolsSubcommand));
 
@@ -158,10 +164,12 @@ static cl::opt<int> Line("line", cl::desc("Line to search."),
 static Expected<CompilerDeclContext> getDeclContext(SymbolVendor &Vendor);
 
 static Error findFunctions(lldb_private::Module &Module);
+static Error findBlocks(lldb_private::Module &Module);
 static Error findNamespaces(lldb_private::Module &Module);
 static Error findTypes(lldb_private::Module &Module);
 static Error findVariables(lldb_private::Module &Module);
 static Error dumpModule(lldb_private::Module &Module);
+static Error dumpAST(lldb_private::Module &Module);
 static Error verify(lldb_private::Module &Module);
 
 static Expected<Error (*)(lldb_private::Module &)> getAction();
@@ -214,10 +222,9 @@ static Error make_string_error(const char *Format, Args &&... args) {
 
 TargetSP opts::createTarget(Debugger &Dbg, const std::string &Filename) {
   TargetSP Target;
-  Status ST =
-      Dbg.GetTargetList().CreateTarget(Dbg, Filename, /*triple*/ "",
-                                       /*get_dependent_modules*/ false,
-                                       /*platform_options*/ nullptr, Target);
+  Status ST = Dbg.GetTargetList().CreateTarget(
+      Dbg, Filename, /*triple*/ "", eLoadDependentsNo,
+      /*platform_options*/ nullptr, Target);
   if (ST.Fail()) {
     errs() << formatv("Failed to create target '{0}: {1}\n", Filename, ST);
     exit(1);
@@ -383,6 +390,42 @@ Error opts::symbols::findFunctions(lldb_private::Module &Module) {
   return Error::success();
 }
 
+Error opts::symbols::findBlocks(lldb_private::Module &Module) {
+  assert(!Regex);
+  assert(!File.empty());
+  assert(Line != 0);
+
+  SymbolContextList List;
+
+  FileSpec src_file(File, false);
+  size_t cu_count = Module.GetNumCompileUnits();
+  for (size_t i = 0; i < cu_count; i++) {
+    lldb::CompUnitSP cu_sp = Module.GetCompileUnitAtIndex(i);
+    if (!cu_sp)
+      continue;
+
+    LineEntry le;
+    cu_sp->FindLineEntry(0, Line, &src_file, false, &le);
+    if (!le.IsValid())
+      continue;
+
+    auto addr = le.GetSameLineContiguousAddressRange().GetBaseAddress();
+    if (!addr.IsValid())
+      continue;
+
+    SymbolContext sc;
+    uint32_t resolved = addr.CalculateSymbolContext(&sc, eSymbolContextBlock);
+    if (resolved & eSymbolContextBlock)
+      List.Append(sc);
+  }
+
+  outs() << formatv("Found {0} blocks:\n", List.GetSize());
+  StreamString Stream;
+  List.Dump(&Stream, nullptr);
+  outs() << Stream.GetData() << "\n";
+  return Error::success();
+}
+
 Error opts::symbols::findNamespaces(lldb_private::Module &Module) {
   SymbolVendor &Vendor = *Module.GetSymbolVendor();
   Expected<CompilerDeclContext> ContextOr = getDeclContext(Vendor);
@@ -470,6 +513,34 @@ Error opts::symbols::dumpModule(lldb_private::Module &Module) {
   return Error::success();
 }
 
+Error opts::symbols::dumpAST(lldb_private::Module &Module) {
+  SymbolVendor &plugin = *Module.GetSymbolVendor();
+
+  auto symfile = plugin.GetSymbolFile();
+  if (!symfile)
+    return make_string_error("Module has no symbol file.");
+
+  auto clang_ast_ctx = llvm::dyn_cast_or_null<ClangASTContext>(
+      symfile->GetTypeSystemForLanguage(eLanguageTypeC_plus_plus));
+  if (!clang_ast_ctx)
+    return make_string_error("Can't retrieve Clang AST context.");
+
+  auto ast_ctx = clang_ast_ctx->getASTContext();
+  if (!ast_ctx)
+    return make_string_error("Can't retrieve AST context.");
+
+  auto tu = ast_ctx->getTranslationUnitDecl();
+  if (!tu)
+    return make_string_error("Can't retrieve translation unit declaration.");
+
+  symfile->ParseDeclsForContext(CompilerDeclContext(
+      clang_ast_ctx, static_cast<clang::DeclContext *>(tu)));
+
+  tu->print(outs());
+
+  return Error::success();
+}
+
 Error opts::symbols::verify(lldb_private::Module &Module) {
   SymbolVendor &plugin = *Module.GetSymbolVendor();
 
@@ -523,6 +594,10 @@ Error opts::symbols::verify(lldb_private::Module &Module) {
 }
 
 Expected<Error (*)(lldb_private::Module &)> opts::symbols::getAction() {
+  if (Verify && DumpAST)
+    return make_string_error(
+        "Cannot both verify symbol information and dump AST.");
+
   if (Verify) {
     if (Find != FindType::None)
       return make_string_error(
@@ -533,6 +608,18 @@ Expected<Error (*)(lldb_private::Module &)> opts::symbols::getAction() {
           "-regex, -context, -name, -file and -line options are not "
           "applicable for symbol verification.");
     return verify;
+  }
+
+  if (DumpAST) {
+    if (Find != FindType::None)
+      return make_string_error(
+          "Cannot both search and dump AST.");
+    if (Regex || !Context.empty() || !Name.empty() || !File.empty() ||
+        Line != 0)
+      return make_string_error(
+          "-regex, -context, -name, -file and -line options are not "
+          "applicable for dumping AST.");
+    return dumpAST;
   }
 
   if (Regex && !Context.empty())
@@ -566,6 +653,15 @@ Expected<Error (*)(lldb_private::Module &)> opts::symbols::getAction() {
                                "when searching a function.");
     return findFunctions;
 
+  case FindType::Block:
+    if (File.empty() || Line == 0)
+      return make_string_error("Both file name and line number must be "
+                               "specified when searching a block.");
+    if (Regex || getFunctionNameFlags() != 0)
+      return make_string_error("Cannot use regular expression or "
+                               "function-flags for searching a block.");
+    return findBlocks;
+
   case FindType::Namespace:
     if (Regex || !File.empty() || Line != 0)
       return make_string_error("Cannot search for namespaces using regular "
@@ -584,6 +680,8 @@ Expected<Error (*)(lldb_private::Module &)> opts::symbols::getAction() {
                                "using line numbers.");
     return findVariables;
   }
+
+  llvm_unreachable("Unsupported symbol action.");
 }
 
 int opts::symbols::dumpSymbols(Debugger &Dbg) {

@@ -210,6 +210,7 @@ Linux::Linux(const Driver &D, const llvm::Triple &Triple, const ArgList &Args)
     : Generic_ELF(D, Triple, Args) {
   GCCInstallation.init(Triple, Args);
   Multilibs = GCCInstallation.getMultilibs();
+  SelectedMultilib = GCCInstallation.getMultilib();
   llvm::Triple::ArchType Arch = Triple.getArch();
   std::string SysRoot = computeSysRoot();
 
@@ -299,16 +300,14 @@ Linux::Linux(const Driver &D, const llvm::Triple &Triple, const ArgList &Args)
   if (GCCInstallation.isValid()) {
     const llvm::Triple &GCCTriple = GCCInstallation.getTriple();
     const std::string &LibPath = GCCInstallation.getParentLibPath();
-    const Multilib &Multilib = GCCInstallation.getMultilib();
-    const MultilibSet &Multilibs = GCCInstallation.getMultilibs();
 
     // Add toolchain / multilib specific file paths.
-    addMultilibsFilePaths(D, Multilibs, Multilib,
+    addMultilibsFilePaths(D, Multilibs, SelectedMultilib,
                           GCCInstallation.getInstallPath(), Paths);
 
     // Sourcery CodeBench MIPS toolchain holds some libraries under
     // a biarch-like suffix of the GCC installation.
-    addPathIfExists(D, GCCInstallation.getInstallPath() + Multilib.gccSuffix(),
+    addPathIfExists(D, GCCInstallation.getInstallPath() + SelectedMultilib.gccSuffix(),
                     Paths);
 
     // GCC cross compiling toolchains will install target libraries which ship
@@ -330,7 +329,7 @@ Linux::Linux(const Driver &D, const llvm::Triple &Triple, const ArgList &Args)
     // Note that this matches the GCC behavior. See the below comment for where
     // Clang diverges from GCC's behavior.
     addPathIfExists(D, LibPath + "/../" + GCCTriple.str() + "/lib/../" +
-                           OSLibDir + Multilib.osSuffix(),
+                           OSLibDir + SelectedMultilib.osSuffix(),
                     Paths);
 
     // If the GCC installation we found is inside of the sysroot, we want to
@@ -376,7 +375,14 @@ Linux::Linux(const Driver &D, const llvm::Triple &Triple, const ArgList &Args)
   }
 
   addPathIfExists(D, SysRoot + "/usr/lib/" + MultiarchTriple, Paths);
-  addPathIfExists(D, SysRoot + "/usr/lib/../" + OSLibDir, Paths);
+  // 64-bit OpenEmbedded sysroots may not have a /usr/lib dir. So they cannot
+  // find /usr/lib64 as it is referenced as /usr/lib/../lib64. So we handle
+  // this here.
+  if (Triple.getVendor() == llvm::Triple::OpenEmbedded &&
+      Triple.isArch64Bit())
+    addPathIfExists(D, SysRoot + "/usr/" + OSLibDir, Paths);
+  else
+    addPathIfExists(D, SysRoot + "/usr/lib/../" + OSLibDir, Paths);
   if (IsRISCV) {
     StringRef ABIName = tools::riscv::getRISCVABI(Args, Triple);
     addPathIfExists(D, SysRoot + "/" + OSLibDir + "/" + ABIName, Paths);
@@ -693,7 +699,8 @@ void Linux::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
       "/usr/include/mips64el-linux-gnu",
       "/usr/include/mips64el-linux-gnuabi64"};
   const StringRef PPCMultiarchIncludeDirs[] = {
-      "/usr/include/powerpc-linux-gnu"};
+      "/usr/include/powerpc-linux-gnu",
+      "/usr/include/powerpc-linux-gnuspe"};
   const StringRef PPC64MultiarchIncludeDirs[] = {
       "/usr/include/powerpc64-linux-gnu"};
   const StringRef PPC64LEMultiarchIncludeDirs[] = {
@@ -900,6 +907,12 @@ bool Linux::isPIEDefault() const {
           getTriple().isMusl() || getSanitizerArgs().requiresPIE();
 }
 
+bool Linux::IsMathErrnoDefault() const {
+  if (getTriple().isAndroid())
+    return false;
+  return Generic_ELF::IsMathErrnoDefault();
+}
+
 SanitizerMask Linux::getSupportedSanitizers() const {
   const bool IsX86 = getTriple().getArch() == llvm::Triple::x86;
   const bool IsX86_64 = getTriple().getArch() == llvm::Triple::x86_64;
@@ -927,6 +940,8 @@ SanitizerMask Linux::getSupportedSanitizers() const {
     Res |= SanitizerKind::Leak;
   if (IsX86_64 || IsMIPS64 || IsAArch64 || IsPowerPC64)
     Res |= SanitizerKind::Thread;
+  if (IsX86_64)
+    Res |= SanitizerKind::KernelMemory;
   if (IsX86_64 || IsMIPS64)
     Res |= SanitizerKind::Efficiency;
   if (IsX86 || IsX86_64)

@@ -385,6 +385,9 @@ static StyleKind findStyleKind(
     const NamedDecl *D,
     const std::vector<llvm::Optional<IdentifierNamingCheck::NamingStyle>>
         &NamingStyles) {
+  assert(D && D->getIdentifier() && !D->getName().empty() && !D->isImplicit() &&
+         "Decl must be an explicit identifier with a name.");
+
   if (isa<ObjCIvarDecl>(D) && NamingStyles[SK_ObjcIvar])
     return SK_ObjcIvar;
   
@@ -548,8 +551,6 @@ static StyleKind findStyleKind(
 
   if (const auto *Decl = dyn_cast<CXXMethodDecl>(D)) {
     if (Decl->isMain() || !Decl->isUserProvided() ||
-        Decl->isUsualDeallocationFunction() ||
-        Decl->isCopyAssignmentOperator() || Decl->isMoveAssignmentOperator() ||
         Decl->size_overridden_methods() > 0)
       return SK_Invalid;
 
@@ -841,7 +842,7 @@ void IdentifierNamingCheck::check(const MatchFinder::MatchResult &Result) {
     if (StringRef(Fixup).equals(Name)) {
       if (!IgnoreFailedSplit) {
         LLVM_DEBUG(llvm::dbgs()
-                   << Decl->getLocStart().printToString(*Result.SourceManager)
+                   << Decl->getBeginLoc().printToString(*Result.SourceManager)
                    << llvm::format(": unable to split words for %s '%s'\n",
                                    KindName.c_str(), Name.str().c_str()));
       }

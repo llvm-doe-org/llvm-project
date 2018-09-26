@@ -628,29 +628,6 @@ static bool IsPossiblyOpaquelyQualifiedType(QualType T) {
   }
 }
 
-/// Retrieve the depth and index of a template parameter.
-static std::pair<unsigned, unsigned>
-getDepthAndIndex(NamedDecl *ND) {
-  if (TemplateTypeParmDecl *TTP = dyn_cast<TemplateTypeParmDecl>(ND))
-    return std::make_pair(TTP->getDepth(), TTP->getIndex());
-
-  if (NonTypeTemplateParmDecl *NTTP = dyn_cast<NonTypeTemplateParmDecl>(ND))
-    return std::make_pair(NTTP->getDepth(), NTTP->getIndex());
-
-  TemplateTemplateParmDecl *TTP = cast<TemplateTemplateParmDecl>(ND);
-  return std::make_pair(TTP->getDepth(), TTP->getIndex());
-}
-
-/// Retrieve the depth and index of an unexpanded parameter pack.
-static std::pair<unsigned, unsigned>
-getDepthAndIndex(UnexpandedParameterPack UPP) {
-  if (const TemplateTypeParmType *TTP
-                          = UPP.first.dyn_cast<const TemplateTypeParmType *>())
-    return std::make_pair(TTP->getDepth(), TTP->getIndex());
-
-  return getDepthAndIndex(UPP.first.get<NamedDecl *>());
-}
-
 /// Helper function to build a TemplateParameter when we don't
 /// know its type statically.
 static TemplateParameter makeTemplateParameter(Decl *D) {
@@ -4446,11 +4423,11 @@ Sema::DeduceAutoType(TypeLoc Type, Expr *&Init, QualType &Result,
   if (const AutoType *AT = Type.getType()->getAs<AutoType>()) {
     if (AT->isDecltypeAuto()) {
       if (isa<InitListExpr>(Init)) {
-        Diag(Init->getLocStart(), diag::err_decltype_auto_initializer_list);
+        Diag(Init->getBeginLoc(), diag::err_decltype_auto_initializer_list);
         return DAR_FailedAlreadyDiagnosed;
       }
 
-      QualType Deduced = BuildDecltypeType(Init, Init->getLocStart(), false);
+      QualType Deduced = BuildDecltypeType(Init, Init->getBeginLoc(), false);
       if (Deduced.isNull())
         return DAR_FailedAlreadyDiagnosed;
       // FIXME: Support a non-canonical deduced type for 'auto'.
@@ -4461,7 +4438,7 @@ Sema::DeduceAutoType(TypeLoc Type, Expr *&Init, QualType &Result,
       return DAR_Succeeded;
     } else if (!getLangOpts().CPlusPlus) {
       if (isa<InitListExpr>(Init)) {
-        Diag(Init->getLocStart(), diag::err_auto_init_list_from_c);
+        Diag(Init->getBeginLoc(), diag::err_auto_init_list_from_c);
         return DAR_FailedAlreadyDiagnosed;
       }
     }
@@ -4622,7 +4599,7 @@ bool Sema::DeduceReturnType(FunctionDecl *FD, SourceLocation Loc,
     CXXRecordDecl *Lambda = cast<CXXMethodDecl>(FD)->getParent();
     FunctionDecl *CallOp = Lambda->getLambdaCallOperator();
 
-    // For a generic lambda, instantiate the call operator if needed. 
+    // For a generic lambda, instantiate the call operator if needed.
     if (auto *Args = FD->getTemplateSpecializationArgs()) {
       CallOp = InstantiateFunctionDeclaration(
           CallOp->getDescribedFunctionTemplate(), Args, Loc);

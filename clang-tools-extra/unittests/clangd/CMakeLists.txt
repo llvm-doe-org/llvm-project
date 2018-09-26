@@ -10,28 +10,33 @@ include_directories(
 
 add_extra_unittest(ClangdTests
   Annotations.cpp
+  CancellationTests.cpp
   ClangdTests.cpp
   ClangdUnitTests.cpp
   CodeCompleteTests.cpp
   CodeCompletionStringsTests.cpp
   ContextTests.cpp
+  DexTests.cpp
   DraftStoreTests.cpp
-  FileIndexTests.cpp
   FileDistanceTests.cpp
+  FileIndexTests.cpp
   FindSymbolsTests.cpp
   FuzzyMatchTests.cpp
   GlobalCompilationDatabaseTests.cpp
   HeadersTests.cpp
   IndexTests.cpp
   QualityTests.cpp
+  RIFFTests.cpp
+  SerializationTests.cpp
   SourceCodeTests.cpp
   SymbolCollectorTests.cpp
   SyncAPI.cpp
+  TUSchedulerTests.cpp
   TestFS.cpp
+  TestIndex.cpp
   TestTU.cpp
   ThreadingTests.cpp
   TraceTests.cpp
-  TUSchedulerTests.cpp
   URITests.cpp
   XRefsTests.cpp
   )

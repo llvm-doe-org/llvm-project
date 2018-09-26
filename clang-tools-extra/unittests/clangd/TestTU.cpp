@@ -5,7 +5,8 @@
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
+
 #include "TestTU.h"
 #include "TestFS.h"
 #include "index/FileIndex.h"
@@ -30,7 +31,7 @@ ParsedAST TestTU::build() const {
     Cmd.push_back(FullHeaderName.c_str());
   }
   Cmd.insert(Cmd.end(), ExtraArgs.begin(), ExtraArgs.end());
-  auto AST = ParsedAST::Build(
+  auto AST = ParsedAST::build(
       createInvocationFromCommandLine(Cmd), nullptr,
       MemoryBuffer::getMemBufferCopy(Code),
       std::make_shared<PCHContainerOperations>(),
@@ -44,11 +45,14 @@ ParsedAST TestTU::build() const {
 
 SymbolSlab TestTU::headerSymbols() const {
   auto AST = build();
-  return indexAST(AST.getASTContext(), AST.getPreprocessorPtr());
+  return indexHeaderSymbols(AST.getASTContext(), AST.getPreprocessorPtr());
 }
 
+// FIXME: This should return a FileIndex with both preamble and main index.
 std::unique_ptr<SymbolIndex> TestTU::index() const {
-  return MemIndex::build(headerSymbols());
+  auto AST = build();
+  auto Content = indexMainDecls(AST);
+  return MemIndex::build(std::move(Content.first), std::move(Content.second));
 }
 
 const Symbol &findSymbol(const SymbolSlab &Slab, llvm::StringRef QName) {

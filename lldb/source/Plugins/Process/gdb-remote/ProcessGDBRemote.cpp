@@ -34,7 +34,6 @@
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/State.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Core/Value.h"
 #include "lldb/DataFormatters/FormatManager.h"
@@ -68,6 +67,7 @@
 #include "lldb/Utility/Args.h"
 #include "lldb/Utility/CleanUp.h"
 #include "lldb/Utility/FileSpec.h"
+#include "lldb/Utility/State.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/Timer.h"
 
@@ -3484,7 +3484,7 @@ Status ProcessGDBRemote::LaunchAndConnectToDebugserver(
     if (m_gdb_comm.IsConnected()) {
       // Finish the connection process by doing the handshake without
       // connecting (send NULL URL)
-      ConnectToDebugserver("");
+      error = ConnectToDebugserver("");
     } else {
       error.SetErrorString("connection failed");
     }
@@ -4802,7 +4802,7 @@ size_t ProcessGDBRemote::LoadModules(LoadedModuleInfoList &module_list) {
         return true;
 
       lldb::ModuleSP module_copy_sp = module_sp;
-      target.SetExecutableModule(module_copy_sp, false);
+      target.SetExecutableModule(module_copy_sp, eLoadDependentsNo);
       return false;
     });
 

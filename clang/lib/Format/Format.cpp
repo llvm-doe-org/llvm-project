@@ -777,9 +777,11 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
           {
               "EqualsProto",
               "EquivToProto",
+              "PARSE_PARTIAL_TEXT_PROTO",
               "PARSE_TEST_PROTO",
               "PARSE_TEXT_PROTO",
               "ParseTextOrDie",
+              "ParseTextProtoOrDie",
           },
           /*CanonicalDelimiter=*/"",
           /*BasedOnStyle=*/"google",
@@ -808,17 +810,16 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
     GoogleStyle.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_Empty;
     GoogleStyle.AlwaysBreakBeforeMultilineStrings = false;
     GoogleStyle.BreakBeforeTernaryOperators = false;
-    // taze:, triple slash directives (`/// <...`), @tag followed by { for a lot
-    // of JSDoc tags, and @see, which is commonly followed by overlong URLs.
-    GoogleStyle.CommentPragmas =
-        "(taze:|^/[ \t]*<|(@[A-Za-z_0-9-]+[ \\t]*{)|@see)";
+    // taze:, triple slash directives (`/// <...`), @see, which is commonly
+    // followed by overlong URLs.
+    GoogleStyle.CommentPragmas = "(taze:|^/[ \t]*<|@see)";
     GoogleStyle.MaxEmptyLinesToKeep = 3;
     GoogleStyle.NamespaceIndentation = FormatStyle::NI_All;
     GoogleStyle.SpacesInContainerLiterals = false;
     GoogleStyle.JavaScriptQuotes = FormatStyle::JSQS_Single;
     GoogleStyle.JavaScriptWrapImports = false;
   } else if (Language == FormatStyle::LK_Proto) {
-    GoogleStyle.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_None;
+    GoogleStyle.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_Empty;
     GoogleStyle.AlwaysBreakBeforeMultilineStrings = false;
     GoogleStyle.SpacesInContainerLiterals = false;
     GoogleStyle.Cpp11BracedListStyle = false;
@@ -1308,8 +1309,7 @@ private:
     std::set<unsigned> DeletedLines;
     for (unsigned i = 0, e = AnnotatedLines.size(); i != e; ++i) {
       auto &Line = *AnnotatedLines[i];
-      if (Line.startsWith(tok::kw_namespace) ||
-          Line.startsWith(tok::kw_inline, tok::kw_namespace)) {
+      if (Line.startsWithNamespace()) {
         checkEmptyNamespace(AnnotatedLines, i, i, DeletedLines);
       }
     }
@@ -1346,9 +1346,7 @@ private:
       if (AnnotatedLines[CurrentLine]->startsWith(tok::r_brace))
         break;
 
-      if (AnnotatedLines[CurrentLine]->startsWith(tok::kw_namespace) ||
-          AnnotatedLines[CurrentLine]->startsWith(tok::kw_inline,
-                                                  tok::kw_namespace)) {
+      if (AnnotatedLines[CurrentLine]->startsWithNamespace()) {
         if (!checkEmptyNamespace(AnnotatedLines, CurrentLine, NewLine,
                                  DeletedLines))
           return false;

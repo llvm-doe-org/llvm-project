@@ -21,6 +21,7 @@
 #include "lldb/Breakpoint/BreakpointResolverFileLine.h"
 #include "lldb/Breakpoint/BreakpointResolverFileRegex.h"
 #include "lldb/Breakpoint/BreakpointResolverName.h"
+#include "lldb/Breakpoint/BreakpointResolverScripted.h"
 #include "lldb/Breakpoint/Watchpoint.h"
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/Event.h"
@@ -28,9 +29,10 @@
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/Section.h"
+#include "lldb/Core/SearchFilter.h"
 #include "lldb/Core/SourceManager.h"
-#include "lldb/Core/State.h"
 #include "lldb/Core/StreamFile.h"
+#include "lldb/Core/StructuredDataImpl.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/Expression/REPL.h"
 #include "lldb/Expression/UserExpression.h"
@@ -58,6 +60,7 @@
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/Utility/LLDBAssert.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/State.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/Timer.h"
 
@@ -322,7 +325,7 @@ BreakpointSP Target::CreateSourceRegexBreakpoint(
 
 BreakpointSP Target::CreateBreakpoint(const FileSpecList *containingModules,
                                       const FileSpec &file, uint32_t line_no,
-                                      lldb::addr_t offset,
+                                      uint32_t column, lldb::addr_t offset,
                                       LazyBool check_inlines,
                                       LazyBool skip_prologue, bool internal,
                                       bool hardware,
@@ -366,8 +369,8 @@ BreakpointSP Target::CreateBreakpoint(const FileSpecList *containingModules,
     move_to_nearest_code = GetMoveToNearestCode() ? eLazyBoolYes : eLazyBoolNo;
 
   BreakpointResolverSP resolver_sp(new BreakpointResolverFileLine(
-      nullptr, remapped_file, line_no, offset, check_inlines, skip_prologue,
-      !static_cast<bool>(move_to_nearest_code)));
+      nullptr, remapped_file, line_no, column, offset, check_inlines,
+      skip_prologue, !static_cast<bool>(move_to_nearest_code)));
   return CreateBreakpoint(filter_sp, resolver_sp, internal, hardware, true);
 }
 
@@ -578,6 +581,48 @@ Target::CreateExceptionBreakpoint(enum lldb::LanguageType language,
   }
   return exc_bkpt_sp;
 }
+
+lldb::BreakpointSP
+Target::CreateScriptedBreakpoint(const llvm::StringRef class_name,
+                                 const FileSpecList *containingModules,
+                                 const FileSpecList *containingSourceFiles,
+                                 bool internal,
+                                 bool request_hardware,
+                                 StructuredData::ObjectSP extra_args_sp,
+                                 Status *creation_error)
+{
+  SearchFilterSP filter_sp;
+  
+  lldb::SearchDepth depth = lldb::eSearchDepthTarget;
+  bool has_files = containingSourceFiles && containingSourceFiles->GetSize() > 0;
+  bool has_modules = containingModules && containingModules->GetSize() > 0;
+  
+  if (has_files && has_modules) {
+    filter_sp = GetSearchFilterForModuleAndCUList(
+      containingModules, containingSourceFiles);
+  } else if (has_files) {
+    filter_sp = GetSearchFilterForModuleAndCUList(
+      nullptr, containingSourceFiles);
+  } else if (has_modules) {
+    filter_sp = GetSearchFilterForModuleList(containingModules);
+  } else {
+    filter_sp.reset(new SearchFilterForUnconstrainedSearches(shared_from_this()));
+  }
+  
+  StructuredDataImpl *extra_args_impl = new StructuredDataImpl();
+  if (extra_args_sp)
+    extra_args_impl->SetObjectSP(extra_args_sp);
+  
+  BreakpointResolverSP resolver_sp(new 
+                                   BreakpointResolverScripted(nullptr, class_name,
+                                   depth,
+                                   extra_args_impl,
+                                   *GetDebugger().GetCommandInterpreter()
+                                       .GetScriptInterpreter()));
+  return CreateBreakpoint(filter_sp, resolver_sp, internal, false, true);
+
+}
+
 
 BreakpointSP Target::CreateBreakpoint(SearchFilterSP &filter_sp,
                                       BreakpointResolverSP &resolver_sp,
@@ -1377,7 +1422,7 @@ void Target::DidExec() {
 }
 
 void Target::SetExecutableModule(ModuleSP &executable_sp,
-                                 bool get_dependent_files) {
+                                 LoadDependentFiles load_dependent_files) {
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_TARGET));
   ClearModules(false);
 
@@ -1401,8 +1446,20 @@ void Target::SetExecutableModule(ModuleSP &executable_sp,
 
     FileSpecList dependent_files;
     ObjectFile *executable_objfile = executable_sp->GetObjectFile();
+    bool load_dependens;
+    switch (load_dependent_files) {
+    case eLoadDependentsDefault:
+      load_dependens = executable_sp->IsExecutable();
+      break;
+    case eLoadDependentsYes:
+      load_dependens = true;
+      break;
+    case eLoadDependentsNo:
+      load_dependens = false;
+      break;
+    }
 
-    if (executable_objfile && get_dependent_files) {
+    if (executable_objfile && load_dependens) {
       executable_objfile->GetDependentModules(dependent_files);
       for (uint32_t i = 0; i < dependent_files.GetSize(); i++) {
         FileSpec dependent_file_spec(
@@ -1426,12 +1483,32 @@ void Target::SetExecutableModule(ModuleSP &executable_sp,
   }
 }
 
-bool Target::SetArchitecture(const ArchSpec &arch_spec) {
+bool Target::SetArchitecture(const ArchSpec &arch_spec, bool set_platform) {
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_TARGET));
   bool missing_local_arch = !m_arch.GetSpec().IsValid();
   bool replace_local_arch = true;
   bool compatible_local_arch = false;
   ArchSpec other(arch_spec);
+
+  // Changing the architecture might mean that the currently selected platform
+  // isn't compatible. Set the platform correctly if we are asked to do so,
+  // otherwise assume the user will set the platform manually.
+  if (set_platform) {
+    if (other.IsValid()) {
+      auto platform_sp = GetPlatform();
+      if (!platform_sp ||
+          !platform_sp->IsCompatibleArchitecture(other, false, nullptr)) {
+        ArchSpec platform_arch;
+        auto arch_platform_sp =
+            Platform::GetPlatformForArchitecture(other, &platform_arch);
+        if (arch_platform_sp) {
+          SetPlatform(arch_platform_sp);
+          if (platform_arch.IsValid())
+            other = platform_arch;
+        }
+      }
+    }
+  }
 
   if (!missing_local_arch) {
     if (m_arch.GetSpec().IsCompatibleMatch(arch_spec)) {
@@ -1487,7 +1564,7 @@ bool Target::SetArchitecture(const ArchSpec &arch_spec) {
                                                nullptr, nullptr);
 
     if (!error.Fail() && executable_sp) {
-      SetExecutableModule(executable_sp, true);
+      SetExecutableModule(executable_sp, eLoadDependentsYes);
       return true;
     }
   }
@@ -2057,7 +2134,7 @@ void Target::ImageSearchPathsChanged(const PathMappingList &path_list,
   Target *target = (Target *)baton;
   ModuleSP exe_module_sp(target->GetExecutableModule());
   if (exe_module_sp)
-    target->SetExecutableModule(exe_module_sp, true);
+    target->SetExecutableModule(exe_module_sp, eLoadDependentsYes);
 }
 
 TypeSystem *Target::GetScratchTypeSystemForLanguage(Status *error,
@@ -2351,249 +2428,22 @@ lldb::addr_t Target::GetPersistentSymbol(const ConstString &name) {
 
 lldb::addr_t Target::GetCallableLoadAddress(lldb::addr_t load_addr,
                                             AddressClass addr_class) const {
-  addr_t code_addr = load_addr;
-  switch (m_arch.GetSpec().GetMachine()) {
-  case llvm::Triple::mips:
-  case llvm::Triple::mipsel:
-  case llvm::Triple::mips64:
-  case llvm::Triple::mips64el:
-    switch (addr_class) {
-    case AddressClass::eData:
-    case AddressClass::eDebug:
-      return LLDB_INVALID_ADDRESS;
-
-    case AddressClass::eUnknown:
-    case AddressClass::eInvalid:
-    case AddressClass::eCode:
-    case AddressClass::eCodeAlternateISA:
-    case AddressClass::eRuntime:
-      if ((code_addr & 2ull) || (addr_class == AddressClass::eCodeAlternateISA))
-        code_addr |= 1ull;
-      break;
-    }
-    break;
-
-  case llvm::Triple::arm:
-  case llvm::Triple::thumb:
-    switch (addr_class) {
-    case AddressClass::eData:
-    case AddressClass::eDebug:
-      return LLDB_INVALID_ADDRESS;
-
-    case AddressClass::eUnknown:
-    case AddressClass::eInvalid:
-    case AddressClass::eCode:
-    case AddressClass::eCodeAlternateISA:
-    case AddressClass::eRuntime:
-      // Check if bit zero it no set?
-      if ((code_addr & 1ull) == 0) {
-        // Bit zero isn't set, check if the address is a multiple of 2?
-        if (code_addr & 2ull) {
-          // The address is a multiple of 2 so it must be thumb, set bit zero
-          code_addr |= 1ull;
-        } else if (addr_class == AddressClass::eCodeAlternateISA) {
-          // We checked the address and the address claims to be the alternate
-          // ISA which means thumb, so set bit zero.
-          code_addr |= 1ull;
-        }
-      }
-      break;
-    }
-    break;
-
-  default:
-    break;
-  }
-  return code_addr;
+  auto arch_plugin = GetArchitecturePlugin();
+  return arch_plugin ?
+      arch_plugin->GetCallableLoadAddress(load_addr, addr_class) : load_addr;
 }
 
 lldb::addr_t Target::GetOpcodeLoadAddress(lldb::addr_t load_addr,
                                           AddressClass addr_class) const {
-  addr_t opcode_addr = load_addr;
-  switch (m_arch.GetSpec().GetMachine()) {
-  case llvm::Triple::mips:
-  case llvm::Triple::mipsel:
-  case llvm::Triple::mips64:
-  case llvm::Triple::mips64el:
-  case llvm::Triple::arm:
-  case llvm::Triple::thumb:
-    switch (addr_class) {
-    case AddressClass::eData:
-    case AddressClass::eDebug:
-      return LLDB_INVALID_ADDRESS;
-
-    case AddressClass::eInvalid:
-    case AddressClass::eUnknown:
-    case AddressClass::eCode:
-    case AddressClass::eCodeAlternateISA:
-    case AddressClass::eRuntime:
-      opcode_addr &= ~(1ull);
-      break;
-    }
-    break;
-
-  default:
-    break;
-  }
-  return opcode_addr;
+  auto arch_plugin = GetArchitecturePlugin();
+  return arch_plugin ?
+      arch_plugin->GetOpcodeLoadAddress(load_addr, addr_class) : load_addr;
 }
 
 lldb::addr_t Target::GetBreakableLoadAddress(lldb::addr_t addr) {
-  addr_t breakable_addr = addr;
-  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_BREAKPOINTS));
-
-  switch (m_arch.GetSpec().GetMachine()) {
-  default:
-    break;
-  case llvm::Triple::mips:
-  case llvm::Triple::mipsel:
-  case llvm::Triple::mips64:
-  case llvm::Triple::mips64el: {
-    addr_t function_start = 0;
-    addr_t current_offset = 0;
-    uint32_t loop_count = 0;
-    Address resolved_addr;
-    uint32_t arch_flags = m_arch.GetSpec().GetFlags();
-    bool IsMips16 = arch_flags & ArchSpec::eMIPSAse_mips16;
-    bool IsMicromips = arch_flags & ArchSpec::eMIPSAse_micromips;
-    SectionLoadList &section_load_list = GetSectionLoadList();
-
-    if (section_load_list.IsEmpty())
-      // No sections are loaded, so we must assume we are not running yet and
-      // need to operate only on file address.
-      m_images.ResolveFileAddress(addr, resolved_addr);
-    else
-      section_load_list.ResolveLoadAddress(addr, resolved_addr);
-
-    // Get the function boundaries to make sure we don't scan back before the
-    // beginning of the current function.
-    ModuleSP temp_addr_module_sp(resolved_addr.GetModule());
-    if (temp_addr_module_sp) {
-      SymbolContext sc;
-      uint32_t resolve_scope = eSymbolContextFunction | eSymbolContextSymbol;
-      temp_addr_module_sp->ResolveSymbolContextForAddress(resolved_addr,
-                                                          resolve_scope, sc);
-      Address sym_addr;
-      if (sc.function)
-        sym_addr = sc.function->GetAddressRange().GetBaseAddress();
-      else if (sc.symbol)
-        sym_addr = sc.symbol->GetAddress();
-
-      function_start = sym_addr.GetLoadAddress(this);
-      if (function_start == LLDB_INVALID_ADDRESS)
-        function_start = sym_addr.GetFileAddress();
-
-      if (function_start)
-        current_offset = addr - function_start;
-    }
-
-    // If breakpoint address is start of function then we dont have to do
-    // anything.
-    if (current_offset == 0)
-      return breakable_addr;
-    else
-      loop_count = current_offset / 2;
-
-    if (loop_count > 3) {
-      // Scan previous 6 bytes
-      if (IsMips16 | IsMicromips)
-        loop_count = 3;
-      // For mips-only, instructions are always 4 bytes, so scan previous 4
-      // bytes only.
-      else
-        loop_count = 2;
-    }
-
-    // Create Disassembler Instance
-    lldb::DisassemblerSP disasm_sp(
-        Disassembler::FindPlugin(m_arch.GetSpec(), nullptr, nullptr));
-
-    ExecutionContext exe_ctx;
-    CalculateExecutionContext(exe_ctx);
-    InstructionList instruction_list;
-    InstructionSP prev_insn;
-    bool prefer_file_cache = true; // Read from file
-    uint32_t inst_to_choose = 0;
-
-    for (uint32_t i = 1; i <= loop_count; i++) {
-      // Adjust the address to read from.
-      resolved_addr.Slide(-2);
-      AddressRange range(resolved_addr, i * 2);
-      uint32_t insn_size = 0;
-
-      disasm_sp->ParseInstructions(&exe_ctx, range, nullptr, prefer_file_cache);
-
-      uint32_t num_insns = disasm_sp->GetInstructionList().GetSize();
-      if (num_insns) {
-        prev_insn = disasm_sp->GetInstructionList().GetInstructionAtIndex(0);
-        insn_size = prev_insn->GetOpcode().GetByteSize();
-        if (i == 1 && insn_size == 2) {
-          // This looks like a valid 2-byte instruction (but it could be a part
-          // of upper 4 byte instruction).
-          instruction_list.Append(prev_insn);
-          inst_to_choose = 1;
-        } else if (i == 2) {
-          // Here we may get one 4-byte instruction or two 2-byte instructions.
-          if (num_insns == 2) {
-            // Looks like there are two 2-byte instructions above our
-            // breakpoint target address. Now the upper 2-byte instruction is
-            // either a valid 2-byte instruction or could be a part of it's
-            // upper 4-byte instruction. In both cases we don't care because in
-            // this case lower 2-byte instruction is definitely a valid
-            // instruction and whatever i=1 iteration has found out is true.
-            inst_to_choose = 1;
-            break;
-          } else if (insn_size == 4) {
-            // This instruction claims its a valid 4-byte instruction. But it
-            // could be a part of it's upper 4-byte instruction. Lets try
-            // scanning upper 2 bytes to verify this.
-            instruction_list.Append(prev_insn);
-            inst_to_choose = 2;
-          }
-        } else if (i == 3) {
-          if (insn_size == 4)
-            // FIXME: We reached here that means instruction at [target - 4] has
-            // already claimed to be a 4-byte instruction, and now instruction
-            // at [target - 6] is also claiming that it's a 4-byte instruction.
-            // This can not be true. In this case we can not decide the valid
-            // previous instruction so we let lldb set the breakpoint at the
-            // address given by user.
-            inst_to_choose = 0;
-          else
-            // This is straight-forward
-            inst_to_choose = 2;
-          break;
-        }
-      } else {
-        // Decode failed, bytes do not form a valid instruction. So whatever
-        // previous iteration has found out is true.
-        if (i > 1) {
-          inst_to_choose = i - 1;
-          break;
-        }
-      }
-    }
-
-    // Check if we are able to find any valid instruction.
-    if (inst_to_choose) {
-      if (inst_to_choose > instruction_list.GetSize())
-        inst_to_choose--;
-      prev_insn = instruction_list.GetInstructionAtIndex(inst_to_choose - 1);
-
-      if (prev_insn->HasDelaySlot()) {
-        uint32_t shift_size = prev_insn->GetOpcode().GetByteSize();
-        // Adjust the breakable address
-        breakable_addr = addr - shift_size;
-        if (log)
-          log->Printf("Target::%s Breakpoint at 0x%8.8" PRIx64
-                      " is adjusted to 0x%8.8" PRIx64 " due to delay slot\n",
-                      __FUNCTION__, addr, breakable_addr);
-      }
-    }
-    break;
-  }
-  }
-  return breakable_addr;
+  auto arch_plugin = GetArchitecturePlugin();
+  return arch_plugin ?
+      arch_plugin->GetBreakableLoadAddress(addr, *this) : addr;
 }
 
 SourceManager &Target::GetSourceManager() {

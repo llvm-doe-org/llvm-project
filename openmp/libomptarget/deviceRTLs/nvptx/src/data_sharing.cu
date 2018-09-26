@@ -79,7 +79,7 @@ __device__ static size_t AlignVal(size_t Val) {
 EXTERN void
 __kmpc_initialize_data_sharing_environment(__kmpc_data_sharing_slot *rootS,
                                            size_t InitialDataSize) {
-
+  ASSERT0(LT_FUSSY, isRuntimeInitialized(), "Runtime must be initialized.");
   DSPRINT0(DSFLAG_INIT,
            "Entering __kmpc_initialize_data_sharing_environment\n");
 
@@ -331,6 +331,7 @@ __kmpc_get_data_sharing_environment_frame(int32_t SourceThreadID,
 ////////////////////////////////////////////////////////////////////////////////
 
 INLINE void data_sharing_init_stack_common() {
+  ASSERT0(LT_FUSSY, isRuntimeInitialized(), "Runtime must be initialized.");
   omptarget_nvptx_TeamDescr *teamDescr =
       &omptarget_nvptx_threadPrivateContext->TeamContext();
 
@@ -346,6 +347,7 @@ INLINE void data_sharing_init_stack_common() {
 // initialization). This function is called only by the MASTER thread of each
 // team in non-SPMD mode.
 EXTERN void __kmpc_data_sharing_init_stack() {
+  ASSERT0(LT_FUSSY, isRuntimeInitialized(), "Runtime must be initialized.");
   // This function initializes the stack pointer with the pointer to the
   // statically allocated shared memory slots. The size of a shared memory
   // slot is pre-determined to be 256 bytes.
@@ -357,6 +359,7 @@ EXTERN void __kmpc_data_sharing_init_stack() {
 // once at the beginning of a data sharing context (coincides with the kernel
 // initialization). This function is called in SPMD mode only.
 EXTERN void __kmpc_data_sharing_init_stack_spmd() {
+  ASSERT0(LT_FUSSY, isRuntimeInitialized(), "Runtime must be initialized.");
   // This function initializes the stack pointer with the pointer to the
   // statically allocated shared memory slots. The size of a shared memory
   // slot is pre-determined to be 256 bytes.
@@ -375,12 +378,18 @@ EXTERN void __kmpc_data_sharing_init_stack_spmd() {
 // as long as the size requested fits the pre-allocated size.
 EXTERN void* __kmpc_data_sharing_push_stack(size_t DataSize,
     int16_t UseSharedMemory) {
+  if (isRuntimeUninitialized()) {
+    ASSERT0(LT_FUSSY, isSPMDMode(),
+            "Expected SPMD mode with uninitialized runtime.");
+    return omptarget_nvptx_SimpleThreadPrivateContext::Allocate(DataSize);
+  }
+
   // Frame pointer must be visible to all workers in the same warp.
   unsigned WID = getWarpId();
   void *&FrameP = DataSharingState.FramePtr[WID];
 
   // Only warp active master threads manage the stack.
-  if (IsWarpMasterActiveThread()) {
+  if (getThreadId() % WARPSIZE == 0) {
     // SlotP will point to either the shared memory slot or an existing
     // global memory slot.
     __kmpc_data_sharing_slot *&SlotP = DataSharingState.SlotPtr[WID];
@@ -453,7 +462,13 @@ EXTERN void* __kmpc_data_sharing_push_stack(size_t DataSize,
 // reclaim all outstanding global memory slots since it is
 // likely we have reached the end of the kernel.
 EXTERN void __kmpc_data_sharing_pop_stack(void *FrameStart) {
-  if (IsWarpMasterActiveThread()) {
+  if (isRuntimeUninitialized()) {
+    ASSERT0(LT_FUSSY, isSPMDMode(),
+            "Expected SPMD mode with uninitialized runtime.");
+    return omptarget_nvptx_SimpleThreadPrivateContext::Deallocate(FrameStart);
+  }
+
+  if (getThreadId() % WARPSIZE == 0) {
     unsigned WID = getWarpId();
 
     // Current slot

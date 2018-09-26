@@ -158,6 +158,8 @@ public:
     case Intrinsic::dbg_label:
     case Intrinsic::invariant_start:
     case Intrinsic::invariant_end:
+    case Intrinsic::launder_invariant_group:
+    case Intrinsic::strip_invariant_group:
     case Intrinsic::lifetime_start:
     case Intrinsic::lifetime_end:
     case Intrinsic::objectsize:
@@ -326,7 +328,7 @@ public:
   bool haveFastSqrt(Type *Ty) { return false; }
 
   bool isFCmpOrdCheaperThanFCmpZero(Type *Ty) { return true; }
-  
+
   unsigned getFPOpCost(Type *Ty) { return TargetTransformInfo::TCC_Basic; }
 
   int getIntImmCodeSizeCost(unsigned Opcode, unsigned Idx, const APInt &Imm,

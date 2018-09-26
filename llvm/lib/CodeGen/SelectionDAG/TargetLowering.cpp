@@ -680,7 +680,7 @@ bool TargetLowering::SimplifyDemandedBits(SDValue Op,
     // If all of the unknown bits are known to be zero on one side or the other
     // (but not both) turn this into an *inclusive* or.
     //    e.g. (A & C1)^(B & C2) -> (A & C1)|(B & C2) iff C1&C2 == 0
-    if ((NewMask & ~Known.Zero & ~Known2.Zero) == 0)
+    if (NewMask.isSubsetOf(Known.Zero|Known2.Zero))
       return TLO.CombineTo(Op, TLO.DAG.getNode(ISD::OR, dl, VT,
                                                Op.getOperand(0),
                                                Op.getOperand(1)));
@@ -690,32 +690,32 @@ bool TargetLowering::SimplifyDemandedBits(SDValue Op,
     // Output known-1 are known to be set if set in only one of the LHS, RHS.
     KnownOut.One = (Known.Zero & Known2.One) | (Known.One & Known2.Zero);
 
-    // If all of the demanded bits on one side are known, and all of the set
-    // bits on that side are also known to be set on the other side, turn this
-    // into an AND, as we know the bits will be cleared.
-    //    e.g. (X | C1) ^ C2 --> (X | C1) & ~C2 iff (C1&C2) == C2
-    // NB: it is okay if more bits are known than are requested
-    if (NewMask.isSubsetOf(Known.Zero|Known.One)) { // all known on one side
-      if (Known.One == Known2.One) { // set bits are the same on both sides
-        SDValue ANDC = TLO.DAG.getConstant(~Known.One & NewMask, dl, VT);
+    if (ConstantSDNode *C = isConstOrConstSplat(Op.getOperand(1))) {
+      // If one side is a constant, and all of the known set bits on the other
+      // side are also set in the constant, turn this into an AND, as we know
+      // the bits will be cleared.
+      //    e.g. (X | C1) ^ C2 --> (X | C1) & ~C2 iff (C1&C2) == C2
+      // NB: it is okay if more bits are known than are requested
+      if (C->getAPIntValue() == Known2.One) {
+        SDValue ANDC = TLO.DAG.getConstant(~C->getAPIntValue() & NewMask,
+                                           dl, VT);
         return TLO.CombineTo(Op, TLO.DAG.getNode(ISD::AND, dl, VT,
                                                  Op.getOperand(0), ANDC));
       }
-    }
 
-    // If the RHS is a constant, see if we can change it. Don't alter a -1
-    // constant because that's a 'not' op, and that is better for combining and
-    // codegen.
-    ConstantSDNode *C = isConstOrConstSplat(Op.getOperand(1));
-    if (C && !C->isAllOnesValue()) {
-      if (NewMask.isSubsetOf(C->getAPIntValue())) {
-        // We're flipping all demanded bits. Flip the undemanded bits too.
-        SDValue New = TLO.DAG.getNOT(dl, Op.getOperand(0), VT);
-        return TLO.CombineTo(Op, New);
+      // If the RHS is a constant, see if we can change it. Don't alter a -1
+      // constant because that's a 'not' op, and that is better for combining
+      // and codegen.
+      if (!C->isAllOnesValue()) {
+        if (NewMask.isSubsetOf(C->getAPIntValue())) {
+          // We're flipping all demanded bits. Flip the undemanded bits too.
+          SDValue New = TLO.DAG.getNOT(dl, Op.getOperand(0), VT);
+          return TLO.CombineTo(Op, New);
+        }
+        // If we can't turn this into a 'not', try to shrink the constant.
+        if (ShrinkDemandedConstant(Op, NewMask, TLO))
+          return true;
       }
-      // If we can't turn this into a 'not', try to shrink the constant.
-      if (ShrinkDemandedConstant(Op, NewMask, TLO))
-        return true;
     }
 
     Known = std::move(KnownOut);
@@ -1481,22 +1481,20 @@ bool TargetLowering::SimplifyDemandedVectorElts(
     break;
   }
   case ISD::EXTRACT_SUBVECTOR: {
-    if (!isa<ConstantSDNode>(Op.getOperand(1)))
-      break;
     SDValue Src = Op.getOperand(0);
+    ConstantSDNode *SubIdx = dyn_cast<ConstantSDNode>(Op.getOperand(1));
     unsigned NumSrcElts = Src.getValueType().getVectorNumElements();
-    const APInt& Idx = cast<ConstantSDNode>(Op.getOperand(1))->getAPIntValue();
-    if (Idx.uge(NumSrcElts - NumElts))
-      break;
-    // Offset the demanded elts by the subvector index.
-    uint64_t SubIdx = Idx.getZExtValue();
-    APInt SrcElts = DemandedElts.zext(NumSrcElts).shl(SubIdx);
-    APInt SrcUndef, SrcZero;
-    if (SimplifyDemandedVectorElts(Src, SrcElts, SrcUndef, SrcZero, TLO,
-                                   Depth + 1))
-      return true;
-    KnownUndef = SrcUndef.extractBits(NumElts, SubIdx);
-    KnownZero = SrcZero.extractBits(NumElts, SubIdx);
+    if (SubIdx && SubIdx->getAPIntValue().ule(NumSrcElts - NumElts)) {
+      // Offset the demanded elts by the subvector index.
+      uint64_t Idx = SubIdx->getZExtValue();
+      APInt SrcElts = DemandedElts.zextOrSelf(NumSrcElts).shl(Idx);
+      APInt SrcUndef, SrcZero;
+      if (SimplifyDemandedVectorElts(Src, SrcElts, SrcUndef, SrcZero, TLO,
+                                     Depth + 1))
+        return true;
+      KnownUndef = SrcUndef.extractBits(NumElts, Idx);
+      KnownZero = SrcZero.extractBits(NumElts, Idx);
+    }
     break;
   }
   case ISD::INSERT_VECTOR_ELT: {
@@ -1534,12 +1532,20 @@ bool TargetLowering::SimplifyDemandedVectorElts(
     break;
   }
   case ISD::VSELECT: {
-    APInt DemandedLHS(DemandedElts);
-    APInt DemandedRHS(DemandedElts);
-
-    // TODO - add support for constant vselect masks.
+    // Try to transform the select condition based on the current demanded
+    // elements.
+    // TODO: If a condition element is undef, we can choose from one arm of the
+    //       select (and if one arm is undef, then we can propagate that to the
+    //       result).
+    // TODO - add support for constant vselect masks (see IR version of this).
+    APInt UnusedUndef, UnusedZero;
+    if (SimplifyDemandedVectorElts(Op.getOperand(0), DemandedElts, UnusedUndef,
+                                   UnusedZero, TLO, Depth + 1))
+      return true;
 
     // See if we can simplify either vselect operand.
+    APInt DemandedLHS(DemandedElts);
+    APInt DemandedRHS(DemandedElts);
     APInt UndefLHS, ZeroLHS;
     APInt UndefRHS, ZeroRHS;
     if (SimplifyDemandedVectorElts(Op.getOperand(1), DemandedLHS, UndefLHS,
@@ -1711,6 +1717,19 @@ bool TargetLowering::SimplifyDemandedVectorEltsForTargetNode(
   return false;
 }
 
+bool TargetLowering::isKnownNeverNaNForTargetNode(SDValue Op,
+                                                  const SelectionDAG &DAG,
+                                                  bool SNaN,
+                                                  unsigned Depth) const {
+  assert((Op.getOpcode() >= ISD::BUILTIN_OP_END ||
+          Op.getOpcode() == ISD::INTRINSIC_WO_CHAIN ||
+          Op.getOpcode() == ISD::INTRINSIC_W_CHAIN ||
+          Op.getOpcode() == ISD::INTRINSIC_VOID) &&
+         "Should use isKnownNeverNaN if you don't know whether Op"
+         " is a target node!");
+  return false;
+}
+
 // FIXME: Ideally, this would use ISD::isConstantSplatVector(), but that must
 // work with truncating build vectors and vectors with elements of less than
 // 8 bits.
@@ -1864,14 +1883,6 @@ SDValue TargetLowering::simplifySetCCWithAnd(EVT VT, SDValue N0, SDValue N1,
 SDValue TargetLowering::optimizeSetCCOfSignedTruncationCheck(
     EVT SCCVT, SDValue N0, SDValue N1, ISD::CondCode Cond, DAGCombinerInfo &DCI,
     const SDLoc &DL) const {
-  ISD::CondCode NewCond;
-  if (Cond == ISD::CondCode::SETULT)
-    NewCond = ISD::CondCode::SETEQ;
-  else if (Cond == ISD::CondCode::SETUGE)
-    NewCond = ISD::CondCode::SETNE;
-  else
-    return SDValue();
-
   // We must be comparing with a constant.
   ConstantSDNode *C1;
   if (!(C1 = dyn_cast<ConstantSDNode>(N1)))
@@ -1891,11 +1902,42 @@ SDValue TargetLowering::optimizeSetCCOfSignedTruncationCheck(
 
   // Validate constants ...
 
-  const APInt &I1 = C1->getAPIntValue();
-  const APInt &I01 = C01->getAPIntValue();
-  // Both of them must be power-of-two, and the constant from setcc is bigger.
-  if (!(I1.ugt(I01) && I1.isPowerOf2() && I01.isPowerOf2()))
+  APInt I1 = C1->getAPIntValue();
+
+  ISD::CondCode NewCond;
+  if (Cond == ISD::CondCode::SETULT) {
+    NewCond = ISD::CondCode::SETEQ;
+  } else if (Cond == ISD::CondCode::SETULE) {
+    NewCond = ISD::CondCode::SETEQ;
+    // But need to 'canonicalize' the constant.
+    I1 += 1;
+  } else if (Cond == ISD::CondCode::SETUGT) {
+    NewCond = ISD::CondCode::SETNE;
+    // But need to 'canonicalize' the constant.
+    I1 += 1;
+  } else if (Cond == ISD::CondCode::SETUGE) {
+    NewCond = ISD::CondCode::SETNE;
+  } else
     return SDValue();
+
+  APInt I01 = C01->getAPIntValue();
+
+  auto checkConstants = [&I1, &I01]() -> bool {
+    // Both of them must be power-of-two, and the constant from setcc is bigger.
+    return I1.ugt(I01) && I1.isPowerOf2() && I01.isPowerOf2();
+  };
+
+  if (checkConstants()) {
+    // Great, e.g. got  icmp ult i16 (add i16 %x, 128), 256
+  } else {
+    // What if we invert constants? (and the target predicate)
+    I1.negate();
+    I01.negate();
+    NewCond = getSetCCInverse(NewCond, /*isInteger=*/true);
+    if (!checkConstants())
+      return SDValue();
+    // Great, e.g. got  icmp uge i16 (add i16 %x, -128), -256
+  }
 
   // They are power-of-two, so which bit is set?
   const unsigned KeptBits = I1.logBase2();
@@ -3410,39 +3452,68 @@ void TargetLowering::ComputeConstraintToUse(AsmOperandInfo &OpInfo,
 
 /// Given an exact SDIV by a constant, create a multiplication
 /// with the multiplicative inverse of the constant.
-static SDValue BuildExactSDIV(const TargetLowering &TLI, SDValue Op1, APInt d,
+static SDValue BuildExactSDIV(const TargetLowering &TLI, SDNode *N,
                               const SDLoc &dl, SelectionDAG &DAG,
-                              std::vector<SDNode *> &Created) {
-  assert(d != 0 && "Division by zero!");
+                              SmallVectorImpl<SDNode *> &Created) {
+  SDValue Op0 = N->getOperand(0);
+  SDValue Op1 = N->getOperand(1);
+  EVT VT = N->getValueType(0);
+  EVT SVT = VT.getScalarType();
+  EVT ShVT = TLI.getShiftAmountTy(VT, DAG.getDataLayout());
+  EVT ShSVT = ShVT.getScalarType();
 
-  // Shift the value upfront if it is even, so the LSB is one.
-  unsigned ShAmt = d.countTrailingZeros();
-  if (ShAmt) {
-    // TODO: For UDIV use SRL instead of SRA.
-    SDValue Amt =
-        DAG.getConstant(ShAmt, dl, TLI.getShiftAmountTy(Op1.getValueType(),
-                                                        DAG.getDataLayout()));
-    SDNodeFlags Flags;
-    Flags.setExact(true);
-    Op1 = DAG.getNode(ISD::SRA, dl, Op1.getValueType(), Op1, Amt, Flags);
-    Created.push_back(Op1.getNode());
-    d.ashrInPlace(ShAmt);
+  bool UseSRA = false;
+  SmallVector<SDValue, 16> Shifts, Factors;
+
+  auto BuildSDIVPattern = [&](ConstantSDNode *C) {
+    if (C->isNullValue())
+      return false;
+    APInt Divisor = C->getAPIntValue();
+    unsigned Shift = Divisor.countTrailingZeros();
+    if (Shift) {
+      Divisor.ashrInPlace(Shift);
+      UseSRA = true;
+    }
+    // Calculate the multiplicative inverse, using Newton's method.
+    APInt t;
+    APInt Factor = Divisor;
+    while ((t = Divisor * Factor) != 1)
+      Factor *= APInt(Divisor.getBitWidth(), 2) - t;
+    Shifts.push_back(DAG.getConstant(Shift, dl, ShSVT));
+    Factors.push_back(DAG.getConstant(Factor, dl, SVT));
+    return true;
+  };
+
+  // Collect all magic values from the build vector.
+  if (!ISD::matchUnaryPredicate(Op1, BuildSDIVPattern))
+    return SDValue();
+
+  SDValue Shift, Factor;
+  if (VT.isVector()) {
+    Shift = DAG.getBuildVector(ShVT, dl, Shifts);
+    Factor = DAG.getBuildVector(VT, dl, Factors);
+  } else {
+    Shift = Shifts[0];
+    Factor = Factors[0];
   }
 
-  // Calculate the multiplicative inverse, using Newton's method.
-  APInt t, xn = d;
-  while ((t = d*xn) != 1)
-    xn *= APInt(d.getBitWidth(), 2) - t;
+  SDValue Res = Op0;
 
-  SDValue Op2 = DAG.getConstant(xn, dl, Op1.getValueType());
-  SDValue Mul = DAG.getNode(ISD::MUL, dl, Op1.getValueType(), Op1, Op2);
-  Created.push_back(Mul.getNode());
-  return Mul;
+  // Shift the value upfront if it is even, so the LSB is one.
+  if (UseSRA) {
+    // TODO: For UDIV use SRL instead of SRA.
+    SDNodeFlags Flags;
+    Flags.setExact(true);
+    Res = DAG.getNode(ISD::SRA, dl, VT, Res, Shift, Flags);
+    Created.push_back(Res.getNode());
+  }
+
+  return DAG.getNode(ISD::MUL, dl, VT, Res, Factor);
 }
 
 SDValue TargetLowering::BuildSDIVPow2(SDNode *N, const APInt &Divisor,
-                                      SelectionDAG &DAG,
-                                      std::vector<SDNode *> *Created) const {
+                                     SelectionDAG &DAG,
+                                     SmallVectorImpl<SDNode *> &Created) const {
   AttributeList Attr = DAG.getMachineFunction().getFunction().getAttributes();
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
   if (TLI.isIntDivCheap(N->getValueType(0), Attr))
@@ -3454,13 +3525,15 @@ SDValue TargetLowering::BuildSDIVPow2(SDNode *N, const APInt &Divisor,
 /// return a DAG expression to select that will generate the same value by
 /// multiplying by a magic number.
 /// Ref: "Hacker's Delight" or "The PowerPC Compiler Writer's Guide".
-SDValue TargetLowering::BuildSDIV(SDNode *N, const APInt &Divisor,
-                                  SelectionDAG &DAG, bool IsAfterLegalization,
-                                  std::vector<SDNode *> *Created) const {
-  assert(Created && "No vector to hold sdiv ops.");
-
-  EVT VT = N->getValueType(0);
+SDValue TargetLowering::BuildSDIV(SDNode *N, SelectionDAG &DAG,
+                                  bool IsAfterLegalization,
+                                  SmallVectorImpl<SDNode *> &Created) const {
   SDLoc dl(N);
+  EVT VT = N->getValueType(0);
+  EVT SVT = VT.getScalarType();
+  EVT ShVT = getShiftAmountTy(VT, DAG.getDataLayout());
+  EVT ShSVT = ShVT.getScalarType();
+  unsigned EltBits = VT.getScalarSizeInBits();
 
   // Check to see if we can do this.
   // FIXME: We should be more aggressive here.
@@ -3469,48 +3542,91 @@ SDValue TargetLowering::BuildSDIV(SDNode *N, const APInt &Divisor,
 
   // If the sdiv has an 'exact' bit we can use a simpler lowering.
   if (N->getFlags().hasExact())
-    return BuildExactSDIV(*this, N->getOperand(0), Divisor, dl, DAG, *Created);
+    return BuildExactSDIV(*this, N, dl, DAG, Created);
 
-  APInt::ms magics = Divisor.magic();
+  SmallVector<SDValue, 16> MagicFactors, Factors, Shifts, ShiftMasks;
 
-  // Multiply the numerator (operand 0) by the magic value
-  // FIXME: We should support doing a MUL in a wider type
+  auto BuildSDIVPattern = [&](ConstantSDNode *C) {
+    if (C->isNullValue())
+      return false;
+
+    const APInt &Divisor = C->getAPIntValue();
+    APInt::ms magics = Divisor.magic();
+    int NumeratorFactor = 0;
+    int ShiftMask = -1;
+
+    if (Divisor.isOneValue() || Divisor.isAllOnesValue()) {
+      // If d is +1/-1, we just multiply the numerator by +1/-1.
+      NumeratorFactor = Divisor.getSExtValue();
+      magics.m = 0;
+      magics.s = 0;
+      ShiftMask = 0;
+    } else if (Divisor.isStrictlyPositive() && magics.m.isNegative()) {
+      // If d > 0 and m < 0, add the numerator.
+      NumeratorFactor = 1;
+    } else if (Divisor.isNegative() && magics.m.isStrictlyPositive()) {
+      // If d < 0 and m > 0, subtract the numerator.
+      NumeratorFactor = -1;
+    }
+
+    MagicFactors.push_back(DAG.getConstant(magics.m, dl, SVT));
+    Factors.push_back(DAG.getConstant(NumeratorFactor, dl, SVT));
+    Shifts.push_back(DAG.getConstant(magics.s, dl, ShSVT));
+    ShiftMasks.push_back(DAG.getConstant(ShiftMask, dl, SVT));
+    return true;
+  };
+
+  SDValue N0 = N->getOperand(0);
+  SDValue N1 = N->getOperand(1);
+
+  // Collect the shifts / magic values from each element.
+  if (!ISD::matchUnaryPredicate(N1, BuildSDIVPattern))
+    return SDValue();
+
+  SDValue MagicFactor, Factor, Shift, ShiftMask;
+  if (VT.isVector()) {
+    MagicFactor = DAG.getBuildVector(VT, dl, MagicFactors);
+    Factor = DAG.getBuildVector(VT, dl, Factors);
+    Shift = DAG.getBuildVector(ShVT, dl, Shifts);
+    ShiftMask = DAG.getBuildVector(VT, dl, ShiftMasks);
+  } else {
+    MagicFactor = MagicFactors[0];
+    Factor = Factors[0];
+    Shift = Shifts[0];
+    ShiftMask = ShiftMasks[0];
+  }
+
+  // Multiply the numerator (operand 0) by the magic value.
+  // FIXME: We should support doing a MUL in a wider type.
   SDValue Q;
-  if (IsAfterLegalization ? isOperationLegal(ISD::MULHS, VT) :
-                            isOperationLegalOrCustom(ISD::MULHS, VT))
-    Q = DAG.getNode(ISD::MULHS, dl, VT, N->getOperand(0),
-                    DAG.getConstant(magics.m, dl, VT));
-  else if (IsAfterLegalization ? isOperationLegal(ISD::SMUL_LOHI, VT) :
-                                 isOperationLegalOrCustom(ISD::SMUL_LOHI, VT))
-    Q = SDValue(DAG.getNode(ISD::SMUL_LOHI, dl, DAG.getVTList(VT, VT),
-                              N->getOperand(0),
-                              DAG.getConstant(magics.m, dl, VT)).getNode(), 1);
-  else
-    return SDValue();       // No mulhs or equvialent
-  // If d > 0 and m < 0, add the numerator
-  if (Divisor.isStrictlyPositive() && magics.m.isNegative()) {
-    Q = DAG.getNode(ISD::ADD, dl, VT, Q, N->getOperand(0));
-    Created->push_back(Q.getNode());
-  }
-  // If d < 0 and m > 0, subtract the numerator.
-  if (Divisor.isNegative() && magics.m.isStrictlyPositive()) {
-    Q = DAG.getNode(ISD::SUB, dl, VT, Q, N->getOperand(0));
-    Created->push_back(Q.getNode());
-  }
-  auto &DL = DAG.getDataLayout();
-  // Shift right algebraic if shift value is nonzero
-  if (magics.s > 0) {
-    Q = DAG.getNode(
-        ISD::SRA, dl, VT, Q,
-        DAG.getConstant(magics.s, dl, getShiftAmountTy(Q.getValueType(), DL)));
-    Created->push_back(Q.getNode());
-  }
-  // Extract the sign bit and add it to the quotient
-  SDValue T =
-      DAG.getNode(ISD::SRL, dl, VT, Q,
-                  DAG.getConstant(VT.getScalarSizeInBits() - 1, dl,
-                                  getShiftAmountTy(Q.getValueType(), DL)));
-  Created->push_back(T.getNode());
+  if (IsAfterLegalization ? isOperationLegal(ISD::MULHS, VT)
+                          : isOperationLegalOrCustom(ISD::MULHS, VT))
+    Q = DAG.getNode(ISD::MULHS, dl, VT, N0, MagicFactor);
+  else if (IsAfterLegalization ? isOperationLegal(ISD::SMUL_LOHI, VT)
+                               : isOperationLegalOrCustom(ISD::SMUL_LOHI, VT)) {
+    SDValue LoHi =
+        DAG.getNode(ISD::SMUL_LOHI, dl, DAG.getVTList(VT, VT), N0, MagicFactor);
+    Q = SDValue(LoHi.getNode(), 1);
+  } else
+    return SDValue(); // No mulhs or equivalent.
+  Created.push_back(Q.getNode());
+
+  // (Optionally) Add/subtract the numerator using Factor.
+  Factor = DAG.getNode(ISD::MUL, dl, VT, N0, Factor);
+  Created.push_back(Factor.getNode());
+  Q = DAG.getNode(ISD::ADD, dl, VT, Q, Factor);
+  Created.push_back(Q.getNode());
+
+  // Shift right algebraic by shift value.
+  Q = DAG.getNode(ISD::SRA, dl, VT, Q, Shift);
+  Created.push_back(Q.getNode());
+
+  // Extract the sign bit, mask it and add it to the quotient.
+  SDValue SignShift = DAG.getConstant(EltBits - 1, dl, ShVT);
+  SDValue T = DAG.getNode(ISD::SRL, dl, VT, Q, SignShift);
+  Created.push_back(T.getNode());
+  T = DAG.getNode(ISD::AND, dl, VT, T, ShiftMask);
+  Created.push_back(T.getNode());
   return DAG.getNode(ISD::ADD, dl, VT, Q, T);
 }
 
@@ -3518,74 +3634,133 @@ SDValue TargetLowering::BuildSDIV(SDNode *N, const APInt &Divisor,
 /// return a DAG expression to select that will generate the same value by
 /// multiplying by a magic number.
 /// Ref: "Hacker's Delight" or "The PowerPC Compiler Writer's Guide".
-SDValue TargetLowering::BuildUDIV(SDNode *N, const APInt &Divisor,
-                                  SelectionDAG &DAG, bool IsAfterLegalization,
-                                  std::vector<SDNode *> *Created) const {
-  assert(Created && "No vector to hold udiv ops.");
-
-  EVT VT = N->getValueType(0);
+SDValue TargetLowering::BuildUDIV(SDNode *N, SelectionDAG &DAG,
+                                  bool IsAfterLegalization,
+                                  SmallVectorImpl<SDNode *> &Created) const {
   SDLoc dl(N);
-  auto &DL = DAG.getDataLayout();
+  EVT VT = N->getValueType(0);
+  EVT SVT = VT.getScalarType();
+  EVT ShVT = getShiftAmountTy(VT, DAG.getDataLayout());
+  EVT ShSVT = ShVT.getScalarType();
+  unsigned EltBits = VT.getScalarSizeInBits();
 
   // Check to see if we can do this.
   // FIXME: We should be more aggressive here.
   if (!isTypeLegal(VT))
     return SDValue();
 
-  // FIXME: We should use a narrower constant when the upper
-  // bits are known to be zero.
-  APInt::mu magics = Divisor.magicu();
+  bool UseNPQ = false;
+  SmallVector<SDValue, 16> PreShifts, PostShifts, MagicFactors, NPQFactors;
 
-  SDValue Q = N->getOperand(0);
+  auto BuildUDIVPattern = [&](ConstantSDNode *C) {
+    if (C->isNullValue())
+      return false;
+    // FIXME: We should use a narrower constant when the upper
+    // bits are known to be zero.
+    APInt Divisor = C->getAPIntValue();
+    APInt::mu magics = Divisor.magicu();
+    unsigned PreShift = 0, PostShift = 0;
 
-  // If the divisor is even, we can avoid using the expensive fixup by shifting
-  // the divided value upfront.
-  if (magics.a != 0 && !Divisor[0]) {
-    unsigned Shift = Divisor.countTrailingZeros();
-    Q = DAG.getNode(
-        ISD::SRL, dl, VT, Q,
-        DAG.getConstant(Shift, dl, getShiftAmountTy(Q.getValueType(), DL)));
-    Created->push_back(Q.getNode());
+    // If the divisor is even, we can avoid using the expensive fixup by
+    // shifting the divided value upfront.
+    if (magics.a != 0 && !Divisor[0]) {
+      PreShift = Divisor.countTrailingZeros();
+      // Get magic number for the shifted divisor.
+      magics = Divisor.lshr(PreShift).magicu(PreShift);
+      assert(magics.a == 0 && "Should use cheap fixup now");
+    }
 
-    // Get magic number for the shifted divisor.
-    magics = Divisor.lshr(Shift).magicu(Shift);
-    assert(magics.a == 0 && "Should use cheap fixup now");
-  }
+    APInt Magic = magics.m;
 
-  // Multiply the numerator (operand 0) by the magic value
-  // FIXME: We should support doing a MUL in a wider type
-  if (IsAfterLegalization ? isOperationLegal(ISD::MULHU, VT) :
-                            isOperationLegalOrCustom(ISD::MULHU, VT))
-    Q = DAG.getNode(ISD::MULHU, dl, VT, Q, DAG.getConstant(magics.m, dl, VT));
-  else if (IsAfterLegalization ? isOperationLegal(ISD::UMUL_LOHI, VT) :
-                                 isOperationLegalOrCustom(ISD::UMUL_LOHI, VT))
-    Q = SDValue(DAG.getNode(ISD::UMUL_LOHI, dl, DAG.getVTList(VT, VT), Q,
-                            DAG.getConstant(magics.m, dl, VT)).getNode(), 1);
-  else
-    return SDValue();       // No mulhu or equivalent
+    unsigned SelNPQ;
+    if (magics.a == 0 || Divisor.isOneValue()) {
+      assert(magics.s < Divisor.getBitWidth() &&
+             "We shouldn't generate an undefined shift!");
+      PostShift = magics.s;
+      SelNPQ = false;
+    } else {
+      PostShift = magics.s - 1;
+      SelNPQ = true;
+    }
 
-  Created->push_back(Q.getNode());
+    PreShifts.push_back(DAG.getConstant(PreShift, dl, ShSVT));
+    MagicFactors.push_back(DAG.getConstant(Magic, dl, SVT));
+    NPQFactors.push_back(
+        DAG.getConstant(SelNPQ ? APInt::getOneBitSet(EltBits, EltBits - 1)
+                               : APInt::getNullValue(EltBits),
+                        dl, SVT));
+    PostShifts.push_back(DAG.getConstant(PostShift, dl, ShSVT));
+    UseNPQ |= SelNPQ;
+    return true;
+  };
 
-  if (magics.a == 0) {
-    assert(magics.s < Divisor.getBitWidth() &&
-           "We shouldn't generate an undefined shift!");
-    return DAG.getNode(
-        ISD::SRL, dl, VT, Q,
-        DAG.getConstant(magics.s, dl, getShiftAmountTy(Q.getValueType(), DL)));
+  SDValue N0 = N->getOperand(0);
+  SDValue N1 = N->getOperand(1);
+
+  // Collect the shifts/magic values from each element.
+  if (!ISD::matchUnaryPredicate(N1, BuildUDIVPattern))
+    return SDValue();
+
+  SDValue PreShift, PostShift, MagicFactor, NPQFactor;
+  if (VT.isVector()) {
+    PreShift = DAG.getBuildVector(ShVT, dl, PreShifts);
+    MagicFactor = DAG.getBuildVector(VT, dl, MagicFactors);
+    NPQFactor = DAG.getBuildVector(VT, dl, NPQFactors);
+    PostShift = DAG.getBuildVector(ShVT, dl, PostShifts);
   } else {
-    SDValue NPQ = DAG.getNode(ISD::SUB, dl, VT, N->getOperand(0), Q);
-    Created->push_back(NPQ.getNode());
-    NPQ = DAG.getNode(
-        ISD::SRL, dl, VT, NPQ,
-        DAG.getConstant(1, dl, getShiftAmountTy(NPQ.getValueType(), DL)));
-    Created->push_back(NPQ.getNode());
-    NPQ = DAG.getNode(ISD::ADD, dl, VT, NPQ, Q);
-    Created->push_back(NPQ.getNode());
-    return DAG.getNode(
-        ISD::SRL, dl, VT, NPQ,
-        DAG.getConstant(magics.s - 1, dl,
-                        getShiftAmountTy(NPQ.getValueType(), DL)));
+    PreShift = PreShifts[0];
+    MagicFactor = MagicFactors[0];
+    PostShift = PostShifts[0];
   }
+
+  SDValue Q = N0;
+  Q = DAG.getNode(ISD::SRL, dl, VT, Q, PreShift);
+  Created.push_back(Q.getNode());
+
+  // FIXME: We should support doing a MUL in a wider type.
+  auto GetMULHU = [&](SDValue X, SDValue Y) {
+    if (IsAfterLegalization ? isOperationLegal(ISD::MULHU, VT)
+                            : isOperationLegalOrCustom(ISD::MULHU, VT))
+      return DAG.getNode(ISD::MULHU, dl, VT, X, Y);
+    if (IsAfterLegalization ? isOperationLegal(ISD::UMUL_LOHI, VT)
+                            : isOperationLegalOrCustom(ISD::UMUL_LOHI, VT)) {
+      SDValue LoHi =
+          DAG.getNode(ISD::UMUL_LOHI, dl, DAG.getVTList(VT, VT), X, Y);
+      return SDValue(LoHi.getNode(), 1);
+    }
+    return SDValue(); // No mulhu or equivalent
+  };
+
+  // Multiply the numerator (operand 0) by the magic value.
+  Q = GetMULHU(Q, MagicFactor);
+  if (!Q)
+    return SDValue();
+
+  Created.push_back(Q.getNode());
+
+  if (UseNPQ) {
+    SDValue NPQ = DAG.getNode(ISD::SUB, dl, VT, N0, Q);
+    Created.push_back(NPQ.getNode());
+
+    // For vectors we might have a mix of non-NPQ/NPQ paths, so use
+    // MULHU to act as a SRL-by-1 for NPQ, else multiply by zero.
+    if (VT.isVector())
+      NPQ = GetMULHU(NPQ, NPQFactor);
+    else
+      NPQ = DAG.getNode(ISD::SRL, dl, VT, NPQ, DAG.getConstant(1, dl, ShVT));
+
+    Created.push_back(NPQ.getNode());
+
+    Q = DAG.getNode(ISD::ADD, dl, VT, NPQ, Q);
+    Created.push_back(Q.getNode());
+  }
+
+  Q = DAG.getNode(ISD::SRL, dl, VT, Q, PostShift);
+  Created.push_back(Q.getNode());
+
+  SDValue One = DAG.getConstant(1, dl, VT);
+  SDValue IsOne = DAG.getSetCC(dl, VT, N1, One, ISD::SETEQ);
+  return DAG.getSelect(dl, VT, IsOne, N0, Q);
 }
 
 bool TargetLowering::
@@ -3868,8 +4043,6 @@ SDValue TargetLowering::scalarizeVectorLoad(LoadSDNode *LD,
   unsigned Stride = SrcEltVT.getSizeInBits() / 8;
   assert(SrcEltVT.isByteSized());
 
-  EVT PtrVT = BasePTR.getValueType();
-
   SmallVector<SDValue, 8> Vals;
   SmallVector<SDValue, 8> LoadChains;
 
@@ -3880,8 +4053,7 @@ SDValue TargetLowering::scalarizeVectorLoad(LoadSDNode *LD,
                        SrcEltVT, MinAlign(LD->getAlignment(), Idx * Stride),
                        LD->getMemOperand()->getFlags(), LD->getAAInfo());
 
-    BasePTR = DAG.getNode(ISD::ADD, SL, PtrVT, BasePTR,
-                          DAG.getConstant(Stride, SL, PtrVT));
+    BasePTR = DAG.getObjectPtrOffset(SL, BasePTR, Stride);
 
     Vals.push_back(ScalarLoad.getValue(0));
     LoadChains.push_back(ScalarLoad.getValue(1));
@@ -3981,9 +4153,12 @@ TargetLowering::expandUnalignedLoad(LoadSDNode *LD, SelectionDAG &DAG) const {
   if (VT.isFloatingPoint() || VT.isVector()) {
     EVT intVT = EVT::getIntegerVT(*DAG.getContext(), LoadedVT.getSizeInBits());
     if (isTypeLegal(intVT) && isTypeLegal(LoadedVT)) {
-      if (!isOperationLegalOrCustom(ISD::LOAD, intVT)) {
+      if (!isOperationLegalOrCustom(ISD::LOAD, intVT) &&
+          LoadedVT.isVector()) {
         // Scalarize the load and let the individual components be handled.
         SDValue Scalarized = scalarizeVectorLoad(LD, DAG);
+        if (Scalarized->getOpcode() == ISD::MERGE_VALUES)
+          return std::make_pair(Scalarized.getOperand(0), Scalarized.getOperand(1));
         return std::make_pair(Scalarized.getValue(0), Scalarized.getValue(1));
       }
 
@@ -4129,13 +4304,14 @@ SDValue TargetLowering::expandUnalignedStore(StoreSDNode *ST,
   EVT VT = Val.getValueType();
   int Alignment = ST->getAlignment();
   auto &MF = DAG.getMachineFunction();
+  EVT MemVT = ST->getMemoryVT();
 
   SDLoc dl(ST);
-  if (ST->getMemoryVT().isFloatingPoint() ||
-      ST->getMemoryVT().isVector()) {
+  if (MemVT.isFloatingPoint() || MemVT.isVector()) {
     EVT intVT = EVT::getIntegerVT(*DAG.getContext(), VT.getSizeInBits());
     if (isTypeLegal(intVT)) {
-      if (!isOperationLegalOrCustom(ISD::STORE, intVT)) {
+      if (!isOperationLegalOrCustom(ISD::STORE, intVT) &&
+          MemVT.isVector()) {
         // Scalarize the store and let the individual components be handled.
         SDValue Result = scalarizeVectorStore(ST, DAG);
 

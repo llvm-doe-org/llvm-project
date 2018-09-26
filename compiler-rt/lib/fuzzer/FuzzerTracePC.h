@@ -74,6 +74,11 @@ class TracePC {
   // How many bits of PC are used from __sanitizer_cov_trace_pc.
   static const size_t kTracePcBits = 18;
 
+  enum HandleUnstableOptions {
+    MinUnstable = 1,
+    ZeroUnstable = 2,
+  };
+
   void HandleInit(uint32_t *Start, uint32_t *Stop);
   void HandleInline8bitCountersInit(uint8_t *Start, uint8_t *Stop);
   void HandlePCsInit(const uintptr_t *Start, const uintptr_t *Stop);
@@ -138,15 +143,16 @@ class TracePC {
   bool ObservedFocusFunction();
 
   void InitializeUnstableCounters();
-  void UpdateUnstableCounters();
+  bool UpdateUnstableCounters(int UnstableMode);
+  void UpdateAndApplyUnstableCounters(int UnstableMode);
 
 private:
-  // Value used to represent unstable edge.
-  static constexpr int16_t kUnstableCounter = -1;
+  struct UnstableEdge {
+    uint8_t Counter;
+    bool IsUnstable;
+  };
 
-  // Uses 16-bit signed type to be able to accommodate any possible value from
-  // uint8_t counter and -1 constant as well.
-  int16_t UnstableCounters[kNumPCs];
+  UnstableEdge UnstableCounters[kNumPCs];
 
   bool UseCounters = false;
   uint32_t UseValueProfileMask = false;

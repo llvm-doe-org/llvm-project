@@ -23,12 +23,12 @@
 #include "lldb/Breakpoint/BreakpointSite.h"
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/State.h"
 #include "lldb/Host/HostInfo.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/State.h"
 #include "lldb/Utility/Status.h"
 #include "lldb/Utility/StreamString.h"
 
@@ -274,9 +274,9 @@ lldb::ProcessSP PlatformFreeBSD::Attach(ProcessAttachInfo &attach_info,
       TargetSP new_target_sp;
       ArchSpec emptyArchSpec;
 
-      error = debugger.GetTargetList().CreateTarget(debugger, "", emptyArchSpec,
-                                                    false, m_remote_platform_sp,
-                                                    new_target_sp);
+      error = debugger.GetTargetList().CreateTarget(
+          debugger, "", emptyArchSpec, eLoadDependentsNo, m_remote_platform_sp,
+          new_target_sp);
       target = new_target_sp.get();
     } else
       error.Clear();

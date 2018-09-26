@@ -39,12 +39,18 @@ let NumMicroOps = 1 in {
   def : WriteRes<BeginGroup, []> { let BeginGroup  = 1; }
   def : WriteRes<EndGroup, []>   { let EndGroup    = 1; }
 }
-def : WriteRes<Cracked, []> {
-  let NumMicroOps = 2;
-  let BeginGroup  = 1;
-}
 def : WriteRes<GroupAlone, []> {
   let NumMicroOps = 3;
+  let BeginGroup  = 1;
+  let EndGroup    = 1;
+}
+def : WriteRes<GroupAlone2, []> {
+  let NumMicroOps = 6;
+  let BeginGroup  = 1;
+  let EndGroup    = 1;
+}
+def : WriteRes<GroupAlone3, []> {
+  let NumMicroOps = 9;
   let BeginGroup  = 1;
   let EndGroup    = 1;
 }
@@ -59,22 +65,9 @@ def : ReadAdvance<RegReadAdv, 4>;
 def : WriteRes<LSULatency, []> { let Latency = 4; let NumMicroOps = 0; }
 
 let NumMicroOps = 0 in {
-  def : WriteRes<WLat1, []> { let Latency = 1; }
-  def : WriteRes<WLat2, []> { let Latency = 2; }
-  def : WriteRes<WLat3, []> { let Latency = 3; }
-  def : WriteRes<WLat4, []> { let Latency = 4; }
-  def : WriteRes<WLat5, []> { let Latency = 5; }
-  def : WriteRes<WLat6, []> { let Latency = 6; }
-  def : WriteRes<WLat7, []> { let Latency = 7; }
-  def : WriteRes<WLat8, []> { let Latency = 8; }
-  def : WriteRes<WLat9, []> { let Latency = 9; }
-  def : WriteRes<WLat10, []> { let Latency = 10; }
-  def : WriteRes<WLat11, []> { let Latency = 11; }
-  def : WriteRes<WLat12, []> { let Latency = 12; }
-  def : WriteRes<WLat15, []> { let Latency = 15; }
-  def : WriteRes<WLat16, []> { let Latency = 16; }
-  def : WriteRes<WLat20, []> { let Latency = 20; }
-  def : WriteRes<WLat30, []> { let Latency = 30; }
+  foreach L = 1-30 in {
+    def : WriteRes<!cast<SchedWrite>("WLat"#L), []> { let Latency = L; }
+  }
 }
 
 // Execution units.
@@ -86,22 +79,16 @@ def Z196_MCD    : ProcResource<1>;
 
 // Subtarget specific definitions of scheduling resources.
 let NumMicroOps = 0 in {
-  def : WriteRes<FXU,       [Z196_FXUnit]>;
-  def : WriteRes<FXU2,      [Z196_FXUnit]> { let ResourceCycles = [2]; }
-  def : WriteRes<FXU3,      [Z196_FXUnit]> { let ResourceCycles = [3]; }
-  def : WriteRes<FXU4,      [Z196_FXUnit]> { let ResourceCycles = [4]; }
-  def : WriteRes<FXU5,      [Z196_FXUnit]> { let ResourceCycles = [5]; }
-  def : WriteRes<FXU6,      [Z196_FXUnit]> { let ResourceCycles = [6]; }
-  def : WriteRes<LSU,       [Z196_LSUnit]>;
-  def : WriteRes<LSU2,      [Z196_LSUnit]> { let ResourceCycles = [2]; }
-  def : WriteRes<LSU3,      [Z196_LSUnit]> { let ResourceCycles = [3]; }
-  def : WriteRes<LSU5,      [Z196_LSUnit]> { let ResourceCycles = [5]; }
-  def : WriteRes<FPU,       [Z196_FPUnit]>;
-  def : WriteRes<FPU2,      [Z196_FPUnit]> { let ResourceCycles = [2]; }
-  def : WriteRes<FPU4,      [Z196_FPUnit]> { let ResourceCycles = [4]; }
-  def : WriteRes<DFU,       [Z196_DFUnit]>;
-  def : WriteRes<DFU2,      [Z196_DFUnit]> { let ResourceCycles = [2]; }
-  def : WriteRes<DFU4,      [Z196_DFUnit]> { let ResourceCycles = [4]; }
+  def : WriteRes<FXU, [Z196_FXUnit]>;
+  def : WriteRes<LSU, [Z196_LSUnit]>;
+  def : WriteRes<FPU, [Z196_FPUnit]>;
+  def : WriteRes<DFU, [Z196_DFUnit]>;
+  foreach Num = 2-6 in { let ResourceCycles = [Num] in {
+    def : WriteRes<!cast<SchedWrite>("FXU"#Num), [Z196_FXUnit]>;
+    def : WriteRes<!cast<SchedWrite>("LSU"#Num), [Z196_LSUnit]>;
+    def : WriteRes<!cast<SchedWrite>("FPU"#Num), [Z196_FPUnit]>;
+    def : WriteRes<!cast<SchedWrite>("DFU"#Num), [Z196_DFUnit]>;
+  }}
 }
 
 def : WriteRes<MCD, [Z196_MCD]> { let NumMicroOps = 3;
@@ -133,7 +120,7 @@ def : InstRW<[WLat1, LSU, EndGroup], (instregex "(Call)?BC(R)?(Asm.*)?$")>;
 def : InstRW<[WLat1, LSU, EndGroup], (instregex "(Call)?B(R)?(Asm.*)?$")>;
 def : InstRW<[WLat1, FXU, LSU, GroupAlone], (instregex "BRCT(G|H)?$")>;
 def : InstRW<[WLat1, FXU, LSU, GroupAlone], (instregex "BCT(G)?(R)?$")>;
-def : InstRW<[WLat1, FXU3, LSU, GroupAlone],
+def : InstRW<[WLat1, FXU3, LSU, GroupAlone2],
              (instregex "B(R)?X(H|L).*$")>;
 
 // Compare and branch
@@ -458,14 +445,14 @@ def : InstRW<[WLat7LSU, RegReadAdv, FXU2, LSU, GroupAlone],
 // Division and remainder
 //===----------------------------------------------------------------------===//
 
-def : InstRW<[WLat30, FPU4, FXU5, GroupAlone], (instregex "DR$")>;
-def : InstRW<[WLat30, RegReadAdv, FPU4, LSU, FXU4, GroupAlone],
+def : InstRW<[WLat30, FPU4, FXU5, GroupAlone3], (instregex "DR$")>;
+def : InstRW<[WLat30, RegReadAdv, FPU4, LSU, FXU4, GroupAlone3],
              (instregex "D$")>;
-def : InstRW<[WLat30, FPU4, FXU4, GroupAlone], (instregex "DSG(F)?R$")>;
-def : InstRW<[WLat30, RegReadAdv, FPU4, LSU, FXU3, GroupAlone],
+def : InstRW<[WLat30, FPU4, FXU4, GroupAlone3], (instregex "DSG(F)?R$")>;
+def : InstRW<[WLat30, RegReadAdv, FPU4, LSU, FXU3, GroupAlone3],
              (instregex "DSG(F)?$")>;
-def : InstRW<[WLat30, FPU4, FXU5, GroupAlone], (instregex "DL(G)?R$")>;
-def : InstRW<[WLat30, RegReadAdv, FPU4, LSU, FXU4, GroupAlone],
+def : InstRW<[WLat30, FPU4, FXU5, GroupAlone3], (instregex "DL(G)?R$")>;
+def : InstRW<[WLat30, RegReadAdv, FPU4, LSU, FXU4, GroupAlone3],
              (instregex "DL(G)?$")>;
 
 //===----------------------------------------------------------------------===//
@@ -476,7 +463,7 @@ def : InstRW<[WLat1, FXU, NormalGr], (instregex "SLL(G|K)?$")>;
 def : InstRW<[WLat1, FXU, NormalGr], (instregex "SRL(G|K)?$")>;
 def : InstRW<[WLat1, FXU, NormalGr], (instregex "SRA(G|K)?$")>;
 def : InstRW<[WLat2, WLat2, FXU, NormalGr], (instregex "SLA(G|K)?$")>;
-def : InstRW<[WLat5LSU, WLat5LSU, FXU4, LSU, GroupAlone],
+def : InstRW<[WLat5LSU, WLat5LSU, FXU4, LSU, GroupAlone2],
              (instregex "S(L|R)D(A|L)$")>;
 
 // Rotate
@@ -579,7 +566,7 @@ def : InstRW<[WLat2LSU, WLat2LSU, FXU2, LSU, GroupAlone],
              (instregex "CS(G|Y)?$")>;
 
 // Compare double and swap
-def : InstRW<[WLat5LSU, WLat5LSU, FXU5, LSU, GroupAlone],
+def : InstRW<[WLat5LSU, WLat5LSU, FXU5, LSU, GroupAlone2],
              (instregex "CDS(Y)?$")>;
 def : InstRW<[WLat12, WLat12, FXU6, LSU2, GroupAlone],
              (instregex "CDSG$")>;
@@ -623,12 +610,12 @@ def : InstRW<[WLat30, WLat30, WLat30, MCD], (instregex "(KIMD|KLMD|KMAC|PCC)$")>
 // Decimal arithmetic
 //===----------------------------------------------------------------------===//
 
-def : InstRW<[WLat30, RegReadAdv, FXU, DFU2, LSU2, GroupAlone],
+def : InstRW<[WLat30, RegReadAdv, FXU, DFU2, LSU2, GroupAlone2],
              (instregex "CVBG$")>;
-def : InstRW<[WLat20, RegReadAdv, FXU, DFU, LSU, GroupAlone],
+def : InstRW<[WLat20, RegReadAdv, FXU, DFU, LSU, GroupAlone2],
              (instregex "CVB(Y)?$")>;
-def : InstRW<[WLat1, FXU3, DFU4, LSU, GroupAlone], (instregex "CVDG$")>;
-def : InstRW<[WLat1, FXU2, DFU, LSU, GroupAlone], (instregex "CVD(Y)?$")>;
+def : InstRW<[WLat1, FXU3, DFU4, LSU, GroupAlone3], (instregex "CVDG$")>;
+def : InstRW<[WLat1, FXU2, DFU, LSU, GroupAlone3], (instregex "CVD(Y)?$")>;
 def : InstRW<[WLat1, LSU5, GroupAlone], (instregex "MV(N|O|Z)$")>;
 def : InstRW<[WLat1, LSU5, GroupAlone], (instregex "(PACK|PKA|PKU)$")>;
 def : InstRW<[WLat10, LSU5, GroupAlone], (instregex "UNPK(A|U)$")>;
@@ -720,13 +707,13 @@ def : InstRW<[], (instregex "Insn.*")>;
 
 // Load zero
 def : InstRW<[WLat1, FXU, NormalGr], (instregex "LZ(DR|ER)$")>;
-def : InstRW<[WLat2, FXU2, GroupAlone], (instregex "LZXR$")>;
+def : InstRW<[WLat2, FXU2, GroupAlone2], (instregex "LZXR$")>;
 
 // Load
 def : InstRW<[WLat1, FXU, NormalGr], (instregex "LER$")>;
 def : InstRW<[WLat1, FXU, NormalGr], (instregex "LD(R|R32|GR)$")>;
 def : InstRW<[WLat3, FXU, NormalGr], (instregex "LGDR$")>;
-def : InstRW<[WLat2, FXU2, GroupAlone], (instregex "LXR$")>;
+def : InstRW<[WLat2, FXU2, GroupAlone2], (instregex "LXR$")>;
 
 // Load and Test
 def : InstRW<[WLat9, WLat9, FPU, NormalGr], (instregex "LT(E|D)BR$")>;
@@ -766,10 +753,10 @@ def : InstRW<[WLat10, FPU4, GroupAlone], (instregex "LX(E|D)BR$")>;
 
 // Convert from fixed / logical
 def : InstRW<[WLat8, FXU, FPU, GroupAlone], (instregex "C(E|D)(F|G)BR(A)?$")>;
-def : InstRW<[WLat11, FXU, FPU4, GroupAlone], (instregex "CX(F|G)BR(A?)$")>;
+def : InstRW<[WLat11, FXU, FPU4, GroupAlone2], (instregex "CX(F|G)BR(A?)$")>;
 def : InstRW<[WLat8, FXU, FPU, GroupAlone], (instregex "CEL(F|G)BR$")>;
 def : InstRW<[WLat8, FXU, FPU, GroupAlone], (instregex "CDL(F|G)BR$")>;
-def : InstRW<[WLat11, FXU, FPU4, GroupAlone], (instregex "CXL(F|G)BR$")>;
+def : InstRW<[WLat11, FXU, FPU4, GroupAlone2], (instregex "CXL(F|G)BR$")>;
 
 // Convert to fixed / logical
 def : InstRW<[WLat12, WLat12, FXU, FPU, GroupAlone],
@@ -893,7 +880,7 @@ def : InstRW<[WLat9, FPU4, GroupAlone], (instregex "LX(E|D)R$")>;
 
 // Convert from fixed
 def : InstRW<[WLat8, FXU, FPU, GroupAlone], (instregex "C(E|D)(F|G)R$")>;
-def : InstRW<[WLat10, FXU, FPU4, GroupAlone], (instregex "CX(F|G)R$")>;
+def : InstRW<[WLat10, FXU, FPU4, GroupAlone2], (instregex "CX(F|G)R$")>;
 
 // Convert to fixed
 def : InstRW<[WLat12, WLat12, FXU, FPU, GroupAlone],
@@ -1005,11 +992,11 @@ def : InstRW<[WLat6, DFU4, GroupAlone], (instregex "LXDTR$")>;
 // Convert from fixed / logical
 def : InstRW<[WLat9, FXU, DFU, GroupAlone], (instregex "CDFTR$")>;
 def : InstRW<[WLat30, FXU, DFU, GroupAlone], (instregex "CDGTR(A)?$")>;
-def : InstRW<[WLat5, FXU, DFU4, GroupAlone], (instregex "CXFTR(A)?$")>;
-def : InstRW<[WLat30, FXU, DFU4, GroupAlone], (instregex "CXGTR(A)?$")>;
+def : InstRW<[WLat5, FXU, DFU4, GroupAlone2], (instregex "CXFTR(A)?$")>;
+def : InstRW<[WLat30, FXU, DFU4, GroupAlone2], (instregex "CXGTR(A)?$")>;
 def : InstRW<[WLat9, FXU, DFU, GroupAlone], (instregex "CDL(F|G)TR$")>;
-def : InstRW<[WLat9, FXU, DFU4, GroupAlone], (instregex "CXLFTR$")>;
-def : InstRW<[WLat5, FXU, DFU4, GroupAlone], (instregex "CXLGTR$")>;
+def : InstRW<[WLat9, FXU, DFU4, GroupAlone2], (instregex "CXLFTR$")>;
+def : InstRW<[WLat5, FXU, DFU4, GroupAlone2], (instregex "CXLGTR$")>;
 
 // Convert to fixed / logical
 def : InstRW<[WLat11, WLat11, FXU, DFU, GroupAlone], (instregex "CFDTR(A)?$")>;
@@ -1021,9 +1008,9 @@ def : InstRW<[WLat7, WLat7, FXU, DFU2, GroupAlone], (instregex "CL(F|G)XTR$")>;
 
 // Convert from / to signed / unsigned packed
 def : InstRW<[WLat5, FXU, DFU, GroupAlone], (instregex "CD(S|U)TR$")>;
-def : InstRW<[WLat8, FXU2, DFU4, GroupAlone], (instregex "CX(S|U)TR$")>;
+def : InstRW<[WLat8, FXU2, DFU4, GroupAlone2], (instregex "CX(S|U)TR$")>;
 def : InstRW<[WLat7, FXU, DFU, GroupAlone], (instregex "C(S|U)DTR$")>;
-def : InstRW<[WLat12, FXU2, DFU4, GroupAlone], (instregex "C(S|U)XTR$")>;
+def : InstRW<[WLat12, FXU2, DFU4, GroupAlone2], (instregex "C(S|U)XTR$")>;
 
 // Perform floating-point operation
 def : InstRW<[WLat30, WLat30, WLat30, MCD], (instregex "PFPO$")>;
@@ -1070,7 +1057,7 @@ def : InstRW<[WLat10, WLat10, DFU4, GroupAlone], (instregex "QAXTR$")>;
 
 // Reround
 def : InstRW<[WLat11, WLat11, FXU, DFU, GroupAlone], (instregex "RRDTR$")>;
-def : InstRW<[WLat30, WLat30, FXU, DFU4, GroupAlone], (instregex "RRXTR$")>;
+def : InstRW<[WLat30, WLat30, FXU, DFU4, GroupAlone2], (instregex "RRXTR$")>;
 
 // Shift significand left/right
 def : InstRW<[WLat7LSU, LSU, DFU, GroupAlone], (instregex "S(L|R)DT$")>;
@@ -1078,7 +1065,7 @@ def : InstRW<[WLat11LSU, LSU, DFU4, GroupAlone], (instregex "S(L|R)XT$")>;
 
 // Insert biased exponent
 def : InstRW<[WLat5, FXU, DFU, GroupAlone], (instregex "IEDTR$")>;
-def : InstRW<[WLat7, FXU, DFU4, GroupAlone], (instregex "IEXTR$")>;
+def : InstRW<[WLat7, FXU, DFU4, GroupAlone2], (instregex "IEXTR$")>;
 
 //===----------------------------------------------------------------------===//
 // DFP: Comparisons

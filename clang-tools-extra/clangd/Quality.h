@@ -1,11 +1,11 @@
-//===--- Quality.h - Ranking alternatives for ambiguous queries -*- C++-*-===//
+//===--- Quality.h - Ranking alternatives for ambiguous queries --*- C++-*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 ///
 /// Some operations such as code completion produce a set of candidates.
 /// Usually the user can choose between them, but we should put the best options
@@ -23,20 +23,27 @@
 ///   - sorting utilities like the TopN container.
 /// These could be split up further to isolate dependencies if we care.
 ///
-//===---------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
+
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_QUALITY_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_QUALITY_H
+
+#include "clang/Sema/CodeCompleteConsumer.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 #include <algorithm>
 #include <functional>
 #include <vector>
+
 namespace llvm {
 class raw_ostream;
 }
+
 namespace clang {
 class CodeCompletionResult;
+
 namespace clangd {
+
 struct Symbol;
 class URIDistance;
 
@@ -57,6 +64,7 @@ struct SymbolQualitySignals {
     Macro,
     Type,
     Function,
+    Constructor,
     Namespace,
     Keyword,
   } Category = Unknown;
@@ -75,6 +83,8 @@ struct SymbolRelevanceSignals {
   /// 0-1+ fuzzy-match score for unqualified name. Must be explicitly assigned.
   float NameMatch = 1;
   bool Forbidden = false; // Unavailable (e.g const) or inaccessible (private).
+  /// Whether fixits needs to be applied for that completion or not.
+  bool NeedsFixIts = false;
 
   URIDistance *FileProximityMatch = nullptr;
   /// This is used to calculate proximity between the index symbol and the
@@ -97,6 +107,11 @@ struct SymbolRelevanceSignals {
     CodeComplete,
     Generic,
   } Query = Generic;
+
+  CodeCompletionContext::Kind Context = CodeCompletionContext::CCC_Other;
+
+  // Whether symbol is an instance member of a class.
+  bool IsInstanceMember = false;
 
   void merge(const CodeCompletionResult &SemaResult);
   void merge(const Symbol &IndexResult);
@@ -154,7 +169,17 @@ private:
 /// LSP. (The highest score compares smallest so it sorts at the top).
 std::string sortText(float Score, llvm::StringRef Tiebreak = "");
 
+struct SignatureQualitySignals {
+  uint32_t NumberOfParameters = 0;
+  uint32_t NumberOfOptionalParameters = 0;
+  bool ContainsActiveParameter = false;
+  CodeCompleteConsumer::OverloadCandidate::CandidateKind Kind =
+      CodeCompleteConsumer::OverloadCandidate::CandidateKind::CK_Function;
+};
+llvm::raw_ostream &operator<<(llvm::raw_ostream &,
+                              const SignatureQualitySignals &);
+
 } // namespace clangd
 } // namespace clang
 
-#endif
+#endif // LLVM_CLANG_TOOLS_EXTRA_CLANGD_QUALITY_H

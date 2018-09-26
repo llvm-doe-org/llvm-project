@@ -328,6 +328,39 @@ static void ReportPiece(raw_ostream &o,
   }
 }
 
+/// Print coverage information to output stream {@code o}.
+/// May modify the used list of files {@code Fids} by inserting new ones.
+static void printCoverage(const PathDiagnostic *D,
+                          unsigned InputIndentLevel,
+                          SmallVectorImpl<FileID> &Fids,
+                          FIDMap &FM,
+                          llvm::raw_fd_ostream &o) {
+  unsigned IndentLevel = InputIndentLevel;
+
+  Indent(o, IndentLevel) << "<key>ExecutedLines</key>\n";
+  Indent(o, IndentLevel) << "<dict>\n";
+  IndentLevel++;
+
+  // Mapping from file IDs to executed lines.
+  const FilesToLineNumsMap &ExecutedLines = D->getExecutedLines();
+  for (auto I = ExecutedLines.begin(), E = ExecutedLines.end(); I != E; ++I) {
+    unsigned FileKey = AddFID(FM, Fids, I->first);
+    Indent(o, IndentLevel) << "<key>" << FileKey << "</key>\n";
+    Indent(o, IndentLevel) << "<array>\n";
+    IndentLevel++;
+    for (unsigned LineNo : I->second) {
+      Indent(o, IndentLevel);
+      EmitInteger(o, LineNo) << "\n";
+    }
+    IndentLevel--;
+    Indent(o, IndentLevel) << "</array>\n";
+  }
+  IndentLevel--;
+  Indent(o, IndentLevel) << "</dict>\n";
+
+  assert(IndentLevel == InputIndentLevel);
+}
+
 void PlistDiagnostics::FlushDiagnosticsImpl(
                                     std::vector<const PathDiagnostic *> &Diags,
                                     FilesMade *filesMade) {
@@ -395,14 +428,7 @@ void PlistDiagnostics::FlushDiagnosticsImpl(
   o << "<dict>\n" <<
        " <key>clang_version</key>\n";
   EmitString(o, getClangFullVersion()) << '\n';
-  o << " <key>files</key>\n"
-       " <array>\n";
-
-  for (FileID FID : Fids)
-    EmitString(o << "  ", SM->getFileEntryForID(FID)->getName()) << '\n';
-
-  o << " </array>\n"
-       " <key>diagnostics</key>\n"
+  o << " <key>diagnostics</key>\n"
        " <array>\n";
 
   for (std::vector<const PathDiagnostic*>::iterator DI=Diags.begin(),
@@ -507,15 +533,17 @@ void PlistDiagnostics::FlushDiagnosticsImpl(
           // the leak location even after code is added between the allocation
           // site and the end of scope (leak report location).
           if (UPDLoc.isValid()) {
-            FullSourceLoc UFunL(SM->getExpansionLoc(
-              D->getUniqueingDecl()->getBody()->getLocStart()), *SM);
+            FullSourceLoc UFunL(
+                SM->getExpansionLoc(
+                    D->getUniqueingDecl()->getBody()->getBeginLoc()),
+                *SM);
             o << "  <key>issue_hash_function_offset</key><string>"
               << L.getExpansionLineNumber() - UFunL.getExpansionLineNumber()
               << "</string>\n";
 
           // Otherwise, use the location on which the bug is reported.
           } else {
-            FullSourceLoc FunL(SM->getExpansionLoc(Body->getLocStart()), *SM);
+            FullSourceLoc FunL(SM->getExpansionLoc(Body->getBeginLoc()), *SM);
             o << "  <key>issue_hash_function_offset</key><string>"
               << L.getExpansionLineNumber() - FunL.getExpansionLineNumber()
               << "</string>\n";
@@ -551,10 +579,18 @@ void PlistDiagnostics::FlushDiagnosticsImpl(
       }
     }
 
+    printCoverage(D, /*IndentLevel=*/2, Fids, FM, o);
+
     // Close up the entry.
     o << "  </dict>\n";
   }
 
+  o << " </array>\n";
+
+  o << " <key>files</key>\n"
+       " <array>\n";
+  for (FileID FID : Fids)
+    EmitString(o << "  ", SM->getFileEntryForID(FID)->getName()) << '\n';
   o << " </array>\n";
 
   if (llvm::AreStatisticsEnabled() && SerializeStatistics) {

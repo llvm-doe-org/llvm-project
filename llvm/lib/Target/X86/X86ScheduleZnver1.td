@@ -93,7 +93,7 @@ def : ReadAdvance<ReadAfterLd, 4>;
 // The Integer PRF for Zen is 168 entries, and it holds the architectural and
 // speculative version of the 64-bit integer registers.
 // Reference: "Software Optimization Guide for AMD Family 17h Processors"
-def ZnIntegerPRF : RegisterFile<168, [GR8, GR16, GR32, GR64, CCR]>;
+def ZnIntegerPRF : RegisterFile<168, [GR64, CCR]>;
 
 // 36 Entry (9x4 entries) floating-point Scheduler
 def ZnFPU     : ProcResGroup<[ZnFPU0, ZnFPU1, ZnFPU2, ZnFPU3]> {
@@ -177,14 +177,34 @@ def : WriteRes<WriteZero,  []>;
 def : WriteRes<WriteLEA, [ZnALU]>;
 defm : ZnWriteResPair<WriteALU,   [ZnALU], 1>;
 defm : ZnWriteResPair<WriteADC,   [ZnALU], 1>;
-defm : ZnWriteResPair<WriteIMul,   [ZnALU1, ZnMultiplier], 4>;
-defm : ZnWriteResPair<WriteIMul64, [ZnALU1, ZnMultiplier], 4, [1,1], 2>;
 
-defm : ZnWriteResPair<WriteBSWAP32,[ZnALU], 1, [4]>;
-defm : ZnWriteResPair<WriteBSWAP64,[ZnALU], 1, [4]>;
+defm : ZnWriteResPair<WriteIMul8,     [ZnALU1, ZnMultiplier], 4>;
+//defm : ZnWriteResPair<WriteIMul16,    [ZnALU1, ZnMultiplier], 4>;
+//defm : ZnWriteResPair<WriteIMul16Imm, [ZnALU1, ZnMultiplier], 4>;
+//defm : ZnWriteResPair<WriteIMul16Reg, [ZnALU1, ZnMultiplier], 4>;
+//defm : ZnWriteResPair<WriteIMul32,    [ZnALU1, ZnMultiplier], 4>;
+//defm : ZnWriteResPair<WriteIMul32Imm, [ZnALU1, ZnMultiplier], 4>;
+//defm : ZnWriteResPair<WriteIMul32Reg, [ZnALU1, ZnMultiplier], 4>;
+//defm : ZnWriteResPair<WriteIMul64,    [ZnALU1, ZnMultiplier], 4, [1,1], 2>;
+//defm : ZnWriteResPair<WriteIMul64Imm, [ZnALU1, ZnMultiplier], 4, [1,1], 2>;
+//defm : ZnWriteResPair<WriteIMul64Reg, [ZnALU1, ZnMultiplier], 4, [1,1], 2>;
 
-defm : ZnWriteResPair<WriteShift, [ZnALU], 1>;
-defm : ZnWriteResPair<WriteShiftDouble, [ZnALU], 1>;
+defm : X86WriteRes<WriteBSWAP32, [ZnALU], 1, [4], 1>;
+defm : X86WriteRes<WriteBSWAP64, [ZnALU], 1, [4], 1>;
+defm : X86WriteRes<WriteCMPXCHG, [ZnALU], 1, [1], 1>;
+defm : X86WriteRes<WriteCMPXCHGRMW,[ZnALU,ZnAGU], 8, [1,1], 5>;
+defm : X86WriteRes<WriteXCHG, [ZnALU], 1, [2], 2>;
+
+defm : ZnWriteResPair<WriteShift,    [ZnALU], 1>;
+defm : ZnWriteResPair<WriteShiftCL,  [ZnALU], 1>;
+defm : ZnWriteResPair<WriteRotate,   [ZnALU], 1>;
+defm : ZnWriteResPair<WriteRotateCL, [ZnALU], 1>;
+
+defm : X86WriteRes<WriteSHDrri, [ZnALU], 1, [1], 1>;
+defm : X86WriteResUnsupported<WriteSHDrrcl>;
+defm : X86WriteResUnsupported<WriteSHDmri>;
+defm : X86WriteResUnsupported<WriteSHDmrcl>;
+
 defm : ZnWriteResPair<WriteJump,  [ZnALU], 1>;
 defm : ZnWriteResFpuPair<WriteCRC32, [ZnFPU0], 3>;
 
@@ -193,6 +213,7 @@ defm : ZnWriteResPair<WriteCMOV2,  [ZnALU], 1>;
 def  : WriteRes<WriteSETCC,  [ZnALU]>;
 def  : WriteRes<WriteSETCCStore,  [ZnALU, ZnAGU]>;
 defm : X86WriteRes<WriteLAHFSAHF, [ZnALU], 2, [1], 2>;
+def  : WriteRes<WriteBitTest,[ZnALU]>;
 
 // Bit counts.
 defm : ZnWriteResPair<WriteBSF, [ZnALU], 3>;
@@ -204,9 +225,10 @@ defm : ZnWriteResPair<WritePOPCNT,         [ZnALU], 1>;
 // Treat misc copies as a move.
 def : InstRW<[WriteMove], (instrs COPY)>;
 
-// BMI1 BEXTR, BMI2 BZHI
+// BMI1 BEXTR/BLS, BMI2 BZHI
 defm : ZnWriteResPair<WriteBEXTR, [ZnALU], 1>;
-defm : ZnWriteResPair<WriteBZHI, [ZnALU], 1>;
+//defm : ZnWriteResPair<WriteBLS,   [ZnALU], 2>;
+defm : ZnWriteResPair<WriteBZHI,  [ZnALU], 1>;
 
 // IDIV
 defm : ZnWriteResPair<WriteDiv8,   [ZnALU2, ZnDivider], 15, [1,15], 1>;
@@ -486,21 +508,13 @@ def : SchedAlias<WriteSTMXCSR, ZnWriteMicrocoded>;
 //-- Move instructions --//
 // MOV.
 // r16,m.
-def : InstRW<[WriteALULd, ReadAfterLd], (instregex "MOV16rm")>;
+def : InstRW<[WriteALULd, ReadAfterLd], (instrs MOV16rm)>;
 
 // MOVSX, MOVZX.
 // r,m.
 def : InstRW<[WriteLoad], (instregex "MOV(S|Z)X32rm(8|16)")>;
 
 // XCHG.
-// r,r.
-def ZnWriteXCHG : SchedWriteRes<[ZnALU]> {
-  let NumMicroOps = 2;
-  let ResourceCycles = [2];
-}
-
-def : InstRW<[ZnWriteXCHG], (instregex "XCHG(8|16|32|64)rr", "XCHG(16|32|64)ar")>;
-
 // r,m.
 def ZnWriteXCHGrm : SchedWriteRes<[ZnAGU, ZnALU]> {
   let Latency = 5;
@@ -516,7 +530,7 @@ def ZnWritePop16r : SchedWriteRes<[ZnAGU]>{
   let Latency = 5;
   let NumMicroOps = 2;
 }
-def : InstRW<[ZnWritePop16r], (instregex "POP16rmm")>;
+def : InstRW<[ZnWritePop16r], (instrs POP16rmm)>;
 def : InstRW<[WriteMicrocoded], (instregex "POPF(16|32)")>;
 def : InstRW<[WriteMicrocoded], (instregex "POPA(16|32)")>;
 
@@ -576,45 +590,51 @@ def : InstRW<[WriteALULd],
 def ZnWriteMul16 : SchedWriteRes<[ZnALU1, ZnMultiplier]> {
   let Latency = 3;
 }
-def : InstRW<[ZnWriteMul16], (instrs IMUL16r, MUL16r)>;
-def : InstRW<[ZnWriteMul16], (instrs IMUL16rr, IMUL16rri, IMUL16rri8)>; // TODO: is this right?
-def : InstRW<[ZnWriteMul16], (instrs IMUL16rm, IMUL16rmi, IMUL16rmi8)>; // TODO: this is definitely wrong but matches what the instregex did.
+def : SchedAlias<WriteIMul16, ZnWriteMul16>;
+def : SchedAlias<WriteIMul16Imm, ZnWriteMul16>; // TODO: is this right?
+def : SchedAlias<WriteIMul16Reg, ZnWriteMul16>; // TODO: is this right?
+def : SchedAlias<WriteIMul16ImmLd, ZnWriteMul16>; // TODO: this is definitely wrong but matches what the instregex did.
+def : SchedAlias<WriteIMul16RegLd, ZnWriteMul16>; // TODO: this is definitely wrong but matches what the instregex did.
 
 // m16.
 def ZnWriteMul16Ld : SchedWriteRes<[ZnAGU, ZnALU1, ZnMultiplier]> {
   let Latency = 8;
 }
-def : InstRW<[ZnWriteMul16Ld, ReadAfterLd], (instrs IMUL16m, MUL16m)>;
+def : SchedAlias<WriteIMul16Ld, ZnWriteMul16Ld>;
 
 // r32.
 def ZnWriteMul32 : SchedWriteRes<[ZnALU1, ZnMultiplier]> {
   let Latency = 3;
 }
-def : InstRW<[ZnWriteMul32], (instrs IMUL32r, MUL32r)>;
-def : InstRW<[ZnWriteMul32], (instrs IMUL32rr, IMUL32rri, IMUL32rri8)>; // TODO: is this right?
-def : InstRW<[ZnWriteMul32], (instrs IMUL32rm, IMUL32rmi, IMUL32rmi8)>; // TODO: this is definitely wrong but matches what the instregex did.
+def : SchedAlias<WriteIMul32, ZnWriteMul32>;
+def : SchedAlias<WriteIMul32Imm, ZnWriteMul32>; // TODO: is this right?
+def : SchedAlias<WriteIMul32Reg, ZnWriteMul32>; // TODO: is this right?
+def : SchedAlias<WriteIMul32ImmLd, ZnWriteMul32>; // TODO: this is definitely wrong but matches what the instregex did.
+def : SchedAlias<WriteIMul32RegLd, ZnWriteMul32>; // TODO: this is definitely wrong but matches what the instregex did.
 
 // m32.
 def ZnWriteMul32Ld : SchedWriteRes<[ZnAGU, ZnALU1, ZnMultiplier]> {
   let Latency = 8;
 }
-def : InstRW<[ZnWriteMul32Ld, ReadAfterLd], (instrs IMUL32m, MUL32m)>;
+def : SchedAlias<WriteIMul32Ld, ZnWriteMul32Ld>;
 
 // r64.
 def ZnWriteMul64 : SchedWriteRes<[ZnALU1, ZnMultiplier]> {
   let Latency = 4;
   let NumMicroOps = 2;
 }
-def : InstRW<[ZnWriteMul64], (instrs IMUL64r, MUL64r)>;
-def : InstRW<[ZnWriteMul64], (instrs IMUL64rr, IMUL64rri8, IMUL64rri32)>; // TODO: is this right?
-def : InstRW<[ZnWriteMul64], (instrs IMUL64rm, IMUL64rmi32, IMUL64rmi8)>; // TODO: this is definitely wrong but matches what the instregex did.
+def : SchedAlias<WriteIMul64, ZnWriteMul64>;
+def : SchedAlias<WriteIMul64Imm, ZnWriteMul64>; // TODO: is this right?
+def : SchedAlias<WriteIMul64Reg, ZnWriteMul64>; // TODO: is this right?
+def : SchedAlias<WriteIMul64ImmLd, ZnWriteMul64>; // TODO: this is definitely wrong but matches what the instregex did.
+def : SchedAlias<WriteIMul64RegLd, ZnWriteMul64>; // TODO: this is definitely wrong but matches what the instregex did.
 
 // m64.
 def ZnWriteMul64Ld : SchedWriteRes<[ZnAGU, ZnALU1, ZnMultiplier]> {
   let Latency = 9;
   let NumMicroOps = 2;
 }
-def : InstRW<[ZnWriteMul64Ld, ReadAfterLd], (instrs IMUL64m, MUL64m)>;
+def : SchedAlias<WriteIMul64Ld, ZnWriteMul64Ld>;
 
 // MULX.
 // r32,r32,r32.
@@ -712,9 +732,9 @@ def : InstRW<[ZnWriteBTRSCm], (instregex "BT(R|S|C)(16|32|64)m(r|i8)")>;
 
 // BLSI BLSMSK BLSR.
 // r,r.
-def : InstRW<[ZnWriteALULat2], (instregex "BLS(I|MSK|R)(32|64)rr")>;
+def : SchedAlias<WriteBLS, ZnWriteALULat2>;
 // r,m.
-def : InstRW<[ZnWriteALULat2Ld], (instregex "BLS(I|MSK|R)(32|64)rm")>;
+def : SchedAlias<WriteBLSLd, ZnWriteALULat2Ld>;
 
 // CLD STD.
 def : InstRW<[WriteALU], (instrs STD, CLD)>;
@@ -744,13 +764,6 @@ def : InstRW<[WriteMicrocoded], (instregex "SH(R|L)D(16|32|64)rrCL")>;
 def : InstRW<[WriteMicrocoded], (instregex "SH(R|L)D(16|32|64)mrCL")>;
 
 //-- Misc instructions --//
-// CMPXCHG.
-def ZnWriteCMPXCHG : SchedWriteRes<[ZnAGU, ZnALU]> {
-  let Latency = 8;
-  let NumMicroOps = 5;
-}
-def : InstRW<[ZnWriteCMPXCHG], (instregex "CMPXCHG(8|16|32|64)rm")>;
-
 // CMPXCHG8B.
 def ZnWriteCMPXCHG8B : SchedWriteRes<[ZnAGU, ZnALU]> {
   let NumMicroOps = 18;
@@ -779,7 +792,7 @@ def : InstRW<[WriteMicrocoded], (instrs RDPMC)>;
 def : InstRW<[WriteMicrocoded], (instregex "RDRAND(16|32|64)r")>;
 
 // XGETBV.
-def : InstRW<[WriteMicrocoded], (instregex "XGETBV")>;
+def : InstRW<[WriteMicrocoded], (instrs XGETBV)>;
 
 //-- String instructions --//
 // CMPS.
@@ -801,6 +814,8 @@ def : InstRW<[WriteMicrocoded], (instregex "SCAS(B|W|L|Q)")>;
 def : InstRW<[WriteMicrocoded], (instregex "STOS(B|L|Q|W)")>;
 
 // XADD.
+def ZnXADD : SchedWriteRes<[ZnALU]>;
+def : InstRW<[ZnXADD], (instregex "XADD(8|16|32|64)rr")>;
 def : InstRW<[WriteMicrocoded], (instregex "XADD(8|16|32|64)rm")>;
 
 //=== Floating Point x87 Instructions ===//
@@ -815,16 +830,16 @@ def ZnWriteSTr: SchedWriteRes<[ZnFPU23]> {
 
 // LD_F.
 // r.
-def : InstRW<[ZnWriteFLDr], (instregex "LD_Frr")>;
+def : InstRW<[ZnWriteFLDr], (instrs LD_Frr)>;
 
 // m.
 def ZnWriteLD_F80m : SchedWriteRes<[ZnAGU, ZnFPU13]> {
   let NumMicroOps = 2;
 }
-def : InstRW<[ZnWriteLD_F80m], (instregex "LD_F80m")>;
+def : InstRW<[ZnWriteLD_F80m], (instrs LD_F80m)>;
 
 // FBLD.
-def : InstRW<[WriteMicrocoded], (instregex "FBLDm")>;
+def : InstRW<[WriteMicrocoded], (instrs FBLDm)>;
 
 // FST(P).
 // r.
@@ -834,11 +849,11 @@ def : InstRW<[ZnWriteSTr], (instregex "ST_(F|FP)rr")>;
 def ZnWriteST_FP80m : SchedWriteRes<[ZnAGU, ZnFPU23]> {
   let Latency = 5;
 }
-def : InstRW<[ZnWriteST_FP80m], (instregex "ST_FP80m")>;
+def : InstRW<[ZnWriteST_FP80m], (instrs ST_FP80m)>;
 
 // FBSTP.
 // m80.
-def : InstRW<[WriteMicrocoded], (instregex "FBSTPm")>;
+def : InstRW<[WriteMicrocoded], (instrs FBSTPm)>;
 
 def ZnWriteFXCH : SchedWriteRes<[ZnFPU]>;
 
@@ -895,10 +910,10 @@ def : InstRW<[ZnWriteFPU3], (instrs FINCSTP, FDECSTP)>;
 def : InstRW<[ZnWriteFPU3], (instregex "FFREE")>;
 
 // FNSAVE.
-def : InstRW<[WriteMicrocoded], (instregex "FSAVEm")>;
+def : InstRW<[WriteMicrocoded], (instrs FSAVEm)>;
 
 // FRSTOR.
-def : InstRW<[WriteMicrocoded], (instregex "FRSTORm")>;
+def : InstRW<[WriteMicrocoded], (instrs FRSTORm)>;
 
 //-- Arithmetic instructions --//
 
@@ -1395,46 +1410,46 @@ def : InstRW<[ZnWriteSHA1MSG1Ld], (instregex "SHA(1|256)MSG1rm")>;
 // SHA1MSG2
 // x,x.
 def ZnWriteSHA1MSG2r : SchedWriteRes<[ZnFPU12]> ;
-def : InstRW<[ZnWriteSHA1MSG2r], (instregex "SHA1MSG2rr")>;
+def : InstRW<[ZnWriteSHA1MSG2r], (instrs SHA1MSG2rr)>;
 // x,m.
 def ZnWriteSHA1MSG2Ld : SchedWriteRes<[ZnAGU, ZnFPU12]> {
   let Latency = 8;
 }
-def : InstRW<[ZnWriteSHA1MSG2Ld], (instregex "SHA1MSG2rm")>;
+def : InstRW<[ZnWriteSHA1MSG2Ld], (instrs SHA1MSG2rm)>;
 
 // SHA1NEXTE
 // x,x.
 def ZnWriteSHA1NEXTEr : SchedWriteRes<[ZnFPU1]> ;
-def : InstRW<[ZnWriteSHA1NEXTEr], (instregex "SHA1NEXTErr")>;
+def : InstRW<[ZnWriteSHA1NEXTEr], (instrs SHA1NEXTErr)>;
 // x,m.
 def ZnWriteSHA1NEXTELd : SchedWriteRes<[ZnAGU, ZnFPU1]> {
   let Latency = 8;
 }
-def : InstRW<[ZnWriteSHA1NEXTELd], (instregex "SHA1NEXTErm")>;
+def : InstRW<[ZnWriteSHA1NEXTELd], (instrs SHA1NEXTErm)>;
 
 // SHA1RNDS4
 // x,x.
 def ZnWriteSHA1RNDS4r : SchedWriteRes<[ZnFPU1]> {
   let Latency = 6;
 }
-def : InstRW<[ZnWriteSHA1RNDS4r], (instregex "SHA1RNDS4rr")>;
+def : InstRW<[ZnWriteSHA1RNDS4r], (instrs SHA1RNDS4rri)>;
 // x,m.
 def ZnWriteSHA1RNDS4Ld : SchedWriteRes<[ZnAGU, ZnFPU1]> {
   let Latency = 13;
 }
-def : InstRW<[ZnWriteSHA1RNDS4Ld], (instregex "SHA1RNDS4rm")>;
+def : InstRW<[ZnWriteSHA1RNDS4Ld], (instrs SHA1RNDS4rmi)>;
 
 // SHA256RNDS2
 // x,x.
 def ZnWriteSHA256RNDS2r : SchedWriteRes<[ZnFPU1]> {
   let Latency = 4;
 }
-def : InstRW<[ZnWriteSHA256RNDS2r], (instregex "SHA256RNDS2rr")>;
+def : InstRW<[ZnWriteSHA256RNDS2r], (instrs SHA256RNDS2rr)>;
 // x,m.
 def ZnWriteSHA256RNDS2Ld : SchedWriteRes<[ZnAGU, ZnFPU1]> {
   let Latency = 11;
 }
-def : InstRW<[ZnWriteSHA256RNDS2Ld], (instregex "SHA256RNDS2rm")>;
+def : InstRW<[ZnWriteSHA256RNDS2Ld], (instrs SHA256RNDS2rm)>;
 
 //-- Arithmetic instructions --//
 
