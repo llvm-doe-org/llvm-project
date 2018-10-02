@@ -18,6 +18,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Regex.h"
 #include "llvm/Support/SourceMgr.h"
+#include <list>
 #include <vector>
 #include <map>
 
@@ -62,6 +63,8 @@ enum FileCheckType {
 };
 }
 
+struct FileCheckDiag;
+
 class FileCheckPattern {
   SMLoc PatternLoc;
 
@@ -105,13 +108,15 @@ public:
                          const StringMap<StringRef> &VariableTable,
                          SMRange MatchRange = None) const;
   void PrintFuzzyMatch(const SourceMgr &SM, StringRef Buffer,
-                       const StringMap<StringRef> &VariableTable) const;
+                       const StringMap<StringRef> &VariableTable,
+                       std::list<FileCheckDiag> *Diags) const;
 
   bool hasVariable() const {
     return !(VariableUses.empty() && VariableDefs.empty());
   }
 
   Check::FileCheckType getCheckTy() const { return CheckTy; }
+  unsigned getLineNumber() const { return LineNumber; }
 
 private:
   bool AddRegExToRegEx(StringRef RS, unsigned &CurParen, SourceMgr &SM);
@@ -121,6 +126,43 @@ private:
                        const StringMap<StringRef> &VariableTable) const;
   bool EvaluateExpression(StringRef Expr, std::string &Value) const;
   size_t FindRegexVarEnd(StringRef Str, SourceMgr &SM);
+};
+
+//===----------------------------------------------------------------------===//
+/// Summary of a FileCheck diagnostic.
+//===----------------------------------------------------------------------===//
+
+struct FileCheckDiag {
+  /// What is the FileCheck directive for this diagnostic?
+  Check::FileCheckType CheckTy;
+  /// Where is the FileCheck directive for this diagnostic?
+  unsigned CheckLine, CheckCol;
+  /// What kind of match result does this diagnostic describe?
+  ///
+  /// There might be more than one of these for the same directive.  For
+  /// example, there might be several discards before either a final or fail,
+  /// and there might be a fuzzy match after a fail.
+  ///
+  /// We iterate these types, so they must have contiguous values in
+  /// [0, MatchTypeCount).  Moreover, keep match types together if they use the
+  /// same mark in annotated input dumps or else printing of the annotation key
+  /// will malfunction.
+  enum MatchType {
+    MatchFinalAndExpected, //< the final match for an expected pattern
+    MatchTypeFirst = MatchFinalAndExpected,
+    MatchFinalButExcluded, //< the final match for an excluded pattern
+    MatchFinalButIllegal,  //< the final but illegal match for an expected pattern
+    MatchDiscard,          //< a discarded match for an expected pattern
+    MatchNoneAndExcluded,  //< no match for an excluded pattern
+    MatchNoneButExpected,  //< no match for an expected pattern
+    MatchFuzzy,            //< a fuzzy match (because no perfect match)
+    MatchTypeCount,
+  } MatchTy;
+  /// The match range if MatchTy is not MatchNoneAndExcluded or
+  /// MatchNoneButExpected, or the search range otherwise.
+  unsigned InputStartLine, InputStartCol, InputEndLine, InputEndCol;
+  FileCheckDiag(const SourceMgr &SM, const Check::FileCheckType &CheckTy,
+                SMLoc CheckLoc, MatchType MatchTy, SMRange InputRange);
 };
 
 //===----------------------------------------------------------------------===//
@@ -147,18 +189,20 @@ struct FileCheckString {
 
   size_t Check(const SourceMgr &SM, StringRef Buffer, bool IsLabelScanMode,
                size_t &MatchLen, StringMap<StringRef> &VariableTable,
-               FileCheckRequest &Req) const;
+               FileCheckRequest &Req, std::list<FileCheckDiag> *Diags) const;
 
   bool CheckNext(const SourceMgr &SM, StringRef Buffer) const;
   bool CheckSame(const SourceMgr &SM, StringRef Buffer) const;
   bool CheckNot(const SourceMgr &SM, StringRef Buffer,
                 const std::vector<const FileCheckPattern *> &NotStrings,
                 StringMap<StringRef> &VariableTable,
-                const FileCheckRequest &Req) const;
+                const FileCheckRequest &Req,
+                std::list<FileCheckDiag> *Diags) const;
   size_t CheckDag(const SourceMgr &SM, StringRef Buffer,
                   std::vector<const FileCheckPattern *> &NotStrings,
                   StringMap<StringRef> &VariableTable,
-                  const FileCheckRequest &Req) const;
+                  const FileCheckRequest &Req,
+                  std::list<FileCheckDiag> *Diags) const;
 };
 
 /// FileCheck class takes the request and exposes various methods that
@@ -195,7 +239,8 @@ public:
   ///
   /// Returns false if the input fails to satisfy the checks.
   bool CheckInput(SourceMgr &SM, StringRef Buffer,
-                  ArrayRef<FileCheckString> CheckStrings);
+                  ArrayRef<FileCheckString> CheckStrings,
+                  std::list<FileCheckDiag> *Diags = nullptr);
 };
 } // namespace llvm
 #endif
