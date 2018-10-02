@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
   llvm::sys::Process::UseANSIEscapeCodes(true);
 
   InitLLVM X(argc, argv);
-  cl::ParseCommandLineOptions(argc, argv);
+  cl::ParseCommandLineOptions(argc, argv, "", nullptr, "FILECHECK_OPTS");
 
   FileCheckRequest Req;
   for (auto Prefix : CheckPrefixes)

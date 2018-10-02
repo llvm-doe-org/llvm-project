@@ -24,6 +24,9 @@ match.  The file to verify is read from standard input unless the
 OPTIONS
 -------
 
+Options are parsed from the command line and from the environment variable
+``FILECHECK_OPTS``.
+
 .. option:: -help
 
  Print a summary of command line options.
