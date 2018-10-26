@@ -21,6 +21,9 @@ namespace modernize {
 namespace {
 
 constexpr char StdMemoryHeader[] = "memory";
+constexpr char ConstructorCall[] = "constructorCall";
+constexpr char ResetCall[] = "resetCall";
+constexpr char NewExpression[] = "newExpression";
 
 std::string GetNewExprName(const CXXNewExpr *NewExpr,
                            const SourceManager &SM,
@@ -30,7 +33,7 @@ std::string GetNewExprName(const CXXNewExpr *NewExpr,
           NewExpr->getAllocatedTypeSourceInfo()->getTypeLoc().getSourceRange()),
       SM, Lang);
   if (NewExpr->isArray()) {
-    return WrittenName.str() + "[]";
+    return (WrittenName + "[]").str();
   }
   return WrittenName.str();
 }
@@ -38,9 +41,6 @@ std::string GetNewExprName(const CXXNewExpr *NewExpr,
 } // namespace
 
 const char MakeSmartPtrCheck::PointerType[] = "pointerType";
-const char MakeSmartPtrCheck::ConstructorCall[] = "constructorCall";
-const char MakeSmartPtrCheck::ResetCall[] = "resetCall";
-const char MakeSmartPtrCheck::NewExpression[] = "newExpression";
 
 MakeSmartPtrCheck::MakeSmartPtrCheck(StringRef Name,
                                      ClangTidyContext* Context,
@@ -68,8 +68,8 @@ bool MakeSmartPtrCheck::isLanguageVersionSupported(
 
 void MakeSmartPtrCheck::registerPPCallbacks(CompilerInstance &Compiler) {
   if (isLanguageVersionSupported(getLangOpts())) {
-    Inserter.reset(new utils::IncludeInserter(
-        Compiler.getSourceManager(), Compiler.getLangOpts(), IncludeStyle));
+    Inserter = llvm::make_unique<utils::IncludeInserter>(
+        Compiler.getSourceManager(), Compiler.getLangOpts(), IncludeStyle);
     Compiler.getPreprocessor().addPPCallbacks(Inserter->CreatePPCallbacks());
   }
 }
@@ -121,13 +121,22 @@ void MakeSmartPtrCheck::check(const MatchFinder::MatchResult &Result) {
   if (New->getNumPlacementArgs() != 0)
     return;
 
+  // Be conservative for cases where we construct an array without any
+  // initalization.
+  // For example,
+  //    P.reset(new int[5]) // check fix: P = make_unique<int []>(5)
+  //
+  // The fix of the check has side effect, it introduces default initialization
+  // which maybe unexpected and cause performance regression.
+  if (New->isArray() && !New->hasInitializer())
+    return;
   if (Construct)
-    checkConstruct(SM, Construct, Type, New);
+    checkConstruct(SM, Result.Context, Construct, Type, New);
   else if (Reset)
-    checkReset(SM, Reset, New);
+    checkReset(SM, Result.Context, Reset, New);
 }
 
-void MakeSmartPtrCheck::checkConstruct(SourceManager &SM,
+void MakeSmartPtrCheck::checkConstruct(SourceManager &SM, ASTContext *Ctx,
                                        const CXXConstructExpr *Construct,
                                        const QualType *Type,
                                        const CXXNewExpr *New) {
@@ -154,7 +163,7 @@ void MakeSmartPtrCheck::checkConstruct(SourceManager &SM,
     return;
   }
 
-  if (!replaceNew(Diag, New, SM)) {
+  if (!replaceNew(Diag, New, SM, Ctx)) {
     return;
   }
 
@@ -193,7 +202,7 @@ void MakeSmartPtrCheck::checkConstruct(SourceManager &SM,
   insertHeader(Diag, SM.getFileID(ConstructCallStart));
 }
 
-void MakeSmartPtrCheck::checkReset(SourceManager &SM,
+void MakeSmartPtrCheck::checkReset(SourceManager &SM, ASTContext *Ctx,
                                    const CXXMemberCallExpr *Reset,
                                    const CXXNewExpr *New) {
   const auto *Expr = cast<MemberExpr>(Reset->getCallee());
@@ -224,7 +233,7 @@ void MakeSmartPtrCheck::checkReset(SourceManager &SM,
     return;
   }
 
-  if (!replaceNew(Diag, New, SM)) {
+  if (!replaceNew(Diag, New, SM, Ctx)) {
     return;
   }
 
@@ -241,10 +250,24 @@ void MakeSmartPtrCheck::checkReset(SourceManager &SM,
 }
 
 bool MakeSmartPtrCheck::replaceNew(DiagnosticBuilder &Diag,
-                                   const CXXNewExpr *New,
-                                   SourceManager& SM) {
-  SourceLocation NewStart = New->getSourceRange().getBegin();
-  SourceLocation NewEnd = New->getSourceRange().getEnd();
+                                   const CXXNewExpr *New, SourceManager &SM,
+                                   ASTContext *Ctx) {
+  auto SkipParensParents = [&](const Expr *E) {
+    for (const Expr *OldE = nullptr; E != OldE;) {
+      OldE = E;
+      for (const auto &Node : Ctx->getParents(*E)) {
+        if (const Expr *Parent = Node.get<ParenExpr>()) {
+          E = Parent;
+          break;
+        }
+      }
+    }
+    return E;
+  };
+
+  SourceRange NewRange = SkipParensParents(New)->getSourceRange();
+  SourceLocation NewStart = NewRange.getBegin();
+  SourceLocation NewEnd = NewRange.getEnd();
 
   // Skip when the source location of the new expression is invalid.
   if (NewStart.isInvalid() || NewEnd.isInvalid())

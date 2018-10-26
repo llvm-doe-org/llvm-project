@@ -502,6 +502,8 @@ bool llvm::AArch64::getArchFeatures(AArch64::ArchKind AK,
     Features.push_back("+v8.3a");
   if (AK == AArch64::ArchKind::ARMV8_4A)
     Features.push_back("+v8.4a");
+  if (AK == AArch64::ArchKind::ARMV8_5A)
+    Features.push_back("+v8.5a");
 
   return AK != AArch64::ArchKind::INVALID;
 }
@@ -608,6 +610,7 @@ static StringRef getArchSynonym(StringRef Arch) {
       .Case("v8.2a", "v8.2-a")
       .Case("v8.3a", "v8.3-a")
       .Case("v8.4a", "v8.4-a")
+      .Case("v8.5a", "v8.5-a")
       .Case("v8r", "v8-r")
       .Case("v8m.base", "v8-m.base")
       .Case("v8m.main", "v8-m.main")
@@ -776,6 +779,7 @@ ARM::ProfileKind ARM::parseArchProfile(StringRef Arch) {
   case ARM::ArchKind::ARMV8_2A:
   case ARM::ArchKind::ARMV8_3A:
   case ARM::ArchKind::ARMV8_4A:
+  case ARM::ArchKind::ARMV8_5A:
     return ARM::ProfileKind::A;
   case ARM::ArchKind::ARMV2:
   case ARM::ArchKind::ARMV2A:
@@ -839,6 +843,7 @@ unsigned llvm::ARM::parseArchVersion(StringRef Arch) {
   case ARM::ArchKind::ARMV8_2A:
   case ARM::ArchKind::ARMV8_3A:
   case ARM::ArchKind::ARMV8_4A:
+  case ARM::ArchKind::ARMV8_5A:
   case ARM::ArchKind::ARMV8R:
   case ARM::ArchKind::ARMV8MBaseline:
   case ARM::ArchKind::ARMV8MMainline:
@@ -990,7 +995,7 @@ constexpr GPUInfo R600GPUs[26] = {
 
 // This table should be sorted by the value of GPUKind
 // Don't bother listing the implicitly true features
-constexpr GPUInfo AMDGCNGPUs[32] = {
+constexpr GPUInfo AMDGCNGPUs[33] = {
   // Name         Canonical    Kind        Features
   //              Name
   {{"gfx600"},    {"gfx600"},  GK_GFX600,  FEATURE_FAST_FMA_F32},
@@ -1025,6 +1030,7 @@ constexpr GPUInfo AMDGCNGPUs[32] = {
   {{"gfx902"},    {"gfx902"},  GK_GFX902,  FEATURE_FAST_FMA_F32|FEATURE_FAST_DENORMAL_F32},
   {{"gfx904"},    {"gfx904"},  GK_GFX904,  FEATURE_FAST_FMA_F32|FEATURE_FAST_DENORMAL_F32},
   {{"gfx906"},    {"gfx906"},  GK_GFX906,  FEATURE_FAST_FMA_F32|FEATURE_FAST_DENORMAL_F32},
+  {{"gfx909"},    {"gfx909"},  GK_GFX909,  FEATURE_FAST_FMA_F32|FEATURE_FAST_DENORMAL_F32},
 };
 
 const GPUInfo *getArchEntry(AMDGPU::GPUKind AK, ArrayRef<GPUInfo> Table) {
@@ -1119,6 +1125,7 @@ AMDGPU::IsaVersion AMDGPU::getIsaVersion(StringRef GPU) {
   case GK_GFX902: return {9, 0, 2};
   case GK_GFX904: return {9, 0, 4};
   case GK_GFX906: return {9, 0, 6};
+  case GK_GFX909: return {9, 0, 9};
   default:        return {0, 0, 0};
   }
 }

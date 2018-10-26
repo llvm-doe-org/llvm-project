@@ -1485,6 +1485,31 @@ Address CGOpenMPRuntime::getOrCreateDefaultLocation(unsigned Flags) {
   return Address(Entry, Align);
 }
 
+void CGOpenMPRuntime::setLocThreadIdInsertPt(CodeGenFunction &CGF,
+                                             bool AtCurrentPoint) {
+  auto &Elem = OpenMPLocThreadIDMap.FindAndConstruct(CGF.CurFn);
+  assert(!Elem.second.ServiceInsertPt && "Insert point is set already.");
+
+  llvm::Value *Undef = llvm::UndefValue::get(CGF.Int32Ty);
+  if (AtCurrentPoint) {
+    Elem.second.ServiceInsertPt = new llvm::BitCastInst(
+        Undef, CGF.Int32Ty, "svcpt", CGF.Builder.GetInsertBlock());
+  } else {
+    Elem.second.ServiceInsertPt =
+        new llvm::BitCastInst(Undef, CGF.Int32Ty, "svcpt");
+    Elem.second.ServiceInsertPt->insertAfter(CGF.AllocaInsertPt);
+  }
+}
+
+void CGOpenMPRuntime::clearLocThreadIdInsertPt(CodeGenFunction &CGF) {
+  auto &Elem = OpenMPLocThreadIDMap.FindAndConstruct(CGF.CurFn);
+  if (Elem.second.ServiceInsertPt) {
+    llvm::Instruction *Ptr = Elem.second.ServiceInsertPt;
+    Elem.second.ServiceInsertPt = nullptr;
+    Ptr->eraseFromParent();
+  }
+}
+
 llvm::Value *CGOpenMPRuntime::emitUpdateLocation(CodeGenFunction &CGF,
                                                  SourceLocation Loc,
                                                  unsigned Flags) {
@@ -1511,8 +1536,10 @@ llvm::Value *CGOpenMPRuntime::emitUpdateLocation(CodeGenFunction &CGF,
     Elem.second.DebugLoc = AI.getPointer();
     LocValue = AI;
 
+    if (!Elem.second.ServiceInsertPt)
+      setLocThreadIdInsertPt(CGF);
     CGBuilderTy::InsertPointGuard IPG(CGF.Builder);
-    CGF.Builder.SetInsertPoint(CGF.AllocaInsertPt);
+    CGF.Builder.SetInsertPoint(Elem.second.ServiceInsertPt);
     CGF.Builder.CreateMemCpy(LocValue, getOrCreateDefaultLocation(Flags),
                              CGF.getTypeSize(IdentQTy));
   }
@@ -1582,21 +1609,25 @@ llvm::Value *CGOpenMPRuntime::getThreadID(CodeGenFunction &CGF,
   // kmpc_global_thread_num(ident_t *loc).
   // Generate thread id value and cache this value for use across the
   // function.
+  auto &Elem = OpenMPLocThreadIDMap.FindAndConstruct(CGF.CurFn);
+  if (!Elem.second.ServiceInsertPt)
+    setLocThreadIdInsertPt(CGF);
   CGBuilderTy::InsertPointGuard IPG(CGF.Builder);
-  CGF.Builder.SetInsertPoint(CGF.AllocaInsertPt);
+  CGF.Builder.SetInsertPoint(Elem.second.ServiceInsertPt);
   llvm::CallInst *Call = CGF.Builder.CreateCall(
       createRuntimeFunction(OMPRTL__kmpc_global_thread_num),
       emitUpdateLocation(CGF, Loc));
   Call->setCallingConv(CGF.getRuntimeCC());
-  auto &Elem = OpenMPLocThreadIDMap.FindAndConstruct(CGF.CurFn);
   Elem.second.ThreadID = Call;
   return Call;
 }
 
 void CGOpenMPRuntime::functionFinished(CodeGenFunction &CGF) {
   assert(CGF.CurFn && "No function in current CodeGenFunction.");
-  if (OpenMPLocThreadIDMap.count(CGF.CurFn))
+  if (OpenMPLocThreadIDMap.count(CGF.CurFn)) {
+    clearLocThreadIdInsertPt(CGF);
     OpenMPLocThreadIDMap.erase(CGF.CurFn);
+  }
   if (FunctionUDRMap.count(CGF.CurFn) > 0) {
     for(auto *D : FunctionUDRMap[CGF.CurFn])
       UDRMap.erase(D);
@@ -5215,8 +5246,8 @@ void CGOpenMPRuntime::emitTaskLoopCall(CodeGenFunction &CGF, SourceLocation Loc,
       LBLVal.getPointer(),
       UBLVal.getPointer(),
       CGF.EmitLoadOfScalar(StLVal, Loc),
-      llvm::ConstantInt::getNullValue(
-          CGF.IntTy), // Always 0 because taskgroup emitted by the compiler
+      llvm::ConstantInt::getSigned(
+              CGF.IntTy, 1), // Always 1 because taskgroup emitted by the compiler
       llvm::ConstantInt::getSigned(
           CGF.IntTy, Data.Schedule.getPointer()
                          ? Data.Schedule.getInt() ? NumTasks : Grainsize
@@ -8273,6 +8304,7 @@ void CGOpenMPRuntime::scanForTargetRegionsFunctions(const Stmt *S,
     case OMPD_declare_reduction:
     case OMPD_taskloop:
     case OMPD_taskloop_simd:
+    case OMPD_requires:
     case OMPD_unknown:
       llvm_unreachable("Unknown target directive for OpenMP device codegen.");
     }
@@ -8748,6 +8780,7 @@ void CGOpenMPRuntime::emitTargetDataStandAloneCall(
     case OMPD_target_parallel:
     case OMPD_target_parallel_for:
     case OMPD_target_parallel_for_simd:
+    case OMPD_requires:
     case OMPD_unknown:
       llvm_unreachable("Unexpected standalone target data directive.");
       break;

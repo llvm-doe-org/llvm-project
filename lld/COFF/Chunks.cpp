@@ -351,7 +351,12 @@ void SectionChunk::writeTo(uint8_t *Buf) const {
           check(File->getCOFFObj()->getSymbol(Rel.SymbolTableIndex));
       StringRef Name;
       File->getCOFFObj()->getSymbolName(Sym, Name);
-      error("relocation against symbol in discarded section: " + Name);
+
+      // MinGW mode object files (built by GCC) can have leftover sections
+      // with relocations against discarded comdat sections. Such sections
+      // are left as is, with relocations untouched.
+      if (!Config->MinGW)
+        error("relocation against symbol in discarded section: " + Name);
       continue;
     }
     // Get the output section of the symbol for this relocation.  The output
@@ -529,8 +534,8 @@ static int getRuntimePseudoRelocSize(uint16_t Type) {
 void SectionChunk::getRuntimePseudoRelocs(
     std::vector<RuntimePseudoReloc> &Res) {
   for (const coff_relocation &Rel : Relocs) {
-    auto *Target = dyn_cast_or_null<DefinedImportData>(
-        File->getSymbol(Rel.SymbolTableIndex));
+    auto *Target =
+        dyn_cast_or_null<Defined>(File->getSymbol(Rel.SymbolTableIndex));
     if (!Target || !Target->IsRuntimePseudoReloc)
       continue;
     int SizeInBits = getRuntimePseudoRelocSize(Rel.Type);
@@ -583,6 +588,13 @@ void SectionChunk::replace(SectionChunk *Other) {
   Alignment = std::max(Alignment, Other->Alignment);
   Other->Repl = Repl;
   Other->Live = false;
+}
+
+uint32_t SectionChunk::getSectionNumber() const {
+  DataRefImpl R;
+  R.p = reinterpret_cast<uintptr_t>(Header);
+  SectionRef S(R, File->getCOFFObj());
+  return S.getIndex() + 1;
 }
 
 CommonChunk::CommonChunk(const COFFSymbolRef S) : Sym(S) {
@@ -663,9 +675,7 @@ void LocalImportChunk::getBaserels(std::vector<Baserel> *Res) {
   Res->emplace_back(getRVA());
 }
 
-size_t LocalImportChunk::getSize() const {
-  return Config->is64() ? 8 : 4;
-}
+size_t LocalImportChunk::getSize() const { return Config->Wordsize; }
 
 void LocalImportChunk::writeTo(uint8_t *Buf) const {
   if (Config->is64()) {
@@ -829,9 +839,7 @@ void MergeChunk::writeTo(uint8_t *Buf) const {
 }
 
 // MinGW specific.
-size_t AbsolutePointerChunk::getSize() const {
-  return Config->is64() ? 8 : 4;
-}
+size_t AbsolutePointerChunk::getSize() const { return Config->Wordsize; }
 
 void AbsolutePointerChunk::writeTo(uint8_t *Buf) const {
   if (Config->is64()) {

@@ -16,46 +16,38 @@
 #ifndef LLVM_TOOLS_LLVM_MCA_SOURCEMGR_H
 #define LLVM_TOOLS_LLVM_MCA_SOURCEMGR_H
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/MC/MCInst.h"
 #include <vector>
 
 namespace mca {
 
-typedef std::pair<unsigned, const llvm::MCInst *> SourceRef;
+typedef std::pair<unsigned, const llvm::MCInst &> SourceRef;
 
 class SourceMgr {
-  using InstVec = std::vector<std::unique_ptr<const llvm::MCInst>>;
-  const InstVec &Sequence;
+  llvm::ArrayRef<llvm::MCInst> Sequence;
   unsigned Current;
-  unsigned Iterations;
+  const unsigned Iterations;
   static const unsigned DefaultIterations = 100;
 
 public:
-  SourceMgr(const InstVec &MCInstSequence, unsigned NumIterations)
+  SourceMgr(llvm::ArrayRef<llvm::MCInst> MCInstSequence, unsigned NumIterations)
       : Sequence(MCInstSequence), Current(0),
         Iterations(NumIterations ? NumIterations : DefaultIterations) {}
 
-  unsigned getCurrentIteration() const { return Current / Sequence.size(); }
   unsigned getNumIterations() const { return Iterations; }
   unsigned size() const { return Sequence.size(); }
-  const InstVec &getSequence() const { return Sequence; }
-
-  bool hasNext() const { return Current < (Iterations * size()); }
-  void updateNext() { Current++; }
+  bool hasNext() const { return Current < (Iterations * Sequence.size()); }
+  void updateNext() { ++Current; }
 
   const SourceRef peekNext() const {
     assert(hasNext() && "Already at end of sequence!");
-    unsigned Index = getCurrentInstructionIndex();
-    return SourceRef(Current, Sequence[Index].get());
+    return SourceRef(Current, Sequence[Current % Sequence.size()]);
   }
 
-  unsigned getCurrentInstructionIndex() const {
-    return Current % Sequence.size();
-  }
-
-  const llvm::MCInst &getMCInstFromIndex(unsigned Index) const {
-    return *Sequence[Index % size()];
-  }
+  using const_iterator = llvm::ArrayRef<llvm::MCInst>::const_iterator;
+  const_iterator begin() const { return Sequence.begin(); }
+  const_iterator end() const { return Sequence.end(); }
 
   bool isEmpty() const { return size() == 0; }
 };

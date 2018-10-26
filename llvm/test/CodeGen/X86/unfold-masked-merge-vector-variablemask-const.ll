@@ -12,7 +12,7 @@ define <4 x i32> @out_constant_varx_mone(<4 x i32> *%px, <4 x i32> *%py, <4 x i3
 ; CHECK-SSE1:       # %bb.0:
 ; CHECK-SSE1-NEXT:    movq %rdi, %rax
 ; CHECK-SSE1-NEXT:    movaps (%rcx), %xmm0
-; CHECK-SSE1-NEXT:    movaps {{.*#+}} xmm1 = [nan,nan,nan,nan]
+; CHECK-SSE1-NEXT:    movaps {{.*#+}} xmm1 = [NaN,NaN,NaN,NaN]
 ; CHECK-SSE1-NEXT:    xorps %xmm0, %xmm1
 ; CHECK-SSE1-NEXT:    andps (%rsi), %xmm0
 ; CHECK-SSE1-NEXT:    orps %xmm1, %xmm0
@@ -122,7 +122,7 @@ define <4 x i32> @in_constant_varx_mone_invmask(<4 x i32> *%px, <4 x i32> *%py, 
 ; CHECK-SSE1:       # %bb.0:
 ; CHECK-SSE1-NEXT:    movq %rdi, %rax
 ; CHECK-SSE1-NEXT:    movaps (%rsi), %xmm0
-; CHECK-SSE1-NEXT:    movaps {{.*#+}} xmm1 = [nan,nan,nan,nan]
+; CHECK-SSE1-NEXT:    movaps {{.*#+}} xmm1 = [NaN,NaN,NaN,NaN]
 ; CHECK-SSE1-NEXT:    movaps (%rcx), %xmm2
 ; CHECK-SSE1-NEXT:    xorps %xmm1, %xmm2
 ; CHECK-SSE1-NEXT:    andnps %xmm2, %xmm0
@@ -132,9 +132,9 @@ define <4 x i32> @in_constant_varx_mone_invmask(<4 x i32> *%px, <4 x i32> *%py, 
 ;
 ; CHECK-SSE2-LABEL: in_constant_varx_mone_invmask:
 ; CHECK-SSE2:       # %bb.0:
-; CHECK-SSE2-NEXT:    movdqa (%rdi), %xmm0
+; CHECK-SSE2-NEXT:    movdqa (%rdx), %xmm0
 ; CHECK-SSE2-NEXT:    pcmpeqd %xmm1, %xmm1
-; CHECK-SSE2-NEXT:    movdqa (%rdx), %xmm2
+; CHECK-SSE2-NEXT:    movdqa (%rdi), %xmm2
 ; CHECK-SSE2-NEXT:    pxor %xmm1, %xmm2
 ; CHECK-SSE2-NEXT:    pandn %xmm2, %xmm0
 ; CHECK-SSE2-NEXT:    pxor %xmm1, %xmm0
@@ -142,9 +142,9 @@ define <4 x i32> @in_constant_varx_mone_invmask(<4 x i32> *%px, <4 x i32> *%py, 
 ;
 ; CHECK-XOP-LABEL: in_constant_varx_mone_invmask:
 ; CHECK-XOP:       # %bb.0:
-; CHECK-XOP-NEXT:    vmovdqa (%rdi), %xmm0
+; CHECK-XOP-NEXT:    vmovdqa (%rdx), %xmm0
 ; CHECK-XOP-NEXT:    vpcmpeqd %xmm1, %xmm1, %xmm1
-; CHECK-XOP-NEXT:    vpxor (%rdx), %xmm1, %xmm2
+; CHECK-XOP-NEXT:    vpxor (%rdi), %xmm1, %xmm2
 ; CHECK-XOP-NEXT:    vpandn %xmm2, %xmm0, %xmm0
 ; CHECK-XOP-NEXT:    vpxor %xmm1, %xmm0, %xmm0
 ; CHECK-XOP-NEXT:    retq
@@ -382,7 +382,7 @@ define <4 x i32> @out_constant_mone_vary_invmask(<4 x i32> *%px, <4 x i32> *%py,
 ; CHECK-SSE1:       # %bb.0:
 ; CHECK-SSE1-NEXT:    movq %rdi, %rax
 ; CHECK-SSE1-NEXT:    movaps (%rcx), %xmm0
-; CHECK-SSE1-NEXT:    movaps {{.*#+}} xmm1 = [nan,nan,nan,nan]
+; CHECK-SSE1-NEXT:    movaps {{.*#+}} xmm1 = [NaN,NaN,NaN,NaN]
 ; CHECK-SSE1-NEXT:    xorps %xmm0, %xmm1
 ; CHECK-SSE1-NEXT:    andps (%rdx), %xmm0
 ; CHECK-SSE1-NEXT:    orps %xmm1, %xmm0
@@ -422,7 +422,7 @@ define <4 x i32> @in_constant_mone_vary_invmask(<4 x i32> *%px, <4 x i32> *%py, 
 ; CHECK-SSE1:       # %bb.0:
 ; CHECK-SSE1-NEXT:    movq %rdi, %rax
 ; CHECK-SSE1-NEXT:    movaps (%rcx), %xmm0
-; CHECK-SSE1-NEXT:    movaps {{.*#+}} xmm1 = [nan,nan,nan,nan]
+; CHECK-SSE1-NEXT:    movaps {{.*#+}} xmm1 = [NaN,NaN,NaN,NaN]
 ; CHECK-SSE1-NEXT:    xorps %xmm0, %xmm1
 ; CHECK-SSE1-NEXT:    andps (%rdx), %xmm0
 ; CHECK-SSE1-NEXT:    orps %xmm1, %xmm0
@@ -461,7 +461,7 @@ define <4 x i32> @out_constant_42_vary(<4 x i32> *%px, <4 x i32> *%py, <4 x i32>
 ; CHECK-SSE1:       # %bb.0:
 ; CHECK-SSE1-NEXT:    movq %rdi, %rax
 ; CHECK-SSE1-NEXT:    movaps (%rcx), %xmm0
-; CHECK-SSE1-NEXT:    movaps {{.*#+}} xmm1 = [5.885454e-44,5.885454e-44,5.885454e-44,5.885454e-44]
+; CHECK-SSE1-NEXT:    movaps {{.*#+}} xmm1 = [5.88545355E-44,5.88545355E-44,5.88545355E-44,5.88545355E-44]
 ; CHECK-SSE1-NEXT:    andps %xmm0, %xmm1
 ; CHECK-SSE1-NEXT:    andnps (%rdx), %xmm0
 ; CHECK-SSE1-NEXT:    orps %xmm1, %xmm0

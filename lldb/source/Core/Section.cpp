@@ -77,6 +77,8 @@ const char *Section::GetTypeAsCString() const {
     return "dwarf-line-str";
   case eSectionTypeDWARFDebugLoc:
     return "dwarf-loc";
+  case eSectionTypeDWARFDebugLocLists:
+    return "dwarf-loclists";
   case eSectionTypeDWARFDebugMacInfo:
     return "dwarf-macinfo";
   case eSectionTypeDWARFDebugMacro:
@@ -87,6 +89,8 @@ const char *Section::GetTypeAsCString() const {
     return "dwarf-pubtypes";
   case eSectionTypeDWARFDebugRanges:
     return "dwarf-ranges";
+  case eSectionTypeDWARFDebugRngLists:
+    return "dwarf-rnglists";
   case eSectionTypeDWARFDebugStr:
     return "dwarf-str";
   case eSectionTypeDWARFDebugStrOffsets:

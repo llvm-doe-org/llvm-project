@@ -1790,12 +1790,14 @@ void ObjectFileELF::CreateSections(SectionList &unified_section_list) {
       static ConstString g_sect_name_dwarf_debug_line(".debug_line");
       static ConstString g_sect_name_dwarf_debug_line_str(".debug_line_str");
       static ConstString g_sect_name_dwarf_debug_loc(".debug_loc");
+      static ConstString g_sect_name_dwarf_debug_loclists(".debug_loclists");
       static ConstString g_sect_name_dwarf_debug_macinfo(".debug_macinfo");
       static ConstString g_sect_name_dwarf_debug_macro(".debug_macro");
       static ConstString g_sect_name_dwarf_debug_names(".debug_names");
       static ConstString g_sect_name_dwarf_debug_pubnames(".debug_pubnames");
       static ConstString g_sect_name_dwarf_debug_pubtypes(".debug_pubtypes");
       static ConstString g_sect_name_dwarf_debug_ranges(".debug_ranges");
+      static ConstString g_sect_name_dwarf_debug_rnglists(".debug_rnglists");
       static ConstString g_sect_name_dwarf_debug_str(".debug_str");
       static ConstString g_sect_name_dwarf_debug_str_offsets(
           ".debug_str_offsets");
@@ -1806,6 +1808,7 @@ void ObjectFileELF::CreateSections(SectionList &unified_section_list) {
       static ConstString g_sect_name_dwarf_debug_line_str_dwo(".debug_line_str.dwo");
       static ConstString g_sect_name_dwarf_debug_macro_dwo(".debug_macro.dwo");
       static ConstString g_sect_name_dwarf_debug_loc_dwo(".debug_loc.dwo");
+      static ConstString g_sect_name_dwarf_debug_loclists_dwo(".debug_loclists.dwo");
       static ConstString g_sect_name_dwarf_debug_str_dwo(".debug_str.dwo");
       static ConstString g_sect_name_dwarf_debug_str_offsets_dwo(
           ".debug_str_offsets.dwo");
@@ -1867,6 +1870,8 @@ void ObjectFileELF::CreateSections(SectionList &unified_section_list) {
         sect_type = eSectionTypeDWARFDebugLineStr;
       else if (name == g_sect_name_dwarf_debug_loc)
         sect_type = eSectionTypeDWARFDebugLoc;
+      else if (name == g_sect_name_dwarf_debug_loclists)
+        sect_type = eSectionTypeDWARFDebugLocLists;
       else if (name == g_sect_name_dwarf_debug_macinfo)
         sect_type = eSectionTypeDWARFDebugMacInfo;
       else if (name == g_sect_name_dwarf_debug_macro)
@@ -1879,6 +1884,8 @@ void ObjectFileELF::CreateSections(SectionList &unified_section_list) {
         sect_type = eSectionTypeDWARFDebugPubTypes;
       else if (name == g_sect_name_dwarf_debug_ranges)
         sect_type = eSectionTypeDWARFDebugRanges;
+      else if (name == g_sect_name_dwarf_debug_rnglists)
+        sect_type = eSectionTypeDWARFDebugRngLists;
       else if (name == g_sect_name_dwarf_debug_str)
         sect_type = eSectionTypeDWARFDebugStr;
       else if (name == g_sect_name_dwarf_debug_types)
@@ -1897,6 +1904,8 @@ void ObjectFileELF::CreateSections(SectionList &unified_section_list) {
         sect_type = eSectionTypeDWARFDebugMacro;
       else if (name == g_sect_name_dwarf_debug_loc_dwo)
         sect_type = eSectionTypeDWARFDebugLoc;
+      else if (name == g_sect_name_dwarf_debug_loclists_dwo)
+        sect_type = eSectionTypeDWARFDebugLocLists;
       else if (name == g_sect_name_dwarf_debug_str_dwo)
         sect_type = eSectionTypeDWARFDebugStr;
       else if (name == g_sect_name_dwarf_debug_str_offsets_dwo)

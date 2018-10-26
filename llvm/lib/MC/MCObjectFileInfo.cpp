@@ -254,6 +254,9 @@ void MCObjectFileInfo::initMachOMCObjectFileInfo(const Triple &T) {
   DwarfStrOffSection =
       Ctx->getMachOSection("__DWARF", "__debug_str_offs", MachO::S_ATTR_DEBUG,
                            SectionKind::getMetadata(), "section_str_off");
+  DwarfAddrSection =
+      Ctx->getMachOSection("__DWARF", "__debug_addr", MachO::S_ATTR_DEBUG,
+                           SectionKind::getMetadata(), "section_info");
   DwarfLocSection =
       Ctx->getMachOSection("__DWARF", "__debug_loc", MachO::S_ATTR_DEBUG,
                            SectionKind::getMetadata(), "section_debug_loc");
@@ -291,11 +294,11 @@ void MCObjectFileInfo::initELFMCObjectFileInfo(const Triple &T, bool Large) {
   switch (T.getArch()) {
   case Triple::mips:
   case Triple::mipsel:
-    FDECFIEncoding = dwarf::DW_EH_PE_sdata4;
-    break;
   case Triple::mips64:
   case Triple::mips64el:
-    FDECFIEncoding = dwarf::DW_EH_PE_sdata8;
+    FDECFIEncoding = Ctx->getAsmInfo()->getCodePointerSize() == 4
+                         ? dwarf::DW_EH_PE_sdata4
+                         : dwarf::DW_EH_PE_sdata8;
     break;
   case Triple::ppc64:
   case Triple::ppc64le:

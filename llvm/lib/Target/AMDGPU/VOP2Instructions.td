@@ -116,24 +116,46 @@ class getVOP2Pat64 <SDPatternOperator node, VOPProfile P> : LetDummies {
     [(set P.DstVT:$vdst, (node P.Src0VT:$src0, P.Src1VT:$src1))]);
 }
 
-multiclass VOP2Inst <string opName,
-                     VOPProfile P,
-                     SDPatternOperator node = null_frag,
-                     string revOp = opName,
-                     bit GFX9Renamed = 0> {
-
+multiclass VOP2Inst_e32<string opName,
+                        VOPProfile P,
+                        SDPatternOperator node = null_frag,
+                        string revOp = opName,
+                        bit GFX9Renamed = 0> {
   let renamedInGFX9 = GFX9Renamed in {
-
     def _e32 : VOP2_Pseudo <opName, P, VOPPatOrNull<node,P>.ret>,
                Commutable_REV<revOp#"_e32", !eq(revOp, opName)>;
+  } // End renamedInGFX9 = GFX9Renamed
+}
 
+multiclass VOP2Inst_e64<string opName,
+                        VOPProfile P,
+                        SDPatternOperator node = null_frag,
+                        string revOp = opName,
+                        bit GFX9Renamed = 0> {
+  let renamedInGFX9 = GFX9Renamed in {
     def _e64 : VOP3_Pseudo <opName, P, getVOP2Pat64<node, P>.ret>,
                Commutable_REV<revOp#"_e64", !eq(revOp, opName)>;
-
-    def _sdwa  : VOP2_SDWA_Pseudo <opName, P>;
-
-  }
+  } // End renamedInGFX9 = GFX9Renamed
 }
+
+multiclass VOP2Inst_sdwa<string opName,
+                         VOPProfile P,
+                         SDPatternOperator node = null_frag,
+                         string revOp = opName,
+                         bit GFX9Renamed = 0> {
+  let renamedInGFX9 = GFX9Renamed in {
+    def _sdwa : VOP2_SDWA_Pseudo <opName, P>;
+  } // End renamedInGFX9 = GFX9Renamed
+}
+
+multiclass VOP2Inst<string opName,
+                    VOPProfile P,
+                    SDPatternOperator node = null_frag,
+                    string revOp = opName,
+                    bit GFX9Renamed = 0> :
+    VOP2Inst_e32<opName, P, node, revOp, GFX9Renamed>,
+    VOP2Inst_e64<opName, P, node, revOp, GFX9Renamed>,
+    VOP2Inst_sdwa<opName, P, node, revOp, GFX9Renamed>;
 
 multiclass VOP2bInst <string opName,
                       VOPProfile P,
@@ -230,21 +252,15 @@ class VOP_MAC <ValueType vt> : VOPProfile <[vt, vt, vt, vt]> {
   let AsmSDWA9 = getAsmSDWA9<1, 1, 2, vt>.ret;
   let HasSrc2 = 0;
   let HasSrc2Mods = 0;
+
   let HasExt = 1;
-  let HasSDWA9 = 0;
+  let HasExtDPP = 1;
+  let HasExtSDWA = 1;
+  let HasExtSDWA9 = 0;
 }
 
-def VOP_MAC_F16 : VOP_MAC <f16> {
-  // FIXME: Move 'Asm64' definition to VOP_MAC, and use 'vt'. Currently it gives
-  // 'not a string initializer' error.
-  let Asm64 = getAsm64<1, 2, 0, HasModifiers, HasOMod, f16>.ret;
-}
-
-def VOP_MAC_F32 : VOP_MAC <f32> {
-  // FIXME: Move 'Asm64' definition to VOP_MAC, and use 'vt'. Currently it gives
-  // 'not a string initializer' error.
-  let Asm64 = getAsm64<1, 2, 0, HasModifiers, HasOMod, f32>.ret;
-}
+def VOP_MAC_F16 : VOP_MAC <f16>;
+def VOP_MAC_F32 : VOP_MAC <f32>;
 
 // Write out to vcc or arbitrary SGPR.
 def VOP2b_I32_I1_I32_I32 : VOPProfile<[i32, i32, i32, untyped]> {
@@ -290,7 +306,9 @@ def VOP2b_I32_I1_I32_I32_I1 : VOPProfile<[i32, i32, i32, i1]> {
                     dpp_ctrl:$dpp_ctrl, row_mask:$row_mask,
                     bank_mask:$bank_mask, bound_ctrl:$bound_ctrl);
   let HasExt = 1;
-  let HasSDWA9 = 1;
+  let HasExtDPP = 1;
+  let HasExtSDWA = 1;
+  let HasExtSDWA9 = 1;
 }
 
 // Read in from vcc or arbitrary SGPR
@@ -321,7 +339,9 @@ def VOP2e_I32_I32_I32_I1 : VOPProfile<[i32, i32, i32, i1]> {
                     dpp_ctrl:$dpp_ctrl, row_mask:$row_mask,
                     bank_mask:$bank_mask, bound_ctrl:$bound_ctrl);
   let HasExt = 1;
-  let HasSDWA9 = 1;
+  let HasExtDPP = 1;
+  let HasExtSDWA = 1;
+  let HasExtSDWA9 = 1;
 }
 
 def VOP_READLANE : VOPProfile<[i32, i32, i32]> {
@@ -331,8 +351,11 @@ def VOP_READLANE : VOPProfile<[i32, i32, i32]> {
   let Ins64 = Ins32;
   let Asm32 = " $vdst, $src0, $src1";
   let Asm64 = Asm32;
+
   let HasExt = 0;
-  let HasSDWA9 = 0;
+  let HasExtDPP = 0;
+  let HasExtSDWA = 0;
+  let HasExtSDWA9 = 0;
 }
 
 def VOP_WRITELANE : VOPProfile<[i32, i32, i32, i32]> {
@@ -342,10 +365,13 @@ def VOP_WRITELANE : VOPProfile<[i32, i32, i32, i32]> {
   let Ins64 = Ins32;
   let Asm32 = " $vdst, $src0, $src1";
   let Asm64 = Asm32;
-  let HasExt = 0;
-  let HasSDWA9 = 0;
   let HasSrc2 = 0;
   let HasSrc2Mods = 0;
+
+  let HasExt = 0;
+  let HasExtDPP = 0;
+  let HasExtSDWA = 0;
+  let HasExtSDWA9 = 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -367,8 +393,8 @@ defm V_MUL_I32_I24 : VOP2Inst <"v_mul_i32_i24", VOP_PAT_GEN<VOP_I32_I32_I32, 2>,
 defm V_MUL_HI_I32_I24 : VOP2Inst <"v_mul_hi_i32_i24", VOP_PAT_GEN<VOP_I32_I32_I32, 2>, AMDGPUmulhi_i24>;
 defm V_MUL_U32_U24 : VOP2Inst <"v_mul_u32_u24", VOP_PAT_GEN<VOP_I32_I32_I32, 2>, AMDGPUmul_u24>;
 defm V_MUL_HI_U32_U24 : VOP2Inst <"v_mul_hi_u32_u24", VOP_PAT_GEN<VOP_I32_I32_I32, 2>, AMDGPUmulhi_u24>;
-defm V_MIN_F32 : VOP2Inst <"v_min_f32", VOP_F32_F32_F32, fminnum>;
-defm V_MAX_F32 : VOP2Inst <"v_max_f32", VOP_F32_F32_F32, fmaxnum>;
+defm V_MIN_F32 : VOP2Inst <"v_min_f32", VOP_F32_F32_F32, fminnum_like>;
+defm V_MAX_F32 : VOP2Inst <"v_max_f32", VOP_F32_F32_F32, fmaxnum_like>;
 defm V_MIN_I32 : VOP2Inst <"v_min_i32", VOP_PAT_GEN<VOP_I32_I32_I32>, smin>;
 defm V_MAX_I32 : VOP2Inst <"v_max_i32", VOP_PAT_GEN<VOP_I32_I32_I32>, smax>;
 defm V_MIN_U32 : VOP2Inst <"v_min_u32", VOP_PAT_GEN<VOP_I32_I32_I32>, umin>;
@@ -530,8 +556,8 @@ defm V_ADD_U16 : VOP2Inst <"v_add_u16", VOP_I16_I16_I16>;
 defm V_SUB_U16 : VOP2Inst <"v_sub_u16" , VOP_I16_I16_I16>;
 defm V_SUBREV_U16 : VOP2Inst <"v_subrev_u16", VOP_I16_I16_I16, null_frag, "v_sub_u16">;
 defm V_MUL_LO_U16 : VOP2Inst <"v_mul_lo_u16", VOP_I16_I16_I16>;
-defm V_MAX_F16 : VOP2Inst <"v_max_f16", VOP_F16_F16_F16, fmaxnum>;
-defm V_MIN_F16 : VOP2Inst <"v_min_f16", VOP_F16_F16_F16, fminnum>;
+defm V_MAX_F16 : VOP2Inst <"v_max_f16", VOP_F16_F16_F16, fmaxnum_like>;
+defm V_MIN_F16 : VOP2Inst <"v_min_f16", VOP_F16_F16_F16, fminnum_like>;
 defm V_MAX_U16 : VOP2Inst <"v_max_u16", VOP_I16_I16_I16>;
 defm V_MAX_I16 : VOP2Inst <"v_max_i16", VOP_I16_I16_I16>;
 defm V_MIN_U16 : VOP2Inst <"v_min_u16", VOP_I16_I16_I16>;

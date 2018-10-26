@@ -4986,7 +4986,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
         if (Chunk.Fun.TypeQuals & Qualifiers::Restrict)
           RemovalLocs.push_back(Chunk.Fun.getRestrictQualifierLoc());
         if (!RemovalLocs.empty()) {
-          llvm::sort(RemovalLocs.begin(), RemovalLocs.end(),
+          llvm::sort(RemovalLocs,
                      BeforeThanCompare<SourceLocation>(S.getSourceManager()));
           RemovalRange = SourceRange(RemovalLocs.front(), RemovalLocs.back());
           Loc = RemovalLocs.front();
@@ -7273,7 +7273,7 @@ static void processTypeAttrs(TypeProcessingState &state, QualType &type,
       // not appertain to a DeclaratorChunk. If we handle them as type
       // attributes, accept them in that position and diagnose the GCC
       // incompatibility.
-      if (attr.getScopeName() && attr.getScopeName()->isStr("gnu")) {
+      if (attr.isGNUScope()) {
         bool IsTypeAttr = attr.isTypeAttr();
         if (TAL == TAL_DeclChunk) {
           state.getSema().Diag(attr.getLoc(),

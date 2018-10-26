@@ -154,7 +154,7 @@ CodeGenModule::CodeGenModule(ASTContext &C, const HeaderSearchOptions &HSO,
 
   if (CodeGenOpts.hasProfileClangUse()) {
     auto ReaderOrErr = llvm::IndexedInstrProfReader::create(
-        CodeGenOpts.ProfileInstrumentUsePath);
+        CodeGenOpts.ProfileInstrumentUsePath, CodeGenOpts.ProfileRemappingFile);
     if (auto E = ReaderOrErr.takeError()) {
       unsigned DiagID = Diags.getCustomDiagID(DiagnosticsEngine::Error,
                                               "Could not read profile %0: %1");
@@ -322,8 +322,6 @@ void CodeGenModule::checkAliases() {
       assert(FTy);
       if (!FTy->getReturnType()->isPointerTy())
         Diags.Report(Location, diag::err_ifunc_resolver_return);
-      if (FTy->getNumParams())
-        Diags.Report(Location, diag::err_ifunc_resolver_params);
     }
 
     llvm::Constant *Aliasee = Alias->getIndirectSymbol();
@@ -1301,9 +1299,19 @@ void CodeGenModule::SetLLVMFunctionAttributesForDefinition(const Decl *D,
     // Otherwise, propagate the inline hint attribute and potentially use its
     // absence to mark things as noinline.
     if (auto *FD = dyn_cast<FunctionDecl>(D)) {
-      if (any_of(FD->redecls(), [&](const FunctionDecl *Redecl) {
-            return Redecl->isInlineSpecified();
-          })) {
+      // Search function and template pattern redeclarations for inline.
+      auto CheckForInline = [](const FunctionDecl *FD) {
+        auto CheckRedeclForInline = [](const FunctionDecl *Redecl) {
+          return Redecl->isInlineSpecified();
+        };
+        if (any_of(FD->redecls(), CheckRedeclForInline))
+          return true;
+        const FunctionDecl *Pattern = FD->getTemplateInstantiationPattern();
+        if (!Pattern)
+          return false;
+        return any_of(Pattern->redecls(), CheckRedeclForInline);
+      };
+      if (CheckForInline(FD)) {
         B.addAttribute(llvm::Attribute::InlineHint);
       } else if (CodeGenOpts.getInlining() ==
                      CodeGenOptions::OnlyHintInlining &&
@@ -1423,7 +1431,7 @@ bool CodeGenModule::GetCPUAndFeaturesAttributes(const Decl *D,
     AddedAttr = true;
   }
   if (!Features.empty()) {
-    llvm::sort(Features.begin(), Features.end());
+    llvm::sort(Features);
     Attrs.addAttribute("target-features", llvm::join(Features, ","));
     AddedAttr = true;
   }
@@ -2554,9 +2562,8 @@ void CodeGenModule::emitCPUDispatchDefinition(GlobalDecl GD) {
   }
 
   llvm::sort(
-      Options.begin(), Options.end(),
-      [](const CodeGenFunction::MultiVersionResolverOption &LHS,
-         const CodeGenFunction::MultiVersionResolverOption &RHS) {
+      Options, [](const CodeGenFunction::MultiVersionResolverOption &LHS,
+                  const CodeGenFunction::MultiVersionResolverOption &RHS) {
         return CodeGenFunction::GetX86CpuSupportsMask(LHS.Conditions.Features) >
                CodeGenFunction::GetX86CpuSupportsMask(RHS.Conditions.Features);
       });
@@ -3672,6 +3679,10 @@ llvm::GlobalValue::LinkageTypes CodeGenModule::getLLVMLinkageForDeclarator(
       return llvm::GlobalVariable::WeakAnyLinkage;
   }
 
+  if (const auto *FD = D->getAsFunction())
+    if (FD->isMultiVersion() && Linkage == GVA_AvailableExternally)
+      return llvm::GlobalVariable::LinkOnceAnyLinkage;
+
   // We are guaranteed to have a strong definition somewhere else,
   // so we can use available_externally linkage.
   if (Linkage == GVA_AvailableExternally)
@@ -4110,39 +4121,50 @@ CodeGenModule::GetAddrOfConstantCFString(const StringLiteral *Literal) {
   llvm::Constant *Zero = llvm::Constant::getNullValue(Int32Ty);
   llvm::Constant *Zeros[] = { Zero, Zero };
 
+  const ASTContext &Context = getContext();
+  const llvm::Triple &Triple = getTriple();
+
   // If we don't already have it, get __CFConstantStringClassReference.
   if (!CFConstantStringClassRef) {
     llvm::Type *Ty = getTypes().ConvertType(getContext().IntTy);
     Ty = llvm::ArrayType::get(Ty, 0);
-    llvm::GlobalValue *GV = cast<llvm::GlobalValue>(
-        CreateRuntimeVariable(Ty, "__CFConstantStringClassReference"));
+    llvm::Constant *C =
+        CreateRuntimeVariable(Ty, "__CFConstantStringClassReference");
 
-    if (getTriple().isOSBinFormatCOFF()) {
-      IdentifierInfo &II = getContext().Idents.get(GV->getName());
-      TranslationUnitDecl *TUDecl = getContext().getTranslationUnitDecl();
-      DeclContext *DC = TranslationUnitDecl::castToDeclContext(TUDecl);
+    if (Triple.isOSBinFormatELF() || Triple.isOSBinFormatCOFF()) {
+      llvm::GlobalValue *GV = nullptr;
 
-      const VarDecl *VD = nullptr;
-      for (const auto &Result : DC->lookup(&II))
-        if ((VD = dyn_cast<VarDecl>(Result)))
-          break;
+      if ((GV = dyn_cast<llvm::GlobalValue>(C))) {
+        IdentifierInfo &II = Context.Idents.get(GV->getName());
+        TranslationUnitDecl *TUDecl = Context.getTranslationUnitDecl();
+        DeclContext *DC = TranslationUnitDecl::castToDeclContext(TUDecl);
 
-      if (!VD || !VD->hasAttr<DLLExportAttr>()) {
-        GV->setDLLStorageClass(llvm::GlobalValue::DLLImportStorageClass);
-        GV->setLinkage(llvm::GlobalValue::ExternalLinkage);
-      } else {
-        GV->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
-        GV->setLinkage(llvm::GlobalValue::ExternalLinkage);
+        const VarDecl *VD = nullptr;
+        for (const auto &Result : DC->lookup(&II))
+          if ((VD = dyn_cast<VarDecl>(Result)))
+            break;
+
+        if (Triple.isOSBinFormatELF()) {
+          if (!VD)
+            GV->setLinkage(llvm::GlobalValue::ExternalLinkage);
+        } else {
+          GV->setLinkage(llvm::GlobalValue::ExternalLinkage);
+          if (!VD || !VD->hasAttr<DLLExportAttr>())
+            GV->setDLLStorageClass(llvm::GlobalValue::DLLImportStorageClass);
+          else
+            GV->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+        }
+
+        setDSOLocal(GV);
       }
     }
-    setDSOLocal(GV);
 
     // Decay array -> ptr
     CFConstantStringClassRef =
-        llvm::ConstantExpr::getGetElementPtr(Ty, GV, Zeros);
+        llvm::ConstantExpr::getGetElementPtr(Ty, C, Zeros);
   }
 
-  QualType CFTy = getContext().getCFConstantStringType();
+  QualType CFTy = Context.getCFConstantStringType();
 
   auto *STy = cast<llvm::StructType>(getTypes().ConvertType(CFTy));
 
@@ -4174,17 +4196,20 @@ CodeGenModule::GetAddrOfConstantCFString(const StringLiteral *Literal) {
   GV->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
   // Don't enforce the target's minimum global alignment, since the only use
   // of the string is via this class initializer.
-  CharUnits Align = isUTF16
-                        ? getContext().getTypeAlignInChars(getContext().ShortTy)
-                        : getContext().getTypeAlignInChars(getContext().CharTy);
+  CharUnits Align = isUTF16 ? Context.getTypeAlignInChars(Context.ShortTy)
+                            : Context.getTypeAlignInChars(Context.CharTy);
   GV->setAlignment(Align.getQuantity());
 
   // FIXME: We set the section explicitly to avoid a bug in ld64 224.1.
   // Without it LLVM can merge the string with a non unnamed_addr one during
   // LTO.  Doing that changes the section it ends in, which surprises ld64.
-  if (getTriple().isOSBinFormatMachO())
+  if (Triple.isOSBinFormatMachO())
     GV->setSection(isUTF16 ? "__TEXT,__ustring"
                            : "__TEXT,__cstring,cstring_literals");
+  // Make sure the literal ends up in .rodata to allow for safe ICF and for
+  // the static linker to adjust permissions to read-only later on.
+  else if (Triple.isOSBinFormatELF())
+    GV->setSection(".rodata");
 
   // String.
   llvm::Constant *Str =
@@ -4196,7 +4221,7 @@ CodeGenModule::GetAddrOfConstantCFString(const StringLiteral *Literal) {
   Fields.add(Str);
 
   // String length.
-  auto Ty = getTypes().ConvertType(getContext().LongTy);
+  auto Ty = getTypes().ConvertType(Context.LongTy);
   Fields.addInt(cast<llvm::IntegerType>(Ty), StringLength);
 
   CharUnits Alignment = getPointerAlign();
@@ -4205,7 +4230,7 @@ CodeGenModule::GetAddrOfConstantCFString(const StringLiteral *Literal) {
   GV = Fields.finishAndCreateGlobal("_unnamed_cfstring_", Alignment,
                                     /*isConstant=*/false,
                                     llvm::GlobalVariable::PrivateLinkage);
-  switch (getTriple().getObjectFormat()) {
+  switch (Triple.getObjectFormat()) {
   case llvm::Triple::UnknownObjectFormat:
     llvm_unreachable("unknown file format");
   case llvm::Triple::COFF:
@@ -4863,6 +4888,10 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
 
   case Decl::OMPDeclareReduction:
     EmitOMPDeclareReduction(cast<OMPDeclareReductionDecl>(D));
+    break;
+
+  case Decl::OMPRequires:
+    EmitOMPRequiresDecl(cast<OMPRequiresDecl>(D));
     break;
 
   default:

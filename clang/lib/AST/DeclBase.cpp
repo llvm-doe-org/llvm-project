@@ -810,6 +810,7 @@ unsigned Decl::getIdentifierNamespaceForKind(Kind DeclKind) {
     case ObjCCategoryImpl:
     case Import:
     case OMPThreadPrivate:
+    case OMPRequires:
     case OMPCapturedExpr:
     case Empty:
       // Never looked up by name.
@@ -1723,8 +1724,18 @@ void DeclContext::localUncachedLookup(DeclarationName Name,
 
 DeclContext *DeclContext::getRedeclContext() {
   DeclContext *Ctx = this;
-  // Skip through transparent contexts.
-  while (Ctx->isTransparentContext())
+
+  // In C, a record type is the redeclaration context for its fields only. If
+  // we arrive at a record context after skipping anything else, we should skip
+  // the record as well. Currently, this means skipping enumerations because
+  // they're the only transparent context that can exist within a struct or
+  // union.
+  bool SkipRecords = getDeclKind() == Decl::Kind::Enum &&
+                     !getParentASTContext().getLangOpts().CPlusPlus;
+
+  // Skip through contexts to get to the redeclaration context. Transparent
+  // contexts are always skipped.
+  while ((SkipRecords && Ctx->isRecord()) || Ctx->isTransparentContext())
     Ctx = Ctx->getParent();
   return Ctx;
 }

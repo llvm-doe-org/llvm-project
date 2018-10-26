@@ -221,6 +221,7 @@ def HasV4T           : Predicate<"Subtarget->hasV4TOps()">,
 def NoV4T            : Predicate<"!Subtarget->hasV4TOps()">;
 def HasV5T           : Predicate<"Subtarget->hasV5TOps()">,
                                  AssemblerPredicate<"HasV5TOps", "armv5t">;
+def NoV5T            : Predicate<"!Subtarget->hasV5TOps()">;
 def HasV5TE          : Predicate<"Subtarget->hasV5TEOps()">,
                                  AssemblerPredicate<"HasV5TEOps", "armv5te">;
 def HasV6            : Predicate<"Subtarget->hasV6Ops()">,
@@ -255,6 +256,8 @@ def HasV8_3a         : Predicate<"Subtarget->hasV8_3aOps()">,
                                  AssemblerPredicate<"HasV8_3aOps", "armv8.3a">;
 def HasV8_4a         : Predicate<"Subtarget->hasV8_4aOps()">,
                                  AssemblerPredicate<"HasV8_4aOps", "armv8.4a">;
+def HasV8_5a         : Predicate<"Subtarget->hasV8_5aOps()">,
+                                 AssemblerPredicate<"HasV8_5aOps", "armv8.5a">;
 def NoVFP            : Predicate<"!Subtarget->hasVFP2()">;
 def HasVFP2          : Predicate<"Subtarget->hasVFP2()">,
                                  AssemblerPredicate<"FeatureVFP2", "VFP2">;
@@ -355,21 +358,22 @@ let RecomputePerFunction = 1 in {
   def DontUseMovt      : Predicate<"!Subtarget->useMovt(*MF)">;
   def UseMovtInPic     : Predicate<"Subtarget->useMovt(*MF) && Subtarget->allowPositionIndependentMovt()">;
   def DontUseMovtInPic : Predicate<"!Subtarget->useMovt(*MF) || !Subtarget->allowPositionIndependentMovt()">;
-  def UseFPVMLx        : Predicate<"Subtarget->useFPVMLx() || MF->getFunction().optForMinSize()">;
+
+  def UseFPVMLx: Predicate<"((Subtarget->useFPVMLx() &&"
+                           "  TM.Options.AllowFPOpFusion != FPOpFusion::Fast) ||"
+                           "MF->getFunction().optForMinSize())">;
 }
 def UseMulOps        : Predicate<"Subtarget->useMulOps()">;
 
 // Prefer fused MAC for fp mul + add over fp VMLA / VMLS if they are available.
-// But only select them if more precision in FP computation is allowed.
+// But only select them if more precision in FP computation is allowed, and when
+// they are not slower than a mul + add sequence.
 // Do not use them for Darwin platforms.
 def UseFusedMAC      : Predicate<"(TM.Options.AllowFPOpFusion =="
                                  " FPOpFusion::Fast && "
                                  " Subtarget->hasVFP4()) && "
-                                 "!Subtarget->isTargetDarwin()">;
-def DontUseFusedMAC  : Predicate<"!(TM.Options.AllowFPOpFusion =="
-                                 " FPOpFusion::Fast &&"
-                                 " Subtarget->hasVFP4()) || "
-                                 "Subtarget->isTargetDarwin()">;
+                                 "!Subtarget->isTargetDarwin() &&"
+                                 "Subtarget->useFPVMLx()">;
 
 def HasFastVGETLNi32 : Predicate<"!Subtarget->hasSlowVGETLNi32()">;
 def HasSlowVGETLNi32 : Predicate<"Subtarget->hasSlowVGETLNi32()">;
@@ -388,6 +392,10 @@ let RecomputePerFunction = 1 in {
 }
 
 def GenExecuteOnly : Predicate<"Subtarget->genExecuteOnly()">;
+
+// Armv8.5-A extensions
+def HasSpecCtrl      : Predicate<"Subtarget->hasSpecCtrl()">,
+                       AssemblerPredicate<"FeatureSpecCtrl", "specctrl">;
 
 //===----------------------------------------------------------------------===//
 // ARM Flag Definitions.
@@ -2192,6 +2200,9 @@ def TRAP : AXI<(outs), (ins), MiscFrm, NoItinerary,
            Requires<[IsARM,DontUseNaClTrap]> {
   let Inst = 0xe7ffdefe;
 }
+
+def : Pat<(debugtrap), (BKPT 0)>, Requires<[IsARM, HasV5T]>;
+def : Pat<(debugtrap), (UDF 254)>, Requires<[IsARM, NoV5T]>;
 
 // Address computation and loads and stores in PIC mode.
 let isNotDuplicable = 1 in {
@@ -4873,6 +4884,14 @@ def TSB : AInoP<(outs), (ins tsb_opt:$opt), MiscFrm, NoItinerary,
 
 }
 
+// Armv8.5-A speculation barrier
+def SB : AInoP<(outs), (ins), MiscFrm, NoItinerary, "sb", "", []>,
+         Requires<[IsARM, HasSpecCtrl]>, Sched<[]> {
+  let Inst{31-0} = 0xf57ff070;
+  let Unpredictable = 0x000fff0f;
+  let hasSideEffects = 1;
+}
+
 let usesCustomInserter = 1, Defs = [CPSR] in {
 
 // Pseudo instruction that combines movs + predicated rsbmi
@@ -5912,6 +5931,8 @@ include "ARMInstrNEON.td"
 // Memory barriers
 def : InstAlias<"dmb", (DMB 0xf), 0>, Requires<[IsARM, HasDB]>;
 def : InstAlias<"dsb", (DSB 0xf), 0>, Requires<[IsARM, HasDB]>;
+def : InstAlias<"ssbb", (DSB 0x0), 1>, Requires<[IsARM, HasDB]>;
+def : InstAlias<"pssbb", (DSB 0x4), 1>, Requires<[IsARM, HasDB]>;
 def : InstAlias<"isb", (ISB 0xf), 0>, Requires<[IsARM, HasDB]>;
 // Armv8-R 'Data Full Barrier'
 def : InstAlias<"dfb", (DSB 0xc), 1>, Requires<[IsARM, HasDFB]>;

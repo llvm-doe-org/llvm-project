@@ -45,7 +45,7 @@ ProgramStateRef removeRefBinding(ProgramStateRef State, SymbolRef Sym) {
 
 void RefVal::print(raw_ostream &Out) const {
   if (!T.isNull())
-    Out << "Tracked " << T.getAsString() << '/';
+    Out << "Tracked " << T.getAsString() << " | ";
 
   switch (getKind()) {
     default: llvm_unreachable("Invalid RefVal kind");
@@ -175,9 +175,7 @@ void RetainCountChecker::checkPostStmt(const BlockExpr *BE,
     Regions.push_back(VR);
   }
 
-  state =
-    state->scanReachableSymbols<StopTrackingCallback>(Regions.data(),
-                                    Regions.data() + Regions.size()).getState();
+  state = state->scanReachableSymbols<StopTrackingCallback>(Regions).getState();
   C.addTransition(state);
 }
 
@@ -774,40 +772,28 @@ bool RetainCountChecker::evalCall(const CallExpr *CE, CheckerContext &C) const {
   // annotate attribute. If it does, we will not inline it.
   bool hasTrustedImplementationAnnotation = false;
 
+  const LocationContext *LCtx = C.getLocationContext();
+
   // See if it's one of the specific functions we know how to eval.
   if (!SmrMgr.canEval(CE, FD, hasTrustedImplementationAnnotation))
     return false;
 
   // Bind the return value.
-  const LocationContext *LCtx = C.getLocationContext();
-  SVal RetVal = state->getSVal(CE->getArg(0), LCtx);
-  if (RetVal.isUnknown() ||
-      (hasTrustedImplementationAnnotation && !ResultTy.isNull())) {
+  // For now, all the functions which we can evaluate and which take
+  // at least one argument are identities.
+  if (CE->getNumArgs() >= 1) {
+    SVal RetVal = state->getSVal(CE->getArg(0), LCtx);
+
     // If the receiver is unknown or the function has
     // 'rc_ownership_trusted_implementation' annotate attribute, conjure a
     // return value.
-    SValBuilder &SVB = C.getSValBuilder();
-    RetVal = SVB.conjureSymbolVal(nullptr, CE, LCtx, ResultTy, C.blockCount());
-  }
-  state = state->BindExpr(CE, LCtx, RetVal, false);
-
-  // FIXME: This should not be necessary, but otherwise the argument seems to be
-  // considered alive during the next statement.
-  if (const MemRegion *ArgRegion = RetVal.getAsRegion()) {
-    // Save the refcount status of the argument.
-    SymbolRef Sym = RetVal.getAsLocSymbol();
-    const RefVal *Binding = nullptr;
-    if (Sym)
-      Binding = getRefBinding(state, Sym);
-
-    // Invalidate the argument region.
-    state = state->invalidateRegions(
-        ArgRegion, CE, C.blockCount(), LCtx,
-        /*CausesPointerEscape*/ hasTrustedImplementationAnnotation);
-
-    // Restore the refcount status of the argument.
-    if (Binding)
-      state = setRefBinding(state, Sym, *Binding);
+    if (RetVal.isUnknown() ||
+        (hasTrustedImplementationAnnotation && !ResultTy.isNull())) {
+      SValBuilder &SVB = C.getSValBuilder();
+      RetVal =
+          SVB.conjureSymbolVal(nullptr, CE, LCtx, ResultTy, C.blockCount());
+    }
+    state = state->BindExpr(CE, LCtx, RetVal, false);
   }
 
   C.addTransition(state);
@@ -1322,19 +1308,6 @@ void RetainCountChecker::checkEndFunction(const ReturnStmt *RS,
   processLeaks(state, Leaked, Ctx, Pred);
 }
 
-const ProgramPointTag *
-RetainCountChecker::getDeadSymbolTag(SymbolRef sym) const {
-  const CheckerProgramPointTag *&tag = DeadSymbolTags[sym];
-  if (!tag) {
-    SmallString<64> buf;
-    llvm::raw_svector_ostream out(buf);
-    out << "Dead Symbol : ";
-    sym->dumpToStream(out);
-    tag = new CheckerProgramPointTag(this, out.str());
-  }
-  return tag;
-}
-
 void RetainCountChecker::checkDeadSymbols(SymbolReaper &SymReaper,
                                           CheckerContext &C) const {
   ExplodedNode *Pred = C.getPredecessor();
@@ -1350,8 +1323,8 @@ void RetainCountChecker::checkDeadSymbols(SymbolReaper &SymReaper,
     if (const RefVal *T = B.lookup(Sym)){
       // Use the symbol as the tag.
       // FIXME: This might not be as unique as we would like.
-      const ProgramPointTag *Tag = getDeadSymbolTag(Sym);
-      state = handleAutoreleaseCounts(state, Pred, Tag, C, Sym, *T);
+      static CheckerProgramPointTag Tag(this, "DeadSymbolAutorelease");
+      state = handleAutoreleaseCounts(state, Pred, &Tag, C, Sym, *T);
       if (!state)
         return;
 

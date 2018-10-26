@@ -2628,6 +2628,16 @@ TEST_F(FormatTest, MacroCallsWithoutTrailingSemicolon) {
                    "  A(X x)\n"
                    "  try : t(0) {} catch (...) {}\n"
                    "};"));
+  FormatStyle Style = getLLVMStyle();
+  Style.BreakBeforeBraces = FormatStyle::BS_Custom;
+  Style.BraceWrapping.AfterControlStatement = true;
+  Style.BraceWrapping.AfterFunction = true;
+  EXPECT_EQ("void f()\n"
+            "try\n"
+            "{\n"
+            "}",
+            format("void f() try {\n"
+                   "}", Style));
   EXPECT_EQ("class SomeClass {\n"
             "public:\n"
             "  SomeClass() EXCLUSIVE_LOCK_FUNCTION(mu_);\n"
@@ -2650,6 +2660,45 @@ TEST_F(FormatTest, MacroCallsWithoutTrailingSemicolon) {
                    getLLVMStyleWithColumns(40)));
 
   verifyFormat("MACRO(>)");
+
+  // Some macros contain an implicit semicolon.
+  Style = getLLVMStyle();
+  Style.StatementMacros.push_back("FOO");
+  verifyFormat("FOO(a) int b = 0;");
+  verifyFormat("FOO(a)\n"
+               "int b = 0;",
+               Style);
+  verifyFormat("FOO(a);\n"
+               "int b = 0;",
+               Style);
+  verifyFormat("FOO(argc, argv, \"4.0.2\")\n"
+               "int b = 0;",
+               Style);
+  verifyFormat("FOO()\n"
+               "int b = 0;",
+               Style);
+  verifyFormat("FOO\n"
+               "int b = 0;",
+               Style);
+  verifyFormat("void f() {\n"
+               "  FOO(a)\n"
+               "  return a;\n"
+               "}",
+               Style);
+  verifyFormat("FOO(a)\n"
+               "FOO(b)",
+               Style);
+  verifyFormat("int a = 0;\n"
+               "FOO(b)\n"
+               "int c = 0;",
+               Style);
+  verifyFormat("int a = 0;\n"
+               "int x = FOO(a)\n"
+               "int b = 0;",
+               Style);
+  verifyFormat("void foo(int a) { FOO(a) }\n"
+               "uint32_t bar() {}",
+               Style);
 }
 
 TEST_F(FormatTest, LayoutMacroDefinitionsStatementsSpanningBlocks) {
@@ -11085,6 +11134,12 @@ TEST_F(FormatTest, ParsesConfiguration) {
   CHECK_PARSE("ForEachMacros: [BOOST_FOREACH, Q_FOREACH]", ForEachMacros,
               BoostAndQForeach);
 
+  Style.StatementMacros.clear();
+  CHECK_PARSE("StatementMacros: [QUNUSED]", StatementMacros,
+              std::vector<std::string>{"QUNUSED"});
+  CHECK_PARSE("StatementMacros: [QUNUSED, QT_REQUIRE_VERSION]", StatementMacros,
+              std::vector<std::string>({"QUNUSED", "QT_REQUIRE_VERSION"}));
+
   Style.IncludeStyle.IncludeCategories.clear();
   std::vector<tooling::IncludeStyle::IncludeCategory> ExpectedCategories = {
       {"abc/.*", 2}, {".*", 1}};
@@ -12320,14 +12375,14 @@ TEST_F(FormatTest, NoSpaceAfterSuper) {
 }
 
 TEST(FormatStyle, GetStyleWithEmptyFileName) {
-  vfs::InMemoryFileSystem FS;
+  llvm::vfs::InMemoryFileSystem FS;
   auto Style1 = getStyle("file", "", "Google", "", &FS);
   ASSERT_TRUE((bool)Style1);
   ASSERT_EQ(*Style1, getGoogleStyle());
 }
 
 TEST(FormatStyle, GetStyleOfFile) {
-  vfs::InMemoryFileSystem FS;
+  llvm::vfs::InMemoryFileSystem FS;
   // Test 1: format file in the same directory.
   ASSERT_TRUE(
       FS.addFile("/a/.clang-format", 0,

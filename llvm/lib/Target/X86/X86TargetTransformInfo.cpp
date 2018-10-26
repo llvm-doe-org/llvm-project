@@ -290,11 +290,6 @@ int X86TTIImpl::getArithmeticInstrCost(
     { ISD::SHL,  MVT::v64i8,   2 }, // psllw + pand.
     { ISD::SRL,  MVT::v64i8,   2 }, // psrlw + pand.
     { ISD::SRA,  MVT::v64i8,   4 }, // psrlw, pand, pxor, psubb.
-
-    { ISD::SDIV, MVT::v32i16,  6 }, // vpmulhw sequence
-    { ISD::SREM, MVT::v32i16,  8 }, // vpmulhw+mul+sub sequence
-    { ISD::UDIV, MVT::v32i16,  6 }, // vpmulhuw sequence
-    { ISD::UREM, MVT::v32i16,  8 }, // vpmulhuw+mul+sub sequence
   };
 
   if (Op2Info == TargetTransformInfo::OK_UniformConstantValue &&
@@ -308,11 +303,6 @@ int X86TTIImpl::getArithmeticInstrCost(
     { ISD::SRA,  MVT::v2i64,   1 },
     { ISD::SRA,  MVT::v4i64,   1 },
     { ISD::SRA,  MVT::v8i64,   1 },
-
-    { ISD::SDIV, MVT::v16i32, 15 }, // vpmuldq sequence
-    { ISD::SREM, MVT::v16i32, 17 }, // vpmuldq+mul+sub sequence
-    { ISD::UDIV, MVT::v16i32, 15 }, // vpmuludq sequence
-    { ISD::UREM, MVT::v16i32, 17 }, // vpmuludq+mul+sub sequence
   };
 
   if (Op2Info == TargetTransformInfo::OK_UniformConstantValue &&
@@ -328,15 +318,6 @@ int X86TTIImpl::getArithmeticInstrCost(
     { ISD::SRA,  MVT::v32i8,   4 }, // psrlw, pand, pxor, psubb.
 
     { ISD::SRA,  MVT::v4i64,   4 }, // 2 x psrad + shuffle.
-
-    { ISD::SDIV, MVT::v16i16,  6 }, // vpmulhw sequence
-    { ISD::SREM, MVT::v16i16,  8 }, // vpmulhw+mul+sub sequence
-    { ISD::UDIV, MVT::v16i16,  6 }, // vpmulhuw sequence
-    { ISD::UREM, MVT::v16i16,  8 }, // vpmulhuw+mul+sub sequence
-    { ISD::SDIV, MVT::v8i32,  15 }, // vpmuldq sequence
-    { ISD::SREM, MVT::v8i32,  19 }, // vpmuldq+mul+sub sequence
-    { ISD::UDIV, MVT::v8i32,  15 }, // vpmuludq sequence
-    { ISD::UREM, MVT::v8i32,  19 }, // vpmuludq+mul+sub sequence
   };
 
   if (Op2Info == TargetTransformInfo::OK_UniformConstantValue &&
@@ -354,7 +335,81 @@ int X86TTIImpl::getArithmeticInstrCost(
     { ISD::SHL,  MVT::v32i8,   4+2 }, // 2*(psllw + pand) + split.
     { ISD::SRL,  MVT::v32i8,   4+2 }, // 2*(psrlw + pand) + split.
     { ISD::SRA,  MVT::v32i8,   8+2 }, // 2*(psrlw, pand, pxor, psubb) + split.
+  };
 
+  // XOP has faster vXi8 shifts.
+  if (Op2Info == TargetTransformInfo::OK_UniformConstantValue &&
+      ST->hasSSE2() && !ST->hasXOP()) {
+    if (const auto *Entry =
+            CostTableLookup(SSE2UniformConstCostTable, ISD, LT.second))
+      return LT.first * Entry->Cost;
+  }
+
+  static const CostTblEntry AVX512BWConstCostTable[] = {
+    { ISD::SDIV, MVT::v64i8,  14 }, // 2*ext+2*pmulhw sequence
+    { ISD::SREM, MVT::v64i8,  16 }, // 2*ext+2*pmulhw+mul+sub sequence
+    { ISD::UDIV, MVT::v64i8,  14 }, // 2*ext+2*pmulhw sequence
+    { ISD::UREM, MVT::v64i8,  16 }, // 2*ext+2*pmulhw+mul+sub sequence
+    { ISD::SDIV, MVT::v32i16,  6 }, // vpmulhw sequence
+    { ISD::SREM, MVT::v32i16,  8 }, // vpmulhw+mul+sub sequence
+    { ISD::UDIV, MVT::v32i16,  6 }, // vpmulhuw sequence
+    { ISD::UREM, MVT::v32i16,  8 }, // vpmulhuw+mul+sub sequence
+  };
+
+  if ((Op2Info == TargetTransformInfo::OK_UniformConstantValue ||
+       Op2Info == TargetTransformInfo::OK_NonUniformConstantValue) &&
+      ST->hasBWI()) {
+    if (const auto *Entry =
+            CostTableLookup(AVX512BWConstCostTable, ISD, LT.second))
+      return LT.first * Entry->Cost;
+  }
+
+  static const CostTblEntry AVX512ConstCostTable[] = {
+    { ISD::SDIV, MVT::v16i32, 15 }, // vpmuldq sequence
+    { ISD::SREM, MVT::v16i32, 17 }, // vpmuldq+mul+sub sequence
+    { ISD::UDIV, MVT::v16i32, 15 }, // vpmuludq sequence
+    { ISD::UREM, MVT::v16i32, 17 }, // vpmuludq+mul+sub sequence
+  };
+
+  if ((Op2Info == TargetTransformInfo::OK_UniformConstantValue ||
+       Op2Info == TargetTransformInfo::OK_NonUniformConstantValue) &&
+      ST->hasAVX512()) {
+    if (const auto *Entry =
+            CostTableLookup(AVX512ConstCostTable, ISD, LT.second))
+      return LT.first * Entry->Cost;
+  }
+
+  static const CostTblEntry AVX2ConstCostTable[] = {
+    { ISD::SDIV, MVT::v32i8,  14 }, // 2*ext+2*pmulhw sequence
+    { ISD::SREM, MVT::v32i8,  16 }, // 2*ext+2*pmulhw+mul+sub sequence
+    { ISD::UDIV, MVT::v32i8,  14 }, // 2*ext+2*pmulhw sequence
+    { ISD::UREM, MVT::v32i8,  16 }, // 2*ext+2*pmulhw+mul+sub sequence
+    { ISD::SDIV, MVT::v16i16,  6 }, // vpmulhw sequence
+    { ISD::SREM, MVT::v16i16,  8 }, // vpmulhw+mul+sub sequence
+    { ISD::UDIV, MVT::v16i16,  6 }, // vpmulhuw sequence
+    { ISD::UREM, MVT::v16i16,  8 }, // vpmulhuw+mul+sub sequence
+    { ISD::SDIV, MVT::v8i32,  15 }, // vpmuldq sequence
+    { ISD::SREM, MVT::v8i32,  19 }, // vpmuldq+mul+sub sequence
+    { ISD::UDIV, MVT::v8i32,  15 }, // vpmuludq sequence
+    { ISD::UREM, MVT::v8i32,  19 }, // vpmuludq+mul+sub sequence
+  };
+
+  if ((Op2Info == TargetTransformInfo::OK_UniformConstantValue ||
+       Op2Info == TargetTransformInfo::OK_NonUniformConstantValue) &&
+      ST->hasAVX2()) {
+    if (const auto *Entry = CostTableLookup(AVX2ConstCostTable, ISD, LT.second))
+      return LT.first * Entry->Cost;
+  }
+
+  static const CostTblEntry SSE2ConstCostTable[] = {
+    { ISD::SDIV, MVT::v32i8,  28+2 }, // 4*ext+4*pmulhw sequence + split.
+    { ISD::SREM, MVT::v32i8,  32+2 }, // 4*ext+4*pmulhw+mul+sub sequence + split.
+    { ISD::SDIV, MVT::v16i8,    14 }, // 2*ext+2*pmulhw sequence
+    { ISD::SREM, MVT::v16i8,    16 }, // 2*ext+2*pmulhw+mul+sub sequence
+    { ISD::UDIV, MVT::v32i8,  28+2 }, // 4*ext+4*pmulhw sequence + split.
+    { ISD::UREM, MVT::v32i8,  32+2 }, // 4*ext+4*pmulhw+mul+sub sequence + split.
+    { ISD::UDIV, MVT::v16i8,    14 }, // 2*ext+2*pmulhw sequence
+    { ISD::UREM, MVT::v16i8,    16 }, // 2*ext+2*pmulhw+mul+sub sequence
     { ISD::SDIV, MVT::v16i16, 12+2 }, // 2*pmulhw sequence + split.
     { ISD::SREM, MVT::v16i16, 16+2 }, // 2*pmulhw+mul+sub sequence + split.
     { ISD::SDIV, MVT::v8i16,     6 }, // pmulhw sequence
@@ -373,7 +428,8 @@ int X86TTIImpl::getArithmeticInstrCost(
     { ISD::UREM, MVT::v4i32,    20 }, // pmuludq+mul+sub sequence
   };
 
-  if (Op2Info == TargetTransformInfo::OK_UniformConstantValue &&
+  if ((Op2Info == TargetTransformInfo::OK_UniformConstantValue ||
+       Op2Info == TargetTransformInfo::OK_NonUniformConstantValue) &&
       ST->hasSSE2()) {
     // pmuldq sequence.
     if (ISD == ISD::SDIV && LT.second == MVT::v8i32 && ST->hasAVX())
@@ -385,12 +441,8 @@ int X86TTIImpl::getArithmeticInstrCost(
     if (ISD == ISD::SREM && LT.second == MVT::v4i32 && ST->hasSSE41())
       return LT.first * 20;
 
-    // XOP has faster vXi8 shifts.
-    if ((ISD != ISD::SHL && ISD != ISD::SRL && ISD != ISD::SRA) ||
-        !ST->hasXOP())
-      if (const auto *Entry =
-              CostTableLookup(SSE2UniformConstCostTable, ISD, LT.second))
-        return LT.first * Entry->Cost;
+    if (const auto *Entry = CostTableLookup(SSE2ConstCostTable, ISD, LT.second))
+      return LT.first * Entry->Cost;
   }
 
   static const CostTblEntry AVX2UniformCostTable[] = {
@@ -809,6 +861,10 @@ int X86TTIImpl::getShuffleCost(TTI::ShuffleKind Kind, Type *Tp, int Index,
   // 64-bit packed float vectors (v2f32) are widened to type v4f32.
   // 64-bit packed integer vectors (v2i32) are promoted to type v2i64.
   std::pair<int, MVT> LT = TLI->getTypeLegalizationCost(DL, Tp);
+
+  // Treat Transpose as 2-op shuffles - there's no difference in lowering.
+  if (Kind == TTI::SK_Transpose)
+    Kind = TTI::SK_PermuteTwoSrc;
 
   // For Broadcasts we are splatting the first element from the first input
   // register, so only need to reference that input and all the output
@@ -2342,11 +2398,15 @@ int X86TTIImpl::getIntImmCost(unsigned Opcode, unsigned Idx, const APInt &Imm,
       return TTI::TCC_Free;
     ImmIdx = 1;
     break;
-  case Instruction::Mul:
   case Instruction::UDiv:
   case Instruction::SDiv:
   case Instruction::URem:
   case Instruction::SRem:
+    // Division by constant is typically expanded later into a different
+    // instruction sequence. This completely changes the constants.
+    // Report them as "free" to stop ConstantHoist from marking them as opaque.
+    return TTI::TCC_Free;
+  case Instruction::Mul:
   case Instruction::Or:
   case Instruction::Xor:
     ImmIdx = 1;
@@ -2719,7 +2779,12 @@ int X86TTIImpl::getInterleavedMemoryOpCostAVX2(unsigned Opcode, Type *VecTy,
                                                unsigned Factor,
                                                ArrayRef<unsigned> Indices,
                                                unsigned Alignment,
-                                               unsigned AddressSpace) {
+                                               unsigned AddressSpace,
+                                               bool IsMasked) {
+
+  if (IsMasked)
+    return BaseT::getInterleavedMemoryOpCost(Opcode, VecTy, Factor, Indices,
+                                             Alignment, AddressSpace, IsMasked);
 
   // We currently Support only fully-interleaved groups, with no gaps.
   // TODO: Support also strided loads (interleaved-groups with gaps).
@@ -2828,7 +2893,12 @@ int X86TTIImpl::getInterleavedMemoryOpCostAVX512(unsigned Opcode, Type *VecTy,
                                                  unsigned Factor,
                                                  ArrayRef<unsigned> Indices,
                                                  unsigned Alignment,
-                                                 unsigned AddressSpace) {
+                                                 unsigned AddressSpace,
+                                                 bool IsMasked) {
+
+  if (IsMasked)
+    return BaseT::getInterleavedMemoryOpCost(Opcode, VecTy, Factor, Indices,
+                                             Alignment, AddressSpace, IsMasked);
 
   // VecTy for interleave memop is <VF*Factor x Elt>.
   // So, for VF=4, Interleave Factor = 3, Element type = i32 we have
@@ -2946,7 +3016,8 @@ int X86TTIImpl::getInterleavedMemoryOpCost(unsigned Opcode, Type *VecTy,
                                            unsigned Factor,
                                            ArrayRef<unsigned> Indices,
                                            unsigned Alignment,
-                                           unsigned AddressSpace) {
+                                           unsigned AddressSpace,
+                                           bool IsMasked) {
   auto isSupportedOnAVX512 = [](Type *VecTy, bool HasBW) {
     Type *EltTy = VecTy->getVectorElementType();
     if (EltTy->isFloatTy() || EltTy->isDoubleTy() || EltTy->isIntegerTy(64) ||
@@ -2958,11 +3029,11 @@ int X86TTIImpl::getInterleavedMemoryOpCost(unsigned Opcode, Type *VecTy,
   };
   if (ST->hasAVX512() && isSupportedOnAVX512(VecTy, ST->hasBWI()))
     return getInterleavedMemoryOpCostAVX512(Opcode, VecTy, Factor, Indices,
-                                            Alignment, AddressSpace);
+                                            Alignment, AddressSpace, IsMasked);
   if (ST->hasAVX2())
     return getInterleavedMemoryOpCostAVX2(Opcode, VecTy, Factor, Indices,
-                                          Alignment, AddressSpace);
+                                          Alignment, AddressSpace, IsMasked);
 
   return BaseT::getInterleavedMemoryOpCost(Opcode, VecTy, Factor, Indices,
-                                           Alignment, AddressSpace);
+                                           Alignment, AddressSpace, IsMasked);
 }

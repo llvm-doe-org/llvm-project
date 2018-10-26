@@ -10,6 +10,7 @@ include_directories(
 
 add_extra_unittest(ClangdTests
   Annotations.cpp
+  BackgroundIndexTests.cpp
   CancellationTests.cpp
   ClangdTests.cpp
   ClangdUnitTests.cpp
@@ -21,10 +22,12 @@ add_extra_unittest(ClangdTests
   FileDistanceTests.cpp
   FileIndexTests.cpp
   FindSymbolsTests.cpp
+  FSTests.cpp
   FuzzyMatchTests.cpp
   GlobalCompilationDatabaseTests.cpp
   HeadersTests.cpp
   IndexTests.cpp
+  JSONTransportTests.cpp
   QualityTests.cpp
   RIFFTests.cpp
   SerializationTests.cpp

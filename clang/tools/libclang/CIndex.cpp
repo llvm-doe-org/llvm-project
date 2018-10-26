@@ -1044,7 +1044,7 @@ bool CursorVisitor::VisitObjCContainerDecl(ObjCContainerDecl *D) {
   }
 
   // Now sort the Decls so that they appear in lexical order.
-  llvm::sort(DeclsInContainer.begin(), DeclsInContainer.end(),
+  llvm::sort(DeclsInContainer,
              [&SM](Decl *A, Decl *B) {
                SourceLocation L_A = A->getBeginLoc();
                SourceLocation L_B = B->getBeginLoc();
@@ -2206,6 +2206,18 @@ void OMPClauseEnqueue::VisitOMPThreadsClause(const OMPThreadsClause *) {}
 void OMPClauseEnqueue::VisitOMPSIMDClause(const OMPSIMDClause *) {}
 
 void OMPClauseEnqueue::VisitOMPNogroupClause(const OMPNogroupClause *) {}
+
+void OMPClauseEnqueue::VisitOMPUnifiedAddressClause(
+    const OMPUnifiedAddressClause *) {}
+
+void OMPClauseEnqueue::VisitOMPUnifiedSharedMemoryClause(
+    const OMPUnifiedSharedMemoryClause *) {}
+
+void OMPClauseEnqueue::VisitOMPReverseOffloadClause(
+    const OMPReverseOffloadClause *) {}
+
+void OMPClauseEnqueue::VisitOMPDynamicAllocatorsClause(
+    const OMPDynamicAllocatorsClause *) {}
 
 void OMPClauseEnqueue::VisitOMPDeviceClause(const OMPDeviceClause *C) {
   Visitor->AddStmt(C->getDevice());
@@ -6226,6 +6238,7 @@ CXCursor clang_getCursorDefinition(CXCursor C) {
   case Decl::Import:
   case Decl::OMPThreadPrivate:
   case Decl::OMPDeclareReduction:
+  case Decl::OMPRequires:
   case Decl::ObjCTypeParam:
   case Decl::BuiltinTemplate:
   case Decl::PragmaComment:
@@ -7805,11 +7818,11 @@ static void getCursorPlatformAvailabilityForDecl(
   if (AvailabilityAttrs.empty())
     return;
 
-  llvm::sort(AvailabilityAttrs.begin(), AvailabilityAttrs.end(),
+  llvm::sort(AvailabilityAttrs,
              [](AvailabilityAttr *LHS, AvailabilityAttr *RHS) {
                return LHS->getPlatform()->getName() <
                       RHS->getPlatform()->getName();
-            });
+             });
   ASTContext &Ctx = D->getASTContext();
   auto It = std::unique(
       AvailabilityAttrs.begin(), AvailabilityAttrs.end(),

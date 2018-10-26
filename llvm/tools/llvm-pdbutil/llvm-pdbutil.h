@@ -83,7 +83,10 @@ extern llvm::cl::opt<bool> Globals;
 extern llvm::cl::opt<bool> Classes;
 extern llvm::cl::opt<bool> Enums;
 extern llvm::cl::opt<bool> Funcsigs;
+extern llvm::cl::opt<bool> Arrays;
 extern llvm::cl::opt<bool> Typedefs;
+extern llvm::cl::opt<bool> Pointers;
+extern llvm::cl::opt<bool> VTShapes;
 extern llvm::cl::opt<bool> All;
 extern llvm::cl::opt<bool> ExcludeCompilerGenerated;
 
@@ -166,6 +169,7 @@ extern llvm::cl::opt<bool> DumpSymbols;
 extern llvm::cl::opt<bool> DumpSymRecordBytes;
 extern llvm::cl::opt<bool> DumpGSIRecords;
 extern llvm::cl::opt<bool> DumpGlobals;
+extern llvm::cl::list<std::string> DumpGlobalNames;
 extern llvm::cl::opt<bool> DumpGlobalExtras;
 extern llvm::cl::opt<bool> DumpPublics;
 extern llvm::cl::opt<bool> DumpPublicExtras;

@@ -613,8 +613,7 @@ void COFFDumper::cacheRelocations() {
       RelocMap[Section].push_back(Reloc);
 
     // Sort relocations by address.
-    llvm::sort(RelocMap[Section].begin(), RelocMap[Section].end(),
-               relocAddressLess);
+    llvm::sort(RelocMap[Section], relocAddressLess);
   }
 }
 
@@ -1550,8 +1549,10 @@ void COFFDumper::printUnwindInfo() {
     Dumper.printData(Ctx);
     break;
   }
+  case COFF::IMAGE_FILE_MACHINE_ARM64:
   case COFF::IMAGE_FILE_MACHINE_ARMNT: {
-    ARM::WinEH::Decoder Decoder(W);
+    ARM::WinEH::Decoder Decoder(W, Obj->getMachine() ==
+                                       COFF::IMAGE_FILE_MACHINE_ARM64);
     Decoder.dumpProcedureData(*Obj);
     break;
   }

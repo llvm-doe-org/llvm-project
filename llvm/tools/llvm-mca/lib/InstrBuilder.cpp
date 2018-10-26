@@ -64,16 +64,15 @@ static void initializeUsedResources(InstrDesc &ID,
 
   // Sort elements by mask popcount, so that we prioritize resource units over
   // resource groups, and smaller groups over larger groups.
-  llvm::sort(Worklist.begin(), Worklist.end(),
-             [](const ResourcePlusCycles &A, const ResourcePlusCycles &B) {
-               unsigned popcntA = countPopulation(A.first);
-               unsigned popcntB = countPopulation(B.first);
-               if (popcntA < popcntB)
-                 return true;
-               if (popcntA > popcntB)
-                 return false;
-               return A.first < B.first;
-             });
+  sort(Worklist, [](const ResourcePlusCycles &A, const ResourcePlusCycles &B) {
+    unsigned popcntA = countPopulation(A.first);
+    unsigned popcntB = countPopulation(B.first);
+    if (popcntA < popcntB)
+      return true;
+    if (popcntA > popcntB)
+      return false;
+    return A.first < B.first;
+  });
 
   uint64_t UsedResourceUnits = 0;
 
@@ -99,7 +98,7 @@ static void initializeUsedResources(InstrDesc &ID,
     for (unsigned J = I + 1; J < E; ++J) {
       ResourcePlusCycles &B = Worklist[J];
       if ((NormalizedMask & B.first) == NormalizedMask) {
-        B.second.CS.Subtract(A.second.size() - SuperResources[A.first]);
+        B.second.CS.subtract(A.second.size() - SuperResources[A.first]);
         if (countPopulation(B.first) > 1)
           B.second.NumUnits++;
       }
@@ -216,9 +215,8 @@ Error InstrBuilder::populateWrites(InstrDesc &ID, const MCInst &MCI,
   }
 
   if (CurrentDef != NumExplicitDefs) {
-    return make_error<StringError>(
-        "error: Expected more register operand definitions.",
-        inconvertibleErrorCode());
+    return make_error<InstructionError<MCInst>>(
+        "Expected more register operand definitions.", MCI);
   }
 
   CurrentDef = 0;
@@ -254,11 +252,12 @@ Error InstrBuilder::populateWrites(InstrDesc &ID, const MCInst &MCI,
     // Always assume that the optional definition is the last operand of the
     // MCInst sequence.
     const MCOperand &Op = MCI.getOperand(MCI.getNumOperands() - 1);
-    if (i == MCI.getNumOperands() || !Op.isReg())
-      return make_error<StringError>(
-          "error: expected a register operand for an optional "
-          "definition. Instruction has not be correctly analyzed.",
-          inconvertibleErrorCode());
+    if (i == MCI.getNumOperands() || !Op.isReg()) {
+      std::string Message =
+          "expected a register operand for an optional definition. Instruction "
+          "has not been correctly analyzed.";
+      return make_error<InstructionError<MCInst>>(Message, MCI);
+    }
 
     WriteDescriptor &Write = ID.Writes[TotalDefs - 1];
     Write.OpIndex = MCI.getNumOperands() - 1;
@@ -285,9 +284,8 @@ Error InstrBuilder::populateReads(InstrDesc &ID, const MCInst &MCI,
   }
 
   if (NumExplicitDefs) {
-    return make_error<StringError>(
-        "error: Expected more register operand definitions. ",
-        inconvertibleErrorCode());
+    return make_error<InstructionError<MCInst>>(
+        "Expected more register operand definitions.", MCI);
   }
 
   unsigned NumExplicitUses = MCI.getNumOperands() - i;
@@ -322,6 +320,31 @@ Error InstrBuilder::populateReads(InstrDesc &ID, const MCInst &MCI,
   return ErrorSuccess();
 }
 
+Error InstrBuilder::verifyInstrDesc(const InstrDesc &ID,
+                                    const MCInst &MCI) const {
+  if (ID.NumMicroOps != 0)
+    return ErrorSuccess();
+
+  bool UsesMemory = ID.MayLoad || ID.MayStore;
+  bool UsesBuffers = !ID.Buffers.empty();
+  bool UsesResources = !ID.Resources.empty();
+  if (!UsesMemory && !UsesBuffers && !UsesResources)
+    return ErrorSuccess();
+
+  StringRef Message;
+  if (UsesMemory) {
+    Message = "found an inconsistent instruction that decodes "
+              "into zero opcodes and that consumes load/store "
+              "unit resources.";
+  } else {
+    Message = "found an inconsistent instruction that decodes "
+              "to zero opcodes and that consumes scheduler "
+              "resources.";
+  }
+
+  return make_error<InstructionError<MCInst>>(Message, MCI);
+}
+
 Expected<const InstrDesc &>
 InstrBuilder::createInstrDescImpl(const MCInst &MCI) {
   assert(STI.getSchedModel().hasInstrSchedModel() &&
@@ -342,24 +365,17 @@ InstrBuilder::createInstrDescImpl(const MCInst &MCI) {
       SchedClassID = STI.resolveVariantSchedClass(SchedClassID, &MCI, CPUID);
 
     if (!SchedClassID) {
-      return make_error<StringError>("unable to resolve this variant class.",
-                                     inconvertibleErrorCode());
+      return make_error<InstructionError<MCInst>>(
+          "unable to resolve scheduling class for write variant.", MCI);
     }
   }
 
   // Check if this instruction is supported. Otherwise, report an error.
   const MCSchedClassDesc &SCDesc = *SM.getSchedClassDesc(SchedClassID);
   if (SCDesc.NumMicroOps == MCSchedClassDesc::InvalidNumMicroOps) {
-    std::string ToString;
-    llvm::raw_string_ostream OS(ToString);
-    WithColor::error() << "found an unsupported instruction in the input"
-                       << " assembly sequence.\n";
-    MCIP.printInst(&MCI, OS, "", STI);
-    OS.flush();
-    WithColor::note() << "instruction: " << ToString << '\n';
-    return make_error<StringError>(
-        "Don't know how to analyze unsupported instructions",
-        inconvertibleErrorCode());
+    return make_error<InstructionError<MCInst>>(
+        "found an unsupported instruction in the input assembly sequence.",
+        MCI);
   }
 
   // Create a new empty descriptor.
@@ -392,6 +408,10 @@ InstrBuilder::createInstrDescImpl(const MCInst &MCI) {
 
   LLVM_DEBUG(dbgs() << "\t\tMaxLatency=" << ID->MaxLatency << '\n');
   LLVM_DEBUG(dbgs() << "\t\tNumMicroOps=" << ID->NumMicroOps << '\n');
+
+  // Sanity check on the instruction descriptor.
+  if (Error Err = verifyInstrDesc(*ID, MCI))
+    return std::move(Err);
 
   // Now add the new descriptor.
   SchedClassID = MCDesc.getSchedClass();
@@ -430,6 +450,8 @@ InstrBuilder::createInstruction(const MCInst &MCI) {
   bool IsZeroIdiom = MCIA.isZeroIdiom(MCI, Mask, ProcID);
   bool IsDepBreaking =
       IsZeroIdiom || MCIA.isDependencyBreaking(MCI, Mask, ProcID);
+  if (MCIA.isOptimizableRegisterMove(MCI, ProcID))
+    NewIS->setOptimizableMove();
 
   // Initialize Reads first.
   for (const ReadDescriptor &RD : D.Reads) {

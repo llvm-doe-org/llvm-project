@@ -2058,6 +2058,14 @@ public:
     return true;
   }
 
+  /// Return true if the specified immediate is legal for the value input of a
+  /// store instruction.
+  virtual bool isLegalStoreImmediate(int64_t Value) const {
+    // Default implementation assumes that at least 0 works since it is likely
+    // that a zero register exists or a zero immediate is allowed.
+    return Value == 0;
+  }
+
   /// Return true if it's significantly cheaper to shift a vector by a uniform
   /// scalar than by an amount which will vary across each lane. On x86, for
   /// example, there is a "psllw" instruction for the former case, but no simple
@@ -2846,7 +2854,8 @@ public:
                             unsigned Depth = 0,
                             bool AssumeSingleUse = false) const;
 
-  /// Helper wrapper around SimplifyDemandedBits
+  /// Helper wrapper around SimplifyDemandedBits.
+  /// Adds Op back to the worklist upon success.
   bool SimplifyDemandedBits(SDValue Op, const APInt &DemandedMask,
                             DAGCombinerInfo &DCI) const;
 
@@ -2869,7 +2878,8 @@ public:
                                   TargetLoweringOpt &TLO, unsigned Depth = 0,
                                   bool AssumeSingleUse = false) const;
 
-  /// Helper wrapper around SimplifyDemandedVectorElts
+  /// Helper wrapper around SimplifyDemandedVectorElts.
+  /// Adds Op back to the worklist upon success.
   bool SimplifyDemandedVectorElts(SDValue Op, const APInt &DemandedElts,
                                   APInt &KnownUndef, APInt &KnownZero,
                                   DAGCombinerInfo &DCI) const;
@@ -2906,10 +2916,21 @@ public:
   /// elements, returning true on success. Otherwise, analyze the expression and
   /// return a mask of KnownUndef and KnownZero elements for the expression
   /// (used to simplify the caller). The KnownUndef/Zero elements may only be
-  /// accurate for those bits in the DemandedMask
+  /// accurate for those bits in the DemandedMask.
   virtual bool SimplifyDemandedVectorEltsForTargetNode(
       SDValue Op, const APInt &DemandedElts, APInt &KnownUndef,
       APInt &KnownZero, TargetLoweringOpt &TLO, unsigned Depth = 0) const;
+
+  /// Attempt to simplify any target nodes based on the demanded bits,
+  /// returning true on success. Otherwise, analyze the
+  /// expression and return a mask of KnownOne and KnownZero bits for the
+  /// expression (used to simplify the caller).  The KnownZero/One bits may only
+  /// be accurate for those bits in the DemandedMask.
+  virtual bool SimplifyDemandedBitsForTargetNode(SDValue Op,
+                                                 const APInt &DemandedBits,
+                                                 KnownBits &Known,
+                                                 TargetLoweringOpt &TLO,
+                                                 unsigned Depth = 0) const;
 
   /// If \p SNaN is false, \returns true if \p Op is known to never be any
   /// NaN. If \p sNaN is true, returns if \p Op is known to never be a signaling
@@ -3642,6 +3663,30 @@ public:
   /// \returns True, if the expansion was successful, false otherwise
   bool expandFP_TO_SINT(SDNode *N, SDValue &Result, SelectionDAG &DAG) const;
 
+  /// Expand fminnum/fmaxnum into fminnum_ieee/fmaxnum_ieee with quieted inputs.
+  SDValue expandFMINNUM_FMAXNUM(SDNode *N, SelectionDAG &DAG) const;
+
+  /// Expand CTPOP nodes. Expands vector/scalar CTPOP nodes,
+  /// vector nodes can only succeed if all operations are legal/custom.
+  /// \param N Node to expand
+  /// \param Result output after conversion
+  /// \returns True, if the expansion was successful, false otherwise
+  bool expandCTPOP(SDNode *N, SDValue &Result, SelectionDAG &DAG) const;
+
+  /// Expand CTLZ/CTLZ_ZERO_UNDEF nodes. Expands vector/scalar CTLZ nodes,
+  /// vector nodes can only succeed if all operations are legal/custom.
+  /// \param N Node to expand
+  /// \param Result output after conversion
+  /// \returns True, if the expansion was successful, false otherwise
+  bool expandCTLZ(SDNode *N, SDValue &Result, SelectionDAG &DAG) const;
+
+  /// Expand CTTZ/CTTZ_ZERO_UNDEF nodes. Expands vector/scalar CTTZ nodes,
+  /// vector nodes can only succeed if all operations are legal/custom.
+  /// \param N Node to expand
+  /// \param Result output after conversion
+  /// \returns True, if the expansion was successful, false otherwise
+  bool expandCTTZ(SDNode *N, SDValue &Result, SelectionDAG &DAG) const;
+
   /// Turn load of vector type into a load of the individual elements.
   /// \param LD load to expand
   /// \returns MERGE_VALUEs of the scalar loads with their chains.
@@ -3678,6 +3723,10 @@ public:
   /// bounds.
   SDValue getVectorElementPointer(SelectionDAG &DAG, SDValue VecPtr, EVT VecVT,
                                   SDValue Index) const;
+
+  /// Method for building the DAG expansion of ISD::[US]ADDSAT. This method
+  /// accepts integers or vectors of integers as its arguments.
+  SDValue getExpandedSaturationAddition(SDNode *Node, SelectionDAG &DAG) const;
 
   //===--------------------------------------------------------------------===//
   // Instruction Emitting Hooks

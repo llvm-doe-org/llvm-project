@@ -28,6 +28,7 @@
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCRegisterInfo.h"
 
+namespace llvm {
 namespace exegesis {
 
 class ExegesisTarget {
@@ -49,7 +50,7 @@ public:
   }
 
   // Fills memory operands with references to the address at [Reg] + Offset.
-  virtual void fillMemoryOperands(InstructionBuilder &IB, unsigned Reg,
+  virtual void fillMemoryOperands(InstructionTemplate &IT, unsigned Reg,
                                   unsigned Offset) const {
 
     llvm_unreachable(
@@ -100,5 +101,6 @@ private:
 };
 
 } // namespace exegesis
+} // namespace llvm
 
 #endif // LLVM_TOOLS_LLVM_EXEGESIS_TARGET_H

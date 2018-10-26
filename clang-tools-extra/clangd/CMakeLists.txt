@@ -21,13 +21,13 @@ add_clang_library(clangDaemon
   DraftStore.cpp
   FindSymbols.cpp
   FileDistance.cpp
+  FS.cpp
   FuzzyMatch.cpp
   GlobalCompilationDatabase.cpp
   Headers.cpp
-  JSONRPCDispatcher.cpp
+  JSONTransport.cpp
   Logger.cpp
   Protocol.cpp
-  ProtocolHandlers.cpp
   Quality.cpp
   RIFF.cpp
   SourceCode.cpp
@@ -37,14 +37,16 @@ add_clang_library(clangDaemon
   URI.cpp
   XRefs.cpp
 
+  index/Background.cpp
   index/CanonicalIncludes.cpp
   index/FileIndex.cpp
   index/Index.cpp
+  index/IndexAction.cpp
   index/MemIndex.cpp
   index/Merge.cpp
   index/Serialization.cpp
   index/SymbolCollector.cpp
-  index/SymbolYAML.cpp
+  index/YAMLSerialization.cpp
 
   index/dex/Dex.cpp
   index/dex/Iterator.cpp

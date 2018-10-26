@@ -125,11 +125,6 @@ def simm12 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isInt<12>(Imm);}]> {
   }];
 }
 
-def uimm12 : Operand<XLenVT> {
-  let ParserMatchClass = UImmAsmOperand<12>;
-  let DecoderMethod = "decodeUImmOperand<12>";
-}
-
 // A 13-bit signed immediate where the least significant bit is zero.
 def simm13_lsb0 : Operand<OtherVT> {
   let ParserMatchClass = SImmAsmOperand<13, "Lsb0">;
@@ -190,6 +185,18 @@ def bare_symbol : Operand<XLenVT> {
   let ParserMatchClass = BareSymbol;
 }
 
+def CSRSystemRegister : AsmOperandClass {
+  let Name = "CSRSystemRegister";
+  let ParserMethod = "parseCSRSystemRegister";
+  let DiagnosticType = "InvalidCSRSystemRegister";
+}
+
+def csr_sysreg : Operand<XLenVT> {
+  let ParserMatchClass = CSRSystemRegister;
+  let PrintMethod = "printCSRSystemRegister";
+  let DecoderMethod = "decodeUImmOperand<12>";
+}
+
 // A parameterized register class alternative to i32imm/i64imm from Target.td.
 def ixlenimm : Operand<XLenVT> {
   let ParserMatchClass = ImmXLenAsmOperand<"">;
@@ -198,6 +205,12 @@ def ixlenimm : Operand<XLenVT> {
 // Standalone (codegen-only) immleaf patterns.
 def simm32     : ImmLeaf<XLenVT, [{return isInt<32>(Imm);}]>;
 def simm32hi20 : ImmLeaf<XLenVT, [{return isShiftedInt<20, 12>(Imm);}]>;
+// A mask value that won't affect significant shift bits.
+def immshiftxlen : ImmLeaf<XLenVT, [{
+  if (Subtarget->is64Bit())
+    return countTrailingOnes<uint64_t>(Imm) >= 6;
+  return countTrailingOnes<uint64_t>(Imm) >= 5;
+}]>;
 
 // Addressing modes.
 // Necessary because a frameindex can't be matched directly in a pattern.
@@ -263,13 +276,13 @@ class ALU_rr<bits<7> funct7, bits<3> funct3, string opcodestr>
 
 let hasSideEffects = 1, mayLoad = 0, mayStore = 0 in
 class CSR_ir<bits<3> funct3, string opcodestr>
-    : RVInstI<funct3, OPC_SYSTEM, (outs GPR:$rd), (ins uimm12:$imm12, GPR:$rs1),
+    : RVInstI<funct3, OPC_SYSTEM, (outs GPR:$rd), (ins csr_sysreg:$imm12, GPR:$rs1),
               opcodestr, "$rd, $imm12, $rs1">;
 
 let hasSideEffects = 1, mayLoad = 0, mayStore = 0 in
 class CSR_ii<bits<3> funct3, string opcodestr>
     : RVInstI<funct3, OPC_SYSTEM, (outs GPR:$rd),
-              (ins uimm12:$imm12, uimm5:$rs1),
+              (ins csr_sysreg:$imm12, uimm5:$rs1),
               opcodestr, "$rd, $imm12, $rs1">;
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
@@ -546,14 +559,14 @@ def : InstAlias<"rdcycleh $rd",   (CSRRS GPR:$rd, 0xC80, X0)>;
 def : InstAlias<"rdtimeh $rd",    (CSRRS GPR:$rd, 0xC81, X0)>;
 } // Predicates = [IsRV32]
 
-def : InstAlias<"csrr $rd, $csr", (CSRRS GPR:$rd, uimm12:$csr,      X0)>;
-def : InstAlias<"csrw $csr, $rs", (CSRRW      X0, uimm12:$csr, GPR:$rs)>;
-def : InstAlias<"csrs $csr, $rs", (CSRRS      X0, uimm12:$csr, GPR:$rs)>;
-def : InstAlias<"csrc $csr, $rs", (CSRRC      X0, uimm12:$csr, GPR:$rs)>;
+def : InstAlias<"csrr $rd, $csr", (CSRRS GPR:$rd, csr_sysreg:$csr,      X0)>;
+def : InstAlias<"csrw $csr, $rs", (CSRRW      X0, csr_sysreg:$csr, GPR:$rs)>;
+def : InstAlias<"csrs $csr, $rs", (CSRRS      X0, csr_sysreg:$csr, GPR:$rs)>;
+def : InstAlias<"csrc $csr, $rs", (CSRRC      X0, csr_sysreg:$csr, GPR:$rs)>;
 
-def : InstAlias<"csrwi $csr, $imm", (CSRRWI X0, uimm12:$csr, uimm5:$imm)>;
-def : InstAlias<"csrsi $csr, $imm", (CSRRSI X0, uimm12:$csr, uimm5:$imm)>;
-def : InstAlias<"csrci $csr, $imm", (CSRRCI X0, uimm12:$csr, uimm5:$imm)>;
+def : InstAlias<"csrwi $csr, $imm", (CSRRWI X0, csr_sysreg:$csr, uimm5:$imm)>;
+def : InstAlias<"csrsi $csr, $imm", (CSRRSI X0, csr_sysreg:$csr, uimm5:$imm)>;
+def : InstAlias<"csrci $csr, $imm", (CSRRCI X0, csr_sysreg:$csr, uimm5:$imm)>;
 
 def : InstAlias<"sfence.vma",     (SFENCE_VMA      X0, X0)>;
 def : InstAlias<"sfence.vma $rs", (SFENCE_VMA GPR:$rs, X0)>;
@@ -625,7 +638,8 @@ def IsOrAdd: PatFrag<(ops node:$A, node:$B), (or node:$A, node:$B), [{
 
 def : Pat<(simm12:$imm), (ADDI X0, simm12:$imm)>;
 def : Pat<(simm32hi20:$imm), (LUI (HI20 imm:$imm))>;
-def : Pat<(simm32:$imm), (ADDI (LUI (HI20 imm:$imm)), (LO12Sext imm:$imm))>;
+def : Pat<(simm32:$imm), (ADDI (LUI (HI20 imm:$imm)), (LO12Sext imm:$imm))>,
+      Requires<[IsRV32]>;
 
 /// Simple arithmetic operations
 
@@ -638,12 +652,23 @@ def : PatGprGpr<and, AND>;
 def : PatGprSimm12<and, ANDI>;
 def : PatGprGpr<xor, XOR>;
 def : PatGprSimm12<xor, XORI>;
-def : PatGprGpr<shl, SLL>;
 def : PatGprUimmLog2XLen<shl, SLLI>;
-def : PatGprGpr<srl, SRL>;
 def : PatGprUimmLog2XLen<srl, SRLI>;
-def : PatGprGpr<sra, SRA>;
 def : PatGprUimmLog2XLen<sra, SRAI>;
+
+// Match both a plain shift and one where the shift amount is masked (this is
+// typically introduced when the legalizer promotes the shift amount and
+// zero-extends it). For RISC-V, the mask is unnecessary as shifts in the base
+// ISA only read the least significant 5 bits (RV32I) or 6 bits (RV64I).
+multiclass VarShiftXLenPat<PatFrag ShiftOp, RVInst Inst> {
+  def : Pat<(ShiftOp GPR:$rs1, GPR:$rs2), (Inst GPR:$rs1, GPR:$rs2)>;
+  def : Pat<(ShiftOp GPR:$rs1, (and GPR:$rs2, immshiftxlen)),
+            (Inst GPR:$rs1, GPR:$rs2)>;
+}
+
+defm : VarShiftXLenPat<shl, SLL>;
+defm : VarShiftXLenPat<srl, SRL>;
+defm : VarShiftXLenPat<sra, SRA>;
 
 /// FrameIndex calculations
 
@@ -685,7 +710,7 @@ def Select_GPR_Using_CC_GPR : SelectCC_rrirr<GPR, GPR>;
 // Match `(brcond (CondOp ..), ..)` and lower to the appropriate RISC-V branch
 // instruction.
 class BccPat<PatFrag CondOp, RVInstB Inst>
-    : Pat<(brcond (i32 (CondOp GPR:$rs1, GPR:$rs2)), bb:$imm12),
+    : Pat<(brcond (XLenVT (CondOp GPR:$rs1, GPR:$rs2)), bb:$imm12),
           (Inst GPR:$rs1, GPR:$rs2, simm13_lsb0:$imm12)>;
 
 def : BccPat<seteq, BEQ>;
@@ -696,7 +721,7 @@ def : BccPat<setult, BLTU>;
 def : BccPat<setuge, BGEU>;
 
 class BccSwapPat<PatFrag CondOp, RVInst InstBcc>
-    : Pat<(brcond (i32 (CondOp GPR:$rs1, GPR:$rs2)), bb:$imm12),
+    : Pat<(brcond (XLenVT (CondOp GPR:$rs1, GPR:$rs2)), bb:$imm12),
           (InstBcc GPR:$rs2, GPR:$rs1, bb:$imm12)>;
 
 // Condition codes that don't have matching RISC-V branch instructions, but
@@ -808,7 +833,7 @@ multiclass StPat<PatFrag StoreOp, RVInst Inst, RegisterClass StTy> {
 
 defm : StPat<truncstorei8, SB, GPR>;
 defm : StPat<truncstorei16, SH, GPR>;
-defm : StPat<store, SW, GPR>;
+defm : StPat<store, SW, GPR>, Requires<[IsRV32]>;
 
 /// Fences
 
@@ -816,13 +841,13 @@ defm : StPat<store, SW, GPR>;
 // Manual: Volume I.
 
 // fence acquire -> fence r, rw
-def : Pat<(atomic_fence (i32 4), (imm)), (FENCE 0b10, 0b11)>;
+def : Pat<(atomic_fence (XLenVT 4), (imm)), (FENCE 0b10, 0b11)>;
 // fence release -> fence rw, w
-def : Pat<(atomic_fence (i32 5), (imm)), (FENCE 0b11, 0b1)>;
+def : Pat<(atomic_fence (XLenVT 5), (imm)), (FENCE 0b11, 0b1)>;
 // fence acq_rel -> fence.tso
-def : Pat<(atomic_fence (i32 6), (imm)), (FENCE_TSO)>;
+def : Pat<(atomic_fence (XLenVT 6), (imm)), (FENCE_TSO)>;
 // fence seq_cst -> fence rw, rw
-def : Pat<(atomic_fence (i32 7), (imm)), (FENCE 0b11, 0b11)>;
+def : Pat<(atomic_fence (XLenVT 7), (imm)), (FENCE 0b11, 0b11)>;
 
 // Lowering for atomic load and store is defined in RISCVInstrInfoA.td.
 // Although these are lowered to fence+load/store instructions defined in the

@@ -24,11 +24,10 @@ namespace mca {
 
 using namespace llvm;
 
-SummaryView::SummaryView(const llvm::MCSchedModel &Model, const SourceMgr &S,
+SummaryView::SummaryView(const MCSchedModel &Model, const SourceMgr &S,
                          unsigned Width)
     : SM(Model), Source(S), DispatchWidth(Width), TotalCycles(0),
-      NumMicroOps(0), ProcResourceUsage(Model.getNumProcResourceKinds(), 0),
-      ProcResourceMasks(Model.getNumProcResourceKinds(), 0) {
+      NumMicroOps(0), ProcResourceUsage(Model.getNumProcResourceKinds(), 0) {
   computeProcResourceMasks(SM, ProcResourceMasks);
 }
 

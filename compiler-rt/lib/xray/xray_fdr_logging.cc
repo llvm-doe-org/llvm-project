@@ -42,8 +42,10 @@
 
 namespace __xray {
 
-atomic_sint32_t LoggingStatus = {XRayLogInitStatus::XRAY_LOG_UNINITIALIZED};
+static atomic_sint32_t LoggingStatus = {
+    XRayLogInitStatus::XRAY_LOG_UNINITIALIZED};
 
+namespace {
 // Group together thread-local-data in a struct, then hide it behind a function
 // call so that it can be initialized on first use instead of as a global. We
 // force the alignment to 64-bytes for x86 cache line alignment, as this
@@ -72,6 +74,7 @@ struct alignas(64) ThreadLocalData {
   // FDRLogging, and that we're going to clean it up when the thread exits.
   BufferQueue *BQ = nullptr;
 };
+} // namespace
 
 static_assert(std::is_trivially_destructible<ThreadLocalData>::value,
               "ThreadLocalData must be trivially destructible");
@@ -835,8 +838,8 @@ XRayLogFlushStatus fdrLoggingFlush() XRAY_NEVER_INSTRUMENT {
   //      (fixed-sized) and let the tools reading the buffers deal with the data
   //      afterwards.
   //
-  int Fd = getLogFD();
-  if (Fd == -1) {
+  LogWriter* LW = LogWriter::Open();
+  if (LW == nullptr) {
     auto Result = XRayLogFlushStatus::XRAY_LOG_NOT_FLUSHING;
     atomic_store(&LogFlushStatus, Result, memory_order_release);
     return Result;
@@ -844,8 +847,8 @@ XRayLogFlushStatus fdrLoggingFlush() XRAY_NEVER_INSTRUMENT {
 
   XRayFileHeader Header = fdrCommonHeaderInfo();
   Header.FdrData = FdrAdditionalHeaderData{BQ->ConfiguredBufferSize()};
-  retryingWriteAll(Fd, reinterpret_cast<char *>(&Header),
-                   reinterpret_cast<char *>(&Header) + sizeof(Header));
+  LW->WriteAll(reinterpret_cast<char *>(&Header),
+               reinterpret_cast<char *>(&Header) + sizeof(Header));
 
   // Release the current thread's buffer before we attempt to write out all the
   // buffers. This ensures that in case we had only a single thread going, that
@@ -868,11 +871,11 @@ XRayLogFlushStatus fdrLoggingFlush() XRAY_NEVER_INSTRUMENT {
         uint8_t(MetadataRecord::RecordKinds::BufferExtents);
     internal_memcpy(ExtentsRecord.Data, &BufferExtents, sizeof(BufferExtents));
     if (BufferExtents > 0) {
-      retryingWriteAll(Fd, reinterpret_cast<char *>(&ExtentsRecord),
-                       reinterpret_cast<char *>(&ExtentsRecord) +
-                           sizeof(MetadataRecord));
-      retryingWriteAll(Fd, reinterpret_cast<char *>(B.Data),
-                       reinterpret_cast<char *>(B.Data) + BufferExtents);
+      LW->WriteAll(reinterpret_cast<char *>(&ExtentsRecord),
+                   reinterpret_cast<char *>(&ExtentsRecord) +
+                   sizeof(MetadataRecord));
+      LW->WriteAll(reinterpret_cast<char *>(B.Data),
+                   reinterpret_cast<char *>(B.Data) + BufferExtents);
     }
   });
 
@@ -1053,8 +1056,7 @@ void fdrLoggingHandleTypedEvent(
   endBufferIfFull();
 }
 
-XRayLogInitStatus fdrLoggingInit(UNUSED size_t BufferSize,
-                                 UNUSED size_t BufferMax, void *Options,
+XRayLogInitStatus fdrLoggingInit(size_t, size_t, void *Options,
                                  size_t OptionsSize) XRAY_NEVER_INSTRUMENT {
   if (Options == nullptr)
     return XRayLogInitStatus::XRAY_LOG_UNINITIALIZED;
@@ -1101,9 +1103,8 @@ XRayLogInitStatus fdrLoggingInit(UNUSED size_t BufferSize,
   // environment-variable defined options.
   FDRParser.ParseString(static_cast<const char *>(Options));
   *fdrFlags() = FDRFlags;
-  BufferSize = FDRFlags.buffer_size;
-  BufferMax = FDRFlags.buffer_max;
-
+  auto BufferSize = FDRFlags.buffer_size;
+  auto BufferMax = FDRFlags.buffer_max;
   bool Success = false;
 
   if (BQ != nullptr) {

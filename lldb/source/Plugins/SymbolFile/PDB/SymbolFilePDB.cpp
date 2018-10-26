@@ -46,6 +46,7 @@
 #include "llvm/DebugInfo/PDB/PDBSymbolTypeUDT.h"
 
 #include "Plugins/Language/CPlusPlus/CPlusPlusLanguage.h" // For IsCPPMangledName
+#include "Plugins/SymbolFile/NativePDB/SymbolFileNativePDB.h"
 #include "Plugins/SymbolFile/PDB/PDBASTParser.h"
 #include "Plugins/SymbolFile/PDB/PDBLocationToDWARFExpression.h"
 
@@ -74,14 +75,31 @@ bool ShouldAddLine(uint32_t requested_line, uint32_t actual_line,
 }
 } // namespace
 
+static bool ShouldUseNativeReader() {
+#if !defined(_WIN32)
+  return true;
+#endif
+  llvm::StringRef use_native = ::getenv("LLDB_USE_NATIVE_PDB_READER");
+  return use_native.equals_lower("on") || use_native.equals_lower("yes") ||
+         use_native.equals_lower("1") || use_native.equals_lower("true");
+}
+
 void SymbolFilePDB::Initialize() {
-  PluginManager::RegisterPlugin(GetPluginNameStatic(),
-                                GetPluginDescriptionStatic(), CreateInstance,
-                                DebuggerInitialize);
+  if (ShouldUseNativeReader()) {
+    npdb::SymbolFileNativePDB::Initialize();
+  } else {
+    PluginManager::RegisterPlugin(GetPluginNameStatic(),
+                                  GetPluginDescriptionStatic(), CreateInstance,
+                                  DebuggerInitialize);
+  }
 }
 
 void SymbolFilePDB::Terminate() {
-  PluginManager::UnregisterPlugin(CreateInstance);
+  if (ShouldUseNativeReader()) {
+    npdb::SymbolFileNativePDB::Terminate();
+  } else {
+    PluginManager::UnregisterPlugin(CreateInstance);
+  }
 }
 
 void SymbolFilePDB::DebuggerInitialize(lldb_private::Debugger &debugger) {}
@@ -516,7 +534,7 @@ SymbolFilePDB::ParseVariablesForContext(const lldb_private::SymbolContext &sc) {
     auto results = m_global_scope_up->findAllChildren<PDBSymbolData>();
     if (results && results->getChildCount()) {
       while (auto result = results->getNext()) {
-        auto cu_id = result->getCompilandId();
+        auto cu_id = GetCompilandId(*result);
         // FIXME: We are not able to determine variable's compile unit.
         if (cu_id == 0)
           continue;
@@ -835,24 +853,16 @@ uint32_t SymbolFilePDB::ResolveSymbolContext(
 }
 
 std::string SymbolFilePDB::GetMangledForPDBData(const PDBSymbolData &pdb_data) {
-  std::string decorated_name;
-  auto vm_addr = pdb_data.getVirtualAddress();
-  if (vm_addr != LLDB_INVALID_ADDRESS && vm_addr) {
-    auto result_up =
-        m_global_scope_up->findAllChildren(PDB_SymType::PublicSymbol);
-    if (result_up) {
-      while (auto symbol_up = result_up->getNext()) {
-        if (symbol_up->getRawSymbol().getVirtualAddress() == vm_addr) {
-          decorated_name = symbol_up->getRawSymbol().getName();
-          break;
-        }
-      }
-    }
-  }
-  if (!decorated_name.empty())
-    return decorated_name;
+  // Cache public names at first
+  if (m_public_names.empty())
+    if (auto result_up =
+            m_global_scope_up->findAllChildren(PDB_SymType::PublicSymbol))
+      while (auto symbol_up = result_up->getNext())
+        if (auto addr = symbol_up->getRawSymbol().getVirtualAddress())
+          m_public_names[addr] = symbol_up->getRawSymbol().getName();
 
-  return std::string();
+  // Look up the name in the cache
+  return m_public_names.lookup(pdb_data.getVirtualAddress());
 }
 
 VariableSP SymbolFilePDB::ParseVariableForPDBData(
@@ -1052,13 +1062,13 @@ uint32_t SymbolFilePDB::FindGlobalVariables(
     sc.module_sp = m_obj_file->GetModule();
     lldbassert(sc.module_sp.get());
 
-    sc.comp_unit = ParseCompileUnitForUID(pdb_data->getCompilandId()).get();
-    // FIXME: We are not able to determine the compile unit.
-    if (sc.comp_unit == nullptr)
-      continue;
-
     if (!name.GetStringRef().equals(
             PDBASTParser::PDBNameDropScope(pdb_data->getName())))
+      continue;
+
+    sc.comp_unit = ParseCompileUnitForUID(GetCompilandId(*pdb_data)).get();
+    // FIXME: We are not able to determine the compile unit.
+    if (sc.comp_unit == nullptr)
       continue;
 
     auto actual_parent_decl_ctx =
@@ -1098,7 +1108,7 @@ SymbolFilePDB::FindGlobalVariables(const lldb_private::RegularExpression &regex,
     sc.module_sp = m_obj_file->GetModule();
     lldbassert(sc.module_sp.get());
 
-    sc.comp_unit = ParseCompileUnitForUID(pdb_data->getCompilandId()).get();
+    sc.comp_unit = ParseCompileUnitForUID(GetCompilandId(*pdb_data)).get();
     // FIXME: We are not able to determine the compile unit.
     if (sc.comp_unit == nullptr)
       continue;
@@ -1863,4 +1873,69 @@ bool SymbolFilePDB::DeclContextMatchesThisSymbolFile(
     return true; // The type systems match, return true
 
   return false;
+}
+
+uint32_t SymbolFilePDB::GetCompilandId(const llvm::pdb::PDBSymbolData &data) {
+  static const auto pred_upper = [](uint32_t lhs, SecContribInfo rhs) {
+    return lhs < rhs.Offset;
+  };
+
+  // Cache section contributions
+  if (m_sec_contribs.empty()) {
+    if (auto SecContribs = m_session_up->getSectionContribs()) {
+      while (auto SectionContrib = SecContribs->getNext()) {
+        auto comp_id = SectionContrib->getCompilandId();
+        if (!comp_id)
+          continue;
+
+        auto sec = SectionContrib->getAddressSection();
+        auto &sec_cs = m_sec_contribs[sec];
+
+        auto offset = SectionContrib->getAddressOffset();
+        auto it =
+            std::upper_bound(sec_cs.begin(), sec_cs.end(), offset, pred_upper);
+
+        auto size = SectionContrib->getLength();
+        sec_cs.insert(it, {offset, size, comp_id});
+      }
+    }
+  }
+
+  // Check by line number
+  if (auto Lines = data.getLineNumbers()) {
+    if (auto FirstLine = Lines->getNext())
+      return FirstLine->getCompilandId();
+  }
+
+  // Retrieve section + offset
+  uint32_t DataSection = data.getAddressSection();
+  uint32_t DataOffset = data.getAddressOffset();
+  if (DataSection == 0) {
+    if (auto RVA = data.getRelativeVirtualAddress())
+      m_session_up->addressForRVA(RVA, DataSection, DataOffset);
+  }
+
+  if (DataSection) {
+    // Search by section contributions
+    auto &sec_cs = m_sec_contribs[DataSection];
+    auto it =
+        std::upper_bound(sec_cs.begin(), sec_cs.end(), DataOffset, pred_upper);
+    if (it != sec_cs.begin()) {
+      --it;
+      if (DataOffset < it->Offset + it->Size)
+        return it->CompilandId;
+    }
+  } else {
+    // Search in lexical tree
+    auto LexParentId = data.getLexicalParentId();
+    while (auto LexParent = m_session_up->getSymbolById(LexParentId)) {
+      if (LexParent->getSymTag() == PDB_SymType::Exe)
+        break;
+      if (LexParent->getSymTag() == PDB_SymType::Compiland)
+        return LexParentId;
+      LexParentId = LexParent->getRawSymbol().getLexicalParentId();
+    }
+  }
+
+  return 0;
 }

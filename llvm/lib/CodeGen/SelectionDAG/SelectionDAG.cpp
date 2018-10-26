@@ -3712,9 +3712,31 @@ bool SelectionDAG::isKnownNeverNaN(SDValue Op, bool SNaN, unsigned Depth) const 
     // TODO: Refine on operand
     return false;
   }
+  case ISD::FMINNUM:
+  case ISD::FMAXNUM: {
+    // Only one needs to be known not-nan, since it will be returned if the
+    // other ends up being one.
+    return isKnownNeverNaN(Op.getOperand(0), SNaN, Depth + 1) ||
+           isKnownNeverNaN(Op.getOperand(1), SNaN, Depth + 1);
+  }
+  case ISD::FMINNUM_IEEE:
+  case ISD::FMAXNUM_IEEE: {
+    if (SNaN)
+      return true;
+    // This can return a NaN if either operand is an sNaN, or if both operands
+    // are NaN.
+    return (isKnownNeverNaN(Op.getOperand(0), false, Depth + 1) &&
+            isKnownNeverSNaN(Op.getOperand(1), Depth + 1)) ||
+           (isKnownNeverNaN(Op.getOperand(1), false, Depth + 1) &&
+            isKnownNeverSNaN(Op.getOperand(0), Depth + 1));
+  }
+  case ISD::FMINNAN:
+  case ISD::FMAXNAN: {
+    // TODO: Does this quiet or return the origina NaN as-is?
+    return isKnownNeverNaN(Op.getOperand(0), SNaN, Depth + 1) &&
+           isKnownNeverNaN(Op.getOperand(1), SNaN, Depth + 1);
 
-  // TODO: Handle FMINNUM/FMAXNUM/FMINNAN/FMAXNAN when there is an agreement on
-  // what they should do.
+  }
   case ISD::EXTRACT_VECTOR_ELT: {
     return isKnownNeverNaN(Op.getOperand(0), SNaN, Depth + 1);
   }
@@ -3867,9 +3889,12 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
     case ISD::SIGN_EXTEND:
       return getConstant(Val.sextOrTrunc(VT.getSizeInBits()), DL, VT,
                          C->isTargetOpcode(), C->isOpaque());
+    case ISD::TRUNCATE:
+      if (C->isOpaque())
+        break;
+      LLVM_FALLTHROUGH;
     case ISD::ANY_EXTEND:
     case ISD::ZERO_EXTEND:
-    case ISD::TRUNCATE:
       return getConstant(Val.zextOrTrunc(VT.getSizeInBits()), DL, VT,
                          C->isTargetOpcode(), C->isOpaque());
     case ISD::UINT_TO_FP:
@@ -5136,8 +5161,11 @@ static SDValue getMemsetValue(SDValue Value, EVT VT, SelectionDAG &DAG,
   if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Value)) {
     assert(C->getAPIntValue().getBitWidth() == 8);
     APInt Val = APInt::getSplat(NumBits, C->getAPIntValue());
-    if (VT.isInteger())
-      return DAG.getConstant(Val, dl, VT);
+    if (VT.isInteger()) {
+      bool IsOpaque = VT.getSizeInBits() > 64 ||
+          !DAG.getTargetLoweringInfo().isLegalStoreImmediate(C->getSExtValue());
+      return DAG.getConstant(Val, dl, VT, false, IsOpaque);
+    }
     return DAG.getConstantFP(APFloat(DAG.EVTToAPFloatSemantics(VT), Val), dl,
                              VT);
   }
@@ -7955,6 +7983,7 @@ void SelectionDAG::CreateTopologicalOrder(std::vector<SDNode*>& Order) {
   }
 }
 
+#ifndef NDEBUG
 void SelectionDAG::VerifyDAGDiverence()
 {
   std::vector<SDNode*> TopoOrder;
@@ -7981,6 +8010,7 @@ void SelectionDAG::VerifyDAGDiverence()
            "Divergence bit inconsistency detected\n");
   }
 }
+#endif
 
 
 /// ReplaceAllUsesOfValuesWith - Replace any uses of From with To, leaving
@@ -8014,7 +8044,7 @@ void SelectionDAG::ReplaceAllUsesOfValuesWith(const SDValue *From,
   }
 
   // Sort the uses, so that all the uses from a given User are together.
-  llvm::sort(Uses.begin(), Uses.end());
+  llvm::sort(Uses);
 
   for (unsigned UseIndex = 0, UseIndexEnd = Uses.size();
        UseIndex != UseIndexEnd; ) {
@@ -8205,11 +8235,11 @@ SDValue llvm::peekThroughOneUseBitcasts(SDValue V) {
 bool llvm::isBitwiseNot(SDValue V) {
   if (V.getOpcode() != ISD::XOR)
     return false;
-  ConstantSDNode *C = isConstOrConstSplat(V.getOperand(1));
+  ConstantSDNode *C = isConstOrConstSplat(peekThroughBitcasts(V.getOperand(1)));
   return C && C->isAllOnesValue();
 }
 
-ConstantSDNode *llvm::isConstOrConstSplat(SDValue N) {
+ConstantSDNode *llvm::isConstOrConstSplat(SDValue N, bool AllowUndefs) {
   if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(N))
     return CN;
 
@@ -8218,9 +8248,7 @@ ConstantSDNode *llvm::isConstOrConstSplat(SDValue N) {
     ConstantSDNode *CN = BV->getConstantSplatNode(&UndefElements);
 
     // BuildVectors can truncate their operands. Ignore that case here.
-    // FIXME: We blindly ignore splats which include undef which is overly
-    // pessimistic.
-    if (CN && UndefElements.none() &&
+    if (CN && (UndefElements.none() || AllowUndefs) &&
         CN->getValueType(0) == N.getValueType().getScalarType())
       return CN;
   }
@@ -8228,15 +8256,14 @@ ConstantSDNode *llvm::isConstOrConstSplat(SDValue N) {
   return nullptr;
 }
 
-ConstantFPSDNode *llvm::isConstOrConstSplatFP(SDValue N) {
+ConstantFPSDNode *llvm::isConstOrConstSplatFP(SDValue N, bool AllowUndefs) {
   if (ConstantFPSDNode *CN = dyn_cast<ConstantFPSDNode>(N))
     return CN;
 
   if (BuildVectorSDNode *BV = dyn_cast<BuildVectorSDNode>(N)) {
     BitVector UndefElements;
     ConstantFPSDNode *CN = BV->getConstantFPSplatNode(&UndefElements);
-
-    if (CN && UndefElements.none())
+    if (CN && (UndefElements.none() || AllowUndefs))
       return CN;
   }
 

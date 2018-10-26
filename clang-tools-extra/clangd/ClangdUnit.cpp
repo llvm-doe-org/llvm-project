@@ -29,21 +29,21 @@
 #include "clang/Serialization/ASTWriter.h"
 #include "clang/Tooling/CompilationDatabase.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Support/CrashRecoveryContext.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 
-using namespace clang::clangd;
-using namespace clang;
-
+using namespace llvm;
+namespace clang {
+namespace clangd {
 namespace {
 
 bool compileCommandsAreEqual(const tooling::CompileCommand &LHS,
                              const tooling::CompileCommand &RHS) {
   // We don't check for Output, it should not matter to clangd.
   return LHS.Directory == RHS.Directory && LHS.Filename == RHS.Filename &&
-         llvm::makeArrayRef(LHS.CommandLine).equals(RHS.CommandLine);
+         makeArrayRef(LHS.CommandLine).equals(RHS.CommandLine);
 }
 
 template <class T> std::size_t getUsedBytes(const std::vector<T> &Vec) {
@@ -116,14 +116,14 @@ private:
 
 } // namespace
 
-void clangd::dumpAST(ParsedAST &AST, llvm::raw_ostream &OS) {
+void dumpAST(ParsedAST &AST, raw_ostream &OS) {
   AST.getASTContext().getTranslationUnitDecl()->dump(OS, true);
 }
 
-llvm::Optional<ParsedAST>
-ParsedAST::build(std::unique_ptr<clang::CompilerInvocation> CI,
+Optional<ParsedAST>
+ParsedAST::build(std::unique_ptr<CompilerInvocation> CI,
                  std::shared_ptr<const PreambleData> Preamble,
-                 std::unique_ptr<llvm::MemoryBuffer> Buffer,
+                 std::unique_ptr<MemoryBuffer> Buffer,
                  std::shared_ptr<PCHContainerOperations> PCHs,
                  IntrusiveRefCntPtr<vfs::FileSystem> VFS) {
   assert(CI);
@@ -138,18 +138,14 @@ ParsedAST::build(std::unique_ptr<clang::CompilerInvocation> CI,
       prepareCompilerInstance(std::move(CI), PreamblePCH, std::move(Buffer),
                               std::move(PCHs), std::move(VFS), ASTDiags);
   if (!Clang)
-    return llvm::None;
-
-  // Recover resources if we crash before exiting this method.
-  llvm::CrashRecoveryContextCleanupRegistrar<CompilerInstance> CICleanup(
-      Clang.get());
+    return None;
 
   auto Action = llvm::make_unique<ClangdFrontendAction>();
   const FrontendInputFile &MainInput = Clang->getFrontendOpts().Inputs[0];
   if (!Action->BeginSourceFile(*Clang, MainInput)) {
     log("BeginSourceFile() failed when building AST for {0}",
         MainInput.getFile());
-    return llvm::None;
+    return None;
   }
 
   // Copy over the includes from the preamble, then combine with the
@@ -214,7 +210,7 @@ std::size_t ParsedAST::getUsedBytes() const {
   // FIXME(ibiryukov): we do not account for the dynamically allocated part of
   // Message and Fixes inside each diagnostic.
   std::size_t Total =
-      ::getUsedBytes(LocalTopLevelDecls) + ::getUsedBytes(Diags);
+      clangd::getUsedBytes(LocalTopLevelDecls) + clangd::getUsedBytes(Diags);
 
   // FIXME: the rest of the function is almost a direct copy-paste from
   // libclang's clang_getCXTUResourceUsage. We could share the implementation.
@@ -246,9 +242,10 @@ const IncludeStructure &ParsedAST::getIncludeStructure() const {
 }
 
 PreambleData::PreambleData(PrecompiledPreamble Preamble,
-                           std::vector<Diag> Diags, IncludeStructure Includes)
+                           std::vector<Diag> Diags, IncludeStructure Includes,
+                           std::unique_ptr<PreambleFileStatusCache> StatCache)
     : Preamble(std::move(Preamble)), Diags(std::move(Diags)),
-      Includes(std::move(Includes)) {}
+      Includes(std::move(Includes)), StatCache(std::move(StatCache)) {}
 
 ParsedAST::ParsedAST(std::shared_ptr<const PreambleData> Preamble,
                      std::unique_ptr<CompilerInstance> Clang,
@@ -264,7 +261,7 @@ ParsedAST::ParsedAST(std::shared_ptr<const PreambleData> Preamble,
 }
 
 std::unique_ptr<CompilerInvocation>
-clangd::buildCompilerInvocation(const ParseInputs &Inputs) {
+buildCompilerInvocation(const ParseInputs &Inputs) {
   std::vector<const char *> ArgStrs;
   for (const auto &S : Inputs.CompileCommand.CommandLine)
     ArgStrs.push_back(S.c_str());
@@ -291,15 +288,16 @@ clangd::buildCompilerInvocation(const ParseInputs &Inputs) {
   return CI;
 }
 
-std::shared_ptr<const PreambleData> clangd::buildPreamble(
-    PathRef FileName, CompilerInvocation &CI,
-    std::shared_ptr<const PreambleData> OldPreamble,
-    const tooling::CompileCommand &OldCompileCommand, const ParseInputs &Inputs,
-    std::shared_ptr<PCHContainerOperations> PCHs, bool StoreInMemory,
-    PreambleParsedCallback PreambleCallback) {
+std::shared_ptr<const PreambleData>
+buildPreamble(PathRef FileName, CompilerInvocation &CI,
+              std::shared_ptr<const PreambleData> OldPreamble,
+              const tooling::CompileCommand &OldCompileCommand,
+              const ParseInputs &Inputs,
+              std::shared_ptr<PCHContainerOperations> PCHs, bool StoreInMemory,
+              PreambleParsedCallback PreambleCallback) {
   // Note that we don't need to copy the input contents, preamble can live
   // without those.
-  auto ContentsBuffer = llvm::MemoryBuffer::getMemBuffer(Inputs.Contents);
+  auto ContentsBuffer = MemoryBuffer::getMemBuffer(Inputs.Contents);
   auto Bounds =
       ComputePreambleBounds(*CI.getLangOpts(), ContentsBuffer.get(), 0);
 
@@ -334,9 +332,14 @@ std::shared_ptr<const PreambleData> clangd::buildPreamble(
     // We proceed anyway, our lit-tests rely on results for non-existing working
     // dirs.
   }
+
+  SmallString<32> AbsFileName(FileName);
+  Inputs.FS->makeAbsolute(AbsFileName);
+  auto StatCache = llvm::make_unique<PreambleFileStatusCache>(AbsFileName);
   auto BuiltPreamble = PrecompiledPreamble::Build(
-      CI, ContentsBuffer.get(), Bounds, *PreambleDiagsEngine, Inputs.FS, PCHs,
-      StoreInMemory, SerializedDeclsCollector);
+      CI, ContentsBuffer.get(), Bounds, *PreambleDiagsEngine,
+      StatCache->getProducingFS(Inputs.FS), PCHs, StoreInMemory,
+      SerializedDeclsCollector);
 
   // When building the AST for the main file, we do want the function
   // bodies.
@@ -347,21 +350,25 @@ std::shared_ptr<const PreambleData> clangd::buildPreamble(
          FileName);
     return std::make_shared<PreambleData>(
         std::move(*BuiltPreamble), PreambleDiagnostics.take(),
-        SerializedDeclsCollector.takeIncludes());
+        SerializedDeclsCollector.takeIncludes(), std::move(StatCache));
   } else {
     elog("Could not build a preamble for file {0}", FileName);
     return nullptr;
   }
 }
 
-llvm::Optional<ParsedAST> clangd::buildAST(
-    PathRef FileName, std::unique_ptr<CompilerInvocation> Invocation,
-    const ParseInputs &Inputs, std::shared_ptr<const PreambleData> Preamble,
-    std::shared_ptr<PCHContainerOperations> PCHs) {
+Optional<ParsedAST> buildAST(PathRef FileName,
+                             std::unique_ptr<CompilerInvocation> Invocation,
+                             const ParseInputs &Inputs,
+                             std::shared_ptr<const PreambleData> Preamble,
+                             std::shared_ptr<PCHContainerOperations> PCHs) {
   trace::Span Tracer("BuildAST");
   SPAN_ATTACH(Tracer, "File", FileName);
 
-  if (Inputs.FS->setCurrentWorkingDirectory(Inputs.CompileCommand.Directory)) {
+  auto VFS = Inputs.FS;
+  if (Preamble && Preamble->StatCache)
+    VFS = Preamble->StatCache->getConsumingFS(std::move(VFS));
+  if (VFS->setCurrentWorkingDirectory(Inputs.CompileCommand.Directory)) {
     log("Couldn't set working directory when building the preamble.");
     // We proceed anyway, our lit-tests rely on results for non-existing working
     // dirs.
@@ -369,12 +376,11 @@ llvm::Optional<ParsedAST> clangd::buildAST(
 
   return ParsedAST::build(
       llvm::make_unique<CompilerInvocation>(*Invocation), Preamble,
-      llvm::MemoryBuffer::getMemBufferCopy(Inputs.Contents), PCHs, Inputs.FS);
+      MemoryBuffer::getMemBufferCopy(Inputs.Contents), PCHs, std::move(VFS));
 }
 
-SourceLocation clangd::getBeginningOfIdentifier(ParsedAST &Unit,
-                                                const Position &Pos,
-                                                const FileID FID) {
+SourceLocation getBeginningOfIdentifier(ParsedAST &Unit, const Position &Pos,
+                                        const FileID FID) {
   const ASTContext &AST = Unit.getASTContext();
   const SourceManager &SourceMgr = AST.getSourceManager();
   auto Offset = positionToOffset(SourceMgr.getBufferData(FID), Pos);
@@ -382,7 +388,6 @@ SourceLocation clangd::getBeginningOfIdentifier(ParsedAST &Unit,
     log("getBeginningOfIdentifier: {0}", Offset.takeError());
     return SourceLocation();
   }
-  SourceLocation InputLoc = SourceMgr.getComposedLoc(FID, *Offset);
 
   // GetBeginningOfToken(pos) is almost what we want, but does the wrong thing
   // if the cursor is at the end of the identifier.
@@ -393,15 +398,19 @@ SourceLocation clangd::getBeginningOfIdentifier(ParsedAST &Unit,
   //  3) anywhere outside an identifier, we'll get some non-identifier thing.
   // We can't actually distinguish cases 1 and 3, but returning the original
   // location is correct for both!
+  SourceLocation InputLoc = SourceMgr.getComposedLoc(FID, *Offset);
   if (*Offset == 0) // Case 1 or 3.
     return SourceMgr.getMacroArgExpandedLocation(InputLoc);
-  SourceLocation Before =
-      SourceMgr.getMacroArgExpandedLocation(InputLoc.getLocWithOffset(-1));
+  SourceLocation Before = SourceMgr.getComposedLoc(FID, *Offset - 1);
+
   Before = Lexer::GetBeginningOfToken(Before, SourceMgr, AST.getLangOpts());
   Token Tok;
   if (Before.isValid() &&
       !Lexer::getRawToken(Before, Tok, SourceMgr, AST.getLangOpts(), false) &&
       Tok.is(tok::raw_identifier))
-    return Before;                                        // Case 2.
+    return SourceMgr.getMacroArgExpandedLocation(Before); // Case 2.
   return SourceMgr.getMacroArgExpandedLocation(InputLoc); // Case 1 or 3.
 }
+
+} // namespace clangd
+} // namespace clang

@@ -50,9 +50,9 @@ protected: // Can only create subclasses.
   bool SkipSpace = true;
   bool AllowAtInIdentifier;
   bool IsAtStartOfStatement = true;
+  bool LexMasmIntegers = false;
   AsmCommentConsumer *CommentConsumer = nullptr;
 
-  bool AltMacroMode;
   MCAsmLexer();
 
   virtual AsmToken LexToken() = 0;
@@ -66,14 +66,6 @@ public:
   MCAsmLexer(const MCAsmLexer &) = delete;
   MCAsmLexer &operator=(const MCAsmLexer &) = delete;
   virtual ~MCAsmLexer();
-
-  bool IsaAltMacroMode() {
-    return AltMacroMode;
-  }
-
-  void SetAltMacroMode(bool AltMacroSet) {
-    AltMacroMode = AltMacroSet;
-  }
 
   /// Consume the next token from the input stream and return it.
   ///
@@ -155,6 +147,10 @@ public:
   void setCommentConsumer(AsmCommentConsumer *CommentConsumer) {
     this->CommentConsumer = CommentConsumer;
   }
+
+  /// Set whether to lex masm-style binary and hex literals. They look like
+  /// 0b1101 and 0ABCh respectively.
+  void setLexMasmIntegers(bool V) { LexMasmIntegers = V; }
 };
 
 } // end namespace llvm

@@ -23,20 +23,40 @@ using testing::ElementsAre;
 using testing::Pair;
 using testing::Pointee;
 using testing::UnorderedElementsAre;
-using namespace llvm;
 
+using namespace llvm;
 namespace clang {
 namespace clangd {
 namespace {
 
 MATCHER_P(Named, N, "") { return arg.Name == N; }
 MATCHER_P(RefRange, Range, "") {
-  return std::tie(arg.Location.Start.Line, arg.Location.Start.Column,
-                  arg.Location.End.Line, arg.Location.End.Column) ==
-         std::tie(Range.start.line, Range.start.character, Range.end.line,
-                  Range.end.character);
+  return std::make_tuple(arg.Location.Start.line(), arg.Location.Start.column(),
+                         arg.Location.End.line(), arg.Location.End.column()) ==
+         std::make_tuple(Range.start.line, Range.start.character,
+                         Range.end.line, Range.end.character);
 }
 MATCHER_P(FileURI, F, "") { return arg.Location.FileURI == F; }
+
+TEST(SymbolLocation, Position) {
+  using Position = SymbolLocation::Position;
+  Position Pos;
+
+  Pos.setLine(1);
+  EXPECT_EQ(1u, Pos.line());
+  Pos.setColumn(2);
+  EXPECT_EQ(2u, Pos.column());
+  EXPECT_FALSE(Pos.hasOverflow());
+
+  Pos.setLine(Position::MaxLine + 1); // overflow
+  EXPECT_TRUE(Pos.hasOverflow());
+  EXPECT_EQ(Pos.line(), Position::MaxLine);
+  Pos.setLine(1); // reset the overflowed line.
+
+  Pos.setColumn(Position::MaxColumn + 1); // overflow
+  EXPECT_TRUE(Pos.hasOverflow());
+  EXPECT_EQ(Pos.column(), Position::MaxColumn);
+}
 
 TEST(SymbolSlab, FindAndIterate) {
   SymbolSlab::Builder B;
@@ -161,16 +181,16 @@ TEST(MemIndexTest, Lookup) {
 TEST(MergeIndexTest, Lookup) {
   auto I = MemIndex::build(generateSymbols({"ns::A", "ns::B"}), RefSlab()),
        J = MemIndex::build(generateSymbols({"ns::B", "ns::C"}), RefSlab());
-  auto M = mergeIndex(I.get(), J.get());
-  EXPECT_THAT(lookup(*M, SymbolID("ns::A")), UnorderedElementsAre("ns::A"));
-  EXPECT_THAT(lookup(*M, SymbolID("ns::B")), UnorderedElementsAre("ns::B"));
-  EXPECT_THAT(lookup(*M, SymbolID("ns::C")), UnorderedElementsAre("ns::C"));
-  EXPECT_THAT(lookup(*M, {SymbolID("ns::A"), SymbolID("ns::B")}),
+  MergedIndex M(I.get(), J.get());
+  EXPECT_THAT(lookup(M, SymbolID("ns::A")), UnorderedElementsAre("ns::A"));
+  EXPECT_THAT(lookup(M, SymbolID("ns::B")), UnorderedElementsAre("ns::B"));
+  EXPECT_THAT(lookup(M, SymbolID("ns::C")), UnorderedElementsAre("ns::C"));
+  EXPECT_THAT(lookup(M, {SymbolID("ns::A"), SymbolID("ns::B")}),
               UnorderedElementsAre("ns::A", "ns::B"));
-  EXPECT_THAT(lookup(*M, {SymbolID("ns::A"), SymbolID("ns::C")}),
+  EXPECT_THAT(lookup(M, {SymbolID("ns::A"), SymbolID("ns::C")}),
               UnorderedElementsAre("ns::A", "ns::C"));
-  EXPECT_THAT(lookup(*M, SymbolID("ns::D")), UnorderedElementsAre());
-  EXPECT_THAT(lookup(*M, {}), UnorderedElementsAre());
+  EXPECT_THAT(lookup(M, SymbolID("ns::D")), UnorderedElementsAre());
+  EXPECT_THAT(lookup(M, {}), UnorderedElementsAre());
 }
 
 TEST(MergeIndexTest, FuzzyFind) {
@@ -178,7 +198,7 @@ TEST(MergeIndexTest, FuzzyFind) {
        J = MemIndex::build(generateSymbols({"ns::B", "ns::C"}), RefSlab());
   FuzzyFindRequest Req;
   Req.Scopes = {"ns::"};
-  EXPECT_THAT(match(*mergeIndex(I.get(), J.get()), Req),
+  EXPECT_THAT(match(MergedIndex(I.get(), J.get()), Req),
               UnorderedElementsAre("ns::A", "ns::B", "ns::C"));
 }
 
@@ -231,7 +251,7 @@ TEST(MergeTest, PreferSymbolWithDefn) {
 TEST(MergeIndexTest, Refs) {
   FileIndex Dyn({"unittest"});
   FileIndex StaticIndex({"unittest"});
-  auto MergedIndex = mergeIndex(&Dyn.index(), &StaticIndex.index());
+  MergedIndex Merge(&Dyn, &StaticIndex);
 
   const char *HeaderCode = "class Foo;";
   auto HeaderSymbols = TestTU::withHeaderCode("class Foo;").headerSymbols();
@@ -266,7 +286,7 @@ TEST(MergeIndexTest, Refs) {
   RefsRequest Request;
   Request.IDs = {Foo.ID};
   RefSlab::Builder Results;
-  MergedIndex->refs(Request, [&](const Ref &O) { Results.insert(Foo.ID, O); });
+  Merge.refs(Request, [&](const Ref &O) { Results.insert(Foo.ID, O); });
 
   EXPECT_THAT(
       std::move(Results).build(),

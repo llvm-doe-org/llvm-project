@@ -409,6 +409,91 @@ NativeProcessProtocol::GetSoftwareBreakpointTrapOpcode(size_t size_hint) {
   }
 }
 
+size_t NativeProcessProtocol::GetSoftwareBreakpointPCOffset() {
+  switch (GetArchitecture().GetMachine()) {
+  case llvm::Triple::x86:
+  case llvm::Triple::x86_64:
+  case llvm::Triple::systemz:
+    // These architectures report increment the PC after breakpoint is hit.
+    return cantFail(GetSoftwareBreakpointTrapOpcode(0)).size();
+
+  case llvm::Triple::arm:
+  case llvm::Triple::aarch64:
+  case llvm::Triple::mips64:
+  case llvm::Triple::mips64el:
+  case llvm::Triple::mips:
+  case llvm::Triple::mipsel:
+  case llvm::Triple::ppc64le:
+    // On these architectures the PC doesn't get updated for breakpoint hits.
+    return 0;
+
+  default:
+    llvm_unreachable("CPU type not supported!");
+  }
+}
+
+void NativeProcessProtocol::FixupBreakpointPCAsNeeded(
+    NativeThreadProtocol &thread) {
+  Log *log = GetLogIfAnyCategoriesSet(LIBLLDB_LOG_BREAKPOINTS);
+
+  Status error;
+
+  // Find out the size of a breakpoint (might depend on where we are in the
+  // code).
+  NativeRegisterContext &context = thread.GetRegisterContext();
+
+  uint32_t breakpoint_size = GetSoftwareBreakpointPCOffset();
+  LLDB_LOG(log, "breakpoint size: {0}", breakpoint_size);
+  if (breakpoint_size == 0)
+    return;
+
+  // First try probing for a breakpoint at a software breakpoint location: PC -
+  // breakpoint size.
+  const lldb::addr_t initial_pc_addr = context.GetPCfromBreakpointLocation();
+  lldb::addr_t breakpoint_addr = initial_pc_addr;
+  // Do not allow breakpoint probe to wrap around.
+  if (breakpoint_addr >= breakpoint_size)
+    breakpoint_addr -= breakpoint_size;
+
+  // Check if we stopped because of a breakpoint.
+  NativeBreakpointSP breakpoint_sp;
+  error = m_breakpoint_list.GetBreakpoint(breakpoint_addr, breakpoint_sp);
+  if (!error.Success() || !breakpoint_sp) {
+    // We didn't find one at a software probe location.  Nothing to do.
+    LLDB_LOG(log,
+             "pid {0} no lldb breakpoint found at current pc with "
+             "adjustment: {1}",
+             GetID(), breakpoint_addr);
+    return;
+  }
+
+  // If the breakpoint is not a software breakpoint, nothing to do.
+  if (!breakpoint_sp->IsSoftwareBreakpoint()) {
+    LLDB_LOG(
+        log,
+        "pid {0} breakpoint found at {1:x}, not software, nothing to adjust",
+        GetID(), breakpoint_addr);
+    return;
+  }
+
+  //
+  // We have a software breakpoint and need to adjust the PC.
+  //
+
+  // Change the program counter.
+  LLDB_LOG(log, "pid {0} tid {1}: changing PC from {2:x} to {3:x}", GetID(),
+           thread.GetID(), initial_pc_addr, breakpoint_addr);
+
+  error = context.SetPC(breakpoint_addr);
+  if (error.Fail()) {
+    // This can happen in case the process was killed between the time we read
+    // the PC and when we are updating it. There's nothing better to do than to
+    // swallow the error.
+    LLDB_LOG(log, "pid {0} tid {1}: failed to set PC: {2}", GetID(),
+             thread.GetID(), error);
+  }
+}
+
 Status NativeProcessProtocol::RemoveBreakpoint(lldb::addr_t addr,
                                                bool hardware) {
   if (hardware)

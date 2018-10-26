@@ -1745,7 +1745,7 @@ void ModuleBitcodeWriter::writeDITemplateValueParameter(
 void ModuleBitcodeWriter::writeDIGlobalVariable(
     const DIGlobalVariable *N, SmallVectorImpl<uint64_t> &Record,
     unsigned Abbrev) {
-  const uint64_t Version = 1 << 1;
+  const uint64_t Version = 2 << 1;
   Record.push_back((uint64_t)N->isDistinct() | Version);
   Record.push_back(VE.getMetadataOrNullID(N->getScope()));
   Record.push_back(VE.getMetadataOrNullID(N->getRawName()));
@@ -1755,8 +1755,8 @@ void ModuleBitcodeWriter::writeDIGlobalVariable(
   Record.push_back(VE.getMetadataOrNullID(N->getType()));
   Record.push_back(N->isLocalToUnit());
   Record.push_back(N->isDefinition());
-  Record.push_back(/* expr */ 0);
   Record.push_back(VE.getMetadataOrNullID(N->getStaticDataMemberDeclaration()));
+  Record.push_back(VE.getMetadataOrNullID(N->getTemplateParams()));
   Record.push_back(N->getAlignInBits());
 
   Stream.EmitRecord(bitc::METADATA_GLOBAL_VAR, Record, Abbrev);
@@ -3903,12 +3903,13 @@ void IndexBitcodeWriter::writeCombinedGlobalValueSummary() {
     NameVals.clear();
   }
 
-  if (!Index.typeIds().empty()) {
-    for (auto &S : Index.typeIds()) {
-      // Skip if not referenced in any GV summary within this index file.
-      if (!ReferencedTypeIds.count(GlobalValue::getGUID(S.first)))
-        continue;
-      writeTypeIdSummaryRecord(NameVals, StrtabBuilder, S.first, S.second);
+  // Walk the GUIDs that were referenced, and write the
+  // corresponding type id records.
+  for (auto &T : ReferencedTypeIds) {
+    auto TidIter = Index.typeIds().equal_range(T);
+    for (auto It = TidIter.first; It != TidIter.second; ++It) {
+      writeTypeIdSummaryRecord(NameVals, StrtabBuilder, It->second.first,
+                               It->second.second);
       Stream.EmitRecord(bitc::FS_TYPE_ID, NameVals);
       NameVals.clear();
     }

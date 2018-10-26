@@ -1597,6 +1597,12 @@ DEF_TRAVERSE_DECL(OMPThreadPrivateDecl, {
   for (auto *I : D->varlists()) {
     TRY_TO(TraverseStmt(I));
   }
+ })
+ 
+DEF_TRAVERSE_DECL(OMPRequiresDecl, {
+  for (auto *C : D->clauselists()) {
+    TRY_TO(TraverseOMPClause(C));
+  }
 })
 
 DEF_TRAVERSE_DECL(OMPDeclareReductionDecl, {
@@ -2182,6 +2188,8 @@ DEF_TRAVERSE_STMT(ObjCAutoreleasePoolStmt, {})
 
 DEF_TRAVERSE_STMT(CXXForRangeStmt, {
   if (!getDerived().shouldVisitImplicitCode()) {
+    if (S->getInit())
+      TRY_TO_TRAVERSE_OR_ENQUEUE_STMT(S->getInit());
     TRY_TO_TRAVERSE_OR_ENQUEUE_STMT(S->getLoopVarStmt());
     TRY_TO_TRAVERSE_OR_ENQUEUE_STMT(S->getRangeInit());
     TRY_TO_TRAVERSE_OR_ENQUEUE_STMT(S->getBody());
@@ -2858,6 +2866,30 @@ bool RecursiveASTVisitor<Derived>::VisitOMPDefaultClause(OMPDefaultClause *) {
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitOMPProcBindClause(OMPProcBindClause *) {
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitOMPUnifiedAddressClause(
+    OMPUnifiedAddressClause *) {
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitOMPUnifiedSharedMemoryClause(
+    OMPUnifiedSharedMemoryClause *) {
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitOMPReverseOffloadClause(
+    OMPReverseOffloadClause *) {
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitOMPDynamicAllocatorsClause(
+    OMPDynamicAllocatorsClause *) {
   return true;
 }
 

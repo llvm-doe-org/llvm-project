@@ -19,6 +19,7 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 
+namespace llvm {
 namespace exegesis {
 
 LLVMState::LLVMState(const std::string &Triple, const std::string &CpuName) {
@@ -35,6 +36,9 @@ LLVMState::LLVMState(const std::string &Triple, const std::string &CpuName) {
     llvm::errs() << "no exegesis target for " << Triple << ", using default\n";
     TheExegesisTarget = &ExegesisTarget::getDefault();
   }
+  RATC.reset(new RegisterAliasingTrackerCache(
+      getRegInfo(), getFunctionReservedRegs(getTargetMachine())));
+  IC.reset(new InstructionsCache(getInstrInfo(), getRATC()));
 }
 
 LLVMState::LLVMState()
@@ -69,3 +73,4 @@ bool LLVMState::canAssemble(const llvm::MCInst &Inst) const {
 }
 
 } // namespace exegesis
+} // namespace llvm

@@ -15,11 +15,11 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+using namespace llvm;
 namespace clang {
 namespace clangd {
-using namespace llvm;
-
 namespace {
+
 using testing::ElementsAre;
 using testing::Field;
 using testing::IsEmpty;
@@ -34,24 +34,23 @@ testing::Matcher<const Diag &> WithNote(testing::Matcher<Note> NoteMatcher) {
 }
 
 MATCHER_P2(Diag, Range, Message,
-           "Diag at " + llvm::to_string(Range) + " = [" + Message + "]") {
+           "Diag at " + to_string(Range) + " = [" + Message + "]") {
   return arg.Range == Range && arg.Message == Message;
 }
 
 MATCHER_P3(Fix, Range, Replacement, Message,
-           "Fix " + llvm::to_string(Range) + " => " +
+           "Fix " + to_string(Range) + " => " +
                testing::PrintToString(Replacement) + " = [" + Message + "]") {
   return arg.Message == Message && arg.Edits.size() == 1 &&
          arg.Edits[0].range == Range && arg.Edits[0].newText == Replacement;
 }
 
-MATCHER_P(EqualToLSPDiag, LSPDiag,
-          "LSP diagnostic " + llvm::to_string(LSPDiag)) {
+MATCHER_P(EqualToLSPDiag, LSPDiag, "LSP diagnostic " + to_string(LSPDiag)) {
   return std::tie(arg.range, arg.severity, arg.message) ==
          std::tie(LSPDiag.range, LSPDiag.severity, LSPDiag.message);
 }
 
-MATCHER_P(EqualToFix, Fix, "LSP fix " + llvm::to_string(Fix)) {
+MATCHER_P(EqualToFix, Fix, "LSP fix " + to_string(Fix)) {
   if (arg.Message != Fix.Message)
     return false;
   if (arg.Edits.size() != Fix.Edits.size())
@@ -75,12 +74,17 @@ Position pos(int line, int character) {
 TEST(DiagnosticsTest, DiagnosticRanges) {
   // Check we report correct ranges, including various edge-cases.
   Annotations Test(R"cpp(
+    namespace test{};
     void $decl[[foo]]();
     int main() {
       $typo[[go\
 o]]();
-      foo()$semicolon[[]]
+      foo()$semicolon[[]]//with comments
       $unk[[unknown]]();
+      double $type[[bar]] = "foo";
+      struct Foo { int x; }; Foo a;
+      a.$nomember[[y]];
+      test::$nomembernamespace[[test]];
     }
   )cpp");
   EXPECT_THAT(
@@ -93,11 +97,19 @@ o]]();
                     Fix(Test.range("typo"), "foo", "change 'go\\ o' to 'foo'")),
                 // This is a pretty normal range.
                 WithNote(Diag(Test.range("decl"), "'foo' declared here"))),
-          // This range is zero-width, and at the end of a line.
+          // This range is zero-width and insertion. Therefore make sure we are
+          // not expanding it into other tokens. Since we are not going to
+          // replace those.
           AllOf(Diag(Test.range("semicolon"), "expected ';' after expression"),
                 WithFix(Fix(Test.range("semicolon"), ";", "insert ';'"))),
           // This range isn't provided by clang, we expand to the token.
-          Diag(Test.range("unk"), "use of undeclared identifier 'unknown'")));
+          Diag(Test.range("unk"), "use of undeclared identifier 'unknown'"),
+          Diag(Test.range("type"),
+               "cannot initialize a variable of type 'double' with an lvalue "
+               "of type 'const char [4]'"),
+          Diag(Test.range("nomember"), "no member named 'y' in 'Foo'"),
+          Diag(Test.range("nomembernamespace"),
+               "no member named 'test' in namespace 'test'")));
 }
 
 TEST(DiagnosticsTest, FlagsMatter) {
@@ -163,7 +175,7 @@ TEST(DiagnosticsTest, ToLSP) {
   F.Message = "do something";
   D.Fixes.push_back(F);
 
-  auto MatchingLSP = [](const DiagBase &D, llvm::StringRef Message) {
+  auto MatchingLSP = [](const DiagBase &D, StringRef Message) {
     clangd::Diagnostic Res;
     Res.range = D.Range;
     Res.severity = getSeverity(D.Severity);
@@ -186,11 +198,13 @@ main.cpp:2:3: error: something terrible happened)");
 
   // Transform dianostics and check the results.
   std::vector<std::pair<clangd::Diagnostic, std::vector<clangd::Fix>>> LSPDiags;
-  toLSPDiags(D, [&](clangd::Diagnostic LSPDiag,
-                    llvm::ArrayRef<clangd::Fix> Fixes) {
-    LSPDiags.push_back({std::move(LSPDiag),
-                        std::vector<clangd::Fix>(Fixes.begin(), Fixes.end())});
-  });
+  toLSPDiags(
+      D, URIForFile("/path/to/foo/bar/main.cpp"), ClangdDiagnosticOptions(),
+      [&](clangd::Diagnostic LSPDiag, ArrayRef<clangd::Fix> Fixes) {
+        LSPDiags.push_back(
+            {std::move(LSPDiag),
+             std::vector<clangd::Fix>(Fixes.begin(), Fixes.end())});
+      });
 
   EXPECT_THAT(
       LSPDiags,
@@ -199,8 +213,13 @@ main.cpp:2:3: error: something terrible happened)");
 }
 
 TEST(ClangdUnitTest, GetBeginningOfIdentifier) {
+  std::string Preamble = R"cpp(
+struct Bar { int func(); };
+#define MACRO(X) void f() { X; }
+Bar* bar;
+  )cpp";
   // First ^ is the expected beginning, last is the search position.
-  for (const char *Text : {
+  for (std::string Text : std::vector<std::string>{
            "int ^f^oo();", // inside identifier
            "int ^foo();",  // beginning of identifier
            "int ^foo^();", // end of identifier
@@ -208,14 +227,26 @@ TEST(ClangdUnitTest, GetBeginningOfIdentifier) {
            "^int foo();",  // beginning of file (can't back up)
            "int ^f0^0();", // after a digit (lexing at N-1 is wrong)
            "int ^λλ^λ();", // UTF-8 handled properly when backing up
+
+           // identifier in macro arg
+           "MACRO(bar->^func())",  // beginning of identifier
+           "MACRO(bar->^fun^c())", // inside identifier
+           "MACRO(bar->^func^())", // end of identifier
+           "MACRO(^bar->func())",  // begin identifier
+           "MACRO(^bar^->func())", // end identifier
+           "^MACRO(bar->func())",  // beginning of macro name
+           "^MAC^RO(bar->func())", // inside macro name
+           "^MACRO^(bar->func())", // end of macro name
        }) {
-    Annotations TestCase(Text);
+    std::string WithPreamble = Preamble + Text;
+    Annotations TestCase(WithPreamble);
     auto AST = TestTU::withCode(TestCase.code()).build();
     const auto &SourceMgr = AST.getASTContext().getSourceManager();
     SourceLocation Actual = getBeginningOfIdentifier(
         AST, TestCase.points().back(), SourceMgr.getMainFileID());
-    Position ActualPos =
-        offsetToPosition(TestCase.code(), SourceMgr.getFileOffset(Actual));
+    Position ActualPos = offsetToPosition(
+        TestCase.code(),
+        SourceMgr.getFileOffset(SourceMgr.getSpellingLoc(Actual)));
     EXPECT_EQ(TestCase.points().front(), ActualPos) << Text;
   }
 }

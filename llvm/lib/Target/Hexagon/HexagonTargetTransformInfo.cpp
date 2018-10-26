@@ -28,7 +28,7 @@ using namespace llvm;
 
 #define DEBUG_TYPE "hexagontti"
 
-static cl::opt<bool> HexagonAutoHVX("hexagon-autohvx", cl::init(false),
+static cl::opt<bool> HexagonAutoHVX("hexagon-autohvx", cl::init(true),
   cl::Hidden, cl::desc("Enable loop vectorizer for HVX"));
 
 static cl::opt<bool> EmitLookupTables("hexagon-emit-lookup-tables",
@@ -206,10 +206,10 @@ unsigned HexagonTTIImpl::getGatherScatterOpCost(unsigned Opcode, Type *DataTy,
 
 unsigned HexagonTTIImpl::getInterleavedMemoryOpCost(unsigned Opcode,
       Type *VecTy, unsigned Factor, ArrayRef<unsigned> Indices,
-      unsigned Alignment, unsigned AddressSpace) {
-  if (Indices.size() != Factor)
+      unsigned Alignment, unsigned AddressSpace, bool IsMasked) {
+  if (Indices.size() != Factor || IsMasked)
     return BaseT::getInterleavedMemoryOpCost(Opcode, VecTy, Factor, Indices,
-                                             Alignment, AddressSpace);
+                                             Alignment, AddressSpace, IsMasked);
   return getMemoryOpCost(Opcode, VecTy, Alignment, AddressSpace, nullptr);
 }
 

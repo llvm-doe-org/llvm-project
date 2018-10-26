@@ -103,22 +103,29 @@ public:
     for (MCRegUnitIterator RUI(Reg, &TRI); RUI.isValid(); ++RUI) {
       auto I = Copies.find(*RUI);
       if (I != Copies.end()) {
+        // When we clobber the source of a copy, we need to clobber everything
+        // it defined.
         markRegsUnavailable(I->second.DefRegs, TRI);
+        // When we clobber the destination of a copy, we need to clobber the
+        // whole register it defined.
+        if (MachineInstr *MI = I->second.MI)
+          markRegsUnavailable({MI->getOperand(0).getReg()}, TRI);
+        // Now we can erase the copy.
         Copies.erase(I);
       }
     }
   }
 
   /// Add this copy's registers into the tracker's copy maps.
-  void trackCopy(MachineInstr *Copy, const TargetRegisterInfo &TRI) {
-    assert(Copy->isCopy() && "Tracking non-copy?");
+  void trackCopy(MachineInstr *MI, const TargetRegisterInfo &TRI) {
+    assert(MI->isCopy() && "Tracking non-copy?");
 
-    unsigned Def = Copy->getOperand(0).getReg();
-    unsigned Src = Copy->getOperand(1).getReg();
+    unsigned Def = MI->getOperand(0).getReg();
+    unsigned Src = MI->getOperand(1).getReg();
 
     // Remember Def is defined by the copy.
     for (MCRegUnitIterator RUI(Def, &TRI); RUI.isValid(); ++RUI)
-      Copies[*RUI] = {Copy, {}, true};
+      Copies[*RUI] = {MI, {}, true};
 
     // Remember source that's copied to Def. Once it's clobbered, then
     // it's no longer available for copy propagation.
@@ -602,6 +609,11 @@ void MachineCopyPropagation::CopyPropagateBlock(MachineBasicBlock &MBB) {
       LLVM_DEBUG(dbgs() << "MCP: Removing copy due to no live-out succ: ";
                  MaybeDead->dump());
       assert(!MRI->isReserved(MaybeDead->getOperand(0).getReg()));
+
+      // Update matching debug values.
+      assert(MaybeDead->isCopy());
+      MaybeDead->changeDebugValuesDefReg(MaybeDead->getOperand(1).getReg());
+
       MaybeDead->eraseFromParent();
       Changed = true;
       ++NumDeletes;

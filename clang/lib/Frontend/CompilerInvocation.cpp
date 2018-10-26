@@ -23,7 +23,6 @@
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/TargetOptions.h"
 #include "clang/Basic/Version.h"
-#include "clang/Basic/VirtualFileSystem.h"
 #include "clang/Basic/Visibility.h"
 #include "clang/Basic/XRayInstr.h"
 #include "clang/Config/config.h"
@@ -77,6 +76,7 @@
 #include "llvm/Support/Process.h"
 #include "llvm/Support/Regex.h"
 #include "llvm/Support/VersionTuple.h"
+#include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetOptions.h"
 #include <algorithm>
@@ -284,6 +284,7 @@ static bool ParseAnalyzerArgs(AnalyzerOptions &Opts, ArgList &Args,
 
   Opts.visualizeExplodedGraphWithGraphViz =
     Args.hasArg(OPT_analyzer_viz_egraph_graphviz);
+  Opts.DumpExplodedGraphTo = Args.getLastArgValue(OPT_analyzer_dump_egraph);
   Opts.NoRetryExhausted = Args.hasArg(OPT_analyzer_disable_retry_exhausted);
   Opts.AnalyzeAll = Args.hasArg(OPT_analyzer_opt_analyze_headers);
   Opts.AnalyzerDisplayProgress = Args.hasArg(OPT_analyzer_display_progress);
@@ -613,6 +614,7 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
   Opts.DisableLifetimeMarkers = Args.hasArg(OPT_disable_lifetimemarkers);
   Opts.DisableO0ImplyOptNone = Args.hasArg(OPT_disable_O0_optnone);
   Opts.DisableRedZone = Args.hasArg(OPT_disable_red_zone);
+  Opts.IndirectTlsSegRefs = Args.hasArg(OPT_mno_tls_direct_seg_refs);
   Opts.ForbidGuardVariables = Args.hasArg(OPT_fforbid_guard_variables);
   Opts.UseRegisterSizedBitfieldAccess = Args.hasArg(
     OPT_fuse_register_sized_bitfield_access);
@@ -656,6 +658,13 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
       Args.getLastArgValue(OPT_fprofile_instrument_use_path_EQ);
   if (!Opts.ProfileInstrumentUsePath.empty())
     setPGOUseInstrumentor(Opts, Opts.ProfileInstrumentUsePath);
+  Opts.ProfileRemappingFile =
+      Args.getLastArgValue(OPT_fprofile_remapping_file_EQ);
+  if (!Opts.ProfileRemappingFile.empty() && !Opts.ExperimentalNewPassManager) {
+    Diags.Report(diag::err_drv_argument_only_allowed_with)
+      << Args.getLastArg(OPT_fprofile_remapping_file_EQ)->getAsString(Args)
+      << "-fexperimental-new-pass-manager";
+  }
 
   Opts.CoverageMapping =
       Args.hasFlag(OPT_fcoverage_mapping, OPT_fno_coverage_mapping, false);
@@ -668,7 +677,7 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
   Opts.RegisterGlobalDtorsWithAtExit =
       Args.hasArg(OPT_fregister_global_dtors_with_atexit);
   Opts.CXXCtorDtorAliases = Args.hasArg(OPT_mconstructor_aliases);
-  Opts.CodeModel = getCodeModel(Args, Diags);
+  Opts.CodeModel = TargetOpts.CodeModel;
   Opts.DebugPass = Args.getLastArgValue(OPT_mdebug_pass);
   Opts.DisableFPElim =
       (Args.hasArg(OPT_mdisable_fp_elim) || Args.hasArg(OPT_pg));
@@ -1338,7 +1347,7 @@ bool clang::ParseDiagnosticArgs(DiagnosticOptions &Opts, ArgList &Args,
     Success = false;
   }
   else
-    llvm::sort(Opts.VerifyPrefixes.begin(), Opts.VerifyPrefixes.end());
+    llvm::sort(Opts.VerifyPrefixes);
   DiagnosticLevelMask DiagMask = DiagnosticLevelMask::None;
   Success &= parseDiagnosticLevelMask("-verify-ignore-unexpected=",
     Args.getAllArgValues(OPT_verify_ignore_unexpected_EQ),
@@ -1469,8 +1478,6 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
       Opts.ProgramAction = frontend::ModuleFileInfo; break;
     case OPT_verify_pch:
       Opts.ProgramAction = frontend::VerifyPCH; break;
-    case OPT_print_decl_contexts:
-      Opts.ProgramAction = frontend::PrintDeclContext; break;
     case OPT_print_preamble:
       Opts.ProgramAction = frontend::PrintPreamble; break;
     case OPT_E:
@@ -2234,7 +2241,7 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   if (Opts.CUDAIsDevice && Args.hasArg(OPT_fcuda_approx_transcendentals))
     Opts.CUDADeviceApproxTranscendentals = 1;
 
-  Opts.CUDARelocatableDeviceCode = Args.hasArg(OPT_fcuda_rdc);
+  Opts.GPURelocatableDeviceCode = Args.hasArg(OPT_fgpu_rdc);
 
   if (Opts.ObjC1) {
     if (Arg *arg = Args.getLastArg(OPT_fobjc_runtime_EQ)) {
@@ -2516,7 +2523,7 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.CurrentModule = Opts.ModuleName;
   Opts.AppExt = Args.hasArg(OPT_fapplication_extension);
   Opts.ModuleFeatures = Args.getAllArgValues(OPT_fmodule_feature);
-  llvm::sort(Opts.ModuleFeatures.begin(), Opts.ModuleFeatures.end());
+  llvm::sort(Opts.ModuleFeatures);
   Opts.NativeHalfType |= Args.hasArg(OPT_fnative_half_type);
   Opts.NativeHalfArgsAndReturns |= Args.hasArg(OPT_fnative_half_arguments_and_returns);
   // Enable HalfArgsAndReturns if present in Args or if NativeHalfArgsAndReturns
@@ -2862,7 +2869,6 @@ static bool isStrictlyPreprocessorAction(frontend::ActionKind Action) {
   case frontend::ModuleFileInfo:
   case frontend::VerifyPCH:
   case frontend::PluginAction:
-  case frontend::PrintDeclContext:
   case frontend::RewriteObjC:
   case frontend::RewriteTest:
   case frontend::RunAnalysis:
@@ -3000,6 +3006,7 @@ static void ParsePreprocessorOutputArgs(PreprocessorOutputOptions &Opts,
 
 static void ParseTargetArgs(TargetOptions &Opts, ArgList &Args,
                             DiagnosticsEngine &Diags) {
+  Opts.CodeModel = getCodeModel(Args, Diags);
   Opts.ABI = Args.getLastArgValue(OPT_target_abi);
   if (Arg *A = Args.getLastArg(OPT_meabi)) {
     StringRef Value = A->getValue();
@@ -3269,21 +3276,21 @@ void BuryPointer(const void *Ptr) {
   GraveYard[Idx] = Ptr;
 }
 
-IntrusiveRefCntPtr<vfs::FileSystem>
+IntrusiveRefCntPtr<llvm::vfs::FileSystem>
 createVFSFromCompilerInvocation(const CompilerInvocation &CI,
                                 DiagnosticsEngine &Diags) {
-  return createVFSFromCompilerInvocation(CI, Diags, vfs::getRealFileSystem());
+  return createVFSFromCompilerInvocation(CI, Diags,
+                                         llvm::vfs::getRealFileSystem());
 }
 
-IntrusiveRefCntPtr<vfs::FileSystem>
-createVFSFromCompilerInvocation(const CompilerInvocation &CI,
-                                DiagnosticsEngine &Diags,
-                                IntrusiveRefCntPtr<vfs::FileSystem> BaseFS) {
+IntrusiveRefCntPtr<llvm::vfs::FileSystem> createVFSFromCompilerInvocation(
+    const CompilerInvocation &CI, DiagnosticsEngine &Diags,
+    IntrusiveRefCntPtr<llvm::vfs::FileSystem> BaseFS) {
   if (CI.getHeaderSearchOpts().VFSOverlayFiles.empty())
     return BaseFS;
 
-  IntrusiveRefCntPtr<vfs::OverlayFileSystem> Overlay(
-      new vfs::OverlayFileSystem(BaseFS));
+  IntrusiveRefCntPtr<llvm::vfs::OverlayFileSystem> Overlay(
+      new llvm::vfs::OverlayFileSystem(BaseFS));
   // earlier vfs files are on the bottom
   for (const auto &File : CI.getHeaderSearchOpts().VFSOverlayFiles) {
     llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> Buffer =
@@ -3293,7 +3300,7 @@ createVFSFromCompilerInvocation(const CompilerInvocation &CI,
       continue;
     }
 
-    IntrusiveRefCntPtr<vfs::FileSystem> FS = vfs::getVFSFromYAML(
+    IntrusiveRefCntPtr<llvm::vfs::FileSystem> FS = llvm::vfs::getVFSFromYAML(
         std::move(Buffer.get()), /*DiagHandler*/ nullptr, File);
     if (FS)
       Overlay->pushOverlay(FS);

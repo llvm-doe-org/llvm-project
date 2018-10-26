@@ -1118,7 +1118,7 @@ Error DumpOutputStyle::dumpStringTableFromPdb() {
 
       std::vector<uint32_t> SortedIDs(IS->name_ids().begin(),
                                       IS->name_ids().end());
-      llvm::sort(SortedIDs.begin(), SortedIDs.end());
+      llvm::sort(SortedIDs);
       for (uint32_t I : SortedIDs) {
         auto ES = IS->getStringForID(I);
         llvm::SmallString<32> Str;
@@ -1572,8 +1572,40 @@ Error DumpOutputStyle::dumpGlobals() {
   ExitOnError Err("Error dumping globals stream: ");
   auto &Globals = Err(getPdb().getPDBGlobalsStream());
 
-  const GSIHashTable &Table = Globals.getGlobalsTable();
-  Err(dumpSymbolsFromGSI(Table, opts::dump::DumpGlobalExtras));
+  if (opts::dump::DumpGlobalNames.empty()) {
+    const GSIHashTable &Table = Globals.getGlobalsTable();
+    Err(dumpSymbolsFromGSI(Table, opts::dump::DumpGlobalExtras));
+  } else {
+    SymbolStream &SymRecords = cantFail(getPdb().getPDBSymbolStream());
+    auto &Types = File.types();
+    auto &Ids = File.ids();
+
+    SymbolVisitorCallbackPipeline Pipeline;
+    SymbolDeserializer Deserializer(nullptr, CodeViewContainer::Pdb);
+    MinimalSymbolDumper Dumper(P, opts::dump::DumpSymRecordBytes, Ids, Types);
+
+    Pipeline.addCallbackToPipeline(Deserializer);
+    Pipeline.addCallbackToPipeline(Dumper);
+    CVSymbolVisitor Visitor(Pipeline);
+
+    using ResultEntryType = std::pair<uint32_t, CVSymbol>;
+    for (StringRef Name : opts::dump::DumpGlobalNames) {
+      AutoIndent Indent(P);
+      P.formatLine("Global Name `{0}`", Name);
+      std::vector<ResultEntryType> Results =
+          Globals.findRecordsByName(Name, SymRecords);
+      if (Results.empty()) {
+        AutoIndent Indent(P);
+        P.printLine("(no matching records found)");
+        continue;
+      }
+
+      for (ResultEntryType Result : Results) {
+        if (auto E = Visitor.visitSymbolRecord(Result.second, Result.first))
+          return E;
+      }
+    }
+  }
   return Error::success();
 }
 
@@ -1676,8 +1708,6 @@ Error DumpOutputStyle::dumpSymbolsFromGSI(const GSIHashTable &Table,
 
   // Return early if we aren't dumping public hash table and address map info.
   if (HashExtras) {
-    P.formatBinary("Hash Bitmap", Table.HashBitmap, 0);
-
     P.formatLine("Hash Entries");
     {
       AutoIndent Indent2(P);

@@ -110,6 +110,19 @@ void basic() {
   // CHECK-MESSAGES: :[[@LINE-1]]:13: warning: use std::make_unique instead
   // CHECK-FIXES: auto P3 = std::make_unique<int>();
 
+  std::unique_ptr<int> P4 = std::unique_ptr<int>((new int));
+  // CHECK-MESSAGES: :[[@LINE-1]]:29: warning: use std::make_unique instead [modernize-make-unique]
+  // CHECK-FIXES: std::unique_ptr<int> P4 = std::make_unique<int>();
+  P4.reset((new int));
+  // CHECK-MESSAGES: :[[@LINE-1]]:6: warning: use std::make_unique instead [modernize-make-unique]
+  // CHECK-FIXES: P4 = std::make_unique<int>();
+  std::unique_ptr<int> P5 = std::unique_ptr<int>((((new int))));
+  // CHECK-MESSAGES: :[[@LINE-1]]:29: warning: use std::make_unique instead [modernize-make-unique]
+  // CHECK-FIXES: std::unique_ptr<int> P5 = std::make_unique<int>();
+  P5.reset(((((new int)))));
+  // CHECK-MESSAGES: :[[@LINE-1]]:6: warning: use std::make_unique instead [modernize-make-unique]
+  // CHECK-FIXES: P5 = std::make_unique<int>();
+
   {
     // No std.
     using namespace std;
@@ -390,18 +403,15 @@ void initialization(int T, Base b) {
   // CHECK-FIXES: FFs = std::make_unique<Foo[]>(Num2);
 
   std::unique_ptr<int[]> FI;
+  FI.reset(new int[5]()); // default initialization.
+  // CHECK-MESSAGES: :[[@LINE-1]]:6: warning:
+  // CHECK-FIXES: FI = std::make_unique<int[]>(5);
+
+  // The check doesn't give warnings and fixes for cases where the original new
+  // expresion doesn't do any initialization.
   FI.reset(new int[5]);
-  // CHECK-MESSAGES: :[[@LINE-1]]:6: warning:
-  // CHECK-FIXES: FI = std::make_unique<int[]>(5);
-  FI.reset(new int[5]());
-  // CHECK-MESSAGES: :[[@LINE-1]]:6: warning:
-  // CHECK-FIXES: FI = std::make_unique<int[]>(5);
   FI.reset(new int[Num]);
-  // CHECK-MESSAGES: :[[@LINE-1]]:6: warning:
-  // CHECK-FIXES: FI = std::make_unique<int[]>(Num);
   FI.reset(new int[Num2]);
-  // CHECK-MESSAGES: :[[@LINE-1]]:6: warning:
-  // CHECK-FIXES: FI = std::make_unique<int[]>(Num2);
 }
 
 void aliases() {

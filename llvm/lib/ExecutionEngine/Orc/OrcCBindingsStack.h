@@ -77,9 +77,9 @@ public:
   };
 
   template <>
-  class GenericLayerImpl<orc::RTDyldObjectLinkingLayer> : public GenericLayer {
+  class GenericLayerImpl<orc::LegacyRTDyldObjectLinkingLayer> : public GenericLayer {
   private:
-    using LayerT = orc::RTDyldObjectLinkingLayer;
+    using LayerT = orc::LegacyRTDyldObjectLinkingLayer;
   public:
     GenericLayerImpl(LayerT &Layer) : Layer(Layer) {}
 
@@ -107,10 +107,10 @@ class OrcCBindingsStack {
 public:
 
   using CompileCallbackMgr = orc::JITCompileCallbackManager;
-  using ObjLayerT = orc::RTDyldObjectLinkingLayer;
-  using CompileLayerT = orc::IRCompileLayer<ObjLayerT, orc::SimpleCompiler>;
+  using ObjLayerT = orc::LegacyRTDyldObjectLinkingLayer;
+  using CompileLayerT = orc::LegacyIRCompileLayer<ObjLayerT, orc::SimpleCompiler>;
   using CODLayerT =
-        orc::CompileOnDemandLayer<CompileLayerT, CompileCallbackMgr>;
+        orc::LegacyCompileOnDemandLayer<CompileLayerT, CompileCallbackMgr>;
 
   using CallbackManagerBuilder =
       std::function<std::unique_ptr<CompileCallbackMgr>()>;
@@ -183,10 +183,17 @@ private:
       // 2. Runtime overrides.
       // 3. External resolver (if present).
 
-      if (auto Sym = Stack.CODLayer.findSymbol(Name, true))
-        return Sym;
-      else if (auto Err = Sym.takeError())
-        return Sym.takeError();
+      if (Stack.CODLayer) {
+        if (auto Sym = Stack.CODLayer->findSymbol(Name, true))
+          return Sym;
+        else if (auto Err = Sym.takeError())
+          return Sym.takeError();
+      } else {
+        if (auto Sym = Stack.CompileLayer.findSymbol(Name, true))
+          return Sym;
+        else if (auto Err = Sym.takeError())
+          return Sym.takeError();
+      }
 
       if (auto Sym = Stack.CXXRuntimeOverrides.searchOverrides(Name))
         return Sym;
@@ -206,8 +213,8 @@ private:
 public:
   OrcCBindingsStack(TargetMachine &TM,
                     IndirectStubsManagerBuilder IndirectStubsMgrBuilder)
-      : CCMgr(createLocalCompileCallbackManager(TM.getTargetTriple(), ES, 0)),
-        DL(TM.createDataLayout()), IndirectStubsMgr(IndirectStubsMgrBuilder()),
+      : CCMgr(createCompileCallbackManager(TM, ES)), DL(TM.createDataLayout()),
+        IndirectStubsMgr(IndirectStubsMgrBuilder()),
         ObjectLayer(ES,
                     [this](orc::VModuleKey K) {
                       auto ResolverI = Resolvers.find(K);
@@ -227,20 +234,8 @@ public:
 		      this->notifyFreed(K, Obj);
                     }),
         CompileLayer(ObjectLayer, orc::SimpleCompiler(TM)),
-        CODLayer(ES, CompileLayer,
-                 [this](orc::VModuleKey K) {
-                   auto ResolverI = Resolvers.find(K);
-                   assert(ResolverI != Resolvers.end() &&
-                          "No resolver for module K");
-                   return ResolverI->second;
-                 },
-                 [this](orc::VModuleKey K,
-                        std::shared_ptr<orc::SymbolResolver> Resolver) {
-                   assert(!Resolvers.count(K) && "Resolver already present");
-                   Resolvers[K] = std::move(Resolver);
-                 },
-                 [](Function &F) { return std::set<Function *>({&F}); },
-                 *this->CCMgr, std::move(IndirectStubsMgrBuilder), false),
+        CODLayer(createCODLayer(ES, CompileLayer, CCMgr.get(),
+                                std::move(IndirectStubsMgrBuilder), Resolvers)),
         CXXRuntimeOverrides(
             [this](const std::string &S) { return mangle(S); }) {}
 
@@ -286,6 +281,7 @@ public:
   Error setIndirectStubPointer(StringRef Name, JITTargetAddress Addr) {
     return IndirectStubsMgr->updatePointer(Name, Addr);
   }
+
   template <typename LayerT>
   Expected<orc::VModuleKey>
   addIRModule(LayerT &Layer, std::unique_ptr<Module> M,
@@ -316,7 +312,7 @@ public:
 
     // Run the static constructors, and save the static destructor runner for
     // execution when the JIT is torn down.
-    orc::CtorDtorRunner<OrcCBindingsStack> CtorRunner(std::move(CtorNames), K);
+    orc::LegacyCtorDtorRunner<OrcCBindingsStack> CtorRunner(std::move(CtorNames), K);
     if (auto Err = CtorRunner.runViaLayer(*this))
       return std::move(Err);
 
@@ -338,7 +334,12 @@ public:
   addIRModuleLazy(std::unique_ptr<Module> M,
                   LLVMOrcSymbolResolverFn ExternalResolver,
                   void *ExternalResolverCtx) {
-    return addIRModule(CODLayer, std::move(M),
+    if (!CODLayer)
+      return make_error<StringError>("Can not add lazy module: No compile "
+                                     "callback manager available",
+                                     inconvertibleErrorCode());
+
+    return addIRModule(*CODLayer, std::move(M),
                        llvm::make_unique<SectionMemoryManager>(),
                        std::move(ExternalResolver), ExternalResolverCtx);
   }
@@ -376,7 +377,9 @@ public:
                                  bool ExportedSymbolsOnly) {
     if (auto Sym = IndirectStubsMgr->findStub(Name, ExportedSymbolsOnly))
       return Sym;
-    return CODLayer.findSymbol(mangle(Name), ExportedSymbolsOnly);
+    if (CODLayer)
+      return CODLayer->findSymbol(mangle(Name), ExportedSymbolsOnly);
+    return CompileLayer.findSymbol(mangle(Name), ExportedSymbolsOnly);
   }
 
   JITSymbol findSymbolIn(orc::VModuleKey K, const std::string &Name,
@@ -440,6 +443,46 @@ public:
   }
 
 private:
+  using ResolverMap =
+      std::map<orc::VModuleKey, std::shared_ptr<orc::SymbolResolver>>;
+
+  static std::unique_ptr<CompileCallbackMgr>
+  createCompileCallbackManager(TargetMachine &TM, orc::ExecutionSession &ES) {
+    auto CCMgr = createLocalCompileCallbackManager(TM.getTargetTriple(), ES, 0);
+    if (!CCMgr) {
+      // FIXME: It would be good if we could report this somewhere, but we do
+      //        have an instance yet.
+      logAllUnhandledErrors(CCMgr.takeError(), errs(), "ORC error: ");
+      return nullptr;
+    }
+    return std::move(*CCMgr);
+  }
+
+  static std::unique_ptr<CODLayerT>
+  createCODLayer(orc::ExecutionSession &ES, CompileLayerT &CompileLayer,
+                 CompileCallbackMgr *CCMgr,
+                 IndirectStubsManagerBuilder IndirectStubsMgrBuilder,
+                 ResolverMap &Resolvers) {
+    // If there is no compile callback manager available we can not create a
+    // compile on demand layer.
+    if (!CCMgr)
+      return nullptr;
+
+    return llvm::make_unique<CODLayerT>(
+        ES, CompileLayer,
+        [&Resolvers](orc::VModuleKey K) {
+          auto ResolverI = Resolvers.find(K);
+          assert(ResolverI != Resolvers.end() && "No resolver for module K");
+          return ResolverI->second;
+        },
+        [&Resolvers](orc::VModuleKey K,
+                     std::shared_ptr<orc::SymbolResolver> Resolver) {
+          assert(!Resolvers.count(K) && "Resolver already present");
+          Resolvers[K] = std::move(Resolver);
+        },
+        [](Function &F) { return std::set<Function *>({&F}); }, *CCMgr,
+        std::move(IndirectStubsMgrBuilder), false);
+  }
 
   void reportError(Error Err) {
     // FIXME: Report errors on the execution session.
@@ -470,15 +513,15 @@ private:
 
   ObjLayerT ObjectLayer;
   CompileLayerT CompileLayer;
-  CODLayerT CODLayer;
+  std::unique_ptr<CODLayerT> CODLayer;
 
   std::map<orc::VModuleKey, std::unique_ptr<detail::GenericLayer>> KeyLayers;
 
-  orc::LocalCXXRuntimeOverrides CXXRuntimeOverrides;
-  std::vector<orc::CtorDtorRunner<OrcCBindingsStack>> IRStaticDestructorRunners;
+  orc::LegacyLocalCXXRuntimeOverrides CXXRuntimeOverrides;
+  std::vector<orc::LegacyCtorDtorRunner<OrcCBindingsStack>> IRStaticDestructorRunners;
   std::string ErrMsg;
 
-  std::map<orc::VModuleKey, std::shared_ptr<orc::SymbolResolver>> Resolvers;
+  ResolverMap Resolvers;
 };
 
 } // end namespace llvm

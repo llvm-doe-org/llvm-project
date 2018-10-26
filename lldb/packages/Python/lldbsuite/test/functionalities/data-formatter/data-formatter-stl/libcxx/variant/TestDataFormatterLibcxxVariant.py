@@ -12,7 +12,7 @@ from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 
-class LibcxxOptionalDataFormatterTestCase(TestBase):
+class LibcxxVariantDataFormatterTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
@@ -21,6 +21,8 @@ class LibcxxOptionalDataFormatterTestCase(TestBase):
     @skipIf(oslist=no_match(["macosx"]), compiler="clang", compiler_version=['<', '5.0'])
     ## We are skipping gcc version less that 5.1 since this test requires -std=c++17
     @skipIf(compiler="gcc", compiler_version=['<', '5.1'])
+    ## std::get is unavailable for std::variant before macOS 10.14
+    @skipIf(macos_version=["<", "10.14"])
 
     def test_with_run_command(self):
         """Test that that file and class static variables display correctly."""

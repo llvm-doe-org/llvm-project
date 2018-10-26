@@ -155,6 +155,7 @@ namespace clang {
   class ObjCPropertyDecl;
   class ObjCProtocolDecl;
   class OMPThreadPrivateDecl;
+  class OMPRequiresDecl;
   class OMPDeclareReductionDecl;
   class OMPDeclareSimdDecl;
   class OMPClause;
@@ -3778,12 +3779,14 @@ public:
 
   StmtResult ActOnCXXForRangeStmt(Scope *S, SourceLocation ForLoc,
                                   SourceLocation CoawaitLoc,
+                                  Stmt *InitStmt,
                                   Stmt *LoopVar,
                                   SourceLocation ColonLoc, Expr *Collection,
                                   SourceLocation RParenLoc,
                                   BuildForRangeKind Kind);
   StmtResult BuildCXXForRangeStmt(SourceLocation ForLoc,
                                   SourceLocation CoawaitLoc,
+                                  Stmt *InitStmt,
                                   SourceLocation ColonLoc,
                                   Stmt *RangeDecl, Stmt *Begin, Stmt *End,
                                   Expr *Cond, Expr *Inc,
@@ -5314,8 +5317,7 @@ public:
   }
   ExprResult ActOnFinishFullExpr(Expr *Expr, SourceLocation CC,
                                  bool DiscardedValue = false,
-                                 bool IsConstexpr = false,
-                                 bool IsLambdaInitCaptureInitializer = false);
+                                 bool IsConstexpr = false);
   StmtResult ActOnFinishFullStmt(Stmt *Stmt);
 
   // Marks SS invalid if it represents an incomplete type.
@@ -6038,6 +6040,10 @@ public:
   AccessResult CheckMemberAccess(SourceLocation UseLoc,
                                  CXXRecordDecl *NamingClass,
                                  DeclAccessPair Found);
+  AccessResult
+  CheckStructuredBindingMemberAccess(SourceLocation UseLoc,
+                                     CXXRecordDecl *DecomposedClass,
+                                     DeclAccessPair Field);
   AccessResult CheckMemberOperatorAccess(SourceLocation Loc,
                                          Expr *ObjectExpr,
                                          Expr *ArgExpr,
@@ -8571,6 +8577,21 @@ public:
   llvm::StringRef getCurrentOpenCLExtension() const {
     return CurrOpenCLExtension;
   }
+
+  /// Check if a function declaration \p FD associates with any
+  /// extensions present in OpenCLDeclExtMap and if so return the
+  /// extension(s) name(s).
+  std::string getOpenCLExtensionsFromDeclExtMap(FunctionDecl *FD);
+
+  /// Check if a function type \p FT associates with any
+  /// extensions present in OpenCLTypeExtMap and if so return the
+  /// extension(s) name(s).
+  std::string getOpenCLExtensionsFromTypeExtMap(FunctionType *FT);
+
+  /// Find an extension in an appropriate extension map and return its name
+  template<typename T, typename MapT>
+  std::string getOpenCLExtensionsFromExtMap(T* FT, MapT &Map);
+
   void setCurrentOpenCLExtension(llvm::StringRef Ext) {
     CurrOpenCLExtension = Ext;
   }
@@ -8712,6 +8733,12 @@ public:
   /// Builds a new OpenMPThreadPrivateDecl and checks its correctness.
   OMPThreadPrivateDecl *CheckOMPThreadPrivateDecl(SourceLocation Loc,
                                                   ArrayRef<Expr *> VarList);
+  /// Called on well-formed '#pragma omp requires'.
+  DeclGroupPtrTy ActOnOpenMPRequiresDirective(SourceLocation Loc,
+                                              ArrayRef<OMPClause *> ClauseList);
+  /// Check restrictions on Requires directive
+  OMPRequiresDecl *CheckOMPRequiresDecl(SourceLocation Loc,
+                                        ArrayRef<OMPClause *> Clauses);
   /// Check if the specified type is allowed to be used in 'omp declare
   /// reduction' construct.
   QualType ActOnOpenMPDeclareReductionType(SourceLocation TyLoc,
@@ -9105,7 +9132,7 @@ public:
                                        SourceLocation StartLoc,
                                        SourceLocation LParenLoc,
                                        SourceLocation EndLoc);
-
+  
   OMPClause *ActOnOpenMPSingleExprWithArgClause(
       OpenMPClauseKind Kind, ArrayRef<unsigned> Arguments, Expr *Expr,
       SourceLocation StartLoc, SourceLocation LParenLoc,
@@ -9153,6 +9180,21 @@ public:
   /// Called on well-formed 'nogroup' clause.
   OMPClause *ActOnOpenMPNogroupClause(SourceLocation StartLoc,
                                       SourceLocation EndLoc);
+  /// Called on well-formed 'unified_address' clause.
+  OMPClause *ActOnOpenMPUnifiedAddressClause(SourceLocation StartLoc,
+                                             SourceLocation EndLoc);
+
+  /// Called on well-formed 'unified_address' clause.
+  OMPClause *ActOnOpenMPUnifiedSharedMemoryClause(SourceLocation StartLoc,
+                                                  SourceLocation EndLoc);
+  
+  /// Called on well-formed 'reverse_offload' clause.
+  OMPClause *ActOnOpenMPReverseOffloadClause(SourceLocation StartLoc,
+                                             SourceLocation EndLoc);
+
+  /// Called on well-formed 'dynamic_allocators' clause.
+  OMPClause *ActOnOpenMPDynamicAllocatorsClause(SourceLocation StartLoc,
+                                                SourceLocation EndLoc);
 
   OMPClause *ActOnOpenMPVarListClause(
       OpenMPClauseKind Kind, ArrayRef<Expr *> Vars, Expr *TailExpr,

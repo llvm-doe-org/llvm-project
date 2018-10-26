@@ -21,7 +21,7 @@ using namespace llvm;
 
 namespace mca {
 
-RetireControlUnit::RetireControlUnit(const llvm::MCSchedModel &SM)
+RetireControlUnit::RetireControlUnit(const MCSchedModel &SM)
     : NextAvailableSlotIdx(0), CurrentInstructionSlotIdx(0),
       AvailableSlots(SM.MicroOpBufferSize), MaxRetirePerCycle(0) {
   // Check if the scheduling model provides extra information about the machine
@@ -41,10 +41,10 @@ RetireControlUnit::RetireControlUnit(const llvm::MCSchedModel &SM)
 // Reserves a number of slots, and returns a new token.
 unsigned RetireControlUnit::reserveSlot(const InstRef &IR,
                                         unsigned NumMicroOps) {
-  assert(isAvailable(NumMicroOps));
+  assert(isAvailable(NumMicroOps) && "Reorder Buffer unavailable!");
   unsigned NormalizedQuantity =
       std::min(NumMicroOps, static_cast<unsigned>(Queue.size()));
-  // Zero latency instructions may have zero mOps. Artificially bump this
+  // Zero latency instructions may have zero uOps. Artificially bump this
   // value to 1. Although zero latency instructions don't consume scheduler
   // resources, they still consume one slot in the retire queue.
   NormalizedQuantity = std::max(NormalizedQuantity, 1U);
@@ -63,7 +63,7 @@ const RetireControlUnit::RUToken &RetireControlUnit::peekCurrentToken() const {
 void RetireControlUnit::consumeCurrentToken() {
   const RetireControlUnit::RUToken &Current = peekCurrentToken();
   assert(Current.NumSlots && "Reserved zero slots?");
-  assert(Current.IR.isValid() && "Invalid RUToken in the RCU queue.");
+  assert(Current.IR && "Invalid RUToken in the RCU queue.");
 
   // Update the slot index to be the next item in the circular queue.
   CurrentInstructionSlotIdx += Current.NumSlots;
@@ -73,7 +73,7 @@ void RetireControlUnit::consumeCurrentToken() {
 
 void RetireControlUnit::onInstructionExecuted(unsigned TokenID) {
   assert(Queue.size() > TokenID);
-  assert(Queue[TokenID].Executed == false && Queue[TokenID].IR.isValid());
+  assert(Queue[TokenID].Executed == false && Queue[TokenID].IR);
   Queue[TokenID].Executed = true;
 }
 

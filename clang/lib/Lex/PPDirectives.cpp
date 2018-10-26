@@ -1888,28 +1888,35 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
       // Check for likely typos due to leading or trailing non-isAlphanumeric
       // characters
       StringRef OriginalFilename = Filename;
-      if (!File) {
-        while (!isAlphanumeric(Filename.front())) {
-          Filename = Filename.drop_front();
-        }
-        while (!isAlphanumeric(Filename.back())) {
-          Filename = Filename.drop_back();
-        }
-
+      if (LangOpts.SpellChecking && !File) {
+        // A heuristic to correct a typo file name by removing leading and
+        // trailing non-isAlphanumeric characters.
+        auto CorrectTypoFilename = [](llvm::StringRef Filename) {
+          Filename = Filename.drop_until(isAlphanumeric);
+          while (!Filename.empty() && !isAlphanumeric(Filename.back())) {
+            Filename = Filename.drop_back();
+          }
+          return Filename;
+        };
+        StringRef TypoCorrectionName = CorrectTypoFilename(Filename);
         File = LookupFile(
             FilenameLoc,
-            LangOpts.MSVCCompat ? NormalizedPath.c_str() : Filename, isAngled,
-            LookupFrom, LookupFromFile, CurDir,
+            LangOpts.MSVCCompat ? NormalizedPath.c_str() : TypoCorrectionName,
+            isAngled, LookupFrom, LookupFromFile, CurDir,
             Callbacks ? &SearchPath : nullptr,
             Callbacks ? &RelativePath : nullptr, &SuggestedModule, &IsMapped);
         if (File) {
           SourceRange Range(FilenameTok.getLocation(), CharEnd);
-          auto Hint = isAngled ? FixItHint::CreateReplacement(
-                                     Range, "<" + Filename.str() + ">")
-                               : FixItHint::CreateReplacement(
-                                     Range, "\"" + Filename.str() + "\"");
+          auto Hint = isAngled
+                          ? FixItHint::CreateReplacement(
+                                Range, "<" + TypoCorrectionName.str() + ">")
+                          : FixItHint::CreateReplacement(
+                                Range, "\"" + TypoCorrectionName.str() + "\"");
           Diag(FilenameTok, diag::err_pp_file_not_found_typo_not_fatal)
-              << OriginalFilename << Filename << Hint;
+              << OriginalFilename << TypoCorrectionName << Hint;
+          // We found the file, so set the Filename to the name after typo
+          // correction.
+          Filename = TypoCorrectionName;
         }
       }
 

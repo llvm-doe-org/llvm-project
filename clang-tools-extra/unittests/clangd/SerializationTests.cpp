@@ -9,20 +9,25 @@
 
 #include "index/Index.h"
 #include "index/Serialization.h"
-#include "index/SymbolYAML.h"
 #include "llvm/Support/ScopedPrinter.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+using testing::_;
+using testing::AllOf;
+using testing::Pair;
 using testing::UnorderedElementsAre;
 using testing::UnorderedElementsAreArray;
+
+using namespace llvm;
 namespace clang {
 namespace clangd {
 namespace {
 
-const char *YAML1 = R"(
+const char *YAML = R"(
 ---
-ID: 057557CEBF6E6B2DD437FBF60CC58F352D1DF856
+!Symbol
+ID: 057557CEBF6E6B2DD437FBF60CC58F35
 Name:   'Foo1'
 Scope:   'clang::'
 SymInfo:
@@ -46,11 +51,9 @@ IncludeHeaders:
   - Header:    'include2'
     References:    3
 ...
-)";
-
-const char *YAML2 = R"(
 ---
-ID: 057557CEBF6E6B2DD437FBF60CC58F352D1DF858
+!Symbol
+ID: 057557CEBF6E6B2DD437FBF60CC58F36
 Name:   'Foo2'
 Scope:   'clang::'
 SymInfo:
@@ -68,17 +71,42 @@ Flags:    2
 Signature:    '-sig'
 CompletionSnippetSuffix:    '-snippet'
 ...
+!Refs
+ID: 057557CEBF6E6B2DD437FBF60CC58F35
+References:
+  - Kind: 4
+    Location:
+      FileURI:    file:///path/foo.cc
+      Start:
+        Line: 5
+        Column: 3
+      End:
+        Line: 5
+        Column: 8
 )";
 
+MATCHER_P(ID, I, "") { return arg.ID == cantFail(SymbolID::fromStr(I)); }
 MATCHER_P(QName, Name, "") { return (arg.Scope + arg.Name).str() == Name; }
 MATCHER_P2(IncludeHeaderWithRef, IncludeHeader, References, "") {
   return (arg.IncludeHeader == IncludeHeader) && (arg.References == References);
 }
 
 TEST(SerializationTest, YAMLConversions) {
-  auto Symbols1 = symbolsFromYAML(YAML1);
-  ASSERT_EQ(Symbols1.size(), 1u);
-  const auto &Sym1 = *Symbols1.begin();
+  auto In = readIndexFile(YAML);
+  EXPECT_TRUE(bool(In)) << In.takeError();
+
+  auto ParsedYAML = readIndexFile(YAML);
+  ASSERT_TRUE(bool(ParsedYAML)) << ParsedYAML.takeError();
+  ASSERT_TRUE(bool(ParsedYAML->Symbols));
+  EXPECT_THAT(*ParsedYAML->Symbols,
+              UnorderedElementsAre(ID("057557CEBF6E6B2DD437FBF60CC58F35"),
+                                   ID("057557CEBF6E6B2DD437FBF60CC58F36")));
+
+  auto Sym1 = *ParsedYAML->Symbols->find(
+      cantFail(SymbolID::fromStr("057557CEBF6E6B2DD437FBF60CC58F35")));
+  auto Sym2 = *ParsedYAML->Symbols->find(
+      cantFail(SymbolID::fromStr("057557CEBF6E6B2DD437FBF60CC58F36")));
+
   EXPECT_THAT(Sym1, QName("clang::Foo1"));
   EXPECT_EQ(Sym1.Signature, "");
   EXPECT_EQ(Sym1.Documentation, "Foo doc");
@@ -91,9 +119,6 @@ TEST(SerializationTest, YAMLConversions) {
               UnorderedElementsAre(IncludeHeaderWithRef("include1", 7u),
                                    IncludeHeaderWithRef("include2", 3u)));
 
-  auto Symbols2 = symbolsFromYAML(YAML2);
-  ASSERT_EQ(Symbols2.size(), 1u);
-  const auto &Sym2 = *Symbols2.begin();
   EXPECT_THAT(Sym2, QName("clang::Foo2"));
   EXPECT_EQ(Sym2.Signature, "-sig");
   EXPECT_EQ(Sym2.ReturnType, "");
@@ -101,41 +126,49 @@ TEST(SerializationTest, YAMLConversions) {
   EXPECT_FALSE(Sym2.Flags & Symbol::IndexedForCodeCompletion);
   EXPECT_TRUE(Sym2.Flags & Symbol::Deprecated);
 
-  std::string ConcatenatedYAML;
-  {
-    llvm::raw_string_ostream OS(ConcatenatedYAML);
-    SymbolsToYAML(Symbols1, OS);
-    SymbolsToYAML(Symbols2, OS);
-  }
-  auto ConcatenatedSymbols = symbolsFromYAML(ConcatenatedYAML);
-  EXPECT_THAT(ConcatenatedSymbols,
-              UnorderedElementsAre(QName("clang::Foo1"), QName("clang::Foo2")));
+  ASSERT_TRUE(bool(ParsedYAML->Refs));
+  EXPECT_THAT(
+      *ParsedYAML->Refs,
+      UnorderedElementsAre(
+          Pair(cantFail(SymbolID::fromStr("057557CEBF6E6B2DD437FBF60CC58F35")),
+               testing::SizeIs(1))));
+  auto Ref1 = ParsedYAML->Refs->begin()->second.front();
+  EXPECT_EQ(Ref1.Kind, RefKind::Reference);
+  EXPECT_EQ(Ref1.Location.FileURI, "file:///path/foo.cc");
 }
 
 std::vector<std::string> YAMLFromSymbols(const SymbolSlab &Slab) {
   std::vector<std::string> Result;
   for (const auto &Sym : Slab)
-    Result.push_back(SymbolToYAML(Sym));
+    Result.push_back(toYAML(Sym));
+  return Result;
+}
+std::vector<std::string> YAMLFromRefs(const RefSlab &Slab) {
+  std::vector<std::string> Result;
+  for (const auto &Sym : Slab)
+    Result.push_back(toYAML(Sym));
   return Result;
 }
 
 TEST(SerializationTest, BinaryConversions) {
-  // We reuse the test symbols from YAML.
-  auto Slab = symbolsFromYAML(std::string(YAML1) + YAML2);
-  ASSERT_EQ(Slab.size(), 2u);
+  auto In = readIndexFile(YAML);
+  EXPECT_TRUE(bool(In)) << In.takeError();
 
   // Write to binary format, and parse again.
-  IndexFileOut Out;
-  Out.Symbols = &Slab;
-  std::string Serialized = llvm::to_string(Out);
+  IndexFileOut Out(*In);
+  Out.Format = IndexFileFormat::RIFF;
+  std::string Serialized = to_string(Out);
 
-  auto In = readIndexFile(Serialized);
-  ASSERT_TRUE(bool(In)) << In.takeError();
-  ASSERT_TRUE(In->Symbols);
+  auto In2 = readIndexFile(Serialized);
+  ASSERT_TRUE(bool(In2)) << In.takeError();
+  ASSERT_TRUE(In2->Symbols);
+  ASSERT_TRUE(In2->Refs);
 
   // Assert the YAML serializations match, for nice comparisons and diffs.
-  EXPECT_THAT(YAMLFromSymbols(*In->Symbols),
-              UnorderedElementsAreArray(YAMLFromSymbols(Slab)));
+  EXPECT_THAT(YAMLFromSymbols(*In2->Symbols),
+              UnorderedElementsAreArray(YAMLFromSymbols(*In->Symbols)));
+  EXPECT_THAT(YAMLFromRefs(*In2->Refs),
+              UnorderedElementsAreArray(YAMLFromRefs(*In->Refs)));
 }
 
 } // namespace

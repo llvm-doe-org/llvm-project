@@ -1325,6 +1325,7 @@ static const EnumEntry<unsigned> ElfHeaderAMDGPUFlags[] = {
   LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX902),
   LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX904),
   LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX906),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX909),
   LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_XNACK)
 };
 
@@ -1423,7 +1424,7 @@ ELFDumper<ELFT>::ELFDumper(const ELFFile<ELFT> *Obj, ScopedPrinter &Writer)
       break;
     case ELF::SHT_LLVM_CALL_GRAPH_PROFILE:
       if (DotCGProfileSec != nullptr)
-        reportError("Multiple .note.llvm.cgprofile");
+        reportError("Multiple .llvm.call-graph-profile");
       DotCGProfileSec = &Sec;
       break;
     case ELF::SHT_LLVM_ADDRSIG:

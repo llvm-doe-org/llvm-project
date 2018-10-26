@@ -167,8 +167,9 @@ struct CodeGenSchedClass {
 struct CodeGenRegisterCost {
   Record *RCDef;
   unsigned Cost;
-  CodeGenRegisterCost(Record *RC, unsigned RegisterCost)
-      : RCDef(RC), Cost(RegisterCost) {}
+  bool AllowMoveElimination;
+  CodeGenRegisterCost(Record *RC, unsigned RegisterCost, bool AllowMoveElim = false)
+      : RCDef(RC), Cost(RegisterCost), AllowMoveElimination(AllowMoveElim) {}
   CodeGenRegisterCost(const CodeGenRegisterCost &) = default;
   CodeGenRegisterCost &operator=(const CodeGenRegisterCost &) = delete;
 };
@@ -181,12 +182,18 @@ struct CodeGenRegisterCost {
 struct CodeGenRegisterFile {
   std::string Name;
   Record *RegisterFileDef;
+  unsigned MaxMovesEliminatedPerCycle;
+  bool AllowZeroMoveEliminationOnly;
 
   unsigned NumPhysRegs;
   std::vector<CodeGenRegisterCost> Costs;
 
-  CodeGenRegisterFile(StringRef name, Record *def)
-      : Name(name), RegisterFileDef(def), NumPhysRegs(0) {}
+  CodeGenRegisterFile(StringRef name, Record *def, unsigned MaxMoveElimPerCy = 0,
+                      bool AllowZeroMoveElimOnly = false)
+      : Name(name), RegisterFileDef(def),
+        MaxMovesEliminatedPerCycle(MaxMoveElimPerCy),
+        AllowZeroMoveEliminationOnly(AllowZeroMoveElimOnly),
+        NumPhysRegs(0) {}
 
   bool hasDefaultCosts() const { return Costs.empty(); }
 };
@@ -242,6 +249,7 @@ struct CodeGenProcModel {
   // List of PfmCounters.
   RecVec PfmIssueCounterDefs;
   Record *PfmCycleCounterDef = nullptr;
+  Record *PfmUopsCounterDef = nullptr;
 
   CodeGenProcModel(unsigned Idx, std::string Name, Record *MDef,
                    Record *IDef) :
@@ -259,7 +267,8 @@ struct CodeGenProcModel {
   bool hasExtraProcessorInfo() const {
     return RetireControlUnit || !RegisterFiles.empty() ||
         !PfmIssueCounterDefs.empty() ||
-        PfmCycleCounterDef != nullptr;
+        PfmCycleCounterDef != nullptr ||
+        PfmUopsCounterDef != nullptr;
   }
 
   unsigned getProcResourceIdx(Record *PRDef) const;

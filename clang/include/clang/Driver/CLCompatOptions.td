@@ -90,8 +90,8 @@ def _SLASH_GF_ : CLFlag<"GF-">, HelpText<"Disable string pooling">,
   Alias<fwritable_strings>;
 def _SLASH_GS : CLFlag<"GS">, HelpText<"Enable buffer security check (default)">;
 def _SLASH_GS_ : CLFlag<"GS-">, HelpText<"Disable buffer security check">;
-// FIXME: Not sure /Gs really means /Gs0 (see PR39074).
-def : CLFlag<"Gs">, HelpText<"Same as /Gs0">, Alias<mstack_probe_size>, AliasArgs<["0"]>;
+def : CLFlag<"Gs">, HelpText<"Use stack probes (default)">,
+  Alias<mstack_probe_size>, AliasArgs<["4096"]>;
 def _SLASH_Gs : CLJoined<"Gs">,
   HelpText<"Set stack probe size (default 4096)">, Alias<mstack_probe_size>;
 def _SLASH_Gy : CLFlag<"Gy">, HelpText<"Put each function in its own section">,
@@ -121,9 +121,9 @@ def _SLASH_O : CLJoined<"O">,
 // FIXME: Not sure why we have -O0 here; MSVC doesn't support that.
 def : CLFlag<"O0">, Alias<O0>, HelpText<"Disable optimization">;
 def : CLFlag<"O1">, Alias<_SLASH_O>, AliasArgs<["1"]>,
-  HelpText<"Optimize for size (equivalent to /Og /Os /Oy /Ob2 /Gs /GF /Gy)">;
+  HelpText<"Optimize for size (equivalent to /Og /Os /Oy /Ob2 /GF /Gy)">;
 def : CLFlag<"O2">, Alias<_SLASH_O>, AliasArgs<["2"]>,
-  HelpText<"Optimize for speed (equivalent to /Og /Oi /Ot /Oy /Ob2 /Gs /GF /Gy)">;
+  HelpText<"Optimize for speed (equivalent to /Og /Oi /Ot /Oy /Ob2 /GF /Gy)">;
 def : CLFlag<"Ob0">, Alias<_SLASH_O>, AliasArgs<["b0"]>,
   HelpText<"Disable function inlining">;
 def : CLFlag<"Ob1">, Alias<_SLASH_O>, AliasArgs<["b1"]>,
@@ -158,6 +158,10 @@ def _SLASH_Qvec_ : CLFlag<"Qvec-">,
 def _SLASH_showIncludes : CLFlag<"showIncludes">,
   HelpText<"Print info about included files to stderr">,
   Alias<show_includes>;
+def _SLASH_showFilenames : CLFlag<"showFilenames">,
+  HelpText<"Print the name of each compiled file">;
+def _SLASH_showFilenames_ : CLFlag<"showFilenames-">,
+  HelpText<"Don't print the name of each compiled file (default)">;
 def _SLASH_source_charset : CLCompileJoined<"source-charset:">,
   HelpText<"Source encoding, supports only UTF-8">, Alias<finput_charset_EQ>;
 def _SLASH_execution_charset : CLCompileJoined<"execution-charset:">,
@@ -354,6 +358,7 @@ def _SLASH_errorReport : CLIgnoredJoined<"errorReport">;
 def _SLASH_FC : CLIgnoredFlag<"FC">;
 def _SLASH_Fd : CLIgnoredJoined<"Fd">;
 def _SLASH_FS : CLIgnoredFlag<"FS">;
+def _SLASH_JMC : CLIgnoredFlag<"JMC">;
 def _SLASH_kernel_ : CLIgnoredFlag<"kernel-">;
 def _SLASH_nologo : CLIgnoredFlag<"nologo">;
 def _SLASH_openmp_ : CLIgnoredFlag<"openmp-">;
@@ -405,7 +410,6 @@ def _SLASH_GZ : CLFlag<"GZ">;
 def _SLASH_H : CLFlag<"H">;
 def _SLASH_homeparams : CLFlag<"homeparams">;
 def _SLASH_hotpatch : CLFlag<"hotpatch">;
-def _SLASH_JMC : CLFlag<"JMC">;
 def _SLASH_kernel : CLFlag<"kernel">;
 def _SLASH_LN : CLFlag<"LN">;
 def _SLASH_MP : CLJoined<"MP">;

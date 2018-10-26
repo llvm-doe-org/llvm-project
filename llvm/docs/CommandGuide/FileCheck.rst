@@ -24,6 +24,9 @@ match.  The file to verify is read from standard input unless the
 OPTIONS
 -------
 
+Options are parsed from the command line and from the environment variable
+``FILECHECK_OPTS``.
+
 .. option:: -help
 
  Print a summary of command line options.
@@ -77,9 +80,14 @@ OPTIONS
   -verify``. With this option FileCheck will verify that input does not contain
   warnings not covered by any ``CHECK:`` patterns.
 
+.. option:: --dump-input <mode>
+
+  Dump annotated original input either 'always', on 'fail', or 'never'.
+
 .. option:: --dump-input-on-failure
 
-  When the check fails, dump all of the original input.
+  When the check fails, dump all of the original input.  This option is
+  deprecated in favor of `--dump-input`.
 
 .. option:: --enable-var-scope
 
@@ -115,6 +123,10 @@ OPTIONS
   directives.  This option is deprecated and is only provided for convenience
   as old tests are migrated to the new non-overlapping ``CHECK-DAG:``
   implementation.
+
+.. option:: --color
+
+  Use colors in output (autodetected by default).
 
 EXIT STATUS
 -----------

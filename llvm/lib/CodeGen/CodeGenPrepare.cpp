@@ -436,11 +436,6 @@ bool CodeGenPrepare::runOnFunction(Function &F) {
   bool MadeChange = true;
   while (MadeChange) {
     MadeChange = false;
-    SeenChainsForSExt.clear();
-    ValToSExtendedUses.clear();
-    RemovedInsts.clear();
-    LargeOffsetGEPMap.clear();
-    LargeOffsetGEPID.clear();
     for (Function::iterator I = F.begin(); I != F.end(); ) {
       BasicBlock *BB = &*I++;
       bool ModifiedDTOnIteration = false;
@@ -460,6 +455,11 @@ bool CodeGenPrepare::runOnFunction(Function &F) {
       I->deleteValue();
 
     EverMadeChange |= MadeChange;
+    SeenChainsForSExt.clear();
+    ValToSExtendedUses.clear();
+    RemovedInsts.clear();
+    LargeOffsetGEPMap.clear();
+    LargeOffsetGEPID.clear();
   }
 
   SunkAddrs.clear();
@@ -1721,11 +1721,22 @@ bool CodeGenPrepare::optimizeCallInst(CallInst *CI, bool &ModifiedDT) {
       return true;
     }
     case Intrinsic::launder_invariant_group:
-    case Intrinsic::strip_invariant_group:
-      II->replaceAllUsesWith(II->getArgOperand(0));
+    case Intrinsic::strip_invariant_group: {
+      Value *ArgVal = II->getArgOperand(0);
+      auto it = LargeOffsetGEPMap.find(II);
+      if (it != LargeOffsetGEPMap.end()) {
+          // Merge entries in LargeOffsetGEPMap to reflect the RAUW.
+          // Make sure not to have to deal with iterator invalidation
+          // after possibly adding ArgVal to LargeOffsetGEPMap.
+          auto GEPs = std::move(it->second);
+          LargeOffsetGEPMap[ArgVal].append(GEPs.begin(), GEPs.end());
+          LargeOffsetGEPMap.erase(II);
+      }
+
+      II->replaceAllUsesWith(ArgVal);
       II->eraseFromParent();
       return true;
-
+    }
     case Intrinsic::cttz:
     case Intrinsic::ctlz:
       // If counting zeros is expensive, try to avoid it.
@@ -1870,15 +1881,6 @@ bool CodeGenPrepare::dupRetToEnableTailCallOpts(BasicBlock *BB) {
   for (unsigned i = 0, e = TailCalls.size(); i != e; ++i) {
     CallInst *CI = TailCalls[i];
     CallSite CS(CI);
-
-    // Conservatively require the attributes of the call to match those of the
-    // return. Ignore noalias because it doesn't affect the call sequence.
-    AttributeList CalleeAttrs = CS.getAttributes();
-    if (AttrBuilder(CalleeAttrs, AttributeList::ReturnIndex)
-            .removeAttribute(Attribute::NoAlias) !=
-        AttrBuilder(CalleeAttrs, AttributeList::ReturnIndex)
-            .removeAttribute(Attribute::NoAlias))
-      continue;
 
     // Make sure the call instruction is followed by an unconditional branch to
     // the return block.
@@ -4998,8 +5000,7 @@ bool CodeGenPrepare::splitLargeGEPOffsets() {
           return LargeOffsetGEPID[LHS.first] < LargeOffsetGEPID[RHS.first];
         };
     // Sorting all the GEPs of the same data structures based on the offsets.
-    llvm::sort(LargeOffsetGEPs.begin(), LargeOffsetGEPs.end(),
-               compareGEPOffset);
+    llvm::sort(LargeOffsetGEPs, compareGEPOffset);
     LargeOffsetGEPs.erase(
         std::unique(LargeOffsetGEPs.begin(), LargeOffsetGEPs.end()),
         LargeOffsetGEPs.end());

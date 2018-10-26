@@ -600,6 +600,8 @@ void TargetLoweringBase::initActions() {
     setOperationAction(ISD::CONCAT_VECTORS, VT, Expand);
     setOperationAction(ISD::FMINNUM, VT, Expand);
     setOperationAction(ISD::FMAXNUM, VT, Expand);
+    setOperationAction(ISD::FMINNUM_IEEE, VT, Expand);
+    setOperationAction(ISD::FMAXNUM_IEEE, VT, Expand);
     setOperationAction(ISD::FMINNAN, VT, Expand);
     setOperationAction(ISD::FMAXNAN, VT, Expand);
     setOperationAction(ISD::FMAD, VT, Expand);
@@ -608,6 +610,8 @@ void TargetLoweringBase::initActions() {
     setOperationAction(ISD::UMIN, VT, Expand);
     setOperationAction(ISD::UMAX, VT, Expand);
     setOperationAction(ISD::ABS, VT, Expand);
+    setOperationAction(ISD::SADDSAT, VT, Expand);
+    setOperationAction(ISD::UADDSAT, VT, Expand);
 
     // Overflow operations default to expand
     setOperationAction(ISD::SADDO, VT, Expand);

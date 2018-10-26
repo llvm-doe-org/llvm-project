@@ -759,9 +759,7 @@ void NativeProcessLinux::MonitorBreakpoint(NativeThreadLinux &thread) {
 
   // Mark the thread as stopped at breakpoint.
   thread.SetStoppedByBreakpoint();
-  Status error = FixupBreakpointPCAsNeeded(thread);
-  if (error.Fail())
-    LLDB_LOG(log, "pid = {0} fixup: {1}", thread.GetID(), error);
+  FixupBreakpointPCAsNeeded(thread);
 
   if (m_threads_stepping_with_breakpoint.find(thread.GetID()) !=
       m_threads_stepping_with_breakpoint.end())
@@ -1502,40 +1500,6 @@ size_t NativeProcessLinux::UpdateThreads() {
   return m_threads.size();
 }
 
-Status NativeProcessLinux::GetSoftwareBreakpointPCOffset(
-    uint32_t &actual_opcode_size) {
-  // FIXME put this behind a breakpoint protocol class that can be
-  // set per architecture.  Need ARM, MIPS support here.
-  static const uint8_t g_i386_opcode[] = {0xCC};
-  static const uint8_t g_s390x_opcode[] = {0x00, 0x01};
-
-  switch (m_arch.GetMachine()) {
-  case llvm::Triple::x86:
-  case llvm::Triple::x86_64:
-    actual_opcode_size = static_cast<uint32_t>(sizeof(g_i386_opcode));
-    return Status();
-
-  case llvm::Triple::systemz:
-    actual_opcode_size = static_cast<uint32_t>(sizeof(g_s390x_opcode));
-    return Status();
-
-  case llvm::Triple::arm:
-  case llvm::Triple::aarch64:
-  case llvm::Triple::mips64:
-  case llvm::Triple::mips64el:
-  case llvm::Triple::mips:
-  case llvm::Triple::mipsel:
-  case llvm::Triple::ppc64le:
-    // On these architectures the PC don't get updated for breakpoint hits
-    actual_opcode_size = 0;
-    return Status();
-
-  default:
-    assert(false && "CPU type not supported!");
-    return Status("CPU type not supported");
-  }
-}
-
 Status NativeProcessLinux::SetBreakpoint(lldb::addr_t addr, uint32_t size,
                                          bool hardware) {
   if (hardware)
@@ -1751,83 +1715,6 @@ NativeThreadLinux &NativeProcessLinux::AddThread(lldb::tid_t thread_id) {
   }
 
   return static_cast<NativeThreadLinux &>(*m_threads.back());
-}
-
-Status
-NativeProcessLinux::FixupBreakpointPCAsNeeded(NativeThreadLinux &thread) {
-  Log *log(ProcessPOSIXLog::GetLogIfAllCategoriesSet(POSIX_LOG_BREAKPOINTS));
-
-  Status error;
-
-  // Find out the size of a breakpoint (might depend on where we are in the
-  // code).
-  NativeRegisterContext &context = thread.GetRegisterContext();
-
-  uint32_t breakpoint_size = 0;
-  error = GetSoftwareBreakpointPCOffset(breakpoint_size);
-  if (error.Fail()) {
-    LLDB_LOG(log, "GetBreakpointSize() failed: {0}", error);
-    return error;
-  } else
-    LLDB_LOG(log, "breakpoint size: {0}", breakpoint_size);
-
-  // First try probing for a breakpoint at a software breakpoint location: PC -
-  // breakpoint size.
-  const lldb::addr_t initial_pc_addr = context.GetPCfromBreakpointLocation();
-  lldb::addr_t breakpoint_addr = initial_pc_addr;
-  if (breakpoint_size > 0) {
-    // Do not allow breakpoint probe to wrap around.
-    if (breakpoint_addr >= breakpoint_size)
-      breakpoint_addr -= breakpoint_size;
-  }
-
-  // Check if we stopped because of a breakpoint.
-  NativeBreakpointSP breakpoint_sp;
-  error = m_breakpoint_list.GetBreakpoint(breakpoint_addr, breakpoint_sp);
-  if (!error.Success() || !breakpoint_sp) {
-    // We didn't find one at a software probe location.  Nothing to do.
-    LLDB_LOG(log,
-             "pid {0} no lldb breakpoint found at current pc with "
-             "adjustment: {1}",
-             GetID(), breakpoint_addr);
-    return Status();
-  }
-
-  // If the breakpoint is not a software breakpoint, nothing to do.
-  if (!breakpoint_sp->IsSoftwareBreakpoint()) {
-    LLDB_LOG(
-        log,
-        "pid {0} breakpoint found at {1:x}, not software, nothing to adjust",
-        GetID(), breakpoint_addr);
-    return Status();
-  }
-
-  //
-  // We have a software breakpoint and need to adjust the PC.
-  //
-
-  // Sanity check.
-  if (breakpoint_size == 0) {
-    // Nothing to do!  How did we get here?
-    LLDB_LOG(log,
-             "pid {0} breakpoint found at {1:x}, it is software, but the "
-             "size is zero, nothing to do (unexpected)",
-             GetID(), breakpoint_addr);
-    return Status();
-  }
-
-  // Change the program counter.
-  LLDB_LOG(log, "pid {0} tid {1}: changing PC from {2:x} to {3:x}", GetID(),
-           thread.GetID(), initial_pc_addr, breakpoint_addr);
-
-  error = context.SetPC(breakpoint_addr);
-  if (error.Fail()) {
-    LLDB_LOG(log, "pid {0} tid {1}: failed to set PC: {2}", GetID(),
-             thread.GetID(), error);
-    return error;
-  }
-
-  return error;
 }
 
 Status NativeProcessLinux::GetLoadedModuleFileSpec(const char *module_path,

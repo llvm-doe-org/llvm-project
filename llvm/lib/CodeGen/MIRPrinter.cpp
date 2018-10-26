@@ -196,6 +196,7 @@ void MIRPrinter::print(const MachineFunction &MF) {
   YamlMF.Name = MF.getName();
   YamlMF.Alignment = MF.getAlignment();
   YamlMF.ExposesReturnsTwice = MF.exposesReturnsTwice();
+  YamlMF.HasWinCFI = MF.hasWinCFI();
 
   YamlMF.Legalized = MF.getProperties().hasProperty(
       MachineFunctionProperties::Property::Legalized);
@@ -328,6 +329,8 @@ void MIRPrinter::convert(ModuleSlotTracker &MST,
   YamlMFI.HasCalls = MFI.hasCalls();
   YamlMFI.MaxCallFrameSize = MFI.isMaxCallFrameSizeComputed()
     ? MFI.getMaxCallFrameSize() : ~0u;
+  YamlMFI.CVBytesOfCalleeSavedRegisters =
+      MFI.getCVBytesOfCalleeSavedRegisters();
   YamlMFI.HasOpaqueSPAdjustment = MFI.hasOpaqueSPAdjustment();
   YamlMFI.HasVAStart = MFI.hasVAStart();
   YamlMFI.HasMustTailInVarArgFunc = MFI.hasMustTailInVarArgFunc();

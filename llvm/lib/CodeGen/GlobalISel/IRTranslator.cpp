@@ -955,6 +955,14 @@ bool IRTranslator::translateKnownIntrinsic(const CallInst &CI, Intrinsic::ID ID,
         .addUse(getOrCreateVReg(*CI.getArgOperand(0)));
     return true;
   }
+  case Intrinsic::invariant_start: {
+    LLT PtrTy = getLLTForType(*CI.getArgOperand(0)->getType(), *DL);
+    unsigned Undef = MRI->createGenericVirtualRegister(PtrTy);
+    MIRBuilder.buildUndef(Undef);
+    return true;
+  }
+  case Intrinsic::invariant_end:
+    return true;
   }
   return false;
 }
@@ -1145,7 +1153,6 @@ bool IRTranslator::translateLandingPad(const User &U,
   const LandingPadInst &LP = cast<LandingPadInst>(U);
 
   MachineBasicBlock &MBB = MIRBuilder.getMBB();
-  addLandingPadInfo(LP, MBB);
 
   MBB.setIsEHPad();
 

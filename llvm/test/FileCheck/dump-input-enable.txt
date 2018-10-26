@@ -1,0 +1,118 @@
+; RUN: echo ciao > %t.good
+; RUN: echo world >> %t.good
+
+; RUN: echo hello > %t.err
+; RUN: echo world >> %t.err
+
+; RUN: echo 'CHECK: ciao' > %t.check
+; RUN: echo 'CHECK-NEXT: world' >> %t.check
+
+;--------------------------------------------------
+; unknown value
+;--------------------------------------------------
+
+; RUN: not FileCheck -input-file %t.good %t.check -check-prefix=CHECK \
+; RUN:               -match-full-lines -dump-input=foobar 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=BADVAL
+
+; RUN: FILECHECK_DUMP_INPUT=foobar \
+; RUN: not FileCheck -input-file %t.good %t.check -check-prefix=CHECK \
+; RUN:               -match-full-lines 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=BADVAL
+
+BADVAL: Unrecognized value for dump-input option: foobar
+
+;--------------------------------------------------
+; never
+;--------------------------------------------------
+
+; RUN: FileCheck -input-file %t.good %t.check -check-prefix=CHECK \
+; RUN:           -match-full-lines -dump-input=never 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-NODUMP -allow-empty
+
+; RUN: not FileCheck -input-file %t.err %t.check -check-prefix=CHECK \
+; RUN:               -match-full-lines -dump-input=never 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-NODUMP
+
+; RUN: FILECHECK_DUMP_INPUT=never \
+; RUN: FileCheck -input-file %t.good %t.check -check-prefix=CHECK \
+; RUN:           -match-full-lines 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-NODUMP -allow-empty
+
+; RUN: FILECHECK_DUMP_INPUT=never \
+; RUN: not FileCheck -input-file %t.err %t.check -check-prefix=CHECK \
+; RUN:               -match-full-lines 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-NODUMP
+
+;--------------------------------------------------
+; fail
+;--------------------------------------------------
+
+; RUN: FileCheck -input-file %t.good %t.check -check-prefix=CHECK \
+; RUN:           -match-full-lines -dump-input=fail 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-NODUMP -allow-empty
+
+; RUN: not FileCheck -input-file %t.err %t.check -check-prefix=CHECK \
+; RUN:               -match-full-lines -dump-input=fail 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-ERR
+
+; RUN: FILECHECK_DUMP_INPUT=fail \
+; RUN: FileCheck -input-file %t.good %t.check -check-prefix=CHECK \
+; RUN:           -match-full-lines 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-NODUMP -allow-empty
+
+; RUN: FILECHECK_DUMP_INPUT=fail \
+; RUN: not FileCheck -input-file %t.err %t.check -check-prefix=CHECK \
+; RUN:               -match-full-lines 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-ERR
+
+;--------------------------------------------------
+; always
+;--------------------------------------------------
+
+; RUN: FileCheck -input-file %t.good %t.check -check-prefix=CHECK \
+; RUN:           -match-full-lines -dump-input=always -v 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-GOOD
+
+; RUN: not FileCheck -input-file %t.err %t.check -check-prefix=CHECK \
+; RUN:               -match-full-lines -dump-input=always 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-ERR
+
+; RUN: FILECHECK_DUMP_INPUT=always \
+; RUN: FileCheck -input-file %t.good %t.check -check-prefix=CHECK \
+; RUN:           -match-full-lines -dump-input=always -v 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-GOOD
+
+; RUN: FILECHECK_DUMP_INPUT=always \
+; RUN: not FileCheck -input-file %t.err %t.check -check-prefix=CHECK \
+; RUN:               -match-full-lines -dump-input=always 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-ERR
+
+;--------------------------------------------------
+; env and command line conflict
+;--------------------------------------------------
+
+; RUN: FILECHECK_DUMP_INPUT=always \
+; RUN: not FileCheck -input-file %t.err %t.check -check-prefix=CHECK \
+; RUN:               -match-full-lines -dump-input=never 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-NODUMP
+
+; END.
+
+; CHECK-GOOD: Full input was:
+; CHECK-GOOD-NEXT: <<<<<<
+; CHECK-GOOD-NEXT:          1: ciao
+; CHECK-GOOD-NEXT: check:1     ^~~~
+; CHECK-GOOD-NEXT:          2: world
+; CHECK-GOOD-NEXT: next:2      ^~~~~
+; CHECK-GOOD-NEXT: >>>>>>
+
+; CHECK-ERR: Full input was:
+; CHECK-ERR-NEXT: <<<<<<
+; CHECK-ERR-NEXT:          1: hello
+; CHECK-ERR-NEXT: check:1     X~~~~
+; CHECK-ERR-NEXT:          2: world
+; CHECK-ERR-NEXT: check:1     ~~~~~
+; CHECK-ERR-NEXT: >>>>>>
+
+; CHECK-NODUMP-NOT: <<<<<<

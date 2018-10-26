@@ -180,6 +180,8 @@ enum ArchExtKind : unsigned {
   AEK_SHA2 =        1 << 15,
   AEK_AES =         1 << 16,
   AEK_FP16FML =     1 << 17,
+  AEK_RAND =        1 << 18,
+  AEK_MTE =         1 << 19,
 };
 
 StringRef getCanonicalArchName(StringRef Arch);
@@ -315,9 +317,10 @@ enum GPUKind : uint32_t {
   GK_GFX902 = 61,
   GK_GFX904 = 62,
   GK_GFX906 = 63,
+  GK_GFX909 = 65,
 
   GK_AMDGCN_FIRST = GK_GFX600,
-  GK_AMDGCN_LAST = GK_GFX906,
+  GK_AMDGCN_LAST = GK_GFX909,
 };
 
 /// Instruction set architecture version.

@@ -6,9 +6,13 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
+
 #include "Serialization.h"
 #include "Index.h"
+#include "Logger.h"
 #include "RIFF.h"
+#include "Trace.h"
+#include "dex/Dex.h"
 #include "llvm/Support/Compression.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/Error.h"
@@ -154,7 +158,7 @@ public:
   // Finalize the table and write it to OS. No more strings may be added.
   void finalize(raw_ostream &OS) {
     Sorted = {Unique.begin(), Unique.end()};
-    std::sort(Sorted.begin(), Sorted.end());
+    llvm::sort(Sorted);
     for (unsigned I = 0; I < Sorted.size(); ++I)
       Index.try_emplace({Sorted[I].data(), Sorted[I].size()}, I);
 
@@ -228,8 +232,8 @@ void writeLocation(const SymbolLocation &Loc, const StringTableOut &Strings,
                    raw_ostream &OS) {
   writeVar(Strings.index(Loc.FileURI), OS);
   for (const auto &Endpoint : {Loc.Start, Loc.End}) {
-    writeVar(Endpoint.Line, OS);
-    writeVar(Endpoint.Column, OS);
+    writeVar(Endpoint.line(), OS);
+    writeVar(Endpoint.column(), OS);
   }
 }
 
@@ -237,8 +241,8 @@ SymbolLocation readLocation(Reader &Data, ArrayRef<StringRef> Strings) {
   SymbolLocation Loc;
   Loc.FileURI = Data.consumeString(Strings);
   for (auto *Endpoint : {&Loc.Start, &Loc.End}) {
-    Endpoint->Line = Data.consumeVar();
-    Endpoint->Column = Data.consumeVar();
+    Endpoint->setLine(Data.consumeVar());
+    Endpoint->setColumn(Data.consumeVar());
   }
   return Loc;
 }
@@ -294,7 +298,34 @@ Symbol readSymbol(Reader &Data, ArrayRef<StringRef> Strings) {
   return Sym;
 }
 
-} // namespace
+// REFS ENCODING
+// A refs section has data grouped by Symbol. Each symbol has:
+//  - SymbolID: 16 bytes
+//  - NumRefs: varint
+//  - Ref[NumRefs]
+// Fields of Ref are encoded in turn, see implementation.
+
+void writeRefs(const SymbolID &ID, ArrayRef<Ref> Refs,
+               const StringTableOut &Strings, raw_ostream &OS) {
+  OS << ID.raw();
+  writeVar(Refs.size(), OS);
+  for (const auto &Ref : Refs) {
+    OS.write(static_cast<unsigned char>(Ref.Kind));
+    writeLocation(Ref.Location, Strings, OS);
+  }
+}
+
+std::pair<SymbolID, std::vector<Ref>> readRefs(Reader &Data,
+                                               ArrayRef<StringRef> Strings) {
+  std::pair<SymbolID, std::vector<Ref>> Result;
+  Result.first = Data.consumeID();
+  Result.second.resize(Data.consumeVar());
+  for (auto &Ref : Result.second) {
+    Ref.Kind = static_cast<RefKind>(Data.consume8());
+    Ref.Location = readLocation(Data, Strings);
+  }
+  return Result;
+}
 
 // FILE ENCODING
 // A file is a RIFF chunk with type 'CdIx'.
@@ -302,13 +333,14 @@ Symbol readSymbol(Reader &Data, ArrayRef<StringRef> Strings) {
 //   - meta: version number
 //   - stri: string table
 //   - symb: symbols
+//   - refs: references to symbols
 
 // The current versioning scheme is simple - non-current versions are rejected.
 // If you make a breaking change, bump this version number to invalidate stored
 // data. Later we may want to support some backward compatibility.
-constexpr static uint32_t Version = 4;
+constexpr static uint32_t Version = 6;
 
-Expected<IndexFileIn> readIndexFile(StringRef Data) {
+Expected<IndexFileIn> readRIFF(StringRef Data) {
   auto RIFF = riff::readFile(Data);
   if (!RIFF)
     return RIFF.takeError();
@@ -340,10 +372,22 @@ Expected<IndexFileIn> readIndexFile(StringRef Data) {
       return makeError("malformed or truncated symbol");
     Result.Symbols = std::move(Symbols).build();
   }
+  if (Chunks.count("refs")) {
+    Reader RefsReader(Chunks.lookup("refs"));
+    RefSlab::Builder Refs;
+    while (!RefsReader.eof()) {
+      auto RefsBundle = readRefs(RefsReader, Strings->Strings);
+      for (const auto &Ref : RefsBundle.second) // FIXME: bulk insert?
+        Refs.insert(RefsBundle.first, Ref);
+    }
+    if (RefsReader.err())
+      return makeError("malformed or truncated refs");
+    Result.Refs = std::move(Refs).build();
+  }
   return std::move(Result);
 }
 
-raw_ostream &operator<<(raw_ostream &OS, const IndexFileOut &Data) {
+void writeRIFF(const IndexFileOut &Data, raw_ostream &OS) {
   assert(Data.Symbols && "An index file without symbols makes no sense!");
   riff::File RIFF;
   RIFF.Type = riff::fourCC("CdIx");
@@ -361,6 +405,14 @@ raw_ostream &operator<<(raw_ostream &OS, const IndexFileOut &Data) {
     Symbols.emplace_back(Sym);
     visitStrings(Symbols.back(), [&](StringRef &S) { Strings.intern(S); });
   }
+  std::vector<std::pair<SymbolID, std::vector<Ref>>> Refs;
+  if (Data.Refs) {
+    for (const auto &Sym : *Data.Refs) {
+      Refs.emplace_back(Sym);
+      for (auto &Ref : Refs.back().second)
+        Strings.intern(Ref.Location.FileURI);
+    }
+  }
 
   std::string StringSection;
   {
@@ -377,7 +429,86 @@ raw_ostream &operator<<(raw_ostream &OS, const IndexFileOut &Data) {
   }
   RIFF.Chunks.push_back({riff::fourCC("symb"), SymbolSection});
 
-  return OS << RIFF;
+  std::string RefsSection;
+  if (Data.Refs) {
+    {
+      raw_string_ostream RefsOS(RefsSection);
+      for (const auto &Sym : Refs)
+        writeRefs(Sym.first, Sym.second, Strings, RefsOS);
+    }
+    RIFF.Chunks.push_back({riff::fourCC("refs"), RefsSection});
+  }
+
+  OS << RIFF;
+}
+
+} // namespace
+
+// Defined in YAMLSerialization.cpp.
+void writeYAML(const IndexFileOut &, raw_ostream &);
+Expected<IndexFileIn> readYAML(StringRef);
+
+raw_ostream &operator<<(raw_ostream &OS, const IndexFileOut &O) {
+  switch (O.Format) {
+  case IndexFileFormat::RIFF:
+    writeRIFF(O, OS);
+    break;
+  case IndexFileFormat::YAML:
+    writeYAML(O, OS);
+    break;
+  }
+  return OS;
+}
+
+Expected<IndexFileIn> readIndexFile(StringRef Data) {
+  if (Data.startswith("RIFF")) {
+    return readRIFF(Data);
+  } else if (auto YAMLContents = readYAML(Data)) {
+    return std::move(*YAMLContents);
+  } else {
+    return makeError("Not a RIFF file and failed to parse as YAML: " +
+                     toString(YAMLContents.takeError()));
+  }
+}
+
+std::unique_ptr<SymbolIndex> loadIndex(StringRef SymbolFilename,
+                                       ArrayRef<std::string> URISchemes,
+                                       bool UseDex) {
+  trace::Span OverallTracer("LoadIndex");
+  auto Buffer = MemoryBuffer::getFile(SymbolFilename);
+  if (!Buffer) {
+    errs() << "Can't open " << SymbolFilename << "\n";
+    return nullptr;
+  }
+
+  SymbolSlab Symbols;
+  RefSlab Refs;
+  {
+    trace::Span Tracer("ParseIndex");
+    if (auto I = readIndexFile(Buffer->get()->getBuffer())) {
+      if (I->Symbols)
+        Symbols = std::move(*I->Symbols);
+      if (I->Refs)
+        Refs = std::move(*I->Refs);
+    } else {
+      errs() << "Bad Index: " << toString(I.takeError()) << "\n";
+      return nullptr;
+    }
+  }
+
+  size_t NumSym = Symbols.size();
+  size_t NumRefs = Refs.numRefs();
+
+  trace::Span Tracer("BuildIndex");
+  auto Index =
+      UseDex ? dex::Dex::build(std::move(Symbols), std::move(Refs), URISchemes)
+             : MemIndex::build(std::move(Symbols), std::move(Refs));
+  vlog("Loaded {0} from {1} with estimated memory usage {2} bytes\n"
+       "  - number of symbols: {3}\n"
+       "  - number of refs: {4}\n",
+       UseDex ? "Dex" : "MemIndex", SymbolFilename,
+       Index->estimateMemoryUsage(), NumSym, NumRefs);
+  return Index;
 }
 
 } // namespace clangd

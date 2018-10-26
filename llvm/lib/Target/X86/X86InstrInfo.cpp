@@ -683,8 +683,10 @@ void X86InstrInfo::reMaterialize(MachineBasicBlock &MBB,
   if (ClobbersEFLAGS && !isSafeToClobberEFLAGS(MBB, I)) {
     // The instruction clobbers EFLAGS. Re-materialize as MOV32ri to avoid side
     // effects.
+    unsigned NewOpc = X86::MOV32ri;
     int Value;
     switch (Orig.getOpcode()) {
+    case X86::MOV64r0:  NewOpc = X86::MOV32ri64; Value = 0; break;
     case X86::MOV32r0:  Value = 0; break;
     case X86::MOV32r1:  Value = 1; break;
     case X86::MOV32r_1: Value = -1; break;
@@ -693,7 +695,7 @@ void X86InstrInfo::reMaterialize(MachineBasicBlock &MBB,
     }
 
     const DebugLoc &DL = Orig.getDebugLoc();
-    BuildMI(MBB, I, DL, get(X86::MOV32ri))
+    BuildMI(MBB, I, DL, get(NewOpc))
         .add(Orig.getOperand(0))
         .addImm(Value);
   } else {
@@ -2640,6 +2642,11 @@ bool X86InstrInfo::AnalyzeBranchImpl(
     if (BranchCode == X86::COND_INVALID)
       return true;  // Can't handle indirect branch.
 
+    // In practice we should never have an undef eflags operand, if we do
+    // abort here as we are not prepared to preserve the flag.
+    if (I->getOperand(1).isUndef())
+      return true;
+
     // Working from the bottom, handle the first conditional branch.
     if (Cond.empty()) {
       MachineBasicBlock *TargetBB = I->getOperand(0).getMBB();
@@ -3119,7 +3126,7 @@ void X86InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
 
   LLVM_DEBUG(dbgs() << "Cannot copy " << RI.getName(SrcReg) << " to "
                     << RI.getName(DestReg) << '\n');
-  llvm_unreachable("Cannot emit physreg copy instruction");
+  report_fatal_error("Cannot emit physreg copy instruction");
 }
 
 bool X86InstrInfo::isCopyInstrImpl(const MachineInstr &MI,
@@ -3313,8 +3320,7 @@ void X86InstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
       (Subtarget.getFrameLowering()->getStackAlignment() >= Alignment) ||
       RI.canRealignStack(MF);
   unsigned Opc = getStoreRegOpcode(SrcReg, RC, isAligned, Subtarget);
-  DebugLoc DL = MBB.findDebugLoc(MI);
-  addFrameReference(BuildMI(MBB, MI, DL, get(Opc)), FrameIdx)
+  addFrameReference(BuildMI(MBB, MI, DebugLoc(), get(Opc)), FrameIdx)
     .addReg(SrcReg, getKillRegState(isKill));
 }
 
@@ -3348,8 +3354,7 @@ void X86InstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
       (Subtarget.getFrameLowering()->getStackAlignment() >= Alignment) ||
       RI.canRealignStack(MF);
   unsigned Opc = getLoadRegOpcode(DestReg, RC, isAligned, Subtarget);
-  DebugLoc DL = MBB.findDebugLoc(MI);
-  addFrameReference(BuildMI(MBB, MI, DL, get(Opc), DestReg), FrameIdx);
+  addFrameReference(BuildMI(MBB, MI, DebugLoc(), get(Opc), DestReg), FrameIdx);
 }
 
 void X86InstrInfo::loadRegFromAddr(
@@ -3747,7 +3752,9 @@ bool X86InstrInfo::optimizeCompareInstr(MachineInstr &CmpInstr, unsigned SrcReg,
       // MOV32r0 etc. are implemented with xor which clobbers condition code.
       // They are safe to move up, if the definition to EFLAGS is dead and
       // earlier instructions do not read or write EFLAGS.
-      if (!Movr0Inst && Instr.getOpcode() == X86::MOV32r0 &&
+      if (!Movr0Inst &&
+          (Instr.getOpcode() == X86::MOV32r0 ||
+           Instr.getOpcode() == X86::MOV64r0) &&
           Instr.registerDefIsDead(X86::EFLAGS, TRI)) {
         Movr0Inst = &Instr;
         continue;
@@ -4152,6 +4159,15 @@ bool X86InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   switch (MI.getOpcode()) {
   case X86::MOV32r0:
     return Expand2AddrUndef(MIB, get(X86::XOR32rr));
+  case X86::MOV64r0: {
+    const TargetRegisterInfo *TRI = &getRegisterInfo();
+    unsigned Reg = MIB->getOperand(0).getReg();
+    unsigned Reg32 = TRI->getSubReg(Reg, X86::sub_32bit);
+    MIB->getOperand(0).setReg(Reg32);
+    Expand2AddrUndef(MIB, get(X86::XOR32rr));
+    MIB.addReg(Reg, RegState::ImplicitDefine);
+    return true;
+  }
   case X86::MOV32r1:
     return expandMOV32r1(MIB, *this, /*MinusOne=*/ false);
   case X86::MOV32r_1:
@@ -4895,8 +4911,10 @@ MachineInstr *X86InstrInfo::foldMemoryOperandImpl(
     isTwoAddrFold = true;
   } else {
     if (OpNum == 0) {
-      if (MI.getOpcode() == X86::MOV32r0) {
-        NewMI = MakeM0Inst(*this, X86::MOV32mi, MOs, InsertPt, MI);
+      if (MI.getOpcode() == X86::MOV32r0 || MI.getOpcode() == X86::MOV64r0) {
+        unsigned NewOpc = MI.getOpcode() == X86::MOV64r0 ? X86::MOV64mi32
+                                                         : X86::MOV32mi;
+        NewMI = MakeM0Inst(*this, NewOpc, MOs, InsertPt, MI);
         if (NewMI)
           return NewMI;
       }

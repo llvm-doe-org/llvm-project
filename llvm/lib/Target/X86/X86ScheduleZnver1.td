@@ -87,8 +87,13 @@ def ZnMultiplier : ProcResource<1>;
 // Integer division issued on ALU2.
 def ZnDivider : ProcResource<1>;
 
-// 4 Cycles load-to use Latency is captured
+// 4 Cycles integer load-to use Latency is captured
 def : ReadAdvance<ReadAfterLd, 4>;
+
+// 8 Cycles vector load-to use Latency is captured
+def : ReadAdvance<ReadAfterVecLd, 8>;
+def : ReadAdvance<ReadAfterVecXLd, 8>;
+def : ReadAdvance<ReadAfterVecYLd, 8>;
 
 // The Integer PRF for Zen is 168 entries, and it holds the architectural and
 // speculative version of the 64-bit integer registers.
@@ -213,7 +218,13 @@ defm : ZnWriteResPair<WriteCMOV2,  [ZnALU], 1>;
 def  : WriteRes<WriteSETCC,  [ZnALU]>;
 def  : WriteRes<WriteSETCCStore,  [ZnALU, ZnAGU]>;
 defm : X86WriteRes<WriteLAHFSAHF, [ZnALU], 2, [1], 2>;
-def  : WriteRes<WriteBitTest,[ZnALU]>;
+
+defm : X86WriteRes<WriteBitTest,         [ZnALU], 1, [1], 1>;
+defm : X86WriteRes<WriteBitTestImmLd,    [ZnALU,ZnAGU], 5, [1,1], 2>;
+defm : X86WriteRes<WriteBitTestRegLd,    [ZnALU,ZnAGU], 5, [1,1], 2>;
+defm : X86WriteRes<WriteBitTestSet,      [ZnALU], 2, [1], 2>;
+//defm : X86WriteRes<WriteBitTestSetImmLd, [ZnALU,ZnAGU], 5, [1,1], 2>;
+//defm : X86WriteRes<WriteBitTestSetRegLd, [ZnALU,ZnAGU], 5, [1,1], 2>;
 
 // Bit counts.
 defm : ZnWriteResPair<WriteBSF, [ZnALU], 3>;
@@ -710,25 +721,15 @@ def ZnWriteALULat2Ld : SchedWriteRes<[ZnAGU, ZnALU]> {
   let Latency = 6;
 }
 
-// BT.
-// m,i.
-def : InstRW<[WriteShiftLd], (instregex "BT(16|32|64)mi8")>;
-
 // BTR BTS BTC.
-// r,r,i.
-def ZnWriteBTRSC : SchedWriteRes<[ZnALU]> {
-  let Latency = 2;
-  let NumMicroOps = 2;
-}
-def : InstRW<[ZnWriteBTRSC], (instregex "BT(R|S|C)(16|32|64)r(r|i8)")>;
-
 // m,r,i.
 def ZnWriteBTRSCm : SchedWriteRes<[ZnAGU, ZnALU]> {
   let Latency = 6;
   let NumMicroOps = 2;
 }
 // m,r,i.
-def : InstRW<[ZnWriteBTRSCm], (instregex "BT(R|S|C)(16|32|64)m(r|i8)")>;
+def : SchedAlias<WriteBitTestSetImmRMW, ZnWriteBTRSCm>;
+def : SchedAlias<WriteBitTestSetRegRMW, ZnWriteBTRSCm>;
 
 // BLSI BLSMSK BLSR.
 // r,r.

@@ -735,6 +735,8 @@ public:
     return static_cast<BinOp>(getSubclassDataFromInstruction() >> 5);
   }
 
+  static StringRef getOperationName(BinOp Op);
+
   void setOperation(BinOp Operation) {
     unsigned short SubclassData = getSubclassDataFromInstruction();
     setInstructionSubclassData((SubclassData & 31) |
@@ -1354,8 +1356,6 @@ class CallInst;
 class InvokeInst;
 
 template <class T> struct CallBaseParent { using type = Instruction; };
-
-template <> struct CallBaseParent<InvokeInst> { using type = TerminatorInst; };
 
 //===----------------------------------------------------------------------===//
 /// Base class for all callable instructions (InvokeInst and CallInst)
@@ -2457,11 +2457,21 @@ public:
 
   /// Return true if this shuffle returns a vector with a different number of
   /// elements than its source vectors.
-  /// Example: shufflevector <4 x n> A, <4 x n> B, <1,2>
+  /// Examples: shufflevector <4 x n> A, <4 x n> B, <1,2,3>
+  ///           shufflevector <4 x n> A, <4 x n> B, <1,2,3,4,5>
   bool changesLength() const {
     unsigned NumSourceElts = Op<0>()->getType()->getVectorNumElements();
     unsigned NumMaskElts = getMask()->getType()->getVectorNumElements();
     return NumSourceElts != NumMaskElts;
+  }
+
+  /// Return true if this shuffle returns a vector with a greater number of
+  /// elements than its source vectors.
+  /// Example: shufflevector <2 x n> A, <2 x n> B, <1,2,3>
+  bool increasesLength() const {
+    unsigned NumSourceElts = Op<0>()->getType()->getVectorNumElements();
+    unsigned NumMaskElts = getMask()->getType()->getVectorNumElements();
+    return NumSourceElts < NumMaskElts;
   }
 
   /// Return true if this shuffle mask chooses elements from exactly one source
@@ -3253,7 +3263,7 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(LandingPadInst, Value)
 /// Return a value (possibly void), from a function.  Execution
 /// does not continue in this function any longer.
 ///
-class ReturnInst : public TerminatorInst {
+class ReturnInst : public Instruction {
   ReturnInst(const ReturnInst &RI);
 
 private:
@@ -3313,8 +3323,6 @@ public:
   }
 
 private:
-  friend TerminatorInst;
-
   BasicBlock *getSuccessor(unsigned idx) const {
     llvm_unreachable("ReturnInst has no successors!");
   }
@@ -3337,7 +3345,7 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(ReturnInst, Value)
 //===---------------------------------------------------------------------------
 /// Conditional or Unconditional Branch instruction.
 ///
-class BranchInst : public TerminatorInst {
+class BranchInst : public Instruction {
   /// Ops list - Branches are strange.  The operands are ordered:
   ///  [Cond, FalseDest,] TrueDest.  This makes some accessors faster because
   /// they don't have to check for cond/uncond branchness. These are mostly
@@ -3481,7 +3489,7 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(BranchInst, Value)
 //===---------------------------------------------------------------------------
 /// Multiway switch
 ///
-class SwitchInst : public TerminatorInst {
+class SwitchInst : public Instruction {
   unsigned ReservedSpace;
 
   // Operand[0]    = Value to switch on
@@ -3564,7 +3572,7 @@ public:
     /// Returns number of current case.
     unsigned getCaseIndex() const { return Index; }
 
-    /// Returns TerminatorInst's successor index for current case successor.
+    /// Returns successor index for current case successor.
     unsigned getSuccessorIndex() const {
       assert(((unsigned)Index == DefaultPseudoIndex ||
               (unsigned)Index < SI->getNumCases()) &&
@@ -3620,7 +3628,7 @@ public:
     CaseIteratorImpl(SwitchInstT *SI, unsigned CaseNum) : Case(SI, CaseNum) {}
 
     /// Initializes case iterator for given SwitchInst and for given
-    /// TerminatorInst's successor index.
+    /// successor index.
     static CaseIteratorImpl fromSuccessorIndex(SwitchInstT *SI,
                                                unsigned SuccessorIndex) {
       assert(SuccessorIndex < SI->getNumSuccessors() &&
@@ -3838,7 +3846,7 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(SwitchInst, Value)
 //===---------------------------------------------------------------------------
 /// Indirect Branch Instruction.
 ///
-class IndirectBrInst : public TerminatorInst {
+class IndirectBrInst : public Instruction {
   unsigned ReservedSpace;
 
   // Operand[0]   = Address to jump to
@@ -4214,7 +4222,7 @@ InvokeInst::InvokeInst(Value *Func, BasicBlock *IfNormal,
 //===---------------------------------------------------------------------------
 /// Resume the propagation of an exception.
 ///
-class ResumeInst : public TerminatorInst {
+class ResumeInst : public Instruction {
   ResumeInst(const ResumeInst &RI);
 
   explicit ResumeInst(Value *Exn, Instruction *InsertBefore=nullptr);
@@ -4252,8 +4260,6 @@ public:
   }
 
 private:
-  friend TerminatorInst;
-
   BasicBlock *getSuccessor(unsigned idx) const {
     llvm_unreachable("ResumeInst has no successors!");
   }
@@ -4273,7 +4279,7 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(ResumeInst, Value)
 //===----------------------------------------------------------------------===//
 //                         CatchSwitchInst Class
 //===----------------------------------------------------------------------===//
-class CatchSwitchInst : public TerminatorInst {
+class CatchSwitchInst : public Instruction {
   /// The number of operands actually allocated.  NumOperands is
   /// the number actually in use.
   unsigned ReservedSpace;
@@ -4539,7 +4545,7 @@ public:
 //                               CatchReturnInst Class
 //===----------------------------------------------------------------------===//
 
-class CatchReturnInst : public TerminatorInst {
+class CatchReturnInst : public Instruction {
   CatchReturnInst(const CatchReturnInst &RI);
   CatchReturnInst(Value *CatchPad, BasicBlock *BB, Instruction *InsertBefore);
   CatchReturnInst(Value *CatchPad, BasicBlock *BB, BasicBlock *InsertAtEnd);
@@ -4599,8 +4605,6 @@ public:
   }
 
 private:
-  friend TerminatorInst;
-
   BasicBlock *getSuccessor(unsigned Idx) const {
     assert(Idx < getNumSuccessors() && "Successor # out of range for catchret!");
     return getSuccessor();
@@ -4622,7 +4626,7 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(CatchReturnInst, Value)
 //                               CleanupReturnInst Class
 //===----------------------------------------------------------------------===//
 
-class CleanupReturnInst : public TerminatorInst {
+class CleanupReturnInst : public Instruction {
 private:
   CleanupReturnInst(const CleanupReturnInst &RI);
   CleanupReturnInst(Value *CleanupPad, BasicBlock *UnwindBB, unsigned Values,
@@ -4695,8 +4699,6 @@ public:
   }
 
 private:
-  friend TerminatorInst;
-
   BasicBlock *getSuccessor(unsigned Idx) const {
     assert(Idx == 0);
     return getUnwindDest();
@@ -4729,7 +4731,7 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(CleanupReturnInst, Value)
 /// presence of this instruction indicates some higher level knowledge that the
 /// end of the block cannot be reached.
 ///
-class UnreachableInst : public TerminatorInst {
+class UnreachableInst : public Instruction {
 protected:
   // Note: Instruction needs to be a friend here to call cloneImpl.
   friend class Instruction;
@@ -4756,8 +4758,6 @@ public:
   }
 
 private:
-  friend TerminatorInst;
-
   BasicBlock *getSuccessor(unsigned idx) const {
     llvm_unreachable("UnreachableInst has no successors!");
   }

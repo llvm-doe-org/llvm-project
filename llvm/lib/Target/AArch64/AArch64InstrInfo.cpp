@@ -108,6 +108,14 @@ unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
     // This gets lowered to an instruction sequence which takes 16 bytes
     NumBytes = 16;
     break;
+  case AArch64::JumpTableDest32:
+  case AArch64::JumpTableDest16:
+  case AArch64::JumpTableDest8:
+    NumBytes = 12;
+    break;
+  case AArch64::SPACE:
+    NumBytes = MI.getOperand(1).getImm();
+    break;
   }
 
   return NumBytes;
@@ -675,14 +683,36 @@ bool AArch64InstrInfo::isAsCheapAsAMove(const MachineInstr &MI) const {
   if (!Subtarget.hasCustomCheapAsMoveHandling())
     return MI.isAsCheapAsAMove();
 
+  const unsigned Opcode = MI.getOpcode();
+
+  // Firstly, check cases gated by features.
+
+  if (Subtarget.hasZeroCycleZeroingFP()) {
+    if (Opcode == AArch64::FMOVH0 ||
+        Opcode == AArch64::FMOVS0 ||
+        Opcode == AArch64::FMOVD0)
+      return true;
+  }
+
+  if (Subtarget.hasZeroCycleZeroingGP()) {
+    if (Opcode == TargetOpcode::COPY &&
+        (MI.getOperand(1).getReg() == AArch64::WZR ||
+         MI.getOperand(1).getReg() == AArch64::XZR))
+      return true;
+  }
+
+  // Secondly, check cases specific to sub-targets.
+
   if (Subtarget.hasExynosCheapAsMoveHandling()) {
-    if (isExynosResetFast(MI) || isExynosShiftLeftFast(MI))
+    if (isExynosResetFast(MI) || isExynosShiftExtFast(MI))
       return true;
     else
       return MI.isAsCheapAsAMove();
   }
 
-  switch (MI.getOpcode()) {
+  // Finally, check generic cases.
+
+  switch (Opcode) {
   default:
     return false;
 
@@ -723,17 +753,6 @@ bool AArch64InstrInfo::isAsCheapAsAMove(const MachineInstr &MI) const {
     return canBeExpandedToORR(MI, 32);
   case AArch64::MOVi64imm:
     return canBeExpandedToORR(MI, 64);
-
-  // It is cheap to zero out registers if the subtarget has ZeroCycleZeroing
-  // feature.
-  case AArch64::FMOVH0:
-  case AArch64::FMOVS0:
-  case AArch64::FMOVD0:
-    return Subtarget.hasZeroCycleZeroing();
-  case TargetOpcode::COPY:
-    return (Subtarget.hasZeroCycleZeroing() &&
-            (MI.getOperand(1).getReg() == AArch64::WZR ||
-             MI.getOperand(1).getReg() == AArch64::XZR));
   }
 
   llvm_unreachable("Unknown opcode to check as cheap as a move!");
@@ -810,7 +829,72 @@ bool AArch64InstrInfo::isExynosResetFast(const MachineInstr &MI) const {
   }
 }
 
-bool AArch64InstrInfo::isExynosShiftLeftFast(const MachineInstr &MI) const {
+bool AArch64InstrInfo::isExynosLdStExtFast(const MachineInstr &MI) const {
+  unsigned Imm;
+  AArch64_AM::ShiftExtendType Ext;
+
+  switch (MI.getOpcode()) {
+  default:
+    return false;
+
+  // WriteLD
+  case AArch64::PRFMroW:
+  case AArch64::PRFMroX:
+
+  // WriteLDIdx
+  case AArch64::LDRBBroW:
+  case AArch64::LDRBBroX:
+  case AArch64::LDRHHroW:
+  case AArch64::LDRHHroX:
+  case AArch64::LDRSBWroW:
+  case AArch64::LDRSBWroX:
+  case AArch64::LDRSBXroW:
+  case AArch64::LDRSBXroX:
+  case AArch64::LDRSHWroW:
+  case AArch64::LDRSHWroX:
+  case AArch64::LDRSHXroW:
+  case AArch64::LDRSHXroX:
+  case AArch64::LDRSWroW:
+  case AArch64::LDRSWroX:
+  case AArch64::LDRWroW:
+  case AArch64::LDRWroX:
+  case AArch64::LDRXroW:
+  case AArch64::LDRXroX:
+
+  case AArch64::LDRBroW:
+  case AArch64::LDRBroX:
+  case AArch64::LDRDroW:
+  case AArch64::LDRDroX:
+  case AArch64::LDRHroW:
+  case AArch64::LDRHroX:
+  case AArch64::LDRSroW:
+  case AArch64::LDRSroX:
+
+  // WriteSTIdx
+  case AArch64::STRBBroW:
+  case AArch64::STRBBroX:
+  case AArch64::STRHHroW:
+  case AArch64::STRHHroX:
+  case AArch64::STRWroW:
+  case AArch64::STRWroX:
+  case AArch64::STRXroW:
+  case AArch64::STRXroX:
+
+  case AArch64::STRBroW:
+  case AArch64::STRBroX:
+  case AArch64::STRDroW:
+  case AArch64::STRDroX:
+  case AArch64::STRHroW:
+  case AArch64::STRHroX:
+  case AArch64::STRSroW:
+  case AArch64::STRSroX:
+    Imm = MI.getOperand(3).getImm();
+    Ext = AArch64_AM::getMemExtendType(Imm);
+    return (Ext == AArch64_AM::SXTX || Ext == AArch64_AM::UXTX);
+  }
+}
+
+bool AArch64InstrInfo::isExynosShiftExtFast(const MachineInstr &MI) const {
   unsigned Imm, Shift;
   AArch64_AM::ShiftExtendType Ext;
 
@@ -876,60 +960,6 @@ bool AArch64InstrInfo::isExynosShiftLeftFast(const MachineInstr &MI) const {
     Shift = AArch64_AM::getArithShiftValue(Imm);
     Ext = AArch64_AM::getArithExtendType(Imm);
     return (Shift == 0 || (Shift <= 3 && Ext == AArch64_AM::UXTX));
-
-  case AArch64::PRFMroW:
-  case AArch64::PRFMroX:
-
-  // WriteLDIdx
-  case AArch64::LDRBBroW:
-  case AArch64::LDRBBroX:
-  case AArch64::LDRHHroW:
-  case AArch64::LDRHHroX:
-  case AArch64::LDRSBWroW:
-  case AArch64::LDRSBWroX:
-  case AArch64::LDRSBXroW:
-  case AArch64::LDRSBXroX:
-  case AArch64::LDRSHWroW:
-  case AArch64::LDRSHWroX:
-  case AArch64::LDRSHXroW:
-  case AArch64::LDRSHXroX:
-  case AArch64::LDRSWroW:
-  case AArch64::LDRSWroX:
-  case AArch64::LDRWroW:
-  case AArch64::LDRWroX:
-  case AArch64::LDRXroW:
-  case AArch64::LDRXroX:
-
-  case AArch64::LDRBroW:
-  case AArch64::LDRBroX:
-  case AArch64::LDRDroW:
-  case AArch64::LDRDroX:
-  case AArch64::LDRHroW:
-  case AArch64::LDRHroX:
-  case AArch64::LDRSroW:
-  case AArch64::LDRSroX:
-
-  // WriteSTIdx
-  case AArch64::STRBBroW:
-  case AArch64::STRBBroX:
-  case AArch64::STRHHroW:
-  case AArch64::STRHHroX:
-  case AArch64::STRWroW:
-  case AArch64::STRWroX:
-  case AArch64::STRXroW:
-  case AArch64::STRXroX:
-
-  case AArch64::STRBroW:
-  case AArch64::STRBroX:
-  case AArch64::STRDroW:
-  case AArch64::STRDroX:
-  case AArch64::STRHroW:
-  case AArch64::STRHroX:
-  case AArch64::STRSroW:
-  case AArch64::STRSroX:
-    Imm = MI.getOperand(3).getImm();
-    Ext = AArch64_AM::getMemExtendType(Imm);
-    return (Ext == AArch64_AM::SXTX || Ext == AArch64_AM::UXTX);
   }
 }
 
@@ -2481,7 +2511,7 @@ void AArch64InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
             .addImm(0)
             .addImm(AArch64_AM::getShifterImm(AArch64_AM::LSL, 0));
       }
-    } else if (SrcReg == AArch64::WZR && Subtarget.hasZeroCycleZeroing()) {
+    } else if (SrcReg == AArch64::WZR && Subtarget.hasZeroCycleZeroingGP()) {
       BuildMI(MBB, I, DL, get(AArch64::MOVZWi), DestReg)
           .addImm(0)
           .addImm(AArch64_AM::getShifterImm(AArch64_AM::LSL, 0));
@@ -2518,7 +2548,7 @@ void AArch64InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
           .addReg(SrcReg, getKillRegState(KillSrc))
           .addImm(0)
           .addImm(AArch64_AM::getShifterImm(AArch64_AM::LSL, 0));
-    } else if (SrcReg == AArch64::XZR && Subtarget.hasZeroCycleZeroing()) {
+    } else if (SrcReg == AArch64::XZR && Subtarget.hasZeroCycleZeroingGP()) {
       BuildMI(MBB, I, DL, get(AArch64::MOVZXi), DestReg)
           .addImm(0)
           .addImm(AArch64_AM::getShifterImm(AArch64_AM::LSL, 0));
@@ -2733,13 +2763,33 @@ void AArch64InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   llvm_unreachable("unimplemented reg-to-reg copy");
 }
 
+static void storeRegPairToStackSlot(const TargetRegisterInfo &TRI,
+                                    MachineBasicBlock &MBB,
+                                    MachineBasicBlock::iterator InsertBefore,
+                                    const MCInstrDesc &MCID,
+                                    unsigned SrcReg, bool IsKill,
+                                    unsigned SubIdx0, unsigned SubIdx1, int FI,
+                                    MachineMemOperand *MMO) {
+  unsigned SrcReg0 = SrcReg;
+  unsigned SrcReg1 = SrcReg;
+  if (TargetRegisterInfo::isPhysicalRegister(SrcReg)) {
+    SrcReg0 = TRI.getSubReg(SrcReg, SubIdx0);
+    SubIdx0 = 0;
+    SrcReg1 = TRI.getSubReg(SrcReg, SubIdx1);
+    SubIdx1 = 0;
+  }
+  BuildMI(MBB, InsertBefore, DebugLoc(), MCID)
+      .addReg(SrcReg0, getKillRegState(IsKill), SubIdx0)
+      .addReg(SrcReg1, getKillRegState(IsKill), SubIdx1)
+      .addFrameIndex(FI)
+      .addImm(0)
+      .addMemOperand(MMO);
+}
+
 void AArch64InstrInfo::storeRegToStackSlot(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI, unsigned SrcReg,
     bool isKill, int FI, const TargetRegisterClass *RC,
     const TargetRegisterInfo *TRI) const {
-  DebugLoc DL;
-  if (MBBI != MBB.end())
-    DL = MBBI->getDebugLoc();
   MachineFunction &MF = *MBB.getParent();
   MachineFrameInfo &MFI = MF.getFrameInfo();
   unsigned Align = MFI.getObjectAlignment(FI);
@@ -2775,8 +2825,14 @@ void AArch64InstrInfo::storeRegToStackSlot(
         MF.getRegInfo().constrainRegClass(SrcReg, &AArch64::GPR64RegClass);
       else
         assert(SrcReg != AArch64::SP);
-    } else if (AArch64::FPR64RegClass.hasSubClassEq(RC))
+    } else if (AArch64::FPR64RegClass.hasSubClassEq(RC)) {
       Opc = AArch64::STRDui;
+    } else if (AArch64::WSeqPairsClassRegClass.hasSubClassEq(RC)) {
+      storeRegPairToStackSlot(getRegisterInfo(), MBB, MBBI,
+                              get(AArch64::STPWi), SrcReg, isKill,
+                              AArch64::sube32, AArch64::subo32, FI, MMO);
+      return;
+    }
     break;
   case 16:
     if (AArch64::FPR128RegClass.hasSubClassEq(RC))
@@ -2786,14 +2842,9 @@ void AArch64InstrInfo::storeRegToStackSlot(
       Opc = AArch64::ST1Twov1d;
       Offset = false;
     } else if (AArch64::XSeqPairsClassRegClass.hasSubClassEq(RC)) {
-      BuildMI(MBB, MBBI, DL, get(AArch64::STPXi))
-          .addReg(TRI->getSubReg(SrcReg, AArch64::sube64),
-                  getKillRegState(isKill))
-          .addReg(TRI->getSubReg(SrcReg, AArch64::subo64),
-                  getKillRegState(isKill))
-          .addFrameIndex(FI)
-          .addImm(0)
-          .addMemOperand(MMO);
+      storeRegPairToStackSlot(getRegisterInfo(), MBB, MBBI,
+                              get(AArch64::STPXi), SrcReg, isKill,
+                              AArch64::sube64, AArch64::subo64, FI, MMO);
       return;
     }
     break;
@@ -2832,7 +2883,7 @@ void AArch64InstrInfo::storeRegToStackSlot(
   }
   assert(Opc && "Unknown register class");
 
-  const MachineInstrBuilder MI = BuildMI(MBB, MBBI, DL, get(Opc))
+  const MachineInstrBuilder MI = BuildMI(MBB, MBBI, DebugLoc(), get(Opc))
                                      .addReg(SrcReg, getKillRegState(isKill))
                                      .addFrameIndex(FI);
 
@@ -2841,13 +2892,35 @@ void AArch64InstrInfo::storeRegToStackSlot(
   MI.addMemOperand(MMO);
 }
 
+static void loadRegPairFromStackSlot(const TargetRegisterInfo &TRI,
+                                     MachineBasicBlock &MBB,
+                                     MachineBasicBlock::iterator InsertBefore,
+                                     const MCInstrDesc &MCID,
+                                     unsigned DestReg, unsigned SubIdx0,
+                                     unsigned SubIdx1, int FI,
+                                     MachineMemOperand *MMO) {
+  unsigned DestReg0 = DestReg;
+  unsigned DestReg1 = DestReg;
+  bool IsUndef = true;
+  if (TargetRegisterInfo::isPhysicalRegister(DestReg)) {
+    DestReg0 = TRI.getSubReg(DestReg, SubIdx0);
+    SubIdx0 = 0;
+    DestReg1 = TRI.getSubReg(DestReg, SubIdx1);
+    SubIdx1 = 0;
+    IsUndef = false;
+  }
+  BuildMI(MBB, InsertBefore, DebugLoc(), MCID)
+      .addReg(DestReg0, RegState::Define | getUndefRegState(IsUndef), SubIdx0)
+      .addReg(DestReg1, RegState::Define | getUndefRegState(IsUndef), SubIdx1)
+      .addFrameIndex(FI)
+      .addImm(0)
+      .addMemOperand(MMO);
+}
+
 void AArch64InstrInfo::loadRegFromStackSlot(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI, unsigned DestReg,
     int FI, const TargetRegisterClass *RC,
     const TargetRegisterInfo *TRI) const {
-  DebugLoc DL;
-  if (MBBI != MBB.end())
-    DL = MBBI->getDebugLoc();
   MachineFunction &MF = *MBB.getParent();
   MachineFrameInfo &MFI = MF.getFrameInfo();
   unsigned Align = MFI.getObjectAlignment(FI);
@@ -2883,8 +2956,14 @@ void AArch64InstrInfo::loadRegFromStackSlot(
         MF.getRegInfo().constrainRegClass(DestReg, &AArch64::GPR64RegClass);
       else
         assert(DestReg != AArch64::SP);
-    } else if (AArch64::FPR64RegClass.hasSubClassEq(RC))
+    } else if (AArch64::FPR64RegClass.hasSubClassEq(RC)) {
       Opc = AArch64::LDRDui;
+    } else if (AArch64::WSeqPairsClassRegClass.hasSubClassEq(RC)) {
+      loadRegPairFromStackSlot(getRegisterInfo(), MBB, MBBI,
+                               get(AArch64::LDPWi), DestReg, AArch64::sube32,
+                               AArch64::subo32, FI, MMO);
+      return;
+    }
     break;
   case 16:
     if (AArch64::FPR128RegClass.hasSubClassEq(RC))
@@ -2894,14 +2973,9 @@ void AArch64InstrInfo::loadRegFromStackSlot(
       Opc = AArch64::LD1Twov1d;
       Offset = false;
     } else if (AArch64::XSeqPairsClassRegClass.hasSubClassEq(RC)) {
-      BuildMI(MBB, MBBI, DL, get(AArch64::LDPXi))
-          .addReg(TRI->getSubReg(DestReg, AArch64::sube64),
-                  getDefRegState(true))
-          .addReg(TRI->getSubReg(DestReg, AArch64::subo64),
-                  getDefRegState(true))
-          .addFrameIndex(FI)
-          .addImm(0)
-          .addMemOperand(MMO);
+      loadRegPairFromStackSlot(getRegisterInfo(), MBB, MBBI,
+                               get(AArch64::LDPXi), DestReg, AArch64::sube64,
+                               AArch64::subo64, FI, MMO);
       return;
     }
     break;
@@ -2940,7 +3014,7 @@ void AArch64InstrInfo::loadRegFromStackSlot(
   }
   assert(Opc && "Unknown register class");
 
-  const MachineInstrBuilder MI = BuildMI(MBB, MBBI, DL, get(Opc))
+  const MachineInstrBuilder MI = BuildMI(MBB, MBBI, DebugLoc(), get(Opc))
                                      .addReg(DestReg, getDefRegState(true))
                                      .addFrameIndex(FI);
   if (Offset)
@@ -5029,6 +5103,10 @@ AArch64InstrInfo::getOutliningCandidateInfo(
   unsigned FrameID = MachineOutlinerDefault;
   unsigned NumBytesToCreateFrame = 4;
 
+  bool HasBTI = any_of(RepeatedSequenceLocs, [](outliner::Candidate &C) {
+    return C.getMF()->getFunction().hasFnAttribute("branch-target-enforcement");
+  });
+
   // If the last instruction in any candidate is a terminator, then we should
   // tail call all of the candidates.
   if (RepeatedSequenceLocs[0].back()->isTerminator()) {
@@ -5037,7 +5115,8 @@ AArch64InstrInfo::getOutliningCandidateInfo(
     SetCandidateCallInfo(MachineOutlinerTailCall, 4);
   }
 
-  else if (LastInstrOpcode == AArch64::BL || LastInstrOpcode == AArch64::BLR) {
+  else if (LastInstrOpcode == AArch64::BL ||
+           (LastInstrOpcode == AArch64::BLR && !HasBTI)) {
     // FIXME: Do we need to check if the code after this uses the value of LR?
     FrameID = MachineOutlinerThunk;
     NumBytesToCreateFrame = 0;
@@ -5061,10 +5140,9 @@ AArch64InstrInfo::getOutliningCandidateInfo(
   // LR is live, so we need to save it. Decide whether it should be saved to
   // the stack, or if it can be saved to a register.
   else {
-    if (std::all_of(RepeatedSequenceLocs.begin(), RepeatedSequenceLocs.end(),
-                    [this](outliner::Candidate &C) {
-                      return findRegisterToSaveLRTo(C);
-                    })) {
+    if (all_of(RepeatedSequenceLocs, [this](outliner::Candidate &C) {
+          return findRegisterToSaveLRTo(C);
+        })) {
       // Every candidate has an available callee-saved register for the save.
       // We can save LR to a register.
       FrameID = MachineOutlinerRegSave;
@@ -5132,8 +5210,7 @@ AArch64InstrInfo::getMachineOutlinerMBBFlags(MachineBasicBlock &MBB) const {
   unsigned Flags = 0x0;
   // Check if there's a call inside this MachineBasicBlock. If there is, then
   // set a flag.
-  if (std::any_of(MBB.begin(), MBB.end(),
-                  [](MachineInstr &MI) { return MI.isCall(); }))
+  if (any_of(MBB, [](MachineInstr &MI) { return MI.isCall(); }))
     Flags |= MachineOutlinerMBBFlags::HasCalls;
 
   // Check if LR is available through all of the MBB. If it's not, then set
@@ -5406,7 +5483,7 @@ void AArch64InstrInfo::buildOutlinedFrame(
       TailOpcode = AArch64::TCRETURNdi;
     } else {
       assert(Call->getOpcode() == AArch64::BLR);
-      TailOpcode = AArch64::TCRETURNri;
+      TailOpcode = AArch64::TCRETURNriALL;
     }
     MachineInstr *TC = BuildMI(MF, DebugLoc(), get(TailOpcode))
                             .add(Call->getOperand(0))

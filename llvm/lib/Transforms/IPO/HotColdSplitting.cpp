@@ -44,6 +44,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO.h"
+#include "llvm/Transforms/IPO/HotColdSplitting.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Cloning.h"
@@ -100,18 +101,34 @@ static bool isSingleEntrySingleExit(BasicBlock *Entry, const BasicBlock *Exit,
   return true;
 }
 
+// Same as blockEndsInUnreachable in CodeGen/BranchFolding.cpp. Do not modify
+// this function unless you modify the MBB version as well.
+//
+/// A no successor, non-return block probably ends in unreachable and is cold.
+/// Also consider a block that ends in an indirect branch to be a return block,
+/// since many targets use plain indirect branches to return.
 bool blockEndsInUnreachable(const BasicBlock &BB) {
+  if (!succ_empty(&BB))
+    return false;
   if (BB.empty())
     return true;
-  const TerminatorInst *I = BB.getTerminator();
-  if (isa<ReturnInst>(I) || isa<IndirectBrInst>(I))
-    return true;
-  // Unreachable blocks do not have any successor.
-  return succ_empty(&BB);
+  const Instruction *I = BB.getTerminator();
+  return !(isa<ReturnInst>(I) || isa<IndirectBrInst>(I));
 }
 
-static
-bool unlikelyExecuted(const BasicBlock &BB) {
+static bool exceptionHandlingFunctions(const CallInst *CI) {
+  auto F = CI->getCalledFunction();
+  if (!F)
+    return false;
+  auto FName = F->getName();
+  return FName == "__cxa_begin_catch" ||
+         FName == "__cxa_free_exception" ||
+         FName == "__cxa_allocate_exception" ||
+         FName == "__cxa_begin_catch" ||
+         FName == "__cxa_end_catch";
+}
+
+static bool unlikelyExecuted(const BasicBlock &BB) {
   if (blockEndsInUnreachable(BB))
     return true;
   // Exception handling blocks are unlikely executed.
@@ -121,7 +138,8 @@ bool unlikelyExecuted(const BasicBlock &BB) {
     if (const CallInst *CI = dyn_cast<CallInst>(&I)) {
       // The block is cold if it calls functions tagged as cold or noreturn.
       if (CI->hasFnAttr(Attribute::Cold) ||
-          CI->hasFnAttr(Attribute::NoReturn))
+          CI->hasFnAttr(Attribute::NoReturn) ||
+          exceptionHandlingFunctions(CI))
         return true;
 
       // Assume that inline assembly is hot code.
@@ -131,13 +149,32 @@ bool unlikelyExecuted(const BasicBlock &BB) {
   return false;
 }
 
+static bool returnsOrHasSideEffects(const BasicBlock &BB) {
+  const Instruction *I = BB.getTerminator();
+  if (isa<ReturnInst>(I) || isa<IndirectBrInst>(I) || isa<InvokeInst>(I))
+    return true;
+
+  for (const Instruction &I : BB)
+    if (const CallInst *CI = dyn_cast<CallInst>(&I)) {
+      if (CI->hasFnAttr(Attribute::NoReturn))
+        return true;
+
+      if (isa<InlineAsm>(CI->getCalledValue()))
+        return true;
+    }
+
+  return false;
+}
+
 static DenseSetBB getHotBlocks(Function &F) {
 
   // Mark all cold basic blocks.
   DenseSetBB ColdBlocks;
   for (BasicBlock &BB : F)
-    if (unlikelyExecuted(BB))
+    if (unlikelyExecuted(BB)) {
+      LLVM_DEBUG(llvm::dbgs() << "\nForward propagation marks cold: " << BB);
       ColdBlocks.insert((const BasicBlock *)&BB);
+    }
 
   // Forward propagation: basic blocks are hot when they are reachable from the
   // beginning of the function through a path that does not contain cold blocks.
@@ -189,7 +226,12 @@ static DenseSetBB getHotBlocks(Function &F) {
     if (ColdBlocks.count(It))
       continue;
 
+    // Do not back-propagate to blocks that return or have side effects.
+    if (returnsOrHasSideEffects(*It))
+      continue;
+
     // Move the block from HotBlocks to ColdBlocks.
+    LLVM_DEBUG(llvm::dbgs() << "\nBack propagation marks cold: " << *It);
     HotBlocks.erase(It);
     ColdBlocks.insert(It);
 
@@ -223,7 +265,7 @@ private:
                                     DominatorTree *DT, PostDomTree *PDT);
   Function *extractColdRegion(const SmallVectorImpl<BasicBlock *> &Region,
                               DominatorTree *DT, BlockFrequencyInfo *BFI,
-                              OptimizationRemarkEmitter &ORE);
+                              OptimizationRemarkEmitter &ORE, unsigned Count);
   bool isOutlineCandidate(const SmallVectorImpl<BasicBlock *> &Region,
                           const BasicBlock *Exit) const {
     if (!Exit)
@@ -289,15 +331,18 @@ bool HotColdSplitting::shouldOutlineFrom(const Function &F) const {
   return true;
 }
 
-Function *
-HotColdSplitting::extractColdRegion(const SmallVectorImpl<BasicBlock *> &Region,
-                                    DominatorTree *DT, BlockFrequencyInfo *BFI,
-                                    OptimizationRemarkEmitter &ORE) {
+Function *HotColdSplitting::extractColdRegion(
+    const SmallVectorImpl<BasicBlock *> &Region, DominatorTree *DT,
+    BlockFrequencyInfo *BFI, OptimizationRemarkEmitter &ORE, unsigned Count) {
+  assert(!Region.empty());
   LLVM_DEBUG(for (auto *BB : Region)
           llvm::dbgs() << "\nExtracting: " << *BB;);
 
   // TODO: Pass BFI and BPI to update profile information.
-  CodeExtractor CE(Region, DT);
+  CodeExtractor CE(Region, DT, /* AggregateArgs */ false, /* BFI */ nullptr,
+                   /* BPI */ nullptr, /* AllowVarArgs */ false,
+                   /* AllowAlloca */ false,
+                   /* Suffix */ "cold." + std::to_string(Count));
 
   SetVector<Value *> Inputs, Outputs, Sinks;
   CE.findInputsOutputs(Inputs, Outputs, Sinks);
@@ -306,6 +351,7 @@ HotColdSplitting::extractColdRegion(const SmallVectorImpl<BasicBlock *> &Region,
   if (Outputs.size() > 0)
     return nullptr;
 
+  Function *OrigF = Region[0]->getParent();
   if (Function *OutF = CE.extractCodeRegion()) {
     User *U = *OutF->user_begin();
     CallInst *CI = cast<CallInst>(U);
@@ -316,7 +362,20 @@ HotColdSplitting::extractColdRegion(const SmallVectorImpl<BasicBlock *> &Region,
       CS.setCallingConv(CallingConv::Cold);
     }
     CI->setIsNoInline();
+
+    // Try to make the outlined code as small as possible on the assumption
+    // that it's cold.
+    assert(!OutF->hasFnAttribute(Attribute::OptimizeNone) &&
+           "An outlined function should never be marked optnone");
+    OutF->addFnAttr(Attribute::MinSize);
+
     LLVM_DEBUG(llvm::dbgs() << "Outlined Region: " << *OutF);
+    ORE.emit([&]() {
+      return OptimizationRemark(DEBUG_TYPE, "HotColdSplit",
+                                &*Region[0]->begin())
+             << ore::NV("Original", OrigF) << " split cold code into "
+             << ore::NV("Split", OutF);
+    });
     return OutF;
   }
 
@@ -339,6 +398,12 @@ const Function *HotColdSplitting::outlineColdBlocks(Function &F,
   // Walking the dominator tree allows us to find the largest
   // cold region.
   BasicBlock *Begin = DT->getRootNode()->getBlock();
+
+  // Early return if the beginning of the function has been marked cold,
+  // otherwise all the function gets outlined.
+  if (PSI->isColdBB(Begin, BFI) || !HotBlocks.count(Begin))
+    return nullptr;
+
   for (auto I = df_begin(Begin), E = df_end(Begin); I != E; ++I) {
     BasicBlock *BB = *I;
     if (PSI->isColdBB(BB, BFI) || !HotBlocks.count(BB)) {
@@ -363,7 +428,7 @@ const Function *HotColdSplitting::outlineColdBlocks(Function &F,
         ++NumColdSESEFound;
         ValidColdRegion.push_back(ExitColdRegion);
         // Candidate for outlining. FIXME: Continue outlining.
-        return extractColdRegion(ValidColdRegion, DT, BFI, ORE);
+        return extractColdRegion(ValidColdRegion, DT, BFI, ORE, /* Count */ 1);
       }
     }
   }
@@ -407,6 +472,38 @@ bool HotColdSplittingLegacyPass::runOnModule(Module &M) {
   };
 
   return HotColdSplitting(PSI, GBFI, GTTI, &GetORE).run(M);
+}
+
+PreservedAnalyses
+HotColdSplittingPass::run(Module &M, ModuleAnalysisManager &AM) {
+  auto &FAM = AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
+
+  std::function<AssumptionCache &(Function &)> GetAssumptionCache =
+      [&FAM](Function &F) -> AssumptionCache & {
+    return FAM.getResult<AssumptionAnalysis>(F);
+  };
+
+  auto GBFI = [&FAM](Function &F) {
+    return &FAM.getResult<BlockFrequencyAnalysis>(F);
+  };
+
+  std::function<TargetTransformInfo &(Function &)> GTTI =
+      [&FAM](Function &F) -> TargetTransformInfo & {
+    return FAM.getResult<TargetIRAnalysis>(F);
+  };
+
+  std::unique_ptr<OptimizationRemarkEmitter> ORE;
+  std::function<OptimizationRemarkEmitter &(Function &)> GetORE =
+      [&ORE](Function &F) -> OptimizationRemarkEmitter & {
+    ORE.reset(new OptimizationRemarkEmitter(&F));
+    return *ORE.get();
+  };
+
+  ProfileSummaryInfo *PSI = &AM.getResult<ProfileSummaryAnalysis>(M);
+
+  if (HotColdSplitting(PSI, GBFI, GTTI, &GetORE).run(M))
+    return PreservedAnalyses::none();
+  return PreservedAnalyses::all();
 }
 
 char HotColdSplittingLegacyPass::ID = 0;

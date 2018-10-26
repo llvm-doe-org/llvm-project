@@ -39,7 +39,6 @@ Defined *ElfSym::MipsGp;
 Defined *ElfSym::MipsGpDisp;
 Defined *ElfSym::MipsLocalGp;
 Defined *ElfSym::RelaIpltEnd;
-Defined *ElfSym::RISCVGlobalPointer;
 
 static uint64_t getSymVA(const Symbol &Sym, int64_t &Addend) {
   switch (Sym.kind()) {
@@ -110,6 +109,8 @@ static uint64_t getSymVA(const Symbol &Sym, int64_t &Addend) {
   case Symbol::LazyObjectKind:
     assert(Sym.IsUsedInRegularObj && "lazy symbol reached writer");
     return 0;
+  case Symbol::PlaceholderKind:
+    llvm_unreachable("placeholder symbol reached writer");
   }
   llvm_unreachable("invalid symbol kind");
 }
@@ -119,7 +120,7 @@ uint64_t Symbol::getVA(int64_t Addend) const {
   return OutVA + Addend;
 }
 
-uint64_t Symbol::getGotVA() const { return InX::Got->getVA() + getGotOffset(); }
+uint64_t Symbol::getGotVA() const { return In.Got->getVA() + getGotOffset(); }
 
 uint64_t Symbol::getGotOffset() const {
   return GotIndex * Target->GotEntrySize;
@@ -127,8 +128,8 @@ uint64_t Symbol::getGotOffset() const {
 
 uint64_t Symbol::getGotPltVA() const {
   if (this->IsInIgot)
-    return InX::IgotPlt->getVA() + getGotPltOffset();
-  return InX::GotPlt->getVA() + getGotPltOffset();
+    return In.IgotPlt->getVA() + getGotPltOffset();
+  return In.GotPlt->getVA() + getGotPltOffset();
 }
 
 uint64_t Symbol::getGotPltOffset() const {
@@ -139,8 +140,8 @@ uint64_t Symbol::getGotPltOffset() const {
 
 uint64_t Symbol::getPltVA() const {
   if (this->IsInIplt)
-    return InX::Iplt->getVA() + PltIndex * Target->PltEntrySize;
-  return InX::Plt->getVA() + Target->getPltEntryOffset(PltIndex);
+    return In.Iplt->getVA() + PltIndex * Target->PltEntrySize;
+  return In.Plt->getVA() + Target->getPltEntryOffset(PltIndex);
 }
 
 uint64_t Symbol::getPltOffset() const {
@@ -225,7 +226,7 @@ uint8_t Symbol::computeBinding() const {
     return Binding;
   if (Visibility != STV_DEFAULT && Visibility != STV_PROTECTED)
     return STB_LOCAL;
-  if (VersionId == VER_NDX_LOCAL && isDefined())
+  if (VersionId == VER_NDX_LOCAL && isDefined() && !IsPreemptible)
     return STB_LOCAL;
   if (!Config->GnuUnique && Binding == STB_GNU_UNIQUE)
     return STB_GLOBAL;
@@ -261,6 +262,15 @@ void elf::printTraceSymbol(Symbol *Sym) {
 
 void elf::warnUnorderableSymbol(const Symbol *Sym) {
   if (!Config->WarnSymbolOrdering)
+    return;
+
+  // If UnresolvedPolicy::Ignore is used, no "undefined symbol" error/warning
+  // is emitted. It makes sense to not warn on undefined symbols.
+  //
+  // Note, ld.bfd --symbol-ordering-file= does not warn on undefined symbols,
+  // but we don't have to be compatible here.
+  if (Sym->isUndefined() &&
+      Config->UnresolvedSymbols == UnresolvedPolicy::Ignore)
     return;
 
   const InputFile *File = Sym->File;

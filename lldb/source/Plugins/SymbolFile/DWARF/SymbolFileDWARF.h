@@ -54,6 +54,7 @@ class DWARFDebugInfo;
 class DWARFDebugInfoEntry;
 class DWARFDebugLine;
 class DWARFDebugRanges;
+class DWARFDebugRngLists;
 class DWARFDeclContext;
 class DWARFDIECollection;
 class DWARFFormValue;
@@ -227,6 +228,8 @@ public:
 
   void PreloadSymbols() override;
 
+  std::recursive_mutex &GetModuleMutex() const override;
+
   //------------------------------------------------------------------
   // PluginInterface protocol
   //------------------------------------------------------------------
@@ -243,7 +246,9 @@ public:
   const lldb_private::DWARFDataExtractor &get_debug_line_str_data();
   const lldb_private::DWARFDataExtractor &get_debug_macro_data();
   const lldb_private::DWARFDataExtractor &get_debug_loc_data();
+  const lldb_private::DWARFDataExtractor &get_debug_loclists_data();
   const lldb_private::DWARFDataExtractor &get_debug_ranges_data();
+  const lldb_private::DWARFDataExtractor &get_debug_rnglists_data();
   const lldb_private::DWARFDataExtractor &get_debug_str_data();
   const lldb_private::DWARFDataExtractor &get_debug_str_offsets_data();
   const lldb_private::DWARFDataExtractor &get_debug_types_data();
@@ -264,6 +269,8 @@ public:
   DWARFDebugRanges *DebugRanges();
 
   const DWARFDebugRanges *DebugRanges() const;
+
+  const lldb_private::DWARFDataExtractor &DebugLocData();
 
   static bool SupportedVersion(uint16_t version);
 
@@ -316,6 +323,9 @@ public:
   static bool
   DIEInDeclContext(const lldb_private::CompilerDeclContext *parent_decl_ctx,
                    const DWARFDIE &die);
+
+  std::vector<lldb_private::CallEdge>
+  ParseCallEdgesInFunction(UserID func_id) override;
 
   void Dump(lldb_private::Stream &s) override;
 
@@ -470,7 +480,9 @@ protected:
   DWARFDataSegment m_data_debug_line_str;
   DWARFDataSegment m_data_debug_macro;
   DWARFDataSegment m_data_debug_loc;
+  DWARFDataSegment m_data_debug_loclists;
   DWARFDataSegment m_data_debug_ranges;
+  DWARFDataSegment m_data_debug_rnglists;
   DWARFDataSegment m_data_debug_str;
   DWARFDataSegment m_data_debug_str_offsets;
   DWARFDataSegment m_data_debug_types;

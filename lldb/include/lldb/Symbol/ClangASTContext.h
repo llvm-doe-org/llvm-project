@@ -377,13 +377,32 @@ public:
                                          const CompilerType &result_type,
                                          const CompilerType *args,
                                          unsigned num_args, bool is_variadic,
-                                         unsigned type_quals);
+                                         unsigned type_quals,
+                                         clang::CallingConv cc);
+
+  static CompilerType CreateFunctionType(clang::ASTContext *ast,
+                                         const CompilerType &result_type,
+                                         const CompilerType *args,
+                                         unsigned num_args, bool is_variadic,
+                                         unsigned type_quals) {
+    return ClangASTContext::CreateFunctionType(
+        ast, result_type, args, num_args, is_variadic, type_quals, clang::CC_C);
+  }
 
   CompilerType CreateFunctionType(const CompilerType &result_type,
                                   const CompilerType *args, unsigned num_args,
                                   bool is_variadic, unsigned type_quals) {
     return ClangASTContext::CreateFunctionType(
         getASTContext(), result_type, args, num_args, is_variadic, type_quals);
+  }
+
+  CompilerType CreateFunctionType(const CompilerType &result_type,
+                                  const CompilerType *args, unsigned num_args,
+                                  bool is_variadic, unsigned type_quals,
+                                  clang::CallingConv cc) {
+    return ClangASTContext::CreateFunctionType(getASTContext(), result_type,
+                                               args, num_args, is_variadic,
+                                               type_quals, cc);
   }
 
   clang::ParmVarDecl *CreateParameterDeclaration(const char *name,
@@ -814,7 +833,7 @@ public:
   // Modifying RecordType
   //----------------------------------------------------------------------
   static clang::FieldDecl *AddFieldToRecordType(const CompilerType &type,
-                                                const char *name,
+                                                llvm::StringRef name,
                                                 const CompilerType &field_type,
                                                 lldb::AccessType access,
                                                 uint32_t bitfield_bit_size);
@@ -824,7 +843,7 @@ public:
   static void SetIsPacked(const CompilerType &type);
 
   static clang::VarDecl *AddVariableToRecordType(const CompilerType &type,
-                                                 const char *name,
+                                                 llvm::StringRef name,
                                                  const CompilerType &var_type,
                                                  lldb::AccessType access);
 

@@ -4143,7 +4143,7 @@ static void handleSharedAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   const auto *VD = cast<VarDecl>(D);
   // extern __shared__ is only allowed on arrays with no length (e.g.
   // "int x[]").
-  if (!S.getLangOpts().CUDARelocatableDeviceCode && VD->hasExternalStorage() &&
+  if (!S.getLangOpts().GPURelocatableDeviceCode && VD->hasExternalStorage() &&
       !isa<IncompleteArrayType>(VD->getType())) {
     S.Diag(AL.getLoc(), diag::err_cuda_extern_shared) << VD;
     return;
@@ -5206,7 +5206,7 @@ static void handleAbiTagAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
     return;
 
   // Store tags sorted and without duplicates.
-  llvm::sort(Tags.begin(), Tags.end());
+  llvm::sort(Tags);
   Tags.erase(std::unique(Tags.begin(), Tags.end()), Tags.end());
 
   D->addAttr(::new (S.Context)
@@ -5834,10 +5834,8 @@ static void handleDeprecatedAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
            !S.checkStringLiteralArgumentAttr(AL, 1, Replacement))
     return;
 
-  if (!S.getLangOpts().CPlusPlus14)
-    if (AL.isCXX11Attribute() &&
-        !(AL.hasScope() && AL.getScopeName()->isStr("gnu")))
-      S.Diag(AL.getLoc(), diag::ext_cxx14_attr) << AL;
+  if (!S.getLangOpts().CPlusPlus14 && AL.isCXX11Attribute() && !AL.isGNUScope())
+    S.Diag(AL.getLoc(), diag::ext_cxx14_attr) << AL;
 
   D->addAttr(::new (S.Context)
                  DeprecatedAttr(AL.getRange(), S.Context, Str, Replacement,
@@ -6511,6 +6509,9 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     break;
   case ParsedAttr::AT_InternalLinkage:
     handleInternalLinkageAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_ExcludeFromExplicitInstantiation:
+    handleSimpleAttribute<ExcludeFromExplicitInstantiationAttr>(S, D, AL);
     break;
   case ParsedAttr::AT_LTOVisibilityPublic:
     handleSimpleAttribute<LTOVisibilityPublicAttr>(S, D, AL);
@@ -7514,6 +7515,7 @@ void Sema::PopParsingDeclaration(ParsingDeclState state, Decl *decl) {
   // for each of the different declarations.
   const DelayedDiagnosticPool *pool = &poppedPool;
   do {
+    bool AnyAccessFailures = false;
     for (DelayedDiagnosticPool::pool_iterator
            i = pool->pool_begin(), e = pool->pool_end(); i != e; ++i) {
       // This const_cast is a bit lame.  Really, Triggered should be mutable.
@@ -7530,7 +7532,14 @@ void Sema::PopParsingDeclaration(ParsingDeclState state, Decl *decl) {
         break;
 
       case DelayedDiagnostic::Access:
+        // Only produce one access control diagnostic for a structured binding
+        // declaration: we don't need to tell the user that all the fields are
+        // inaccessible one at a time.
+        if (AnyAccessFailures && isa<DecompositionDecl>(decl))
+          continue;
         HandleDelayedAccessCheck(diag, decl);
+        if (diag.Triggered)
+          AnyAccessFailures = true;
         break;
 
       case DelayedDiagnostic::ForbiddenType:

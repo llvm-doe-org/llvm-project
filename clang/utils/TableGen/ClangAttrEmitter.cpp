@@ -2935,9 +2935,9 @@ void EmitClangAttrHasAttrImpl(RecordKeeper &Records, raw_ostream &OS) {
       if (I != List.cbegin())
         OS << " else ";
       if (I->first.empty())
-        OS << "if (!Scope || Scope->getName() == \"\") {\n";
+        OS << "if (ScopeName == \"\") {\n";
       else
-        OS << "if (Scope->getName() == \"" << I->first << "\") {\n";
+        OS << "if (ScopeName == \"" << I->first << "\") {\n";
       OS << "  return llvm::StringSwitch<int>(Name)\n";
       GenerateHasAttrSpellingStringSwitch(I->second, OS, Spelling, I->first);
       OS << "}";
@@ -3961,10 +3961,10 @@ void EmitClangAttrDocs(RecordKeeper &Records, raw_ostream &OS) {
   for (auto &I : SplitDocs) {
     WriteCategoryHeader(I.first, OS);
 
-    llvm::sort(I.second.begin(), I.second.end(),
+    llvm::sort(I.second,
                [](const DocumentationData &D1, const DocumentationData &D2) {
                  return D1.Heading < D2.Heading;
-              });
+               });
 
     // Walk over each of the attributes in the category and write out their
     // documentation.

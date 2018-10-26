@@ -192,7 +192,9 @@ def ext_flexible_array_init : Extension<
   "flexible array initialization is a GNU extension">, InGroup<GNUFlexibleArrayInitializer>;
 
 // Declarations.
-def ext_duplicate_declspec : ExtWarn<"duplicate '%0' declaration specifier">,
+def ext_duplicate_declspec : Extension<"duplicate '%0' declaration specifier">,
+  InGroup<DuplicateDeclSpecifier>;
+def ext_warn_duplicate_declspec : ExtWarn<"duplicate '%0' declaration specifier">,
   InGroup<DuplicateDeclSpecifier>;
 def warn_duplicate_declspec : Warning<"duplicate '%0' declaration specifier">,
   InGroup<DuplicateDeclSpecifier>;
@@ -452,10 +454,12 @@ def err_decomp_decl_multiple_bases_with_members : Error<
   "have non-static data members">;
 def err_decomp_decl_ambiguous_base : Error<
   "cannot decompose members of ambiguous base class %1 of %0:%2">;
-def err_decomp_decl_non_public_base : Error<
-  "cannot decompose members of non-public base class %1 of %0">;
-def err_decomp_decl_non_public_member : Error<
-  "cannot decompose non-public member %0 of %1">;
+def err_decomp_decl_inaccessible_base : Error<
+  "cannot decompose members of inaccessible base class %1 of %0">,
+  AccessControl;
+def err_decomp_decl_inaccessible_field : Error<
+  "cannot decompose %select{private|protected}0 member %1 of %3">,
+  AccessControl;
 def err_decomp_decl_anon_union_member : Error<
   "cannot decompose class type %0 because it has an anonymous "
   "%select{struct|union}1 member">;
@@ -1870,6 +1874,9 @@ def err_reference_bind_init_list : Error<
 def err_init_list_bad_dest_type : Error<
   "%select{|non-aggregate }0type %1 cannot be initialized with an initializer "
   "list">;
+def warn_cxx2a_compat_aggregate_init_with_ctors : Warning<
+  "aggregate initialization of type %0 with user-declared constructors "
+  "is incompatible with C++2a">, DefaultIgnore, InGroup<CXX2aCompat>;
 
 def err_reference_bind_to_bitfield : Error<
   "%select{non-const|volatile}0 reference cannot bind to "
@@ -2294,6 +2301,9 @@ def warn_for_range_copy : Warning<
   "loop variable %0 of type %1 creates a copy from type %2">,
   InGroup<RangeLoopAnalysis>, DefaultIgnore;
 def note_use_reference_type : Note<"use reference type %0 to prevent copying">;
+def err_objc_for_range_init_stmt : Error<
+  "initialization statement is not supported when iterating over Objective-C "
+  "collection">;
 
 // C++11 constexpr
 def warn_cxx98_compat_constexpr : Warning<
@@ -2879,8 +2889,6 @@ def err_cyclic_alias : Error<
   "%select{alias|ifunc}0 definition is part of a cycle">;
 def err_ifunc_resolver_return : Error<
   "ifunc resolver function must return a pointer">;
-def err_ifunc_resolver_params : Error<
-  "ifunc resolver function must have no parameters">;
 def warn_attribute_wrong_decl_type_str : Warning<
   "%0 attribute only applies to %1">, InGroup<IgnoredAttributes>;
 def err_attribute_wrong_decl_type_str : Error<
@@ -3173,10 +3181,10 @@ def err_impcast_complex_scalar : Error<
   "implicit conversion from %0 to %1 is not permitted in C++">;
 def warn_impcast_float_precision : Warning<
   "implicit conversion loses floating-point precision: %0 to %1">,
-  InGroup<Conversion>, DefaultIgnore;
+  InGroup<ImplicitFloatConversion>, DefaultIgnore;
 def warn_impcast_float_result_precision : Warning<
   "implicit conversion when assigning computation result loses floating-point precision: %0 to %1">,
-  InGroup<Conversion>, DefaultIgnore;
+  InGroup<ImplicitFloatConversion>, DefaultIgnore;
 def warn_impcast_double_promotion : Warning<
   "implicit conversion increases floating-point precision: %0 to %1">,
   InGroup<DoublePromotion>, DefaultIgnore;
@@ -3188,7 +3196,13 @@ def warn_impcast_integer_sign_conditional : Warning<
   InGroup<SignConversion>, DefaultIgnore;
 def warn_impcast_integer_precision : Warning<
   "implicit conversion loses integer precision: %0 to %1">,
-  InGroup<Conversion>, DefaultIgnore;
+  InGroup<ImplicitIntConversion>, DefaultIgnore;
+def warn_impcast_high_order_zero_bits : Warning<
+  "higher order bits are zeroes after implicit conversion">,
+  InGroup<ImplicitIntConversion>, DefaultIgnore;
+def warn_impcast_nonnegative_result : Warning<
+  "the resulting value is always non-negative after implicit conversion">,
+  InGroup<SignConversion>, DefaultIgnore;
 def warn_impcast_integer_64_32 : Warning<
   "implicit conversion loses integer precision: %0 to %1">,
   InGroup<Shorten64To32>, DefaultIgnore;
@@ -3660,7 +3674,7 @@ def warn_diagnose_if_succeeded : Warning<"%0">, InGroup<UserDefinedWarnings>,
 def note_ovl_candidate_disabled_by_function_cond_attr : Note<
     "candidate disabled: %0">;
 def note_ovl_candidate_disabled_by_extension : Note<
-    "candidate disabled due to OpenCL extension">;
+    "candidate unavailable as it requires OpenCL extension '%0' to be disabled">;
 def err_addrof_function_disabled_by_enable_if_attr : Error<
     "cannot take address of function %0 because it has one or more "
     "non-tautological enable_if conditions">;
@@ -6628,6 +6642,11 @@ let CategoryName = "Lambda Issue" in {
     InGroup<DeprecatedThisCapture>, DefaultIgnore;
   def note_deprecated_this_capture : Note<
     "add an explicit capture of 'this' to capture '*this' by reference">;
+
+  // C++2a default constructible / assignable lambdas.
+  def warn_cxx17_compat_lambda_def_ctor_assign : Warning<
+    "%select{default construction|assignment}0 of lambda is incompatible with "
+    "C++ standards before C++2a">, InGroup<CXXPre2aCompat>, DefaultIgnore;
 }
 
 def err_return_in_captured_stmt : Error<
@@ -7750,9 +7769,19 @@ def err_incorrect_defaulted_exception_spec : Error<
 def err_incorrect_defaulted_constexpr : Error<
   "defaulted definition of %sub{select_special_member_kind}0 "
   "is not constexpr">;
+def warn_defaulted_method_deleted : Warning<
+  "explicitly defaulted %sub{select_special_member_kind}0 is implicitly "
+  "deleted">, InGroup<DiagGroup<"defaulted-function-deleted">>;
 def err_out_of_line_default_deletes : Error<
   "defaulting this %sub{select_special_member_kind}0 "
   "would delete it after its first declaration">;
+def note_deleted_type_mismatch : Note<
+  "function is implicitly deleted because its declared type does not match "
+  "the type of an implicit %sub{select_special_member_kind}0">;
+def warn_cxx17_compat_defaulted_method_type_mismatch : Warning<
+  "explicitly defaulting this %sub{select_special_member_kind}0 with a type "
+  "different from the implicit type is incompatible with C++ standards before "
+  "C++2a">, InGroup<CXXPre2aCompat>, DefaultIgnore;
 def warn_vbase_moved_multiple_times : Warning<
   "defaulted move assignment operator of %0 will move assign virtual base "
   "class %1 multiple times">, InGroup<DiagGroup<"multiple-move-vbase">>;
@@ -9071,6 +9100,12 @@ def err_omp_linear_distribute_var_non_loop_iteration : Error<
 def warn_omp_non_trivial_type_mapped : Warning<
   "Non-trivial type %0 is mapped, only trivial types are guaranteed to be mapped correctly">,
   InGroup<OpenMPTarget>;
+def err_omp_requires_clause_redeclaration : Error <
+  "Only one %0 clause can appear on a requires directive in a single translation unit">;
+def note_omp_requires_previous_clause : Note <
+  "%0 clause previously used here">;
+def err_omp_invalid_scope : Error <
+  "'#pragma omp %0' directive must appear only in file scope">;
 } // end of OpenMP category
 
 let CategoryName = "OpenACC Issue" in {

@@ -18,6 +18,7 @@
 
 #include "Assembler.h"
 #include "BenchmarkCode.h"
+#include "CodeTemplate.h"
 #include "LlvmState.h"
 #include "MCInstrDescView.h"
 #include "RegisterAliasing.h"
@@ -27,7 +28,19 @@
 #include <memory>
 #include <vector>
 
+namespace llvm {
 namespace exegesis {
+
+std::vector<CodeTemplate> getSingleton(CodeTemplate &&CT);
+
+// Generates code templates that has a self-dependency.
+llvm::Expected<std::vector<CodeTemplate>>
+generateSelfAliasingCodeTemplates(const Instruction &Instr);
+
+// Generates code templates without assignment constraints.
+llvm::Expected<std::vector<CodeTemplate>>
+generateUnconstrainedCodeTemplates(const Instruction &Instr,
+                                   llvm::StringRef Msg);
 
 // A class representing failures that happened during Benchmark, they are used
 // to report informations to the user.
@@ -45,30 +58,41 @@ public:
 
   // Calls generateCodeTemplate and expands it into one or more BenchmarkCode.
   llvm::Expected<std::vector<BenchmarkCode>>
-  generateConfigurations(unsigned Opcode) const;
+  generateConfigurations(const Instruction &Instr) const;
 
   // Given a snippet, computes which registers the setup code needs to define.
   std::vector<RegisterValue> computeRegisterInitialValues(
-      const std::vector<InstructionBuilder> &Snippet) const;
+      const std::vector<InstructionTemplate> &Snippet) const;
 
 protected:
   const LLVMState &State;
-  const RegisterAliasingTrackerCache RATC;
-
-  // Generates a single code template that has a self-dependency.
-  llvm::Expected<CodeTemplate>
-  generateSelfAliasingCodeTemplate(const Instruction &Instr) const;
-  // Generates a single code template without assignment constraints.
-  llvm::Expected<CodeTemplate>
-  generateUnconstrainedCodeTemplate(const Instruction &Instr,
-                                    llvm::StringRef Msg) const;
 
 private:
   // API to be implemented by subclasses.
-  virtual llvm::Expected<CodeTemplate>
-  generateCodeTemplate(unsigned Opcode) const = 0;
+  virtual llvm::Expected<std::vector<CodeTemplate>>
+  generateCodeTemplates(const Instruction &Instr) const = 0;
 };
 
+// A global Random Number Generator to randomize configurations.
+// FIXME: Move random number generation into an object and make it seedable for
+// unit tests.
+std::mt19937 &randomGenerator();
+
+// Picks a random bit among the bits set in Vector and returns its index.
+// Precondition: Vector must have at least one bit set.
+size_t randomBit(const llvm::BitVector &Vector);
+
+// Picks a random configuration, then selects a random def and a random use from
+// it and finally set the selected values in the provided InstructionInstances.
+void setRandomAliasing(const AliasingConfigurations &AliasingConfigurations,
+                       InstructionTemplate &DefIB, InstructionTemplate &UseIB);
+
+// Assigns a Random Value to all Variables in IT that are still Invalid.
+// Do not use any of the registers in `ForbiddenRegs`.
+void randomizeUnsetVariables(const llvm::BitVector &ForbiddenRegs,
+                             InstructionTemplate &IT);
+
 } // namespace exegesis
+} // namespace llvm
 
 #endif // LLVM_TOOLS_LLVM_EXEGESIS_SNIPPETGENERATOR_H

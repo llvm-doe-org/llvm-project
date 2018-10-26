@@ -19,11 +19,20 @@
 #include "ClangdUnit.h"
 #include "Index.h"
 #include "MemIndex.h"
+#include "Merge.h"
 #include "clang/Lex/Preprocessor.h"
 #include <memory>
 
 namespace clang {
 namespace clangd {
+
+/// Select between in-memory index implementations, which have tradeoffs.
+enum class IndexType {
+  // MemIndex is trivially cheap to build, but has poor query performance.
+  Light,
+  // Dex is relatively expensive to build and uses more memory, but is fast.
+  Heavy,
+};
 
 /// A container of Symbols from several source files. It can be updated
 /// at source-file granularity, replacing all symbols from one file with a new
@@ -46,7 +55,8 @@ public:
               std::unique_ptr<RefSlab> Refs);
 
   // The index keeps the symbols alive.
-  std::unique_ptr<SymbolIndex> buildMemIndex();
+  std::unique_ptr<SymbolIndex>
+  buildIndex(IndexType, ArrayRef<std::string> URISchemes = {});
 
 private:
   mutable std::mutex Mutex;
@@ -59,14 +69,11 @@ private:
 
 /// This manages symbols from files and an in-memory index on all symbols.
 /// FIXME: Expose an interface to remove files that are closed.
-class FileIndex {
+class FileIndex : public MergedIndex {
 public:
   /// If URISchemes is empty, the default schemes in SymbolCollector will be
   /// used.
-  FileIndex(std::vector<std::string> URISchemes = {});
-
-  // Presents a merged view of the supplied main-file and preamble ASTs.
-  const SymbolIndex &index() const { return *MergedIndex; }
+  FileIndex(std::vector<std::string> URISchemes = {}, bool UseDex = true);
 
   /// Update preamble symbols of file \p Path with all declarations in \p AST
   /// and macros in \p PP.
@@ -78,6 +85,7 @@ public:
   void updateMain(PathRef Path, ParsedAST &AST);
 
 private:
+  bool UseDex; // FIXME: this should be always on.
   std::vector<std::string> URISchemes;
 
   // Contains information from each file's preamble only.
@@ -102,8 +110,6 @@ private:
   // (Note that symbols *only* in the main file are not indexed).
   FileSymbols MainFileSymbols;
   SwapIndex MainFileIndex;
-
-  std::unique_ptr<SymbolIndex> MergedIndex;  // Merge preamble and main index.
 };
 
 /// Retrieves symbols and refs of local top level decls in \p AST (i.e.

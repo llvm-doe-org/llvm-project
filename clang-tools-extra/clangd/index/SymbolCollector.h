@@ -6,6 +6,8 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
+#ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_SYMBOL_COLLECTOR_H
+#define LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_SYMBOL_COLLECTOR_H
 
 #include "CanonicalIncludes.h"
 #include "Index.h"
@@ -55,6 +57,11 @@ public:
     /// The symbol ref kinds that will be collected.
     /// If not set, SymbolCollector will not collect refs.
     RefKind RefFilter = RefKind::Unknown;
+    /// If set to true, SymbolCollector will collect all refs (from main file
+    /// and included headers); otherwise, only refs from main file will be
+    /// collected.
+    /// This flag is only meaningful when RefFilter is set.
+    bool RefsInHeaders = false;
     // Every symbol collected will be stamped with this origin.
     SymbolOrigin Origin = SymbolOrigin::Unknown;
     /// Collect macros.
@@ -122,3 +129,4 @@ private:
 
 } // namespace clangd
 } // namespace clang
+#endif

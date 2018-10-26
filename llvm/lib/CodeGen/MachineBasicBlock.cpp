@@ -362,7 +362,7 @@ void MachineBasicBlock::print(raw_ostream &OS, ModuleSlotTracker &MST,
       // Print human readable probabilities as comments.
       OS << "; ";
       for (auto I = succ_begin(), E = succ_end(); I != E; ++I) {
-        const BranchProbability &BP = *getProbabilityIterator(I);
+        const BranchProbability &BP = getSuccProbability(I);
         if (I != succ_begin())
           OS << ", ";
         OS << printMBBReference(**I) << '('
@@ -461,7 +461,7 @@ bool MachineBasicBlock::isLiveIn(MCPhysReg Reg, LaneBitmask LaneMask) const {
 }
 
 void MachineBasicBlock::sortUniqueLiveIns() {
-  llvm::sort(LiveIns.begin(), LiveIns.end(),
+  llvm::sort(LiveIns,
              [](const RegisterMaskPair &LI0, const RegisterMaskPair &LI1) {
                return LI0.PhysReg < LI1.PhysReg;
              });

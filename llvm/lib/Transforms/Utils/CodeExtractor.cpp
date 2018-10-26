@@ -228,19 +228,21 @@ buildExtractionBlockSet(ArrayRef<BasicBlock *> BBs, DominatorTree *DT,
 CodeExtractor::CodeExtractor(ArrayRef<BasicBlock *> BBs, DominatorTree *DT,
                              bool AggregateArgs, BlockFrequencyInfo *BFI,
                              BranchProbabilityInfo *BPI, bool AllowVarArgs,
-                             bool AllowAlloca)
+                             bool AllowAlloca, std::string Suffix)
     : DT(DT), AggregateArgs(AggregateArgs || AggregateArgsOpt), BFI(BFI),
       BPI(BPI), AllowVarArgs(AllowVarArgs),
-      Blocks(buildExtractionBlockSet(BBs, DT, AllowVarArgs, AllowAlloca)) {}
+      Blocks(buildExtractionBlockSet(BBs, DT, AllowVarArgs, AllowAlloca)),
+      Suffix(Suffix) {}
 
 CodeExtractor::CodeExtractor(DominatorTree &DT, Loop &L, bool AggregateArgs,
                              BlockFrequencyInfo *BFI,
-                             BranchProbabilityInfo *BPI)
+                             BranchProbabilityInfo *BPI, std::string Suffix)
     : DT(&DT), AggregateArgs(AggregateArgs || AggregateArgsOpt), BFI(BFI),
       BPI(BPI), AllowVarArgs(false),
       Blocks(buildExtractionBlockSet(L.getBlocks(), &DT,
                                      /* AllowVarArgs */ false,
-                                     /* AllowAlloca */ false)) {}
+                                     /* AllowAlloca */ false)),
+      Suffix(Suffix) {}
 
 /// definedInRegion - Return true if the specified value is defined in the
 /// extracted region.
@@ -566,7 +568,7 @@ void CodeExtractor::severSplitPHINodes(BasicBlock *&Header) {
     // changing them to branch to NewBB instead.
     for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i)
       if (Blocks.count(PN->getIncomingBlock(i))) {
-        TerminatorInst *TI = PN->getIncomingBlock(i)->getTerminator();
+        Instruction *TI = PN->getIncomingBlock(i)->getTerminator();
         TI->replaceUsesOfWith(OldPred, NewBB);
       }
 
@@ -669,10 +671,14 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
                   FunctionType::get(RetTy, paramTy,
                                     AllowVarArgs && oldFunction->isVarArg());
 
+  std::string SuffixToUse =
+      Suffix.empty()
+          ? (header->getName().empty() ? "extracted" : header->getName().str())
+          : Suffix;
   // Create the new function
   Function *newFunction = Function::Create(
       funcType, GlobalValue::InternalLinkage, oldFunction->getAddressSpace(),
-      oldFunction->getName() + "_" + header->getName(), M);
+      oldFunction->getName() + "." + SuffixToUse, M);
   // If the old function is no-throw, so is the new one.
   if (oldFunction->doesNotThrow())
     newFunction->setDoesNotThrow();
@@ -778,7 +784,7 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
       Value *Idx[2];
       Idx[0] = Constant::getNullValue(Type::getInt32Ty(header->getContext()));
       Idx[1] = ConstantInt::get(Type::getInt32Ty(header->getContext()), i);
-      TerminatorInst *TI = newFunction->begin()->getTerminator();
+      Instruction *TI = newFunction->begin()->getTerminator();
       GetElementPtrInst *GEP = GetElementPtrInst::Create(
           StructTy, &*AI, Idx, "gep_" + inputs[i]->getName(), TI);
       RewriteVal = new LoadInst(GEP, "loadgep_" + inputs[i]->getName(), TI);
@@ -808,10 +814,10 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
   for (unsigned i = 0, e = Users.size(); i != e; ++i)
     // The BasicBlock which contains the branch is not in the region
     // modify the branch target to a new block
-    if (TerminatorInst *TI = dyn_cast<TerminatorInst>(Users[i]))
-      if (!Blocks.count(TI->getParent()) &&
-          TI->getParent()->getParent() == oldFunction)
-        TI->replaceUsesOfWith(header, newHeader);
+    if (Instruction *I = dyn_cast<Instruction>(Users[i]))
+      if (I->isTerminator() && !Blocks.count(I->getParent()) &&
+          I->getParent()->getParent() == oldFunction)
+        I->replaceUsesOfWith(header, newHeader);
 
   return newFunction;
 }
@@ -972,7 +978,7 @@ emitCallAndSwitchStatement(Function *newFunction, BasicBlock *codeReplacer,
 
   unsigned switchVal = 0;
   for (BasicBlock *Block : Blocks) {
-    TerminatorInst *TI = Block->getTerminator();
+    Instruction *TI = Block->getTerminator();
     for (unsigned i = 0, e = TI->getNumSuccessors(); i != e; ++i)
       if (!Blocks.count(TI->getSuccessor(i))) {
         BasicBlock *OldTarget = TI->getSuccessor(i);
@@ -1078,7 +1084,7 @@ void CodeExtractor::calculateNewCallTerminatorWeights(
   using BlockNode = BlockFrequencyInfoImplBase::BlockNode;
 
   // Update the branch weights for the exit block.
-  TerminatorInst *TI = CodeReplacer->getTerminator();
+  Instruction *TI = CodeReplacer->getTerminator();
   SmallVector<unsigned, 8> BranchWeights(TI->getNumSuccessors(), 0);
 
   // Block Frequency distribution with dummy node.
@@ -1285,6 +1291,19 @@ Function *CodeExtractor::extractCodeRegion() {
           }
         }
     }
+
+  // Erase debug info intrinsics. Variable updates within the new function are
+  // invisible to debuggers. This could be improved by defining a DISubprogram
+  // for the new function.
+  for (BasicBlock &BB : *newFunction) {
+    auto BlockIt = BB.begin();
+    while (BlockIt != BB.end()) {
+      Instruction *Inst = &*BlockIt;
+      ++BlockIt;
+      if (isa<DbgInfoIntrinsic>(Inst))
+        Inst->eraseFromParent();
+    }
+  }
 
   LLVM_DEBUG(if (verifyFunction(*newFunction))
                  report_fatal_error("verifyFunction failed!"));

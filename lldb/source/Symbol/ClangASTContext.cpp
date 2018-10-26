@@ -2058,7 +2058,8 @@ FunctionDecl *ClangASTContext::CreateFunctionDeclaration(
 
 CompilerType ClangASTContext::CreateFunctionType(
     ASTContext *ast, const CompilerType &result_type, const CompilerType *args,
-    unsigned num_args, bool is_variadic, unsigned type_quals) {
+    unsigned num_args, bool is_variadic, unsigned type_quals,
+    clang::CallingConv cc) {
   if (ast == nullptr)
     return CompilerType(); // invalid AST
 
@@ -2086,6 +2087,7 @@ CompilerType ClangASTContext::CreateFunctionType(
 
   // TODO: Detect calling convention in DWARF?
   FunctionProtoType::ExtProtoInfo proto_info;
+  proto_info.ExtInfo = cc;
   proto_info.Variadic = is_variadic;
   proto_info.ExceptionSpec = EST_None;
   proto_info.TypeQuals = type_quals;
@@ -7776,7 +7778,7 @@ ClangASTContext::GetAsObjCInterfaceDecl(const CompilerType &type) {
 }
 
 clang::FieldDecl *ClangASTContext::AddFieldToRecordType(
-    const CompilerType &type, const char *name,
+    const CompilerType &type, llvm::StringRef name,
     const CompilerType &field_clang_type, AccessType access,
     uint32_t bitfield_bit_size) {
   if (!type.IsValid() || !field_clang_type.IsValid())
@@ -7786,6 +7788,9 @@ clang::FieldDecl *ClangASTContext::AddFieldToRecordType(
   if (!ast)
     return nullptr;
   clang::ASTContext *clang_ast = ast->getASTContext();
+  clang::IdentifierInfo *ident = nullptr;
+  if (!name.empty())
+    ident = &clang_ast->Idents.get(name);
 
   clang::FieldDecl *field = nullptr;
 
@@ -7803,14 +7808,14 @@ clang::FieldDecl *ClangASTContext::AddFieldToRecordType(
     field = clang::FieldDecl::Create(
         *clang_ast, record_decl, clang::SourceLocation(),
         clang::SourceLocation(),
-        name ? &clang_ast->Idents.get(name) : nullptr, // Identifier
-        ClangUtil::GetQualType(field_clang_type),      // Field type
-        nullptr,                                       // TInfo *
-        bit_width,                                     // BitWidth
-        false,                                         // Mutable
-        clang::ICIS_NoInit);                           // HasInit
+        ident,                                    // Identifier
+        ClangUtil::GetQualType(field_clang_type), // Field type
+        nullptr,                                  // TInfo *
+        bit_width,                                // BitWidth
+        false,                                    // Mutable
+        clang::ICIS_NoInit);                      // HasInit
 
-    if (!name) {
+    if (name.empty()) {
       // Determine whether this field corresponds to an anonymous struct or
       // union.
       if (const clang::TagType *TagT =
@@ -7846,9 +7851,9 @@ clang::FieldDecl *ClangASTContext::AddFieldToRecordType(
       field = clang::ObjCIvarDecl::Create(
           *clang_ast, class_interface_decl, clang::SourceLocation(),
           clang::SourceLocation(),
-          name ? &clang_ast->Idents.get(name) : nullptr, // Identifier
-          ClangUtil::GetQualType(field_clang_type),      // Field type
-          nullptr,                                       // TypeSourceInfo *
+          ident,                                    // Identifier
+          ClangUtil::GetQualType(field_clang_type), // Field type
+          nullptr,                                  // TypeSourceInfo *
           ConvertAccessTypeToObjCIvarAccessControl(access), bit_width,
           is_synthesized);
 
@@ -7987,38 +7992,44 @@ void ClangASTContext::SetIsPacked(const CompilerType &type) {
 }
 
 clang::VarDecl *ClangASTContext::AddVariableToRecordType(
-    const CompilerType &type, const char *name, const CompilerType &var_type,
-    AccessType access) {
-  clang::VarDecl *var_decl = nullptr;
-
+    const CompilerType &type, llvm::StringRef name,
+    const CompilerType &var_type, AccessType access) {
   if (!type.IsValid() || !var_type.IsValid())
     return nullptr;
+
   ClangASTContext *ast = llvm::dyn_cast<ClangASTContext>(type.GetTypeSystem());
   if (!ast)
     return nullptr;
 
   clang::RecordDecl *record_decl = ast->GetAsRecordDecl(type);
-  if (record_decl) {
-    var_decl = clang::VarDecl::Create(
-        *ast->getASTContext(),   // ASTContext &
-        record_decl,             // DeclContext *
-        clang::SourceLocation(), // clang::SourceLocation StartLoc
-        clang::SourceLocation(), // clang::SourceLocation IdLoc
-        name ? &ast->getASTContext()->Idents.get(name)
-             : nullptr,                   // clang::IdentifierInfo *
-        ClangUtil::GetQualType(var_type), // Variable clang::QualType
-        nullptr,                          // TypeSourceInfo *
-        clang::SC_Static);                // StorageClass
-    if (var_decl) {
-      var_decl->setAccess(
-          ClangASTContext::ConvertAccessTypeToAccessSpecifier(access));
-      record_decl->addDecl(var_decl);
+  if (!record_decl)
+    return nullptr;
+
+  clang::VarDecl *var_decl = nullptr;
+  clang::IdentifierInfo *ident = nullptr;
+  if (!name.empty())
+    ident = &ast->getASTContext()->Idents.get(name);
+
+  var_decl = clang::VarDecl::Create(
+      *ast->getASTContext(),            // ASTContext &
+      record_decl,                      // DeclContext *
+      clang::SourceLocation(),          // clang::SourceLocation StartLoc
+      clang::SourceLocation(),          // clang::SourceLocation IdLoc
+      ident,                            // clang::IdentifierInfo *
+      ClangUtil::GetQualType(var_type), // Variable clang::QualType
+      nullptr,                          // TypeSourceInfo *
+      clang::SC_Static);                // StorageClass
+  if (!var_decl)
+    return nullptr;
+
+  var_decl->setAccess(
+      ClangASTContext::ConvertAccessTypeToAccessSpecifier(access));
+  record_decl->addDecl(var_decl);
 
 #ifdef LLDB_CONFIGURATION_DEBUG
-      VerifyDecl(var_decl);
+  VerifyDecl(var_decl);
 #endif
-    }
-  }
+
   return var_decl;
 }
 

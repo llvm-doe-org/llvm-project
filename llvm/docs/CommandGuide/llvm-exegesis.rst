@@ -127,7 +127,7 @@ following command:
     $ llvm-exegesis -mode=analysis \
   -benchmarks-file=/tmp/benchmarks.yaml \
   -analysis-clusters-output-file=/tmp/clusters.csv \
-  -analysis-inconsistencies-output-file=/tmp/inconsistencies.txt
+  -analysis-inconsistencies-output-file=/tmp/inconsistencies.html
 
 This will group the instructions into clusters with the same performance
 characteristics. The clusters will be written out to `/tmp/clusters.csv` in the
@@ -175,9 +175,10 @@ OPTIONS
  Specify the opcode to measure, by index. See example 1 for details.
  Either `opcode-index`, `opcode-name` or `snippets-file` must be set.
 
-.. option:: -opcode-name=<LLVM opcode name>
+.. option:: -opcode-name=<opcode name 1>,<opcode name 2>,...
 
- Specify the opcode to measure, by name. See example 1 for details.
+ Specify the opcode to measure, by name. Several opcodes can be specified as
+ a comma-separated list. See example 1 for details.
  Either `opcode-index`, `opcode-name` or `snippets-file` must be set.
 
  .. option:: -snippets-file=<filename>

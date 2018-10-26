@@ -23,6 +23,7 @@
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/Support/MemoryBuffer.h"
 
+namespace llvm {
 namespace exegesis {
 
 static constexpr const char ModuleID[] = "ExegesisInfoTest";
@@ -33,6 +34,7 @@ generateSnippetSetupCode(const ExegesisTarget &ET,
                          const llvm::MCSubtargetInfo *const MSI,
                          llvm::ArrayRef<RegisterValue> RegisterInitialValues,
                          bool &IsSnippetSetupComplete) {
+  IsSnippetSetupComplete = true;
   std::vector<llvm::MCInst> Result;
   for (const RegisterValue &RV : RegisterInitialValues) {
     // Load a constant in the register.
@@ -109,6 +111,8 @@ static void fillMachineFunction(llvm::MachineFunction &MF,
         Builder.addReg(Op.getReg(), Flags);
       } else if (Op.isImm()) {
         Builder.addImm(Op.getImm());
+      } else if (!Op.isValid()) {
+        llvm_unreachable("Operand is not set");
       } else {
         llvm_unreachable("Not yet implemented");
       }
@@ -121,7 +125,7 @@ static void fillMachineFunction(llvm::MachineFunction &MF,
   } else {
     llvm::MachineIRBuilder MIB(MF);
     MIB.setMBB(*MBB);
-    MF.getSubtarget().getCallLowering()->lowerReturn(MIB, nullptr, 0);
+    MF.getSubtarget().getCallLowering()->lowerReturn(MIB, nullptr, {});
   }
 }
 
@@ -170,7 +174,7 @@ void assembleToStream(const ExegesisTarget &ET,
   for (const unsigned Reg : LiveIns)
     MF.getRegInfo().addLiveIn(Reg);
 
-  bool IsSnippetSetupComplete = false;
+  bool IsSnippetSetupComplete;
   std::vector<llvm::MCInst> Code =
       generateSnippetSetupCode(ET, TM->getMCSubtargetInfo(),
                                RegisterInitialValues, IsSnippetSetupComplete);
@@ -292,3 +296,4 @@ ExecutableFunction::ExecutableFunction(
 }
 
 } // namespace exegesis
+} // namespace llvm
