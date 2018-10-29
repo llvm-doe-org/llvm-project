@@ -126,6 +126,10 @@ struct MatchTypeStyle {
 
 static MatchTypeStyle GetMatchTypeStyle(unsigned MatchTy) {
   switch (MatchTy) {
+  case FileCheckDiag::MatchFinalButIllegal:
+    return MatchTypeStyle('!', raw_ostream::RED,
+                          "the final but illegal match for an expected "
+                          "pattern (e.g., CHECK-NEXT)");
   case FileCheckDiag::MatchNoneButExpected:
     return MatchTypeStyle('X', raw_ostream::RED,
                           "the search range for an unmatched expected "
@@ -164,6 +168,9 @@ static void DumpInputAnnotationExplanation(raw_ostream &OS,
 
   // Markers on annotation lines.
   OS << "  - ";
+  WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "!~~";
+  OS << "    marks bad match\n"
+     << "  - ";
   WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "X~~";
   OS << "    marks search range when no match is found\n"
      << "  - ";
