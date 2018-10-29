@@ -19,6 +19,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/Process.h"
+#include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/FileCheck.h"
 using namespace llvm;
@@ -91,7 +92,14 @@ static cl::opt<bool> DumpInputOnFailure(
     "dump-input-on-failure", cl::init(std::getenv(DumpInputEnv)),
     cl::desc("Dump original input to stderr before failing.\n"
              "The value can be also controlled using\n"
-             "FILECHECK_DUMP_INPUT_ON_FAILURE environment variable.\n"));
+             "FILECHECK_DUMP_INPUT_ON_FAILURE environment variable.\n"
+             "This option is deprecated in favor of -dump-input.\n"));
+
+static cl::opt<std::string> DumpInput(
+    "dump-input", cl::init("never"),
+    cl::desc("Dump annotated input to stderr either 'always', on 'fail',\n"
+             "or 'never'.\n"),
+    cl::value_desc("mode"));
 
 typedef cl::list<std::string>::const_iterator prefix_iterator;
 
@@ -106,6 +114,265 @@ static void DumpCommandLine(int argc, char **argv) {
   for (int I = 0; I < argc; I++)
     errs() << " " << argv[I];
   errs() << "\n";
+}
+
+struct MatchTypeStyle {
+  char Mark;
+  raw_ostream::Colors Color;
+  const char *What;
+  MatchTypeStyle(char Mark, raw_ostream::Colors Color, const char *What)
+      : Mark(Mark), Color(Color), What(What) {}
+};
+
+static MatchTypeStyle GetMatchTypeStyle(unsigned MatchTy) {
+  switch (MatchTy) {
+  case FileCheckDiag::MatchNoneButExpected:
+    return MatchTypeStyle('X', raw_ostream::RED,
+                          "the search range for an unmatched expected "
+                          "pattern (e.g., CHECK)");
+  case FileCheckDiag::MatchTypeCount:
+    llvm_unreachable_internal("unexpected match type");
+  }
+  llvm_unreachable_internal("unexpected match type");
+}
+
+static void DumpInputAnnotationExplanation(raw_ostream &OS,
+                                           const FileCheckRequest &Req) {
+  OS << "\nFormat for input dump annotations:\n\n";
+
+  // Labels for input lines.
+  OS << "  - ";
+  WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "L:";
+  OS << "S    labels line number L of the input file, where S is a "
+     << "single space\n";
+
+  // Labels for annotation lines.
+  OS << "  - ";
+  WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "T:L";
+  OS << "    labels the match result for a pattern of type T from "
+     << "line L of\n"
+     << "           the check file\n";
+
+  // Markers on annotation lines.
+  OS << "  - ";
+  WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "X~~";
+  OS << "    marks search range when no match is found\n";
+
+  // Colors.
+  if (WithColor(OS).colorsEnabled()) {
+    OS << "  - color  ";
+    WithColor(OS, raw_ostream::RED, true) << "error";
+    OS << '\n';
+  }
+
+  // Files.
+  OS << "\nInput file: ";
+  if (InputFilename == "-")
+    OS << "<stdin>";
+  else
+    OS << InputFilename;
+  OS << "\nCheck file: " << CheckFilename << "\n";
+}
+
+/// An annotation for a single input line.
+struct InputAnnotation {
+  /// The check file line (one-origin indexing) where the directive that
+  /// produced this annotation is located.
+  unsigned CheckLine;
+  /// The label for this annotation.
+  std::string Label;
+  /// What input line (one-origin indexing) this annotation marks.  This might
+  /// be different from the starting line of the original diagnostic if this is
+  /// a non-initial fragment of a diagnostic that has been broken across
+  /// multiple lines.
+  unsigned InputLine;
+  /// The column range (one-origin indexing, open end) in which to to mark the
+  /// input line.  If InputEndCol is UINT_MAX, treat it as the last column
+  /// before the newline.
+  unsigned InputStartCol, InputEndCol;
+  /// The starting char (before tildes) for marking the line.
+  char Mark;
+  /// What color to use for this annotation.
+  raw_ostream::Colors Color;
+};
+
+/// Get an abbreviation for the check type.
+std::string GetCheckTypeAbbreviation(Check::FileCheckType Ty) {
+  switch (Ty) {
+  case Check::CheckPlain:
+    if (Ty.getCount() > 1)
+      return "count";
+    return "check";
+  case Check::CheckNext:
+    return "next";
+  case Check::CheckSame:
+    return "same";
+  case Check::CheckNot:
+    return "not";
+  case Check::CheckDAG:
+    return "dag";
+  case Check::CheckLabel:
+    return "label";
+  case Check::CheckEmpty:
+    return "empty";
+  case Check::CheckEOF:
+    return "eof";
+  case Check::CheckBadNot:
+    return "bad-not";
+  case Check::CheckBadCount:
+    return "bad-count";
+  case Check::CheckNone:
+    llvm_unreachable("invalid FileCheckType");
+  }
+  llvm_unreachable("unknown FileCheckType");
+}
+
+static void BuildInputAnnotations(const std::vector<FileCheckDiag> &Diags,
+                                  std::vector<InputAnnotation> &Annotations,
+                                  unsigned &LabelWidth) {
+  // What's the widest label?
+  LabelWidth = 0;
+  for (auto DiagItr = Diags.begin(), DiagEnd = Diags.end(); DiagItr != DiagEnd;
+       ++DiagItr) {
+    InputAnnotation A;
+
+    // Build label, which uniquely identifies this check result.
+    A.CheckLine = DiagItr->CheckLine;
+    llvm::raw_string_ostream Label(A.Label);
+    Label << GetCheckTypeAbbreviation(DiagItr->CheckTy) << ":"
+          << DiagItr->CheckLine;
+    Label.flush();
+    LabelWidth = std::max((std::string::size_type)LabelWidth, A.Label.size());
+
+    MatchTypeStyle MatchTyStyle = GetMatchTypeStyle(DiagItr->MatchTy);
+    A.Mark = MatchTyStyle.Mark;
+    A.Color = MatchTyStyle.Color;
+
+    // Compute the mark location, and break annotation into multiple
+    // annotations if it spans multiple lines.
+    A.InputLine = DiagItr->InputStartLine;
+    A.InputStartCol = DiagItr->InputStartCol;
+    if (DiagItr->InputStartLine == DiagItr->InputEndLine) {
+      // Sometimes ranges are empty in order to indicate a specific point, but
+      // that would mean nothing would be marked, so adjust the range to
+      // include the following character.
+      A.InputEndCol =
+          std::max(DiagItr->InputStartCol + 1, DiagItr->InputEndCol);
+      Annotations.push_back(A);
+    } else {
+      assert(DiagItr->InputStartLine < DiagItr->InputEndLine &&
+             "expected input range not to be inverted");
+      A.InputEndCol = UINT_MAX;
+      Annotations.push_back(A);
+      for (unsigned L = DiagItr->InputStartLine + 1, E = DiagItr->InputEndLine;
+           L <= E; ++L) {
+        // If a range ends before the first column on a line, then it has no
+        // characters on that line, so there's nothing to render.
+        if (DiagItr->InputEndCol == 1 && L == E)
+          break;
+        InputAnnotation B;
+        B.CheckLine = A.CheckLine;
+        B.Label = A.Label;
+        B.InputLine = L;
+        B.Mark = '~';
+        B.InputStartCol = 1;
+        if (L != E)
+          B.InputEndCol = UINT_MAX;
+        else
+          B.InputEndCol = DiagItr->InputEndCol;
+        B.Color = A.Color;
+        Annotations.push_back(B);
+      }
+    }
+  }
+}
+
+static void DumpAnnotatedInput(
+    raw_ostream &OS, StringRef InputFileText,
+    std::vector<InputAnnotation> &Annotations, unsigned LabelWidth) {
+  OS << "Full input was:\n<<<<<<\n";
+
+  // Sort annotations.
+  //
+  // First, sort in the order of input lines to make it easier to find relevant
+  // annotations while iterating input lines in the implementation below.
+  // FileCheck diagnostics are not always reported and recorded in the order of
+  // input lines due to, for example, CHECK-DAG and CHECK-NOT.
+  //
+  // Second, for annotations for the same input line, sort in the order of the
+  // FileCheck directive's line in the check file (where there's at most one
+  // directive per line).  The rationale of this choice is that, for any input
+  // line, this sort establishes a total order of annotations that, with
+  // respect to match results, is consistent across multiple lines, thus
+  // making match results easier to track from one line to the next when they
+  // span multiple lines.
+  std::sort(Annotations.begin(), Annotations.end(),
+            [](const InputAnnotation &A, const InputAnnotation &B) {
+              if (A.InputLine != B.InputLine)
+                return A.InputLine < B.InputLine;
+              return A.CheckLine < B.CheckLine;
+            });
+
+  // Compute the width of the label column.
+  const unsigned char *InputFilePtr = InputFileText.bytes_begin(),
+                      *InputFileEnd = InputFileText.bytes_end();
+  unsigned LineCount = InputFileText.count('\n');
+  if (InputFileEnd[-1] != '\n')
+    ++LineCount;
+  unsigned LineNoWidth = log10(LineCount) + 1;
+  // +3 below adds spaces (1) to the left of the (right-aligned) line numbers
+  // on input lines and (2) to the right of the (left-aligned) labels on
+  // annotation lines so that input lines and annotation lines are more
+  // visually distinct.  For example, the spaces on the annotation lines ensure
+  // that input line numbers and check directive line numbers never align
+  // horizontally.  Those line numbers might not even be for the same file.
+  // One space would be enough to achieve that, but more makes it even easier
+  // to see.
+  LabelWidth = std::max(LabelWidth, LineNoWidth) + 3;
+
+  // Print annotated input lines.
+  auto AnnotationItr = Annotations.begin(), AnnotationEnd = Annotations.end();
+  for (unsigned Line = 1;
+       InputFilePtr != InputFileEnd || AnnotationItr != AnnotationEnd;
+       ++Line) {
+    const unsigned char *InputFileLine = InputFilePtr;
+
+    // Print right-aligned line number.
+    WithColor(OS, raw_ostream::BLACK, true)
+        << format_decimal(Line, LabelWidth) << ": ";
+
+    // Print numbered line.
+    bool Newline = false;
+    while (InputFilePtr != InputFileEnd && !Newline) {
+      if (*InputFilePtr == '\n')
+        Newline = true;
+      else
+        OS << *InputFilePtr;
+      ++InputFilePtr;
+    }
+    OS << '\n';
+    unsigned InputLineWidth = InputFilePtr - InputFileLine - Newline;
+
+    // Print any annotations.
+    while (AnnotationItr != AnnotationEnd &&
+           AnnotationItr->InputLine == Line) {
+      WithColor COS(OS, AnnotationItr->Color, true);
+      // The two spaces below are where the ": " appears on input lines.
+      COS << left_justify(AnnotationItr->Label, LabelWidth) << "  ";
+      unsigned Col;
+      for (Col = 1; Col < AnnotationItr->InputStartCol; ++Col)
+        COS << ' ';
+      COS << AnnotationItr->Mark;
+      // If InputEndCol=UINT_MAX, stop at InputLineWidth.
+      for (++Col; Col < AnnotationItr->InputEndCol && Col <= InputLineWidth;
+           ++Col)
+        COS << '~';
+      COS << '\n';
+      ++AnnotationItr;
+    }
+  }
+
+  OS << ">>>>>>\n";
 }
 
 int main(int argc, char **argv) {
@@ -157,6 +424,10 @@ int main(int argc, char **argv) {
     return 2;
   }
 
+  if (DumpInput != "never" && DumpInput != "fail" && DumpInput != "always") {
+    errs() << "Unrecognized value for dump-input option: " << DumpInput << '\n';
+    return 2;
+  }
 
   SourceMgr SM;
 
@@ -204,10 +475,21 @@ int main(int argc, char **argv) {
                             InputFileText, InputFile.getBufferIdentifier()),
                         SMLoc());
 
-  int ExitCode =
-      FC.CheckInput(SM, InputFileText, CheckStrings) ? EXIT_SUCCESS : 1;
+  std::vector<FileCheckDiag> Diags;
+  int ExitCode = FC.CheckInput(SM, InputFileText, CheckStrings, &Diags)
+                     ? EXIT_SUCCESS
+                     : 1;
   if (ExitCode == 1 && DumpInputOnFailure)
     errs() << "Full input was:\n<<<<<<\n" << InputFileText << "\n>>>>>>\n";
+  if (DumpInput == "always" || (ExitCode == 1 && DumpInput == "fail")) {
+    errs() << '\n';
+    DumpInputAnnotationExplanation(errs(), Req);
+    std::vector<InputAnnotation> Annotations;
+    unsigned LabelWidth;
+    BuildInputAnnotations(Diags, Annotations, LabelWidth);
+    errs() << '\n';
+    DumpAnnotatedInput(errs(), InputFileText, Annotations, LabelWidth);
+  }
 
   return ExitCode;
 }
