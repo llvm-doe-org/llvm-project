@@ -118,24 +118,30 @@ static void DumpCommandLine(int argc, char **argv) {
 
 struct MatchTypeStyle {
   char Mark;
+  bool HasTildes;
   raw_ostream::Colors Color;
   const char *What;
-  MatchTypeStyle(char Mark, raw_ostream::Colors Color, const char *What)
-      : Mark(Mark), Color(Color), What(What) {}
+  MatchTypeStyle(char Mark, bool HasTildes, raw_ostream::Colors Color,
+                 const char *What)
+      : Mark(Mark), HasTildes(HasTildes), Color(Color), What(What) {}
 };
 
 static MatchTypeStyle GetMatchTypeStyle(unsigned MatchTy) {
   switch (MatchTy) {
+  case FileCheckDiag::MatchFinalButExcluded:
+    return MatchTypeStyle('!', true, raw_ostream::RED,
+                          "the final match for an excluded pattern (e.g., "
+                          "CHECK-NOT)");
   case FileCheckDiag::MatchFinalButIllegal:
-    return MatchTypeStyle('!', raw_ostream::RED,
+    return MatchTypeStyle('!', true, raw_ostream::RED,
                           "the final but illegal match for an expected "
                           "pattern (e.g., CHECK-NEXT)");
   case FileCheckDiag::MatchNoneButExpected:
-    return MatchTypeStyle('X', raw_ostream::RED,
+    return MatchTypeStyle('X', true, raw_ostream::RED,
                           "the search range for an unmatched expected "
                           "pattern (e.g., CHECK)");
   case FileCheckDiag::MatchFuzzy:
-    return MatchTypeStyle('?', raw_ostream::MAGENTA,
+    return MatchTypeStyle('?', false, raw_ostream::MAGENTA,
                           "a fuzzy match start for an otherwise unmatched "
                           "pattern");
   case FileCheckDiag::MatchTypeCount:
@@ -184,6 +190,32 @@ static void DumpInputAnnotationExplanation(raw_ostream &OS,
     OS << ", ";
     WithColor(OS, raw_ostream::MAGENTA, true) << "fuzzy";
     OS << '\n';
+  }
+
+  OS << "\nDetailed description of currently enabled markers:\n\n";
+
+  for (unsigned StyleIdx = FileCheckDiag::MatchTypeFirst;
+       StyleIdx < FileCheckDiag::MatchTypeCount; ++StyleIdx) {
+    MatchTypeStyle Style = GetMatchTypeStyle(StyleIdx);
+    if (StyleIdx == FileCheckDiag::MatchTypeFirst ||
+        Style.Mark != GetMatchTypeStyle(StyleIdx - 1).Mark ||
+        Style.HasTildes != GetMatchTypeStyle(StyleIdx - 1).HasTildes ||
+        (WithColor(OS).colorsEnabled() &&
+         Style.Color != GetMatchTypeStyle(StyleIdx - 1).Color)) {
+      OS << "  - ";
+      WithColor(OS, Style.Color, true)
+          << Style.Mark << (Style.HasTildes ? "~~" : "  ");
+      OS << "    marks ";
+      if (StyleIdx + 1 != FileCheckDiag::MatchTypeCount &&
+          Style.Mark == GetMatchTypeStyle(StyleIdx + 1).Mark &&
+          Style.HasTildes == GetMatchTypeStyle(StyleIdx + 1).HasTildes &&
+          (!WithColor(OS).colorsEnabled() ||
+           Style.Color == GetMatchTypeStyle(StyleIdx + 1).Color))
+        OS << "either:\n"
+           << "           - ";
+    } else
+      OS << "           - ";
+    OS << Style.What << "\n";
   }
 
   // Files.
@@ -296,8 +328,15 @@ static void BuildInputAnnotations(const std::vector<FileCheckDiag> &Diags,
       // include the following character.
       A.InputEndCol =
           std::max(DiagItr->InputStartCol + 1, DiagItr->InputEndCol);
+      assert((MatchTyStyle.HasTildes ||
+              A.InputStartCol + 1 == A.InputEndCol) &&
+             "expected input range to have only one character for marker "
+             "style without tildes");
       Annotations.push_back(A);
     } else {
+      assert(MatchTyStyle.HasTildes &&
+             "expected input range to have only one character for marker "
+             "style without tildes");
       assert(DiagItr->InputStartLine < DiagItr->InputEndLine &&
              "expected input range not to be inverted");
       A.InputEndCol = UINT_MAX;

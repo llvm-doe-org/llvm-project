@@ -164,11 +164,14 @@ struct FileCheckDiag {
   /// example, there might be a fuzzy match after a fail.
   ///
   /// We iterate these types, so they must have contiguous values in
-  /// [0, MatchTypeCount).
+  /// [0, MatchTypeCount).  Moreover, keep match types together if they use the
+  /// same mark in annotated input dumps or else printing of the annotation key
+  /// will malfunction.
   enum MatchType {
     // TODO: More members will appear with later patches in this series.
+    MatchFinalButExcluded, //< the final match for an excluded pattern
+    MatchTypeFirst = MatchFinalButExcluded,
     MatchFinalButIllegal,  //< the final but illegal match for an expected pattern
-    MatchTypeFirst = MatchFinalButIllegal,
     MatchNoneButExpected,  //< no match for an expected pattern
     MatchFuzzy,            //< a fuzzy match (because no perfect match)
     MatchTypeCount,
@@ -211,7 +214,8 @@ struct FileCheckString {
   bool CheckNot(const SourceMgr &SM, StringRef Buffer,
                 const std::vector<const FileCheckPattern *> &NotStrings,
                 StringMap<StringRef> &VariableTable,
-                const FileCheckRequest &Req) const;
+                const FileCheckRequest &Req,
+                std::vector<FileCheckDiag> *Diags) const;
   size_t CheckDag(const SourceMgr &SM, StringRef Buffer,
                   std::vector<const FileCheckPattern *> &NotStrings,
                   StringMap<StringRef> &VariableTable,
