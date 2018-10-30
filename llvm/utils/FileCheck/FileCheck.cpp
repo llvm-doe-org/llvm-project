@@ -148,6 +148,11 @@ static MatchTypeStyle GetMatchTypeStyle(unsigned MatchTy) {
                           MatchTypeStyle::VerboseVerbose,
                           "a discarded match for an expected pattern (e.g., "
                           "CHECK-DAG)");
+  case FileCheckDiag::MatchNoneAndExcluded:
+    return MatchTypeStyle('X', true, raw_ostream::GREEN,
+                          MatchTypeStyle::VerboseVerbose,
+                          "the search range for an unmatched excluded "
+                          "pattern (e.g., CHECK-NOT)");
   case FileCheckDiag::MatchNoneButExpected:
     return MatchTypeStyle('X', true, raw_ostream::RED, MatchTypeStyle::Quiet,
                           "the search range for an unmatched expected "

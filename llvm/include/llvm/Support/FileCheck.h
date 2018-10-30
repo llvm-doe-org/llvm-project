@@ -169,18 +169,18 @@ struct FileCheckDiag {
   /// same mark in annotated input dumps or else printing of the annotation key
   /// will malfunction.
   enum MatchType {
-    // TODO: More members will appear with later patches in this series.
     MatchFinalAndExpected, //< the final match for an expected pattern
     MatchTypeFirst = MatchFinalAndExpected,
     MatchFinalButExcluded, //< the final match for an excluded pattern
     MatchFinalButIllegal,  //< the final but illegal match for an expected pattern
     MatchDiscard,          //< a discarded match for an expected pattern
+    MatchNoneAndExcluded,  //< no match for an excluded pattern
     MatchNoneButExpected,  //< no match for an expected pattern
     MatchFuzzy,            //< a fuzzy match (because no perfect match)
     MatchTypeCount,
   } MatchTy;
-  /// The match range if MatchTy is not MatchNoneButExpected, or the search
-  /// range otherwise.
+  /// The match range if MatchTy is not MatchNoneAndExcluded or
+  /// MatchNoneButExpected, or the search range otherwise.
   unsigned InputStartLine, InputStartCol, InputEndLine, InputEndCol;
   FileCheckDiag(const SourceMgr &SM, const Check::FileCheckType &CheckTy,
                 SMLoc CheckLoc, MatchType MatchTy, SMRange InputRange);
