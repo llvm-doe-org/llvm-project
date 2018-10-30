@@ -143,6 +143,11 @@ static MatchTypeStyle GetMatchTypeStyle(unsigned MatchTy) {
     return MatchTypeStyle('!', true, raw_ostream::RED, MatchTypeStyle::Quiet,
                           "the final but illegal match for an expected "
                           "pattern (e.g., CHECK-NEXT)");
+  case FileCheckDiag::MatchDiscard:
+    return MatchTypeStyle('!', true, raw_ostream::CYAN,
+                          MatchTypeStyle::VerboseVerbose,
+                          "a discarded match for an expected pattern (e.g., "
+                          "CHECK-DAG)");
   case FileCheckDiag::MatchNoneButExpected:
     return MatchTypeStyle('X', true, raw_ostream::RED, MatchTypeStyle::Quiet,
                           "the search range for an unmatched expected "
@@ -205,6 +210,10 @@ static void DumpInputAnnotationExplanation(raw_ostream &OS,
     if (Req.Verbose) {
       OS << ", ";
       WithColor(OS, raw_ostream::CYAN, true, true) << "unmatched";
+      if (Req.VerboseVerbose) {
+        OS << ", ";
+        WithColor(OS, raw_ostream::CYAN, true, false) << "discarded";
+      }
     }
     OS << ", ";
     WithColor(OS, raw_ostream::MAGENTA, true) << "fuzzy";
