@@ -169,8 +169,9 @@ struct FileCheckDiag {
   /// will malfunction.
   enum MatchType {
     // TODO: More members will appear with later patches in this series.
+    MatchFinalAndExpected, //< the final match for an expected pattern
+    MatchTypeFirst = MatchFinalAndExpected,
     MatchFinalButExcluded, //< the final match for an excluded pattern
-    MatchTypeFirst = MatchFinalButExcluded,
     MatchFinalButIllegal,  //< the final but illegal match for an expected pattern
     MatchNoneButExpected,  //< no match for an expected pattern
     MatchFuzzy,            //< a fuzzy match (because no perfect match)

@@ -120,28 +120,36 @@ struct MatchTypeStyle {
   char Mark;
   bool HasTildes;
   raw_ostream::Colors Color;
+  enum Verbosity { Quiet, Verbose, VerboseVerbose } RequiredVerbosity;
   const char *What;
   MatchTypeStyle(char Mark, bool HasTildes, raw_ostream::Colors Color,
-                 const char *What)
-      : Mark(Mark), HasTildes(HasTildes), Color(Color), What(What) {}
+                 Verbosity RequiredVerbosity, const char *What)
+      : Mark(Mark), HasTildes(HasTildes), Color(Color),
+        RequiredVerbosity(RequiredVerbosity), What(What) {}
 };
 
 static MatchTypeStyle GetMatchTypeStyle(unsigned MatchTy) {
   switch (MatchTy) {
+  case FileCheckDiag::MatchFinalAndExpected:
+    return MatchTypeStyle('^', true, raw_ostream::GREEN,
+                          MatchTypeStyle::Verbose,
+                          "the final match for an expected pattern (e.g., "
+                          "CHECK)");
   case FileCheckDiag::MatchFinalButExcluded:
-    return MatchTypeStyle('!', true, raw_ostream::RED,
+    return MatchTypeStyle('!', true, raw_ostream::RED, MatchTypeStyle::Quiet,
                           "the final match for an excluded pattern (e.g., "
                           "CHECK-NOT)");
   case FileCheckDiag::MatchFinalButIllegal:
-    return MatchTypeStyle('!', true, raw_ostream::RED,
+    return MatchTypeStyle('!', true, raw_ostream::RED, MatchTypeStyle::Quiet,
                           "the final but illegal match for an expected "
                           "pattern (e.g., CHECK-NEXT)");
   case FileCheckDiag::MatchNoneButExpected:
-    return MatchTypeStyle('X', true, raw_ostream::RED,
+    return MatchTypeStyle('X', true, raw_ostream::RED, MatchTypeStyle::Quiet,
                           "the search range for an unmatched expected "
                           "pattern (e.g., CHECK)");
   case FileCheckDiag::MatchFuzzy:
     return MatchTypeStyle('?', false, raw_ostream::MAGENTA,
+                          MatchTypeStyle::Quiet,
                           "a fuzzy match start for an otherwise unmatched "
                           "pattern");
   case FileCheckDiag::MatchTypeCount:
@@ -174,6 +182,9 @@ static void DumpInputAnnotationExplanation(raw_ostream &OS,
 
   // Markers on annotation lines.
   OS << "  - ";
+  WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "^~~";
+  OS << "    marks good match (requires -v)\n"
+     << "  - ";
   WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "!~~";
   OS << "    marks bad match\n"
      << "  - ";
@@ -186,7 +197,15 @@ static void DumpInputAnnotationExplanation(raw_ostream &OS,
   // Colors.
   if (WithColor(OS).colorsEnabled()) {
     OS << "  - color  ";
+    if (Req.Verbose) {
+      WithColor(OS, raw_ostream::GREEN, true) << "success";
+      OS << ", ";
+    }
     WithColor(OS, raw_ostream::RED, true) << "error";
+    if (Req.Verbose) {
+      OS << ", ";
+      WithColor(OS, raw_ostream::CYAN, true, true) << "unmatched";
+    }
     OS << ", ";
     WithColor(OS, raw_ostream::MAGENTA, true) << "fuzzy";
     OS << '\n';
@@ -194,10 +213,17 @@ static void DumpInputAnnotationExplanation(raw_ostream &OS,
 
   OS << "\nDetailed description of currently enabled markers:\n\n";
 
+  MatchTypeStyle::Verbosity Verbosity =
+      Req.VerboseVerbose
+          ? MatchTypeStyle::VerboseVerbose
+          : Req.Verbose ? MatchTypeStyle::Verbose : MatchTypeStyle::Quiet;
   for (unsigned StyleIdx = FileCheckDiag::MatchTypeFirst;
        StyleIdx < FileCheckDiag::MatchTypeCount; ++StyleIdx) {
     MatchTypeStyle Style = GetMatchTypeStyle(StyleIdx);
+    if (Verbosity < Style.RequiredVerbosity)
+      continue;
     if (StyleIdx == FileCheckDiag::MatchTypeFirst ||
+        Verbosity < GetMatchTypeStyle(StyleIdx - 1).RequiredVerbosity ||
         Style.Mark != GetMatchTypeStyle(StyleIdx - 1).Mark ||
         Style.HasTildes != GetMatchTypeStyle(StyleIdx - 1).HasTildes ||
         (WithColor(OS).colorsEnabled() &&
@@ -207,6 +233,7 @@ static void DumpInputAnnotationExplanation(raw_ostream &OS,
           << Style.Mark << (Style.HasTildes ? "~~" : "  ");
       OS << "    marks ";
       if (StyleIdx + 1 != FileCheckDiag::MatchTypeCount &&
+          Verbosity >= GetMatchTypeStyle(StyleIdx + 1).RequiredVerbosity &&
           Style.Mark == GetMatchTypeStyle(StyleIdx + 1).Mark &&
           Style.HasTildes == GetMatchTypeStyle(StyleIdx + 1).HasTildes &&
           (!WithColor(OS).colorsEnabled() ||
@@ -216,6 +243,13 @@ static void DumpInputAnnotationExplanation(raw_ostream &OS,
     } else
       OS << "           - ";
     OS << Style.What << "\n";
+  }
+
+  if (WithColor(OS).colorsEnabled() && Req.Verbose) {
+    OS << "  - ";
+    WithColor(OS, raw_ostream::CYAN, true, true) << "input";
+    OS << "  is style of input text with no final match for any expected "
+       << "pattern\n";
   }
 
   // Files.
@@ -247,6 +281,8 @@ struct InputAnnotation {
   unsigned InputStartCol, InputEndCol;
   /// The starting char (before tildes) for marking the line.
   char Mark;
+  /// Whether this annotation represents a final match for an expected pattern.
+  bool FinalAndExpectedMatch;
   /// What color to use for this annotation.
   raw_ostream::Colors Color;
 };
@@ -317,6 +353,8 @@ static void BuildInputAnnotations(const std::vector<FileCheckDiag> &Diags,
     MatchTypeStyle MatchTyStyle = GetMatchTypeStyle(DiagItr->MatchTy);
     A.Mark = MatchTyStyle.Mark;
     A.Color = MatchTyStyle.Color;
+    A.FinalAndExpectedMatch =
+        DiagItr->MatchTy == FileCheckDiag::MatchFinalAndExpected;
 
     // Compute the mark location, and break annotation into multiple
     // annotations if it spans multiple lines.
@@ -358,6 +396,7 @@ static void BuildInputAnnotations(const std::vector<FileCheckDiag> &Diags,
           B.InputEndCol = UINT_MAX;
         else
           B.InputEndCol = DiagItr->InputEndCol;
+        B.FinalAndExpectedMatch = A.FinalAndExpectedMatch;
         B.Color = A.Color;
         Annotations.push_back(B);
       }
@@ -366,7 +405,7 @@ static void BuildInputAnnotations(const std::vector<FileCheckDiag> &Diags,
 }
 
 static void DumpAnnotatedInput(
-    raw_ostream &OS, StringRef InputFileText,
+    raw_ostream &OS, const FileCheckRequest &Req, StringRef InputFileText,
     std::vector<InputAnnotation> &Annotations, unsigned LabelWidth) {
   OS << "Full input was:\n<<<<<<\n";
 
@@ -390,9 +429,15 @@ static void DumpAnnotatedInput(
                 return A.InputLine < B.InputLine;
               if (A.CheckLine != B.CheckLine)
                 return A.CheckLine < B.CheckLine;
-              assert(A.CheckDiagIndex != B.CheckDiagIndex &&
-                     "expected diagnostic indices to be unique within a "
-                     " check line");
+              // FIXME: Sometimes CHECK-LABEL reports its match twice with
+              // other diagnostics in between, and then diag index incrementing
+              // fails to work properly, and then this assert fails.  We should
+              // suppress one of those diagnostics or do a better job of
+              // computing this index.  For now, we just produce a redundant
+              // CHECK-LABEL annotation.
+              // assert(A.CheckDiagIndex != B.CheckDiagIndex &&
+              //        "expected diagnostic indices to be unique within a "
+              //        " check line");
               return A.CheckDiagIndex < B.CheckDiagIndex;
             });
 
@@ -424,14 +469,44 @@ static void DumpAnnotatedInput(
     WithColor(OS, raw_ostream::BLACK, true)
         << format_decimal(Line, LabelWidth) << ": ";
 
-    // Print numbered line.
+    // For case where -v and colors are enabled, find the annotations for final
+    // matches for expected patterns in order to highlight everything else in
+    // the line.  There are no such annotations if -v is disabled.
+    std::list<InputAnnotation> FinalAndExpectedMatches;
+    if (Req.Verbose && WithColor(OS).colorsEnabled()) {
+      for (auto I = AnnotationItr; I != AnnotationEnd && I->InputLine == Line;
+           ++I) {
+        if (I->FinalAndExpectedMatch)
+          FinalAndExpectedMatches.push_back(*I);
+      }
+    }
+
+    // Print numbered line with highlighting where there are no matches for
+    // expected patterns.
     bool Newline = false;
-    while (InputFilePtr != InputFileEnd && !Newline) {
-      if (*InputFilePtr == '\n')
-        Newline = true;
-      else
-        OS << *InputFilePtr;
-      ++InputFilePtr;
+    {
+      WithColor COS(OS);
+      if (Req.Verbose)
+        COS.changeColor(raw_ostream::CYAN, true, true);
+      for (unsigned Col = 1; InputFilePtr != InputFileEnd && !Newline; ++Col) {
+        bool StartsMatch = false;
+        bool EndsMatch = false;
+        for (auto M : FinalAndExpectedMatches) {
+          if (Col == M.InputEndCol)
+            EndsMatch = true;
+          else if (Col == M.InputStartCol)
+            StartsMatch = true;
+        }
+        if (StartsMatch)
+          COS.resetColor();
+        else if (EndsMatch)
+          COS.changeColor(raw_ostream::CYAN, true, true);
+        if (*InputFilePtr == '\n')
+          Newline = true;
+        else
+          COS << *InputFilePtr;
+        ++InputFilePtr;
+      }
     }
     OS << '\n';
     unsigned InputLineWidth = InputFilePtr - InputFileLine - Newline;
@@ -571,7 +646,7 @@ int main(int argc, char **argv) {
     unsigned LabelWidth;
     BuildInputAnnotations(Diags, Annotations, LabelWidth);
     errs() << '\n';
-    DumpAnnotatedInput(errs(), InputFileText, Annotations, LabelWidth);
+    DumpAnnotatedInput(errs(), Req, InputFileText, Annotations, LabelWidth);
   }
 
   return ExitCode;
