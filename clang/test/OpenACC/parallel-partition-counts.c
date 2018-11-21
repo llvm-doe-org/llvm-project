@@ -329,7 +329,8 @@ int main(int argc, char *argv[]) {
       // DMP-NEXT:     OMPNum_threadsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:     OMPSimdlenClause
-      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop vector{{$}}
@@ -389,7 +390,8 @@ int main(int argc, char *argv[]) {
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPDistributeSimdDirective
       // DMP-NEXT:     OMPSimdlenClause
-      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop gang vector{{$}}
@@ -451,7 +453,8 @@ int main(int argc, char *argv[]) {
           // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
           // DMP-NEXT:   impl: OMPSimdDirective
           // DMP-NEXT:     OMPSimdlenClause
-          // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+          // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+          // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
           // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
           // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
           // DMP-NEXT:       DeclRefExpr {{.*}} 'j' 'int'
@@ -525,7 +528,8 @@ int main(int argc, char *argv[]) {
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPSimdDirective
       // DMP-NEXT:     OMPSimdlenClause
-      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop vector{{$}}
@@ -578,7 +582,8 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:         OMPNum_threadsClause
     // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:         OMPSimdlenClause
-    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 1
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop vector num_gangs(1) num_workers(1) vector_length(1){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
@@ -651,7 +656,8 @@ int main(int argc, char *argv[]) {
       // DMP-NEXT:     OMPNum_threadsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
       // DMP-NEXT:     OMPSimdlenClause
-      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
+      // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker vector{{$}}
@@ -684,7 +690,8 @@ int main(int argc, char *argv[]) {
       // DMP-NEXT:     OMPNum_threadsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
       // DMP-NEXT:     OMPSimdlenClause
-      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
+      // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop gang worker vector{{$}}
@@ -731,7 +738,8 @@ int main(int argc, char *argv[]) {
         // DMP-NEXT:     OMPNum_threadsClause
         // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
         // DMP-NEXT:     OMPSimdlenClause
-        // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
+        // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+        // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
         // DMP-NEXT:     OMPSharedClause {{.*}}
         // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
         // DMP-NOT:      OMP
@@ -789,7 +797,8 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:         OMPNum_threadsClause
     // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:         OMPSimdlenClause
-    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 3
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop worker vector num_gangs(1) num_workers(2) vector_length(3){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
@@ -847,7 +856,8 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:         OMPNum_threadsClause
     // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:         OMPSimdlenClause
-    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 3
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop gang worker vector num_gangs(1) num_workers(2) vector_length(3){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
@@ -919,7 +929,8 @@ int main(int argc, char *argv[]) {
       // DMP-NEXT:     OMPNum_threadsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
       // DMP-NEXT:     OMPSimdlenClause
-      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
+      // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
       // DMP-NEXT:     OMPSharedClause {{.*}}
       // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NOT:      OMP
@@ -1035,7 +1046,8 @@ int main(int argc, char *argv[]) {
       // DMP-NEXT:     OMPNum_threadsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:     OMPSimdlenClause
-      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop vector{{$}}
@@ -1139,7 +1151,8 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:       impl: OMPDistributeSimdDirective
     // DMP-NEXT:         OMPSimdlenClause
-    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 1
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop gang vector num_gangs(1) num_workers(nw) vector_length(1){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
@@ -1189,6 +1202,8 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:     OMPTargetTeamsDirective
     // DMP-NEXT:       OMPNum_teamsClause
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:       OMPFirstprivateClause {{.*}} <implicit>
+    // DMP-NEXT:         DeclRefExpr {{.*}} '__clang_acc_num_workers__' 'const int'
     // DMP-NOT:        OMP
     // DMP:        CompoundStmt
     // DMP:          ACCLoopDirective
@@ -1286,6 +1301,10 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:       OMPTargetTeamsDirective
     // DMP-NEXT:         OMPNum_teamsClause
     // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:         OMPFirstprivateClause {{.*}} <implicit>
+    // DMP-NEXT:           DeclRefExpr {{.*}} '__clang_acc_num_workers__' 'const int'
+    // DMP-NOT:          OMP
+    // DMP:              CapturedStmt
     // DMP:          ACCLoopDirective
     // DMP-NEXT:       ACCWorkerClause
     // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
@@ -1300,7 +1319,8 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:           impl: OMPSimdDirective
     // DMP-NEXT:             OMPSimdlenClause
-    // DMP-NEXT:               IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:               ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:                 IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:             OMPSharedClause {{.*}} <implicit>
     // DMP-NEXT:               DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NOT:              OMP
@@ -1335,7 +1355,7 @@ int main(int argc, char *argv[]) {
     // PRT-O-NEXT:       const int __clang_acc_num_workers__ = nw;
     // PRT-O-NEXT:       {{^ *}}#pragma omp target teams num_teams(1){{$}}
     // PRT-O-NEXT:       {{^ *}}#pragma omp parallel for num_threads(__clang_acc_num_workers__){{$}}
-    // PRT-O-NEXT:       {
+    // PRT-O-NEXT:       for ({{.*}}) {
     // PRT-O-NEXT:         {{^ *}}#pragma omp simd simdlen(1){{$}}
     // PRT-O-NEXT:         for ({{.*}}) {
     // PRT-O-NEXT:           printf
@@ -1390,6 +1410,8 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:     OMPTargetTeamsDirective
     // DMP-NEXT:       OMPNum_teamsClause
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:       OMPFirstprivateClause {{.*}} <implicit>
+    // DMP-NEXT:         DeclRefExpr {{.*}} '__clang_acc_num_workers__' 'const int'
     // DMP-NOT:        OMP
     // DMP:        CompoundStmt
     // DMP:          ACCLoopDirective
@@ -1442,7 +1464,8 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:                   DeclRefExpr {{.*}} 'm' 'int'
     // DMP-NEXT:                 impl: OMPSimdDirective
     // DMP-NEXT:                   OMPSimdlenClause
-    // DMP-NEXT:                     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:                     ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:                       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:                   OMPSharedClause {{.*}} <implicit>
     // DMP-NEXT:                     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:                     DeclRefExpr {{.*}} 'j' 'int'
