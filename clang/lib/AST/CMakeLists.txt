@@ -40,6 +40,7 @@ add_clang_library(clangAST
   ExprObjC.cpp
   ExternalASTMerger.cpp
   ExternalASTSource.cpp
+  FormatString.cpp
   InheritViz.cpp
   ItaniumCXXABI.cpp
   ItaniumMangle.cpp
@@ -50,12 +51,15 @@ add_clang_library(clangAST
   NSAPI.cpp
   ODRHash.cpp
   OpenACCClause.cpp
+  OSLog.cpp
   OpenMPClause.cpp
   ParentMap.cpp
+  PrintfFormatString.cpp
   QualTypeNames.cpp
   RawCommentList.cpp
   RecordLayout.cpp
   RecordLayoutBuilder.cpp
+  ScanfFormatString.cpp
   SelectorLocationsKind.cpp
   Stmt.cpp
   StmtCXX.cpp

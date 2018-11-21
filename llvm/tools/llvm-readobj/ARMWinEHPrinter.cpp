@@ -788,7 +788,7 @@ void Decoder::decodeOpcodes(ArrayRef<uint8_t> Opcodes, unsigned Offset,
       if ((isAArch64 && (DI >= array_lengthof(Ring64))) ||
           (!isAArch64 && (DI >= array_lengthof(Ring)))) {
         SW.startLine() << format("0x%02x                ; Bad opcode!\n",
-                                 Opcodes.data()[Offset]);
+                                 Opcodes.data()[OI]);
         ++OI;
         break;
       }
@@ -871,6 +871,8 @@ bool Decoder::dumpXDataRecord(const COFFObjectFile &COFF,
       SW.printNumber("EpilogueStartIndex",
                      isAArch64 ? ES.EpilogueStartIndexAArch64()
                                : ES.EpilogueStartIndexARM());
+      if (ES.ES & ~0xffc3ffff)
+        SW.printNumber("ReservedBits", (ES.ES >> 18) & 0xF);
 
       ListScope Opcodes(SW, "Opcodes");
       decodeOpcodes(XData.UnwindByteCode(),
@@ -887,16 +889,21 @@ bool Decoder::dumpXDataRecord(const COFFObjectFile &COFF,
                                + (XData.E() ? 0 : XData.EpilogueCount())
                                + XData.CodeWords();
 
-    ErrorOr<SymbolRef> Symbol =
-      getRelocatedSymbol(COFF, Section, HandlerOffset * sizeof(uint32_t));
+    ErrorOr<SymbolRef> Symbol = getRelocatedSymbol(
+        COFF, Section, Offset + HandlerOffset * sizeof(uint32_t));
     if (!Symbol)
       Symbol = getSymbol(COFF, Address, /*FunctionOnly=*/true);
+    if (!Symbol) {
+      ListScope EHS(SW, "ExceptionHandler");
+      SW.printString("Routine", "(null)");
+      return true;
+    }
 
     Expected<StringRef> Name = Symbol->getName();
     if (!Name) {
       std::string Buf;
       llvm::raw_string_ostream OS(Buf);
-      logAllUnhandledErrors(Name.takeError(), OS, "");
+      logAllUnhandledErrors(Name.takeError(), OS);
       OS.flush();
       report_fatal_error(Buf);
     }
@@ -935,7 +942,7 @@ bool Decoder::dumpUnpackedEntry(const COFFObjectFile &COFF,
     if (!FunctionNameOrErr) {
       std::string Buf;
       llvm::raw_string_ostream OS(Buf);
-      logAllUnhandledErrors(FunctionNameOrErr.takeError(), OS, "");
+      logAllUnhandledErrors(FunctionNameOrErr.takeError(), OS);
       OS.flush();
       report_fatal_error(Buf);
     }
@@ -944,16 +951,13 @@ bool Decoder::dumpUnpackedEntry(const COFFObjectFile &COFF,
     if (!FunctionAddressOrErr) {
       std::string Buf;
       llvm::raw_string_ostream OS(Buf);
-      logAllUnhandledErrors(FunctionAddressOrErr.takeError(), OS, "");
+      logAllUnhandledErrors(FunctionAddressOrErr.takeError(), OS);
       OS.flush();
       report_fatal_error(Buf);
     }
     FunctionAddress = *FunctionAddressOrErr;
   } else {
-    const pe32_header *PEHeader;
-    if (COFF.getPE32Header(PEHeader))
-      return false;
-    FunctionAddress = PEHeader->ImageBase + RF.BeginAddress;
+    FunctionAddress = COFF.getImageBase() + RF.BeginAddress;
   }
 
   SW.printString("Function", formatSymbol(FunctionName, FunctionAddress));
@@ -963,7 +967,7 @@ bool Decoder::dumpUnpackedEntry(const COFFObjectFile &COFF,
     if (!Name) {
       std::string Buf;
       llvm::raw_string_ostream OS(Buf);
-      logAllUnhandledErrors(Name.takeError(), OS, "");
+      logAllUnhandledErrors(Name.takeError(), OS);
       OS.flush();
       report_fatal_error(Buf);
     }
@@ -972,7 +976,7 @@ bool Decoder::dumpUnpackedEntry(const COFFObjectFile &COFF,
     if (!AddressOrErr) {
       std::string Buf;
       llvm::raw_string_ostream OS(Buf);
-      logAllUnhandledErrors(AddressOrErr.takeError(), OS, "");
+      logAllUnhandledErrors(AddressOrErr.takeError(), OS);
       OS.flush();
       report_fatal_error(Buf);
     }
@@ -988,22 +992,18 @@ bool Decoder::dumpUnpackedEntry(const COFFObjectFile &COFF,
     }
     section_iterator SI = *SIOrErr;
 
-    return dumpXDataRecord(COFF, *SI, FunctionAddress, Address);
+    // FIXME: Do we need to add an offset from the relocation?
+    return dumpXDataRecord(COFF, *SI, FunctionAddress,
+                           RF.ExceptionInformationRVA());
   } else {
-    const pe32_header *PEHeader;
-    if (COFF.getPE32Header(PEHeader))
-      return false;
-
-    uint64_t Address = PEHeader->ImageBase + RF.ExceptionInformationRVA();
+    uint64_t Address = COFF.getImageBase() + RF.ExceptionInformationRVA();
     SW.printString("ExceptionRecord", formatSymbol("", Address));
 
-    ErrorOr<SectionRef> Section =
-      getSectionContaining(COFF, RF.ExceptionInformationRVA());
+    ErrorOr<SectionRef> Section = getSectionContaining(COFF, Address);
     if (!Section)
       return false;
 
-    return dumpXDataRecord(COFF, *Section, FunctionAddress,
-                           RF.ExceptionInformationRVA());
+    return dumpXDataRecord(COFF, *Section, FunctionAddress, Address);
   }
 }
 
@@ -1025,7 +1025,7 @@ bool Decoder::dumpPackedEntry(const object::COFFObjectFile &COFF,
     if (!FunctionNameOrErr) {
       std::string Buf;
       llvm::raw_string_ostream OS(Buf);
-      logAllUnhandledErrors(FunctionNameOrErr.takeError(), OS, "");
+      logAllUnhandledErrors(FunctionNameOrErr.takeError(), OS);
       OS.flush();
       report_fatal_error(Buf);
     }
@@ -1034,7 +1034,7 @@ bool Decoder::dumpPackedEntry(const object::COFFObjectFile &COFF,
     if (!FunctionAddressOrErr) {
       std::string Buf;
       llvm::raw_string_ostream OS(Buf);
-      logAllUnhandledErrors(FunctionAddressOrErr.takeError(), OS, "");
+      logAllUnhandledErrors(FunctionAddressOrErr.takeError(), OS);
       OS.flush();
       report_fatal_error(Buf);
     }
@@ -1073,8 +1073,8 @@ bool Decoder::dumpProcedureDataEntry(const COFFObjectFile &COFF,
   if (Entry.Flag() == RuntimeFunctionFlag::RFF_Unpacked)
     return dumpUnpackedEntry(COFF, Section, Offset, Index, Entry);
   if (isAArch64) {
-    llvm::errs() << "Packed unwind data not yet supported for ARM64\n";
-    return false;
+    SW.startLine() << "Packed unwind data not yet supported for ARM64\n";
+    return true;
   }
   return dumpPackedEntry(COFF, Section, Offset, Index, Entry);
 }

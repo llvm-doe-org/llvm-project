@@ -243,3 +243,26 @@ unsigned long long int operator"" _ull(unsigned long long int);
 void user_defined_literals() {
   1_ull;
 }
+
+template <unsigned alignment>
+void template_test() {
+  static_assert(alignment, "");
+}
+void actual_template_test() {
+  template_test<4>();
+}
+
+const int table[6] = {};
+void read_test() {
+  for (auto i : table) {
+  }
+}
+
+namespace {
+enum a { b };
+constexpr bool operator&(a, a) { return int(); }
+template <a l>
+void c() { l &a(); }
+void d();
+void d() { c<b>(); }
+} // namespace

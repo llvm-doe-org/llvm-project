@@ -48,17 +48,16 @@ class RangeSpanList {
 private:
   // Index for locating within the debug_range section this particular span.
   MCSymbol *RangeSym;
-  const MCSymbol **CUBaseAddress;
+  const DwarfCompileUnit *CU;
   // List of ranges.
   SmallVector<RangeSpan, 2> Ranges;
 
 public:
-  RangeSpanList(MCSymbol *Sym, const MCSymbol *&CUBaseAddress,
+  RangeSpanList(MCSymbol *Sym, const DwarfCompileUnit &CU,
                 SmallVector<RangeSpan, 2> Ranges)
-      : RangeSym(Sym), CUBaseAddress(&CUBaseAddress),
-        Ranges(std::move(Ranges)) {}
+      : RangeSym(Sym), CU(&CU), Ranges(std::move(Ranges)) {}
   MCSymbol *getSym() const { return RangeSym; }
-  const MCSymbol *&getBaseAddress() const { return *CUBaseAddress; }
+  const DwarfCompileUnit &getCU() const { return *CU; }
   const SmallVectorImpl<RangeSpan> &getRanges() const { return Ranges; }
   void addRange(RangeSpan Range) { Ranges.push_back(Range); }
 };
@@ -88,6 +87,10 @@ class DwarfFile {
   /// DWARF v5: The symbol that designates the base of the range list table.
   /// The table is shared by all units.
   MCSymbol *RnglistsTableBaseSym = nullptr;
+
+  /// DWARF v5: The symbol that designates the base of the locations list table.
+  /// The table is shared by all units.
+  MCSymbol *LoclistsTableBaseSym = nullptr;
 
   /// The variables of a lexical scope.
   struct ScopeVars {
@@ -119,7 +122,7 @@ public:
     return CUs;
   }
 
-  std::pair<uint32_t, RangeSpanList *> addRange(const MCSymbol *&CUBaseAddress,
+  std::pair<uint32_t, RangeSpanList *> addRange(const DwarfCompileUnit &CU,
                                                 SmallVector<RangeSpan, 2> R);
 
   /// getRangeLists - Get the vector of range lists.
@@ -161,12 +164,13 @@ public:
   DwarfStringPool &getStringPool() { return StrPool; }
 
   MCSymbol *getStringOffsetsStartSym() const { return StringOffsetsStartSym; }
-
   void setStringOffsetsStartSym(MCSymbol *Sym) { StringOffsetsStartSym = Sym; }
 
   MCSymbol *getRnglistsTableBaseSym() const { return RnglistsTableBaseSym; }
-
   void setRnglistsTableBaseSym(MCSymbol *Sym) { RnglistsTableBaseSym = Sym; }
+
+  MCSymbol *getLoclistsTableBaseSym() const { return LoclistsTableBaseSym; }
+  void setLoclistsTableBaseSym(MCSymbol *Sym) { LoclistsTableBaseSym = Sym; }
 
   /// \returns false if the variable was merged with a previous one.
   bool addScopeVariable(LexicalScope *LS, DbgVariable *Var);

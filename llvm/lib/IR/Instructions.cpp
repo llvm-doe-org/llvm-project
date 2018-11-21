@@ -275,7 +275,7 @@ void CallInst::init(FunctionType *FTy, Value *Func, ArrayRef<Value *> Args,
            "Calling a function with a bad signature!");
 #endif
 
-  std::copy(Args.begin(), Args.end(), op_begin());
+  llvm::copy(Args, op_begin());
 
   auto It = populateBundleOperandInfos(Bundles, Args.size());
   (void)It;
@@ -577,7 +577,7 @@ void InvokeInst::init(FunctionType *FTy, Value *Fn, BasicBlock *IfNormal,
            "Invoking a function with a bad signature!");
 #endif
 
-  std::copy(Args.begin(), Args.end(), op_begin());
+  llvm::copy(Args, op_begin());
 
   auto It = populateBundleOperandInfos(Bundles, Args.size());
   (void)It;
@@ -834,7 +834,7 @@ void CatchSwitchInst::removeHandler(handler_iterator HI) {
 void FuncletPadInst::init(Value *ParentPad, ArrayRef<Value *> Args,
                           const Twine &NameStr) {
   assert(getNumOperands() == 1 + Args.size() && "NumOperands not set up?");
-  std::copy(Args.begin(), Args.end(), op_begin());
+  llvm::copy(Args, op_begin());
   setParentPad(ParentPad);
   setName(NameStr);
 }
@@ -1390,7 +1390,7 @@ void GetElementPtrInst::init(Value *Ptr, ArrayRef<Value *> IdxList,
   assert(getNumOperands() == 1 + IdxList.size() &&
          "NumOperands not initialized?");
   Op<0>() = Ptr;
-  std::copy(IdxList.begin(), IdxList.end(), op_begin() + 1);
+  llvm::copy(IdxList, op_begin() + 1);
   setName(Name);
 }
 
@@ -1798,6 +1798,35 @@ bool ShuffleVectorInst::isTransposeMask(ArrayRef<int> Mask) {
   return true;
 }
 
+bool ShuffleVectorInst::isExtractSubvectorMask(ArrayRef<int> Mask,
+                                               int NumSrcElts, int &Index) {
+  // Must extract from a single source.
+  if (!isSingleSourceMaskImpl(Mask, NumSrcElts))
+    return false;
+
+  // Must be smaller (else this is an Identity shuffle).
+  if (NumSrcElts <= (int)Mask.size())
+    return false;
+
+  // Find start of extraction, accounting that we may start with an UNDEF.
+  int SubIndex = -1;
+  for (int i = 0, e = Mask.size(); i != e; ++i) {
+    int M = Mask[i];
+    if (M < 0)
+      continue;
+    int Offset = (M % NumSrcElts) - i;
+    if (0 <= SubIndex && SubIndex != Offset)
+      return false;
+    SubIndex = Offset;
+  }
+
+  if (0 <= SubIndex) {
+    Index = SubIndex;
+    return true;
+  }
+  return false;
+}
+
 bool ShuffleVectorInst::isIdentityWithPadding() const {
   int NumOpElts = Op<0>()->getType()->getVectorNumElements();
   int NumMaskElts = getType()->getVectorNumElements();
@@ -1925,6 +1954,59 @@ Type *ExtractValueInst::getIndexedType(Type *Agg,
     Agg = cast<CompositeType>(Agg)->getTypeAtIndex(Index);
   }
   return const_cast<Type*>(Agg);
+}
+
+//===----------------------------------------------------------------------===//
+//                             UnaryOperator Class
+//===----------------------------------------------------------------------===//
+
+UnaryOperator::UnaryOperator(UnaryOps iType, Value *S,
+                             Type *Ty, const Twine &Name,
+                             Instruction *InsertBefore)
+  : UnaryInstruction(Ty, iType, S, InsertBefore) {
+  Op<0>() = S;
+  setName(Name);
+  AssertOK();
+}
+
+UnaryOperator::UnaryOperator(UnaryOps iType, Value *S,
+                             Type *Ty, const Twine &Name,
+                             BasicBlock *InsertAtEnd)
+  : UnaryInstruction(Ty, iType, S, InsertAtEnd) {
+  Op<0>() = S;
+  setName(Name);
+  AssertOK();
+}
+
+UnaryOperator *UnaryOperator::Create(UnaryOps Op, Value *S,
+                                     const Twine &Name,
+                                     Instruction *InsertBefore) {
+  return new UnaryOperator(Op, S, S->getType(), Name, InsertBefore);
+}
+
+UnaryOperator *UnaryOperator::Create(UnaryOps Op, Value *S,
+                                     const Twine &Name,
+                                     BasicBlock *InsertAtEnd) {
+  UnaryOperator *Res = Create(Op, S, Name);
+  InsertAtEnd->getInstList().push_back(Res);
+  return Res;
+}
+
+void UnaryOperator::AssertOK() {
+  Value *LHS = getOperand(0);
+  (void)LHS; // Silence warnings.
+#ifndef NDEBUG
+  switch (getOpcode()) {
+  case FNeg:
+    assert(getType() == LHS->getType() &&
+           "Unary operation should return same type as operand!");
+    assert(getType()->isFPOrFPVectorTy() &&
+           "Tried to create a floating-point operation on a "
+           "non-floating-point type!");
+    break;
+  default: llvm_unreachable("Invalid opcode provided");
+  }
+#endif
 }
 
 //===----------------------------------------------------------------------===//
@@ -2107,25 +2189,6 @@ BinaryOperator *BinaryOperator::CreateNot(Value *Op, const Twine &Name,
   Constant *AllOnes = Constant::getAllOnesValue(Op->getType());
   return new BinaryOperator(Instruction::Xor, Op, AllOnes,
                             Op->getType(), Name, InsertAtEnd);
-}
-
-bool BinaryOperator::isFNeg(const Value *V, bool IgnoreZeroSign) {
-  if (const BinaryOperator *Bop = dyn_cast<BinaryOperator>(V))
-    if (Bop->getOpcode() == Instruction::FSub)
-      if (Constant *C = dyn_cast<Constant>(Bop->getOperand(0))) {
-        if (!IgnoreZeroSign)
-          IgnoreZeroSign = cast<Instruction>(V)->hasNoSignedZeros();
-        return !IgnoreZeroSign ? C->isNegativeZeroValue() : C->isZeroValue();
-      }
-  return false;
-}
-
-Value *BinaryOperator::getFNegArgument(Value *BinOp) {
-  return cast<BinaryOperator>(BinOp)->getOperand(1);
-}
-
-const Value *BinaryOperator::getFNegArgument(const Value *BinOp) {
-  return getFNegArgument(const_cast<Value*>(BinOp));
 }
 
 // Exchange the two operands to this instruction. This instruction is safe to
@@ -3168,15 +3231,18 @@ AddrSpaceCastInst::AddrSpaceCastInst(
 //===----------------------------------------------------------------------===//
 
 CmpInst::CmpInst(Type *ty, OtherOps op, Predicate predicate, Value *LHS,
-                 Value *RHS, const Twine &Name, Instruction *InsertBefore)
+                 Value *RHS, const Twine &Name, Instruction *InsertBefore,
+                 Instruction *FlagsSource)
   : Instruction(ty, op,
                 OperandTraits<CmpInst>::op_begin(this),
                 OperandTraits<CmpInst>::operands(this),
                 InsertBefore) {
-    Op<0>() = LHS;
-    Op<1>() = RHS;
+  Op<0>() = LHS;
+  Op<1>() = RHS;
   setPredicate((Predicate)predicate);
   setName(Name);
+  if (FlagsSource)
+    copyIRFlags(FlagsSource);
 }
 
 CmpInst::CmpInst(Type *ty, OtherOps op, Predicate predicate, Value *LHS,
@@ -3682,6 +3748,10 @@ void IndirectBrInst::removeDestination(unsigned idx) {
 
 GetElementPtrInst *GetElementPtrInst::cloneImpl() const {
   return new (getNumOperands()) GetElementPtrInst(*this);
+}
+
+UnaryOperator *UnaryOperator::cloneImpl() const {
+  return Create(getOpcode(), Op<0>());
 }
 
 BinaryOperator *BinaryOperator::cloneImpl() const {

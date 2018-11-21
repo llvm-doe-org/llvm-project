@@ -343,6 +343,10 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
     K = CXCursor_CharacterLiteral;
     break;
 
+  case Stmt::ConstantExprClass:
+    return MakeCXCursor(cast<ConstantExpr>(S)->getSubExpr(),
+                        Parent, TU, RegionOfInterest);
+
   case Stmt::ParenExprClass:
     K = CXCursor_ParenExpr;
     break;
@@ -1018,10 +1022,6 @@ const Stmt *cxcursor::getCursorStmt(CXCursor Cursor) {
 
 const Attr *cxcursor::getCursorAttr(CXCursor Cursor) {
   return static_cast<const Attr *>(Cursor.data[1]);
-}
-
-const Decl *cxcursor::getCursorParentDecl(CXCursor Cursor) {
-  return static_cast<const Decl *>(Cursor.data[0]);
 }
 
 ASTContext &cxcursor::getCursorContext(CXCursor Cursor) {

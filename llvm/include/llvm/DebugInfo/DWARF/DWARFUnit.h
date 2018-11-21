@@ -72,7 +72,8 @@ public:
   /// Parse a unit header from \p debug_info starting at \p offset_ptr.
   bool extract(DWARFContext &Context, const DWARFDataExtractor &debug_info,
                uint32_t *offset_ptr, DWARFSectionKind Kind = DW_SECT_INFO,
-               const DWARFUnitIndex *Index = nullptr);
+               const DWARFUnitIndex *Index = nullptr,
+               const DWARFUnitIndex::Entry *Entry = nullptr);
   uint32_t getOffset() const { return Offset; }
   const dwarf::FormParams &getFormParams() const { return FormParams; }
   uint16_t getVersion() const { return FormParams.Version; }
@@ -108,7 +109,8 @@ const DWARFUnitIndex &getDWARFUnitIndex(DWARFContext &Context,
 /// .debug_info and .debug_types, or from .debug_info.dwo and .debug_types.dwo.
 class DWARFUnitVector final : public SmallVector<std::unique_ptr<DWARFUnit>, 1> {
   std::function<std::unique_ptr<DWARFUnit>(uint32_t, DWARFSectionKind,
-                                           const DWARFSection *)>
+                                           const DWARFSection *,
+                                           const DWARFUnitIndex::Entry *)>
       Parser;
   int NumInfoUnits = -1;
 
@@ -205,7 +207,7 @@ class DWARFUnit {
   const DWARFSection *AddrOffsetSection;
   uint32_t AddrOffsetSectionBase = 0;
   bool isLittleEndian;
-  bool isDWO;
+  bool IsDWO;
   const DWARFUnitVector &UnitVector;
 
   /// Start, length, and DWARF format of the unit's contribution to the string
@@ -246,16 +248,14 @@ protected:
   /// length and form. The given offset is expected to be derived from the unit
   /// DIE's DW_AT_str_offsets_base attribute.
   Optional<StrOffsetsContributionDescriptor>
-  determineStringOffsetsTableContribution(DWARFDataExtractor &DA,
-                                          uint64_t Offset);
+  determineStringOffsetsTableContribution(DWARFDataExtractor &DA);
 
   /// Find the unit's contribution to the string offsets table and determine its
   /// length and form. The given offset is expected to be 0 in a dwo file or,
   /// in a dwp file, the start of the unit's contribution to the string offsets
   /// table section (as determined by the index table).
   Optional<StrOffsetsContributionDescriptor>
-  determineStringOffsetsTableContributionDWO(DWARFDataExtractor &DA,
-                                             uint64_t Offset);
+  determineStringOffsetsTableContributionDWO(DWARFDataExtractor &DA);
 
 public:
   DWARFUnit(DWARFContext &Context, const DWARFSection &Section,
@@ -267,7 +267,7 @@ public:
 
   virtual ~DWARFUnit();
 
-  bool isDWOUnit() const { return isDWO; }
+  bool isDWOUnit() const { return IsDWO; }
   DWARFContext& getContext() const { return Context; }
   const DWARFSection &getInfoSection() const { return InfoSection; }
   const DWARFSection *getLocSection() const { return LocSection; }
@@ -306,7 +306,7 @@ public:
   }
 
   Optional<SectionedAddress> getAddrOffsetSectionItem(uint32_t Index) const;
-  bool getStringOffsetSectionItem(uint32_t Index, uint64_t &Result) const;
+  Optional<uint64_t> getStringOffsetSectionItem(uint32_t Index) const;
 
   DWARFDataExtractor getDebugInfoExtractor() const;
 

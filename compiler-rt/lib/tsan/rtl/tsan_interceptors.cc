@@ -53,6 +53,8 @@ using namespace __tsan;  // NOLINT
 #define stdout ((char*)&__sF + (__sF_size * 1))
 #define stderr ((char*)&__sF + (__sF_size * 2))
 
+#define nanosleep __nanosleep50
+#define vfork __vfork14
 #endif
 
 #if SANITIZER_ANDROID
@@ -225,6 +227,16 @@ void InitializeLibIgnore() {
     libignore()->IgnoreNoninstrumentedModules(true);
   libignore()->OnLibraryLoaded(0);
 }
+
+// The following two hooks can be used by for cooperative scheduling when
+// locking.
+#ifdef TSAN_EXTERNAL_HOOKS
+void OnPotentiallyBlockingRegionBegin();
+void OnPotentiallyBlockingRegionEnd();
+#else
+SANITIZER_WEAK_CXX_DEFAULT_IMPL void OnPotentiallyBlockingRegionBegin() {}
+SANITIZER_WEAK_CXX_DEFAULT_IMPL void OnPotentiallyBlockingRegionEnd() {}
+#endif
 
 }  // namespace __tsan
 
@@ -864,6 +876,8 @@ TSAN_INTERCEPTOR(int, posix_memalign, void **memptr, uptr align, uptr sz) {
 // Used in thread-safe function static initialization.
 STDCXX_INTERCEPTOR(int, __cxa_guard_acquire, atomic_uint32_t *g) {
   SCOPED_INTERCEPTOR_RAW(__cxa_guard_acquire, g);
+  OnPotentiallyBlockingRegionBegin();
+  auto on_exit = at_scope_exit(&OnPotentiallyBlockingRegionEnd);
   for (;;) {
     u32 cmp = atomic_load(g, memory_order_acquire);
     if (cmp == 0) {
@@ -2560,6 +2574,8 @@ TSAN_INTERCEPTOR_NETBSD_ALIAS(int, rwlock_wrlock, void *m)
 TSAN_INTERCEPTOR_NETBSD_ALIAS(int, rwlock_trywrlock, void *m)
 TSAN_INTERCEPTOR_NETBSD_ALIAS(int, rwlock_unlock, void *m)
 TSAN_INTERCEPTOR_NETBSD_ALIAS_THR(int, once, void *o, void (*f)())
+TSAN_INTERCEPTOR_NETBSD_ALIAS_THR2(int, sigsetmask, sigmask, int a, void *b,
+  void *c)
 
 namespace __tsan {
 
@@ -2769,6 +2785,7 @@ void InitializeInterceptors() {
   TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS(rwlock_trywrlock);
   TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS(rwlock_unlock);
   TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS_THR(once);
+  TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS_THR(sigsetmask);
 
   FdInit();
 }

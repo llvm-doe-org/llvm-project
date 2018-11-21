@@ -56,14 +56,19 @@ struct SymbolLocation {
     uint32_t Column : 12; // 0-based
   };
 
-  // The URI of the source file where a symbol occurs.
-  llvm::StringRef FileURI;
-
   /// The symbol range, using half-open range [Start, End).
   Position Start;
   Position End;
 
-  explicit operator bool() const { return !FileURI.empty(); }
+  explicit operator bool() const { return !StringRef(FileURI).empty(); }
+
+  // The URI of the source file where a symbol occurs.
+  // The string must be null-terminated.
+  //
+  // We avoid using llvm::StringRef here to save memory.
+  // WARNING: unless you know what you are doing, it is recommended to use it
+  // via llvm::StringRef.
+  const char *FileURI = "";
 };
 inline bool operator==(const SymbolLocation::Position &L,
                        const SymbolLocation::Position &R) {
@@ -76,12 +81,16 @@ inline bool operator<(const SymbolLocation::Position &L,
          std::make_tuple(R.line(), R.column());
 }
 inline bool operator==(const SymbolLocation &L, const SymbolLocation &R) {
-  return std::tie(L.FileURI, L.Start, L.End) ==
-         std::tie(R.FileURI, R.Start, R.End);
+  assert(L.FileURI && R.FileURI);
+  return !std::strcmp(L.FileURI, R.FileURI) &&
+         std::tie(L.Start, L.End) == std::tie(R.Start, R.End);
 }
 inline bool operator<(const SymbolLocation &L, const SymbolLocation &R) {
-  return std::tie(L.FileURI, L.Start, L.End) <
-         std::tie(R.FileURI, R.Start, R.End);
+  assert(L.FileURI && R.FileURI);
+  int Cmp = std::strcmp(L.FileURI, R.FileURI);
+  if (Cmp != 0)
+    return Cmp < 0;
+  return std::tie(L.Start, L.End) < std::tie(R.Start, R.End);
 }
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const SymbolLocation &);
 
@@ -107,8 +116,7 @@ public:
 
   // The stored hash is truncated to RawSize bytes.
   // This trades off memory against the number of symbols we can handle.
-  // FIXME: can we reduce this further to 8 bytes?
-  constexpr static size_t RawSize = 16;
+  constexpr static size_t RawSize = 8;
   llvm::StringRef raw() const {
     return StringRef(reinterpret_cast<const char *>(HashValue.data()), RawSize);
   }
@@ -288,12 +296,19 @@ raw_ostream &operator<<(raw_ostream &, Symbol::SymbolFlag);
 template <typename Callback> void visitStrings(Symbol &S, const Callback &CB) {
   CB(S.Name);
   CB(S.Scope);
-  CB(S.CanonicalDeclaration.FileURI);
-  CB(S.Definition.FileURI);
   CB(S.Signature);
   CB(S.CompletionSnippetSuffix);
   CB(S.Documentation);
   CB(S.ReturnType);
+  auto RawCharPointerCB = [&CB](const char *&P) {
+    llvm::StringRef S(P);
+    CB(S);
+    assert(!S.data()[S.size()] && "Visited StringRef must be null-terminated");
+    P = S.data();
+  };
+  RawCharPointerCB(S.CanonicalDeclaration.FileURI);
+  RawCharPointerCB(S.Definition.FileURI);
+
   for (auto &Include : S.IncludeHeaders)
     CB(Include.IncludeHeader);
 }
@@ -460,9 +475,6 @@ struct FuzzyFindRequest {
   /// namespace xyz::abc.
   ///
   /// The global scope is "", a top level scope is "foo::", etc.
-  /// FIXME: drop the special case for empty list, which is the same as
-  /// `AnyScope = true`.
-  /// FIXME: support scope proximity.
   std::vector<std::string> Scopes;
   /// If set to true, allow symbols from any scope. Scopes explicitly listed
   /// above will be ranked higher.

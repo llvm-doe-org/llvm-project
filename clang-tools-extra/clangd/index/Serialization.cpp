@@ -239,7 +239,7 @@ void writeLocation(const SymbolLocation &Loc, const StringTableOut &Strings,
 
 SymbolLocation readLocation(Reader &Data, ArrayRef<StringRef> Strings) {
   SymbolLocation Loc;
-  Loc.FileURI = Data.consumeString(Strings);
+  Loc.FileURI = Data.consumeString(Strings).data();
   for (auto *Endpoint : {&Loc.Start, &Loc.End}) {
     Endpoint->setLine(Data.consumeVar());
     Endpoint->setColumn(Data.consumeVar());
@@ -300,7 +300,7 @@ Symbol readSymbol(Reader &Data, ArrayRef<StringRef> Strings) {
 
 // REFS ENCODING
 // A refs section has data grouped by Symbol. Each symbol has:
-//  - SymbolID: 16 bytes
+//  - SymbolID: 8 bytes
 //  - NumRefs: varint
 //  - Ref[NumRefs]
 // Fields of Ref are encoded in turn, see implementation.
@@ -331,6 +331,7 @@ std::pair<SymbolID, std::vector<Ref>> readRefs(Reader &Data,
 // A file is a RIFF chunk with type 'CdIx'.
 // It contains the sections:
 //   - meta: version number
+//   - srcs: checksum of the source file
 //   - stri: string table
 //   - symb: symbols
 //   - refs: references to symbols
@@ -338,7 +339,7 @@ std::pair<SymbolID, std::vector<Ref>> readRefs(Reader &Data,
 // The current versioning scheme is simple - non-current versions are rejected.
 // If you make a breaking change, bump this version number to invalidate stored
 // data. Later we may want to support some backward compatibility.
-constexpr static uint32_t Version = 6;
+constexpr static uint32_t Version = 7;
 
 Expected<IndexFileIn> readRIFF(StringRef Data) {
   auto RIFF = riff::readFile(Data);
@@ -363,6 +364,13 @@ Expected<IndexFileIn> readRIFF(StringRef Data) {
     return Strings.takeError();
 
   IndexFileIn Result;
+  if (Chunks.count("srcs")) {
+    Reader Hash(Chunks.lookup("srcs"));
+    Result.Digest.emplace();
+    llvm::StringRef Digest = Hash.consume(Result.Digest->size());
+    std::copy(Digest.bytes_begin(), Digest.bytes_end(), Result.Digest->begin());
+  }
+
   if (Chunks.count("symb")) {
     Reader SymbolReader(Chunks.lookup("symb"));
     SymbolSlab::Builder Symbols;
@@ -399,6 +407,12 @@ void writeRIFF(const IndexFileOut &Data, raw_ostream &OS) {
   }
   RIFF.Chunks.push_back({riff::fourCC("meta"), Meta});
 
+  if (Data.Digest) {
+    llvm::StringRef Hash(reinterpret_cast<const char *>(Data.Digest->data()),
+                         Data.Digest->size());
+    RIFF.Chunks.push_back({riff::fourCC("srcs"), Hash});
+  }
+
   StringTableOut Strings;
   std::vector<Symbol> Symbols;
   for (const auto &Sym : *Data.Symbols) {
@@ -409,8 +423,11 @@ void writeRIFF(const IndexFileOut &Data, raw_ostream &OS) {
   if (Data.Refs) {
     for (const auto &Sym : *Data.Refs) {
       Refs.emplace_back(Sym);
-      for (auto &Ref : Refs.back().second)
-        Strings.intern(Ref.Location.FileURI);
+      for (auto &Ref : Refs.back().second) {
+        StringRef File = Ref.Location.FileURI;
+        Strings.intern(File);
+        Ref.Location.FileURI = File.data();
+      }
     }
   }
 

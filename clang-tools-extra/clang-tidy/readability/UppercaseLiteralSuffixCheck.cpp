@@ -58,7 +58,7 @@ constexpr llvm::StringLiteral FloatingLiteralCheck::SkipFirst;
 constexpr llvm::StringLiteral FloatingLiteralCheck::Suffixes;
 
 struct NewSuffix {
-  SourceLocation LiteralLocation;
+  SourceRange LiteralLocation;
   StringRef OldSuffix;
   llvm::Optional<FixItHint> FixIt;
 };
@@ -113,7 +113,7 @@ shouldReplaceLiteralSuffix(const Expr &Literal,
   const auto &L = cast<typename LiteralType::type>(Literal);
 
   // The naive location of the literal. Is always valid.
-  ReplacementDsc.LiteralLocation = L.getLocation();
+  ReplacementDsc.LiteralLocation = L.getSourceRange();
 
   // Was this literal fully spelled or is it a product of macro expansion?
   bool RangeCanBeFixed =
@@ -126,7 +126,7 @@ shouldReplaceLiteralSuffix(const Expr &Literal,
     return llvm::None;
 
   if (RangeCanBeFixed)
-    ReplacementDsc.LiteralLocation = Range->getBegin();
+    ReplacementDsc.LiteralLocation = *Range;
   // Else keep the naive literal location!
 
   // Get the whole literal from the source buffer.
@@ -198,7 +198,9 @@ void UppercaseLiteralSuffixCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(
       stmt(allOf(eachOf(integerLiteral().bind(IntegerLiteralCheck::Name),
                         floatLiteral().bind(FloatingLiteralCheck::Name)),
-                 unless(hasParent(userDefinedLiteral())))),
+                 unless(anyOf(hasParent(userDefinedLiteral()),
+                              hasAncestor(isImplicit()),
+                              hasAncestor(substNonTypeTemplateParmExpr()))))),
       this);
 }
 
@@ -214,7 +216,7 @@ bool UppercaseLiteralSuffixCheck::checkBoundMatch(
   // We might have a suffix that is already uppercase.
   if (auto Details = shouldReplaceLiteralSuffix<LiteralType>(
           *Literal, NewSuffixes, *Result.SourceManager, getLangOpts())) {
-    auto Complaint = diag(Details->LiteralLocation,
+    auto Complaint = diag(Details->LiteralLocation.getBegin(),
                           "%0 literal has suffix '%1', which is not uppercase")
                      << LiteralType::Name << Details->OldSuffix;
     if (Details->FixIt) // Similarly, a fix-it is not always possible.

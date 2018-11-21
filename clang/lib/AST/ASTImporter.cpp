@@ -579,6 +579,7 @@ namespace clang {
     ExpectedStmt VisitCompoundLiteralExpr(CompoundLiteralExpr *E);
     ExpectedStmt VisitAtomicExpr(AtomicExpr *E);
     ExpectedStmt VisitAddrLabelExpr(AddrLabelExpr *E);
+    ExpectedStmt VisitConstantExpr(ConstantExpr *E);
     ExpectedStmt VisitParenExpr(ParenExpr *E);
     ExpectedStmt VisitParenListExpr(ParenListExpr *E);
     ExpectedStmt VisitStmtExpr(StmtExpr *E);
@@ -988,6 +989,10 @@ ExpectedType ASTNodeImporter::VisitBuiltinType(const BuiltinType *T) {
   case BuiltinType::Id: \
     return Importer.getToContext().SingletonId;
 #include "clang/Basic/OpenCLImageTypes.def"
+#define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
+  case BuiltinType::Id: \
+    return Importer.getToContext().Id##Ty;
+#include "clang/Basic/OpenCLExtensionTypes.def"
 #define SHARED_SINGLETON_TYPE(Expansion)
 #define BUILTIN_TYPE(Id, SingletonId) \
   case BuiltinType::Id: return Importer.getToContext().SingletonId;
@@ -3139,19 +3144,6 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
         FromConstructor->isExplicit(),
         D->isInlineSpecified(), D->isImplicit(), D->isConstexpr()))
       return ToFunction;
-    if (unsigned NumInitializers = FromConstructor->getNumCtorInitializers()) {
-      SmallVector<CXXCtorInitializer *, 4> CtorInitializers(NumInitializers);
-      // Import first, then allocate memory and copy if there was no error.
-      if (Error Err = ImportContainerChecked(
-          FromConstructor->inits(), CtorInitializers))
-        return std::move(Err);
-      auto **Memory =
-          new (Importer.getToContext()) CXXCtorInitializer *[NumInitializers];
-      std::copy(CtorInitializers.begin(), CtorInitializers.end(), Memory);
-      auto *ToCtor = cast<CXXConstructorDecl>(ToFunction);
-      ToCtor->setCtorInitializers(Memory);
-      ToCtor->setNumCtorInitializers(NumInitializers);
-    }
   } else if (isa<CXXDestructorDecl>(D)) {
     if (GetImportedOrCreateDecl<CXXDestructorDecl>(
         ToFunction, D, Importer.getToContext(), cast<CXXRecordDecl>(DC),
@@ -3179,6 +3171,30 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
       return ToFunction;
   }
 
+  // Connect the redecl chain.
+  if (FoundByLookup) {
+    auto *Recent = const_cast<FunctionDecl *>(
+          FoundByLookup->getMostRecentDecl());
+    ToFunction->setPreviousDecl(Recent);
+  }
+
+  // Import Ctor initializers.
+  if (auto *FromConstructor = dyn_cast<CXXConstructorDecl>(D)) {
+    if (unsigned NumInitializers = FromConstructor->getNumCtorInitializers()) {
+      SmallVector<CXXCtorInitializer *, 4> CtorInitializers(NumInitializers);
+      // Import first, then allocate memory and copy if there was no error.
+      if (Error Err = ImportContainerChecked(
+          FromConstructor->inits(), CtorInitializers))
+        return std::move(Err);
+      auto **Memory =
+          new (Importer.getToContext()) CXXCtorInitializer *[NumInitializers];
+      std::copy(CtorInitializers.begin(), CtorInitializers.end(), Memory);
+      auto *ToCtor = cast<CXXConstructorDecl>(ToFunction);
+      ToCtor->setCtorInitializers(Memory);
+      ToCtor->setNumCtorInitializers(NumInitializers);
+    }
+  }
+
   ToFunction->setQualifierInfo(ToQualifierLoc);
   ToFunction->setAccess(D->getAccess());
   ToFunction->setLexicalDeclContext(LexicalDC);
@@ -3193,12 +3209,6 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
     ToFunction->addDeclInternal(Param);
   }
   ToFunction->setParams(Parameters);
-
-  if (FoundByLookup) {
-    auto *Recent = const_cast<FunctionDecl *>(
-          FoundByLookup->getMostRecentDecl());
-    ToFunction->setPreviousDecl(Recent);
-  }
 
   // We need to complete creation of FunctionProtoTypeLoc manually with setting
   // params it refers to.
@@ -3258,15 +3268,15 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
     DC->makeDeclVisibleInContext(ToFunction);
   }
 
+  if (auto *FromCXXMethod = dyn_cast<CXXMethodDecl>(D))
+    ImportOverrides(cast<CXXMethodDecl>(ToFunction), FromCXXMethod);
+
   // Import the rest of the chain. I.e. import all subsequent declarations.
   for (++RedeclIt; RedeclIt != Redecls.end(); ++RedeclIt) {
     ExpectedDecl ToRedeclOrErr = import(*RedeclIt);
     if (!ToRedeclOrErr)
       return ToRedeclOrErr.takeError();
   }
-
-  if (auto *FromCXXMethod = dyn_cast<CXXMethodDecl>(D))
-    ImportOverrides(cast<CXXMethodDecl>(ToFunction), FromCXXMethod);
 
   return ToFunction;
 }
@@ -5707,8 +5717,8 @@ ExpectedStmt ASTNodeImporter::VisitCaseStmt(CaseStmt *S) {
   std::tie(ToLHS, ToRHS, ToSubStmt, ToCaseLoc, ToEllipsisLoc, ToColonLoc) =
       *Imp;
 
-  auto *ToStmt = new (Importer.getToContext()) CaseStmt(
-      ToLHS, ToRHS, ToCaseLoc, ToEllipsisLoc, ToColonLoc);
+  auto *ToStmt = CaseStmt::Create(Importer.getToContext(), ToLHS, ToRHS,
+                                  ToCaseLoc, ToEllipsisLoc, ToColonLoc);
   ToStmt->setSubStmt(ToSubStmt);
 
   return ToStmt;
@@ -5772,10 +5782,9 @@ ExpectedStmt ASTNodeImporter::VisitIfStmt(IfStmt *S) {
       ToIfLoc, ToInit, ToConditionVariable, ToCond, ToThen, ToElseLoc, ToElse) =
           *Imp;
 
-  return new (Importer.getToContext()) IfStmt(
-      Importer.getToContext(),
-      ToIfLoc, S->isConstexpr(), ToInit, ToConditionVariable, ToCond,
-      ToThen, ToElseLoc, ToElse);
+  return IfStmt::Create(Importer.getToContext(), ToIfLoc, S->isConstexpr(),
+                        ToInit, ToConditionVariable, ToCond, ToThen, ToElseLoc,
+                        ToElse);
 }
 
 ExpectedStmt ASTNodeImporter::VisitSwitchStmt(SwitchStmt *S) {
@@ -5791,8 +5800,8 @@ ExpectedStmt ASTNodeImporter::VisitSwitchStmt(SwitchStmt *S) {
   SourceLocation ToSwitchLoc;
   std::tie(ToInit, ToConditionVariable, ToCond, ToBody, ToSwitchLoc) = *Imp;
 
-  auto *ToStmt = new (Importer.getToContext()) SwitchStmt(
-      Importer.getToContext(), ToInit, ToConditionVariable, ToCond);
+  auto *ToStmt = SwitchStmt::Create(Importer.getToContext(), ToInit,
+                                    ToConditionVariable, ToCond);
   ToStmt->setBody(ToBody);
   ToStmt->setSwitchLoc(ToSwitchLoc);
 
@@ -5825,9 +5834,8 @@ ExpectedStmt ASTNodeImporter::VisitWhileStmt(WhileStmt *S) {
   SourceLocation ToWhileLoc;
   std::tie(ToConditionVariable, ToCond, ToBody, ToWhileLoc) = *Imp;
 
-  return new (Importer.getToContext()) WhileStmt(
-      Importer.getToContext(),
-      ToConditionVariable, ToCond, ToBody, ToWhileLoc);
+  return WhileStmt::Create(Importer.getToContext(), ToConditionVariable, ToCond,
+                           ToBody, ToWhileLoc);
 }
 
 ExpectedStmt ASTNodeImporter::VisitDoStmt(DoStmt *S) {
@@ -5919,8 +5927,8 @@ ExpectedStmt ASTNodeImporter::VisitReturnStmt(ReturnStmt *S) {
   const VarDecl *ToNRVOCandidate;
   std::tie(ToReturnLoc, ToRetValue, ToNRVOCandidate) = *Imp;
 
-  return new (Importer.getToContext()) ReturnStmt(
-      ToReturnLoc, ToRetValue, ToNRVOCandidate);
+  return ReturnStmt::Create(Importer.getToContext(), ToReturnLoc, ToRetValue,
+                            ToNRVOCandidate);
 }
 
 ExpectedStmt ASTNodeImporter::VisitCXXCatchStmt(CXXCatchStmt *S) {
@@ -6148,8 +6156,8 @@ ExpectedStmt ASTNodeImporter::VisitPredefinedExpr(PredefinedExpr *E) {
   StringLiteral *ToFunctionName;
   std::tie(ToBeginLoc, ToType, ToFunctionName) = *Imp;
 
-  return new (Importer.getToContext()) PredefinedExpr(
-      ToBeginLoc, ToType, E->getIdentType(), ToFunctionName);
+  return PredefinedExpr::Create(Importer.getToContext(), ToBeginLoc, ToType,
+                                E->getIdentKind(), ToFunctionName);
 }
 
 ExpectedStmt ASTNodeImporter::VisitDeclRefExpr(DeclRefExpr *E) {
@@ -6364,6 +6372,17 @@ ExpectedStmt ASTNodeImporter::VisitAddrLabelExpr(AddrLabelExpr *E) {
       ToAmpAmpLoc, ToLabelLoc, ToLabel, ToType);
 }
 
+ExpectedStmt ASTNodeImporter::VisitConstantExpr(ConstantExpr *E) {
+  auto Imp = importSeq(E->getSubExpr());
+  if (!Imp)
+    return Imp.takeError();
+
+  Expr *ToSubExpr;
+  std::tie(ToSubExpr) = *Imp;
+
+  return new (Importer.getToContext()) ConstantExpr(ToSubExpr);
+}
+
 ExpectedStmt ASTNodeImporter::VisitParenExpr(ParenExpr *E) {
   auto Imp = importSeq(E->getLParen(), E->getRParen(), E->getSubExpr());
   if (!Imp)
@@ -6390,8 +6409,8 @@ ExpectedStmt ASTNodeImporter::VisitParenListExpr(ParenListExpr *E) {
   if (!ToRParenLocOrErr)
     return ToRParenLocOrErr.takeError();
 
-  return new (Importer.getToContext()) ParenListExpr(
-      Importer.getToContext(), *ToLParenLocOrErr, ToExprs, *ToRParenLocOrErr);
+  return ParenListExpr::Create(Importer.getToContext(), *ToLParenLocOrErr,
+                               ToExprs, *ToRParenLocOrErr);
 }
 
 ExpectedStmt ASTNodeImporter::VisitStmtExpr(StmtExpr *E) {

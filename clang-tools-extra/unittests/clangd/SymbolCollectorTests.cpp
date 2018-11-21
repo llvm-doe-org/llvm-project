@@ -53,8 +53,10 @@ MATCHER_P(Snippet, S, "") {
   return (arg.Name + arg.CompletionSnippetSuffix).str() == S;
 }
 MATCHER_P(QName, Name, "") { return (arg.Scope + arg.Name).str() == Name; }
-MATCHER_P(DeclURI, P, "") { return arg.CanonicalDeclaration.FileURI == P; }
-MATCHER_P(DefURI, P, "") { return arg.Definition.FileURI == P; }
+MATCHER_P(DeclURI, P, "") {
+  return StringRef(arg.CanonicalDeclaration.FileURI) == P;
+}
+MATCHER_P(DefURI, P, "") { return StringRef(arg.Definition.FileURI) == P; }
 MATCHER_P(IncludeHeader, P, "") {
   return (arg.IncludeHeaders.size() == 1) &&
          (arg.IncludeHeaders.begin()->IncludeHeader == P);
@@ -113,7 +115,7 @@ public:
   bool shouldCollect(StringRef Name, bool Qualified = true) {
     assert(AST.hasValue());
     return SymbolCollector::shouldCollectSymbol(
-        Qualified ? findDecl(*AST, Name) : findAnyDecl(*AST, Name),
+        Qualified ? findDecl(*AST, Name) : findUnqualifiedDecl(*AST, Name),
         AST->getASTContext(), SymbolCollector::Options());
   }
 
@@ -127,8 +129,8 @@ protected:
 TEST_F(ShouldCollectSymbolTest, ShouldCollectSymbol) {
   build(R"(
     namespace nx {
-    class X{}
-    void f() { int Local; }
+    class X{};
+    auto f() { int Local; } // auto ensures function body is parsed.
     struct { int x } var;
     namespace { class InAnonymous {}; }
     }
@@ -443,6 +445,8 @@ TEST_F(SymbolCollectorTest, Refs) {
   };
   class $bar[[Bar]];
   void $func[[func]]();
+
+  namespace $ns[[NS]] {} // namespace ref is ignored
   )");
   Annotations Main(R"(
   class $bar[[Bar]] {};
@@ -474,6 +478,7 @@ TEST_F(SymbolCollectorTest, Refs) {
                                   HaveRanges(Main.ranges("bar")))));
   EXPECT_THAT(Refs, Contains(Pair(findSymbol(Symbols, "func").ID,
                                   HaveRanges(Main.ranges("func")))));
+  EXPECT_THAT(Refs, Not(Contains(Pair(findSymbol(Symbols, "NS").ID, _))));
   // Symbols *only* in the main file (a, b, c) had no refs collected.
   auto MainSymbols =
       TestTU::withHeaderCode(SymbolsOnlyInMainCode.code()).headerSymbols();
@@ -623,22 +628,6 @@ TEST_F(SymbolCollectorTest, SymbolFormedFromMacro) {
                 DeclURI(TestHeaderURI)),
           AllOf(QName("Test"), DeclRange(Header.range("spelling")),
                 DeclURI(TestHeaderURI))));
-}
-
-TEST_F(SymbolCollectorTest, SymbolFormedByCLI) {
-  Annotations Header(R"(
-    #ifdef NAME
-    class $expansion[[NAME]] {};
-    #endif
-  )");
-
-  runSymbolCollector(Header.code(), /*Main=*/"",
-                     /*ExtraArgs=*/{"-DNAME=name"});
-  EXPECT_THAT(Symbols,
-              UnorderedElementsAre(AllOf(
-                  QName("name"),
-                  DeclRange(Header.range("expansion")),
-                  DeclURI(TestHeaderURI))));
 }
 
 TEST_F(SymbolCollectorTest, IgnoreSymbolsInMainFile) {

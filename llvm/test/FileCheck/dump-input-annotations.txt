@@ -61,6 +61,36 @@
 ; CHK-NOT:    {{.}}
 
 ;--------------------------------------------------
+; CHECK-COUNT-<num>
+;--------------------------------------------------
+
+; Good match and no match.
+
+; RUN: echo 'pete'   > %t.in
+; RUN: echo 'repete' >> %t.in
+; RUN: echo 'repeat' >> %t.in
+
+; RUN: echo 'CHECK-COUNT-3: pete' > %t.chk
+
+; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk 2>&1 \
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=CNT,CNT-Q
+; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=CNT,CNT-V
+; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=CNT,CNT-V
+
+; CNT:          <<<<<<
+; CNT-NEXT:                1: pete
+; CNT-V-NEXT:   count:1'0     ^~~~
+; CNT-NEXT:                2: repete
+; CNT-V-NEXT:   count:1'1       ^~~~
+; CNT-NEXT:                3: repeat
+; CNT-Q-NEXT:   count:1       X~~~~~
+; CNT-V-NEXT:   count:1'2     X~~~~~
+; CNT-NEXT:     >>>>>>
+; CNT-NOT:      {{.}}
+
+;--------------------------------------------------
 ; CHECK-NEXT (also: EOF search-range, illegal match)
 ;--------------------------------------------------
 

@@ -103,6 +103,8 @@ private:
                             MachineInstr &Inst) const;
   void splitScalar64BitBFE(SetVectorType &Worklist,
                            MachineInstr &Inst) const;
+  void splitScalarBuffer(SetVectorType &Worklist,
+                         MachineInstr &Inst) const;
   void movePackToVALU(SetVectorType &Worklist,
                       MachineRegisterInfo &MRI,
                       MachineInstr &Inst) const;
@@ -951,6 +953,9 @@ namespace AMDGPU {
 
   LLVM_READONLY
   int getSOPKOp(uint16_t Opcode);
+
+  LLVM_READONLY
+  int getGlobalSaddrOp(uint16_t Opcode);
 
   const uint64_t RSRC_DATA_FORMAT = 0xf00000000000LL;
   const uint64_t RSRC_ELEMENT_SIZE_SHIFT = (32 + 19);

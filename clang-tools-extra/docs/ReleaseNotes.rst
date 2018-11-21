@@ -81,6 +81,12 @@ Improvements to clang-tidy
   ``absl::Duration`` factory functions are called when the more-efficient
   integer versions could be used instead.
 
+- New :doc:`abseil-duration-factory-scale
+  <clang-tidy/checks/abseil-duration-factory-scale>` check.
+
+  Checks for cases where arguments to ``absl::Duration`` factory functions are
+  scaled internally and could be changed to a different factory function.
+
 - New :doc:`abseil-faster-strsplit-delimiter
   <clang-tidy/checks/abseil-faster-strsplit-delimiter>` check.
 
@@ -110,11 +116,24 @@ Improvements to clang-tidy
   Flags uses of ``absl::StrCat()`` to append to a ``std::string``. Suggests
   ``absl::StrAppend()`` should be used instead.
 
+- New :doc:`bugprone-too-small-loop-variable
+  <clang-tidy/checks/bugprone-too-small-loop-variable>` check.
+
+  Detects those ``for`` loops that have a loop variable with a "too small" type
+  which means this type can't represent all values which are part of the
+  iteration range.
+
 - New :doc:`cppcoreguidelines-macro-usage
   <clang-tidy/checks/cppcoreguidelines-macro-usage>` check.
 
   Finds macro usage that is considered problematic because better language
   constructs exist for the task.
+
+- New :doc:`google-objc-function-naming
+  <clang-tidy/checks/google-objc-function-naming>` check.
+
+  Checks that function names in function declarations comply with the naming
+  conventions described in the Google Objective-C Style Guide.
 
 - New :doc:`misc-non-private-member-variables-in-classes
   <clang-tidy/checks/misc-non-private-member-variables-in-classes>` check.
@@ -122,6 +141,12 @@ Improvements to clang-tidy
   Finds classes that not only contain the data (non-static member variables),
   but also have logic (non-static member functions), and diagnoses all member
   variables that have any other scope other than ``private``.
+
+- New :doc:`modernize-avoid-c-arrays
+  <clang-tidy/checks/modernize-avoid-c-arrays>` check.
+
+  Finds C-style array types and recommend to use ``std::array<>`` /
+  ``std::vector<>``.
 
 - New :doc:`modernize-concat-nested-namespaces
   <clang-tidy/checks/modernize-concat-nested-namespaces>` check.
@@ -135,6 +160,18 @@ Improvements to clang-tidy
 
   Detects usage of the deprecated member types of ``std::ios_base`` and replaces
   those that have a non-deprecated equivalent.
+
+- New :doc:`readability-isolate-decl
+  <clang-tidy/checks/readability-isolate-declaration>` check.
+
+  Detects local variable declarations declaring more than one variable and
+  tries to refactor the code to one statement per declaration.
+
+- New :doc:`readability-const-return-type
+  <clang-tidy/checks/readability-const-return-type>` check.
+
+  Checks for functions with a ``const``-qualified return type and recommends
+  removal of the ``const`` keyword.
 
 - New :doc:`readability-magic-numbers
   <clang-tidy/checks/readability-magic-numbers>` check.
@@ -154,11 +191,21 @@ Improvements to clang-tidy
   <clang-tidy/checks/readability-uppercase-literal-suffix>`
   added.
 
+- New alias :doc:`cppcoreguidelines-avoid-c-arrays
+  <clang-tidy/checks/cppcoreguidelines-avoid-c-arrays>`
+  to :doc:`modernize-avoid-c-arrays
+  <clang-tidy/checks/modernize-avoid-c-arrays>` added.
+
 - New alias :doc:`cppcoreguidelines-non-private-member-variables-in-classes
   <clang-tidy/checks/cppcoreguidelines-non-private-member-variables-in-classes>`
   to :doc:`misc-non-private-member-variables-in-classes
   <clang-tidy/checks/misc-non-private-member-variables-in-classes>`
   added.
+
+- New alias :doc:`hicpp-avoid-c-arrays
+  <clang-tidy/checks/hicpp-avoid-c-arrays>`
+  to :doc:`modernize-avoid-c-arrays
+  <clang-tidy/checks/modernize-avoid-c-arrays>` added.
 
 - New alias :doc:`hicpp-uppercase-literal-suffix
   <clang-tidy/checks/hicpp-uppercase-literal-suffix>` to

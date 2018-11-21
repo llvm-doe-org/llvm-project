@@ -1104,6 +1104,71 @@ GetElementPtrInst::GetElementPtrInst(Type *PointeeType, Value *Ptr,
 DEFINE_TRANSPARENT_OPERAND_ACCESSORS(GetElementPtrInst, Value)
 
 //===----------------------------------------------------------------------===//
+//                                UnaryOperator Class
+//===----------------------------------------------------------------------===//
+
+/// a unary instruction 
+class UnaryOperator : public UnaryInstruction {
+  void AssertOK();
+
+protected:
+  UnaryOperator(UnaryOps iType, Value *S, Type *Ty,
+                const Twine &Name, Instruction *InsertBefore);
+  UnaryOperator(UnaryOps iType, Value *S, Type *Ty,
+                const Twine &Name, BasicBlock *InsertAtEnd);
+
+  // Note: Instruction needs to be a friend here to call cloneImpl.
+  friend class Instruction;
+
+  UnaryOperator *cloneImpl() const;
+
+public:
+
+  /// Construct a unary instruction, given the opcode and an operand.
+  /// Optionally (if InstBefore is specified) insert the instruction
+  /// into a BasicBlock right before the specified instruction.  The specified
+  /// Instruction is allowed to be a dereferenced end iterator.
+  ///
+  static UnaryOperator *Create(UnaryOps Op, Value *S,
+                               const Twine &Name = Twine(),
+                               Instruction *InsertBefore = nullptr);
+
+  /// Construct a unary instruction, given the opcode and an operand.
+  /// Also automatically insert this instruction to the end of the
+  /// BasicBlock specified.
+  ///
+  static UnaryOperator *Create(UnaryOps Op, Value *S,
+                               const Twine &Name,
+                               BasicBlock *InsertAtEnd);
+
+  /// These methods just forward to Create, and are useful when you
+  /// statically know what type of instruction you're going to create.  These
+  /// helpers just save some typing.
+#define HANDLE_UNARY_INST(N, OPC, CLASS) \
+  static UnaryInstruction *Create##OPC(Value *V, \
+                                       const Twine &Name = "") {\
+    return Create(Instruction::OPC, V, Name);\
+  }
+#include "llvm/IR/Instruction.def"
+#define HANDLE_UNARY_INST(N, OPC, CLASS) \
+  static UnaryInstruction *Create##OPC(Value *V, \
+                                       const Twine &Name, BasicBlock *BB) {\
+    return Create(Instruction::OPC, V, Name, BB);\
+  }
+#include "llvm/IR/Instruction.def"
+#define HANDLE_UNARY_INST(N, OPC, CLASS) \
+  static UnaryInstruction *Create##OPC(Value *V, \
+                                       const Twine &Name, Instruction *I) {\
+    return Create(Instruction::OPC, V, Name, I);\
+  }
+#include "llvm/IR/Instruction.def"
+
+  UnaryOps getOpcode() const {
+    return static_cast<UnaryOps>(Instruction::getOpcode());
+  }
+};
+
+//===----------------------------------------------------------------------===//
 //                               ICmpInst Class
 //===----------------------------------------------------------------------===//
 
@@ -1299,12 +1364,13 @@ public:
 
   /// Constructor with no-insertion semantics
   FCmpInst(
-    Predicate pred, ///< The predicate to use for the comparison
+    Predicate Pred, ///< The predicate to use for the comparison
     Value *LHS,     ///< The left-hand-side of the expression
     Value *RHS,     ///< The right-hand-side of the expression
-    const Twine &NameStr = "" ///< Name of the instruction
-  ) : CmpInst(makeCmpResultType(LHS->getType()),
-              Instruction::FCmp, pred, LHS, RHS, NameStr) {
+    const Twine &NameStr = "", ///< Name of the instruction
+    Instruction *FlagsSource = nullptr
+  ) : CmpInst(makeCmpResultType(LHS->getType()), Instruction::FCmp, Pred, LHS,
+              RHS, NameStr, nullptr, FlagsSource) {
     AssertOK();
   }
 
@@ -1523,7 +1589,7 @@ public:
   /// indirect function invocation.
   ///
   Function *getCalledFunction() const {
-    return dyn_cast<Function>(Op<-InstTy::ArgOffset>());
+    return dyn_cast_or_null<Function>(Op<-InstTy::ArgOffset>());
   }
 
   /// Determine whether this call has the given attribute.
@@ -2645,6 +2711,25 @@ public:
   /// Example: shufflevector <4 x n> A, <4 x n> B, <0,4,2,6>
   bool isTranspose() const {
     return !changesLength() && isTransposeMask(getMask());
+  }
+
+  /// Return true if this shuffle mask is an extract subvector mask.
+  /// A valid extract subvector mask returns a smaller vector from a single
+  /// source operand. The base extraction index is returned as well.
+  static bool isExtractSubvectorMask(ArrayRef<int> Mask, int NumSrcElts,
+                                     int &Index);
+  static bool isExtractSubvectorMask(const Constant *Mask, int NumSrcElts,
+                                     int &Index) {
+    assert(Mask->getType()->isVectorTy() && "Shuffle needs vector constant.");
+    SmallVector<int, 16> MaskAsInts;
+    getShuffleMask(Mask, MaskAsInts);
+    return isExtractSubvectorMask(MaskAsInts, NumSrcElts, Index);
+  }
+
+  /// Return true if this shuffle mask is an extract subvector mask.
+  bool isExtractSubvectorMask(int &Index) const {
+    int NumSrcElts = Op<0>()->getType()->getVectorNumElements();
+    return isExtractSubvectorMask(getMask(), NumSrcElts, Index);
   }
 
   /// Change values in a shuffle permute mask assuming the two vector operands

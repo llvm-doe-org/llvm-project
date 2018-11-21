@@ -17,10 +17,6 @@
 // X86 specific DAG Nodes.
 //
 
-def SDTIntShiftDOp: SDTypeProfile<1, 3,
-                                  [SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>,
-                                   SDTCisInt<0>, SDTCisInt<3>]>;
-
 def SDTX86CmpTest : SDTypeProfile<1, 2, [SDTCisVT<0, i32>, SDTCisSameAs<1, 2>]>;
 
 def SDTX86Cmps : SDTypeProfile<1, 3, [SDTCisFP<0>, SDTCisSameAs<1, 2>, SDTCisVT<3, i8>]>;
@@ -1493,7 +1489,7 @@ def MOV64rr : RI<0x89, MRMDestReg, (outs GR64:$dst), (ins GR64:$src),
                  "mov{q}\t{$src, $dst|$dst, $src}", []>;
 }
 
-let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
+let isReMaterializable = 1, isAsCheapAsAMove = 1, isMoveImm = 1 in {
 def MOV8ri  : Ii8 <0xB0, AddRegFrm, (outs GR8 :$dst), (ins i8imm :$src),
                    "mov{b}\t{$src, $dst|$dst, $src}",
                    [(set GR8:$dst, imm:$src)]>;
@@ -1507,7 +1503,7 @@ def MOV64ri32 : RIi32S<0xC7, MRM0r, (outs GR64:$dst), (ins i64i32imm:$src),
                        "mov{q}\t{$src, $dst|$dst, $src}",
                        [(set GR64:$dst, i64immSExt32:$src)]>;
 }
-let isReMaterializable = 1 in {
+let isReMaterializable = 1, isMoveImm = 1 in {
 def MOV64ri : RIi64<0xB8, AddRegFrm, (outs GR64:$dst), (ins i64imm:$src),
                     "movabs{q}\t{$src, $dst|$dst, $src}",
                     [(set GR64:$dst, relocImm:$src)]>;
@@ -2498,46 +2494,6 @@ let Predicates = [HasBMI2, NoTBM] in {
               (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
                              (MOV8ri (CountTrailingOnes imm:$mask)), sub_8bit))>;
 }
-
-let Predicates = [HasBMI2] in {
-  multiclass _bmi_bzhi_pattern<dag regpattern, dag mempattern, RegisterClass RC,
-                               ValueType VT, Instruction DstInst,
-                               Instruction DstMemInst> {
-    def : Pat<regpattern,
-              (DstInst RC:$src,
-                (INSERT_SUBREG (VT (IMPLICIT_DEF)), GR8:$lz, sub_8bit))>;
-    def : Pat<mempattern,
-              (DstMemInst addr:$src,
-                (INSERT_SUBREG (VT (IMPLICIT_DEF)), GR8:$lz, sub_8bit))>;
-  }
-
-  multiclass bmi_bzhi_patterns<RegisterClass RC, int bitwidth, ValueType VT,
-                               Instruction DstInst, X86MemOperand x86memop,
-                               Instruction DstMemInst> {
-    // x & (-1 >> (bitwidth - y))
-    defm : _bmi_bzhi_pattern<(and RC:$src, (srl -1, (sub bitwidth, GR8:$lz))),
-                             (and (x86memop addr:$src),
-                                  (srl -1, (sub bitwidth, GR8:$lz))),
-                             RC, VT, DstInst, DstMemInst>;
-  }
-
-  defm : bmi_bzhi_patterns<GR32, 32, i32, BZHI32rr, loadi32, BZHI32rm>;
-  defm : bmi_bzhi_patterns<GR64, 64, i64, BZHI64rr, loadi64, BZHI64rm>;
-
-  // x & (-1 >> (32 - y))
-  def : Pat<(and GR32:$src, (srl -1, (i8 (trunc (sub 32, GR32:$lz))))),
-            (BZHI32rr GR32:$src, GR32:$lz)>;
-  def : Pat<(and (loadi32 addr:$src), (srl -1, (i8 (trunc (sub 32, GR32:$lz))))),
-            (BZHI32rm addr:$src, GR32:$lz)>;
-
-  // x & (-1 >> (64 - y))
-  def : Pat<(and GR64:$src, (srl -1, (i8 (trunc (sub 64, GR32:$lz))))),
-            (BZHI64rr GR64:$src,
-              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), GR32:$lz, sub_32bit))>;
-  def : Pat<(and (loadi64 addr:$src), (srl -1, (i8 (trunc (sub 64, GR32:$lz))))),
-            (BZHI64rm addr:$src,
-              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), GR32:$lz, sub_32bit))>;
-} // HasBMI2
 
 multiclass bmi_pdep_pext<string mnemonic, RegisterClass RC,
                          X86MemOperand x86memop, Intrinsic Int,

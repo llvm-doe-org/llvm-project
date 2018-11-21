@@ -36,7 +36,7 @@ MATCHER_P(RefRange, Range, "") {
          std::make_tuple(Range.start.line, Range.start.character,
                          Range.end.line, Range.end.character);
 }
-MATCHER_P(FileURI, F, "") { return arg.Location.FileURI == F; }
+MATCHER_P(FileURI, F, "") { return StringRef(arg.Location.FileURI) == F; }
 
 TEST(SymbolLocation, Position) {
   using Position = SymbolLocation::Position;
@@ -90,6 +90,7 @@ TEST(MemIndexTest, MemIndexDeduplicate) {
                                  symbol("2") /* duplicate */};
   FuzzyFindRequest Req;
   Req.Query = "2";
+  Req.AnyScope = true;
   MemIndex I(Symbols, RefSlab());
   EXPECT_THAT(match(I, Req), ElementsAre("2"));
 }
@@ -98,6 +99,7 @@ TEST(MemIndexTest, MemIndexLimitedNumMatches) {
   auto I = MemIndex::build(generateNumSymbols(0, 100), RefSlab());
   FuzzyFindRequest Req;
   Req.Query = "5";
+  Req.AnyScope = true;
   Req.Limit = 3;
   bool Incomplete;
   auto Matches = match(*I, Req, &Incomplete);
@@ -112,6 +114,7 @@ TEST(MemIndexTest, FuzzyMatch) {
       RefSlab());
   FuzzyFindRequest Req;
   Req.Query = "lol";
+  Req.AnyScope = true;
   Req.Limit = 2;
   EXPECT_THAT(match(*I, Req),
               UnorderedElementsAre("LaughingOutLoud", "LittleOldLady"));
@@ -122,6 +125,7 @@ TEST(MemIndexTest, MatchQualifiedNamesWithoutSpecificScope) {
       MemIndex::build(generateSymbols({"a::y1", "b::y2", "y3"}), RefSlab());
   FuzzyFindRequest Req;
   Req.Query = "y";
+  Req.AnyScope = true;
   EXPECT_THAT(match(*I, Req), UnorderedElementsAre("a::y1", "b::y2", "y3"));
 }
 
@@ -218,7 +222,7 @@ TEST(MergeTest, Merge) {
 
   Symbol M = mergeSymbol(L, R);
   EXPECT_EQ(M.Name, "Foo");
-  EXPECT_EQ(M.CanonicalDeclaration.FileURI, "file:///left.h");
+  EXPECT_EQ(StringRef(M.CanonicalDeclaration.FileURI), "file:///left.h");
   EXPECT_EQ(M.References, 3u);
   EXPECT_EQ(M.Signature, "()");
   EXPECT_EQ(M.CompletionSnippetSuffix, "{$1:0}");
@@ -237,14 +241,14 @@ TEST(MergeTest, PreferSymbolWithDefn) {
   R.Name = "right";
 
   Symbol M = mergeSymbol(L, R);
-  EXPECT_EQ(M.CanonicalDeclaration.FileURI, "file:/left.h");
-  EXPECT_EQ(M.Definition.FileURI, "");
+  EXPECT_EQ(StringRef(M.CanonicalDeclaration.FileURI), "file:/left.h");
+  EXPECT_EQ(StringRef(M.Definition.FileURI), "");
   EXPECT_EQ(M.Name, "left");
 
   R.Definition.FileURI = "file:/right.cpp"; // Now right will be favored.
   M = mergeSymbol(L, R);
-  EXPECT_EQ(M.CanonicalDeclaration.FileURI, "file:/right.h");
-  EXPECT_EQ(M.Definition.FileURI, "file:/right.cpp");
+  EXPECT_EQ(StringRef(M.CanonicalDeclaration.FileURI), "file:/right.h");
+  EXPECT_EQ(StringRef(M.Definition.FileURI), "file:/right.cpp");
   EXPECT_EQ(M.Name, "right");
 }
 

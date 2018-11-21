@@ -79,7 +79,7 @@ function(add_lldb_library name)
         # framework, so it must rely on the framework being fully built first.
         if (LLDB_BUILD_FRAMEWORK AND ${name} STREQUAL "liblldb")
           add_dependencies(install-${name} lldb-framework)
-          add_dependencies(install-lldb-framework-stripped lldb-framework)
+          add_dependencies(install-${name}-stripped lldb-framework)
         endif()
       endif()
     endif()
@@ -100,13 +100,13 @@ endfunction(add_lldb_library)
 function(add_lldb_executable name)
   cmake_parse_arguments(ARG
     "INCLUDE_IN_SUITE;GENERATE_INSTALL"
-    ""
+    "ENTITLEMENTS"
     "LINK_LIBS;LINK_COMPONENTS"
     ${ARGN}
     )
 
   list(APPEND LLVM_LINK_COMPONENTS ${ARG_LINK_COMPONENTS})
-  add_llvm_executable(${name} ${ARG_UNPARSED_ARGUMENTS})
+  add_llvm_executable(${name} ${ARG_UNPARSED_ARGUMENTS} ENTITLEMENTS ${ARG_ENTITLEMENTS})
 
   target_link_libraries(${name} PRIVATE ${ARG_LINK_LIBS})
   set_target_properties(${name} PROPERTIES

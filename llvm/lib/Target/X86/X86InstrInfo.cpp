@@ -683,10 +683,8 @@ void X86InstrInfo::reMaterialize(MachineBasicBlock &MBB,
   if (ClobbersEFLAGS && !isSafeToClobberEFLAGS(MBB, I)) {
     // The instruction clobbers EFLAGS. Re-materialize as MOV32ri to avoid side
     // effects.
-    unsigned NewOpc = X86::MOV32ri;
     int Value;
     switch (Orig.getOpcode()) {
-    case X86::MOV64r0:  NewOpc = X86::MOV32ri64; Value = 0; break;
     case X86::MOV32r0:  Value = 0; break;
     case X86::MOV32r1:  Value = 1; break;
     case X86::MOV32r_1: Value = -1; break;
@@ -695,7 +693,7 @@ void X86InstrInfo::reMaterialize(MachineBasicBlock &MBB,
     }
 
     const DebugLoc &DL = Orig.getDebugLoc();
-    BuildMI(MBB, I, DL, get(NewOpc))
+    BuildMI(MBB, I, DL, get(X86::MOV32ri))
         .add(Orig.getOperand(0))
         .addImm(Value);
   } else {
@@ -2552,7 +2550,7 @@ void X86InstrInfo::replaceBranchWithTailCall(
   // call. This way they still appear live across the call.
   LivePhysRegs LiveRegs(getRegisterInfo());
   LiveRegs.addLiveOuts(MBB);
-  SmallVector<std::pair<unsigned, const MachineOperand *>, 8> Clobbers;
+  SmallVector<std::pair<MCPhysReg, const MachineOperand *>, 8> Clobbers;
   LiveRegs.stepForward(*MIB, Clobbers);
   for (const auto &C : Clobbers) {
     MIB.addReg(C.first, RegState::Implicit);
@@ -3752,9 +3750,7 @@ bool X86InstrInfo::optimizeCompareInstr(MachineInstr &CmpInstr, unsigned SrcReg,
       // MOV32r0 etc. are implemented with xor which clobbers condition code.
       // They are safe to move up, if the definition to EFLAGS is dead and
       // earlier instructions do not read or write EFLAGS.
-      if (!Movr0Inst &&
-          (Instr.getOpcode() == X86::MOV32r0 ||
-           Instr.getOpcode() == X86::MOV64r0) &&
+      if (!Movr0Inst && Instr.getOpcode() == X86::MOV32r0 &&
           Instr.registerDefIsDead(X86::EFLAGS, TRI)) {
         Movr0Inst = &Instr;
         continue;
@@ -4159,15 +4155,6 @@ bool X86InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   switch (MI.getOpcode()) {
   case X86::MOV32r0:
     return Expand2AddrUndef(MIB, get(X86::XOR32rr));
-  case X86::MOV64r0: {
-    const TargetRegisterInfo *TRI = &getRegisterInfo();
-    unsigned Reg = MIB->getOperand(0).getReg();
-    unsigned Reg32 = TRI->getSubReg(Reg, X86::sub_32bit);
-    MIB->getOperand(0).setReg(Reg32);
-    Expand2AddrUndef(MIB, get(X86::XOR32rr));
-    MIB.addReg(Reg, RegState::ImplicitDefine);
-    return true;
-  }
   case X86::MOV32r1:
     return expandMOV32r1(MIB, *this, /*MinusOne=*/ false);
   case X86::MOV32r_1:
@@ -4911,10 +4898,8 @@ MachineInstr *X86InstrInfo::foldMemoryOperandImpl(
     isTwoAddrFold = true;
   } else {
     if (OpNum == 0) {
-      if (MI.getOpcode() == X86::MOV32r0 || MI.getOpcode() == X86::MOV64r0) {
-        unsigned NewOpc = MI.getOpcode() == X86::MOV64r0 ? X86::MOV64mi32
-                                                         : X86::MOV32mi;
-        NewMI = MakeM0Inst(*this, NewOpc, MOs, InsertPt, MI);
+      if (MI.getOpcode() == X86::MOV32r0) {
+        NewMI = MakeM0Inst(*this, X86::MOV32mi, MOs, InsertPt, MI);
         if (NewMI)
           return NewMI;
       }
@@ -7488,12 +7473,28 @@ namespace {
               .addExternalSymbol("_GLOBAL_OFFSET_TABLE_")
               .addReg(0);
         } else if (TM->getCodeModel() == CodeModel::Large) {
-          // Loading the GOT in the large code model requires math with labels,
-          // so we use a pseudo instruction and expand it during MC emission.
-          unsigned Scratch = RegInfo.createVirtualRegister(&X86::GR64RegClass);
-          BuildMI(FirstMBB, MBBI, DL, TII->get(X86::MOVGOT64r), PC)
-              .addReg(Scratch, RegState::Undef | RegState::Define)
-              .addExternalSymbol("_GLOBAL_OFFSET_TABLE_");
+          // In the large code model, we are aiming for this code, though the
+          // register allocation may vary:
+          //   leaq .LN$pb(%rip), %rax
+          //   movq $_GLOBAL_OFFSET_TABLE_ - .LN$pb, %rcx
+          //   addq %rcx, %rax
+          // RAX now holds address of _GLOBAL_OFFSET_TABLE_.
+          unsigned PBReg = RegInfo.createVirtualRegister(&X86::GR64RegClass);
+          unsigned GOTReg =
+              RegInfo.createVirtualRegister(&X86::GR64RegClass);
+          BuildMI(FirstMBB, MBBI, DL, TII->get(X86::LEA64r), PBReg)
+              .addReg(X86::RIP)
+              .addImm(0)
+              .addReg(0)
+              .addSym(MF.getPICBaseSymbol())
+              .addReg(0);
+          std::prev(MBBI)->setPreInstrSymbol(MF, MF.getPICBaseSymbol());
+          BuildMI(FirstMBB, MBBI, DL, TII->get(X86::MOV64ri), GOTReg)
+              .addExternalSymbol("_GLOBAL_OFFSET_TABLE_",
+                                 X86II::MO_PIC_BASE_OFFSET);
+          BuildMI(FirstMBB, MBBI, DL, TII->get(X86::ADD64rr), PC)
+              .addReg(PBReg, RegState::Kill)
+              .addReg(GOTReg, RegState::Kill);
         } else {
           llvm_unreachable("unexpected code model");
         }
@@ -7828,3 +7829,6 @@ X86InstrInfo::insertOutlinedCall(Module &M, MachineBasicBlock &MBB,
 
   return It;
 }
+
+#define GET_TII_HELPERS
+#include "X86GenInstrInfo.inc"

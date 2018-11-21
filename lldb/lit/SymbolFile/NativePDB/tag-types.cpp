@@ -2,9 +2,9 @@
 // REQUIRES: lld
 
 // Test that we can display tag types.
-// RUN: clang-cl /Z7 /GS- /GR- /c /Fo%t.obj -- %s 
+// RUN: %clang_cl /Z7 /GS- /GR- /c /Fo%t.obj -- %s 
 // RUN: lld-link /DEBUG /nodefaultlib /entry:main /OUT:%t.exe /PDB:%t.pdb -- %t.obj
-// RUN: env LLDB_USE_NATIVE_PDB_READER=1 lldb -f %t.exe -s \
+// RUN: env LLDB_USE_NATIVE_PDB_READER=1 %lldb -f %t.exe -s \
 // RUN:     %p/Inputs/tag-types.lldbinit | FileCheck %s
 
 // Test struct
@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
 }
 
 // CHECK:      (lldb) target create "{{.*}}tag-types.cpp.tmp.exe"
-// CHECK-NEXT: Current executable set to '{{.*}}tag-types.cpp.tmp.exe' (x86_64).
+// CHECK-NEXT: Current executable set to '{{.*}}tag-types.cpp.tmp.exe'
 // CHECK-NEXT: (lldb) command source -s 0 '{{.*}}tag-types.lldbinit'
 // CHECK-NEXT: Executing commands in '{{.*}}tag-types.lldbinit'.
 // CHECK-NEXT: (lldb) type lookup -- Struct

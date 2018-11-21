@@ -68,6 +68,7 @@ representation.
    CMakePrimer
    AdvancedBuilds
    HowToBuildOnARM
+   HowToBuildWithPGO
    HowToCrossCompileBuiltinsOnArm
    HowToCrossCompileLLVM
    CommandGuide/index
@@ -106,6 +107,9 @@ representation.
 
 :doc:`HowToBuildOnARM`
    Notes on building and testing LLVM/Clang on ARM.
+
+:doc:`HowToBuildWithPGO`
+    Notes on building LLVM/Clang with PGO.
 
 :doc:`HowToCrossCompileBuiltinsOnArm`
    Notes on cross-building and testing the compiler-rt builtins for Arm.
@@ -450,6 +454,7 @@ Information about LLVM's development process.
    Packaging
    ReleaseProcess
    Phabricator
+   BugLifeCycle
 
 :doc:`Contributing`
    An overview on how to contribute to LLVM.
@@ -479,6 +484,9 @@ Information about LLVM's development process.
 :doc:`Phabricator`
    Describes how to use the Phabricator code review tool hosted on
    http://reviews.llvm.org/ and its command line interface, Arcanist.
+
+:doc:`BugLifeCycle`
+   Describes how bugs are reported, triaged and closed.
 
 Community
 =========

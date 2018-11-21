@@ -305,8 +305,8 @@ DriverConfig parseObjcopyOptions(ArrayRef<const char *> ArgsArr) {
 
   for (auto Arg : InputArgs.filtered(OBJCOPY_remove_section))
     Config.ToRemove.push_back(Arg->getValue());
-  for (auto Arg : InputArgs.filtered(OBJCOPY_keep))
-    Config.Keep.push_back(Arg->getValue());
+  for (auto Arg : InputArgs.filtered(OBJCOPY_keep_section))
+    Config.KeepSection.push_back(Arg->getValue());
   for (auto Arg : InputArgs.filtered(OBJCOPY_only_keep))
     Config.OnlyKeep.push_back(Arg->getValue());
   for (auto Arg : InputArgs.filtered(OBJCOPY_add_section))
@@ -342,6 +342,10 @@ DriverConfig parseObjcopyOptions(ArrayRef<const char *> ArgsArr) {
     Config.SymbolsToRemove.push_back(Arg->getValue());
   for (auto Arg : InputArgs.filtered(OBJCOPY_keep_symbol))
     Config.SymbolsToKeep.push_back(Arg->getValue());
+
+  Config.DeterministicArchives = InputArgs.hasFlag(
+      OBJCOPY_enable_deterministic_archives,
+      OBJCOPY_disable_deterministic_archives, /*default=*/true);
 
   Config.PreserveDates = InputArgs.hasArg(OBJCOPY_preserve_dates);
 
@@ -401,15 +405,24 @@ DriverConfig parseStripOptions(ArrayRef<const char *> ArgsArr) {
   Config.DiscardAll = InputArgs.hasArg(STRIP_discard_all);
   Config.StripUnneeded = InputArgs.hasArg(STRIP_strip_unneeded);
   Config.StripAll = InputArgs.hasArg(STRIP_strip_all);
+  Config.StripAllGNU = InputArgs.hasArg(STRIP_strip_all_gnu);
 
-  if (!Config.StripDebug && !Config.StripUnneeded && !Config.DiscardAll)
+  if (!Config.StripDebug && !Config.StripUnneeded && !Config.DiscardAll &&
+      !Config.StripAllGNU)
     Config.StripAll = true;
+
+  for (auto Arg : InputArgs.filtered(STRIP_keep_section))
+    Config.KeepSection.push_back(Arg->getValue());
 
   for (auto Arg : InputArgs.filtered(STRIP_remove_section))
     Config.ToRemove.push_back(Arg->getValue());
 
   for (auto Arg : InputArgs.filtered(STRIP_keep_symbol))
     Config.SymbolsToKeep.push_back(Arg->getValue());
+
+  Config.DeterministicArchives =
+      InputArgs.hasFlag(STRIP_enable_deterministic_archives,
+                        STRIP_disable_deterministic_archives, /*default=*/true);
 
   Config.PreserveDates = InputArgs.hasArg(STRIP_preserve_dates);
 

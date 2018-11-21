@@ -9,10 +9,6 @@
 
 #include "SymbolFileDWARFDwp.h"
 
-// C Includes
-// C++ Includes
-// Other libraries and framework includes
-// Project includes
 #include "lldb/Core/Section.h"
 #include "lldb/Symbol/ObjectFile.h"
 
@@ -50,7 +46,8 @@ SymbolFileDWARFDwp::Create(lldb::ModuleSP module_sp,
   lldb::DataBufferSP file_data_sp;
   lldb::offset_t file_data_offset = 0;
   lldb::ObjectFileSP obj_file = lldb_private::ObjectFile::FindPlugin(
-      module_sp, &file_spec, file_offset, file_spec.GetByteSize(), file_data_sp,
+      module_sp, &file_spec, file_offset,
+      lldb_private::FileSystem::Instance().GetByteSize(file_spec), file_data_sp,
       file_data_offset);
   if (obj_file == nullptr)
     return nullptr;

@@ -342,6 +342,7 @@ inline bool isKernel(CallingConv::ID CC) {
 }
 
 bool hasXNACK(const MCSubtargetInfo &STI);
+bool hasSRAMECC(const MCSubtargetInfo &STI);
 bool hasMIMG_R128(const MCSubtargetInfo &STI);
 bool hasPackedD16(const MCSubtargetInfo &STI);
 
@@ -440,8 +441,11 @@ int64_t getSMRDEncodedOffset(const MCSubtargetInfo &ST, int64_t ByteOffset);
 /// not the encoded offset.
 bool isLegalSMRDImmOffset(const MCSubtargetInfo &ST, int64_t ByteOffset);
 
+// Given Imm, split it into the values to put into the SOffset and ImmOffset
+// fields in an MUBUF instruction. Return false if it is not possible (due to a
+// hardware bug needing a workaround).
 bool splitMUBUFOffset(uint32_t Imm, uint32_t &SOffset, uint32_t &ImmOffset,
-                      const GCNSubtarget *Subtarget, uint32_t Align = 4);
+                      const GCNSubtarget *Subtarget);
 
 /// \returns true if the intrinsic is divergent
 bool isIntrinsicSourceOfDivergence(unsigned IntrID);

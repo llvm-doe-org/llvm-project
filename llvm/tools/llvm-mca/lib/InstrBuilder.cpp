@@ -22,9 +22,16 @@
 
 #define DEBUG_TYPE "llvm-mca"
 
+namespace llvm {
 namespace mca {
 
-using namespace llvm;
+InstrBuilder::InstrBuilder(const llvm::MCSubtargetInfo &sti,
+                           const llvm::MCInstrInfo &mcii,
+                           const llvm::MCRegisterInfo &mri,
+                           const llvm::MCInstrAnalysis &mcia)
+    : STI(sti), MCII(mcii), MRI(mri), MCIA(mcia) {
+  computeProcResourceMasks(STI.getSchedModel(), ProcResourceMasks);
+}
 
 static void initializeUsedResources(InstrDesc &ID,
                                     const MCSchedClassDesc &SCDesc,
@@ -48,12 +55,15 @@ static void initializeUsedResources(InstrDesc &ID,
   // part of a "Super" resource. The key value is the "Super" resource mask ID.
   DenseMap<uint64_t, unsigned> SuperResources;
 
+  unsigned NumProcResources = SM.getNumProcResourceKinds();
+  APInt Buffers(NumProcResources, 0);
+
   for (unsigned I = 0, E = SCDesc.NumWriteProcResEntries; I < E; ++I) {
     const MCWriteProcResEntry *PRE = STI.getWriteProcResBegin(&SCDesc) + I;
     const MCProcResourceDesc &PR = *SM.getProcResource(PRE->ProcResourceIdx);
     uint64_t Mask = ProcResourceMasks[PRE->ProcResourceIdx];
     if (PR.BufferSize != -1)
-      ID.Buffers.push_back(Mask);
+      Buffers.setBit(PRE->ProcResourceIdx);
     CycleSegment RCy(0, PRE->Cycles, false);
     Worklist.emplace_back(ResourcePlusCycles(Mask, ResourceUsage(RCy)));
     if (PR.SuperIdx) {
@@ -128,6 +138,30 @@ static void initializeUsedResources(InstrDesc &ID,
       uint64_t Mask = RPC.first ^ PowerOf2Floor(RPC.first);
       if ((Mask & UsedResourceUnits) == Mask)
         RPC.second.setReserved();
+    }
+  }
+
+  // Identify extra buffers that are consumed through super resources.
+  for (const std::pair<uint64_t, unsigned> &SR : SuperResources) {
+    for (unsigned I = 1, E = NumProcResources; I < E; ++I) {
+      const MCProcResourceDesc &PR = *SM.getProcResource(I);
+      if (PR.BufferSize == -1)
+        continue;
+
+      uint64_t Mask = ProcResourceMasks[I];
+      if (Mask != SR.first && ((Mask & SR.first) == SR.first))
+        Buffers.setBit(I);
+    }
+  }
+
+  // Now set the buffers.
+  if (unsigned NumBuffers = Buffers.countPopulation()) {
+    ID.Buffers.resize(NumBuffers);
+    for (unsigned I = 0, E = NumProcResources; I < E && NumBuffers; ++I) {
+      if (Buffers[I]) {
+        --NumBuffers;
+        ID.Buffers[NumBuffers] = ProcResourceMasks[I];
+      }
     }
   }
 
@@ -474,14 +508,15 @@ InstrBuilder::createInstruction(const MCInst &MCI) {
 
     // Okay, this is a register operand. Create a ReadState for it.
     assert(RegID > 0 && "Invalid register ID found!");
-    auto RS = llvm::make_unique<ReadState>(RD, RegID);
+    NewIS->getUses().emplace_back(RD, RegID);
+    ReadState &RS = NewIS->getUses().back();
 
     if (IsDepBreaking) {
       // A mask of all zeroes means: explicit input operands are not
       // independent.
       if (Mask.isNullValue()) {
         if (!RD.isImplicitRead())
-          RS->setIndependentFromDef();
+          RS.setIndependentFromDef();
       } else {
         // Check if this register operand is independent according to `Mask`.
         // Note that Mask may not have enough bits to describe all explicit and
@@ -491,11 +526,10 @@ InstrBuilder::createInstruction(const MCInst &MCI) {
         if (Mask.getBitWidth() > RD.UseIndex) {
           // Okay. This map describe register use `RD.UseIndex`.
           if (Mask[RD.UseIndex])
-            RS->setIndependentFromDef();
+            RS.setIndependentFromDef();
         }
       }
     }
-    NewIS->getUses().emplace_back(std::move(RS));
   }
 
   // Early exit if there are no writes.
@@ -522,12 +556,13 @@ InstrBuilder::createInstruction(const MCInst &MCI) {
     }
 
     assert(RegID && "Expected a valid register ID!");
-    NewIS->getDefs().emplace_back(llvm::make_unique<WriteState>(
+    NewIS->getDefs().emplace_back(
         WD, RegID, /* ClearsSuperRegs */ WriteMask[WriteIndex],
-        /* WritesZero */ IsZeroIdiom));
+        /* WritesZero */ IsZeroIdiom);
     ++WriteIndex;
   }
 
   return std::move(NewIS);
 }
 } // namespace mca
+} // namespace llvm

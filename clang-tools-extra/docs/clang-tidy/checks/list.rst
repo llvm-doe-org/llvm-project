@@ -6,6 +6,7 @@ Clang-Tidy Checks
 .. toctree::
    abseil-duration-division
    abseil-duration-factory-float
+   abseil-duration-factory-scale
    abseil-faster-strsplit-delimiter
    abseil-no-internal-dependencies
    abseil-no-namespace
@@ -59,6 +60,7 @@ Clang-Tidy Checks
    bugprone-swapped-arguments
    bugprone-terminating-continue
    bugprone-throw-keyword-missing
+   bugprone-too-small-loop-variable
    bugprone-undefined-memory-manipulation
    bugprone-undelegated-constructor
    bugprone-unused-raii
@@ -87,6 +89,7 @@ Clang-Tidy Checks
    cert-msc51-cpp
    cert-oop11-cpp (redirects to performance-move-constructor-init) <cert-oop11-cpp>
    cppcoreguidelines-avoid-goto
+   cppcoreguidelines-avoid-c-arrays (redirects to modernize-avoid-c-arrays) <cppcoreguidelines-avoid-c-arrays>
    cppcoreguidelines-avoid-magic-numbers (redirects to readability-magic-numbers) <cppcoreguidelines-avoid-magic-numbers>
    cppcoreguidelines-c-copy-assignment-signature (redirects to misc-unconventional-assign-operator) <cppcoreguidelines-c-copy-assignment-signature>
    cppcoreguidelines-interfaces-global-init
@@ -122,6 +125,7 @@ Clang-Tidy Checks
    google-explicit-constructor
    google-global-names-in-headers
    google-objc-avoid-throwing-exception
+   google-objc-function-naming
    google-objc-global-variable-declaration
    google-readability-braces-around-statements (redirects to readability-braces-around-statements) <google-readability-braces-around-statements>
    google-readability-casting
@@ -131,6 +135,7 @@ Clang-Tidy Checks
    google-runtime-int
    google-runtime-operator
    google-runtime-references
+   hicpp-avoid-c-arrays (redirects to modernize-avoid-c-arrays) <hicpp-avoid-c-arrays>
    hicpp-avoid-goto
    hicpp-braces-around-statements (redirects to readability-braces-around-statements) <hicpp-braces-around-statements>
    hicpp-deprecated-headers (redirects to modernize-deprecated-headers) <hicpp-deprecated-headers>
@@ -178,6 +183,7 @@ Clang-Tidy Checks
    misc-unused-parameters
    misc-unused-using-decls
    modernize-avoid-bind
+   modernize-avoid-c-arrays
    modernize-concat-nested-namespaces
    modernize-deprecated-headers
    modernize-deprecated-ios-base-aliases
@@ -225,6 +231,7 @@ Clang-Tidy Checks
    portability-simd-intrinsics
    readability-avoid-const-params-in-decls
    readability-braces-around-statements
+   readability-const-return-type
    readability-container-size-empty
    readability-delete-null-pointer
    readability-deleted-default
@@ -233,6 +240,7 @@ Clang-Tidy Checks
    readability-identifier-naming
    readability-implicit-bool-conversion
    readability-inconsistent-declaration-parameter-name
+   readability-isolate-declaration
    readability-magic-numbers
    readability-misleading-indentation
    readability-misplaced-array-index

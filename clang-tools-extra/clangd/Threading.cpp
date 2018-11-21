@@ -4,6 +4,9 @@
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Threading.h"
 #include <thread>
+#ifdef __USE_POSIX
+#include <pthread.h>
+#endif
 
 using namespace llvm;
 namespace clang {
@@ -95,6 +98,17 @@ void wait(std::unique_lock<std::mutex> &Lock, std::condition_variable &CV,
   if (D == Deadline::infinity())
     return CV.wait(Lock);
   CV.wait_until(Lock, D.time());
+}
+
+void setThreadPriority(std::thread &T, ThreadPriority Priority) {
+  // Some *really* old glibcs are missing SCHED_IDLE.
+#if defined(__linux__) && defined(SCHED_IDLE)
+  sched_param priority;
+  priority.sched_priority = 0;
+  pthread_setschedparam(
+      T.native_handle(),
+      Priority == ThreadPriority::Low ? SCHED_IDLE : SCHED_OTHER, &priority);
+#endif
 }
 
 } // namespace clangd

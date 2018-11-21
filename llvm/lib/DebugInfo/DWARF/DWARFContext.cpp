@@ -309,7 +309,7 @@ static void dumpLoclistsSection(raw_ostream &OS, DIDumpOptions DumpOpts,
   DataExtractor LocData(Data.getData().drop_front(Offset),
                         Data.isLittleEndian(), Header.getAddrSize());
 
-  Loclists.parse(LocData);
+  Loclists.parse(LocData, Header.getVersion());
   Loclists.dump(OS, 0, MRI, DumpOffset);
 }
 
@@ -317,7 +317,6 @@ void DWARFContext::dump(
     raw_ostream &OS, DIDumpOptions DumpOpts,
     std::array<Optional<uint64_t>, DIDT_ID_Count> DumpOffsets) {
 
-  Optional<uint64_t> DumpOffset;
   uint64_t DumpType = DumpOpts.DumpType;
 
   StringRef Extension = sys::path::extension(DObj->getFileName());
@@ -334,13 +333,13 @@ void DWARFContext::dump(
   bool Explicit = DumpType != DIDT_All && !IsDWO;
   bool ExplicitDWO = Explicit && IsDWO;
   auto shouldDump = [&](bool Explicit, const char *Name, unsigned ID,
-                        StringRef Section) {
-    DumpOffset = DumpOffsets[ID];
+                        StringRef Section) -> Optional<uint64_t> * {
     unsigned Mask = 1U << ID;
     bool Should = (DumpType & Mask) && (Explicit || !Section.empty());
-    if (Should)
-      OS << "\n" << Name << " contents:\n";
-    return Should;
+    if (!Should)
+      return nullptr;
+    OS << "\n" << Name << " contents:\n";
+    return &DumpOffsets[ID];
   };
 
   // Dump individual sections.
@@ -351,26 +350,27 @@ void DWARFContext::dump(
                  DObj->getAbbrevDWOSection()))
     getDebugAbbrevDWO()->dump(OS);
 
-  auto dumpDebugInfo = [&](unit_iterator_range Units) {
-    if (DumpOffset)
-      getDIEForOffset(DumpOffset.getValue())
-          .dump(OS, 0, DumpOpts.noImplicitRecursion());
+  auto dumpDebugInfo = [&](const char *Name, unit_iterator_range Units) {
+    OS << '\n' << Name << " contents:\n";
+    if (auto DumpOffset = DumpOffsets[DIDT_ID_DebugInfo])
+      for (const auto &U : Units)
+        U->getDIEForOffset(DumpOffset.getValue())
+            .dump(OS, 0, DumpOpts.noImplicitRecursion());
     else
       for (const auto &U : Units)
         U->dump(OS, DumpOpts);
   };
-  if (shouldDump(Explicit, ".debug_info", DIDT_ID_DebugInfo,
-                 DObj->getInfoSection().Data))
-    dumpDebugInfo(info_section_units());
-  if (shouldDump(ExplicitDWO, ".debug_info.dwo", DIDT_ID_DebugInfo,
-                 DObj->getInfoDWOSection().Data))
-    dumpDebugInfo(dwo_info_section_units());
+  if ((DumpType & DIDT_DebugInfo)) {
+    if (Explicit || getNumCompileUnits())
+      dumpDebugInfo(".debug_info", info_section_units());
+    if (ExplicitDWO || getNumDWOCompileUnits())
+      dumpDebugInfo(".debug_info.dwo", dwo_info_section_units());
+  }
 
   auto dumpDebugType = [&](const char *Name, unit_iterator_range Units) {
     OS << '\n' << Name << " contents:\n";
-    DumpOffset = DumpOffsets[DIDT_ID_DebugTypes];
     for (const auto &U : Units)
-      if (DumpOffset)
+      if (auto DumpOffset = DumpOffsets[DIDT_ID_DebugTypes])
         U->getDIEForOffset(*DumpOffset)
             .dump(OS, 0, DumpOpts.noImplicitRecursion());
       else
@@ -383,28 +383,30 @@ void DWARFContext::dump(
       dumpDebugType(".debug_types.dwo", dwo_types_section_units());
   }
 
-  if (shouldDump(Explicit, ".debug_loc", DIDT_ID_DebugLoc,
-                 DObj->getLocSection().Data)) {
-    getDebugLoc()->dump(OS, getRegisterInfo(), DumpOffset);
+  if (const auto *Off = shouldDump(Explicit, ".debug_loc", DIDT_ID_DebugLoc,
+                                   DObj->getLocSection().Data)) {
+    getDebugLoc()->dump(OS, getRegisterInfo(), *Off);
   }
-  if (shouldDump(Explicit, ".debug_loclists", DIDT_ID_DebugLoclists,
-                 DObj->getLoclistsSection().Data)) {
+  if (const auto *Off =
+          shouldDump(Explicit, ".debug_loclists", DIDT_ID_DebugLoclists,
+                     DObj->getLoclistsSection().Data)) {
     DWARFDataExtractor Data(*DObj, DObj->getLoclistsSection(), isLittleEndian(),
                             0);
-    dumpLoclistsSection(OS, DumpOpts, Data, getRegisterInfo(), DumpOffset);
+    dumpLoclistsSection(OS, DumpOpts, Data, getRegisterInfo(), *Off);
   }
-  if (shouldDump(ExplicitDWO, ".debug_loc.dwo", DIDT_ID_DebugLoc,
-                 DObj->getLocDWOSection().Data)) {
-    getDebugLocDWO()->dump(OS, 0, getRegisterInfo(), DumpOffset);
+  if (const auto *Off =
+          shouldDump(ExplicitDWO, ".debug_loc.dwo", DIDT_ID_DebugLoc,
+                     DObj->getLocDWOSection().Data)) {
+    getDebugLocDWO()->dump(OS, 0, getRegisterInfo(), *Off);
   }
 
-  if (shouldDump(Explicit, ".debug_frame", DIDT_ID_DebugFrame,
-                 DObj->getDebugFrameSection()))
-    getDebugFrame()->dump(OS, getRegisterInfo(), DumpOffset);
+  if (const auto *Off = shouldDump(Explicit, ".debug_frame", DIDT_ID_DebugFrame,
+                                   DObj->getDebugFrameSection()))
+    getDebugFrame()->dump(OS, getRegisterInfo(), *Off);
 
-  if (shouldDump(Explicit, ".eh_frame", DIDT_ID_DebugFrame,
-                 DObj->getEHFrameSection()))
-    getEHFrame()->dump(OS, getRegisterInfo(), DumpOffset);
+  if (const auto *Off = shouldDump(Explicit, ".eh_frame", DIDT_ID_DebugFrame,
+                                   DObj->getEHFrameSection()))
+    getEHFrame()->dump(OS, getRegisterInfo(), *Off);
 
   if (DumpType & DIDT_DebugMacro) {
     if (Explicit || !getDebugMacro()->empty()) {
@@ -423,7 +425,8 @@ void DWARFContext::dump(
   }
 
   auto DumpLineSection = [&](DWARFDebugLine::SectionParser Parser,
-                             DIDumpOptions DumpOpts) {
+                             DIDumpOptions DumpOpts,
+                             Optional<uint64_t> DumpOffset) {
     while (!Parser.done()) {
       if (DumpOffset && Parser.getOffset() != *DumpOffset) {
         Parser.skip(dumpWarning);
@@ -440,22 +443,23 @@ void DWARFContext::dump(
     }
   };
 
-  if (shouldDump(Explicit, ".debug_line", DIDT_ID_DebugLine,
-                 DObj->getLineSection().Data)) {
+  if (const auto *Off = shouldDump(Explicit, ".debug_line", DIDT_ID_DebugLine,
+                                   DObj->getLineSection().Data)) {
     DWARFDataExtractor LineData(*DObj, DObj->getLineSection(), isLittleEndian(),
                                 0);
     DWARFDebugLine::SectionParser Parser(LineData, *this, compile_units(),
                                          type_units());
-    DumpLineSection(Parser, DumpOpts);
+    DumpLineSection(Parser, DumpOpts, *Off);
   }
 
-  if (shouldDump(ExplicitDWO, ".debug_line.dwo", DIDT_ID_DebugLine,
-                 DObj->getLineDWOSection().Data)) {
+  if (const auto *Off =
+          shouldDump(ExplicitDWO, ".debug_line.dwo", DIDT_ID_DebugLine,
+                     DObj->getLineDWOSection().Data)) {
     DWARFDataExtractor LineData(*DObj, DObj->getLineDWOSection(),
                                 isLittleEndian(), 0);
     DWARFDebugLine::SectionParser Parser(LineData, *this, dwo_compile_units(),
                                          dwo_type_units());
-    DumpLineSection(Parser, DumpOpts);
+    DumpLineSection(Parser, DumpOpts, *Off);
   }
 
   if (shouldDump(Explicit, ".debug_cu_index", DIDT_ID_DebugCUIndex,
@@ -547,24 +551,24 @@ void DWARFContext::dump(
   }
 
   if (shouldDump(Explicit, ".debug_pubnames", DIDT_ID_DebugPubnames,
-                 DObj->getPubNamesSection()))
-    DWARFDebugPubTable(DObj->getPubNamesSection(), isLittleEndian(), false)
+                 DObj->getPubNamesSection().Data))
+    DWARFDebugPubTable(*DObj, DObj->getPubNamesSection(), isLittleEndian(), false)
         .dump(OS);
 
   if (shouldDump(Explicit, ".debug_pubtypes", DIDT_ID_DebugPubtypes,
-                 DObj->getPubTypesSection()))
-    DWARFDebugPubTable(DObj->getPubTypesSection(), isLittleEndian(), false)
+                 DObj->getPubTypesSection().Data))
+    DWARFDebugPubTable(*DObj, DObj->getPubTypesSection(), isLittleEndian(), false)
         .dump(OS);
 
   if (shouldDump(Explicit, ".debug_gnu_pubnames", DIDT_ID_DebugGnuPubnames,
-                 DObj->getGnuPubNamesSection()))
-    DWARFDebugPubTable(DObj->getGnuPubNamesSection(), isLittleEndian(),
+                 DObj->getGnuPubNamesSection().Data))
+    DWARFDebugPubTable(*DObj, DObj->getGnuPubNamesSection(), isLittleEndian(),
                        true /* GnuStyle */)
         .dump(OS);
 
   if (shouldDump(Explicit, ".debug_gnu_pubtypes", DIDT_ID_DebugGnuPubtypes,
-                 DObj->getGnuPubTypesSection()))
-    DWARFDebugPubTable(DObj->getGnuPubTypesSection(), isLittleEndian(),
+                 DObj->getGnuPubTypesSection().Data))
+    DWARFDebugPubTable(*DObj, DObj->getGnuPubTypesSection(), isLittleEndian(),
                        true /* GnuStyle */)
         .dump(OS);
 
@@ -581,7 +585,7 @@ void DWARFContext::dump(
                              DObj->getStringDWOSection(), dwo_units(),
                              isLittleEndian(), getMaxDWOVersion());
 
-  if (shouldDump(Explicit, ".gnu_index", DIDT_ID_GdbIndex,
+  if (shouldDump(Explicit, ".gdb_index", DIDT_ID_GdbIndex,
                  DObj->getGdbIndexSection())) {
     getGdbIndex().dump(OS);
   }
@@ -732,7 +736,10 @@ const DWARFDebugLoclists *DWARFContext::getDebugLocDWO() {
   // FIXME: We don't need AddressSize for split DWARF since relocatable
   // addresses cannot appear there. At the moment DWARFExpression requires it.
   DataExtractor LocData(DObj->getLocDWOSection().Data, isLittleEndian(), 4);
-  LocDWO->parse(LocData);
+  // Use version 4. DWO does not support the DWARF v5 .debug_loclists yet and
+  // that means we are parsing the new style .debug_loc (pre-standatized version
+  // of the .debug_loclists).
+  LocDWO->parse(LocData, 4 /* Version */);
   return LocDWO.get();
 }
 
@@ -869,7 +876,9 @@ Expected<const DWARFDebugLine::LineTable *> DWARFContext::getLineTableForUnit(
 void DWARFContext::parseNormalUnits() {
   if (!NormalUnits.empty())
     return;
-  NormalUnits.addUnitsForSection(*this, DObj->getInfoSection(), DW_SECT_INFO);
+  DObj->forEachInfoSections([&](const DWARFSection &S) {
+    NormalUnits.addUnitsForSection(*this, S, DW_SECT_INFO);
+  });
   NormalUnits.finishedInfoUnits();
   DObj->forEachTypesSections([&](const DWARFSection &S) {
     NormalUnits.addUnitsForSection(*this, S, DW_SECT_TYPES);
@@ -879,8 +888,9 @@ void DWARFContext::parseNormalUnits() {
 void DWARFContext::parseDWOUnits(bool Lazy) {
   if (!DWOUnits.empty())
     return;
-  DWOUnits.addUnitsForDWOSection(*this, DObj->getInfoDWOSection(), DW_SECT_INFO,
-                                 Lazy);
+  DObj->forEachInfoDWOSections([&](const DWARFSection &S) {
+    DWOUnits.addUnitsForDWOSection(*this, S, DW_SECT_INFO, Lazy);
+  });
   DWOUnits.finishedInfoUnits();
   DObj->forEachTypesDWOSections([&](const DWARFSection &S) {
     DWOUnits.addUnitsForDWOSection(*this, S, DW_SECT_TYPES, Lazy);
@@ -1232,20 +1242,20 @@ class DWARFObjInMemory final : public DWARFObject {
   const object::ObjectFile *Obj = nullptr;
   std::vector<SectionName> SectionNames;
 
-  using TypeSectionMap = MapVector<object::SectionRef, DWARFSectionMap,
+  using InfoSectionMap = MapVector<object::SectionRef, DWARFSectionMap,
                                    std::map<object::SectionRef, unsigned>>;
 
-  TypeSectionMap TypesSections;
-  TypeSectionMap TypesDWOSections;
+  InfoSectionMap InfoSections;
+  InfoSectionMap TypesSections;
+  InfoSectionMap InfoDWOSections;
+  InfoSectionMap TypesDWOSections;
 
-  DWARFSectionMap InfoSection;
   DWARFSectionMap LocSection;
   DWARFSectionMap LocListsSection;
   DWARFSectionMap LineSection;
   DWARFSectionMap RangeSection;
   DWARFSectionMap RnglistsSection;
   DWARFSectionMap StringOffsetSection;
-  DWARFSectionMap InfoDWOSection;
   DWARFSectionMap LineDWOSection;
   DWARFSectionMap LocDWOSection;
   DWARFSectionMap StringOffsetDWOSection;
@@ -1257,17 +1267,19 @@ class DWARFObjInMemory final : public DWARFObject {
   DWARFSectionMap AppleNamespacesSection;
   DWARFSectionMap AppleObjCSection;
   DWARFSectionMap DebugNamesSection;
+  DWARFSectionMap PubNamesSection;
+  DWARFSectionMap PubTypesSection;
+  DWARFSectionMap GnuPubNamesSection;
+  DWARFSectionMap GnuPubTypesSection;
 
   DWARFSectionMap *mapNameToDWARFSection(StringRef Name) {
     return StringSwitch<DWARFSectionMap *>(Name)
-        .Case("debug_info", &InfoSection)
         .Case("debug_loc", &LocSection)
         .Case("debug_loclists", &LocListsSection)
         .Case("debug_line", &LineSection)
         .Case("debug_str_offsets", &StringOffsetSection)
         .Case("debug_ranges", &RangeSection)
         .Case("debug_rnglists", &RnglistsSection)
-        .Case("debug_info.dwo", &InfoDWOSection)
         .Case("debug_loc.dwo", &LocDWOSection)
         .Case("debug_line.dwo", &LineDWOSection)
         .Case("debug_names", &DebugNamesSection)
@@ -1275,6 +1287,10 @@ class DWARFObjInMemory final : public DWARFObject {
         .Case("debug_str_offsets.dwo", &StringOffsetDWOSection)
         .Case("debug_addr", &AddrSection)
         .Case("apple_names", &AppleNamesSection)
+        .Case("debug_pubnames", &PubNamesSection)
+        .Case("debug_pubtypes", &PubTypesSection)
+        .Case("debug_gnu_pubnames", &GnuPubNamesSection)
+        .Case("debug_gnu_pubtypes", &GnuPubTypesSection)
         .Case("apple_types", &AppleTypesSection)
         .Case("apple_namespaces", &AppleNamespacesSection)
         .Case("apple_namespac", &AppleNamespacesSection)
@@ -1288,12 +1304,8 @@ class DWARFObjInMemory final : public DWARFObject {
   StringRef EHFrameSection;
   StringRef StringSection;
   StringRef MacinfoSection;
-  StringRef PubNamesSection;
-  StringRef PubTypesSection;
-  StringRef GnuPubNamesSection;
   StringRef AbbrevDWOSection;
   StringRef StringDWOSection;
-  StringRef GnuPubTypesSection;
   StringRef CUIndexSection;
   StringRef GdbIndexSection;
   StringRef TUIndexSection;
@@ -1313,10 +1325,6 @@ class DWARFObjInMemory final : public DWARFObject {
         .Case("eh_frame", &EHFrameSection)
         .Case("debug_str", &StringSection)
         .Case("debug_macinfo", &MacinfoSection)
-        .Case("debug_pubnames", &PubNamesSection)
-        .Case("debug_pubtypes", &PubTypesSection)
-        .Case("debug_gnu_pubnames", &GnuPubNamesSection)
-        .Case("debug_gnu_pubtypes", &GnuPubTypesSection)
         .Case("debug_abbrev.dwo", &AbbrevDWOSection)
         .Case("debug_str.dwo", &StringDWOSection)
         .Case("debug_cu_index", &CUIndexSection)
@@ -1356,6 +1364,16 @@ public:
     for (const auto &SecIt : Sections) {
       if (StringRef *SectionData = mapSectionToMember(SecIt.first()))
         *SectionData = SecIt.second->getBuffer();
+      else if (SecIt.first() == "debug_info")
+        // Find debug_info and debug_types data by section rather than name as
+        // there are multiple, comdat grouped, of these sections.
+        InfoSections[SectionRef()].Data = SecIt.second->getBuffer();
+      else if (SecIt.first() == "debug_info.dwo")
+        InfoDWOSections[SectionRef()].Data = SecIt.second->getBuffer();
+      else if (SecIt.first() == "debug_types")
+        TypesSections[SectionRef()].Data = SecIt.second->getBuffer();
+      else if (SecIt.first() == "debug_types.dwo")
+        TypesDWOSections[SectionRef()].Data = SecIt.second->getBuffer();
     }
   }
   DWARFObjInMemory(const object::ObjectFile &Obj, const LoadedObjectInfo *L,
@@ -1410,9 +1428,13 @@ public:
           // FIXME: Use the other dwo range section when we emit it.
           RangeDWOSection.Data = Data;
         }
+      } else if (Name == "debug_info") {
+        // Find debug_info and debug_types data by section rather than name as
+        // there are multiple, comdat grouped, of these sections.
+        InfoSections[Section].Data = Data;
+      } else if (Name == "debug_info.dwo") {
+        InfoDWOSections[Section].Data = Data;
       } else if (Name == "debug_types") {
-        // Find debug_types data by section rather than name as there are
-        // multiple, comdat grouped, debug_types sections.
         TypesSections[Section].Data = Data;
       } else if (Name == "debug_types.dwo") {
         TypesDWOSections[Section].Data = Data;
@@ -1447,9 +1469,16 @@ public:
       DWARFSectionMap *Sec = mapNameToDWARFSection(RelSecName);
       RelocAddrMap *Map = Sec ? &Sec->Relocs : nullptr;
       if (!Map) {
-        // Find debug_types relocs by section rather than name as there are
-        // multiple, comdat grouped, debug_types sections.
-        if (RelSecName == "debug_types")
+        // Find debug_info and debug_types relocs by section rather than name
+        // as there are multiple, comdat grouped, of these sections.
+        if (RelSecName == "debug_info")
+          Map = &static_cast<DWARFSectionMap &>(InfoSections[*RelocatedSection])
+                     .Relocs;
+        else if (RelSecName == "debug_info.dwo")
+          Map = &static_cast<DWARFSectionMap &>(
+                     InfoDWOSections[*RelocatedSection])
+                     .Relocs;
+        else if (RelSecName == "debug_types")
           Map =
               &static_cast<DWARFSectionMap &>(TypesSections[*RelocatedSection])
                    .Relocs;
@@ -1547,8 +1576,10 @@ public:
   StringRef getLineStringSection() const override { return LineStringSection; }
 
   // Sections for DWARF5 split dwarf proposal.
-  const DWARFSection &getInfoDWOSection() const override {
-    return InfoDWOSection;
+  void forEachInfoDWOSections(
+      function_ref<void(const DWARFSection &)> F) const override {
+    for (auto &P : InfoDWOSections)
+      F(P.second);
   }
   void forEachTypesDWOSections(
       function_ref<void(const DWARFSection &)> F) const override {
@@ -1569,12 +1600,12 @@ public:
     return RnglistsSection;
   }
   StringRef getMacinfoSection() const override { return MacinfoSection; }
-  StringRef getPubNamesSection() const override { return PubNamesSection; }
-  StringRef getPubTypesSection() const override { return PubTypesSection; }
-  StringRef getGnuPubNamesSection() const override {
+  const DWARFSection &getPubNamesSection() const override { return PubNamesSection; }
+  const DWARFSection &getPubTypesSection() const override { return PubTypesSection; }
+  const DWARFSection &getGnuPubNamesSection() const override {
     return GnuPubNamesSection;
   }
-  StringRef getGnuPubTypesSection() const override {
+  const DWARFSection &getGnuPubTypesSection() const override {
     return GnuPubTypesSection;
   }
   const DWARFSection &getAppleNamesSection() const override {
@@ -1595,7 +1626,11 @@ public:
 
   StringRef getFileName() const override { return FileName; }
   uint8_t getAddressSize() const override { return AddressSize; }
-  const DWARFSection &getInfoSection() const override { return InfoSection; }
+  void forEachInfoSections(
+      function_ref<void(const DWARFSection &)> F) const override {
+    for (auto &P : InfoSections)
+      F(P.second);
+  }
   void forEachTypesSections(
       function_ref<void(const DWARFSection &)> F) const override {
     for (auto &P : TypesSections)

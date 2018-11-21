@@ -36,15 +36,15 @@ class UdtRecordCompleter : public llvm::codeview::TypeVisitorCallbacks {
     llvm::codeview::EnumRecord er;
   } m_cvr;
 
-  PdbSymUid m_uid;
+  PdbTypeSymId m_id;
   CompilerType &m_derived_ct;
   clang::TagDecl &m_tag_decl;
   SymbolFileNativePDB &m_symbol_file;
-  std::vector<clang::CXXBaseSpecifier *> m_bases;
+  std::vector<std::unique_ptr<clang::CXXBaseSpecifier>> m_bases;
   ClangASTImporter::LayoutInfo m_layout;
 
 public:
-  UdtRecordCompleter(PdbSymUid uid, CompilerType &derived_ct,
+  UdtRecordCompleter(PdbTypeSymId id, CompilerType &derived_ct,
                      clang::TagDecl &tag_decl,
                      SymbolFileNativePDB &symbol_file);
 

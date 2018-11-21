@@ -85,6 +85,9 @@ public:
   ParseVariablesForContext(const lldb_private::SymbolContext &sc) override;
 
   lldb_private::Type *ResolveTypeUID(lldb::user_id_t type_uid) override;
+  llvm::Optional<ArrayInfo> GetDynamicArrayInfoForUID(
+      lldb::user_id_t type_uid,
+      const lldb_private::ExecutionContext *exe_ctx) override;
 
   bool CompleteType(lldb_private::CompilerType &compiler_type) override;
 
@@ -100,12 +103,13 @@ public:
   ParseDeclsForContext(lldb_private::CompilerDeclContext decl_ctx) override;
 
   uint32_t ResolveSymbolContext(const lldb_private::Address &so_addr,
-                                uint32_t resolve_scope,
+                                lldb::SymbolContextItem resolve_scope,
                                 lldb_private::SymbolContext &sc) override;
 
   uint32_t
   ResolveSymbolContext(const lldb_private::FileSpec &file_spec, uint32_t line,
-                       bool check_inlines, uint32_t resolve_scope,
+                       bool check_inlines,
+                       lldb::SymbolContextItem resolve_scope,
                        lldb_private::SymbolContextList &sc_list) override;
 
   uint32_t
@@ -121,8 +125,8 @@ public:
   uint32_t
   FindFunctions(const lldb_private::ConstString &name,
                 const lldb_private::CompilerDeclContext *parent_decl_ctx,
-                uint32_t name_type_mask, bool include_inlines, bool append,
-                lldb_private::SymbolContextList &sc_list) override;
+                lldb::FunctionNameType name_type_mask, bool include_inlines,
+                bool append, lldb_private::SymbolContextList &sc_list) override;
 
   uint32_t FindFunctions(const lldb_private::RegularExpression &regex,
                          bool include_inlines, bool append,
@@ -149,7 +153,7 @@ public:
   lldb_private::TypeList *GetTypeList() override;
 
   size_t GetTypes(lldb_private::SymbolContextScope *sc_scope,
-                  uint32_t type_mask,
+                  lldb::TypeClass type_mask,
                   lldb_private::TypeList &type_list) override;
 
   lldb_private::TypeSystem *
@@ -167,6 +171,8 @@ public:
   llvm::pdb::IPDBSession &GetPDBSession();
 
   const llvm::pdb::IPDBSession &GetPDBSession() const;
+
+  void DumpClangAST(lldb_private::Stream &s) override;
 
 private:
   struct SecContribInfo {
@@ -186,7 +192,7 @@ private:
       const llvm::pdb::PDBSymbolCompiland &pdb_compiland,
       llvm::DenseMap<uint32_t, uint32_t> &index_map) const;
 
-  void FindTypesByName(const std::string &name,
+  void FindTypesByName(llvm::StringRef name,
                        const lldb_private::CompilerDeclContext *parent_decl_ctx,
                        uint32_t max_matches, lldb_private::TypeMap &types);
 

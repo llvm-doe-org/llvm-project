@@ -44,7 +44,8 @@ struct FileCheckRequest {
 //===----------------------------------------------------------------------===//
 
 namespace Check {
-enum FileCheckType {
+
+enum FileCheckKind {
   CheckNone = 0,
   CheckPlain,
   CheckNext,
@@ -59,7 +60,26 @@ enum FileCheckType {
   CheckEOF,
 
   /// Marks when parsing found a -NOT check combined with another CHECK suffix.
-  CheckBadNot
+  CheckBadNot,
+
+  /// Marks when parsing found a -COUNT directive with invalid count value.
+  CheckBadCount
+};
+
+class FileCheckType {
+  FileCheckKind Kind;
+  int Count; ///< optional Count for some checks
+
+public:
+  FileCheckType(FileCheckKind Kind = CheckNone) : Kind(Kind), Count(1) {}
+  FileCheckType(const FileCheckType &) = default;
+
+  operator FileCheckKind() const { return Kind; }
+
+  int getCount() const { return Count; }
+  FileCheckType &setCount(int C);
+
+  std::string getDescription(StringRef Prefix) const;
 };
 }
 
@@ -109,14 +129,15 @@ public:
                          SMRange MatchRange = None) const;
   void PrintFuzzyMatch(const SourceMgr &SM, StringRef Buffer,
                        const StringMap<StringRef> &VariableTable,
-                       std::list<FileCheckDiag> *Diags) const;
+                       std::vector<FileCheckDiag> *Diags) const;
 
   bool hasVariable() const {
     return !(VariableUses.empty() && VariableDefs.empty());
   }
 
   Check::FileCheckType getCheckTy() const { return CheckTy; }
-  unsigned getLineNumber() const { return LineNumber; }
+
+  int getCount() const { return CheckTy.getCount(); }
 
 private:
   bool AddRegExToRegEx(StringRef RS, unsigned &CurParen, SourceMgr &SM);
@@ -189,7 +210,7 @@ struct FileCheckString {
 
   size_t Check(const SourceMgr &SM, StringRef Buffer, bool IsLabelScanMode,
                size_t &MatchLen, StringMap<StringRef> &VariableTable,
-               FileCheckRequest &Req, std::list<FileCheckDiag> *Diags) const;
+               FileCheckRequest &Req, std::vector<FileCheckDiag> *Diags) const;
 
   bool CheckNext(const SourceMgr &SM, StringRef Buffer) const;
   bool CheckSame(const SourceMgr &SM, StringRef Buffer) const;
@@ -197,12 +218,12 @@ struct FileCheckString {
                 const std::vector<const FileCheckPattern *> &NotStrings,
                 StringMap<StringRef> &VariableTable,
                 const FileCheckRequest &Req,
-                std::list<FileCheckDiag> *Diags) const;
+                std::vector<FileCheckDiag> *Diags) const;
   size_t CheckDag(const SourceMgr &SM, StringRef Buffer,
                   std::vector<const FileCheckPattern *> &NotStrings,
                   StringMap<StringRef> &VariableTable,
                   const FileCheckRequest &Req,
-                  std::list<FileCheckDiag> *Diags) const;
+                  std::vector<FileCheckDiag> *Diags) const;
 };
 
 /// FileCheck class takes the request and exposes various methods that
@@ -240,7 +261,7 @@ public:
   /// Returns false if the input fails to satisfy the checks.
   bool CheckInput(SourceMgr &SM, StringRef Buffer,
                   ArrayRef<FileCheckString> CheckStrings,
-                  std::list<FileCheckDiag> *Diags = nullptr);
+                  std::vector<FileCheckDiag> *Diags = nullptr);
 };
 } // namespace llvm
 #endif

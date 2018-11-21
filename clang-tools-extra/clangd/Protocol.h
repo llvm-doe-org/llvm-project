@@ -175,11 +175,6 @@ struct Location {
 llvm::json::Value toJSON(const Location &);
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const Location &);
 
-struct Metadata {
-  std::vector<std::string> extraFlags;
-};
-bool fromJSON(const llvm::json::Value &, Metadata &);
-
 struct TextEdit {
   /// The range of the text document to be manipulated. To insert
   /// text into a document create a range where start === end.
@@ -355,25 +350,30 @@ struct ClangdCompileCommand {
 };
 bool fromJSON(const llvm::json::Value &, ClangdCompileCommand &);
 
-/// Clangd extension to set clangd-specific "initializationOptions" in the
-/// "initialize" request and for the "workspace/didChangeConfiguration"
-/// notification since the data received is described as 'any' type in LSP.
-struct ClangdConfigurationParamsChange {
-  // The changes that happened to the compilation database.
+/// Clangd extension: parameters configurable at any time, via the
+/// `workspace/didChangeConfiguration` notification.
+/// LSP defines this type as `any`.
+struct ConfigurationSettings {
+  // Changes to the in-memory compilation database.
   // The key of the map is a file name.
-  llvm::Optional<std::map<std::string, ClangdCompileCommand>>
-      compilationDatabaseChanges;
+  std::map<std::string, ClangdCompileCommand> compilationDatabaseChanges;
 };
-bool fromJSON(const llvm::json::Value &, ClangdConfigurationParamsChange &);
+bool fromJSON(const llvm::json::Value &, ConfigurationSettings &);
 
-struct ClangdInitializationOptions {
+/// Clangd extension: parameters configurable at `initialize` time.
+/// LSP defines this type as `any`.
+struct InitializationOptions {
   // What we can change throught the didChangeConfiguration request, we can
   // also set through the initialize request (initializationOptions field).
-  ClangdConfigurationParamsChange ParamsChange;
+  ConfigurationSettings ConfigSettings;
 
   llvm::Optional<std::string> compilationDatabasePath;
+  // Additional flags to be included in the "fallback command" used when
+  // the compilation database doesn't describe an opened file.
+  // The command used will be approximately `clang $FILE $fallbackFlags`.
+  std::vector<std::string> fallbackFlags;
 };
-bool fromJSON(const llvm::json::Value &, ClangdInitializationOptions &);
+bool fromJSON(const llvm::json::Value &, InitializationOptions &);
 
 struct InitializeParams {
   /// The process Id of the parent process that started
@@ -402,18 +402,14 @@ struct InitializeParams {
   /// The initial trace setting. If omitted trace is disabled ('off').
   llvm::Optional<TraceLevel> trace;
 
-  // We use this predefined struct because it is easier to use
-  // than the protocol specified type of 'any'.
-  llvm::Optional<ClangdInitializationOptions> initializationOptions;
+  /// User-provided initialization options.
+  InitializationOptions initializationOptions;
 };
 bool fromJSON(const llvm::json::Value &, InitializeParams &);
 
 struct DidOpenTextDocumentParams {
   /// The document that was opened.
   TextDocumentItem textDocument;
-
-  /// Extension storing per-file metadata, such as compilation flags.
-  llvm::Optional<Metadata> metadata;
 };
 bool fromJSON(const llvm::json::Value &, DidOpenTextDocumentParams &);
 
@@ -477,9 +473,7 @@ struct DidChangeWatchedFilesParams {
 bool fromJSON(const llvm::json::Value &, DidChangeWatchedFilesParams &);
 
 struct DidChangeConfigurationParams {
-  // We use this predefined struct because it is easier to use
-  // than the protocol specified type of 'any'.
-  ClangdConfigurationParamsChange settings;
+  ConfigurationSettings settings;
 };
 bool fromJSON(const llvm::json::Value &, DidChangeConfigurationParams &);
 

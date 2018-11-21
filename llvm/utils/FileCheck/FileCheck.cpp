@@ -95,13 +95,10 @@ static cl::opt<bool> DumpInputOnFailure(
              "FILECHECK_DUMP_INPUT_ON_FAILURE environment variable.\n"
              "This option is deprecated in favor of -dump-input.\n"));
 
-static const char *DumpInputEnvValue = std::getenv("FILECHECK_DUMP_INPUT");
-
 static cl::opt<std::string> DumpInput(
-    "dump-input", cl::init(DumpInputEnvValue ? DumpInputEnvValue : "never"),
-    cl::desc("Dump annotated original input to stderr either 'always', on\n"
-             "'fail', or 'never'.  The value can be also controlled using\n"
-             "FILECHECK_DUMP_INPUT environment variable.\n"),
+    "dump-input", cl::init("never"),
+    cl::desc("Dump annotated input to stderr either 'always', on 'fail',\n"
+             "or 'never'.\n"),
     cl::value_desc("mode"));
 
 typedef cl::list<std::string>::const_iterator prefix_iterator;
@@ -171,9 +168,9 @@ static MatchTypeStyle GetMatchTypeStyle(unsigned MatchTy) {
   llvm_unreachable_internal("unexpected match type");
 }
 
-static void DumpInputAnnotationKey(raw_ostream &OS,
-                                   const FileCheckRequest &Req) {
-  OS << "\nKey for input dump annotations:\n\n";
+static void DumpInputAnnotationExplanation(raw_ostream &OS,
+                                           const FileCheckRequest &Req) {
+  OS << "\nFormat for input dump annotations:\n\n";
 
   // Labels for input lines.
   OS << "  - ";
@@ -268,6 +265,14 @@ static void DumpInputAnnotationKey(raw_ostream &OS,
     OS << "  is style of input text with no final match for any expected "
        << "pattern\n";
   }
+
+  // Files.
+  OS << "\nInput file: ";
+  if (InputFilename == "-")
+    OS << "<stdin>";
+  else
+    OS << InputFilename;
+  OS << "\nCheck file: " << CheckFilename << "\n";
 }
 
 /// An annotation for a single input line.
@@ -296,10 +301,12 @@ struct InputAnnotation {
   raw_ostream::Colors Color;
 };
 
-/// Get a three-letter abbreviation for the check type.
+/// Get an abbreviation for the check type.
 std::string GetCheckTypeAbbreviation(Check::FileCheckType Ty) {
   switch (Ty) {
   case Check::CheckPlain:
+    if (Ty.getCount() > 1)
+      return "count";
     return "check";
   case Check::CheckNext:
     return "next";
@@ -317,23 +324,24 @@ std::string GetCheckTypeAbbreviation(Check::FileCheckType Ty) {
     return "eof";
   case Check::CheckBadNot:
     return "bad-not";
+  case Check::CheckBadCount:
+    return "bad-count";
   case Check::CheckNone:
     llvm_unreachable("invalid FileCheckType");
   }
   llvm_unreachable("unknown FileCheckType");
 }
 
-static void BuildInputAnnotations(const std::list<FileCheckDiag> &DiagList,
-                                  std::list<InputAnnotation> &AnnotationList,
+static void BuildInputAnnotations(const std::vector<FileCheckDiag> &Diags,
+                                  std::vector<InputAnnotation> &Annotations,
                                   unsigned &LabelWidth) {
   // How many diagnostics has the current check seen so far?
   unsigned CheckDiagCount = 0;
   // What's the widest label?
   LabelWidth = 0;
-  for (auto DiagItr = DiagList.begin(), DiagEnd = DiagList.end();
-       DiagItr != DiagEnd; ++DiagItr) {
-    AnnotationList.emplace_back();
-    InputAnnotation &A = AnnotationList.back();
+  for (auto DiagItr = Diags.begin(), DiagEnd = Diags.end(); DiagItr != DiagEnd;
+       ++DiagItr) {
+    InputAnnotation A;
 
     // Build label, which uniquely identifies this check result.
     A.CheckLine = DiagItr->CheckLine;
@@ -376,6 +384,7 @@ static void BuildInputAnnotations(const std::list<FileCheckDiag> &DiagList,
               A.InputStartCol + 1 == A.InputEndCol) &&
              "expected input range to have only one character for marker "
              "style without tildes");
+      Annotations.push_back(A);
     } else {
       assert(MatchTyStyle.HasTildes &&
              "expected input range to have only one character for marker "
@@ -383,14 +392,14 @@ static void BuildInputAnnotations(const std::list<FileCheckDiag> &DiagList,
       assert(DiagItr->InputStartLine < DiagItr->InputEndLine &&
              "expected input range not to be inverted");
       A.InputEndCol = UINT_MAX;
+      Annotations.push_back(A);
       for (unsigned L = DiagItr->InputStartLine + 1, E = DiagItr->InputEndLine;
            L <= E; ++L) {
         // If a range ends before the first column on a line, then it has no
         // characters on that line, so there's nothing to render.
         if (DiagItr->InputEndCol == 1 && L == E)
           break;
-        AnnotationList.emplace_back();
-        InputAnnotation &B = AnnotationList.back();
+        InputAnnotation B;
         B.CheckLine = A.CheckLine;
         B.CheckDiagIndex = A.CheckDiagIndex;
         B.Label = A.Label;
@@ -403,6 +412,7 @@ static void BuildInputAnnotations(const std::list<FileCheckDiag> &DiagList,
           B.InputEndCol = DiagItr->InputEndCol;
         B.FinalAndExpectedMatch = A.FinalAndExpectedMatch;
         B.Color = A.Color;
+        Annotations.push_back(B);
       }
     }
   }
@@ -410,7 +420,7 @@ static void BuildInputAnnotations(const std::list<FileCheckDiag> &DiagList,
 
 static void DumpAnnotatedInput(
     raw_ostream &OS, const FileCheckRequest &Req, StringRef InputFileText,
-    const std::list<InputAnnotation> &AnnotationList, unsigned LabelWidth) {
+    std::vector<InputAnnotation> &Annotations, unsigned LabelWidth) {
   OS << "Full input was:\n<<<<<<\n";
 
   // Sort annotations.
@@ -427,8 +437,6 @@ static void DumpAnnotatedInput(
   // sort establishes a total order of annotations that, with respect to match
   // results, is consistent across multiple lines, thus making match results
   // easier to track from one line to the next when they span multiple lines.
-  std::vector<InputAnnotation> Annotations(AnnotationList.begin(),
-                                           AnnotationList.end());
   std::sort(Annotations.begin(), Annotations.end(),
             [](const InputAnnotation &A, const InputAnnotation &B) {
               if (A.InputLine != B.InputLine)
@@ -545,7 +553,8 @@ int main(int argc, char **argv) {
   llvm::sys::Process::UseANSIEscapeCodes(true);
 
   InitLLVM X(argc, argv);
-  cl::ParseCommandLineOptions(argc, argv, "", nullptr, "FILECHECK_OPTS");
+  cl::ParseCommandLineOptions(argc, argv, /*Overview*/ "", /*Errs*/ nullptr,
+                              "FILECHECK_OPTS");
 
   FileCheckRequest Req;
   for (auto Prefix : CheckPrefixes)
@@ -638,20 +647,20 @@ int main(int argc, char **argv) {
                             InputFileText, InputFile.getBufferIdentifier()),
                         SMLoc());
 
-  std::list<FileCheckDiag> DiagList;
-  int ExitCode = FC.CheckInput(SM, InputFileText, CheckStrings, &DiagList)
+  std::vector<FileCheckDiag> Diags;
+  int ExitCode = FC.CheckInput(SM, InputFileText, CheckStrings, &Diags)
                      ? EXIT_SUCCESS
                      : 1;
   if (ExitCode == 1 && DumpInputOnFailure)
     errs() << "Full input was:\n<<<<<<\n" << InputFileText << "\n>>>>>>\n";
   if (DumpInput == "always" || (ExitCode == 1 && DumpInput == "fail")) {
     errs() << '\n';
-    DumpInputAnnotationKey(errs(), Req);
-    std::list<InputAnnotation> AnnotationList;
+    DumpInputAnnotationExplanation(errs(), Req);
+    std::vector<InputAnnotation> Annotations;
     unsigned LabelWidth;
-    BuildInputAnnotations(DiagList, AnnotationList, LabelWidth);
+    BuildInputAnnotations(Diags, Annotations, LabelWidth);
     errs() << '\n';
-    DumpAnnotatedInput(errs(), Req, InputFileText, AnnotationList, LabelWidth);
+    DumpAnnotatedInput(errs(), Req, InputFileText, Annotations, LabelWidth);
   }
 
   return ExitCode;

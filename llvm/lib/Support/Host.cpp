@@ -211,6 +211,17 @@ StringRef sys::detail::getHostCPUNameForARM(StringRef ProcCpuinfoContent) {
     }
   }
 
+  if (Implementer == "0x48") // HiSilicon Technologies, Inc.
+    // Look for the CPU part line.
+    for (unsigned I = 0, E = Lines.size(); I != E; ++I)
+      if (Lines[I].startswith("CPU part"))
+        // The CPU part is a 3 digit hexadecimal number with a 0x prefix. The
+        // values correspond to the "Part number" in the CP15/c0 register. The
+        // contents are specified in the various processor manuals.
+        return StringSwitch<const char *>(Lines[I].substr(8).ltrim("\t :"))
+          .Case("0xd01", "tsv110")
+          .Default("generic");
+
   if (Implementer == "0x51") // Qualcomm Technologies, Inc.
     // Look for the CPU part line.
     for (unsigned I = 0, E = Lines.size(); I != E; ++I)
@@ -679,6 +690,12 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
       break;
 
     default: // Unknown family 6 CPU, try to guess.
+      if (Features & (1 << X86::FEATURE_AVX512VBMI2)) {
+        *Type = X86::INTEL_COREI7;
+        *Subtype = X86::INTEL_COREI7_ICELAKE_CLIENT;
+        break;
+      }
+
       if (Features & (1 << X86::FEATURE_AVX512VBMI)) {
         *Type = X86::INTEL_COREI7;
         *Subtype = X86::INTEL_COREI7_CANNONLAKE;

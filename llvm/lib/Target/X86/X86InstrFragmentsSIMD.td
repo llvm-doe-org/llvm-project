@@ -103,16 +103,6 @@ def X86vzmovl  : SDNode<"X86ISD::VZEXT_MOVL",
 def X86vzload  : SDNode<"X86ISD::VZEXT_LOAD", SDTLoad,
                         [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
 
-def X86vzext   : SDNode<"X86ISD::VZEXT",
-                         SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisVec<1>,
-                                              SDTCisInt<0>, SDTCisInt<1>,
-                                              SDTCisOpSmallerThanOp<1, 0>]>>;
-
-def X86vsext   : SDNode<"X86ISD::VSEXT",
-                         SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisVec<1>,
-                                              SDTCisInt<0>, SDTCisInt<1>,
-                                              SDTCisOpSmallerThanOp<1, 0>]>>;
-
 def SDTVtrunc    : SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisVec<1>,
                                        SDTCisInt<0>, SDTCisInt<1>,
                                        SDTCisOpSmallerThanOp<0, 1>]>;
@@ -855,6 +845,7 @@ def bc_v4f64 : PatFrag<(ops node:$in), (v4f64 (bitconvert node:$in))>;
 
 // 512-bit bitconvert pattern fragments
 def bc_v64i8 : PatFrag<(ops node:$in), (v64i8 (bitconvert node:$in))>;
+def bc_v32i16 : PatFrag<(ops node:$in), (v32i16 (bitconvert node:$in))>;
 def bc_v16i32 : PatFrag<(ops node:$in), (v16i32 (bitconvert node:$in))>;
 def bc_v8i64 : PatFrag<(ops node:$in), (v8i64 (bitconvert node:$in))>;
 def bc_v8f64 : PatFrag<(ops node:$in), (v8f64 (bitconvert node:$in))>;

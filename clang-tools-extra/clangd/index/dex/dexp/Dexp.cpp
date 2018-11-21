@@ -33,7 +33,7 @@ cl::opt<std::string> IndexPath("index-path", cl::desc("Path to the index"),
 
 static const std::string Overview = R"(
 This is an **experimental** interactive tool to process user-provided search
-queries over given symbol collection obtained via global-symbol-builder. The
+queries over given symbol collection obtained via clangd-indexer. The
 tool can be used to evaluate search quality of existing index implementations
 and manually construct non-trivial test cases.
 
@@ -58,6 +58,10 @@ std::vector<SymbolID> getSymbolIDsFromIndex(StringRef QualifiedName,
   auto Names = splitQualifiedName(QualifiedName);
   if (IsGlobalScope || !Names.first.empty())
     Request.Scopes = {Names.first};
+  else
+    // QualifiedName refers to a symbol in global scope (e.g. "GlobalSymbol"),
+    // add the global scope to the request.
+    Request.Scopes = {""};
 
   Request.Query = Names.second;
   std::vector<SymbolID> SymIDs;
@@ -139,6 +143,7 @@ class FuzzyFind : public Command {
       StringRef(this->Scopes).split(Scopes, ',');
       Request.Scopes = {Scopes.begin(), Scopes.end()};
     }
+    Request.AnyScope = Request.Scopes.empty();
     // FIXME(kbobyrev): Print symbol final scores to see the distribution.
     static const auto OutputFormat = "{0,-4} | {1,-40} | {2,-25}\n";
     outs() << formatv(OutputFormat, "Rank", "Symbol ID", "Symbol Name");
@@ -217,6 +222,12 @@ class Refs : public Command {
       IDs.push_back(*SID);
     } else {
       IDs = getSymbolIDsFromIndex(Name, Index);
+      if (IDs.size() > 1) {
+        outs() << formatv("The name {0} is ambiguous, found {1} different "
+                          "symbols. Please use id flag to disambiguate.\n",
+                          Name, IDs.size());
+        return;
+      }
     }
     RefsRequest RefRequest;
     RefRequest.IDs.insert(IDs.begin(), IDs.end());

@@ -38,6 +38,8 @@
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #include <sys/attr.h>
+#elif defined(__DragonFly__)
+#include <sys/mount.h>
 #endif
 
 // Both stdio.h and cstdio are included via different paths and
@@ -83,7 +85,7 @@
 #define STATVFS_F_FRSIZE(vfs) static_cast<uint64_t>(vfs.f_bsize)
 #endif
 
-#if defined(__NetBSD__) || defined(__GNU__)
+#if defined(__NetBSD__) || defined(__DragonFly__) || defined(__GNU__)
 #define STATVFS_F_FLAG(vfs) (vfs).f_flag
 #else
 #define STATVFS_F_FLAG(vfs) (vfs).f_flags
@@ -546,6 +548,18 @@ static void expandTildeExpr(SmallVectorImpl<char> &Path) {
   Path.clear();
   Path.append(Entry->pw_dir, Entry->pw_dir + strlen(Entry->pw_dir));
   llvm::sys::path::append(Path, Storage);
+}
+
+
+void expand_tilde(const Twine &path, SmallVectorImpl<char> &dest) {
+  dest.clear();
+  if (path.isTriviallyEmpty())
+    return;
+
+  path.toVector(dest);
+  expandTildeExpr(dest);
+
+  return;
 }
 
 static file_type typeForMode(mode_t Mode) {

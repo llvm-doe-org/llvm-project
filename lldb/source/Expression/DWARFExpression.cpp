@@ -9,10 +9,8 @@
 
 #include "lldb/Expression/DWARFExpression.h"
 
-// C Includes
 #include <inttypes.h>
 
-// C++ Includes
 #include <vector>
 
 #include "lldb/Core/Module.h"
@@ -3029,7 +3027,9 @@ bool DWARFExpression::AddressRangeForLocationListEntry(
   if (!debug_loc_data.ValidOffset(*offset_ptr))
     return false;
 
-  switch (dwarf_cu->GetSymbolFileDWARF()->GetLocationListFormat()) {
+  DWARFExpression::LocationListFormat format =
+      dwarf_cu->GetSymbolFileDWARF()->GetLocationListFormat();
+  switch (format) {
   case NonLocationList:
     return false;
   case RegularLocationList:
@@ -3051,7 +3051,9 @@ bool DWARFExpression::AddressRangeForLocationListEntry(
     case DW_LLE_startx_length: {
       uint64_t index = debug_loc_data.GetULEB128(offset_ptr);
       low_pc = ReadAddressFromDebugAddrSection(dwarf_cu, index);
-      uint32_t length = debug_loc_data.GetU32(offset_ptr);
+      uint64_t length = (format == LocLists)
+                            ? debug_loc_data.GetULEB128(offset_ptr)
+                            : debug_loc_data.GetU32(offset_ptr);
       high_pc = low_pc + length;
       return true;
     }

@@ -213,28 +213,23 @@ define void @test1(x86_mmx* %A, x86_mmx* %B) {
 ; X32-NEXT:    movq %xmm0, (%eax)
 ; X32-NEXT:    movsd {{.*#+}} xmm0 = mem[0],zero
 ; X32-NEXT:    shufps {{.*#+}} xmm0 = xmm0[0,1,1,3]
-; X32-NEXT:    movdqa %xmm1, %xmm2
-; X32-NEXT:    pmuludq %xmm0, %xmm2
-; X32-NEXT:    psrlq $32, %xmm1
-; X32-NEXT:    pmuludq %xmm0, %xmm1
-; X32-NEXT:    psllq $32, %xmm1
-; X32-NEXT:    paddq %xmm2, %xmm1
-; X32-NEXT:    pshufd {{.*#+}} xmm0 = xmm1[0,2,2,3]
-; X32-NEXT:    movq %xmm0, (%eax)
-; X32-NEXT:    movsd {{.*#+}} xmm0 = mem[0],zero
-; X32-NEXT:    shufps {{.*#+}} xmm0 = xmm0[0,1,1,3]
-; X32-NEXT:    andps %xmm1, %xmm0
+; X32-NEXT:    pmuludq %xmm1, %xmm0
 ; X32-NEXT:    pshufd {{.*#+}} xmm1 = xmm0[0,2,2,3]
 ; X32-NEXT:    movq %xmm1, (%eax)
 ; X32-NEXT:    movsd {{.*#+}} xmm1 = mem[0],zero
 ; X32-NEXT:    shufps {{.*#+}} xmm1 = xmm1[0,1,1,3]
-; X32-NEXT:    orps %xmm0, %xmm1
+; X32-NEXT:    andps %xmm0, %xmm1
 ; X32-NEXT:    pshufd {{.*#+}} xmm0 = xmm1[0,2,2,3]
 ; X32-NEXT:    movq %xmm0, (%eax)
 ; X32-NEXT:    movsd {{.*#+}} xmm0 = mem[0],zero
 ; X32-NEXT:    shufps {{.*#+}} xmm0 = xmm0[0,1,1,3]
-; X32-NEXT:    xorps %xmm1, %xmm0
-; X32-NEXT:    pshufd {{.*#+}} xmm0 = xmm0[0,2,2,3]
+; X32-NEXT:    orps %xmm1, %xmm0
+; X32-NEXT:    pshufd {{.*#+}} xmm1 = xmm0[0,2,2,3]
+; X32-NEXT:    movq %xmm1, (%eax)
+; X32-NEXT:    movsd {{.*#+}} xmm1 = mem[0],zero
+; X32-NEXT:    shufps {{.*#+}} xmm1 = xmm1[0,1,1,3]
+; X32-NEXT:    xorps %xmm0, %xmm1
+; X32-NEXT:    pshufd {{.*#+}} xmm0 = xmm1[0,2,2,3]
 ; X32-NEXT:    movq %xmm0, (%eax)
 ; X32-NEXT:    emms
 ; X32-NEXT:    retl
@@ -250,28 +245,23 @@ define void @test1(x86_mmx* %A, x86_mmx* %B) {
 ; X64-NEXT:    movq %xmm0, (%rdi)
 ; X64-NEXT:    movq {{.*#+}} xmm0 = mem[0],zero
 ; X64-NEXT:    pshufd {{.*#+}} xmm0 = xmm0[0,1,1,3]
-; X64-NEXT:    movdqa %xmm1, %xmm2
-; X64-NEXT:    pmuludq %xmm0, %xmm2
-; X64-NEXT:    psrlq $32, %xmm1
-; X64-NEXT:    pmuludq %xmm0, %xmm1
-; X64-NEXT:    psllq $32, %xmm1
-; X64-NEXT:    paddq %xmm2, %xmm1
-; X64-NEXT:    pshufd {{.*#+}} xmm0 = xmm1[0,2,2,3]
-; X64-NEXT:    movq %xmm0, (%rdi)
-; X64-NEXT:    movq {{.*#+}} xmm0 = mem[0],zero
-; X64-NEXT:    pshufd {{.*#+}} xmm0 = xmm0[0,1,1,3]
-; X64-NEXT:    pand %xmm1, %xmm0
+; X64-NEXT:    pmuludq %xmm1, %xmm0
 ; X64-NEXT:    pshufd {{.*#+}} xmm1 = xmm0[0,2,2,3]
 ; X64-NEXT:    movq %xmm1, (%rdi)
 ; X64-NEXT:    movq {{.*#+}} xmm1 = mem[0],zero
 ; X64-NEXT:    pshufd {{.*#+}} xmm1 = xmm1[0,1,1,3]
-; X64-NEXT:    por %xmm0, %xmm1
+; X64-NEXT:    pand %xmm0, %xmm1
 ; X64-NEXT:    pshufd {{.*#+}} xmm0 = xmm1[0,2,2,3]
 ; X64-NEXT:    movq %xmm0, (%rdi)
 ; X64-NEXT:    movq {{.*#+}} xmm0 = mem[0],zero
 ; X64-NEXT:    pshufd {{.*#+}} xmm0 = xmm0[0,1,1,3]
-; X64-NEXT:    pxor %xmm1, %xmm0
-; X64-NEXT:    pshufd {{.*#+}} xmm0 = xmm0[0,2,2,3]
+; X64-NEXT:    por %xmm1, %xmm0
+; X64-NEXT:    pshufd {{.*#+}} xmm1 = xmm0[0,2,2,3]
+; X64-NEXT:    movq %xmm1, (%rdi)
+; X64-NEXT:    movq {{.*#+}} xmm1 = mem[0],zero
+; X64-NEXT:    pshufd {{.*#+}} xmm1 = xmm1[0,1,1,3]
+; X64-NEXT:    pxor %xmm0, %xmm1
+; X64-NEXT:    pshufd {{.*#+}} xmm0 = xmm1[0,2,2,3]
 ; X64-NEXT:    movq %xmm0, (%rdi)
 ; X64-NEXT:    emms
 ; X64-NEXT:    retq
@@ -604,13 +594,12 @@ define <1 x i64> @test3(<1 x i64>* %a, <1 x i64>* %b, i32 %count) nounwind {
 ;
 ; X64-LABEL: test3:
 ; X64:       # %bb.0: # %entry
+; X64-NEXT:    xorl %r8d, %r8d
 ; X64-NEXT:    xorl %eax, %eax
 ; X64-NEXT:    testl %edx, %edx
-; X64-NEXT:    je .LBB3_3
-; X64-NEXT:  # %bb.1: # %bb26.preheader
-; X64-NEXT:    xorl %r8d, %r8d
+; X64-NEXT:    je .LBB3_2
 ; X64-NEXT:    .p2align 4, 0x90
-; X64-NEXT:  .LBB3_2: # %bb26
+; X64-NEXT:  .LBB3_1: # %bb26
 ; X64-NEXT:    # =>This Inner Loop Header: Depth=1
 ; X64-NEXT:    movslq %r8d, %r8
 ; X64-NEXT:    movq (%rdi,%r8,8), %rcx
@@ -618,8 +607,8 @@ define <1 x i64> @test3(<1 x i64>* %a, <1 x i64>* %b, i32 %count) nounwind {
 ; X64-NEXT:    addq %rcx, %rax
 ; X64-NEXT:    incl %r8d
 ; X64-NEXT:    cmpl %edx, %r8d
-; X64-NEXT:    jb .LBB3_2
-; X64-NEXT:  .LBB3_3: # %bb31
+; X64-NEXT:    jb .LBB3_1
+; X64-NEXT:  .LBB3_2: # %bb31
 ; X64-NEXT:    retq
 entry:
   %tmp2942 = icmp eq i32 %count, 0

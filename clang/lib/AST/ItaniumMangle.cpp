@@ -2635,6 +2635,12 @@ void CXXNameMangler::mangleType(const BuiltinType *T) {
   case BuiltinType::OCLReserveID:
     Out << "13ocl_reserveid";
     break;
+#define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
+  case BuiltinType::Id: \
+    type_name = "ocl_" #ExtType; \
+    Out << type_name.size() << type_name; \
+    break;
+#include "clang/Basic/OpenCLExtensionTypes.def"
   }
 }
 
@@ -3507,6 +3513,10 @@ recurse:
   case Expr::CXXInheritedCtorInitExprClass:
     llvm_unreachable("unexpected statement kind");
 
+  case Expr::ConstantExprClass:
+    E = cast<ConstantExpr>(E)->getSubExpr();
+    goto recurse;
+
   // FIXME: invent manglings for all these.
   case Expr::BlockExprClass:
   case Expr::ChooseExprClass:
@@ -3864,6 +3874,7 @@ recurse:
     case UETT_SizeOf:
       Out << 's';
       break;
+    case UETT_PreferredAlignOf:
     case UETT_AlignOf:
       Out << 'a';
       break;

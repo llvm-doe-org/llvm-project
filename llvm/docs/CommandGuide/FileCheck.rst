@@ -24,8 +24,8 @@ match.  The file to verify is read from standard input unless the
 OPTIONS
 -------
 
-Options are parsed from the command line and from the environment variable
-``FILECHECK_OPTS``.
+Options are parsed from the environment variable ``FILECHECK_OPTS``
+and from the command line.
 
 .. option:: -help
 
@@ -315,6 +315,29 @@ can be used:
    ; CHECK-NOT: load
    ; CHECK: ret i8
    }
+
+The "CHECK-COUNT:" directive
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you need to match multiple lines with the same pattern over and over again
+you can repeat a plain ``CHECK:`` as many times as needed. If that looks too
+boring you can instead use a counted check "``CHECK-COUNT-<num>:``", where
+``<num>`` is a positive decimal number. It will match the pattern exactly
+``<num>`` times, no more and no less. If you specified a custom check prefix,
+just use "``<PREFIX>-COUNT-<num>:``" for the same effect.
+Here is a simple example:
+
+.. code-block:: text
+
+   Loop at depth 1
+   Loop at depth 1
+   Loop at depth 1
+   Loop at depth 1
+     Loop at depth 2
+       Loop at depth 3
+
+   ; CHECK-COUNT-6: Loop at depth {{[0-9]+}}
+   ; CHECK-NOT:     Loop at depth {{[0-9]+}}
 
 The "CHECK-DAG:" directive
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

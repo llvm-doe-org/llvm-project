@@ -594,13 +594,10 @@ define <4 x i32> @computesignbits_through_shuffles(<4 x float> %x, <4 x float> %
 ; CHECK-NEXT:    [[S3:%.*]] = shufflevector <4 x i32> [[SHUF_OR1]], <4 x i32> undef, <4 x i32> <i32 0, i32 0, i32 1, i32 1>
 ; CHECK-NEXT:    [[S4:%.*]] = shufflevector <4 x i32> [[SHUF_OR1]], <4 x i32> undef, <4 x i32> <i32 2, i32 2, i32 3, i32 3>
 ; CHECK-NEXT:    [[SHUF_OR2:%.*]] = or <4 x i32> [[S3]], [[S4]]
-; CHECK-NEXT:    [[NOT_OR2:%.*]] = xor <4 x i32> [[SHUF_OR2]], <i32 -1, i32 -1, i32 -1, i32 -1>
-; CHECK-NEXT:    [[XBC:%.*]] = bitcast <4 x float> [[X]] to <4 x i32>
-; CHECK-NEXT:    [[ZBC:%.*]] = bitcast <4 x float> [[Z:%.*]] to <4 x i32>
-; CHECK-NEXT:    [[AND1:%.*]] = and <4 x i32> [[NOT_OR2]], [[XBC]]
-; CHECK-NEXT:    [[AND2:%.*]] = and <4 x i32> [[SHUF_OR2]], [[ZBC]]
-; CHECK-NEXT:    [[SEL:%.*]] = or <4 x i32> [[AND1]], [[AND2]]
-; CHECK-NEXT:    ret <4 x i32> [[SEL]]
+; CHECK-NEXT:    [[TMP1:%.*]] = trunc <4 x i32> [[SHUF_OR2]] to <4 x i1>
+; CHECK-NEXT:    [[DOTV:%.*]] = select <4 x i1> [[TMP1]], <4 x float> [[Z:%.*]], <4 x float> [[X]]
+; CHECK-NEXT:    [[TMP2:%.*]] = bitcast <4 x float> [[DOTV]] to <4 x i32>
+; CHECK-NEXT:    ret <4 x i32> [[TMP2]]
 ;
   %cmp = fcmp ole <4 x float> %x, %y
   %sext = sext <4 x i1> %cmp to <4 x i32>
@@ -615,6 +612,25 @@ define <4 x i32> @computesignbits_through_shuffles(<4 x float> %x, <4 x float> %
   %zbc = bitcast <4 x float> %z to <4 x i32>
   %and1 = and <4 x i32> %not_or2, %xbc
   %and2 = and <4 x i32> %shuf_or2, %zbc
+  %sel = or <4 x i32> %and1, %and2
+  ret <4 x i32> %sel
+}
+
+define <4 x i32> @computesignbits_through_two_input_shuffle(<4 x i32> %x, <4 x i32> %y, <4 x i1> %cond1, <4 x i1> %cond2) {
+; CHECK-LABEL: @computesignbits_through_two_input_shuffle(
+; CHECK-NEXT:    [[SEXT1:%.*]] = sext <4 x i1> [[COND1:%.*]] to <4 x i32>
+; CHECK-NEXT:    [[SEXT2:%.*]] = sext <4 x i1> [[COND2:%.*]] to <4 x i32>
+; CHECK-NEXT:    [[COND:%.*]] = shufflevector <4 x i32> [[SEXT1]], <4 x i32> [[SEXT2]], <4 x i32> <i32 0, i32 2, i32 4, i32 6>
+; CHECK-NEXT:    [[TMP1:%.*]] = trunc <4 x i32> [[COND]] to <4 x i1>
+; CHECK-NEXT:    [[TMP2:%.*]] = select <4 x i1> [[TMP1]], <4 x i32> [[Y:%.*]], <4 x i32> [[X:%.*]]
+; CHECK-NEXT:    ret <4 x i32> [[TMP2]]
+;
+  %sext1 = sext <4 x i1> %cond1 to <4 x i32>
+  %sext2 = sext <4 x i1> %cond2 to <4 x i32>
+  %cond = shufflevector <4 x i32> %sext1, <4 x i32> %sext2, <4 x i32> <i32 0, i32 2, i32 4, i32 6>
+  %notcond = xor <4 x i32> %cond, <i32 -1, i32 -1, i32 -1, i32 -1>
+  %and1 = and <4 x i32> %notcond, %x
+  %and2 = and <4 x i32> %cond, %y
   %sel = or <4 x i32> %and1, %and2
   ret <4 x i32> %sel
 }

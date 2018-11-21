@@ -2206,8 +2206,8 @@ public:
   /// By default, performs semantic analysis to build the new expression.
   /// Subclasses may override this routine to provide different behavior.
   ExprResult RebuildPredefinedExpr(SourceLocation Loc,
-                                   PredefinedExpr::IdentType IT) {
-    return getSema().BuildPredefinedExpr(Loc, IT);
+                                   PredefinedExpr::IdentKind IK) {
+    return getSema().BuildPredefinedExpr(Loc, IK);
   }
 
   /// Build a new expression that references a declaration.
@@ -3470,8 +3470,8 @@ ExprResult TreeTransform<Derived>::TransformInitializer(Expr *Init,
   if (!Init)
     return Init;
 
-  if (ExprWithCleanups *ExprTemp = dyn_cast<ExprWithCleanups>(Init))
-    Init = ExprTemp->getSubExpr();
+  if (auto *FE = dyn_cast<FullExpr>(Init))
+    Init = FE->getSubExpr();
 
   if (auto *AIL = dyn_cast<ArrayInitLoopExpr>(Init))
     Init = AIL->getCommonExpr();
@@ -8583,6 +8583,13 @@ OMPClause *TreeTransform<Derived>::TransformOMPDynamicAllocatorsClause(
 }
 
 template <typename Derived>
+OMPClause *TreeTransform<Derived>::TransformOMPAtomicDefaultMemOrderClause(
+    OMPAtomicDefaultMemOrderClause *C) {
+  llvm_unreachable(
+      "atomic_default_mem_order clause cannot appear in dependent context");
+}
+
+template <typename Derived>
 OMPClause *
 TreeTransform<Derived>::TransformOMPPrivateClause(OMPPrivateClause *C) {
   llvm::SmallVector<Expr *, 16> Vars;
@@ -9260,12 +9267,18 @@ TreeTransform<Derived>::TransformACCVectorClause(ACCVectorClause *C) {
 //===----------------------------------------------------------------------===//
 template<typename Derived>
 ExprResult
+TreeTransform<Derived>::TransformConstantExpr(ConstantExpr *E) {
+  return TransformExpr(E->getSubExpr());
+}
+
+template<typename Derived>
+ExprResult
 TreeTransform<Derived>::TransformPredefinedExpr(PredefinedExpr *E) {
   if (!E->isTypeDependent())
     return E;
 
   return getDerived().RebuildPredefinedExpr(E->getLocation(),
-                                            E->getIdentType());
+                                            E->getIdentKind());
 }
 
 template<typename Derived>

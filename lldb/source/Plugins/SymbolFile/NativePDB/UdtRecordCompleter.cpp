@@ -24,26 +24,23 @@ using namespace lldb_private::npdb;
 
 using Error = llvm::Error;
 
-UdtRecordCompleter::UdtRecordCompleter(PdbSymUid uid, CompilerType &derived_ct,
+UdtRecordCompleter::UdtRecordCompleter(PdbTypeSymId id,
+                                       CompilerType &derived_ct,
                                        clang::TagDecl &tag_decl,
                                        SymbolFileNativePDB &symbol_file)
-    : m_uid(uid), m_derived_ct(derived_ct), m_tag_decl(tag_decl),
+    : m_id(id), m_derived_ct(derived_ct), m_tag_decl(tag_decl),
       m_symbol_file(symbol_file) {
   TpiStream &tpi = symbol_file.m_index->tpi();
-  TypeIndex ti(uid.asTypeSym().index);
-  CVType cvt = tpi.getType(ti);
+  CVType cvt = tpi.getType(m_id.index);
   switch (cvt.kind()) {
   case LF_ENUM:
-    lldbassert(uid.tag() == PDB_SymType::Enum);
     llvm::cantFail(TypeDeserializer::deserializeAs<EnumRecord>(cvt, m_cvr.er));
     break;
   case LF_UNION:
-    lldbassert(uid.tag() == PDB_SymType::UDT);
     llvm::cantFail(TypeDeserializer::deserializeAs<UnionRecord>(cvt, m_cvr.ur));
     break;
   case LF_CLASS:
   case LF_STRUCTURE:
-    lldbassert(uid.tag() == PDB_SymType::UDT);
     llvm::cantFail(TypeDeserializer::deserializeAs<ClassRecord>(cvt, m_cvr.cr));
     break;
   default:
@@ -59,12 +56,12 @@ lldb::opaque_compiler_type_t UdtRecordCompleter::AddBaseClassForTypeIndex(
   CVType udt_cvt = m_symbol_file.m_index->tpi().getType(ti);
 
   lldb::opaque_compiler_type_t base_qt = base_ct.GetOpaqueQualType();
-  clang::CXXBaseSpecifier *base_spec =
+  std::unique_ptr<clang::CXXBaseSpecifier> base_spec =
       m_symbol_file.GetASTContext().CreateBaseClassSpecifier(
           base_qt, TranslateMemberAccess(access), false,
           udt_cvt.kind() == LF_CLASS);
-
-  m_bases.push_back(base_spec);
+  lldbassert(base_spec);
+  m_bases.push_back(std::move(base_spec));
   return base_qt;
 }
 
@@ -123,17 +120,33 @@ Error UdtRecordCompleter::visitKnownMember(CVMemberRecord &cvr,
 Error UdtRecordCompleter::visitKnownMember(CVMemberRecord &cvr,
                                            DataMemberRecord &data_member) {
 
-  TypeSP member_type = m_symbol_file.GetOrCreateType(data_member.Type);
-  CompilerType complete_member_type = member_type->GetFullCompilerType();
+  uint64_t offset = data_member.FieldOffset * 8;
+  uint32_t bitfield_width = 0;
 
+  TypeSP member_type;
+  TpiStream &tpi = m_symbol_file.m_index->tpi();
+  TypeIndex ti(data_member.Type);
+  if (!ti.isSimple()) {
+    CVType cvt = tpi.getType(ti);
+    if (cvt.kind() == LF_BITFIELD) {
+      BitFieldRecord bfr;
+      llvm::cantFail(TypeDeserializer::deserializeAs<BitFieldRecord>(cvt, bfr));
+      offset += bfr.BitOffset;
+      bitfield_width = bfr.BitSize;
+      ti = bfr.Type;
+    }
+  }
+
+  member_type = m_symbol_file.GetOrCreateType(ti);
+  CompilerType complete_member_type = member_type->GetFullCompilerType();
   lldb::AccessType access = TranslateMemberAccess(data_member.getAccess());
 
   clang::FieldDecl *decl = ClangASTContext::AddFieldToRecordType(
-      m_derived_ct, data_member.Name, complete_member_type, access, 0);
+      m_derived_ct, data_member.Name, complete_member_type, access,
+      bitfield_width);
   // FIXME: Add a PdbSymUid namespace for field list members and update
   // the m_uid_to_decl map with this decl.
 
-  uint64_t offset = data_member.FieldOffset * 8;
   m_layout.field_offsets.insert(std::make_pair(decl, offset));
 
   return Error::success();
@@ -155,26 +168,20 @@ Error UdtRecordCompleter::visitKnownMember(CVMemberRecord &cvr,
 
   Declaration decl;
   llvm::StringRef name = DropNameScope(enumerator.getName());
-  lldbassert(m_uid.tag() == PDB_SymType::Enum);
   TypeSP underlying_type =
       m_symbol_file.GetOrCreateType(m_cvr.er.getUnderlyingType());
 
-  lldb::opaque_compiler_type_t enum_qt = m_derived_ct.GetOpaqueQualType();
-
-  CompilerType enumerator_type = clang.GetEnumerationIntegerType(enum_qt);
   uint64_t byte_size = underlying_type->GetByteSize();
   clang.AddEnumerationValueToEnumerationType(
-      m_derived_ct.GetOpaqueQualType(), enumerator_type, decl,
-      name.str().c_str(), enumerator.Value.getSExtValue(),
+      m_derived_ct, decl, name.str().c_str(), enumerator.Value.getSExtValue(),
       byte_size * 8);
   return Error::success();
 }
 
 void UdtRecordCompleter::complete() {
   ClangASTContext &clang = m_symbol_file.GetASTContext();
-  clang.SetBaseClassesForClassType(m_derived_ct.GetOpaqueQualType(),
-                                   m_bases.data(), m_bases.size());
-  ClangASTContext::DeleteBaseClassSpecifiers(m_bases.data(), m_bases.size());
+  clang.TransferBaseClasses(m_derived_ct.GetOpaqueQualType(),
+                            std::move(m_bases));
 
   clang.AddMethodOverridesForCXXRecordType(m_derived_ct.GetOpaqueQualType());
   ClangASTContext::BuildIndirectFields(m_derived_ct);

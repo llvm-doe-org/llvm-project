@@ -1084,19 +1084,19 @@ bool TargetLowering::SimplifyDemandedBits(SDValue Op,
     break;
   }
   case ISD::ZERO_EXTEND: {
-    unsigned OperandBitWidth = Op.getOperand(0).getScalarValueSizeInBits();
+    SDValue Src = Op.getOperand(0);
+    unsigned InBits = Src.getScalarValueSizeInBits();
 
     // If none of the top bits are demanded, convert this into an any_extend.
-    if (DemandedBits.getActiveBits() <= OperandBitWidth)
-      return TLO.CombineTo(Op, TLO.DAG.getNode(ISD::ANY_EXTEND, dl, VT,
-                                               Op.getOperand(0)));
+    if (DemandedBits.getActiveBits() <= InBits)
+      return TLO.CombineTo(Op, TLO.DAG.getNode(ISD::ANY_EXTEND, dl, VT, Src));
 
-    APInt InMask = DemandedBits.trunc(OperandBitWidth);
-    if (SimplifyDemandedBits(Op.getOperand(0), InMask, Known, TLO, Depth+1))
+    APInt InDemandedBits = DemandedBits.trunc(InBits);
+    if (SimplifyDemandedBits(Src, InDemandedBits, Known, TLO, Depth+1))
       return true;
     assert(!Known.hasConflict() && "Bits known to be one AND zero?");
     Known = Known.zext(BitWidth);
-    Known.Zero.setBitsFrom(OperandBitWidth);
+    Known.Zero.setBitsFrom(InBits);
     break;
   }
   case ISD::SIGN_EXTEND: {
@@ -1143,9 +1143,10 @@ bool TargetLowering::SimplifyDemandedBits(SDValue Op,
     break;
   }
   case ISD::ANY_EXTEND: {
-    unsigned OperandBitWidth = Op.getOperand(0).getScalarValueSizeInBits();
-    APInt InMask = DemandedBits.trunc(OperandBitWidth);
-    if (SimplifyDemandedBits(Op.getOperand(0), InMask, Known, TLO, Depth+1))
+    SDValue Src = Op.getOperand(0);
+    unsigned InBits = Src.getScalarValueSizeInBits();
+    APInt InDemandedBits = DemandedBits.trunc(InBits);
+    if (SimplifyDemandedBits(Src, InDemandedBits, Known, TLO, Depth+1))
       return true;
     assert(!Known.hasConflict() && "Bits known to be one AND zero?");
     Known = Known.zext(BitWidth);
@@ -1459,6 +1460,23 @@ bool TargetLowering::SimplifyDemandedVectorElts(
                                      TLO, Depth + 1))
         return true;
 
+      // Try calling SimplifyDemandedBits, converting demanded elts to the bits
+      // of the large element.
+      // TODO - bigendian once we have test coverage.
+      if (TLO.DAG.getDataLayout().isLittleEndian()) {
+        unsigned SrcEltSizeInBits = SrcVT.getScalarSizeInBits();
+        APInt SrcDemandedBits = APInt::getNullValue(SrcEltSizeInBits);
+        for (unsigned i = 0; i != NumElts; ++i)
+          if (DemandedElts[i]) {
+            unsigned Ofs = (i % Scale) * EltSizeInBits;
+            SrcDemandedBits.setBits(Ofs, Ofs + EltSizeInBits);
+          }
+
+        KnownBits Known;
+        if (SimplifyDemandedBits(Src, SrcDemandedBits, Known, TLO, Depth + 1))
+          return true;
+      }
+
       // If the src element is zero/undef then all the output elements will be -
       // only demanded elements are guaranteed to be correct.
       for (unsigned i = 0; i != NumSrcElts; ++i) {
@@ -1551,7 +1569,7 @@ bool TargetLowering::SimplifyDemandedVectorElts(
     EVT SubVT = Sub.getValueType();
     unsigned NumSubElts = SubVT.getVectorNumElements();
     const APInt& Idx = cast<ConstantSDNode>(Op.getOperand(2))->getAPIntValue();
-    if (Idx.uge(NumElts - NumSubElts))
+    if (Idx.ugt(NumElts - NumSubElts))
       break;
     unsigned SubIdx = Idx.getZExtValue();
     APInt SubElts = DemandedElts.extractBits(NumSubElts, SubIdx);
@@ -2284,7 +2302,8 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
       }
       if (bestWidth) {
         EVT newVT = EVT::getIntegerVT(*DAG.getContext(), bestWidth);
-        if (newVT.isRound()) {
+        if (newVT.isRound() &&
+            shouldReduceLoadWidth(Lod, ISD::NON_EXTLOAD, newVT)) {
           EVT PtrType = Lod->getOperand(1).getValueType();
           SDValue Ptr = Lod->getBasePtr();
           if (bestOffset != 0)
@@ -4076,65 +4095,194 @@ bool TargetLowering::expandMUL(SDNode *N, SDValue &Lo, SDValue &Hi, EVT HiLoVT,
 
 bool TargetLowering::expandFP_TO_SINT(SDNode *Node, SDValue &Result,
                                SelectionDAG &DAG) const {
-  EVT VT = Node->getOperand(0).getValueType();
-  EVT NVT = Node->getValueType(0);
+  SDValue Src = Node->getOperand(0);
+  EVT SrcVT = Src.getValueType();
+  EVT DstVT = Node->getValueType(0);
   SDLoc dl(SDValue(Node, 0));
 
   // FIXME: Only f32 to i64 conversions are supported.
-  if (VT != MVT::f32 || NVT != MVT::i64)
+  if (SrcVT != MVT::f32 || DstVT != MVT::i64)
     return false;
 
   // Expand f32 -> i64 conversion
   // This algorithm comes from compiler-rt's implementation of fixsfdi:
   // https://github.com/llvm-mirror/compiler-rt/blob/master/lib/builtins/fixsfdi.c
-  EVT IntVT = EVT::getIntegerVT(*DAG.getContext(),
-                                VT.getSizeInBits());
+  unsigned SrcEltBits = SrcVT.getScalarSizeInBits();
+  EVT IntVT = SrcVT.changeTypeToInteger();
+  EVT IntShVT = getShiftAmountTy(IntVT, DAG.getDataLayout());
+
   SDValue ExponentMask = DAG.getConstant(0x7F800000, dl, IntVT);
   SDValue ExponentLoBit = DAG.getConstant(23, dl, IntVT);
   SDValue Bias = DAG.getConstant(127, dl, IntVT);
-  SDValue SignMask = DAG.getConstant(APInt::getSignMask(VT.getSizeInBits()), dl,
-                                     IntVT);
-  SDValue SignLowBit = DAG.getConstant(VT.getSizeInBits() - 1, dl, IntVT);
+  SDValue SignMask = DAG.getConstant(APInt::getSignMask(SrcEltBits), dl, IntVT);
+  SDValue SignLowBit = DAG.getConstant(SrcEltBits - 1, dl, IntVT);
   SDValue MantissaMask = DAG.getConstant(0x007FFFFF, dl, IntVT);
 
-  SDValue Bits = DAG.getNode(ISD::BITCAST, dl, IntVT, Node->getOperand(0));
+  SDValue Bits = DAG.getNode(ISD::BITCAST, dl, IntVT, Src);
 
-  auto &DL = DAG.getDataLayout();
   SDValue ExponentBits = DAG.getNode(
       ISD::SRL, dl, IntVT, DAG.getNode(ISD::AND, dl, IntVT, Bits, ExponentMask),
-      DAG.getZExtOrTrunc(ExponentLoBit, dl, getShiftAmountTy(IntVT, DL)));
+      DAG.getZExtOrTrunc(ExponentLoBit, dl, IntShVT));
   SDValue Exponent = DAG.getNode(ISD::SUB, dl, IntVT, ExponentBits, Bias);
 
-  SDValue Sign = DAG.getNode(
-      ISD::SRA, dl, IntVT, DAG.getNode(ISD::AND, dl, IntVT, Bits, SignMask),
-      DAG.getZExtOrTrunc(SignLowBit, dl, getShiftAmountTy(IntVT, DL)));
-  Sign = DAG.getSExtOrTrunc(Sign, dl, NVT);
+  SDValue Sign = DAG.getNode(ISD::SRA, dl, IntVT,
+                             DAG.getNode(ISD::AND, dl, IntVT, Bits, SignMask),
+                             DAG.getZExtOrTrunc(SignLowBit, dl, IntShVT));
+  Sign = DAG.getSExtOrTrunc(Sign, dl, DstVT);
 
   SDValue R = DAG.getNode(ISD::OR, dl, IntVT,
-      DAG.getNode(ISD::AND, dl, IntVT, Bits, MantissaMask),
-      DAG.getConstant(0x00800000, dl, IntVT));
+                          DAG.getNode(ISD::AND, dl, IntVT, Bits, MantissaMask),
+                          DAG.getConstant(0x00800000, dl, IntVT));
 
-  R = DAG.getZExtOrTrunc(R, dl, NVT);
+  R = DAG.getZExtOrTrunc(R, dl, DstVT);
 
   R = DAG.getSelectCC(
       dl, Exponent, ExponentLoBit,
-      DAG.getNode(ISD::SHL, dl, NVT, R,
+      DAG.getNode(ISD::SHL, dl, DstVT, R,
                   DAG.getZExtOrTrunc(
                       DAG.getNode(ISD::SUB, dl, IntVT, Exponent, ExponentLoBit),
-                      dl, getShiftAmountTy(IntVT, DL))),
-      DAG.getNode(ISD::SRL, dl, NVT, R,
+                      dl, IntShVT)),
+      DAG.getNode(ISD::SRL, dl, DstVT, R,
                   DAG.getZExtOrTrunc(
                       DAG.getNode(ISD::SUB, dl, IntVT, ExponentLoBit, Exponent),
-                      dl, getShiftAmountTy(IntVT, DL))),
+                      dl, IntShVT)),
       ISD::SETGT);
 
-  SDValue Ret = DAG.getNode(ISD::SUB, dl, NVT,
-      DAG.getNode(ISD::XOR, dl, NVT, R, Sign),
-      Sign);
+  SDValue Ret = DAG.getNode(ISD::SUB, dl, DstVT,
+                            DAG.getNode(ISD::XOR, dl, DstVT, R, Sign), Sign);
 
   Result = DAG.getSelectCC(dl, Exponent, DAG.getConstant(0, dl, IntVT),
-      DAG.getConstant(0, dl, NVT), Ret, ISD::SETLT);
+                           DAG.getConstant(0, dl, DstVT), Ret, ISD::SETLT);
   return true;
+}
+
+bool TargetLowering::expandFP_TO_UINT(SDNode *Node, SDValue &Result,
+                                      SelectionDAG &DAG) const {
+  SDLoc dl(SDValue(Node, 0));
+  SDValue Src = Node->getOperand(0);
+
+  EVT SrcVT = Src.getValueType();
+  EVT DstVT = Node->getValueType(0);
+  EVT SetCCVT =
+      getSetCCResultType(DAG.getDataLayout(), *DAG.getContext(), SrcVT);
+
+  // Only expand vector types if we have the appropriate vector bit operations.
+  if (DstVT.isVector() && (!isOperationLegalOrCustom(ISD::FP_TO_SINT, DstVT) ||
+                           !isOperationLegalOrCustomOrPromote(ISD::XOR, SrcVT)))
+    return false;
+
+  // If the maximum float value is smaller then the signed integer range,
+  // the destination signmask can't be represented by the float, so we can
+  // just use FP_TO_SINT directly.
+  const fltSemantics &APFSem = DAG.EVTToAPFloatSemantics(SrcVT);
+  APFloat APF(APFSem, APInt::getNullValue(SrcVT.getScalarSizeInBits()));
+  APInt SignMask = APInt::getSignMask(DstVT.getScalarSizeInBits());
+  if (APFloat::opOverflow &
+      APF.convertFromAPInt(SignMask, false, APFloat::rmNearestTiesToEven)) {
+    Result = DAG.getNode(ISD::FP_TO_SINT, dl, DstVT, Src);
+    return true;
+  }
+
+  // Expand based on maximum range of FP_TO_SINT:
+  // True = fp_to_sint(Src)
+  // False = 0x8000000000000000 + fp_to_sint(Src - 0x8000000000000000)
+  // Result = select (Src < 0x8000000000000000), True, False
+  SDValue Cst = DAG.getConstantFP(APF, dl, SrcVT);
+  SDValue Sel = DAG.getSetCC(dl, SetCCVT, Src, Cst, ISD::SETLT);
+
+  SDValue True = DAG.getNode(ISD::FP_TO_SINT, dl, DstVT, Src);
+  // TODO: Should any fast-math-flags be set for the FSUB?
+  SDValue False = DAG.getNode(ISD::FP_TO_SINT, dl, DstVT,
+                              DAG.getNode(ISD::FSUB, dl, SrcVT, Src, Cst));
+  False = DAG.getNode(ISD::XOR, dl, DstVT, False,
+                      DAG.getConstant(SignMask, dl, DstVT));
+  Result = DAG.getSelect(dl, DstVT, Sel, True, False);
+  return true;
+}
+
+bool TargetLowering::expandUINT_TO_FP(SDNode *Node, SDValue &Result,
+                                      SelectionDAG &DAG) const {
+  SDValue Src = Node->getOperand(0);
+  EVT SrcVT = Src.getValueType();
+  EVT DstVT = Node->getValueType(0);
+
+  if (SrcVT.getScalarType() != MVT::i64)
+    return false;
+
+  SDLoc dl(SDValue(Node, 0));
+  EVT ShiftVT = getShiftAmountTy(SrcVT, DAG.getDataLayout());
+
+  if (DstVT.getScalarType() == MVT::f32) {
+    // Only expand vector types if we have the appropriate vector bit
+    // operations.
+    if (SrcVT.isVector() &&
+        (!isOperationLegalOrCustom(ISD::SRL, SrcVT) ||
+         !isOperationLegalOrCustom(ISD::FADD, DstVT) ||
+         !isOperationLegalOrCustom(ISD::SINT_TO_FP, SrcVT) ||
+         !isOperationLegalOrCustomOrPromote(ISD::OR, SrcVT) ||
+         !isOperationLegalOrCustomOrPromote(ISD::AND, SrcVT)))
+      return false;
+
+    // For unsigned conversions, convert them to signed conversions using the
+    // algorithm from the x86_64 __floatundidf in compiler_rt.
+    SDValue Fast = DAG.getNode(ISD::SINT_TO_FP, dl, DstVT, Src);
+
+    SDValue ShiftConst = DAG.getConstant(1, dl, ShiftVT);
+    SDValue Shr = DAG.getNode(ISD::SRL, dl, SrcVT, Src, ShiftConst);
+    SDValue AndConst = DAG.getConstant(1, dl, SrcVT);
+    SDValue And = DAG.getNode(ISD::AND, dl, SrcVT, Src, AndConst);
+    SDValue Or = DAG.getNode(ISD::OR, dl, SrcVT, And, Shr);
+
+    SDValue SignCvt = DAG.getNode(ISD::SINT_TO_FP, dl, DstVT, Or);
+    SDValue Slow = DAG.getNode(ISD::FADD, dl, DstVT, SignCvt, SignCvt);
+
+    // TODO: This really should be implemented using a branch rather than a
+    // select.  We happen to get lucky and machinesink does the right
+    // thing most of the time.  This would be a good candidate for a
+    // pseudo-op, or, even better, for whole-function isel.
+    EVT SetCCVT =
+        getSetCCResultType(DAG.getDataLayout(), *DAG.getContext(), SrcVT);
+
+    SDValue SignBitTest = DAG.getSetCC(
+        dl, SetCCVT, Src, DAG.getConstant(0, dl, SrcVT), ISD::SETLT);
+    Result = DAG.getSelect(dl, DstVT, SignBitTest, Slow, Fast);
+    return true;
+  }
+
+  if (DstVT.getScalarType() == MVT::f64) {
+    // Only expand vector types if we have the appropriate vector bit
+    // operations.
+    if (SrcVT.isVector() &&
+        (!isOperationLegalOrCustom(ISD::SRL, SrcVT) ||
+         !isOperationLegalOrCustom(ISD::FADD, DstVT) ||
+         !isOperationLegalOrCustom(ISD::FSUB, DstVT) ||
+         !isOperationLegalOrCustomOrPromote(ISD::OR, SrcVT) ||
+         !isOperationLegalOrCustomOrPromote(ISD::AND, SrcVT)))
+      return false;
+
+    // Implementation of unsigned i64 to f64 following the algorithm in
+    // __floatundidf in compiler_rt. This implementation has the advantage
+    // of performing rounding correctly, both in the default rounding mode
+    // and in all alternate rounding modes.
+    SDValue TwoP52 = DAG.getConstant(UINT64_C(0x4330000000000000), dl, SrcVT);
+    SDValue TwoP84PlusTwoP52 = DAG.getConstantFP(
+        BitsToDouble(UINT64_C(0x4530000000100000)), dl, DstVT);
+    SDValue TwoP84 = DAG.getConstant(UINT64_C(0x4530000000000000), dl, SrcVT);
+    SDValue LoMask = DAG.getConstant(UINT64_C(0x00000000FFFFFFFF), dl, SrcVT);
+    SDValue HiShift = DAG.getConstant(32, dl, ShiftVT);
+
+    SDValue Lo = DAG.getNode(ISD::AND, dl, SrcVT, Src, LoMask);
+    SDValue Hi = DAG.getNode(ISD::SRL, dl, SrcVT, Src, HiShift);
+    SDValue LoOr = DAG.getNode(ISD::OR, dl, SrcVT, Lo, TwoP52);
+    SDValue HiOr = DAG.getNode(ISD::OR, dl, SrcVT, Hi, TwoP84);
+    SDValue LoFlt = DAG.getBitcast(DstVT, LoOr);
+    SDValue HiFlt = DAG.getBitcast(DstVT, HiOr);
+    SDValue HiSub = DAG.getNode(ISD::FSUB, dl, DstVT, HiFlt, TwoP84PlusTwoP52);
+    Result = DAG.getNode(ISD::FADD, dl, DstVT, LoFlt, HiSub);
+    return true;
+  }
+
+  return false;
 }
 
 SDValue TargetLowering::expandFMINNUM_FMAXNUM(SDNode *Node,
@@ -4173,8 +4321,19 @@ bool TargetLowering::expandCTPOP(SDNode *Node, SDValue &Result,
   EVT ShVT = getShiftAmountTy(VT, DAG.getDataLayout());
   SDValue Op = Node->getOperand(0);
   unsigned Len = VT.getScalarSizeInBits();
-  assert(VT.isInteger() && Len <= 128 && Len % 8 == 0 &&
-         "CTPOP not implemented for this type.");
+  assert(VT.isInteger() && "CTPOP not implemented for this type.");
+
+  // TODO: Add support for irregular type lengths.
+  if (!(Len <= 128 && Len % 8 == 0))
+    return false;
+
+  // Only expand vector types if we have the appropriate vector bit operations.
+  if (VT.isVector() && (!isOperationLegalOrCustom(ISD::ADD, VT) ||
+                        !isOperationLegalOrCustom(ISD::SUB, VT) ||
+                        !isOperationLegalOrCustom(ISD::SRL, VT) ||
+                        (Len != 8 && !isOperationLegalOrCustom(ISD::MUL, VT)) ||
+                        !isOperationLegalOrCustomOrPromote(ISD::AND, VT)))
+    return false;
 
   // This is the "best" algorithm from
   // http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
@@ -4862,11 +5021,27 @@ SDValue TargetLowering::lowerCmpEqZeroToCtlzSrl(SDValue Op,
   return SDValue();
 }
 
-SDValue TargetLowering::getExpandedSaturationAddition(SDNode *Node,
-                                                      SelectionDAG &DAG) const {
+SDValue TargetLowering::getExpandedSaturationAdditionSubtraction(
+    SDNode *Node, SelectionDAG &DAG) const {
   unsigned Opcode = Node->getOpcode();
-  assert((Opcode == ISD::SADDSAT || Opcode == ISD::UADDSAT) &&
-         "Expected method to receive SADDSAT or UADDSAT node.");
+  unsigned OverflowOp;
+  switch (Opcode) {
+  case ISD::SADDSAT:
+    OverflowOp = ISD::SADDO;
+    break;
+  case ISD::UADDSAT:
+    OverflowOp = ISD::UADDO;
+    break;
+  case ISD::SSUBSAT:
+    OverflowOp = ISD::SSUBO;
+    break;
+  case ISD::USUBSAT:
+    OverflowOp = ISD::USUBO;
+    break;
+  default:
+    llvm_unreachable("Expected method to receive signed or unsigned saturation "
+                     "addition or subtraction node.");
+  }
   assert(Node->getNumOperands() == 2 && "Expected node to have 2 operands.");
 
   SDLoc dl(Node);
@@ -4881,31 +5056,35 @@ SDValue TargetLowering::getExpandedSaturationAddition(SDNode *Node,
   assert(LHS.getValueType() == RHS.getValueType() &&
          "Expected both operands to be the same type");
 
-  unsigned OverflowOp = Opcode == ISD::SADDSAT ? ISD::SADDO : ISD::UADDO;
   unsigned BitWidth = LHS.getValueSizeInBits();
   EVT ResultType = LHS.getValueType();
   EVT BoolVT =
       getSetCCResultType(DAG.getDataLayout(), *DAG.getContext(), ResultType);
   SDValue Result =
       DAG.getNode(OverflowOp, dl, DAG.getVTList(ResultType, BoolVT), LHS, RHS);
-  SDValue Sum = Result.getValue(0);
+  SDValue SumDiff = Result.getValue(0);
   SDValue Overflow = Result.getValue(1);
   SDValue Zero = DAG.getConstant(0, dl, ResultType);
 
-  if (Opcode == ISD::SADDSAT) {
-    // SatMax -> Overflow && Sum < 0
-    // SatMin -> Overflow && Sum > 0
+  if (Opcode == ISD::UADDSAT) {
+    // Just need to check overflow for SatMax.
+    APInt MaxVal = APInt::getMaxValue(BitWidth);
+    SDValue SatMax = DAG.getConstant(MaxVal, dl, ResultType);
+    return DAG.getSelect(dl, ResultType, Overflow, SatMax, SumDiff);
+  } else if (Opcode == ISD::USUBSAT) {
+    // Just need to check overflow for SatMin.
+    APInt MinVal = APInt::getMinValue(BitWidth);
+    SDValue SatMin = DAG.getConstant(MinVal, dl, ResultType);
+    return DAG.getSelect(dl, ResultType, Overflow, SatMin, SumDiff);
+  } else {
+    // SatMax -> Overflow && SumDiff < 0
+    // SatMin -> Overflow && SumDiff >= 0
     APInt MinVal = APInt::getSignedMinValue(BitWidth);
     APInt MaxVal = APInt::getSignedMaxValue(BitWidth);
     SDValue SatMin = DAG.getConstant(MinVal, dl, ResultType);
     SDValue SatMax = DAG.getConstant(MaxVal, dl, ResultType);
-    SDValue SumNeg = DAG.getSetCC(dl, BoolVT, Sum, Zero, ISD::SETLT);
+    SDValue SumNeg = DAG.getSetCC(dl, BoolVT, SumDiff, Zero, ISD::SETLT);
     Result = DAG.getSelect(dl, ResultType, SumNeg, SatMax, SatMin);
-    return DAG.getSelect(dl, ResultType, Overflow, Result, Sum);
-  } else {
-    // Just need to check overflow for SatMax.
-    APInt MaxVal = APInt::getMaxValue(BitWidth);
-    SDValue SatMax = DAG.getConstant(MaxVal, dl, ResultType);
-    return DAG.getSelect(dl, ResultType, Overflow, SatMax, Sum);
+    return DAG.getSelect(dl, ResultType, Overflow, Result, SumDiff);
   }
 }

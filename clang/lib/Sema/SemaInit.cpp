@@ -1192,6 +1192,10 @@ void InitListChecker::CheckListElementTypes(const InitializedEntity &Entity,
     if (!VerifyOnly)
       SemaRef.Diag(IList->getBeginLoc(), diag::err_init_objc_class) << DeclType;
     hadError = true;
+  } else if (DeclType->isOCLIntelSubgroupAVCType()) {
+    // Checks for scalar type are sufficient for these types too.
+    CheckScalarType(Entity, IList, DeclType, Index, StructuredList,
+                    StructuredIndex);
   } else {
     if (!VerifyOnly)
       SemaRef.Diag(IList->getBeginLoc(), diag::err_illegal_initializer_type)
@@ -5252,6 +5256,11 @@ static bool TryOCLSamplerInitialization(Sema &S,
   return true;
 }
 
+static bool IsZeroInitializer(Expr *Initializer, Sema &S) {
+  return Initializer->isIntegerConstantExpr(S.getASTContext()) &&
+    (Initializer->EvaluateKnownConstInt(S.getASTContext()) == 0);
+}
+
 static bool TryOCLZeroOpaqueTypeInitialization(Sema &S,
                                                InitializationSequence &Sequence,
                                                QualType DestType,
@@ -5268,8 +5277,23 @@ static bool TryOCLZeroOpaqueTypeInitialization(Sema &S,
   // event should be zero.
   //
   if (DestType->isEventT() || DestType->isQueueT()) {
-    if (!Initializer->isIntegerConstantExpr(S.getASTContext()) ||
-        (Initializer->EvaluateKnownConstInt(S.getASTContext()) != 0))
+    if (!IsZeroInitializer(Initializer, S))
+      return false;
+
+    Sequence.AddOCLZeroOpaqueTypeStep(DestType);
+    return true;
+  }
+
+  // We should allow zero initialization for all types defined in the
+  // cl_intel_device_side_avc_motion_estimation extension, except
+  // intel_sub_group_avc_mce_payload_t and intel_sub_group_avc_mce_result_t.
+  if (S.getOpenCLOptions().isEnabled(
+          "cl_intel_device_side_avc_motion_estimation") &&
+      DestType->isOCLIntelSubgroupAVCType()) {
+    if (DestType->isOCLIntelSubgroupAVCMcePayloadType() ||
+        DestType->isOCLIntelSubgroupAVCMceResultType())
+      return false;
+    if (!IsZeroInitializer(Initializer, S))
       return false;
 
     Sequence.AddOCLZeroOpaqueTypeStep(DestType);
@@ -5381,7 +5405,7 @@ void InitializationSequence::InitializeFrom(Sema &S,
   Expr *Initializer = nullptr;
   if (Args.size() == 1) {
     Initializer = Args[0];
-    if (S.getLangOpts().ObjC1) {
+    if (S.getLangOpts().ObjC) {
       if (S.CheckObjCBridgeRelatedConversions(Initializer->getBeginLoc(),
                                               DestType, Initializer->getType(),
                                               Initializer) ||
@@ -5503,7 +5527,8 @@ void InitializationSequence::InitializeFrom(Sema &S,
     // array from a compound literal that creates an array of the same
     // type, so long as the initializer has no side effects.
     if (!S.getLangOpts().CPlusPlus && Initializer &&
-        isa<CompoundLiteralExpr>(Initializer->IgnoreParens()) &&
+        (isa<ConstantExpr>(Initializer->IgnoreParens()) ||
+         isa<CompoundLiteralExpr>(Initializer->IgnoreParens())) &&
         Initializer->getType()->isArrayType()) {
       const ArrayType *SourceAT
         = Context.getAsArrayType(Initializer->getType());
@@ -6161,7 +6186,10 @@ PerformConstructorInitialization(Sema &S,
     TypeSourceInfo *TSInfo = Entity.getTypeSourceInfo();
     if (!TSInfo)
       TSInfo = S.Context.getTrivialTypeSourceInfo(Entity.getType(), Loc);
-    SourceRange ParenOrBraceRange = Kind.getParenOrBraceRange();
+    SourceRange ParenOrBraceRange =
+        (Kind.getKind() == InitializationKind::IK_DirectList)
+        ? SourceRange(LBraceLoc, RBraceLoc)
+        : Kind.getParenOrBraceRange();
 
     if (auto *Shadow = dyn_cast<ConstructorUsingShadowDecl>(
             Step.Function.FoundDecl.getDecl())) {
@@ -6510,8 +6538,8 @@ static void visitLocalsRetainedByReferenceBinding(IndirectLocalPath &Path,
   do {
     Old = Init;
 
-    if (auto *EWC = dyn_cast<ExprWithCleanups>(Init))
-      Init = EWC->getSubExpr();
+    if (auto *FE = dyn_cast<FullExpr>(Init))
+      Init = FE->getSubExpr();
 
     if (InitListExpr *ILE = dyn_cast<InitListExpr>(Init)) {
       // If this is just redundant braces around an initializer, step over it.
@@ -6634,8 +6662,8 @@ static void visitLocalsRetainedByInitializer(IndirectLocalPath &Path,
       Init = DIE->getExpr();
     }
 
-    if (auto *EWC = dyn_cast<ExprWithCleanups>(Init))
-      Init = EWC->getSubExpr();
+    if (auto *FE = dyn_cast<FullExpr>(Init))
+      Init = FE->getSubExpr();
 
     // Dig out the expression which constructs the extended temporary.
     Init = const_cast<Expr *>(Init->skipRValueSubobjectAdjustments());
@@ -7233,12 +7261,20 @@ ExprResult Sema::TemporaryMaterializationConversion(Expr *E) {
   return CreateMaterializeTemporaryExpr(E->getType(), E, false);
 }
 
-ExprResult
-InitializationSequence::Perform(Sema &S,
-                                const InitializedEntity &Entity,
-                                const InitializationKind &Kind,
-                                MultiExprArg Args,
-                                QualType *ResultType) {
+ExprResult Sema::PerformQualificationConversion(Expr *E, QualType Ty,
+                                                ExprValueKind VK,
+                                                CheckedConversionKind CCK) {
+  CastKind CK = (Ty.getAddressSpace() != E->getType().getAddressSpace())
+                    ? CK_AddressSpaceConversion
+                    : CK_NoOp;
+  return ImpCastExprToType(E, Ty, CK, VK, /*BasePath=*/nullptr, CCK);
+}
+
+ExprResult InitializationSequence::Perform(Sema &S,
+                                           const InitializedEntity &Entity,
+                                           const InitializationKind &Kind,
+                                           MultiExprArg Args,
+                                           QualType *ResultType) {
   if (Failed()) {
     Diagnose(S, Entity, Kind, Args);
     return ExprError();
@@ -7626,12 +7662,11 @@ InitializationSequence::Perform(Sema &S,
     case SK_QualificationConversionRValue: {
       // Perform a qualification conversion; these can never go wrong.
       ExprValueKind VK =
-          Step->Kind == SK_QualificationConversionLValue ?
-              VK_LValue :
-              (Step->Kind == SK_QualificationConversionXValue ?
-                   VK_XValue :
-                   VK_RValue);
-      CurInit = S.ImpCastExprToType(CurInit.get(), Step->Type, CK_NoOp, VK);
+          Step->Kind == SK_QualificationConversionLValue
+              ? VK_LValue
+              : (Step->Kind == SK_QualificationConversionXValue ? VK_XValue
+                                                                : VK_RValue);
+      CurInit = S.PerformQualificationConversion(CurInit.get(), Step->Type, VK);
       break;
     }
 
@@ -8026,7 +8061,9 @@ InitializationSequence::Perform(Sema &S,
         // defined in SPIR spec v1.2 and also opencl-c.h
         unsigned AddressingMode  = (0x0E & SamplerValue) >> 1;
         unsigned FilterMode      = (0x30 & SamplerValue) >> 4;
-        if (FilterMode != 1 && FilterMode != 2)
+        if (FilterMode != 1 && FilterMode != 2 &&
+            !S.getOpenCLOptions().isEnabled(
+                "cl_intel_device_side_avc_motion_estimation"))
           S.Diag(Kind.getLocation(),
                  diag::warn_sampler_initializer_invalid_bits)
                  << "Filter Mode";
@@ -8043,7 +8080,8 @@ InitializationSequence::Perform(Sema &S,
       break;
     }
     case SK_OCLZeroOpaqueType: {
-      assert((Step->Type->isEventT() || Step->Type->isQueueT()) &&
+      assert((Step->Type->isEventT() || Step->Type->isQueueT() ||
+              Step->Type->isOCLIntelSubgroupAVCType()) &&
              "Wrong type for initialization of OpenCL opaque type.");
 
       CurInit = S.ImpCastExprToType(CurInit.get(), Step->Type,
@@ -8240,7 +8278,8 @@ bool InitializationSequence::Diagnose(Sema &S,
     break;
   case FK_UTF8StringIntoPlainChar:
     S.Diag(Kind.getLocation(),
-           diag::err_array_init_utf8_string_into_char);
+           diag::err_array_init_utf8_string_into_char)
+      << S.getLangOpts().CPlusPlus2a;
     break;
   case FK_ArrayTypeMismatch:
   case FK_NonConstantArrayInit:

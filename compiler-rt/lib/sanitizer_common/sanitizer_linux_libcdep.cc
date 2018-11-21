@@ -23,6 +23,7 @@
 #include "sanitizer_file.h"
 #include "sanitizer_flags.h"
 #include "sanitizer_freebsd.h"
+#include "sanitizer_getauxval.h"
 #include "sanitizer_linux.h"
 #include "sanitizer_placement_new.h"
 #include "sanitizer_procmaps.h"
@@ -782,15 +783,12 @@ INLINE bool CanUseVDSO() {
 
 // MonotonicNanoTime is a timing function that can leverage the vDSO by calling
 // clock_gettime. real_clock_gettime only exists if clock_gettime is
-// intercepted, so define it weakly and use it if available. MonotonicNanoTime
-// might also be called when interceptors are not yet initialized, so check for
-// that as well.
+// intercepted, so define it weakly and use it if available.
 extern "C" SANITIZER_WEAK_ATTRIBUTE
 int real_clock_gettime(u32 clk_id, void *tp);
-namespace __interception { int (*real_clock_gettime)(u32 clk_id, void *tp); }
 u64 MonotonicNanoTime() {
   timespec ts;
-  if (CanUseVDSO() && __interception::real_clock_gettime) {
+  if (CanUseVDSO()) {
     if (&real_clock_gettime)
       real_clock_gettime(CLOCK_MONOTONIC, &ts);
     else
@@ -808,6 +806,40 @@ u64 MonotonicNanoTime() {
   return (u64)ts.tv_sec * (1000ULL * 1000 * 1000) + ts.tv_nsec;
 }
 #endif  // SANITIZER_LINUX && !SANITIZER_GO
+
+#if !SANITIZER_OPENBSD
+void ReExec() {
+  const char *pathname = "/proc/self/exe";
+
+#if SANITIZER_NETBSD
+  static const int name[] = {
+      CTL_KERN,
+      KERN_PROC_ARGS,
+      -1,
+      KERN_PROC_PATHNAME,
+  };
+  char path[400];
+  uptr len;
+
+  len = sizeof(path);
+  if (internal_sysctl(name, ARRAY_SIZE(name), path, &len, NULL, 0) != -1)
+    pathname = path;
+#elif SANITIZER_SOLARIS
+  pathname = getexecname();
+  CHECK_NE(pathname, NULL);
+#elif SANITIZER_USE_GETAUXVAL
+  // Calling execve with /proc/self/exe sets that as $EXEC_ORIGIN. Binaries that
+  // rely on that will fail to load shared libraries. Query AT_EXECFN instead.
+  pathname = reinterpret_cast<const char *>(getauxval(AT_EXECFN));
+#endif
+
+  uptr rv = internal_execve(pathname, GetArgv(), GetEnviron());
+  int rverrno;
+  CHECK_EQ(internal_iserror(rv, &rverrno), true);
+  Printf("execve failed, errno %d\n", rverrno);
+  Die();
+}
+#endif  // !SANITIZER_OPENBSD
 
 } // namespace __sanitizer
 
