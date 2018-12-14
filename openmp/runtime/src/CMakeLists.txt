@@ -148,6 +148,15 @@ set_target_properties(omp PROPERTIES
   LINKER_LANGUAGE ${LIBOMP_LINKER_LANGUAGE}
 )
 
+if(OPENMP_CLANG_LIB_SUBDIR AND NOT OPENMP_STANDALONE_BUILD)
+  add_custom_command(TARGET omp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+      $<TARGET_FILE_DIR:omp>/${OPENMP_CLANG_LIB_SUBDIR}
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:omp>
+      $<TARGET_FILE_DIR:omp>/${OPENMP_CLANG_LIB_SUBDIR}
+  )
+endif()
+
 # Get the library's location within the build tree for the unit tester
 if(NOT WIN32)
   get_target_property(LIBOMP_LIBRARY_DIR omp LIBRARY_OUTPUT_DIRECTORY)
@@ -282,11 +291,10 @@ add_dependencies(libomp-micro-tests libomp-test-deps)
 # Install rules
 # We want to install libomp in DESTDIR/CMAKE_INSTALL_PREFIX/lib
 # We want to install headers in DESTDIR/CMAKE_INSTALL_PREFIX/include
-if(${OPENMP_STANDALONE_BUILD})
+if(NOT OPENMP_CLANG_INCLUDE_SUBDIR)
   set(LIBOMP_HEADERS_INSTALL_PATH include)
 else()
-  string(REGEX MATCH "[0-9]+\\.[0-9]+(\\.[0-9]+)?" CLANG_VERSION ${PACKAGE_VERSION})
-  set(LIBOMP_HEADERS_INSTALL_PATH "${OPENMP_INSTALL_LIBDIR}/clang/${CLANG_VERSION}/include")
+  set(LIBOMP_HEADERS_INSTALL_PATH "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_INCLUDE_SUBDIR}")
 endif()
 if(WIN32)
   install(TARGETS omp RUNTIME DESTINATION bin)
@@ -302,6 +310,9 @@ if(WIN32)
 else()
 
   install(TARGETS omp ${LIBOMP_INSTALL_KIND} DESTINATION "${OPENMP_INSTALL_LIBDIR}")
+  if(OPENMP_CLANG_LIB_SUBDIR)
+    install(TARGETS omp ${LIBOMP_INSTALL_KIND} DESTINATION "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_LIB_SUBDIR}")
+  endif()
 
   if(${LIBOMP_INSTALL_ALIASES})
     # Create aliases (symlinks) of the library for backwards compatibility

@@ -20,6 +20,8 @@ if (OPENMP_STANDALONE_BUILD OR "${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_S
     "Suffix of lib installation directory, e.g. 64 => lib64")
   # Do not use OPENMP_LIBDIR_SUFFIX directly, use OPENMP_INSTALL_LIBDIR.
   set(OPENMP_INSTALL_LIBDIR "lib${OPENMP_LIBDIR_SUFFIX}")
+  set(OPENMP_CLANG_VERSION CACHE STRING
+      "The Clang version to assume when installing OpenMP headers/libraries in Clang-dedicated directories from a standalone OpenMP build")
 
   # Group test settings.
   set(OPENMP_TEST_C_COMPILER ${CMAKE_C_COMPILER} CACHE STRING
@@ -31,6 +33,8 @@ else()
   set(OPENMP_ENABLE_WERROR ${LLVM_ENABLE_WERROR})
   # If building in tree, we honor the same install suffix LLVM uses.
   set(OPENMP_INSTALL_LIBDIR "lib${LLVM_LIBDIR_SUFFIX}")
+  string(REGEX MATCH "[0-9]+\\.[0-9]+(\\.[0-9]+)?" OPENMP_CLANG_VERSION
+    ${PACKAGE_VERSION})
 
   if (NOT MSVC)
     set(OPENMP_TEST_C_COMPILER ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang)
@@ -39,6 +43,14 @@ else()
     set(OPENMP_TEST_C_COMPILER ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang.exe)
     set(OPENMP_TEST_CXX_COMPILER ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang++.exe)
   endif()
+endif()
+
+# Clang-dedicated subdirectories.
+if(OPENMP_CLANG_VERSION)
+  string(TOLOWER ${CMAKE_SYSTEM_NAME} os_dir)
+  set(OPENMP_CLANG_LIB_SUBDIR
+    clang/${OPENMP_CLANG_VERSION}/lib/${os_dir}/${CMAKE_SYSTEM_PROCESSOR})
+  set(OPENMP_CLANG_INCLUDE_SUBDIR clang/${OPENMP_CLANG_VERSION}/include)
 endif()
 
 # Check and set up common compiler flags.
