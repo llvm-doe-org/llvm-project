@@ -87,9 +87,21 @@ if(LIBOMPTARGET_DEP_CUDA_FOUND)
 
   cuda_add_library(omptarget-nvptx STATIC ${cuda_src_files} ${omp_data_objects}
       OPTIONS ${CUDA_ARCH} ${CUDA_DEBUG})
+  if(OPENMP_CLANG_LIB_SUBDIR AND NOT OPENMP_STANDALONE_BUILD)
+    add_custom_command(TARGET "omptarget-nvptx" POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E make_directory
+        $<TARGET_FILE_DIR:omptarget-nvptx>/${OPENMP_CLANG_LIB_SUBDIR}
+      COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:omptarget-nvptx>
+        $<TARGET_FILE_DIR:omptarget-nvptx>/${OPENMP_CLANG_LIB_SUBDIR}
+    )
+  endif()
 
   # Install device RTL under the lib destination folder.
   install(TARGETS omptarget-nvptx ARCHIVE DESTINATION "${OPENMP_INSTALL_LIBDIR}")
+  if(OPENMP_CLANG_LIB_SUBDIR)
+    install(TARGETS omptarget-nvptx ARCHIVE DESTINATION
+      "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_LIB_SUBDIR}")
+  endif()
 
   target_link_libraries(omptarget-nvptx ${CUDA_LIBRARIES})
 
@@ -174,9 +186,22 @@ if(LIBOMPTARGET_DEP_CUDA_FOUND)
       add_custom_command(TARGET omptarget-nvptx-${sm}-bc POST_BUILD
                          COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-nvptx-sm_${sm}.bc
                          $<TARGET_FILE_DIR:omptarget-nvptx>)
+      if(OPENMP_CLANG_LIB_SUBDIR AND NOT OPENMP_STANDALONE_BUILD)
+        add_custom_command(TARGET omptarget-nvptx-${sm}-bc POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E make_directory
+            $<TARGET_FILE_DIR:omptarget-nvptx>/${OPENMP_CLANG_LIB_SUBDIR}
+          COMMAND ${CMAKE_COMMAND} -E copy
+            ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-nvptx-sm_${sm}.bc
+            $<TARGET_FILE_DIR:omptarget-nvptx>/${OPENMP_CLANG_LIB_SUBDIR}
+        )
+      endif()
 
       # Install bitcode library under the lib destination folder.
       install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-nvptx-sm_${sm}.bc DESTINATION "${OPENMP_INSTALL_LIBDIR}")
+      if(OPENMP_CLANG_LIB_SUBDIR)
+        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-nvptx-sm_${sm}.bc
+          DESTINATION "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_LIB_SUBDIR}")
+      endif()
     endforeach()
   endif()
 
