@@ -28,6 +28,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/BinaryFormat/AMDGPUMetadataVerifier.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Object/ELF.h"
 #include "llvm/Object/ELFObjectFile.h"
@@ -639,9 +640,12 @@ static void printVersionDefinitionSection(ELFDumper<ELFT> *Dumper,
   // is determined by DT_VERDEFNUM tag.
   unsigned VerDefsNum = 0;
   for (const typename ELFO::Elf_Dyn &Dyn : Dumper->dynamic_table()) {
-    if (Dyn.d_tag == DT_VERDEFNUM)
+    if (Dyn.d_tag == DT_VERDEFNUM) {
       VerDefsNum = Dyn.d_un.d_val;
+      break;
+    }
   }
+
   const uint8_t *SecStartAddress =
       (const uint8_t *)Obj->base() + Sec->sh_offset;
   const uint8_t *SecEndAddress = SecStartAddress + Sec->sh_size;
@@ -692,9 +696,12 @@ static void printVersionDependencySection(ELFDumper<ELFT> *Dumper,
     return;
 
   unsigned VerNeedNum = 0;
-  for (const typename ELFO::Elf_Dyn &Dyn : Dumper->dynamic_table())
-    if (Dyn.d_tag == DT_VERNEEDNUM)
+  for (const typename ELFO::Elf_Dyn &Dyn : Dumper->dynamic_table()) {
+    if (Dyn.d_tag == DT_VERNEEDNUM) {
       VerNeedNum = Dyn.d_un.d_val;
+      break;
+    }
+  }
 
   const uint8_t *SecData = (const uint8_t *)Obj->base() + Sec->sh_offset;
   const typename ELFO::Elf_Shdr *StrTab =
@@ -1478,19 +1485,10 @@ template <typename ELFT>
 void ELFDumper<ELFT>::parseDynamicTable(
     ArrayRef<const Elf_Phdr *> LoadSegments) {
   auto toMappedAddr = [&](uint64_t VAddr) -> const uint8_t * {
-    const Elf_Phdr *const *I =
-        std::upper_bound(LoadSegments.begin(), LoadSegments.end(), VAddr,
-                         [](uint64_t VAddr, const Elf_Phdr_Impl<ELFT> *Phdr) {
-                           return VAddr < Phdr->p_vaddr;
-                         });
-    if (I == LoadSegments.begin())
-      report_fatal_error("Virtual address is not in any segment");
-    --I;
-    const Elf_Phdr &Phdr = **I;
-    uint64_t Delta = VAddr - Phdr.p_vaddr;
-    if (Delta >= Phdr.p_filesz)
-      report_fatal_error("Virtual address is not in any segment");
-    return Obj->base() + Phdr.p_offset + Delta;
+    auto MappedAddrOrError = Obj->toMappedAddr(VAddr);
+    if (!MappedAddrOrError)
+      report_fatal_error(MappedAddrOrError.takeError());
+    return MappedAddrOrError.get();
   };
 
   uint64_t SONameOffset = 0;
@@ -3631,7 +3629,7 @@ static std::string getFreeBSDNoteTypeName(const uint32_t NT) {
   return OS.str();
 }
 
-static std::string getAMDGPUNoteTypeName(const uint32_t NT) {
+static std::string getAMDNoteTypeName(const uint32_t NT) {
   static const struct {
     uint32_t ID;
     const char *Name;
@@ -3647,6 +3645,16 @@ static std::string getAMDGPUNoteTypeName(const uint32_t NT) {
   for (const auto &Note : Notes)
     if (Note.ID == NT)
       return std::string(Note.Name);
+
+  std::string string;
+  raw_string_ostream OS(string);
+  OS << format("Unknown note type (0x%08x)", NT);
+  return OS.str();
+}
+
+static std::string getAMDGPUNoteTypeName(const uint32_t NT) {
+  if (NT == ELF::NT_AMDGPU_METADATA)
+    return std::string("NT_AMDGPU_METADATA (AMDGPU Metadata)");
 
   std::string string;
   raw_string_ostream OS(string);
@@ -3811,14 +3819,13 @@ static void printGNUNote(raw_ostream &OS, uint32_t NoteType,
   OS << '\n';
 }
 
-struct AMDGPUNote {
-  std::string type;
-  std::string value;
+struct AMDNote {
+  std::string Type;
+  std::string Value;
 };
 
 template <typename ELFT>
-static AMDGPUNote getAMDGPUNote(uint32_t NoteType,
-                                ArrayRef<uint8_t> Desc) {
+static AMDNote getAMDNote(uint32_t NoteType, ArrayRef<uint8_t> Desc) {
   switch (NoteType) {
   default:
     return {"", ""};
@@ -3841,6 +3848,41 @@ static AMDGPUNote getAMDGPUNote(uint32_t NoteType,
       return {"PAL Metadata", "Invalid"};
     }
     return {"PAL Metadata", PALMetadataString};
+  }
+}
+
+struct AMDGPUNote {
+  std::string Type;
+  std::string Value;
+};
+
+template <typename ELFT>
+static AMDGPUNote getAMDGPUNote(uint32_t NoteType, ArrayRef<uint8_t> Desc) {
+  switch (NoteType) {
+  default:
+    return {"", ""};
+  case ELF::NT_AMDGPU_METADATA:
+    auto MsgPackString =
+        StringRef(reinterpret_cast<const char *>(Desc.data()), Desc.size());
+    msgpack::Reader MsgPackReader(MsgPackString);
+    auto OptMsgPackNodeOrErr = msgpack::Node::read(MsgPackReader);
+    if (errorToBool(OptMsgPackNodeOrErr.takeError()))
+      return {"AMDGPU Metadata", "Invalid AMDGPU Metadata"};
+    auto &OptMsgPackNode = *OptMsgPackNodeOrErr;
+    if (!OptMsgPackNode)
+      return {"AMDGPU Metadata", "Invalid AMDGPU Metadata"};
+    auto &MsgPackNode = *OptMsgPackNode;
+
+    AMDGPU::HSAMD::V3::MetadataVerifier Verifier(true);
+    if (!Verifier.verify(*MsgPackNode))
+      return {"AMDGPU Metadata", "Invalid AMDGPU Metadata"};
+
+    std::string HSAMetadataString;
+    raw_string_ostream StrOS(HSAMetadataString);
+    yaml::Output YOut(StrOS);
+    YOut << MsgPackNode;
+
+    return {"AMDGPU Metadata", StrOS.str()};
   }
 }
 
@@ -3870,10 +3912,15 @@ void GNUStyle<ELFT>::printNotes(const ELFFile<ELFT> *Obj) {
     } else if (Name == "FreeBSD") {
       OS << getFreeBSDNoteTypeName(Type) << '\n';
     } else if (Name == "AMD") {
+      OS << getAMDNoteTypeName(Type) << '\n';
+      const AMDNote N = getAMDNote<ELFT>(Type, Descriptor);
+      if (!N.Type.empty())
+        OS << "    " << N.Type << ":\n        " << N.Value << '\n';
+    } else if (Name == "AMDGPU") {
       OS << getAMDGPUNoteTypeName(Type) << '\n';
       const AMDGPUNote N = getAMDGPUNote<ELFT>(Type, Descriptor);
-      if (!N.type.empty())
-        OS << "    " << N.type << ":\n        " << N.value << '\n';
+      if (!N.Type.empty())
+        OS << "    " << N.Type << ":\n        " << N.Value << '\n';
     } else {
       OS << "Unknown note type: (" << format_hex(Type, 10) << ')';
     }
@@ -4536,10 +4583,15 @@ void LLVMStyle<ELFT>::printNotes(const ELFFile<ELFT> *Obj) {
     } else if (Name == "FreeBSD") {
       W.printString("Type", getFreeBSDNoteTypeName(Type));
     } else if (Name == "AMD") {
+      W.printString("Type", getAMDNoteTypeName(Type));
+      const AMDNote N = getAMDNote<ELFT>(Type, Descriptor);
+      if (!N.Type.empty())
+        W.printString(N.Type, N.Value);
+    } else if (Name == "AMDGPU") {
       W.printString("Type", getAMDGPUNoteTypeName(Type));
       const AMDGPUNote N = getAMDGPUNote<ELFT>(Type, Descriptor);
-      if (!N.type.empty())
-        W.printString(N.type, N.value);
+      if (!N.Type.empty())
+        W.printString(N.Type, N.Value);
     } else {
       W.getOStream() << "Unknown note type: (" << format_hex(Type, 10) << ')';
     }

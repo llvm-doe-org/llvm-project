@@ -2192,17 +2192,17 @@ bool X86DAGToDAGISel::isSExtAbsoluteSymbolRef(unsigned Width, SDNode *N) const {
 }
 
 /// Test whether the given X86ISD::CMP node has any uses which require the SF
-/// or OF bits to be accurate.
-static bool hasNoSignedComparisonUses(SDNode *N) {
+/// flag to be accurate.
+static bool hasNoSignFlagUses(SDValue Flags) {
   // Examine each user of the node.
-  for (SDNode::use_iterator UI = N->use_begin(),
-         UE = N->use_end(); UI != UE; ++UI) {
-    // Only examine CopyToReg uses.
-    if (UI->getOpcode() != ISD::CopyToReg)
-      return false;
+  for (SDNode::use_iterator UI = Flags->use_begin(), UE = Flags->use_end();
+         UI != UE; ++UI) {
+    // Only check things that use the flags.
+    if (UI.getUse().getResNo() != Flags.getResNo())
+      continue;
     // Only examine CopyToReg uses that copy to EFLAGS.
-    if (cast<RegisterSDNode>(UI->getOperand(1))->getReg() !=
-          X86::EFLAGS)
+    if (UI->getOpcode() != ISD::CopyToReg ||
+        cast<RegisterSDNode>(UI->getOperand(1))->getReg() != X86::EFLAGS)
       return false;
     // Examine each user of the CopyToReg use.
     for (SDNode::use_iterator FlagUI = UI->use_begin(),
@@ -2215,11 +2215,14 @@ static bool hasNoSignedComparisonUses(SDNode *N) {
       switch (FlagUI->getMachineOpcode()) {
       // These comparisons don't treat the most significant bit specially.
       case X86::SETAr: case X86::SETAEr: case X86::SETBr: case X86::SETBEr:
-      case X86::SETEr: case X86::SETNEr: case X86::SETPr: case X86::SETNPr:
+      case X86::SETEr: case X86::SETNEr: case X86::SETOr: case X86::SETNOr:
+      case X86::SETPr: case X86::SETNPr:
       case X86::SETAm: case X86::SETAEm: case X86::SETBm: case X86::SETBEm:
-      case X86::SETEm: case X86::SETNEm: case X86::SETPm: case X86::SETNPm:
+      case X86::SETEm: case X86::SETNEm: case X86::SETOm: case X86::SETNOm:
+      case X86::SETPm: case X86::SETNPm:
       case X86::JA_1: case X86::JAE_1: case X86::JB_1: case X86::JBE_1:
-      case X86::JE_1: case X86::JNE_1: case X86::JP_1: case X86::JNP_1:
+      case X86::JE_1: case X86::JNE_1: case X86::JO_1: case X86::JNO_1:
+      case X86::JP_1: case X86::JNP_1:
       case X86::CMOVA16rr: case X86::CMOVA16rm:
       case X86::CMOVA32rr: case X86::CMOVA32rm:
       case X86::CMOVA64rr: case X86::CMOVA64rm:
@@ -2241,6 +2244,9 @@ static bool hasNoSignedComparisonUses(SDNode *N) {
       case X86::CMOVNP16rr: case X86::CMOVNP16rm:
       case X86::CMOVNP32rr: case X86::CMOVNP32rm:
       case X86::CMOVNP64rr: case X86::CMOVNP64rm:
+      case X86::CMOVO16rr: case X86::CMOVO16rm:
+      case X86::CMOVO32rr: case X86::CMOVO32rm:
+      case X86::CMOVO64rr: case X86::CMOVO64rm:
       case X86::CMOVP16rr: case X86::CMOVP16rm:
       case X86::CMOVP32rr: case X86::CMOVP32rm:
       case X86::CMOVP64rr: case X86::CMOVP64rm:
@@ -2255,18 +2261,16 @@ static bool hasNoSignedComparisonUses(SDNode *N) {
 
 /// Test whether the given node which sets flags has any uses which require the
 /// CF flag to be accurate.
-static bool hasNoCarryFlagUses(SDNode *N) {
+static bool hasNoCarryFlagUses(SDValue Flags) {
   // Examine each user of the node.
-  for (SDNode::use_iterator UI = N->use_begin(), UE = N->use_end(); UI != UE;
-       ++UI) {
+  for (SDNode::use_iterator UI = Flags->use_begin(), UE = Flags->use_end();
+         UI != UE; ++UI) {
     // Only check things that use the flags.
-    if (UI.getUse().getResNo() != 1)
+    if (UI.getUse().getResNo() != Flags.getResNo())
       continue;
-    // Only examine CopyToReg uses.
-    if (UI->getOpcode() != ISD::CopyToReg)
-      return false;
     // Only examine CopyToReg uses that copy to EFLAGS.
-    if (cast<RegisterSDNode>(UI->getOperand(1))->getReg() != X86::EFLAGS)
+    if (UI->getOpcode() != ISD::CopyToReg ||
+        cast<RegisterSDNode>(UI->getOperand(1))->getReg() != X86::EFLAGS)
       return false;
     // Examine each user of the CopyToReg use.
     for (SDNode::use_iterator FlagUI = UI->use_begin(), FlagUE = UI->use_end();
@@ -2631,7 +2635,7 @@ bool X86DAGToDAGISel::foldLoadStoreIntoMemOperand(SDNode *Node) {
             (-OperandV).getMinSignedBits() <= 8) ||
            (MemVT == MVT::i64 && OperandV.getMinSignedBits() > 32 &&
             (-OperandV).getMinSignedBits() <= 32)) &&
-          hasNoCarryFlagUses(StoredVal.getNode())) {
+          hasNoCarryFlagUses(StoredVal.getValue(1))) {
         OperandV = -OperandV;
         Opc = Opc == X86ISD::ADD ? X86ISD::SUB : X86ISD::ADD;
       }
@@ -3410,14 +3414,11 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
 
     unsigned Opc, MOpc;
     bool isSigned = Opcode == ISD::SMUL_LOHI;
-    bool hasBMI2 = Subtarget->hasBMI2();
     if (!isSigned) {
       switch (NVT.SimpleTy) {
       default: llvm_unreachable("Unsupported VT!");
-      case MVT::i32: Opc = hasBMI2 ? X86::MULX32rr : X86::MUL32r;
-                     MOpc = hasBMI2 ? X86::MULX32rm : X86::MUL32m; break;
-      case MVT::i64: Opc = hasBMI2 ? X86::MULX64rr : X86::MUL64r;
-                     MOpc = hasBMI2 ? X86::MULX64rm : X86::MUL64m; break;
+      case MVT::i32: Opc = X86::MUL32r; MOpc = X86::MUL32m; break;
+      case MVT::i64: Opc = X86::MUL64r; MOpc = X86::MUL64m; break;
       }
     } else {
       switch (NVT.SimpleTy) {
@@ -3438,12 +3439,6 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
     case X86::MUL64r:
       SrcReg = LoReg = X86::RAX; HiReg = X86::RDX;
       break;
-    case X86::MULX32rr:
-      SrcReg = X86::EDX; LoReg = HiReg = 0;
-      break;
-    case X86::MULX64rr:
-      SrcReg = X86::RDX; LoReg = HiReg = 0;
-      break;
     }
 
     SDValue Tmp0, Tmp1, Tmp2, Tmp3, Tmp4;
@@ -3457,26 +3452,15 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
 
     SDValue InFlag = CurDAG->getCopyToReg(CurDAG->getEntryNode(), dl, SrcReg,
                                           N0, SDValue()).getValue(1);
-    SDValue ResHi, ResLo;
-
     if (foldedLoad) {
       SDValue Chain;
       MachineSDNode *CNode = nullptr;
       SDValue Ops[] = { Tmp0, Tmp1, Tmp2, Tmp3, Tmp4, N1.getOperand(0),
                         InFlag };
-      if (MOpc == X86::MULX32rm || MOpc == X86::MULX64rm) {
-        SDVTList VTs = CurDAG->getVTList(NVT, NVT, MVT::Other, MVT::Glue);
-        CNode = CurDAG->getMachineNode(MOpc, dl, VTs, Ops);
-        ResHi = SDValue(CNode, 0);
-        ResLo = SDValue(CNode, 1);
-        Chain = SDValue(CNode, 2);
-        InFlag = SDValue(CNode, 3);
-      } else {
-        SDVTList VTs = CurDAG->getVTList(MVT::Other, MVT::Glue);
-        CNode = CurDAG->getMachineNode(MOpc, dl, VTs, Ops);
-        Chain = SDValue(CNode, 0);
-        InFlag = SDValue(CNode, 1);
-      }
+      SDVTList VTs = CurDAG->getVTList(MVT::Other, MVT::Glue);
+      CNode = CurDAG->getMachineNode(MOpc, dl, VTs, Ops);
+      Chain = SDValue(CNode, 0);
+      InFlag = SDValue(CNode, 1);
 
       // Update the chain.
       ReplaceUses(N1.getValue(1), Chain);
@@ -3484,39 +3468,27 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
       CurDAG->setNodeMemRefs(CNode, {cast<LoadSDNode>(N1)->getMemOperand()});
     } else {
       SDValue Ops[] = { N1, InFlag };
-      if (Opc == X86::MULX32rr || Opc == X86::MULX64rr) {
-        SDVTList VTs = CurDAG->getVTList(NVT, NVT, MVT::Glue);
-        SDNode *CNode = CurDAG->getMachineNode(Opc, dl, VTs, Ops);
-        ResHi = SDValue(CNode, 0);
-        ResLo = SDValue(CNode, 1);
-        InFlag = SDValue(CNode, 2);
-      } else {
-        SDVTList VTs = CurDAG->getVTList(MVT::Glue);
-        SDNode *CNode = CurDAG->getMachineNode(Opc, dl, VTs, Ops);
-        InFlag = SDValue(CNode, 0);
-      }
+      SDVTList VTs = CurDAG->getVTList(MVT::Glue);
+      SDNode *CNode = CurDAG->getMachineNode(Opc, dl, VTs, Ops);
+      InFlag = SDValue(CNode, 0);
     }
 
     // Copy the low half of the result, if it is needed.
     if (!SDValue(Node, 0).use_empty()) {
-      if (!ResLo.getNode()) {
-        assert(LoReg && "Register for low half is not defined!");
-        ResLo = CurDAG->getCopyFromReg(CurDAG->getEntryNode(), dl, LoReg, NVT,
-                                       InFlag);
-        InFlag = ResLo.getValue(2);
-      }
+      assert(LoReg && "Register for low half is not defined!");
+      SDValue ResLo = CurDAG->getCopyFromReg(CurDAG->getEntryNode(), dl, LoReg,
+                                             NVT, InFlag);
+      InFlag = ResLo.getValue(2);
       ReplaceUses(SDValue(Node, 0), ResLo);
       LLVM_DEBUG(dbgs() << "=> "; ResLo.getNode()->dump(CurDAG);
                  dbgs() << '\n');
     }
     // Copy the high half of the result, if it is needed.
     if (!SDValue(Node, 1).use_empty()) {
-      if (!ResHi.getNode()) {
-        assert(HiReg && "Register for high half is not defined!");
-        ResHi = CurDAG->getCopyFromReg(CurDAG->getEntryNode(), dl, HiReg, NVT,
-                                       InFlag);
-        InFlag = ResHi.getValue(2);
-      }
+      assert(HiReg && "Register for high half is not defined!");
+      SDValue ResHi = CurDAG->getCopyFromReg(CurDAG->getEntryNode(), dl, HiReg,
+                                             NVT, InFlag);
+      InFlag = ResHi.getValue(2);
       ReplaceUses(SDValue(Node, 1), ResHi);
       LLVM_DEBUG(dbgs() << "=> "; ResHi.getNode()->dump(CurDAG);
                  dbgs() << '\n');
@@ -3749,7 +3721,7 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
 
       if (isUInt<8>(Mask) &&
           (!(Mask & 0x80) || CmpVT == MVT::i8 ||
-           hasNoSignedComparisonUses(Node))) {
+           hasNoSignFlagUses(SDValue(Node, 0)))) {
         // For example, convert "testl %eax, $8" to "testb %al, $8"
         VT = MVT::i8;
         SubRegOp = X86::sub_8bit;
@@ -3757,7 +3729,7 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
         MOpc = X86::TEST8mi;
       } else if (OptForMinSize && isUInt<16>(Mask) &&
                  (!(Mask & 0x8000) || CmpVT == MVT::i16 ||
-                  hasNoSignedComparisonUses(Node))) {
+                  hasNoSignFlagUses(SDValue(Node, 0)))) {
         // For example, "testl %eax, $32776" to "testw %ax, $32776".
         // NOTE: We only want to form TESTW instructions if optimizing for
         // min size. Otherwise we only save one byte and possibly get a length
@@ -3771,7 +3743,8 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
                    // Without minsize 16-bit Cmps can get here so we need to
                    // be sure we calculate the correct sign flag if needed.
                    (CmpVT != MVT::i16 || !(Mask & 0x8000))) ||
-                  CmpVT == MVT::i32 || hasNoSignedComparisonUses(Node))) {
+                  CmpVT == MVT::i32 ||
+                  hasNoSignFlagUses(SDValue(Node, 0)))) {
         // For example, "testq %rax, $268468232" to "testl %eax, $268468232".
         // NOTE: We only want to run that transform if N0 is 32 or 64 bits.
         // Otherwize, we find ourselves in a position where we have to do

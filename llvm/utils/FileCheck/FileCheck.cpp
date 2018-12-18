@@ -25,7 +25,7 @@
 using namespace llvm;
 
 static cl::opt<std::string>
-    CheckFilename(cl::Positional, cl::desc("<check-file>"), cl::Required);
+    CheckFilename(cl::Positional, cl::desc("<check-file>"), cl::Optional);
 
 static cl::opt<std::string>
     InputFilename("input-file", cl::desc("File to check (defaults to stdin)"),
@@ -79,13 +79,16 @@ static cl::opt<bool> AllowDeprecatedDagOverlap(
              "provided for convenience as old tests are migrated to the new\n"
              "non-overlapping CHECK-DAG implementation.\n"));
 
-static cl::opt<bool> Verbose("v", cl::init(false),
-                             cl::desc("Print directive pattern matches.\n"));
+static cl::opt<bool> Verbose(
+    "v", cl::init(false),
+    cl::desc("Print directive pattern matches, or add them to the input dump\n"
+             "if enabled.\n"));
 
 static cl::opt<bool> VerboseVerbose(
     "vv", cl::init(false),
     cl::desc("Print information helpful in diagnosing internal FileCheck\n"
-             "issues.  Implies -v.\n"));
+             "issues, or add it to the input dump if enabled.  Implies\n"
+             "-v.\n"));
 static const char * DumpInputEnv = "FILECHECK_DUMP_INPUT_ON_FAILURE";
 
 static cl::opt<bool> DumpInputOnFailure(
@@ -93,13 +96,26 @@ static cl::opt<bool> DumpInputOnFailure(
     cl::desc("Dump original input to stderr before failing.\n"
              "The value can be also controlled using\n"
              "FILECHECK_DUMP_INPUT_ON_FAILURE environment variable.\n"
-             "This option is deprecated in favor of -dump-input.\n"));
+             "This option is deprecated in favor of -dump-input=fail.\n"));
 
-static cl::opt<std::string> DumpInput(
-    "dump-input", cl::init("never"),
-    cl::desc("Dump annotated input to stderr either 'always', on 'fail',\n"
-             "or 'never'.\n"),
-    cl::value_desc("mode"));
+enum DumpInputValue {
+  DumpInputDefault,
+  DumpInputHelp,
+  DumpInputNever,
+  DumpInputFail,
+  DumpInputAlways
+};
+
+static cl::opt<DumpInputValue> DumpInput(
+    "dump-input", cl::init(DumpInputDefault),
+    cl::desc("Dump input to stderr, adding annotations representing\n"
+             " currently enabled diagnostics\n"),
+    cl::value_desc("mode"),
+    cl::values(clEnumValN(DumpInputHelp, "help",
+                          "Explain dump format and quit"),
+               clEnumValN(DumpInputNever, "never", "Never dump input"),
+               clEnumValN(DumpInputFail, "fail", "Dump input on failure"),
+               clEnumValN(DumpInputAlways, "always", "Always dump input")));
 
 typedef cl::list<std::string>::const_iterator prefix_iterator;
 
@@ -116,67 +132,49 @@ static void DumpCommandLine(int argc, char **argv) {
   errs() << "\n";
 }
 
-struct MatchTypeStyle {
-  char Mark;
-  bool HasTildes;
+struct MarkerStyle {
+  /// The starting char (before tildes) for marking the line.
+  char Lead;
+  /// What color to use for this annotation.
   raw_ostream::Colors Color;
-  enum Verbosity { Quiet, Verbose, VerboseVerbose } RequiredVerbosity;
-  const char *What;
-  MatchTypeStyle(char Mark, bool HasTildes, raw_ostream::Colors Color,
-                 Verbosity RequiredVerbosity, const char *What)
-      : Mark(Mark), HasTildes(HasTildes), Color(Color),
-        RequiredVerbosity(RequiredVerbosity), What(What) {}
+  /// A note to follow the marker, or empty string if none.
+  std::string Note;
+  MarkerStyle() {}
+  MarkerStyle(char Lead, raw_ostream::Colors Color,
+              const std::string &Note = "")
+      : Lead(Lead), Color(Color), Note(Note) {}
 };
 
-static MatchTypeStyle GetMatchTypeStyle(unsigned MatchTy) {
+static MarkerStyle GetMarker(FileCheckDiag::MatchType MatchTy) {
   switch (MatchTy) {
-  case FileCheckDiag::MatchFinalAndExpected:
-    return MatchTypeStyle('^', true, raw_ostream::GREEN,
-                          MatchTypeStyle::Verbose,
-                          "the final match for an expected pattern (e.g., "
-                          "CHECK)");
-  case FileCheckDiag::MatchFinalButExcluded:
-    return MatchTypeStyle('!', true, raw_ostream::RED, MatchTypeStyle::Quiet,
-                          "the final match for an excluded pattern (e.g., "
-                          "CHECK-NOT)");
-  case FileCheckDiag::MatchFinalButIllegal:
-    return MatchTypeStyle('!', true, raw_ostream::RED, MatchTypeStyle::Quiet,
-                          "the final but illegal match for an expected "
-                          "pattern (e.g., CHECK-NEXT)");
-  case FileCheckDiag::MatchDiscard:
-    return MatchTypeStyle('!', true, raw_ostream::CYAN,
-                          MatchTypeStyle::VerboseVerbose,
-                          "a discarded match for an expected pattern (e.g., "
-                          "CHECK-DAG)");
+  case FileCheckDiag::MatchFoundAndExpected:
+    return MarkerStyle('^', raw_ostream::GREEN);
+  case FileCheckDiag::MatchFoundButExcluded:
+    return MarkerStyle('!', raw_ostream::RED, "error: no match expected");
+  case FileCheckDiag::MatchFoundButWrongLine:
+    return MarkerStyle('!', raw_ostream::RED, "error: match on wrong line");
+  case FileCheckDiag::MatchFoundButDiscarded:
+    return MarkerStyle('!', raw_ostream::CYAN,
+                       "discard: overlaps earlier match");
   case FileCheckDiag::MatchNoneAndExcluded:
-    return MatchTypeStyle('X', true, raw_ostream::GREEN,
-                          MatchTypeStyle::VerboseVerbose,
-                          "the search range for an unmatched excluded "
-                          "pattern (e.g., CHECK-NOT)");
+    return MarkerStyle('X', raw_ostream::GREEN);
   case FileCheckDiag::MatchNoneButExpected:
-    return MatchTypeStyle('X', true, raw_ostream::RED, MatchTypeStyle::Quiet,
-                          "the search range for an unmatched expected "
-                          "pattern (e.g., CHECK)");
+    return MarkerStyle('X', raw_ostream::RED, "error: no match found");
   case FileCheckDiag::MatchFuzzy:
-    return MatchTypeStyle('?', false, raw_ostream::MAGENTA,
-                          MatchTypeStyle::Quiet,
-                          "a fuzzy match start for an otherwise unmatched "
-                          "pattern");
-  case FileCheckDiag::MatchTypeCount:
-    llvm_unreachable_internal("unexpected match type");
+    return MarkerStyle('?', raw_ostream::MAGENTA, "possible intended match");
   }
   llvm_unreachable_internal("unexpected match type");
 }
 
-static void DumpInputAnnotationExplanation(raw_ostream &OS,
-                                           const FileCheckRequest &Req) {
-  OS << "\nFormat for input dump annotations:\n\n";
+static void DumpInputAnnotationHelp(raw_ostream &OS) {
+  OS << "The following description was requested by -dump-input=help to\n"
+     << "explain the input annotations printed by -dump-input=always and\n"
+     << "-dump-input=fail:\n\n";
 
   // Labels for input lines.
   OS << "  - ";
   WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "L:";
-  OS << "S    labels line number L of the input file, where S is a "
-     << "single space\n";
+  OS << "     labels line number L of the input file\n";
 
   // Labels for annotation lines.
   OS << "  - ";
@@ -193,86 +191,37 @@ static void DumpInputAnnotationExplanation(raw_ostream &OS,
   // Markers on annotation lines.
   OS << "  - ";
   WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "^~~";
-  OS << "    marks good match (requires -v)\n"
+  OS << "    marks good match (reported if -v)\n"
      << "  - ";
   WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "!~~";
-  OS << "    marks bad match\n"
+  OS << "    marks bad match, such as:\n"
+     << "           - CHECK-NEXT on same line as previous match (error)\n"
+     << "           - CHECK-NOT found (error)\n"
+     << "           - CHECK-DAG overlapping match (discarded, reported if "
+     << "-vv)\n"
      << "  - ";
   WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "X~~";
-  OS << "    marks search range when no match is found\n"
+  OS << "    marks search range when no match is found, such as:\n"
+     << "           - CHECK-NEXT not found (error)\n"
+     << "           - CHECK-NOT not found (success, reported if -vv)\n"
+     << "           - CHECK-DAG not found after discarded matches (error)\n"
      << "  - ";
   WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "?";
   OS << "      marks fuzzy match when no match is found\n";
 
   // Colors.
-  if (WithColor(OS).colorsEnabled()) {
-    OS << "  - color  ";
-    if (Req.Verbose) {
-      WithColor(OS, raw_ostream::GREEN, true) << "success";
-      OS << ", ";
-    }
-    WithColor(OS, raw_ostream::RED, true) << "error";
-    if (Req.Verbose) {
-      OS << ", ";
-      WithColor(OS, raw_ostream::CYAN, true, true) << "unmatched";
-      if (Req.VerboseVerbose) {
-        OS << ", ";
-        WithColor(OS, raw_ostream::CYAN, true, false) << "discarded";
-      }
-    }
-    OS << ", ";
-    WithColor(OS, raw_ostream::MAGENTA, true) << "fuzzy";
-    OS << '\n';
-  }
-
-  OS << "\nDetailed description of currently enabled markers:\n\n";
-
-  MatchTypeStyle::Verbosity Verbosity =
-      Req.VerboseVerbose
-          ? MatchTypeStyle::VerboseVerbose
-          : Req.Verbose ? MatchTypeStyle::Verbose : MatchTypeStyle::Quiet;
-  for (unsigned StyleIdx = FileCheckDiag::MatchTypeFirst;
-       StyleIdx < FileCheckDiag::MatchTypeCount; ++StyleIdx) {
-    MatchTypeStyle Style = GetMatchTypeStyle(StyleIdx);
-    if (Verbosity < Style.RequiredVerbosity)
-      continue;
-    if (StyleIdx == FileCheckDiag::MatchTypeFirst ||
-        Verbosity < GetMatchTypeStyle(StyleIdx - 1).RequiredVerbosity ||
-        Style.Mark != GetMatchTypeStyle(StyleIdx - 1).Mark ||
-        Style.HasTildes != GetMatchTypeStyle(StyleIdx - 1).HasTildes ||
-        (WithColor(OS).colorsEnabled() &&
-         Style.Color != GetMatchTypeStyle(StyleIdx - 1).Color)) {
-      OS << "  - ";
-      WithColor(OS, Style.Color, true)
-          << Style.Mark << (Style.HasTildes ? "~~" : "  ");
-      OS << "    marks ";
-      if (StyleIdx + 1 != FileCheckDiag::MatchTypeCount &&
-          Verbosity >= GetMatchTypeStyle(StyleIdx + 1).RequiredVerbosity &&
-          Style.Mark == GetMatchTypeStyle(StyleIdx + 1).Mark &&
-          Style.HasTildes == GetMatchTypeStyle(StyleIdx + 1).HasTildes &&
-          (!WithColor(OS).colorsEnabled() ||
-           Style.Color == GetMatchTypeStyle(StyleIdx + 1).Color))
-        OS << "either:\n"
-           << "           - ";
-    } else
-      OS << "           - ";
-    OS << Style.What << "\n";
-  }
-
-  if (WithColor(OS).colorsEnabled() && Req.Verbose) {
-    OS << "  - ";
-    WithColor(OS, raw_ostream::CYAN, true, true) << "input";
-    OS << "  is style of input text with no final match for any expected "
-       << "pattern\n";
-  }
-
-  // Files.
-  OS << "\nInput file: ";
-  if (InputFilename == "-")
-    OS << "<stdin>";
-  else
-    OS << InputFilename;
-  OS << "\nCheck file: " << CheckFilename << "\n";
+  OS << "  - colors ";
+  WithColor(OS, raw_ostream::GREEN, true) << "success";
+  OS << ", ";
+  WithColor(OS, raw_ostream::RED, true) << "error";
+  OS << ", ";
+  WithColor(OS, raw_ostream::MAGENTA, true) << "fuzzy match";
+  OS << ", ";
+  WithColor(OS, raw_ostream::CYAN, true, false) << "discarded match";
+  OS << ", ";
+  WithColor(OS, raw_ostream::CYAN, true, true) << "unmatched input";
+  OS << "\n\n"
+     << "If you are not seeing color above or in input dumps, try: -color\n";
 }
 
 /// An annotation for a single input line.
@@ -293,12 +242,10 @@ struct InputAnnotation {
   /// input line.  If InputEndCol is UINT_MAX, treat it as the last column
   /// before the newline.
   unsigned InputStartCol, InputEndCol;
-  /// The starting char (before tildes) for marking the line.
-  char Mark;
-  /// Whether this annotation represents a final match for an expected pattern.
-  bool FinalAndExpectedMatch;
-  /// What color to use for this annotation.
-  raw_ostream::Colors Color;
+  /// The marker to use.
+  MarkerStyle Marker;
+  /// Whether this annotation represents a good match for an expected pattern.
+  bool FoundAndExpectedMatch;
 };
 
 /// Get an abbreviation for the check type.
@@ -364,11 +311,10 @@ static void BuildInputAnnotations(const std::vector<FileCheckDiag> &Diags,
     Label.flush();
     LabelWidth = std::max((std::string::size_type)LabelWidth, A.Label.size());
 
-    MatchTypeStyle MatchTyStyle = GetMatchTypeStyle(DiagItr->MatchTy);
-    A.Mark = MatchTyStyle.Mark;
-    A.Color = MatchTyStyle.Color;
-    A.FinalAndExpectedMatch =
-        DiagItr->MatchTy == FileCheckDiag::MatchFinalAndExpected;
+    MarkerStyle Marker = GetMarker(DiagItr->MatchTy);
+    A.Marker = Marker;
+    A.FoundAndExpectedMatch =
+        DiagItr->MatchTy == FileCheckDiag::MatchFoundAndExpected;
 
     // Compute the mark location, and break annotation into multiple
     // annotations if it spans multiple lines.
@@ -380,47 +326,45 @@ static void BuildInputAnnotations(const std::vector<FileCheckDiag> &Diags,
       // include the following character.
       A.InputEndCol =
           std::max(DiagItr->InputStartCol + 1, DiagItr->InputEndCol);
-      assert((MatchTyStyle.HasTildes ||
-              A.InputStartCol + 1 == A.InputEndCol) &&
-             "expected input range to have only one character for marker "
-             "style without tildes");
       Annotations.push_back(A);
     } else {
-      assert(MatchTyStyle.HasTildes &&
-             "expected input range to have only one character for marker "
-             "style without tildes");
       assert(DiagItr->InputStartLine < DiagItr->InputEndLine &&
              "expected input range not to be inverted");
       A.InputEndCol = UINT_MAX;
+      A.Marker.Note = "";
       Annotations.push_back(A);
       for (unsigned L = DiagItr->InputStartLine + 1, E = DiagItr->InputEndLine;
            L <= E; ++L) {
         // If a range ends before the first column on a line, then it has no
         // characters on that line, so there's nothing to render.
-        if (DiagItr->InputEndCol == 1 && L == E)
+        if (DiagItr->InputEndCol == 1 && L == E) {
+          Annotations.back().Marker.Note = Marker.Note;
           break;
+        }
         InputAnnotation B;
         B.CheckLine = A.CheckLine;
         B.CheckDiagIndex = A.CheckDiagIndex;
         B.Label = A.Label;
         B.InputLine = L;
-        B.Mark = '~';
+        B.Marker = Marker;
+        B.Marker.Lead = '~';
         B.InputStartCol = 1;
-        if (L != E)
+        if (L != E) {
           B.InputEndCol = UINT_MAX;
-        else
+          B.Marker.Note = "";
+        } else
           B.InputEndCol = DiagItr->InputEndCol;
-        B.FinalAndExpectedMatch = A.FinalAndExpectedMatch;
-        B.Color = A.Color;
+        B.FoundAndExpectedMatch = A.FoundAndExpectedMatch;
         Annotations.push_back(B);
       }
     }
   }
 }
 
-static void DumpAnnotatedInput(
-    raw_ostream &OS, const FileCheckRequest &Req, StringRef InputFileText,
-    std::vector<InputAnnotation> &Annotations, unsigned LabelWidth) {
+static void DumpAnnotatedInput(raw_ostream &OS, const FileCheckRequest &Req,
+                               StringRef InputFileText,
+                               std::vector<InputAnnotation> &Annotations,
+                               unsigned LabelWidth) {
   OS << "Full input was:\n<<<<<<\n";
 
   // Sort annotations.
@@ -483,15 +427,15 @@ static void DumpAnnotatedInput(
     WithColor(OS, raw_ostream::BLACK, true)
         << format_decimal(Line, LabelWidth) << ": ";
 
-    // For case where -v and colors are enabled, find the annotations for final
-    // matches for expected patterns in order to highlight everything else in
-    // the line.  There are no such annotations if -v is disabled.
-    std::list<InputAnnotation> FinalAndExpectedMatches;
+    // For the case where -v and colors are enabled, find the annotations for
+    // good matches for expected patterns in order to highlight everything
+    // else in the line.  There are no such annotations if -v is disabled.
+    std::vector<InputAnnotation> FoundAndExpectedMatches;
     if (Req.Verbose && WithColor(OS).colorsEnabled()) {
       for (auto I = AnnotationItr; I != AnnotationEnd && I->InputLine == Line;
            ++I) {
-        if (I->FinalAndExpectedMatch)
-          FinalAndExpectedMatches.push_back(*I);
+        if (I->FoundAndExpectedMatch)
+          FoundAndExpectedMatches.push_back(*I);
       }
     }
 
@@ -500,20 +444,21 @@ static void DumpAnnotatedInput(
     bool Newline = false;
     {
       WithColor COS(OS);
+      bool InMatch = false;
       if (Req.Verbose)
         COS.changeColor(raw_ostream::CYAN, true, true);
       for (unsigned Col = 1; InputFilePtr != InputFileEnd && !Newline; ++Col) {
-        bool StartsMatch = false;
-        bool EndsMatch = false;
-        for (auto M : FinalAndExpectedMatches) {
-          if (Col == M.InputEndCol)
-            EndsMatch = true;
-          else if (Col == M.InputStartCol)
-            StartsMatch = true;
+        bool WasInMatch = InMatch;
+        InMatch = false;
+        for (auto M : FoundAndExpectedMatches) {
+          if (M.InputStartCol <= Col && Col < M.InputEndCol) {
+            InMatch = true;
+            break;
+          }
         }
-        if (StartsMatch)
+        if (!WasInMatch && InMatch)
           COS.resetColor();
-        else if (EndsMatch)
+        else if (WasInMatch && !InMatch)
           COS.changeColor(raw_ostream::CYAN, true, true);
         if (*InputFilePtr == '\n')
           Newline = true;
@@ -528,17 +473,27 @@ static void DumpAnnotatedInput(
     // Print any annotations.
     while (AnnotationItr != AnnotationEnd &&
            AnnotationItr->InputLine == Line) {
-      WithColor COS(OS, AnnotationItr->Color, true);
+      WithColor COS(OS, AnnotationItr->Marker.Color, true);
       // The two spaces below are where the ": " appears on input lines.
       COS << left_justify(AnnotationItr->Label, LabelWidth) << "  ";
       unsigned Col;
       for (Col = 1; Col < AnnotationItr->InputStartCol; ++Col)
         COS << ' ';
-      COS << AnnotationItr->Mark;
+      COS << AnnotationItr->Marker.Lead;
       // If InputEndCol=UINT_MAX, stop at InputLineWidth.
       for (++Col; Col < AnnotationItr->InputEndCol && Col <= InputLineWidth;
            ++Col)
         COS << '~';
+      const std::string &Note = AnnotationItr->Marker.Note;
+      if (!Note.empty()) {
+        // Put the note at the end of the input line.  If we were to instead
+        // put the note right after the marker, subsequent annotations for the
+        // same input line might appear to mark this note instead of the input
+        // line.
+        for (; Col <= InputLineWidth; ++Col)
+          COS << ' ';
+        COS << ' ' << Note;
+      }
       COS << '\n';
       ++AnnotationItr;
     }
@@ -555,6 +510,14 @@ int main(int argc, char **argv) {
   InitLLVM X(argc, argv);
   cl::ParseCommandLineOptions(argc, argv, /*Overview*/ "", /*Errs*/ nullptr,
                               "FILECHECK_OPTS");
+  if (DumpInput == DumpInputHelp) {
+    DumpInputAnnotationHelp(outs());
+    return 0;
+  }
+  if (CheckFilename.empty()) {
+    errs() << "<check-file> not specified\n";
+    return 2;
+  }
 
   FileCheckRequest Req;
   for (auto Prefix : CheckPrefixes)
@@ -593,11 +556,6 @@ int main(int argc, char **argv) {
               "the check-prefix strings. Regular expression parsing failed "
               "with the following error: "
            << REError << "\n";
-    return 2;
-  }
-
-  if (DumpInput != "never" && DumpInput != "fail" && DumpInput != "always") {
-    errs() << "Unrecognized value for dump-input option: " << DumpInput << '\n';
     return 2;
   }
 
@@ -647,19 +605,27 @@ int main(int argc, char **argv) {
                             InputFileText, InputFile.getBufferIdentifier()),
                         SMLoc());
 
+  if (DumpInput == DumpInputDefault)
+    DumpInput = DumpInputOnFailure ? DumpInputFail : DumpInputNever;
+
   std::vector<FileCheckDiag> Diags;
-  int ExitCode = FC.CheckInput(SM, InputFileText, CheckStrings, &Diags)
+  int ExitCode = FC.CheckInput(SM, InputFileText, CheckStrings,
+                               DumpInput == DumpInputNever ? nullptr : &Diags)
                      ? EXIT_SUCCESS
                      : 1;
-  if (ExitCode == 1 && DumpInputOnFailure)
-    errs() << "Full input was:\n<<<<<<\n" << InputFileText << "\n>>>>>>\n";
-  if (DumpInput == "always" || (ExitCode == 1 && DumpInput == "fail")) {
-    errs() << '\n';
-    DumpInputAnnotationExplanation(errs(), Req);
+  if (DumpInput == DumpInputAlways ||
+      (ExitCode == 1 && DumpInput == DumpInputFail)) {
+    errs() << "\n"
+           << "Input file: "
+           << (InputFilename == "-" ? "<stdin>" : InputFilename.getValue())
+           << "\n"
+           << "Check file: " << CheckFilename << "\n"
+           << "\n"
+           << "-dump-input=help describes the format of the following dump.\n"
+           << "\n";
     std::vector<InputAnnotation> Annotations;
     unsigned LabelWidth;
     BuildInputAnnotations(Diags, Annotations, LabelWidth);
-    errs() << '\n';
     DumpAnnotatedInput(errs(), Req, InputFileText, Annotations, LabelWidth);
   }
 

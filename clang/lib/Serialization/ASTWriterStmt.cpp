@@ -651,6 +651,7 @@ void ASTStmtWriter::VisitCallExpr(CallExpr *E) {
   for (CallExpr::arg_iterator Arg = E->arg_begin(), ArgEnd = E->arg_end();
        Arg != ArgEnd; ++Arg)
     Record.AddStmt(*Arg);
+  Record.push_back(static_cast<unsigned>(E->getADLCallKind()));
   Code = serialization::EXPR_CALL;
 }
 
@@ -1506,7 +1507,7 @@ void ASTStmtWriter::VisitCXXDeleteExpr(CXXDeleteExpr *E) {
   Record.push_back(E->doesUsualArrayDeleteWantSize());
   Record.AddDeclRef(E->getOperatorDelete());
   Record.AddStmt(E->getArgument());
-  Record.AddSourceLocation(E->getSourceRange().getBegin());
+  Record.AddSourceLocation(E->getBeginLoc());
 
   Code = serialization::EXPR_CXX_DELETE;
 }

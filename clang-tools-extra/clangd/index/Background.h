@@ -12,6 +12,8 @@
 
 #include "Context.h"
 #include "FSProvider.h"
+#include "GlobalCompilationDatabase.h"
+#include "Threading.h"
 #include "index/FileIndex.h"
 #include "index/Index.h"
 #include "index/Serialization.h"
@@ -63,39 +65,38 @@ class BackgroundIndex : public SwapIndex {
 public:
   // FIXME: resource-dir injection should be hoisted somewhere common.
   BackgroundIndex(Context BackgroundContext, llvm::StringRef ResourceDir,
-                  const FileSystemProvider &, ArrayRef<std::string> URISchemes,
+                  const FileSystemProvider &,
+                  const GlobalCompilationDatabase &CDB,
                   BackgroundIndexStorage::Factory IndexStorageFactory,
                   size_t ThreadPoolSize = llvm::hardware_concurrency());
   ~BackgroundIndex(); // Blocks while the current task finishes.
 
-  // Enqueue a translation unit for indexing.
+  // Enqueue translation units for indexing.
   // The indexing happens in a background thread, so the symbols will be
   // available sometime later.
-  void enqueue(llvm::StringRef Directory, tooling::CompileCommand);
-  // Index all TUs described in the compilation database.
-  void enqueueAll(llvm::StringRef Directory,
-                  const tooling::CompilationDatabase &);
+  void enqueue(const std::vector<std::string> &ChangedFiles);
+  void enqueue(const std::string &File);
 
   // Cause background threads to stop after ther current task, any remaining
   // tasks will be discarded.
   void stop();
 
   // Wait until the queue is empty, to allow deterministic testing.
-  void blockUntilIdleForTest();
-
-  using FileDigest = decltype(llvm::SHA1::hash({}));
+  LLVM_NODISCARD bool
+  blockUntilIdleForTest(llvm::Optional<double> TimeoutSeconds = 10);
 
 private:
   /// Given index results from a TU, only update files in \p FilesToUpdate.
-  void update(llvm::StringRef MainFile, SymbolSlab Symbols, RefSlab Refs,
+  /// Also stores new index information on IndexStorage.
+  void update(llvm::StringRef MainFile, IndexFileIn Index,
               const llvm::StringMap<FileDigest> &FilesToUpdate,
               BackgroundIndexStorage *IndexStorage);
 
   // configuration
   std::string ResourceDir;
   const FileSystemProvider &FSProvider;
+  const GlobalCompilationDatabase &CDB;
   Context BackgroundContext;
-  std::vector<std::string> URISchemes;
 
   // index state
   llvm::Error index(tooling::CompileCommand,
@@ -110,14 +111,16 @@ private:
   // queue management
   using Task = std::function<void()>;
   void run(); // Main loop executed by Thread. Runs tasks from Queue.
+  void enqueueTask(Task T, ThreadPriority Prioirty);
   void enqueueLocked(tooling::CompileCommand Cmd,
                      BackgroundIndexStorage *IndexStorage);
   std::mutex QueueMu;
   unsigned NumActiveTasks = 0; // Only idle when queue is empty *and* no tasks.
   std::condition_variable QueueCV;
   bool ShouldStop = false;
-  std::deque<Task> Queue;
+  std::deque<std::pair<Task, ThreadPriority>> Queue;
   std::vector<std::thread> ThreadPool; // FIXME: Abstract this away.
+  GlobalCompilationDatabase::CommandChanged::Subscription CommandsChanged;
 };
 
 } // namespace clangd

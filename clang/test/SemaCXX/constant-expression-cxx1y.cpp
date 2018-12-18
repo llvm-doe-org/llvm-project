@@ -444,7 +444,7 @@ namespace compound_assign {
   static_assert(test_bounds("foo", 0)[0] == 'f', "");
   static_assert(test_bounds("foo", 3)[0] == 0, "");
   static_assert(test_bounds("foo", 4)[-3] == 'o', "");
-  static_assert(test_bounds("foo" + 4, -4)[0] == 'f', "");
+  static_assert(test_bounds(&"foo"[4], -4)[0] == 'f', "");
   static_assert(test_bounds("foo", 5) != 0, ""); // expected-error {{constant}} expected-note {{call}}
   static_assert(test_bounds("foo", -1) != 0, ""); // expected-error {{constant}} expected-note {{call}}
   static_assert(test_bounds("foo", 1000) != 0, ""); // expected-error {{constant}} expected-note {{call}}
@@ -1122,3 +1122,8 @@ constexpr E e2 = E{0};
 static_assert(e2.x != e2.y, "");
 
 } // namespace IndirectFields
+
+constexpr bool indirect_builtin_constant_p(const char *__s) {
+  return __builtin_constant_p(*__s);
+}
+constexpr bool n = indirect_builtin_constant_p("a");

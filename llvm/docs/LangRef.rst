@@ -1643,19 +1643,15 @@ example:
 ``speculative_load_hardening``
     This attribute indicates that
     `Speculative Load Hardening <https://llvm.org/docs/SpeculativeLoadHardening.html>`_
-    should be enabled for the function body. This is a best-effort attempt to
-    mitigate all known speculative execution information leak vulnerabilities
-    that are based on the fundamental principles of modern processors'
-    speculative execution. These vulnerabilities are classified as "Spectre
-    variant #1" vulnerabilities typically. Notably, this does not attempt to
-    mitigate any vulnerabilities where the speculative execution and/or
-    prediction devices of specific processors can be *completely* undermined
-    (such as "Branch Target Injection", a.k.a, "Spectre variant #2"). Instead,
-    this is a target-independent request to harden against the completely
-    generic risk posed by speculative execution to incorrectly load secret data,
-    making it available to some micro-architectural side-channel for information
-    leak. For a processor without any speculative execution or predictors, this
-    is expected to be a no-op.
+    should be enabled for the function body.
+
+    Speculative Load Hardening is a best-effort mitigation against
+    information leak attacks that make use of control flow
+    miss-speculation - specifically miss-speculation of whether a branch
+    is taken or not. Typically vulnerabilities enabling such attacks are
+    classified as "Spectre variant #1". Notably, this does not attempt to
+    mitigate against miss-speculation of branch target, classified as
+    "Spectre variant #2" vulnerabilities.
 
     When inlining, the attribute is sticky. Inlining a function that carries
     this attribute will cause the caller to gain the attribute. This is intended
@@ -5080,6 +5076,8 @@ optimizations related to compare and branch instructions. The metadata
 is treated as a boolean value; if it exists, it signals that the branch
 or switch that it is attached to is completely unpredictable.
 
+.. _llvm.loop:
+
 '``llvm.loop``'
 ^^^^^^^^^^^^^^^
 
@@ -5112,6 +5110,26 @@ suggests an unroll factor to the loop unroller:
     ...
     !0 = !{!0, !1}
     !1 = !{!"llvm.loop.unroll.count", i32 4}
+
+'``llvm.loop.disable_nonforced``'
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This metadata disables all optional loop transformations unless
+explicitly instructed using other transformation metdata such as
+``llvm.loop.unroll.enable``. That is, no heuristic will try to determine
+whether a transformation is profitable. The purpose is to avoid that the
+loop is transformed to a different loop before an explicitly requested
+(forced) transformation is applied. For instance, loop fusion can make
+other transformations impossible. Mandatory loop canonicalizations such
+as loop rotation are still applied.
+
+It is recommended to use this metadata in addition to any llvm.loop.*
+transformation directive. Also, any loop should have at most one
+directive applied to it (and a sequence of transformations built using
+followup-attributes). Otherwise, which transformation will be applied
+depends on implementation details such as the pass pipeline order.
+
+See :ref:`transformation-metadata` for details.
 
 '``llvm.loop.vectorize``' and '``llvm.loop.interleave``'
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -5170,6 +5188,29 @@ Note that setting ``llvm.loop.vectorize.width`` to 1 disables
 vectorization of the loop. If ``llvm.loop.vectorize.width`` is set to
 0 or if the loop does not have this metadata the width will be
 determined automatically.
+
+'``llvm.loop.vectorize.followup_vectorized``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This metadata defines which loop attributes the vectorized loop will
+have. See :ref:`transformation-metadata` for details.
+
+'``llvm.loop.vectorize.followup_epilogue``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This metadata defines which loop attributes the epilogue will have. The
+epilogue is not vectorized and is executed when either the vectorized
+loop is not known to preserve semantics (because e.g., it processes two
+arrays that are found to alias by a runtime check) or for the last
+iterations that do not fill a complete set of vector lanes. See
+:ref:`Transformation Metadata <transformation-metadata>` for details.
+
+'``llvm.loop.vectorize.followup_all``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Attributes in the metadata will be added to both the vectorized and
+epilogue loop.
+See :ref:`Transformation Metadata <transformation-metadata>` for details.
 
 '``llvm.loop.unroll``'
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -5239,6 +5280,19 @@ For example:
 
    !0 = !{!"llvm.loop.unroll.full"}
 
+'``llvm.loop.unroll.followup``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This metadata defines which loop attributes the unrolled loop will have.
+See :ref:`Transformation Metadata <transformation-metadata>` for details.
+
+'``llvm.loop.unroll.followup_remainder``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This metadata defines which loop attributes the remainder loop after
+partial/runtime unrolling will have. See
+:ref:`Transformation Metadata <transformation-metadata>` for details.
+
 '``llvm.loop.unroll_and_jam``'
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -5292,6 +5346,43 @@ string ``llvm.loop.unroll_and_jam.enable``.  For example:
 
    !0 = !{!"llvm.loop.unroll_and_jam.enable"}
 
+'``llvm.loop.unroll_and_jam.followup_outer``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This metadata defines which loop attributes the outer unrolled loop will
+have. See :ref:`Transformation Metadata <transformation-metadata>` for
+details.
+
+'``llvm.loop.unroll_and_jam.followup_inner``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This metadata defines which loop attributes the inner jammed loop will
+have. See :ref:`Transformation Metadata <transformation-metadata>` for
+details.
+
+'``llvm.loop.unroll_and_jam.followup_remainder_outer``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This metadata defines which attributes the epilogue of the outer loop
+will have. This loop is usually unrolled, meaning there is no such
+loop. This attribute will be ignored in this case. See
+:ref:`Transformation Metadata <transformation-metadata>` for details.
+
+'``llvm.loop.unroll_and_jam.followup_remainder_inner``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This metadata defines which attributes the inner loop of the epilogue
+will have. The outer epilogue will usually be unrolled, meaning there
+can be multiple inner remainder loops. See
+:ref:`Transformation Metadata <transformation-metadata>` for details.
+
+'``llvm.loop.unroll_and_jam.followup_all``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Attributes specified in the metadata is added to all
+``llvm.loop.unroll_and_jam.*`` loops. See
+:ref:`Transformation Metadata <transformation-metadata>` for details.
+
 '``llvm.loop.licm_versioning.disable``' Metadata
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -5323,6 +5414,34 @@ enabled. A value of 0 disables distribution:
 
 This metadata should be used in conjunction with ``llvm.loop`` loop
 identification metadata.
+
+'``llvm.loop.distribute.followup_coincident``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This metadata defines which attributes extracted loops with no cyclic
+dependencies will have (i.e. can be vectorized). See
+:ref:`Transformation Metadata <transformation-metadata>` for details.
+
+'``llvm.loop.distribute.followup_sequential``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This metadata defines which attributes the isolated loops with unsafe
+memory dependencies will have. See
+:ref:`Transformation Metadata <transformation-metadata>` for details.
+
+'``llvm.loop.distribute.followup_fallback``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If loop versioning is necessary, this metadata defined the attributes
+the non-distributed fallback version will have. See
+:ref:`Transformation Metadata <transformation-metadata>` for details.
+
+'``llvm.loop.distribute.followup_all``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Thes attributes in this metdata is added to all followup loops of the
+loop distribution pass. See
+:ref:`Transformation Metadata <transformation-metadata>` for details.
 
 '``llvm.mem``'
 ^^^^^^^^^^^^^^^
@@ -12776,6 +12895,76 @@ Examples
       %res = call i4 @llvm.usub.sat.i4(i4 2, i4 6)  ; %res = 0
 
 
+Fixed Point Arithmetic Intrinsics
+---------------------------------
+
+A fixed point number represents a real data type for a number that has a fixed
+number of digits after a radix point (equivalent to the decimal point '.').
+The number of digits after the radix point is referred as the ``scale``. These
+are useful for representing fractional values to a specific precision. The
+following intrinsics perform fixed point arithmetic operations on 2 operands
+of the same scale, specified as the third argument.
+
+
+'``llvm.smul.fix.*``' Intrinsics
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax
+"""""""
+
+This is an overloaded intrinsic. You can use ``llvm.smul.fix``
+on any integer bit width or vectors of integers.
+
+::
+
+      declare i16 @llvm.smul.fix.i16(i16 %a, i16 %b, i32 %scale)
+      declare i32 @llvm.smul.fix.i32(i32 %a, i32 %b, i32 %scale)
+      declare i64 @llvm.smul.fix.i64(i64 %a, i64 %b, i32 %scale)
+      declare <4 x i32> @llvm.smul.fix.v4i32(<4 x i32> %a, <4 x i32> %b, i32 %scale)
+
+Overview
+"""""""""
+
+The '``llvm.smul.fix``' family of intrinsic functions perform signed
+fixed point multiplication on 2 arguments of the same scale.
+
+Arguments
+""""""""""
+
+The arguments (%a and %b) and the result may be of integer types of any bit
+width, but they must have the same bit width. ``%a`` and ``%b`` are the two
+values that will undergo signed fixed point multiplication. The argument
+``%scale`` represents the scale of both operands, and must be a constant
+integer.
+
+Semantics:
+""""""""""
+
+This operation performs fixed point multiplication on the 2 arguments of a
+specified scale. The result will also be returned in the same scale specified
+in the third argument.
+
+If the result value cannot be precisely represented in the given scale, the
+value is rounded up or down to the closest representable value. The rounding
+direction is unspecified.
+
+It is undefined behavior if the source value does not fit within the range of
+the fixed point type.
+
+
+Examples
+"""""""""
+
+.. code-block:: llvm
+
+      %res = call i4 @llvm.smul.fix.i4(i4 3, i4 2, i32 0)  ; %res = 6 (2 x 3 = 6)
+      %res = call i4 @llvm.smul.fix.i4(i4 3, i4 2, i32 1)  ; %res = 3 (1.5 x 1 = 1.5)
+      %res = call i4 @llvm.smul.fix.i4(i4 3, i4 -2, i32 1)  ; %res = -3 (1.5 x -1 = -1.5)
+
+      ; The result in the following could be rounded up to -2 or down to -2.5
+      %res = call i4 @llvm.smul.fix.i4(i4 3, i4 -3, i32 1)  ; %res = -5 (or -4) (1.5 x -1.5 = -2.25)
+
+
 Specialised Arithmetic Intrinsics
 ---------------------------------
 
@@ -15608,6 +15797,145 @@ if"); and this allows for "check widening" type optimizations.
 ``@llvm.experimental.guard`` cannot be invoked.
 
 
+'``llvm.experimental.widenable.condition``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+
+::
+
+      declare i1 @llvm.experimental.widenable.condition()
+
+Overview:
+"""""""""
+
+This intrinsic represents a "widenable condition" which is
+boolean expressions with the following property: whether this
+expression is `true` or `false`, the program is correct and
+well-defined.
+
+Together with :ref:`deoptimization operand bundles <deopt_opbundles>`,
+``@llvm.experimental.widenable.condition`` allows frontends to
+express guards or checks on optimistic assumptions made during
+compilation and represent them as branch instructions on special
+conditions.
+
+While this may appear similar in semantics to `undef`, it is very
+different in that an invocation produces a particular, singular
+value. It is also intended to be lowered late, and remain available
+for specific optimizations and transforms that can benefit from its
+special properties.
+
+Arguments:
+""""""""""
+
+None.
+
+Semantics:
+""""""""""
+
+The intrinsic ``@llvm.experimental.widenable.condition()``
+returns either `true` or `false`. For each evaluation of a call
+to this intrinsic, the program must be valid and correct both if
+it returns `true` and if it returns `false`. This allows
+transformation passes to replace evaluations of this intrinsic
+with either value whenever one is beneficial.
+
+When used in a branch condition, it allows us to choose between
+two alternative correct solutions for the same problem, like
+in example below:
+
+.. code-block:: text
+
+    %cond = call i1 @llvm.experimental.widenable.condition()
+    br i1 %cond, label %solution_1, label %solution_2
+
+  label %fast_path:
+    ; Apply memory-consuming but fast solution for a task.
+
+  label %slow_path:
+    ; Cheap in memory but slow solution.
+
+Whether the result of intrinsic's call is `true` or `false`,
+it should be correct to pick either solution. We can switch
+between them by replacing the result of
+``@llvm.experimental.widenable.condition`` with different
+`i1` expressions.
+
+This is how it can be used to represent guards as widenable branches:
+
+.. code-block:: text
+
+  block:
+    ; Unguarded instructions
+    call void @llvm.experimental.guard(i1 %cond, <args...>) ["deopt"(<deopt_args...>)]
+    ; Guarded instructions
+
+Can be expressed in an alternative equivalent form of explicit branch using
+``@llvm.experimental.widenable.condition``:
+
+.. code-block:: text
+
+  block:
+    ; Unguarded instructions
+    %widenable_condition = call i1 @llvm.experimental.widenable.condition()
+    %guard_condition = and i1 %cond, %widenable_condition
+    br i1 %guard_condition, label %guarded, label %deopt
+
+  guarded:
+    ; Guarded instructions
+
+  deopt:
+    call type @llvm.experimental.deoptimize(<args...>) [ "deopt"(<deopt_args...>) ]
+
+So the block `guarded` is only reachable when `%cond` is `true`,
+and it should be valid to go to the block `deopt` whenever `%cond`
+is `true` or `false`.
+
+``@llvm.experimental.widenable.condition`` will never throw, thus
+it cannot be invoked.
+
+Guard widening:
+"""""""""""""""
+
+When ``@llvm.experimental.widenable.condition()`` is used in
+condition of a guard represented as explicit branch, it is
+legal to widen the guard's condition with any additional
+conditions.
+
+Guard widening looks like replacement of
+
+.. code-block:: text
+
+  %widenable_cond = call i1 @llvm.experimental.widenable.condition()
+  %guard_cond = and i1 %cond, %widenable_cond
+  br i1 %guard_cond, label %guarded, label %deopt
+
+with
+
+.. code-block:: text
+
+  %widenable_cond = call i1 @llvm.experimental.widenable.condition()
+  %new_cond = and i1 %any_other_cond, %widenable_cond
+  %new_guard_cond = and i1 %cond, %new_cond
+  br i1 %new_guard_cond, label %guarded, label %deopt
+
+for this branch. Here `%any_other_cond` is an arbitrarily chosen
+well-defined `i1` value. By making guard widening, we may
+impose stricter conditions on `guarded` block and bail to the
+deopt when the new condition is not met.
+
+Lowering:
+"""""""""
+
+Default lowering strategy is replacing the result of
+call of ``@llvm.experimental.widenable.condition``  with
+constant `true`. However it is always correct to replace
+it with any other `i1` value. Any pass can
+freely do it if it can benefit from non-default lowering.
+
+
 '``llvm.load.relative``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -15943,3 +16271,263 @@ lowered to a call to the symbol ``__llvm_memset_element_unordered_atomic_*``. Wh
 is replaced with an actual element size.
 
 The optimizer is allowed to inline the memory assignment when it's profitable to do so.
+
+Objective-C ARC Runtime Intrinsics
+----------------------------------
+
+LLVM provides intrinsics that lower to Objective-C ARC runtime entry points.
+LLVM is aware of the semantics of these functions, and optimizes based on that
+knowledge. You can read more about the details of Objective-C ARC `here
+<https://clang.llvm.org/docs/AutomaticReferenceCounting.html>`_.
+
+'``llvm.objc.autorelease``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.autorelease(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_autorelease <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-autorelease>`_.
+
+'``llvm.objc.autoreleasePoolPop``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare void @llvm.objc.autoreleasePoolPop(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_autoreleasePoolPop <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#void-objc-autoreleasepoolpop-void-pool>`_.
+
+'``llvm.objc.autoreleasePoolPush``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.autoreleasePoolPush()
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_autoreleasePoolPush <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#void-objc-autoreleasepoolpush-void>`_.
+
+'``llvm.objc.autoreleaseReturnValue``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.autoreleaseReturnValue(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_autoreleaseReturnValue <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-autoreleasereturnvalue>`_.
+
+'``llvm.objc.copyWeak``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare void @llvm.objc.copyWeak(i8**, i8**)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_copyWeak <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#void-objc-copyweak-id-dest-id-src>`_.
+
+'``llvm.objc.destroyWeak``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare void @llvm.objc.destroyWeak(i8**)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_destroyWeak <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#void-objc-destroyweak-id-object>`_.
+
+'``llvm.objc.initWeak``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.initWeak(i8**, i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_initWeak <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-initweak>`_.
+
+'``llvm.objc.loadWeak``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.loadWeak(i8**)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_loadWeak <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-loadweak>`_.
+
+'``llvm.objc.loadWeakRetained``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.loadWeakRetained(i8**)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_loadWeakRetained <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-loadweakretained>`_.
+
+'``llvm.objc.moveWeak``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare void @llvm.objc.moveWeak(i8**, i8**)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_moveWeak <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#void-objc-moveweak-id-dest-id-src>`_.
+
+'``llvm.objc.release``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare void @llvm.objc.release(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_release <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#void-objc-release-id-value>`_.
+
+'``llvm.objc.retain``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.retain(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_retain <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-retain>`_.
+
+'``llvm.objc.retainAutorelease``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.retainAutorelease(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_retainAutorelease <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-retainautorelease>`_.
+
+'``llvm.objc.retainAutoreleaseReturnValue``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.retainAutoreleaseReturnValue(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_retainAutoreleaseReturnValue <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-retainautoreleasereturnvalue>`_.
+
+'``llvm.objc.retainAutoreleasedReturnValue``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.retainAutoreleasedReturnValue(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_retainAutoreleasedReturnValue <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-retainautoreleasedreturnvalue>`_.
+
+'``llvm.objc.retainBlock``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.retainBlock(i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_retainBlock <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-retainblock>`_.
+
+'``llvm.objc.storeStrong``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare void @llvm.objc.storeStrong(i8**, i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_storeStrong <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#void-objc-storestrong-id-object-id-value>`_.
+
+'``llvm.objc.storeWeak``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+::
+
+      declare i8* @llvm.objc.storeWeak(i8**, i8*)
+
+Lowering:
+"""""""""
+
+Lowers to a call to `objc_storeWeak <https://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-runtime-objc-storeweak>`_.

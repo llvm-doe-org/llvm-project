@@ -323,12 +323,14 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
   // to speed up scalar BSWAP64.
   // CTPOP or CTTZ were introduced in P8/P9 respectively
   setOperationAction(ISD::BSWAP, MVT::i32  , Expand);
-  if (Subtarget.isISA3_0()) {
+  if (Subtarget.hasP9Vector())
     setOperationAction(ISD::BSWAP, MVT::i64  , Custom);
+  else
+    setOperationAction(ISD::BSWAP, MVT::i64  , Expand);
+  if (Subtarget.isISA3_0()) {
     setOperationAction(ISD::CTTZ , MVT::i32  , Legal);
     setOperationAction(ISD::CTTZ , MVT::i64  , Legal);
   } else {
-    setOperationAction(ISD::BSWAP, MVT::i64  , Expand);
     setOperationAction(ISD::CTTZ , MVT::i32  , Expand);
     setOperationAction(ISD::CTTZ , MVT::i64  , Expand);
   }
@@ -13706,6 +13708,35 @@ unsigned PPCTargetLowering::getRegisterByName(const char* RegName, EVT VT,
   if (Reg)
     return Reg;
   report_fatal_error("Invalid register name global variable");
+}
+
+bool PPCTargetLowering::isAccessedAsGotIndirect(SDValue GA) const {
+  // 32-bit SVR4 ABI access everything as got-indirect.
+  if (Subtarget.isSVR4ABI() && !Subtarget.isPPC64())
+    return true;
+
+  CodeModel::Model CModel = getTargetMachine().getCodeModel();
+  // If it is small or large code model, module locals are accessed
+  // indirectly by loading their address from .toc/.got. The difference
+  // is that for large code model we have ADDISTocHa + LDtocL and for
+  // small code model we simply have LDtoc.
+  if (CModel == CodeModel::Small || CModel == CodeModel::Large)
+    return true;
+
+  // JumpTable and BlockAddress are accessed as got-indirect. 
+  if (isa<JumpTableSDNode>(GA) || isa<BlockAddressSDNode>(GA))
+    return true;
+
+  if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(GA)) {
+    const GlobalValue *GV = G->getGlobal();
+    unsigned char GVFlags = Subtarget.classifyGlobalReference(GV);
+    // The NLP flag indicates that a global access has to use an
+    // extra indirection.
+    if (GVFlags & PPCII::MO_NLP_FLAG)
+      return true;
+  }
+
+  return false;
 }
 
 bool

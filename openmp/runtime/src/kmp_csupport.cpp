@@ -1292,7 +1292,7 @@ __ompt_get_mutex_impl_type(void *user_lock, kmp_indirect_lock_t *ilock = 0) {
       return kmp_mutex_impl_speculative;
 #endif
     default:
-      return ompt_mutex_impl_unknown;
+      return ompt_mutex_impl_none;
     }
     ilock = KMP_LOOKUP_I_LOCK(user_lock);
   }
@@ -1316,7 +1316,7 @@ __ompt_get_mutex_impl_type(void *user_lock, kmp_indirect_lock_t *ilock = 0) {
   case locktag_nested_drdpa:
     return kmp_mutex_impl_queuing;
   default:
-    return ompt_mutex_impl_unknown;
+    return ompt_mutex_impl_none;
   }
 }
 #else
@@ -1339,7 +1339,7 @@ static kmp_mutex_impl_t __ompt_get_mutex_impl_type() {
     return kmp_mutex_impl_speculative;
 #endif
   default:
-    return ompt_mutex_impl_unknown;
+    return ompt_mutex_impl_none;
   }
 }
 #endif // KMP_USE_DYNAMIC_LOCK
@@ -1866,6 +1866,59 @@ int ompc_get_ancestor_thread_num(int level) {
 int ompc_get_team_size(int level) {
   return __kmp_get_team_size(__kmp_entry_gtid(), level);
 }
+
+#if OMP_50_ENABLED
+/* OpenMP 5.0 Affinity Format API */
+
+void ompc_set_affinity_format(char const *format) {
+  if (!__kmp_init_serial) {
+    __kmp_serial_initialize();
+  }
+  __kmp_strncpy_truncate(__kmp_affinity_format, KMP_AFFINITY_FORMAT_SIZE,
+                         format, KMP_STRLEN(format) + 1);
+}
+
+size_t ompc_get_affinity_format(char *buffer, size_t size) {
+  size_t format_size;
+  if (!__kmp_init_serial) {
+    __kmp_serial_initialize();
+  }
+  format_size = KMP_STRLEN(__kmp_affinity_format);
+  if (buffer && size) {
+    __kmp_strncpy_truncate(buffer, size, __kmp_affinity_format,
+                           format_size + 1);
+  }
+  return format_size;
+}
+
+void ompc_display_affinity(char const *format) {
+  int gtid;
+  if (!TCR_4(__kmp_init_middle)) {
+    __kmp_middle_initialize();
+  }
+  gtid = __kmp_get_gtid();
+  __kmp_aux_display_affinity(gtid, format);
+}
+
+size_t ompc_capture_affinity(char *buffer, size_t buf_size,
+                             char const *format) {
+  int gtid;
+  size_t num_required;
+  kmp_str_buf_t capture_buf;
+  if (!TCR_4(__kmp_init_middle)) {
+    __kmp_middle_initialize();
+  }
+  gtid = __kmp_get_gtid();
+  __kmp_str_buf_init(&capture_buf);
+  num_required = __kmp_aux_capture_affinity(gtid, format, &capture_buf);
+  if (buffer && buf_size) {
+    __kmp_strncpy_truncate(buffer, buf_size, capture_buf.str,
+                           capture_buf.used + 1);
+  }
+  __kmp_str_buf_free(&capture_buf);
+  return num_required;
+}
+#endif /* OMP_50_ENABLED */
 
 void kmpc_set_stacksize(int arg) {
   // __kmp_aux_set_stacksize initializes the library if needed

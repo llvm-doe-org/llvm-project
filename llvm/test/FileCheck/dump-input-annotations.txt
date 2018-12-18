@@ -1,5 +1,5 @@
 ;--------------------------------------------------
-; Use -strict-whitespace to check marker alignment here.
+; Use -strict-whitespace to check marker and note alignment here.
 ; (Also check multiline marker where start/end columns vary across lines.)
 ;
 ; In the remaining checks, don't use -strict-whitespace and thus check just the
@@ -10,6 +10,7 @@
 ; RUN: echo 'hello world' > %t.in
 ; RUN: echo 'goodbye' >> %t.in
 ; RUN: echo 'world' >> %t.in
+; RUN: echo 'unicorn' >> %t.in
 
 ; RUN: echo 'CHECK: hello' > %t.chk
 ; RUN: echo 'CHECK: universe' >> %t.chk
@@ -17,15 +18,23 @@
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
 ; RUN: | FileCheck -strict-whitespace -match-full-lines -check-prefix=ALIGN %s
 
+; Verbose diagnostics are suppressed but not errors.
+; ALIGN-NOT:{{.*}}remark:{{.*}}
+; ALIGN:{{.*}}error:{{.*}}
+; ALIGN:{{.*}}possible intended match here{{.*}}
+
 ; ALIGN:Full input was:
 ; ALIGN-NEXT:<<<<<<
-; ALIGN-NEXT:         1: hello world
-; ALIGN-NEXT:check:1     ^~~~~
-; ALIGN-NEXT:check:2           X~~~~
-; ALIGN-NEXT:         2: goodbye
-; ALIGN-NEXT:check:2     ~~~~~~~
-; ALIGN-NEXT:         3: world
-; ALIGN-NEXT:check:2     ~~~~~
+; ALIGN-NEXT:           1: hello world
+; ALIGN-NEXT:check:1       ^~~~~
+; ALIGN-NEXT:check:2'0           X~~~~
+; ALIGN-NEXT:           2: goodbye
+; ALIGN-NEXT:check:2'0     ~~~~~~~
+; ALIGN-NEXT:           3: world
+; ALIGN-NEXT:check:2'0     ~~~~~
+; ALIGN-NEXT:           4: unicorn
+; ALIGN-NEXT:check:2'0     ~~~~~~~ error: no match found
+; ALIGN-NEXT:check:2'1     ?       possible intended match
 ; ALIGN-NEXT:>>>>>>
 ; ALIGN-NOT:{{.}}
 
@@ -49,14 +58,19 @@
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
 ; RUN: | FileCheck -match-full-lines %s -check-prefixes=CHK,CHK-V
 
+; Verbose diagnostics are suppressed but not errors.
+; CHK-NOT: {{.*}}remark:{{.*}}
+; CHK: {{.*}}error:{{.*}}
+; CHK: {{.*}}possible intended match here{{.*}}
+
 ; CHK:        <<<<<<
 ; CHK-NEXT:              1: hello
 ; CHK-V-NEXT: check:1       ^~~~~
 ; CHK-NEXT:              2: again
 ; CHK-NEXT:   check:2'0     X~~~~
 ; CHK-NEXT:              3: whirled
-; CHK-NEXT:   check:2'0     ~~~~~~~
-; CHK-NEXT:   check:2'1     ?
+; CHK-NEXT:   check:2'0     ~~~~~~~ error: no match found
+; CHK-NEXT:   check:2'1     ?       possible intended match
 ; CHK-NEXT:   >>>>>>
 ; CHK-NOT:    {{.}}
 
@@ -79,19 +93,23 @@
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
 ; RUN: | FileCheck -match-full-lines %s -check-prefixes=CNT,CNT-V
 
+; Verbose diagnostics are suppressed but not errors.
+; CNT-NOT: {{.*}}remark:{{.*}}
+; CNT: {{.*}}error:{{.*}}
+
 ; CNT:          <<<<<<
 ; CNT-NEXT:                1: pete
 ; CNT-V-NEXT:   count:1'0     ^~~~
 ; CNT-NEXT:                2: repete
 ; CNT-V-NEXT:   count:1'1       ^~~~
 ; CNT-NEXT:                3: repeat
-; CNT-Q-NEXT:   count:1       X~~~~~
-; CNT-V-NEXT:   count:1'2     X~~~~~
+; CNT-Q-NEXT:   count:1       X~~~~~ error: no match found
+; CNT-V-NEXT:   count:1'2     X~~~~~ error: no match found
 ; CNT-NEXT:     >>>>>>
 ; CNT-NOT:      {{.}}
 
 ;--------------------------------------------------
-; CHECK-NEXT (also: EOF search-range, illegal match)
+; CHECK-NEXT (also: EOF search-range, wrong-line match)
 ;--------------------------------------------------
 
 ; Good match and no match.
@@ -110,17 +128,21 @@
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
 ; RUN: | FileCheck -match-full-lines %s -check-prefixes=NXT,NXT-V,NXT-VV
 
+; Verbose diagnostics are suppressed but not errors.
+; NXT-NOT: {{.*}}remark:{{.*}}
+; NXT: {{.*}}error:{{.*}}
+
 ; NXT:        <<<<<<
 ; NXT-NEXT:            1: hello
 ; NXT-V-NEXT: check:1     ^~~~~
 ; NXT-NEXT:            2: again
 ; NXT-V-NEXT: next:2      ^~~~~
 ; NXT-NEXT:            3:
-; NXT-NEXT:   next:3      X
+; NXT-NEXT:   next:3      X error: no match found
 ; NXT-NEXT:   >>>>>>
 ; NXT-NOT:    {{.}}
 
-; Illegal match.
+; Wrong-line match.
 
 ; RUN: echo 'yonder' >> %t.in
 ; RUN: echo 'world' >> %t.in
@@ -133,13 +155,13 @@
 ; NXT2-NEXT:         2: again
 ; NXT2-NEXT:         3: yonder
 ; NXT2-NEXT:         4: world
-; NXT2-NEXT: next:3     !~~~~
+; NXT2-NEXT: next:3     !~~~~ error: match on wrong line
 ; NXT2-NEXT: >>>>>>
 ; NXT2-NOT:  {{.}}
 
 ;--------------------------------------------------
 ; CHECK-SAME (also: multiple annotations per line, single-char search range,
-; illegal match)
+; wrong-line match)
 ;--------------------------------------------------
 
 ; Good match and no match.
@@ -157,32 +179,40 @@
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
 ; RUN: | FileCheck -match-full-lines %s -check-prefixes=SAM,SAM-V,SAM-VV
 
+; Verbose diagnostics are suppressed but not errors.
+; SAM-NOT: {{.*}}remark:{{.*}}
+; SAM: {{.*}}error:{{.*}}
+
 ; SAM:        <<<<<<
 ; SAM-NEXT:            1: hello world!
 ; SAM-V-NEXT: check:1     ^~~~~
 ; SAM-V-NEXT: same:2            ^~~~~
-; SAM-NEXT:   same:3                 X
+; SAM-NEXT:   same:3                 X error: no match found
 ; SAM-NEXT:   >>>>>>
 ; SAM-NOT:    {{.}}
 
-; Illegal match.
+; Wrong-line match.
 
 ; RUN: echo 'again' >> %t.in
 
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
 ; RUN: | FileCheck -match-full-lines %s -check-prefixes=SAM2
 
+; Verbose diagnostics are suppressed but not errors.
+; SAM2-NOT: {{.*}}remark:{{.*}}
+; SAM2: {{.*}}error:{{.*}}
+
 ; SAM2:      <<<<<<
 ; SAM2-NEXT:          1: hello world!
 ; SAM2-NEXT: check:1     ^~~~~
 ; SAM2-NEXT: same:2            ^~~~~
 ; SAM2-NEXT:          2: again
-; SAM2-NEXT: same:3      !~~~~
+; SAM2-NEXT: same:3      !~~~~ error: match on wrong line
 ; SAM2-NEXT: >>>>>>
 ; SAM2-NOT:  {{.}}
 
 ;--------------------------------------------------
-; CHECK-EMPTY (also: search range ends at label, single-char match, illegal
+; CHECK-EMPTY (also: search range ends at label, single-char match, wrong-line
 ; match)
 ;--------------------------------------------------
 
@@ -210,6 +240,10 @@
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
 ; RUN: | FileCheck -match-full-lines %s -check-prefixes=EMP,EMP-V,EMP-VV
 
+; Verbose diagnostics are suppressed but not errors.
+; EMP-NOT: {{.*}}remark:{{.*}}
+; EMP: {{.*}}error:{{.*}}
+
 ; EMP:        <<<<<<
 ; EMP-NEXT:            1: hello
 ; EMP-V-NEXT: check:1     ^~~~~
@@ -218,12 +252,12 @@
 ; EMP-NEXT:            3: world
 ; EMP-NEXT:   empty:3     X~~~~
 ; EMP-NEXT:            4: label
-; EMP-NEXT:   empty:3     ~~~~~
+; EMP-NEXT:   empty:3     ~~~~~ error: no match found
 ; EMP-V-NEXT: label:4     ^~~~~
 ; EMP-NEXT:   >>>>>>
 ; EMP-NOT:    {{.}}
 
-; Illegal match.
+; Wrong-line match.
 
 ; RUN: echo 'hello' > %t.in
 ; RUN: echo 'world' >> %t.in
@@ -238,12 +272,16 @@
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
 ; RUN: | FileCheck -match-full-lines %s -check-prefixes=EMP2,EMP2-V,EMP2-VV
 
+; Verbose diagnostics are suppressed but not errors.
+; EMP2-NOT: {{.*}}remark:{{.*}}
+; EMP2: {{.*}}error:{{.*}}
+
 ; EMP2:        <<<<<<
 ; EMP2-NEXT:            1: hello
 ; EMP2-V-NEXT: check:1     ^~~~~
 ; EMP2-NEXT:            2: world
 ; EMP2-NEXT:            3:
-; EMP2-NEXT:   empty:2     !
+; EMP2-NEXT:   empty:2     !     error: match on wrong line
 ; EMP2-NEXT:   >>>>>>
 ; EMP2-NOT:    {{.}}
 
@@ -251,7 +289,7 @@
 ; CHECK-NOT (also: EOF pattern, and multiline range that ends before EOL)
 ;--------------------------------------------------
 
-; No match (success) and illegal match.
+; No match (success) and unexpected match (error).
 
 ; RUN: echo 'hello' > %t.in
 ; RUN: echo 'world' >> %t.in
@@ -267,12 +305,16 @@
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
 ; RUN: | FileCheck -match-full-lines %s -check-prefixes=NOT,NOT-V,NOT-VV
 
+; Verbose diagnostics are suppressed but not errors.
+; NOT-NOT: {{.*}}remark:{{.*}}
+; NOT: {{.*}}error:{{.*}}
+
 ; NOT:         <<<<<<
 ; NOT-NEXT:           1: hello
 ; NOT-VV-NEXT: not:1     X~~~~
 ; NOT-NEXT:           2: world
 ; NOT-VV-NEXT: not:1     ~~~~~
-; NOT-NEXT:    not:2     !~~~~
+; NOT-NEXT:    not:2     !~~~~ error: no match expected
 ; NOT-NEXT:           3: again
 ; NOT-VV-NEXT: not:1     ~~~~~
 ; NOT-VV-NEXT:        4:
@@ -291,12 +333,16 @@
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
 ; RUN: | FileCheck -match-full-lines %s -check-prefixes=NOT2,NOT2-V,NOT2-VV
 
+; Verbose diagnostics are suppressed but not errors.
+; NOT2-NOT: {{.*}}remark:{{.*}}
+; NOT2: {{.*}}error:{{.*}}
+
 ; NOT2:         <<<<<<
 ; NOT2-NEXT:             1: hello
 ; NOT2-VV-NEXT: not:1       X~~~~
 ; NOT2-NEXT:             2: world
 ; NOT2-VV-NEXT: not:1       ~~~~~
-; NOT2-NEXT:    not:2       !~~~~
+; NOT2-NEXT:    not:2       !~~~~ error: no match expected
 ; NOT2-NEXT:             3: again
 ; NOT2-VV-NEXT: not:1       ~~
 ; NOT2-V-NEXT:  check:3       ^~~
@@ -318,6 +364,13 @@
 ; RUN: echo 'CHECK-DAG: abc' >> %t.chk
 ; RUN: echo 'CHECK-DAG: def' >> %t.chk
 
+; Prefixes used here:
+; DAG    = quiet, -v, or -vv
+; DAG-Q  = quiet
+; DAG-V  = -v or -vv (-vv implies -v)
+; DAG-VQ = -v and not -vv
+; DAG-VV = -vv
+
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk 2>&1 \
 ; RUN: | FileCheck -match-full-lines %s -check-prefixes=DAG,DAG-Q
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
@@ -325,19 +378,23 @@
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
 ; RUN: | FileCheck -match-full-lines %s -check-prefixes=DAG,DAG-V,DAG-VV
 
+; Verbose diagnostics are suppressed but not errors.
+; DAG-NOT: {{.*}}remark:{{.*}}
+; DAG: {{.*}}error:{{.*}}
+
 ; DAG:         <<<<<<
 ; DAG-NEXT:             1: abc
 ; DAG-V-NEXT:  dag:2       ^~~
-; DAG-VV-NEXT: dag:3'0     !~~
+; DAG-VV-NEXT: dag:3'0     !~~ discard: overlaps earlier match
 ; DAG-NEXT:             2: def
 ; DAG-V-NEXT:  dag:1       ^~~
-; DAG-VV-NEXT: dag:4'0     !~~
+; DAG-VV-NEXT: dag:4'0     !~~ discard: overlaps earlier match
 ; DAG-NEXT:             3: abc
 ; DAG-VQ-NEXT: dag:3       ^~~
 ; DAG-VV-NEXT: dag:3'1     ^~~
-; DAG-Q-NEXT:  dag:4       X~~
-; DAG-VQ-NEXT: dag:4       X~~
-; DAG-VV-NEXT: dag:4'1     X~~
+; DAG-Q-NEXT:  dag:4       X~~ error: no match found
+; DAG-VQ-NEXT: dag:4       X~~ error: no match found
+; DAG-VV-NEXT: dag:4'1     X~~ error: no match found
 ; DAG-NEXT:    >>>>>>
 ; DAG-NOT:     {{.}}
 
@@ -366,6 +423,11 @@
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
 ; RUN: | FileCheck -match-full-lines %s -check-prefixes=LAB,LAB-V,LAB-VV
 
+; Verbose diagnostics are suppressed but not errors.
+; LAB-NOT: {{.*}}remark:{{.*}}
+; LAB: {{.*}}error:{{.*}}
+; LAB: {{.*}}possible intended match{{.*}}
+
 ; LAB:         <<<<<<
 ; LAB-NEXT:               1: lab0
 ; LAB-V-NEXT:  label:1'0     ^~~~
@@ -374,10 +436,8 @@
 ; LAB-NEXT:    label:3'0     X~~
 ; LAB-NEXT:               3: lab1
 ; LAB-NEXT:    label:3'0     ~~~~
-; LAB-NEXT:    label:3'1     ?
+; LAB-NEXT:    label:3'1     ?    possible intended match
 ; LAB-NEXT:               4: bar
-; LAB-NEXT:    label:3'0     ~~~
+; LAB-NEXT:    label:3'0     ~~~ error: no match found
 ; LAB-NEXT:    >>>>>>
 ; LAB-NOT:     {{.}}
-
-

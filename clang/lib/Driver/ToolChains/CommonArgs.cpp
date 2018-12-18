@@ -271,7 +271,7 @@ std::string tools::getCPUName(const ArgList &Args, const llvm::Triple &T,
 
   case llvm::Triple::aarch64:
   case llvm::Triple::aarch64_be:
-    return aarch64::getAArch64TargetCPU(Args, A);
+    return aarch64::getAArch64TargetCPU(Args, T, A);
 
   case llvm::Triple::arm:
   case llvm::Triple::armeb:
@@ -812,13 +812,16 @@ bool tools::areOptimizationsEnabled(const ArgList &Args) {
 
 const char *tools::SplitDebugName(const ArgList &Args,
                                   const InputInfo &Output) {
+  SmallString<128> F(Output.isFilename()
+                         ? Output.getFilename()
+                         : llvm::sys::path::stem(Output.getBaseInput()));
+
   if (Arg *A = Args.getLastArg(options::OPT_gsplit_dwarf_EQ))
     if (StringRef(A->getValue()) == "single")
-      return Args.MakeArgString(Output.getFilename());
+      return Args.MakeArgString(F);
 
-  SmallString<128> T(Output.getFilename());
-  llvm::sys::path::replace_extension(T, "dwo");
-  return Args.MakeArgString(T);
+  llvm::sys::path::replace_extension(F, "dwo");
+  return Args.MakeArgString(F);
 }
 
 void tools::SplitDebugInfo(const ToolChain &TC, Compilation &C, const Tool &T,

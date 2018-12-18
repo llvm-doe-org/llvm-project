@@ -219,9 +219,9 @@ static Reloc::Model getEffectiveRelocModel(const Triple &TT,
   return *RM;
 }
 
-static CodeModel::Model getEffectiveCodeModel(const Triple &TT,
-                                              Optional<CodeModel::Model> CM,
-                                              bool JIT) {
+static CodeModel::Model
+getEffectiveAArch64CodeModel(const Triple &TT, Optional<CodeModel::Model> CM,
+                             bool JIT) {
   if (CM) {
     if (*CM != CodeModel::Small && *CM != CodeModel::Tiny &&
         *CM != CodeModel::Large) {
@@ -255,7 +255,7 @@ AArch64TargetMachine::AArch64TargetMachine(const Target &T, const Triple &TT,
     : LLVMTargetMachine(T,
                         computeDataLayout(TT, Options.MCOptions, LittleEndian),
                         TT, CPU, FS, Options, getEffectiveRelocModel(TT, RM),
-                        getEffectiveCodeModel(TT, CM, JIT), OL),
+                        getEffectiveAArch64CodeModel(TT, CM, JIT), OL),
       TLOF(createTLOF(getTargetTriple())), isLittle(LittleEndian) {
   initAsmInfo();
 
@@ -275,8 +275,10 @@ AArch64TargetMachine::AArch64TargetMachine(const Target &T, const Triple &TT,
   }
 
   // Enable GlobalISel at or below EnableGlobalISelAt0.
-  if (getOptLevel() <= EnableGlobalISelAtO)
+  if (getOptLevel() <= EnableGlobalISelAtO) {
     setGlobalISel(true);
+    setGlobalISelAbort(GlobalISelAbortMode::Disable);
+  }
 
   // AArch64 supports the MachineOutliner.
   setMachineOutliner(true);
@@ -554,6 +556,12 @@ void AArch64PassConfig::addPreSched2() {
 }
 
 void AArch64PassConfig::addPreEmitPass() {
+  // Machine Block Placement might have created new opportunities when run
+  // at O3, where the Tail Duplication Threshold is set to 4 instructions.
+  // Run the load/store optimizer once more.
+  if (TM->getOptLevel() >= CodeGenOpt::Aggressive && EnableLoadStoreOpt)
+    addPass(createAArch64LoadStoreOptimizationPass());
+
   if (EnableA53Fix835769)
     addPass(createAArch64A53Fix835769());
   // Relax conditional branch instructions if they're otherwise out of

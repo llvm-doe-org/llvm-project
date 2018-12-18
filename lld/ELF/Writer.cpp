@@ -172,15 +172,14 @@ static Defined *addOptionalRegular(StringRef Name, SectionBase *Sec,
   Symbol *S = Symtab->find(Name);
   if (!S || S->isDefined())
     return nullptr;
-  Symbol *Sym = Symtab->addDefined(Name, StOther, STT_NOTYPE, Val,
-                                   /*Size=*/0, Binding, Sec,
-                                   /*File=*/nullptr);
-  return cast<Defined>(Sym);
+  return Symtab->addDefined(Name, StOther, STT_NOTYPE, Val,
+                            /*Size=*/0, Binding, Sec,
+                            /*File=*/nullptr);
 }
 
 static Defined *addAbsolute(StringRef Name) {
-  return cast<Defined>(Symtab->addDefined(Name, STV_HIDDEN, STT_NOTYPE, 0, 0,
-                                          STB_GLOBAL, nullptr, nullptr));
+  return Symtab->addDefined(Name, STV_HIDDEN, STT_NOTYPE, 0, 0, STB_GLOBAL,
+                            nullptr, nullptr);
 }
 
 // The linker is expected to define some symbols depending on
@@ -213,9 +212,20 @@ void elf::addReservedSymbols() {
   // _GLOBAL_OFFSET_TABLE_ and _SDA_BASE_ from the 32-bit ABI. It is used to
   // represent the TOC base which is offset by 0x8000 bytes from the start of
   // the .got section.
-  ElfSym::GlobalOffsetTable = addOptionalRegular(
-      (Config->EMachine == EM_PPC64) ? ".TOC." : "_GLOBAL_OFFSET_TABLE_",
-      Out::ElfHeader, Target->GotBaseSymOff);
+  // We do not allow _GLOBAL_OFFSET_TABLE_ to be defined by input objects as the
+  // correctness of some relocations depends on its value.
+  StringRef GotTableSymName =
+      (Config->EMachine == EM_PPC64) ? ".TOC." : "_GLOBAL_OFFSET_TABLE_";
+  if (Symbol *S = Symtab->find(GotTableSymName)) {
+    if (S->isDefined())
+      error(toString(S->File) + " cannot redefine linker defined symbol '" +
+            GotTableSymName + "'");
+    else
+      ElfSym::GlobalOffsetTable = Symtab->addDefined(
+          GotTableSymName, STV_HIDDEN, STT_NOTYPE, Target->GotBaseSymOff,
+          /*Size=*/0, STB_GLOBAL, Out::ElfHeader,
+          /*File=*/nullptr);
+  }
 
   // __ehdr_start is the location of ELF file headers. Note that we define
   // this symbol unconditionally even when using a linker script, which
@@ -1611,7 +1621,7 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
   // It should be okay as no one seems to care about the type.
   // Even the author of gold doesn't remember why gold behaves that way.
   // https://sourceware.org/ml/binutils/2002-03/msg00360.html
-  if (In.DynSymTab)
+  if (In.Dynamic->Parent)
     Symtab->addDefined("_DYNAMIC", STV_HIDDEN, STT_NOTYPE, 0 /*Value*/,
                        /*Size=*/0, STB_WEAK, In.Dynamic,
                        /*File=*/nullptr);
@@ -1651,7 +1661,7 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
     if (In.SymTab)
       In.SymTab->addSymbol(Sym);
 
-    if (In.DynSymTab && Sym->includeInDynsym()) {
+    if (Sym->includeInDynsym()) {
       In.DynSymTab->addSymbol(Sym);
       if (auto *File = dyn_cast_or_null<SharedFile<ELFT>>(Sym->File))
         if (File->IsNeeded && !Sym->isUndefined())
@@ -1925,9 +1935,8 @@ template <class ELFT> std::vector<PhdrEntry *> Writer<ELFT>::createPhdrs() {
     Ret.push_back(TlsHdr);
 
   // Add an entry for .dynamic.
-  if (In.DynSymTab)
-    AddHdr(PT_DYNAMIC, In.Dynamic->getParent()->getPhdrFlags())
-        ->add(In.Dynamic->getParent());
+  if (OutputSection *Sec = In.Dynamic->getParent())
+    AddHdr(PT_DYNAMIC, Sec->getPhdrFlags())->add(Sec);
 
   // PT_GNU_RELRO includes all sections that should be marked as
   // read-only by dynamic linker after proccessing relocations.
@@ -2392,7 +2401,8 @@ template <class ELFT> void Writer<ELFT>::writeHeader() {
 
 // Open a result file.
 template <class ELFT> void Writer<ELFT>::openFile() {
-  if (!Config->Is64 && FileSize > UINT32_MAX) {
+  uint64_t MaxSize = Config->Is64 ? INT64_MAX : UINT32_MAX;
+  if (MaxSize < FileSize) {
     error("output file too large: " + Twine(FileSize) + " bytes");
     return;
   }

@@ -1,10 +1,10 @@
-; RUN: echo ciao > %t.good
+; RUN: echo hello > %t.good
 ; RUN: echo world >> %t.good
 
 ; RUN: echo hello > %t.err
-; RUN: echo world >> %t.err
+; RUN: echo whirled >> %t.err
 
-; RUN: echo 'CHECK: ciao' > %t.check
+; RUN: echo 'CHECK: hello' > %t.check
 ; RUN: echo 'CHECK-NEXT: world' >> %t.check
 
 ;--------------------------------------------------
@@ -15,31 +15,88 @@
 ; RUN:               -match-full-lines -dump-input=foobar 2>&1 \
 ; RUN: | FileCheck %s -match-full-lines -check-prefix=BADVAL
 
-BADVAL: Unrecognized value for dump-input option: foobar
+; No positional arg.
+; RUN: not FileCheck -dump-input=foobar 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefix=BADVAL
+
+BADVAL: FileCheck{{.*}}: for the -dump-input option: Cannot find option named 'foobar'!
+
+;--------------------------------------------------
+; help
+;--------------------------------------------------
+
+; Appended to normal command line.
+; RUN: FileCheck -input-file %t.err -color %t.check -dump-input=help \
+; RUN: | FileCheck %s -check-prefix=HELP
+
+; No positional arg.
+; RUN: FileCheck -dump-input=help | FileCheck %s -check-prefix=HELP
+
+HELP-NOT: {{.}}
+HELP: The following description was requested by -dump-input=help
+HELP: try{{.*}}-color
+HELP-NOT: {{.}}
 
 ;--------------------------------------------------
 ; never
 ;--------------------------------------------------
 
 ; RUN: FileCheck -input-file %t.good %t.check -check-prefix=CHECK \
-; RUN:           -match-full-lines -dump-input=never 2>&1 \
-; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-NODUMP -allow-empty
+; RUN:           -match-full-lines -dump-input=never -v 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefixes=TRACE,NODUMP
 
 ; RUN: not FileCheck -input-file %t.err %t.check -check-prefix=CHECK \
-; RUN:               -match-full-lines -dump-input=never 2>&1 \
-; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-NODUMP
+; RUN:               -match-full-lines -dump-input=never -v 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefixes=TRACE,ERR,NODUMP
+
+;--------------------------------------------------
+; default: never
+;--------------------------------------------------
+
+; RUN: FileCheck -input-file %t.good %t.check -check-prefix=CHECK \
+; RUN:           -match-full-lines -v 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefixes=TRACE,NODUMP
+
+; RUN: not FileCheck -input-file %t.err %t.check -check-prefix=CHECK \
+; RUN:               -match-full-lines -v 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefixes=TRACE,ERR,NODUMP
 
 ;--------------------------------------------------
 ; fail
 ;--------------------------------------------------
 
 ; RUN: FileCheck -input-file %t.good %t.check -check-prefix=CHECK \
-; RUN:           -match-full-lines -dump-input=fail 2>&1 \
-; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-NODUMP -allow-empty
+; RUN:           -match-full-lines -dump-input=fail -v 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -allow-empty \
+; RUN:             -check-prefixes=NOTRACE,NODUMP
 
 ; RUN: not FileCheck -input-file %t.err %t.check -check-prefix=CHECK \
-; RUN:               -match-full-lines -dump-input=fail 2>&1 \
-; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-ERR
+; RUN:               -match-full-lines -dump-input=fail -v 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefixes=NOTRACE,ERR,DUMP-ERR
+
+;--------------------------------------------------
+; -dump-input-on-failure
+;--------------------------------------------------
+
+; RUN: FileCheck -input-file %t.good %t.check -check-prefix=CHECK \
+; RUN:           -match-full-lines -dump-input-on-failure -v 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -allow-empty \
+; RUN:             -check-prefixes=NOTRACE,NODUMP
+
+; RUN: not FileCheck -input-file %t.err %t.check -check-prefix=CHECK \
+; RUN:               -match-full-lines -dump-input-on-failure -v 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefixes=NOTRACE,ERR,DUMP-ERR
+
+; RUN: env FILECHECK_DUMP_INPUT_ON_FAILURE=1 \
+; RUN: FileCheck -input-file %t.good %t.check -check-prefix=CHECK \
+; RUN:           -match-full-lines -v 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -allow-empty \
+; RUN:             -check-prefixes=NOTRACE,NODUMP
+
+; RUN: env FILECHECK_DUMP_INPUT_ON_FAILURE=1 \
+; RUN: not FileCheck -input-file %t.err %t.check -check-prefix=CHECK \
+; RUN:               -match-full-lines -v 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefixes=NOTRACE,ERR,DUMP-ERR
 
 ;--------------------------------------------------
 ; always
@@ -47,28 +104,35 @@ BADVAL: Unrecognized value for dump-input option: foobar
 
 ; RUN: FileCheck -input-file %t.good %t.check -check-prefix=CHECK \
 ; RUN:           -match-full-lines -dump-input=always -v 2>&1 \
-; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-GOOD
+; RUN: | FileCheck %s -match-full-lines -check-prefixes=NOTRACE,DUMP-OK
 
 ; RUN: not FileCheck -input-file %t.err %t.check -check-prefix=CHECK \
-; RUN:               -match-full-lines -dump-input=always 2>&1 \
-; RUN: | FileCheck %s -match-full-lines -check-prefix=CHECK-ERR
+; RUN:               -match-full-lines -dump-input=always -v 2>&1 \
+; RUN: | FileCheck %s -match-full-lines -check-prefixes=NOTRACE,ERR,DUMP-ERR
 
 ; END.
 
-; CHECK-GOOD: Full input was:
-; CHECK-GOOD-NEXT: <<<<<<
-; CHECK-GOOD-NEXT:          1: ciao
-; CHECK-GOOD-NEXT: check:1     ^~~~
-; CHECK-GOOD-NEXT:          2: world
-; CHECK-GOOD-NEXT: next:2      ^~~~~
-; CHECK-GOOD-NEXT: >>>>>>
+; Trace is sometimes suppressed.
+; TRACE:       {{.*}}remark:{{.*}}
+; NOTRACE-NOT: {{.*}}remark:{{.*}}
 
-; CHECK-ERR: Full input was:
-; CHECK-ERR-NEXT: <<<<<<
-; CHECK-ERR-NEXT:          1: hello
-; CHECK-ERR-NEXT: check:1     X~~~~
-; CHECK-ERR-NEXT:          2: world
-; CHECK-ERR-NEXT: check:1     ~~~~~
-; CHECK-ERR-NEXT: >>>>>>
+; Error diagnostics are never suppressed.
+; ERR: {{.*}}error:{{.*}}
 
-; CHECK-NODUMP-NOT: <<<<<<
+; NODUMP-NOT: <<<<<<
+
+; DUMP-OK:      Full input was:
+; DUMP-OK-NEXT: <<<<<<
+; DUMP-OK-NEXT:          1: hello
+; DUMP-OK-NEXT: check:1     ^~~~~
+; DUMP-OK-NEXT:          2: world
+; DUMP-OK-NEXT: next:2      ^~~~~
+; DUMP-OK-NEXT: >>>>>>
+
+; DUMP-ERR:      Full input was:
+; DUMP-ERR-NEXT: <<<<<<
+; DUMP-ERR-NEXT:          1: hello
+; DUMP-ERR-NEXT: check:1     ^~~~~
+; DUMP-ERR-NEXT:          2: whirled
+; DUMP-ERR-NEXT: next:2      X~~~~~~ error: no match found
+; DUMP-ERR-NEXT: >>>>>>

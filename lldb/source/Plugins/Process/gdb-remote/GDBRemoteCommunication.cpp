@@ -656,7 +656,7 @@ GDBRemoteCommunication::CheckForPacket(const uint8_t *src, size_t src_len,
     // Size of packet before it is decompressed, for logging purposes
     size_t original_packet_size = m_bytes.size();
     if (CompressionIsEnabled()) {
-      if (DecompressPacket() == false) {
+      if (!DecompressPacket()) {
         packet.Clear();
         return GDBRemoteCommunication::PacketType::Standard;
       }
@@ -1011,7 +1011,7 @@ Status GDBRemoteCommunication::StartDebugserverProcess(
       debugserver_args.AppendArgument(llvm::StringRef("--setsid"));
     }
 
-    llvm::SmallString<PATH_MAX> named_pipe_path;
+    llvm::SmallString<128> named_pipe_path;
     // socket_pipe is used by debug server to communicate back either
     // TCP port or domain socket name which it listens on.
     // The second purpose of the pipe to serve as a synchronization point -

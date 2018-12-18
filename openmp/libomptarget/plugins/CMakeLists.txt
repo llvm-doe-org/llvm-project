@@ -34,10 +34,25 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "${tmachine}$")
     
       add_library("omptarget.rtl.${tmachine_libname}" SHARED 
         ${CMAKE_CURRENT_SOURCE_DIR}/../generic-elf-64bit/src/rtl.cpp)
+      if(OPENMP_CLANG_LIB_SUBDIR AND NOT OPENMP_STANDALONE_BUILD)
+        add_custom_command(TARGET "omptarget.rtl.${tmachine_libname}"
+          POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E make_directory
+            $<TARGET_FILE_DIR:omptarget.rtl.${tmachine_libname}>/${OPENMP_CLANG_LIB_SUBDIR}
+          COMMAND ${CMAKE_COMMAND} -E copy
+            $<TARGET_FILE:omptarget.rtl.${tmachine_libname}>
+            $<TARGET_FILE_DIR:omptarget.rtl.${tmachine_libname}>/${OPENMP_CLANG_LIB_SUBDIR}
+        )
+      endif()
         
       # Install plugin under the lib destination folder.
       install(TARGETS "omptarget.rtl.${tmachine_libname}" 
         LIBRARY DESTINATION "${OPENMP_INSTALL_LIBDIR}")
+      if(OPENMP_CLANG_LIB_SUBDIR)
+        install(TARGETS "omptarget.rtl.${tmachine_libname}"
+          LIBRARY DESTINATION
+          "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_LIB_SUBDIR}")
+      endif()
         
       target_link_libraries(
         "omptarget.rtl.${tmachine_libname}"

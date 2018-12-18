@@ -1001,6 +1001,8 @@ public:
     /// expressions for which we have deferred checking the destructor.
     SmallVector<CXXBindTemporaryExpr *, 8> DelayedDecltypeBinds;
 
+    llvm::SmallPtrSet<const Expr *, 8> PossibleDerefs;
+
     /// \brief Describes whether we are in an expression constext which we have
     /// to handle differently.
     enum ExpressionKind {
@@ -1033,6 +1035,9 @@ public:
 
   /// A stack of expression evaluation contexts.
   SmallVector<ExpressionEvaluationContextRecord, 8> ExprEvalContexts;
+
+  /// Emit a warning for all pending noderef expressions that we recorded.
+  void WarnOnPendingNoDerefs(ExpressionEvaluationContextRecord &Rec);
 
   /// Compute the mangling number context for a lambda expression or
   /// block literal.
@@ -1546,6 +1551,17 @@ public:
   };
 
 private:
+  /// Methods for marking which expressions involve dereferencing a pointer
+  /// marked with the 'noderef' attribute. Expressions are checked bottom up as
+  /// they are parsed, meaning that a noderef pointer may not be accessed. For
+  /// example, in `&*p` where `p` is a noderef pointer, we will first parse the
+  /// `*p`, but need to check that `address of` is called on it. This requires
+  /// keeping a container of all pending expressions and checking if the address
+  /// of them are eventually taken.
+  void CheckSubscriptAccessOfNoDeref(const ArraySubscriptExpr *E);
+  void CheckAddressOfNoDeref(const Expr *E);
+  void CheckMemberAccessOfNoDeref(const MemberExpr *E);
+
   bool RequireCompleteTypeImpl(SourceLocation Loc, QualType T,
                                TypeDiagnoser *Diagnoser);
 
@@ -2735,13 +2751,15 @@ public:
   typedef llvm::SmallSetVector<DeclContext   *, 16> AssociatedNamespaceSet;
   typedef llvm::SmallSetVector<CXXRecordDecl *, 16> AssociatedClassSet;
 
-  void AddOverloadCandidate(FunctionDecl *Function,
-                            DeclAccessPair FoundDecl,
+  using ADLCallKind = CallExpr::ADLCallKind;
+
+  void AddOverloadCandidate(FunctionDecl *Function, DeclAccessPair FoundDecl,
                             ArrayRef<Expr *> Args,
                             OverloadCandidateSet &CandidateSet,
                             bool SuppressUserConversions = false,
                             bool PartialOverloading = false,
                             bool AllowExplicit = false,
+                            ADLCallKind IsADLCandidate = ADLCallKind::NotADL,
                             ConversionSequenceList EarlyConversions = None);
   void AddFunctionCandidates(const UnresolvedSetImpl &Functions,
                       ArrayRef<Expr *> Args,
@@ -2775,13 +2793,12 @@ public:
                                   OverloadCandidateSet& CandidateSet,
                                   bool SuppressUserConversions = false,
                                   bool PartialOverloading = false);
-  void AddTemplateOverloadCandidate(FunctionTemplateDecl *FunctionTemplate,
-                                    DeclAccessPair FoundDecl,
-                                 TemplateArgumentListInfo *ExplicitTemplateArgs,
-                                    ArrayRef<Expr *> Args,
-                                    OverloadCandidateSet& CandidateSet,
-                                    bool SuppressUserConversions = false,
-                                    bool PartialOverloading = false);
+  void AddTemplateOverloadCandidate(
+      FunctionTemplateDecl *FunctionTemplate, DeclAccessPair FoundDecl,
+      TemplateArgumentListInfo *ExplicitTemplateArgs, ArrayRef<Expr *> Args,
+      OverloadCandidateSet &CandidateSet, bool SuppressUserConversions = false,
+      bool PartialOverloading = false,
+      ADLCallKind IsADLCandidate = ADLCallKind::NotADL);
   bool CheckNonDependentConversions(FunctionTemplateDecl *FunctionTemplate,
                                     ArrayRef<QualType> ParamTypes,
                                     ArrayRef<Expr *> Args,
@@ -2847,11 +2864,7 @@ public:
 
   /// Find the failed Boolean condition within a given Boolean
   /// constant expression, and describe it with a string.
-  ///
-  /// \param AllowTopLevelCond Whether to allow the result to be the
-  /// complete top-level condition.
-  std::pair<Expr *, std::string>
-  findFailedBooleanCondition(Expr *Cond, bool AllowTopLevelCond);
+  std::pair<Expr *, std::string> findFailedBooleanCondition(Expr *Cond);
 
   /// Emit diagnostics for the diagnose_if attributes on Function, ignoring any
   /// non-ArgDependent DiagnoseIfAttrs.
@@ -4377,12 +4390,11 @@ public:
                            MultiExprArg ArgExprs, SourceLocation RParenLoc,
                            Expr *ExecConfig = nullptr,
                            bool IsExecConfig = false);
-  ExprResult BuildResolvedCallExpr(Expr *Fn, NamedDecl *NDecl,
-                                   SourceLocation LParenLoc,
-                                   ArrayRef<Expr *> Arg,
-                                   SourceLocation RParenLoc,
-                                   Expr *Config = nullptr,
-                                   bool IsExecConfig = false);
+  ExprResult
+  BuildResolvedCallExpr(Expr *Fn, NamedDecl *NDecl, SourceLocation LParenLoc,
+                        ArrayRef<Expr *> Arg, SourceLocation RParenLoc,
+                        Expr *Config = nullptr, bool IsExecConfig = false,
+                        ADLCallKind UsesADL = ADLCallKind::NotADL);
 
   ExprResult ActOnCUDAExecConfigExpr(Scope *S, SourceLocation LLLLoc,
                                      MultiExprArg ExecConfig,
@@ -5105,7 +5117,7 @@ public:
     /// using the given declaration (which is either a class template or a
     /// class) along with the given qualifiers.
     /// along with the qualifiers placed on '*this'.
-    CXXThisScopeRAII(Sema &S, Decl *ContextDecl, unsigned CXXThisTypeQuals,
+    CXXThisScopeRAII(Sema &S, Decl *ContextDecl, Qualifiers CXXThisTypeQuals,
                      bool Enabled = true);
 
     ~CXXThisScopeRAII();
@@ -6067,7 +6079,8 @@ public:
                                     bool ForceCheck = false,
                                     bool ForceUnprivileged = false);
   void CheckLookupAccess(const LookupResult &R);
-  bool IsSimplyAccessible(NamedDecl *decl, DeclContext *Ctx);
+  bool IsSimplyAccessible(NamedDecl *Decl, CXXRecordDecl *NamingClass,
+                          QualType BaseType);
   bool isSpecialMemberAccessibleForDeletion(CXXMethodDecl *decl,
                                             AccessSpecifier access,
                                             QualType objectType);
@@ -7741,7 +7754,7 @@ public:
                                         SourceLocation Loc,
                                         DeclarationName Entity,
                                         CXXRecordDecl *ThisContext,
-                                        unsigned ThisTypeQuals);
+                                        Qualifiers ThisTypeQuals);
   void SubstExceptionSpec(FunctionDecl *New, const FunctionProtoType *Proto,
                           const MultiLevelTemplateArgumentList &Args);
   bool SubstExceptionSpec(SourceLocation Loc,
@@ -8546,9 +8559,9 @@ public:
   void AddParameterABIAttr(SourceRange AttrRange, Decl *D,
                            ParameterABI ABI, unsigned SpellingListIndex);
 
-  void AddNSConsumedAttr(SourceRange AttrRange, Decl *D,
-                         unsigned SpellingListIndex, bool isNSConsumed,
-                         bool isTemplateInstantiation);
+  enum class RetainOwnershipKind {NS, CF, OS};
+  void AddXConsumedAttr(Decl *D, SourceRange SR, unsigned SpellingIndex,
+                        RetainOwnershipKind K, bool IsTemplateInstantiation);
 
   bool checkNSReturnsRetainedReturnType(SourceLocation loc, QualType type);
 
@@ -10473,10 +10486,10 @@ public:
   void CodeCompleteInitializer(Scope *S, Decl *D);
   void CodeCompleteReturn(Scope *S);
   void CodeCompleteAfterIf(Scope *S);
-  void CodeCompleteAssignmentRHS(Scope *S, Expr *LHS);
+  void CodeCompleteBinaryRHS(Scope *S, Expr *LHS, tok::TokenKind Op);
 
   void CodeCompleteQualifiedId(Scope *S, CXXScopeSpec &SS,
-                               bool EnteringContext);
+                               bool EnteringContext, QualType BaseType);
   void CodeCompleteUsing(Scope *S);
   void CodeCompleteUsingDirective(Scope *S);
   void CodeCompleteNamespaceDecl(Scope *S);

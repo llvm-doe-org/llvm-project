@@ -58,7 +58,10 @@ import shutil
 import sys
 import threading
 import time
-import Queue
+try:
+    import queue
+except ImportError:
+    import Queue as queue
 
 ###############################################################################
 # Helper functions.
@@ -382,7 +385,7 @@ def runAnalyzePreprocessed(Args, Dir, SBOutputDir, Mode):
             check_call(Command, cwd=Dir, stderr=LogFile,
                        stdout=LogFile,
                        shell=True)
-        except CalledProcessError, e:
+        except CalledProcessError as e:
             Local.stderr.write("Error: Analyzes of %s failed. "
                                "See %s for details."
                                "Error code %d.\n" % (
@@ -742,7 +745,7 @@ def multiThreadedTestAll(Args, ProjectsToTest, Jobs):
 
     :return: whether tests have passed.
     """
-    TasksQueue = Queue.Queue()
+    TasksQueue = queue.Queue()
 
     for ProjArgs in ProjectsToTest:
         TasksQueue.put(ProjArgs)

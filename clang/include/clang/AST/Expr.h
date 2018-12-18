@@ -583,7 +583,8 @@ public:
   /// this function returns true, it returns the folded constant in Result. If
   /// the expression is a glvalue, an lvalue-to-rvalue conversion will be
   /// applied.
-  bool EvaluateAsRValue(EvalResult &Result, const ASTContext &Ctx) const;
+  bool EvaluateAsRValue(EvalResult &Result, const ASTContext &Ctx,
+                        bool InConstantContext = false) const;
 
   /// EvaluateAsBooleanCondition - Return true if this is a constant
   /// which we can fold and convert to a boolean condition using
@@ -600,7 +601,7 @@ public:
 
   /// EvaluateAsInt - Return true if this is a constant which we can fold and
   /// convert to an integer, using any crazy technique that we want to.
-  bool EvaluateAsInt(llvm::APSInt &Result, const ASTContext &Ctx,
+  bool EvaluateAsInt(EvalResult &Result, const ASTContext &Ctx,
                      SideEffectsKind AllowSideEffects = SE_NoSideEffects) const;
 
   /// EvaluateAsFloat - Return true if this is a constant which we can fold and
@@ -901,9 +902,14 @@ public:
 
 /// ConstantExpr - An expression that occurs in a constant context.
 class ConstantExpr : public FullExpr {
-public:
   ConstantExpr(Expr *subexpr)
     : FullExpr(ConstantExprClass, subexpr) {}
+
+public:
+  static ConstantExpr *Create(const ASTContext &Context, Expr *E) {
+    assert(!isa<ConstantExpr>(E));
+    return new (Context) ConstantExpr(E);
+  }
 
   /// Build an empty constant expression wrapper.
   explicit ConstantExpr(EmptyShell Empty)
@@ -2406,15 +2412,22 @@ class CallExpr : public Expr {
 
   void updateDependenciesFromArg(Expr *Arg);
 
+public:
+  enum class ADLCallKind : bool { NotADL, UsesADL };
+  static constexpr ADLCallKind NotADL = ADLCallKind::NotADL;
+  static constexpr ADLCallKind UsesADL = ADLCallKind::UsesADL;
+
 protected:
   // These versions of the constructor are for derived classes.
   CallExpr(const ASTContext &C, StmtClass SC, Expr *fn,
            ArrayRef<Expr *> preargs, ArrayRef<Expr *> args, QualType t,
-           ExprValueKind VK, SourceLocation rparenloc);
+           ExprValueKind VK, SourceLocation rparenloc, unsigned MinNumArgs = 0,
+           ADLCallKind UsesADL = NotADL);
   CallExpr(const ASTContext &C, StmtClass SC, Expr *fn, ArrayRef<Expr *> args,
-           QualType t, ExprValueKind VK, SourceLocation rparenloc);
+           QualType t, ExprValueKind VK, SourceLocation rparenloc,
+           unsigned MinNumArgs = 0, ADLCallKind UsesADL = NotADL);
   CallExpr(const ASTContext &C, StmtClass SC, unsigned NumPreArgs,
-           EmptyShell Empty);
+           unsigned NumArgs, EmptyShell Empty);
 
   Stmt *getPreArg(unsigned i) {
     assert(i < getNumPreArgs() && "Prearg access out of range!");
@@ -2432,15 +2445,27 @@ protected:
   unsigned getNumPreArgs() const { return CallExprBits.NumPreArgs; }
 
 public:
-  CallExpr(const ASTContext& C, Expr *fn, ArrayRef<Expr*> args, QualType t,
-           ExprValueKind VK, SourceLocation rparenloc);
+  /// Build a call expression. MinNumArgs specifies the minimum number of
+  /// arguments. The actual number of arguments will be the greater of
+  /// args.size() and MinNumArgs.
+  CallExpr(const ASTContext &C, Expr *fn, ArrayRef<Expr *> args, QualType t,
+           ExprValueKind VK, SourceLocation rparenloc, unsigned MinNumArgs = 0,
+           ADLCallKind UsesADL = NotADL);
 
   /// Build an empty call expression.
-  CallExpr(const ASTContext &C, StmtClass SC, EmptyShell Empty);
+  CallExpr(const ASTContext &C, unsigned NumArgs, EmptyShell Empty);
 
   const Expr *getCallee() const { return cast<Expr>(SubExprs[FN]); }
   Expr *getCallee() { return cast<Expr>(SubExprs[FN]); }
   void setCallee(Expr *F) { SubExprs[FN] = F; }
+
+  ADLCallKind getADLCallKind() const {
+    return static_cast<ADLCallKind>(CallExprBits.UsesADL);
+  }
+  void setADLCallKind(ADLCallKind V = UsesADL) {
+    CallExprBits.UsesADL = static_cast<bool>(V);
+  }
+  bool usesADL() const { return getADLCallKind() == UsesADL; }
 
   Decl *getCalleeDecl();
   const Decl *getCalleeDecl() const {
@@ -2482,10 +2507,18 @@ public:
     SubExprs[Arg+getNumPreArgs()+PREARGS_START] = ArgExpr;
   }
 
-  /// setNumArgs - This changes the number of arguments present in this call.
-  /// Any orphaned expressions are deleted by this, and any new operands are set
-  /// to null.
-  void setNumArgs(const ASTContext& C, unsigned NumArgs);
+  /// Reduce the number of arguments in this call expression. This is used for
+  /// example during error recovery to drop extra arguments. There is no way
+  /// to perform the opposite because: 1.) We don't track how much storage
+  /// we have for the argument array 2.) This would potentially require growing
+  /// the argument array, something we cannot support since the arguments will
+  /// be stored in a trailing array in the future.
+  /// (TODO: update this comment when this is done).
+  void shrinkNumArgs(unsigned NewNumArgs) {
+    assert((NewNumArgs <= NumArgs) &&
+           "shrinkNumArgs cannot increase the number of arguments!");
+    NumArgs = NewNumArgs;
+  }
 
   typedef ExprIterator arg_iterator;
   typedef ConstExprIterator const_arg_iterator;
@@ -3087,8 +3120,8 @@ inline Expr *Expr::IgnoreImpCasts() {
   while (true)
     if (ImplicitCastExpr *ice = dyn_cast<ImplicitCastExpr>(e))
       e = ice->getSubExpr();
-    else if (ConstantExpr *ce = dyn_cast<ConstantExpr>(e))
-      e = ce->getSubExpr();
+    else if (FullExpr *fe = dyn_cast<FullExpr>(e))
+      e = fe->getSubExpr();
     else
       break;
   return e;

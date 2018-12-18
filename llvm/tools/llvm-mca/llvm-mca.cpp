@@ -24,8 +24,6 @@
 #include "CodeRegion.h"
 #include "CodeRegionGenerator.h"
 #include "PipelinePrinter.h"
-#include "Stages/EntryStage.h"
-#include "Stages/InstructionTables.h"
 #include "Views/DispatchStatistics.h"
 #include "Views/InstructionInfoView.h"
 #include "Views/RegisterFileStatistics.h"
@@ -34,13 +32,15 @@
 #include "Views/SchedulerStatistics.h"
 #include "Views/SummaryView.h"
 #include "Views/TimelineView.h"
-#include "include/Context.h"
-#include "include/Pipeline.h"
-#include "include/Support.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/MCA/Context.h"
+#include "llvm/MCA/Pipeline.h"
+#include "llvm/MCA/Stages/EntryStage.h"
+#include "llvm/MCA/Stages/InstructionTables.h"
+#include "llvm/MCA/Support.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ErrorOr.h"
@@ -151,12 +151,12 @@ static cl::opt<bool>
 
 static cl::opt<unsigned>
     LoadQueueSize("lqueue",
-                  cl::desc("Size of the load queue (unbound by default)"),
+                  cl::desc("Size of the load queue"),
                   cl::cat(ToolOptions), cl::init(0));
 
 static cl::opt<unsigned>
     StoreQueueSize("squeue",
-                   cl::desc("Size of the store queue (unbound by default)"),
+                   cl::desc("Size of the store queue"),
                    cl::cat(ToolOptions), cl::init(0));
 
 static cl::opt<bool>
@@ -240,8 +240,9 @@ static void processViewOptions() {
 // Returns true on success.
 static bool runPipeline(mca::Pipeline &P) {
   // Handle pipeline errors here.
-  if (auto Err = P.run()) {
-    WithColor::error() << toString(std::move(Err));
+  Expected<unsigned> Cycles = P.run();
+  if (!Cycles) {
+    WithColor::error() << toString(Cycles.takeError());
     return false;
   }
   return true;
@@ -377,7 +378,7 @@ int main(int argc, char **argv) {
     Width = DispatchWidth;
 
   // Create an instruction builder.
-  mca::InstrBuilder IB(*STI, *MCII, *MRI, *MCIA);
+  mca::InstrBuilder IB(*STI, *MCII, *MRI, MCIA.get());
 
   // Create a context to control ownership of the pipeline hardware.
   mca::Context MCA(*MRI, *STI);
@@ -472,7 +473,7 @@ int main(int argc, char **argv) {
       Printer.addView(llvm::make_unique<mca::SchedulerStatistics>(*STI));
 
     if (PrintRetireStats)
-      Printer.addView(llvm::make_unique<mca::RetireControlUnitStatistics>());
+      Printer.addView(llvm::make_unique<mca::RetireControlUnitStatistics>(SM));
 
     if (PrintRegisterFileStats)
       Printer.addView(llvm::make_unique<mca::RegisterFileStatistics>(*STI));

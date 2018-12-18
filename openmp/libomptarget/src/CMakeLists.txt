@@ -26,6 +26,18 @@ add_library(omptarget SHARED ${src_files})
 target_link_libraries(omptarget
   ${CMAKE_DL_LIBS}
   "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports")
+if(OPENMP_CLANG_LIB_SUBDIR AND NOT OPENMP_STANDALONE_BUILD)
+  add_custom_command(TARGET omptarget POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+      $<TARGET_FILE_DIR:omptarget>/${OPENMP_CLANG_LIB_SUBDIR}
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:omptarget>
+      $<TARGET_FILE_DIR:omptarget>/${OPENMP_CLANG_LIB_SUBDIR}
+  )
+endif()
 
 # Install libomptarget under the lib destination folder.
 install(TARGETS omptarget LIBRARY DESTINATION "${OPENMP_INSTALL_LIBDIR}")
+if(OPENMP_CLANG_LIB_SUBDIR)
+  install(TARGETS omptarget LIBRARY DESTINATION
+    "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_LIB_SUBDIR}")
+endif()

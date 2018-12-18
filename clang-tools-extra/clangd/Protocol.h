@@ -25,6 +25,7 @@
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_PROTOCOL_H
 
 #include "URI.h"
+#include "index/SymbolID.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/Support/JSON.h"
 #include <bitset>
@@ -66,9 +67,25 @@ public:
   }
 };
 
+// URI in "file" scheme for a file.
 struct URIForFile {
   URIForFile() = default;
-  explicit URIForFile(std::string AbsPath);
+
+  /// Canonicalizes \p AbsPath via URI.
+  ///
+  /// File paths in URIForFile can come from index or local AST. Path from
+  /// index goes through URI transformation, and the final path is resolved by
+  /// URI scheme and could potentially be different from the original path.
+  /// Hence, we do the same transformation for all paths.
+  ///
+  /// Files can be referred to by several paths (e.g. in the presence of links).
+  /// Which one we prefer may depend on where we're coming from. \p TUPath is a
+  /// hint, and should usually be the main entrypoint file we're processing.
+  static URIForFile canonicalize(llvm::StringRef AbsPath,
+                                 llvm::StringRef TUPath);
+
+  static llvm::Expected<URIForFile> fromURI(const URI &U,
+                                            llvm::StringRef HintPath);
 
   /// Retrieves absolute path to the file.
   llvm::StringRef file() const { return File; }
@@ -89,6 +106,8 @@ struct URIForFile {
   }
 
 private:
+  explicit URIForFile(std::string &&File) : File(std::move(File)) {}
+
   std::string File;
 };
 
@@ -150,6 +169,9 @@ struct Range {
   }
 
   bool contains(Position Pos) const { return start <= Pos && Pos < end; }
+  bool contains(Range Rng) const {
+    return start <= Rng.start && Rng.end <= end;
+  }
 };
 bool fromJSON(const llvm::json::Value &, Range &);
 llvm::json::Value toJSON(const Range &);
@@ -330,6 +352,9 @@ struct ClientCapabilities {
   /// Client supports snippets as insert text.
   /// textDocument.completion.completionItem.snippetSupport
   bool CompletionSnippets = false;
+
+  /// Client supports hierarchical document symbols.
+  bool HierarchicalDocumentSymbol = false;
 
   /// The supported set of CompletionItemKinds for textDocument/completion.
   /// textDocument.completion.completionItemKind.valueSet
@@ -655,6 +680,39 @@ struct CodeAction {
 };
 llvm::json::Value toJSON(const CodeAction &);
 
+/// Represents programming constructs like variables, classes, interfaces etc.
+/// that appear in a document. Document symbols can be hierarchical and they
+/// have two ranges: one that encloses its definition and one that points to its
+/// most interesting range, e.g. the range of an identifier.
+struct DocumentSymbol {
+  /// The name of this symbol.
+  std::string name;
+
+  /// More detail for this symbol, e.g the signature of a function.
+  std::string detail;
+
+  /// The kind of this symbol.
+  SymbolKind kind;
+
+  /// Indicates if this symbol is deprecated.
+  bool deprecated;
+
+  /// The range enclosing this symbol not including leading/trailing whitespace
+  /// but everything else like comments. This information is typically used to
+  /// determine if the clients cursor is inside the symbol to reveal in the
+  /// symbol in the UI.
+  Range range;
+
+  /// The range that should be selected and revealed when this symbol is being
+  /// picked, e.g the name of a function. Must be contained by the `range`.
+  Range selectionRange;
+
+  /// Children of this symbol, e.g. properties of a class.
+  std::vector<DocumentSymbol> children;
+};
+llvm::raw_ostream &operator<<(llvm::raw_ostream &O, const DocumentSymbol &S);
+llvm::json::Value toJSON(const DocumentSymbol &S);
+
 /// Represents information about programming constructs like variables, classes,
 /// interfaces etc.
 struct SymbolInformation {
@@ -672,6 +730,26 @@ struct SymbolInformation {
 };
 llvm::json::Value toJSON(const SymbolInformation &);
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const SymbolInformation &);
+
+/// Represents information about identifier.
+/// This is returned from textDocument/symbolInfo, which is a clangd extension.
+struct SymbolDetails {
+  std::string name;
+
+  std::string containerName;
+
+  /// Unified Symbol Resolution identifier
+  /// This is an opaque string uniquely identifying a symbol.
+  /// Unlike SymbolID, it is variable-length and somewhat human-readable.
+  /// It is a common representation across several clang tools.
+  /// (See USRGeneration.h)
+  std::string USR;
+
+  llvm::Optional<SymbolID> ID;
+};
+llvm::json::Value toJSON(const SymbolDetails &);
+llvm::raw_ostream &operator<<(llvm::raw_ostream &, const SymbolDetails &);
+bool operator==(const SymbolDetails &, const SymbolDetails &);
 
 /// The parameters of a Workspace Symbol Request.
 struct WorkspaceSymbolParams {

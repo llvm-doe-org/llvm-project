@@ -37,9 +37,22 @@ include_directories(${LIBOMPTARGET_DEP_CUDA_INCLUDE_DIRS})
 include_directories(${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIRS})
 
 add_library(omptarget.rtl.cuda SHARED src/rtl.cpp)
+if(OPENMP_CLANG_LIB_SUBDIR AND NOT OPENMP_STANDALONE_BUILD)
+  add_custom_command(TARGET "omptarget.rtl.cuda"
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+      $<TARGET_FILE_DIR:omptarget.rtl.cuda>/${OPENMP_CLANG_LIB_SUBDIR}
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:omptarget.rtl.cuda>
+      $<TARGET_FILE_DIR:omptarget.rtl.cuda>/${OPENMP_CLANG_LIB_SUBDIR}
+  )
+endif()
 
 # Install plugin under the lib destination folder.
 install(TARGETS omptarget.rtl.cuda LIBRARY DESTINATION "${OPENMP_INSTALL_LIBDIR}")
+if(OPENMP_CLANG_LIB_SUBDIR)
+  install(TARGETS "omptarget.rtl.cuda" LIBRARY DESTINATION
+          "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_LIB_SUBDIR}")
+endif()
 
 target_link_libraries(omptarget.rtl.cuda
   ${LIBOMPTARGET_DEP_CUDA_DRIVER_LIBRARIES}
