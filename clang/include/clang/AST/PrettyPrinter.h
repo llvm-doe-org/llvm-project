@@ -62,7 +62,8 @@ struct PrintingPolicy {
         MSWChar(LO.MicrosoftExt && !LO.WChar), IncludeNewlines(true),
         MSVCFormatting(false), ConstantsAsWritten(false),
         SuppressImplicitBase(false), FullyQualifiedName(false),
-        RemapFilePaths(false), OpenACCPrint(OpenACCPrint_ACC) {}
+        RemapFilePaths(false), PrintCanonicalTypes(false),
+        OpenACCPrint(OpenACCPrint_ACC) {}
 
   /// Adjust this printing policy for cases where it's known that we're
   /// printing C++ code (for instance, if AST dumping reaches a C++-only
@@ -238,6 +239,9 @@ struct PrintingPolicy {
 
   /// Whether to apply -fdebug-prefix-map to any file paths.
   unsigned RemapFilePaths : 1;
+
+  /// Whether to print types as written or canonically.
+  unsigned PrintCanonicalTypes : 1;
 
   /// When RemapFilePaths is true, this function performs the action.
   std::function<std::string(StringRef)> remapPath;

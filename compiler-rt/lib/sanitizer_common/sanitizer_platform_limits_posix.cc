@@ -45,6 +45,7 @@
 #include <termios.h>
 #include <time.h>
 #include <wchar.h>
+#include <regex.h>
 #if !SANITIZER_MAC
 #include <utmp.h>
 #endif
@@ -54,6 +55,7 @@
 #endif
 
 #if !SANITIZER_ANDROID
+#include <fstab.h>
 #include <sys/mount.h>
 #include <sys/timeb.h>
 #include <utmpx.h>
@@ -189,13 +191,15 @@ namespace __sanitizer {
   unsigned struct_tms_sz = sizeof(struct tms);
   unsigned struct_sigevent_sz = sizeof(struct sigevent);
   unsigned struct_sched_param_sz = sizeof(struct sched_param);
-
+  unsigned struct_regex_sz = sizeof(regex_t);
+  unsigned struct_regmatch_sz = sizeof(regmatch_t);
 
 #if SANITIZER_MAC && !SANITIZER_IOS
   unsigned struct_statfs64_sz = sizeof(struct statfs64);
 #endif // SANITIZER_MAC && !SANITIZER_IOS
 
 #if !SANITIZER_ANDROID
+  unsigned struct_fstab_sz = sizeof(struct fstab);
   unsigned struct_statfs_sz = sizeof(struct statfs);
   unsigned struct_sockaddr_sz = sizeof(struct sockaddr);
   unsigned ucontext_t_sz = sizeof(ucontext_t);

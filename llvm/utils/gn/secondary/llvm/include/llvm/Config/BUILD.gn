@@ -1,6 +1,7 @@
 import("//llvm/lib/Target/targets.gni")
 import("//llvm/triples.gni")
 import("//llvm/utils/gn/build/buildflags.gni")
+import("//llvm/utils/gn/build/libs/edit/enable.gni")
 import("//llvm/utils/gn/build/libs/pthread/enable.gni")
 import("//llvm/utils/gn/build/libs/terminfo/enable.gni")
 import("//llvm/utils/gn/build/libs/xar/enable.gni")
@@ -178,7 +179,6 @@ action("config") {
       "HAVE_CRASHREPORTER_INFO=1",
       "HAVE_DECL_ARC4RANDOM=1",
       "HAVE_DLADDR=1",
-      "HAVE_LIBEDIT=1",
       "HAVE_MALLOC_H=",
       "HAVE_MACH_MACH_H=1",
       "HAVE_MALLOC_MALLOC_H=1",
@@ -190,7 +190,6 @@ action("config") {
       "HAVE_CRASHREPORTER_INFO=",
       "HAVE_DECL_ARC4RANDOM=",
       "HAVE_DLADDR=",
-      "HAVE_LIBEDIT=",
       "HAVE_MACH_MACH_H=",
       "HAVE_MALLOC_H=1",
       "HAVE_MALLOC_MALLOC_H=",
@@ -292,6 +291,12 @@ action("config") {
     args += [ "LTDL_SHLIB_EXT=.dll" ]
   }
 
+  if (llvm_enable_libedit) {
+    args += [ "HAVE_LIBEDIT=1" ]
+  } else {
+    args += [ "HAVE_LIBEDIT=" ]
+  }
+
   if (llvm_enable_libxar) {
     args += [ "HAVE_LIBXAR=1" ]
   } else {
@@ -370,8 +375,8 @@ action("llvm-config") {
 # .def files used by llvm/lib/Target
 
 template("write_target_def_file") {
-  assert(defined(invoker.key), "callers must set key")
-  assert(defined(invoker.value), "callers must set value")
+  assert(defined(invoker.key), "must set 'key' in $target_name")
+  assert(defined(invoker.value), "must set 'value' in $target_name")
 
   action(target_name) {
     visibility = [ ":write_target_def_files" ]

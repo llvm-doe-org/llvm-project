@@ -5533,9 +5533,8 @@ GetDynamicArrayInfo(ClangASTContext &ast, SymbolFile *sym_file,
                     const ExecutionContext *exe_ctx) {
   if (qual_type->isIncompleteArrayType())
     if (auto *metadata = ast.GetMetadata(qual_type.getAsOpaquePtr()))
-      if (auto *dwarf_parser = ast.GetDWARFParser())
-        return sym_file->GetDynamicArrayInfoForUID(metadata->GetUserID(),
-                                                   exe_ctx);
+      return sym_file->GetDynamicArrayInfoForUID(metadata->GetUserID(),
+                                                 exe_ctx);
   return llvm::None;
 }
 
@@ -7452,7 +7451,7 @@ ClangASTContext::GetIndexOfChildWithName(lldb::opaque_compiler_type_t type,
                                                base_class->getType());
             std::string base_class_type_name(
                 base_class_clang_type.GetTypeName().AsCString(""));
-            if (base_class_type_name.compare(name) == 0)
+            if (base_class_type_name == name)
               return child_idx;
             ++child_idx;
           }

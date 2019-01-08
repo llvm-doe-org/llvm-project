@@ -3389,7 +3389,14 @@ Value *llvm::GetPointerBaseWithConstantOffset(Value *Ptr, int64_t &Offset,
       if (!GEP->accumulateConstantOffset(DL, GEPOffset))
         break;
 
-      ByteOffset += GEPOffset.getSExtValue();
+      APInt OrigByteOffset(ByteOffset);
+      ByteOffset += GEPOffset.sextOrTrunc(ByteOffset.getBitWidth());
+      if (ByteOffset.getMinSignedBits() > 64) {
+        // Stop traversal if the pointer offset wouldn't fit into int64_t
+        // (this should be removed if Offset is updated to an APInt)
+        ByteOffset = OrigByteOffset;
+        break;
+      }
 
       Ptr = GEP->getPointerOperand();
     } else if (Operator::getOpcode(Ptr) == Instruction::BitCast ||
@@ -3822,8 +3829,7 @@ bool llvm::onlyUsedByLifetimeMarkers(const Value *V) {
     const IntrinsicInst *II = dyn_cast<IntrinsicInst>(U);
     if (!II) return false;
 
-    if (II->getIntrinsicID() != Intrinsic::lifetime_start &&
-        II->getIntrinsicID() != Intrinsic::lifetime_end)
+    if (!II->isLifetimeStartOrEnd())
       return false;
   }
   return true;

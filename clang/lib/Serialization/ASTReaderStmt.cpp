@@ -1347,27 +1347,29 @@ void ASTStmtReader::VisitMSDependentExistsStmt(MSDependentExistsStmt *S) {
 
 void ASTStmtReader::VisitCXXOperatorCallExpr(CXXOperatorCallExpr *E) {
   VisitCallExpr(E);
-  E->Operator = (OverloadedOperatorKind)Record.readInt();
+  E->CXXOperatorCallExprBits.OperatorKind = Record.readInt();
+  E->CXXOperatorCallExprBits.FPFeatures = Record.readInt();
   E->Range = Record.readSourceRange();
-  E->setFPFeatures(FPOptions(Record.readInt()));
 }
 
 void ASTStmtReader::VisitCXXConstructExpr(CXXConstructExpr *E) {
   VisitExpr(E);
-  E->NumArgs = Record.readInt();
-  if (E->NumArgs)
-    E->Args = new (Record.getContext()) Stmt*[E->NumArgs];
-  for (unsigned I = 0, N = E->getNumArgs(); I != N; ++I)
-    E->setArg(I, Record.readSubExpr());
-  E->setConstructor(ReadDeclAs<CXXConstructorDecl>());
-  E->setLocation(ReadSourceLocation());
-  E->setElidable(Record.readInt());
-  E->setHadMultipleCandidates(Record.readInt());
-  E->setListInitialization(Record.readInt());
-  E->setStdInitListInitialization(Record.readInt());
-  E->setRequiresZeroInitialization(Record.readInt());
-  E->setConstructionKind((CXXConstructExpr::ConstructionKind)Record.readInt());
+
+  unsigned NumArgs = Record.readInt();
+  assert((NumArgs == E->getNumArgs()) && "Wrong NumArgs!");
+
+  E->CXXConstructExprBits.Elidable = Record.readInt();
+  E->CXXConstructExprBits.HadMultipleCandidates = Record.readInt();
+  E->CXXConstructExprBits.ListInitialization = Record.readInt();
+  E->CXXConstructExprBits.StdInitListInitialization = Record.readInt();
+  E->CXXConstructExprBits.ZeroInitialization = Record.readInt();
+  E->CXXConstructExprBits.ConstructionKind = Record.readInt();
+  E->CXXConstructExprBits.Loc = ReadSourceLocation();
+  E->Constructor = ReadDeclAs<CXXConstructorDecl>();
   E->ParenOrBraceRange = ReadSourceRange();
+
+  for (unsigned I = 0; I != NumArgs; ++I)
+    E->setArg(I, Record.readSubExpr());
 }
 
 void ASTStmtReader::VisitCXXInheritedCtorInitExpr(CXXInheritedCtorInitExpr *E) {
@@ -1380,7 +1382,7 @@ void ASTStmtReader::VisitCXXInheritedCtorInitExpr(CXXInheritedCtorInitExpr *E) {
 
 void ASTStmtReader::VisitCXXTemporaryObjectExpr(CXXTemporaryObjectExpr *E) {
   VisitCXXConstructExpr(E);
-  E->Type = GetTypeSourceInfo();
+  E->TSI = GetTypeSourceInfo();
 }
 
 void ASTStmtReader::VisitLambdaExpr(LambdaExpr *E) {
@@ -2665,9 +2667,8 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       break;
 
     case EXPR_CALL:
-      S = new (Context) CallExpr(
-          Context, /* NumArgs=*/Record[ASTStmtReader::NumExprFields],
-          Empty);
+      S = CallExpr::CreateEmpty(
+          Context, /*NumArgs=*/Record[ASTStmtReader::NumExprFields], Empty);
       break;
 
     case EXPR_MEMBER: {
@@ -3275,19 +3276,19 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
     }
 
     case EXPR_CXX_OPERATOR_CALL:
-      S = new (Context) CXXOperatorCallExpr(
-          Context, /*NumArgs=*/Record[ASTStmtReader::NumExprFields],
-          Empty);
+      S = CXXOperatorCallExpr::CreateEmpty(
+          Context, /*NumArgs=*/Record[ASTStmtReader::NumExprFields], Empty);
       break;
 
     case EXPR_CXX_MEMBER_CALL:
-      S = new (Context) CXXMemberCallExpr(
-          Context, /*NumArgs=*/Record[ASTStmtReader::NumExprFields],
-          Empty);
+      S = CXXMemberCallExpr::CreateEmpty(
+          Context, /*NumArgs=*/Record[ASTStmtReader::NumExprFields], Empty);
       break;
 
     case EXPR_CXX_CONSTRUCT:
-      S = new (Context) CXXConstructExpr(Empty);
+      S = CXXConstructExpr::CreateEmpty(
+          Context,
+          /* NumArgs=*/Record[ASTStmtReader::NumExprFields]);
       break;
 
     case EXPR_CXX_INHERITED_CTOR_INIT:
@@ -3295,7 +3296,9 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       break;
 
     case EXPR_CXX_TEMPORARY_OBJECT:
-      S = new (Context) CXXTemporaryObjectExpr(Empty);
+      S = CXXTemporaryObjectExpr::CreateEmpty(
+          Context,
+          /* NumArgs=*/Record[ASTStmtReader::NumExprFields]);
       break;
 
     case EXPR_CXX_STATIC_CAST:
@@ -3323,7 +3326,7 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       break;
 
     case EXPR_USER_DEFINED_LITERAL:
-      S = new (Context) UserDefinedLiteral(
+      S = UserDefinedLiteral::CreateEmpty(
           Context, /*NumArgs=*/Record[ASTStmtReader::NumExprFields], Empty);
       break;
 
@@ -3494,7 +3497,7 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       break;
 
     case EXPR_CUDA_KERNEL_CALL:
-      S = new (Context) CUDAKernelCallExpr(
+      S = CUDAKernelCallExpr::CreateEmpty(
           Context, /*NumArgs=*/Record[ASTStmtReader::NumExprFields], Empty);
       break;
 

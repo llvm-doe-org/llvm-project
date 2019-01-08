@@ -433,7 +433,16 @@ protected:
 
     /// True if the callee of the call expression was found using ADL.
     unsigned UsesADL : 1;
+
+    /// Padding used to align OffsetToTrailingObjects to a byte multiple.
+    unsigned : 24 - 2 - NumExprBits;
+
+    /// The offset in bytes from the this pointer to the start of the
+    /// trailing objects belonging to CallExpr. Intentionally byte sized
+    /// for faster access.
+    unsigned OffsetToTrailingObjects : 8;
   };
+  enum { NumCallExprBits = 32 };
 
   class MemberExprBitfields {
     friend class MemberExpr;
@@ -522,6 +531,20 @@ protected:
   };
 
   //===--- C++ Expression bitfields classes ---===//
+
+  class CXXOperatorCallExprBitfields {
+    friend class ASTStmtReader;
+    friend class CXXOperatorCallExpr;
+
+    unsigned : NumCallExprBits;
+
+    /// The kind of this overloaded operator. One of the enumerator
+    /// value of OverloadedOperatorKind.
+    unsigned OperatorKind : 6;
+
+    // Only meaningful for floating point types.
+    unsigned FPFeatures : 3;
+  };
 
   class CXXBoolLiteralExprBitfields {
     friend class CXXBoolLiteralExpr;
@@ -632,6 +655,22 @@ protected:
     unsigned NumArgs : 32 - 8 - 1 - NumExprBits;
   };
 
+  class CXXConstructExprBitfields {
+    friend class ASTStmtReader;
+    friend class CXXConstructExpr;
+
+    unsigned : NumExprBits;
+
+    unsigned Elidable : 1;
+    unsigned HadMultipleCandidates : 1;
+    unsigned ListInitialization : 1;
+    unsigned StdInitListInitialization : 1;
+    unsigned ZeroInitialization : 1;
+    unsigned ConstructionKind : 3;
+
+    SourceLocation Loc;
+  };
+
   class ExprWithCleanupsBitfields {
     friend class ASTStmtReader; // deserialization
     friend class ExprWithCleanups;
@@ -714,6 +753,7 @@ protected:
     PseudoObjectExprBitfields PseudoObjectExprBits;
 
     // C++ Expressions
+    CXXOperatorCallExprBitfields CXXOperatorCallExprBits;
     CXXBoolLiteralExprBitfields CXXBoolLiteralExprBits;
     CXXNullPtrLiteralExprBitfields CXXNullPtrLiteralExprBits;
     CXXThisExprBitfields CXXThisExprBits;
@@ -722,6 +762,7 @@ protected:
     CXXDefaultInitExprBitfields CXXDefaultInitExprBits;
     CXXDeleteExprBitfields CXXDeleteExprBits;
     TypeTraitExprBitfields TypeTraitExprBits;
+    CXXConstructExprBitfields CXXConstructExprBits;
     ExprWithCleanupsBitfields ExprWithCleanupsBits;
 
     // C++ Coroutines TS expressions

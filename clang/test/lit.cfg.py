@@ -191,5 +191,8 @@ macOSSDKVersion = lit.util.findPlatformSdkVersionOnMacOS(config, lit_config)
 if macOSSDKVersion is not None:
     config.available_features.add('macos-sdk-' + macOSSDKVersion)
 
+if os.path.exists('/etc/gentoo-release'):
+    config.available_features.add('gentoo')
+
 if config.has_libatomic:
     config.substitutions.append(('%libatomic', ' -latomic'))

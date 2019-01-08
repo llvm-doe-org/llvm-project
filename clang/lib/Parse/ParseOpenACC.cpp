@@ -261,7 +261,7 @@ ExprResult Parser::ParseOpenACCParensExpr(StringRef ClauseName,
   ExprResult LHS(ParseCastExpression(
       /*isUnaryExpression=*/false, /*isAddressOfOperand=*/false, NotTypeCast));
   ExprResult Val(ParseRHSOfBinaryExpression(LHS, prec::Conditional));
-  Val = Actions.ActOnFinishFullExpr(Val.get(), ELoc);
+  Val = Actions.ActOnFinishFullExpr(Val.get(), ELoc, /*DiscardedValue*/ false);
 
   // Parse ')'.
   T.consumeClose();

@@ -295,6 +295,12 @@ Status ProcessMinidump::GetMemoryRegionInfo(lldb::addr_t load_addr,
   return Status();
 }
 
+Status ProcessMinidump::GetMemoryRegions(
+    lldb_private::MemoryRegionInfos &region_list) {
+  region_list = m_minidump_parser.GetMemoryRegions();
+  return Status();
+}
+
 void ProcessMinidump::Clear() { Process::m_thread_list.Clear(); }
 
 bool ProcessMinidump::UpdateThreadList(ThreadList &old_thread_list,
@@ -573,7 +579,7 @@ public:
       s.Printf("\n");
     }
     auto DumpTextStream = [&](MinidumpStreamType stream_type,
-        llvm::StringRef label = llvm::StringRef()) -> void {
+                              llvm::StringRef label) -> void {
       auto bytes = minidump.GetStream(stream_type);
       if (!bytes.empty()) {
         if (label.empty())
@@ -582,7 +588,7 @@ public:
       }
     };
     auto DumpBinaryStream = [&](MinidumpStreamType stream_type,
-        llvm::StringRef label = llvm::StringRef()) -> void {
+                                llvm::StringRef label) -> void {
       auto bytes = minidump.GetStream(stream_type);
       if (!bytes.empty()) {
         if (label.empty())

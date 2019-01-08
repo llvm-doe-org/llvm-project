@@ -18,6 +18,8 @@
 
 #include <arpa/inet.h>
 #include <dirent.h>
+#include <fts.h>
+#include <fstab.h>
 #include <grp.h>
 #include <limits.h>
 #include <net/if.h>
@@ -25,6 +27,7 @@
 #include <poll.h>
 #include <pthread.h>
 #include <pwd.h>
+#include <regex.h>
 #include <signal.h>
 #include <stddef.h>
 #include <sys/mman.h>
@@ -65,6 +68,7 @@
 #include <term.h>
 #include <utmpx.h>
 #include <wchar.h>
+#include <vis.h>
 
 #define _KERNEL  // to declare 'shminfo' structure
 # include <sys/shm.h>
@@ -124,6 +128,11 @@ namespace __sanitizer {
   unsigned struct_statvfs_sz = sizeof(struct statvfs);
   unsigned struct_shminfo_sz = sizeof(struct shminfo);
   unsigned struct_shm_info_sz = sizeof(struct shm_info);
+  unsigned struct_regmatch_sz = sizeof(regmatch_t);
+  unsigned struct_regex_sz = sizeof(regex_t);
+  unsigned struct_fstab_sz = sizeof(struct fstab);
+  unsigned struct_FTS_sz = sizeof(FTS);
+  unsigned struct_FTSENT_sz = sizeof(FTSENT);
 
   const uptr sig_ign = (uptr)SIG_IGN;
   const uptr sig_dfl = (uptr)SIG_DFL;
@@ -338,6 +347,8 @@ namespace __sanitizer {
 
   const int si_SEGV_MAPERR = SEGV_MAPERR;
   const int si_SEGV_ACCERR = SEGV_ACCERR;
+  const int unvis_valid = UNVIS_VALID;
+  const int unvis_validpush = UNVIS_VALIDPUSH;
 } // namespace __sanitizer
 
 using namespace __sanitizer;

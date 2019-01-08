@@ -34,6 +34,7 @@
 #include "llvm/Analysis/MemorySSAUpdater.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
+#include "llvm/Analysis/VectorUtils.h"
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/IR/Argument.h"
 #include "llvm/IR/Attributes.h"
@@ -392,8 +393,7 @@ bool llvm::wouldInstructionBeTriviallyDead(Instruction *I,
       return true;
 
     // Lifetime intrinsics are dead when their right-hand is undef.
-    if (II->getIntrinsicID() == Intrinsic::lifetime_start ||
-        II->getIntrinsicID() == Intrinsic::lifetime_end)
+    if (II->isLifetimeStartOrEnd())
       return isa<UndefValue>(II->getArgOperand(1));
 
     // Assumptions are dead if their condition is trivially true.  Guards on
@@ -2297,6 +2297,10 @@ void llvm::combineMetadata(Instruction *K, const Instruction *J,
       case LLVMContext::MD_mem_parallel_loop_access:
         K->setMetadata(Kind, MDNode::intersect(JMD, KMD));
         break;
+      case LLVMContext::MD_access_group:
+        K->setMetadata(LLVMContext::MD_access_group,
+                       intersectAccessGroups(K, J));
+        break;
       case LLVMContext::MD_range:
 
         // If K does move, use most generic range. Otherwise keep the range of
@@ -2353,7 +2357,8 @@ void llvm::combineMetadataForCSE(Instruction *K, const Instruction *J,
       LLVMContext::MD_invariant_load,  LLVMContext::MD_nonnull,
       LLVMContext::MD_invariant_group, LLVMContext::MD_align,
       LLVMContext::MD_dereferenceable,
-      LLVMContext::MD_dereferenceable_or_null};
+      LLVMContext::MD_dereferenceable_or_null,
+      LLVMContext::MD_access_group};
   combineMetadata(K, J, KnownIDs, KDominatesJ);
 }
 
@@ -2384,7 +2389,8 @@ void llvm::patchReplacementInstruction(Instruction *I, Value *Repl) {
       LLVMContext::MD_tbaa,            LLVMContext::MD_alias_scope,
       LLVMContext::MD_noalias,         LLVMContext::MD_range,
       LLVMContext::MD_fpmath,          LLVMContext::MD_invariant_load,
-      LLVMContext::MD_invariant_group, LLVMContext::MD_nonnull};
+      LLVMContext::MD_invariant_group, LLVMContext::MD_nonnull,
+      LLVMContext::MD_access_group};
   combineMetadata(ReplInst, I, KnownIDs, false);
 }
 

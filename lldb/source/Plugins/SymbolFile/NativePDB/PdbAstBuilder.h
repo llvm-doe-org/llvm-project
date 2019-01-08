@@ -66,8 +66,10 @@ public:
                                                  clang::DeclContext &context);
   clang::FunctionDecl *GetOrCreateFunctionDecl(PdbCompilandSymId func_id);
   clang::BlockDecl *GetOrCreateBlockDecl(PdbCompilandSymId block_id);
-  clang::VarDecl *GetOrCreateLocalVariableDecl(PdbCompilandSymId scope_id,
-                                               PdbCompilandSymId var_id);
+  clang::VarDecl *GetOrCreateVariableDecl(PdbCompilandSymId scope_id,
+                                          PdbCompilandSymId var_id);
+  clang::VarDecl *GetOrCreateVariableDecl(PdbGlobalSymId var_id);
+  void ParseDeclsForContext(clang::DeclContext &context);
 
   clang::QualType GetBasicType(lldb::BasicType type);
   clang::QualType GetOrCreateType(PdbTypeSymId type);
@@ -78,6 +80,7 @@ public:
   CompilerDecl ToCompilerDecl(clang::Decl &decl);
   CompilerType ToCompilerType(clang::QualType qt);
   CompilerDeclContext ToCompilerDeclContext(clang::DeclContext &context);
+  clang::DeclContext *FromCompilerDeclContext(CompilerDeclContext context);
 
   ClangASTContext &clang() { return m_clang; }
   ClangASTImporter &importer() { return m_importer; }
@@ -106,6 +109,13 @@ private:
                                 clang::FunctionDecl &function_decl,
                                 uint32_t param_count);
   clang::Decl *GetOrCreateSymbolForId(PdbCompilandSymId id);
+  clang::VarDecl *CreateVariableDecl(PdbSymUid uid,
+                                     llvm::codeview::CVSymbol sym,
+                                     clang::DeclContext &scope);
+
+  void ParseAllNamespacesPlusChildrenOf(llvm::Optional<llvm::StringRef> parent);
+  void ParseDeclsForSimpleContext(clang::DeclContext &context);
+  void ParseBlockChildren(PdbCompilandSymId block_id);
 
   void BuildParentMap();
   std::pair<clang::DeclContext *, std::string>

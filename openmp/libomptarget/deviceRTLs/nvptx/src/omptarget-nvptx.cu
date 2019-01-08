@@ -29,7 +29,7 @@ extern __device__ omptarget_nvptx_Queue<
 // init entry points
 ////////////////////////////////////////////////////////////////////////////////
 
-INLINE unsigned smid() {
+INLINE static unsigned smid() {
   unsigned id;
   asm("mov.u32 %0, %%smid;" : "=r"(id));
   return id;
@@ -61,12 +61,12 @@ EXTERN void __kmpc_kernel_init(int ThreadLimit, int16_t RequiresOMPRuntime) {
       omptarget_nvptx_device_State[slot].Dequeue();
 
   // init thread private
-  int threadId = GetLogicalThreadIdInBlock();
+  int threadId = GetLogicalThreadIdInBlock(/*isSPMDExecutionMode=*/false);
   omptarget_nvptx_threadPrivateContext->InitThreadPrivateContext(threadId);
 
   // init team context
   omptarget_nvptx_TeamDescr &currTeamDescr = getMyTeamDescriptor();
-  currTeamDescr.InitTeamDescr();
+  currTeamDescr.InitTeamDescr(/*isSPMDExecutionMode=*/false);
   // this thread will start execution... has to update its task ICV
   // to point to the level zero task ICV. That ICV was init in
   // InitTeamDescr()
@@ -81,6 +81,7 @@ EXTERN void __kmpc_kernel_init(int ThreadLimit, int16_t RequiresOMPRuntime) {
 }
 
 EXTERN void __kmpc_kernel_deinit(int16_t IsOMPRuntimeInitialized) {
+  PRINT0(LD_IO, "call to __kmpc_kernel_deinit\n");
   ASSERT0(LT_FUSSY, IsOMPRuntimeInitialized,
           "Generic always requires initialized runtime.");
   // Enqueue omp state object for use by another team.
@@ -104,7 +105,8 @@ EXTERN void __kmpc_spmd_kernel_init(int ThreadLimit, int16_t RequiresOMPRuntime,
       omptarget_nvptx_simpleThreadPrivateContext =
           omptarget_nvptx_device_simpleState[slot].Dequeue();
     }
-    __syncthreads();
+    // FIXME: use __syncthreads instead when the function copy is fixed in LLVM.
+    __SYNCTHREADS();
     omptarget_nvptx_simpleThreadPrivateContext->Init();
     return;
   }
@@ -126,9 +128,10 @@ EXTERN void __kmpc_spmd_kernel_init(int ThreadLimit, int16_t RequiresOMPRuntime,
     omptarget_nvptx_TeamDescr &currTeamDescr = getMyTeamDescriptor();
     omptarget_nvptx_WorkDescr &workDescr = getMyWorkDescriptor();
     // init team context
-    currTeamDescr.InitTeamDescr();
+    currTeamDescr.InitTeamDescr(/*isSPMDExecutionMode=*/true);
   }
-  __syncthreads();
+  // FIXME: use __syncthreads instead when the function copy is fixed in LLVM.
+  __SYNCTHREADS();
 
   omptarget_nvptx_TeamDescr &currTeamDescr = getMyTeamDescriptor();
   omptarget_nvptx_WorkDescr &workDescr = getMyWorkDescriptor();
@@ -169,7 +172,8 @@ EXTERN __attribute__((deprecated)) void __kmpc_spmd_kernel_deinit() {
 EXTERN void __kmpc_spmd_kernel_deinit_v2(int16_t RequiresOMPRuntime) {
   // We're not going to pop the task descr stack of each thread since
   // there are no more parallel regions in SPMD mode.
-  __syncthreads();
+  // FIXME: use __syncthreads instead when the function copy is fixed in LLVM.
+  __SYNCTHREADS();
   int threadId = GetThreadIdInBlock();
   if (!RequiresOMPRuntime) {
     if (threadId == 0) {
@@ -190,5 +194,6 @@ EXTERN void __kmpc_spmd_kernel_deinit_v2(int16_t RequiresOMPRuntime) {
 
 // Return true if the current target region is executed in SPMD mode.
 EXTERN int8_t __kmpc_is_spmd_exec_mode() {
+  PRINT0(LD_IO | LD_PAR, "call to __kmpc_is_spmd_exec_mode\n");
   return isSPMDMode();
 }

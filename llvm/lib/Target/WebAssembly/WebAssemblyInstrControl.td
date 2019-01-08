@@ -36,10 +36,14 @@ def : Pat<(brcond (i32 (seteq I32:$cond, 0)), bb:$dst),
 // A list of branch targets enclosed in {} and separated by comma.
 // Used by br_table only.
 def BrListAsmOperand : AsmOperandClass { let Name = "BrList"; }
+let OperandNamespace = "WebAssembly" in {
+let OperandType = "OPERAND_BRLIST" in {
 def brlist : Operand<i32> {
   let ParserMatchClass = BrListAsmOperand;
   let PrintMethod = "printBrList";
 }
+}  // OPERAND_BRLIST
+}  // OperandNamespace = "WebAssembly"
 
 // TODO: SelectionDAG's lowering insists on using a pointer as the index for
 // jump tables, so in practice we don't ever use BR_TABLE_I64 in wasm32 mode
@@ -75,13 +79,19 @@ defm NOP : NRI<(outs), (ins), [], "nop", 0x01>;
 // These use/clobber VALUE_STACK to prevent them from being moved into the
 // middle of an expression tree.
 let Uses = [VALUE_STACK], Defs = [VALUE_STACK] in {
-defm BLOCK     : NRI<(outs), (ins Signature:$sig), [], "block   \t$sig", 0x02>;
-defm LOOP      : NRI<(outs), (ins Signature:$sig), [], "loop    \t$sig", 0x03>;
+defm BLOCK : NRI<(outs), (ins Signature:$sig), [], "block   \t$sig", 0x02>;
+defm LOOP  : NRI<(outs), (ins Signature:$sig), [], "loop    \t$sig", 0x03>;
 
-// END_BLOCK, END_LOOP, and END_FUNCTION are represented with the same opcode in
-// wasm.
+defm IF : I<(outs), (ins Signature:$sig, I32:$cond),
+            (outs), (ins Signature:$sig),
+            [], "if    \t$sig, $cond", "if    \t$sig", 0x04>;
+defm ELSE : NRI<(outs), (ins), [], "else", 0x05>;
+
+// END_BLOCK, END_LOOP, END_IF and END_FUNCTION are represented with the same
+// opcode in wasm.
 defm END_BLOCK : NRI<(outs), (ins), [], "end_block", 0x0b>;
 defm END_LOOP  : NRI<(outs), (ins), [], "end_loop", 0x0b>;
+defm END_IF    : NRI<(outs), (ins), [], "end_if", 0x0b>;
 let isTerminator = 1, isBarrier = 1 in
 defm END_FUNCTION : NRI<(outs), (ins), [], "end_function", 0x0b>;
 } // Uses = [VALUE_STACK], Defs = [VALUE_STACK]

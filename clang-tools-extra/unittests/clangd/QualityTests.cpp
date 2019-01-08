@@ -371,7 +371,7 @@ TEST(QualityTests, IsInstanceMember) {
   Rel.merge(BarSym);
   EXPECT_TRUE(Rel.IsInstanceMember);
 
-  Rel.IsInstanceMember =false;
+  Rel.IsInstanceMember = false;
   const Symbol &TplSym = findSymbol(Symbols, "Foo::tpl");
   Rel.merge(TplSym);
   EXPECT_TRUE(Rel.IsInstanceMember);
@@ -429,7 +429,7 @@ TEST(QualityTests, Operator) {
   auto Header = TestTU::withHeaderCode(R"cpp(
     class Foo {
     public:
-      bool operator<(const Foo& f1, const Foo& f2);
+      bool operator<(const Foo& f1);
     };
   )cpp");
   auto AST = Header.build();
