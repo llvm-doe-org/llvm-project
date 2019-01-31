@@ -1,9 +1,8 @@
 //===--- SourceCode.h - Manipulating source code as strings -----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,7 +16,9 @@
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/Format/Format.h"
 #include "clang/Tooling/Core/Replacement.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/SHA1.h"
 
 namespace clang {
@@ -55,6 +56,11 @@ Position offsetToPosition(llvm::StringRef Code, size_t Offset);
 /// FIXME: This should return an error if the location is invalid.
 Position sourceLocToPosition(const SourceManager &SM, SourceLocation Loc);
 
+/// Return the file location, corresponding to \p P. Note that one should take
+/// care to avoid comparing the result with expansion locations.
+llvm::Expected<SourceLocation> sourceLocationInMainFile(const SourceManager &SM,
+                                                        Position P);
+
 // Converts a half-open clang source range to an LSP range.
 // Note that clang also uses closed source ranges, which this can't handle!
 Range halfOpenToRange(const SourceManager &SM, CharSourceRange R);
@@ -91,7 +97,12 @@ TextEdit toTextEdit(const FixItHint &FixIt, const SourceManager &M,
 llvm::Optional<std::string> getCanonicalPath(const FileEntry *F,
                                              const SourceManager &SourceMgr);
 
-bool IsRangeConsecutive(const Range &Left, const Range &Right);
+bool isRangeConsecutive(const Range &Left, const Range &Right);
+
+format::FormatStyle getFormatStyleForFile(llvm::StringRef File,
+                                          llvm::StringRef Content,
+                                          llvm::vfs::FileSystem *FS);
+
 } // namespace clangd
 } // namespace clang
 #endif

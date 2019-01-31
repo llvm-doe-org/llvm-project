@@ -1,9 +1,8 @@
 //===-- llvm/CodeGen/ISDOpcodes.h - CodeGen opcodes -------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -819,6 +818,8 @@ namespace ISD {
     ATOMIC_LOAD_MAX,
     ATOMIC_LOAD_UMIN,
     ATOMIC_LOAD_UMAX,
+    ATOMIC_LOAD_FADD,
+    ATOMIC_LOAD_FSUB,
 
     // Masked load and store - consecutive vector load and store operations
     // with additional mask operand that prevents memory accesses to the

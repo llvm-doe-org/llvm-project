@@ -1,9 +1,8 @@
 //===-- sanitizer_common_interceptors.inc -----------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -95,6 +94,7 @@
 #define getutxent __getutxent50
 #define getutxid __getutxid50
 #define getutxline __getutxline50
+#define pututxline __pututxline50
 #define glob __glob30
 #define gmtime __gmtime50
 #define gmtime_r __gmtime_r50
@@ -5694,9 +5694,15 @@ INTERCEPTOR(void *, tsearch, void *key, void **rootp,
 void unpoison_file(__sanitizer_FILE *fp) {
 #if SANITIZER_HAS_STRUCT_FILE
   COMMON_INTERCEPTOR_INITIALIZE_RANGE(fp, sizeof(*fp));
+#if SANITIZER_NETBSD
+  if (fp->_bf._base && fp->_bf._size > 0)
+    COMMON_INTERCEPTOR_INITIALIZE_RANGE(fp->_bf._base,
+                                        fp->_bf._size);
+#else
   if (fp->_IO_read_base && fp->_IO_read_base < fp->_IO_read_end)
     COMMON_INTERCEPTOR_INITIALIZE_RANGE(fp->_IO_read_base,
                                         fp->_IO_read_end - fp->_IO_read_base);
+#endif
 #endif  // SANITIZER_HAS_STRUCT_FILE
 }
 #endif
@@ -6566,10 +6572,21 @@ INTERCEPTOR(void *, getutxline, void *ut) {
     COMMON_INTERCEPTOR_INITIALIZE_RANGE(res, __sanitizer::struct_utmpx_sz);
   return res;
 }
+INTERCEPTOR(void *, pututxline, const void *ut) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, pututxline, ut);
+  if (ut)
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, ut, __sanitizer::struct_utmpx_sz);
+  void *res = REAL(pututxline)(ut);
+  if (res)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, res, __sanitizer::struct_utmpx_sz);
+  return res;
+}
 #define INIT_UTMPX                      \
   COMMON_INTERCEPT_FUNCTION(getutxent); \
   COMMON_INTERCEPT_FUNCTION(getutxid);  \
-  COMMON_INTERCEPT_FUNCTION(getutxline);
+  COMMON_INTERCEPT_FUNCTION(getutxline); \
+  COMMON_INTERCEPT_FUNCTION(pututxline);
 #else
 #define INIT_UTMPX
 #endif
@@ -9347,6 +9364,108 @@ INTERCEPTOR(__sanitizer_FILE *, funopen2, void *cookie, funopen2_readfn readfn,
 #define INIT_FUNOPEN2
 #endif
 
+#if SANITIZER_INTERCEPT_FDEVNAME
+INTERCEPTOR(char *, fdevname,  int fd) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, fdevname, fd);
+  COMMON_INTERCEPTOR_FD_ACCESS(ctx, fd);
+  char *name = REAL(fdevname)(fd);
+  if (name) {
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, name, REAL(strlen)(name) + 1);
+    if (fd > 0)
+      COMMON_INTERCEPTOR_FD_ACQUIRE(ctx, fd);
+  }
+  return name;
+}
+
+INTERCEPTOR(char *, fdevname_r,  int fd, char *buf, SIZE_T len) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, fdevname_r, fd, buf, len);
+  COMMON_INTERCEPTOR_FD_ACCESS(ctx, fd);
+  char *name = REAL(fdevname_r)(fd, buf, len);
+  if (name && buf && len > 0) {
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, buf, REAL(strlen)(buf) + 1);
+    if (fd > 0)
+      COMMON_INTERCEPTOR_FD_ACQUIRE(ctx, fd);
+  }
+  return name;
+}
+
+#define INIT_FDEVNAME \
+  COMMON_INTERCEPT_FUNCTION(fdevname); \
+  COMMON_INTERCEPT_FUNCTION(fdevname_r);
+#else
+#define INIT_FDEVNAME
+#endif
+
+#if SANITIZER_INTERCEPT_GETUSERSHELL
+INTERCEPTOR(char *, getusershell) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, getusershell);
+  char *res = REAL(getusershell)();
+  if (res)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, res, REAL(strlen)(res) + 1);
+  return res;
+}
+
+#define INIT_GETUSERSHELL COMMON_INTERCEPT_FUNCTION(getusershell);
+#else
+#define INIT_GETUSERSHELL
+#endif
+
+#if SANITIZER_INTERCEPT_SL_INIT
+INTERCEPTOR(void *, sl_init) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, sl_init);
+  void *res = REAL(sl_init)();
+  if (res)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, res, __sanitizer::struct_StringList_sz);
+  return res;
+}
+
+INTERCEPTOR(int, sl_add, void *sl, char *item) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, sl_add, sl, item);
+  if (sl)
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, sl, __sanitizer::struct_StringList_sz);
+  if (item)
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, item, REAL(strlen)(item) + 1);
+  int res = REAL(sl_add)(sl, item);
+  if (!res)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, sl, __sanitizer::struct_StringList_sz);
+  return res;
+}
+
+INTERCEPTOR(char *, sl_find, void *sl, const char *item) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, sl_find, sl, item);
+  if (sl)
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, sl, __sanitizer::struct_StringList_sz);
+  if (item)
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, item, REAL(strlen)(item) + 1);
+  char *res = REAL(sl_find)(sl, item);
+  if (res)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, res, REAL(strlen)(res) + 1);
+  return res;
+}
+
+INTERCEPTOR(void, sl_free, void *sl, int freeall) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, sl_free, sl, freeall);
+  if (sl)
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, sl, __sanitizer::struct_StringList_sz);
+  REAL(sl_free)(sl, freeall);
+}
+
+#define INIT_SL_INIT                  \
+  COMMON_INTERCEPT_FUNCTION(sl_init); \
+  COMMON_INTERCEPT_FUNCTION(sl_add);  \
+  COMMON_INTERCEPT_FUNCTION(sl_find); \
+  COMMON_INTERCEPT_FUNCTION(sl_free);
+#else
+#define INIT_SL_INIT
+#endif
+
 static void InitializeCommonInterceptors() {
   static u64 metadata_mem[sizeof(MetadataHashMap) / sizeof(u64) + 1];
   interceptor_metadata_map =
@@ -9634,6 +9753,9 @@ static void InitializeCommonInterceptors() {
   INIT_PCLOSE;
   INIT_FUNOPEN;
   INIT_FUNOPEN2;
+  INIT_FDEVNAME;
+  INIT_GETUSERSHELL;
+  INIT_SL_INIT;
 
   INIT___PRINTF_CHK;
 }

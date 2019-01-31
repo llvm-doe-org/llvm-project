@@ -1,9 +1,8 @@
 //===-- Symtab.cpp ----------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -610,10 +609,9 @@ void Symtab::SortSymbolIndexesByValue(std::vector<uint32_t> &indexes,
     return;
 
   // Sort the indexes in place using std::stable_sort.
-  // NOTE: The use of std::stable_sort instead of std::sort here is strictly for
-  // performance,
-  // not correctness.  The indexes vector tends to be "close" to sorted, which
-  // the stable sort handles better.
+  // NOTE: The use of std::stable_sort instead of llvm::sort here is strictly
+  // for performance, not correctness.  The indexes vector tends to be "close"
+  // to sorted, which the stable sort handles better.
 
   std::vector<lldb::addr_t> addr_cache(m_symbols.size(), LLDB_INVALID_ADDRESS);
 
@@ -1132,7 +1130,7 @@ size_t Symtab::FindFunctionSymbols(const ConstString &name,
   }
 
   if (!symbol_indexes.empty()) {
-    std::sort(symbol_indexes.begin(), symbol_indexes.end());
+    llvm::sort(symbol_indexes.begin(), symbol_indexes.end());
     symbol_indexes.erase(
         std::unique(symbol_indexes.begin(), symbol_indexes.end()),
         symbol_indexes.end());

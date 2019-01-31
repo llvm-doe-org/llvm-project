@@ -1,9 +1,8 @@
 //===---- omptarget-nvptx.h - NVPTX OpenMP GPU initialization ---- CUDA -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -344,6 +343,7 @@ public:
   INLINE omptarget_nvptx_TeamDescr &TeamContext() { return teamContext; }
 
   INLINE void InitThreadPrivateContext(int tid);
+  INLINE uint64_t &Cnt() { return cnt; }
 
 private:
   // team context for this team
@@ -366,6 +366,7 @@ private:
   // state for dispatch with dyn/guided OR static (never use both at a time)
   int64_t nextLowerBound[MAX_THREADS_PER_TEAM];
   int64_t stride[MAX_THREADS_PER_TEAM];
+  uint64_t cnt;
 };
 
 /// Device envrionment data
@@ -389,39 +390,6 @@ public:
   INLINE const void *Acquire(const void *buf, size_t size);
 };
 
-class omptarget_nvptx_SimpleThreadPrivateContext {
-  uint16_t par_level[MAX_THREADS_PER_TEAM];
-
-public:
-  INLINE void Init() {
-    ASSERT0(LT_FUSSY, isSPMDMode() && isRuntimeUninitialized(),
-            "Expected SPMD + uninitialized runtime modes.");
-    par_level[GetThreadIdInBlock()] = 0;
-  }
-  INLINE void IncParLevel() {
-    ASSERT0(LT_FUSSY, isSPMDMode() && isRuntimeUninitialized(),
-            "Expected SPMD + uninitialized runtime modes.");
-    ++par_level[GetThreadIdInBlock()];
-  }
-  INLINE void DecParLevel() {
-    ASSERT0(LT_FUSSY, isSPMDMode() && isRuntimeUninitialized(),
-            "Expected SPMD + uninitialized runtime modes.");
-    ASSERT0(LT_FUSSY, par_level[GetThreadIdInBlock()] > 0,
-            "Expected parallel level >0.");
-    --par_level[GetThreadIdInBlock()];
-  }
-  INLINE bool InL2OrHigherParallelRegion() const {
-    ASSERT0(LT_FUSSY, isSPMDMode() && isRuntimeUninitialized(),
-            "Expected SPMD + uninitialized runtime modes.");
-    return par_level[GetThreadIdInBlock()] > 0;
-  }
-  INLINE uint16_t GetParallelLevel() const {
-    ASSERT0(LT_FUSSY, isSPMDMode() && isRuntimeUninitialized(),
-            "Expected SPMD + uninitialized runtime modes.");
-    return par_level[GetThreadIdInBlock()] + 1;
-  }
-};
-
 ////////////////////////////////////////////////////////////////////////////////
 // global device envrionment
 ////////////////////////////////////////////////////////////////////////////////
@@ -438,10 +406,9 @@ extern __device__ omptarget_nvptx_SimpleMemoryManager
     omptarget_nvptx_simpleMemoryManager;
 extern __device__ __shared__ uint32_t usedMemIdx;
 extern __device__ __shared__ uint32_t usedSlotIdx;
+extern __device__ __shared__ uint8_t parallelLevel;
 extern __device__ __shared__
     omptarget_nvptx_ThreadPrivateContext *omptarget_nvptx_threadPrivateContext;
-extern __device__ __shared__ omptarget_nvptx_SimpleThreadPrivateContext
-    *omptarget_nvptx_simpleThreadPrivateContext;
 
 extern __device__ __shared__ uint32_t execution_param;
 extern __device__ __shared__ void *ReductionScratchpadPtr;

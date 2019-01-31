@@ -1,9 +1,8 @@
 //===- MemorySanitizer.cpp - detector of uninitialized reads --------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -321,6 +320,7 @@ static cl::opt<unsigned long long> ClOriginBase("msan-origin-base",
        cl::desc("Define custom MSan OriginBase"),
        cl::Hidden, cl::init(0));
 
+static const char *const kMsanModuleCtorName = "msan.module_ctor";
 static const char *const kMsanInitName = "__msan_init";
 
 namespace {
@@ -586,6 +586,8 @@ private:
 
   /// An empty volatile inline asm that prevents callback merge.
   InlineAsm *EmptyAsm;
+
+  Function *MsanCtorFunction;
 };
 
 /// A legacy function pass for msan instrumentation.
@@ -839,6 +841,8 @@ Value *MemorySanitizer::getKmsanShadowOriginAccessFn(bool isStore, int size) {
 }
 
 /// Module-level initialization.
+///
+/// inserts a call to __msan_init to the module's constructor list.
 void MemorySanitizer::initializeModule(Module &M) {
   auto &DL = M.getDataLayout();
 
@@ -913,7 +917,22 @@ void MemorySanitizer::initializeModule(Module &M) {
   OriginStoreWeights = MDBuilder(*C).createBranchWeights(1, 1000);
 
   if (!CompileKernel) {
-    getOrCreateInitFunction(M, kMsanInitName);
+    std::tie(MsanCtorFunction, std::ignore) =
+        getOrCreateSanitizerCtorAndInitFunctions(
+            M, kMsanModuleCtorName, kMsanInitName,
+            /*InitArgTypes=*/{},
+            /*InitArgs=*/{},
+            // This callback is invoked when the functions are created the first
+            // time. Hook them into the global ctors list in that case:
+            [&](Function *Ctor, Function *) {
+              if (!ClWithComdat) {
+                appendToGlobalCtors(M, Ctor, 0);
+                return;
+              }
+              Comdat *MsanCtorComdat = M.getOrInsertComdat(kMsanModuleCtorName);
+              Ctor->setComdat(MsanCtorComdat);
+              appendToGlobalCtors(M, Ctor, 0, Ctor);
+            });
 
     if (TrackOrigins)
       M.getOrInsertGlobal("__msan_track_origins", IRB.getInt32Ty(), [&] {
@@ -3230,8 +3249,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     }
     LLVM_DEBUG(dbgs() << "  done with call args\n");
 
-    FunctionType *FT =
-      cast<FunctionType>(CS.getCalledValue()->getType()->getContainedType(0));
+    FunctionType *FT = CS.getFunctionType();
     if (FT->isVarArg()) {
       VAHelper->visitCallSite(CS, IRB);
     }
@@ -4459,6 +4477,8 @@ static VarArgHelper *CreateVarArgHelper(Function &Func, MemorySanitizer &Msan,
 }
 
 bool MemorySanitizer::sanitizeFunction(Function &F, TargetLibraryInfo &TLI) {
+  if (!CompileKernel && (&F == MsanCtorFunction))
+    return false;
   MemorySanitizerVisitor Visitor(F, *this, TLI);
 
   // Clear out readonly/readnone attributes.

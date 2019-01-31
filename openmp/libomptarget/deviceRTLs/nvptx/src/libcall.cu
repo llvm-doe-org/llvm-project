@@ -1,9 +1,8 @@
 //===------------ libcall.cu - NVPTX OpenMP user calls ----------- CUDA -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -165,7 +164,7 @@ EXTERN int omp_get_level(void) {
   if (isRuntimeUninitialized()) {
     ASSERT0(LT_FUSSY, isSPMDMode(),
             "Expected SPMD mode only with uninitialized runtime.");
-    return omptarget_nvptx_simpleThreadPrivateContext->GetParallelLevel();
+    return parallelLevel;
   }
   int level = 0;
   omptarget_nvptx_TaskDescr *currTaskDescr =

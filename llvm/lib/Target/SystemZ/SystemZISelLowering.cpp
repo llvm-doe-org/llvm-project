@@ -1,9 +1,8 @@
 //===-- SystemZISelLowering.cpp - SystemZ DAG lowering implementation -----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -6213,7 +6212,8 @@ static void createPHIsForSelects(MachineBasicBlock::iterator MIItBegin,
   // destination registers, and the registers that went into the PHI.
   DenseMap<unsigned, std::pair<unsigned, unsigned>> RegRewriteTable;
 
-  for (MachineBasicBlock::iterator MIIt = MIItBegin; MIIt != MIItEnd; ++MIIt) {
+  for (MachineBasicBlock::iterator MIIt = MIItBegin; MIIt != MIItEnd;
+       MIIt = skipDebugInstructionsForward(++MIIt, MIItEnd)) {
     unsigned DestReg = MIIt->getOperand(0).getReg();
     unsigned TrueReg = MIIt->getOperand(1).getReg();
     unsigned FalseReg = MIIt->getOperand(2).getReg();
@@ -6237,6 +6237,8 @@ static void createPHIsForSelects(MachineBasicBlock::iterator MIItBegin,
     // Add this PHI to the rewrite table.
     RegRewriteTable[DestReg] = std::make_pair(TrueReg, FalseReg);
   }
+
+  MF->getProperties().reset(MachineFunctionProperties::Property::NoPHIs);
 }
 
 // Implement EmitInstrWithCustomInserter for pseudo Select* instruction MI.
@@ -6254,8 +6256,8 @@ SystemZTargetLowering::emitSelect(MachineInstr &MI,
   // same condition code value, we want to expand all of them into
   // a single pair of basic blocks using the same condition.
   MachineInstr *LastMI = &MI;
-  MachineBasicBlock::iterator NextMIIt =
-      std::next(MachineBasicBlock::iterator(MI));
+  MachineBasicBlock::iterator NextMIIt = skipDebugInstructionsForward(
+      std::next(MachineBasicBlock::iterator(MI)), MBB->end());
 
   if (isSelectPseudo(MI))
     while (NextMIIt != MBB->end() && isSelectPseudo(*NextMIIt) &&
@@ -6263,7 +6265,7 @@ SystemZTargetLowering::emitSelect(MachineInstr &MI,
            (NextMIIt->getOperand(4).getImm() == CCMask ||
             NextMIIt->getOperand(4).getImm() == (CCValid ^ CCMask))) {
       LastMI = &*NextMIIt;
-      ++NextMIIt;
+      NextMIIt = skipDebugInstructionsForward(++NextMIIt, MBB->end());
     }
 
   MachineBasicBlock *StartMBB = MBB;
@@ -6296,8 +6298,8 @@ SystemZTargetLowering::emitSelect(MachineInstr &MI,
   //  ...
   MBB = JoinMBB;
   MachineBasicBlock::iterator MIItBegin = MachineBasicBlock::iterator(MI);
-  MachineBasicBlock::iterator MIItEnd =
-      std::next(MachineBasicBlock::iterator(LastMI));
+  MachineBasicBlock::iterator MIItEnd = skipDebugInstructionsForward(
+      std::next(MachineBasicBlock::iterator(LastMI)), MBB->end());
   createPHIsForSelects(MIItBegin, MIItEnd, StartMBB, FalseMBB, MBB);
 
   StartMBB->erase(MIItBegin, MIItEnd);

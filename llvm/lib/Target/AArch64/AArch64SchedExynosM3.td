@@ -1,9 +1,8 @@
 //=- AArch64SchedExynosM3.td - Samsung Exynos M3 Sched Defs --*- tablegen -*-=//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -127,18 +126,18 @@ def M3WriteAD : SchedWriteRes<[M3UnitALU,
 def M3WriteC1 : SchedWriteRes<[M3UnitC]>   { let Latency = 1; }
 def M3WriteC2 : SchedWriteRes<[M3UnitC]>   { let Latency = 2; }
 def M3WriteAU : SchedWriteVariant<[SchedVar<IsCopyIdiomPred, [M3WriteZ0]>,
-                                   SchedVar<ExynosShiftPred, [M3WriteA1]>,
+                                   SchedVar<ExynosArithPred, [M3WriteA1]>,
+                                   SchedVar<ExynosLogicPred, [M3WriteA1]>,
                                    SchedVar<NoSchedPred,     [M3WriteAA]>]>;
 def M3WriteAV : SchedWriteVariant<[SchedVar<IsCopyIdiomPred, [M3WriteZ0]>,
                                    SchedVar<NoSchedPred,     [M3WriteAA]>]>;
 def M3WriteAW : SchedWriteVariant<[SchedVar<IsZeroIdiomPred, [M3WriteZ0]>,
                                    SchedVar<NoSchedPred,     [M3WriteAA]>]>;
-def M3WriteAX : SchedWriteVariant<[SchedVar<ExynosExtPred, [M3WriteA1]>,
-                                   SchedVar<NoSchedPred,   [M3WriteAA]>]>;
+def M3WriteAX : SchedWriteVariant<[SchedVar<ExynosArithPred, [M3WriteA1]>,
+                                   SchedVar<ExynosLogicPred, [M3WriteA1]>,
+                                   SchedVar<NoSchedPred,     [M3WriteAA]>]>;
 def M3WriteAY : SchedWriteVariant<[SchedVar<ExynosRotateRightImmPred, [M3WriteA1]>,
                                    SchedVar<NoSchedPred,              [M3WriteAA]>]>;
-def M3WriteAZ : SchedWriteVariant<[SchedVar<ExynosShiftPred, [M3WriteA1]>,
-                                   SchedVar<NoSchedPred,     [M3WriteAA]>]>;
 
 def M3WriteB1 : SchedWriteRes<[M3UnitB]> { let Latency = 1; }
 def M3WriteBX : SchedWriteVariant<[SchedVar<ExynosBranchLinkLRPred, [M3WriteAC]>,
@@ -484,10 +483,10 @@ def : InstRW<[M3WriteC1], (instregex "^CBN?Z[WX]")>;
 def : InstRW<[M3WriteAD], (instregex "^TBN?Z[WX]")>;
 
 // Arithmetic and logical integer instructions.
-def : InstRW<[M3WriteAZ], (instregex "^(ADD|AND|BIC|EON|EOR|ORN|SUB)[WX]rs$")>;
+def : InstRW<[M3WriteAX], (instregex "^(ADD|AND|BIC|EON|EOR|ORN|SUB)[WX]rs$")>;
 def : InstRW<[M3WriteAU], (instrs ORRWrs, ORRXrs)>;
 def : InstRW<[M3WriteAX], (instregex "^(ADD|SUB)S?[WX]rx(64)?$")>;
-def : InstRW<[M3WriteAZ], (instregex "^(ADD|AND|BIC|SUB)S[WX]rs$")>;
+def : InstRW<[M3WriteAX], (instregex "^(ADD|AND|BIC|SUB)S[WX]rs$")>;
 def : InstRW<[M3WriteAV], (instrs ADDWri, ADDXri)>;
 def : InstRW<[M3WriteAW], (instrs ORRWri, ORRXri)>;
 

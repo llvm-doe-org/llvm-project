@@ -1,9 +1,8 @@
 //===--------------------- ResourceManager.cpp ------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -99,9 +98,9 @@ ResourceStateEvent ResourceState::isBufferAvailable() const {
 
 #ifndef NDEBUG
 void ResourceState::dump() const {
-  dbgs() << "MASK=" << format_hex(ResourceMask, 8)
-         << ", SZMASK=" << format_hex(ResourceSizeMask, 8)
-         << ", RDYMASK=" << format_hex(ReadyMask, 8)
+  dbgs() << "MASK=" << format_hex(ResourceMask, 16)
+         << ", SZMASK=" << format_hex(ResourceSizeMask, 16)
+         << ", RDYMASK=" << format_hex(ReadyMask, 16)
          << ", BufferSize=" << BufferSize
          << ", AvailableSlots=" << AvailableSlots
          << ", Reserved=" << Unavailable << '\n';
@@ -118,7 +117,8 @@ getStrategyFor(const ResourceState &RS) {
 ResourceManager::ResourceManager(const MCSchedModel &SM)
     : Resources(SM.getNumProcResourceKinds()),
       Strategies(SM.getNumProcResourceKinds()),
-      Resource2Groups(SM.getNumProcResourceKinds(), 0) {
+      Resource2Groups(SM.getNumProcResourceKinds(), 0),
+      ProcResID2Mask(SM.getNumProcResourceKinds()) {
   computeProcResourceMasks(SM, ProcResID2Mask);
 
   for (unsigned I = 0, E = SM.getNumProcResourceKinds(); I < E; ++I) {
@@ -169,6 +169,7 @@ unsigned ResourceManager::getNumUnits(uint64_t ResourceID) const {
 // Second, is the specific sub-resource ID.
 ResourceRef ResourceManager::selectPipe(uint64_t ResourceID) {
   unsigned Index = getResourceStateIndex(ResourceID);
+  assert(Index < Resources.size() && "Invalid resource use!");
   ResourceState &RS = *Resources[Index];
   assert(RS.isReady() && "No available units to select!");
 
@@ -282,9 +283,6 @@ void ResourceManager::issueInstruction(
       ResourceRef Pipe = selectPipe(R.first);
       use(Pipe);
       BusyResources[Pipe] += CS.size();
-      // Replace the resource mask with a valid processor resource index.
-      const ResourceState &RS = *Resources[getResourceStateIndex(Pipe.first)];
-      Pipe.first = RS.getProcResourceID();
       Pipes.emplace_back(std::pair<ResourceRef, ResourceCycles>(
           Pipe, ResourceCycles(CS.size())));
     } else {

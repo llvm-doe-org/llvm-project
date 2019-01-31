@@ -1,9 +1,8 @@
 //===--- AArch64Subtarget.h - Define Subtarget for the AArch64 -*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -128,7 +127,7 @@ protected:
   bool HasSpecRestrict = false;
   bool HasSSBS = false;
   bool HasSB = false;
-  bool HasPredCtrl = false;
+  bool HasPredRes = false;
   bool HasCCDP = false;
   bool HasBTI = false;
   bool HasRandGen = false;
@@ -166,8 +165,9 @@ protected:
   bool HasArithmeticCbzFusion = false;
   bool HasFuseAddress = false;
   bool HasFuseAES = false;
-  bool HasFuseCryptoEOR = false;
+  bool HasFuseArithmeticLogic = false;
   bool HasFuseCCSelect = false;
+  bool HasFuseCryptoEOR = false;
   bool HasFuseLiterals = false;
   bool DisableLatencySchedHeuristic = false;
   bool UseRSqrt = false;
@@ -311,14 +311,16 @@ public:
   bool hasArithmeticCbzFusion() const { return HasArithmeticCbzFusion; }
   bool hasFuseAddress() const { return HasFuseAddress; }
   bool hasFuseAES() const { return HasFuseAES; }
-  bool hasFuseCryptoEOR() const { return HasFuseCryptoEOR; }
+  bool hasFuseArithmeticLogic() const { return HasFuseArithmeticLogic; }
   bool hasFuseCCSelect() const { return HasFuseCCSelect; }
+  bool hasFuseCryptoEOR() const { return HasFuseCryptoEOR; }
   bool hasFuseLiterals() const { return HasFuseLiterals; }
 
   /// Return true if the CPU supports any kind of instruction fusion.
   bool hasFusion() const {
     return hasArithmeticBccFusion() || hasArithmeticCbzFusion() ||
-           hasFuseAES() || hasFuseCCSelect() || hasFuseLiterals();
+           hasFuseAES() || hasFuseArithmeticLogic() ||
+           hasFuseCCSelect() || hasFuseLiterals();
   }
 
   bool useRSqrt() const { return UseRSqrt; }
@@ -357,7 +359,7 @@ public:
   bool hasSpecRestrict() const { return HasSpecRestrict; }
   bool hasSSBS() const { return HasSSBS; }
   bool hasSB() const { return HasSB; }
-  bool hasPredCtrl() const { return HasPredCtrl; }
+  bool hasPredRes() const { return HasPredRes; }
   bool hasCCDP() const { return HasCCDP; }
   bool hasBTI() const { return HasBTI; }
   bool hasRandGen() const { return HasRandGen; }

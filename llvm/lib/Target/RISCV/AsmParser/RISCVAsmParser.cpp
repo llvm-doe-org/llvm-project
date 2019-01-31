@@ -1,9 +1,8 @@
 //===-- RISCVAsmParser.cpp - Parse RISCV assembly to MCInst instructions --===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -1033,17 +1032,10 @@ OperandMatchResultTy RISCVAsmParser::parseImmediate(OperandVector &Operands) {
   case AsmToken::Plus:
   case AsmToken::Integer:
   case AsmToken::String:
+  case AsmToken::Identifier:
     if (getParser().parseExpression(Res))
       return MatchOperand_ParseFail;
     break;
-  case AsmToken::Identifier: {
-    StringRef Identifier;
-    if (getParser().parseIdentifier(Identifier))
-      return MatchOperand_ParseFail;
-    MCSymbol *Sym = getContext().getOrCreateSymbol(Identifier);
-    Res = MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None, getContext());
-    break;
-  }
   case AsmToken::Percent:
     return parseOperandWithModifier(Operands);
   }

@@ -1,9 +1,8 @@
 //===-- X86InstrInfo.td - Main X86 Instruction Definition --*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -2388,6 +2387,11 @@ def xor_flag_nocf : PatFrag<(ops node:$lhs, node:$rhs),
   return hasNoCarryFlagUses(SDValue(N, 1));
 }]>;
 
+def and_flag_nocf : PatFrag<(ops node:$lhs, node:$rhs),
+                            (X86and_flag node:$lhs, node:$rhs), [{
+  return hasNoCarryFlagUses(SDValue(N, 1));
+}]>;
+
 let Predicates = [HasBMI] in {
   // FIXME: patterns for the load versions are not implemented
   def : Pat<(and GR32:$src, (add GR32:$src, -1)),
@@ -2406,12 +2410,15 @@ let Predicates = [HasBMI] in {
             (BLSI64rr GR64:$src)>;
 
   // Versions to match flag producing ops.
-  // X86and_flag nodes are rarely created. Those should use CMP+AND. We do
-  // TESTrr matching in PostProcessISelDAG to allow BLSR/BLSI to be formed.
   def : Pat<(xor_flag_nocf GR32:$src, (add GR32:$src, -1)),
             (BLSMSK32rr GR32:$src)>;
   def : Pat<(xor_flag_nocf GR64:$src, (add GR64:$src, -1)),
             (BLSMSK64rr GR64:$src)>;
+
+  def : Pat<(and_flag_nocf GR32:$src, (add GR32:$src, -1)),
+            (BLSR32rr GR32:$src)>;
+  def : Pat<(and_flag_nocf GR64:$src, (add GR64:$src, -1)),
+            (BLSR64rr GR64:$src)>;
 }
 
 multiclass bmi_bextr<bits<8> opc, string mnemonic, RegisterClass RC,
@@ -3238,7 +3245,7 @@ multiclass FpUnaryAlias<string Mnemonic, Instruction Inst, bit EmitAlias = 1> {
 }
 
 defm : FpUnaryAlias<"fadd",   ADD_FST0r>;
-defm : FpUnaryAlias<"faddp",  ADD_FPrST0, 0>;
+defm : FpUnaryAlias<"faddp",  ADD_FPrST0>;
 defm : FpUnaryAlias<"fsub",   SUB_FST0r>;
 defm : FpUnaryAlias<"fsub{|r}p",  SUBR_FPrST0>;
 defm : FpUnaryAlias<"fsubr",  SUBR_FST0r>;
@@ -3249,8 +3256,8 @@ defm : FpUnaryAlias<"fdiv",   DIV_FST0r>;
 defm : FpUnaryAlias<"fdiv{|r}p",  DIVR_FPrST0>;
 defm : FpUnaryAlias<"fdivr",  DIVR_FST0r>;
 defm : FpUnaryAlias<"fdiv{r|}p", DIV_FPrST0>;
-defm : FpUnaryAlias<"fcomi",   COM_FIr, 0>;
-defm : FpUnaryAlias<"fucomi",  UCOM_FIr, 0>;
+defm : FpUnaryAlias<"fcomi",   COM_FIr>;
+defm : FpUnaryAlias<"fucomi",  UCOM_FIr>;
 defm : FpUnaryAlias<"fcompi",   COM_FIPr>;
 defm : FpUnaryAlias<"fucompi",  UCOM_FIPr>;
 
@@ -3258,7 +3265,7 @@ defm : FpUnaryAlias<"fucompi",  UCOM_FIPr>;
 // Handle "f{mulp,addp} st(0), $op" the same as "f{mulp,addp} $op", since they
 // commute.  We also allow fdiv[r]p/fsubrp even though they don't commute,
 // solely because gas supports it.
-def : InstAlias<"faddp\t{%st(0), $op|$op, st(0)}", (ADD_FPrST0 RST:$op), 0>;
+def : InstAlias<"faddp\t{%st(0), $op|$op, st(0)}", (ADD_FPrST0 RST:$op)>;
 def : InstAlias<"fmulp\t{%st(0), $op|$op, st(0)}", (MUL_FPrST0 RST:$op)>;
 def : InstAlias<"fsub{|r}p\t{%st(0), $op|$op, st(0)}", (SUBR_FPrST0 RST:$op)>;
 def : InstAlias<"fsub{r|}p\t{%st(0), $op|$op, st(0)}", (SUB_FPrST0 RST:$op)>;

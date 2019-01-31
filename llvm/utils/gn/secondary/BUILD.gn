@@ -1,5 +1,6 @@
 import("//clang/lib/ARCMigrate/enable.gni")
 import("//clang/lib/StaticAnalyzer/Frontend/enable.gni")
+import("//llvm/utils/gn/build/toolchain/compiler.gni")
 
 group("default") {
   deps = [
@@ -7,6 +8,10 @@ group("default") {
     "//lld/test",
     "//llvm/test",
   ]
+  if (current_os == "linux" || current_os == "android") {
+    deps += [ "//compiler-rt/test/hwasan" ]
+  }
+
   testonly = true
 }
 

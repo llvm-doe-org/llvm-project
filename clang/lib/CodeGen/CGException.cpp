@@ -1,9 +1,8 @@
 //===--- CGException.cpp - Emit LLVM Code for C++ exceptions ----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -22,7 +21,6 @@
 #include "clang/AST/StmtObjC.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Basic/TargetBuiltins.h"
-#include "llvm/IR/CallSite.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/Support/SaveAndRestore.h"
@@ -1627,8 +1625,16 @@ struct PerformSEHFinally final : EHScopeStack::Cleanup {
 
     // Compute the two argument values.
     QualType ArgTys[2] = {Context.UnsignedCharTy, Context.VoidPtrTy};
-    llvm::Value *LocalAddrFn = CGM.getIntrinsic(llvm::Intrinsic::localaddress);
-    llvm::Value *FP = CGF.Builder.CreateCall(LocalAddrFn);
+    llvm::Value *FP = nullptr;
+    // If CFG.IsOutlinedSEHHelper is true, then we are within a finally block.
+    if (CGF.IsOutlinedSEHHelper) {
+      FP = &CGF.CurFn->arg_begin()[1];
+    } else {
+      llvm::Value *LocalAddrFn =
+          CGM.getIntrinsic(llvm::Intrinsic::localaddress);
+      FP = CGF.Builder.CreateCall(LocalAddrFn);
+    }
+
     llvm::Value *IsForEH =
         llvm::ConstantInt::get(CGF.ConvertType(ArgTys[0]), F.isForEHCleanup());
     Args.add(RValue::get(IsForEH), ArgTys[0]);
@@ -1781,7 +1787,7 @@ void CodeGenFunction::EmitCapturedLocals(CodeGenFunction &ParentCGF,
     // frame pointer of the parent function. We only need to do this in filters,
     // since finally funclets recover the parent FP for us.
     llvm::Function *RecoverFPIntrin =
-        CGM.getIntrinsic(llvm::Intrinsic::x86_seh_recoverfp);
+        CGM.getIntrinsic(llvm::Intrinsic::eh_recoverfp);
     llvm::Constant *ParentI8Fn =
         llvm::ConstantExpr::getBitCast(ParentCGF.CurFn, Int8PtrTy);
     ParentFP = Builder.CreateCall(RecoverFPIntrin, {ParentI8Fn, EntryFP});

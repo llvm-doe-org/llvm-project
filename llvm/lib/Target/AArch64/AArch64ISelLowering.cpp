@@ -1,9 +1,8 @@
 //===-- AArch64ISelLowering.cpp - AArch64 DAG Lowering Implementation  ----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -333,36 +332,38 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::FCOPYSIGN, MVT::f16, Promote);
 
   setOperationAction(ISD::FREM,    MVT::f16,   Promote);
-  setOperationAction(ISD::FREM,    MVT::v4f16, Promote);
-  setOperationAction(ISD::FREM,    MVT::v8f16, Promote);
+  setOperationAction(ISD::FREM,    MVT::v4f16, Expand);
+  setOperationAction(ISD::FREM,    MVT::v8f16, Expand);
   setOperationAction(ISD::FPOW,    MVT::f16,   Promote);
-  setOperationAction(ISD::FPOW,    MVT::v4f16, Promote);
-  setOperationAction(ISD::FPOW,    MVT::v8f16, Promote);
+  setOperationAction(ISD::FPOW,    MVT::v4f16, Expand);
+  setOperationAction(ISD::FPOW,    MVT::v8f16, Expand);
   setOperationAction(ISD::FPOWI,   MVT::f16,   Promote);
+  setOperationAction(ISD::FPOWI,   MVT::v4f16, Expand);
+  setOperationAction(ISD::FPOWI,   MVT::v8f16, Expand);
   setOperationAction(ISD::FCOS,    MVT::f16,   Promote);
-  setOperationAction(ISD::FCOS,    MVT::v4f16, Promote);
-  setOperationAction(ISD::FCOS,    MVT::v8f16, Promote);
+  setOperationAction(ISD::FCOS,    MVT::v4f16, Expand);
+  setOperationAction(ISD::FCOS,    MVT::v8f16, Expand);
   setOperationAction(ISD::FSIN,    MVT::f16,   Promote);
-  setOperationAction(ISD::FSIN,    MVT::v4f16, Promote);
-  setOperationAction(ISD::FSIN,    MVT::v8f16, Promote);
+  setOperationAction(ISD::FSIN,    MVT::v4f16, Expand);
+  setOperationAction(ISD::FSIN,    MVT::v8f16, Expand);
   setOperationAction(ISD::FSINCOS, MVT::f16,   Promote);
-  setOperationAction(ISD::FSINCOS, MVT::v4f16, Promote);
-  setOperationAction(ISD::FSINCOS, MVT::v8f16, Promote);
+  setOperationAction(ISD::FSINCOS, MVT::v4f16, Expand);
+  setOperationAction(ISD::FSINCOS, MVT::v8f16, Expand);
   setOperationAction(ISD::FEXP,    MVT::f16,   Promote);
-  setOperationAction(ISD::FEXP,    MVT::v4f16, Promote);
-  setOperationAction(ISD::FEXP,    MVT::v8f16, Promote);
+  setOperationAction(ISD::FEXP,    MVT::v4f16, Expand);
+  setOperationAction(ISD::FEXP,    MVT::v8f16, Expand);
   setOperationAction(ISD::FEXP2,   MVT::f16,   Promote);
-  setOperationAction(ISD::FEXP2,   MVT::v4f16, Promote);
-  setOperationAction(ISD::FEXP2,   MVT::v8f16, Promote);
+  setOperationAction(ISD::FEXP2,   MVT::v4f16, Expand);
+  setOperationAction(ISD::FEXP2,   MVT::v8f16, Expand);
   setOperationAction(ISD::FLOG,    MVT::f16,   Promote);
-  setOperationAction(ISD::FLOG,    MVT::v4f16, Promote);
-  setOperationAction(ISD::FLOG,    MVT::v8f16, Promote);
+  setOperationAction(ISD::FLOG,    MVT::v4f16, Expand);
+  setOperationAction(ISD::FLOG,    MVT::v8f16, Expand);
   setOperationAction(ISD::FLOG2,   MVT::f16,   Promote);
-  setOperationAction(ISD::FLOG2,   MVT::v4f16, Promote);
-  setOperationAction(ISD::FLOG2,   MVT::v8f16, Promote);
+  setOperationAction(ISD::FLOG2,   MVT::v4f16, Expand);
+  setOperationAction(ISD::FLOG2,   MVT::v8f16, Expand);
   setOperationAction(ISD::FLOG10,  MVT::f16,   Promote);
-  setOperationAction(ISD::FLOG10,  MVT::v4f16, Promote);
-  setOperationAction(ISD::FLOG10,  MVT::v8f16, Promote);
+  setOperationAction(ISD::FLOG10,  MVT::v4f16, Expand);
+  setOperationAction(ISD::FLOG10,  MVT::v8f16, Expand);
 
   if (!Subtarget->hasFullFP16()) {
     setOperationAction(ISD::SELECT,      MVT::f16,  Promote);
@@ -2716,9 +2717,19 @@ SDValue AArch64TargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     EVT PtrVT = getPointerTy(DAG.getDataLayout());
     return DAG.getNode(AArch64ISD::THREAD_POINTER, dl, PtrVT);
   }
-  case Intrinsic::aarch64_neon_abs:
-    return DAG.getNode(ISD::ABS, dl, Op.getValueType(),
-                       Op.getOperand(1));
+  case Intrinsic::aarch64_neon_abs: {
+    EVT Ty = Op.getValueType();
+    if (Ty == MVT::i64) {
+      SDValue Result = DAG.getNode(ISD::BITCAST, dl, MVT::v1i64,
+                                   Op.getOperand(1));
+      Result = DAG.getNode(ISD::ABS, dl, MVT::v1i64, Result);
+      return DAG.getNode(ISD::BITCAST, dl, MVT::i64, Result);
+    } else if (Ty.isVector() && Ty.isInteger() && isTypeLegal(Ty)) {
+      return DAG.getNode(ISD::ABS, dl, Ty, Op.getOperand(1));
+    } else {
+      report_fatal_error("Unexpected type for AArch64 NEON intrinic");
+    }
+  }
   case Intrinsic::aarch64_neon_smax:
     return DAG.getNode(ISD::SMAX, dl, Op.getValueType(),
                        Op.getOperand(1), Op.getOperand(2));
@@ -2731,6 +2742,34 @@ SDValue AArch64TargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
   case Intrinsic::aarch64_neon_umin:
     return DAG.getNode(ISD::UMIN, dl, Op.getValueType(),
                        Op.getOperand(1), Op.getOperand(2));
+
+  case Intrinsic::localaddress: {
+    // Returns one of the stack, base, or frame pointer registers, depending on
+    // which is used to reference local variables.
+    MachineFunction &MF = DAG.getMachineFunction();
+    const AArch64RegisterInfo *RegInfo = Subtarget->getRegisterInfo();
+    unsigned Reg;
+    if (RegInfo->hasBasePointer(MF))
+      Reg = RegInfo->getBaseRegister();
+    else // This function handles the SP or FP case.
+      Reg = RegInfo->getFrameRegister(MF);
+    return DAG.getCopyFromReg(DAG.getEntryNode(), dl, Reg,
+                              Op.getSimpleValueType());
+  }
+
+  case Intrinsic::eh_recoverfp: {
+    // FIXME: This needs to be implemented to correctly handle highly aligned
+    // stack objects. For now we simply return the incoming FP. Refer D53541
+    // for more details.
+    SDValue FnOp = Op.getOperand(1);
+    SDValue IncomingFPOp = Op.getOperand(2);
+    GlobalAddressSDNode *GSD = dyn_cast<GlobalAddressSDNode>(FnOp);
+    auto *Fn = dyn_cast_or_null<Function>(GSD ? GSD->getGlobal() : nullptr);
+    if (!Fn)
+      report_fatal_error(
+          "llvm.eh.recoverfp must take a function as the first argument");
+    return IncomingFPOp;
+  }
   }
 }
 
@@ -2932,8 +2971,6 @@ SDValue AArch64TargetLowering::LowerOperation(SDValue Op,
 //===----------------------------------------------------------------------===//
 //                      Calling Convention Implementation
 //===----------------------------------------------------------------------===//
-
-#include "AArch64GenCallingConv.inc"
 
 /// Selects the correct CCAssignFn for a given CallingConvention value.
 CCAssignFn *AArch64TargetLowering::CCAssignFnForCall(CallingConv::ID CC,
@@ -10053,6 +10090,7 @@ static SDValue performExtendCombine(SDNode *N,
 
 static SDValue splitStoreSplat(SelectionDAG &DAG, StoreSDNode &St,
                                SDValue SplatVal, unsigned NumVecElts) {
+  assert(!St.isTruncatingStore() && "cannot split truncating vector store");
   unsigned OrigAlignment = St.getAlignment();
   unsigned EltOffset = SplatVal.getValueType().getSizeInBits() / 8;
 
@@ -10127,6 +10165,11 @@ static SDValue replaceZeroVectorStore(SelectionDAG &DAG, StoreSDNode &St) {
   if (!StVal.hasOneUse())
     return SDValue();
 
+  // If the store is truncating then it's going down to i16 or smaller, which
+  // means it can be implemented in a single store anyway.
+  if (St.isTruncatingStore())
+    return SDValue();
+
   // If the immediate offset of the address operand is too large for the stp
   // instruction, then bail out.
   if (DAG.isBaseWithConstantOffset(St.getBasePtr())) {
@@ -10175,6 +10218,11 @@ static SDValue replaceSplatVectorStore(SelectionDAG &DAG, StoreSDNode &St) {
   // We can express a splat as store pair(s) for 2 or 4 elements.
   unsigned NumVecElts = VT.getVectorNumElements();
   if (NumVecElts != 4 && NumVecElts != 2)
+    return SDValue();
+
+  // If the store is truncating then it's going down to i16 or smaller, which
+  // means it can be implemented in a single store anyway.
+  if (St.isTruncatingStore())
     return SDValue();
 
   // Check that this is a splat.
@@ -11550,6 +11598,9 @@ AArch64TargetLowering::shouldExpandAtomicLoadInIR(LoadInst *LI) const {
 // For the real atomic operations, we have ldxr/stxr up to 128 bits,
 TargetLowering::AtomicExpansionKind
 AArch64TargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
+  if (AI->isFloatingPointOperation())
+    return AtomicExpansionKind::CmpXChg;
+
   unsigned Size = AI->getType()->getPrimitiveSizeInBits();
   if (Size > 128) return AtomicExpansionKind::None;
   // Nand not supported in LSE.
@@ -11604,9 +11655,13 @@ Value *AArch64TargetLowering::emitLoadLinked(IRBuilder<> &Builder, Value *Addr,
       IsAcquire ? Intrinsic::aarch64_ldaxr : Intrinsic::aarch64_ldxr;
   Function *Ldxr = Intrinsic::getDeclaration(M, Int, Tys);
 
-  return Builder.CreateTruncOrBitCast(
-      Builder.CreateCall(Ldxr, Addr),
-      cast<PointerType>(Addr->getType())->getElementType());
+  Type *EltTy = cast<PointerType>(Addr->getType())->getElementType();
+
+  const DataLayout &DL = M->getDataLayout();
+  IntegerType *IntEltTy = Builder.getIntNTy(DL.getTypeSizeInBits(EltTy));
+  Value *Trunc = Builder.CreateTrunc(Builder.CreateCall(Ldxr, Addr), IntEltTy);
+
+  return Builder.CreateBitCast(Trunc, EltTy);
 }
 
 void AArch64TargetLowering::emitAtomicCmpXchgNoStoreLLBalance(
@@ -11640,6 +11695,10 @@ Value *AArch64TargetLowering::emitStoreConditional(IRBuilder<> &Builder,
       IsRelease ? Intrinsic::aarch64_stlxr : Intrinsic::aarch64_stxr;
   Type *Tys[] = { Addr->getType() };
   Function *Stxr = Intrinsic::getDeclaration(M, Int, Tys);
+
+  const DataLayout &DL = M->getDataLayout();
+  IntegerType *IntValTy = Builder.getIntNTy(DL.getTypeSizeInBits(Val->getType()));
+  Val = Builder.CreateBitCast(Val, IntValTy);
 
   return Builder.CreateCall(Stxr,
                             {Builder.CreateZExtOrBitCast(

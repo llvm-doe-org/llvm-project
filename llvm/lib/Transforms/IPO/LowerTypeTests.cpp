@@ -1,9 +1,8 @@
 //===- LowerTypeTests.cpp - type metadata lowering pass -------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -1701,6 +1700,13 @@ bool LowerTypeTestsModule::lower() {
       (!ICallBranchFunnelFunc || ICallBranchFunnelFunc->use_empty()) &&
       !ExportSummary && !ImportSummary)
     return false;
+
+  // If only some of the modules were split, we cannot correctly handle
+  // code that contains type tests.
+  if (TypeTestFunc && !TypeTestFunc->use_empty() &&
+      ((ExportSummary && ExportSummary->partiallySplitLTOUnits()) ||
+       (ImportSummary && ImportSummary->partiallySplitLTOUnits())))
+    report_fatal_error("inconsistent LTO Unit splitting with llvm.type.test");
 
   if (ImportSummary) {
     if (TypeTestFunc) {

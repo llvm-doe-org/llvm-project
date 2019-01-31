@@ -1,9 +1,8 @@
 //===- SROA.cpp - Scalar Replacement Of Aggregates ------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -221,13 +220,6 @@ public:
 };
 
 } // end anonymous namespace
-
-namespace llvm {
-
-template <typename T> struct isPodLike;
-template <> struct isPodLike<Slice> { static const bool value = true; };
-
-} // end namespace llvm
 
 /// Representation of the alloca slices.
 ///
@@ -3031,7 +3023,10 @@ private:
     ConstantInt *Size =
         ConstantInt::get(cast<IntegerType>(II.getArgOperand(0)->getType()),
                          NewEndOffset - NewBeginOffset);
-    Value *Ptr = getNewAllocaSlicePtr(IRB, OldPtr->getType());
+    // Lifetime intrinsics always expect an i8* so directly get such a pointer
+    // for the new alloca slice.
+    Type *PointerTy = IRB.getInt8PtrTy(OldPtr->getType()->getPointerAddressSpace());
+    Value *Ptr = getNewAllocaSlicePtr(IRB, PointerTy);
     Value *New;
     if (II.getIntrinsicID() == Intrinsic::lifetime_start)
       New = IRB.CreateLifetimeStart(Ptr, Size);

@@ -1,9 +1,8 @@
 //===--------- supporti.h - NVPTX OpenMP support functions ------- CUDA -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -155,8 +154,7 @@ INLINE int GetOmpThreadId(int threadId, bool isSPMDExecutionMode,
     ASSERT0(LT_FUSSY, isSPMDExecutionMode,
             "Uninitialized runtime with non-SPMD mode.");
     // For level 2 parallelism all parallel regions are executed sequentially.
-    if (omptarget_nvptx_simpleThreadPrivateContext
-            ->InL2OrHigherParallelRegion())
+    if (parallelLevel > 0)
       rc = 0;
     else
       rc = GetThreadIdInBlock();
@@ -177,8 +175,7 @@ INLINE int GetNumberOfOmpThreads(int threadId, bool isSPMDExecutionMode,
     ASSERT0(LT_FUSSY, isSPMDExecutionMode,
             "Uninitialized runtime with non-SPMD mode.");
     // For level 2 parallelism all parallel regions are executed sequentially.
-    if (omptarget_nvptx_simpleThreadPrivateContext
-            ->InL2OrHigherParallelRegion())
+    if (parallelLevel > 0)
       rc = 1;
     else
       rc = GetNumberOfThreadsInBlock();

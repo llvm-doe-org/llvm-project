@@ -1,9 +1,8 @@
 //===- SLPVectorizer.cpp - A bottom up SLP Vectorizer ---------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -1468,8 +1467,9 @@ void BoUpSLP::buildTree_rec(ArrayRef<Value *> VL, unsigned Depth,
 
   // If any of the scalars is marked as a value that needs to stay scalar, then
   // we need to gather the scalars.
+  // The reduction nodes (stored in UserIgnoreList) also should stay scalar.
   for (unsigned i = 0, e = VL.size(); i != e; ++i) {
-    if (MustGather.count(VL[i])) {
+    if (MustGather.count(VL[i]) || is_contained(UserIgnoreList, VL[i])) {
       LLVM_DEBUG(dbgs() << "SLP: Gathering due to gathered scalar.\n");
       newTreeEntry(VL, false, UserTreeIdx);
       return;

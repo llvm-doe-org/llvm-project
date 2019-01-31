@@ -1,9 +1,8 @@
 //===---- CGObjC.cpp - Emit LLVM Code for Objective-C ---------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -22,7 +21,6 @@
 #include "clang/Basic/Diagnostic.h"
 #include "clang/CodeGen/CGFunctionInfo.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/IR/CallSite.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/InlineAsm.h"
 using namespace clang;
@@ -1052,7 +1050,7 @@ CodeGenFunction::generateObjCGetterBody(const ObjCImplementationDecl *classImpl,
 
     // FIXME: We shouldn't need to get the function info here, the
     // runtime already should have computed it to build the function.
-    llvm::Instruction *CallInstruction;
+    llvm::CallBase *CallInstruction;
     RValue RV = EmitCall(
         getTypes().arrangeBuiltinFunctionCall(propType, args),
         callee, ReturnValueSlot(), args, &CallInstruction);

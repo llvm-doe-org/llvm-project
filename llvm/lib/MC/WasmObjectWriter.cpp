@@ -1,9 +1,8 @@
 //===- lib/MC/WasmObjectWriter.cpp - Wasm File Writer ---------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -224,6 +223,7 @@ class WasmObjectWriter : public MCObjectWriter {
   // Stores output data (index, relocations, content offset) for custom
   // section.
   std::vector<WasmCustomSection> CustomSections;
+  std::unique_ptr<WasmCustomSection> ProducersSection;
   // Relocations for fixing up references in the custom sections.
   DenseMap<const MCSectionWasm *, std::vector<WasmRelocationEntry>>
       CustomSectionsRelocations;
@@ -265,6 +265,8 @@ private:
     WasmIndices.clear();
     TableIndices.clear();
     DataLocations.clear();
+    CustomSections.clear();
+    ProducersSection.reset();
     CustomSectionsRelocations.clear();
     SignatureIndices.clear();
     Signatures.clear();
@@ -311,7 +313,8 @@ private:
       ArrayRef<wasm::WasmSymbolInfo> SymbolInfos,
       ArrayRef<std::pair<uint16_t, uint32_t>> InitFuncs,
       const std::map<StringRef, std::vector<WasmComdatEntry>> &Comdats);
-  void writeCustomSections(const MCAssembler &Asm, const MCAsmLayout &Layout);
+  void writeCustomSection(WasmCustomSection &CustomSection,
+                          const MCAssembler &Asm, const MCAsmLayout &Layout);
   void writeCustomRelocSections();
   void
   updateCustomSectionRelocations(const SmallVector<WasmFunction, 4> &Functions,
@@ -1045,25 +1048,24 @@ void WasmObjectWriter::writeLinkingMetaDataSection(
   endSection(Section);
 }
 
-void WasmObjectWriter::writeCustomSections(const MCAssembler &Asm,
-                                           const MCAsmLayout &Layout) {
-  for (auto &CustomSection : CustomSections) {
-    SectionBookkeeping Section;
-    auto *Sec = CustomSection.Section;
-    startCustomSection(Section, CustomSection.Name);
+void WasmObjectWriter::writeCustomSection(WasmCustomSection &CustomSection,
+                                          const MCAssembler &Asm,
+                                          const MCAsmLayout &Layout) {
+  SectionBookkeeping Section;
+  auto *Sec = CustomSection.Section;
+  startCustomSection(Section, CustomSection.Name);
 
-    Sec->setSectionOffset(W.OS.tell() - Section.ContentsOffset);
-    Asm.writeSectionData(W.OS, Sec, Layout);
+  Sec->setSectionOffset(W.OS.tell() - Section.ContentsOffset);
+  Asm.writeSectionData(W.OS, Sec, Layout);
 
-    CustomSection.OutputContentsOffset = Section.ContentsOffset;
-    CustomSection.OutputIndex = Section.Index;
+  CustomSection.OutputContentsOffset = Section.ContentsOffset;
+  CustomSection.OutputIndex = Section.Index;
 
-    endSection(Section);
+  endSection(Section);
 
-    // Apply fixups.
-    auto &Relocations = CustomSectionsRelocations[CustomSection.Section];
-    applyRelocations(Relocations, CustomSection.OutputContentsOffset);
-  }
+  // Apply fixups.
+  auto &Relocations = CustomSectionsRelocations[CustomSection.Section];
+  applyRelocations(Relocations, CustomSection.OutputContentsOffset);
 }
 
 uint32_t WasmObjectWriter::getFunctionType(const MCSymbolWasm &Symbol) {
@@ -1176,7 +1178,7 @@ uint64_t WasmObjectWriter::writeObject(MCAssembler &Asm,
   TableImport.Module = TableSym->getModuleName();
   TableImport.Field = TableSym->getName();
   TableImport.Kind = wasm::WASM_EXTERNAL_TABLE;
-  TableImport.Table.ElemType = wasm::WASM_TYPE_ANYFUNC;
+  TableImport.Table.ElemType = wasm::WASM_TYPE_FUNCREF;
   Imports.push_back(TableImport);
 
   // Populate SignatureIndices, and Imports and WasmIndices for undefined
@@ -1256,7 +1258,7 @@ uint64_t WasmObjectWriter::writeObject(MCAssembler &Asm,
       Segment.Offset = DataSize;
       Segment.Section = &Section;
       addData(Segment.Data, Section);
-      Segment.Alignment = Section.getAlignment();
+      Segment.Alignment = Log2_32(Section.getAlignment());
       Segment.Flags = 0;
       DataSize += Segment.Data.size();
       Section.setSegmentIndex(SegmentIndex);
@@ -1282,6 +1284,13 @@ uint64_t WasmObjectWriter::writeObject(MCAssembler &Asm,
           report_fatal_error("section name and begin symbol should match: " +
                              Twine(SectionName));
       }
+
+      // Separate out the producers section
+      if (Name == "producers") {
+        ProducersSection = llvm::make_unique<WasmCustomSection>(Name, &Section);
+        continue;
+      }
+
       CustomSections.emplace_back(Name, &Section);
     }
   }
@@ -1570,11 +1579,14 @@ uint64_t WasmObjectWriter::writeObject(MCAssembler &Asm,
   writeElemSection(TableElems);
   writeCodeSection(Asm, Layout, Functions);
   writeDataSection();
-  writeCustomSections(Asm, Layout);
+  for (auto &CustomSection : CustomSections)
+    writeCustomSection(CustomSection, Asm, Layout);
   writeLinkingMetaDataSection(SymbolInfos, InitFuncs, Comdats);
   writeRelocSection(CodeSectionIndex, "CODE", CodeRelocations);
   writeRelocSection(DataSectionIndex, "DATA", DataRelocations);
   writeCustomRelocSections();
+  if (ProducersSection)
+    writeCustomSection(*ProducersSection, Asm, Layout);
 
   // TODO: Translate the .comment section to the output.
   return W.OS.tell() - StartOffset;

@@ -1,9 +1,8 @@
 //===- AArch64FrameLowering.cpp - AArch64 Frame Lowering -------*- C++ -*-====//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -226,6 +225,10 @@ bool AArch64FrameLowering::hasFP(const MachineFunction &MF) const {
   // DefaultSafeSPDisplacement is fine as we only emergency spill GP regs.
   if (!MFI.isMaxCallFrameSizeComputed() ||
       MFI.getMaxCallFrameSize() > DefaultSafeSPDisplacement)
+    return true;
+
+  // Win64 SEH requires frame pointer if funclets are present.
+  if (MF.hasLocalEscape())
     return true;
 
   return false;
@@ -919,6 +922,19 @@ void AArch64FrameLowering::emitPrologue(MachineFunction &MF,
     if (NeedsWinCFI)
       BuildMI(MBB, MBBI, DL, TII->get(AArch64::SEH_PrologEnd))
           .setMIFlag(MachineInstr::FrameSetup);
+
+    // SEH funclets are passed the frame pointer in X1.  If the parent
+    // function uses the base register, then the base register is used
+    // directly, and is not retrieved from X1.
+    if (F.hasPersonalityFn()) {
+      EHPersonality Per = classifyEHPersonality(F.getPersonalityFn());
+      if (isAsynchronousEHPersonality(Per)) {
+        BuildMI(MBB, MBBI, DL, TII->get(TargetOpcode::COPY), AArch64::FP)
+            .addReg(AArch64::X1).setMIFlag(MachineInstr::FrameSetup);
+        MBB.addLiveIn(AArch64::X1);
+      }
+    }
+
     return;
   }
 
@@ -1759,8 +1775,8 @@ bool AArch64FrameLowering::spillCalleeSavedRegisters(
           static_cast<char>(unsigned(dwarf::DW_OP_breg18)),
           static_cast<char>(-8) & 0x7f, // addend (sleb128)
       };
-      unsigned CFIIndex =
-          MF.addFrameInst(MCCFIInstruction::createEscape(nullptr, CFIInst));
+      unsigned CFIIndex = MF.addFrameInst(MCCFIInstruction::createEscape(
+          nullptr, StringRef(CFIInst, sizeof(CFIInst))));
       BuildMI(MBB, MI, DL, TII.get(AArch64::CFI_INSTRUCTION))
           .addCFIIndex(CFIIndex)
           .setMIFlag(MachineInstr::FrameSetup);

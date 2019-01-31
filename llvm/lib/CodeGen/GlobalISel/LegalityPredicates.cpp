@@ -1,9 +1,8 @@
 //===- lib/CodeGen/GlobalISel/LegalizerPredicates.cpp - Predicates --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -54,6 +53,26 @@ LegalityPredicate LegalityPredicates::typePairAndMemSizeInSet(
 LegalityPredicate LegalityPredicates::isScalar(unsigned TypeIdx) {
   return [=](const LegalityQuery &Query) {
     return Query.Types[TypeIdx].isScalar();
+  };
+}
+
+LegalityPredicate LegalityPredicates::isVector(unsigned TypeIdx) {
+  return [=](const LegalityQuery &Query) {
+    return Query.Types[TypeIdx].isVector();
+  };
+}
+
+LegalityPredicate LegalityPredicates::isPointer(unsigned TypeIdx) {
+  return [=](const LegalityQuery &Query) {
+    return Query.Types[TypeIdx].isPointer();
+  };
+}
+
+LegalityPredicate LegalityPredicates::isPointer(unsigned TypeIdx,
+                                                unsigned AddrSpace) {
+  return [=](const LegalityQuery &Query) {
+    LLT Ty = Query.Types[TypeIdx];
+    return Ty.isPointer() && Ty.getAddressSpace() == AddrSpace;
   };
 }
 

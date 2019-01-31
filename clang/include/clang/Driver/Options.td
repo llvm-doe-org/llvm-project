@@ -1,9 +1,8 @@
 //===--- Options.td - Options for clang -----------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -1574,6 +1573,10 @@ def fopenmp_cuda_number_of_sm_EQ : Joined<["-"], "fopenmp-cuda-number-of-sm=">, 
   Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
 def fopenmp_cuda_blocks_per_sm_EQ : Joined<["-"], "fopenmp-cuda-blocks-per-sm=">, Group<f_Group>,
   Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
+def fopenmp_optimistic_collapse : Flag<["-"], "fopenmp-optimistic-collapse">, Group<f_Group>,
+  Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
+def fno_openmp_optimistic_collapse : Flag<["-"], "fno-openmp-optimistic-collapse">, Group<f_Group>,
+  Flags<[NoArgumentUnused, HelpHidden]>;
 
 def fopenacc : Flag<["-"], "fopenacc">, Group<f_Group>,
   Flags<[CC1Option, NoArgumentUnused]>, HelpText<"Enable OpenACC support">;
@@ -1784,6 +1787,11 @@ def fwhole_program_vtables : Flag<["-"], "fwhole-program-vtables">, Group<f_Grou
   Flags<[CoreOption, CC1Option]>,
   HelpText<"Enables whole-program vtable optimization. Requires -flto">;
 def fno_whole_program_vtables : Flag<["-"], "fno-whole-program-vtables">, Group<f_Group>,
+  Flags<[CoreOption]>;
+def fsplit_lto_unit : Flag<["-"], "fsplit-lto-unit">, Group<f_Group>,
+  Flags<[CoreOption, CC1Option]>,
+  HelpText<"Enables splitting of the LTO unit.">;
+def fno_split_lto_unit : Flag<["-"], "fno-split-lto-unit">, Group<f_Group>,
   Flags<[CoreOption]>;
 def fforce_emit_vtables : Flag<["-"], "fforce-emit-vtables">, Group<f_Group>,
     Flags<[CC1Option]>,
@@ -2039,6 +2047,7 @@ def mfloat_abi_EQ : Joined<["-"], "mfloat-abi=">, Group<m_Group>, Values<"soft,s
 def mfpmath_EQ : Joined<["-"], "mfpmath=">, Group<m_Group>;
 def mfpu_EQ : Joined<["-"], "mfpu=">, Group<m_Group>;
 def mhwdiv_EQ : Joined<["-"], "mhwdiv=">, Group<m_Group>;
+def mhwmult_EQ : Joined<["-"], "mhwmult=">, Group<m_Group>;
 def mglobal_merge : Flag<["-"], "mglobal-merge">, Group<m_Group>, Flags<[CC1Option]>,
   HelpText<"Enable merging of globals">;
 def mhard_float : Flag<["-"], "mhard-float">, Group<m_Group>;
@@ -2150,6 +2159,8 @@ def mbranch_protection_EQ : Joined<["-"], "mbranch-protection=">,
   HelpText<"Enforce targets of indirect branches and function returns">;
 
 def msimd128 : Flag<["-"], "msimd128">, Group<m_wasm_Features_Group>;
+def munimplemented_simd128 : Flag<["-"], "munimplemented-simd128">, Group<m_wasm_Features_Group>;
+def mno_unimplemented_simd128 : Flag<["-"], "mno-unimplemented-simd128">, Group<m_wasm_Features_Group>;
 def mno_simd128 : Flag<["-"], "mno-simd128">, Group<m_wasm_Features_Group>;
 def mnontrapping_fptoint : Flag<["-"], "mnontrapping-fptoint">, Group<m_wasm_Features_Group>;
 def mno_nontrapping_fptoint : Flag<["-"], "mno-nontrapping-fptoint">, Group<m_wasm_Features_Group>;
@@ -2419,6 +2430,14 @@ def modd_spreg : Flag<["-"], "modd-spreg">, Group<m_mips_Features_Group>,
 def mno_odd_spreg : Flag<["-"], "mno-odd-spreg">, Group<m_mips_Features_Group>,
   HelpText<"Disable odd single-precision floating point registers">,
   Flags<[HelpHidden]>;
+def mrelax_pic_calls : Flag<["-"], "mrelax-pic-calls">,
+  Group<m_mips_Features_Group>,
+  HelpText<"Produce relaxation hints for linkers to try optimizing PIC "
+           "call sequences into direct calls (MIPS only)">, Flags<[HelpHidden]>;
+def mno_relax_pic_calls : Flag<["-"], "mno-relax-pic-calls">,
+  Group<m_mips_Features_Group>,
+  HelpText<"Do not produce relaxation hints for linkers to try optimizing PIC "
+           "call sequences into direct calls (MIPS only)">, Flags<[HelpHidden]>;
 def mglibc : Flag<["-"], "mglibc">, Group<m_libc_Group>, Flags<[HelpHidden]>;
 def muclibc : Flag<["-"], "muclibc">, Group<m_libc_Group>, Flags<[HelpHidden]>;
 def module_file_info : Flag<["-"], "module-file-info">, Flags<[DriverOption,CC1Option]>, Group<Action_Group>,

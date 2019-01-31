@@ -1,9 +1,8 @@
 //===- AArch6464FastISel.cpp - AArch64 FastISel implementation ------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -304,8 +303,6 @@ public:
 };
 
 } // end anonymous namespace
-
-#include "AArch64GenCallingConv.inc"
 
 /// Check if the sign-/zero-extend will be a noop.
 static bool isIntExtFree(const Instruction *I) {
@@ -5171,10 +5168,6 @@ bool AArch64FastISel::fastSelectInstruction(const Instruction *I) {
   case Instruction::AtomicCmpXchg:
     return selectAtomicCmpXchg(cast<AtomicCmpXchgInst>(I));
   }
-
-  // Silence warnings.
-  (void)&CC_AArch64_DarwinPCS_VarArg;
-  (void)&CC_AArch64_Win64_VarArg;
 
   // fall-back to target-independent instruction selection.
   return selectOperator(I, I->getOpcode());

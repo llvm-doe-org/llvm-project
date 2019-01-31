@@ -1,9 +1,8 @@
 //===--------- LoopSimplifyCFG.cpp - Loop CFG Simplification Pass ---------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -80,6 +79,7 @@ static BasicBlock *getOnlyLiveSuccessor(BasicBlock *BB) {
   return nullptr;
 }
 
+namespace {
 /// Helper class that can turn branches and switches with constant conditions
 /// into unconditional branches.
 class ConstantTerminatorFoldingImpl {
@@ -207,12 +207,13 @@ private:
       // folding. Only handle blocks from current loop: branches in child loops
       // are skipped because if they can be folded, they should be folded during
       // the processing of child loops.
-      if (TheOnlySucc && LI.getLoopFor(BB) == &L)
+      bool TakeFoldCandidate = TheOnlySucc && LI.getLoopFor(BB) == &L;
+      if (TakeFoldCandidate)
         FoldCandidates.push_back(BB);
 
       // Handle successors.
       for (BasicBlock *Succ : successors(BB))
-        if (!TheOnlySucc || TheOnlySucc == Succ) {
+        if (!TakeFoldCandidate || TheOnlySucc == Succ) {
           if (L.contains(Succ))
             LiveLoopBlocks.insert(Succ);
           else
@@ -238,7 +239,7 @@ private:
       if (!LiveLoopBlocks.count(From))
         return false;
       BasicBlock *TheOnlySucc = getOnlyLiveSuccessor(From);
-      return !TheOnlySucc || TheOnlySucc == To;
+      return !TheOnlySucc || TheOnlySucc == To || LI.getLoopFor(From) != &L;
     };
 
     // The loop will not be destroyed if its latch is live.
@@ -378,6 +379,15 @@ private:
           StillReachable->addChildLoop(&L);
         else
           LI.addTopLevelLoop(&L);
+
+        // Some values from loops in [OuterLoop, StillReachable) could be used
+        // in the current loop. Now it is not their child anymore, so such uses
+        // require LCSSA Phis.
+        Loop *FixLCSSALoop = OuterLoop;
+        while (FixLCSSALoop->getParentLoop() != StillReachable)
+          FixLCSSALoop = FixLCSSALoop->getParentLoop();
+        assert(FixLCSSALoop && "Should be a loop!");
+        formLCSSARecursively(*FixLCSSALoop, DT, &LI, &SE);
       }
     }
   }
@@ -401,9 +411,10 @@ private:
         LI.erase(LI.getLoopFor(BB));
       }
       LI.removeBlock(BB);
-      DeleteDeadBlock(BB, &DTU);
-      ++NumLoopBlocksDeleted;
     }
+
+    DeleteDeadBlocks(DeadLoopBlocks, &DTU);
+    NumLoopBlocksDeleted += DeadLoopBlocks.size();
   }
 
   /// Constant-fold terminators of blocks acculumated in FoldCandidates into the
@@ -530,7 +541,7 @@ public:
 
 #ifndef NDEBUG
     // Make sure that we have preserved all data structures after the transform.
-    DT.verify();
+    assert(DT.verify() && "DT broken after transform!");
     assert(DT.isReachableFromEntry(L.getHeader()));
     LI.verify(DT);
 #endif
@@ -538,6 +549,7 @@ public:
     return true;
   }
 };
+} // namespace
 
 /// Turn branches and switches with known constant conditions into unconditional
 /// branches.

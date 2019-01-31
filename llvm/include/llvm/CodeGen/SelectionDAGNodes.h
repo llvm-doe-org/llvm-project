@@ -1,9 +1,8 @@
 //===- llvm/CodeGen/SelectionDAGNodes.h - SelectionDAG Nodes ----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -232,7 +231,6 @@ template<> struct DenseMapInfo<SDValue> {
     return LHS == RHS;
   }
 };
-template <> struct isPodLike<SDValue> { static const bool value = true; };
 
 /// Allow casting operators to work directly on
 /// SDValues as if they were SDNode*'s.
@@ -898,6 +896,11 @@ public:
   /// Return the number of values used by this operation.
   unsigned getNumOperands() const { return NumOperands; }
 
+  /// Return the maximum number of operands that a SDNode can hold.
+  static constexpr size_t getMaxNumOperands() {
+    return std::numeric_limits<decltype(SDNode::NumOperands)>::max();
+  }
+
   /// Helper method returns the integer value of a ConstantSDNode operand.
   inline uint64_t getConstantOperandVal(unsigned Num) const;
 
@@ -1356,6 +1359,8 @@ public:
            N->getOpcode() == ISD::ATOMIC_LOAD_MAX     ||
            N->getOpcode() == ISD::ATOMIC_LOAD_UMIN    ||
            N->getOpcode() == ISD::ATOMIC_LOAD_UMAX    ||
+           N->getOpcode() == ISD::ATOMIC_LOAD_FADD    ||
+           N->getOpcode() == ISD::ATOMIC_LOAD_FSUB    ||
            N->getOpcode() == ISD::ATOMIC_LOAD         ||
            N->getOpcode() == ISD::ATOMIC_STORE        ||
            N->getOpcode() == ISD::MLOAD               ||
@@ -1408,6 +1413,8 @@ public:
            N->getOpcode() == ISD::ATOMIC_LOAD_MAX     ||
            N->getOpcode() == ISD::ATOMIC_LOAD_UMIN    ||
            N->getOpcode() == ISD::ATOMIC_LOAD_UMAX    ||
+           N->getOpcode() == ISD::ATOMIC_LOAD_FADD    ||
+           N->getOpcode() == ISD::ATOMIC_LOAD_FSUB    ||
            N->getOpcode() == ISD::ATOMIC_LOAD         ||
            N->getOpcode() == ISD::ATOMIC_STORE;
   }

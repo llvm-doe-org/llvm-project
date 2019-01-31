@@ -1,9 +1,8 @@
 //===- AtomicExpandPass.cpp - Expand atomic instructions ------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -496,11 +495,26 @@ static void createCmpXchgInstFun(IRBuilder<> &Builder, Value *Addr,
                                  Value *Loaded, Value *NewVal,
                                  AtomicOrdering MemOpOrder,
                                  Value *&Success, Value *&NewLoaded) {
+  Type *OrigTy = NewVal->getType();
+
+  // This code can go away when cmpxchg supports FP types.
+  bool NeedBitcast = OrigTy->isFloatingPointTy();
+  if (NeedBitcast) {
+    IntegerType *IntTy = Builder.getIntNTy(OrigTy->getPrimitiveSizeInBits());
+    unsigned AS = Addr->getType()->getPointerAddressSpace();
+    Addr = Builder.CreateBitCast(Addr, IntTy->getPointerTo(AS));
+    NewVal = Builder.CreateBitCast(NewVal, IntTy);
+    Loaded = Builder.CreateBitCast(Loaded, IntTy);
+  }
+
   Value* Pair = Builder.CreateAtomicCmpXchg(
       Addr, Loaded, NewVal, MemOpOrder,
       AtomicCmpXchgInst::getStrongestFailureOrdering(MemOpOrder));
   Success = Builder.CreateExtractValue(Pair, 1, "success");
   NewLoaded = Builder.CreateExtractValue(Pair, 0, "newloaded");
+
+  if (NeedBitcast)
+    NewLoaded = Builder.CreateBitCast(NewLoaded, OrigTy);
 }
 
 /// Emit IR to implement the given atomicrmw operation on values in registers,
@@ -535,6 +549,10 @@ static Value *performAtomicOp(AtomicRMWInst::BinOp Op, IRBuilder<> &Builder,
   case AtomicRMWInst::UMin:
     NewVal = Builder.CreateICmpULE(Loaded, Inc);
     return Builder.CreateSelect(NewVal, Loaded, Inc, "new");
+  case AtomicRMWInst::FAdd:
+    return Builder.CreateFAdd(Loaded, Inc, "new");
+  case AtomicRMWInst::FSub:
+    return Builder.CreateFSub(Loaded, Inc, "new");
   default:
     llvm_unreachable("Unknown atomic op");
   }
@@ -1533,6 +1551,8 @@ static ArrayRef<RTLIB::Libcall> GetRMWLibcall(AtomicRMWInst::BinOp Op) {
   case AtomicRMWInst::Min:
   case AtomicRMWInst::UMax:
   case AtomicRMWInst::UMin:
+  case AtomicRMWInst::FAdd:
+  case AtomicRMWInst::FSub:
     // No atomic libcalls are available for max/min/umax/umin.
     return {};
   }

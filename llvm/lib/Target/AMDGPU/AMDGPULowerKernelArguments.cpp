@@ -1,9 +1,8 @@
 //===-- AMDGPULowerKernelArguments.cpp ------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -110,7 +109,8 @@ bool AMDGPULowerKernelArguments::runOnFunction(Function &F) {
       // modes on SI to know the high bits are 0 so pointer adds don't wrap. We
       // can't represent this with range metadata because it's only allowed for
       // integer types.
-      if (PT->getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS &&
+      if ((PT->getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS ||
+           PT->getAddressSpace() == AMDGPUAS::REGION_ADDRESS) &&
           ST.getGeneration() == AMDGPUSubtarget::SOUTHERN_ISLANDS)
         continue;
 

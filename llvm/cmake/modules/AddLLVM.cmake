@@ -380,7 +380,7 @@ endfunction(set_windows_version_resource_properties)
 function(llvm_add_library name)
   cmake_parse_arguments(ARG
     "MODULE;SHARED;STATIC;OBJECT;DISABLE_LLVM_LINK_LLVM_DYLIB;SONAME;NO_INSTALL_RPATH"
-    "OUTPUT_NAME;PLUGIN_TOOL"
+    "OUTPUT_NAME;PLUGIN_TOOL;ENTITLEMENTS"
     "ADDITIONAL_HEADERS;DEPENDS;LINK_COMPONENTS;LINK_LIBS;OBJLIBS"
     ${ARGN})
   list(APPEND LLVM_COMMON_DEPENDS ${ARG_DEPENDS})
@@ -584,7 +584,7 @@ function(llvm_add_library name)
 
   if(ARG_SHARED OR ARG_MODULE)
     llvm_externalize_debuginfo(${name})
-    llvm_codesign(${name})
+    llvm_codesign(${name} ENTITLEMENTS ${ARG_ENTITLEMENTS})
   endif()
 endfunction()
 
@@ -920,6 +920,9 @@ macro(add_llvm_utility name)
                                DEPENDS ${name}
                                COMPONENT ${name})
     endif()
+    set_property(GLOBAL APPEND PROPERTY LLVM_EXPORTS ${name})
+  elseif( LLVM_BUILD_UTILS )
+    set_property(GLOBAL APPEND PROPERTY LLVM_EXPORTS_BUILDTREE_ONLY ${name})
   endif()
 endmacro(add_llvm_utility name)
 
@@ -1277,7 +1280,6 @@ function(get_llvm_lit_path base_dir file_name)
   cmake_parse_arguments(ARG "ALLOW_EXTERNAL" "" "" ${ARGN})
 
   if (ARG_ALLOW_EXTERNAL)
-    set(LLVM_DEFAULT_EXTERNAL_LIT "${LLVM_EXTERNAL_LIT}")
     set (LLVM_EXTERNAL_LIT "" CACHE STRING "Command used to spawn lit")
     if ("${LLVM_EXTERNAL_LIT}" STREQUAL "")
       set(LLVM_EXTERNAL_LIT "${LLVM_DEFAULT_EXTERNAL_LIT}")

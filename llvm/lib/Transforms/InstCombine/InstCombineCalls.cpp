@@ -1,9 +1,8 @@
 //===- InstCombineCalls.cpp -----------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -136,6 +135,14 @@ Instruction *InstCombiner::SimplifyAnyMemTransfer(AnyMemTransferInst *MI) {
   if (Size > 8 || (Size&(Size-1)))
     return nullptr;  // If not 1/2/4/8 bytes, exit.
 
+  // If it is an atomic and alignment is less than the size then we will
+  // introduce the unaligned memory access which will be later transformed
+  // into libcall in CodeGen. This is not evident performance gain so disable
+  // it now.
+  if (isa<AtomicMemTransferInst>(MI))
+    if (CopyDstAlign < Size || CopySrcAlign < Size)
+      return nullptr;
+
   // Use an integer load+store unless we can find something better.
   unsigned SrcAddrSp =
     cast<PointerType>(MI->getArgOperand(1)->getType())->getAddressSpace();
@@ -220,6 +227,18 @@ Instruction *InstCombiner::SimplifyAnyMemSet(AnyMemSetInst *MI) {
   Alignment = MI->getDestAlignment();
   assert(Len && "0-sized memory setting should be removed already.");
 
+  // Alignment 0 is identity for alignment 1 for memset, but not store.
+  if (Alignment == 0)
+    Alignment = 1;
+
+  // If it is an atomic and alignment is less than the size then we will
+  // introduce the unaligned memory access which will be later transformed
+  // into libcall in CodeGen. This is not evident performance gain so disable
+  // it now.
+  if (isa<AtomicMemSetInst>(MI))
+    if (Alignment < Len)
+      return nullptr;
+
   // memset(s,c,n) -> store s, c (for n=1,2,4,8)
   if (Len <= 8 && isPowerOf2_32((uint32_t)Len)) {
     Type *ITy = IntegerType::get(MI->getContext(), Len*8);  // n=1 -> i8.
@@ -228,9 +247,6 @@ Instruction *InstCombiner::SimplifyAnyMemSet(AnyMemSetInst *MI) {
     unsigned DstAddrSp = cast<PointerType>(Dest->getType())->getAddressSpace();
     Type *NewDstPtrTy = PointerType::get(ITy, DstAddrSp);
     Dest = Builder.CreateBitCast(Dest, NewDstPtrTy);
-
-    // Alignment 0 is identity for alignment 1 for memset, but not store.
-    if (Alignment == 0) Alignment = 1;
 
     // Extract the fill value and store.
     uint64_t Fill = FillC->getZExtValue()*0x0101010101010101ULL;
@@ -1117,45 +1133,6 @@ static Value *simplifyX86vpermv(const IntrinsicInst &II,
   return Builder.CreateShuffleVector(V1, V2, ShuffleMask);
 }
 
-/// Decode XOP integer vector comparison intrinsics.
-static Value *simplifyX86vpcom(const IntrinsicInst &II,
-                               InstCombiner::BuilderTy &Builder,
-                               bool IsSigned) {
-  if (auto *CInt = dyn_cast<ConstantInt>(II.getArgOperand(2))) {
-    uint64_t Imm = CInt->getZExtValue() & 0x7;
-    VectorType *VecTy = cast<VectorType>(II.getType());
-    CmpInst::Predicate Pred = ICmpInst::BAD_ICMP_PREDICATE;
-
-    switch (Imm) {
-    case 0x0:
-      Pred = IsSigned ? ICmpInst::ICMP_SLT : ICmpInst::ICMP_ULT;
-      break;
-    case 0x1:
-      Pred = IsSigned ? ICmpInst::ICMP_SLE : ICmpInst::ICMP_ULE;
-      break;
-    case 0x2:
-      Pred = IsSigned ? ICmpInst::ICMP_SGT : ICmpInst::ICMP_UGT;
-      break;
-    case 0x3:
-      Pred = IsSigned ? ICmpInst::ICMP_SGE : ICmpInst::ICMP_UGE;
-      break;
-    case 0x4:
-      Pred = ICmpInst::ICMP_EQ; break;
-    case 0x5:
-      Pred = ICmpInst::ICMP_NE; break;
-    case 0x6:
-      return ConstantInt::getSigned(VecTy, 0); // FALSE
-    case 0x7:
-      return ConstantInt::getSigned(VecTy, -1); // TRUE
-    }
-
-    if (Value *Cmp = Builder.CreateICmp(Pred, II.getArgOperand(0),
-                                        II.getArgOperand(1)))
-      return Builder.CreateSExtOrTrunc(Cmp, VecTy);
-  }
-  return nullptr;
-}
-
 static bool maskIsAllOneOrUndef(Value *Mask) {
   auto *ConstMask = dyn_cast<Constant>(Mask);
   if (!ConstMask)
@@ -1891,6 +1868,19 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     if (Changed) return II;
   }
 
+  // For vector result intrinsics, use the generic demanded vector support to
+  // simplify any operands before moving on to the per-intrinsic rules.    
+  if (II->getType()->isVectorTy()) {
+    auto VWidth = II->getType()->getVectorNumElements();
+    APInt UndefElts(VWidth, 0);
+    APInt AllOnesEltMask(APInt::getAllOnesValue(VWidth));
+    if (Value *V = SimplifyDemandedVectorElts(II, AllOnesEltMask, UndefElts)) {
+      if (V != II)
+        return replaceInstUsesWith(*II, V);
+      return II;
+    }
+  }
+
   if (Instruction *I = SimplifyNVVMIntrinsic(II, *this))
     return I;
 
@@ -1904,9 +1894,8 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
   switch (II->getIntrinsicID()) {
   default: break;
   case Intrinsic::objectsize:
-    if (ConstantInt *N =
-            lowerObjectSizeCall(II, DL, &TLI, /*MustSucceed=*/false))
-      return replaceInstUsesWith(CI, N);
+    if (Value *V = lowerObjectSizeCall(II, DL, &TLI, /*MustSucceed=*/false))
+      return replaceInstUsesWith(CI, V);
     return nullptr;
   case Intrinsic::bswap: {
     Value *IIOperand = II->getArgOperand(0);
@@ -2689,41 +2678,11 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
         return replaceInstUsesWith(*II, V);
       }
     }
-    LLVM_FALLTHROUGH;
+    break;
 
-  // X86 scalar intrinsics simplified with SimplifyDemandedVectorElts.
-  case Intrinsic::x86_avx512_mask_max_ss_round:
-  case Intrinsic::x86_avx512_mask_min_ss_round:
-  case Intrinsic::x86_avx512_mask_max_sd_round:
-  case Intrinsic::x86_avx512_mask_min_sd_round:
-  case Intrinsic::x86_sse_cmp_ss:
-  case Intrinsic::x86_sse_min_ss:
-  case Intrinsic::x86_sse_max_ss:
-  case Intrinsic::x86_sse2_cmp_sd:
-  case Intrinsic::x86_sse2_min_sd:
-  case Intrinsic::x86_sse2_max_sd:
-  case Intrinsic::x86_xop_vfrcz_ss:
-  case Intrinsic::x86_xop_vfrcz_sd: {
-   unsigned VWidth = II->getType()->getVectorNumElements();
-   APInt UndefElts(VWidth, 0);
-   APInt AllOnesEltMask(APInt::getAllOnesValue(VWidth));
-   if (Value *V = SimplifyDemandedVectorElts(II, AllOnesEltMask, UndefElts)) {
-     if (V != II)
-       return replaceInstUsesWith(*II, V);
-     return II;
-   }
-   break;
-  }
   case Intrinsic::x86_sse41_round_ss:
   case Intrinsic::x86_sse41_round_sd: {
-    unsigned VWidth = II->getType()->getVectorNumElements();
-    APInt UndefElts(VWidth, 0);
-    APInt AllOnesEltMask(APInt::getAllOnesValue(VWidth));
-    if (Value *V = SimplifyDemandedVectorElts(II, AllOnesEltMask, UndefElts)) {
-      if (V != II)
-        return replaceInstUsesWith(*II, V);
-      return II;
-    } else if (Value *V = simplifyX86round(*II, Builder))
+    if (Value *V = simplifyX86round(*II, Builder))
       return replaceInstUsesWith(*II, V);
     break;
   }
@@ -3149,22 +3108,6 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
   case Intrinsic::x86_avx2_maskstore_q_256:
     if (simplifyX86MaskedStore(*II, *this))
       return nullptr;
-    break;
-
-  case Intrinsic::x86_xop_vpcomb:
-  case Intrinsic::x86_xop_vpcomd:
-  case Intrinsic::x86_xop_vpcomq:
-  case Intrinsic::x86_xop_vpcomw:
-    if (Value *V = simplifyX86vpcom(*II, Builder, true))
-      return replaceInstUsesWith(*II, V);
-    break;
-
-  case Intrinsic::x86_xop_vpcomub:
-  case Intrinsic::x86_xop_vpcomud:
-  case Intrinsic::x86_xop_vpcomuq:
-  case Intrinsic::x86_xop_vpcomuw:
-    if (Value *V = simplifyX86vpcom(*II, Builder, false))
-      return replaceInstUsesWith(*II, V);
     break;
 
   case Intrinsic::ppc_altivec_vperm:
@@ -3760,6 +3703,11 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
         // Promote to next legal integer type.
         unsigned Width = CmpType->getBitWidth();
         unsigned NewWidth = Width;
+
+        // Don't do anything for i1 comparisons.
+        if (Width == 1)
+          break;
+
         if (Width <= 16)
           NewWidth = 16;
         else if (Width <= 32)

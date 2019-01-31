@@ -1,9 +1,8 @@
 //===-- SymbolInfoTests.cpp  -----------------------*- C++ -*--------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 #include "Annotations.h"
@@ -21,7 +20,6 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using namespace llvm;
 namespace clang {
 namespace clangd {
 namespace {
@@ -151,7 +149,13 @@ TEST(SymbolInfoTests, All) {
           #define MACRO 5\nint i = MAC^RO;
         )cpp",
               {CreateExpectedSymbolDetails("MACRO", "",
-                                           "c:TestTU.cpp@55@macro@MACRO")}},
+                                           "c:TestTU.cpp@38@macro@MACRO")}},
+          {
+              R"cpp( // Macro reference
+          #define MACRO 5\nint i = MACRO^;
+        )cpp",
+              {CreateExpectedSymbolDetails("MACRO", "",
+                                           "c:TestTU.cpp@38@macro@MACRO")}},
           {
               R"cpp( // Multiple symbols returned - using overloaded function name
           void foo() {}

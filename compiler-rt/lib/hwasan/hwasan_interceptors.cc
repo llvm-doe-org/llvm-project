@@ -1,9 +1,8 @@
 //===-- hwasan_interceptors.cc --------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -217,6 +216,17 @@ INTERCEPTOR_ALIAS(void, malloc_stats, void);
 #endif
 #endif // HWASAN_WITH_INTERCEPTORS
 
+
+#if HWASAN_WITH_INTERCEPTORS && !defined(__aarch64__)
+INTERCEPTOR(int, pthread_create, void *th, void *attr,
+            void *(*callback)(void *), void *param) {
+  ScopedTaggingDisabler disabler;
+  int res = REAL(pthread_create)(UntagPtr(th), UntagPtr(attr),
+                                 callback, param);
+  return res;
+}
+#endif
+
 static void BeforeFork() {
   StackDepotLockAll();
 }
@@ -256,6 +266,9 @@ void InitializeInterceptors() {
   INTERCEPT_FUNCTION(fork);
 
 #if HWASAN_WITH_INTERCEPTORS
+#if !defined(__aarch64__)
+  INTERCEPT_FUNCTION(pthread_create);
+#endif
   INTERCEPT_FUNCTION(realloc);
   INTERCEPT_FUNCTION(free);
 #endif

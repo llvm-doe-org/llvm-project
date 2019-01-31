@@ -1,9 +1,8 @@
 //===- llvm/CodeGen/TargetLowering.h - Target Lowering Info -----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -1716,8 +1715,9 @@ public:
 
   /// Returns how the IR-level AtomicExpand pass should expand the given
   /// AtomicRMW, if at all. Default is to never expand.
-  virtual AtomicExpansionKind shouldExpandAtomicRMWInIR(AtomicRMWInst *) const {
-    return AtomicExpansionKind::None;
+  virtual AtomicExpansionKind shouldExpandAtomicRMWInIR(AtomicRMWInst *RMW) const {
+    return RMW->isFloatingPointOperation() ?
+      AtomicExpansionKind::CmpXChg : AtomicExpansionKind::None;
   }
 
   /// On some platforms, an AtomicRMW that never actually modifies the value
@@ -1761,6 +1761,8 @@ public:
     return Action != TypeExpandInteger && Action != TypeExpandFloat &&
       Action != TypeSplitVector;
   }
+
+  virtual bool isProfitableToCombineMinNumMaxNum(EVT VT) const { return true; }
 
   /// Return true if a select of constants (select Cond, C1, C2) should be
   /// transformed into simple math ops with the condition value. For example:
@@ -2155,6 +2157,8 @@ public:
     case ISD::UADDO:
     case ISD::ADDC:
     case ISD::ADDE:
+    case ISD::SADDSAT:
+    case ISD::UADDSAT:
     case ISD::FMINNUM:
     case ISD::FMAXNUM:
     case ISD::FMINIMUM:
@@ -2894,16 +2898,6 @@ public:
   /// generalized for targets with other types of implicit widening casts.
   bool ShrinkDemandedOp(SDValue Op, unsigned BitWidth, const APInt &Demanded,
                         TargetLoweringOpt &TLO) const;
-
-  /// Helper for SimplifyDemandedBits that can simplify an operation with
-  /// multiple uses.  This function simplifies operand \p OpIdx of \p User and
-  /// then updates \p User with the simplified version. No other uses of
-  /// \p OpIdx are updated. If \p User is the only user of \p OpIdx, this
-  /// function behaves exactly like function SimplifyDemandedBits declared
-  /// below except that it also updates the DAG by calling
-  /// DCI.CommitTargetLoweringOpt.
-  bool SimplifyDemandedBits(SDNode *User, unsigned OpIdx, const APInt &Demanded,
-                            DAGCombinerInfo &DCI, TargetLoweringOpt &TLO) const;
 
   /// Look at Op.  At this point, we know that only the DemandedBits bits of the
   /// result of Op are ever used downstream.  If we can use this information to
@@ -3797,6 +3791,14 @@ public:
   /// \returns True, if the expansion was successful, false otherwise
   bool expandCTTZ(SDNode *N, SDValue &Result, SelectionDAG &DAG) const;
 
+  /// Expand ABS nodes. Expands vector/scalar ABS nodes,
+  /// vector nodes can only succeed if all operations are legal/custom.
+  /// (ABS x) -> (XOR (ADD x, (SRA x, type_size)), (SRA x, type_size))
+  /// \param N Node to expand
+  /// \param Result output after conversion
+  /// \returns True, if the expansion was successful, false otherwise
+  bool expandABS(SDNode *N, SDValue &Result, SelectionDAG &DAG) const;
+
   /// Turn load of vector type into a load of the individual elements.
   /// \param LD load to expand
   /// \returns MERGE_VALUEs of the scalar loads with their chains.
@@ -3836,13 +3838,11 @@ public:
 
   /// Method for building the DAG expansion of ISD::[US][ADD|SUB]SAT. This
   /// method accepts integers as its arguments.
-  SDValue getExpandedSaturationAdditionSubtraction(SDNode *Node,
-                                                   SelectionDAG &DAG) const;
+  SDValue expandAddSubSat(SDNode *Node, SelectionDAG &DAG) const;
 
   /// Method for building the DAG expansion of ISD::SMULFIX. This method accepts
   /// integers as its arguments.
-  SDValue getExpandedFixedPointMultiplication(SDNode *Node,
-                                              SelectionDAG &DAG) const;
+  SDValue expandFixedPointMul(SDNode *Node, SelectionDAG &DAG) const;
 
   //===--------------------------------------------------------------------===//
   // Instruction Emitting Hooks

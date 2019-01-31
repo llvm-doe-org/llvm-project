@@ -1,9 +1,8 @@
 //===-- X86ISelLowering.h - X86 DAG Lowering Interface ----------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -98,7 +97,7 @@ namespace llvm {
       SETCC,
 
       /// X86 Select
-      SELECT, SELECTS,
+      SELECTS,
 
       // Same as SETCC except it's materialized with a sbb and the value is all
       // one's or all zero's.
@@ -203,8 +202,10 @@ namespace llvm {
 
       /// Dynamic (non-constant condition) vector blend where only the sign bits
       /// of the condition elements are used. This is used to enforce that the
-      /// condition mask is not valid for generic VSELECT optimizations.
-      SHRUNKBLEND,
+      /// condition mask is not valid for generic VSELECT optimizations. This
+      /// is also used to implement the intrinsics.
+      /// Operands are in VSELECT order: MASK, TRUE, FALSE
+      BLENDV,
 
       /// Combined add and sub on an FP vector.
       ADDSUB,
@@ -292,11 +293,21 @@ namespace llvm {
       // Vector integer truncate with unsigned/signed saturation.
       VTRUNCUS, VTRUNCS,
 
+      // Masked version of the above. Used when less than a 128-bit result is
+      // produced since the mask only applies to the lower elements and can't
+      // be represented by a select.
+      // SRC, PASSTHRU, MASK
+      VMTRUNC, VMTRUNCUS, VMTRUNCS,
+
       // Vector FP extend.
       VFPEXT, VFPEXT_RND, VFPEXTS_RND,
 
       // Vector FP round.
       VFPROUND, VFPROUND_RND, VFPROUNDS_RND,
+
+      // Masked version of above. Used for v2f64->v4f32.
+      // SRC, PASSTHRU, MASK
+      VMFPROUND,
 
       // 128-bit vector logical left / right shift
       VSHLDQ, VSRLDQ,
@@ -304,10 +315,8 @@ namespace llvm {
       // Vector shift elements
       VSHL, VSRL, VSRA,
 
-      // Vector variable shift right arithmetic.
-      // Unlike ISD::SRA, in case shift count greater then element size
-      // use sign bit to fill destination data element.
-      VSRAV,
+      // Vector variable shift
+      VSHLV, VSRLV, VSRAV,
 
       // Vector shift elements by immediate
       VSHLI, VSRLI, VSRAI,
@@ -503,6 +512,11 @@ namespace llvm {
       // Vector signed/unsigned integer to float/double.
       CVTSI2P, CVTUI2P,
 
+      // Masked versions of above. Used for v2f64->v4f32.
+      // SRC, PASSTHRU, MASK
+      MCVTP2SI, MCVTP2UI, MCVTTP2SI, MCVTTP2UI,
+      MCVTSI2P, MCVTUI2P,
+
       // Save xmm argument registers to the stack, according to %al. An operator
       // is needed so that this can be expanded with control flow.
       VASTART_SAVE_XMM_REGS,
@@ -549,6 +563,10 @@ namespace llvm {
 
       // Conversions between float and half-float.
       CVTPS2PH, CVTPH2PS, CVTPH2PS_RND,
+
+      // Masked version of above.
+      // SRC, RND, PASSTHRU, MASK
+      MCVTPS2PH,
 
       // Galois Field Arithmetic Instructions
       GF2P8AFFINEINVQB, GF2P8AFFINEQB, GF2P8MULB,

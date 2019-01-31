@@ -1,9 +1,8 @@
 //===--- SanitizerArgs.cpp - Arguments for sanitizer tools  ---------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 #include "clang/Driver/SanitizerArgs.h"
@@ -207,6 +206,8 @@ bool SanitizerArgs::needsUnwindTables() const {
   return Sanitizers.Mask & NeedsUnwindTables;
 }
 
+bool SanitizerArgs::needsLTO() const { return Sanitizers.Mask & NeedsLTO; }
+
 SanitizerArgs::SanitizerArgs(const ToolChain &TC,
                              const llvm::opt::ArgList &Args) {
   SanitizerMask AllRemove = 0;  // During the loop below, the accumulated set of
@@ -250,7 +251,7 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
       if (RemoveObjectSizeAtO0) {
         AllRemove |= SanitizerKind::ObjectSize;
 
-        // The user explicitly enabled the object size sanitizer. Warn that
+        // The user explicitly enabled the object size sanitizer. Warn
         // that this does nothing at -O0.
         if (Add & SanitizerKind::ObjectSize)
           D.Diag(diag::warn_drv_object_size_disabled_O0)

@@ -1,9 +1,8 @@
 //===-- TargetLowering.cpp - Implement the TargetLowering class -----------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -429,56 +428,6 @@ bool TargetLowering::ShrinkDemandedOp(SDValue Op, unsigned BitWidth,
     }
   }
   return false;
-}
-
-bool
-TargetLowering::SimplifyDemandedBits(SDNode *User, unsigned OpIdx,
-                                     const APInt &DemandedBits,
-                                     DAGCombinerInfo &DCI,
-                                     TargetLoweringOpt &TLO) const {
-  SDValue Op = User->getOperand(OpIdx);
-  KnownBits Known;
-
-  if (!SimplifyDemandedBits(Op, DemandedBits, Known, TLO, 0, true))
-    return false;
-
-
-  // Old will not always be the same as Op.  For example:
-  //
-  // Demanded = 0xffffff
-  // Op = i64 truncate (i32 and x, 0xffffff)
-  // In this case simplify demand bits will want to replace the 'and' node
-  // with the value 'x', which will give us:
-  // Old = i32 and x, 0xffffff
-  // New = x
-  if (TLO.Old.hasOneUse()) {
-    // For the one use case, we just commit the change.
-    DCI.CommitTargetLoweringOpt(TLO);
-    return true;
-  }
-
-  // If Old has more than one use then it must be Op, because the
-  // AssumeSingleUse flag is not propogated to recursive calls of
-  // SimplifyDemanded bits, so the only node with multiple use that
-  // it will attempt to combine will be Op.
-  assert(TLO.Old == Op);
-
-  SmallVector <SDValue, 4> NewOps;
-  for (unsigned i = 0, e = User->getNumOperands(); i != e; ++i) {
-    if (i == OpIdx) {
-      NewOps.push_back(TLO.New);
-      continue;
-    }
-    NewOps.push_back(User->getOperand(i));
-  }
-  User = TLO.DAG.UpdateNodeOperands(User, NewOps);
-  // Op has less users now, so we may be able to perform additional combines
-  // with it.
-  DCI.AddToWorklist(Op.getNode());
-  // User's operands have been updated, so we may be able to do new combines
-  // with it.
-  DCI.AddToWorklist(User);
-  return true;
 }
 
 bool TargetLowering::SimplifyDemandedBits(SDValue Op, const APInt &DemandedBits,
@@ -4370,7 +4319,7 @@ bool TargetLowering::expandFP_TO_SINT(SDNode *Node, SDValue &Result,
 
   // Expand f32 -> i64 conversion
   // This algorithm comes from compiler-rt's implementation of fixsfdi:
-  // https://github.com/llvm-mirror/compiler-rt/blob/master/lib/builtins/fixsfdi.c
+  // https://github.com/llvm/llvm-project/blob/master/compiler-rt/lib/builtins/fixsfdi.c
   unsigned SrcEltBits = SrcVT.getScalarSizeInBits();
   EVT IntVT = SrcVT.changeTypeToInteger();
   EVT IntShVT = getShiftAmountTy(IntVT, DAG.getDataLayout());
@@ -4762,6 +4711,27 @@ bool TargetLowering::expandCTTZ(SDNode *Node, SDValue &Result,
   }
 
   Result = DAG.getNode(ISD::CTPOP, dl, VT, Tmp);
+  return true;
+}
+
+bool TargetLowering::expandABS(SDNode *N, SDValue &Result,
+                               SelectionDAG &DAG) const {
+  SDLoc dl(N);
+  EVT VT = N->getValueType(0);
+  EVT ShVT = getShiftAmountTy(VT, DAG.getDataLayout());
+  SDValue Op = N->getOperand(0);
+
+  // Only expand vector types if we have the appropriate vector operations.
+  if (VT.isVector() && (!isOperationLegalOrCustom(ISD::SRA, VT) ||
+                        !isOperationLegalOrCustom(ISD::ADD, VT) ||
+                        !isOperationLegalOrCustomOrPromote(ISD::XOR, VT)))
+    return false;
+
+  SDValue Shift =
+      DAG.getNode(ISD::SRA, dl, VT, Op,
+                  DAG.getConstant(VT.getScalarSizeInBits() - 1, dl, ShVT));
+  SDValue Add = DAG.getNode(ISD::ADD, dl, VT, Op, Shift);
+  Result = DAG.getNode(ISD::XOR, dl, VT, Add, Shift);
   return true;
 }
 
@@ -5304,9 +5274,30 @@ SDValue TargetLowering::lowerCmpEqZeroToCtlzSrl(SDValue Op,
   return SDValue();
 }
 
-SDValue TargetLowering::getExpandedSaturationAdditionSubtraction(
-    SDNode *Node, SelectionDAG &DAG) const {
+SDValue TargetLowering::expandAddSubSat(SDNode *Node, SelectionDAG &DAG) const {
   unsigned Opcode = Node->getOpcode();
+  SDValue LHS = Node->getOperand(0);
+  SDValue RHS = Node->getOperand(1);
+  EVT VT = LHS.getValueType();
+  SDLoc dl(Node);
+
+  // usub.sat(a, b) -> umax(a, b) - b
+  if (Opcode == ISD::USUBSAT && isOperationLegalOrCustom(ISD::UMAX, VT)) {
+    SDValue Max = DAG.getNode(ISD::UMAX, dl, VT, LHS, RHS);
+    return DAG.getNode(ISD::SUB, dl, VT, Max, RHS);
+  }
+
+  if (Opcode == ISD::UADDSAT && isOperationLegalOrCustom(ISD::UMIN, VT)) {
+    SDValue InvRHS = DAG.getNOT(dl, RHS, VT);
+    SDValue Min = DAG.getNode(ISD::UMIN, dl, VT, LHS, InvRHS);
+    return DAG.getNode(ISD::ADD, dl, VT, Min, RHS);
+  }
+
+  if (VT.isVector()) {
+    // TODO: Consider not scalarizing here.
+    return SDValue();
+  }
+
   unsigned OverflowOp;
   switch (Opcode) {
   case ISD::SADDSAT:
@@ -5325,11 +5316,7 @@ SDValue TargetLowering::getExpandedSaturationAdditionSubtraction(
     llvm_unreachable("Expected method to receive signed or unsigned saturation "
                      "addition or subtraction node.");
   }
-  assert(Node->getNumOperands() == 2 && "Expected node to have 2 operands.");
 
-  SDLoc dl(Node);
-  SDValue LHS = Node->getOperand(0);
-  SDValue RHS = Node->getOperand(1);
   assert(LHS.getValueType().isScalarInteger() &&
          "Expected operands to be integers. Vector of int arguments should "
          "already be unrolled.");
@@ -5373,8 +5360,7 @@ SDValue TargetLowering::getExpandedSaturationAdditionSubtraction(
 }
 
 SDValue
-TargetLowering::getExpandedFixedPointMultiplication(SDNode *Node,
-                                                    SelectionDAG &DAG) const {
+TargetLowering::expandFixedPointMul(SDNode *Node, SelectionDAG &DAG) const {
   assert(Node->getOpcode() == ISD::SMULFIX && "Expected opcode to be SMULFIX.");
   assert(Node->getNumOperands() == 3 &&
          "Expected signed fixed point multiplication to have 3 operands.");

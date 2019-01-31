@@ -1,9 +1,8 @@
 //===-- TUSchedulerTests.cpp ------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,7 +17,6 @@
 #include <algorithm>
 #include <utility>
 
-using namespace llvm;
 namespace clang {
 namespace clangd {
 namespace {
@@ -28,7 +26,6 @@ using ::testing::AllOf;
 using ::testing::AnyOf;
 using ::testing::Each;
 using ::testing::ElementsAre;
-using ::testing::Pair;
 using ::testing::Pointee;
 using ::testing::UnorderedElementsAre;
 
@@ -39,12 +36,16 @@ MATCHER_P2(TUState, State, ActionName, "") {
 class TUSchedulerTests : public ::testing::Test {
 protected:
   ParseInputs getInputs(PathRef File, std::string Contents) {
-    return ParseInputs{*CDB.getCompileCommand(File),
-                       buildTestFS(Files, Timestamps), std::move(Contents)};
+    ParseInputs Inputs;
+    Inputs.CompileCommand = *CDB.getCompileCommand(File);
+    Inputs.FS = buildTestFS(Files, Timestamps);
+    Inputs.Contents = std::move(Contents);
+    Inputs.Opts = ParseOptions();
+    return Inputs;
   }
 
-  void updateWithCallback(TUScheduler &S, PathRef File, StringRef Contents,
-                          WantDiagnostics WD,
+  void updateWithCallback(TUScheduler &S, PathRef File,
+                          llvm::StringRef Contents, WantDiagnostics WD,
                           llvm::unique_function<void()> CB) {
     WithContextValue Ctx(llvm::make_scope_exit(std::move(CB)));
     S.update(File, getInputs(File, Contents), WD);
@@ -93,8 +94,8 @@ protected:
                            std::move(CB));
   }
 
-  StringMap<std::string> Files;
-  StringMap<time_t> Timestamps;
+  llvm::StringMap<std::string> Files;
+  llvm::StringMap<time_t> Timestamps;
   MockCompilationDatabase CDB;
 };
 

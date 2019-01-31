@@ -1,9 +1,8 @@
 //===----- LegalizeIntegerTypes.cpp - Legalization of integer types -------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -555,7 +554,7 @@ SDValue DAGTypeLegalizer::PromoteIntRes_MLOAD(MaskedLoadSDNode *N) {
   SDLoc dl(N);
   SDValue Res = DAG.getMaskedLoad(NVT, dl, N->getChain(), N->getBasePtr(),
                                   N->getMask(), ExtPassThru, N->getMemoryVT(),
-                                  N->getMemOperand(), ISD::SEXTLOAD);
+                                  N->getMemOperand(), ISD::EXTLOAD);
   // Legalize the chain result - switch anything that used the old chain to
   // use the new one.
   ReplaceValueWith(SDValue(N, 1), Res.getValue(1));
@@ -2577,7 +2576,7 @@ void DAGTypeLegalizer::ExpandIntRes_READCYCLECOUNTER(SDNode *N, SDValue &Lo,
 
 void DAGTypeLegalizer::ExpandIntRes_ADDSUBSAT(SDNode *N, SDValue &Lo,
                                               SDValue &Hi) {
-  SDValue Result = TLI.getExpandedSaturationAdditionSubtraction(N, DAG);
+  SDValue Result = TLI.expandAddSubSat(N, DAG);
   SplitInteger(Result, Lo, Hi);
 }
 

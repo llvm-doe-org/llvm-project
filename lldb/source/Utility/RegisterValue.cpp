@@ -1,9 +1,8 @@
 //===-- RegisterValue.cpp ---------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -157,6 +156,7 @@ bool RegisterValue::GetScalarValue(Scalar &scalar) const {
       return true;
     case 16:
     case 32:
+    case 64:
       if (buffer.length % sizeof(uint64_t) == 0) {
         const auto length_in_bits = buffer.length * 8;
         const auto length_in_uint64 = buffer.length / sizeof(uint64_t);

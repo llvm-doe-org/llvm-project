@@ -1,9 +1,8 @@
 //===--- Sema.h - Semantic Analysis & AST Building --------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -308,6 +307,10 @@ class Sema {
     return false;
   }
   bool shouldLinkPossiblyHiddenDecl(LookupResult &Old, const NamedDecl *New);
+
+  void setupImplicitSpecialMemberType(CXXMethodDecl *SpecialMem,
+                                      QualType ResultTy,
+                                      ArrayRef<QualType> Args);
 
 public:
   typedef OpaquePtr<DeclGroupRef> DeclGroupPtrTy;
@@ -1410,6 +1413,10 @@ public:
   QualType BuildVectorType(QualType T, Expr *VecSize, SourceLocation AttrLoc);
   QualType BuildExtVectorType(QualType T, Expr *ArraySize,
                               SourceLocation AttrLoc);
+  QualType BuildAddressSpaceAttr(QualType &T, LangAS ASIdx, Expr *AddrSpace,
+                                 SourceLocation AttrLoc);
+
+  /// Same as above, but constructs the AddressSpace index if not provided.
   QualType BuildAddressSpaceAttr(QualType &T, Expr *AddrSpace,
                                  SourceLocation AttrLoc);
 
@@ -1962,7 +1969,7 @@ public:
   bool CheckVariableDeclaration(VarDecl *NewVD, LookupResult &Previous);
   void CheckVariableDeclarationType(VarDecl *NewVD);
   bool DeduceVariableDeclarationType(VarDecl *VDecl, bool DirectInit,
-                                     Expr *Init);
+                                     Expr *&Init);
   void CheckCompleteVariableDeclaration(VarDecl *VD);
   void CheckCompleteDecompositionDeclaration(DecompositionDecl *DD);
   void MaybeSuggestAddingStaticToDecl(const FunctionDecl *D);
@@ -2454,18 +2461,38 @@ public:
     AMK_ProtocolImplementation,
   };
 
+  /// Describes the kind of priority given to an availability attribute.
+  ///
+  /// The sum of priorities deteremines the final priority of the attribute.
+  /// The final priority determines how the attribute will be merged.
+  /// An attribute with a lower priority will always remove higher priority
+  /// attributes for the specified platform when it is being applied. An
+  /// attribute with a higher priority will not be applied if the declaration
+  /// already has an availability attribute with a lower priority for the
+  /// specified platform. The final prirority values are not expected to match
+  /// the values in this enumeration, but instead should be treated as a plain
+  /// integer value. This enumeration just names the priority weights that are
+  /// used to calculate that final vaue.
+  enum AvailabilityPriority : int {
+    /// The availability attribute was specified explicitly next to the
+    /// declaration.
+    AP_Explicit = 0,
+
+    /// The availability attribute was applied using '#pragma clang attribute'.
+    AP_PragmaClangAttribute = 1,
+
+    /// The availability attribute for a specific platform was inferred from
+    /// an availability attribute for another platform.
+    AP_InferredFromOtherPlatform = 2
+  };
+
   /// Attribute merging methods. Return true if a new attribute was added.
-  AvailabilityAttr *mergeAvailabilityAttr(NamedDecl *D, SourceRange Range,
-                                          IdentifierInfo *Platform,
-                                          bool Implicit,
-                                          VersionTuple Introduced,
-                                          VersionTuple Deprecated,
-                                          VersionTuple Obsoleted,
-                                          bool IsUnavailable,
-                                          StringRef Message,
-                                          bool IsStrict, StringRef Replacement,
-                                          AvailabilityMergeKind AMK,
-                                          unsigned AttrSpellingListIndex);
+  AvailabilityAttr *mergeAvailabilityAttr(
+      NamedDecl *D, SourceRange Range, IdentifierInfo *Platform, bool Implicit,
+      VersionTuple Introduced, VersionTuple Deprecated, VersionTuple Obsoleted,
+      bool IsUnavailable, StringRef Message, bool IsStrict,
+      StringRef Replacement, AvailabilityMergeKind AMK, int Priority,
+      unsigned AttrSpellingListIndex);
   TypeVisibilityAttr *mergeTypeVisibilityAttr(Decl *D, SourceRange Range,
                                        TypeVisibilityAttr::VisibilityType Vis,
                                               unsigned AttrSpellingListIndex);
@@ -2494,6 +2521,12 @@ public:
                                           unsigned AttrSpellingListIndex);
   MinSizeAttr *mergeMinSizeAttr(Decl *D, SourceRange Range,
                                 unsigned AttrSpellingListIndex);
+  NoSpeculativeLoadHardeningAttr *
+  mergeNoSpeculativeLoadHardeningAttr(Decl *D,
+                                      const NoSpeculativeLoadHardeningAttr &AL);
+  SpeculativeLoadHardeningAttr *
+  mergeSpeculativeLoadHardeningAttr(Decl *D,
+                                    const SpeculativeLoadHardeningAttr &AL);
   OptimizeNoneAttr *mergeOptimizeNoneAttr(Decl *D, SourceRange Range,
                                           unsigned AttrSpellingListIndex);
   InternalLinkageAttr *mergeInternalLinkageAttr(Decl *D, const ParsedAttr &AL);
@@ -4821,7 +4854,7 @@ public:
   ImplicitExceptionSpecification
   ComputeDefaultedCopyCtorExceptionSpec(CXXMethodDecl *MD);
 
-  /// Determine what sort of exception specification a defautled
+  /// Determine what sort of exception specification a defaulted
   /// copy assignment operator of a class will have, and whether the
   /// parameter will be const.
   ImplicitExceptionSpecification
@@ -6358,9 +6391,9 @@ public:
                     const TemplateArgumentListInfo &ExplicitTemplateArgs,
                                                     LookupResult &Previous);
 
-  bool CheckFunctionTemplateSpecialization(FunctionDecl *FD,
-                         TemplateArgumentListInfo *ExplicitTemplateArgs,
-                                           LookupResult &Previous);
+  bool CheckFunctionTemplateSpecialization(
+      FunctionDecl *FD, TemplateArgumentListInfo *ExplicitTemplateArgs,
+      LookupResult &Previous, bool QualifiedFriend = false);
   bool CheckMemberSpecialization(NamedDecl *Member, LookupResult &Previous);
   void CompleteMemberSpecialization(NamedDecl *Member, LookupResult &Previous);
 
@@ -7097,7 +7130,7 @@ public:
   QualType deduceVarTypeFromInitializer(VarDecl *VDecl, DeclarationName Name,
                                         QualType Type, TypeSourceInfo *TSI,
                                         SourceRange Range, bool DirectInit,
-                                        Expr *Init);
+                                        Expr *&Init);
 
   TypeLoc getReturnTypeLoc(FunctionDecl *FD) const;
 

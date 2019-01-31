@@ -1,9 +1,8 @@
 //===--------------------- ResourceManager.h --------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -72,7 +71,7 @@ class DefaultResourceStrategy final : public ResourceStrategy {
   ///
   /// There is one bit set for every available resource unit.
   /// It defaults to the value of field ResourceSizeMask in ResourceState.
-  const unsigned ResourceUnitMask;
+  const uint64_t ResourceUnitMask;
 
   /// A simple round-robin selector for processor resource units.
   /// Each bit of this mask identifies a sub resource within a group.
@@ -335,12 +334,12 @@ class ResourceManager {
   // Used to quickly identify groups that own a particular resource unit.
   std::vector<uint64_t> Resource2Groups;
 
+  // A table to map processor resource IDs to processor resource masks.
+  SmallVector<uint64_t, 8> ProcResID2Mask;
+
   // Keeps track of which resources are busy, and how many cycles are left
   // before those become usable again.
   SmallDenseMap<ResourceRef, unsigned> BusyResources;
-
-  // A table to map processor resource IDs to processor resource masks.
-  SmallVector<uint64_t, 8> ProcResID2Mask;
 
   // Returns the actual resource unit that will be used.
   ResourceRef selectPipe(uint64_t ResourceID);

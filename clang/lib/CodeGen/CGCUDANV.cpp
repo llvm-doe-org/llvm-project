@@ -1,9 +1,8 @@
 //===----- CGCUDANV.cpp - Interface to NVIDIA CUDA Runtime ----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,7 +17,6 @@
 #include "clang/AST/Decl.h"
 #include "clang/CodeGen/ConstantInitBuilder.h"
 #include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/CallSite.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/Support/Format.h"
@@ -209,11 +207,11 @@ void CGNVCUDARuntime::emitDeviceStubBody(CodeGenFunction &CGF,
         llvm::ConstantInt::get(SizeTy, TyWidth.getQuantity()),
         llvm::ConstantInt::get(SizeTy, Offset.getQuantity()),
     };
-    llvm::CallSite CS = CGF.EmitRuntimeCallOrInvoke(cudaSetupArgFn, Args);
+    llvm::CallBase *CB = CGF.EmitRuntimeCallOrInvoke(cudaSetupArgFn, Args);
     llvm::Constant *Zero = llvm::ConstantInt::get(IntTy, 0);
-    llvm::Value *CSZero = CGF.Builder.CreateICmpEQ(CS.getInstruction(), Zero);
+    llvm::Value *CBZero = CGF.Builder.CreateICmpEQ(CB, Zero);
     llvm::BasicBlock *NextBlock = CGF.createBasicBlock("setup.next");
-    CGF.Builder.CreateCondBr(CSZero, NextBlock, EndBlock);
+    CGF.Builder.CreateCondBr(CBZero, NextBlock, EndBlock);
     CGF.EmitBlock(NextBlock);
     Offset += TyWidth;
   }

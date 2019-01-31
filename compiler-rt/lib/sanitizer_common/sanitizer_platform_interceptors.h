@@ -1,9 +1,8 @@
 //===-- sanitizer_platform_interceptors.h -----------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -545,13 +544,15 @@
 #define SANITIZER_INTERCEPT_SHA2 SI_NETBSD
 #define SANITIZER_INTERCEPT_CDB SI_NETBSD
 #define SANITIZER_INTERCEPT_VIS (SI_NETBSD || SI_FREEBSD)
-#define SANITIZER_INTERCEPT_GETFSENT (SI_FREEBSD || SI_NETBSD || SI_MAC)
-#define SANITIZER_INTERCEPT_ARC4RANDOM (SI_FREEBSD || SI_NETBSD)
-
 #define SANITIZER_INTERCEPT_POPEN SI_POSIX
 #define SANITIZER_INTERCEPT_POPENVE SI_NETBSD
 #define SANITIZER_INTERCEPT_PCLOSE SI_POSIX
 #define SANITIZER_INTERCEPT_FUNOPEN (SI_NETBSD || SI_FREEBSD)
 #define SANITIZER_INTERCEPT_FUNOPEN2 SI_NETBSD
+#define SANITIZER_INTERCEPT_GETFSENT (SI_FREEBSD || SI_NETBSD || SI_MAC)
+#define SANITIZER_INTERCEPT_ARC4RANDOM (SI_FREEBSD || SI_NETBSD)
+#define SANITIZER_INTERCEPT_FDEVNAME SI_FREEBSD
+#define SANITIZER_INTERCEPT_GETUSERSHELL (SI_POSIX && !SI_POSIX)
+#define SANITIZER_INTERCEPT_SL_INIT (SI_FREEBSD || SI_NETBSD)
 
 #endif  // #ifndef SANITIZER_PLATFORM_INTERCEPTORS_H

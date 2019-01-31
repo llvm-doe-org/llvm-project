@@ -1,9 +1,8 @@
 //===--- XRefs.h -------------------------------------------------*- C++-*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -35,7 +34,9 @@ std::vector<DocumentHighlight> findDocumentHighlights(ParsedAST &AST,
 llvm::Optional<Hover> getHover(ParsedAST &AST, Position Pos);
 
 /// Returns reference locations of the symbol at a specified \p Pos.
+/// \p Limit limits the number of results returned (0 means no limit).
 std::vector<Location> findReferences(ParsedAST &AST, Position Pos,
+                                     uint32_t Limit,
                                      const SymbolIndex *Index = nullptr);
 
 /// Get info about symbols at \p Pos.

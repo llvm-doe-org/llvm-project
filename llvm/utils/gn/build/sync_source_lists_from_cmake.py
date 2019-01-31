@@ -18,8 +18,9 @@ import subprocess
 
 
 def sync_source_lists():
-    gn_files = subprocess.check_output(
-            ['git', 'ls-files', '*BUILD.gn']).splitlines()
+    # Use shell=True on Windows in case git is a bat file.
+    gn_files = subprocess.check_output(['git', 'ls-files', '*BUILD.gn'],
+                                       shell=os.name == 'nt').splitlines()
 
     # Matches e.g. |   "foo.cpp",|, captures |foo| in group 1.
     gn_cpp_re = re.compile(r'^\s*"([^"]+\.(?:cpp|h))",$', re.MULTILINE)
@@ -60,8 +61,7 @@ def sync_unittests():
     # Matches e.g. |add_llvm_unittest_with_input_files|.
     unittest_re = re.compile(r'^add_\S+_unittest', re.MULTILINE)
 
-    # FIXME: Add 'llvm' here once it's complete.
-    checked = [ 'clang', 'lld' ]
+    checked = [ 'clang', 'lld', 'llvm' ]
     for c in checked:
         for root, _, _ in os.walk(os.path.join(c, 'unittests')):
             cmake_file = os.path.join(root, 'CMakeLists.txt')

@@ -1,9 +1,8 @@
 //==- AArch64AsmParser.cpp - Parse AArch64 assembly to MCInst instructions -==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -2826,7 +2825,7 @@ static const struct Extension {
     {"simd", {AArch64::FeatureNEON}},
     {"ras", {AArch64::FeatureRAS}},
     {"lse", {AArch64::FeatureLSE}},
-    {"predctrl", {AArch64::FeaturePredCtrl}},
+    {"predres", {AArch64::FeaturePredRes}},
     {"ccdp", {AArch64::FeatureCacheDeepPersist}},
     {"mte", {AArch64::FeatureMTE}},
     {"tlb-rmi", {AArch64::FeatureTLB_RMI}},

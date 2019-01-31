@@ -1,9 +1,8 @@
 //===-- ARM.td - Describe the ARM Target Machine -----------*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -1078,7 +1077,9 @@ def : ProcessorModel<"cyclone",     SwiftModel,         [ARMv8a, ProcSwift,
 def : ProcNoItin<"exynos-m1",                           [ARMv8a, ProcExynos]>;
 def : ProcNoItin<"exynos-m2",                           [ARMv8a, ProcExynos]>;
 def : ProcNoItin<"exynos-m3",                           [ARMv8a, ProcExynos]>;
-def : ProcNoItin<"exynos-m4",                           [ARMv8a, ProcExynos]>;
+def : ProcNoItin<"exynos-m4",                           [ARMv82a, ProcExynos,
+                                                         FeatureFullFP16,
+                                                         FeatureDotProd]>;
 
 def : ProcNoItin<"kryo",                                [ARMv8a, ProcKryo,
                                                          FeatureHWDivThumb,

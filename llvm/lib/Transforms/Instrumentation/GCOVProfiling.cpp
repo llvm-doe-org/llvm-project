@@ -1,9 +1,8 @@
 //===- GCOVProfiling.cpp - Insert edge counters for gcov profiling --------===//
 //
-//                      The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -185,7 +184,7 @@ static StringRef getFunctionName(const DISubprogram *SP) {
 /// Prefer relative paths in the coverage notes. Clang also may split
 /// up absolute paths into a directory and filename component. When
 /// the relative path doesn't exist, reconstruct the absolute path.
-SmallString<128> getFilename(const DISubprogram *SP) {
+static SmallString<128> getFilename(const DISubprogram *SP) {
   SmallString<128> Path;
   StringRef RelPath = SP->getFilename();
   if (sys::fs::exists(RelPath))

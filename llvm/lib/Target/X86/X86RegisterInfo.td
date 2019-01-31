@@ -1,9 +1,8 @@
 //===- X86RegisterInfo.td - Describe the X86 Register File --*- tablegen -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -522,9 +521,15 @@ def FR64 : RegisterClass<"X86", [f64], 64, (add FR32)>;
 // faster on common hardware.  In reality, this should be controlled by a
 // command line option or something.
 
+
 def RFP32 : RegisterClass<"X86",[f32], 32, (sequence "FP%u", 0, 6)>;
 def RFP64 : RegisterClass<"X86",[f64], 32, (add RFP32)>;
 def RFP80 : RegisterClass<"X86",[f80], 32, (add RFP32)>;
+
+// st(7) may be is not allocatable.
+def RFP80_7 : RegisterClass<"X86",[f80], 32, (add FP7)> {
+  let isAllocatable = 0;
+}
 
 // Floating point stack registers (these are not allocatable by the
 // register allocator - the floating point stackifier is responsible

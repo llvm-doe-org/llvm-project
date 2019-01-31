@@ -1,9 +1,8 @@
 //===--- Expr.cpp - Expression AST Node Implementation --------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -1677,10 +1676,10 @@ bool CastExpr::CastConsistency() const {
     auto Ty = getType();
     auto SETy = getSubExpr()->getType();
     assert(getValueKindForType(Ty) == Expr::getValueKindForType(SETy));
-    if (!isGLValue())
+    if (isRValue()) {
       Ty = Ty->getPointeeType();
-    if (!isGLValue())
       SETy = SETy->getPointeeType();
+    }
     assert(!Ty.isNull() && !SETy.isNull() &&
            Ty.getAddressSpace() != SETy.getAddressSpace());
     goto CheckNoBasePath;
@@ -1808,21 +1807,6 @@ NamedDecl *CastExpr::getConversionFunction() const {
   return nullptr;
 }
 
-CastExpr::BasePathSizeTy *CastExpr::BasePathSize() {
-  assert(!path_empty());
-  switch (getStmtClass()) {
-#define ABSTRACT_STMT(x)
-#define CASTEXPR(Type, Base)                                                   \
-  case Stmt::Type##Class:                                                      \
-    return static_cast<Type *>(this)                                           \
-        ->getTrailingObjects<CastExpr::BasePathSizeTy>();
-#define STMT(Type, Base)
-#include "clang/AST/StmtNodes.inc"
-  default:
-    llvm_unreachable("non-cast expressions not possible here");
-  }
-}
-
 CXXBaseSpecifier **CastExpr::path_buffer() {
   switch (getStmtClass()) {
 #define ABSTRACT_STMT(x)
@@ -1861,9 +1845,7 @@ ImplicitCastExpr *ImplicitCastExpr::Create(const ASTContext &C, QualType T,
                                            const CXXCastPath *BasePath,
                                            ExprValueKind VK) {
   unsigned PathSize = (BasePath ? BasePath->size() : 0);
-  void *Buffer =
-      C.Allocate(totalSizeToAlloc<CastExpr::BasePathSizeTy, CXXBaseSpecifier *>(
-          PathSize ? 1 : 0, PathSize));
+  void *Buffer = C.Allocate(totalSizeToAlloc<CXXBaseSpecifier *>(PathSize));
   ImplicitCastExpr *E =
     new (Buffer) ImplicitCastExpr(T, Kind, Operand, PathSize, VK);
   if (PathSize)
@@ -1874,9 +1856,7 @@ ImplicitCastExpr *ImplicitCastExpr::Create(const ASTContext &C, QualType T,
 
 ImplicitCastExpr *ImplicitCastExpr::CreateEmpty(const ASTContext &C,
                                                 unsigned PathSize) {
-  void *Buffer =
-      C.Allocate(totalSizeToAlloc<CastExpr::BasePathSizeTy, CXXBaseSpecifier *>(
-          PathSize ? 1 : 0, PathSize));
+  void *Buffer = C.Allocate(totalSizeToAlloc<CXXBaseSpecifier *>(PathSize));
   return new (Buffer) ImplicitCastExpr(EmptyShell(), PathSize);
 }
 
@@ -1887,9 +1867,7 @@ CStyleCastExpr *CStyleCastExpr::Create(const ASTContext &C, QualType T,
                                        TypeSourceInfo *WrittenTy,
                                        SourceLocation L, SourceLocation R) {
   unsigned PathSize = (BasePath ? BasePath->size() : 0);
-  void *Buffer =
-      C.Allocate(totalSizeToAlloc<CastExpr::BasePathSizeTy, CXXBaseSpecifier *>(
-          PathSize ? 1 : 0, PathSize));
+  void *Buffer = C.Allocate(totalSizeToAlloc<CXXBaseSpecifier *>(PathSize));
   CStyleCastExpr *E =
     new (Buffer) CStyleCastExpr(T, VK, K, Op, PathSize, WrittenTy, L, R);
   if (PathSize)
@@ -1900,9 +1878,7 @@ CStyleCastExpr *CStyleCastExpr::Create(const ASTContext &C, QualType T,
 
 CStyleCastExpr *CStyleCastExpr::CreateEmpty(const ASTContext &C,
                                             unsigned PathSize) {
-  void *Buffer =
-      C.Allocate(totalSizeToAlloc<CastExpr::BasePathSizeTy, CXXBaseSpecifier *>(
-          PathSize ? 1 : 0, PathSize));
+  void *Buffer = C.Allocate(totalSizeToAlloc<CXXBaseSpecifier *>(PathSize));
   return new (Buffer) CStyleCastExpr(EmptyShell(), PathSize);
 }
 
@@ -3798,55 +3774,95 @@ void ShuffleVectorExpr::setExprs(const ASTContext &C, ArrayRef<Expr *> Exprs) {
   memcpy(SubExprs, Exprs.data(), sizeof(Expr *) * Exprs.size());
 }
 
-GenericSelectionExpr::GenericSelectionExpr(const ASTContext &Context,
-                               SourceLocation GenericLoc, Expr *ControllingExpr,
-                               ArrayRef<TypeSourceInfo*> AssocTypes,
-                               ArrayRef<Expr*> AssocExprs,
-                               SourceLocation DefaultLoc,
-                               SourceLocation RParenLoc,
-                               bool ContainsUnexpandedParameterPack,
-                               unsigned ResultIndex)
-  : Expr(GenericSelectionExprClass,
-         AssocExprs[ResultIndex]->getType(),
-         AssocExprs[ResultIndex]->getValueKind(),
-         AssocExprs[ResultIndex]->getObjectKind(),
-         AssocExprs[ResultIndex]->isTypeDependent(),
-         AssocExprs[ResultIndex]->isValueDependent(),
-         AssocExprs[ResultIndex]->isInstantiationDependent(),
-         ContainsUnexpandedParameterPack),
-    AssocTypes(new (Context) TypeSourceInfo*[AssocTypes.size()]),
-    SubExprs(new (Context) Stmt*[END_EXPR+AssocExprs.size()]),
-    NumAssocs(AssocExprs.size()), ResultIndex(ResultIndex),
-    GenericLoc(GenericLoc), DefaultLoc(DefaultLoc), RParenLoc(RParenLoc) {
-  SubExprs[CONTROLLING] = ControllingExpr;
-  assert(AssocTypes.size() == AssocExprs.size());
-  std::copy(AssocTypes.begin(), AssocTypes.end(), this->AssocTypes);
-  std::copy(AssocExprs.begin(), AssocExprs.end(), SubExprs+END_EXPR);
+GenericSelectionExpr::GenericSelectionExpr(
+    const ASTContext &, SourceLocation GenericLoc, Expr *ControllingExpr,
+    ArrayRef<TypeSourceInfo *> AssocTypes, ArrayRef<Expr *> AssocExprs,
+    SourceLocation DefaultLoc, SourceLocation RParenLoc,
+    bool ContainsUnexpandedParameterPack, unsigned ResultIndex)
+    : Expr(GenericSelectionExprClass, AssocExprs[ResultIndex]->getType(),
+           AssocExprs[ResultIndex]->getValueKind(),
+           AssocExprs[ResultIndex]->getObjectKind(),
+           AssocExprs[ResultIndex]->isTypeDependent(),
+           AssocExprs[ResultIndex]->isValueDependent(),
+           AssocExprs[ResultIndex]->isInstantiationDependent(),
+           ContainsUnexpandedParameterPack),
+      NumAssocs(AssocExprs.size()), ResultIndex(ResultIndex),
+      DefaultLoc(DefaultLoc), RParenLoc(RParenLoc) {
+  assert(AssocTypes.size() == AssocExprs.size() &&
+         "Must have the same number of association expressions"
+         " and TypeSourceInfo!");
+  assert(ResultIndex < NumAssocs && "ResultIndex is out-of-bounds!");
+
+  GenericSelectionExprBits.GenericLoc = GenericLoc;
+  getTrailingObjects<Stmt *>()[ControllingIndex] = ControllingExpr;
+  std::copy(AssocExprs.begin(), AssocExprs.end(),
+            getTrailingObjects<Stmt *>() + AssocExprStartIndex);
+  std::copy(AssocTypes.begin(), AssocTypes.end(),
+            getTrailingObjects<TypeSourceInfo *>());
 }
 
-GenericSelectionExpr::GenericSelectionExpr(const ASTContext &Context,
-                               SourceLocation GenericLoc, Expr *ControllingExpr,
-                               ArrayRef<TypeSourceInfo*> AssocTypes,
-                               ArrayRef<Expr*> AssocExprs,
-                               SourceLocation DefaultLoc,
-                               SourceLocation RParenLoc,
-                               bool ContainsUnexpandedParameterPack)
-  : Expr(GenericSelectionExprClass,
-         Context.DependentTy,
-         VK_RValue,
-         OK_Ordinary,
-         /*isTypeDependent=*/true,
-         /*isValueDependent=*/true,
-         /*isInstantiationDependent=*/true,
-         ContainsUnexpandedParameterPack),
-    AssocTypes(new (Context) TypeSourceInfo*[AssocTypes.size()]),
-    SubExprs(new (Context) Stmt*[END_EXPR+AssocExprs.size()]),
-    NumAssocs(AssocExprs.size()), ResultIndex(-1U), GenericLoc(GenericLoc),
-    DefaultLoc(DefaultLoc), RParenLoc(RParenLoc) {
-  SubExprs[CONTROLLING] = ControllingExpr;
-  assert(AssocTypes.size() == AssocExprs.size());
-  std::copy(AssocTypes.begin(), AssocTypes.end(), this->AssocTypes);
-  std::copy(AssocExprs.begin(), AssocExprs.end(), SubExprs+END_EXPR);
+GenericSelectionExpr::GenericSelectionExpr(
+    const ASTContext &Context, SourceLocation GenericLoc, Expr *ControllingExpr,
+    ArrayRef<TypeSourceInfo *> AssocTypes, ArrayRef<Expr *> AssocExprs,
+    SourceLocation DefaultLoc, SourceLocation RParenLoc,
+    bool ContainsUnexpandedParameterPack)
+    : Expr(GenericSelectionExprClass, Context.DependentTy, VK_RValue,
+           OK_Ordinary,
+           /*isTypeDependent=*/true,
+           /*isValueDependent=*/true,
+           /*isInstantiationDependent=*/true, ContainsUnexpandedParameterPack),
+      NumAssocs(AssocExprs.size()), ResultIndex(ResultDependentIndex),
+      DefaultLoc(DefaultLoc), RParenLoc(RParenLoc) {
+  assert(AssocTypes.size() == AssocExprs.size() &&
+         "Must have the same number of association expressions"
+         " and TypeSourceInfo!");
+
+  GenericSelectionExprBits.GenericLoc = GenericLoc;
+  getTrailingObjects<Stmt *>()[ControllingIndex] = ControllingExpr;
+  std::copy(AssocExprs.begin(), AssocExprs.end(),
+            getTrailingObjects<Stmt *>() + AssocExprStartIndex);
+  std::copy(AssocTypes.begin(), AssocTypes.end(),
+            getTrailingObjects<TypeSourceInfo *>());
+}
+
+GenericSelectionExpr::GenericSelectionExpr(EmptyShell Empty, unsigned NumAssocs)
+    : Expr(GenericSelectionExprClass, Empty), NumAssocs(NumAssocs) {}
+
+GenericSelectionExpr *GenericSelectionExpr::Create(
+    const ASTContext &Context, SourceLocation GenericLoc, Expr *ControllingExpr,
+    ArrayRef<TypeSourceInfo *> AssocTypes, ArrayRef<Expr *> AssocExprs,
+    SourceLocation DefaultLoc, SourceLocation RParenLoc,
+    bool ContainsUnexpandedParameterPack, unsigned ResultIndex) {
+  unsigned NumAssocs = AssocExprs.size();
+  void *Mem = Context.Allocate(
+      totalSizeToAlloc<Stmt *, TypeSourceInfo *>(1 + NumAssocs, NumAssocs),
+      alignof(GenericSelectionExpr));
+  return new (Mem) GenericSelectionExpr(
+      Context, GenericLoc, ControllingExpr, AssocTypes, AssocExprs, DefaultLoc,
+      RParenLoc, ContainsUnexpandedParameterPack, ResultIndex);
+}
+
+GenericSelectionExpr *GenericSelectionExpr::Create(
+    const ASTContext &Context, SourceLocation GenericLoc, Expr *ControllingExpr,
+    ArrayRef<TypeSourceInfo *> AssocTypes, ArrayRef<Expr *> AssocExprs,
+    SourceLocation DefaultLoc, SourceLocation RParenLoc,
+    bool ContainsUnexpandedParameterPack) {
+  unsigned NumAssocs = AssocExprs.size();
+  void *Mem = Context.Allocate(
+      totalSizeToAlloc<Stmt *, TypeSourceInfo *>(1 + NumAssocs, NumAssocs),
+      alignof(GenericSelectionExpr));
+  return new (Mem) GenericSelectionExpr(
+      Context, GenericLoc, ControllingExpr, AssocTypes, AssocExprs, DefaultLoc,
+      RParenLoc, ContainsUnexpandedParameterPack);
+}
+
+GenericSelectionExpr *
+GenericSelectionExpr::CreateEmpty(const ASTContext &Context,
+                                  unsigned NumAssocs) {
+  void *Mem = Context.Allocate(
+      totalSizeToAlloc<Stmt *, TypeSourceInfo *>(1 + NumAssocs, NumAssocs),
+      alignof(GenericSelectionExpr));
+  return new (Mem) GenericSelectionExpr(EmptyShell(), NumAssocs);
 }
 
 //===----------------------------------------------------------------------===//

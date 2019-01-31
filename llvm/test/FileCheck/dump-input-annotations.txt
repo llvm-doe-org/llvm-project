@@ -16,10 +16,10 @@
 ; RUN: echo 'CHECK: universe' >> %t.chk
 
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
-; RUN: | FileCheck -strict-whitespace -match-full-lines -check-prefix=ALIGN %s
+; RUN: | FileCheck -strict-whitespace -match-full-lines -check-prefix=ALIGN \
+; RUN:             -implicit-check-not='remark:' %s
 
 ; Verbose diagnostics are suppressed but not errors.
-; ALIGN-NOT:{{.*}}remark:{{.*}}
 ; ALIGN:{{.*}}error:{{.*}}
 ; ALIGN:{{.*}}possible intended match here{{.*}}
 
@@ -52,14 +52,16 @@
 ; RUN: echo 'CHECK: world' >> %t.chk
 
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefix=CHK
+; RUN: | FileCheck -match-full-lines %s -check-prefix=CHK \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=CHK,CHK-V
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=CHK,CHK-V \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=CHK,CHK-V
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=CHK,CHK-V \
+; RUN:             -implicit-check-not='remark:'
 
 ; Verbose diagnostics are suppressed but not errors.
-; CHK-NOT: {{.*}}remark:{{.*}}
 ; CHK: {{.*}}error:{{.*}}
 ; CHK: {{.*}}possible intended match here{{.*}}
 
@@ -87,14 +89,16 @@
 ; RUN: echo 'CHECK-COUNT-3: pete' > %t.chk
 
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=CNT,CNT-Q
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=CNT,CNT-Q \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=CNT,CNT-V
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=CNT,CNT-V \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=CNT,CNT-V
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=CNT,CNT-V \
+; RUN:             -implicit-check-not='remark:'
 
 ; Verbose diagnostics are suppressed but not errors.
-; CNT-NOT: {{.*}}remark:{{.*}}
 ; CNT: {{.*}}error:{{.*}}
 
 ; CNT:          <<<<<<
@@ -122,14 +126,16 @@
 ; RUN: echo 'CHECK-NEXT: world' >> %t.chk
 
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefix=NXT
+; RUN: | FileCheck -match-full-lines %s -check-prefix=NXT \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=NXT,NXT-V
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=NXT,NXT-V \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=NXT,NXT-V,NXT-VV
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=NXT,NXT-V,NXT-VV \
+; RUN:             -implicit-check-not='remark:'
 
 ; Verbose diagnostics are suppressed but not errors.
-; NXT-NOT: {{.*}}remark:{{.*}}
 ; NXT: {{.*}}error:{{.*}}
 
 ; NXT:        <<<<<<
@@ -173,14 +179,16 @@
 ; RUN: echo 'CHECK-SAME: again' >> %t.chk
 
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefix=SAM
+; RUN: | FileCheck -match-full-lines %s -check-prefix=SAM \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=SAM,SAM-V
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=SAM,SAM-V \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=SAM,SAM-V,SAM-VV
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=SAM,SAM-V,SAM-VV \
+; RUN:             -implicit-check-not='remark:'
 
 ; Verbose diagnostics are suppressed but not errors.
-; SAM-NOT: {{.*}}remark:{{.*}}
 ; SAM: {{.*}}error:{{.*}}
 
 ; SAM:        <<<<<<
@@ -196,10 +204,10 @@
 ; RUN: echo 'again' >> %t.in
 
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=SAM2
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=SAM2 \
+; RUN:             -implicit-check-not='remark:'
 
 ; Verbose diagnostics are suppressed but not errors.
-; SAM2-NOT: {{.*}}remark:{{.*}}
 ; SAM2: {{.*}}error:{{.*}}
 
 ; SAM2:      <<<<<<
@@ -234,14 +242,16 @@
 ; RUN: echo 'CHECK-LABEL: label' >> %t.chk
 
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefix=EMP
+; RUN: | FileCheck -match-full-lines %s -check-prefix=EMP \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=EMP,EMP-V
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=EMP,EMP-V \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=EMP,EMP-V,EMP-VV
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=EMP,EMP-V,EMP-VV \
+; RUN:             -implicit-check-not='remark:'
 
 ; Verbose diagnostics are suppressed but not errors.
-; EMP-NOT: {{.*}}remark:{{.*}}
 ; EMP: {{.*}}error:{{.*}}
 
 ; EMP:        <<<<<<
@@ -266,14 +276,16 @@
 ; RUN: echo 'CHECK-EMPTY:' >> %t.chk
 
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefix=EMP2
+; RUN: | FileCheck -match-full-lines %s -check-prefix=EMP2 \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=EMP2,EMP2-V
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=EMP2,EMP2-V \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=EMP2,EMP2-V,EMP2-VV
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=EMP2,EMP2-V,EMP2-VV \
+; RUN:             -implicit-check-not='remark:'
 
 ; Verbose diagnostics are suppressed but not errors.
-; EMP2-NOT: {{.*}}remark:{{.*}}
 ; EMP2: {{.*}}error:{{.*}}
 
 ; EMP2:        <<<<<<
@@ -299,14 +311,16 @@
 ; RUN: echo 'CHECK-NOT: world' >> %t.chk
 
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefix=NOT
+; RUN: | FileCheck -match-full-lines %s -check-prefix=NOT \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=NOT,NOT-V
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=NOT,NOT-V \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=NOT,NOT-V,NOT-VV
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=NOT,NOT-V,NOT-VV \
+; RUN:             -implicit-check-not='remark:'
 
 ; Verbose diagnostics are suppressed but not errors.
-; NOT-NOT: {{.*}}remark:{{.*}}
 ; NOT: {{.*}}error:{{.*}}
 
 ; NOT:         <<<<<<
@@ -327,14 +341,16 @@
 ; RUN: echo 'CHECK: ain' >> %t.chk
 
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefix=NOT2
+; RUN: | FileCheck -match-full-lines %s -check-prefix=NOT2 \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=NOT2,NOT2-V
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=NOT2,NOT2-V \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=NOT2,NOT2-V,NOT2-VV
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=NOT2,NOT2-V,NOT2-VV \
+; RUN:             -implicit-check-not='remark:'
 
 ; Verbose diagnostics are suppressed but not errors.
-; NOT2-NOT: {{.*}}remark:{{.*}}
 ; NOT2: {{.*}}error:{{.*}}
 
 ; NOT2:         <<<<<<
@@ -372,14 +388,16 @@
 ; DAG-VV = -vv
 
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=DAG,DAG-Q
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=DAG,DAG-Q \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=DAG,DAG-V,DAG-VQ
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=DAG,DAG-V,DAG-VQ \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=DAG,DAG-V,DAG-VV
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=DAG,DAG-V,DAG-VV \
+; RUN:             -implicit-check-not='remark:'
 
 ; Verbose diagnostics are suppressed but not errors.
-; DAG-NOT: {{.*}}remark:{{.*}}
 ; DAG: {{.*}}error:{{.*}}
 
 ; DAG:         <<<<<<
@@ -417,14 +435,16 @@
 ; RUN: echo 'CHECK-LABEL: lab2' >> %t.chk
 
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=LAB
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=LAB \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -v 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=LAB,LAB-V
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=LAB,LAB-V \
+; RUN:             -implicit-check-not='remark:'
 ; RUN: not FileCheck -dump-input=always -input-file %t.in %t.chk -vv 2>&1 \
-; RUN: | FileCheck -match-full-lines %s -check-prefixes=LAB,LAB-V,LAB-VV
+; RUN: | FileCheck -match-full-lines %s -check-prefixes=LAB,LAB-V,LAB-VV \
+; RUN:             -implicit-check-not='remark:'
 
 ; Verbose diagnostics are suppressed but not errors.
-; LAB-NOT: {{.*}}remark:{{.*}}
 ; LAB: {{.*}}error:{{.*}}
 ; LAB: {{.*}}possible intended match{{.*}}
 

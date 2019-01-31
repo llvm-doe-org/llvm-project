@@ -1,9 +1,8 @@
 //===- CompilerInvocation.cpp ---------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -907,6 +906,7 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
       Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << S;
   }
   Opts.LTOUnit = Args.hasFlag(OPT_flto_unit, OPT_fno_lto_unit, false);
+  Opts.EnableSplitLTOUnit = Args.hasArg(OPT_fsplit_lto_unit);
   if (Arg *A = Args.getLastArg(OPT_fthinlto_index_EQ)) {
     if (IK.getLanguage() != InputKind::LLVM_IR)
       Diags.Report(diag::err_drv_argument_only_allowed_with)
@@ -1681,20 +1681,7 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
     Opts.ProgramAction = frontend::PluginAction;
     Opts.ActionName = A->getValue();
   }
-  for (const std::string &Arg : Args.getAllArgValues(OPT_add_plugin)) {
-    bool Found = false;
-    for (FrontendPluginRegistry::iterator it = FrontendPluginRegistry::begin(),
-                                          ie = FrontendPluginRegistry::end();
-         it != ie; ++it) {
-      if (it->getName() == Arg)
-        Found = true;
-    }
-    if (!Found) {
-      Diags.Report(diag::err_fe_invalid_plugin_name) << Arg;
-      continue;
-    }
-    Opts.AddPluginActions.push_back(Arg);
-  }
+  Opts.AddPluginActions = Args.getAllArgValues(OPT_add_plugin);
   for (const auto *AA : Args.filtered(OPT_plugin_arg))
     Opts.PluginArgs[AA->getValue(0)].emplace_back(AA->getValue(1));
 
@@ -2529,6 +2516,9 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   if (Args.hasArg(OPT_fvisibility_global_new_delete_hidden))
     Opts.GlobalAllocationFunctionVisibilityHidden = 1;
 
+  if (Args.hasArg(OPT_fapply_global_visibility_to_externs))
+    Opts.SetVisibilityForExternDecls = 1;
+
   if (Args.hasArg(OPT_ftrapv)) {
     Opts.setSignedOverflowBehavior(LangOptions::SOB_Trapping);
     // Set the handler, if one is specified.
@@ -2881,6 +2871,11 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
         getLastArgIntValue(Args, options::OPT_fopenmp_cuda_blocks_per_sm_EQ,
                            Opts.OpenMPCUDABlocksPerSM, Diags);
   }
+
+  // Prevent auto-widening the representation of loop counters during an
+  // OpenMP collapse clause.
+  Opts.OpenMPOptimisticCollapse =
+      Args.hasArg(options::OPT_fopenmp_optimistic_collapse) ? 1 : 0;
 
   // Get the OpenMP target triples if any.
   if (Arg *A = Args.getLastArg(options::OPT_fopenmp_targets_EQ)) {

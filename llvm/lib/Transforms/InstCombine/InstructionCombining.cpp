@@ -1,9 +1,8 @@
 //===- InstructionCombining.cpp - Combine multiple instructions -----------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -2296,8 +2295,8 @@ Instruction *InstCombiner::visitAllocSite(Instruction &MI) {
 
       if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(I)) {
         if (II->getIntrinsicID() == Intrinsic::objectsize) {
-          ConstantInt *Result = lowerObjectSizeCall(II, DL, &TLI,
-                                                    /*MustSucceed=*/true);
+          Value *Result =
+              lowerObjectSizeCall(II, DL, &TLI, /*MustSucceed=*/true);
           replaceInstUsesWith(*I, Result);
           eraseInstFromFunction(*I);
           Users[i] = nullptr; // Skip examining in the next loop.
@@ -3065,9 +3064,11 @@ static bool TryToSinkInstruction(Instruction *I, BasicBlock *DestBlock) {
       I->isTerminator())
     return false;
 
-  // Do not sink alloca instructions out of the entry block.
-  if (isa<AllocaInst>(I) && I->getParent() ==
-        &DestBlock->getParent()->getEntryBlock())
+  // Do not sink static or dynamic alloca instructions. Static allocas must
+  // remain in the entry block, and dynamic allocas must not be sunk in between
+  // a stacksave / stackrestore pair, which would incorrectly shorten its
+  // lifetime.
+  if (isa<AllocaInst>(I))
     return false;
 
   // Do not sink into catchswitch blocks.

@@ -40,6 +40,14 @@ int __attribute__((cpu_dispatch(atom))) redecl2(void) { }
 int allow_fwd_decl(void);
 int __attribute__((cpu_dispatch(atom))) allow_fwd_decl(void) {}
 
+int allow_fwd_decl2(void);
+void use_fwd_decl(void) {
+  allow_fwd_decl2();
+}
+// expected-error@+1 {{function declaration cannot become a multiversioned function after first usage}}
+int __attribute__((cpu_dispatch(atom))) allow_fwd_decl2(void) {}
+
+
 int __attribute__((cpu_specific(atom))) redecl4(void);
 // expected-error@+1 {{function declaration is missing 'cpu_specific' or 'cpu_dispatch' attribute in a multiversioned function}}
 int redecl4(void);
@@ -104,3 +112,6 @@ int __attribute__((cpu_specific(pentium_4))) called_invalid_value(void){ return 
 int use3(void) {
   return called_invalid_value();
 }
+
+// expected-warning@+1 {{CPU list contains duplicate entries; attribute ignored}}
+int __attribute__((cpu_dispatch(pentium_iii, pentium_iii_no_xmm_regs))) dupe_p3(void);

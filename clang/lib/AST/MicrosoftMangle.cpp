@@ -1,9 +1,8 @@
 //===--- MicrosoftMangle.cpp - Microsoft Visual C++ Name Mangling ---------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -2112,7 +2111,7 @@ void MicrosoftCXXNameMangler::mangleType(const FunctionProtoType *T, Qualifiers,
   // Structors only appear in decls, so at this point we know it's not a
   // structor type.
   // FIXME: This may not be lambda-friendly.
-  if (T->getTypeQuals() || T->getRefQualifier() != RQ_None) {
+  if (T->getMethodQuals() || T->getRefQualifier() != RQ_None) {
     Out << "$$A8@@";
     mangleFunctionType(T, /*D=*/nullptr, /*ForceThisQuals=*/true);
   } else {
@@ -2161,7 +2160,7 @@ void MicrosoftCXXNameMangler::mangleFunctionType(const FunctionType *T,
   // If this is a C++ instance method, mangle the CVR qualifiers for the
   // this pointer.
   if (HasThisQuals) {
-    Qualifiers Quals = Proto->getTypeQuals();
+    Qualifiers Quals = Proto->getMethodQuals();
     manglePointerExtQualifiers(Quals, /*PointeeType=*/QualType());
     mangleRefQualifier(Proto->getRefQualifier());
     mangleQualifiers(Quals, /*IsMember=*/false);

@@ -1,9 +1,8 @@
 //===--- CGBlocks.cpp - Emit LLVM Code for declarations ---------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -23,7 +22,6 @@
 #include "clang/AST/DeclObjC.h"
 #include "clang/CodeGen/ConstantInitBuilder.h"
 #include "llvm/ADT/SmallSet.h"
-#include "llvm/IR/CallSite.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/ScopedPrinter.h"
@@ -551,7 +549,7 @@ static void computeBlockInfo(CodeGenModule &CGM, CodeGenFunction *CGF,
   if (block->capturesCXXThis()) {
     assert(CGF && CGF->CurFuncDecl && isa<CXXMethodDecl>(CGF->CurFuncDecl) &&
            "Can't capture 'this' outside a method");
-    QualType thisType = cast<CXXMethodDecl>(CGF->CurFuncDecl)->getThisType(C);
+    QualType thisType = cast<CXXMethodDecl>(CGF->CurFuncDecl)->getThisType();
 
     // Theoretically, this could be in a different address space, so
     // don't assume standard pointer size/align.

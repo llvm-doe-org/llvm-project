@@ -1,9 +1,8 @@
 //===- llvm/Module.h - C++ class to represent a VM module -------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -366,6 +365,11 @@ public:
   Constant *getOrInsertFunction(StringRef Name, Type *RetTy, ArgsTy... Args) {
     return getOrInsertFunction(Name, AttributeList{}, RetTy, Args...);
   }
+
+  // Avoid an incorrect ordering that'd otherwise compile incorrectly.
+  template <typename... ArgsTy>
+  Constant *getOrInsertFunction(StringRef Name, AttributeList AttributeList,
+                                FunctionType *Invalid, ArgsTy... Args) = delete;
 
   /// Look up the specified function in the module symbol table. If it does not
   /// exist, return null.

@@ -1,9 +1,8 @@
 //===---- parallel.cu - NVPTX OpenMP parallel implementation ----- CUDA -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -340,7 +339,11 @@ EXTERN void __kmpc_serialized_parallel(kmp_Ident *loc, uint32_t global_tid) {
   if (checkRuntimeUninitialized(loc)) {
     ASSERT0(LT_FUSSY, checkSPMDMode(loc),
             "Expected SPMD mode with uninitialized runtime.");
-    omptarget_nvptx_simpleThreadPrivateContext->IncParLevel();
+    __SYNCTHREADS();
+    if (GetThreadIdInBlock() == 0)
+      ++parallelLevel;
+    __SYNCTHREADS();
+
     return;
   }
 
@@ -379,7 +382,10 @@ EXTERN void __kmpc_end_serialized_parallel(kmp_Ident *loc,
   if (checkRuntimeUninitialized(loc)) {
     ASSERT0(LT_FUSSY, checkSPMDMode(loc),
             "Expected SPMD mode with uninitialized runtime.");
-    omptarget_nvptx_simpleThreadPrivateContext->DecParLevel();
+    __SYNCTHREADS();
+    if (GetThreadIdInBlock() == 0)
+      --parallelLevel;
+    __SYNCTHREADS();
     return;
   }
 
@@ -401,7 +407,7 @@ EXTERN uint16_t __kmpc_parallel_level(kmp_Ident *loc, uint32_t global_tid) {
   if (checkRuntimeUninitialized(loc)) {
     ASSERT0(LT_FUSSY, checkSPMDMode(loc),
             "Expected SPMD mode with uninitialized runtime.");
-    return omptarget_nvptx_simpleThreadPrivateContext->GetParallelLevel();
+    return parallelLevel;
   }
 
   int threadId = GetLogicalThreadIdInBlock(checkSPMDMode(loc));

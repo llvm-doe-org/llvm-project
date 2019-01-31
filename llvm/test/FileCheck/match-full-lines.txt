@@ -1,9 +1,6 @@
-// In case the environment has FILECHECK_DUMP_INPUT, use -dump-input=never here
-// to avoid additional output that might not match expected output.
-//
-// RUN: not FileCheck -dump-input=never -match-full-lines -input-file %s %s  2>&1 \
+// RUN: not FileCheck -match-full-lines -input-file %s %s  2>&1 \
 // RUN:   | FileCheck --check-prefix=ERROR --implicit-check-not=error: %s
-// RUN: not FileCheck -dump-input=never -match-full-lines -strict-whitespace -input-file %s %s  2>&1 \
+// RUN: not FileCheck -match-full-lines -strict-whitespace -input-file %s %s  2>&1 \
 // RUN:   | FileCheck --check-prefix=ERROR-STRICT --check-prefix=ERROR --implicit-check-not=error: %s
 
 Label 1

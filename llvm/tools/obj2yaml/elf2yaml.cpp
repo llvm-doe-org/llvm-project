@@ -1,9 +1,8 @@
 //===------ utils/elf2yaml.cpp - obj2yaml conversion tool -------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -318,6 +317,8 @@ std::error_code ELFDumper<ELFT>::dumpCommonSection(const Elf_Shdr *Shdr,
   S.Flags = Shdr->sh_flags;
   S.Address = Shdr->sh_addr;
   S.AddressAlign = Shdr->sh_addralign;
+  if (Shdr->sh_entsize)
+    S.EntSize = static_cast<llvm::yaml::Hex64>(Shdr->sh_entsize);
 
   auto NameOrErr = getUniquedSectionName(Shdr);
   if (!NameOrErr)

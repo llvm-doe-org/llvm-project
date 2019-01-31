@@ -35,19 +35,15 @@ endif ()
 add_subdirectory(source)
 add_subdirectory(tools)
 
-option(LLDB_INCLUDE_TESTS "Generate build targets for the LLDB unit tests."
-  ${LLVM_INCLUDE_TESTS})
+option(LLDB_INCLUDE_TESTS "Generate build targets for the LLDB unit tests." ${LLVM_INCLUDE_TESTS})
 option(LLDB_TEST_USE_CUSTOM_C_COMPILER "Use the C compiler provided via LLDB_TEST_C_COMPILER for building test inferiors (instead of the just-built compiler). Defaults to OFF." OFF)
 option(LLDB_TEST_USE_CUSTOM_CXX_COMPILER "Use the C++ compiler provided via LLDB_TEST_CXX_COMPILER for building test inferiors (instead of the just-built compiler). Defaults to OFF." OFF)
 if(LLDB_INCLUDE_TESTS)
 
-  # Set the path to the default lldb test executable. Make the path relative to
-  # LLVM_RUNTIME_OUTPUT_INTDIR: this will be correct even when LLVM and LLDB
-  # have separate binary directories.
+  # Set the path to the default lldb test executable.
   set(LLDB_DEFAULT_TEST_EXECUTABLE "${LLVM_RUNTIME_OUTPUT_INTDIR}/lldb${CMAKE_EXECUTABLE_SUFFIX}")
 
-  # Set the paths to default llvm tools. Make these paths relative to the LLVM
-  # binary directory.
+  # Set the paths to default llvm tools.
   set(LLDB_DEFAULT_TEST_DSYMUTIL "${LLVM_BINARY_DIR}/${CMAKE_CFG_INTDIR}/bin/dsymutil${CMAKE_EXECUTABLE_SUFFIX}")
   set(LLDB_DEFAULT_TEST_FILECHECK "${LLVM_BINARY_DIR}/${CMAKE_CFG_INTDIR}/bin/FileCheck${CMAKE_EXECUTABLE_SUFFIX}")
 
@@ -101,16 +97,30 @@ if(LLDB_INCLUDE_TESTS)
     list(APPEND LLDB_TEST_DEPS liblldb)
   endif()
 
+  # Add dependencies if we test with the in-tree clang.
+  # This works with standalone builds as they import the clang target.
   if(TARGET clang)
     list(APPEND LLDB_TEST_DEPS clang)
     if(APPLE)
-      list(APPEND LLDB_TEST_DEPS cxx)
+      # If we build clang, we should build libcxx.
+      # FIXME: Standalone builds should import the cxx target as well.
+      if(LLDB_BUILT_STANDALONE)
+        # For now check that the include directory exists.
+        set(cxx_dir "${LLVM_BINARY_DIR}/include/c++")
+        if(NOT EXISTS ${cxx_dir})
+          message(WARNING "LLDB test suite requires libc++ in llvm/projects/libcxx or an existing build symlinked to ${cxx_dir}")
+        endif()
+      else()
+        list(APPEND LLDB_TEST_DEPS cxx)
+      endif()
     endif()
   endif()
 
   if(TARGET dsymutil)
     list(APPEND LLDB_TEST_DEPS dsymutil)
   endif()
+
+  add_custom_target(lldb-test-depends DEPENDS ${LLDB_TEST_DEPS})
 
   add_subdirectory(test)
   add_subdirectory(unittests)

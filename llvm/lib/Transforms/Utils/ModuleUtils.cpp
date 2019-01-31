@@ -1,9 +1,8 @@
 //===-- ModuleUtils.cpp - Functions to manipulate Modules -----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -171,6 +170,28 @@ std::pair<Function *, Function *> llvm::createSanitizerCtorAndInitFunctions(
             AttributeList()));
     IRB.CreateCall(VersionCheckFunction, {});
   }
+  return std::make_pair(Ctor, InitFunction);
+}
+
+std::pair<Function *, Function *>
+llvm::getOrCreateSanitizerCtorAndInitFunctions(
+    Module &M, StringRef CtorName, StringRef InitName,
+    ArrayRef<Type *> InitArgTypes, ArrayRef<Value *> InitArgs,
+    function_ref<void(Function *, Function *)> FunctionsCreatedCallback,
+    StringRef VersionCheckName) {
+  assert(!CtorName.empty() && "Expected ctor function name");
+
+  if (Function *Ctor = M.getFunction(CtorName))
+    // FIXME: Sink this logic into the module, similar to the handling of
+    // globals. This will make moving to a concurrent model much easier.
+    if (Ctor->arg_size() == 0 ||
+        Ctor->getReturnType() == Type::getVoidTy(M.getContext()))
+      return {Ctor, declareSanitizerInitFunction(M, InitName, InitArgTypes)};
+
+  Function *Ctor, *InitFunction;
+  std::tie(Ctor, InitFunction) = llvm::createSanitizerCtorAndInitFunctions(
+      M, CtorName, InitName, InitArgTypes, InitArgs, VersionCheckName);
+  FunctionsCreatedCallback(Ctor, InitFunction);
   return std::make_pair(Ctor, InitFunction);
 }
 
