@@ -84,6 +84,7 @@ namespace  {
                const Decl *From = nullptr, const char *Label = nullptr);
     void Visit(const BlockDecl::Capture &C);
     void Visit(const OMPClause *C);
+    void Visit(const ACCClause *C);
     void Visit(const GenericSelectionExpr::ConstAssociation &A);
     void Visit(const Comment *C, const FullComment *FC);
 
@@ -390,6 +391,14 @@ void ASTDumper::Visit(const BlockDecl::Capture &C) {
 }
 
 void ASTDumper::Visit(const OMPClause *C) {
+  NodeDumper.AddChild([=] {
+    NodeDumper.Visit(C);
+    for (const auto *S : C->children())
+      Visit(S);
+  });
+}
+
+void ASTDumper::Visit(const ACCClause *C) {
   NodeDumper.AddChild([=] {
     NodeDumper.Visit(C);
     for (const auto *S : C->children())
@@ -833,33 +842,8 @@ void ASTDumper::VisitOMPExecutableDirective(
 
 void ASTDumper::VisitACCExecutableDirective(
     const ACCExecutableDirective *Node) {
-  for (auto *C : Node->clauses()) {
-    NodeDumper.AddChild([=] {
-      if (!C) {
-        ColorScope Color(OS, ShowColors, NullColor);
-        OS << "<<<NULL>>> ACCClause";
-        return;
-      }
-      {
-        ColorScope Color(OS, ShowColors, AttrColor);
-        StringRef ClauseName(getOpenACCClauseName(C->getClauseKind()));
-        OS << "ACC" << ClauseName.substr(/*Start=*/0, /*N=*/1).upper()
-           << ClauseName.drop_front() << "Clause";
-      }
-      NodeDumper.dumpPointer(C);
-      NodeDumper.dumpSourceRange(SourceRange(C->getBeginLoc(),
-                                             C->getEndLoc()));
-      if (C->isImplicit())
-        OS << " <implicit>";
-      if (auto Reduction = dyn_cast<ACCReductionClause>(C)) {
-        OS << " '";
-        Reduction->printReductionOperator(OS);
-        OS << "'";
-      }
-      for (auto *S : C->children())
-        Visit(S);
-    });
-  }
+  for (const auto *C : Node->clauses())
+    Visit(C);
   if (ACCExecutableDirective *Effect = Node->getEffectiveDirective())
     Visit(Effect, "effect");
   else if (Node->hasOMPNode())

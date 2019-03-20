@@ -171,6 +171,7 @@ public:
   void Visit(const CXXCtorInitializer *Init);
 
   void Visit(const OMPClause *C);
+  void Visit(const ACCClause *C);
 
   void Visit(const BlockDecl::Capture &C);
 
