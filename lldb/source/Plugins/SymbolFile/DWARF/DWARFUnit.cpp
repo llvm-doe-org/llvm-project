@@ -17,7 +17,6 @@
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/Timer.h"
 
-#include "DWARFDIECollection.h"
 #include "DWARFDebugAranges.h"
 #include "DWARFDebugInfo.h"
 #include "LogChannelDWARF.h"
@@ -60,15 +59,12 @@ void DWARFUnit::ExtractUnitDIEIfNeeded() {
   // parse
   const DWARFDataExtractor &data = GetData();
   DWARFFormValue::FixedFormSizes fixed_form_sizes =
-      DWARFFormValue::GetFixedFormSizesForAddressSize(GetAddressByteSize(),
-                                                      IsDWARF64());
+      DWARFFormValue::GetFixedFormSizesForAddressSize(GetAddressByteSize());
   if (offset < GetNextCompileUnitOffset() &&
       m_first_die.FastExtract(data, this, fixed_form_sizes, &offset)) {
     AddUnitDIE(m_first_die);
     return;
   }
-
-  ExtractDIEsEndCheck(offset);
 }
 
 //----------------------------------------------------------------------
@@ -166,16 +162,6 @@ void DWARFUnit::ExtractDIEsRWLocked() {
   lldb::offset_t next_cu_offset = GetNextCompileUnitOffset();
 
   DWARFDebugInfoEntry die;
-  // Keep a flat array of the DIE for binary lookup by DIE offset
-  Log *log(
-      LogChannelDWARF::GetLogIfAny(DWARF_LOG_DEBUG_INFO | DWARF_LOG_LOOKUPS));
-  if (log) {
-    m_dwarf->GetObjectFile()->GetModule()->LogMessageVerboseBacktrace(
-        log,
-        "DWARFUnit::ExtractDIEsIfNeeded () for compile unit at "
-        ".debug_info[0x%8.8x]",
-        GetOffset());
-  }
 
   uint32_t depth = 0;
   // We are in our compile unit, parse starting at the offset we were told to
@@ -186,8 +172,7 @@ void DWARFUnit::ExtractDIEsRWLocked() {
   die_index_stack.push_back(0);
   bool prev_die_had_children = false;
   DWARFFormValue::FixedFormSizes fixed_form_sizes =
-      DWARFFormValue::GetFixedFormSizesForAddressSize(GetAddressByteSize(),
-                                                      IsDWARF64());
+      DWARFFormValue::GetFixedFormSizesForAddressSize(GetAddressByteSize());
   while (offset < next_cu_offset &&
          die.FastExtract(data, this, fixed_form_sizes, &offset)) {
     const bool null_die = die.IsNULL();
@@ -263,37 +248,9 @@ void DWARFUnit::ExtractDIEsRWLocked() {
 
   m_die_array.shrink_to_fit();
 
-  ExtractDIEsEndCheck(offset);
-
   if (m_dwo_symbol_file) {
     DWARFUnit *dwo_cu = m_dwo_symbol_file->GetCompileUnit();
     dwo_cu->ExtractDIEsIfNeeded();
-  }
-}
-
-//--------------------------------------------------------------------------
-// Final checks for both ExtractUnitDIEIfNeeded() and ExtractDIEsIfNeeded().
-//--------------------------------------------------------------------------
-void DWARFUnit::ExtractDIEsEndCheck(lldb::offset_t offset) const {
-  // Give a little bit of info if we encounter corrupt DWARF (our offset should
-  // always terminate at or before the start of the next compilation unit
-  // header).
-  if (offset > GetNextCompileUnitOffset()) {
-    m_dwarf->GetObjectFile()->GetModule()->ReportWarning(
-        "DWARF compile unit extends beyond its bounds cu 0x%8.8x at "
-        "0x%8.8" PRIx64 "\n",
-        GetOffset(), offset);
-  }
-
-  Log *log(LogChannelDWARF::GetLogIfAll(DWARF_LOG_DEBUG_INFO));
-  if (log && log->GetVerbose()) {
-    StreamString strm;
-    Dump(&strm);
-    if (m_die_array.empty())
-      strm.Printf("error: no DIE for compile unit");
-    else
-      m_die_array[0].Dump(m_dwarf, this, strm, UINT32_MAX);
-    log->PutString(strm.GetString());
   }
 }
 
@@ -400,23 +357,22 @@ DWARFDIE DWARFUnit::LookupAddress(const dw_addr_t address) {
 }
 
 size_t DWARFUnit::AppendDIEsWithTag(const dw_tag_t tag,
-				    DWARFDIECollection &dies,
-				    uint32_t depth) const {
-  size_t old_size = dies.Size();
+                                    std::vector<DWARFDIE> &dies,
+                                    uint32_t depth) const {
+  size_t old_size = dies.size();
   {
     llvm::sys::ScopedReader lock(m_die_array_mutex);
     DWARFDebugInfoEntry::const_iterator pos;
     DWARFDebugInfoEntry::const_iterator end = m_die_array.end();
     for (pos = m_die_array.begin(); pos != end; ++pos) {
       if (pos->Tag() == tag)
-        dies.Append(DWARFDIE(this, &(*pos)));
+        dies.emplace_back(this, &(*pos));
     }
   }
 
   // Return the number of DIEs added to the collection
-  return dies.Size() - old_size;
+  return dies.size() - old_size;
 }
-
 
 lldb::user_id_t DWARFUnit::GetID() const {
   dw_offset_t local_id =
@@ -571,8 +527,7 @@ TypeSystem *DWARFUnit::GetTypeSystem() {
 }
 
 DWARFFormValue::FixedFormSizes DWARFUnit::GetFixedFormSizes() {
-  return DWARFFormValue::GetFixedFormSizesForAddressSize(GetAddressByteSize(),
-                                                         IsDWARF64());
+  return DWARFFormValue::GetFixedFormSizesForAddressSize(GetAddressByteSize());
 }
 
 void DWARFUnit::SetBaseAddress(dw_addr_t base_addr) { m_base_addr = base_addr; }
@@ -621,12 +576,6 @@ uint8_t DWARFUnit::GetAddressByteSize(const DWARFUnit *cu) {
   if (cu)
     return cu->GetAddressByteSize();
   return DWARFUnit::GetDefaultAddressSize();
-}
-
-bool DWARFUnit::IsDWARF64(const DWARFUnit *cu) {
-  if (cu)
-    return cu->IsDWARF64();
-  return false;
 }
 
 uint8_t DWARFUnit::GetDefaultAddressSize() { return 4; }
@@ -820,22 +769,19 @@ void DWARFUnit::ComputeCompDirAndGuessPathStyle() {
   if (!die)
     return;
 
-  auto guess = [](llvm::StringRef str) {
-    if (str.startswith("/"))
-      return FileSpec::Style::posix;
-    if (str.size() > 3 && llvm::isAlpha(str[0]) && str.substr(1, 2) == ":\\")
-      return FileSpec::Style::windows;
-    return FileSpec::Style::native;
-  };
   llvm::StringRef comp_dir = removeHostnameFromPathname(
       die->GetAttributeValueAsString(m_dwarf, this, DW_AT_comp_dir, NULL));
   if (!comp_dir.empty()) {
-    m_comp_dir = resolveCompDir(FileSpec(comp_dir, guess(comp_dir)));
+    FileSpec::Style comp_dir_style =
+        FileSpec::GuessPathStyle(comp_dir).getValueOr(FileSpec::Style::native);
+    m_comp_dir = resolveCompDir(FileSpec(comp_dir, comp_dir_style));
   } else {
     // Try to detect the style based on the DW_AT_name attribute, but just store
     // the detected style in the m_comp_dir field.
-    m_comp_dir = FileSpec("", guess(die->GetAttributeValueAsString(
-                                  m_dwarf, this, DW_AT_name, NULL)));
+    const char *name =
+        die->GetAttributeValueAsString(m_dwarf, this, DW_AT_name, NULL);
+    m_comp_dir = FileSpec(
+        "", FileSpec::GuessPathStyle(name).getValueOr(FileSpec::Style::native));
   }
 }
 
@@ -846,33 +792,24 @@ SymbolFileDWARFDwo *DWARFUnit::GetDwoSymbolFile() const {
 dw_offset_t DWARFUnit::GetBaseObjOffset() const { return m_base_obj_offset; }
 
 const DWARFDebugAranges &DWARFUnit::GetFunctionAranges() {
-  if (m_func_aranges_ap.get() == NULL) {
-    m_func_aranges_ap.reset(new DWARFDebugAranges());
-    Log *log(LogChannelDWARF::GetLogIfAll(DWARF_LOG_DEBUG_ARANGES));
-
-    if (log) {
-      m_dwarf->GetObjectFile()->GetModule()->LogMessage(
-          log,
-          "DWARFUnit::GetFunctionAranges() for compile unit at "
-          ".debug_info[0x%8.8x]",
-          GetOffset());
-    }
+  if (m_func_aranges_up == NULL) {
+    m_func_aranges_up.reset(new DWARFDebugAranges());
     const DWARFDebugInfoEntry *die = DIEPtr();
     if (die)
       die->BuildFunctionAddressRangeTable(m_dwarf, this,
-                                          m_func_aranges_ap.get());
+                                          m_func_aranges_up.get());
 
     if (m_dwo_symbol_file) {
       DWARFUnit *dwo_cu = m_dwo_symbol_file->GetCompileUnit();
       const DWARFDebugInfoEntry *dwo_die = dwo_cu->DIEPtr();
       if (dwo_die)
         dwo_die->BuildFunctionAddressRangeTable(m_dwo_symbol_file.get(), dwo_cu,
-                                                m_func_aranges_ap.get());
+                                                m_func_aranges_up.get());
     }
 
     const bool minimize = false;
-    m_func_aranges_ap->Sort(minimize);
+    m_func_aranges_up->Sort(minimize);
   }
-  return *m_func_aranges_ap.get();
+  return *m_func_aranges_up;
 }
 

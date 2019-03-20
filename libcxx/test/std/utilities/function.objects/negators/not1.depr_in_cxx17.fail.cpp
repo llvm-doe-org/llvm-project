@@ -15,9 +15,6 @@
 // UNSUPPORTED: c++98, c++03, c++11, c++14
 // REQUIRES: verify-support
 
-// MODULES_DEFINES: _LIBCPP_ENABLE_DEPRECATION_WARNINGS
-#define _LIBCPP_ENABLE_DEPRECATION_WARNINGS
-
 #include <functional>
 
 #include "test_macros.h"
@@ -27,6 +24,8 @@ struct Predicate {
     bool operator()(argument_type) const { return true; }
 };
 
-int main() {
+int main(int, char**) {
     std::not1(Predicate()); // expected-error{{'not1<Predicate>' is deprecated}}
+
+  return 0;
 }

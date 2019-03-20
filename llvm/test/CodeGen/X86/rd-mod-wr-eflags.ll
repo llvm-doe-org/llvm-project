@@ -68,13 +68,12 @@ define i32 @test2() nounwind uwtable ssp {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    pushq %rax
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
-; CHECK-NEXT:    movq {{.*}}(%rip), %rax
-; CHECK-NEXT:    leaq -1(%rax), %rsi
+; CHECK-NEXT:    movq {{.*}}(%rip), %rsi
+; CHECK-NEXT:    xorl %eax, %eax
+; CHECK-NEXT:    addq $-1, %rsi
+; CHECK-NEXT:    setb %al
 ; CHECK-NEXT:    movq %rsi, {{.*}}(%rip)
-; CHECK-NEXT:    xorl %ecx, %ecx
-; CHECK-NEXT:    testq %rax, %rax
-; CHECK-NEXT:    setne %cl
-; CHECK-NEXT:    movl %ecx, {{.*}}(%rip)
+; CHECK-NEXT:    movl %eax, {{.*}}(%rip)
 ; CHECK-NEXT:    movl $.L.str, %edi
 ; CHECK-NEXT:    xorl %eax, %eax
 ; CHECK-NEXT:    callq printf
@@ -177,11 +176,11 @@ define void @example_inc(%struct.obj2* %o) nounwind uwtable ssp {
 ; CHECK-NEXT:    jne .LBB4_4
 ; CHECK-NEXT:  # %bb.3: # %if.end2
 ; CHECK-NEXT:    incb 14(%rdi)
-; CHECK-NEXT:    je .LBB4_5
+; CHECK-NEXT:    jne .LBB4_4
+; CHECK-NEXT:  # %bb.5: # %if.end4
+; CHECK-NEXT:    jmp other # TAILCALL
 ; CHECK-NEXT:  .LBB4_4: # %return
 ; CHECK-NEXT:    retq
-; CHECK-NEXT:  .LBB4_5: # %if.end4
-; CHECK-NEXT:    jmp other # TAILCALL
 entry:
   %s64 = getelementptr inbounds %struct.obj2, %struct.obj2* %o, i64 0, i32 0
   %0 = load i64, i64* %s64, align 8

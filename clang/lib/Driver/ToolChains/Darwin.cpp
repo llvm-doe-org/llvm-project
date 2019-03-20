@@ -483,6 +483,14 @@ void darwin::Linker::ConstructJob(Compilation &C, const JobAction &JA,
         CmdArgs.push_back(Args.MakeArgString(Opt));
       }
     }
+
+    if (const Arg *A =
+            Args.getLastArg(options::OPT_foptimization_record_passes_EQ)) {
+      CmdArgs.push_back("-mllvm");
+      std::string Passes =
+          std::string("-lto-pass-remarks-filter=") + A->getValue();
+      CmdArgs.push_back(Args.MakeArgString(Passes));
+    }
   }
 
   // Propagate the -moutline flag to the linker in LTO.
@@ -1048,7 +1056,6 @@ void Darwin::addProfileRTLibs(const ArgList &Args,
       addExportedSymbol(CmdArgs, "___llvm_profile_filename");
       addExportedSymbol(CmdArgs, "___llvm_profile_raw_version");
       addExportedSymbol(CmdArgs, "_lprofCurFilename");
-      addExportedSymbol(CmdArgs, "_lprofMergeValueProfData");
     }
     addExportedSymbol(CmdArgs, "_lprofDirMode");
   }
@@ -1116,8 +1123,6 @@ void DarwinClang::AddLinkRuntimeLibArgs(const ArgList &Args,
     AddLinkRuntimeLib(Args, CmdArgs, "stats_client", RLO_AlwaysLink);
     AddLinkSanitizerLibArgs(Args, CmdArgs, "stats");
   }
-  if (Sanitize.needsEsanRt())
-    AddLinkSanitizerLibArgs(Args, CmdArgs, "esan");
 
   const XRayArgs &XRay = getXRayArgs();
   if (XRay.needsXRayRt()) {
@@ -2289,22 +2294,27 @@ void Darwin::addStartObjectFileArgs(const ArgList &Args,
       }
     } else {
       if (Args.hasArg(options::OPT_pg) && SupportsProfiling()) {
-        if (Args.hasArg(options::OPT_static) ||
-            Args.hasArg(options::OPT_object) ||
-            Args.hasArg(options::OPT_preload)) {
-          CmdArgs.push_back("-lgcrt0.o");
-        } else {
-          CmdArgs.push_back("-lgcrt1.o");
+        if (isTargetMacOS() && isMacosxVersionLT(10, 9)) {
+          if (Args.hasArg(options::OPT_static) ||
+              Args.hasArg(options::OPT_object) ||
+              Args.hasArg(options::OPT_preload)) {
+            CmdArgs.push_back("-lgcrt0.o");
+          } else {
+            CmdArgs.push_back("-lgcrt1.o");
 
-          // darwin_crt2 spec is empty.
+            // darwin_crt2 spec is empty.
+          }
+          // By default on OS X 10.8 and later, we don't link with a crt1.o
+          // file and the linker knows to use _main as the entry point.  But,
+          // when compiling with -pg, we need to link with the gcrt1.o file,
+          // so pass the -no_new_main option to tell the linker to use the
+          // "start" symbol as the entry point.
+          if (isTargetMacOS() && !isMacosxVersionLT(10, 8))
+            CmdArgs.push_back("-no_new_main");
+        } else {
+          getDriver().Diag(diag::err_drv_clang_unsupported_opt_pg_darwin)
+              << isTargetMacOS();
         }
-        // By default on OS X 10.8 and later, we don't link with a crt1.o
-        // file and the linker knows to use _main as the entry point.  But,
-        // when compiling with -pg, we need to link with the gcrt1.o file,
-        // so pass the -no_new_main option to tell the linker to use the
-        // "start" symbol as the entry point.
-        if (isTargetMacOS() && !isMacosxVersionLT(10, 8))
-          CmdArgs.push_back("-no_new_main");
       } else {
         if (Args.hasArg(options::OPT_static) ||
             Args.hasArg(options::OPT_object) ||

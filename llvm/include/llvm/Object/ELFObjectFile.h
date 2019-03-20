@@ -41,6 +41,9 @@
 namespace llvm {
 namespace object {
 
+constexpr int NumElfSymbolTypes = 8;
+extern const llvm::EnumEntry<unsigned> ElfSymbolTypes[NumElfSymbolTypes];
+
 class elf_symbol_iterator;
 
 class ELFObjectFileBase : public ObjectFile {
@@ -147,6 +150,16 @@ public:
 
   uint8_t getELFType() const {
     return getObject()->getSymbolELFType(getRawDataRefImpl());
+  }
+
+  StringRef getELFTypeName() const {
+    uint8_t Type = getELFType();
+    for (auto &EE : ElfSymbolTypes) {
+      if (EE.Value == Type) {
+        return EE.AltName;
+      }
+    }
+    return "";
   }
 };
 
@@ -440,7 +453,16 @@ Expected<StringRef> ELFObjectFile<ELFT>::getSymbolName(DataRefImpl Sym) const {
   auto SymStrTabOrErr = EF.getStringTable(StringTableSec);
   if (!SymStrTabOrErr)
     return SymStrTabOrErr.takeError();
-  return ESym->getName(*SymStrTabOrErr);
+  Expected<StringRef> Name = ESym->getName(*SymStrTabOrErr);
+
+  // If the symbol name is empty use the section name.
+  if ((!Name || Name->empty()) && ESym->getType() == ELF::STT_SECTION) {
+    StringRef SecName;
+    Expected<section_iterator> Sec = getSymbolSection(Sym);
+    if (Sec && !(*Sec)->getName(SecName))
+      return SecName;
+  }
+  return Name;
 }
 
 template <class ELFT>

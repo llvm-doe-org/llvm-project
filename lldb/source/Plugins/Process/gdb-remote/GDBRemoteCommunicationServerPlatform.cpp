@@ -21,9 +21,9 @@
 
 #include "lldb/Host/Config.h"
 #include "lldb/Host/ConnectionFileDescriptor.h"
+#include "lldb/Host/FileAction.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/HostInfo.h"
-#include "lldb/Target/FileAction.h"
 #include "lldb/Target/Platform.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/UnixSignals.h"
@@ -206,7 +206,7 @@ GDBRemoteCommunicationServerPlatform::Handle_qLaunchGDBServer(
                   port + m_port_offset);
   if (!socket_name.empty()) {
     response.PutCString("socket_name:");
-    response.PutCStringAsRawHex8(socket_name.c_str());
+    response.PutStringAsRawHex8(socket_name);
     response.PutChar(';');
   }
 
@@ -398,7 +398,7 @@ GDBRemoteCommunicationServerPlatform::Handle_jSignalsInfo(
     StringExtractorGDBRemote &packet) {
   StructuredData::Array signal_array;
 
-  const auto &signals = Host::GetUnixSignals();
+  lldb::UnixSignalsSP signals = UnixSignals::CreateForHost();
   for (auto signo = signals->GetFirstSignalNumber();
        signo != LLDB_INVALID_SIGNAL_NUMBER;
        signo = signals->GetNextSignalNumber(signo)) {

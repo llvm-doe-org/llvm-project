@@ -99,8 +99,10 @@ namespace {
     void VisitUsingDecl(UsingDecl *D);
     void VisitUsingShadowDecl(UsingShadowDecl *D);
     void VisitOMPThreadPrivateDecl(OMPThreadPrivateDecl *D);
+    void VisitOMPAllocateDecl(OMPAllocateDecl *D);
     void VisitOMPRequiresDecl(OMPRequiresDecl *D);
     void VisitOMPDeclareReductionDecl(OMPDeclareReductionDecl *D);
+    void VisitOMPDeclareMapperDecl(OMPDeclareMapperDecl *D);
     void VisitOMPCapturedExprDecl(OMPCapturedExprDecl *D);
 
     void printTemplateParameters(const TemplateParameterList *Params);
@@ -423,7 +425,8 @@ void DeclPrinter::VisitDeclContext(DeclContext *DC, bool Indent) {
     // FIXME: Need to be able to tell the DeclPrinter when
     const char *Terminator = nullptr;
     if (isa<OMPThreadPrivateDecl>(*D) || isa<OMPDeclareReductionDecl>(*D) ||
-        isa<OMPRequiresDecl>(*D))
+        isa<OMPDeclareMapperDecl>(*D) || isa<OMPRequiresDecl>(*D) ||
+        isa<OMPAllocateDecl>(*D))
       Terminator = nullptr;
     else if (isa<ObjCMethodDecl>(*D) && cast<ObjCMethodDecl>(*D)->hasBody())
       Terminator = nullptr;
@@ -1545,6 +1548,26 @@ void DeclPrinter::VisitOMPThreadPrivateDecl(OMPThreadPrivateDecl *D) {
   }
 }
 
+void DeclPrinter::VisitOMPAllocateDecl(OMPAllocateDecl *D) {
+  Out << "#pragma omp allocate";
+  if (!D->varlist_empty()) {
+    for (OMPAllocateDecl::varlist_iterator I = D->varlist_begin(),
+                                           E = D->varlist_end();
+         I != E; ++I) {
+      Out << (I == D->varlist_begin() ? '(' : ',');
+      NamedDecl *ND = cast<DeclRefExpr>(*I)->getDecl();
+      ND->printQualifiedName(Out);
+    }
+    Out << ")";
+  }
+  if (!D->clauselist_empty()) {
+    Out << " ";
+    OMPClausePrinter Printer(Out, Policy);
+    for (OMPClause *C : D->clauselists())
+      Printer.Visit(C);
+  }
+}
+
 void DeclPrinter::VisitOMPRequiresDecl(OMPRequiresDecl *D) {
   Out << "#pragma omp requires ";
   if (!D->clauselist_empty()) {
@@ -1593,6 +1616,25 @@ void DeclPrinter::VisitOMPDeclareReductionDecl(OMPDeclareReductionDecl *D) {
       if (D->getInitializerKind() == OMPDeclareReductionDecl::DirectInit)
         Out << ")";
       Out << ")";
+    }
+  }
+}
+
+void DeclPrinter::VisitOMPDeclareMapperDecl(OMPDeclareMapperDecl *D) {
+  if (!D->isInvalidDecl()) {
+    Out << "#pragma omp declare mapper (";
+    D->printName(Out);
+    Out << " : ";
+    D->getType().print(Out, Policy);
+    Out << " ";
+    Out << D->getVarName();
+    Out << ")";
+    if (!D->clauselist_empty()) {
+      OMPClausePrinter Printer(Out, Policy);
+      for (auto *C : D->clauselists()) {
+        Out << " ";
+        Printer.Visit(C);
+      }
     }
   }
 }

@@ -48,7 +48,8 @@ namespace X86 {
     TO_NEG_INF = 1,
     TO_POS_INF = 2,
     TO_ZERO = 3,
-    CUR_DIRECTION = 4
+    CUR_DIRECTION = 4,
+    NO_EXC = 8
   };
 
   /// The constants to describe instr prefixes if there are
@@ -59,9 +60,7 @@ namespace X86 {
     IP_HAS_REPEAT_NE = 4,
     IP_HAS_REPEAT = 8,
     IP_HAS_LOCK = 16,
-    NO_SCHED_INFO = 32, // Don't add sched comment to the current instr because
-                        // it was already added
-    IP_HAS_NOTRACK = 64
+    IP_HAS_NOTRACK = 32
   };
 } // end namespace X86;
 

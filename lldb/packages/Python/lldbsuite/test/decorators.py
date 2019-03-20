@@ -363,7 +363,7 @@ def apple_simulator_test(platform):
             return "simulator tests are run only on darwin hosts"
         try:
             DEVNULL = open(os.devnull, 'w')
-            output = subprocess.check_output(["xcodebuild", "-showsdks"], stderr=DEVNULL)
+            output = subprocess.check_output(["xcodebuild", "-showsdks"], stderr=DEVNULL).decode("utf-8")
             if re.search('%ssimulator' % platform, output):
                 return None
             else:
@@ -434,6 +434,12 @@ def expectedFailureAndroid(bugnumber=None, api_levels=None, archs=None):
             "xfailing on android",
             api_levels,
             archs),
+        bugnumber)
+
+
+def expectedFailureNetBSD(bugnumber=None):
+    return expectedFailureOS(
+        ['netbsd'],
         bugnumber)
 
 # Flakey tests get two chances to run. If they fail the first time round, the result formatter
@@ -803,7 +809,7 @@ def skipUnlessFeature(feature):
         if platform.system() == 'Darwin':
             try:
                 DEVNULL = open(os.devnull, 'w')
-                output = subprocess.check_output(["/usr/sbin/sysctl", feature], stderr=DEVNULL)
+                output = subprocess.check_output(["/usr/sbin/sysctl", feature], stderr=DEVNULL).decode("utf-8")
                 # If 'feature: 1' was output, then this feature is available and
                 # the test should not be skipped.
                 if re.match('%s: 1\s*' % feature, output):

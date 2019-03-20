@@ -42,9 +42,7 @@ define void @test_0(i64*, i64*) {
 define void @test_1(i64*, i64*) {
 ; CHECK-LABEL: test_1:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    incq (%rdi)
-; CHECK-NEXT:    sete %al
-; CHECK-NEXT:    addb $-1, %al
+; CHECK-NEXT:    addq $1, (%rdi)
 ; CHECK-NEXT:    adcq $0, (%rsi)
 ; CHECK-NEXT:    retq
   %3 = load i64, i64* %0, align 8
@@ -231,12 +229,7 @@ define void @test_18446744073709551614(i64*, i64*) {
 define void @test_18446744073709551615(i64*, i64*) {
 ; CHECK-LABEL: test_18446744073709551615:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    movq (%rdi), %rax
-; CHECK-NEXT:    leaq -1(%rax), %rcx
-; CHECK-NEXT:    movq %rcx, (%rdi)
-; CHECK-NEXT:    testq %rax, %rax
-; CHECK-NEXT:    setne %al
-; CHECK-NEXT:    addb $-1, %al
+; CHECK-NEXT:    addq $-1, (%rdi)
 ; CHECK-NEXT:    adcq $0, (%rsi)
 ; CHECK-NEXT:    retq
   %3 = load i64, i64* %0, align 8
@@ -249,6 +242,84 @@ define void @test_18446744073709551615(i64*, i64*) {
   %9 = extractvalue { i8, i64 } %8, 1
   store i64 %9, i64* %1, align 8
   ret void
+}
+
+define i1 @illegal_type(i17 %x, i17* %p) {
+; CHECK-LABEL: illegal_type:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    addl $29, %edi
+; CHECK-NEXT:    movw %di, (%rsi)
+; CHECK-NEXT:    andl $131071, %edi # imm = 0x1FFFF
+; CHECK-NEXT:    movl %edi, %eax
+; CHECK-NEXT:    shrl $16, %eax
+; CHECK-NEXT:    movb %al, 2(%rsi)
+; CHECK-NEXT:    cmpl $29, %edi
+; CHECK-NEXT:    setb %al
+; CHECK-NEXT:    retq
+  %a = add i17 %x, 29
+  store i17 %a, i17* %p
+  %ov = icmp ult i17 %a, 29
+  ret i1 %ov
+}
+
+; The overflow check may be against the input rather than the sum.
+
+define i1 @uaddo_i64_increment_alt(i64 %x, i64* %p) {
+; CHECK-LABEL: uaddo_i64_increment_alt:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    incq %rdi
+; CHECK-NEXT:    sete %al
+; CHECK-NEXT:    movq %rdi, (%rsi)
+; CHECK-NEXT:    retq
+  %a = add i64 %x, 1
+  store i64 %a, i64* %p
+  %ov = icmp eq i64 %x, -1
+  ret i1 %ov
+}
+
+; Make sure insertion is done correctly based on dominance.
+
+define i1 @uaddo_i64_increment_alt_dom(i64 %x, i64* %p) {
+; CHECK-LABEL: uaddo_i64_increment_alt_dom:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    incq %rdi
+; CHECK-NEXT:    sete %al
+; CHECK-NEXT:    movq %rdi, (%rsi)
+; CHECK-NEXT:    retq
+  %ov = icmp eq i64 %x, -1
+  %a = add i64 %x, 1
+  store i64 %a, i64* %p
+  ret i1 %ov
+}
+
+; The overflow check may be against the input rather than the sum.
+
+define i1 @uaddo_i64_decrement_alt(i64 %x, i64* %p) {
+; CHECK-LABEL: uaddo_i64_decrement_alt:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    addq $-1, %rdi
+; CHECK-NEXT:    setb %al
+; CHECK-NEXT:    movq %rdi, (%rsi)
+; CHECK-NEXT:    retq
+  %a = add i64 %x, -1
+  store i64 %a, i64* %p
+  %ov = icmp ne i64 %x, 0
+  ret i1 %ov
+}
+
+; Make sure insertion is done correctly based on dominance.
+
+define i1 @uaddo_i64_decrement_alt_dom(i64 %x, i64* %p) {
+; CHECK-LABEL: uaddo_i64_decrement_alt_dom:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    addq $-1, %rdi
+; CHECK-NEXT:    setb %al
+; CHECK-NEXT:    movq %rdi, (%rsi)
+; CHECK-NEXT:    retq
+  %ov = icmp ne i64 %x, 0
+  %a = add i64 %x, -1
+  store i64 %a, i64* %p
+  ret i1 %ov
 }
 
 declare { i8, i64 } @llvm.x86.addcarry.64(i8, i64, i64)

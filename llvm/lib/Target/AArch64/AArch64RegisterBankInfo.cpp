@@ -242,11 +242,13 @@ const RegisterBank &AArch64RegisterBankInfo::getRegBankFromRegClass(
   case AArch64::GPR32RegClassID:
   case AArch64::GPR32spRegClassID:
   case AArch64::GPR32sponlyRegClassID:
+  case AArch64::GPR32argRegClassID:
   case AArch64::GPR32allRegClassID:
   case AArch64::GPR64commonRegClassID:
   case AArch64::GPR64RegClassID:
   case AArch64::GPR64spRegClassID:
   case AArch64::GPR64sponlyRegClassID:
+  case AArch64::GPR64argRegClassID:
   case AArch64::GPR64allRegClassID:
   case AArch64::GPR64noipRegClassID:
   case AArch64::GPR64common_and_GPR64noipRegClassID:
@@ -392,6 +394,7 @@ static bool isPreISelGenericFloatingPointOpcode(unsigned Opc) {
   case TargetOpcode::G_FPEXT:
   case TargetOpcode::G_FPTRUNC:
   case TargetOpcode::G_FCEIL:
+  case TargetOpcode::G_FFLOOR:
   case TargetOpcode::G_FNEG:
   case TargetOpcode::G_FCOS:
   case TargetOpcode::G_FSIN:
@@ -399,6 +402,8 @@ static bool isPreISelGenericFloatingPointOpcode(unsigned Opc) {
   case TargetOpcode::G_FLOG:
   case TargetOpcode::G_FLOG2:
   case TargetOpcode::G_FSQRT:
+  case TargetOpcode::G_FABS:
+  case TargetOpcode::G_FEXP:
     return true;
   }
   return false;
@@ -684,7 +689,27 @@ AArch64RegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
     }
     break;
   }
+  case TargetOpcode::G_EXTRACT_VECTOR_ELT:
+    // Destination and source need to be FPRs.
+    OpRegBankIdx[0] = PMI_FirstFPR;
+    OpRegBankIdx[1] = PMI_FirstFPR;
 
+    // Index needs to be a GPR.
+    OpRegBankIdx[2] = PMI_FirstGPR;
+    break;
+  case TargetOpcode::G_INSERT_VECTOR_ELT:
+    OpRegBankIdx[0] = PMI_FirstFPR;
+    OpRegBankIdx[1] = PMI_FirstFPR;
+
+    // The element may be either a GPR or FPR. Preserve that behaviour.
+    if (getRegBank(MI.getOperand(2).getReg(), MRI, TRI) == &AArch64::FPRRegBank)
+      OpRegBankIdx[2] = PMI_FirstFPR;
+    else
+      OpRegBankIdx[2] = PMI_FirstGPR;
+
+    // Index needs to be a GPR.
+    OpRegBankIdx[3] = PMI_FirstGPR;
+    break;
   case TargetOpcode::G_BUILD_VECTOR:
     // If the first source operand belongs to a FPR register bank, then make
     // sure that we preserve that.
@@ -695,10 +720,13 @@ AArch64RegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
       break;
 
     // Get the instruction that defined the source operand reg, and check if
-    // it's a floating point operation.
+    // it's a floating point operation. Or, if it's a type like s16 which
+    // doesn't have a exact size gpr register class.
     MachineInstr *DefMI = MRI.getVRegDef(VReg);
     unsigned DefOpc = DefMI->getOpcode();
-    if (isPreISelGenericFloatingPointOpcode(DefOpc)) {
+    const LLT SrcTy = MRI.getType(VReg);
+    if (isPreISelGenericFloatingPointOpcode(DefOpc) ||
+        SrcTy.getSizeInBits() < 32) {
       // Have a floating point op.
       // Make sure every operand gets mapped to a FPR register class.
       unsigned NumOperands = MI.getNumOperands();

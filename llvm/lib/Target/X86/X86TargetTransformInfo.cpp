@@ -2988,15 +2988,26 @@ bool X86TTIImpl::canMacroFuseCmp() {
 }
 
 bool X86TTIImpl::isLegalMaskedLoad(Type *DataTy) {
+  if (!ST->hasAVX())
+    return false;
+
   // The backend can't handle a single element vector.
   if (isa<VectorType>(DataTy) && DataTy->getVectorNumElements() == 1)
     return false;
   Type *ScalarTy = DataTy->getScalarType();
-  int DataWidth = isa<PointerType>(ScalarTy) ?
-    DL.getPointerSizeInBits() : ScalarTy->getPrimitiveSizeInBits();
 
-  return ((DataWidth == 32 || DataWidth == 64) && ST->hasAVX()) ||
-         ((DataWidth == 8 || DataWidth == 16) && ST->hasBWI());
+  if (ScalarTy->isPointerTy())
+    return true;
+
+  if (ScalarTy->isFloatTy() || ScalarTy->isDoubleTy())
+    return true;
+
+  if (!ScalarTy->isIntegerTy())
+    return false;
+
+  unsigned IntWidth = ScalarTy->getIntegerBitWidth();
+  return IntWidth == 32 || IntWidth == 64 ||
+         ((IntWidth == 8 || IntWidth == 16) && ST->hasBWI());
 }
 
 bool X86TTIImpl::isLegalMaskedStore(Type *DataType) {
@@ -3004,6 +3015,12 @@ bool X86TTIImpl::isLegalMaskedStore(Type *DataType) {
 }
 
 bool X86TTIImpl::isLegalMaskedGather(Type *DataTy) {
+  // Some CPUs have better gather performance than others.
+  // TODO: Remove the explicit ST->hasAVX512()?, That would mean we would only
+  // enable gather with a -march.
+  if (!(ST->hasAVX512() || (ST->hasFastGather() && ST->hasAVX2())))
+    return false;
+
   // This function is called now in two cases: from the Loop Vectorizer
   // and from the Scalarizer.
   // When the Loop Vectorizer asks about legality of the feature,
@@ -3022,14 +3039,17 @@ bool X86TTIImpl::isLegalMaskedGather(Type *DataTy) {
       return false;
   }
   Type *ScalarTy = DataTy->getScalarType();
-  int DataWidth = isa<PointerType>(ScalarTy) ?
-    DL.getPointerSizeInBits() : ScalarTy->getPrimitiveSizeInBits();
+  if (ScalarTy->isPointerTy())
+    return true;
 
-  // Some CPUs have better gather performance than others.
-  // TODO: Remove the explicit ST->hasAVX512()?, That would mean we would only
-  // enable gather with a -march.
-  return (DataWidth == 32 || DataWidth == 64) &&
-         (ST->hasAVX512() || (ST->hasFastGather() && ST->hasAVX2()));
+  if (ScalarTy->isFloatTy() || ScalarTy->isDoubleTy())
+    return true;
+
+  if (!ScalarTy->isIntegerTy())
+    return false;
+
+  unsigned IntWidth = ScalarTy->getIntegerBitWidth();
+  return IntWidth == 32 || IntWidth == 64;
 }
 
 bool X86TTIImpl::isLegalMaskedScatter(Type *DataType) {
@@ -3058,10 +3078,25 @@ bool X86TTIImpl::areInlineCompatible(const Function *Caller,
   const FeatureBitset &CalleeBits =
       TM.getSubtargetImpl(*Callee)->getFeatureBits();
 
-  // FIXME: This is likely too limiting as it will include subtarget features
-  // that we might not care about for inlining, but it is conservatively
-  // correct.
-  return (CallerBits & CalleeBits) == CalleeBits;
+  FeatureBitset RealCallerBits = CallerBits & ~InlineFeatureIgnoreList;
+  FeatureBitset RealCalleeBits = CalleeBits & ~InlineFeatureIgnoreList;
+  return (RealCallerBits & RealCalleeBits) == RealCalleeBits;
+}
+
+bool X86TTIImpl::areFunctionArgsABICompatible(
+    const Function *Caller, const Function *Callee,
+    SmallPtrSetImpl<Argument *> &Args) const {
+  if (!BaseT::areFunctionArgsABICompatible(Caller, Callee, Args))
+    return false;
+
+  // If we get here, we know the target features match. If one function
+  // considers 512-bit vectors legal and the other does not, consider them
+  // incompatible.
+  // FIXME Look at the arguments and only consider 512 bit or larger vectors?
+  const TargetMachine &TM = getTLI()->getTargetMachine();
+
+  return TM.getSubtarget<X86Subtarget>(*Caller).useAVX512Regs() ==
+         TM.getSubtarget<X86Subtarget>(*Callee).useAVX512Regs();
 }
 
 const X86TTIImpl::TTI::MemCmpExpansionOptions *

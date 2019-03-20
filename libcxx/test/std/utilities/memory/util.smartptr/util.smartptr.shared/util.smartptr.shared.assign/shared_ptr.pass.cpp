@@ -12,6 +12,8 @@
 
 // shared_ptr& operator=(const shared_ptr& r);
 
+#define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
+
 #include <memory>
 #include <type_traits>
 #include <cassert>
@@ -39,7 +41,7 @@ struct A
 
 int A::count = 0;
 
-int main()
+int main(int, char**)
 {
     {
         const std::shared_ptr<A> pA(new A);
@@ -117,4 +119,6 @@ int main()
     }
     assert(B::count == 0);
     assert(A::count == 0);
+
+  return 0;
 }

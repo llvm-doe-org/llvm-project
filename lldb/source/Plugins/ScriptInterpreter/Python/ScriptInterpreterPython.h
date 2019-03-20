@@ -310,22 +310,6 @@ public:
   bool GenerateWatchpointCommandCallbackData(StringList &input,
                                              std::string &output) override;
 
-  //    static size_t
-  //    GenerateBreakpointOptionsCommandCallback (void *baton,
-  //                                              InputReader &reader,
-  //                                              lldb::InputReaderAction
-  //                                              notification,
-  //                                              const char *bytes,
-  //                                              size_t bytes_len);
-  //
-  //    static size_t
-  //    GenerateWatchpointOptionsCommandCallback (void *baton,
-  //                                              InputReader &reader,
-  //                                              lldb::InputReaderAction
-  //                                              notification,
-  //                                              const char *bytes,
-  //                                              size_t bytes_len);
-
   static bool BreakpointCallbackFunction(void *baton,
                                          StoppointCallbackContext *context,
                                          lldb::user_id_t break_id,
@@ -459,7 +443,7 @@ public:
   //----------------------------------------------------------------------
   // IOHandlerDelegate
   //----------------------------------------------------------------------
-  void IOHandlerActivated(IOHandler &io_handler) override;
+  void IOHandlerActivated(IOHandler &io_handler, bool interactive) override;
 
   void IOHandlerInputComplete(IOHandler &io_handler,
                               std::string &data) override;

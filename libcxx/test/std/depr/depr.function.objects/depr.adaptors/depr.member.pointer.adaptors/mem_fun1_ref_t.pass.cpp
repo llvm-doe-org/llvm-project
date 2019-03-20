@@ -11,6 +11,8 @@
 
 // mem_fun1_ref_t
 
+#define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
+
 #include <functional>
 #include <type_traits>
 #include <cassert>
@@ -23,11 +25,13 @@ struct A
     double a4(unsigned i) const {return i-1;}
 };
 
-int main()
+int main(int, char**)
 {
     typedef std::mem_fun1_ref_t<short, A, int> F;
     static_assert((std::is_base_of<std::binary_function<A, int, short>, F>::value), "");
     const F f(&A::a2);
     A a;
     assert(f(a, 5) == 6);
+
+  return 0;
 }

@@ -391,6 +391,7 @@ def warn_cxx98_compat_empty_fnmacro_arg : Warning<
   "empty macro arguments are incompatible with C++98">,
   InGroup<CXX98CompatPedantic>, DefaultIgnore;
 def note_macro_here : Note<"macro %0 defined here">;
+def note_macro_expansion_here : Note<"expansion of macro %0 requested here">;
 
 def err_pp_opencl_variadic_macros :
   Error<"variadic macros not supported in OpenCL">;
@@ -418,6 +419,8 @@ def err_pp_file_not_found_angled_include_not_fatal : Error<
   "'%0' file not found with <angled> include; use \"quotes\" instead">;
 def err_pp_file_not_found_typo_not_fatal
     : Error<"'%0' file not found, did you mean '%1'?">;
+def note_pp_framework_without_header : Note<
+  "did not find header '%0' in framework '%1' (loaded from '%2')">;
 def err_pp_error_opening_file : Error<
   "error opening file '%0': %1">, DefaultFatal;
 def err_pp_empty_filename : Error<"empty filename">;
@@ -502,6 +505,17 @@ def warn_pragma_warning_push_level :
 def warn_pragma_warning_expected_number :
   ExtWarn<"#pragma warning expected a warning number">,
   InGroup<UnknownPragmas>;
+
+// - #pragma execution_character_set(...)
+def warn_pragma_exec_charset_expected :
+  ExtWarn<"#pragma execution_character_set expected '%0'">,
+  InGroup<UnknownPragmas>;
+def warn_pragma_exec_charset_spec_invalid :
+  ExtWarn<"#pragma execution_character_set expected 'push' or 'pop'">,
+  InGroup<UnknownPragmas>;
+def warn_pragma_exec_charset_push_invalid :
+   ExtWarn<"#pragma execution_character_set invalid value '%0', only 'UTF-8' is supported">,
+   InGroup<UnknownPragmas>;
 
 def err__Pragma_malformed : Error<
   "_Pragma takes a parenthesized string literal">;

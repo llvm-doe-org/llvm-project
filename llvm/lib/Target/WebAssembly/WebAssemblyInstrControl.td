@@ -20,11 +20,10 @@ defm BR_IF : I<(outs), (ins bb_op:$dst, I32:$cond),
 let isCodeGenOnly = 1 in
 defm BR_UNLESS : I<(outs), (ins bb_op:$dst, I32:$cond),
                    (outs), (ins bb_op:$dst), []>;
-let isBarrier = 1 in {
+let isBarrier = 1 in
 defm BR   : NRI<(outs), (ins bb_op:$dst),
                 [(br bb:$dst)],
                 "br      \t$dst", 0x0c>;
-} // isBarrier = 1
 } // isBranch = 1, isTerminator = 1, hasCtrlDep = 1
 
 def : Pat<(brcond (i32 (setne I32:$cond, 0)), bb:$dst),
@@ -35,14 +34,11 @@ def : Pat<(brcond (i32 (seteq I32:$cond, 0)), bb:$dst),
 // A list of branch targets enclosed in {} and separated by comma.
 // Used by br_table only.
 def BrListAsmOperand : AsmOperandClass { let Name = "BrList"; }
-let OperandNamespace = "WebAssembly" in {
-let OperandType = "OPERAND_BRLIST" in {
+let OperandNamespace = "WebAssembly", OperandType = "OPERAND_BRLIST" in
 def brlist : Operand<i32> {
   let ParserMatchClass = BrListAsmOperand;
   let PrintMethod = "printBrList";
 }
-} // OPERAND_BRLIST
-} // OperandNamespace = "WebAssembly"
 
 // TODO: SelectionDAG's lowering insists on using a pointer as the index for
 // jump tables, so in practice we don't ever use BR_TABLE_I64 in wasm32 mode
@@ -81,6 +77,9 @@ defm ELSE : NRI<(outs), (ins), [], "else", 0x05>;
 defm END_BLOCK : NRI<(outs), (ins), [], "end_block", 0x0b>;
 defm END_LOOP  : NRI<(outs), (ins), [], "end_loop", 0x0b>;
 defm END_IF    : NRI<(outs), (ins), [], "end_if", 0x0b>;
+// Generic instruction, for disassembler.
+let IsCanonical = 1 in
+defm END       : NRI<(outs), (ins), [], "end", 0x0b>;
 let isTerminator = 1, isBarrier = 1 in
 defm END_FUNCTION : NRI<(outs), (ins), [], "end_function", 0x0b>;
 } // Uses = [VALUE_STACK], Defs = [VALUE_STACK]
@@ -105,7 +104,7 @@ multiclass SIMD_RETURN<ValueType vt> {
   let isCodeGenOnly = 1 in
   defm FALLTHROUGH_RETURN_#vt : I<(outs), (ins V128:$val), (outs), (ins),
                                   []>,
-                                Requires<[HasSIMD128]>;
+                                  Requires<[HasSIMD128]>;
 }
 
 let isTerminator = 1, hasCtrlDep = 1, isBarrier = 1 in {
@@ -145,7 +144,13 @@ defm THROW : I<(outs), (ins event_op:$tag, variable_ops),
                (outs), (ins event_op:$tag),
                [(WebAssemblythrow (WebAssemblywrapper texternalsym:$tag))],
                "throw   \t$tag", "throw   \t$tag", 0x08>;
-defm RETHROW : NRI<(outs), (ins), [(int_wasm_rethrow)], "rethrow", 0x09>;
+defm RETHROW : I<(outs), (ins EXCEPT_REF:$exn), (outs), (ins),
+                 [], "rethrow \t$exn", "rethrow", 0x09>;
+// Pseudo instruction to be the lowering target of int_wasm_rethrow_in_catch
+// intrinsic. Will be converted to the real rethrow instruction later.
+let isPseudo = 1 in
+defm RETHROW_IN_CATCH : NRI<(outs), (ins), [(int_wasm_rethrow_in_catch)],
+                            "rethrow_in_catch", 0>;
 } // isTerminator = 1, hasCtrlDep = 1, isBarrier = 1
 
 // Region within which an exception is caught: try / end_try
@@ -183,4 +188,4 @@ let isTerminator = 1, hasSideEffects = 1, isBarrier = 1, hasCtrlDep = 1,
                       [(catchret bb:$dst, bb:$from)], "catchret", 0>;
 } // isTerminator = 1, hasSideEffects = 1, isBarrier = 1, hasCtrlDep = 1,
   // isPseudo = 1, isEHScopeReturn = 1
-}
+} // Predicates = [HasExceptionHandling]

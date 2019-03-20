@@ -31,7 +31,8 @@ enum class DurationScale : std::uint8_t {
 /// constructing a `Duration` for that scale.
 llvm::StringRef getDurationFactoryForScale(DurationScale Scale);
 
-/// Returns the Time factory function name for a given `Scale`.
+/// Given a 'Scale', return the appropriate factory function call for
+/// constructing a `Time` for that scale.
 llvm::StringRef getTimeFactoryForScale(DurationScale scale);
 
 // Determine if `Node` represents a literal floating point or integral zero.
@@ -75,16 +76,25 @@ llvm::Optional<DurationScale> getScaleForTimeInverse(llvm::StringRef Name);
 const std::pair<llvm::StringRef, llvm::StringRef> &
 getDurationInverseForScale(DurationScale Scale);
 
+/// Returns the Time inverse function name for a given `Scale`.
+llvm::StringRef getTimeInverseForScale(DurationScale scale);
+
 /// Assuming `Node` has type `double` or `int` representing a time interval of
 /// `Scale`, return the expression to make it a suitable `Duration`.
 std::string rewriteExprFromNumberToDuration(
     const ast_matchers::MatchFinder::MatchResult &Result, DurationScale Scale,
     const Expr *Node);
 
-/// Return `true` if `E` is a either: not a macro at all; or an argument to
+/// Assuming `Node` has a type `int` representing a time instant of `Scale`
+/// since The Epoch, return the expression to make it a suitable `Time`.
+std::string rewriteExprFromNumberToTime(
+    const ast_matchers::MatchFinder::MatchResult &Result, DurationScale Scale,
+    const Expr *Node);
+
+/// Return `false` if `E` is a either: not a macro at all; or an argument to
 /// one.  In the both cases, we often want to do the transformation.
-bool isNotInMacro(const ast_matchers::MatchFinder::MatchResult &Result,
-                  const Expr *E);
+bool isInMacro(const ast_matchers::MatchFinder::MatchResult &Result,
+               const Expr *E);
 
 AST_MATCHER_FUNCTION(ast_matchers::internal::Matcher<FunctionDecl>,
                      DurationConversionFunction) {
@@ -107,11 +117,21 @@ AST_MATCHER_FUNCTION(ast_matchers::internal::Matcher<FunctionDecl>,
 }
 
 AST_MATCHER_FUNCTION(ast_matchers::internal::Matcher<FunctionDecl>,
-                     TimeFactoryFunction) {
+                     TimeConversionFunction) {
   using namespace clang::ast_matchers;
   return functionDecl(hasAnyName(
       "::absl::ToUnixHours", "::absl::ToUnixMinutes", "::absl::ToUnixSeconds",
       "::absl::ToUnixMillis", "::absl::ToUnixMicros", "::absl::ToUnixNanos"));
+}
+
+AST_MATCHER_FUNCTION_P(ast_matchers::internal::Matcher<Stmt>,
+                       comparisonOperatorWithCallee,
+                       ast_matchers::internal::Matcher<Decl>, funcDecl) {
+  using namespace clang::ast_matchers;
+  return binaryOperator(
+      anyOf(hasOperatorName(">"), hasOperatorName(">="), hasOperatorName("=="),
+            hasOperatorName("<="), hasOperatorName("<")),
+      hasEitherOperand(ignoringImpCasts(callExpr(callee(funcDecl)))));
 }
 
 } // namespace abseil

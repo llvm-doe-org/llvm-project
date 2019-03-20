@@ -29,6 +29,8 @@ public:
 
   lldb::SBAddress GetEndAddress() const;
 
+  explicit operator bool() const;
+
   bool IsValid() const;
 
   lldb::SBFileSpec GetFileSpec() const;
@@ -68,7 +70,7 @@ private:
 
   void SetLineEntry(const lldb_private::LineEntry &lldb_object_ref);
 
-  std::unique_ptr<lldb_private::LineEntry> m_opaque_ap;
+  std::unique_ptr<lldb_private::LineEntry> m_opaque_up;
 };
 
 } // namespace lldb

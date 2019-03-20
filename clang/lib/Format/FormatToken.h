@@ -60,6 +60,7 @@ namespace format {
   TYPE(JsExponentiationEqual)                                                  \
   TYPE(JsFatArrow)                                                             \
   TYPE(JsNonNullAssertion)                                                     \
+  TYPE(JsPrivateIdentifier)                                                    \
   TYPE(JsTypeColon)                                                            \
   TYPE(JsTypeOperator)                                                         \
   TYPE(JsTypeOptionalQuestion)                                                 \
@@ -489,8 +490,7 @@ struct FormatToken {
   bool opensBlockOrBlockTypeList(const FormatStyle &Style) const {
     if (is(TT_TemplateString) && opensScope())
       return true;
-    return is(TT_ArrayInitializerLSquare) ||
-           is(TT_ProtoExtensionLSquare) ||
+    return is(TT_ArrayInitializerLSquare) || is(TT_ProtoExtensionLSquare) ||
            (is(tok::l_brace) &&
             (BlockKind == BK_Block || is(TT_DictLiteral) ||
              (!Style.Cpp11BracedListStyle && NestingLevel == 0))) ||

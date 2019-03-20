@@ -31,10 +31,9 @@ def preserve_dates : Flag<["-", "--"], "preserve-dates">,
                      HelpText<"Preserve access and modification timestamps">;
 def p : Flag<["-"], "p">, Alias<preserve_dates>;
 
-def strip_all
-    : Flag<["-", "--"], "strip-all">,
-      HelpText<
-          "Remove non-allocated sections other than .gnu.warning* sections">;
+def strip_all : Flag<["-", "--"], "strip-all">,
+                HelpText<"Remove non-allocated sections outside segments. "
+                         ".gnu.warning* sections are not removed">;
 def s : Flag<["-"], "s">, Alias<strip_all>;
 
 def strip_all_gnu : Flag<["-", "--"], "strip-all-gnu">,
@@ -51,11 +50,23 @@ defm remove_section : Eq<"remove-section", "Remove <section>">,
                       MetaVarName<"section">;
 def R : JoinedOrSeparate<["-"], "R">, Alias<remove_section>;
 
+defm strip_symbol : Eq<"strip-symbol", "Strip <symbol>">,
+                    MetaVarName<"symbol">;
+def N : JoinedOrSeparate<["-"], "N">, Alias<strip_symbol>;
+
 defm keep_section : Eq<"keep-section", "Keep <section>">,
                     MetaVarName<"section">;
 defm keep_symbol : Eq<"keep-symbol", "Do not remove symbol <symbol>">,
                    MetaVarName<"symbol">;
+def keep_file_symbols : Flag<["-", "--"], "keep-file-symbols">,
+                        HelpText<"Do not remove file symbols">;
+
 def K : JoinedOrSeparate<["-"], "K">, Alias<keep_symbol>;
+
+def only_keep_debug
+    : Flag<["-", "--"], "only-keep-debug">,
+      HelpText<"Clear sections that would not be stripped by --strip-debug. "
+               "Currently only implemented for COFF.">;
 
 def discard_locals : Flag<["-", "--"], "discard-locals">,
                      HelpText<"Remove compiler-generated local symbols, (e.g. "
@@ -66,6 +77,10 @@ def discard_all
     : Flag<["-", "--"], "discard-all">,
       HelpText<"Remove all local symbols except file and section symbols">;
 def x : Flag<["-"], "x">, Alias<discard_all>;
+
+def regex
+    : Flag<["-", "--"], "regex">,
+      HelpText<"Permit regular expressions in name comparison">;
 
 def version : Flag<["-", "--"], "version">,
               HelpText<"Print the version and exit.">;

@@ -887,7 +887,8 @@ namespace llvm {
     bool useLoadStackGuardNode() const override;
     void insertSSPDeclarations(Module &M) const override;
 
-    bool isFPImmLegal(const APFloat &Imm, EVT VT) const override;
+    bool isFPImmLegal(const APFloat &Imm, EVT VT,
+                      bool ForCodeSize) const override;
 
     unsigned getJumpTableEncoding() const override;
     bool isJumpTableRelative() const override;
@@ -951,6 +952,8 @@ namespace llvm {
 
     SDValue LowerINT_TO_FPVector(SDValue Op, SelectionDAG &DAG,
                                  const SDLoc &dl) const;
+
+    SDValue LowerTRUNCATEVector(SDValue Op, SelectionDAG &DAG) const;
 
     SDValue getFramePointerFrameIndex(SelectionDAG & DAG) const;
     SDValue getReturnAddrFrameIndex(SelectionDAG & DAG) const;

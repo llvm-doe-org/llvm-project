@@ -3699,6 +3699,19 @@ ensure that this class cannot be subclassed.
   }];
 }
 
+def ObjCNonLazyClassDocs : Documentation {
+  let Category = DocCatType;
+  let Content = [{
+This attribute can be added to an Objective-C ``@interface`` declaration to
+add the class to the list of non-lazily initialized classes. A non-lazy class
+will be initialized eagerly when the Objective-C runtime is loaded.  This is
+required for certain system classes which have instances allocated in
+non-standard ways, such as the classes for blocks and constant strings.  Adding
+this attribute is essentially equivalent to providing a trivial `+load` method 
+but avoids the (fairly small) load-time overheads associated with defining and
+calling such a method.
+  }];
+}
 
 def SelectAnyDocs : Documentation {
   let Category = DocCatType;
@@ -3727,6 +3740,23 @@ name, which typically identifies a field from that module to import. By
 default, module names for C/C++ symbols are assigned automatically by the
 linker. This attribute can be used to override the default behavior, and
 reuqest a specific module name be used instead.
+  }];
+}
+
+def WebAssemblyImportNameDocs : Documentation {
+  let Category = DocCatFunction;
+  let Content = [{
+Clang supports the ``__attribute__((import_name(<name>)))`` 
+attribute for the WebAssembly target. This attribute may be attached to a
+function declaration, where it modifies how the symbol is to be imported
+within the WebAssembly linking environment.
+
+WebAssembly imports use a two-level namespace scheme, consisting of a module
+name, which typically identifies a module from which to import, and a field
+name, which typically identifies a field from that module to import. By
+default, field names for C/C++ symbols are the same as their C/C++ symbol
+names. This attribute can be used to override the default behavior, and
+reuqest a specific field name be used instead.
   }];
 }
 
@@ -3912,13 +3942,13 @@ The ``gnu_inline`` changes the meaning of ``extern inline`` to use GNU inline
 semantics, meaning:
 
 * If any declaration that is declared ``inline`` is not declared ``extern``,
-then the ``inline`` keyword is just a hint. In particular, an out-of-line
-definition is still emitted for a function with external linkage, even if all
-call sites are inlined, unlike in C99 and C++ inline semantics.
+  then the ``inline`` keyword is just a hint. In particular, an out-of-line
+  definition is still emitted for a function with external linkage, even if all
+  call sites are inlined, unlike in C99 and C++ inline semantics.
 
 * If all declarations that are declared ``inline`` are also declared
-``extern``, then the function body is present only for inlining and no
-out-of-line version is emitted.
+  ``extern``, then the function body is present only for inlining and no
+  out-of-line version is emitted.
 
 Some important consequences: ``static inline`` emits an out-of-line
 version if needed, a plain ``inline`` definition emits an out-of-line version
@@ -4028,3 +4058,24 @@ Likewise, when applied to a strong local variable, that variable becomes
 
 When compiled without ``-fobjc-arc``, this attribute is ignored.
 }]; }
+
+def MIGConventionDocs : Documentation {
+  let Category = DocCatType;
+  let Content = [{
+  The Mach Interface Generator release-on-success convention dictates
+functions that follow it to only release arguments passed to them when they
+return "success" (a ``kern_return_t`` error code that indicates that
+no errors have occured). Otherwise the release is performed by the MIG client
+that called the function. The annotation ``__attribute__((mig_server_routine))``
+is applied in order to specify which functions are expected to follow the
+convention. This allows the Static Analyzer to find bugs caused by violations of
+that convention. The attribute would normally appear on the forward declaration
+of the actual server routine in the MIG server header, but it may also be
+added to arbitrary functions that need to follow the same convention - for
+example, a user can add them to auxiliary functions called by the server routine
+that have their return value of type ``kern_return_t`` unconditionally returned
+from the routine. The attribute can be applied to C++ methods, and in this case
+it will be automatically applied to overrides if the method is virtual. The
+attribute can also be written using C++11 syntax: ``[[mig::server_routine]]``.
+}];
+}

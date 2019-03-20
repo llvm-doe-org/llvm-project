@@ -18,7 +18,6 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/InlineAsm.h"
@@ -154,15 +153,10 @@ void AsmPrinter::EmitInlineAsm(StringRef Str, const MCSubtargetInfo &STI,
                        " we don't have an asm parser for this target\n");
   Parser->setAssemblerDialect(Dialect);
   Parser->setTargetParser(*TAP.get());
-  Parser->setEnablePrintSchedInfo(EnablePrintSchedInfo);
   // Enable lexing Masm binary and hex integer literals in intel inline
   // assembly.
   if (Dialect == InlineAsm::AD_Intel)
     Parser->getLexer().setLexMasmIntegers(true);
-  if (MF) {
-    const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
-    TAP->SetFrameRegister(TRI->getFrameRegister(*MF));
-  }
 
   emitInlineAsmStart();
   // Don't implicitly switch to the text section before the asm.
@@ -435,9 +429,16 @@ static void EmitGCCInlineAsmStr(const char *AsmStr, const MachineInstr *MI,
           ++OpNo;  // Skip over the ID number.
 
           if (Modifier[0] == 'l') { // Labels are target independent.
-            // FIXME: What if the operand isn't an MBB, report error?
-            const MCSymbol *Sym = MI->getOperand(OpNo).getMBB()->getSymbol();
-            Sym->print(OS, AP->MAI);
+            if (MI->getOperand(OpNo).isBlockAddress()) {
+              const BlockAddress *BA = MI->getOperand(OpNo).getBlockAddress();
+              MCSymbol *Sym = AP->GetBlockAddressSymbol(BA);
+              Sym->print(OS, AP->MAI);
+            } else if (MI->getOperand(OpNo).isMBB()) {
+              const MCSymbol *Sym = MI->getOperand(OpNo).getMBB()->getSymbol();
+              Sym->print(OS, AP->MAI);
+            } else {
+              Error = true;
+            }
           } else {
             if (InlineAsm::isMemKind(OpFlags)) {
               Error = AP->PrintAsmMemoryOperand(MI, OpNo, InlineAsmVariant,
@@ -522,11 +523,6 @@ void AsmPrinter::EmitInlineAsm(const MachineInstr *MI) const {
   else
     EmitMSInlineAsmStr(AsmStr, MI, MMI, InlineAsmVariant, AP, LocCookie, OS);
 
-  // Reset SanitizeAddress based on the function's attribute.
-  MCTargetOptions MCOptions = TM.Options.MCOptions;
-  MCOptions.SanitizeAddress =
-      MF->getFunction().hasFnAttribute(Attribute::SanitizeAddress);
-
   // Emit warnings if we use reserved registers on the clobber list, as
   // that might give surprising results.
   std::vector<std::string> RestrRegs;
@@ -565,7 +561,7 @@ void AsmPrinter::EmitInlineAsm(const MachineInstr *MI) const {
     SrcMgr.PrintMessage(Loc, SourceMgr::DK_Note, Note);
   }
 
-  EmitInlineAsm(OS.str(), getSubtargetInfo(), MCOptions, LocMD,
+  EmitInlineAsm(OS.str(), getSubtargetInfo(), TM.Options.MCOptions, LocMD,
                 MI->getInlineAsmDialect());
 
   // Emit the #NOAPP end marker.  This has to happen even if verbose-asm isn't

@@ -15,9 +15,6 @@
 // UNSUPPORTED: c++98, c++03, c++11, c++14
 // REQUIRES: verify-support
 
-// MODULES_DEFINES: _LIBCPP_ENABLE_DEPRECATION_WARNINGS
-#define _LIBCPP_ENABLE_DEPRECATION_WARNINGS
-
 #include <functional>
 
 #include "test_macros.h"
@@ -28,7 +25,9 @@ struct Predicate {
     bool operator()(first_argument_type, second_argument_type) const { return true; }
 };
 
-int main() {
+int main(int, char**) {
     std::binary_negate<Predicate> f((Predicate())); // expected-error{{'binary_negate<Predicate>' is deprecated}}
     (void)f;
+
+  return 0;
 }

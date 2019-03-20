@@ -28,6 +28,8 @@ public:
 
   const SBFileSpec &operator=(const lldb::SBFileSpec &rhs);
 
+  explicit operator bool() const;
+
   bool IsValid() const;
 
   bool Exists() const;
@@ -58,7 +60,6 @@ private:
   friend class SBDeclaration;
   friend class SBFileSpecList;
   friend class SBHostOS;
-  friend class SBInitializerOptions;
   friend class SBLaunchInfo;
   friend class SBLineEntry;
   friend class SBModule;
@@ -82,7 +83,7 @@ private:
 
   const lldb_private::FileSpec &ref() const;
 
-  std::unique_ptr<lldb_private::FileSpec> m_opaque_ap;
+  std::unique_ptr<lldb_private::FileSpec> m_opaque_up;
 };
 
 } // namespace lldb

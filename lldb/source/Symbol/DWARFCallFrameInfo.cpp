@@ -40,9 +40,7 @@ GetGNUEHPointer(const DataExtractor &DE, offset_t *offset_ptr,
   uint64_t baseAddress = 0;
   uint64_t addressValue = 0;
   const uint32_t addr_size = DE.GetAddressByteSize();
-#ifdef LLDB_CONFIGURATION_DEBUG
   assert(addr_size == 4 || addr_size == 8);
-#endif
 
   bool signExtendValue = false;
   // Decode the base part or adjust our offset
@@ -230,7 +228,7 @@ DWARFCallFrameInfo::GetCIE(dw_offset_t cie_offset) {
 
   if (pos != m_cie_map.end()) {
     // Parse and cache the CIE
-    if (pos->second.get() == nullptr)
+    if (pos->second == nullptr)
       pos->second = ParseCIE(cie_offset);
 
     return pos->second.get();

@@ -57,7 +57,6 @@ extern "C" void LLVMInitializeWebAssemblyTarget() {
   initializeOptimizeReturnedPass(PR);
   initializeWebAssemblyArgumentMovePass(PR);
   initializeWebAssemblySetP2AlignOperandsPass(PR);
-  initializeWebAssemblyEHRestoreStackPointerPass(PR);
   initializeWebAssemblyReplacePhysRegsPass(PR);
   initializeWebAssemblyPrepareForLiveIntervalsPass(PR);
   initializeWebAssemblyOptimizeLiveIntervalsPass(PR);
@@ -116,12 +115,27 @@ WebAssemblyTargetMachine::WebAssemblyTargetMachine(
 
   initAsmInfo();
 
+  // Create a subtarget using the unmodified target machine features to
+  // initialize the used feature set with explicitly enabled features.
+  getSubtargetImpl(getTargetCPU(), getTargetFeatureString());
+
   // Note that we don't use setRequiresStructuredCFG(true). It disables
   // optimizations than we're ok with, and want, such as critical edge
   // splitting and tail merging.
 }
 
-WebAssemblyTargetMachine::~WebAssemblyTargetMachine() {}
+WebAssemblyTargetMachine::~WebAssemblyTargetMachine() = default; // anchor.
+
+const WebAssemblySubtarget *
+WebAssemblyTargetMachine::getSubtargetImpl(std::string CPU,
+                                           std::string FS) const {
+  auto &I = SubtargetMap[CPU + FS];
+  if (!I) {
+    I = llvm::make_unique<WebAssemblySubtarget>(TargetTriple, CPU, FS, *this);
+    UsedFeatures |= I->getFeatureBits();
+  }
+  return I.get();
+}
 
 const WebAssemblySubtarget *
 WebAssemblyTargetMachine::getSubtargetImpl(const Function &F) const {
@@ -135,15 +149,12 @@ WebAssemblyTargetMachine::getSubtargetImpl(const Function &F) const {
                        ? FSAttr.getValueAsString().str()
                        : TargetFS;
 
-  auto &I = SubtargetMap[CPU + FS];
-  if (!I) {
-    // This needs to be done before we create a new subtarget since any
-    // creation will depend on the TM and the code generation flags on the
-    // function that reside in TargetOptions.
-    resetTargetOptions(F);
-    I = llvm::make_unique<WebAssemblySubtarget>(TargetTriple, CPU, FS, *this);
-  }
-  return I.get();
+  // This needs to be done before we create a new subtarget since any
+  // creation will depend on the TM and the code generation flags on the
+  // function that reside in TargetOptions.
+  resetTargetOptions(F);
+
+  return getSubtargetImpl(CPU, FS);
 }
 
 namespace {
@@ -180,6 +191,12 @@ public:
   void addPostRegAlloc() override;
   bool addGCPasses() override { return false; }
   void addPreEmitPass() override;
+
+  // No reg alloc
+  bool addRegAssignmentFast() override { return false; }
+
+  // No reg alloc
+  bool addRegAssignmentOptimized() override { return false; }
 };
 } // end anonymous namespace
 
@@ -203,14 +220,15 @@ FunctionPass *WebAssemblyPassConfig::createTargetRegisterAllocator(bool) {
 //===----------------------------------------------------------------------===//
 
 void WebAssemblyPassConfig::addIRPasses() {
-  if (TM->Options.ThreadModel == ThreadModel::Single) {
-    // In "single" mode, atomics get lowered to non-atomics.
-    addPass(createLowerAtomicPass());
-    addPass(new StripThreadLocal());
-  } else {
+  if (static_cast<WebAssemblyTargetMachine *>(TM)
+          ->getUsedFeatures()[WebAssembly::FeatureAtomics]) {
     // Expand some atomic operations. WebAssemblyTargetLowering has hooks which
     // control specifically what gets lowered.
     addPass(createAtomicExpandPass());
+  } else {
+    // If atomics are not enabled, they get lowered to non-atomics.
+    addPass(createLowerAtomicPass());
+    addPass(new StripThreadLocal());
   }
 
   // Add signatures to prototype-less function declarations
@@ -278,19 +296,15 @@ void WebAssemblyPassConfig::addPostRegAlloc() {
   disablePass(&PatchableFunctionID);
   disablePass(&ShrinkWrapID);
 
+  // This pass hurts code size for wasm because it can generate irreducible
+  // control flow.
+  disablePass(&MachineBlockPlacementID);
+
   TargetPassConfig::addPostRegAlloc();
 }
 
 void WebAssemblyPassConfig::addPreEmitPass() {
   TargetPassConfig::addPreEmitPass();
-
-  // Restore __stack_pointer global after an exception is thrown.
-  addPass(createWebAssemblyEHRestoreStackPointer());
-
-  // Now that we have a prologue and epilogue and all frame indices are
-  // rewritten, eliminate SP and FP. This allows them to be stackified,
-  // colored, and numbered with the rest of the registers.
-  addPass(createWebAssemblyReplacePhysRegs());
 
   // Rewrite pseudo call_indirect instructions as real instructions.
   // This needs to run before register stackification, because we change the
@@ -303,6 +317,11 @@ void WebAssemblyPassConfig::addPreEmitPass() {
   // Do various transformations for exception handling.
   // Every CFG-changing optimizations should come before this.
   addPass(createWebAssemblyLateEHPrepare());
+
+  // Now that we have a prologue and epilogue and all frame indices are
+  // rewritten, eliminate SP and FP. This allows them to be stackified,
+  // colored, and numbered with the rest of the registers.
+  addPass(createWebAssemblyReplacePhysRegs());
 
   // Preparations and optimizations related to register stackification.
   if (getOptLevel() != CodeGenOpt::None) {

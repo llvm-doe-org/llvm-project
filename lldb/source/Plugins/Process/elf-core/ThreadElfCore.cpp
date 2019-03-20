@@ -38,6 +38,8 @@
 #include "RegisterContextPOSIXCore_x86_64.h"
 #include "ThreadElfCore.h"
 
+#include <memory>
+
 using namespace lldb;
 using namespace lldb_private;
 
@@ -186,40 +188,40 @@ ThreadElfCore::CreateRegisterContextForFrame(StackFrame *frame) {
 
     switch (arch.GetMachine()) {
     case llvm::Triple::aarch64:
-      m_thread_reg_ctx_sp.reset(new RegisterContextCorePOSIX_arm64(
-          *this, reg_interface, m_gpregset_data, m_notes));
+      m_thread_reg_ctx_sp = std::make_shared<RegisterContextCorePOSIX_arm64>(
+          *this, reg_interface, m_gpregset_data, m_notes);
       break;
     case llvm::Triple::arm:
-      m_thread_reg_ctx_sp.reset(new RegisterContextCorePOSIX_arm(
-          *this, reg_interface, m_gpregset_data, m_notes));
+      m_thread_reg_ctx_sp = std::make_shared<RegisterContextCorePOSIX_arm>(
+          *this, reg_interface, m_gpregset_data, m_notes);
       break;
     case llvm::Triple::mipsel:
     case llvm::Triple::mips:
-      m_thread_reg_ctx_sp.reset(new RegisterContextCorePOSIX_mips64(
-          *this, reg_interface, m_gpregset_data, m_notes));
+      m_thread_reg_ctx_sp = std::make_shared<RegisterContextCorePOSIX_mips64>(
+          *this, reg_interface, m_gpregset_data, m_notes);
       break;
     case llvm::Triple::mips64:
     case llvm::Triple::mips64el:
-      m_thread_reg_ctx_sp.reset(new RegisterContextCorePOSIX_mips64(
-          *this, reg_interface, m_gpregset_data, m_notes));
+      m_thread_reg_ctx_sp = std::make_shared<RegisterContextCorePOSIX_mips64>(
+          *this, reg_interface, m_gpregset_data, m_notes);
       break;
     case llvm::Triple::ppc:
     case llvm::Triple::ppc64:
-      m_thread_reg_ctx_sp.reset(new RegisterContextCorePOSIX_powerpc(
-          *this, reg_interface, m_gpregset_data, m_notes));
+      m_thread_reg_ctx_sp = std::make_shared<RegisterContextCorePOSIX_powerpc>(
+          *this, reg_interface, m_gpregset_data, m_notes);
       break;
     case llvm::Triple::ppc64le:
-      m_thread_reg_ctx_sp.reset(new RegisterContextCorePOSIX_ppc64le(
-          *this, reg_interface, m_gpregset_data, m_notes));
+      m_thread_reg_ctx_sp = std::make_shared<RegisterContextCorePOSIX_ppc64le>(
+          *this, reg_interface, m_gpregset_data, m_notes);
       break;
     case llvm::Triple::systemz:
-      m_thread_reg_ctx_sp.reset(new RegisterContextCorePOSIX_s390x(
-          *this, reg_interface, m_gpregset_data, m_notes));
+      m_thread_reg_ctx_sp = std::make_shared<RegisterContextCorePOSIX_s390x>(
+          *this, reg_interface, m_gpregset_data, m_notes);
       break;
     case llvm::Triple::x86:
     case llvm::Triple::x86_64:
-      m_thread_reg_ctx_sp.reset(new RegisterContextCorePOSIX_x86_64(
-          *this, reg_interface, m_gpregset_data, m_notes));
+      m_thread_reg_ctx_sp = std::make_shared<RegisterContextCorePOSIX_x86_64>(
+          *this, reg_interface, m_gpregset_data, m_notes);
       break;
     default:
       break;
@@ -253,6 +255,7 @@ ELFLinuxPrStatus::ELFLinuxPrStatus() {
 size_t ELFLinuxPrStatus::GetSize(const lldb_private::ArchSpec &arch) {
   constexpr size_t mips_linux_pr_status_size_o32 = 96;
   constexpr size_t mips_linux_pr_status_size_n32 = 72;
+  constexpr size_t num_ptr_size_members = 10;
   if (arch.IsMIPS()) {
     std::string abi = arch.GetTargetABI();
     assert(!abi.empty() && "ABI is not set");
@@ -264,15 +267,14 @@ size_t ELFLinuxPrStatus::GetSize(const lldb_private::ArchSpec &arch) {
     return mips_linux_pr_status_size_n32;
   }
   switch (arch.GetCore()) {
-  case lldb_private::ArchSpec::eCore_s390x_generic:
-  case lldb_private::ArchSpec::eCore_x86_64_x86_64:
-  case lldb_private::ArchSpec::eCore_ppc64le_generic:
-    return sizeof(ELFLinuxPrStatus);
   case lldb_private::ArchSpec::eCore_x86_32_i386:
   case lldb_private::ArchSpec::eCore_x86_32_i486:
     return 72;
   default:
-    return 0;
+    if (arch.GetAddressByteSize() == 8)
+      return sizeof(ELFLinuxPrStatus);
+    else
+      return sizeof(ELFLinuxPrStatus) - num_ptr_size_members * 4;
   }
 }
 

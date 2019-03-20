@@ -6,6 +6,7 @@
 
 # Create obj files with each selection type.
 # RUN: sed -e s/SEL/discard/ %s | llvm-mc -triple x86_64-pc-win32 -filetype=obj -o %t.discard.obj
+# RUN: sed -e s/SEL/discard/ -e s/.long/.short/ -e s/1/2/ %s | llvm-mc -triple x86_64-pc-win32 -filetype=obj -o %t.discard.short.2.obj
 # RUN: sed -e s/SEL/one_only/ %s | llvm-mc -triple x86_64-pc-win32 -filetype=obj -o %t.one_only.obj
 # RUN: sed -e s/SEL/same_size/ %s | llvm-mc -triple x86_64-pc-win32 -filetype=obj -o %t.same_size.obj
 # RUN: sed -e s/SEL/same_size/ -e s/.long/.short/ %s | llvm-mc -triple x86_64-pc-win32 -filetype=obj -o %t.same_size.short.obj
@@ -72,16 +73,35 @@ symbol:
 # lld-link rejects all comdat selection type mismatches. Spot-test just a few
 # combinations.
 
-# RUN: not lld-link /dll /noentry /nodefaultlib %t.discard.obj %t.one_only.obj 2>&1 | FileCheck --check-prefix=DISCARDONE %s
-# DISCARDONE: lld-link: error: conflicting comdat type for symbol: 2 in
-# RUN: lld-link /force /dll /noentry /nodefaultlib %t.discard.obj %t.one_only.obj 2>&1 | FileCheck --check-prefix=DISCARDONEFORCE %s
-# DISCARDONEFORCE: lld-link: warning: conflicting comdat type for symbol: 2 in
+# RUN: not lld-link /verbose /dll /noentry /nodefaultlib %t.discard.obj %t.one_only.obj 2>&1 | FileCheck --check-prefix=DISCARDONE %s
+# DISCARDONE: lld-link: conflicting comdat type for symbol: 2 in
+# DISCARDONE: lld-link: error: duplicate symbol: symbol
+# RUN: lld-link /verbose /force /dll /noentry /nodefaultlib %t.discard.obj %t.one_only.obj 2>&1 | FileCheck --check-prefix=DISCARDONEFORCE %s
+# DISCARDONEFORCE: lld-link: conflicting comdat type for symbol: 2 in
+# DISCARDONEFORCE: lld-link: warning: duplicate symbol: symbol
 
-# RUN: not lld-link /dll /noentry /nodefaultlib %t.same_contents.obj %t.same_size.obj 2>&1 | FileCheck --check-prefix=CONTENTSSIZE %s
-# CONTENTSSIZE: lld-link: error: conflicting comdat type for symbol: 4 in
+# Make sure the error isn't depending on the order of .obj files.
+# RUN: not lld-link /verbose /dll /noentry /nodefaultlib %t.one_only.obj %t.discard.obj 2>&1 | FileCheck --check-prefix=ONEDISCARD %s
+# ONEDISCARD: lld-link: conflicting comdat type for symbol: 1 in
+# ONEDISCARD: lld-link: error: duplicate symbol: symbol
+
+# RUN: not lld-link /verbose /dll /noentry /nodefaultlib %t.same_contents.obj %t.same_size.obj 2>&1 | FileCheck --check-prefix=CONTENTSSIZE %s
+# CONTENTSSIZE: lld-link: conflicting comdat type for symbol: 4 in
+# CONTENTSSIZE: lld-link: error: duplicate symbol: symbol
+
+# Check that linking one 'discard' and one 'largest' has the effect of
+# 'largest'.
+# RUN: lld-link /dll /noentry /nodefaultlib %t.discard.short.2.obj %t.largest.obj
+# RUN: llvm-objdump -s %t.exe | FileCheck --check-prefix=DISCARDLARGEST %s
+# DISCARDLARGEST: Contents of section .text:
+# DISCARDLARGEST:   180001000 01000000 ....
+# RUN: lld-link /dll /noentry /nodefaultlib %t.largest.obj %t.discard.short.2.obj
+# RUN: llvm-objdump -s %t.exe | FileCheck --check-prefix=LARGESTDISCARD %s
+# LARGESTDISCARD: Contents of section .text:
+# LARGESTDISCARD:   180001000 01000000 ....
+
 
 # These cases are accepted by link.exe but not by lld-link.
-# RUN: not lld-link /dll /noentry /nodefaultlib %t.discard.obj %t.largest.obj 2>&1 | FileCheck --check-prefix=DISCARDLARGEST %s
-# DISCARDLARGEST: lld-link: error: conflicting comdat type for symbol: 2 in
-# RUN: not lld-link /dll /noentry /nodefaultlib %t.largest.obj %t.one_only.obj 2>&1 | FileCheck --check-prefix=LARGESTONE %s
-# LARGESTONE: lld-link: error: conflicting comdat type for symbol: 6 in
+# RUN: not lld-link /verbose /dll /noentry /nodefaultlib %t.largest.obj %t.one_only.obj 2>&1 | FileCheck --check-prefix=LARGESTONE %s
+# LARGESTONE: lld-link: conflicting comdat type for symbol: 6 in
+# LARGESTONE: lld-link: error: duplicate symbol: symbol

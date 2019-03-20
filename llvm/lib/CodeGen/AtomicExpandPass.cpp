@@ -381,7 +381,7 @@ LoadInst *AtomicExpand::convertAtomicLoadToIntegerType(LoadInst *LI) {
                               Addr->getType()->getPointerAddressSpace());
   Value *NewAddr = Builder.CreateBitCast(Addr, PT);
 
-  auto *NewLI = Builder.CreateLoad(NewAddr);
+  auto *NewLI = Builder.CreateLoad(NewTy, NewAddr);
   NewLI->setAlignment(LI->getAlignment());
   NewLI->setVolatile(LI->isVolatile());
   NewLI->setAtomic(LI->getOrdering(), LI->getSyncScopeID());
@@ -430,6 +430,9 @@ bool AtomicExpand::expandAtomicLoadToLL(LoadInst *LI) {
 bool AtomicExpand::expandAtomicLoadToCmpXchg(LoadInst *LI) {
   IRBuilder<> Builder(LI);
   AtomicOrdering Order = LI->getOrdering();
+  if (Order == AtomicOrdering::Unordered)
+    Order = AtomicOrdering::Monotonic;
+
   Value *Addr = LI->getPointerOperand();
   Type *Ty = cast<PointerType>(Addr->getType())->getElementType();
   Constant *DummyVal = Constant::getNullValue(Ty);
@@ -1691,8 +1694,14 @@ bool AtomicExpand::expandAtomicOpToLibcall(
   }
 
   // 'ptr' argument.
-  Value *PtrVal =
-      Builder.CreateBitCast(PointerOperand, Type::getInt8PtrTy(Ctx));
+  // note: This assumes all address spaces share a common libfunc
+  // implementation and that addresses are convertable.  For systems without
+  // that property, we'd need to extend this mechanism to support AS-specific
+  // families of atomic intrinsics.
+  auto PtrTypeAS = PointerOperand->getType()->getPointerAddressSpace();
+  Value *PtrVal = Builder.CreateBitCast(PointerOperand,
+                                        Type::getInt8PtrTy(Ctx, PtrTypeAS));
+  PtrVal = Builder.CreateAddrSpaceCast(PtrVal, Type::getInt8PtrTy(Ctx));
   Args.push_back(PtrVal);
 
   // 'expected' argument, if present.
@@ -1754,7 +1763,7 @@ bool AtomicExpand::expandAtomicOpToLibcall(
   for (Value *Arg : Args)
     ArgTys.push_back(Arg->getType());
   FunctionType *FnType = FunctionType::get(ResultTy, ArgTys, false);
-  Constant *LibcallFn =
+  FunctionCallee LibcallFn =
       M->getOrInsertFunction(TLI->getLibcallName(RTLibType), FnType, Attr);
   CallInst *Call = Builder.CreateCall(LibcallFn, Args);
   Call->setAttributes(Attr);
@@ -1769,8 +1778,8 @@ bool AtomicExpand::expandAtomicOpToLibcall(
     // from call}
     Type *FinalResultTy = I->getType();
     Value *V = UndefValue::get(FinalResultTy);
-    Value *ExpectedOut =
-        Builder.CreateAlignedLoad(AllocaCASExpected, AllocaAlignment);
+    Value *ExpectedOut = Builder.CreateAlignedLoad(
+        CASExpected->getType(), AllocaCASExpected, AllocaAlignment);
     Builder.CreateLifetimeEnd(AllocaCASExpected_i8, SizeVal64);
     V = Builder.CreateInsertValue(V, ExpectedOut, 0);
     V = Builder.CreateInsertValue(V, Result, 1);
@@ -1780,7 +1789,8 @@ bool AtomicExpand::expandAtomicOpToLibcall(
     if (UseSizedLibcall)
       V = Builder.CreateBitOrPointerCast(Result, I->getType());
     else {
-      V = Builder.CreateAlignedLoad(AllocaResult, AllocaAlignment);
+      V = Builder.CreateAlignedLoad(I->getType(), AllocaResult,
+                                    AllocaAlignment);
       Builder.CreateLifetimeEnd(AllocaResult_i8, SizeVal64);
     }
     I->replaceAllUsesWith(V);

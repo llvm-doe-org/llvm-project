@@ -277,8 +277,8 @@ Module::~Module() {
   // function calls back into this module object. The ordering is important
   // here because symbol files can require the module object file. So we tear
   // down the symbol file first, then the object file.
-  m_sections_ap.reset();
-  m_symfile_ap.reset();
+  m_sections_up.reset();
+  m_symfile_up.reset();
   m_objfile_sp.reset();
 }
 
@@ -291,13 +291,13 @@ ObjectFile *Module::GetMemoryObjectFile(const lldb::ProcessSP &process_sp,
     std::lock_guard<std::recursive_mutex> guard(m_mutex);
     if (process_sp) {
       m_did_load_objfile = true;
-      auto data_ap = llvm::make_unique<DataBufferHeap>(size_to_read, 0);
+      auto data_up = llvm::make_unique<DataBufferHeap>(size_to_read, 0);
       Status readmem_error;
       const size_t bytes_read =
-          process_sp->ReadMemory(header_addr, data_ap->GetBytes(),
-                                 data_ap->GetByteSize(), readmem_error);
+          process_sp->ReadMemory(header_addr, data_up->GetBytes(),
+                                 data_up->GetByteSize(), readmem_error);
       if (bytes_read == size_to_read) {
-        DataBufferSP data_sp(data_ap.release());
+        DataBufferSP data_sp(data_up.release());
         m_objfile_sp = ObjectFile::FindPlugin(shared_from_this(), process_sp,
                                               header_addr, data_sp);
         if (m_objfile_sp) {
@@ -309,6 +309,10 @@ ObjectFile *Module::GetMemoryObjectFile(const lldb::ProcessSP &process_sp,
           // file's architecture since it might differ in vendor/os if some
           // parts were unknown.
           m_arch = m_objfile_sp->GetArchitecture();
+
+          // Augment the arch with the target's information in case
+          // we are unable to extract the os/environment from memory.
+          m_arch.MergeFrom(process_sp->GetTarget().GetArchitecture());
         } else {
           error.SetErrorString("unable to find suitable object file plug-in");
         }
@@ -330,7 +334,7 @@ const lldb_private::UUID &Module::GetUUID() {
       ObjectFile *obj_file = GetObjectFile();
 
       if (obj_file != nullptr) {
-        obj_file->GetUUID(&m_uuid);
+        m_uuid = obj_file->GetUUID();
         m_did_set_uuid = true;
       }
     }
@@ -594,7 +598,7 @@ uint32_t Module::ResolveSymbolContextsForFileSpec(
   return sc_list.GetSize() - initial_count;
 }
 
-size_t Module::FindGlobalVariables(const ConstString &name,
+size_t Module::FindGlobalVariables(ConstString name,
                                    const CompilerDeclContext *parent_decl_ctx,
                                    size_t max_matches,
                                    VariableList &variables) {
@@ -634,7 +638,7 @@ size_t Module::FindCompileUnits(const FileSpec &path, bool append,
   return sc_list.GetSize() - start_size;
 }
 
-Module::LookupInfo::LookupInfo(const ConstString &name,
+Module::LookupInfo::LookupInfo(ConstString name,
                                FunctionNameType name_type_mask,
                                LanguageType language)
     : m_name(name), m_lookup_name(), m_language(language),
@@ -794,7 +798,7 @@ void Module::LookupInfo::Prune(SymbolContextList &sc_list,
   }
 }
 
-size_t Module::FindFunctions(const ConstString &name,
+size_t Module::FindFunctions(ConstString name,
                              const CompilerDeclContext *parent_decl_ctx,
                              FunctionNameType name_type_mask,
                              bool include_symbols, bool include_inlines,
@@ -942,7 +946,7 @@ void Module::FindAddressesForLine(const lldb::TargetSP target_sp,
 }
 
 size_t Module::FindTypes_Impl(
-    const ConstString &name, const CompilerDeclContext *parent_decl_ctx,
+    ConstString name, const CompilerDeclContext *parent_decl_ctx,
     bool append, size_t max_matches,
     llvm::DenseSet<lldb_private::SymbolFile *> &searched_symbol_files,
     TypeMap &types) {
@@ -955,7 +959,7 @@ size_t Module::FindTypes_Impl(
   return 0;
 }
 
-size_t Module::FindTypesInNamespace(const ConstString &type_name,
+size_t Module::FindTypesInNamespace(ConstString type_name,
                                     const CompilerDeclContext *parent_decl_ctx,
                                     size_t max_matches, TypeList &type_list) {
   const bool append = true;
@@ -973,7 +977,7 @@ size_t Module::FindTypesInNamespace(const ConstString &type_name,
 }
 
 lldb::TypeSP Module::FindFirstType(const SymbolContext &sc,
-                                   const ConstString &name, bool exact_match) {
+                                   ConstString name, bool exact_match) {
   TypeList type_list;
   llvm::DenseSet<lldb_private::SymbolFile *> searched_symbol_files;
   const size_t num_matches =
@@ -984,7 +988,7 @@ lldb::TypeSP Module::FindFirstType(const SymbolContext &sc,
 }
 
 size_t Module::FindTypes(
-    const ConstString &name, bool exact_match, size_t max_matches,
+    ConstString name, bool exact_match, size_t max_matches,
     llvm::DenseSet<lldb_private::SymbolFile *> &searched_symbol_files,
     TypeList &types) {
   size_t num_matches = 0;
@@ -1049,17 +1053,17 @@ SymbolVendor *Module::GetSymbolVendor(bool can_create,
       if (obj_file != nullptr) {
         static Timer::Category func_cat(LLVM_PRETTY_FUNCTION);
         Timer scoped_timer(func_cat, LLVM_PRETTY_FUNCTION);
-        m_symfile_ap.reset(
+        m_symfile_up.reset(
             SymbolVendor::FindPlugin(shared_from_this(), feedback_strm));
         m_did_load_symbol_vendor = true;
       }
     }
   }
-  return m_symfile_ap.get();
+  return m_symfile_up.get();
 }
 
 void Module::SetFileSpecAndObjectName(const FileSpec &file,
-                                      const ConstString &object_name) {
+                                      ConstString object_name) {
   // Container objects whose paths do not specify a file directly can call this
   // function to correct the file and object names.
   m_file = file;
@@ -1242,7 +1246,7 @@ TypeList *Module::GetTypeList() {
   return nullptr;
 }
 
-const ConstString &Module::GetObjectName() const { return m_object_name; }
+ConstString Module::GetObjectName() const { return m_object_name; }
 
 ObjectFile *Module::GetObjectFile() {
   if (!m_did_load_objfile.load()) {
@@ -1278,13 +1282,13 @@ ObjectFile *Module::GetObjectFile() {
 }
 
 SectionList *Module::GetSectionList() {
-  // Populate m_sections_ap with sections from objfile.
-  if (!m_sections_ap) {
+  // Populate m_sections_up with sections from objfile.
+  if (!m_sections_up) {
     ObjectFile *obj_file = GetObjectFile();
     if (obj_file != nullptr)
       obj_file->CreateSections(*GetUnifiedSectionList());
   }
-  return m_sections_ap.get();
+  return m_sections_up.get();
 }
 
 void Module::SectionFileAddressesChanged() {
@@ -1296,13 +1300,19 @@ void Module::SectionFileAddressesChanged() {
     sym_vendor->SectionFileAddressesChanged();
 }
 
-SectionList *Module::GetUnifiedSectionList() {
-  if (!m_sections_ap)
-    m_sections_ap = llvm::make_unique<SectionList>();
-  return m_sections_ap.get();
+UnwindTable &Module::GetUnwindTable() {
+  if (!m_unwind_table)
+    m_unwind_table.emplace(*this);
+  return *m_unwind_table;
 }
 
-const Symbol *Module::FindFirstSymbolWithNameAndType(const ConstString &name,
+SectionList *Module::GetUnifiedSectionList() {
+  if (!m_sections_up)
+    m_sections_up = llvm::make_unique<SectionList>();
+  return m_sections_up.get();
+}
+
+const Symbol *Module::FindFirstSymbolWithNameAndType(ConstString name,
                                                      SymbolType symbol_type) {
   static Timer::Category func_cat(LLVM_PRETTY_FUNCTION);
   Timer scoped_timer(
@@ -1335,7 +1345,7 @@ void Module::SymbolIndicesToSymbolContextList(
   }
 }
 
-size_t Module::FindFunctionSymbols(const ConstString &name,
+size_t Module::FindFunctionSymbols(ConstString name,
                                    uint32_t name_type_mask,
                                    SymbolContextList &sc_list) {
   static Timer::Category func_cat(LLVM_PRETTY_FUNCTION);
@@ -1351,7 +1361,7 @@ size_t Module::FindFunctionSymbols(const ConstString &name,
   return 0;
 }
 
-size_t Module::FindSymbolsWithNameAndType(const ConstString &name,
+size_t Module::FindSymbolsWithNameAndType(ConstString name,
                                           SymbolType symbol_type,
                                           SymbolContextList &sc_list) {
   // No need to protect this call using m_mutex all other method calls are
@@ -1419,11 +1429,11 @@ void Module::PreloadSymbols() {
 void Module::SetSymbolFileFileSpec(const FileSpec &file) {
   if (!FileSystem::Instance().Exists(file))
     return;
-  if (m_symfile_ap) {
+  if (m_symfile_up) {
     // Remove any sections in the unified section list that come from the
     // current symbol vendor.
     SectionList *section_list = GetSectionList();
-    SymbolFile *symbol_file = m_symfile_ap->GetSymbolFile();
+    SymbolFile *symbol_file = m_symfile_up->GetSymbolFile();
     if (section_list && symbol_file) {
       ObjectFile *obj_file = symbol_file->GetObjectFile();
       // Make sure we have an object file and that the symbol vendor's objfile
@@ -1441,6 +1451,10 @@ void Module::SetSymbolFileFileSpec(const FileSpec &file) {
         // Cleare the current symtab as we are going to replace it with a new
         // one
         obj_file->ClearSymtab();
+
+        // Clear the unwind table too, as that may also be affected by the
+        // symbol file information.
+        m_unwind_table.reset();
 
         // The symbol file might be a directory bundle ("/tmp/a.out.dSYM")
         // instead of a full path to the symbol file within the bundle
@@ -1471,10 +1485,10 @@ void Module::SetSymbolFileFileSpec(const FileSpec &file) {
     }
     // Keep all old symbol files around in case there are any lingering type
     // references in any SBValue objects that might have been handed out.
-    m_old_symfiles.push_back(std::move(m_symfile_ap));
+    m_old_symfiles.push_back(std::move(m_symfile_up));
   }
   m_symfile_spec = file;
-  m_symfile_ap.reset();
+  m_symfile_up.reset();
   m_did_load_symbol_vendor = false;
 }
 
@@ -1621,7 +1635,7 @@ bool Module::MatchesModuleSpec(const ModuleSpec &module_ref) {
       return false;
   }
 
-  const ConstString &object_name = module_ref.GetObjectName();
+  ConstString object_name = module_ref.GetObjectName();
   if (object_name) {
     if (object_name != GetObjectName())
       return false;

@@ -535,6 +535,8 @@ enum FunctionCodes {
   // 54 is unused.
   FUNC_CODE_OPERAND_BUNDLE = 55, // OPERAND_BUNDLE: [tag#, value...]
   FUNC_CODE_INST_UNOP = 56,      // UNOP:       [opcode, ty, opval]
+  FUNC_CODE_INST_CALLBR = 57,    // CALLBR:     [attr, cc, norm, transfs,
+                                 //              fnty, fnid, args...]
 };
 
 enum UseListCodes {
@@ -603,6 +605,7 @@ enum AttributeKindCodes {
   ATTR_KIND_OPT_FOR_FUZZING = 57,
   ATTR_KIND_SHADOWCALLSTACK = 58,
   ATTR_KIND_SPECULATIVE_LOAD_HARDENING = 59,
+  ATTR_KIND_IMMARG = 60
 };
 
 enum ComdatSelectionKindCodes {

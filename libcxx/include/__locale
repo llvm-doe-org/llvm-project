@@ -254,7 +254,10 @@ public:
         return do_compare(__lo1, __hi1, __lo2, __hi2);
     }
 
+    // FIXME(EricWF): The _LIBCPP_ALWAYS_INLINE is needed on Windows to work
+    // around a dllimport bug that expects an external instantiation.
     _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_ALWAYS_INLINE
     string_type transform(const char_type* __lo, const char_type* __hi) const
     {
         return do_transform(__lo, __hi);
@@ -1228,8 +1231,6 @@ _LIBCPP_EXTERN_TEMPLATE2(class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<c
 _LIBCPP_EXTERN_TEMPLATE2(class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<wchar_t, char, mbstate_t>)
 _LIBCPP_EXTERN_TEMPLATE2(class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<char16_t, char, mbstate_t>)
 _LIBCPP_EXTERN_TEMPLATE2(class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<char32_t, char, mbstate_t>)
-
-_LIBCPP_NORETURN _LIBCPP_FUNC_VIS void __throw_runtime_error(const char*);
 
 template <size_t _Np>
 struct __narrow_to_utf8

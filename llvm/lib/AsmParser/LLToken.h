@@ -226,6 +226,7 @@ enum Kind {
   kw_uwtable,
   kw_writeonly,
   kw_zeroext,
+  kw_immarg,
 
   kw_type,
   kw_opaque,
@@ -327,6 +328,7 @@ enum Kind {
   kw_catchret,
   kw_catchpad,
   kw_cleanuppad,
+  kw_callbr,
 
   kw_alloca,
   kw_load,

@@ -193,14 +193,12 @@ define zeroext i1 @saddoinci64(i64 %v1, i64* %res) {
 }
 
 ; SADDO reg, imm | imm, reg
-; FIXME: DAG doesn't optimize immediates on the LHS.
 define zeroext i1 @saddoi64imm1(i64 %v1, i64* %res) {
 ; SDAG-LABEL: saddoi64imm1:
 ; SDAG:       ## %bb.0:
-; SDAG-NEXT:    movl $2, %ecx
-; SDAG-NEXT:    addq %rdi, %rcx
+; SDAG-NEXT:    addq $2, %rdi
 ; SDAG-NEXT:    seto %al
-; SDAG-NEXT:    movq %rcx, (%rsi)
+; SDAG-NEXT:    movq %rdi, (%rsi)
 ; SDAG-NEXT:    retq
 ;
 ; FAST-LABEL: saddoi64imm1:
@@ -293,10 +291,9 @@ define zeroext i1 @saddoi64imm4(i64 %v1, i64* %res) {
 define zeroext i1 @saddoi64imm5(i64 %v1, i64* %res) {
 ; SDAG-LABEL: saddoi64imm5:
 ; SDAG:       ## %bb.0:
-; SDAG-NEXT:    movl $2147483648, %ecx ## imm = 0x80000000
-; SDAG-NEXT:    addq %rdi, %rcx
+; SDAG-NEXT:    subq $-2147483648, %rdi ## imm = 0x80000000
 ; SDAG-NEXT:    seto %al
-; SDAG-NEXT:    movq %rcx, (%rsi)
+; SDAG-NEXT:    movq %rdi, (%rsi)
 ; SDAG-NEXT:    retq
 ;
 ; FAST-LABEL: saddoi64imm5:
@@ -366,8 +363,8 @@ define zeroext i1 @uaddoi64(i64 %v1, i64 %v2, i64* %res) {
 define zeroext i1 @uaddoinci8(i8 %v1, i8* %res) {
 ; SDAG-LABEL: uaddoinci8:
 ; SDAG:       ## %bb.0:
-; SDAG-NEXT:    addb $1, %dil
-; SDAG-NEXT:    setb %al
+; SDAG-NEXT:    incb %dil
+; SDAG-NEXT:    sete %al
 ; SDAG-NEXT:    movb %dil, (%rsi)
 ; SDAG-NEXT:    retq
 ;
@@ -389,8 +386,8 @@ define zeroext i1 @uaddoinci8(i8 %v1, i8* %res) {
 define zeroext i1 @uaddoinci16(i16 %v1, i16* %res) {
 ; SDAG-LABEL: uaddoinci16:
 ; SDAG:       ## %bb.0:
-; SDAG-NEXT:    addw $1, %di
-; SDAG-NEXT:    setb %al
+; SDAG-NEXT:    incw %di
+; SDAG-NEXT:    sete %al
 ; SDAG-NEXT:    movw %di, (%rsi)
 ; SDAG-NEXT:    retq
 ;
@@ -412,8 +409,8 @@ define zeroext i1 @uaddoinci16(i16 %v1, i16* %res) {
 define zeroext i1 @uaddoinci32(i32 %v1, i32* %res) {
 ; SDAG-LABEL: uaddoinci32:
 ; SDAG:       ## %bb.0:
-; SDAG-NEXT:    addl $1, %edi
-; SDAG-NEXT:    setb %al
+; SDAG-NEXT:    incl %edi
+; SDAG-NEXT:    sete %al
 ; SDAG-NEXT:    movl %edi, (%rsi)
 ; SDAG-NEXT:    retq
 ;
@@ -435,8 +432,8 @@ define zeroext i1 @uaddoinci32(i32 %v1, i32* %res) {
 define zeroext i1 @uaddoinci64(i64 %v1, i64* %res) {
 ; SDAG-LABEL: uaddoinci64:
 ; SDAG:       ## %bb.0:
-; SDAG-NEXT:    addq $1, %rdi
-; SDAG-NEXT:    setb %al
+; SDAG-NEXT:    incq %rdi
+; SDAG-NEXT:    sete %al
 ; SDAG-NEXT:    movq %rdi, (%rsi)
 ; SDAG-NEXT:    retq
 ;

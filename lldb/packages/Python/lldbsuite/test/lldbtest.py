@@ -37,6 +37,7 @@ from __future__ import print_function
 # System modules
 import abc
 import collections
+from distutils.version import LooseVersion
 from functools import wraps
 import gc
 import glob
@@ -437,26 +438,10 @@ def system(commands, **kwargs):
             stdout=PIPE,
             stderr=PIPE,
             shell=True,
-            universal_newlines=True,
             **kwargs)
         pid = process.pid
         this_output, this_error = process.communicate()
         retcode = process.poll()
-
-        # Enable trace on failure return while tracking down FreeBSD buildbot
-        # issues
-        trace = traceAlways
-        if not trace and retcode and sys.platform.startswith("freebsd"):
-            trace = True
-
-        with recording(test, trace) as sbuf:
-            print(file=sbuf)
-            print("os command:", shellCommand, file=sbuf)
-            print("with pid:", pid, file=sbuf)
-            print("stdout:", this_output, file=sbuf)
-            print("stderr:", this_error, file=sbuf)
-            print("retcode:", retcode, file=sbuf)
-            print(file=sbuf)
 
         if retcode:
             cmd = kwargs.get("args")
@@ -470,8 +455,8 @@ def system(commands, **kwargs):
                 "command": shellCommand
             }
             raise cpe
-        output = output + this_output
-        error = error + this_error
+        output = output + this_output.decode("utf-8")
+        error = error + this_error.decode("utf-8")
     return (output, error)
 
 
@@ -1352,13 +1337,13 @@ class Base(unittest2.TestCase):
         if (version is None):
             return True
         if (operator == '>'):
-            return self.getCompilerVersion() > version
+            return LooseVersion(self.getCompilerVersion()) > LooseVersion(version)
         if (operator == '>=' or operator == '=>'):
-            return self.getCompilerVersion() >= version
+            return LooseVersion(self.getCompilerVersion()) >= LooseVersion(version)
         if (operator == '<'):
-            return self.getCompilerVersion() < version
+            return LooseVersion(self.getCompilerVersion()) < LooseVersion(version)
         if (operator == '<=' or operator == '=<'):
-            return self.getCompilerVersion() <= version
+            return LooseVersion(self.getCompilerVersion()) <= LooseVersion(version)
         if (operator == '!=' or operator == '!' or operator == 'not'):
             return str(version) not in str(self.getCompilerVersion())
         return str(version) in str(self.getCompilerVersion())
@@ -1681,7 +1666,8 @@ class Base(unittest2.TestCase):
         elif self.getPlatform() == "openbsd":
             cflags += " -stdlib=libc++"
         elif self.getPlatform() == "netbsd":
-            cflags += " -stdlib=libstdc++"
+            # NetBSD defaults to libc++
+            pass
         elif "clang" in self.getCompiler():
             cflags += " -stdlib=libstdc++"
 
@@ -1717,7 +1703,7 @@ class Base(unittest2.TestCase):
         if self.getPlatform() in ('freebsd', 'linux', 'netbsd', 'openbsd'):
             return ['libc++.so.1']
         else:
-            return ['libc++.1.dylib', 'libc++abi.dylib']
+            return ['libc++.1.dylib', 'libc++abi.']
 
 # Metaclass for TestBase to change the list of test metods when a new TestCase is loaded.
 # We change the test methods to create a new test method for each test for each debug info we are
@@ -1879,8 +1865,7 @@ class TestBase(Base):
         Base.setUp(self)
 
         # Set the clang modules cache path used by LLDB.
-        mod_cache = os.path.join(os.path.join(os.environ["LLDB_BUILD"],
-                                              "module-cache-lldb"))
+        mod_cache = os.path.join(os.environ["LLDB_BUILD"], "module-cache-lldb")
         self.runCmd('settings set symbols.clang-modules-cache-path "%s"'
                     % mod_cache)
 
@@ -1889,6 +1874,10 @@ class TestBase(Base):
         # differ in the debug info, which is not being hashed.
         self.runCmd('settings set symbols.enable-external-lookup false')
 
+        # Make sure that a sanitizer LLDB's environment doesn't get passed on.
+        if 'DYLD_LIBRARY_PATH' in os.environ:
+            self.runCmd('settings set target.env-vars DYLD_LIBRARY_PATH=')
+        
         if "LLDB_MAX_LAUNCH_COUNT" in os.environ:
             self.maxLaunchCount = int(os.environ["LLDB_MAX_LAUNCH_COUNT"])
 

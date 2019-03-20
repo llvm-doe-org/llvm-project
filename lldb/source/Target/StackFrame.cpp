@@ -33,6 +33,8 @@
 
 #include "lldb/lldb-enumerations.h"
 
+#include <memory>
+
 using namespace lldb;
 using namespace lldb_private;
 
@@ -422,7 +424,7 @@ VariableList *StackFrame::GetVariableList(bool get_file_globals) {
       const bool get_child_variables = true;
       const bool can_create = true;
       const bool stop_if_child_block_is_inlined_function = true;
-      m_variable_list_sp.reset(new VariableList());
+      m_variable_list_sp = std::make_shared<VariableList>();
       frame_block->AppendBlockVariables(can_create, get_child_variables,
                                         stop_if_child_block_is_inlined_function,
                                         [](Variable *v) { return true; },
@@ -640,7 +642,12 @@ ValueObjectSP StackFrame::GetValueForVariableExpressionPath(
         valobj_sp = valobj_sp->Dereference(deref_error);
         if (error.Fail()) {
           error.SetErrorStringWithFormatv(
-              "Failed to dereference sythetic value: %s", deref_error);
+              "Failed to dereference sythetic value: {0}", deref_error);
+          return ValueObjectSP();
+        }
+        // Some synthetic plug-ins fail to set the error in Dereference
+        if (!valobj_sp) {
+          error.SetErrorString("Failed to dereference sythetic value");
           return ValueObjectSP();
         }
         expr_is_ptr = false;
@@ -1173,7 +1180,7 @@ ValueObjectSP StackFrame::TrackGlobalVariable(const VariableSP &variable_sp,
     VariableList *var_list = GetVariableList(true);
     // If this frame has no variables, create a new list
     if (var_list == nullptr)
-      m_variable_list_sp.reset(new VariableList());
+      m_variable_list_sp = std::make_shared<VariableList>();
 
     // Add the global/static variable to this frame
     m_variable_list_sp->AddVariable(variable_sp);
@@ -1450,25 +1457,25 @@ ValueObjectSP GetValueForDereferincingOffset(StackFrame &frame,
 /// Attempt to reconstruct the ValueObject for the address contained in a
 /// given register plus an offset.
 ///
-/// @params [in] frame
+/// \params [in] frame
 ///   The current stack frame.
 ///
-/// @params [in] reg
+/// \params [in] reg
 ///   The register.
 ///
-/// @params [in] offset
+/// \params [in] offset
 ///   The offset from the register.
 ///
-/// @param [in] disassembler
+/// \param [in] disassembler
 ///   A disassembler containing instructions valid up to the current PC.
 ///
-/// @param [in] variables
+/// \param [in] variables
 ///   The variable list from the current frame,
 ///
-/// @param [in] pc
+/// \param [in] pc
 ///   The program counter for the instruction considered the 'user'.
 ///
-/// @return
+/// \return
 ///   A string describing the base for the ExpressionPath.  This could be a
 ///     variable, a register value, an argument, or a function return value.
 ///   The ValueObject if found.  If valid, it has a valid ExpressionPath.

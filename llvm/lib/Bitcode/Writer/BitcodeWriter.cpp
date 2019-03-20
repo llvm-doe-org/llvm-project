@@ -712,6 +712,8 @@ static uint64_t getAttrKindEncoding(Attribute::AttrKind Kind) {
     return bitc::ATTR_KIND_WRITEONLY;
   case Attribute::ZExt:
     return bitc::ATTR_KIND_Z_EXT;
+  case Attribute::ImmArg:
+    return bitc::ATTR_KIND_IMMARG;
   case Attribute::EndAttrKinds:
     llvm_unreachable("Can not encode end-attribute kinds marker.");
   case Attribute::None:
@@ -2775,6 +2777,41 @@ void ModuleBitcodeWriter::writeInstruction(const Instruction &I,
 
     if (CatchSwitch.hasUnwindDest())
       Vals.push_back(VE.getValueID(CatchSwitch.getUnwindDest()));
+    break;
+  }
+  case Instruction::CallBr: {
+    const CallBrInst *CBI = cast<CallBrInst>(&I);
+    const Value *Callee = CBI->getCalledValue();
+    FunctionType *FTy = CBI->getFunctionType();
+
+    if (CBI->hasOperandBundles())
+      writeOperandBundles(CBI, InstID);
+
+    Code = bitc::FUNC_CODE_INST_CALLBR;
+
+    Vals.push_back(VE.getAttributeListID(CBI->getAttributes()));
+
+    Vals.push_back(CBI->getCallingConv() << bitc::CALL_CCONV |
+                   1 << bitc::CALL_EXPLICIT_TYPE);
+
+    Vals.push_back(VE.getValueID(CBI->getDefaultDest()));
+    Vals.push_back(CBI->getNumIndirectDests());
+    for (unsigned i = 0, e = CBI->getNumIndirectDests(); i != e; ++i)
+      Vals.push_back(VE.getValueID(CBI->getIndirectDest(i)));
+
+    Vals.push_back(VE.getTypeID(FTy));
+    pushValueAndType(Callee, InstID, Vals);
+
+    // Emit value #'s for the fixed parameters.
+    for (unsigned i = 0, e = FTy->getNumParams(); i != e; ++i)
+      pushValue(I.getOperand(i), InstID, Vals); // fixed param.
+
+    // Emit type/value pairs for varargs params.
+    if (FTy->isVarArg()) {
+      for (unsigned i = FTy->getNumParams(), e = CBI->getNumArgOperands();
+           i != e; ++i)
+        pushValueAndType(I.getOperand(i), InstID, Vals); // vararg
+    }
     break;
   }
   case Instruction::Unreachable:

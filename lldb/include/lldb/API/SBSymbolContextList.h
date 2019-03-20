@@ -25,6 +25,8 @@ public:
   const lldb::SBSymbolContextList &
   operator=(const lldb::SBSymbolContextList &rhs);
 
+  explicit operator bool() const;
+
   bool IsValid() const;
 
   uint32_t GetSize() const;
@@ -48,7 +50,7 @@ protected:
   lldb_private::SymbolContextList &operator*() const;
 
 private:
-  std::unique_ptr<lldb_private::SymbolContextList> m_opaque_ap;
+  std::unique_ptr<lldb_private::SymbolContextList> m_opaque_up;
 };
 
 } // namespace lldb

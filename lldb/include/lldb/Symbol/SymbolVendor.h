@@ -13,6 +13,7 @@
 
 #include "lldb/Core/ModuleChild.h"
 #include "lldb/Core/PluginInterface.h"
+#include "lldb/Symbol/SourceModule.h"
 #include "lldb/Symbol/TypeList.h"
 #include "lldb/Symbol/TypeMap.h"
 #include "lldb/lldb-private.h"
@@ -60,8 +61,9 @@ public:
 
   virtual size_t ParseTypes(CompileUnit &comp_unit);
 
-  virtual bool ParseImportedModules(const SymbolContext &sc,
-                                    std::vector<ConstString> &imported_modules);
+  virtual bool
+  ParseImportedModules(const SymbolContext &sc,
+                       std::vector<SourceModule> &imported_modules);
 
   virtual size_t ParseBlocksRecursive(Function &func);
 
@@ -78,7 +80,7 @@ public:
                                         lldb::SymbolContextItem resolve_scope,
                                         SymbolContextList &sc_list);
 
-  virtual size_t FindGlobalVariables(const ConstString &name,
+  virtual size_t FindGlobalVariables(ConstString name,
                                      const CompilerDeclContext *parent_decl_ctx,
                                      size_t max_matches,
                                      VariableList &variables);
@@ -87,7 +89,7 @@ public:
                                      size_t max_matches,
                                      VariableList &variables);
 
-  virtual size_t FindFunctions(const ConstString &name,
+  virtual size_t FindFunctions(ConstString name,
                                const CompilerDeclContext *parent_decl_ctx,
                                lldb::FunctionNameType name_type_mask,
                                bool include_inlines, bool append,
@@ -98,7 +100,7 @@ public:
                                SymbolContextList &sc_list);
 
   virtual size_t
-  FindTypes(const ConstString &name, const CompilerDeclContext *parent_decl_ctx,
+  FindTypes(ConstString name, const CompilerDeclContext *parent_decl_ctx,
             bool append, size_t max_matches,
             llvm::DenseSet<lldb_private::SymbolFile *> &searched_symbol_files,
             TypeMap &types);
@@ -107,7 +109,7 @@ public:
                            bool append, TypeMap &types);
 
   virtual CompilerDeclContext
-  FindNamespace(const ConstString &name,
+  FindNamespace(ConstString name,
                 const CompilerDeclContext *parent_decl_ctx);
 
   virtual size_t GetNumCompileUnits();
@@ -124,7 +126,7 @@ public:
   virtual size_t GetTypes(SymbolContextScope *sc_scope,
                           lldb::TypeClass type_mask, TypeList &type_list);
 
-  SymbolFile *GetSymbolFile() { return m_sym_file_ap.get(); }
+  SymbolFile *GetSymbolFile() { return m_sym_file_up.get(); }
 
   FileSpec GetMainFileSpec() const;
 
@@ -161,7 +163,7 @@ protected:
                                    // case it isn't the same as the module
                                    // object file (debug symbols in a separate
                                    // file)
-  std::unique_ptr<SymbolFile> m_sym_file_ap; // A single symbol file. Subclasses
+  std::unique_ptr<SymbolFile> m_sym_file_up; // A single symbol file. Subclasses
                                              // can add more of these if needed.
   Symtab *m_symtab; // Save a symtab once to not pass it through `AddSymbols` of
                     // the symbol file each time when it is needed

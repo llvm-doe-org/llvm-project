@@ -25,6 +25,8 @@ public:
 
   lldb::SBTypeMember &operator=(const lldb::SBTypeMember &rhs);
 
+  explicit operator bool() const;
+
   bool IsValid() const;
 
   const char *GetName();
@@ -51,7 +53,7 @@ protected:
 
   const lldb_private::TypeMemberImpl &ref() const;
 
-  std::unique_ptr<lldb_private::TypeMemberImpl> m_opaque_ap;
+  std::unique_ptr<lldb_private::TypeMemberImpl> m_opaque_up;
 };
 
 class SBTypeMemberFunction {
@@ -63,6 +65,8 @@ public:
   ~SBTypeMemberFunction();
 
   lldb::SBTypeMemberFunction &operator=(const lldb::SBTypeMemberFunction &rhs);
+
+  explicit operator bool() const;
 
   bool IsValid() const;
 
@@ -104,6 +108,8 @@ public:
   SBType(const lldb::SBType &rhs);
 
   ~SBType();
+
+  explicit operator bool() const;
 
   bool IsValid() const;
 
@@ -235,6 +241,8 @@ public:
 
   lldb::SBTypeList &operator=(const lldb::SBTypeList &rhs);
 
+  explicit operator bool() const;
+
   bool IsValid();
 
   void Append(lldb::SBType type);
@@ -244,7 +252,7 @@ public:
   uint32_t GetSize();
 
 private:
-  std::unique_ptr<lldb_private::TypeListImpl> m_opaque_ap;
+  std::unique_ptr<lldb_private::TypeListImpl> m_opaque_up;
   friend class SBModule;
   friend class SBCompileUnit;
 };

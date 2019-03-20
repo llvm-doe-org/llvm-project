@@ -64,6 +64,8 @@ lldb::LanguageType TranslateLanguage(PDB_Lang lang) {
     return lldb::LanguageType::eLanguageTypeC_plus_plus;
   case PDB_Lang::C:
     return lldb::LanguageType::eLanguageTypeC;
+  case PDB_Lang::Swift:
+    return lldb::LanguageType::eLanguageTypeSwift;
   default:
     return lldb::LanguageType::eLanguageTypeUnknown;
   }
@@ -181,7 +183,7 @@ uint32_t SymbolFilePDB::CalculateAbilities() {
 }
 
 void SymbolFilePDB::InitializeObject() {
-  lldb::addr_t obj_load_address = m_obj_file->GetFileOffset();
+  lldb::addr_t obj_load_address = m_obj_file->GetBaseAddress().GetFileAddress();
   lldbassert(obj_load_address && obj_load_address != LLDB_INVALID_ADDRESS);
   m_session_up->setLoadAddress(obj_load_address);
   if (!m_global_scope_up)
@@ -377,7 +379,7 @@ bool SymbolFilePDB::ParseSupportFiles(
 
 bool SymbolFilePDB::ParseImportedModules(
     const lldb_private::SymbolContext &sc,
-    std::vector<lldb_private::ConstString> &imported_modules) {
+    std::vector<SourceModule> &imported_modules) {
   // PDB does not yet support module debug info
   return false;
 }
@@ -933,12 +935,25 @@ VariableSP SymbolFilePDB::ParseVariableForPDBData(
 
   Variable::RangeList ranges;
   SymbolContextScope *context_scope = sc.comp_unit;
-  if (scope == eValueTypeVariableLocal) {
+  if (scope == eValueTypeVariableLocal || scope == eValueTypeVariableArgument) {
     if (sc.function) {
-      context_scope = sc.function->GetBlock(true).FindBlockByID(
-          pdb_data.getLexicalParentId());
-      if (context_scope == nullptr)
-        context_scope = sc.function;
+      Block &function_block = sc.function->GetBlock(true);
+      Block *block =
+          function_block.FindBlockByID(pdb_data.getLexicalParentId());
+      if (!block)
+        block = &function_block;
+
+      context_scope = block;
+
+      for (size_t i = 0, num_ranges = block->GetNumRanges(); i < num_ranges;
+           ++i) {
+        AddressRange range;
+        if (!block->GetRangeAtIndex(i, range))
+          continue;
+
+        ranges.Append(range.GetBaseAddress().GetFileAddress(),
+                      range.GetByteSize());
+      }
     }
   }
 
@@ -951,7 +966,7 @@ VariableSP SymbolFilePDB::ParseVariableForPDBData(
 
   bool is_constant;
   DWARFExpression location = ConvertPDBLocationToDWARFExpression(
-      GetObjectFile()->GetModule(), pdb_data, is_constant);
+      GetObjectFile()->GetModule(), pdb_data, ranges, is_constant);
 
   var_sp = std::make_shared<Variable>(
       var_uid, var_name.c_str(), mangled_cstr, type_sp, scope, context_scope,
@@ -1033,7 +1048,7 @@ SymbolFilePDB::ParseVariables(const lldb_private::SymbolContext &sc,
 }
 
 uint32_t SymbolFilePDB::FindGlobalVariables(
-    const lldb_private::ConstString &name,
+    lldb_private::ConstString name,
     const lldb_private::CompilerDeclContext *parent_decl_ctx,
     uint32_t max_matches, lldb_private::VariableList &variables) {
   if (!DeclContextMatchesThisSymbolFile(parent_decl_ctx))
@@ -1233,7 +1248,7 @@ void SymbolFilePDB::CacheFunctionNames() {
 }
 
 uint32_t SymbolFilePDB::FindFunctions(
-    const lldb_private::ConstString &name,
+    lldb_private::ConstString name,
     const lldb_private::CompilerDeclContext *parent_decl_ctx,
     FunctionNameType name_type_mask, bool include_inlines, bool append,
     lldb_private::SymbolContextList &sc_list) {
@@ -1336,11 +1351,9 @@ void SymbolFilePDB::AddSymbols(lldb_private::Symtab &symtab) {
     return;
 
   while (auto pub_symbol = results->getNext()) {
-    auto section_idx = pub_symbol->getAddressSection() - 1;
-    if (section_idx >= section_list->GetSize())
-      continue;
+    auto section_id = pub_symbol->getAddressSection();
 
-    auto section = section_list->GetSectionAtIndex(section_idx);
+    auto section = section_list->FindSectionByID(section_id);
     if (!section)
       continue;
 
@@ -1375,7 +1388,7 @@ void SymbolFilePDB::AddSymbols(lldb_private::Symtab &symtab) {
 }
 
 uint32_t SymbolFilePDB::FindTypes(
-    const lldb_private::ConstString &name,
+    lldb_private::ConstString name,
     const lldb_private::CompilerDeclContext *parent_decl_ctx, bool append,
     uint32_t max_matches,
     llvm::DenseSet<lldb_private::SymbolFile *> &searched_symbol_files,
@@ -1617,7 +1630,7 @@ PDBASTParser *SymbolFilePDB::GetPDBAstParser() {
 
 
 lldb_private::CompilerDeclContext SymbolFilePDB::FindNamespace(
-    const lldb_private::ConstString &name,
+    lldb_private::ConstString name,
     const lldb_private::CompilerDeclContext *parent_decl_ctx) {
   auto type_system = GetTypeSystemForLanguage(lldb::eLanguageTypeC_plus_plus);
   auto clang_type_system = llvm::dyn_cast_or_null<ClangASTContext>(type_system);

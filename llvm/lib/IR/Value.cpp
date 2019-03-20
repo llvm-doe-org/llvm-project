@@ -57,7 +57,8 @@ Value::Value(Type *ty, unsigned scid)
   // FIXME: Why isn't this in the subclass gunk??
   // Note, we cannot call isa<CallInst> before the CallInst has been
   // constructed.
-  if (SubclassID == Instruction::Call || SubclassID == Instruction::Invoke)
+  if (SubclassID == Instruction::Call || SubclassID == Instruction::Invoke ||
+      SubclassID == Instruction::CallBr)
     assert((VTy->isFirstClassType() || VTy->isVoidTy() || VTy->isStructTy()) &&
            "invalid CallInst type!");
   else if (SubclassID != BasicBlockVal &&
@@ -647,10 +648,14 @@ unsigned Value::getPointerAlignment(const DataLayout &DL) const {
 
   unsigned Align = 0;
   if (auto *GO = dyn_cast<GlobalObject>(this)) {
-    // Don't make any assumptions about function pointer alignment. Some
-    // targets use the LSBs to store additional information.
-    if (isa<Function>(GO))
-      return 0;
+    if (isa<Function>(GO)) {
+      switch (DL.getFunctionPtrAlignType()) {
+      case DataLayout::FunctionPtrAlignType::Independent:
+        return DL.getFunctionPtrAlign();
+      case DataLayout::FunctionPtrAlignType::MultipleOfFunctionAlign:
+        return std::max(DL.getFunctionPtrAlign(), GO->getAlignment());
+      }
+    }
     Align = GO->getAlignment();
     if (Align == 0) {
       if (auto *GVar = dyn_cast<GlobalVariable>(GO)) {

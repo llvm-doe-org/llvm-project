@@ -1675,7 +1675,8 @@ public:
   // Helper for converting old bitfields to new flags word.
   static DISPFlags toSPFlags(bool IsLocalToUnit, bool IsDefinition,
                              bool IsOptimized,
-                             unsigned Virtuality = SPFlagNonvirtual) {
+                             unsigned Virtuality = SPFlagNonvirtual,
+                             bool IsMainSubprogram = false) {
     // We're assuming virtuality is the low-order field.
     static_assert(
         int(SPFlagVirtual) == int(dwarf::DW_VIRTUALITY_virtual) &&
@@ -1685,7 +1686,8 @@ public:
         (Virtuality & SPFlagVirtuality) |
         (IsLocalToUnit ? SPFlagLocalToUnit : SPFlagZero) |
         (IsDefinition ? SPFlagDefinition : SPFlagZero) |
-        (IsOptimized ? SPFlagOptimized : SPFlagZero));
+        (IsOptimized ? SPFlagOptimized : SPFlagZero) |
+        (IsMainSubprogram ? SPFlagMainSubprogram : SPFlagZero));
   }
 
 private:
@@ -1784,6 +1786,7 @@ public:
   bool isLocalToUnit() const { return getSPFlags() & SPFlagLocalToUnit; }
   bool isDefinition() const { return getSPFlags() & SPFlagDefinition; }
   bool isOptimized() const { return getSPFlags() & SPFlagOptimized; }
+  bool isMainSubprogram() const { return getSPFlags() & SPFlagMainSubprogram; }
 
   bool isArtificial() const { return getFlags() & FlagArtificial; }
   bool isPrivate() const {
@@ -1800,7 +1803,9 @@ public:
   bool areAllCallsDescribed() const {
     return getFlags() & FlagAllCallsDescribed;
   }
-  bool isMainSubprogram() const { return getFlags() & FlagMainSubprogram; }
+  bool isPure() const { return getSPFlags() & SPFlagPure; }
+  bool isElemental() const { return getSPFlags() & SPFlagElemental; }
+  bool isRecursive() const { return getSPFlags() & SPFlagRecursive; }
 
   /// Check if this is reference-qualified.
   ///
@@ -2509,6 +2514,12 @@ public:
   /// If this is a constant offset, extract it. If there is no expression,
   /// return true with an offset of zero.
   bool extractIfOffset(int64_t &Offset) const;
+
+  /// Checks if the last 4 elements of the expression are DW_OP_constu <DWARF
+  /// Address Space> DW_OP_swap DW_OP_xderef and extracts the <DWARF Address
+  /// Space>.
+  static const DIExpression *extractAddressClass(const DIExpression *Expr,
+                                                 unsigned &AddrClass);
 
   /// Constants for DIExpression::prepend.
   enum { NoDeref = false, WithDeref = true, WithStackValue = true };

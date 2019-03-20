@@ -13,6 +13,8 @@
 // ptr_fun(Result (*f)(Arg1, Arg2));
 // UNSUPPORTED: c++98, c++03, c++11, c++14
 
+#define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
+
 #include <functional>
 #include <type_traits>
 #include <cassert>
@@ -21,7 +23,9 @@
 
 double binary_f(int i, short j) {return i - j + .75;}
 
-int main()
+int main(int, char**)
 {
     assert(std::ptr_fun(binary_f)(36, 27) == 9.75);
+
+  return 0;
 }

@@ -12,6 +12,8 @@
 // Removed in c++17
 // UNSUPPORTED: c++98, c++03, c++11, c++14
 
+#define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
+
 #include <functional>
 #include <type_traits>
 #include <cassert>
@@ -26,7 +28,9 @@ struct A
     double a4(unsigned i) const {return i-1;}
 };
 
-int main()
+int main(int, char**)
 {
     typedef std::const_mem_fun1_t<double, A, unsigned> F;
+
+  return 0;
 }

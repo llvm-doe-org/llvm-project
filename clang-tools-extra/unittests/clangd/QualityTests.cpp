@@ -1,4 +1,4 @@
-//===-- SourceCodeTests.cpp  ------------------------------------*- C++ -*-===//
+//===-- QualityTests.cpp ----------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -178,6 +178,19 @@ TEST(QualityTests, SymbolRelevanceSignalExtraction) {
   BaseMember.InBaseClass = true;
   Relevance.merge(BaseMember);
   EXPECT_TRUE(Relevance.InBaseClass);
+
+  auto Index = Test.index();
+  FuzzyFindRequest Req;
+  Req.Query = "X";
+  Req.AnyScope = true;
+  bool Matched = false;
+  Index->fuzzyFind(Req, [&](const Symbol &S) {
+    Matched = true;
+    Relevance = {};
+    Relevance.merge(S);
+    EXPECT_EQ(Relevance.Scope, SymbolRelevanceSignals::FileScope);
+  });
+  EXPECT_TRUE(Matched);
 }
 
 // Do the signals move the scores in the direction we expect?
@@ -264,7 +277,7 @@ TEST(QualityTests, SymbolRelevanceSignalsSanity) {
 
   SymbolRelevanceSignals Scoped;
   Scoped.Scope = SymbolRelevanceSignals::FileScope;
-  EXPECT_EQ(Scoped.evaluate(), Default.evaluate());
+  EXPECT_LT(Scoped.evaluate(), Default.evaluate());
   Scoped.Query = SymbolRelevanceSignals::CodeComplete;
   EXPECT_GT(Scoped.evaluate(), Default.evaluate());
 

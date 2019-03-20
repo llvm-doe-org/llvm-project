@@ -780,6 +780,9 @@ unsigned Decl::getIdentifierNamespaceForKind(Kind DeclKind) {
     case OMPDeclareReduction:
       return IDNS_OMPReduction;
 
+    case OMPDeclareMapper:
+      return IDNS_OMPMapper;
+
     // Never have names.
     case Friend:
     case FriendTemplate:
@@ -809,6 +812,7 @@ unsigned Decl::getIdentifierNamespaceForKind(Kind DeclKind) {
     case ObjCCategoryImpl:
     case Import:
     case OMPThreadPrivate:
+    case OMPAllocate:
     case OMPRequires:
     case OMPCapturedExpr:
     case Empty:
@@ -1163,6 +1167,7 @@ DeclContext *DeclContext::getPrimaryContext() {
   case Decl::Block:
   case Decl::Captured:
   case Decl::OMPDeclareReduction:
+  case Decl::OMPDeclareMapper:
     // There is only one DeclContext for these entities.
     return this;
 
@@ -1174,13 +1179,15 @@ DeclContext *DeclContext::getPrimaryContext() {
     return this;
 
   case Decl::ObjCInterface:
-    if (auto *Def = cast<ObjCInterfaceDecl>(this)->getDefinition())
-      return Def;
+    if (auto *OID = dyn_cast<ObjCInterfaceDecl>(this))
+      if (auto *Def = OID->getDefinition())
+        return Def;
     return this;
 
   case Decl::ObjCProtocol:
-    if (auto *Def = cast<ObjCProtocolDecl>(this)->getDefinition())
-      return Def;
+    if (auto *OPD = dyn_cast<ObjCProtocolDecl>(this))
+      if (auto *Def = OPD->getDefinition())
+        return Def;
     return this;
 
   case Decl::ObjCCategory:

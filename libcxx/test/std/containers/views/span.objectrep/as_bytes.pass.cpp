@@ -10,11 +10,11 @@
 
 // <span>
 
-// template <class ElementType, ptrdiff_t Extent>
+// template <class ElementType, size_t Extent>
 //     span<const byte,
 //          Extent == dynamic_extent
 //              ? dynamic_extent
-//              : static_cast<ptrdiff_t>(sizeof(ElementType)) * Extent>
+//              : sizeof(ElementType) * Extent>
 //     as_bytes(span<ElementType, Extent> s) noexcept;
 
 
@@ -36,7 +36,7 @@ void testRuntimeSpan(Span sp)
     if (sp.extent == std::dynamic_extent)
         assert(spBytes.extent == std::dynamic_extent);
     else
-        assert(spBytes.extent == static_cast<std::ptrdiff_t>(sizeof(typename Span::element_type)) * sp.extent);
+        assert(spBytes.extent == sizeof(typename Span::element_type) * sp.extent);
 
     assert((void *) spBytes.data() == (void *) sp.data());
     assert(spBytes.size() == sp.size_bytes());
@@ -45,7 +45,7 @@ void testRuntimeSpan(Span sp)
 struct A{};
 int iArr2[] = { 0,  1,  2,  3,  4,  5,  6,  7,  8,  9};
 
-int main ()
+int main(int, char**)
 {
     testRuntimeSpan(std::span<int>        ());
     testRuntimeSpan(std::span<long>       ());
@@ -72,6 +72,8 @@ int main ()
     testRuntimeSpan(std::span<int, 5>(iArr2 + 1, 5));
 
     std::string s;
-    testRuntimeSpan(std::span<std::string>(&s, (std::ptrdiff_t) 0));
+    testRuntimeSpan(std::span<std::string>(&s, (std::size_t) 0));
     testRuntimeSpan(std::span<std::string>(&s, 1));
+
+  return 0;
 }

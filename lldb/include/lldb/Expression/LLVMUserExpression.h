@@ -20,7 +20,7 @@
 namespace lldb_private {
 
 //----------------------------------------------------------------------
-/// @class LLVMUserExpression LLVMUserExpression.h
+/// \class LLVMUserExpression LLVMUserExpression.h
 /// "lldb/Expression/LLVMUserExpression.h" Encapsulates a one-time expression
 /// for use in lldb.
 ///
@@ -33,6 +33,11 @@ namespace lldb_private {
 //----------------------------------------------------------------------
 class LLVMUserExpression : public UserExpression {
 public:
+  /// LLVM-style RTTI support.
+  static bool classof(const Expression *E) {
+    return E->getKind() == eKindLLVMUserExpression;
+  }
+
   // The IRPasses struct is filled in by a runtime after an expression is
   // compiled and can be used to to run fixups/analysis passes as required.
   // EarlyPasses are run on the generated module before lldb runs its own IR
@@ -48,7 +53,8 @@ public:
   LLVMUserExpression(ExecutionContextScope &exe_scope, llvm::StringRef expr,
                      llvm::StringRef prefix, lldb::LanguageType language,
                      ResultType desired_type,
-                     const EvaluateExpressionOptions &options);
+                     const EvaluateExpressionOptions &options,
+                     ExpressionKind kind);
   ~LLVMUserExpression() override;
 
   bool FinalizeJITExecution(
@@ -97,9 +103,9 @@ protected:
 
   std::shared_ptr<IRExecutionUnit>
       m_execution_unit_sp; ///< The execution unit the expression is stored in.
-  std::unique_ptr<Materializer> m_materializer_ap; ///< The materializer to use
-                                                   ///when running the
-                                                   ///expression.
+  std::unique_ptr<Materializer> m_materializer_up; ///< The materializer to use
+                                                   /// when running the
+                                                   /// expression.
   lldb::ModuleWP m_jit_module_wp;
   bool m_enforce_valid_object; ///< True if the expression parser should enforce
                                ///the presence of a valid class pointer

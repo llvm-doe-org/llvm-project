@@ -264,7 +264,10 @@ void FileSystem::Resolve(FileSpec &file_spec) {
   Resolve(path);
 
   // Update the FileSpec with the resolved path.
-  file_spec.SetPath(path);
+  if (file_spec.GetFilename().IsEmpty())
+    file_spec.GetDirectory().SetString(path);
+  else
+    file_spec.SetPath(path);
   file_spec.SetIsResolved(true);
 }
 
@@ -305,12 +308,12 @@ FileSystem::CreateDataBuffer(const FileSpec &file_spec, uint64_t size,
 
 bool FileSystem::ResolveExecutableLocation(FileSpec &file_spec) {
   // If the directory is set there's nothing to do.
-  const ConstString &directory = file_spec.GetDirectory();
+  ConstString directory = file_spec.GetDirectory();
   if (directory)
     return false;
 
   // We cannot look for a file if there's no file name.
-  const ConstString &filename = file_spec.GetFilename();
+  ConstString filename = file_spec.GetFilename();
   if (!filename)
     return false;
 
@@ -408,7 +411,7 @@ static mode_t GetOpenMode(uint32_t permissions) {
 }
 
 Status FileSystem::Open(File &File, const FileSpec &file_spec, uint32_t options,
-                        uint32_t permissions) {
+                        uint32_t permissions, bool should_close_fd) {
   if (m_collector)
     m_collector->AddFile(file_spec);
 
@@ -431,7 +434,7 @@ Status FileSystem::Open(File &File, const FileSpec &file_spec, uint32_t options,
     File.SetDescriptor(descriptor, false);
     error.SetErrorToErrno();
   } else {
-    File.SetDescriptor(descriptor, true);
+    File.SetDescriptor(descriptor, should_close_fd);
     File.SetOptions(options);
   }
   return error;

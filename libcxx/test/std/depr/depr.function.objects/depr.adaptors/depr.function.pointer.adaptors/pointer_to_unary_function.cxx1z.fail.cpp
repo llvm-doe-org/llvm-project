@@ -10,6 +10,8 @@
 // pointer_to_unary_function
 // UNSUPPORTED: c++98, c++03, c++11, c++14
 
+#define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
+
 #include <functional>
 #include <type_traits>
 #include <cassert>
@@ -18,7 +20,9 @@
 
 double unary_f(int i) {return 0.5 - i;}
 
-int main()
+int main(int, char**)
 {
     typedef std::pointer_to_unary_function<int, double> F;
+
+  return 0;
 }

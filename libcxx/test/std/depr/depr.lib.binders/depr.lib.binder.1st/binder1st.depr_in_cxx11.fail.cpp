@@ -14,9 +14,7 @@
 // UNSUPPORTED: c++98, c++03
 // REQUIRES: verify-support
 
-// MODULES_DEFINES: _LIBCPP_ENABLE_DEPRECATION_WARNINGS
 // MODULES_DEFINES: _LIBCPP_ENABLE_CXX17_REMOVED_BINDERS
-#define _LIBCPP_ENABLE_DEPRECATION_WARNINGS
 #define _LIBCPP_ENABLE_CXX17_REMOVED_BINDERS
 
 #include <functional>
@@ -24,7 +22,9 @@
 #include "../test_func.h"
 #include "test_macros.h"
 
-int main()
+int main(int, char**)
 {
     typedef std::binder1st<test_func> B1ST; // expected-error{{'binder1st<test_func>' is deprecated}}
+
+  return 0;
 }

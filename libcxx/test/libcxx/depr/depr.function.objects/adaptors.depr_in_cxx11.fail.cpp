@@ -12,9 +12,7 @@
 // UNSUPPORTED: c++98, c++03
 // REQUIRES: verify-support
 
-// MODULES_DEFINES: _LIBCPP_ENABLE_DEPRECATION_WARNINGS
 // MODULES_DEFINES: _LIBCPP_ENABLE_CXX17_REMOVED_BINDERS
-#define _LIBCPP_ENABLE_DEPRECATION_WARNINGS
 #define _LIBCPP_ENABLE_CXX17_REMOVED_BINDERS
 
 #include <functional>
@@ -31,7 +29,7 @@ struct Foo {
     int identity(int v) { return v; }
 };
 
-int main()
+int main(int, char**)
 {
     typedef std::pointer_to_unary_function<int, int> PUF; // expected-error{{'pointer_to_unary_function<int, int>' is deprecated}}
     typedef std::pointer_to_binary_function<int, int, int> PBF; // expected-error{{'pointer_to_binary_function<int, int, int>' is deprecated}}
@@ -55,4 +53,6 @@ int main()
     std::mem_fun_ref<int, Foo, int>(&Foo::identity); // expected-error{{'mem_fun_ref<int, Foo, int>' is deprecated}}
     std::mem_fun_ref<int, Foo>(&Foo::const_zero); // expected-error{{'mem_fun_ref<int, Foo>' is deprecated}}
     std::mem_fun_ref<int, Foo, int>(&Foo::const_identity); // expected-error{{'mem_fun_ref<int, Foo, int>' is deprecated}}
+
+  return 0;
 }

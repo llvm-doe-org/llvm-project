@@ -13,6 +13,8 @@
 #include "index/Index.h"
 #include "index/MemIndex.h"
 #include "index/Merge.h"
+#include "index/Symbol.h"
+#include "clang/Index/IndexSymbol.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
@@ -181,6 +183,41 @@ TEST(MemIndexTest, Lookup) {
   EXPECT_THAT(lookup(*I, SymbolID("ns::nonono")), UnorderedElementsAre());
 }
 
+TEST(MemIndexTest, TemplateSpecialization) {
+  SymbolSlab::Builder B;
+
+  Symbol S = symbol("TempSpec");
+  S.ID = SymbolID("0");
+  B.insert(S);
+
+  S = symbol("TempSpec");
+  S.ID = SymbolID("1");
+  S.SymInfo.Properties = static_cast<index::SymbolPropertySet>(
+      index::SymbolProperty::TemplateSpecialization);
+  B.insert(S);
+
+  S = symbol("TempSpec");
+  S.ID = SymbolID("2");
+  S.SymInfo.Properties = static_cast<index::SymbolPropertySet>(
+      index::SymbolProperty::TemplatePartialSpecialization);
+  B.insert(S);
+
+  auto I = MemIndex::build(std::move(B).build(), RefSlab());
+  FuzzyFindRequest Req;
+  Req.Query = "TempSpec";
+  Req.AnyScope = true;
+
+  std::vector<Symbol> Symbols;
+  I->fuzzyFind(Req, [&Symbols](const Symbol &Sym) { Symbols.push_back(Sym); });
+  EXPECT_EQ(Symbols.size(), 1U);
+  EXPECT_FALSE(Symbols.front().SymInfo.Properties &
+               static_cast<index::SymbolPropertySet>(
+                   index::SymbolProperty::TemplateSpecialization));
+  EXPECT_FALSE(Symbols.front().SymInfo.Properties &
+               static_cast<index::SymbolPropertySet>(
+                   index::SymbolProperty::TemplatePartialSpecialization));
+}
+
 TEST(MergeIndexTest, Lookup) {
   auto I = MemIndex::build(generateSymbols({"ns::A", "ns::B"}), RefSlab()),
        J = MemIndex::build(generateSymbols({"ns::B", "ns::C"}), RefSlab());
@@ -251,6 +288,22 @@ TEST(MergeTest, PreferSymbolWithDefn) {
   EXPECT_EQ(StringRef(M.CanonicalDeclaration.FileURI), "file:/right.h");
   EXPECT_EQ(StringRef(M.Definition.FileURI), "file:/right.cpp");
   EXPECT_EQ(M.Name, "right");
+}
+
+TEST(MergeTest, PreferSymbolLocationInCodegenFile) {
+  Symbol L, R;
+
+  L.ID = R.ID = SymbolID("hello");
+  L.CanonicalDeclaration.FileURI = "file:/x.proto.h";
+  R.CanonicalDeclaration.FileURI = "file:/x.proto";
+
+  Symbol M = mergeSymbol(L, R);
+  EXPECT_EQ(StringRef(M.CanonicalDeclaration.FileURI), "file:/x.proto");
+
+  // Prefer L if both have codegen suffix.
+  L.CanonicalDeclaration.FileURI = "file:/y.proto";
+  M = mergeSymbol(L, R);
+  EXPECT_EQ(StringRef(M.CanonicalDeclaration.FileURI), "file:/y.proto");
 }
 
 TEST(MergeIndexTest, Refs) {

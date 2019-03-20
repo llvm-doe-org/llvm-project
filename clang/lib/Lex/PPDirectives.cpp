@@ -665,7 +665,8 @@ const FileEntry *Preprocessor::LookupFile(
     const DirectoryLookup *FromDir, const FileEntry *FromFile,
     const DirectoryLookup *&CurDir, SmallVectorImpl<char> *SearchPath,
     SmallVectorImpl<char> *RelativePath,
-    ModuleMap::KnownHeader *SuggestedModule, bool *IsMapped, bool SkipCache) {
+    ModuleMap::KnownHeader *SuggestedModule, bool *IsMapped,
+    bool *IsFrameworkFound, bool SkipCache) {
   Module *RequestingModule = getModuleForLocation(FilenameLoc);
   bool RequestingModuleIsModuleInterface = !SourceMgr.isInMainFile(FilenameLoc);
 
@@ -723,7 +724,8 @@ const FileEntry *Preprocessor::LookupFile(
     while (const FileEntry *FE = HeaderInfo.LookupFile(
                Filename, FilenameLoc, isAngled, TmpFromDir, TmpCurDir,
                Includers, SearchPath, RelativePath, RequestingModule,
-               SuggestedModule, /*IsMapped=*/nullptr, SkipCache)) {
+               SuggestedModule, /*IsMapped=*/nullptr,
+               /*IsFrameworkFound=*/nullptr, SkipCache)) {
       // Keep looking as if this file did a #include_next.
       TmpFromDir = TmpCurDir;
       ++TmpFromDir;
@@ -739,8 +741,8 @@ const FileEntry *Preprocessor::LookupFile(
   // Do a standard file entry lookup.
   const FileEntry *FE = HeaderInfo.LookupFile(
       Filename, FilenameLoc, isAngled, FromDir, CurDir, Includers, SearchPath,
-      RelativePath, RequestingModule, SuggestedModule, IsMapped, SkipCache,
-      BuildSystemModule);
+      RelativePath, RequestingModule, SuggestedModule, IsMapped,
+      IsFrameworkFound, SkipCache, BuildSystemModule);
   if (FE) {
     if (SuggestedModule && !LangOpts.AsmPreprocessor)
       HeaderInfo.getModuleMap().diagnoseHeaderInclusion(
@@ -884,6 +886,8 @@ void Preprocessor::HandleDirective(Token &Result) {
       case tok::pp___include_macros:
       case tok::pp_pragma:
         Diag(Result, diag::err_embedded_directive) << II->getName();
+        Diag(*ArgMacro, diag::note_macro_expansion_here)
+            << ArgMacro->getIdentifierInfo();
         DiscardUntilEndOfDirective();
         return;
       default:
@@ -1476,67 +1480,6 @@ bool Preprocessor::GetIncludeFilenameSpelling(SourceLocation Loc,
   return isAngled;
 }
 
-// Handle cases where the \#include name is expanded from a macro
-// as multiple tokens, which need to be glued together.
-//
-// This occurs for code like:
-// \code
-//    \#define FOO <a/b.h>
-//    \#include FOO
-// \endcode
-// because in this case, "<a/b.h>" is returned as 7 tokens, not one.
-//
-// This code concatenates and consumes tokens up to the '>' token.  It returns
-// false if the > was found, otherwise it returns true if it finds and consumes
-// the EOD marker.
-bool Preprocessor::ConcatenateIncludeName(SmallString<128> &FilenameBuffer,
-                                          SourceLocation &End) {
-  Token CurTok;
-
-  Lex(CurTok);
-  while (CurTok.isNot(tok::eod)) {
-    End = CurTok.getLocation();
-
-    // FIXME: Provide code completion for #includes.
-    if (CurTok.is(tok::code_completion)) {
-      setCodeCompletionReached();
-      Lex(CurTok);
-      continue;
-    }
-
-    // Append the spelling of this token to the buffer. If there was a space
-    // before it, add it now.
-    if (CurTok.hasLeadingSpace())
-      FilenameBuffer.push_back(' ');
-
-    // Get the spelling of the token, directly into FilenameBuffer if possible.
-    size_t PreAppendSize = FilenameBuffer.size();
-    FilenameBuffer.resize(PreAppendSize+CurTok.getLength());
-
-    const char *BufPtr = &FilenameBuffer[PreAppendSize];
-    unsigned ActualLen = getSpelling(CurTok, BufPtr);
-
-    // If the token was spelled somewhere else, copy it into FilenameBuffer.
-    if (BufPtr != &FilenameBuffer[PreAppendSize])
-      memcpy(&FilenameBuffer[PreAppendSize], BufPtr, ActualLen);
-
-    // Resize FilenameBuffer to the correct size.
-    if (CurTok.getLength() != ActualLen)
-      FilenameBuffer.resize(PreAppendSize+ActualLen);
-
-    // If we found the '>' marker, return success.
-    if (CurTok.is(tok::greater))
-      return false;
-
-    Lex(CurTok);
-  }
-
-  // If we hit the eod marker, emit an error and return true so that the caller
-  // knows the EOD has been read.
-  Diag(CurTok.getLocation(), diag::err_pp_expects_filename);
-  return true;
-}
-
 /// Push a token onto the token stream containing an annotation.
 void Preprocessor::EnterAnnotationToken(SourceRange Range,
                                         tok::TokenKind Kind,
@@ -1667,43 +1610,23 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
                                           const FileEntry *LookupFromFile,
                                           bool isImport) {
   Token FilenameTok;
-  CurPPLexer->LexIncludeFilename(FilenameTok);
-
-  // Reserve a buffer to get the spelling.
-  SmallString<128> FilenameBuffer;
-  StringRef Filename;
-  SourceLocation End;
-  SourceLocation CharEnd; // the end of this directive, in characters
-
-  switch (FilenameTok.getKind()) {
-  case tok::eod:
-    // If the token kind is EOD, the error has already been diagnosed.
+  if (LexHeaderName(FilenameTok))
     return;
 
-  case tok::angle_string_literal:
-  case tok::string_literal:
-    Filename = getSpelling(FilenameTok, FilenameBuffer);
-    End = FilenameTok.getLocation();
-    CharEnd = End.getLocWithOffset(FilenameTok.getLength());
-    break;
-
-  case tok::less:
-    // This could be a <foo/bar.h> file coming from a macro expansion.  In this
-    // case, glue the tokens together into FilenameBuffer and interpret those.
-    FilenameBuffer.push_back('<');
-    if (ConcatenateIncludeName(FilenameBuffer, End))
-      return;   // Found <eod> but no ">"?  Diagnostic already emitted.
-    Filename = FilenameBuffer;
-    CharEnd = End.getLocWithOffset(1);
-    break;
-  default:
+  if (!FilenameTok.isOneOf(tok::angle_string_literal, tok::string_literal)) {
     Diag(FilenameTok.getLocation(), diag::err_pp_expects_filename);
-    DiscardUntilEndOfDirective();
+    if (FilenameTok.isNot(tok::eod))
+      DiscardUntilEndOfDirective();
     return;
   }
 
+  SmallString<128> FilenameBuffer;
+  StringRef Filename = getSpelling(FilenameTok, FilenameBuffer);
+  SourceLocation CharEnd = FilenameTok.getEndLoc();
+
   CharSourceRange FilenameRange
     = CharSourceRange::getCharRange(FilenameTok.getLocation(), CharEnd);
+  SourceRange DirectiveRange(HashLoc, FilenameTok.getLocation());
   StringRef OriginalFilename = Filename;
   bool isAngled =
     GetIncludeFilenameSpelling(FilenameTok.getLocation(), Filename);
@@ -1719,13 +1642,6 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
   // falls into the category of "#include pp-tokens new-line" specified in
   // C99 6.10.2p4.
   CheckEndOfDirective(IncludeTok.getIdentifierInfo()->getNameStart(), true);
-
-  // Check that we don't have infinite #include recursion.
-  if (IncludeMacroStack.size() == MaxAllowedIncludeStackDepth-1) {
-    Diag(FilenameTok, diag::err_pp_include_too_deep);
-    HasReachedMaxIncludeDepth = true;
-    return;
-  }
 
   // Complain about attempts to #include files in an audit pragma.
   if (PragmaARCCFCodeAuditedLoc.isValid()) {
@@ -1756,6 +1672,7 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
 
   // Search include directories.
   bool IsMapped = false;
+  bool IsFrameworkFound = false;
   const DirectoryLookup *CurDir;
   SmallString<1024> SearchPath;
   SmallString<1024> RelativePath;
@@ -1774,7 +1691,7 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
       FilenameLoc, LangOpts.MSVCCompat ? NormalizedPath.c_str() : Filename,
       isAngled, LookupFrom, LookupFromFile, CurDir,
       Callbacks ? &SearchPath : nullptr, Callbacks ? &RelativePath : nullptr,
-      &SuggestedModule, &IsMapped);
+      &SuggestedModule, &IsMapped, &IsFrameworkFound);
 
   if (!File) {
     if (Callbacks) {
@@ -1791,7 +1708,8 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
               FilenameLoc,
               LangOpts.MSVCCompat ? NormalizedPath.c_str() : Filename, isAngled,
               LookupFrom, LookupFromFile, CurDir, nullptr, nullptr,
-              &SuggestedModule, &IsMapped, /*SkipCache*/ true);
+              &SuggestedModule, &IsMapped, /*IsFrameworkFound=*/nullptr,
+              /*SkipCache*/ true);
         }
       }
     }
@@ -1806,12 +1724,14 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
             LangOpts.MSVCCompat ? NormalizedPath.c_str() : Filename, false,
             LookupFrom, LookupFromFile, CurDir,
             Callbacks ? &SearchPath : nullptr,
-            Callbacks ? &RelativePath : nullptr, &SuggestedModule, &IsMapped);
+            Callbacks ? &RelativePath : nullptr, &SuggestedModule, &IsMapped,
+            /*IsFrameworkFound=*/nullptr);
         if (File) {
-          SourceRange Range(FilenameTok.getLocation(), CharEnd);
-          Diag(FilenameTok, diag::err_pp_file_not_found_angled_include_not_fatal) <<
-            Filename <<
-            FixItHint::CreateReplacement(Range, "\"" + Filename.str() + "\"");
+          Diag(FilenameTok,
+               diag::err_pp_file_not_found_angled_include_not_fatal)
+              << Filename
+              << FixItHint::CreateReplacement(FilenameRange,
+                                              "\"" + Filename.str() + "\"");
         }
       }
 
@@ -1842,14 +1762,15 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
                                 : TypoCorrectionName,
             isAngled, LookupFrom, LookupFromFile, CurDir,
             Callbacks ? &SearchPath : nullptr,
-            Callbacks ? &RelativePath : nullptr, &SuggestedModule, &IsMapped);
+            Callbacks ? &RelativePath : nullptr, &SuggestedModule, &IsMapped,
+            /*IsFrameworkFound=*/nullptr);
         if (File) {
-          SourceRange Range(FilenameTok.getLocation(), CharEnd);
-          auto Hint = isAngled
-                          ? FixItHint::CreateReplacement(
-                                Range, "<" + TypoCorrectionName.str() + ">")
-                          : FixItHint::CreateReplacement(
-                                Range, "\"" + TypoCorrectionName.str() + "\"");
+          auto Hint =
+              isAngled
+                  ? FixItHint::CreateReplacement(
+                        FilenameRange, "<" + TypoCorrectionName.str() + ">")
+                  : FixItHint::CreateReplacement(
+                        FilenameRange, "\"" + TypoCorrectionName.str() + "\"");
           Diag(FilenameTok, diag::err_pp_file_not_found_typo_not_fatal)
               << OriginalFilename << TypoCorrectionName << Hint;
           // We found the file, so set the Filename to the name after typo
@@ -1859,9 +1780,22 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
       }
 
       // If the file is still not found, just go with the vanilla diagnostic
-      if (!File)
+      if (!File) {
         Diag(FilenameTok, diag::err_pp_file_not_found) << OriginalFilename
                                                        << FilenameRange;
+        if (IsFrameworkFound) {
+          size_t SlashPos = OriginalFilename.find('/');
+          assert(SlashPos != StringRef::npos &&
+                 "Include with framework name should have '/' in the filename");
+          StringRef FrameworkName = OriginalFilename.substr(0, SlashPos);
+          FrameworkCacheEntry &CacheEntry =
+              HeaderInfo.LookupFrameworkCache(FrameworkName);
+          assert(CacheEntry.Directory && "Found framework should be in cache");
+          Diag(FilenameTok, diag::note_pp_framework_without_header)
+              << OriginalFilename.substr(SlashPos + 1) << FrameworkName
+              << CacheEntry.Directory->getName();
+        }
+      }
     }
   }
 
@@ -2021,9 +1955,8 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
       // For other system headers, we don't. They can be controlled separately.
       auto DiagId = (FileCharacter == SrcMgr::C_User || warnByDefaultOnWrongCase(Name)) ?
           diag::pp_nonportable_path : diag::pp_nonportable_system_path;
-      SourceRange Range(FilenameTok.getLocation(), CharEnd);
       Diag(FilenameTok, DiagId) << Path <<
-        FixItHint::CreateReplacement(Range, Path);
+        FixItHint::CreateReplacement(FilenameRange, Path);
     }
   }
 
@@ -2044,14 +1977,20 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
 
       if (IncludeTok.getIdentifierInfo()->getPPKeywordID() !=
           tok::pp___include_macros)
-        EnterAnnotationToken(SourceRange(HashLoc, End),
-                             tok::annot_module_include, M);
+        EnterAnnotationToken(DirectiveRange, tok::annot_module_include, M);
     }
     return;
   }
 
+  // Check that we don't have infinite #include recursion.
+  if (IncludeMacroStack.size() == MaxAllowedIncludeStackDepth-1) {
+    Diag(FilenameTok, diag::err_pp_include_too_deep);
+    HasReachedMaxIncludeDepth = true;
+    return;
+  }
+
   // Look up the file, create a File ID for it.
-  SourceLocation IncludePos = End;
+  SourceLocation IncludePos = FilenameTok.getLocation();
   // If the filename string was the result of macro expansions, set the include
   // position on the file where it will be included and after the expansions.
   if (IncludePos.isMacroID())
@@ -2093,7 +2032,7 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
     // submodule.
     // FIXME: There's no point doing this if we're handling a #__include_macros
     // directive.
-    EnterAnnotationToken(SourceRange(HashLoc, End), tok::annot_module_begin, M);
+    EnterAnnotationToken(DirectiveRange, tok::annot_module_begin, M);
   }
 }
 

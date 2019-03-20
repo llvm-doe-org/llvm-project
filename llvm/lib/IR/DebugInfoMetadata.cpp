@@ -813,6 +813,7 @@ DIExpression *DIExpression::getImpl(LLVMContext &Context,
 
 unsigned DIExpression::ExprOperand::getSize() const {
   switch (getOp()) {
+  case dwarf::DW_OP_LLVM_convert:
   case dwarf::DW_OP_LLVM_fragment:
     return 3;
   case dwarf::DW_OP_constu:
@@ -857,6 +858,7 @@ bool DIExpression::isValid() const {
         return false;
       break;
     }
+    case dwarf::DW_OP_LLVM_convert:
     case dwarf::DW_OP_constu:
     case dwarf::DW_OP_plus_uconst:
     case dwarf::DW_OP_plus:
@@ -926,6 +928,24 @@ bool DIExpression::extractIfOffset(int64_t &Offset) const {
   }
 
   return false;
+}
+
+const DIExpression *DIExpression::extractAddressClass(const DIExpression *Expr,
+                                                      unsigned &AddrClass) {
+  const unsigned PatternSize = 4;
+  if (Expr->Elements.size() >= PatternSize &&
+      Expr->Elements[PatternSize - 4] == dwarf::DW_OP_constu &&
+      Expr->Elements[PatternSize - 2] == dwarf::DW_OP_swap &&
+      Expr->Elements[PatternSize - 1] == dwarf::DW_OP_xderef) {
+    AddrClass = Expr->Elements[PatternSize - 3];
+
+    if (Expr->Elements.size() == PatternSize)
+      return nullptr;
+    return DIExpression::get(Expr->getContext(),
+                             makeArrayRef(&*Expr->Elements.begin(),
+                                          Expr->Elements.size() - PatternSize));
+  }
+  return Expr;
 }
 
 DIExpression *DIExpression::prepend(const DIExpression *Expr, bool DerefBefore,

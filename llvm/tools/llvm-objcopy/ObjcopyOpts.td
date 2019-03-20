@@ -76,6 +76,16 @@ defm rename_section
 defm redefine_symbol
     : Eq<"redefine-sym", "Change the name of a symbol old to new">,
       MetaVarName<"old=new">;
+defm redefine_symbols
+    : Eq<"redefine-syms",
+         "Reads a list of symbol pairs from <filename> and runs as if "
+         "--redefine-sym=<old>=<new> is set for each one. <filename> "
+         "contains two symbols per line separated with whitespace and may "
+         "contain comments beginning with '#'. Leading and trailing "
+         "whitespace is stripped from each line. May be repeated to read "
+         "symbols from many files.">,         
+      MetaVarName<"filename">;
+
 defm keep_section : Eq<"keep-section", "Keep <section>">,
                     MetaVarName<"section">;
 defm only_section : Eq<"only-section", "Remove all but <section>">,
@@ -93,10 +103,9 @@ defm set_section_flags
          "rom, share, contents, merge, strings.">,
       MetaVarName<"section=flag1[,flag2,...]">;
 
-def strip_all
-    : Flag<["-", "--"], "strip-all">,
-      HelpText<
-          "Remove non-allocated sections other than .gnu.warning* sections">;
+def strip_all : Flag<["-", "--"], "strip-all">,
+                HelpText<"Remove non-allocated sections outside segments. "
+                         ".gnu.warning* sections are not removed">;
 def S : Flag<["-"], "S">, Alias<strip_all>;
 def strip_all_gnu : Flag<["-", "--"], "strip-all-gnu">,
                     HelpText<"Compatible with GNU objcopy's --strip-all">;
@@ -106,12 +115,23 @@ def g : Flag<["-"], "g">, Alias<strip_debug>,
         HelpText<"Alias for --strip-debug">;
 def strip_dwo : Flag<["-", "--"], "strip-dwo">,
                 HelpText<"Remove all DWARF .dwo sections from file">;
-def strip_sections : Flag<["-", "--"], "strip-sections">,
-                     HelpText<"Remove all section headers">;
-def strip_non_alloc : Flag<["-", "--"], "strip-non-alloc">,
-                      HelpText<"Remove all non-allocated sections">;
+def strip_sections
+    : Flag<["-", "--"], "strip-sections">,
+      HelpText<"Remove all section headers and all sections not in segments">;
+def strip_non_alloc
+    : Flag<["-", "--"], "strip-non-alloc">,
+      HelpText<"Remove all non-allocated sections outside segments">;
 def strip_unneeded : Flag<["-", "--"], "strip-unneeded">,
                      HelpText<"Remove all symbols not needed by relocations">;
+defm strip_unneeded_symbol
+    : Eq<"strip-unneeded-symbol",
+         "Remove symbol <symbol> if it is not needed by relocations">,
+      MetaVarName<"symbol">;
+defm strip_unneeded_symbols
+    : Eq<"strip-unneeded-symbols",
+         "Reads a list of symbols from <filename> and removes them "
+         "if they are not needed by relocations">,
+      MetaVarName<"filename">;
 
 def extract_dwo
     : Flag<["-", "--"], "extract-dwo">,
@@ -124,10 +144,21 @@ def localize_hidden
           "Mark all symbols that have hidden or internal visibility as local">;
 defm localize_symbol : Eq<"localize-symbol", "Mark <symbol> as local">,
                        MetaVarName<"symbol">;
+defm localize_symbols
+    : Eq<"localize-symbols",
+         "Reads a list of symbols from <filename> and marks them local.">,
+      MetaVarName<"filename">;
+
 def L : JoinedOrSeparate<["-"], "L">, Alias<localize_symbol>;
 
 defm globalize_symbol : Eq<"globalize-symbol", "Mark <symbol> as global">,
                         MetaVarName<"symbol">;
+
+defm globalize_symbols
+    : Eq<"globalize-symbols",
+         "Reads a list of symbols from <filename> and marks them global.">,
+      MetaVarName<"filename">;
+
 defm keep_global_symbol
     : Eq<"keep-global-symbol",
          "Convert all symbols except <symbol> to local. May be repeated to "
@@ -146,6 +177,11 @@ defm keep_global_symbols
 
 defm weaken_symbol : Eq<"weaken-symbol", "Mark <symbol> as weak">,
                      MetaVarName<"symbol">;
+defm weaken_symbols
+    : Eq<"weaken-symbols",
+         "Reads a list of symbols from <filename> and marks them weak.">,
+      MetaVarName<"filename">;
+
 def W : JoinedOrSeparate<["-"], "W">, Alias<weaken_symbol>;
 def weaken : Flag<["-", "--"], "weaken">,
              HelpText<"Mark all global symbols as weak">;
@@ -161,13 +197,21 @@ def discard_all
 def x : Flag<["-"], "x">, Alias<discard_all>;
 defm strip_symbol : Eq<"strip-symbol", "Remove symbol <symbol>">,
                     MetaVarName<"symbol">;
+defm strip_symbols
+    : Eq<"strip-symbols",
+         "Reads a list of symbols from <filename> and removes them.">,
+      MetaVarName<"filename">;
+
 def N : JoinedOrSeparate<["-"], "N">, Alias<strip_symbol>;
 defm keep_symbol : Eq<"keep-symbol", "Do not remove symbol <symbol>">,
                    MetaVarName<"symbol">;
 def K : JoinedOrSeparate<["-"], "K">, Alias<keep_symbol>;
+
 def only_keep_debug
     : Flag<["-", "--"], "only-keep-debug">,
-      HelpText<"Currently ignored. Only for compatibility with GNU objcopy.">;
+      HelpText<"Clear sections that would not be stripped by --strip-debug. "
+               "Currently only implemented for COFF.">;
+
 def keep_file_symbols : Flag<["-", "--"], "keep-file-symbols">,
                         HelpText<"Do not remove file symbols">;
 defm dump_section
@@ -193,3 +237,25 @@ defm build_id_link_output
     : Eq<"build-id-link-output", "Hard-link the output to <dir>/xx/xxx<suffix> "
                                  "name derived from hex build ID">,
       MetaVarName<"suffix">;
+
+def regex
+    : Flag<["-", "--"], "regex">,
+      HelpText<"Permit regular expressions in name comparison">;
+
+defm set_start : Eq<"set-start", "Set the start address to <addr>. Overrides "
+                    "any previous --change-start or --adjust-start values.">,
+                 MetaVarName<"addr">;
+defm change_start : Eq<"change-start", "Add <incr> to the start address. Can be "                        
+                       "specified multiple times, all values will be applied "
+                       "cumulatively.">,
+                    MetaVarName<"incr">;
+def adjust_start : JoinedOrSeparate<["-", "--"], "adjust-start">,
+                   Alias<change_start>;
+
+defm add_symbol
+    : Eq<"add-symbol", "Add new symbol <name> to .symtab. Accepted flags: "
+         "global, local, weak, default, hidden, file, section, object, "
+         "function, indirect-function. Accepted but ignored for "
+         "compatibility: debug, constructor, warning, indirect, synthetic, "
+         "unique-object, before.">,
+      MetaVarName<"name=[section:]value[,flags]">;

@@ -21,6 +21,7 @@
 #include "ClangDiagnostic.h"
 #include "ClangExpressionDeclMap.h"
 #include "ClangExpressionParser.h"
+#include "ClangExpressionSourceCode.h"
 #include "ClangModulesDeclVendor.h"
 #include "ClangPersistentVariables.h"
 
@@ -36,6 +37,7 @@
 #include "lldb/Symbol/Block.h"
 #include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Symbol/ClangExternalASTSourceCommon.h"
+#include "lldb/Symbol/CompileUnit.h"
 #include "lldb/Symbol/Function.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Symbol/SymbolVendor.h"
@@ -59,13 +61,13 @@ using namespace lldb_private;
 ClangUserExpression::ClangUserExpression(
     ExecutionContextScope &exe_scope, llvm::StringRef expr,
     llvm::StringRef prefix, lldb::LanguageType language,
-    ResultType desired_type, const EvaluateExpressionOptions &options)
+    ResultType desired_type, const EvaluateExpressionOptions &options,
+    ValueObject *ctx_obj)
     : LLVMUserExpression(exe_scope, expr, prefix, language, desired_type,
-                         options),
-      m_type_system_helper(*m_target_wp.lock().get(),
-                           options.GetExecutionPolicy() ==
-                               eExecutionPolicyTopLevel),
-      m_result_delegate(exe_scope.CalculateTarget()) {
+                         options, eKindClangUserExpression),
+      m_type_system_helper(*m_target_wp.lock(), options.GetExecutionPolicy() ==
+                                                    eExecutionPolicyTopLevel),
+      m_result_delegate(exe_scope.CalculateTarget()), m_ctx_obj(ctx_obj) {
   switch (m_language) {
   case lldb::eLanguageTypeC_plus_plus:
     m_allow_cxx = true;
@@ -130,7 +132,27 @@ void ClangUserExpression::ScanContext(ExecutionContext &exe_ctx, Status &err) {
     return;
   }
 
-  if (clang::CXXMethodDecl *method_decl =
+  if (m_ctx_obj) {
+    switch (m_ctx_obj->GetObjectRuntimeLanguage()) {
+    case lldb::eLanguageTypeC:
+    case lldb::eLanguageTypeC89:
+    case lldb::eLanguageTypeC99:
+    case lldb::eLanguageTypeC11:
+    case lldb::eLanguageTypeC_plus_plus:
+    case lldb::eLanguageTypeC_plus_plus_03:
+    case lldb::eLanguageTypeC_plus_plus_11:
+    case lldb::eLanguageTypeC_plus_plus_14:
+      m_in_cplusplus_method = true;
+      break;
+    case lldb::eLanguageTypeObjC:
+    case lldb::eLanguageTypeObjC_plus_plus:
+      m_in_objectivec_method = true;
+      break;
+    default:
+      break;
+    }
+    m_needs_object_ptr = true;
+  } else if (clang::CXXMethodDecl *method_decl =
           ClangASTContext::DeclContextGetAsCXXMethodDecl(decl_context)) {
     if (m_allow_cxx && method_decl->isInstance()) {
       if (m_enforce_valid_object) {
@@ -376,7 +398,8 @@ static void SetupDeclVendor(ExecutionContext &exe_ctx, Target *target) {
 }
 
 void ClangUserExpression::UpdateLanguageForExpr(
-    DiagnosticManager &diagnostic_manager, ExecutionContext &exe_ctx) {
+    DiagnosticManager &diagnostic_manager, ExecutionContext &exe_ctx,
+    std::vector<std::string> modules_to_import) {
   m_expr_lang = lldb::LanguageType::eLanguageTypeUnknown;
 
   std::string prefix = m_expr_prefix;
@@ -384,8 +407,8 @@ void ClangUserExpression::UpdateLanguageForExpr(
   if (m_options.GetExecutionPolicy() == eExecutionPolicyTopLevel) {
     m_transformed_text = m_expr_text;
   } else {
-    std::unique_ptr<ExpressionSourceCode> source_code(
-        ExpressionSourceCode::CreateWrapped(prefix.c_str(),
+    std::unique_ptr<ClangExpressionSourceCode> source_code(
+        ClangExpressionSourceCode::CreateWrapped(prefix.c_str(),
                                             m_expr_text.c_str()));
 
     if (m_in_cplusplus_method)
@@ -396,7 +419,8 @@ void ClangUserExpression::UpdateLanguageForExpr(
       m_expr_lang = lldb::eLanguageTypeC;
 
     if (!source_code->GetText(m_transformed_text, m_expr_lang,
-                              m_in_static_method, exe_ctx)) {
+                              m_in_static_method, exe_ctx, !m_ctx_obj,
+                              modules_to_import)) {
       diagnostic_manager.PutString(eDiagnosticSeverityError,
                                    "couldn't construct expression body");
       return;
@@ -414,8 +438,67 @@ void ClangUserExpression::UpdateLanguageForExpr(
   }
 }
 
+static bool SupportsCxxModuleImport(lldb::LanguageType language) {
+  switch (language) {
+  case lldb::eLanguageTypeC_plus_plus:
+  case lldb::eLanguageTypeC_plus_plus_03:
+  case lldb::eLanguageTypeC_plus_plus_11:
+  case lldb::eLanguageTypeC_plus_plus_14:
+  case lldb::eLanguageTypeObjC_plus_plus:
+    return true;
+  default:
+    return false;
+  }
+}
+
+std::vector<std::string>
+ClangUserExpression::GetModulesToImport(ExecutionContext &exe_ctx) {
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
+
+  if (!SupportsCxxModuleImport(Language()))
+    return {};
+
+  Target *target = exe_ctx.GetTargetPtr();
+  if (!target || !target->GetEnableImportStdModule())
+    return {};
+
+  StackFrame *frame = exe_ctx.GetFramePtr();
+  if (!frame)
+    return {};
+
+  Block *block = frame->GetFrameBlock();
+  if (!block)
+    return {};
+
+  SymbolContext sc;
+  block->CalculateSymbolContext(&sc);
+  if (!sc.comp_unit)
+    return {};
+
+  if (log) {
+    for (const SourceModule &m : sc.comp_unit->GetImportedModules()) {
+      LLDB_LOG(log, "Found module in compile unit: {0:$[.]} - include dir: {1}",
+                  llvm::make_range(m.path.begin(), m.path.end()), m.search_path);
+    }
+  }
+
+  for (const SourceModule &m : sc.comp_unit->GetImportedModules())
+    m_include_directories.push_back(m.search_path);
+
+  // Check if we imported 'std' or any of its submodules.
+  // We currently don't support importing any other modules in the expression
+  // parser.
+  for (const SourceModule &m : sc.comp_unit->GetImportedModules())
+    if (!m.path.empty() && m.path.front() == ConstString("std"))
+      return {"std"};
+
+  return {};
+}
+
 bool ClangUserExpression::PrepareForParsing(
     DiagnosticManager &diagnostic_manager, ExecutionContext &exe_ctx) {
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
+
   InstallContext(exe_ctx);
 
   if (!SetupPersistentState(diagnostic_manager, exe_ctx))
@@ -436,7 +519,13 @@ bool ClangUserExpression::PrepareForParsing(
 
   SetupDeclVendor(exe_ctx, m_target);
 
-  UpdateLanguageForExpr(diagnostic_manager, exe_ctx);
+  std::vector<std::string> used_modules = GetModulesToImport(exe_ctx);
+  m_imported_cpp_modules = !used_modules.empty();
+
+  LLDB_LOG(log, "List of imported modules in expression: {0}",
+           llvm::make_range(used_modules.begin(), used_modules.end()));
+
+  UpdateLanguageForExpr(diagnostic_manager, exe_ctx, used_modules);
   return true;
 }
 
@@ -468,13 +557,13 @@ bool ClangUserExpression::Parse(DiagnosticManager &diagnostic_manager,
   // Parse the expression
   //
 
-  m_materializer_ap.reset(new Materializer());
+  m_materializer_up.reset(new Materializer());
 
   ResetDeclMap(exe_ctx, m_result_delegate, keep_result_in_memory);
 
   OnExit on_exit([this]() { ResetDeclMap(); });
 
-  if (!DeclMap()->WillParse(exe_ctx, m_materializer_ap.get())) {
+  if (!DeclMap()->WillParse(exe_ctx, m_materializer_up.get())) {
     diagnostic_manager.PutString(
         eDiagnosticSeverityError,
         "current process state is unsuitable for expression parsing");
@@ -495,7 +584,8 @@ bool ClangUserExpression::Parse(DiagnosticManager &diagnostic_manager,
   // succeeds or the rewrite parser we might make if it fails.  But the
   // parser_sp will never be empty.
 
-  ClangExpressionParser parser(exe_scope, *this, generate_debug_info);
+  ClangExpressionParser parser(exe_scope, *this, generate_debug_info,
+                               m_include_directories);
 
   unsigned num_errors = parser.Parse(diagnostic_manager);
 
@@ -508,7 +598,7 @@ bool ClangUserExpression::Parse(DiagnosticManager &diagnostic_manager,
         size_t fixed_end;
         const std::string &fixed_expression =
             diagnostic_manager.GetFixedExpression();
-        if (ExpressionSourceCode::GetOriginalBodyBounds(
+        if (ClangExpressionSourceCode::GetOriginalBodyBounds(
                 fixed_expression, m_expr_lang, fixed_start, fixed_end))
           m_fixed_text =
               fixed_expression.substr(fixed_start, fixed_end - fixed_start);
@@ -600,18 +690,18 @@ bool ClangUserExpression::Parse(DiagnosticManager &diagnostic_manager,
 /// Converts an absolute position inside a given code string into
 /// a column/line pair.
 ///
-/// @param[in] abs_pos
+/// \param[in] abs_pos
 ///     A absolute position in the code string that we want to convert
 ///     to a column/line pair.
 ///
-/// @param[in] code
+/// \param[in] code
 ///     A multi-line string usually representing source code.
 ///
-/// @param[out] line
+/// \param[out] line
 ///     The line in the code that contains the given absolute position.
 ///     The first line in the string is indexed as 1.
 ///
-/// @param[out] column
+/// \param[out] column
 ///     The column in the line that contains the absolute position.
 ///     The first character in a line is indexed as 0.
 //------------------------------------------------------------------
@@ -657,13 +747,13 @@ bool ClangUserExpression::Complete(ExecutionContext &exe_ctx,
   // Parse the expression
   //
 
-  m_materializer_ap.reset(new Materializer());
+  m_materializer_up.reset(new Materializer());
 
   ResetDeclMap(exe_ctx, m_result_delegate, /*keep result in memory*/ true);
 
   OnExit on_exit([this]() { ResetDeclMap(); });
 
-  if (!DeclMap()->WillParse(exe_ctx, m_materializer_ap.get())) {
+  if (!DeclMap()->WillParse(exe_ctx, m_materializer_up.get())) {
     diagnostic_manager.PutString(
         eDiagnosticSeverityError,
         "current process state is unsuitable for expression parsing");
@@ -733,7 +823,15 @@ bool ClangUserExpression::AddArguments(ExecutionContext &exe_ctx,
 
     Status object_ptr_error;
 
-    object_ptr = GetObjectPointer(frame_sp, object_name, object_ptr_error);
+    if (m_ctx_obj) {
+      AddressType address_type;
+      object_ptr = m_ctx_obj->GetAddressOf(false, &address_type);
+      if (object_ptr == LLDB_INVALID_ADDRESS ||
+          address_type != eAddressTypeLoad)
+        object_ptr_error.SetErrorString("Can't get context object's "
+                                        "debuggee address");
+    } else
+      object_ptr = GetObjectPointer(frame_sp, object_name, object_ptr_error);
 
     if (!object_ptr_error.Success()) {
       exe_ctx.GetTargetRef().GetDebugger().GetAsyncOutputStream()->Printf(
@@ -776,9 +874,11 @@ lldb::ExpressionVariableSP ClangUserExpression::GetResultAfterDematerialization(
 void ClangUserExpression::ClangUserExpressionHelper::ResetDeclMap(
     ExecutionContext &exe_ctx,
     Materializer::PersistentVariableDelegate &delegate,
-    bool keep_result_in_memory) {
+    bool keep_result_in_memory,
+    ValueObject *ctx_obj) {
   m_expr_decl_map_up.reset(
-      new ClangExpressionDeclMap(keep_result_in_memory, &delegate, exe_ctx));
+      new ClangExpressionDeclMap(keep_result_in_memory, &delegate, exe_ctx,
+                                 ctx_obj));
 }
 
 clang::ASTConsumer *
@@ -791,7 +891,7 @@ ClangUserExpression::ClangUserExpressionHelper::ASTTransformer(
 }
 
 void ClangUserExpression::ClangUserExpressionHelper::CommitPersistentDecls() {
-  if (m_result_synthesizer_up.get()) {
+  if (m_result_synthesizer_up) {
     m_result_synthesizer_up->CommitPersistentDecls();
   }
 }

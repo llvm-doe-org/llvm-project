@@ -26,6 +26,7 @@
 
 // MODULES_DEFINES: _LIBCPP_ENABLE_CXX17_REMOVED_RANDOM_SHUFFLE
 #define _LIBCPP_ENABLE_CXX17_REMOVED_RANDOM_SHUFFLE
+#define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
 
 #include <algorithm>
 #include <vector>
@@ -39,10 +40,12 @@ struct gen
 };
 
 
-int main()
+int main(int, char**)
 {
     std::vector<int> v;
     std::random_shuffle(v.begin(), v.end());
     gen r;
     std::random_shuffle(v.begin(), v.end(), r);
+
+  return 0;
 }

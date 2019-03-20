@@ -11,10 +11,10 @@
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Host/FileSystem.h"
-#include "lldb/Host/Symbols.h"
 #include "lldb/Interpreter/OptionValueFileSpec.h"
 #include "lldb/Interpreter/OptionValueProperties.h"
 #include "lldb/Interpreter/Property.h"
+#include "lldb/Symbol/LocateSymbolFile.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Symbol/SymbolContext.h"
 #include "lldb/Symbol/VariableList.h"
@@ -87,7 +87,8 @@ enum { ePropertyEnableExternalLookup, ePropertyClangModulesCachePath };
 } // namespace
 
 ModuleListProperties::ModuleListProperties() {
-  m_collection_sp.reset(new OptionValueProperties(ConstString("symbols")));
+  m_collection_sp =
+      std::make_shared<OptionValueProperties>(ConstString("symbols"));
   m_collection_sp->Initialize(g_properties);
 
   llvm::SmallString<128> path;
@@ -343,7 +344,7 @@ ModuleSP ModuleList::GetModuleAtIndexUnlocked(size_t idx) const {
   return module_sp;
 }
 
-size_t ModuleList::FindFunctions(const ConstString &name,
+size_t ModuleList::FindFunctions(ConstString name,
                                  FunctionNameType name_type_mask,
                                  bool include_symbols, bool include_inlines,
                                  bool append,
@@ -379,7 +380,7 @@ size_t ModuleList::FindFunctions(const ConstString &name,
   return sc_list.GetSize() - old_size;
 }
 
-size_t ModuleList::FindFunctionSymbols(const ConstString &name,
+size_t ModuleList::FindFunctionSymbols(ConstString name,
                                        lldb::FunctionNameType name_type_mask,
                                        SymbolContextList &sc_list) {
   const size_t old_size = sc_list.GetSize();
@@ -438,7 +439,7 @@ size_t ModuleList::FindCompileUnits(const FileSpec &path, bool append,
   return sc_list.GetSize();
 }
 
-size_t ModuleList::FindGlobalVariables(const ConstString &name,
+size_t ModuleList::FindGlobalVariables(ConstString name,
                                        size_t max_matches,
                                        VariableList &variable_list) const {
   size_t initial_size = variable_list.GetSize();
@@ -462,7 +463,7 @@ size_t ModuleList::FindGlobalVariables(const RegularExpression &regex,
   return variable_list.GetSize() - initial_size;
 }
 
-size_t ModuleList::FindSymbolsWithNameAndType(const ConstString &name,
+size_t ModuleList::FindSymbolsWithNameAndType(ConstString name,
                                               SymbolType symbol_type,
                                               SymbolContextList &sc_list,
                                               bool append) const {
@@ -541,7 +542,7 @@ ModuleSP ModuleList::FindModule(const UUID &uuid) const {
 }
 
 size_t
-ModuleList::FindTypes(Module *search_first, const ConstString &name,
+ModuleList::FindTypes(Module *search_first, ConstString name,
                       bool name_is_fully_qualified, size_t max_matches,
                       llvm::DenseSet<SymbolFile *> &searched_symbol_files,
                       TypeList &types) const {
@@ -829,7 +830,7 @@ Status ModuleList::GetSharedModule(const ModuleSpec &module_spec,
   if (module_sp)
     return error;
 
-  module_sp.reset(new Module(module_spec));
+  module_sp = std::make_shared<Module>(module_spec);
   // Make sure there are a module and an object file since we can specify a
   // valid file path with an architecture that might not be in that file. By
   // getting the object file we can guarantee that the architecture matches
@@ -871,7 +872,7 @@ Status ModuleList::GetSharedModule(const ModuleSpec &module_spec,
 
       auto resolved_module_spec(module_spec);
       resolved_module_spec.GetFileSpec() = search_path_spec;
-      module_sp.reset(new Module(resolved_module_spec));
+      module_sp = std::make_shared<Module>(resolved_module_spec);
       if (module_sp->GetObjectFile()) {
         // If we get in here we got the correct arch, now we just need to
         // verify the UUID if one was given
@@ -970,7 +971,7 @@ Status ModuleList::GetSharedModule(const ModuleSpec &module_spec,
     }
 
     if (!module_sp) {
-      module_sp.reset(new Module(platform_module_spec));
+      module_sp = std::make_shared<Module>(platform_module_spec);
       // Make sure there are a module and an object file since we can specify a
       // valid file path with an architecture that might not be in that file.
       // By getting the object file we can guarantee that the architecture

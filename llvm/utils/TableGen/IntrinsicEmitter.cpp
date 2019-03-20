@@ -504,7 +504,6 @@ struct AttributeComparator {
     CodeGenIntrinsic::ModRefBehavior LK = L->ModRef;
     CodeGenIntrinsic::ModRefBehavior RK = R->ModRef;
     if (LK != RK) return (LK > RK);
-
     // Order by argument attributes.
     // This is reliable because each side is already sorted internally.
     return (L->ArgumentAttributes < R->ArgumentAttributes);
@@ -610,6 +609,12 @@ void IntrinsicEmitter::EmitAttributes(const CodeGenIntrinsicTable &Ints,
             if (addComma)
               OS << ",";
             OS << "Attribute::ReadNone";
+            addComma = true;
+            break;
+          case CodeGenIntrinsic::ImmArg:
+            if (addComma)
+              OS << ',';
+            OS << "Attribute::ImmArg";
             addComma = true;
             break;
           }
@@ -770,8 +775,9 @@ void IntrinsicEmitter::EmitIntrinsicToBuiltinMap(
           BuiltinMap[Ints[i].TargetPrefix];
 
       if (!BIM.insert(std::make_pair(BuiltinName, Ints[i].EnumName)).second)
-        PrintFatalError("Intrinsic '" + Ints[i].TheDef->getName() +
-                        "': duplicate " + CompilerName + " builtin name!");
+        PrintFatalError(Ints[i].TheDef->getLoc(),
+                        "Intrinsic '" + Ints[i].TheDef->getName() +
+                            "': duplicate " + CompilerName + " builtin name!");
       Table.GetOrAddStringOffset(BuiltinName);
     }
   }

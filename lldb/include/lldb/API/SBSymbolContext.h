@@ -29,6 +29,8 @@ public:
 
   ~SBSymbolContext();
 
+  explicit operator bool() const;
+
   bool IsValid() const;
 
   const lldb::SBSymbolContext &operator=(const lldb::SBSymbolContext &rhs);
@@ -73,7 +75,7 @@ protected:
   void SetSymbolContext(const lldb_private::SymbolContext *sc_ptr);
 
 private:
-  std::unique_ptr<lldb_private::SymbolContext> m_opaque_ap;
+  std::unique_ptr<lldb_private::SymbolContext> m_opaque_up;
 };
 
 } // namespace lldb

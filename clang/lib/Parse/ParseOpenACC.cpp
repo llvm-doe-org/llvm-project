@@ -62,8 +62,7 @@ static OpenACCDirectiveKind parseOpenACCDirectiveKind(Parser &P) {
 ///         annot_pragma_openacc 'parallel' | 'loop' | 'parallel loop' {clause}
 ///         annot_pragma_openacc_end
 ///
-StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
-    AllowedConstructsKind Allowed) {
+StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
   assert(Tok.is(tok::annot_pragma_openacc) && "Not an OpenACC directive!");
   ParenBraceBracketBalancer BalancerRAIIObj(*this);
   SmallVector<ACCClause *, 5> Clauses;

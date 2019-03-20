@@ -1,12 +1,13 @@
 set (FILES
+  FileActionTest.cpp
   FileSystemTest.cpp
   HostInfoTest.cpp
   HostTest.cpp
   MainLoopTest.cpp
   NativeProcessProtocolTest.cpp
+  ProcessLaunchInfoTest.cpp
   SocketAddressTest.cpp
   SocketTest.cpp
-  SymbolsTest.cpp
   TaskPoolTest.cpp
 )
 
@@ -20,7 +21,6 @@ endif()
 add_lldb_unittest(HostTests
   ${FILES}
   LINK_LIBS
-    lldbCore
     lldbHost
     lldbUtilityHelpers
     LLVMTestingSupport

@@ -24,6 +24,8 @@ public:
 
   const SBModuleSpec &operator=(const SBModuleSpec &rhs);
 
+  explicit operator bool() const;
+
   bool IsValid() const;
 
   void Clear();
@@ -35,7 +37,7 @@ public:
   /// that is running LLDB. This can differ from the path on the
   /// platform since we might be doing remote debugging.
   ///
-  /// @return
+  /// \return
   ///     A const reference to the file specification object.
   //------------------------------------------------------------------
   lldb::SBFileSpec GetFileSpec();
@@ -54,7 +56,7 @@ public:
   /// '/tmp/lldb/platform-cache/remote.host.computer/usr/lib/liba.dylib'
   /// The file could also be cached in a local developer kit directory.
   ///
-  /// @return
+  /// \return
   ///     A const reference to the file specification object.
   //------------------------------------------------------------------
   lldb::SBFileSpec GetPlatformFileSpec();
@@ -86,7 +88,7 @@ private:
   friend class SBModule;
   friend class SBTarget;
 
-  std::unique_ptr<lldb_private::ModuleSpec> m_opaque_ap;
+  std::unique_ptr<lldb_private::ModuleSpec> m_opaque_up;
 };
 
 class SBModuleSpecList {
@@ -116,7 +118,7 @@ public:
   bool GetDescription(lldb::SBStream &description);
 
 private:
-  std::unique_ptr<lldb_private::ModuleSpecList> m_opaque_ap;
+  std::unique_ptr<lldb_private::ModuleSpecList> m_opaque_up;
 };
 
 } // namespace lldb

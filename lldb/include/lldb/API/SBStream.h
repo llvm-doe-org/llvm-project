@@ -23,6 +23,8 @@ public:
 
   ~SBStream();
 
+  explicit operator bool() const;
+
   bool IsValid() const;
 
   // If this stream is not redirected to a file, it will maintain a local cache
@@ -94,7 +96,7 @@ protected:
 
 private:
   DISALLOW_COPY_AND_ASSIGN(SBStream);
-  std::unique_ptr<lldb_private::Stream> m_opaque_ap;
+  std::unique_ptr<lldb_private::Stream> m_opaque_up;
   bool m_is_file;
 };
 

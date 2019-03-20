@@ -76,6 +76,8 @@ public:
   // Returns the file from which this symbol was created.
   InputFile *getFile() const { return File; }
 
+  uint32_t getFlags() const { return Flags; }
+
   InputChunk *getChunk() const;
 
   // Indicates that the section or import for this symbol will be included in
@@ -96,14 +98,26 @@ public:
   WasmSymbolType getWasmType() const;
   bool isExported() const;
 
-  // True if this symbol was referenced by a regular (non-bitcode) object.
+  // True if the symbol was used for linking and thus need to be added to the
+  // output file's symbol table. This is true for all symbols except for
+  // unreferenced DSO symbols, lazy (archive) symbols, and bitcode symbols that
+  // are unreferenced except by other bitcode objects.
   unsigned IsUsedInRegularObj : 1;
+
+  // True if ths symbol is explicity marked for export (i.e. via the -e/--export
+  // command line flag)
   unsigned ForceExport : 1;
+
+  // True if this symbol is specified by --trace-symbol option.
+  unsigned Traced : 1;
+
+  const WasmSignature* getSignature() const;
 
 protected:
   Symbol(StringRef Name, Kind K, uint32_t Flags, InputFile *F)
-      : IsUsedInRegularObj(false), ForceExport(false), Name(Name),
-        SymbolKind(K), Flags(Flags), File(F), Referenced(!Config->GcSections) {}
+      : IsUsedInRegularObj(false), ForceExport(false), Traced(false),
+        Name(Name), SymbolKind(K), Flags(Flags), File(F),
+        Referenced(!Config->GcSections) {}
 
   StringRef Name;
   Kind SymbolKind;
@@ -155,13 +169,19 @@ public:
 
 class UndefinedFunction : public FunctionSymbol {
 public:
-  UndefinedFunction(StringRef Name, uint32_t Flags, InputFile *File = nullptr,
+  UndefinedFunction(StringRef Name, StringRef ImportName,
+                    StringRef ImportModule, uint32_t Flags,
+                    InputFile *File = nullptr,
                     const WasmSignature *Type = nullptr)
-      : FunctionSymbol(Name, UndefinedFunctionKind, Flags, File, Type) {}
+      : FunctionSymbol(Name, UndefinedFunctionKind, Flags, File, Type),
+        ImportName(ImportName), ImportModule(ImportModule) {}
 
   static bool classof(const Symbol *S) {
     return S->kind() == UndefinedFunctionKind;
   }
+
+  StringRef ImportName;
+  StringRef ImportModule;
 };
 
 class SectionSymbol : public Symbol {
@@ -229,6 +249,21 @@ public:
   static bool classof(const Symbol *S) {
     return S->kind() == UndefinedDataKind;
   }
+
+  // Undefined data symbols are imported as wasm globals so also have a global
+  // index.
+  uint32_t getGlobalIndex() const {
+    assert(GlobalIndex != INVALID_INDEX);
+    return GlobalIndex;
+  }
+  void setGlobalIndex(uint32_t Index) {
+    assert(GlobalIndex == INVALID_INDEX);
+    GlobalIndex = Index;
+  }
+  bool hasGlobalIndex() const { return GlobalIndex != INVALID_INDEX; }
+
+protected:
+  uint32_t GlobalIndex = INVALID_INDEX;
 };
 
 class GlobalSymbol : public Symbol {
@@ -267,13 +302,18 @@ public:
 
 class UndefinedGlobal : public GlobalSymbol {
 public:
-  UndefinedGlobal(StringRef Name, uint32_t Flags, InputFile *File = nullptr,
+  UndefinedGlobal(StringRef Name, StringRef ImportName, StringRef ImportModule,
+                  uint32_t Flags, InputFile *File = nullptr,
                   const WasmGlobalType *Type = nullptr)
-      : GlobalSymbol(Name, UndefinedGlobalKind, Flags, File, Type) {}
+      : GlobalSymbol(Name, UndefinedGlobalKind, Flags, File, Type),
+        ImportName(ImportName), ImportModule(ImportModule) {}
 
   static bool classof(const Symbol *S) {
     return S->kind() == UndefinedGlobalKind;
   }
+
+  StringRef ImportName;
+  StringRef ImportModule;
 };
 
 // Wasm events are features that suspend the current execution and transfer the
@@ -398,6 +438,8 @@ union SymbolUnion {
   alignas(SectionSymbol) char I[sizeof(SectionSymbol)];
 };
 
+void printTraceSymbol(Symbol *Sym);
+
 template <typename T, typename... ArgT>
 T *replaceSymbol(Symbol *S, ArgT &&... Arg) {
   static_assert(std::is_trivially_destructible<T>(),
@@ -413,6 +455,13 @@ T *replaceSymbol(Symbol *S, ArgT &&... Arg) {
   T *S2 = new (S) T(std::forward<ArgT>(Arg)...);
   S2->IsUsedInRegularObj = SymCopy.IsUsedInRegularObj;
   S2->ForceExport = SymCopy.ForceExport;
+  S2->Traced = SymCopy.Traced;
+
+  // Print out a log message if --trace-symbol was specified.
+  // This is for debugging.
+  if (S2->Traced)
+    printTraceSymbol(S2);
+
   return S2;
 }
 

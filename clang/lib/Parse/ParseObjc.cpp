@@ -623,6 +623,8 @@ void Parser::ParseObjCInterfaceDeclList(tok::ObjCKeywordKind contextKey,
     }
     // Ignore excess semicolons.
     if (Tok.is(tok::semi)) {
+      // FIXME: This should use ConsumeExtraSemi() for extraneous semicolons,
+      // to make -Wextra-semi diagnose them.
       ConsumeToken();
       continue;
     }
@@ -646,7 +648,19 @@ void Parser::ParseObjCInterfaceDeclList(tok::ObjCKeywordKind contextKey,
       // erroneous r_brace would cause an infinite loop if not handled here.
       if (Tok.is(tok::r_brace))
         break;
+
       ParsedAttributesWithRange attrs(AttrFactory);
+
+      // Since we call ParseDeclarationOrFunctionDefinition() instead of
+      // ParseExternalDeclaration() below (so that this doesn't parse nested
+      // @interfaces), this needs to duplicate some code from the latter.
+      if (Tok.isOneOf(tok::kw_static_assert, tok::kw__Static_assert)) {
+        SourceLocation DeclEnd;
+        allTUVariables.push_back(
+            ParseDeclaration(DeclaratorContext::FileContext, DeclEnd, attrs));
+        continue;
+      }
+
       allTUVariables.push_back(ParseDeclarationOrFunctionDefinition(attrs));
       continue;
     }
@@ -1875,6 +1889,7 @@ void Parser::HelperActionsForIvarDeclarations(Decl *interfaceDecl, SourceLocatio
 ///     ';'
 ///     objc-instance-variable-decl-list objc-visibility-spec
 ///     objc-instance-variable-decl-list objc-instance-variable-decl ';'
+///     objc-instance-variable-decl-list static_assert-declaration
 ///     objc-instance-variable-decl-list ';'
 ///
 ///   objc-visibility-spec:
@@ -1943,6 +1958,15 @@ void Parser::ParseObjCClassInstanceVariables(Decl *interfaceDecl,
       Actions.CodeCompleteOrdinaryName(getCurScope(),
                                        Sema::PCC_ObjCInstanceVariableList);
       return cutOffParsing();
+    }
+
+    // This needs to duplicate a small amount of code from
+    // ParseStructUnionBody() for things that should work in both
+    // C struct and in Objective-C class instance variables.
+    if (Tok.isOneOf(tok::kw_static_assert, tok::kw__Static_assert)) {
+      SourceLocation DeclEnd;
+      ParseStaticAssertDeclaration(DeclEnd);
+      continue;
     }
 
     auto ObjCIvarCallback = [&](ParsingFieldDeclarator &FD) {
@@ -2703,7 +2727,8 @@ Decl *Parser::ParseObjCMethodDefinition() {
   return MDecl;
 }
 
-StmtResult Parser::ParseObjCAtStatement(SourceLocation AtLoc) {
+StmtResult Parser::ParseObjCAtStatement(SourceLocation AtLoc,
+                                        ParsedStmtContext StmtCtx) {
   if (Tok.is(tok::code_completion)) {
     Actions.CodeCompleteObjCAtStatement(getCurScope());
     cutOffParsing();
@@ -2740,7 +2765,7 @@ StmtResult Parser::ParseObjCAtStatement(SourceLocation AtLoc) {
 
   // Otherwise, eat the semicolon.
   ExpectAndConsumeSemi(diag::err_expected_semi_after_expr);
-  return Actions.ActOnExprStmt(Res, isExprValueDiscarded());
+  return handleExprStmt(Res, StmtCtx);
 }
 
 ExprResult Parser::ParseObjCAtExpression(SourceLocation AtLoc) {

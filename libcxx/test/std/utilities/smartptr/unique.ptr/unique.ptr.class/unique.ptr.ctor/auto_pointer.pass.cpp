@@ -16,6 +16,8 @@
 
 // template <class U> unique_ptr(auto_ptr<U>&&) noexcept
 
+#define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
+
 #include <memory>
 #include <utility>
 #include <cassert>
@@ -61,7 +63,7 @@ void test_sfinae() {
   }
 }
 
-int main() {
+int main(int, char**) {
   {
     B* p = new B;
     std::auto_ptr<B> ap(p);
@@ -93,4 +95,6 @@ int main() {
   }
 #endif
   test_sfinae();
+
+  return 0;
 }

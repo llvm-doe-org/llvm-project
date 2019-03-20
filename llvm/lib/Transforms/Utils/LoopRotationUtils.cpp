@@ -16,6 +16,7 @@
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"
 #include "llvm/Analysis/CodeMetrics.h"
+#include "llvm/Analysis/DomTreeUpdater.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/LoopPass.h"
@@ -27,7 +28,6 @@
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/DebugInfoMetadata.h"
-#include "llvm/IR/DomTreeUpdater.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IntrinsicInst.h"
@@ -462,9 +462,8 @@ bool LoopRotate::rotateLoop(Loop *L, bool SimplifiedLatch) {
     for (BasicBlock *ExitPred : ExitPreds) {
       // We only need to split loop exit edges.
       Loop *PredLoop = LI->getLoopFor(ExitPred);
-      if (!PredLoop || PredLoop->contains(Exit))
-        continue;
-      if (isa<IndirectBrInst>(ExitPred->getTerminator()))
+      if (!PredLoop || PredLoop->contains(Exit) ||
+          ExitPred->getTerminator()->isIndirectTerminator())
         continue;
       SplitLatchEdge |= L->getLoopLatch() == ExitPred;
       BasicBlock *ExitSplit = SplitCriticalEdge(

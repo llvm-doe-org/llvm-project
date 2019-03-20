@@ -249,8 +249,8 @@ void tools::MinGW::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
       if (Sanitize.needsAsanRt()) {
         // MinGW always links against a shared MSVCRT.
-        CmdArgs.push_back(
-            TC.getCompilerRTArgString(Args, "asan_dynamic", true));
+        CmdArgs.push_back(TC.getCompilerRTArgString(Args, "asan_dynamic",
+                                                    ToolChain::FT_Shared));
         CmdArgs.push_back(
             TC.getCompilerRTArgString(Args, "asan_dynamic_runtime_thunk"));
         CmdArgs.push_back(Args.MakeArgString("--require-defined"));
@@ -264,6 +264,8 @@ void tools::MinGW::Linker::ConstructJob(Compilation &C, const JobAction &JA,
             TC.getCompilerRT(Args, "asan_dynamic_runtime_thunk")));
         CmdArgs.push_back(Args.MakeArgString("--no-whole-archive"));
       }
+
+      TC.addProfileRTLibs(Args, CmdArgs);
 
       if (!HasWindowsApp) {
         // Add system libraries. If linking to libwindowsapp.a, that import

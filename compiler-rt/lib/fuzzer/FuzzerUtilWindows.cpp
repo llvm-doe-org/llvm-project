@@ -85,11 +85,11 @@ void CALLBACK AlarmHandler(PVOID, BOOLEAN) {
 class TimerQ {
   HANDLE TimerQueue;
  public:
-  TimerQ() : TimerQueue(NULL) {};
+  TimerQ() : TimerQueue(NULL) {}
   ~TimerQ() {
     if (TimerQueue)
       DeleteTimerQueueEx(TimerQueue, NULL);
-  };
+  }
   void SetTimer(int Seconds) {
     if (!TimerQueue) {
       TimerQueue = CreateTimerQueue();
@@ -104,12 +104,16 @@ class TimerQ {
       Printf("libFuzzer: CreateTimerQueueTimer failed.\n");
       exit(1);
     }
-  };
+  }
 };
 
 static TimerQ Timer;
 
 static void CrashHandler(int) { Fuzzer::StaticCrashSignalCallback(); }
+
+bool Mprotect(void *Ptr, size_t Size, bool AllowReadWrite) {
+  return false;  // UNIMPLEMENTED
+}
 
 void SetSignalHandler(const FuzzingOptions& Options) {
   HandlerOpt = &Options;

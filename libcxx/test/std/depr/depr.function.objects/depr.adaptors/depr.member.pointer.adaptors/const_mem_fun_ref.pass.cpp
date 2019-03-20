@@ -13,6 +13,8 @@
 //   const_mem_fun_ref_t<S,T>
 //   mem_fun_ref(S (T::*f)() const);
 
+#define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
+
 #include <functional>
 #include <cassert>
 
@@ -24,8 +26,10 @@ struct A
     double a4(unsigned i) const {return i-1;}
 };
 
-int main()
+int main(int, char**)
 {
     const A a = A();
     assert(std::mem_fun_ref(&A::a3)(a) == 1);
+
+  return 0;
 }

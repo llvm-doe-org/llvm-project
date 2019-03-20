@@ -232,8 +232,9 @@ void ScalarEnumerationTraits<ELFYAML::ELF_ELFCLASS>::enumeration(
 void ScalarEnumerationTraits<ELFYAML::ELF_ELFDATA>::enumeration(
     IO &IO, ELFYAML::ELF_ELFDATA &Value) {
 #define ECase(X) IO.enumCase(Value, #X, ELF::X)
-  // Since the semantics of ELFDATANONE is "invalid", just don't accept it
-  // here.
+  // ELFDATANONE is an invalid data encoding, but we accept it because
+  // we want to be able to produce invalid binaries for the tests.
+  ECase(ELFDATANONE);
   ECase(ELFDATA2LSB);
   ECase(ELFDATA2MSB);
 #undef ECase
@@ -446,7 +447,6 @@ void ScalarEnumerationTraits<ELFYAML::ELF_SHT>::enumeration(
   ECase(SHT_GROUP);
   ECase(SHT_SYMTAB_SHNDX);
   ECase(SHT_RELR);
-  ECase(SHT_LOOS);
   ECase(SHT_ANDROID_REL);
   ECase(SHT_ANDROID_RELA);
   ECase(SHT_ANDROID_RELR);
@@ -459,8 +459,6 @@ void ScalarEnumerationTraits<ELFYAML::ELF_SHT>::enumeration(
   ECase(SHT_GNU_verdef);
   ECase(SHT_GNU_verneed);
   ECase(SHT_GNU_versym);
-  ECase(SHT_HIOS);
-  ECase(SHT_LOPROC);
   switch (Object->Header.Machine) {
   case ELF::EM_ARM:
     ECase(SHT_ARM_EXIDX);
@@ -478,6 +476,7 @@ void ScalarEnumerationTraits<ELFYAML::ELF_SHT>::enumeration(
   case ELF::EM_MIPS:
     ECase(SHT_MIPS_REGINFO);
     ECase(SHT_MIPS_OPTIONS);
+    ECase(SHT_MIPS_DWARF);
     ECase(SHT_MIPS_ABIFLAGS);
     break;
   default:
@@ -485,6 +484,7 @@ void ScalarEnumerationTraits<ELFYAML::ELF_SHT>::enumeration(
     break;
   }
 #undef ECase
+  IO.enumFallback<Hex32>(Value);
 }
 
 void ScalarBitSetTraits<ELFYAML::ELF_PF>::bitset(IO &IO,
@@ -572,6 +572,7 @@ void ScalarEnumerationTraits<ELFYAML::ELF_STT>::enumeration(
   ECase(STT_TLS);
   ECase(STT_GNU_IFUNC);
 #undef ECase
+  IO.enumFallback<Hex8>(Value);
 }
 
 void ScalarEnumerationTraits<ELFYAML::ELF_STV>::enumeration(
@@ -658,6 +659,57 @@ void ScalarEnumerationTraits<ELFYAML::ELF_REL>::enumeration(
   }
 #undef ELF_RELOC
   IO.enumFallback<Hex32>(Value);
+}
+
+void ScalarEnumerationTraits<ELFYAML::ELF_DYNTAG>::enumeration(
+    IO &IO, ELFYAML::ELF_DYNTAG &Value) {
+  const auto *Object = static_cast<ELFYAML::Object *>(IO.getContext());
+  assert(Object && "The IO context is not initialized");
+
+// Disable architecture specific tags by default. We might enable them below.
+#define MIPS_DYNAMIC_TAG(name, value)
+#define HEXAGON_DYNAMIC_TAG(name, value)
+#define PPC64_DYNAMIC_TAG(name, value)
+// Ignore marker tags such as DT_HIOS (maps to DT_VERNEEDNUM), etc.
+#define DYNAMIC_TAG_MARKER(name, value)
+
+#define STRINGIFY(X) (#X)
+#define DYNAMIC_TAG(X, Y) IO.enumCase(Value, STRINGIFY(DT_##X), ELF::DT_##X);
+  switch (Object->Header.Machine) {
+  case ELF::EM_MIPS:
+#undef MIPS_DYNAMIC_TAG
+#define MIPS_DYNAMIC_TAG(name, value) DYNAMIC_TAG(name, value)
+#include "llvm/BinaryFormat/DynamicTags.def"
+#undef MIPS_DYNAMIC_TAG
+#define MIPS_DYNAMIC_TAG(name, value)
+    break;
+  case ELF::EM_HEXAGON:
+#undef HEXAGON_DYNAMIC_TAG
+#define HEXAGON_DYNAMIC_TAG(name, value) DYNAMIC_TAG(name, value)
+#include "llvm/BinaryFormat/DynamicTags.def"
+#undef HEXAGON_DYNAMIC_TAG
+#define HEXAGON_DYNAMIC_TAG(name, value)
+    break;
+  case ELF::EM_PPC64:
+#undef PPC64_DYNAMIC_TAG
+#define PPC64_DYNAMIC_TAG(name, value) DYNAMIC_TAG(name, value)
+#include "llvm/BinaryFormat/DynamicTags.def"
+#undef PPC64_DYNAMIC_TAG
+#define PPC64_DYNAMIC_TAG(name, value)
+    break;
+  default:
+#include "llvm/BinaryFormat/DynamicTags.def"
+    break;
+  }
+
+#undef MIPS_DYNAMIC_TAG
+#undef HEXAGON_DYNAMIC_TAG
+#undef PPC64_DYNAMIC_TAG
+#undef DYNAMIC_TAG_MARKER
+#undef STRINGIFY
+#undef DYNAMIC_TAG
+
+  IO.enumFallback<Hex64>(Value);
 }
 
 void ScalarEnumerationTraits<ELFYAML::MIPS_AFL_REG>::enumeration(
@@ -767,6 +819,9 @@ void MappingTraits<ELFYAML::ProgramHeader>::mapping(
   IO.mapOptional("VAddr", Phdr.VAddr, Hex64(0));
   IO.mapOptional("PAddr", Phdr.PAddr, Hex64(0));
   IO.mapOptional("Align", Phdr.Align);
+  IO.mapOptional("FileSize", Phdr.FileSize);
+  IO.mapOptional("MemSize", Phdr.MemSize);
+  IO.mapOptional("Offset", Phdr.Offset);
 }
 
 namespace {
@@ -806,9 +861,6 @@ StringRef MappingTraits<ELFYAML::Symbol>::validate(IO &IO,
   if (Symbol.Index && *Symbol.Index == ELFYAML::ELF_SHN(ELF::SHN_XINDEX)) {
     return "Large indexes are not supported";
   }
-  if (Symbol.Index && *Symbol.Index < ELFYAML::ELF_SHN(ELF::SHN_LORESERVE)) {
-    return "Use a section name to define which section a symbol is defined in";
-  }
   return StringRef();
 }
 
@@ -827,13 +879,19 @@ static void commonSectionMapping(IO &IO, ELFYAML::Section &Section) {
   IO.mapOptional("Link", Section.Link, StringRef());
   IO.mapOptional("AddressAlign", Section.AddressAlign, Hex64(0));
   IO.mapOptional("EntSize", Section.EntSize);
-  IO.mapOptional("Info", Section.Info, StringRef());
+}
+
+static void sectionMapping(IO &IO, ELFYAML::DynamicSection &Section) {
+  commonSectionMapping(IO, Section);
+  IO.mapOptional("Entries", Section.Entries);
+  IO.mapOptional("Content", Section.Content);
 }
 
 static void sectionMapping(IO &IO, ELFYAML::RawContentSection &Section) {
   commonSectionMapping(IO, Section);
   IO.mapOptional("Content", Section.Content);
   IO.mapOptional("Size", Section.Size, Hex64(Section.Content.binary_size()));
+  IO.mapOptional("Info", Section.Info, Hex64(0));
 }
 
 static void sectionMapping(IO &IO, ELFYAML::NoBitsSection &Section) {
@@ -841,14 +899,33 @@ static void sectionMapping(IO &IO, ELFYAML::NoBitsSection &Section) {
   IO.mapOptional("Size", Section.Size, Hex64(0));
 }
 
+static void sectionMapping(IO &IO, ELFYAML::VerdefSection &Section) {
+  commonSectionMapping(IO, Section);
+  IO.mapRequired("Info", Section.Info);
+  IO.mapRequired("Entries", Section.Entries);
+}
+
+static void sectionMapping(IO &IO, ELFYAML::SymverSection &Section) {
+  commonSectionMapping(IO, Section);
+  IO.mapRequired("Entries", Section.Entries);
+}
+
+static void sectionMapping(IO &IO, ELFYAML::VerneedSection &Section) {
+  commonSectionMapping(IO, Section);
+  IO.mapRequired("Info", Section.Info);
+  IO.mapRequired("Dependencies", Section.VerneedV);
+}
+
 static void sectionMapping(IO &IO, ELFYAML::RelocationSection &Section) {
   commonSectionMapping(IO, Section);
+  IO.mapOptional("Info", Section.RelocatableSec, StringRef());
   IO.mapOptional("Relocations", Section.Relocations);
 }
 
-static void groupSectionMapping(IO &IO, ELFYAML::Group &group) {
-  commonSectionMapping(IO, group);
-  IO.mapRequired("Members", group.Members);
+static void groupSectionMapping(IO &IO, ELFYAML::Group &Group) {
+  commonSectionMapping(IO, Group);
+  IO.mapOptional("Info", Group.Signature, StringRef());
+  IO.mapRequired("Members", Group.Members);
 }
 
 void MappingTraits<ELFYAML::SectionOrType>::mapping(
@@ -890,6 +967,11 @@ void MappingTraits<std::unique_ptr<ELFYAML::Section>>::mapping(
     IO.mapRequired("Type", sectionType);
 
   switch (sectionType) {
+  case ELF::SHT_DYNAMIC:
+    if (!IO.outputting())
+      Section.reset(new ELFYAML::DynamicSection());
+    sectionMapping(IO, *cast<ELFYAML::DynamicSection>(Section.get()));
+    break;
   case ELF::SHT_REL:
   case ELF::SHT_RELA:
     if (!IO.outputting())
@@ -910,6 +992,21 @@ void MappingTraits<std::unique_ptr<ELFYAML::Section>>::mapping(
     if (!IO.outputting())
       Section.reset(new ELFYAML::MipsABIFlags());
     sectionMapping(IO, *cast<ELFYAML::MipsABIFlags>(Section.get()));
+    break;
+  case ELF::SHT_GNU_verdef:
+    if (!IO.outputting())
+      Section.reset(new ELFYAML::VerdefSection());
+    sectionMapping(IO, *cast<ELFYAML::VerdefSection>(Section.get()));
+    break;
+  case ELF::SHT_GNU_versym:
+    if (!IO.outputting())
+      Section.reset(new ELFYAML::SymverSection());
+    sectionMapping(IO, *cast<ELFYAML::SymverSection>(Section.get()));
+    break;
+  case ELF::SHT_GNU_verneed:
+    if (!IO.outputting())
+      Section.reset(new ELFYAML::VerneedSection());
+    sectionMapping(IO, *cast<ELFYAML::VerneedSection>(Section.get()));
     break;
   default:
     if (!IO.outputting())
@@ -950,6 +1047,44 @@ struct NormalizedMips64RelType {
 };
 
 } // end anonymous namespace
+
+void MappingTraits<ELFYAML::DynamicEntry>::mapping(IO &IO,
+                                                   ELFYAML::DynamicEntry &Rel) {
+  assert(IO.getContext() && "The IO context is not initialized");
+
+  IO.mapRequired("Tag", Rel.Tag);
+  IO.mapRequired("Value", Rel.Val);
+}
+
+void MappingTraits<ELFYAML::VerdefEntry>::mapping(IO &IO,
+                                                  ELFYAML::VerdefEntry &E) {
+  assert(IO.getContext() && "The IO context is not initialized");
+
+  IO.mapRequired("Version", E.Version);
+  IO.mapRequired("Flags", E.Flags);
+  IO.mapRequired("VersionNdx", E.VersionNdx);
+  IO.mapRequired("Hash", E.Hash);
+  IO.mapRequired("Names", E.VerNames);
+}
+
+void MappingTraits<ELFYAML::VerneedEntry>::mapping(IO &IO,
+                                                   ELFYAML::VerneedEntry &E) {
+  assert(IO.getContext() && "The IO context is not initialized");
+
+  IO.mapRequired("Version", E.Version);
+  IO.mapRequired("File", E.File);
+  IO.mapRequired("Entries", E.AuxV);
+}
+
+void MappingTraits<ELFYAML::VernauxEntry>::mapping(IO &IO,
+                                                   ELFYAML::VernauxEntry &E) {
+  assert(IO.getContext() && "The IO context is not initialized");
+
+  IO.mapRequired("Name", E.Name);
+  IO.mapRequired("Hash", E.Hash);
+  IO.mapRequired("Flags", E.Flags);
+  IO.mapRequired("Other", E.Other);
+}
 
 void MappingTraits<ELFYAML::Relocation>::mapping(IO &IO,
                                                  ELFYAML::Relocation &Rel) {

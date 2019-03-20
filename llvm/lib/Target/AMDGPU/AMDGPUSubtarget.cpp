@@ -80,7 +80,7 @@ GCNSubtarget::initializeSubtargetDependencies(const Triple &TT,
   SmallString<256> FullFS("+promote-alloca,+dx10-clamp,+load-store-opt,");
 
   if (isAmdHsaOS()) // Turn on FlatForGlobal for HSA.
-    FullFS += "+flat-address-space,+flat-for-global,+unaligned-buffer-access,+trap-handler,";
+    FullFS += "+flat-for-global,+unaligned-buffer-access,+trap-handler,";
 
   // FIXME: I don't think think Evergreen has any useful support for
   // denormals, but should be checked. Should we issue a warning somewhere
@@ -123,6 +123,10 @@ GCNSubtarget::initializeSubtargetDependencies(const Triple &TT,
       HasMovrel = true;
   }
 
+  // Don't crash on invalid devices.
+  if (WavefrontSize == 0)
+    WavefrontSize = 64;
+
   HasFminFmaxLegacy = getGeneration() < AMDGPUSubtarget::VOLCANIC_ISLANDS;
 
   return *this;
@@ -151,8 +155,7 @@ GCNSubtarget::GCNSubtarget(const Triple &TT, StringRef GPU, StringRef FS,
     AMDGPUGenSubtargetInfo(TT, GPU, FS),
     AMDGPUSubtarget(TT),
     TargetTriple(TT),
-    Gen(SOUTHERN_ISLANDS),
-    IsaVersion(ISAVersion0_0_0),
+    Gen(TT.getOS() == Triple::AMDHSA ? SEA_ISLANDS : SOUTHERN_ISLANDS),
     InstrItins(getInstrItineraryForCPU(GPU)),
     LDSBankCount(0),
     MaxPrivateElementSize(0),
@@ -171,8 +174,6 @@ GCNSubtarget::GCNSubtarget(const Triple &TT, StringRef GPU, StringRef FS,
     HasApertureRegs(false),
     EnableXNACK(false),
     TrapHandler(false),
-    DebuggerInsertNops(false),
-    DebuggerEmitPrologue(false),
 
     EnableHugePrivateBuffer(false),
     EnableLoadStoreOpt(false),
@@ -203,7 +204,8 @@ GCNSubtarget::GCNSubtarget(const Triple &TT, StringRef GPU, StringRef FS,
     HasDPP(false),
     HasR128A16(false),
     HasDLInsts(false),
-    HasDotInsts(false),
+    HasDot1Insts(false),
+    HasDot2Insts(false),
     EnableSRAMECC(false),
     FlatAddressSpace(false),
     FlatInstOffsets(false),

@@ -14,6 +14,8 @@
 // Removed in c++17
 // UNSUPPORTED: c++98, c++03, c++11, c++14
 
+#define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
+
 #include <functional>
 #include <cassert>
 
@@ -27,8 +29,10 @@ struct A
     double a4(unsigned i) const {return i-1;}
 };
 
-int main()
+int main(int, char**)
 {
     const A a = A();
     assert(std::mem_fun_ref(&A::a4)(a, 6) == 5);
+
+  return 0;
 }

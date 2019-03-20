@@ -121,9 +121,6 @@ public:
   using GOTEquivUsePair = std::pair<const GlobalVariable *, unsigned>;
   MapVector<const MCSymbol *, GOTEquivUsePair> GlobalGOTEquivs;
 
-  /// Enable print [latency:throughput] in output.
-  bool EnablePrintSchedInfo = false;
-
 private:
   MCSymbol *CurrentFnBegin = nullptr;
   MCSymbol *CurrentFnEnd = nullptr;
@@ -513,7 +510,7 @@ public:
   void EmitSLEB128(int64_t Value, const char *Desc = nullptr) const;
 
   /// Emit the specified unsigned leb128 value.
-  void EmitULEB128(uint64_t Value, const char *Desc = nullptr) const;
+  void EmitULEB128(uint64_t Value, const char *Desc = nullptr, unsigned PadTo = 0) const;
 
   /// Emit a .byte 42 directive that corresponds to an encoding.  If verbose
   /// assembly output is enabled, we output comments describing the encoding.

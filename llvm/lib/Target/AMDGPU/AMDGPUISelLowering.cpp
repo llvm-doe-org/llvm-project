@@ -590,6 +590,7 @@ static bool hasSourceMods(const SDNode *N) {
   case ISD::FDIV:
   case ISD::FREM:
   case ISD::INLINEASM:
+  case ISD::INLINEASM_BR:
   case AMDGPUISD::INTERP_P1:
   case AMDGPUISD::INTERP_P2:
   case AMDGPUISD::DIV_SCALE:
@@ -638,7 +639,8 @@ bool AMDGPUTargetLowering::isSelectSupported(SelectSupportKind SelType) const {
 
 // The backend supports 32 and 64 bit floating point immediates.
 // FIXME: Why are we reporting vectors of FP immediates as legal?
-bool AMDGPUTargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT) const {
+bool AMDGPUTargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT,
+                                        bool ForCodeSize) const {
   EVT ScalarVT = VT.getScalarType();
   return (ScalarVT == MVT::f32 || ScalarVT == MVT::f64 ||
          (ScalarVT == MVT::f16 && Subtarget->has16BitInsts()));
@@ -847,9 +849,6 @@ bool AMDGPUTargetLowering::isNarrowingProfitable(EVT SrcVT, EVT DestVT) const {
 CCAssignFn *AMDGPUCallLowering::CCAssignFnForCall(CallingConv::ID CC,
                                                   bool IsVarArg) {
   switch (CC) {
-  case CallingConv::AMDGPU_KERNEL:
-  case CallingConv::SPIR_KERNEL:
-    llvm_unreachable("kernels should not be handled here");
   case CallingConv::AMDGPU_VS:
   case CallingConv::AMDGPU_GS:
   case CallingConv::AMDGPU_PS:
@@ -862,8 +861,10 @@ CCAssignFn *AMDGPUCallLowering::CCAssignFnForCall(CallingConv::ID CC,
   case CallingConv::Fast:
   case CallingConv::Cold:
     return CC_AMDGPU_Func;
+  case CallingConv::AMDGPU_KERNEL:
+  case CallingConv::SPIR_KERNEL:
   default:
-    report_fatal_error("Unsupported calling convention.");
+    report_fatal_error("Unsupported calling convention for call");
   }
 }
 
@@ -1008,9 +1009,10 @@ void AMDGPUTargetLowering::analyzeFormalArgumentsCompute(
       if (MemVT.isVector() && MemVT.getVectorNumElements() == 1)
         MemVT = MemVT.getScalarType();
 
-      if (MemVT.isExtended()) {
-        // This should really only happen if we have vec3 arguments
-        assert(MemVT.isVector() && MemVT.getVectorNumElements() == 3);
+      // Round up vec3/vec5 argument.
+      if (MemVT.isVector() && !MemVT.isPow2VectorType()) {
+        assert(MemVT.getVectorNumElements() == 3 ||
+               MemVT.getVectorNumElements() == 5);
         MemVT = MemVT.getPow2VectorType(State.getContext());
       }
 
@@ -3088,7 +3090,7 @@ SDValue AMDGPUTargetLowering::performTruncateCombine(
   SDValue Src = N->getOperand(0);
 
   // vt1 (truncate (bitcast (build_vector vt0:x, ...))) -> vt1 (bitcast vt0:x)
-  if (Src.getOpcode() == ISD::BITCAST) {
+  if (Src.getOpcode() == ISD::BITCAST && !VT.isVector()) {
     SDValue Vec = Src.getOperand(0);
     if (Vec.getOpcode() == ISD::BUILD_VECTOR) {
       SDValue Elt0 = Vec.getOperand(0);
@@ -4186,6 +4188,12 @@ const char* AMDGPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(INTERP_P1LL_F16)
   NODE_NAME_CASE(INTERP_P1LV_F16)
   NODE_NAME_CASE(INTERP_P2_F16)
+  NODE_NAME_CASE(LOAD_D16_HI)
+  NODE_NAME_CASE(LOAD_D16_LO)
+  NODE_NAME_CASE(LOAD_D16_HI_I8)
+  NODE_NAME_CASE(LOAD_D16_HI_U8)
+  NODE_NAME_CASE(LOAD_D16_LO_I8)
+  NODE_NAME_CASE(LOAD_D16_LO_U8)
   NODE_NAME_CASE(STORE_MSKOR)
   NODE_NAME_CASE(LOAD_CONSTANT)
   NODE_NAME_CASE(TBUFFER_STORE_FORMAT)
@@ -4200,10 +4208,16 @@ const char* AMDGPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(ATOMIC_LOAD_FMIN)
   NODE_NAME_CASE(ATOMIC_LOAD_FMAX)
   NODE_NAME_CASE(BUFFER_LOAD)
+  NODE_NAME_CASE(BUFFER_LOAD_UBYTE)
+  NODE_NAME_CASE(BUFFER_LOAD_USHORT)
+  NODE_NAME_CASE(BUFFER_LOAD_BYTE)
+  NODE_NAME_CASE(BUFFER_LOAD_SHORT)
   NODE_NAME_CASE(BUFFER_LOAD_FORMAT)
   NODE_NAME_CASE(BUFFER_LOAD_FORMAT_D16)
   NODE_NAME_CASE(SBUFFER_LOAD)
   NODE_NAME_CASE(BUFFER_STORE)
+  NODE_NAME_CASE(BUFFER_STORE_BYTE)
+  NODE_NAME_CASE(BUFFER_STORE_SHORT)
   NODE_NAME_CASE(BUFFER_STORE_FORMAT)
   NODE_NAME_CASE(BUFFER_STORE_FORMAT_D16)
   NODE_NAME_CASE(BUFFER_ATOMIC_SWAP)
@@ -4368,6 +4382,14 @@ void AMDGPUTargetLowering::computeKnownBitsForTargetNode(
     }
     break;
   }
+  case AMDGPUISD::BUFFER_LOAD_UBYTE:  {
+    Known.Zero.setHighBits(24);
+    break;
+  }
+  case AMDGPUISD::BUFFER_LOAD_USHORT: {
+    Known.Zero.setHighBits(16);
+    break;
+  }
   case ISD::INTRINSIC_WO_CHAIN: {
     unsigned IID = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
     switch (IID) {
@@ -4413,6 +4435,14 @@ unsigned AMDGPUTargetLowering::ComputeNumSignBitsForTargetNode(
   case AMDGPUISD::CARRY:
   case AMDGPUISD::BORROW:
     return 31;
+  case AMDGPUISD::BUFFER_LOAD_BYTE:
+    return 25;
+  case AMDGPUISD::BUFFER_LOAD_SHORT:
+    return 17;
+  case AMDGPUISD::BUFFER_LOAD_UBYTE:
+    return 24;
+  case AMDGPUISD::BUFFER_LOAD_USHORT:
+    return 16;
   case AMDGPUISD::FP_TO_FP16:
   case AMDGPUISD::FP16_ZEXT:
     return 16;

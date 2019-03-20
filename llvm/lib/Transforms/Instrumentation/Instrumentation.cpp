@@ -100,8 +100,8 @@ Comdat *llvm::GetOrCreateFunctionComdat(Function &F, Triple &T,
 /// initializeInstrumentation - Initialize all passes in the TransformUtils
 /// library.
 void llvm::initializeInstrumentation(PassRegistry &Registry) {
-  initializeAddressSanitizerPass(Registry);
-  initializeAddressSanitizerModulePass(Registry);
+  initializeAddressSanitizerLegacyPassPass(Registry);
+  initializeModuleAddressSanitizerLegacyPassPass(Registry);
   initializeBoundsCheckingLegacyPassPass(Registry);
   initializeControlHeightReductionLegacyPassPass(Registry);
   initializeGCOVProfilerLegacyPassPass(Registry);
@@ -109,13 +109,13 @@ void llvm::initializeInstrumentation(PassRegistry &Registry) {
   initializePGOInstrumentationUseLegacyPassPass(Registry);
   initializePGOIndirectCallPromotionLegacyPassPass(Registry);
   initializePGOMemOPSizeOptLegacyPassPass(Registry);
+  initializeInstrOrderFileLegacyPassPass(Registry);
   initializeInstrProfilingLegacyPassPass(Registry);
   initializeMemorySanitizerLegacyPassPass(Registry);
   initializeHWAddressSanitizerPass(Registry);
   initializeThreadSanitizerLegacyPassPass(Registry);
   initializeSanitizerCoverageModulePass(Registry);
   initializeDataFlowSanitizerPass(Registry);
-  initializeEfficiencySanitizerPass(Registry);
 }
 
 /// LLVMInitializeInstrumentation - C binding for

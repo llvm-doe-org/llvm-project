@@ -194,7 +194,11 @@ public:
           IsNest(false), IsByVal(false), IsInAlloca(false), IsReturned(false),
           IsSwiftSelf(false), IsSwiftError(false) {}
 
-    void setAttributes(ImmutableCallSite *CS, unsigned ArgIdx);
+    void setAttributes(const CallBase *Call, unsigned ArgIdx);
+
+    void setAttributes(ImmutableCallSite *CS, unsigned ArgIdx) {
+      return setAttributes(cast<CallBase>(CS->getInstruction()), ArgIdx);
+    }
   };
   using ArgListTy = std::vector<ArgListEntry>;
 
@@ -290,6 +294,9 @@ public:
     // The default action for one element vectors is to scalarize
     if (VT.getVectorNumElements() == 1)
       return TypeScalarizeVector;
+    // The default action for an odd-width vector is to widen.
+    if (!VT.isPow2VectorType())
+      return TypeWidenVector;
     // The default action for other vectors is to promote
     return TypePromoteInteger;
   }
@@ -642,6 +649,13 @@ public:
     return RepRegClassCostForVT[VT.SimpleTy];
   }
 
+  /// Return true if SHIFT instructions should be expanded to SHIFT_PARTS
+  /// instructions, and false if a library call is preferred (e.g for code-size
+  /// reasons).
+  virtual bool shouldExpandShift(SelectionDAG &DAG, SDNode *N) const {
+    return true;
+  }
+
   /// Return true if the target has native support for the specified value type.
   /// This means that it has a register that directly holds it without
   /// promotions or expansions.
@@ -767,7 +781,8 @@ public:
   /// Returns true if the target can instruction select the specified FP
   /// immediate natively. If false, the legalizer will materialize the FP
   /// immediate as a load from a constant pool.
-  virtual bool isFPImmLegal(const APFloat &/*Imm*/, EVT /*VT*/) const {
+  virtual bool isFPImmLegal(const APFloat &/*Imm*/, EVT /*VT*/,
+			    bool ForCodeSize = false) const {
     return false;
   }
 
@@ -829,6 +844,7 @@ public:
     default:
       llvm_unreachable("Unexpected fixed point operation.");
     case ISD::SMULFIX:
+    case ISD::UMULFIX:
       Supported = isSupportedFixedPointOperation(Op, VT, Scale);
       break;
     }
@@ -1514,7 +1530,7 @@ public:
   /// performs validation and error handling, returns the function. Otherwise,
   /// returns nullptr. Must be previously inserted by insertSSPDeclarations.
   /// Should be used only when getIRStackGuard returns nullptr.
-  virtual Value *getSSPStackGuardCheck(const Module &M) const;
+  virtual Function *getSSPStackGuardCheck(const Module &M) const;
 
 protected:
   Value *getDefaultSafeStackPointerLocation(IRBuilder<> &IRB,
@@ -2272,6 +2288,16 @@ public:
     return false;
   }
 
+  /// Return true if sinking I's operands to the same basic block as I is
+  /// profitable, e.g. because the operands can be folded into a target
+  /// instruction during instruction selection. After calling the function
+  /// \p Ops contains the Uses to sink ordered by dominance (dominating users
+  /// come first).
+  virtual bool shouldSinkOperands(Instruction *I,
+                                  SmallVectorImpl<Use *> &Ops) const {
+    return false;
+  }
+
   /// Return true if the target supplies and combines to a paired load
   /// two loaded values of type LoadedType next to each other in memory.
   /// RequiredAlignment gives the minimal alignment constraints that must be met
@@ -2415,6 +2441,23 @@ public:
   /// extract element followed by a scalar operation.
   virtual bool shouldScalarizeBinop(SDValue VecOp) const {
     return false;
+  }
+
+  /// Try to convert math with an overflow comparison into the corresponding DAG
+  /// node operation. Targets may want to override this independently of whether
+  /// the operation is legal/custom for the given type because it may obscure
+  /// matching of other patterns.
+  virtual bool shouldFormOverflowOp(unsigned Opcode, EVT VT) const {
+    // TODO: The default logic is inherited from code in CodeGenPrepare.
+    // The opcode should not make a difference by default?
+    if (Opcode != ISD::UADDO)
+      return false;
+
+    // Allow the transform as long as we have an integer type that is not
+    // obviously illegal and unsupported.
+    if (VT.isVector())
+      return false;
+    return VT.isSimple() || !isOperationExpand(Opcode, VT);
   }
 
   // Return true if it is profitable to use a scalar input to a BUILD_VECTOR
@@ -2836,11 +2879,10 @@ public:
 
   /// Returns a pair of (return value, chain).
   /// It is an error to pass RTLIB::UNKNOWN_LIBCALL as \p LC.
-  std::pair<SDValue, SDValue> makeLibCall(SelectionDAG &DAG, RTLIB::Libcall LC,
-                                          EVT RetVT, ArrayRef<SDValue> Ops,
-                                          bool isSigned, const SDLoc &dl,
-                                          bool doesNotReturn = false,
-                                          bool isReturnValueUsed = true) const;
+  std::pair<SDValue, SDValue> makeLibCall(
+      SelectionDAG &DAG, RTLIB::Libcall LC, EVT RetVT, ArrayRef<SDValue> Ops,
+      bool isSigned, const SDLoc &dl, bool doesNotReturn = false,
+      bool isReturnValueUsed = true, bool isPostTypeLegalization = false) const;
 
   /// Check whether parameters to a call that are passed in callee saved
   /// registers are the same as from the calling function.  This needs to be
@@ -3640,6 +3682,12 @@ public:
                                             std::vector<SDValue> &Ops,
                                             SelectionDAG &DAG) const;
 
+  // Lower custom output constraints. If invalid, return SDValue().
+  virtual SDValue LowerAsmOutputForConstraint(SDValue &Chain, SDValue &Flag,
+                                              SDLoc DL,
+                                              const AsmOperandInfo &OpInfo,
+                                              SelectionDAG &DAG) const;
+
   //===--------------------------------------------------------------------===//
   // Div utility functions
   //
@@ -3844,6 +3892,15 @@ public:
   /// integers as its arguments.
   SDValue expandFixedPointMul(SDNode *Node, SelectionDAG &DAG) const;
 
+  /// Method for building the DAG expansion of ISD::[US]MULO. Returns whether
+  /// expansion was successful and populates the Result and Overflow arguments.
+  bool expandMULO(SDNode *Node, SDValue &Result, SDValue &Overflow,
+                  SelectionDAG &DAG) const;
+
+  /// Expand a VECREDUCE_* into an explicit calculation. If Count is specified,
+  /// only the first Count elements of the vector are used.
+  SDValue expandVecReduce(SDNode *Node, SelectionDAG &DAG) const;
+
   //===--------------------------------------------------------------------===//
   // Instruction Emitting Hooks
   //
@@ -3895,9 +3952,10 @@ public:
   SDValue lowerCmpEqZeroToCtlzSrl(SDValue Op, SelectionDAG &DAG) const;
 
 private:
-  SDValue simplifySetCCWithAnd(EVT VT, SDValue N0, SDValue N1,
-                               ISD::CondCode Cond, DAGCombinerInfo &DCI,
-                               const SDLoc &DL) const;
+  SDValue foldSetCCWithAnd(EVT VT, SDValue N0, SDValue N1, ISD::CondCode Cond,
+                           const SDLoc &DL, DAGCombinerInfo &DCI) const;
+  SDValue foldSetCCWithBinOp(EVT VT, SDValue N0, SDValue N1, ISD::CondCode Cond,
+                             const SDLoc &DL, DAGCombinerInfo &DCI) const;
 
   SDValue optimizeSetCCOfSignedTruncationCheck(EVT SCCVT, SDValue N0,
                                                SDValue N1, ISD::CondCode Cond,

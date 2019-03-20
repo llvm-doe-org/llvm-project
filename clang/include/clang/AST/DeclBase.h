@@ -175,7 +175,10 @@ public:
     IDNS_LocalExtern         = 0x0800,
 
     /// This declaration is an OpenMP user defined reduction construction.
-    IDNS_OMPReduction        = 0x1000
+    IDNS_OMPReduction        = 0x1000,
+
+    /// This declaration is an OpenMP user defined mapper.
+    IDNS_OMPMapper           = 0x2000,
   };
 
   /// ObjCDeclQualifier - 'Qualifiers' written next to the return and
@@ -323,7 +326,7 @@ protected:
   unsigned FromASTFile : 1;
 
   /// IdentifierNamespace - This specifies what IDNS_* namespace this lives in.
-  unsigned IdentifierNamespace : 13;
+  unsigned IdentifierNamespace : 14;
 
   /// If 0, we have not computed the linkage of this declaration.
   /// Otherwise, it is the linkage + 1.
@@ -1251,6 +1254,7 @@ public:
 ///   NamespaceDecl
 ///   TagDecl
 ///   OMPDeclareReductionDecl
+///   OMPDeclareMapperDecl
 ///   FunctionDecl
 ///   ObjCMethodDecl
 ///   ObjCContainerDecl
@@ -1661,6 +1665,11 @@ class DeclContext {
     /// A bit that indicates this block is passed directly to a function as a
     /// non-escaping parameter.
     uint64_t DoesNotEscape : 1;
+
+    /// A bit that indicates whether it's possible to avoid coying this block to
+    /// the heap when it initializes or is assigned to a local variable with
+    /// automatic storage.
+    uint64_t CanAvoidCopyToHeap : 1;
   };
 
   /// Number of non-inherited bits in BlockDeclBitfields.

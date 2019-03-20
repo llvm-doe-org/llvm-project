@@ -15,13 +15,10 @@ add_lldb_library(lldbPluginSymbolFileDWARF PLUGIN
   DWARFDebugInfoEntry.cpp
   DWARFDebugLine.cpp
   DWARFDebugMacro.cpp
-  DWARFDebugMacinfo.cpp
-  DWARFDebugMacinfoEntry.cpp
   DWARFDebugRanges.cpp
   DWARFDeclContext.cpp
   DWARFDefines.cpp
   DWARFDIE.cpp
-  DWARFDIECollection.cpp
   DWARFFormValue.cpp
   DWARFIndex.cpp
   DWARFUnit.cpp

@@ -38,6 +38,7 @@ enum DeclUpdateKind {
   UPD_MANGLING_NUMBER,
   UPD_STATIC_LOCAL_NUMBER,
   UPD_DECL_MARKED_OPENMP_THREADPRIVATE,
+  UPD_DECL_MARKED_OPENMP_ALLOCATE,
   UPD_DECL_MARKED_OPENMP_DECLARETARGET,
   UPD_DECL_EXPORTED,
   UPD_ADDED_ATTR_TO_RECORD
@@ -106,6 +107,21 @@ template<typename Fn> void numberAnonymousDeclsWithin(const DeclContext *DC,
 
     Visit(ND, Index++);
   }
+}
+
+/// Determine whether the given declaration will be included in the per-module
+/// initializer if it needs to be eagerly handed to the AST consumer. If so, we
+/// should not hand it to the consumer when deserializing it, nor include it in
+/// the list of eagerly deserialized declarations.
+inline bool isPartOfPerModuleInitializer(const Decl *D) {
+  if (isa<ImportDecl>(D))
+    return true;
+  // Template instantiations are notionally in an "instantiation unit" rather
+  // than in any particular translation unit, so they need not be part of any
+  // particular (sub)module's per-module initializer.
+  if (auto *VD = dyn_cast<VarDecl>(D))
+    return !isTemplateInstantiation(VD->getTemplateSpecializationKind());
+  return false;
 }
 
 } // namespace serialization

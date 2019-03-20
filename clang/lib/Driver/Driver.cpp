@@ -89,6 +89,33 @@ using namespace clang::driver;
 using namespace clang;
 using namespace llvm::opt;
 
+// static
+std::string Driver::GetResourcesPath(StringRef BinaryPath,
+                                     StringRef CustomResourceDir) {
+  // Since the resource directory is embedded in the module hash, it's important
+  // that all places that need it call this function, so that they get the
+  // exact same string ("a/../b/" and "b/" get different hashes, for example).
+
+  // Dir is bin/ or lib/, depending on where BinaryPath is.
+  std::string Dir = llvm::sys::path::parent_path(BinaryPath);
+
+  SmallString<128> P(Dir);
+  if (CustomResourceDir != "") {
+    llvm::sys::path::append(P, CustomResourceDir);
+  } else {
+    // On Windows, libclang.dll is in bin/.
+    // On non-Windows, libclang.so/.dylib is in lib/.
+    // With a static-library build of libclang, LibClangPath will contain the
+    // path of the embedding binary, which for LLVM binaries will be in bin/.
+    // ../lib gets us to lib/ in both cases.
+    P = llvm::sys::path::parent_path(Dir);
+    llvm::sys::path::append(P, Twine("lib") + CLANG_LIBDIR_SUFFIX, "clang",
+                            CLANG_VERSION_STRING);
+  }
+
+  return P.str();
+}
+
 Driver::Driver(StringRef ClangExecutable, StringRef TargetTriple,
                DiagnosticsEngine &Diags,
                IntrusiveRefCntPtr<llvm::vfs::FileSystem> VFS)
@@ -119,17 +146,7 @@ Driver::Driver(StringRef ClangExecutable, StringRef TargetTriple,
 #endif
 
   // Compute the path to the resource directory.
-  StringRef ClangResourceDir(CLANG_RESOURCE_DIR);
-  SmallString<128> P(Dir);
-  if (ClangResourceDir != "") {
-    llvm::sys::path::append(P, ClangResourceDir);
-  } else {
-    StringRef ClangLibdirSuffix(CLANG_LIBDIR_SUFFIX);
-    P = llvm::sys::path::parent_path(Dir);
-    llvm::sys::path::append(P, Twine("lib") + ClangLibdirSuffix, "clang",
-                            CLANG_VERSION_STRING);
-  }
-  ResourceDir = P.str();
+  ResourceDir = GetResourcesPath(ClangExecutable, CLANG_RESOURCE_DIR);
 }
 
 void Driver::ParseDriverMode(StringRef ProgramName,
@@ -1559,8 +1576,7 @@ void Driver::HandleAutocompletions(StringRef PassedFlags) const {
 
   // We want to show cc1-only options only when clang is invoked with -cc1 or
   // -Xclang.
-  if (std::find(Flags.begin(), Flags.end(), "-Xclang") != Flags.end() ||
-      std::find(Flags.begin(), Flags.end(), "-cc1") != Flags.end())
+  if (llvm::is_contained(Flags, "-Xclang") || llvm::is_contained(Flags, "-cc1"))
     DisableFlags &= ~options::NoDriverOption;
 
   StringRef Cur;
@@ -2278,6 +2294,9 @@ class OffloadingActionBuilder final {
 
     /// Flag that is set to true if this builder acted on the current input.
     bool IsActive = false;
+
+    /// Flag for -fgpu-rdc.
+    bool Relocatable = false;
   public:
     CudaActionBuilderBase(Compilation &C, DerivedArgList &Args,
                           const Driver::InputList &Inputs,
@@ -2323,6 +2342,12 @@ class OffloadingActionBuilder final {
 
       // If this is an unbundling action use it as is for each CUDA toolchain.
       if (auto *UA = dyn_cast<OffloadUnbundlingJobAction>(HostAction)) {
+
+        // If -fgpu-rdc is disabled, should not unbundle since there is no
+        // device code to link.
+        if (!Relocatable)
+          return ABRT_Inactive;
+
         CudaDeviceActions.clear();
         auto *IA = cast<InputAction>(UA->getInputs().back());
         std::string FileName = IA->getInputArg().getAsString(Args);
@@ -2393,6 +2418,9 @@ class OffloadingActionBuilder final {
       if (AssociatedOffloadKind == Action::OFK_HIP &&
           !C.hasOffloadToolChain<Action::OFK_HIP>())
         return false;
+
+      Relocatable = Args.hasFlag(options::OPT_fgpu_rdc,
+          options::OPT_fno_gpu_rdc, /*Default=*/false);
 
       const ToolChain *HostTC = C.getSingleOffloadToolChain<Action::OFK_Host>();
       assert(HostTC && "No toolchain for host compilation.");
@@ -2579,13 +2607,11 @@ class OffloadingActionBuilder final {
   class HIPActionBuilder final : public CudaActionBuilderBase {
     /// The linker inputs obtained for each device arch.
     SmallVector<ActionList, 8> DeviceLinkerInputs;
-    bool Relocatable;
 
   public:
     HIPActionBuilder(Compilation &C, DerivedArgList &Args,
                      const Driver::InputList &Inputs)
-        : CudaActionBuilderBase(C, Args, Inputs, Action::OFK_HIP),
-          Relocatable(false) {}
+        : CudaActionBuilderBase(C, Args, Inputs, Action::OFK_HIP) {}
 
     bool canUseBundlerUnbundler() const override { return true; }
 
@@ -2689,13 +2715,6 @@ class OffloadingActionBuilder final {
                CudaArchToString(GpuArchList[I]), AssociatedOffloadKind);
         ++I;
       }
-    }
-
-    bool initialize() override {
-      Relocatable = Args.hasFlag(options::OPT_fgpu_rdc,
-          options::OPT_fno_gpu_rdc, /*Default=*/false);
-
-      return CudaActionBuilderBase::initialize();
     }
   };
 

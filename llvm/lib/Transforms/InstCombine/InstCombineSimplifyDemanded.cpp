@@ -365,10 +365,9 @@ Value *InstCombiner::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
     KnownBits InputKnown(SrcBitWidth);
     if (SimplifyDemandedBits(I, 0, InputDemandedMask, InputKnown, Depth + 1))
       return I;
-    Known = InputKnown.zextOrTrunc(BitWidth);
-    // Any top bits are known to be zero.
-    if (BitWidth > SrcBitWidth)
-      Known.Zero.setBitsFrom(SrcBitWidth);
+    assert(InputKnown.getBitWidth() == SrcBitWidth && "Src width changed?");
+    Known = InputKnown.zextOrTrunc(BitWidth,
+                                   true /* ExtendedBitsAreKnownZero */);
     assert(!Known.hasConflict() && "Bits known to be one AND zero?");
     break;
   }
@@ -966,25 +965,15 @@ InstCombiner::simplifyShrShlDemandedBits(Instruction *Shr, const APInt &ShrOp1,
 }
 
 /// Implement SimplifyDemandedVectorElts for amdgcn buffer and image intrinsics.
+///
+/// Note: This only supports non-TFE/LWE image intrinsic calls; those have
+///       struct returns.
 Value *InstCombiner::simplifyAMDGCNMemoryIntrinsicDemanded(IntrinsicInst *II,
                                                            APInt DemandedElts,
-                                                           int DMaskIdx,
-                                                           int TFCIdx) {
+                                                           int DMaskIdx) {
   unsigned VWidth = II->getType()->getVectorNumElements();
   if (VWidth == 1)
     return nullptr;
-
-  // Need to change to new instruction format
-  ConstantInt *TFC = nullptr;
-  bool TFELWEEnabled = false;
-  if (TFCIdx > 0) {
-    TFC = dyn_cast<ConstantInt>(II->getArgOperand(TFCIdx));
-    TFELWEEnabled =    TFC->getZExtValue() & 0x1  // TFE
-                    || TFC->getZExtValue() & 0x2; // LWE
-  }
-
-  if (TFELWEEnabled)
-    return nullptr; // TFE not yet supported
 
   ConstantInt *NewDMask = nullptr;
 
@@ -993,10 +982,7 @@ Value *InstCombiner::simplifyAMDGCNMemoryIntrinsicDemanded(IntrinsicInst *II,
     // below.
     DemandedElts = (1 << DemandedElts.getActiveBits()) - 1;
   } else {
-    ConstantInt *DMask = dyn_cast<ConstantInt>(II->getArgOperand(DMaskIdx));
-    if (!DMask)
-      return nullptr; // non-constant dmask is not supported by codegen
-
+    ConstantInt *DMask = cast<ConstantInt>(II->getArgOperand(DMaskIdx));
     unsigned DMaskVal = DMask->getZExtValue() & 0xf;
 
     // Mask off values that are undefined because the dmask doesn't cover them
@@ -1189,9 +1175,18 @@ Value *InstCombiner::SimplifyDemandedVectorElts(Value *V, APInt DemandedElts,
     // wouldn't have a vector result to get here. Note that we intentionally
     // merge the undef bits here since gepping with either an undef base or
     // index results in undef. 
-    for (unsigned i = 0; i < I->getNumOperands(); i++)
-      if (I->getOperand(i)->getType()->isVectorTy())
-        simplifyAndSetOp(I, i, DemandedElts, UndefElts);
+    for (unsigned i = 0; i < I->getNumOperands(); i++) {
+      if (isa<UndefValue>(I->getOperand(i))) {
+        // If the entire vector is undefined, just return this info.
+        UndefElts = EltMask;
+        return nullptr;
+      }
+      if (I->getOperand(i)->getType()->isVectorTy()) {
+        APInt UndefEltsOp(VWidth, 0);
+        simplifyAndSetOp(I, i, DemandedElts, UndefEltsOp);
+        UndefElts |= UndefEltsOp;
+      }
+    }
 
     break;
   }
@@ -1441,6 +1436,26 @@ Value *InstCombiner::SimplifyDemandedVectorElts(Value *V, APInt DemandedElts,
     IntrinsicInst *II = dyn_cast<IntrinsicInst>(I);
     if (!II) break;
     switch (II->getIntrinsicID()) {
+    case Intrinsic::masked_gather: // fallthrough
+    case Intrinsic::masked_load: {
+      APInt DemandedPtrs(DemandedElts), DemandedPassThrough(DemandedElts);
+      if (auto *CV = dyn_cast<ConstantVector>(II->getOperand(2)))
+        for (unsigned i = 0; i < VWidth; i++) {
+          Constant *CElt = CV->getAggregateElement(i);
+          if (CElt->isNullValue())
+            DemandedPtrs.clearBit(i);
+          else if (CElt->isAllOnesValue())
+            DemandedPassThrough.clearBit(i);
+        }
+      if (II->getIntrinsicID() == Intrinsic::masked_gather)
+        simplifyAndSetOp(II, 0, DemandedPtrs, UndefElts2);
+      simplifyAndSetOp(II, 3, DemandedPassThrough, UndefElts3);
+      
+      // Output elements are undefined if the element from both sources are.
+      // TODO: can strengthen via mask as well.
+      UndefElts = UndefElts2 & UndefElts3;
+      break;
+    }
     case Intrinsic::x86_xop_vfrcz_ss:
     case Intrinsic::x86_xop_vfrcz_sd:
       // The instructions for these intrinsics are speced to zero upper bits not
@@ -1650,8 +1665,7 @@ Value *InstCombiner::SimplifyDemandedVectorElts(Value *V, APInt DemandedElts,
       return simplifyAMDGCNMemoryIntrinsicDemanded(II, DemandedElts);
     default: {
       if (getAMDGPUImageDMaskIntrinsic(II->getIntrinsicID()))
-        return simplifyAMDGCNMemoryIntrinsicDemanded(
-            II, DemandedElts, 0, II->getNumArgOperands() - 2);
+        return simplifyAMDGCNMemoryIntrinsicDemanded(II, DemandedElts, 0);
 
       break;
     }
@@ -1677,6 +1691,11 @@ Value *InstCombiner::SimplifyDemandedVectorElts(Value *V, APInt DemandedElts,
     // like undef & 0. The result is known zero, not undef.
     UndefElts &= UndefElts2;
   }
+
+  // If we've proven all of the lanes undef, return an undef value.
+  // TODO: Intersect w/demanded lanes
+  if (UndefElts.isAllOnesValue())
+    return UndefValue::get(I->getType());;
 
   return MadeChange ? I : nullptr;
 }

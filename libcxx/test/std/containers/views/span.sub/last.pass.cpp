@@ -10,7 +10,7 @@
 
 // <span>
 
-// template<ptrdiff_t Count>
+// template<size_t Count>
 //  constexpr span<element_type, Count> last() const;
 //
 // constexpr span<element_type, dynamic_extent> last(index_type count) const;
@@ -25,7 +25,7 @@
 
 #include "test_macros.h"
 
-template <typename Span, ptrdiff_t Count>
+template <typename Span, size_t Count>
 constexpr bool testConstexprSpan(Span sp)
 {
     LIBCPP_ASSERT((noexcept(sp.template last<Count>())));
@@ -45,7 +45,7 @@ constexpr bool testConstexprSpan(Span sp)
 }
 
 
-template <typename Span, ptrdiff_t Count>
+template <typename Span, size_t Count>
 void testRuntimeSpan(Span sp)
 {
     LIBCPP_ASSERT((noexcept(sp.template last<Count>())));
@@ -68,7 +68,7 @@ constexpr int carr1[] = {1,2,3,4};
           int   arr[] = {5,6,7};
 std::string   sarr [] = { "ABC", "DEF", "GHI", "JKL", "MNO"};
 
-int main ()
+int main(int, char**)
 {
     {
     using Sp = std::span<const int>;
@@ -132,4 +132,6 @@ int main ()
     testRuntimeSpan<Sp, 4>(Sp{sarr});
     testRuntimeSpan<Sp, 5>(Sp{sarr});
     }
+
+  return 0;
 }

@@ -34,6 +34,7 @@ add_extra_unittest(ClangdTests
   JSONTransportTests.cpp
   QualityTests.cpp
   RIFFTests.cpp
+  SelectionTests.cpp
   SerializationTests.cpp
   SourceCodeTests.cpp
   SymbolCollectorTests.cpp
@@ -45,8 +46,12 @@ add_extra_unittest(ClangdTests
   TestTU.cpp
   ThreadingTests.cpp
   TraceTests.cpp
+  TypeHierarchyTests.cpp
+  TweakTests.cpp
   URITests.cpp
   XRefsTests.cpp
+
+  $<TARGET_OBJECTS:obj.clangDaemonTweaks>
   )
 
 target_link_libraries(ClangdTests

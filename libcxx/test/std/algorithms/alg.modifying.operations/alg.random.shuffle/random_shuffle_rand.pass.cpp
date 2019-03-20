@@ -15,6 +15,8 @@
 //   void
 //   random_shuffle(Iter first, Iter last, Rand&& rand);
 
+#define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
+
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -51,8 +53,9 @@ test_with_iterator()
 }
 
 
-int main()
+int main(int, char**)
 {
     test_with_iterator<random_access_iterator<int*> >();
     test_with_iterator<int*>();
+    return 0;
 }

@@ -144,8 +144,10 @@ namespace clang {
     void VisitObjCPropertyDecl(ObjCPropertyDecl *D);
     void VisitObjCPropertyImplDecl(ObjCPropertyImplDecl *D);
     void VisitOMPThreadPrivateDecl(OMPThreadPrivateDecl *D);
+    void VisitOMPAllocateDecl(OMPAllocateDecl *D);
     void VisitOMPRequiresDecl(OMPRequiresDecl *D);
     void VisitOMPDeclareReductionDecl(OMPDeclareReductionDecl *D);
+    void VisitOMPDeclareMapperDecl(OMPDeclareMapperDecl *D);
     void VisitOMPCapturedExprDecl(OMPCapturedExprDecl *D);
 
     /// Add an Objective-C type parameter list to the given record.
@@ -1109,6 +1111,7 @@ void ASTDeclWriter::VisitBlockDecl(BlockDecl *D) {
   Record.push_back(D->blockMissingReturnType());
   Record.push_back(D->isConversionFromLambda());
   Record.push_back(D->doesNotEscape());
+  Record.push_back(D->canAvoidCopyToHeap());
   Record.push_back(D->capturesCXXThis());
   Record.push_back(D->getNumCaptures());
   for (const auto &capture : D->captures()) {
@@ -1742,10 +1745,22 @@ void ASTDeclWriter::VisitOMPThreadPrivateDecl(OMPThreadPrivateDecl *D) {
   Code = serialization::DECL_OMP_THREADPRIVATE;
 }
 
+void ASTDeclWriter::VisitOMPAllocateDecl(OMPAllocateDecl *D) {
+  Record.push_back(D->varlist_size());
+  Record.push_back(D->clauselist_size());
+  VisitDecl(D);
+  for (auto *I : D->varlists())
+    Record.AddStmt(I);
+  OMPClauseWriter ClauseWriter(Record);
+  for (OMPClause *C : D->clauselists())
+    ClauseWriter.writeClause(C);
+  Code = serialization::DECL_OMP_ALLOCATE;
+}
+
 void ASTDeclWriter::VisitOMPRequiresDecl(OMPRequiresDecl *D) {
   Record.push_back(D->clauselist_size());
   VisitDecl(D);
-  OMPClauseWriter ClauseWriter(Record); 
+  OMPClauseWriter ClauseWriter(Record);
   for (OMPClause *C : D->clauselists())
     ClauseWriter.writeClause(C);
   Code = serialization::DECL_OMP_REQUIRES;
@@ -1763,6 +1778,19 @@ void ASTDeclWriter::VisitOMPDeclareReductionDecl(OMPDeclareReductionDecl *D) {
   Record.push_back(D->getInitializerKind());
   Record.AddDeclRef(D->getPrevDeclInScope());
   Code = serialization::DECL_OMP_DECLARE_REDUCTION;
+}
+
+void ASTDeclWriter::VisitOMPDeclareMapperDecl(OMPDeclareMapperDecl *D) {
+  Record.push_back(D->clauselist_size());
+  VisitValueDecl(D);
+  Record.AddSourceLocation(D->getBeginLoc());
+  Record.AddStmt(D->getMapperVarRef());
+  Record.AddDeclarationName(D->getVarName());
+  Record.AddDeclRef(D->getPrevDeclInScope());
+  OMPClauseWriter ClauseWriter(Record);
+  for (OMPClause *C : D->clauselists())
+    ClauseWriter.writeClause(C);
+  Code = serialization::DECL_OMP_DECLARE_MAPPER;
 }
 
 void ASTDeclWriter::VisitOMPCapturedExprDecl(OMPCapturedExprDecl *D) {
@@ -2258,7 +2286,7 @@ static bool isRequiredDecl(const Decl *D, ASTContext &Context,
   if (isa<FileScopeAsmDecl>(D) || isa<ObjCImplDecl>(D))
     return true;
 
-  if (WritingModule && (isa<VarDecl>(D) || isa<ImportDecl>(D))) {
+  if (WritingModule && isPartOfPerModuleInitializer(D)) {
     // These declarations are part of the module initializer, and are emitted
     // if and when the module is imported, rather than being emitted eagerly.
     return false;

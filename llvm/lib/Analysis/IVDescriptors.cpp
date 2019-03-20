@@ -14,6 +14,7 @@
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"
+#include "llvm/Analysis/DomTreeUpdater.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/LoopInfo.h"
@@ -25,7 +26,6 @@
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
-#include "llvm/IR/DomTreeUpdater.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
@@ -251,6 +251,10 @@ bool RecurrenceDescriptor::AddReductionVar(PHINode *Phi, RecurrenceKind Kind,
   Worklist.push_back(Start);
   VisitedInsts.insert(Start);
 
+  // Start with all flags set because we will intersect this with the reduction
+  // flags from all the reduction operations.
+  FastMathFlags FMF = FastMathFlags::getFast();
+
   // A value in the reduction can be used:
   //  - By the reduction:
   //      - Reduction operation:
@@ -296,6 +300,8 @@ bool RecurrenceDescriptor::AddReductionVar(PHINode *Phi, RecurrenceKind Kind,
       ReduxDesc = isRecurrenceInstr(Cur, Kind, ReduxDesc, HasFunNoNaNAttr);
       if (!ReduxDesc.isRecurrence())
         return false;
+      if (isa<FPMathOperator>(ReduxDesc.getPatternInst()))
+        FMF &= ReduxDesc.getPatternInst()->getFastMathFlags();
     }
 
     bool IsASelect = isa<SelectInst>(Cur);
@@ -441,7 +447,7 @@ bool RecurrenceDescriptor::AddReductionVar(PHINode *Phi, RecurrenceKind Kind,
 
   // Save the description of this reduction variable.
   RecurrenceDescriptor RD(
-      RdxStart, ExitInstruction, Kind, ReduxDesc.getMinMaxKind(),
+      RdxStart, ExitInstruction, Kind, FMF, ReduxDesc.getMinMaxKind(),
       ReduxDesc.getUnsafeAlgebraInst(), RecurrenceType, IsSigned, CastInsts);
   RedDes = RD;
 
@@ -549,9 +555,8 @@ RecurrenceDescriptor::isConditionalRdxPattern(
 RecurrenceDescriptor::InstDesc
 RecurrenceDescriptor::isRecurrenceInstr(Instruction *I, RecurrenceKind Kind,
                                         InstDesc &Prev, bool HasFunNoNaNAttr) {
-  bool FP = I->getType()->isFloatingPointTy();
   Instruction *UAI = Prev.getUnsafeAlgebraInst();
-  if (!UAI && FP && !I->isFast())
+  if (!UAI && isa<FPMathOperator>(I) && !I->hasAllowReassoc())
     UAI = I; // Found an unsafe (unvectorizable) algebra instruction.
 
   switch (I->getOpcode()) {
@@ -1009,7 +1014,7 @@ bool InductionDescriptor::isInductionPHI(PHINode *Phi, const Loop *TheLoop,
   // If we started from an UnknownSCEV, and managed to build an addRecurrence
   // only after enabling Assume with PSCEV, this means we may have encountered
   // cast instructions that required adding a runtime check in order to
-  // guarantee the correctness of the AddRecurence respresentation of the
+  // guarantee the correctness of the AddRecurrence respresentation of the
   // induction.
   if (PhiScev != AR && SymbolicPhi) {
     SmallVector<Instruction *, 2> Casts;

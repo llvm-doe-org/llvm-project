@@ -10,11 +10,13 @@
 
 // unary_negate
 
+#define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
+
 #include <functional>
 #include <type_traits>
 #include <cassert>
 
-int main()
+int main(int, char**)
 {
     typedef std::unary_negate<std::logical_not<int> > F;
     const F f = F(std::logical_not<int>());
@@ -22,4 +24,6 @@ int main()
     static_assert((std::is_same<F::result_type, bool>::value), "" );
     assert(f(36));
     assert(!f(0));
+
+  return 0;
 }

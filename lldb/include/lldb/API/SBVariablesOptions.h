@@ -26,6 +26,8 @@ public:
 
   ~SBVariablesOptions();
 
+  explicit operator bool() const;
+
   bool IsValid() const;
 
   bool GetIncludeArguments() const;
@@ -72,7 +74,7 @@ protected:
   void SetOptions(VariablesOptionsImpl *lldb_object_ptr);
 
 private:
-  std::unique_ptr<VariablesOptionsImpl> m_opaque_ap;
+  std::unique_ptr<VariablesOptionsImpl> m_opaque_up;
 };
 
 } // namespace lldb

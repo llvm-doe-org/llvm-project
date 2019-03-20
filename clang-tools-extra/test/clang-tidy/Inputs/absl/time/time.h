@@ -14,11 +14,14 @@ public:
   Duration &operator/=(float r);
   Duration &operator/=(double r);
   template <typename T> Duration &operator/=(T r);
+
+  Duration &operator+(Duration d);
 };
 
 template <typename T> Duration operator*(Duration lhs, T rhs);
 template <typename T> Duration operator*(T lhs, Duration rhs);
 template <typename T> Duration operator/(Duration lhs, T rhs);
+int64_t operator/(Duration lhs, Duration rhs);
 
 class Time{};
 
@@ -68,6 +71,8 @@ Time FromUnixMillis(int64_t);
 Time FromUnixMicros(int64_t);
 Time FromUnixNanos(int64_t);
 
+Time Now();
+
 // Relational Operators
 constexpr bool operator<(Duration lhs, Duration rhs);
 constexpr bool operator>(Duration lhs, Duration rhs);
@@ -81,5 +86,7 @@ inline Time operator+(Time lhs, Duration rhs);
 inline Time operator+(Duration lhs, Time rhs);
 inline Time operator-(Time lhs, Duration rhs);
 inline Duration operator-(Time lhs, Time rhs);
+
+double FDivDuration(Duration num, Duration den);
 
 }  // namespace absl

@@ -6,8 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/ADT/StringSwitch.h"
-
 #include "RenderScriptRuntime.h"
 #include "RenderScriptScriptGroup.h"
 
@@ -39,6 +37,10 @@
 #include "lldb/Utility/RegisterValue.h"
 #include "lldb/Utility/RegularExpression.h"
 #include "lldb/Utility/Status.h"
+
+#include "llvm/ADT/StringSwitch.h"
+
+#include <memory>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -590,7 +592,7 @@ struct RenderScriptRuntime::Element {
       array_size;        // Number of items in array, only needed for structs
   ConstString type_name; // Name of type, only needed for structs
 
-  static const ConstString &
+  static ConstString 
   GetFallbackStructName(); // Print this as the type name of a struct Element
                            // If we can't resolve the actual struct name
 
@@ -690,7 +692,7 @@ struct RenderScriptRuntime::AllocationDetails {
   }
 };
 
-const ConstString &RenderScriptRuntime::Element::GetFallbackStructName() {
+ConstString RenderScriptRuntime::Element::GetFallbackStructName() {
   static const ConstString FallbackStructName("struct");
   return FallbackStructName;
 }
@@ -1211,7 +1213,7 @@ void RenderScriptRuntime::CaptureDebugHintScriptGroup2(
       }
     }
     if (!group) {
-      group.reset(new RSScriptGroupDescriptor);
+      group = std::make_shared<RSScriptGroupDescriptor>();
       group->m_name = group_name;
       m_scriptGroups.push_back(group);
     } else {
@@ -1500,9 +1502,9 @@ void RenderScriptRuntime::CaptureAllocationDestroy(RuntimeHook *hook,
                 uint64_t(args[eRsContext]), uint64_t(args[eRsAlloc]));
 
   for (auto iter = m_allocations.begin(); iter != m_allocations.end(); ++iter) {
-    auto &allocation_ap = *iter; // get the unique pointer
-    if (allocation_ap->address.isValid() &&
-        *allocation_ap->address.get() == addr_t(args[eRsAlloc])) {
+    auto &allocation_up = *iter; // get the unique pointer
+    if (allocation_up->address.isValid() &&
+        *allocation_up->address.get() == addr_t(args[eRsAlloc])) {
       m_allocations.erase(iter);
       if (log)
         log->Printf("%s - deleted allocation entry.", __FUNCTION__);
@@ -2361,7 +2363,7 @@ void RenderScriptRuntime::FindStructTypeName(Element &elem,
                     size_diff);
 
       for (uint32_t i = 0; i < size_diff; ++i) {
-        const ConstString &name = elem.children[num_children + i].type_name;
+        ConstString name = elem.children[num_children + i].type_name;
         if (strcmp(name.AsCString(), "#rs_padding") < 0)
           found = false;
       }
@@ -2854,7 +2856,7 @@ bool RenderScriptRuntime::LoadModule(const lldb::ModuleSP &module_sp) {
     switch (GetModuleKind(module_sp)) {
     case eModuleKindKernelObj: {
       RSModuleDescriptorSP module_desc;
-      module_desc.reset(new RSModuleDescriptor(module_sp));
+      module_desc = std::make_shared<RSModuleDescriptor>(module_sp);
       if (module_desc->ParseRSInfo()) {
         m_rsmodules.push_back(module_desc);
         module_desc->WarnIfVersionMismatch(GetProcess()
@@ -3592,7 +3594,7 @@ void RenderScriptRuntime::SetBreakAllKernels(bool do_break, TargetSP target) {
 // Given the name of a kernel this function creates a breakpoint using our own
 // breakpoint resolver, and returns the Breakpoint shared pointer.
 BreakpointSP
-RenderScriptRuntime::CreateKernelBreakpoint(const ConstString &name) {
+RenderScriptRuntime::CreateKernelBreakpoint(ConstString name) {
   Log *log(
       GetLogIfAnyCategoriesSet(LIBLLDB_LOG_LANGUAGE | LIBLLDB_LOG_BREAKPOINTS));
 
@@ -3620,7 +3622,7 @@ RenderScriptRuntime::CreateKernelBreakpoint(const ConstString &name) {
 }
 
 BreakpointSP
-RenderScriptRuntime::CreateReductionBreakpoint(const ConstString &name,
+RenderScriptRuntime::CreateReductionBreakpoint(ConstString name,
                                                int kernel_types) {
   Log *log(
       GetLogIfAnyCategoriesSet(LIBLLDB_LOG_LANGUAGE | LIBLLDB_LOG_BREAKPOINTS));
@@ -3861,7 +3863,7 @@ bool RenderScriptRuntime::PlaceBreakpointOnKernel(TargetSP target,
 }
 
 BreakpointSP
-RenderScriptRuntime::CreateScriptGroupBreakpoint(const ConstString &name,
+RenderScriptRuntime::CreateScriptGroupBreakpoint(ConstString name,
                                                  bool stop_on_all) {
   Log *log(
       GetLogIfAnyCategoriesSet(LIBLLDB_LOG_LANGUAGE | LIBLLDB_LOG_BREAKPOINTS));
@@ -3891,7 +3893,7 @@ RenderScriptRuntime::CreateScriptGroupBreakpoint(const ConstString &name,
 
 bool RenderScriptRuntime::PlaceBreakpointOnScriptGroup(TargetSP target,
                                                        Stream &strm,
-                                                       const ConstString &name,
+                                                       ConstString name,
                                                        bool multi) {
   InitSearchFilter(target);
   BreakpointSP bp = CreateScriptGroupBreakpoint(name, multi);

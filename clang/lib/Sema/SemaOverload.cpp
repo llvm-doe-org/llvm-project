@@ -7659,6 +7659,12 @@ BuiltinCandidateTypeSet::AddTypesConvertedFrom(QualType Ty,
     }
   }
 }
+/// Helper function for adjusting address spaces for the pointer or reference
+/// operands of builtin operators depending on the argument.
+static QualType AdjustAddressSpaceForBuiltinOperandType(Sema &S, QualType T,
+                                                        Expr *Arg) {
+  return S.Context.getAddrSpaceQualType(T, Arg->getType().getAddressSpace());
+}
 
 /// Helper function for AddBuiltinOperatorCandidates() that adds
 /// the volatile- and non-volatile-qualified assignment operators for the
@@ -7670,15 +7676,17 @@ static void AddBuiltinAssignmentOperatorCandidates(Sema &S,
   QualType ParamTypes[2];
 
   // T& operator=(T&, T)
-  ParamTypes[0] = S.Context.getLValueReferenceType(T);
+  ParamTypes[0] = S.Context.getLValueReferenceType(
+      AdjustAddressSpaceForBuiltinOperandType(S, T, Args[0]));
   ParamTypes[1] = T;
   S.AddBuiltinCandidate(ParamTypes, Args, CandidateSet,
                         /*IsAssignmentOperator=*/true);
 
   if (!S.Context.getCanonicalType(T).isVolatileQualified()) {
     // volatile T& operator=(volatile T&, T)
-    ParamTypes[0]
-      = S.Context.getLValueReferenceType(S.Context.getVolatileType(T));
+    ParamTypes[0] = S.Context.getLValueReferenceType(
+        AdjustAddressSpaceForBuiltinOperandType(S, S.Context.getVolatileType(T),
+                                                Args[0]));
     ParamTypes[1] = T;
     S.AddBuiltinCandidate(ParamTypes, Args, CandidateSet,
                           /*IsAssignmentOperator=*/true);
@@ -8505,17 +8513,16 @@ public:
            Right < LastPromotedArithmeticType; ++Right) {
         QualType ParamTypes[2];
         ParamTypes[1] = ArithmeticTypes[Right];
-
+        auto LeftBaseTy = AdjustAddressSpaceForBuiltinOperandType(
+            S, ArithmeticTypes[Left], Args[0]);
         // Add this built-in operator as a candidate (VQ is empty).
-        ParamTypes[0] =
-          S.Context.getLValueReferenceType(ArithmeticTypes[Left]);
+        ParamTypes[0] = S.Context.getLValueReferenceType(LeftBaseTy);
         S.AddBuiltinCandidate(ParamTypes, Args, CandidateSet,
                               /*IsAssigmentOperator=*/isEqualOp);
 
         // Add this built-in operator as a candidate (VQ is 'volatile').
         if (VisibleTypeConversionsQuals.hasVolatile()) {
-          ParamTypes[0] =
-            S.Context.getVolatileType(ArithmeticTypes[Left]);
+          ParamTypes[0] = S.Context.getVolatileType(LeftBaseTy);
           ParamTypes[0] = S.Context.getLValueReferenceType(ParamTypes[0]);
           S.AddBuiltinCandidate(ParamTypes, Args, CandidateSet,
                                 /*IsAssigmentOperator=*/isEqualOp);
@@ -8571,14 +8578,14 @@ public:
            Right < LastPromotedIntegralType; ++Right) {
         QualType ParamTypes[2];
         ParamTypes[1] = ArithmeticTypes[Right];
-
+        auto LeftBaseTy = AdjustAddressSpaceForBuiltinOperandType(
+            S, ArithmeticTypes[Left], Args[0]);
         // Add this built-in operator as a candidate (VQ is empty).
-        ParamTypes[0] =
-          S.Context.getLValueReferenceType(ArithmeticTypes[Left]);
+        ParamTypes[0] = S.Context.getLValueReferenceType(LeftBaseTy);
         S.AddBuiltinCandidate(ParamTypes, Args, CandidateSet);
         if (VisibleTypeConversionsQuals.hasVolatile()) {
           // Add this built-in operator as a candidate (VQ is 'volatile').
-          ParamTypes[0] = ArithmeticTypes[Left];
+          ParamTypes[0] = LeftBaseTy;
           ParamTypes[0] = S.Context.getVolatileType(ParamTypes[0]);
           ParamTypes[0] = S.Context.getLValueReferenceType(ParamTypes[0]);
           S.AddBuiltinCandidate(ParamTypes, Args, CandidateSet);

@@ -1,4 +1,4 @@
-//=- ReachableCodePathInsensitive.cpp ---------------------------*- C++ --*-==//
+//===-- ReachableCode.cpp - Code Reachability Analysis --------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -192,9 +192,10 @@ static bool isConfigurationValue(const Stmt *S,
   if (!S)
     return false;
 
-  S = S->IgnoreImplicit();
+  if (const auto *Ex = dyn_cast<Expr>(S))
+    S = Ex->IgnoreImplicit();
 
-  if (const Expr *Ex = dyn_cast<Expr>(S))
+  if (const auto *Ex = dyn_cast<Expr>(S))
     S = Ex->IgnoreCasts();
 
   // Special case looking for the sigil '()' around an integer literal.

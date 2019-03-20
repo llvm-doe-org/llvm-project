@@ -23,6 +23,8 @@ public:
 
   ~SBStringList();
 
+  explicit operator bool() const;
+
   bool IsValid() const;
 
   void AppendString(const char *str);
@@ -55,7 +57,7 @@ protected:
   const lldb_private::StringList &operator*() const;
 
 private:
-  std::unique_ptr<lldb_private::StringList> m_opaque_ap;
+  std::unique_ptr<lldb_private::StringList> m_opaque_up;
 };
 
 } // namespace lldb

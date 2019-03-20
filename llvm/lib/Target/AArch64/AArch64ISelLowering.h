@@ -286,7 +286,8 @@ public:
 
   bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
 
-  bool isFPImmLegal(const APFloat &Imm, EVT VT) const override;
+  bool isFPImmLegal(const APFloat &Imm, EVT VT,
+                    bool ForCodeSize) const override;
 
   /// Return true if the given shuffle mask can be codegen'd directly, or if it
   /// should be stack expanded.
@@ -326,6 +327,9 @@ public:
   bool isZExtFree(Type *Ty1, Type *Ty2) const override;
   bool isZExtFree(EVT VT1, EVT VT2) const override;
   bool isZExtFree(SDValue Val, EVT VT2) const override;
+
+  bool shouldSinkOperands(Instruction *I,
+                          SmallVectorImpl<Use *> &Ops) const override;
 
   bool hasPairedLoad(EVT LoadedType, unsigned &RequiredAligment) const override;
 
@@ -408,7 +412,7 @@ public:
 
   void insertSSPDeclarations(Module &M) const override;
   Value *getSDagStackGuard(const Module &M) const override;
-  Value *getSSPStackGuardCheck(const Module &M) const override;
+  Function *getSSPStackGuardCheck(const Module &M) const override;
 
   /// If the target has a standard location for the unsafe stack pointer,
   /// returns the address of that location. Otherwise, returns nullptr.
@@ -467,6 +471,12 @@ public:
       return hasAndNotCompare(Y);
 
     return VT.getSizeInBits() >= 64; // vector 'bic'
+  }
+
+  bool shouldExpandShift(SelectionDAG &DAG, SDNode *N) const override {
+    if (DAG.getMachineFunction().getFunction().optForMinSize())
+      return false;
+    return true;
   }
 
   bool shouldTransformSignedTruncationCheck(EVT XVT,
@@ -647,9 +657,9 @@ private:
   SDValue LowerFCOPYSIGN(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFP_EXTEND(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFP_ROUND(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerVectorFP_TO_INT(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFP_TO_INT(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerINT_TO_FP(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerVectorAND(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVectorOR(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerCONCAT_VECTORS(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFSINCOS(SDValue Op, SelectionDAG &DAG) const;

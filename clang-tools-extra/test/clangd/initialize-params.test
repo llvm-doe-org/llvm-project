@@ -14,6 +14,7 @@
 # CHECK-NEXT:          ":"
 # CHECK-NEXT:        ]
 # CHECK-NEXT:      },
+# CHECK-NEXT:      "declarationProvider": true,
 # CHECK-NEXT:      "definitionProvider": true,
 # CHECK-NEXT:      "documentFormattingProvider": true,
 # CHECK-NEXT:      "documentHighlightProvider": true,
@@ -39,6 +40,7 @@
 # CHECK-NEXT:        ]
 # CHECK-NEXT:      },
 # CHECK-NEXT:      "textDocumentSync": 2,
+# CHECK-NEXT:      "typeHierarchyProvider": true
 # CHECK-NEXT:      "workspaceSymbolProvider": true
 # CHECK-NEXT:    }
 # CHECK-NEXT:  }

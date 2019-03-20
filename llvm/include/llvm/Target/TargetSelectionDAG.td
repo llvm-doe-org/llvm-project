@@ -124,7 +124,7 @@ def SDTIntSatNoShOp : SDTypeProfile<1, 2, [   // ssat with no shift
 def SDTIntBinHiLoOp : SDTypeProfile<2, 2, [ // mulhi, mullo, sdivrem, udivrem
   SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>,SDTCisInt<0>
 ]>;
-def SDTIntScaledBinOp : SDTypeProfile<1, 3, [  // smulfix
+def SDTIntScaledBinOp : SDTypeProfile<1, 3, [  // smulfix, umulfix
   SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisInt<0>, SDTCisInt<3>
 ]>;
 
@@ -389,7 +389,9 @@ def saddsat    : SDNode<"ISD::SADDSAT"   , SDTIntBinOp, [SDNPCommutative]>;
 def uaddsat    : SDNode<"ISD::UADDSAT"   , SDTIntBinOp, [SDNPCommutative]>;
 def ssubsat    : SDNode<"ISD::SSUBSAT"   , SDTIntBinOp>;
 def usubsat    : SDNode<"ISD::USUBSAT"   , SDTIntBinOp>;
+
 def smulfix    : SDNode<"ISD::SMULFIX"   , SDTIntScaledBinOp, [SDNPCommutative]>;
+def umulfix    : SDNode<"ISD::UMULFIX"   , SDTIntScaledBinOp, [SDNPCommutative]>;
 
 def sext_inreg : SDNode<"ISD::SIGN_EXTEND_INREG", SDTExtInreg>;
 def sext_invec : SDNode<"ISD::SIGN_EXTEND_VECTOR_INREG", SDTExtInvec>;
@@ -780,14 +782,11 @@ class FPImmLeaf<ValueType vt, code pred, SDNodeXForm xform = NOOP_SDNodeXForm>
 def vtInt      : PatLeaf<(vt),  [{ return N->getVT().isInteger(); }]>;
 def vtFP       : PatLeaf<(vt),  [{ return N->getVT().isFloatingPoint(); }]>;
 
-def immAllOnesV: PatLeaf<(build_vector), [{
-  return ISD::isBuildVectorAllOnes(N);
-}]>;
-def immAllZerosV: PatLeaf<(build_vector), [{
-  return ISD::isBuildVectorAllZeros(N);
-}]>;
-
-
+// Use ISD::isBuildVectorAllOnes or ISD::isBuildVectorAllZeros to look for
+// the corresponding build_vector. Will look through bitcasts except when used
+// as a pattern root.
+def immAllOnesV; // ISD::isBuildVectorAllOnes
+def immAllZerosV; // ISD::isBuildVectorAllZeros
 
 // Other helper fragments.
 def not  : PatFrag<(ops node:$in), (xor node:$in, -1)>;

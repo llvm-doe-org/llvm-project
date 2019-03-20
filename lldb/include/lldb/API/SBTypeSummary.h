@@ -23,6 +23,8 @@ public:
 
   ~SBTypeSummaryOptions();
 
+  explicit operator bool() const;
+
   bool IsValid();
 
   lldb::LanguageType GetLanguage();
@@ -49,7 +51,7 @@ protected:
   void SetOptions(const lldb_private::TypeSummaryOptions *lldb_object_ptr);
 
 private:
-  std::unique_ptr<lldb_private::TypeSummaryOptions> m_opaque_ap;
+  std::unique_ptr<lldb_private::TypeSummaryOptions> m_opaque_up;
 };
 
 class SBTypeSummary {
@@ -78,6 +80,8 @@ public:
   SBTypeSummary(const lldb::SBTypeSummary &rhs);
 
   ~SBTypeSummary();
+
+  explicit operator bool() const;
 
   bool IsValid() const;
 

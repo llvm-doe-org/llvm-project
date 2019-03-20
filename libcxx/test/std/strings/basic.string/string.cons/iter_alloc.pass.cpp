@@ -56,7 +56,7 @@ test(It first, It last, const A& a)
     assert(s2.capacity() >= s2.size());
 }
 
-int main()
+int main(int, char**)
 {
     {
     typedef test_allocator<char> A;
@@ -116,4 +116,15 @@ int main()
     test(input_iterator<const char*>(s), input_iterator<const char*>(s+50), A());
     }
 #endif
+    {
+      static_assert((!std::is_constructible<std::string, std::string,
+                                            std::string>::value),
+                    "");
+      static_assert(
+          (!std::is_constructible<std::string, std::string, std::string,
+                                  std::allocator<char> >::value),
+          "");
+    }
+
+  return 0;
 }

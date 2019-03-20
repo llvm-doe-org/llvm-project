@@ -34,7 +34,8 @@ static const char *const DataLayoutStringR600 =
 static const char *const DataLayoutStringAMDGCN =
     "e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32"
     "-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128"
-    "-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5";
+    "-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5"
+    "-ni:7";
 
 const LangASMap AMDGPUTargetInfo::AMDGPUDefIsGenMap = {
     Generic,  // Default
@@ -136,7 +137,8 @@ bool AMDGPUTargetInfo::initFeatureMap(
     switch (llvm::AMDGPU::parseArchAMDGCN(CPU)) {
     case GK_GFX906:
       Features["dl-insts"] = true;
-      Features["dot-insts"] = true;
+      Features["dot1-insts"] = true;
+      Features["dot2-insts"] = true;
       LLVM_FALLTHROUGH;
     case GK_GFX909:
     case GK_GFX904:
@@ -307,5 +309,16 @@ void AMDGPUTargetInfo::getTargetDefines(const LangOptions &Opts,
 }
 
 void AMDGPUTargetInfo::setAuxTarget(const TargetInfo *Aux) {
+  assert(HalfFormat == Aux->HalfFormat);
+  assert(FloatFormat == Aux->FloatFormat);
+  assert(DoubleFormat == Aux->DoubleFormat);
+
+  // On x86_64 long double is 80-bit extended precision format, which is
+  // not supported by AMDGPU. 128-bit floating point format is also not
+  // supported by AMDGPU. Therefore keep its own format for these two types.
+  auto SaveLongDoubleFormat = LongDoubleFormat;
+  auto SaveFloat128Format = Float128Format;
   copyAuxTarget(Aux);
+  LongDoubleFormat = SaveLongDoubleFormat;
+  Float128Format = SaveFloat128Format;
 }

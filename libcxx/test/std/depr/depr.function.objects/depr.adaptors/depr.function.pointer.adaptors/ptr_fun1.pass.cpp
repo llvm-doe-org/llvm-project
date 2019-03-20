@@ -13,13 +13,17 @@
 // pointer_to_unary_function<Arg, Result>
 // ptr_fun(Result (*f)(Arg));
 
+#define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
+
 #include <functional>
 #include <type_traits>
 #include <cassert>
 
 double unary_f(int i) {return 0.5 - i;}
 
-int main()
+int main(int, char**)
 {
     assert(std::ptr_fun(unary_f)(36) == -35.5);
+
+  return 0;
 }

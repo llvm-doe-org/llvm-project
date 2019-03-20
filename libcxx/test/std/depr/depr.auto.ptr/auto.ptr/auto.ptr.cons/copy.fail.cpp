@@ -12,6 +12,8 @@
 
 // auto_ptr(auto_ptr& a) throw();
 
+#define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
+
 #include <memory>
 #include <cassert>
 
@@ -31,7 +33,9 @@ test()
     assert(A::count == 0);
 }
 
-int main()
+int main(int, char**)
 {
     test();
+
+  return 0;
 }

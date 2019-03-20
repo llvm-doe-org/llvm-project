@@ -281,9 +281,9 @@ LLVM Address Space number is used throughout LLVM (for example, in LLVM IR).
   .. table:: Address Space Mapping
      :name: amdgpu-address-space-mapping-table
 
-     ================== =================
+     ================== =================================
      LLVM Address Space Memory Space
-     ================== =================
+     ================== =================================
      0                  Generic (Flat)
      1                  Global
      2                  Region (GDS)
@@ -291,7 +291,15 @@ LLVM Address Space number is used throughout LLVM (for example, in LLVM IR).
      4                  Constant
      5                  Private (Scratch)
      6                  Constant 32-bit
-     ================== =================
+     7                  Buffer Fat Pointer (experimental)
+     ================== =================================
+
+The buffer fat pointer is an experimental address space that is currently
+unsupported in the backend. It exposes a non-integral pointer that is in future
+intended to support the modelling of 128-bit buffer descriptors + a 32-bit
+offset into the buffer descriptor (in total encapsulating a 160-bit 'pointer'),
+allowing us to use normal LLVM load/store/atomic operations to model the buffer
+descriptors used heavily in graphics workloads targeting the backend.
 
 .. _amdgpu-memory-scopes:
 
@@ -4875,10 +4883,26 @@ symbols do not affect code generation.
 .amdgcn.gfx_generation_number
 +++++++++++++++++++++++++++++
 
-Set to the GFX generation number of the target being assembled for. For
+Set to the GFX major generation number of the target being assembled for. For
 example, when assembling for a "GFX9" target this will be set to the integer
-value "9". The possible GFX generation numbers are presented in
+value "9". The possible GFX major generation numbers are presented in
 :ref:`amdgpu-processors`.
+
+.amdgcn.gfx_generation_minor
+++++++++++++++++++++++++++++
+
+Set to the GFX minor generation number of the target being assembled for. For
+example, when assembling for a "GFX810" target this will be set to the integer
+value "1". The possible GFX minor generation numbers are presented in
+:ref:`amdgpu-processors`.
+
+.amdgcn.gfx_generation_stepping
++++++++++++++++++++++++++++++++
+
+Set to the GFX stepping generation number of the target being assembled for.
+For example, when assembling for a "GFX704" target this will be set to the
+integer value "4". The possible GFX stepping generation numbers are presented
+in :ref:`amdgpu-processors`.
 
 .amdgcn.next_free_vgpr
 ++++++++++++++++++++++

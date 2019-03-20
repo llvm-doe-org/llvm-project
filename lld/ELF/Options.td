@@ -30,7 +30,7 @@ def Bstatic: F<"Bstatic">, HelpText<"Do not link against shared libraries">;
 def build_id: F<"build-id">, HelpText<"Alias for --build-id=fast">;
 
 def build_id_eq: J<"build-id=">, HelpText<"Generate build ID note">,
-  MetaVarName<"[fast,md5,sha,uuid,0x<hexstring>]">;
+  MetaVarName<"[fast,md5,sha1,uuid,0x<hexstring>]">;
 
 defm check_sections: B<"check-sections",
     "Check section addresses for overlaps (default)",
@@ -62,6 +62,10 @@ defm Ttext: Eq<"Ttext", "Same as --section-start with .text as the sectionname">
 defm allow_multiple_definition: B<"allow-multiple-definition",
     "Allow multiple definitions",
     "Do not allow multiple definitions (default)">;
+
+defm allow_shlib_undefined: B<"allow-shlib-undefined",
+    "Allow unresolved references in shared libraries (default when linking a shared library)",
+    "Do not allow unresolved references in shared libraries (default when linking an executable)">;
 
 defm apply_dynamic_relocs: B<"apply-dynamic-relocs",
     "Apply link-time values for dynamic relocations",
@@ -440,12 +444,18 @@ def lto_O: J<"lto-O">, MetaVarName<"<opt-level>">,
   HelpText<"Optimization level for LTO">;
 def lto_partitions: J<"lto-partitions=">,
   HelpText<"Number of LTO codegen partitions">;
+def lto_cs_profile_generate: F<"lto-cs-profile-generate">,
+  HelpText<"Perform context senstive PGO instrumentation">;
+def lto_cs_profile_file: J<"lto-cs-profile-file=">,
+  HelpText<"Context sensitive profile file path">;
 def lto_sample_profile: J<"lto-sample-profile=">,
   HelpText<"Sample profile file path">;
 def disable_verify: F<"disable-verify">;
 defm mllvm: Eq<"mllvm", "Additional arguments to forward to LLVM's option processing">;
 def opt_remarks_filename: Separate<["--"], "opt-remarks-filename">,
   HelpText<"YAML output file for optimization remarks">;
+def opt_remarks_passes: Separate<["--"], "opt-remarks-passes">,
+  HelpText<"Regex for the passes that need to be serialized to the output file">;
 def opt_remarks_with_hotness: Flag<["--"], "opt-remarks-with-hotness">,
   HelpText<"Include hotness information in the optimization remarks file">;
 defm plugin_opt: Eq<"plugin-opt", "specifies LTO options for compatibility with GNU linkers">;
@@ -468,6 +478,10 @@ def plugin_opt_mcpu_eq: J<"plugin-opt=mcpu=">;
 def: F<"plugin-opt=new-pass-manager">,
   Alias<lto_new_pass_manager>, HelpText<"Alias for -lto-new-pass-manager">;
 def plugin_opt_obj_path_eq: J<"plugin-opt=obj-path=">;
+def: F<"plugin-opt=cs-profile-generate">,
+  Alias<lto_cs_profile_generate>, HelpText<"Alias for -lto-cs-profile-generate">;
+def: J<"plugin-opt=cs-profile-path=">,
+  Alias<lto_cs_profile_file>, HelpText<"Alias for -lto-cs-profile-file">;
 def: J<"plugin-opt=sample-profile=">,
   Alias<lto_sample_profile>, HelpText<"Alias for -lto-sample-profile">;
 def: F<"plugin-opt=save-temps">, Alias<save_temps>, HelpText<"Alias for -save-temps">;
@@ -492,17 +506,17 @@ def plugin_opt_thinlto: J<"plugin-opt=thinlto">;
 def plugin_opt_slash: J<"plugin-opt=/">;
 
 // Options listed below are silently ignored for now for compatibility.
-def: F<"allow-shlib-undefined">;
 def: F<"detect-odr-violations">;
 def: Flag<["-"], "g">;
 def: F<"long-plt">;
 def: F<"no-add-needed">;
-def: F<"no-allow-shlib-undefined">;
 def: F<"no-copy-dt-needed-entries">;
 def: F<"no-ctors-in-init-array">;
 def: F<"no-keep-memory">;
 def: F<"no-mmap-output-file">;
+def: F<"no-pipeline-knowledge">;
 def: F<"no-warn-mismatch">;
+def: Flag<["-"], "p">;
 def: Separate<["--", "-"], "rpath-link">;
 def: J<"rpath-link=">;
 def: F<"sort-common">;

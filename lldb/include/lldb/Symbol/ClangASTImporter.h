@@ -21,6 +21,7 @@
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/FileSystemOptions.h"
 
+#include "lldb/Host/FileSystem.h"
 #include "lldb/Symbol/CompilerDeclContext.h"
 #include "lldb/lldb-types.h"
 
@@ -93,7 +94,9 @@ public:
         vbase_offsets;
   };
 
-  ClangASTImporter() : m_file_manager(clang::FileSystemOptions()) {}
+  ClangASTImporter()
+      : m_file_manager(clang::FileSystemOptions(),
+                       FileSystem::Instance().GetVirtualFileSystem()) {}
 
   clang::QualType CopyType(clang::ASTContext *dst_ctx,
                            clang::ASTContext *src_ctx, clang::QualType type);
@@ -184,7 +187,7 @@ public:
     virtual ~MapCompleter();
 
     virtual void CompleteNamespaceMap(NamespaceMapSP &namespace_map,
-                                      const ConstString &name,
+                                      ConstString name,
                                       NamespaceMapSP &parent_map) const = 0;
   };
 

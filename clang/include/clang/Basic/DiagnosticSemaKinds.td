@@ -609,6 +609,8 @@ def warn_cstruct_memaccess : Warning<
   InGroup<NonTrivialMemaccess>;
 def note_nontrivial_field : Note<
   "field is non-trivial to %select{copy|default-initialize}0">;
+def err_nontrivial_primitive_type_in_union : Error<
+  "non-trivial C types are disallowed in union">;
 def warn_dyn_class_memaccess : Warning<
   "%select{destination for|source of|first operand of|second operand of}0 this "
   "%1 call is a pointer to %select{|class containing a }2dynamic class %3; "
@@ -670,10 +672,16 @@ def warn_assume_side_effects : Warning<
   "the argument to %0 has side effects that will be discarded">,
   InGroup<DiagGroup<"assume">>;
 
-def warn_memcpy_chk_overflow : Warning<
+def warn_builtin_chk_overflow : Warning<
   "'%0' will always overflow; destination buffer has size %1,"
   " but size argument is %2">,
   InGroup<DiagGroup<"builtin-memcpy-chk-size">>;
+
+def warn_fortify_source_overflow
+  : Warning<warn_builtin_chk_overflow.Text>, InGroup<FortifySource>;
+def warn_fortify_source_size_mismatch : Warning<
+  "'%0' size argument is too large; destination buffer has size %1,"
+  " but size argument is %2">, InGroup<FortifySource>;
 
 /// main()
 // static main() is not an error in C, just in C++.
@@ -916,6 +924,9 @@ def err_inconsistent_ivar_count : Error<
   "inconsistent number of instance variables specified">;
 def warn_undef_method_impl : Warning<"method definition for %0 not found">,
   InGroup<DiagGroup<"incomplete-implementation">>;
+def warn_objc_boxing_invalid_utf8_string : Warning<
+  "string is ill-formed as UTF-8 and will become a null %0 when boxed">,
+  InGroup<ObjCBoxing>;
 
 def warn_conflicting_overriding_ret_types : Warning<
   "conflicting return type in "
@@ -1828,8 +1839,9 @@ def err_reference_bind_drops_quals : Error<
   "'volatile'|'const' and 'volatile'|'restrict' and 'volatile'|"
   "'const', 'restrict', and 'volatile'}2 qualifier%plural{1:|2:|4:|:s}2">;
 def err_reference_bind_failed : Error<
-  "reference %diff{to type $ could not bind to an %select{rvalue|lvalue}1 of "
-  "type $|could not bind to %select{rvalue|lvalue}1 of incompatible type}0,2">;
+  "reference %diff{to %select{type|incomplete type}1 $ could not bind to an "
+  "%select{rvalue|lvalue}2 of type $|could not bind to %select{rvalue|lvalue}2 of "
+  "incompatible type}0,3">;
 def err_reference_bind_init_list : Error<
   "reference to type %0 cannot bind to an initializer list">;
 def err_init_list_bad_dest_type : Error<
@@ -2524,7 +2536,7 @@ def err_attribute_argument_n_type : Error<
 def err_attribute_argument_type : Error<
   "%0 attribute requires %select{int or bool|an integer "
   "constant|a string|an identifier}1">;
-def err_attribute_argument_outof_range : Error<
+def err_attribute_argument_out_of_range : Error<
   "%0 attribute requires integer constant between %1 and %2 inclusive">;
 def err_init_priority_object_attr : Error<
   "can only use 'init_priority' attribute on file-scope definitions "
@@ -3020,7 +3032,7 @@ def warn_thread_attribute_decl_not_lockable : Warning<
 def warn_thread_attribute_decl_not_pointer : Warning<
   "%0 only applies to pointer types; type here is %1">,
   InGroup<ThreadSafetyAttributes>, DefaultIgnore;
-def err_attribute_argument_out_of_range : Error<
+def err_attribute_argument_out_of_bounds_extra_info : Error<
   "%0 attribute parameter %1 is out of bounds: "
   "%plural{0:no parameters to index into|"
   "1:can only be 1, since there is one parameter|"
@@ -3478,6 +3490,9 @@ def warn_objc_secondary_init_missing_init_call : Warning<
 def warn_objc_implementation_missing_designated_init_override : Warning<
   "method override for the designated initializer of the superclass %objcinstance0 not found">,
   InGroup<ObjCDesignatedInit>;
+def err_designated_init_attr_non_init : Error<
+  "'objc_designated_initializer' attribute only applies to init methods "
+  "of interface or class extension declarations">;
 
 // objc_bridge attribute diagnostics.
 def err_objc_attr_not_id : Error<
@@ -4648,13 +4663,15 @@ def note_deleted_special_member_class_subobject : Note<
   "copy assignment operator of|move assignment operator of|destructor of|"
   "constructor inherited by}0 "
   "%1 is implicitly deleted because "
-  "%select{base class %3|%select{||||variant }4field %3}2 has "
+  "%select{base class %3|%select{||||variant }4field %3}2 "
+  "%select{has "
   "%select{no|a deleted|multiple|an inaccessible|a non-trivial}4 "
   "%select{%select{default constructor|copy constructor|move constructor|copy "
   "assignment operator|move assignment operator|destructor|"
   "%select{default|corresponding|default|default|default}4 constructor}0|"
   "destructor}5"
-  "%select{||s||}4">;
+  "%select{||s||}4"
+  "|is an ObjC pointer}6">;
 def note_deleted_default_ctor_uninit_field : Note<
   "%select{default constructor of|constructor inherited by}0 "
   "%1 is implicitly deleted because field %2 of "
@@ -6261,6 +6278,10 @@ def err_bad_cxx_cast_bitfield : Error<
 def err_bad_cxx_cast_qualifiers_away : Error<
   "%select{const_cast|static_cast|reinterpret_cast|dynamic_cast|C-style cast|"
   "functional-style cast}0 from %1 to %2 casts away qualifiers">;
+def err_bad_cxx_cast_addr_space_mismatch : Error<
+  "%select{const_cast|static_cast|reinterpret_cast|dynamic_cast|C-style cast|"
+  "functional-style cast}0 from %1 to %2 converts between mismatching address"
+  " spaces">;
 def ext_bad_cxx_cast_qualifiers_away_incoherent : ExtWarn<
   "ISO C++ does not allow "
   "%select{const_cast|static_cast|reinterpret_cast|dynamic_cast|C-style cast|"
@@ -7143,7 +7164,7 @@ def err_kern_type_not_void_return : Error<
 def err_kern_is_nonstatic_method : Error<
   "kernel function %0 must be a free function or static member function">;
 def err_config_scalar_return : Error<
-  "CUDA special function 'cudaConfigureCall' must have scalar return type">;
+  "CUDA special function '%0' must have scalar return type">;
 def err_kern_call_not_global_function : Error<
   "kernel call to non-global function %0">;
 def err_global_call_not_config : Error<
@@ -8696,6 +8717,11 @@ def err_opencl_builtin_expected_type : Error<
 def ext_opencl_ext_vector_type_rgba_selector: ExtWarn<
   "vector component name '%0' is an OpenCL version 2.2 feature">,
   InGroup<OpenCLUnsupportedRGBA>;
+
+// MIG routine annotations.
+def warn_mig_server_routine_does_not_return_kern_return_t : Warning<
+  "'mig_server_routine' attribute only applies to routines that return a kern_return_t">,
+  InGroup<IgnoredAttributes>;
 } // end of sema category
 
 let CategoryName = "OpenMP Issue" in {
@@ -8977,6 +9003,14 @@ def err_omp_parent_cancel_region_ordered : Error<
 def err_omp_reduction_wrong_type : Error<"reduction type cannot be %select{qualified with 'const', 'volatile' or 'restrict'|a function|a reference|an array}0 type">;
 def err_omp_wrong_var_in_declare_reduction : Error<"only %select{'omp_priv' or 'omp_orig'|'omp_in' or 'omp_out'}0 variables are allowed in %select{initializer|combiner}0 expression">;
 def err_omp_declare_reduction_redefinition : Error<"redefinition of user-defined reduction for type %0">;
+def err_omp_mapper_wrong_type : Error<
+  "mapper type must be of struct, union or class type">;
+def err_omp_declare_mapper_wrong_var : Error<
+  "only variable %0 is allowed in map clauses of this 'omp declare mapper' directive">;
+def err_omp_declare_mapper_redefinition : Error<
+  "redefinition of user-defined mapper for type %0 with name %1">;
+def err_omp_invalid_mapper: Error<
+  "cannot find a valid user-defined mapper for type %0 with name %1">;
 def err_omp_array_section_use : Error<"OpenMP array section is not allowed here">;
 def err_omp_typecheck_section_value : Error<
   "subscripted value is not an array or pointer">;
@@ -9105,6 +9139,13 @@ def note_omp_invalid_subscript_on_this_ptr_map : Note <
   "expected 'this' subscript expression on map clause to be 'this[0]'">;
 def err_omp_invalid_map_this_expr : Error <
   "invalid 'this' expression on 'map' clause">;
+def err_implied_omp_allocator_handle_t_not_found : Error<
+  "omp_allocator_handle_t type not found; include <omp.h>">;
+def err_omp_expected_predefined_allocator : Error<
+  "expected one of the predefined allocators for the variables with the static "
+  "storage: 'omp_default_mem_alloc', 'omp_large_cap_mem_alloc', "
+  "'omp_const_mem_alloc', 'omp_high_bw_mem_alloc', 'omp_low_lat_mem_alloc', "
+  "'omp_cgroup_mem_alloc', 'omp_pteam_mem_alloc' or 'omp_thread_mem_alloc'">;
 } // end of OpenMP category
 
 let CategoryName = "OpenACC Issue" in {
@@ -9278,6 +9319,8 @@ def err_coroutine_objc_method : Error<
   "Objective-C methods as coroutines are not yet supported">;
 def err_coroutine_unevaluated_context : Error<
   "'%0' cannot be used in an unevaluated context">;
+def err_coroutine_within_handler : Error<
+  "'%0' cannot be used in the handler of a try block">;
 def err_coroutine_outside_function : Error<
   "'%0' cannot be used outside a function">;
 def err_coroutine_invalid_func_context : Error<

@@ -190,7 +190,9 @@ OPTIONS
 
 .. option:: -mode=[latency|uops|inverse_throughput|analysis]
 
- Specify the run mode.
+ Specify the run mode. Note that if you pick `analysis` mode, you also need
+ to specify at least one of the `-analysis-clusters-output-file=` and
+ `-analysis-inconsistencies-output-file=`.
 
 .. option:: -num-repetitions=<Number of repetition>
 
@@ -205,22 +207,34 @@ OPTIONS
 .. option:: -analysis-clusters-output-file=</path/to/file>
 
  If provided, write the analysis clusters as CSV to this file. "-" prints to
- stdout.
+ stdout. By default, this analysis is not run.
 
 .. option:: -analysis-inconsistencies-output-file=</path/to/file>
 
  If non-empty, write inconsistencies found during analysis to this file. `-`
- prints to stdout.
+ prints to stdout. By default, this analysis is not run.
 
 .. option:: -analysis-numpoints=<dbscan numPoints parameter>
 
  Specify the numPoints parameters to be used for DBSCAN clustering
  (`analysis` mode).
 
-.. option:: -analysis-espilon=<dbscan epsilon parameter>
+.. option:: -analysis-clustering-epsilon=<dbscan epsilon parameter>
 
- Specify the numPoints parameters to be used for DBSCAN clustering
+ Specify the epsilon parameter used for clustering of benchmark points
  (`analysis` mode).
+
+.. option:: -analysis-inconsistency-epsilon=<epsilon>
+
+ Specify the epsilon parameter used for detection of when the cluster
+ is different from the LLVM schedule profile values (`analysis` mode).
+
+.. option:: -analysis-display-unstable-clusters
+
+ If there is more than one benchmark for an opcode, said benchmarks may end up
+ not being clustered into the same cluster if the measured performance
+ characteristics are different. by default all such opcodes are filtered out.
+ This flag will instead show only such unstable opcodes.
 
 .. option:: -ignore-invalid-sched-class=false
 
