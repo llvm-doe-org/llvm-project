@@ -498,12 +498,12 @@ class ACCNumWorkersClause : public ACCClause {
   /// Location of '('.
   SourceLocation LParenLoc;
 
-  /// Original NumWorkers expression.
+  /// Original num_workers expression.
   Stmt *NumWorkers = nullptr;
 
-  /// Set the original NumWorkers expression.
+  /// Set the original num_workers expression.
   ///
-  /// \param E NumWorkers expression.
+  /// \param E num_workers expression.
   void setNumWorkers(Expr *E) { NumWorkers = E; }
 
 public:
@@ -529,10 +529,10 @@ public:
   /// Returns the location of '('.
   SourceLocation getLParenLoc() const { return LParenLoc; }
 
-  /// Return the original NumWorkers expression.
+  /// Return the original num_workers expression.
   Expr *getNumWorkers() { return cast<Expr>(NumWorkers); }
 
-  /// Return the original NumWorkers expression.
+  /// Return the original num_workers expression.
   Expr *getNumWorkers() const { return cast<Expr>(NumWorkers); }
 
   child_range children() { return child_range(&NumWorkers, &NumWorkers + 1); }
@@ -556,12 +556,12 @@ class ACCVectorLengthClause : public ACCClause {
   /// Location of '('.
   SourceLocation LParenLoc;
 
-  /// Original VectorLength expression.
+  /// Original vector_length expression.
   Stmt *VectorLength = nullptr;
 
-  /// Set the original VectorLength expression.
+  /// Set the original vector_length expression.
   ///
-  /// \param E VectorLength expression.
+  /// \param E vector_length expression.
   void setVectorLength(Expr *E) { VectorLength = E; }
 
 public:
@@ -587,10 +587,10 @@ public:
   /// Returns the location of '('.
   SourceLocation getLParenLoc() const { return LParenLoc; }
 
-  /// Return the original VectorLength expression.
+  /// Return the original vector_length expression.
   Expr *getVectorLength() { return cast<Expr>(VectorLength); }
 
-  /// Return the original VectorLength expression.
+  /// Return the original vector_length expression.
   Expr *getVectorLength() const { return cast<Expr>(VectorLength); }
 
   child_range children() {
