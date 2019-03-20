@@ -12560,3 +12560,125 @@ void OMPClauseReader::VisitOMPIsDevicePtrClause(OMPIsDevicePtrClause *C) {
   }
   C->setComponents(Components, ListSizes);
 }
+
+//===----------------------------------------------------------------------===//
+// OpenACCClauseReader implementation
+//===----------------------------------------------------------------------===//
+
+ACCClause *ACCClauseReader::readClause() {
+  ACCClause *C;
+  switch ((OpenACCClauseKind)Record.readInt()) {
+  case ACCC_shared:
+    C = ACCSharedClause::CreateEmpty(Context, Record.readInt());
+    break;
+  case ACCC_private:
+    C = ACCPrivateClause::CreateEmpty(Context, Record.readInt());
+    break;
+  case ACCC_firstprivate:
+    C = ACCFirstprivateClause::CreateEmpty(Context, Record.readInt());
+    break;
+  case ACCC_reduction:
+    C = ACCReductionClause::CreateEmpty(Context, Record.readInt());
+    break;
+  case ACCC_num_gangs:
+    C = new (Context) ACCNumGangsClause();
+    break;
+  case ACCC_num_workers:
+    C = new (Context) ACCNumWorkersClause();
+    break;
+  case ACCC_vector_length:
+    C = new (Context) ACCVectorLengthClause();
+    break;
+  case ACCC_seq:
+    C = new (Context) ACCSeqClause();
+    break;
+  case ACCC_independent:
+    C = new (Context) ACCIndependentClause();
+    break;
+  case ACCC_auto:
+    C = new (Context) ACCAutoClause();
+    break;
+  case ACCC_gang:
+    C = new (Context) ACCGangClause();
+    break;
+  case ACCC_worker:
+    C = new (Context) ACCWorkerClause();
+    break;
+  case ACCC_vector:
+    C = new (Context) ACCVectorClause();
+    break;
+  case ACCC_unknown:
+    llvm_unreachable("Clause is not known");
+  }
+  Visit(C);
+  C->setLocStart(Record.readSourceLocation());
+  C->setLocEnd(Record.readSourceLocation());
+
+  return C;
+}
+
+void ACCClauseReader::VisitACCSharedClause(ACCSharedClause *C) {
+  C->setLParenLoc(Record.readSourceLocation());
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Record.readSubExpr());
+  C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCPrivateClause(ACCPrivateClause *C) {
+  C->setLParenLoc(Record.readSourceLocation());
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Record.readSubExpr());
+  C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCFirstprivateClause(ACCFirstprivateClause *C) {
+  C->setLParenLoc(Record.readSourceLocation());
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Record.readSubExpr());
+  C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCReductionClause(ACCReductionClause *C) {
+  C->setLParenLoc(Record.readSourceLocation());
+  C->setColonLoc(Record.readSourceLocation());
+  DeclarationNameInfo DNI;
+  Record.readDeclarationNameInfo(DNI);
+  C->setNameInfo(DNI);
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Record.readSubExpr());
+  C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCNumGangsClause(ACCNumGangsClause *C) {
+  C->setNumGangs(Record.readSubExpr());
+  C->setLParenLoc(Record.readSourceLocation());
+}
+
+void ACCClauseReader::VisitACCNumWorkersClause(ACCNumWorkersClause *C) {
+  C->setNumWorkers(Record.readSubExpr());
+  C->setLParenLoc(Record.readSourceLocation());
+}
+
+void ACCClauseReader::VisitACCVectorLengthClause(ACCVectorLengthClause *C) {
+  C->setVectorLength(Record.readSubExpr());
+  C->setLParenLoc(Record.readSourceLocation());
+}
+
+void ACCClauseReader::VisitACCSeqClause(ACCSeqClause *) {}
+void ACCClauseReader::VisitACCIndependentClause(ACCIndependentClause *) {}
+void ACCClauseReader::VisitACCAutoClause(ACCAutoClause *) {}
+void ACCClauseReader::VisitACCGangClause(ACCGangClause *) {}
+void ACCClauseReader::VisitACCWorkerClause(ACCWorkerClause *) {}
+void ACCClauseReader::VisitACCVectorClause(ACCVectorClause *) {}

@@ -17,6 +17,7 @@
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclarationName.h"
 #include "clang/AST/NestedNameSpecifier.h"
+#include "clang/AST/OpenACCClause.h"
 #include "clang/AST/OpenMPClause.h"
 #include "clang/AST/TemplateBase.h"
 #include "clang/AST/TemplateName.h"
@@ -2691,6 +2692,19 @@ public:
   OMPClause *readClause();
   void VisitOMPClauseWithPreInit(OMPClauseWithPreInit *C);
   void VisitOMPClauseWithPostUpdate(OMPClauseWithPostUpdate *C);
+};
+
+class ACCClauseReader : public ACCClauseVisitor<ACCClauseReader> {
+  ASTRecordReader &Record;
+  ASTContext &Context;
+
+public:
+  ACCClauseReader(ASTRecordReader &Record)
+      : Record(Record), Context(Record.getContext()) {}
+
+#define OPENACC_CLAUSE(Name, Class) void Visit##Class(Class *C);
+#include "clang/Basic/OpenACCKinds.def"
+  ACCClause *readClause();
 };
 
 } // namespace clang

@@ -771,6 +771,44 @@ public:
     return T->getClauseKind() == ACCC_vector;
   }
 };
+
+/// This class implements a simple visitor for ACCClause
+/// subclasses.
+template<class ImplClass, template <typename> class Ptr, typename RetTy>
+class ACCClauseVisitorBase {
+public:
+#define PTR(CLASS) typename Ptr<CLASS>::type
+#define DISPATCH(CLASS) \
+  return static_cast<ImplClass*>(this)->Visit##CLASS(static_cast<PTR(CLASS)>(S))
+
+#define OPENACC_CLAUSE(Name, Class)                              \
+  RetTy Visit ## Class (PTR(Class) S) { DISPATCH(Class); }
+#include "clang/Basic/OpenACCKinds.def"
+
+  RetTy Visit(PTR(ACCClause) S) {
+    // Top switch clause: visit each ACCClause.
+    switch (S->getClauseKind()) {
+    default: llvm_unreachable("Unknown clause kind!");
+#define OPENACC_CLAUSE(Name, Class)                              \
+    case ACCC_ ## Name : return Visit ## Class(static_cast<PTR(Class)>(S));
+#include "clang/Basic/OpenACCKinds.def"
+    }
+  }
+  // Base case, ignore it. :)
+  RetTy VisitACCClause(PTR(ACCClause) Node) { return RetTy(); }
+#undef PTR
+#undef DISPATCH
+};
+
+template <typename T>
+using const_ptr = typename std::add_pointer<typename std::add_const<T>::type>;
+
+template<class ImplClass, typename RetTy = void>
+class ACCClauseVisitor :
+      public ACCClauseVisitorBase <ImplClass, std::add_pointer, RetTy> {};
+template<class ImplClass, typename RetTy = void>
+class ConstACCClauseVisitor :
+      public ACCClauseVisitorBase <ImplClass, const_ptr, RetTy> {};
 } // end namespace clang
 
 #endif // LLVM_CLANG_AST_OPENACCCLAUSE_H

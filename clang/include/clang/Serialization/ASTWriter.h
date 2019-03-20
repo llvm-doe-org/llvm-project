@@ -18,6 +18,7 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclarationName.h"
 #include "clang/AST/NestedNameSpecifier.h"
+#include "clang/AST/OpenACCClause.h"
 #include "clang/AST/OpenMPClause.h"
 #include "clang/AST/TemplateBase.h"
 #include "clang/AST/TemplateName.h"
@@ -1004,6 +1005,16 @@ public:
   void writeClause(OMPClause *C);
   void VisitOMPClauseWithPreInit(OMPClauseWithPreInit *C);
   void VisitOMPClauseWithPostUpdate(OMPClauseWithPostUpdate *C);
+};
+
+class ACCClauseWriter : public ACCClauseVisitor<ACCClauseWriter> {
+  ASTRecordWriter &Record;
+
+public:
+  ACCClauseWriter(ASTRecordWriter &Record) : Record(Record) {}
+#define OPENACC_CLAUSE(Name, Class) void Visit##Class(Class *S);
+#include "clang/Basic/OpenACCKinds.def"
+  void writeClause(ACCClause *C);
 };
 
 } // namespace clang

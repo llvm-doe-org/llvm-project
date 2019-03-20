@@ -6952,3 +6952,68 @@ void OMPClauseWriter::VisitOMPAtomicDefaultMemOrderClause(
   Record.AddSourceLocation(C->getLParenLoc());
   Record.AddSourceLocation(C->getAtomicDefaultMemOrderKindKwLoc());
 }
+
+//===----------------------------------------------------------------------===//
+// ACCClause Serialization
+//===----------------------------------------------------------------------===//
+
+void ACCClauseWriter::writeClause(ACCClause *C) {
+  Record.push_back(C->getClauseKind());
+  Visit(C);
+  Record.AddSourceLocation(C->getBeginLoc());
+  Record.AddSourceLocation(C->getEndLoc());
+}
+
+void ACCClauseWriter::VisitACCSharedClause(ACCSharedClause *C) {
+  Record.push_back(C->varlist_size());
+  Record.AddSourceLocation(C->getLParenLoc());
+  for (auto *VE : C->varlists())
+    Record.AddStmt(VE);
+}
+
+void ACCClauseWriter::VisitACCPrivateClause(ACCPrivateClause *C) {
+  Record.push_back(C->varlist_size());
+  Record.AddSourceLocation(C->getLParenLoc());
+  for (auto *VE : C->varlists()) {
+    Record.AddStmt(VE);
+  }
+}
+
+void ACCClauseWriter::VisitACCFirstprivateClause(ACCFirstprivateClause *C) {
+  Record.push_back(C->varlist_size());
+  Record.AddSourceLocation(C->getLParenLoc());
+  for (auto *VE : C->varlists()) {
+    Record.AddStmt(VE);
+  }
+}
+
+void ACCClauseWriter::VisitACCReductionClause(ACCReductionClause *C) {
+  Record.push_back(C->varlist_size());
+  Record.AddSourceLocation(C->getLParenLoc());
+  Record.AddSourceLocation(C->getColonLoc());
+  Record.AddDeclarationNameInfo(C->getNameInfo());
+  for (auto *VE : C->varlists())
+    Record.AddStmt(VE);
+}
+
+void ACCClauseWriter::VisitACCNumGangsClause(ACCNumGangsClause *C) {
+  Record.AddStmt(C->getNumGangs());
+  Record.AddSourceLocation(C->getLParenLoc());
+}
+
+void ACCClauseWriter::VisitACCNumWorkersClause(ACCNumWorkersClause *C) {
+  Record.AddStmt(C->getNumWorkers());
+  Record.AddSourceLocation(C->getLParenLoc());
+}
+
+void ACCClauseWriter::VisitACCVectorLengthClause(ACCVectorLengthClause *C) {
+  Record.AddStmt(C->getVectorLength());
+  Record.AddSourceLocation(C->getLParenLoc());
+}
+
+void ACCClauseWriter::VisitACCSeqClause(ACCSeqClause *) {}
+void ACCClauseWriter::VisitACCIndependentClause(ACCIndependentClause *) {}
+void ACCClauseWriter::VisitACCAutoClause(ACCAutoClause *) {}
+void ACCClauseWriter::VisitACCGangClause(ACCGangClause *) {}
+void ACCClauseWriter::VisitACCWorkerClause(ACCWorkerClause *) {}
+void ACCClauseWriter::VisitACCVectorClause(ACCVectorClause *) {}
