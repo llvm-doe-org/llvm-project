@@ -93,6 +93,9 @@ int main() {
   // parloop-error@+1 {{unexpected OpenACC clause 'shared' in directive '#pragma acc parallel loop'}}
   #pragma acc parallel LOOP shared(i, jk)
     FORLOOP
+  // par-error@+1 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc parallel'}}
+  #pragma acc parallel LOOP collapse(1)
+    FORLOOP
 
   //--------------------------------------------------
   // Data sharing attribute clauses: syntax

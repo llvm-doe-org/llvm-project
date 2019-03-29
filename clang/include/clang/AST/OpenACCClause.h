@@ -772,6 +772,66 @@ public:
   }
 };
 
+/// This represents 'collapse' clause in the '#pragma acc ...'
+/// directive.
+///
+/// \code
+/// #pragma acc loop collapse(n)
+/// \endcode
+/// In this example directive '#pragma acc loop' has clause 'collapse'
+/// with single expression 'n'.
+class ACCCollapseClause : public ACCClause {
+  friend class ACCClauseReader;
+
+  /// Location of '('.
+  SourceLocation LParenLoc;
+
+  /// Original collapse expression.
+  Stmt *Collapse = nullptr;
+
+  /// Set the original collapse expression.
+  ///
+  /// \param E collapse expression.
+  void setCollapse(Expr *E) { Collapse = E; }
+
+public:
+  /// Build 'collapse' clause.
+  ///
+  /// \param E Original expression associated with this clause.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  ACCCollapseClause(Expr *E, SourceLocation StartLoc, SourceLocation LParenLoc,
+                    SourceLocation EndLoc)
+      : ACCClause(ACCC_collapse, StartLoc, EndLoc), LParenLoc(LParenLoc),
+        Collapse(E) {
+  }
+
+  /// Build an empty clause.
+  ACCCollapseClause()
+      : ACCClause(ACCC_collapse, SourceLocation(), SourceLocation()) {}
+
+  /// Sets the location of '('.
+  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
+
+  /// Returns the location of '('.
+  SourceLocation getLParenLoc() const { return LParenLoc; }
+
+  /// Return the original collapse expression.
+  Expr *getCollapse() { return cast<Expr>(Collapse); }
+
+  /// Return the original collapse expression.
+  Expr *getCollapse() const { return cast<Expr>(Collapse); }
+
+  child_range children() {
+    return child_range(&Collapse, &Collapse + 1);
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_collapse;
+  }
+};
+
 /// This class implements a simple visitor for ACCClause
 /// subclasses.
 template<class ImplClass, template <typename> class Ptr, typename RetTy>

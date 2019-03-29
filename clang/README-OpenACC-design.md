@@ -458,7 +458,11 @@ loop analysis and thus with only a safe mapping to OpenMP.
               nested vector-partitioned `acc loop`.
 * `acc loop` within `acc parallel`:
     * if exp `seq`, then:
-        * Discard the directive.
+        * The directive and the following clauses are discarded during
+          translation:
+            * `seq`, `independent`, `auto`
+            * `gang`, `worker`, `vector`
+            * `collapse`
         * Data sharing semantics:
             * If the loop control variable is declared in the init of
               the attached `for` loop, the loop control variable is
@@ -623,6 +627,7 @@ loop analysis and thus with only a safe mapping to OpenMP.
             * if exp `vector`, then exp `vector_length` from ancestor
               `acc parallel` -> exp `simdlen` (with the exp
               `vector_length` constant-expression argument)
+            * `collapse` -> `collapse`
             * Data sharing semantics:
                 * Whether just assigned or declared in the init of the
                   attached `for` loop, the loop control variable is:

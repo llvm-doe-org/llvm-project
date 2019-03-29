@@ -2306,7 +2306,11 @@ void ASTStmtReader::VisitACCLoopDirective(ACCLoopDirective *D) {
   // The NumClauses field was read in ReadStmtFromStream.
   Record.skipInts(1);
   VisitACCExecutableDirective(D);
-  D->setLoopControlVariable(Record.readDeclAs<VarDecl>());
+  uint64_t LCVCount  = Record.readInt();
+  llvm::DenseSet<VarDecl *> LCVs(LCVCount);
+  for (uint64_t I = 0; I < LCVCount; ++I)
+    LCVs.insert(Record.readDeclAs<VarDecl>());
+  D->setLoopControlVariables(LCVs);
   D->setParentLoopPartitioning(
       static_cast<OpenACCClauseKind>(Record.readInt()));
 }

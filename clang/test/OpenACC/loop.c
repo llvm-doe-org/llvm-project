@@ -730,6 +730,8 @@ int main() {
   // Despite being a control variable on an inner loop, k shouldn't be
   // handled as the control variable for the enclosing acc loop and so
   // shouldn't be predetermined private.
+  //
+  // For collapse value greater than 1, this is checked in loop-collapse.c.
   //--------------------------------------------------
 
   // PRT: {

@@ -145,8 +145,8 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
 ///    clause:
 ///       private-clause | firstprivate-clause | reduction-clause
 ///       | num_gangs-clause | num_workers-clause | vector_length-clause
-///       | seq | independent | auto
-///       | gang | worker | vector
+///       | seq-clause | independent-clause | auto-clause
+///       | gang-clause | worker-clause | vector-clause | collapse-clause
 ///
 ACCClause *Parser::ParseOpenACCClause(
     OpenACCDirectiveKind DKind, OpenACCClauseKind CKind,
@@ -166,6 +166,7 @@ ACCClause *Parser::ParseOpenACCClause(
   case ACCC_num_gangs:
   case ACCC_num_workers:
   case ACCC_vector_length:
+  case ACCC_collapse:
     if (FirstClauses[CKind]) {
       Diag(Tok, diag::err_acc_more_one_clause)
           << getOpenACCDirectiveName(DKind) << getOpenACCClauseName(CKind);

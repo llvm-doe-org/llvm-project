@@ -2309,7 +2309,10 @@ void ASTStmtWriter::VisitACCLoopDirective(ACCLoopDirective *D) {
   VisitStmt(D);
   Record.push_back(D->getNumClauses());
   VisitACCExecutableDirective(D);
-  Record.AddDeclRef(D->getLoopControlVariable());
+  const llvm::DenseSet<VarDecl *> &LCVs = D->getLoopControlVariables();
+  Record.push_back(LCVs.size());
+  for (VarDecl *LCV : LCVs)
+    Record.AddDeclRef(LCV);
   Record.push_back(D->getParentLoopPartitioning());
   Code = serialization::STMT_ACC_LOOP_DIRECTIVE;
 }

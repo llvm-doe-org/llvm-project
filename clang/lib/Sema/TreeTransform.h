@@ -2060,6 +2060,18 @@ public:
                                                  ReductionId);
   }
 
+  /// Build a new OpenACC 'collapse' clause.
+  ///
+  /// By default, performs semantic analysis to build the new statement.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCCollapseClause(Expr *Collapse,
+                                      SourceLocation StartLoc,
+                                      SourceLocation LParenLoc,
+                                      SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCCollapseClause(Collapse, StartLoc, LParenLoc,
+                                                EndLoc);
+  }
+
   /// Rebuild the operand to an Objective-C \@synchronized statement.
   ///
   /// By default, performs semantic analysis to build the new statement.
@@ -9382,6 +9394,16 @@ ACCClause *
 TreeTransform<Derived>::TransformACCVectorClause(ACCVectorClause *C) {
   // No need to rebuild this clause, no parameters.
   return C;
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCCollapseClause(ACCCollapseClause *C) {
+  ExprResult E = getDerived().TransformExpr(C->getCollapse());
+  if (E.isInvalid())
+    return nullptr;
+  return getDerived().RebuildACCCollapseClause(
+      E.get(), C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
 }
 
 //===----------------------------------------------------------------------===//

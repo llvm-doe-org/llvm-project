@@ -7051,3 +7051,8 @@ void ACCClauseWriter::VisitACCAutoClause(ACCAutoClause *) {}
 void ACCClauseWriter::VisitACCGangClause(ACCGangClause *) {}
 void ACCClauseWriter::VisitACCWorkerClause(ACCWorkerClause *) {}
 void ACCClauseWriter::VisitACCVectorClause(ACCVectorClause *) {}
+
+void ACCClauseWriter::VisitACCCollapseClause(ACCCollapseClause *C) {
+  Record.AddStmt(C->getCollapse());
+  Record.AddSourceLocation(C->getLParenLoc());
+}

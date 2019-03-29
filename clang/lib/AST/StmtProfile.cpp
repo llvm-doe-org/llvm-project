@@ -1056,6 +1056,10 @@ void ACCClauseProfiler::VisitACCAutoClause(const ACCAutoClause *) {}
 void ACCClauseProfiler::VisitACCGangClause(const ACCGangClause *) {}
 void ACCClauseProfiler::VisitACCWorkerClause(const ACCWorkerClause *) {}
 void ACCClauseProfiler::VisitACCVectorClause(const ACCVectorClause *) {}
+void ACCClauseProfiler::VisitACCCollapseClause(const ACCCollapseClause *C) {
+  if (C->getCollapse())
+    Profiler->VisitStmt(C->getCollapse());
+}
 
 void
 StmtProfiler::VisitACCExecutableDirective(const ACCExecutableDirective *S) {

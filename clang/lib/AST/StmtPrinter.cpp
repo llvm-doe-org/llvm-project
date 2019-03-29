@@ -1017,6 +1017,12 @@ void ACCClausePrinter::VisitACCWorkerClause(ACCWorkerClause *Node) {
 void ACCClausePrinter::VisitACCVectorClause(ACCVectorClause *Node) {
   OS << "vector";
 }
+
+void ACCClausePrinter::VisitACCCollapseClause(ACCCollapseClause *Node) {
+  OS << "collapse(";
+  Node->getCollapse()->printPretty(OS, nullptr, Policy, 0);
+  OS << ")";
+}
 }
 
 //===----------------------------------------------------------------------===//

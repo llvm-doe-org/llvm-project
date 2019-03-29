@@ -332,7 +332,7 @@ public:
 ///
 class ACCLoopDirective : public ACCExecutableDirective {
   friend class ASTStmtReader;
-  VarDecl *LCVar = nullptr;
+  llvm::DenseSet<VarDecl *> LCVars;
   OpenACCClauseKind ParentLoopPartitioning = ACCC_unknown;
 
   /// Build directive with the given start and end location.
@@ -359,13 +359,14 @@ public:
   /// \param EndLoc Ending Location of the directive.
   /// \param Clauses List of clauses.
   /// \param AssociatedStmt Statement associated with the directive.
-  /// \param LCVar Loop control variable that is assigned but not declared in
-  ///        the init of the for loop associated with the directive.
+  /// \param LCVars Loop control variables that are assigned but not declared
+  ///        in the inits of the for loops associated with the directive.
   /// \param ParentLoopPartitioning The loop partitioning that immediately
   ///        parents this directive.
   static ACCLoopDirective *Create(
       const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
-      ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt, VarDecl *LCVar,
+      ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
+      const llvm::DenseSet<VarDecl *> &LCVars,
       OpenACCClauseKind ParentLoopPartitioning);
 
   /// Creates an empty directive.
@@ -380,13 +381,17 @@ public:
     return T->getStmtClass() == ACCLoopDirectiveClass;
   }
 
-  /// Set the loop control variable that is assigned but not declared in the
-  /// init of the for loop associated with the directive.
-  void setLoopControlVariable(VarDecl *LCVar) { this->LCVar = LCVar; }
-  /// Get the loop control variable that is assigned but not declared in the
-  /// init of the for loop associated with the directive, or return nullptr if
-  /// none.
-  VarDecl *getLoopControlVariable() const { return LCVar; }
+  /// Set the loop control variables that are assigned but not declared in the
+  /// inits of the for loops associated with the directive.
+  void setLoopControlVariables(const llvm::DenseSet<VarDecl *> &LCVars) {
+    this->LCVars = LCVars;
+  }
+  /// Get the loop control variables that are assigned but not declared in the
+  /// init of the for loop associated with the directive, or return an empty
+  /// set if none.
+  const llvm::DenseSet<VarDecl *> &getLoopControlVariables() const {
+    return LCVars;
+  }
 
   /// Set the loop partitioning that immediately parents this directive.
   void setParentLoopPartitioning(OpenACCClauseKind V) {

@@ -105,6 +105,7 @@ We have implemented the following features:
           clause because, for now, `auto` produces a sequential loop.
         * For now, if none of these three is specified, then a
           sequential loop is produced.
+    * `collapse` clause
     * data sharing:
         * for loop control variable:
             * implicit `shared` if sequential loop and loop control
@@ -128,6 +129,9 @@ We have implemented the following features:
         * In the future when `auto` doesn't always produce a
           sequential loop, a `break` statement will force it to be
           sequential, probably with a warning.
+        * Both the OpenACC and OpenMP implementations currently permit
+          `break` statements for nested loops that are associated via
+          a `collapse` clause, but that's probably a bug.
     * any number of levels of nesting within other `loop` directives
 * `acc parallel loop`:
     * All features currently supported by `acc parallel` and `acc

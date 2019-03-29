@@ -60,6 +60,7 @@ OPENACC_CLAUSE(auto, ACCAutoClause)
 OPENACC_CLAUSE(gang, ACCGangClause)
 OPENACC_CLAUSE(worker, ACCWorkerClause)
 OPENACC_CLAUSE(vector, ACCVectorClause)
+OPENACC_CLAUSE(collapse, ACCCollapseClause)
 
 // Clauses allowed for OpenACC directive 'parallel'.
 // OpenACC does not define an explicit shared clause, so it's not listed here
@@ -80,6 +81,7 @@ OPENACC_LOOP_CLAUSE(worker)
 OPENACC_LOOP_CLAUSE(vector)
 OPENACC_LOOP_CLAUSE(private)
 OPENACC_LOOP_CLAUSE(reduction)
+OPENACC_LOOP_CLAUSE(collapse)
 
 // Clauses allowed for OpenACC directive 'parallel loop'.
 OPENACC_PARALLEL_LOOP_CLAUSE(private)
@@ -94,6 +96,7 @@ OPENACC_PARALLEL_LOOP_CLAUSE(auto)
 OPENACC_PARALLEL_LOOP_CLAUSE(gang)
 OPENACC_PARALLEL_LOOP_CLAUSE(worker)
 OPENACC_PARALLEL_LOOP_CLAUSE(vector)
+OPENACC_PARALLEL_LOOP_CLAUSE(collapse)
 
 // Parent directives allowed for 'parallel'.
 OPENACC_PARALLEL_PARENT(unknown)

@@ -131,7 +131,7 @@ private:
   typedef llvm::DenseMap<VarDecl *, DSAVarData> DeclSAMapTy;
   struct SharingMapTy final {
     DeclSAMapTy SharingMap;
-    VarDecl *LCV = nullptr;
+    llvm::DenseSet<VarDecl *> LCVs;
     /// The real directive kind.  In the case of a combined directive, there
     /// are two consecutive entries: the outer has RealDKind as the combined
     /// directive kind, the inner has RealDKind has ACCD_unknown, and both
@@ -151,7 +151,8 @@ private:
     // loop control variable, but that seems like a weak justification for
     // putting it here.
     SourceLocation LoopBreakLoc; // invalid if no break statement or not loop
-    unsigned AssociatedLoops = 1;
+    unsigned AssociatedLoops = 1; // from collapse clause
+    unsigned AssociatedLoopsParsed = 0; // how many have been parsed so far
     // True if this directive has a (separate or combined with this directive)
     // nested acc loop directive with worker partitioning.
     bool NestedWorkerPartitioning = false;
@@ -205,14 +206,14 @@ public:
     assert(!isStackEmpty() && "Data-sharing attributes stack is empty");
     assert(isOpenACCLoopDirective(getEffectiveDirective())
            && "Loop control variable must be added only to loop directive");
-    Stack.back().LCV = VD->getCanonicalDecl();
+    Stack.back().LCVs.insert(VD->getCanonicalDecl());
   }
-  /// Get the canonical declaration for the loop control variable that is
-  /// assigned but not declared in the init of the for loop associated with the
-  /// current directive, or return nullptr if none.
-  VarDecl *getLoopControlVariable() const {
+  /// Get the canonical declarations for the loop control variables that are
+  /// assigned but not declared in the inits of the for loops associated with
+  /// the current directive, or return an empty set if none.
+  const llvm::DenseSet<VarDecl *> &getLoopControlVariables() const {
     assert(!isStackEmpty() && "Data-sharing attributes stack is empty");
-    return Stack.back().LCV;
+    return Stack.back().LCVs;
   }
   /// Register the current directive's loop partitioning kind.
   void setLoopPartitioning(PartitioningKind Kind) {
@@ -316,14 +317,25 @@ public:
     return I->EffectiveDKind;
   }
 
-  /// Set collapse value for the region.
+  /// Set associated loop count (collapse value) for the region.
   void setAssociatedLoops(unsigned Val) {
     assert(!isStackEmpty());
+    assert(Stack.back().AssociatedLoops == 1);
+    assert(Stack.back().AssociatedLoopsParsed == 0);
     Stack.back().AssociatedLoops = Val;
   }
-  /// Return collapse value for region.
+  /// Return associated loop count (collapse value) for the region.
   unsigned getAssociatedLoops() const {
     return isStackEmpty() ? 0 : Stack.back().AssociatedLoops;
+  }
+  /// Increment associated loops parsed in region so far.
+  void incAssociatedLoopsParsed() {
+    assert(!isStackEmpty());
+    ++Stack.back().AssociatedLoopsParsed;
+  }
+  /// Get associated loops parsed in region so far.
+  unsigned getAssociatedLoopsParsed() {
+    return isStackEmpty() ? 0 : Stack.back().AssociatedLoopsParsed;
   }
 
   SourceLocation getConstructLoc() { return Stack.back().ConstructLoc; }
@@ -466,7 +478,7 @@ DSAStackTy::DSAVarData DSAStackTy::getImplicitDSA(VarDecl *VD) {
   VD = VD->getCanonicalDecl();
   DSAVarData DVar;
   DVar.RefExpr = nullptr;
-  if (VD == getLoopControlVariable()) {
+  if (getLoopControlVariables().count(VD)) {
     PartitioningKind LoopKind = getLoopPartitioning();
     // OpenACC 2.6 [2.6.1]:
     //   "The loop variable in a C for statement [...] that is associated
@@ -585,6 +597,7 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
   case ACCC_gang:
   case ACCC_worker:
   case ACCC_vector:
+  case ACCC_collapse:
   case ACCC_unknown:
     llvm_unreachable("Clause is not allowed.");
   }
@@ -697,6 +710,7 @@ public:
           case ACCC_gang:
           case ACCC_worker:
           case ACCC_vector:
+          case ACCC_collapse:
             llvm_unreachable("unexpected as explicit data attribute clause");
           case ACCC_private:
           case ACCC_firstprivate:
@@ -963,7 +977,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
   case ACCD_loop:
     Res = ActOnOpenACCLoopDirective(
         ClausesWithImplicit, AStmt, StartLoc, EndLoc,
-        DSAStack->getLoopControlVariable(),
+        DSAStack->getLoopControlVariables(),
         DSAStack->getParentLoopPartitioning().getInnermost());
     break;
   case ACCD_parallel_loop:
@@ -991,8 +1005,7 @@ StmtResult Sema::ActOnOpenACCParallelDirective(
 void Sema::ActOnOpenACCLoopInitialization(SourceLocation ForLoc, Stmt *Init) {
   assert(getLangOpts().OpenACC && "OpenACC is not active.");
   assert(Init && "Expected loop in canonical form.");
-  unsigned AssociatedLoops = DSAStack->getAssociatedLoops();
-  if (AssociatedLoops &&
+  if (DSAStack->getAssociatedLoopsParsed() < DSAStack->getAssociatedLoops() &&
       isOpenACCLoopDirective(DSAStack->getEffectiveDirective())) {
     if (Expr *E = dyn_cast<Expr>(Init))
       Init = E->IgnoreParens();
@@ -1006,7 +1019,7 @@ void Sema::ActOnOpenACCLoopInitialization(SourceLocation ForLoc, Stmt *Init) {
         }
       }
     }
-    DSAStack->setAssociatedLoops(AssociatedLoops - 1);
+    DSAStack->incAssociatedLoopsParsed();
   }
 }
 
@@ -1019,18 +1032,36 @@ void Sema::ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
 
 StmtResult Sema::ActOnOpenACCLoopDirective(
     ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-    SourceLocation EndLoc, VarDecl *LCVar,
+    SourceLocation EndLoc, const llvm::DenseSet<VarDecl *> &LCVars,
     OpenACCClauseKind ParentLoopPartitioning) {
   if (!AStmt)
     return StmtError();
 
-  auto *For = dyn_cast_or_null<ForStmt>(AStmt);
-  if (!For) {
-    Diag(AStmt->getBeginLoc(), diag::err_acc_not_for)
-        << getOpenACCDirectiveName(DSAStack->getRealDirective());
-    return StmtError();
+  // OpenACC 2.7 sec. 2.9.1, lines 1441-1442:
+  // "The collapse clause is used to specify how many tightly nested loops are
+  // associated with the loop construct."
+  // Complain if there aren't enough.
+  Stmt *LoopStmt = AStmt;
+  for (unsigned LoopI = 0, LoopCount = DSAStack->getAssociatedLoops();
+       LoopI < LoopCount; ++LoopI)
+  {
+    LoopStmt = LoopStmt->IgnoreContainers();
+    auto *LoopFor = dyn_cast_or_null<ForStmt>(LoopStmt);
+    if (!LoopFor) {
+      Diag(LoopStmt->getBeginLoc(), diag::err_acc_not_for)
+          << getOpenACCDirectiveName(DSAStack->getRealDirective());
+      auto CollapseClauses =
+          ACCExecutableDirective::getClausesOfKind<ACCCollapseClause>(Clauses);
+      if (CollapseClauses.begin() != CollapseClauses.end()) {
+        Expr *E = CollapseClauses.begin()->getCollapse();
+        Diag(E->getExprLoc(), diag::note_acc_collapse_expr)
+            << E->getSourceRange();
+      }
+      return StmtError();
+    }
+    LoopStmt = LoopFor->getBody();
+    assert(LoopStmt);
   }
-  assert(For->getBody());
 
   // Complain if we have a reduction on an acc loop control variable.  Record
   // for parent construct any worker partitioning here.
@@ -1039,7 +1070,7 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
       for (Expr *VR : RC->varlists()) {
         VarDecl *VD = cast<VarDecl>(cast<DeclRefExpr>(VR)->getDecl())
                       ->getCanonicalDecl();
-        if (VD == DSAStack->getLoopControlVariable()) {
+        if (DSAStack->getLoopControlVariables().count(VD)) {
            Diag(VR->getEndLoc(), diag::err_acc_reduction_on_loop_control_var)
                << VD->getName() << VR->getSourceRange();
            return StmtError();
@@ -1058,7 +1089,7 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
   // OpenACC-level tools.
 
   return ACCLoopDirective::Create(Context, StartLoc, EndLoc, Clauses, AStmt,
-                                  LCVar, ParentLoopPartitioning);
+                                  LCVars, ParentLoopPartitioning);
 }
 
 StmtResult Sema::ActOnOpenACCParallelLoopDirective(
@@ -1146,6 +1177,9 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr
     break;
   case ACCC_vector_length:
     Res = ActOnOpenACCVectorLengthClause(Expr, StartLoc, LParenLoc, EndLoc);
+    break;
+  case ACCC_collapse:
+    Res = ActOnOpenACCCollapseClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
   case ACCC_shared:
   case ACCC_private:
@@ -1507,7 +1541,11 @@ static bool IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
           << getOpenACCClauseName(CKind) << ValExpr->getSourceRange();
       return false;
     }
-  } else if (!Result.isStrictlyPositive()) {
+  // FIXME: llvm::APSInt::isStrictlyPositive is incorrect for unsigned
+  // values with top bit set.  Once fixed, we only need to check
+  // !Result.isStrictlyPositive() here.
+  } else if (Result.isUnsigned() ? Result.isNullValue()
+                                 : !Result.isStrictlyPositive()) {
     SemaRef.Diag(Loc, diag::err_acc_clause_not_positive_ice)
         << getOpenACCClauseName(CKind) << ValExpr->getSourceRange();
     return false;
@@ -1546,6 +1584,7 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
   case ACCC_num_gangs:
   case ACCC_num_workers:
   case ACCC_vector_length:
+  case ACCC_collapse:
   case ACCC_unknown:
     llvm_unreachable("Clause is not allowed.");
   }
@@ -1620,6 +1659,18 @@ ACCClause *Sema::ActOnOpenACCVectorLengthClause(Expr *VectorLength,
     return nullptr;
   return new (Context) ACCVectorLengthClause(VectorLength, StartLoc, LParenLoc,
                                              EndLoc);
+}
+
+ACCClause *Sema::ActOnOpenACCCollapseClause(Expr *Collapse,
+                                            SourceLocation StartLoc,
+                                            SourceLocation LParenLoc,
+                                            SourceLocation EndLoc) {
+  if (!IsPositiveIntegerValue(Collapse, *this, ACCC_collapse, true))
+    return nullptr;
+  DSAStack->setAssociatedLoops(
+      Collapse->EvaluateKnownConstInt(Context).getExtValue());
+  return new (Context) ACCCollapseClause(Collapse, StartLoc, LParenLoc,
+                                         EndLoc);
 }
 
 namespace {
@@ -1929,7 +1980,8 @@ public:
         for (Expr *VR : C->varlists()) {
           VarDecl *VD = cast<VarDecl>(cast<DeclRefExpr>(VR)->getDecl())
                         ->getCanonicalDecl();
-          if ((AddScopeWithLCVPrivate && D->getLoopControlVariable() == VD) ||
+          if ((AddScopeWithLCVPrivate &&
+               D->getLoopControlVariables().count(VD)) ||
               AddScopeWithAllPrivates)
             EnclosingCompoundStmt.addPrivateDecl(VR->getBeginLoc(),
                                                  VR->getEndLoc(), VD);
@@ -2078,11 +2130,12 @@ private:
   template<typename Derived>
   bool transformACCVarList(
       ACCExecutableDirective *D, ACCVarListClause<Derived> *C,
-      VarDecl *SkipVar, llvm::SmallVector<Expr *, 16> &Vars) {
+      const llvm::DenseSet<VarDecl *> &SkipVars,
+      llvm::SmallVector<Expr *, 16> &Vars) {
     Vars.reserve(C->varlist_size());
     for (auto *VE : C->varlists()) {
-      if (SkipVar == cast<VarDecl>(cast<DeclRefExpr>(VE)->getDecl())
-                     ->getCanonicalDecl())
+      if (SkipVars.count(cast<VarDecl>(cast<DeclRefExpr>(VE)->getDecl())
+                             ->getCanonicalDecl()))
         continue;
       ExprResult EVar = getDerived().TransformExpr(cast<Expr>(VE));
       if (EVar.isInvalid())
@@ -2093,17 +2146,34 @@ private:
   }
 
   template<typename Derived>
+  bool transformACCVarList(
+      ACCExecutableDirective *D, ACCVarListClause<Derived> *C,
+      llvm::SmallVector<Expr *, 16> &Vars) {
+    return transformACCVarList(D, C, llvm::DenseSet<VarDecl *>(), Vars);
+  }
+
+  template<typename Derived>
   OMPClauseResult transformACCVarListClause(
       ACCExecutableDirective *D, ACCVarListClause<Derived> *C,
-      OpenMPClauseKind TCKind, VarDecl *SkipVar,
+      OpenMPClauseKind TCKind, const llvm::DenseSet<VarDecl *> &SkipVars,
       OMPClause *(TransformACCToOMP::*Rebuilder)(
           ArrayRef<Expr *>, SourceLocation, SourceLocation, SourceLocation)) {
     OpenMPStartEndClauseRAII ClauseRAII(getSema(), TCKind);
     llvm::SmallVector<Expr *, 16> Vars;
-    if (transformACCVarList(D, C, SkipVar, Vars))
+    if (transformACCVarList(D, C, SkipVars, Vars))
       return OMPClauseError();
     ExplicitClauseLocs L(D, C, C->getLParenLoc());
     return (getDerived().*Rebuilder)(Vars, L.LocStart, L.LParenLoc, L.LocEnd);
+  }
+
+  template<typename Derived>
+  OMPClauseResult transformACCVarListClause(
+      ACCExecutableDirective *D, ACCVarListClause<Derived> *C,
+      OpenMPClauseKind TCKind,
+      OMPClause *(TransformACCToOMP::*Rebuilder)(
+          ArrayRef<Expr *>, SourceLocation, SourceLocation, SourceLocation)) {
+    return transformACCVarListClause(D, C, TCKind, llvm::DenseSet<VarDecl *>(),
+                                     Rebuilder);
   }
 
 public:
@@ -2131,6 +2201,14 @@ public:
     return OMPClauseEmpty();
   }
 
+  OMPClauseResult TransformACCCollapseClause(ACCExecutableDirective *D,
+                                             OpenMPDirectiveKind TDKind,
+                                             ACCCollapseClause *C) {
+    ExplicitClauseLocs L(D, C, C->getLParenLoc());
+    return getDerived().RebuildOMPCollapseClause(
+        C->getCollapse(), L.LocStart, L.LParenLoc, L.LocEnd);
+  }
+
   OMPClauseResult TransformACCSharedClause(ACCExecutableDirective *D,
                                            OpenMPDirectiveKind TDKind,
                                            ACCSharedClause *C) {
@@ -2147,7 +2225,7 @@ public:
     assert(C->getBeginLoc().isInvalid()
            && "Unexpected explicit OpenACC shared clause");
     return transformACCVarListClause<ACCSharedClause>(
-        RequireImplicit ? nullptr : D, C, OMPC_shared, nullptr,
+        RequireImplicit ? nullptr : D, C, OMPC_shared,
         &TransformACCToOMP::RebuildOMPSharedClause);
   }
 
@@ -2165,15 +2243,15 @@ public:
     // loop.  So that the OpenACC implementation doesn't have to replicate the
     // OpenMP implementation for that computation, we instead omit the linear
     // clause.
-    VarDecl *SkipVar = nullptr;
+    llvm::DenseSet<VarDecl *> SkipVars;
     if (isOpenMPSimdDirective(TDKind)) {
       ACCLoopDirective *LD = cast<ACCLoopDirective>(D);
       assert(LD && "expected omp simd directive to translate from acc loop"
                    " directive");
-      SkipVar = LD->getLoopControlVariable();
+      SkipVars = LD->getLoopControlVariables();
     }
     return transformACCVarListClause<ACCPrivateClause>(
-        D, C, OMPC_private, SkipVar,
+        D, C, OMPC_private, SkipVars,
         &TransformACCToOMP::RebuildOMPPrivateClause);
   }
 
@@ -2181,7 +2259,7 @@ public:
                                                  OpenMPDirectiveKind TDKind,
                                                  ACCFirstprivateClause *C) {
     return transformACCVarListClause<ACCFirstprivateClause>(
-        D, C, OMPC_firstprivate, nullptr,
+        D, C, OMPC_firstprivate,
         &TransformACCToOMP::RebuildOMPFirstprivateClause);
   }
 
@@ -2196,7 +2274,7 @@ public:
       return OMPClauseEmpty();
     OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_reduction);
     llvm::SmallVector<Expr *, 16> Vars;
-    if (transformACCVarList(D, C, nullptr, Vars))
+    if (transformACCVarList(D, C, Vars))
       return OMPClauseError();
     ExplicitClauseLocs L(D, C, C->getLParenLoc(), C->getColonLoc());
     CXXScopeSpec Spec;

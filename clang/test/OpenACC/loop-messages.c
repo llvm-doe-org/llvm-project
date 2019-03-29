@@ -26,6 +26,7 @@
 //
 // END.
 
+#include <limits.h>
 #include <stdint.h>
 
 #define ERR_ACC       1
@@ -232,6 +233,315 @@ void fn() {
   }
 
   //--------------------------------------------------
+  // collapse clause
+  //--------------------------------------------------
+
+  // Syntax
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    // expected-error@+1 {{expected '(' after 'collapse'}}
+    #pragma acc CMB_PAR loop collapse
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+3 {{expected expression}}
+    // expected-error@+2 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop independent collapse(
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{expected expression}}
+    #pragma acc CMB_PAR loop seq collapse()
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop auto collapse(2, 3)
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        ;
+    // sep-error@+2 {{directive '#pragma acc loop' cannot contain more than one 'collapse' clause}}
+    // cmb-error@+1 {{directive '#pragma acc parallel loop' cannot contain more than one 'collapse' clause}}
+    #pragma acc CMB_PAR loop gang collapse(1) worker collapse(1) vector
+    for (int i = 0; i < 5; ++i)
+      ;
+  }
+
+  // Invalid argument
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    // Not integer type and not constant expression
+
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int []'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop collapse(incomplete)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int [2]'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop independent collapse(a)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int *'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop seq collapse(p)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'float'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop auto collapse(f)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'double'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop gang collapse(d)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not '_Complex float'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop worker collapse(fc)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not '_Complex double'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop vector collapse(dc)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'struct S'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop gang worker collapse(s)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'union U'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop gang vector collapse(u)
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // Integer type but not constant expression
+
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop worker vector collapse(b)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop gang worker vector collapse(e)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop collapse(*p)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop collapse(i) independent
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop collapse(constI) seq
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // Constant expression but not integer type
+
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int [2]'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop collapse((int[]){1, 2}) auto
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int *'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop collapse((int*)0) gang
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'float'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop collapse(1.3f) worker
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'double'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop collapse(0.2) vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not '_Complex float'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop collapse((float _Complex)0.09f) gang worker
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not '_Complex double'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop collapse((double _Complex)-10.0) gang vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'struct S'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop collapse((struct S){5}) gang worker vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'union U'}}
+    // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop independent gang collapse((union U){5})
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // Integer type and constant expression but not positive
+
+    // expected-error@+1 {{argument to 'collapse' clause must be a strictly positive integer value}}
+    #pragma acc CMB_PAR loop auto worker collapse((_Bool)0)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{argument to 'collapse' clause must be a strictly positive integer value}}
+    #pragma acc CMB_PAR loop vector collapse(0) independent
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{argument to 'collapse' clause must be a strictly positive integer value}}
+    #pragma acc CMB_PAR loop collapse(0u) auto gang
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{argument to 'collapse' clause must be a strictly positive integer value}}
+    #pragma acc CMB_PAR loop worker independent collapse(E0)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{argument to 'collapse' clause must be a strictly positive integer value}}
+    #pragma acc CMB_PAR loop gang worker vector collapse(-5L) auto
+    for (int i = 0; i < 5; ++i)
+      ;
+
+  }
+
+  // Not enough loops.
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    // 1 too few.
+
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop collapse((_Bool)1)
+      // sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      ;
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop independent collapse(E1)
+      // sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      while (1)
+        ;
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop seq collapse(1)
+    // sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+    // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+    {
+      int i;
+      for (i = 0; i < 5; ++i)
+        ;
+    }
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop auto collapse(2)
+    for (i = 0; i < 5; ++i) {
+      // sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      ;
+    }
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop gang collapse(3)
+    for (i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+      // sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      {
+        for (int k = 0; k < 5; ++k)
+          ;
+        ;
+      }
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop worker collapse(4u)
+    for (int i = 0; i < 5; ++i) {
+      for (jk = 0; jk < 5; ++jk) {
+        for (int k = 0; k < 5; ++k) {
+          // sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+          // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+          f += 0.5;
+        }
+      }
+    }
+
+    // 2 too few.
+
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop vector collapse(5l)
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        for (jk = 0; jk < 5; ++jk)
+          // sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+          // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+          ;
+
+    // 3 too few.
+
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop gang worker collapse(7ll)
+    for (i = 0; i < 5; ++i)
+      for (jk = 0; jk < 5; ++jk)
+        for (int k = 0; k < 5; ++k)
+          for (int l = 0; l < 5; ++l)
+            // sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+            // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+            ;
+
+    // Many too few.  High bits are set in these values, but they shouldn't be
+    // rejected as negative values.
+
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop gang vector collapse((unsigned char)0xa3)
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        // sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+        // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+        ;
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop gang worker vector collapse(UINT_MAX)
+    for (i = 0; i < 5; ++i)
+      // sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      ;
+
+    // Enough but some have their own loop directives.
+
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop gang collapse(2)
+    for (i = 0; i < 5; ++i)
+      // sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      #pragma acc loop worker
+      for (int j = 0; j < 5; ++j)
+        ;
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop gang collapse(3)
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        // sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+        // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+        #pragma acc loop vector collapse(2)
+        for (int k = 0; k < 5; ++k)
+          for (int l = 0; l < 5; ++l)
+            ;
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop worker collapse(3)
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        // sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+        // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+        #pragma acc loop vector
+        for (int k = 0; k < 5; ++k)
+          for (int l = 0; l < 5; ++l)
+            ;
+  }
+
+  //--------------------------------------------------
   // Associated for loop
   //--------------------------------------------------
 
@@ -267,6 +577,12 @@ void fn() {
 
     // break is permitted in nested loops that are not partitioned
     #pragma acc CMB_PAR loop independent
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        break;
+    // FIXME: This should probably be an error, but the OpenMP implementation
+    // currently doesn't catch it either for omp parallel for either.
+    #pragma acc CMB_PAR loop independent collapse(2)
     for (int i = 0; i < 5; ++i)
       for (int j = 0; j < 5; ++j)
         break;
@@ -966,6 +1282,38 @@ void fn() {
     #pragma acc CMB_PAR loop reduction(^:foo)
     for (int foo = 0; foo < 5; ++foo)
       ;
+
+    // expected-error@+1 {{OpenACC loop control variable 'i' cannot have reduction}}
+    #pragma acc CMB_PAR loop reduction(*:i) vector collapse(2)
+    for (i = 0; i < 5; ++i)
+      for (jk = 0; jk < 5; ++jk)
+        ;
+    // expected-error@+1 {{OpenACC loop control variable 'jk' cannot have reduction}}
+    #pragma acc CMB_PAR loop reduction(max:jk) vector collapse(2)
+    for (i = 0; i < 5; ++i)
+      for (jk = 0; jk < 5; ++jk)
+        ;
+    {
+      int i, j, k;
+      // expected-error@+1 {{OpenACC loop control variable 'i' cannot have reduction}}
+      #pragma acc CMB_PAR loop reduction(min:i) vector collapse(3)
+      for (i = 0; i < 5; ++i)
+        for (j = 0; j < 5; ++j)
+          for (k = 0; k < 5; ++k)
+            ;
+      // expected-error@+1 {{OpenACC loop control variable 'j' cannot have reduction}}
+      #pragma acc CMB_PAR loop reduction(&:i,j,k) vector collapse(3)
+      for (int i = 0; i < 5; ++i)
+        for (j = 0; j < 5; ++j)
+          for (int k = 0; k < 5; ++k)
+            ;
+      // expected-error@+1 {{OpenACC loop control variable 'k' cannot have reduction}}
+      #pragma acc CMB_PAR loop reduction(|:k) vector collapse(3)
+      for (i = 0; i < 5; ++i)
+        for (j = 0; j < 5; ++j)
+          for (k = 0; k < 5; ++k)
+            ;
+    }
   }
 
 #if !CMB

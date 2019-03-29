@@ -9583,7 +9583,7 @@ public:
   /// of the associated statement.
   StmtResult ActOnOpenACCLoopDirective(
       ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc, VarDecl *LCVar,
+      SourceLocation EndLoc, const llvm::DenseSet<VarDecl *> &LCVar,
       OpenACCClauseKind ParentLoopPartitioning);
   /// Called on well-formed '\#pragma acc parallel loop' after parsing
   /// of the associated statement.
@@ -9655,6 +9655,11 @@ public:
                                             SourceLocation StartLoc,
                                             SourceLocation LParenLoc,
                                             SourceLocation EndLoc);
+  /// Called on well-formed 'collapse' clause.
+  ACCClause *ActOnOpenACCCollapseClause(Expr *Collapse,
+                                        SourceLocation StartLoc,
+                                        SourceLocation LParenLoc,
+                                        SourceLocation EndLoc);
 
   /// Transform OpenACC region to OpenMP, and return true if an error occurred.
   ///
