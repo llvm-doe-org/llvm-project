@@ -1,11 +1,11 @@
 // Check diagnostics for "acc loop".
 //
-// When CMB is not set, this file check diagnostics for "acc loop" nested
+// When CMB is not set, this file checks diagnostics for "acc loop" nested
 // within "acc parallel".
 //
 // When CMB is set, it combines those "acc parallel" and "acc loop" directives
 // in order to check the same diagnostics but for combined "acc parallel loop"
-// directives.  In some cases (gang reduction inter-directive conflicts),
+// directives.  In some cases (gang-reduction inter-directive conflicts),
 // combining them would defeat the purpose of the test, so it instead adds
 // "loop" and a for loop to the outer "acc parallel"
 
@@ -57,7 +57,7 @@ int incomplete[];
 
 void fn() {
   _Bool b;
-  enum E { E1, E2 } e;
+  enum E { E0, E1 } e;
   int i, jk, a[2], *p; // expected-note 9 {{'a' defined here}}
                        // expected-note@-1 7 {{'p' defined here}}
   float f; // expected-note 3 {{'f' defined here}}
@@ -245,7 +245,7 @@ void fn() {
       // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
       ;
 
-    // break is fine when loop is executed sequentially.
+    // break is fine when loop is executed sequentially
     #pragma acc CMB_PAR loop seq
     for (int i = 0; i < 5; ++i)
       break;
@@ -938,6 +938,34 @@ void fn() {
     #pragma acc CMB_PAR loop private(constI, constIDecl) reduction(+: constI, constIDecl)
     for (int i = 0; i < 5; ++i)
       ;
+
+    // expected-error@+2 {{private variable cannot be reduction}}
+    // expected-note@+1 {{defined as private}}
+    #pragma acc CMB_PAR loop private(i) gang reduction(&:i) vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{reduction variable cannot be private}}
+    // expected-note@+1 {{defined as reduction}}
+    #pragma acc CMB_PAR loop gang reduction(&&:i) worker private(i) vector
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // expected-error@+1 {{OpenACC loop control variable cannot have reduction}}
+    #pragma acc CMB_PAR loop reduction(^:i)
+    for (i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{OpenACC loop control variable cannot have reduction}}
+    #pragma acc CMB_PAR loop reduction(^:jk, i) gang
+    for (i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{OpenACC loop control variable cannot have reduction}}
+    #pragma acc CMB_PAR loop reduction(^:jk) reduction(+:i) worker
+    for (i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{use of undeclared identifier 'foo'}}
+    #pragma acc CMB_PAR loop reduction(^:foo)
+    for (int foo = 0; foo < 5; ++foo)
+      ;
   }
 
 #if !CMB
@@ -1248,33 +1276,6 @@ void fn() {
       for (int j = 0; j < 5; ++j)
         ;
     }
-  }
-  #pragma acc parallel CMB_LOOP
-  CMB_FORLOOP_HEAD
-  {
-    // expected-error@+2 {{private variable cannot be reduction}}
-    // expected-note@+1 {{defined as private}}
-    #pragma acc loop private(i) gang reduction(&:i) vector
-    for (int i = 0; i < 5; ++i)
-      ;
-    // expected-error@+2 {{reduction variable cannot be private}}
-    // expected-note@+1 {{defined as reduction}}
-    #pragma acc loop gang reduction(&&:i) worker private(i) vector
-    for (int i = 0; i < 5; ++i)
-      ;
-
-    // expected-error@+1 {{OpenACC loop control variable cannot have reduction}}
-    #pragma acc loop reduction(^:i)
-    for (i = 0; i < 5; ++i)
-      ;
-    // expected-error@+1 {{OpenACC loop control variable cannot have reduction}}
-    #pragma acc loop reduction(^:jk, i) gang
-    for (i = 0; i < 5; ++i)
-      ;
-    // expected-error@+1 {{OpenACC loop control variable cannot have reduction}}
-    #pragma acc loop reduction(^:jk) reduction(+:i) worker
-    for (i = 0; i < 5; ++i)
-      ;
   }
 
   //--------------------------------------------------
