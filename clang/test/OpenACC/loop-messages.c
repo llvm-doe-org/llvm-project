@@ -950,15 +950,15 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
 
-    // expected-error@+1 {{OpenACC loop control variable cannot have reduction}}
+    // expected-error@+1 {{OpenACC loop control variable 'i' cannot have reduction}}
     #pragma acc CMB_PAR loop reduction(^:i)
     for (i = 0; i < 5; ++i)
       ;
-    // expected-error@+1 {{OpenACC loop control variable cannot have reduction}}
+    // expected-error@+1 {{OpenACC loop control variable 'i' cannot have reduction}}
     #pragma acc CMB_PAR loop reduction(^:jk, i) gang
     for (i = 0; i < 5; ++i)
       ;
-    // expected-error@+1 {{OpenACC loop control variable cannot have reduction}}
+    // expected-error@+1 {{OpenACC loop control variable 'i' cannot have reduction}}
     #pragma acc CMB_PAR loop reduction(^:jk) reduction(+:i) worker
     for (i = 0; i < 5; ++i)
       ;

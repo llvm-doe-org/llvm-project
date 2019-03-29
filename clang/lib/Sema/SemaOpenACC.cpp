@@ -1041,7 +1041,7 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
                       ->getCanonicalDecl();
         if (VD == DSAStack->getLoopControlVariable()) {
            Diag(VR->getEndLoc(), diag::err_acc_reduction_on_loop_control_var)
-               << VR->getSourceRange();
+               << VD->getName() << VR->getSourceRange();
            return StmtError();
         }
       }

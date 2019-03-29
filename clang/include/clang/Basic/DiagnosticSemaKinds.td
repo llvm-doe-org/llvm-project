@@ -9196,7 +9196,7 @@ def err_acc_reduction_not_scalar_type : Error<
 def err_acc_reduction_not_real_or_pointer_type : Error<
   "OpenACC reduction operator '%0' argument must be of real or pointer type">;
 def err_acc_reduction_on_loop_control_var : Error<
-  "OpenACC loop control variable cannot have reduction">;
+  "OpenACC loop control variable '%0' cannot have reduction">;
 def err_acc_conflicting_reduction : Error<
   "%select{conflicting|redundant}0 '%1' reduction for variable %2">;
 def note_acc_gang_reduction_apply : Note<
