@@ -67,6 +67,10 @@ The improvements are...
 Improvements to clang-tidy
 --------------------------
 
+- New OpenMP module.
+
+  For checks specific to `OpenMP <https://www.openmp.org/>`_ API.
+
 - New :doc:`abseil-duration-addition
   <clang-tidy/checks/abseil-duration-addition>` check.
 
@@ -115,6 +119,9 @@ Improvements to clang-tidy
   `CommentUserDefiniedLiterals`, `CommentStringLiterals`,
   `CommentCharacterLiterals` & `CommentNullPtrs` options.
 
+- The :doc:`google-runtime-int <clang-tidy/checks/google-runtime-int>`
+  check has been disabled in Objective-C++.
+
 - The `Acronyms` and `IncludeDefaultAcronyms` options for the
   :doc:`objc-property-declaration <clang-tidy/checks/objc-property-declaration>`
   check have been removed.
@@ -123,8 +130,21 @@ Improvements to clang-tidy
   <clang-tidy/checks/modernize-use-override>` now supports `OverrideSpelling`
   and `FinalSpelling` options.
 
-Improvements to include-fixer
------------------------------
+- New :doc:`openmp-exception-escape
+  <clang-tidy/checks/openmp-exception-escape>` check.
+
+  Analyzes OpenMP Structured Blocks and checks that no exception escapes
+  out of the Structured Block it was thrown in.
+
+- New :doc:`openmp-use-default-none
+  <clang-tidy/checks/openmp-use-default-none>` check.
+
+  Finds OpenMP directives that are allowed to contain a ``default`` clause,
+  but either don't specify it or the clause is specified but with the kind
+  other than ``none``, and suggests to use the ``default(none)`` clause.
+
+Improvements to clang-include-fixer
+-----------------------------------
 
 The improvements are...
 

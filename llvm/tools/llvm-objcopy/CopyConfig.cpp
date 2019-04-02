@@ -8,7 +8,6 @@
 
 #include "CopyConfig.h"
 
-#include "llvm/ADT/BitmaskEnum.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -91,23 +90,6 @@ public:
   StripOptTable() : OptTable(StripInfoTable) {}
 };
 
-enum SectionFlag {
-  SecNone = 0,
-  SecAlloc = 1 << 0,
-  SecLoad = 1 << 1,
-  SecNoload = 1 << 2,
-  SecReadonly = 1 << 3,
-  SecDebug = 1 << 4,
-  SecCode = 1 << 5,
-  SecData = 1 << 6,
-  SecRom = 1 << 7,
-  SecMerge = 1 << 8,
-  SecStrings = 1 << 9,
-  SecContents = 1 << 10,
-  SecShare = 1 << 11,
-  LLVM_MARK_AS_BITMASK_ENUM(/* LargestValue = */ SecShare)
-};
-
 } // namespace
 
 static SectionFlag parseSectionRenameFlag(StringRef SectionName) {
@@ -127,7 +109,7 @@ static SectionFlag parseSectionRenameFlag(StringRef SectionName) {
       .Default(SectionFlag::SecNone);
 }
 
-static Expected<uint64_t>
+static Expected<SectionFlag>
 parseSectionFlagSet(ArrayRef<StringRef> SectionFlags) {
   SectionFlag ParsedFlags = SectionFlag::SecNone;
   for (StringRef Flag : SectionFlags) {
@@ -142,18 +124,7 @@ parseSectionFlagSet(ArrayRef<StringRef> SectionFlags) {
     ParsedFlags |= ParsedFlag;
   }
 
-  uint64_t NewFlags = 0;
-  if (ParsedFlags & SectionFlag::SecAlloc)
-    NewFlags |= ELF::SHF_ALLOC;
-  if (!(ParsedFlags & SectionFlag::SecReadonly))
-    NewFlags |= ELF::SHF_WRITE;
-  if (ParsedFlags & SectionFlag::SecCode)
-    NewFlags |= ELF::SHF_EXECINSTR;
-  if (ParsedFlags & SectionFlag::SecMerge)
-    NewFlags |= ELF::SHF_MERGE;
-  if (ParsedFlags & SectionFlag::SecStrings)
-    NewFlags |= ELF::SHF_STRINGS;
-  return NewFlags;
+  return ParsedFlags;
 }
 
 static Expected<SectionRename> parseRenameSectionValue(StringRef FlagValue) {
@@ -172,7 +143,7 @@ static Expected<SectionRename> parseRenameSectionValue(StringRef FlagValue) {
   SR.NewName = NameAndFlags[0];
 
   if (NameAndFlags.size() > 1) {
-    Expected<uint64_t> ParsedFlagSet =
+    Expected<SectionFlag> ParsedFlagSet =
         parseSectionFlagSet(makeArrayRef(NameAndFlags).drop_front());
     if (!ParsedFlagSet)
       return ParsedFlagSet.takeError();
@@ -196,7 +167,7 @@ parseSetSectionFlagValue(StringRef FlagValue) {
   // Flags split: "f1" "f2" ...
   SmallVector<StringRef, 6> SectionFlags;
   Section2Flags.second.split(SectionFlags, ',');
-  Expected<uint64_t> ParsedFlagSet = parseSectionFlagSet(SectionFlags);
+  Expected<SectionFlag> ParsedFlagSet = parseSectionFlagSet(SectionFlags);
   if (!ParsedFlagSet)
     return ParsedFlagSet.takeError();
   SFU.NewFlags = *ParsedFlagSet;
@@ -282,14 +253,14 @@ static Expected<NewSymbolInfo> parseNewSymbolInfo(StringRef FlagValue) {
 }
 
 static const StringMap<MachineInfo> ArchMap{
-    // Name, {EMachine, 64bit, LittleEndian}
-    {"aarch64", {ELF::EM_AARCH64, true, true}},
-    {"arm", {ELF::EM_ARM, false, true}},
-    {"i386", {ELF::EM_386, false, true}},
-    {"i386:x86-64", {ELF::EM_X86_64, true, true}},
-    {"powerpc:common64", {ELF::EM_PPC64, true, true}},
-    {"sparc", {ELF::EM_SPARC, false, true}},
-    {"x86-64", {ELF::EM_X86_64, true, true}},
+    // Name, {EMachine, OS/ABI, 64bit, LittleEndian}
+    {"aarch64", {ELF::EM_AARCH64, ELF::ELFOSABI_NONE, true, true}},
+    {"arm", {ELF::EM_ARM, ELF::ELFOSABI_NONE, false, true}},
+    {"i386", {ELF::EM_386, ELF::ELFOSABI_NONE, false, true}},
+    {"i386:x86-64", {ELF::EM_X86_64, ELF::ELFOSABI_NONE, true, true}},
+    {"powerpc:common64", {ELF::EM_PPC64, ELF::ELFOSABI_NONE, true, true}},
+    {"sparc", {ELF::EM_SPARC, ELF::ELFOSABI_NONE, false, true}},
+    {"x86-64", {ELF::EM_X86_64, ELF::ELFOSABI_NONE, true, true}},
 };
 
 static Expected<const MachineInfo &> getMachineInfo(StringRef Arch) {
@@ -301,12 +272,15 @@ static Expected<const MachineInfo &> getMachineInfo(StringRef Arch) {
 }
 
 static const StringMap<MachineInfo> OutputFormatMap{
-    // Name, {EMachine, 64bit, LittleEndian}
-    {"elf32-i386", {ELF::EM_386, false, true}},
-    {"elf32-powerpcle", {ELF::EM_PPC, false, true}},
-    {"elf32-x86-64", {ELF::EM_X86_64, false, true}},
-    {"elf64-powerpcle", {ELF::EM_PPC64, true, true}},
-    {"elf64-x86-64", {ELF::EM_X86_64, true, true}},
+    // Name, {EMachine, OSABI, 64bit, LittleEndian}
+    {"elf32-i386", {ELF::EM_386, ELF::ELFOSABI_NONE, false, true}},
+    {"elf32-i386-freebsd", {ELF::EM_386, ELF::ELFOSABI_FREEBSD, false, true}},
+    {"elf32-powerpcle", {ELF::EM_PPC, ELF::ELFOSABI_NONE, false, true}},
+    {"elf32-x86-64", {ELF::EM_X86_64, ELF::ELFOSABI_NONE, false, true}},
+    {"elf64-powerpcle", {ELF::EM_PPC64, ELF::ELFOSABI_NONE, true, true}},
+    {"elf64-x86-64", {ELF::EM_X86_64, ELF::ELFOSABI_NONE, true, true}},
+    {"elf64-x86-64-freebsd",
+     {ELF::EM_X86_64, ELF::ELFOSABI_FREEBSD, true, true}},
 };
 
 static Expected<const MachineInfo &>
@@ -622,6 +596,10 @@ Expected<DriverConfig> parseObjcopyOptions(ArrayRef<const char *> ArgsArr) {
       return std::move(E);
   for (auto Arg : InputArgs.filtered(OBJCOPY_keep_symbol))
     Config.SymbolsToKeep.emplace_back(Arg->getValue(), UseRegex);
+  for (auto Arg : InputArgs.filtered(OBJCOPY_keep_symbols))
+    if (Error E = addSymbolsFromFile(Config.SymbolsToKeep, DC.Alloc,
+                                     Arg->getValue(), UseRegex))
+      return std::move(E);
   for (auto Arg : InputArgs.filtered(OBJCOPY_add_symbol)) {
     Expected<NewSymbolInfo> NSI = parseNewSymbolInfo(Arg->getValue());
     if (!NSI)

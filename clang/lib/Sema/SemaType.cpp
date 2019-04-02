@@ -255,6 +255,23 @@ namespace {
       return T;
     }
 
+    /// Completely replace the \c auto in \p TypeWithAuto by
+    /// \p Replacement. Also replace \p TypeWithAuto in \c TypeAttrPair if
+    /// necessary.
+    QualType ReplaceAutoType(QualType TypeWithAuto, QualType Replacement) {
+      QualType T = sema.ReplaceAutoType(TypeWithAuto, Replacement);
+      if (auto *AttrTy = TypeWithAuto->getAs<AttributedType>()) {
+        // Attributed type still should be an attributed type after replacement.
+        auto *NewAttrTy = cast<AttributedType>(T.getTypePtr());
+        for (TypeAttrPair &A : AttrsForTypes) {
+          if (A.first == AttrTy)
+            A.first = NewAttrTy;
+        }
+        AttrsForTypesSorted = false;
+      }
+      return T;
+    }
+
     /// Extract and remove the Attr* for a given attributed type.
     const Attr *takeAttrForAttributedType(const AttributedType *AT) {
       if (!AttrsForTypesSorted) {
@@ -2938,7 +2955,7 @@ static QualType GetDeclSpecTypeForDeclarator(TypeProcessingState &state,
         // template type parameter.
         // FIXME: Retain some type sugar to indicate that this was written
         // as 'auto'.
-        T = SemaRef.ReplaceAutoType(
+        T = state.ReplaceAutoType(
             T, QualType(CorrespondingTemplateParam->getTypeForDecl(), 0));
       }
       break;
@@ -5913,7 +5930,8 @@ static void HandleAddressSpaceTypeAttribute(QualType &Type,
       id.setIdentifier(Attr.getArgAsIdent(0)->Ident, Attr.getLoc());
 
       ExprResult AddrSpace = S.ActOnIdExpression(
-          S.getCurScope(), SS, TemplateKWLoc, id, false, false);
+          S.getCurScope(), SS, TemplateKWLoc, id, /*HasTrailingLParen=*/false,
+          /*IsAddressOfOperand=*/false);
       if (AddrSpace.isInvalid())
         return;
 
@@ -6930,19 +6948,16 @@ static bool handleFunctionTypeAttr(TypeProcessingState &state, ParsedAttr &attr,
   if (!supportsVariadicCall(CC)) {
     const FunctionProtoType *FnP = dyn_cast<FunctionProtoType>(fn);
     if (FnP && FnP->isVariadic()) {
-      unsigned DiagID = diag::err_cconv_varargs;
-
       // stdcall and fastcall are ignored with a warning for GCC and MS
       // compatibility.
-      bool IsInvalid = true;
-      if (CC == CC_X86StdCall || CC == CC_X86FastCall) {
-        DiagID = diag::warn_cconv_varargs;
-        IsInvalid = false;
-      }
+      if (CC == CC_X86StdCall || CC == CC_X86FastCall)
+        return S.Diag(attr.getLoc(), diag::warn_cconv_ignored)
+               << FunctionType::getNameForCallConv(CC)
+               << (int)Sema::CallingConventionIgnoredReason::VariadicFunction;
 
-      S.Diag(attr.getLoc(), DiagID) << FunctionType::getNameForCallConv(CC);
-      if (IsInvalid) attr.setInvalid();
-      return true;
+      attr.setInvalid();
+      return S.Diag(attr.getLoc(), diag::err_cconv_varargs)
+             << FunctionType::getNameForCallConv(CC);
     }
   }
 
@@ -6997,8 +7012,9 @@ void Sema::adjustMemberFunctionCC(QualType &T, bool IsStatic, bool IsCtorOrDtor,
     // Issue a warning on ignored calling convention -- except of __stdcall.
     // Again, this is what MS compiler does.
     if (CurCC != CC_X86StdCall)
-      Diag(Loc, diag::warn_cconv_structors)
-          << FunctionType::getNameForCallConv(CurCC);
+      Diag(Loc, diag::warn_cconv_ignored)
+          << FunctionType::getNameForCallConv(CurCC)
+          << (int)Sema::CallingConventionIgnoredReason::ConstructorDestructor;
   // Default adjustment.
   } else {
     // Only adjust types with the default convention.  For example, on Windows
@@ -7045,7 +7061,8 @@ static void HandleVectorSizeAttr(QualType &CurType, const ParsedAttr &Attr,
     Id.setIdentifier(Attr.getArgAsIdent(0)->Ident, Attr.getLoc());
 
     ExprResult Size = S.ActOnIdExpression(S.getCurScope(), SS, TemplateKWLoc,
-                                          Id, false, false);
+                                          Id, /*HasTrailingLParen=*/false,
+                                          /*IsAddressOfOperand=*/false);
 
     if (Size.isInvalid())
       return;
@@ -7082,7 +7099,8 @@ static void HandleExtVectorTypeAttr(QualType &CurType, const ParsedAttr &Attr,
     id.setIdentifier(Attr.getArgAsIdent(0)->Ident, Attr.getLoc());
 
     ExprResult Size = S.ActOnIdExpression(S.getCurScope(), SS, TemplateKWLoc,
-                                          id, false, false);
+                                          id, /*HasTrailingLParen=*/false,
+                                          /*IsAddressOfOperand=*/false);
     if (Size.isInvalid())
       return;
 

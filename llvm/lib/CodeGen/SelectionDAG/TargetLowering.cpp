@@ -557,6 +557,44 @@ bool TargetLowering::SimplifyDemandedBits(
       Known.Zero &= Known2.Zero;
     }
     return false; // Don't fall through, will infinitely loop.
+  case ISD::INSERT_VECTOR_ELT: {
+    SDValue Vec = Op.getOperand(0);
+    SDValue Scl = Op.getOperand(1);
+    auto *CIdx = dyn_cast<ConstantSDNode>(Op.getOperand(2));
+    EVT VecVT = Vec.getValueType();
+
+    // If index isn't constant, assume we need all vector elements AND the
+    // inserted element.
+    APInt DemandedVecElts(OriginalDemandedElts);
+    if (CIdx && CIdx->getAPIntValue().ult(VecVT.getVectorNumElements())) {
+      unsigned Idx = CIdx->getZExtValue();
+      DemandedVecElts.clearBit(Idx);
+
+      // Inserted element is not required.
+      if (!OriginalDemandedElts[Idx])
+        return TLO.CombineTo(Op, Vec);
+    }
+
+    KnownBits KnownScl;
+    unsigned NumSclBits = Scl.getScalarValueSizeInBits();
+    APInt DemandedSclBits = OriginalDemandedBits.zextOrTrunc(NumSclBits);
+    if (SimplifyDemandedBits(Scl, DemandedSclBits, KnownScl, TLO, Depth + 1))
+      return true;
+
+    Known = KnownScl.zextOrTrunc(BitWidth, false);
+
+    KnownBits KnownVec;
+    if (SimplifyDemandedBits(Vec, OriginalDemandedBits, DemandedVecElts,
+                             KnownVec, TLO, Depth + 1))
+      return true;
+
+    if (!!DemandedVecElts) {
+      Known.One &= KnownVec.One;
+      Known.Zero &= KnownVec.Zero;
+    }
+
+    return false;
+  }
   case ISD::CONCAT_VECTORS: {
     Known.Zero.setAllBits();
     Known.One.setAllBits();
@@ -1257,29 +1295,29 @@ bool TargetLowering::SimplifyDemandedBits(
           // Do not turn (vt1 truncate (vt2 srl)) into (vt1 srl) if vt1 is
           // undesirable.
           break;
-        ConstantSDNode *ShAmt = dyn_cast<ConstantSDNode>(Src.getOperand(1));
-        if (!ShAmt)
+
+        auto *ShAmt = dyn_cast<ConstantSDNode>(Src.getOperand(1));
+        if (!ShAmt || ShAmt->getAPIntValue().uge(BitWidth))
           break;
+
         SDValue Shift = Src.getOperand(1);
-        if (TLO.LegalTypes()) {
-          uint64_t ShVal = ShAmt->getZExtValue();
+        uint64_t ShVal = ShAmt->getZExtValue();
+
+        if (TLO.LegalTypes())
           Shift = TLO.DAG.getConstant(ShVal, dl, getShiftAmountTy(VT, DL));
-        }
 
-        if (ShAmt->getZExtValue() < BitWidth) {
-          APInt HighBits = APInt::getHighBitsSet(OperandBitWidth,
-                                                 OperandBitWidth - BitWidth);
-          HighBits.lshrInPlace(ShAmt->getZExtValue());
-          HighBits = HighBits.trunc(BitWidth);
+        APInt HighBits =
+            APInt::getHighBitsSet(OperandBitWidth, OperandBitWidth - BitWidth);
+        HighBits.lshrInPlace(ShVal);
+        HighBits = HighBits.trunc(BitWidth);
 
-          if (!(HighBits & DemandedBits)) {
-            // None of the shifted in bits are needed.  Add a truncate of the
-            // shift input, then shift it.
-            SDValue NewTrunc =
-                TLO.DAG.getNode(ISD::TRUNCATE, dl, VT, Src.getOperand(0));
-            return TLO.CombineTo(
-                Op, TLO.DAG.getNode(ISD::SRL, dl, VT, NewTrunc, Shift));
-          }
+        if (!(HighBits & DemandedBits)) {
+          // None of the shifted in bits are needed.  Add a truncate of the
+          // shift input, then shift it.
+          SDValue NewTrunc =
+              TLO.DAG.getNode(ISD::TRUNCATE, dl, VT, Src.getOperand(0));
+          return TLO.CombineTo(
+              Op, TLO.DAG.getNode(ISD::SRL, dl, VT, NewTrunc, Shift));
         }
         break;
       }

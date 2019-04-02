@@ -11,6 +11,18 @@ elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "SunOS")
   list(APPEND LIBCXX_SOURCES ${LIBCXX_SOLARIS_SOURCES})
 endif()
 
+if (LIBCXX_ENABLE_FILESYSTEM)
+  list(APPEND LIBCXX_SOURCES ../src/filesystem/operations.cpp
+                             ../src/filesystem/directory_iterator.cpp)
+  # Filesystem uses __int128_t, which requires a definition of __muloi4 when
+  # compiled with UBSAN. This definition is not provided by libgcc_s, but is
+  # provided by compiler-rt. So we need to disable it to avoid having multiple
+  # definitions. See filesystem/int128_builtins.cpp.
+  if (NOT LIBCXX_USE_COMPILER_RT)
+    list(APPEND LIBCXX_SOURCES ../src/filesystem/int128_builtins.cpp)
+  endif()
+endif()
+
 # Add all the headers to the project for IDEs.
 if (LIBCXX_CONFIGURE_IDE)
   file(GLOB_RECURSE LIBCXX_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/../include/*)
@@ -40,14 +52,19 @@ endif()
 add_library_flags_if(LIBCXX_COVERAGE_LIBRARY "${LIBCXX_COVERAGE_LIBRARY}")
 
 if (APPLE AND (LIBCXX_CXX_ABI_LIBNAME STREQUAL "libcxxabi" OR
-               LIBCXX_CXX_ABI_LIBNAME STREQUAL "default"))
+               LIBCXX_CXX_ABI_LIBNAME STREQUAL "default")
+          AND NOT DEFINED LIBCXX_OSX_REEXPORT_LIBCXXABI_SYMBOLS)
   set(LIBCXX_OSX_REEXPORT_LIBCXXABI_SYMBOLS ON)
 endif()
 
 if (LIBCXX_STATICALLY_LINK_ABI_IN_SHARED_LIBRARY)
-  add_library_flags("-Wl,--whole-archive" "-Wl,-Bstatic")
-  add_library_flags("${LIBCXX_CXX_ABI_LIBRARY}")
-  add_library_flags("-Wl,-Bdynamic" "-Wl,--no-whole-archive")
+  if (APPLE)
+    add_library_flags("-Wl,-force_load" "${LIBCXX_CXX_ABI_LIBRARY}")
+  else()
+    add_library_flags("-Wl,--whole-archive" "-Wl,-Bstatic")
+    add_library_flags("${LIBCXX_CXX_ABI_LIBRARY}")
+    add_library_flags("-Wl,-Bdynamic" "-Wl,--no-whole-archive")
+  endif()
 elseif (LIBCXX_OSX_REEXPORT_LIBCXXABI_SYMBOLS)
   add_library_flags("${LIBCXX_CXX_ABI_LIBRARY}")
 else ()
@@ -126,28 +143,10 @@ if (LIBCXX_TARGETING_MSVC)
 endif()
 
 if (LIBCXX_OSX_REEXPORT_LIBCXXABI_SYMBOLS)
-  if (NOT DEFINED LIBCXX_LIBCPPABI_VERSION)
-    set(LIBCXX_LIBCPPABI_VERSION "2") # Default value
-    execute_process(
-      COMMAND xcrun --show-sdk-version
-      OUTPUT_VARIABLE sdk_ver
-      RESULT_VARIABLE res
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if (res EQUAL 0)
-      message(STATUS "Found SDK version ${sdk_ver}")
-      string(REPLACE "10." "" sdk_ver "${sdk_ver}")
-      if (sdk_ver LESS 9)
-        set(LIBCXX_LIBCPPABI_VERSION "")
-      else()
-        set(LIBCXX_LIBCPPABI_VERSION "2")
-      endif()
-    endif()
-  endif()
-
-  if ("armv7" IN_LIST CMAKE_OSX_ARCHITECTURES)
-    set(RE_EXPORT_LIST "${CMAKE_CURRENT_SOURCE_DIR}/libc++sjlj-abi.exp")
+  if ("${CMAKE_OSX_ARCHITECTURES}" MATCHES "^(armv6|armv7|armv7s)$")
+    set(RE_EXPORT_LIST "${CMAKE_CURRENT_SOURCE_DIR}/libc++sjlj-abi.v${LIBCXX_LIBCPPABI_VERSION}.exp")
   else()
-    set(RE_EXPORT_LIST "${CMAKE_CURRENT_SOURCE_DIR}/libc++abi${LIBCXX_LIBCPPABI_VERSION}.exp")
+    set(RE_EXPORT_LIST "${CMAKE_CURRENT_SOURCE_DIR}/libc++abi.v${LIBCXX_LIBCPPABI_VERSION}.exp")
   endif()
   add_link_flags(
     "-compatibility_version 1"
@@ -278,39 +277,6 @@ endif()
 # Add a meta-target for both libraries.
 add_custom_target(cxx DEPENDS cxx-headers ${LIBCXX_BUILD_TARGETS})
 
-if (LIBCXX_ENABLE_FILESYSTEM)
-  set(LIBCXX_FILESYSTEM_SOURCES
-      ../src/filesystem/operations.cpp
-      ../src/filesystem/directory_iterator.cpp)
-
-  # Filesystem uses __int128_t, which requires a definition of __muloi4 when
-  # compiled with UBSAN. This definition is not provided by libgcc_s, but is
-  # provided by compiler-rt. So we need to disable it to avoid having multiple
-  # definitions. See filesystem/int128_builtins.cpp.
-  if (NOT LIBCXX_USE_COMPILER_RT)
-    list(APPEND LIBCXX_FILESYSTEM_SOURCES ../src/filesystem/int128_builtins.cpp)
-  endif()
-
-  add_library(cxx_filesystem STATIC ${LIBCXX_FILESYSTEM_SOURCES})
-  if (LIBCXX_ENABLE_SHARED)
-    target_link_libraries(cxx_filesystem cxx_shared)
-  else()
-    target_link_libraries(cxx_filesystem cxx_static)
-  endif()
-
-  set(filesystem_flags "${LIBCXX_COMPILE_FLAGS}")
-  check_flag_supported(-std=c++14)
-  if (NOT MSVC AND LIBCXX_SUPPORTS_STD_EQ_CXX14_FLAG AND LIBCXX_STANDARD_VER STREQUAL "c++11")
-    string(REPLACE "-std=c++11" "-std=c++14" filesystem_flags "${LIBCXX_COMPILE_FLAGS}")
-  endif()
-  set_target_properties(cxx_filesystem
-    PROPERTIES
-      COMPILE_FLAGS "${filesystem_flags}"
-      OUTPUT_NAME   "c++fs"
-  )
-endif()
-
-
 if (LIBCXX_ENABLE_EXPERIMENTAL_LIBRARY)
   file(GLOB LIBCXX_EXPERIMENTAL_SOURCES ../src/experimental/*.cpp)
   add_library(cxx_experimental STATIC ${LIBCXX_EXPERIMENTAL_SOURCES})
@@ -379,13 +345,10 @@ if (LIBCXX_ENABLE_SHARED AND LIBCXX_ENABLE_ABI_LINKER_SCRIPT)
 endif()
 
 if (LIBCXX_INSTALL_LIBRARY)
-  if (LIBCXX_INSTALL_FILESYSTEM_LIBRARY)
-    set(filesystem_lib cxx_filesystem)
-  endif()
   if (LIBCXX_INSTALL_EXPERIMENTAL_LIBRARY)
     set(experimental_lib cxx_experimental)
   endif()
-  install(TARGETS ${LIBCXX_INSTALL_TARGETS} ${filesystem_lib} ${experimental_lib}
+  install(TARGETS ${LIBCXX_INSTALL_TARGETS} ${experimental_lib}
     LIBRARY DESTINATION ${LIBCXX_INSTALL_PREFIX}lib${LIBCXX_LIBDIR_SUFFIX} COMPONENT cxx
     ARCHIVE DESTINATION ${LIBCXX_INSTALL_PREFIX}lib${LIBCXX_LIBDIR_SUFFIX} COMPONENT cxx
     )
@@ -405,9 +368,6 @@ if (NOT CMAKE_CONFIGURATION_TYPES AND (LIBCXX_INSTALL_LIBRARY OR
     if(LIBCXX_INSTALL_LIBRARY)
       set(lib_install_target cxx)
     endif()
-    if (LIBCXX_INSTALL_FILESYSTEM_LIBRARY)
-      set(filesystem_lib_install_target cxx_filesystem)
-    endif()
     if (LIBCXX_INSTALL_EXPERIMENTAL_LIBRARY)
       set(experimental_lib_install_target cxx_experimental)
     endif()
@@ -417,7 +377,6 @@ if (NOT CMAKE_CONFIGURATION_TYPES AND (LIBCXX_INSTALL_LIBRARY OR
     add_custom_target(install-cxx
                       DEPENDS ${lib_install_target}
                               ${experimental_lib_install_target}
-                              ${filesystem_lib_install_target}
                               ${header_install_target}
                       COMMAND "${CMAKE_COMMAND}"
                       -DCMAKE_INSTALL_COMPONENT=cxx
@@ -425,7 +384,6 @@ if (NOT CMAKE_CONFIGURATION_TYPES AND (LIBCXX_INSTALL_LIBRARY OR
     add_custom_target(install-cxx-stripped
                       DEPENDS ${lib_install_target}
                               ${experimental_lib_install_target}
-                              ${filesystem_lib_install_target}
                               ${header_install_target}
                       COMMAND "${CMAKE_COMMAND}"
                       -DCMAKE_INSTALL_COMPONENT=cxx

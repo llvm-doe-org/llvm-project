@@ -139,8 +139,7 @@ static void hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
                   MemorySSAUpdater *MSSAU, OptimizationRemarkEmitter *ORE);
 static bool sink(Instruction &I, LoopInfo *LI, DominatorTree *DT,
                  const Loop *CurLoop, ICFLoopSafetyInfo *SafetyInfo,
-                 MemorySSAUpdater *MSSAU, OptimizationRemarkEmitter *ORE,
-                 bool FreeInLoop);
+                 MemorySSAUpdater *MSSAU, OptimizationRemarkEmitter *ORE);
 static bool isSafeToExecuteUnconditionally(Instruction &Inst,
                                            const DominatorTree *DT,
                                            const Loop *CurLoop,
@@ -511,7 +510,7 @@ bool llvm::sinkRegion(DomTreeNode *N, AliasAnalysis *AA, LoopInfo *LI,
           canSinkOrHoistInst(I, AA, DT, CurLoop, CurAST, MSSAU, true,
                              NoOfMemAccTooLarge, &LicmMssaOptCounter, ORE) &&
           !I.mayHaveSideEffects()) {
-        if (sink(I, LI, DT, CurLoop, SafetyInfo, MSSAU, ORE, FreeInLoop)) {
+        if (sink(I, LI, DT, CurLoop, SafetyInfo, MSSAU, ORE)) {
           if (!FreeInLoop) {
             ++II;
             eraseInstruction(I, *SafetyInfo, CurAST, MSSAU);
@@ -998,16 +997,15 @@ static bool isLoadInvariantInLoop(LoadInst *LI, DominatorTree *DT,
 namespace {
 /// Return true if-and-only-if we know how to (mechanically) both hoist and
 /// sink a given instruction out of a loop.  Does not address legality
-/// concerns such as aliasing or speculation safety.  
+/// concerns such as aliasing or speculation safety.
 bool isHoistableAndSinkableInst(Instruction &I) {
   // Only these instructions are hoistable/sinkable.
-  return (isa<LoadInst>(I) || isa<StoreInst>(I) ||
-          isa<CallInst>(I) || isa<FenceInst>(I) || 
-          isa<BinaryOperator>(I) || isa<CastInst>(I) ||
-          isa<SelectInst>(I) || isa<GetElementPtrInst>(I) ||
-          isa<CmpInst>(I) || isa<InsertElementInst>(I) ||
-          isa<ExtractElementInst>(I) || isa<ShuffleVectorInst>(I) ||
-          isa<ExtractValueInst>(I) || isa<InsertValueInst>(I));
+  return (isa<LoadInst>(I) || isa<StoreInst>(I) || isa<CallInst>(I) ||
+          isa<FenceInst>(I) || isa<BinaryOperator>(I) || isa<CastInst>(I) ||
+          isa<SelectInst>(I) || isa<GetElementPtrInst>(I) || isa<CmpInst>(I) ||
+          isa<InsertElementInst>(I) || isa<ExtractElementInst>(I) ||
+          isa<ShuffleVectorInst>(I) || isa<ExtractValueInst>(I) ||
+          isa<InsertValueInst>(I));
 }
 /// Return true if all of the alias sets within this AST are known not to
 /// contain a Mod, or if MSSA knows thare are no MemoryDefs in the loop.
@@ -1191,33 +1189,39 @@ bool llvm::canSinkOrHoistInst(Instruction &I, AAResults *AA, DominatorTree *DT,
     } else { // MSSAU
       if (isOnlyMemoryAccess(SI, CurLoop, MSSAU))
         return true;
-      if (*LicmMssaOptCounter < LicmMssaOptCap) {
-        auto *Source = MSSA->getSkipSelfWalker()->getClobberingMemoryAccess(SI);
-        (*LicmMssaOptCounter)++;
-        // If there are no clobbering Defs in the loop, we still need to check
-        // for interfering Uses. If there are more accesses than the Promotion
-        // cap, give up, we're not walking a list that long. Otherwise, walk the
-        // list, check each Use if it's optimized to an access outside the loop.
-        // If yes, store is safe to hoist. This is fairly restrictive, but
-        // conservatively correct.
-        // TODO: Cache set of Uses on the first walk in runOnLoop, update when
-        // moving accesses. Can also extend to dominating uses.
-        if ((!MSSA->isLiveOnEntryDef(Source) &&
-             CurLoop->contains(Source->getBlock())) ||
-            NoOfMemAccTooLarge)
-          return false;
-        for (auto *BB : CurLoop->getBlocks())
-          if (auto *Accesses = MSSA->getBlockAccesses(BB))
-            for (const auto &MA : *Accesses)
-              if (const auto *MU = dyn_cast<MemoryUse>(&MA)) {
-                auto *MD = MU->getDefiningAccess();
-                if (!MSSA->isLiveOnEntryDef(MD) &&
-                    CurLoop->contains(MD->getBlock()))
-                  return false;
+      // If there are more accesses than the Promotion cap, give up, we're not
+      // walking a list that long.
+      if (NoOfMemAccTooLarge)
+        return false;
+      // Check store only if there's still "quota" to check clobber.
+      if (*LicmMssaOptCounter >= LicmMssaOptCap)
+        return false;
+      // If there are interfering Uses (i.e. their defining access is in the
+      // loop), or ordered loads (stored as Defs!), don't move this store.
+      // Could do better here, but this is conservatively correct.
+      // TODO: Cache set of Uses on the first walk in runOnLoop, update when
+      // moving accesses. Can also extend to dominating uses.
+      for (auto *BB : CurLoop->getBlocks())
+        if (auto *Accesses = MSSA->getBlockAccesses(BB)) {
+          for (const auto &MA : *Accesses)
+            if (const auto *MU = dyn_cast<MemoryUse>(&MA)) {
+              auto *MD = MU->getDefiningAccess();
+              if (!MSSA->isLiveOnEntryDef(MD) &&
+                  CurLoop->contains(MD->getBlock()))
+                return false;
+            } else if (const auto *MD = dyn_cast<MemoryDef>(&MA))
+              if (auto *LI = dyn_cast<LoadInst>(MD->getMemoryInst())) {
+                (void)LI; // Silence warning.
+                assert(!LI->isUnordered() && "Expected unordered load");
+                return false;
               }
-        return true;
-      }
-      return false;
+        }
+
+      auto *Source = MSSA->getSkipSelfWalker()->getClobberingMemoryAccess(SI);
+      (*LicmMssaOptCounter)++;
+      // If there are no clobbering Defs in the loop, store is safe to hoist.
+      return MSSA->isLiveOnEntryDef(Source) ||
+             !CurLoop->contains(Source->getBlock());
     }
   }
 
@@ -1311,7 +1315,7 @@ static Instruction *CloneInstructionInExitBlock(
 
     // Sinking call-sites need to be handled differently from other
     // instructions.  The cloned call-site needs a funclet bundle operand
-    // appropriate for it's location in the CFG.
+    // appropriate for its location in the CFG.
     SmallVector<OperandBundleDef, 1> OpBundles;
     for (unsigned BundleIdx = 0, BundleEnd = CI->getNumOperandBundles();
          BundleIdx != BundleEnd; ++BundleIdx) {
@@ -1509,8 +1513,7 @@ static void splitPredecessorsOfLoopExit(PHINode *PN, DominatorTree *DT,
 ///
 static bool sink(Instruction &I, LoopInfo *LI, DominatorTree *DT,
                  const Loop *CurLoop, ICFLoopSafetyInfo *SafetyInfo,
-                 MemorySSAUpdater *MSSAU, OptimizationRemarkEmitter *ORE,
-                 bool FreeInLoop) {
+                 MemorySSAUpdater *MSSAU, OptimizationRemarkEmitter *ORE) {
   LLVM_DEBUG(dbgs() << "LICM sinking instruction: " << I << "\n");
   ORE->emit([&]() {
     return OptimizationRemark(DEBUG_TYPE, "InstSunk", &I)
@@ -1524,7 +1527,7 @@ static bool sink(Instruction &I, LoopInfo *LI, DominatorTree *DT,
   ++NumSunk;
 
   // Iterate over users to be ready for actual sinking. Replace users via
-  // unrechable blocks with undef and make all user PHIs trivially replcable.
+  // unreachable blocks with undef and make all user PHIs trivially replaceable.
   SmallPtrSet<Instruction *, 8> VisitedUsers;
   for (Value::user_iterator UI = I.user_begin(), UE = I.user_end(); UI != UE;) {
     auto *User = cast<Instruction>(*UI);

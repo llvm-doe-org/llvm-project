@@ -75,6 +75,8 @@ future versions of Clang.
 Modified Compiler Flags
 -----------------------
 
+- `clang -dumpversion` now returns the version of Clang itself.
+
 - ...
 
 New Pragmas in Clang
@@ -170,8 +172,10 @@ AST Matchers
 clang-format
 ------------
 
-
-- ...
+- Add language support for clang-formatting C# files
+- Add Microsoft coding style to encapsulate default C# formatting style
+- Added new option `PPDIS_BeforeHash` (in configuration: `BeforeHash`) to
+  `IndentPPDirectives` which indents preprocessor directives before the hash.
 
 libclang
 --------

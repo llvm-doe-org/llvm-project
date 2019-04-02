@@ -606,6 +606,7 @@ Query for this feature with ``__has_attribute(diagnose_if)``.
 
 def PassObjectSizeDocs : Documentation {
   let Category = DocCatVariable; // Technically it's a parameter doc, but eh.
+  let Heading = "pass_object_size, pass_dynamic_object_size";
   let Content = [{
 .. Note:: The mangling of functions with parameters that are annotated with
   ``pass_object_size`` is subject to change. You can get around this by
@@ -698,6 +699,15 @@ Currently, ``pass_object_size`` is a bit restricted in terms of its usage:
 * It is an error to apply the ``pass_object_size`` attribute to parameters that
   are not pointers. Additionally, any parameter that ``pass_object_size`` is
   applied to must be marked ``const`` at its function's definition.
+
+Clang also supports the ``pass_dynamic_object_size`` attribute, which behaves
+identically to ``pass_object_size``, but evaluates a call to
+``__builtin_dynamic_object_size`` at the callee instead of
+``__builtin_object_size``. ``__builtin_dynamic_object_size`` provides some extra
+runtime checks when the object size can't be determined at compile-time. You can
+read more about ``__builtin_dynamic_object_size`` `here
+<https://clang.llvm.org/docs/LanguageExtensions.html#evaluating-object-size-dynamically>`_.
+
   }];
 }
 
@@ -4077,5 +4087,22 @@ that have their return value of type ``kern_return_t`` unconditionally returned
 from the routine. The attribute can be applied to C++ methods, and in this case
 it will be automatically applied to overrides if the method is virtual. The
 attribute can also be written using C++11 syntax: ``[[mig::server_routine]]``.
+}];
+}
+
+def MSAllocatorDocs : Documentation {
+  let Category = DocCatType;
+  let Content = [{
+The ``__declspec(allocator)`` attribute is applied to functions that allocate
+memory, such as operator new in C++. When CodeView debug information is emitted
+(enabled by ``clang -gcodeview`` or ``clang-cl /Z7``), Clang will attempt to
+record the code offset of heap allocation call sites in the debug info. It will
+also record the type being allocated using some local heuristics. The Visual
+Studio debugger uses this information to `profile memory usage`_.
+
+.. _profile memory usage: https://docs.microsoft.com/en-us/visualstudio/profiling/memory-usage
+
+This attribute does not affect optimizations in any way, unlike GCC's
+``__attribute__((malloc))``.
 }];
 }

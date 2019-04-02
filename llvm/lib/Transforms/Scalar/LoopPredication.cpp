@@ -193,6 +193,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/LoopUtils.h"
 
 #define DEBUG_TYPE "loop-predication"
@@ -265,8 +266,8 @@ class LoopPredication {
 
   bool CanExpand(const SCEV* S);
   Value *expandCheck(SCEVExpander &Expander, IRBuilder<> &Builder,
-                     ICmpInst::Predicate Pred, const SCEV *LHS, const SCEV *RHS,
-                     Instruction *InsertAt);
+                     ICmpInst::Predicate Pred, const SCEV *LHS,
+                     const SCEV *RHS);
 
   Optional<Value *> widenICmpRangeCheck(ICmpInst *ICI, SCEVExpander &Expander,
                                         IRBuilder<> &Builder);
@@ -389,15 +390,17 @@ LoopPredication::parseLoopICmp(ICmpInst::Predicate Pred, Value *LHS,
 Value *LoopPredication::expandCheck(SCEVExpander &Expander,
                                     IRBuilder<> &Builder,
                                     ICmpInst::Predicate Pred, const SCEV *LHS,
-                                    const SCEV *RHS, Instruction *InsertAt) {
-  // TODO: we can check isLoopEntryGuardedByCond before emitting the check
-
+                                    const SCEV *RHS) {
   Type *Ty = LHS->getType();
   assert(Ty == RHS->getType() && "expandCheck operands have different types?");
 
   if (SE->isLoopEntryGuardedByCond(L, Pred, LHS, RHS))
     return Builder.getTrue();
+  if (SE->isLoopEntryGuardedByCond(L, ICmpInst::getInversePredicate(Pred),
+                                   LHS, RHS))
+    return Builder.getFalse();
 
+  Instruction *InsertAt = &*Builder.GetInsertPoint();
   Value *LHSV = Expander.expandCodeFor(LHS, Ty, InsertAt);
   Value *RHSV = Expander.expandCodeFor(RHS, Ty, InsertAt);
   return Builder.CreateICmp(Pred, LHSV, RHSV);
@@ -469,12 +472,11 @@ Optional<Value *> LoopPredication::widenICmpRangeCheckIncrementingLoop(
   LLVM_DEBUG(dbgs() << "LHS: " << *LatchLimit << "\n");
   LLVM_DEBUG(dbgs() << "RHS: " << *RHS << "\n");
   LLVM_DEBUG(dbgs() << "Pred: " << LimitCheckPred << "\n");
-
-  Instruction *InsertAt = Preheader->getTerminator();
+ 
   auto *LimitCheck =
-      expandCheck(Expander, Builder, LimitCheckPred, LatchLimit, RHS, InsertAt);
+      expandCheck(Expander, Builder, LimitCheckPred, LatchLimit, RHS);
   auto *FirstIterationCheck = expandCheck(Expander, Builder, RangeCheck.Pred,
-                                          GuardStart, GuardLimit, InsertAt);
+                                          GuardStart, GuardLimit);
   return Builder.CreateAnd(FirstIterationCheck, LimitCheck);
 }
 
@@ -504,13 +506,12 @@ Optional<Value *> LoopPredication::widenICmpRangeCheckDecrementingLoop(
   // guardStart u< guardLimit &&
   // latchLimit <pred> 1.
   // See the header comment for reasoning of the checks.
-  Instruction *InsertAt = Preheader->getTerminator();
   auto LimitCheckPred =
       ICmpInst::getFlippedStrictnessPredicate(LatchCheck.Pred);
   auto *FirstIterationCheck = expandCheck(Expander, Builder, ICmpInst::ICMP_ULT,
-                                          GuardStart, GuardLimit, InsertAt);
+                                          GuardStart, GuardLimit);
   auto *LimitCheck = expandCheck(Expander, Builder, LimitCheckPred, LatchLimit,
-                                 SE->getOne(Ty), InsertAt);
+                                 SE->getOne(Ty));
   return Builder.CreateAnd(FirstIterationCheck, LimitCheck);
 }
 
@@ -607,7 +608,8 @@ unsigned LoopPredication::collectChecks(SmallVectorImpl<Value *> &Checks,
     }
 
     if (ICmpInst *ICI = dyn_cast<ICmpInst>(Condition)) {
-      if (auto NewRangeCheck = widenICmpRangeCheck(ICI, Expander, Builder)) {
+      if (auto NewRangeCheck = widenICmpRangeCheck(ICI, Expander,
+                                                   Builder)) {
         Checks.push_back(NewRangeCheck.getValue());
         NumWidened++;
         continue;
@@ -643,7 +645,9 @@ bool LoopPredication::widenGuardConditions(IntrinsicInst *Guard,
       LastCheck = Check;
     else
       LastCheck = Builder.CreateAnd(LastCheck, Check);
+  auto *OldCond = Guard->getOperand(0);
   Guard->setOperand(0, LastCheck);
+  RecursivelyDeleteTriviallyDeadInstructions(OldCond);
 
   LLVM_DEBUG(dbgs() << "Widened checks = " << NumWidened << "\n");
   return true;
@@ -678,9 +682,11 @@ bool LoopPredication::widenWidenableBranchGuardConditions(
   // Make sure that the check contains widenable condition and therefore can be
   // further widened.
   LastCheck = Builder.CreateAnd(LastCheck, WidenableCondition);
+  auto *OldCond = Guard->getOperand(0);
   Guard->setOperand(0, LastCheck);
   assert(isGuardAsWidenableBranch(Guard) &&
          "Stopped being a guard after transform?");
+  RecursivelyDeleteTriviallyDeadInstructions(OldCond);
 
   LLVM_DEBUG(dbgs() << "Widened checks = " << NumWidened << "\n");
   return true;

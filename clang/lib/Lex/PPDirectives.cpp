@@ -1446,6 +1446,14 @@ bool Preprocessor::GetIncludeFilenameSpelling(SourceLocation Loc,
   // Get the text form of the filename.
   assert(!Buffer.empty() && "Can't have tokens with empty spellings!");
 
+  // FIXME: Consider warning on some of the cases described in C11 6.4.7/3 and
+  // C++20 [lex.header]/2:
+  //
+  // If `"`, `'`, `\`, `/*`, or `//` appears in a header-name, then
+  //   in C: behavior is undefined
+  //   in C++: program is conditionally-supported with implementation-defined
+  //           semantics
+
   // Make sure the filename is <x> or "x".
   bool isAngled;
   if (Buffer[0] == '<') {
@@ -1613,7 +1621,7 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
   if (LexHeaderName(FilenameTok))
     return;
 
-  if (!FilenameTok.isOneOf(tok::angle_string_literal, tok::string_literal)) {
+  if (FilenameTok.isNot(tok::header_name)) {
     Diag(FilenameTok.getLocation(), diag::err_pp_expects_filename);
     if (FilenameTok.isNot(tok::eod))
       DiscardUntilEndOfDirective();
@@ -1805,26 +1813,26 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
     return;
   }
 
-  // Should we enter the source file? Set to false if either the source file is
+  // Should we enter the source file? Set to Skip if either the source file is
   // known to have no effect beyond its effect on module visibility -- that is,
-  // if it's got an include guard that is already defined or is a modular header
-  // we've imported or already built.
-  bool ShouldEnter = true;
+  // if it's got an include guard that is already defined, set to Import if it
+  // is a modular header we've already built and should import.
+  enum { Enter, Import, Skip, IncludeLimitReached } Action = Enter;
 
   if (PPOpts->SingleFileParseMode)
-    ShouldEnter = false;
+    Action = IncludeLimitReached;
 
   // If we've reached the max allowed include depth, it is usually due to an
   // include cycle. Don't enter already processed files again as it can lead to
   // reaching the max allowed include depth again.
-  if (ShouldEnter && HasReachedMaxIncludeDepth && File &&
+  if (Action == Enter && HasReachedMaxIncludeDepth && File &&
       HeaderInfo.getFileInfo(File).NumIncludes)
-    ShouldEnter = false;
+    Action = IncludeLimitReached;
 
   // Determine whether we should try to import the module for this #include, if
   // there is one. Don't do so if precompiled module support is disabled or we
   // are processing this module textually (because we're building the module).
-  if (ShouldEnter && File && SuggestedModule && getLangOpts().Modules &&
+  if (Action == Enter && File && SuggestedModule && getLangOpts().Modules &&
       !isForModuleBuilding(SuggestedModule.getModule(),
                            getLangOpts().CurrentModule,
                            getLangOpts().ModuleName)) {
@@ -1864,9 +1872,9 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
     assert((Imported == nullptr || Imported == SuggestedModule.getModule()) &&
            "the imported module is different than the suggested one");
 
-    if (Imported)
-      ShouldEnter = false;
-    else if (Imported.isMissingExpected()) {
+    if (Imported) {
+      Action = Import;
+    } else if (Imported.isMissingExpected()) {
       // We failed to find a submodule that we assumed would exist (because it
       // was in the directory of an umbrella header, for instance), but no
       // actual module containing it exists (because the umbrella header is
@@ -1899,13 +1907,18 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
 
   // Ask HeaderInfo if we should enter this #include file.  If not, #including
   // this file will have no effect.
-  bool SkipHeader = false;
-  if (ShouldEnter && File &&
+  if (Action == Enter && File &&
       !HeaderInfo.ShouldEnterIncludeFile(*this, File, isImport,
                                          getLangOpts().Modules,
                                          SuggestedModule.getModule())) {
-    ShouldEnter = false;
-    SkipHeader = true;
+    // Even if we've already preprocessed this header once and know that we
+    // don't need to see its contents again, we still need to import it if it's
+    // modular because we might not have imported it from this submodule before.
+    //
+    // FIXME: We don't do this when compiling a PCH because the AST
+    // serialization layer can't cope with it. This means we get local
+    // submodule visibility semantics wrong in that case.
+    Action = (SuggestedModule && !getLangOpts().CompilingPCH) ? Import : Skip;
   }
 
   if (Callbacks) {
@@ -1914,8 +1927,9 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
         HashLoc, IncludeTok,
         LangOpts.MSVCCompat ? NormalizedPath.c_str() : Filename, isAngled,
         FilenameRange, File, SearchPath, RelativePath,
-        ShouldEnter ? nullptr : SuggestedModule.getModule(), FileCharacter);
-    if (SkipHeader && !SuggestedModule.getModule())
+        Action == Import ? SuggestedModule.getModule() : nullptr,
+        FileCharacter);
+    if (Action == Skip)
       Callbacks->FileSkipped(*File, FilenameTok, FileCharacter);
   }
 
@@ -1960,26 +1974,31 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
     }
   }
 
-  // If we don't need to enter the file, stop now.
-  if (!ShouldEnter) {
-    // If this is a module import, make it visible if needed.
-    if (auto *M = SuggestedModule.getModule()) {
-      // When building a pch, -fmodule-name tells the compiler to textually
-      // include headers in the specified module. But it is possible that
-      // ShouldEnter is false because we are skipping the header. In that
-      // case, We are not importing the specified module.
-      if (SkipHeader && getLangOpts().CompilingPCH &&
-          isForModuleBuilding(M, getLangOpts().CurrentModule,
-                              getLangOpts().ModuleName))
-        return;
-
-      makeModuleVisible(M, HashLoc);
-
-      if (IncludeTok.getIdentifierInfo()->getPPKeywordID() !=
-          tok::pp___include_macros)
-        EnterAnnotationToken(DirectiveRange, tok::annot_module_include, M);
-    }
+  switch (Action) {
+  case Skip:
+    // If we don't need to enter the file, stop now.
     return;
+
+  case IncludeLimitReached:
+    // If we reached our include limit and don't want to enter any more files,
+    // don't go any further.
+    return;
+
+  case Import: {
+    // If this is a module import, make it visible if needed.
+    Module *M = SuggestedModule.getModule();
+    assert(M && "no module to import");
+
+    makeModuleVisible(M, HashLoc);
+
+    if (IncludeTok.getIdentifierInfo()->getPPKeywordID() !=
+        tok::pp___include_macros)
+      EnterAnnotationToken(DirectiveRange, tok::annot_module_include, M);
+    return;
+  }
+
+  case Enter:
+    break;
   }
 
   // Check that we don't have infinite #include recursion.
@@ -2016,6 +2035,11 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
     // When building a pch, -fmodule-name tells the compiler to textually
     // include headers in the specified module. We are not building the
     // specified module.
+    //
+    // FIXME: This is the wrong way to handle this. We should produce a PCH
+    // that behaves the same as the header would behave in a compilation using
+    // that PCH, which means we should enter the submodule. We need to teach
+    // the AST serialization layer to deal with the resulting AST.
     if (getLangOpts().CompilingPCH &&
         isForModuleBuilding(M, getLangOpts().CurrentModule,
                             getLangOpts().ModuleName))
@@ -2061,6 +2085,10 @@ void Preprocessor::HandleIncludeNextDirective(SourceLocation HashLoc,
     LookupFromFile = CurPPLexer->getFileEntry();
     Lookup = nullptr;
   } else if (!Lookup) {
+    // The current file was not found by walking the include path. Either it
+    // is the primary file (handled above), or it was found by absolute path,
+    // or it was found relative to such a file.
+    // FIXME: Track enough information so we know which case we're in.
     Diag(IncludeNextTok, diag::pp_include_next_absolute_path);
   } else {
     // Start looking up in the next directory.
@@ -2153,8 +2181,7 @@ bool Preprocessor::ReadMacroParameterList(MacroInfo *MI, Token &Tok) {
 
       // OpenCL v1.2 s6.9.e: variadic macros are not supported.
       if (LangOpts.OpenCL) {
-        Diag(Tok, diag::err_pp_opencl_variadic_macros);
-        return true;
+        Diag(Tok, diag::ext_pp_opencl_variadic_macros);
       }
 
       // Lex the token after the identifier.
@@ -2183,8 +2210,7 @@ bool Preprocessor::ReadMacroParameterList(MacroInfo *MI, Token &Tok) {
 
       // If this is already used as a parameter, it is used multiple times (e.g.
       // #define X(A,A.
-      if (std::find(Parameters.begin(), Parameters.end(), II) !=
-          Parameters.end()) {  // C99 6.10.3p6
+      if (llvm::find(Parameters, II) != Parameters.end()) { // C99 6.10.3p6
         Diag(Tok, diag::err_pp_duplicate_name_in_arg_list) << II;
         return true;
       }

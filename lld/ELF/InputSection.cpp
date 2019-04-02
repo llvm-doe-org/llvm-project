@@ -210,8 +210,8 @@ OutputSection *SectionBase::getOutputSection() {
 // by zlib-compressed data. This function parses a header to initialize
 // `UncompressedSize` member and remove the header from `RawData`.
 void InputSectionBase::parseCompressedHeader() {
-  typedef typename ELF64LE::Chdr Chdr64;
-  typedef typename ELF32LE::Chdr Chdr32;
+  using Chdr64 = typename ELF64LE::Chdr;
+  using Chdr32 = typename ELF32LE::Chdr;
 
   // Old-style header
   if (Name.startswith(".zdebug")) {
@@ -380,7 +380,7 @@ OutputSection *InputSection::getParent() const {
 // Copy SHT_GROUP section contents. Used only for the -r option.
 template <class ELFT> void InputSection::copyShtGroup(uint8_t *Buf) {
   // ELFT::Word is the 32-bit integral type in the target endianness.
-  typedef typename ELFT::Word u32;
+  using u32 = typename ELFT::Word;
   ArrayRef<u32> From = getDataAs<u32>();
   auto *To = reinterpret_cast<u32 *>(Buf);
 
@@ -624,15 +624,15 @@ static uint64_t getRelocTargetVA(const InputFile *File, RelType Type, int64_t A,
     return Sym.getGotVA() + A;
   case R_GOTONLY_PC:
     return In.Got->getVA() + A - P;
-  case R_GOTONLY_PC_FROM_END:
-    return In.Got->getVA() + A - P + In.Got->getSize();
+  case R_GOTPLTONLY_PC:
+    return In.GotPlt->getVA() + A - P;
   case R_GOTREL:
     return Sym.getVA(A) - In.Got->getVA();
-  case R_GOTREL_FROM_END:
-    return Sym.getVA(A) - In.Got->getVA() - In.Got->getSize();
-  case R_GOT_FROM_END:
+  case R_GOTPLTREL:
+    return Sym.getVA(A) - In.GotPlt->getVA();
+  case R_GOTPLT:
   case R_RELAX_TLS_GD_TO_IE_END:
-    return Sym.getGotOffset() + A - In.Got->getSize();
+    return Sym.getGotVA() + A - In.GotPlt->getVA();
   case R_TLSLD_GOT_OFF:
   case R_GOT_OFF:
   case R_RELAX_TLS_GD_TO_IE_GOT_OFF:
@@ -758,12 +758,12 @@ static uint64_t getRelocTargetVA(const InputFile *File, RelType Type, int64_t A,
            getAArch64Page(P);
   case R_TLSGD_GOT:
     return In.Got->getGlobalDynOffset(Sym) + A;
-  case R_TLSGD_GOT_FROM_END:
-    return In.Got->getGlobalDynOffset(Sym) + A - In.Got->getSize();
+  case R_TLSGD_GOTPLT:
+    return In.Got->getVA() + In.Got->getGlobalDynOffset(Sym) + A - In.GotPlt->getVA();
   case R_TLSGD_PC:
     return In.Got->getGlobalDynAddr(Sym) + A - P;
-  case R_TLSLD_GOT_FROM_END:
-    return In.Got->getTlsIndexOff() + A - In.Got->getSize();
+  case R_TLSLD_GOTPLT:
+    return In.Got->getVA() + In.Got->getTlsIndexOff() + A - In.GotPlt->getVA();
   case R_TLSLD_GOT:
     return In.Got->getTlsIndexOff() + A;
   case R_TLSLD_PC:

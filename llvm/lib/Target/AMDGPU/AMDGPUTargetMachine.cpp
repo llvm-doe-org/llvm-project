@@ -68,6 +68,11 @@ EnableEarlyIfConversion("amdgpu-early-ifcvt", cl::Hidden,
                         cl::desc("Run early if-conversion"),
                         cl::init(false));
 
+static cl::opt<bool>
+OptExecMaskPreRA("amdgpu-opt-exec-mask-pre-ra", cl::Hidden,
+            cl::desc("Run pre-RA exec mask optimizations"),
+            cl::init(true));
+
 static cl::opt<bool> EnableR600IfConvert(
   "r600-if-convert",
   cl::desc("Use if conversion pass"),
@@ -203,7 +208,7 @@ extern "C" void LLVMInitializeAMDGPUTarget() {
   initializeSIInsertSkipsPass(*PR);
   initializeSIMemoryLegalizerPass(*PR);
   initializeSIOptimizeExecMaskingPass(*PR);
-  initializeSIFixWWMLivenessPass(*PR);
+  initializeSIPreAllocateWWMRegsPass(*PR);
   initializeSIFormMemoryClausesPass(*PR);
   initializeAMDGPUUnifyDivergentExitNodesPass(*PR);
   initializeAMDGPUAAWrapperPassPass(*PR);
@@ -874,26 +879,27 @@ void GCNPassConfig::addFastRegAlloc() {
   // SI_ELSE will introduce a copy of the tied operand source after the else.
   insertPass(&PHIEliminationID, &SILowerControlFlowID, false);
 
-  // This must be run after SILowerControlFlow, since it needs to use the
-  // machine-level CFG, but before register allocation.
-  insertPass(&SILowerControlFlowID, &SIFixWWMLivenessID, false);
+  // This must be run just after RegisterCoalescing.
+  insertPass(&RegisterCoalescerID, &SIPreAllocateWWMRegsID, false);
 
   TargetPassConfig::addFastRegAlloc();
 }
 
 void GCNPassConfig::addOptimizedRegAlloc() {
-  insertPass(&MachineSchedulerID, &SIOptimizeExecMaskingPreRAID);
-
-  insertPass(&SIOptimizeExecMaskingPreRAID, &SIFormMemoryClausesID);
+  if (OptExecMaskPreRA) {
+    insertPass(&MachineSchedulerID, &SIOptimizeExecMaskingPreRAID);
+    insertPass(&SIOptimizeExecMaskingPreRAID, &SIFormMemoryClausesID);
+  } else {
+    insertPass(&MachineSchedulerID, &SIFormMemoryClausesID);
+  }
 
   // This must be run immediately after phi elimination and before
   // TwoAddressInstructions, otherwise the processing of the tied operand of
   // SI_ELSE will introduce a copy of the tied operand source after the else.
   insertPass(&PHIEliminationID, &SILowerControlFlowID, false);
 
-  // This must be run after SILowerControlFlow, since it needs to use the
-  // machine-level CFG, but before register allocation.
-  insertPass(&SILowerControlFlowID, &SIFixWWMLivenessID, false);
+  // This must be run just after RegisterCoalescing.
+  insertPass(&RegisterCoalescerID, &SIPreAllocateWWMRegsID, false);
 
   TargetPassConfig::addOptimizedRegAlloc();
 }

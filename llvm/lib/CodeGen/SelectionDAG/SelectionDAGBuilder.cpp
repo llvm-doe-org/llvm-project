@@ -1350,7 +1350,7 @@ bool SelectionDAGBuilder::handleDebugValue(const Value *V, DILocalVariable *Var,
 void SelectionDAGBuilder::resolveOrClearDbgInfo() {
   // Try to fixup any remaining dangling debug info -- and drop it if we can't.
   for (auto &Pair : DanglingDebugInfoMap)
-    for (auto &DDI : Pair.getSecond())
+    for (auto &DDI : Pair.second)
       salvageUnresolvedDbgValue(DDI);
   clearDanglingDebugInfo();
 }
@@ -2283,6 +2283,17 @@ void SelectionDAGBuilder::visitSwitchCase(CaseBlock &CB,
   SDValue CondLHS = getValue(CB.CmpLHS);
   SDLoc dl = CB.DL;
 
+  if (CB.CC == ISD::SETTRUE) {
+    // Branch or fall through to TrueBB.
+    addSuccessorWithProb(SwitchBB, CB.TrueBB, CB.TrueProb);
+    SwitchBB->normalizeSuccProbs();
+    if (CB.TrueBB != NextBlock(SwitchBB)) {
+      DAG.setRoot(DAG.getNode(ISD::BR, dl, MVT::Other, getControlRoot(),
+                              DAG.getBasicBlock(CB.TrueBB)));
+    }
+    return;
+  }
+
   // Build the setcc now.
   if (!CB.CmpMHS) {
     // Fold "(X == true)" to X and "(X == false)" to !X to
@@ -2366,9 +2377,7 @@ void SelectionDAGBuilder::visitJumpTableHeader(JumpTable &JT,
                                                MachineBasicBlock *SwitchBB) {
   SDLoc dl = getCurSDLoc();
 
-  // Subtract the lowest switch case value from the value being switched on and
-  // conditional branch to default mbb if the result is greater than the
-  // difference between smallest and largest cases.
+  // Subtract the lowest switch case value from the value being switched on.
   SDValue SwitchOp = getValue(JTH.SValue);
   EVT VT = SwitchOp.getValueType();
   SDValue Sub = DAG.getNode(ISD::SUB, dl, VT, SwitchOp,
@@ -2388,24 +2397,33 @@ void SelectionDAGBuilder::visitJumpTableHeader(JumpTable &JT,
                                     JumpTableReg, SwitchOp);
   JT.Reg = JumpTableReg;
 
-  // Emit the range check for the jump table, and branch to the default block
-  // for the switch statement if the value being switched on exceeds the largest
-  // case in the switch.
-  SDValue CMP = DAG.getSetCC(
-      dl, TLI.getSetCCResultType(DAG.getDataLayout(), *DAG.getContext(),
-                                 Sub.getValueType()),
-      Sub, DAG.getConstant(JTH.Last - JTH.First, dl, VT), ISD::SETUGT);
+  if (!JTH.OmitRangeCheck) {
+    // Emit the range check for the jump table, and branch to the default block
+    // for the switch statement if the value being switched on exceeds the
+    // largest case in the switch.
+    SDValue CMP = DAG.getSetCC(
+        dl, TLI.getSetCCResultType(DAG.getDataLayout(), *DAG.getContext(),
+                                   Sub.getValueType()),
+        Sub, DAG.getConstant(JTH.Last - JTH.First, dl, VT), ISD::SETUGT);
 
-  SDValue BrCond = DAG.getNode(ISD::BRCOND, dl,
-                               MVT::Other, CopyTo, CMP,
-                               DAG.getBasicBlock(JT.Default));
+    SDValue BrCond = DAG.getNode(ISD::BRCOND, dl,
+                                 MVT::Other, CopyTo, CMP,
+                                 DAG.getBasicBlock(JT.Default));
 
-  // Avoid emitting unnecessary branches to the next block.
-  if (JT.MBB != NextBlock(SwitchBB))
-    BrCond = DAG.getNode(ISD::BR, dl, MVT::Other, BrCond,
-                         DAG.getBasicBlock(JT.MBB));
+    // Avoid emitting unnecessary branches to the next block.
+    if (JT.MBB != NextBlock(SwitchBB))
+      BrCond = DAG.getNode(ISD::BR, dl, MVT::Other, BrCond,
+                           DAG.getBasicBlock(JT.MBB));
 
-  DAG.setRoot(BrCond);
+    DAG.setRoot(BrCond);
+  } else {
+    // Avoid emitting unnecessary branches to the next block.
+    if (JT.MBB != NextBlock(SwitchBB))
+      DAG.setRoot(DAG.getNode(ISD::BR, dl, MVT::Other, CopyTo,
+                              DAG.getBasicBlock(JT.MBB)));
+    else
+      DAG.setRoot(CopyTo);
+  }
 }
 
 /// Create a LOAD_STACK_GUARD node, and let it carry the target specific global
@@ -8164,7 +8182,8 @@ void SelectionDAGBuilder::visitInlineAsm(ImmutableCallSite CS) {
   AsmNodeOperands[InlineAsm::Op_InputChain] = Chain;
   if (Flag.getNode()) AsmNodeOperands.push_back(Flag);
 
-  unsigned ISDOpc = isa<CallBrInst>(CS.getInstruction()) ? ISD::INLINEASM_BR : ISD::INLINEASM;
+  unsigned ISDOpc = isa<CallBrInst>(CS.getInstruction()) ? ISD::INLINEASM_BR
+                                                         : ISD::INLINEASM;
   Chain = DAG.getNode(ISDOpc, getCurSDLoc(),
                       DAG.getVTList(MVT::Other, MVT::Glue), AsmNodeOperands);
   Flag = Chain.getValue(1);
@@ -8339,7 +8358,7 @@ SDValue SelectionDAGBuilder::lowerRangeToAssertZExt(SelectionDAG &DAG,
     return Op;
 
   ConstantRange CR = getConstantRangeFromMetadata(*Range);
-  if (CR.isFullSet() || CR.isEmptySet() || CR.isWrappedSet())
+  if (CR.isFullSet() || CR.isEmptySet() || CR.isUpperWrapped())
     return Op;
 
   APInt Lo = CR.getUnsignedMin();
@@ -10295,10 +10314,13 @@ void SelectionDAGBuilder::lowerWorkItem(SwitchWorkListItem W, Value *Cond,
 
   MachineBasicBlock *CurMBB = W.MBB;
   for (CaseClusterIt I = W.FirstCluster, E = W.LastCluster; I <= E; ++I) {
+    bool FallthroughUnreachable = false;
     MachineBasicBlock *Fallthrough;
     if (I == W.LastCluster) {
       // For the last cluster, fall through to the default destination.
       Fallthrough = DefaultMBB;
+      FallthroughUnreachable = isa<UnreachableInst>(
+          DefaultMBB->getBasicBlock()->getFirstNonPHIOrDbg());
     } else {
       Fallthrough = CurMF->CreateMachineBasicBlock(CurMBB->getBasicBlock());
       CurMF->insert(BBI, Fallthrough);
@@ -10335,7 +10357,13 @@ void SelectionDAGBuilder::lowerWorkItem(SwitchWorkListItem W, Value *Cond,
           }
         }
 
-        addSuccessorWithProb(CurMBB, Fallthrough, FallthroughProb);
+        if (FallthroughUnreachable) {
+          // Skip the range check if the fallthrough block is unreachable.
+          JTH->OmitRangeCheck = true;
+        }
+
+        if (!JTH->OmitRangeCheck)
+          addSuccessorWithProb(CurMBB, Fallthrough, FallthroughProb);
         addSuccessorWithProb(CurMBB, JumpMBB, JumpProb);
         CurMBB->normalizeSuccProbs();
 
@@ -10352,6 +10380,8 @@ void SelectionDAGBuilder::lowerWorkItem(SwitchWorkListItem W, Value *Cond,
         break;
       }
       case CC_BitTests: {
+        // FIXME: If Fallthrough is unreachable, skip the range check.
+
         // FIXME: Optimize away range check based on pivot comparisons.
         BitTestBlock *BTB = &BitTestCases[I->BTCasesIndex];
 
@@ -10395,6 +10425,10 @@ void SelectionDAGBuilder::lowerWorkItem(SwitchWorkListItem W, Value *Cond,
           MHS = Cond;
           RHS = I->High;
         }
+
+        // If Fallthrough is unreachable, fold away the comparison.
+        if (FallthroughUnreachable)
+          CC = ISD::SETTRUE;
 
         // The false probability is the sum of all unhandled cases.
         CaseBlock CB(CC, LHS, RHS, MHS, I->MBB, Fallthrough, CurMBB,
@@ -10648,38 +10682,6 @@ void SelectionDAGBuilder::visitSwitch(const SwitchInst &SI) {
   // optimization levels because it's cheap to do and will make codegen faster
   // if there are many clusters.
   sortAndRangeify(Clusters);
-
-  if (TM.getOptLevel() != CodeGenOpt::None) {
-    // Replace an unreachable default with the most popular destination.
-    // FIXME: Exploit unreachable default more aggressively.
-    bool UnreachableDefault =
-        isa<UnreachableInst>(SI.getDefaultDest()->getFirstNonPHIOrDbg());
-    if (UnreachableDefault && !Clusters.empty()) {
-      DenseMap<const BasicBlock *, unsigned> Popularity;
-      unsigned MaxPop = 0;
-      const BasicBlock *MaxBB = nullptr;
-      for (auto I : SI.cases()) {
-        const BasicBlock *BB = I.getCaseSuccessor();
-        if (++Popularity[BB] > MaxPop) {
-          MaxPop = Popularity[BB];
-          MaxBB = BB;
-        }
-      }
-      // Set new default.
-      assert(MaxPop > 0 && MaxBB);
-      DefaultMBB = FuncInfo.MBBMap[MaxBB];
-
-      // Remove cases that were pointing to the destination that is now the
-      // default.
-      CaseClusterVector New;
-      New.reserve(Clusters.size());
-      for (CaseCluster &CC : Clusters) {
-        if (CC.MBB != DefaultMBB)
-          New.push_back(CC);
-      }
-      Clusters = std::move(New);
-    }
-  }
 
   // The branch probablity of the peeled case.
   BranchProbability PeeledCaseProb = BranchProbability::getZero();

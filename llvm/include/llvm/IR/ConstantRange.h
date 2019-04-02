@@ -47,9 +47,19 @@ struct KnownBits;
 class LLVM_NODISCARD ConstantRange {
   APInt Lower, Upper;
 
+  /// Create empty constant range with same bitwidth.
+  ConstantRange getEmpty() const {
+    return ConstantRange(getBitWidth(), false);
+  }
+
+  /// Create full constant range with same bitwidth.
+  ConstantRange getFull() const {
+    return ConstantRange(getBitWidth(), true);
+  }
+
 public:
-  /// Initialize a full (the default) or empty set for the specified bit width.
-  explicit ConstantRange(uint32_t BitWidth, bool isFullSet = true);
+  /// Initialize a full or empty set for the specified bit width.
+  explicit ConstantRange(uint32_t BitWidth, bool isFullSet);
 
   /// Initialize a range to hold the single specified value.
   ConstantRange(APInt Value);
@@ -58,6 +68,16 @@ public:
   /// Lower==Upper and Lower != Min or Max value for its type. It will also
   /// assert out if the two APInt's are not the same bit width.
   ConstantRange(APInt Lower, APInt Upper);
+
+  /// Create empty constant range with the given bit width.
+  static ConstantRange getEmpty(uint32_t BitWidth) {
+    return ConstantRange(BitWidth, false);
+  }
+
+  /// Create full constant range with the given bit width.
+  static ConstantRange getFull(uint32_t BitWidth) {
+    return ConstantRange(BitWidth, true);
+  }
 
   /// Initialize a range based on a known bits constraint. The IsSigned flag
   /// indicates whether the constant range should not wrap in the signed or
@@ -143,13 +163,31 @@ public:
   /// Return true if this set contains no members.
   bool isEmptySet() const;
 
-  /// Return true if this set wraps around the top of the range.
-  /// For example: [100, 8).
+  /// Return true if this set wraps around the unsigned domain. Special cases:
+  ///  * Empty set: Not wrapped.
+  ///  * Full set: Not wrapped.
+  ///  * [X, 0) == [X, Max]: Not wrapped.
   bool isWrappedSet() const;
 
-  /// Return true if this set wraps around the INT_MIN of
-  /// its bitwidth. For example: i8 [120, 140).
+  /// Return true if the exclusive upper bound wraps around the unsigned
+  /// domain. Special cases:
+  ///  * Empty set: Not wrapped.
+  ///  * Full set: Not wrapped.
+  ///  * [X, 0): Wrapped.
+  bool isUpperWrapped() const;
+
+  /// Return true if this set wraps around the signed domain. Special cases:
+  ///  * Empty set: Not wrapped.
+  ///  * Full set: Not wrapped.
+  ///  * [X, SignedMin) == [X, SignedMax]: Not wrapped.
   bool isSignWrappedSet() const;
+
+  /// Return true if the (exclusive) upper bound wraps around the signed
+  /// domain. Special cases:
+  ///  * Empty set: Not wrapped.
+  ///  * Full set: Not wrapped.
+  ///  * [X, SignedMin): Wrapped.
+  bool isUpperSignWrapped() const;
 
   /// Return true if the specified value is in the set.
   bool contains(const APInt &Val) const;

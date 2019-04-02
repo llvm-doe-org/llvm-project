@@ -40,6 +40,7 @@ public:
   ClangdLSPServer(Transport &Transp, const FileSystemProvider &FSProvider,
                   const clangd::CodeCompleteOptions &CCOpts,
                   llvm::Optional<Path> CompileCommandsDir, bool UseDirBasedCDB,
+                  llvm::Optional<OffsetEncoding> ForcedOffsetEncoding,
                   const ClangdServer::Options &Opts);
   ~ClangdLSPServer();
 
@@ -113,6 +114,10 @@ private:
   void reparseOpenedFiles();
   void applyConfiguration(const ConfigurationSettings &Settings);
 
+  /// Sends a "publishDiagnostics" notification to the LSP client.
+  void publishDiagnostics(const URIForFile &File,
+                          std::vector<clangd::Diagnostic> Diagnostics);
+
   /// Used to indicate that the 'shutdown' request was received from the
   /// Language Server client.
   bool ShutdownRequestReceived = false;
@@ -161,6 +166,7 @@ private:
   // It is destroyed before run() returns, to ensure worker threads exit.
   ClangdServer::Options ClangdServerOpts;
   llvm::Optional<ClangdServer> Server;
+  llvm::Optional<OffsetEncoding> NegotiatedOffsetEncoding;
 };
 } // namespace clangd
 } // namespace clang

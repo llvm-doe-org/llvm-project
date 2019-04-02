@@ -68,6 +68,7 @@ void DAGTypeLegalizer::ScalarizeVectorResult(SDNode *N, unsigned ResNo) {
   case ISD::ZERO_EXTEND_VECTOR_INREG:
     R = ScalarizeVecRes_VecInregOp(N);
     break;
+  case ISD::ABS:
   case ISD::ANY_EXTEND:
   case ISD::BITREVERSE:
   case ISD::BSWAP:
@@ -4379,6 +4380,8 @@ static EVT FindMemType(SelectionDAG& DAG, const TargetLowering &TLI,
         isPowerOf2_32(WidenWidth / MemVTWidth) &&
         (MemVTWidth <= Width ||
          (Align!=0 && MemVTWidth<=AlignInBits && MemVTWidth<=Width+WidenEx))) {
+      if (MemVTWidth == WidenWidth)
+        return MemVT;
       RetVT = MemVT;
       break;
     }
@@ -4390,7 +4393,10 @@ static EVT FindMemType(SelectionDAG& DAG, const TargetLowering &TLI,
        VT >= (unsigned)MVT::FIRST_VECTOR_VALUETYPE; --VT) {
     EVT MemVT = (MVT::SimpleValueType) VT;
     unsigned MemVTWidth = MemVT.getSizeInBits();
-    if (TLI.isTypeLegal(MemVT) && WidenEltVT == MemVT.getVectorElementType() &&
+    auto Action = TLI.getTypeAction(*DAG.getContext(), MemVT);
+    if ((Action == TargetLowering::TypeLegal ||
+         Action == TargetLowering::TypePromoteInteger) &&
+        WidenEltVT == MemVT.getVectorElementType() &&
         (WidenWidth % MemVTWidth) == 0 &&
         isPowerOf2_32(WidenWidth / MemVTWidth) &&
         (MemVTWidth <= Width ||

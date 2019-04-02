@@ -48,7 +48,7 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST) {
   const LLT v2s64 = LLT::vector(2, 64);
 
   getActionDefinitionsBuilder(G_IMPLICIT_DEF)
-    .legalFor({p0, s1, s8, s16, s32, s64, v2s64})
+    .legalFor({p0, s1, s8, s16, s32, s64, v4s32, v2s64})
     .clampScalar(0, s1, s64)
     .widenScalarToNextPow2(0, 8)
     .fewerElementsIf(
@@ -64,13 +64,8 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST) {
         return std::make_pair(0, EltTy);
       });
 
-  // HACK: Check that the intrinsic isn't ambiguous.
-  // (See: https://bugs.llvm.org/show_bug.cgi?id=40968)
-  getActionDefinitionsBuilder(G_INTRINSIC)
-    .custom();
-
   getActionDefinitionsBuilder(G_PHI)
-      .legalFor({p0, s16, s32, s64})
+      .legalFor({p0, s16, s32, s64, v2s32, v4s32, v2s64})
       .clampScalar(0, s16, s64)
       .widenScalarToNextPow2(0);
 
@@ -453,9 +448,8 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST) {
   getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT)
       .legalIf([=](const LegalityQuery &Query) {
         const LLT &VecTy = Query.Types[0];
-        // TODO: Support destination sizes of < 128 bits.
         // TODO: Support s8 and s16
-        return VecTy == v4s32 || VecTy == v2s64;
+        return VecTy == v2s32 || VecTy == v4s32 || VecTy == v2s64;
       });
 
   getActionDefinitionsBuilder(G_BUILD_VECTOR)
@@ -517,28 +511,9 @@ bool AArch64LegalizerInfo::legalizeCustom(MachineInstr &MI,
     return false;
   case TargetOpcode::G_VAARG:
     return legalizeVaArg(MI, MRI, MIRBuilder);
-  case TargetOpcode::G_INTRINSIC:
-    return legalizeIntrinsic(MI, MRI, MIRBuilder);
   }
 
   llvm_unreachable("expected switch to return");
-}
-
-bool AArch64LegalizerInfo::legalizeIntrinsic(
-    MachineInstr &MI, MachineRegisterInfo &MRI,
-    MachineIRBuilder &MIRBuilder) const {
-  // HACK: Don't allow faddp/addp for now. We don't pass down the type info
-  // necessary to get this right today.
-  //
-  // It looks like addp/faddp is the only intrinsic that's impacted by this.
-  // All other intrinsics fully describe the required types in their names.
-  //
-  // (See: https://bugs.llvm.org/show_bug.cgi?id=40968)
-  const MachineOperand &IntrinOp = MI.getOperand(1);
-  if (IntrinOp.isIntrinsicID() &&
-      IntrinOp.getIntrinsicID() == Intrinsic::aarch64_neon_addp)
-    return false;
-  return true;
 }
 
 bool AArch64LegalizerInfo::legalizeVaArg(MachineInstr &MI,

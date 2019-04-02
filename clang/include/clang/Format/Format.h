@@ -154,6 +154,38 @@ struct FormatStyle {
   /// \endcode
   bool AlignTrailingComments;
 
+  /// \brief If a function call or braced initializer list doesn't fit on a
+  /// line, allow putting all arguments onto the next line, even if
+  /// ``BinPackArguments`` is ``false``.
+  /// \code
+  ///   true:
+  ///   callFunction(
+  ///       a, b, c, d);
+  ///
+  ///   false:
+  ///   callFunction(a,
+  ///                b,
+  ///                c,
+  ///                d);
+  /// \endcode
+  bool AllowAllArgumentsOnNextLine;
+
+  /// \brief If a constructor definition with a member initializer list doesn't
+  /// fit on a single line, allow putting all member initializers onto the next
+  /// line, if ```ConstructorInitializerAllOnOneLineOrOnePerLine``` is true.
+  /// Note that this parameter has no effect if
+  /// ```ConstructorInitializerAllOnOneLineOrOnePerLine``` is false.
+  /// \code
+  ///   true:
+  ///   MyClass::MyClass() :
+  ///       member0(0), member1(2) {}
+  ///
+  ///   false:
+  ///   MyClass::MyClass() :
+  ///       member0(0),
+  ///       member1(2) {}
+  bool AllowAllConstructorInitializersOnNextLine;
+
   /// If the function declaration doesn't fit on a line,
   /// allow putting all parameters of a function declaration onto
   /// the next line even if ``BinPackParameters`` is ``false``.
@@ -273,6 +305,39 @@ struct FormatStyle {
 
   /// If ``true``, ``if (a) return;`` can be put on a single line.
   ShortIfStyle AllowShortIfStatementsOnASingleLine;
+
+  /// Different styles for merging short lambdas containing at most one
+  /// statement.
+  enum ShortLambdaStyle {
+    /// Never merge lambdas into a single line.
+    SLS_None,
+    /// Only merge empty lambdas.
+    /// \code
+    ///   auto lambda = [](int a) {}
+    ///   auto lambda2 = [](int a) {
+    ///       return a;
+    ///   };
+    /// \endcode
+    SLS_Empty,
+    /// Merge lambda into a single line if argument of a function.
+    /// \code
+    ///   auto lambda = [](int a) {
+    ///       return a;
+    ///   };
+    ///   sort(a.begin(), a.end(), ()[] { return x < y; })
+    /// \endcode
+    SLS_Inline,
+    /// Merge all lambdas fitting on a single line.
+    /// \code
+    ///   auto lambda = [](int a) {}
+    ///   auto lambda2 = [](int a) { return a; };
+    /// \endcode
+    SLS_All,
+  };
+
+  /// Dependent on the value, ``auto lambda []() { return 0; }`` can be put on a
+  /// single line.
+  ShortLambdaStyle AllowShortLambdasOnASingleLine;
 
   /// If ``true``, ``while (true) continue;`` can be put on a single
   /// line.
@@ -1126,7 +1191,16 @@ struct FormatStyle {
     ///    #  endif
     ///    #endif
     /// \endcode
-    PPDIS_AfterHash
+    PPDIS_AfterHash,
+    /// Indents directives before the hash.
+    /// \code
+    ///    #if FOO
+    ///      #if BAR
+    ///        #include <foo>
+    ///      #endif
+    ///    #endif
+    /// \endcode
+    PPDIS_BeforeHash
   };
 
   /// The preprocessor directive indenting style to use.
@@ -1160,7 +1234,7 @@ struct FormatStyle {
 
   /// A vector of prefixes ordered by the desired groups for Java imports.
   ///
-  /// Each group is seperated by a newline. Static imports will also follow the
+  /// Each group is separated by a newline. Static imports will also follow the
   /// same grouping convention above all non-static imports. One group's prefix
   /// can be a subset of another - the longest prefix is always matched. Within
   /// a group, the imports are ordered lexicographically.
@@ -1249,6 +1323,8 @@ struct FormatStyle {
     LK_None,
     /// Should be used for C, C++.
     LK_Cpp,
+    /// Should be used for C#.
+    LK_CSharp,
     /// Should be used for Java.
     LK_Java,
     /// Should be used for JavaScript.
@@ -1265,6 +1341,7 @@ struct FormatStyle {
     LK_TextProto
   };
   bool isCpp() const { return Language == LK_Cpp || Language == LK_ObjC; }
+  bool isCSharp() const { return Language == LK_CSharp; }
 
   /// Language, this format style is targeted at.
   LanguageKind Language;
@@ -1613,6 +1690,17 @@ struct FormatStyle {
     ///    }
     /// \endcode
     SBPO_ControlStatements,
+    /// Put a space before opening parentheses only if the parentheses are not
+    /// empty i.e. '()'
+    /// \code
+    ///   void() {
+    ///     if (true) {
+    ///       f();
+    ///       g (x, y, z);
+    ///     }
+    ///   }
+    /// \endcode
+    SBPO_NonEmptyParentheses,
     /// Always put a space before opening parentheses, except when it's
     /// prohibited by the syntax rules (in function-like macro definitions) or
     /// when determined by other style rules (after unary operators, opening
@@ -1749,6 +1837,9 @@ struct FormatStyle {
            AlignEscapedNewlines == R.AlignEscapedNewlines &&
            AlignOperands == R.AlignOperands &&
            AlignTrailingComments == R.AlignTrailingComments &&
+           AllowAllArgumentsOnNextLine == R.AllowAllArgumentsOnNextLine &&
+           AllowAllConstructorInitializersOnNextLine ==
+               R.AllowAllConstructorInitializersOnNextLine &&
            AllowAllParametersOfDeclarationOnNextLine ==
                R.AllowAllParametersOfDeclarationOnNextLine &&
            AllowShortBlocksOnASingleLine == R.AllowShortBlocksOnASingleLine &&
@@ -1758,6 +1849,7 @@ struct FormatStyle {
                R.AllowShortFunctionsOnASingleLine &&
            AllowShortIfStatementsOnASingleLine ==
                R.AllowShortIfStatementsOnASingleLine &&
+           AllowShortLambdasOnASingleLine == R.AllowShortLambdasOnASingleLine &&
            AllowShortLoopsOnASingleLine == R.AllowShortLoopsOnASingleLine &&
            AlwaysBreakAfterReturnType == R.AlwaysBreakAfterReturnType &&
            AlwaysBreakBeforeMultilineStrings ==
@@ -2081,6 +2173,8 @@ inline StringRef getLanguageName(FormatStyle::LanguageKind Language) {
   switch (Language) {
   case FormatStyle::LK_Cpp:
     return "C++";
+  case FormatStyle::LK_CSharp:
+    return "CSharp";
   case FormatStyle::LK_ObjC:
     return "Objective-C";
   case FormatStyle::LK_Java:

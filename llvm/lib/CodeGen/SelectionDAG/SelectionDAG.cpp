@@ -85,6 +85,7 @@ static SDVTList makeVTList(const EVT *VTs, unsigned NumVTs) {
 // Default null implementations of the callbacks.
 void SelectionDAG::DAGUpdateListener::NodeDeleted(SDNode*, SDNode*) {}
 void SelectionDAG::DAGUpdateListener::NodeUpdated(SDNode*) {}
+void SelectionDAG::DAGUpdateListener::NodeInserted(SDNode *) {}
 
 void SelectionDAG::DAGNodeDeletedListener::anchor() {}
 
@@ -517,6 +518,13 @@ static void AddNodeIDCustom(FoldingSetNodeID &ID, const SDNode *N) {
   case ISD::TargetFrameIndex:
     ID.AddInteger(cast<FrameIndexSDNode>(N)->getIndex());
     break;
+  case ISD::LIFETIME_START:
+  case ISD::LIFETIME_END:
+    if (cast<LifetimeSDNode>(N)->hasOffset()) {
+      ID.AddInteger(cast<LifetimeSDNode>(N)->getSize());
+      ID.AddInteger(cast<LifetimeSDNode>(N)->getOffset());
+    }
+    break;
   case ISD::JumpTable:
   case ISD::TargetJumpTable:
     ID.AddInteger(cast<JumpTableSDNode>(N)->getIndex());
@@ -833,6 +841,8 @@ void SelectionDAG::InsertNode(SDNode *N) {
   N->PersistentId = NextPersistentId++;
   VerifySDNode(N);
 #endif
+  for (DAGUpdateListener *DUL = UpdateListeners; DUL; DUL = DUL->Next)
+    DUL->NodeInserted(N);
 }
 
 /// RemoveNodeFromCSEMaps - Take the specified node out of the CSE map that
@@ -1974,9 +1984,25 @@ SDValue SelectionDAG::FoldSetCC(EVT VT, SDValue N1, SDValue N2,
     break;
   }
 
-  // We can always fold X == X for integer setcc's.
-  if (N1 == N2 && OpVT.isInteger())
-    return getBoolConstant(ISD::isTrueWhenEqual(Cond), dl, VT, OpVT);
+  if (OpVT.isInteger()) {
+    // For EQ and NE, we can always pick a value for the undef to make the
+    // predicate pass or fail, so we can return undef.
+    // Matches behavior in llvm::ConstantFoldCompareInstruction.
+    // icmp eq/ne X, undef -> undef.
+    if ((N1.isUndef() || N2.isUndef()) &&
+        (Cond == ISD::SETEQ || Cond == ISD::SETNE))
+      return getUNDEF(VT);
+
+    // If both operands are undef, we can return undef for int comparison.
+    // icmp undef, undef -> undef.
+    if (N1.isUndef() && N2.isUndef())
+      return getUNDEF(VT);
+
+    // icmp X, X -> true/false
+    // icmp X, undef -> true/false because undef could be X.
+    if (N1 == N2)
+      return getBoolConstant(ISD::isTrueWhenEqual(Cond), dl, VT, OpVT);
+  }
 
   if (ConstantSDNode *N2C = dyn_cast<ConstantSDNode>(N2)) {
     const APInt &C2 = N2C->getAPIntValue();
@@ -4912,6 +4938,8 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
     assert(VT.isFloatingPoint() && "This operator only applies to FP types!");
     assert(N1.getValueType() == N2.getValueType() &&
            N1.getValueType() == VT && "Binary operator types must match!");
+    if (SDValue V = simplifyFPBinop(Opcode, N1, N2))
+      return V;
     break;
   case ISD::FCOPYSIGN:   // N1 and result must match.  N1/N2 need not match.
     assert(N1.getValueType() == VT &&
@@ -7030,6 +7058,31 @@ SDValue SelectionDAG::simplifyShift(SDValue X, SDValue Y) {
   };
   if (ISD::matchUnaryPredicate(Y, isShiftTooBig, true))
     return getUNDEF(X.getValueType());
+
+  return SDValue();
+}
+
+// TODO: Use fast-math-flags to enable more simplifications.
+SDValue SelectionDAG::simplifyFPBinop(unsigned Opcode, SDValue X, SDValue Y) {
+  ConstantFPSDNode *YC = isConstOrConstSplatFP(Y, /* AllowUndefs */ true);
+  if (!YC)
+    return SDValue();
+
+  // X + -0.0 --> X
+  if (Opcode == ISD::FADD)
+    if (YC->getValueAPF().isNegZero())
+      return X;
+
+  // X - +0.0 --> X
+  if (Opcode == ISD::FSUB)
+    if (YC->getValueAPF().isPosZero())
+      return X;
+
+  // X * 1.0 --> X
+  // X / 1.0 --> X
+  if (Opcode == ISD::FMUL || Opcode == ISD::FDIV)
+    if (YC->getValueAPF().isExactlyValue(1.0))
+      return X;
 
   return SDValue();
 }

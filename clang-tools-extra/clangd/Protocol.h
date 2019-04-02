@@ -28,6 +28,7 @@
 #include "clang/Index/IndexSymbol.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/raw_ostream.h"
 #include <bitset>
 #include <string>
 #include <vector>
@@ -338,6 +339,21 @@ SymbolKind adjustKindToCapability(SymbolKind Kind,
 // https://github.com/Microsoft/language-server-protocol/issues/344
 SymbolKind indexSymbolKindToSymbolKind(index::SymbolKind Kind);
 
+// Determines the encoding used to measure offsets and lengths of source in LSP.
+enum class OffsetEncoding {
+  // Any string is legal on the wire. Unrecognized encodings parse as this.
+  UnsupportedEncoding,
+  // Length counts code units of UTF-16 encoded text. (Standard LSP behavior).
+  UTF16,
+  // Length counts bytes of UTF-8 encoded text. (Clangd extension).
+  UTF8,
+  // Length counts codepoints in unicode text. (Clangd extension).
+  UTF32,
+};
+llvm::json::Value toJSON(const OffsetEncoding &);
+bool fromJSON(const llvm::json::Value &, OffsetEncoding &);
+llvm::raw_ostream &operator<<(llvm::raw_ostream &, OffsetEncoding OS);
+
 // This struct doesn't mirror LSP!
 // The protocol defines deeply nested structures for client capabilities.
 // Instead of mapping them all, this just parses out the bits we care about.
@@ -369,6 +385,9 @@ struct ClientCapabilities {
   /// Client supports CodeAction return value for textDocument/codeAction.
   /// textDocument.codeAction.codeActionLiteralSupport.
   bool CodeActionStructure = false;
+
+  /// Supported encodings for LSP character offsets. (clangd extension).
+  llvm::Optional<std::vector<OffsetEncoding>> offsetEncoding;
 };
 bool fromJSON(const llvm::json::Value &, ClientCapabilities &);
 

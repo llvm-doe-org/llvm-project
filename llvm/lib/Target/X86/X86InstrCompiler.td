@@ -19,11 +19,6 @@ def GetLo32XForm : SDNodeXForm<imm, [{
   return getI32Imm((uint32_t)N->getZExtValue(), SDLoc(N));
 }]>;
 
-def GetLo8XForm : SDNodeXForm<imm, [{
-  // Transformation function: get the low 8 bits.
-  return getI8Imm((uint8_t)N->getZExtValue(), SDLoc(N));
-}]>;
-
 
 //===----------------------------------------------------------------------===//
 // Random Pseudo Instructions.
@@ -867,7 +862,7 @@ let isCodeGenOnly = 1, SchedRW = [WriteCMPXCHGRMW] in {
 }
 
 let Defs = [EAX, EDX, EFLAGS], Uses = [EAX, EBX, ECX, EDX],
-    SchedRW = [WriteCMPXCHGRMW] in {
+    Predicates = [HasCmpxchg8b], SchedRW = [WriteCMPXCHGRMW] in {
 defm LCMPXCHG8B : LCMPXCHG_UnOp<0xC7, MRM1m, "cmpxchg8b", X86cas8, i64mem>;
 }
 
@@ -891,8 +886,9 @@ defm LCMPXCHG8B : LCMPXCHG_UnOp<0xC7, MRM1m, "cmpxchg8b", X86cas8, i64mem>;
 // the instruction and we are sure we will have a valid register to restore
 // the value of RBX.
 let Defs = [EAX, EDX, EBX, EFLAGS], Uses = [EAX, ECX, EDX],
-    SchedRW = [WriteCMPXCHGRMW], isCodeGenOnly = 1, isPseudo = 1,
-    Constraints = "$ebx_save = $dst", usesCustomInserter = 1 in {
+    Predicates = [HasCmpxchg8b], SchedRW = [WriteCMPXCHGRMW],
+    isCodeGenOnly = 1, isPseudo = 1, Constraints = "$ebx_save = $dst",
+    usesCustomInserter = 1 in {
 def LCMPXCHG8B_SAVE_EBX :
     I<0, Pseudo, (outs GR32:$dst),
       (ins i64mem:$ptr, GR32:$ebx_input, GR32:$ebx_save),
@@ -903,14 +899,14 @@ def LCMPXCHG8B_SAVE_EBX :
 
 
 let Defs = [RAX, RDX, EFLAGS], Uses = [RAX, RBX, RCX, RDX],
-    Predicates = [HasCmpxchg16b], SchedRW = [WriteCMPXCHGRMW] in {
+    Predicates = [HasCmpxchg16b,In64BitMode], SchedRW = [WriteCMPXCHGRMW] in {
 defm LCMPXCHG16B : LCMPXCHG_UnOp<0xC7, MRM1m, "cmpxchg16b",
                                  X86cas16, i128mem>, REX_W;
 }
 
 // Same as LCMPXCHG8B_SAVE_RBX but for the 16 Bytes variant.
 let Defs = [RAX, RDX, RBX, EFLAGS], Uses = [RAX, RCX, RDX],
-    Predicates = [HasCmpxchg16b], SchedRW = [WriteCMPXCHGRMW],
+    Predicates = [HasCmpxchg16b,In64BitMode], SchedRW = [WriteCMPXCHGRMW],
     isCodeGenOnly = 1, isPseudo = 1, Constraints = "$rbx_save = $dst",
     usesCustomInserter = 1 in {
 def LCMPXCHG16B_SAVE_RBX :
@@ -1522,7 +1518,7 @@ def : Pat<(and GR64:$src, i64immZExt32SExt8:$imm),
             (i64 0),
             (AND32ri8
               (EXTRACT_SUBREG GR64:$src, sub_32bit),
-              (i32 (GetLo8XForm imm:$imm))),
+              (i32 (GetLo32XForm imm:$imm))),
             sub_32bit)>;
 
 def : Pat<(and GR64:$src, i64immZExt32:$imm),

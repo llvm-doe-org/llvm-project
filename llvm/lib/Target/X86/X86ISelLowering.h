@@ -77,15 +77,6 @@ namespace llvm {
       /// Same as call except it adds the NoTrack prefix.
       NT_CALL,
 
-      /// This operation implements the lowering for readcyclecounter.
-      RDTSC_DAG,
-
-      /// X86 Read Time-Stamp Counter and Processor ID.
-      RDTSCP_DAG,
-
-      /// X86 Read Performance Monitoring Counters.
-      RDPMC_DAG,
-
       /// X86 compare and logical compare instructions.
       CMP, COMI, UCOMI,
 
@@ -965,6 +956,9 @@ namespace llvm {
                              unsigned AS) const override;
 
     bool isVectorShiftByScalarCheap(Type *Ty) const override;
+
+    /// Returns true if the opcode is a commutative binary operation.
+    bool isCommutativeBinOp(unsigned Opcode) const override;
 
     /// Return true if it's free to truncate a value of
     /// type Ty1 to type Ty2. e.g. On x86 it's free to truncate a i32 value in

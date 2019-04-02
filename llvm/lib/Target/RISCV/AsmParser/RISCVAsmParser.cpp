@@ -47,6 +47,7 @@ class RISCVAsmParser : public MCTargetAsmParser {
 
   SMLoc getLoc() const { return getParser().getTok().getLoc(); }
   bool isRV64() const { return getSTI().hasFeature(RISCV::Feature64Bit); }
+  bool isRV32E() const { return getSTI().hasFeature(RISCV::FeatureRV32E); }
 
   RISCVTargetStreamer &getTargetStreamer() {
     MCTargetStreamer &TS = *getParser().getStreamer().getTargetStreamer();
@@ -112,6 +113,7 @@ class RISCVAsmParser : public MCTargetAsmParser {
   OperandMatchResultTy parseMemOpBaseReg(OperandVector &Operands);
   OperandMatchResultTy parseOperandWithModifier(OperandVector &Operands);
   OperandMatchResultTy parseBareSymbol(OperandVector &Operands);
+  OperandMatchResultTy parseCallSymbol(OperandVector &Operands);
   OperandMatchResultTy parseJALOffset(OperandVector &Operands);
 
   bool parseOperand(OperandVector &Operands, StringRef Mnemonic);
@@ -280,6 +282,16 @@ public:
       return false;
     return RISCVAsmParser::classifySymbolRef(getImm(), VK, Imm) &&
            VK == RISCVMCExpr::VK_RISCV_None;
+  }
+
+  bool isCallSymbol() const {
+    int64_t Imm;
+    RISCVMCExpr::VariantKind VK;
+    // Must be of 'immediate' type but not a constant.
+    if (!isImm() || evaluateConstantImm(getImm(), Imm, VK))
+      return false;
+    return RISCVAsmParser::classifySymbolRef(getImm(), VK, Imm) &&
+           VK == RISCVMCExpr::VK_RISCV_CALL;
   }
 
   bool isCSRSystemRegister() const { return isSystemRegister(); }
@@ -903,6 +915,10 @@ bool RISCVAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
     SMLoc ErrorLoc = ((RISCVOperand &)*Operands[ErrorInfo]).getStartLoc();
     return Error(ErrorLoc, "operand must be a bare symbol name");
   }
+  case Match_InvalidCallSymbol: {
+    SMLoc ErrorLoc = ((RISCVOperand &)*Operands[ErrorInfo]).getStartLoc();
+    return Error(ErrorLoc, "operand must be a bare symbol name");
+  }
   }
 
   llvm_unreachable("Unknown match type detected!");
@@ -910,11 +926,15 @@ bool RISCVAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
 
 // Attempts to match Name as a register (either using the default name or
 // alternative ABI names), setting RegNo to the matching register. Upon
-// failure, returns true and sets RegNo to 0.
-static bool matchRegisterNameHelper(unsigned &RegNo, StringRef Name) {
+// failure, returns true and sets RegNo to 0. If IsRV32E then registers
+// x16-x31 will be rejected.
+static bool matchRegisterNameHelper(bool IsRV32E, unsigned &RegNo,
+                                    StringRef Name) {
   RegNo = MatchRegisterName(Name);
   if (RegNo == 0)
     RegNo = MatchRegisterAltName(Name);
+  if (IsRV32E && RegNo >= RISCV::X16 && RegNo <= RISCV::X31)
+    RegNo = 0;
   return RegNo == 0;
 }
 
@@ -926,7 +946,7 @@ bool RISCVAsmParser::ParseRegister(unsigned &RegNo, SMLoc &StartLoc,
   RegNo = 0;
   StringRef Name = getLexer().getTok().getIdentifier();
 
-  if (matchRegisterNameHelper(RegNo, Name))
+  if (matchRegisterNameHelper(isRV32E(), RegNo, Name))
     return Error(StartLoc, "invalid register name");
 
   getParser().Lex(); // Eat identifier token.
@@ -954,7 +974,7 @@ OperandMatchResultTy RISCVAsmParser::parseRegister(OperandVector &Operands,
   case AsmToken::Identifier:
     StringRef Name = getLexer().getTok().getIdentifier();
     unsigned RegNo;
-    matchRegisterNameHelper(RegNo, Name);
+    matchRegisterNameHelper(isRV32E(), RegNo, Name);
 
     if (RegNo == 0) {
       if (HadParens)
@@ -1133,6 +1153,25 @@ OperandMatchResultTy RISCVAsmParser::parseBareSymbol(OperandVector &Operands) {
     Res = V;
   } else
     Res = MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None, getContext());
+  Operands.push_back(RISCVOperand::createImm(Res, S, E, isRV64()));
+  return MatchOperand_Success;
+}
+
+OperandMatchResultTy RISCVAsmParser::parseCallSymbol(OperandVector &Operands) {
+  SMLoc S = getLoc();
+  SMLoc E = SMLoc::getFromPointer(S.getPointer() - 1);
+  const MCExpr *Res;
+
+  if (getLexer().getKind() != AsmToken::Identifier)
+    return MatchOperand_NoMatch;
+
+  StringRef Identifier;
+  if (getParser().parseIdentifier(Identifier))
+    return MatchOperand_ParseFail;
+
+  MCSymbol *Sym = getContext().getOrCreateSymbol(Identifier);
+  Res = MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None, getContext());
+  Res = RISCVMCExpr::create(Res, RISCVMCExpr::VK_RISCV_CALL, getContext());
   Operands.push_back(RISCVOperand::createImm(Res, S, E, isRV64()));
   return MatchOperand_Success;
 }

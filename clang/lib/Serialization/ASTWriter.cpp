@@ -5290,10 +5290,13 @@ void ASTWriter::WriteDeclUpdatesBlocks(RecordDataImpl &OffsetsRecord) {
             D->getAttr<OMPThreadPrivateDeclAttr>()->getRange());
         break;
 
-      case UPD_DECL_MARKED_OPENMP_ALLOCATE:
-        Record.AddStmt(D->getAttr<OMPAllocateDeclAttr>()->getAllocator());
-        Record.AddSourceRange(D->getAttr<OMPAllocateDeclAttr>()->getRange());
+      case UPD_DECL_MARKED_OPENMP_ALLOCATE: {
+        auto *A = D->getAttr<OMPAllocateDeclAttr>();
+        Record.push_back(A->getAllocatorType());
+        Record.AddStmt(A->getAllocator());
+        Record.AddSourceRange(A->getRange());
         break;
+      }
 
       case UPD_DECL_MARKED_OPENMP_DECLARETARGET:
         Record.push_back(D->getAttr<OMPDeclareTargetDeclAttr>()->getMapType());
@@ -6826,6 +6829,15 @@ void OMPClauseWriter::VisitOMPMapClause(OMPMapClause *C) {
     Record.AddStmt(M.getAssociatedExpression());
     Record.AddDeclRef(M.getAssociatedDeclaration());
   }
+}
+
+void OMPClauseWriter::VisitOMPAllocateClause(OMPAllocateClause *C) {
+  Record.push_back(C->varlist_size());
+  Record.AddSourceLocation(C->getLParenLoc());
+  Record.AddSourceLocation(C->getColonLoc());
+  Record.AddStmt(C->getAllocator());
+  for (auto *VE : C->varlists())
+    Record.AddStmt(VE);
 }
 
 void OMPClauseWriter::VisitOMPNumTeamsClause(OMPNumTeamsClause *C) {

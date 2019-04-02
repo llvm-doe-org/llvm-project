@@ -58,6 +58,7 @@
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MD5.h"
+#include "llvm/Support/TimeProfiler.h"
 
 using namespace clang;
 using namespace CodeGen;
@@ -2482,13 +2483,14 @@ void CodeGenModule::EmitGlobalDefinition(GlobalDecl GD, llvm::GlobalValue *GV) {
     if (!shouldEmitFunction(GD))
       return;
 
+    llvm::TimeTraceScope TimeScope(
+        "CodeGen Function", [&]() { return FD->getQualifiedNameAsString(); });
+
     if (const auto *Method = dyn_cast<CXXMethodDecl>(D)) {
       // Make sure to emit the definition(s) before we emit the thunks.
       // This is necessary for the generation of certain thunks.
-      if (const auto *CD = dyn_cast<CXXConstructorDecl>(Method))
-        ABI->emitCXXStructor(CD, getFromCtorType(GD.getCtorType()));
-      else if (const auto *DD = dyn_cast<CXXDestructorDecl>(Method))
-        ABI->emitCXXStructor(DD, getFromDtorType(GD.getDtorType()));
+      if (isa<CXXConstructorDecl>(Method) || isa<CXXDestructorDecl>(Method))
+        ABI->emitCXXStructor(GD);
       else if (FD->isMultiVersion())
         EmitMultiVersionFunctionDefinition(GD, GV);
       else
@@ -3234,15 +3236,8 @@ llvm::Constant *
 CodeGenModule::GetAddrOfGlobal(GlobalDecl GD,
                                ForDefinition_t IsForDefinition) {
   const Decl *D = GD.getDecl();
-  if (isa<CXXConstructorDecl>(D))
-    return getAddrOfCXXStructor(cast<CXXConstructorDecl>(D),
-                                getFromCtorType(GD.getCtorType()),
-                                /*FnInfo=*/nullptr, /*FnType=*/nullptr,
-                                /*DontDefer=*/false, IsForDefinition);
-  else if (isa<CXXDestructorDecl>(D))
-    return getAddrOfCXXStructor(cast<CXXDestructorDecl>(D),
-                                getFromDtorType(GD.getDtorType()),
-                                /*FnInfo=*/nullptr, /*FnType=*/nullptr,
+  if (isa<CXXConstructorDecl>(D) || isa<CXXDestructorDecl>(D))
+    return getAddrOfCXXStructor(GD, /*FnInfo=*/nullptr, /*FnType=*/nullptr,
                                 /*DontDefer=*/false, IsForDefinition);
   else if (isa<CXXMethodDecl>(D)) {
     auto FInfo = &getTypes().arrangeCXXMethodDeclaration(
@@ -3387,6 +3382,11 @@ LangAS CodeGenModule::GetGlobalVarAddressSpace(const VarDecl *D) {
       return LangAS::cuda_device;
   }
 
+  if (LangOpts.OpenMP) {
+    LangAS AS;
+    if (OpenMPRuntime->hasAllocateAttributeForGlobalVar(D, AS))
+      return AS;
+  }
   return getTargetCodeGenInfo().getGlobalVarAddressSpace(*this, D);
 }
 

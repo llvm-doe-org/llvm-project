@@ -161,8 +161,8 @@ const Expr *bugreporter::getDerefExpr(const Stmt *S) {
 /// are the immediate snapshots of the tracked region's bindings within the
 /// node's respective states but not really checking that these snapshots
 /// actually contain the same set of bindings.
-bool hasVisibleUpdate(const ExplodedNode *LeftNode, SVal LeftVal,
-                      const ExplodedNode *RightNode, SVal RightVal) {
+static bool hasVisibleUpdate(const ExplodedNode *LeftNode, SVal LeftVal,
+                             const ExplodedNode *RightNode, SVal RightVal) {
   if (LeftVal == RightVal)
     return true;
 
@@ -322,7 +322,7 @@ public:
     CallEventRef<> Call =
         BR.getStateManager().getCallEventManager().getCaller(SCtx, State);
 
-    if (SM.isInSystemHeader(Call->getDecl()->getSourceRange().getBegin()))
+    if (Call->isInSystemHeader())
       return nullptr;
 
     // Region of interest corresponds to an IVar, exiting a method
@@ -2412,26 +2412,6 @@ CXXSelfAssignmentBRVisitor::VisitNode(const ExplodedNode *Succ,
   return std::move(Piece);
 }
 
-std::shared_ptr<PathDiagnosticPiece>
-TaintBugVisitor::VisitNode(const ExplodedNode *N,
-                           BugReporterContext &BRC, BugReport &) {
-
-  // Find the ExplodedNode where the taint was first introduced
-  if (!N->getState()->isTainted(V) || N->getFirstPred()->getState()->isTainted(V))
-    return nullptr;
-
-  const Stmt *S = PathDiagnosticLocation::getStmt(N);
-  if (!S)
-    return nullptr;
-
-  const LocationContext *NCtx = N->getLocationContext();
-  PathDiagnosticLocation L =
-      PathDiagnosticLocation::createBegin(S, BRC.getSourceManager(), NCtx);
-  if (!L.isValid() || !L.asLocation().isValid())
-    return nullptr;
-
-  return std::make_shared<PathDiagnosticEventPiece>(L, "Taint originated here");
-}
 
 FalsePositiveRefutationBRVisitor::FalsePositiveRefutationBRVisitor()
     : Constraints(ConstraintRangeTy::Factory().getEmptyMap()) {}
@@ -2442,7 +2422,7 @@ void FalsePositiveRefutationBRVisitor::finalizeVisitor(
   VisitNode(EndPathNode, BRC, BR);
 
   // Create a refutation manager
-  SMTSolverRef RefutationSolver = CreateZ3Solver();
+  llvm::SMTSolverRef RefutationSolver = llvm::CreateZ3Solver();
   ASTContext &Ctx = BRC.getASTContext();
 
   // Add constraints to the solver
@@ -2450,7 +2430,7 @@ void FalsePositiveRefutationBRVisitor::finalizeVisitor(
     const SymbolRef Sym = I.first;
     auto RangeIt = I.second.begin();
 
-    SMTExprRef Constraints = SMTConv::getRangeExpr(
+    llvm::SMTExprRef Constraints = SMTConv::getRangeExpr(
         RefutationSolver, Ctx, Sym, RangeIt->From(), RangeIt->To(),
         /*InRange=*/true);
     while ((++RangeIt) != I.second.end()) {

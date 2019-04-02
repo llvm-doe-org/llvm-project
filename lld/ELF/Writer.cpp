@@ -40,9 +40,9 @@ namespace {
 template <class ELFT> class Writer {
 public:
   Writer() : Buffer(errorHandler().OutputBuffer) {}
-  typedef typename ELFT::Shdr Elf_Shdr;
-  typedef typename ELFT::Ehdr Elf_Ehdr;
-  typedef typename ELFT::Phdr Elf_Phdr;
+  using Elf_Shdr = typename ELFT::Shdr;
+  using Elf_Ehdr = typename ELFT::Ehdr;
+  using Elf_Phdr = typename ELFT::Phdr;
 
   void run();
 
@@ -152,14 +152,18 @@ template <class ELFT> void Writer<ELFT>::removeEmptyPTLoad() {
   });
 }
 
-template <class ELFT> static void combineEhFrameSections() {
+template <class ELFT> static void combineEhSections() {
   for (InputSectionBase *&S : InputSections) {
-    EhInputSection *ES = dyn_cast<EhInputSection>(S);
-    if (!ES || !ES->Live)
+    if (!S->Live)
       continue;
 
-    In.EhFrame->addSection<ELFT>(ES);
-    S = nullptr;
+    if (auto *ES = dyn_cast<EhInputSection>(S)) {
+      In.EhFrame->addSection<ELFT>(ES);
+      S = nullptr;
+    } else if (S->kind() == SectionBase::Regular && In.ARMExidx &&
+               In.ARMExidx->addSection(cast<InputSection>(S))) {
+      S = nullptr;
+    }
   }
 
   std::vector<InputSectionBase *> &V = InputSections;
@@ -214,17 +218,24 @@ void elf::addReservedSymbols() {
   // the .got section.
   // We do not allow _GLOBAL_OFFSET_TABLE_ to be defined by input objects as the
   // correctness of some relocations depends on its value.
-  StringRef GotTableSymName =
+  StringRef GotSymName =
       (Config->EMachine == EM_PPC64) ? ".TOC." : "_GLOBAL_OFFSET_TABLE_";
-  if (Symbol *S = Symtab->find(GotTableSymName)) {
-    if (S->isDefined())
+
+  if (Symbol *S = Symtab->find(GotSymName)) {
+    if (S->isDefined()) {
       error(toString(S->File) + " cannot redefine linker defined symbol '" +
-            GotTableSymName + "'");
-    else
-      ElfSym::GlobalOffsetTable = Symtab->addDefined(
-          GotTableSymName, STV_HIDDEN, STT_NOTYPE, Target->GotBaseSymOff,
-          /*Size=*/0, STB_GLOBAL, Out::ElfHeader,
-          /*File=*/nullptr);
+            GotSymName + "'");
+      return;
+    }
+
+    uint64_t GotOff = 0;
+    if (Config->EMachine == EM_PPC || Config->EMachine == EM_PPC64)
+      GotOff = 0x8000;
+
+    ElfSym::GlobalOffsetTable =
+        Symtab->addDefined(GotSymName, STV_HIDDEN, STT_NOTYPE, GotOff,
+                           /*Size=*/0, STB_GLOBAL, Out::ElfHeader,
+                           /*File=*/nullptr);
   }
 
   // __ehdr_start is the location of ELF file headers. Note that we define
@@ -383,6 +394,15 @@ template <class ELFT> static void createSyntheticSections() {
   In.IgotPlt = make<IgotPltSection>();
   Add(In.IgotPlt);
 
+  // _GLOBAL_OFFSET_TABLE_ is defined relative to either .got.plt or .got. Treat
+  // it as a relocation and ensure the referenced section is created.
+  if (ElfSym::GlobalOffsetTable && Config->EMachine != EM_MIPS) {
+    if (Target->GotBaseSymInGotPlt)
+      In.GotPlt->HasGotPltOffRel = true;
+    else
+      In.Got->HasGotOffRel = true;
+  }
+
   if (Config->GdbIndex)
     Add(GdbIndexSection::create<ELFT>());
 
@@ -435,10 +455,12 @@ template <class ELFT> static void createSyntheticSections() {
   if (In.StrTab)
     Add(In.StrTab);
 
-  if (Config->EMachine == EM_ARM && !Config->Relocatable)
-    // Add a sentinel to terminate .ARM.exidx. It helps an unwinder
-    // to find the exact address range of the last entry.
-    Add(make<ARMExidxSentinelSection>());
+  if (Config->EMachine == EM_ARM && !Config->Relocatable) {
+    // The ARMExidxsyntheticsection replaces all the individual .ARM.exidx
+    // InputSections.
+    In.ARMExidx = make<ARMExidxSyntheticSection>();
+    Add(In.ARMExidx);
+  }
 }
 
 // The main function of the writer.
@@ -447,8 +469,11 @@ template <class ELFT> void Writer<ELFT>::run() {
   // Such sections are of type input section.
   createSyntheticSections<ELFT>();
 
+  // Some input sections that are used for exception handling need to be moved
+  // into synthetic sections. Do that now so that they aren't assigned to
+  // output sections in the usual way.
   if (!Config->Relocatable)
-    combineEhFrameSections<ELFT>();
+    combineEhSections<ELFT>();
 
   // We want to process linker script commands. When SECTIONS command
   // is given we let it create sections.
@@ -921,6 +946,9 @@ void Writer<ELFT>::forEachRelSec(
       Fn(*IS);
   for (EhInputSection *ES : In.EhFrame->Sections)
     Fn(*ES);
+  if (In.ARMExidx && In.ARMExidx->Live)
+    for (InputSection *Ex : In.ARMExidx->ExidxSections)
+      Fn(*Ex);
 }
 
 // This function generates assignments for predefined symbols (e.g. _end or
@@ -940,7 +968,7 @@ template <class ELFT> void Writer<ELFT>::setReservedSymbolSections() {
   }
 
   // .rela_iplt_{start,end} mark the start and the end of .rela.plt section.
-  if (ElfSym::RelaIpltStart && !In.RelaIplt->empty()) {
+  if (ElfSym::RelaIpltStart && In.RelaIplt->isNeeded()) {
     ElfSym::RelaIpltStart->Section = In.RelaIplt;
     ElfSym::RelaIpltEnd->Section = In.RelaIplt;
     ElfSym::RelaIpltEnd->Value = In.RelaIplt->getSize();
@@ -1383,11 +1411,6 @@ template <class ELFT> void Writer<ELFT>::sortSections() {
 }
 
 static bool compareByFilePosition(InputSection *A, InputSection *B) {
-  // Synthetic, i. e. a sentinel section, should go last.
-  if (A->kind() == InputSectionBase::Synthetic ||
-      B->kind() == InputSectionBase::Synthetic)
-    return A->kind() != InputSectionBase::Synthetic;
-
   InputSection *LA = A->getLinkOrderDep();
   InputSection *LB = B->getLinkOrderDep();
   OutputSection *AOut = LA->getParent();
@@ -1396,53 +1419,6 @@ static bool compareByFilePosition(InputSection *A, InputSection *B) {
   if (AOut != BOut)
     return AOut->SectionIndex < BOut->SectionIndex;
   return LA->OutSecOff < LB->OutSecOff;
-}
-
-// This function is used by the --merge-exidx-entries to detect duplicate
-// .ARM.exidx sections. It is Arm only.
-//
-// The .ARM.exidx section is of the form:
-// | PREL31 offset to function | Unwind instructions for function |
-// where the unwind instructions are either a small number of unwind
-// instructions inlined into the table entry, the special CANT_UNWIND value of
-// 0x1 or a PREL31 offset into a .ARM.extab Section that contains unwind
-// instructions.
-//
-// We return true if all the unwind instructions in the .ARM.exidx entries of
-// Cur can be merged into the last entry of Prev.
-static bool isDuplicateArmExidxSec(InputSection *Prev, InputSection *Cur) {
-
-  // References to .ARM.Extab Sections have bit 31 clear and are not the
-  // special EXIDX_CANTUNWIND bit-pattern.
-  auto IsExtabRef = [](uint32_t Unwind) {
-    return (Unwind & 0x80000000) == 0 && Unwind != 0x1;
-  };
-
-  struct ExidxEntry {
-    ulittle32_t Fn;
-    ulittle32_t Unwind;
-  };
-
-  // Get the last table Entry from the previous .ARM.exidx section.
-  const ExidxEntry &PrevEntry = Prev->getDataAs<ExidxEntry>().back();
-  if (IsExtabRef(PrevEntry.Unwind))
-    return false;
-
-  // We consider the unwind instructions of an .ARM.exidx table entry
-  // a duplicate if the previous unwind instructions if:
-  // - Both are the special EXIDX_CANTUNWIND.
-  // - Both are the same inline unwind instructions.
-  // We do not attempt to follow and check links into .ARM.extab tables as
-  // consecutive identical entries are rare and the effort to check that they
-  // are identical is high.
-
-  for (const ExidxEntry Entry : Cur->getDataAs<ExidxEntry>())
-    if (IsExtabRef(Entry.Unwind) || Entry.Unwind != PrevEntry.Unwind)
-      return false;
-
-  // All table entries in this .ARM.exidx Section can be merged into the
-  // previous Section.
-  return true;
 }
 
 template <class ELFT> void Writer<ELFT>::resolveShfLinkOrder() {
@@ -1462,46 +1438,17 @@ template <class ELFT> void Writer<ELFT>::resolveShfLinkOrder() {
         }
       }
     }
-    std::stable_sort(Sections.begin(), Sections.end(), compareByFilePosition);
 
+    // The ARM.exidx section use SHF_LINK_ORDER, but we have consolidated
+    // this processing inside the ARMExidxsyntheticsection::finalizeContents().
     if (!Config->Relocatable && Config->EMachine == EM_ARM &&
-        Sec->Type == SHT_ARM_EXIDX) {
+        Sec->Type == SHT_ARM_EXIDX)
+      continue;
 
-      if (auto *Sentinel = dyn_cast<ARMExidxSentinelSection>(Sections.back())) {
-        assert(Sections.size() >= 2 &&
-               "We should create a sentinel section only if there are "
-               "alive regular exidx sections.");
-
-        // The last executable section is required to fill the sentinel.
-        // Remember it here so that we don't have to find it again.
-        Sentinel->Highest = Sections[Sections.size() - 2]->getLinkOrderDep();
-      }
-
-      // The EHABI for the Arm Architecture permits consecutive identical
-      // table entries to be merged. We use a simple implementation that
-      // removes a .ARM.exidx Input Section if it can be merged into the
-      // previous one. This does not require any rewriting of InputSection
-      // contents but misses opportunities for fine grained deduplication
-      // where only a subset of the InputSection contents can be merged.
-      if (Config->MergeArmExidx) {
-        size_t Prev = 0;
-        // The last one is a sentinel entry which should not be removed.
-        for (size_t I = 1; I < Sections.size() - 1; ++I) {
-          if (isDuplicateArmExidxSec(Sections[Prev], Sections[I]))
-            Sections[I] = nullptr;
-          else
-            Prev = I;
-        }
-      }
-    }
+    std::stable_sort(Sections.begin(), Sections.end(), compareByFilePosition);
 
     for (int I = 0, N = Sections.size(); I < N; ++I)
       *ScriptSections[I] = Sections[I];
-
-    // Remove the Sections we marked as duplicate earlier.
-    for (BaseCommand *Base : Sec->SectionCommands)
-      if (auto *ISD = dyn_cast<InputSectionDescription>(Base))
-        llvm::erase_if(ISD->Sections, [](InputSection *IS) { return !IS; });
   }
 }
 
@@ -1546,7 +1493,7 @@ template <class ELFT> void Writer<ELFT>::maybeAddThunks() {
 }
 
 static void finalizeSynthetic(SyntheticSection *Sec) {
-  if (Sec && !Sec->empty() && Sec->getParent())
+  if (Sec && Sec->isNeeded() && Sec->getParent())
     Sec->finalizeContents();
 }
 
@@ -1571,7 +1518,7 @@ static void removeUnusedSyntheticSections() {
     if (!SS)
       return;
     OutputSection *OS = SS->getParent();
-    if (!OS || !SS->empty())
+    if (!OS || SS->isNeeded())
       continue;
 
     // If we reach here, then SS is an unused synthetic section and we want to
@@ -1663,9 +1610,9 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
 
   addIRelativeRelocs();
 
-  if (In.Plt && !In.Plt->empty())
+  if (In.Plt && In.Plt->isNeeded())
     In.Plt->addSymbols();
-  if (In.Iplt && !In.Iplt->empty())
+  if (In.Iplt && In.Iplt->isNeeded())
     In.Iplt->addSymbols();
 
   if (!Config->AllowShlibUndefined) {
@@ -1771,6 +1718,7 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
   // Dynamic section must be the last one in this list and dynamic
   // symbol table section (DynSymTab) must be the first one.
   finalizeSynthetic(In.DynSymTab);
+  finalizeSynthetic(In.ARMExidx);
   finalizeSynthetic(In.Bss);
   finalizeSynthetic(In.BssRelRo);
   finalizeSynthetic(In.GnuHashTab);
@@ -1797,8 +1745,8 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
   if (!Script->HasSectionsCommand && !Config->Relocatable)
     fixSectionAlignments();
 
-  // After link order processing .ARM.exidx sections can be deduplicated, which
-  // needs to be resolved before any other address dependent operation.
+  // SHFLinkOrder processing must be processed after relative section placements are
+  // known but before addresses are allocated.
   resolveShfLinkOrder();
 
   // Jump instructions in many ISAs have small displacements, and therefore they
@@ -2009,7 +1957,7 @@ template <class ELFT> std::vector<PhdrEntry *> Writer<ELFT>::createPhdrs() {
     Ret.push_back(RelRo);
 
   // PT_GNU_EH_FRAME is a special section pointing on .eh_frame_hdr.
-  if (!In.EhFrame->empty() && In.EhFrameHdr && In.EhFrame->getParent() &&
+  if (In.EhFrame->isNeeded() && In.EhFrameHdr && In.EhFrame->getParent() &&
       In.EhFrameHdr->getParent())
     AddHdr(PT_GNU_EH_FRAME, In.EhFrameHdr->getParent()->getPhdrFlags())
         ->add(In.EhFrameHdr->getParent());
@@ -2088,7 +2036,7 @@ template <class ELFT> void Writer<ELFT>::fixSectionAlignments() {
     // Find the first section after PT_GNU_RELRO. If it is in a PT_LOAD we
     // have to align it to a page.
     auto End = OutputSections.end();
-    auto I = std::find(OutputSections.begin(), End, P->LastSec);
+    auto I = llvm::find(OutputSections, P->LastSec);
     if (I == End || (I + 1) == End)
       continue;
 

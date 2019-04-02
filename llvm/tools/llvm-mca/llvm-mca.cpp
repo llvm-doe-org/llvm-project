@@ -100,6 +100,17 @@ static cl::opt<unsigned>
                               "be used for register mappings"),
                      cl::cat(ToolOptions), cl::init(0));
 
+static cl::opt<unsigned>
+    MicroOpQueue("micro-op-queue-size", cl::Hidden,
+                 cl::desc("Number of entries in the micro-op queue"),
+                 cl::cat(ToolOptions), cl::init(0));
+
+static cl::opt<unsigned>
+    DecoderThroughput("decoder-throughput", cl::Hidden,
+                      cl::desc("Maximum throughput from the decoders "
+                               "(instructions per cycle)"),
+                      cl::cat(ToolOptions), cl::init(0));
+
 static cl::opt<bool>
     PrintRegisterFileStats("register-file-stats",
                            cl::desc("Print register file statistics"),
@@ -381,19 +392,15 @@ int main(int argc, char **argv) {
 
   const MCSchedModel &SM = STI->getSchedModel();
 
-  unsigned Width = SM.IssueWidth;
-  if (DispatchWidth)
-    Width = DispatchWidth;
-
   // Create an instruction builder.
   mca::InstrBuilder IB(*STI, *MCII, *MRI, MCIA.get());
 
   // Create a context to control ownership of the pipeline hardware.
   mca::Context MCA(*MRI, *STI);
 
-  mca::PipelineOptions PO(Width, RegisterFileSize, LoadQueueSize,
-                          StoreQueueSize, AssumeNoAlias,
-                          EnableBottleneckAnalysis);
+  mca::PipelineOptions PO(MicroOpQueue, DecoderThroughput, DispatchWidth,
+                          RegisterFileSize, LoadQueueSize, StoreQueueSize,
+                          AssumeNoAlias, EnableBottleneckAnalysis);
 
   // Number each region in the sequence.
   unsigned RegionIdx = 0;
@@ -470,7 +477,7 @@ int main(int argc, char **argv) {
 
     if (PrintSummaryView)
       Printer.addView(llvm::make_unique<mca::SummaryView>(
-          SM, Insts, Width, EnableBottleneckAnalysis));
+          SM, Insts, DispatchWidth, EnableBottleneckAnalysis));
 
     if (PrintInstructionInfoView)
       Printer.addView(

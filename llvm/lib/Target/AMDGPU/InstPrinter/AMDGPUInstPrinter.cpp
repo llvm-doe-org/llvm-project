@@ -268,6 +268,21 @@ void AMDGPUInstPrinter::printRegOperand(unsigned RegNo, raw_ostream &O,
   case AMDGPU::XNACK_MASK:
     O << "xnack_mask";
     return;
+  case AMDGPU::SRC_SHARED_BASE:
+    O << "src_shared_base";
+    return;
+  case AMDGPU::SRC_SHARED_LIMIT:
+    O << "src_shared_limit";
+    return;
+  case AMDGPU::SRC_PRIVATE_BASE:
+    O << "src_private_base";
+    return;
+  case AMDGPU::SRC_PRIVATE_LIMIT:
+    O << "src_private_limit";
+    return;
+  case AMDGPU::SRC_POPS_EXITING_WAVE_ID:
+    O << "src_pops_exiting_wave_id";
+    return;
   case AMDGPU::LDS_DIRECT:
     O << "src_lds_direct";
     return;
@@ -342,6 +357,9 @@ void AMDGPUInstPrinter::printRegOperand(unsigned RegNo, raw_ostream &O,
   } else if (MRI.getRegClass(AMDGPU::VReg_96RegClassID).contains(RegNo)) {
     O << 'v';
     NumRegs = 3;
+  } else if (MRI.getRegClass(AMDGPU::VReg_160RegClassID).contains(RegNo)) {
+    O << 'v';
+    NumRegs = 5;
   } else if (MRI.getRegClass(AMDGPU::VReg_256RegClassID).contains(RegNo)) {
     O << 'v';
     NumRegs = 8;
@@ -1223,7 +1241,7 @@ void AMDGPUInstPrinter::printEndpgm(const MCInst *MI, unsigned OpNo,
 #include "AMDGPUGenAsmWriter.inc"
 
 void R600InstPrinter::printInst(const MCInst *MI, raw_ostream &O,
-		                StringRef Annot, const MCSubtargetInfo &STI) {
+                                StringRef Annot, const MCSubtargetInfo &STI) {
   O.flush();
   printInstruction(MI, O);
   printAnnotation(O, Annot);

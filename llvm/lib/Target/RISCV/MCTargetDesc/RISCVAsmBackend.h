@@ -36,16 +36,24 @@ public:
         TargetOptions(Options) {
     TargetABI = RISCVABI::computeTargetABI(
         STI.getTargetTriple(), STI.getFeatureBits(), Options.getABIName());
+    RISCVFeatures::validate(STI.getTargetTriple(), STI.getFeatureBits());
   }
   ~RISCVAsmBackend() override {}
 
   void setForceRelocs() { ForceRelocs = true; }
 
+  // Returns true if relocations will be forced for shouldForceRelocation by
+  // default. This will be true if relaxation is enabled or had previously
+  // been enabled.
+  bool willForceRelocations() const {
+    return ForceRelocs || STI.getFeatureBits()[RISCV::FeatureRelax];
+  }
+
   // Generate diff expression relocations if the relax feature is enabled or had
   // previously been enabled, otherwise it is safe for the assembler to
   // calculate these internally.
   bool requiresDiffExpressionRelocations() const override {
-    return STI.getFeatureBits()[RISCV::FeatureRelax] || ForceRelocs;
+    return willForceRelocations();
   }
 
   // Return Size with extra Nop Bytes for alignment directive in code section.
