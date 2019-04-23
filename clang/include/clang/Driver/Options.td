@@ -1596,9 +1596,10 @@ def fno_openacc : Flag<["-"], "fno-openacc">, Group<f_Group>,
 def fopenacc_print_EQ : Joined<["-"], "fopenacc-print=">,
   Flags<[DriverOption,CC1Option]>, Group<Action_Group>,
   MetaVarName<"<versions>">,
-  HelpText<"Which versions of OpenACC constructs are printed by -ast-print:"
-           " acc (default), omp, acc-omp, or omp-acc. In the last two cases,"
-           " the first is uncommented and the second is commented.">,
+  HelpText<"Enable OpenACC (-fopenacc) and print the source including the"
+           " specified versions of OpenACC constructs: acc, omp, acc-omp,"
+           " or omp-acc. In the last two cases, the first is uncommented"
+           " and the second is commented.">,
   Values<"acc,omp,acc-omp,omp-acc">;
 
 def fno_optimize_sibling_calls : Flag<["-"], "fno-optimize-sibling-calls">, Group<f_Group>;
