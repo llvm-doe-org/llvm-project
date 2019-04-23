@@ -1,5 +1,5 @@
-The lists below give the current status of Clang's OpenACC support
-(clacc).
+This document describes the current status of Clacc, which extends
+Clang and LLVM with support for OpenACC.
 
 Supported Features
 ==================
@@ -11,7 +11,7 @@ We have implemented the following features:
     * `-Wsource-uses-openacc`
     * `-fopenacc-print=acc|omp|acc-omp|omp-acc`
 * targets:
-    * host
+    * host or multicore
 * `parallel` directive:
     * use without clauses
     * data sharing:
@@ -32,20 +32,20 @@ We have implemented the following features:
                   operator.
                 * The interaction between `reduction` and other data
                   sharing attributes is not exactly as specified in
-                  OpenACC 2.6.  For example, in clacc, any gang-like
+                  OpenACC 2.6.  For example, in Clacc, any gang-like
                   reduction specified on an `acc loop` or `acc
                   parallel loop` directive implies a reduction clause
                   on the enclosing `acc parallel` directive, and that
                   makes the reduction variable gang-private within the
                   `acc parallel`, but OpenACC leaves the possibility
-                  that it could be gang-shared.  Moreover, clacc
+                  that it could be gang-shared.  Moreover, Clacc
                   considers `firstprivate`, `private`, and `reduction`
                   to be contradictory specifications for a variable,
                   but OpenACC treats `reduction` as orthogonal to the
                   others.  OpenACC 2.6 is actually unclear in many
                   cases about the handling of `reduction`, and many
                   improvements have been proposed for OpenACC 2.7.  We
-                  will update clacc as the OpenACC specification is
+                  will update Clacc as the OpenACC specification is
                   improved.
                 * OpenACC 2.6 specifies that reduction operators
                   support "the numerical data types in C", which is
@@ -63,7 +63,7 @@ We have implemented the following features:
                   operators when combined with the general reduction
                   constraint that the result type and both operand
                   types must all be the same type.
-                * All such support depends on clang's corresponding
+                * All such support depends on Clang's corresponding
                   support for OpenMP reductions.  Some operand types
                   might not be supported when compiling the generated
                   OpenMP using a different compiler.
@@ -75,7 +75,7 @@ We have implemented the following features:
             * OpenACC 2.6 specifies only that the arguments must be
               integer expressions.  However, OpenMP specifies the
               stricter requirements above for `num_teams`,
-              `num_threads`, and `simdlen`, to which clacc translates
+              `num_threads`, and `simdlen`, to which Clacc translates
               the above clauses.
             * A non-positive value here probably doesn't make sense
               anyway.  Moreover, if the argument is an integer
@@ -124,7 +124,7 @@ We have implemented the following features:
     * detection of `break` statement for the associated loop:
         * compile error if implicit/explicit `independent`
         * no error if `seq` or `auto`
-        * This is important because clang's implementation does not
+        * This is important because Clang's implementation does not
           permit `break` statements for OpenMP loops.
         * In the future when `auto` doesn't always produce a
           sequential loop, a `break` statement will force it to be
@@ -150,7 +150,7 @@ the following features for now:
 * command-line options:
     * option to specify target
 * targets:
-    * offloading to accelerators or multicore
+    * offloading to accelerators
 * all directives:
     * clauses not listed in the previous section
     * nesting (other than `loop` directives within `loop` directives
@@ -176,7 +176,7 @@ the following features for now:
       also not clear because `firstprivate(x)` is then implied, so we
       again have a gang reduction on a gang-private variable.
       `copy(x)` probably should be implied in this case.
-    * Currently, clacc handles all gang-like reductions that would be
+    * Currently, Clacc handles all gang-like reductions that would be
       specified by the OpenACC 2.7 behavior as a reduction on the `acc
       parallel`.  However, that means all references to the reduction
       variable within the `acc parallel` refer to gang-private copies
