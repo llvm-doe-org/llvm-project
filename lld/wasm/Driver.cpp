@@ -226,7 +226,7 @@ void LinkerDriver::addFile(StringRef Path) {
     // Handle -whole-archive.
     if (InWholeArchive) {
       for (MemoryBufferRef &M : getArchiveMembers(MBRef))
-        Files.push_back(createObjectFile(M));
+        Files.push_back(createObjectFile(M, Path));
       return;
     }
 
@@ -278,27 +278,29 @@ void LinkerDriver::createFiles(opt::InputArgList &Args) {
   }
 }
 
-static StringRef getEntry(opt::InputArgList &Args, StringRef Default) {
+static StringRef getEntry(opt::InputArgList &Args) {
   auto *Arg = Args.getLastArg(OPT_entry, OPT_no_entry);
-  if (!Arg)
-    return Default;
+  if (!Arg) {
+    if (Args.hasArg(OPT_relocatable))
+      return "";
+    if (Args.hasArg(OPT_shared))
+      return "__wasm_call_ctors";
+    return "_start";
+  }
   if (Arg->getOption().getID() == OPT_no_entry)
     return "";
   return Arg->getValue();
 }
 
-// Some Config members do not directly correspond to any particular
-// command line options, but computed based on other Config values.
-// This function initialize such members. See Config.h for the details
-// of these values.
-static void setConfigs(opt::InputArgList &Args) {
+// Initializes Config members by the command line options.
+static void readConfigs(opt::InputArgList &Args) {
   Config->AllowUndefined = Args.hasArg(OPT_allow_undefined);
   Config->CheckFeatures =
       Args.hasFlag(OPT_check_features, OPT_no_check_features, true);
   Config->CompressRelocations = Args.hasArg(OPT_compress_relocations);
   Config->Demangle = Args.hasFlag(OPT_demangle, OPT_no_demangle, true);
   Config->DisableVerify = Args.hasArg(OPT_disable_verify);
-  Config->Entry = getEntry(Args, Args.hasArg(OPT_relocatable) ? "" : "_start");
+  Config->Entry = getEntry(Args);
   Config->ExportAll = Args.hasArg(OPT_export_all);
   Config->ExportDynamic = Args.hasFlag(OPT_export_dynamic,
       OPT_no_export_dynamic, false);
@@ -348,6 +350,26 @@ static void setConfigs(opt::InputArgList &Args) {
         llvm::Optional<std::vector<std::string>>(std::vector<std::string>());
     for (StringRef S : Arg->getValues())
       Config->Features->push_back(S);
+  }
+}
+
+// Some Config members do not directly correspond to any particular
+// command line options, but computed based on other Config values.
+// This function initialize such members. See Config.h for the details
+// of these values.
+static void setConfigs() {
+  Config->Pic = Config->Pie || Config->Shared;
+
+  if (Config->Pic) {
+    if (Config->ExportTable)
+      error("-shared/-pie is incompatible with --export-table");
+    Config->ImportTable = true;
+  }
+
+  if (Config->Shared) {
+    Config->ImportMemory = true;
+    Config->ExportDynamic = true;
+    Config->AllowUndefined = true;
   }
 }
 
@@ -422,10 +444,20 @@ static void createSyntheticSymbols() {
   static llvm::wasm::WasmGlobalType MutableGlobalTypeI32 = {WASM_TYPE_I32,
                                                             true};
 
-  if (!Config->Relocatable)
+  if (!Config->Relocatable) {
     WasmSym::CallCtors = Symtab->addSyntheticFunction(
         "__wasm_call_ctors", WASM_SYMBOL_VISIBILITY_HIDDEN,
         make<SyntheticFunction>(NullSignature, "__wasm_call_ctors"));
+
+    if (Config->Pic) {
+      // For PIC code we create a synthetic function call __wasm_apply_relocs
+      // and add this as the first call in __wasm_call_ctors.
+      // We also unconditionally export 
+      WasmSym::ApplyRelocs = Symtab->addSyntheticFunction(
+          "__wasm_apply_relocs", WASM_SYMBOL_VISIBILITY_HIDDEN,
+          make<SyntheticFunction>(NullSignature, "__wasm_apply_relocs"));
+    }
+  }
 
   // The __stack_pointer is imported in the shared library case, and exported
   // in the non-shared (executable) case.
@@ -499,7 +531,8 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
 
   errorHandler().ErrorLimit = args::getInteger(Args, OPT_error_limit, 20);
 
-  setConfigs(Args);
+  readConfigs(Args);
+  setConfigs();
   checkOptions(Args);
 
   if (auto *Arg = Args.getLastArg(OPT_allow_undefined_file))
@@ -508,20 +541,6 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   if (!Args.hasArg(OPT_INPUT)) {
     error("no input files");
     return;
-  }
-
-  Config->Pic = Config->Pie || Config->Shared;
-
-  if (Config->Pic) {
-    if (Config->ExportTable)
-      error("-shared/-pie is incompatible with --export-table");
-    Config->ImportTable = true;
-  }
-
-  if (Config->Shared) {
-    Config->ImportMemory = true;
-    Config->ExportDynamic = true;
-    Config->AllowUndefined = true;
   }
 
   // Handle --trace-symbol.
@@ -547,15 +566,13 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
     handleUndefined(Arg->getValue());
 
   Symbol *EntrySym = nullptr;
-  if (!Config->Relocatable) {
-    if (!Config->Shared && !Config->Entry.empty()) {
-      EntrySym = handleUndefined(Config->Entry);
-      if (EntrySym && EntrySym->isDefined())
-        EntrySym->ForceExport = true;
-      else
-        error("entry symbol not defined (pass --no-entry to supress): " +
-              Config->Entry);
-    }
+  if (!Config->Relocatable && !Config->Entry.empty()) {
+    EntrySym = handleUndefined(Config->Entry);
+    if (EntrySym && EntrySym->isDefined())
+      EntrySym->ForceExport = true;
+    else
+      error("entry symbol not defined (pass --no-entry to supress): " +
+            Config->Entry);
   }
 
   if (errorCount())

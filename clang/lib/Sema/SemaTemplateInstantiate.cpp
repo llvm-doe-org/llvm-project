@@ -66,9 +66,12 @@ Sema::getTemplateInstantiationArgs(NamedDecl *D,
   if (!Ctx) {
     Ctx = D->getDeclContext();
 
-    // Add template arguments from a variable template instantiation.
-    if (VarTemplateSpecializationDecl *Spec =
-            dyn_cast<VarTemplateSpecializationDecl>(D)) {
+    // Add template arguments from a variable template instantiation. For a
+    // class-scope explicit specialization, there are no template arguments
+    // at this level, but there may be enclosing template arguments.
+    VarTemplateSpecializationDecl *Spec =
+        dyn_cast<VarTemplateSpecializationDecl>(D);
+    if (Spec && !Spec->isClassScopeExplicitSpecialization()) {
       // We're done when we hit an explicit specialization.
       if (Spec->getSpecializationKind() == TSK_ExplicitSpecialization &&
           !isa<VarTemplatePartialSpecializationDecl>(Spec))
@@ -111,8 +114,9 @@ Sema::getTemplateInstantiationArgs(NamedDecl *D,
 
   while (!Ctx->isFileContext()) {
     // Add template arguments from a class template instantiation.
-    if (ClassTemplateSpecializationDecl *Spec
-          = dyn_cast<ClassTemplateSpecializationDecl>(Ctx)) {
+    ClassTemplateSpecializationDecl *Spec
+          = dyn_cast<ClassTemplateSpecializationDecl>(Ctx);
+    if (Spec && !Spec->isClassScopeExplicitSpecialization()) {
       // We're done when we hit an explicit specialization.
       if (Spec->getSpecializationKind() == TSK_ExplicitSpecialization &&
           !isa<ClassTemplatePartialSpecializationDecl>(Spec))
@@ -129,9 +133,8 @@ Sema::getTemplateInstantiationArgs(NamedDecl *D,
     // Add template arguments from a function template specialization.
     else if (FunctionDecl *Function = dyn_cast<FunctionDecl>(Ctx)) {
       if (!RelativeToPrimary &&
-          (Function->getTemplateSpecializationKind() ==
-                                                  TSK_ExplicitSpecialization &&
-           !Function->getClassScopeSpecializationPattern()))
+          Function->getTemplateSpecializationKindForInstantiation() ==
+              TSK_ExplicitSpecialization)
         break;
 
       if (const TemplateArgumentList *TemplateArgs
@@ -2011,7 +2014,11 @@ Sema::InstantiateClass(SourceLocation PointOfInstantiation,
     return true;
 
   llvm::TimeTraceScope TimeScope("InstantiateClass", [&]() {
-    return Instantiation->getQualifiedNameAsString();
+    std::string Name;
+    llvm::raw_string_ostream OS(Name);
+    Instantiation->getNameForDiagnostic(OS, getPrintingPolicy(),
+                                        /*Qualified=*/true);
+    return Name;
   });
 
   Pattern = PatternDef;
@@ -2075,6 +2082,7 @@ Sema::InstantiateClass(SourceLocation PointOfInstantiation,
   LateInstantiatedAttrVec LateAttrs;
   Instantiator.enableLateAttributeInstantiation(&LateAttrs);
 
+  bool MightHaveConstexprVirtualFunctions = false;
   for (auto *Member : Pattern->decls()) {
     // Don't instantiate members not belonging in this semantic context.
     // e.g. for:
@@ -2121,6 +2129,10 @@ Sema::InstantiateClass(SourceLocation PointOfInstantiation,
           Instantiation->setInvalidDecl();
           break;
         }
+      } else if (CXXMethodDecl *MD = dyn_cast<CXXMethodDecl>(NewMember)) {
+        if (MD->isConstexpr() && !MD->getFriendObjectKind() &&
+            (MD->isVirtualAsWritten() || Instantiation->getNumBases()))
+          MightHaveConstexprVirtualFunctions = true;
       }
 
       if (NewMember->isInvalidDecl())
@@ -2213,9 +2225,14 @@ Sema::InstantiateClass(SourceLocation PointOfInstantiation,
     Consumer.HandleTagDeclDefinition(Instantiation);
 
     // Always emit the vtable for an explicit instantiation definition
-    // of a polymorphic class template specialization.
+    // of a polymorphic class template specialization. Otherwise, eagerly
+    // instantiate only constexpr virtual functions in preparation for their use
+    // in constant evaluation.
     if (TSK == TSK_ExplicitInstantiationDefinition)
       MarkVTableUsed(PointOfInstantiation, Instantiation, true);
+    else if (MightHaveConstexprVirtualFunctions)
+      MarkVirtualMembersReferenced(PointOfInstantiation, Instantiation,
+                                   /*ConstexprOnly*/ true);
   }
 
   return Instantiation->isInvalidDecl();
@@ -2680,11 +2697,14 @@ Sema::InstantiateClassMembers(SourceLocation PointOfInstantiation,
                                                 == TSK_ExplicitSpecialization)
         continue;
 
-      if ((Context.getTargetInfo().getCXXABI().isMicrosoft() ||
-           Context.getTargetInfo().getTriple().isWindowsItaniumEnvironment()) &&
+      if (Context.getTargetInfo().getTriple().isOSWindows() &&
           TSK == TSK_ExplicitInstantiationDeclaration) {
-        // In MSVC and Windows Itanium mode, explicit instantiation decl of the
-        // outer class doesn't affect the inner class.
+        // On Windows, explicit instantiation decl of the outer class doesn't
+        // affect the inner class. Typically extern template declarations are
+        // used in combination with dll import/export annotations, but those
+        // are not propagated from the outer class templates to inner classes.
+        // Therefore, do not instantiate inner classes on this platform, so
+        // that users don't end up with undefined symbols during linking.
         continue;
       }
 
@@ -2892,7 +2912,7 @@ static const Decl *getCanonicalParmVarDecl(const Decl *D) {
       unsigned i = PV->getFunctionScopeIndex();
       // This parameter might be from a freestanding function type within the
       // function and isn't necessarily referring to one of FD's parameters.
-      if (FD->getParamDecl(i) == PV)
+      if (i < FD->getNumParams() && FD->getParamDecl(i) == PV)
         return FD->getCanonicalDecl()->getParamDecl(i);
     }
   }

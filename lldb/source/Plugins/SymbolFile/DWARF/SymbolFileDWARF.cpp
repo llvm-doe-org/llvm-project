@@ -136,8 +136,8 @@ public:
     m_collection_sp->Initialize(g_properties);
   }
 
-  FileSpecList &GetSymLinkPaths() {
-    OptionValueFileSpecList *option_value =
+  FileSpecList GetSymLinkPaths() {
+    const OptionValueFileSpecList *option_value =
         m_collection_sp->GetPropertyAtIndexAsOptionValueFileSpecList(
             nullptr, true, ePropertySymLinkPaths);
     assert(option_value);
@@ -159,7 +159,7 @@ static const SymbolFileDWARFPropertiesSP &GetGlobalPluginProperties() {
 
 } // anonymous namespace end
 
-const FileSpecList &SymbolFileDWARF::GetSymlinkPaths() {
+FileSpecList SymbolFileDWARF::GetSymlinkPaths() {
   return GetGlobalPluginProperties()->GetSymLinkPaths();
 }
 
@@ -301,13 +301,13 @@ size_t SymbolFileDWARF::GetTypes(SymbolContextScope *sc_scope,
     if (dwarf_cu == 0)
       return 0;
     GetTypes(dwarf_cu->DIE(), dwarf_cu->GetOffset(),
-             dwarf_cu->GetNextCompileUnitOffset(), type_mask, type_set);
+             dwarf_cu->GetNextUnitOffset(), type_mask, type_set);
   } else {
     DWARFDebugInfo *info = DebugInfo();
     if (info) {
-      const size_t num_cus = info->GetNumCompileUnits();
+      const size_t num_cus = info->GetNumUnits();
       for (size_t cu_idx = 0; cu_idx < num_cus; ++cu_idx) {
-        dwarf_cu = info->GetCompileUnitAtIndex(cu_idx);
+        dwarf_cu = info->GetUnitAtIndex(cu_idx);
         if (dwarf_cu) {
           GetTypes(dwarf_cu->DIE(), 0, UINT32_MAX, type_mask, type_set);
         }
@@ -328,10 +328,8 @@ size_t SymbolFileDWARF::GetTypes(SymbolContextScope *sc_scope,
   return num_types_added;
 }
 
-//----------------------------------------------------------------------
 // Gets the first parent that is a lexical block, function or inlined
 // subroutine, or compile unit.
-//----------------------------------------------------------------------
 DWARFDIE
 SymbolFileDWARF::GetParentSymbolContextDIE(const DWARFDIE &child_die) {
   DWARFDIE die;
@@ -351,10 +349,10 @@ SymbolFileDWARF::GetParentSymbolContextDIE(const DWARFDIE &child_die) {
 }
 
 SymbolFileDWARF::SymbolFileDWARF(ObjectFile *objfile)
-    : SymbolFile(objfile), UserID(uint64_t(DW_INVALID_OFFSET)
-                                  << 32), // Used by SymbolFileDWARFDebugMap to
-                                          // when this class parses .o files to
-                                          // contain the .o file index/ID
+    : SymbolFile(objfile),
+      UserID(0x7fffffff00000000), // Used by SymbolFileDWARFDebugMap to
+                                  // when this class parses .o files to
+                                  // contain the .o file index/ID
       m_debug_map_module_wp(), m_debug_map_symfile(NULL),
       m_context(*objfile->GetModule()), m_data_debug_abbrev(),
       m_data_debug_frame(), m_data_debug_info(), m_data_debug_line(),
@@ -691,11 +689,8 @@ SymbolFileDWARF::GetDWARFCompileUnit(lldb_private::CompileUnit *comp_unit) {
 
   DWARFDebugInfo *info = DebugInfo();
   if (info) {
-    // Just a normal DWARF file whose user ID for the compile unit is the DWARF
-    // offset itself
-
-    DWARFUnit *dwarf_cu =
-        info->GetCompileUnit((dw_offset_t)comp_unit->GetID());
+    // The compile unit ID is the index of the DWARF unit.
+    DWARFUnit *dwarf_cu = info->GetUnitAtIndex(comp_unit->GetID());
     if (dwarf_cu && dwarf_cu->GetUserData() == NULL)
       dwarf_cu->SetUserData(comp_unit);
     return dwarf_cu;
@@ -783,7 +778,7 @@ lldb::CompUnitSP SymbolFileDWARF::ParseCompileUnit(DWARFUnit *dwarf_cu,
 
               // Figure out the compile unit index if we weren't given one
               if (cu_idx == UINT32_MAX)
-                DebugInfo()->GetCompileUnit(dwarf_cu->GetOffset(), &cu_idx);
+                cu_idx = dwarf_cu->GetID();
 
               m_obj_file->GetModule()->GetSymbolVendor()->SetCompileUnitAtIndex(
                   cu_idx, cu_sp);
@@ -799,7 +794,7 @@ lldb::CompUnitSP SymbolFileDWARF::ParseCompileUnit(DWARFUnit *dwarf_cu,
 uint32_t SymbolFileDWARF::GetNumCompileUnits() {
   DWARFDebugInfo *info = DebugInfo();
   if (info)
-    return info->GetNumCompileUnits();
+    return info->GetNumUnits();
   return 0;
 }
 
@@ -808,7 +803,7 @@ CompUnitSP SymbolFileDWARF::ParseCompileUnitAtIndex(uint32_t cu_idx) {
   CompUnitSP cu_sp;
   DWARFDebugInfo *info = DebugInfo();
   if (info) {
-    DWARFUnit *dwarf_cu = info->GetCompileUnitAtIndex(cu_idx);
+    DWARFUnit *dwarf_cu = info->GetUnitAtIndex(cu_idx);
     if (dwarf_cu)
       cu_sp = ParseCompileUnit(dwarf_cu, cu_idx);
   }
@@ -911,9 +906,6 @@ bool SymbolFileDWARF::ParseImportedModules(
     return false;
   UpdateExternalModuleListIfNeeded();
 
-  if (!sc.comp_unit)
-    return false;
-
   const DWARFDIE die = dwarf_cu->DIE();
   if (!die)
     return false;
@@ -959,9 +951,7 @@ struct ParseDWARFLineTableCallbackInfo {
   lldb::addr_t addr_mask;
 };
 
-//----------------------------------------------------------------------
 // ParseStatementTableCallback
-//----------------------------------------------------------------------
 static void ParseDWARFLineTableCallback(dw_offset_t offset,
                                         const DWARFDebugLine::State &state,
                                         void *userData) {
@@ -1253,7 +1243,7 @@ void SymbolFileDWARF::ParseDeclsForContext(CompilerDeclContext decl_ctx) {
       ast_parser->GetDeclForUIDFromDWARF(decl);
 }
 
-SymbolFileDWARF *SymbolFileDWARF::GetDWARFForUID(lldb::user_id_t uid) {
+SymbolFileDWARF::DecodedUID SymbolFileDWARF::DecodeUID(lldb::user_id_t uid) {
   // This method can be called without going through the symbol vendor so we
   // need to lock the module.
   std::lock_guard<std::recursive_mutex> guard(GetModuleMutex());
@@ -1264,28 +1254,40 @@ SymbolFileDWARF *SymbolFileDWARF::GetDWARFForUID(lldb::user_id_t uid) {
   // references to other DWARF objects and we must be ready to receive a
   // "lldb::user_id_t" that specifies a DIE from another SymbolFileDWARF
   // instance.
-  SymbolFileDWARFDebugMap *debug_map = GetDebugMapSymfile();
-  if (debug_map)
-    return debug_map->GetSymbolFileByOSOIndex(
+  if (SymbolFileDWARFDebugMap *debug_map = GetDebugMapSymfile()) {
+    SymbolFileDWARF *dwarf = debug_map->GetSymbolFileByOSOIndex(
         debug_map->GetOSOIndexFromUserID(uid));
-  return this;
+    return {dwarf, {DIERef::Section::DebugInfo, DW_INVALID_OFFSET, dw_offset_t(uid)}};
+  }
+  DIERef::Section section =
+      uid >> 63 ? DIERef::Section::DebugTypes : DIERef::Section::DebugInfo;
+  uint32_t dwarf_id = uid >> 32 & 0x7fffffff;
+  dw_offset_t die_offset = uid;
+
+  if (die_offset == DW_INVALID_OFFSET)
+    return {nullptr, DIERef()};
+
+  SymbolFileDWARF *dwarf = this;
+  if (DebugInfo()) {
+    if (DWARFUnit *unit = DebugInfo()->GetUnitAtIndex(dwarf_id)) {
+      if (unit->GetDwoSymbolFile())
+        dwarf = unit->GetDwoSymbolFile();
+    }
+  }
+  return {dwarf, {section, DW_INVALID_OFFSET, die_offset}};
 }
 
 DWARFDIE
-SymbolFileDWARF::GetDIEFromUID(lldb::user_id_t uid) {
+SymbolFileDWARF::GetDIE(lldb::user_id_t uid) {
   // This method can be called without going through the symbol vendor so we
   // need to lock the module.
   std::lock_guard<std::recursive_mutex> guard(GetModuleMutex());
-  // Anytime we get a "lldb::user_id_t" from an lldb_private::SymbolFile API we
-  // must make sure we use the correct DWARF file when resolving things. On
-  // MacOSX, when using SymbolFileDWARFDebugMap, we will use multiple
-  // SymbolFileDWARF classes, one for each .o file. We can often end up with
-  // references to other DWARF objects and we must be ready to receive a
-  // "lldb::user_id_t" that specifies a DIE from another SymbolFileDWARF
-  // instance.
-  SymbolFileDWARF *dwarf = GetDWARFForUID(uid);
-  if (dwarf)
-    return dwarf->GetDIE(DIERef(uid, dwarf));
+
+  DecodedUID decoded = DecodeUID(uid);
+
+  if (decoded.dwarf)
+    return decoded.dwarf->GetDIE(decoded.ref);
+
   return DWARFDIE();
 }
 
@@ -1294,10 +1296,9 @@ CompilerDecl SymbolFileDWARF::GetDeclForUID(lldb::user_id_t type_uid) {
   // need to lock the module.
   std::lock_guard<std::recursive_mutex> guard(GetModuleMutex());
   // Anytime we have a lldb::user_id_t, we must get the DIE by calling
-  // SymbolFileDWARF::GetDIEFromUID(). See comments inside the
-  // SymbolFileDWARF::GetDIEFromUID() for details.
-  DWARFDIE die = GetDIEFromUID(type_uid);
-  if (die)
+  // SymbolFileDWARF::GetDIE(). See comments inside the
+  // SymbolFileDWARF::GetDIE() for details.
+  if (DWARFDIE die = GetDIE(type_uid))
     return die.GetDecl();
   return CompilerDecl();
 }
@@ -1308,10 +1309,9 @@ SymbolFileDWARF::GetDeclContextForUID(lldb::user_id_t type_uid) {
   // need to lock the module.
   std::lock_guard<std::recursive_mutex> guard(GetModuleMutex());
   // Anytime we have a lldb::user_id_t, we must get the DIE by calling
-  // SymbolFileDWARF::GetDIEFromUID(). See comments inside the
-  // SymbolFileDWARF::GetDIEFromUID() for details.
-  DWARFDIE die = GetDIEFromUID(type_uid);
-  if (die)
+  // SymbolFileDWARF::GetDIE(). See comments inside the
+  // SymbolFileDWARF::GetDIE() for details.
+  if (DWARFDIE die = GetDIE(type_uid))
     return die.GetDeclContext();
   return CompilerDeclContext();
 }
@@ -1322,10 +1322,9 @@ SymbolFileDWARF::GetDeclContextContainingUID(lldb::user_id_t type_uid) {
   // need to lock the module.
   std::lock_guard<std::recursive_mutex> guard(GetModuleMutex());
   // Anytime we have a lldb::user_id_t, we must get the DIE by calling
-  // SymbolFileDWARF::GetDIEFromUID(). See comments inside the
-  // SymbolFileDWARF::GetDIEFromUID() for details.
-  DWARFDIE die = GetDIEFromUID(type_uid);
-  if (die)
+  // SymbolFileDWARF::GetDIE(). See comments inside the
+  // SymbolFileDWARF::GetDIE() for details.
+  if (DWARFDIE die = GetDIE(type_uid))
     return die.GetContainingDeclContext();
   return CompilerDeclContext();
 }
@@ -1335,10 +1334,9 @@ Type *SymbolFileDWARF::ResolveTypeUID(lldb::user_id_t type_uid) {
   // need to lock the module.
   std::lock_guard<std::recursive_mutex> guard(GetModuleMutex());
   // Anytime we have a lldb::user_id_t, we must get the DIE by calling
-  // SymbolFileDWARF::GetDIEFromUID(). See comments inside the
-  // SymbolFileDWARF::GetDIEFromUID() for details.
-  DWARFDIE type_die = GetDIEFromUID(type_uid);
-  if (type_die)
+  // SymbolFileDWARF::GetDIE(). See comments inside the
+  // SymbolFileDWARF::GetDIE() for details.
+  if (DWARFDIE type_die = GetDIE(type_uid))
     return type_die.ResolveType();
   else
     return nullptr;
@@ -1348,8 +1346,7 @@ llvm::Optional<SymbolFile::ArrayInfo>
 SymbolFileDWARF::GetDynamicArrayInfoForUID(
     lldb::user_id_t type_uid, const lldb_private::ExecutionContext *exe_ctx) {
   std::lock_guard<std::recursive_mutex> guard(GetModuleMutex());
-  DWARFDIE type_die = GetDIEFromUID(type_uid);
-  if (type_die)
+  if (DWARFDIE type_die = GetDIE(type_uid))
     return DWARFASTParser::ParseChildArrayInfo(type_die, exe_ctx);
   else
     return llvm::None;
@@ -1606,7 +1603,7 @@ void SymbolFileDWARF::UpdateExternalModuleListIfNeeded() {
 
   const uint32_t num_compile_units = GetNumCompileUnits();
   for (uint32_t cu_idx = 0; cu_idx < num_compile_units; ++cu_idx) {
-    DWARFUnit *dwarf_cu = debug_info->GetCompileUnitAtIndex(cu_idx);
+    DWARFUnit *dwarf_cu = debug_info->GetUnitAtIndex(cu_idx);
 
     const DWARFBaseDIE die = dwarf_cu->GetUnitDIEOnly();
     if (die && !die.HasChildren()) {
@@ -1648,9 +1645,7 @@ void SymbolFileDWARF::UpdateExternalModuleListIfNeeded() {
             // printed. However, as one can notice in this case we don't
             // actually need to try to load the already loaded module
             // (corresponding to .dwo) so we simply skip it.
-            if (m_obj_file->GetFileSpec()
-                        .GetFileNameExtension()
-                        .GetStringRef() == ".dwo" &&
+            if (m_obj_file->GetFileSpec().GetFileNameExtension() == ".dwo" &&
                 llvm::StringRef(m_obj_file->GetFileSpec().GetPath())
                     .endswith(dwo_module_spec.GetFileSpec().GetPath())) {
               continue;
@@ -1772,8 +1767,8 @@ uint32_t SymbolFileDWARF::ResolveSymbolContext(const Address &so_addr,
         }
       } else {
         uint32_t cu_idx = DW_INVALID_INDEX;
-        DWARFUnit *dwarf_cu =
-            debug_info->GetCompileUnit(cu_offset, &cu_idx);
+        DWARFUnit *dwarf_cu = debug_info->GetUnitAtOffset(DIERef::Section::DebugInfo,
+                                                          cu_offset, &cu_idx);
         if (dwarf_cu) {
           sc.comp_unit = GetCompUnitForDWARFCompUnit(dwarf_cu, cu_idx);
           if (sc.comp_unit) {
@@ -1873,8 +1868,7 @@ uint32_t SymbolFileDWARF::ResolveSymbolContext(const FileSpec &file_spec,
       uint32_t cu_idx;
       DWARFUnit *dwarf_cu = NULL;
 
-      for (cu_idx = 0;
-           (dwarf_cu = debug_info->GetCompileUnitAtIndex(cu_idx)) != NULL;
+      for (cu_idx = 0; (dwarf_cu = debug_info->GetUnitAtIndex(cu_idx)) != NULL;
            ++cu_idx) {
         CompileUnit *dc_cu = GetCompUnitForDWARFCompUnit(dwarf_cu, cu_idx);
         const bool full_match = (bool)file_spec.GetDirectory();
@@ -2040,6 +2034,7 @@ uint32_t SymbolFileDWARF::FindGlobalVariables(
 
   llvm::StringRef basename;
   llvm::StringRef context;
+  bool name_is_mangled = (bool)Mangled(name);
 
   if (!CPlusPlusLanguage::ExtractContextAndIdentifier(name.GetCString(),
                                                       context, basename))
@@ -2089,7 +2084,8 @@ uint32_t SymbolFileDWARF::FindGlobalVariables(
                          &variables);
           while (pruned_idx < variables.GetSize()) {
             VariableSP var_sp = variables.GetVariableAtIndex(pruned_idx);
-            if (var_sp->GetName().GetStringRef().contains(name.GetStringRef()))
+            if (name_is_mangled ||
+                var_sp->GetName().GetStringRef().contains(name.GetStringRef()))
               ++pruned_idx;
             else
               variables.RemoveVariableAtIndex(pruned_idx);
@@ -2361,10 +2357,10 @@ void SymbolFileDWARF::GetMangledNamesForFunction(
   DWARFDebugInfo *info = DebugInfo();
   uint32_t num_comp_units = 0;
   if (info)
-    num_comp_units = info->GetNumCompileUnits();
+    num_comp_units = info->GetNumUnits();
 
   for (uint32_t i = 0; i < num_comp_units; i++) {
-    DWARFUnit *cu = info->GetCompileUnitAtIndex(i);
+    DWARFUnit *cu = info->GetUnitAtIndex(i);
     if (cu == nullptr)
       continue;
 
@@ -2703,7 +2699,7 @@ bool SymbolFileDWARF::Supports_DW_AT_APPLE_objc_complete_type(
       DWARFDebugInfo *debug_info = DebugInfo();
       const uint32_t num_compile_units = GetNumCompileUnits();
       for (uint32_t cu_idx = 0; cu_idx < num_compile_units; ++cu_idx) {
-        DWARFUnit *dwarf_cu = debug_info->GetCompileUnitAtIndex(cu_idx);
+        DWARFUnit *dwarf_cu = debug_info->GetUnitAtIndex(cu_idx);
         if (dwarf_cu != cu &&
             dwarf_cu->Supports_DW_AT_APPLE_objc_complete_type()) {
           m_supports_DW_AT_APPLE_objc_complete_type = eLazyBoolYes;
@@ -2787,7 +2783,6 @@ TypeSP SymbolFileDWARF::FindCompleteObjCDefinitionTypeForDIE(
   return type_sp;
 }
 
-//----------------------------------------------------------------------
 // This function helps to ensure that the declaration contexts match for two
 // different DIEs. Often times debug information will refer to a forward
 // declaration of a type (the equivalent of "struct my_struct;". There will
@@ -2797,7 +2792,6 @@ TypeSP SymbolFileDWARF::FindCompleteObjCDefinitionTypeForDIE(
 // type was in the same declaration context as the original DIE. This function
 // can efficiently compare two DIEs and will return true when the declaration
 // context matches, and false when they don't.
-//----------------------------------------------------------------------
 bool SymbolFileDWARF::DIEDeclContextsMatch(const DWARFDIE &die1,
                                            const DWARFDIE &die2) {
   if (die1 == die2)
@@ -3117,7 +3111,7 @@ size_t SymbolFileDWARF::ParseVariablesForContext(const SymbolContext &sc) {
       return 0;
 
     if (sc.function) {
-      DWARFDIE function_die = info->GetDIE(DIERef(sc.function->GetID(), this));
+      DWARFDIE function_die = GetDIE(sc.function->GetID());
 
       const dw_addr_t func_lo_pc = function_die.GetAttributeValueAsAddress(
           DW_AT_low_pc, LLDB_INVALID_ADDRESS);
@@ -3130,7 +3124,7 @@ size_t SymbolFileDWARF::ParseVariablesForContext(const SymbolContext &sc) {
         return num_variables;
       }
     } else if (sc.comp_unit) {
-      DWARFUnit *dwarf_cu = info->GetCompileUnit(sc.comp_unit->GetID());
+      DWARFUnit *dwarf_cu = info->GetUnitAtIndex(sc.comp_unit->GetID());
 
       if (dwarf_cu == NULL)
         return 0;
@@ -3318,7 +3312,7 @@ VariableSP SymbolFileDWARF::ParseVariableDIE(const SymbolContext &sc,
             }
           } break;
           case DW_AT_specification:
-            spec_die = GetDIE(DIERef(form_value));
+            spec_die = form_value.Reference();
             break;
           case DW_AT_start_scope: {
             if (form_value.Form() == DW_FORM_sec_offset) {
@@ -3543,7 +3537,7 @@ VariableSP SymbolFileDWARF::ParseVariableDIE(const SymbolContext &sc,
 
       if (symbol_context_scope) {
         SymbolFileTypeSP type_sp(
-            new SymbolFileType(*this, DIERef(type_die_form).GetUID(this)));
+            new SymbolFileType(*this, GetUID(DIERef(type_die_form))));
 
         if (const_value.Form() && type_sp && type_sp->GetType())
           location.CopyOpcodeData(
@@ -3593,12 +3587,11 @@ SymbolFileDWARF::FindBlockContainingSpecification(
     case DW_TAG_subprogram:
     case DW_TAG_inlined_subroutine:
     case DW_TAG_lexical_block: {
-      if (die.GetAttributeValueAsReference(
-              DW_AT_specification, DW_INVALID_OFFSET) == spec_block_die_offset)
+      if (die.GetReferencedDIE(DW_AT_specification).GetOffset() ==
+          spec_block_die_offset)
         return die;
 
-      if (die.GetAttributeValueAsReference(DW_AT_abstract_origin,
-                                           DW_INVALID_OFFSET) ==
+      if (die.GetReferencedDIE(DW_AT_abstract_origin).GetOffset() ==
           spec_block_die_offset)
         return die;
     } break;
@@ -3680,7 +3673,7 @@ size_t SymbolFileDWARF::ParseVariables(const SymbolContext &sc,
                 // variable to it
                 const DWARFDIE concrete_block_die =
                     FindBlockContainingSpecification(
-                        DIERef(sc.function->GetID(), this),
+                        GetDIE(sc.function->GetID()),
                         sc_parent_die.GetOffset());
                 if (concrete_block_die)
                   block = sc.function->GetBlock(true).FindBlockByID(
@@ -3782,15 +3775,13 @@ CollectCallEdges(DWARFDIE function_die) {
 
 std::vector<lldb_private::CallEdge>
 SymbolFileDWARF::ParseCallEdgesInFunction(UserID func_id) {
-  DWARFDIE func_die = GetDIEFromUID(func_id.GetID());
+  DWARFDIE func_die = GetDIE(func_id.GetID());
   if (func_die.IsValid())
     return CollectCallEdges(func_die);
   return {};
 }
 
-//------------------------------------------------------------------
 // PluginInterface protocol
-//------------------------------------------------------------------
 ConstString SymbolFileDWARF::GetPluginName() { return GetPluginNameStatic(); }
 
 uint32_t SymbolFileDWARF::GetPluginVersion() { return 1; }

@@ -267,6 +267,7 @@ For API clients and LLVM developers.
    Bugpoint
    CodeGenerator
    ExceptionHandling
+   AddingConstrainedIntrinsics
    LinkTimeOptimization
    SegmentedStacks
    TableGenFundamentals
@@ -344,6 +345,10 @@ For API clients and LLVM developers.
 :doc:`ExceptionHandling`
    This document describes the design and implementation of exception handling
    in LLVM.
+
+:doc:`AddingConstrainedIntrinsics`
+   Gives the steps necessary when adding a new constrained math intrinsic
+   to LLVM.
 
 :doc:`Bugpoint`
    Automatic bug finder and test-case reducer description and usage
@@ -559,6 +564,21 @@ This channel has several bots.
 
 * clang-bot - A `geordi <http://www.eelis.net/geordi/>`_ instance running
   near-trunk clang instead of gcc.
+
+Meetups and social events
+-------------------------
+
+.. toctree::
+   :hidden:
+
+   MeetupGuidelines
+
+Besides developer `meetings and conferences <https://llvm.org/devmtg/>`_,
+there are several user groups called
+`LLVM Socials <https://www.meetup.com/pro/llvm/>`_. We greatly encourage you to
+join one in your city. Or start a new one if there is none:
+
+:doc:`MeetupGuidelines`
 
 Community wide proposals
 ------------------------

@@ -69,7 +69,7 @@ llvm::MemoryBuffer::BufferKind ContentCache::getMemoryBufferKind() const {
   if (!Buffer.getPointer())
     return llvm::MemoryBuffer::MemoryBuffer_Malloc;
 
-  llvm::MemoryBuffer *buf = Buffer.getPointer();
+  const llvm::MemoryBuffer *buf = Buffer.getPointer();
   return buf->getBufferKind();
 }
 
@@ -82,7 +82,7 @@ unsigned ContentCache::getSize() const {
                              : (unsigned) ContentsEntry->getSize();
 }
 
-void ContentCache::replaceBuffer(llvm::MemoryBuffer *B, bool DoNotFree) {
+void ContentCache::replaceBuffer(const llvm::MemoryBuffer *B, bool DoNotFree) {
   if (B && B == Buffer.getPointer()) {
     assert(0 && "Replacing with the same buffer");
     Buffer.setInt(DoNotFree? DoNotFreeFlag : 0);
@@ -95,10 +95,10 @@ void ContentCache::replaceBuffer(llvm::MemoryBuffer *B, bool DoNotFree) {
   Buffer.setInt((B && DoNotFree) ? DoNotFreeFlag : 0);
 }
 
-llvm::MemoryBuffer *ContentCache::getBuffer(DiagnosticsEngine &Diag,
-                                            const SourceManager &SM,
-                                            SourceLocation Loc,
-                                            bool *Invalid) const {
+const llvm::MemoryBuffer *ContentCache::getBuffer(DiagnosticsEngine &Diag,
+                                                  const SourceManager &SM,
+                                                  SourceLocation Loc,
+                                                  bool *Invalid) const {
   // Lazily create the Buffer for ContentCaches that wrap files.  If we already
   // computed it, just return what we have.
   if (Buffer.getPointer() || !ContentsEntry) {
@@ -167,16 +167,16 @@ llvm::MemoryBuffer *ContentCache::getBuffer(DiagnosticsEngine &Diag,
   // http://en.wikipedia.org/wiki/Byte_order_mark for more information.
   StringRef BufStr = Buffer.getPointer()->getBuffer();
   const char *InvalidBOM = llvm::StringSwitch<const char *>(BufStr)
-    .StartsWith("\xFE\xFF", "UTF-16 (BE)")
-    .StartsWith("\xFF\xFE", "UTF-16 (LE)")
     .StartsWith(llvm::StringLiteral::withInnerNUL("\x00\x00\xFE\xFF"),
                                                   "UTF-32 (BE)")
     .StartsWith(llvm::StringLiteral::withInnerNUL("\xFF\xFE\x00\x00"),
                                                   "UTF-32 (LE)")
+    .StartsWith("\xFE\xFF", "UTF-16 (BE)")
+    .StartsWith("\xFF\xFE", "UTF-16 (LE)")
     .StartsWith("\x2B\x2F\x76", "UTF-7")
     .StartsWith("\xF7\x64\x4C", "UTF-1")
     .StartsWith("\xDD\x73\x66\x73", "UTF-EBCDIC")
-    .StartsWith("\x0E\xFE\xFF", "SDSU")
+    .StartsWith("\x0E\xFE\xFF", "SCSU")
     .StartsWith("\xFB\xEE\x28", "BOCU-1")
     .StartsWith("\x84\x31\x95\x33", "GB-18030")
     .Default(nullptr);
@@ -423,7 +423,7 @@ SourceManager::getOrCreateContentCache(const FileEntry *FileEnt,
 /// Create a new ContentCache for the specified memory buffer.
 /// This does no caching.
 const ContentCache *
-SourceManager::createMemBufferContentCache(llvm::MemoryBuffer *Buffer,
+SourceManager::createMemBufferContentCache(const llvm::MemoryBuffer *Buffer,
                                            bool DoNotFree) {
   // Add a new ContentCache to the MemBufferInfos list and return it.
   ContentCache *Entry = ContentCacheAlloc.Allocate<ContentCache>();
@@ -618,8 +618,8 @@ SourceManager::createExpansionLocImpl(const ExpansionInfo &Info,
   return SourceLocation::getMacroLoc(NextLocalOffset - (TokLength + 1));
 }
 
-llvm::MemoryBuffer *SourceManager::getMemoryBufferForFile(const FileEntry *File,
-                                                          bool *Invalid) {
+const llvm::MemoryBuffer *
+SourceManager::getMemoryBufferForFile(const FileEntry *File, bool *Invalid) {
   const SrcMgr::ContentCache *IR = getOrCreateContentCache(File);
   assert(IR && "getOrCreateContentCache() cannot return NULL");
   return IR->getBuffer(Diag, *this, SourceLocation(), Invalid);
@@ -675,7 +675,7 @@ StringRef SourceManager::getBufferData(FileID FID, bool *Invalid) const {
     return "<<<<<INVALID SOURCE LOCATION>>>>>";
   }
 
-  llvm::MemoryBuffer *Buf = SLoc.getFile().getContentCache()->getBuffer(
+  const llvm::MemoryBuffer *Buf = SLoc.getFile().getContentCache()->getBuffer(
       Diag, *this, SourceLocation(), &MyInvalid);
   if (Invalid)
     *Invalid = MyInvalid;
@@ -1105,8 +1105,9 @@ const char *SourceManager::getCharacterData(SourceLocation SL,
 
     return "<<<<INVALID BUFFER>>>>";
   }
-  llvm::MemoryBuffer *Buffer = Entry.getFile().getContentCache()->getBuffer(
-      Diag, *this, SourceLocation(), &CharDataInvalid);
+  const llvm::MemoryBuffer *Buffer =
+      Entry.getFile().getContentCache()->getBuffer(
+          Diag, *this, SourceLocation(), &CharDataInvalid);
   if (Invalid)
     *Invalid = CharDataInvalid;
   return Buffer->getBufferStart() + (CharDataInvalid? 0 : LocInfo.second);
@@ -1117,7 +1118,7 @@ const char *SourceManager::getCharacterData(SourceLocation SL,
 unsigned SourceManager::getColumnNumber(FileID FID, unsigned FilePos,
                                         bool *Invalid) const {
   bool MyInvalid = false;
-  llvm::MemoryBuffer *MemBuf = getBuffer(FID, &MyInvalid);
+  const llvm::MemoryBuffer *MemBuf = getBuffer(FID, &MyInvalid);
   if (Invalid)
     *Invalid = MyInvalid;
 
@@ -1202,7 +1203,8 @@ static void ComputeLineNumbers(DiagnosticsEngine &Diag, ContentCache *FI,
                                llvm::BumpPtrAllocator &Alloc,
                                const SourceManager &SM, bool &Invalid) {
   // Note that calling 'getBuffer()' may lazily page in the file.
-  MemoryBuffer *Buffer = FI->getBuffer(Diag, SM, SourceLocation(), &Invalid);
+  const MemoryBuffer *Buffer =
+      FI->getBuffer(Diag, SM, SourceLocation(), &Invalid);
   if (Invalid)
     return;
 
@@ -1580,7 +1582,7 @@ FileID SourceManager::translateFile(const FileEntry *SourceFile) const {
     if (MainSLoc.isFile()) {
       const ContentCache *MainContentCache
         = MainSLoc.getFile().getContentCache();
-      if (!MainContentCache) {
+      if (!MainContentCache || !MainContentCache->OrigEntry) {
         // Can't do anything
       } else if (MainContentCache->OrigEntry == SourceFile) {
         FirstFID = MainFileID;
@@ -1720,7 +1722,7 @@ SourceLocation SourceManager::translateLineCol(FileID FID,
     return FileLoc.getLocWithOffset(Size);
   }
 
-  llvm::MemoryBuffer *Buffer = Content->getBuffer(Diag, *this);
+  const llvm::MemoryBuffer *Buffer = Content->getBuffer(Diag, *this);
   unsigned FilePos = Content->SourceLineCache[Line - 1];
   const char *Buf = Buffer->getBufferStart() + FilePos;
   unsigned BufLength = Buffer->getBufferSize() - FilePos;

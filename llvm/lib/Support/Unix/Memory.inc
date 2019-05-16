@@ -91,16 +91,24 @@ Memory::allocateMappedMemory(size_t NumBytes,
   if (NumBytes == 0)
     return MemoryBlock();
 
-  int fd = -1;
-
-  int MMFlags = MAP_PRIVATE |
-#ifdef MAP_ANONYMOUS
-  MAP_ANONYMOUS
+  // On platforms that have it, we can use MAP_ANON to get a memory-mapped
+  // page without file backing, but we need a fallback of opening /dev/zero
+  // for strictly POSIX platforms instead.
+  int fd;
+#if defined(MAP_ANON)
+  fd = -1;
 #else
-  MAP_ANON
+  fd = open("/dev/zero", O_RDWR);
+  if (fd == -1) {
+    EC = std::error_code(errno, std::generic_category());
+    return MemoryBlock();
+  }
 #endif
-  ; // Ends statement above
 
+  int MMFlags = MAP_PRIVATE;
+#if defined(MAP_ANON)
+  MMFlags |= MAP_ANON;
+#endif
   int Protect = getPosixProtectionFlags(PFlags);
 
 #if defined(__NetBSD__) && defined(PROT_MPROTECT)
@@ -110,7 +118,7 @@ Memory::allocateMappedMemory(size_t NumBytes,
   // Use any near hint and the page size to set a page-aligned starting address
   uintptr_t Start = NearBlock ? reinterpret_cast<uintptr_t>(NearBlock->base()) +
                                       NearBlock->size() : 0;
-  static const size_t PageSize = Process::getPageSize();
+  static const size_t PageSize = Process::getPageSizeEstimate();
   if (Start && Start % PageSize)
     Start += PageSize - Start % PageSize;
 
@@ -118,12 +126,23 @@ Memory::allocateMappedMemory(size_t NumBytes,
   void *Addr = ::mmap(reinterpret_cast<void *>(Start), NumBytes, Protect,
                       MMFlags, fd, 0);
   if (Addr == MAP_FAILED) {
-    if (NearBlock) //Try again without a near hint
+    if (NearBlock) { //Try again without a near hint
+#if !defined(MAP_ANON)
+      close(fd);
+#endif
       return allocateMappedMemory(NumBytes, nullptr, PFlags, EC);
+    }
 
     EC = std::error_code(errno, std::generic_category());
+#if !defined(MAP_ANON)
+    close(fd);
+#endif
     return MemoryBlock();
   }
+
+#if !defined(MAP_ANON)
+  close(fd);
+#endif
 
   MemoryBlock Result;
   Result.Address = Addr;
@@ -156,7 +175,7 @@ Memory::releaseMappedMemory(MemoryBlock &M) {
 
 std::error_code
 Memory::protectMappedMemory(const MemoryBlock &M, unsigned Flags) {
-  static const size_t PageSize = Process::getPageSize();
+  static const size_t PageSize = Process::getPageSizeEstimate();
   if (M.Address == nullptr || M.Size == 0)
     return std::error_code();
 

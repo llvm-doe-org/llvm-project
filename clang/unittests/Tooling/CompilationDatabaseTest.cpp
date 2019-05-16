@@ -673,6 +673,27 @@ protected:
     return llvm::join(Results[0].CommandLine, " ");
   }
 
+  // Parse the file whose command was used out of the Heuristic string.
+  std::string getProxy(llvm::StringRef F) {
+    auto Results =
+        inferMissingCompileCommands(llvm::make_unique<MemCDB>(Entries))
+            ->getCompileCommands(path(F));
+    if (Results.empty())
+      return "none";
+    StringRef Proxy = Results.front().Heuristic;
+    if (!Proxy.consume_front("inferred from "))
+      return "";
+    // We have a proxy file, convert back to a unix relative path.
+    // This is a bit messy, but we do need to test these strings somehow...
+    llvm::SmallString<32> TempDir;
+    llvm::sys::path::system_temp_directory(false, TempDir);
+    Proxy.consume_front(TempDir);
+    Proxy.consume_front(llvm::sys::path::get_separator());
+    llvm::SmallString<32> Result = Proxy;
+    llvm::sys::path::native(Result, llvm::sys::path::Style::posix);
+    return Result.str();
+  }
+
   MemCDB::EntryMap Entries;
 };
 
@@ -682,18 +703,16 @@ TEST_F(InterpolateTest, Nearby) {
   add("an/other/foo.cpp");
 
   // great: dir and name both match (prefix or full, case insensitive)
-  EXPECT_EQ(getCommand("dir/f.cpp"), "clang -D dir/foo.cpp");
-  EXPECT_EQ(getCommand("dir/FOO.cpp"), "clang -D dir/foo.cpp");
+  EXPECT_EQ(getProxy("dir/f.cpp"), "dir/foo.cpp");
+  EXPECT_EQ(getProxy("dir/FOO.cpp"), "dir/foo.cpp");
   // no name match. prefer matching dir, break ties by alpha
-  EXPECT_EQ(getCommand("dir/a.cpp"), "clang -D dir/bar.cpp");
+  EXPECT_EQ(getProxy("dir/a.cpp"), "dir/bar.cpp");
   // an exact name match beats one segment of directory match
-  EXPECT_EQ(getCommand("some/other/bar.h"),
-            "clang -D dir/bar.cpp -x c++-header");
+  EXPECT_EQ(getProxy("some/other/bar.h"), "dir/bar.cpp");
   // two segments of directory match beat a prefix name match
-  EXPECT_EQ(getCommand("an/other/b.cpp"), "clang -D an/other/foo.cpp");
+  EXPECT_EQ(getProxy("an/other/b.cpp"), "an/other/foo.cpp");
   // if nothing matches at all, we still get the closest alpha match
-  EXPECT_EQ(getCommand("below/some/obscure/path.cpp"),
-            "clang -D an/other/foo.cpp");
+  EXPECT_EQ(getProxy("below/some/obscure/path.cpp"), "an/other/foo.cpp");
 }
 
 TEST_F(InterpolateTest, Language) {
@@ -704,14 +723,17 @@ TEST_F(InterpolateTest, Language) {
   // .h is ambiguous, so we add explicit language flags
   EXPECT_EQ(getCommand("foo.h"),
             "clang -D dir/foo.cpp -x c++-header -std=c++17");
+  // Same thing if we have no extension. (again, we treat as header).
+  EXPECT_EQ(getCommand("foo"), "clang -D dir/foo.cpp -x c++-header -std=c++17");
+  // and invalid extensions.
+  EXPECT_EQ(getCommand("foo.cce"),
+            "clang -D dir/foo.cpp -x c++-header -std=c++17");
   // and don't add -x if the inferred language is correct.
   EXPECT_EQ(getCommand("foo.hpp"), "clang -D dir/foo.cpp -std=c++17");
   // respect -x if it's already there.
   EXPECT_EQ(getCommand("baz.h"), "clang -D dir/baz.cee -x c-header");
   // prefer a worse match with the right extension.
   EXPECT_EQ(getCommand("foo.c"), "clang -D dir/bar.c");
-  // make sure we don't crash on queries with invalid extensions.
-  EXPECT_EQ(getCommand("foo.cce"), "clang -D dir/foo.cpp");
   Entries.erase(path(StringRef("dir/bar.c")));
   // Now we transfer across languages, so drop -std too.
   EXPECT_EQ(getCommand("foo.c"), "clang -D dir/foo.cpp");
@@ -727,7 +749,7 @@ TEST_F(InterpolateTest, Case) {
   add("FOO/BAR/BAZ/SHOUT.cc");
   add("foo/bar/baz/quiet.cc");
   // Case mismatches are completely ignored, so we choose the name match.
-  EXPECT_EQ(getCommand("foo/bar/baz/shout.C"), "clang -D FOO/BAR/BAZ/SHOUT.cc");
+  EXPECT_EQ(getProxy("foo/bar/baz/shout.C"), "FOO/BAR/BAZ/SHOUT.cc");
 }
 
 TEST_F(InterpolateTest, Aliasing) {

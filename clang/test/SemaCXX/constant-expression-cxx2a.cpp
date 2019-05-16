@@ -211,3 +211,146 @@ constexpr bool for_range_init() {
   return k == 6;
 }
 static_assert(for_range_init());
+
+namespace Virtual {
+  struct NonZeroOffset { int padding = 123; };
+
+  // Ensure that we pick the right final overrider during construction.
+  struct A {
+    virtual constexpr char f() const { return 'A'; }
+    char a = f();
+  };
+  struct NoOverrideA : A {};
+  struct B : NonZeroOffset, NoOverrideA {
+    virtual constexpr char f() const { return 'B'; }
+    char b = f();
+  };
+  struct NoOverrideB : B {};
+  struct C : NonZeroOffset, A {
+    virtual constexpr char f() const { return 'C'; }
+    A *pba;
+    char c = ((A*)this)->f();
+    char ba = pba->f();
+    constexpr C(A *pba) : pba(pba) {}
+  };
+  struct D : NonZeroOffset, NoOverrideB, C { // expected-warning {{inaccessible}}
+    virtual constexpr char f() const { return 'D'; }
+    char d = f();
+    constexpr D() : C((B*)this) {}
+  };
+  constexpr D d;
+  static_assert(((B&)d).a == 'A');
+  static_assert(((C&)d).a == 'A');
+  static_assert(d.b == 'B');
+  static_assert(d.c == 'C');
+  // During the construction of C, the dynamic type of B's A is B.
+  static_assert(d.ba == 'B');
+  static_assert(d.d == 'D');
+  static_assert(d.f() == 'D');
+  constexpr const A &a = (B&)d;
+  constexpr const B &b = d;
+  static_assert(a.f() == 'D');
+  static_assert(b.f() == 'D');
+
+  // FIXME: It is unclear whether this should be permitted.
+  D d_not_constexpr;
+  static_assert(d_not_constexpr.f() == 'D'); // expected-error {{constant expression}} expected-note {{virtual function called on object 'd_not_constexpr' whose dynamic type is not constant}}
+
+  // Check that we apply a proper adjustment for a covariant return type.
+  struct Covariant1 {
+    D d;
+    virtual const A *f() const;
+  };
+  template<typename T>
+  struct Covariant2 : Covariant1 {
+    virtual const T *f() const;
+  };
+  template<typename T>
+  struct Covariant3 : Covariant2<T> {
+    constexpr virtual const D *f() const { return &this->d; }
+  };
+
+  constexpr Covariant3<B> cb;
+  constexpr Covariant3<C> cc;
+
+  constexpr const Covariant1 *cb1 = &cb;
+  constexpr const Covariant2<B> *cb2 = &cb;
+  static_assert(cb1->f()->a == 'A');
+  static_assert(cb1->f() == (B*)&cb.d);
+  static_assert(cb1->f()->f() == 'D');
+  static_assert(cb2->f()->b == 'B');
+  static_assert(cb2->f() == &cb.d);
+  static_assert(cb2->f()->f() == 'D');
+
+  constexpr const Covariant1 *cc1 = &cc;
+  constexpr const Covariant2<C> *cc2 = &cc;
+  static_assert(cc1->f()->a == 'A');
+  static_assert(cc1->f() == (C*)&cc.d);
+  static_assert(cc1->f()->f() == 'D');
+  static_assert(cc2->f()->c == 'C');
+  static_assert(cc2->f() == &cc.d);
+  static_assert(cc2->f()->f() == 'D');
+
+  static_assert(cb.f()->d == 'D');
+  static_assert(cc.f()->d == 'D');
+
+  struct Abstract {
+    constexpr virtual void f() = 0; // expected-note {{declared here}}
+    constexpr Abstract() { do_it(); } // expected-note {{in call to}}
+    constexpr void do_it() { f(); } // expected-note {{pure virtual function 'Virtual::Abstract::f' called}}
+  };
+  struct PureVirtualCall : Abstract { void f(); }; // expected-note {{in call to 'Abstract}}
+  constexpr PureVirtualCall pure_virtual_call; // expected-error {{constant expression}} expected-note {{in call to 'PureVirtualCall}}
+}
+
+namespace DynamicCast {
+  struct A2 { virtual void a2(); };
+  struct A : A2 { virtual void a(); };
+  struct B : A {};
+  struct C2 { virtual void c2(); };
+  struct C : A, C2 { A *c = dynamic_cast<A*>(static_cast<C2*>(this)); };
+  struct D { virtual void d(); };
+  struct E { virtual void e(); };
+  struct F : B, C, D, private E { void *f = dynamic_cast<void*>(static_cast<D*>(this)); };
+  struct Padding { virtual void padding(); };
+  struct G : Padding, F {};
+
+  constexpr G g;
+
+  // During construction of C, A is unambiguous subobject of dynamic type C.
+  static_assert(g.c == (C*)&g);
+  // ... but in the complete object, the same is not true, so the runtime fails.
+  static_assert(dynamic_cast<const A*>(static_cast<const C2*>(&g)) == nullptr);
+
+  // dynamic_cast<void*> produces a pointer to the object of the dynamic type.
+  static_assert(g.f == (void*)(F*)&g);
+  static_assert(dynamic_cast<const void*>(static_cast<const D*>(&g)) == &g);
+
+  // expected-note@+1 {{reference dynamic_cast failed: 'DynamicCast::A' is an ambiguous base class of dynamic type 'DynamicCast::G' of operand}}
+  constexpr int d_a = (dynamic_cast<const A&>(static_cast<const D&>(g)), 0); // expected-error {{}}
+
+  // Can navigate from A2 to its A...
+  static_assert(&dynamic_cast<A&>((A2&)(B&)g) == &(A&)(B&)g);
+  // ... and from B to its A ...
+  static_assert(&dynamic_cast<A&>((B&)g) == &(A&)(B&)g);
+  // ... but not from D.
+  // expected-note@+1 {{reference dynamic_cast failed: 'DynamicCast::A' is an ambiguous base class of dynamic type 'DynamicCast::G' of operand}}
+  static_assert(&dynamic_cast<A&>((D&)g) == &(A&)(B&)g); // expected-error {{}}
+
+  // Can cast from A2 to sibling class D.
+  static_assert(&dynamic_cast<D&>((A2&)(B&)g) == &(D&)g);
+
+  // Cannot cast from private base E to derived class F.
+  // expected-note@+1 {{reference dynamic_cast failed: static type 'DynamicCast::E' of operand is a non-public base class of dynamic type 'DynamicCast::G'}}
+  constexpr int e_f = (dynamic_cast<F&>((E&)g), 0); // expected-error {{}}
+
+  // Cannot cast from B to private sibling E.
+  // expected-note@+1 {{reference dynamic_cast failed: 'DynamicCast::E' is a non-public base class of dynamic type 'DynamicCast::G' of operand}}
+  constexpr int b_e = (dynamic_cast<E&>((B&)g), 0); // expected-error {{}}
+
+  struct Unrelated { virtual void unrelated(); };
+  // expected-note@+1 {{reference dynamic_cast failed: dynamic type 'DynamicCast::G' of operand does not have a base class of type 'DynamicCast::Unrelated'}}
+  constexpr int b_unrelated = (dynamic_cast<Unrelated&>((B&)g), 0); // expected-error {{}}
+  // expected-note@+1 {{reference dynamic_cast failed: dynamic type 'DynamicCast::G' of operand does not have a base class of type 'DynamicCast::Unrelated'}}
+  constexpr int e_unrelated = (dynamic_cast<Unrelated&>((E&)g), 0); // expected-error {{}}
+}

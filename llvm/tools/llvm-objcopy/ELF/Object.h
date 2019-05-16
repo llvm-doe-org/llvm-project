@@ -18,7 +18,6 @@
 #include "llvm/MC/StringTableBuilder.h"
 #include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Support/FileOutputBuffer.h"
-#include "llvm/Support/JamCRC.h"
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -226,12 +225,11 @@ private:
 
 public:
   virtual ~ELFWriter() {}
-  bool WriteSectionHeaders = true;
+  bool WriteSectionHeaders;
 
   Error finalize() override;
   Error write() override;
-  ELFWriter(Object &Obj, Buffer &Buf, bool WSH)
-      : Writer(Obj, Buf), WriteSectionHeaders(WSH) {}
+  ELFWriter(Object &Obj, Buffer &Buf, bool WSH);
 };
 
 class BinaryWriter : public Writer {
@@ -277,7 +275,8 @@ public:
   virtual void finalize();
   // Remove references to these sections. The list of sections must be sorted.
   virtual Error
-  removeSectionReferences(function_ref<bool(const SectionBase *)> ToRemove);
+  removeSectionReferences(bool AllowBrokenLinks,
+                          function_ref<bool(const SectionBase *)> ToRemove);
   virtual Error removeSymbols(function_ref<bool(const Symbol &)> ToRemove);
   virtual void accept(SectionVisitor &Visitor) const = 0;
   virtual void accept(MutableSectionVisitor &Visitor) = 0;
@@ -342,7 +341,7 @@ public:
 
   void accept(SectionVisitor &Visitor) const override;
   void accept(MutableSectionVisitor &Visitor) override;
-  Error removeSectionReferences(
+  Error removeSectionReferences(bool AllowBrokenLinks,
       function_ref<bool(const SectionBase *)> ToRemove) override;
   void initialize(SectionTableRef SecTable) override;
   void finalize() override;
@@ -482,9 +481,14 @@ private:
 public:
   virtual ~SectionIndexSection() {}
   void addIndex(uint32_t Index) {
-    Indexes.push_back(Index);
-    Size += 4;
+    assert(Size > 0);
+    Indexes.push_back(Index);    
   }
+
+  void reserve(size_t NumSymbols) {
+    Indexes.reserve(NumSymbols);
+    Size = NumSymbols * 4;
+  }  
   void setSymTab(SymbolTableSection *SymTab) { Symbols = SymTab; }
   void initialize(SectionTableRef SecTable) override;
   void finalize() override;
@@ -517,7 +521,7 @@ public:
 
   void addSymbol(Twine Name, uint8_t Bind, uint8_t Type, SectionBase *DefinedIn,
                  uint64_t Value, uint8_t Visibility, uint16_t Shndx,
-                 uint64_t Size);
+                 uint64_t SymbolSize);
   void prepareForLayout();
   // An 'empty' symbol table still contains a null symbol.
   bool empty() const { return Symbols.size() == 1; }
@@ -525,12 +529,13 @@ public:
     SectionIndexTable = ShndxTable;
   }
   const SectionIndexSection *getShndxTable() const { return SectionIndexTable; }
+  void fillShndxTable();
   const SectionBase *getStrTab() const { return SymbolNames; }
   const Symbol *getSymbolByIndex(uint32_t Index) const;
   Symbol *getSymbolByIndex(uint32_t Index);
   void updateSymbols(function_ref<void(Symbol &)> Callable);
 
-  Error removeSectionReferences(
+  Error removeSectionReferences(bool AllowBrokenLinks,
       function_ref<bool(const SectionBase *)> ToRemove) override;
   void initialize(SectionTableRef SecTable) override;
   void finalize() override;
@@ -600,7 +605,7 @@ public:
   void addRelocation(Relocation Rel) { Relocations.push_back(Rel); }
   void accept(SectionVisitor &Visitor) const override;
   void accept(MutableSectionVisitor &Visitor) override;
-  Error removeSectionReferences(
+  Error removeSectionReferences(bool AllowBrokenLinks,
       function_ref<bool(const SectionBase *)> ToRemove) override;
   Error removeSymbols(function_ref<bool(const Symbol &)> ToRemove) override;
   void markSymbols() override;
@@ -679,6 +684,9 @@ public:
 
   void accept(SectionVisitor &) const override;
   void accept(MutableSectionVisitor &Visitor) override;
+  Error removeSectionReferences(
+      bool AllowBrokenLinks,
+      function_ref<bool(const SectionBase *)> ToRemove) override;
 
   static bool classof(const SectionBase *S) {
     if (!(S->Flags & ELF::SHF_ALLOC))
@@ -694,11 +702,11 @@ private:
   StringRef FileName;
   uint32_t CRC32;
 
-  void init(StringRef File, StringRef Data);
+  void init(StringRef File);
 
 public:
   // If we add this section from an external source we can use this ctor.
-  explicit GnuDebugLinkSection(StringRef File);
+  explicit GnuDebugLinkSection(StringRef File, uint32_t PrecomputedCRC);
   void accept(SectionVisitor &Visitor) const override;
   void accept(MutableSectionVisitor &Visitor) override;
 };
@@ -810,6 +818,7 @@ public:
   uint32_t Version;
   uint32_t Flags;
 
+  bool HadShdrs = true;
   StringTableSection *SectionNames = nullptr;
   SymbolTableSection *SymbolTable = nullptr;
   SectionIndexSection *SectionIndexTable = nullptr;
@@ -829,7 +838,8 @@ public:
   Range<Segment> segments() { return make_pointee_range(Segments); }
   ConstRange<Segment> segments() const { return make_pointee_range(Segments); }
 
-  Error removeSections(std::function<bool(const SectionBase &)> ToRemove);
+  Error removeSections(bool AllowBrokenLinks,
+                       std::function<bool(const SectionBase &)> ToRemove);
   Error removeSymbols(function_ref<bool(const Symbol &)> ToRemove);
   template <class T, class... Ts> T &addSection(Ts &&... Args) {
     auto Sec = llvm::make_unique<T>(std::forward<Ts>(Args)...);

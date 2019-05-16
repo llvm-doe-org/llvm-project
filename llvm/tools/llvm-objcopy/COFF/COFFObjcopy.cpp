@@ -174,9 +174,10 @@ static Error handleArgs(const CopyConfig &Config, Object &Obj) {
   if (!Config.AddGnuDebugLink.empty())
     addGnuDebugLink(Obj, Config.AddGnuDebugLink);
 
-  if (!Config.BuildIdLinkDir.empty() || Config.BuildIdLinkInput ||
-      Config.BuildIdLinkOutput || !Config.SplitDWO.empty() ||
-      !Config.SymbolsPrefix.empty() || !Config.AddSection.empty() ||
+  if (Config.AllowBrokenLinks || !Config.BuildIdLinkDir.empty() ||
+      Config.BuildIdLinkInput || Config.BuildIdLinkOutput ||
+      !Config.SplitDWO.empty() || !Config.SymbolsPrefix.empty() ||
+      !Config.AllocSectionsPrefix.empty() || !Config.AddSection.empty() ||
       !Config.DumpSection.empty() || !Config.KeepSection.empty() ||
       !Config.SymbolsToGlobalize.empty() || !Config.SymbolsToKeep.empty() ||
       !Config.SymbolsToLocalize.empty() || !Config.SymbolsToWeaken.empty() ||

@@ -348,6 +348,8 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
   CCOpts.EnableSnippets = Params.capabilities.CompletionSnippets;
   DiagOpts.EmbedFixesInDiagnostics = Params.capabilities.DiagnosticFixes;
   DiagOpts.SendDiagnosticCategory = Params.capabilities.DiagnosticCategory;
+  DiagOpts.EmitRelatedLocations =
+      Params.capabilities.DiagnosticRelatedInformation;
   if (Params.capabilities.WorkspaceSymbolKinds)
     SupportedSymbolKinds |= *Params.capabilities.WorkspaceSymbolKinds;
   if (Params.capabilities.CompletionItemKinds)
@@ -541,19 +543,13 @@ void ClangdLSPServer::onRename(const RenameParams &Params,
   Server->rename(
       File, Params.position, Params.newName,
       Bind(
-          [File, Code, Params](
-              decltype(Reply) Reply,
-              llvm::Expected<std::vector<tooling::Replacement>> Replacements) {
-            if (!Replacements)
-              return Reply(Replacements.takeError());
+          [File, Code, Params](decltype(Reply) Reply,
+                               llvm::Expected<std::vector<TextEdit>> Edits) {
+            if (!Edits)
+              return Reply(Edits.takeError());
 
-            // Turn the replacements into the format specified by the Language
-            // Server Protocol. Fuse them into one big JSON array.
-            std::vector<TextEdit> Edits;
-            for (const auto &R : *Replacements)
-              Edits.push_back(replacementToEdit(*Code, R));
             WorkspaceEdit WE;
-            WE.changes = {{Params.textDocument.uri.uri(), Edits}};
+            WE.changes = {{Params.textDocument.uri.uri(), *Edits}};
             Reply(WE);
           },
           std::move(Reply)));
@@ -827,10 +823,13 @@ void ClangdLSPServer::onGoToDeclaration(
           std::move(Reply)));
 }
 
-void ClangdLSPServer::onSwitchSourceHeader(const TextDocumentIdentifier &Params,
-                                           Callback<std::string> Reply) {
-  llvm::Optional<Path> Result = Server->switchSourceHeader(Params.uri.file());
-  Reply(Result ? URI::createFile(*Result).toString() : "");
+void ClangdLSPServer::onSwitchSourceHeader(
+    const TextDocumentIdentifier &Params,
+    Callback<llvm::Optional<URIForFile>> Reply) {
+  if (auto Result = Server->switchSourceHeader(Params.uri.file()))
+    Reply(URIForFile::canonicalize(*Result, Params.uri.file()));
+  else
+    Reply(llvm::None);
 }
 
 void ClangdLSPServer::onDocumentHighlight(

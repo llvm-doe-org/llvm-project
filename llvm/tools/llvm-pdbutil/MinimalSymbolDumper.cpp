@@ -331,7 +331,7 @@ Error MinimalSymbolDumper::visitSymbolBegin(codeview::CVSymbol &Record,
   // append to the existing line.
   P.formatLine("{0} | {1} [size = {2}]",
                fmt_align(Offset, AlignStyle::Right, 6),
-               formatSymbolKind(Record.Type), Record.length());
+               formatSymbolKind(Record.kind()), Record.length());
   P.Indent();
   return Error::success();
 }
@@ -778,5 +778,14 @@ Error MinimalSymbolDumper::visitKnownRecord(CVSymbol &CVR, UDTSym &UDT) {
 Error MinimalSymbolDumper::visitKnownRecord(CVSymbol &CVR,
                                             UsingNamespaceSym &UN) {
   P.format(" `{0}`", UN.Name);
+  return Error::success();
+}
+
+Error MinimalSymbolDumper::visitKnownRecord(CVSymbol &CVR,
+                                            AnnotationSym &Annot) {
+  AutoIndent Indent(P, 7);
+  P.formatLine("addr = {0}", formatSegmentOffset(Annot.Segment, Annot.CodeOffset));
+  P.formatLine("strings = {0}", typesetStringList(P.getIndentLevel() + 9 + 2,
+                                                   Annot.Strings));
   return Error::success();
 }

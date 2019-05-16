@@ -97,9 +97,7 @@ Status AttachToProcess(ProcessAttachInfo &attach_info, Target &target) {
 
 } // namespace
 
-//----------------------------------------------------------------------
 // SBTarget constructor
-//----------------------------------------------------------------------
 SBTarget::SBTarget() : m_opaque_sp() {
   LLDB_RECORD_CONSTRUCTOR_NO_ARGS(SBTarget);
 }
@@ -118,12 +116,10 @@ const SBTarget &SBTarget::operator=(const SBTarget &rhs) {
 
   if (this != &rhs)
     m_opaque_sp = rhs.m_opaque_sp;
-  return *this;
+  return LLDB_RECORD_RESULT(*this);
 }
 
-//----------------------------------------------------------------------
 // Destructor
-//----------------------------------------------------------------------
 SBTarget::~SBTarget() {}
 
 bool SBTarget::EventIsTargetEvent(const SBEvent &event) {
@@ -1591,7 +1587,7 @@ lldb::SBModule SBTarget::AddModule(const char *path, const char *triple,
     if (symfile)
       module_spec.GetSymbolFileSpec().SetFile(symfile, FileSpec::Style::native);
 
-    sb_module.SetSP(target_sp->GetSharedModule(module_spec));
+    sb_module.SetSP(target_sp->GetOrCreateModule(module_spec, true /* notify */));
   }
   return LLDB_RECORD_RESULT(sb_module);
 }
@@ -1603,7 +1599,8 @@ lldb::SBModule SBTarget::AddModule(const SBModuleSpec &module_spec) {
   lldb::SBModule sb_module;
   TargetSP target_sp(GetSP());
   if (target_sp)
-    sb_module.SetSP(target_sp->GetSharedModule(*module_spec.m_opaque_up));
+    sb_module.SetSP(target_sp->GetOrCreateModule(*module_spec.m_opaque_up, 
+                                                 true /* notify */));
   return LLDB_RECORD_RESULT(sb_module);
 }
 

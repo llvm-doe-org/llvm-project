@@ -1466,10 +1466,10 @@ namespace {
 class BaseMemOpClusterMutation : public ScheduleDAGMutation {
   struct MemOpInfo {
     SUnit *SU;
-    MachineOperand *BaseOp;
+    const MachineOperand *BaseOp;
     int64_t Offset;
 
-    MemOpInfo(SUnit *su, MachineOperand *Op, int64_t ofs)
+    MemOpInfo(SUnit *su, const MachineOperand *Op, int64_t ofs)
         : SU(su), BaseOp(Op), Offset(ofs) {}
 
     bool operator<(const MemOpInfo &RHS) const {
@@ -1555,7 +1555,7 @@ void BaseMemOpClusterMutation::clusterNeighboringMemOps(
     ArrayRef<SUnit *> MemOps, ScheduleDAGInstrs *DAG) {
   SmallVector<MemOpInfo, 32> MemOpRecords;
   for (SUnit *SU : MemOps) {
-    MachineOperand *BaseOp;
+    const MachineOperand *BaseOp;
     int64_t Offset;
     if (TII->getMemOperandWithOffset(*SU->getInstr(), BaseOp, Offset, TRI))
       MemOpRecords.push_back(MemOpInfo(SU, BaseOp, Offset));
@@ -1863,6 +1863,7 @@ void SchedBoundary::reset() {
   ZoneCritResIdx = 0;
   IsResourceLimited = false;
   ReservedCycles.clear();
+  ReservedCyclesIndex.clear();
 #ifndef NDEBUG
   // Track the maximum number of stall cycles that could arise either from the
   // latency of a DAG edge or the number of cycles that a processor resource is
@@ -1901,8 +1902,17 @@ init(ScheduleDAGMI *dag, const TargetSchedModel *smodel, SchedRemainder *rem) {
   SchedModel = smodel;
   Rem = rem;
   if (SchedModel->hasInstrSchedModel()) {
-    ExecutedResCounts.resize(SchedModel->getNumProcResourceKinds());
-    ReservedCycles.resize(SchedModel->getNumProcResourceKinds(), InvalidCycle);
+    unsigned ResourceCount = SchedModel->getNumProcResourceKinds();
+    ReservedCyclesIndex.resize(ResourceCount);
+    ExecutedResCounts.resize(ResourceCount);
+    unsigned NumUnits = 0;
+
+    for (unsigned i = 0; i < ResourceCount; ++i) {
+      ReservedCyclesIndex[i] = NumUnits;
+      NumUnits += SchedModel->getProcResource(i)->NumUnits;
+    }
+
+    ReservedCycles.resize(NumUnits, InvalidCycle);
   }
 }
 
@@ -1923,11 +1933,11 @@ unsigned SchedBoundary::getLatencyStallCycles(SUnit *SU) {
   return 0;
 }
 
-/// Compute the next cycle at which the given processor resource can be
-/// scheduled.
-unsigned SchedBoundary::
-getNextResourceCycle(unsigned PIdx, unsigned Cycles) {
-  unsigned NextUnreserved = ReservedCycles[PIdx];
+/// Compute the next cycle at which the given processor resource unit
+/// can be scheduled.
+unsigned SchedBoundary::getNextResourceCycleByInstance(unsigned InstanceIdx,
+                                                       unsigned Cycles) {
+  unsigned NextUnreserved = ReservedCycles[InstanceIdx];
   // If this resource has never been used, always return cycle zero.
   if (NextUnreserved == InvalidCycle)
     return 0;
@@ -1935,6 +1945,29 @@ getNextResourceCycle(unsigned PIdx, unsigned Cycles) {
   if (!isTop())
     NextUnreserved += Cycles;
   return NextUnreserved;
+}
+
+/// Compute the next cycle at which the given processor resource can be
+/// scheduled.  Returns the next cycle and the index of the processor resource
+/// instance in the reserved cycles vector.
+std::pair<unsigned, unsigned>
+SchedBoundary::getNextResourceCycle(unsigned PIdx, unsigned Cycles) {
+  unsigned MinNextUnreserved = InvalidCycle;
+  unsigned InstanceIdx = 0;
+  unsigned StartIndex = ReservedCyclesIndex[PIdx];
+  unsigned NumberOfInstances = SchedModel->getProcResource(PIdx)->NumUnits;
+  assert(NumberOfInstances > 0 &&
+         "Cannot have zero instances of a ProcResource");
+
+  for (unsigned I = StartIndex, End = StartIndex + NumberOfInstances; I < End;
+       ++I) {
+    unsigned NextUnreserved = getNextResourceCycleByInstance(I, Cycles);
+    if (MinNextUnreserved > NextUnreserved) {
+      InstanceIdx = I;
+      MinNextUnreserved = NextUnreserved;
+    }
+  }
+  return std::make_pair(MinNextUnreserved, InstanceIdx);
 }
 
 /// Does this SU have a hazard within the current instruction group.
@@ -1978,14 +2011,16 @@ bool SchedBoundary::checkHazard(SUnit *SU) {
                      SchedModel->getWriteProcResEnd(SC))) {
       unsigned ResIdx = PE.ProcResourceIdx;
       unsigned Cycles = PE.Cycles;
-      unsigned NRCycle = getNextResourceCycle(ResIdx, Cycles);
+      unsigned NRCycle, InstanceIdx;
+      std::tie(NRCycle, InstanceIdx) = getNextResourceCycle(ResIdx, Cycles);
       if (NRCycle > CurrCycle) {
 #ifndef NDEBUG
         MaxObservedStall = std::max(Cycles, MaxObservedStall);
 #endif
         LLVM_DEBUG(dbgs() << "  SU(" << SU->NodeNum << ") "
-                          << SchedModel->getResourceName(ResIdx) << "="
-                          << NRCycle << "c\n");
+                          << SchedModel->getResourceName(ResIdx)
+                          << '[' << InstanceIdx - ReservedCyclesIndex[ResIdx]  << ']'
+                          << "=" << NRCycle << "c\n");
         return true;
       }
     }
@@ -2140,10 +2175,12 @@ countResource(unsigned PIdx, unsigned Cycles, unsigned NextCycle) {
                       << "c\n");
   }
   // For reserved resources, record the highest cycle using the resource.
-  unsigned NextAvailable = getNextResourceCycle(PIdx, Cycles);
+  unsigned NextAvailable, InstanceIdx;
+  std::tie(NextAvailable, InstanceIdx) = getNextResourceCycle(PIdx, Cycles);
   if (NextAvailable > CurrCycle) {
     LLVM_DEBUG(dbgs() << "  Resource conflict: "
-                      << SchedModel->getProcResource(PIdx)->Name
+                      << SchedModel->getResourceName(PIdx)
+                      << '[' << InstanceIdx - ReservedCyclesIndex[PIdx]  << ']'
                       << " reserved until @" << NextAvailable << "\n");
   }
   return NextAvailable;
@@ -2159,6 +2196,8 @@ void SchedBoundary::bumpNode(SUnit *SU) {
       HazardRec->Reset();
     }
     HazardRec->EmitInstruction(SU);
+    // Scheduling an instruction may have made pending instructions available.
+    CheckPending = true;
   }
   // checkHazard should prevent scheduling multiple instructions per cycle that
   // exceed the issue width.
@@ -2231,12 +2270,13 @@ void SchedBoundary::bumpNode(SUnit *SU) {
              PE = SchedModel->getWriteProcResEnd(SC); PI != PE; ++PI) {
         unsigned PIdx = PI->ProcResourceIdx;
         if (SchedModel->getProcResource(PIdx)->BufferSize == 0) {
+          unsigned ReservedUntil, InstanceIdx;
+          std::tie(ReservedUntil, InstanceIdx) = getNextResourceCycle(PIdx, 0);
           if (isTop()) {
-            ReservedCycles[PIdx] =
-              std::max(getNextResourceCycle(PIdx, 0), NextCycle + PI->Cycles);
-          }
-          else
-            ReservedCycles[PIdx] = NextCycle;
+            ReservedCycles[InstanceIdx] =
+                std::max(ReservedUntil, NextCycle + PI->Cycles);
+          } else
+            ReservedCycles[InstanceIdx] = NextCycle;
         }
       }
     }

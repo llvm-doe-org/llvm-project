@@ -21,6 +21,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Object/Minidump.h"
 
 // C includes
 
@@ -51,19 +52,15 @@ public:
 
   llvm::ArrayRef<uint8_t> GetStream(StreamType stream_type);
 
-  llvm::Optional<std::string> GetMinidumpString(uint32_t rva);
+  UUID GetModuleUUID(const minidump::Module *module);
 
-  UUID GetModuleUUID(const MinidumpModule* module);
-
-  llvm::ArrayRef<MinidumpThread> GetThreads();
+  llvm::ArrayRef<minidump::Thread> GetThreads();
 
   llvm::ArrayRef<uint8_t> GetThreadContext(const LocationDescriptor &location);
 
-  llvm::ArrayRef<uint8_t> GetThreadContext(const MinidumpThread &td);
+  llvm::ArrayRef<uint8_t> GetThreadContext(const minidump::Thread &td);
 
-  llvm::ArrayRef<uint8_t> GetThreadContextWow64(const MinidumpThread &td);
-
-  const SystemInfo *GetSystemInfo();
+  llvm::ArrayRef<uint8_t> GetThreadContextWow64(const minidump::Thread &td);
 
   ArchSpec GetArchitecture();
 
@@ -73,13 +70,13 @@ public:
 
   llvm::Optional<lldb::pid_t> GetPid();
 
-  llvm::ArrayRef<MinidumpModule> GetModuleList();
+  llvm::ArrayRef<minidump::Module> GetModuleList();
 
   // There are cases in which there is more than one record in the ModuleList
   // for the same module name.(e.g. when the binary has non contiguous segments)
   // So this function returns a filtered module list - if it finds records that
   // have the same name, it keeps the copy with the lowest load address.
-  std::vector<const MinidumpModule *> GetFilteredModuleList();
+  std::vector<const minidump::Module *> GetFilteredModuleList();
 
   const MinidumpExceptionStream *GetExceptionStream();
 
@@ -93,20 +90,17 @@ public:
 
   static llvm::StringRef GetStreamTypeAsString(StreamType stream_type);
 
-  const llvm::DenseMap<StreamType, LocationDescriptor> &
-  GetDirectoryMap() const {
-    return m_directory_map;
-  }
+  llvm::object::MinidumpFile &GetMinidumpFile() { return *m_file; }
 
 private:
   MinidumpParser(lldb::DataBufferSP data_sp,
-                 llvm::DenseMap<StreamType, LocationDescriptor> directory_map);
+                 std::unique_ptr<llvm::object::MinidumpFile> file);
 
   MemoryRegionInfo FindMemoryRegion(lldb::addr_t load_addr) const;
 
 private:
   lldb::DataBufferSP m_data_sp;
-  llvm::DenseMap<StreamType, LocationDescriptor> m_directory_map;
+  std::unique_ptr<llvm::object::MinidumpFile> m_file;
   ArchSpec m_arch;
   MemoryRegionInfos m_regions;
   bool m_parsed_regions = false;

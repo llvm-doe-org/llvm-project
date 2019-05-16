@@ -75,6 +75,7 @@
 
 #include "MCTargetDesc/X86BaseInfo.h"
 #include "MCTargetDesc/X86MCTargetDesc.h"
+#include "TargetInfo/X86TargetInfo.h"
 #include "X86DisassemblerDecoder.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCDisassembler/MCDisassembler.h"
@@ -780,6 +781,9 @@ static bool translateOperand(MCInst &mcInst, const OperandSpecifier &operand,
   case ENCODING_RO:
   case ENCODING_Rv:
     translateRegister(mcInst, insn.opcodeRegister);
+    return false;
+  case ENCODING_CC:
+    mcInst.addOperand(MCOperand::createImm(insn.immediates[1]));
     return false;
   case ENCODING_FP:
     translateFPRegister(mcInst, insn.modRM & 7);

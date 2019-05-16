@@ -327,13 +327,15 @@ void MIPS<ELFT>::writePlt(uint8_t *Buf, uint64_t GotPltEntryAddr,
     return;
   }
 
+  uint32_t LoadInst = ELFT::Is64Bits ? 0xddf90000 : 0x8df90000;
   uint32_t JrInst = isMipsR6() ? (Config->ZHazardplt ? 0x03200409 : 0x03200009)
                                : (Config->ZHazardplt ? 0x03200408 : 0x03200008);
+  uint32_t AddInst = ELFT::Is64Bits ? 0x65f80000 : 0x25f80000;
 
   write32<E>(Buf, 0x3c0f0000);     // lui   $15, %hi(.got.plt entry)
-  write32<E>(Buf + 4, 0x8df90000); // l[wd] $25, %lo(.got.plt entry)($15)
+  write32<E>(Buf + 4, LoadInst);   // l[wd] $25, %lo(.got.plt entry)($15)
   write32<E>(Buf + 8, JrInst);     // jr  $25 / jr.hb $25
-  write32<E>(Buf + 12, 0x25f80000); // addiu $24, $15, %lo(.got.plt entry)
+  write32<E>(Buf + 12, AddInst);   // [d]addiu $24, $15, %lo(.got.plt entry)
   writeValue<E>(Buf, GotPltEntryAddr + 0x8000, 16, 16);
   writeValue<E>(Buf + 4, GotPltEntryAddr, 16, 0);
   writeValue<E>(Buf + 12, GotPltEntryAddr, 16, 0);
@@ -350,7 +352,7 @@ bool MIPS<ELFT>::needsThunk(RelExpr Expr, RelType Type, const InputFile *File,
   if (Type != R_MIPS_26 && Type != R_MIPS_PC26_S2 &&
       Type != R_MICROMIPS_26_S1 && Type != R_MICROMIPS_PC26_S1)
     return false;
-  auto *F = dyn_cast_or_null<ELFFileBase<ELFT>>(File);
+  auto *F = dyn_cast_or_null<ObjFile<ELFT>>(File);
   if (!F)
     return false;
   // If current file has PIC code, LA25 stub is not required.

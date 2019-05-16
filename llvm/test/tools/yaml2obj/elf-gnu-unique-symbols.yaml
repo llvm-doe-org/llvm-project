@@ -1,5 +1,5 @@
 # RUN: yaml2obj %s -o %t
-# RUN: llvm-readobj -symbols %t | FileCheck %s
+# RUN: llvm-readobj --symbols %t | FileCheck %s
 
 ## Check yaml2obj is able to create the STB_GNU_UNIQUE symbol.
 
@@ -16,6 +16,6 @@ FileHeader:
   Type:      ET_REL
   Machine:   EM_X86_64
 Symbols:
-  GNUUnique:
-    - Name:  foo
-      Type:  STT_OBJECT
+  - Name:    foo
+    Type:    STT_OBJECT
+    Binding: STB_GNU_UNIQUE

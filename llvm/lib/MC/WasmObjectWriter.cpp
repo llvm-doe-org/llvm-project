@@ -151,6 +151,7 @@ struct WasmRelocationEntry {
     switch (Type) {
     case wasm::R_WASM_MEMORY_ADDR_LEB:
     case wasm::R_WASM_MEMORY_ADDR_SLEB:
+    case wasm::R_WASM_MEMORY_ADDR_REL_SLEB:
     case wasm::R_WASM_MEMORY_ADDR_I32:
     case wasm::R_WASM_FUNCTION_OFFSET_I32:
     case wasm::R_WASM_SECTION_OFFSET_I32:
@@ -325,6 +326,7 @@ private:
   void writeFunctionSection(ArrayRef<WasmFunction> Functions);
   void writeExportSection(ArrayRef<wasm::WasmExport> Exports);
   void writeElemSection(ArrayRef<uint32_t> TableElems);
+  void writeDataCountSection();
   void writeCodeSection(const MCAssembler &Asm, const MCAsmLayout &Layout,
                         ArrayRef<WasmFunction> Functions);
   void writeDataSection();
@@ -580,6 +582,7 @@ WasmObjectWriter::getProvisionalValue(const WasmRelocationEntry &RelEntry) {
   }
 
   switch (RelEntry.Type) {
+  case wasm::R_WASM_TABLE_INDEX_REL_SLEB:
   case wasm::R_WASM_TABLE_INDEX_SLEB:
   case wasm::R_WASM_TABLE_INDEX_I32: {
     // Provisional value is table address of the resolved symbol itself
@@ -604,6 +607,7 @@ WasmObjectWriter::getProvisionalValue(const WasmRelocationEntry &RelEntry) {
   }
   case wasm::R_WASM_MEMORY_ADDR_LEB:
   case wasm::R_WASM_MEMORY_ADDR_I32:
+  case wasm::R_WASM_MEMORY_ADDR_REL_SLEB:
   case wasm::R_WASM_MEMORY_ADDR_SLEB: {
     // Provisional value is address of the global
     const MCSymbolWasm *Sym = resolveSymbol(*RelEntry.Symbol);
@@ -698,7 +702,9 @@ void WasmObjectWriter::applyRelocations(
       writeI32(Stream, Value, Offset);
       break;
     case wasm::R_WASM_TABLE_INDEX_SLEB:
+    case wasm::R_WASM_TABLE_INDEX_REL_SLEB:
     case wasm::R_WASM_MEMORY_ADDR_SLEB:
+    case wasm::R_WASM_MEMORY_ADDR_REL_SLEB:
       writePatchableSLEB(Stream, Value, Offset);
       break;
     default:
@@ -844,6 +850,16 @@ void WasmObjectWriter::writeElemSection(ArrayRef<uint32_t> TableElems) {
   endSection(Section);
 }
 
+void WasmObjectWriter::writeDataCountSection() {
+  if (DataSegments.empty())
+    return;
+
+  SectionBookkeeping Section;
+  startSection(Section, wasm::WASM_SEC_DATACOUNT);
+  encodeULEB128(DataSegments.size(), W.OS);
+  endSection(Section);
+}
+
 void WasmObjectWriter::writeCodeSection(const MCAssembler &Asm,
                                         const MCAsmLayout &Layout,
                                         ArrayRef<WasmFunction> Functions) {
@@ -918,9 +934,8 @@ void WasmObjectWriter::writeRelocSection(
   // order, but for the code section we combine many MC sections into single
   // wasm section, and this order is determined by the order of Asm.Symbols()
   // not the sections order.
-  std::stable_sort(
-      Relocs.begin(), Relocs.end(),
-      [](const WasmRelocationEntry &A, const WasmRelocationEntry &B) {
+  llvm::stable_sort(
+      Relocs, [](const WasmRelocationEntry &A, const WasmRelocationEntry &B) {
         return (A.Offset + A.FixupSection->getSectionOffset()) <
                (B.Offset + B.FixupSection->getSectionOffset());
       });
@@ -1595,6 +1610,7 @@ uint64_t WasmObjectWriter::writeObject(MCAssembler &Asm,
   writeEventSection(Events);
   writeExportSection(Exports);
   writeElemSection(TableElems);
+  writeDataCountSection();
   writeCodeSection(Asm, Layout, Functions);
   writeDataSection();
   for (auto &CustomSection : CustomSections)

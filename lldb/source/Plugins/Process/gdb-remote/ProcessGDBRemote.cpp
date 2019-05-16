@@ -111,7 +111,13 @@ void DumpProcessGDBRemotePacketHistory(void *p, const char *path) {
 namespace {
 
 static constexpr PropertyDefinition g_properties[] = {
-    {"packet-timeout", OptionValue::eTypeUInt64, true, 1, NULL, {},
+    {"packet-timeout", OptionValue::eTypeUInt64, true, 5
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+      * 2
+#endif
+#endif
+      , NULL, {},
      "Specify the default packet timeout in seconds."},
     {"target-definition-file", OptionValue::eTypeFileSpec, true, 0, NULL, {},
      "The file that provides the description for remote target registers."}};
@@ -129,7 +135,7 @@ public:
     m_collection_sp->Initialize(g_properties);
   }
 
-  virtual ~PluginProperties() {}
+  ~PluginProperties() override {}
 
   uint64_t GetPacketTimeout() {
     const uint32_t idx = ePropertyPacketTimeout;
@@ -282,9 +288,7 @@ bool ProcessGDBRemote::CanDebug(lldb::TargetSP target_sp,
   return true;
 }
 
-//----------------------------------------------------------------------
 // ProcessGDBRemote constructor
-//----------------------------------------------------------------------
 ProcessGDBRemote::ProcessGDBRemote(lldb::TargetSP target_sp,
                                    ListenerSP listener_sp)
     : Process(target_sp, listener_sp),
@@ -347,9 +351,7 @@ ProcessGDBRemote::ProcessGDBRemote(lldb::TargetSP target_sp,
     m_gdb_comm.SetPacketTimeout(std::chrono::seconds(timeout_seconds));
 }
 
-//----------------------------------------------------------------------
 // Destructor
-//----------------------------------------------------------------------
 ProcessGDBRemote::~ProcessGDBRemote() {
   //  m_mach_process.UnregisterNotificationCallbacks (this);
   Clear();
@@ -367,9 +369,7 @@ ProcessGDBRemote::~ProcessGDBRemote() {
   KillDebugserverProcess();
 }
 
-//----------------------------------------------------------------------
 // PluginInterface
-//----------------------------------------------------------------------
 ConstString ProcessGDBRemote::GetPluginName() { return GetPluginNameStatic(); }
 
 uint32_t ProcessGDBRemote::GetPluginVersion() { return 1; }
@@ -377,7 +377,7 @@ uint32_t ProcessGDBRemote::GetPluginVersion() { return 1; }
 bool ProcessGDBRemote::ParsePythonTargetDefinition(
     const FileSpec &target_definition_fspec) {
   ScriptInterpreter *interpreter =
-      GetTarget().GetDebugger().GetCommandInterpreter().GetScriptInterpreter();
+      GetTarget().GetDebugger().GetScriptInterpreter();
   Status error;
   StructuredData::ObjectSP module_object_sp(
       interpreter->LoadPluginModule(target_definition_fspec, error));
@@ -803,9 +803,7 @@ Status ProcessGDBRemote::WillLaunchOrAttach() {
   return error;
 }
 
-//----------------------------------------------------------------------
 // Process Control
-//----------------------------------------------------------------------
 Status ProcessGDBRemote::DoLaunch(lldb_private::Module *exe_module,
                                   ProcessLaunchInfo &launch_info) {
   Log *log(ProcessGDBRemoteLog::GetLogIfAllCategoriesSet(GDBR_LOG_PROCESS));
@@ -2718,9 +2716,7 @@ void ProcessGDBRemote::SetUnixSignals(const UnixSignalsSP &signals_sp) {
   Process::SetUnixSignals(std::make_shared<GDBRemoteSignals>(signals_sp));
 }
 
-//------------------------------------------------------------------
 // Process Queries
-//------------------------------------------------------------------
 
 bool ProcessGDBRemote::IsAlive() {
   return m_gdb_comm.IsConnected() && Process::IsAlive();
@@ -2764,9 +2760,7 @@ void ProcessGDBRemote::WillPublicStop() {
   }
 }
 
-//------------------------------------------------------------------
 // Process Memory
-//------------------------------------------------------------------
 size_t ProcessGDBRemote::DoReadMemory(addr_t addr, void *buf, size_t size,
                                       Status &error) {
   GetMaxMemorySize();
@@ -3127,9 +3121,7 @@ Status ProcessGDBRemote::DoDeallocateMemory(lldb::addr_t addr) {
   return error;
 }
 
-//------------------------------------------------------------------
 // Process STDIO
-//------------------------------------------------------------------
 size_t ProcessGDBRemote::PutSTDIN(const char *src, size_t src_len,
                                   Status &error) {
   if (m_stdio_communication.IsConnected()) {
@@ -5166,7 +5158,7 @@ public:
     m_option_group.Finalize();
   }
 
-  ~CommandObjectProcessGDBRemoteSpeedTest() {}
+  ~CommandObjectProcessGDBRemoteSpeedTest() override {}
 
   Options *GetOptions() override { return &m_option_group; }
 
@@ -5217,7 +5209,7 @@ public:
       : CommandObjectParsed(interpreter, "process plugin packet history",
                             "Dumps the packet history buffer. ", NULL) {}
 
-  ~CommandObjectProcessGDBRemotePacketHistory() {}
+  ~CommandObjectProcessGDBRemotePacketHistory() override {}
 
   bool DoExecute(Args &command, CommandReturnObject &result) override {
     const size_t argc = command.GetArgumentCount();
@@ -5248,7 +5240,7 @@ public:
             "Maximum size that lldb will try to read/write one one chunk.",
             NULL) {}
 
-  ~CommandObjectProcessGDBRemotePacketXferSize() {}
+  ~CommandObjectProcessGDBRemotePacketXferSize() override {}
 
   bool DoExecute(Args &command, CommandReturnObject &result) override {
     const size_t argc = command.GetArgumentCount();
@@ -5290,7 +5282,7 @@ public:
                             "stripped from the result.",
                             NULL) {}
 
-  ~CommandObjectProcessGDBRemotePacketSend() {}
+  ~CommandObjectProcessGDBRemotePacketSend() override {}
 
   bool DoExecute(Args &command, CommandReturnObject &result) override {
     const size_t argc = command.GetArgumentCount();
@@ -5341,7 +5333,7 @@ public:
                          "encoded into a valid 'qRcmd' packet, sent and the "
                          "response will be printed.") {}
 
-  ~CommandObjectProcessGDBRemotePacketMonitor() {}
+  ~CommandObjectProcessGDBRemotePacketMonitor() override {}
 
   bool DoExecute(llvm::StringRef command,
                  CommandReturnObject &result) override {
@@ -5405,7 +5397,7 @@ public:
                        interpreter)));
   }
 
-  ~CommandObjectProcessGDBRemotePacket() {}
+  ~CommandObjectProcessGDBRemotePacket() override {}
 };
 
 class CommandObjectMultiwordProcessGDBRemote : public CommandObjectMultiword {
@@ -5420,7 +5412,7 @@ public:
         CommandObjectSP(new CommandObjectProcessGDBRemotePacket(interpreter)));
   }
 
-  ~CommandObjectMultiwordProcessGDBRemote() {}
+  ~CommandObjectMultiwordProcessGDBRemote() override {}
 };
 
 CommandObject *ProcessGDBRemote::GetPluginCommandObject() {

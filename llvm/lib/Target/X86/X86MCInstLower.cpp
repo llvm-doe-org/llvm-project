@@ -11,9 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "InstPrinter/X86ATTInstPrinter.h"
-#include "InstPrinter/X86InstComments.h"
+#include "MCTargetDesc/X86ATTInstPrinter.h"
 #include "MCTargetDesc/X86BaseInfo.h"
+#include "MCTargetDesc/X86InstComments.h"
 #include "MCTargetDesc/X86TargetStreamer.h"
 #include "Utils/X86ShuffleDecode.h"
 #include "X86AsmPrinter.h"
@@ -550,11 +550,6 @@ void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
     case X86::TAILJMPd64:
       Opcode = X86::JMP_1;
       goto SetTailJmpOpcode;
-    case X86::TAILJMPd_CC:
-    case X86::TAILJMPd64_CC:
-      Opcode = X86::GetCondBranchFromCond(
-          static_cast<X86::CondCode>(MI->getOperand(1).getImm()));
-      goto SetTailJmpOpcode;
 
     SetTailJmpOpcode:
       MCOperand Saved = OutMI.getOperand(0);
@@ -563,6 +558,17 @@ void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
       OutMI.addOperand(Saved);
       break;
     }
+
+  case X86::TAILJMPd_CC:
+  case X86::TAILJMPd64_CC: {
+    MCOperand Saved = OutMI.getOperand(0);
+    MCOperand Saved2 = OutMI.getOperand(1);
+    OutMI = MCInst();
+    OutMI.setOpcode(X86::JCC_1);
+    OutMI.addOperand(Saved);
+    OutMI.addOperand(Saved2);
+    break;
+  }
 
   case X86::DEC16r:
   case X86::DEC32r:
@@ -761,7 +767,7 @@ static unsigned EmitNop(MCStreamer &OS, unsigned NumBytes, bool Is64Bit,
 
   unsigned NopSize;
   unsigned Opc, BaseReg, ScaleVal, IndexReg, Displacement, SegmentReg;
-  Opc = IndexReg = Displacement = SegmentReg = 0;
+  IndexReg = Displacement = SegmentReg = 0;
   BaseReg = X86::RAX;
   ScaleVal = 1;
   switch (NumBytes) {
@@ -1358,7 +1364,8 @@ PrevCrossBBInst(MachineBasicBlock::const_iterator MBBI) {
     MBB = MBB->getPrevNode();
     MBBI = MBB->end();
   }
-  return --MBBI;
+  --MBBI;
+  return MBBI;
 }
 
 static const Constant *getConstantFromPool(const MachineInstr &MI,

@@ -1255,6 +1255,10 @@ Stmt::child_range CapturedStmt::children() {
   return child_range(getStoredStmts(), getStoredStmts() + NumCaptures);
 }
 
+Stmt::const_child_range CapturedStmt::children() const {
+  return const_child_range(getStoredStmts(), getStoredStmts() + NumCaptures);
+}
+
 CapturedDecl *CapturedStmt::getCapturedDecl() {
   return CapDeclAndKind.getPointer();
 }

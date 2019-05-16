@@ -10,6 +10,7 @@
 #define LLVM_OBJECTYAML_MINIDUMPYAML_H
 
 #include "llvm/BinaryFormat/Minidump.h"
+#include "llvm/Object/Minidump.h"
 #include "llvm/ObjectYAML/YAML.h"
 #include "llvm/Support/YAMLTraits.h"
 
@@ -25,9 +26,12 @@ namespace MinidumpYAML {
 /// from Types to Kinds is fixed and given by the static getKind function.
 struct Stream {
   enum class StreamKind {
+    MemoryList,
+    ModuleList,
     RawContent,
     SystemInfo,
     TextContent,
+    ThreadList,
   };
 
   Stream(StreamKind Kind, minidump::StreamType Type) : Kind(Kind), Type(Type) {}
@@ -41,7 +45,62 @@ struct Stream {
 
   /// Create an empty stream of the given Type.
   static std::unique_ptr<Stream> create(minidump::StreamType Type);
+
+  /// Create a stream from the given stream directory entry.
+  static Expected<std::unique_ptr<Stream>>
+  create(const minidump::Directory &StreamDesc,
+         const object::MinidumpFile &File);
 };
+
+namespace detail {
+/// A stream representing a list of abstract entries in a minidump stream. Its
+/// instantiations can be used to represent the ModuleList stream and other
+/// streams with a similar structure.
+template <typename EntryT> struct ListStream : public Stream {
+  using entry_type = EntryT;
+
+  std::vector<entry_type> Entries;
+
+  explicit ListStream(std::vector<entry_type> Entries = {})
+      : Stream(EntryT::Kind, EntryT::Type), Entries(std::move(Entries)) {}
+
+  static bool classof(const Stream *S) { return S->Kind == EntryT::Kind; }
+};
+
+/// A structure containing all data belonging to a single minidump module.
+struct ParsedModule {
+  static constexpr Stream::StreamKind Kind = Stream::StreamKind::ModuleList;
+  static constexpr minidump::StreamType Type = minidump::StreamType::ModuleList;
+
+  minidump::Module Entry;
+  std::string Name;
+  yaml::BinaryRef CvRecord;
+  yaml::BinaryRef MiscRecord;
+};
+
+/// A structure containing all data belonging to a single minidump thread.
+struct ParsedThread {
+  static constexpr Stream::StreamKind Kind = Stream::StreamKind::ThreadList;
+  static constexpr minidump::StreamType Type = minidump::StreamType::ThreadList;
+
+  minidump::Thread Entry;
+  yaml::BinaryRef Stack;
+  yaml::BinaryRef Context;
+};
+
+/// A structure containing all data describing a single memory region.
+struct ParsedMemoryDescriptor {
+  static constexpr Stream::StreamKind Kind = Stream::StreamKind::MemoryList;
+  static constexpr minidump::StreamType Type = minidump::StreamType::MemoryList;
+
+  minidump::MemoryDescriptor Entry;
+  yaml::BinaryRef Content;
+};
+} // namespace detail
+
+using ModuleListStream = detail::ListStream<detail::ParsedModule>;
+using ThreadListStream = detail::ListStream<detail::ParsedThread>;
+using MemoryListStream = detail::ListStream<detail::ParsedMemoryDescriptor>;
 
 /// A minidump stream represented as a sequence of hex bytes. This is used as a
 /// fallback when no other stream kind is suitable.
@@ -61,10 +120,12 @@ struct RawContentStream : public Stream {
 /// SystemInfo minidump stream.
 struct SystemInfoStream : public Stream {
   minidump::SystemInfo Info;
+  std::string CSDVersion;
 
-  explicit SystemInfoStream(const minidump::SystemInfo &Info)
+  explicit SystemInfoStream(const minidump::SystemInfo &Info,
+                            std::string CSDVersion)
       : Stream(StreamKind::SystemInfo, minidump::StreamType::SystemInfo),
-        Info(Info) {}
+        Info(Info), CSDVersion(std::move(CSDVersion)) {}
 
   SystemInfoStream()
       : Stream(StreamKind::SystemInfo, minidump::StreamType::SystemInfo) {
@@ -103,11 +164,17 @@ struct Object {
   Object(Object &&) = default;
   Object &operator=(Object &&) = default;
 
+  Object(const minidump::Header &Header,
+         std::vector<std::unique_ptr<Stream>> Streams)
+      : Header(Header), Streams(std::move(Streams)) {}
+
   /// The minidump header.
   minidump::Header Header;
 
   /// The list of streams in this minidump object.
   std::vector<std::unique_ptr<Stream>> Streams;
+
+  static Expected<Object> create(const object::MinidumpFile &File);
 };
 
 /// Serialize the minidump file represented by Obj to OS in binary form.
@@ -137,6 +204,11 @@ template <> struct MappingTraits<std::unique_ptr<MinidumpYAML::Stream>> {
   static StringRef validate(IO &IO, std::unique_ptr<MinidumpYAML::Stream> &S);
 };
 
+template <> struct MappingContextTraits<minidump::MemoryDescriptor, BinaryRef> {
+  static void mapping(IO &IO, minidump::MemoryDescriptor &Memory,
+                      BinaryRef &Content);
+};
+
 } // namespace yaml
 
 } // namespace llvm
@@ -148,8 +220,19 @@ LLVM_YAML_DECLARE_ENUM_TRAITS(llvm::minidump::StreamType)
 LLVM_YAML_DECLARE_MAPPING_TRAITS(llvm::minidump::CPUInfo::ArmInfo)
 LLVM_YAML_DECLARE_MAPPING_TRAITS(llvm::minidump::CPUInfo::OtherInfo)
 LLVM_YAML_DECLARE_MAPPING_TRAITS(llvm::minidump::CPUInfo::X86Info)
+LLVM_YAML_DECLARE_MAPPING_TRAITS(llvm::minidump::VSFixedFileInfo)
+
+LLVM_YAML_DECLARE_MAPPING_TRAITS(
+    llvm::MinidumpYAML::MemoryListStream::entry_type)
+LLVM_YAML_DECLARE_MAPPING_TRAITS(
+    llvm::MinidumpYAML::ModuleListStream::entry_type)
+LLVM_YAML_DECLARE_MAPPING_TRAITS(
+    llvm::MinidumpYAML::ThreadListStream::entry_type)
 
 LLVM_YAML_IS_SEQUENCE_VECTOR(std::unique_ptr<llvm::MinidumpYAML::Stream>)
+LLVM_YAML_IS_SEQUENCE_VECTOR(llvm::MinidumpYAML::MemoryListStream::entry_type)
+LLVM_YAML_IS_SEQUENCE_VECTOR(llvm::MinidumpYAML::ModuleListStream::entry_type)
+LLVM_YAML_IS_SEQUENCE_VECTOR(llvm::MinidumpYAML::ThreadListStream::entry_type)
 
 LLVM_YAML_DECLARE_MAPPING_TRAITS(llvm::MinidumpYAML::Object)
 

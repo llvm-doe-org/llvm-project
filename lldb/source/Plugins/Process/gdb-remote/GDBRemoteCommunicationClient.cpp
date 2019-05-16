@@ -37,7 +37,9 @@
 #include "llvm/ADT/StringSwitch.h"
 
 #if defined(__APPLE__)
+#ifndef HAVE_LIBCOMPRESSION
 #define HAVE_LIBCOMPRESSION
+#endif
 #include <compression.h>
 #endif
 
@@ -46,9 +48,7 @@ using namespace lldb_private;
 using namespace lldb_private::process_gdb_remote;
 using namespace std::chrono;
 
-//----------------------------------------------------------------------
 // GDBRemoteCommunicationClient constructor
-//----------------------------------------------------------------------
 GDBRemoteCommunicationClient::GDBRemoteCommunicationClient()
     : GDBRemoteClientBase("gdb-remote.client", "gdb-remote.client.rx_packet"),
       m_supports_not_sending_acks(eLazyBoolCalculate),
@@ -103,9 +103,7 @@ GDBRemoteCommunicationClient::GDBRemoteCommunicationClient()
       m_supported_async_json_packets_sp(), m_qXfer_memory_map(),
       m_qXfer_memory_map_loaded(false) {}
 
-//----------------------------------------------------------------------
 // Destructor
-//----------------------------------------------------------------------
 GDBRemoteCommunicationClient::~GDBRemoteCommunicationClient() {
   if (IsConnected())
     Disconnect();
@@ -1713,28 +1711,22 @@ lldb_private::Status
 GDBRemoteCommunicationClient::GetWatchpointsTriggerAfterInstruction(
     bool &after, const ArchSpec &arch) {
   Status error;
-  llvm::Triple::ArchType atype = arch.GetMachine();
+  llvm::Triple triple = arch.GetTriple();
 
   // we assume watchpoints will happen after running the relevant opcode and we
   // only want to override this behavior if we have explicitly received a
   // qHostInfo telling us otherwise
   if (m_qHostInfo_is_valid != eLazyBoolYes) {
-    // On targets like MIPS and ppc64le, watchpoint exceptions are always
+    // On targets like MIPS and ppc64, watchpoint exceptions are always
     // generated before the instruction is executed. The connected target may
     // not support qHostInfo or qWatchpointSupportInfo packets.
-    after =
-        !(atype == llvm::Triple::mips || atype == llvm::Triple::mipsel ||
-          atype == llvm::Triple::mips64 || atype == llvm::Triple::mips64el ||
-          atype == llvm::Triple::ppc64le);
+    after = !(triple.isMIPS() || triple.isPPC64());
   } else {
-    // For MIPS and ppc64le, set m_watchpoints_trigger_after_instruction to
+    // For MIPS and ppc64, set m_watchpoints_trigger_after_instruction to
     // eLazyBoolNo if it is not calculated before.
-    if ((m_watchpoints_trigger_after_instruction == eLazyBoolCalculate &&
-         (atype == llvm::Triple::mips || atype == llvm::Triple::mipsel ||
-          atype == llvm::Triple::mips64 || atype == llvm::Triple::mips64el)) ||
-        atype == llvm::Triple::ppc64le) {
+    if (m_watchpoints_trigger_after_instruction == eLazyBoolCalculate &&
+        (triple.isMIPS() || triple.isPPC64()))
       m_watchpoints_trigger_after_instruction = eLazyBoolNo;
-    }
 
     after = (m_watchpoints_trigger_after_instruction != eLazyBoolNo);
   }

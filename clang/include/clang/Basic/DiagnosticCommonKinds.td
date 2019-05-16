@@ -150,6 +150,8 @@ def ext_warn_duplicate_declspec : ExtWarn<"%sub{duplicate_declspec}0">,
 def warn_duplicate_declspec : Warning<"%sub{duplicate_declspec}0">,
   InGroup<DuplicateDeclSpecifier>;
 
+def err_duplicate_declspec : Error<"%sub{duplicate_declspec}0">;
+
 def err_friend_decl_spec : Error<"'%0' is invalid in friend declarations">;
 
 def err_invalid_member_in_interface : Error<
@@ -296,7 +298,7 @@ def err_acc_more_one_clause : Error<
 
 // Static Analyzer Core
 def err_unknown_analyzer_checker : Error<
-    "no analyzer checkers are associated with '%0'">;
+    "no analyzer checkers or packages are associated with '%0'">;
 def note_suggest_disabling_all_checkers : Note<
     "use -analyzer-disable-all-checks to disable all static analyzer checkers">;
 }

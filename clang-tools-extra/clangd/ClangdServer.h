@@ -36,8 +36,6 @@
 #include <utility>
 
 namespace clang {
-class PCHContainerOperations;
-
 namespace clangd {
 
 // FIXME: find a better name.
@@ -217,7 +215,7 @@ public:
   /// Rename all occurrences of the symbol at the \p Pos in \p File to
   /// \p NewName.
   void rename(PathRef File, Position Pos, llvm::StringRef NewName,
-              Callback<std::vector<tooling::Replacement>> CB);
+              Callback<std::vector<TextEdit>> CB);
 
   struct TweakRef {
     std::string ID;    /// ID to pass for applyTweak.
@@ -252,10 +250,6 @@ public:
   /// FIXME: those metrics might be useful too, we should add them.
   std::vector<std::pair<Path, std::size_t>> getUsedBytesPerFile() const;
 
-  /// Returns the active dynamic index if one was built.
-  /// This can be useful for testing, debugging, or observing memory usage.
-  const SymbolIndex *dynamicIndex() const { return DynamicIdx.get(); }
-
   // Blocks the main thread until the server is idle. Only for use in tests.
   // Returns false if the timeout expires.
   LLVM_NODISCARD bool
@@ -268,9 +262,6 @@ private:
   formatCode(llvm::StringRef Code, PathRef File,
              ArrayRef<tooling::Range> Ranges);
 
-  tooling::CompileCommand getCompileCommand(PathRef File);
-
-  const GlobalCompilationDatabase &CDB;
   const FileSystemProvider &FSProvider;
 
   Path ResourceDir;
@@ -300,7 +291,6 @@ private:
   mutable std::mutex CachedCompletionFuzzyFindRequestMutex;
 
   llvm::Optional<std::string> WorkspaceRoot;
-  std::shared_ptr<PCHContainerOperations> PCHs;
   // WorkScheduler has to be the last member, because its destructor has to be
   // called before all other members to stop the worker thread that references
   // ClangdServer.

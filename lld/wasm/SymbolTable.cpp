@@ -58,8 +58,8 @@ void SymbolTable::addCombinedLTOObject() {
     LTO->add(*F);
 
   for (StringRef Filename : LTO->compile()) {
-    auto *Obj = make<ObjFile>(MemoryBufferRef(Filename, "lto.tmp"));
-    Obj->parse();
+    auto *Obj = make<ObjFile>(MemoryBufferRef(Filename, "lto.tmp"), "");
+    Obj->parse(true);
     ObjectFiles.push_back(Obj);
   }
 }
@@ -476,7 +476,7 @@ void SymbolTable::addLazy(ArchiveFile *File, const Archive::Symbol *Sym) {
 }
 
 bool SymbolTable::addComdat(StringRef Name) {
-  return Comdats.insert(CachedHashStringRef(Name)).second;
+  return ComdatGroups.insert(CachedHashStringRef(Name)).second;
 }
 
 // The new signature doesn't match.  Create a variant to the symbol with the
@@ -491,7 +491,7 @@ bool SymbolTable::getFunctionVariant(Symbol* Sym, const WasmSignature *Sig,
   // Linear search through symbol variants.  Should never be more than two
   // or three entries here.
   auto &Variants = SymVariants[CachedHashStringRef(Sym->getName())];
-  if (Variants.size() == 0)
+  if (Variants.empty())
     Variants.push_back(Sym);
 
   for (Symbol* V : Variants) {

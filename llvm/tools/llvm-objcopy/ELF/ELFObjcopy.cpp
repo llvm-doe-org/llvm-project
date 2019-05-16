@@ -13,6 +13,7 @@
 #include "llvm-objcopy.h"
 
 #include "llvm/ADT/BitmaskEnum.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
@@ -85,7 +86,7 @@ uint64_t getNewShfFlags(SectionFlag AllFlags) {
   return NewFlags;
 }
 
-static uint64_t setSectionFlagsPreserveMask(uint64_t OldFlags,
+static uint64_t getSectionFlagsPreserveMask(uint64_t OldFlags,
                                             uint64_t NewFlags) {
   // Preserve some flags which should not be dropped when setting flags.
   // Also, preserve anything OS/processor dependant.
@@ -94,6 +95,18 @@ static uint64_t setSectionFlagsPreserveMask(uint64_t OldFlags,
                                 ELF::SHF_MASKOS | ELF::SHF_MASKPROC |
                                 ELF::SHF_TLS | ELF::SHF_INFO_LINK;
   return (OldFlags & PreserveMask) | (NewFlags & ~PreserveMask);
+}
+
+static void setSectionFlagsAndType(SectionBase &Sec, SectionFlag Flags) {
+  Sec.Flags = getSectionFlagsPreserveMask(Sec.Flags, getNewShfFlags(Flags));
+
+  // In GNU objcopy, certain flags promote SHT_NOBITS to SHT_PROGBITS. This rule
+  // may promote more non-ALLOC sections than GNU objcopy, but it is fine as
+  // non-ALLOC SHT_NOBITS sections do not make much sense.
+  if (Sec.Type == SHT_NOBITS &&
+      (!(Sec.Flags & ELF::SHF_ALLOC) ||
+       Flags & (SectionFlag::SecContents | SectionFlag::SecLoad)))
+    Sec.Type = SHT_PROGBITS;
 }
 
 static ElfType getOutputElfType(const Binary &Bin) {
@@ -237,7 +250,8 @@ static Error splitDWOToFile(const CopyConfig &Config, const Reader &Reader,
   auto OnlyKeepDWOPred = [&DWOFile](const SectionBase &Sec) {
     return onlyKeepDWOPred(*DWOFile, Sec);
   };
-  if (Error E = DWOFile->removeSections(OnlyKeepDWOPred))
+  if (Error E = DWOFile->removeSections(Config.AllowBrokenLinks,
+                                        OnlyKeepDWOPred))
     return E;
   if (Config.OutputArch) {
     DWOFile->Machine = Config.OutputArch.getValue().EMachine;
@@ -534,7 +548,7 @@ static Error replaceAndRemoveSections(const CopyConfig &Config, Object &Obj) {
           return &Obj.addSection<DecompressedSection>(*CS);
         });
 
-  return Obj.removeSections(RemovePred);
+  return Obj.removeSections(Config.AllowBrokenLinks, RemovePred);
 }
 
 // This function handles the high level operations of GNU objcopy including
@@ -567,15 +581,69 @@ static Error handleArgs(const CopyConfig &Config, Object &Obj,
   if (Error E = updateAndRemoveSymbols(Config, Obj))
     return E;
 
-  if (!Config.SectionsToRename.empty()) {
+  if (!Config.SectionsToRename.empty() || !Config.AllocSectionsPrefix.empty()) {
+    DenseSet<SectionBase *> PrefixedSections;
     for (auto &Sec : Obj.sections()) {
       const auto Iter = Config.SectionsToRename.find(Sec.Name);
       if (Iter != Config.SectionsToRename.end()) {
         const SectionRename &SR = Iter->second;
         Sec.Name = SR.NewName;
         if (SR.NewFlags.hasValue())
-          Sec.Flags = setSectionFlagsPreserveMask(
-              Sec.Flags, getNewShfFlags(SR.NewFlags.getValue()));
+          setSectionFlagsAndType(Sec, SR.NewFlags.getValue());
+      }
+
+      // Add a prefix to allocated sections and their relocation sections. This
+      // should be done after renaming the section by Config.SectionToRename to
+      // imitate the GNU objcopy behavior.
+      if (!Config.AllocSectionsPrefix.empty()) {
+        if (Sec.Flags & SHF_ALLOC) {
+          Sec.Name = (Config.AllocSectionsPrefix + Sec.Name).str();
+          PrefixedSections.insert(&Sec);
+
+        // Rename relocation sections associated to the allocated sections.
+        // For example, if we rename .text to .prefix.text, we also rename
+        // .rel.text to .rel.prefix.text.
+        //
+        // Dynamic relocation sections (SHT_REL[A] with SHF_ALLOC) are handled
+        // above, e.g., .rela.plt is renamed to .prefix.rela.plt, not
+        // .rela.prefix.plt since GNU objcopy does so.
+        } else if (auto *RelocSec = dyn_cast<RelocationSectionBase>(&Sec)) {
+          auto *TargetSec = RelocSec->getSection();
+          if (TargetSec && (TargetSec->Flags & SHF_ALLOC)) {
+            StringRef prefix;
+            switch (Sec.Type) {
+            case SHT_REL:
+              prefix = ".rel";
+              break;
+            case SHT_RELA:
+              prefix = ".rela";
+              break;
+            default:
+              continue;
+            }
+
+            // If the relocation section comes *after* the target section, we
+            // don't add Config.AllocSectionsPrefix because we've already added
+            // the prefix to TargetSec->Name. Otherwise, if the relocation
+            // section comes *before* the target section, we add the prefix.
+            if (PrefixedSections.count(TargetSec)) {
+              Sec.Name = (prefix + TargetSec->Name).str();
+            } else {
+              const auto Iter = Config.SectionsToRename.find(TargetSec->Name);
+              if (Iter != Config.SectionsToRename.end()) {
+                // Both `--rename-section` and `--prefix-alloc-sections` are
+                // given but the target section is not yet renamed.
+                Sec.Name =
+                    (prefix + Config.AllocSectionsPrefix + Iter->second.NewName)
+                        .str();
+              } else {
+                Sec.Name =
+                    (prefix + Config.AllocSectionsPrefix + TargetSec->Name)
+                        .str();
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -585,8 +653,7 @@ static Error handleArgs(const CopyConfig &Config, Object &Obj,
       const auto Iter = Config.SetSectionFlags.find(Sec.Name);
       if (Iter != Config.SetSectionFlags.end()) {
         const SectionFlagsUpdate &SFU = Iter->second;
-        Sec.Flags = setSectionFlagsPreserveMask(Sec.Flags,
-                                                getNewShfFlags(SFU.NewFlags));
+        setSectionFlagsAndType(Sec, SFU.NewFlags);
       }
     }
   }
@@ -618,7 +685,8 @@ static Error handleArgs(const CopyConfig &Config, Object &Obj,
   }
 
   if (!Config.AddGnuDebugLink.empty())
-    Obj.addSection<GnuDebugLinkSection>(Config.AddGnuDebugLink);
+    Obj.addSection<GnuDebugLinkSection>(Config.AddGnuDebugLink,
+                                        Config.GnuDebugLinkCRC32);
 
   for (const NewSymbolInfo &SI : Config.SymbolsToAdd) {
     SectionBase *Sec = Obj.findSection(SI.SectionName);

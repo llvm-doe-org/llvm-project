@@ -86,7 +86,7 @@ OutputSection *LinkerScript::createOutputSection(StringRef Name,
     // There was a forward reference.
     Sec = SecRef;
   } else {
-    Sec = make<OutputSection>(Name, SHT_NOBITS, 0);
+    Sec = make<OutputSection>(Name, SHT_PROGBITS, 0);
     if (!SecRef)
       SecRef = Sec;
   }
@@ -135,7 +135,7 @@ void LinkerScript::setDot(Expr E, const Twine &Loc, bool InSec) {
   // Update to location counter means update to section size.
   if (InSec)
     expandOutputSection(Val - Dot);
-  else
+  else if (Val > Dot)
     expandMemoryRegions(Val - Dot);
 
   Dot = Val;
@@ -166,13 +166,9 @@ void LinkerScript::addSymbol(SymbolAssignment *Cmd) {
     return;
 
   // Define a symbol.
-  Symbol *Sym;
-  uint8_t Visibility = Cmd->Hidden ? STV_HIDDEN : STV_DEFAULT;
-  std::tie(Sym, std::ignore) = Symtab->insert(Cmd->Name, Visibility,
-                                              /*CanOmitFromDynSym*/ false,
-                                              /*File*/ nullptr);
   ExprValue Value = Cmd->Expression();
   SectionBase *Sec = Value.isAbsolute() ? nullptr : Value.Sec;
+  uint8_t Visibility = Cmd->Hidden ? STV_HIDDEN : STV_DEFAULT;
 
   // When this function is called, section addresses have not been
   // fixed yet. So, we may or may not know the value of the RHS
@@ -187,8 +183,12 @@ void LinkerScript::addSymbol(SymbolAssignment *Cmd) {
   // write expressions like this: `alignment = 16; . = ALIGN(., alignment)`.
   uint64_t SymValue = Value.Sec ? 0 : Value.getValue();
 
-  replaceSymbol<Defined>(Sym, nullptr, Cmd->Name, STB_GLOBAL, Visibility,
-                         STT_NOTYPE, SymValue, 0, Sec);
+  Defined New(nullptr, Cmd->Name, STB_GLOBAL, Visibility, STT_NOTYPE, SymValue,
+              0, Sec);
+
+  Symbol *Sym = Symtab->insert(New);
+  Symtab->mergeProperties(Sym, New);
+  replaceSymbol(Sym, &New);
   Cmd->Sym = cast<Defined>(Sym);
 }
 
@@ -198,14 +198,15 @@ static void declareSymbol(SymbolAssignment *Cmd) {
   if (!shouldDefineSym(Cmd))
     return;
 
-  // We can't calculate final value right now.
-  Symbol *Sym;
   uint8_t Visibility = Cmd->Hidden ? STV_HIDDEN : STV_DEFAULT;
-  std::tie(Sym, std::ignore) = Symtab->insert(Cmd->Name, Visibility,
-                                              /*CanOmitFromDynSym*/ false,
-                                              /*File*/ nullptr);
-  replaceSymbol<Defined>(Sym, nullptr, Cmd->Name, STB_GLOBAL, Visibility,
-                         STT_NOTYPE, 0, 0, nullptr);
+  Defined New(nullptr, Cmd->Name, STB_GLOBAL, Visibility, STT_NOTYPE, 0, 0,
+              nullptr);
+
+  // We can't calculate final value right now.
+  Symbol *Sym = Symtab->insert(New);
+  Symtab->mergeProperties(Sym, New);
+  replaceSymbol(Sym, &New);
+
   Cmd->Sym = cast<Defined>(Sym);
   Cmd->Provide = false;
   Sym->ScriptDefined = true;
@@ -345,7 +346,7 @@ static bool matchConstraints(ArrayRef<InputSection *> Sections,
 static void sortSections(MutableArrayRef<InputSection *> Vec,
                          SortSectionPolicy K) {
   if (K != SortSectionPolicy::Default && K != SortSectionPolicy::None)
-    std::stable_sort(Vec.begin(), Vec.end(), getComparator(K));
+    llvm::stable_sort(Vec, getComparator(K));
 }
 
 // Sort sections as instructed by SORT-family commands and --sort-section
@@ -482,6 +483,7 @@ void LinkerScript::processSectionCommands() {
       if (Sec->Name == "/DISCARD/") {
         discard(V);
         Sec->SectionCommands.clear();
+        Sec->SectionIndex = 0; // Not an orphan.
         continue;
       }
 
@@ -760,13 +762,14 @@ static OutputSection *findFirstSection(PhdrEntry *Load) {
 void LinkerScript::assignOffsets(OutputSection *Sec) {
   if (!(Sec->Flags & SHF_ALLOC))
     Dot = 0;
-  else if (Sec->AddrExpr)
-    setDot(Sec->AddrExpr, Sec->Location, false);
 
   Ctx->MemRegion = Sec->MemRegion;
   Ctx->LMARegion = Sec->LMARegion;
   if (Ctx->MemRegion)
     Dot = Ctx->MemRegion->CurPos;
+
+  if ((Sec->Flags & SHF_ALLOC) && Sec->AddrExpr)
+    setDot(Sec->AddrExpr, Sec->Location, false);
 
   switchTo(Sec);
 
@@ -824,10 +827,16 @@ static bool isDiscardable(OutputSection &Sec) {
   if (!Sec.Phdrs.empty())
     return false;
 
-  // We do not want to remove sections that reference symbols in address and
-  // other expressions. We add script symbols as undefined, and want to ensure
-  // all of them are defined in the output, hence have to keep them.
+  // We do not want to remove OutputSections with expressions that reference
+  // symbols even if the OutputSection is empty. We want to ensure that the
+  // expressions can be evaluated and report an error if they cannot.
   if (Sec.ExpressionsUseSymbols)
+    return false;
+
+  // OutputSections may be referenced by name in ADDR and LOADADDR expressions,
+  // as an empty Section can has a valid VMA and LMA we keep the OutputSection
+  // to maintain the integrity of the other Expression.
+  if (Sec.UsedInExpression)
     return false;
 
   for (BaseCommand *Base : Sec.SectionCommands) {
@@ -886,7 +895,8 @@ void LinkerScript::adjustSectionsBeforeSorting() {
     // in case it is empty.
     bool IsEmpty = getInputSections(Sec).empty();
     if (IsEmpty)
-      Sec->Flags = Flags & (SHF_ALLOC | SHF_WRITE | SHF_EXECINSTR);
+      Sec->Flags = Flags & ((Sec->NonAlloc ? 0 : (uint64_t)SHF_ALLOC) |
+                            SHF_WRITE | SHF_EXECINSTR);
 
     if (IsEmpty && isDiscardable(*Sec)) {
       Sec->Live = false;
@@ -984,8 +994,10 @@ void LinkerScript::allocateHeaders(std::vector<PhdrEntry *> &Phdrs) {
       llvm::any_of(PhdrsCommands, [](const PhdrsCommand &Cmd) {
         return Cmd.HasPhdrs || Cmd.HasFilehdr;
       });
+  bool Paged = !Config->Omagic && !Config->Nmagic;
   uint64_t HeaderSize = getHeaderSize();
-  if (HeaderSize <= Min - computeBase(Min, HasExplicitHeaders)) {
+  if ((Paged || HasExplicitHeaders) &&
+      HeaderSize <= Min - computeBase(Min, HasExplicitHeaders)) {
     Min = alignDown(Min - HeaderSize, Config->MaxPageSize);
     Out::ElfHeader->Addr = Min;
     Out::ProgramHeaders->Addr = Min + Out::ElfHeader->Size;

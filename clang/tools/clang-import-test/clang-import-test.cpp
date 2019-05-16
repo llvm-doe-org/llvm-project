@@ -102,7 +102,8 @@ private:
     unsigned LocColumn =
         SM.getSpellingColumnNumber(Loc, /*Invalid=*/nullptr) - 1;
     FileID FID = SM.getFileID(Loc);
-    llvm::MemoryBuffer *Buffer = SM.getBuffer(FID, Loc, /*Invalid=*/nullptr);
+    const llvm::MemoryBuffer *Buffer =
+        SM.getBuffer(FID, Loc, /*Invalid=*/nullptr);
 
     assert(LocData >= Buffer->getBufferStart() &&
            LocData < Buffer->getBufferEnd());
@@ -315,8 +316,9 @@ llvm::Expected<CIAndOrigins> Parse(const std::string &Path,
   auto &CG = *static_cast<CodeGenerator *>(ASTConsumers.back().get());
 
   if (ShouldDumpAST)
-    ASTConsumers.push_back(CreateASTDumper(nullptr /*Dump to stdout.*/,
-                                           "", true, false, false));
+    ASTConsumers.push_back(
+        CreateASTDumper(nullptr /*Dump to stdout.*/, "", true, false, false,
+                        clang::ADOF_Default));
 
   CI.getDiagnosticClient().BeginSourceFile(
       CI.getCompilerInstance().getLangOpts(),

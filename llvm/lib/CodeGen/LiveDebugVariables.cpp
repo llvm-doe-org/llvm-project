@@ -22,6 +22,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/IntervalMap.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -503,7 +504,8 @@ static void printExtendedName(raw_ostream &OS, const DINode *Node,
 
   if (!Res.empty())
     OS << Res << "," << Line;
-  if (auto *InlinedAt = DL->getInlinedAt()) {
+  auto *InlinedAt = DL ? DL->getInlinedAt() : nullptr;
+  if (InlinedAt) {
     if (DebugLoc InlinedAtDL = InlinedAt) {
       OS << " @[";
       printDebugLoc(InlinedAtDL, OS, Ctx);

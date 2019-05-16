@@ -253,16 +253,16 @@ void tools::MinGW::Linker::ConstructJob(Compilation &C, const JobAction &JA,
                                                     ToolChain::FT_Shared));
         CmdArgs.push_back(
             TC.getCompilerRTArgString(Args, "asan_dynamic_runtime_thunk"));
-        CmdArgs.push_back(Args.MakeArgString("--require-defined"));
-        CmdArgs.push_back(Args.MakeArgString(TC.getArch() == llvm::Triple::x86
-                                                 ? "___asan_seh_interceptor"
-                                                 : "__asan_seh_interceptor"));
+        CmdArgs.push_back("--require-defined");
+        CmdArgs.push_back(TC.getArch() == llvm::Triple::x86
+                              ? "___asan_seh_interceptor"
+                              : "__asan_seh_interceptor");
         // Make sure the linker consider all object files from the dynamic
         // runtime thunk.
-        CmdArgs.push_back(Args.MakeArgString("--whole-archive"));
-        CmdArgs.push_back(Args.MakeArgString(
-            TC.getCompilerRT(Args, "asan_dynamic_runtime_thunk")));
-        CmdArgs.push_back(Args.MakeArgString("--no-whole-archive"));
+        CmdArgs.push_back("--whole-archive");
+        CmdArgs.push_back(
+            TC.getCompilerRTArgString(Args, "asan_dynamic_runtime_thunk"));
+        CmdArgs.push_back("--no-whole-archive");
       }
 
       TC.addProfileRTLibs(Args, CmdArgs);
@@ -437,7 +437,8 @@ bool toolchains::MinGW::IsUnwindTablesDefault(const ArgList &Args) const {
   if (ExceptionArg &&
       ExceptionArg->getOption().matches(options::OPT_fseh_exceptions))
     return true;
-  return getArch() == llvm::Triple::x86_64;
+  return getArch() == llvm::Triple::x86_64 ||
+         getArch() == llvm::Triple::aarch64;
 }
 
 bool toolchains::MinGW::isPICDefault() const {
@@ -452,7 +453,7 @@ bool toolchains::MinGW::isPICDefaultForced() const {
 
 llvm::ExceptionHandling
 toolchains::MinGW::GetExceptionModel(const ArgList &Args) const {
-  if (getArch() == llvm::Triple::x86_64)
+  if (getArch() == llvm::Triple::x86_64 || getArch() == llvm::Triple::aarch64)
     return llvm::ExceptionHandling::WinEH;
   return llvm::ExceptionHandling::DwarfCFI;
 }
@@ -460,6 +461,8 @@ toolchains::MinGW::GetExceptionModel(const ArgList &Args) const {
 SanitizerMask toolchains::MinGW::getSupportedSanitizers() const {
   SanitizerMask Res = ToolChain::getSupportedSanitizers();
   Res |= SanitizerKind::Address;
+  Res |= SanitizerKind::PointerCompare;
+  Res |= SanitizerKind::PointerSubtract;
   return Res;
 }
 

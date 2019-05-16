@@ -36,9 +36,7 @@
 #include "DWARFIndex.h"
 #include "UniqueDWARFASTType.h"
 
-//----------------------------------------------------------------------
 // Forward Declarations for this DWARF plugin
-//----------------------------------------------------------------------
 class DebugMapModule;
 class DWARFAbbreviationDeclaration;
 class DWARFAbbreviationDeclarationSet;
@@ -68,9 +66,7 @@ public:
   friend class DWARFDIE;
   friend class DWARFASTParserClang;
 
-  //------------------------------------------------------------------
   // Static Functions
-  //------------------------------------------------------------------
   static void Initialize();
 
   static void Terminate();
@@ -84,11 +80,9 @@ public:
   static lldb_private::SymbolFile *
   CreateInstance(lldb_private::ObjectFile *obj_file);
 
-  static const lldb_private::FileSpecList &GetSymlinkPaths();
+  static lldb_private::FileSpecList GetSymlinkPaths();
 
-  //------------------------------------------------------------------
   // Constructors and Destructors
-  //------------------------------------------------------------------
 
   SymbolFileDWARF(lldb_private::ObjectFile *ofile);
 
@@ -98,9 +92,7 @@ public:
 
   void InitializeObject() override;
 
-  //------------------------------------------------------------------
   // Compile Unit function calls
-  //------------------------------------------------------------------
 
   uint32_t GetNumCompileUnits() override;
 
@@ -141,11 +133,6 @@ public:
   lldb_private::Type *ResolveType(const DWARFDIE &die,
                                   bool assert_not_being_parsed = true,
                                   bool resolve_function_context = false);
-
-  SymbolFileDWARF *GetDWARFForUID(lldb::user_id_t uid);
-
-  DWARFDIE
-  GetDIEFromUID(lldb::user_id_t uid);
 
   lldb_private::CompilerDecl GetDeclForUID(lldb::user_id_t uid) override;
 
@@ -219,9 +206,7 @@ public:
 
   std::recursive_mutex &GetModuleMutex() const override;
 
-  //------------------------------------------------------------------
   // PluginInterface protocol
-  //------------------------------------------------------------------
   lldb_private::ConstString GetPluginName() override;
 
   uint32_t GetPluginVersion() override;
@@ -298,6 +283,17 @@ public:
   }
 
   virtual DWARFDIE GetDIE(const DIERef &die_ref);
+
+  DWARFDIE GetDIE(lldb::user_id_t uid);
+
+  lldb::user_id_t GetUID(const DWARFBaseDIE &die) {
+    return GetUID(die.GetDIERef());
+  }
+
+  lldb::user_id_t GetUID(const DIERef &ref) {
+    return GetID() | ref.die_offset |
+           (lldb::user_id_t(ref.section == DIERef::Section::DebugTypes) << 63);
+  }
 
   virtual std::unique_ptr<SymbolFileDWARFDwo>
   GetDwoSymbolFileForCompileUnit(DWARFUnit &dwarf_cu,
@@ -449,6 +445,12 @@ protected:
   virtual ClangTypeToDIE &GetForwardDeclClangTypeToDie() {
     return m_forward_decl_clang_type_to_die;
   }
+
+  struct DecodedUID {
+    SymbolFileDWARF *dwarf;
+    DIERef ref;
+  };
+  DecodedUID DecodeUID(lldb::user_id_t uid);
 
   SymbolFileDWARFDwp *GetDwpSymbolFile();
 

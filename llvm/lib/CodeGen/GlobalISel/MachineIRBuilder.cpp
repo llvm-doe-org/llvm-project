@@ -215,10 +215,8 @@ MachineIRBuilder::materializeGEP(unsigned &Res, unsigned Op0,
   }
 
   Res = getMRI()->createGenericVirtualRegister(getMRI()->getType(Op0));
-  unsigned TmpReg = getMRI()->createGenericVirtualRegister(ValueTy);
-
-  buildConstant(TmpReg, Value);
-  return buildGEP(Res, Op0, TmpReg);
+  auto Cst = buildConstant(ValueTy, Value);
+  return buildGEP(Res, Op0, Cst.getReg(0));
 }
 
 MachineInstrBuilder MachineIRBuilder::buildPtrMask(unsigned Res, unsigned Op0,
@@ -311,6 +309,13 @@ MachineInstrBuilder MachineIRBuilder::buildFConstant(const DstOp &Res,
   auto &Ctx = getMF().getFunction().getContext();
   auto *CFP =
       ConstantFP::get(Ctx, getAPFloatFromSize(Val, DstTy.getScalarSizeInBits()));
+  return buildFConstant(Res, *CFP);
+}
+
+MachineInstrBuilder MachineIRBuilder::buildFConstant(const DstOp &Res,
+                                                     const APFloat &Val) {
+  auto &Ctx = getMF().getFunction().getContext();
+  auto *CFP = ConstantFP::get(Ctx, Val);
   return buildFConstant(Res, *CFP);
 }
 
@@ -547,6 +552,15 @@ MachineInstrBuilder MachineIRBuilder::buildUnmerge(ArrayRef<LLT> Res,
   return buildInstr(TargetOpcode::G_UNMERGE_VALUES, TmpVec, Op);
 }
 
+MachineInstrBuilder MachineIRBuilder::buildUnmerge(LLT Res,
+                                                   const SrcOp &Op) {
+  unsigned NumReg = Op.getLLTTy(*getMRI()).getSizeInBits() / Res.getSizeInBits();
+  SmallVector<unsigned, 8> TmpVec;
+  for (unsigned I = 0; I != NumReg; ++I)
+    TmpVec.push_back(getMRI()->createGenericVirtualRegister(Res));
+  return buildUnmerge(TmpVec, Op);
+}
+
 MachineInstrBuilder MachineIRBuilder::buildUnmerge(ArrayRef<unsigned> Res,
                                                    const SrcOp &Op) {
   // Unfortunately to convert from ArrayRef<unsigned> to ArrayRef<DstOp>,
@@ -616,6 +630,18 @@ MachineInstrBuilder MachineIRBuilder::buildIntrinsic(Intrinsic::ID ID,
                                 : TargetOpcode::G_INTRINSIC);
   for (unsigned ResultReg : ResultRegs)
     MIB.addDef(ResultReg);
+  MIB.addIntrinsicID(ID);
+  return MIB;
+}
+
+MachineInstrBuilder MachineIRBuilder::buildIntrinsic(Intrinsic::ID ID,
+                                                     ArrayRef<DstOp> Results,
+                                                     bool HasSideEffects) {
+  auto MIB =
+      buildInstr(HasSideEffects ? TargetOpcode::G_INTRINSIC_W_SIDE_EFFECTS
+                                : TargetOpcode::G_INTRINSIC);
+  for (DstOp Result : Results)
+    Result.addDefToMIB(*getMRI(), MIB);
   MIB.addIntrinsicID(ID);
   return MIB;
 }

@@ -9,6 +9,7 @@
 #include "MCTargetDesc/ARMAddressingModes.h"
 #include "MCTargetDesc/ARMBaseInfo.h"
 #include "MCTargetDesc/ARMMCTargetDesc.h"
+#include "TargetInfo/ARMTargetInfo.h"
 #include "Utils/ARMBaseInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCDisassembler/MCDisassembler.h"
@@ -441,6 +442,18 @@ static DecodeStatus checkDecodedInstruction(MCInst &MI, uint64_t &Size,
         return MCDisassembler::SoftFail;
       return Result;
     }
+    case ARM::t2ADDri:
+    case ARM::t2ADDri12:
+    case ARM::t2ADDrr:
+    case ARM::t2ADDrs:
+    case ARM::t2SUBri:
+    case ARM::t2SUBri12:
+    case ARM::t2SUBrr:
+    case ARM::t2SUBrs:
+      if (MI.getOperand(0).getReg() == ARM::SP &&
+          MI.getOperand(1).getReg() != ARM::SP)
+        return MCDisassembler::SoftFail;
+      return Result;
     default: return Result;
   }
 }
@@ -772,7 +785,7 @@ DecodeStatus ThumbDisassembler::getInstruction(MCInst &MI, uint64_t &Size,
   if (Result != MCDisassembler::Fail) {
     Size = 4;
     Check(Result, AddThumbPredicate(MI));
-    return Result;
+    return checkDecodedInstruction(MI, Size, Address, OS, CS, Insn32, Result);
   }
 
   if (fieldFromInstruction(Insn32, 28, 4) == 0xE) {

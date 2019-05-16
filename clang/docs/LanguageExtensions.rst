@@ -1791,7 +1791,7 @@ the arguments. Both arguments and the result have the bitwidth specified
 by the name of the builtin.
 
 ``__builtin_rotateright``
-_------------------------
+-------------------------
 
 * ``__builtin_rotateright8``
 * ``__builtin_rotateright16``
@@ -2447,6 +2447,31 @@ The effective values for mode are:
 Note that the mode argument will modulo 4, so if the integer argument is greater
 than 3, it will only use the least significant two bits of the mode. 
 Namely, ``__builtin_setrnd(102))`` is equal to ``__builtin_setrnd(2)``.
+
+PowerPC cache builtins
+^^^^^^^^^^^^^^^^^^^^^^
+
+The PowerPC architecture specifies instructions implementing cache operations.
+Clang provides builtins that give direct programmer access to these cache
+instructions.
+
+Currently the following builtins are implemented in clang:
+
+``__builtin_dcbf`` copies the contents of a modified block from the data cache
+to main memory and flushes the copy from the data cache.
+
+**Syntax**:
+
+.. code-block:: c
+
+  void __dcbf(const void* addr); /* Data Cache Block Flush */
+
+**Example of Use**:
+
+.. code-block:: c
+
+  int a = 1;
+  __builtin_dcbf (&a);
 
 Extensions for Static Analysis
 ==============================

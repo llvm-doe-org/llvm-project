@@ -538,6 +538,10 @@ let IntrProperties = [IntrNoMem, IntrSpeculatable] in {
   def int_round : Intrinsic<[llvm_anyfloat_ty], [LLVMMatchType<0>]>;
   def int_canonicalize : Intrinsic<[llvm_anyfloat_ty], [LLVMMatchType<0>],
                                    [IntrNoMem]>;
+
+  def int_lround_i32 : Intrinsic<[llvm_i32_ty], [llvm_anyfloat_ty]>;
+  def int_lround_i64 : Intrinsic<[llvm_i64_ty], [llvm_anyfloat_ty]>;
+  def int_llround    : Intrinsic<[llvm_i64_ty], [llvm_anyfloat_ty]>;
 }
 
 def int_minnum : Intrinsic<[llvm_anyfloat_ty],
@@ -606,6 +610,15 @@ let IntrProperties = [IntrInaccessibleMemOnly] in {
                                                       LLVMMatchType<0>,
                                                       llvm_metadata_ty,
                                                       llvm_metadata_ty ]>;
+
+  def int_experimental_constrained_fptrunc : Intrinsic<[ llvm_anyfloat_ty ],
+                                                       [ llvm_anyfloat_ty,
+                                                         llvm_metadata_ty,
+                                                         llvm_metadata_ty ]>;
+
+  def int_experimental_constrained_fpext : Intrinsic<[ llvm_anyfloat_ty ],
+                                                     [ llvm_anyfloat_ty,
+                                                       llvm_metadata_ty ]>;
 
   // These intrinsics are sensitive to the rounding mode so we need constrained
   // versions of each of them.  When strict rounding and exception control are
@@ -688,9 +701,7 @@ let IntrProperties = [IntrInaccessibleMemOnly] in {
                                                        llvm_metadata_ty,
                                                        llvm_metadata_ty ]>;
 }
-// FIXME: Add intrinsics for fcmp, fptrunc, fpext, fptoui and fptosi.
-// FIXME: Add intrinsics for fabs and copysign?
-
+// FIXME: Add intrinsics for fcmp, fptoui and fptosi.
 
 //===------------------------- Expect Intrinsics --------------------------===//
 //

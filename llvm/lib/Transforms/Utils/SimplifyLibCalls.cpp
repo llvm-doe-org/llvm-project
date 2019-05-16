@@ -16,8 +16,10 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/Triple.h"
+#include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
+#include "llvm/Analysis/ProfileSummaryInfo.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Analysis/ValueTracking.h"
@@ -34,6 +36,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/KnownBits.h"
 #include "llvm/Transforms/Utils/BuildLibCalls.h"
+#include "llvm/Transforms/Utils/SizeOpts.h"
 
 using namespace llvm;
 using namespace PatternMatch;
@@ -101,6 +104,12 @@ static bool isOnlyUsedInEqualityComparison(Value *V, Value *With) {
 static bool callHasFloatingPointArgument(const CallInst *CI) {
   return any_of(CI->operands(), [](const Use &OI) {
     return OI->getType()->isFloatingPointTy();
+  });
+}
+
+static bool callHasFP128Argument(const CallInst *CI) {
+  return any_of(CI->operands(), [](const Use &OI) {
+    return OI->getType()->isFP128Ty();
   });
 }
 
@@ -907,7 +916,9 @@ static Value *optimizeMemCmpConstantSize(CallInst *CI, Value *LHS, Value *RHS,
   return nullptr;
 }
 
-Value *LibCallSimplifier::optimizeMemCmp(CallInst *CI, IRBuilder<> &B) {
+// Most simplifications for memcmp also apply to bcmp.
+Value *LibCallSimplifier::optimizeMemCmpBCmpCommon(CallInst *CI,
+                                                   IRBuilder<> &B) {
   Value *LHS = CI->getArgOperand(0), *RHS = CI->getArgOperand(1);
   Value *Size = CI->getArgOperand(2);
 
@@ -920,14 +931,28 @@ Value *LibCallSimplifier::optimizeMemCmp(CallInst *CI, IRBuilder<> &B) {
                                                 LenC->getZExtValue(), B, DL))
       return Res;
 
+  return nullptr;
+}
+
+Value *LibCallSimplifier::optimizeMemCmp(CallInst *CI, IRBuilder<> &B) {
+  if (Value *V = optimizeMemCmpBCmpCommon(CI, B))
+    return V;
+
   // memcmp(x, y, Len) == 0 -> bcmp(x, y, Len) == 0
   // `bcmp` can be more efficient than memcmp because it only has to know that
   // there is a difference, not where it is.
   if (isOnlyUsedInZeroEqualityComparison(CI) && TLI->has(LibFunc_bcmp)) {
+    Value *LHS = CI->getArgOperand(0);
+    Value *RHS = CI->getArgOperand(1);
+    Value *Size = CI->getArgOperand(2);
     return emitBCmp(LHS, RHS, Size, B, DL, TLI);
   }
 
   return nullptr;
+}
+
+Value *LibCallSimplifier::optimizeBCmp(CallInst *CI, IRBuilder<> &B) {
+  return optimizeMemCmpBCmpCommon(CI, B);
 }
 
 Value *LibCallSimplifier::optimizeMemCpy(CallInst *CI, IRBuilder<> &B) {
@@ -1050,7 +1075,8 @@ static Value *valueHasFloatPrecision(Value *Val) {
 /// Shrink double -> float functions.
 static Value *optimizeDoubleFP(CallInst *CI, IRBuilder<> &B,
                                bool isBinary, bool isPrecise = false) {
-  if (!CI->getType()->isDoubleTy())
+  Function *CalleeFn = CI->getCalledFunction();
+  if (!CI->getType()->isDoubleTy() || !CalleeFn)
     return nullptr;
 
   // If not all the uses of the function are converted to float, then bail out.
@@ -1070,15 +1096,16 @@ static Value *optimizeDoubleFP(CallInst *CI, IRBuilder<> &B,
   if (!V[0] || (isBinary && !V[1]))
     return nullptr;
 
+  StringRef CalleeNm = CalleeFn->getName();
+  AttributeList CalleeAt = CalleeFn->getAttributes();
+  bool CalleeIn = CalleeFn->isIntrinsic();
+
   // If call isn't an intrinsic, check that it isn't within a function with the
   // same name as the float version of this call, otherwise the result is an
   // infinite loop.  For example, from MinGW-w64:
   //
   // float expf(float val) { return (float) exp((double) val); }
-  Function *CalleeFn = CI->getCalledFunction();
-  StringRef CalleeNm = CalleeFn->getName();
-  AttributeList CalleeAt = CalleeFn->getAttributes();
-  if (CalleeFn && !CalleeFn->isIntrinsic()) {
+  if (!CalleeIn) {
     const Function *Fn = CI->getFunction();
     StringRef FnName = Fn->getName();
     if (FnName.back() == 'f' &&
@@ -1093,7 +1120,7 @@ static Value *optimizeDoubleFP(CallInst *CI, IRBuilder<> &B,
 
   // g((double) float) -> (double) gf(float)
   Value *R;
-  if (CalleeFn->isIntrinsic()) {
+  if (CalleeIn) {
     Module *M = CI->getModule();
     Intrinsic::ID IID = CalleeFn->getIntrinsicID();
     Function *Fn = Intrinsic::getDeclaration(M, IID, B.getFloatTy());
@@ -2051,6 +2078,20 @@ Value *LibCallSimplifier::optimizePrintF(CallInst *CI, IRBuilder<> &B) {
     B.Insert(New);
     return New;
   }
+
+  // printf(format, ...) -> __small_printf(format, ...) if no 128-bit floating point
+  // arguments.
+  if (TLI->has(LibFunc_small_printf) && !callHasFP128Argument(CI)) {
+    Module *M = B.GetInsertBlock()->getParent()->getParent();
+    auto SmallPrintFFn =
+        M->getOrInsertFunction(TLI->getName(LibFunc_small_printf),
+                               FT, Callee->getAttributes());
+    CallInst *New = cast<CallInst>(CI->clone());
+    New->setCalledFunction(SmallPrintFFn);
+    B.Insert(New);
+    return New;
+  }
+
   return nullptr;
 }
 
@@ -2131,6 +2172,20 @@ Value *LibCallSimplifier::optimizeSPrintF(CallInst *CI, IRBuilder<> &B) {
     B.Insert(New);
     return New;
   }
+
+  // sprintf(str, format, ...) -> __small_sprintf(str, format, ...) if no 128-bit
+  // floating point arguments.
+  if (TLI->has(LibFunc_small_sprintf) && !callHasFP128Argument(CI)) {
+    Module *M = B.GetInsertBlock()->getParent()->getParent();
+    auto SmallSPrintFFn =
+        M->getOrInsertFunction(TLI->getName(LibFunc_small_sprintf),
+                               FT, Callee->getAttributes());
+    CallInst *New = cast<CallInst>(CI->clone());
+    New->setCalledFunction(SmallSPrintFFn);
+    B.Insert(New);
+    return New;
+  }
+
   return nullptr;
 }
 
@@ -2288,6 +2343,20 @@ Value *LibCallSimplifier::optimizeFPrintF(CallInst *CI, IRBuilder<> &B) {
     B.Insert(New);
     return New;
   }
+
+  // fprintf(stream, format, ...) -> __small_fprintf(stream, format, ...) if no
+  // 128-bit floating point arguments.
+  if (TLI->has(LibFunc_small_fprintf) && !callHasFP128Argument(CI)) {
+    Module *M = B.GetInsertBlock()->getParent()->getParent();
+    auto SmallFPrintFFn =
+        M->getOrInsertFunction(TLI->getName(LibFunc_small_fprintf),
+                               FT, Callee->getAttributes());
+    CallInst *New = cast<CallInst>(CI->clone());
+    New->setCalledFunction(SmallFPrintFFn);
+    B.Insert(New);
+    return New;
+  }
+
   return nullptr;
 }
 
@@ -2327,7 +2396,9 @@ Value *LibCallSimplifier::optimizeFPuts(CallInst *CI, IRBuilder<> &B) {
 
   // Don't rewrite fputs to fwrite when optimising for size because fwrite
   // requires more arguments and thus extra MOVs are required.
-  if (CI->getFunction()->optForSize())
+  bool OptForSize = CI->getFunction()->hasOptSize() ||
+                    llvm::shouldOptimizeForSize(CI->getParent(), PSI, BFI);
+  if (OptForSize)
     return nullptr;
 
   // Check if has any use
@@ -2457,6 +2528,8 @@ Value *LibCallSimplifier::optimizeStringMemoryLibCall(CallInst *CI,
       return optimizeStrStr(CI, Builder);
     case LibFunc_memchr:
       return optimizeMemChr(CI, Builder);
+    case LibFunc_bcmp:
+      return optimizeBCmp(CI, Builder);
     case LibFunc_memcmp:
       return optimizeMemCmp(CI, Builder);
     case LibFunc_memcpy:
@@ -2702,9 +2775,10 @@ Value *LibCallSimplifier::optimizeCall(CallInst *CI) {
 LibCallSimplifier::LibCallSimplifier(
     const DataLayout &DL, const TargetLibraryInfo *TLI,
     OptimizationRemarkEmitter &ORE,
+    BlockFrequencyInfo *BFI, ProfileSummaryInfo *PSI,
     function_ref<void(Instruction *, Value *)> Replacer,
     function_ref<void(Instruction *)> Eraser)
-    : FortifiedSimplifier(TLI), DL(DL), TLI(TLI), ORE(ORE),
+    : FortifiedSimplifier(TLI), DL(DL), TLI(TLI), ORE(ORE), BFI(BFI), PSI(PSI),
       UnsafeFPShrink(false), Replacer(Replacer), Eraser(Eraser) {}
 
 void LibCallSimplifier::replaceAllUsesWith(Instruction *I, Value *With) {

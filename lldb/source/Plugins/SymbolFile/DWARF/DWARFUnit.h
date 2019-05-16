@@ -31,7 +31,7 @@ enum DWARFProducer {
   eProcucerOther
 };
 
-class DWARFUnit {
+class DWARFUnit : public lldb_private::UserID {
   using die_iterator_range =
       llvm::iterator_range<DWARFDebugInfoEntry::collection::iterator>;
 
@@ -58,7 +58,6 @@ public:
                            uint32_t depth = UINT32_MAX) const;
   bool Verify(lldb_private::Stream *s) const;
   virtual void Dump(lldb_private::Stream *s) const = 0;
-  //------------------------------------------------------------------
   /// Get the data that contains the DIE information for this unit.
   ///
   /// This will return the correct bytes that contain the data for
@@ -67,36 +66,30 @@ public:
   ///
   /// \return
   ///   The correct data for the DIE information in this unit.
-  //------------------------------------------------------------------
   virtual const lldb_private::DWARFDataExtractor &GetData() const = 0;
-  //------------------------------------------------------------------
   /// Get the size in bytes of the compile unit header.
   ///
   /// \return
   ///     Byte size of the compile unit header
-  //------------------------------------------------------------------
   virtual uint32_t GetHeaderByteSize() const = 0;
   // Offset of the initial length field.
   dw_offset_t GetOffset() const { return m_offset; }
-  lldb::user_id_t GetID() const;
-  //------------------------------------------------------------------
   /// Get the size in bytes of the length field in the header.
   ///
   /// In DWARF32 this is just 4 bytes
   ///
   /// \return
   ///     Byte size of the compile unit header length field
-  //------------------------------------------------------------------
   size_t GetLengthByteSize() const { return 4; }
 
   bool ContainsDIEOffset(dw_offset_t die_offset) const {
     return die_offset >= GetFirstDIEOffset() &&
-           die_offset < GetNextCompileUnitOffset();
+           die_offset < GetNextUnitOffset();
   }
   dw_offset_t GetFirstDIEOffset() const {
     return m_offset + GetHeaderByteSize();
   }
-  dw_offset_t GetNextCompileUnitOffset() const;
+  dw_offset_t GetNextUnitOffset() const;
   // Size of the CU data (without initial length and without header).
   size_t GetDebugInfoSize() const;
   // Size of the CU data incl. header but without initial length.
@@ -174,8 +167,10 @@ public:
     return die_iterator_range(m_die_array.begin(), m_die_array.end());
   }
 
+  virtual DIERef::Section GetDebugSection() const = 0;
+
 protected:
-  DWARFUnit(SymbolFileDWARF *dwarf);
+  DWARFUnit(SymbolFileDWARF *dwarf, lldb::user_id_t uid);
 
   SymbolFileDWARF *m_dwarf = nullptr;
   std::unique_ptr<SymbolFileDWARFDwo> m_dwo_symbol_file;

@@ -38,7 +38,7 @@ public:
 
   RelExpr adjustRelaxExpr(RelType Type, const uint8_t *Data,
                           RelExpr Expr) const override;
-  void relaxGot(uint8_t *Loc, uint64_t Val) const override;
+  void relaxGot(uint8_t *Loc, RelType Type, uint64_t Val) const override;
   void relaxTlsGdToIe(uint8_t *Loc, RelType Type, uint64_t Val) const override;
   void relaxTlsGdToLe(uint8_t *Loc, RelType Type, uint64_t Val) const override;
   void relaxTlsIeToLe(uint8_t *Loc, RelType Type, uint64_t Val) const override;
@@ -82,9 +82,10 @@ RelExpr X86_64::getRelExpr(RelType Type, const Symbol &S,
   case R_X86_64_32:
   case R_X86_64_32S:
   case R_X86_64_64:
+    return R_ABS;
   case R_X86_64_DTPOFF32:
   case R_X86_64_DTPOFF64:
-    return R_ABS;
+    return R_DTPREL;
   case R_X86_64_TPOFF32:
     return R_TLS;
   case R_X86_64_TLSLD:
@@ -452,7 +453,7 @@ static void relaxGotNoPic(uint8_t *Loc, uint64_t Val, uint8_t Op,
   write32le(Loc, Val);
 }
 
-void X86_64::relaxGot(uint8_t *Loc, uint64_t Val) const {
+void X86_64::relaxGot(uint8_t *Loc, RelType Type, uint64_t Val) const {
   const uint8_t Op = Loc[-2];
   const uint8_t ModRm = Loc[-1];
 

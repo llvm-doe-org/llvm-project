@@ -13,6 +13,7 @@
 #ifndef LLVM_OBJECT_BINARY_H
 #define LLVM_OBJECT_BINARY_H
 
+#include "llvm-c/Types.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Object/Error.h"
 #include "llvm/Support/Error.h"
@@ -50,6 +51,7 @@ protected:
     // Object and children.
     ID_StartObjects,
     ID_COFF,
+    ID_XCOFF32, // AIX XCOFF 32-bit
 
     ID_ELF32L, // ELF 32-bit, little endian
     ID_ELF32B, // ELF 32-bit, big endian
@@ -119,6 +121,8 @@ public:
     return TypeID == ID_COFF;
   }
 
+  bool isXCOFF() const { return TypeID == ID_XCOFF32; }
+
   bool isWasm() const { return TypeID == ID_Wasm; }
 
   bool isCOFFImportFile() const {
@@ -158,6 +162,9 @@ public:
     return std::error_code();
   }
 };
+
+// Create wrappers for C Binding types (see CBindingWrapping.h).
+DEFINE_ISA_CONVERSION_FUNCTIONS(Binary, LLVMBinaryRef)
 
 /// Create a Binary from Source, autodetecting the file type.
 ///

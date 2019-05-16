@@ -549,17 +549,12 @@ ABISysV_mips64::GetRegisterInfoArray(uint32_t &count) {
 
 size_t ABISysV_mips64::GetRedZoneSize() const { return 0; }
 
-//------------------------------------------------------------------
 // Static Functions
-//------------------------------------------------------------------
 
 ABISP
 ABISysV_mips64::CreateInstance(lldb::ProcessSP process_sp, const ArchSpec &arch) {
-  const llvm::Triple::ArchType arch_type = arch.GetTriple().getArch();
-  if ((arch_type == llvm::Triple::mips64) ||
-      (arch_type == llvm::Triple::mips64el)) {
+  if (arch.GetTriple().isMIPS64())
     return ABISP(new ABISysV_mips64(process_sp));
-  }
   return ABISP();
 }
 
@@ -1213,9 +1208,7 @@ lldb_private::ConstString ABISysV_mips64::GetPluginNameStatic() {
   return g_name;
 }
 
-//------------------------------------------------------------------
 // PluginInterface protocol
-//------------------------------------------------------------------
 
 lldb_private::ConstString ABISysV_mips64::GetPluginName() {
   return GetPluginNameStatic();

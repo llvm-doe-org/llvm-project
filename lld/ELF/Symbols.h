@@ -13,6 +13,7 @@
 #ifndef LLD_ELF_SYMBOLS_H
 #define LLD_ELF_SYMBOLS_H
 
+#include "InputFiles.h"
 #include "InputSection.h"
 #include "lld/Common/LLVM.h"
 #include "lld/Common/Strings.h"
@@ -29,8 +30,6 @@ std::string toString(const elf::Symbol &);
 std::string toString(const elf::InputFile *);
 
 namespace elf {
-
-template <class ELFT> class SharedFile;
 
 // This is a StringRef-like container that doesn't run strlen().
 //
@@ -52,6 +51,7 @@ public:
   enum Kind {
     PlaceholderKind,
     DefinedKind,
+    CommonKind,
     SharedKind,
     UndefinedKind,
     LazyArchiveKind,
@@ -125,8 +125,11 @@ public:
   bool isWeak() const { return Binding == llvm::ELF::STB_WEAK; }
 
   bool isUndefined() const { return SymbolKind == UndefinedKind; }
+  bool isCommon() const { return SymbolKind == CommonKind; }
   bool isDefined() const { return SymbolKind == DefinedKind; }
   bool isShared() const { return SymbolKind == SharedKind; }
+  bool isPlaceholder() const { return SymbolKind == PlaceholderKind; }
+
   bool isLocal() const { return Binding == llvm::ELF::STB_LOCAL; }
 
   bool isLazy() const {
@@ -173,10 +176,13 @@ protected:
   Symbol(Kind K, InputFile *File, StringRefZ Name, uint8_t Binding,
          uint8_t StOther, uint8_t Type)
       : File(File), NameData(Name.Data), NameSize(Name.Size), Binding(Binding),
-        Type(Type), StOther(StOther), SymbolKind(K), NeedsPltAddr(false),
-        IsInIplt(false), GotInIgot(false), IsPreemptible(false),
-        Used(!Config->GcSections), NeedsTocRestore(false),
-        ScriptDefined(false) {}
+        Type(Type), StOther(StOther), SymbolKind(K), Visibility(StOther & 3),
+        IsUsedInRegularObj(!File || File->kind() == InputFile::ObjKind),
+        ExportDynamic(K != SharedKind &&
+                      (Config->Shared || Config->ExportDynamic)),
+        CanInline(false), Traced(false), NeedsPltAddr(false), IsInIplt(false),
+        GotInIgot(false), IsPreemptible(false), Used(!Config->GcSections),
+        NeedsTocRestore(false), ScriptDefined(false) {}
 
 public:
   // True the symbol should point to its PLT entry.
@@ -227,6 +233,40 @@ public:
   SectionBase *Section;
 };
 
+// Represents a common symbol.
+//
+// On Unix, it is traditionally allowed to write variable definitions
+// without initialization expressions (such as "int foo;") to header
+// files. Such definition is called "tentative definition".
+//
+// Using tentative definition is usually considered a bad practice
+// because you should write only declarations (such as "extern int
+// foo;") to header files. Nevertheless, the linker and the compiler
+// have to do something to support bad code by allowing duplicate
+// definitions for this particular case.
+//
+// Common symbols represent variable definitions without initializations.
+// The compiler creates common symbols when it sees varaible definitions
+// without initialization (you can suppress this behavior and let the
+// compiler create a regular defined symbol by -fno-common).
+//
+// The linker allows common symbols to be replaced by regular defined
+// symbols. If there are remaining common symbols after name resolution is
+// complete, they are converted to regular defined symbols in a .bss
+// section. (Therefore, the later passes don't see any CommonSymbols.)
+class CommonSymbol : public Symbol {
+public:
+  CommonSymbol(InputFile *File, StringRefZ Name, uint8_t Binding,
+               uint8_t StOther, uint8_t Type, uint64_t Alignment, uint64_t Size)
+      : Symbol(CommonKind, File, Name, Binding, StOther, Type),
+        Alignment(Alignment), Size(Size) {}
+
+  static bool classof(const Symbol *S) { return S->isCommon(); }
+
+  uint32_t Alignment;
+  uint64_t Size;
+};
+
 class Undefined : public Symbol {
 public:
   Undefined(InputFile *File, StringRefZ Name, uint8_t Binding, uint8_t StOther,
@@ -266,9 +306,7 @@ public:
       this->Type = llvm::ELF::STT_FUNC;
   }
 
-  template <class ELFT> SharedFile<ELFT> &getFile() const {
-    return *cast<SharedFile<ELFT>>(File);
-  }
+  SharedFile &getFile() const { return *cast<SharedFile>(File); }
 
   uint32_t Alignment;
 
@@ -292,15 +330,14 @@ public:
 // symbol.
 class LazyArchive : public Symbol {
 public:
-  LazyArchive(InputFile &File, uint8_t Type,
-              const llvm::object::Archive::Symbol S)
+  LazyArchive(InputFile &File, const llvm::object::Archive::Symbol S)
       : Symbol(LazyArchiveKind, &File, S.getName(), llvm::ELF::STB_GLOBAL,
-               llvm::ELF::STV_DEFAULT, Type),
+               llvm::ELF::STV_DEFAULT, llvm::ELF::STT_NOTYPE),
         Sym(S) {}
 
   static bool classof(const Symbol *S) { return S->kind() == LazyArchiveKind; }
 
-  InputFile *fetch();
+  InputFile *fetch() const;
   MemoryBufferRef getMemberBuffer();
 
 private:
@@ -311,11 +348,13 @@ private:
 // --start-lib and --end-lib options.
 class LazyObject : public Symbol {
 public:
-  LazyObject(InputFile &File, uint8_t Type, StringRef Name)
+  LazyObject(InputFile &File, StringRef Name)
       : Symbol(LazyObjectKind, &File, Name, llvm::ELF::STB_GLOBAL,
-               llvm::ELF::STV_DEFAULT, Type) {}
+               llvm::ELF::STV_DEFAULT, llvm::ELF::STT_NOTYPE) {}
 
   static bool classof(const Symbol *S) { return S->kind() == LazyObjectKind; }
+
+  InputFile *fetch() const;
 };
 
 // Some linker-generated symbols need to be created as
@@ -364,8 +403,7 @@ union SymbolUnion {
 
 void printTraceSymbol(Symbol *Sym);
 
-template <typename T, typename... ArgT>
-void replaceSymbol(Symbol *S, ArgT &&... Arg) {
+template <typename T> void replaceSymbol(Symbol *Sym, const T *New) {
   using llvm::ELF::STT_TLS;
 
   static_assert(std::is_trivially_destructible<T>(),
@@ -376,34 +414,35 @@ void replaceSymbol(Symbol *S, ArgT &&... Arg) {
   assert(static_cast<Symbol *>(static_cast<T *>(nullptr)) == nullptr &&
          "Not a Symbol");
 
-  Symbol Sym = *S;
-
-  new (S) T(std::forward<ArgT>(Arg)...);
-
-  S->VersionId = Sym.VersionId;
-  S->Visibility = Sym.Visibility;
-  S->IsUsedInRegularObj = Sym.IsUsedInRegularObj;
-  S->ExportDynamic = Sym.ExportDynamic;
-  S->CanInline = Sym.CanInline;
-  S->Traced = Sym.Traced;
-  S->ScriptDefined = Sym.ScriptDefined;
-
   // Symbols representing thread-local variables must be referenced by
   // TLS-aware relocations, and non-TLS symbols must be reference by
   // non-TLS relocations, so there's a clear distinction between TLS
   // and non-TLS symbols. It is an error if the same symbol is defined
   // as a TLS symbol in one file and as a non-TLS symbol in other file.
-  bool TlsMismatch = (Sym.Type == STT_TLS && S->Type != STT_TLS) ||
-                     (Sym.Type != STT_TLS && S->Type == STT_TLS);
+  if (Sym->SymbolKind != Symbol::PlaceholderKind && !Sym->isLazy() &&
+      !New->isLazy()) {
+    bool TlsMismatch = (Sym->Type == STT_TLS && New->Type != STT_TLS) ||
+                       (Sym->Type != STT_TLS && New->Type == STT_TLS);
+    if (TlsMismatch)
+      error("TLS attribute mismatch: " + toString(*Sym) + "\n>>> defined in " +
+            toString(New->File) + "\n>>> defined in " + toString(Sym->File));
+  }
 
-  if (Sym.SymbolKind != Symbol::PlaceholderKind && TlsMismatch && !Sym.isLazy())
-    error("TLS attribute mismatch: " + toString(Sym) + "\n>>> defined in " +
-          toString(Sym.File) + "\n>>> defined in " + toString(S->File));
+  Symbol Old = *Sym;
+  memcpy(Sym, New, sizeof(T));
+
+  Sym->VersionId = Old.VersionId;
+  Sym->Visibility = Old.Visibility;
+  Sym->IsUsedInRegularObj = Old.IsUsedInRegularObj;
+  Sym->ExportDynamic = Old.ExportDynamic;
+  Sym->CanInline = Old.CanInline;
+  Sym->Traced = Old.Traced;
+  Sym->ScriptDefined = Old.ScriptDefined;
 
   // Print out a log message if --trace-symbol was specified.
   // This is for debugging.
-  if (S->Traced)
-    printTraceSymbol(S);
+  if (Sym->Traced)
+    printTraceSymbol(Sym);
 }
 
 void maybeWarnUnorderableSymbol(const Symbol *Sym);

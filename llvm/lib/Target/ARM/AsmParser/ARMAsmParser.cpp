@@ -7,12 +7,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "ARMFeatures.h"
-#include "InstPrinter/ARMInstPrinter.h"
 #include "Utils/ARMBaseInfo.h"
 #include "MCTargetDesc/ARMAddressingModes.h"
 #include "MCTargetDesc/ARMBaseInfo.h"
+#include "MCTargetDesc/ARMInstPrinter.h"
 #include "MCTargetDesc/ARMMCExpr.h"
 #include "MCTargetDesc/ARMMCTargetDesc.h"
+#include "TargetInfo/ARMTargetInfo.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/None.h"
@@ -163,6 +164,7 @@ public:
     FPReg = ARM::SP;
   }
 };
+
 
 class ARMAsmParser : public MCTargetAsmParser {
   const MCRegisterInfo *MRI;
@@ -6789,6 +6791,20 @@ bool ARMAsmParser::validateInstruction(MCInst &Inst,
       return Error(Operands[4]->getStartLoc(),
                    "source register must be the same as destination");
     }
+    break;
+
+  case ARM::t2ADDri:
+  case ARM::t2ADDri12:
+  case ARM::t2ADDrr:
+  case ARM::t2ADDrs:
+  case ARM::t2SUBri:
+  case ARM::t2SUBri12:
+  case ARM::t2SUBrr:
+  case ARM::t2SUBrs:
+    if (Inst.getOperand(0).getReg() == ARM::SP &&
+        Inst.getOperand(1).getReg() != ARM::SP)
+      return Error(Operands[4]->getStartLoc(),
+                   "source register must be sp if destination is sp");
     break;
 
   // Final range checking for Thumb unconditional branch instructions.

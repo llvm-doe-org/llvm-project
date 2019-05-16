@@ -38,6 +38,7 @@ Clang-Tidy Checks
    bugprone-argument-comment
    bugprone-assert-side-effect
    bugprone-bool-pointer-implicit-conversion
+   bugprone-branch-clone
    bugprone-copy-constructor-init
    bugprone-dangling-handle
    bugprone-exception-escape
@@ -71,6 +72,7 @@ Clang-Tidy Checks
    bugprone-too-small-loop-variable
    bugprone-undefined-memory-manipulation
    bugprone-undelegated-constructor
+   bugprone-unhandled-self-assignment
    bugprone-unused-raii
    bugprone-unused-return-value
    bugprone-use-after-move
@@ -178,6 +180,7 @@ Clang-Tidy Checks
    llvm-header-guard
    llvm-include-order
    llvm-namespace-comment
+   llvm-prefer-isa-or-dyn-cast-in-conditionals
    llvm-twine-local
    misc-definitions-in-headers
    misc-misplaced-const
@@ -218,6 +221,7 @@ Clang-Tidy Checks
    modernize-use-noexcept
    modernize-use-nullptr
    modernize-use-override
+   modernize-use-trailing-return-type
    modernize-use-transparent-functors
    modernize-use-uncaught-exceptions
    modernize-use-using
@@ -227,6 +231,7 @@ Clang-Tidy Checks
    objc-avoid-spinlock
    objc-forbidden-subclassing
    objc-property-declaration
+   objc-super-self
    openmp-exception-escape
    openmp-use-default-none
    performance-faster-string-find

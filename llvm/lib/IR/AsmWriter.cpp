@@ -2001,6 +2001,19 @@ static void writeDINamespace(raw_ostream &Out, const DINamespace *N,
   Out << ")";
 }
 
+static void writeDICommonBlock(raw_ostream &Out, const DICommonBlock *N,
+                               TypePrinting *TypePrinter, SlotTracker *Machine,
+                               const Module *Context) {
+  Out << "!DICommonBlock(";
+  MDFieldPrinter Printer(Out, TypePrinter, Machine, Context);
+  Printer.printMetadata("scope", N->getRawScope(), false);
+  Printer.printMetadata("declaration", N->getRawDecl(), false);
+  Printer.printString("name", N->getName());
+  Printer.printMetadata("file", N->getRawFile());
+  Printer.printInt("line", N->getLineNo());
+  Out << ")";
+}
+
 static void writeDIMacro(raw_ostream &Out, const DIMacro *N,
                          TypePrinting *TypePrinter, SlotTracker *Machine,
                          const Module *Context) {
@@ -3028,6 +3041,7 @@ void AssemblyWriter::printSummary(const GlobalValueSummary &Summary) {
   Out << ", notEligibleToImport: " << GVFlags.NotEligibleToImport;
   Out << ", live: " << GVFlags.Live;
   Out << ", dsoLocal: " << GVFlags.DSOLocal;
+  Out << ", canAutoHide: " << GVFlags.CanAutoHide;
   Out << ")";
 
   if (Summary.getSummaryKind() == GlobalValueSummary::AliasKind)

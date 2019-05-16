@@ -81,16 +81,15 @@ template <class RelTy>
 Optional<RelocAddrEntry>
 LLDDwarfObj<ELFT>::findAux(const InputSectionBase &Sec, uint64_t Pos,
                            ArrayRef<RelTy> Rels) const {
-  auto It = std::lower_bound(
-      Rels.begin(), Rels.end(), Pos,
-      [](const RelTy &A, uint64_t B) { return A.r_offset < B; });
+  auto It =
+      llvm::bsearch(Rels, [=](const RelTy &A) { return Pos <= A.r_offset; });
   if (It == Rels.end() || It->r_offset != Pos)
     return None;
   const RelTy &Rel = *It;
 
   const ObjFile<ELFT> *File = Sec.getFile<ELFT>();
   uint32_t SymIndex = Rel.getSymbol(Config->IsMips64EL);
-  const typename ELFT::Sym &Sym = File->getELFSyms()[SymIndex];
+  const typename ELFT::Sym &Sym = File->template getELFSyms<ELFT>()[SymIndex];
   uint32_t SecIndex = File->getSectionIndex(Sym);
 
   // Broken debug info can point to a non-Defined symbol.

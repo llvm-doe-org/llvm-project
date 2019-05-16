@@ -24,7 +24,7 @@ DIERef DWARFBaseDIE::GetDIERef() const {
   dw_offset_t cu_offset = m_cu->GetOffset();
   if (m_cu->GetBaseObjOffset() != DW_INVALID_OFFSET)
     cu_offset = m_cu->GetBaseObjOffset();
-  return DIERef(cu_offset, m_die->GetOffset());
+  return DIERef(m_cu->GetDebugSection(), cu_offset, m_die->GetOffset());
 }
 
 dw_tag_t DWARFBaseDIE::Tag() const {
@@ -56,15 +56,6 @@ uint64_t DWARFBaseDIE::GetAttributeValueAsUnsigned(const dw_attr_t attr,
     return fail_value;
 }
 
-uint64_t DWARFBaseDIE::GetAttributeValueAsReference(const dw_attr_t attr,
-                                                uint64_t fail_value) const {
-  if (IsValid())
-    return m_die->GetAttributeValueAsReference(GetDWARF(), GetCU(), attr,
-                                               fail_value);
-  else
-    return fail_value;
-}
-
 uint64_t DWARFBaseDIE::GetAttributeValueAsAddress(const dw_attr_t attr,
                                               uint64_t fail_value) const {
   if (IsValid())
@@ -75,7 +66,9 @@ uint64_t DWARFBaseDIE::GetAttributeValueAsAddress(const dw_attr_t attr,
 }
 
 lldb::user_id_t DWARFBaseDIE::GetID() const {
-  return GetDIERef().GetUID(GetDWARF());
+  if (IsValid())
+    return GetDWARF()->GetUID(*this);
+  return LLDB_INVALID_UID;
 }
 
 const char *DWARFBaseDIE::GetName() const {

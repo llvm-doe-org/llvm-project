@@ -1,6 +1,6 @@
 # RUN: yaml2obj %s > %t
 # RUN: llvm-objcopy %t %t2
-# RUN: llvm-readobj -t %t2 | FileCheck %s
+# RUN: llvm-readobj --symbols %t2 | FileCheck %s
 
 ## Check that all values of the null symbol are zeroes.
 
@@ -37,11 +37,10 @@ Sections:
     Type:  SHT_PROGBITS
     Flags: [ SHF_ALLOC, SHF_EXECINSTR ]
 Symbols:
-  Local:
-    - Name:    ""
-      Type:    STT_SECTION
-      Section: .text
-  Global:
-  # We need to have a named symbol, otherwise the original
-  # issue that was fixed is not reproduced by this test.
-    - Name: foo
+  - Name:    ""
+    Type:    STT_SECTION
+    Section: .text
+# We need to have a named symbol, otherwise the original
+# issue that was fixed is not reproduced by this test.
+  - Name:    foo
+    Binding: STB_GLOBAL

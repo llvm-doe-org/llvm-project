@@ -30,12 +30,12 @@ if (WIN32)
   add_definitions(-D_ENABLE_EXTENDED_ALIGNED_STORAGE)
 endif()
 
-add_subdirectory(docs)
 if (NOT LLDB_DISABLE_PYTHON)
   add_subdirectory(scripts)
 endif ()
 add_subdirectory(source)
 add_subdirectory(tools)
+add_subdirectory(docs)
 
 option(LLDB_INCLUDE_TESTS "Generate build targets for the LLDB unit tests." ${LLVM_INCLUDE_TESTS})
 option(LLDB_TEST_USE_CUSTOM_C_COMPILER "Use the C compiler provided via LLDB_TEST_C_COMPILER for building test inferiors (instead of the just-built compiler). Defaults to OFF." OFF)
@@ -79,6 +79,9 @@ if(LLDB_INCLUDE_TESTS)
     list(APPEND LLDB_TEST_DEPS darwin-debug)
   endif()
 
+  # lldb-test is an hard dependency for the testsuite.
+  list(APPEND LLDB_TEST_DEPS lldb-test)
+
   if(TARGET lldb-server)
     list(APPEND LLDB_TEST_DEPS lldb-server)
   endif()
@@ -121,6 +124,24 @@ if(LLDB_INCLUDE_TESTS)
           message(WARNING "LLDB test suite requires libc++ in llvm/projects/libcxx or an existing build symlinked to ${cxx_dir}")
         endif()
       else()
+        # We require libcxx for the test suite, so if we aren't building it,
+        # try to provide a helpful error about how to resolve the situation.
+        if(NOT TARGET cxx)
+          if(LLVM_ENABLE_PROJECTS STREQUAL "")
+            # If `LLVM_ENABLE_PROJECTS` is not being used (implying that we are
+            # using the old layout), suggest checking it out.
+            message(FATAL_ERROR
+              "LLDB test suite requires libc++, but it is currently disabled. "
+              "Please checkout `libcxx` in `llvm/projects` or disable tests "
+              "via `LLDB_INCLUDE_TESTS=OFF`.")
+          else()
+            # If `LLVM_ENABLE_PROJECTS` is being used, suggest adding it.
+            message(FATAL_ERROR
+              "LLDB test suite requires libc++, but it is currently disabled. "
+              "Please add `libcxx` to `LLVM_ENABLE_PROJECTS` or disable tests "
+              "via `LLDB_INCLUDE_TESTS=OFF`.")
+          endif()
+        endif()
         list(APPEND LLDB_TEST_DEPS cxx)
       endif()
     endif()
@@ -130,11 +151,13 @@ if(LLDB_INCLUDE_TESTS)
     list(APPEND LLDB_TEST_DEPS dsymutil)
   endif()
 
-  add_custom_target(lldb-test-deps DEPENDS ${LLDB_TEST_DEPS})
+  add_custom_target(lldb-test-deps)
+  add_dependencies(lldb-test-deps ${LLDB_TEST_DEPS})
 
   add_subdirectory(test)
   add_subdirectory(unittests)
   add_subdirectory(lit)
+  add_subdirectory(utils/lit-cpuid)
   add_subdirectory(utils/lldb-dotest)
 endif()
 

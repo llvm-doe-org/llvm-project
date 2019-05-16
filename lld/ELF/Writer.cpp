@@ -24,6 +24,9 @@
 #include "lld/Common/Threads.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/Support/RandomNumberGenerator.h"
+#include "llvm/Support/SHA1.h"
+#include "llvm/Support/xxhash.h"
 #include <climits>
 
 using namespace llvm;
@@ -52,7 +55,7 @@ private:
   void forEachRelSec(llvm::function_ref<void(InputSectionBase &)> Fn);
   void sortSections();
   void resolveShfLinkOrder();
-  void maybeAddThunks();
+  void finalizeAddressDependentContent();
   void sortInputSections();
   void finalizeSections();
   void checkExecuteOnly();
@@ -176,14 +179,18 @@ static Defined *addOptionalRegular(StringRef Name, SectionBase *Sec,
   Symbol *S = Symtab->find(Name);
   if (!S || S->isDefined())
     return nullptr;
-  return Symtab->addDefined(Name, StOther, STT_NOTYPE, Val,
-                            /*Size=*/0, Binding, Sec,
-                            /*File=*/nullptr);
+
+  return cast<Defined>(Symtab->addDefined(
+      Defined{/*File=*/nullptr, Name, Binding, StOther, STT_NOTYPE, Val,
+              /*Size=*/0, Sec}));
 }
 
 static Defined *addAbsolute(StringRef Name) {
-  return Symtab->addDefined(Name, STV_HIDDEN, STT_NOTYPE, 0, 0, STB_GLOBAL,
-                            nullptr, nullptr);
+  Defined New(nullptr, Name, STB_GLOBAL, STV_HIDDEN, STT_NOTYPE, 0, 0, nullptr);
+  Symbol *Sym = Symtab->addDefined(New);
+  if (!Sym->isDefined())
+    error("duplicate symbol: " + toString(*Sym));
+  return cast<Defined>(Sym);
 }
 
 // The linker is expected to define some symbols depending on
@@ -232,10 +239,10 @@ void elf::addReservedSymbols() {
     if (Config->EMachine == EM_PPC || Config->EMachine == EM_PPC64)
       GotOff = 0x8000;
 
-    ElfSym::GlobalOffsetTable =
-        Symtab->addDefined(GotSymName, STV_HIDDEN, STT_NOTYPE, GotOff,
-                           /*Size=*/0, STB_GLOBAL, Out::ElfHeader,
-                           /*File=*/nullptr);
+    Symtab->addDefined(Defined{/*File=*/nullptr, GotSymName, STB_GLOBAL,
+                               STV_HIDDEN, STT_NOTYPE, GotOff, /*Size=*/0,
+                               Out::ElfHeader});
+    ElfSym::GlobalOffsetTable = cast<Defined>(S);
   }
 
   // __ehdr_start is the location of ELF file headers. Note that we define
@@ -560,12 +567,16 @@ template <class ELFT> void Writer<ELFT>::run() {
     error("failed to write to the output file: " + toString(std::move(E)));
 }
 
-static bool shouldKeepInSymtab(SectionBase *Sec, StringRef SymName,
-                               const Symbol &B) {
-  if (B.isSection())
+static bool shouldKeepInSymtab(const Defined &Sym) {
+  if (Sym.isSection())
     return false;
 
   if (Config->Discard == DiscardPolicy::None)
+    return true;
+
+  // If -emit-reloc is given, all symbols including local ones need to be
+  // copied because they may be referenced by relocations.
+  if (Config->EmitRelocs)
     return true;
 
   // In ELF assembly .L symbols are normally discarded by the assembler.
@@ -573,12 +584,15 @@ static bool shouldKeepInSymtab(SectionBase *Sec, StringRef SymName,
   // * --discard-locals is used.
   // * The symbol is in a SHF_MERGE section, which is normally the reason for
   //   the assembler keeping the .L symbol.
-  if (!SymName.startswith(".L") && !SymName.empty())
+  StringRef Name = Sym.getName();
+  bool IsLocal = Name.startswith(".L") || Name.empty();
+  if (!IsLocal)
     return true;
 
   if (Config->Discard == DiscardPolicy::Locals)
     return false;
 
+  SectionBase *Sec = Sym.Section;
   return !Sec || !(Sec->Flags & SHF_MERGE);
 }
 
@@ -623,9 +637,7 @@ template <class ELFT> void Writer<ELFT>::copyLocalSymbols() {
         continue;
       if (!includeInSymtab(*B))
         continue;
-
-      SectionBase *Sec = DR->Section;
-      if (!shouldKeepInSymtab(Sec, B->getName(), *B))
+      if (!shouldKeepInSymtab(*DR))
         continue;
       In.SymTab->addSymbol(B);
     }
@@ -1042,9 +1054,8 @@ static int getRankProximityAux(OutputSection *A, OutputSection *B) {
 }
 
 static int getRankProximity(OutputSection *A, BaseCommand *B) {
-  if (auto *Sec = dyn_cast<OutputSection>(B))
-    return getRankProximityAux(A, Sec);
-  return -1;
+  auto *Sec = dyn_cast<OutputSection>(B);
+  return (Sec && Sec->Live) ? getRankProximityAux(A, Sec) : -1;
 }
 
 // When placing orphan sections, we want to place them after symbol assignments
@@ -1086,16 +1097,19 @@ findOrphanPos(std::vector<BaseCommand *>::iterator B,
   int Proximity = getRankProximity(Sec, *I);
   for (; I != E; ++I) {
     auto *CurSec = dyn_cast<OutputSection>(*I);
-    if (!CurSec)
+    if (!CurSec || !CurSec->Live)
       continue;
     if (getRankProximity(Sec, CurSec) != Proximity ||
         Sec->SortRank < CurSec->SortRank)
       break;
   }
 
-  auto IsOutputSec = [](BaseCommand *Cmd) { return isa<OutputSection>(Cmd); };
+  auto IsLiveOutputSec = [](BaseCommand *Cmd) {
+    auto *OS = dyn_cast<OutputSection>(Cmd);
+    return OS && OS->Live;
+  };
   auto J = std::find_if(llvm::make_reverse_iterator(I),
-                        llvm::make_reverse_iterator(B), IsOutputSec);
+                        llvm::make_reverse_iterator(B), IsLiveOutputSec);
   I = J.base();
 
   // As a special case, if the orphan section is the last section, put
@@ -1103,7 +1117,7 @@ findOrphanPos(std::vector<BaseCommand *>::iterator B,
   // This matches bfd's behavior and is convenient when the linker script fully
   // specifies the start of the file, but doesn't care about the end (the non
   // alloc sections for example).
-  auto NextSec = std::find_if(I, E, IsOutputSec);
+  auto NextSec = std::find_if(I, E, IsLiveOutputSec);
   if (NextSec == E)
     return E;
 
@@ -1272,11 +1286,11 @@ static void sortSection(OutputSection *Sec,
       return;
     assert(Sec->SectionCommands.size() == 1);
     auto *ISD = cast<InputSectionDescription>(Sec->SectionCommands[0]);
-    std::stable_sort(ISD->Sections.begin(), ISD->Sections.end(),
-                     [](const InputSection *A, const InputSection *B) -> bool {
-                       return A->File->PPC64SmallCodeModelTocRelocs &&
-                              !B->File->PPC64SmallCodeModelTocRelocs;
-                     });
+    llvm::stable_sort(ISD->Sections,
+                      [](const InputSection *A, const InputSection *B) -> bool {
+                        return A->File->PPC64SmallCodeModelTocRelocs &&
+                               !B->File->PPC64SmallCodeModelTocRelocs;
+                      });
     return;
   }
 
@@ -1445,26 +1459,22 @@ template <class ELFT> void Writer<ELFT>::resolveShfLinkOrder() {
         Sec->Type == SHT_ARM_EXIDX)
       continue;
 
-    std::stable_sort(Sections.begin(), Sections.end(), compareByFilePosition);
+    llvm::stable_sort(Sections, compareByFilePosition);
 
     for (int I = 0, N = Sections.size(); I < N; ++I)
       *ScriptSections[I] = Sections[I];
   }
 }
 
-// For most RISC ISAs, we need to generate content that depends on the address
-// of InputSections. For example some architectures such as AArch64 use small
-// displacements for jump instructions that is the linker's responsibility for
-// creating range extension thunks for. As the generation of the content may
-// also alter InputSection addresses we must converge to a fixed point.
-template <class ELFT> void Writer<ELFT>::maybeAddThunks() {
-  if (!Target->NeedsThunks && !Config->AndroidPackDynRelocs &&
-      !Config->RelrPackDynRelocs)
-    return;
-
+// We need to generate and finalize the content that depends on the address of
+// InputSections. As the generation of the content may also alter InputSection
+// addresses we must converge to a fixed point. We do that here. See the comment
+// in Writer<ELFT>::finalizeSections().
+template <class ELFT> void Writer<ELFT>::finalizeAddressDependentContent() {
   ThunkCreator TC;
   AArch64Err843419Patcher A64P;
 
+  // For some targets, like x86, this loop iterates only once.
   for (;;) {
     bool Changed = false;
 
@@ -1582,9 +1592,9 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
   // Even the author of gold doesn't remember why gold behaves that way.
   // https://sourceware.org/ml/binutils/2002-03/msg00360.html
   if (In.Dynamic->Parent)
-    Symtab->addDefined("_DYNAMIC", STV_HIDDEN, STT_NOTYPE, 0 /*Value*/,
-                       /*Size=*/0, STB_WEAK, In.Dynamic,
-                       /*File=*/nullptr);
+    Symtab->addDefined(Defined{/*File=*/nullptr, "_DYNAMIC", STB_WEAK,
+                               STV_HIDDEN, STT_NOTYPE,
+                               /*Value=*/0, /*Size=*/0, In.Dynamic});
 
   // Define __rel[a]_iplt_{start,end} symbols if needed.
   addRelIpltSymbols();
@@ -1623,15 +1633,14 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
     // ld.bfd traces all DT_NEEDED to emulate the logic of the dynamic linker to
     // catch more cases. That is too much for us. Our approach resembles the one
     // used in ld.gold, achieves a good balance to be useful but not too smart.
-    for (InputFile *File : SharedFiles) {
-      SharedFile<ELFT> *F = cast<SharedFile<ELFT>>(File);
-      F->AllNeededIsKnown = llvm::all_of(F->DtNeeded, [&](StringRef Needed) {
-        return Symtab->SoNames.count(Needed);
-      });
-    }
+    for (SharedFile *File : SharedFiles)
+      File->AllNeededIsKnown =
+          llvm::all_of(File->DtNeeded, [&](StringRef Needed) {
+            return Symtab->SoNames.count(Needed);
+          });
     for (Symbol *Sym : Symtab->getSymbols())
       if (Sym->isUndefined() && !Sym->isWeak())
-        if (auto *F = dyn_cast_or_null<SharedFile<ELFT>>(Sym->File))
+        if (auto *F = dyn_cast_or_null<SharedFile>(Sym->File))
           if (F->AllNeededIsKnown)
             error(toString(F) + ": undefined reference to " + toString(*Sym));
   }
@@ -1646,9 +1655,9 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
 
     if (Sym->includeInDynsym()) {
       In.DynSymTab->addSymbol(Sym);
-      if (auto *File = dyn_cast_or_null<SharedFile<ELFT>>(Sym->File))
+      if (auto *File = dyn_cast_or_null<SharedFile>(Sym->File))
         if (File->IsNeeded && !Sym->isUndefined())
-          In.VerNeed->addSymbol(Sym);
+          addVerneed(Sym);
     }
   }
 
@@ -1749,19 +1758,30 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
   // known but before addresses are allocated.
   resolveShfLinkOrder();
 
-  // Jump instructions in many ISAs have small displacements, and therefore they
-  // cannot jump to arbitrary addresses in memory. For example, RISC-V JAL
-  // instruction can target only +-1 MiB from PC. It is a linker's
-  // responsibility to create and insert small pieces of code between sections
-  // to extend the ranges if jump targets are out of range. Such code pieces are
-  // called "thunks".
+  // This is used to:
+  // 1) Create "thunks":
+  //    Jump instructions in many ISAs have small displacements, and therefore
+  //    they cannot jump to arbitrary addresses in memory. For example, RISC-V
+  //    JAL instruction can target only +-1 MiB from PC. It is a linker's
+  //    responsibility to create and insert small pieces of code between
+  //    sections to extend the ranges if jump targets are out of range. Such
+  //    code pieces are called "thunks".
   //
-  // We add thunks at this stage. We couldn't do this before this point because
-  // this is the earliest point where we know sizes of sections and their
-  // layouts (that are needed to determine if jump targets are in range).
-  maybeAddThunks();
+  //    We add thunks at this stage. We couldn't do this before this point
+  //    because this is the earliest point where we know sizes of sections and
+  //    their layouts (that are needed to determine if jump targets are in
+  //    range).
+  //
+  // 2) Update the sections. We need to generate content that depends on the
+  //    address of InputSections. For example, MIPS GOT section content or
+  //    android packed relocations sections content.
+  //
+  // 3) Assign the final values for the linker script symbols. Linker scripts
+  //    sometimes using forward symbol declarations. We want to set the correct
+  //    values. They also might change after adding the thunks.
+  finalizeAddressDependentContent();
 
-  // maybeAddThunks may have added local symbols to the static symbol table.
+  // finalizeAddressDependentContent may have added local symbols to the static symbol table.
   finalizeSynthetic(In.SymTab);
   finalizeSynthetic(In.PPC64LongBranchTarget);
 
@@ -1983,11 +2003,12 @@ template <class ELFT> std::vector<PhdrEntry *> Writer<ELFT>::createPhdrs() {
   if (Config->ZWxneeded)
     AddHdr(PT_OPENBSD_WXNEEDED, PF_X);
 
-  // Create one PT_NOTE per a group of contiguous .note sections.
+  // Create one PT_NOTE per a group of contiguous SHT_NOTE sections with the
+  // same alignment.
   PhdrEntry *Note = nullptr;
   for (OutputSection *Sec : OutputSections) {
     if (Sec->Type == SHT_NOTE && (Sec->Flags & SHF_ALLOC)) {
-      if (!Note || Sec->LMAExpr)
+      if (!Note || Sec->LMAExpr || Note->LastSec->Alignment != Sec->Alignment)
         Note = AddHdr(PT_NOTE, PF_R);
       Note->add(Sec);
     } else {
@@ -2115,7 +2136,7 @@ template <class ELFT> void Writer<ELFT>::assignFileOffsets() {
     // segment is the last loadable segment, align the offset of the
     // following section to avoid loading non-segments parts of the file.
     if (LastRX && LastRX->LastSec == Sec)
-      Off = alignTo(Off, Target->PageSize);
+      Off = alignTo(Off, Config->CommonPageSize);
   }
 
   SectionHeaderOff = alignTo(Off, Config->Wordsize);
@@ -2167,7 +2188,7 @@ template <class ELFT> void Writer<ELFT>::setPhdrs() {
       // The glibc dynamic loader rounds the size down, so we need to round up
       // to protect the last page. This is a no-op on FreeBSD which always
       // rounds up.
-      P->p_memsz = alignTo(P->p_memsz, Target->PageSize);
+      P->p_memsz = alignTo(P->p_memsz, Config->CommonPageSize);
     }
 
     if (P->p_type == PT_TLS && P->p_memsz) {
@@ -2460,10 +2481,10 @@ template <class ELFT> void Writer<ELFT>::writeTrapInstr() {
   // Fill the last page.
   for (PhdrEntry *P : Phdrs)
     if (P->p_type == PT_LOAD && (P->p_flags & PF_X))
-      fillTrap(Out::BufferStart +
-                   alignDown(P->p_offset + P->p_filesz, Target->PageSize),
+      fillTrap(Out::BufferStart + alignDown(P->p_offset + P->p_filesz,
+                                            Config->CommonPageSize),
                Out::BufferStart +
-                   alignTo(P->p_offset + P->p_filesz, Target->PageSize));
+                   alignTo(P->p_offset + P->p_filesz, Config->CommonPageSize));
 
   // Round up the file size of the last segment to the page boundary iff it is
   // an executable segment to ensure that other tools don't accidentally
@@ -2474,7 +2495,8 @@ template <class ELFT> void Writer<ELFT>::writeTrapInstr() {
       Last = P;
 
   if (Last && (Last->p_flags & PF_X))
-    Last->p_memsz = Last->p_filesz = alignTo(Last->p_filesz, Target->PageSize);
+    Last->p_memsz = Last->p_filesz =
+        alignTo(Last->p_filesz, Config->CommonPageSize);
 }
 
 // Write section contents to a mmap'ed file.
@@ -2491,12 +2513,76 @@ template <class ELFT> void Writer<ELFT>::writeSections() {
       Sec->writeTo<ELFT>(Out::BufferStart + Sec->Offset);
 }
 
+// Split one uint8 array into small pieces of uint8 arrays.
+static std::vector<ArrayRef<uint8_t>> split(ArrayRef<uint8_t> Arr,
+                                            size_t ChunkSize) {
+  std::vector<ArrayRef<uint8_t>> Ret;
+  while (Arr.size() > ChunkSize) {
+    Ret.push_back(Arr.take_front(ChunkSize));
+    Arr = Arr.drop_front(ChunkSize);
+  }
+  if (!Arr.empty())
+    Ret.push_back(Arr);
+  return Ret;
+}
+
+// Computes a hash value of Data using a given hash function.
+// In order to utilize multiple cores, we first split data into 1MB
+// chunks, compute a hash for each chunk, and then compute a hash value
+// of the hash values.
+static void
+computeHash(llvm::MutableArrayRef<uint8_t> HashBuf,
+            llvm::ArrayRef<uint8_t> Data,
+            std::function<void(uint8_t *Dest, ArrayRef<uint8_t> Arr)> HashFn) {
+  std::vector<ArrayRef<uint8_t>> Chunks = split(Data, 1024 * 1024);
+  std::vector<uint8_t> Hashes(Chunks.size() * HashBuf.size());
+
+  // Compute hash values.
+  parallelForEachN(0, Chunks.size(), [&](size_t I) {
+    HashFn(Hashes.data() + I * HashBuf.size(), Chunks[I]);
+  });
+
+  // Write to the final output buffer.
+  HashFn(HashBuf.data(), Hashes);
+}
+
 template <class ELFT> void Writer<ELFT>::writeBuildId() {
   if (!In.BuildId || !In.BuildId->getParent())
     return;
 
+  if (Config->BuildId == BuildIdKind::Hexstring) {
+    In.BuildId->writeBuildId(Config->BuildIdVector);
+    return;
+  }
+
   // Compute a hash of all sections of the output file.
-  In.BuildId->writeBuildId({Out::BufferStart, size_t(FileSize)});
+  std::vector<uint8_t> BuildId(In.BuildId->HashSize);
+  llvm::ArrayRef<uint8_t> Buf{Out::BufferStart, size_t(FileSize)};
+
+  switch (Config->BuildId) {
+  case BuildIdKind::Fast:
+    computeHash(BuildId, Buf, [](uint8_t *Dest, ArrayRef<uint8_t> Arr) {
+      write64le(Dest, xxHash64(Arr));
+    });
+    break;
+  case BuildIdKind::Md5:
+    computeHash(BuildId, Buf, [&](uint8_t *Dest, ArrayRef<uint8_t> Arr) {
+      memcpy(Dest, MD5::hash(Arr).data(), In.BuildId->HashSize);
+    });
+    break;
+  case BuildIdKind::Sha1:
+    computeHash(BuildId, Buf, [&](uint8_t *Dest, ArrayRef<uint8_t> Arr) {
+      memcpy(Dest, SHA1::hash(Arr).data(), In.BuildId->HashSize);
+    });
+    break;
+  case BuildIdKind::Uuid:
+    if (auto EC = llvm::getRandomBytes(BuildId.data(), In.BuildId->HashSize))
+      error("entropy source failure: " + EC.message());
+    break;
+  default:
+    llvm_unreachable("unknown BuildIdKind");
+  }
+  In.BuildId->writeBuildId(BuildId);
 }
 
 template void elf::writeResult<ELF32LE>();

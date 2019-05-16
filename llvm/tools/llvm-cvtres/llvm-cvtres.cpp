@@ -24,6 +24,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Process.h"
+#include "llvm/Support/ScopedPrinter.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -102,7 +103,7 @@ int main(int Argc, const char **Argv) {
   opt::InputArgList InputArgs = T.ParseArgs(ArgsArr, MAI, MAC);
 
   if (InputArgs.hasArg(OPT_HELP)) {
-    T.PrintHelp(outs(), "llvm-cvtres [options] file...", "Resource Converter", false);
+    T.PrintHelp(outs(), "llvm-cvtres [options] file...", "Resource Converter");
     return 0;
   }
 
@@ -182,7 +183,10 @@ int main(int Argc, const char **Argv) {
       outs() << "Number of resources: " << EntryNumber << "\n";
     }
 
-    error(Parser.parse(RF));
+    std::vector<std::string> Duplicates;
+    error(Parser.parse(RF, Duplicates));
+    for (const auto& DupeDiag : Duplicates)
+      reportError(DupeDiag);
   }
 
   if (Verbose) {

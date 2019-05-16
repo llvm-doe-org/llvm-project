@@ -218,11 +218,6 @@ public:
   static bool classof(const DbgEntity *N) {
     return N->getDbgEntityID() == DbgVariableKind;
   }
-
-private:
-  template <typename T> T *resolve(TypedDINodeRef<T> Ref) const {
-    return Ref.resolve();
-  }
 };
 
 //===----------------------------------------------------------------------===//
@@ -252,11 +247,6 @@ public:
 
   static bool classof(const DbgEntity *N) {
     return N->getDbgEntityID() == DbgLabelKind;
-  }
-
-private:
-  template <typename T> T *resolve(TypedDINodeRef<T> Ref) const {
-    return Ref.resolve();
   }
 };
 
@@ -559,7 +549,7 @@ class DwarfDebug : public DebugHandlerBase {
   /// Build the location list for all DBG_VALUEs in the
   /// function that describe the same variable.
   void buildLocationList(SmallVectorImpl<DebugLocEntry> &DebugLoc,
-                         const DbgValueHistoryMap::InstrRanges &Ranges);
+                         const DbgValueHistoryMap::Entries &Entries);
 
   /// Collect variable information from the side table maintained by MF.
   void collectVariableInfoFromMFTable(DwarfCompileUnit &TheCU,
@@ -605,6 +595,19 @@ public:
   /// type units.
   void addDwarfTypeUnitType(DwarfCompileUnit &CU, StringRef Identifier,
                             DIE &Die, const DICompositeType *CTy);
+
+  friend class NonTypeUnitContext;
+  class NonTypeUnitContext {
+    DwarfDebug *DD;
+    decltype(DwarfDebug::TypeUnitsUnderConstruction) TypeUnitsUnderConstruction;
+    friend class DwarfDebug;
+    NonTypeUnitContext(DwarfDebug *DD);
+  public:
+    NonTypeUnitContext(NonTypeUnitContext&&) = default;
+    ~NonTypeUnitContext();
+  };
+
+  NonTypeUnitContext enterNonTypeUnitContext();
 
   /// Add a label so that arange data can be generated for it.
   void addArangeLabel(SymbolCU SCU) { ArangeLabels.push_back(SCU); }
@@ -688,11 +691,6 @@ public:
   /// Emit the location for a debug loc entry, including the size header.
   void emitDebugLocEntryLocation(const DebugLocStream::Entry &Entry,
                                  const DwarfCompileUnit *CU);
-
-  /// Find the MDNode for the given reference.
-  template <typename T> T *resolve(TypedDINodeRef<T> Ref) const {
-    return Ref.resolve();
-  }
 
   void addSubprogramNames(const DICompileUnit &CU, const DISubprogram *SP,
                           DIE &Die);

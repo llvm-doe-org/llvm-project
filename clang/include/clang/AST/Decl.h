@@ -1434,6 +1434,12 @@ public:
   /// template specialization or instantiation this is.
   TemplateSpecializationKind getTemplateSpecializationKind() const;
 
+  /// Get the template specialization kind of this variable for the purposes of
+  /// template instantiation. This differs from getTemplateSpecializationKind()
+  /// for an instantiation of a class-scope explicit specialization.
+  TemplateSpecializationKind
+  getTemplateSpecializationKindForInstantiation() const;
+
   /// If this variable is an instantiation of a variable template or a
   /// static data member of a class template, determine its point of
   /// instantiation.
@@ -1742,10 +1748,19 @@ class FunctionDecl : public DeclaratorDecl,
 public:
   /// The kind of templated function a FunctionDecl can be.
   enum TemplatedKind {
+    // Not templated.
     TK_NonTemplate,
+    // The pattern in a function template declaration.
     TK_FunctionTemplate,
+    // A non-template function that is an instantiation or explicit
+    // specialization of a member of a templated class.
     TK_MemberSpecialization,
+    // An instantiation or explicit specialization of a function template.
+    // Note: this might have been instantiated from a templated class if it
+    // is a class-scope explicit specialization.
     TK_FunctionTemplateSpecialization,
+    // A function template specialization that hasn't yet been resolved to a
+    // particular specialized function template.
     TK_DependentFunctionTemplateSpecialization
   };
 
@@ -2354,16 +2369,6 @@ public:
   /// that was defined in the class body.
   bool isInlined() const { return FunctionDeclBits.IsInline; }
 
-  /// Whether this function is marked as explicit explicitly.
-  bool isExplicitSpecified() const {
-    return FunctionDeclBits.IsExplicitSpecified;
-  }
-
-  /// State that this function is marked as explicit explicitly.
-  void setExplicitSpecified(bool ExpSpec = true) {
-    FunctionDeclBits.IsExplicitSpecified = ExpSpec;
-  }
-
   bool isInlineDefinitionExternallyVisible() const;
 
   bool isMSExternInline() const;
@@ -2439,10 +2444,6 @@ public:
   bool isFunctionTemplateSpecialization() const {
     return getPrimaryTemplate() != nullptr;
   }
-
-  /// Retrieve the class scope template pattern that this function
-  ///  template specialization is instantiated from.
-  FunctionDecl *getClassScopeSpecializationPattern() const;
 
   /// If this function is actually a function template specialization,
   /// retrieve information about this function template specialization.
@@ -2529,6 +2530,11 @@ public:
   /// Determine what kind of template instantiation this function
   /// represents.
   TemplateSpecializationKind getTemplateSpecializationKind() const;
+
+  /// Determine the kind of template specialization this function represents
+  /// for the purpose of template instantiation.
+  TemplateSpecializationKind
+  getTemplateSpecializationKindForInstantiation() const;
 
   /// Determine what kind of template instantiation this function
   /// represents.
@@ -4239,8 +4245,10 @@ public:
   SourceLocation getRBraceLoc() const { return RBraceLoc; }
   void setRBraceLoc(SourceLocation L) { RBraceLoc = L; }
 
+  bool hasBraces() const { return RBraceLoc.isValid(); }
+
   SourceLocation getEndLoc() const LLVM_READONLY {
-    if (RBraceLoc.isValid())
+    if (hasBraces())
       return RBraceLoc;
     // No braces: get the end location of the (only) declaration in context
     // (if present).

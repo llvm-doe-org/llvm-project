@@ -790,9 +790,7 @@ const uint32_t RenderScriptRuntime::AllocationDetails::RSTypeToFormat[][3] = {
     // RS_TYPE_MATRIX_2X2
     {eFormatVectorOfFloat32, eFormatVectorOfFloat32, sizeof(float) * 4}};
 
-//------------------------------------------------------------------
 // Static Functions
-//------------------------------------------------------------------
 LanguageRuntime *
 RenderScriptRuntime::CreateInstance(Process *process,
                                     lldb::LanguageType language) {
@@ -1030,9 +1028,7 @@ void RenderScriptRuntime::ModulesDidLoad(const ModuleList &module_list) {
   }
 }
 
-//------------------------------------------------------------------
 // PluginInterface protocol
-//------------------------------------------------------------------
 lldb_private::ConstString RenderScriptRuntime::GetPluginName() {
   return GetPluginNameStatic();
 }
@@ -1976,8 +1972,8 @@ bool RenderScriptRuntime::JITTypePacked(AllocationDetails *alloc,
 
   // We want 4 elements from packed data
   const uint32_t num_exprs = 4;
-  assert(num_exprs == (eExprTypeElemPtr - eExprTypeDimX + 1) &&
-         "Invalid number of expressions");
+  static_assert(num_exprs == (eExprTypeElemPtr - eExprTypeDimX + 1),
+                "Invalid number of expressions");
 
   char expr_bufs[num_exprs][jit_max_expr_size];
   uint64_t results[num_exprs];
@@ -2035,8 +2031,8 @@ bool RenderScriptRuntime::JITElementPacked(Element &elem,
 
   // We want 4 elements from packed data
   const uint32_t num_exprs = 4;
-  assert(num_exprs == (eExprElementFieldCount - eExprElementType + 1) &&
-         "Invalid number of expressions");
+  static_assert(num_exprs == (eExprElementFieldCount - eExprElementType + 1),
+                "Invalid number of expressions");
 
   char expr_bufs[num_exprs][jit_max_expr_size];
   uint64_t results[num_exprs];
@@ -2094,8 +2090,8 @@ bool RenderScriptRuntime::JITSubelements(Element &elem,
   }
 
   const short num_exprs = 3;
-  assert(num_exprs == (eExprSubelementsArrSize - eExprSubelementsId + 1) &&
-         "Invalid number of expressions");
+  static_assert(num_exprs == (eExprSubelementsArrSize - eExprSubelementsId + 1),
+                "Invalid number of expressions");
 
   char expr_buffer[jit_max_expr_size];
   uint64_t results;

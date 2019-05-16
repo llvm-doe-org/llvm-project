@@ -1,3 +1,5 @@
+import("//clang-tools-extra/clangd/xpc/enable.gni")
+
 group("unittests") {
   deps = [
     "clang-apply-replacements:ClangApplyReplacementsTests",
@@ -8,8 +10,6 @@ group("unittests") {
     "clang-move:ClangMoveTests",
     "clang-query:ClangQueryTests",
     "clang-tidy:ClangTidyTests",
-    "clangd:ClangdTests",
   ]
-  # FIXME: dep on clangd/xpc:ClangdXpcTests once it exists
   testonly = true
 }

@@ -36,9 +36,6 @@
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/LEB128.h"
 #include "llvm/Support/MD5.h"
-#include "llvm/Support/RandomNumberGenerator.h"
-#include "llvm/Support/SHA1.h"
-#include "llvm/Support/xxhash.h"
 #include <cstdlib>
 #include <thread>
 
@@ -303,71 +300,15 @@ void BuildIdSection::writeTo(uint8_t *Buf) {
   HashBuf = Buf + 16;
 }
 
-// Split one uint8 array into small pieces of uint8 arrays.
-static std::vector<ArrayRef<uint8_t>> split(ArrayRef<uint8_t> Arr,
-                                            size_t ChunkSize) {
-  std::vector<ArrayRef<uint8_t>> Ret;
-  while (Arr.size() > ChunkSize) {
-    Ret.push_back(Arr.take_front(ChunkSize));
-    Arr = Arr.drop_front(ChunkSize);
-  }
-  if (!Arr.empty())
-    Ret.push_back(Arr);
-  return Ret;
-}
-
-// Computes a hash value of Data using a given hash function.
-// In order to utilize multiple cores, we first split data into 1MB
-// chunks, compute a hash for each chunk, and then compute a hash value
-// of the hash values.
-void BuildIdSection::computeHash(
-    llvm::ArrayRef<uint8_t> Data,
-    std::function<void(uint8_t *Dest, ArrayRef<uint8_t> Arr)> HashFn) {
-  std::vector<ArrayRef<uint8_t>> Chunks = split(Data, 1024 * 1024);
-  std::vector<uint8_t> Hashes(Chunks.size() * HashSize);
-
-  // Compute hash values.
-  parallelForEachN(0, Chunks.size(), [&](size_t I) {
-    HashFn(Hashes.data() + I * HashSize, Chunks[I]);
-  });
-
-  // Write to the final output buffer.
-  HashFn(HashBuf, Hashes);
+void BuildIdSection::writeBuildId(ArrayRef<uint8_t> Buf) {
+  assert(Buf.size() == HashSize);
+  memcpy(HashBuf, Buf.data(), HashSize);
 }
 
 BssSection::BssSection(StringRef Name, uint64_t Size, uint32_t Alignment)
     : SyntheticSection(SHF_ALLOC | SHF_WRITE, SHT_NOBITS, Alignment, Name) {
   this->Bss = true;
   this->Size = Size;
-}
-
-void BuildIdSection::writeBuildId(ArrayRef<uint8_t> Buf) {
-  switch (Config->BuildId) {
-  case BuildIdKind::Fast:
-    computeHash(Buf, [](uint8_t *Dest, ArrayRef<uint8_t> Arr) {
-      write64le(Dest, xxHash64(Arr));
-    });
-    break;
-  case BuildIdKind::Md5:
-    computeHash(Buf, [](uint8_t *Dest, ArrayRef<uint8_t> Arr) {
-      memcpy(Dest, MD5::hash(Arr).data(), 16);
-    });
-    break;
-  case BuildIdKind::Sha1:
-    computeHash(Buf, [](uint8_t *Dest, ArrayRef<uint8_t> Arr) {
-      memcpy(Dest, SHA1::hash(Arr).data(), 20);
-    });
-    break;
-  case BuildIdKind::Uuid:
-    if (auto EC = getRandomBytes(HashBuf, HashSize))
-      error("entropy source failure: " + EC.message());
-    break;
-  case BuildIdKind::Hexstring:
-    memcpy(HashBuf, Config->BuildIdVector.data(), Config->BuildIdVector.size());
-    break;
-  default:
-    llvm_unreachable("unknown BuildIdKind");
-  }
 }
 
 EhFrameSection::EhFrameSection()
@@ -531,7 +472,7 @@ std::vector<EhFrameSection::FdeData> EhFrameSection::getFdeData() const {
   auto Less = [](const FdeData &A, const FdeData &B) {
     return A.PcRel < B.PcRel;
   };
-  std::stable_sort(Ret.begin(), Ret.end(), Less);
+  llvm::stable_sort(Ret, Less);
   auto Eq = [](const FdeData &A, const FdeData &B) {
     return A.PcRel == B.PcRel;
   };
@@ -1263,11 +1204,9 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
     addInt(Config->EnableNewDtags ? DT_RUNPATH : DT_RPATH,
            In.DynStrTab->addString(Config->Rpath));
 
-  for (InputFile *File : SharedFiles) {
-    SharedFile<ELFT> *F = cast<SharedFile<ELFT>>(File);
-    if (F->IsNeeded)
-      addInt(DT_NEEDED, In.DynStrTab->addString(F->SoName));
-  }
+  for (SharedFile *File : SharedFiles)
+    if (File->IsNeeded)
+      addInt(DT_NEEDED, In.DynStrTab->addString(File->SoName));
   if (!Config->SoName.empty())
     addInt(DT_SONAME, In.DynStrTab->addString(Config->SoName));
 
@@ -1399,7 +1338,7 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
     if (B->isDefined())
       addSym(DT_FINI, B);
 
-  bool HasVerNeed = In.VerNeed->getNeedNum() != 0;
+  bool HasVerNeed = SharedFile::VernauxNum != 0;
   if (HasVerNeed || In.VerDef)
     addInSec(DT_VERSYM, In.VerSym);
   if (In.VerDef) {
@@ -1408,7 +1347,11 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
   }
   if (HasVerNeed) {
     addInSec(DT_VERNEED, In.VerNeed);
-    addInt(DT_VERNEEDNUM, In.VerNeed->getNeedNum());
+    unsigned NeedNum = 0;
+    for (SharedFile *F : SharedFiles)
+      if (!F->Vernauxs.empty())
+        ++NeedNum;
+    addInt(DT_VERNEEDNUM, NeedNum);
   }
 
   if (Config->EMachine == EM_MIPS) {
@@ -1555,7 +1498,7 @@ static bool compRelocations(const DynamicReloc &A, const DynamicReloc &B) {
 
 template <class ELFT> void RelocationSection<ELFT>::writeTo(uint8_t *Buf) {
   if (Sort)
-    std::stable_sort(Relocs.begin(), Relocs.end(), compRelocations);
+    llvm::stable_sort(Relocs, compRelocations);
 
   for (const DynamicReloc &Rel : Relocs) {
     encodeDynamicReloc<ELFT>(reinterpret_cast<Elf_Rela *>(Buf), Rel);
@@ -1888,7 +1831,7 @@ void SymbolTableBaseSection::finalizeContents() {
     // NB: It also sorts Symbols to meet the GNU hash table requirements.
     In.GnuHashTab->addSymbols(Symbols);
   } else if (Config->EMachine == EM_MIPS) {
-    std::stable_sort(Symbols.begin(), Symbols.end(), sortMipsSymbols);
+    llvm::stable_sort(Symbols, sortMipsSymbols);
   }
 
   size_t I = 0;
@@ -2065,7 +2008,7 @@ template <class ELFT> void SymbolTableSection<ELFT>::writeTo(uint8_t *Buf) {
 }
 
 SymtabShndxSection::SymtabShndxSection()
-    : SyntheticSection(0, SHT_SYMTAB_SHNDX, 4, ".symtab_shndxr") {
+    : SyntheticSection(0, SHT_SYMTAB_SHNDX, 4, ".symtab_shndx") {
   this->Entsize = 4;
 }
 
@@ -2086,7 +2029,7 @@ bool SymtabShndxSection::isNeeded() const {
   // SHN_LORESERVE. If we need more, we want to use extension SHT_SYMTAB_SHNDX
   // section. Problem is that we reveal the final section indices a bit too
   // late, and we do not know them here. For simplicity, we just always create
-  // a .symtab_shndxr section when the amount of output sections is huge.
+  // a .symtab_shndx section when the amount of output sections is huge.
   size_t Size = 0;
   for (BaseCommand *Base : Script->SectionCommands)
     if (isa<OutputSection>(Base))
@@ -2256,9 +2199,9 @@ void GnuHashTableSection::addSymbols(std::vector<SymbolTableEntry> &V) {
     Symbols.push_back({B, Ent.StrTabOffset, Hash, BucketIdx});
   }
 
-  std::stable_sort(
-      Symbols.begin(), Symbols.end(),
-      [](const Entry &L, const Entry &R) { return L.BucketIdx < R.BucketIdx; });
+  llvm::stable_sort(Symbols, [](const Entry &L, const Entry &R) {
+    return L.BucketIdx < R.BucketIdx;
+  });
 
   V.erase(Mid, V.end());
   for (const Entry &Ent : Symbols)
@@ -2424,6 +2367,8 @@ readAddressAreas(DWARFContext &Dwarf, InputSection *Sec) {
 
     ArrayRef<InputSectionBase *> Sections = Sec->File->getSections();
     for (DWARFAddressRange &R : *Ranges) {
+      if (R.SectionIndex == -1ULL)
+        continue;
       InputSectionBase *S = Sections[R.SectionIndex];
       if (!S || S == &InputSection::Discarded || !S->Live)
         continue;
@@ -2782,67 +2727,76 @@ bool VersionTableSection::isNeeded() const {
   return In.VerDef || In.VerNeed->isNeeded();
 }
 
-VersionNeedBaseSection::VersionNeedBaseSection()
-    : SyntheticSection(SHF_ALLOC, SHT_GNU_verneed, sizeof(uint32_t),
-                       ".gnu.version_r") {
-  // Identifiers in verneed section start at 2 because 0 and 1 are reserved
-  // for VER_NDX_LOCAL and VER_NDX_GLOBAL.
-  // First identifiers are reserved by verdef section if it exist.
-  NextIndex = getVerDefNum() + 1;
-}
-
-template <class ELFT> void VersionNeedSection<ELFT>::addSymbol(Symbol *SS) {
-  auto &File = cast<SharedFile<ELFT>>(*SS->File);
+void elf::addVerneed(Symbol *SS) {
+  auto &File = cast<SharedFile>(*SS->File);
   if (SS->VerdefIndex == VER_NDX_GLOBAL) {
     SS->VersionId = VER_NDX_GLOBAL;
     return;
   }
 
-  // If we don't already know that we need an Elf_Verneed for this DSO, prepare
-  // to create one by adding it to our needed list and creating a dynstr entry
-  // for the soname.
-  if (File.VerdefMap.empty())
-    Needed.push_back({&File, In.DynStrTab->addString(File.SoName)});
-  const typename ELFT::Verdef *Ver = File.Verdefs[SS->VerdefIndex];
-  typename SharedFile<ELFT>::NeededVer &NV = File.VerdefMap[Ver];
+  if (File.Vernauxs.empty())
+    File.Vernauxs.resize(File.Verdefs.size());
 
-  // If we don't already know that we need an Elf_Vernaux for this Elf_Verdef,
-  // prepare to create one by allocating a version identifier and creating a
-  // dynstr entry for the version name.
-  if (NV.Index == 0) {
-    NV.StrTab = In.DynStrTab->addString(File.getStringTable().data() +
-                                        Ver->getAux()->vda_name);
-    NV.Index = NextIndex++;
+  // Select a version identifier for the vernaux data structure, if we haven't
+  // already allocated one. The verdef identifiers cover the range
+  // [1..getVerDefNum()]; this causes the vernaux identifiers to start from
+  // getVerDefNum()+1.
+  if (File.Vernauxs[SS->VerdefIndex] == 0)
+    File.Vernauxs[SS->VerdefIndex] = ++SharedFile::VernauxNum + getVerDefNum();
+
+  SS->VersionId = File.Vernauxs[SS->VerdefIndex];
+}
+
+template <class ELFT>
+VersionNeedSection<ELFT>::VersionNeedSection()
+    : SyntheticSection(SHF_ALLOC, SHT_GNU_verneed, sizeof(uint32_t),
+                       ".gnu.version_r") {}
+
+template <class ELFT> void VersionNeedSection<ELFT>::finalizeContents() {
+  for (SharedFile *F : SharedFiles) {
+    if (F->Vernauxs.empty())
+      continue;
+    Verneeds.emplace_back();
+    Verneed &VN = Verneeds.back();
+    VN.NameStrTab = In.DynStrTab->addString(F->SoName);
+    for (unsigned I = 0; I != F->Vernauxs.size(); ++I) {
+      if (F->Vernauxs[I] == 0)
+        continue;
+      auto *Verdef =
+          reinterpret_cast<const typename ELFT::Verdef *>(F->Verdefs[I]);
+      VN.Vernauxs.push_back(
+          {Verdef->vd_hash, F->Vernauxs[I],
+           In.DynStrTab->addString(F->getStringTable().data() +
+                                   Verdef->getAux()->vda_name)});
+    }
   }
-  SS->VersionId = NV.Index;
+
+  if (OutputSection *Sec = In.DynStrTab->getParent())
+    getParent()->Link = Sec->SectionIndex;
+  getParent()->Info = Verneeds.size();
 }
 
 template <class ELFT> void VersionNeedSection<ELFT>::writeTo(uint8_t *Buf) {
   // The Elf_Verneeds need to appear first, followed by the Elf_Vernauxs.
   auto *Verneed = reinterpret_cast<Elf_Verneed *>(Buf);
-  auto *Vernaux = reinterpret_cast<Elf_Vernaux *>(Verneed + Needed.size());
+  auto *Vernaux = reinterpret_cast<Elf_Vernaux *>(Verneed + Verneeds.size());
 
-  for (std::pair<SharedFile<ELFT> *, size_t> &P : Needed) {
+  for (auto &VN : Verneeds) {
     // Create an Elf_Verneed for this DSO.
     Verneed->vn_version = 1;
-    Verneed->vn_cnt = P.first->VerdefMap.size();
-    Verneed->vn_file = P.second;
+    Verneed->vn_cnt = VN.Vernauxs.size();
+    Verneed->vn_file = VN.NameStrTab;
     Verneed->vn_aux =
         reinterpret_cast<char *>(Vernaux) - reinterpret_cast<char *>(Verneed);
     Verneed->vn_next = sizeof(Elf_Verneed);
     ++Verneed;
 
-    // Create the Elf_Vernauxs for this Elf_Verneed. The loop iterates over
-    // VerdefMap, which will only contain references to needed version
-    // definitions. Each Elf_Vernaux is based on the information contained in
-    // the Elf_Verdef in the source DSO. This loop iterates over a std::map of
-    // pointers, but is deterministic because the pointers refer to Elf_Verdef
-    // data structures within a single input file.
-    for (auto &NV : P.first->VerdefMap) {
-      Vernaux->vna_hash = NV.first->vd_hash;
+    // Create the Elf_Vernauxs for this Elf_Verneed.
+    for (auto &VNA : VN.Vernauxs) {
+      Vernaux->vna_hash = VNA.Hash;
       Vernaux->vna_flags = 0;
-      Vernaux->vna_other = NV.second.Index;
-      Vernaux->vna_name = NV.second.StrTab;
+      Vernaux->vna_other = VNA.VerneedIndex;
+      Vernaux->vna_name = VNA.NameStrTab;
       Vernaux->vna_next = sizeof(Elf_Vernaux);
       ++Vernaux;
     }
@@ -2852,21 +2806,13 @@ template <class ELFT> void VersionNeedSection<ELFT>::writeTo(uint8_t *Buf) {
   Verneed[-1].vn_next = 0;
 }
 
-template <class ELFT> void VersionNeedSection<ELFT>::finalizeContents() {
-  if (OutputSection *Sec = In.DynStrTab->getParent())
-    getParent()->Link = Sec->SectionIndex;
-  getParent()->Info = Needed.size();
-}
-
 template <class ELFT> size_t VersionNeedSection<ELFT>::getSize() const {
-  unsigned Size = Needed.size() * sizeof(Elf_Verneed);
-  for (const std::pair<SharedFile<ELFT> *, size_t> &P : Needed)
-    Size += P.first->VerdefMap.size() * sizeof(Elf_Vernaux);
-  return Size;
+  return Verneeds.size() * sizeof(Elf_Verneed) +
+         SharedFile::VernauxNum * sizeof(Elf_Vernaux);
 }
 
 template <class ELFT> bool VersionNeedSection<ELFT>::isNeeded() const {
-  return getNeedNum() != 0;
+  return SharedFile::VernauxNum != 0;
 }
 
 void MergeSyntheticSection::addSection(MergeInputSection *MS) {
@@ -2932,8 +2878,10 @@ void MergeNoTailSection::finalizeContents() {
   parallelForEachN(0, Concurrency, [&](size_t ThreadId) {
     for (MergeInputSection *Sec : Sections) {
       for (size_t I = 0, E = Sec->Pieces.size(); I != E; ++I) {
+        if (!Sec->Pieces[I].Live)
+          continue;
         size_t ShardId = getShardId(Sec->Pieces[I].Hash);
-        if ((ShardId & (Concurrency - 1)) == ThreadId && Sec->Pieces[I].Live)
+        if ((ShardId & (Concurrency - 1)) == ThreadId)
           Sec->Pieces[I].OutputOff = Shards[ShardId].add(Sec->getData(I));
       }
     }
@@ -3142,8 +3090,7 @@ void ARMExidxSyntheticSection::finalizeContents() {
       return AOut->SectionIndex < BOut->SectionIndex;
     return A->OutSecOff < B->OutSecOff;
   };
-  std::stable_sort(ExecutableSections.begin(), ExecutableSections.end(),
-                   CompareByFilePosition);
+  llvm::stable_sort(ExecutableSections, CompareByFilePosition);
   Sentinel = ExecutableSections.back();
   // Optionally merge adjacent duplicate entries.
   if (Config->MergeArmExidx) {

@@ -35,7 +35,6 @@ write_lit_config("lit_site_cfg") {
     "LLVM_LIT_TOOLS_DIR=",  # Intentionally empty, matches cmake build.
     "LLVM_TOOLS_DIR=" + rebase_path("$root_out_dir/bin"),
     "PYTHON_EXECUTABLE=$python_path",
-    "CLANGD_BUILD_XPC_SUPPORT=0",  # FIXME
   ]
 
   if (clang_enable_static_analyzer) {
@@ -68,8 +67,6 @@ group("test") {
     "//clang-tools-extra/clang-query/tool:clang-query",
     "//clang-tools-extra/clang-reorder-fields/tool:clang-reorder-fields",
     "//clang-tools-extra/clang-tidy/tool:clang-tidy",
-    "//clang-tools-extra/clangd/indexer:clangd-indexer",
-    "//clang-tools-extra/clangd/tool:clangd",
     "//clang-tools-extra/modularize",
     "//clang-tools-extra/pp-trace",
     "//clang-tools-extra/unittests",
@@ -83,8 +80,6 @@ group("test") {
     "//llvm/utils/llvm-lit",
     "//llvm/utils/not",
   ]
-
-  # FIXME: dep on dexp once it exist
   testonly = true
 }
 
@@ -108,7 +103,7 @@ action("check-clang-tools") {
   ]
 
   # Since check-clang-tools is always dirty, //:default doesn't depend on it so
-  # that it's not part of the default ninja target.  Hence, check-clang
+  # that it's not part of the default ninja target.  Hence, check-clang-tools
   # shouldn't have any deps except :test. so that the default target is sure to
   # build all the deps.
   deps = [

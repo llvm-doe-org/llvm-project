@@ -113,7 +113,7 @@ and the working directory to point to binaries inside of the ninja tree.
 Building LLDB on macOS
 ----------------------
 
-There are two ways to build LLDB on Mac OS X: Using Xcode and using CMake
+There are two ways to build LLDB on macOS: Using Xcode and using CMake
 
 **Preliminaries**
 
@@ -122,13 +122,12 @@ There are two ways to build LLDB on Mac OS X: Using Xcode and using CMake
 
 **Building LLDB with Xcode**
 
-Building on Mac OS X with Xcode is as easy as downloading the code and building
+Building on macOS with Xcode is as easy as downloading the code and building
 the Xcode project or workspace:
 
 * Download the lldb sources.
 * Follow the code signing instructions in ``lldb/docs/code-signing.txt``.
-* In Xcode 3.x: ``lldb/lldb.xcodeproj``, select the lldb-tool target, and build.
-* In Xcode 4.x: ``lldb/lldb.xcworkspace``, select the lldb-tool scheme, and build.
+* In Xcode, open ``lldb/lldb.xcworkspace``, select the lldb-tool scheme, and build.
 
 **Building LLDB with CMake**
 
@@ -152,6 +151,12 @@ variables to cmake to change build behavior. If LLDB is built as a part of
 LLVM, then you can pass LLVM-specific CMake variables to cmake when building
 LLDB.
 
+If you are building both Clang and LLDB together, be sure to also add libc++,
+which is currently required for testing on macOS:
+
+::
+
+  > cmake -D LLVM_ENABLE_PROJECTS='clang;lldb;libcxx' $PATH_TO_LLVM -G Ninja
 
 Here are some commonly used LLDB-specific CMake variables:
 
@@ -230,21 +235,6 @@ On NetBSD one might run:
 ::
 
   > pkgin install swig python27 cmake ninja-build
-
-
-If you wish to build the optional reference documentation, additional dependencies are required:
-
-* Graphviz (for the 'dot' tool).
-* doxygen (only if you wish to build the C++ API reference)
-* epydoc (only if you wish to build the Python API reference)
-
-
-To install the prerequisites for building the documentation (on Debian/Ubuntu) do:
-
-::
-
-  > sudo apt-get install doxygen graphviz
-  > sudo pip install epydoc # or install package python-epydoc
 
 
 **Building LLDB**
@@ -514,3 +504,30 @@ arm64 build:
 
 Note that currently only lldb-server is functional on android. The lldb client
 is not supported and unlikely to work.
+
+Building The Documentation
+--------------------------
+
+If you wish to build the optional (reference) documentation, additional
+dependencies are required:
+
+* Sphinx (for the website)
+* Graphviz (for the 'dot' tool)
+* doxygen (if you wish to build the C++ API reference)
+* epydoc (if you wish to build the Python API reference)
+
+To install the prerequisites for building the documentation (on Debian/Ubuntu)
+do:
+
+::
+
+  > sudo apt-get install doxygen graphviz python3-sphinx
+  > sudo pip install epydoc
+
+To build the documentation, build the desired target(s).
+
+::
+
+  > cmake --build . --target docs-lldb-html
+  > cmake --build . --target lldb-cpp-doc
+  > cmake --build . --target lldb-python-doc

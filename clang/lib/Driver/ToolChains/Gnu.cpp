@@ -21,6 +21,7 @@
 #include "clang/Driver/DriverDiagnostic.h"
 #include "clang/Driver/Options.h"
 #include "clang/Driver/Tool.h"
+#include "clang/Driver/ToolChain.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/Path.h"
@@ -32,6 +33,8 @@ using namespace clang::driver;
 using namespace clang::driver::toolchains;
 using namespace clang;
 using namespace llvm::opt;
+
+using tools::addMultilibFlag;
 
 void tools::GnuTool::anchor() {}
 
@@ -451,20 +454,29 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
     if (IsIAMCU)
       CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crt0.o")));
-    else {
-      const char *crtbegin;
-      if (Args.hasArg(options::OPT_static))
-        crtbegin = isAndroid ? "crtbegin_static.o" : "crtbeginT.o";
-      else if (Args.hasArg(options::OPT_shared))
-        crtbegin = isAndroid ? "crtbegin_so.o" : "crtbeginS.o";
-      else if (IsPIE || IsStaticPIE)
-        crtbegin = isAndroid ? "crtbegin_dynamic.o" : "crtbeginS.o";
-      else
-        crtbegin = isAndroid ? "crtbegin_dynamic.o" : "crtbegin.o";
-
-      if (HasCRTBeginEndFiles)
-        CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath(crtbegin)));
-	}
+    else if (HasCRTBeginEndFiles) {
+      std::string P;
+      if (ToolChain.GetRuntimeLibType(Args) == ToolChain::RLT_CompilerRT &&
+          !isAndroid) {
+        std::string crtbegin = ToolChain.getCompilerRT(Args, "crtbegin",
+                                                       ToolChain::FT_Object);
+        if (ToolChain.getVFS().exists(crtbegin))
+          P = crtbegin;
+      }
+      if (P.empty()) {
+        const char *crtbegin;
+        if (Args.hasArg(options::OPT_static))
+          crtbegin = isAndroid ? "crtbegin_static.o" : "crtbeginT.o";
+        else if (Args.hasArg(options::OPT_shared))
+          crtbegin = isAndroid ? "crtbegin_so.o" : "crtbeginS.o";
+        else if (IsPIE || IsStaticPIE)
+          crtbegin = isAndroid ? "crtbegin_dynamic.o" : "crtbeginS.o";
+        else
+          crtbegin = isAndroid ? "crtbegin_dynamic.o" : "crtbegin.o";
+        P = ToolChain.GetFilePath(crtbegin);
+      }
+      CmdArgs.push_back(Args.MakeArgString(P));
+	  }
 
     // Add crtfastmath.o if available and fast math is enabled.
     ToolChain.AddFastMathRuntimeIfAvailable(Args, CmdArgs);
@@ -558,16 +570,27 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     }
 
     if (!Args.hasArg(options::OPT_nostartfiles) && !IsIAMCU) {
-      const char *crtend;
-      if (Args.hasArg(options::OPT_shared))
-        crtend = isAndroid ? "crtend_so.o" : "crtendS.o";
-      else if (IsPIE || IsStaticPIE)
-        crtend = isAndroid ? "crtend_android.o" : "crtendS.o";
-      else
-        crtend = isAndroid ? "crtend_android.o" : "crtend.o";
-
-      if (HasCRTBeginEndFiles)
-        CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath(crtend)));
+      if (HasCRTBeginEndFiles) {
+        std::string P;
+        if (ToolChain.GetRuntimeLibType(Args) == ToolChain::RLT_CompilerRT &&
+            !isAndroid) {
+          std::string crtend = ToolChain.getCompilerRT(Args, "crtend",
+                                                       ToolChain::FT_Object);
+          if (ToolChain.getVFS().exists(crtend))
+            P = crtend;
+        }
+        if (P.empty()) {
+          const char *crtend;
+          if (Args.hasArg(options::OPT_shared))
+            crtend = isAndroid ? "crtend_so.o" : "crtendS.o";
+          else if (IsPIE || IsStaticPIE)
+            crtend = isAndroid ? "crtend_android.o" : "crtendS.o";
+          else
+            crtend = isAndroid ? "crtend_android.o" : "crtend.o";
+          P = ToolChain.GetFilePath(crtend);
+        }
+        CmdArgs.push_back(Args.MakeArgString(P));
+      }
       if (!isAndroid)
         CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crtn.o")));
     }
@@ -604,14 +627,12 @@ void tools::gnutools::Assembler::ConstructJob(Compilation &C,
 
   if (const Arg *A = Args.getLastArg(options::OPT_gz, options::OPT_gz_EQ)) {
     if (A->getOption().getID() == options::OPT_gz) {
-      CmdArgs.push_back("-compress-debug-sections");
+      CmdArgs.push_back("--compress-debug-sections");
     } else {
       StringRef Value = A->getValue();
-      if (Value == "none") {
-        CmdArgs.push_back("-compress-debug-sections=none");
-      } else if (Value == "zlib" || Value == "zlib-gnu") {
+      if (Value == "none" || Value == "zlib" || Value == "zlib-gnu") {
         CmdArgs.push_back(
-            Args.MakeArgString("-compress-debug-sections=" + Twine(Value)));
+            Args.MakeArgString("--compress-debug-sections=" + Twine(Value)));
       } else {
         D.Diag(diag::err_drv_unsupported_option_argument)
             << A->getOption().getName() << Value;
@@ -675,14 +696,16 @@ void tools::gnutools::Assembler::ConstructJob(Compilation &C,
   case llvm::Triple::sparcel: {
     CmdArgs.push_back("-32");
     std::string CPU = getCPUName(Args, getToolChain().getTriple());
-    CmdArgs.push_back(sparc::getSparcAsmModeForCPU(CPU, getToolChain().getTriple()));
+    CmdArgs.push_back(
+        sparc::getSparcAsmModeForCPU(CPU, getToolChain().getTriple()));
     AddAssemblerKPIC(getToolChain(), Args, CmdArgs);
     break;
   }
   case llvm::Triple::sparcv9: {
     CmdArgs.push_back("-64");
     std::string CPU = getCPUName(Args, getToolChain().getTriple());
-    CmdArgs.push_back(sparc::getSparcAsmModeForCPU(CPU, getToolChain().getTriple()));
+    CmdArgs.push_back(
+        sparc::getSparcAsmModeForCPU(CPU, getToolChain().getTriple()));
     AddAssemblerKPIC(getToolChain(), Args, CmdArgs);
     break;
   }
@@ -867,16 +890,6 @@ static bool isSoftFloatABI(const ArgList &Args) {
   return A->getOption().matches(options::OPT_msoft_float) ||
          (A->getOption().matches(options::OPT_mfloat_abi_EQ) &&
           A->getValue() == StringRef("soft"));
-}
-
-/// \p Flag must be a flag accepted by the driver with its leading '-' removed,
-//     otherwise '-print-multi-lib' will not emit them correctly.
-static void addMultilibFlag(bool Enabled, const char *const Flag,
-                            std::vector<std::string> &Flags) {
-  if (Enabled)
-    Flags.push_back(std::string("+") + Flag);
-  else
-    Flags.push_back(std::string("-") + Flag);
 }
 
 static bool isArmOrThumbArch(llvm::Triple::ArchType Arch) {
@@ -1873,6 +1886,7 @@ void Generic_GCC::GCCInstallationDetector::AddDefaultGCCPrefixes(
   // Non-Solaris is much simpler - most systems just go with "/usr".
   if (SysRoot.empty() && TargetTriple.getOS() == llvm::Triple::Linux) {
     // Yet, still look for RHEL devtoolsets.
+    Prefixes.push_back("/opt/rh/devtoolset-8/root/usr");
     Prefixes.push_back("/opt/rh/devtoolset-7/root/usr");
     Prefixes.push_back("/opt/rh/devtoolset-6/root/usr");
     Prefixes.push_back("/opt/rh/devtoolset-4/root/usr");
@@ -1974,10 +1988,14 @@ void Generic_GCC::GCCInstallationDetector::AddDefaultGCCPrefixes(
       "powerpc64le-linux-gnu", "powerpc64le-unknown-linux-gnu",
       "powerpc64le-suse-linux", "ppc64le-redhat-linux"};
 
-  static const char *const RISCV32LibDirs[] = {"/lib", "/lib32"};
-  static const char *const RISCVTriples[] = {"riscv32-unknown-linux-gnu",
-                                             "riscv64-unknown-linux-gnu",
-                                             "riscv32-unknown-elf"};
+  static const char *const RISCV32LibDirs[] = {"/lib32", "/lib"};
+  static const char *const RISCV32Triples[] = {"riscv32-unknown-linux-gnu",
+                                               "riscv32-linux-gnu",
+                                               "riscv32-unknown-elf"};
+  static const char *const RISCV64LibDirs[] = {"/lib64", "/lib"};
+  static const char *const RISCV64Triples[] = {"riscv64-unknown-linux-gnu",
+                                               "riscv64-linux-gnu",
+                                               "riscv64-unknown-elf"};
 
   static const char *const SPARCv8LibDirs[] = {"/lib32", "/lib"};
   static const char *const SPARCv8Triples[] = {"sparc-linux-gnu",
@@ -2207,9 +2225,15 @@ void Generic_GCC::GCCInstallationDetector::AddDefaultGCCPrefixes(
     break;
   case llvm::Triple::riscv32:
     LibDirs.append(begin(RISCV32LibDirs), end(RISCV32LibDirs));
+    TripleAliases.append(begin(RISCV32Triples), end(RISCV32Triples));
+    BiarchLibDirs.append(begin(RISCV64LibDirs), end(RISCV64LibDirs));
+    BiarchTripleAliases.append(begin(RISCV64Triples), end(RISCV64Triples));
+    break;
+  case llvm::Triple::riscv64:
+    LibDirs.append(begin(RISCV64LibDirs), end(RISCV64LibDirs));
+    TripleAliases.append(begin(RISCV64Triples), end(RISCV64Triples));
     BiarchLibDirs.append(begin(RISCV32LibDirs), end(RISCV32LibDirs));
-    TripleAliases.append(begin(RISCVTriples), end(RISCVTriples));
-    BiarchTripleAliases.append(begin(RISCVTriples), end(RISCVTriples));
+    BiarchTripleAliases.append(begin(RISCV32Triples), end(RISCV32Triples));
     break;
   case llvm::Triple::sparc:
   case llvm::Triple::sparcel:
@@ -2535,7 +2559,8 @@ bool Generic_GCC::IsIntegratedAssemblerDefault() const {
   case llvm::Triple::sparc:
   case llvm::Triple::sparcel:
   case llvm::Triple::sparcv9:
-    if (getTriple().isOSSolaris() || getTriple().isOSOpenBSD())
+    if (getTriple().isOSFreeBSD() || getTriple().isOSOpenBSD() ||
+        getTriple().isOSSolaris())
       return true;
     return false;
   default:

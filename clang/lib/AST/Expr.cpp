@@ -1678,7 +1678,7 @@ bool CastExpr::CastConsistency() const {
     auto Ty = getType();
     auto SETy = getSubExpr()->getType();
     assert(getValueKindForType(Ty) == Expr::getValueKindForType(SETy));
-    if (isRValue()) {
+    if (/*isRValue()*/ !Ty->getPointeeType().isNull()) {
       Ty = Ty->getPointeeType();
       SETy = SETy->getPointeeType();
     }
@@ -2947,6 +2947,7 @@ bool Expr::isConstantInitializer(ASTContext &Ctx, bool IsForRef,
   }
   case InitListExprClass: {
     const InitListExpr *ILE = cast<InitListExpr>(this);
+    assert(ILE->isSemanticForm() && "InitListExpr must be in semantic form");
     if (ILE->getType()->isArrayType()) {
       unsigned numInits = ILE->getNumInits();
       for (unsigned i = 0; i < numInits; i++) {

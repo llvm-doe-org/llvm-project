@@ -102,8 +102,13 @@ and from the command line.
 
 .. option:: -D<VAR=VALUE>
 
-  Sets a filecheck variable ``VAR`` with value ``VALUE`` that can be used in
-  ``CHECK:`` lines.
+  Sets a filecheck pattern variable ``VAR`` with value ``VALUE`` that can be
+  used in ``CHECK:`` lines.
+
+.. option:: -D#<NUMVAR>=<VALUE>
+
+  Sets a filecheck numeric variable ``NUMVAR`` to ``<VALUE>`` that can be used
+  in ``CHECK:`` lines.
 
 .. option:: -version
 
@@ -520,14 +525,14 @@ braces like you would in C.  In the rare case that you want to match double
 braces explicitly from the input, you can use something ugly like
 ``{{[{][{]}}`` as your pattern.
 
-FileCheck Variables
-~~~~~~~~~~~~~~~~~~~
+FileCheck Pattern Expressions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 It is often useful to match a pattern and then verify that it occurs again
 later in the file.  For codegen tests, this can be useful to allow any register,
 but verify that that register is used consistently later.  To do this,
-:program:`FileCheck` allows named variables to be defined and substituted into
-patterns.  Here is a simple example:
+:program:`FileCheck` supports pattern expressions that allow pattern variables
+to be defined and substituted into patterns.  Here is a simple example:
 
 .. code-block:: llvm
 
@@ -560,30 +565,78 @@ CHECK-LABEL block. Global variables are not affected by CHECK-LABEL.
 This makes it easier to ensure that individual tests are not affected
 by variables set in preceding tests.
 
-FileCheck Expressions
-~~~~~~~~~~~~~~~~~~~~~
+FileCheck Numeric Variables and Expressions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Sometimes there's a need to verify output which refers line numbers of the
+:program:`FileCheck` also allows checking for numeric values that satisfy a
+numeric expression constraint based on numeric variables. This allows
+``CHECK:`` directives to verify a numeric relation between two numbers, such as
+the need for consecutive registers to be used.
+
+The syntax to check a numeric expression constraint is
+``[[#<NUMVAR><op><offset>]]`` where:
+
+* ``<NUMVAR>`` is the name of a numeric variable defined on the command line.
+
+* ``<op>`` is an optional numeric operation to perform on the value of
+  ``<NUMVAR>``. Currently supported numeric operations are ``+`` and ``-``.
+
+* ``<offset>`` is the immediate value that constitutes the second operand of
+  the numeric operation <op>. It must be present if ``<op>`` is present,
+  absent otherwise.
+
+For example:
+
+.. code-block:: llvm
+
+    ; CHECK: add r[[#REG]], r[[#REG]], r[[#REG+1]]
+
+The above example would match the line:
+
+.. code-block:: gas
+
+    add r5, r5, r6
+
+but would not match the line:
+
+.. code-block:: gas
+
+    add r5, r5, r7
+
+due to ``7`` being unequal to ``5 + 1``.
+
+The ``--enable-var-scope`` option has the same effect on numeric variables as
+on pattern variables.
+
+FileCheck Pseudo Numeric Variables
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Sometimes there's a need to verify output that contains line numbers of the
 match file, e.g. when testing compiler diagnostics.  This introduces a certain
 fragility of the match file structure, as "``CHECK:``" lines contain absolute
 line numbers in the same file, which have to be updated whenever line numbers
 change due to text addition or deletion.
 
-To support this case, FileCheck allows using ``[[@LINE]]``,
-``[[@LINE+<offset>]]``, ``[[@LINE-<offset>]]`` expressions in patterns. These
-expressions expand to a number of the line where a pattern is located (with an
-optional integer offset).
+To support this case, FileCheck understands the ``@LINE`` pseudo numeric
+variable which evaluates to the line number of the CHECK pattern where it is
+found.
 
 This way match patterns can be put near the relevant test lines and include
 relative line number references, for example:
 
 .. code-block:: c++
 
-   // CHECK: test.cpp:[[@LINE+4]]:6: error: expected ';' after top level declarator
+   // CHECK: test.cpp:[[# @LINE + 4]]:6: error: expected ';' after top level declarator
    // CHECK-NEXT: {{^int a}}
    // CHECK-NEXT: {{^     \^}}
    // CHECK-NEXT: {{^     ;}}
    int a
+
+To support legacy uses of ``@LINE`` as a special pattern variable,
+:program:`FileCheck` also accepts the following uses of ``@LINE`` with pattern
+variable syntax: ``[[@LINE]]``, ``[[@LINE+<offset>]]`` and
+``[[@LINE-<offset>]]`` without any spaces inside the brackets and where
+``offset`` is an integer.
 
 Matching Newline Characters
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~

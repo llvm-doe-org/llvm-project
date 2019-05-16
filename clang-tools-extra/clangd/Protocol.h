@@ -206,11 +206,10 @@ struct TextEdit {
   /// The string to be inserted. For delete operations use an
   /// empty string.
   std::string newText;
-
-  bool operator==(const TextEdit &rhs) const {
-    return newText == rhs.newText && range == rhs.range;
-  }
 };
+inline bool operator==(const TextEdit &L, const TextEdit &R) {
+  return std::tie(L.newText, L.range) == std::tie(R.newText, R.range);
+}
 bool fromJSON(const llvm::json::Value &, TextEdit &);
 llvm::json::Value toJSON(const TextEdit &);
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const TextEdit &);
@@ -294,7 +293,7 @@ using CompletionItemKindBitset = std::bitset<CompletionItemKindMax + 1>;
 bool fromJSON(const llvm::json::Value &, CompletionItemKindBitset &);
 CompletionItemKind
 adjustKindToCapability(CompletionItemKind Kind,
-                       CompletionItemKindBitset &supportedCompletionItemKinds);
+                       CompletionItemKindBitset &SupportedCompletionItemKinds);
 
 /// A symbol kind.
 enum class SymbolKind {
@@ -352,7 +351,7 @@ enum class OffsetEncoding {
 };
 llvm::json::Value toJSON(const OffsetEncoding &);
 bool fromJSON(const llvm::json::Value &, OffsetEncoding &);
-llvm::raw_ostream &operator<<(llvm::raw_ostream &, OffsetEncoding OS);
+llvm::raw_ostream &operator<<(llvm::raw_ostream &, OffsetEncoding);
 
 // This struct doesn't mirror LSP!
 // The protocol defines deeply nested structures for client capabilities.
@@ -365,6 +364,10 @@ struct ClientCapabilities {
   /// Whether the client accepts diagnostics with codeActions attached inline.
   /// textDocument.publishDiagnostics.codeActionsInline.
   bool DiagnosticFixes = false;
+
+  /// Whether the client accepts diagnostics with related locations.
+  /// textDocument.publishDiagnostics.relatedInformation.
+  bool DiagnosticRelatedInformation = false;
 
   /// Whether the client accepts diagnostics with category attached to it
   /// using the "category" extension.
@@ -582,6 +585,18 @@ struct DocumentSymbolParams {
 };
 bool fromJSON(const llvm::json::Value &, DocumentSymbolParams &);
 
+
+/// Represents a related message and source code location for a diagnostic.
+/// This should be used to point to code locations that cause or related to a
+/// diagnostics, e.g when duplicating a symbol in a scope.
+struct DiagnosticRelatedInformation {
+  /// The location of this related diagnostic information.
+  Location location;
+  /// The message of this related diagnostic information.
+  std::string message;
+};
+llvm::json::Value toJSON(const DiagnosticRelatedInformation &);
+
 struct CodeAction;
 struct Diagnostic {
   /// The range at which the message applies.
@@ -592,16 +607,18 @@ struct Diagnostic {
   int severity = 0;
 
   /// The diagnostic's code. Can be omitted.
-  /// Note: Not currently used by clangd
-  // std::string code;
+  std::string code;
 
   /// A human-readable string describing the source of this
   /// diagnostic, e.g. 'typescript' or 'super lint'.
-  /// Note: Not currently used by clangd
-  // std::string source;
+  std::string source;
 
   /// The diagnostic's message.
   std::string message;
+
+  /// An array of related diagnostic information, e.g. when symbol-names within
+  /// a scope collide all definitions can be marked via this property.
+  llvm::Optional<std::vector<DiagnosticRelatedInformation>> relatedInformation;
 
   /// The diagnostic's category. Can be omitted.
   /// An LSP extension that's used to send the name of the category over to the

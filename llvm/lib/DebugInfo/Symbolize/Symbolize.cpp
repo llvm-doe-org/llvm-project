@@ -23,6 +23,7 @@
 #include "llvm/Object/COFF.h"
 #include "llvm/Object/MachO.h"
 #include "llvm/Object/MachOUniversal.h"
+#include "llvm/Support/CRC.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Compression.h"
 #include "llvm/Support/DataExtractor.h"
@@ -163,7 +164,7 @@ bool checkFileCRC(StringRef Path, uint32_t CRCHash) {
       MemoryBuffer::getFileOrSTDIN(Path);
   if (!MB)
     return false;
-  return !zlib::isAvailable() || CRCHash == zlib::crc32(MB.get()->getBuffer());
+  return CRCHash == llvm::crc32(0, MB.get()->getBuffer());
 }
 
 bool findDebugBinary(const std::string &OrigPath,
@@ -220,9 +221,12 @@ bool getGNUDebuglinkContents(const ObjectFile *Obj, std::string &DebugName,
     Section.getName(Name);
     Name = Name.substr(Name.find_first_not_of("._"));
     if (Name == "gnu_debuglink") {
-      StringRef Data;
-      Section.getContents(Data);
-      DataExtractor DE(Data, Obj->isLittleEndian(), 0);
+      Expected<StringRef> ContentsOrErr = Section.getContents();
+      if (!ContentsOrErr) {
+        consumeError(ContentsOrErr.takeError());
+        return false;
+      }
+      DataExtractor DE(*ContentsOrErr, Obj->isLittleEndian(), 0);
       uint32_t Offset = 0;
       if (const char *DebugNameStr = DE.getCStr(&Offset)) {
         // 4-byte align the offset.

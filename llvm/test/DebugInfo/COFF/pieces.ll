@@ -1,5 +1,5 @@
 ; RUN: llc < %s | FileCheck %s --check-prefix=ASM
-; RUN: llc < %s -filetype=obj | llvm-readobj -codeview | FileCheck %s --check-prefix=OBJ
+; RUN: llc < %s -filetype=obj | llvm-readobj --codeview | FileCheck %s --check-prefix=OBJ
 
 ; Compile with -O1 as C
 
@@ -104,7 +104,7 @@
 ; ASM:        .asciz  "o"
 ; ASM:        .cv_def_range    [[oy_ox_start]] [[ox_start]], "C\021\030\000\000\000\000\000\000\000"
 ; ASM:        .cv_def_range    [[oy_ox_start]] [[oy_start]], "C\021\027\000\000\000\004\000\000\000"
-; ASM:        .cv_def_range    [[ox_start]] .Lfunc_end0, "C\021\030\000\000\000\000\000\000\000"
+; ASM:        .cv_def_range    [[ox_start]] [[oy_end]], "C\021\030\000\000\000\000\000\000\000"
 ; ASM:        .cv_def_range    [[oy_start]] [[oy_end]], "C\021\027\000\000\000\004\000\000\000"
 
 

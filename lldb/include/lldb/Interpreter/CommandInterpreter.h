@@ -29,7 +29,6 @@ namespace lldb_private {
 
 class CommandInterpreterRunOptions {
 public:
-  //------------------------------------------------------------------
   /// Construct a CommandInterpreterRunOptions object. This class is used to
   /// control all the instances where we run multiple commands, e.g.
   /// HandleCommands, HandleCommandsFromFile, RunCommandInterpreter.
@@ -54,20 +53,23 @@ public:
   ///    \b false, print no ouput in this case. This setting has an effect only
   ///    if \param echo_commands is \b true.
   /// \param[in] print_results
-  ///    If \b true print the results of the command after executing it. If
-  ///    \b false, execute silently.
+  ///    If \b true and the command succeeds, print the results of the command
+  ///    after executing it. If \b false, execute silently.
+  /// \param[in] print_errors
+  ///    If \b true and the command fails, print the results of the command
+  ///    after executing it. If \b false, execute silently.
   /// \param[in] add_to_history
   ///    If \b true add the commands to the command history. If \b false, don't
   ///    add them.
-  //------------------------------------------------------------------
   CommandInterpreterRunOptions(LazyBool stop_on_continue,
                                LazyBool stop_on_error, LazyBool stop_on_crash,
                                LazyBool echo_commands, LazyBool echo_comments,
-                               LazyBool print_results, LazyBool add_to_history)
+                               LazyBool print_results, LazyBool print_errors,
+                               LazyBool add_to_history)
       : m_stop_on_continue(stop_on_continue), m_stop_on_error(stop_on_error),
         m_stop_on_crash(stop_on_crash), m_echo_commands(echo_commands),
         m_echo_comment_commands(echo_comments), m_print_results(print_results),
-        m_add_to_history(add_to_history) {}
+        m_print_errors(print_errors), m_add_to_history(add_to_history) {}
 
   CommandInterpreterRunOptions()
       : m_stop_on_continue(eLazyBoolCalculate),
@@ -75,13 +77,14 @@ public:
         m_stop_on_crash(eLazyBoolCalculate),
         m_echo_commands(eLazyBoolCalculate),
         m_echo_comment_commands(eLazyBoolCalculate),
-        m_print_results(eLazyBoolCalculate),
+        m_print_results(eLazyBoolCalculate), m_print_errors(eLazyBoolCalculate),
         m_add_to_history(eLazyBoolCalculate) {}
 
   void SetSilent(bool silent) {
     LazyBool value = silent ? eLazyBoolNo : eLazyBoolYes;
 
     m_print_results = value;
+    m_print_errors = value;
     m_echo_commands = value;
     m_echo_comment_commands = value;
     m_add_to_history = value;
@@ -129,6 +132,12 @@ public:
     m_print_results = print_results ? eLazyBoolYes : eLazyBoolNo;
   }
 
+  bool GetPrintErrors() const { return DefaultToYes(m_print_errors); }
+
+  void SetPrintErrors(bool print_errors) {
+    m_print_errors = print_errors ? eLazyBoolYes : eLazyBoolNo;
+  }
+
   bool GetAddToHistory() const { return DefaultToYes(m_add_to_history); }
 
   void SetAddToHistory(bool add_to_history) {
@@ -141,6 +150,7 @@ public:
   LazyBool m_echo_commands;
   LazyBool m_echo_comment_commands;
   LazyBool m_print_results;
+  LazyBool m_print_errors;
   LazyBool m_add_to_history;
 
 private:
@@ -190,8 +200,7 @@ public:
     eCommandTypesAllThem = 0xFFFF  // all commands
   };
 
-  CommandInterpreter(Debugger &debugger, lldb::ScriptLanguage script_language,
-                     bool synchronous_execution);
+  CommandInterpreter(Debugger &debugger, bool synchronous_execution);
 
   ~CommandInterpreter() override;
 
@@ -254,7 +263,6 @@ public:
 
   bool WasInterrupted() const;
 
-  //------------------------------------------------------------------
   /// Execute a list of commands in sequence.
   ///
   /// \param[in] commands
@@ -272,12 +280,10 @@ public:
   ///    safely,
   ///    and failed with some explanation if we aborted executing the commands
   ///    at some point.
-  //------------------------------------------------------------------
   void HandleCommands(const StringList &commands, ExecutionContext *context,
                       CommandInterpreterRunOptions &options,
                       CommandReturnObject &result);
 
-  //------------------------------------------------------------------
   /// Execute a list of commands from a file.
   ///
   /// \param[in] file
@@ -295,7 +301,6 @@ public:
   ///    safely,
   ///    and failed with some explanation if we aborted executing the commands
   ///    at some point.
-  //------------------------------------------------------------------
   void HandleCommandsFromFile(FileSpec &file, ExecutionContext *context,
                               CommandInterpreterRunOptions &options,
                               CommandReturnObject &result);
@@ -378,8 +383,6 @@ public:
 
   void Clear();
 
-  void SetScriptLanguage(lldb::ScriptLanguage lang);
-
   bool HasCommands() const;
 
   bool HasAliases() const;
@@ -394,10 +397,6 @@ public:
                              CommandReturnObject &result);
 
   int GetOptionArgumentPosition(const char *in_string);
-
-  ScriptInterpreter *GetScriptInterpreter(bool can_create = true);
-
-  void SetScriptInterpreter();
 
   void SkipLLDBInitFiles(bool skip_lldbinit_files) {
     m_skip_lldbinit_files = skip_lldbinit_files;
@@ -459,9 +458,7 @@ public:
 
   const char *GetCommandPrefix();
 
-  //------------------------------------------------------------------
   // Properties
-  //------------------------------------------------------------------
   bool GetExpandRegexAliases() const;
 
   bool GetPromptOnQuit() const;
@@ -474,28 +471,22 @@ public:
   bool GetEchoCommentCommands() const;
   void SetEchoCommentCommands(bool b);
 
-  //------------------------------------------------------------------
   /// Specify if the command interpreter should allow that the user can
   /// specify a custom exit code when calling 'quit'.
-  //------------------------------------------------------------------
   void AllowExitCodeOnQuit(bool allow);
 
-  //------------------------------------------------------------------
   /// Sets the exit code for the quit command.
   /// \param[in] exit_code
   ///     The exit code that the driver should return on exit.
   /// \return True if the exit code was successfully set; false if the
   ///         interpreter doesn't allow custom exit codes.
   /// \see AllowExitCodeOnQuit
-  //------------------------------------------------------------------
   LLVM_NODISCARD bool SetQuitExitCode(int exit_code);
 
-  //------------------------------------------------------------------
   /// Returns the exit code that the user has specified when running the
   /// 'quit' command.
   /// \param[out] exited
   ///     Set to true if the user has called quit with a custom exit code.
-  //------------------------------------------------------------------
   int GetQuitExitCode(bool &exited) const;
 
   void ResolveCommand(const char *command_line, CommandReturnObject &result);
@@ -517,9 +508,7 @@ public:
 protected:
   friend class Debugger;
 
-  //------------------------------------------------------------------
   // IOHandlerDelegate functions
-  //------------------------------------------------------------------
   void IOHandlerInputComplete(IOHandler &io_handler,
                               std::string &line) override;
 
@@ -592,8 +581,6 @@ private:
   CommandHistory m_command_history;
   std::string m_repeat_command; // Stores the command that will be executed for
                                 // an empty command string.
-  lldb::ScriptInterpreterSP m_script_interpreter_sp;
-  std::recursive_mutex m_script_interpreter_mutex;
   lldb::IOHandlerSP m_command_io_handler_sp;
   char m_comment_char;
   bool m_batch_command_mode;

@@ -32,10 +32,8 @@
 using namespace clang;
 using namespace lldb_private;
 
-//------------------------------------------------------------------
 // Scoped class that will remove an active lexical decl from the set when it
 // goes out of scope.
-//------------------------------------------------------------------
 namespace {
 class ScopedLexicalDeclEraser {
 public:
@@ -761,6 +759,10 @@ void ClangASTSource::FindExternalVisibleDecls(NameSearchContext &context) {
     if (clang_namespace_decl)
       clang_namespace_decl->setHasExternalVisibleStorage();
   }
+}
+
+clang::Sema *ClangASTSource::getSema() {
+  return ClangASTContext::GetASTContext(m_ast_context)->getSema();
 }
 
 bool ClangASTSource::IgnoreName(const ConstString name,
@@ -1966,7 +1968,14 @@ clang::QualType ClangASTSource::CopyTypeWithMerger(
     return QualType();
   }
 
-  return merger.ImporterForOrigin(from_context).Import(type);
+  if (llvm::Expected<QualType> type_or_error =
+          merger.ImporterForOrigin(from_context).Import(type)) {
+    return *type_or_error;
+  } else {
+    Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS);
+    LLDB_LOG_ERROR(log, type_or_error.takeError(), "Couldn't import type: {0}");
+    return QualType();
+  }
 }
 
 clang::Decl *ClangASTSource::CopyDecl(Decl *src_decl) {
@@ -1979,7 +1988,16 @@ clang::Decl *ClangASTSource::CopyDecl(Decl *src_decl) {
       return nullptr;
     }
 
-    return m_merger_up->ImporterForOrigin(from_context).Import(src_decl);
+    if (llvm::Expected<Decl *> decl_or_error =
+            m_merger_up->ImporterForOrigin(from_context).Import(src_decl)) {
+      return *decl_or_error;
+    } else {
+      Log *log =
+          lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS);
+      LLDB_LOG_ERROR(log, decl_or_error.takeError(),
+                     "Couldn't import decl: {0}");
+      return nullptr;
+    }
   } else {
     lldbassert(0 && "No mechanism for copying a decl!");
     return nullptr;

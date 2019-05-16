@@ -25,10 +25,10 @@ let Predicates = [HasSVE] in {
   defm SQSUB_ZZZ : sve_int_bin_cons_arit_0<0b110, "sqsub">;
   defm UQSUB_ZZZ : sve_int_bin_cons_arit_0<0b111, "uqsub">;
 
-  def AND_ZZZ : sve_int_bin_cons_log<0b00, "and">;
-  def ORR_ZZZ : sve_int_bin_cons_log<0b01, "orr">;
-  def EOR_ZZZ : sve_int_bin_cons_log<0b10, "eor">;
-  def BIC_ZZZ : sve_int_bin_cons_log<0b11, "bic">;
+  defm AND_ZZZ : sve_int_bin_cons_log<0b00, "and">;
+  defm ORR_ZZZ : sve_int_bin_cons_log<0b01, "orr">;
+  defm EOR_ZZZ : sve_int_bin_cons_log<0b10, "eor">;
+  defm BIC_ZZZ : sve_int_bin_cons_log<0b11, "bic">;
 
   defm ADD_ZPmZ   : sve_int_bin_pred_arit_0<0b000, "add">;
   defm SUB_ZPmZ   : sve_int_bin_pred_arit_0<0b001, "sub">;
@@ -1020,4 +1020,50 @@ let Predicates = [HasSVE] in {
                   (FCMGT_PPzZZ_S PPR32:$Zd, PPR3bAny:$Pg, ZPR32:$Zn, ZPR32:$Zm), 0>;
   def : InstAlias<"fcmlt $Zd, $Pg/z, $Zm, $Zn",
                   (FCMGT_PPzZZ_D PPR64:$Zd, PPR3bAny:$Pg, ZPR64:$Zn, ZPR64:$Zm), 0>;
+}
+
+let Predicates = [HasSVE2] in {
+  // SVE2 integer multiply-add (indexed)
+  defm MLA_ZZZI : sve2_int_mla_by_indexed_elem<0b01, 0b0, "mla">;
+  defm MLS_ZZZI : sve2_int_mla_by_indexed_elem<0b01, 0b1, "mls">;
+
+  // SVE2 saturating multiply-add high (indexed)
+  defm SQRDMLAH_ZZZI : sve2_int_mla_by_indexed_elem<0b10, 0b0, "sqrdmlah">;
+  defm SQRDMLSH_ZZZI : sve2_int_mla_by_indexed_elem<0b10, 0b1, "sqrdmlsh">;
+
+  // SVE2 saturating multiply-add high (vectors, unpredicated)
+  defm SQRDMLAH_ZZZ : sve2_int_mla<0b0, "sqrdmlah">;
+  defm SQRDMLSH_ZZZ : sve2_int_mla<0b1, "sqrdmlsh">;
+
+  // SVE2 integer multiply (indexed)
+  defm MUL_ZZZI : sve2_int_mul_by_indexed_elem<0b1110, "mul">;
+
+  // SVE2 saturating multiply high (indexed)
+  defm SQDMULH_ZZZI  : sve2_int_mul_by_indexed_elem<0b1100, "sqdmulh">;
+  defm SQRDMULH_ZZZI : sve2_int_mul_by_indexed_elem<0b1101, "sqrdmulh">;
+
+  // SVE2 signed saturating doubling multiply high (unpredicated)
+  defm SQDMULH_ZZZ  : sve2_int_mul<0b100, "sqdmulh">;
+  defm SQRDMULH_ZZZ : sve2_int_mul<0b101, "sqrdmulh">;
+
+  // SVE2 integer multiply vectors (unpredicated)
+  defm MUL_ZZZ    : sve2_int_mul<0b000, "mul">;
+  defm SMULH_ZZZ  : sve2_int_mul<0b010, "smulh">;
+  defm UMULH_ZZZ  : sve2_int_mul<0b011, "umulh">;
+  def  PMUL_ZZZ_B : sve2_int_mul<0b00, 0b001, "pmul", ZPR8>;
+
+  // SVE2 complex integer dot product (indexed)
+  defm CDOT_ZZZI : sve2_cintx_dot_by_indexed_elem<"cdot">;
+
+  // SVE2 complex integer dot product
+  defm CDOT_ZZZ : sve2_cintx_dot<"cdot">;
+
+  // SVE2 complex integer multiply-add (indexed)
+  defm CMLA_ZZZI      : sve2_cmla_by_indexed_elem<0b0, "cmla">;
+  // SVE2 complex saturating multiply-add (indexed)
+  defm SQRDCMLAH_ZZZI : sve2_cmla_by_indexed_elem<0b1, "sqrdcmlah">;
+
+  // SVE2 complex integer multiply-add
+  defm CMLA_ZZZ      : sve2_int_cmla<0b0, "cmla">;
+  defm SQRDCMLAH_ZZZ : sve2_int_cmla<0b1, "sqrdcmlah">;
 }

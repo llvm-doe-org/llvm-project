@@ -107,6 +107,16 @@ def HasFuseAES       : Predicate<"Subtarget->hasFuseAES()">,
                                  "fuse-aes">;
 def HasSVE           : Predicate<"Subtarget->hasSVE()">,
                                  AssemblerPredicate<"FeatureSVE", "sve">;
+def HasSVE2          : Predicate<"Subtarget->hasSVE2()">,
+                                 AssemblerPredicate<"FeatureSVE2", "sve2">;
+def HasSVE2AES       : Predicate<"Subtarget->hasSVE2AES()">,
+                                 AssemblerPredicate<"FeatureSVE2AES", "sve2-aes">;
+def HasSVE2SM4       : Predicate<"Subtarget->hasSVE2SM4()">,
+                                 AssemblerPredicate<"FeatureSVE2SM4", "sve2-sm4">;
+def HasSVE2SHA3      : Predicate<"Subtarget->hasSVE2SHA3()">,
+                                 AssemblerPredicate<"FeatureSVE2SHA3", "sve2-sha3">;
+def HasSVE2BitPerm   : Predicate<"Subtarget->hasSVE2BitPerm()">,
+                                 AssemblerPredicate<"FeatureSVE2BitPerm", "bitperm">;
 def HasRCPC          : Predicate<"Subtarget->hasRCPC()">,
                                  AssemblerPredicate<"FeatureRCPC", "rcpc">;
 def HasAltNZCV       : Predicate<"Subtarget->hasAlternativeNZCV()">,
@@ -407,10 +417,10 @@ def AArch64umaxv    : SDNode<"AArch64ISD::UMAXV", SDT_AArch64UnaryVec>;
 // the Function object through the <Target>Subtarget and objections were raised
 // to that (see post-commit review comments for r301750).
 let RecomputePerFunction = 1 in {
-  def ForCodeSize   : Predicate<"MF->getFunction().optForSize()">;
-  def NotForCodeSize   : Predicate<"!MF->getFunction().optForSize()">;
+  def ForCodeSize   : Predicate<"MF->getFunction().hasOptSize()">;
+  def NotForCodeSize   : Predicate<"!MF->getFunction().hasOptSize()">;
   // Avoid generating STRQro if it is slow, unless we're optimizing for code size.
-  def UseSTRQro : Predicate<"!Subtarget->isSTRQroSlow() || MF->getFunction().optForSize()">;
+  def UseSTRQro : Predicate<"!Subtarget->isSTRQroSlow() || MF->getFunction().hasOptSize()">;
 
   def UseBTI : Predicate<[{ MF->getFunction().hasFnAttribute("branch-target-enforcement") }]>;
   def NotUseBTI : Predicate<[{ !MF->getFunction().hasFnAttribute("branch-target-enforcement") }]>;
@@ -1233,11 +1243,11 @@ defm : STOPregister<"stumin","LDUMIN">;// STUMINx
 // v8.5 Memory Tagging Extension
 let Predicates = [HasMTE] in {
 
-def IRG   : BaseTwoOperand<0b0100, GPR64sp, "irg", null_frag, GPR64sp, GPR64>,
+def IRG   : BaseTwoOperand<0b0100, GPR64sp, "irg", int_aarch64_irg, GPR64sp, GPR64>,
             Sched<[]>{
   let Inst{31} = 1;
 }
-def GMI   : BaseTwoOperand<0b0101, GPR64, "gmi", null_frag, GPR64sp>, Sched<[]>{
+def GMI   : BaseTwoOperand<0b0101, GPR64, "gmi", int_aarch64_gmi, GPR64sp>, Sched<[]>{
   let Inst{31} = 1;
   let isNotDuplicable = 1;
 }
@@ -1246,7 +1256,7 @@ def SUBG  : AddSubG<1, "subg", null_frag>;
 
 def : InstAlias<"irg $dst, $src", (IRG GPR64sp:$dst, GPR64sp:$src, XZR), 1>;
 
-def SUBP : SUBP<0, "subp", null_frag>, Sched<[]>;
+def SUBP : SUBP<0, "subp", int_aarch64_subp>, Sched<[]>;
 def SUBPS : SUBP<1, "subps", null_frag>, Sched<[]>{
   let Defs = [NZCV];
 }
@@ -1254,13 +1264,18 @@ def SUBPS : SUBP<1, "subps", null_frag>, Sched<[]>{
 def : InstAlias<"cmpp $lhs, $rhs", (SUBPS XZR, GPR64sp:$lhs, GPR64sp:$rhs), 0>;
 
 def LDG : MemTagLoad<"ldg", "\t$Rt, [$Rn, $offset]">;
+
+def : Pat<(int_aarch64_addg (am_indexedu6s128 GPR64sp:$Rn, uimm6s16:$imm6), imm0_15:$imm4),
+          (ADDG GPR64sp:$Rn, imm0_63:$imm6, imm0_15:$imm4)>;
+def : Pat<(int_aarch64_ldg GPR64:$Rt, (am_indexeds9s128 GPR64sp:$Rn,  simm9s16:$offset)),
+          (LDG GPR64:$Rt, GPR64sp:$Rn,  simm9s16:$offset)>;
+
 def : InstAlias<"ldg $Rt, [$Rn]", (LDG GPR64:$Rt, GPR64sp:$Rn, 0), 1>;
 
 def LDGM : MemTagVector<1, "ldgm", "\t$Rt, [$Rn]",
                    (outs GPR64:$Rt), (ins GPR64sp:$Rn)>;
 def STGM : MemTagVector<0, "stgm", "\t$Rt, [$Rn]",
                    (outs), (ins GPR64:$Rt, GPR64sp:$Rn)>;
-
 def STZGM : MemTagVector<0, "stzgm", "\t$Rt, [$Rn]",
                    (outs), (ins GPR64:$Rt, GPR64sp:$Rn)> {
   let Inst{23} = 0;
@@ -1274,6 +1289,9 @@ defm STZ2G : MemTagStore<0b11, "stz2g">;
 defm STGP     : StorePairOffset <0b01, 0, GPR64z, simm7s16, "stgp">;
 def  STGPpre  : StorePairPreIdx <0b01, 0, GPR64z, simm7s16, "stgp">;
 def  STGPpost : StorePairPostIdx<0b01, 0, GPR64z, simm7s16, "stgp">;
+
+def : Pat<(int_aarch64_stg GPR64:$Rt, (am_indexeds9s128 GPR64sp:$Rn, simm9s16:$offset)),
+          (STGOffset GPR64:$Rt, GPR64sp:$Rn,  simm9s16:$offset)>;
 
 } // Predicates = [HasMTE]
 
@@ -3064,6 +3082,15 @@ defm : FPToIntegerPats<fp_to_sint, ftrunc, "FCVTZS">;
 defm : FPToIntegerPats<fp_to_uint, ftrunc, "FCVTZU">;
 defm : FPToIntegerPats<fp_to_sint, fround, "FCVTAS">;
 defm : FPToIntegerPats<fp_to_uint, fround, "FCVTAU">;
+
+def : Pat<(i64 (lround f32:$Rn)),
+          (!cast<Instruction>(FCVTASUXSr) f32:$Rn)>;
+def : Pat<(i64 (lround f64:$Rn)),
+          (!cast<Instruction>(FCVTASUXDr) f64:$Rn)>;
+def : Pat<(i64 (llround f32:$Rn)),
+          (!cast<Instruction>(FCVTASUXSr) f32:$Rn)>;
+def : Pat<(i64 (llround f64:$Rn)),
+          (!cast<Instruction>(FCVTASUXDr) f64:$Rn)>;
 
 //===----------------------------------------------------------------------===//
 // Scaled integer to floating point conversion instructions.
@@ -5327,6 +5354,8 @@ def : Pat<(f16 (int_aarch64_neon_vcvtfxs2fp (i32 (sext_inreg FPR32:$Rn, i16)), v
           (SCVTFh (EXTRACT_SUBREG FPR32:$Rn, hsub), vecshiftR16:$imm)>;
 def : Pat<(f16 (int_aarch64_neon_vcvtfxs2fp (i32 FPR32:$Rn), vecshiftR16:$imm)),
           (SCVTFh (EXTRACT_SUBREG FPR32:$Rn, hsub), vecshiftR16:$imm)>;
+def : Pat<(f16 (int_aarch64_neon_vcvtfxs2fp (i64 FPR64:$Rn), vecshiftR16:$imm)),
+          (SCVTFh (EXTRACT_SUBREG FPR64:$Rn, hsub), vecshiftR16:$imm)>;
 def : Pat<(f16 (int_aarch64_neon_vcvtfxu2fp
             (and FPR32:$Rn, (i32 65535)),
             vecshiftR16:$imm)),
@@ -5354,6 +5383,16 @@ def : Pat<(i64 (int_aarch64_neon_vcvtfp2fxu (f16 FPR16:$Rn), vecshiftR64:$imm)),
           (i64 (INSERT_SUBREG
             (i64 (IMPLICIT_DEF)),
             (FCVTZUh FPR16:$Rn, vecshiftR64:$imm),
+            hsub))>;
+def : Pat<(i32 (int_aarch64_neon_facge (f16 FPR16:$Rn), (f16 FPR16:$Rm))),
+          (i32 (INSERT_SUBREG
+            (i32 (IMPLICIT_DEF)),
+            (FACGE16 FPR16:$Rn, FPR16:$Rm),
+            hsub))>;
+def : Pat<(i32 (int_aarch64_neon_facgt (f16 FPR16:$Rn), (f16 FPR16:$Rm))),
+          (i32 (INSERT_SUBREG
+            (i32 (IMPLICIT_DEF)),
+            (FACGT16 FPR16:$Rn, FPR16:$Rm),
             hsub))>;
 
 defm SHL      : SIMDScalarLShiftD<   0, 0b01010, "shl", AArch64vshl>;

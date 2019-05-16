@@ -24,14 +24,10 @@
 using namespace lldb;
 using namespace lldb_private;
 
-//----------------------------------------------------------------------
 // Constructor
-//----------------------------------------------------------------------
 DWARFDebugAranges::DWARFDebugAranges() : m_aranges() {}
 
-//----------------------------------------------------------------------
 // CountArangeDescriptors
-//----------------------------------------------------------------------
 class CountArangeDescriptors {
 public:
   CountArangeDescriptors(uint32_t &count_ref) : count(count_ref) {
@@ -43,13 +39,9 @@ public:
   uint32_t &count;
 };
 
-//----------------------------------------------------------------------
 // Extract
-//----------------------------------------------------------------------
 llvm::Error
 DWARFDebugAranges::extract(const DWARFDataExtractor &debug_aranges_data) {
-  assert(debug_aranges_data.ValidOffset(0));
-
   lldb::offset_t offset = 0;
 
   DWARFDebugArangeSet set;
@@ -71,8 +63,8 @@ DWARFDebugAranges::extract(const DWARFDataExtractor &debug_aranges_data) {
       }
     }
     set.Clear();
-    }
-    return llvm::ErrorSuccess();
+  }
+  return llvm::ErrorSuccess();
 }
 
 void DWARFDebugAranges::Dump(Log *log) const {
@@ -103,9 +95,7 @@ void DWARFDebugAranges::Sort(bool minimize) {
   m_aranges.CombineConsecutiveEntriesWithEqualData();
 }
 
-//----------------------------------------------------------------------
 // FindAddress
-//----------------------------------------------------------------------
 dw_offset_t DWARFDebugAranges::FindAddress(dw_addr_t address) const {
   const RangeToDIE::Entry *entry = m_aranges.FindEntryThatContains(address);
   if (entry)

@@ -2231,13 +2231,22 @@ void StmtPrinter::VisitLambdaExpr(LambdaExpr *Node) {
       llvm_unreachable("VLA type in explicit captures.");
     }
 
+    if (C->isPackExpansion())
+      OS << "...";
+
     if (Node->isInitCapture(C))
       PrintExpr(C->getCapturedVar()->getInit());
   }
   OS << ']';
 
+  if (!Node->getExplicitTemplateParameters().empty()) {
+    Node->getTemplateParameterList()->print(
+        OS, Node->getLambdaClass()->getASTContext(),
+        /*OmitTemplateKW*/true);
+  }
+
   if (Node->hasExplicitParameters()) {
-    OS << " (";
+    OS << '(';
     CXXMethodDecl *Method = Node->getCallOperator();
     NeedComma = false;
     for (const auto *P : Method->parameters()) {
@@ -2272,9 +2281,8 @@ void StmtPrinter::VisitLambdaExpr(LambdaExpr *Node) {
   }
 
   // Print the body.
-  CompoundStmt *Body = Node->getBody();
   OS << ' ';
-  PrintStmt(Body);
+  PrintRawCompoundStmt(Node->getBody());
 }
 
 void StmtPrinter::VisitCXXScalarValueInitExpr(CXXScalarValueInitExpr *Node) {
@@ -2304,10 +2312,11 @@ void StmtPrinter::VisitCXXNewExpr(CXXNewExpr *E) {
   if (E->isParenTypeId())
     OS << "(";
   std::string TypeS;
-  if (Expr *Size = E->getArraySize()) {
+  if (Optional<Expr *> Size = E->getArraySize()) {
     llvm::raw_string_ostream s(TypeS);
     s << '[';
-    Size->printPretty(s, Helper, Policy);
+    if (*Size)
+      (*Size)->printPretty(s, Helper, Policy);
     s << ']';
   }
   E->getAllocatedType().print(OS, Policy, TypeS);

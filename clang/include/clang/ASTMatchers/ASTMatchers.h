@@ -2938,10 +2938,59 @@ AST_MATCHER_P(ObjCMessageExpr, hasReceiverType, internal::Matcher<QualType>,
   return InnerMatcher.matches(TypeDecl, Finder, Builder);
 }
 
+/// Returns true when the Objective-C method declaration is a class method.
+///
+/// Example
+/// matcher = objcMethodDecl(isClassMethod())
+/// matches
+/// \code
+/// @interface I + (void)foo; @end
+/// \endcode
+/// but not
+/// \code
+/// @interface I - (void)bar; @end
+/// \endcode
+AST_MATCHER(ObjCMethodDecl, isClassMethod) {
+  return Node.isClassMethod();
+}
+
+/// Returns true when the Objective-C method declaration is an instance method.
+///
+/// Example
+/// matcher = objcMethodDecl(isInstanceMethod())
+/// matches
+/// \code
+/// @interface I - (void)bar; @end
+/// \endcode
+/// but not
+/// \code
+/// @interface I + (void)foo; @end
+/// \endcode
+AST_MATCHER(ObjCMethodDecl, isInstanceMethod) {
+  return Node.isInstanceMethod();
+}
+
+/// Returns true when the Objective-C message is sent to a class.
+///
+/// Example
+/// matcher = objcMessageExpr(isClassMessage())
+/// matches
+/// \code
+///   [NSString stringWithFormat:@"format"];
+/// \endcode
+/// but not
+/// \code
+///   NSString *x = @"hello";
+///   [x containsString:@"h"];
+/// \endcode
+AST_MATCHER(ObjCMessageExpr, isClassMessage) {
+  return Node.isClassMessage();
+}
+
 /// Returns true when the Objective-C message is sent to an instance.
 ///
 /// Example
-/// matcher = objcMessagaeExpr(isInstanceMessage())
+/// matcher = objcMessageExpr(isInstanceMessage())
 /// matches
 /// \code
 ///   NSString *x = @"hello";
@@ -6122,6 +6171,9 @@ AST_MATCHER(CXXConstructorDecl, isDelegatingConstructor) {
 AST_POLYMORPHIC_MATCHER(isExplicit,
                         AST_POLYMORPHIC_SUPPORTED_TYPES(CXXConstructorDecl,
                                                         CXXConversionDecl)) {
+  // FIXME : it's not clear whether this should match a dependent
+  //         explicit(....). this matcher should also be able to match
+  //         CXXDeductionGuideDecl with explicit specifier.
   return Node.isExplicit();
 }
 
@@ -6163,6 +6215,29 @@ AST_MATCHER(NamespaceDecl, isAnonymous) {
   return Node.isAnonymousNamespace();
 }
 
+/// Matches declarations in the namespace `std`, but not in nested namespaces.
+///
+/// Given
+/// \code
+///   class vector {};
+///   namespace foo {
+///     class vector {};
+///     namespace std {
+///       class vector {};
+///     }
+///   }
+///   namespace std {
+///     inline namespace __1 {
+///       class vector {}; // #1
+///       namespace experimental {
+///         class vector {};
+///       }
+///     }
+///   }
+/// \endcode
+/// cxxRecordDecl(hasName("vector"), isInStdNamespace()) will match only #1.
+AST_MATCHER(Decl, isInStdNamespace) { return Node.isInStdNamespace(); }
+
 /// If the given case statement does not use the GNU case range
 /// extension, matches the constant given in the statement.
 ///
@@ -6187,7 +6262,7 @@ AST_MATCHER_P(CaseStmt, hasCaseConstant, internal::Matcher<Expr>,
 ///   __attribute__((device)) void f() { ... }
 /// \endcode
 /// decl(hasAttr(clang::attr::CUDADevice)) matches the function declaration of
-/// f. If the matcher is use from clang-query, attr::Kind parameter should be
+/// f. If the matcher is used from clang-query, attr::Kind parameter should be
 /// passed as a quoted string. e.g., hasAttr("attr::CUDADevice").
 AST_MATCHER_P(Decl, hasAttr, attr::Kind, AttrKind) {
   for (const auto *Attr : Node.attrs()) {
@@ -6338,8 +6413,8 @@ AST_MATCHER(CXXNewExpr, isArray) {
 /// cxxNewExpr(hasArraySize(intgerLiteral(equals(10))))
 ///   matches the expression 'new MyClass[10]'.
 AST_MATCHER_P(CXXNewExpr, hasArraySize, internal::Matcher<Expr>, InnerMatcher) {
-  return Node.isArray() &&
-    InnerMatcher.matches(*Node.getArraySize(), Finder, Builder);
+  return Node.isArray() && *Node.getArraySize() &&
+         InnerMatcher.matches(**Node.getArraySize(), Finder, Builder);
 }
 
 /// Matches a class declaration that is defined.

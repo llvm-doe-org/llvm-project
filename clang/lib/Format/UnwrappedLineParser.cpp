@@ -172,10 +172,16 @@ class CompoundStatementIndenter {
 public:
   CompoundStatementIndenter(UnwrappedLineParser *Parser,
                             const FormatStyle &Style, unsigned &LineLevel)
+      : CompoundStatementIndenter(Parser, LineLevel,
+                                  Style.BraceWrapping.AfterControlStatement,
+                                  Style.BraceWrapping.IndentBraces) {
+  }
+  CompoundStatementIndenter(UnwrappedLineParser *Parser, unsigned &LineLevel,
+                            bool WrapBrace, bool IndentBrace)
       : LineLevel(LineLevel), OldLineLevel(LineLevel) {
-    if (Style.BraceWrapping.AfterControlStatement)
+    if (WrapBrace)
       Parser->addUnwrappedLine();
-    if (Style.BraceWrapping.IndentBraces)
+    if (IndentBrace)
       ++LineLevel;
   }
   ~CompoundStatementIndenter() { LineLevel = OldLineLevel; }
@@ -799,7 +805,7 @@ void UnwrappedLineParser::parsePPEndIf() {
 void UnwrappedLineParser::parsePPDefine() {
   nextToken();
 
-  if (FormatTok->Tok.getKind() != tok::identifier) {
+  if (!FormatTok->Tok.getIdentifierInfo()) {
     IncludeGuard = IG_Rejected;
     IncludeGuardToken = nullptr;
     parsePPUnknown();
@@ -1329,10 +1335,15 @@ void UnwrappedLineParser::parseStructuralElement() {
       // See if the following token should start a new unwrapped line.
       StringRef Text = FormatTok->TokenText;
       nextToken();
-      if (Line->Tokens.size() == 1 &&
-          // JS doesn't have macros, and within classes colons indicate fields,
-          // not labels.
-          Style.Language != FormatStyle::LK_JavaScript) {
+
+      // JS doesn't have macros, and within classes colons indicate fields, not
+      // labels.
+      if (Style.Language == FormatStyle::LK_JavaScript)
+        break;
+
+      TokenCount = Line->Tokens.size();
+      if (TokenCount == 1 ||
+          (TokenCount == 2 && Line->Tokens.front().Tok->is(tok::comment))) {
         if (FormatTok->Tok.is(tok::colon) && !Line->MustBeDeclaration) {
           Line->Tokens.begin()->Tok->MustBreakBefore = true;
           parseLabel();
@@ -1950,7 +1961,9 @@ void UnwrappedLineParser::parseLabel() {
   if (Line->Level > 1 || (!Line->InPPDirective && Line->Level > 0))
     --Line->Level;
   if (CommentsBeforeNextToken.empty() && FormatTok->Tok.is(tok::l_brace)) {
-    CompoundStatementIndenter Indenter(this, Style, Line->Level);
+    CompoundStatementIndenter Indenter(this, Line->Level,
+                                       Style.BraceWrapping.AfterCaseLabel,
+                                       Style.BraceWrapping.IndentBraces);
     parseBlock(/*MustBeDeclaration=*/false);
     if (FormatTok->Tok.is(tok::kw_break)) {
       if (Style.BraceWrapping.AfterControlStatement)

@@ -720,6 +720,7 @@ class XForm_25_memOp<bits<6> opcode, bits<10> xo, dag OOL, dag IOL,
   : XForm_base_r3xo_memOp<opcode, xo, OOL, IOL, asmstr, itin, pattern> {
 }
 
+// [PO RT /// RB XO RC]
 class XForm_26<bits<6> opcode, bits<10> xo, dag OOL, dag IOL, string asmstr,
                InstrItinClass itin, list<dag> pattern>
   : XForm_base_r3xo<opcode, xo, OOL, IOL, asmstr, itin, pattern> {
@@ -1183,9 +1184,9 @@ class XX2_RD6_DCMX7_RS6<bits<6> opcode, bits<4> xo1, bits<3> xo2,
   let Inst{11-15} = DCMX{4-0};
   let Inst{16-20} = XB{4-0};
   let Inst{21-24} = xo1;
-  let Inst{25}    = DCMX{5};
+  let Inst{25}    = DCMX{6};
   let Inst{26-28} = xo2;
-  let Inst{29}    = DCMX{6};
+  let Inst{29}    = DCMX{5};
   let Inst{30}    = XB{5};
   let Inst{31}    = XT{5};
 }

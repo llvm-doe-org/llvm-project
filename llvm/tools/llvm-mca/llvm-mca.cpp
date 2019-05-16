@@ -23,6 +23,7 @@
 #include "CodeRegion.h"
 #include "CodeRegionGenerator.h"
 #include "PipelinePrinter.h"
+#include "Views/BottleneckAnalysis.h"
 #include "Views/DispatchStatistics.h"
 #include "Views/InstructionInfoView.h"
 #include "Views/RegisterFileStatistics.h"
@@ -363,6 +364,11 @@ int main(int argc, char **argv) {
     return 1;
   }
   const mca::CodeRegions &Regions = *RegionsOrErr;
+
+  // Early exit if errors were found by the code region parsing logic.
+  if (!Regions.isValid())
+    return 1;
+
   if (Regions.empty()) {
     WithColor::error() << "no assembly instructions found.\n";
     return 1;
@@ -477,7 +483,10 @@ int main(int argc, char **argv) {
 
     if (PrintSummaryView)
       Printer.addView(llvm::make_unique<mca::SummaryView>(
-          SM, Insts, DispatchWidth, EnableBottleneckAnalysis));
+          SM, Insts, DispatchWidth));
+
+    if (EnableBottleneckAnalysis)
+      Printer.addView(llvm::make_unique<mca::BottleneckAnalysis>(SM));
 
     if (PrintInstructionInfoView)
       Printer.addView(

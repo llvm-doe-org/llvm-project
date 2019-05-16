@@ -244,8 +244,8 @@ void RegisterContextLLDB::InitializeZerothFrame() {
     }
 
     if (func_unwinders_sp.get() != nullptr)
-      call_site_unwind_plan = func_unwinders_sp->GetUnwindPlanAtCallSite(
-          process->GetTarget(), m_current_offset_backed_up_one);
+      call_site_unwind_plan =
+          func_unwinders_sp->GetUnwindPlanAtCallSite(process->GetTarget());
 
     if (call_site_unwind_plan.get() != nullptr) {
       m_fallback_unwind_plan_sp = call_site_unwind_plan;
@@ -822,8 +822,8 @@ UnwindPlanSP RegisterContextLLDB::GetFullUnwindPlanForFrame() {
   // unwind out of sigtramp.
   if (m_frame_type == eTrapHandlerFrame && process) {
     m_fast_unwind_plan_sp.reset();
-    unwind_plan_sp = func_unwinders_sp->GetEHFrameUnwindPlan(
-        process->GetTarget(), m_current_offset_backed_up_one);
+    unwind_plan_sp =
+        func_unwinders_sp->GetEHFrameUnwindPlan(process->GetTarget());
     if (unwind_plan_sp && unwind_plan_sp->PlanValidAtAddress(m_current_pc) &&
         unwind_plan_sp->GetSourcedFromCompiler() == eLazyBoolYes) {
       return unwind_plan_sp;
@@ -844,8 +844,8 @@ UnwindPlanSP RegisterContextLLDB::GetFullUnwindPlanForFrame() {
     // normally we would call GetUnwindPlanAtCallSite() -- because CallSite may
     // return an unwind plan sourced from either eh_frame (that's what we
     // intend) or compact unwind (this won't work)
-    unwind_plan_sp = func_unwinders_sp->GetEHFrameUnwindPlan(
-        process->GetTarget(), m_current_offset_backed_up_one);
+    unwind_plan_sp =
+        func_unwinders_sp->GetEHFrameUnwindPlan(process->GetTarget());
     if (unwind_plan_sp && unwind_plan_sp->PlanValidAtAddress(m_current_pc)) {
       UnwindLogMsgVerbose("frame uses %s for full UnwindPlan because the "
                           "DynamicLoader suggested we prefer it",
@@ -858,7 +858,7 @@ UnwindPlanSP RegisterContextLLDB::GetFullUnwindPlanForFrame() {
   // the assembly language instructions
   if (behaves_like_zeroth_frame && process) {
     unwind_plan_sp = func_unwinders_sp->GetUnwindPlanAtNonCallSite(
-        process->GetTarget(), m_thread, m_current_offset_backed_up_one);
+        process->GetTarget(), m_thread);
     if (unwind_plan_sp && unwind_plan_sp->PlanValidAtAddress(m_current_pc)) {
       if (unwind_plan_sp->GetSourcedFromCompiler() == eLazyBoolNo) {
         // We probably have an UnwindPlan created by inspecting assembly
@@ -873,8 +873,7 @@ UnwindPlanSP RegisterContextLLDB::GetFullUnwindPlanForFrame() {
         // location what helps in the most common cases when the instruction
         // emulation fails.
         UnwindPlanSP call_site_unwind_plan =
-            func_unwinders_sp->GetUnwindPlanAtCallSite(
-                process->GetTarget(), m_current_offset_backed_up_one);
+            func_unwinders_sp->GetUnwindPlanAtCallSite(process->GetTarget());
         if (call_site_unwind_plan &&
             call_site_unwind_plan.get() != unwind_plan_sp.get() &&
             call_site_unwind_plan->GetSourceName() !=
@@ -884,21 +883,39 @@ UnwindPlanSP RegisterContextLLDB::GetFullUnwindPlanForFrame() {
           m_fallback_unwind_plan_sp = arch_default_unwind_plan_sp;
         }
       }
-      UnwindLogMsgVerbose("frame uses %s for full UnwindPlan",
+      UnwindLogMsgVerbose("frame uses %s for full UnwindPlan because this "
+                          "is the non-call site unwind plan and this is a "
+                          "zeroth frame",
                           unwind_plan_sp->GetSourceName().GetCString());
       return unwind_plan_sp;
+    }
+
+    // If we're on the first instruction of a function, and we have an
+    // architectural default UnwindPlan for the initial instruction of a
+    // function, use that.
+    if (m_current_offset == 0) {
+      unwind_plan_sp =
+          func_unwinders_sp->GetUnwindPlanArchitectureDefaultAtFunctionEntry(
+              m_thread);
+      if (unwind_plan_sp) {
+        UnwindLogMsgVerbose("frame uses %s for full UnwindPlan because we are at "
+                            "the first instruction of a function",
+                            unwind_plan_sp->GetSourceName().GetCString());
+        return unwind_plan_sp;
+      }
     }
   }
 
   // Typically this is unwind info from an eh_frame section intended for
   // exception handling; only valid at call sites
   if (process) {
-    unwind_plan_sp = func_unwinders_sp->GetUnwindPlanAtCallSite(
-        process->GetTarget(), m_current_offset_backed_up_one);
+    unwind_plan_sp =
+        func_unwinders_sp->GetUnwindPlanAtCallSite(process->GetTarget());
   }
   int valid_offset = -1;
   if (IsUnwindPlanValidForCurrentPC(unwind_plan_sp, valid_offset)) {
-    UnwindLogMsgVerbose("frame uses %s for full UnwindPlan",
+    UnwindLogMsgVerbose("frame uses %s for full UnwindPlan because this "
+                        "is the call-site unwind plan",
                         unwind_plan_sp->GetSourceName().GetCString());
     return unwind_plan_sp;
   }
@@ -908,7 +925,7 @@ UnwindPlanSP RegisterContextLLDB::GetFullUnwindPlanForFrame() {
   // call-site assembly inspection UnwindPlan if possible.
   if (process) {
     unwind_plan_sp = func_unwinders_sp->GetUnwindPlanAtNonCallSite(
-        process->GetTarget(), m_thread, m_current_offset_backed_up_one);
+        process->GetTarget(), m_thread);
   }
   if (unwind_plan_sp &&
       unwind_plan_sp->GetSourcedFromCompiler() == eLazyBoolNo) {
@@ -923,8 +940,7 @@ UnwindPlanSP RegisterContextLLDB::GetFullUnwindPlanForFrame() {
     // code it is often written in a way that it valid at all location what
     // helps in the most common cases when the instruction emulation fails.
     UnwindPlanSP call_site_unwind_plan =
-        func_unwinders_sp->GetUnwindPlanAtCallSite(
-            process->GetTarget(), m_current_offset_backed_up_one);
+        func_unwinders_sp->GetUnwindPlanAtCallSite(process->GetTarget());
     if (call_site_unwind_plan &&
         call_site_unwind_plan.get() != unwind_plan_sp.get() &&
         call_site_unwind_plan->GetSourceName() !=
@@ -936,30 +952,18 @@ UnwindPlanSP RegisterContextLLDB::GetFullUnwindPlanForFrame() {
   }
 
   if (IsUnwindPlanValidForCurrentPC(unwind_plan_sp, valid_offset)) {
-    UnwindLogMsgVerbose("frame uses %s for full UnwindPlan",
+    UnwindLogMsgVerbose("frame uses %s for full UnwindPlan because we "
+                        "failed to find a call-site unwind plan that would work",
                         unwind_plan_sp->GetSourceName().GetCString());
     return unwind_plan_sp;
-  }
-
-  // If we're on the first instruction of a function, and we have an
-  // architectural default UnwindPlan for the initial instruction of a
-  // function, use that.
-  if (m_current_offset_backed_up_one == 0) {
-    unwind_plan_sp =
-        func_unwinders_sp->GetUnwindPlanArchitectureDefaultAtFunctionEntry(
-            m_thread);
-    if (unwind_plan_sp) {
-      UnwindLogMsgVerbose("frame uses %s for full UnwindPlan",
-                          unwind_plan_sp->GetSourceName().GetCString());
-      return unwind_plan_sp;
-    }
   }
 
   // If nothing else, use the architectural default UnwindPlan and hope that
   // does the job.
   if (arch_default_unwind_plan_sp)
     UnwindLogMsgVerbose(
-        "frame uses %s for full UnwindPlan",
+        "frame uses %s for full UnwindPlan because we are falling back "
+        "to the arch default plan",
         arch_default_unwind_plan_sp->GetSourceName().GetCString());
   else
     UnwindLogMsg(
@@ -1509,9 +1513,11 @@ RegisterContextLLDB::SavedLocationForRegister(
     DWARFExpression dwarfexpr(opcode_ctx, dwarfdata, nullptr, 0,
                               unwindplan_regloc.GetDWARFExpressionLength());
     dwarfexpr.SetRegisterKind(unwindplan_registerkind);
+    Value cfa_val = Scalar(m_cfa);
+    cfa_val.SetValueType(Value::eValueTypeLoadAddress);
     Value result;
     Status error;
-    if (dwarfexpr.Evaluate(&exe_ctx, this, 0, nullptr, nullptr, result,
+    if (dwarfexpr.Evaluate(&exe_ctx, this, 0, &cfa_val, nullptr, result,
                            &error)) {
       addr_t val;
       val = result.GetScalar().ULongLong();

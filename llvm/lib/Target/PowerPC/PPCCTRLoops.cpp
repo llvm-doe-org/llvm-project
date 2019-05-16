@@ -80,13 +80,6 @@ SmallCTRLoopThreshold("min-ctr-loop-threshold", cl::init(4), cl::Hidden,
 
 STATISTIC(NumCTRLoops, "Number of loops converted to CTR loops");
 
-namespace llvm {
-  void initializePPCCTRLoopsPass(PassRegistry&);
-#ifndef NDEBUG
-  void initializePPCCTRLoopsVerifyPass(PassRegistry&);
-#endif
-}
-
 namespace {
   struct PPCCTRLoops : public FunctionPass {
 
@@ -202,6 +195,7 @@ bool PPCCTRLoops::runOnFunction(Function &F) {
   auto *TLIP = getAnalysisIfAvailable<TargetLibraryInfoWrapperPass>();
   LibInfo = TLIP ? &TLIP->getTLI() : nullptr;
   PreserveLCSSA = mustPreserveAnalysisID(LCSSAID);
+  SchedModel.init(STI);
 
   bool MadeChange = false;
 
@@ -637,7 +631,7 @@ bool PPCCTRLoops::convertToCTRLoop(Loop *L) {
   // the CTR register because some such uses might be reordered by the
   // selection DAG after the mtctr instruction).
   if (!Preheader || mightUseCTR(Preheader))
-    Preheader = InsertPreheaderForLoop(L, DT, LI, PreserveLCSSA);
+    Preheader = InsertPreheaderForLoop(L, DT, LI, nullptr, PreserveLCSSA);
   if (!Preheader)
     return MadeChange;
 

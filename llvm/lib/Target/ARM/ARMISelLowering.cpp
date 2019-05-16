@@ -1184,7 +1184,7 @@ ARMTargetLowering::ARMTargetLowering(const TargetMachine &TM,
   setStackPointerRegisterToSaveRestore(ARM::SP);
 
   if (Subtarget->useSoftFloat() || Subtarget->isThumb1Only() ||
-      !Subtarget->hasVFP2())
+      !Subtarget->hasVFP2() || Subtarget->hasMinSize())
     setSchedulingPreference(Sched::RegPressure);
   else
     setSchedulingPreference(Sched::Hybrid);
@@ -1988,32 +1988,10 @@ ARMTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   // Build a sequence of copy-to-reg nodes chained together with token chain
   // and flag operands which copy the outgoing args into the appropriate regs.
   SDValue InFlag;
-  // Tail call byval lowering might overwrite argument registers so in case of
-  // tail call optimization the copies to registers are lowered later.
-  if (!isTailCall)
-    for (unsigned i = 0, e = RegsToPass.size(); i != e; ++i) {
-      Chain = DAG.getCopyToReg(Chain, dl, RegsToPass[i].first,
-                               RegsToPass[i].second, InFlag);
-      InFlag = Chain.getValue(1);
-    }
-
-  // For tail calls lower the arguments to the 'real' stack slot.
-  if (isTailCall) {
-    // Force all the incoming stack arguments to be loaded from the stack
-    // before any new outgoing arguments are stored to the stack, because the
-    // outgoing stack slots may alias the incoming argument stack slots, and
-    // the alias isn't otherwise explicit. This is slightly more conservative
-    // than necessary, because it means that each store effectively depends
-    // on every argument instead of just those arguments it would clobber.
-
-    // Do not flag preceding copytoreg stuff together with the following stuff.
-    InFlag = SDValue();
-    for (unsigned i = 0, e = RegsToPass.size(); i != e; ++i) {
-      Chain = DAG.getCopyToReg(Chain, dl, RegsToPass[i].first,
-                               RegsToPass[i].second, InFlag);
-      InFlag = Chain.getValue(1);
-    }
-    InFlag = SDValue();
+  for (unsigned i = 0, e = RegsToPass.size(); i != e; ++i) {
+    Chain = DAG.getCopyToReg(Chain, dl, RegsToPass[i].first,
+                             RegsToPass[i].second, InFlag);
+    InFlag = Chain.getValue(1);
   }
 
   // If the callee is a GlobalAddress/ExternalSymbol node (quite common, every
@@ -2074,7 +2052,7 @@ ARMTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     auto *GV = cast<GlobalAddressSDNode>(Callee)->getGlobal();
     auto *BB = CLI.CS.getParent();
     bool PreferIndirect =
-        Subtarget->isThumb() && Subtarget->optForMinSize() &&
+        Subtarget->isThumb() && Subtarget->hasMinSize() &&
         count_if(GV->users(), [&BB](const User *U) {
           return isa<Instruction>(U) && cast<Instruction>(U)->getParent() == BB;
         }) > 2;
@@ -2146,7 +2124,7 @@ ARMTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       CallOpc = ARMISD::CALL_NOLINK;
     else if (doesNotRet && isDirect && Subtarget->hasRetAddrStack() &&
              // Emit regular call when code size is the priority
-             !Subtarget->optForMinSize())
+             !Subtarget->hasMinSize())
       // "mov lr, pc; b _foo" to avoid confusing the RSP
       CallOpc = ARMISD::CALL_NOLINK;
     else
@@ -7818,7 +7796,7 @@ ARMTargetLowering::BuildSDIVPow2(SDNode *N, const APInt &Divisor,
     return SDValue();
 
   const auto &ST = static_cast<const ARMSubtarget&>(DAG.getSubtarget());
-  const bool MinSize = ST.optForMinSize();
+  const bool MinSize = ST.hasMinSize();
   const bool HasDivide = ST.isThumb() ? ST.hasDivideInThumbMode()
                                       : ST.hasDivideInARMMode();
 
@@ -10483,9 +10461,8 @@ ARMTargetLowering::isDesirableToCommuteWithShift(const SDNode *N,
   return false;
 }
 
-bool
-ARMTargetLowering::shouldFoldShiftPairToMask(const SDNode *N,
-                                             CombineLevel Level) const {
+bool ARMTargetLowering::shouldFoldConstantShiftPairToMask(
+    const SDNode *N, CombineLevel Level) const {
   if (!Subtarget->isThumb1Only())
     return true;
 
@@ -12866,15 +12843,21 @@ ARMTargetLowering::PerformCMOVCombine(SDNode *N, SelectionDAG &DAG) const {
   // On Thumb1, the DAG above may be further combined if z is a power of 2
   // (z == 2 ^ K).
   // CMOV (SUBS x, y), z, !=, (SUBS x, y):1 ->
-  //       merge t3, t4
-  // where t1 = (SUBCARRY (SUB x, y), z, 0)
-  //       t2 = (SUBCARRY (SUB x, y), t1:0, t1:1)
-  //       t3 = if K != 0 then (SHL t2:0, K) else t2:0
-  //       t4 = (SUB 1, t2:1)   [ we want a carry, not a borrow ]
+  // t1 = (USUBO (SUB x, y), 1)
+  // t2 = (SUBCARRY (SUB x, y), t1:0, t1:1)
+  // Result = if K != 0 then (SHL t2:0, K) else t2:0
+  //
+  // This also handles the special case of comparing against zero; it's
+  // essentially, the same pattern, except there's no SUBS:
+  // CMOV x, z, !=, (CMPZ x, 0) ->
+  // t1 = (USUBO x, 1)
+  // t2 = (SUBCARRY x, t1:0, t1:1)
+  // Result = if K != 0 then (SHL t2:0, K) else t2:0
   const APInt *TrueConst;
   if (Subtarget->isThumb1Only() && CC == ARMCC::NE &&
-      (FalseVal.getOpcode() == ARMISD::SUBS) &&
-      (FalseVal.getOperand(0) == LHS) && (FalseVal.getOperand(1) == RHS) &&
+      ((FalseVal.getOpcode() == ARMISD::SUBS &&
+        FalseVal.getOperand(0) == LHS && FalseVal.getOperand(1) == RHS) ||
+       (FalseVal == LHS && isNullConstant(RHS))) &&
       (TrueConst = isPowerOf2Constant(TrueVal))) {
     SDVTList VTs = DAG.getVTList(VT, MVT::i32);
     unsigned ShiftAmount = TrueConst->logBase2();
@@ -12882,10 +12865,6 @@ ARMTargetLowering::PerformCMOVCombine(SDNode *N, SelectionDAG &DAG) const {
       TrueVal = DAG.getConstant(1, dl, VT);
     SDValue Subc = DAG.getNode(ISD::USUBO, dl, VTs, FalseVal, TrueVal);
     Res = DAG.getNode(ISD::SUBCARRY, dl, VTs, FalseVal, Subc, Subc.getValue(1));
-    // Make it a carry, not a borrow.
-    SDValue Carry = DAG.getNode(
-        ISD::SUB, dl, VT, DAG.getConstant(1, dl, MVT::i32), Res.getValue(1));
-    Res = DAG.getNode(ISD::MERGE_VALUES, dl, VTs, Res, Carry);
 
     if (ShiftAmount)
       Res = DAG.getNode(ISD::SHL, dl, VT, Res,
@@ -13092,16 +13071,13 @@ static bool memOpAlign(unsigned DstAlign, unsigned SrcAlign,
           (DstAlign == 0 || DstAlign % AlignCheck == 0));
 }
 
-EVT ARMTargetLowering::getOptimalMemOpType(uint64_t Size,
-                                           unsigned DstAlign, unsigned SrcAlign,
-                                           bool IsMemset, bool ZeroMemset,
-                                           bool MemcpyStrSrc,
-                                           MachineFunction &MF) const {
-  const Function &F = MF.getFunction();
-
+EVT ARMTargetLowering::getOptimalMemOpType(
+    uint64_t Size, unsigned DstAlign, unsigned SrcAlign, bool IsMemset,
+    bool ZeroMemset, bool MemcpyStrSrc,
+    const AttributeList &FuncAttributes) const {
   // See if we can use NEON instructions for this...
   if ((!IsMemset || ZeroMemset) && Subtarget->hasNEON() &&
-      !F.hasFnAttribute(Attribute::NoImplicitFloat)) {
+      !FuncAttributes.hasFnAttribute(Attribute::NoImplicitFloat)) {
     bool Fast;
     if (Size >= 16 &&
         (memOpAlign(SrcAlign, DstAlign, 16) ||
@@ -13288,38 +13264,36 @@ static bool isLegalT1AddressImmediate(int64_t V, EVT VT) {
 
   if ((V & (Scale - 1)) != 0)
     return false;
-  V /= Scale;
-  return V == (V & ((1LL << 5) - 1));
+  return isUInt<5>(V / Scale);
 }
 
 static bool isLegalT2AddressImmediate(int64_t V, EVT VT,
                                       const ARMSubtarget *Subtarget) {
-  bool isNeg = false;
+  if (!VT.isInteger() && !VT.isFloatingPoint())
+    return false;
+  if (Subtarget->hasNEON() && VT.isVector())
+    return false;
+
+  bool IsNeg = false;
   if (V < 0) {
-    isNeg = true;
-    V = - V;
+    IsNeg = true;
+    V = -V;
   }
 
-  switch (VT.getSimpleVT().SimpleTy) {
-  default: return false;
-  case MVT::i1:
-  case MVT::i8:
-  case MVT::i16:
-  case MVT::i32:
+  unsigned NumBytes = std::max(VT.getSizeInBits() / 8, 1U);
+
+  // VLDR and LDRD: 4 * imm8
+  if ((VT.isFloatingPoint() && Subtarget->hasVFP2()) || NumBytes == 8)
+    return isShiftedUInt<8, 2>(V);
+
+  if (NumBytes == 1 || NumBytes == 2 || NumBytes == 4) {
     // + imm12 or - imm8
-    if (isNeg)
-      return V == (V & ((1LL << 8) - 1));
-    return V == (V & ((1LL << 12) - 1));
-  case MVT::f32:
-  case MVT::f64:
-    // Same as ARM mode. FIXME: NEON?
-    if (!Subtarget->hasVFP2())
-      return false;
-    if ((V & 3) != 0)
-      return false;
-    V >>= 2;
-    return V == (V & ((1LL << 8) - 1));
+    if (IsNeg)
+      return isUInt<8>(V);
+    return isUInt<12>(V);
   }
+
+  return false;
 }
 
 /// isLegalAddressImmediate - Return true if the integer value can be used
@@ -13347,18 +13321,15 @@ static bool isLegalAddressImmediate(int64_t V, EVT VT,
   case MVT::i8:
   case MVT::i32:
     // +- imm12
-    return V == (V & ((1LL << 12) - 1));
+    return isUInt<12>(V);
   case MVT::i16:
     // +- imm8
-    return V == (V & ((1LL << 8) - 1));
+    return isUInt<8>(V);
   case MVT::f32:
   case MVT::f64:
     if (!Subtarget->hasVFP2()) // FIXME: NEON?
       return false;
-    if ((V & 3) != 0)
-      return false;
-    V >>= 2;
-    return V == (V & ((1LL << 8) - 1));
+    return isShiftedUInt<8, 2>(V);
   }
 }
 
@@ -14824,7 +14795,7 @@ bool ARMTargetLowering::isCheapToSpeculateCtlz() const {
 }
 
 bool ARMTargetLowering::shouldExpandShift(SelectionDAG &DAG, SDNode *N) const {
-  return !Subtarget->optForMinSize();
+  return !Subtarget->hasMinSize();
 }
 
 Value *ARMTargetLowering::emitLoadLinked(IRBuilder<> &Builder, Value *Addr,

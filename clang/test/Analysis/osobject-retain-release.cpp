@@ -679,3 +679,39 @@ void test_tagged_retain_no_uaf() {
   obj->release();
   obj->release();
 }
+
+class IOService {
+public:
+  OSObject *somethingMatching(OSObject *table = 0);
+};
+
+OSObject *testSuppressionForMethodsEndingWithMatching(IOService *svc,
+                                                      OSObject *table = 0) {
+  // This probably just passes table through. We should probably not make
+  // ptr1 definitely equal to table, but we should not warn about leaks.
+  OSObject *ptr1 = svc->somethingMatching(table); // no-warning
+
+  // FIXME: This, however, should follow the Create Rule regardless.
+  // We should warn about the leak here.
+  OSObject *ptr2 = svc->somethingMatching(); // no-warning
+
+  if (!table)
+    table = OSTypeAlloc(OSArray);
+
+  // This function itself ends with "Matching"! Do not warn when we're
+  // returning from it at +0.
+  return table; // no-warning
+}
+
+namespace weird_result {
+struct WeirdResult {
+  int x, y, z;
+};
+
+WeirdResult outParamWithWeirdResult(OS_RETURNS_RETAINED_ON_ZERO OSObject **obj);
+
+WeirdResult testOutParamWithWeirdResult() {
+  OSObject *obj;
+  return outParamWithWeirdResult(&obj); // no-warning
+}
+} // namespace weird_result

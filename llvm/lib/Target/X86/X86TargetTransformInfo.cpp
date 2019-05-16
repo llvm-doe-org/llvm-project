@@ -2379,8 +2379,8 @@ int X86TTIImpl::getMaskedMemoryOpCost(unsigned Opcode, Type *SrcTy,
   if (VT.isSimple() && LT.second != VT.getSimpleVT() &&
       LT.second.getVectorNumElements() == NumElem)
     // Promotion requires expand/truncate for data and a shuffle for mask.
-    Cost += getShuffleCost(TTI::SK_Select, SrcVTy, 0, nullptr) +
-            getShuffleCost(TTI::SK_Select, MaskTy, 0, nullptr);
+    Cost += getShuffleCost(TTI::SK_PermuteTwoSrc, SrcVTy, 0, nullptr) +
+            getShuffleCost(TTI::SK_PermuteTwoSrc, MaskTy, 0, nullptr);
 
   else if (LT.second.getVectorNumElements() > NumElem) {
     VectorType *NewMaskTy = VectorType::get(MaskTy->getVectorElementType(),
@@ -2401,7 +2401,7 @@ int X86TTIImpl::getAddressComputationCost(Type *Ty, ScalarEvolution *SE,
   // likely result in more instructions compared to scalar code where the
   // computation can more often be merged into the index mode. The resulting
   // extra micro-ops can significantly decrease throughput.
-  unsigned NumVectorInstToHideOverhead = 10;
+  const unsigned NumVectorInstToHideOverhead = 10;
 
   // Cost modeling of Strided Access Computation is hidden by the indexing
   // modes of X86 regardless of the stride value. We dont believe that there
@@ -2489,6 +2489,48 @@ int X86TTIImpl::getArithmeticReductionCost(unsigned Opcode, Type *ValTy,
         return LT.first * Entry->Cost;
   }
 
+  static const CostTblEntry AVX2BoolReduction[] = {
+    { ISD::AND,  MVT::v16i16,  2 }, // vpmovmskb + cmp
+    { ISD::AND,  MVT::v32i8,   2 }, // vpmovmskb + cmp
+    { ISD::OR,   MVT::v16i16,  2 }, // vpmovmskb + cmp
+    { ISD::OR,   MVT::v32i8,   2 }, // vpmovmskb + cmp
+  };
+
+  static const CostTblEntry AVX1BoolReduction[] = {
+    { ISD::AND,  MVT::v4i64,   2 }, // vmovmskpd + cmp
+    { ISD::AND,  MVT::v8i32,   2 }, // vmovmskps + cmp
+    { ISD::AND,  MVT::v16i16,  4 }, // vextractf128 + vpand + vpmovmskb + cmp
+    { ISD::AND,  MVT::v32i8,   4 }, // vextractf128 + vpand + vpmovmskb + cmp
+    { ISD::OR,   MVT::v4i64,   2 }, // vmovmskpd + cmp
+    { ISD::OR,   MVT::v8i32,   2 }, // vmovmskps + cmp
+    { ISD::OR,   MVT::v16i16,  4 }, // vextractf128 + vpor + vpmovmskb + cmp
+    { ISD::OR,   MVT::v32i8,   4 }, // vextractf128 + vpor + vpmovmskb + cmp
+  };
+
+  static const CostTblEntry SSE2BoolReduction[] = {
+    { ISD::AND,  MVT::v2i64,   2 }, // movmskpd + cmp
+    { ISD::AND,  MVT::v4i32,   2 }, // movmskps + cmp
+    { ISD::AND,  MVT::v8i16,   2 }, // pmovmskb + cmp
+    { ISD::AND,  MVT::v16i8,   2 }, // pmovmskb + cmp
+    { ISD::OR,   MVT::v2i64,   2 }, // movmskpd + cmp
+    { ISD::OR,   MVT::v4i32,   2 }, // movmskps + cmp
+    { ISD::OR,   MVT::v8i16,   2 }, // pmovmskb + cmp
+    { ISD::OR,   MVT::v16i8,   2 }, // pmovmskb + cmp
+  };
+
+  // Handle bool allof/anyof patterns.
+  if (ValTy->getVectorElementType()->isIntegerTy(1)) {
+    if (ST->hasAVX2())
+      if (const auto *Entry = CostTableLookup(AVX2BoolReduction, ISD, MTy))
+        return LT.first * Entry->Cost;
+    if (ST->hasAVX())
+      if (const auto *Entry = CostTableLookup(AVX1BoolReduction, ISD, MTy))
+        return LT.first * Entry->Cost;
+    if (ST->hasSSE2())
+      if (const auto *Entry = CostTableLookup(SSE2BoolReduction, ISD, MTy))
+        return LT.first * Entry->Cost;
+  }
+
   return BaseT::getArithmeticReductionCost(Opcode, ValTy, IsPairwise);
 }
 
@@ -2510,15 +2552,37 @@ int X86TTIImpl::getMinMaxReductionCost(Type *ValTy, Type *CondTy,
   // We use the Intel Architecture Code Analyzer(IACA) to measure the throughput
   // and make it as the cost.
 
-  static const CostTblEntry SSE42CostTblPairWise[] = {
+  static const CostTblEntry SSE1CostTblPairWise[] = {
+      {ISD::FMINNUM, MVT::v4f32, 4},
+  };
+
+  static const CostTblEntry SSE2CostTblPairWise[] = {
       {ISD::FMINNUM, MVT::v2f64, 3},
+      {ISD::SMIN, MVT::v2i64, 6},
+      {ISD::UMIN, MVT::v2i64, 8},
+      {ISD::SMIN, MVT::v4i32, 6},
+      {ISD::UMIN, MVT::v4i32, 8},
+      {ISD::SMIN, MVT::v8i16, 4},
+      {ISD::UMIN, MVT::v8i16, 6},
+      {ISD::SMIN, MVT::v16i8, 8},
+      {ISD::UMIN, MVT::v16i8, 6},
+  };
+
+  static const CostTblEntry SSE41CostTblPairWise[] = {
       {ISD::FMINNUM, MVT::v4f32, 2},
-      {ISD::SMIN, MVT::v2i64, 7}, // The data reported by the IACA is "6.8"
-      {ISD::UMIN, MVT::v2i64, 8}, // The data reported by the IACA is "8.6"
+      {ISD::SMIN, MVT::v2i64, 9},
+      {ISD::UMIN, MVT::v2i64,10},
       {ISD::SMIN, MVT::v4i32, 1}, // The data reported by the IACA is "1.5"
       {ISD::UMIN, MVT::v4i32, 2}, // The data reported by the IACA is "1.8"
       {ISD::SMIN, MVT::v8i16, 2},
       {ISD::UMIN, MVT::v8i16, 2},
+      {ISD::SMIN, MVT::v16i8, 3},
+      {ISD::UMIN, MVT::v16i8, 3},
+  };
+
+  static const CostTblEntry SSE42CostTblPairWise[] = {
+      {ISD::SMIN, MVT::v2i64, 7}, // The data reported by the IACA is "6.8"
+      {ISD::UMIN, MVT::v2i64, 8}, // The data reported by the IACA is "8.6"
   };
 
   static const CostTblEntry AVX1CostTblPairWise[] = {
@@ -2531,8 +2595,16 @@ int X86TTIImpl::getMinMaxReductionCost(Type *ValTy, Type *CondTy,
       {ISD::UMIN, MVT::v4i32, 1},
       {ISD::SMIN, MVT::v8i16, 1},
       {ISD::UMIN, MVT::v8i16, 1},
+      {ISD::SMIN, MVT::v16i8, 2},
+      {ISD::UMIN, MVT::v16i8, 2},
+      {ISD::SMIN, MVT::v4i64, 7},
+      {ISD::UMIN, MVT::v4i64, 7},
       {ISD::SMIN, MVT::v8i32, 3},
       {ISD::UMIN, MVT::v8i32, 3},
+      {ISD::SMIN, MVT::v16i16, 3},
+      {ISD::UMIN, MVT::v16i16, 3},
+      {ISD::SMIN, MVT::v32i8, 3},
+      {ISD::UMIN, MVT::v32i8, 3},
   };
 
   static const CostTblEntry AVX2CostTblPairWise[] = {
@@ -2555,15 +2627,37 @@ int X86TTIImpl::getMinMaxReductionCost(Type *ValTy, Type *CondTy,
       {ISD::UMIN, MVT::v16i32, 1},
   };
 
-  static const CostTblEntry SSE42CostTblNoPairWise[] = {
+  static const CostTblEntry SSE1CostTblNoPairWise[] = {
+      {ISD::FMINNUM, MVT::v4f32, 4},
+  };
+
+  static const CostTblEntry SSE2CostTblNoPairWise[] = {
       {ISD::FMINNUM, MVT::v2f64, 3},
+      {ISD::SMIN, MVT::v2i64, 6},
+      {ISD::UMIN, MVT::v2i64, 8},
+      {ISD::SMIN, MVT::v4i32, 6},
+      {ISD::UMIN, MVT::v4i32, 8},
+      {ISD::SMIN, MVT::v8i16, 4},
+      {ISD::UMIN, MVT::v8i16, 6},
+      {ISD::SMIN, MVT::v16i8, 8},
+      {ISD::UMIN, MVT::v16i8, 6},
+  };
+
+  static const CostTblEntry SSE41CostTblNoPairWise[] = {
       {ISD::FMINNUM, MVT::v4f32, 3},
-      {ISD::SMIN, MVT::v2i64, 7}, // The data reported by the IACA is "6.8"
-      {ISD::UMIN, MVT::v2i64, 9}, // The data reported by the IACA is "8.6"
+      {ISD::SMIN, MVT::v2i64, 9},
+      {ISD::UMIN, MVT::v2i64,11},
       {ISD::SMIN, MVT::v4i32, 1}, // The data reported by the IACA is "1.5"
       {ISD::UMIN, MVT::v4i32, 2}, // The data reported by the IACA is "1.8"
       {ISD::SMIN, MVT::v8i16, 1}, // The data reported by the IACA is "1.5"
       {ISD::UMIN, MVT::v8i16, 2}, // The data reported by the IACA is "1.8"
+      {ISD::SMIN, MVT::v16i8, 3},
+      {ISD::UMIN, MVT::v16i8, 3},
+  };
+
+  static const CostTblEntry SSE42CostTblNoPairWise[] = {
+      {ISD::SMIN, MVT::v2i64, 7}, // The data reported by the IACA is "6.8"
+      {ISD::UMIN, MVT::v2i64, 9}, // The data reported by the IACA is "8.6"
   };
 
   static const CostTblEntry AVX1CostTblNoPairWise[] = {
@@ -2576,8 +2670,16 @@ int X86TTIImpl::getMinMaxReductionCost(Type *ValTy, Type *CondTy,
       {ISD::UMIN, MVT::v4i32, 1},
       {ISD::SMIN, MVT::v8i16, 1},
       {ISD::UMIN, MVT::v8i16, 1},
+      {ISD::SMIN, MVT::v16i8, 2},
+      {ISD::UMIN, MVT::v16i8, 2},
+      {ISD::SMIN, MVT::v4i64, 7},
+      {ISD::UMIN, MVT::v4i64, 7},
       {ISD::SMIN, MVT::v8i32, 2},
       {ISD::UMIN, MVT::v8i32, 2},
+      {ISD::SMIN, MVT::v16i16, 2},
+      {ISD::UMIN, MVT::v16i16, 2},
+      {ISD::SMIN, MVT::v32i8, 2},
+      {ISD::UMIN, MVT::v32i8, 2},
   };
 
   static const CostTblEntry AVX2CostTblNoPairWise[] = {
@@ -2616,6 +2718,18 @@ int X86TTIImpl::getMinMaxReductionCost(Type *ValTy, Type *CondTy,
     if (ST->hasSSE42())
       if (const auto *Entry = CostTableLookup(SSE42CostTblPairWise, ISD, MTy))
         return LT.first * Entry->Cost;
+
+    if (ST->hasSSE41())
+      if (const auto *Entry = CostTableLookup(SSE41CostTblPairWise, ISD, MTy))
+        return LT.first * Entry->Cost;
+
+    if (ST->hasSSE2())
+      if (const auto *Entry = CostTableLookup(SSE2CostTblPairWise, ISD, MTy))
+        return LT.first * Entry->Cost;
+
+    if (ST->hasSSE1())
+      if (const auto *Entry = CostTableLookup(SSE1CostTblPairWise, ISD, MTy))
+        return LT.first * Entry->Cost;
   } else {
     if (ST->hasAVX512())
       if (const auto *Entry =
@@ -2632,6 +2746,18 @@ int X86TTIImpl::getMinMaxReductionCost(Type *ValTy, Type *CondTy,
 
     if (ST->hasSSE42())
       if (const auto *Entry = CostTableLookup(SSE42CostTblNoPairWise, ISD, MTy))
+        return LT.first * Entry->Cost;
+
+    if (ST->hasSSE41())
+      if (const auto *Entry = CostTableLookup(SSE41CostTblNoPairWise, ISD, MTy))
+        return LT.first * Entry->Cost;
+
+    if (ST->hasSSE2())
+      if (const auto *Entry = CostTableLookup(SSE2CostTblNoPairWise, ISD, MTy))
+        return LT.first * Entry->Cost;
+
+    if (ST->hasSSE1())
+      if (const auto *Entry = CostTableLookup(SSE1CostTblNoPairWise, ISD, MTy))
         return LT.first * Entry->Cost;
   }
 

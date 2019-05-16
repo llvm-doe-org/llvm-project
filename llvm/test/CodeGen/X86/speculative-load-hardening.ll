@@ -1045,10 +1045,10 @@ define void @test_deferred_hardening(i32* %ptr1, i32* %ptr2, i32 %x) nounwind sp
 ; X64-NEXT:    sarq $63, %rax
 ; X64-NEXT:    cmpq $.Lslh_ret_addr23, %rcx
 ; X64-NEXT:    cmovneq %r15, %rax
-; X64-NEXT:    movzwl (%rbx), %ecx
-; X64-NEXT:    sarw $7, %cx
-; X64-NEXT:    movzwl %cx, %edi
+; X64-NEXT:    movswl (%rbx), %edi
+; X64-NEXT:    shrl $7, %edi
 ; X64-NEXT:    notl %edi
+; X64-NEXT:    orl $-65536, %edi # imm = 0xFFFF0000
 ; X64-NEXT:    orl %eax, %edi
 ; X64-NEXT:    shlq $47, %rax
 ; X64-NEXT:    orq %rax, %rsp
@@ -1098,10 +1098,10 @@ define void @test_deferred_hardening(i32* %ptr1, i32* %ptr2, i32 %x) nounwind sp
 ; X64-LFENCE-NEXT:    movl (%rbx), %edi
 ; X64-LFENCE-NEXT:    shll $7, %edi
 ; X64-LFENCE-NEXT:    callq sink
-; X64-LFENCE-NEXT:    movzwl (%rbx), %eax
-; X64-LFENCE-NEXT:    sarw $7, %ax
-; X64-LFENCE-NEXT:    movzwl %ax, %edi
+; X64-LFENCE-NEXT:    movswl (%rbx), %edi
+; X64-LFENCE-NEXT:    shrl $7, %edi
 ; X64-LFENCE-NEXT:    notl %edi
+; X64-LFENCE-NEXT:    orl $-65536, %edi # imm = 0xFFFF0000
 ; X64-LFENCE-NEXT:    callq sink
 ; X64-LFENCE-NEXT:    movzwl (%rbx), %eax
 ; X64-LFENCE-NEXT:    rolw $9, %ax
@@ -1140,5 +1140,21 @@ entry:
   %e6 = sext i16 %e5 to i32
   %e7 = sub i32 0, %e6
   call void @sink(i32 %e7)
+  ret void
+}
+
+; Make sure we don't crash on idempotent atomic operations which have a
+; hardcoded reference to RSP+offset.
+define void @idempotent_atomic(i32* %x) speculative_load_hardening {
+; X64-LABEL: idempotent_atomic:
+; X64:       # %bb.0:
+; X64-NEXT:    lock orl $0, -{{[0-9]+}}(%rsp)
+; X64-NEXT:    retq
+;
+; X64-LFENCE-LABEL: idempotent_atomic:
+; X64-LFENCE:       # %bb.0:
+; X64-LFENCE-NEXT:    lock orl $0, -{{[0-9]+}}(%rsp)
+; X64-LFENCE-NEXT:    retq
+  %tmp = atomicrmw or i32* %x, i32 0 seq_cst
   ret void
 }

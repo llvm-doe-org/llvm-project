@@ -1462,7 +1462,7 @@ def : GCNPat<
 
 def : GCNPat<
   (fcanonicalize (v2f16 (VOP3PMods v2f16:$src, i32:$src_mods))),
-  (V_PK_MUL_F16 0, (i32 CONST.V2FP16_ONE), $src_mods, $src, DSTCLAMP.NONE)
+  (V_PK_MUL_F16 0, (i32 CONST.FP16_ONE), $src_mods, $src, DSTCLAMP.NONE)
 >;
 }
 
@@ -1523,6 +1523,14 @@ def : GCNPat <
 >;
 } // End OtherPredicates = [HasDLInsts]
 
+let SubtargetPredicate = isGFX10Plus in
+def : GCNPat <
+  (fma (f16 (VOP3Mods0 f32:$src0, i32:$src0_modifiers, i1:$clamp, i32:$omod)),
+       (f16 (VOP3Mods f32:$src1, i32:$src1_modifiers)),
+       (f16 (VOP3NoMods f32:$src2))),
+  (V_FMAC_F16_e64 $src0_modifiers, $src0, $src1_modifiers, $src1,
+                  SRCMODS.NONE, $src2, $clamp, $omod)
+>;
 
 // Allow integer inputs
 class ExpPattern<SDPatternOperator node, ValueType vt, Instruction Inst> : GCNPat<
@@ -1613,7 +1621,7 @@ def : GCNPat <
 // Fract Patterns
 //===----------------------------------------------------------------------===//
 
-let SubtargetPredicate = isSI in {
+let SubtargetPredicate = isGFX6 in {
 
 // V_FRACT is buggy on SI, so the F32 version is never used and (x-floor(x)) is
 // used instead. However, SI doesn't have V_FLOOR_F64, so the most efficient
@@ -1640,7 +1648,7 @@ def : GCNPat <
       DSTCLAMP.NONE, DSTOMOD.NONE)
 >;
 
-} // End SubtargetPredicates = isSI
+} // End SubtargetPredicates = isGFX6
 
 //============================================================================//
 // Miscellaneous Optimization Patterns
@@ -1724,8 +1732,8 @@ multiclass Int16Med3Pat<Instruction med3Inst,
 
 def : FPMed3Pat<f32, V_MED3_F32>;
 
-let OtherPredicates = [isGFX9] in {
+let OtherPredicates = [isGFX9Plus] in {
 def : FP16Med3Pat<f16, V_MED3_F16>;
 defm : Int16Med3Pat<V_MED3_I16, smin, smax, smax_oneuse, smin_oneuse>;
 defm : Int16Med3Pat<V_MED3_U16, umin, umax, umax_oneuse, umin_oneuse>;
-} // End Predicates = [isGFX9]
+} // End Predicates = [isGFX9Plus]

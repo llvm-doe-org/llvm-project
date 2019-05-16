@@ -292,10 +292,13 @@ public:
   bool GetTypeBitSize(const CompilerType &compiler_type,
                       uint64_t &size) override;
 
+  /// Check whether the name is "self" or "_cmd" and should show up in
+  /// "frame variable".
+  static bool IsWhitelistedRuntimeValue(ConstString name);
+  bool IsRuntimeSupportValue(ValueObject &valobj) override;
+
 protected:
-  //------------------------------------------------------------------
   // Classes that inherit from ObjCLanguageRuntime can see and modify these
-  //------------------------------------------------------------------
   ObjCLanguageRuntime(Process *process);
 
   virtual bool CalculateHasNewLiteralsAndIndexing() { return false; }

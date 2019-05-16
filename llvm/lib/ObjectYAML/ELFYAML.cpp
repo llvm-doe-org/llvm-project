@@ -411,6 +411,7 @@ void ScalarBitSetTraits<ELFYAML::ELF_EF>::bitset(IO &IO,
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX904, EF_AMDGPU_MACH);
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX906, EF_AMDGPU_MACH);
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX909, EF_AMDGPU_MACH);
+    BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX1010, EF_AMDGPU_MACH);
     BCase(EF_AMDGPU_XNACK);
     BCase(EF_AMDGPU_SRAM_ECC);
     break;
@@ -558,6 +559,17 @@ void ScalarEnumerationTraits<ELFYAML::ELF_SHN>::enumeration(
   ECase(SHN_HEXAGON_SCOMMON_8);
 #undef ECase
   IO.enumFallback<Hex32>(Value);
+}
+
+void ScalarEnumerationTraits<ELFYAML::ELF_STB>::enumeration(
+    IO &IO, ELFYAML::ELF_STB &Value) {
+#define ECase(X) IO.enumCase(Value, #X, ELF::X)
+  ECase(STB_LOCAL);
+  ECase(STB_GLOBAL);
+  ECase(STB_WEAK);
+  ECase(STB_GNU_UNIQUE);
+#undef ECase
+  IO.enumFallback<Hex8>(Value);
 }
 
 void ScalarEnumerationTraits<ELFYAML::ELF_STT>::enumeration(
@@ -842,12 +854,13 @@ struct NormalizedOther {
 
 void MappingTraits<ELFYAML::Symbol>::mapping(IO &IO, ELFYAML::Symbol &Symbol) {
   IO.mapOptional("Name", Symbol.Name, StringRef());
+  IO.mapOptional("NameIndex", Symbol.NameIndex);
   IO.mapOptional("Type", Symbol.Type, ELFYAML::ELF_STT(0));
   IO.mapOptional("Section", Symbol.Section, StringRef());
   IO.mapOptional("Index", Symbol.Index);
+  IO.mapOptional("Binding", Symbol.Binding, ELFYAML::ELF_STB(0));
   IO.mapOptional("Value", Symbol.Value, Hex64(0));
   IO.mapOptional("Size", Symbol.Size, Hex64(0));
-
   MappingNormalization<NormalizedOther, uint8_t> Keys(IO, Symbol.Other);
   IO.mapOptional("Visibility", Keys->Visibility, ELFYAML::ELF_STV(0));
   IO.mapOptional("Other", Keys->Other, ELFYAML::ELF_STO(0));
@@ -855,21 +868,13 @@ void MappingTraits<ELFYAML::Symbol>::mapping(IO &IO, ELFYAML::Symbol &Symbol) {
 
 StringRef MappingTraits<ELFYAML::Symbol>::validate(IO &IO,
                                                    ELFYAML::Symbol &Symbol) {
-  if (Symbol.Index && Symbol.Section.data()) {
+  if (Symbol.Index && Symbol.Section.data())
     return "Index and Section cannot both be specified for Symbol";
-  }
-  if (Symbol.Index && *Symbol.Index == ELFYAML::ELF_SHN(ELF::SHN_XINDEX)) {
+  if (Symbol.Index && *Symbol.Index == ELFYAML::ELF_SHN(ELF::SHN_XINDEX))
     return "Large indexes are not supported";
-  }
+  if (Symbol.NameIndex && !Symbol.Name.empty())
+    return "Name and NameIndex cannot both be specified for Symbol";
   return StringRef();
-}
-
-void MappingTraits<ELFYAML::SymbolsDef>::mapping(IO &IO,
-                                                 ELFYAML::SymbolsDef &Symbols) {
-  IO.mapOptional("Local", Symbols.Local);
-  IO.mapOptional("Global", Symbols.Global);
-  IO.mapOptional("Weak", Symbols.Weak);
-  IO.mapOptional("GNUUnique", Symbols.GNUUnique);
 }
 
 static void commonSectionMapping(IO &IO, ELFYAML::Section &Section) {

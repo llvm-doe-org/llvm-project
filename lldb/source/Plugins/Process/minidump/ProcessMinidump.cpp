@@ -326,12 +326,12 @@ void ProcessMinidump::Clear() { Process::m_thread_list.Clear(); }
 
 bool ProcessMinidump::UpdateThreadList(ThreadList &old_thread_list,
                                        ThreadList &new_thread_list) {
-  for (const MinidumpThread& thread : m_thread_list) {
-    LocationDescriptor context_location = thread.thread_context;
+  for (const minidump::Thread &thread : m_thread_list) {
+    LocationDescriptor context_location = thread.Context;
 
     // If the minidump contains an exception context, use it
     if (m_active_exception != nullptr &&
-        m_active_exception->thread_id == thread.thread_id) {
+        m_active_exception->thread_id == thread.ThreadId) {
       context_location = m_active_exception->thread_context;
     }
 
@@ -348,40 +348,60 @@ bool ProcessMinidump::UpdateThreadList(ThreadList &old_thread_list,
 }
 
 void ProcessMinidump::ReadModuleList() {
-  std::vector<const MinidumpModule *> filtered_modules =
+  std::vector<const minidump::Module *> filtered_modules =
       m_minidump_parser->GetFilteredModuleList();
 
+  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_MODULES));
+
   for (auto module : filtered_modules) {
-    llvm::Optional<std::string> name =
-        m_minidump_parser->GetMinidumpString(module->module_name_rva);
-
-    if (!name)
-      continue;
-
-    Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_MODULES));
-    if (log) {
-      log->Printf("ProcessMinidump::%s found module: name: %s %#010" PRIx64
-                  "-%#010" PRIx64 " size: %" PRIu32,
-                  __FUNCTION__, name.getValue().c_str(),
-                  uint64_t(module->base_of_image),
-                  module->base_of_image + module->size_of_image,
-                  uint32_t(module->size_of_image));
-    }
+    std::string name = cantFail(m_minidump_parser->GetMinidumpFile().getString(
+        module->ModuleNameRVA));
+    LLDB_LOG(log, "found module: name: {0} {1:x10}-{2:x10} size: {3}", name,
+             module->BaseOfImage, module->BaseOfImage + module->SizeOfImage,
+             module->SizeOfImage);
 
     // check if the process is wow64 - a 32 bit windows process running on a
     // 64 bit windows
-    if (llvm::StringRef(name.getValue()).endswith_lower("wow64.dll")) {
+    if (llvm::StringRef(name).endswith_lower("wow64.dll")) {
       m_is_wow64 = true;
     }
 
     const auto uuid = m_minidump_parser->GetModuleUUID(module);
-    auto file_spec = FileSpec(name.getValue(), GetArchitecture().GetTriple());
-    FileSystem::Instance().Resolve(file_spec);
+    auto file_spec = FileSpec(name, GetArchitecture().GetTriple());
     ModuleSpec module_spec(file_spec, uuid);
     module_spec.GetArchitecture() = GetArchitecture();
     Status error;
-    lldb::ModuleSP module_sp = GetTarget().GetSharedModule(module_spec, &error);
-    if (!module_sp || error.Fail()) {
+    // Try and find a module with a full UUID that matches. This function will
+    // add the module to the target if it finds one.
+    lldb::ModuleSP module_sp = GetTarget().GetOrCreateModule(module_spec, 
+                                                     true /* notify */, &error);
+    if (!module_sp) {
+      // Try and find a module without specifying the UUID and only looking for
+      // the file given a basename. We then will look for a partial UUID match
+      // if we find any matches. This function will add the module to the
+      // target if it finds one, so we need to remove the module from the target
+      // if the UUID doesn't match during our manual UUID verification. This
+      // allows the "target.exec-search-paths" setting to specify one or more
+      // directories that contain executables that can be searched for matches.
+      ModuleSpec basename_module_spec(module_spec);
+      basename_module_spec.GetUUID().Clear();
+      basename_module_spec.GetFileSpec().GetDirectory().Clear();
+      module_sp = GetTarget().GetOrCreateModule(basename_module_spec, 
+                                                     true /* notify */, &error);
+      if (module_sp) {
+        // We consider the module to be a match if the minidump UUID is a
+        // prefix of the actual UUID, or if either of the UUIDs are empty.
+        const auto dmp_bytes = uuid.GetBytes();
+        const auto mod_bytes = module_sp->GetUUID().GetBytes();
+        const bool match = dmp_bytes.empty() || mod_bytes.empty() ||
+            mod_bytes.take_front(dmp_bytes.size()) == dmp_bytes;
+        if (!match) {
+            GetTarget().GetImages().Remove(module_sp);
+            module_sp.reset();
+        }
+      }
+    }
+    if (!module_sp) {
       // We failed to locate a matching local object file. Fortunately, the
       // minidump format encodes enough information about each module's memory
       // range to allow us to create placeholder modules.
@@ -389,24 +409,18 @@ void ProcessMinidump::ReadModuleList() {
       // This enables most LLDB functionality involving address-to-module
       // translations (ex. identifing the module for a stack frame PC) and
       // modules/sections commands (ex. target modules list, ...)
-      if (log) {
-        log->Printf("Unable to locate the matching object file, creating a "
-                    "placeholder module for: %s",
-                    name.getValue().c_str());
-      }
+      LLDB_LOG(log,
+               "Unable to locate the matching object file, creating a "
+               "placeholder module for: {0}",
+               name);
 
       module_sp = Module::CreateModuleFromObjectFile<PlaceholderObjectFile>(
-          module_spec, module->base_of_image, module->size_of_image);
-      GetTarget().GetImages().Append(module_sp);
-    }
-
-    if (log) {
-      log->Printf("ProcessMinidump::%s load module: name: %s", __FUNCTION__,
-                  name.getValue().c_str());
+          module_spec, module->BaseOfImage, module->SizeOfImage);
+      GetTarget().GetImages().Append(module_sp, true /* notify */);
     }
 
     bool load_addr_changed = false;
-    module_sp->SetLoadAddress(GetTarget(), module->base_of_image, false,
+    module_sp->SetLoadAddress(GetTarget(), module->BaseOfImage, false,
                               load_addr_changed);
   }
 }
@@ -668,7 +682,7 @@ public:
     m_option_group.Finalize();
   }
 
-  ~CommandObjectProcessMinidumpDump() {}
+  ~CommandObjectProcessMinidumpDump() override {}
 
   Options *GetOptions() override { return &m_option_group; }
 
@@ -690,10 +704,12 @@ public:
     if (DumpDirectory()) {
       s.Printf("RVA        SIZE       TYPE       StreamType\n");
       s.Printf("---------- ---------- ---------- --------------------------\n");
-      for (const auto &pair: minidump.GetDirectoryMap())
-        s.Printf("0x%8.8x 0x%8.8x 0x%8.8x %s\n", (uint32_t)pair.second.RVA,
-                 (uint32_t)pair.second.DataSize, (unsigned)pair.first,
-                 MinidumpParser::GetStreamTypeAsString(pair.first).data());
+      for (const auto &stream_desc : minidump.GetMinidumpFile().streams())
+        s.Printf(
+            "0x%8.8x 0x%8.8x 0x%8.8x %s\n", (uint32_t)stream_desc.Location.RVA,
+            (uint32_t)stream_desc.Location.DataSize,
+            (unsigned)(StreamType)stream_desc.Type,
+            MinidumpParser::GetStreamTypeAsString(stream_desc.Type).data());
       s.Printf("\n");
     }
     auto DumpTextStream = [&](StreamType stream_type,
@@ -796,7 +812,7 @@ public:
         CommandObjectSP(new CommandObjectProcessMinidumpDump(interpreter)));
   }
 
-  ~CommandObjectMultiwordProcessMinidump() {}
+  ~CommandObjectMultiwordProcessMinidump() override {}
 };
 
 CommandObject *ProcessMinidump::GetPluginCommandObject() {
