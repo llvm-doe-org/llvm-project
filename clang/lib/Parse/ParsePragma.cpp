@@ -2286,7 +2286,7 @@ PragmaOpenACCHandler::HandlePragma(Preprocessor &PP,
   Token Tok;
   Tok.startToken();
   Tok.setKind(tok::annot_pragma_openacc);
-  Tok.setLocation(FirstTok.getLocation());
+  Tok.setLocation(IntroducerLoc);
 
   while (Tok.isNot(tok::eod)) {
     Pragma.push_back(Tok);
