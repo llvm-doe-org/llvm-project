@@ -9,12 +9,11 @@
 
 // Check -ast-print and -fopenacc[-ast]-print.
 //
-// RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
+// RUN: %clang -Xclang -verify=noacc -Xclang -ast-print -fsyntax-only %s \
 // RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
 //
 // Strip comments and blank lines so checking -fopenacc-print output is easier.
-// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
-// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
+// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' > %t-acc.c
 //
 // TODO: If lit were to support %for inside a %data, we could iterate prt-opts
 // within prt-args after the first prt-args iteration, significantly shortening
@@ -30,10 +29,10 @@
 // RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT,PRT-O)
 // RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT,PRT-A,PRT-AO)
 // RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT,PRT-O,PRT-OA)
-// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT,PRT-A)
-// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT,PRT-O)
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT,PRT-A,PRT-AO)
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT,PRT-O,PRT-OA)
+// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-PRE,PRT,PRT-A)
+// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-PRE,PRT,PRT-O)
+// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-PRE,PRT,PRT-A,PRT-AO)
+// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-PRE,PRT,PRT-O,PRT-OA)
 // RUN: }
 // RUN: %for prt-args {
 // RUN:   %clang -Xclang -verify %[prt] %t-acc.c \
@@ -55,8 +54,8 @@
 //
 // RUN: %for prt-opts {
 // RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c
-// RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:   %clang -Xclang -verify -fopenmp -o %t %t-omp.c
+// RUN:   echo "// noacc""-no-diagnostics" >> %t-omp.c
+// RUN:   %clang -Xclang -verify=noacc -fopenmp -o %t %t-omp.c
 // RUN:   %t 2 2>&1 | FileCheck -check-prefix=EXE %s
 // RUN: }
 
@@ -67,7 +66,7 @@
 
 // END.
 
-// expected-no-diagnostics
+// noacc-no-diagnostics
 
 #include <assert.h>
 #include <stdio.h>
@@ -1642,6 +1641,67 @@ int main(int argc, char *argv[]) {
         }
       }
     }
+  } // PRT-NEXT: }
+
+  //--------------------------------------------------
+  // vector_length non-constant>1, used except discarded
+  //--------------------------------------------------
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int vl = 2;
+    int vl = 2;
+    // DMP:      ACCParallelDirective
+    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP:          DeclRefExpr {{.*}} 'vl' 'int'
+    // DMP-NEXT:   impl: OMPTargetTeamsDirective
+    // DMP-NEXT:     OMPNum_teamsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NOT:      OMP
+    //
+    // PRT-PRE-NEXT: /* expected{{-warning.*}} */
+    // PRT-A-NEXT:   {{^ *}}#pragma acc parallel num_gangs(1) num_workers(1) vector_length(vl){{$}}
+    // PRT-AO-NEXT:  {{^ *}}// #pragma omp target teams num_teams(1){{$}}
+    // PRT-O-NEXT:   {{^ *}}#pragma omp target teams num_teams(1){{$}}
+    // PRT-OA-NEXT:  {{^ *}}// #pragma acc parallel num_gangs(1) num_workers(1) vector_length(vl){{$}}
+    /* expected-warning@+1 {{'vector_length' discarded because argument is not an integer constant expression}} */
+    #pragma acc parallel num_gangs(1) num_workers(1) vector_length(vl)
+    // DMP: CompoundStmt
+    // PRT-NEXT: {
+    {
+      // DMP:      ACCLoopDirective
+      // DMP-NEXT:   ACCVectorClause
+      // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:   impl: OMPParallelForSimdDirective
+      // DMP-NEXT:     OMPNum_threadsClause
+      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+      // DMP-NOT:      OMP
+      //
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop vector{{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(1){{$}}
+      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(1){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop vector{{$}}
+      #pragma acc loop vector
+      // PRT-NEXT: for ({{.*}}) {
+      for (int i = 0; i < 8; ++i) {
+        // sequential as partitioned only across 1 vector lane
+        // DMP: CallExpr
+        // PRT-NEXT: printf
+        // EXE-NEXT: 0
+        // EXE-NEXT: 1
+        // EXE-NEXT: 2
+        // EXE-NEXT: 3
+        // EXE-NEXT: 4
+        // EXE-NEXT: 5
+        // EXE-NEXT: 6
+        // EXE-NEXT: 7
+        printf("%d\n", i);
+      } // PRT-NEXT: }
+    } // PRT-NEXT: }
   } // PRT-NEXT: }
 
   // PRT-NEXT: return 0;

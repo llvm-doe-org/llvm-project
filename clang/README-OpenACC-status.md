@@ -8,8 +8,9 @@ We have implemented the following features:
 
 * command-line options:
     * `-f[no-]openacc`
-    * `-Wsource-uses-openacc`
     * `-fopenacc[-ast]-print=acc|omp|acc-omp|omp-acc`
+    * `-Wsource-uses-openacc`
+    * `-Wopenacc-discarded-clause`
 * targets:
     * host or multicore
 * `parallel` directive:
@@ -70,7 +71,11 @@ We have implemented the following features:
     * `num_gangs`, `num_workers`, `vector_length` clause:
         * The argument in all cases must be a positive integer
           expression.
-        * The `vector_length` argument must also be a constant.
+        * The `vector_length` argument must also be a constant or
+          Clacc discards the clause and reports a warning diagnostic,
+          which can be suppressed or converted to an error using the
+          `-W{no-,error=}openacc-discarded-clause` command-line
+          options.
         * Notes:
             * OpenACC 2.6 specifies only that the arguments must be
               integer expressions.  However, OpenMP specifies the
@@ -82,14 +87,13 @@ We have implemented the following features:
               constant (so that it can be statically analyzed), gcc
               7.3.0 warns if it's non-positive.  However, pgcc 18.4-0
               doesn't warn even if it's negative.
-            * It's not clear to me yet why OpenMP requires `simdlen`
-              to have a constant expression.  Neither gcc 7.3.0 nor
-              pgcc 18.4-0 warn if `vector_length` receives a
-              non-constant expression.  However, we're stuck with this
-              restriction because we translate to OpenMP.  OpenACC
-              does permit the compiler to ignore `vector_length` as a
-              hint, so we could choose to ignore it in the case of a
-              non-constant expression.
+            * Neither gcc 7.3.0 nor pgcc 18.4-0 warn if
+              `vector_length` receives a non-constant expression.
+              However, we're stuck with this restriction because we
+              translate to OpenMP.  OpenACC does permit the compiler
+              to ignore `vector_length` as a hint, so we choose to
+              discard it and warn in the case of a non-constant
+              expression.
 * `loop` directive within a `parallel` directive:
     * use without clauses
     * partitionability:

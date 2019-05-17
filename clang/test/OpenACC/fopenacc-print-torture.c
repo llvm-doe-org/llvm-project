@@ -48,8 +48,10 @@
 
 // PRT-NEXT:int main() {
 int main() {
+  // PRT-NEXT:  float f = 0;
   // PRT-NEXT:  int non_const_expr = 2;
   // PRT-NEXT:  int var, i;
+  float f = 0;
   int non_const_expr = 2;
   int var, i;
 
@@ -643,9 +645,11 @@ for (i = 0; i < 5; ++i) {
 // PRT-NEXT:#if ERRS
 #if ERRS
   // PRT-NEXT:  /* expected-error{{.*}} */
-  // PRT-NEXT:  #pragma acc parallel vector_length(non_const_expr)
-  /* expected-error@+1 {{argument to 'vector_length' clause must be an integer constant expression}} */
-  #pragma acc parallel vector_length(non_const_expr)
+  // PRT-NEXT:  /* expected-warning{{.*}} */
+  // PRT-NEXT:  #pragma acc parallel vector_length(f)
+  /* expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'float'}} */
+  /* expected-warning@+1 {{'vector_length' discarded because argument is not an integer constant expression}} */
+  #pragma acc parallel vector_length(f)
   // PRT-NEXT:  #pragma acc loop
   #pragma acc loop
   // PRT-NEXT:  for (int i = 0; i < 5; ++i)

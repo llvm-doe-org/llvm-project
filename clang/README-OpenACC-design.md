@@ -383,7 +383,7 @@ OpenACC to OpenMP Mapping
 This section details Clacc's planned mapping from OpenACC directives
 and clauses to OpenMP directives and clauses.  If an OpenACC directive
 or clause does not appear in this section, we haven't planned it yet.
-README-OpenACC-status.md lists which OpenACC directives and clauses
+`README-OpenACC-status.md` lists which OpenACC directives and clauses
 Clacc already implements.
 
 Notation
@@ -515,14 +515,15 @@ this section.
       discuss the case where sibling `loop` constructs specify
       conflicting gang reductions.
 * Variable type restrictions for `reduction` are specified in
-  README-OpenACC-status.md as that is a highly user-visible issue.
+  `README-OpenACC-status.md` as that is a highly user-visible issue.
 
 ### Integer Expression Arguments ###
 
-* The arguments to `num_gangs`, `num_workers`, and `vector_length`
-  must be positive integer expressions.  The `vector_length` argument
-  must also be a constant expression.  These restrictions are
-  inherited from the OpenMP clauses to which Clacc maps these clauses.
+* It is an error if an argument to `num_gangs`, `num_workers`, or
+  `vector_length` is not a positive integer expression.  If the
+  argument to `vector_length` is not also a constant expression, Clacc
+  discards it and reports a warning diagnostic.  See
+  `README-OpenACC-status.md` for rationale.
 
 ### Loop Control Variables ###
 
@@ -592,10 +593,9 @@ to OpenMP is as follows:
     * A constant-expression argument here might be used by a nested
       worker-partitioned `acc loop`.
 * Translation discards *exp* `vector_length`.  Notes:
-    * Clacc does not support non-constant expressions for
-      `vector_length`.  See README-OpenACC-status.md for details.
-    * The constant expression argument here might be used by a
-      nested vector-partitioned `acc loop`.
+    * A constant expression argument here might be used by a nested
+      vector-partitioned `acc loop`, but a non-constant-expression
+      argument is not (see `README-OpenACC-status.md` for rationale).
 
 Loop Directives
 ---------------
@@ -741,8 +741,9 @@ its clauses to OpenMP is as follows:
       efficient, but not all OpenMP directives permit an *exp*
       `shared` clause.  Thus, relying on implicit data sharing
       attributes throughout simplifies the implementation.
-* If *exp* `vector`, then *exp* `vector_length` from ancestor `acc
-  parallel` -> *exp* `simdlen`.
+* If *exp* `vector`, then *exp* `vector_length` with a
+  constant-expression argument from ancestor `acc parallel` -> *exp*
+  `simdlen`.
 * `collapse` -> `collapse`
 * If *exp* `worker` or if this and every ancestor `acc loop` until the
   ancestor `acc parallel` is not gang-partitioned and not
@@ -860,9 +861,13 @@ The following is a list of OpenACC features we have identified that
 might not be possible to map to OpenMP, but we are still investigating
 possible solutions:
 
-* `vector_length` with a non-constant expression argument because
+* `vector_length` with a non-constant-expression argument because
   `simdlen`, to which `vector_length` is translated, requires a
-  constant expression.
+  constant expression.  In the future, Clacc might support alternative
+  mappings for partitioning types, either configured by the user or
+  computed automatically.  If `acc loop vector` were mapped to `omp
+  parallel for`, `vector_length` with a non-constant-expression
+  argument would be possible.
 * If a variable is gang-shared within an `acc parallel` due to, for
   example, a `copy` clause there, and if that variable is also
   involved in a gang reduction specified on a nested `acc loop`, that

@@ -1523,32 +1523,36 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
                                     EndLoc, Vars, ReductionId);
 }
 
-static bool IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
-                                   OpenACCClauseKind CKind, bool IsConstant) {
+enum PosIntResult {PosIntConst, PosIntNonConst, PosIntError};
+
+static PosIntResult IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
+                                           OpenACCClauseKind CKind,
+                                           bool ErrorIfNotConst) {
   SourceLocation Loc = ValExpr->getExprLoc();
   // This uses err_omp_* diagnostics, but none currently mention OpenMP or
   // OpenMP-specific constructs, so they should work fine for OpenACC.
   ExprResult Value =
       SemaRef.PerformOpenMPImplicitIntegerConversion(Loc, ValExpr);
   if (Value.isInvalid())
-    return false;
+    return PosIntError;
 
   ValExpr = Value.get();
   // The expression must evaluate to a non-negative integer value.
   llvm::APSInt Result;
   if (!ValExpr->isIntegerConstantExpr(Result, SemaRef.Context)) {
-    if (IsConstant) {
+    if (ErrorIfNotConst) {
       SemaRef.Diag(Loc, diag::err_acc_clause_not_ice)
           << getOpenACCClauseName(CKind) << ValExpr->getSourceRange();
-      return false;
+      return PosIntError;
     }
+    return PosIntNonConst;
   } else if (!Result.isStrictlyPositive()) {
     SemaRef.Diag(Loc, diag::err_acc_clause_not_positive_ice)
         << getOpenACCClauseName(CKind) << ValExpr->getSourceRange();
-    return false;
+    return PosIntError;
   }
 
-  return true;
+  return PosIntConst;
 }
 
 ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
@@ -1625,7 +1629,8 @@ ACCClause *Sema::ActOnOpenACCNumGangsClause(Expr *NumGangs,
   // OpenMP says num_teams must evaluate to a positive integer value.
   // OpenACC doesn't specify such a restriction that I see for num_gangs, but
   // it seems reasonable.
-  if (!IsPositiveIntegerValue(NumGangs, *this, ACCC_num_gangs, false))
+  if (PosIntError == IsPositiveIntegerValue(NumGangs, *this, ACCC_num_gangs,
+                                            false))
     return nullptr;
   return new (Context) ACCNumGangsClause(NumGangs, StartLoc, LParenLoc,
                                          EndLoc);
@@ -1638,7 +1643,8 @@ ACCClause *Sema::ActOnOpenACCNumWorkersClause(Expr *NumWorkers,
   // OpenMP says num_threads must evaluate to a positive integer value.
   // OpenACC doesn't specify such a restriction that I see for num_workers, but
   // it seems reasonable.
-  if (!IsPositiveIntegerValue(NumWorkers, *this, ACCC_num_workers, false))
+  if (PosIntError == IsPositiveIntegerValue(NumWorkers, *this,
+                                            ACCC_num_workers, false))
     return nullptr;
   return new (Context) ACCNumWorkersClause(NumWorkers, StartLoc, LParenLoc,
                                            EndLoc);
@@ -1648,12 +1654,24 @@ ACCClause *Sema::ActOnOpenACCVectorLengthClause(Expr *VectorLength,
                                                 SourceLocation StartLoc,
                                                 SourceLocation LParenLoc,
                                                 SourceLocation EndLoc) {
-  // OpenMP says simdlen must be a constant positive integer.
-  // OpenACC doesn't specify such a restriction that I see for vector_length.
-  // It seems reasonable for it to be a positive integer, but I'm not sure why
-  // it needs to be constant.
-  if (!IsPositiveIntegerValue(VectorLength, *this, ACCC_vector_length, true))
+  // OpenMP says simdlen must be a constant positive integer.  OpenACC doesn't
+  // specify such a restriction for vector_length.  It seems reasonable for it
+  // to have to be a positive integer, so we require that.  However, according
+  // to our users, some existing OpenACC applications do use non-constant
+  // expressions here.  For that case, we discard the clause, as permitted by
+  // OpenACC 2.7 sec. 2.5.10 L805-806:
+  //
+  // "The implementation may use a different value than specified based on
+  // limitations imposed by the target architecture."
+  //
+  PosIntResult Res = IsPositiveIntegerValue(VectorLength, *this,
+                                            ACCC_vector_length, false);
+  if (Res == PosIntError)
     return nullptr;
+  if (Res == PosIntNonConst)
+    Diag(VectorLength->getExprLoc(), diag::warn_acc_clause_discarded_not_ice)
+        << getOpenACCClauseName(ACCC_vector_length)
+        << VectorLength->getSourceRange();
   return new (Context) ACCVectorLengthClause(VectorLength, StartLoc, LParenLoc,
                                              EndLoc);
 }
@@ -1662,7 +1680,8 @@ ACCClause *Sema::ActOnOpenACCCollapseClause(Expr *Collapse,
                                             SourceLocation StartLoc,
                                             SourceLocation LParenLoc,
                                             SourceLocation EndLoc) {
-  if (!IsPositiveIntegerValue(Collapse, *this, ACCC_collapse, true))
+  if (PosIntError == IsPositiveIntegerValue(Collapse, *this, ACCC_collapse,
+                                            true))
     return nullptr;
   DSAStack->setAssociatedLoops(
       Collapse->EvaluateKnownConstInt(Context).getExtValue());
@@ -1848,8 +1867,12 @@ public:
       }
     }
     auto VectorLengthClauses = D->getClausesOfKind<ACCVectorLengthClause>();
-    if (VectorLengthClauses.begin() != VectorLengthClauses.end())
+    if (VectorLengthClauses.begin() != VectorLengthClauses.end()) {
       VectorLengthExpr = VectorLengthClauses.begin()->getVectorLength();
+      if (!VectorLengthExpr->isIntegerConstantExpr(this->getSema()
+                                                       .getASTContext()))
+        VectorLengthExpr = nullptr;
+    }
 
     // Start OpenMP DSA block.
     getSema().StartOpenMPDSABlock(OMPD_target_teams, DeclarationNameInfo(),
