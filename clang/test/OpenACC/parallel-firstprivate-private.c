@@ -47,33 +47,47 @@
 // RUN:   }
 // RUN: }
 
-// Check -fopenacc-print.  Default is checked above.
+// Check -fopenacc[-ast]-print.  Default is checked above.
 //
-// RUN: %data prints {
-// RUN:   (mode=MODE_I print=acc     pre=PRT,PRT-I,PRT-%[dir],PRT-%[dir]-I,PRT-A,PRT-A-I,PRT-A-%[dir],PRT-A-%[dir]-I                                              )
-// RUN:   (mode=MODE_I print=omp     pre=PRT,PRT-I,PRT-%[dir],PRT-%[dir]-I,PRT-O,PRT-O-I,PRT-O-%[dir],PRT-O-%[dir]-I                                              )
-// RUN:   (mode=MODE_I print=acc-omp pre=PRT,PRT-I,PRT-%[dir],PRT-%[dir]-I,PRT-A,PRT-A-I,PRT-A-%[dir],PRT-A-%[dir]-I,PRT-AO,PRT-AO-I,PRT-AO-%[dir],PRT-AO-%[dir]-I)
-// RUN:   (mode=MODE_I print=omp-acc pre=PRT,PRT-I,PRT-%[dir],PRT-%[dir]-I,PRT-O,PRT-O-I,PRT-O-%[dir],PRT-O-%[dir]-I,PRT-OA,PRT-OA-I,PRT-OA-%[dir],PRT-OA-%[dir]-I)
+// Strip comments and blank lines so checking -fopenacc-print output is easier.
+// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
+// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
 //
-// RUN:   (mode=MODE_F print=acc     pre=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-A,PRT-A-F,PRT-A-%[dir],PRT-A-%[dir]-F                                              )
-// RUN:   (mode=MODE_F print=omp     pre=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-O,PRT-O-F,PRT-O-%[dir],PRT-O-%[dir]-F                                              )
-// RUN:   (mode=MODE_F print=acc-omp pre=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-A,PRT-A-F,PRT-A-%[dir],PRT-A-%[dir]-F,PRT-AO,PRT-AO-F,PRT-AO-%[dir],PRT-AO-%[dir]-F)
-// RUN:   (mode=MODE_F print=omp-acc pre=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-O,PRT-O-F,PRT-O-%[dir],PRT-O-%[dir]-F,PRT-OA,PRT-OA-F,PRT-OA-%[dir],PRT-OA-%[dir]-F)
+// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
+// (which would need additional fields) within prt-args, significantly
+// shortening the prt-args definition.
 //
-// RUN:   (mode=MODE_P print=acc     pre=PRT,PRT-P,PRT-%[dir],PRT-%[dir]-P,PRT-A,PRT-A-P,PRT-A-%[dir],PRT-A-%[dir]-P                                              )
-// RUN:   (mode=MODE_P print=omp     pre=PRT,PRT-P,PRT-%[dir],PRT-%[dir]-P,PRT-O,PRT-O-P,PRT-O-%[dir],PRT-O-%[dir]-P                                              )
-// RUN:   (mode=MODE_P print=acc-omp pre=PRT,PRT-P,PRT-%[dir],PRT-%[dir]-P,PRT-A,PRT-A-P,PRT-A-%[dir],PRT-A-%[dir]-P,PRT-AO,PRT-AO-P,PRT-AO-%[dir],PRT-AO-%[dir]-P)
-// RUN:   (mode=MODE_P print=omp-acc pre=PRT,PRT-P,PRT-%[dir],PRT-%[dir]-P,PRT-O,PRT-O-P,PRT-O-%[dir],PRT-O-%[dir]-P,PRT-OA,PRT-OA-P,PRT-OA-%[dir],PRT-OA-%[dir]-P)
+// RUN: %data prt-opts {
+// RUN:   (prt-opt=-fopenacc-ast-print)
+// RUN:   (prt-opt=-fopenacc-print    )
+// RUN: }
+// RUN: %data prt-args {
+// RUN:   (mode=MODE_I prt=%[prt-opt]=acc     prt-chk=PRT,PRT-I,PRT-%[dir],PRT-%[dir]-I,PRT-A,PRT-A-I,PRT-A-%[dir],PRT-A-%[dir]-I                                              )
+// RUN:   (mode=MODE_I prt=%[prt-opt]=omp     prt-chk=PRT,PRT-I,PRT-%[dir],PRT-%[dir]-I,PRT-O,PRT-O-I,PRT-O-%[dir],PRT-O-%[dir]-I                                              )
+// RUN:   (mode=MODE_I prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-I,PRT-%[dir],PRT-%[dir]-I,PRT-A,PRT-A-I,PRT-A-%[dir],PRT-A-%[dir]-I,PRT-AO,PRT-AO-I,PRT-AO-%[dir],PRT-AO-%[dir]-I)
+// RUN:   (mode=MODE_I prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-I,PRT-%[dir],PRT-%[dir]-I,PRT-O,PRT-O-I,PRT-O-%[dir],PRT-O-%[dir]-I,PRT-OA,PRT-OA-I,PRT-OA-%[dir],PRT-OA-%[dir]-I)
+//
+// RUN:   (mode=MODE_F prt=%[prt-opt]=acc     prt-chk=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-A,PRT-A-F,PRT-A-%[dir],PRT-A-%[dir]-F                                              )
+// RUN:   (mode=MODE_F prt=%[prt-opt]=omp     prt-chk=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-O,PRT-O-F,PRT-O-%[dir],PRT-O-%[dir]-F                                              )
+// RUN:   (mode=MODE_F prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-A,PRT-A-F,PRT-A-%[dir],PRT-A-%[dir]-F,PRT-AO,PRT-AO-F,PRT-AO-%[dir],PRT-AO-%[dir]-F)
+// RUN:   (mode=MODE_F prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-O,PRT-O-F,PRT-O-%[dir],PRT-O-%[dir]-F,PRT-OA,PRT-OA-F,PRT-OA-%[dir],PRT-OA-%[dir]-F)
+//
+// RUN:   (mode=MODE_P prt=%[prt-opt]=acc     prt-chk=PRT,PRT-P,PRT-%[dir],PRT-%[dir]-P,PRT-A,PRT-A-P,PRT-A-%[dir],PRT-A-%[dir]-P                                              )
+// RUN:   (mode=MODE_P prt=%[prt-opt]=omp     prt-chk=PRT,PRT-P,PRT-%[dir],PRT-%[dir]-P,PRT-O,PRT-O-P,PRT-O-%[dir],PRT-O-%[dir]-P                                              )
+// RUN:   (mode=MODE_P prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-P,PRT-%[dir],PRT-%[dir]-P,PRT-A,PRT-A-P,PRT-A-%[dir],PRT-A-%[dir]-P,PRT-AO,PRT-AO-P,PRT-AO-%[dir],PRT-AO-%[dir]-P)
+// RUN:   (mode=MODE_P prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-P,PRT-%[dir],PRT-%[dir]-P,PRT-O,PRT-O-P,PRT-O-%[dir],PRT-O-%[dir]-P,PRT-OA,PRT-OA-P,PRT-OA-%[dir],PRT-OA-%[dir]-P)
 // RUN: }
 // RUN: %for directives {
-// RUN:   %for prints {
-// RUN:     %clang -Xclang -verify -fopenacc-print=%[print] -DMODE=%[mode] \
-// RUN:            %[dir-cflags] %s \
-// RUN:     | FileCheck -check-prefixes=%[pre] %s
+// RUN:   %for prt-opts {
+// RUN:     %for prt-args {
+// RUN:       %clang -Xclang -verify %[prt] -DMODE=%[mode] %[dir-cflags] \
+// RUN:              %t-acc.c \
+// RUN:       | FileCheck -check-prefixes=%[prt-chk] %s
+// RUN:     }
 // RUN:   }
 // RUN: }
 
-// Can we -ast-print the OpenMP source code, compile, and run it successfully?
+// Can we print the OpenMP source code, compile, and run it successfully?
 //
 // RUN: %data exes {
 // RUN:   (mode=MODE_I  cflags=                 pre=EXE-I,EXE-IF,EXE       )
@@ -87,11 +101,14 @@
 // RUN: }
 // RUN: %for directives {
 // RUN:   %for exes {
-// RUN:     %clang -Xclang -verify -fopenacc-print=omp -DMODE=%[mode] \
-// RUN:            %[cflags] %[dir-cflags] %s > %t-omp.c
-// RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:     %clang -Xclang -verify -fopenmp -o %t %t-omp.c
-// RUN:     %t | FileCheck -check-prefixes=%[pre] %s
+// RUN:     %for prt-opts {
+// RUN:       %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c \
+// RUN:              -DMODE=%[mode] %[cflags] %[dir-cflags]
+// RUN:       echo "// expected""-no-diagnostics" >> %t-omp.c
+// RUN:       %clang -Xclang -verify -fopenmp -o %t %t-omp.c \
+// RUN:              -DMODE=%[mode] %[cflags] %[dir-cflags]
+// RUN:       %t | FileCheck -check-prefixes=%[pre] %s
+// RUN:     }
 // RUN:   }
 // RUN: }
 //
@@ -527,23 +544,23 @@ int main() {
   //
   // PRT-NOT:       #pragma
   //
-  // PRT-A-PAR-I:           {{^ *}}#pragma acc parallel num_gangs(2){{$}}
-  // PRT-A-PARLOOP-I:       {{^ *}}#pragma acc parallel loop num_gangs(2){{$}}
+  // PRT-A-PAR-I:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2){{(.*\\$[[:space:]])*.*$}}
+  // PRT-A-PARLOOP-I:       {{^ *}}#pragma acc parallel {{LOOP|loop}} num_gangs(2){{(.*\\$[[:space:]])*.*$}}
   // PRT-AO-I-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) shared(ga,gs,gu,la,ls,lu) firstprivate(gi,{{(gt,)?}}gp,li,{{(lt,)?}}lp,shadowed){{$}}
   // PRT-O-I:               {{^ *}}#pragma omp target teams num_teams(2) shared(ga,gs,gu,la,ls,lu) firstprivate(gi,{{(gt,)?}}gp,li,{{(lt,)?}}lp,shadowed){{$}}
-  // PRT-OA-PAR-I-NEXT:     {{^ *}}// #pragma acc parallel num_gangs(2){{$}}
-  // PRT-OA-PARLOOP-I-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2){{$}}
+  // PRT-OA-PAR-I-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2){{(.*\\$[[:space:]])*.*$}}
+  // PRT-OA-PARLOOP-I-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop}} num_gangs(2){{(.*\\$[[:space:]])*.*$}}
   //
-  // PRT-A-PAR-F:           {{^ *}}#pragma acc parallel num_gangs(2) firstprivate(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) firstprivate(li,{{(lt,)?}}lp,la,ls,lu,lUnref) firstprivate(shadowed){{$}}
-  // PRT-A-PARLOOP-F:       {{^ *}}#pragma acc parallel loop num_gangs(2) firstprivate(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) firstprivate(li,{{(lt,)?}}lp,la,ls,lu,lUnref) firstprivate(shadowed){{$}}
+  // PRT-A-PAR-F:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PARLOOP-F:       {{^ *}}#pragma acc parallel {{LOOP|loop}} num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   // PRT-AO-F-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) firstprivate(li,{{(lt,)?}}lp,la,ls,lu,lUnref) firstprivate(shadowed){{$}}
   // PRT-O-F:               {{^ *}}#pragma omp target teams num_teams(2) firstprivate(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) firstprivate(li,{{(lt,)?}}lp,la,ls,lu,lUnref) firstprivate(shadowed){{$}}
-  // PRT-OA-PAR-F-NEXT:     {{^ *}}// #pragma acc parallel num_gangs(2) firstprivate(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) firstprivate(li,{{(lt,)?}}lp,la,ls,lu,lUnref) firstprivate(shadowed){{$}}
-  // PRT-OA-PARLOOP-F-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) firstprivate(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) firstprivate(li,{{(lt,)?}}lp,la,ls,lu,lUnref) firstprivate(shadowed){{$}}
+  // PRT-OA-PAR-F-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PARLOOP-F-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop}} num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   //
-  // PRT-A-PAR-P:           {{^ *}}#pragma acc parallel num_gangs(2) private(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) private(li,{{(lt,)?}}lp,la,ls,lu,lUnref) private(shadowed){{$}}
+  // PRT-A-PAR-P:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   // PRT-AO-PAR-P-NEXT:     {{^ *}}// #pragma omp target teams num_teams(2) private(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) private(li,{{(lt,)?}}lp,la,ls,lu,lUnref) private(shadowed){{$}}
-  // PRT-A-PARLOOP-P:       {{^ *}}#pragma acc parallel loop num_gangs(2) private(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) private(li,{{(lt,)?}}lp,la,ls,lu,lUnref) private(shadowed){{$}}
+  // PRT-A-PARLOOP-P:       {{^ *}}#pragma acc parallel {{LOOP|loop}} num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   // PRT-AO-PARLOOP-P-NOT:  #pragma
   // PRT-AO-PARLOOP-P:      {{^ *}}// #pragma omp target teams num_teams(2) shared(ga,gs,gu,la,ls,lu) firstprivate(gi,{{(gt,)?}}gp,li,{{(lt,)?}}lp,shadowed){{$}}
   // PRT-AO-PARLOOP-P-NEXT: //{{ *}}{
@@ -563,7 +580,7 @@ int main() {
   // PRT-AO-PARLOOP-P-NEXT: //{{ *}}  int lUnref;
   // PRT-AO-PARLOOP-P-NEXT: //{{ *}}  int shadowed;
   // PRT-O-PAR-P:           {{^ *}}#pragma omp target teams num_teams(2) private(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) private(li,{{(lt,)?}}lp,la,ls,lu,lUnref) private(shadowed){{$}}
-  // PRT-OA-PAR-P-NEXT:     {{^ *}}// #pragma acc parallel num_gangs(2) private(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) private(li,{{(lt,)?}}lp,la,ls,lu,lUnref) private(shadowed){{$}}
+  // PRT-OA-PAR-P-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   // PRT-O-PARLOOP-P:       {{^ *}}#pragma omp target teams num_teams(2) shared(ga,gs,gu,la,ls,lu) firstprivate(gi,{{(gt,)?}}gp,li,{{(lt,)?}}lp,shadowed){{$}}
   // PRT-O-PARLOOP-P-NEXT:  {
   // PRT-O-PARLOOP-P-NEXT:    int gi;
@@ -582,7 +599,7 @@ int main() {
   // PRT-O-PARLOOP-P-NEXT:    int lUnref;
   // PRT-O-PARLOOP-P-NEXT:    int shadowed;
   // PRT-OA-PARLOOP-P-NOT:  #pragma
-  // PRT-OA-PARLOOP-P:      {{^ *}}// #pragma acc parallel loop num_gangs(2) private(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) private(li,{{(lt,)?}}lp,la,ls,lu,lUnref) private(shadowed){{$}}
+  // PRT-OA-PARLOOP-P:      {{^ *}}// #pragma acc parallel {{LOOP|loop}} num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   //
   // PRT-NOT:      #pragma
   //
@@ -606,8 +623,8 @@ int main() {
     CLAUSE(gi,IF_UINT128(gt,)gp, ga,gs , gu , gUnref )         \
     CLAUSE(  li,IF_UINT128(lt,)lp  ,  la  ,ls,  lu , lUnref  ) \
     CLAUSE(shadowed)
-  // PRT-PARLOOP-NEXT: for ({{.*}}) {
-  // PRT-PAR-NEXT: {
+  // PRT-PARLOOP-NEXT: {{for (.*) [{]|FORLOOP_HEAD}}
+  // PRT-PAR-NEXT: {{(FORLOOP_HEAD$[[:space:]])? *}}{
   FORLOOP_HEAD
   {
     // Read before writing in order to exercise SemaExpr.cpp's
@@ -665,7 +682,7 @@ int main() {
     gpOld = gp;
     lpOld = lp;
 #endif
-    // PRT:      printf("inside :
+    // PRT:      printf("inside :{{([^;]|[[:space:]])*}};
     //
     // EXE-IF:      inside : gi:55->56,{{( gt:[1400,59]->[f08234,a07de1],)?}}
     // EXE-P:       inside : gi:{{.+}}->56,{{( gt:[.+]->[f08234,a07de1],)?}}

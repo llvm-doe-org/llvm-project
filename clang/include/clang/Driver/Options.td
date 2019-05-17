@@ -1603,6 +1603,14 @@ def fopenacc_print_EQ : Joined<["-"], "fopenacc-print=">,
            " or omp-acc. In the last two cases, the first is uncommented"
            " and the second is commented.">,
   Values<"acc,omp,acc-omp,omp-acc">;
+def fopenacc_ast_print_EQ : Joined<["-"], "fopenacc-ast-print=">,
+  Flags<[DriverOption,CC1Option]>, Group<Action_Group>,
+  MetaVarName<"<versions>">,
+  HelpText<"Same as -fopenacc-print=<versions> except pretty-print the AST"
+           " instead of printing an adjusted version of the input source.  As"
+           " a result, the output will see preprocessor expansions and"
+           " reformatting.">,
+  Values<"acc,omp,acc-omp,omp-acc">;
 
 def fno_optimize_sibling_calls : Flag<["-"], "fno-optimize-sibling-calls">, Group<f_Group>;
 def foptimize_sibling_calls : Flag<["-"], "foptimize-sibling-calls">, Group<f_Group>;

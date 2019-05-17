@@ -104,6 +104,7 @@ CreateFrontendBaseAction(CompilerInstance &CI) {
 #else
   case RewriteObjC:            Action = "RewriteObjC"; break;
 #endif
+  case RewriteOpenACC:         return llvm::make_unique<RewriteOpenACCAction>();
 #if CLANG_ENABLE_ARCMT
   case MigrateSource:
     return llvm::make_unique<arcmt::MigrateSourceAction>();

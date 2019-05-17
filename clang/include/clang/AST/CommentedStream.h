@@ -32,6 +32,10 @@ class commented_raw_ostream : public llvm::raw_ostream {
   /// the beginning of each line.
   unsigned IndentPre;
 
+  /// IndentPreReuses - Whether IndentPre should reuse any existing spaces at
+  /// the beginning of each line.
+  bool IndentPreReuses;
+
   /// IndentPost - The number of space characters to insert after the "//" at
   /// the beginning of each line.
   unsigned IndentPost;
@@ -58,14 +62,20 @@ public:
   /// IndentPre and IndentPost specify the number of space characters to insert
   /// before and after the "//" at the beginning of each line.
   ///
+  /// If IndentPreReuses, then the "//" is instead inserted after IndentPre
+  /// existing leading spaces, which are first extended to IndentPre spaces if
+  /// there are fewer.
+  ///
   /// ComStart specifies whether to insert indentation and "//" immediately
   /// on the next character because that character is assumed to start a new
   /// line.
   ///
   commented_raw_ostream(raw_ostream &Stream, unsigned IndentPre,
-                        unsigned IndentPost, bool ComStart)
+                        bool IndentPreReuses, unsigned IndentPost,
+                        bool ComStart)
       : raw_ostream(true), TheStream(Stream), IndentPre(IndentPre),
-        IndentPost(IndentPost), ComStart(ComStart) {}
+        IndentPreReuses(IndentPreReuses), IndentPost(IndentPost),
+        ComStart(ComStart) {}
 
   raw_ostream &resetColor() override {
     TheStream.resetColor();

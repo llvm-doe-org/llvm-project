@@ -84,22 +84,38 @@
 // RUN:               -DOMPDD=%[ompdd]
 // RUN: }
 
-// Check -ast-print and -fopenacc-print.
+// Check -ast-print and -fopenacc[-ast]-print.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
 // RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
 //
-// RUN: %data prints {
-// RUN:   (print='-Xclang -ast-print -fsyntax-only -fopenacc' prt=PRT,PRT-A)
-// RUN:   (print=-fopenacc-print=acc     prt=PRT,PRT-A)
-// RUN:   (print=-fopenacc-print=omp     prt=PRT,PRT-O,PRT-O-%[ompdk])
-// RUN:   (print=-fopenacc-print=acc-omp prt=PRT,PRT-A,PRT-AO,PRT-AO-%[ompdk])
-// RUN:   (print=-fopenacc-print=omp-acc prt=PRT,PRT-O,PRT-O-%[ompdk],PRT-OA,PRT-OA-%[ompdk])
+// Strip comments and blank lines so checking -fopenacc-print output is easier.
+// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
+// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
+//
+// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
+// (which would need additional fields) within prt-args after the first
+// prt-args iteration, significantly shortening the prt-args definition.
+//
+// RUN: %data prt-opts {
+// RUN:   (prt-opt=-fopenacc-ast-print)
+// RUN:   (prt-opt=-fopenacc-print    )
+// RUN: }
+// RUN: %data prt-args {
+// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' ACCC="%'accc'" prt-chk=PRT,PRT-A)
+// RUN:   (prt=-fopenacc-ast-print=acc                      ACCC="%'accc'" prt-chk=PRT,PRT-A)
+// RUN:   (prt=-fopenacc-ast-print=omp                      ACCC="%'accc'" prt-chk=PRT,PRT-O,PRT-O-%[ompdk])
+// RUN:   (prt=-fopenacc-ast-print=acc-omp                  ACCC="%'accc'" prt-chk=PRT,PRT-A,PRT-AO,PRT-AO-%[ompdk])
+// RUN:   (prt=-fopenacc-ast-print=omp-acc                  ACCC="%'accc'" prt-chk=PRT,PRT-O,PRT-O-%[ompdk],PRT-OA,PRT-OA-%[ompdk])
+// RUN:   (prt=-fopenacc-print=acc                          ACCC=ACCC      prt-chk=PRT,PRT-A)
+// RUN:   (prt=-fopenacc-print=omp                          ACCC=ACCC      prt-chk=PRT,PRT-O,PRT-O-%[ompdk])
+// RUN:   (prt=-fopenacc-print=acc-omp                      ACCC=ACCC      prt-chk=PRT,PRT-A,PRT-AO,PRT-AO-%[ompdk])
+// RUN:   (prt=-fopenacc-print=omp-acc                      ACCC=ACCC      prt-chk=PRT,PRT-O,PRT-O-%[ompdk],PRT-OA,PRT-OA-%[ompdk])
 // RUN: }
 // RUN: %for loop-clauses {
-// RUN:   %for prints {
-// RUN:     %clang -Xclang -verify %[print] -DACCC=%'accc' %s \
-// RUN:     | FileCheck -check-prefixes=%[prt] -DACCC=' '%'accc' \
+// RUN:   %for prt-args {
+// RUN:     %clang -Xclang -verify %[prt] -DACCC=%'accc' %t-acc.c \
+// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DACCC=' '%[ACCC] \
 // RUN:                 -DOMPDP=%'ompdp' %s
 // RUN:   }
 // RUN: }
@@ -110,23 +126,24 @@
 // and deserialized, so it's worthwhile to try all OpenACC printing modes.
 //
 // RUN: %for loop-clauses {
-// RUN:   %clang -Xclang -verify -fopenacc -emit-ast %s -DACCC=%'accc' \
+// RUN:   %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -DACCC=%'accc' \
 // RUN:          -o %t.ast
-// RUN:   %for prints {
-// RUN:     %clang %[print] %t.ast 2>&1 \
-// RUN:     | FileCheck -check-prefixes=%[prt] -DACCC=' '%'accc' \
+// RUN:   %for prt-args {
+// RUN:     %clang %[prt] %t.ast 2>&1 \
+// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DACCC=' '%[ACCC] \
 // RUN:                 -DOMPDP=%'ompdp' %s
 // RUN:   }
 // RUN: }
 
-// Can we -ast-print the OpenMP source code, compile, and run it successfully?
+// Can we print the OpenMP source code, compile, and run it successfully?
 //
 // RUN: %for loop-clauses {
-// RUN:   %clang -Xclang -verify -fopenacc-print=omp -DACCC=%'accc' %s \
-// RUN:          > %t-omp.c
-// RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:   %clang -Xclang -verify -fopenmp -o %t %t-omp.c
-// RUN:   %t | FileCheck -check-prefixes=%[exe] %s
+// RUN:   %for prt-opts {
+// RUN:     %clang -Xclang -verify %[prt-opt]=omp -DACCC=%'accc' %s > %t-omp.c
+// RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
+// RUN:     %clang -Xclang -verify -fopenmp -o %t %t-omp.c
+// RUN:     %t | FileCheck -check-prefixes=%[exe] %s
+// RUN:   }
 // RUN: }
 
 // Check execution with normal compilation.
@@ -1094,7 +1111,7 @@ int main() {
     // PRT-NOACC-NEXT:     printf
     // PRT-NOACC-NEXT:     j = k = 55;
     // PRT-NOACC-NEXT:   }
-    #pragma acc loop ACCC private(j, i, k) private(i)
+    #pragma acc loop ACCC private(j,i,k) private(i)
     for (i = 0; i < 2; ++i) {
       // EXE-DAG:        in loop: i=0
       // EXE-DAG:        in loop: i=1
@@ -1257,7 +1274,7 @@ int main() {
     // PRT-NOACC-NEXT:     printf
     // PRT-NOACC-NEXT:     j = k = 55;
     // PRT-NOACC-NEXT:   }
-    #pragma acc parallel loop num_gangs(2) ACCC private(j, i, k) private(i)
+    #pragma acc parallel loop num_gangs(2) ACCC private(j,i,k) private(i)
     for (i = 0; i < 2; ++i) {
       // EXE-DAG:        in loop: i=0
       // EXE-DAG:        in loop: i=1

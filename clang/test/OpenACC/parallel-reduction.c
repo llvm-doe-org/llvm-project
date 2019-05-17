@@ -20,7 +20,11 @@
 // RUN:   | FileCheck -check-prefixes=DMP,DMP-%[dir] %s
 // RUN: }
 
-// Check -ast-print and -fopenacc-print.
+// Check -ast-print and -fopenacc[-ast]-print.
+//
+// Strip comments and blank lines so checking -fopenacc-print output is easier.
+// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
+// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
 //
 // RUN: %for directives {
 // RUN:   %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
@@ -28,22 +32,29 @@
 // RUN:   | FileCheck -check-prefixes=PRT,PRT-%[dir] -DLOOP=%'dir-loop' %s
 // RUN: }
 //
-// RUN: %data prints {
-// RUN:   (print='-Xclang -ast-print -fsyntax-only -fopenacc'
-// RUN:    prt=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir])
-// RUN:   (print=-fopenacc-print=acc
-// RUN:    prt=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir])
-// RUN:   (print=-fopenacc-print=omp
-// RUN:    prt=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir])
-// RUN:   (print=-fopenacc-print=acc-omp
-// RUN:    prt=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir],PRT-AO,PRT-AO-%[dir])
-// RUN:   (print=-fopenacc-print=omp-acc
-// RUN:    prt=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir],PRT-OA,PRT-OA-%[dir])
+// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
+// (which would need additional fields) within prt-args after the first
+// prt-args iteration, significantly shortening the prt-args definition.
+//
+// RUN: %data prt-opts {
+// RUN:   (prt-opt=-fopenacc-ast-print)
+// RUN:   (prt-opt=-fopenacc-print    )
+// RUN: }
+// RUN: %data prt-args {
+// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' LOOP="%'dir-loop'" prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir])
+// RUN:   (prt=-fopenacc-ast-print=acc                      LOOP="%'dir-loop'" prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir])
+// RUN:   (prt=-fopenacc-ast-print=omp                      LOOP="%'dir-loop'" prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir])
+// RUN:   (prt=-fopenacc-ast-print=acc-omp                  LOOP="%'dir-loop'" prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir],PRT-AO,PRT-AO-%[dir])
+// RUN:   (prt=-fopenacc-ast-print=omp-acc                  LOOP="%'dir-loop'" prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir],PRT-OA,PRT-OA-%[dir])
+// RUN:   (prt=-fopenacc-print=acc                          LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir])
+// RUN:   (prt=-fopenacc-print=omp                          LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir])
+// RUN:   (prt=-fopenacc-print=acc-omp                      LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir],PRT-AO,PRT-AO-%[dir])
+// RUN:   (prt=-fopenacc-print=omp-acc                      LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir],PRT-OA,PRT-OA-%[dir])
 // RUN: }
 // RUN: %for directives {
-// RUN:   %for prints {
-// RUN:     %clang -Xclang -verify %[print] %[dir-cflags] %s \
-// RUN:     | FileCheck -check-prefixes=%[prt] -DLOOP=%'dir-loop' %s
+// RUN:   %for prt-args {
+// RUN:     %clang -Xclang -verify %[prt] %[dir-cflags] %t-acc.c \
+// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DLOOP=%[LOOP] %s
 // RUN:   }
 // RUN: }
 
@@ -53,25 +64,27 @@
 // and deserialized, so it's worthwhile to try all OpenACC printing modes.
 //
 // RUN: %for directives {
-// RUN:   %for prints {
-// RUN:     %clang -Xclang -verify -fopenacc -emit-ast %[dir-cflags] %s \
-// RUN:            -o %t.ast
-// RUN:     %clang %[print] %t.ast 2>&1 \
-// RUN:     | FileCheck -check-prefixes=%[prt] -DLOOP=%'dir-loop' %s
+// RUN:   %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -o %t.ast \
+// RUN:          %[dir-cflags]
+// RUN:   %for prt-args {
+// RUN:     %clang %[prt] %t.ast 2>&1 \
+// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DLOOP=%[LOOP] %s
 // RUN:   }
 // RUN: }
 
 // For some Linux platforms, -latomic is required for OpenMP support for
 // reductions on complex types.
 
-// Can we -ast-print the OpenMP source code, compile, and run it successfully?
+// Can we print the OpenMP source code, compile, and run it successfully?
 //
 // RUN: %for directives {
-// RUN:   %clang -Xclang -verify -fopenacc-print=omp %[dir-cflags] %s \
-// RUN:          > %t-omp.c
-// RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:   %clang -Xclang -verify -fopenmp -o %t %t-omp.c %libatomic
-// RUN:   %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-%[dir] %s
+// RUN:   %for prt-opts {
+// RUN:     %clang -Xclang -verify %[prt-opt]=omp %[dir-cflags] %s > %t-omp.c
+// RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
+// RUN:     %clang -Xclang -verify -fopenmp -o %t %t-omp.c %libatomic \
+// RUN:            %[dir-cflags]
+// RUN:     %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-%[dir] %s
+// RUN:   }
 // RUN: }
 
 // Check execution with normal compilation.
@@ -153,10 +166,11 @@ int main() {
     //
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) reduction(+: acc) firstprivate(val){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(+: acc) firstprivate(val){{$}}
-    #pragma acc parallel LOOP num_gangs(4) reduction(+:acc) firstprivate(val)
+    #pragma acc parallel LOOP num_gangs(4) reduction(+: acc) firstprivate(val)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
-    // PRT-PARLOOP: for ({{.*}})
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for \(.*\)|FORLOOP_HEAD}}
     FORLOOP_HEAD
       // DMP: CompoundAssignOperator {{.*}} 'int' '+='
       // PRT-NEXT: acc += val;
@@ -217,10 +231,11 @@ int main() {
     //
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) reduction(*: acc) firstprivate(val){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(*: acc) firstprivate(val){{$}}
-    #pragma acc parallel LOOP num_gangs(4) reduction(*:acc) firstprivate(val)
+    #pragma acc parallel LOOP num_gangs(4) reduction(*: acc) firstprivate(val)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
-    // PRT-PARLOOP: for ({{.*}})
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for (.*)|FORLOOP_HEAD}}
     FORLOOP_HEAD
       // DMP: CompoundAssignOperator {{.*}} 'float' '*='
       // PRT-NEXT: acc *= val;
@@ -283,10 +298,11 @@ int main() {
     //
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) reduction(max: acc) firstprivate(val){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(max: acc) firstprivate(val){{$}}
-    #pragma acc parallel LOOP num_gangs(4) reduction(max:acc) firstprivate(val)
+    #pragma acc parallel LOOP num_gangs(4) reduction(max: acc) firstprivate(val)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
-    // PRT-PARLOOP: for ({{.*}})
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for (.*)|FORLOOP_HEAD}}
     FORLOOP_HEAD
       // DMP: ConditionalOperator {{.*}} 'int *'
       // PRT-NEXT: acc = val > acc ? val : acc;
@@ -346,10 +362,11 @@ int main() {
     //
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) reduction(min: acc) firstprivate(val){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(min: acc) firstprivate(val){{$}}
-    #pragma acc parallel LOOP num_gangs(4) reduction(min:acc) firstprivate(val)
+    #pragma acc parallel LOOP num_gangs(4) reduction(min: acc) firstprivate(val)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
-    // PRT-PARLOOP: for ({{.*}})
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for (.*)|FORLOOP_HEAD}}
     FORLOOP_HEAD
       // DMP: ConditionalOperator {{.*}} 'double'
       // PRT-NEXT: acc = val < acc ? val : acc;
@@ -409,10 +426,11 @@ int main() {
     //
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) reduction(&: acc) firstprivate(val){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(&: acc) firstprivate(val){{$}}
-    #pragma acc parallel LOOP num_gangs(4) reduction(&:acc) firstprivate(val)
+    #pragma acc parallel LOOP num_gangs(4) reduction(&: acc) firstprivate(val)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
-    // PRT-PARLOOP: for ({{.*}})
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for (.*)|FORLOOP_HEAD}}
     FORLOOP_HEAD
       // DMP: CompoundAssignOperator {{.*}} 'char' '&='
       // PRT-NEXT: acc &= val;
@@ -472,10 +490,11 @@ int main() {
     //
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) reduction(|: acc) firstprivate(val){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(|: acc) firstprivate(val){{$}}
-    #pragma acc parallel LOOP num_gangs(4) reduction(|:acc) firstprivate(val)
+    #pragma acc parallel LOOP num_gangs(4) reduction(|: acc) firstprivate(val)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
-    // PRT-PARLOOP: for ({{.*}})
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for (.*)|FORLOOP_HEAD}}
     FORLOOP_HEAD
       // DMP: CompoundAssignOperator {{.*}} 'int' '|='
       // PRT-NEXT: acc |= val;
@@ -535,10 +554,11 @@ int main() {
     //
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(3) reduction(^: acc) firstprivate(val){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(3) reduction(^: acc) firstprivate(val){{$}}
-    #pragma acc parallel LOOP num_gangs(3) reduction(^:acc) firstprivate(val)
+    #pragma acc parallel LOOP num_gangs(3) reduction(^: acc) firstprivate(val)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
-    // PRT-PARLOOP: for ({{.*}})
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for (.*)|FORLOOP_HEAD}}
     FORLOOP_HEAD
       // DMP: CompoundAssignOperator {{.*}} 'int' '^='
       // PRT-NEXT: acc ^= val;
@@ -605,10 +625,11 @@ int main() {
     //
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) reduction(&&: acc) firstprivate(val){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(&&: acc) firstprivate(val){{$}}
-    #pragma acc parallel LOOP num_gangs(4) reduction(&&:acc) firstprivate(val)
+    #pragma acc parallel LOOP num_gangs(4) reduction(&&: acc) firstprivate(val)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
-    // PRT-PARLOOP: for ({{.*}})
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for (.*)|FORLOOP_HEAD}}
     FORLOOP_HEAD
       // DMP: BinaryOperator {{.*}} 'int' '&&'
       // PRT-NEXT: acc = acc && val;
@@ -671,10 +692,11 @@ int main() {
     //
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) reduction(||: acc) firstprivate(val){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(||: acc) firstprivate(val){{$}}
-    #pragma acc parallel LOOP num_gangs(4) reduction(||:acc) firstprivate(val)
+    #pragma acc parallel LOOP num_gangs(4) reduction(||: acc) firstprivate(val)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
-    // PRT-PARLOOP: for ({{.*}})
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for (.*)|FORLOOP_HEAD}}
     FORLOOP_HEAD
       // DMP: BinaryOperator {{.*}} 'int' '||'
       // PRT-NEXT: acc = acc || val;
@@ -696,8 +718,8 @@ int main() {
   // PRT-NEXT: {
   {
     // PRT-NEXT: enum E {
-    // PRT: E10
-    // PRT-NEXT: };
+    // PRT: E10{{[[:space:]]*}}
+    // PRT-SAME: };
     enum E {E0, E1, E2, E3, E4, E5, E6, E7, E8, E9, E10};
     // PRT-NEXT: enum E acc = E3;
     // PRT-NEXT: enum E val = E10;
@@ -741,10 +763,11 @@ int main() {
     //
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) reduction(&: acc) firstprivate(val){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(&: acc) firstprivate(val){{$}}
-    #pragma acc parallel LOOP num_gangs(4) reduction(&:acc) firstprivate(val)
+    #pragma acc parallel LOOP num_gangs(4) reduction(&: acc) firstprivate(val)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
-    // PRT-PARLOOP: for ({{.*}})
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for (.*)|FORLOOP_HEAD}}
     FORLOOP_HEAD
       // DMP: CompoundAssignOperator {{.*}}'enum E' '&='
       // PRT-NEXT: acc &= val;
@@ -762,8 +785,8 @@ int main() {
 
   // PRT-NEXT: {
   {
-    // PRT-NEXT: _Bool acc = 3;
-    // PRT-NEXT: _Bool val = 0;
+    // PRT-NEXT: {{_Bool|bool}} acc = 3;
+    // PRT-NEXT: {{_Bool|bool}} val = 0;
     bool acc = 3;
     bool val = 0;
     // DMP-PAR:           ACCParallelDirective
@@ -804,10 +827,11 @@ int main() {
     //
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) reduction(|: acc) firstprivate(val){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(|: acc) firstprivate(val){{$}}
-    #pragma acc parallel LOOP num_gangs(4) reduction(|:acc) firstprivate(val)
+    #pragma acc parallel LOOP num_gangs(4) reduction(|: acc) firstprivate(val)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
-    // PRT-PARLOOP: for ({{.*}})
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for (.*)|FORLOOP_HEAD}}
     FORLOOP_HEAD
       // DMP: CompoundAssignOperator {{.*}} 'bool' '|='
       // PRT-NEXT: acc |= val;
@@ -825,8 +849,8 @@ int main() {
 
   // PRT-NEXT: {
   {
-    // PRT-NEXT: _Complex float acc
-    // PRT-NEXT: _Complex float val
+    // PRT-NEXT: {{_Complex float|float complex}} acc
+    // PRT-NEXT: {{_Complex float|float complex}} val
     float complex acc = 10 + 1*I;
     float complex val = 2 + 3*I;
     // DMP-PAR:           ACCParallelDirective
@@ -867,10 +891,11 @@ int main() {
     //
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) reduction(+: acc) firstprivate(val){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(+: acc) firstprivate(val){{$}}
-    #pragma acc parallel LOOP num_gangs(4) reduction(+:acc) firstprivate(val)
+    #pragma acc parallel LOOP num_gangs(4) reduction(+: acc) firstprivate(val)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
-    // PRT-PARLOOP: for ({{.*}})
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for (.*)|FORLOOP_HEAD}}
     FORLOOP_HEAD
       // DMP: CompoundAssignOperator {{.*}} '_Complex float' '+='
       // PRT-NEXT: acc += val;

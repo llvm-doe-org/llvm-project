@@ -13,6 +13,7 @@
 
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Attr.h"
+#include "clang/AST/CommentedStream.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclCXX.h"
@@ -52,7 +53,6 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
-#include "CommentedStream.h"
 #include <cassert>
 #include <string>
 
@@ -1089,80 +1089,6 @@ void StmtPrinter::PrintACCExecutableDirectiveBody(ACCExecutableDirective *S) {
     PrintStmt(S->getAssociatedStmt());
 }
 
-// Are the OpenACC and OpenMP versions of an OpenACC region different enough
-// that, when printing both versions, StmtPrinter must print the associated
-// statements separately?
-//
-// StmtPrinter prints both versions (one within comments) when
-// Policy.OpenACCPrint is OpenACCPrint_ACC_OMP or OpenACCPrint_OMP_ACC.  When
-// the result of mustSplitACCExecutableDirective is true, StmtPrinter must
-// print the OpenACC directive plus its associated statement completely
-// separately (one within comments) from the OpenMP directive plus its
-// associated statement.  When the result is false, StmtPrinter prints the
-// OpenACC directive separately (one within comments) from the OpenMP directive
-// but prints the associated statement once afterward.
-//
-// mustSplitACCExecutableDirective makes the determination by checking whether
-// all portions of the associated statements except nested OpenACC regions
-// (and their OpenMP versions) are identical when printed.  The reason it
-// doesn't check nested OpenACC regions is that they can be split if necessary
-// within this region (it checks them for the need to split when its reaches
-// them while printing this region).  A degenerate case is when there is no
-// associated statement at all (standalone directive), and then it returns
-// false because there's nothing to split.  Another special case is when the
-// OpenMP version is not an OpenMP directive (OpenACC directive was dropped but
-// perhaps some new code was inserted into a new compound statement enclosing
-// the possibly transformed associated statement), and then it just compares
-// the entire OpenMP version with the OpenACC version's associated statement.
-//
-// The implementation of this check works as follows.  First, it prints the
-// associated statements to strings using Policy.OpenACCPrint =
-// OpenACCPrint_OMP.  That policy shouldn't matter for the OpenMP version
-// because it contains no OpenACC because all OpenACC regions are transformed
-// to OpenMP along with the outermost OpenACC region.  For the OpenACC version,
-// that policy makes the nested OpenACC regions look the same as in the OpenMP
-// version.  Second, it compares the two strings and returns the result.
-//
-// TODO: The implementation could be more efficient.  It has to print each
-// OpenACC region 2N+1 times where N is the number of directives enclosing it.
-// Without nesting, that means it prints a region 3 times (N=1).  With
-// two-levels, it prints the code that is only in the outer region 3 times
-// (N=1), and it prints the code that is only in the inner region 5 times
-// (N=2).  This poor efficiency probably doesn't matter much if a user is using
-// printing for just a manual inspection of the code (command-line -ast-print),
-// but it might if users use printing as part of their compilation process.  A
-// more efficient way probably amounts to some sort of AST diff (I believe I've
-// read somewhere about a clang mechanism or extension for that) so that large
-// strings wouldn't need to be generated and so that nested OpenACC regions
-// could be skipped entirely during the diff.
-static bool mustSplitACCExecutableDirective(ACCExecutableDirective *S,
-                                            const PrintingPolicy &Policy,
-                                            StringRef NL,
-                                            const ASTContext *Context) {
-  if (!S->hasAssociatedStmt())
-    return false;
-  Stmt *ACCStmt = S->getAssociatedStmt();
-  Stmt *OMPStmt = S->getOMPNode();
-  for (int i = 0, e = getOpenACCEffectiveDirectives(S->getDirectiveKind());
-       i < e; ++i) {
-    if (auto *OMPDir = dyn_cast<OMPExecutableDirective>(OMPStmt))
-      OMPStmt = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
-  }
-  if (ACCStmt == OMPStmt) // we probably will never implement such a case
-    return false;
-  PrintingPolicy PolicyOMP = Policy;
-  PolicyOMP.OpenACCPrint = OpenACCPrint_OMP;
-  std::string ACCStr, OMPStr;
-  llvm::raw_string_ostream ACCStrStr(ACCStr), OMPStrStr(OMPStr);
-  ACCStmt->printPretty(ACCStrStr, nullptr, PolicyOMP, 0, NL, Context);
-  OMPStmt->printPretty(OMPStrStr, nullptr, PolicyOMP, 0, NL, Context);
-  ACCStrStr.flush();
-  OMPStrStr.flush();
-  // llvm::errs() << NL << "<<<<" << NL << ACCStr << NL << "----" << NL
-  //     << OMPStr << NL << ">>>>" << NL;
-  return ACCStr != OMPStr;
-}
-
 void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
   if (!S->hasOMPNode()) {
     PrintACCExecutableDirectiveHead(S, false, false);
@@ -1190,9 +1116,10 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
   }
   case OpenACCPrint_ACC_OMP:
     PrintACCExecutableDirectiveHead(S, false, true);
-    if (mustSplitACCExecutableDirective(S, Policy, NL, Context)) {
+    if (S->ompStmtPrintsDifferently(Policy, Context)) {
       PrintACCExecutableDirectiveBody(S);
-      clang::commented_raw_ostream ComStream(OS, IndentLevel*2, 1, true);
+      clang::commented_raw_ostream ComStream(OS, IndentLevel*2, false, 1,
+                                             true);
       StmtPrinter ComPrinter(ComStream, Helper, Policy, 0, NL, Context);
       Stmt *OMPInnerDir = ComPrinter.PrintOMPExecutableDirectiveHead(
           S->getOMPNode(), false, EffectiveDirectives);
@@ -1204,12 +1131,13 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
       PrintACCExecutableDirectiveBody(S);
     }
     break;
-  case OpenACCPrint_OMP_ACC:
+  case OpenACCPrint_OMP_ACC: {
     Stmt *OMPInnerDir = PrintOMPExecutableDirectiveHead(
         S->getOMPNode(), false, EffectiveDirectives);
-    if (mustSplitACCExecutableDirective(S, Policy, NL, Context)) {
+    if (S->ompStmtPrintsDifferently(Policy, Context)) {
       PrintOMPExecutableDirectiveBody(OMPInnerDir);
-      clang::commented_raw_ostream ComStream(OS, IndentLevel*2, 1, true);
+      clang::commented_raw_ostream ComStream(OS, IndentLevel*2, false, 1,
+                                             true);
       PrintingPolicy ComPolicy(Policy);
       ComPolicy.OpenACCPrint = OpenACCPrint_ACC_OMP;
       StmtPrinter ComPrinter(ComStream, Helper, ComPolicy, 0, NL, Context);
@@ -1220,6 +1148,11 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
       PrintACCExecutableDirectiveHead(S, true, true);
       PrintACCExecutableDirectiveBody(S);
     }
+    break;
+  }
+  case OpenACCPrint_OMP_HEAD:
+    PrintOMPExecutableDirectiveHead(S->getOMPNode(), false,
+                                    EffectiveDirectives);
     break;
   }
 }

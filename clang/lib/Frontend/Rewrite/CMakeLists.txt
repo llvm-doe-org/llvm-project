@@ -10,6 +10,7 @@ add_clang_library(clangRewriteFrontend
   RewriteMacros.cpp
   RewriteModernObjC.cpp
   RewriteObjC.cpp
+  RewriteOpenACC.cpp
   RewriteTest.cpp
 
   LINK_LIBS

@@ -116,6 +116,9 @@ enum ActionKind {
   /// ObjC->C Rewriter.
   RewriteObjC,
 
+  /// Rewrite OpenACC as OpenMP.
+  RewriteOpenACC,
+
   /// Rewriter playground
   RewriteTest,
 

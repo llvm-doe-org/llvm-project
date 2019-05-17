@@ -145,6 +145,37 @@ public:
     return DirectiveDiscardedForOMP;
   }
 
+  // Are the OpenACC and OpenMP versions of an OpenACC construct different
+  // enough that, when printing both versions, the associated statements must
+  // be printed separately?
+  //
+  // For example, StmtPrinter prints both versions (one within comments) when
+  // Policy.OpenACCPrint is OpenACCPrint_ACC_OMP or OpenACCPrint_OMP_ACC.  When
+  // the result of ompStmtPrintsDifferently is true, StmtPrinter must print the
+  // OpenACC directive plus its associated statement completely separately (one
+  // within comments) from the OpenMP directive plus its associated statement.
+  // When the result is false, StmtPrinter prints the OpenACC directive
+  // separately (one within comments) from the OpenMP directive but prints the
+  // associated statement once afterward.
+  //
+  // ompStmtPrintsDifferently makes its determination by checking whether all
+  // portions of the associated statements except nested OpenACC regions are
+  // identical when printed.  The reason it doesn't check nested OpenACC
+  // regions is that they can be split if necessary within this region (it
+  // checks them for the need to split when its reaches them while printing
+  // this region).  A degenerate case is when there is no associated statement
+  // at all (standalone directive), and then it returns false because there's
+  // nothing to split. Another special case is when the OpenMP version is not
+  // an OpenMP directive (OpenACC directive was dropped but perhaps some new
+  // code was inserted into a new compound statement enclosing the possibly
+  // transformed associated statement), and then it just compares the entire
+  // OpenMP version with the OpenACC version's associated statement.
+  //
+  // \param Policy The base printing policy to use for comparisons.
+  // \param Context AST context.
+  bool ompStmtPrintsDifferently(const PrintingPolicy &Policy,
+                                const ASTContext *Context);
+
   /// Iterates over a filtered subrange of clauses applied to a
   /// directive.
   ///
@@ -208,6 +239,14 @@ public:
   SourceLocation getBeginLoc() const { return StartLoc; }
   /// Returns ending location of directive.
   SourceLocation getEndLoc() const { return EndLoc; }
+  /// Gets the source range covering the '#pragma' through the end of any
+  /// associated statement.
+  SourceRange getConstructRange() const;
+  /// Gets the source range covering the '#pragma' through the end of just
+  /// the directive without any associated statement.
+  SourceRange getDirectiveRange() const {
+    return SourceRange(StartLoc, EndLoc);
+  }
 
   /// Set starting location of directive kind.
   ///

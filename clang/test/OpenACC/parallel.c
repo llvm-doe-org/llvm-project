@@ -20,7 +20,7 @@
 // RUN:   | FileCheck -check-prefixes=DMP,DMP-%[dir] %s
 // RUN: }
 
-// Check -ast-print and -fopenacc-print.
+// Check -ast-print and -fopenacc[-ast]-print.
 //
 // RUN: %for directives {
 // RUN:   %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
@@ -28,22 +28,33 @@
 // RUN:   | FileCheck -check-prefixes=PRT,PRT-%[dir] %s
 // RUN: }
 //
-// RUN: %data prints {
-// RUN:   (print='-Xclang -ast-print -fsyntax-only -fopenacc'
-// RUN:    prt=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir])
-// RUN:   (print=-fopenacc-print=acc
-// RUN:    prt=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir])
-// RUN:   (print=-fopenacc-print=omp
-// RUN:    prt=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir])
-// RUN:   (print=-fopenacc-print=acc-omp
-// RUN:    prt=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir],PRT-AO,PRT-AO-%[dir])
-// RUN:   (print=-fopenacc-print=omp-acc
-// RUN:    prt=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir],PRT-OA,PRT-OA-%[dir])
+// Strip comments and blank lines so checking -fopenacc-print output is easier.
+// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
+// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
+//
+// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
+// within prt-args after the first prt-args iteration, significantly shortening
+// the prt-args definition.
+//
+// RUN: %data prt-opts {
+// RUN:   (prt-opt=-fopenacc-ast-print)
+// RUN:   (prt-opt=-fopenacc-print    )
+// RUN: }
+// RUN: %data prt-args {
+// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir])
+// RUN:   (prt=-fopenacc-ast-print=acc                      prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir])
+// RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir])
+// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir],PRT-AO,PRT-AO-%[dir])
+// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir],PRT-OA,PRT-OA-%[dir])
+// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir])
+// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir])
+// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir],PRT-AO,PRT-AO-%[dir])
+// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir],PRT-OA,PRT-OA-%[dir])
 // RUN: }
 // RUN: %for directives {
-// RUN:   %for prints {
-// RUN:     %clang -Xclang -verify %[print] %[dir-cflags] %s \
-// RUN:     | FileCheck -check-prefixes=%[prt] %s
+// RUN:   %for prt-args {
+// RUN:     %clang -Xclang -verify %[prt] %[dir-cflags] %t-acc.c \
+// RUN:     | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN:   }
 // RUN: }
 
@@ -53,22 +64,23 @@
 // and deserialized, so it's worthwhile to try all OpenACC printing modes.
 //
 // RUN: %for directives {
-// RUN:   %for prints {
-// RUN:     %clang -Xclang -verify -fopenacc -emit-ast %[dir-cflags] %s \
-// RUN:            -o %t.ast
-// RUN:     %clang %[print] %t.ast 2>&1 \
-// RUN:     | FileCheck -check-prefixes=%[prt] %s
+// RUN:   %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -o %t.ast \
+// RUN:          %[dir-cflags]
+// RUN:   %for prt-args {
+// RUN:     %clang %[prt] %t.ast 2>&1 \
+// RUN:     | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN:   }
 // RUN: }
 
-// Can we -ast-print the OpenMP source code, compile, and run it successfully?
+// Can we print the OpenMP source code, compile, and run it successfully?
 //
 // RUN: %for directives {
-// RUN:   %clang -Xclang -verify -fopenacc-print=omp %[dir-cflags] %s \
-// RUN:          > %t-omp.c
-// RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:   %clang -Xclang -verify -fopenmp -o %t %t-omp.c
-// RUN:   %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-%[dir] %s
+// RUN:   %for prt-opts {
+// RUN:     %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c %[dir-cflags]
+// RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
+// RUN:     %clang -Xclang -verify -fopenmp -o %t %t-omp.c %[dir-cflags]
+// RUN:     %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-%[dir] %s
+// RUN:   }
 // RUN: }
 
 // Check execution with normal compilation.
@@ -112,16 +124,17 @@ int main(int argc, char *argv[]) {
   // DMP-PARLOOP:          ACCLoopDirective
   // DMP-PARLOOP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   //
-  // PRT-A-PAR-NEXT:      {{^ *}}#pragma acc parallel num_gangs(4){{$}}
-  // PRT-A-PARLOOP-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(4){{$}}
+  // PRT-A-PAR-NEXT:      {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(4){{ ?$}}
+  // PRT-A-PARLOOP-NEXT:  {{^ *}}#pragma acc parallel {{LOOP|loop}} num_gangs(4){{ ?$}}
   // PRT-AO-NEXT:         {{^ *}}// #pragma omp target teams num_teams(4){{$}}
   // PRT-O-NEXT:          {{^ *}}#pragma omp target teams num_teams(4){{$}}
-  // PRT-OA-PAR-NEXT:     {{^ *}}// #pragma acc parallel num_gangs(4){{$}}
-  // PRT-OA-PARLOOP-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(4){{$}}
-  #pragma acc parallel LOOP num_gangs(/*literal*/4)
+  // PRT-OA-PAR-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(4){{ ?$}}
+  // PRT-OA-PARLOOP-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop}} num_gangs(4){{ ?$}}
+  #pragma acc parallel LOOP num_gangs(4) // literal num_gangs argument
   // DMP-PAR-NOT:      ForStmt
   // DMP-PARLOOP-NEXT: impl: ForStmt
-  // PRT-PARLOOP: for ({{.*}})
+  // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+  // PRT-PARLOOP-NEXT: {{FORLOOP_HEAD|for \(.*\)}}
   FORLOOP_HEAD
     // DMP: CallExpr
     // PRT-NEXT: printf("hello world\n");
@@ -143,16 +156,17 @@ int main(int argc, char *argv[]) {
   // DMP-PARLOOP:          ACCLoopDirective
   // DMP-PARLOOP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   //
-  // PRT-A-PAR-NEXT:      {{^ *}}#pragma acc parallel{{$}}
-  // PRT-A-PARLOOP-NEXT:  {{^ *}}#pragma acc parallel loop{{$}}
+  // PRT-A-PAR-NEXT:      {{^ *}}#pragma acc parallel{{ LOOP$|$}}
+  // PRT-A-PARLOOP-NEXT:  {{^ *}}#pragma acc parallel {{(LOOP|loop)$}}
   // PRT-AO-NEXT:         {{^ *}}// #pragma omp target teams{{$}}
   // PRT-O-NEXT:          {{^ *}}#pragma omp target teams{{$}}
-  // PRT-OA-PAR-NEXT:     {{^ *}}// #pragma acc parallel{{$}}
-  // PRT-OA-PARLOOP-NEXT: {{^ *}}// #pragma acc parallel loop{{$}}
+  // PRT-OA-PAR-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP$|$}}
+  // PRT-OA-PARLOOP-NEXT: {{^ *}}// #pragma acc parallel {{(LOOP|loop)$}}
   #pragma acc parallel LOOP
   // DMP-PAR-NOT:      ForStmt
   // DMP-PARLOOP-NEXT: impl: ForStmt
-  // PRT-PARLOOP: for ({{.*}})
+  // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+  // PRT-PARLOOP-NEXT: {{FORLOOP_HEAD|for \(.*\)}}
   FORLOOP_HEAD
     // DMP: CallExpr
     // PRT-NEXT: printf("crazy world\n");
@@ -173,16 +187,17 @@ int main(int argc, char *argv[]) {
   // DMP-PARLOOP:           ACCLoopDirective
   // DMP-PARLOOP-NEXT:        ACCIndependentClause {{.*}} <implicit>
   //
-  // PRT-A-PAR-NEXT:      {{^ *}}#pragma acc parallel num_gangs(atoi(argv[1])){{$}}
-  // PRT-A-PARLOOP-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(atoi(argv[1])){{$}}
+  // PRT-A-PAR-NEXT:      {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(atoi(argv[1])){{ ?$}}
+  // PRT-A-PARLOOP-NEXT:  {{^ *}}#pragma acc parallel {{LOOP|loop}} num_gangs(atoi(argv[1])){{ ?$}}
   // PRT-AO-NEXT:         {{^ *}}// #pragma omp target teams num_teams(atoi(argv[1])){{$}}
   // PRT-O-NEXT:          {{^ *}}#pragma omp target teams num_teams(atoi(argv[1])){{$}}
-  // PRT-OA-PAR-NEXT:     {{^ *}}// #pragma acc parallel num_gangs(atoi(argv[1])){{$}}
-  // PRT-OA-PARLOOP-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(atoi(argv[1])){{$}}
-  #pragma acc parallel LOOP num_gangs(/*expr with var*/atoi(argv[1]))
+  // PRT-OA-PAR-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(atoi(argv[1])){{ ?$}}
+  // PRT-OA-PARLOOP-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop}} num_gangs(atoi(argv[1])){{ ?$}}
+  #pragma acc parallel LOOP num_gangs(atoi(argv[1])) // num_gangs expr with var
   // DMP-PAR-NOT:      ForStmt
   // DMP-PARLOOP-NEXT: impl: ForStmt
-  // PRT-PARLOOP:      for ({{.*}})
+  // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+  // PRT-PARLOOP-NEXT: {{FORLOOP_HEAD|for \(.*\)}}
   FORLOOP_HEAD
     // DMP: CallExpr
     // PRT-NEXT: printf("goodbye world\n");

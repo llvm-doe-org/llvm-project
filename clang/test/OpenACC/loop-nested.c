@@ -154,28 +154,44 @@
 // RUN:   }
 // RUN: }
 
-// Check -ast-print and -fopenacc-print.
+// Check -ast-print and -fopenacc[-ast]-print.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
 // RUN:        -DITRS0=2 -DITRS1=2 -DITRS2=2 \
 // RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
 //
-// RUN: %data prints {
-// RUN:   (print='-Xclang -ast-print -fsyntax-only -fopenacc' prt=PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb])
-// RUN:   (print=-fopenacc-print=acc     prt=PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb])
-// RUN:   (print=-fopenacc-print=omp     prt=PRT,PRT-%[cmb],PRT-O,PRT-O-%[cmb],PRT-O-%[ompdk0]0,PRT-O-%[ompdk0]0-%[ompsk0]0,PRT-O-%[cmb]-%[ompdk0]0,PRT-O-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-O-%[ompdk1]1,PRT-O-%[ompdk1]1-%[ompsk1]1,PRT-O-%[ompdk2]2,PRT-O-%[ompdk2]2-%[ompsk2]2)
-// RUN:   (print=-fopenacc-print=acc-omp prt=PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb],PRT-AO,PRT-AO-%[cmb],PRT-AO-%[ompdk0]0,PRT-AO-%[ompdk0]0-%[ompsk0]0,PRT-AO-%[cmb]-%[ompdk0]0,PRT-AO-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-AO-%[ompdk1]1,PRT-AO-%[ompdk1]1-%[ompsk1]1,PRT-AO-%[ompdk2]2,PRT-AO-%[ompdk2]2-%[ompsk2]2)
-// RUN:   (print=-fopenacc-print=omp-acc prt=PRT,PRT-%[cmb],PRT-O,PRT-O-%[cmb],PRT-O-%[ompdk0]0,PRT-O-%[ompdk0]0-%[ompsk0]0,PRT-O-%[cmb]-%[ompdk0]0,PRT-O-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-O-%[ompdk1]1,PRT-O-%[ompdk1]1-%[ompsk1]1,PRT-O-%[ompdk2]2,PRT-O-%[ompdk2]2-%[ompsk2]2,PRT-OA,PRT-OA-%[cmb],PRT-OA-%[ompdk0]0,PRT-OA-%[ompdk0]0-%[ompsk0]0,PRT-OA-%[cmb]-%[ompdk0]0,PRT-OA-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-OA-%[ompdk1]1,PRT-OA-%[ompdk1]1-%[ompsk1]1,PRT-OA-%[ompdk2]2,PRT-OA-%[ompdk2]2-%[ompsk2]2)
+// Strip comments and blank lines so checking -fopenacc-print output is easier.
+// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
+// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
+//
+// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
+// (which would need additional fields) within prt-args after the first
+// prt-args iteration, significantly shortening the prt-args definition.
+//
+// RUN: %data prt-opts {
+// RUN:   (prt-opt=-fopenacc-ast-print)
+// RUN:   (prt-opt=-fopenacc-print    )
+// RUN: }
+// RUN: %data prt-args {
+// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' ACCC0="%'accc0'" ACCC1="%'accc1'" ACCC2="%'accc2'" prt-chk=PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb])
+// RUN:   (prt=-fopenacc-ast-print=acc                      ACCC0="%'accc0'" ACCC1="%'accc1'" ACCC2="%'accc2'" prt-chk=PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb])
+// RUN:   (prt=-fopenacc-ast-print=omp                      ACCC0="%'accc0'" ACCC1="%'accc1'" ACCC2="%'accc2'" prt-chk=PRT,PRT-%[cmb],PRT-O,PRT-O-%[cmb],PRT-O-%[ompdk0]0,PRT-O-%[ompdk0]0-%[ompsk0]0,PRT-O-%[cmb]-%[ompdk0]0,PRT-O-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-O-%[ompdk1]1,PRT-O-%[ompdk1]1-%[ompsk1]1,PRT-O-%[ompdk2]2,PRT-O-%[ompdk2]2-%[ompsk2]2)
+// RUN:   (prt=-fopenacc-ast-print=acc-omp                  ACCC0="%'accc0'" ACCC1="%'accc1'" ACCC2="%'accc2'" prt-chk=PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb],PRT-AO,PRT-AO-%[cmb],PRT-AO-%[ompdk0]0,PRT-AO-%[ompdk0]0-%[ompsk0]0,PRT-AO-%[cmb]-%[ompdk0]0,PRT-AO-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-AO-%[ompdk1]1,PRT-AO-%[ompdk1]1-%[ompsk1]1,PRT-AO-%[ompdk2]2,PRT-AO-%[ompdk2]2-%[ompsk2]2)
+// RUN:   (prt=-fopenacc-ast-print=omp-acc                  ACCC0="%'accc0'" ACCC1="%'accc1'" ACCC2="%'accc2'" prt-chk=PRT,PRT-%[cmb],PRT-O,PRT-O-%[cmb],PRT-O-%[ompdk0]0,PRT-O-%[ompdk0]0-%[ompsk0]0,PRT-O-%[cmb]-%[ompdk0]0,PRT-O-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-O-%[ompdk1]1,PRT-O-%[ompdk1]1-%[ompsk1]1,PRT-O-%[ompdk2]2,PRT-O-%[ompdk2]2-%[ompsk2]2,PRT-OA,PRT-OA-%[cmb],PRT-OA-%[ompdk0]0,PRT-OA-%[ompdk0]0-%[ompsk0]0,PRT-OA-%[cmb]-%[ompdk0]0,PRT-OA-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-OA-%[ompdk1]1,PRT-OA-%[ompdk1]1-%[ompsk1]1,PRT-OA-%[ompdk2]2,PRT-OA-%[ompdk2]2-%[ompsk2]2)
+// RUN:   (prt=-fopenacc-print=acc                          ACCC0=ACCC0      ACCC1=ACCC1      ACCC2=ACCC2      prt-chk=PRT-PRE,PRT-PRE-%[cmb],PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb])
+// RUN:   (prt=-fopenacc-print=omp                          ACCC0=ACCC0      ACCC1=ACCC1      ACCC2=ACCC2      prt-chk=PRT-PRE,PRT-PRE-%[cmb],PRT,PRT-%[cmb],PRT-O,PRT-O-%[cmb],PRT-O-%[ompdk0]0,PRT-O-%[ompdk0]0-%[ompsk0]0,PRT-O-%[cmb]-%[ompdk0]0,PRT-O-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-O-%[ompdk1]1,PRT-O-%[ompdk1]1-%[ompsk1]1,PRT-O-%[ompdk2]2,PRT-O-%[ompdk2]2-%[ompsk2]2)
+// RUN:   (prt=-fopenacc-print=acc-omp                      ACCC0=ACCC0      ACCC1=ACCC1      ACCC2=ACCC2      prt-chk=PRT-PRE,PRT-PRE-%[cmb],PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb],PRT-AO,PRT-AO-%[cmb],PRT-AO-%[ompdk0]0,PRT-AO-%[ompdk0]0-%[ompsk0]0,PRT-AO-%[cmb]-%[ompdk0]0,PRT-AO-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-AO-%[ompdk1]1,PRT-AO-%[ompdk1]1-%[ompsk1]1,PRT-AO-%[ompdk2]2,PRT-AO-%[ompdk2]2-%[ompsk2]2)
+// RUN:   (prt=-fopenacc-print=omp-acc                      ACCC0=ACCC0      ACCC1=ACCC1      ACCC2=ACCC2      prt-chk=PRT-PRE,PRT-PRE-%[cmb],PRT,PRT-%[cmb],PRT-O,PRT-O-%[cmb],PRT-O-%[ompdk0]0,PRT-O-%[ompdk0]0-%[ompsk0]0,PRT-O-%[cmb]-%[ompdk0]0,PRT-O-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-O-%[ompdk1]1,PRT-O-%[ompdk1]1-%[ompsk1]1,PRT-O-%[ompdk2]2,PRT-O-%[ompdk2]2-%[ompsk2]2,PRT-OA,PRT-OA-%[cmb],PRT-OA-%[ompdk0]0,PRT-OA-%[ompdk0]0-%[ompsk0]0,PRT-OA-%[cmb]-%[ompdk0]0,PRT-OA-%[cmb]-%[ompdk0]0-%[ompsk0]0,PRT-OA-%[ompdk1]1,PRT-OA-%[ompdk1]1-%[ompsk1]1,PRT-OA-%[ompdk2]2,PRT-OA-%[ompdk2]2-%[ompsk2]2)
 // RUN: }
 // RUN: %for cmbs {
 // RUN:   %for loop-clauses {
-// RUN:     %for prints {
-// RUN:       %clang -Xclang -verify %[print] %s \
+// RUN:     %for prt-args {
+// RUN:       %clang -Xclang -verify %[prt] %t-acc.c \
 // RUN:              -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
 // RUN:              -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2' \
 // RUN:              %[cmb-cflags] \
-// RUN:       | FileCheck -check-prefixes=%[prt] %s \
-// RUN:                   -DACCC0=%'accc0'   -DACCC1=%'accc1'   -DACCC2=%'accc2' \
+// RUN:       | FileCheck -check-prefixes=%[prt-chk] %s \
+// RUN:                   -DACCC0=%[ACCC0]   -DACCC1=%[ACCC1]   -DACCC2=%[ACCC2] \
 // RUN:                   -DOMPDP0=%'ompdp0' -DOMPDP1=%'ompdp1' -DOMPDP2=%'ompdp2'
 // RUN:     }
 // RUN:   }
@@ -188,31 +204,37 @@
 //
 // RUN: %for cmbs {
 // RUN:   %for loop-clauses {
-// RUN:     %clang -Xclang -verify -fopenacc -emit-ast %s -o %t.ast \
+// RUN:     %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -o %t.ast \
 // RUN:            -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
-// RUN:            -DITRS0=%[itrs0] -DITRS1=%[itrs1] -DITRS2=%[itrs2] \
+// RUN:            -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2' \
 // RUN:            %[cmb-cflags]
-// RUN:     %for prints {
-// RUN:       %clang_cc1 -ast-print %t.ast 2>&1 \
-// RUN:       | FileCheck -check-prefixes=PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb] %s \
-// RUN:                   -DACCC0=%'accc0'   -DACCC1=%'accc1'   -DACCC2=%'accc2' \
+// RUN:     %for prt-args {
+// RUN:       %clang %[prt] %t.ast 2>&1 \
+// RUN:       | FileCheck -check-prefixes=%[prt-chk] %s \
+// RUN:                   -DACCC0=%[ACCC0]   -DACCC1=%[ACCC1]   -DACCC2=%[ACCC2] \
 // RUN:                   -DOMPDP0=%'ompdp0' -DOMPDP1=%'ompdp1' -DOMPDP2=%'ompdp2'
 // RUN:     }
 // RUN:   }
 // RUN: }
 
-// Can we -ast-print the OpenMP source code, compile, and run it successfully?
+// Can we print the OpenMP source code, compile, and run it successfully?
 //
 // RUN: %for cmbs {
 // RUN:   %for loop-clauses {
-// RUN:     %clang -Xclang -verify -fopenacc-print=omp %s > %t-omp.c \
-// RUN:            -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
-// RUN:            -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2' \
-// RUN:             %[cmb-cflags]
-// RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:     %clang -Xclang -verify -fopenmp -o %t %t-omp.c
-// RUN:     %t | FileCheck -check-prefixes=%'exe' %s \
-// RUN:          -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2'
+// RUN:     %for prt-opts {
+// RUN:       %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c \
+// RUN:              -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
+// RUN:              -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2' \
+// RUN:               %[cmb-cflags]
+// RUN:       echo "// expected""-no-diagnostics" >> %t-omp.c
+// RUN:       %clang -Xclang -verify -fopenmp -o %t %t-omp.c \
+// RUN:              -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
+// RUN:              -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2' \
+// RUN:               %[cmb-cflags]
+// RUN:       %t 2>&1 \
+// RUN:       | FileCheck -check-prefixes=%'exe' %s \
+// RUN:                   -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2'
+// RUN:     }
 // RUN:   }
 // RUN: }
 
@@ -224,7 +246,7 @@
 // RUN:            -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
 // RUN:            -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2' \
 // RUN:            %[cmb-cflags]
-// RUN:     %t 2 2>&1 \
+// RUN:     %t 2>&1 \
 // RUN:     | FileCheck -check-prefixes=%'exe' %s \
 // RUN:                 -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2'
 // RUN:   }
@@ -287,6 +309,9 @@ int main() {
   // DMP0-OPRG:                  ForStmt
   // DMP0-OSEQ-NEXT:           impl: ForStmt
   //
+  //
+  // PRT-PRE-SEP-NEXT: #if !CMB
+  //
   // PRT-A-SEP-NEXT:        {{^ *}}#pragma acc parallel num_gangs(2){{$}}
   // PRT-AO-SEP-NEXT:       {{^ *}}// #pragma omp target teams num_teams(2){{$}}
   // PRT-A-SEP-NEXT:        {
@@ -303,6 +328,19 @@ int main() {
   // PRT-OA-SEP-OSEQ0-SAME:   {{^}} // discarded in OpenMP translation
   // PRT-OA-SEP-SAME:         {{^$}}
   //
+  // PRT-PRE-SEP-NEXT: #else
+  // PRT-PRE-SEP-NEXT:      {{^ *}}#pragma acc parallel loop num_gangs(2) ACCC0{{$}}
+  // PRT-PRE-SEP-NEXT: #endif
+  //
+  //
+  // PRT-PRE-CMB-NEXT: #if !CMB
+  //
+  // PRT-PRE-CMB-NEXT:      {{^ *}}#pragma acc parallel num_gangs(2)
+  // PRT-PRE-CMB-NEXT:      {
+  // PRT-PRE-CMB-NEXT:        {{^ *}}#pragma acc loop ACCC0
+  //
+  // PRT-PRE-CMB-NEXT: #else
+  //
   // PRT-A-CMB-NEXT:        {{^ *}}#pragma acc parallel loop num_gangs(2) [[ACCC0]]{{$}}
   // PRT-AO-CMB-NEXT:       {{^ *}}// #pragma omp target teams num_teams(2){{$}}
   // PRT-AO-CMB-OPRG0-NEXT: {{^ *}}// #pragma omp [[OMPDP0]]{{$}}
@@ -310,6 +348,9 @@ int main() {
   // PRT-O-CMB-NEXT:        {{^ *}}#pragma omp target teams num_teams(2){{$}}
   // PRT-O-CMB-OPRG0-NEXT:  {{^ *}}#pragma omp [[OMPDP0]]{{$}}
   // PRT-OA-CMB-NEXT:       {{^ *}}// #pragma acc parallel loop num_gangs(2) [[ACCC0]]{{$}}
+  //
+  // PRT-PRE-CMB-NEXT: #endif
+  //
   //
   // PRT-NOACC:             {
 #if !CMB
@@ -530,12 +571,14 @@ int main() {
         } // PRT-NEXT: }
       } // PRT-NEXT: }
     } // PRT-NEXT: }
+// PRT-PRE: #if !CMB
 #if !CMB
   }
 #endif
   // PRT-NOACC-NEXT: }
   // PRT-O-SEP-NEXT: }
   // PRT-A-SEP-NEXT: }
+// PRT-PRE: #endif
 
   // Close off EXE*-DAGs.
   // PRT-NEXT: printf

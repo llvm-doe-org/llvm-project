@@ -9,7 +9,7 @@ We have implemented the following features:
 * command-line options:
     * `-f[no-]openacc`
     * `-Wsource-uses-openacc`
-    * `-fopenacc-print=acc|omp|acc-omp|omp-acc`
+    * `-fopenacc[-ast]-print=acc|omp|acc-omp|omp-acc`
 * targets:
     * host or multicore
 * `parallel` directive:

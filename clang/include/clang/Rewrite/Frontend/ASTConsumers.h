@@ -13,6 +13,7 @@
 #ifndef LLVM_CLANG_REWRITE_FRONTEND_ASTCONSUMERS_H
 #define LLVM_CLANG_REWRITE_FRONTEND_ASTCONSUMERS_H
 
+#include "clang/AST/PrettyPrinter.h"
 #include "clang/Basic/LLVM.h"
 #include <memory>
 #include <string>
@@ -42,6 +43,13 @@ std::unique_ptr<ASTConsumer> CreateHTMLPrinter(std::unique_ptr<raw_ostream> OS,
                                                Preprocessor &PP,
                                                bool SyntaxHighlight = true,
                                                bool HighlightMacros = true);
+
+/// CreateOpenACCRewriter - Create an AST consumer that rewrites OpenACC
+/// regions to OpenMP.
+std::unique_ptr<ASTConsumer>
+CreateOpenACCRewriter(const std::string &InFile,
+                      std::unique_ptr<raw_ostream> OS,
+                      OpenACCPrintKind OpenACCPrint);
 
 } // end clang namespace
 

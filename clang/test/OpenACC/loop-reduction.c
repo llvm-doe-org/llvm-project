@@ -5,21 +5,37 @@
 // RUN: %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
 // RUN: | FileCheck -check-prefix=DMP %s
 
-// Check -ast-print and -fopenacc-print.
+// Check -ast-print and -fopenacc[-ast]-print.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
 // RUN: | FileCheck -check-prefix=PRT %s
 //
-// RUN: %data prints {
-// RUN:   (print='-Xclang -ast-print -fsyntax-only -fopenacc' prt=PRT-A,PRT)
-// RUN:   (print=-fopenacc-print=acc                          prt=PRT-A,PRT)
-// RUN:   (print=-fopenacc-print=omp                          prt=PRT-O,PRT)
-// RUN:   (print=-fopenacc-print=acc-omp                      prt=PRT-A,PRT-AO,PRT)
-// RUN:   (print=-fopenacc-print=omp-acc                      prt=PRT-O,PRT-OA,PRT)
+// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
+// within prt-args after the first prt-args iteration, significantly shortening
+// the prt-args definition.
+//
+// Strip comments and blank lines so checking -fopenacc-print output is easier.
+// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
+// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
+//
+// RUN: %data prt-opts {
+// RUN:   (prt-opt=-fopenacc-ast-print)
+// RUN:   (prt-opt=-fopenacc-print    )
 // RUN: }
-// RUN: %for prints {
-// RUN:   %clang -Xclang -verify %[print] %s \
-// RUN:   | FileCheck -check-prefixes=%[prt] %s
+// RUN: %data prt-args {
+// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT-A,PRT)
+// RUN:   (prt=-fopenacc-ast-print=acc                      prt-chk=PRT-A,PRT)
+// RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT-O,PRT)
+// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT-A,PRT-AO,PRT)
+// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT-O,PRT-OA,PRT)
+// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-A,PRT)
+// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-O,PRT)
+// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-A,PRT-AO,PRT)
+// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-O,PRT-OA,PRT)
+// RUN: }
+// RUN: %for prt-args {
+// RUN:   %clang -Xclang -verify %[prt] %t-acc.c \
+// RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN: }
 
 // Check ASTWriterStmt, ASTReaderStmt, StmtPrinter, and
@@ -27,21 +43,23 @@
 // printing (where to print comments about discarded directives) is serialized
 // and deserialized, so it's worthwhile to try all OpenACC printing modes.
 //
-// RUN: %for prints {
-// RUN:   %clang -Xclang -verify -fopenacc -emit-ast %s -o %t.ast
-// RUN:   %clang %[print] %t.ast 2>&1 \
-// RUN:   | FileCheck -check-prefixes=%[prt] %s
+// RUN: %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -o %t.ast
+// RUN: %for prt-args {
+// RUN:   %clang %[prt] %t.ast 2>&1 \
+// RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN: }
 
 // For some Linux platforms, -latomic is required for OpenMP support for
 // reductions on complex types.
 
-// Can we -ast-print the OpenMP source code, compile, and run it successfully?
+// Can we print the OpenMP source code, compile, and run it successfully?
 //
-// RUN: %clang -Xclang -verify -fopenacc-print=omp %s > %t-omp.c
-// RUN: echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN: %clang -Xclang -verify -fopenmp -o %t %t-omp.c %libatomic
-// RUN: %t 2 2>&1 | FileCheck -check-prefix=EXE %s
+// RUN: %for prt-opts {
+// RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c
+// RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
+// RUN:   %clang -Xclang -verify -fopenmp -o %t %t-omp.c %libatomic
+// RUN:   %t 2 2>&1 | FileCheck -check-prefix=EXE %s
+// RUN: }
 
 // Check execution with normal compilation.
 //
@@ -86,7 +104,7 @@ int main() {
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(*: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(*: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(*: out){{$}}
-    #pragma acc parallel num_gangs(2) reduction(*:out)
+    #pragma acc parallel num_gangs(2) reduction(*: out)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
@@ -104,7 +122,7 @@ int main() {
       // PRT-AO-SAME: {{^}} // discarded in OpenMP translation
       // PRT-A-SAME:  {{^$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop seq reduction(*: out) reduction(+: in) // discarded in OpenMP translation{{$}}
-      #pragma acc loop seq reduction(*:out) reduction(+:in)
+      #pragma acc loop seq reduction(*: out) reduction(+: in)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 2; ++i) {
         // DMP: CompoundAssignOperator {{.*}} 'int' '*='
@@ -159,7 +177,7 @@ int main() {
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) seq reduction(*: out){{$}}
     //
     // PRT-NEXT: for ({{.*}}) {
-    #pragma acc parallel loop num_gangs(2) seq reduction(*:out)
+    #pragma acc parallel loop num_gangs(2) seq reduction(*: out)
     for (int i = 0; i < 2; ++i) {
       // DMP: CompoundAssignOperator {{.*}} 'int' '*='
       // PRT-NEXT: out *= 2;
@@ -177,10 +195,10 @@ int main() {
 
   // PRT-NEXT: {
   {
-    // PRT-NEXT: enum E {
-    // PRT-NEXT:   E0,
-    // PRT-NEXT:   E1
-    // PRT-NEXT: } out = E0;
+    // PRT-NEXT: enum E {{{[[:space:]]*}}
+    // PRT-SAME:   E0,{{[[:space:]]*}}
+    // PRT-SAME:   E1{{[[:space:]]*}}
+    // PRT-SAME: } out = E0;
     enum E {E0, E1} out = E0;
     // DMP:      ACCParallelDirective
     // DMP-NEXT:   ACCNum_gangsClause
@@ -197,7 +215,7 @@ int main() {
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(max: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(max: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(max: out){{$}}
-    #pragma acc parallel num_gangs(2) reduction(max:out)
+    #pragma acc parallel num_gangs(2) reduction(max: out)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
@@ -219,7 +237,7 @@ int main() {
       // PRT-AO-SAME: {{^}} // discarded in OpenMP translation
       // PRT-A-SAME:  {{^$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop reduction(max: out) reduction(min: in) // discarded in OpenMP translation{{$}}
-      #pragma acc loop reduction(max:out) reduction(min:in)
+      #pragma acc loop reduction(max: out) reduction(min: in)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 2; ++i) {
         // DMP: ConditionalOperator
@@ -243,10 +261,10 @@ int main() {
 
   // PRT-NEXT: {
   {
-    // PRT-NEXT: enum E {
-    // PRT-NEXT:   E0,
-    // PRT-NEXT:   E1
-    // PRT-NEXT: } out = E0;
+    // PRT-NEXT: enum E {{{[[:space:]]*}}
+    // PRT-SAME:   E0,{{[[:space:]]*}}
+    // PRT-SAME:   E1{{[[:space:]]*}}
+    // PRT-SAME: } out = E0;
     enum E {E0, E1} out = E0;
     // DMP:      ACCParallelLoopDirective
     // DMP-NEXT:   ACCNum_gangsClause
@@ -276,7 +294,7 @@ int main() {
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) reduction(max: out){{$}}
     //
     // PRT-NEXT: for ({{.*}}) {
-    #pragma acc parallel loop num_gangs(2) reduction(max:out)
+    #pragma acc parallel loop num_gangs(2) reduction(max: out)
     for (int i = 0; i < 2; ++i) {
       // DMP: ConditionalOperator
       // PRT-NEXT: out = E1 > out ? E1 : out;
@@ -311,7 +329,7 @@ int main() {
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(&: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(&: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(&: out){{$}}
-    #pragma acc parallel num_gangs(2) reduction(&:out)
+    #pragma acc parallel num_gangs(2) reduction(&: out)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
@@ -330,7 +348,7 @@ int main() {
       // PRT-AO-SAME: {{^}} // discarded in OpenMP translation
       // PRT-A-SAME:  {{^$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop auto worker reduction(&: out) reduction(|: in) // discarded in OpenMP translation{{$}}
-      #pragma acc loop auto worker reduction(&:out) reduction(|:in)
+      #pragma acc loop auto worker reduction(&: out) reduction(|: in)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 2; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '_Bool' '&='
@@ -387,7 +405,7 @@ int main() {
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop reduction(&: out) auto worker num_gangs(2){{$}}
     //
     // PRT-NEXT: for ({{.*}}) {
-    #pragma acc parallel loop reduction(&:out) auto worker num_gangs(2)
+    #pragma acc parallel loop reduction(&: out) auto worker num_gangs(2)
     for (int i = 0; i < 2; ++i) {
       // DMP: CompoundAssignOperator {{.*}} '_Bool' '&='
       // PRT-NEXT: out &= 0;
@@ -406,7 +424,7 @@ int main() {
   // PRT-NEXT: {
   {
     // PRT-NEXT: _Complex double out = 2;
-    double _Complex out = 2;
+    _Complex double out = 2;
     // DMP:      ACCParallelDirective
     // DMP-NEXT:   ACCNum_gangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -422,7 +440,7 @@ int main() {
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(&&: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(&&: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(&&: out){{$}}
-    #pragma acc parallel num_gangs(2) reduction(&&:out)
+    #pragma acc parallel num_gangs(2) reduction(&&: out)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
@@ -445,7 +463,7 @@ int main() {
       // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for reduction(&&: out) reduction(||: in){{$}}
       // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for reduction(&&: out) reduction(||: in){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker reduction(&&: out) reduction(||: in){{$}}
-      #pragma acc loop worker reduction(&&:out) reduction(||:in)
+      #pragma acc loop worker reduction(&&: out) reduction(||: in)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 2; ++i) {
         // DMP: BinaryOperator {{.*}} '&&'
@@ -470,7 +488,7 @@ int main() {
   // PRT-NEXT: {
   {
     // PRT-NEXT: _Complex double out = 2;
-    double _Complex out = 2;
+    _Complex double out = 2;
     // DMP:      ACCParallelLoopDirective
     // DMP-NEXT:   ACCNum_gangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -503,7 +521,7 @@ int main() {
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(&&: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for reduction(&&: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) worker reduction(&&: out){{$}}
-    #pragma acc parallel loop num_gangs(2) worker reduction(&&:out)
+    #pragma acc parallel loop num_gangs(2) worker reduction(&&: out)
     // PRT-NEXT: for ({{.*}}) {
     for (int i = 0; i < 2; ++i) {
       // DMP: BinaryOperator {{.*}} '&&'
@@ -539,7 +557,7 @@ int main() {
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(+: out){{$}}
-    #pragma acc parallel num_gangs(2) reduction(+:out)
+    #pragma acc parallel num_gangs(2) reduction(+: out)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
@@ -564,7 +582,7 @@ int main() {
       // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(1) reduction(+: out) reduction(*: in){{$}}
       // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(1) reduction(+: out) reduction(*: in){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop vector reduction(+: out) reduction(*: in){{$}}
-      #pragma acc loop vector reduction(+:out) reduction(*:in)
+      #pragma acc loop vector reduction(+: out) reduction(*: in)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 2; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '+='
@@ -624,7 +642,7 @@ int main() {
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(1) reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) reduction(+: out) vector{{$}}
-    #pragma acc parallel loop num_gangs(2) reduction(+:out) vector
+    #pragma acc parallel loop num_gangs(2) reduction(+: out) vector
     // PRT-NEXT: for ({{.*}}) {
     for (int i = 0; i < 2; ++i) {
       // DMP: CompoundAssignOperator {{.*}} '+='
@@ -660,7 +678,7 @@ int main() {
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(*: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(*: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(*: out){{$}}
-    #pragma acc parallel num_gangs(2) reduction(*:out)
+    #pragma acc parallel num_gangs(2) reduction(*: out)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
@@ -684,7 +702,7 @@ int main() {
       // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd reduction(*: out) reduction(+: in){{$}}
       // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd reduction(*: out) reduction(+: in){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector reduction(*: out) reduction(+: in){{$}}
-      #pragma acc loop worker vector reduction(*:out) reduction(+:in)
+      #pragma acc loop worker vector reduction(*: out) reduction(+: in)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 4; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '*='
@@ -744,7 +762,7 @@ int main() {
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(*: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd reduction(*: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) worker vector reduction(*: out){{$}}
-    #pragma acc parallel loop num_gangs(2) worker vector reduction(*:out)
+    #pragma acc parallel loop num_gangs(2) worker vector reduction(*: out)
     // PRT-NEXT: for ({{.*}}) {
     for (int i = 0; i < 4; ++i) {
       // DMP: CompoundAssignOperator {{.*}} '*='
@@ -785,7 +803,7 @@ int main() {
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(+: out){{$}}
-    #pragma acc parallel num_gangs(2) reduction(+:out)
+    #pragma acc parallel num_gangs(2) reduction(+: out)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
@@ -805,7 +823,7 @@ int main() {
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
       // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang reduction(+: out) reduction(*: in){{$}}
-      #pragma acc loop gang reduction(+:out) reduction(*:in)
+      #pragma acc loop gang reduction(+: out) reduction(*: in)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 4; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '+='
@@ -862,7 +880,7 @@ int main() {
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) gang reduction(+: out){{$}}
-    #pragma acc parallel loop num_gangs(2) gang reduction(+:out)
+    #pragma acc parallel loop num_gangs(2) gang reduction(+: out)
     // PRT-NEXT: for ({{.*}}) {
     for (int i = 0; i < 4; ++i) {
       // DMP: CompoundAssignOperator {{.*}} '+='
@@ -923,7 +941,7 @@ int main() {
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
       // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang reduction(+: out){{$}}
-      #pragma acc loop gang reduction(+:out)
+      #pragma acc loop gang reduction(+: out)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 4; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '+='
@@ -960,7 +978,7 @@ int main() {
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(+: out){{$}}
-    #pragma acc parallel num_gangs(2) reduction(+:out)
+    #pragma acc parallel num_gangs(2) reduction(+: out)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
@@ -982,7 +1000,7 @@ int main() {
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for reduction(+: out,in){{$}}
       // PRT-O-NEXT:  {{^ *}}#pragma omp distribute parallel for reduction(+: out,in){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang worker reduction(+: out,in){{$}}
-      #pragma acc loop gang worker reduction(+:out,in)
+      #pragma acc loop gang worker reduction(+: out,in)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 4; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '+='
@@ -1042,7 +1060,7 @@ int main() {
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp distribute parallel for reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop gang num_gangs(2) worker reduction(+: out){{$}}
-    #pragma acc parallel loop gang num_gangs(2) worker reduction(+:out)
+    #pragma acc parallel loop gang num_gangs(2) worker reduction(+: out)
     // PRT-NEXT: for ({{.*}}) {
     for (int i = 0; i < 4; ++i) {
       // DMP: CompoundAssignOperator {{.*}} '+='
@@ -1104,7 +1122,7 @@ int main() {
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute simd reduction(+: out,in){{$}}
       // PRT-O-NEXT:  {{^ *}}#pragma omp distribute simd reduction(+: out,in){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang vector reduction(+: out,in){{$}}
-      #pragma acc loop gang vector reduction(+:out,in)
+      #pragma acc loop gang vector reduction(+: out,in)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 4; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '+='
@@ -1164,7 +1182,7 @@ int main() {
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams reduction(+: out) num_teams(2){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp distribute simd reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop vector gang reduction(+: out) num_gangs(2){{$}}
-    #pragma acc parallel loop vector gang reduction(+:out) num_gangs(2)
+    #pragma acc parallel loop vector gang reduction(+: out) num_gangs(2)
     // PRT-NEXT: for ({{.*}}) {
     for (int i = 0; i < 4; ++i) {
       // DMP: CompoundAssignOperator {{.*}} '+='
@@ -1223,7 +1241,7 @@ int main() {
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd reduction(+: out,in){{$}}
       // PRT-O-NEXT:  {{^ *}}#pragma omp distribute parallel for simd reduction(+: out,in){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang worker vector reduction(+: out,in){{$}}
-      #pragma acc loop gang worker vector reduction(+:out,in)
+      #pragma acc loop gang worker vector reduction(+: out,in)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 4; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '+='
@@ -1285,7 +1303,7 @@ int main() {
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp distribute parallel for simd reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) gang worker vector reduction(+: out){{$}}
-    #pragma acc parallel loop num_gangs(2) gang worker vector reduction(+:out)
+    #pragma acc parallel loop num_gangs(2) gang worker vector reduction(+: out)
     // PRT-NEXT: for ({{.*}}) {
     for (int i = 0; i < 4; ++i) {
       // DMP: CompoundAssignOperator {{.*}} '+='
@@ -1341,7 +1359,7 @@ int main() {
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
       // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang reduction(+: out,in){{$}}
-      #pragma acc loop gang reduction(+:out,in)
+      #pragma acc loop gang reduction(+: out,in)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 2; ++i) {
         // DMP:      ACCLoopDirective
@@ -1359,7 +1377,7 @@ int main() {
         // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for reduction(+: out,in){{$}}
         // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for reduction(+: out,in){{$}}
         // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker reduction(+: out,in){{$}}
-        #pragma acc loop worker reduction(+:out,in)
+        #pragma acc loop worker reduction(+: out,in)
         // PRT-NEXT: for ({{.*}}) {
         for (int j = 0; j < 2; ++j) {
           // DMP:      ACCLoopDirective
@@ -1377,7 +1395,7 @@ int main() {
           // PRT-AO-NEXT: {{^ *}}// #pragma omp simd reduction(+: out,in){{$}}
           // PRT-O-NEXT:  {{^ *}}#pragma omp simd reduction(+: out,in){{$}}
           // PRT-OA-NEXT: {{^ *}}// #pragma acc loop vector reduction(+: out,in){{$}}
-          #pragma acc loop vector reduction(+:out,in)
+          #pragma acc loop vector reduction(+: out,in)
           // PRT-NEXT: for ({{.*}}) {
           for (int k = 0; k < 2; ++k) {
             // DMP: CompoundAssignOperator {{.*}} '+='
@@ -1437,7 +1455,7 @@ int main() {
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) gang reduction(+: out){{$}}
-    #pragma acc parallel loop num_gangs(2) gang reduction(+:out)
+    #pragma acc parallel loop num_gangs(2) gang reduction(+: out)
     // PRT-NEXT: for ({{.*}}) {
     for (int i = 0; i < 2; ++i) {
       // PRT-NEXT: int in = 3;
@@ -1458,7 +1476,7 @@ int main() {
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for reduction(+: out,in){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker reduction(+: out,in){{$}}
-      #pragma acc loop worker reduction(+:out,in)
+      #pragma acc loop worker reduction(+: out,in)
       // PRT-NEXT: for ({{.*}}) {
       for (int j = 0; j < 2; ++j) {
         // DMP:      ACCLoopDirective
@@ -1477,7 +1495,7 @@ int main() {
         //
         // PRT-O-NEXT:  {{^ *}}#pragma omp simd reduction(+: out,in){{$}}
         // PRT-OA-NEXT: {{^ *}}// #pragma acc loop vector reduction(+: out,in){{$}}
-        #pragma acc loop vector reduction(+:out,in)
+        #pragma acc loop vector reduction(+: out,in)
         // PRT-NEXT: for ({{.*}}) {
         for (int k = 0; k < 2; ++k) {
           // DMP: CompoundAssignOperator {{.*}} '+='
@@ -1535,7 +1553,7 @@ int main() {
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
       // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang reduction(+: out){{$}}
-      #pragma acc loop gang reduction(+:out)
+      #pragma acc loop gang reduction(+: out)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 2; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '+='
@@ -1555,7 +1573,7 @@ int main() {
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
       // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang reduction(+: out){{$}}
-      #pragma acc loop gang reduction(+:out)
+      #pragma acc loop gang reduction(+: out)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 2; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '+='
@@ -1613,7 +1631,7 @@ int main() {
         // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
         // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
         // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang reduction(+: out){{$}}
-        #pragma acc loop gang reduction(+:out)
+        #pragma acc loop gang reduction(+: out)
         // PRT-NEXT: for ({{.*}}) {
         for (int i = 0; i < 2; ++i) {
           // DMP: CompoundAssignOperator {{.*}} '+='
@@ -1634,7 +1652,7 @@ int main() {
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
       // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang reduction(+: out){{$}}
-      #pragma acc loop gang reduction(+:out)
+      #pragma acc loop gang reduction(+: out)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 2; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '+='
@@ -1741,7 +1759,7 @@ int main() {
               // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
               // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
               // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang reduction(+: out){{$}}
-              #pragma acc loop gang reduction(+:out)
+              #pragma acc loop gang reduction(+: out)
               // PRT-NEXT: for ({{.*}}) {
               for (int j = 0; j < 2; ++j) {
                 // DMP: CompoundAssignOperator {{.*}} '+='
@@ -1843,7 +1861,7 @@ int main() {
             // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
             // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
             // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang reduction(+: out){{$}}
-            #pragma acc loop gang reduction(+:out)
+            #pragma acc loop gang reduction(+: out)
             // PRT-NEXT: for ({{.*}}) {
             for (int j = 0; j < 2; ++j) {
               // DMP: CompoundAssignOperator {{.*}} '+='
@@ -1911,7 +1929,7 @@ int main() {
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
       // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang reduction(+: out0,out1){{$}}
-      #pragma acc loop gang reduction(+:out0,out1)
+      #pragma acc loop gang reduction(+: out0,out1)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 2; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '+='

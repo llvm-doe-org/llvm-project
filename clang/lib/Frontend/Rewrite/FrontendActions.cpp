@@ -173,6 +173,17 @@ RewriteObjCAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
 
 #endif
 
+std::unique_ptr<ASTConsumer>
+RewriteOpenACCAction::CreateASTConsumer(CompilerInstance &CI,
+                                        StringRef InFile) {
+  if (std::unique_ptr<raw_ostream> OS =
+          CI.createDefaultOutputFile(false, InFile)) {
+    return CreateOpenACCRewriter(InFile, std::move(OS),
+                                 CI.getFrontendOpts().OpenACCPrint);
+  }
+  return nullptr;
+}
+
 //===----------------------------------------------------------------------===//
 // Preprocessor Actions
 //===----------------------------------------------------------------------===//

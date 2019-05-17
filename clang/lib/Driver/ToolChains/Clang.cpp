@@ -4549,6 +4549,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (Args.hasFlag(options::OPT_fopenacc, options::OPT_fno_openacc, false))
     CmdArgs.push_back("-fopenacc");
   Args.AddLastArg(CmdArgs, options::OPT_fopenacc_print_EQ);
+  Args.AddLastArg(CmdArgs, options::OPT_fopenacc_ast_print_EQ);
 
   const SanitizerArgs &Sanitize = TC.getSanitizerArgs();
   Sanitize.addArgs(TC, Args, CmdArgs, InputType);

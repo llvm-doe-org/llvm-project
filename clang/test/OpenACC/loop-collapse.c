@@ -5,21 +5,37 @@
 // RUN: %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
 // RUN: | FileCheck -check-prefix=DMP %s
 
-// Check -ast-print and -fopenacc-print.
+// Check -ast-print and -fopenacc[-ast]-print.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
 // RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
 //
-// RUN: %data prints {
-// RUN:   (print='-Xclang -ast-print -fsyntax-only -fopenacc' prt=PRT-A,PRT)
-// RUN:   (print=-fopenacc-print=acc                          prt=PRT-A,PRT)
-// RUN:   (print=-fopenacc-print=omp                          prt=PRT-O,PRT)
-// RUN:   (print=-fopenacc-print=acc-omp                      prt=PRT-A,PRT-AO,PRT)
-// RUN:   (print=-fopenacc-print=omp-acc                      prt=PRT-O,PRT-OA,PRT)
+// Strip comments and blank lines so checking -fopenacc-print output is easier.
+// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
+// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
+//
+// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
+// within prt-args after the first prt-args iteration, significantly shortening
+// the prt-args definition.
+//
+// RUN: %data prt-opts {
+// RUN:   (prt-opt=-fopenacc-ast-print)
+// RUN:   (prt-opt=-fopenacc-print    )
 // RUN: }
-// RUN: %for prints {
-// RUN:   %clang -Xclang -verify %[print] %s \
-// RUN:   | FileCheck -check-prefixes=%[prt] %s
+// RUN: %data prt-args {
+// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT-A,PRT)
+// RUN:   (prt=-fopenacc-ast-print=acc                      prt-chk=PRT-A,PRT)
+// RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT-O,PRT)
+// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT-A,PRT-AO,PRT)
+// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT-O,PRT-OA,PRT)
+// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-A,PRT)
+// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-O,PRT)
+// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-A,PRT-AO,PRT)
+// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-O,PRT-OA,PRT)
+// RUN: }
+// RUN: %for prt-args {
+// RUN:   %clang -Xclang -verify %[prt] %t-acc.c \
+// RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN: }
 
 // Check ASTWriterStmt, ASTReaderStmt, StmtPrinter, and
@@ -27,19 +43,21 @@
 // printing (where to print comments about discarded directives) is serialized
 // and deserialized, so it's worthwhile to try all OpenACC printing modes.
 //
-// RUN: %for prints {
-// RUN:   %clang -Xclang -verify -fopenacc -emit-ast %s -o %t.ast
-// RUN:   %clang %[print] %t.ast 2>&1 \
-// RUN:   | FileCheck -check-prefixes=%[prt] %s
+// RUN: %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -o %t.ast
+// RUN: %for prt-args {
+// RUN:   %clang %[prt] %t.ast 2>&1 \
+// RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN: }
 
-// Can we -ast-print the OpenMP source code, compile, and run it successfully?
+// Can we print the OpenMP source code, compile, and run it successfully?
 //
-// RUN: %clang -Xclang -verify -fopenacc-print=omp %s > %t-omp.c
-// RUN: echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN: %clang -Xclang -verify -fopenmp -o %t %t-omp.c
-// RUN: %t 2 2>&1 | FileCheck -check-prefix=EXE -match-full-lines %s
-
+// RUN: %for prt-opts {
+// RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c
+// RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
+// RUN:   %clang -Xclang -verify -fopenmp -o %t %t-omp.c
+// RUN:   %t 2 2>&1 | FileCheck -check-prefix=EXE -match-full-lines %s
+// RUN: }
+//
 // Check execution with normal compilation.
 //
 // RUN: %clang -Xclang -verify -fopenacc %s -o %t

@@ -37,7 +37,9 @@ enum OpenACCPrintKind {
   /// Print original OpenACC plus OpenMP translation in comments.
   OpenACCPrint_ACC_OMP,
   /// Print OpenMP translation plus original OpenACC in comments.
-  OpenACCPrint_OMP_ACC
+  OpenACCPrint_OMP_ACC,
+  /// Print only pragma from OpenMP translation.
+  OpenACCPrint_OMP_HEAD
 };
 
 /// Describes how types, statements, expressions, and declarations should be

@@ -281,6 +281,7 @@ phases::ID Driver::getFinalPhase(const DerivedArgList &DAL,
     // -{fsyntax-only,-analyze,emit-ast} only run up to the compiler.
   } else if ((PhaseArg = DAL.getLastArg(options::OPT_fsyntax_only)) ||
              (PhaseArg = DAL.getLastArg(options::OPT_fopenacc_print_EQ)) ||
+             (PhaseArg = DAL.getLastArg(options::OPT_fopenacc_ast_print_EQ)) ||
              (PhaseArg = DAL.getLastArg(options::OPT_module_file_info)) ||
              (PhaseArg = DAL.getLastArg(options::OPT_verify_pch)) ||
              (PhaseArg = DAL.getLastArg(options::OPT_rewrite_objc)) ||
@@ -3419,7 +3420,8 @@ Action *Driver::ConstructPhaseAction(
     }
 
     if (Args.hasArg(options::OPT_fsyntax_only) ||
-        Args.hasArg(options::OPT_fopenacc_print_EQ)) {
+        Args.hasArg(options::OPT_fopenacc_print_EQ) ||
+        Args.hasArg(options::OPT_fopenacc_ast_print_EQ)) {
       // Syntax checks should not emit a PCH file
       OutputTy = types::TY_Nothing;
     }
@@ -3431,7 +3433,8 @@ Action *Driver::ConstructPhaseAction(
   }
   case phases::Compile: {
     if (Args.hasArg(options::OPT_fsyntax_only) ||
-        Args.hasArg(options::OPT_fopenacc_print_EQ))
+        Args.hasArg(options::OPT_fopenacc_print_EQ) ||
+        Args.hasArg(options::OPT_fopenacc_ast_print_EQ))
       return C.MakeAction<CompileJobAction>(Input, types::TY_Nothing);
     if (Args.hasArg(options::OPT_rewrite_objc))
       return C.MakeAction<CompileJobAction>(Input, types::TY_RewrittenObjC);

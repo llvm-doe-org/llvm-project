@@ -312,39 +312,43 @@ Because traditional OpenACC compilation is a major use case for Clacc,
 and because for Clang that requires LLVM IR codegen, we chose
 `TreeTransform` not `Rewrite` to implement `TransformACCToOMP`.
 However, source-to-source translation is also a Clacc use case, and,
-as discussed in the next section, `Rewrite` is potentially helpful
-there after `TransformACCToOMP`.
+as discussed in the next section, `Rewrite` is helpful there after
+`TransformACCToOMP`.
 
 Design
 ------
 
 To enable source-to-source translation from the Clang command line,
-Clacc supports a new Clang command-line option named
-`-fopenacc-print`.  (TODO: A `-f` option might be inappropriate here.
+Clacc supports two new Clang command-line options: `-fopenacc-print`,
+which is built on `Rewrite`, and `-fopenacc-ast-print`, which is built
+on `-ast-print`.  (TODO: A `-f` option might be inappropriate here.
 Something more like `-emit-llvm`, `-ast-print`, or `-c`, all of which
-have a major impact on the output form, might be better.)  It takes
+have a major impact on the output form, might be better.)  Each takes
 any of the following values:
 
-* `acc`: OpenACC subtrees are printed and OpenMP subtrees to which
-  they were translated are ignored.  In this case, the only difference
-  from `-ast-print` is that `-ast-print` typically must be combined
-  with several other command-line options to, for example, enable
-  OpenACC compilation.  That is, `-fopenacc-print=acc` is more
-  convenient.
-* `omp`: OpenMP subtrees are printed, and the OpenACC subtrees from
-  which they were translated are ignored.
-* `acc-omp`: OpenACC subtrees are printed and the OpenMP subtrees to
-  which they were translated are printed in neighboring comments.
-* `omp-acc`: OpenMP subtrees are printed and the OpenACC subtrees from
-  which they were translated are printed in neighboring comments.
+* `acc`: OpenACC constructs are printed and the OpenMP constructs to
+  which they were translated are ignored.  Thus, this value is likely
+  not helpful to users but can be helpful to developers for debugging
+  the Clacc implementation.  That is, `-fopenacc-print=acc` merely
+  prints the original source without modification, and
+  `-fopenacc-ast-print=acc` is a more convenient form of `-Xclang
+  -ast-print -fsyntax-only -fopenacc`.
+* `omp`: OpenMP constructs are printed, and the OpenACC constructs
+  from which they were translated are ignored.
+* `acc-omp`: OpenACC constructs are printed and the OpenMP constructs
+  to which they were translated are printed in neighboring comments.
+* `omp-acc`: OpenMP constructs are printed and the OpenACC constructs
+  from which they were translated are printed in neighboring comments.
 
 In the last two cases, Clacc will avoid duplicating the code block
 associated with a directive if that code block prints identically in
 both the OpenACC and OpenMP versions.  The output then looks similar
 to the code passage in the previous example.
 
-Currently, the implementation of `-fopenacc-print` is based on
-`-ast-print`.  This is problematic in several ways:
+Originally, Clacc only supported the functionality of
+`-fopenacc-ast-print` (but under a different name).  Because it's
+built on `-ast-print`, its functionality is problematic in several
+ways:
 
 * `-ast-print` was designed for debugging and not for faithful
   printing of the AST.  Even so, we have successfully contributed
@@ -361,16 +365,20 @@ Currently, the implementation of `-fopenacc-print` is based on
   perhaps for a different target architecture where preprocessor
   macros and includes expand differently.
 
-On the other hand, `Rewrite` modifies the original input buffer and
-thus should mostly avoid these problems.  In the future, we plan to
-adjust `-fopenacc-print` to use `Rewrite`.  For this purpose, it would
-examine the OpenACC subtrees and the OpenMP subtrees computed by
-`TransformatACCToOMP` as needed to modify the input buffer in the
-manner requested by the argument to `-fopenacc-print`.  For OpenMP
-subtrees containing directives and other code not appearing in the
-original source and thus not in the input buffer, we might sometimes
-still need to employ `-ast-print` functionality, but at least the
-above problems would no longer be pervasive in the output.
+On the other hand, because `-fopenacc-print` is built on `Rewrite`, it
+modifies the original input buffer and thus can avoid these problems
+in most cases.  That is, `-fopenacc-print` examines the OpenACC
+subtrees and the OpenMP subtrees computed by `TransformatACCToOMP` as
+needed to modify the input buffer in the manner requested by the
+argument to `-fopenacc-print`.  For OpenMP subtrees containing
+directives and other code not appearing in the original source and
+thus not in the input buffer, it still employs `-ast-print`
+functionality, but at least the above problems are not pervasive in
+the output.  In the future, we might experiment with using some means
+such as source locations to track which portions of an OpenMP subtree
+were copied verbatim from the OpenACC subtree and then overriding
+`-ast-print` functionality to print just those portions using the
+original input buffer.
 
 OpenACC to OpenMP Mapping
 =========================

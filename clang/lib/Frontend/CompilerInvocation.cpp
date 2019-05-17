@@ -1598,6 +1598,7 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
                                    DiagnosticsEngine &Diags,
                                    bool &IsHeaderFile) {
   Opts.ProgramAction = frontend::ParseSyntaxOnly;
+  const Arg *OpenACCPrint = nullptr;
   if (const Arg *A = Args.getLastArg(OPT_Action_Group)) {
     switch (A->getOption().getID()) {
     default:
@@ -1625,8 +1626,15 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
     case OPT_ast_dump_lookups:
       Opts.ProgramAction = frontend::ASTDump; break;
     case OPT_ast_print:
-    case OPT_fopenacc_print_EQ:
       Opts.ProgramAction = frontend::ASTPrint; break;
+    case OPT_fopenacc_print_EQ:
+      OpenACCPrint = A;
+      Opts.ProgramAction = frontend::RewriteOpenACC;
+      break;
+    case OPT_fopenacc_ast_print_EQ:
+      OpenACCPrint = A;
+      Opts.ProgramAction = frontend::ASTPrint;
+      break;
     case OPT_ast_view:
       Opts.ProgramAction = frontend::ASTView; break;
     case OPT_compiler_options_dump:
@@ -1691,8 +1699,8 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
     }
   }
 
-  if (Arg *A = Args.getLastArg(OPT_fopenacc_print_EQ)) {
-    StringRef Val = A->getValue();
+  if (OpenACCPrint) {
+    StringRef Val = OpenACCPrint->getValue();
     if (Val == "acc")
       Opts.OpenACCPrint = OpenACCPrint_ACC;
     else if (Val == "omp")
@@ -1702,7 +1710,8 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
     else if (Val == "omp-acc")
       Opts.OpenACCPrint = OpenACCPrint_OMP_ACC;
     else
-      Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
+      Diags.Report(diag::err_drv_invalid_value)
+          << OpenACCPrint->getAsString(Args) << Val;
   }
 
   if (const Arg* A = Args.getLastArg(OPT_plugin)) {
@@ -2843,7 +2852,8 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
 
   // Check if -fopenacc is specified.
   Opts.OpenACC = Args.hasArg(OPT_fopenacc) ||
-                 Args.hasArg(OPT_fopenacc_print_EQ);
+                 Args.hasArg(OPT_fopenacc_print_EQ) ||
+                 Args.hasArg(OPT_fopenacc_ast_print_EQ);
   if (Opts.OpenACC && Opts.CPlusPlus)
     Diags.Report(clang::diag::err_drv_acc_cxx_not_supported);
 
@@ -3114,6 +3124,7 @@ static bool isStrictlyPreprocessorAction(frontend::ActionKind Action) {
   case frontend::VerifyPCH:
   case frontend::PluginAction:
   case frontend::RewriteObjC:
+  case frontend::RewriteOpenACC:
   case frontend::RewriteTest:
   case frontend::RunAnalysis:
   case frontend::TemplightDump:
