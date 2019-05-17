@@ -40,19 +40,28 @@ class ACCExecutableDirective : public Stmt {
   /// Ending location of the directive.
   SourceLocation EndLoc;
   /// Number of clauses.
-  const unsigned NumClauses;
+  unsigned NumClauses;
+  /// Maximum number of clauses that might be added later.
+  unsigned MaxAddClauses;
   /// Number of child expressions/stmts.
   const unsigned NumChildren;
   /// Offset from this to the start of clauses.
-  /// There are NumClauses pointers to clauses, they are followed by
-  /// NumChildren pointers to child stmts/exprs (if the directive type
-  /// requires an associated stmt, then it has to be the first of them).
+  /// There are NumClauses + MaxAddClauses pointers to clauses.  They are
+  /// followed by NumChildren pointers to child stmts/exprs (if the directive
+  /// type requires an associated stmt, then it has to be the first of them).
   const unsigned ClausesOffset;
   ACCExecutableDirective *EffectiveDirective = nullptr;
   Stmt *OMPNode;
   bool DirectiveDiscardedForOMP;
 
-  /// Get the clauses storage.
+  /// Get the full storage for the clauses.
+  MutableArrayRef<ACCClause *> getClauseStorage() {
+    ACCClause **ClauseStorage = reinterpret_cast<ACCClause **>(
+        reinterpret_cast<char *>(this) + ClausesOffset);
+    return MutableArrayRef<ACCClause *>(ClauseStorage,
+                                        NumClauses + MaxAddClauses);
+  }
+  /// Get the clauses.
   MutableArrayRef<ACCClause *> getClauses() {
     ACCClause **ClauseStorage = reinterpret_cast<ACCClause **>(
         reinterpret_cast<char *>(this) + ClausesOffset);
@@ -66,14 +75,18 @@ protected:
   /// \param K Kind of OpenACC directive.
   /// \param StartLoc Starting location of the directive (directive keyword).
   /// \param EndLoc Ending location of the directive.
+  /// \param NumClauses Number of actual clauses.
+  /// \param MaxAddClauses Maximum number of clauses that might be added later.
+  /// \param NumChildren Number of child nodes.
   ///
   template <typename T>
   ACCExecutableDirective(const T *, StmtClass SC, OpenACCDirectiveKind K,
                          SourceLocation StartLoc, SourceLocation EndLoc,
-                         unsigned NumClauses, unsigned NumChildren)
+                         unsigned NumClauses, unsigned MaxAddClauses,
+                         unsigned NumChildren)
       : Stmt(SC), Kind(K), StartLoc(std::move(StartLoc)),
         EndLoc(std::move(EndLoc)), NumClauses(NumClauses),
-        NumChildren(NumChildren),
+        MaxAddClauses(MaxAddClauses), NumChildren(NumChildren),
         ClausesOffset(llvm::alignTo(sizeof(T), alignof(ACCClause *))),
         OMPNode(nullptr), DirectiveDiscardedForOMP(false) {}
 
@@ -82,6 +95,13 @@ protected:
   /// \param Clauses The list of clauses for the directive.
   ///
   void setClauses(ArrayRef<ACCClause *> Clauses);
+
+  /// Adds a clause to the directive (total must be no more than the
+  /// NumClauses + MaxAddClauses specified to the constructor).
+  ///
+  /// \param Clause The clause to add.
+  ///
+  void addClause(ACCClause *Clause);
 
   /// Set the associated statement for the directive.
   ///
@@ -289,7 +309,7 @@ public:
   child_range children() {
     if (!hasAssociatedStmt())
       return child_range(child_iterator(), child_iterator());
-    Stmt **ChildStorage = reinterpret_cast<Stmt **>(getClauses().end());
+    Stmt **ChildStorage = reinterpret_cast<Stmt **>(getClauseStorage().end());
     return child_range(ChildStorage, ChildStorage + NumChildren);
   }
 
@@ -310,18 +330,19 @@ class ACCParallelDirective : public ACCExecutableDirective {
   ///
   /// \param StartLoc Starting location of the directive (directive keyword).
   /// \param EndLoc Ending Location of the directive.
+  /// \param NumClauses Number of clauses.
   ///
   ACCParallelDirective(SourceLocation StartLoc, SourceLocation EndLoc,
                        unsigned NumClauses)
       : ACCExecutableDirective(this, ACCParallelDirectiveClass, ACCD_parallel,
-                               StartLoc, EndLoc, NumClauses, 1)
+                               StartLoc, EndLoc, NumClauses, 0, 1)
         {}
 
   /// Build an empty directive.
   explicit ACCParallelDirective(unsigned NumClauses)
       : ACCExecutableDirective(this, ACCParallelDirectiveClass, ACCD_parallel,
                                SourceLocation(), SourceLocation(), NumClauses,
-                               1)
+                               0, 1)
         {}
 
 public:
@@ -518,17 +539,21 @@ class ACCLoopDirective : public ACCExecutableDirective {
   ///
   /// \param StartLoc Starting location of the directive (directive keyword).
   /// \param EndLoc Ending Location of the directive.
+  /// \param NumClauses Number of clauses.
   ///
   ACCLoopDirective(SourceLocation StartLoc, SourceLocation EndLoc,
                    unsigned NumClauses)
       : ACCExecutableDirective(this, ACCLoopDirectiveClass, ACCD_loop, StartLoc,
-                               EndLoc, NumClauses, 1) {}
+                               EndLoc, NumClauses, 0, 1) {}
 
   /// Build an empty directive.
+  ///
+  /// \param NumClauses Number of clauses.
+  ///
   explicit ACCLoopDirective(unsigned NumClauses)
       : ACCExecutableDirective(this, ACCLoopDirectiveClass, ACCD_loop,
                                SourceLocation(), SourceLocation(), NumClauses,
-                               1) {}
+                               0, 1) {}
 
 public:
   /// Creates directive.
@@ -552,8 +577,8 @@ public:
   /// \param C AST context.
   /// \param NumClauses Number of clauses.
   ///
-  static ACCLoopDirective *CreateEmpty(const ASTContext &C, unsigned NumClauses,
-                                       EmptyShell);
+  static ACCLoopDirective *CreateEmpty(const ASTContext &C,
+                                       unsigned NumClauses, EmptyShell);
 
   static bool classof(const Stmt *T) {
     return T->getStmtClass() == ACCLoopDirectiveClass;
@@ -591,18 +616,19 @@ class ACCParallelLoopDirective : public ACCExecutableDirective {
   ///
   /// \param StartLoc Starting location of the directive (directive keyword).
   /// \param EndLoc Ending Location of the directive.
+  /// \param NumClauses Number of clauses.
   ///
   ACCParallelLoopDirective(SourceLocation StartLoc, SourceLocation EndLoc,
                            unsigned NumClauses)
       : ACCExecutableDirective(this, ACCParallelLoopDirectiveClass,
                                ACCD_parallel_loop, StartLoc, EndLoc,
-                               NumClauses, 1) {}
+                               NumClauses, 0, 1) {}
 
   /// Build an empty directive.
   explicit ACCParallelLoopDirective(unsigned NumClauses)
       : ACCExecutableDirective(this, ACCParallelLoopDirectiveClass,
                                ACCD_parallel_loop, SourceLocation(),
-                               SourceLocation(), NumClauses, 1) {}
+                               SourceLocation(), NumClauses, 0, 1) {}
 
 public:
   /// Creates directive.

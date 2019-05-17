@@ -19,9 +19,16 @@
 using namespace clang;
 
 void ACCExecutableDirective::setClauses(ArrayRef<ACCClause *> Clauses) {
-  assert(Clauses.size() == getNumClauses() &&
-         "Number of clauses is not the same as the preallocated buffer");
+  assert(Clauses.size() == NumClauses &&
+         "Number of clauses is not the same as specified during construction");
   std::copy(Clauses.begin(), Clauses.end(), getClauses().begin());
+}
+
+void ACCExecutableDirective::addClause(ACCClause *Clause) {
+  assert(MaxAddClauses > 0 &&
+         "Number of clauses is too many for the preallocated buffer");
+  getClauseStorage()[NumClauses++] = Clause;
+  --MaxAddClauses;
 }
 
 // The implementation of this check works as follows.  First, it prints the
