@@ -1205,14 +1205,6 @@ int main(int argc, char *argv[]) {
   {
     // PRT-NEXT: int nw = 2;
     int nw = 2;
-
-    // FIXME: Throughout, I've suppressed checking OpenMP code in OpenACC
-    // comments for omp-acc mode because it shows up for -fopenacc-ast-print
-    // but not for -fopenacc-print.  Ultimately, I don't want it to show up for
-    // either, but I'll fix that later.  The suppression here has three
-    // components: discarded comments are optional, directives matching
-    // OpenMP directive have invalid FileCheck prefixes starting with XRT, and
-    // directives after such directives dropped the -NEXT suffix.
     // DMP:      ACCParallelDirective
     // DMP-NEXT:   ACCNum_gangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
@@ -1276,8 +1268,7 @@ int main(int argc, char *argv[]) {
     // PRT-OA-NEXT:    // #pragma acc parallel num_gangs(1) num_workers(nw) vector_length(1){{$}}
     // PRT-OA-NEXT:    // {
     // PRT-OA-NEXT:    //   #pragma acc loop worker{{$}}
-    // XRT-OA-NEXT:    //   // #pragma omp parallel for num_threads(__clang_acc_num_workers__){{$}}
-    // PRT-OA:         //   for ({{.*}}) {
+    // PRT-OA-NEXT:    //   for ({{.*}}) {
     // PRT-OA-NEXT:    //     printf
     // PRT-OA-NEXT:    //   }
     // PRT-OA-NEXT:    // }
@@ -1390,8 +1381,7 @@ int main(int argc, char *argv[]) {
     // PRT-OA-NEXT:    // #pragma acc parallel loop worker num_gangs(1) num_workers(nw) vector_length(1){{$}}
     // PRT-OA-NEXT:    // for ({{.*}}) {
     // PRT-OA-NEXT:    //   #pragma acc loop vector{{$}}
-    // XRT-OA-NEXT:    //   // #pragma omp simd simdlen(1){{$}}
-    // PRT-OA:         //   for ({{.*}}) {
+    // PRT-OA-NEXT:    //   for ({{.*}}) {
     // PRT-OA-NEXT:    //     printf
     // PRT-OA-NEXT:    //   }
     // PRT-OA-NEXT:    // }
@@ -1588,21 +1578,18 @@ int main(int argc, char *argv[]) {
     // PRT-O-NEXT:     }
     // PRT-OA-NEXT:    // #pragma acc parallel num_gangs(1) num_workers(foo()) vector_length(1){{$}}
     // PRT-OA-NEXT:    // {
-    // PRT-OA-NEXT:    //   #pragma acc loop seq{{( // discarded in OpenMP translation)?$}}
+    // PRT-OA-NEXT:    //   #pragma acc loop seq{{$}}
     // PRT-OA-NEXT:    //   for (int i = 0; i < 2; ++i) {
     // PRT-OA-NEXT:    //     #pragma acc loop gang{{$}}
-    // XRT-OA-NEXT:    //     // #pragma omp distribute{{$}}
-    // PRT-OA:         //     for (int j = 0; j < 1; ++j) {
-    // PRT-OA-NEXT:    //       #pragma acc loop seq{{( // discarded in OpenMP translation)?$}}
+    // PRT-OA-NEXT:    //     for (int j = 0; j < 1; ++j) {
+    // PRT-OA-NEXT:    //       #pragma acc loop seq{{$}}
     // PRT-OA-NEXT:    //       for (int k = 0; k < 2; ++k) {
     // PRT-OA-NEXT:    //         #pragma acc loop worker{{$}}
-    // XRT-OA-NEXT:    //         // #pragma omp parallel for num_threads(__clang_acc_num_workers__) shared(i,j,k){{$}}
-    // PRT-OA:         //         for (int l = 0; l < 2; ++l) {
-    // PRT-OA-NEXT:    //           #pragma acc loop seq{{( // discarded in OpenMP translation)?$}}
+    // PRT-OA-NEXT:    //         for (int l = 0; l < 2; ++l) {
+    // PRT-OA-NEXT:    //           #pragma acc loop seq{{$}}
     // PRT-OA-NEXT:    //           for (int m = 0; m < 2; ++m) {
     // PRT-OA-NEXT:    //             #pragma acc loop vector{{$}}
-    // XRT-OA-NEXT:    //             // #pragma omp simd simdlen(1){{$}}
-    // PRT-OA:         //             for (int n = 0; n < 1; ++n)
+    // PRT-OA-NEXT:    //             for (int n = 0; n < 1; ++n)
     // PRT-OA-NEXT:    //               printf
     // PRT-OA-NEXT:    //           }
     // PRT-OA-NEXT:    //         }

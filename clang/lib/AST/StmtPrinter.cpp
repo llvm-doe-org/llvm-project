@@ -1139,7 +1139,7 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
       clang::commented_raw_ostream ComStream(OS, IndentLevel*2, false, 1,
                                              true);
       PrintingPolicy ComPolicy(Policy);
-      ComPolicy.OpenACCPrint = OpenACCPrint_ACC_OMP;
+      ComPolicy.OpenACCPrint = OpenACCPrint_ACC;
       StmtPrinter ComPrinter(ComStream, Helper, ComPolicy, 0, NL, Context);
       ComPrinter.PrintACCExecutableDirectiveHead(S, false, true);
       ComPrinter.PrintACCExecutableDirectiveBody(S);
