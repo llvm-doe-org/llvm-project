@@ -1137,7 +1137,7 @@ void StmtPrinter::PrintACCExecutableDirectiveBody(ACCExecutableDirective *S) {
 // could be skipped entirely during the diff.
 static bool mustSplitACCExecutableDirective(ACCExecutableDirective *S,
                                             const PrintingPolicy &Policy,
-					    StringRef NL,
+                                            StringRef NL,
                                             const ASTContext *Context) {
   if (!S->hasAssociatedStmt())
     return false;
