@@ -1541,11 +1541,7 @@ static bool IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
           << getOpenACCClauseName(CKind) << ValExpr->getSourceRange();
       return false;
     }
-  // FIXME: llvm::APSInt::isStrictlyPositive is incorrect for unsigned
-  // values with top bit set.  Once fixed, we only need to check
-  // !Result.isStrictlyPositive() here.
-  } else if (Result.isUnsigned() ? Result.isNullValue()
-                                 : !Result.isStrictlyPositive()) {
+  } else if (!Result.isStrictlyPositive()) {
     SemaRef.Diag(Loc, diag::err_acc_clause_not_positive_ice)
         << getOpenACCClauseName(CKind) << ValExpr->getSourceRange();
     return false;
