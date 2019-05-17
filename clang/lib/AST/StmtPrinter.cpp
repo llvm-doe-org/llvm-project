@@ -1116,17 +1116,20 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
   }
   case OpenACCPrint_ACC_OMP:
     if (S->ompStmtPrintsDifferently(Policy, Context)) {
+      Indent() << "// v----------ACC----------v\n";
       PrintACCExecutableDirectiveHead(S, false, false);
       PrintingPolicy ACCPolicy(Policy);
       ACCPolicy.OpenACCPrint = OpenACCPrint_ACC;
       StmtPrinter ACCPrinter(OS, Helper, ACCPolicy, IndentLevel, NL, Context);
       ACCPrinter.PrintACCExecutableDirectiveBody(S);
+      Indent() << "// ---------ACC->OMP--------\n";
       clang::commented_raw_ostream ComStream(OS, IndentLevel*2, false, 1,
                                              true);
       StmtPrinter ComPrinter(ComStream, Helper, Policy, 0, NL, Context);
       Stmt *OMPInnerDir = ComPrinter.PrintOMPExecutableDirectiveHead(
           S->getOMPNode(), false, EffectiveDirectives);
       ComPrinter.PrintOMPExecutableDirectiveBody(OMPInnerDir);
+      Indent() << "// ^----------OMP----------^\n";
     }
     else {
       PrintACCExecutableDirectiveHead(S, false, true);
@@ -1136,10 +1139,12 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
     }
     break;
   case OpenACCPrint_OMP_ACC: {
-    Stmt *OMPInnerDir = PrintOMPExecutableDirectiveHead(
-        S->getOMPNode(), false, EffectiveDirectives);
     if (S->ompStmtPrintsDifferently(Policy, Context)) {
+      Indent() << "// v----------OMP----------v\n";
+      Stmt *OMPInnerDir = PrintOMPExecutableDirectiveHead(
+          S->getOMPNode(), false, EffectiveDirectives);
       PrintOMPExecutableDirectiveBody(OMPInnerDir);
+      Indent() << "// ---------OMP<-ACC--------\n";
       clang::commented_raw_ostream ComStream(OS, IndentLevel*2, false, 1,
                                              true);
       PrintingPolicy ACCPolicy(Policy);
@@ -1147,8 +1152,11 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
       StmtPrinter ComPrinter(ComStream, Helper, ACCPolicy, 0, NL, Context);
       ComPrinter.PrintACCExecutableDirectiveHead(S, false, false);
       ComPrinter.PrintACCExecutableDirectiveBody(S);
+      Indent() << "// ^----------ACC----------^\n";
     }
     else {
+      PrintOMPExecutableDirectiveHead(S->getOMPNode(), false,
+                                      EffectiveDirectives);
       PrintACCExecutableDirectiveHead(S, true, true);
       PrintACCExecutableDirectiveBody(S);
     }

@@ -19,8 +19,8 @@
 // RUN:   (cpp=-DERRS)
 // RUN: }
 // RUN: %data prt-args {
-// RUN:   (prt-arg=acc     prt-chk=PRT,PRT-A,PRT-AX)
-// RUN:   (prt-arg=omp     prt-chk=PRT,PRT-O,PRT-OX)
+// RUN:   (prt-arg=acc     prt-chk=PRT,PRT-A,PRT-AA)
+// RUN:   (prt-arg=omp     prt-chk=PRT,PRT-O,PRT-OO)
 // RUN:   (prt-arg=acc-omp prt-chk=PRT,PRT-A,PRT-AO)
 // RUN:   (prt-arg=omp-acc prt-chk=PRT,PRT-O,PRT-OA)
 // RUN: }
@@ -93,7 +93,7 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams
   // PRT-OA-NEXT:  // #pragma acc parallel
   #pragma acc parallel
-  // PRT-AX-NEXT:  #pragma acc loop seq
+  // PRT-AA-NEXT:  #pragma acc loop seq
   // PRT-AO-NEXT:  #pragma acc loop seq // discarded in OpenMP translation
   // PRT-OA-NEXT:  // #pragma acc loop seq // discarded in OpenMP translation
   #pragma acc loop seq
@@ -114,10 +114,12 @@ int main() {
 
   // Null statement: Clang selects semicolon as end token.
 
+  // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   //  PRT-A-NEXT:  #pragma acc loop worker
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
   //  PRT-A-NEXT:    ;
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
   // PRT-AO-NEXT:  //     #pragma omp target teams
@@ -125,7 +127,9 @@ int main() {
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 ;
   // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
   //
+  // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
   //  PRT-O-NEXT:      #pragma omp target teams
@@ -133,10 +137,12 @@ int main() {
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  ;
   //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel num_workers(non_const_expr)
   // PRT-OA-NEXT:  // #pragma acc loop worker
   // PRT-OA-NEXT:  // for (int i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //   ;
+  // PRT-OA-NEXT:  // ^----------ACC----------^
   #pragma acc parallel num_workers(non_const_expr)
   #pragma acc loop worker
   for (int i = 0; i < 5; ++i)
@@ -144,12 +150,14 @@ int main() {
 
   // Compound statement: Clang selects closing brace as end token.
 
+  // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   //  PRT-A-NEXT:  #pragma acc loop worker
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i) {
   //  PRT-A-NEXT:    var = 5;
   //  PRT-A-NEXT:    var = non_const_expr;
   //  PRT-A-NEXT:  }
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
   // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(var,non_const_expr)
@@ -159,7 +167,9 @@ int main() {
   // PRT-AO-NEXT:  //                 var = non_const_expr;
   // PRT-AO-NEXT:  //             }
   // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
   //
+  // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
   //  PRT-O-NEXT:      #pragma omp target teams firstprivate(var,non_const_expr)
@@ -169,12 +179,14 @@ int main() {
   //  PRT-O-NEXT:                  var = non_const_expr;
   //  PRT-O-NEXT:              }
   //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel num_workers(non_const_expr)
   // PRT-OA-NEXT:  // #pragma acc loop worker
   // PRT-OA-NEXT:  // for (int i = 0; i < 5; ++i) {
   // PRT-OA-NEXT:  //   var = 5;
   // PRT-OA-NEXT:  //   var = non_const_expr;
   // PRT-OA-NEXT:  // }
+  // PRT-OA-NEXT:  // ^----------ACC----------^
   #pragma acc parallel num_workers(non_const_expr)
   #pragma acc loop worker
   for (int i = 0; i < 5; ++i) {
@@ -184,10 +196,12 @@ int main() {
 
   // Expression statement: Clang selects token before semicolon as end token.
 
+  // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   //  PRT-A-NEXT:  #pragma acc loop worker
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
   //  PRT-A-NEXT:    var = non_const_expr;
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
   // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(var,non_const_expr)
@@ -195,7 +209,9 @@ int main() {
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 var = non_const_expr;
   // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
   //
+  // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
   //  PRT-O-NEXT:      #pragma omp target teams firstprivate(var,non_const_expr)
@@ -203,10 +219,12 @@ int main() {
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  var = non_const_expr;
   //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel num_workers(non_const_expr)
   // PRT-OA-NEXT:  // #pragma acc loop worker
   // PRT-OA-NEXT:  // for (int i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //   var = non_const_expr;
+  // PRT-OA-NEXT:  // ^----------ACC----------^
   #pragma acc parallel num_workers(non_const_expr)
   #pragma acc loop worker
   for (int i = 0; i < 5; ++i)
@@ -220,27 +238,33 @@ int main() {
 
   //  PRT-A-NEXT:  #pragma acc parallel
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(i)
+  // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc loop vector
   //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
   //  PRT-A-NEXT:    ;
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
   // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1)
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             ;
   // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(i)
   // PRT-OA-NEXT:  // #pragma acc parallel
+  // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
   //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1)
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              ;
   //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //   ;
+  // PRT-OA-NEXT:  // ^----------ACC----------^
   #pragma acc parallel
   #pragma acc loop vector
   for (i = 0; i < 5; ++i)
@@ -250,11 +274,13 @@ int main() {
 
   //  PRT-A-NEXT:  #pragma acc parallel
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(i,var,non_const_expr)
+  // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc loop vector
   //  PRT-A-NEXT:  for (i = 0; i < 5; ++i) {
   //  PRT-A-NEXT:    var = 5;
   //  PRT-A-NEXT:    var = non_const_expr ;
   //  PRT-A-NEXT:  }
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
   // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
@@ -263,9 +289,11 @@ int main() {
   // PRT-AO-NEXT:  //             var = non_const_expr;
   // PRT-AO-NEXT:  //         }
   // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(i,var,non_const_expr)
   // PRT-OA-NEXT:  // #pragma acc parallel
+  // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
   //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
@@ -274,11 +302,13 @@ int main() {
   //  PRT-O-NEXT:              var = non_const_expr;
   //  PRT-O-NEXT:          }
   //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i) {
   // PRT-OA-NEXT:  //   var = 5;
   // PRT-OA-NEXT:  //   var = non_const_expr ;
   // PRT-OA-NEXT:  // }
+  // PRT-OA-NEXT:  // ^----------ACC----------^
   #pragma acc parallel
   #pragma acc loop vector
   for (i = 0; i < 5; ++i) {
@@ -290,27 +320,33 @@ int main() {
 
   //  PRT-A-NEXT:  #pragma acc parallel
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(i,var,non_const_expr)
+  // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc loop vector
   //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
   //  PRT-A-NEXT:    var = non_const_expr ;
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
   // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             var = non_const_expr;
   // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(i,var,non_const_expr)
   // PRT-OA-NEXT:  // #pragma acc parallel
+  // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
   //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              var = non_const_expr;
   //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //   var = non_const_expr ;
+  // PRT-OA-NEXT:  // ^----------ACC----------^
   #pragma acc parallel
   #pragma acc loop vector
   for (i = 0; i < 5; ++i)
@@ -320,10 +356,12 @@ int main() {
   // Full construct rewrite, outer and inner directive.
   //--------------------------------------------------
 
+  // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   //  PRT-A-NEXT:  #pragma acc loop worker vector
   //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
   //  PRT-A-NEXT:    ;
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
   // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(i)
@@ -334,7 +372,9 @@ int main() {
   // PRT-AO-NEXT:  //                     ;
   // PRT-AO-NEXT:  //         }
   // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
   //
+  // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
   //  PRT-O-NEXT:      #pragma omp target teams firstprivate(i)
@@ -345,10 +385,12 @@ int main() {
   //  PRT-O-NEXT:                      ;
   //  PRT-O-NEXT:          }
   //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel num_workers(non_const_expr)
   // PRT-OA-NEXT:  // #pragma acc loop worker vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //   ;
+  // PRT-OA-NEXT:  // ^----------ACC----------^
   #pragma acc parallel num_workers(non_const_expr)
   #pragma acc loop worker vector
   for (i = 0; i < 5; ++i)
@@ -360,25 +402,31 @@ int main() {
 
   //  PRT-A-NEXT:  #pragma acc parallel
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(i,var,non_const_expr)
+  // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc loop seq private(i)
   //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
   //  PRT-A-NEXT:    var = non_const_expr;
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
   // PRT-AO-NEXT:  //     for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //         var = non_const_expr;
   // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(i,var,non_const_expr)
   // PRT-OA-NEXT:  // #pragma acc parallel
+  // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
   //  PRT-O-NEXT:      for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:          var = non_const_expr;
   //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc loop seq private(i)
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //   var = non_const_expr;
+  // PRT-OA-NEXT:  // ^----------ACC----------^
   #pragma acc parallel
   #pragma acc loop seq private(i)
   for (i = 0; i < 5; ++i)
@@ -439,11 +487,13 @@ int main() {
 
   //  PRT-A-NEXT:  #pragma acc parallel
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(i,var,non_const_expr)
+  // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc loop vector
   //  PRT-A-NEXT:for (i = 0; i < 5; ++i) {
   //  PRT-A-NEXT: var = 5;
   //  PRT-A-NEXT:  var = non_const_expr ;
   //  PRT-A-NEXT:}
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
   // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
@@ -452,9 +502,11 @@ int main() {
   // PRT-AO-NEXT:  //             var = non_const_expr;
   // PRT-AO-NEXT:  //         }
   // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(i,var,non_const_expr)
   // PRT-OA-NEXT:  // #pragma acc parallel
+  // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
   //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
@@ -463,11 +515,13 @@ int main() {
   //  PRT-O-NEXT:              var = non_const_expr;
   //  PRT-O-NEXT:          }
   //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i) {
   // PRT-OA-NEXT:  // var = 5;
   // PRT-OA-NEXT:  // var = non_const_expr ;
   // PRT-OA-NEXT:  // }
+  // PRT-OA-NEXT:  // ^----------ACC----------^
   #pragma acc parallel
   #pragma acc loop vector
 for (i = 0; i < 5; ++i) {
@@ -502,11 +556,13 @@ for (i = 0; i < 5; ++i) {
   // Full construct rewrite, trailing text.
   //--------------------------------------------------
 
+  // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   //  PRT-A-NEXT:  #pragma acc loop worker
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
-  // PRT-AX-NEXT:    ;var = 5;
+  // PRT-AA-NEXT:    ;var = 5;
   // PRT-AO-NEXT:    ;
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
   // PRT-AO-NEXT:  //     #pragma omp target teams
@@ -514,20 +570,24 @@ for (i = 0; i < 5; ++i) {
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 ;
   // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
   // PRT-AO-NEXT:var = 5;
   //
+  // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
   //  PRT-O-NEXT:      #pragma omp target teams
   //  PRT-O-NEXT:          #pragma omp parallel for num_threads(__clang_acc_num_workers__)
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  ;
-  // PRT-OX-NEXT:  }var = 5;
+  // PRT-OO-NEXT:  }var = 5;
   // PRT-OA-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel num_workers(non_const_expr)
   // PRT-OA-NEXT:  // #pragma acc loop worker
   // PRT-OA-NEXT:  // for (int i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //   ;
+  // PRT-OA-NEXT:  // ^----------ACC----------^
   // PRT-OA-NEXT:var = 5;
   #pragma acc parallel num_workers(non_const_expr)
   #pragma acc loop worker
@@ -538,31 +598,37 @@ for (i = 0; i < 5; ++i) {
   // for either reading the OpenACC range or replacing it, we'll incorrectly
   // pick up var in the range.
 
+  // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   //  PRT-A-NEXT:  #pragma acc loop worker
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
-  // PRT-AX-NEXT:    ;{{  }}
+  // PRT-AA-NEXT:    ;{{  }}
   // PRT-AO-NEXT:    ;
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
   // PRT-AO-NEXT:  //     #pragma omp target teams
   // PRT-AO-NEXT:  //         #pragma omp parallel for num_threads(__clang_acc_num_workers__)
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 ;
-  // PRT-AO-NEXT:  // }{{  }}
+  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^{{  }}
   //
+  // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
   //  PRT-O-NEXT:      #pragma omp target teams
   //  PRT-O-NEXT:          #pragma omp parallel for num_threads(__clang_acc_num_workers__)
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  ;
-  // PRT-OX-NEXT:  }{{  }}
+  // PRT-OO-NEXT:  }{{  }}
   // PRT-OA-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel num_workers(non_const_expr)
   // PRT-OA-NEXT:  // #pragma acc loop worker
   // PRT-OA-NEXT:  // for (int i = 0; i < 5; ++i)
-  // PRT-OA-NEXT:  //   ;{{  }}
+  // PRT-OA-NEXT:  //   ;
+  // PRT-OA-NEXT:  // ^----------ACC----------^{{  }}
   #pragma acc parallel num_workers(non_const_expr)
   #pragma acc loop worker
   for (int i = 0; i < 5; ++i)

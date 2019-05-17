@@ -117,44 +117,91 @@ public:
     std::string RewriteString;
     llvm::raw_string_ostream RewriteStream(RewriteString);
 
-    // Add the OpenMP version.  We never reach this point for OpenACCPrint_ACC,
-    // so the OpenMP version is always included.  However, if the associated
-    // statement wasn't changed and the directive was merely discarded during
-    // translation, then there's nothing to print in the OpenMP version.
-    if (!DirectiveOnly || !ACCNode->directiveDiscardedForOMP()) {
-      PrintingPolicy PolicyOMP(Policy);
-      PolicyOMP.OpenACCPrint = DirectiveOnly ? OpenACCPrint_OMP_HEAD
-                                             : OpenACCPrint_OMP;
-      if (OpenACCPrint == OpenACCPrint_ACC_OMP) {
-        clang::commented_raw_ostream ComStream(RewriteStream, IndentWidth,
-                                               false, 1, false);
-        ComStream << '\n';
-        ACCNode->printPretty(ComStream, nullptr, PolicyOMP, 0, "\n", Context);
-        LastLineCommented = true;
+    switch (OpenACCPrint) {
+    case OpenACCPrint_ACC:
+    case OpenACCPrint_OMP_HEAD:
+      llvm_unreachable("unexpected OpenACC print kind while rewriting input");
+    case OpenACCPrint_OMP:
+      if (DirectiveOnly) {
+        if (!ACCNode->directiveDiscardedForOMP()) {
+          PrintingPolicy PolicyOMP(Policy);
+          PolicyOMP.OpenACCPrint = OpenACCPrint_OMP_HEAD;
+          ACCNode->printPretty(RewriteStream, nullptr, PolicyOMP, 0, "\n",
+                               Context);
+        }
       } else {
+        PrintingPolicy PolicyOMP(Policy);
+        PolicyOMP.OpenACCPrint = OpenACCPrint_OMP;
         ACCNode->printPretty(RewriteStream, nullptr, PolicyOMP, IndentLevel,
                              "\n", Context);
-        LastLineCommented = false;
       }
-    }
-
-    // Add a commented version of the original OpenACC.  Printing the OpenMP
-    // above includes a trailing newline, so the OpenACC copy will be separated
-    // properly.
-    if (OpenACCPrint == OpenACCPrint_OMP_ACC) {
-      clang::commented_raw_ostream ComStream(RewriteStream, IndentWidth, true,
-                                             1, true);
-      ComStream << Rewrite.getRewrittenText(
-          CharSourceRange::getCharRange(ACCNode->getDirectiveRange()));
+      LastLineCommented = false;
+      break;
+    case OpenACCPrint_ACC_OMP:
       if (DirectiveOnly) {
+        RewriteStream << Rewrite.getRewrittenText(
+            CharSourceRange::getCharRange(ACCNode->getDirectiveRange()));
         if (ACCNode->directiveDiscardedForOMP())
           RewriteStream << " // discarded in OpenMP translation";
+        else {
+          clang::commented_raw_ostream ComStream(RewriteStream, IndentWidth,
+                                                 false, 1, false);
+          ComStream << '\n';
+          PrintingPolicy PolicyOMP(Policy);
+          PolicyOMP.OpenACCPrint = OpenACCPrint_OMP_HEAD;
+          ACCNode->printPretty(ComStream, nullptr, PolicyOMP, 0, "\n",
+                               Context);
+        }
       } else {
-        SourceRange Range(DirectiveRange.getEnd(), RewriteRange.getEnd());
-        ComStream << Rewrite.getRewrittenText(
-            CharSourceRange::getCharRange(Range));
+        RewriteStream << "// v----------ACC----------v\n"
+                      << IndentText
+                      << Rewrite.getRewrittenText(
+                             CharSourceRange::getCharRange(RewriteRange));
+        clang::commented_raw_ostream ComStream(RewriteStream, IndentWidth,
+                                               false, 1, false);
+        ComStream << "\n---------ACC->OMP--------\n";
+        PrintingPolicy PolicyOMP(Policy);
+        PolicyOMP.OpenACCPrint = OpenACCPrint_OMP;
+        ACCNode->printPretty(ComStream, nullptr, PolicyOMP, 0, "\n", Context);
+        ComStream << "^----------OMP----------^";
       }
       LastLineCommented = true;
+      break;
+    case OpenACCPrint_OMP_ACC:
+      if (DirectiveOnly) {
+        if (ACCNode->directiveDiscardedForOMP()) {
+          clang::commented_raw_ostream ComStream(RewriteStream, IndentWidth,
+                                                 true, 1, false);
+          ComStream << "// "
+                    << Rewrite.getRewrittenText(
+                           CharSourceRange::getCharRange(
+                               ACCNode->getDirectiveRange()))
+                    << " // discarded in OpenMP translation";
+        } else {
+          PrintingPolicy PolicyOMP(Policy);
+          PolicyOMP.OpenACCPrint = OpenACCPrint_OMP_HEAD;
+          ACCNode->printPretty(RewriteStream, nullptr, PolicyOMP, 0, "\n",
+                               Context);
+          clang::commented_raw_ostream ComStream(RewriteStream, IndentWidth,
+                                                 true, 1, true);
+          ComStream << Rewrite.getRewrittenText(
+              CharSourceRange::getCharRange(ACCNode->getDirectiveRange()));
+        }
+      } else {
+        RewriteStream << "// v----------OMP----------v\n";
+        PrintingPolicy PolicyOMP(Policy);
+        PolicyOMP.OpenACCPrint = OpenACCPrint_OMP;
+        ACCNode->printPretty(RewriteStream, nullptr, PolicyOMP, IndentLevel,
+                             "\n", Context);
+        clang::commented_raw_ostream ComStream(RewriteStream, IndentWidth,
+                                               true, 1, true);
+        ComStream << "---------OMP<-ACC--------\n";
+        ComStream << Rewrite.getRewrittenText(
+                         CharSourceRange::getCharRange(RewriteRange));
+        ComStream << "\n^----------ACC----------^";
+      }
+      LastLineCommented = true;
+      break;
     }
 
     // If the last line we inserted was commented and there are non-whitespace
@@ -180,61 +227,46 @@ public:
     } else if (RequiresNewline)
       RewriteString += '\n';
 
-    // Perform the insertion (if OpenACC is uncommented) or replacement (if
-    // OpenMP is uncommented).
-    switch (OpenACCPrint) {
-    case OpenACCPrint_ACC_OMP:
-      if (DirectiveOnly && ACCNode->directiveDiscardedForOMP())
-        Rewrite.InsertTextBefore(DirectiveRange.getEnd(),
-                                 " // discarded in OpenMP translation");
-      if (!RewriteString.empty())
-        Rewrite.InsertTextBefore(RewriteRange.getEnd(), RewriteString);
-      break;
-    case OpenACCPrint_OMP:
-    case OpenACCPrint_OMP_ACC:
-      if (!RewriteString.empty()) {
-        // Trim any leading space as the text we're replacing should already be
-        // preceded by any necessary indentation.
-        RewriteString.erase(0, RewriteString.find_first_not_of(" "));
-        Rewrite.ReplaceText(CharSourceRange::getCharRange(RewriteRange),
-                            RewriteString);
-      } else {
-        // If the line will end up blank, expand the range to include the
-        // entire line.
-        FileID File = SM.getFileID(RewriteRange.getBegin());
-        StringRef Buffer = SM.getBufferData(File);
-        bool LineBlank = true;
-        const char *RewriteBeg = SM.getCharacterData(RewriteRange.getBegin());
-        const char *LineBeg = RewriteBeg;
-        const char *BufferBeg = Buffer.data();
-        for (; LineBeg != BufferBeg && *(LineBeg - 1) != '\n'; --LineBeg) {
-          if (!std::isspace(*(LineBeg-1))) {
+    // Trim any leading space as the text we're replacing should already be
+    // preceded by any necessary indentation.
+    RewriteString.erase(0, RewriteString.find_first_not_of(" "));
+
+    // Perform the replacement.
+    if (!RewriteString.empty())
+      Rewrite.ReplaceText(CharSourceRange::getCharRange(RewriteRange),
+                          RewriteString);
+    else {
+      // If the line will end up blank, expand the range to include the entire
+      // line.
+      FileID File = SM.getFileID(RewriteRange.getBegin());
+      StringRef Buffer = SM.getBufferData(File);
+      bool LineBlank = true;
+      const char *RewriteBeg = SM.getCharacterData(RewriteRange.getBegin());
+      const char *LineBeg = RewriteBeg;
+      const char *BufferBeg = Buffer.data();
+      for (; LineBeg != BufferBeg && *(LineBeg - 1) != '\n'; --LineBeg) {
+        if (!std::isspace(*(LineBeg-1))) {
+          LineBlank = false;
+          break;
+        }
+      }
+      if (LineBlank) {
+        const char *RewriteEnd = SM.getCharacterData(RewriteRange.getEnd());
+        const char *LineEnd = RewriteEnd;
+        for (const char *BufferEnd = BufferBeg + Buffer.size();
+             LineEnd != BufferEnd && *(LineEnd - 1) != '\n';
+             ++LineEnd) {
+          if (!std::isspace(*LineEnd)) {
             LineBlank = false;
             break;
           }
         }
         if (LineBlank) {
-          const char *RewriteEnd = SM.getCharacterData(RewriteRange.getEnd());
-          const char *LineEnd = RewriteEnd;
-          for (const char *BufferEnd = BufferBeg + Buffer.size();
-               LineEnd != BufferEnd && *(LineEnd - 1) != '\n';
-               ++LineEnd) {
-            if (!std::isspace(*LineEnd)) {
-              LineBlank = false;
-              break;
-            }
-          }
-          if (LineBlank) {
-            RewriteRange.setBegin(SM.getComposedLoc(File, LineBeg-BufferBeg));
-            RewriteRange.setEnd(SM.getComposedLoc(File, LineEnd-BufferBeg));
-          }
+          RewriteRange.setBegin(SM.getComposedLoc(File, LineBeg-BufferBeg));
+          RewriteRange.setEnd(SM.getComposedLoc(File, LineEnd-BufferBeg));
         }
-        Rewrite.RemoveText(CharSourceRange::getCharRange(RewriteRange));
       }
-      break;
-    case OpenACCPrint_ACC:
-    case OpenACCPrint_OMP_HEAD:
-      llvm_unreachable("unexpected OpenACC print kind while rewriting input");
+      Rewrite.RemoveText(CharSourceRange::getCharRange(RewriteRange));
     }
 
     // Recurse to children if we didn't print the OpenACC and OpenMP

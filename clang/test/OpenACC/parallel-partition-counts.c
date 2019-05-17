@@ -1237,6 +1237,7 @@ int main(int argc, char *argv[]) {
     // PRT-NOACC-NEXT:     printf
     // PRT-NOACC-NEXT:   }
     // PRT-NOACC-NEXT: }
+    // PRT-AO-NEXT:    // v----------ACC----------v
     // PRT-A-NEXT:     {{^ *}}#pragma acc parallel num_gangs(1) num_workers(nw) vector_length(1){{$}}
     // PRT-A-NEXT:     {
     // PRT-A-NEXT:       {{^ *}}#pragma acc loop worker{{$}}
@@ -1244,6 +1245,7 @@ int main(int argc, char *argv[]) {
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:       }
     // PRT-A-NEXT:     }
+    // PRT-AO-NEXT:    // ---------ACC->OMP--------
     // PRT-AO-NEXT:    // {
     // PRT-AO-NEXT:    //   const int __clang_acc_num_workers__ = nw;
     // PRT-AO-NEXT:    //   #pragma omp target teams num_teams(1){{$}}
@@ -1254,6 +1256,8 @@ int main(int argc, char *argv[]) {
     // PRT-AO-NEXT:    //     }
     // PRT-AO-NEXT:    //   }
     // PRT-AO-NEXT:    // }
+    // PRT-AO-NEXT:    // ^----------OMP----------^
+    // PRT-OA-NEXT:    // v----------OMP----------v
     // PRT-O-NEXT:     {
     // PRT-O-NEXT:       const int __clang_acc_num_workers__ = nw;
     // PRT-O-NEXT:       {{^ *}}#pragma omp target teams num_teams(1){{$}}
@@ -1264,6 +1268,7 @@ int main(int argc, char *argv[]) {
     // PRT-O-NEXT:         }
     // PRT-O-NEXT:       }
     // PRT-O-NEXT:     }
+    // PRT-OA-NEXT:    // ---------OMP<-ACC--------
     // PRT-OA-NEXT:    // #pragma acc parallel num_gangs(1) num_workers(nw) vector_length(1){{$}}
     // PRT-OA-NEXT:    // {
     // PRT-OA-NEXT:    //   #pragma acc loop worker{{$}}
@@ -1271,6 +1276,7 @@ int main(int argc, char *argv[]) {
     // PRT-OA-NEXT:    //     printf
     // PRT-OA-NEXT:    //   }
     // PRT-OA-NEXT:    // }
+    // PRT-OA-NEXT:    // ^----------ACC----------^
     #pragma acc parallel num_gangs(1) num_workers(nw) vector_length(1)
     {
       #pragma acc loop worker
@@ -1347,6 +1353,7 @@ int main(int argc, char *argv[]) {
     // PRT-NOACC-NEXT:     printf
     // PRT-NOACC-NEXT:   }
     // PRT-NOACC-NEXT: }
+    // PRT-AO-NEXT:    // v----------ACC----------v
     // PRT-A-NEXT:     {{^ *}}#pragma acc parallel loop worker num_gangs(1) num_workers(nw) vector_length(1){{$}}
     // PRT-A-NEXT:     for ({{.*}}) {
     // PRT-A-NEXT:       {{^ *}}#pragma acc loop vector{{$}}
@@ -1354,6 +1361,7 @@ int main(int argc, char *argv[]) {
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:       }
     // PRT-A-NEXT:     }
+    // PRT-AO-NEXT:    // ---------ACC->OMP--------
     // PRT-AO-NEXT:    // {
     // PRT-AO-NEXT:    //   const int __clang_acc_num_workers__ = nw;
     // PRT-AO-NEXT:    //   #pragma omp target teams num_teams(1){{$}}
@@ -1365,6 +1373,8 @@ int main(int argc, char *argv[]) {
     // PRT-AO-NEXT:    //     }
     // PRT-AO-NEXT:    //   }
     // PRT-AO-NEXT:    // }
+    // PRT-AO-NEXT:    // ^----------OMP----------^
+    // PRT-OA-NEXT:    // v----------OMP----------v
     // PRT-O-NEXT:     {
     // PRT-O-NEXT:       const int __clang_acc_num_workers__ = nw;
     // PRT-O-NEXT:       {{^ *}}#pragma omp target teams num_teams(1){{$}}
@@ -1376,6 +1386,7 @@ int main(int argc, char *argv[]) {
     // PRT-O-NEXT:         }
     // PRT-O-NEXT:       }
     // PRT-O-NEXT:     }
+    // PRT-OA-NEXT:    // ---------OMP<-ACC--------
     // PRT-OA-NEXT:    // #pragma acc parallel loop worker num_gangs(1) num_workers(nw) vector_length(1){{$}}
     // PRT-OA-NEXT:    // for ({{.*}}) {
     // PRT-OA-NEXT:    //   #pragma acc loop vector{{$}}
@@ -1383,6 +1394,7 @@ int main(int argc, char *argv[]) {
     // PRT-OA-NEXT:    //     printf
     // PRT-OA-NEXT:    //   }
     // PRT-OA-NEXT:    // }
+    // PRT-OA-NEXT:    // ^----------ACC----------^
     #pragma acc parallel loop worker num_gangs(1) num_workers(nw) vector_length(1)
     for (int i = 0; i < 2; ++i) {
       #pragma acc loop vector
@@ -1502,6 +1514,7 @@ int main(int argc, char *argv[]) {
     // PRT-NOACC-NEXT:     }
     // PRT-NOACC-NEXT:   }
     // PRT-NOACC-NEXT: }
+    // PRT-AO-NEXT:    // v----------ACC----------v
     // PRT-A-NEXT:     {{^ *}}#pragma acc parallel num_gangs(1) num_workers(foo()) vector_length(1){{$}}
     // PRT-A-NEXT:     {
     // PRT-A-NEXT:       {{^ *}}#pragma acc loop seq{{$}}
@@ -1523,6 +1536,7 @@ int main(int argc, char *argv[]) {
     // PRT-A-NEXT:         }
     // PRT-A-NEXT:       }
     // PRT-A-NEXT:     }
+    // PRT-AO-NEXT:    // ---------ACC->OMP--------
     // PRT-AO-NEXT:    // {
     // PRT-AO-NEXT:    //   const int __clang_acc_num_workers__ = foo();
     // PRT-AO-NEXT:    //   #pragma omp target teams num_teams(1){{$}}
@@ -1544,6 +1558,8 @@ int main(int argc, char *argv[]) {
     // PRT-AO-NEXT:    //     }
     // PRT-AO-NEXT:    //   }
     // PRT-AO-NEXT:    // }
+    // PRT-AO-NEXT:    // ^----------OMP----------^
+    // PRT-OA-NEXT:    // v----------OMP----------v
     // PRT-O-NEXT:     {
     // PRT-O-NEXT:       const int __clang_acc_num_workers__ = foo();
     // PRT-O-NEXT:       {{^ *}}#pragma omp target teams num_teams(1){{$}}
@@ -1565,6 +1581,7 @@ int main(int argc, char *argv[]) {
     // PRT-O-NEXT:         }
     // PRT-O-NEXT:       }
     // PRT-O-NEXT:     }
+    // PRT-OA-NEXT:    // ---------OMP<-ACC--------
     // PRT-OA-NEXT:    // #pragma acc parallel num_gangs(1) num_workers(foo()) vector_length(1){{$}}
     // PRT-OA-NEXT:    // {
     // PRT-OA-NEXT:    //   #pragma acc loop seq{{$}}
@@ -1586,6 +1603,7 @@ int main(int argc, char *argv[]) {
     // PRT-OA-NEXT:    //     }
     // PRT-OA-NEXT:    //   }
     // PRT-OA-NEXT:    // }
+    // PRT-OA-NEXT:    // ^----------ACC----------^
     #pragma acc parallel num_gangs(1) num_workers(foo()) vector_length(1)
     {
       #pragma acc loop seq

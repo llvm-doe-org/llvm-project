@@ -208,6 +208,7 @@ int main() {
     // DMP-OSEQ-NEXT:       VarDecl {{.*}} i 'int'
     // DMP-OSEQ-NEXT:     ForStmt
     //
+    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
     // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(i){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
     // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
@@ -215,6 +216,7 @@ int main() {
     // PRT-A-NEXT:         i = j;
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:       }
+    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OSEQ-NEXT: // {
     // PRT-AO-OSEQ-NEXT: //   int i;
     // PRT-AO-OSEQ-NEXT: //   for (int j = 0; j < 2; ++j) {
@@ -222,7 +224,9 @@ int main() {
     // PRT-AO-OSEQ-NEXT: //     printf
     // PRT-AO-OSEQ-NEXT: //   }
     // PRT-AO-OSEQ-NEXT: // }
+    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
     //
+    // PRT-OA-OSEQ-NEXT: // v----------OMP----------v
     // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
     // PRT-O-OPLC-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
     // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(i){{$}}
@@ -234,11 +238,13 @@ int main() {
     // PRT-O-NEXT:           printf
     // PRT-O-NEXT:         }
     // PRT-O-OSEQ-NEXT:  }
+    // PRT-OA-OSEQ-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(i){{$}}
     // PRT-OA-OSEQ-NEXT: // for (int j = 0; j < 2; ++j) {
     // PRT-OA-OSEQ-NEXT: //   i = j;
     // PRT-OA-OSEQ-NEXT: //   printf
     // PRT-OA-OSEQ-NEXT: // }
+    // PRT-OA-OSEQ-NEXT: // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT:   for (int j = 0; j < 2; ++j) {
     // PRT-NOACC-NEXT:     i = j;
@@ -314,6 +320,7 @@ int main() {
     // DMP-OSEQ-NEXT:           VarDecl {{.*}} i 'int'
     // DMP-OSEQ-NEXT:         ForStmt
     //
+    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
     // PRT-A-NEXT:       {{^ *}}#pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(i){{$}}
     // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(i){{$}}
@@ -323,6 +330,7 @@ int main() {
     // PRT-A-NEXT:         i = j;
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:       }
+    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OSEQ-NEXT: // #pragma omp target teams num_teams(2) firstprivate(i){{$}}
     // PRT-AO-OSEQ-NEXT: // {
     // PRT-AO-OSEQ-NEXT: //   int i;
@@ -331,7 +339,9 @@ int main() {
     // PRT-AO-OSEQ-NEXT: //     printf
     // PRT-AO-OSEQ-NEXT: //   }
     // PRT-AO-OSEQ-NEXT: // }
+    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
     //
+    // PRT-OA-OSEQ-NEXT: // v----------OMP----------v
     // PRT-O-NEXT:       {{^ *}}#pragma omp target teams num_teams(2) firstprivate(i){{$}}
     // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
     // PRT-O-OPLC-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
@@ -344,11 +354,13 @@ int main() {
     // PRT-O-NEXT:           printf
     // PRT-O-NEXT:         }
     // PRT-O-OSEQ-NEXT:  }
+    // PRT-OA-OSEQ-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
     // PRT-OA-OSEQ-NEXT: // for (int j = 0; j < 2; ++j) {
     // PRT-OA-OSEQ-NEXT: //   i = j;
     // PRT-OA-OSEQ-NEXT: //   printf
     // PRT-OA-OSEQ-NEXT: // }
+    // PRT-OA-OSEQ-NEXT: // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT:   for (int j = 0; j < 2; ++j) {
     // PRT-NOACC-NEXT:     i = j;
@@ -410,6 +422,7 @@ int main() {
     // DMP-OSEQ-NEXT:       VarDecl {{.*}} tentativeDef 'int'
     // DMP-OSEQ-NEXT:     ForStmt
     //
+    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
     // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(tentativeDef){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(tentativeDef){{$}}
     // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(tentativeDef){{$}}
@@ -417,6 +430,7 @@ int main() {
     // PRT-A-NEXT:         tentativeDef = j;
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:       }
+    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OSEQ-NEXT: // {
     // PRT-AO-OSEQ-NEXT: //   int tentativeDef;
     // PRT-AO-OSEQ-NEXT: //   for (int j = 0; j < 2; ++j) {
@@ -424,7 +438,9 @@ int main() {
     // PRT-AO-OSEQ-NEXT: //     printf
     // PRT-AO-OSEQ-NEXT: //   }
     // PRT-AO-OSEQ-NEXT: // }
+    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
     //
+    // PRT-OA-OSEQ-NEXT: // v----------OMP----------v
     // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
     // PRT-O-OPLC-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
     // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(tentativeDef){{$}}
@@ -436,11 +452,13 @@ int main() {
     // PRT-O-NEXT:           printf
     // PRT-O-NEXT:         }
     // PRT-O-OSEQ-NEXT:  }
+    // PRT-OA-OSEQ-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(tentativeDef){{$}}
     // PRT-OA-OSEQ-NEXT: // for (int j = 0; j < 2; ++j) {
     // PRT-OA-OSEQ-NEXT: //   tentativeDef = j;
     // PRT-OA-OSEQ-NEXT: //   printf
     // PRT-OA-OSEQ-NEXT: // }
+    // PRT-OA-OSEQ-NEXT: // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT:   for (int j = 0; j < 2; ++j) {
     // PRT-NOACC-NEXT:     tentativeDef = j;
@@ -513,6 +531,7 @@ int main() {
     // DMP-OSEQ-NEXT:           VarDecl {{.*}} tentativeDef 'int'
     // DMP-OSEQ-NEXT:         ForStmt
     //
+    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
     // PRT-A-NEXT:       {{^ *}}#pragma acc parallel loop num_gangs(2)[[ACCC]] private(tentativeDef){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(tentativeDef){{$}}
     // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(tentativeDef){{$}}
@@ -522,6 +541,7 @@ int main() {
     // PRT-A-NEXT:         tentativeDef = j;
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:       }
+    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OSEQ-NEXT: // #pragma omp target teams num_teams(2) firstprivate(tentativeDef){{$}}
     // PRT-AO-OSEQ-NEXT: // {
     // PRT-AO-OSEQ-NEXT: //   int tentativeDef;
@@ -530,7 +550,9 @@ int main() {
     // PRT-AO-OSEQ-NEXT: //     printf
     // PRT-AO-OSEQ-NEXT: //   }
     // PRT-AO-OSEQ-NEXT: // }
+    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
     //
+    // PRT-OA-OSEQ-NEXT: // v----------OMP----------v
     // PRT-O-NEXT:       {{^ *}}#pragma omp target teams num_teams(2) firstprivate(tentativeDef){{$}}
     // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
     // PRT-O-OPLC-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
@@ -543,11 +565,13 @@ int main() {
     // PRT-O-NEXT:           printf
     // PRT-O-NEXT:         }
     // PRT-O-OSEQ-NEXT:  }
+    // PRT-OA-OSEQ-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(tentativeDef){{$}}
     // PRT-OA-OSEQ-NEXT: // for (int j = 0; j < 2; ++j) {
     // PRT-OA-OSEQ-NEXT: //   tentativeDef = j;
     // PRT-OA-OSEQ-NEXT: //   printf
     // PRT-OA-OSEQ-NEXT: // }
+    // PRT-OA-OSEQ-NEXT: // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT:   for (int j = 0; j < 2; ++j) {
     // PRT-NOACC-NEXT:     tentativeDef = j;
@@ -608,19 +632,23 @@ int main() {
     // DMP-OSEQ-NEXT:       VarDecl {{.*}} i 'int'
     // DMP-OSEQ-NEXT:     ForStmt
     //
+    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
     // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(i){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
     // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
     // PRT-A-NEXT:       for (int i = 0; i < 2; ++i) {
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:       }
+    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OSEQ-NEXT: // {
     // PRT-AO-OSEQ-NEXT: //   int i;
     // PRT-AO-OSEQ-NEXT: //   for (int i = 0; i < 2; ++i) {
     // PRT-AO-OSEQ-NEXT: //     printf
     // PRT-AO-OSEQ-NEXT: //   }
     // PRT-AO-OSEQ-NEXT: // }
+    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
     //
+    // PRT-OA-OSEQ-NEXT: // v----------OMP----------v
     // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
     // PRT-O-OPLC-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
     // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(i){{$}}
@@ -631,10 +659,12 @@ int main() {
     // PRT-O-NEXT:           printf
     // PRT-O-NEXT:         }
     // PRT-O-OSEQ-NEXT:  }
+    // PRT-OA-OSEQ-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(i){{$}}
     // PRT-OA-OSEQ-NEXT: // for (int i = 0; i < 2; ++i) {
     // PRT-OA-OSEQ-NEXT: //   printf
     // PRT-OA-OSEQ-NEXT: // }
+    // PRT-OA-OSEQ-NEXT: // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT:   for (int i = 0; i < 2; ++i) {
     // PRT-NOACC-NEXT:     printf
@@ -702,6 +732,7 @@ int main() {
     // DMP-OSEQ-NEXT:           VarDecl {{.*}} i 'int'
     // DMP-OSEQ-NEXT:         ForStmt
     //
+    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
     // PRT-A-NEXT:       {{^ *}}#pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
     // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
@@ -710,6 +741,7 @@ int main() {
     // PRT-A-NEXT:       for (int i = 0; i < 2; ++i) {
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:       }
+    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OSEQ-NEXT: // #pragma omp target teams num_teams(2){{$}}
     // PRT-AO-OSEQ-NEXT: // {
     // PRT-AO-OSEQ-NEXT: //   int i;
@@ -717,7 +749,9 @@ int main() {
     // PRT-AO-OSEQ-NEXT: //     printf
     // PRT-AO-OSEQ-NEXT: //   }
     // PRT-AO-OSEQ-NEXT: // }
+    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
     //
+    // PRT-OA-OSEQ-NEXT: // v----------OMP----------v
     // PRT-O-NEXT:       {{^ *}}#pragma omp target teams num_teams(2){{$}}
     // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
     // PRT-O-OPLC-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
@@ -729,10 +763,12 @@ int main() {
     // PRT-O-NEXT:           printf
     // PRT-O-NEXT:         }
     // PRT-O-OSEQ-NEXT:  }
+    // PRT-OA-OSEQ-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
     // PRT-OA-OSEQ-NEXT: // for (int i = 0; i < 2; ++i) {
     // PRT-OA-OSEQ-NEXT: //   printf
     // PRT-OA-OSEQ-NEXT: // }
+    // PRT-OA-OSEQ-NEXT: // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT:   for (int i = 0; i < 2; ++i) {
     // PRT-NOACC-NEXT:     printf
@@ -792,11 +828,14 @@ int main() {
     // DMP-OSEQ-NEXT:       VarDecl {{.*}} i 'int'
     // DMP-OSEQ-NEXT:     ForStmt
     //
+    // PRT-AO-OPLC-NEXT: // v----------ACC----------v
+    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
     // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(i){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
     // PRT-A-NEXT:       for (i = 0; i < 2; ++i) {
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:       }
+    // PRT-AO-OPLC-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OPLC-NEXT: // {
     // PRT-AO-OPLC-NEXT: //   int i;
     // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
@@ -804,13 +843,18 @@ int main() {
     // PRT-AO-OPLC-NEXT: //     printf
     // PRT-AO-OPLC-NEXT: //   }
     // PRT-AO-OPLC-NEXT: // }
+    // PRT-AO-OPLC-NEXT: // ^----------OMP----------^
+    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OSEQ-NEXT: // {
     // PRT-AO-OSEQ-NEXT: //   int i;
     // PRT-AO-OSEQ-NEXT: //   for (i = 0; i < 2; ++i) {
     // PRT-AO-OSEQ-NEXT: //     printf
     // PRT-AO-OSEQ-NEXT: //   }
     // PRT-AO-OSEQ-NEXT: // }
+    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
     //
+    // PRT-OA-OPLC-NEXT: // v----------OMP----------v
+    // PRT-OA-OSEQ-NEXT: // v----------OMP----------v
     // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
     // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(i){{$}}
     // PRT-O-OPRG-NEXT:  for (i = 0; i < 2; ++i) {
@@ -829,14 +873,18 @@ int main() {
     // PRT-O-OSEQ-NEXT:      printf
     // PRT-O-OSEQ-NEXT:    }
     // PRT-O-OSEQ-NEXT:  }
+    // PRT-OA-OPLC-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OPLC-NEXT: // #pragma acc loop[[ACCC]] private(i){{$}}
     // PRT-OA-OPLC-NEXT: // for (i = 0; i < 2; ++i) {
     // PRT-OA-OPLC-NEXT: //   printf
     // PRT-OA-OPLC-NEXT: // }
+    // PRT-OA-OPLC-NEXT: // ^----------ACC----------^
+    // PRT-OA-OSEQ-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(i){{$}}
     // PRT-OA-OSEQ-NEXT: // for (i = 0; i < 2; ++i) {
     // PRT-OA-OSEQ-NEXT: //   printf
     // PRT-OA-OSEQ-NEXT: // }
+    // PRT-OA-OSEQ-NEXT: // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT:   for (i = 0; i < 2; ++i) {
     // PRT-NOACC-NEXT:     printf
@@ -910,12 +958,15 @@ int main() {
     // DMP-OSEQ-NEXT:           VarDecl {{.*}} i 'int'
     // DMP-OSEQ-NEXT:         ForStmt
     //
+    // PRT-AO-OPLC-NEXT: // v----------ACC----------v
+    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
     // PRT-A-NEXT:       {{^ *}}#pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(i){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
     // PRT-A-NEXT:       for (i = 0; i < 2; ++i) {
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:       }
+    // PRT-AO-OPLC-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OPLC-NEXT: // #pragma omp target teams num_teams(2) firstprivate(i){{$}}
     // PRT-AO-OPLC-NEXT: // {
     // PRT-AO-OPLC-NEXT: //   int i;
@@ -924,6 +975,8 @@ int main() {
     // PRT-AO-OPLC-NEXT: //     printf
     // PRT-AO-OPLC-NEXT: //   }
     // PRT-AO-OPLC-NEXT: // }
+    // PRT-AO-OPLC-NEXT: // ^----------OMP----------^
+    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OSEQ-NEXT: // #pragma omp target teams num_teams(2) firstprivate(i){{$}}
     // PRT-AO-OSEQ-NEXT: // {
     // PRT-AO-OSEQ-NEXT: //   int i;
@@ -931,7 +984,10 @@ int main() {
     // PRT-AO-OSEQ-NEXT: //     printf
     // PRT-AO-OSEQ-NEXT: //   }
     // PRT-AO-OSEQ-NEXT: // }
+    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
     //
+    // PRT-OA-OPLC-NEXT: // v----------OMP----------v
+    // PRT-OA-OSEQ-NEXT: // v----------OMP----------v
     // PRT-O-NEXT:       {{^ *}}#pragma omp target teams num_teams(2) firstprivate(i){{$}}
     // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
     // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
@@ -951,14 +1007,18 @@ int main() {
     // PRT-O-OSEQ-NEXT:      printf
     // PRT-O-OSEQ-NEXT:    }
     // PRT-O-OSEQ-NEXT:  }
+    // PRT-OA-OPLC-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OPLC-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
     // PRT-OA-OPLC-NEXT: // for (i = 0; i < 2; ++i) {
     // PRT-OA-OPLC-NEXT: //   printf
     // PRT-OA-OPLC-NEXT: // }
+    // PRT-OA-OPLC-NEXT: // ^----------ACC----------^
+    // PRT-OA-OSEQ-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
     // PRT-OA-OSEQ-NEXT: // for (i = 0; i < 2; ++i) {
     // PRT-OA-OSEQ-NEXT: //   printf
     // PRT-OA-OSEQ-NEXT: // }
+    // PRT-OA-OSEQ-NEXT: // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT:   for (i = 0; i < 2; ++i) {
     // PRT-NOACC-NEXT:     printf
@@ -1039,12 +1099,15 @@ int main() {
     // DMP-OSEQ-NEXT:       VarDecl {{.*}} k 'int'
     // DMP-OSEQ-NEXT:     ForStmt
     //
+    // PRT-AO-OPLC-NEXT: // v----------ACC----------v
+    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
     // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(j,i,k) private(i){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(j,i,k) private(i){{$}}
     // PRT-A-NEXT:       for (i = 0; i < 2; ++i) {
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:         j = k = 55;
     // PRT-A-NEXT:       }
+    // PRT-AO-OPLC-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OPLC-NEXT: // {
     // PRT-AO-OPLC-NEXT: //   int i;
     // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]] private(j,k){{$}}
@@ -1053,6 +1116,8 @@ int main() {
     // PRT-AO-OPLC-NEXT: //     j = k = 55;
     // PRT-AO-OPLC-NEXT: //   }
     // PRT-AO-OPLC-NEXT: // }
+    // PRT-AO-OPLC-NEXT: // ^----------OMP----------^
+    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OSEQ-NEXT: // {
     // PRT-AO-OSEQ-NEXT: //   int j;
     // PRT-AO-OSEQ-NEXT: //   int i;
@@ -1062,7 +1127,10 @@ int main() {
     // PRT-AO-OSEQ-NEXT: //     j = k = 55;
     // PRT-AO-OSEQ-NEXT: //   }
     // PRT-AO-OSEQ-NEXT: // }
+    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
     //
+    // PRT-OA-OPLC-NEXT: // v----------OMP----------v
+    // PRT-OA-OSEQ-NEXT: // v----------OMP----------v
     // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(j,i,k) private(i){{$}}
     // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(j,i,k) private(i){{$}}
     // PRT-O-OPRG-NEXT:  for (i = 0; i < 2; ++i) {
@@ -1086,16 +1154,20 @@ int main() {
     // PRT-O-OSEQ-NEXT:      j = k = 55;
     // PRT-O-OSEQ-NEXT:    }
     // PRT-O-OSEQ-NEXT:  }
+    // PRT-OA-OPLC-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OPLC-NEXT: // #pragma acc loop[[ACCC]] private(j,i,k) private(i){{$}}
     // PRT-OA-OPLC-NEXT: // for (i = 0; i < 2; ++i) {
     // PRT-OA-OPLC-NEXT: //   printf
     // PRT-OA-OPLC-NEXT: //   j = k = 55;
     // PRT-OA-OPLC-NEXT: // }
+    // PRT-OA-OPLC-NEXT: // ^----------ACC----------^
+    // PRT-OA-OSEQ-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(j,i,k) private(i){{$}}
     // PRT-OA-OSEQ-NEXT: // for (i = 0; i < 2; ++i) {
     // PRT-OA-OSEQ-NEXT: //   printf
     // PRT-OA-OSEQ-NEXT: //   j = k = 55;
     // PRT-OA-OSEQ-NEXT: // }
+    // PRT-OA-OSEQ-NEXT: // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT:   for (i = 0; i < 2; ++i) {
     // PRT-NOACC-NEXT:     printf
@@ -1198,6 +1270,8 @@ int main() {
     // DMP-OSEQ-NEXT:             VarDecl {{.*}} k 'int'
     // DMP-OSEQ-NEXT:           ForStmt
     //
+    // PRT-AO-OPLC-NEXT: // v----------ACC----------v
+    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
     // PRT-A-NEXT:       {{^ *}}#pragma acc parallel loop num_gangs(2)[[ACCC]] private(j,i,k) private(i){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(i,j,k){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(j,i,k) private(i){{$}}
@@ -1205,6 +1279,7 @@ int main() {
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:         j = k = 55;
     // PRT-A-NEXT:       }
+    // PRT-AO-OPLC-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OPLC-NEXT: // #pragma omp target teams num_teams(2) firstprivate(i,j,k){{$}}
     // PRT-AO-OPLC-NEXT: // {
     // PRT-AO-OPLC-NEXT: //   int i;
@@ -1214,6 +1289,8 @@ int main() {
     // PRT-AO-OPLC-NEXT: //     j = k = 55;
     // PRT-AO-OPLC-NEXT: //   }
     // PRT-AO-OPLC-NEXT: // }
+    // PRT-AO-OPLC-NEXT: // ^----------OMP----------^
+    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OSEQ-NEXT: // #pragma omp target teams num_teams(2) firstprivate(i,j,k){{$}}
     // PRT-AO-OSEQ-NEXT: // {
     // PRT-AO-OSEQ-NEXT: //   int j;
@@ -1224,7 +1301,10 @@ int main() {
     // PRT-AO-OSEQ-NEXT: //     j = k = 55;
     // PRT-AO-OSEQ-NEXT: //   }
     // PRT-AO-OSEQ-NEXT: // }
+    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
     //
+    // PRT-OA-OPLC-NEXT: // v----------OMP----------v
+    // PRT-OA-OSEQ-NEXT: // v----------OMP----------v
     // PRT-O-NEXT:       {{^ *}}#pragma omp target teams num_teams(2) firstprivate(i,j,k){{$}}
     // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(j,i,k) private(i){{$}}
     // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2)[[ACCC]] private(j,i,k) private(i){{$}}
@@ -1249,16 +1329,20 @@ int main() {
     // PRT-O-OSEQ-NEXT:      j = k = 55;
     // PRT-O-OSEQ-NEXT:    }
     // PRT-O-OSEQ-NEXT:  }
+    // PRT-OA-OPLC-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OPLC-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(j,i,k) private(i){{$}}
     // PRT-OA-OPLC-NEXT: // for (i = 0; i < 2; ++i) {
     // PRT-OA-OPLC-NEXT: //   printf
     // PRT-OA-OPLC-NEXT: //   j = k = 55;
     // PRT-OA-OPLC-NEXT: // }
+    // PRT-OA-OPLC-NEXT: // ^----------ACC----------^
+    // PRT-OA-OSEQ-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(j,i,k) private(i){{$}}
     // PRT-OA-OSEQ-NEXT: // for (i = 0; i < 2; ++i) {
     // PRT-OA-OSEQ-NEXT: //   printf
     // PRT-OA-OSEQ-NEXT: //   j = k = 55;
     // PRT-OA-OSEQ-NEXT: // }
+    // PRT-OA-OSEQ-NEXT: // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT:   for (i = 0; i < 2; ++i) {
     // PRT-NOACC-NEXT:     printf

@@ -1330,11 +1330,13 @@ int main() {
     // PRT-NOACC-NEXT:     for (k ={{.*}})
     // PRT-NOACC-NEXT:       printf
     //
+    // PRT-AO-NEXT: // v----------ACC----------v
     // PRT-A-NEXT:  #pragma acc parallel loop num_gangs(1) vector_length(8) vector collapse(2){{$}}
     // PRT-A-NEXT:  for (int i ={{.*}})
     // PRT-A-NEXT:    for (j ={{.*}})
     // PRT-A-NEXT:      for (k ={{.*}})
     // PRT-A-NEXT:        printf
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
     // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) firstprivate(j,k){{$}}
     // PRT-AO-NEXT: // {
     // PRT-AO-NEXT: //   int j;
@@ -1344,7 +1346,9 @@ int main() {
     // PRT-AO-NEXT: //       for (k ={{.*}})
     // PRT-AO-NEXT: //         printf
     // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
     //
+    // PRT-OA-NEXT: // v----------OMP----------v
     // PRT-O-NEXT:  #pragma omp target teams num_teams(1) firstprivate(j,k){{$}}
     // PRT-O-NEXT:  {
     // PRT-O-NEXT:    int j;
@@ -1354,11 +1358,13 @@ int main() {
     // PRT-O-NEXT:        for (k ={{.*}})
     // PRT-O-NEXT:          printf
     // PRT-O-NEXT:  }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-NEXT: // #pragma acc parallel loop num_gangs(1) vector_length(8) vector collapse(2){{$}}
     // PRT-OA-NEXT: // for (int i ={{.*}})
     // PRT-OA-NEXT: //   for (j ={{.*}})
     // PRT-OA-NEXT: //     for (k ={{.*}})
     // PRT-OA-NEXT: //       printf
+    // PRT-OA-NEXT: // ^----------ACC----------^
     #pragma acc parallel loop num_gangs(1) vector_length(8) vector collapse(2)
     for (int i = 0; i < 2; ++i)
       for (j = 0; j < 2; ++j)
