@@ -146,9 +146,10 @@ public:
                                              1, true);
       ComStream << Rewrite.getRewrittenText(
           CharSourceRange::getCharRange(ACCNode->getDirectiveRange()));
-      if (ACCNode->directiveDiscardedForOMP())
-        RewriteStream << " // discarded in OpenMP translation";
-      if (!DirectiveOnly) {
+      if (DirectiveOnly) {
+        if (ACCNode->directiveDiscardedForOMP())
+          RewriteStream << " // discarded in OpenMP translation";
+      } else {
         SourceRange Range(DirectiveRange.getEnd(), RewriteRange.getEnd());
         ComStream << Rewrite.getRewrittenText(
             CharSourceRange::getCharRange(Range));
@@ -183,7 +184,7 @@ public:
     // OpenMP is uncommented).
     switch (OpenACCPrint) {
     case OpenACCPrint_ACC_OMP:
-      if (ACCNode->directiveDiscardedForOMP())
+      if (DirectiveOnly && ACCNode->directiveDiscardedForOMP())
         Rewrite.InsertTextBefore(DirectiveRange.getEnd(),
                                  " // discarded in OpenMP translation");
       if (!RewriteString.empty())

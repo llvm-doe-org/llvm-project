@@ -208,9 +208,7 @@ int main() {
     // DMP-OSEQ-NEXT:       VarDecl {{.*}} i 'int'
     // DMP-OSEQ-NEXT:     ForStmt
     //
-    // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(i)
-    // PRT-AO-OSEQ-SAME: {{^}} // discarded in OpenMP translation
-    // PRT-A-SAME:       {{^$}}
+    // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(i){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
     // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
     // PRT-A-NEXT:       for (int j = 0; j < 2; ++j) {
@@ -236,7 +234,7 @@ int main() {
     // PRT-O-NEXT:           printf
     // PRT-O-NEXT:         }
     // PRT-O-OSEQ-NEXT:  }
-    // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(i) // discarded in OpenMP translation{{$}}
+    // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(i){{$}}
     // PRT-OA-OSEQ-NEXT: // for (int j = 0; j < 2; ++j) {
     // PRT-OA-OSEQ-NEXT: //   i = j;
     // PRT-OA-OSEQ-NEXT: //   printf
@@ -412,9 +410,7 @@ int main() {
     // DMP-OSEQ-NEXT:       VarDecl {{.*}} tentativeDef 'int'
     // DMP-OSEQ-NEXT:     ForStmt
     //
-    // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(tentativeDef)
-    // PRT-AO-OSEQ-SAME: {{^}} // discarded in OpenMP translation
-    // PRT-A-SAME:       {{^$}}
+    // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(tentativeDef){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(tentativeDef){{$}}
     // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(tentativeDef){{$}}
     // PRT-A-NEXT:       for (int j = 0; j < 2; ++j) {
@@ -440,7 +436,7 @@ int main() {
     // PRT-O-NEXT:           printf
     // PRT-O-NEXT:         }
     // PRT-O-OSEQ-NEXT:  }
-    // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(tentativeDef) // discarded in OpenMP translation{{$}}
+    // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(tentativeDef){{$}}
     // PRT-OA-OSEQ-NEXT: // for (int j = 0; j < 2; ++j) {
     // PRT-OA-OSEQ-NEXT: //   tentativeDef = j;
     // PRT-OA-OSEQ-NEXT: //   printf
@@ -612,9 +608,7 @@ int main() {
     // DMP-OSEQ-NEXT:       VarDecl {{.*}} i 'int'
     // DMP-OSEQ-NEXT:     ForStmt
     //
-    // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(i)
-    // PRT-AO-OSEQ-SAME: {{^}} // discarded in OpenMP translation
-    // PRT-A-SAME:       {{^$}}
+    // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(i){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
     // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
     // PRT-A-NEXT:       for (int i = 0; i < 2; ++i) {
@@ -637,7 +631,7 @@ int main() {
     // PRT-O-NEXT:           printf
     // PRT-O-NEXT:         }
     // PRT-O-OSEQ-NEXT:  }
-    // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(i) // discarded in OpenMP translation{{$}}
+    // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(i){{$}}
     // PRT-OA-OSEQ-NEXT: // for (int i = 0; i < 2; ++i) {
     // PRT-OA-OSEQ-NEXT: //   printf
     // PRT-OA-OSEQ-NEXT: // }
@@ -798,9 +792,7 @@ int main() {
     // DMP-OSEQ-NEXT:       VarDecl {{.*}} i 'int'
     // DMP-OSEQ-NEXT:     ForStmt
     //
-    // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(i)
-    // PRT-AO-OSEQ-SAME: {{^}} // discarded in OpenMP translation
-    // PRT-A-SAME:       {{^$}}
+    // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(i){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
     // PRT-A-NEXT:       for (i = 0; i < 2; ++i) {
     // PRT-A-NEXT:         printf
@@ -841,7 +833,7 @@ int main() {
     // PRT-OA-OPLC-NEXT: // for (i = 0; i < 2; ++i) {
     // PRT-OA-OPLC-NEXT: //   printf
     // PRT-OA-OPLC-NEXT: // }
-    // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(i) // discarded in OpenMP translation{{$}}
+    // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(i){{$}}
     // PRT-OA-OSEQ-NEXT: // for (i = 0; i < 2; ++i) {
     // PRT-OA-OSEQ-NEXT: //   printf
     // PRT-OA-OSEQ-NEXT: // }
@@ -1047,9 +1039,7 @@ int main() {
     // DMP-OSEQ-NEXT:       VarDecl {{.*}} k 'int'
     // DMP-OSEQ-NEXT:     ForStmt
     //
-    // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(j,i,k) private(i)
-    // PRT-AO-OSEQ-SAME: {{^}} // discarded in OpenMP translation
-    // PRT-A-SAME:       {{^$}}
+    // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(j,i,k) private(i){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(j,i,k) private(i){{$}}
     // PRT-A-NEXT:       for (i = 0; i < 2; ++i) {
     // PRT-A-NEXT:         printf
@@ -1101,7 +1091,7 @@ int main() {
     // PRT-OA-OPLC-NEXT: //   printf
     // PRT-OA-OPLC-NEXT: //   j = k = 55;
     // PRT-OA-OPLC-NEXT: // }
-    // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(j,i,k) private(i) // discarded in OpenMP translation{{$}}
+    // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(j,i,k) private(i){{$}}
     // PRT-OA-OSEQ-NEXT: // for (i = 0; i < 2; ++i) {
     // PRT-OA-OSEQ-NEXT: //   printf
     // PRT-OA-OSEQ-NEXT: //   j = k = 55;

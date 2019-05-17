@@ -360,8 +360,7 @@ int main() {
 
   //  PRT-A-NEXT:  #pragma acc parallel
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(i,var,non_const_expr)
-  // PRT-AX-NEXT:  #pragma acc loop seq private(i)
-  // PRT-AO-NEXT:  #pragma acc loop seq private(i) // discarded in OpenMP translation
+  //  PRT-A-NEXT:  #pragma acc loop seq private(i)
   //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
   //  PRT-A-NEXT:    var = non_const_expr;
   // PRT-AO-NEXT:  // {
@@ -377,7 +376,7 @@ int main() {
   //  PRT-O-NEXT:      for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:          var = non_const_expr;
   //  PRT-O-NEXT:  }
-  // PRT-OA-NEXT:  // #pragma acc loop seq private(i) // discarded in OpenMP translation
+  // PRT-OA-NEXT:  // #pragma acc loop seq private(i)
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //   var = non_const_expr;
   #pragma acc parallel
