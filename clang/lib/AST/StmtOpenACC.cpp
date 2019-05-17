@@ -127,16 +127,17 @@ ACCLoopDirective::Create(
     const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
     ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
     const llvm::DenseSet<VarDecl *> &LCVars,
-    ACCPartitioningKind Partitioning) {
+    ACCPartitioningKind Partitioning, bool NestedGangPartitioning) {
   unsigned Size = llvm::alignTo(sizeof(ACCLoopDirective), alignof(ACCClause *));
-  void *Mem =
-      C.Allocate(Size + sizeof(ACCClause *) * Clauses.size() + sizeof(Stmt *));
+  void *Mem = C.Allocate(Size + sizeof(ACCClause *) * (Clauses.size() + 1) +
+                         sizeof(Stmt *));
   ACCLoopDirective *Dir =
       new (Mem) ACCLoopDirective(StartLoc, EndLoc, Clauses.size());
   Dir->setClauses(Clauses);
   Dir->setAssociatedStmt(AssociatedStmt);
   Dir->setLoopControlVariables(LCVars);
   Dir->setPartitioning(Partitioning);
+  Dir->setNestedGangPartitioning(NestedGangPartitioning);
   return Dir;
 }
 

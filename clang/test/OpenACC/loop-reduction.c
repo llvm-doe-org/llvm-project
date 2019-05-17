@@ -190,8 +190,10 @@ int main() {
   } // PRT-NEXT: }
 
   //--------------------------------------------------
-  // Implicit independent, no partitioning.
+  // Implicit independent, implicit gang partitioning.
   //--------------------------------------------------
+
+  // acc parallel has reduction already.
 
   // PRT-NEXT: {
   {
@@ -231,12 +233,16 @@ int main() {
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int [2]'
-      // DMP-NEXT:   impl: ForStmt
+      // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+      // DMP-NEXT:   impl: OMPDistributeDirective
+      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int [2]'
+      // DMP:          ForStmt
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc loop reduction(max: out) reduction(min: in)
-      // PRT-AO-SAME: {{^}} // discarded in OpenMP translation
-      // PRT-A-SAME:  {{^$}}
-      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop reduction(max: out) reduction(min: in) // discarded in OpenMP translation{{$}}
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop reduction(max: out) reduction(min: in){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
+      // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop reduction(max: out) reduction(min: in){{$}}
       #pragma acc loop reduction(max: out) reduction(min: in)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 2; ++i) {
@@ -258,6 +264,59 @@ int main() {
     // EXE-NEXT: out = 1
     printf("out = %d\n", out);
   } // PRT-NEXT: }
+
+  // Only acc loop has gang reduction.
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: enum E {{{[[:space:]]*}}
+    // PRT-SAME:   E0,{{[[:space:]]*}}
+    // PRT-SAME:   E1{{[[:space:]]*}}
+    // PRT-SAME: } out = E0;
+    enum E {E0, E1} out = E0;
+    // DMP:      ACCParallelDirective
+    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> 'max'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'enum E'
+    // DMP-NEXT:   impl: OMPTargetTeamsDirective
+    // DMP-NEXT:     OMPNum_teamsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     OMPReductionClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'enum E'
+    // DMP:        ACCLoopDirective
+    // DMP-NEXT:     ACCReductionClause {{.*}} 'max'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'enum E'
+    // DMP-NEXT:     ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:     ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:     impl: OMPDistributeDirective
+    // DMP:            ForStmt
+    //
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2)
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(max: out){{$}}
+    // PRT-A-NEXT:  {{^ *}}#pragma acc loop reduction(max: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
+    //
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(max: out){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop reduction(max: out){{$}}
+    //
+    // PRT-NEXT: for ({{.*}}) {
+    #pragma acc parallel num_gangs(2)
+    #pragma acc loop reduction(max: out)
+    for (int i = 0; i < 2; ++i) {
+      // DMP: ConditionalOperator
+      // PRT-NEXT: out = E1 > out ? E1 : out;
+      out = E1 > out ? E1 : out;
+    } // PRT-NEXT: }
+    // DMP: CallExpr
+    // PRT-NEXT: printf
+    // EXE-NEXT: out = 1
+    printf("out = %d\n", out);
+  } // PRT-NEXT: }
+
+  // acc parallel loop with gang reduction.
 
   // PRT-NEXT: {
   {
@@ -285,12 +344,16 @@ int main() {
     // DMP-NEXT:       ACCReductionClause {{.*}} 'max'
     // DMP-NEXT:         DeclRefExpr {{.*}} 'out' 'enum E'
     // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-    // DMP-NEXT:       impl: ForStmt
+    // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPDistributeDirective
+    // DMP:              ForStmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(2) reduction(max: out){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(max: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
     //
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(max: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) reduction(max: out){{$}}
     //
     // PRT-NEXT: for ({{.*}}) {

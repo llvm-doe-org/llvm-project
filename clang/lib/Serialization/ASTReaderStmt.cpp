@@ -2317,6 +2317,7 @@ void ASTStmtReader::VisitACCLoopDirective(ACCLoopDirective *D) {
                 "ACCPartitioningKind is too large in ASTStmtReader");
   uint64_t Part = Record.readInt();
   D->setPartitioning(*reinterpret_cast<ACCPartitioningKind*>(&Part));
+  D->setNestedGangPartitioning(Record.readInt());
 }
 
 void ASTStmtReader::VisitACCParallelLoopDirective(ACCParallelLoopDirective *D)

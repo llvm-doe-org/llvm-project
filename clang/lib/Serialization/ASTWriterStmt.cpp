@@ -2320,6 +2320,7 @@ void ASTStmtWriter::VisitACCLoopDirective(ACCLoopDirective *D) {
                 "ACCPartitioningKind is too large in ASTStmtWriter");
   ACCPartitioningKind Part = D->getPartitioning();
   Record.push_back(*reinterpret_cast<uint64_t*>(&Part));
+  Record.push_back(D->getNestedGangPartitioning());
 }
 
 void ASTStmtWriter::VisitACCParallelLoopDirective(

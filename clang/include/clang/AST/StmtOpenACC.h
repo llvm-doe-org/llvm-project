@@ -474,18 +474,20 @@ public:
 
   /// Does the loop have a seq clause, perhaps explicitly or computed by auto?
   /// False does not necessarily indicate the loop won't execute sequentially,
-  /// depending on specified partitioning levels.
+  /// depending on specified partitioning levels and any implicit gang clause
+  /// possibly added later.
   bool hasSeq() const { return PartKind == PartSeq; }
   /// Does the loop have an independent clause, perhaps implicitly, explicitly,
-  /// or computed by auto?  True does not necessarily indicated the loop won't
-  /// execute sequentially, depending on specified partitioning levels.  If
-  /// implicit, returns true before any contradictory explicit clause is set
+  /// or computed by auto?  True does not necessarily indicate the loop won't
+  /// execute sequentially, depending on specified partitioning levels and any
+  /// implicit gang clause possibly added later.  In the case of implicit
+  /// independent, returns true before any contradictory explicit clause is set
   /// and false afterward.
   bool hasIndependent() const { return PartKind == PartIndependent; }
   /// Does the loop have an auto clause, perhaps implicitly or explicitly?  If
   /// implicit, returns true before any contradictory explicit clause is set
-  /// and false afterward.  Returns true before conversion of an auto clause to
-  /// seq or independent and false afterward.
+  /// and false afterward.  Returns true before conversion of an auto clause
+  /// to seq or independent and false afterward.
   bool hasAuto() const { return PartKind == PartAuto; }
 
   /// Does the loop have an explicit seq clause?
@@ -493,15 +495,17 @@ public:
     return PartKind == PartSeq && PartSource == PartExplicit;
   }
   /// Does the loop have an implicit independent clause?  True does not
-  /// necessarily indicated the loop won't execute sequentially, depending on
-  /// specified partitioning levels.  If returns true, returns false after any
-  /// contradictory explicit clause is set.
+  /// necessarily indicate the loop won't execute sequentially, depending on
+  /// specified partitioning levels and any implicit gang clause possibly added
+  /// later.  If returns true, returns false after any contradictory explicit
+  /// clause is set.
   bool hasIndependentImplicit() const {
     return PartKind == PartIndependent && PartSource == PartImplicit;
   }
 
-  /// Does the loop have a gang clause?  True does not necessarily indicate
-  /// gang-partitioning, depending on the determination of any auto clause.
+  /// Does the loop have a gang clause, perhaps implicitly or explicitly?
+  /// True does not necessarily indicate gang-partitioning, depending on the
+  /// determination of any auto clause.
   bool hasGangClause() const { return Gang; }
   /// Does the loop have a worker clause?  True does not necessarily indicate
   /// worker-partitioning, depending on the determination of any auto clause.
@@ -534,21 +538,24 @@ class ACCLoopDirective : public ACCExecutableDirective {
   friend class ASTStmtReader;
   llvm::DenseSet<VarDecl *> LCVars;
   ACCPartitioningKind Partitioning;
+  bool NestedGangPartitioning = false;
 
   /// Build directive with the given start and end location.
   ///
   /// \param StartLoc Starting location of the directive (directive keyword).
   /// \param EndLoc Ending Location of the directive.
-  /// \param NumClauses Number of clauses.
+  /// \param NumClauses Starting number of clauses (implicit gang clause can be
+  ///        added later).
   ///
   ACCLoopDirective(SourceLocation StartLoc, SourceLocation EndLoc,
                    unsigned NumClauses)
-      : ACCExecutableDirective(this, ACCLoopDirectiveClass, ACCD_loop, StartLoc,
-                               EndLoc, NumClauses, 0, 1) {}
+      : ACCExecutableDirective(this, ACCLoopDirectiveClass, ACCD_loop,
+                               StartLoc, EndLoc, NumClauses, 1, 1) {}
 
   /// Build an empty directive.
   ///
-  /// \param NumClauses Number of clauses.
+  /// \param NumClauses Permanent number of clauses (implicit gang clause
+  ///        cannot be added later).
   ///
   explicit ACCLoopDirective(unsigned NumClauses)
       : ACCExecutableDirective(this, ACCLoopDirectiveClass, ACCD_loop,
@@ -566,11 +573,13 @@ public:
   /// \param LCVars Loop control variables that are assigned but not declared
   ///        in the inits of the for loops associated with the directive.
   /// \param Partitioning How this loop is partitioned.
+  /// \param NestedGangPartitioning Whether an acc loop directive with gang
+  ///        partitioning is nested here.
   static ACCLoopDirective *Create(
       const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
       ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
       const llvm::DenseSet<VarDecl *> &LCVars,
-      ACCPartitioningKind Partitioning);
+      ACCPartitioningKind Partitioning, bool NestedGangPartitioning);
 
   /// Creates an empty directive.
   ///
@@ -596,10 +605,29 @@ public:
     return LCVars;
   }
 
+  /// Record whether an acc loop directive with gang partitioning is nested
+  /// here.
+  void setNestedGangPartitioning(bool V) { NestedGangPartitioning = V; }
+  /// Return true if an acc loop directive with gang partitioning is nested
+  /// here.
+  bool getNestedGangPartitioning() const { return NestedGangPartitioning; }
+
   /// Set how the loop is partitioned.
   void setPartitioning(ACCPartitioningKind V) { Partitioning = V; }
   /// Get how the loop is partitioned.
   ACCPartitioningKind getPartitioning() const { return Partitioning; }
+
+  /// Add an implicit gang clause.
+  ///
+  /// Must not be called if there's already a gang clause or if this directive
+  /// was constructed using CreateEmpty.
+  ///
+  void addImplicitGangClause() {
+    assert(!hasClausesOfKind<ACCGangClause>() &&
+           "expected loop directive not to already have a gang clause");
+    addClause(new ACCGangClause());
+    Partitioning.setGang();
+  }
 };
 
 /// This represents '#pragma acc parallel loop' directive.

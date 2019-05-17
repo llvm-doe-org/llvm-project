@@ -3,7 +3,7 @@
 // When ADD_LOOP_TO_PAR is not set, this file checks gang-redundant mode for
 // "acc parallel" without "loop".
 //
-// When ADD_LOOP_TO_PAR is set, it adds "loop" and a for loop to those "acc
+// When ADD_LOOP_TO_PAR is set, it adds "loop seq" and a for loop to those "acc
 // parallel" directives in order to check gang-redundant mode for combined "acc
 // parallel loop" directives.
 //
@@ -101,7 +101,7 @@
 # define LOOP
 # define FORLOOP_HEAD
 #else
-# define LOOP loop
+# define LOOP loop seq
 # define FORLOOP_HEAD for (int i = 0; i < 2; ++i)
 #endif
 
@@ -113,6 +113,7 @@ int main(int argc, char *argv[]) {
 
   // DMP-PAR:          ACCParallelDirective
   // DMP-PARLOOP:      ACCParallelLoopDirective
+  // DMP-PARLOOP-NEXT:   ACCSeqClause
   // DMP-NEXT:           ACCNum_gangsClause
   // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 4
   // DMP-PARLOOP-NEXT:   effect: ACCParallelDirective
@@ -122,14 +123,14 @@ int main(int argc, char *argv[]) {
   // DMP-NEXT:               OMPNum_teamsClause
   // DMP-NEXT:                 IntegerLiteral {{.*}} 'int' 4
   // DMP-PARLOOP:          ACCLoopDirective
-  // DMP-PARLOOP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+  // DMP-PARLOOP-NEXT:       ACCSeqClause
   //
   // PRT-A-PAR-NEXT:      {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(4){{ ?$}}
-  // PRT-A-PARLOOP-NEXT:  {{^ *}}#pragma acc parallel {{LOOP|loop}} num_gangs(4){{ ?$}}
+  // PRT-A-PARLOOP-NEXT:  {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(4){{ ?$}}
   // PRT-AO-NEXT:         {{^ *}}// #pragma omp target teams num_teams(4){{$}}
   // PRT-O-NEXT:          {{^ *}}#pragma omp target teams num_teams(4){{$}}
   // PRT-OA-PAR-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(4){{ ?$}}
-  // PRT-OA-PARLOOP-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop}} num_gangs(4){{ ?$}}
+  // PRT-OA-PARLOOP-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(4){{ ?$}}
   #pragma acc parallel LOOP num_gangs(4) // literal num_gangs argument
   // DMP-PAR-NOT:      ForStmt
   // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -151,17 +152,18 @@ int main(int argc, char *argv[]) {
 
   // DMP-PAR:          ACCParallelDirective
   // DMP-PARLOOP:      ACCParallelLoopDirective
+  // DMP-PARLOOP-NEXT:   ACCSeqClause
   // DMP-PARLOOP-NEXT:   effect: ACCParallelDirective
   // DMP-NEXT:             impl: OMPTargetTeamsDirective
   // DMP-PARLOOP:          ACCLoopDirective
-  // DMP-PARLOOP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+  // DMP-PARLOOP-NEXT:       ACCSeqClause
   //
   // PRT-A-PAR-NEXT:      {{^ *}}#pragma acc parallel{{ LOOP$|$}}
-  // PRT-A-PARLOOP-NEXT:  {{^ *}}#pragma acc parallel {{(LOOP|loop)$}}
+  // PRT-A-PARLOOP-NEXT:  {{^ *}}#pragma acc parallel {{(LOOP|loop seq)$}}
   // PRT-AO-NEXT:         {{^ *}}// #pragma omp target teams{{$}}
   // PRT-O-NEXT:          {{^ *}}#pragma omp target teams{{$}}
   // PRT-OA-PAR-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP$|$}}
-  // PRT-OA-PARLOOP-NEXT: {{^ *}}// #pragma acc parallel {{(LOOP|loop)$}}
+  // PRT-OA-PARLOOP-NEXT: {{^ *}}// #pragma acc parallel {{(LOOP|loop seq)$}}
   #pragma acc parallel LOOP
   // DMP-PAR-NOT:      ForStmt
   // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -176,6 +178,7 @@ int main(int argc, char *argv[]) {
 
   // DMP-PAR:          ACCParallelDirective
   // DMP-PARLOOP:      ACCParallelLoopDirective
+  // DMP-PARLOOP-NEXT:   ACCSeqClause
   // DMP-NEXT:           ACCNum_gangsClause
   // DMP-NEXT:             CallExpr {{.*}} 'int'
   // DMP-PARLOOP:        effect: ACCParallelDirective
@@ -185,14 +188,14 @@ int main(int argc, char *argv[]) {
   // DMP-NEXT:               OMPNum_teamsClause
   // DMP-NEXT:                 ImplicitCastExpr
   // DMP-PARLOOP:           ACCLoopDirective
-  // DMP-PARLOOP-NEXT:        ACCIndependentClause {{.*}} <implicit>
+  // DMP-PARLOOP-NEXT:        ACCSeqClause
   //
   // PRT-A-PAR-NEXT:      {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(atoi(argv[1])){{ ?$}}
-  // PRT-A-PARLOOP-NEXT:  {{^ *}}#pragma acc parallel {{LOOP|loop}} num_gangs(atoi(argv[1])){{ ?$}}
+  // PRT-A-PARLOOP-NEXT:  {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(atoi(argv[1])){{ ?$}}
   // PRT-AO-NEXT:         {{^ *}}// #pragma omp target teams num_teams(atoi(argv[1])){{$}}
   // PRT-O-NEXT:          {{^ *}}#pragma omp target teams num_teams(atoi(argv[1])){{$}}
   // PRT-OA-PAR-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(atoi(argv[1])){{ ?$}}
-  // PRT-OA-PARLOOP-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop}} num_gangs(atoi(argv[1])){{ ?$}}
+  // PRT-OA-PARLOOP-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(atoi(argv[1])){{ ?$}}
   #pragma acc parallel LOOP num_gangs(atoi(argv[1])) // num_gangs expr with var
   // DMP-PAR-NOT:      ForStmt
   // DMP-PARLOOP-NEXT: impl: ForStmt

@@ -164,7 +164,7 @@ int main() {
       printf("%d, %d\n", i, j);
 
   //--------------------------------------------------
-  // Implicit independent, no partitioning.
+  // Implicit independent, implicit gang partitioning.
   //--------------------------------------------------
 
   // DMP: CallExpr
@@ -190,12 +190,17 @@ int main() {
   // DMP-NEXT:   ACCCollapseClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 2
   // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-  // DMP-NEXT:   impl: ForStmt
+  // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+  // DMP-NEXT:   impl: OMPDistributeDirective
+  // DMP-NEXT:     OMPCollapseClause
+  // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP:          ForStmt
   //
-  // PRT-A-NEXT:  {{^ *}}#pragma acc loop collapse(2)
-  // PRT-AO-SAME: {{^}} // discarded in OpenMP translation
-  // PRT-A-SAME:  {{^$}}
-  // PRT-OA-NEXT: {{^ *}}// #pragma acc loop collapse(2) // discarded in OpenMP translation{{$}}
+  // PRT-A-NEXT:  {{^ *}}#pragma acc loop collapse(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute collapse(2){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp distribute collapse(2){{$}}
+  // PRT-OA-NEXT: {{^ *}}// #pragma acc loop collapse(2){{$}}
   // PRT-NEXT:    for (int i ={{.*}})
   #pragma acc loop collapse(2)
   for (int i = 0; i < 2; ++i)
@@ -234,11 +239,18 @@ int main() {
   // DMP-NEXT:       ACCCollapseClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 2
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-  // DMP-NEXT:       impl: ForStmt
+  // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+  // DMP-NEXT:       impl: OMPDistributeDirective
+  // DMP-NEXT:         OMPCollapseClause
+  // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 2
+  // DMP:              ForStmt
   //
   // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(1) vector_length(4) collapse(2){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute collapse(2){{$}}
   // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp distribute collapse(2){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(1) vector_length(4) collapse(2){{$}}
   // PRT-NEXT:    for (int i ={{.*}})
   #pragma acc parallel loop num_gangs(1) vector_length(4) collapse(2)
@@ -255,7 +267,7 @@ int main() {
       printf("%d, %d\n", i, j);
 
   //--------------------------------------------------
-  // Explicit independent, no partitioning.
+  // Explicit independent, implicit gang partitioning.
   //--------------------------------------------------
 
   // DMP: CallExpr
@@ -282,12 +294,17 @@ int main() {
   // DMP-NOT:      <implicit>
   // DMP-NEXT:   ACCCollapseClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 2
-  // DMP-NEXT:   impl: ForStmt
+  // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+  // DMP-NEXT:   impl: OMPDistributeDirective
+  // DMP-NEXT:     OMPCollapseClause
+  // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP:          ForStmt
   //
-  // PRT-A-NEXT:  {{^ *}}#pragma acc loop independent collapse(2)
-  // PRT-AO-SAME: {{^}} // discarded in OpenMP translation
-  // PRT-A-SAME:  {{^$}}
-  // PRT-OA-NEXT: {{^ *}}// #pragma acc loop independent collapse(2) // discarded in OpenMP translation{{$}}
+  // PRT-A-NEXT:  {{^ *}}#pragma acc loop independent collapse(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute collapse(2){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp distribute collapse(2){{$}}
+  // PRT-OA-NEXT: {{^ *}}// #pragma acc loop independent collapse(2){{$}}
   // PRT-NEXT:    for (int i ={{.*}})
   #pragma acc loop independent collapse(2)
   for (int i = 0; i < 2; ++i)
@@ -329,11 +346,18 @@ int main() {
   // DMP-NOT:          <implicit>
   // DMP-NEXT:       ACCCollapseClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 2
-  // DMP-NEXT:       impl: ForStmt
+  // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+  // DMP-NEXT:       impl: OMPDistributeDirective
+  // DMP-NEXT:         OMPCollapseClause
+  // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 2
+  // DMP:              ForStmt
   //
   // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(1) vector_length(4) independent collapse(2){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute collapse(2){{$}}
   // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp distribute collapse(2){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(1) vector_length(4) independent collapse(2){{$}}
   // PRT-NEXT:    for (int i ={{.*}})
   #pragma acc parallel loop num_gangs(1) vector_length(4) independent collapse(2)
@@ -558,7 +582,7 @@ int main() {
       printf("%d, %d\n", i, j);
 
   //--------------------------------------------------
-  // Gang partitioned.
+  // Explicit gang partitioned.
   //--------------------------------------------------
 
   // DMP: CallExpr
@@ -580,6 +604,7 @@ int main() {
   #pragma acc parallel num_gangs(4)
   // DMP:      ACCLoopDirective
   // DMP-NEXT:   ACCGangClause
+  // DMP-NOT:    <implicit>
   // DMP-NEXT:   ACCCollapseClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 2
   // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
@@ -616,6 +641,7 @@ int main() {
   // DMP-NEXT:   ACCNum_gangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 8
   // DMP-NEXT:   ACCGangClause
+  // DMP-NOT:    <implicit>
   // DMP-NEXT:   ACCCollapseClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 3
   // DMP-NEXT:   effect: ACCParallelDirective
@@ -626,6 +652,7 @@ int main() {
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 8
   // DMP:          ACCLoopDirective
   // DMP-NEXT:       ACCGangClause
+  // DMP-NOT:        <implicit>
   // DMP-NEXT:       ACCCollapseClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 3
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
@@ -687,6 +714,7 @@ int main() {
   #pragma acc parallel num_gangs(16)
   // DMP:      ACCLoopDirective
   // DMP-NEXT:   ACCGangClause
+  // DMP-NOT:    <implicit>
   // DMP-NEXT:   ACCCollapseClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 1
   // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
@@ -733,22 +761,22 @@ int main() {
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(8){{$}}
   #pragma acc parallel num_gangs(8)
   // DMP:      ACCLoopDirective
-  // DMP-NEXT:   ACCGangClause
   // DMP-NEXT:   ACCCollapseClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 2
   // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+  // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
   // DMP-NEXT:   impl: OMPDistributeDirective
   // DMP-NEXT:     OMPCollapseClause
   // DMP-NEXT:       ConstantExpr {{.*}} 'int'
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
   // DMP:          ForStmt
   //
-  // PRT-A-NEXT:  {{^ *}}#pragma acc loop gang collapse(2){{$}}
+  // PRT-A-NEXT:  {{^ *}}#pragma acc loop collapse(2){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute collapse(2){{$}}
   // PRT-O-NEXT:  {{^ *}}#pragma omp distribute collapse(2){{$}}
-  // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang collapse(2){{$}}
+  // PRT-OA-NEXT: {{^ *}}// #pragma acc loop collapse(2){{$}}
   // PRT-NEXT:    for (int i ={{.*}})
-  #pragma acc loop gang collapse(2)
+  #pragma acc loop collapse(2)
   for (int i = 0; i < 2; ++i)
     // DMP: ForStmt
     // PRT-NEXT: for (int j ={{.*}})
@@ -772,6 +800,7 @@ int main() {
   // DMP-NEXT:   ACCNum_gangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 16
   // DMP-NEXT:   ACCGangClause
+  // DMP-NOT:    <implicit>
   // DMP-NEXT:   ACCCollapseClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 2
   // DMP-NEXT:   effect: ACCParallelDirective
@@ -782,6 +811,7 @@ int main() {
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 16
   // DMP:          ACCLoopDirective
   // DMP-NEXT:       ACCGangClause
+  // DMP-NOT:        <implicit>
   // DMP-NEXT:       ACCCollapseClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 2
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
@@ -845,6 +875,7 @@ int main() {
   #pragma acc parallel num_gangs(4) num_workers(4)
   // DMP:      ACCLoopDirective
   // DMP-NEXT:   ACCGangClause
+  // DMP-NOT:    <implicit>
   // DMP-NEXT:   ACCCollapseClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 2
   // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
@@ -925,7 +956,6 @@ int main() {
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 4
   // DMP-NEXT:   ACCVector_lengthClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 4
-  // DMP-NEXT:   ACCGangClause
   // DMP-NEXT:   ACCCollapseClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 2
   // DMP-NEXT:   effect: ACCParallelDirective
@@ -939,26 +969,26 @@ int main() {
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   // DMP:          ACCLoopDirective
-  // DMP-NEXT:       ACCGangClause
   // DMP-NEXT:       ACCCollapseClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 2
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+  // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
   // DMP-NEXT:       impl: OMPDistributeDirective
   // DMP-NEXT:         OMPCollapseClause
   // DMP-NEXT:           ConstantExpr {{.*}} 'int'
   // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 2
   // DMP:              ForStmt
   //
-  // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(4) num_workers(4) vector_length(4) gang collapse(2){{$}}
+  // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(4) num_workers(4) vector_length(4) collapse(2){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute collapse(2){{$}}
   //
   // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4){{$}}
   // PRT-O-NEXT:  {{^ *}}#pragma omp distribute collapse(2){{$}}
-  // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(4) num_workers(4) vector_length(4) gang collapse(2){{$}}
+  // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(4) num_workers(4) vector_length(4) collapse(2){{$}}
   //
   // PRT-NEXT:    for (int i ={{.*}})
-  #pragma acc parallel loop num_gangs(4) num_workers(4) vector_length(4) gang collapse(2)
+  #pragma acc parallel loop num_gangs(4) num_workers(4) vector_length(4) collapse(2)
   for (int i = 0; i < 2; ++i)
     // DMP: ForStmt
     // PRT-NEXT: for (int j ={{.*}})
@@ -1140,6 +1170,7 @@ int main() {
     #pragma acc parallel num_gangs(8)
     // DMP:      ACCLoopDirective
     // DMP-NEXT:   ACCGangClause
+    // DMP-NOT:    <implicit>
     // DMP-NEXT:   ACCCollapseClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 2
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>

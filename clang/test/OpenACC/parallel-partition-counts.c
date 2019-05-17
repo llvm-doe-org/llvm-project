@@ -111,14 +111,14 @@ int main(int argc, char *argv[]) {
     // PRT-NEXT: {
     {
       // DMP:      ACCLoopDirective
-      // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:   ACCSeqClause
       // DMP-NEXT:   impl: ForStmt
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc loop
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop seq
       // PRT-AO-SAME: {{^}} // discarded in OpenMP translation
       // PRT-A-SAME:  {{^$}}
-      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop // discarded in OpenMP translation{{$}}
-      #pragma acc loop
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop seq // discarded in OpenMP translation{{$}}
+      #pragma acc loop seq
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 8; ++i) {
         // sequential, so order is deterministic
@@ -173,6 +173,7 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCVector_lengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCSeqClause
     // DMP-NEXT:   effect: ACCParallelDirective
     // DMP-NEXT:     ACCNum_gangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
@@ -184,13 +185,13 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:       OMPNum_teamsClause
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
     // DMP:          ACCLoopDirective
-    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       ACCSeqClause
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(1) num_workers(2) vector_length(2){{$}}
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(1) num_workers(2) vector_length(2) seq{{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(1) num_workers(2) vector_length(2){{$}}
-    #pragma acc parallel loop num_gangs(1) num_workers(2) vector_length(2)
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(1) num_workers(2) vector_length(2) seq{{$}}
+    #pragma acc parallel loop num_gangs(1) num_workers(2) vector_length(2) seq
     // DMP-NEXT: impl: ForStmt
     // PRT-NEXT: for ({{.*}}) {
     for (int i = 0; i < 2; ++i) {
@@ -1006,14 +1007,14 @@ int main(int argc, char *argv[]) {
     // PRT-NEXT: {
     {
       // DMP:      ACCLoopDirective
-      // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:   ACCSeqClause
       // DMP-NEXT:   impl: ForStmt
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc loop
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop seq
       // PRT-AO-SAME: {{^}} // discarded in OpenMP translation
       // PRT-A-SAME:  {{^$}}
-      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop // discarded in OpenMP translation{{$}}
-      #pragma acc loop
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop seq // discarded in OpenMP translation{{$}}
+      #pragma acc loop seq
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 8; ++i) {
         // sequential, so order is deterministic
@@ -1129,6 +1130,7 @@ int main(int argc, char *argv[]) {
     // DMP:          DeclRefExpr {{.*}} 'nw' 'int'
     // DMP-NEXT:   ACCVector_lengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCSeqClause
     // DMP-NEXT:   effect: ACCParallelDirective
     // DMP-NEXT:     ACCNum_gangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
@@ -1140,13 +1142,13 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:       OMPNum_teamsClause
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
     // DMP:          ACCLoopDirective
-    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       ACCSeqClause
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(1) num_workers(nw) vector_length(1){{$}}
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(1) num_workers(nw) vector_length(1) seq{{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(1) num_workers(nw) vector_length(1){{$}}
-    #pragma acc parallel loop num_gangs(1) num_workers(nw) vector_length(1)
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(1) num_workers(nw) vector_length(1) seq{{$}}
+    #pragma acc parallel loop num_gangs(1) num_workers(nw) vector_length(1) seq
     // DMP-NEXT: impl: ForStmt
     // PRT-NEXT: for ({{.*}}) {
     for (int i = 0; i < 8; ++i) {
@@ -1697,7 +1699,7 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:           OMPSharedClause {{.*}} <implicit>
     // DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
     // DMP:              ACCLoopDirective
-    // DMP-NEXT:           ACCSeqClause
+    // DMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:           ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
@@ -1717,7 +1719,7 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:                 DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:                 DeclRefExpr {{.*}} 'k' 'int'
     // DMP:                  ACCLoopDirective
-    // DMP-NEXT:               ACCSeqClause
+    // DMP-NEXT:               ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:               ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:                 DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:                 DeclRefExpr {{.*}} 'j' 'int'
@@ -1767,11 +1769,11 @@ int main(int argc, char *argv[]) {
     // PRT-A-NEXT:       for (int i = 0; i < 2; ++i) {
     // PRT-A-NEXT:         {{^ *}}#pragma acc loop gang{{$}}
     // PRT-A-NEXT:         for (int j = 0; j < 1; ++j) {
-    // PRT-A-NEXT:           {{^ *}}#pragma acc loop seq{{$}}
+    // PRT-A-NEXT:           {{^ *}}#pragma acc loop{{$}}
     // PRT-A-NEXT:           for (int k = 0; k < 2; ++k) {
     // PRT-A-NEXT:             {{^ *}}#pragma acc loop worker{{$}}
     // PRT-A-NEXT:             for (int l = 0; l < 2; ++l) {
-    // PRT-A-NEXT:               {{^ *}}#pragma acc loop seq{{$}}
+    // PRT-A-NEXT:               {{^ *}}#pragma acc loop{{$}}
     // PRT-A-NEXT:               for (int m = 0; m < 2; ++m) {
     // PRT-A-NEXT:                 {{^ *}}#pragma acc loop vector{{$}}
     // PRT-A-NEXT:                 for (int n = 0; n < 1; ++n)
@@ -1834,11 +1836,11 @@ int main(int argc, char *argv[]) {
     // PRT-OA-NEXT:    //   for (int i = 0; i < 2; ++i) {
     // PRT-OA-NEXT:    //     #pragma acc loop gang{{$}}
     // PRT-OA-NEXT:    //     for (int j = 0; j < 1; ++j) {
-    // PRT-OA-NEXT:    //       #pragma acc loop seq{{$}}
+    // PRT-OA-NEXT:    //       #pragma acc loop{{$}}
     // PRT-OA-NEXT:    //       for (int k = 0; k < 2; ++k) {
     // PRT-OA-NEXT:    //         #pragma acc loop worker{{$}}
     // PRT-OA-NEXT:    //         for (int l = 0; l < 2; ++l) {
-    // PRT-OA-NEXT:    //           #pragma acc loop seq{{$}}
+    // PRT-OA-NEXT:    //           #pragma acc loop{{$}}
     // PRT-OA-NEXT:    //           for (int m = 0; m < 2; ++m) {
     // PRT-OA-NEXT:    //             #pragma acc loop vector{{$}}
     // PRT-OA-NEXT:    //             for (int n = 0; n < 1; ++n)
@@ -1858,11 +1860,11 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 2; ++i) {
         #pragma acc loop gang
         for (int j = 0; j < 1; ++j) {
-          #pragma acc loop seq
+          #pragma acc loop
           for (int k = 0; k < 2; ++k) {
             #pragma acc loop worker
             for (int l = 0; l < 2; ++l) {
-              #pragma acc loop seq
+              #pragma acc loop
               for (int m = 0; m < 2; ++m) {
                 #pragma acc loop vector
                 for (int n = 0; n < 1; ++n)
@@ -1993,6 +1995,7 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:       impl: OMPParallelForSimdDirective
     // DMP-NEXT:         OMPNum_threadsClause
     // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
+    // DMP-NOT:          OMP
     // DMP:              ForStmt
     // DMP:                CallExpr
     //

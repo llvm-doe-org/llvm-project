@@ -42,7 +42,7 @@
 # define CMB_FORLOOP_HEAD
 #else
 # define CMB_PAR parallel
-# define CMB_LOOP loop
+# define CMB_LOOP loop seq
 # define CMB_FORLOOP_HEAD for (int fli = 0; fli < 2; ++fli)
 #endif
 
@@ -1758,7 +1758,7 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+1 {{expected ',' or ')' in 'reduction' clause}}
-    #pragma acc CMB_PAR loop reduction(*:jk i)
+    #pragma acc CMB_PAR loop seq reduction(*:jk i)
     for (int i = 0; i < 5; ++i)
       ;
 
@@ -2193,6 +2193,26 @@ void fn() {
     for (int i = 0; i < 5; ++i) {
       // expected-error@+1 {{conflicting '+' reduction for variable 'd'}}
       #pragma acc loop gang reduction(+:d)
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+  }
+  // sep-note@+2 {{while applying gang reduction to '#pragma acc parallel' here}}
+  // cmb-note@+1 {{while applying gang reduction to '#pragma acc parallel loop' here}}
+  #pragma acc parallel CMB_LOOP
+  CMB_FORLOOP_HEAD
+  {
+    #pragma acc loop seq
+    for (int i = 0; i < 5; ++i) {
+      // expected-note@+1 {{previous '&&' reduction here}}
+      #pragma acc loop reduction(&&:jk)
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+    #pragma acc loop seq
+    for (int i = 0; i < 5; ++i) {
+      // expected-error@+1 {{conflicting 'max' reduction for variable 'jk'}}
+      #pragma acc loop reduction(max:jk)
       for (int j = 0; j < 5; ++j)
         ;
     }

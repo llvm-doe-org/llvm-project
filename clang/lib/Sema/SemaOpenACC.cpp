@@ -110,6 +110,13 @@ private:
     unsigned AssociatedLoops = 1; // from collapse clause
     unsigned AssociatedLoopsParsed = 0; // how many have been parsed so far
     // True if this directive has a (separate or combined with this directive)
+    // nested acc loop directive with explicit gang partitioning.
+    //
+    // Implicit gang clauses are later added by ImplicitGangAdder after the
+    // entire parallel construct is parsed and thus after this stack is popped
+    // for all nested loop directives, so we don't bother to update this then.
+    bool NestedExplicitGangPartitioning = false;
+    // True if this directive has a (separate or combined with this directive)
     // nested acc loop directive with worker partitioning.
     bool NestedWorkerPartitioning = false;
     SharingMapTy(OpenACCDirectiveKind RealDKind,
@@ -178,17 +185,19 @@ public:
     /// Mark all ancestor directives (including the effective parent
     /// directive if this is the effective child directive in a combined
     /// directive) as containing explicit gang or worker partitioning.
-    if (Kind.hasWorkerPartitioning()) {
+    if (Kind.hasGangPartitioning() || Kind.hasWorkerPartitioning()) {
       assert(isOpenACCLoopDirective(getEffectiveDirective()) &&
-             "expected worker partitioning to be on a loop directive");
+             "expected gang/worker partitioning to be on a loop directive");
       assert(getEffectiveParentDirective() != ACCD_unknown &&
              "unexpected orphaned acc loop directive");
       for (auto I = std::next(Stack.rbegin()), E = std::prev(Stack.rend());
            I != E; ++I) {
         assert((isOpenACCLoopDirective(I->EffectiveDKind) ||
                 isOpenACCParallelDirective(I->EffectiveDKind)) &&
-               "expected worker partitioning to be nested in acc loop or"
+               "expected gang/worker partitioning to be nested in acc loop or"
                " parallel directive");
+        if (Kind.hasGangPartitioning())
+          I->NestedExplicitGangPartitioning = true;
         if (Kind.hasWorkerPartitioning())
           I->NestedWorkerPartitioning = true;
       }
@@ -198,7 +207,8 @@ public:
   ///
   /// Must be called only after the point where \c setLoopPartitioning would be
   /// called, which is after explicit clauses for the current directive have
-  /// been parsed.
+  /// been parsed.  This also does not include implicit gang clauses, which are
+  /// not computed until the enclosing compute construct is fully parsed.
   ACCPartitioningKind getLoopPartitioning() const {
     assert(!isStackEmpty() && "Data-sharing attributes stack is empty");
     return Stack.back().LoopDirectiveKind;
@@ -225,6 +235,17 @@ public:
       }
     }
     return ACCPartitioningKind();
+  }
+  /// Does this directive have a nested acc loop directive (either a separate
+  /// directive or an effective child directive in a combined directive) with
+  /// explicit gang partitioning?
+  ///
+  /// Implicit gang clauses are later added by ImplicitGangAdder after the
+  /// entire parallel construct is parsed and thus after this stack is popped
+  /// for all nested loop directives, so we don't bother to update this then.
+  bool getNestedExplicitGangPartitioning() const {
+    assert(!isStackEmpty());
+    return Stack.back().NestedExplicitGangPartitioning;
   }
   /// Does this directive have a nested acc loop directive (either a separate
   /// directive or an effective child directive in a combined directive) with
@@ -728,6 +749,46 @@ public:
 
   DSAAttrChecker(DSAStackTy *S) : Stack(S) {}
 };
+
+class ImplicitGangAdder : public StmtVisitor<ImplicitGangAdder> {
+public:
+  void VisitACCExecutableDirective(ACCExecutableDirective *D) {
+    if (isOpenACCLoopDirective(D->getDirectiveKind())) {
+      auto *LD = cast<ACCLoopDirective>(D);
+      ACCPartitioningKind Part = LD->getPartitioning();
+      // If there's nested gang partitioning or if the loop has not been
+      // determined to be independent, continue on to descendants, some of
+      // which that might not be true for.
+      if (!LD->getNestedGangPartitioning() && Part.hasIndependent()) {
+        // If there's already a gang, worker, or vector clause, don't mess
+        // with the directive's partitioning specification.  Don't continue to
+        // descendants because this means they can't accept a gang clause
+        // either.
+        if (Part.hasGangClause() || Part.hasWorkerClause() ||
+            Part.hasVectorClause())
+          return;
+        // The first three conditions checked above plus the fact that we
+        // haven't encountered a gang clause on enclosing loops mean this is a
+        // gang clause candidate.  The last two conditions above plus the fact
+        // that this is the outermost gang clause candidate we've encountered
+        // means this is where we add the implicit gang clause.  Don't continue
+        // to descendants as they then cannot have a gang clause.
+        LD->addImplicitGangClause();
+        return;
+      }
+    }
+    for (auto *C : D->children()) {
+      if (C)
+        Visit(C);
+    }
+  }
+  void VisitStmt(Stmt *S) {
+    for (Stmt *C : S->children()) {
+      if (C)
+        Visit(C);
+    }
+  }
+};
 } // namespace
 
 bool Sema::ActOnOpenACCRegionStart(
@@ -894,6 +955,11 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     // case?
   }
   if (AStmt) {
+    // Add implicit gang clauses.  This must come before adding implicit
+    // data sharing attributes or implicit reductions due to implicit gang
+    // clauses will be missed.
+    if (isOpenACCParallelDirective(DKind))
+      ImplicitGangAdder().Visit(AStmt);
     // Check default data sharing attributes for referenced variables.
     DSAAttrChecker DSAChecker(DSAStack);
     DSAChecker.Visit(AStmt);
@@ -938,7 +1004,8 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
   case ACCD_loop:
     Res = ActOnOpenACCLoopDirective(
         ClausesWithImplicit, AStmt, StartLoc, EndLoc,
-        DSAStack->getLoopControlVariables(), DSAStack->getLoopPartitioning());
+        DSAStack->getLoopControlVariables(), DSAStack->getLoopPartitioning(),
+        DSAStack->getNestedExplicitGangPartitioning());
     break;
   case ACCD_parallel_loop:
   case ACCD_unknown:
@@ -993,7 +1060,7 @@ void Sema::ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
 StmtResult Sema::ActOnOpenACCLoopDirective(
     ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
     SourceLocation EndLoc, const llvm::DenseSet<VarDecl *> &LCVars,
-    ACCPartitioningKind Partitioning) {
+    ACCPartitioningKind Partitioning, bool NestedExplicitGangPartitioning) {
   if (!AStmt)
     return StmtError();
 
@@ -1046,7 +1113,8 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
   // OpenACC-level tools.
 
   return ACCLoopDirective::Create(Context, StartLoc, EndLoc, Clauses, AStmt,
-                                  LCVars, Partitioning);
+                                  LCVars, Partitioning,
+                                  NestedExplicitGangPartitioning);
 }
 
 StmtResult Sema::ActOnOpenACCParallelLoopDirective(

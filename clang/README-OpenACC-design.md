@@ -511,7 +511,7 @@ this section.
   for a single variable *v*.
     * OpenACC 2.7 sec. 2.9.11 L1580-1581 specifies this restriction
       for *exp* `reduction` on nested constructs, but it doesn't
-      discuss the case where sibling `loop` constructs specify
+      discuss the case where sibling `acc loop` constructs specify
       conflicting gang reductions.
 * Variable type restrictions for `reduction` are specified in
   `README-OpenACC-status.md` as that is a highly user-visible issue.
@@ -595,6 +595,78 @@ this section.
     * For OpenACC, gcc 7.2.0 also enforces this constraint, but pgcc
       18.4-0 does not enforce it.
 
+### Implicit Gang Clauses ###
+
+The OpenACC technical committee has discussed [clarifying the behavior
+of *naked* loop
+directives](https://github.com/OpenACC/openacc-spec/issues/125).  In
+these discussions, a naked loop directive is an `acc loop` directive
+with *not* `seq`, *not* `gang`, *not* `worker`, and *not* `vector`.
+The problem is that the OpenACC spec implies that such a loop should
+run in gang-redundant mode, but existing OpenACC compilers (GCC and
+PGI) usually gang-partition it.  The difference between these modes is
+often important to semantic correctness besides just performance, and
+understandably some existing OpenACC programs were written to expect
+the semantics that existing compilers provide.  This issue has not yet
+been resolved as of OpenACC 2.7.
+
+Clacc attempts to mimic the behavior of existing OpenACC compilers by
+adding *imp* `gang` to `acc loop` directives, but many questions
+remain about exactly how *imp* `gang` placement should be computed.
+Currently, it works as follows in Clacc:
+
+* Any conversion of `acc loop` constructs with *exp* `auto` to
+  sequential loops is performed before computing *imp* `gang`
+  placement.  Notes:
+    * Currently, Clacc converts all `acc loop` constructs with *exp*
+      `auto` to sequential loops.  Obviously, as Clacc grows a
+      descriptive interpretation of `auto`, some such constructs will
+      be handled as if they have *imp* `independent` instead.
+    * Performing `auto` conversions first so that *imp* `gang`
+      placement depends on them places more optimization power in the
+      hands of the compiler.  For example, in an `acc loop auto` nest,
+      the compiler could choose any loop level for gang partitioning.
+      However, the difference between gang-partitioned mode and
+      gang-redundant mode can have an important impact on the
+      semantics of a program.  The OpenACC programmer specified `auto`
+      presumably because he cannot predict the outcome of `auto`
+      conversions, and thus now he cannot predict at which of the many
+      loop levels these semantics will shift.
+    * Performing *imp* `gang` placement first so it does not depend on
+      the outcome of `auto` conversions can reduce the possible
+      semantics of an OpenACC program.  In the `acc loop auto` nest
+      example, the loop nest would be either entirely gang-redundant
+      or entirely gang-partitioned.
+    * TODO: In our experiments so far, we have not been able to
+      determine what approach pgcc 19.4-0 follows generally, and it's
+      not clear what's really better here.  As the OpenACC technical
+      committee standardizes an approach, we will adjust Clacc.
+* Within that context, an `acc loop` construct has *imp* `gang` if all
+  of the following are true:
+    * *not* `gang`, *not* `worker`, and *not* `vector`.  Notes:
+        * The goal here is to give the OpenACC programmer some means
+          to specify partitioning exactly as he sees fit.
+        * Interestingly, without this constraint, it would be
+          impossible to specify gang-redundant mode combined with
+          worker-partitioned or vector-partitioned mode.
+    * *exp* `gang` would be permitted.  Notes:
+        * Based on OpenACC 2.7, *exp* `gang` would not be permitted on
+          any `acc loop` construct that has (a) an ancestor `acc loop`
+          construct with *exp* `gang`, *exp* `worker`, or *exp*
+          `vector`, (b) *exp* `seq`, or (c) a nested `acc loop`
+          construct with *exp* `gang`.
+        * These restrictions are relaxed a bit for *imp* `gang`
+          because `auto` conversions are performed first.  For
+          example, an `acc loop auto gang` that becomes a sequential
+          loop prevents a nested `acc loop` from having an *exp*
+          `gang` clause but not from having an *imp* `gang` clause.
+          TODO: This behavior seems inconsistent.  Should we change
+          it?  In general, the semantics of `auto` plus `gang` are
+          still being clarified by the OpenACC technical committee.
+    * There is no ancestor `acc loop` construct that is permitted to
+      have *exp* `gang`.  Notes:
+        * The point here is to chose the outermost construct possible.
+
 Parallel Directives
 -------------------
 
@@ -643,7 +715,7 @@ following are true:
 
 * *exp* `seq`
 * *exp* `auto`
-* *not* `gang`, *not* `worker`, and *not* `vector`
+* *not* `gang`, *not* `worker`, *not* `vector`, and not *imp* `gang`
 * Notes:
     * The latter two cases normally depend on the OpenACC compiler to
       determine the best way to parallelize the loop.  Again, Clacc
@@ -657,17 +729,15 @@ following are true:
       data-independent (that is, *imp*|*exp* `independent`).  This is
       a case where a simple AST-level analysis could go a long way for
       existing OpenACC applications that expect a descriptive
-      interpretation: Clacc could add whichever of `gang`, `worker`,
-      or `vector` doesn't interfere with any explicit occurrences of
-      these clauses on other enclosing or nested loops.
-    * TODO: The OpenACC technical committee has had some [discussion
-      on "naked
-      loops"](https://github.com/OpenACC/openacc-spec/issues/125) and
-      how the compiler cannot simply make an arbitrary choice between
-      gang parallelism or gang redundancy without affecting semantics.
-      While Clacc appears to be consistent with the spec in this case,
-      Clacc might need to move to gang-parallelism in order to be
-      consistent with other OpenACC compilers.
+      interpretation: Clacc could add whichever of `worker` or
+      `vector` doesn't conflict with other clauses on ancestor or
+      nested loops.
+    * Actually, the placement of *imp* `gang` is already a step in
+      this direction.  Unlike an *imp* `worker` or *imp* `vector`,
+      it's necessitated due to the shift in semantics between
+      gang-redundant and gang-partitioned mode, and it will likely be
+      specified more exactly by the OpenACC standard in the future.
+      See "Implicit Gang Clauses" above for details.
 
 Clacc's current mapping of a sequential `acc loop` directive and its
 clauses to OpenMP is as follows:
@@ -746,7 +816,7 @@ In that case, Clacc's current mapping of the `acc loop` directive and
 its clauses to OpenMP is as follows:
 
 * `acc loop` -> `omp`
-* *exp* `gang` -> `distribute`
+* *imp*|*exp* `gang` -> `distribute`
 * *exp* `worker` -> `parallel for`
 * If neither this nor any ancestor `acc loop` is gang-partitioned or
   worker-partitioned, then -> `parallel for` and -> *exp*

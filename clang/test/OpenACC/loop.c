@@ -10,7 +10,8 @@
 //   AIND    = OpenACC explicit independent clause
 //   ASEQ    = OpenACC seq clause
 //   AAUTO   = OpenACC auto clause
-//   AG      = OpenACC gang clause
+//   AG      = OpenACC explicit gang clause
+//   AGIMP   = OpenACC implicit gang clause
 //   AW      = OpenACC worker clause
 //   AV      = OpenACC vector clause
 //   ASLC    = OpenACC shared clause for assigned loop control variable
@@ -44,12 +45,12 @@
 //        implicit independent, seq, independent, auto
 // RUN:   (accc=
 // RUN:    accc_sp=
-// RUN:    ompdd=
-// RUN:    ompdp=
-// RUN:    ompdk=OSEQPLC
+// RUN:    ompdd=OMPDistributeDirective
+// RUN:    ompdp=distribute
+// RUN:    ompdk=OPRG
 // RUN:    ompsk=OSIMP
-// RUN:    dmp=DMP-AIMP,DMP-APLC
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-PLC)
+// RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AGIMP
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
 // RUN:   (accc=seq
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -60,12 +61,12 @@
 // RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-SLC)
 // RUN:   (accc=independent
 // RUN:    accc_sp=' '
-// RUN:    ompdd=
-// RUN:    ompdp=
-// RUN:    ompdk=OSEQPLC
+// RUN:    ompdd=OMPDistributeDirective
+// RUN:    ompdp=distribute
+// RUN:    ompdk=OPRG
 // RUN:    ompsk=OSIMP
-// RUN:    dmp=DMP-AIND,DMP-APLC
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-PLC)
+// RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AGIMP
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
 // RUN:   (accc=auto
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -416,6 +417,7 @@ int main() {
       // DMP-AIND-NOT:           <implicit>
       // DMP-AAUTO-NOT:          <implicit>
       // DMP-AG-NEXT:            ACCGangClause
+      // DMP-AG-NOT:             <implicit>
       // DMP-AW-NEXT:            ACCWorkerClause
       // DMP-AV-NEXT:            ACCVectorClause
       // DMP-AIMP-NEXT:          ACCIndependentClause {{.*}} <implicit>
@@ -424,6 +426,7 @@ int main() {
       // DMP-NEXT:                 DeclRefExpr {{.*}} 'loopOnly' 'int'
       // DMP-NEXT:                 DeclRefExpr {{.*}} 'save'
       // DMP-NEXT:                 DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+      // DMP-AGIMP-NEXT:         ACCGangClause {{.*}} <implicit>
       // DMP-OPRG-NEXT:          impl: [[OMPDD]]
       // DMP-OPRG-NEXT:            OMPSharedClause
       // DMP-OPRG-OSIMP-SAME:        <implicit>
@@ -590,6 +593,7 @@ int main() {
     // DMP-AIND-NOT:        <implicit>
     // DMP-AAUTO-NOT:       <implicit>
     // DMP-AG-NEXT:         ACCGangClause
+    // DMP-AG-NOT:          <implicit>
     // DMP-AW-NEXT:         ACCWorkerClause
     // DMP-AV-NEXT:         ACCVectorClause
     // DMP-NEXT:            effect: ACCParallelDirective
@@ -620,6 +624,7 @@ int main() {
     // DMP-AIND-NOT:            <implicit>
     // DMP-AAUTO-NOT:           <implicit>
     // DMP-AG-NEXT:             ACCGangClause
+    // DMP-AG-NOT:              <implicit>
     // DMP-AW-NEXT:             ACCWorkerClause
     // DMP-AV-NEXT:             ACCVectorClause
     // DMP-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
@@ -628,6 +633,7 @@ int main() {
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'loopOnly' 'int'
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'save'
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-AGIMP-NEXT:          ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:           impl: [[OMPDD]]
     // DMP-OPRG-NEXT:             OMPSharedClause
     // DMP-OPRG-OSIMP-SAME:         <implicit>
@@ -816,6 +822,7 @@ int main() {
       // DMP-AIND-NOT:          <implicit>
       // DMP-AAUTO-NOT:         <implicit>
       // DMP-AG-NEXT:           ACCGangClause
+      // DMP-AG-NOT:            <implicit>
       // DMP-AW-NEXT:           ACCWorkerClause
       // DMP-AV-NEXT:           ACCVectorClause
       // DMP-AIMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
@@ -824,6 +831,7 @@ int main() {
       // DMP-NEXT:                DeclRefExpr {{.*}} 'k' 'int'
       // DMP-APLC-NEXT:         ACCPrivateClause {{.*}} <implicit>
       // DMP-APLC-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
+      // DMP-AGIMP-NEXT:        ACCGangClause {{.*}} <implicit>
       // DMP-OPRG-NEXT:         impl: [[OMPDD]]
       // DMP-OPRG-NEXT:           OMPSharedClause
       // DMP-OPRG-OSIMP-SAME:       <implicit>
@@ -969,12 +977,14 @@ int main() {
       // DMP-AIND-NOT:           <implicit>
       // DMP-AAUTO-NOT:          <implicit>
       // DMP-AG-NEXT:            ACCGangClause
+      // DMP-AG-NOT:             <implicit>
       // DMP-AW-NEXT:            ACCWorkerClause
       // DMP-AV-NEXT:            ACCVectorClause
       // DMP-AIMP-NEXT:          ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:               ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:                 DeclRefExpr {{.*}} 'j' 'int'
       // DMP-NEXT:                 DeclRefExpr {{.*}} 'save'
+      // DMP-AGIMP-NEXT:         ACCGangClause {{.*}} <implicit>
       // DMP-OPRG-NEXT:          impl: [[OMPDD]]
       // DMP-OPRG-NEXT:            OMPSharedClause
       // DMP-OPRG-OSIMP-SAME:        <implicit>
@@ -1102,6 +1112,7 @@ int main() {
     // DMP-AIND-NOT:        <implicit>
     // DMP-AAUTO-NOT:       <implicit>
     // DMP-AG-NEXT:         ACCGangClause
+    // DMP-AG-NOT:          <implicit>
     // DMP-AW-NEXT:         ACCWorkerClause
     // DMP-AV-NEXT:         ACCVectorClause
     // DMP-NEXT:            ACCNum_gangsClause
@@ -1127,6 +1138,7 @@ int main() {
     // DMP-AIND-NOT:            <implicit>
     // DMP-AAUTO-NOT:           <implicit>
     // DMP-AG-NEXT:             ACCGangClause
+    // DMP-AG-NOT:              <implicit>
     // DMP-AW-NEXT:             ACCWorkerClause
     // DMP-AV-NEXT:             ACCVectorClause
     // DMP-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
@@ -1135,6 +1147,7 @@ int main() {
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'k' 'int'
     // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <implicit>
     // DMP-APLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-AGIMP-NEXT:          ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:           impl: [[OMPDD]]
     // DMP-OPRG-NEXT:             OMPSharedClause
     // DMP-OPRG-OSIMP-SAME:         <implicit>
@@ -1269,6 +1282,7 @@ int main() {
     // DMP-AIND-NOT:        <implicit>
     // DMP-AAUTO-NOT:       <implicit>
     // DMP-AG-NEXT:         ACCGangClause
+    // DMP-AG-NOT:          <implicit>
     // DMP-AW-NEXT:         ACCWorkerClause
     // DMP-AV-NEXT:         ACCVectorClause
     // DMP-NEXT:            ACCNum_gangsClause
@@ -1301,6 +1315,7 @@ int main() {
     // DMP-AIND-NOT:            <implicit>
     // DMP-AAUTO-NOT:           <implicit>
     // DMP-AG-NEXT:             ACCGangClause
+    // DMP-AG-NOT:              <implicit>
     // DMP-AW-NEXT:             ACCWorkerClause
     // DMP-AV-NEXT:             ACCVectorClause
     // DMP-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
@@ -1309,6 +1324,7 @@ int main() {
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'k' 'int'
     // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <implicit>
     // DMP-APLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-AGIMP-NEXT:          ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:           impl: [[OMPDD]]
     // DMP-OPRG-NEXT:             OMPSharedClause
     // DMP-OPRG-OSIMP-SAME:         <implicit>
@@ -1462,12 +1478,14 @@ int main() {
       // DMP-AIND-NOT:          <implicit>
       // DMP-AAUTO-NOT:         <implicit>
       // DMP-AG-NEXT:           ACCGangClause
+      // DMP-AG-NOT:            <implicit>
       // DMP-AW-NEXT:           ACCWorkerClause
       // DMP-AV-NEXT:           ACCVectorClause
       // DMP-AIMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
       // DMP-ASLC-NEXT:         ACCSharedClause {{.*}} <implicit>
       // DMP-APLC-NEXT:         ACCPrivateClause {{.*}} <implicit>
       // DMP-NEXT:                DeclRefExpr {{.*}} 'tentativeDef' 'int'
+      // DMP-AGIMP-NEXT:        ACCGangClause {{.*}} <implicit>
       // DMP-OPRG-NEXT:         impl: [[OMPDD]]
       // DMP-OPRG-NEXT:           OMPPrivateClause
       // DMP-OPRG-NOT:              <implicit>
@@ -1571,6 +1589,7 @@ int main() {
     // DMP-AIND-NOT:        <implicit>
     // DMP-AAUTO-NOT:       <implicit>
     // DMP-AG-NEXT:         ACCGangClause
+    // DMP-AG-NOT:          <implicit>
     // DMP-AW-NEXT:         ACCWorkerClause
     // DMP-AV-NEXT:         ACCVectorClause
     // DMP-NEXT:            effect: ACCParallelDirective
@@ -1592,12 +1611,14 @@ int main() {
     // DMP-AIND-NOT:            <implicit>
     // DMP-AAUTO-NOT:           <implicit>
     // DMP-AG-NEXT:             ACCGangClause
+    // DMP-AG-NOT:              <implicit>
     // DMP-AW-NEXT:             ACCWorkerClause
     // DMP-AV-NEXT:             ACCVectorClause
     // DMP-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
     // DMP-ASLC-NEXT:           ACCSharedClause {{.*}} <implicit>
     // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-AGIMP-NEXT:          ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:           impl: [[OMPDD]]
     // DMP-OPRG-NEXT:             OMPPrivateClause
     // DMP-OPRG-NOT:                <implicit>
@@ -1712,9 +1733,11 @@ int main() {
   // DMP-AIND-NOT:        <implicit>
   // DMP-AAUTO-NOT:       <implicit>
   // DMP-AG-NEXT:         ACCGangClause
+  // DMP-AG-NOT:          <implicit>
   // DMP-AW-NEXT:         ACCWorkerClause
   // DMP-AV-NEXT:         ACCVectorClause
   // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+  // DMP-AGIMP-NEXT:      ACCGangClause {{.*}} <implicit>
   // DMP-OPRG-NEXT:       impl: [[OMPDD]]
   // DMP-OPRG:              ForStmt
   // DMP-OPRGPLC-NEXT:    impl: [[OMPDD]]
@@ -1757,6 +1780,7 @@ int main() {
   // DMP-AIND-NOT:        <implicit>
   // DMP-AAUTO-NOT:       <implicit>
   // DMP-AG-NEXT:         ACCGangClause
+  // DMP-AG-NOT:          <implicit>
   // DMP-AW-NEXT:         ACCWorkerClause
   // DMP-AV-NEXT:         ACCVectorClause
   // DMP-NEXT:            effect: ACCParallelDirective
@@ -1769,9 +1793,11 @@ int main() {
   // DMP-AIND-NOT:            <implicit>
   // DMP-AAUTO-NOT:           <implicit>
   // DMP-AG-NEXT:             ACCGangClause
+  // DMP-AG-NOT:              <implicit>
   // DMP-AW-NEXT:             ACCWorkerClause
   // DMP-AV-NEXT:             ACCVectorClause
   // DMP-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
+  // DMP-AGIMP-NEXT:          ACCGangClause {{.*}} <implicit>
   // DMP-OPRG-NEXT:           impl: [[OMPDD]]
   // DMP-OPRG:                  ForStmt
   // DMP-OPRGPLC-NEXT:        impl: [[OMPDD]]
@@ -1826,6 +1852,7 @@ int main() {
     // DMP-AIND-NOT:        <implicit>
     // DMP-AAUTO-NOT:       <implicit>
     // DMP-AG-NEXT:         ACCGangClause
+    // DMP-AG-NOT:          <implicit>
     // DMP-AW-NEXT:         ACCWorkerClause
     // DMP-AV-NEXT:         ACCVectorClause
     // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
@@ -1833,6 +1860,7 @@ int main() {
     // DMP-ASLC-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
     // DMP-APLC-NEXT:       ACCPrivateClause {{.*}} <implicit>
     // DMP-APLC-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-AGIMP-NEXT:      ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:       impl: [[OMPDD]]
     // DMP-OPRG-NEXT:         OMPPrivateClause
     // DMP-OPRG-NOT:            <implicit>
@@ -1934,6 +1962,7 @@ int main() {
     // DMP-AIND-NOT:       <implicit>
     // DMP-AAUTO-NOT:      <implicit>
     // DMP-AG-NEXT:        ACCGangClause
+    // DMP-AG-NOT:         <implicit>
     // DMP-AW-NEXT:        ACCWorkerClause
     // DMP-AV-NEXT:        ACCVectorClause
     // DMP-NEXT:           effect: ACCParallelDirective
@@ -1951,6 +1980,7 @@ int main() {
     // DMP-AIND-NOT:           <implicit>
     // DMP-AAUTO-NOT:          <implicit>
     // DMP-AG-NEXT:            ACCGangClause
+    // DMP-AG-NOT:             <implicit>
     // DMP-AW-NEXT:            ACCWorkerClause
     // DMP-AV-NEXT:            ACCVectorClause
     // DMP-AIMP-NEXT:          ACCIndependentClause {{.*}} <implicit>
@@ -1958,6 +1988,7 @@ int main() {
     // DMP-ASLC-NEXT:            DeclRefExpr {{.*}} 'j' 'int'
     // DMP-APLC-NEXT:          ACCPrivateClause {{.*}} <implicit>
     // DMP-APLC-NEXT:            DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-AGIMP-NEXT:         ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:          impl: [[OMPDD]]
     // DMP-OPRG-NEXT:            OMPPrivateClause
     // DMP-OPRG-NOT:               <implicit>
@@ -2081,11 +2112,13 @@ int main() {
       // DMP-AIND-NOT:             <implicit>
       // DMP-AAUTO-NOT:            <implicit>
       // DMP-AG-NEXT:              ACCGangClause
+      // DMP-AG-NOT:               <implicit>
       // DMP-AW-NEXT:              ACCWorkerClause
       // DMP-AV-NEXT:              ACCVectorClause
       // DMP-AIMP-NEXT:            ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:                 ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:                   DeclRefExpr {{.*}} 'x' 'const int'
+      // DMP-AGIMP-NEXT:           ACCGangClause {{.*}} <implicit>
       // DMP-OPRG-NEXT:            impl: [[OMPDD]]
       // DMP-OPRG-NEXT:              OMPSharedClause
       // DMP-OPRG-OSIMP-SAME:          <implicit>

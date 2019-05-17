@@ -6,7 +6,7 @@
 // When ADD_LOOP_TO_PAR is not set, this file checks implicit and explicit
 // data sharing attributes on "acc parallel" without "loop".
 //
-// When ADD_LOOP_TO_PAR is set, it adds "loop" and a for loop to those "acc
+// When ADD_LOOP_TO_PAR is set, it adds "loop seq" and a for loop to those "acc
 // parallel" directives in order to check data sharing attributes for combined
 // "acc parallel loop" directives.
 //
@@ -197,7 +197,7 @@
 # define LOOP
 # define FORLOOP_HEAD
 #else
-# define LOOP loop
+# define LOOP loop seq
 # define FORLOOP_HEAD for (int i = 0; i < 1; ++i)
 #endif
 
@@ -322,6 +322,7 @@ int main() {
 
   // DMP-PAR:            ACCParallelDirective
   // DMP-PARLOOP:        ACCParallelLoopDirective
+  // DMP-PARLOOP-NEXT:     ACCSeqClause
   // DMP-NEXT:             ACCNum_gangsClause
   // DMP-NEXT:               IntegerLiteral {{.*}} 'int' 2
   // DMP-PAR-I-NEXT:       ACCSharedClause {{.*}} <implicit>
@@ -467,6 +468,7 @@ int main() {
   // DMP-PARLOOP-IP:             DeclRefExpr {{.*}} 'lp' 'const int *'
   // DMP-PARLOOP-IP-NEXT:        DeclRefExpr {{.*}} 'shadowed' 'int'
   // DMP-PARLOOP:            ACCLoopDirective
+  // DMP-PARLOOP-NEXT:         ACCSeqClause
   // DMP-PARLOOP-P-NEXT:       ACCPrivateClause
   // DMP-PARLOOP-P-NOT:          <implicit>
   // DMP-PARLOOP-P-SAME:         {{$}}
@@ -493,7 +495,6 @@ int main() {
   // DMP-PARLOOP-P-NOT:          <implicit>
   // DMP-PARLOOP-P-SAME:         {{$}}
   // DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-PARLOOP-NEXT:         ACCIndependentClause {{.*}} <implicit>
   // DMP-PARLOOP-IF-NEXT:      ACCSharedClause {{.*}} <implicit>
   // DMP-PARLOOP-IF-NEXT:        DeclRefExpr {{.*}} 'gi' 'int'
   //                             DeclRefExpr for gt is here if defined
@@ -545,22 +546,22 @@ int main() {
   // PRT-NOT:       #pragma
   //
   // PRT-A-PAR-I:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2){{(.*\\$[[:space:]])*.*$}}
-  // PRT-A-PARLOOP-I:       {{^ *}}#pragma acc parallel {{LOOP|loop}} num_gangs(2){{(.*\\$[[:space:]])*.*$}}
+  // PRT-A-PARLOOP-I:       {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2){{(.*\\$[[:space:]])*.*$}}
   // PRT-AO-I-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) shared(ga,gs,gu,la,ls,lu) firstprivate(gi,{{(gt,)?}}gp,li,{{(lt,)?}}lp,shadowed){{$}}
   // PRT-O-I:               {{^ *}}#pragma omp target teams num_teams(2) shared(ga,gs,gu,la,ls,lu) firstprivate(gi,{{(gt,)?}}gp,li,{{(lt,)?}}lp,shadowed){{$}}
   // PRT-OA-PAR-I-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2){{(.*\\$[[:space:]])*.*$}}
-  // PRT-OA-PARLOOP-I-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop}} num_gangs(2){{(.*\\$[[:space:]])*.*$}}
+  // PRT-OA-PARLOOP-I-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2){{(.*\\$[[:space:]])*.*$}}
   //
   // PRT-A-PAR-F:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-PARLOOP-F:       {{^ *}}#pragma acc parallel {{LOOP|loop}} num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PARLOOP-F:       {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   // PRT-AO-F-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) firstprivate(li,{{(lt,)?}}lp,la,ls,lu,lUnref) firstprivate(shadowed){{$}}
   // PRT-O-F:               {{^ *}}#pragma omp target teams num_teams(2) firstprivate(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) firstprivate(li,{{(lt,)?}}lp,la,ls,lu,lUnref) firstprivate(shadowed){{$}}
   // PRT-OA-PAR-F-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-PARLOOP-F-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop}} num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PARLOOP-F-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   //
   // PRT-A-PAR-P:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   // PRT-AO-PAR-P-NEXT:     {{^ *}}// #pragma omp target teams num_teams(2) private(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) private(li,{{(lt,)?}}lp,la,ls,lu,lUnref) private(shadowed){{$}}
-  // PRT-A-PARLOOP-P:       {{^ *}}#pragma acc parallel {{LOOP|loop}} num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PARLOOP-P:       {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   // PRT-AO-PARLOOP-P-NOT:  #pragma
   // PRT-AO-PARLOOP-P:      {{^ *}}// #pragma omp target teams num_teams(2) shared(ga,gs,gu,la,ls,lu) firstprivate(gi,{{(gt,)?}}gp,li,{{(lt,)?}}lp,shadowed){{$}}
   // PRT-AO-PARLOOP-P-NEXT: //{{ *}}{
@@ -599,7 +600,7 @@ int main() {
   // PRT-O-PARLOOP-P-NEXT:    int lUnref;
   // PRT-O-PARLOOP-P-NEXT:    int shadowed;
   // PRT-OA-PARLOOP-P-NOT:  #pragma
-  // PRT-OA-PARLOOP-P:      {{^ *}}// #pragma acc parallel {{LOOP|loop}} num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PARLOOP-P:      {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   //
   // PRT-NOT:      #pragma
   //

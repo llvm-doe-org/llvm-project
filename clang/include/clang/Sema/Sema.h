@@ -9648,7 +9648,7 @@ public:
   StmtResult ActOnOpenACCLoopDirective(
       ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
       SourceLocation EndLoc, const llvm::DenseSet<VarDecl *> &LCVar,
-      ACCPartitioningKind Partitioning);
+      ACCPartitioningKind Partitioning, bool NestedGangPartitioning);
   /// Called on well-formed '\#pragma acc parallel loop' after parsing
   /// of the associated statement.
   StmtResult ActOnOpenACCParallelLoopDirective(
