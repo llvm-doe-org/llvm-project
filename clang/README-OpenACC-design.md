@@ -526,35 +526,59 @@ this section.
 
 ### Loop Control Variables ###
 
-* For a sequential `acc loop` directive such that the loop control
-  variable is just assigned instead of declared in the init of the
-  attached `for` loop, the loop control variable is *imp* `shared`.
-  Notes:
+* For an `acc loop` directive with *exp* `seq` such that the loop
+  control variable is just assigned instead of declared in the init of
+  the attached `for` loop, the loop control variable is *imp*
+  `shared`.  Notes:
     * Otherwise, there appears to be no way to tell an aggressive
       OpenACC compiler to leave such a loop as a normal sequential
       loop in C, where the variable would normally have `shared`
       semantics in that its final value is visible after the loop.
-    * In our experiments, both gcc 7.3.0 and pgcc 18.10-0 assume *pre*
-      `private` instead.  However, OpenACC 2.7 sec. 2.6.1 L876-879
-      only requires that the variable is private to each thread
-      executing the loop.  Only one thread executes a sequential loop,
-      and it's the same thread that executes outside the loop.  The
-      specification does not appear to clarify whether the variable's
-      privacy is also limited to the loop's region.  Clacc uses the
-      interpretation that, as explained above, seems more useful.
+    * OpenACC 2.7 sec. 2.6.1 L876-879 only requires that the variable
+      is private to each thread executing the loop.  Only one thread
+      executes a sequential loop, and it's the same thread that
+      executes outside the loop.  The specification does not appear to
+      clarify whether the variable's privacy is also limited to the
+      loop's region.  Clacc uses the interpretation that, as explained
+      above, seems more useful.
+    * In our experiments, this choice is consistent with pgcc 19.4-0,
+      but gcc 8.3.0 assumes *pre* `private` instead.
 * For any other `acc loop` directive, the loop control variable is
   *pre* `private`.  Notes:
     * OpenACC 2.7 sec. 2.6.1 L876-879 only requires that the variable
-      is private to each thread executing the loop.  Clacc assumes
-      this means *pre* `private`, which additionally means none of
-      those private variables are visible after the loop.
+      is private to each thread executing the loop.  Clacc interprets
+      this as *pre* `private`, which additionally means none of those
+      private variables are visible after the loop.
+    * This choice is not consistent with the previous case.  However,
+      because the deciding factors are the presence of *exp* `seq` and
+      whether the loop control variable is declared or just assigned,
+      it is straight-forward for the OpenACC programmer to determine
+      the visibility of the loop control variable without, for
+      example, predicting the compiler's parallelization decisions.
+    * In our experiments, this choice is consistent with gcc 8.3.0.
+      However, pgcc 19.4-0 appears to let each thread (within each
+      gang within each worker) retain the value it would have after
+      incrementing once past only the iterations it performs, so the
+      value visible afterward depends on the exact partitioning and
+      which thread is the master and thus continues to run after the
+      loop.  Thus, pgcc seems the most consistent with the exact
+      wording in the spec.
     * This choice is consistent with OpenMP 4.5's choice for
       `distribute` (`gang`) and `parallel for` (`worker`)
       (sec. 2.15.1.1 p. 179 lines 24-25).
     * This choice is not consistent with OpenMP 4.5's choice for
       `simd` (`vector`) (sec. 2.15.1.1 p. 179 lines 26-27), which
       instead specifies pre `linear`, which has `lastprivate`-like
-      semantics, but we must follow OpenACC's semantics.
+      semantics.
+    * This choice is reasonably straight-forward to translate to
+      OpenMP, but the pgcc approach would be harder to translate to
+      OpenMP.  For example, in our experiments, `lastprivate` produces
+      either the original value from before the loop or the value
+      after the entire loop and not the value after only the
+      iterations performed by the thread.
+    * It is not clear whether the values produced by the pgcc approach
+      are actually useful given their dependence on the exact
+      partitioning chosen by the compiler.
 * For any `acc loop` directive, *exp* `reduction` is not permitted on
   a loop control variable regardless of its data sharing.  Notes:
     * For consistency with parallelized `acc loop` directives, this
@@ -653,12 +677,13 @@ clauses to OpenMP is as follows:
     * *exp* `seq`, *exp* `independent`, *exp* `auto`
     * *exp* `gang`, *exp* `worker`, *exp* `vector`
     * *exp* `collapse`
-    * *pre* `private`, *imp* `shared`, *exp* `reduction`
+    * *pre* `private` for a loop control variable that is declared in
+      the init of the attached `for` loop
+    * *imp* `shared`, *exp* `reduction`
     * Notes:
-        * *pre* `private` is only for a loop control variable that is
-          declared in the init of the attached `for` loop, so a
-          private copy is already made for the one thread executing
-          the loop.
+        * For a loop control variable that is declared in the init of
+          the attached `for` loop, a private copy is already made for
+          the one thread executing the loop.
         * *imp* `shared` is only for variables referenced within the
           loop but declared outside the loop, and these are already
           shared by the simple C `for` loop.
@@ -677,8 +702,9 @@ clauses to OpenMP is as follows:
           cases and need not be supported.  In general, it seems
           intuitive that a reduction on a sequential loop should have
           no effect.
-* *exp* `private` -> wrap the loop in a compound statement and declare
-  an uninitialized local copy of the variable.  Notes:
+* Otherwise, *pre*|*exp* `private` -> wrap the loop in a compound
+  statement and declare an uninitialized local copy of the variable.
+  Notes:
     * exp `private` just needs to be local to the one thread executing
       the loop, and so creating a new local variable is sufficient.
 
@@ -694,9 +720,9 @@ fail to behave correctly:
 * `omp parallel for num_threads(1)` does not behave as a sequential
   loop in at least two ways:
     * It makes the loop control variable *pre* `private`, but that's
-      not how Clacc treats a sequential `acc loop` directive's loop
-      control variable that is assigned but not declared in the init
-      of the attached `for` loop.
+      not how Clacc treats an `acc loop seq` directive's loop control
+      variable that is assigned but not declared in the init of the
+      attached `for` loop.
     * When the loop control variable is modified in the body of the
       loop, behavior is not defined because the init, cond, and incr
       expressions alone must determine the number of iterations.  In

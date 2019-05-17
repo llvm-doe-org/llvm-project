@@ -112,10 +112,10 @@ We have implemented the following features:
     * `collapse` clause
     * data sharing:
         * for loop control variable:
-            * implicit `shared` if sequential loop and loop control
-              variable is assigned but not declared in init of
-              attached `for` loop
-            * implicit `private` otherwise
+            * implicit `shared` if `seq` is explictly specified and
+              loop control variable is assigned but not declared in
+              init of attached `for` loop
+            * predetermined `private` otherwise
         * implicit `shared` for other referenced variables
         * `private` clause
         * `reduction` clause:

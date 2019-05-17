@@ -430,33 +430,31 @@ DSAStackTy::DSAVarData DSAStackTy::getImplicitDSA(VarDecl *VD) {
   DSAVarData DVar;
   DVar.RefExpr = nullptr;
   if (getLoopControlVariables().count(VD)) {
-    ACCPartitioningKind LoopKind = getLoopPartitioning();
     // OpenACC 2.6 [2.6.1]:
     //   "The loop variable in a C for statement [...] that is associated
     //   with a loop directive is predetermined to be private to each thread
     //   that will execute each iteration of the loop."
     //
-    //   If the loop control variable is assigned but not defined in the for
+    //   If the loop control variable is assigned but not declared in the for
     //   init, we need to specify a data sharing clause.  The OpenACC spec does
     //   not appear to clarify the end of the scope of the private copy, so we
-    //   make what appears to be the intuitive choices for each case below.
-    if (LoopKind.hasGangPartitioning() || LoopKind.hasWorkerPartitioning() ||
-        LoopKind.hasVectorPartitioning())
+    //   make what appears to be the intuitive choice for each case below.
+    if (getLoopPartitioning().hasSeqExplicit())
+      // In the case of a loop with an explicit seq, we assume the normal
+      // behavior of a sequential loop in C: the loop control variable takes
+      // its final value computed by the loop.  We implement this behavior by
+      // making the loop control variable implicitly shared instead of
+      // predetermined private, and this doesn't seem to contradict the
+      // specification that it be private to the one thread that executes the
+      // loop.
+      DVar.CKind = ACCC_shared;
+    else
       // Private is consistent with OpenMP in all cases here except vector
       // partitioning.  That is, OpenMP simd makes it predetermined linear,
       // which has lastprivate-like semantics.  However, for consistency, we
       // assume the intuitive semantics of private in all cases here: the
       // private copy goes out of scope at the end of the loop.
       DVar.CKind = ACCC_private;
-    else
-      // In the case of a sequential loop (perhaps explicitly declared with
-      // seq), we assume the normal behavior of a sequential loop in C: the
-      // loop control variable takes its final value computed by the loop.
-      // We implement this behavior by making the loop control variable
-      // implicitly shared instead of predetermined private, and this
-      // doesn't seem to contradict the specification that it be private to
-      // the one thread that executes the loop.
-      DVar.CKind = ACCC_shared;
   }
   // OpenACC 2.5 [2.5.1.588-590]:
   //   "A scalar variable referenced in the parallel construct that does not
