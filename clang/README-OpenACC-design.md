@@ -500,9 +500,8 @@ this section.
 * Given some variable *v* that is declared outside an `acc parallel`,
   if (1) neither *exp* `firstprivate(`*v*`)` nor *exp*
   `private(`*v*`)` on that `acc parallel`, and (2) *exp*
-  `reduction(`*o*`:`*v*`)` on any contained gang-partitioned `acc
-  loop`, then this `acc parallel` has *imp* `reduction(`*o*`:`*v*`)`.
-  Notes:
+  `reduction(`*o*`:`*v*`)` on any nested gang-partitioned `acc loop`,
+  then this `acc parallel` has *imp* `reduction(`*o*`:`*v*`)`.  Notes:
     * If the first condition doesn't hold but the second does, then
       the reduction refers to the gang-private copy of *v*, so no
       gang-reduction is implied.  In our experiments, gcc 7.3.0 and
@@ -585,7 +584,7 @@ to OpenMP is as follows:
 * *imp*|*exp* `reduction` -> *exp* `reduction`
 * *exp* `num_gangs` -> *exp* `num_teams`
 * If *exp* `num_workers` with a non-constant-expression argument, and
-  if there is a contained worker-partitioned `acc loop`, then *exp*
+  if there is a nested worker-partitioned `acc loop`, then *exp*
   `num_workers` -> wrap the `omp target teams` in a compound statement
   and declare a local `const` variable with the same type and value as
   the *exp* `num_workers` argument.
