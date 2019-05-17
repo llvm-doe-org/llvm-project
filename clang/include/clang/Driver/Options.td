@@ -1607,8 +1607,8 @@ def fopenacc_ast_print_EQ : Joined<["-"], "fopenacc-ast-print=">,
   Flags<[DriverOption,CC1Option]>, Group<Action_Group>,
   MetaVarName<"<versions>">,
   HelpText<"Same as -fopenacc-print=<versions> except pretty-print the AST"
-           " instead of printing an adjusted version of the input source.  As"
-           " a result, the output will see preprocessor expansions and"
+           " instead of printing a translated version of the input source. As"
+           " a result, the output will have preprocessor expansions and"
            " reformatting.">,
   Values<"acc,omp,acc-omp,omp-acc">;
 

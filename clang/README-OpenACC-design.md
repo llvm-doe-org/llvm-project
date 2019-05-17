@@ -321,10 +321,7 @@ Design
 To enable source-to-source translation from the Clang command line,
 Clacc supports two new Clang command-line options: `-fopenacc-print`,
 which is built on `Rewrite`, and `-fopenacc-ast-print`, which is built
-on `-ast-print`.  (TODO: A `-f` option might be inappropriate here.
-Something more like `-emit-llvm`, `-ast-print`, or `-c`, all of which
-have a major impact on the output form, might be better.)  Each takes
-any of the following values:
+on `-ast-print`.  Each takes any of the following values:
 
 * `acc`: OpenACC constructs are printed and the OpenMP constructs to
   which they were translated are ignored.  Thus, this value is likely
