@@ -665,7 +665,7 @@ struct UnknownPragmaHandler : public PragmaHandler {
       : Prefix(prefix), Callbacks(callbacks),
         ShouldExpandTokens(RequireTokenExpansion) {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &PragmaTok) override {
+                    SourceLocation IntroducerLoc, Token &PragmaTok) override {
     // Figure out what line we went to and insert the appropriate number of
     // newline characters.
     Callbacks->startNewLineIfNeeded();

@@ -27,32 +27,32 @@ namespace {
 struct PragmaAlignHandler : public PragmaHandler {
   explicit PragmaAlignHandler() : PragmaHandler("align") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaGCCVisibilityHandler : public PragmaHandler {
   explicit PragmaGCCVisibilityHandler() : PragmaHandler("visibility") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaOptionsHandler : public PragmaHandler {
   explicit PragmaOptionsHandler() : PragmaHandler("options") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaPackHandler : public PragmaHandler {
   explicit PragmaPackHandler() : PragmaHandler("pack") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaClangSectionHandler : public PragmaHandler {
   explicit PragmaClangSectionHandler(Sema &S)
              : PragmaHandler("section"), Actions(S) {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 private:
   Sema &Actions;
 };
@@ -60,38 +60,38 @@ private:
 struct PragmaMSStructHandler : public PragmaHandler {
   explicit PragmaMSStructHandler() : PragmaHandler("ms_struct") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaUnusedHandler : public PragmaHandler {
   PragmaUnusedHandler() : PragmaHandler("unused") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaWeakHandler : public PragmaHandler {
   explicit PragmaWeakHandler() : PragmaHandler("weak") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaRedefineExtnameHandler : public PragmaHandler {
   explicit PragmaRedefineExtnameHandler() : PragmaHandler("redefine_extname") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaOpenCLExtensionHandler : public PragmaHandler {
   PragmaOpenCLExtensionHandler() : PragmaHandler("EXTENSION") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 
 struct PragmaFPContractHandler : public PragmaHandler {
   PragmaFPContractHandler() : PragmaHandler("FP_CONTRACT") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 // Pragma STDC implementations.
@@ -101,7 +101,7 @@ struct PragmaSTDC_FENV_ACCESSHandler : public PragmaHandler {
   PragmaSTDC_FENV_ACCESSHandler() : PragmaHandler("FENV_ACCESS") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &Tok) override {
+                    SourceLocation IntroducerLoc, Token &Tok) override {
     tok::OnOffSwitch OOS;
     if (PP.LexOnOffSwitch(OOS))
      return;
@@ -126,7 +126,7 @@ struct PragmaSTDC_CX_LIMITED_RANGEHandler : public PragmaHandler {
   PragmaSTDC_CX_LIMITED_RANGEHandler() : PragmaHandler("CX_LIMITED_RANGE") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &Tok) override {
+                    SourceLocation IntroducerLoc, Token &Tok) override {
     tok::OnOffSwitch OOS;
     PP.LexOnOffSwitch(OOS);
   }
@@ -137,7 +137,7 @@ struct PragmaSTDC_UnknownHandler : public PragmaHandler {
   PragmaSTDC_UnknownHandler() = default;
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &UnknownTok) override {
+                    SourceLocation IntroducerLoc, Token &UnknownTok) override {
     // C99 6.10.6p2, unknown forms are not allowed.
     PP.Diag(UnknownTok, diag::ext_stdc_pragma_ignored);
   }
@@ -146,31 +146,31 @@ struct PragmaSTDC_UnknownHandler : public PragmaHandler {
 struct PragmaFPHandler : public PragmaHandler {
   PragmaFPHandler() : PragmaHandler("fp") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaNoOpenMPHandler : public PragmaHandler {
   PragmaNoOpenMPHandler() : PragmaHandler("omp") { }
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaOpenMPHandler : public PragmaHandler {
   PragmaOpenMPHandler() : PragmaHandler("omp") { }
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaNoOpenACCHandler : public PragmaHandler {
   PragmaNoOpenACCHandler() : PragmaHandler("acc") { }
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaOpenACCHandler : public PragmaHandler {
   PragmaOpenACCHandler() : PragmaHandler("acc") { }
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 /// PragmaCommentHandler - "\#pragma comment ...".
@@ -178,7 +178,7 @@ struct PragmaCommentHandler : public PragmaHandler {
   PragmaCommentHandler(Sema &Actions)
     : PragmaHandler("comment"), Actions(Actions) {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 private:
   Sema &Actions;
 };
@@ -187,7 +187,7 @@ struct PragmaDetectMismatchHandler : public PragmaHandler {
   PragmaDetectMismatchHandler(Sema &Actions)
     : PragmaHandler("detect_mismatch"), Actions(Actions) {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 private:
   Sema &Actions;
 };
@@ -195,19 +195,19 @@ private:
 struct PragmaMSPointersToMembers : public PragmaHandler {
   explicit PragmaMSPointersToMembers() : PragmaHandler("pointers_to_members") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaMSVtorDisp : public PragmaHandler {
   explicit PragmaMSVtorDisp() : PragmaHandler("vtordisp") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaMSPragma : public PragmaHandler {
   explicit PragmaMSPragma(const char *name) : PragmaHandler(name) {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 /// PragmaOptimizeHandler - "\#pragma clang optimize on/off".
@@ -215,7 +215,7 @@ struct PragmaOptimizeHandler : public PragmaHandler {
   PragmaOptimizeHandler(Sema &S)
     : PragmaHandler("optimize"), Actions(S) {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 private:
   Sema &Actions;
 };
@@ -223,13 +223,13 @@ private:
 struct PragmaLoopHintHandler : public PragmaHandler {
   PragmaLoopHintHandler() : PragmaHandler("loop") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaUnrollHintHandler : public PragmaHandler {
   PragmaUnrollHintHandler(const char *name) : PragmaHandler(name) {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaMSRuntimeChecksHandler : public EmptyPragmaHandler {
@@ -239,20 +239,20 @@ struct PragmaMSRuntimeChecksHandler : public EmptyPragmaHandler {
 struct PragmaMSIntrinsicHandler : public PragmaHandler {
   PragmaMSIntrinsicHandler() : PragmaHandler("intrinsic") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaMSOptimizeHandler : public PragmaHandler {
   PragmaMSOptimizeHandler() : PragmaHandler("optimize") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 struct PragmaForceCUDAHostDeviceHandler : public PragmaHandler {
   PragmaForceCUDAHostDeviceHandler(Sema &Actions)
       : PragmaHandler("force_cuda_host_device"), Actions(Actions) {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 
 private:
   Sema &Actions;
@@ -263,7 +263,7 @@ struct PragmaAttributeHandler : public PragmaHandler {
   PragmaAttributeHandler(AttributeFactory &AttrFactory)
       : PragmaHandler("attribute"), AttributesForPragmaAttribute(AttrFactory) {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 
   /// A pool of attributes that were parsed in \#pragma clang attribute.
   ParsedAttributes AttributesForPragmaAttribute;
@@ -1592,6 +1592,7 @@ void Parser::HandlePragmaAttribute() {
 //   'pop'
 void PragmaGCCVisibilityHandler::HandlePragma(Preprocessor &PP,
                                               PragmaIntroducerKind Introducer,
+                                              SourceLocation IntroducerLoc,
                                               Token &VisTok) {
   SourceLocation VisLoc = VisTok.getLocation();
 
@@ -1652,6 +1653,7 @@ void PragmaGCCVisibilityHandler::HandlePragma(Preprocessor &PP,
 //   pack '(' ('push' | 'pop') [',' identifier] [, integer] ')'
 void PragmaPackHandler::HandlePragma(Preprocessor &PP,
                                      PragmaIntroducerKind Introducer,
+                                     SourceLocation IntroducerLoc,
                                      Token &PackTok) {
   SourceLocation PackLoc = PackTok.getLocation();
 
@@ -1763,6 +1765,7 @@ void PragmaPackHandler::HandlePragma(Preprocessor &PP,
 // #pragma ms_struct off
 void PragmaMSStructHandler::HandlePragma(Preprocessor &PP,
                                          PragmaIntroducerKind Introducer,
+                                         SourceLocation IntroducerLoc,
                                          Token &MSStructTok) {
   PragmaMSStructKind Kind = PMSST_OFF;
 
@@ -1804,7 +1807,9 @@ void PragmaMSStructHandler::HandlePragma(Preprocessor &PP,
 
 // #pragma clang section bss="abc" data="" rodata="def" text=""
 void PragmaClangSectionHandler::HandlePragma(Preprocessor &PP,
-             PragmaIntroducerKind Introducer, Token &FirstToken) {
+                                             PragmaIntroducerKind Introducer,
+                                             SourceLocation IntroducerLoc,
+                                             Token &FirstToken) {
 
   Token Tok;
   auto SecKind = Sema::PragmaClangSectionKind::PCSK_Invalid;
@@ -1917,12 +1922,14 @@ static void ParseAlignPragma(Preprocessor &PP, Token &FirstTok,
 
 void PragmaAlignHandler::HandlePragma(Preprocessor &PP,
                                       PragmaIntroducerKind Introducer,
+                                      SourceLocation IntroducerLoc,
                                       Token &AlignTok) {
   ParseAlignPragma(PP, AlignTok, /*IsOptions=*/false);
 }
 
 void PragmaOptionsHandler::HandlePragma(Preprocessor &PP,
                                         PragmaIntroducerKind Introducer,
+                                        SourceLocation IntroducerLoc,
                                         Token &OptionsTok) {
   ParseAlignPragma(PP, OptionsTok, /*IsOptions=*/true);
 }
@@ -1930,6 +1937,7 @@ void PragmaOptionsHandler::HandlePragma(Preprocessor &PP,
 // #pragma unused(identifier)
 void PragmaUnusedHandler::HandlePragma(Preprocessor &PP,
                                        PragmaIntroducerKind Introducer,
+                                       SourceLocation IntroducerLoc,
                                        Token &UnusedTok) {
   // FIXME: Should we be expanding macros here? My guess is no.
   SourceLocation UnusedLoc = UnusedTok.getLocation();
@@ -2011,6 +2019,7 @@ void PragmaUnusedHandler::HandlePragma(Preprocessor &PP,
 // #pragma weak identifier '=' identifier
 void PragmaWeakHandler::HandlePragma(Preprocessor &PP,
                                      PragmaIntroducerKind Introducer,
+                                     SourceLocation IntroducerLoc,
                                      Token &WeakTok) {
   SourceLocation WeakLoc = WeakTok.getLocation();
 
@@ -2068,9 +2077,9 @@ void PragmaWeakHandler::HandlePragma(Preprocessor &PP,
 }
 
 // #pragma redefine_extname identifier identifier
-void PragmaRedefineExtnameHandler::HandlePragma(Preprocessor &PP,
-                                               PragmaIntroducerKind Introducer,
-                                                Token &RedefToken) {
+void PragmaRedefineExtnameHandler::HandlePragma(
+    Preprocessor &PP, PragmaIntroducerKind Introducer,
+    SourceLocation IntroducerLoc, Token &RedefToken) {
   SourceLocation RedefLoc = RedefToken.getLocation();
 
   Token Tok;
@@ -2111,11 +2120,10 @@ void PragmaRedefineExtnameHandler::HandlePragma(Preprocessor &PP,
   PP.EnterTokenStream(Toks, /*DisableMacroExpansion=*/true);
 }
 
-
-void
-PragmaFPContractHandler::HandlePragma(Preprocessor &PP,
-                                      PragmaIntroducerKind Introducer,
-                                      Token &Tok) {
+void PragmaFPContractHandler::HandlePragma(Preprocessor &PP,
+                                           PragmaIntroducerKind Introducer,
+                                           SourceLocation IntroducerLoc,
+                                           Token &Tok) {
   tok::OnOffSwitch OOS;
   if (PP.LexOnOffSwitch(OOS))
     return;
@@ -2131,10 +2139,9 @@ PragmaFPContractHandler::HandlePragma(Preprocessor &PP,
   PP.EnterTokenStream(Toks, /*DisableMacroExpansion=*/true);
 }
 
-void
-PragmaOpenCLExtensionHandler::HandlePragma(Preprocessor &PP,
-                                           PragmaIntroducerKind Introducer,
-                                           Token &Tok) {
+void PragmaOpenCLExtensionHandler::HandlePragma(
+    Preprocessor &PP, PragmaIntroducerKind Introducer,
+    SourceLocation IntroducerLoc, Token &Tok) {
   PP.LexUnexpandedToken(Tok);
   if (Tok.isNot(tok::identifier)) {
     PP.Diag(Tok.getLocation(), diag::warn_pragma_expected_identifier) <<
@@ -2199,10 +2206,10 @@ PragmaOpenCLExtensionHandler::HandlePragma(Preprocessor &PP,
 
 /// Handle '#pragma omp ...' when OpenMP is disabled.
 ///
-void
-PragmaNoOpenMPHandler::HandlePragma(Preprocessor &PP,
-                                    PragmaIntroducerKind Introducer,
-                                    Token &FirstTok) {
+void PragmaNoOpenMPHandler::HandlePragma(Preprocessor &PP,
+                                         PragmaIntroducerKind Introducer,
+                                         SourceLocation IntroducerLoc,
+                                         Token &FirstTok) {
   if (!PP.getDiagnostics().isIgnored(diag::warn_pragma_omp_ignored,
                                      FirstTok.getLocation())) {
     PP.Diag(FirstTok, diag::warn_pragma_omp_ignored);
@@ -2214,10 +2221,10 @@ PragmaNoOpenMPHandler::HandlePragma(Preprocessor &PP,
 
 /// Handle '#pragma omp ...' when OpenMP is enabled.
 ///
-void
-PragmaOpenMPHandler::HandlePragma(Preprocessor &PP,
-                                  PragmaIntroducerKind Introducer,
-                                  Token &FirstTok) {
+void PragmaOpenMPHandler::HandlePragma(Preprocessor &PP,
+                                       PragmaIntroducerKind Introducer,
+                                       SourceLocation IntroducerLoc,
+                                       Token &FirstTok) {
   SmallVector<Token, 16> Pragma;
   Token Tok;
   Tok.startToken();
@@ -2257,6 +2264,7 @@ PragmaOpenMPHandler::HandlePragma(Preprocessor &PP,
 void
 PragmaNoOpenACCHandler::HandlePragma(Preprocessor &PP,
                                      PragmaIntroducerKind Introducer,
+                                     SourceLocation IntroducerLoc,
                                      Token &FirstTok) {
   if (!PP.getDiagnostics().isIgnored(diag::warn_pragma_acc_ignored,
                                      FirstTok.getLocation())) {
@@ -2272,6 +2280,7 @@ PragmaNoOpenACCHandler::HandlePragma(Preprocessor &PP,
 void
 PragmaOpenACCHandler::HandlePragma(Preprocessor &PP,
                                    PragmaIntroducerKind Introducer,
+                                   SourceLocation IntroducerLoc,
                                    Token &FirstTok) {
   SmallVector<Token, 16> Pragma;
   Token Tok;
@@ -2305,6 +2314,7 @@ PragmaOpenACCHandler::HandlePragma(Preprocessor &PP,
 // #pragma pointers_to_members '(' inheritance-model ')'
 void PragmaMSPointersToMembers::HandlePragma(Preprocessor &PP,
                                              PragmaIntroducerKind Introducer,
+                                             SourceLocation IntroducerLoc,
                                              Token &Tok) {
   SourceLocation PointersToMembersLoc = Tok.getLocation();
   PP.Lex(Tok);
@@ -2403,7 +2413,7 @@ void PragmaMSPointersToMembers::HandlePragma(Preprocessor &PP,
 // #pragma vtordisp '(' ')'
 void PragmaMSVtorDisp::HandlePragma(Preprocessor &PP,
                                     PragmaIntroducerKind Introducer,
-                                    Token &Tok) {
+                                    SourceLocation IntroducerLoc, Token &Tok) {
   SourceLocation VtorDispLoc = Tok.getLocation();
   PP.Lex(Tok);
   if (Tok.isNot(tok::l_paren)) {
@@ -2490,7 +2500,7 @@ void PragmaMSVtorDisp::HandlePragma(Preprocessor &PP,
 /// an annotation token.
 void PragmaMSPragma::HandlePragma(Preprocessor &PP,
                                   PragmaIntroducerKind Introducer,
-                                  Token &Tok) {
+                                  SourceLocation IntroducerLoc, Token &Tok) {
   Token EoF, AnnotTok;
   EoF.startToken();
   EoF.setKind(tok::eof);
@@ -2529,6 +2539,7 @@ void PragmaMSPragma::HandlePragma(Preprocessor &PP,
 /// is emitted.  See MSDN for more details.
 void PragmaDetectMismatchHandler::HandlePragma(Preprocessor &PP,
                                                PragmaIntroducerKind Introducer,
+                                               SourceLocation IntroducerLoc,
                                                Token &Tok) {
   SourceLocation DetectMismatchLoc = Tok.getLocation();
   PP.Lex(Tok);
@@ -2585,6 +2596,7 @@ void PragmaDetectMismatchHandler::HandlePragma(Preprocessor &PP,
 /// concatenation, embedded escape characters etc.  See MSDN for more details.
 void PragmaCommentHandler::HandlePragma(Preprocessor &PP,
                                         PragmaIntroducerKind Introducer,
+                                        SourceLocation IntroducerLoc,
                                         Token &Tok) {
   SourceLocation CommentLoc = Tok.getLocation();
   PP.Lex(Tok);
@@ -2665,8 +2677,9 @@ void PragmaCommentHandler::HandlePragma(Preprocessor &PP,
 // #pragma clang optimize off
 // #pragma clang optimize on
 void PragmaOptimizeHandler::HandlePragma(Preprocessor &PP,
-                                        PragmaIntroducerKind Introducer,
-                                        Token &FirstToken) {
+                                         PragmaIntroducerKind Introducer,
+                                         SourceLocation IntroducerLoc,
+                                         Token &FirstToken) {
   Token Tok;
   PP.Lex(Tok);
   if (Tok.is(tok::eod)) {
@@ -2713,7 +2726,7 @@ struct TokFPAnnotValue {
 
 void PragmaFPHandler::HandlePragma(Preprocessor &PP,
                                    PragmaIntroducerKind Introducer,
-                                   Token &Tok) {
+                                   SourceLocation IntroducerLoc, Token &Tok) {
   // fp
   Token PragmaName = Tok;
   SmallVector<Token, 1> TokenList;
@@ -2914,6 +2927,7 @@ static bool ParseLoopHintValue(Preprocessor &PP, Token &Tok, Token PragmaName,
 /// loop the number of times indicated by the value.
 void PragmaLoopHintHandler::HandlePragma(Preprocessor &PP,
                                          PragmaIntroducerKind Introducer,
+                                         SourceLocation IntroducerLoc,
                                          Token &Tok) {
   // Incoming token is "loop" from "#pragma clang loop".
   Token PragmaName = Tok;
@@ -3007,6 +3021,7 @@ void PragmaLoopHintHandler::HandlePragma(Preprocessor &PP,
 /// disables unrolling of the loop.
 void PragmaUnrollHintHandler::HandlePragma(Preprocessor &PP,
                                            PragmaIntroducerKind Introducer,
+                                           SourceLocation IntroducerLoc,
                                            Token &Tok) {
   // Incoming token is "unroll" for "#pragma unroll", or "nounroll" for
   // "#pragma nounroll".
@@ -3073,6 +3088,7 @@ void PragmaUnrollHintHandler::HandlePragma(Preprocessor &PP,
 /// isn't an intrinsic in clang and suggest to include intrin.h.
 void PragmaMSIntrinsicHandler::HandlePragma(Preprocessor &PP,
                                             PragmaIntroducerKind Introducer,
+                                            SourceLocation IntroducerLoc,
                                             Token &Tok) {
   PP.Lex(Tok);
 
@@ -3112,6 +3128,7 @@ void PragmaMSIntrinsicHandler::HandlePragma(Preprocessor &PP,
 // #pragma optimize("gsty", on|off)
 void PragmaMSOptimizeHandler::HandlePragma(Preprocessor &PP,
                                            PragmaIntroducerKind Introducer,
+                                           SourceLocation IntroducerLoc,
                                            Token &Tok) {
   SourceLocation StartLoc = Tok.getLocation();
   PP.Lex(Tok);
@@ -3164,7 +3181,8 @@ void PragmaMSOptimizeHandler::HandlePragma(Preprocessor &PP,
 }
 
 void PragmaForceCUDAHostDeviceHandler::HandlePragma(
-    Preprocessor &PP, PragmaIntroducerKind Introducer, Token &Tok) {
+    Preprocessor &PP, PragmaIntroducerKind Introducer,
+    SourceLocation IntroducerLoc, Token &Tok) {
   Token FirstTok = Tok;
 
   PP.Lex(Tok);
@@ -3216,6 +3234,7 @@ void PragmaForceCUDAHostDeviceHandler::HandlePragma(
 /// of the pragma.
 void PragmaAttributeHandler::HandlePragma(Preprocessor &PP,
                                           PragmaIntroducerKind Introducer,
+                                          SourceLocation IntroducerLoc,
                                           Token &FirstToken) {
   Token Tok;
   PP.Lex(Tok);

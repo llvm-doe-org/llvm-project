@@ -64,6 +64,7 @@ EmptyPragmaHandler::EmptyPragmaHandler(StringRef Name) : PragmaHandler(Name) {}
 
 void EmptyPragmaHandler::HandlePragma(Preprocessor &PP,
                                       PragmaIntroducerKind Introducer,
+                                      SourceLocation IntroducerLoc,
                                       Token &FirstToken) {}
 
 //===----------------------------------------------------------------------===//
@@ -99,7 +100,7 @@ void PragmaNamespace::RemovePragmaHandler(PragmaHandler *Handler) {
 
 void PragmaNamespace::HandlePragma(Preprocessor &PP,
                                    PragmaIntroducerKind Introducer,
-                                   Token &Tok) {
+                                   SourceLocation IntroducerLoc, Token &Tok) {
   // Read the 'namespace' that the directive is in, e.g. STDC.  Do not macro
   // expand it, the user can have a STDC #define, that should not affect this.
   PP.LexUnexpandedToken(Tok);
@@ -115,7 +116,7 @@ void PragmaNamespace::HandlePragma(Preprocessor &PP,
   }
 
   // Otherwise, pass it down.
-  Handler->HandlePragma(PP, Introducer, Tok);
+  Handler->HandlePragma(PP, Introducer, IntroducerLoc, Tok);
 }
 
 //===----------------------------------------------------------------------===//
@@ -136,7 +137,7 @@ void Preprocessor::HandlePragmaDirective(SourceLocation IntroducerLoc,
 
   // Invoke the first level of pragma handlers which reads the namespace id.
   Token Tok;
-  PragmaHandlers->HandlePragma(*this, Introducer, Tok);
+  PragmaHandlers->HandlePragma(*this, Introducer, IntroducerLoc, Tok);
 
   // If the pragma handler didn't read the rest of the line, consume it now.
   if ((CurTokenLexer && CurTokenLexer->isParsingPreprocessorDirective())
@@ -958,7 +959,7 @@ struct PragmaOnceHandler : public PragmaHandler {
   PragmaOnceHandler() : PragmaHandler("once") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &OnceTok) override {
+                    SourceLocation IntroducerLoc, Token &OnceTok) override {
     PP.CheckEndOfDirective("pragma once");
     PP.HandlePragmaOnce(OnceTok);
   }
@@ -970,7 +971,7 @@ struct PragmaMarkHandler : public PragmaHandler {
   PragmaMarkHandler() : PragmaHandler("mark") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &MarkTok) override {
+                    SourceLocation IntroducerLoc, Token &MarkTok) override {
     PP.HandlePragmaMark();
   }
 };
@@ -980,7 +981,7 @@ struct PragmaPoisonHandler : public PragmaHandler {
   PragmaPoisonHandler() : PragmaHandler("poison") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &PoisonTok) override {
+                    SourceLocation IntroducerLoc, Token &PoisonTok) override {
     PP.HandlePragmaPoison();
   }
 };
@@ -991,7 +992,7 @@ struct PragmaSystemHeaderHandler : public PragmaHandler {
   PragmaSystemHeaderHandler() : PragmaHandler("system_header") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &SHToken) override {
+                    SourceLocation IntroducerLoc, Token &SHToken) override {
     PP.HandlePragmaSystemHeader(SHToken);
     PP.CheckEndOfDirective("pragma");
   }
@@ -1001,7 +1002,7 @@ struct PragmaDependencyHandler : public PragmaHandler {
   PragmaDependencyHandler() : PragmaHandler("dependency") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &DepToken) override {
+                    SourceLocation IntroducerLoc, Token &DepToken) override {
     PP.HandlePragmaDependency(DepToken);
   }
 };
@@ -1010,7 +1011,7 @@ struct PragmaDebugHandler : public PragmaHandler {
   PragmaDebugHandler() : PragmaHandler("__debug") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &DebugToken) override {
+                    SourceLocation IntroducerLoc, Token &DebugToken) override {
     Token Tok;
     PP.LexUnexpandedToken(Tok);
     if (Tok.isNot(tok::identifier)) {
@@ -1149,7 +1150,7 @@ public:
       : PragmaHandler("diagnostic"), Namespace(NS) {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &DiagToken) override {
+                    SourceLocation IntroducerLoc, Token &DiagToken) override {
     SourceLocation DiagLoc = DiagToken.getLocation();
     Token Tok;
     PP.LexUnexpandedToken(Tok);
@@ -1228,7 +1229,7 @@ public:
 struct PragmaHdrstopHandler : public PragmaHandler {
   PragmaHdrstopHandler() : PragmaHandler("hdrstop") {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &DepToken) override {
+                    SourceLocation IntroducerLoc, Token &DepToken) override {
     PP.HandlePragmaHdrstop(DepToken);
   }
 };
@@ -1240,7 +1241,7 @@ struct PragmaWarningHandler : public PragmaHandler {
   PragmaWarningHandler() : PragmaHandler("warning") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &Tok) override {
+                    SourceLocation IntroducerLoc, Token &Tok) override {
     // Parse things like:
     // warning(push, 1)
     // warning(pop)
@@ -1363,7 +1364,7 @@ struct PragmaExecCharsetHandler : public PragmaHandler {
   PragmaExecCharsetHandler() : PragmaHandler("execution_character_set") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &Tok) override {
+                    SourceLocation IntroducerLoc, Token &Tok) override {
     // Parse things like:
     // execution_character_set(push, "UTF-8")
     // execution_character_set(pop)
@@ -1425,6 +1426,7 @@ struct PragmaIncludeAliasHandler : public PragmaHandler {
   PragmaIncludeAliasHandler() : PragmaHandler("include_alias") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
+                    SourceLocation IntroducerLoc,
                     Token &IncludeAliasTok) override {
     PP.HandlePragmaIncludeAlias(IncludeAliasTok);
   }
@@ -1468,7 +1470,7 @@ public:
         Namespace(Namespace) {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &Tok) override {
+                    SourceLocation IntroducerLoc, Token &Tok) override {
     SourceLocation MessageLoc = Tok.getLocation();
     PP.Lex(Tok);
     bool ExpectClosingParen = false;
@@ -1524,7 +1526,7 @@ struct PragmaModuleImportHandler : public PragmaHandler {
   PragmaModuleImportHandler() : PragmaHandler("import") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &Tok) override {
+                    SourceLocation IntroducerLoc, Token &Tok) override {
     SourceLocation ImportLoc = Tok.getLocation();
 
     // Read the module name.
@@ -1561,7 +1563,7 @@ struct PragmaModuleBeginHandler : public PragmaHandler {
   PragmaModuleBeginHandler() : PragmaHandler("begin") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &Tok) override {
+                    SourceLocation IntroducerLoc, Token &Tok) override {
     SourceLocation BeginLoc = Tok.getLocation();
 
     // Read the module name.
@@ -1621,7 +1623,7 @@ struct PragmaModuleEndHandler : public PragmaHandler {
   PragmaModuleEndHandler() : PragmaHandler("end") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &Tok) override {
+                    SourceLocation IntroducerLoc, Token &Tok) override {
     SourceLocation Loc = Tok.getLocation();
 
     PP.LexUnexpandedToken(Tok);
@@ -1641,7 +1643,7 @@ struct PragmaModuleBuildHandler : public PragmaHandler {
   PragmaModuleBuildHandler() : PragmaHandler("build") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &Tok) override {
+                    SourceLocation IntroducerLoc, Token &Tok) override {
     PP.HandlePragmaModuleBuild(Tok);
   }
 };
@@ -1651,7 +1653,7 @@ struct PragmaModuleLoadHandler : public PragmaHandler {
   PragmaModuleLoadHandler() : PragmaHandler("load") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &Tok) override {
+                    SourceLocation IntroducerLoc, Token &Tok) override {
     SourceLocation Loc = Tok.getLocation();
 
     // Read the module name.
@@ -1675,6 +1677,7 @@ struct PragmaPushMacroHandler : public PragmaHandler {
   PragmaPushMacroHandler() : PragmaHandler("push_macro") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
+                    SourceLocation IntroducerLoc,
                     Token &PushMacroTok) override {
     PP.HandlePragmaPushMacro(PushMacroTok);
   }
@@ -1686,6 +1689,7 @@ struct PragmaPopMacroHandler : public PragmaHandler {
   PragmaPopMacroHandler() : PragmaHandler("pop_macro") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
+                    SourceLocation IntroducerLoc,
                     Token &PopMacroTok) override {
     PP.HandlePragmaPopMacro(PopMacroTok);
   }
@@ -1697,7 +1701,7 @@ struct PragmaARCCFCodeAuditedHandler : public PragmaHandler {
   PragmaARCCFCodeAuditedHandler() : PragmaHandler("arc_cf_code_audited") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &NameTok) override {
+                    SourceLocation IntroducerLoc, Token &NameTok) override {
     SourceLocation Loc = NameTok.getLocation();
     bool IsBegin;
 
@@ -1752,7 +1756,7 @@ struct PragmaAssumeNonNullHandler : public PragmaHandler {
   PragmaAssumeNonNullHandler() : PragmaHandler("assume_nonnull") {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &NameTok) override {
+                    SourceLocation IntroducerLoc, Token &NameTok) override {
     SourceLocation Loc = NameTok.getLocation();
     bool IsBegin;
 
@@ -1821,7 +1825,7 @@ struct PragmaRegionHandler : public PragmaHandler {
   PragmaRegionHandler(const char *pragma) : PragmaHandler(pragma) {}
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &NameTok) override {
+                    SourceLocation IntroducerLoc, Token &NameTok) override {
     // #pragma region: endregion matches can be verified
     // __pragma(region): no sense, but ignored by msvc
     // _Pragma is not valid for MSVC, but there isn't any point

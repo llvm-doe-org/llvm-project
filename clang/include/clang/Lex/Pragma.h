@@ -14,6 +14,7 @@
 #define LLVM_CLANG_LEX_PRAGMA_H
 
 #include "clang/Basic/LLVM.h"
+#include "clang/Basic/SourceLocation.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include <string>
@@ -65,6 +66,7 @@ public:
 
   StringRef getName() const { return Name; }
   virtual void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
+                            SourceLocation IntroducerLoc,
                             Token &FirstToken) = 0;
 
   /// getIfNamespace - If this is a namespace, return it.  This is equivalent to
@@ -79,7 +81,7 @@ public:
   explicit EmptyPragmaHandler(StringRef Name = StringRef());
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &FirstToken) override;
+                    SourceLocation IntroducerLoc, Token &FirstToken) override;
 };
 
 /// PragmaNamespace - This PragmaHandler subdivides the namespace of pragmas,
@@ -112,7 +114,7 @@ public:
   bool IsEmpty() const { return Handlers.empty(); }
 
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    Token &Tok) override;
+                    SourceLocation IntroducerLoc, Token &Tok) override;
 
   PragmaNamespace *getIfNamespace() override { return this; }
 };
