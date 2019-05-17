@@ -1658,18 +1658,21 @@ ACCClause *Sema::ActOnOpenACCVectorLengthClause(Expr *VectorLength,
   // specify such a restriction for vector_length.  It seems reasonable for it
   // to have to be a positive integer, so we require that.  However, according
   // to our users, some existing OpenACC applications do use non-constant
-  // expressions here.  For that case, we discard the clause, as permitted by
+  // expressions here.  For that case, we ignore the clause, as permitted by
   // OpenACC 2.7 sec. 2.5.10 L805-806:
   //
   // "The implementation may use a different value than specified based on
   // limitations imposed by the target architecture."
+  //
+  // However, the translation to OpenMP is careful to evaluate the expression
+  // if it might have side effects.
   //
   PosIntResult Res = IsPositiveIntegerValue(VectorLength, *this,
                                             ACCC_vector_length, false);
   if (Res == PosIntError)
     return nullptr;
   if (Res == PosIntNonConst)
-    Diag(VectorLength->getExprLoc(), diag::warn_acc_clause_discarded_not_ice)
+    Diag(VectorLength->getExprLoc(), diag::warn_acc_clause_ignored_not_ice)
         << getOpenACCClauseName(ACCC_vector_length)
         << VectorLength->getSourceRange();
   return new (Context) ACCVectorLengthClause(VectorLength, StartLoc, LParenLoc,
@@ -1698,9 +1701,9 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
   /// parallel directives are not permitted, so we don't need a stack of these
   /// variables.
   ///
-  /// If the acc parallel directive has a num_workers or vector_length clause,
-  /// then NumWorkersExpr or VectorLengthExpr, respectively, is set to its
-  /// value.
+  /// If the acc parallel directive has a num_workers or constant-expression
+  /// vector_length clause, then NumWorkersExpr or VectorLengthExpr,
+  /// respectively, is set to its value.
   ///
   /// If the acc parallel directive has a num_workers clause with a
   /// non-constant expression and it has a (separate or combined with this
@@ -1794,11 +1797,11 @@ private:
         Tx.getSema().ActOnStartOfCompoundStmt(false);
         Started = true;
       }
-      ASTContext &Ctxt = Tx.getSema().getASTContext();
+      ASTContext &Context = Tx.getSema().getASTContext();
       DeclContext *DC = Tx.getSema().CurContext;
       IdentifierInfo *II = &Tx.getSema().PP.getIdentifierTable().get(Name);
-      TypeSourceInfo *TInfo = Ctxt.getTrivialTypeSourceInfo(Ty, Loc);
-      VarDecl *VD = VarDecl::Create(Ctxt, DC, Loc, Loc, II, Ty, TInfo,
+      TypeSourceInfo *TInfo = Context.getTrivialTypeSourceInfo(Ty, Loc);
+      VarDecl *VD = VarDecl::Create(Context, DC, Loc, Loc, II, Ty, TInfo,
                                     SC_None);
       Tx.getSema().AddInitializerToDecl(VD, Init, false);
       StmtResult Res = Tx.getSema().ActOnDeclStmt(
@@ -1809,6 +1812,27 @@ private:
       else
         Stmts.push_back(Res.get());
       return VD;
+    }
+    void addUnusedExpr(Expr *E) {
+      if (!Started) {
+        Tx.getSema().ActOnStartOfCompoundStmt(false);
+        Started = true;
+      }
+      ExprResult Res = Tx.getDerived().TransformExpr(E);
+      if (Res.isInvalid()) {
+        Err = true;
+        return;
+      }
+      ASTContext &Context = Tx.getSema().getASTContext();
+      SourceLocation Loc = E->getExprLoc();
+      TypeSourceInfo *TInfo = Context.getTrivialTypeSourceInfo(Context.VoidTy,
+                                                               Loc);
+      Res = Tx.getSema().BuildCStyleCastExpr(Loc, TInfo, Loc, Res.get());
+      if (Res.isInvalid()) {
+        Err = true;
+        return;
+      }
+      Stmts.push_back(Res.get());
     }
     void finalize(StmtResult &S) {
       assert(!Finalized && "expected only one finalization");
@@ -1848,6 +1872,7 @@ private:
 public:
   StmtResult TransformACCParallelDirective(ACCParallelDirective *D) {
     ConditionalCompoundStmtRAII EnclosingCompoundStmt(*this);
+    ASTContext &Context = this->getSema().getASTContext();
 
     // Declare a num_workers variable in an enclosing compound statement, if
     // needed.
@@ -1858,20 +1883,21 @@ public:
     if (NumWorkersClauses.begin() != NumWorkersClauses.end()) {
       NumWorkersExpr = NumWorkersClauses.begin()->getNumWorkers();
       if (D->getNestedWorkerPartitioning()) {
-        if (!NumWorkersExpr->isIntegerConstantExpr(this->getSema()
-                                                       .getASTContext()))
+        if (!NumWorkersExpr->isIntegerConstantExpr(Context))
           NumWorkersVarDecl = EnclosingCompoundStmt.addNewPrivateDecl(
               "__clang_acc_num_workers__",
               NumWorkersExpr->getType().withConst(), NumWorkersExpr,
               NumWorkersExpr->getBeginLoc());
-      }
+      } else if (NumWorkersExpr->HasSideEffects(Context))
+        EnclosingCompoundStmt.addUnusedExpr(NumWorkersExpr);
     }
     auto VectorLengthClauses = D->getClausesOfKind<ACCVectorLengthClause>();
     if (VectorLengthClauses.begin() != VectorLengthClauses.end()) {
-      VectorLengthExpr = VectorLengthClauses.begin()->getVectorLength();
-      if (!VectorLengthExpr->isIntegerConstantExpr(this->getSema()
-                                                       .getASTContext()))
-        VectorLengthExpr = nullptr;
+      Expr *E = VectorLengthClauses.begin()->getVectorLength();
+      if (E->isIntegerConstantExpr(Context))
+        VectorLengthExpr = E;
+      else if (E->HasSideEffects(Context))
+        EnclosingCompoundStmt.addUnusedExpr(E);
     }
 
     // Start OpenMP DSA block.

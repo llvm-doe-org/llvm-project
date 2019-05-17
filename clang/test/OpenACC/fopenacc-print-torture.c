@@ -648,7 +648,7 @@ for (i = 0; i < 5; ++i) {
   // PRT-NEXT:  /* expected-warning{{.*}} */
   // PRT-NEXT:  #pragma acc parallel vector_length(f)
   /* expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'float'}} */
-  /* expected-warning@+1 {{'vector_length' discarded because argument is not an integer constant expression}} */
+  /* expected-warning@+1 {{'vector_length' ignored because argument is not an integer constant expression}} */
   #pragma acc parallel vector_length(f)
   // PRT-NEXT:  #pragma acc loop
   #pragma acc loop

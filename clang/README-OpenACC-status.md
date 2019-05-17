@@ -10,7 +10,7 @@ We have implemented the following features:
     * `-f[no-]openacc`
     * `-fopenacc[-ast]-print=acc|omp|acc-omp|omp-acc`
     * `-Wsource-uses-openacc`
-    * `-Wopenacc-discarded-clause`
+    * `-Wopenacc-ignored-clause`
 * targets:
     * host or multicore
 * `parallel` directive:
@@ -72,10 +72,10 @@ We have implemented the following features:
         * The argument in all cases must be a positive integer
           expression.
         * The `vector_length` argument must also be a constant or
-          Clacc discards the clause and reports a warning diagnostic,
-          which can be suppressed or converted to an error using the
-          `-W{no-,error=}openacc-discarded-clause` command-line
-          options.
+          Clacc does not use the clause and reports a warning
+          diagnostic, which can be suppressed or converted to an error
+          using the `-W{no-,error=}openacc-ignored-clause`
+          command-line options.
         * Notes:
             * OpenACC 2.6 specifies only that the arguments must be
               integer expressions.  However, OpenMP specifies the
@@ -90,10 +90,10 @@ We have implemented the following features:
             * Neither gcc 7.3.0 nor pgcc 18.4-0 warn if
               `vector_length` receives a non-constant expression.
               However, we're stuck with this restriction because we
-              translate to OpenMP.  OpenACC does permit the compiler
-              to ignore `vector_length` as a hint, so we choose to
-              discard it and warn in the case of a non-constant
-              expression.
+              translate to OpenMP `simdlen`.  OpenACC does permit the
+              compiler to ignore `vector_length` as a hint, so we
+              choose to ignore it and warn in the case of a
+              non-constant expression.
 * `loop` directive within a `parallel` directive:
     * use without clauses
     * partitionability:

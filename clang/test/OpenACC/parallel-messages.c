@@ -12,15 +12,15 @@
 // RUN: %clang_cc1 -verify=expected-noacc %s -DADD_LOOP_TO_PAR
 
 // OpenACC enabled
-// RUN: %clang_cc1 -verify=par,acc-discard,expected,expected-noacc -fopenacc %s
-// RUN: %clang_cc1 -verify=parloop,acc-discard,expected,expected-noacc \
+// RUN: %clang_cc1 -verify=par,acc-ignore,expected,expected-noacc -fopenacc %s
+// RUN: %clang_cc1 -verify=parloop,acc-ignore,expected,expected-noacc \
 // RUN:            -DADD_LOOP_TO_PAR -fopenacc %s
 
 // OpenACC enabled but optional warnings disabled
 // RUN: %clang_cc1 -verify=par,expected,expected-noacc -fopenacc %s \
-// RUN:            -Wno-openacc-discarded-clause
+// RUN:            -Wno-openacc-ignored-clause
 // RUN: %clang_cc1 -verify=parloop,expected,expected-noacc -fopenacc %s \
-// RUN:            -DADD_LOOP_TO_PAR -Wno-openacc-discarded-clause
+// RUN:            -DADD_LOOP_TO_PAR -Wno-openacc-ignored-clause
 
 // END.
 
@@ -419,7 +419,7 @@ int main() {
   // expected-error@+1 {{use of undeclared identifier 'bogusv'}}
   #pragma acc parallel LOOP num_gangs(bogusg) num_workers(bogusw) vector_length(bogusv)
     FORLOOP
-  // acc-discard-warning@+1 {{'vector_length' discarded because argument is not an integer constant expression}}
+  // acc-ignore-warning@+1 {{'vector_length' ignored because argument is not an integer constant expression}}
   #pragma acc parallel LOOP num_gangs(i*1) num_workers(i+3) vector_length(i)
     FORLOOP
   #pragma acc parallel LOOP num_gangs(31 * 3 + 1) num_workers(10 + 5) vector_length(5 * 2)
@@ -449,13 +449,13 @@ int main() {
   // expected-error@+4 {{expression must have integral or unscoped enumeration type, not 'double'}}
   // expected-error@+3 {{expression must have integral or unscoped enumeration type, not 'float'}}
   // expected-error@+2 {{expression must have integral or unscoped enumeration type, not '_Complex float'}}
-  // acc-discard-warning@+1 {{'vector_length' discarded because argument is not an integer constant expression}}
+  // acc-ignore-warning@+1 {{'vector_length' ignored because argument is not an integer constant expression}}
   #pragma acc parallel LOOP num_gangs(d) num_workers(f) vector_length(fc)
     FORLOOP
   // expected-error@+4 {{expression must have integral or unscoped enumeration type, not 'float'}}
   // expected-error@+3 {{expression must have integral or unscoped enumeration type, not 'double'}}
   // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'long double'}}
-  // acc-discard-warning@+1 {{'vector_length' discarded because argument is not an integer constant expression}}
+  // acc-ignore-warning@+1 {{'vector_length' ignored because argument is not an integer constant expression}}
   #pragma acc parallel LOOP num_gangs(1.0f) num_workers(2e3) vector_length(1.3l)
     FORLOOP
 

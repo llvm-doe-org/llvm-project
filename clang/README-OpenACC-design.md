@@ -522,7 +522,7 @@ this section.
 * It is an error if an argument to `num_gangs`, `num_workers`, or
   `vector_length` is not a positive integer expression.  If the
   argument to `vector_length` is not also a constant expression, Clacc
-  discards it and reports a warning diagnostic.  See
+  does not use it and reports a warning diagnostic.  See
   `README-OpenACC-status.md` for rationale.
 
 ### Loop Control Variables ###
@@ -589,13 +589,22 @@ to OpenMP is as follows:
   `num_workers` -> wrap the `omp target teams` in a compound statement
   and declare a local `const` variable with the same type and value as
   the *exp* `num_workers` argument.
+* Else if *exp* `num_workers` with a non-constant-expression argument
+  that potentially has side effects, then *exp* `num_workers` -> wrap
+  the `omp target teams` in a compound statement and insert a
+  statement that casts the argument's expression to `void`.
 * Else, translation discards *exp* `num_workers`.  Notes:
     * A constant-expression argument here might be used by a nested
       worker-partitioned `acc loop`.
-* Translation discards *exp* `vector_length`.  Notes:
+* If *exp* `vector_length` with a non-constant-expression argument
+  that potentially has side effects, then *exp* `vector_length` ->
+  wrap the `omp target teams` in a compound statement and insert a
+  statement that casts the argument's expression to `void`.  Moreover,
+  report a warning diagnostic that `vector_length` is being ignored.
+* Else, translation discards *exp* `vector_length`.  Notes:
     * A constant expression argument here might be used by a nested
       vector-partitioned `acc loop`, but a non-constant-expression
-      argument is not (see `README-OpenACC-status.md` for rationale).
+      argument is not (this follows "Semantic Clarifications" above).
 
 Loop Directives
 ---------------

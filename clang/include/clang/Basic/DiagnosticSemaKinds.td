@@ -9240,9 +9240,9 @@ def note_acc_const_private : Note<
   "variable %0 declared const here">;
 def err_acc_clause_not_ice : Error<
   "argument to '%0' clause must be an integer constant expression">;
-def warn_acc_clause_discarded_not_ice : Warning<
-  "'%0' discarded because argument is not an integer constant expression">,
-  InGroup<DiagGroup<"openacc-discarded-clause">>;
+def warn_acc_clause_ignored_not_ice : Warning<
+  "'%0' ignored because argument is not an integer constant expression">,
+  InGroup<DiagGroup<"openacc-ignored-clause">>;
 def err_acc_clause_not_positive_ice : Error<
   "argument to '%0' clause must be a strictly positive integer value">;
 def err_acc_directive_bad_nesting : Error<
