@@ -1117,7 +1117,10 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
   case OpenACCPrint_ACC_OMP:
     PrintACCExecutableDirectiveHead(S, false, true);
     if (S->ompStmtPrintsDifferently(Policy, Context)) {
-      PrintACCExecutableDirectiveBody(S);
+      PrintingPolicy ACCPolicy(Policy);
+      ACCPolicy.OpenACCPrint = OpenACCPrint_ACC;
+      StmtPrinter ACCPrinter(OS, Helper, ACCPolicy, IndentLevel, NL, Context);
+      ACCPrinter.PrintACCExecutableDirectiveBody(S);
       clang::commented_raw_ostream ComStream(OS, IndentLevel*2, false, 1,
                                              true);
       StmtPrinter ComPrinter(ComStream, Helper, Policy, 0, NL, Context);
@@ -1138,9 +1141,9 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
       PrintOMPExecutableDirectiveBody(OMPInnerDir);
       clang::commented_raw_ostream ComStream(OS, IndentLevel*2, false, 1,
                                              true);
-      PrintingPolicy ComPolicy(Policy);
-      ComPolicy.OpenACCPrint = OpenACCPrint_ACC;
-      StmtPrinter ComPrinter(ComStream, Helper, ComPolicy, 0, NL, Context);
+      PrintingPolicy ACCPolicy(Policy);
+      ACCPolicy.OpenACCPrint = OpenACCPrint_ACC;
+      StmtPrinter ComPrinter(ComStream, Helper, ACCPolicy, 0, NL, Context);
       ComPrinter.PrintACCExecutableDirectiveHead(S, false, true);
       ComPrinter.PrintACCExecutableDirectiveBody(S);
     }

@@ -236,9 +236,9 @@ public:
       llvm_unreachable("unexpected OpenACC print kind while rewriting input");
     }
 
-    // Recurse to children if we didn't rewrite the original associated
-    // statement.
-    return OpenACCPrint == OpenACCPrint_ACC_OMP || DirectiveOnly;
+    // Recurse to children if we didn't print the OpenACC and OpenMP
+    // associated statements separately.
+    return DirectiveOnly;
   }
 };
 } // end anonymous namespace

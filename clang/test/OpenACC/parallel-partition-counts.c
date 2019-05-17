@@ -1240,7 +1240,6 @@ int main(int argc, char *argv[]) {
     // PRT-A-NEXT:     {{^ *}}#pragma acc parallel num_gangs(1) num_workers(nw) vector_length(1){{$}}
     // PRT-A-NEXT:     {
     // PRT-A-NEXT:       {{^ *}}#pragma acc loop worker{{$}}
-    // PRT-AO-NEXT:      {{^ *}}// #pragma omp parallel for num_threads(__clang_acc_num_workers__){{$}}
     // PRT-A-NEXT:       for ({{.*}}) {
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:       }
@@ -1351,7 +1350,6 @@ int main(int argc, char *argv[]) {
     // PRT-A-NEXT:     {{^ *}}#pragma acc parallel loop worker num_gangs(1) num_workers(nw) vector_length(1){{$}}
     // PRT-A-NEXT:     for ({{.*}}) {
     // PRT-A-NEXT:       {{^ *}}#pragma acc loop vector{{$}}
-    // PRT-AO-NEXT:      {{^ *}}// #pragma omp simd simdlen(1){{$}}
     // PRT-A-NEXT:       for ({{.*}}) {
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:       }
@@ -1506,26 +1504,17 @@ int main(int argc, char *argv[]) {
     // PRT-NOACC-NEXT: }
     // PRT-A-NEXT:     {{^ *}}#pragma acc parallel num_gangs(1) num_workers(foo()) vector_length(1){{$}}
     // PRT-A-NEXT:     {
-    // PRT-A-NEXT:       {{^ *}}#pragma acc loop seq
-    // PRT-AO-SAME:      {{^}} // discarded in OpenMP translation
-    // PRT-A-SAME:       {{^$}}
+    // PRT-A-NEXT:       {{^ *}}#pragma acc loop seq{{$}}
     // PRT-A-NEXT:       for (int i = 0; i < 2; ++i) {
     // PRT-A-NEXT:         {{^ *}}#pragma acc loop gang{{$}}
-    // PRT-AO-NEXT:        // #pragma omp distribute{{$}}
     // PRT-A-NEXT:         for (int j = 0; j < 1; ++j) {
-    // PRT-A-NEXT:           {{^ *}}#pragma acc loop seq
-    // PRT-AO-SAME:          {{^}} // discarded in OpenMP translation
-    // PRT-A-SAME:           {{^$}}
+    // PRT-A-NEXT:           {{^ *}}#pragma acc loop seq{{$}}
     // PRT-A-NEXT:           for (int k = 0; k < 2; ++k) {
     // PRT-A-NEXT:             {{^ *}}#pragma acc loop worker{{$}}
-    // PRT-AO-NEXT:            // #pragma omp parallel for num_threads(__clang_acc_num_workers__) shared(i,j,k){{$}}
     // PRT-A-NEXT:             for (int l = 0; l < 2; ++l) {
-    // PRT-A-NEXT:               {{^ *}}#pragma acc loop seq
-    // PRT-AO-SAME:              {{^}} // discarded in OpenMP translation
-    // PRT-A-SAME:               {{^$}}
+    // PRT-A-NEXT:               {{^ *}}#pragma acc loop seq{{$}}
     // PRT-A-NEXT:               for (int m = 0; m < 2; ++m) {
     // PRT-A-NEXT:                 {{^ *}}#pragma acc loop vector{{$}}
-    // PRT-AO-NEXT:                // #pragma omp simd simdlen(1){{$}}
     // PRT-A-NEXT:                 for (int n = 0; n < 1; ++n)
     // PRT-A-NEXT:                   printf
     // PRT-A-NEXT:               }

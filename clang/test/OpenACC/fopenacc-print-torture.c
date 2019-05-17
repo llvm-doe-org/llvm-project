@@ -116,7 +116,6 @@ int main() {
 
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   //  PRT-A-NEXT:  #pragma acc loop worker
-  // PRT-AO-NEXT:  // #pragma omp parallel for num_threads(__clang_acc_num_workers__)
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
   //  PRT-A-NEXT:    ;
   // PRT-AO-NEXT:  // {
@@ -147,7 +146,6 @@ int main() {
 
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   //  PRT-A-NEXT:  #pragma acc loop worker
-  // PRT-AO-NEXT:  // #pragma omp parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i) {
   //  PRT-A-NEXT:    var = 5;
   //  PRT-A-NEXT:    var = non_const_expr;
@@ -188,7 +186,6 @@ int main() {
 
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   //  PRT-A-NEXT:  #pragma acc loop worker
-  // PRT-AO-NEXT:  // #pragma omp parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
   //  PRT-A-NEXT:    var = non_const_expr;
   // PRT-AO-NEXT:  // {
@@ -327,12 +324,6 @@ int main() {
   //  PRT-A-NEXT:  #pragma acc loop worker vector
   //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
   //  PRT-A-NEXT:    ;
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(__clang_acc_num_workers__)
-  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             ;
-  // PRT-AO-NEXT:  // }
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
   // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(i)
@@ -514,7 +505,6 @@ for (i = 0; i < 5; ++i) {
 
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   //  PRT-A-NEXT:  #pragma acc loop worker
-  // PRT-AO-NEXT:  // #pragma omp parallel for num_threads(__clang_acc_num_workers__)
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
   // PRT-AX-NEXT:    ;var = 5;
   // PRT-AO-NEXT:    ;
@@ -551,7 +541,6 @@ for (i = 0; i < 5; ++i) {
 
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   //  PRT-A-NEXT:  #pragma acc loop worker
-  // PRT-AO-NEXT:  // #pragma omp parallel for num_threads(__clang_acc_num_workers__)
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
   // PRT-AX-NEXT:    ;{{  }}
   // PRT-AO-NEXT:    ;
