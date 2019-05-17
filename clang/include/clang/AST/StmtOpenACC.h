@@ -372,7 +372,6 @@ public:
 class ACCLoopDirective : public ACCExecutableDirective {
   friend class ASTStmtReader;
   llvm::DenseSet<VarDecl *> LCVars;
-  OpenACCClauseKind ParentLoopPartitioning = ACCC_unknown;
 
   /// Build directive with the given start and end location.
   ///
@@ -400,13 +399,10 @@ public:
   /// \param AssociatedStmt Statement associated with the directive.
   /// \param LCVars Loop control variables that are assigned but not declared
   ///        in the inits of the for loops associated with the directive.
-  /// \param ParentLoopPartitioning The loop partitioning that immediately
-  ///        parents this directive.
   static ACCLoopDirective *Create(
       const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
       ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
-      const llvm::DenseSet<VarDecl *> &LCVars,
-      OpenACCClauseKind ParentLoopPartitioning);
+      const llvm::DenseSet<VarDecl *> &LCVars);
 
   /// Creates an empty directive.
   ///
@@ -430,21 +426,6 @@ public:
   /// set if none.
   const llvm::DenseSet<VarDecl *> &getLoopControlVariables() const {
     return LCVars;
-  }
-
-  /// Set the loop partitioning that immediately parents this directive.
-  void setParentLoopPartitioning(OpenACCClauseKind V) {
-    ParentLoopPartitioning = V;
-  }
-  /// Get the loop partitioning that immediately parents this directive.  That
-  /// is, search upward, skip sequential loops, and stop at the first compute
-  /// directive or partitioned loop directive.  If stopping on a partitioned
-  /// loop directive (including a combined compute and partitioned loop
-  /// directive), return ACCC_vector, ACCC_worker, or ACCC_gang, in that order
-  /// of preference where the loop is partitioned by more than one of these.
-  /// Else, if stopping on a compute directive, return ACCC_unknown.
-  OpenACCClauseKind getParentLoopPartitioning() const {
-    return ParentLoopPartitioning;
   }
 };
 

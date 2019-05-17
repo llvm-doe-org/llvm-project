@@ -2313,8 +2313,6 @@ void ASTStmtReader::VisitACCLoopDirective(ACCLoopDirective *D) {
   for (uint64_t I = 0; I < LCVCount; ++I)
     LCVs.insert(Record.readDeclAs<VarDecl>());
   D->setLoopControlVariables(LCVs);
-  D->setParentLoopPartitioning(
-      static_cast<OpenACCClauseKind>(Record.readInt()));
 }
 
 void ASTStmtReader::VisitACCParallelLoopDirective(ACCParallelLoopDirective *D)

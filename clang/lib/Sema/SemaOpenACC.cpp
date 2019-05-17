@@ -76,12 +76,6 @@ public:
   bool hasExplicitIndependent() const { return ExplicitIndependent; }
   /// True if there's no explicit auto, seq, or independent clause.
   bool hasImplicitIndependent() const { return ImplicitIndependent; }
-  /// Return the first of vector, worker, and then gang that is set here.
-  OpenACCClauseKind getInnermost() const {
-    return hasGang() ? ACCC_gang
-                     : hasWorker() ? ACCC_worker
-                                   : hasVector() ? ACCC_vector : ACCC_unknown;
-  }
 };
 
 /// Stack for tracking declarations used in OpenACC directives and
@@ -251,11 +245,6 @@ public:
       }
     }
     return PartitioningKind();
-  }
-  PartitioningKind getParentLoopPartitioning() const {
-    OpenACCDirectiveKind ParentDir;
-    SourceLocation ParentLoc;
-    return getParentLoopPartitioning(ParentDir, ParentLoc);
   }
 
   /// Adds data sharing attribute to the specified declaration.
@@ -975,10 +964,9 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
         DSAStack->getNestedWorkerPartitioning());
     break;
   case ACCD_loop:
-    Res = ActOnOpenACCLoopDirective(
-        ClausesWithImplicit, AStmt, StartLoc, EndLoc,
-        DSAStack->getLoopControlVariables(),
-        DSAStack->getParentLoopPartitioning().getInnermost());
+    Res = ActOnOpenACCLoopDirective(ClausesWithImplicit, AStmt, StartLoc,
+                                    EndLoc,
+                                    DSAStack->getLoopControlVariables());
     break;
   case ACCD_parallel_loop:
   case ACCD_unknown:
@@ -1032,8 +1020,7 @@ void Sema::ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
 
 StmtResult Sema::ActOnOpenACCLoopDirective(
     ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-    SourceLocation EndLoc, const llvm::DenseSet<VarDecl *> &LCVars,
-    OpenACCClauseKind ParentLoopPartitioning) {
+    SourceLocation EndLoc, const llvm::DenseSet<VarDecl *> &LCVars) {
   if (!AStmt)
     return StmtError();
 
@@ -1089,7 +1076,7 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
   // OpenACC-level tools.
 
   return ACCLoopDirective::Create(Context, StartLoc, EndLoc, Clauses, AStmt,
-                                  LCVars, ParentLoopPartitioning);
+                                  LCVars);
 }
 
 StmtResult Sema::ActOnOpenACCParallelLoopDirective(
@@ -1714,6 +1701,13 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
   Expr *NumWorkersExpr = nullptr;
   Expr *VectorLengthExpr = nullptr;
 
+  /// Before translating the associated statement of an OpenACC directive that
+  /// translates to an OpenMP loop-related directive (acc loop seq, for
+  /// example, does not), the following variable is set to the type of that
+  /// OpenMP directive.  It is set back to its previous value after the
+  /// translation of the associated statement.
+  OpenMPDirectiveKind ParentLoopOMPKind = OMPD_unknown;
+
 public:
   TransformACCToOMP(Sema &SemaRef) : BaseTransform(SemaRef) {}
 
@@ -1989,7 +1983,7 @@ public:
             TDKind = OMPD_unknown;
             AddScopeWithAllPrivates = true;
           } else { // HasVector
-            if (D->getParentLoopPartitioning() == ACCC_unknown) {
+            if (ParentLoopOMPKind == OMPD_unknown) {
               TDKind = OMPD_parallel_for_simd;
               AddNumThreads1 = true;
             }
@@ -2082,8 +2076,12 @@ public:
     transformACCClauses(D, TDKind, TClauses, TClausesEmptyCount);
 
     // Transform associated statement.
+    OpenMPDirectiveKind ParentLoopOMPKindOld = ParentLoopOMPKind;
+    if (isOpenMPLoopDirective(TDKind))
+      ParentLoopOMPKind = TDKind;
     StmtResult AssociatedStmt = transformACCAssociatedStmt(D, TDKind,
                                                            TClauses);
+    ParentLoopOMPKind = ParentLoopOMPKindOld;
 
     // Build OpenMP directive and finalize enclosing compound statement, if
     // any.

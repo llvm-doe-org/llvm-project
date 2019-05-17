@@ -9646,8 +9646,7 @@ public:
   /// of the associated statement.
   StmtResult ActOnOpenACCLoopDirective(
       ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc, const llvm::DenseSet<VarDecl *> &LCVar,
-      OpenACCClauseKind ParentLoopPartitioning);
+      SourceLocation EndLoc, const llvm::DenseSet<VarDecl *> &LCVar);
   /// Called on well-formed '\#pragma acc parallel loop' after parsing
   /// of the associated statement.
   StmtResult ActOnOpenACCParallelLoopDirective(

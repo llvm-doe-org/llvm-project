@@ -119,8 +119,7 @@ ACCLoopDirective *
 ACCLoopDirective::Create(
     const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
     ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
-    const llvm::DenseSet<VarDecl *> &LCVars,
-    OpenACCClauseKind ParentLoopPartitioning) {
+    const llvm::DenseSet<VarDecl *> &LCVars) {
   unsigned Size = llvm::alignTo(sizeof(ACCLoopDirective), alignof(ACCClause *));
   void *Mem =
       C.Allocate(Size + sizeof(ACCClause *) * Clauses.size() + sizeof(Stmt *));
@@ -129,7 +128,6 @@ ACCLoopDirective::Create(
   Dir->setClauses(Clauses);
   Dir->setAssociatedStmt(AssociatedStmt);
   Dir->setLoopControlVariables(LCVars);
-  Dir->setParentLoopPartitioning(ParentLoopPartitioning);
   return Dir;
 }
 
