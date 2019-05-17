@@ -68,6 +68,17 @@ class ACCExecutableDirective : public Stmt {
     return MutableArrayRef<ACCClause *>(ClauseStorage, NumClauses);
   }
 
+  /// Set starting location of directive kind.
+  ///
+  /// \param Loc New starting location of directive.
+  ///
+  void setLocStart(SourceLocation Loc) { StartLoc = Loc; }
+  /// Set ending location of directive.
+  ///
+  /// \param Loc New ending location of directive.
+  ///
+  void setLocEnd(SourceLocation Loc) { EndLoc = Loc; }
+
 protected:
   /// Build instance of directive of class \a K.
   ///
@@ -268,17 +279,6 @@ public:
     return SourceRange(StartLoc, EndLoc);
   }
 
-  /// Set starting location of directive kind.
-  ///
-  /// \param Loc New starting location of directive.
-  ///
-  void setLocStart(SourceLocation Loc) { StartLoc = Loc; }
-  /// Set ending location of directive.
-  ///
-  /// \param Loc New ending location of directive.
-  ///
-  void setLocEnd(SourceLocation Loc) { EndLoc = Loc; }
-
   /// Get number of clauses.
   unsigned getNumClauses() const { return NumClauses; }
 
@@ -345,6 +345,10 @@ class ACCParallelDirective : public ACCExecutableDirective {
                                0, 1)
         {}
 
+  /// Record whether a (separate or combined with this directive) acc loop
+  /// directive with worker partitioning is nested here.
+  void setNestedWorkerPartitioning(bool V) { NestedWorkerPartitioning = V; }
+
 public:
   /// Creates directive.
   ///
@@ -373,9 +377,6 @@ public:
     return T->getStmtClass() == ACCParallelDirectiveClass;
   }
 
-  /// Record whether a (separate or combined with this directive) acc loop
-  /// directive with worker partitioning is nested here.
-  void setNestedWorkerPartitioning(bool V) { NestedWorkerPartitioning = V; }
   /// Return true if a (separate or combined with this directive) acc loop
   /// directive with worker partitioning is nested here.
   bool getNestedWorkerPartitioning() const { return NestedWorkerPartitioning; }
@@ -562,6 +563,19 @@ class ACCLoopDirective : public ACCExecutableDirective {
                                SourceLocation(), SourceLocation(), NumClauses,
                                0, 1) {}
 
+  /// Set the loop control variables that are assigned but not declared in the
+  /// inits of the for loops associated with the directive.
+  void setLoopControlVariables(const llvm::DenseSet<VarDecl *> &LCVars) {
+    this->LCVars = LCVars;
+  }
+
+  /// Record whether an acc loop directive with gang partitioning is nested
+  /// here.
+  void setNestedGangPartitioning(bool V) { NestedGangPartitioning = V; }
+
+  /// Set how the loop is partitioned.
+  void setPartitioning(ACCPartitioningKind V) { Partitioning = V; }
+
 public:
   /// Creates directive.
   ///
@@ -593,11 +607,6 @@ public:
     return T->getStmtClass() == ACCLoopDirectiveClass;
   }
 
-  /// Set the loop control variables that are assigned but not declared in the
-  /// inits of the for loops associated with the directive.
-  void setLoopControlVariables(const llvm::DenseSet<VarDecl *> &LCVars) {
-    this->LCVars = LCVars;
-  }
   /// Get the loop control variables that are assigned but not declared in the
   /// init of the for loop associated with the directive, or return an empty
   /// set if none.
@@ -605,15 +614,10 @@ public:
     return LCVars;
   }
 
-  /// Record whether an acc loop directive with gang partitioning is nested
-  /// here.
-  void setNestedGangPartitioning(bool V) { NestedGangPartitioning = V; }
   /// Return true if an acc loop directive with gang partitioning is nested
   /// here.
   bool getNestedGangPartitioning() const { return NestedGangPartitioning; }
 
-  /// Set how the loop is partitioned.
-  void setPartitioning(ACCPartitioningKind V) { Partitioning = V; }
   /// Get how the loop is partitioned.
   ACCPartitioningKind getPartitioning() const { return Partitioning; }
 

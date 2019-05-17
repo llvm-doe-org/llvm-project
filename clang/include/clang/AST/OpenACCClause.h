@@ -30,12 +30,19 @@ namespace clang {
 /// This is a basic class for representing single OpenACC clause.
 ///
 class ACCClause {
+  friend class ACCClauseReader;
+
   /// Starting location of the clause (the clause keyword).
   SourceLocation StartLoc;
   /// Ending location of the clause.
   SourceLocation EndLoc;
   /// Kind of the clause.
   OpenACCClauseKind Kind;
+
+  /// Sets the starting location of the clause.
+  void setLocStart(SourceLocation Loc) { StartLoc = Loc; }
+  /// Sets the ending location of the clause.
+  void setLocEnd(SourceLocation Loc) { EndLoc = Loc; }
 
 protected:
   ACCClause(OpenACCClauseKind K, SourceLocation StartLoc, SourceLocation EndLoc)
@@ -46,11 +53,6 @@ public:
   SourceLocation getBeginLoc() const { return StartLoc; }
   /// Returns the ending location of the clause.
   SourceLocation getEndLoc() const { return EndLoc; }
-
-  /// Sets the starting location of the clause.
-  void setLocStart(SourceLocation Loc) { StartLoc = Loc; }
-  /// Sets the ending location of the clause.
-  void setLocEnd(SourceLocation Loc) { EndLoc = Loc; }
 
   /// Returns kind of OpenACC clause (private, shared, reduction, etc.).
   OpenACCClauseKind getClauseKind() const { return Kind; }
@@ -75,10 +77,14 @@ public:
 /// '#pragma acc ...' directives.
 template <class T> class ACCVarListClause : public ACCClause {
   friend class ACCClauseReader;
+
   /// Location of '('.
   SourceLocation LParenLoc;
   /// Number of variables in the list.
   unsigned NumVars;
+
+  /// Sets the location of '('.
+  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
 
 protected:
   /// Fetches list of variables associated with this clause.
@@ -128,8 +134,6 @@ public:
   varlist_const_iterator varlist_begin() const { return getVarRefs().begin(); }
   varlist_const_iterator varlist_end() const { return getVarRefs().end(); }
 
-  /// Sets the location of '('.
-  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
   /// Returns the location of '('.
   SourceLocation getLParenLoc() const { return LParenLoc; }
 
@@ -152,6 +156,7 @@ class ACCSharedClause final
   friend TrailingObjects;
   friend ACCVarListClause;
   friend class ACCClauseReader;
+
   /// Build clause with number of variables \a N.
   ///
   /// \param N Number of the variables in the clause.
@@ -197,6 +202,7 @@ class ACCPrivateClause final
   friend TrailingObjects;
   friend ACCVarListClause;
   friend class ACCClauseReader;
+
   /// Build clause with number of variables \a N.
   ///
   /// \param StartLoc Starting location of the clause.
@@ -501,6 +507,9 @@ class ACCNumWorkersClause : public ACCClause {
   /// Original num_workers expression.
   Stmt *NumWorkers = nullptr;
 
+  /// Sets the location of '('.
+  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
+
   /// Set the original num_workers expression.
   ///
   /// \param E num_workers expression.
@@ -522,9 +531,6 @@ public:
   /// Build an empty clause.
   ACCNumWorkersClause()
       : ACCClause(ACCC_num_workers, SourceLocation(), SourceLocation()) {}
-
-  /// Sets the location of '('.
-  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
 
   /// Returns the location of '('.
   SourceLocation getLParenLoc() const { return LParenLoc; }
@@ -559,6 +565,9 @@ class ACCVectorLengthClause : public ACCClause {
   /// Original vector_length expression.
   Stmt *VectorLength = nullptr;
 
+  /// Sets the location of '('.
+  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
+
   /// Set the original vector_length expression.
   ///
   /// \param E vector_length expression.
@@ -580,9 +589,6 @@ public:
   /// Build an empty clause.
   ACCVectorLengthClause()
       : ACCClause(ACCC_vector_length, SourceLocation(), SourceLocation()) {}
-
-  /// Sets the location of '('.
-  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
 
   /// Returns the location of '('.
   SourceLocation getLParenLoc() const { return LParenLoc; }
@@ -789,6 +795,9 @@ class ACCCollapseClause : public ACCClause {
   /// Original collapse expression.
   Stmt *Collapse = nullptr;
 
+  /// Sets the location of '('.
+  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
+
   /// Set the original collapse expression.
   ///
   /// \param E collapse expression.
@@ -810,9 +819,6 @@ public:
   /// Build an empty clause.
   ACCCollapseClause()
       : ACCClause(ACCC_collapse, SourceLocation(), SourceLocation()) {}
-
-  /// Sets the location of '('.
-  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
 
   /// Returns the location of '('.
   SourceLocation getLParenLoc() const { return LParenLoc; }
