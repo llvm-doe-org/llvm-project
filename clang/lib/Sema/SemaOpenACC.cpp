@@ -704,7 +704,7 @@ public:
     }
   }
   void VisitStmt(Stmt *S) {
-    for (auto *C : S->children()) {
+    for (Stmt *C : S->children()) {
       if (C)
         Visit(C);
     }

@@ -77,7 +77,7 @@ protected:
         ClausesOffset(llvm::alignTo(sizeof(T), alignof(ACCClause *))),
         OMPNode(nullptr), DirectiveDiscardedForOMP(false) {}
 
-  /// Sets the list of variables for this clause.
+  /// Sets the list of clauses for this directive.
   ///
   /// \param Clauses The list of clauses for the directive.
   ///
