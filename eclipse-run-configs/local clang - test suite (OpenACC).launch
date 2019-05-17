@@ -32,5 +32,8 @@
     <listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_TYPES">
         <listEntry value="4"/>
     </listAttribute>
+    <mapAttribute key="org.eclipse.debug.core.environmentVariables">
+        <mapEntry key="FILECHECK_OPTS" value="-vv -dump-input=fail -color"/>
+    </mapAttribute>
     <stringAttribute key="process_factory_id" value="org.eclipse.cdt.testsrunner.TestingProcessFactory"/>
 </launchConfiguration>
