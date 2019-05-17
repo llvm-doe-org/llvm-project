@@ -2952,6 +2952,8 @@ public:
   //===--------------------------------------------------------------------===//
   // OpenACC: Directives and clauses.
 
+  /// Parses declarative OpenACC directives.
+  DeclGroupPtrTy ParseOpenACCDeclarativeDirective();
   /// Parses declarative or executable directive.
   StmtResult ParseOpenACCDeclarativeOrExecutableDirective();
   /// Parses clause of kind \a CKind for directive of a kind \a Kind.

@@ -56,6 +56,33 @@ static OpenACCDirectiveKind parseOpenACCDirectiveKind(Parser &P) {
                               : ACCD_unknown;
 }
 
+/// Parsing of declarative OpenACC directives.  None are supported yet, but
+/// we want to give a better diagnostic than a syntax error.
+///
+Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
+  assert(Tok.is(tok::annot_pragma_openacc) && "Not an OpenACC directive!");
+  ParenBraceBracketBalancer BalancerRAIIObj(*this);
+
+  ConsumeAnnotationToken();
+  OpenACCDirectiveKind DKind = parseOpenACCDirectiveKind(*this);
+
+  switch (DKind) {
+  case ACCD_unknown:
+    Diag(Tok, diag::err_acc_unknown_directive);
+    break;
+  case ACCD_parallel:
+  case ACCD_loop:
+  case ACCD_parallel_loop:
+    Diag(Tok, diag::err_acc_unexpected_directive)
+        << getOpenACCDirectiveName(DKind);
+    break;
+  }
+  while (Tok.isNot(tok::annot_pragma_openacc_end))
+    ConsumeAnyToken();
+  ConsumeAnyToken();
+  return nullptr;
+}
+
 ///  Parsing of declarative or executable OpenACC directives.
 ///
 ///       executable-directive:

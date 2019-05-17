@@ -1203,7 +1203,9 @@ def warn_acc_extra_tokens_at_eol : Warning<
   "extra tokens at the end of '#pragma acc %0' are ignored">,
   InGroup<ExtraTokens>;
 def err_acc_unknown_directive : Error<
-  "expected an OpenACC directive">;
+  "unknown or unsupported OpenACC directive">;
+def err_acc_unexpected_directive : Error<
+  "unexpected OpenACC directive '#pragma acc %0'">;
 def err_acc_expected_punc : Error<
   "expected ',' or ')' in '%0' clause">;
 def err_acc_unexpected_clause : Error<

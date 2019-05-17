@@ -762,6 +762,8 @@ Parser::ParseExternalDeclaration(ParsedAttributesWithRange &attrs,
     AccessSpecifier AS = AS_none;
     return ParseOpenMPDeclarativeDirectiveWithExtDecl(AS, attrs);
   }
+  case tok::annot_pragma_openacc:
+    return ParseOpenACCDeclarativeDirective();
   case tok::annot_pragma_ms_pointers_to_members:
     HandlePragmaMSPointersToMembers();
     return nullptr;
