@@ -16,9 +16,11 @@
 //   ASLC    = OpenACC shared clause for assigned loop control variable
 //   APLC    = OpenACC private clause for assigned loop control variable
 //   OPRG    = OpenACC pragma translated to OpenMP pragma
-//   OPLC    = OPRG but any assigned loop control var becomes declared private
+//   OPRGPLC = OPRG but any assigned loop control var becomes declared private
 //             in an enclosing compound statement
 //   OSEQ    = OpenACC loop seq discarded in translation to OpenMP
+//   OSEQPLC = OSEQ but any assigned loop control var becomes declared private
+//             in an enclosing compound statement
 //   OSIMP   = OpenMP shared implicit
 //   OSEXP   = OpenMP shared explicit
 //   ONT1    = OpenMP num_threads(1)
@@ -33,7 +35,7 @@
 //   accc_sp = space before OpenACC clauses or none if no clauses
 //   ompdd   = OpenMP directive dump
 //   ompdp   = OpenMP directive print
-//   ompdk   = OpenMP directive kind (OPRG, OPLC, or OSEQ)
+//   ompdk   = OpenMP directive kind (OPRG, OPRGPLC, OSEQ, OSEQPLC)
 //   ompsk   = OpenMP shared kind (OSIMP or OSEXP)
 //   dmp     = additional FileCheck prefixes for dump
 //   exe     = additional FileCheck prefixes for execution
@@ -94,7 +96,7 @@
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPParallelForSimdDirective
 // RUN:    ompdp='parallel for simd num_threads(1)'
-// RUN:    ompdk=OPLC
+// RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AV,DMP-ONT1
 // RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
@@ -118,7 +120,7 @@
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPParallelForSimdDirective
 // RUN:    ompdp='parallel for simd num_threads(1)'
-// RUN:    ompdk=OPLC
+// RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AV,DMP-ONT1
 // RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
@@ -168,7 +170,7 @@
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPDistributeSimdDirective
 // RUN:    ompdp='distribute simd'
-// RUN:    ompdk=OPLC
+// RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AG,DMP-AV
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
@@ -176,7 +178,7 @@
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPDistributeSimdDirective
 // RUN:    ompdp='distribute simd'
-// RUN:    ompdk=OPLC
+// RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AG,DMP-AV
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
@@ -184,7 +186,7 @@
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPParallelForSimdDirective
 // RUN:    ompdp='parallel for simd'
-// RUN:    ompdk=OPLC
+// RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AW,DMP-AV
 // RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
@@ -192,7 +194,7 @@
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPParallelForSimdDirective
 // RUN:    ompdp='parallel for simd'
-// RUN:    ompdk=OPLC
+// RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AW,DMP-AV
 // RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
@@ -200,7 +202,7 @@
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPDistributeParallelForSimdDirective
 // RUN:    ompdp='distribute parallel for simd'
-// RUN:    ompdk=OPLC
+// RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AG,DMP-AW,DMP-AV
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
@@ -208,7 +210,7 @@
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPDistributeParallelForSimdDirective
 // RUN:    ompdp='distribute parallel for simd'
-// RUN:    ompdk=OPLC
+// RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AG,DMP-AW,DMP-AV
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
@@ -406,59 +408,59 @@ int main() {
       // PRT-NEXT: int j = 0;
       int j = 0;
 
-      // DMP:               ACCLoopDirective
-      // DMP-ASEQ-NEXT:       ACCSeqClause
-      // DMP-AIND-NEXT:       ACCIndependentClause
-      // DMP-AAUTO-NEXT:      ACCAutoClause
-      // DMP-ASEQ-NOT:        <implicit>
-      // DMP-AIND-NOT:        <implicit>
-      // DMP-AAUTO-NOT:       <implicit>
-      // DMP-AG-NEXT:         ACCGangClause
-      // DMP-AW-NEXT:         ACCWorkerClause
-      // DMP-AV-NEXT:         ACCVectorClause
-      // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-      // DMP-NEXT:            ACCSharedClause {{.*}} <implicit>
-      // DMP-NEXT:              DeclRefExpr {{.*}} 'j' 'int'
-      // DMP-NEXT:              DeclRefExpr {{.*}} 'loopOnly' 'int'
-      // DMP-NEXT:              DeclRefExpr {{.*}} 'save'
-      // DMP-NEXT:              DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
-      // DMP-OPRG-NEXT:       impl: [[OMPDD]]
-      // DMP-OPRG-NEXT:         OMPSharedClause
-      // DMP-OPRG-OSIMP-SAME:     <implicit>
-      // DMP-OPRG-OSEXP-NOT:      <implicit>
-      // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
-      // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'loopOnly' 'int'
-      // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'save'
-      // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
-      // DMP-OPRG:              ForStmt
-      // DMP-OPLC-NEXT:       impl: [[OMPDD]]
-      // DMP-ONT1-NEXT:         OMPNum_threadsClause
-      // DMP-ONT1-NEXT:           IntegerLiteral {{.*}} 'int' 1
-      // DMP-OPLC-NEXT:         OMPSharedClause
-      // DMP-OPLC-OSIMP-SAME:     <implicit>
-      // DMP-OPLC-OSEXP-NOT:      <implicit>
-      // DMP-OPLC-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
-      // DMP-OPLC-NEXT:           DeclRefExpr {{.*}} 'loopOnly' 'int'
-      // DMP-OPLC-NEXT:           DeclRefExpr {{.*}} 'save'
-      // DMP-OPLC-NEXT:           DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
-      // DMP-OPLC:              ForStmt
-      // DMP-OSEQ-NEXT:       impl: ForStmt
+      // DMP:                  ACCLoopDirective
+      // DMP-ASEQ-NEXT:          ACCSeqClause
+      // DMP-AIND-NEXT:          ACCIndependentClause
+      // DMP-AAUTO-NEXT:         ACCAutoClause
+      // DMP-ASEQ-NOT:           <implicit>
+      // DMP-AIND-NOT:           <implicit>
+      // DMP-AAUTO-NOT:          <implicit>
+      // DMP-AG-NEXT:            ACCGangClause
+      // DMP-AW-NEXT:            ACCWorkerClause
+      // DMP-AV-NEXT:            ACCVectorClause
+      // DMP-AIMP-NEXT:          ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:               ACCSharedClause {{.*}} <implicit>
+      // DMP-NEXT:                 DeclRefExpr {{.*}} 'j' 'int'
+      // DMP-NEXT:                 DeclRefExpr {{.*}} 'loopOnly' 'int'
+      // DMP-NEXT:                 DeclRefExpr {{.*}} 'save'
+      // DMP-NEXT:                 DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+      // DMP-OPRG-NEXT:          impl: [[OMPDD]]
+      // DMP-OPRG-NEXT:            OMPSharedClause
+      // DMP-OPRG-OSIMP-SAME:        <implicit>
+      // DMP-OPRG-OSEXP-NOT:         <implicit>
+      // DMP-OPRG-NEXT:              DeclRefExpr {{.*}} 'j' 'int'
+      // DMP-OPRG-NEXT:              DeclRefExpr {{.*}} 'loopOnly' 'int'
+      // DMP-OPRG-NEXT:              DeclRefExpr {{.*}} 'save'
+      // DMP-OPRG-NEXT:              DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+      // DMP-OPRG:                 ForStmt
+      // DMP-OPRGPLC-NEXT:       impl: [[OMPDD]]
+      // DMP-ONT1-NEXT:            OMPNum_threadsClause
+      // DMP-ONT1-NEXT:              IntegerLiteral {{.*}} 'int' 1
+      // DMP-OPRGPLC-NEXT:         OMPSharedClause
+      // DMP-OPRGPLC-OSIMP-SAME:     <implicit>
+      // DMP-OPRGPLC-OSEXP-NOT:      <implicit>
+      // DMP-OPRGPLC-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
+      // DMP-OPRGPLC-NEXT:           DeclRefExpr {{.*}} 'loopOnly' 'int'
+      // DMP-OPRGPLC-NEXT:           DeclRefExpr {{.*}} 'save'
+      // DMP-OPRGPLC-NEXT:           DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+      // DMP-OPRGPLC:              ForStmt
+      // DMP-OSEQ-NEXT:          impl: ForStmt
       //
-      // PRT-A-NEXT:             {{^ *}}#pragma acc loop[[ACCC]]
-      // PRT-AO-OSEQ-SAME:       {{^}} // discarded in OpenMP translation
-      // PRT-A-SAME:             {{^$}}
-      // PRT-AO-OPRG-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
-      // PRT-AO-OPLC-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
-      // PRT-AO-OPRG-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
-      // PRT-AO-OPLC-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
+      // PRT-A-NEXT:                {{^ *}}#pragma acc loop[[ACCC]]
+      // PRT-AO-OSEQ-SAME:          {{^}} // discarded in OpenMP translation
+      // PRT-A-SAME:                {{^$}}
+      // PRT-AO-OPRG-OSIMP-NEXT:    {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+      // PRT-AO-OPRGPLC-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+      // PRT-AO-OPRG-OSEXP-NEXT:    {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
+      // PRT-AO-OPRGPLC-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
       //
-      // PRT-O-OPRG-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
-      // PRT-O-OPLC-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
-      // PRT-O-OPRG-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
-      // PRT-O-OPLC-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
-      // PRT-OA-NEXT:           {{^ *}}// #pragma acc loop[[ACCC]]
-      // PRT-OA-OSEQ-SAME:      {{^}} // discarded in OpenMP translation
-      // PRT-OA-SAME:           {{^$}}
+      // PRT-O-OPRG-OSIMP-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
+      // PRT-O-OPRGPLC-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
+      // PRT-O-OPRG-OSEXP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
+      // PRT-O-OPRGPLC-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
+      // PRT-OA-NEXT:              {{^ *}}// #pragma acc loop[[ACCC]]
+      // PRT-OA-OSEQ-SAME:         {{^}} // discarded in OpenMP translation
+      // PRT-OA-SAME:              {{^$}}
       //
       // PRT-NEXT: for ({{.*}}) {
       #pragma acc loop ACCC
@@ -575,89 +577,89 @@ int main() {
     // PRT-NEXT: memset
     memset(&save, 0, sizeof(save));
 
-    // DMP:            ACCParallelLoopDirective
-    // DMP-NEXT:         ACCNum_gangsClause
-    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 3
-    // DMP-ASEQ-NEXT:    ACCSeqClause
-    // DMP-AIND-NEXT:    ACCIndependentClause
-    // DMP-AAUTO-NEXT:   ACCAutoClause
-    // DMP-ASEQ-NOT:     <implicit>
-    // DMP-AIND-NOT:     <implicit>
-    // DMP-AAUTO-NOT:    <implicit>
-    // DMP-AG-NEXT:      ACCGangClause
-    // DMP-AW-NEXT:      ACCWorkerClause
-    // DMP-AV-NEXT:      ACCVectorClause
-    // DMP-NEXT:         effect: ACCParallelDirective
-    // DMP-NEXT:           ACCNum_gangsClause
-    // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 3
-    // DMP-NEXT:           ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:             DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:             DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
-    // DMP-NEXT:           ACCFirstprivateClause {{.*}} <implicit>
-    // DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:             DeclRefExpr {{.*}} 'loopOnly' 'int'
-    // DMP-NEXT:           impl: OMPTargetTeamsDirective
-    // DMP-NEXT:             OMPNum_teamsClause
-    // DMP-NEXT:               IntegerLiteral {{.*}} 'int' 3
-    // DMP-NEXT:             OMPSharedClause
-    // DMP-NOT:                <implicit>
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
-    // DMP-NEXT:             OMPFirstprivateClause
-    // DMP-NOT:                <implicit>
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'loopOnly' 'int'
-    // DMP:                ACCLoopDirective
-    // DMP-ASEQ-NEXT:        ACCSeqClause
-    // DMP-AIND-NEXT:        ACCIndependentClause
-    // DMP-AAUTO-NEXT:       ACCAutoClause
-    // DMP-ASEQ-NOT:         <implicit>
-    // DMP-AIND-NOT:         <implicit>
-    // DMP-AAUTO-NOT:        <implicit>
-    // DMP-AG-NEXT:          ACCGangClause
-    // DMP-AW-NEXT:          ACCWorkerClause
-    // DMP-AV-NEXT:          ACCVectorClause
-    // DMP-AIMP-NEXT:        ACCIndependentClause {{.*}} <implicit>
-    // DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'loopOnly' 'int'
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
-    // DMP-OPRG-NEXT:        impl: [[OMPDD]]
-    // DMP-OPRG-NEXT:          OMPSharedClause
-    // DMP-OPRG-OSIMP-SAME:      <implicit>
-    // DMP-OPRG-OSEXP-NOT:       <implicit>
-    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'loopOnly' 'int'
-    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'save'
-    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
-    // DMP-OPRG:               ForStmt
-    // DMP-OPLC-NEXT:        impl: [[OMPDD]]
-    // DMP-ONT1-NEXT:          OMPNum_threadsClause
-    // DMP-ONT1-NEXT:            IntegerLiteral {{.*}} 'int' 1
-    // DMP-OPLC-NEXT:          OMPSharedClause
-    // DMP-OPLC-OSIMP-SAME:      <implicit>
-    // DMP-OPLC-OSEXP-NOT:       <implicit>
-    // DMP-OPLC-NEXT:            DeclRefExpr {{.*}} 'j'
-    // DMP-OPLC-NEXT:            DeclRefExpr {{.*}} 'loopOnly' 'int'
-    // DMP-OPLC-NEXT:            DeclRefExpr {{.*}} 'save'
-    // DMP-OPLC-NEXT:            DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
-    // DMP-OPLC:               ForStmt
-    // DMP-OSEQ-NEXT:        impl: ForStmt
+    // DMP:               ACCParallelLoopDirective
+    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 3
+    // DMP-ASEQ-NEXT:       ACCSeqClause
+    // DMP-AIND-NEXT:       ACCIndependentClause
+    // DMP-AAUTO-NEXT:      ACCAutoClause
+    // DMP-ASEQ-NOT:        <implicit>
+    // DMP-AIND-NOT:        <implicit>
+    // DMP-AAUTO-NOT:       <implicit>
+    // DMP-AG-NEXT:         ACCGangClause
+    // DMP-AW-NEXT:         ACCWorkerClause
+    // DMP-AV-NEXT:         ACCVectorClause
+    // DMP-NEXT:            effect: ACCParallelDirective
+    // DMP-NEXT:              ACCNum_gangsClause
+    // DMP-NEXT:                IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:              ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'save'
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:              ACCFirstprivateClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'loopOnly' 'int'
+    // DMP-NEXT:              impl: OMPTargetTeamsDirective
+    // DMP-NEXT:                OMPNum_teamsClause
+    // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:                OMPSharedClause
+    // DMP-NOT:                   <implicit>
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'save'
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:                OMPFirstprivateClause
+    // DMP-NOT:                   <implicit>
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'loopOnly' 'int'
+    // DMP:                   ACCLoopDirective
+    // DMP-ASEQ-NEXT:           ACCSeqClause
+    // DMP-AIND-NEXT:           ACCIndependentClause
+    // DMP-AAUTO-NEXT:          ACCAutoClause
+    // DMP-ASEQ-NOT:            <implicit>
+    // DMP-AIND-NOT:            <implicit>
+    // DMP-AAUTO-NOT:           <implicit>
+    // DMP-AG-NEXT:             ACCGangClause
+    // DMP-AW-NEXT:             ACCWorkerClause
+    // DMP-AV-NEXT:             ACCVectorClause
+    // DMP-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:                ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'loopOnly' 'int'
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'save'
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-OPRG-NEXT:           impl: [[OMPDD]]
+    // DMP-OPRG-NEXT:             OMPSharedClause
+    // DMP-OPRG-OSIMP-SAME:         <implicit>
+    // DMP-OPRG-OSEXP-NOT:          <implicit>
+    // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'loopOnly' 'int'
+    // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'save'
+    // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-OPRG:                  ForStmt
+    // DMP-OPRGPLC-NEXT:        impl: [[OMPDD]]
+    // DMP-ONT1-NEXT:             OMPNum_threadsClause
+    // DMP-ONT1-NEXT:               IntegerLiteral {{.*}} 'int' 1
+    // DMP-OPRGPLC-NEXT:          OMPSharedClause
+    // DMP-OPRGPLC-OSIMP-SAME:      <implicit>
+    // DMP-OPRGPLC-OSEXP-NOT:       <implicit>
+    // DMP-OPRGPLC-NEXT:            DeclRefExpr {{.*}} 'j'
+    // DMP-OPRGPLC-NEXT:            DeclRefExpr {{.*}} 'loopOnly' 'int'
+    // DMP-OPRGPLC-NEXT:            DeclRefExpr {{.*}} 'save'
+    // DMP-OPRGPLC-NEXT:            DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-OPRGPLC:               ForStmt
+    // DMP-OSEQ-NEXT:           impl: ForStmt
     //
-    // PRT-A-NEXT:             {{^ *}}#pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
-    // PRT-AO-NEXT:            {{^ *}}// #pragma omp target teams num_teams(3) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
-    // PRT-AO-OPRG-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
-    // PRT-AO-OPLC-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
-    // PRT-AO-OPRG-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
-    // PRT-AO-OPLC-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
+    // PRT-A-NEXT:                {{^ *}}#pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
+    // PRT-AO-NEXT:               {{^ *}}// #pragma omp target teams num_teams(3) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    // PRT-AO-OPRG-OSIMP-NEXT:    {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+    // PRT-AO-OPRGPLC-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+    // PRT-AO-OPRG-OSEXP-NEXT:    {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
+    // PRT-AO-OPRGPLC-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
     //
-    // PRT-O-NEXT:            {{^ *}}#pragma omp target teams num_teams(3) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
-    // PRT-O-OPRG-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
-    // PRT-O-OPLC-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
-    // PRT-O-OPRG-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
-    // PRT-O-OPLC-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
-    // PRT-OA-NEXT:           {{^ *}}// #pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
+    // PRT-O-NEXT:               {{^ *}}#pragma omp target teams num_teams(3) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    // PRT-O-OPRG-OSIMP-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
+    // PRT-O-OPRGPLC-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
+    // PRT-O-OPRG-OSEXP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
+    // PRT-O-OPRGPLC-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
+    // PRT-OA-NEXT:              {{^ *}}// #pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
     //
     // PRT-NEXT: for ({{.*}}) {
     #pragma acc parallel loop num_gangs(3) ACCC
@@ -802,93 +804,93 @@ int main() {
       // PRT-NEXT: int k = 888;
       int k = 888;
 
-      // DMP:              ACCLoopDirective
-      // DMP-ASEQ-NEXT:      ACCSeqClause
-      // DMP-AIND-NEXT:      ACCIndependentClause
-      // DMP-AAUTO-NEXT:     ACCAutoClause
-      // DMP-ASEQ-NOT:       <implicit>
-      // DMP-AIND-NOT:       <implicit>
-      // DMP-AAUTO-NOT:      <implicit>
-      // DMP-AG-NEXT:        ACCGangClause
-      // DMP-AW-NEXT:        ACCWorkerClause
-      // DMP-AV-NEXT:        ACCVectorClause
-      // DMP-AIMP-NEXT:      ACCIndependentClause {{.*}} <implicit>
-      // DMP-NEXT:           ACCSharedClause {{.*}} <implicit>
-      // DMP-ASLC-NEXT:        DeclRefExpr {{.*}} 'j' 'int'
-      // DMP-NEXT:             DeclRefExpr {{.*}} 'k' 'int'
-      // DMP-APLC-NEXT:      ACCPrivateClause {{.*}} <implicit>
-      // DMP-APLC-NEXT:        DeclRefExpr {{.*}} 'j' 'int'
-      // DMP-OPRG-NEXT:      impl: [[OMPDD]]
-      // DMP-OPRG-NEXT:        OMPSharedClause
-      // DMP-OPRG-OSIMP-SAME:    <implicit>
-      // DMP-OPRG-OSEXP-NOT:     <implicit>
-      // DMP-OPRG-NEXT:          DeclRefExpr {{.*}} 'k' 'int'
-      // DMP-OPRG-NEXT:        OMPPrivateClause
-      // DMP-OPRG-NOT:           <implicit>
-      // DMP-OPRG-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
-      // DMP-OPRG:             ForStmt
-      // DMP-OPLC-NEXT:      impl: CompoundStmt
-      // DMP-OPLC-NEXT:        DeclStmt
-      // DMP-OPLC-NEXT:          VarDecl {{.*}} j 'int'
-      // DMP-OPLC-NEXT:        [[OMPDD]]
-      // DMP-ONT1-NEXT:          OMPNum_threadsClause
-      // DMP-ONT1-NEXT:            IntegerLiteral {{.*}} 'int' 1
-      // DMP-OPLC:               ForStmt
-      // DMP-OSEQ-NEXT:      impl: ForStmt
+      // DMP:                 ACCLoopDirective
+      // DMP-ASEQ-NEXT:         ACCSeqClause
+      // DMP-AIND-NEXT:         ACCIndependentClause
+      // DMP-AAUTO-NEXT:        ACCAutoClause
+      // DMP-ASEQ-NOT:          <implicit>
+      // DMP-AIND-NOT:          <implicit>
+      // DMP-AAUTO-NOT:         <implicit>
+      // DMP-AG-NEXT:           ACCGangClause
+      // DMP-AW-NEXT:           ACCWorkerClause
+      // DMP-AV-NEXT:           ACCVectorClause
+      // DMP-AIMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:              ACCSharedClause {{.*}} <implicit>
+      // DMP-ASLC-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
+      // DMP-NEXT:                DeclRefExpr {{.*}} 'k' 'int'
+      // DMP-APLC-NEXT:         ACCPrivateClause {{.*}} <implicit>
+      // DMP-APLC-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
+      // DMP-OPRG-NEXT:         impl: [[OMPDD]]
+      // DMP-OPRG-NEXT:           OMPSharedClause
+      // DMP-OPRG-OSIMP-SAME:       <implicit>
+      // DMP-OPRG-OSEXP-NOT:        <implicit>
+      // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'k' 'int'
+      // DMP-OPRG-NEXT:           OMPPrivateClause
+      // DMP-OPRG-NOT:              <implicit>
+      // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
+      // DMP-OPRG:                ForStmt
+      // DMP-OPRGPLC-NEXT:      impl: CompoundStmt
+      // DMP-OPRGPLC-NEXT:        DeclStmt
+      // DMP-OPRGPLC-NEXT:          VarDecl {{.*}} j 'int'
+      // DMP-OPRGPLC-NEXT:        [[OMPDD]]
+      // DMP-ONT1-NEXT:             OMPNum_threadsClause
+      // DMP-ONT1-NEXT:               IntegerLiteral {{.*}} 'int' 1
+      // DMP-OPRGPLC:               ForStmt
+      // DMP-OSEQ-NEXT:         impl: ForStmt
       //
-      // PRT-AO-OPLC-NEXT:       // v----------ACC----------v
-      // PRT-A-NEXT:             {{^ *}}#pragma acc loop[[ACCC]]
-      // PRT-AO-OSEQ-SAME:       {{^}} // discarded in OpenMP translation
-      // PRT-A-SAME:             {{^$}}
-      // PRT-AO-OPRG-OSIMP-NEXT: // #pragma omp [[OMPDP]] private(j){{$}}
-      // PRT-AO-OPRG-OSEXP-NEXT: // #pragma omp [[OMPDP]] shared(k) private(j){{$}}
-      // PRT-A-NEXT:             for (j ={{.*}}) {
-      // PRT-A-NEXT:               printf
-      // PRT-A-NEXT:               for (k ={{.*}})
-      // PRT-A-NEXT:                 ;
-      // PRT-A-NEXT:             }
-      // PRT-AO-OPLC-NEXT:       // ---------ACC->OMP--------
-      // PRT-AO-OPLC-NEXT:       // {
-      // PRT-AO-OPLC-NEXT:       //   int j;
-      // PRT-AO-OPLC-OSIMP-NEXT: //   #pragma omp [[OMPDP]]{{$}}
-      // PRT-AO-OPLC-OSEXP-NEXT: //   #pragma omp [[OMPDP]] shared(k){{$}}
-      // PRT-AO-OPLC-NEXT:       //   for (j ={{.*}}) {
-      // PRT-AO-OPLC-NEXT:       //     printf
-      // PRT-AO-OPLC-NEXT:       //     for (k ={{.*}})
-      // PRT-AO-OPLC-NEXT:       //       ;
-      // PRT-AO-OPLC-NEXT:       //   }
-      // PRT-AO-OPLC-NEXT:       // }
-      // PRT-AO-OPLC-NEXT:       // ^----------OMP----------^
+      // PRT-AO-OPRGPLC-NEXT:       // v----------ACC----------v
+      // PRT-A-NEXT:                {{^ *}}#pragma acc loop[[ACCC]]
+      // PRT-AO-OSEQ-SAME:          {{^}} // discarded in OpenMP translation
+      // PRT-A-SAME:                {{^$}}
+      // PRT-AO-OPRG-OSIMP-NEXT:    // #pragma omp [[OMPDP]] private(j){{$}}
+      // PRT-AO-OPRG-OSEXP-NEXT:    // #pragma omp [[OMPDP]] shared(k) private(j){{$}}
+      // PRT-A-NEXT:                for (j ={{.*}}) {
+      // PRT-A-NEXT:                  printf
+      // PRT-A-NEXT:                  for (k ={{.*}})
+      // PRT-A-NEXT:                    ;
+      // PRT-A-NEXT:                }
+      // PRT-AO-OPRGPLC-NEXT:       // ---------ACC->OMP--------
+      // PRT-AO-OPRGPLC-NEXT:       // {
+      // PRT-AO-OPRGPLC-NEXT:       //   int j;
+      // PRT-AO-OPRGPLC-OSIMP-NEXT: //   #pragma omp [[OMPDP]]{{$}}
+      // PRT-AO-OPRGPLC-OSEXP-NEXT: //   #pragma omp [[OMPDP]] shared(k){{$}}
+      // PRT-AO-OPRGPLC-NEXT:       //   for (j ={{.*}}) {
+      // PRT-AO-OPRGPLC-NEXT:       //     printf
+      // PRT-AO-OPRGPLC-NEXT:       //     for (k ={{.*}})
+      // PRT-AO-OPRGPLC-NEXT:       //       ;
+      // PRT-AO-OPRGPLC-NEXT:       //   }
+      // PRT-AO-OPRGPLC-NEXT:       // }
+      // PRT-AO-OPRGPLC-NEXT:       // ^----------OMP----------^
       //
-      // PRT-OA-OPLC-NEXT:      // v----------OMP----------v
-      // PRT-O-OPRG-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
-      // PRT-O-OPRG-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(k) private(j){{$}}
-      // PRT-OA-OPRG-NEXT:      // #pragma acc loop[[ACCC]]{{$}}
-      // PRT-OA-OSEQ-NEXT:      // #pragma acc loop[[ACCC]] // discarded in OpenMP translation{{$}}
-      // PRT-O-OPLC-NEXT:       {
-      // PRT-O-OPLC-NEXT:         int j;
-      // PRT-O-OPLC-OSIMP-NEXT:   {{^ *}}#pragma omp [[OMPDP]]{{$}}
-      // PRT-O-OPLC-OSEXP-NEXT:   {{^ *}}#pragma omp [[OMPDP]] shared(k){{$}}
-      // PRT-O-NEXT:              for (j ={{.*}}) {
-      // PRT-O-NEXT:                printf
-      // PRT-O-NEXT:                for (k ={{.*}})
-      // PRT-O-NEXT:                  ;
-      // PRT-O-NEXT:              }
-      // PRT-O-OPLC-NEXT:       }
-      // PRT-OA-OPLC-NEXT:      // ---------OMP<-ACC--------
-      // PRT-OA-OPLC-NEXT:      // #pragma acc loop[[ACCC]]{{$}}
-      // PRT-OA-OPLC-NEXT:      // for (j ={{.*}}) {
-      // PRT-OA-OPLC-NEXT:      //   printf
-      // PRT-OA-OPLC-NEXT:      //   for (k ={{.*}})
-      // PRT-OA-OPLC-NEXT:      //     ;
-      // PRT-OA-OPLC-NEXT:      // }
-      // PRT-OA-OPLC-NEXT:      // ^----------ACC----------^
+      // PRT-OA-OPRGPLC-NEXT:       // v----------OMP----------v
+      // PRT-O-OPRG-OSIMP-NEXT:     {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
+      // PRT-O-OPRG-OSEXP-NEXT:     {{^ *}}#pragma omp [[OMPDP]] shared(k) private(j){{$}}
+      // PRT-OA-OPRG-NEXT:          // #pragma acc loop[[ACCC]]{{$}}
+      // PRT-OA-OSEQ-NEXT:          // #pragma acc loop[[ACCC]] // discarded in OpenMP translation{{$}}
+      // PRT-O-OPRGPLC-NEXT:        {
+      // PRT-O-OPRGPLC-NEXT:          int j;
+      // PRT-O-OPRGPLC-OSIMP-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
+      // PRT-O-OPRGPLC-OSEXP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] shared(k){{$}}
+      // PRT-O-NEXT:                  for (j ={{.*}}) {
+      // PRT-O-NEXT:                    printf
+      // PRT-O-NEXT:                    for (k ={{.*}})
+      // PRT-O-NEXT:                      ;
+      // PRT-O-NEXT:                  }
+      // PRT-O-OPRGPLC-NEXT:        }
+      // PRT-OA-OPRGPLC-NEXT:       // ---------OMP<-ACC--------
+      // PRT-OA-OPRGPLC-NEXT:       // #pragma acc loop[[ACCC]]{{$}}
+      // PRT-OA-OPRGPLC-NEXT:       // for (j ={{.*}}) {
+      // PRT-OA-OPRGPLC-NEXT:       //   printf
+      // PRT-OA-OPRGPLC-NEXT:       //   for (k ={{.*}})
+      // PRT-OA-OPRGPLC-NEXT:       //     ;
+      // PRT-OA-OPRGPLC-NEXT:       // }
+      // PRT-OA-OPRGPLC-NEXT:       // ^----------ACC----------^
       //
-      // PRT-NOACC-NEXT:        for (j ={{.*}}) {
-      // PRT-NOACC-NEXT:          printf
-      // PRT-NOACC-NEXT:          for (k ={{.*}})
-      // PRT-NOACC-NEXT:            ;
-      // PRT-NOACC-NEXT:        }
+      // PRT-NOACC-NEXT:            for (j ={{.*}}) {
+      // PRT-NOACC-NEXT:              printf
+      // PRT-NOACC-NEXT:              for (k ={{.*}})
+      // PRT-NOACC-NEXT:                ;
+      // PRT-NOACC-NEXT:            }
       #pragma acc loop ACCC
       for (j = 1; j < 3; ++j) {
         // EXE-NEXT:        hello world
@@ -928,53 +930,53 @@ int main() {
       // control variable list, so it should now be implicitly shared in all
       // cases.
       //
-      // DMP:               ACCLoopDirective
-      // DMP-ASEQ-NEXT:       ACCSeqClause
-      // DMP-AIND-NEXT:       ACCIndependentClause
-      // DMP-AAUTO-NEXT:      ACCAutoClause
-      // DMP-ASEQ-NOT:        <implicit>
-      // DMP-AIND-NOT:        <implicit>
-      // DMP-AAUTO-NOT:       <implicit>
-      // DMP-AG-NEXT:         ACCGangClause
-      // DMP-AW-NEXT:         ACCWorkerClause
-      // DMP-AV-NEXT:         ACCVectorClause
-      // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-      // DMP-NEXT:            ACCSharedClause {{.*}} <implicit>
-      // DMP-NEXT:              DeclRefExpr {{.*}} 'j' 'int'
-      // DMP-NEXT:              DeclRefExpr {{.*}} 'save'
-      // DMP-OPRG-NEXT:       impl: [[OMPDD]]
-      // DMP-OPRG-NEXT:         OMPSharedClause
-      // DMP-OPRG-OSIMP-SAME:     <implicit>
-      // DMP-OPRG-OSEXP-NOT:      <implicit>
-      // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
-      // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'save'
-      // DMP-OPRG:              ForStmt
-      // DMP-OPLC-NEXT:       impl: [[OMPDD]]
-      // DMP-ONT1-NEXT:         OMPNum_threadsClause
-      // DMP-ONT1-NEXT:           IntegerLiteral {{.*}} 'int' 1
-      // DMP-OPLC-NEXT:         OMPSharedClause
-      // DMP-OPLC-OSIMP-SAME:     <implicit>
-      // DMP-OPLC-OSEXP-NOT:      <implicit>
-      // DMP-OPLC-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
-      // DMP-OPLC-NEXT:           DeclRefExpr {{.*}} 'save'
-      // DMP-OPLC:              ForStmt
-      // DMP-OSEQ-NEXT:       impl: ForStmt
+      // DMP:                  ACCLoopDirective
+      // DMP-ASEQ-NEXT:          ACCSeqClause
+      // DMP-AIND-NEXT:          ACCIndependentClause
+      // DMP-AAUTO-NEXT:         ACCAutoClause
+      // DMP-ASEQ-NOT:           <implicit>
+      // DMP-AIND-NOT:           <implicit>
+      // DMP-AAUTO-NOT:          <implicit>
+      // DMP-AG-NEXT:            ACCGangClause
+      // DMP-AW-NEXT:            ACCWorkerClause
+      // DMP-AV-NEXT:            ACCVectorClause
+      // DMP-AIMP-NEXT:          ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:               ACCSharedClause {{.*}} <implicit>
+      // DMP-NEXT:                 DeclRefExpr {{.*}} 'j' 'int'
+      // DMP-NEXT:                 DeclRefExpr {{.*}} 'save'
+      // DMP-OPRG-NEXT:          impl: [[OMPDD]]
+      // DMP-OPRG-NEXT:            OMPSharedClause
+      // DMP-OPRG-OSIMP-SAME:        <implicit>
+      // DMP-OPRG-OSEXP-NOT:         <implicit>
+      // DMP-OPRG-NEXT:              DeclRefExpr {{.*}} 'j' 'int'
+      // DMP-OPRG-NEXT:              DeclRefExpr {{.*}} 'save'
+      // DMP-OPRG:                 ForStmt
+      // DMP-OPRGPLC-NEXT:       impl: [[OMPDD]]
+      // DMP-ONT1-NEXT:            OMPNum_threadsClause
+      // DMP-ONT1-NEXT:              IntegerLiteral {{.*}} 'int' 1
+      // DMP-OPRGPLC-NEXT:         OMPSharedClause
+      // DMP-OPRGPLC-OSIMP-SAME:     <implicit>
+      // DMP-OPRGPLC-OSEXP-NOT:      <implicit>
+      // DMP-OPRGPLC-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
+      // DMP-OPRGPLC-NEXT:           DeclRefExpr {{.*}} 'save'
+      // DMP-OPRGPLC:              ForStmt
+      // DMP-OSEQ-NEXT:          impl: ForStmt
       //
-      // PRT-A-NEXT:             {{^ *}}#pragma acc loop[[ACCC]]
-      // PRT-AO-OSEQ-SAME:       {{^}} // discarded in OpenMP translation
-      // PRT-A-SAME:             {{^$}}
-      // PRT-AO-OPRG-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
-      // PRT-AO-OPLC-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
-      // PRT-AO-OPRG-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,save){{$}}
-      // PRT-AO-OPLC-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,save){{$}}
+      // PRT-A-NEXT:                {{^ *}}#pragma acc loop[[ACCC]]
+      // PRT-AO-OSEQ-SAME:          {{^}} // discarded in OpenMP translation
+      // PRT-A-SAME:                {{^$}}
+      // PRT-AO-OPRG-OSIMP-NEXT:    {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+      // PRT-AO-OPRGPLC-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+      // PRT-AO-OPRG-OSEXP-NEXT:    {{^ *}}// #pragma omp [[OMPDP]] shared(j,save){{$}}
+      // PRT-AO-OPRGPLC-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,save){{$}}
       //
-      // PRT-O-OPRG-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
-      // PRT-O-OPLC-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
-      // PRT-O-OPRG-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,save){{$}}
-      // PRT-O-OPLC-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(j,save){{$}}
-      // PRT-OA-NEXT:           {{^ *}}// #pragma acc loop[[ACCC]]
-      // PRT-OA-OSEQ-SAME:      {{^}} // discarded in OpenMP translation
-      // PRT-OA-SAME:           {{^$}}
+      // PRT-O-OPRG-OSIMP-NEXT:     {{^ *}}#pragma omp [[OMPDP]]{{$}}
+      // PRT-O-OPRGPLC-OSIMP-NEXT:  {{^ *}}#pragma omp [[OMPDP]]{{$}}
+      // PRT-O-OPRG-OSEXP-NEXT:     {{^ *}}#pragma omp [[OMPDP]] shared(j,save){{$}}
+      // PRT-O-OPRGPLC-OSEXP-NEXT:  {{^ *}}#pragma omp [[OMPDP]] shared(j,save){{$}}
+      // PRT-OA-NEXT:               {{^ *}}// #pragma acc loop[[ACCC]]
+      // PRT-OA-OSEQ-SAME:          {{^}} // discarded in OpenMP translation
+      // PRT-OA-SAME:               {{^$}}
       //
       // PRT-NEXT: for ({{.*}}) {
       #pragma acc loop ACCC
@@ -1058,120 +1060,120 @@ int main() {
     // PRT-NEXT: int k = 888;
     int k = 888;
 
-    // DMP:            ACCParallelLoopDirective
-    // DMP-ASEQ-NEXT:    ACCSeqClause
-    // DMP-AIND-NEXT:    ACCIndependentClause
-    // DMP-AAUTO-NEXT:   ACCAutoClause
-    // DMP-ASEQ-NOT:     <implicit>
-    // DMP-AIND-NOT:     <implicit>
-    // DMP-AAUTO-NOT:    <implicit>
-    // DMP-AG-NEXT:      ACCGangClause
-    // DMP-AW-NEXT:      ACCWorkerClause
-    // DMP-AV-NEXT:      ACCVectorClause
-    // DMP-NEXT:         ACCNum_gangsClause
-    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 3
-    // DMP-NEXT:         effect: ACCParallelDirective
-    // DMP-NEXT:           ACCNum_gangsClause
-    // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 3
-    // DMP-NEXT:           ACCFirstprivateClause {{.*}} <implicit>
-    // DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:             DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-NEXT:           impl: OMPTargetTeamsDirective
-    // DMP-NEXT:             OMPNum_teamsClause
-    // DMP-NEXT:               IntegerLiteral {{.*}} 'int' 3
-    // DMP-NEXT:             OMPFirstprivateClause
-    // DMP-NOT:                <implicit>
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
-    // DMP:                ACCLoopDirective
-    // DMP-ASEQ-NEXT:        ACCSeqClause
-    // DMP-AIND-NEXT:        ACCIndependentClause
-    // DMP-AAUTO-NEXT:       ACCAutoClause
-    // DMP-ASEQ-NOT:         <implicit>
-    // DMP-AIND-NOT:         <implicit>
-    // DMP-AAUTO-NOT:        <implicit>
-    // DMP-AG-NEXT:          ACCGangClause
-    // DMP-AW-NEXT:          ACCWorkerClause
-    // DMP-AV-NEXT:          ACCVectorClause
-    // DMP-AIMP-NEXT:        ACCIndependentClause {{.*}} <implicit>
-    // DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
-    // DMP-ASLC-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-APLC-NEXT:        ACCPrivateClause {{.*}} <implicit>
-    // DMP-APLC-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-OPRG-NEXT:        impl: [[OMPDD]]
-    // DMP-OPRG-NEXT:          OMPSharedClause
-    // DMP-OPRG-OSIMP-SAME:      <implicit>
-    // DMP-OPRG-OSEXP-NOT:       <implicit>
-    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-OPRG-NEXT:          OMPPrivateClause
-    // DMP-OPRG-NOT:             <implicit>
-    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-OPRG:               ForStmt
-    // DMP-OPLC-NEXT:        impl: CompoundStmt
-    // DMP-OPLC-NEXT:          DeclStmt
-    // DMP-OPLC-NEXT:            VarDecl {{.*}} j 'int'
-    // DMP-OPLC-NEXT:          [[OMPDD]]
-    // DMP-ONT1-NEXT:            OMPNum_threadsClause
-    // DMP-ONT1-NEXT:              IntegerLiteral {{.*}} 'int' 1
-    // DMP-OPLC:                 ForStmt
-    // DMP-OSEQ-NEXT:        impl: ForStmt
+    // DMP:               ACCParallelLoopDirective
+    // DMP-ASEQ-NEXT:       ACCSeqClause
+    // DMP-AIND-NEXT:       ACCIndependentClause
+    // DMP-AAUTO-NEXT:      ACCAutoClause
+    // DMP-ASEQ-NOT:        <implicit>
+    // DMP-AIND-NOT:        <implicit>
+    // DMP-AAUTO-NOT:       <implicit>
+    // DMP-AG-NEXT:         ACCGangClause
+    // DMP-AW-NEXT:         ACCWorkerClause
+    // DMP-AV-NEXT:         ACCVectorClause
+    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:            effect: ACCParallelDirective
+    // DMP-NEXT:              ACCNum_gangsClause
+    // DMP-NEXT:                IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:              ACCFirstprivateClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:              impl: OMPTargetTeamsDirective
+    // DMP-NEXT:                OMPNum_teamsClause
+    // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:                OMPFirstprivateClause
+    // DMP-NOT:                   <implicit>
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'k' 'int'
+    // DMP:                   ACCLoopDirective
+    // DMP-ASEQ-NEXT:           ACCSeqClause
+    // DMP-AIND-NEXT:           ACCIndependentClause
+    // DMP-AAUTO-NEXT:          ACCAutoClause
+    // DMP-ASEQ-NOT:            <implicit>
+    // DMP-AIND-NOT:            <implicit>
+    // DMP-AAUTO-NOT:           <implicit>
+    // DMP-AG-NEXT:             ACCGangClause
+    // DMP-AW-NEXT:             ACCWorkerClause
+    // DMP-AV-NEXT:             ACCVectorClause
+    // DMP-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:                ACCSharedClause {{.*}} <implicit>
+    // DMP-ASLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPRG-NEXT:           impl: [[OMPDD]]
+    // DMP-OPRG-NEXT:             OMPSharedClause
+    // DMP-OPRG-OSIMP-SAME:         <implicit>
+    // DMP-OPRG-OSEXP-NOT:          <implicit>
+    // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-OPRG-NEXT:             OMPPrivateClause
+    // DMP-OPRG-NOT:                <implicit>
+    // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPRG:                  ForStmt
+    // DMP-OPRGPLC-NEXT:        impl: CompoundStmt
+    // DMP-OPRGPLC-NEXT:          DeclStmt
+    // DMP-OPRGPLC-NEXT:            VarDecl {{.*}} j 'int'
+    // DMP-OPRGPLC-NEXT:          [[OMPDD]]
+    // DMP-ONT1-NEXT:               OMPNum_threadsClause
+    // DMP-ONT1-NEXT:                 IntegerLiteral {{.*}} 'int' 1
+    // DMP-OPRGPLC:                 ForStmt
+    // DMP-OSEQ-NEXT:           impl: ForStmt
     //
-    // PRT-AO-OPLC-NEXT:       // v----------ACC----------v
-    // PRT-A:                  {{^ *}}#pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
-    // PRT-AO-OSEQ-NEXT:       // #pragma omp target teams num_teams(3) firstprivate(j,k){{$}}
-    // PRT-AO-OPRG-NEXT:       // #pragma omp target teams num_teams(3) firstprivate(j,k){{$}}
-    // PRT-AO-OPRG-OSIMP-NEXT: // #pragma omp [[OMPDP]] private(j){{$}}
-    // PRT-AO-OPRG-OSEXP-NEXT: // #pragma omp [[OMPDP]] shared(k) private(j){{$}}
-    // PRT-A-NEXT:             for (j ={{.*}}) {
-    // PRT-A-NEXT:               printf
-    // PRT-A-NEXT:               for (k ={{.*}})
-    // PRT-A-NEXT:                 ;
-    // PRT-A-NEXT:             }
-    // PRT-AO-OPLC-NEXT:       // ---------ACC->OMP--------
-    // PRT-AO-OPLC-NEXT:       // #pragma omp target teams num_teams(3) firstprivate(j,k){{$}}
-    // PRT-AO-OPLC-NEXT:       // {
-    // PRT-AO-OPLC-NEXT:       //   int j;
-    // PRT-AO-OPLC-OSIMP-NEXT: //   #pragma omp [[OMPDP]]{{$}}
-    // PRT-AO-OPLC-OSEXP-NEXT: //   #pragma omp [[OMPDP]] shared(k){{$}}
-    // PRT-AO-OPLC-NEXT:       //   for (j ={{.*}}) {
-    // PRT-AO-OPLC-NEXT:       //     printf
-    // PRT-AO-OPLC-NEXT:       //     for (k ={{.*}})
-    // PRT-AO-OPLC-NEXT:       //       ;
-    // PRT-AO-OPLC-NEXT:       //   }
-    // PRT-AO-OPLC-NEXT:       // }
-    // PRT-AO-OPLC-NEXT:       // ^----------OMP----------^
+    // PRT-AO-OPRGPLC-NEXT:       // v----------ACC----------v
+    // PRT-A:                     {{^ *}}#pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
+    // PRT-AO-OSEQ-NEXT:          // #pragma omp target teams num_teams(3) firstprivate(j,k){{$}}
+    // PRT-AO-OPRG-NEXT:          // #pragma omp target teams num_teams(3) firstprivate(j,k){{$}}
+    // PRT-AO-OPRG-OSIMP-NEXT:    // #pragma omp [[OMPDP]] private(j){{$}}
+    // PRT-AO-OPRG-OSEXP-NEXT:    // #pragma omp [[OMPDP]] shared(k) private(j){{$}}
+    // PRT-A-NEXT:                for (j ={{.*}}) {
+    // PRT-A-NEXT:                  printf
+    // PRT-A-NEXT:                  for (k ={{.*}})
+    // PRT-A-NEXT:                    ;
+    // PRT-A-NEXT:                }
+    // PRT-AO-OPRGPLC-NEXT:       // ---------ACC->OMP--------
+    // PRT-AO-OPRGPLC-NEXT:       // #pragma omp target teams num_teams(3) firstprivate(j,k){{$}}
+    // PRT-AO-OPRGPLC-NEXT:       // {
+    // PRT-AO-OPRGPLC-NEXT:       //   int j;
+    // PRT-AO-OPRGPLC-OSIMP-NEXT: //   #pragma omp [[OMPDP]]{{$}}
+    // PRT-AO-OPRGPLC-OSEXP-NEXT: //   #pragma omp [[OMPDP]] shared(k){{$}}
+    // PRT-AO-OPRGPLC-NEXT:       //   for (j ={{.*}}) {
+    // PRT-AO-OPRGPLC-NEXT:       //     printf
+    // PRT-AO-OPRGPLC-NEXT:       //     for (k ={{.*}})
+    // PRT-AO-OPRGPLC-NEXT:       //       ;
+    // PRT-AO-OPRGPLC-NEXT:       //   }
+    // PRT-AO-OPRGPLC-NEXT:       // }
+    // PRT-AO-OPRGPLC-NEXT:       // ^----------OMP----------^
     //
-    // PRT-OA-OPLC-NEXT:      // v----------OMP----------v
-    // PRT-O:                 {{^ *}}#pragma omp target teams num_teams(3) firstprivate(j,k){{$}}
-    // PRT-O-OPRG-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
-    // PRT-O-OPRG-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(k) private(j){{$}}
-    // PRT-OA-OSEQ-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
-    // PRT-OA-OPRG-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
-    // PRT-O-OPLC-NEXT:       {
-    // PRT-O-OPLC-NEXT:         int j;
-    // PRT-O-OPLC-OSIMP-NEXT:   {{^ *}}#pragma omp [[OMPDP]]{{$}}
-    // PRT-O-OPLC-OSEXP-NEXT:   {{^ *}}#pragma omp [[OMPDP]] shared(k){{$}}
-    // PRT-O-NEXT:              for (j ={{.*}}) {
-    // PRT-O-NEXT:                printf
-    // PRT-O-NEXT:                for (k ={{.*}})
-    // PRT-O-NEXT:                  ;
-    // PRT-O-NEXT:              }
-    // PRT-O-OPLC-NEXT:       }
-    // PRT-OA-OPLC-NEXT:      // ---------OMP<-ACC--------
-    // PRT-OA-OPLC-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
-    // PRT-OA-OPLC-NEXT:      // for (j ={{.*}}) {
-    // PRT-OA-OPLC-NEXT:      //   printf
-    // PRT-OA-OPLC-NEXT:      //   for (k ={{.*}})
-    // PRT-OA-OPLC-NEXT:      //     ;
-    // PRT-OA-OPLC-NEXT:      // }
-    // PRT-OA-OPLC-NEXT:      // ^----------ACC----------^
+    // PRT-OA-OPRGPLC-NEXT:      // v----------OMP----------v
+    // PRT-O:                    {{^ *}}#pragma omp target teams num_teams(3) firstprivate(j,k){{$}}
+    // PRT-O-OPRG-OSIMP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
+    // PRT-O-OPRG-OSEXP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] shared(k) private(j){{$}}
+    // PRT-OA-OSEQ-NEXT:         // #pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
+    // PRT-OA-OPRG-NEXT:         // #pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
+    // PRT-O-OPRGPLC-NEXT:       {
+    // PRT-O-OPRGPLC-NEXT:         int j;
+    // PRT-O-OPRGPLC-OSIMP-NEXT:   {{^ *}}#pragma omp [[OMPDP]]{{$}}
+    // PRT-O-OPRGPLC-OSEXP-NEXT:   {{^ *}}#pragma omp [[OMPDP]] shared(k){{$}}
+    // PRT-O-NEXT:                 for (j ={{.*}}) {
+    // PRT-O-NEXT:                   printf
+    // PRT-O-NEXT:                   for (k ={{.*}})
+    // PRT-O-NEXT:                     ;
+    // PRT-O-NEXT:                 }
+    // PRT-O-OPRGPLC-NEXT:       }
+    // PRT-OA-OPRGPLC-NEXT:      // ---------OMP<-ACC--------
+    // PRT-OA-OPRGPLC-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
+    // PRT-OA-OPRGPLC-NEXT:      // for (j ={{.*}}) {
+    // PRT-OA-OPRGPLC-NEXT:      //   printf
+    // PRT-OA-OPRGPLC-NEXT:      //   for (k ={{.*}})
+    // PRT-OA-OPRGPLC-NEXT:      //     ;
+    // PRT-OA-OPRGPLC-NEXT:      // }
+    // PRT-OA-OPRGPLC-NEXT:      // ^----------ACC----------^
     //
-    // PRT-NOACC-NEXT:        for (j ={{.*}}) {
-    // PRT-NOACC-NEXT:          printf
-    // PRT-NOACC-NEXT:          for (k ={{.*}})
-    // PRT-NOACC-NEXT:            ;
-    // PRT-NOACC-NEXT:        }
+    // PRT-NOACC-NEXT:           for (j ={{.*}}) {
+    // PRT-NOACC-NEXT:             printf
+    // PRT-NOACC-NEXT:             for (k ={{.*}})
+    // PRT-NOACC-NEXT:               ;
+    // PRT-NOACC-NEXT:           }
     #pragma acc parallel loop ACCC num_gangs(3)
     for (j = 1; j < 3; ++j) {
       // EXE-NEXT:        hello world
@@ -1197,127 +1199,127 @@ int main() {
     // PRT-NEXT: int k = 888;
     int k = 888;
 
-    // DMP:            ACCParallelLoopDirective
-    // DMP-ASEQ-NEXT:    ACCSeqClause
-    // DMP-AIND-NEXT:    ACCIndependentClause
-    // DMP-AAUTO-NEXT:   ACCAutoClause
-    // DMP-ASEQ-NOT:     <implicit>
-    // DMP-AIND-NOT:     <implicit>
-    // DMP-AAUTO-NOT:    <implicit>
-    // DMP-AG-NEXT:      ACCGangClause
-    // DMP-AW-NEXT:      ACCWorkerClause
-    // DMP-AV-NEXT:      ACCVectorClause
-    // DMP-NEXT:         ACCNum_gangsClause
-    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 3
-    // DMP-NEXT:         ACCFirstprivateClause
-    // DMP-NOT:            <implicit>
-    // DMP-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:         effect: ACCParallelDirective
-    // DMP-NEXT:           ACCNum_gangsClause
-    // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 3
-    // DMP-NEXT:           ACCFirstprivateClause
-    // DMP-NOT:              <implicit>
-    // DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:           ACCFirstprivateClause {{.*}} <implicit>
-    // DMP-NEXT:             DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-NEXT:           impl: OMPTargetTeamsDirective
-    // DMP-NEXT:             OMPNum_teamsClause
-    // DMP-NEXT:               IntegerLiteral {{.*}} 'int' 3
-    // DMP-NEXT:             OMPFirstprivateClause
-    // DMP-NOT:                <implicit>
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:             OMPFirstprivateClause
-    // DMP-NOT:                <implicit>
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
-    // DMP:                ACCLoopDirective
-    // DMP-ASEQ-NEXT:        ACCSeqClause
-    // DMP-AIND-NEXT:        ACCIndependentClause
-    // DMP-AAUTO-NEXT:       ACCAutoClause
-    // DMP-ASEQ-NOT:         <implicit>
-    // DMP-AIND-NOT:         <implicit>
-    // DMP-AAUTO-NOT:        <implicit>
-    // DMP-AG-NEXT:          ACCGangClause
-    // DMP-AW-NEXT:          ACCWorkerClause
-    // DMP-AV-NEXT:          ACCVectorClause
-    // DMP-AIMP-NEXT:        ACCIndependentClause {{.*}} <implicit>
-    // DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
-    // DMP-ASLC-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-APLC-NEXT:        ACCPrivateClause {{.*}} <implicit>
-    // DMP-APLC-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-OPRG-NEXT:        impl: [[OMPDD]]
-    // DMP-OPRG-NEXT:          OMPSharedClause
-    // DMP-OPRG-OSIMP-SAME:      <implicit>
-    // DMP-OPRG-OSEXP-NOT:       <implicit>
-    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-OPRG-NEXT:          OMPPrivateClause
-    // DMP-OPRG-NOT:             <implicit>
-    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-OPRG:               ForStmt
-    // DMP-OPLC-NEXT:        impl: CompoundStmt
-    // DMP-OPLC-NEXT:          DeclStmt
-    // DMP-OPLC-NEXT:            VarDecl {{.*}} j 'int'
-    // DMP-OPLC-NEXT:          [[OMPDD]]
-    // DMP-ONT1-NEXT:            OMPNum_threadsClause
-    // DMP-ONT1-NEXT:              IntegerLiteral {{.*}} 'int' 1
-    // DMP-OPLC:                 ForStmt
-    // DMP-OSEQ-NEXT:        impl: ForStmt
+    // DMP:               ACCParallelLoopDirective
+    // DMP-ASEQ-NEXT:       ACCSeqClause
+    // DMP-AIND-NEXT:       ACCIndependentClause
+    // DMP-AAUTO-NEXT:      ACCAutoClause
+    // DMP-ASEQ-NOT:        <implicit>
+    // DMP-AIND-NOT:        <implicit>
+    // DMP-AAUTO-NOT:       <implicit>
+    // DMP-AG-NEXT:         ACCGangClause
+    // DMP-AW-NEXT:         ACCWorkerClause
+    // DMP-AV-NEXT:         ACCVectorClause
+    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:            ACCFirstprivateClause
+    // DMP-NOT:               <implicit>
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:            effect: ACCParallelDirective
+    // DMP-NEXT:              ACCNum_gangsClause
+    // DMP-NEXT:                IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:              ACCFirstprivateClause
+    // DMP-NOT:                 <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:              ACCFirstprivateClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:              impl: OMPTargetTeamsDirective
+    // DMP-NEXT:                OMPNum_teamsClause
+    // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:                OMPFirstprivateClause
+    // DMP-NOT:                   <implicit>
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:                OMPFirstprivateClause
+    // DMP-NOT:                   <implicit>
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'k' 'int'
+    // DMP:                   ACCLoopDirective
+    // DMP-ASEQ-NEXT:           ACCSeqClause
+    // DMP-AIND-NEXT:           ACCIndependentClause
+    // DMP-AAUTO-NEXT:          ACCAutoClause
+    // DMP-ASEQ-NOT:            <implicit>
+    // DMP-AIND-NOT:            <implicit>
+    // DMP-AAUTO-NOT:           <implicit>
+    // DMP-AG-NEXT:             ACCGangClause
+    // DMP-AW-NEXT:             ACCWorkerClause
+    // DMP-AV-NEXT:             ACCVectorClause
+    // DMP-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:                ACCSharedClause {{.*}} <implicit>
+    // DMP-ASLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPRG-NEXT:           impl: [[OMPDD]]
+    // DMP-OPRG-NEXT:             OMPSharedClause
+    // DMP-OPRG-OSIMP-SAME:         <implicit>
+    // DMP-OPRG-OSEXP-NOT:          <implicit>
+    // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-OPRG-NEXT:             OMPPrivateClause
+    // DMP-OPRG-NOT:                <implicit>
+    // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPRG:                  ForStmt
+    // DMP-OPRGPLC-NEXT:        impl: CompoundStmt
+    // DMP-OPRGPLC-NEXT:          DeclStmt
+    // DMP-OPRGPLC-NEXT:            VarDecl {{.*}} j 'int'
+    // DMP-OPRGPLC-NEXT:          [[OMPDD]]
+    // DMP-ONT1-NEXT:               OMPNum_threadsClause
+    // DMP-ONT1-NEXT:                 IntegerLiteral {{.*}} 'int' 1
+    // DMP-OPRGPLC:                 ForStmt
+    // DMP-OSEQ-NEXT:           impl: ForStmt
     //
-    // PRT-AO-OPLC-NEXT:       // v----------ACC----------v
-    // PRT-A:                  {{^ *}}#pragma acc parallel loop[[ACCC]] num_gangs(3) firstprivate(j){{$}}
-    // PRT-AO-OSEQ-NEXT:       // #pragma omp target teams num_teams(3) firstprivate(j) firstprivate(k){{$}}
-    // PRT-AO-OPRG-NEXT:       // #pragma omp target teams num_teams(3) firstprivate(j) firstprivate(k){{$}}
-    // PRT-AO-OPRG-OSIMP-NEXT: // #pragma omp [[OMPDP]] private(j){{$}}
-    // PRT-AO-OPRG-OSEXP-NEXT: // #pragma omp [[OMPDP]] shared(k) private(j){{$}}
-    // PRT-A-NEXT:             for (j ={{.*}}) {
-    // PRT-A-NEXT:               printf
-    // PRT-A-NEXT:               for (k ={{.*}})
-    // PRT-A-NEXT:                 ;
-    // PRT-A-NEXT:             }
-    // PRT-AO-OPLC-NEXT:       // ---------ACC->OMP--------
-    // PRT-AO-OPLC-NEXT:       // #pragma omp target teams num_teams(3) firstprivate(j) firstprivate(k){{$}}
-    // PRT-AO-OPLC-NEXT:       // {
-    // PRT-AO-OPLC-NEXT:       //   int j;
-    // PRT-AO-OPLC-OSIMP-NEXT: //   #pragma omp [[OMPDP]]{{$}}
-    // PRT-AO-OPLC-OSEXP-NEXT: //   #pragma omp [[OMPDP]] shared(k){{$}}
-    // PRT-AO-OPLC-NEXT:       //   for (j ={{.*}}) {
-    // PRT-AO-OPLC-NEXT:       //     printf
-    // PRT-AO-OPLC-NEXT:       //     for (k ={{.*}})
-    // PRT-AO-OPLC-NEXT:       //       ;
-    // PRT-AO-OPLC-NEXT:       //   }
-    // PRT-AO-OPLC-NEXT:       // }
-    // PRT-AO-OPLC-NEXT:       // ^----------OMP----------^
+    // PRT-AO-OPRGPLC-NEXT:       // v----------ACC----------v
+    // PRT-A:                     {{^ *}}#pragma acc parallel loop[[ACCC]] num_gangs(3) firstprivate(j){{$}}
+    // PRT-AO-OSEQ-NEXT:          // #pragma omp target teams num_teams(3) firstprivate(j) firstprivate(k){{$}}
+    // PRT-AO-OPRG-NEXT:          // #pragma omp target teams num_teams(3) firstprivate(j) firstprivate(k){{$}}
+    // PRT-AO-OPRG-OSIMP-NEXT:    // #pragma omp [[OMPDP]] private(j){{$}}
+    // PRT-AO-OPRG-OSEXP-NEXT:    // #pragma omp [[OMPDP]] shared(k) private(j){{$}}
+    // PRT-A-NEXT:                for (j ={{.*}}) {
+    // PRT-A-NEXT:                  printf
+    // PRT-A-NEXT:                  for (k ={{.*}})
+    // PRT-A-NEXT:                    ;
+    // PRT-A-NEXT:                }
+    // PRT-AO-OPRGPLC-NEXT:       // ---------ACC->OMP--------
+    // PRT-AO-OPRGPLC-NEXT:       // #pragma omp target teams num_teams(3) firstprivate(j) firstprivate(k){{$}}
+    // PRT-AO-OPRGPLC-NEXT:       // {
+    // PRT-AO-OPRGPLC-NEXT:       //   int j;
+    // PRT-AO-OPRGPLC-OSIMP-NEXT: //   #pragma omp [[OMPDP]]{{$}}
+    // PRT-AO-OPRGPLC-OSEXP-NEXT: //   #pragma omp [[OMPDP]] shared(k){{$}}
+    // PRT-AO-OPRGPLC-NEXT:       //   for (j ={{.*}}) {
+    // PRT-AO-OPRGPLC-NEXT:       //     printf
+    // PRT-AO-OPRGPLC-NEXT:       //     for (k ={{.*}})
+    // PRT-AO-OPRGPLC-NEXT:       //       ;
+    // PRT-AO-OPRGPLC-NEXT:       //   }
+    // PRT-AO-OPRGPLC-NEXT:       // }
+    // PRT-AO-OPRGPLC-NEXT:       // ^----------OMP----------^
     //
-    // PRT-OA-OPLC-NEXT:      // v----------OMP----------v
-    // PRT-O:                 {{^ *}}#pragma omp target teams num_teams(3) firstprivate(j) firstprivate(k){{$}}
-    // PRT-O-OPRG-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
-    // PRT-O-OPRG-OSEXP-NEXT: {{^ *}}#pragma omp [[OMPDP]] shared(k) private(j){{$}}
-    // PRT-OA-OSEQ-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3) firstprivate(j){{$}}
-    // PRT-OA-OPRG-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3) firstprivate(j){{$}}
-    // PRT-O-OPLC-NEXT:       {
-    // PRT-O-OPLC-NEXT:         int j;
-    // PRT-O-OPLC-OSIMP-NEXT:   {{^ *}}#pragma omp [[OMPDP]]{{$}}
-    // PRT-O-OPLC-OSEXP-NEXT:   {{^ *}}#pragma omp [[OMPDP]] shared(k){{$}}
-    // PRT-O-NEXT:              for (j ={{.*}}) {
-    // PRT-O-NEXT:                printf
-    // PRT-O-NEXT:                for (k ={{.*}})
-    // PRT-O-NEXT:                  ;
-    // PRT-O-NEXT:              }
-    // PRT-O-OPLC-NEXT:       }
-    // PRT-OA-OPLC-NEXT:      // ---------OMP<-ACC--------
-    // PRT-OA-OPLC-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3) firstprivate(j){{$}}
-    // PRT-OA-OPLC-NEXT:      // for (j ={{.*}}) {
-    // PRT-OA-OPLC-NEXT:      //   printf
-    // PRT-OA-OPLC-NEXT:      //   for (k ={{.*}})
-    // PRT-OA-OPLC-NEXT:      //     ;
-    // PRT-OA-OPLC-NEXT:      // }
-    // PRT-OA-OPLC-NEXT:      // ^----------ACC----------^
+    // PRT-OA-OPRGPLC-NEXT:      // v----------OMP----------v
+    // PRT-O:                    {{^ *}}#pragma omp target teams num_teams(3) firstprivate(j) firstprivate(k){{$}}
+    // PRT-O-OPRG-OSIMP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
+    // PRT-O-OPRG-OSEXP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] shared(k) private(j){{$}}
+    // PRT-OA-OSEQ-NEXT:         // #pragma acc parallel loop[[ACCC]] num_gangs(3) firstprivate(j){{$}}
+    // PRT-OA-OPRG-NEXT:         // #pragma acc parallel loop[[ACCC]] num_gangs(3) firstprivate(j){{$}}
+    // PRT-O-OPRGPLC-NEXT:       {
+    // PRT-O-OPRGPLC-NEXT:         int j;
+    // PRT-O-OPRGPLC-OSIMP-NEXT:   {{^ *}}#pragma omp [[OMPDP]]{{$}}
+    // PRT-O-OPRGPLC-OSEXP-NEXT:   {{^ *}}#pragma omp [[OMPDP]] shared(k){{$}}
+    // PRT-O-NEXT:                 for (j ={{.*}}) {
+    // PRT-O-NEXT:                   printf
+    // PRT-O-NEXT:                   for (k ={{.*}})
+    // PRT-O-NEXT:                     ;
+    // PRT-O-NEXT:                 }
+    // PRT-O-OPRGPLC-NEXT:       }
+    // PRT-OA-OPRGPLC-NEXT:      // ---------OMP<-ACC--------
+    // PRT-OA-OPRGPLC-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3) firstprivate(j){{$}}
+    // PRT-OA-OPRGPLC-NEXT:      // for (j ={{.*}}) {
+    // PRT-OA-OPRGPLC-NEXT:      //   printf
+    // PRT-OA-OPRGPLC-NEXT:      //   for (k ={{.*}})
+    // PRT-OA-OPRGPLC-NEXT:      //     ;
+    // PRT-OA-OPRGPLC-NEXT:      // }
+    // PRT-OA-OPRGPLC-NEXT:      // ^----------ACC----------^
     //
-    // PRT-NOACC-NEXT:        for (j ={{.*}}) {
-    // PRT-NOACC-NEXT:          printf
-    // PRT-NOACC-NEXT:          for (k ={{.*}})
-    // PRT-NOACC-NEXT:            ;
-    // PRT-NOACC-NEXT:        }
+    // PRT-NOACC-NEXT:           for (j ={{.*}}) {
+    // PRT-NOACC-NEXT:             printf
+    // PRT-NOACC-NEXT:             for (k ={{.*}})
+    // PRT-NOACC-NEXT:               ;
+    // PRT-NOACC-NEXT:           }
     #pragma acc parallel loop ACCC num_gangs(3) firstprivate(j)
     for (j = 1; j < 3; ++j) {
       // EXE-NEXT:        hello world
@@ -1362,69 +1364,69 @@ int main() {
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // DMP:              ACCLoopDirective
-      // DMP-ASEQ-NEXT:      ACCSeqClause
-      // DMP-AIND-NEXT:      ACCIndependentClause
-      // DMP-AAUTO-NEXT:     ACCAutoClause
-      // DMP-ASEQ-NOT:       <implicit>
-      // DMP-AIND-NOT:       <implicit>
-      // DMP-AAUTO-NOT:      <implicit>
-      // DMP-AG-NEXT:        ACCGangClause
-      // DMP-AW-NEXT:        ACCWorkerClause
-      // DMP-AV-NEXT:        ACCVectorClause
-      // DMP-AIMP-NEXT:      ACCIndependentClause {{.*}} <implicit>
-      // DMP-ASLC-NEXT:      ACCSharedClause {{.*}} <implicit>
-      // DMP-APLC-NEXT:      ACCPrivateClause {{.*}} <implicit>
-      // DMP-NEXT:             DeclRefExpr {{.*}} 'tentativeDef' 'int'
-      // DMP-OPRG-NEXT:      impl: [[OMPDD]]
-      // DMP-OPRG-NEXT:        OMPPrivateClause
-      // DMP-OPRG-NOT:           <implicit>
-      // DMP-OPRG-NEXT:          DeclRefExpr {{.*}} 'tentativeDef' 'int'
-      // DMP-OPRG:             ForStmt
-      // DMP-OPLC-NEXT:      impl: CompoundStmt
-      // DMP-OPLC-NEXT:        DeclStmt
-      // DMP-OPLC-NEXT:          VarDecl {{.*}} tentativeDef 'int'
-      // DMP-OPLC-NEXT:        [[OMPDD]]
-      // DMP-ONT1-NEXT:          OMPNum_threadsClause
-      // DMP-ONT1-NEXT:            IntegerLiteral {{.*}} 'int' 1
-      // DMP-OPLC:               ForStmt
-      // DMP-OSEQ-NEXT:      impl: ForStmt
+      // DMP:                 ACCLoopDirective
+      // DMP-ASEQ-NEXT:         ACCSeqClause
+      // DMP-AIND-NEXT:         ACCIndependentClause
+      // DMP-AAUTO-NEXT:        ACCAutoClause
+      // DMP-ASEQ-NOT:          <implicit>
+      // DMP-AIND-NOT:          <implicit>
+      // DMP-AAUTO-NOT:         <implicit>
+      // DMP-AG-NEXT:           ACCGangClause
+      // DMP-AW-NEXT:           ACCWorkerClause
+      // DMP-AV-NEXT:           ACCVectorClause
+      // DMP-AIMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
+      // DMP-ASLC-NEXT:         ACCSharedClause {{.*}} <implicit>
+      // DMP-APLC-NEXT:         ACCPrivateClause {{.*}} <implicit>
+      // DMP-NEXT:                DeclRefExpr {{.*}} 'tentativeDef' 'int'
+      // DMP-OPRG-NEXT:         impl: [[OMPDD]]
+      // DMP-OPRG-NEXT:           OMPPrivateClause
+      // DMP-OPRG-NOT:              <implicit>
+      // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'tentativeDef' 'int'
+      // DMP-OPRG:                ForStmt
+      // DMP-OPRGPLC-NEXT:      impl: CompoundStmt
+      // DMP-OPRGPLC-NEXT:        DeclStmt
+      // DMP-OPRGPLC-NEXT:          VarDecl {{.*}} tentativeDef 'int'
+      // DMP-OPRGPLC-NEXT:        [[OMPDD]]
+      // DMP-ONT1-NEXT:             OMPNum_threadsClause
+      // DMP-ONT1-NEXT:               IntegerLiteral {{.*}} 'int' 1
+      // DMP-OPRGPLC:               ForStmt
+      // DMP-OSEQ-NEXT:         impl: ForStmt
       //
-      // PRT-AO-OPLC-NEXT: // v----------ACC----------v
-      // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]]
-      // PRT-AO-OSEQ-SAME: {{^}} // discarded in OpenMP translation
-      // PRT-A-SAME:       {{^$}}
-      // PRT-AO-OPRG-NEXT: // #pragma omp [[OMPDP]] private(tentativeDef){{$}}
-      // PRT-A-NEXT:       for (tentativeDef ={{.*}}) {
-      // PRT-A-NEXT:         printf
-      // PRT-A-NEXT:       }
-      // PRT-AO-OPLC-NEXT: // ---------ACC->OMP--------
-      // PRT-AO-OPLC-NEXT: // {
-      // PRT-AO-OPLC-NEXT: //   int tentativeDef;
-      // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
-      // PRT-AO-OPLC-NEXT: //   for (tentativeDef ={{.*}}) {
-      // PRT-AO-OPLC-NEXT: //     printf
-      // PRT-AO-OPLC-NEXT: //   }
-      // PRT-AO-OPLC-NEXT: // }
-      // PRT-AO-OPLC-NEXT: // ^----------OMP----------^
+      // PRT-AO-OPRGPLC-NEXT: // v----------ACC----------v
+      // PRT-A-NEXT:          {{^ *}}#pragma acc loop[[ACCC]]
+      // PRT-AO-OSEQ-SAME:    {{^}} // discarded in OpenMP translation
+      // PRT-A-SAME:          {{^$}}
+      // PRT-AO-OPRG-NEXT:    // #pragma omp [[OMPDP]] private(tentativeDef){{$}}
+      // PRT-A-NEXT:          for (tentativeDef ={{.*}}) {
+      // PRT-A-NEXT:            printf
+      // PRT-A-NEXT:          }
+      // PRT-AO-OPRGPLC-NEXT: // ---------ACC->OMP--------
+      // PRT-AO-OPRGPLC-NEXT: // {
+      // PRT-AO-OPRGPLC-NEXT: //   int tentativeDef;
+      // PRT-AO-OPRGPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
+      // PRT-AO-OPRGPLC-NEXT: //   for (tentativeDef ={{.*}}) {
+      // PRT-AO-OPRGPLC-NEXT: //     printf
+      // PRT-AO-OPRGPLC-NEXT: //   }
+      // PRT-AO-OPRGPLC-NEXT: // }
+      // PRT-AO-OPRGPLC-NEXT: // ^----------OMP----------^
       //
-      // PRT-OA-OPLC-NEXT: // v----------OMP----------v
-      // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
-      // PRT-OA-OPRG-NEXT: // #pragma acc loop[[ACCC]]{{$}}
-      // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] // discarded in OpenMP translation{{$}}
-      // PRT-O-OPLC-NEXT:  {
-      // PRT-O-OPLC-NEXT:    int tentativeDef;
-      // PRT-O-OPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
-      // PRT-O-NEXT:         for (tentativeDef ={{.*}}) {
-      // PRT-O-NEXT:           printf
-      // PRT-O-NEXT:         }
-      // PRT-O-OPLC-NEXT:  }
-      // PRT-OA-OPLC-NEXT: // ---------OMP<-ACC--------
-      // PRT-OA-OPLC-NEXT: // #pragma acc loop[[ACCC]]{{$}}
-      // PRT-OA-OPLC-NEXT: // for (tentativeDef ={{.*}}) {
-      // PRT-OA-OPLC-NEXT: //   printf
-      // PRT-OA-OPLC-NEXT: // }
-      // PRT-OA-OPLC-NEXT: // ^----------ACC----------^
+      // PRT-OA-OPRGPLC-NEXT: // v----------OMP----------v
+      // PRT-O-OPRG-NEXT:     {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
+      // PRT-OA-OPRG-NEXT:    // #pragma acc loop[[ACCC]]{{$}}
+      // PRT-OA-OSEQ-NEXT:    // #pragma acc loop[[ACCC]] // discarded in OpenMP translation{{$}}
+      // PRT-O-OPRGPLC-NEXT:  {
+      // PRT-O-OPRGPLC-NEXT:    int tentativeDef;
+      // PRT-O-OPRGPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
+      // PRT-O-NEXT:            for (tentativeDef ={{.*}}) {
+      // PRT-O-NEXT:              printf
+      // PRT-O-NEXT:            }
+      // PRT-O-OPRGPLC-NEXT:  }
+      // PRT-OA-OPRGPLC-NEXT: // ---------OMP<-ACC--------
+      // PRT-OA-OPRGPLC-NEXT: // #pragma acc loop[[ACCC]]{{$}}
+      // PRT-OA-OPRGPLC-NEXT: // for (tentativeDef ={{.*}}) {
+      // PRT-OA-OPRGPLC-NEXT: //   printf
+      // PRT-OA-OPRGPLC-NEXT: // }
+      // PRT-OA-OPRGPLC-NEXT: // ^----------ACC----------^
       //
       // PRT-NOACC-NEXT: for (tentativeDef ={{.*}}) {
       // PRT-NOACC-NEXT:   printf
@@ -1446,95 +1448,95 @@ int main() {
 
   // PRT: {
   {
-    // DMP:            ACCParallelLoopDirective
-    // DMP-NEXT:         ACCNum_gangsClause
-    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 3
-    // DMP-ASEQ-NEXT:    ACCSeqClause
-    // DMP-AIND-NEXT:    ACCIndependentClause
-    // DMP-AAUTO-NEXT:   ACCAutoClause
-    // DMP-ASEQ-NOT:     <implicit>
-    // DMP-AIND-NOT:     <implicit>
-    // DMP-AAUTO-NOT:    <implicit>
-    // DMP-AG-NEXT:      ACCGangClause
-    // DMP-AW-NEXT:      ACCWorkerClause
-    // DMP-AV-NEXT:      ACCVectorClause
-    // DMP-NEXT:         effect: ACCParallelDirective
-    // DMP-NEXT:           ACCNum_gangsClause
-    // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 3
-    // DMP-NEXT:           ACCFirstprivateClause {{.*}} <implicit>
-    // DMP-NEXT:             DeclRefExpr {{.*}} 'tentativeDef' 'int'
-    // DMP-NEXT:           impl: OMPTargetTeamsDirective
-    // DMP-NEXT:             OMPNum_teamsClause
-    // DMP-NEXT:               IntegerLiteral {{.*}} 'int' 3
-    // DMP-NEXT:             OMPFirstprivateClause
-    // DMP-NOT:                <implicit>
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'tentativeDef' 'int'
-    // DMP:                ACCLoopDirective
-    // DMP-ASEQ-NEXT:        ACCSeqClause
-    // DMP-AIND-NEXT:        ACCIndependentClause
-    // DMP-AAUTO-NEXT:       ACCAutoClause
-    // DMP-ASEQ-NOT:         <implicit>
-    // DMP-AIND-NOT:         <implicit>
-    // DMP-AAUTO-NOT:        <implicit>
-    // DMP-AG-NEXT:          ACCGangClause
-    // DMP-AW-NEXT:          ACCWorkerClause
-    // DMP-AV-NEXT:          ACCVectorClause
-    // DMP-AIMP-NEXT:        ACCIndependentClause {{.*}} <implicit>
-    // DMP-ASLC-NEXT:        ACCSharedClause {{.*}} <implicit>
-    // DMP-APLC-NEXT:        ACCPrivateClause {{.*}} <implicit>
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'tentativeDef' 'int'
-    // DMP-OPRG-NEXT:        impl: [[OMPDD]]
-    // DMP-OPRG-NEXT:          OMPPrivateClause
-    // DMP-OPRG-NOT:             <implicit>
-    // DMP-OPRG-NEXT:            DeclRefExpr {{.*}} 'tentativeDef' 'int'
-    // DMP-OPRG:               ForStmt
-    // DMP-OPLC-NEXT:        impl: CompoundStmt
-    // DMP-OPLC-NEXT:          DeclStmt
-    // DMP-OPLC-NEXT:            VarDecl {{.*}} tentativeDef 'int'
-    // DMP-OPLC-NEXT:          [[OMPDD]]
-    // DMP-ONT1-NEXT:            OMPNum_threadsClause
-    // DMP-ONT1-NEXT:              IntegerLiteral {{.*}} 'int' 1
-    // DMP-OPLC:                 ForStmt
-    // DMP-OSEQ-NEXT:        impl: ForStmt
+    // DMP:               ACCParallelLoopDirective
+    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 3
+    // DMP-ASEQ-NEXT:       ACCSeqClause
+    // DMP-AIND-NEXT:       ACCIndependentClause
+    // DMP-AAUTO-NEXT:      ACCAutoClause
+    // DMP-ASEQ-NOT:        <implicit>
+    // DMP-AIND-NOT:        <implicit>
+    // DMP-AAUTO-NOT:       <implicit>
+    // DMP-AG-NEXT:         ACCGangClause
+    // DMP-AW-NEXT:         ACCWorkerClause
+    // DMP-AV-NEXT:         ACCVectorClause
+    // DMP-NEXT:            effect: ACCParallelDirective
+    // DMP-NEXT:              ACCNum_gangsClause
+    // DMP-NEXT:                IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:              ACCFirstprivateClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-NEXT:              impl: OMPTargetTeamsDirective
+    // DMP-NEXT:                OMPNum_teamsClause
+    // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:                OMPFirstprivateClause
+    // DMP-NOT:                   <implicit>
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP:                   ACCLoopDirective
+    // DMP-ASEQ-NEXT:           ACCSeqClause
+    // DMP-AIND-NEXT:           ACCIndependentClause
+    // DMP-AAUTO-NEXT:          ACCAutoClause
+    // DMP-ASEQ-NOT:            <implicit>
+    // DMP-AIND-NOT:            <implicit>
+    // DMP-AAUTO-NOT:           <implicit>
+    // DMP-AG-NEXT:             ACCGangClause
+    // DMP-AW-NEXT:             ACCWorkerClause
+    // DMP-AV-NEXT:             ACCVectorClause
+    // DMP-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
+    // DMP-ASLC-NEXT:           ACCSharedClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <implicit>
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-OPRG-NEXT:           impl: [[OMPDD]]
+    // DMP-OPRG-NEXT:             OMPPrivateClause
+    // DMP-OPRG-NOT:                <implicit>
+    // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-OPRG:                  ForStmt
+    // DMP-OPRGPLC-NEXT:        impl: CompoundStmt
+    // DMP-OPRGPLC-NEXT:          DeclStmt
+    // DMP-OPRGPLC-NEXT:            VarDecl {{.*}} tentativeDef 'int'
+    // DMP-OPRGPLC-NEXT:          [[OMPDD]]
+    // DMP-ONT1-NEXT:               OMPNum_threadsClause
+    // DMP-ONT1-NEXT:                 IntegerLiteral {{.*}} 'int' 1
+    // DMP-OPRGPLC:                 ForStmt
+    // DMP-OSEQ-NEXT:           impl: ForStmt
     //
     //
-    // PRT-AO-OPLC-NEXT: // v----------ACC----------v
-    // PRT-A:            {{^ *}}#pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) firstprivate(tentativeDef){{$}}
-    // PRT-AO-OSEQ-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) firstprivate(tentativeDef){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(tentativeDef){{$}}
-    // PRT-A-NEXT:       for (tentativeDef ={{.*}}) {
-    // PRT-A-NEXT:         printf
-    // PRT-A-NEXT:       }
-    // PRT-AO-OPLC-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-OPLC-NEXT: // #pragma omp target teams num_teams(3) firstprivate(tentativeDef){{$}}
-    // PRT-AO-OPLC-NEXT: // {
-    // PRT-AO-OPLC-NEXT: //   int tentativeDef;
-    // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
-    // PRT-AO-OPLC-NEXT: //   for (tentativeDef ={{.*}}) {
-    // PRT-AO-OPLC-NEXT: //     printf
-    // PRT-AO-OPLC-NEXT: //   }
-    // PRT-AO-OPLC-NEXT: // }
-    // PRT-AO-OPLC-NEXT: // ^----------OMP----------^
+    // PRT-AO-OPRGPLC-NEXT: // v----------ACC----------v
+    // PRT-A:               {{^ *}}#pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
+    // PRT-AO-OPRG-NEXT:    {{^ *}}// #pragma omp target teams num_teams(3) firstprivate(tentativeDef){{$}}
+    // PRT-AO-OSEQ-NEXT:    {{^ *}}// #pragma omp target teams num_teams(3) firstprivate(tentativeDef){{$}}
+    // PRT-AO-OPRG-NEXT:    {{^ *}}// #pragma omp [[OMPDP]] private(tentativeDef){{$}}
+    // PRT-A-NEXT:          for (tentativeDef ={{.*}}) {
+    // PRT-A-NEXT:            printf
+    // PRT-A-NEXT:          }
+    // PRT-AO-OPRGPLC-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-OPRGPLC-NEXT: // #pragma omp target teams num_teams(3) firstprivate(tentativeDef){{$}}
+    // PRT-AO-OPRGPLC-NEXT: // {
+    // PRT-AO-OPRGPLC-NEXT: //   int tentativeDef;
+    // PRT-AO-OPRGPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
+    // PRT-AO-OPRGPLC-NEXT: //   for (tentativeDef ={{.*}}) {
+    // PRT-AO-OPRGPLC-NEXT: //     printf
+    // PRT-AO-OPRGPLC-NEXT: //   }
+    // PRT-AO-OPRGPLC-NEXT: // }
+    // PRT-AO-OPRGPLC-NEXT: // ^----------OMP----------^
     //
-    // PRT-OA-OPLC-NEXT: // v----------OMP----------v
-    // PRT-O:            {{^ *}}#pragma omp target teams num_teams(3) firstprivate(tentativeDef){{$}}
-    // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
-    // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
-    // PRT-OA-OSEQ-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
-    // PRT-O-OPLC-NEXT:  {
-    // PRT-O-OPLC-NEXT:    int tentativeDef;
-    // PRT-O-OPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
-    // PRT-O-NEXT:         for (tentativeDef ={{.*}}) {
-    // PRT-O-NEXT:           printf
-    // PRT-O-NEXT:         }
-    // PRT-O-OPLC-NEXT:  }
-    // PRT-OA-OPLC-NEXT: // ---------OMP<-ACC--------
-    // PRT-OA-OPLC-NEXT: // #pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
-    // PRT-OA-OPLC-NEXT: // for (tentativeDef ={{.*}}) {
-    // PRT-OA-OPLC-NEXT: //   printf
-    // PRT-OA-OPLC-NEXT: // }
-    // PRT-OA-OPLC-NEXT: // ^----------ACC----------^
+    // PRT-OA-OPRGPLC-NEXT: // v----------OMP----------v
+    // PRT-O:               {{^ *}}#pragma omp target teams num_teams(3) firstprivate(tentativeDef){{$}}
+    // PRT-O-OPRG-NEXT:     {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
+    // PRT-OA-OPRG-NEXT:    {{^ *}}// #pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
+    // PRT-OA-OSEQ-NEXT:    {{^ *}}// #pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
+    // PRT-O-OPRGPLC-NEXT:  {
+    // PRT-O-OPRGPLC-NEXT:    int tentativeDef;
+    // PRT-O-OPRGPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
+    // PRT-O-NEXT:            for (tentativeDef ={{.*}}) {
+    // PRT-O-NEXT:              printf
+    // PRT-O-NEXT:            }
+    // PRT-O-OPRGPLC-NEXT:  }
+    // PRT-OA-OPRGPLC-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-OPRGPLC-NEXT: // #pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
+    // PRT-OA-OPRGPLC-NEXT: // for (tentativeDef ={{.*}}) {
+    // PRT-OA-OPRGPLC-NEXT: //   printf
+    // PRT-OA-OPRGPLC-NEXT: // }
+    // PRT-OA-OPRGPLC-NEXT: // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT: for (tentativeDef ={{.*}}) {
     // PRT-NOACC-NEXT:   printf
@@ -1565,36 +1567,36 @@ int main() {
   // PRT-O-NEXT:  {{^ *}}#pragma omp target teams{{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel{{$}}
   #pragma acc parallel
-  // DMP:             ACCLoopDirective
-  // DMP-ASEQ-NEXT:     ACCSeqClause
-  // DMP-AIND-NEXT:     ACCIndependentClause
-  // DMP-AAUTO-NEXT:    ACCAutoClause
-  // DMP-ASEQ-NOT:      <implicit>
-  // DMP-AIND-NOT:      <implicit>
-  // DMP-AAUTO-NOT:     <implicit>
-  // DMP-AG-NEXT:       ACCGangClause
-  // DMP-AW-NEXT:       ACCWorkerClause
-  // DMP-AV-NEXT:       ACCVectorClause
-  // DMP-AIMP-NEXT:     ACCIndependentClause {{.*}} <implicit>
-  // DMP-OPRG-NEXT:     impl: [[OMPDD]]
-  // DMP-OPRG:            ForStmt
-  // DMP-OPLC-NEXT:     impl: [[OMPDD]]
-  // DMP-ONT1-NEXT:       OMPNum_threadsClause
-  // DMP-ONT1-NEXT:         IntegerLiteral {{.*}} 'int' 1
-  // DMP-OPLC:            ForStmt
-  // DMP-OSEQ-NEXT:     impl: ForStmt
+  // DMP:               ACCLoopDirective
+  // DMP-ASEQ-NEXT:       ACCSeqClause
+  // DMP-AIND-NEXT:       ACCIndependentClause
+  // DMP-AAUTO-NEXT:      ACCAutoClause
+  // DMP-ASEQ-NOT:        <implicit>
+  // DMP-AIND-NOT:        <implicit>
+  // DMP-AAUTO-NOT:       <implicit>
+  // DMP-AG-NEXT:         ACCGangClause
+  // DMP-AW-NEXT:         ACCWorkerClause
+  // DMP-AV-NEXT:         ACCVectorClause
+  // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+  // DMP-OPRG-NEXT:       impl: [[OMPDD]]
+  // DMP-OPRG:              ForStmt
+  // DMP-OPRGPLC-NEXT:    impl: [[OMPDD]]
+  // DMP-ONT1-NEXT:         OMPNum_threadsClause
+  // DMP-ONT1-NEXT:           IntegerLiteral {{.*}} 'int' 1
+  // DMP-OPRGPLC:           ForStmt
+  // DMP-OSEQ-NEXT:       impl: ForStmt
   //
-  // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]]
-  // PRT-AO-OSEQ-SAME: {{^}} // discarded in OpenMP translation
-  // PRT-A-SAME:       {{^$}}
-  // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
-  // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+  // PRT-A-NEXT:          {{^ *}}#pragma acc loop[[ACCC]]
+  // PRT-AO-OSEQ-SAME:    {{^}} // discarded in OpenMP translation
+  // PRT-A-SAME:          {{^$}}
+  // PRT-AO-OPRG-NEXT:    {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+  // PRT-AO-OPRGPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
   //
-  // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]]{{$}}
-  // PRT-O-OPLC-NEXT:  {{^ *}}#pragma omp [[OMPDP]]{{$}}
-  // PRT-OA-NEXT:      {{^ *}}// #pragma acc loop[[ACCC]]
-  // PRT-OA-OSEQ-SAME: {{^}} // discarded in OpenMP translation
-  // PRT-OA-SAME:      {{^$}}
+  // PRT-O-OPRG-NEXT:     {{^ *}}#pragma omp [[OMPDP]]{{$}}
+  // PRT-O-OPRGPLC-NEXT:  {{^ *}}#pragma omp [[OMPDP]]{{$}}
+  // PRT-OA-NEXT:         {{^ *}}// #pragma acc loop[[ACCC]]
+  // PRT-OA-OSEQ-SAME:    {{^}} // discarded in OpenMP translation
+  // PRT-OA-SAME:         {{^$}}
   //
   // PRT-NEXT: for ({{.*}}) {
   #pragma acc loop ACCC
@@ -1607,46 +1609,46 @@ int main() {
 
   // Repeat that but with acc parallel and acc loop combined.
 
-  // DMP:             ACCParallelLoopDirective
-  // DMP-ASEQ-NEXT:     ACCSeqClause
-  // DMP-AIND-NEXT:     ACCIndependentClause
-  // DMP-AAUTO-NEXT:    ACCAutoClause
-  // DMP-ASEQ-NOT:      <implicit>
-  // DMP-AIND-NOT:      <implicit>
-  // DMP-AAUTO-NOT:     <implicit>
-  // DMP-AG-NEXT:       ACCGangClause
-  // DMP-AW-NEXT:       ACCWorkerClause
-  // DMP-AV-NEXT:       ACCVectorClause
-  // DMP-NEXT:          effect: ACCParallelDirective
-  // DMP-NEXT:            impl: OMPTargetTeamsDirective
-  // DMP:                 ACCLoopDirective
-  // DMP-ASEQ-NEXT:         ACCSeqClause
-  // DMP-AIND-NEXT:         ACCIndependentClause
-  // DMP-AAUTO-NEXT:        ACCAutoClause
-  // DMP-ASEQ-NOT:          <implicit>
-  // DMP-AIND-NOT:          <implicit>
-  // DMP-AAUTO-NOT:         <implicit>
-  // DMP-AG-NEXT:           ACCGangClause
-  // DMP-AW-NEXT:           ACCWorkerClause
-  // DMP-AV-NEXT:           ACCVectorClause
-  // DMP-AIMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
-  // DMP-OPRG-NEXT:         impl: [[OMPDD]]
-  // DMP-OPRG:                ForStmt
-  // DMP-OPLC-NEXT:         impl: [[OMPDD]]
-  // DMP-ONT1-NEXT:           OMPNum_threadsClause
-  // DMP-ONT1-NEXT:             IntegerLiteral {{.*}} 'int' 1
-  // DMP-OPLC:                ForStmt
-  // DMP-OSEQ-NEXT:         impl: ForStmt
+  // DMP:               ACCParallelLoopDirective
+  // DMP-ASEQ-NEXT:       ACCSeqClause
+  // DMP-AIND-NEXT:       ACCIndependentClause
+  // DMP-AAUTO-NEXT:      ACCAutoClause
+  // DMP-ASEQ-NOT:        <implicit>
+  // DMP-AIND-NOT:        <implicit>
+  // DMP-AAUTO-NOT:       <implicit>
+  // DMP-AG-NEXT:         ACCGangClause
+  // DMP-AW-NEXT:         ACCWorkerClause
+  // DMP-AV-NEXT:         ACCVectorClause
+  // DMP-NEXT:            effect: ACCParallelDirective
+  // DMP-NEXT:              impl: OMPTargetTeamsDirective
+  // DMP:                   ACCLoopDirective
+  // DMP-ASEQ-NEXT:           ACCSeqClause
+  // DMP-AIND-NEXT:           ACCIndependentClause
+  // DMP-AAUTO-NEXT:          ACCAutoClause
+  // DMP-ASEQ-NOT:            <implicit>
+  // DMP-AIND-NOT:            <implicit>
+  // DMP-AAUTO-NOT:           <implicit>
+  // DMP-AG-NEXT:             ACCGangClause
+  // DMP-AW-NEXT:             ACCWorkerClause
+  // DMP-AV-NEXT:             ACCVectorClause
+  // DMP-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
+  // DMP-OPRG-NEXT:           impl: [[OMPDD]]
+  // DMP-OPRG:                  ForStmt
+  // DMP-OPRGPLC-NEXT:        impl: [[OMPDD]]
+  // DMP-ONT1-NEXT:             OMPNum_threadsClause
+  // DMP-ONT1-NEXT:               IntegerLiteral {{.*}} 'int' 1
+  // DMP-OPRGPLC:               ForStmt
+  // DMP-OSEQ-NEXT:           impl: ForStmt
   //
-  // PRT-A-NEXT:       {{^ *}}#pragma acc parallel loop[[ACCC]]{{$}}
-  // PRT-AO-NEXT:      {{^ *}}// #pragma omp target teams{{$}}
-  // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
-  // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+  // PRT-A-NEXT:          {{^ *}}#pragma acc parallel loop[[ACCC]]{{$}}
+  // PRT-AO-NEXT:         {{^ *}}// #pragma omp target teams{{$}}
+  // PRT-AO-OPRG-NEXT:    {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+  // PRT-AO-OPRGPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
   //
-  // PRT-O-NEXT:       {{^ *}}#pragma omp target teams{{$}}
-  // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]]{{$}}
-  // PRT-O-OPLC-NEXT:  {{^ *}}#pragma omp [[OMPDP]]{{$}}
-  // PRT-OA-NEXT:      {{^ *}}// #pragma acc parallel loop[[ACCC]]{{$}}
+  // PRT-O-NEXT:         {{^ *}}#pragma omp target teams{{$}}
+  // PRT-O-OPRG-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
+  // PRT-O-OPRGPLC-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
+  // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel loop[[ACCC]]{{$}}
   //
   // PRT-NEXT: for ({{.*}}) {
   #pragma acc parallel loop ACCC
@@ -1695,50 +1697,50 @@ int main() {
     // DMP-OPRG-NOT:            <implicit>
     // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
     // DMP-OPRG:              ForStmt
-    // DMP-OPLC-NEXT:       impl: CompoundStmt
-    // DMP-OPLC-NEXT:         DeclStmt
-    // DMP-OPLC-NEXT:           VarDecl {{.*}} j 'int'
-    // DMP-OPLC-NEXT:         [[OMPDD]]
+    // DMP-OPRGPLC-NEXT:    impl: CompoundStmt
+    // DMP-OPRGPLC-NEXT:      DeclStmt
+    // DMP-OPRGPLC-NEXT:        VarDecl {{.*}} j 'int'
+    // DMP-OPRGPLC-NEXT:      [[OMPDD]]
     // DMP-ONT1-NEXT:           OMPNum_threadsClause
     // DMP-ONT1-NEXT:             IntegerLiteral {{.*}} 'int' 1
-    // DMP-OPLC:                ForStmt
+    // DMP-OPRGPLC:             ForStmt
     // DMP-OSEQ-NEXT:       impl: ForStmt
     //
-    // PRT-AO-OPLC-NEXT: // v----------ACC----------v
-    // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]]
-    // PRT-AO-OSEQ-SAME: {{^}} // discarded in OpenMP translation
-    // PRT-A-SAME:       {{^$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(j){{$}}
-    // PRT-A-NEXT:       for (j ={{.*}}) {
-    // PRT-A-NEXT:         printf
-    // PRT-A-NEXT:       }
-    // PRT-AO-OPLC-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-OPLC-NEXT: // {
-    // PRT-AO-OPLC-NEXT: //   int j;
-    // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
-    // PRT-AO-OPLC-NEXT: //   for (j ={{.*}}) {
-    // PRT-AO-OPLC-NEXT: //     printf
-    // PRT-AO-OPLC-NEXT: //   }
-    // PRT-AO-OPLC-NEXT: // }
-    // PRT-AO-OPLC-NEXT: // ^----------OMP----------^
+    // PRT-AO-OPRGPLC-NEXT: // v----------ACC----------v
+    // PRT-A-NEXT:          {{^ *}}#pragma acc loop[[ACCC]]
+    // PRT-AO-OSEQ-SAME:    {{^}} // discarded in OpenMP translation
+    // PRT-A-SAME:          {{^$}}
+    // PRT-AO-OPRG-NEXT:    {{^ *}}// #pragma omp [[OMPDP]] private(j){{$}}
+    // PRT-A-NEXT:          for (j ={{.*}}) {
+    // PRT-A-NEXT:            printf
+    // PRT-A-NEXT:          }
+    // PRT-AO-OPRGPLC-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-OPRGPLC-NEXT: // {
+    // PRT-AO-OPRGPLC-NEXT: //   int j;
+    // PRT-AO-OPRGPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
+    // PRT-AO-OPRGPLC-NEXT: //   for (j ={{.*}}) {
+    // PRT-AO-OPRGPLC-NEXT: //     printf
+    // PRT-AO-OPRGPLC-NEXT: //   }
+    // PRT-AO-OPRGPLC-NEXT: // }
+    // PRT-AO-OPRGPLC-NEXT: // ^----------OMP----------^
     //
-    // PRT-OA-OPLC-NEXT: // v----------OMP----------v
-    // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
-    // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]]{{$}}
-    // PRT-OA-OSEQ-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] // discarded in OpenMP translation{{$}}
-    // PRT-O-OPLC-NEXT:  {
-    // PRT-O-OPLC-NEXT:    int j;
-    // PRT-O-OPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
-    // PRT-O-NEXT:         for (j ={{.*}}) {
-    // PRT-O-NEXT:           printf
-    // PRT-O-NEXT:         }
-    // PRT-O-OPLC-NEXT:  }
-    // PRT-OA-OPLC-NEXT: // ---------OMP<-ACC--------
-    // PRT-OA-OPLC-NEXT: // #pragma acc loop[[ACCC]]{{$}}
-    // PRT-OA-OPLC-NEXT: // for (j ={{.*}}) {
-    // PRT-OA-OPLC-NEXT: //   printf
-    // PRT-OA-OPLC-NEXT: // }
-    // PRT-OA-OPLC-NEXT: // ^----------ACC----------^
+    // PRT-OA-OPRGPLC-NEXT: // v----------OMP----------v
+    // PRT-O-OPRG-NEXT:     {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
+    // PRT-OA-OPRG-NEXT:    {{^ *}}// #pragma acc loop[[ACCC]]{{$}}
+    // PRT-OA-OSEQ-NEXT:    {{^ *}}// #pragma acc loop[[ACCC]] // discarded in OpenMP translation{{$}}
+    // PRT-O-OPRGPLC-NEXT:  {
+    // PRT-O-OPRGPLC-NEXT:    int j;
+    // PRT-O-OPRGPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
+    // PRT-O-NEXT:            for (j ={{.*}}) {
+    // PRT-O-NEXT:              printf
+    // PRT-O-NEXT:            }
+    // PRT-O-OPRGPLC-NEXT:  }
+    // PRT-OA-OPRGPLC-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-OPRGPLC-NEXT: // #pragma acc loop[[ACCC]]{{$}}
+    // PRT-OA-OPRGPLC-NEXT: // for (j ={{.*}}) {
+    // PRT-OA-OPRGPLC-NEXT: //   printf
+    // PRT-OA-OPRGPLC-NEXT: // }
+    // PRT-OA-OPRGPLC-NEXT: // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT:   for (j ={{.*}}) {
     // PRT-NOACC-NEXT:     printf
@@ -1760,93 +1762,93 @@ int main() {
   {
     // PRT-NEXT: int j;
     int j;
-    // DMP:           ACCParallelLoopDirective
-    // DMP-ASEQ-NEXT:   ACCSeqClause
-    // DMP-AIND-NEXT:   ACCIndependentClause
-    // DMP-AAUTO-NEXT:  ACCAutoClause
-    // DMP-ASEQ-NOT:    <implicit>
-    // DMP-AIND-NOT:    <implicit>
-    // DMP-AAUTO-NOT:   <implicit>
-    // DMP-AG-NEXT:     ACCGangClause
-    // DMP-AW-NEXT:     ACCWorkerClause
-    // DMP-AV-NEXT:     ACCVectorClause
-    // DMP-NEXT:        effect: ACCParallelDirective
-    // DMP-NEXT:          ACCFirstprivateClause {{.*}} <implicit>
-    // DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:          impl: OMPTargetTeamsDirective
-    // DMP-NEXT:            OMPFirstprivateClause
-    // DMP-NOT:                <implicit>
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
-    // DMP:               ACCLoopDirective
-    // DMP-ASEQ-NEXT:       ACCSeqClause
-    // DMP-AIND-NEXT:       ACCIndependentClause
-    // DMP-AAUTO-NEXT:      ACCAutoClause
-    // DMP-ASEQ-NOT:        <implicit>
-    // DMP-AIND-NOT:        <implicit>
-    // DMP-AAUTO-NOT:       <implicit>
-    // DMP-AG-NEXT:         ACCGangClause
-    // DMP-AW-NEXT:         ACCWorkerClause
-    // DMP-AV-NEXT:         ACCVectorClause
-    // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-    // DMP-ASLC-NEXT:       ACCSharedClause {{.*}} <implicit>
-    // DMP-ASLC-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-APLC-NEXT:       ACCPrivateClause {{.*}} <implicit>
-    // DMP-APLC-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-OPRG-NEXT:       impl: [[OMPDD]]
-    // DMP-OPRG-NEXT:         OMPPrivateClause
-    // DMP-OPRG-NOT:            <implicit>
-    // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-OPRG:              ForStmt
-    // DMP-OPLC-NEXT:       impl: CompoundStmt
-    // DMP-OPLC-NEXT:         DeclStmt
-    // DMP-OPLC-NEXT:           VarDecl {{.*}} j 'int'
-    // DMP-OPLC-NEXT:         [[OMPDD]]
-    // DMP-ONT1-NEXT:           OMPNum_threadsClause
-    // DMP-ONT1-NEXT:             IntegerLiteral {{.*}} 'int' 1
-    // DMP-OPLC:                ForStmt
-    // DMP-OSEQ-NEXT:       impl: ForStmt
+    // DMP:              ACCParallelLoopDirective
+    // DMP-ASEQ-NEXT:      ACCSeqClause
+    // DMP-AIND-NEXT:      ACCIndependentClause
+    // DMP-AAUTO-NEXT:     ACCAutoClause
+    // DMP-ASEQ-NOT:       <implicit>
+    // DMP-AIND-NOT:       <implicit>
+    // DMP-AAUTO-NOT:      <implicit>
+    // DMP-AG-NEXT:        ACCGangClause
+    // DMP-AW-NEXT:        ACCWorkerClause
+    // DMP-AV-NEXT:        ACCVectorClause
+    // DMP-NEXT:           effect: ACCParallelDirective
+    // DMP-NEXT:             ACCFirstprivateClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:             impl: OMPTargetTeamsDirective
+    // DMP-NEXT:               OMPFirstprivateClause
+    // DMP-NOT:                   <implicit>
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'j' 'int'
+    // DMP:                  ACCLoopDirective
+    // DMP-ASEQ-NEXT:          ACCSeqClause
+    // DMP-AIND-NEXT:          ACCIndependentClause
+    // DMP-AAUTO-NEXT:         ACCAutoClause
+    // DMP-ASEQ-NOT:           <implicit>
+    // DMP-AIND-NOT:           <implicit>
+    // DMP-AAUTO-NOT:          <implicit>
+    // DMP-AG-NEXT:            ACCGangClause
+    // DMP-AW-NEXT:            ACCWorkerClause
+    // DMP-AV-NEXT:            ACCVectorClause
+    // DMP-AIMP-NEXT:          ACCIndependentClause {{.*}} <implicit>
+    // DMP-ASLC-NEXT:          ACCSharedClause {{.*}} <implicit>
+    // DMP-ASLC-NEXT:            DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-APLC-NEXT:          ACCPrivateClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:            DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPRG-NEXT:          impl: [[OMPDD]]
+    // DMP-OPRG-NEXT:            OMPPrivateClause
+    // DMP-OPRG-NOT:               <implicit>
+    // DMP-OPRG-NEXT:              DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPRG:                 ForStmt
+    // DMP-OPRGPLC-NEXT:       impl: CompoundStmt
+    // DMP-OPRGPLC-NEXT:         DeclStmt
+    // DMP-OPRGPLC-NEXT:           VarDecl {{.*}} j 'int'
+    // DMP-OPRGPLC-NEXT:         [[OMPDD]]
+    // DMP-ONT1-NEXT:              OMPNum_threadsClause
+    // DMP-ONT1-NEXT:                IntegerLiteral {{.*}} 'int' 1
+    // DMP-OPRGPLC:                ForStmt
+    // DMP-OSEQ-NEXT:          impl: ForStmt
     //
-    // PRT-AO-OPLC-NEXT: // v----------ACC----------v
-    // PRT-A-NEXT:       {{^ *}}#pragma acc parallel loop[[ACCC]]{{$}}
-    // PRT-AO-OPRG-NEXT: // #pragma omp target teams firstprivate(j){{$}}
-    // PRT-AO-OSEQ-NEXT: // #pragma omp target teams firstprivate(j){{$}}
-    // PRT-AO-OPRG-NEXT: // #pragma omp [[OMPDP]] private(j){{$}}
-    // PRT-A-NEXT:       for (j ={{.*}}) {
-    // PRT-A-NEXT:         printf
-    // PRT-A-NEXT:       }
-    // PRT-AO-OPLC-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-OPLC-NEXT: // #pragma omp target teams firstprivate(j){{$}}
-    // PRT-AO-OPLC-NEXT: // {
-    // PRT-AO-OPLC-NEXT: //   int j;
-    // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
-    // PRT-AO-OPLC-NEXT: //   for (j ={{.*}}) {
-    // PRT-AO-OPLC-NEXT: //     printf
-    // PRT-AO-OPLC-NEXT: //   }
-    // PRT-AO-OPLC-NEXT: // }
-    // PRT-AO-OPLC-NEXT: // ^----------OMP----------^
+    // PRT-AO-OPRGPLC-NEXT: // v----------ACC----------v
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel loop[[ACCC]]{{$}}
+    // PRT-AO-OPRG-NEXT:    // #pragma omp target teams firstprivate(j){{$}}
+    // PRT-AO-OSEQ-NEXT:    // #pragma omp target teams firstprivate(j){{$}}
+    // PRT-AO-OPRG-NEXT:    // #pragma omp [[OMPDP]] private(j){{$}}
+    // PRT-A-NEXT:          for (j ={{.*}}) {
+    // PRT-A-NEXT:            printf
+    // PRT-A-NEXT:          }
+    // PRT-AO-OPRGPLC-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-OPRGPLC-NEXT: // #pragma omp target teams firstprivate(j){{$}}
+    // PRT-AO-OPRGPLC-NEXT: // {
+    // PRT-AO-OPRGPLC-NEXT: //   int j;
+    // PRT-AO-OPRGPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
+    // PRT-AO-OPRGPLC-NEXT: //   for (j ={{.*}}) {
+    // PRT-AO-OPRGPLC-NEXT: //     printf
+    // PRT-AO-OPRGPLC-NEXT: //   }
+    // PRT-AO-OPRGPLC-NEXT: // }
+    // PRT-AO-OPRGPLC-NEXT: // ^----------OMP----------^
     //
-    // PRT-OA-OPLC-NEXT: // v----------OMP----------v
-    // PRT-O-NEXT:       {{^ *}}#pragma omp target teams firstprivate(j){{$}}
-    // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
-    // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop[[ACCC]]{{$}}
-    // PRT-OA-OSEQ-NEXT: {{^ *}}// #pragma acc parallel loop[[ACCC]]{{$}}
-    // PRT-O-OPLC-NEXT:  {
-    // PRT-O-OPLC-NEXT:    int j;
-    // PRT-O-OPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
-    // PRT-O-NEXT:         for (j ={{.*}}) {
-    // PRT-O-NEXT:           printf
-    // PRT-O-NEXT:         }
-    // PRT-O-OPLC-NEXT:  }
-    // PRT-OA-OPLC-NEXT: // ---------OMP<-ACC--------
-    // PRT-OA-OPLC-NEXT: // #pragma acc parallel loop[[ACCC]]{{$}}
-    // PRT-OA-OPLC-NEXT: // for (j ={{.*}}) {
-    // PRT-OA-OPLC-NEXT: //   printf
-    // PRT-OA-OPLC-NEXT: // }
-    // PRT-OA-OPLC-NEXT: // ^----------ACC----------^
+    // PRT-OA-OPRGPLC-NEXT: // v----------OMP----------v
+    // PRT-O-NEXT:          {{^ *}}#pragma omp target teams firstprivate(j){{$}}
+    // PRT-O-OPRG-NEXT:     {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
+    // PRT-OA-OPRG-NEXT:    {{^ *}}// #pragma acc parallel loop[[ACCC]]{{$}}
+    // PRT-OA-OSEQ-NEXT:    {{^ *}}// #pragma acc parallel loop[[ACCC]]{{$}}
+    // PRT-O-OPRGPLC-NEXT:  {
+    // PRT-O-OPRGPLC-NEXT:    int j;
+    // PRT-O-OPRGPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
+    // PRT-O-NEXT:            for (j ={{.*}}) {
+    // PRT-O-NEXT:              printf
+    // PRT-O-NEXT:            }
+    // PRT-O-OPRGPLC-NEXT:  }
+    // PRT-OA-OPRGPLC-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-OPRGPLC-NEXT: // #pragma acc parallel loop[[ACCC]]{{$}}
+    // PRT-OA-OPRGPLC-NEXT: // for (j ={{.*}}) {
+    // PRT-OA-OPRGPLC-NEXT: //   printf
+    // PRT-OA-OPRGPLC-NEXT: // }
+    // PRT-OA-OPRGPLC-NEXT: // ^----------ACC----------^
     //
-    // PRT-NOACC-NEXT:   for (j ={{.*}}) {
-    // PRT-NOACC-NEXT:     printf
-    // PRT-NOACC-NEXT:   }
+    // PRT-NOACC-NEXT: for (j ={{.*}}) {
+    // PRT-NOACC-NEXT:   printf
+    // PRT-NOACC-NEXT: }
     #pragma acc parallel loop ACCC
     for (j = 7; j > -2; j -= 2) {
       // EXE-DAG: 7
@@ -1883,50 +1885,50 @@ int main() {
     #pragma acc parallel
     // PRT-NEXT: {
     {
-      // DMP:                 ACCLoopDirective
-      // DMP-ASEQ-NEXT:         ACCSeqClause
-      // DMP-AIND-NEXT:         ACCIndependentClause
-      // DMP-AAUTO-NEXT:        ACCAutoClause
-      // DMP-ASEQ-NOT:          <implicit>
-      // DMP-AIND-NOT:          <implicit>
-      // DMP-AAUTO-NOT:         <implicit>
-      // DMP-AG-NEXT:           ACCGangClause
-      // DMP-AW-NEXT:           ACCWorkerClause
-      // DMP-AV-NEXT:           ACCVectorClause
-      // DMP-AIMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
-      // DMP-NEXT:              ACCSharedClause {{.*}} <implicit>
-      // DMP-NEXT:                DeclRefExpr {{.*}} 'x' 'const int'
-      // DMP-OPRG-NEXT:         impl: [[OMPDD]]
-      // DMP-OPRG-NEXT:           OMPSharedClause
-      // DMP-OPRG-OSIMP-SAME:       <implicit>
-      // DMP-OPRG-OSEXP-NOT:        <implicit>
-      // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'x' 'const int'
-      // DMP-OPRG:                ForStmt
-      // DMP-OPLC-NEXT:         impl: [[OMPDD]]
-      // DMP-ONT1-NEXT:           OMPNum_threadsClause
-      // DMP-ONT1-NEXT:             IntegerLiteral {{.*}} 'int' 1
-      // DMP-OPLC-NEXT:           OMPSharedClause
-      // DMP-OPLC-OSIMP-SAME:       <implicit>
-      // DMP-OPLC-OSEXP-NOT:        <implicit>
-      // DMP-OPLC-NEXT:             DeclRefExpr {{.*}} 'x' 'const int'
-      // DMP-OPLC:                ForStmt
-      // DMP-OSEQ-NEXT:         impl: ForStmt
+      // DMP:                    ACCLoopDirective
+      // DMP-ASEQ-NEXT:            ACCSeqClause
+      // DMP-AIND-NEXT:            ACCIndependentClause
+      // DMP-AAUTO-NEXT:           ACCAutoClause
+      // DMP-ASEQ-NOT:             <implicit>
+      // DMP-AIND-NOT:             <implicit>
+      // DMP-AAUTO-NOT:            <implicit>
+      // DMP-AG-NEXT:              ACCGangClause
+      // DMP-AW-NEXT:              ACCWorkerClause
+      // DMP-AV-NEXT:              ACCVectorClause
+      // DMP-AIMP-NEXT:            ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:                 ACCSharedClause {{.*}} <implicit>
+      // DMP-NEXT:                   DeclRefExpr {{.*}} 'x' 'const int'
+      // DMP-OPRG-NEXT:            impl: [[OMPDD]]
+      // DMP-OPRG-NEXT:              OMPSharedClause
+      // DMP-OPRG-OSIMP-SAME:          <implicit>
+      // DMP-OPRG-OSEXP-NOT:           <implicit>
+      // DMP-OPRG-NEXT:                DeclRefExpr {{.*}} 'x' 'const int'
+      // DMP-OPRG:                   ForStmt
+      // DMP-OPRGPLC-NEXT:         impl: [[OMPDD]]
+      // DMP-ONT1-NEXT:              OMPNum_threadsClause
+      // DMP-ONT1-NEXT:                IntegerLiteral {{.*}} 'int' 1
+      // DMP-OPRGPLC-NEXT:           OMPSharedClause
+      // DMP-OPRGPLC-OSIMP-SAME:       <implicit>
+      // DMP-OPRGPLC-OSEXP-NOT:        <implicit>
+      // DMP-OPRGPLC-NEXT:             DeclRefExpr {{.*}} 'x' 'const int'
+      // DMP-OPRGPLC:                ForStmt
+      // DMP-OSEQ-NEXT:            impl: ForStmt
       //
-      // PRT-A-NEXT:             {{^ *}}#pragma acc loop[[ACCC]]
-      // PRT-AO-OSEQ-SAME:       {{^}} // discarded in OpenMP translation
-      // PRT-A-SAME:             {{^$}}
-      // PRT-AO-OPRG-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
-      // PRT-AO-OPRG-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(x){{$}}
-      // PRT-AO-OPLC-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
-      // PRT-AO-OPLC-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(x){{$}}
+      // PRT-A-NEXT:                {{^ *}}#pragma acc loop[[ACCC]]
+      // PRT-AO-OSEQ-SAME:          {{^}} // discarded in OpenMP translation
+      // PRT-A-SAME:                {{^$}}
+      // PRT-AO-OPRG-OSIMP-NEXT:    {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+      // PRT-AO-OPRG-OSEXP-NEXT:    {{^ *}}// #pragma omp [[OMPDP]] shared(x){{$}}
+      // PRT-AO-OPRGPLC-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
+      // PRT-AO-OPRGPLC-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(x){{$}}
       //
-      // PRT-O-OPRG-OSIMP-NEXT:  {{^ *}}#pragma omp [[OMPDP]]{{$}}
-      // PRT-O-OPRG-OSEXP-NEXT:  {{^ *}}#pragma omp [[OMPDP]] shared(x){{$}}
-      // PRT-O-OPLC-OSIMP-NEXT:  {{^ *}}#pragma omp [[OMPDP]]{{$}}
-      // PRT-O-OPLC-OSEXP-NEXT:  {{^ *}}#pragma omp [[OMPDP]] shared(x){{$}}
-      // PRT-OA-OPRG-NEXT:       {{^ *}}// #pragma acc loop[[ACCC]]{{$}}
-      // PRT-OA-OPLC-NEXT:       {{^ *}}// #pragma acc loop[[ACCC]]{{$}}
-      // PRT-OA-OSEQ-NEXT:       {{^ *}}// #pragma acc loop[[ACCC]] // discarded in OpenMP translation{{$}}
+      // PRT-O-OPRG-OSIMP-NEXT:     {{^ *}}#pragma omp [[OMPDP]]{{$}}
+      // PRT-O-OPRG-OSEXP-NEXT:     {{^ *}}#pragma omp [[OMPDP]] shared(x){{$}}
+      // PRT-O-OPRGPLC-OSIMP-NEXT:  {{^ *}}#pragma omp [[OMPDP]]{{$}}
+      // PRT-O-OPRGPLC-OSEXP-NEXT:  {{^ *}}#pragma omp [[OMPDP]] shared(x){{$}}
+      // PRT-OA-OPRG-NEXT:          {{^ *}}// #pragma acc loop[[ACCC]]{{$}}
+      // PRT-OA-OPRGPLC-NEXT:       {{^ *}}// #pragma acc loop[[ACCC]]{{$}}
+      // PRT-OA-OSEQ-NEXT:          {{^ *}}// #pragma acc loop[[ACCC]] // discarded in OpenMP translation{{$}}
       //
       // PRT-NEXT:         for (int i ={{.*}}) {
       // PRT-NEXT:           printf
