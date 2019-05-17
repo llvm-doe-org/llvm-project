@@ -1266,6 +1266,7 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(ArrayRef<Expr *> VarList,
     // variable cannot be private.  However, you can never initialize the
     // private version of such a variable, and OpenMP does have this
     // restriction.
+    // TODO: Should this be isConstant?
     if (VD->getType().isConstQualified()) {
       Diag(ELoc, diag::err_acc_const_private);
       Diag(VD->getLocation(), diag::note_acc_const_private)
