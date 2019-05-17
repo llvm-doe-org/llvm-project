@@ -175,6 +175,24 @@ public:
   void setLoopPartitioning(ACCPartitioningKind Kind) {
     assert(!isStackEmpty() && "Data-sharing attributes stack is empty");
     Stack.back().LoopDirectiveKind = Kind;
+    /// Mark all ancestor directives (including the effective parent
+    /// directive if this is the effective child directive in a combined
+    /// directive) as containing explicit gang or worker partitioning.
+    if (Kind.hasWorkerPartitioning()) {
+      assert(isOpenACCLoopDirective(getEffectiveDirective()) &&
+             "expected worker partitioning to be on a loop directive");
+      assert(getEffectiveParentDirective() != ACCD_unknown &&
+             "unexpected orphaned acc loop directive");
+      for (auto I = std::next(Stack.rbegin()), E = std::prev(Stack.rend());
+           I != E; ++I) {
+        assert((isOpenACCLoopDirective(I->EffectiveDKind) ||
+                isOpenACCParallelDirective(I->EffectiveDKind)) &&
+               "expected worker partitioning to be nested in acc loop or"
+               " parallel directive");
+        if (Kind.hasWorkerPartitioning())
+          I->NestedWorkerPartitioning = true;
+      }
+    }
   }
   /// Get the current directive's loop partitioning kind.
   ///
@@ -207,6 +225,13 @@ public:
       }
     }
     return ACCPartitioningKind();
+  }
+  /// Does this directive have a nested acc loop directive (either a separate
+  /// directive or an effective child directive in a combined directive) with
+  /// worker partitioning?
+  bool getNestedWorkerPartitioning() const {
+    assert(!isStackEmpty());
+    return Stack.back().NestedWorkerPartitioning;
   }
 
   /// Adds data sharing attribute to the specified declaration.
@@ -290,31 +315,6 @@ public:
   }
 
   SourceLocation getConstructLoc() { return Stack.back().ConstructLoc; }
-
-  /// Mark all ancestor directives (including the effective parent directive
-  /// if this is the effective child directive in a combined directive) as
-  /// containing worker partitioning.
-  void setWorkerPartitioning() {
-    assert(isOpenACCLoopDirective(getEffectiveDirective()) &&
-           "expected worker partitioning to be on a loop directive");
-    assert(getEffectiveParentDirective() != ACCD_unknown &&
-           "unexpected orphaned acc loop directive");
-    for (auto I = std::next(Stack.rbegin()), E = std::prev(Stack.rend());
-         I != E; ++I) {
-      assert((isOpenACCLoopDirective(I->EffectiveDKind) ||
-              isOpenACCParallelDirective(I->EffectiveDKind)) &&
-             "expected worker partitioning to be nested in acc loop or"
-             " parallel directive");
-      I->NestedWorkerPartitioning = true;
-    }
-  }
-  /// Does this directive have a nested acc loop directive (either a separate
-  /// directive or an effective child directive in a combined directive) with
-  /// worker partitioning?
-  bool getNestedWorkerPartitioning() const {
-    assert(!isStackEmpty());
-    return Stack.back().NestedWorkerPartitioning;
-  }
 };
 } // namespace
 
@@ -838,9 +838,6 @@ bool Sema::ActOnOpenACCRegionStart(
 
     // Record partitioning on stack.
     DSAStack->setLoopPartitioning(LoopKind);
-    // Record for parent construct any worker partitioning here.
-    if (LoopKind.hasWorkerPartitioning())
-      DSAStack->setWorkerPartitioning();
   }
   return ErrorFound;
 }
