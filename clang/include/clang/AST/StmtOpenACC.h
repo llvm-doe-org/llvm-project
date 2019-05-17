@@ -363,42 +363,141 @@ public:
 /// How a loop is partitioned.
 class ACCPartitioningKind {
   friend class ASTStmtReader;
-  /// All fields false indicates either a sequential loop or not a loop.
+  enum PartitionabilitySource {
+    PartSourceUnknown,
+    PartImplicit,
+    PartExplicit,
+    PartComputed,
+  } PartSource : 2;
+  enum PartitionabilityKind {
+    PartKindUnknown,
+    PartSeq,
+    PartIndependent,
+    PartAuto
+  } PartKind : 2;
   bool Gang : 1;
   bool Worker : 1;
   bool Vector : 1;
-  bool ExplicitIndependent : 1;
-  bool ImplicitIndependent : 1;
+
+  void setPartImplicit(PartitionabilityKind K) {
+    assert(PartSource == PartSourceUnknown && PartKind == PartKindUnknown &&
+           "expected partitionability not to be set yet");
+    PartKind = K;
+    PartSource = PartImplicit;
+  }
+  void setPartExplicit(PartitionabilityKind K) {
+    assert(PartSource == PartImplicit && PartKind != PartKindUnknown &&
+           "expected implicit partitionability to be set already");
+    PartKind = K;
+    PartSource = PartExplicit;
+  }
+  void setPartComputed(PartitionabilityKind K) {
+    assert((PartSource == PartImplicit || PartSource == PartExplicit) &&
+           PartKind == PartAuto &&
+           "expected implicit or explicit auto to be set");
+    PartKind = K;
+    PartSource = PartComputed;
+  }
+  void setPartLevel() {
+    assert(PartSource != PartSourceUnknown &&
+           (PartKind != PartSeq || PartSource == PartImplicit) &&
+           "expected implicit partitionability or some partitionablity other"
+           " than seq to be set");
+  }
+  bool hasPartitioning(bool HasPartLevel) const {
+    assert(((PartSource == PartSourceUnknown && PartKind == PartKindUnknown) ||
+            PartKind != PartAuto) &&
+           "expected any auto clause to already be converted to seq or"
+           " independent");
+    return PartKind == PartIndependent && HasPartLevel;
+  }
+
 public:
+  /// Construct a placeholder with nothing yet specified.  This can be left as
+  /// is for constructs other than loops.
   ACCPartitioningKind()
-      : Gang(false), Worker(false), Vector(false), ExplicitIndependent(false),
-        ImplicitIndependent(false) {}
-  void setGang() { Gang = true; }
-  void setWorker() { Worker = true; }
-  void setVector() { Vector = true; }
-  void setExplicitIndependent() {
-    assert(!ImplicitIndependent &&
-           "expected implicit and explicit to be mutually exclusive");
-    ExplicitIndependent = true;
+      : PartSource(PartSourceUnknown), PartKind(PartKindUnknown),
+        Gang(false), Worker(false), Vector(false) {}
+
+  /// Set implicit independent clause.  Must not be called after other members.
+  void setIndependentImplicit() { setPartImplicit(PartIndependent); }
+  /// Set implicit auto clause.  Must not be called after other members.
+  void setAutoImplicit() { setPartImplicit(PartAuto); }
+
+  /// Set explicit seq clause.  Must not be called before setting the implicit
+  /// partitionability or after setting computed partitionability.
+  void setSeqExplicit() { setPartExplicit(PartSeq); }
+  /// Set explicit independent clause.  Must not be called before setting the
+  /// implicit partitionability or after setting computed partitionability.
+  void setIndependentExplicit() { setPartExplicit(PartIndependent); }
+  /// Set explicit auto clause.  Must not be called before setting the implicit
+  /// partitionability or after setting computed partitionability.
+  void setAutoExplicit() { setPartExplicit(PartAuto); }
+
+  /// Set gang clause.  Must be called only while implicit partitionablity or
+  /// some partitionability other than seq is set.
+  void setGang() { setPartLevel(); Gang = true; }
+  /// Set worker clause.  Must be called only while implicit partitionablity or
+  /// some partitionability other than seq is set.
+  void setWorker() { setPartLevel(); Worker = true; }
+  /// Set vector clause.  Must be called only while implicit partitionablity or
+  /// some partitionability other than seq is set.
+  void setVector() { setPartLevel(); Vector = true; }
+
+  /// Set computed seq clause.  Must be called only while implicit or explicit
+  /// auto is set.
+  void setSeqComputed() { setPartComputed(PartSeq); }
+  /// Set computed independent clause.  Must be called only while implicit
+  /// or explicit auto is set.
+  void setIndependentComputed() { setPartComputed(PartIndependent); }
+
+  /// Does the loop have a seq clause, perhaps explicitly or computed by auto?
+  /// False does not necessarily indicate the loop won't execute sequentially,
+  /// depending on specified partitioning levels.
+  bool hasSeq() const { return PartKind == PartSeq; }
+  /// Does the loop have an independent clause, perhaps implicitly, explicitly,
+  /// or computed by auto?  True does not necessarily indicated the loop won't
+  /// execute sequentially, depending on specified partitioning levels.  If
+  /// implicit, returns true before any contradictory explicit clause is set
+  /// and false afterward.
+  bool hasIndependent() const { return PartKind == PartIndependent; }
+  /// Does the loop have an auto clause, perhaps implicitly or explicitly?  If
+  /// implicit, returns true before any contradictory explicit clause is set
+  /// and false afterward.  Returns true before conversion of an auto clause to
+  /// seq or independent and false afterward.
+  bool hasAuto() const { return PartKind == PartAuto; }
+
+  /// Does the loop have an explicit seq clause?
+  bool hasSeqExplicit() const {
+    return PartKind == PartSeq && PartSource == PartExplicit;
   }
-  void setImplicitIndependent() {
-    assert(!ExplicitIndependent &&
-           "expected implicit and explicit to be mutually exclusive");
-    ImplicitIndependent = true;
+  /// Does the loop have an implicit independent clause?  True does not
+  /// necessarily indicated the loop won't execute sequentially, depending on
+  /// specified partitioning levels.  If returns true, returns false after any
+  /// contradictory explicit clause is set.
+  bool hasIndependentImplicit() const {
+    return PartKind == PartIndependent && PartSource == PartImplicit;
   }
-  /// True if there's a gang clause, implicit or explicit.
-  bool hasGang() const { return Gang; }
-  /// True if there's a worker clause.
-  bool hasWorker() const { return Worker; }
-  /// True if there's a vector clause.
-  bool hasVector() const { return Vector; }
-  /// True if hasExplicitIndependent() or hasImplicitIndependent().
-  bool hasIndependent() const { return ExplicitIndependent ||
-                                       ImplicitIndependent; }
-  /// True if there's an explicit independent clause.
-  bool hasExplicitIndependent() const { return ExplicitIndependent; }
-  /// True if there's no explicit auto, seq, or independent clause.
-  bool hasImplicitIndependent() const { return ImplicitIndependent; }
+
+  /// Does the loop have a gang clause?  True does not necessarily indicate
+  /// gang-partitioning, depending on the determination of any auto clause.
+  bool hasGangClause() const { return Gang; }
+  /// Does the loop have a worker clause?  True does not necessarily indicate
+  /// worker-partitioning, depending on the determination of any auto clause.
+  bool hasWorkerClause() const { return Worker; }
+  /// Does the loop have a vector clause?  True does not necessarily indicate
+  /// vector-partitioning, depending on the determination of any auto clause.
+  bool hasVectorClause() const { return Vector; }
+
+  /// Does the loop have gang partitioning?  Must not be called before
+  /// converting any auto clause to seq or independent.
+  bool hasGangPartitioning() const { return hasPartitioning(Gang); }
+  /// Does the loop have worker partitioning?  Must not be called before
+  /// converting any auto clause to seq or independent.
+  bool hasWorkerPartitioning() const { return hasPartitioning(Worker); }
+  /// Does the loop have vector partitioning?  Must not be called before
+  /// converting any auto clause to seq or independent.
+  bool hasVectorPartitioning() const { return hasPartitioning(Vector); }
 };
 
 /// This represents '#pragma acc loop' directive.
