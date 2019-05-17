@@ -615,8 +615,8 @@ struct ReductionVar {
   DeclRefExpr * const RE;
   ReductionVar(ACCReductionClause *C, DeclRefExpr *RE) : C(C), RE(RE) {}
 };
-class DSAAttrChecker : public StmtVisitor<DSAAttrChecker, void> {
-  typedef StmtVisitor<DSAAttrChecker, void> BaseVisitor;
+class DSAAttrChecker : public StmtVisitor<DSAAttrChecker> {
+  typedef StmtVisitor<DSAAttrChecker> BaseVisitor;
   DSAStackTy *Stack;
   llvm::SmallVector<Expr *, 8> ImplicitShared;
   llvm::SmallVector<Expr *, 8> ImplicitPrivate;
