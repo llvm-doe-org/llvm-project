@@ -360,6 +360,47 @@ public:
   bool getNestedWorkerPartitioning() const { return NestedWorkerPartitioning; }
 };
 
+/// How a loop is partitioned.
+class ACCPartitioningKind {
+  friend class ASTStmtReader;
+  /// All fields false indicates either a sequential loop or not a loop.
+  bool Gang : 1;
+  bool Worker : 1;
+  bool Vector : 1;
+  bool ExplicitIndependent : 1;
+  bool ImplicitIndependent : 1;
+public:
+  ACCPartitioningKind()
+      : Gang(false), Worker(false), Vector(false), ExplicitIndependent(false),
+        ImplicitIndependent(false) {}
+  void setGang() { Gang = true; }
+  void setWorker() { Worker = true; }
+  void setVector() { Vector = true; }
+  void setExplicitIndependent() {
+    assert(!ImplicitIndependent &&
+           "expected implicit and explicit to be mutually exclusive");
+    ExplicitIndependent = true;
+  }
+  void setImplicitIndependent() {
+    assert(!ExplicitIndependent &&
+           "expected implicit and explicit to be mutually exclusive");
+    ImplicitIndependent = true;
+  }
+  /// True if there's a gang clause, implicit or explicit.
+  bool hasGang() const { return Gang; }
+  /// True if there's a worker clause.
+  bool hasWorker() const { return Worker; }
+  /// True if there's a vector clause.
+  bool hasVector() const { return Vector; }
+  /// True if hasExplicitIndependent() or hasImplicitIndependent().
+  bool hasIndependent() const { return ExplicitIndependent ||
+                                       ImplicitIndependent; }
+  /// True if there's an explicit independent clause.
+  bool hasExplicitIndependent() const { return ExplicitIndependent; }
+  /// True if there's no explicit auto, seq, or independent clause.
+  bool hasImplicitIndependent() const { return ImplicitIndependent; }
+};
+
 /// This represents '#pragma acc loop' directive.
 ///
 /// \code
@@ -372,6 +413,7 @@ public:
 class ACCLoopDirective : public ACCExecutableDirective {
   friend class ASTStmtReader;
   llvm::DenseSet<VarDecl *> LCVars;
+  ACCPartitioningKind Partitioning;
 
   /// Build directive with the given start and end location.
   ///
@@ -399,10 +441,12 @@ public:
   /// \param AssociatedStmt Statement associated with the directive.
   /// \param LCVars Loop control variables that are assigned but not declared
   ///        in the inits of the for loops associated with the directive.
+  /// \param Partitioning How this loop is partitioned.
   static ACCLoopDirective *Create(
       const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
       ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
-      const llvm::DenseSet<VarDecl *> &LCVars);
+      const llvm::DenseSet<VarDecl *> &LCVars,
+      ACCPartitioningKind Partitioning);
 
   /// Creates an empty directive.
   ///
@@ -427,6 +471,11 @@ public:
   const llvm::DenseSet<VarDecl *> &getLoopControlVariables() const {
     return LCVars;
   }
+
+  /// Set how the loop is partitioned.
+  void setPartitioning(ACCPartitioningKind V) { Partitioning = V; }
+  /// Get how the loop is partitioned.
+  ACCPartitioningKind getPartitioning() const { return Partitioning; }
 };
 
 /// This represents '#pragma acc parallel loop' directive.

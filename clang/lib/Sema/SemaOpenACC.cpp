@@ -40,44 +40,6 @@ using namespace clang;
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// How a loop is partitioned.
-///
-/// All fields false indicates either a sequential loop or not a loop.
-class PartitioningKind {
-  bool Gang : 1;
-  bool Worker : 1;
-  bool Vector : 1;
-  bool ExplicitIndependent : 1;
-  bool ImplicitIndependent : 1;
-public:
-  PartitioningKind()
-      : Gang(false), Worker(false), Vector(false), ExplicitIndependent(false),
-        ImplicitIndependent(false) {}
-  void setGang() { Gang = true; }
-  void setWorker() { Worker = true; }
-  void setVector() { Vector = true; }
-  void setExplicitIndependent() {
-    assert(!ImplicitIndependent &&
-           "expected implicit and explicit to be mutually exclusive");
-    ExplicitIndependent = true;
-  }
-  void setImplicitIndependent() {
-    assert(!ExplicitIndependent &&
-           "expected implicit and explicit to be mutually exclusive");
-    ImplicitIndependent = true;
-  }
-  bool hasGang() const { return Gang; }
-  bool hasWorker() const { return Worker; }
-  bool hasVector() const { return Vector; }
-  /// True if hasExplicitIndependent() or hasImplicitIndependent().
-  bool hasIndependent() const { return ExplicitIndependent ||
-                                       ImplicitIndependent; }
-  /// True if there's an explicit independent clause.
-  bool hasExplicitIndependent() const { return ExplicitIndependent; }
-  /// True if there's no explicit auto, seq, or independent clause.
-  bool hasImplicitIndependent() const { return ImplicitIndependent; }
-};
-
 /// Stack for tracking declarations used in OpenACC directives and
 /// clauses and their data-sharing attributes.
 ///
@@ -134,7 +96,7 @@ private:
     /// The effective directive kind, which is always the same as RealDKind in
     /// the case of a non-combined directive.
     OpenACCDirectiveKind EffectiveDKind = ACCD_unknown;
-    PartitioningKind LoopDirectiveKind;
+    ACCPartitioningKind LoopDirectiveKind;
     SourceLocation ConstructLoc;
     // FIXME: LoopBreakLoc isn't directly for data sharing attributes, but I
     // don't know of a better place to put it as it's tied to the Directive
@@ -210,7 +172,7 @@ public:
     return Stack.back().LCVs;
   }
   /// Register the current directive's loop partitioning kind.
-  void setLoopPartitioning(PartitioningKind Kind) {
+  void setLoopPartitioning(ACCPartitioningKind Kind) {
     assert(!isStackEmpty() && "Data-sharing attributes stack is empty");
     Stack.back().LoopDirectiveKind = Kind;
   }
@@ -219,7 +181,7 @@ public:
   /// Must be called only after the point where \c setLoopPartitioning would be
   /// called, which is after explicit clauses for the current directive have
   /// been parsed.
-  PartitioningKind getLoopPartitioning() const {
+  ACCPartitioningKind getLoopPartitioning() const {
     assert(!isStackEmpty() && "Data-sharing attributes stack is empty");
     return Stack.back().LoopDirectiveKind;
   }
@@ -229,10 +191,10 @@ public:
   /// If case 1, return that directive's loop partitioning kind, and record its
   /// real directive kind and location.  Else if case 2 or 3, return no
   /// partitioning, and don't record a directive kind or location.
-  PartitioningKind getParentLoopPartitioning(OpenACCDirectiveKind &ParentDir,
-                                             SourceLocation &ParentLoc) const {
+  ACCPartitioningKind getParentLoopPartitioning(
+      OpenACCDirectiveKind &ParentDir, SourceLocation &ParentLoc) const {
     for (auto I = std::next(Stack.rbegin()), E = Stack.rend(); I != E; ++I) {
-      const PartitioningKind &ParentKind = I->LoopDirectiveKind;
+      const ACCPartitioningKind &ParentKind = I->LoopDirectiveKind;
       if (isOpenACCComputeDirective(I->EffectiveDKind) ||
           ParentKind.hasGang() || ParentKind.hasWorker() ||
           ParentKind.hasVector())
@@ -244,7 +206,7 @@ public:
         return ParentKind;
       }
     }
-    return PartitioningKind();
+    return ACCPartitioningKind();
   }
 
   /// Adds data sharing attribute to the specified declaration.
@@ -468,7 +430,7 @@ DSAStackTy::DSAVarData DSAStackTy::getImplicitDSA(VarDecl *VD) {
   DSAVarData DVar;
   DVar.RefExpr = nullptr;
   if (getLoopControlVariables().count(VD)) {
-    PartitioningKind LoopKind = getLoopPartitioning();
+    ACCPartitioningKind LoopKind = getLoopPartitioning();
     // OpenACC 2.6 [2.6.1]:
     //   "The loop variable in a C for statement [...] that is associated
     //   with a loop directive is predetermined to be private to each thread
@@ -795,7 +757,7 @@ bool Sema::ActOnOpenACCRegionStart(
   }
   if (isOpenACCLoopDirective(DKind)) {
     bool HasSeqOrAuto = false;
-    PartitioningKind LoopKind;
+    ACCPartitioningKind LoopKind;
     for (ACCClause *C : Clauses) {
       OpenACCClauseKind CKind = C->getClauseKind();
       if (CKind == ACCC_seq || CKind == ACCC_auto)
@@ -814,7 +776,7 @@ bool Sema::ActOnOpenACCRegionStart(
            " auto");
     OpenACCDirectiveKind ParentDKind;
     SourceLocation ParentLoopLoc;
-    PartitioningKind ParentLoopKind =
+    ACCPartitioningKind ParentLoopKind =
         DSAStack->getParentLoopPartitioning(ParentDKind, ParentLoopLoc);
     if (ParentLoopKind.hasGang() && LoopKind.hasGang()) {
       // OpenACC 2.6, sec. 2.9.2:
@@ -864,7 +826,7 @@ bool Sema::ActOnOpenACCRegionStart(
     if (!HasSeqOrAuto && !LoopKind.hasExplicitIndependent())
       LoopKind.setImplicitIndependent();
     if (!LoopKind.hasIndependent())
-      LoopKind = PartitioningKind();
+      LoopKind = ACCPartitioningKind();
     DSAStack->setLoopPartitioning(LoopKind);
     // Record for parent construct any worker partitioning here.
     if (LoopKind.hasWorker())
@@ -907,7 +869,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
   llvm::SmallVector<ACCClause *, 8> ClausesWithImplicit;
   bool ErrorFound = false;
   ClausesWithImplicit.append(Clauses.begin(), Clauses.end());
-  PartitioningKind LoopKind = DSAStack->getLoopPartitioning();
+  ACCPartitioningKind LoopKind = DSAStack->getLoopPartitioning();
   if (LoopKind.hasImplicitIndependent()) {
     ACCClause *Implicit = ActOnOpenACCIndependentClause(SourceLocation(),
                                                         SourceLocation());
@@ -967,9 +929,9 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
         DSAStack->getNestedWorkerPartitioning());
     break;
   case ACCD_loop:
-    Res = ActOnOpenACCLoopDirective(ClausesWithImplicit, AStmt, StartLoc,
-                                    EndLoc,
-                                    DSAStack->getLoopControlVariables());
+    Res = ActOnOpenACCLoopDirective(
+        ClausesWithImplicit, AStmt, StartLoc, EndLoc,
+        DSAStack->getLoopControlVariables(), DSAStack->getLoopPartitioning());
     break;
   case ACCD_parallel_loop:
   case ACCD_unknown:
@@ -1023,7 +985,8 @@ void Sema::ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
 
 StmtResult Sema::ActOnOpenACCLoopDirective(
     ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-    SourceLocation EndLoc, const llvm::DenseSet<VarDecl *> &LCVars) {
+    SourceLocation EndLoc, const llvm::DenseSet<VarDecl *> &LCVars,
+    ACCPartitioningKind Partitioning) {
   if (!AStmt)
     return StmtError();
 
@@ -1076,7 +1039,7 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
   // OpenACC-level tools.
 
   return ACCLoopDirective::Create(Context, StartLoc, EndLoc, Clauses, AStmt,
-                                  LCVars);
+                                  LCVars, Partitioning);
 }
 
 StmtResult Sema::ActOnOpenACCParallelLoopDirective(
@@ -1931,21 +1894,7 @@ public:
 
   StmtResult TransformACCLoopDirective(ACCLoopDirective *D) {
     // What OpenACC clauses do we have?
-    bool HasIndependent = false;
-    bool HasGang = false;
-    bool HasWorker = false;
-    bool HasVector = false;
-    for (ACCClause *C : D->clauses()) {
-      OpenACCClauseKind CKind = C->getClauseKind();
-      if (CKind == ACCC_independent)
-        HasIndependent = true; // implicit or explicit independent
-      else if (CKind == ACCC_gang)
-        HasGang = true;
-      else if (CKind == ACCC_worker)
-        HasWorker = true;
-      else if (CKind == ACCC_vector)
-        HasVector = true;
-    }
+    ACCPartitioningKind Partitioning = D->getPartitioning();
 
     // What kind of OpenMP directive should we build?
     // OMPD_unknown means none (so sequential).
@@ -1955,12 +1904,12 @@ public:
     Expr *AddSimdlenExpr = nullptr;
     bool AddScopeWithLCVPrivate = false;
     bool AddScopeWithAllPrivates = false;
-    if (!HasIndependent) {
+    if (!Partitioning.hasIndependent()) {
       // sequential loop
       TDKind = OMPD_unknown;
       AddScopeWithAllPrivates = true;
     } else {
-      if (HasWorker) {
+      if (Partitioning.hasWorker()) {
         if (NumWorkersVarDecl) {
           ExprResult Res = getSema().BuildDeclRefExpr(
               NumWorkersVarDecl,
@@ -1972,17 +1921,17 @@ public:
         } else
           AddNumThreadsExpr = NumWorkersExpr;
       }
-      if (HasVector) {
+      if (Partitioning.hasVector()) {
         AddSimdlenExpr = VectorLengthExpr;
         AddScopeWithLCVPrivate = true;
       }
-      if (!HasGang) {
-        if (!HasWorker) {
-          if (!HasVector) {
+      if (!Partitioning.hasGang()) {
+        if (!Partitioning.hasWorker()) {
+          if (!Partitioning.hasVector()) {
             // sequential loop
             TDKind = OMPD_unknown;
             AddScopeWithAllPrivates = true;
-          } else { // HasVector
+          } else { // hasVector
             if (ParentLoopOMPKind == OMPD_unknown) {
               TDKind = OMPD_parallel_for_simd;
               AddNumThreads1 = true;
@@ -1990,25 +1939,23 @@ public:
             else
               TDKind = OMPD_simd;
           }
-        } else { // HasWorker
-          if (!HasVector)
+        } else { // hasWorker
+          if (!Partitioning.hasVector())
             TDKind = OMPD_parallel_for;
-          else // HasVector
+          else // hasVector
             TDKind = OMPD_parallel_for_simd;
         }
-      } else { // HasGang
-        if (!HasWorker) {
-          if (!HasVector)
+      } else { // hasGang
+        if (!Partitioning.hasWorker()) {
+          if (!Partitioning.hasVector())
             TDKind = OMPD_distribute;
-          else { // HasVector
+          else // hasVector
             TDKind = OMPD_distribute_simd;
-          }
-        } else { // HasWorker
-          if (!HasVector)
+        } else { // hasWorker
+          if (!Partitioning.hasVector())
             TDKind = OMPD_distribute_parallel_for;
-          else { // HasVector
+          else // hasVector
             TDKind = OMPD_distribute_parallel_for_simd;
-          }
         }
       }
     }

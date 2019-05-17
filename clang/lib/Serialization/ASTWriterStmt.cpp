@@ -2316,6 +2316,10 @@ void ASTStmtWriter::VisitACCLoopDirective(ACCLoopDirective *D) {
   for (VarDecl *LCV : LCVs)
     Record.AddDeclRef(LCV);
   Code = serialization::STMT_ACC_LOOP_DIRECTIVE;
+  static_assert(sizeof(ACCPartitioningKind) <= sizeof(uint64_t),
+                "ACCPartitioningKind is too large in ASTStmtWriter");
+  ACCPartitioningKind Part = D->getPartitioning();
+  Record.push_back(*reinterpret_cast<uint64_t*>(&Part));
 }
 
 void ASTStmtWriter::VisitACCParallelLoopDirective(

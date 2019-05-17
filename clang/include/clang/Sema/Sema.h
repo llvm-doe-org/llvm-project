@@ -28,6 +28,7 @@
 #include "clang/AST/NSAPI.h"
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/AST/StmtCXX.h"
+#include "clang/AST/StmtOpenACC.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/AST/TypeOrdering.h"
 #include "clang/Basic/ExpressionTraits.h"
@@ -9646,7 +9647,8 @@ public:
   /// of the associated statement.
   StmtResult ActOnOpenACCLoopDirective(
       ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc, const llvm::DenseSet<VarDecl *> &LCVar);
+      SourceLocation EndLoc, const llvm::DenseSet<VarDecl *> &LCVar,
+      ACCPartitioningKind Partitioning);
   /// Called on well-formed '\#pragma acc parallel loop' after parsing
   /// of the associated statement.
   StmtResult ActOnOpenACCParallelLoopDirective(

@@ -2313,6 +2313,10 @@ void ASTStmtReader::VisitACCLoopDirective(ACCLoopDirective *D) {
   for (uint64_t I = 0; I < LCVCount; ++I)
     LCVs.insert(Record.readDeclAs<VarDecl>());
   D->setLoopControlVariables(LCVs);
+  static_assert(sizeof(ACCPartitioningKind) <= sizeof(uint64_t),
+                "ACCPartitioningKind is too large in ASTStmtReader");
+  uint64_t Part = Record.readInt();
+  D->setPartitioning(*reinterpret_cast<ACCPartitioningKind*>(&Part));
 }
 
 void ASTStmtReader::VisitACCParallelLoopDirective(ACCParallelLoopDirective *D)
