@@ -888,6 +888,578 @@ void fn() {
   }
 
   //--------------------------------------------------
+  // nesting of acc loops: 2 levels with auto on outer level
+  //--------------------------------------------------
+
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    // sep-note@+2 4 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 4 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop auto gang
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      #pragma acc loop worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      #pragma acc loop vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop worker gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      #pragma acc loop vector worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop vector worker gang
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 6 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 6 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop worker auto
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      #pragma acc loop vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop gang worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop vector gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop vector gang worker
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 7 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 7 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop auto vector
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop worker gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop gang vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop vector worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop worker vector gang
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 6 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 6 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop gang auto worker
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      #pragma acc loop vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop vector gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop worker gang vector
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 7 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 7 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop gang vector auto
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop worker gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop vector worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang vector worker
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 7 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 7 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop auto worker vector
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop gang worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop vector gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop gang worker vector
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 7 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 7 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop gang auto worker vector
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop worker gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop vector worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop vector worker gang
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+  }
+
+  //--------------------------------------------------
+  // nesting of acc loops: 2 levels with auto on inner level
+  //--------------------------------------------------
+
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    // sep-note@+2 4 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 4 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop gang
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop auto gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      #pragma acc loop worker auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      #pragma acc loop auto vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop worker auto gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang vector auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      #pragma acc loop auto vector worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop vector auto worker gang
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 6 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 6 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop worker
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop gang auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop auto worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      #pragma acc loop vector auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop auto gang worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop vector auto gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker vector auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop auto vector gang worker
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 7 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 7 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop vector
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop auto gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop worker auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop auto vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop worker gang auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop gang auto vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop auto vector worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop worker vector gang auto
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 6 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 6 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop gang worker
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop auto worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      #pragma acc loop vector auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop auto gang worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop vector gang auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker auto vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop auto worker gang vector
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 7 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 7 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop gang vector
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop auto worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop vector auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop auto worker gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang auto vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop vector worker auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop auto gang vector worker
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 7 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 7 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop worker vector
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop auto gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop auto worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop vector auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop gang auto worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop vector gang auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker vector auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop gang worker vector auto
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+
+    // sep-note@+2 7 {{enclosing '#pragma acc loop' here}}
+    // cmb-note@+1 7 {{enclosing '#pragma acc parallel loop' here}}
+    #pragma acc CMB_PAR loop gang worker vector
+    for (int i = 0; i < 5; ++i) {
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop worker auto
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc loop' with 'vector' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'vector' clause cannot be nested within '#pragma acc parallel loop' with 'vector' clause}}
+      #pragma acc loop auto vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop auto worker gang
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop gang auto vector
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc loop' with 'worker' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'worker' clause cannot be nested within '#pragma acc parallel loop' with 'worker' clause}}
+      #pragma acc loop vector auto worker
+      for (int j = 0; j < 5; ++j)
+        ;
+      // sep-error@+2 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc loop' with 'gang' clause}}
+      // cmb-error@+1 {{'#pragma acc loop' with 'gang' clause cannot be nested within '#pragma acc parallel loop' with 'gang' clause}}
+      #pragma acc loop vector worker auto gang
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+  }
+
+  //--------------------------------------------------
   // nesting of acc loops: 3 levels
   //--------------------------------------------------
 

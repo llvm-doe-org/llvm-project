@@ -187,7 +187,7 @@ public:
   }
   /// Iterate through the ancestor directives until finding either (1) an acc
   /// loop directive or combined loop directive with gang, worker, or vector
-  /// partitioning, (2) a compute directive, or (3) or the start of the stack.
+  /// clauses, (2) a compute directive, or (3) or the start of the stack.
   /// If case 1, return that directive's loop partitioning kind, and record its
   /// real directive kind and location.  Else if case 2 or 3, return no
   /// partitioning, and don't record a directive kind or location.
@@ -196,9 +196,8 @@ public:
     for (auto I = std::next(Stack.rbegin()), E = Stack.rend(); I != E; ++I) {
       const ACCPartitioningKind &ParentKind = I->LoopDirectiveKind;
       if (isOpenACCComputeDirective(I->EffectiveDKind) ||
-          ParentKind.hasGangPartitioning() ||
-          ParentKind.hasWorkerPartitioning() ||
-          ParentKind.hasVectorPartitioning())
+          ParentKind.hasGangClause() || ParentKind.hasWorkerClause() ||
+          ParentKind.hasVectorClause())
       {
         while (I->RealDKind == ACCD_unknown)
           I = std::next(I);
@@ -791,7 +790,7 @@ bool Sema::ActOnOpenACCRegionStart(
     SourceLocation ParentLoopLoc;
     ACCPartitioningKind ParentLoopKind =
         DSAStack->getParentLoopPartitioning(ParentDKind, ParentLoopLoc);
-    if (ParentLoopKind.hasGangPartitioning() && LoopKind.hasGangClause()) {
+    if (ParentLoopKind.hasGangClause() && LoopKind.hasGangClause()) {
       // OpenACC 2.6, sec. 2.9.2:
       // "The region of a loop with the gang clause may not contain another
       // loop with the gang clause unless within a nested compute region."
@@ -802,7 +801,7 @@ bool Sema::ActOnOpenACCRegionStart(
           << getOpenACCDirectiveName(ParentDKind);
       ErrorFound = true;
     }
-    else if (ParentLoopKind.hasWorkerPartitioning() &&
+    else if (ParentLoopKind.hasWorkerClause() &&
              (LoopKind.hasGangClause() || LoopKind.hasWorkerClause())) {
       // OpenACC 2.6, sec. 2.9.3:
       // "The region of a loop with the worker clause may not contain a loop
@@ -815,7 +814,7 @@ bool Sema::ActOnOpenACCRegionStart(
           << getOpenACCDirectiveName(ParentDKind);
       ErrorFound = true;
     }
-    else if (ParentLoopKind.hasVectorPartitioning() &&
+    else if (ParentLoopKind.hasVectorClause() &&
              (LoopKind.hasGangClause() || LoopKind.hasWorkerClause() ||
               LoopKind.hasVectorClause())) {
       // OpenACC 2.6, sec. 2.9.4:
