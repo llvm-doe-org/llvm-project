@@ -866,6 +866,9 @@ bool Sema::ActOnOpenACCRegionStart(
     if (!LoopKind.hasIndependent())
       LoopKind = PartitioningKind();
     DSAStack->setLoopPartitioning(LoopKind);
+    // Record for parent construct any worker partitioning here.
+    if (LoopKind.hasWorker())
+      DSAStack->setWorkerPartitioning();
   }
   return ErrorFound;
 }
@@ -1050,8 +1053,7 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
     assert(LoopStmt);
   }
 
-  // Complain if we have a reduction on an acc loop control variable.  Record
-  // for parent construct any worker partitioning here.
+  // Complain if we have a reduction on an acc loop control variable.
   for (ACCClause *C : Clauses) {
     if (ACCReductionClause *RC = dyn_cast_or_null<ACCReductionClause>(C)) {
       for (Expr *VR : RC->varlists()) {
@@ -1064,8 +1066,6 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
         }
       }
     }
-    else if (dyn_cast_or_null<ACCWorkerClause>(C))
-      DSAStack->setWorkerPartitioning();
   }
 
   // FIXME: Much more validation of the for statement should be performed.  To

@@ -1088,6 +1088,32 @@ int main(int argc, char *argv[]) {
         // EXE-NEXT: 7
         printf("%d\n", i);
       } // PRT-NEXT: }
+
+      // DMP:      ACCLoopDirective
+      // DMP-NEXT:   ACCAutoClause
+      // DMP-NEXT:   ACCWorkerClause
+      // DMP-NEXT:   impl: ForStmt
+      //
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop auto worker
+      // PRT-AO-SAME: {{^}} // discarded in OpenMP translation
+      // PRT-A-SAME:  {{^$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop auto worker // discarded in OpenMP translation{{$}}
+      #pragma acc loop auto worker
+      // PRT-NEXT: for ({{.*}}) {
+      for (int i = 0; i < 8; ++i) {
+        // sequential, so order is deterministic
+        // DMP: CallExpr
+        // PRT-NEXT: printf
+        // EXE-NEXT: 0
+        // EXE-NEXT: 1
+        // EXE-NEXT: 2
+        // EXE-NEXT: 3
+        // EXE-NEXT: 4
+        // EXE-NEXT: 5
+        // EXE-NEXT: 6
+        // EXE-NEXT: 7
+        printf("%d\n", i);
+      } // PRT-NEXT: }
     } // PRT-NEXT: }
   } // PRT-NEXT: }
 
