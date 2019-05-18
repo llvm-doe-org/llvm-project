@@ -2148,7 +2148,6 @@ public:
     case ACCC_unknown:
       llvm_unreachable("Unexpected OpenACC directive");
     }
-
   }
 
 private:

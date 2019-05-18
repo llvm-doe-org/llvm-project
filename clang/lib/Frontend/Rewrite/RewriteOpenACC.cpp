@@ -126,8 +126,8 @@ public:
         if (!ACCNode->directiveDiscardedForOMP()) {
           PrintingPolicy PolicyOMP(Policy);
           PolicyOMP.OpenACCPrint = OpenACCPrint_OMP_HEAD;
-          ACCNode->printPretty(RewriteStream, nullptr, PolicyOMP, 0, "\n",
-                               Context);
+          ACCNode->printPretty(RewriteStream, nullptr, PolicyOMP, IndentLevel,
+                               "\n", Context);
         }
       } else {
         PrintingPolicy PolicyOMP(Policy);
@@ -180,8 +180,8 @@ public:
         } else {
           PrintingPolicy PolicyOMP(Policy);
           PolicyOMP.OpenACCPrint = OpenACCPrint_OMP_HEAD;
-          ACCNode->printPretty(RewriteStream, nullptr, PolicyOMP, 0, "\n",
-                               Context);
+          ACCNode->printPretty(RewriteStream, nullptr, PolicyOMP, IndentLevel,
+                               "\n", Context);
           clang::commented_raw_ostream ComStream(RewriteStream, IndentWidth,
                                                  true, 1, true);
           ComStream << Rewrite.getRewrittenText(
