@@ -1156,16 +1156,14 @@ int main() {
     // DMP-NEXT:   ACCNum_gangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 8
     // DMP-NEXT:   ACCFirstprivateClause {{.*}} <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 8
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(8){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(8) firstprivate(i,j,k){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(8) firstprivate(i,j,k){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(8) firstprivate(k){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(8) firstprivate(k){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(8){{$}}
     #pragma acc parallel num_gangs(8)
     // DMP:      ACCLoopDirective
@@ -1236,16 +1234,14 @@ int main() {
     // DMP-NEXT:   ACCNum_workersClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 8
     // DMP-NEXT:   ACCFirstprivateClause {{.*}} <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) num_workers(8){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) firstprivate(i,j,k){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1) firstprivate(i,j,k){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) firstprivate(k){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1) firstprivate(k){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) num_workers(8){{$}}
     #pragma acc parallel num_gangs(1) num_workers(8)
     // DMP:      ACCLoopDirective
@@ -1321,7 +1317,6 @@ int main() {
     // DMP-NEXT:     ACCVector_lengthClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 8
     // DMP-NEXT:     ACCFirstprivateClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:     impl: OMPTargetTeamsDirective
     // DMP-NEXT:       OMPNum_teamsClause
@@ -1368,7 +1363,7 @@ int main() {
     // PRT-A-NEXT:      for (k ={{.*}})
     // PRT-A-NEXT:        printf
     // PRT-AO-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) firstprivate(j,k){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) firstprivate(k){{$}}
     // PRT-AO-NEXT: // {
     // PRT-AO-NEXT: //   int j;
     // PRT-AO-NEXT: //   #pragma omp parallel for simd num_threads(1) simdlen(8) collapse(2) shared(k){{$}}
@@ -1380,7 +1375,7 @@ int main() {
     // PRT-AO-NEXT: // ^----------OMP----------^
     //
     // PRT-OA-NEXT: // v----------OMP----------v
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) firstprivate(j,k){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) firstprivate(k){{$}}
     // PRT-O-NEXT:  {
     // PRT-O-NEXT:    int j;
     // PRT-O-NEXT:    #pragma omp parallel for simd num_threads(1) simdlen(8) collapse(2) shared(k){{$}}

@@ -606,7 +606,7 @@ class DSAAttrChecker : public StmtVisitor<DSAAttrChecker> {
   llvm::DenseSet<VarDecl *> ImplicitPrivacyVarDecls;
   llvm::SmallVector<ReductionVar, 8> ImplicitGangReductions;
   llvm::DenseMap<VarDecl *, ACCReductionClause *>  ImplicitGangReductionMap;
-  llvm::DenseSet<Decl *> LocalDefinitions;
+  llvm::SmallVector<llvm::DenseSet<const Decl *>, 8> LocalDefinitions;
   void pruneImplicitPrivacyClause(llvm::SmallVector<Expr *, 8> &VarDecls) {
     auto Write = VarDecls.begin();
     for (auto Read = VarDecls.begin(), End = VarDecls.end(); Read != End;
@@ -624,13 +624,13 @@ class DSAAttrChecker : public StmtVisitor<DSAAttrChecker> {
 public:
   void VisitDeclStmt(DeclStmt *S) {
     for (auto I = S->decl_begin(), E = S->decl_end(); I != E; ++I)
-      LocalDefinitions.insert(*I);
+      LocalDefinitions.back().insert(*I);
     BaseVisitor::VisitDeclStmt(S);
   }
   void VisitDeclRefExpr(DeclRefExpr *E) {
     if (auto *VD = dyn_cast<VarDecl>(E->getDecl())) {
       // Skip internally declared variables.
-      if (LocalDefinitions.count(VD))
+      if (LocalDefinitions.back().count(VD))
         return;
 
       auto DVar = Stack->getTopDSA(VD);
@@ -664,7 +664,7 @@ public:
           VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
 
           // Skip variables declared gang-local.
-          if (LocalDefinitions.count(VD))
+          if (LocalDefinitions.back().count(VD))
             continue;
 
           // Skip variables that have gang-local private copies or that already
@@ -718,10 +718,35 @@ public:
         }
       }
     }
-    for (auto *C : D->children()) {
-      if (C)
-        Visit(C);
+    LocalDefinitions.emplace_back(LocalDefinitions.back());
+    for (ACCClause *C : D->clauses()) {
+      if (!C)
+        return;
+      // A reference to a variable in a private clause does not require a data
+      // sharing clause on the directives enclosing this one, and any reference
+      // to the private copy doesn't either.  Variables in firstprivate and
+      // reduction clauses do, so it's not useful to list them in
+      // LocalDefinitions.  Moreover, if a reduction variable were listed in
+      // LocalDefinitions, we would not recognize conflicting nested reductions
+      // as being for the same variable.
+      if (auto PC = dyn_cast<ACCPrivateClause>(C)) {
+        for (const Expr *VR : PC->varlists()) {
+          const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
+          const VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
+          LocalDefinitions.back().insert(VD);
+        }
+        continue;
+      }
+      for (Stmt *Child : C->children()) {
+        if (Child)
+          Visit(Child);
+      }
     }
+    for (auto *Child : D->children()) {
+      if (Child)
+        Visit(Child);
+    }
+    LocalDefinitions.pop_back();
   }
   void VisitStmt(Stmt *S) {
     for (Stmt *C : S->children()) {
@@ -747,7 +772,7 @@ public:
     return ImplicitGangReductions;
   }
 
-  DSAAttrChecker(DSAStackTy *S) : Stack(S) {}
+  DSAAttrChecker(DSAStackTy *S) : Stack(S) { LocalDefinitions.emplace_back(); }
 };
 
 class ImplicitGangAdder : public StmtVisitor<ImplicitGangAdder> {
