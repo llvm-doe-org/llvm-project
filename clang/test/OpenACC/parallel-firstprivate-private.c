@@ -320,153 +320,188 @@ int main() {
   // Implicit firstprivate that is shadowed.
   STORAGE int shadowed = 111;
 
-  // DMP-PAR:            ACCParallelDirective
   // DMP-PARLOOP:        ACCParallelLoopDirective
   // DMP-PARLOOP-NEXT:     ACCSeqClause
-  // DMP-NEXT:             ACCNum_gangsClause
-  // DMP-NEXT:               IntegerLiteral {{.*}} 'int' 2
-  // DMP-PAR-I-NEXT:       ACCSharedClause {{.*}} <implicit>
-  // DMP-PAR-I-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-PAR-I-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-PAR-I-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-PAR-I-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-PAR-I-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-PAR-I-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-PAR-I-NEXT:       ACCFirstprivateClause {{.*}} <implicit>
-  // DMP-PAR-I-NEXT:         DeclRefExpr {{.*}} 'gi' 'int'
+  // DMP-PARLOOP-NEXT:     ACCNum_gangsClause
+  // DMP-PARLOOP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-PARLOOP-F-NEXT:   ACCFirstprivateClause
+  // DMP-PARLOOP-P-NEXT:   ACCPrivateClause
+  // DMP-PARLOOP-FP-NOT:     <implicit>
+  // DMP-PARLOOP-FP-SAME:    {{$}}
+  // DMP-PARLOOP-FP-NEXT:    DeclRefExpr {{.*}} 'gi' 'int'
   //                         DeclRefExpr for gt is here if defined
-  // DMP-PAR-I-NOT:          ACC
-  // DMP-PAR-I:              DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-PAR-I-NEXT:         DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PAR-I-NOT:          ACC
+  // DMP-PARLOOP-FP-NOT:     ACC
+  // DMP-PARLOOP-FP:         DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-PARLOOP-FP-NEXT:    DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-PARLOOP-FP-NEXT:    DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  // DMP-PARLOOP-FP-NEXT:    DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  // DMP-PARLOOP-FP-NEXT:    DeclRefExpr {{.*}} 'gUnref' 'int'
+  // DMP-PARLOOP-F-NEXT:   ACCFirstprivateClause
+  // DMP-PARLOOP-P-NEXT:   ACCPrivateClause
+  // DMP-PARLOOP-FP-NOT:     <implicit>
+  // DMP-PARLOOP-FP-SAME:    {{$}}
+  // DMP-PARLOOP-FP-NEXT:    DeclRefExpr {{.*}} 'li' 'int'
+  // DMP-PARLOOP-FP-NOT:     ACC
   //                         DeclRefExpr for lt is here if defined
-  // DMP-PAR-I:              DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-PAR-I-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-F-NEXT:           ACCFirstprivateClause
-  // DMP-P-NEXT:           ACCPrivateClause
-  // DMP-FP-NOT:             <implicit>
-  // DMP-FP-SAME:            {{$}}
-  // DMP-FP-NEXT:            DeclRefExpr {{.*}} 'gi' 'int'
-  //                         DeclRefExpr for gt is here if defined
-  // DMP-FP-NOT:             ACC
-  // DMP-FP:                 DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-FP-NEXT:            DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-FP-NEXT:            DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-FP-NEXT:            DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-FP-NEXT:            DeclRefExpr {{.*}} 'gUnref' 'int'
-  // DMP-F-NEXT:           ACCFirstprivateClause
-  // DMP-P-NEXT:           ACCPrivateClause
-  // DMP-FP-NOT:             <implicit>
-  // DMP-FP-SAME:            {{$}}
-  // DMP-FP-NEXT:            DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-FP-NOT:             ACC
-  //                         DeclRefExpr for lt is here if defined
-  // DMP-FP:                 DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-FP-NEXT:            DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-FP-NEXT:            DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-FP-NEXT:            DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-FP-NEXT:            DeclRefExpr {{.*}} 'lUnref' 'int'
-  // DMP-F-NEXT:           ACCFirstprivateClause
-  // DMP-P-NEXT:           ACCPrivateClause
-  // DMP-FP-NOT:             <implicit>
-  // DMP-FP-SAME:            {{$}}
-  // DMP-FP-NEXT:            DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-PARLOOP-FP:         DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-PARLOOP-FP-NEXT:    DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-PARLOOP-FP-NEXT:    DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  // DMP-PARLOOP-FP-NEXT:    DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-PARLOOP-FP-NEXT:    DeclRefExpr {{.*}} 'lUnref' 'int'
+  // DMP-PARLOOP-F-NEXT:   ACCFirstprivateClause
+  // DMP-PARLOOP-P-NEXT:   ACCPrivateClause
+  // DMP-PARLOOP-FP-NOT:     <implicit>
+  // DMP-PARLOOP-FP-SAME:    {{$}}
+  // DMP-PARLOOP-FP-NEXT:    DeclRefExpr {{.*}} 'shadowed' 'int'
   // DMP-PARLOOP-NEXT:     effect: ACCParallelDirective
-  // DMP-PARLOOP-NEXT:       ACCNum_gangsClause
-  // DMP-PARLOOP-NEXT:         IntegerLiteral {{.*}} 'int' 2
-  // DMP-PARLOOP-F-NEXT:     ACCFirstprivateClause
-  // DMP-PARLOOP-F-NOT:        <implicit>
-  // DMP-PARLOOP-F-SAME:       {{$}}
-  // DMP-PARLOOP-F-NEXT:       DeclRefExpr {{.*}} 'gi' 'int'
+  // DMP-PAR:              ACCParallelDirective
+  // DMP-NEXT:               ACCNum_gangsClause
+  // DMP-NEXT:                 IntegerLiteral {{.*}} 'int' 2
+  // DMP-F-NEXT:             ACCFirstprivateClause
+  // DMP-F-NOT:                <implicit>
+  // DMP-F-SAME:               {{$}}
+  // DMP-F-NEXT:               DeclRefExpr {{.*}} 'gi' 'int'
   //                           DeclRefExpr for gt is here if defined
-  // DMP-PARLOOP-F-NOT:        ACC
-  // DMP-PARLOOP-F:            DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-PARLOOP-F-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-PARLOOP-F-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-PARLOOP-F-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-PARLOOP-F-NEXT:       DeclRefExpr {{.*}} 'gUnref' 'int'
-  // DMP-PARLOOP-F-NEXT:     ACCFirstprivateClause
-  // DMP-PARLOOP-F-NOT:        <implicit>
-  // DMP-PARLOOP-F-SAME:       {{$}}
-  // DMP-PARLOOP-F-NEXT:       DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PARLOOP-F-NOT:        ACC
+  // DMP-F-NOT:                ACC
+  // DMP-F:                    DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-F-NEXT:               DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-F-NEXT:               DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  // DMP-F-NEXT:               DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  // DMP-F-NEXT:               DeclRefExpr {{.*}} 'gUnref' 'int'
+  // DMP-F-NEXT:             ACCFirstprivateClause
+  // DMP-F-NOT:                <implicit>
+  // DMP-F-SAME:               {{$}}
+  // DMP-F-NEXT:               DeclRefExpr {{.*}} 'li' 'int'
+  // DMP-F-NOT:                ACC
   //                           DeclRefExpr for lt is here if defined
-  // DMP-PARLOOP-F:            DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-PARLOOP-F-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-PARLOOP-F-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-PARLOOP-F-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-PARLOOP-F-NEXT:       DeclRefExpr {{.*}} 'lUnref' 'int'
-  // DMP-PARLOOP-F-NEXT:     ACCFirstprivateClause
-  // DMP-PARLOOP-F-NOT:        <implicit>
-  // DMP-PARLOOP-F-SAME:       {{$}}
-  // DMP-PARLOOP-F-NEXT:       DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-PARLOOP-I-NEXT:     ACCSharedClause {{.*}} <implicit>
-  // DMP-PARLOOP-I-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-PARLOOP-I-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-PARLOOP-I-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-PARLOOP-I-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-PARLOOP-I-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-PARLOOP-I-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-PARLOOP-I-NEXT:     ACCFirstprivateClause {{.*}} <implicit>
-  // DMP-PARLOOP-I-NEXT:       DeclRefExpr {{.*}} 'gi' 'int'
+  // DMP-F:                    DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-F-NEXT:               DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-F-NEXT:               DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  // DMP-F-NEXT:               DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-F-NEXT:               DeclRefExpr {{.*}} 'lUnref' 'int'
+  // DMP-F-NEXT:             ACCFirstprivateClause
+  // DMP-F-NOT:                <implicit>
+  // DMP-F-SAME:               {{$}}
+  // DMP-F-NEXT:               DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-PAR-P-NEXT:         ACCPrivateClause
+  // DMP-PAR-P-NOT:            <implicit>
+  // DMP-PAR-P-SAME:           {{$}}
+  // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'gi' 'int'
   //                           DeclRefExpr for gt is here if defined
-  // DMP-PARLOOP-I-NOT:        ACC
-  // DMP-PARLOOP-I:            DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-PARLOOP-I-NEXT:       DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PARLOOP-I-NOT:        ACC
+  // DMP-PAR-P-NOT:            ACC
+  // DMP-PAR-P:                DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'gUnref' 'int'
+  // DMP-PAR-P-NEXT:         ACCPrivateClause
+  // DMP-PAR-P-NOT:            <implicit>
+  // DMP-PAR-P-SAME:           {{$}}
+  // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'li' 'int'
+  // DMP-PAR-P-NOT:            ACC
   //                           DeclRefExpr for lt is here if defined
-  // DMP-PARLOOP-I:            DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-PARLOOP-I-NEXT:       DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-PAR-P:                DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'lUnref' 'int'
+  // DMP-PAR-P-NEXT:         ACCPrivateClause
+  // DMP-PAR-P-NOT:            <implicit>
+  // DMP-PAR-P-SAME:           {{$}}
+  // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-I-NEXT:             ACCSharedClause {{.*}} <implicit>
+  // DMP-I-NEXT:               DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-I-NEXT:               DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  // DMP-I-NEXT:               DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  // DMP-I-NEXT:               DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-I-NEXT:               DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  // DMP-I-NEXT:               DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-I-NEXT:             ACCFirstprivateClause {{.*}} <implicit>
+  // DMP-I-NEXT:               DeclRefExpr {{.*}} 'gi' 'int'
+  //                           DeclRefExpr for gt is here if defined
+  // DMP-I-NOT:                ACC
+  // DMP-I:                    DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-I-NEXT:               DeclRefExpr {{.*}} 'li' 'int'
+  // DMP-I-NOT:                ACC
+  //                           DeclRefExpr for lt is here if defined
+  // DMP-I:                    DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-I-NEXT:               DeclRefExpr {{.*}} 'shadowed' 'int'
   // DMP-NEXT:               impl: OMPTargetTeamsDirective
   // DMP-NEXT:                 OMPNum_teamsClause
   // DMP-NEXT:                   IntegerLiteral {{.*}} 'int' 2
-  // DMP-PARLOOP-F-NEXT:       OMPFirstprivateClause
-  // DMP-PARLOOP-F-NOT:          <implicit>
-  // DMP-PARLOOP-F-SAME:         {{$}}
-  // DMP-PARLOOP-F-NEXT:         DeclRefExpr {{.*}} 'gi' 'int'
+  // DMP-F-NEXT:               OMPFirstprivateClause
+  // DMP-F-NOT:                  <implicit>
+  // DMP-F-SAME:                 {{$}}
+  // DMP-F-NEXT:                 DeclRefExpr {{.*}} 'gi' 'int'
   //                             DeclRefExpr for gt is here if defined
-  // DMP-PARLOOP-F-NOT:          OMP
-  // DMP-PARLOOP-F:              DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-PARLOOP-F-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-PARLOOP-F-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-PARLOOP-F-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-PARLOOP-F-NEXT:         DeclRefExpr {{.*}} 'gUnref' 'int'
-  // DMP-PARLOOP-F-NEXT:       OMPFirstprivateClause
-  // DMP-PARLOOP-F-NOT:          <implicit>
-  // DMP-PARLOOP-F-SAME:         {{$}}
-  // DMP-PARLOOP-F-NEXT:         DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PARLOOP-F-NOT:          OMP
+  // DMP-F-NOT:                  OMP
+  // DMP-F:                      DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-F-NEXT:                 DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-F-NEXT:                 DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  // DMP-F-NEXT:                 DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  // DMP-F-NEXT:                 DeclRefExpr {{.*}} 'gUnref' 'int'
+  // DMP-F-NEXT:               OMPFirstprivateClause
+  // DMP-F-NOT:                  <implicit>
+  // DMP-F-SAME:                 {{$}}
+  // DMP-F-NEXT:                 DeclRefExpr {{.*}} 'li' 'int'
+  // DMP-F-NOT:                  OMP
   //                             DeclRefExpr for lt is here if defined
-  // DMP-PARLOOP-F:              DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-PARLOOP-F-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-PARLOOP-F-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-PARLOOP-F-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-PARLOOP-F-NEXT:         DeclRefExpr {{.*}} 'lUnref' 'int'
-  // DMP-PARLOOP-F-NEXT:       OMPFirstprivateClause
-  // DMP-PARLOOP-F-NOT:          <implicit>
-  // DMP-PARLOOP-F-SAME:         {{$}}
-  // DMP-PARLOOP-F-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-PARLOOP-I-NEXT:       OMPSharedClause
-  // DMP-PARLOOP-I-NOT:          <implicit>
-  // DMP-PARLOOP-I-SAME:         {{$}}
-  // DMP-PARLOOP-I-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-PARLOOP-I-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-PARLOOP-I-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-PARLOOP-I-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-PARLOOP-I-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-PARLOOP-I-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-PARLOOP-I-NEXT:       OMPFirstprivateClause
-  // DMP-PARLOOP-I-NOT:          <implicit>
-  // DMP-PARLOOP-I-SAME:         {{$}}
-  // DMP-PARLOOP-I-NEXT:         DeclRefExpr {{.*}} 'gi' 'int'
+  // DMP-F:                      DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-F-NEXT:                 DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-F-NEXT:                 DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  // DMP-F-NEXT:                 DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-F-NEXT:                 DeclRefExpr {{.*}} 'lUnref' 'int'
+  // DMP-F-NEXT:               OMPFirstprivateClause
+  // DMP-F-NOT:                  <implicit>
+  // DMP-F-SAME:                 {{$}}
+  // DMP-F-NEXT:                 DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-PAR-P-NEXT:           OMPPrivateClause
+  // DMP-PAR-P-NOT:              <implicit>
+  // DMP-PAR-P-SAME:             {{$}}
+  // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'gi' 'int'
+  //     PAR-                    DeclRefExpr for gt is here if defined
+  // DMP-PAR-P-NOT:              OMP
+  // DMP-PAR-P:                  DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'gUnref' 'int'
+  // DMP-PAR-P-NEXT:           OMPPrivateClause
+  // DMP-PAR-P-NOT:              <implicit>
+  // DMP-PAR-P-SAME:             {{$}}
+  // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'li' 'int'
+  // DMP-PAR-P-NOT:              OMP
+  //     PAR-                    DeclRefExpr for lt is here if defined
+  // DMP-PAR-P:                  DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'lUnref' 'int'
+  // DMP-PAR-P-NEXT:           OMPPrivateClause
+  // DMP-PAR-P-NOT:              <implicit>
+  // DMP-PAR-P-SAME:             {{$}}
+  // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-I-NEXT:               OMPSharedClause
+  // DMP-I-NOT:                  <implicit>
+  // DMP-I-SAME:                 {{$}}
+  // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-I-NEXT:               OMPFirstprivateClause
+  // DMP-I-NOT:                  <implicit>
+  // DMP-I-SAME:                 {{$}}
+  // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'gi' 'int'
   //                             DeclRefExpr for gt is here if defined
-  // DMP-PARLOOP-I-NOT:          OMP
-  // DMP-PARLOOP-I:              DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-PARLOOP-I-NEXT:         DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PARLOOP-I-NOT:          OMP
+  // DMP-I-NOT:                  OMP
+  // DMP-I:                      DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'li' 'int'
+  // DMP-I-NOT:                  OMP
   //                             DeclRefExpr for lt is here if defined
-  // DMP-PARLOOP-I:              DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-PARLOOP-I-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-I:                      DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'shadowed' 'int'
   // DMP-PARLOOP:            ACCLoopDirective
   // DMP-PARLOOP-NEXT:         ACCSeqClause
   // DMP-PARLOOP-P-NEXT:       ACCPrivateClause
