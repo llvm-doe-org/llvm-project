@@ -28,14 +28,12 @@ will eventually update this to LLVM's more recent monorepo.
 
 The branches and tags are as follows:
 
-* `clacc` branch: We'll create this soon for our most recent work as
-  it stabilizes.
+* `clacc` branch: This contains our most recent stable work.
 
 * [`clacc-2018-llvm-hpc`](https://code.ornl.gov/jum/Clacc/tree/clacc-2018-llvm-hpc)
   tag: This points to the version of Clacc we used for the evaluation
   in our [LLVM-HPC 2018
-  paper](https://csmd.ornl.gov/index.php/node/362).  It's currently
-  the most stable version of Clacc.
+  paper](https://csmd.ornl.gov/index.php/node/362).
 
 * [`master`](https://code.ornl.gov/jum/Clacc/tree/master) branch and
   other branches and tags whose names do not start with `clacc`: These
