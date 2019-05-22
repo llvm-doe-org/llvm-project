@@ -1010,6 +1010,7 @@ def OpenMPTarget : DiagGroup<"openmp-target">;
 
 // OpenACC warnings.
 def SourceUsesOpenACC : DiagGroup<"source-uses-openacc">;
+def OpenACCIgnoredClause : DiagGroup<"openacc-ignored-clause">;
 
 // Backend warnings.
 def BackendInlineAsm : DiagGroup<"inline-asm">;
