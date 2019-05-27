@@ -152,6 +152,9 @@ the following features for now:
 
 * combining OpenMP and OpenACC in the same application:
     * `-fopenmp` is an error when OpenACC support is enabled.
+    * As usual when `-fopenmp` is not specified, OpenMP directives are
+      discarded, but `-Wsource-uses-openmp` is available as usual to
+      produce warnings for them.
 * command-line options:
     * option to specify target
 * targets:

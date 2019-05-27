@@ -2858,8 +2858,6 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     Diags.Report(clang::diag::err_drv_acc_cxx_not_supported);
 
   // Check if -fopenmp is specified, and add it for -fopenacc.
-  // FIXME: We need a way to enable OpenMP sema for the sake of OpenACC without
-  // enabling OpenMP directive parsing.
   Opts.OpenMP = Args.hasArg(options::OPT_fopenmp);
   if (Opts.OpenACC) {
     if (Opts.OpenMP)

@@ -317,7 +317,7 @@ void Parser::initializePragmaHandlers() {
 
     PP.AddPragmaHandler("OPENCL", FPContractHandler.get());
   }
-  if (getLangOpts().OpenMP)
+  if (getLangOpts().OpenMP && !getLangOpts().OpenACC)
     OpenMPHandler = llvm::make_unique<PragmaOpenMPHandler>();
   else
     OpenMPHandler = llvm::make_unique<PragmaNoOpenMPHandler>();
