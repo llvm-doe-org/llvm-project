@@ -114,11 +114,21 @@
 //
 // Check execution with normal compilation.
 //
+// RUN: %data tgts {
+// RUN:   (run-if=                tgt=HOST    tgt-cflags=                        )
+// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=x86_64 )
+// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=nvptx64)
+// RUN: }
 // RUN: %for directives {
 // RUN:   %for exes {
-// RUN:     %clang -Xclang -verify -fopenacc -o %t -DMODE=%[mode] %[cflags] \
-// RUN:            %[dir-cflags] %s
-// RUN:     %t | FileCheck -check-prefixes=%[pre] %s
+// RUN:     %for tgts {
+// RUN:       %[run-if] %clang -Xclang -verify -fopenacc %s -o %t \
+// RUN:                        -DMODE=%[mode] -DTGT_%[tgt]_EXE \
+// RUN:                        %[cflags] %[tgt-cflags] %[dir-cflags]
+// RUN:       %[run-if] %t > %t.out 2>&1
+// RUN:       %[run-if] FileCheck -input-file %t.out %s \
+// RUN:                           -check-prefixes=%[pre]
+// RUN:     }
 // RUN:   }
 // RUN: }
 
@@ -196,6 +206,18 @@
 #else
 # define HAS_UINT128 0
 # define IF_UINT128(...)
+#endif
+
+// FIXME: When OpenMP offloading is activated by -fopenmp-targets, pointers
+// pass into acc parallel as null, but otherwise they pass in just fine.
+// What does the OpenMP spec say is supposed to happen?
+
+#if !TGT_X86_64_EXE && !TGT_NVPTX64_EXE
+# define CHECK_PTR_EXE 1
+# define IF_PTR_EXE(...) __VA_ARGS__
+#else
+# define CHECK_PTR_EXE 0
+# define IF_PTR_EXE(...)
 #endif
 
 // Scalar global, either:
@@ -648,17 +670,17 @@ int main() {
     //
     // EXE-IF:      inside : gi:55->56,{{( gt:[1400,59]->[f08234,a07de1],)?}}
     // EXE-P:       inside : gi:{{.+}}->56,{{( gt:[.+]->[f08234,a07de1],)?}}
-    // EXE-I-NEXT:           *gp:55->98, ga:[{{100|101}},{{200|202}}]->[101,202],
-    // EXE-F-NEXT:           *gp:55->98, ga:[100,200]->[101,202],
-    // EXE-P-NEXT:           *gp:{{.+}}->98, ga:[{{.+,.+}}]->[101,202],
+    // EXE-I-NEXT:           {{(\*gp:55->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
+    // EXE-F-NEXT:           {{(\*gp:55->98, )?}}ga:[100,200]->[101,202],
+    // EXE-P-NEXT:           {{(\*gp:.+->98, )?}}ga:[{{.+,.+}}]->[101,202],
     // EXE-I-NEXT:           gs:[{{33|42}},{{11|1}}]->[42,1], gu.i:{{22|13}}->13,
     // EXE-F-NEXT:           gs:[33,11]->[42,1], gu.i:22->13,
     // EXE-P-NEXT:           gs:[{{.+,.+}}]->[42,1], gu.i:{{.+}}->13,
     // EXE-IF-NEXT:          li:99->98,{{( lt:[7a1,62b0]->[79ca,2961],)?}}
     // EXE-P-NEXT:           li:{{.+}}->98,{{( lt:[.+]->[f08234,a07de1],)?}}
-    // EXE-I-NEXT:           *lp:55->98, la:[{{77|55}},{{88|66}}]->[55,66],
-    // EXE-F-NEXT:           *lp:55->98, la:[77,88]->[55,66],
-    // EXE-P-NEXT:           *lp:{{.+}}->98, la:[{{.+,.+}}]->[55,66],
+    // EXE-I-NEXT:           {{(\*lp:55->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
+    // EXE-F-NEXT:           {{(\*lp:55->98, )?}}la:[77,88]->[55,66],
+    // EXE-P-NEXT:           {{(\*lp:.+->98, )?}}la:[{{.+,.+}}]->[55,66],
     // EXE-I-NEXT:           ls:[{{222|333}},{{111|444}}]->[333,444], lu.i:{{167|279}}->279,
     // EXE-F-NEXT:           ls:[222,111]->[333,444], lu.i:167->279,
     // EXE-P-NEXT:           ls:[{{.+,.+}}]->[333,444], lu.i:{{.+}}->279,
@@ -668,26 +690,26 @@ int main() {
     //
     // EXE-IF-NEXT: inside : gi:55->56,{{( gt:[1400,59]->[f08234,a07de1],)?}}
     // EXE-P-NEXT:  inside : gi:{{.+}}->56,{{( gt:[.+]->[f08234,a07de1],)?}}
-    // EXE-I-NEXT:           *gp:55->98, ga:[{{100|101}},{{200|202}}]->[101,202],
-    // EXE-F-NEXT:           *gp:55->98, ga:[100,200]->[101,202],
-    // EXE-P-NEXT:           *gp:{{.+}}->98, ga:[{{.+,.+}}]->[101,202],
+    // EXE-I-NEXT:           {{(\*gp:55->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
+    // EXE-F-NEXT:           {{(\*gp:55->98, )?}}ga:[100,200]->[101,202],
+    // EXE-P-NEXT:           {{(\*gp:.+->98, )?}}ga:[{{.+,.+}}]->[101,202],
     // EXE-I-NEXT:           gs:[{{33|42}},{{11|1}}]->[42,1], gu.i:{{22|13}}->13,
     // EXE-F-NEXT:           gs:[33,11]->[42,1], gu.i:22->13,
     // EXE-P-NEXT:           gs:[{{.+,.+}}]->[42,1], gu.i:{{.+}}->13,
     // EXE-IF-NEXT:          li:99->98,{{( lt:[7a1,62b0]->[79ca,2961],)?}}
     // EXE-P-NEXT:           li:{{.+}}->98,{{( lt:[.+]->[f08234,a07de1],)?}}
-    // EXE-I-NEXT:           *lp:55->98, la:[{{77|55}},{{88|66}}]->[55,66],
-    // EXE-F-NEXT:           *lp:55->98, la:[77,88]->[55,66],
-    // EXE-P-NEXT:           *lp:{{.+}}->98, la:[{{.+,.+}}]->[55,66],
+    // EXE-I-NEXT:           {{(\*lp:55->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
+    // EXE-F-NEXT:           {{(\*lp:55->98, )?}}la:[77,88]->[55,66],
+    // EXE-P-NEXT:           {{(\*lp:.+->98, )?}}la:[{{.+,.+}}]->[55,66],
     // EXE-I-NEXT:           ls:[{{222|333}},{{111|444}}]->[333,444], lu.i:{{167|279}}->279,
     // EXE-F-NEXT:           ls:[222,111]->[333,444], lu.i:167->279,
     // EXE-P-NEXT:           ls:[{{.+,.+}}]->[333,444], lu.i:{{.+}}->279,
     // EXE-NEXT:             shadowed:
     printf("inside : gi:%d->%d,"IF_UINT128(" gt:[%lx,%lx]->[%lx,%lx],")"\n"
-           "         *gp:%d->%d, ga:[%d,%d]->[%d,%d],\n"
+           "         "IF_PTR_EXE("*gp:%d->%d, ")"ga:[%d,%d]->[%d,%d],\n"
            "         gs:[%d,%d]->[%d,%d], gu.i:%d->%d,\n"
            "         li:%d->%d,"IF_UINT128(" lt:[%lx,%lx]->[%lx,%lx],")"\n"
-           "         *lp:%d->%d, la:[%d,%d]->[%d,%d],\n"
+           "         "IF_PTR_EXE("*lp:%d->%d, ")"la:[%d,%d]->[%d,%d],\n"
            "         ls:[%d,%d]->[%d,%d], lu.i:%d->%d,\n"
            "         shadowed:%d\n",
            giOld, gi,
@@ -695,35 +717,42 @@ int main() {
            HI_UINT128(gtOld), LW_UINT128(gtOld),
            HI_UINT128(gt), LW_UINT128(gt),
 #endif
-           *gpOld, *gp, gaOld[0], gaOld[1], ga[0], ga[1],
-           gsOld.i, gsOld.j, gs.i, gs.j, guOld.i, gu.i,
+#if CHECK_PTR_EXE
+           *gpOld, *gp,
+#endif
+           gaOld[0], gaOld[1], ga[0], ga[1],
+           gsOld.i, gsOld.j, gs.i, gs.j,
+           guOld.i, gu.i,
            liOld, li,
 #if HAS_UINT128
            HI_UINT128(ltOld), LW_UINT128(ltOld),
            HI_UINT128(lt), LW_UINT128(lt),
 #endif
-           *lpOld, *lp, laOld[0], laOld[1], la[0], la[1],
+#if CHECK_PTR_EXE
+           *lpOld, *lp,
+#endif
+           laOld[0], laOld[1], la[0], la[1],
            lsOld.i, lsOld.j, ls.i, ls.j, luOld.i, lu.i,
            shadowed);
   } // PRT-NEXT: }
   // DMP: CallExpr
   //
   // EXE-NEXT:    outside: gi:55->55,{{( gt:[1400,59]->[1400,59],)?}}
-  // EXE-I-NEXT:           *gp:55->55, ga:[100,200]->[101,202],
-  // EXE-FP-NEXT:          *gp:55->55, ga:[100,200]->[100,200],
+  // EXE-I-NEXT:           {{(\*gp:55->55, )?}}ga:[100,200]->[101,202],
+  // EXE-FP-NEXT:          {{(\*gp:55->55, )?}}ga:[100,200]->[100,200],
   // EXE-I-NEXT:           gs:[33,11]->[42,1], gu.i:22->13, gUnref:2->2,
   // EXE-FP-NEXT:          gs:[33,11]->[33,11], gu.i:22->22, gUnref:2->2,
   // EXE-NEXT:             li:99->99,{{( lt:[7a1,62b0]->[7a1,62b0],)?}}
-  // EXE-I-NEXT:           *lp:55->55, la:[77,88]->[55,66],
-  // EXE-FP-NEXT:          *lp:55->55, la:[77,88]->[77,88],
+  // EXE-I-NEXT:           {{(\*lp:55->55, )?}}la:[77,88]->[55,66],
+  // EXE-FP-NEXT:          {{(\*lp:55->55, )?}}la:[77,88]->[77,88],
   // EXE-I-NEXT:           ls:[222,111]->[333,444], lu.i:167->279, lUnref:9->9,
   // EXE-FP-NEXT:          ls:[222,111]->[222,111], lu.i:167->167, lUnref:9->9,
   // EXE-NEXT:             shadowed:111
   printf("outside: gi:%d->%d,"IF_UINT128(" gt:[%lx,%lx]->[%lx,%lx],")"\n"
-         "         *gp:%d->%d, ga:[%d,%d]->[%d,%d],\n"
+         "         "IF_PTR_EXE("*gp:%d->%d, ")"ga:[%d,%d]->[%d,%d],\n"
          "         gs:[%d,%d]->[%d,%d], gu.i:%d->%d, gUnref:%d->%d,\n"
          "         li:%d->%d,"IF_UINT128(" lt:[%lx,%lx]->[%lx,%lx],")"\n"
-         "         *lp:%d->%d, la:[%d,%d]->[%d,%d],\n"
+         "         "IF_PTR_EXE("*lp:%d->%d, ")"la:[%d,%d]->[%d,%d],\n"
          "         ls:[%d,%d]->[%d,%d], lu.i:%d->%d, lUnref:%d->%d,\n"
          "         shadowed:%d\n",
          giOld, gi,
@@ -731,14 +760,20 @@ int main() {
          HI_UINT128(gtOld), LW_UINT128(gtOld),
          HI_UINT128(gt), LW_UINT128(gt),
 #endif
-         *gpOld, *gp, gaOld[0], gaOld[1], ga[0], ga[1],
+#if CHECK_PTR_EXE
+         *gpOld, *gp,
+#endif
+         gaOld[0], gaOld[1], ga[0], ga[1],
          gsOld.i, gsOld.j, gs.i, gs.j, guOld.i, gu.i, gUnrefOld, gUnref,
          liOld, li,
 #if HAS_UINT128
          HI_UINT128(ltOld), LW_UINT128(ltOld),
          HI_UINT128(lt), LW_UINT128(lt),
 #endif
-         *lpOld, *lp, laOld[0], laOld[1], la[0], la[1],
+#if CHECK_PTR_EXE
+         *lpOld, *lp,
+#endif
+         laOld[0], laOld[1], la[0], la[1],
          lsOld.i, lsOld.j, ls.i, ls.j, luOld.i, lu.i, lUnrefOld, lUnref,
          shadowed);
 

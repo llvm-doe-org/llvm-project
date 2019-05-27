@@ -652,15 +652,18 @@ void Driver::CreateOffloadingDeviceToolChains(Compilation &C,
   //
   // We need to generate an OpenMP toolchain if the user specified targets with
   // the -fopenmp-targets option.
+  bool HasOpenMPFlag = C.getInputArgs().hasFlag(
+      options::OPT_fopenmp, options::OPT_fopenmp_EQ,
+      options::OPT_fno_openmp, false);
+  bool HasOpenACCFlag = C.getInputArgs().hasFlag(
+      options::OPT_fopenacc, options::OPT_fno_openacc, false);
   if (Arg *OpenMPTargets =
           C.getInputArgs().getLastArg(options::OPT_fopenmp_targets_EQ)) {
     if (OpenMPTargets->getNumValues()) {
       // We expect that -fopenmp-targets is always used in conjunction with the
       // option -fopenmp specifying a valid runtime with offloading support,
       // i.e. libomp or libiomp.
-      bool HasValidOpenMPRuntime = C.getInputArgs().hasFlag(
-          options::OPT_fopenmp, options::OPT_fopenmp_EQ,
-          options::OPT_fno_openmp, false);
+      bool HasValidOpenMPRuntime = HasOpenMPFlag || HasOpenACCFlag;
       if (HasValidOpenMPRuntime) {
         OpenMPRuntimeKind OpenMPKind = getOpenMPRuntime(C.getInputArgs());
         HasValidOpenMPRuntime =

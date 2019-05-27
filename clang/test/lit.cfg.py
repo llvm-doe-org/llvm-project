@@ -192,3 +192,8 @@ if os.path.exists('/etc/gentoo-release'):
 
 if config.has_libatomic:
     config.substitutions.append(('%libatomic', ' -latomic'))
+
+config.substitutions.append(('%run-if-x86_64',
+                             '' if config.clang_acc_test_exe_x86_64 else ':'))
+config.substitutions.append(('%run-if-nvptx64',
+                             '' if config.clang_acc_test_exe_nvptx64 else ':'))

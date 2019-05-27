@@ -4487,17 +4487,24 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddLastArg(CmdArgs, options::OPT_fdiagnostics_show_template_tree);
   Args.AddLastArg(CmdArgs, options::OPT_fno_elide_type);
 
-  // Forward flags for OpenMP. We don't do this if the current action is an
-  // device offloading action other than OpenMP.
-  if (Args.hasFlag(options::OPT_fopenmp, options::OPT_fopenmp_EQ,
-                   options::OPT_fno_openmp, false) &&
+  // Forward flags for OpenMP or OpenACC. We don't do this if the current
+  // action is a device offloading action other than OpenMP or OpenACC.
+  bool HasOpenMPFlag = Args.hasFlag(options::OPT_fopenmp,
+                                    options::OPT_fopenmp_EQ,
+                                    options::OPT_fno_openmp, false);
+  bool HasOpenACCFlag = Args.hasFlag(options::OPT_fopenacc,
+                                     options::OPT_fno_openacc, false);
+  if ((HasOpenMPFlag || HasOpenACCFlag) &&
       (JA.isDeviceOffloading(Action::OFK_None) ||
        JA.isDeviceOffloading(Action::OFK_OpenMP))) {
     switch (D.getOpenMPRuntime(Args)) {
     case Driver::OMPRT_OMP:
     case Driver::OMPRT_IOMP5:
       // Clang can generate useful OpenMP code for these two runtime libraries.
-      CmdArgs.push_back("-fopenmp");
+      if (HasOpenMPFlag)
+        CmdArgs.push_back("-fopenmp");
+      if (HasOpenACCFlag)
+        CmdArgs.push_back("-fopenacc");
 
       // If no option regarding the use of TLS in OpenMP codegeneration is
       // given, decide a default based on the target. Otherwise rely on the
@@ -4544,10 +4551,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                     options::OPT_fno_openmp_simd);
     Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_version_EQ);
   }
-
-  // Forward flags for OpenACC.
-  if (Args.hasFlag(options::OPT_fopenacc, options::OPT_fno_openacc, false))
-    CmdArgs.push_back("-fopenacc");
   Args.AddLastArg(CmdArgs, options::OPT_fopenacc_print_EQ);
   Args.AddLastArg(CmdArgs, options::OPT_fopenacc_ast_print_EQ);
 

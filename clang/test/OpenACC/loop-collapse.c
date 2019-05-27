@@ -60,8 +60,17 @@
 //
 // Check execution with normal compilation.
 //
-// RUN: %clang -Xclang -verify -fopenacc %s -o %t
-// RUN: %t 2 2>&1 | FileCheck -check-prefix=EXE -match-full-lines %s
+// RUN: %data tgts {
+// RUN:   (run-if=                tgt-cflags=                        )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=x86_64 )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=nvptx64)
+// RUN: }
+// RUN: %for tgts {
+// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %s -o %t %[tgt-cflags]
+// RUN:   %[run-if] %t 2 > %t.out 2>&1
+// RUN:   %[run-if] FileCheck -input-file %t.out %s -match-full-lines \
+// RUN:                       -check-prefixes=EXE
+// RUN: }
 
 // END.
 

@@ -11,8 +11,9 @@ We have implemented the following features:
     * `-fopenacc[-ast]-print=acc|omp|acc-omp|omp-acc`
     * `-Wsource-uses-openacc`
     * `-Wopenacc-ignored-clause`
-* targets:
-    * host or multicore
+    * `-fopenmp-targets=<triples>` for traditional compilation mode
+* offloading targets:
+    * host, x86_64, or nvptx64
 * `parallel` directive:
     * use without clauses
     * data sharing:
@@ -156,9 +157,8 @@ the following features for now:
       discarded, but `-Wsource-uses-openmp` is available as usual to
       produce warnings for them.
 * command-line options:
-    * option to specify target
-* targets:
-    * offloading to accelerators
+    * `-fopenmp-targets=<triples>` for source-to-source mode
+    * other `-fopenmp-*` options
 * all directives:
     * clauses not listed in the previous section
     * nesting (other than `loop` directives within `loop` directives

@@ -28,10 +28,10 @@
 // RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT-O,PRT)
 // RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT-A,PRT-AO,PRT)
 // RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT-O,PRT-OA,PRT)
-// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-A,PRT)
-// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-O,PRT)
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-A,PRT-AO,PRT)
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-O,PRT-OA,PRT)
+// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-A,PRT,PRT-SRC)
+// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-O,PRT,PRT-SRC)
+// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-A,PRT-AO,PRT,PRT-SRC)
+// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-O,PRT-OA,PRT,PRT-SRC)
 // RUN: }
 // RUN: %for prt-args {
 // RUN:   %clang -Xclang -verify %[prt] %t-acc.c \
@@ -58,13 +58,23 @@
 // RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c
 // RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:   %clang -Xclang -verify -fopenmp -o %t %t-omp.c %libatomic
-// RUN:   %t 2 2>&1 | FileCheck -check-prefix=EXE %s
+// RUN:   %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-TGT-HOST %s
 // RUN: }
 
 // Check execution with normal compilation.
 //
-// RUN: %clang -Xclang -verify -fopenacc %s -o %t %libatomic
-// RUN: %t 2 2>&1 | FileCheck -check-prefix=EXE %s
+// RUN: %data tgts {
+// RUN:   (run-if=                tgt=HOST    tgt-cflags=                        )
+// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=x86_64 )
+// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=nvptx64)
+// RUN: }
+// RUN: %for tgts {
+// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %s -o %t %libatomic \
+// RUN:                    %[tgt-cflags] -DTGT_%[tgt]_EXE
+// RUN:   %[run-if] %t 2 > %t.out 2>&1
+// RUN:   %[run-if] FileCheck -input-file %t.out %s \
+// RUN:                       -check-prefixes=EXE,EXE-TGT-%[tgt]
+// RUN: }
 
 // END.
 
@@ -373,6 +383,11 @@ int main() {
   // Explicit auto with partitioning.
   //--------------------------------------------------
 
+  // FIXME: OpenMP offloading for nvptx64 doesn't store bool correctly for
+  // reductions.
+
+// PRT-SRC-NEXT: #if !TGT_NVPTX64_EXE
+#if !TGT_NVPTX64_EXE
   // PRT-NEXT: {
   {
     // PRT-NEXT: _Bool out = 1;
@@ -423,16 +438,23 @@ int main() {
       } // PRT-NEXT: }
       // DMP: CallExpr
       // PRT-NEXT: printf
-      // EXE-NEXT: in: 11
-      // EXE-NEXT: in: 11
+      // EXE-TGT-HOST-NEXT: in: 11
+      // EXE-TGT-HOST-NEXT: in: 11
+      // EXE-TGT-X86_64-NEXT: in: 11
+      // EXE-TGT-X86_64-NEXT: in: 11
       printf("in: %d\n", in);
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-NEXT: out = 0
+    // EXE-TGT-HOST-NEXT: out = 0
+    // EXE-TGT-X86_64-NEXT: out = 0
     printf("out = %d\n", out);
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
+// PRT-SRC-NEXT: #if !TGT_NVPTX64_EXE
+#if !TGT_NVPTX64_EXE
   // PRT-NEXT: {
   {
     // PRT-NEXT: _Bool out = 1;
@@ -476,9 +498,12 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-NEXT: out = 0
+    // EXE-TGT-HOST-NEXT: out = 0
+    // EXE-TGT-X86_64-NEXT: out = 0
     printf("out = %d\n", out);
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   //--------------------------------------------------
   // Worker partitioned.
@@ -659,7 +684,7 @@ int main() {
       // PRT-NEXT: printf
       // EXE-NEXT: in: -9.0
       // EXE-NEXT: in: -9.0
-      printf("in: %.1Lf\n", in);
+      printf("in: %.1f\n", (double)in);
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf

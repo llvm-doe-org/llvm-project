@@ -281,15 +281,34 @@ debugging and analysis tools on top of Clacc.  The capabilities of
 `-ast-dump`, as described above, and `-fopenacc-print`, as described
 in the next section, are simple examples.
 
+Codegen
+=======
+
+As mentioned in the previous section, an OpenACC AST node implements
+LLVM IR codegen by delegating to its hidden OpenMP child.  The most
+obvious points for this implementation are the OpenACC cases in the
+main switch on AST node types within Clang codegen's
+`CodeGenFunction::EmitStmt`.
+
+While necessary, those implementation points are insufficient for
+offloading support.  The trouble is that the OpenMP codegen
+implementation also has a hook into Clang's codegen framework outside
+that switch.  This hook calls
+`CGOpenMPRuntime::scanForTargetRegionsFunctions`, which recurses
+through AST nodes looking for OpenMP target regions to emit in
+separate device functions.  Thus, Clacc extends this scan to look for
+OpenACC AST nodes and, as before, to delegate the required codegen to
+their hidden OpenMP children.
+
 Source-to-Source Translation
 ============================
 
-The previous section described how Clacc uses Clang's `TreeTransform`
-facility to construct and attach hidden OpenMP subtrees to OpenACC
-subtrees.  It also mentions that `-ast-print` prints only OpenACC.  In
-this section, we describe Clang's `Rewrite` facility, which is
-normally used in Clang for source-to-source translation, and we
-describe how Clacc prints OpenMP source.
+The `TransformACCToOMP` section described how Clacc uses Clang's
+`TreeTransform` facility to construct and attach hidden OpenMP
+subtrees to OpenACC subtrees.  It also mentions that `-ast-print`
+prints only OpenACC.  In this section, we describe Clang's `Rewrite`
+facility, which is normally used in Clang for source-to-source
+translation, and we describe how Clacc prints OpenMP source.
 
 Background: Rewrite
 -------------------
@@ -410,6 +429,53 @@ the user did not request both OpenACC and OpenMP support, it enables
 OpenMP support if OpenACC support is enabled, and (2) it discards
 OpenMP directives during parsing if either OpenMP support is disabled
 or OpenACC support is enabled.
+
+`-fopenmp-*`
+------------
+
+Clacc permits all `-fopenmp-*` command-line options when OpenACC
+support is enabled.  These options adjust various OpenMP features when
+compiling the OpenMP translation.  To implement this, Clacc extends
+Clang to check if OpenACC support is enabled everywhere it already
+checks if OpenMP support is enabled.  However, so far, only
+`-fopenmp-targets=<triples>` to specify desired offloading targets has
+been tested, and it's only been tested for traditional compilation
+mode.
+
+It's not clear if `-fopenmp-*` options should be relevant to
+source-to-source mode.  First, some options like
+`-fopenmp-targets=<triples>` affect the OpenMP version Clang selects
+by default, and that can affect semantics, diagnostics, and any
+AST-printed code containing `_OPENMP`, but should Clacc let any of
+that matter when compiling OpenACC?  Second, in experimental
+implementations, we have observed that `-fopenmp-targets=nvptx64` adds
+many declarations to the source code printed for `nvptx64`.  Would
+offload bundling of the various versions of the source code be useful?
+
+In general, the Clacc user should not have to be aware that OpenMP
+support is being utilized when in traditional compilation mode.
+However, the need to combine `-fopenmp-targets=<triples>` with
+`-fopenacc` to enable offloading, for example, violates that
+principle.  Moreover, diagnostics for `-fopenmp-*` are currently
+expressed in terms of OpenMP even when OpenACC support is enabled.  In
+the future, especially when Clacc is considered for upstreaming, Clacc
+might develop its own `-fopenacc-*` options to be used instead.
+Nevertheless, for now, we have concluded that the Clacc implementation
+will be easier to keep in sync with upstream while the Clacc
+implementation reuses the existing `-fopenmp-*` options with minimal
+modifications.
+
+`-fopenmp=<lib>`
+----------------
+
+Normally, `-fopenmp=<lib>` can be used to specify an alternate OpenMP
+library.  However, Clang handles it as an alias for `-fopenmp`, so
+it's also expected to enable OpenMP support.  We feel it would be
+subtle and surprising to users if Clacc were to suppress the latter
+behavior when OpenACC support is enabled, so it is currently not
+possible to use `-fopenmp=<lib>` to specify an alternate OpenMP
+library when OpenACC support is enabled.  Options like `-L` and `-l`
+must be used instead.
 
 OpenACC to OpenMP Mapping
 =========================

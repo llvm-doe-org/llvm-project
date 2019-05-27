@@ -85,9 +85,19 @@
 
 // Check execution with normal compilation.
 //
+// RUN: %data tgts {
+// RUN:   (run-if=                tgt-cflags=                        )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=x86_64 )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=nvptx64)
+// RUN: }
 // RUN: %for directives {
-// RUN:   %clang -Xclang -verify -fopenacc %[dir-cflags] %s -o %t
-// RUN:   %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-%[dir] %s
+// RUN:   %for tgts {
+// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %s -o %t \
+// RUN:                      %[tgt-cflags] %[dir-cflags]
+// RUN:     %[run-if] %t 2 > %t.out 2>&1
+// RUN:     %[run-if] FileCheck -input-file %t.out %s \
+// RUN:                         -check-prefixes=EXE,EXE-%[dir]
+// RUN:   }
 // RUN: }
 
 // END.
@@ -175,6 +185,15 @@ int main(int argc, char *argv[]) {
     // EXE-NEXT:         crazy world
     // EXE-PARLOOP-NEXT: crazy world
     printf("crazy world\n");
+
+  // The number of gangs for the previous parallel construct is determined by
+  // the implementation, so we don't know how many times it will print, so
+  // we use this to find the end before strictly checking the next set.
+  //
+  // DMP: CallExpr
+  // PRT-NEXT: printf("barrier\n");
+  // EXE: barrier
+  printf("barrier\n");
 
   // DMP-PAR:          ACCParallelDirective
   // DMP-PARLOOP:      ACCParallelLoopDirective

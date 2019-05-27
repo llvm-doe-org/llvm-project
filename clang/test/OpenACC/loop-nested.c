@@ -240,15 +240,24 @@
 
 // Check execution with normal compilation.
 //
+// RUN: %data tgts {
+// RUN:   (run-if=                tgt-cflags=                        )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=x86_64 )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=nvptx64)
+// RUN: }
 // RUN: %for cmbs {
 // RUN:   %for loop-clauses {
-// RUN:     %clang -Xclang -verify -fopenacc %s -o %t \
-// RUN:            -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
-// RUN:            -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2' \
-// RUN:            %[cmb-cflags]
-// RUN:     %t 2>&1 \
-// RUN:     | FileCheck -check-prefixes=%'exe' %s \
-// RUN:                 -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2'
+// RUN:     %for tgts {
+// RUN:       %[run-if] %clang \
+// RUN:           -Xclang -verify -fopenacc %s -o %t \
+// RUN:           -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
+// RUN:           -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2' \
+// RUN:           %[cmb-cflags] %[tgt-cflags]
+// RUN:       %[run-if] %t > %t.out 2>&1
+// RUN:       %[run-if] FileCheck \
+// RUN:           -input-file %t.out %s -check-prefixes=%'exe' \
+// RUN:           -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2'
+// RUN:     }
 // RUN:   }
 // RUN: }
 

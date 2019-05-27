@@ -17,6 +17,7 @@
 #include "CodeGenFunction.h"
 #include "clang/CodeGen/ConstantInitBuilder.h"
 #include "clang/AST/Decl.h"
+#include "clang/AST/StmtOpenACC.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/Basic/BitmaskEnum.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -8875,6 +8876,11 @@ void CGOpenMPRuntime::scanForTargetRegionsFunctions(const Stmt *S,
                                                     StringRef ParentName) {
   if (!S)
     return;
+
+  if (const auto *A = dyn_cast<ACCExecutableDirective>(S)) {
+    scanForTargetRegionsFunctions(A->getOMPNode(), ParentName);
+    return;
+  }
 
   // Codegen OMP target directives that offload compute to the device.
   bool RequiresDeviceCodegen =

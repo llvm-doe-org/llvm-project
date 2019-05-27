@@ -45,8 +45,8 @@ reached out to us.  Eventually, we plan to set it up for CI, etc.  If
 you see something missing that would be helpful now, let us know, and
 we'll raise the priority.
 
-Building
-========
+Building and Testing
+====================
 
 Clacc should be built in the same manner as upstream Clang when OpenMP
 support is desired.  At minimum, you must build the `clang` and
@@ -68,6 +68,26 @@ build stage that improves offloading support, see the following blog:
 
 > <https://www.hahnjo.de/blog/2018/10/08/clang-7.0-openmp-offloading-nvidia.html>
 
+The Clang OpenACC test suite currently builds and runs OpenACC test
+programs.  Normally it builds them without offloading to avoid
+requiring specific hardware.  To specify hardware architectures
+available on your system so that it tests offloading to them as well,
+specify one or more of the following when running `cmake`:
+
+```
+-DCLANG_ACC_TEST_EXE_X86_64=True
+-DCLANG_ACC_TEST_EXE_NVPTX64=True
+```
+
+The Clang OpenACC test suite can be run by itself or as part of larger
+test suites as follows:
+
+```
+$ ninja check-clang-openacc
+$ ninja check-clang
+$ ninja check-all
+```
+
 Using
 =====
 
@@ -78,20 +98,32 @@ programs with C as the base language.
 
 Clacc's compiler is the `clang` executable in the `bin` subdirectory
 of the LLVM build directory.  The most relevant command-line options
-are:
+are as follows:
 
-* `-fopenacc` enables OpenACC support.
-* `-fopenacc-print=omp` implies `-fopenacc` and prints the OpenMP
-  translation instead of performing normal compilation.
-* `-fopenacc-print=omp-acc` is the same except it also prints the
-  original OpenACC in comments next to the OpenMP.
-* `-fopenacc-print=acc-omp` reverses that.
+* OpenACC traditional compilation mode:
+    * `-fopenacc` enables OpenACC support.  Unless source-to-source
+      mode is enabled as discussed below, Clacc translates OpenACC to
+      OpenMP and then compiles the OpenMP.
+    * `-fopenmp-*` adjusts various OpenMP features when compiling the
+      OpenMP translation.  So far, only `-fopenmp-targets=<triples>`
+      to specify desired offloading targets has been tested.
+* OpenACC source-to-source mode:
+    * `-fopenacc-print=omp` enables OpenACC support and prints the
+      OpenMP translation instead of performing traditional
+      compilation.
+    * `-fopenacc-print=omp-acc` is the same except it also prints the
+      original OpenACC in comments next to the OpenMP.
+    * `-fopenacc-print=acc-omp` reverses that.
+    * `-fopenacc` is redundant with any of those options.
+    * `-fopenmp-*` support has not yet been tested in OpenACC
+      source-to-source mode.
 * `-fopenmp` produces an error diagnostic when OpenACC support is
-  enabled as Clacc currently does not support OpenACC and OpenMP in
-  the same source.
+  enabled in either mode as Clacc currently does not support OpenACC
+  and OpenMP in the same source.
 
-For a full description of OpenACC-related command-line options, run
-Clacc's `clang -help` and search for `openacc`.
+For descriptions of all OpenACC-related and OpenMP-related
+command-line options, run Clacc's `clang -help` and search for
+`openacc` or `openmp`.
 
 Documentation
 =============

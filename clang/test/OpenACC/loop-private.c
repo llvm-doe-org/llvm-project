@@ -152,6 +152,20 @@
 // RUN:   %clang -Xclang -verify -fopenacc -DACCC=%'accc' %s -o %t
 // RUN:   %t 2 2>&1 | FileCheck -check-prefixes=%[exe] %s
 // RUN: }
+// RUN: %data tgts {
+// RUN:   (run-if=                tgt-cflags=                        )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=x86_64 )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=nvptx64)
+// RUN: }
+// RUN: %for loop-clauses {
+// RUN:   %for tgts {
+// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %s -o %t \
+// RUN:                      %[tgt-cflags] -DACCC=%'accc'
+// RUN:     %[run-if] %t 2 > %t.out 2>&1
+// RUN:     %[run-if] FileCheck -input-file %t.out %s -check-prefixes=%[exe]
+// RUN:   }
+// RUN: }
+
 
 // END.
 

@@ -1598,7 +1598,7 @@ def fno_openacc : Flag<["-"], "fno-openacc">, Group<f_Group>,
 def fopenacc_print_EQ : Joined<["-"], "fopenacc-print=">,
   Flags<[DriverOption,CC1Option]>, Group<Action_Group>,
   MetaVarName<"<versions>">,
-  HelpText<"Enable OpenACC (-fopenacc) and print the source including the"
+  HelpText<"Enable OpenACC support and print the source including the"
            " specified versions of OpenACC constructs: acc, omp, acc-omp,"
            " or omp-acc. In the last two cases, the first is uncommented"
            " and the second is commented.">,

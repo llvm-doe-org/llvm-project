@@ -46,10 +46,10 @@
 // RUN:   (prt=-fopenacc-ast-print=omp                      LOOP="%'dir-loop'" prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir])
 // RUN:   (prt=-fopenacc-ast-print=acc-omp                  LOOP="%'dir-loop'" prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir],PRT-AO,PRT-AO-%[dir])
 // RUN:   (prt=-fopenacc-ast-print=omp-acc                  LOOP="%'dir-loop'" prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir],PRT-OA,PRT-OA-%[dir])
-// RUN:   (prt=-fopenacc-print=acc                          LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir])
-// RUN:   (prt=-fopenacc-print=omp                          LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir])
-// RUN:   (prt=-fopenacc-print=acc-omp                      LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir],PRT-AO,PRT-AO-%[dir])
-// RUN:   (prt=-fopenacc-print=omp-acc                      LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir],PRT-OA,PRT-OA-%[dir])
+// RUN:   (prt=-fopenacc-print=acc                          LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir],PRT-SRC)
+// RUN:   (prt=-fopenacc-print=omp                          LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir],PRT-SRC)
+// RUN:   (prt=-fopenacc-print=acc-omp                      LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir],PRT-AO,PRT-AO-%[dir],PRT-SRC)
+// RUN:   (prt=-fopenacc-print=omp-acc                      LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir],PRT-OA,PRT-OA-%[dir],PRT-SRC)
 // RUN: }
 // RUN: %for directives {
 // RUN:   %for prt-args {
@@ -83,15 +83,26 @@
 // RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:     %clang -Xclang -verify -fopenmp -o %t %t-omp.c %libatomic \
 // RUN:            %[dir-cflags]
-// RUN:     %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-%[dir] %s
+// RUN:     %t 2 2>&1 \
+// RUN:     | FileCheck -check-prefixes=EXE,EXE-%[dir],EXE-TGT-HOST %s
 // RUN:   }
 // RUN: }
 
 // Check execution with normal compilation.
 //
+// RUN: %data tgts {
+// RUN:   (run-if=                tgt=HOST    tgt-cflags=                        )
+// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=x86_64 )
+// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=nvptx64)
+// RUN: }
 // RUN: %for directives {
-// RUN:   %clang -Xclang -verify -fopenacc %[dir-cflags] %s -o %t %libatomic
-// RUN:   %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-%[dir] %s
+// RUN:   %for tgts {
+// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %s -o %t %libatomic \
+// RUN:                      %[tgt-cflags] %[dir-cflags] -DTGT_%[tgt]_EXE
+// RUN:     %[run-if] %t 2 > %t.out 2>&1
+// RUN:     %[run-if] FileCheck -input-file %t.out %s \
+// RUN:                         -check-prefixes=EXE,EXE-%[dir],EXE-TGT-%[tgt]
+// RUN:   }
 // RUN: }
 
 // END.
@@ -252,6 +263,12 @@ int main() {
   // Reduction operator 'max'
   //--------------------------------------------------
 
+  // FIXME: When OpenMP offloading is activated by -fopenmp-targets, pointers
+  // pass into acc parallel as null, but otherwise they pass in just fine.
+  // What does the OpenMP spec say is supposed to happen?
+
+// PRT-SRC-NEXT: #if !TGT_X86_64_EXE && !TGT_NVPTX64_EXE
+#if !TGT_X86_64_EXE && !TGT_NVPTX64_EXE
   // PRT-NEXT: {
   {
     // PRT-NEXT: int arr[]
@@ -309,8 +326,72 @@ int main() {
       acc = val > acc ? val : acc;
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-NEXT: acc == arr + 2: 1
+    // EXE-TGT-HOST-NEXT: acc == arr + 2: 1
     printf("acc == arr + 2: %d\n", acc == arr + 2);
+  }
+  // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
+
+  // Also test 'max' for ints, which works regardless of offloading.
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int acc
+    // PRT-NEXT: int val
+    int acc = 0;
+    int val = 2;
+    // DMP-PAR:           ACCParallelDirective
+    // DMP-PARLOOP:       ACCParallelLoopDirective
+    // DMP-PARLOOP-NEXT:    ACCSeqClause
+    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
+    // DMP-NEXT:            ACCReductionClause {{.*}} 'max'
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-NEXT:            ACCFirstprivateClause {{.*}}
+    // DMP-NOT:               <implicit>
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
+    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} 'max'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
+    // DMP-PARLOOP-NOT:         <implicit>
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-NEXT:              impl: OMPTargetTeamsDirective
+    // DMP-NEXT:                OMPNum_teamsClause
+    // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
+    // DMP-NEXT:                OMPReductionClause
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-NEXT:                OMPFirstprivateClause
+    // DMP-NOT:                   <implicit>
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-PARLOOP:           ACCLoopDirective
+    // DMP-PARLOOP-NEXT:        ACCSeqClause
+    // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} 'max'
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
+    //
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) reduction(max: acc) firstprivate(val){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) reduction(max: acc) firstprivate(val){{$}}
+    //
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) reduction(max: acc) firstprivate(val){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(max: acc) firstprivate(val){{$}}
+    #pragma acc parallel LOOP num_gangs(4) reduction(max: acc) firstprivate(val)
+    // DMP-PAR-NOT:      ForStmt
+    // DMP-PARLOOP-NEXT: impl: ForStmt
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for (.*)|FORLOOP_HEAD}}
+    FORLOOP_HEAD
+      // DMP: ConditionalOperator {{.*}} 'int'
+      // PRT-NEXT: acc = val > acc ? val : acc;
+      acc = val > acc ? val : acc;
+    // DMP: CallExpr
+    // PRT-NEXT: printf
+    // EXE-NEXT: acc: 2
+    printf("acc: %d\n", acc);
   }
   // PRT-NEXT: }
 
@@ -783,6 +864,11 @@ int main() {
   // bool argument type
   //--------------------------------------------------
 
+  // FIXME: OpenMP offloading for nvptx64 doesn't store bool correctly for
+  // reductions.
+
+// PRT-SRC-NEXT: #if !TGT_NVPTX64_EXE
+#if !TGT_NVPTX64_EXE
   // PRT-NEXT: {
   {
     // PRT-NEXT: {{_Bool|bool}} acc = 3;
@@ -838,10 +924,13 @@ int main() {
       acc |= val;
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-NEXT: acc: 1
+    // EXE-TGT-HOST-NEXT: acc: 1
+    // EXE-TGT-X86_64-NEXT: acc: 1
     printf("acc: %d\n", acc);
   }
   // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   //--------------------------------------------------
   // Complex argument type
