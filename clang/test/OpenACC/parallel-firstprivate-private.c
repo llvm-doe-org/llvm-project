@@ -166,29 +166,9 @@
 // RUN:   }
 // RUN: }
 
-// Check err_acc_wrong_dsa.  Whether firstprivate or private is first affects
-// the code path, so try both.
-//
-// TODO: Why are we testing this here?  Isn't it tested in parallel-messages.c?
-// Moreover, we should make the PP and FF cases errors (like gcc does) and move
-// those to parallel-messages.c as well.
-//
-// RUN: %data dsaConflicts {
-// RUN:   (mode=MODE_FP verify=fp,%[dir]-fp)
-// RUN:   (mode=MODE_PF verify=pf,%[dir]-pf)
-// RUN: }
-// RUN: %for directives {
-// RUN:   %for dsaConflicts {
-// RUN:     %clang -fopenacc -fsyntax-only -Xclang -verify=%[verify] \
-// RUN:            -DMODE=%[mode] %[dir-cflags] %s
-// RUN:   }
-// RUN: }
-
 // END.
 
 // expected-no-diagnostics
-// PARLOOP-fp-no-diagnostics
-// PARLOOP-pf-no-diagnostics
 
 #include <stdio.h>
 #include <stdint.h>
@@ -217,8 +197,6 @@
 #define MODE_P  3
 #define MODE_FF 4
 #define MODE_PP 5
-#define MODE_FP 6
-#define MODE_PF 7
 
 #ifndef MODE
 # error MODE undefined
@@ -229,15 +207,13 @@
 #elif MODE == MODE_P
 # define CLAUSE(...) private(__VA_ARGS__)
 #elif MODE == MODE_FF
+// TODO: Should be an error as in gcc?  Then test in parallel-messages.c.
 // Checks that duplicate clauses don't change the behavior.
 # define CLAUSE(...) firstprivate(__VA_ARGS__) firstprivate(__VA_ARGS__)
 #elif MODE == MODE_PP
+// TODO: Should be an error as in gcc?  Then test in parallel-messages.c.
 // Checks that duplicate clauses don't change the behavior.
 # define CLAUSE(...) private(__VA_ARGS__) private(__VA_ARGS__)
-#elif MODE == MODE_FP
-# define CLAUSE(...) firstprivate(__VA_ARGS__) private(__VA_ARGS__)
-#elif MODE == MODE_PF
-# define CLAUSE(...) private(__VA_ARGS__) firstprivate(__VA_ARGS__)
 #else
 # error unknown MODE
 #endif
@@ -638,20 +614,6 @@ int main() {
   // PRT-OA-PARLOOP-P:      {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   //
   // PRT-NOT:      #pragma
-  //
-  // PAR-fp-error@+17 6-7 {{firstprivate variable cannot be private}}
-  // PAR-fp-note@+16  6-7 {{defined as firstprivate}}
-  // PAR-fp-error@+16 6-7 {{firstprivate variable cannot be private}}
-  // PAR-fp-note@+15  6-7 {{defined as firstprivate}}
-  // PAR-fp-error@+15 1   {{firstprivate variable cannot be private}}
-  // PAR-fp-note@+14  1   {{defined as firstprivate}}
-  //
-  // PAR-pf-error@+10 6-7 {{private variable cannot be firstprivate}}
-  // PAR-pf-note@+9   6-7 {{defined as private}}
-  // PAR-pf-error@+9  6-7 {{private variable cannot be firstprivate}}
-  // PAR-pf-note@+8   6-7 {{defined as private}}
-  // PAR-pf-error@+8  1   {{private variable cannot be firstprivate}}
-  // PAR-pf-note@+7   1   {{defined as private}}
   //
   // gconst-priv-error@+3 {{const variable cannot be private because initialization is impossible}}
   // lconst-priv-error@+3 {{const variable cannot be private because initialization is impossible}}
