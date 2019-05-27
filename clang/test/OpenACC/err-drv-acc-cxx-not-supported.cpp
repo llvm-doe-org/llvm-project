@@ -21,9 +21,11 @@
 // RUN:     | FileCheck --check-prefix ERROR %s
 // RUN:   }
 // RUN: }
+// END.
 
-// CHECK-NOT: error: OpenACC support for C++ not yet implemented
-// ERROR:     error: OpenACC support for C++ not yet implemented
+// Braces prevent these directives from matching themselves when printing.
+// CHECK-NOT: {{error:}} OpenACC support for C++ not yet implemented
+// ERROR:     {{error:}} OpenACC support for C++ not yet implemented
 
 int main() {
   return 0;
