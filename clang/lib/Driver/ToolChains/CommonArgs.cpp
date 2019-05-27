@@ -504,9 +504,8 @@ bool tools::addOpenMPRuntime(ArgStringList &CmdArgs, const ToolChain &TC,
                              const ArgList &Args, bool IsOffloadingHost,
                              bool GompNeedsRT) {
   if (!Args.hasFlag(options::OPT_fopenmp, options::OPT_fopenmp_EQ,
-                    options::OPT_fno_openmp, false)
-      && !Args.hasFlag(options::OPT_fopenacc, options::OPT_fno_openacc,
-                       false))
+                    options::OPT_fno_openmp, false) &&
+      !Args.hasFlag(options::OPT_fopenacc, options::OPT_fno_openacc, false))
     return false;
 
   switch (TC.getDriver().getOpenMPRuntime(Args)) {
