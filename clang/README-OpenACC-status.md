@@ -150,7 +150,8 @@ Skipped Features
 While implementing the above features, we have intentionally skipped
 the following features for now:
 
-* combining OpenMP and OpenACC in the same application
+* combining OpenMP and OpenACC in the same application:
+    * `-fopenmp` is an error when OpenACC support is enabled.
 * command-line options:
     * option to specify target
 * targets:

@@ -377,6 +377,21 @@ were copied verbatim from the OpenACC subtree and then overriding
 `-ast-print` functionality to print just those portions using the
 original input buffer.
 
+Interaction with OpenMP Support
+===============================
+
+Even though Clacc translates OpenACC to OpenMP, Clacc currently does
+not support OpenACC and OpenMP in the same source.  Doing so would
+require, for example, extensions to data sharing analyses to consider
+the interactions between OpenACC and OpenMP directives and clauses.
+Thus, Clacc reports an error diagnostic if `-fopenmp` is specified on
+the Clang command line when OpenACC support is enabled by any
+`-fopenacc*` option.  To implement this, Clacc extends the Clang
+driver to just pass the relevant command-line options to the Clang
+front end, and it extends the front end to produce the error
+diagnostic.  Thus, specifying `-cc1` to bypass the driver does not
+avoid the error diagnostic.
+
 OpenACC to OpenMP Mapping
 =========================
 

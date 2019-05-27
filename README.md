@@ -86,6 +86,9 @@ are:
 * `-fopenacc-print=omp-acc` is the same except it also prints the
   original OpenACC in comments next to the OpenMP.
 * `-fopenacc-print=acc-omp` reverses that.
+* `-fopenmp` produces an error diagnostic when OpenACC support is
+  enabled as Clacc currently does not support OpenACC and OpenMP in
+  the same source.
 
 For a full description of OpenACC-related command-line options, run
 Clacc's `clang -help` and search for `openacc`.
