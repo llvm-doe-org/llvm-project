@@ -142,30 +142,6 @@
 // LLVM: define internal void @.omp_outlined.
 // LLVM-SAME: ({{[^,]+}} %.global_tid., {{[^,]+}} %.bound_tid.)
 
-// Check err_typecheck_assign_const, which wasn't reported when SemaExpr.cpp's
-// captureInCapturedRegion or Sema::tryCaptureVariable removed type qualifiers
-// from captured types.
-//
-// TODO: This should move to parallel-messages.c (unless it's already there).
-// Notice that mode here is important: MODE_P checks that the clause has a
-// diagnostic, and MODE_I and MODE_F check that const isn't lost so that
-// the normal assign to const diagnostic happens.
-//
-// RUN: %data constErrs {
-// RUN:   (mode=MODE_I cflags=-DGCONST=const verify=gconst)
-// RUN:   (mode=MODE_I cflags=-DLCONST=const verify=lconst)
-// RUN:   (mode=MODE_F cflags=-DGCONST=const verify=gconst)
-// RUN:   (mode=MODE_F cflags=-DLCONST=const verify=lconst)
-// RUN:   (mode=MODE_P cflags=-DGCONST=const verify=gconst,gconst-priv)
-// RUN:   (mode=MODE_P cflags=-DLCONST=const verify=lconst,lconst-priv)
-// RUN: }
-// RUN: %for directives {
-// RUN:   %for constErrs {
-// RUN:     %clang -fopenacc -fsyntax-only -Xclang -verify=%[verify] \
-// RUN:            %[cflags] -DMODE=%[mode] %[dir-cflags] %s
-// RUN:   }
-// RUN: }
-
 // END.
 
 // expected-no-diagnostics
@@ -179,13 +155,6 @@
 #else
 # define LOOP loop seq
 # define FORLOOP_HEAD for (int i = 0; i < 1; ++i)
-#endif
-
-#ifndef GCONST
-# define GCONST
-#endif
-#ifndef LCONST
-# define LCONST
 #endif
 
 #ifndef STORAGE
@@ -237,8 +206,7 @@
 //     into 64 bits as a result. Thus, we exercise both the high and low 64
 //     bits to check that all bits are passed through.
 // - explicitly private, captured decl only
-STORAGE GCONST int gi = 55; // gconst-note {{variable 'gi' declared const here}}
-                            // gconst-priv-note@-1 {{variable 'gi' declared const here}}
+STORAGE int gi = 55;
 #if HAS_UINT128
 STORAGE __uint128_t gt = MK_UINT128(0x1400, 0x59); // t=tetra integer
 #endif
@@ -256,8 +224,7 @@ STORAGE int gUnref = 2;
 
 int main() {
   // Scalar local: same as for scalar global
-  STORAGE LCONST int li = 99; // lconst-note {{variable 'li' declared const here}}
-                              // lconst-priv-note@-1 {{variable 'li' declared const here}}
+  STORAGE int li = 99;
 #if HAS_UINT128
   STORAGE __uint128_t lt = MK_UINT128(0x7a1, 0x62b0); // t=tetra integer
 #endif
@@ -614,9 +581,6 @@ int main() {
   // PRT-OA-PARLOOP-P:      {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   //
   // PRT-NOT:      #pragma
-  //
-  // gconst-priv-error@+3 {{const variable cannot be private because initialization is impossible}}
-  // lconst-priv-error@+3 {{const variable cannot be private because initialization is impossible}}
   #pragma acc parallel LOOP num_gangs(2)                       \
     CLAUSE(gi,IF_UINT128(gt,)gp, ga,gs , gu , gUnref )         \
     CLAUSE(  li,IF_UINT128(lt,)lp  ,  la  ,ls,  lu , lUnref  ) \
@@ -651,7 +615,7 @@ int main() {
     int tmp = shadowed;
     int shadowed = tmp + 111;
 
-    gi = 56; // gconst-error {{cannot assign to variable 'gi' with const-qualified type 'const int'}})
+    gi = 56;
 #if HAS_UINT128
     gt = MK_UINT128(0xf08234, 0xa07de1);
 #endif
@@ -662,7 +626,7 @@ int main() {
     gs.j = 1;
     gu.i = 13;
 
-    li = 98; // lconst-error {{cannot assign to variable 'li' with const-qualified type 'const int'}})
+    li = 98;
 #if HAS_UINT128
     lt = MK_UINT128(0x79ca, 0x2961);
 #endif

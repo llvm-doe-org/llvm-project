@@ -27,9 +27,11 @@
 #if !ADD_LOOP_TO_PAR
 # define LOOP
 # define FORLOOP ;
+# define FORLOOP_HEAD
 #else
 # define LOOP loop
 # define FORLOOP for (int i = 0; i < 2; ++i) ;
+# define FORLOOP_HEAD for (int fli = 0; fli < 2; ++fli) ;
 #endif
 
 int incomplete[];
@@ -44,9 +46,11 @@ int main() {
   float _Complex fc; // expected-note 5 {{'fc' defined here}}
   double _Complex dc; // expected-note 5 {{'dc' defined here}}
   const int constI = 5; // expected-note {{variable 'constI' declared const here}}
-                        // expected-note@-1 {{'constI' defined here}}
+                        // expected-noacc-note@-1 {{variable 'constI' declared const here}}
+                        // expected-note@-2 {{'constI' defined here}}
   const extern int constIDecl; // expected-note {{variable 'constIDecl' declared const here}}
-                               // expected-note@-1 {{'constIDecl' declared here}}
+                               // expected-noacc-note@-1 {{variable 'constIDecl' declared const here}}
+                               // expected-note@-2 {{'constIDecl' declared here}}
   struct S { int i; } s; // expected-note 9 {{'s' defined here}}
   union U { int i; } u; // expected-note 9 {{'u' defined here}}
   extern union U uDecl; // expected-note 9 {{'uDecl' declared here}}
@@ -253,6 +257,16 @@ int main() {
   // expected-error@+1 {{reduction variable cannot be const}}
   #pragma acc parallel LOOP private(constI, constIDecl) reduction(max: constI, constIDecl)
     FORLOOP
+
+  // Make sure const qualifier isn't lost on implicitly/explicitly firstprivate
+  // variables.
+  #pragma acc parallel LOOP firstprivate(constI)
+    FORLOOP_HEAD {
+      // expected-noacc-error@+2 {{cannot assign to variable 'constI' with const-qualified type 'const int'}}
+      // expected-noacc-error@+2 {{cannot assign to variable 'constIDecl' with const-qualified type 'const int'}}
+      constI = 5;
+      constIDecl = 5;
+    }
 
   #pragma acc parallel LOOP reduction(max:b,e,i,jk,f,d,p)
     FORLOOP
