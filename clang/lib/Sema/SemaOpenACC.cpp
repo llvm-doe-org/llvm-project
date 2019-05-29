@@ -188,8 +188,6 @@ public:
     if (Kind.hasGangPartitioning() || Kind.hasWorkerPartitioning()) {
       assert(isOpenACCLoopDirective(getEffectiveDirective()) &&
              "expected gang/worker partitioning to be on a loop directive");
-      assert(getEffectiveParentDirective() != ACCD_unknown &&
-             "unexpected orphaned acc loop directive");
       for (auto I = std::next(Stack.rbegin()), E = std::prev(Stack.rend());
            I != E; ++I) {
         assert((isOpenACCLoopDirective(I->EffectiveDKind) ||

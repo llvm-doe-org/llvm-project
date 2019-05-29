@@ -2220,12 +2220,27 @@ void fn() {
 
   //--------------------------------------------------
   // Orphaned acc loop
+  //
+  // Some of these cases used to fail an unnecessary assert in an analysis
+  // required by the clauses.
   //--------------------------------------------------
 
-  #pragma acc loop // expected-error {{'#pragma acc loop' cannot be orphaned}}
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop
   for (int i = 0; i < 5; ++i)
     ;
-  ;
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop gang
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop vector
+  for (int i = 0; i < 5; ++i)
+    ;
 }
 
 // The remaining diagnostics are currently produced by OpenMP sema during the
