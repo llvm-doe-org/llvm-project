@@ -109,10 +109,9 @@ Independently of Clacc, Clang uses the `TreeTransform` facility to
 transform C++ templates for the sake of instantiating them.  When the
 parser reaches a template instantiation in the source code,
 `TreeTransform` builds a transformed copy of the AST subtree that
-represents the template, and it inserts that copy into the syntactic
-context of the template instantiation.  This insertion is part of the
-normal process of extending the AST during parsing and so does not
-violate AST immutability.
+represents the template, and it inserts that copy into the AST.  This
+insertion is part of the normal process of extending the AST during
+parsing and so does not violate AST immutability.
 
 `TreeTransform`'s design has some convenient properties for Clacc's
 purposes:
