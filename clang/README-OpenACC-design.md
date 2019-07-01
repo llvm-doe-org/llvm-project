@@ -383,7 +383,7 @@ ways:
 On the other hand, because `-fopenacc-print` is built on `Rewrite`, it
 modifies the original input buffer and thus can avoid these problems
 in most cases.  That is, `-fopenacc-print` examines the OpenACC
-subtrees and the OpenMP subtrees computed by `TransformatACCToOMP` as
+subtrees and the OpenMP subtrees computed by `TransformACCToOMP` as
 needed to modify the input buffer in the manner requested by the
 argument to `-fopenacc-print`.  For OpenMP subtrees containing
 directives and other code not appearing in the original source and
