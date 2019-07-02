@@ -418,7 +418,8 @@ void visualstudio::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddAllArgValues(CmdArgs, options::OPT__SLASH_link);
 
   if (Args.hasFlag(options::OPT_fopenmp, options::OPT_fopenmp_EQ,
-                   options::OPT_fno_openmp, false)) {
+                   options::OPT_fno_openmp, false) ||
+      Args.hasFlag(options::OPT_fopenacc, options::OPT_fno_openacc, false)) {
     CmdArgs.push_back("-nodefaultlib:vcomp.lib");
     CmdArgs.push_back("-nodefaultlib:vcompd.lib");
     CmdArgs.push_back(Args.MakeArgString(std::string("-libpath:") +

@@ -4,8 +4,10 @@ Clang and LLVM with support for OpenACC.
 Supported Features
 ==================
 
-We have implemented the following features:
+We have implemented and tested support for the following features:
 
+* build platforms:
+    * linux
 * command-line options:
     * `-f[no-]openacc`
     * `-fopenacc[-ast]-print=acc|omp|acc-omp|omp-acc`
@@ -148,9 +150,12 @@ We have implemented the following features:
 Skipped Features
 ================
 
-While implementing the above features, we have intentionally skipped
-the following features for now:
+While implementing support for the above features, we have
+intentionally skipped or have not fully tested support for the
+following features for now:
 
+* build platforms:
+    * windows
 * combining OpenMP and OpenACC in the same application:
     * `-fopenmp` is an error when OpenACC support is enabled.
     * As usual when `-fopenmp` is not specified, OpenMP directives are
