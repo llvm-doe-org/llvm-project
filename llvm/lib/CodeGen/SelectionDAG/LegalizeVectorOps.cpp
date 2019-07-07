@@ -140,6 +140,8 @@ class VectorLegalizer {
   SDValue ExpandFunnelShift(SDValue Op);
   SDValue ExpandROT(SDValue Op);
   SDValue ExpandFMINNUM_FMAXNUM(SDValue Op);
+  SDValue ExpandUADDSUBO(SDValue Op);
+  SDValue ExpandSADDSUBO(SDValue Op);
   SDValue ExpandMULO(SDValue Op);
   SDValue ExpandAddSubSat(SDValue Op);
   SDValue ExpandFixedPointMul(SDValue Op);
@@ -422,6 +424,10 @@ SDValue VectorLegalizer::LegalizeOp(SDValue Op) {
   case ISD::UMAX:
   case ISD::SMUL_LOHI:
   case ISD::UMUL_LOHI:
+  case ISD::SADDO:
+  case ISD::UADDO:
+  case ISD::SSUBO:
+  case ISD::USUBO:
   case ISD::SMULO:
   case ISD::UMULO:
   case ISD::FCANONICALIZE:
@@ -432,6 +438,7 @@ SDValue VectorLegalizer::LegalizeOp(SDValue Op) {
     Action = TLI.getOperationAction(Node->getOpcode(), Node->getValueType(0));
     break;
   case ISD::SMULFIX:
+  case ISD::SMULFIXSAT:
   case ISD::UMULFIX: {
     unsigned Scale = Node->getConstantOperandVal(2);
     Action = TLI.getFixedPointOperationAction(Node->getOpcode(),
@@ -796,6 +803,12 @@ SDValue VectorLegalizer::Expand(SDValue Op) {
   case ISD::FMINNUM:
   case ISD::FMAXNUM:
     return ExpandFMINNUM_FMAXNUM(Op);
+  case ISD::UADDO:
+  case ISD::USUBO:
+    return ExpandUADDSUBO(Op);
+  case ISD::SADDO:
+  case ISD::SSUBO:
+    return ExpandSADDSUBO(Op);
   case ISD::UMULO:
   case ISD::SMULO:
     return ExpandMULO(Op);
@@ -936,6 +949,19 @@ SDValue VectorLegalizer::ExpandANY_EXTEND_VECTOR_INREG(SDValue Op) {
   EVT SrcVT = Src.getValueType();
   int NumSrcElements = SrcVT.getVectorNumElements();
 
+  // *_EXTEND_VECTOR_INREG SrcVT can be smaller than VT - so insert the vector
+  // into a larger vector type.
+  if (SrcVT.bitsLE(VT)) {
+    assert((VT.getSizeInBits() % SrcVT.getScalarSizeInBits()) == 0 &&
+           "ANY_EXTEND_VECTOR_INREG vector size mismatch");
+    NumSrcElements = VT.getSizeInBits() / SrcVT.getScalarSizeInBits();
+    SrcVT = EVT::getVectorVT(*DAG.getContext(), SrcVT.getScalarType(),
+                             NumSrcElements);
+    Src = DAG.getNode(
+        ISD::INSERT_SUBVECTOR, DL, SrcVT, DAG.getUNDEF(SrcVT), Src,
+        DAG.getConstant(0, DL, TLI.getVectorIdxTy(DAG.getDataLayout())));
+  }
+
   // Build a base mask of undef shuffles.
   SmallVector<int, 16> ShuffleMask;
   ShuffleMask.resize(NumSrcElements, -1);
@@ -982,6 +1008,19 @@ SDValue VectorLegalizer::ExpandZERO_EXTEND_VECTOR_INREG(SDValue Op) {
   SDValue Src = Op.getOperand(0);
   EVT SrcVT = Src.getValueType();
   int NumSrcElements = SrcVT.getVectorNumElements();
+
+  // *_EXTEND_VECTOR_INREG SrcVT can be smaller than VT - so insert the vector
+  // into a larger vector type.
+  if (SrcVT.bitsLE(VT)) {
+    assert((VT.getSizeInBits() % SrcVT.getScalarSizeInBits()) == 0 &&
+           "ZERO_EXTEND_VECTOR_INREG vector size mismatch");
+    NumSrcElements = VT.getSizeInBits() / SrcVT.getScalarSizeInBits();
+    SrcVT = EVT::getVectorVT(*DAG.getContext(), SrcVT.getScalarType(),
+                             NumSrcElements);
+    Src = DAG.getNode(
+        ISD::INSERT_SUBVECTOR, DL, SrcVT, DAG.getUNDEF(SrcVT), Src,
+        DAG.getConstant(0, DL, TLI.getVectorIdxTy(DAG.getDataLayout())));
+  }
 
   // Build up a zero vector to blend into this one.
   SDValue Zero = DAG.getConstant(0, DL, SrcVT);
@@ -1248,6 +1287,32 @@ SDValue VectorLegalizer::ExpandFMINNUM_FMAXNUM(SDValue Op) {
   if (SDValue Expanded = TLI.expandFMINNUM_FMAXNUM(Op.getNode(), DAG))
     return Expanded;
   return DAG.UnrollVectorOp(Op.getNode());
+}
+
+SDValue VectorLegalizer::ExpandUADDSUBO(SDValue Op) {
+  SDValue Result, Overflow;
+  TLI.expandUADDSUBO(Op.getNode(), Result, Overflow, DAG);
+
+  if (Op.getResNo() == 0) {
+    AddLegalizedOperand(Op.getValue(1), LegalizeOp(Overflow));
+    return Result;
+  } else {
+    AddLegalizedOperand(Op.getValue(0), LegalizeOp(Result));
+    return Overflow;
+  }
+}
+
+SDValue VectorLegalizer::ExpandSADDSUBO(SDValue Op) {
+  SDValue Result, Overflow;
+  TLI.expandSADDSUBO(Op.getNode(), Result, Overflow, DAG);
+
+  if (Op.getResNo() == 0) {
+    AddLegalizedOperand(Op.getValue(1), LegalizeOp(Overflow));
+    return Result;
+  } else {
+    AddLegalizedOperand(Op.getValue(0), LegalizeOp(Result));
+    return Overflow;
+  }
 }
 
 SDValue VectorLegalizer::ExpandMULO(SDValue Op) {

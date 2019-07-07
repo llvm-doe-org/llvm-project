@@ -108,6 +108,31 @@ const llvm::MemoryBuffer *ContentCache::getBuffer(DiagnosticsEngine &Diag,
     return Buffer.getPointer();
   }
 
+  // Check that the file's size fits in an 'unsigned' (with room for a
+  // past-the-end value). This is deeply regrettable, but various parts of
+  // Clang (including elsewhere in this file!) use 'unsigned' to represent file
+  // offsets, line numbers, string literal lengths, and so on, and fail
+  // miserably on large source files.
+  if (ContentsEntry->getSize() >= std::numeric_limits<unsigned>::max()) {
+    // We can't make a memory buffer of the required size, so just make a small
+    // one. We should never hit a situation where we've already parsed to a
+    // later offset of the file, so it shouldn't matter that the buffer is
+    // smaller than the file.
+    Buffer.setPointer(
+        llvm::MemoryBuffer::getMemBuffer("", ContentsEntry->getName())
+            .release());
+    if (Diag.isDiagnosticInFlight())
+      Diag.SetDelayedDiagnostic(diag::err_file_too_large,
+                                ContentsEntry->getName());
+    else
+      Diag.Report(Loc, diag::err_file_too_large)
+        << ContentsEntry->getName();
+
+    Buffer.setInt(Buffer.getInt() | InvalidFlag);
+    if (Invalid) *Invalid = true;
+    return Buffer.getPointer();
+  }
+
   bool isVolatile = SM.userFilesAreVolatile() && !IsSystemFile;
   auto BufferOrError =
       SM.getFileManager().getBufferForFile(ContentsEntry, isVolatile);
@@ -1430,6 +1455,7 @@ PresumedLoc SourceManager::getPresumedLoc(SourceLocation Loc,
   // To get the source name, first consult the FileEntry (if one exists)
   // before the MemBuffer as this will avoid unnecessarily paging in the
   // MemBuffer.
+  FileID FID = LocInfo.first;
   StringRef Filename;
   if (C->OrigEntry)
     Filename = C->OrigEntry->getName();
@@ -1453,8 +1479,12 @@ PresumedLoc SourceManager::getPresumedLoc(SourceLocation Loc,
     if (const LineEntry *Entry =
           LineTable->FindNearestLineEntry(LocInfo.first, LocInfo.second)) {
       // If the LineEntry indicates a filename, use it.
-      if (Entry->FilenameID != -1)
+      if (Entry->FilenameID != -1) {
         Filename = LineTable->getFilename(Entry->FilenameID);
+        // The contents of files referenced by #line are not in the
+        // SourceManager
+        FID = FileID::get(0);
+      }
 
       // Use the line number specified by the LineEntry.  This line number may
       // be multiple lines down from the line entry.  Add the difference in
@@ -1473,7 +1503,7 @@ PresumedLoc SourceManager::getPresumedLoc(SourceLocation Loc,
     }
   }
 
-  return PresumedLoc(Filename.data(), LineNo, ColNo, IncludeLoc);
+  return PresumedLoc(Filename.data(), FID, LineNo, ColNo, IncludeLoc);
 }
 
 /// Returns whether the PresumedLoc for a given SourceLocation is

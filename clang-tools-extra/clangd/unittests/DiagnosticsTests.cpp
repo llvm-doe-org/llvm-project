@@ -73,6 +73,7 @@ MATCHER_P(EqualToLSPDiag, LSPDiag,
 
 MATCHER_P(DiagSource, S, "") { return arg.Source == S; }
 MATCHER_P(DiagName, N, "") { return arg.Name == N; }
+MATCHER_P(DiagSeverity, S, "") { return arg.Severity == S; }
 
 MATCHER_P(EqualToFix, Fix, "LSP fix " + llvm::to_string(Fix)) {
   if (arg.Message != Fix.Message)
@@ -100,6 +101,7 @@ TEST(DiagnosticsTest, DiagnosticRanges) {
   Annotations Test(R"cpp(
     namespace test{};
     void $decl[[foo]]();
+    class T{$explicit[[]]$constructor[[T]](int a);};
     int main() {
       $typo[[go\
 o]]();
@@ -111,15 +113,17 @@ o]]();
       test::$nomembernamespace[[test]];
     }
   )cpp");
+  auto TU = TestTU::withCode(Test.code());
+  TU.ClangTidyChecks = "-*,google-explicit-constructor";
   EXPECT_THAT(
-      TestTU::withCode(Test.code()).build().getDiagnostics(),
+      TU.build().getDiagnostics(),
       ElementsAre(
           // This range spans lines.
           AllOf(Diag(Test.range("typo"),
                      "use of undeclared identifier 'goo'; did you mean 'foo'?"),
                 DiagSource(Diag::Clang), DiagName("undeclared_var_use_suggest"),
                 WithFix(
-                    Fix(Test.range("typo"), "foo", "change 'go\\ o' to 'foo'")),
+                    Fix(Test.range("typo"), "foo", "change 'go\\…' to 'foo'")),
                 // This is a pretty normal range.
                 WithNote(Diag(Test.range("decl"), "'foo' declared here"))),
           // This range is zero-width and insertion. Therefore make sure we are
@@ -134,7 +138,13 @@ o]]();
                "of type 'const char [4]'"),
           Diag(Test.range("nomember"), "no member named 'y' in 'Foo'"),
           Diag(Test.range("nomembernamespace"),
-               "no member named 'test' in namespace 'test'")));
+               "no member named 'test' in namespace 'test'"),
+          // We make sure here that the entire token is highlighted
+          AllOf(Diag(Test.range("constructor"),
+                     "single-argument constructors must be marked explicit to "
+                     "avoid unintentional implicit conversions"),
+                WithFix(Fix(Test.range("explicit"), "explicit ",
+                            "insert 'explicit '")))));
 }
 
 TEST(DiagnosticsTest, FlagsMatter) {
@@ -205,6 +215,94 @@ TEST(DiagnosticsTest, ClangTidy) {
                   Diag(Test.range("macrodef"), "macro 'SQUARE' defined here"))),
           Diag(Test.range("macroarg"),
                "multiple unsequenced modifications to 'y'")));
+}
+
+TEST(DiagnosticTest, ClangTidySuppressionComment) {
+  Annotations Main(R"cpp(
+    int main() {
+      int i = 3;
+      double d = 8 / i;  // NOLINT
+      // NOLINTNEXTLINE
+      double e = 8 / i;
+      double f = [[8]] / i;
+    }
+  )cpp");
+  TestTU TU = TestTU::withCode(Main.code());
+  TU.ClangTidyChecks = "bugprone-integer-division";
+  EXPECT_THAT(
+      TU.build().getDiagnostics(),
+      UnorderedElementsAre(::testing::AllOf(
+          Diag(Main.range(), "result of integer division used in a floating "
+                             "point context; possible loss of precision"),
+          DiagSource(Diag::ClangTidy), DiagName("bugprone-integer-division"))));
+}
+
+TEST(DiagnosticTest, ClangTidyWarningAsError) {
+  Annotations Main(R"cpp(
+    int main() {
+      int i = 3;
+      double f = [[8]] / i;
+    }
+  )cpp");
+  TestTU TU = TestTU::withCode(Main.code());
+  TU.ClangTidyChecks = "bugprone-integer-division";
+  TU.ClangTidyWarningsAsErrors = "bugprone-integer-division";
+  EXPECT_THAT(
+      TU.build().getDiagnostics(),
+      UnorderedElementsAre(::testing::AllOf(
+          Diag(Main.range(), "result of integer division used in a floating "
+                             "point context; possible loss of precision"),
+          DiagSource(Diag::ClangTidy), DiagName("bugprone-integer-division"),
+          DiagSeverity(DiagnosticsEngine::Error))));
+}
+
+TEST(DiagnosticTest, LongFixMessages) {
+  // We limit the size of printed code.
+  Annotations Source(R"cpp(
+    int main() {
+      int somereallyreallyreallyreallyreallyreallyreallyreallylongidentifier;
+      [[omereallyreallyreallyreallyreallyreallyreallyreallylongidentifier]]= 10;
+    }
+  )cpp");
+  TestTU TU = TestTU::withCode(Source.code());
+  EXPECT_THAT(
+      TU.build().getDiagnostics(),
+      ElementsAre(WithFix(Fix(
+          Source.range(),
+          "somereallyreallyreallyreallyreallyreallyreallyreallylongidentifier",
+          "change 'omereallyreallyreallyreallyreallyreallyreallyreall…' to "
+          "'somereallyreallyreallyreallyreallyreallyreallyreal…'"))));
+  // Only show changes up to a first newline.
+  Source = Annotations(R"cpp(
+    int main() {
+      int ident;
+      [[ide\
+n]] = 10;
+    }
+  )cpp");
+  TU = TestTU::withCode(Source.code());
+  EXPECT_THAT(TU.build().getDiagnostics(),
+              ElementsAre(WithFix(
+                  Fix(Source.range(), "ident", "change 'ide\\…' to 'ident'"))));
+}
+
+TEST(DiagnosticTest, ClangTidyWarningAsErrorTrumpsSuppressionComment) {
+  Annotations Main(R"cpp(
+    int main() {
+      int i = 3;
+      double f = [[8]] / i;  // NOLINT
+    }
+  )cpp");
+  TestTU TU = TestTU::withCode(Main.code());
+  TU.ClangTidyChecks = "bugprone-integer-division";
+  TU.ClangTidyWarningsAsErrors = "bugprone-integer-division";
+  EXPECT_THAT(
+      TU.build().getDiagnostics(),
+      UnorderedElementsAre(::testing::AllOf(
+          Diag(Main.range(), "result of integer division used in a floating "
+                             "point context; possible loss of precision"),
+          DiagSource(Diag::ClangTidy), DiagName("bugprone-integer-division"),
+          DiagSeverity(DiagnosticsEngine::Error))));
 }
 
 TEST(DiagnosticsTest, Preprocessor) {
@@ -380,7 +478,7 @@ buildIndexWithSymbol(llvm::ArrayRef<SymbolWithHeader> Syms) {
     Sym.IncludeHeaders.emplace_back(S.IncludeHeader, 1);
     Slab.insert(Sym);
   }
-  return MemIndex::build(std::move(Slab).build(), RefSlab());
+  return MemIndex::build(std::move(Slab).build(), RefSlab(), RelationSlab());
 }
 
 TEST(IncludeFixerTest, IncompleteType) {
@@ -436,7 +534,8 @@ int main() {
 
   SymbolSlab::Builder Slab;
   Slab.insert(Sym);
-  auto Index = MemIndex::build(std::move(Slab).build(), RefSlab());
+  auto Index =
+      MemIndex::build(std::move(Slab).build(), RefSlab(), RelationSlab());
   TU.ExternalIndex = Index.get();
 
   EXPECT_THAT(TU.build().getDiagnostics(),
@@ -767,6 +866,7 @@ TEST(DiagsInHeaders, OnlyErrorOrFatal) {
                                      "a type specifier for all declarations"),
                   WithNote(Diag(Header.range(), "error occurred here")))));
 }
+
 } // namespace
 
 } // namespace clangd

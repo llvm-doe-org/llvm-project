@@ -47,6 +47,12 @@ class Token;
     PIK___pragma
   };
 
+  /// Describes how and where the pragma was introduced.
+  struct PragmaIntroducer {
+    PragmaIntroducerKind Kind;
+    SourceLocation Loc;
+  };
+
 /// PragmaHandler - Instances of this interface defined to handle the various
 /// pragmas that the language front-end uses.  Each handler optionally has a
 /// name (e.g. "pack") and the HandlePragma method is invoked when a pragma with
@@ -65,8 +71,7 @@ public:
   virtual ~PragmaHandler();
 
   StringRef getName() const { return Name; }
-  virtual void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                            SourceLocation IntroducerLoc,
+  virtual void HandlePragma(Preprocessor &PP, PragmaIntroducer Introducer,
                             Token &FirstToken) = 0;
 
   /// getIfNamespace - If this is a namespace, return it.  This is equivalent to
@@ -80,8 +85,8 @@ class EmptyPragmaHandler : public PragmaHandler {
 public:
   explicit EmptyPragmaHandler(StringRef Name = StringRef());
 
-  void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    SourceLocation IntroducerLoc, Token &FirstToken) override;
+  void HandlePragma(Preprocessor &PP, PragmaIntroducer Introducer,
+                    Token &FirstToken) override;
 };
 
 /// PragmaNamespace - This PragmaHandler subdivides the namespace of pragmas,
@@ -113,8 +118,8 @@ public:
 
   bool IsEmpty() const { return Handlers.empty(); }
 
-  void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    SourceLocation IntroducerLoc, Token &Tok) override;
+  void HandlePragma(Preprocessor &PP, PragmaIntroducer Introducer,
+                    Token &Tok) override;
 
   PragmaNamespace *getIfNamespace() override { return this; }
 };

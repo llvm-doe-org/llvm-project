@@ -570,6 +570,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(align);
   KEYWORD(addrspace);
   KEYWORD(section);
+  KEYWORD(partition);
   KEYWORD(alias);
   KEYWORD(ifunc);
   KEYWORD(module);
@@ -682,6 +683,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(swifterror);
   KEYWORD(swiftself);
   KEYWORD(uwtable);
+  KEYWORD(willreturn);
   KEYWORD(writeonly);
   KEYWORD(zeroext);
   KEYWORD(immarg);

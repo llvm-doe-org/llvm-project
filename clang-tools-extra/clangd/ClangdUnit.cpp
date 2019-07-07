@@ -36,6 +36,7 @@
 #include "clang/Serialization/ASTWriter.h"
 #include "clang/Serialization/PCHContainerOperations.h"
 #include "clang/Tooling/CompilationDatabase.h"
+#include "clang/Tooling/Syntax/Tokens.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
@@ -113,12 +114,12 @@ public:
   }
 
   void EndOfMainFile() {
-    for (const auto& Entry : MainFileMacros)
+    for (const auto &Entry : MainFileMacros)
       Out->push_back(Entry.getKey());
     llvm::sort(*Out);
   }
 
- private:
+private:
   const SourceManager &SM;
   bool InMainFile = true;
   llvm::StringSet<> MainFileMacros;
@@ -129,7 +130,6 @@ class CppFilePreambleCallbacks : public PreambleCallbacks {
 public:
   CppFilePreambleCallbacks(PathRef File, PreambleParsedCallback ParsedCallback)
       : File(File), ParsedCallback(ParsedCallback) {
-    addSystemHeadersMapping(&CanonIncludes);
   }
 
   IncludeStructure takeIncludes() { return std::move(Includes); }
@@ -148,6 +148,7 @@ public:
   }
 
   void BeforeExecute(CompilerInstance &CI) override {
+    addSystemHeadersMapping(&CanonIncludes, CI.getLangOpts());
     SourceMgr = &CI.getSourceManager();
   }
 
@@ -332,6 +333,38 @@ ParsedAST::build(std::unique_ptr<CompilerInvocation> CI,
     CTContext->setASTContext(&Clang->getASTContext());
     CTContext->setCurrentFile(MainInput.getFile());
     CTFactories.createChecks(CTContext.getPointer(), CTChecks);
+    ASTDiags.setLevelAdjuster([&CTContext](DiagnosticsEngine::Level DiagLevel,
+                                           const clang::Diagnostic &Info) {
+      if (CTContext) {
+        std::string CheckName = CTContext->getCheckName(Info.getID());
+        bool IsClangTidyDiag = !CheckName.empty();
+        if (IsClangTidyDiag) {
+          // Check for warning-as-error.
+          // We deliberately let this take precedence over suppression comments
+          // to match clang-tidy's behaviour.
+          if (DiagLevel == DiagnosticsEngine::Warning &&
+              CTContext->treatAsError(CheckName)) {
+            return DiagnosticsEngine::Error;
+          }
+
+          // Check for suppression comment. Skip the check for diagnostics not
+          // in the main file, because we don't want that function to query the
+          // source buffer for preamble files. For the same reason, we ask
+          // ShouldSuppressDiagnostic not to follow macro expansions, since
+          // those might take us into a preamble file as well.
+          bool IsInsideMainFile =
+              Info.hasSourceManager() &&
+              Info.getSourceManager().isWrittenInMainFile(
+                  Info.getSourceManager().getFileLoc(Info.getLocation()));
+          if (IsInsideMainFile && tidy::ShouldSuppressDiagnostic(
+                                      DiagLevel, Info, *CTContext,
+                                      /* CheckMacroExpansion = */ false)) {
+            return DiagnosticsEngine::Ignored;
+          }
+        }
+      }
+      return DiagLevel;
+    });
     Preprocessor *PP = &Clang->getPreprocessor();
     for (const auto &Check : CTChecks) {
       // FIXME: the PP callbacks skip the entire preamble.
@@ -381,13 +414,17 @@ ParsedAST::build(std::unique_ptr<CompilerInvocation> CI,
   if (Preamble)
     CanonIncludes = Preamble->CanonIncludes;
   else
-    addSystemHeadersMapping(&CanonIncludes);
+    addSystemHeadersMapping(&CanonIncludes, Clang->getLangOpts());
   std::unique_ptr<CommentHandler> IWYUHandler =
       collectIWYUHeaderMaps(&CanonIncludes);
   Clang->getPreprocessor().addCommentHandler(IWYUHandler.get());
 
-  if (!Action->Execute())
-    log("Execute() failed when building AST for {0}", MainInput.getFile());
+  // Collect tokens of the main file.
+  syntax::TokenCollector Tokens(Clang->getPreprocessor());
+
+  if (llvm::Error Err = Action->Execute())
+    log("Execute() failed when building AST for {0}: {1}", MainInput.getFile(),
+        toString(std::move(Err)));
 
   std::vector<Decl *> ParsedDecls = Action->takeTopLevelDecls();
   // AST traversals should exclude the preamble, to avoid performance cliffs.
@@ -414,8 +451,9 @@ ParsedAST::build(std::unique_ptr<CompilerInvocation> CI,
   if (Preamble)
     Diags.insert(Diags.begin(), Preamble->Diags.begin(), Preamble->Diags.end());
   return ParsedAST(std::move(Preamble), std::move(Clang), std::move(Action),
-                   std::move(ParsedDecls), std::move(Diags),
-                   std::move(Includes), std::move(CanonIncludes));
+                   std::move(Tokens).consume(), std::move(ParsedDecls),
+                   std::move(Diags), std::move(Includes),
+                   std::move(CanonIncludes));
 }
 
 ParsedAST::ParsedAST(ParsedAST &&Other) = default;
@@ -508,11 +546,13 @@ PreambleData::PreambleData(PrecompiledPreamble Preamble,
 ParsedAST::ParsedAST(std::shared_ptr<const PreambleData> Preamble,
                      std::unique_ptr<CompilerInstance> Clang,
                      std::unique_ptr<FrontendAction> Action,
+                     syntax::TokenBuffer Tokens,
                      std::vector<Decl *> LocalTopLevelDecls,
                      std::vector<Diag> Diags, IncludeStructure Includes,
                      CanonicalIncludes CanonIncludes)
     : Preamble(std::move(Preamble)), Clang(std::move(Clang)),
-      Action(std::move(Action)), Diags(std::move(Diags)),
+      Action(std::move(Action)), Tokens(std::move(Tokens)),
+      Diags(std::move(Diags)),
       LocalTopLevelDecls(std::move(LocalTopLevelDecls)),
       Includes(std::move(Includes)), CanonIncludes(std::move(CanonIncludes)) {
   assert(this->Clang);

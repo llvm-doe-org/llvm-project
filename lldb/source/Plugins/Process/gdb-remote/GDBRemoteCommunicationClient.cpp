@@ -115,13 +115,6 @@ bool GDBRemoteCommunicationClient::HandshakeWithServer(Status *error_ptr) {
   // Start the read thread after we send the handshake ack since if we fail to
   // send the handshake ack, there is no reason to continue...
   if (SendAck()) {
-    // Wait for any responses that might have been queued up in the remote
-    // GDB server and flush them all
-    StringExtractorGDBRemote response;
-    PacketResult packet_result = PacketResult::Success;
-    while (packet_result == PacketResult::Success)
-      packet_result = ReadPacket(response, milliseconds(10), false);
-
     // The return value from QueryNoAckModeSupported() is true if the packet
     // was sent and _any_ response (including UNIMPLEMENTED) was received), or
     // false if no response was received. This quickly tells us if we have a
@@ -386,14 +379,14 @@ void GDBRemoteCommunicationClient::GetRemoteQSupported() {
         std::vector<std::string> supported_compressions;
         compressions += sizeof("SupportedCompressions=") - 1;
         const char *end_of_compressions = strchr(compressions, ';');
-        if (end_of_compressions == NULL) {
+        if (end_of_compressions == nullptr) {
           end_of_compressions = strchr(compressions, '\0');
         }
         const char *current_compression = compressions;
         while (current_compression < end_of_compressions) {
           const char *next_compression_name = strchr(current_compression, ',');
           const char *end_of_this_word = next_compression_name;
-          if (next_compression_name == NULL ||
+          if (next_compression_name == nullptr ||
               end_of_compressions < next_compression_name) {
             end_of_this_word = end_of_compressions;
           }
@@ -775,7 +768,7 @@ int GDBRemoteCommunicationClient::SendArgumentsPacket(
   std::vector<const char *> argv;
   FileSpec exe_file = launch_info.GetExecutableFile();
   std::string exe_path;
-  const char *arg = NULL;
+  const char *arg = nullptr;
   const Args &launch_args = launch_info.GetArguments();
   if (exe_file)
     exe_path = exe_file.GetPath(false);
@@ -786,7 +779,7 @@ int GDBRemoteCommunicationClient::SendArgumentsPacket(
   }
   if (!exe_path.empty()) {
     argv.push_back(exe_path.c_str());
-    for (uint32_t i = 1; (arg = launch_args.GetArgumentAtIndex(i)) != NULL;
+    for (uint32_t i = 1; (arg = launch_args.GetArgumentAtIndex(i)) != nullptr;
          ++i) {
       if (arg)
         argv.push_back(arg);
@@ -1094,7 +1087,7 @@ const char *GDBRemoteCommunicationClient::GetGDBServerProgramName() {
     if (!m_gdb_server_name.empty())
       return m_gdb_server_name.c_str();
   }
-  return NULL;
+  return nullptr;
 }
 
 uint32_t GDBRemoteCommunicationClient::GetGDBServerProgramVersion() {

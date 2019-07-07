@@ -2362,12 +2362,7 @@ TEST_P(ImportFriendFunctions,
   EXPECT_EQ(ToFD->getPreviousDecl(), ImportedD);
 }
 
-// Disabled temporarily, because the new structural equivalence check
-// (https://reviews.llvm.org/D48628) breaks it.
-// PreviousDecl is not set because there is no structural match.
-// FIXME Enable!
-TEST_P(ImportFriendFunctions,
-    DISABLED_ImportFriendFunctionRedeclChainDefWithClass) {
+TEST_P(ImportFriendFunctions, ImportFriendFunctionRedeclChainDefWithClass) {
   auto Pattern = functionDecl(hasName("f"));
 
   Decl *FromTU = getTuDecl(
@@ -2395,12 +2390,8 @@ TEST_P(ImportFriendFunctions,
             (*ImportedD->param_begin())->getOriginalType());
 }
 
-// Disabled temporarily, because the new structural equivalence check
-// (https://reviews.llvm.org/D48628) breaks it.
-// PreviousDecl is not set because there is no structural match.
-// FIXME Enable!
 TEST_P(ImportFriendFunctions,
-    DISABLED_ImportFriendFunctionRedeclChainDefWithClass_ImportTheProto) {
+       ImportFriendFunctionRedeclChainDefWithClass_ImportTheProto) {
   auto Pattern = functionDecl(hasName("f"));
 
   Decl *FromTU = getTuDecl(
@@ -4246,13 +4237,13 @@ TEST_P(ASTImporterLookupTableTest, LookupDeclNamesFromDifferentTUs) {
   ASSERT_EQ(Res.size(), 0u);
 }
 
-static const RecordDecl * getRecordDeclOfFriend(FriendDecl *FD) {
-  QualType Ty = FD->getFriendType()->getType();
-  QualType NamedTy = cast<ElaboratedType>(Ty)->getNamedType();
-  return cast<RecordType>(NamedTy)->getDecl();
+static const RecordDecl *getRecordDeclOfFriend(FriendDecl *FD) {
+  QualType Ty = FD->getFriendType()->getType().getCanonicalType();
+  return cast<RecordType>(Ty)->getDecl();
 }
 
-TEST_P(ASTImporterLookupTableTest, LookupFindsFwdFriendClassDecl) {
+TEST_P(ASTImporterLookupTableTest,
+       LookupFindsFwdFriendClassDeclWithElaboratedType) {
   TranslationUnitDecl *ToTU = getToTuDecl(
       R"(
       class Y { friend class F; };
@@ -4274,6 +4265,52 @@ TEST_P(ASTImporterLookupTableTest, LookupFindsFwdFriendClassDecl) {
 
   Res = LT.lookup(Y, Name);
   EXPECT_EQ(Res.size(), 0u);
+}
+
+TEST_P(ASTImporterLookupTableTest,
+       LookupFindsFwdFriendClassDeclWithUnelaboratedType) {
+  TranslationUnitDecl *ToTU = getToTuDecl(
+      R"(
+      class F;
+      class Y { friend F; };
+      )",
+      Lang_CXX11);
+
+  // In this case, the CXXRecordDecl is hidden, the FriendDecl is not a parent.
+  // So we must dig up the underlying CXXRecordDecl.
+  ASTImporterLookupTable LT(*ToTU);
+  auto *FriendD = FirstDeclMatcher<FriendDecl>().match(ToTU, friendDecl());
+  const RecordDecl *RD = getRecordDeclOfFriend(FriendD);
+  auto *Y = FirstDeclMatcher<CXXRecordDecl>().match(ToTU, cxxRecordDecl(hasName("Y")));
+
+  DeclarationName Name = RD->getDeclName();
+  auto Res = LT.lookup(ToTU, Name);
+  EXPECT_EQ(Res.size(), 1u);
+  EXPECT_EQ(*Res.begin(), RD);
+
+  Res = LT.lookup(Y, Name);
+  EXPECT_EQ(Res.size(), 0u);
+}
+
+TEST_P(ASTImporterLookupTableTest,
+       LookupFindsFriendClassDeclWithTypeAliasDoesNotAssert) {
+  TranslationUnitDecl *ToTU = getToTuDecl(
+      R"(
+      class F;
+      using alias_of_f = F;
+      class Y { friend alias_of_f; };
+      )",
+      Lang_CXX11);
+
+  // ASTImporterLookupTable constructor handles using declarations correctly,
+  // no assert is expected.
+  ASTImporterLookupTable LT(*ToTU);
+
+  auto *Alias = FirstDeclMatcher<TypeAliasDecl>().match(
+      ToTU, typeAliasDecl(hasName("alias_of_f")));
+  DeclarationName Name = Alias->getDeclName();
+  auto Res = LT.lookup(ToTU, Name);
+  EXPECT_EQ(Res.count(Alias), 1u);
 }
 
 TEST_P(ASTImporterLookupTableTest, LookupFindsFwdFriendClassTemplateDecl) {
@@ -4582,6 +4619,127 @@ TEST_P(ImportFriendFunctionTemplates, LookupShouldFindPreviousFriend) {
 
   EXPECT_EQ(Imported->getPreviousDecl(), Friend);
 }
+
+struct ASTImporterWithFakeErrors : ASTImporter {
+  using ASTImporter::ASTImporter;
+  bool returnWithErrorInTest() override { return true; }
+};
+
+struct ErrorHandlingTest : ASTImporterOptionSpecificTestBase {
+  ErrorHandlingTest() {
+    Creator = [](ASTContext &ToContext, FileManager &ToFileManager,
+                 ASTContext &FromContext, FileManager &FromFileManager,
+                 bool MinimalImport, ASTImporterLookupTable *LookupTable) {
+      return new ASTImporterWithFakeErrors(ToContext, ToFileManager,
+                                           FromContext, FromFileManager,
+                                           MinimalImport, LookupTable);
+    };
+  }
+  // In this test we purposely report an error (UnsupportedConstruct) when
+  // importing the below stmt.
+  static constexpr auto* ErroneousStmt = R"( asm(""); )";
+};
+
+// Check a case when no new AST node is created in the AST before encountering
+// the error.
+TEST_P(ErrorHandlingTest, ErrorHappensBeforeCreatingANewNode) {
+  TranslationUnitDecl *ToTU = getToTuDecl(
+      R"(
+      template <typename T>
+      class X {};
+      template <>
+      class X<int> { int a; };
+      )",
+      Lang_CXX);
+  TranslationUnitDecl *FromTU = getTuDecl(
+      R"(
+      template <typename T>
+      class X {};
+      template <>
+      class X<int> { double b; };
+      )",
+      Lang_CXX);
+  auto *FromSpec = FirstDeclMatcher<ClassTemplateSpecializationDecl>().match(
+      FromTU, classTemplateSpecializationDecl(hasName("X")));
+  ClassTemplateSpecializationDecl *ImportedSpec = Import(FromSpec, Lang_CXX);
+  EXPECT_FALSE(ImportedSpec);
+
+  // The original Decl is kept, no new decl is created.
+  EXPECT_EQ(DeclCounter<ClassTemplateSpecializationDecl>().match(
+                ToTU, classTemplateSpecializationDecl(hasName("X"))),
+            1u);
+
+  // But an error is set to the counterpart in the "from" context.
+  ASTImporter *Importer = findFromTU(FromSpec)->Importer.get();
+  Optional<ImportError> OptErr = Importer->getImportDeclErrorIfAny(FromSpec);
+  ASSERT_TRUE(OptErr);
+  EXPECT_EQ(OptErr->Error, ImportError::NameConflict);
+}
+
+// Check a case when a new AST node is created but not linked to the AST before
+// encountering the error.
+TEST_P(ErrorHandlingTest,
+       ErrorHappensAfterCreatingTheNodeButBeforeLinkingThatToTheAST) {
+  TranslationUnitDecl *FromTU = getTuDecl(
+      std::string("void foo() { ") + ErroneousStmt + " }",
+      Lang_CXX);
+  auto *FromFoo = FirstDeclMatcher<FunctionDecl>().match(
+      FromTU, functionDecl(hasName("foo")));
+
+  FunctionDecl *ImportedFoo = Import(FromFoo, Lang_CXX);
+  EXPECT_FALSE(ImportedFoo);
+
+  TranslationUnitDecl *ToTU = ToAST->getASTContext().getTranslationUnitDecl();
+  // Created, but not linked.
+  EXPECT_EQ(
+      DeclCounter<FunctionDecl>().match(ToTU, functionDecl(hasName("foo"))),
+      0u);
+
+  ASTImporter *Importer = findFromTU(FromFoo)->Importer.get();
+  Optional<ImportError> OptErr = Importer->getImportDeclErrorIfAny(FromFoo);
+  ASSERT_TRUE(OptErr);
+  EXPECT_EQ(OptErr->Error, ImportError::UnsupportedConstruct);
+}
+
+// Check a case when a new AST node is created and linked to the AST before
+// encountering the error. The error is set for the counterpart of the nodes in
+// the "from" context.
+TEST_P(ErrorHandlingTest, ErrorHappensAfterNodeIsCreatedAndLinked) {
+  TranslationUnitDecl *FromTU = getTuDecl(
+      std::string(R"(
+      void f();
+      void f() { )") + ErroneousStmt + R"( }
+      )",
+    Lang_CXX);
+  auto *FromProto = FirstDeclMatcher<FunctionDecl>().match(
+      FromTU, functionDecl(hasName("f")));
+  auto *FromDef =
+      LastDeclMatcher<FunctionDecl>().match(FromTU, functionDecl(hasName("f")));
+  FunctionDecl *ImportedProto = Import(FromProto, Lang_CXX);
+  EXPECT_FALSE(ImportedProto); // Could not import.
+  // However, we created two nodes in the AST. 1) the fwd decl 2) the
+  // definition. The definition is not added to its DC, but the fwd decl is
+  // there.
+  TranslationUnitDecl *ToTU = ToAST->getASTContext().getTranslationUnitDecl();
+  EXPECT_EQ(DeclCounter<FunctionDecl>().match(ToTU, functionDecl(hasName("f"))),
+            1u);
+  // Match the fwd decl.
+  auto *ToProto =
+      FirstDeclMatcher<FunctionDecl>().match(ToTU, functionDecl(hasName("f")));
+  EXPECT_TRUE(ToProto);
+  // An error is set to the counterpart in the "from" context both for the fwd
+  // decl and the definition.
+  ASTImporter *Importer = findFromTU(FromProto)->Importer.get();
+  Optional<ImportError> OptErr = Importer->getImportDeclErrorIfAny(FromProto);
+  ASSERT_TRUE(OptErr);
+  EXPECT_EQ(OptErr->Error, ImportError::UnsupportedConstruct);
+  OptErr = Importer->getImportDeclErrorIfAny(FromDef);
+  ASSERT_TRUE(OptErr);
+  EXPECT_EQ(OptErr->Error, ImportError::UnsupportedConstruct);
+}
+
+INSTANTIATE_TEST_CASE_P(ParameterizedTests, ErrorHandlingTest,
+                        DefaultTestValuesForRunOptions, );
 
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ASTImporterLookupTableTest,
                         DefaultTestValuesForRunOptions, );

@@ -13,9 +13,8 @@
 using namespace lldb;
 using namespace lldb_private;
 
-static DWARFDataExtractor LoadSection(Module &module,
+static DWARFDataExtractor LoadSection(SectionList *section_list,
                                       SectionType section_type) {
-  SectionList *section_list = module.GetSectionList();
   if (!section_list)
     return DWARFDataExtractor();
 
@@ -28,17 +27,76 @@ static DWARFDataExtractor LoadSection(Module &module,
   return data;
 }
 
-static const DWARFDataExtractor &
-LoadOrGetSection(Module &module, SectionType section_type,
-                 llvm::Optional<DWARFDataExtractor> &extractor) {
-  if (!extractor)
-    extractor = LoadSection(module, section_type);
-  return *extractor;
+const DWARFDataExtractor &
+DWARFContext::LoadOrGetSection(SectionType main_section_type,
+                               llvm::Optional<SectionType> dwo_section_type,
+                               SectionData &data) {
+  llvm::call_once(data.flag, [&] {
+    if (dwo_section_type && isDwo())
+      data.data = LoadSection(m_dwo_section_list, *dwo_section_type);
+    else
+      data.data = LoadSection(m_main_section_list, main_section_type);
+  });
+  return data.data;
 }
 
-DWARFContext::DWARFContext(Module &module) : m_module(module) {}
+const DWARFDataExtractor &DWARFContext::getOrLoadAbbrevData() {
+  return LoadOrGetSection(eSectionTypeDWARFDebugAbbrev,
+                          eSectionTypeDWARFDebugAbbrevDwo, m_data_debug_abbrev);
+}
 
 const DWARFDataExtractor &DWARFContext::getOrLoadArangesData() {
-  return LoadOrGetSection(m_module, eSectionTypeDWARFDebugAranges,
+  return LoadOrGetSection(eSectionTypeDWARFDebugAranges, llvm::None,
                           m_data_debug_aranges);
+}
+
+const DWARFDataExtractor &DWARFContext::getOrLoadAddrData() {
+  return LoadOrGetSection(eSectionTypeDWARFDebugAddr, llvm::None,
+                          m_data_debug_addr);
+}
+
+const DWARFDataExtractor &DWARFContext::getOrLoadDebugInfoData() {
+  return LoadOrGetSection(eSectionTypeDWARFDebugInfo,
+                          eSectionTypeDWARFDebugInfoDwo, m_data_debug_info);
+}
+
+const DWARFDataExtractor &DWARFContext::getOrLoadLineData() {
+  return LoadOrGetSection(eSectionTypeDWARFDebugLine, llvm::None,
+                          m_data_debug_line);
+}
+
+const DWARFDataExtractor &DWARFContext::getOrLoadLineStrData() {
+  return LoadOrGetSection(eSectionTypeDWARFDebugLineStr, llvm::None,
+                          m_data_debug_line_str);
+}
+
+const DWARFDataExtractor &DWARFContext::getOrLoadMacroData() {
+  return LoadOrGetSection(eSectionTypeDWARFDebugMacro, llvm::None,
+                          m_data_debug_macro);
+}
+
+const DWARFDataExtractor &DWARFContext::getOrLoadRangesData() {
+  return LoadOrGetSection(eSectionTypeDWARFDebugRanges, llvm::None,
+                          m_data_debug_ranges);
+}
+
+const DWARFDataExtractor &DWARFContext::getOrLoadRngListsData() {
+  return LoadOrGetSection(eSectionTypeDWARFDebugRngLists, llvm::None,
+                          m_data_debug_rnglists);
+}
+
+const DWARFDataExtractor &DWARFContext::getOrLoadStrData() {
+  return LoadOrGetSection(eSectionTypeDWARFDebugStr,
+                          eSectionTypeDWARFDebugStrDwo, m_data_debug_str);
+}
+
+const DWARFDataExtractor &DWARFContext::getOrLoadStrOffsetsData() {
+  return LoadOrGetSection(eSectionTypeDWARFDebugStrOffsets,
+                          eSectionTypeDWARFDebugStrOffsetsDwo,
+                          m_data_debug_str_offsets);
+}
+
+const DWARFDataExtractor &DWARFContext::getOrLoadDebugTypesData() {
+  return LoadOrGetSection(eSectionTypeDWARFDebugTypes,
+                          eSectionTypeDWARFDebugTypesDwo, m_data_debug_types);
 }

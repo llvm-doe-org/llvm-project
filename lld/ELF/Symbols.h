@@ -22,8 +22,14 @@
 
 namespace lld {
 namespace elf {
-class Symbol;
+class CommonSymbol;
+class Defined;
 class InputFile;
+class LazyArchive;
+class LazyObject;
+class SharedSymbol;
+class Symbol;
+class Undefined;
 } // namespace elf
 
 std::string toString(const elf::Symbol &);
@@ -83,7 +89,7 @@ public:
   // An index into the .branch_lt section on PPC64.
   uint16_t PPC64BranchltIndex = -1;
 
-  // Symbol binding. This is not overwritten by replaceSymbol to track
+  // Symbol binding. This is not overwritten by replace() to track
   // changes during resolution. In particular:
   //  - An undefined weak is still weak when it resolves to a shared library.
   //  - An undefined weak will not fetch archive members, but we have to
@@ -119,6 +125,8 @@ public:
 
   // True if this symbol is specified by --trace-symbol option.
   unsigned Traced : 1;
+
+  inline void replace(const Symbol &New);
 
   bool includeInDynsym() const;
   uint8_t computeBinding() const;
@@ -172,17 +180,54 @@ public:
   uint64_t getSize() const;
   OutputSection *getOutputSection() const;
 
+  // The following two functions are used for symbol resolution.
+  //
+  // You are expected to call mergeProperties for all symbols in input
+  // files so that attributes that are attached to names rather than
+  // indivisual symbol (such as visibility) are merged together.
+  //
+  // Every time you read a new symbol from an input, you are supposed
+  // to call resolve() with the new symbol. That function replaces
+  // "this" object as a result of name resolution if the new symbol is
+  // more appropriate to be included in the output.
+  //
+  // For example, if "this" is an undefined symbol and a new symbol is
+  // a defined symbol, "this" is replaced with the new symbol.
+  void mergeProperties(const Symbol &Other);
+  void resolve(const Symbol &Other);
+
+  // If this is a lazy symbol, fetch an input file and add the symbol
+  // in the file to the symbol table. Calling this function on
+  // non-lazy object causes a runtime error.
+  void fetch() const;
+
+private:
+  static bool isExportDynamic(Kind K, uint8_t Visibility) {
+    if (K == SharedKind)
+      return Visibility == llvm::ELF::STV_DEFAULT;
+    return Config->Shared || Config->ExportDynamic;
+  }
+
+  void resolveUndefined(const Undefined &Other);
+  void resolveCommon(const CommonSymbol &Other);
+  void resolveDefined(const Defined &Other);
+  template <class LazyT> void resolveLazy(const LazyT &Other);
+  void resolveShared(const SharedSymbol &Other);
+
+  int compare(const Symbol *Other) const;
+
+  inline size_t getSymbolSize() const;
+
 protected:
   Symbol(Kind K, InputFile *File, StringRefZ Name, uint8_t Binding,
          uint8_t StOther, uint8_t Type)
       : File(File), NameData(Name.Data), NameSize(Name.Size), Binding(Binding),
         Type(Type), StOther(StOther), SymbolKind(K), Visibility(StOther & 3),
         IsUsedInRegularObj(!File || File->kind() == InputFile::ObjKind),
-        ExportDynamic(K != SharedKind &&
-                      (Config->Shared || Config->ExportDynamic)),
-        CanInline(false), Traced(false), NeedsPltAddr(false), IsInIplt(false),
-        GotInIgot(false), IsPreemptible(false), Used(!Config->GcSections),
-        NeedsTocRestore(false), ScriptDefined(false) {}
+        ExportDynamic(isExportDynamic(K, Visibility)), CanInline(false),
+        Traced(false), NeedsPltAddr(false), IsInIplt(false), GotInIgot(false),
+        IsPreemptible(false), Used(!Config->GcSections), NeedsTocRestore(false),
+        ScriptDefined(false) {}
 
 public:
   // True the symbol should point to its PLT entry.
@@ -209,6 +254,9 @@ public:
 
   // True if this symbol is defined by a linker script.
   unsigned ScriptDefined : 1;
+
+  // The partition whose dynamic symbol table contains this symbol's definition.
+  uint8_t Partition = 1;
 
   bool isSection() const { return Type == llvm::ELF::STT_SECTION; }
   bool isTls() const { return Type == llvm::ELF::STT_TLS; }
@@ -270,10 +318,14 @@ public:
 class Undefined : public Symbol {
 public:
   Undefined(InputFile *File, StringRefZ Name, uint8_t Binding, uint8_t StOther,
-            uint8_t Type)
-      : Symbol(UndefinedKind, File, Name, Binding, StOther, Type) {}
+            uint8_t Type, uint32_t DiscardedSecIdx = 0)
+      : Symbol(UndefinedKind, File, Name, Binding, StOther, Type),
+        DiscardedSecIdx(DiscardedSecIdx) {}
 
   static bool classof(const Symbol *S) { return S->kind() == UndefinedKind; }
+
+  // The section index if in a discarded section, 0 otherwise.
+  uint32_t DiscardedSecIdx;
 };
 
 class SharedSymbol : public Symbol {
@@ -337,10 +389,8 @@ public:
 
   static bool classof(const Symbol *S) { return S->kind() == LazyArchiveKind; }
 
-  InputFile *fetch() const;
   MemoryBufferRef getMemberBuffer();
 
-private:
   const llvm::object::Archive::Symbol Sym;
 };
 
@@ -353,8 +403,6 @@ public:
                llvm::ELF::STV_DEFAULT, llvm::ELF::STT_NOTYPE) {}
 
   static bool classof(const Symbol *S) { return S->kind() == LazyObjectKind; }
-
-  InputFile *fetch() const;
 };
 
 // Some linker-generated symbols need to be created as
@@ -388,6 +436,12 @@ struct ElfSym {
   // __rel{,a}_iplt_{start,end} symbols.
   static Defined *RelaIpltStart;
   static Defined *RelaIpltEnd;
+
+  // __global_pointer$ for RISC-V.
+  static Defined *RISCVGlobalPointer;
+
+  // _TLS_MODULE_BASE_ on targets that support TLSDESC.
+  static Defined *TlsModuleBase;
 };
 
 // A buffer class that is large enough to hold any Symbol-derived
@@ -395,54 +449,93 @@ struct ElfSym {
 // using the placement new.
 union SymbolUnion {
   alignas(Defined) char A[sizeof(Defined)];
+  alignas(CommonSymbol) char B[sizeof(CommonSymbol)];
   alignas(Undefined) char C[sizeof(Undefined)];
   alignas(SharedSymbol) char D[sizeof(SharedSymbol)];
   alignas(LazyArchive) char E[sizeof(LazyArchive)];
   alignas(LazyObject) char F[sizeof(LazyObject)];
 };
 
-void printTraceSymbol(Symbol *Sym);
-
-template <typename T> void replaceSymbol(Symbol *Sym, const T *New) {
-  using llvm::ELF::STT_TLS;
-
+template <typename T> struct AssertSymbol {
   static_assert(std::is_trivially_destructible<T>(),
                 "Symbol types must be trivially destructible");
   static_assert(sizeof(T) <= sizeof(SymbolUnion), "SymbolUnion too small");
   static_assert(alignof(T) <= alignof(SymbolUnion),
                 "SymbolUnion not aligned enough");
-  assert(static_cast<Symbol *>(static_cast<T *>(nullptr)) == nullptr &&
-         "Not a Symbol");
+};
+
+static inline void assertSymbols() {
+  AssertSymbol<Defined>();
+  AssertSymbol<CommonSymbol>();
+  AssertSymbol<Undefined>();
+  AssertSymbol<SharedSymbol>();
+  AssertSymbol<LazyArchive>();
+  AssertSymbol<LazyObject>();
+}
+
+void printTraceSymbol(const Symbol *Sym);
+
+size_t Symbol::getSymbolSize() const {
+  switch (kind()) {
+  case CommonKind:
+    return sizeof(CommonSymbol);
+  case DefinedKind:
+    return sizeof(Defined);
+  case LazyArchiveKind:
+    return sizeof(LazyArchive);
+  case LazyObjectKind:
+    return sizeof(LazyObject);
+  case SharedKind:
+    return sizeof(SharedSymbol);
+  case UndefinedKind:
+    return sizeof(Undefined);
+  case PlaceholderKind:
+    return sizeof(Symbol);
+  }
+  llvm_unreachable("unknown symbol kind");
+}
+
+// replace() replaces "this" object with a given symbol by memcpy'ing
+// it over to "this". This function is called as a result of name
+// resolution, e.g. to replace an undefind symbol with a defined symbol.
+void Symbol::replace(const Symbol &New) {
+  using llvm::ELF::STT_TLS;
 
   // Symbols representing thread-local variables must be referenced by
   // TLS-aware relocations, and non-TLS symbols must be reference by
   // non-TLS relocations, so there's a clear distinction between TLS
   // and non-TLS symbols. It is an error if the same symbol is defined
   // as a TLS symbol in one file and as a non-TLS symbol in other file.
-  if (Sym->SymbolKind != Symbol::PlaceholderKind && !Sym->isLazy() &&
-      !New->isLazy()) {
-    bool TlsMismatch = (Sym->Type == STT_TLS && New->Type != STT_TLS) ||
-                       (Sym->Type != STT_TLS && New->Type == STT_TLS);
+  if (SymbolKind != PlaceholderKind && !isLazy() && !New.isLazy()) {
+    bool TlsMismatch = (Type == STT_TLS && New.Type != STT_TLS) ||
+                       (Type != STT_TLS && New.Type == STT_TLS);
     if (TlsMismatch)
-      error("TLS attribute mismatch: " + toString(*Sym) + "\n>>> defined in " +
-            toString(New->File) + "\n>>> defined in " + toString(Sym->File));
+      error("TLS attribute mismatch: " + toString(*this) + "\n>>> defined in " +
+            toString(New.File) + "\n>>> defined in " + toString(File));
   }
 
-  Symbol Old = *Sym;
-  memcpy(Sym, New, sizeof(T));
+  Symbol Old = *this;
+  memcpy(this, &New, New.getSymbolSize());
 
-  Sym->VersionId = Old.VersionId;
-  Sym->Visibility = Old.Visibility;
-  Sym->IsUsedInRegularObj = Old.IsUsedInRegularObj;
-  Sym->ExportDynamic = Old.ExportDynamic;
-  Sym->CanInline = Old.CanInline;
-  Sym->Traced = Old.Traced;
-  Sym->ScriptDefined = Old.ScriptDefined;
+  VersionId = Old.VersionId;
+  Visibility = Old.Visibility;
+  IsUsedInRegularObj = Old.IsUsedInRegularObj;
+  ExportDynamic = Old.ExportDynamic;
+  CanInline = Old.CanInline;
+  Traced = Old.Traced;
+  IsPreemptible = Old.IsPreemptible;
+  ScriptDefined = Old.ScriptDefined;
+  Partition = Old.Partition;
+
+  // Symbol length is computed lazily. If we already know a symbol length,
+  // propagate it.
+  if (NameData == Old.NameData && NameSize == 0 && Old.NameSize != 0)
+    NameSize = Old.NameSize;
 
   // Print out a log message if --trace-symbol was specified.
   // This is for debugging.
-  if (Sym->Traced)
-    printTraceSymbol(Sym);
+  if (Traced)
+    printTraceSymbol(this);
 }
 
 void maybeWarnUnorderableSymbol(const Symbol *Sym);

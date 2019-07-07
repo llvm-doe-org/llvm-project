@@ -32,12 +32,20 @@ public:
                       MachineIRBuilder &MIRBuilder,
                       GISelChangeObserver &Observer) const override;
 
-  unsigned getSegmentAperture(unsigned AddrSpace,
+  Register getSegmentAperture(unsigned AddrSpace,
                               MachineRegisterInfo &MRI,
                               MachineIRBuilder &MIRBuilder) const;
 
   bool legalizeAddrSpaceCast(MachineInstr &MI, MachineRegisterInfo &MRI,
                              MachineIRBuilder &MIRBuilder) const;
+  bool legalizeFrint(MachineInstr &MI, MachineRegisterInfo &MRI,
+                     MachineIRBuilder &MIRBuilder) const;
+  bool legalizeFceil(MachineInstr &MI, MachineRegisterInfo &MRI,
+                     MachineIRBuilder &MIRBuilder) const;
+  bool legalizeIntrinsicTrunc(MachineInstr &MI, MachineRegisterInfo &MRI,
+                              MachineIRBuilder &MIRBuilder) const;
+  bool legalizeITOFP(MachineInstr &MI, MachineRegisterInfo &MRI,
+                     MachineIRBuilder &MIRBuilder, bool Signed) const;
 };
 } // End llvm namespace.
 #endif

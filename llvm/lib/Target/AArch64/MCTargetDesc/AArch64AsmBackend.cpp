@@ -6,9 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "AArch64.h"
 #include "MCTargetDesc/AArch64FixupKinds.h"
 #include "MCTargetDesc/AArch64MCExpr.h"
+#include "MCTargetDesc/AArch64MCTargetDesc.h"
+#include "Utils/AArch64BaseInfo.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/MC/MCAsmBackend.h"
@@ -21,8 +22,10 @@
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/MCSectionMachO.h"
+#include "llvm/MC/MCTargetOptions.h"
 #include "llvm/MC/MCValue.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
 
 namespace {
@@ -40,6 +43,8 @@ public:
   unsigned getNumFixupKinds() const override {
     return AArch64::NumTargetFixupKinds;
   }
+
+  Optional<MCFixupKind> getFixupKind(StringRef Name) const override;
 
   const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override {
     const static MCFixupKindInfo Infos[AArch64::NumTargetFixupKinds] = {
@@ -103,6 +108,7 @@ static unsigned getFixupKindNumBytes(unsigned Kind) {
   default:
     llvm_unreachable("Unknown fixup kind!");
 
+  case FK_NONE:
   case AArch64::fixup_aarch64_tlsdesc_call:
     return 0;
 
@@ -304,6 +310,7 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
     if (Value & 0x3)
       Ctx.reportError(Fixup.getLoc(), "fixup not sufficiently aligned");
     return (Value >> 2) & 0x3ffffff;
+  case FK_NONE:
   case FK_Data_1:
   case FK_Data_2:
   case FK_Data_4:
@@ -312,6 +319,12 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
   case FK_SecRel_4:
     return Value;
   }
+}
+
+Optional<MCFixupKind> AArch64AsmBackend::getFixupKind(StringRef Name) const {
+  if (TheTriple.isOSBinFormatELF() && Name == "R_AARCH64_NONE")
+    return FK_NONE;
+  return MCAsmBackend::getFixupKind(Name);
 }
 
 /// getFixupKindContainereSizeInBytes - The number of bytes of the
@@ -445,6 +458,10 @@ bool AArch64AsmBackend::writeNopData(raw_ostream &OS, uint64_t Count) const {
 bool AArch64AsmBackend::shouldForceRelocation(const MCAssembler &Asm,
                                               const MCFixup &Fixup,
                                               const MCValue &Target) {
+  unsigned Kind = Fixup.getKind();
+  if (Kind == FK_NONE)
+    return true;
+
   // The ADRP instruction adds some multiple of 0x1000 to the current PC &
   // ~0xfff. This means that the required offset to reach a symbol can vary by
   // up to one step depending on where the ADRP is in memory. For example:
@@ -457,14 +474,14 @@ bool AArch64AsmBackend::shouldForceRelocation(const MCAssembler &Asm,
   // same page as the ADRP and the instruction should encode 0x0. Assuming the
   // section isn't 0x1000-aligned, we therefore need to delegate this decision
   // to the linker -- a relocation!
-  if ((uint32_t)Fixup.getKind() == AArch64::fixup_aarch64_pcrel_adrp_imm21)
+  if (Kind == AArch64::fixup_aarch64_pcrel_adrp_imm21)
     return true;
 
   AArch64MCExpr::VariantKind RefKind =
       static_cast<AArch64MCExpr::VariantKind>(Target.getRefKind());
   AArch64MCExpr::VariantKind SymLoc = AArch64MCExpr::getSymbolLoc(RefKind);
   // LDR GOT relocations need a relocation
-  if ((uint32_t)Fixup.getKind() == AArch64::fixup_aarch64_ldr_pcrel_imm19 &&
+  if (Kind == AArch64::fixup_aarch64_ldr_pcrel_imm19 &&
       SymLoc == AArch64MCExpr::VK_GOT)
     return true;
   return false;

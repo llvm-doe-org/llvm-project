@@ -35,6 +35,7 @@
 #include "llvm/IR/InstVisitor.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Operator.h"
+#include "llvm/IR/PatternMatch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -272,6 +273,7 @@ class CallAnalyzer : public InstVisitor<CallAnalyzer, bool> {
   bool visitCmpInst(CmpInst &I);
   bool visitSub(BinaryOperator &I);
   bool visitBinaryOperator(BinaryOperator &I);
+  bool visitFNeg(UnaryOperator &I);
   bool visitLoad(LoadInst &I);
   bool visitStore(StoreInst &I);
   bool visitExtractValue(ExtractValueInst &I);
@@ -708,7 +710,7 @@ bool CallAnalyzer::visitIntToPtr(IntToPtrInst &I) {
 }
 
 bool CallAnalyzer::visitCastInst(CastInst &I) {
-  // Propagate constants through ptrtoint.
+  // Propagate constants through casts.
   if (simplifyInstruction(I, [&](SmallVectorImpl<Constant *> &COps) {
         return ConstantExpr::getCast(I.getOpcode(), COps[0], I.getType());
       }))
@@ -744,7 +746,7 @@ bool CallAnalyzer::visitUnaryInstruction(UnaryInstruction &I) {
       }))
     return true;
 
-  // Disable any SROA on the argument to arbitrary unary operators.
+  // Disable any SROA on the argument to arbitrary unary instructions.
   disableSROA(Operand);
 
   return false;
@@ -895,7 +897,15 @@ void CallAnalyzer::updateThreshold(CallBase &Call, Function &Callee) {
   // and the callsite.
   int SingleBBBonusPercent = 50;
   int VectorBonusPercent = 150;
-  int LastCallToStaticBonus = InlineConstants::LastCallToStaticBonus;
+
+  int LastCallToStaticBonus = 0;
+  bool OnlyOneCallAndLocalLinkage =
+      F.hasLocalLinkage() && F.hasOneUse() && &F == Call.getCalledFunction();
+  // If there is only one call of the function, and it has internal linkage,
+  // we can allow to inline pretty anything as it will lead to size reduction
+  // anyway.
+  if (OnlyOneCallAndLocalLinkage)
+    LastCallToStaticBonus = InlineConstants::LastCallToStaticBonus;
 
   // Lambda to set all the above bonus and bonus percentages to 0.
   auto DisallowAllBonuses = [&]() {
@@ -968,20 +978,13 @@ void CallAnalyzer::updateThreshold(CallBase &Call, Function &Callee) {
     }
   }
 
-  // Finally, take the target-specific inlining threshold multiplier into
-  // account.
+  // Take the target-specific inlining threshold multiplier into account.
   Threshold *= TTI.getInliningThresholdMultiplier();
 
   SingleBBBonus = Threshold * SingleBBBonusPercent / 100;
   VectorBonus = Threshold * VectorBonusPercent / 100;
 
-  bool OnlyOneCallAndLocalLinkage =
-      F.hasLocalLinkage() && F.hasOneUse() && &F == Call.getCalledFunction();
-  // If there is only one call of the function, and it has internal linkage,
-  // the cost of inlining it drops dramatically. It may seem odd to update
-  // Cost in updateThreshold, but the bonus depends on the logic in this method.
-  if (OnlyOneCallAndLocalLinkage)
-    Cost -= LastCallToStaticBonus;
+  Threshold += LastCallToStaticBonus;
 }
 
 bool CallAnalyzer::visitCmpInst(CmpInst &I) {
@@ -1095,10 +1098,34 @@ bool CallAnalyzer::visitBinaryOperator(BinaryOperator &I) {
 
   // If the instruction is floating point, and the target says this operation
   // is expensive, this may eventually become a library call. Treat the cost
-  // as such.
+  // as such. Unless it's fneg which can be implemented with an xor.
+  using namespace llvm::PatternMatch;
   if (I.getType()->isFloatingPointTy() &&
-      TTI.getFPOpCost(I.getType()) == TargetTransformInfo::TCC_Expensive)
+      TTI.getFPOpCost(I.getType()) == TargetTransformInfo::TCC_Expensive &&
+      !match(&I, m_FNeg(m_Value())))
     addCost(InlineConstants::CallPenalty);
+
+  return false;
+}
+
+bool CallAnalyzer::visitFNeg(UnaryOperator &I) {
+  Value *Op = I.getOperand(0);
+  Constant *COp = dyn_cast<Constant>(Op);
+  if (!COp)
+    COp = SimplifiedValues.lookup(Op);
+
+  Value *SimpleV = SimplifyFNegInst(COp ? COp : Op,
+                                    cast<FPMathOperator>(I).getFastMathFlags(),
+                                    DL);
+
+  if (Constant *C = dyn_cast_or_null<Constant>(SimpleV))
+    SimplifiedValues[&I] = C;
+
+  if (SimpleV)
+    return true;
+
+  // Disable any SROA on arguments to arbitrary, unsimplified fneg.
+  disableSROA(Op);
 
   return false;
 }
@@ -1304,9 +1331,10 @@ bool CallAnalyzer::visitCallBase(CallBase &Call) {
   CallAnalyzer CA(TTI, GetAssumptionCache, GetBFI, PSI, ORE, *F, Call,
                   IndirectCallParams);
   if (CA.analyzeCall(Call)) {
-    // We were able to inline the indirect call! Subtract the cost from the
-    // threshold to get the bonus we want to apply, but don't go below zero.
-    Cost -= std::max(0, CA.getThreshold() - CA.getCost());
+    // We were able to inline the indirect call! Increase the threshold
+    // with the bonus we want to apply (less the cost of inlinee).
+    // Make sure the bonus doesn't go below zero.
+    Threshold += std::max(0, CA.getThreshold() - CA.getCost());
   }
 
   if (!F->onlyReadsMemory())
@@ -1830,14 +1858,18 @@ InlineResult CallAnalyzer::analyzeCall(CallBase &Call) {
     if (BB->empty())
       continue;
 
-    // Disallow inlining a blockaddress. A blockaddress only has defined
-    // behavior for an indirect branch in the same function, and we do not
-    // currently support inlining indirect branches. But, the inliner may not
-    // see an indirect branch that ends up being dead code at a particular call
-    // site. If the blockaddress escapes the function, e.g., via a global
-    // variable, inlining may lead to an invalid cross-function reference.
+    // Disallow inlining a blockaddress with uses other than strictly callbr.
+    // A blockaddress only has defined behavior for an indirect branch in the
+    // same function, and we do not currently support inlining indirect
+    // branches.  But, the inliner may not see an indirect branch that ends up
+    // being dead code at a particular call site. If the blockaddress escapes
+    // the function, e.g., via a global variable, inlining may lead to an
+    // invalid cross-function reference.
+    // FIXME: pr/39560: continue relaxing this overt restriction.
     if (BB->hasAddressTaken())
-      return "blockaddress";
+      for (User *U : BlockAddress::get(&*BB)->users())
+        if (!isa<CallBrInst>(*U))
+          return "blockaddress used outside of callbr";
 
     // Analyze the cost of this block. If we blow through the threshold, this
     // returns false, and we can bail on out.
@@ -2081,13 +2113,16 @@ InlineCost llvm::getInlineCost(
 InlineResult llvm::isInlineViable(Function &F) {
   bool ReturnsTwice = F.hasFnAttribute(Attribute::ReturnsTwice);
   for (Function::iterator BI = F.begin(), BE = F.end(); BI != BE; ++BI) {
-    // Disallow inlining of functions which contain indirect branches or
-    // blockaddresses.
+    // Disallow inlining of functions which contain indirect branches.
     if (isa<IndirectBrInst>(BI->getTerminator()))
       return "contains indirect branches";
 
+    // Disallow inlining of blockaddresses which are used by non-callbr
+    // instructions.
     if (BI->hasAddressTaken())
-      return "uses block address";
+      for (User *U : BlockAddress::get(&*BI)->users())
+        if (!isa<CallBrInst>(*U))
+          return "blockaddress used outside of callbr";
 
     for (auto &II : *BI) {
       CallBase *Call = dyn_cast<CallBase>(&II);

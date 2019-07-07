@@ -94,9 +94,6 @@ static const uint64_t kDefaultShadowOffset32 = 1ULL << 29;
 static const uint64_t kDefaultShadowOffset64 = 1ULL << 44;
 static const uint64_t kDynamicShadowSentinel =
     std::numeric_limits<uint64_t>::max();
-static const uint64_t kIOSShadowOffset32 = 1ULL << 30;
-static const uint64_t kIOSSimShadowOffset32 = 1ULL << 30;
-static const uint64_t kIOSSimShadowOffset64 = kDefaultShadowOffset64;
 static const uint64_t kSmallX86_64ShadowOffsetBase = 0x7FFFFFFF;  // < 2G.
 static const uint64_t kSmallX86_64ShadowOffsetAlignMask = ~0xFFFULL;
 static const uint64_t kLinuxKasan_ShadowOffset64 = 0xdffffc0000000000;
@@ -112,6 +109,7 @@ static const uint64_t kNetBSD_ShadowOffset64 = 1ULL << 46;
 static const uint64_t kNetBSDKasan_ShadowOffset64 = 0xdfff900000000000;
 static const uint64_t kPS4CPU_ShadowOffset64 = 1ULL << 40;
 static const uint64_t kWindowsShadowOffset32 = 3ULL << 28;
+static const uint64_t kEmscriptenShadowOffset = 0;
 
 static const uint64_t kMyriadShadowScale = 5;
 static const uint64_t kMyriadMemoryOffset32 = 0x80000000ULL;
@@ -428,7 +426,6 @@ static ShadowMapping getShadowMapping(Triple &TargetTriple, int LongSize,
   bool IsPPC64 = TargetTriple.getArch() == Triple::ppc64 ||
                  TargetTriple.getArch() == Triple::ppc64le;
   bool IsSystemZ = TargetTriple.getArch() == Triple::systemz;
-  bool IsX86 = TargetTriple.getArch() == Triple::x86;
   bool IsX86_64 = TargetTriple.getArch() == Triple::x86_64;
   bool IsMIPS32 = TargetTriple.isMIPS32();
   bool IsMIPS64 = TargetTriple.isMIPS64();
@@ -437,6 +434,7 @@ static ShadowMapping getShadowMapping(Triple &TargetTriple, int LongSize,
   bool IsWindows = TargetTriple.isOSWindows();
   bool IsFuchsia = TargetTriple.isOSFuchsia();
   bool IsMyriad = TargetTriple.getVendor() == llvm::Triple::Myriad;
+  bool IsEmscripten = TargetTriple.isOSEmscripten();
 
   ShadowMapping Mapping;
 
@@ -455,10 +453,11 @@ static ShadowMapping getShadowMapping(Triple &TargetTriple, int LongSize,
     else if (IsNetBSD)
       Mapping.Offset = kNetBSD_ShadowOffset32;
     else if (IsIOS)
-      // If we're targeting iOS and x86, the binary is built for iOS simulator.
-      Mapping.Offset = IsX86 ? kIOSSimShadowOffset32 : kIOSShadowOffset32;
+      Mapping.Offset = kDynamicShadowSentinel;
     else if (IsWindows)
       Mapping.Offset = kWindowsShadowOffset32;
+    else if (IsEmscripten)
+      Mapping.Offset = kEmscriptenShadowOffset;
     else if (IsMyriad) {
       uint64_t ShadowOffset = (kMyriadMemoryOffset32 + kMyriadMemorySize32 -
                                (kMyriadMemorySize32 >> Mapping.Scale));
@@ -495,10 +494,7 @@ static ShadowMapping getShadowMapping(Triple &TargetTriple, int LongSize,
     } else if (IsMIPS64)
       Mapping.Offset = kMIPS64_ShadowOffset64;
     else if (IsIOS)
-      // If we're targeting iOS and x86, the binary is built for iOS simulator.
-      // We are using dynamic shadow offset on the 64-bit devices.
-      Mapping.Offset =
-        IsX86_64 ? kIOSSimShadowOffset64 : kDynamicShadowSentinel;
+      Mapping.Offset = kDynamicShadowSentinel;
     else if (IsAArch64)
       Mapping.Offset = kAArch64_ShadowOffset64;
     else
@@ -3053,7 +3049,7 @@ void FunctionStackPoisoner::processStaticAllocas() {
   Value *FakeStack;
   Value *LocalStackBase;
   Value *LocalStackBaseAlloca;
-  bool Deref;
+  uint8_t DIExprFlags = DIExpression::ApplyOffset;
 
   if (DoStackMalloc) {
     LocalStackBaseAlloca =
@@ -3094,7 +3090,7 @@ void FunctionStackPoisoner::processStaticAllocas() {
     LocalStackBase = createPHI(IRB, NoFakeStack, AllocaValue, Term, FakeStack);
     IRB.SetCurrentDebugLocation(EntryDebugLocation);
     IRB.CreateStore(LocalStackBase, LocalStackBaseAlloca);
-    Deref = true;
+    DIExprFlags |= DIExpression::DerefBefore;
   } else {
     // void *FakeStack = nullptr;
     // void *LocalStackBase = alloca(LocalStackSize);
@@ -3102,14 +3098,13 @@ void FunctionStackPoisoner::processStaticAllocas() {
     LocalStackBase =
         DoDynamicAlloca ? createAllocaForLayout(IRB, L, true) : StaticAlloca;
     LocalStackBaseAlloca = LocalStackBase;
-    Deref = false;
   }
 
   // Replace Alloca instructions with base+offset.
   for (const auto &Desc : SVD) {
     AllocaInst *AI = Desc.AI;
-    replaceDbgDeclareForAlloca(AI, LocalStackBaseAlloca, DIB, Deref,
-                               Desc.Offset, DIExpression::NoDeref);
+    replaceDbgDeclareForAlloca(AI, LocalStackBaseAlloca, DIB, DIExprFlags,
+                               Desc.Offset);
     Value *NewAllocaPtr = IRB.CreateIntToPtr(
         IRB.CreateAdd(LocalStackBase, ConstantInt::get(IntptrTy, Desc.Offset)),
         AI->getType());

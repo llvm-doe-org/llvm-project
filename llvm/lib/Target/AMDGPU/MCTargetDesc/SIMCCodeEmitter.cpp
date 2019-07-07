@@ -389,7 +389,7 @@ SIMCCodeEmitter::getSDWAVopcDstEncoding(const MCInst &MI, unsigned OpNo,
   const MCOperand &MO = MI.getOperand(OpNo);
 
   unsigned Reg = MO.getReg();
-  if (Reg != AMDGPU::VCC) {
+  if (Reg != AMDGPU::VCC && Reg != AMDGPU::VCC_LO) {
     RegEnc |= MRI.getEncodingValue(Reg);
     RegEnc &= SDWA9EncValues::VOPC_DST_SGPR_MASK;
     RegEnc |= SDWA9EncValues::VOPC_DST_VCC_MASK;
@@ -399,8 +399,12 @@ SIMCCodeEmitter::getSDWAVopcDstEncoding(const MCInst &MI, unsigned OpNo,
 
 static bool needsPCRel(const MCExpr *Expr) {
   switch (Expr->getKind()) {
-  case MCExpr::SymbolRef:
-    return true;
+  case MCExpr::SymbolRef: {
+    auto *SE = cast<MCSymbolRefExpr>(Expr);
+    MCSymbolRefExpr::VariantKind Kind = SE->getKind();
+    return Kind != MCSymbolRefExpr::VK_AMDGPU_ABS32_LO &&
+           Kind != MCSymbolRefExpr::VK_AMDGPU_ABS32_HI;
+  }
   case MCExpr::Binary: {
     auto *BE = cast<MCBinaryExpr>(Expr);
     if (BE->getOpcode() == MCBinaryExpr::Sub)
@@ -439,7 +443,13 @@ uint64_t SIMCCodeEmitter::getMachineOpValue(const MCInst &MI,
       Kind = FK_PCRel_4;
     else
       Kind = FK_Data_4;
-    Fixups.push_back(MCFixup::create(4, MO.getExpr(), Kind, MI.getLoc()));
+
+    const MCInstrDesc &Desc = MCII.get(MI.getOpcode());
+    uint32_t Offset = Desc.getSize();
+    assert(Offset == 4 || Offset == 8);
+
+    Fixups.push_back(
+      MCFixup::create(Offset, MO.getExpr(), Kind, MI.getLoc()));
   }
 
   // Figure out the operand number, needed for isSrcOperand check

@@ -58,14 +58,13 @@ int getPosixProtectionFlags(unsigned Flags) {
       llvm::sys::Memory::MF_EXEC:
     return PROT_READ | PROT_WRITE | PROT_EXEC;
   case llvm::sys::Memory::MF_EXEC:
-#if defined(__FreeBSD__)
+#if (defined(__FreeBSD__) || defined(__POWERPC__) || defined (__ppc__) || \
+     defined(_POWER) || defined(_ARCH_PPC))
     // On PowerPC, having an executable page that has no read permission
     // can have unintended consequences.  The function InvalidateInstruction-
     // Cache uses instructions dcbf and icbi, both of which are treated by
     // the processor as loads.  If the page has no read permissions,
     // executing these instructions will result in a segmentation fault.
-    // Somehow, this problem is not present on Linux, but it does happen
-    // on FreeBSD.
     return PROT_READ | PROT_EXEC;
 #else
     return PROT_EXEC;
@@ -117,13 +116,15 @@ Memory::allocateMappedMemory(size_t NumBytes,
 
   // Use any near hint and the page size to set a page-aligned starting address
   uintptr_t Start = NearBlock ? reinterpret_cast<uintptr_t>(NearBlock->base()) +
-                                      NearBlock->size() : 0;
+                                      NearBlock->allocatedSize() : 0;
   static const size_t PageSize = Process::getPageSizeEstimate();
+  const size_t NumPages = (NumBytes+PageSize-1)/PageSize;
+
   if (Start && Start % PageSize)
     Start += PageSize - Start % PageSize;
 
   // FIXME: Handle huge page requests (MF_HUGE_HINT).
-  void *Addr = ::mmap(reinterpret_cast<void *>(Start), NumBytes, Protect,
+  void *Addr = ::mmap(reinterpret_cast<void *>(Start), PageSize*NumPages, Protect,
                       MMFlags, fd, 0);
   if (Addr == MAP_FAILED) {
     if (NearBlock) { //Try again without a near hint
@@ -146,7 +147,7 @@ Memory::allocateMappedMemory(size_t NumBytes,
 
   MemoryBlock Result;
   Result.Address = Addr;
-  Result.Size = NumBytes;
+  Result.AllocatedSize = PageSize*NumPages;
   Result.Flags = PFlags;
 
   // Rely on protectMappedMemory to invalidate instruction cache.
@@ -161,14 +162,14 @@ Memory::allocateMappedMemory(size_t NumBytes,
 
 std::error_code
 Memory::releaseMappedMemory(MemoryBlock &M) {
-  if (M.Address == nullptr || M.Size == 0)
+  if (M.Address == nullptr || M.AllocatedSize == 0)
     return std::error_code();
 
-  if (0 != ::munmap(M.Address, M.Size))
+  if (0 != ::munmap(M.Address, M.AllocatedSize))
     return std::error_code(errno, std::generic_category());
 
   M.Address = nullptr;
-  M.Size = 0;
+  M.AllocatedSize = 0;
 
   return std::error_code();
 }
@@ -176,7 +177,7 @@ Memory::releaseMappedMemory(MemoryBlock &M) {
 std::error_code
 Memory::protectMappedMemory(const MemoryBlock &M, unsigned Flags) {
   static const size_t PageSize = Process::getPageSizeEstimate();
-  if (M.Address == nullptr || M.Size == 0)
+  if (M.Address == nullptr || M.AllocatedSize == 0)
     return std::error_code();
 
   if (!Flags)
@@ -184,7 +185,7 @@ Memory::protectMappedMemory(const MemoryBlock &M, unsigned Flags) {
 
   int Protect = getPosixProtectionFlags(Flags);
   uintptr_t Start = alignAddr((uint8_t *)M.Address - PageSize + 1, PageSize);
-  uintptr_t End = alignAddr((uint8_t *)M.Address + M.Size, PageSize);
+  uintptr_t End = alignAddr((uint8_t *)M.Address + M.AllocatedSize, PageSize);
 
   bool InvalidateCache = (Flags & MF_EXEC);
 
@@ -197,7 +198,7 @@ Memory::protectMappedMemory(const MemoryBlock &M, unsigned Flags) {
     if (Result != 0)
       return std::error_code(errno, std::generic_category());
 
-    Memory::InvalidateInstructionCache(M.Address, M.Size);
+    Memory::InvalidateInstructionCache(M.Address, M.AllocatedSize);
     InvalidateCache = false;
   }
 #endif
@@ -208,7 +209,7 @@ Memory::protectMappedMemory(const MemoryBlock &M, unsigned Flags) {
     return std::error_code(errno, std::generic_category());
 
   if (InvalidateCache)
-    Memory::InvalidateInstructionCache(M.Address, M.Size);
+    Memory::InvalidateInstructionCache(M.Address, M.AllocatedSize);
 
   return std::error_code();
 }

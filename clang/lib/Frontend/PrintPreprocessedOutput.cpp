@@ -664,8 +664,8 @@ struct UnknownPragmaHandler : public PragmaHandler {
                        bool RequireTokenExpansion)
       : Prefix(prefix), Callbacks(callbacks),
         ShouldExpandTokens(RequireTokenExpansion) {}
-  void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                    SourceLocation IntroducerLoc, Token &PragmaTok) override {
+  void HandlePragma(Preprocessor &PP, PragmaIntroducer Introducer,
+                    Token &PragmaTok) override {
     // Figure out what line we went to and insert the appropriate number of
     // newline characters.
     Callbacks->startNewLineIfNeeded();
@@ -678,7 +678,8 @@ struct UnknownPragmaHandler : public PragmaHandler {
       auto Toks = llvm::make_unique<Token[]>(1);
       Toks[0] = PragmaTok;
       PP.EnterTokenStream(std::move(Toks), /*NumToks=*/1,
-                          /*DisableMacroExpansion=*/false);
+                          /*DisableMacroExpansion=*/false,
+                          /*IsReinject=*/false);
       PP.Lex(PragmaTok);
     }
     Token PrevToken;

@@ -201,6 +201,9 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST) {
       .legalForTypesWithMemDesc({{s32, p0, 8, 8},
                                  {s32, p0, 16, 8},
                                  {s32, p0, 32, 8},
+                                 {s64, p0, 8, 2},
+                                 {s64, p0, 16, 2},
+                                 {s64, p0, 32, 4},
                                  {s64, p0, 64, 8},
                                  {p0, p0, 64, 8},
                                  {v2s32, p0, 64, 8}})
@@ -276,8 +279,8 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST) {
 
   // Constants
   getActionDefinitionsBuilder(G_CONSTANT)
-      .legalFor({p0, s32, s64})
-      .clampScalar(0, s32, s64)
+    .legalFor({p0, s8, s16, s32, s64})
+      .clampScalar(0, s8, s64)
       .widenScalarToNextPow2(0);
   getActionDefinitionsBuilder(G_FCONSTANT)
       .legalFor({s32, s64})
@@ -573,6 +576,13 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST) {
 
   getActionDefinitionsBuilder(G_CONCAT_VECTORS)
       .legalFor({{v4s32, v2s32}, {v8s16, v4s16}});
+
+  getActionDefinitionsBuilder(G_JUMP_TABLE)
+    .legalFor({{p0}, {s64}});
+
+  getActionDefinitionsBuilder(G_BRJT).legalIf([=](const LegalityQuery &Query) {
+    return Query.Types[0] == p0 && Query.Types[1] == s64;
+  });
 
   computeTables();
   verify(*ST.getInstrInfo());

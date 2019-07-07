@@ -22,6 +22,7 @@
 #include "EHScopeStack.h"
 #include "VarBypassDetector.h"
 #include "clang/AST/CharUnits.h"
+#include "clang/AST/CurrentSourceLocExprScope.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprObjC.h"
 #include "clang/AST/ExprOpenMP.h"
@@ -325,6 +326,10 @@ public:
   /// ReturnValue - The temporary alloca to hold the return
   /// value. This is invalid iff the function has no return value.
   Address ReturnValue = Address::invalid();
+
+  /// ReturnValuePointer - The temporary alloca to hold a pointer to sret.
+  /// This is invalid if sret is not in use.
+  Address ReturnValuePointer = Address::invalid();
 
   /// Return true if a label was seen in the current scope.
   bool hasLabelBeenSeenInCurrentScope() const {
@@ -1393,6 +1398,12 @@ private:
   SourceLocation LastStopPoint;
 
 public:
+  /// Source location information about the default argument or member
+  /// initializer expression we're evaluating, if any.
+  CurrentSourceLocExprScope CurSourceLocExprScope;
+  using SourceLocExprScopeGuard =
+      CurrentSourceLocExprScope::SourceLocExprScopeGuard;
+
   /// A scope within which we are constructing the fields of an object which
   /// might use a CXXDefaultInitExpr. This stashes away a 'this' value to use
   /// if we need to evaluate a CXXDefaultInitExpr within the evaluation.
@@ -1413,11 +1424,12 @@ public:
 
   /// The scope of a CXXDefaultInitExpr. Within this scope, the value of 'this'
   /// is overridden to be the object under construction.
-  class CXXDefaultInitExprScope {
+  class CXXDefaultInitExprScope  {
   public:
-    CXXDefaultInitExprScope(CodeGenFunction &CGF)
-      : CGF(CGF), OldCXXThisValue(CGF.CXXThisValue),
-        OldCXXThisAlignment(CGF.CXXThisAlignment) {
+    CXXDefaultInitExprScope(CodeGenFunction &CGF, const CXXDefaultInitExpr *E)
+        : CGF(CGF), OldCXXThisValue(CGF.CXXThisValue),
+          OldCXXThisAlignment(CGF.CXXThisAlignment),
+          SourceLocScope(E, CGF.CurSourceLocExprScope) {
       CGF.CXXThisValue = CGF.CXXDefaultInitExprThis.getPointer();
       CGF.CXXThisAlignment = CGF.CXXDefaultInitExprThis.getAlignment();
     }
@@ -1430,6 +1442,12 @@ public:
     CodeGenFunction &CGF;
     llvm::Value *OldCXXThisValue;
     CharUnits OldCXXThisAlignment;
+    SourceLocExprScopeGuard SourceLocScope;
+  };
+
+  struct CXXDefaultArgExprScope : SourceLocExprScopeGuard {
+    CXXDefaultArgExprScope(CodeGenFunction &CGF, const CXXDefaultArgExpr *E)
+        : SourceLocExprScopeGuard(E, CGF.CurSourceLocExprScope) {}
   };
 
   /// The scope of an ArrayInitLoopExpr. Within this scope, the value of the
@@ -2296,7 +2314,7 @@ public:
   }
 
   /// Determine whether a return value slot may overlap some other object.
-  AggValueSlot::Overlap_t overlapForReturnValue() {
+  AggValueSlot::Overlap_t getOverlapForReturnValue() {
     // FIXME: Assuming no overlap here breaks guaranteed copy elision for base
     // class subobjects. These cases may need to be revisited depending on the
     // resolution of the relevant core issue.
@@ -2304,20 +2322,13 @@ public:
   }
 
   /// Determine whether a field initialization may overlap some other object.
-  AggValueSlot::Overlap_t overlapForFieldInit(const FieldDecl *FD) {
-    // FIXME: These cases can result in overlap as a result of P0840R0's
-    // [[no_unique_address]] attribute. We can still infer NoOverlap in the
-    // presence of that attribute if the field is within the nvsize of its
-    // containing class, because non-virtual subobjects are initialized in
-    // address order.
-    return AggValueSlot::DoesNotOverlap;
-  }
+  AggValueSlot::Overlap_t getOverlapForFieldInit(const FieldDecl *FD);
 
   /// Determine whether a base class initialization may overlap some other
   /// object.
-  AggValueSlot::Overlap_t overlapForBaseInit(const CXXRecordDecl *RD,
-                                             const CXXRecordDecl *BaseRD,
-                                             bool IsVirtual);
+  AggValueSlot::Overlap_t getOverlapForBaseInit(const CXXRecordDecl *RD,
+                                                const CXXRecordDecl *BaseRD,
+                                                bool IsVirtual);
 
   /// Emit an aggregate assignment.
   void EmitAggregateAssign(LValue Dest, LValue Src, QualType EltTy) {
@@ -3594,6 +3605,7 @@ public:
   CGCallee EmitCallee(const Expr *E);
 
   void checkTargetFeatures(const CallExpr *E, const FunctionDecl *TargetDecl);
+  void checkTargetFeatures(SourceLocation Loc, const FunctionDecl *TargetDecl);
 
   llvm::CallInst *EmitRuntimeCall(llvm::FunctionCallee callee,
                                   const Twine &name = "");

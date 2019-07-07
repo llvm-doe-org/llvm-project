@@ -598,7 +598,7 @@ public:
   using MaybeODRUseExprSet = llvm::SmallPtrSet<Expr *, 2>;
   MaybeODRUseExprSet MaybeODRUseExprs;
 
-  std::unique_ptr<sema::FunctionScopeInfo> PreallocatedFunctionScope;
+  std::unique_ptr<sema::FunctionScopeInfo> CachedFunctionScope;
 
   /// Stack containing information about each of the nested
   /// function, block, and method scopes that are currently active.
@@ -799,6 +799,15 @@ public:
       pop();
     }
   };
+
+  /// Used to change context to isConstantEvaluated without pushing a heavy
+  /// ExpressionEvaluationContextRecord object.
+  bool isConstantEvaluatedOverride;
+
+  bool isConstantEvaluated() {
+    return ExprEvalContexts.back().isConstantEvaluated() ||
+           isConstantEvaluatedOverride;
+  }
 
   /// RAII object to handle the state changes required to synthesize
   /// a function body.
@@ -1411,10 +1420,24 @@ public:
   void PushCapturedRegionScope(Scope *RegionScope, CapturedDecl *CD,
                                RecordDecl *RD,
                                CapturedRegionKind K);
-  void
+
+  /// Custom deleter to allow FunctionScopeInfos to be kept alive for a short
+  /// time after they've been popped.
+  class PoppedFunctionScopeDeleter {
+    Sema *Self;
+
+  public:
+    explicit PoppedFunctionScopeDeleter(Sema *Self) : Self(Self) {}
+    void operator()(sema::FunctionScopeInfo *Scope) const;
+  };
+
+  using PoppedFunctionScopePtr =
+      std::unique_ptr<sema::FunctionScopeInfo, PoppedFunctionScopeDeleter>;
+
+  PoppedFunctionScopePtr
   PopFunctionScopeInfo(const sema::AnalysisBasedWarnings::Policy *WP = nullptr,
                        const Decl *D = nullptr,
-                       const BlockExpr *blkExpr = nullptr);
+                       QualType BlockType = QualType());
 
   sema::FunctionScopeInfo *getCurFunction() const {
     return FunctionScopes.empty() ? nullptr : FunctionScopes.back();
@@ -1553,6 +1576,7 @@ public:
   bool CheckExceptionSpecSubset(const PartialDiagnostic &DiagID,
                                 const PartialDiagnostic &NestedDiagID,
                                 const PartialDiagnostic &NoteID,
+                                const PartialDiagnostic &NoThrowDiagID,
                                 const FunctionProtoType *Superset,
                                 SourceLocation SuperLoc,
                                 const FunctionProtoType *Subset,
@@ -2071,7 +2095,9 @@ public:
                                       QualType NewT, QualType OldT);
   void CheckMain(FunctionDecl *FD, const DeclSpec &D);
   void CheckMSVCRTEntryPoint(FunctionDecl *FD);
-  Attr *getImplicitCodeSegOrSectionAttrForFunction(const FunctionDecl *FD, bool IsDefinition);
+  Attr *getImplicitCodeSegOrSectionAttrForFunction(const FunctionDecl *FD,
+                                                   bool IsDefinition);
+  void CheckFunctionOrTemplateParamDeclarator(Scope *S, Declarator &D);
   Decl *ActOnParamDeclarator(Scope *S, Declarator &D);
   ParmVarDecl *BuildParmVarDeclForTypedef(DeclContext *DC,
                                           SourceLocation Loc,
@@ -3974,6 +4000,7 @@ public:
                              unsigned NumInputs, IdentifierInfo **Names,
                              MultiExprArg Constraints, MultiExprArg Exprs,
                              Expr *AsmString, MultiExprArg Clobbers,
+                             unsigned NumLabels,
                              SourceLocation RParenLoc);
 
   void FillInlineAsmIdentifierInfo(Expr *Res,
@@ -4168,8 +4195,11 @@ public:
   void MarkVariableReferenced(SourceLocation Loc, VarDecl *Var);
   void MarkDeclRefReferenced(DeclRefExpr *E, const Expr *Base = nullptr);
   void MarkMemberReferenced(MemberExpr *E);
+  void MarkFunctionParmPackReferenced(FunctionParmPackExpr *E);
+  void MarkCaptureUsedInEnclosingContext(VarDecl *Capture, SourceLocation Loc,
+                                         unsigned CapturingScopeIndex);
 
-  void UpdateMarkingForLValueToRValue(Expr *E);
+  ExprResult CheckLValueToRValueConversionOperand(Expr *E);
   void CleanupVarDeclMarking();
 
   enum TryCaptureKind {
@@ -4289,16 +4319,28 @@ public:
                                         bool isAddressOfOperand,
                                 const TemplateArgumentListInfo *TemplateArgs);
 
-  ExprResult BuildDeclRefExpr(ValueDecl *D, QualType Ty,
-                              ExprValueKind VK,
-                              SourceLocation Loc,
-                              const CXXScopeSpec *SS = nullptr);
-  ExprResult
+  /// If \p D cannot be odr-used in the current expression evaluation context,
+  /// return a reason explaining why. Otherwise, return NOUR_None.
+  NonOdrUseReason getNonOdrUseReasonInCurrentContext(ValueDecl *D);
+
+  DeclRefExpr *BuildDeclRefExpr(ValueDecl *D, QualType Ty, ExprValueKind VK,
+                                SourceLocation Loc,
+                                const CXXScopeSpec *SS = nullptr);
+  DeclRefExpr *
   BuildDeclRefExpr(ValueDecl *D, QualType Ty, ExprValueKind VK,
                    const DeclarationNameInfo &NameInfo,
                    const CXXScopeSpec *SS = nullptr,
                    NamedDecl *FoundD = nullptr,
+                   SourceLocation TemplateKWLoc = SourceLocation(),
                    const TemplateArgumentListInfo *TemplateArgs = nullptr);
+  DeclRefExpr *
+  BuildDeclRefExpr(ValueDecl *D, QualType Ty, ExprValueKind VK,
+                   const DeclarationNameInfo &NameInfo,
+                   NestedNameSpecifierLoc NNS,
+                   NamedDecl *FoundD = nullptr,
+                   SourceLocation TemplateKWLoc = SourceLocation(),
+                   const TemplateArgumentListInfo *TemplateArgs = nullptr);
+
   ExprResult
   BuildAnonymousStructUnionMemberReference(
       const CXXScopeSpec &SS,
@@ -4486,6 +4528,23 @@ public:
                                    UnqualifiedId &Member,
                                    Decl *ObjCImpDecl);
 
+  MemberExpr *
+  BuildMemberExpr(Expr *Base, bool IsArrow, SourceLocation OpLoc,
+                  const CXXScopeSpec *SS, SourceLocation TemplateKWLoc,
+                  ValueDecl *Member, DeclAccessPair FoundDecl,
+                  bool HadMultipleCandidates,
+                  const DeclarationNameInfo &MemberNameInfo, QualType Ty,
+                  ExprValueKind VK, ExprObjectKind OK,
+                  const TemplateArgumentListInfo *TemplateArgs = nullptr);
+  MemberExpr *
+  BuildMemberExpr(Expr *Base, bool IsArrow, SourceLocation OpLoc,
+                  NestedNameSpecifierLoc NNS, SourceLocation TemplateKWLoc,
+                  ValueDecl *Member, DeclAccessPair FoundDecl,
+                  bool HadMultipleCandidates,
+                  const DeclarationNameInfo &MemberNameInfo, QualType Ty,
+                  ExprValueKind VK, ExprObjectKind OK,
+                  const TemplateArgumentListInfo *TemplateArgs = nullptr);
+
   void ActOnDefaultCtorInitializers(Decl *CDtorDecl);
   bool ConvertArgumentsForCall(CallExpr *Call, Expr *Fn,
                                FunctionDecl *FDecl,
@@ -4614,6 +4673,17 @@ public:
                         SourceLocation RPLoc);
   ExprResult BuildVAArgExpr(SourceLocation BuiltinLoc, Expr *E,
                             TypeSourceInfo *TInfo, SourceLocation RPLoc);
+
+  // __builtin_LINE(), __builtin_FUNCTION(), __builtin_FILE(),
+  // __builtin_COLUMN()
+  ExprResult ActOnSourceLocExpr(SourceLocExpr::IdentKind Kind,
+                                SourceLocation BuiltinLoc,
+                                SourceLocation RPLoc);
+
+  // Build a potentially resolved SourceLocExpr.
+  ExprResult BuildSourceLocExpr(SourceLocExpr::IdentKind Kind,
+                                SourceLocation BuiltinLoc, SourceLocation RPLoc,
+                                DeclContext *ParentContext);
 
   // __null
   ExprResult ActOnGNUNullExpr(SourceLocation TokenLoc);
@@ -5215,6 +5285,10 @@ public:
   //// ActOnCXXThis -  Parse 'this' pointer.
   ExprResult ActOnCXXThis(SourceLocation loc);
 
+  /// Build a CXXThisExpr and mark it referenced in the current context.
+  Expr *BuildCXXThisExpr(SourceLocation Loc, QualType Type, bool IsImplicit);
+  void MarkThisReferenced(CXXThisExpr *This);
+
   /// Try to retrieve the type of the 'this' pointer.
   ///
   /// \returns The type of 'this', if possible. Otherwise, returns a NULL type.
@@ -5682,12 +5756,12 @@ public:
                                          LambdaCaptureDefault CaptureDefault);
 
   /// Start the definition of a lambda expression.
-  CXXMethodDecl *startLambdaDefinition(CXXRecordDecl *Class,
-                                       SourceRange IntroducerRange,
-                                       TypeSourceInfo *MethodType,
-                                       SourceLocation EndLoc,
-                                       ArrayRef<ParmVarDecl *> Params,
-                                       bool IsConstexprSpecified);
+  CXXMethodDecl *
+  startLambdaDefinition(CXXRecordDecl *Class, SourceRange IntroducerRange,
+                        TypeSourceInfo *MethodType, SourceLocation EndLoc,
+                        ArrayRef<ParmVarDecl *> Params,
+                        ConstexprSpecKind ConstexprKind,
+                        Optional<std::pair<unsigned, Decl *>> Mangling = None);
 
   /// Endow the lambda scope info with the relevant properties.
   void buildLambdaScope(sema::LambdaScopeInfo *LSI,
@@ -5703,14 +5777,16 @@ public:
   /// any implicit conversions such as an lvalue-to-rvalue conversion if
   /// not being used to initialize a reference.
   ParsedType actOnLambdaInitCaptureInitialization(
-      SourceLocation Loc, bool ByRef, IdentifierInfo *Id,
-      LambdaCaptureInitKind InitKind, Expr *&Init) {
+      SourceLocation Loc, bool ByRef, SourceLocation EllipsisLoc,
+      IdentifierInfo *Id, LambdaCaptureInitKind InitKind, Expr *&Init) {
     return ParsedType::make(buildLambdaInitCaptureInitialization(
-        Loc, ByRef, Id, InitKind != LambdaCaptureInitKind::CopyInit, Init));
+        Loc, ByRef, EllipsisLoc, None, Id,
+        InitKind != LambdaCaptureInitKind::CopyInit, Init));
   }
-  QualType buildLambdaInitCaptureInitialization(SourceLocation Loc, bool ByRef,
-                                                IdentifierInfo *Id,
-                                                bool DirectInit, Expr *&Init);
+  QualType buildLambdaInitCaptureInitialization(
+      SourceLocation Loc, bool ByRef, SourceLocation EllipsisLoc,
+      Optional<unsigned> NumExpansions, IdentifierInfo *Id, bool DirectInit,
+      Expr *&Init);
 
   /// Create a dummy variable within the declcontext of the lambda's
   ///  call operator, for name lookup purposes for a lambda init capture.
@@ -5719,11 +5795,12 @@ public:
   ///  variables appropriately.
   VarDecl *createLambdaInitCaptureVarDecl(SourceLocation Loc,
                                           QualType InitCaptureType,
+                                          SourceLocation EllipsisLoc,
                                           IdentifierInfo *Id,
                                           unsigned InitStyle, Expr *Init);
 
-  /// Build the implicit field for an init-capture.
-  FieldDecl *buildInitCaptureField(sema::LambdaScopeInfo *LSI, VarDecl *Var);
+  /// Add an init-capture to a lambda scope.
+  void addInitCapture(sema::LambdaScopeInfo *LSI, VarDecl *Var);
 
   /// Note that we have finished the explicit captures for the
   /// given lambda.
@@ -5768,6 +5845,14 @@ public:
   /// diagnostic is emitted.
   bool DiagnoseUnusedLambdaCapture(SourceRange CaptureRange,
                                    const sema::Capture &From);
+
+  /// Build a FieldDecl suitable to hold the given capture.
+  FieldDecl *BuildCaptureField(RecordDecl *RD, const sema::Capture &Capture);
+
+  /// Initialize the given capture with a suitable expression.
+  ExprResult BuildCaptureInit(const sema::Capture &Capture,
+                              SourceLocation ImplicitCaptureLoc,
+                              bool IsOpenMPMapping = false);
 
   /// Complete a lambda-expression having processed and attached the
   /// lambda body.
@@ -10770,8 +10855,8 @@ public:
   void CodeCompleteInitializer(Scope *S, Decl *D);
   void CodeCompleteAfterIf(Scope *S);
 
-  void CodeCompleteQualifiedId(Scope *S, CXXScopeSpec &SS,
-                               bool EnteringContext, QualType BaseType);
+  void CodeCompleteQualifiedId(Scope *S, CXXScopeSpec &SS, bool EnteringContext,
+                               QualType BaseType, QualType PreferredType);
   void CodeCompleteUsing(Scope *S);
   void CodeCompleteUsingDirective(Scope *S);
   void CodeCompleteNamespaceDecl(Scope *S);

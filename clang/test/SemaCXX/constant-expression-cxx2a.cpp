@@ -2,6 +2,10 @@
 
 #include "Inputs/std-compare.h"
 
+namespace std {
+  struct type_info;
+};
+
 namespace ThreeWayComparison {
   struct A {
     int n;
@@ -353,4 +357,194 @@ namespace DynamicCast {
   constexpr int b_unrelated = (dynamic_cast<Unrelated&>((B&)g), 0); // expected-error {{}}
   // expected-note@+1 {{reference dynamic_cast failed: dynamic type 'DynamicCast::G' of operand does not have a base class of type 'DynamicCast::Unrelated'}}
   constexpr int e_unrelated = (dynamic_cast<Unrelated&>((E&)g), 0); // expected-error {{}}
+}
+
+namespace TypeId {
+  struct A {
+    const std::type_info &ti = typeid(*this);
+  };
+  struct A2 : A {};
+  static_assert(&A().ti == &typeid(A));
+  static_assert(&typeid((A2())) == &typeid(A2));
+  extern A2 extern_a2;
+  static_assert(&typeid(extern_a2) == &typeid(A2));
+
+  constexpr A2 a2;
+  constexpr const A &a1 = a2;
+  static_assert(&typeid(a1) == &typeid(A));
+
+  struct B {
+    virtual void f();
+    const std::type_info &ti1 = typeid(*this);
+  };
+  struct B2 : B {
+    const std::type_info &ti2 = typeid(*this);
+  };
+  static_assert(&B2().ti1 == &typeid(B));
+  static_assert(&B2().ti2 == &typeid(B2));
+  extern B2 extern_b2;
+  // expected-note@+1 {{typeid applied to object 'extern_b2' whose dynamic type is not constant}}
+  static_assert(&typeid(extern_b2) == &typeid(B2)); // expected-error {{constant expression}}
+
+  constexpr B2 b2;
+  constexpr const B &b1 = b2;
+  static_assert(&typeid(b1) == &typeid(B2));
+
+  constexpr bool side_effects() {
+    // Not polymorphic nor a glvalue.
+    bool OK = true;
+    (void)typeid(OK = false, A2()); // expected-warning {{has no effect}}
+    if (!OK) return false;
+
+    // Not polymorphic.
+    A2 a2;
+    (void)typeid(OK = false, a2); // expected-warning {{has no effect}}
+    if (!OK) return false;
+
+    // Not a glvalue.
+    (void)typeid(OK = false, B2()); // expected-warning {{has no effect}}
+    if (!OK) return false;
+
+    // Polymorphic glvalue: operand evaluated.
+    OK = false;
+    B2 b2;
+    (void)typeid(OK = true, b2); // expected-warning {{will be evaluated}}
+    return OK;
+  }
+  static_assert(side_effects());
+}
+
+namespace Union {
+  struct Base {
+    int y; // expected-note {{here}}
+  };
+  struct A : Base {
+    int x;
+    int arr[3];
+    union { int p, q; };
+  };
+  union B {
+    A a;
+    int b;
+  };
+  constexpr int read_wrong_member() { // expected-error {{never produces a constant}}
+    B b = {.b = 1};
+    return b.a.x; // expected-note {{read of member 'a' of union with active member 'b'}}
+  }
+  constexpr int change_member() {
+    B b = {.b = 1};
+    b.a.x = 1;
+    return b.a.x;
+  }
+  static_assert(change_member() == 1);
+  constexpr int change_member_then_read_wrong_member() { // expected-error {{never produces a constant}}
+    B b = {.b = 1};
+    b.a.x = 1;
+    return b.b; // expected-note {{read of member 'b' of union with active member 'a'}}
+  }
+  constexpr int read_wrong_member_indirect() { // expected-error {{never produces a constant}}
+    B b = {.b = 1};
+    int *p = &b.a.y;
+    return *p; // expected-note {{read of member 'a' of union with active member 'b'}}
+  }
+  constexpr int read_uninitialized() {
+    B b = {.b = 1};
+    int *p = &b.a.y;
+    b.a.x = 1;
+    return *p; // expected-note {{read of uninitialized object}}
+  }
+  static_assert(read_uninitialized() == 0); // expected-error {{constant}} expected-note {{in call}}
+  constexpr void write_wrong_member_indirect() { // expected-error {{never produces a constant}}
+    B b = {.b = 1};
+    int *p = &b.a.y;
+    *p = 1; // expected-note {{assignment to member 'a' of union with active member 'b'}}
+  }
+  constexpr int write_uninitialized() {
+    B b = {.b = 1};
+    int *p = &b.a.y;
+    b.a.x = 1;
+    *p = 1;
+    return *p;
+  }
+  static_assert(write_uninitialized() == 1);
+  constexpr int change_member_indirectly() {
+    B b = {.b = 1};
+    b.a.arr[1] = 1;
+    int &r = b.a.y;
+    r = 123;
+
+    b.b = 2;
+    b.a.y = 3;
+    b.a.arr[2] = 4;
+    return b.a.arr[2];
+  }
+  static_assert(change_member_indirectly() == 4);
+  constexpr B return_uninit() {
+    B b = {.b = 1};
+    b.a.x = 2;
+    return b;
+  }
+  constexpr B uninit = return_uninit(); // expected-error {{constant expression}} expected-note {{subobject of type 'int' is not initialized}}
+  static_assert(return_uninit().a.x == 2);
+  constexpr A return_uninit_struct() {
+    B b = {.b = 1};
+    b.a.x = 2;
+    return b.a;
+  }
+  // FIXME: It's unclear that this should be valid. Copying a B involves
+  // copying the object representation of the union, but copying an A invokes a
+  // copy constructor that copies the object elementwise, and reading from
+  // b.a.y is undefined.
+  static_assert(return_uninit_struct().x == 2);
+  constexpr B return_init_all() {
+    B b = {.b = 1};
+    b.a.x = 2;
+    b.a.y = 3;
+    b.a.arr[0] = 4;
+    b.a.arr[1] = 5;
+    b.a.arr[2] = 6;
+    return b;
+  }
+  static_assert(return_init_all().a.x == 2);
+  static_assert(return_init_all().a.y == 3);
+  static_assert(return_init_all().a.arr[0] == 4);
+  static_assert(return_init_all().a.arr[1] == 5);
+  static_assert(return_init_all().a.arr[2] == 6);
+  static_assert(return_init_all().a.p == 7); // expected-error {{}} expected-note {{read of member 'p' of union with no active member}}
+  static_assert(return_init_all().a.q == 8); // expected-error {{}} expected-note {{read of member 'q' of union with no active member}}
+  constexpr B init_all = return_init_all();
+
+  constexpr bool test_no_member_change =  []{
+    union U { char dummy = {}; };
+    U u1;
+    U u2;
+    u1 = u2;
+    return true;
+  }();
+
+  struct S1 {
+    int n;
+  };
+  struct S2 : S1 {};
+  struct S3 : S2 {};
+  void f() {
+    S3 s;
+    s.n = 0;
+  }
+}
+
+namespace TwosComplementShifts {
+  using uint32 = __UINT32_TYPE__;
+  using int32 = __INT32_TYPE__;
+  static_assert(uint32(int32(0x1234) << 16) == 0x12340000);
+  static_assert(uint32(int32(0x1234) << 19) == 0x91a00000);
+  static_assert(uint32(int32(0x1234) << 20) == 0x23400000); // expected-warning {{requires 34 bits}}
+  static_assert(uint32(int32(0x1234) << 24) == 0x34000000); // expected-warning {{requires 38 bits}}
+  static_assert(uint32(int32(-1) << 31) == 0x80000000);
+
+  static_assert(-1 >> 1 == -1);
+  static_assert(-1 >> 31 == -1);
+  static_assert(-2 >> 1 == -1);
+  static_assert(-3 >> 1 == -2);
+  static_assert(-4 >> 1 == -2);
 }

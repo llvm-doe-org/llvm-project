@@ -61,9 +61,9 @@
 // Check execution with normal compilation.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                        )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=x86_64 )
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=nvptx64)
+// RUN:   (run-if=                tgt-cflags=                                    )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc %s -o %t %[tgt-cflags]

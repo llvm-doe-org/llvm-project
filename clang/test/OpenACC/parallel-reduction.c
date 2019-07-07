@@ -91,9 +91,9 @@
 // Check execution with normal compilation.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt=HOST    tgt-cflags=                        )
-// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=x86_64 )
-// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=nvptx64)
+// RUN:   (run-if=                tgt=HOST    tgt-cflags=                                    )
+// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
+// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
 // RUN: }
 // RUN: %for directives {
 // RUN:   %for tgts {

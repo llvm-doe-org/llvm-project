@@ -75,8 +75,8 @@ available on your system so that it tests offloading to them as well,
 specify one or more of the following when running `cmake`:
 
 ```
--DCLANG_ACC_TEST_EXE_X86_64=True
--DCLANG_ACC_TEST_EXE_NVPTX64=True
+-DCLANG_ACC_TEST_EXE_X86_64=True   # x86_64-unknown-linux-gnu
+-DCLANG_ACC_TEST_EXE_NVPTX64=True  # nvptx64-nvidia-cuda
 ```
 
 The Clang OpenACC test suite can be run by itself or as part of larger

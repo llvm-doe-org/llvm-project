@@ -75,7 +75,7 @@ TEST_F(GISelMITest, DstOpSrcOp) {
   if (!TM)
     return;
 
-  SmallVector<unsigned, 4> Copies;
+  SmallVector<Register, 4> Copies;
   collectCopies(Copies, MF);
 
   LLT s64 = LLT::scalar(64);
@@ -100,7 +100,7 @@ TEST_F(GISelMITest, BuildUnmerge) {
   if (!TM)
     return;
 
-  SmallVector<unsigned, 4> Copies;
+  SmallVector<Register, 4> Copies;
   collectCopies(Copies, MF);
   B.buildUnmerge(LLT::scalar(32), Copies[0]);
   B.buildUnmerge(LLT::scalar(16), Copies[1]);
@@ -120,7 +120,7 @@ TEST_F(GISelMITest, TestBuildFPInsts) {
   if (!TM)
     return;
 
-  SmallVector<unsigned, 4> Copies;
+  SmallVector<Register, 4> Copies;
   collectCopies(Copies, MF);
 
   LLT S64 = LLT::scalar(64);
@@ -152,7 +152,7 @@ TEST_F(GISelMITest, BuildIntrinsic) {
     return;
 
   LLT S64 = LLT::scalar(64);
-  SmallVector<unsigned, 4> Copies;
+  SmallVector<Register, 4> Copies;
   collectCopies(Copies, MF);
 
   // Make sure DstOp version works. sqrt is just a placeholder intrinsic.
@@ -160,7 +160,7 @@ TEST_F(GISelMITest, BuildIntrinsic) {
     .addUse(Copies[0]);
 
   // Make sure register version works
-  SmallVector<unsigned, 1> Results;
+  SmallVector<Register, 1> Results;
   Results.push_back(MRI->createGenericVirtualRegister(S64));
   B.buildIntrinsic(Intrinsic::sqrt, Results, false)
     .addUse(Copies[1]);
@@ -181,7 +181,7 @@ TEST_F(GISelMITest, BuildXor) {
 
   LLT S64 = LLT::scalar(64);
   LLT S128 = LLT::scalar(128);
-  SmallVector<unsigned, 4> Copies;
+  SmallVector<Register, 4> Copies;
   collectCopies(Copies, MF);
   B.buildXor(S64, Copies[0], Copies[1]);
   B.buildNot(S64, Copies[0]);
@@ -198,6 +198,82 @@ TEST_F(GISelMITest, BuildXor) {
   ; CHECK: [[MERGE:%[0-9]+]]:_(s128) = G_MERGE_VALUES [[COPY0]]:_(s64), [[COPY1]]:_(s64)
   ; CHECK: [[NEGONE128:%[0-9]+]]:_(s128) = G_CONSTANT i128 -1
   ; CHECK: [[XOR2:%[0-9]+]]:_(s128) = G_XOR [[MERGE]]:_, [[NEGONE128]]:_
+  )";
+
+  EXPECT_TRUE(CheckMachineFunction(*MF, CheckStr)) << *MF;
+}
+
+TEST_F(GISelMITest, BuildBitCounts) {
+  if (!TM)
+    return;
+
+  LLT S32 = LLT::scalar(32);
+  SmallVector<Register, 4> Copies;
+  collectCopies(Copies, MF);
+
+  B.buildCTPOP(S32, Copies[0]);
+  B.buildCTLZ(S32, Copies[0]);
+  B.buildCTLZ_ZERO_UNDEF(S32, Copies[1]);
+  B.buildCTTZ(S32, Copies[0]);
+  B.buildCTTZ_ZERO_UNDEF(S32, Copies[1]);
+
+  auto CheckStr = R"(
+  ; CHECK: [[COPY0:%[0-9]+]]:_(s64) = COPY $x0
+  ; CHECK: [[COPY1:%[0-9]+]]:_(s64) = COPY $x1
+  ; CHECK: [[CTPOP:%[0-9]+]]:_(s32) = G_CTPOP [[COPY0]]:_
+  ; CHECK: [[CTLZ0:%[0-9]+]]:_(s32) = G_CTLZ [[COPY0]]:_
+  ; CHECK: [[CTLZ_UNDEF0:%[0-9]+]]:_(s32) = G_CTLZ_ZERO_UNDEF [[COPY1]]:_
+  ; CHECK: [[CTTZ:%[0-9]+]]:_(s32) = G_CTTZ [[COPY0]]:_
+  ; CHECK: [[CTTZ_UNDEF0:%[0-9]+]]:_(s32) = G_CTTZ_ZERO_UNDEF [[COPY1]]:_
+  )";
+
+  EXPECT_TRUE(CheckMachineFunction(*MF, CheckStr)) << *MF;
+}
+
+TEST_F(GISelMITest, BuildCasts) {
+  if (!TM)
+    return;
+
+  LLT S32 = LLT::scalar(32);
+  SmallVector<Register, 4> Copies;
+  collectCopies(Copies, MF);
+
+  B.buildUITOFP(S32, Copies[0]);
+  B.buildSITOFP(S32, Copies[0]);
+  B.buildFPTOUI(S32, Copies[0]);
+  B.buildFPTOSI(S32, Copies[0]);
+
+  auto CheckStr = R"(
+  ; CHECK: [[COPY0:%[0-9]+]]:_(s64) = COPY $x0
+  ; CHECK: [[UITOFP:%[0-9]+]]:_(s32) = G_UITOFP [[COPY0]]:_
+  ; CHECK: [[SITOFP:%[0-9]+]]:_(s32) = G_SITOFP [[COPY0]]:_
+  ; CHECK: [[FPTOUI:%[0-9]+]]:_(s32) = G_FPTOUI [[COPY0]]:_
+  ; CHECK: [[FPTOSI:%[0-9]+]]:_(s32) = G_FPTOSI [[COPY0]]:_
+  )";
+
+  EXPECT_TRUE(CheckMachineFunction(*MF, CheckStr)) << *MF;
+}
+
+TEST_F(GISelMITest, BuildMinMax) {
+  if (!TM)
+    return;
+
+  LLT S64 = LLT::scalar(64);
+  SmallVector<Register, 4> Copies;
+  collectCopies(Copies, MF);
+
+  B.buildSMin(S64, Copies[0], Copies[1]);
+  B.buildSMax(S64, Copies[0], Copies[1]);
+  B.buildUMin(S64, Copies[0], Copies[1]);
+  B.buildUMax(S64, Copies[0], Copies[1]);
+
+  auto CheckStr = R"(
+  ; CHECK: [[COPY0:%[0-9]+]]:_(s64) = COPY $x0
+  ; CHECK: [[COPY1:%[0-9]+]]:_(s64) = COPY $x1
+  ; CHECK: [[SMIN0:%[0-9]+]]:_(s64) = G_SMIN [[COPY0]]:_, [[COPY1]]:_
+  ; CHECK: [[SMAX0:%[0-9]+]]:_(s64) = G_SMAX [[COPY0]]:_, [[COPY1]]:_
+  ; CHECK: [[UMIN0:%[0-9]+]]:_(s64) = G_UMIN [[COPY0]]:_, [[COPY1]]:_
+  ; CHECK: [[UMAX0:%[0-9]+]]:_(s64) = G_UMAX [[COPY0]]:_, [[COPY1]]:_
   )";
 
   EXPECT_TRUE(CheckMachineFunction(*MF, CheckStr)) << *MF;

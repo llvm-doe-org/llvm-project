@@ -64,9 +64,9 @@
 // Check execution with normal compilation.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt=HOST    tgt-cflags=                        )
-// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=x86_64 )
-// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=nvptx64)
+// RUN:   (run-if=                tgt=HOST    tgt-cflags=                                    )
+// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
+// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc %s -o %t %libatomic \
@@ -626,6 +626,10 @@ int main() {
   // Vector partitioned.
   //--------------------------------------------------
 
+  // OpenMP offloading from x86_64 to nvptx64 isn't supported for long double.
+
+// PRT-SRC-NEXT: #if !TGT_NVPTX64_EXE
+#if !TGT_NVPTX64_EXE
   // PRT-NEXT: {
   {
     // PRT-NEXT: long out = 5;
@@ -682,15 +686,20 @@ int main() {
       } // PRT-NEXT: }
       // DMP: CallExpr
       // PRT-NEXT: printf
-      // EXE-NEXT: in: -9.0
-      // EXE-NEXT: in: -9.0
+      // EXE-TGT-HOST-NEXT:   in: -9.0
+      // EXE-TGT-HOST-NEXT:   in: -9.0
+      // EXE-TGT-X86_64-NEXT: in: -9.0
+      // EXE-TGT-X86_64-NEXT: in: -9.0
       printf("in: %.1f\n", (double)in);
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-NEXT: out = 45
+    // EXE-TGT-HOST-NEXT:   out = 45
+    // EXE-TGT-X86_64-NEXT: out = 45
     printf("out = %ld\n", out);
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   // PRT-NEXT: {
   {

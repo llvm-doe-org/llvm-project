@@ -12,7 +12,8 @@ let Component = "AST" in {
 def note_expr_divide_by_zero : Note<"division by zero">;
 def note_constexpr_invalid_cast : Note<
   "%select{reinterpret_cast|dynamic_cast|cast that performs the conversions of"
-  " a reinterpret_cast|cast from %1}0 is not allowed in a constant expression">;
+  " a reinterpret_cast|cast from %1}0 is not allowed in a constant expression"
+  "%select{| in C++ standards before C++2a||}0">;
 def note_constexpr_invalid_downcast : Note<
   "cannot cast object of dynamic type %0 to type %1">;
 def note_constexpr_overflow : Note<
@@ -31,12 +32,13 @@ def note_constexpr_invalid_inhctor : Note<
 def note_constexpr_no_return : Note<
   "control reached end of constexpr function">;
 def note_constexpr_virtual_call : Note<
-  "cannot evaluate call to virtual function in a constant expression">;
+  "cannot evaluate call to virtual function in a constant expression "
+  "in C++ standards before C++2a">;
 def note_constexpr_pure_virtual_call : Note<
   "pure virtual function %q0 called">;
 def note_constexpr_polymorphic_unknown_dynamic_type : Note<
-  "%select{||||virtual function called on|dynamic_cast applied to}0 "
-  "object '%1' whose dynamic type is not constant">;
+  "%select{||||virtual function called on|dynamic_cast applied to|"
+  "typeid applied to}0 object '%1' whose dynamic type is not constant">;
 def note_constexpr_dynamic_cast_to_reference_failed : Note<
   "reference dynamic_cast failed: %select{"
   "static type %1 of operand is a non-public base class of dynamic type %2|"
@@ -53,6 +55,8 @@ def note_constexpr_non_global : Note<
   "%select{temporary|%3}2 is not a constant expression">;
 def note_constexpr_uninitialized : Note<
   "%select{|sub}0object of type %1 is not initialized">;
+def note_constexpr_subobject_declared_here : Note<
+  "subobject declared here">;
 def note_constexpr_array_index : Note<"cannot refer to element %0 of "
   "%select{array of %2 element%plural{1:|:s}2|non-array object}1 "
   "in a constant expression">;
@@ -81,6 +85,8 @@ def note_constexpr_past_end_subobject : Note<
   "access array element of|ERROR|"
   "access real component of|access imaginary component of}0 "
   "pointer past the end of object">;
+def note_non_null_attribute_failed : Note<
+  "null passed to a callee that requires a non-null argument">;
 def note_constexpr_null_subobject : Note<
   "cannot %select{access base class of|access derived class of|access field of|"
   "access array element of|perform pointer arithmetic on|"
@@ -90,7 +96,7 @@ def note_constexpr_var_init_non_constant : Note<
   "initializer of %0 is not a constant expression">;
 def note_constexpr_typeid_polymorphic : Note<
   "typeid applied to expression of polymorphic type %0 is "
-  "not allowed in a constant expression">;
+  "not allowed in a constant expression in C++ standards before C++2a">;
 def note_constexpr_void_comparison : Note<
   "comparison between unequal pointers to void has unspecified result">;
 def note_constexpr_temporary_here : Note<"temporary created here">;
@@ -108,12 +114,13 @@ def note_constexpr_this : Note<
   "evaluation of a call to a 'constexpr' member function">;
 def note_constexpr_lifetime_ended : Note<
   "%select{read of|assignment to|increment of|decrement of|member call on|"
-  "dynamic_cast of}0 "
+  "dynamic_cast of|typeid applied to}0 "
   "%select{temporary|variable}1 whose lifetime has ended">;
 def note_constexpr_access_uninit : Note<
   "%select{read of|assignment to|increment of|decrement of|member call on|"
-  "dynamic_cast of}0 "
-  "object outside its lifetime is not allowed in a constant expression">;
+  "dynamic_cast of|typeid applied to}0 "
+  "%select{object outside its lifetime|uninitialized object}1 "
+  "is not allowed in a constant expression">;
 def note_constexpr_use_uninit_reference : Note<
   "use of reference outside its lifetime "
   "is not allowed in a constant expression">;
@@ -139,27 +146,30 @@ def note_constexpr_ltor_incomplete_type : Note<
   "read of incomplete type %0 is not allowed in a constant expression">;
 def note_constexpr_access_null : Note<
   "%select{read of|assignment to|increment of|decrement of|member call on|"
-  "dynamic_cast of}0 "
+  "dynamic_cast of|typeid applied to}0 "
   "dereferenced null pointer is not allowed in a constant expression">;
 def note_constexpr_access_past_end : Note<
   "%select{read of|assignment to|increment of|decrement of|member call on|"
-  "dynamic_cast of}0 "
+  "dynamic_cast of|typeid applied to}0 "
   "dereferenced one-past-the-end pointer is not allowed in a constant expression">;
 def note_constexpr_access_unsized_array : Note<
   "%select{read of|assignment to|increment of|decrement of|member call on|"
-  "dynamic_cast of}0 "
+  "dynamic_cast of|typeid applied to}0 "
   "element of array without known bound "
   "is not allowed in a constant expression">;
 def note_constexpr_access_inactive_union_member : Note<
   "%select{read of|assignment to|increment of|decrement of|member call on|"
-  "dynamic_cast of}0 "
+  "dynamic_cast of|typeid applied to}0 "
   "member %1 of union with %select{active member %3|no active member}2 "
   "is not allowed in a constant expression">;
 def note_constexpr_access_static_temporary : Note<
   "%select{read of|assignment to|increment of|decrement of|member call on|"
-  "dynamic_cast of}0 temporary "
+  "dynamic_cast of|typeid applied to}0 temporary "
   "is not allowed in a constant expression outside the expression that "
   "created the temporary">;
+def note_constexpr_access_unreadable_object : Note<
+  "%select{read of|assignment to|increment of|decrement of|member call on|"
+  "dynamic_cast of|typeid applied to}0 object '%1' whose value is not known">;
 def note_constexpr_modify_global : Note<
   "a constant expression cannot modify an object that is visible outside "
   "that expression">;

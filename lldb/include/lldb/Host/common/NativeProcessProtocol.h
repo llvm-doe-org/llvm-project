@@ -32,6 +32,14 @@ namespace lldb_private {
 class MemoryRegionInfo;
 class ResumeActionList;
 
+struct SVR4LibraryInfo {
+  std::string name;
+  lldb::addr_t link_map;
+  lldb::addr_t base_addr;
+  lldb::addr_t ld_addr;
+  lldb::addr_t next;
+};
+
 // NativeProcessProtocol
 class NativeProcessProtocol {
 public:
@@ -86,6 +94,12 @@ public:
 
   virtual lldb::addr_t GetSharedLibraryInfoAddress() = 0;
 
+  virtual llvm::Expected<std::vector<SVR4LibraryInfo>>
+  GetLoadedSVR4Libraries() {
+    return llvm::createStringError(llvm::inconvertibleErrorCode(),
+                                   "Not implemented");
+  }
+
   virtual bool IsAlive() const;
 
   virtual size_t UpdateThreads() = 0;
@@ -131,6 +145,10 @@ public:
 
   lldb::ByteOrder GetByteOrder() const {
     return GetArchitecture().GetByteOrder();
+  }
+
+  uint32_t GetAddressByteSize() const {
+    return GetArchitecture().GetAddressByteSize();
   }
 
   virtual llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>>

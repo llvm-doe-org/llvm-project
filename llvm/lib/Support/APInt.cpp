@@ -482,10 +482,13 @@ unsigned APInt::getBitsNeeded(StringRef str, uint8_t radix) {
   APInt tmp(sufficient, StringRef(p, slen), radix);
 
   // Compute how many bits are required. If the log is infinite, assume we need
-  // just bit.
+  // just bit. If the log is exact and value is negative, then the value is
+  // MinSignedValue with (log + 1) bits.
   unsigned log = tmp.logBase2();
   if (log == (unsigned)-1) {
     return isNegative + 1;
+  } else if (isNegative && tmp.isPowerOf2()) {
+    return isNegative + log;
   } else {
     return isNegative + log + 1;
   }
@@ -1095,6 +1098,8 @@ APInt APInt::sqrt() const {
 /// however we simplify it to speed up calculating only the inverse, and take
 /// advantage of div+rem calculations. We also use some tricks to avoid copying
 /// (potentially large) APInts around.
+/// WARNING: a value of '0' may be returned,
+///          signifying that no multiplicative inverse exists!
 APInt APInt::multiplicativeInverse(const APInt& modulo) const {
   assert(ult(modulo) && "This APInt must be smaller than the modulo");
 

@@ -43,6 +43,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <cassert>
@@ -363,6 +364,7 @@ void Preprocessor::RegisterBuiltinMacros() {
   }
 
   // Clang Extensions.
+  Ident__FILE_NAME__      = RegisterBuiltinMacro(*this, "__FILE_NAME__");
   Ident__has_feature      = RegisterBuiltinMacro(*this, "__has_feature");
   Ident__has_extension    = RegisterBuiltinMacro(*this, "__has_extension");
   Ident__has_builtin      = RegisterBuiltinMacro(*this, "__has_builtin");
@@ -804,7 +806,7 @@ MacroArgs *Preprocessor::ReadMacroCallArgumentList(Token &MacroName,
         // Do not lose the EOF/EOD.
         auto Toks = llvm::make_unique<Token[]>(1);
         Toks[0] = Tok;
-        EnterTokenStream(std::move(Toks), 1, true);
+        EnterTokenStream(std::move(Toks), 1, true, /*IsReinject*/ false);
         break;
       } else if (Tok.is(tok::r_paren)) {
         // If we found the ) token, the macro arg list is done.
@@ -1328,9 +1330,13 @@ already_lexed:
 
         // The last ')' has been reached; return the value if one found or
         // a diagnostic and a dummy value.
-        if (Result.hasValue())
+        if (Result.hasValue()) {
           OS << Result.getValue();
-        else {
+          // For strict conformance to __has_cpp_attribute rules, use 'L'
+          // suffix for dated literals.
+          if (Result.getValue() > 1)
+            OS << 'L';
+        } else {
           OS << 0;
           if (!SuppressDiagnostic)
             PP.Diag(Tok.getLocation(), diag::err_too_few_args_in_macro_invoc);
@@ -1452,6 +1458,8 @@ void Preprocessor::ExpandBuiltinMacro(Token &Tok) {
   // Set up the return result.
   Tok.setIdentifierInfo(nullptr);
   Tok.clearFlag(Token::NeedsCleaning);
+  bool IsAtStartOfLine = Tok.isAtStartOfLine();
+  bool HasLeadingSpace = Tok.hasLeadingSpace();
 
   if (II == Ident__LINE__) {
     // C99 6.10.8: "__LINE__: The presumed line number (within the current
@@ -1474,7 +1482,8 @@ void Preprocessor::ExpandBuiltinMacro(Token &Tok) {
     // __LINE__ expands to a simple numeric value.
     OS << (PLoc.isValid()? PLoc.getLine() : 1);
     Tok.setKind(tok::numeric_constant);
-  } else if (II == Ident__FILE__ || II == Ident__BASE_FILE__) {
+  } else if (II == Ident__FILE__ || II == Ident__BASE_FILE__ ||
+             II == Ident__FILE_NAME__) {
     // C99 6.10.8: "__FILE__: The presumed name of the current source file (a
     // character string literal)". This can be affected by #line.
     PresumedLoc PLoc = SourceMgr.getPresumedLoc(Tok.getLocation());
@@ -1495,7 +1504,19 @@ void Preprocessor::ExpandBuiltinMacro(Token &Tok) {
     // Escape this filename.  Turn '\' -> '\\' '"' -> '\"'
     SmallString<128> FN;
     if (PLoc.isValid()) {
-      FN += PLoc.getFilename();
+      // __FILE_NAME__ is a Clang-specific extension that expands to the
+      // the last part of __FILE__.
+      if (II == Ident__FILE_NAME__) {
+        // Try to get the last path component, failing that return the original
+        // presumed location.
+        StringRef PLFileName = llvm::sys::path::filename(PLoc.getFilename());
+        if (PLFileName != "")
+          FN += PLFileName;
+        else
+          FN += PLoc.getFilename();
+      } else {
+        FN += PLoc.getFilename();
+      }
       Lexer::Stringify(FN);
       OS << '"' << FN << '"';
     }
@@ -1605,6 +1626,10 @@ void Preprocessor::ExpandBuiltinMacro(Token &Tok) {
                       .Case("__is_target_vendor", true)
                       .Case("__is_target_os", true)
                       .Case("__is_target_environment", true)
+                      .Case("__builtin_LINE", true)
+                      .Case("__builtin_FILE", true)
+                      .Case("__builtin_FUNCTION", true)
+                      .Case("__builtin_COLUMN", true)
                       .Default(false);
         }
       });
@@ -1788,6 +1813,8 @@ void Preprocessor::ExpandBuiltinMacro(Token &Tok) {
     llvm_unreachable("Unknown identifier!");
   }
   CreateString(OS.str(), Tok, Tok.getLocation(), Tok.getLocation());
+  Tok.setFlagValue(Token::StartOfLine, IsAtStartOfLine);
+  Tok.setFlagValue(Token::LeadingSpace, HasLeadingSpace);
 }
 
 void Preprocessor::markMacroAsUsed(MacroInfo *MI) {

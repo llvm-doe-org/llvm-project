@@ -31,6 +31,7 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineOperand.h"
@@ -541,9 +542,16 @@ static void insertCSRSaves(MachineBasicBlock &SaveBlock,
     for (const CalleeSavedInfo &CS : CSI) {
       // Insert the spill to the stack frame.
       unsigned Reg = CS.getReg();
-      const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
-      TII.storeRegToStackSlot(SaveBlock, I, Reg, true, CS.getFrameIdx(), RC,
-                              TRI);
+
+      if (CS.isSpilledToReg()) {
+        BuildMI(SaveBlock, I, DebugLoc(),
+                TII.get(TargetOpcode::COPY), CS.getDstReg())
+          .addReg(Reg, getKillRegState(true));
+      } else {
+        const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
+        TII.storeRegToStackSlot(SaveBlock, I, Reg, true, CS.getFrameIdx(), RC,
+                                TRI);
+      }
     }
   }
 }
@@ -563,12 +571,17 @@ static void insertCSRRestores(MachineBasicBlock &RestoreBlock,
   if (!TFI->restoreCalleeSavedRegisters(RestoreBlock, I, CSI, TRI)) {
     for (const CalleeSavedInfo &CI : reverse(CSI)) {
       unsigned Reg = CI.getReg();
-      const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
-      TII.loadRegFromStackSlot(RestoreBlock, I, Reg, CI.getFrameIdx(), RC, TRI);
-      assert(I != RestoreBlock.begin() &&
-             "loadRegFromStackSlot didn't insert any code!");
-      // Insert in reverse order.  loadRegFromStackSlot can insert
-      // multiple instructions.
+      if (CI.isSpilledToReg()) {
+        BuildMI(RestoreBlock, I, DebugLoc(), TII.get(TargetOpcode::COPY), Reg)
+          .addReg(CI.getDstReg(), getKillRegState(true));
+      } else {
+        const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
+        TII.loadRegFromStackSlot(RestoreBlock, I, Reg, CI.getFrameIdx(), RC, TRI);
+        assert(I != RestoreBlock.begin() &&
+               "loadRegFromStackSlot didn't insert any code!");
+        // Insert in reverse order.  loadRegFromStackSlot can insert
+        // multiple instructions.
+      }
     }
   }
 }
@@ -662,11 +675,11 @@ computeFreeStackSlots(MachineFrameInfo &MFI, bool StackGrowsDown,
   // Add fixed objects.
   for (int i = MFI.getObjectIndexBegin(); i != 0; ++i)
     // StackSlot scavenging is only implemented for the default stack.
-    if (MFI.getStackID(i) == 0)
+    if (MFI.getStackID(i) == TargetStackID::Default)
       AllocatedFrameSlots.push_back(i);
   // Add callee-save objects.
   for (int i = MinCSFrameIndex; i <= (int)MaxCSFrameIndex; ++i)
-    if (MFI.getStackID(i) == 0)
+    if (MFI.getStackID(i) == TargetStackID::Default)
       AllocatedFrameSlots.push_back(i);
 
   for (int i : AllocatedFrameSlots) {
@@ -791,7 +804,8 @@ void PEI::calculateFrameObjectOffsets(MachineFunction &MF) {
 
 #ifdef EXPENSIVE_CHECKS
   for (unsigned i = 0, e = MFI.getObjectIndexEnd(); i != e; ++i)
-    if (!MFI.isDeadObjectIndex(i) && MFI.getStackID(i) == 0)
+    if (!MFI.isDeadObjectIndex(i) &&
+        MFI.getStackID(i) == TargetStackID::Default)
       assert(MFI.getObjectAlignment(i) <= MFI.getMaxAlignment() &&
              "MaxAlignment is invalid");
 #endif
@@ -801,7 +815,8 @@ void PEI::calculateFrameObjectOffsets(MachineFunction &MF) {
   // Adjust 'Offset' to point to the end of last fixed sized preallocated
   // object.
   for (int i = MFI.getObjectIndexBegin(); i != 0; ++i) {
-    if (MFI.getStackID(i)) // Only allocate objects on the default stack.
+    if (MFI.getStackID(i) !=
+        TargetStackID::Default) // Only allocate objects on the default stack.
       continue;
 
     int64_t FixedOff;
@@ -822,7 +837,8 @@ void PEI::calculateFrameObjectOffsets(MachineFunction &MF) {
   // callee saved registers.
   if (StackGrowsDown) {
     for (unsigned i = MinCSFrameIndex; i <= MaxCSFrameIndex; ++i) {
-      if (MFI.getStackID(i)) // Only allocate objects on the default stack.
+      if (MFI.getStackID(i) !=
+          TargetStackID::Default) // Only allocate objects on the default stack.
         continue;
 
       // If the stack grows down, we need to add the size to find the lowest
@@ -839,7 +855,8 @@ void PEI::calculateFrameObjectOffsets(MachineFunction &MF) {
   } else if (MaxCSFrameIndex >= MinCSFrameIndex) {
     // Be careful about underflow in comparisons agains MinCSFrameIndex.
     for (unsigned i = MaxCSFrameIndex; i != MinCSFrameIndex - 1; --i) {
-      if (MFI.getStackID(i)) // Only allocate objects on the default stack.
+      if (MFI.getStackID(i) !=
+          TargetStackID::Default) // Only allocate objects on the default stack.
         continue;
 
       if (MFI.isDeadObjectIndex(i))
@@ -932,7 +949,8 @@ void PEI::calculateFrameObjectOffsets(MachineFunction &MF) {
       if (MFI.getStackProtectorIndex() == (int)i ||
           EHRegNodeFrameIndex == (int)i)
         continue;
-      if (MFI.getStackID(i)) // Only allocate objects on the default stack.
+      if (MFI.getStackID(i) !=
+          TargetStackID::Default) // Only allocate objects on the default stack.
         continue;
 
       switch (MFI.getObjectSSPLayout(i)) {
@@ -977,7 +995,8 @@ void PEI::calculateFrameObjectOffsets(MachineFunction &MF) {
       continue;
     if (ProtectedObjs.count(i))
       continue;
-    if (MFI.getStackID(i)) // Only allocate objects on the default stack.
+    if (MFI.getStackID(i) !=
+        TargetStackID::Default) // Only allocate objects on the default stack.
       continue;
 
     // Add the objects that we need to allocate to our working set.
@@ -1187,11 +1206,13 @@ void PEI::replaceFrameIndices(MachineBasicBlock *BB, MachineFunction &MF,
         // to be direct.
         if (MI.isIndirectDebugValue() && DIExpr->isImplicit()) {
           SmallVector<uint64_t, 2> Ops = {dwarf::DW_OP_deref_size, Size};
-          DIExpr = DIExpression::prependOpcodes(DIExpr, Ops, DIExpression::WithStackValue);
+          bool WithStackValue = true;
+          DIExpr = DIExpression::prependOpcodes(DIExpr, Ops, WithStackValue);
           // Make the DBG_VALUE direct.
           MI.getOperand(1).ChangeToRegister(0, false);
         }
-        DIExpr = DIExpression::prepend(DIExpr, DIExpression::NoDeref, Offset);
+        DIExpr =
+            DIExpression::prepend(DIExpr, DIExpression::ApplyOffset, Offset);
         MI.getOperand(3).setMetadata(DIExpr);
         continue;
       }
