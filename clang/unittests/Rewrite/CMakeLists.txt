@@ -6,8 +6,10 @@ add_clang_unittest(RewriteTests
   RewriteBufferTest.cpp
   RewriterTest.cpp
   )
-target_link_libraries(RewriteTests
+clang_target_link_libraries(RewriteTests
   PRIVATE
+  clangFrontend
   clangRewrite
+  clangSerialization
   clangTooling
   )

@@ -58,8 +58,6 @@ public:
         process.GetLanguageRuntime(lldb::eLanguageTypeC_plus_plus));
   }
 
-  virtual bool IsVTableName(const char *name) = 0;
-
   bool GetObjectDescription(Stream &str, ValueObject &object) override;
 
   bool GetObjectDescription(Stream &str, Value &value,
@@ -78,7 +76,7 @@ public:
   lldb::ThreadPlanSP GetStepThroughTrampolinePlan(Thread &thread,
                                                   bool stop_others) override;
 
-  bool IsRuntimeSupportValue(ValueObject &valobj) override;
+  bool IsWhitelistedRuntimeValue(ConstString name) override;
 protected:
   // Classes that inherit from CPPLanguageRuntime can see and modify these
   CPPLanguageRuntime(Process *process);

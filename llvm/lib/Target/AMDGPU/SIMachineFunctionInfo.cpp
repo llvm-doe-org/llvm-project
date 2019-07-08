@@ -46,7 +46,8 @@ SIMachineFunctionInfo::SIMachineFunctionInfo(const MachineFunction &MF)
     ImplicitBufferPtr(false),
     ImplicitArgPtr(false),
     GITPtrHigh(0xffffffff),
-    HighBitsOf32BitAddress(0) {
+    HighBitsOf32BitAddress(0),
+    GDSSize(0) {
   const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
   const Function &F = MF.getFunction();
   FlatWorkGroupSizes = ST.getFlatWorkGroupSizes(F);
@@ -144,9 +145,20 @@ SIMachineFunctionInfo::SIMachineFunctionInfo(const MachineFunction &MF)
     KernargSegmentPtr = true;
 
   if (ST.hasFlatAddressSpace() && isEntryFunction() && isAmdHsaOrMesa) {
+    auto hasNonSpillStackObjects = [&]() {
+      // Avoid expensive checking if there's no stack objects.
+      if (!HasStackObjects)
+        return false;
+      for (auto OI = FrameInfo.getObjectIndexBegin(),
+                OE = FrameInfo.getObjectIndexEnd(); OI != OE; ++OI)
+        if (!FrameInfo.isSpillSlotObjectIndex(OI))
+          return true;
+      // All stack objects are spill slots.
+      return false;
+    };
     // TODO: This could be refined a lot. The attribute is a poor way of
     // detecting calls that may require it before argument lowering.
-    if (HasStackObjects || F.hasFnAttribute("amdgpu-flat-scratch"))
+    if (hasNonSpillStackObjects() || F.hasFnAttribute("amdgpu-flat-scratch"))
       FlatScratchInit = true;
   }
 
@@ -159,6 +171,10 @@ SIMachineFunctionInfo::SIMachineFunctionInfo(const MachineFunction &MF)
   S = A.getValueAsString();
   if (!S.empty())
     S.consumeInteger(0, HighBitsOf32BitAddress);
+
+  S = F.getFnAttribute("amdgpu-gds-size").getValueAsString();
+  if (!S.empty())
+    S.consumeInteger(0, GDSSize);
 }
 
 void SIMachineFunctionInfo::limitOccupancy(const MachineFunction &MF) {
@@ -319,6 +335,57 @@ static yaml::StringValue regToString(unsigned Reg,
   return Dest;
 }
 
+static Optional<yaml::SIArgumentInfo>
+convertArgumentInfo(const AMDGPUFunctionArgInfo &ArgInfo,
+                    const TargetRegisterInfo &TRI) {
+  yaml::SIArgumentInfo AI;
+
+  auto convertArg = [&](Optional<yaml::SIArgument> &A,
+                        const ArgDescriptor &Arg) {
+    if (!Arg)
+      return false;
+
+    // Create a register or stack argument.
+    yaml::SIArgument SA = yaml::SIArgument::createArgument(Arg.isRegister());
+    if (Arg.isRegister()) {
+      raw_string_ostream OS(SA.RegisterName.Value);
+      OS << printReg(Arg.getRegister(), &TRI);
+    } else
+      SA.StackOffset = Arg.getStackOffset();
+    // Check and update the optional mask.
+    if (Arg.isMasked())
+      SA.Mask = Arg.getMask();
+
+    A = SA;
+    return true;
+  };
+
+  bool Any = false;
+  Any |= convertArg(AI.PrivateSegmentBuffer, ArgInfo.PrivateSegmentBuffer);
+  Any |= convertArg(AI.DispatchPtr, ArgInfo.DispatchPtr);
+  Any |= convertArg(AI.QueuePtr, ArgInfo.QueuePtr);
+  Any |= convertArg(AI.KernargSegmentPtr, ArgInfo.KernargSegmentPtr);
+  Any |= convertArg(AI.DispatchID, ArgInfo.DispatchID);
+  Any |= convertArg(AI.FlatScratchInit, ArgInfo.FlatScratchInit);
+  Any |= convertArg(AI.PrivateSegmentSize, ArgInfo.PrivateSegmentSize);
+  Any |= convertArg(AI.WorkGroupIDX, ArgInfo.WorkGroupIDX);
+  Any |= convertArg(AI.WorkGroupIDY, ArgInfo.WorkGroupIDY);
+  Any |= convertArg(AI.WorkGroupIDZ, ArgInfo.WorkGroupIDZ);
+  Any |= convertArg(AI.WorkGroupInfo, ArgInfo.WorkGroupInfo);
+  Any |= convertArg(AI.PrivateSegmentWaveByteOffset,
+                    ArgInfo.PrivateSegmentWaveByteOffset);
+  Any |= convertArg(AI.ImplicitArgPtr, ArgInfo.ImplicitArgPtr);
+  Any |= convertArg(AI.ImplicitBufferPtr, ArgInfo.ImplicitBufferPtr);
+  Any |= convertArg(AI.WorkItemIDX, ArgInfo.WorkItemIDX);
+  Any |= convertArg(AI.WorkItemIDY, ArgInfo.WorkItemIDY);
+  Any |= convertArg(AI.WorkItemIDZ, ArgInfo.WorkItemIDZ);
+
+  if (Any)
+    return AI;
+
+  return None;
+}
+
 yaml::SIMachineFunctionInfo::SIMachineFunctionInfo(
   const llvm::SIMachineFunctionInfo& MFI,
   const TargetRegisterInfo &TRI)
@@ -332,7 +399,8 @@ yaml::SIMachineFunctionInfo::SIMachineFunctionInfo(
     ScratchRSrcReg(regToString(MFI.getScratchRSrcReg(), TRI)),
     ScratchWaveOffsetReg(regToString(MFI.getScratchWaveOffsetReg(), TRI)),
     FrameOffsetReg(regToString(MFI.getFrameOffsetReg(), TRI)),
-    StackPtrOffsetReg(regToString(MFI.getStackPtrOffsetReg(), TRI)) {}
+    StackPtrOffsetReg(regToString(MFI.getStackPtrOffsetReg(), TRI)),
+    ArgInfo(convertArgumentInfo(MFI.getArgInfo(), TRI)) {}
 
 void yaml::SIMachineFunctionInfo::mappingImpl(yaml::IO &YamlIO) {
   MappingTraits<SIMachineFunctionInfo>::mapping(YamlIO, *this);

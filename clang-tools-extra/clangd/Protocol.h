@@ -406,6 +406,9 @@ struct ClientCapabilities {
   /// textDocument.codeAction.codeActionLiteralSupport.
   bool CodeActionStructure = false;
 
+  /// Client supports semantic highlighting.
+  bool SemanticHighlighting = false;
+
   /// Supported encodings for LSP character offsets. (clangd extension).
   llvm::Optional<std::vector<OffsetEncoding>> offsetEncoding;
 
@@ -665,17 +668,11 @@ llvm::json::Value toJSON(const Diagnostic &);
 
 /// A LSP-specific comparator used to find diagnostic in a container like
 /// std:map.
-/// We only use as many fields of Diagnostic as is needed to make distinct
-/// diagnostics unique in practice, to avoid  regression issues from LSP clients
-/// (e.g. VScode), see https://git.io/vbr29
+/// We only use the required fields of Diagnostic to do the comparsion to avoid
+/// any regression issues from LSP clients (e.g. VScode), see
+/// https://git.io/vbr29
 struct LSPDiagnosticCompare {
   bool operator()(const Diagnostic &LHS, const Diagnostic &RHS) const {
-    if (!LHS.code.empty() && !RHS.code.empty()) {
-      // If the code is known for both, use the code to diambiguate, as e.g.
-      // two checkers could produce diagnostics with the same range and message.
-      return std::tie(LHS.range, LHS.message, LHS.code) <
-             std::tie(RHS.range, RHS.message, RHS.code);
-    }
     return std::tie(LHS.range, LHS.message) < std::tie(RHS.range, RHS.message);
   }
 };
@@ -1172,6 +1169,27 @@ struct FileStatus {
   // FIXME: add detail messages.
 };
 llvm::json::Value toJSON(const FileStatus &FStatus);
+
+/// Represents a semantic highlighting information that has to be applied on a
+/// specific line of the text document.
+struct SemanticHighlightingInformation {
+  /// The line these highlightings belong to.
+  int Line;
+  /// The base64 encoded string of highlighting tokens.
+  std::string Tokens;
+};
+bool operator==(const SemanticHighlightingInformation &Lhs,
+                const SemanticHighlightingInformation &Rhs);
+llvm::json::Value toJSON(const SemanticHighlightingInformation &Highlighting);
+
+/// Parameters for the semantic highlighting (server-side) push notification.
+struct SemanticHighlightingParams {
+  /// The textdocument these highlightings belong to.
+  TextDocumentIdentifier TextDocument;
+  /// The lines of highlightings that should be sent.
+  std::vector<SemanticHighlightingInformation> Lines;
+};
+llvm::json::Value toJSON(const SemanticHighlightingParams &Highlighting);
 
 } // namespace clangd
 } // namespace clang

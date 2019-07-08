@@ -69,9 +69,8 @@ void *__libc_stack_end = 0;
 
 #if SANITIZER_LINUX && defined(__aarch64__)
 void InitializeGuardPtr() __attribute__((visibility("hidden")));
-#endif
-// TODO(yln): only define this when necessary
 extern "C" __tsan::uptr _tsan_pointer_chk_guard = 0;
+#endif
 
 namespace __tsan {
 
@@ -337,11 +336,11 @@ int ExtractRecvmsgFDs(void *msgp, int *fds, int nfd) {
 }
 
 // Reverse operation of libc stack pointer mangling
-uptr UnmangleLongJmpSp(uptr mangled_sp) {
+static uptr UnmangleLongJmpSp(uptr mangled_sp) {
 #if defined(__x86_64__)
-#if SANITIZER_FREEBSD || SANITIZER_NETBSD
+# if SANITIZER_FREEBSD || SANITIZER_NETBSD
   return mangled_sp;
-#else  // Linux
+# else  // Linux
   // Reverse of:
   //   xor  %fs:0x30, %rsi
   //   rol  $0x11, %rsi
@@ -351,9 +350,13 @@ uptr UnmangleLongJmpSp(uptr mangled_sp) {
       : "=r" (sp)
       : "0" (mangled_sp));
   return sp;
-#endif
+# endif
 #elif defined(__aarch64__)
+# if SANITIZER_LINUX
   return mangled_sp ^ _tsan_pointer_chk_guard;
+# else
+  return mangled_sp;
+# endif
 #elif defined(__powerpc64__)
   // Reverse of:
   //  ld   r4, -28696(r13)
@@ -366,6 +369,27 @@ uptr UnmangleLongJmpSp(uptr mangled_sp) {
 #else
   #error "Unknown platform"
 #endif
+}
+
+#ifdef __powerpc__
+# define LONG_JMP_SP_ENV_SLOT 0
+#elif SANITIZER_FREEBSD
+# define LONG_JMP_SP_ENV_SLOT 2
+#elif SANITIZER_NETBSD
+# define LONG_JMP_SP_ENV_SLOT 6
+#elif SANITIZER_LINUX
+# ifdef __aarch64__
+#  define LONG_JMP_SP_ENV_SLOT 13
+# elif defined(__mips64)
+#  define LONG_JMP_SP_ENV_SLOT 1
+# else
+#  define LONG_JMP_SP_ENV_SLOT 6
+# endif
+#endif
+
+uptr ExtractLongJmpSp(uptr *env) {
+  uptr mangled_sp = env[LONG_JMP_SP_ENV_SLOT];
+  return UnmangleLongJmpSp(mangled_sp);
 }
 
 void ImitateTlsWrite(ThreadState *thr, uptr tls_addr, uptr tls_size) {

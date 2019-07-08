@@ -76,7 +76,7 @@ static llvm::cl::opt<JSONStreamStyle> InputStyle(
         clEnumValN(JSONStreamStyle::Standard, "standard", "usual LSP protocol"),
         clEnumValN(JSONStreamStyle::Delimited, "delimited",
                    "messages delimited by --- lines, with # comment support")),
-    llvm::cl::init(JSONStreamStyle::Standard));
+    llvm::cl::init(JSONStreamStyle::Standard), llvm::cl::Hidden);
 
 static llvm::cl::opt<bool>
     PrettyPrint("pretty", llvm::cl::desc("Pretty-print JSON output"),
@@ -189,7 +189,7 @@ static llvm::cl::opt<bool> EnableBackgroundIndex(
     llvm::cl::desc(
         "Index project code in the background and persist index on disk. "
         "Experimental"),
-    llvm::cl::init(false), llvm::cl::Hidden);
+    llvm::cl::init(true));
 
 static llvm::cl::opt<int> BackgroundIndexRebuildPeriod(
     "background-index-rebuild-period",
@@ -215,7 +215,8 @@ static llvm::cl::opt<bool> EnableFunctionArgSnippets(
     llvm::cl::desc("When disabled, completions contain only parentheses for "
                    "function calls. When enabled, completions also contain "
                    "placeholders for method parameters"),
-    llvm::cl::init(CodeCompleteOptions().EnableFunctionArgSnippets));
+    llvm::cl::init(CodeCompleteOptions().EnableFunctionArgSnippets),
+    llvm::cl::Hidden);
 
 static llvm::cl::opt<std::string> ClangTidyChecks(
     "clang-tidy-checks",
@@ -277,6 +278,12 @@ static llvm::cl::list<std::string> QueryDriverGlobs(
         "will be used to extract system includes. e.g. "
         "/usr/bin/**/clang-*,/path/to/repo/**/g++-*"),
     llvm::cl::CommaSeparated);
+
+static llvm::cl::list<std::string> TweakList(
+    "tweaks",
+    llvm::cl::desc(
+        "Specify a list of Tweaks to enable (only for clangd developers)."),
+    llvm::cl::Hidden, llvm::cl::CommaSeparated);
 
 namespace {
 
@@ -533,6 +540,11 @@ int main(int argc, char *argv[]) {
   }
   Opts.SuggestMissingIncludes = SuggestMissingIncludes;
   Opts.QueryDriverGlobs = std::move(QueryDriverGlobs);
+  if (TweakList.getNumOccurrences())
+    Opts.TweakFilter = [&](llvm::StringRef TweakToSearch) {
+      // return true if any tweak matches the TweakToSearch
+      return llvm::find(TweakList, TweakToSearch) != TweakList.end();
+    };
   llvm::Optional<OffsetEncoding> OffsetEncodingFromFlag;
   if (ForceOffsetEncoding != OffsetEncoding::UnsupportedEncoding)
     OffsetEncodingFromFlag = ForceOffsetEncoding;

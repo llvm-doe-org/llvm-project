@@ -177,7 +177,7 @@ handleTlsRelocation(RelType Type, Symbol &Sym, InputSectionBase &C,
     return 1;
   }
 
-  bool CanRelax = Config->EMachine != EM_ARM;
+  bool CanRelax = Config->EMachine != EM_ARM && Config->EMachine != EM_RISCV;
 
   // If we are producing an executable and the symbol is non-preemptable, it
   // must be defined and the code sequence can be relaxed to use Local-Exec.
@@ -566,10 +566,10 @@ template <class ELFT> static void addCopyRelSymbol(SharedSymbol &SS) {
 
   // See if this symbol is in a read-only segment. If so, preserve the symbol's
   // memory protection by reserving space in the .bss.rel.ro section.
-  bool IsReadOnly = isReadOnly<ELFT>(SS);
-  BssSection *Sec = make<BssSection>(IsReadOnly ? ".bss.rel.ro" : ".bss",
-                                     SymSize, SS.Alignment);
-  if (IsReadOnly)
+  bool IsRO = isReadOnly<ELFT>(SS);
+  BssSection *Sec =
+      make<BssSection>(IsRO ? ".bss.rel.ro" : ".bss", SymSize, SS.Alignment);
+  if (IsRO)
     In.BssRelRo->getParent()->addSection(Sec);
   else
     In.Bss->getParent()->addSection(Sec);

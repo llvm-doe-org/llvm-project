@@ -2558,7 +2558,11 @@ enum CXCursorKind {
    */
   CXCursor_ACCParallelLoopDirective = 282,
 
-  CXCursor_LastStmt = CXCursor_ACCParallelLoopDirective,
+  /** C++2a std::bit_cast expression.
+   */
+  CXCursor_BuiltinBitCastExpr = 283,
+
+  CXCursor_LastStmt = CXCursor_BuiltinBitCastExpr,
 
   /**
    * Cursor that represents the translation unit itself.

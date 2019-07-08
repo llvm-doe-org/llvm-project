@@ -39,6 +39,9 @@
 #include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/IR/BasicBlock.h"
+#ifdef EXPENSIVE_CHECKS
+#include "llvm/IR/Dominators.h"
+#endif
 #include "llvm/IR/Instruction.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/Support/Casting.h"
@@ -136,8 +139,11 @@ public:
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addRequired<AMDGPUArgumentUsageInfo>();
-    AU.addRequired<AMDGPUPerfHintAnalysis>();
     AU.addRequired<LegacyDivergenceAnalysis>();
+#ifdef EXPENSIVE_CHECKS
+    AU.addRequired<DominatorTreeWrapperPass>();
+    AU.addRequired<LoopInfoWrapperPass>();
+#endif
     SelectionDAGISel::getAnalysisUsage(AU);
   }
 
@@ -351,6 +357,10 @@ INITIALIZE_PASS_BEGIN(AMDGPUDAGToDAGISel, "amdgpu-isel",
 INITIALIZE_PASS_DEPENDENCY(AMDGPUArgumentUsageInfo)
 INITIALIZE_PASS_DEPENDENCY(AMDGPUPerfHintAnalysis)
 INITIALIZE_PASS_DEPENDENCY(LegacyDivergenceAnalysis)
+#ifdef EXPENSIVE_CHECKS
+INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
+#endif
 INITIALIZE_PASS_END(AMDGPUDAGToDAGISel, "amdgpu-isel",
                     "AMDGPU DAG->DAG Pattern Instruction Selection", false, false)
 
@@ -369,6 +379,13 @@ FunctionPass *llvm::createR600ISelDag(TargetMachine *TM,
 }
 
 bool AMDGPUDAGToDAGISel::runOnMachineFunction(MachineFunction &MF) {
+#ifdef EXPENSIVE_CHECKS
+  DominatorTree & DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
+  LoopInfo * LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
+  for (auto &L : LI->getLoopsInPreorder()) {
+    assert(L->isLCSSAForm(DT));
+  }
+#endif
   Subtarget = &MF.getSubtarget<GCNSubtarget>();
   return SelectionDAGISel::runOnMachineFunction(MF);
 }
@@ -568,8 +585,6 @@ SDNode *AMDGPUDAGToDAGISel::glueCopyToM0(SDNode *N, SDValue Val) const {
   const SITargetLowering& Lowering =
     *static_cast<const SITargetLowering*>(getTargetLowering());
 
-  // Write max value to m0 before each load operation
-
   assert(N->getOperand(0).getValueType() == MVT::Other && "Expected chain");
 
   SDValue M0 = Lowering.copyToM0(*CurDAG, N->getOperand(0), SDLoc(N),
@@ -587,10 +602,17 @@ SDNode *AMDGPUDAGToDAGISel::glueCopyToM0(SDNode *N, SDValue Val) const {
 }
 
 SDNode *AMDGPUDAGToDAGISel::glueCopyToM0LDSInit(SDNode *N) const {
-  if (cast<MemSDNode>(N)->getAddressSpace() != AMDGPUAS::LOCAL_ADDRESS ||
-      !Subtarget->ldsRequiresM0Init())
-    return N;
-  return glueCopyToM0(N, CurDAG->getTargetConstant(-1, SDLoc(N), MVT::i32));
+  unsigned AS = cast<MemSDNode>(N)->getAddressSpace();
+  if (AS == AMDGPUAS::LOCAL_ADDRESS) {
+    if (Subtarget->ldsRequiresM0Init())
+      return glueCopyToM0(N, CurDAG->getTargetConstant(-1, SDLoc(N), MVT::i32));
+  } else if (AS == AMDGPUAS::REGION_ADDRESS) {
+    MachineFunction &MF = CurDAG->getMachineFunction();
+    unsigned Value = MF.getInfo<SIMachineFunctionInfo>()->getGDSSize();
+    return
+        glueCopyToM0(N, CurDAG->getTargetConstant(Value, SDLoc(N), MVT::i32));
+  }
+  return N;
 }
 
 MachineSDNode *AMDGPUDAGToDAGISel::buildSMovImm64(SDLoc &DL, uint64_t Imm,

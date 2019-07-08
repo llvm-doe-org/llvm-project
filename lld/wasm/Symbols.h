@@ -41,7 +41,7 @@ class OutputSection;
 // The base class for real symbol classes.
 class Symbol {
 public:
-  enum Kind {
+  enum Kind : uint8_t {
     DefinedFunctionKind,
     DefinedDataKind,
     DefinedGlobalKind,
@@ -107,24 +107,6 @@ public:
   WasmSymbolType getWasmType() const;
   bool isExported() const;
 
-  // True if the symbol was used for linking and thus need to be added to the
-  // output file's symbol table. This is true for all symbols except for
-  // unreferenced DSO symbols, lazy (archive) symbols, and bitcode symbols that
-  // are unreferenced except by other bitcode objects.
-  unsigned IsUsedInRegularObj : 1;
-
-  // True if ths symbol is explicity marked for export (i.e. via the -e/--export
-  // command line flag)
-  unsigned ForceExport : 1;
-
-  // False if LTO shouldn't inline whatever this symbol points to. If a symbol
-  // is overwritten after LTO, LTO shouldn't inline the symbol because it
-  // doesn't know the final contents of the symbol.
-  unsigned CanInline : 1;
-
-  // True if this symbol is specified by --trace-symbol option.
-  unsigned Traced : 1;
-
   const WasmSignature* getSignature() const;
 
   bool isInGOT() const { return GOTIndex != INVALID_INDEX; }
@@ -139,17 +121,37 @@ public:
 
 protected:
   Symbol(StringRef Name, Kind K, uint32_t Flags, InputFile *F)
-      : IsUsedInRegularObj(false), ForceExport(false), CanInline(false),
-        Traced(false), Name(Name), SymbolKind(K), Flags(Flags), File(F),
-        Referenced(!Config->GcSections) {}
+      : Name(Name), File(F), Flags(Flags), SymbolKind(K),
+        Referenced(!Config->GcSections), IsUsedInRegularObj(false),
+        ForceExport(false), CanInline(false), Traced(false) {}
 
   StringRef Name;
-  Kind SymbolKind;
-  uint32_t Flags;
   InputFile *File;
+  uint32_t Flags;
   uint32_t OutputSymbolIndex = INVALID_INDEX;
   uint32_t GOTIndex = INVALID_INDEX;
-  bool Referenced;
+  Kind SymbolKind;
+
+public:
+  bool Referenced : 1;
+
+  // True if the symbol was used for linking and thus need to be added to the
+  // output file's symbol table. This is true for all symbols except for
+  // unreferenced DSO symbols, lazy (archive) symbols, and bitcode symbols that
+  // are unreferenced except by other bitcode objects.
+  bool IsUsedInRegularObj : 1;
+
+  // True if ths symbol is explicity marked for export (i.e. via the -e/--export
+  // command line flag)
+  bool ForceExport : 1;
+
+  // False if LTO shouldn't inline whatever this symbol points to. If a symbol
+  // is overwritten after LTO, LTO shouldn't inline the symbol because it
+  // doesn't know the final contents of the symbol.
+  bool CanInline : 1;
+
+  // True if this symbol is specified by --trace-symbol option.
+  bool Traced : 1;
 };
 
 class FunctionSymbol : public Symbol {
@@ -438,6 +440,10 @@ struct WasmSym {
   // Function that directly calls all ctors in priority order.
   static DefinedFunction *CallCtors;
 
+  // __wasm_init_memory
+  // Function that initializes passive data segments post-instantiation.
+  static DefinedFunction *InitMemory;
+
   // __wasm_apply_relocs
   // Function that applies relocations to data segment post-instantiation.
   static DefinedFunction *ApplyRelocs;
@@ -469,6 +475,11 @@ union SymbolUnion {
   alignas(UndefinedGlobal) char H[sizeof(UndefinedGlobal)];
   alignas(SectionSymbol) char I[sizeof(SectionSymbol)];
 };
+
+// It is important to keep the size of SymbolUnion small for performance and
+// memory usage reasons. 96 bytes is a soft limit based on the size of
+// UndefinedFunction on a 64-bit system.
+static_assert(sizeof(SymbolUnion) <= 96, "SymbolUnion too large");
 
 void printTraceSymbol(Symbol *Sym);
 void printTraceSymbolUndefined(StringRef Name, const InputFile* File);

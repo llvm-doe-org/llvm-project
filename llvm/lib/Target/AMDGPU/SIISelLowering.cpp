@@ -335,16 +335,16 @@ SITargetLowering::SITargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::INSERT_VECTOR_ELT, MVT::v4f16, Custom);
 
   // Deal with vec3 vector operations when widened to vec4.
-  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v3i32, Expand);
-  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v3f32, Expand);
-  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v4i32, Expand);
-  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v4f32, Expand);
+  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v3i32, Custom);
+  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v3f32, Custom);
+  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v4i32, Custom);
+  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v4f32, Custom);
 
   // Deal with vec5 vector operations when widened to vec8.
-  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v5i32, Expand);
-  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v5f32, Expand);
-  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v8i32, Expand);
-  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v8f32, Expand);
+  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v5i32, Custom);
+  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v5f32, Custom);
+  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v8i32, Custom);
+  setOperationAction(ISD::INSERT_SUBVECTOR, MVT::v8f32, Custom);
 
   // BUFFER/FLAT_ATOMIC_CMP_SWAP on GCN GPUs needs input marshalling,
   // and output demarshalling
@@ -629,6 +629,9 @@ SITargetLowering::SITargetLowering(const TargetMachine &TM,
 
     setOperationAction(ISD::EXTRACT_VECTOR_ELT, MVT::v2i16, Custom);
     setOperationAction(ISD::EXTRACT_VECTOR_ELT, MVT::v2f16, Custom);
+
+    setOperationAction(ISD::VECTOR_SHUFFLE, MVT::v4f16, Custom);
+    setOperationAction(ISD::VECTOR_SHUFFLE, MVT::v4i16, Custom);
 
     setOperationAction(ISD::SHL, MVT::v4i16, Custom);
     setOperationAction(ISD::SRA, MVT::v4i16, Custom);
@@ -1173,7 +1176,7 @@ bool SITargetLowering::canMergeStoresTo(unsigned AS, EVT MemVT,
   } else if (AS == AMDGPUAS::PRIVATE_ADDRESS) {
     unsigned MaxPrivateBits = 8 * getSubtarget()->getMaxPrivateElementSize();
     return (MemVT.getSizeInBits() <= MaxPrivateBits);
-  } else if (AS == AMDGPUAS::LOCAL_ADDRESS) {
+  } else if (AS == AMDGPUAS::LOCAL_ADDRESS || AS == AMDGPUAS::REGION_ADDRESS) {
     return (MemVT.getSizeInBits() <= 2 * 32);
   }
   return true;
@@ -3953,10 +3956,14 @@ SDValue SITargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::INTRINSIC_W_CHAIN: return LowerINTRINSIC_W_CHAIN(Op, DAG);
   case ISD::INTRINSIC_VOID: return LowerINTRINSIC_VOID(Op, DAG);
   case ISD::ADDRSPACECAST: return lowerADDRSPACECAST(Op, DAG);
+  case ISD::INSERT_SUBVECTOR:
+    return lowerINSERT_SUBVECTOR(Op, DAG);
   case ISD::INSERT_VECTOR_ELT:
     return lowerINSERT_VECTOR_ELT(Op, DAG);
   case ISD::EXTRACT_VECTOR_ELT:
     return lowerEXTRACT_VECTOR_ELT(Op, DAG);
+  case ISD::VECTOR_SHUFFLE:
+    return lowerVECTOR_SHUFFLE(Op, DAG);
   case ISD::BUILD_VECTOR:
     return lowerBUILD_VECTOR(Op, DAG);
   case ISD::FP_ROUND:
@@ -4623,6 +4630,32 @@ SDValue SITargetLowering::lowerADDRSPACECAST(SDValue Op,
   return DAG.getUNDEF(ASC->getValueType(0));
 }
 
+// This lowers an INSERT_SUBVECTOR by extracting the individual elements from
+// the small vector and inserting them into the big vector. That is better than
+// the default expansion of doing it via a stack slot. Even though the use of
+// the stack slot would be optimized away afterwards, the stack slot itself
+// remains.
+SDValue SITargetLowering::lowerINSERT_SUBVECTOR(SDValue Op,
+                                                SelectionDAG &DAG) const {
+  SDValue Vec = Op.getOperand(0);
+  SDValue Ins = Op.getOperand(1);
+  SDValue Idx = Op.getOperand(2);
+  EVT VecVT = Vec.getValueType();
+  EVT InsVT = Ins.getValueType();
+  EVT EltVT = VecVT.getVectorElementType();
+  unsigned InsNumElts = InsVT.getVectorNumElements();
+  unsigned IdxVal = cast<ConstantSDNode>(Idx)->getZExtValue();
+  SDLoc SL(Op);
+
+  for (unsigned I = 0; I != InsNumElts; ++I) {
+    SDValue Elt = DAG.getNode(ISD::EXTRACT_VECTOR_ELT, SL, EltVT, Ins,
+                              DAG.getConstant(I, SL, MVT::i32));
+    Vec = DAG.getNode(ISD::INSERT_VECTOR_ELT, SL, VecVT, Vec, Elt,
+                      DAG.getConstant(IdxVal + I, SL, MVT::i32));
+  }
+  return Vec;
+}
+
 SDValue SITargetLowering::lowerINSERT_VECTOR_ELT(SDValue Op,
                                                  SelectionDAG &DAG) const {
   SDValue Vec = Op.getOperand(0);
@@ -4738,6 +4771,63 @@ SDValue SITargetLowering::lowerEXTRACT_VECTOR_ELT(SDValue Op,
   }
 
   return DAG.getAnyExtOrTrunc(Elt, SL, ResultVT);
+}
+
+static bool elementPairIsContiguous(ArrayRef<int> Mask, int Elt) {
+  assert(Elt % 2 == 0);
+  return Mask[Elt + 1] == Mask[Elt] + 1 && (Mask[Elt] % 2 == 0);
+}
+
+SDValue SITargetLowering::lowerVECTOR_SHUFFLE(SDValue Op,
+                                              SelectionDAG &DAG) const {
+  SDLoc SL(Op);
+  EVT ResultVT = Op.getValueType();
+  ShuffleVectorSDNode *SVN = cast<ShuffleVectorSDNode>(Op);
+
+  EVT PackVT = ResultVT.isInteger() ? MVT::v2i16 : MVT::v2f16;
+  EVT EltVT = PackVT.getVectorElementType();
+  int SrcNumElts = Op.getOperand(0).getValueType().getVectorNumElements();
+
+  // vector_shuffle <0,1,6,7> lhs, rhs
+  // -> concat_vectors (extract_subvector lhs, 0), (extract_subvector rhs, 2)
+  //
+  // vector_shuffle <6,7,2,3> lhs, rhs
+  // -> concat_vectors (extract_subvector rhs, 2), (extract_subvector lhs, 2)
+  //
+  // vector_shuffle <6,7,0,1> lhs, rhs
+  // -> concat_vectors (extract_subvector rhs, 2), (extract_subvector lhs, 0)
+
+  // Avoid scalarizing when both halves are reading from consecutive elements.
+  SmallVector<SDValue, 4> Pieces;
+  for (int I = 0, N = ResultVT.getVectorNumElements(); I != N; I += 2) {
+    if (elementPairIsContiguous(SVN->getMask(), I)) {
+      const int Idx = SVN->getMaskElt(I);
+      int VecIdx = Idx < SrcNumElts ? 0 : 1;
+      int EltIdx = Idx < SrcNumElts ? Idx : Idx - SrcNumElts;
+      SDValue SubVec = DAG.getNode(ISD::EXTRACT_SUBVECTOR, SL,
+                                    PackVT, SVN->getOperand(VecIdx),
+                                    DAG.getConstant(EltIdx, SL, MVT::i32));
+      Pieces.push_back(SubVec);
+    } else {
+      const int Idx0 = SVN->getMaskElt(I);
+      const int Idx1 = SVN->getMaskElt(I + 1);
+      int VecIdx0 = Idx0 < SrcNumElts ? 0 : 1;
+      int VecIdx1 = Idx1 < SrcNumElts ? 0 : 1;
+      int EltIdx0 = Idx0 < SrcNumElts ? Idx0 : Idx0 - SrcNumElts;
+      int EltIdx1 = Idx1 < SrcNumElts ? Idx1 : Idx1 - SrcNumElts;
+
+      SDValue Vec0 = SVN->getOperand(VecIdx0);
+      SDValue Elt0 = DAG.getNode(ISD::EXTRACT_VECTOR_ELT, SL, EltVT,
+                                 Vec0, DAG.getConstant(EltIdx0, SL, MVT::i32));
+
+      SDValue Vec1 = SVN->getOperand(VecIdx1);
+      SDValue Elt1 = DAG.getNode(ISD::EXTRACT_VECTOR_ELT, SL, EltVT,
+                                 Vec1, DAG.getConstant(EltIdx1, SL, MVT::i32));
+      Pieces.push_back(DAG.getBuildVector(PackVT, SL, { Elt0, Elt1 }));
+    }
+  }
+
+  return DAG.getNode(ISD::CONCAT_VECTORS, SL, ResultVT, Pieces);
 }
 
 SDValue SITargetLowering::lowerBUILD_VECTOR(SDValue Op,
@@ -5891,11 +5981,28 @@ SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
     SDValue Chain = M->getOperand(0);
     SDValue M0 = M->getOperand(2);
     SDValue Value = M->getOperand(3);
-    unsigned OrderedCountIndex = M->getConstantOperandVal(7);
+    unsigned IndexOperand = M->getConstantOperandVal(7);
     unsigned WaveRelease = M->getConstantOperandVal(8);
     unsigned WaveDone = M->getConstantOperandVal(9);
     unsigned ShaderType;
     unsigned Instruction;
+
+    unsigned OrderedCountIndex = IndexOperand & 0x3f;
+    IndexOperand &= ~0x3f;
+    unsigned CountDw = 0;
+
+    if (Subtarget->getGeneration() >= AMDGPUSubtarget::GFX10) {
+      CountDw = (IndexOperand >> 24) & 0xf;
+      IndexOperand &= ~(0xf << 24);
+
+      if (CountDw < 1 || CountDw > 4) {
+        report_fatal_error(
+            "ds_ordered_count: dword count must be between 1 and 4");
+      }
+    }
+
+    if (IndexOperand)
+      report_fatal_error("ds_ordered_count: bad index operand");
 
     switch (IntrID) {
     case Intrinsic::amdgcn_ds_ordered_add:
@@ -5930,6 +6037,10 @@ SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
     unsigned Offset0 = OrderedCountIndex << 2;
     unsigned Offset1 = WaveRelease | (WaveDone << 1) | (ShaderType << 2) |
                        (Instruction << 4);
+
+    if (Subtarget->getGeneration() >= AMDGPUSubtarget::GFX10)
+      Offset1 |= (CountDw - 1) << 6;
+
     unsigned Offset = Offset0 | (Offset1 << 8);
 
     SDValue Ops[] = {
@@ -7135,7 +7246,7 @@ SDValue SITargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
     default:
       llvm_unreachable("unsupported private_element_size");
     }
-  } else if (AS == AMDGPUAS::LOCAL_ADDRESS) {
+  } else if (AS == AMDGPUAS::LOCAL_ADDRESS || AS == AMDGPUAS::REGION_ADDRESS) {
     // Use ds_read_b128 if possible.
     if (Subtarget->useDS128() && Load->getAlignment() >= 16 &&
         MemVT.getStoreSize() == 16)
@@ -7557,7 +7668,7 @@ SDValue SITargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
     default:
       llvm_unreachable("unsupported private_element_size");
     }
-  } else if (AS == AMDGPUAS::LOCAL_ADDRESS) {
+  } else if (AS == AMDGPUAS::LOCAL_ADDRESS || AS == AMDGPUAS::REGION_ADDRESS) {
     // Use ds_write_b128 if possible.
     if (Subtarget->useDS128() && Store->getAlignment() >= 16 &&
         VT.getStoreSize() == 16 && NumElements != 3)

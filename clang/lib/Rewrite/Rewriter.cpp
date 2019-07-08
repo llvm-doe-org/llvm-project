@@ -194,8 +194,8 @@ std::string Rewriter::getRewrittenText(CharSourceRange Range) const {
     // Adjust the end offset to the end of the last token, instead of being the
     // start of the last token.
     if (Range.isTokenRange())
-      EndOff += Lexer::MeasureTokenLength(Range.getEnd(), *SourceMgr,
-                                          *LangOpts);
+      EndOff +=
+          Lexer::MeasureTokenLength(Range.getEnd(), *SourceMgr, *LangOpts);
     return std::string(Ptr, Ptr+EndOff-StartOff);
   }
 

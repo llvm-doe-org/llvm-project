@@ -8,6 +8,7 @@
 
 #include "Annotations.h"
 #include "ClangdServer.h"
+#include "Protocol.h"
 #include "SemanticHighlighting.h"
 #include "TestFS.h"
 #include "TestTU.h"
@@ -47,26 +48,41 @@ void checkHighlightings(llvm::StringRef Code) {
 
 TEST(SemanticHighlighting, GetsCorrectTokens) {
   const char *TestCases[] = {
-      R"cpp(
-    struct A {
-      double SomeMember;
-    };
-    struct {
-    }   $Variable[[HStruct]];
-    void $Function[[foo]](int $Variable[[a]]) {
-      auto $Variable[[VeryLongVariableName]] = 12312;
-      A     $Variable[[aa]];
-    }
-  )cpp",
-      R"cpp(
-    void $Function[[foo]](int);
-  )cpp"};
+    R"cpp(
+      struct AS {
+        double SomeMember;
+      };
+      struct {
+      } $Variable[[S]];
+      void $Function[[foo]](int $Variable[[A]]) {
+        auto $Variable[[VeryLongVariableName]] = 12312;
+        AS     $Variable[[AA]];
+        auto $Variable[[L]] = $Variable[[AA]].SomeMember + $Variable[[A]];
+        auto $Variable[[FN]] = [ $Variable[[AA]]](int $Variable[[A]]) -> void {};
+        $Variable[[FN]](12312);
+      }
+    )cpp",
+    R"cpp(
+      void $Function[[foo]](int);
+      void $Function[[Gah]]();
+      void $Function[[foo]]() {
+        auto $Variable[[Bou]] = $Function[[Gah]];
+      }
+    )cpp",
+    R"cpp(
+      struct A {
+        A();
+        ~A();
+        void $Function[[abc]]();
+        void operator<<(int);
+      };
+    )cpp"};
   for (const auto &TestCase : TestCases) {
     checkHighlightings(TestCase);
   }
 }
 
-TEST(ClangdSemanticHighlightingTest, GeneratesHighlightsWhenFileChange) {
+TEST(SemanticHighlighting, GeneratesHighlightsWhenFileChange) {
   class HighlightingsCounterDiagConsumer : public DiagnosticsConsumer {
   public:
     std::atomic<int> Count = {0};
@@ -88,6 +104,29 @@ TEST(ClangdSemanticHighlightingTest, GeneratesHighlightsWhenFileChange) {
   Server.addDocument(FooCpp, "int a;");
   ASSERT_TRUE(Server.blockUntilIdleForTest()) << "Waiting for server";
   ASSERT_EQ(DiagConsumer.Count, 1);
+}
+
+TEST(SemanticHighlighting, toSemanticHighlightingInformation) {
+  auto CreatePosition = [](int Line, int Character) -> Position {
+    Position Pos;
+    Pos.line = Line;
+    Pos.character = Character;
+    return Pos;
+  };
+
+  std::vector<HighlightingToken> Tokens{
+      {HighlightingKind::Variable,
+                        Range{CreatePosition(3, 8), CreatePosition(3, 12)}},
+      {HighlightingKind::Function,
+                        Range{CreatePosition(3, 4), CreatePosition(3, 7)}},
+      {HighlightingKind::Variable,
+                        Range{CreatePosition(1, 1), CreatePosition(1, 5)}}};
+  std::vector<SemanticHighlightingInformation> ActualResults =
+      toSemanticHighlightingInformation(Tokens);
+  std::vector<SemanticHighlightingInformation> ExpectedResults = {
+      {1, "AAAAAQAEAAA="},
+      {3, "AAAACAAEAAAAAAAEAAMAAQ=="}};
+  EXPECT_EQ(ActualResults, ExpectedResults);
 }
 
 } // namespace

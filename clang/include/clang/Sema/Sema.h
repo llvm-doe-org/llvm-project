@@ -5239,6 +5239,13 @@ public:
                                SourceRange AngleBrackets,
                                SourceRange Parens);
 
+  ExprResult ActOnBuiltinBitCastExpr(SourceLocation KWLoc, Declarator &Dcl,
+                                     ExprResult Operand,
+                                     SourceLocation RParenLoc);
+
+  ExprResult BuildBuiltinBitCastExpr(SourceLocation KWLoc, TypeSourceInfo *TSI,
+                                     Expr *Operand, SourceLocation RParenLoc);
+
   ExprResult BuildCXXTypeId(QualType TypeInfoType,
                             SourceLocation TypeidLoc,
                             TypeSourceInfo *Operand,
@@ -8972,6 +8979,10 @@ private:
                                      SourceRange SrcRange = SourceRange());
 
 public:
+  /// Function tries to capture lambda's captured variables in the OpenMP region
+  /// before the original lambda is captured.
+  void tryCaptureOpenMPLambdas(ValueDecl *V);
+
   /// Return true if the provided declaration \a VD should be captured by
   /// reference.
   /// \param Level Relative level of nested OpenMP construct for that the check

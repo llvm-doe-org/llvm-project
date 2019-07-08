@@ -4745,10 +4745,12 @@ void SelectionDAGBuilder::visitTargetIntrinsic(const CallInst &I,
   SDValue Result;
   if (IsTgtIntrinsic) {
     // This is target intrinsic that touches memory
-    Result = DAG.getMemIntrinsicNode(Info.opc, getCurSDLoc(), VTs,
-      Ops, Info.memVT,
-      MachinePointerInfo(Info.ptrVal, Info.offset), Info.align,
-      Info.flags, Info.size);
+    AAMDNodes AAInfo;
+    I.getAAMetadata(AAInfo);
+    Result =
+        DAG.getMemIntrinsicNode(Info.opc, getCurSDLoc(), VTs, Ops, Info.memVT,
+                                MachinePointerInfo(Info.ptrVal, Info.offset),
+                                Info.align, Info.flags, Info.size, AAInfo);
   } else if (!HasChain) {
     Result = DAG.getNode(ISD::INTRINSIC_WO_CHAIN, getCurSDLoc(), VTs, Ops);
   } else if (!I.getType()->isVoidTy()) {
@@ -6016,28 +6018,18 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
                              getValue(I.getArgOperand(0))));
     return;
   }
-  case Intrinsic::minnum: {
-    auto VT = getValue(I.getArgOperand(0)).getValueType();
-    unsigned Opc =
-        I.hasNoNaNs() && TLI.isOperationLegalOrCustom(ISD::FMINIMUM, VT)
-            ? ISD::FMINIMUM
-            : ISD::FMINNUM;
-    setValue(&I, DAG.getNode(Opc, sdl, VT,
+  case Intrinsic::minnum:
+    setValue(&I, DAG.getNode(ISD::FMINNUM, sdl,
+                             getValue(I.getArgOperand(0)).getValueType(),
                              getValue(I.getArgOperand(0)),
                              getValue(I.getArgOperand(1))));
     return;
-  }
-  case Intrinsic::maxnum: {
-    auto VT = getValue(I.getArgOperand(0)).getValueType();
-    unsigned Opc =
-        I.hasNoNaNs() && TLI.isOperationLegalOrCustom(ISD::FMAXIMUM, VT)
-            ? ISD::FMAXIMUM
-            : ISD::FMAXNUM;
-    setValue(&I, DAG.getNode(Opc, sdl, VT,
+  case Intrinsic::maxnum:
+    setValue(&I, DAG.getNode(ISD::FMAXNUM, sdl,
+                             getValue(I.getArgOperand(0)).getValueType(),
                              getValue(I.getArgOperand(0)),
                              getValue(I.getArgOperand(1))));
     return;
-  }
   case Intrinsic::minimum:
     setValue(&I, DAG.getNode(ISD::FMINIMUM, sdl,
                              getValue(I.getArgOperand(0)).getValueType(),
@@ -6754,7 +6746,6 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
 
   case Intrinsic::icall_branch_funnel: {
     SmallVector<SDValue, 16> Ops;
-    Ops.push_back(DAG.getRoot());
     Ops.push_back(getValue(I.getArgOperand(0)));
 
     int64_t Offset;
@@ -6797,6 +6788,7 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
       Ops.push_back(T.Target);
     }
 
+    Ops.push_back(DAG.getRoot()); // Chain
     SDValue N(DAG.getMachineNode(TargetOpcode::ICALL_BRANCH_FUNNEL,
                                  getCurSDLoc(), MVT::Other, Ops),
               0);

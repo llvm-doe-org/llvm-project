@@ -716,18 +716,17 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::OMPTargetTeamsDistributeSimdDirectiveClass:
     K = CXCursor_OMPTargetTeamsDistributeSimdDirective;
     break;
-
   case Stmt::ACCParallelDirectiveClass:
     K = CXCursor_ACCParallelDirective;
     break;
-
   case Stmt::ACCLoopDirectiveClass:
     K = CXCursor_ACCLoopDirective;
     break;
-
   case Stmt::ACCParallelLoopDirectiveClass:
     K = CXCursor_ACCParallelLoopDirective;
     break;
+  case Stmt::BuiltinBitCastExprClass:
+    K = CXCursor_BuiltinBitCastExpr;
   }
 
   CXCursor C = { K, 0, { Parent, S, TU } };

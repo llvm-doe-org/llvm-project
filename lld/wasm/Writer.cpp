@@ -54,6 +54,7 @@ public:
 private:
   void openFile();
 
+  void createInitMemoryFunction();
   void createApplyRelocationsFunction();
   void createCallCtorsFunction();
 
@@ -73,7 +74,6 @@ private:
   void addSection(OutputSection *Sec);
 
   void addSections();
-  void addStartStopSymbols(const InputSegment *Seg);
 
   void createCustomSections();
   void createSyntheticSections();
@@ -302,15 +302,15 @@ void Writer::addSection(OutputSection *Sec) {
 // __stop_<secname> symbols. They are at beginning and end of the section,
 // respectively. This is not requested by the ELF standard, but GNU ld and
 // gold provide the feature, and used by many programs.
-void Writer::addStartStopSymbols(const InputSegment *Seg) {
-  StringRef S = Seg->getName();
-  LLVM_DEBUG(dbgs() << "addStartStopSymbols: " << S << "\n");
-  if (!isValidCIdentifier(S))
+static void addStartStopSymbols(const OutputSegment *Seg) {
+  StringRef Name = Seg->Name;
+  LLVM_DEBUG(dbgs() << "addStartStopSymbols: " << Name << "\n");
+  if (!isValidCIdentifier(Name))
     return;
-  uint32_t Start = Seg->OutputSeg->StartVA + Seg->OutputSegmentOffset;
-  uint32_t Stop = Start + Seg->getSize();
-  Symtab->addOptionalDataSymbol(Saver.save("__start_" + S), Start);
-  Symtab->addOptionalDataSymbol(Saver.save("__stop_" + S), Stop);
+  uint32_t Start = Seg->StartVA;
+  uint32_t Stop = Start + Seg->Size;
+  Symtab->addOptionalDataSymbol(Saver.save("__start_" + Name), Start);
+  Symtab->addOptionalDataSymbol(Saver.save("__stop_" + Name), Stop);
 }
 
 void Writer::addSections() {
@@ -406,6 +406,10 @@ void Writer::populateTargetFeatures() {
   if (Disallowed.count("atomics") && Config->SharedMemory)
     error("'atomics' feature is disallowed by " + Disallowed["atomics"] +
           ", so --shared-memory must not be used");
+
+  if (!Used.count("bulk-memory") && Config->PassiveSegments)
+    error("'bulk-memory' feature must be used in order to emit passive "
+          "segments");
 
   // Validate that used features are allowed in output
   if (!InferFeatures) {
@@ -621,6 +625,8 @@ void Writer::createOutputSegments() {
       if (S == nullptr) {
         LLVM_DEBUG(dbgs() << "new segment: " << Name << "\n");
         S = make<OutputSegment>(Name, Segments.size());
+        if (Config->PassiveSegments)
+          S->InitFlags = WASM_SEGMENT_IS_PASSIVE;
         Segments.push_back(S);
       }
       S->addInputSegment(Segment);
@@ -629,10 +635,57 @@ void Writer::createOutputSegments() {
   }
 }
 
+static void CreateFunction(DefinedFunction *Func, StringRef BodyContent) {
+  std::string FunctionBody;
+  {
+    raw_string_ostream OS(FunctionBody);
+    writeUleb128(OS, BodyContent.size(), "function size");
+    OS << BodyContent;
+  }
+  ArrayRef<uint8_t> Body = arrayRefFromStringRef(Saver.save(FunctionBody));
+  cast<SyntheticFunction>(Func->Function)->setBody(Body);
+}
+
+void Writer::createInitMemoryFunction() {
+  LLVM_DEBUG(dbgs() << "createInitMemoryFunction\n");
+  std::string BodyContent;
+  {
+    raw_string_ostream OS(BodyContent);
+    writeUleb128(OS, 0, "num locals");
+
+    // initialize passive data segments
+    for (const OutputSegment *S : Segments) {
+      if (S->InitFlags & WASM_SEGMENT_IS_PASSIVE) {
+        // destination address
+        writeU8(OS, WASM_OPCODE_I32_CONST, "i32.const");
+        writeUleb128(OS, S->StartVA, "destination address");
+        // source segment offset
+        writeU8(OS, WASM_OPCODE_I32_CONST, "i32.const");
+        writeUleb128(OS, 0, "segment offset");
+        // memory region size
+        writeU8(OS, WASM_OPCODE_I32_CONST, "i32.const");
+        writeUleb128(OS, S->Size, "memory region size");
+        // memory.init instruction
+        writeU8(OS, WASM_OPCODE_MISC_PREFIX, "bulk-memory prefix");
+        writeUleb128(OS, WASM_OPCODE_MEMORY_INIT, "MEMORY.INIT");
+        writeUleb128(OS, S->Index, "segment index immediate");
+        writeU8(OS, 0, "memory index immediate");
+        // data.drop instruction
+        writeU8(OS, WASM_OPCODE_MISC_PREFIX, "bulk-memory prefix");
+        writeUleb128(OS, WASM_OPCODE_DATA_DROP, "DATA.DROP");
+        writeUleb128(OS, S->Index, "segment index immediate");
+      }
+    }
+    writeU8(OS, WASM_OPCODE_END, "END");
+  }
+
+  CreateFunction(WasmSym::InitMemory, BodyContent);
+}
+
 // For -shared (PIC) output, we create create a synthetic function which will
 // apply any relocations to the data segments on startup.  This function is
-// called __wasm_apply_relocs and is added at the very beginning of
-// __wasm_call_ctors before any of the constructors run.
+// called __wasm_apply_relocs and is added at the beginning of __wasm_call_ctors
+// before any of the constructors run.
 void Writer::createApplyRelocationsFunction() {
   LLVM_DEBUG(dbgs() << "createApplyRelocationsFunction\n");
   // First write the body's contents to a string.
@@ -646,16 +699,7 @@ void Writer::createApplyRelocationsFunction() {
     writeU8(OS, WASM_OPCODE_END, "END");
   }
 
-  // Once we know the size of the body we can create the final function body
-  std::string FunctionBody;
-  {
-    raw_string_ostream OS(FunctionBody);
-    writeUleb128(OS, BodyContent.size(), "function size");
-    OS << BodyContent;
-  }
-
-  ArrayRef<uint8_t> Body = arrayRefFromStringRef(Saver.save(FunctionBody));
-  cast<SyntheticFunction>(WasmSym::ApplyRelocs->Function)->setBody(Body);
+  CreateFunction(WasmSym::ApplyRelocs, BodyContent);
 }
 
 // Create synthetic "__wasm_call_ctors" function based on ctor functions
@@ -669,11 +713,20 @@ void Writer::createCallCtorsFunction() {
   {
     raw_string_ostream OS(BodyContent);
     writeUleb128(OS, 0, "num locals");
+
+    if (Config->PassiveSegments) {
+      writeU8(OS, WASM_OPCODE_CALL, "CALL");
+      writeUleb128(OS, WasmSym::InitMemory->getFunctionIndex(),
+                   "function index");
+    }
+
     if (Config->Pic) {
       writeU8(OS, WASM_OPCODE_CALL, "CALL");
       writeUleb128(OS, WasmSym::ApplyRelocs->getFunctionIndex(),
                    "function index");
     }
+
+    // Call constructors
     for (const WasmInitEntry &F : InitFunctions) {
       writeU8(OS, WASM_OPCODE_CALL, "CALL");
       writeUleb128(OS, F.Sym->getFunctionIndex(), "function index");
@@ -681,16 +734,7 @@ void Writer::createCallCtorsFunction() {
     writeU8(OS, WASM_OPCODE_END, "END");
   }
 
-  // Once we know the size of the body we can create the final function body
-  std::string FunctionBody;
-  {
-    raw_string_ostream OS(FunctionBody);
-    writeUleb128(OS, BodyContent.size(), "function size");
-    OS << BodyContent;
-  }
-
-  ArrayRef<uint8_t> Body = arrayRefFromStringRef(Saver.save(FunctionBody));
-  cast<SyntheticFunction>(WasmSym::CallCtors->Function)->setBody(Body);
+  CreateFunction(WasmSym::CallCtors, BodyContent);
 }
 
 // Populate InitFunctions vector with init functions from all input objects.
@@ -766,8 +810,7 @@ void Writer::run() {
     // Create linker synthesized __start_SECNAME/__stop_SECNAME symbols
     // This has to be done after memory layout is performed.
     for (const OutputSegment *Seg : Segments)
-      for (const InputSegment *S : Seg->InputSegments)
-        addStartStopSymbols(S);
+      addStartStopSymbols(Seg);
   }
 
   log("-- scanRelocations");
@@ -779,6 +822,8 @@ void Writer::run() {
 
   if (!Config->Relocatable) {
     // Create linker synthesized functions
+    if (Config->PassiveSegments)
+      createInitMemoryFunction();
     if (Config->Pic)
       createApplyRelocationsFunction();
     createCallCtorsFunction();
