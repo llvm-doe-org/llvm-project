@@ -8,7 +8,7 @@
 // Check -ast-print and -fopenacc[-ast]-print.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
-// RUN: | FileCheck -check-prefix=PRT %s
+// RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
 //
 // TODO: If lit were to support %for inside a %data, we could iterate prt-opts
 // within prt-args after the first prt-args iteration, significantly shortening
@@ -1976,7 +1976,7 @@ int main() {
   } // PRT-NEXT: }
 
   //--------------------------------------------------
-  // Gang reduction on gang-local private copies of variables.
+  // Gang reduction on variable explicitly gang-private at acc parallel.
   //
   // TODO: Once we decide how to deal with private/firstprivate and reduction
   // on the same variable, this might be interesting to extend for acc parallel
@@ -2045,6 +2045,99 @@ int main() {
     // EXE-NEXT: out1 = 5
     printf("out0 = %d\n", out0);
     printf("out1 = %d\n", out1);
+  } // PRT-NEXT: }
+
+  //--------------------------------------------------
+  // Gang reduction on variable explicitly private only at enclosing acc loop.
+  //--------------------------------------------------
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int out = 5;
+    int out = 5;
+    // DMP:      ACCParallelDirective
+    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   impl: OMPTargetTeamsDirective
+    // DMP-NEXT:     OMPNum_teamsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    //
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2){{$}}
+    #pragma acc parallel num_gangs(2)
+    // DMP: CompoundStmt
+    // PRT-NEXT: {
+    {
+      // DMP:      ACCLoopDirective
+      // DMP-NEXT:   ACCSeqClause
+      // DMP-NEXT:   ACCPrivateClause
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'int'
+      // DMP-NEXT:   impl: CompoundStmt
+      // DMP-NEXT:     DeclStmt
+      // DMP-NEXT:       VarDecl {{.*}} out 'int'
+      // DMP-NEXT:     ForStmt
+      // DMP:        ACCLoopDirective
+      // DMP-NEXT:     ACCGangClause
+      // DMP-NEXT:     ACCReductionClause {{.*}} '+'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'int'
+      // DMP-NEXT:     ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:     impl: OMPDistributeDirective
+      // DMP:            ForStmt
+      // DMP:              CompoundAssignOperator {{.*}} '+='
+      //
+      // PRT-NOACC-NEXT: {{^ *}}for (int i = 0; i < 2; ++i) {
+      // PRT-NOACC-NEXT: {{^ *}}  for (int j = 0; j < 2; ++j)
+      // PRT-NOACC-NEXT: {{^ *}}    out += 2;
+      // PRT-NOACC-NEXT: {{^ *}}}
+      //
+      // PRT-AO-NEXT: {{^ *}}// v----------ACC----------v
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop seq private(out){{$}}
+      // PRT-A-NEXT:  {{^ *}}for (int i = 0; i < 2; ++i) {
+      // PRT-A-NEXT:  {{^ *}}  #pragma acc loop gang reduction(+: out){{$}}
+      // PRT-A-NEXT:  {{^ *}}  for (int j = 0; j < 2; ++j)
+      // PRT-A-NEXT:  {{^ *}}    out += 2;
+      // PRT-A-NEXT:  {{^ *}}}
+      // PRT-AO-NEXT: {{^ *}}// ---------ACC->OMP--------
+      // PRT-AO-NEXT: {{^ *}}// {
+      // PRT-AO-NEXT: {{^ *}}//   int out;
+      // PRT-AO-NEXT: {{^ *}}//   for (int i = 0; i < 2; ++i) {
+      // PRT-AO-NEXT: {{^ *}}//     #pragma omp distribute{{$}}
+      // PRT-AO-NEXT: {{^ *}}//     for (int j = 0; j < 2; ++j)
+      // PRT-AO-NEXT: {{^ *}}//       out += 2;
+      // PRT-AO-NEXT: {{^ *}}//   }
+      // PRT-AO-NEXT: {{^ *}}// }
+      // PRT-AO-NEXT: {{^ *}}// ^----------OMP----------^
+      //
+      // PRT-OA-NEXT: {{^ *}}// v----------OMP----------v
+      // PRT-O-NEXT:  {{^ *}}{
+      // PRT-O-NEXT:  {{^ *}}  int out;
+      // PRT-O-NEXT:  {{^ *}}  for (int i = 0; i < 2; ++i) {
+      // PRT-O-NEXT:  {{^ *}}    #pragma omp distribute{{$}}
+      // PRT-O-NEXT:  {{^ *}}    for (int j = 0; j < 2; ++j)
+      // PRT-O-NEXT:  {{^ *}}      out += 2;
+      // PRT-O-NEXT:  {{^ *}}  }
+      // PRT-O-NEXT:  {{^ *}}}
+      // PRT-OA-NEXT: {{^ *}}// ---------OMP<-ACC--------
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop seq private(out){{$}}
+      // PRT-OA-NEXT: {{^ *}}// for (int i = 0; i < 2; ++i) {
+      // PRT-OA-NEXT: {{^ *}}//   #pragma acc loop gang reduction(+: out){{$}}
+      // PRT-OA-NEXT: {{^ *}}//   for (int j = 0; j < 2; ++j)
+      // PRT-OA-NEXT: {{^ *}}//     out += 2;
+      // PRT-OA-NEXT: {{^ *}}// }
+      // PRT-OA-NEXT: {{^ *}}// ^----------ACC----------^
+      #pragma acc loop seq private(out)
+      for (int i = 0; i < 2; ++i) {
+        #pragma acc loop gang reduction(+: out)
+        for (int j = 0; j < 2; ++j)
+          out += 2;
+      }
+    } // PRT-NEXT: }
+    // DMP: CallExpr
+    // PRT-NEXT: printf
+    // EXE-NEXT: out = 5
+    printf("out = %d\n", out);
   } // PRT-NEXT: }
 
   // PRT-NEXT: return 0;
