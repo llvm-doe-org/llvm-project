@@ -30,6 +30,14 @@ enum OpenACCDirectiveKind {
   ACCD_unknown
 };
 
+/// OpenACC base data-sharing attributes.
+enum OpenACCBaseDSAKind {
+#define OPENACC_BASE_DSA(Name) \
+  ACC_BASE_DSA_##Name,
+#include "clang/Basic/OpenACCKinds.def"
+  ACC_BASE_DSA_unknown
+};
+
 /// OpenACC clauses.
 enum OpenACCClauseKind {
 #define OPENACC_CLAUSE(Name, Class) \
@@ -42,7 +50,13 @@ OpenACCDirectiveKind getOpenACCDirectiveKind(llvm::StringRef Str);
 const char *getOpenACCDirectiveName(OpenACCDirectiveKind Kind);
 
 OpenACCClauseKind getOpenACCClauseKind(llvm::StringRef Str);
+const char *getOpenACCBaseDSAName(OpenACCBaseDSAKind Kind);
 const char *getOpenACCClauseName(OpenACCClauseKind Kind);
+
+/// Is BaseDSAKind allowed as a DSA on DKind?  Must not be ACCD_unknown or
+/// ACC_BASE_DSA_unknown.
+bool isAllowedBaseDSAForDirective(OpenACCDirectiveKind DKind,
+                                  OpenACCBaseDSAKind BaseDSAKind);
 
 /// Is CKind allowed as a clause for DKind?  Must not be ACCD_unknown or
 /// ACCC_unknown.
