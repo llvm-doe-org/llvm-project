@@ -145,6 +145,11 @@ public:
   }
 };
 
+/// If a clause makes variables private to the construct on which it appears,
+/// return the expressions referencing those variables.
+llvm::iterator_range<ArrayRef<const Expr *>::iterator>
+getPrivateVarsFromClause(const ACCClause *);
+
 /// This represents the implicit clause 'shared' for '#pragma acc ...'.
 ///
 /// These clauses are computed implicitly by clang.  Currently, OpenACC does

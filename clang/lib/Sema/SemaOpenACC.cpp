@@ -723,29 +723,15 @@ public:
     for (ACCClause *C : D->clauses()) {
       if (!C)
         return;
-      if (auto PC = dyn_cast<ACCPrivateClause>(C)) {
-        // Skip computing gang reductions for these variables due to references
-        // to them within the construct because those references refer to local
-        // copies.
-        for (const Expr *VR : PC->varlists()) {
-          const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
-          const VarDecl *VD =
-              cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
-          LocalDefinitions.back().insert(VD);
-        }
-      } else if (auto PC = dyn_cast<ACCReductionClause>(C)) {
-        // Skip computing gang reductions for these variables due to references
-        // to them within the construct because those references refer to local
-        // copies.
-        for (const Expr *VR : PC->varlists()) {
-          const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
-          const VarDecl *VD =
-              cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
-          LocalDefinitions.back().insert(VD);
-        }
+      // For variables privatized here, skip computing gang reductions due to
+      // references to them within the construct because those references
+      // refer to local copies.
+      for (const Expr *VR : getPrivateVarsFromClause(C)) {
+        const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
+        const VarDecl *VD =
+            cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
+        LocalDefinitions.back().insert(VD);
       }
-      // firstprivate is currently impossible because we're always within an
-      // acc parallel looking at an acc loop, which does not take firstprivate.
     }
     for (auto *Child : D->children()) {
       if (Child)
@@ -820,46 +806,32 @@ public:
     for (ACCClause *C : D->clauses()) {
       if (!C)
         return;
-      if (auto PC = dyn_cast<ACCPrivateClause>(C)) {
-        // Skip computing data-sharing attributes for these variables due to
-        // references to them within the construct because those references
-        // refer to local copies.
-        for (const Expr *VR : PC->varlists()) {
-          const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
-          const VarDecl *VD =
-              cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
-          LocalDefinitions.back().insert(VD);
-        }
-        // Skip computing data-sharing attributes for these variables due to
-        // the references within the clause itself.
-        continue;
-      }
-      // Compute data-sharing attributes for these variables due to the
-      // references within the clause itself.  For clauses other than private,
-      // this is necessary because at least the variables' original values are
+      // For clauses other than private, compute data-sharing attributes for
+      // the variables due to the references within the clause itself.  This
+      // is necessary because at least the variables' original values are
       // needed.
-      for (Stmt *Child : C->children()) {
-        if (Child)
-          Visit(Child);
-      }
-      if (auto PC = dyn_cast<ACCReductionClause>(C)) {
-        // Skip computing data-sharing attributes for these variables due to
-        // references to them within the construct because those references
-        // refer to local copies.
-        //
-        // Actually, this skip should be redundant because we just computed the
-        // implicit DSAs for these variables, so doing so again for other
-        // references to them should have no effect.  Neverthless, keeping this
-        // skip makes it easier to understand the analysis when debugging.
-        for (const Expr *VR : PC->varlists()) {
-          const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
-          const VarDecl *VD =
-              cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
-          LocalDefinitions.back().insert(VD);
+      if (C->getClauseKind() != ACCC_private) {
+        for (Stmt *Child : C->children()) {
+          if (Child)
+            Visit(Child);
         }
       }
-      // firstprivate is currently impossible because we're always within an
-      // acc parallel looking at an acc loop, which does not take firstprivate.
+      // Skip computing data-sharing attributes for these variables due to
+      // references to them within the construct because those references
+      // refer to local copies.
+      //
+      // Actually, except in the case of private, this skip should be redundant
+      // because we just computed the implicit DSAs for these variables, so
+      // doing so again for other references to them should have no effect.
+      // Neverthless, keeping this skip in all cases makes it easier to
+      // understand the analysis when debugging because it properly reflects
+      // the privatization.
+      for (const Expr *VR : getPrivateVarsFromClause(C)) {
+        const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
+        const VarDecl *VD =
+            cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
+        LocalDefinitions.back().insert(VD);
+      }
     }
     for (auto *Child : D->children()) {
       if (Child)

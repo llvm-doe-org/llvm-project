@@ -29,6 +29,34 @@ ACCClause::child_range ACCClause::children() {
   llvm_unreachable("unknown ACCClause");
 }
 
+llvm::iterator_range<ArrayRef<const Expr *>::iterator>
+clang::getPrivateVarsFromClause(const ACCClause *C) {
+  switch (C->getClauseKind()) {
+  case ACCC_private:
+    return cast<ACCPrivateClause>(C)->varlists();
+  case ACCC_firstprivate:
+    return cast<ACCFirstprivateClause>(C)->varlists();
+  case ACCC_reduction:
+    return cast<ACCReductionClause>(C)->varlists();
+  case ACCC_shared:
+  case ACCC_num_gangs:
+  case ACCC_num_workers:
+  case ACCC_vector_length:
+  case ACCC_seq:
+  case ACCC_independent:
+  case ACCC_auto:
+  case ACCC_gang:
+  case ACCC_worker:
+  case ACCC_vector:
+  case ACCC_collapse:
+    return llvm::iterator_range<ArrayRef<const Expr *>::iterator>(
+        llvm::makeArrayRef<const Expr *>(nullptr, (int)0));
+  case ACCC_unknown:
+    llvm_unreachable("unexpected unknown ACCClause");
+  }
+  llvm_unreachable("unexpected ACCClause");
+}
+
 ACCSharedClause *
 ACCSharedClause::Create(const ASTContext &C, ArrayRef<Expr *> VL) {
   // Allocate space for variables.
