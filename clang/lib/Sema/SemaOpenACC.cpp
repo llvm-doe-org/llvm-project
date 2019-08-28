@@ -2267,24 +2267,21 @@ private:
   struct ExplicitClauseLocs {
     const SourceLocation LocStart;
     const SourceLocation LParenLoc;
-    const SourceLocation ColonLoc;
     const SourceLocation LocEnd;
     ExplicitClauseLocs(ACCExecutableDirective *D, ACCClause *C,
-                       SourceLocation LParenLoc,
-                       SourceLocation ColonLoc = SourceLocation())
+                       SourceLocation LParenLoc)
       // So far, it appears that only LocStart is used to decide if the
       // directive is implicit.
       : LocStart(D && C->getBeginLoc().isInvalid() ? D->getEndLoc()
                                                    : C->getBeginLoc()),
-        LParenLoc(LParenLoc), ColonLoc(ColonLoc), LocEnd(C->getEndLoc())
+        LParenLoc(LParenLoc), LocEnd(C->getEndLoc())
     {
       // So far, we have found that, if the clause's LocStart is invalid, all
       // the clause's locations are invalid.  Otherwise, setting LocStart to
       // the directive end might produce locations that are out of order.
       assert((!C->getBeginLoc().isInvalid() ||
-              (LParenLoc.isInvalid() && ColonLoc.isInvalid() &&
-               C->getEndLoc().isInvalid())) &&
-              "Inconsistent location validity");
+              (LParenLoc.isInvalid() && C->getEndLoc().isInvalid())) &&
+             "Inconsistent location validity");
       assert((!D || !D->getEndLoc().isInvalid()) &&
              "Invalid directive location");
     }
@@ -2308,36 +2305,42 @@ private:
     return false;
   }
 
-  template<typename Derived>
-  bool transformACCVarList(
-      ACCExecutableDirective *D, ACCVarListClause<Derived> *C,
-      llvm::SmallVector<Expr *, 16> &Vars) {
-    return transformACCVarList(D, C, llvm::DenseSet<VarDecl *>(), Vars);
-  }
-
-  template<typename Derived>
+  template<typename Derived, typename RebuilderType>
   OMPClauseResult transformACCVarListClause(
       ACCExecutableDirective *D, ACCVarListClause<Derived> *C,
       OpenMPClauseKind TCKind, const llvm::DenseSet<VarDecl *> &SkipVars,
-      OMPClause *(TransformACCToOMP::*Rebuilder)(
-          ArrayRef<Expr *>, SourceLocation, SourceLocation, SourceLocation)) {
+      RebuilderType Rebuilder) {
     OpenMPStartEndClauseRAII ClauseRAII(getSema(), TCKind);
     llvm::SmallVector<Expr *, 16> Vars;
     if (transformACCVarList(D, C, SkipVars, Vars))
       return OMPClauseError();
     ExplicitClauseLocs L(D, C, C->getLParenLoc());
-    return (getDerived().*Rebuilder)(Vars, L.LocStart, L.LParenLoc, L.LocEnd);
+    return Rebuilder(Vars, L);
   }
 
-  template<typename Derived>
+  template<typename Derived, typename RebuilderType>
   OMPClauseResult transformACCVarListClause(
       ACCExecutableDirective *D, ACCVarListClause<Derived> *C,
-      OpenMPClauseKind TCKind,
-      OMPClause *(TransformACCToOMP::*Rebuilder)(
-          ArrayRef<Expr *>, SourceLocation, SourceLocation, SourceLocation)) {
+      OpenMPClauseKind TCKind, RebuilderType Rebuilder) {
     return transformACCVarListClause(D, C, TCKind, llvm::DenseSet<VarDecl *>(),
                                      Rebuilder);
   }
+
+  class OMPVarListClauseRebuilder {
+    TransformACCToOMP *ACCToOMP;
+    OMPClause *(TransformACCToOMP::*Rebuilder)(
+        ArrayRef<Expr *>, SourceLocation, SourceLocation, SourceLocation);
+  public:
+    OMPVarListClauseRebuilder(
+        TransformACCToOMP *ACCToOMP,
+        OMPClause *(TransformACCToOMP::*Rebuilder)(
+            ArrayRef<Expr *>, SourceLocation, SourceLocation, SourceLocation))
+      : ACCToOMP(ACCToOMP), Rebuilder(Rebuilder) {}
+    OMPClause *operator()(ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+      return (ACCToOMP->getDerived().*Rebuilder)(Vars, L.LocStart, L.LParenLoc,
+                                                 L.LocEnd);
+    }
+  };
 
 public:
   OMPClauseResult TransformACCNumGangsClause(ACCExecutableDirective *D,
@@ -2389,7 +2392,8 @@ public:
            && "Unexpected explicit OpenACC shared clause");
     return transformACCVarListClause<ACCSharedClause>(
         RequireImplicit ? nullptr : D, C, OMPC_shared,
-        &TransformACCToOMP::RebuildOMPSharedClause);
+        OMPVarListClauseRebuilder(
+            this, &TransformACCToOMP::RebuildOMPSharedClause));
   }
 
   OMPClauseResult TransformACCPrivateClause(ACCExecutableDirective *D,
@@ -2415,7 +2419,8 @@ public:
     }
     return transformACCVarListClause<ACCPrivateClause>(
         D, C, OMPC_private, SkipVars,
-        &TransformACCToOMP::RebuildOMPPrivateClause);
+        OMPVarListClauseRebuilder(
+            this, &TransformACCToOMP::RebuildOMPPrivateClause));
   }
 
   OMPClauseResult TransformACCFirstprivateClause(ACCExecutableDirective *D,
@@ -2423,7 +2428,8 @@ public:
                                                  ACCFirstprivateClause *C) {
     return transformACCVarListClause<ACCFirstprivateClause>(
         D, C, OMPC_firstprivate,
-        &TransformACCToOMP::RebuildOMPFirstprivateClause);
+        OMPVarListClauseRebuilder(
+            this, &TransformACCToOMP::RebuildOMPFirstprivateClause));
   }
 
   OMPClauseResult TransformACCReductionClause(ACCExecutableDirective *D,
@@ -2435,15 +2441,14 @@ public:
     if (isOpenMPDistributeDirective(TDKind) &&
         !isOpenMPParallelDirective(TDKind) && !isOpenMPSimdDirective(TDKind))
       return OMPClauseEmpty();
-    OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_reduction);
-    llvm::SmallVector<Expr *, 16> Vars;
-    if (transformACCVarList(D, C, Vars))
-      return OMPClauseError();
-    ExplicitClauseLocs L(D, C, C->getLParenLoc(), C->getColonLoc());
-    CXXScopeSpec Spec;
-    return getDerived().RebuildOMPReductionClause(
-        Vars, L.LocStart, L.LParenLoc, L.ColonLoc, L.LocEnd, Spec,
-        C->getNameInfo(), ArrayRef<Expr*>());
+    return transformACCVarListClause<ACCReductionClause>(
+        D, C, OMPC_reduction,
+        [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+          CXXScopeSpec Spec;
+          return getDerived().RebuildOMPReductionClause(
+            Vars, L.LocStart, L.LParenLoc, C->getColonLoc(), L.LocEnd, Spec,
+            C->getNameInfo(), ArrayRef<Expr*>());
+        });
   }
 
   OMPClauseResult TransformACCSeqClause(ACCExecutableDirective *D,
