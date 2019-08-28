@@ -16,7 +16,7 @@
 #  define OPENACC_DIRECTIVE(Name)
 #endif
 #ifndef OPENACC_DIRECTIVE_EXT
-#define OPENACC_DIRECTIVE_EXT(Name, Str)
+#  define OPENACC_DIRECTIVE_EXT(Name, Str)
 #endif
 #ifndef OPENACC_BASE_DSA
 #  define OPENACC_BASE_DSA(Name)
