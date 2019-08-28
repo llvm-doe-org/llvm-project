@@ -78,6 +78,21 @@ const char *clang::getOpenACCClauseName(OpenACCClauseKind Kind) {
   llvm_unreachable("Invalid OpenACC clause kind");
 }
 
+bool clang::isAllowedBaseDSAForReduction(OpenACCBaseDSAKind BaseDSAKind) {
+  assert(BaseDSAKind <= ACC_BASE_DSA_unknown);
+  switch (BaseDSAKind) {
+  case ACC_BASE_DSA_unknown:
+    return true;
+#define OPENACC_REDUCTION_BASE_DSA(Name) \
+  case ACC_BASE_DSA_##Name:              \
+    return true;
+#include "clang/Basic/OpenACCKinds.def"
+  default:
+    break;
+  }
+  return false;
+}
+
 bool clang::isAllowedBaseDSAForDirective(OpenACCDirectiveKind DKind,
                                          OpenACCBaseDSAKind BaseDSAKind) {
   assert(BaseDSAKind <= ACC_BASE_DSA_unknown);

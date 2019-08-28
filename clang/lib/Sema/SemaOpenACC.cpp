@@ -54,26 +54,36 @@ class DSAStackTy final {
 public:
   Sema &SemaRef;
 
-  /// Represents a variable's uncomputed, implicit, or explicit (specified in
-  /// an explicit clause) data-sharing attributes on a directive.
+  /// Represents a variable's data-sharing attributes (DSAs) on a directive.
+  ///
+  /// There are potentially two DSAs per variable: the base DSA and a
+  /// reduction.  Each can be uncomputed, implicit, or explicit.  A base DSA
+  /// can also be predetermined.  At least one of these two will eventually be
+  /// computed per variable referenced by a construct.
   struct DSAVarData final {
-    /// If uncomputed, then ACC_BASE_DSA_unknown.  Otherwise, not
+    /// If base DSA is uncomputed, then ACC_BASE_DSA_unknown.  Otherwise, not
     /// ACC_BASE_DSA_unknown.
     OpenACCBaseDSAKind BaseDSAKind = ACC_BASE_DSA_unknown;
-    /// If uncomputed, then nullptr.  If implicit, then a referencing
-    /// expression within the directive's region.  If explicit, then the
-    /// referencing expression appearing in the clause.
-    Expr *RefExpr = nullptr;
-    /// If uncomputed or not a reduction, then default constructed.  Otherwise,
-    /// the reduction ID.
+    /// If base DSA is uncomputed, then nullptr.  If predetermined or implicit,
+    /// then a referencing expression within the directive's region.  If
+    /// explicit, then the referencing expression appearing in the associated
+    /// clause.
+    Expr *BaseDSARefExpr = nullptr;
+    /// If reduction is uncomputed, then default-constructed
+    /// (ReductionID.getName().isEmpty()).  Otherwise, the reduction ID.
     DeclarationNameInfo ReductionId;
+    /// If reduction is uncomputed, then nullptr.  If implicit reduction, then
+    /// a referencing expression within a descendant directive's reduction
+    /// clause.  If explicit reduction, then the referencing expression
+    /// appearing in the associated clause on this directive.
+    Expr *ReductionRefExpr = nullptr;
     DSAVarData() {}
   };
 
 private:
-  typedef llvm::DenseMap<VarDecl *, DSAVarData> DeclSAMapTy;
+  typedef llvm::DenseMap<VarDecl *, DSAVarData> DSAMapTy;
   struct SharingMapTy final {
-    DeclSAMapTy SharingMap;
+    DSAMapTy SharingMap;
     llvm::DenseSet<VarDecl *> LCVs;
     /// The real directive kind.  In the case of a combined directive, there
     /// are two consecutive entries: the outer has RealDKind as the combined
@@ -240,7 +250,7 @@ public:
     return Stack.back().NestedWorkerPartitioning;
   }
 
-  /// Adds base DSA other than reduction to the specified declaration.
+  /// Adds base DSA to the specified declaration.
   bool addBaseDSA(VarDecl *D, Expr *E, OpenACCBaseDSAKind A);
   /// Adds reduction to the specified declaration.
   bool addReduction(
@@ -250,8 +260,9 @@ public:
   /// Returns data sharing attributes from top of the stack for the
   /// specified declaration.
   DSAVarData getTopDSA(VarDecl *VD);
-  /// Returns implicit data-sharing attributes for the specified declaration.
-  OpenACCBaseDSAKind getImplicitBaseDSA(VarDecl *D);
+  /// Returns predetermined or implicit base data-sharing attribute for the
+  /// specified declaration.
+  OpenACCBaseDSAKind getImplicitBaseDSA(VarDecl *D, bool HasReduction);
 
   /// Returns currently analyzed directive.
   OpenACCDirectiveKind getRealDirective() const {
@@ -368,13 +379,24 @@ bool DSAStackTy::addBaseDSA(VarDecl *VD, Expr *E,
     SemaRef.Diag(E->getExprLoc(), diag::err_acc_wrong_dsa)
         << getOpenACCBaseDSAName(DVar.BaseDSAKind)
         << getOpenACCBaseDSAName(BaseDSAKind);
-    SemaRef.Diag(DVar.RefExpr->getExprLoc(), diag::note_acc_explicit_dsa)
+    SemaRef.Diag(DVar.BaseDSARefExpr->getExprLoc(),
+                 diag::note_acc_explicit_dsa)
         << getOpenACCBaseDSAName(DVar.BaseDSAKind);
+    return true;
+  }
+  if (!DVar.ReductionId.getName().isEmpty() &&
+      !isAllowedBaseDSAForReduction(BaseDSAKind)) {
+    SemaRef.Diag(E->getExprLoc(), diag::err_acc_wrong_dsa)
+        << getOpenACCClauseName(ACCC_reduction)
+        << getOpenACCBaseDSAName(BaseDSAKind);
+    SemaRef.Diag(DVar.ReductionRefExpr->getExprLoc(),
+                 diag::note_acc_explicit_dsa)
+        << getOpenACCClauseName(ACCC_reduction);
     return true;
   }
 
   DVar.BaseDSAKind = BaseDSAKind;
-  DVar.RefExpr = E;
+  DVar.BaseDSARefExpr = E;
 
   return false;
 }
@@ -391,15 +413,15 @@ bool DSAStackTy::addReduction(VarDecl *VD, Expr *E,
   DSAStackTy::DSAVarData &DVar = I->SharingMap[VD];
 
   // Complain if any existing base DSA cannot combine with a reduction.
-  if (DVar.BaseDSAKind != ACC_BASE_DSA_unknown &&
-      DVar.BaseDSAKind != ACC_BASE_DSA_reduction) {
+  if (!isAllowedBaseDSAForReduction(DVar.BaseDSAKind)) {
     SemaRef.Diag(E->getExprLoc(), diag::err_acc_wrong_dsa)
         << getOpenACCBaseDSAName(DVar.BaseDSAKind)
-        << getOpenACCBaseDSAName(ACC_BASE_DSA_reduction);
+        << getOpenACCClauseName(ACCC_reduction);
     if (CopiedGangReduction)
       SemaRef.Diag(getConstructLoc(), diag::note_acc_gang_reduction_apply)
           << getOpenACCDirectiveName(getRealDirective());
-    SemaRef.Diag(DVar.RefExpr->getExprLoc(), diag::note_acc_explicit_dsa)
+    SemaRef.Diag(DVar.BaseDSARefExpr->getExprLoc(),
+                 diag::note_acc_explicit_dsa)
         << getOpenACCBaseDSAName(DVar.BaseDSAKind);
     return true;
   }
@@ -414,15 +436,15 @@ bool DSAStackTy::addReduction(VarDecl *VD, Expr *E,
     if (CopiedGangReduction)
       SemaRef.Diag(getConstructLoc(), diag::note_acc_gang_reduction_apply)
           << getOpenACCDirectiveName(getRealDirective());
-    SemaRef.Diag(DVar.RefExpr->getExprLoc(), diag::note_acc_previous_reduction)
+    SemaRef.Diag(DVar.ReductionRefExpr->getExprLoc(),
+                 diag::note_acc_previous_reduction)
         << ACCReductionClause::printReductionOperatorToString(
             DVar.ReductionId);
     return true;
   }
 
-  DVar.BaseDSAKind = ACC_BASE_DSA_reduction;
   DVar.ReductionId = ReductionId;
-  DVar.RefExpr = E;
+  DVar.ReductionRefExpr = E;
 
   // TODO: Currently we add reductions to all effective directives in the case
   // of a combined directive.  See todo in
@@ -434,10 +456,15 @@ bool DSAStackTy::addReduction(VarDecl *VD, Expr *E,
   return false;
 }
 
-OpenACCBaseDSAKind DSAStackTy::getImplicitBaseDSA(VarDecl *VD) {
+OpenACCBaseDSAKind DSAStackTy::getImplicitBaseDSA(VarDecl *VD,
+                                                  bool HasReduction) {
   VD = VD->getCanonicalDecl();
   OpenACCBaseDSAKind BaseDSAKind;
-  if (getLoopControlVariables().count(VD)) {
+  // Here, we assume a reduction variable isn't a loop-control variable, and we
+  // complain about that combination later in ActOnOpenACCLoopDirective.
+  if (HasReduction)
+    BaseDSAKind = ACC_BASE_DSA_unknown;
+  else if (getLoopControlVariables().count(VD)) {
     // OpenACC 2.6 [2.6.1]:
     //   "The loop variable in a C for statement [...] that is associated
     //   with a loop directive is predetermined to be private to each thread
@@ -620,15 +647,16 @@ public:
       if (LocalDefinitions.back().count(VD))
         return;
 
-      OpenACCBaseDSAKind BaseDSAKind = Stack->getTopDSA(VD).BaseDSAKind;
-      // Stop analysis if the variable has DSA already set.
-      if (BaseDSAKind != ACC_BASE_DSA_unknown ||
+      DSAStackTy::DSAVarData DVar = Stack->getTopDSA(VD);
+      // Stop analysis if the variable has base DSA already set.
+      if (DVar.BaseDSAKind != ACC_BASE_DSA_unknown ||
           !ImplicitPrivacyVarDecls.insert(VD).second)
         return;
 
       // Compute implicit base DSA.
-      BaseDSAKind = Stack->getImplicitBaseDSA(VD);
-      switch (BaseDSAKind) {
+      DVar.BaseDSAKind = Stack->getImplicitBaseDSA(
+          VD, !DVar.ReductionId.getName().isEmpty());
+      switch (DVar.BaseDSAKind) {
       case ACC_BASE_DSA_shared:
         ImplicitShared.push_back(E);
         break;
@@ -640,8 +668,6 @@ public:
         break;
       case ACC_BASE_DSA_unknown:
         break;
-      case ACC_BASE_DSA_reduction:
-        llvm_unreachable("unexpected reduction as implicit base DSA");
       }
     }
   }
@@ -665,7 +691,7 @@ public:
 
           // Skip variables that have gang-local private copies or that already
           // have the same reduction.
-          auto DVar = Stack->getTopDSA(VD);
+          DSAStackTy::DSAVarData DVar = Stack->getTopDSA(VD);
           switch (DVar.BaseDSAKind) {
           case ACC_BASE_DSA_shared:
             llvm_unreachable("unexpected as explicit data-sharing clause");
@@ -674,26 +700,27 @@ public:
             // The variable is gang-local at the acc loop due to an explicit
             // private or firstprivate at the acc parallel.
             continue;
-          case ACC_BASE_DSA_reduction: {
-            // Skip if we have the same reduction explicitly specified on the
-            // acc parallel.
-            if (DVar.ReductionId.getName() == C->getNameInfo().getName())
-              continue;
-            // We have a conflicting reduction operator.  Record in
-            // ImplicitGangReductions to produce a diagnostic later.  Don't
-            // record in ImplicitGangReductionMap, where it could suppress
-            // diagnostics for additional conflicts.
-            break;
-          }
           case ACC_BASE_DSA_unknown: {
+            if (!DVar.ReductionId.getName().isEmpty()) {
+              // Skip if we have the same reduction explicitly specified on
+              // the acc parallel.
+              if (DVar.ReductionId.getName() == C->getNameInfo().getName())
+                continue;
+              // We have a conflicting reduction operator.  Record in
+              // ImplicitGangReductions to produce a diagnostic later.  Don't
+              // record in ImplicitGangReductionMap, where it could suppress
+              // diagnostics for additional conflicts.
+              break;
+            }
             // Skip if we have the same reduction implicitly specified by
             // another acc loop.
             auto COld = ImplicitGangReductionMap.try_emplace(VD, C);
             if (!COld.second && COld.first->second->getNameInfo().getName() ==
                                 C->getNameInfo().getName())
               continue;
-            // We have a conflicting implicit reduction operator.  Same
-            // behavior as for the explicit case.
+            // If we have a conflicting implicit reduction operator, follow
+            // the same behavior as for the explicit case.  Otherwise, there's
+            // no existing reduction operator.
             break;
           }
           }

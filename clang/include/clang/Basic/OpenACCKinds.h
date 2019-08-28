@@ -53,6 +53,9 @@ OpenACCClauseKind getOpenACCClauseKind(llvm::StringRef Str);
 const char *getOpenACCBaseDSAName(OpenACCBaseDSAKind Kind);
 const char *getOpenACCClauseName(OpenACCClauseKind Kind);
 
+/// Is BaseDSAKind allowed as a base DSA for a reduction?
+bool isAllowedBaseDSAForReduction(OpenACCBaseDSAKind BaseDSAKind);
+
 /// Is BaseDSAKind allowed as a DSA on DKind?  Must not be ACCD_unknown or
 /// ACC_BASE_DSA_unknown.
 bool isAllowedBaseDSAForDirective(OpenACCDirectiveKind DKind,

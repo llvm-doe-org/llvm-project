@@ -21,6 +21,9 @@
 #ifndef OPENACC_BASE_DSA
 #  define OPENACC_BASE_DSA(Name)
 #endif
+#ifndef OPENACC_REDUCTION_BASE_DSA
+#  define OPENACC_REDUCTION_BASE_DSA(Name)
+#endif
 #ifndef OPENACC_CLAUSE
 #  define OPENACC_CLAUSE(Name, Class)
 #endif
@@ -52,6 +55,9 @@
 #define OPENACC_CLAUSE_AND_BASE_DSA(Name, Class) \
   OPENACC_BASE_DSA(Name) \
   OPENACC_CLAUSE(Name, Class)
+#define OPENACC_CLAUSE_AND_REDUCTION_BASE_DSA(Name, Class) \
+  OPENACC_CLAUSE_AND_BASE_DSA(Name, Class) \
+  OPENACC_REDUCTION_BASE_DSA(Name)
 #define OPENACC_PARALLEL_CLAUSE_AND_BASE_DSA(Name) \
   OPENACC_PARALLEL_BASE_DSA(Name) \
   OPENACC_PARALLEL_CLAUSE(Name)
@@ -66,25 +72,30 @@ OPENACC_DIRECTIVE_EXT(parallel_loop, "parallel loop")
 
 // OpenACC clauses and base data-sharing attributes (DSAs).
 //
-// Currently, we define base DSAs as all DSAs, but we will distinguish some in
-// the future as we implement support for more DSAs and related clauses.  For
-// any variable on any OpenACC construct, the base DSAs are mutually exclusive.
-// The OpenACC 2.6 spec doesn't actually say that firstprivate, private, and
-// shared cannot be combined with reduction (and shared is not actually part of
-// the OpenACC spec).  However, a reduction implies visibility at the beginning
-// and end of the construct and privacy within (among gangs or loop
-// iterations), so any of firstprivate, private, and shared would contradict
-// the reduction.  The OpenMP implementation also has this restriction.
+// We define base DSAs as DSAs other than reductions.  For any variable on any
+// OpenACC construct, the base DSAs are mutually exclusive, but most can be
+// combined with a reduction.  The exceptions are firstprivate, private, and
+// shared.  The OpenACC 2.6 spec doesn't actually say that these combinations
+// are not permitted (and shared is not actually part of the OpenACC spec).
+// However, a reduction implies visibility at the beginning and end of the
+// construct and privacy within (among gangs or loop iterations), so any of
+// firstprivate, private, and shared would contradict the reduction.  The
+// OpenMP implementation also has this restriction.
 //
 // Every base DSA is also a clause and has an ACC*Clause class so it can be
 // stored like a predetermined/implicit clause even if it's not permitted as
 // an explicit clause on any directive (e.g., ACCSharedClause).  Thus, define
-// every base DSA with OPENACC_CLAUSE_AND_BASE_DSA and never with
-// OPENACC_BASE_DSA directly.
+// every base DSA with either OPENACC_CLAUSE_AND_BASE_DSA (a base DSA not
+// combinable with a reduction) or OPENACC_CLAUSE_AND_REDUCTION_BASE_DSA (a
+// base DSA combinable with a reduction) and never with either OPENACC_BASE_DSA
+// or OPENACC_REDUCTION_BASE_DSA directly.
+//
+// TODO: We haven't yet implemented any of the base DSAs that are combinable
+// with reductions.  An example is copy.
 OPENACC_CLAUSE_AND_BASE_DSA(shared, ACCSharedClause)
 OPENACC_CLAUSE_AND_BASE_DSA(private, ACCPrivateClause)
 OPENACC_CLAUSE_AND_BASE_DSA(firstprivate, ACCFirstprivateClause)
-OPENACC_CLAUSE_AND_BASE_DSA(reduction, ACCReductionClause)
+OPENACC_CLAUSE(reduction, ACCReductionClause)
 OPENACC_CLAUSE(num_gangs, ACCNumGangsClause)
 OPENACC_CLAUSE(num_workers, ACCNumWorkersClause)
 OPENACC_CLAUSE(vector_length, ACCVectorLengthClause)
@@ -100,7 +111,7 @@ OPENACC_CLAUSE(collapse, ACCCollapseClause)
 OPENACC_PARALLEL_BASE_DSA(shared)
 OPENACC_PARALLEL_CLAUSE_AND_BASE_DSA(private)
 OPENACC_PARALLEL_CLAUSE_AND_BASE_DSA(firstprivate)
-OPENACC_PARALLEL_CLAUSE_AND_BASE_DSA(reduction)
+OPENACC_PARALLEL_CLAUSE(reduction)
 OPENACC_PARALLEL_CLAUSE(num_gangs)
 OPENACC_PARALLEL_CLAUSE(num_workers)
 OPENACC_PARALLEL_CLAUSE(vector_length)
@@ -114,7 +125,7 @@ OPENACC_LOOP_CLAUSE(worker)
 OPENACC_LOOP_CLAUSE(vector)
 OPENACC_LOOP_BASE_DSA(shared)
 OPENACC_LOOP_CLAUSE_AND_BASE_DSA(private)
-OPENACC_LOOP_CLAUSE_AND_BASE_DSA(reduction)
+OPENACC_LOOP_CLAUSE(reduction)
 OPENACC_LOOP_CLAUSE(collapse)
 
 // Explicit clauses allowed for OpenACC directive 'parallel loop'.  DSAs are
@@ -147,6 +158,7 @@ OPENACC_PARALLEL_LOOP_PARENT(unknown)
 #undef OPENACC_DIRECTIVE
 #undef OPENACC_DIRECTIVE_EXT
 #undef OPENACC_BASE_DSA
+#undef OPENACC_REDUCTION_BASE_DSA
 #undef OPENACC_CLAUSE
 #undef OPENACC_PARALLEL_BASE_DSA
 #undef OPENACC_LOOP_BASE_DSA
@@ -157,5 +169,6 @@ OPENACC_PARALLEL_LOOP_PARENT(unknown)
 #undef OPENACC_LOOP_PARENT
 #undef OPENACC_PARALLEL_LOOP_PARENT
 #undef OPENACC_CLAUSE_AND_BASE_DSA
+#undef OPENACC_CLAUSE_AND_REDUCTION_BASE_DSA
 #undef OPENACC_PARALLEL_CLAUSE_AND_BASE_DSA
 #undef OPENACC_LOOP_CLAUSE_AND_BASE_DSA
