@@ -606,6 +606,46 @@ void Sema::EndOpenACCDSABlock() {
 }
 
 namespace {
+class ImplicitGangAdder : public StmtVisitor<ImplicitGangAdder> {
+public:
+  void VisitACCExecutableDirective(ACCExecutableDirective *D) {
+    if (isOpenACCLoopDirective(D->getDirectiveKind())) {
+      auto *LD = cast<ACCLoopDirective>(D);
+      ACCPartitioningKind Part = LD->getPartitioning();
+      // If there's nested gang partitioning or if the loop has not been
+      // determined to be independent, continue on to descendants, some of
+      // which that might not be true for.
+      if (!LD->getNestedGangPartitioning() && Part.hasIndependent()) {
+        // If there's already a gang, worker, or vector clause, don't mess
+        // with the directive's partitioning specification.  Don't continue to
+        // descendants because this means they can't accept a gang clause
+        // either.
+        if (Part.hasGangClause() || Part.hasWorkerClause() ||
+            Part.hasVectorClause())
+          return;
+        // The first three conditions checked above plus the fact that we
+        // haven't encountered a gang clause on enclosing loops mean this is a
+        // gang clause candidate.  The last two conditions above plus the fact
+        // that this is the outermost gang clause candidate we've encountered
+        // means this is where we add the implicit gang clause.  Don't continue
+        // to descendants as they then cannot have a gang clause.
+        LD->addImplicitGangClause();
+        return;
+      }
+    }
+    for (auto *C : D->children()) {
+      if (C)
+        Visit(C);
+    }
+  }
+  void VisitStmt(Stmt *S) {
+    for (Stmt *C : S->children()) {
+      if (C)
+        Visit(C);
+    }
+  }
+};
+
 struct ReductionVar {
   ACCReductionClause * const C;
   DeclRefExpr * const RE;
@@ -840,46 +880,6 @@ public:
 
   ImplicitBaseDSAAdder(DSAStackTy *S) : Stack(S) {
     LocalDefinitions.emplace_back();
-  }
-};
-
-class ImplicitGangAdder : public StmtVisitor<ImplicitGangAdder> {
-public:
-  void VisitACCExecutableDirective(ACCExecutableDirective *D) {
-    if (isOpenACCLoopDirective(D->getDirectiveKind())) {
-      auto *LD = cast<ACCLoopDirective>(D);
-      ACCPartitioningKind Part = LD->getPartitioning();
-      // If there's nested gang partitioning or if the loop has not been
-      // determined to be independent, continue on to descendants, some of
-      // which that might not be true for.
-      if (!LD->getNestedGangPartitioning() && Part.hasIndependent()) {
-        // If there's already a gang, worker, or vector clause, don't mess
-        // with the directive's partitioning specification.  Don't continue to
-        // descendants because this means they can't accept a gang clause
-        // either.
-        if (Part.hasGangClause() || Part.hasWorkerClause() ||
-            Part.hasVectorClause())
-          return;
-        // The first three conditions checked above plus the fact that we
-        // haven't encountered a gang clause on enclosing loops mean this is a
-        // gang clause candidate.  The last two conditions above plus the fact
-        // that this is the outermost gang clause candidate we've encountered
-        // means this is where we add the implicit gang clause.  Don't continue
-        // to descendants as they then cannot have a gang clause.
-        LD->addImplicitGangClause();
-        return;
-      }
-    }
-    for (auto *C : D->children()) {
-      if (C)
-        Visit(C);
-    }
-  }
-  void VisitStmt(Stmt *S) {
-    for (Stmt *C : S->children()) {
-      if (C)
-        Visit(C);
-    }
   }
 };
 } // namespace
