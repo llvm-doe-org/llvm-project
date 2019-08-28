@@ -54,31 +54,17 @@ class DSAStackTy final {
 public:
   Sema &SemaRef;
 
-  /// There are four cases:
-  ///
-  /// 1. If this DSAVarData is for an explicit data sharing attribute (and thus
-  ///    addDSA has already been called for it within the associated
-  ///    ActOnOpenACC*Clause), then CKind!=ACCC_unknown, RefExpr is the
-  ///    referencing expression appearing in the clause, and ReductionId is the
-  ///    reduction ID if a reduction or is default constructed otherwise.
-  /// 2. If both (a) this DSAVarData is for an implicit data sharing attribute
-  ///    and (b) addDSA has already been called within the associated
-  ///    ActOnOpenACC*Clause call, then CKind!=ACCC_unknown, and RefExpr is a
-  ///    referencing expression within the directive's region, and ReductionId
-  ///    is the reduction ID if a reduction or is default constructed
-  ///    otherwise.
-  /// 3. If 2a is true but 2b is not true, then CKind!=ACCC_unknown,
-  ///    RefExpr=nullptr, and ReductionId is default constructed.
-  /// 4. If no data sharing attribute has been computed, then
-  ///    CKind=ACCC_unknown, RefExpr=nullptr, and ReductionId is default
-  ///    constructed.
-  ///
-  /// Because getTopDSA looks for a DSAVarData for which addDSA has already
-  /// been called, getTopDSA's result is never case 3, and so its
-  /// CKind=ACCC_unknown iff RefExpr=nullptr.
+  /// Represents a variable's uncomputed, implicit, or explicit (specified in
+  /// an explicit clause) data-sharing attributes on a directive.
   struct DSAVarData final {
+    /// If uncomputed, then ACCC_unknown.  Otherwise, not ACCC_unknown.
     OpenACCClauseKind CKind = ACCC_unknown;
+    /// If uncomputed, then nullptr.  If implicit, then a referencing
+    /// expression within the directive's region.  If explicit, then the
+    /// referencing expression appearing in the clause.
     Expr *RefExpr = nullptr;
+    /// If uncomputed or not a reduction, then default constructed.  Otherwise,
+    /// the reduction ID.
     DeclarationNameInfo ReductionId;
     DSAVarData() {}
   };
@@ -261,8 +247,8 @@ public:
   /// Returns data sharing attributes from top of the stack for the
   /// specified declaration.
   DSAVarData getTopDSA(VarDecl *VD);
-  /// Returns data-sharing attributes for the specified declaration.
-  DSAVarData getImplicitDSA(VarDecl *D);
+  /// Returns implicit data-sharing attributes for the specified declaration.
+  OpenACCClauseKind getImplicitDSA(VarDecl *D);
 
   /// Returns currently analyzed directive.
   OpenACCDirectiveKind getRealDirective() const {
@@ -444,10 +430,9 @@ bool DSAStackTy::addDSA(
   return false;
 }
 
-DSAStackTy::DSAVarData DSAStackTy::getImplicitDSA(VarDecl *VD) {
+OpenACCClauseKind DSAStackTy::getImplicitDSA(VarDecl *VD) {
   VD = VD->getCanonicalDecl();
-  DSAVarData DVar;
-  DVar.RefExpr = nullptr;
+  OpenACCClauseKind CKind;
   if (getLoopControlVariables().count(VD)) {
     // OpenACC 2.6 [2.6.1]:
     //   "The loop variable in a C for statement [...] that is associated
@@ -466,14 +451,14 @@ DSAStackTy::DSAVarData DSAStackTy::getImplicitDSA(VarDecl *VD) {
       // predetermined private, and this doesn't seem to contradict the
       // specification that it be private to the one thread that executes the
       // loop.
-      DVar.CKind = ACCC_shared;
+      CKind = ACCC_shared;
     else
       // Private is consistent with OpenMP in all cases here except vector
       // partitioning.  That is, OpenMP simd makes it predetermined linear,
       // which has lastprivate-like semantics.  However, for consistency, we
       // assume the intuitive semantics of private in all cases here: the
       // private copy goes out of scope at the end of the loop.
-      DVar.CKind = ACCC_private;
+      CKind = ACCC_private;
   }
   // OpenACC 2.5 [2.5.1.588-590]:
   //   "A scalar variable referenced in the parallel construct that does not
@@ -489,10 +474,10 @@ DSAStackTy::DSAVarData DSAStackTy::getImplicitDSA(VarDecl *VD) {
   //   attribute) or any pointer datatype."
   else if (VD->getType()->isScalarType() &&
            isOpenACCParallelDirective(getEffectiveDirective()))
-    DVar.CKind = ACCC_firstprivate;
+    CKind = ACCC_firstprivate;
   else
-    DVar.CKind = ACCC_shared;
-  return DVar;
+    CKind = ACCC_shared;
+  return CKind;
 }
 
 DSAStackTy::DSAVarData DSAStackTy::getTopDSA(VarDecl *VD) {
@@ -631,19 +616,18 @@ public:
       if (LocalDefinitions.back().count(VD))
         return;
 
-      auto DVar = Stack->getTopDSA(VD);
+      OpenACCClauseKind CKind = Stack->getTopDSA(VD).CKind;
       // Stop analysis if the variable has DSA already set.
-      if (DVar.CKind != ACCC_unknown ||
-          !ImplicitPrivacyVarDecls.insert(VD).second)
+      if (CKind != ACCC_unknown || !ImplicitPrivacyVarDecls.insert(VD).second)
         return;
 
       // Compute implicit (perhaps inherited) data sharing attribute.
-      DVar = Stack->getImplicitDSA(VD);
-      if (DVar.CKind == ACCC_shared)
+      CKind = Stack->getImplicitDSA(VD);
+      if (CKind == ACCC_shared)
         ImplicitShared.push_back(E);
-      else if (DVar.CKind == ACCC_private)
+      else if (CKind == ACCC_private)
         ImplicitPrivate.push_back(E);
-      else if (DVar.CKind == ACCC_firstprivate)
+      else if (CKind == ACCC_firstprivate)
         ImplicitFirstprivate.push_back(E);
     }
   }
