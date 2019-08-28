@@ -611,29 +611,13 @@ struct ReductionVar {
   DeclRefExpr * const RE;
   ReductionVar(ACCReductionClause *C, DeclRefExpr *RE) : C(C), RE(RE) {}
 };
-class DSAAttrChecker : public StmtVisitor<DSAAttrChecker> {
-  typedef StmtVisitor<DSAAttrChecker> BaseVisitor;
+class ImplicitGangReductionAdder
+    : public StmtVisitor<ImplicitGangReductionAdder> {
+  typedef StmtVisitor<ImplicitGangReductionAdder> BaseVisitor;
   DSAStackTy *Stack;
-  llvm::SmallVector<Expr *, 8> ImplicitShared;
-  llvm::SmallVector<Expr *, 8> ImplicitPrivate;
-  llvm::SmallVector<Expr *, 8> ImplicitFirstprivate;
-  llvm::DenseSet<VarDecl *> ImplicitPrivacyVarDecls;
   llvm::SmallVector<ReductionVar, 8> ImplicitGangReductions;
   llvm::DenseMap<VarDecl *, ACCReductionClause *>  ImplicitGangReductionMap;
   llvm::SmallVector<llvm::DenseSet<const Decl *>, 8> LocalDefinitions;
-  void pruneImplicitPrivacyClause(llvm::SmallVector<Expr *, 8> &VarDecls) {
-    auto Write = VarDecls.begin();
-    for (auto Read = VarDecls.begin(), End = VarDecls.end(); Read != End;
-         ++Read) {
-      auto *DE = dyn_cast_or_null<DeclRefExpr>((*Read)->IgnoreParens());
-      assert(DE && "OpenACC implicit privacy clause for non-DeclRefExpr");
-      auto *VD = dyn_cast_or_null<VarDecl>(DE->getDecl());
-      assert(VD && "OpenACC implicit privacy clause for non-VarDecl");
-      if (!ImplicitGangReductionMap.count(VD))
-        *Write++ = *Read;
-    }
-    VarDecls.resize(Write - VarDecls.begin());
-  }
 
 public:
   void VisitDeclStmt(DeclStmt *S) {
@@ -641,44 +625,8 @@ public:
       LocalDefinitions.back().insert(*I);
     BaseVisitor::VisitDeclStmt(S);
   }
-  void VisitDeclRefExpr(DeclRefExpr *E) {
-    if (auto *VD = dyn_cast<VarDecl>(E->getDecl())) {
-      // Skip internally declared variables.
-      if (LocalDefinitions.back().count(VD))
-        return;
-
-      DSAStackTy::DSAVarData DVar = Stack->getTopDSA(VD);
-      // Stop analysis if the variable has base DSA already set.
-      if (DVar.BaseDSAKind != ACC_BASE_DSA_unknown ||
-          !ImplicitPrivacyVarDecls.insert(VD).second)
-        return;
-
-      // Compute implicit base DSA.
-      DVar.BaseDSAKind = Stack->getImplicitBaseDSA(
-          VD, !DVar.ReductionId.getName().isEmpty());
-      switch (DVar.BaseDSAKind) {
-      case ACC_BASE_DSA_shared:
-        ImplicitShared.push_back(E);
-        break;
-      case ACC_BASE_DSA_private:
-        ImplicitPrivate.push_back(E);
-        break;
-      case ACC_BASE_DSA_firstprivate:
-        ImplicitFirstprivate.push_back(E);
-        break;
-      case ACC_BASE_DSA_unknown:
-        break;
-      }
-    }
-  }
-  void VisitMemberExpr(MemberExpr *E) {
-    Visit(E->getBase());
-  }
   void VisitACCExecutableDirective(ACCExecutableDirective *D) {
-    // For acc parallel directive, record gang reductions from descendant acc
-    // loop directives.
-    if (isOpenACCParallelDirective(Stack->getEffectiveDirective()) &&
-        isOpenACCLoopDirective(D->getDirectiveKind()) &&
+    if (isOpenACCLoopDirective(D->getDirectiveKind()) &&
         D->hasClausesOfKind<ACCGangClause>()) {
       for (ACCReductionClause *C : D->getClausesOfKind<ACCReductionClause>()) {
         for (Expr *VR : C->varlists()) {
@@ -736,12 +684,110 @@ public:
       if (!C)
         return;
       if (auto PC = dyn_cast<ACCPrivateClause>(C)) {
-        // Skip computing data-sharing attributes and gang reductions for these
-        // variables due to references to them within the construct because
-        // those references refer to local copies.
+        // Skip computing gang reductions for these variables due to references
+        // to them within the construct because those references refer to local
+        // copies.
         for (const Expr *VR : PC->varlists()) {
           const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
-          const VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
+          const VarDecl *VD =
+              cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
+          LocalDefinitions.back().insert(VD);
+        }
+      } else if (auto PC = dyn_cast<ACCReductionClause>(C)) {
+        // Skip computing gang reductions for these variables due to references
+        // to them within the construct because those references refer to local
+        // copies.
+        for (const Expr *VR : PC->varlists()) {
+          const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
+          const VarDecl *VD =
+              cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
+          LocalDefinitions.back().insert(VD);
+        }
+      }
+      // firstprivate is currently impossible because we're always within an
+      // acc parallel looking at an acc loop, which does not take firstprivate.
+    }
+    for (auto *Child : D->children()) {
+      if (Child)
+        Visit(Child);
+    }
+    LocalDefinitions.pop_back();
+  }
+  void VisitStmt(Stmt *S) {
+    for (Stmt *C : S->children()) {
+      if (C)
+        Visit(C);
+    }
+  }
+  ArrayRef<ReductionVar> getImplicitGangReductions() {
+    return ImplicitGangReductions;
+  }
+  ImplicitGangReductionAdder(DSAStackTy *S) : Stack(S) {
+    LocalDefinitions.emplace_back();
+  }
+};
+
+class ImplicitBaseDSAAdder : public StmtVisitor<ImplicitBaseDSAAdder> {
+  typedef StmtVisitor<ImplicitBaseDSAAdder> BaseVisitor;
+  DSAStackTy *Stack;
+  llvm::SmallVector<Expr *, 8> ImplicitShared;
+  llvm::SmallVector<Expr *, 8> ImplicitPrivate;
+  llvm::SmallVector<Expr *, 8> ImplicitFirstprivate;
+  llvm::DenseSet<VarDecl *> ImplicitPrivacyVarDecls;
+  llvm::SmallVector<llvm::DenseSet<const Decl *>, 8> LocalDefinitions;
+
+public:
+  void VisitDeclStmt(DeclStmt *S) {
+    for (auto I = S->decl_begin(), E = S->decl_end(); I != E; ++I)
+      LocalDefinitions.back().insert(*I);
+    BaseVisitor::VisitDeclStmt(S);
+  }
+  void VisitDeclRefExpr(DeclRefExpr *E) {
+    if (auto *VD = dyn_cast<VarDecl>(E->getDecl())) {
+      // Skip internally declared variables.
+      if (LocalDefinitions.back().count(VD))
+        return;
+
+      DSAStackTy::DSAVarData DVar = Stack->getTopDSA(VD);
+      // Stop analysis if the variable has base DSA already set.
+      if (DVar.BaseDSAKind != ACC_BASE_DSA_unknown ||
+          !ImplicitPrivacyVarDecls.insert(VD).second)
+        return;
+
+      // Compute implicit base DSA.
+      DVar.BaseDSAKind = Stack->getImplicitBaseDSA(
+          VD, !DVar.ReductionId.getName().isEmpty());
+      switch (DVar.BaseDSAKind) {
+      case ACC_BASE_DSA_shared:
+        ImplicitShared.push_back(E);
+        break;
+      case ACC_BASE_DSA_private:
+        ImplicitPrivate.push_back(E);
+        break;
+      case ACC_BASE_DSA_firstprivate:
+        ImplicitFirstprivate.push_back(E);
+        break;
+      case ACC_BASE_DSA_unknown:
+        break;
+      }
+    }
+  }
+  void VisitMemberExpr(MemberExpr *E) {
+    Visit(E->getBase());
+  }
+  void VisitACCExecutableDirective(ACCExecutableDirective *D) {
+    LocalDefinitions.emplace_back(LocalDefinitions.back());
+    for (ACCClause *C : D->clauses()) {
+      if (!C)
+        return;
+      if (auto PC = dyn_cast<ACCPrivateClause>(C)) {
+        // Skip computing data-sharing attributes for these variables due to
+        // references to them within the construct because those references
+        // refer to local copies.
+        for (const Expr *VR : PC->varlists()) {
+          const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
+          const VarDecl *VD =
+              cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
           LocalDefinitions.back().insert(VD);
         }
         // Skip computing data-sharing attributes for these variables due to
@@ -757,12 +803,18 @@ public:
           Visit(Child);
       }
       if (auto PC = dyn_cast<ACCReductionClause>(C)) {
-        // Skip computing data-sharing attributes and gang reductions for these
-        // variables due to references to them within the construct because
-        // those references refer to local copies.
+        // Skip computing data-sharing attributes for these variables due to
+        // references to them within the construct because those references
+        // refer to local copies.
+        //
+        // Actually, this skip should be redundant because we just computed the
+        // implicit DSAs for these variables, so doing so again for other
+        // references to them should have no effect.  Neverthless, keeping this
+        // skip makes it easier to understand the analysis when debugging.
         for (const Expr *VR : PC->varlists()) {
           const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
-          const VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
+          const VarDecl *VD =
+              cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
           LocalDefinitions.back().insert(VD);
         }
       }
@@ -782,24 +834,13 @@ public:
     }
   }
 
-  // Remove variables for implicit gang reductions from other implicit clauses,
-  // over which they have priority, and with which they would conflict if we
-  // kept both.  This is necessary because, during this single subtree
-  // traversal, we add privacy clauses upon any use of a variable, but we might
-  // discover a nested acc loop with a gang reduction afterward.
-  void pruneImplicitPrivacyClauses() {
-    pruneImplicitPrivacyClause(ImplicitShared);
-    pruneImplicitPrivacyClause(ImplicitPrivate);
-    pruneImplicitPrivacyClause(ImplicitFirstprivate);
-  }
   ArrayRef<Expr *> getImplicitShared() { return ImplicitShared; }
   ArrayRef<Expr *> getImplicitPrivate() { return ImplicitPrivate; }
   ArrayRef<Expr *> getImplicitFirstprivate() { return ImplicitFirstprivate; }
-  ArrayRef<ReductionVar> getImplicitGangReductions() {
-    return ImplicitGangReductions;
-  }
 
-  DSAAttrChecker(DSAStackTy *S) : Stack(S) { LocalDefinitions.emplace_back(); }
+  ImplicitBaseDSAAdder(DSAStackTy *S) : Stack(S) {
+    LocalDefinitions.emplace_back();
+  }
 };
 
 class ImplicitGangAdder : public StmtVisitor<ImplicitGangAdder> {
@@ -1007,43 +1048,47 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     // case?
   }
   if (AStmt) {
-    // Add implicit gang clauses.  This must come before adding implicit
-    // data sharing attributes or implicit reductions due to implicit gang
-    // clauses will be missed.
-    if (isOpenACCParallelDirective(DKind))
+    if (isOpenACCParallelDirective(DKind)) {
+      // Add implicit gang clauses.
       ImplicitGangAdder().Visit(AStmt);
-    // Check default data sharing attributes for referenced variables.
-    DSAAttrChecker DSAChecker(DSAStack);
-    DSAChecker.Visit(AStmt);
-    DSAChecker.pruneImplicitPrivacyClauses();
-    if (!DSAChecker.getImplicitShared().empty()) {
+      // Add implicit gang reductions, possibly due to any implicit gang
+      // clauses added above.
+      ImplicitGangReductionAdder ReductionAdder(DSAStack);
+      ReductionAdder.Visit(AStmt);
+      for (ReductionVar RV : ReductionAdder.getImplicitGangReductions()) {
+        ACCClause *Implicit = ActOnOpenACCReductionClause(
+            RV.RE, SourceLocation(), SourceLocation(), SourceLocation(),
+            SourceLocation(), RV.C->getNameInfo(),
+            /*CopiedGangReduction*/ true);
+        if (!Implicit)
+          ErrorFound = true;
+        else
+          ClausesWithImplicit.push_back(Implicit);
+      }
+    }
+    // For referenced variables, add implicit base DSAs, possibly influenced by
+    // any implicit gang reductions added above.
+    ImplicitBaseDSAAdder Adder(DSAStack);
+    Adder.Visit(AStmt);
+    if (!Adder.getImplicitShared().empty()) {
       ACCClause *Implicit = ActOnOpenACCSharedClause(
-          DSAChecker.getImplicitShared());
+          Adder.getImplicitShared());
       assert(Implicit);
       ClausesWithImplicit.push_back(Implicit);
     }
-    if (!DSAChecker.getImplicitPrivate().empty()) {
+    if (!Adder.getImplicitPrivate().empty()) {
       ACCClause *Implicit = ActOnOpenACCPrivateClause(
-          DSAChecker.getImplicitPrivate(), SourceLocation(),
+          Adder.getImplicitPrivate(), SourceLocation(),
           SourceLocation(), SourceLocation());
       assert(Implicit);
       ClausesWithImplicit.push_back(Implicit);
     }
-    if (!DSAChecker.getImplicitFirstprivate().empty()) {
+    if (!Adder.getImplicitFirstprivate().empty()) {
       ACCClause *Implicit = ActOnOpenACCFirstprivateClause(
-          DSAChecker.getImplicitFirstprivate(), SourceLocation(),
+          Adder.getImplicitFirstprivate(), SourceLocation(),
           SourceLocation(), SourceLocation());
       assert(Implicit);
       ClausesWithImplicit.push_back(Implicit);
-    }
-    for (ReductionVar RV : DSAChecker.getImplicitGangReductions()) {
-      ACCClause *Implicit = ActOnOpenACCReductionClause(
-          RV.RE, SourceLocation(), SourceLocation(), SourceLocation(),
-          SourceLocation(), RV.C->getNameInfo(), true);
-      if (!Implicit)
-        ErrorFound = true;
-      else
-        ClausesWithImplicit.push_back(Implicit);
     }
   }
 
