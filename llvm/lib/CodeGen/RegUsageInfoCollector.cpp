@@ -88,6 +88,9 @@ static bool isCallableFunction(const MachineFunction &MF) {
   case CallingConv::AMDGPU_GS:
   case CallingConv::AMDGPU_PS:
   case CallingConv::AMDGPU_CS:
+  case CallingConv::AMDGPU_HS:
+  case CallingConv::AMDGPU_ES:
+  case CallingConv::AMDGPU_LS:
   case CallingConv::AMDGPU_KERNEL:
     return false;
   default:
@@ -139,6 +142,13 @@ bool RegUsageInfoCollector::runOnMachineFunction(MachineFunction &MF) {
   auto SetRegAsDefined = [&RegMask] (unsigned Reg) {
     RegMask[Reg / 32] &= ~(1u << Reg % 32);
   };
+
+  // Some targets can clobber registers "inside" a call, typically in
+  // linker-generated code.
+  for (const MCPhysReg Reg : TRI->getIntraCallClobberedRegs(&MF))
+    for (MCRegAliasIterator AI(Reg, TRI, true); AI.isValid(); ++AI)
+      SetRegAsDefined(*AI);
+
   // Scan all the physical registers. When a register is defined in the current
   // function set it and all the aliasing registers as defined in the regmask.
   // FIXME: Rewrite to use regunits.
@@ -161,7 +171,8 @@ bool RegUsageInfoCollector::runOnMachineFunction(MachineFunction &MF) {
       SetRegAsDefined(PReg);
   }
 
-  if (TargetFrameLowering::isSafeForNoCSROpt(F)) {
+  if (TargetFrameLowering::isSafeForNoCSROpt(F) &&
+      MF.getSubtarget().getFrameLowering()->isProfitableForNoCSROpt(F)) {
     ++NumCSROpt;
     LLVM_DEBUG(dbgs() << MF.getName()
                       << " function optimized for not having CSR.\n");
@@ -189,42 +200,17 @@ computeCalleeSavedRegs(BitVector &SavedRegs, MachineFunction &MF) {
   // Target will return the set of registers that it saves/restores as needed.
   SavedRegs.clear();
   TFI.determineCalleeSaves(MF, SavedRegs);
+  if (SavedRegs.none())
+    return;
 
   // Insert subregs.
   const MCPhysReg *CSRegs = TRI.getCalleeSavedRegs(&MF);
   for (unsigned i = 0; CSRegs[i]; ++i) {
-    unsigned Reg = CSRegs[i];
-    if (SavedRegs.test(Reg))
-      for (MCSubRegIterator SR(Reg, &TRI, false); SR.isValid(); ++SR)
+    MCPhysReg Reg = CSRegs[i];
+    if (SavedRegs.test(Reg)) {
+      // Save subregisters
+      for (MCSubRegIterator SR(Reg, &TRI); SR.isValid(); ++SR)
         SavedRegs.set(*SR);
-  }
-
-  // Insert any register fully saved via subregisters.
-  // FIXME: Rewrite to use regunits.
-  for (const TargetRegisterClass *RC : TRI.regclasses()) {
-    if (!RC->CoveredBySubRegs)
-       continue;
-
-    for (unsigned PReg = 1, PRegE = TRI.getNumRegs(); PReg < PRegE; ++PReg) {
-      if (SavedRegs.test(PReg))
-        continue;
-
-      // Check if PReg is fully covered by its subregs.
-      if (!RC->contains(PReg))
-        continue;
-
-      // Add PReg to SavedRegs if all subregs are saved.
-      bool AllSubRegsSaved = true;
-      bool HasAtLeastOneSubreg = false;
-      for (MCSubRegIterator SR(PReg, &TRI, false); SR.isValid(); ++SR) {
-        HasAtLeastOneSubreg = true;
-        if (!SavedRegs.test(*SR)) {
-          AllSubRegsSaved = false;
-          break;
-        }
-      }
-      if (AllSubRegsSaved && HasAtLeastOneSubreg)
-        SavedRegs.set(PReg);
     }
   }
 }

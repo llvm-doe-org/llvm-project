@@ -39,80 +39,6 @@
 #include "llvm/Support/KnownBits.h"
 using namespace llvm;
 
-static bool allocateCCRegs(unsigned ValNo, MVT ValVT, MVT LocVT,
-                           CCValAssign::LocInfo LocInfo,
-                           ISD::ArgFlagsTy ArgFlags, CCState &State,
-                           const TargetRegisterClass *RC,
-                           unsigned NumRegs) {
-  ArrayRef<MCPhysReg> RegList = makeArrayRef(RC->begin(), NumRegs);
-  unsigned RegResult = State.AllocateReg(RegList);
-  if (RegResult == AMDGPU::NoRegister)
-    return false;
-
-  State.addLoc(CCValAssign::getReg(ValNo, ValVT, RegResult, LocVT, LocInfo));
-  return true;
-}
-
-static bool allocateSGPRTuple(unsigned ValNo, MVT ValVT, MVT LocVT,
-                              CCValAssign::LocInfo LocInfo,
-                              ISD::ArgFlagsTy ArgFlags, CCState &State) {
-  switch (LocVT.SimpleTy) {
-  case MVT::i64:
-  case MVT::f64:
-  case MVT::v2i32:
-  case MVT::v2f32:
-  case MVT::v4i16:
-  case MVT::v4f16: {
-    // Up to SGPR0-SGPR105
-    return allocateCCRegs(ValNo, ValVT, LocVT, LocInfo, ArgFlags, State,
-                          &AMDGPU::SGPR_64RegClass, 53);
-  }
-  default:
-    return false;
-  }
-}
-
-// Allocate up to VGPR31.
-//
-// TODO: Since there are no VGPR alignent requirements would it be better to
-// split into individual scalar registers?
-static bool allocateVGPRTuple(unsigned ValNo, MVT ValVT, MVT LocVT,
-                              CCValAssign::LocInfo LocInfo,
-                              ISD::ArgFlagsTy ArgFlags, CCState &State) {
-  switch (LocVT.SimpleTy) {
-  case MVT::i64:
-  case MVT::f64:
-  case MVT::v2i32:
-  case MVT::v2f32:
-  case MVT::v4i16:
-  case MVT::v4f16: {
-    return allocateCCRegs(ValNo, ValVT, LocVT, LocInfo, ArgFlags, State,
-                          &AMDGPU::VReg_64RegClass, 31);
-  }
-  case MVT::v4i32:
-  case MVT::v4f32:
-  case MVT::v2i64:
-  case MVT::v2f64: {
-    return allocateCCRegs(ValNo, ValVT, LocVT, LocInfo, ArgFlags, State,
-                          &AMDGPU::VReg_128RegClass, 29);
-  }
-  case MVT::v8i32:
-  case MVT::v8f32: {
-    return allocateCCRegs(ValNo, ValVT, LocVT, LocInfo, ArgFlags, State,
-                          &AMDGPU::VReg_256RegClass, 25);
-
-  }
-  case MVT::v16i32:
-  case MVT::v16f32: {
-    return allocateCCRegs(ValNo, ValVT, LocVT, LocInfo, ArgFlags, State,
-                          &AMDGPU::VReg_512RegClass, 17);
-
-  }
-  default:
-    return false;
-  }
-}
-
 #include "AMDGPUGenCallingConv.inc"
 
 // Find a larger type to do a load / store of a vector with.
@@ -165,6 +91,9 @@ AMDGPUTargetLowering::AMDGPUTargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::LOAD, MVT::v16f32, Promote);
   AddPromotedToType(ISD::LOAD, MVT::v16f32, MVT::v16i32);
 
+  setOperationAction(ISD::LOAD, MVT::v32f32, Promote);
+  AddPromotedToType(ISD::LOAD, MVT::v32f32, MVT::v32i32);
+
   setOperationAction(ISD::LOAD, MVT::i64, Promote);
   AddPromotedToType(ISD::LOAD, MVT::i64, MVT::v2i32);
 
@@ -215,6 +144,9 @@ AMDGPUTargetLowering::AMDGPUTargetLowering(const TargetMachine &TM,
     setLoadExtAction(ISD::EXTLOAD, VT, MVT::v2i16, Expand);
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::v2i16, Expand);
     setLoadExtAction(ISD::ZEXTLOAD, VT, MVT::v2i16, Expand);
+    setLoadExtAction(ISD::EXTLOAD, VT, MVT::v3i16, Expand);
+    setLoadExtAction(ISD::SEXTLOAD, VT, MVT::v3i16, Expand);
+    setLoadExtAction(ISD::ZEXTLOAD, VT, MVT::v3i16, Expand);
     setLoadExtAction(ISD::EXTLOAD, VT, MVT::v4i16, Expand);
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::v4i16, Expand);
     setLoadExtAction(ISD::ZEXTLOAD, VT, MVT::v4i16, Expand);
@@ -222,8 +154,11 @@ AMDGPUTargetLowering::AMDGPUTargetLowering(const TargetMachine &TM,
 
   setLoadExtAction(ISD::EXTLOAD, MVT::f32, MVT::f16, Expand);
   setLoadExtAction(ISD::EXTLOAD, MVT::v2f32, MVT::v2f16, Expand);
+  setLoadExtAction(ISD::EXTLOAD, MVT::v3f32, MVT::v3f16, Expand);
   setLoadExtAction(ISD::EXTLOAD, MVT::v4f32, MVT::v4f16, Expand);
   setLoadExtAction(ISD::EXTLOAD, MVT::v8f32, MVT::v8f16, Expand);
+  setLoadExtAction(ISD::EXTLOAD, MVT::v16f32, MVT::v16f16, Expand);
+  setLoadExtAction(ISD::EXTLOAD, MVT::v32f32, MVT::v32f16, Expand);
 
   setLoadExtAction(ISD::EXTLOAD, MVT::f64, MVT::f32, Expand);
   setLoadExtAction(ISD::EXTLOAD, MVT::v2f64, MVT::v2f32, Expand);
@@ -256,6 +191,9 @@ AMDGPUTargetLowering::AMDGPUTargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::STORE, MVT::v16f32, Promote);
   AddPromotedToType(ISD::STORE, MVT::v16f32, MVT::v16i32);
 
+  setOperationAction(ISD::STORE, MVT::v32f32, Promote);
+  AddPromotedToType(ISD::STORE, MVT::v32f32, MVT::v32i32);
+
   setOperationAction(ISD::STORE, MVT::i64, Promote);
   AddPromotedToType(ISD::STORE, MVT::i64, MVT::v2i32);
 
@@ -280,8 +218,11 @@ AMDGPUTargetLowering::AMDGPUTargetLowering(const TargetMachine &TM,
 
   setTruncStoreAction(MVT::f32, MVT::f16, Expand);
   setTruncStoreAction(MVT::v2f32, MVT::v2f16, Expand);
+  setTruncStoreAction(MVT::v3f32, MVT::v3f16, Expand);
   setTruncStoreAction(MVT::v4f32, MVT::v4f16, Expand);
   setTruncStoreAction(MVT::v8f32, MVT::v8f16, Expand);
+  setTruncStoreAction(MVT::v16f32, MVT::v16f16, Expand);
+  setTruncStoreAction(MVT::v32f32, MVT::v32f16, Expand);
 
   setTruncStoreAction(MVT::f64, MVT::f16, Expand);
   setTruncStoreAction(MVT::f64, MVT::f32, Expand);
@@ -355,6 +296,10 @@ AMDGPUTargetLowering::AMDGPUTargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::EXTRACT_SUBVECTOR, MVT::v5i32, Custom);
   setOperationAction(ISD::EXTRACT_SUBVECTOR, MVT::v8f32, Custom);
   setOperationAction(ISD::EXTRACT_SUBVECTOR, MVT::v8i32, Custom);
+  setOperationAction(ISD::EXTRACT_SUBVECTOR, MVT::v16f32, Custom);
+  setOperationAction(ISD::EXTRACT_SUBVECTOR, MVT::v16i32, Custom);
+  setOperationAction(ISD::EXTRACT_SUBVECTOR, MVT::v32f32, Custom);
+  setOperationAction(ISD::EXTRACT_SUBVECTOR, MVT::v32i32, Custom);
 
   setOperationAction(ISD::FP16_TO_FP, MVT::f64, Expand);
   setOperationAction(ISD::FP_TO_FP16, MVT::f64, Custom);
@@ -719,8 +664,9 @@ bool AMDGPUTargetLowering::shouldReduceLoadWidth(SDNode *N,
   return (OldSize < 32);
 }
 
-bool AMDGPUTargetLowering::isLoadBitCastBeneficial(EVT LoadTy,
-                                                   EVT CastTy) const {
+bool AMDGPUTargetLowering::isLoadBitCastBeneficial(EVT LoadTy, EVT CastTy,
+                                                   const SelectionDAG &DAG,
+                                                   const MachineMemOperand &MMO) const {
 
   assert(LoadTy.getSizeInBits() == CastTy.getSizeInBits());
 
@@ -730,8 +676,12 @@ bool AMDGPUTargetLowering::isLoadBitCastBeneficial(EVT LoadTy,
   unsigned LScalarSize = LoadTy.getScalarSizeInBits();
   unsigned CastScalarSize = CastTy.getScalarSizeInBits();
 
-  return (LScalarSize < CastScalarSize) ||
-         (CastScalarSize >= 32);
+  if ((LScalarSize >= CastScalarSize) && (CastScalarSize < 32))
+    return false;
+
+  bool Fast = false;
+  return allowsMemoryAccess(*DAG.getContext(), DAG.getDataLayout(), CastTy,
+                            MMO, &Fast) && Fast;
 }
 
 // SI+ has instructions for cttz / ctlz for 32-bit values. This is probably also
@@ -2922,18 +2872,11 @@ bool AMDGPUTargetLowering::SelectFlatOffset(bool IsSigned,
     SDValue N1 = Addr.getOperand(1);
     int64_t COffsetVal = cast<ConstantSDNode>(N1)->getSExtValue();
 
-    if (ST.getGeneration() >= AMDGPUSubtarget::GFX10) {
-      if ((IsSigned && isInt<12>(COffsetVal)) ||
-          (!IsSigned && isUInt<11>(COffsetVal))) {
-        Addr = N0;
-        OffsetVal = COffsetVal;
-      }
-    } else {
-      if ((IsSigned && isInt<13>(COffsetVal)) ||
-          (!IsSigned && isUInt<12>(COffsetVal))) {
-        Addr = N0;
-        OffsetVal = COffsetVal;
-      }
+    const SIInstrInfo *TII = ST.getInstrInfo();
+    if (TII->isLegalFLATOffset(COffsetVal, findMemSDNode(N)->getAddressSpace(),
+                               IsSigned)) {
+      Addr = N0;
+      OffsetVal = COffsetVal;
     }
   }
 
@@ -3650,13 +3593,11 @@ SDValue AMDGPUTargetLowering::performSelectCombine(SDNode *N,
 
   if (Cond.hasOneUse()) { // TODO: Look for multiple select uses.
     SelectionDAG &DAG = DCI.DAG;
-    if ((DAG.isConstantValueOfAnyType(True) ||
-         DAG.isConstantValueOfAnyType(True)) &&
-        (!DAG.isConstantValueOfAnyType(False) &&
-         !DAG.isConstantValueOfAnyType(False))) {
+    if (DAG.isConstantValueOfAnyType(True) &&
+        !DAG.isConstantValueOfAnyType(False)) {
       // Swap cmp + select pair to move constant to false input.
       // This will allow using VOPC cndmasks more often.
-      // select (setcc x, y), k, x -> select (setcc y, x) x, x
+      // select (setcc x, y), k, x -> select (setccinv x, y), x, k
 
       SDLoc SL(N);
       ISD::CondCode NewCC = getSetCCInverse(cast<CondCodeSDNode>(CC)->get(),
@@ -4289,6 +4230,7 @@ const char* AMDGPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(FRACT)
   NODE_NAME_CASE(SETCC)
   NODE_NAME_CASE(SETREG)
+  NODE_NAME_CASE(DENORM_MODE)
   NODE_NAME_CASE(FMA_W_CHAIN)
   NODE_NAME_CASE(FMUL_W_CHAIN)
   NODE_NAME_CASE(CLAMP)
@@ -4422,7 +4364,13 @@ const char* AMDGPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(BUFFER_ATOMIC_AND)
   NODE_NAME_CASE(BUFFER_ATOMIC_OR)
   NODE_NAME_CASE(BUFFER_ATOMIC_XOR)
+  NODE_NAME_CASE(BUFFER_ATOMIC_INC)
+  NODE_NAME_CASE(BUFFER_ATOMIC_DEC)
   NODE_NAME_CASE(BUFFER_ATOMIC_CMPSWAP)
+  NODE_NAME_CASE(BUFFER_ATOMIC_FADD)
+  NODE_NAME_CASE(BUFFER_ATOMIC_PK_FADD)
+  NODE_NAME_CASE(ATOMIC_FADD)
+  NODE_NAME_CASE(ATOMIC_PK_FADD)
 
   case AMDGPUISD::LAST_AMDGPU_ISD_NUMBER: break;
   }
@@ -4566,9 +4514,9 @@ void AMDGPUTargetLowering::computeKnownBitsForTargetNode(
         Known.One |= ((LHSKnown.One.getZExtValue() >> SelBits) & 0xff) << I;
         Known.Zero |= ((LHSKnown.Zero.getZExtValue() >> SelBits) & 0xff) << I;
       } else if (SelBits == 0x0c) {
-        Known.Zero |= 0xff << I;
+        Known.Zero |= 0xFFull << I;
       } else if (SelBits > 0x0c) {
-        Known.One |= 0xff << I;
+        Known.One |= 0xFFull << I;
       }
       Sel >>= 8;
     }

@@ -598,6 +598,10 @@ def ext_implicit_lib_function_decl : ExtWarn<
 def note_include_header_or_declare : Note<
   "include the header <%0> or explicitly provide a declaration for '%1'">;
 def note_previous_builtin_declaration : Note<"%0 is a builtin with type %1">;
+def warn_implicit_decl_no_jmp_buf
+    : Warning<"declaration of built-in function '%0' requires the declaration"
+    " of the 'jmp_buf' type, commonly provided in the header <setjmp.h>.">,
+      InGroup<DiagGroup<"incomplete-setjmp-declaration">>;
 def warn_implicit_decl_requires_sysheader : Warning<
   "declaration of built-in function '%1' requires inclusion of the header <%0>">,
   InGroup<BuiltinRequiresHeader>;
@@ -2010,8 +2014,8 @@ def err_auto_not_allowed : Error<
   "%select{'auto'|'decltype(auto)'|'__auto_type'|"
   "use of "
   "%select{class template|function template|variable template|alias template|"
-  "template template parameter|template}2 %3 requires template arguments; "
-  "argument deduction}0 not allowed "
+  "template template parameter|concept|template}2 %3 requires template "
+  "arguments; argument deduction}0 not allowed "
   "%select{in function prototype"
   "|in non-static struct member|in struct member"
   "|in non-static union member|in union member"
@@ -2100,8 +2104,8 @@ def err_deduced_class_template_compound_type : Error<
   "deduced class template specialization type">;
 def err_deduced_non_class_template_specialization_type : Error<
   "%select{<error>|function template|variable template|alias template|"
-  "template template parameter|template}0 %1 requires template arguments; "
-  "argument deduction only allowed for class templates">;
+  "template template parameter|concept|template}0 %1 requires template "
+  "arguments; argument deduction only allowed for class templates">;
 def err_deduced_class_template_ctor_ambiguous : Error<
   "ambiguous deduction for template arguments of %0">;
 def err_deduced_class_template_ctor_no_viable : Error<
@@ -2128,7 +2132,7 @@ def err_deduction_guide_invalid_specifier : Error<
 def err_deduction_guide_name_not_class_template : Error<
   "cannot specify deduction guide for "
   "%select{<error>|function template|variable template|alias template|"
-  "template template parameter|dependent template name}0 %1">;
+  "template template parameter|concept|dependent template name}0 %1">;
 def err_deduction_guide_wrong_scope : Error<
   "deduction guide must be declared in the same scope as template %q0">;
 def err_deduction_guide_defines_function : Error<
@@ -2456,32 +2460,20 @@ def warn_private_extern : Warning<
 def note_private_extern : Note<
   "use __attribute__((visibility(\"hidden\"))) attribute instead">;
 
-// C++ Concepts TS
-def err_concept_wrong_decl_kind : Error<
-  "'concept' can only appear on the definition of a function template or variable template">;
-def err_concept_decls_may_only_appear_in_namespace_scope : Error<
-  "concept declarations may only appear in namespace scope">;
-def err_function_concept_not_defined : Error<
-  "function concept declaration must be a definition">;
-def err_var_concept_not_initialized : Error<
-  "variable concept declaration must be initialized">;
-def err_function_concept_exception_spec : Error<
-  "function concept cannot have exception specification">;
-def err_concept_decl_invalid_specifiers : Error<
-  "%select{variable|function}0 concept cannot be declared "
-  "'%select{thread_local|inline|friend|constexpr}1'">;
-def err_function_concept_with_params : Error<
-  "function concept cannot have any parameters">;
-def err_function_concept_bool_ret : Error<
-  "declared return type of function concept must be 'bool'">;
-def err_variable_concept_bool_decl : Error<
-  "declared type of variable concept must be 'bool'">;
-def err_concept_specified_specialization : Error<
-  "'concept' cannot be applied on an "
-  "%select{explicit instantiation|explicit specialization|partial specialization}0">;
-def err_concept_specialized : Error<
-  "%select{function|variable}0 concept cannot be "
-  "%select{explicitly instantiated|explicitly specialized|partially specialized}1">;
+// C++ Concepts
+def err_concept_initialized_with_non_bool_type : Error<
+  "constraint expression must be of type 'bool' but is of type %0">;
+def err_concept_decls_may_only_appear_in_global_namespace_scope : Error<
+  "concept declarations may only appear in global or namespace scope">;
+def err_concept_no_parameters : Error<
+  "concept template parameter list must have at least one parameter; explicit "
+  "specialization of concepts is not allowed">;
+def err_concept_extra_headers : Error<
+  "extraneous template parameter list in concept definition">;
+def err_concept_no_associated_constraints : Error<
+  "concept cannot have associated constraints">;
+def err_concept_not_implemented : Error<
+  "sorry, unimplemented concepts feature %0 used">;
 
 def err_template_different_associated_constraints : Error<
   "associated constraints differ in template redeclaration">;
@@ -2516,6 +2508,9 @@ def err_nsobject_attribute : Error<
   "'NSObject' attribute is for pointer types only">;
 def err_attributes_are_not_compatible : Error<
   "%0 and %1 attributes are not compatible">;
+def err_attribute_invalid_argument : Error<
+  "%select{'void'|a reference type|an array type|a non-vector or "
+  "non-vectorizable scalar type}0 is an invalid argument to attribute %1">;
 def err_attribute_wrong_number_arguments : Error<
   "%0 attribute %plural{0:takes no arguments|1:takes one argument|"
   ":requires exactly %1 arguments}1">;
@@ -2564,8 +2559,6 @@ def err_attribute_argument_out_of_range : Error<
 def err_init_priority_object_attr : Error<
   "can only use 'init_priority' attribute on file-scope definitions "
   "of objects of class type">;
-def err_attribute_argument_vec_type_hint : Error<
-  "invalid attribute argument %0 - expecting a vector or vectorizable scalar type">;
 def err_attribute_argument_out_of_bounds : Error<
   "%0 attribute parameter %1 is out of bounds">;
 def err_attribute_only_once_per_parameter : Error<
@@ -2750,6 +2743,9 @@ def err_only_annotate_after_access_spec : Error<
 
 def err_attribute_section_invalid_for_target : Error<
   "argument to %select{'code_seg'|'section'}1 attribute is not valid for this target: %0">;
+def warn_attribute_section_drectve : Warning<
+  "#pragma %0(\".drectve\") has undefined behavior, "
+  "use #pragma comment(linker, ...) instead">, InGroup<MicrosoftDrectveSection>;
 def warn_mismatched_section : Warning<
   "%select{codeseg|section}0 does not match previous declaration">, InGroup<Section>;
 def warn_attribute_section_on_redeclaration : Warning<
@@ -2771,6 +2767,11 @@ def err_no_accessor_for_property : Error<
   "no %select{getter|setter}0 defined for property %1">;
 def err_cannot_find_suitable_accessor : Error<
   "cannot find suitable %select{getter|setter}0 for property %1">;
+
+def warn_alloca : Warning<
+  "use of function %0 is discouraged; there is no way to check for failure but "
+  "failure may still occur, resulting in a possibly exploitable security vulnerability">,
+  InGroup<DiagGroup<"alloca">>, DefaultIgnore;
 
 def warn_alloca_align_alignof : Warning<
   "second argument to __builtin_alloca_with_align is supposed to be in bits">,
@@ -2951,8 +2952,8 @@ def err_attribute_vecreturn_only_pod_record : Error<
 def err_cconv_change : Error<
   "function declared '%0' here was previously declared "
   "%select{'%2'|without calling convention}1">;
-def warn_cconv_ignored : Warning<
-  "%0 calling convention ignored %select{"
+def warn_cconv_unsupported : Warning<
+  "%0 calling convention is not supported %select{"
   // Use CallingConventionIgnoredReason Enum to specify these.
   "for this target"
   "|on variadic function"
@@ -2960,6 +2961,7 @@ def warn_cconv_ignored : Warning<
   "|on builtin function"
   "}1">,
   InGroup<IgnoredAttributes>;
+def error_cconv_unsupported : Error<warn_cconv_unsupported.Text>;
 def err_cconv_knr : Error<
   "function with no prototype cannot use the %0 calling convention">;
 def warn_cconv_knr : Warning<
@@ -3245,6 +3247,10 @@ def warn_impcast_integer_precision_constant : Warning<
 def warn_impcast_bitfield_precision_constant : Warning<
   "implicit truncation from %2 to bit-field changes value from %0 to %1">,
   InGroup<BitFieldConstantConversion>;
+def warn_impcast_constant_int_to_objc_bool : Warning<
+  "implicit conversion from constant value %0 to BOOL; "
+  "the only well defined values for BOOL are YES and NO">,
+  InGroup<ObjCBoolConstantConversion>;
 
 def warn_impcast_fixed_point_range : Warning<
   "implicit conversion from %0 cannot fit within the range of values for %1">,
@@ -3259,6 +3265,14 @@ def warn_impcast_literal_float_to_integer_out_of_range : Warning<
 def warn_impcast_float_integer : Warning<
   "implicit conversion turns floating-point number into integer: %0 to %1">,
   InGroup<FloatConversion>, DefaultIgnore;
+
+// Implicit int -> float conversion precision loss warnings.
+def warn_impcast_integer_float_precision : Warning<
+  "implicit conversion from %0 to %1 may lose precision">,
+  InGroup<ImplicitIntFloatConversion>, DefaultIgnore;
+def warn_impcast_integer_float_precision_constant : Warning<
+  "implicit conversion from %2 to %3 changes value from %0 to %1">,
+  InGroup<ImplicitIntFloatConversion>;
 
 def warn_impcast_float_to_integer : Warning<
   "implicit conversion from %0 to %1 changes value from %2 to %3">,
@@ -3282,6 +3296,10 @@ def warn_impcast_bool_to_null_pointer : Warning<
 def warn_non_literal_null_pointer : Warning<
     "expression which evaluates to zero treated as a null pointer constant of "
     "type %0">, InGroup<NonLiteralNullConversion>;
+def warn_pointer_compare : Warning<
+    "comparing a pointer to a null character constant; did you mean "
+    "to compare to %select{NULL|(void *)0}0?">,
+    InGroup<DiagGroup<"pointer-compare">>;
 def warn_impcast_null_pointer_to_integer : Warning<
     "implicit conversion of %select{NULL|nullptr}0 constant to %1">,
     InGroup<NullConversion>;
@@ -3308,6 +3326,15 @@ def warn_address_of_reference_bool_conversion : Warning<
   "code; pointer may be assumed to always convert to true">,
   InGroup<UndefinedBoolConversion>;
 
+def warn_xor_used_as_pow_base_extra : Warning<
+  "result of '%0' is %1; did you mean '%2' (%3)?">,
+  InGroup<XorUsedAsPow>;
+def warn_xor_used_as_pow_base : Warning<
+  "result of '%0' is %1; did you mean '%2'?">,
+  InGroup<XorUsedAsPow>;
+def note_xor_used_as_pow_silence : Note<
+  "replace expression with '%0' to silence this warning">;
+
 def warn_null_pointer_compare : Warning<
     "comparison of %select{address of|function|array}0 '%1' %select{not |}2"
     "equal to a null pointer is always %select{true|false}2">,
@@ -3328,6 +3355,8 @@ def warn_address_of_reference_null_compare : Warning<
   InGroup<TautologicalUndefinedCompare>;
 def note_reference_is_return_value : Note<"%0 returns a reference">;
 
+def note_pointer_declared_here : Note<
+  "pointer %0 declared here">;
 def warn_division_sizeof_ptr : Warning<
   "'%0' will return the size of the pointer, not the array itself">,
   InGroup<DiagGroup<"sizeof-pointer-div">>;
@@ -4012,11 +4041,12 @@ def ext_adl_only_template_id : ExtWarn<
 def err_template_missing_args : Error<
   "use of "
   "%select{class template|function template|variable template|alias template|"
-  "template template parameter|template}0 %1 requires template arguments">;
+  "template template parameter|concept|template}0 %1 requires template "
+  "arguments">;
 def err_template_arg_list_different_arity : Error<
   "%select{too few|too many}0 template arguments for "
   "%select{class template|function template|variable template|alias template|"
-  "template template parameter|template}1 %2">;
+  "template template parameter|concept|template}1 %2">;
 def note_template_decl_here : Note<"template is declared here">;
 def err_template_arg_must_be_type : Error<
   "template argument for template type parameter must be a type">;
@@ -5627,10 +5657,10 @@ def note_logical_instead_of_bitwise_remove_constant : Note<
   "remove constant to silence this warning">;
 
 def warn_bitwise_op_in_bitwise_op : Warning<
-  "'%0' within '%1'">, InGroup<BitwiseOpParentheses>;
+  "'%0' within '%1'">, InGroup<BitwiseOpParentheses>, DefaultIgnore;
 
 def warn_logical_and_in_logical_or : Warning<
-  "'&&' within '||'">, InGroup<LogicalOpParentheses>;
+  "'&&' within '||'">, InGroup<LogicalOpParentheses>, DefaultIgnore;
 
 def warn_overloaded_shift_in_comparison :Warning<
   "overloaded operator %select{>>|<<}0 has higher precedence than "
@@ -5707,6 +5737,9 @@ def err_arithmetic_nonfragile_interface : Error<
   "arithmetic on pointer to interface %0, which is not a constant size for "
   "this architecture and platform">;
 
+def warn_deprecated_comma_subscript : Warning<
+  "top-level comma expression in array subscript is deprecated">,
+  InGroup<DeprecatedCommaSubscript>;
 
 def ext_subscript_non_lvalue : Extension<
   "ISO C90 does not allow subscripting non-lvalue array">;
@@ -6026,6 +6059,10 @@ def warn_tautological_constant_compare : Warning<
   "result of comparison %select{%3|%1}0 %2 "
   "%select{%1|%3}0 is always %4">,
   InGroup<TautologicalTypeLimitCompare>, DefaultIgnore;
+def warn_tautological_compare_objc_bool : Warning<
+  "result of comparison of constant %0 with expression of type BOOL"
+  " is always %1, as the only well defined values for BOOL are YES and NO">,
+  InGroup<TautologicalObjCBoolCompare>;
 
 def warn_mixed_sign_comparison : Warning<
   "comparison of integers of different signs: %0 and %1">,
@@ -7411,6 +7448,12 @@ def warn_unused_container_subscript_expr : Warning<
 def warn_unused_call : Warning<
   "ignoring return value of function declared with %0 attribute">,
   InGroup<UnusedValue>;
+def warn_unused_constructor : Warning<
+  "ignoring temporary created by a constructor declared with %0 attribute">,
+  InGroup<UnusedValue>;
+def warn_unused_constructor_msg : Warning<
+  "ignoring temporary created by a constructor declared with %0 attribute: %1">,
+  InGroup<UnusedValue>;
 def warn_side_effects_unevaluated_context : Warning<
   "expression with side effects has no effect in an unevaluated context">,
   InGroup<UnevaluatedExpression>;
@@ -7420,6 +7463,9 @@ def warn_side_effects_typeid : Warning<
 def warn_unused_result : Warning<
   "ignoring return value of function declared with %0 attribute">,
   InGroup<UnusedResult>;
+def warn_unused_result_msg : Warning<
+  "ignoring return value of function declared with %0 attribute: %1">,
+  InGroup<UnusedResult>;
 def warn_unused_volatile : Warning<
   "expression result unused; assign into a variable to force a volatile load">,
   InGroup<DiagGroup<"unused-volatile-lvalue">>;
@@ -7428,6 +7474,8 @@ def ext_cxx14_attr : Extension<
   "use of the %0 attribute is a C++14 extension">, InGroup<CXX14>;
 def ext_cxx17_attr : Extension<
   "use of the %0 attribute is a C++17 extension">, InGroup<CXX17>;
+def ext_cxx2a_attr : Extension<
+  "use of the %0 attribute is a C++2a extension">, InGroup<CXX2a>;
 
 def warn_unused_comparison : Warning<
   "%select{equality|inequality|relational|three-way}0 comparison result unused">,
@@ -8070,6 +8118,10 @@ def warn_dangling_member : Warning<
   "%select{binds to|is}2 a temporary object "
   "whose lifetime is shorter than the lifetime of the constructed object">,
   InGroup<DanglingField>;
+def warn_dangling_lifetime_pointer_member : Warning<
+  "initializing pointer member %0 to point to a temporary object "
+  "whose lifetime is shorter than the lifetime of the constructed object">,
+  InGroup<DanglingField>;
 def note_lifetime_extending_member_declared_here : Note<
   "%select{%select{reference|'std::initializer_list'}0 member|"
   "member with %select{reference|'std::initializer_list'}0 subobject}1 "
@@ -8088,6 +8140,10 @@ def warn_new_dangling_reference : Warning<
   "temporary bound to reference member of allocated object "
   "will be destroyed at the end of the full-expression">,
   InGroup<DanglingField>;
+def warn_dangling_lifetime_pointer : Warning<
+  "object backing the pointer "
+  "will be destroyed at the end of the full-expression">,
+  InGroup<Dangling>;
 def warn_new_dangling_initializer_list : Warning<
   "array backing "
   "%select{initializer list subobject of the allocated object|"
@@ -8105,7 +8161,8 @@ def warn_unsupported_lifetime_extension : Warning<
 // should result in a warning, since these always evaluate to a constant.
 // Array comparisons have similar warnings
 def warn_comparison_always : Warning<
-  "%select{self-|array }0comparison always evaluates to %select{a constant|%2}1">,
+  "%select{self-|array }0comparison always evaluates to "
+  "%select{a constant|true|false|'std::strong_ordering::equal'}1">,
   InGroup<TautologicalCompare>;
 def warn_comparison_bitwise_always : Warning<
   "bitwise comparison always evaluates to %select{false|true}0">,
@@ -8488,10 +8545,11 @@ def warn_sync_fetch_and_nand_semantics_change : Warning<
   InGroup<DiagGroup<"sync-fetch-and-nand-semantics-changed">>;
 
 // Type
-def ext_invalid_sign_spec : Extension<"'%0' cannot be signed or unsigned">;
+def ext_wchar_t_sign_spec : ExtWarn<"'%0' cannot be signed or unsigned">,
+  InGroup<DiagGroup<"signed-unsigned-wchar">>, DefaultError;
 def warn_receiver_forward_class : Warning<
-    "receiver %0 is a forward class and corresponding @interface may not exist">,
-    InGroup<ForwardClassReceiver>;
+  "receiver %0 is a forward class and corresponding @interface may not exist">,
+  InGroup<ForwardClassReceiver>;
 def note_method_sent_forward_class : Note<"method %0 is used for the forward class">;
 def ext_missing_declspec : ExtWarn<
   "declaration specifier missing, defaulting to 'int'">;
@@ -9269,6 +9327,10 @@ def err_omp_invariant_or_linear_dependency : Error<
   "expected loop invariant expression or '<invariant1> * %0 + <invariant2>' kind of expression">;
 def err_omp_wrong_dependency_iterator_type : Error<
   "expected an integer or a pointer type of the outer loop counter '%0' for non-rectangular nests">;
+def err_omp_unsupported_type : Error <
+  "host requires %0 bit size %1 type support, but device '%2' does not support it">;
+def err_omp_lambda_capture_in_declare_target_not_to : Error<
+  "variable captured in declare target region must appear in a to clause">;
 } // end of OpenMP category
 
 let CategoryName = "OpenACC Issue" in {

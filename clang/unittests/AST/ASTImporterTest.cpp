@@ -1472,7 +1472,7 @@ TEST_P(ASTImporterOptionSpecificTestBase,
 }
 
 TEST_P(ASTImporterOptionSpecificTestBase,
-       DISABLED_CXXRecordDeclFieldOrderShouldNotDependOnImportOrder) {
+       CXXRecordDeclFieldOrderShouldNotDependOnImportOrder) {
   Decl *From, *To;
   std::tie(From, To) = getImportedDecl(
       // The original recursive algorithm of ASTImporter first imports 'c' then
@@ -2389,6 +2389,49 @@ TEST_P(ImportFunctions,
                 functionDecl(hasName("f"), hasDescendant(declRefExpr()))))));
 }
 
+struct ImportFunctionTemplates : ASTImporterOptionSpecificTestBase {};
+
+TEST_P(ImportFunctionTemplates, ImportFunctionTemplateInRecordDeclTwice) {
+  auto Code =
+      R"(
+      class X {
+        template <class T>
+        void f(T t);
+      };
+      )";
+  Decl *FromTU1 = getTuDecl(Code, Lang_CXX, "input1.cc");
+  auto *FromD1 = FirstDeclMatcher<FunctionTemplateDecl>().match(
+      FromTU1, functionTemplateDecl(hasName("f")));
+  auto *ToD1 = Import(FromD1, Lang_CXX);
+  Decl *FromTU2 = getTuDecl(Code, Lang_CXX, "input2.cc");
+  auto *FromD2 = FirstDeclMatcher<FunctionTemplateDecl>().match(
+      FromTU2, functionTemplateDecl(hasName("f")));
+  auto *ToD2 = Import(FromD2, Lang_CXX);
+  EXPECT_EQ(ToD1, ToD2);
+}
+
+TEST_P(ImportFunctionTemplates,
+       ImportFunctionTemplateWithDefInRecordDeclTwice) {
+  auto Code =
+      R"(
+      class X {
+        template <class T>
+        void f(T t);
+      };
+      template <class T>
+      void X::f(T t) {};
+      )";
+  Decl *FromTU1 = getTuDecl(Code, Lang_CXX, "input1.cc");
+  auto *FromD1 = FirstDeclMatcher<FunctionTemplateDecl>().match(
+      FromTU1, functionTemplateDecl(hasName("f")));
+  auto *ToD1 = Import(FromD1, Lang_CXX);
+  Decl *FromTU2 = getTuDecl(Code, Lang_CXX, "input2.cc");
+  auto *FromD2 = FirstDeclMatcher<FunctionTemplateDecl>().match(
+      FromTU2, functionTemplateDecl(hasName("f")));
+  auto *ToD2 = Import(FromD2, Lang_CXX);
+  EXPECT_EQ(ToD1, ToD2);
+}
+
 struct ImportFriendFunctions : ImportFunctions {};
 
 TEST_P(ImportFriendFunctions, ImportFriendFunctionRedeclChainProto) {
@@ -2793,6 +2836,16 @@ TEST_P(ImportDecl, ImportEnumSequential) {
       Samples, {ImportMoo, ImportFoo}, // "moo", them "foo".
       // Check that there is only one enum decl in the result AST.
       "main.c", enumDecl(), VerificationMatcher);
+}
+
+TEST_P(ImportDecl, ImportFieldOrder) {
+  MatchVerifier<Decl> Verifier;
+  testImport("struct declToImport {"
+             "  int b = a + 2;"
+             "  int a = 5;"
+             "};",
+             Lang_CXX11, "", Lang_CXX11, Verifier,
+             recordDecl(hasFieldOrder({"b", "a"})));
 }
 
 const internal::VariadicDynCastAllOfMatcher<Expr, DependentScopeDeclRefExpr>
@@ -5083,6 +5136,236 @@ INSTANTIATE_TEST_CASE_P(ParameterizedTests, DeclContextTest,
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, CanonicalRedeclChain,
                         ::testing::Values(ArgVector()), );
 
+TEST_P(ASTImporterOptionSpecificTestBase, LambdaInFunctionBody) {
+  Decl *FromTU = getTuDecl(
+      R"(
+      void f() {
+        auto L = [](){};
+      }
+      )",
+      Lang_CXX11, "input0.cc");
+  auto Pattern = lambdaExpr();
+  CXXRecordDecl *FromL =
+      FirstDeclMatcher<LambdaExpr>().match(FromTU, Pattern)->getLambdaClass();
+
+  auto ToL = Import(FromL, Lang_CXX11);
+  unsigned ToLSize = std::distance(ToL->decls().begin(), ToL->decls().end());
+  unsigned FromLSize =
+      std::distance(FromL->decls().begin(), FromL->decls().end());
+  EXPECT_NE(ToLSize, 0u);
+  EXPECT_EQ(ToLSize, FromLSize);
+}
+
+TEST_P(ASTImporterOptionSpecificTestBase, LambdaInFunctionParam) {
+  Decl *FromTU = getTuDecl(
+      R"(
+      template <typename F>
+      void f(F L = [](){}) {}
+      )",
+      Lang_CXX11, "input0.cc");
+  auto Pattern = lambdaExpr();
+  CXXRecordDecl *FromL =
+      FirstDeclMatcher<LambdaExpr>().match(FromTU, Pattern)->getLambdaClass();
+
+  auto ToL = Import(FromL, Lang_CXX11);
+  unsigned ToLSize = std::distance(ToL->decls().begin(), ToL->decls().end());
+  unsigned FromLSize =
+      std::distance(FromL->decls().begin(), FromL->decls().end());
+  EXPECT_NE(ToLSize, 0u);
+  EXPECT_EQ(ToLSize, FromLSize);
+}
+
+TEST_P(ASTImporterOptionSpecificTestBase, LambdaInGlobalScope) {
+  Decl *FromTU = getTuDecl(
+      R"(
+      auto l1 = [](unsigned lp) { return 1; };
+      auto l2 = [](int lp) { return 2; };
+      int f(int p) {
+        return l1(p) + l2(p);
+      }
+      )",
+      Lang_CXX11, "input0.cc");
+  FunctionDecl *FromF = FirstDeclMatcher<FunctionDecl>().match(
+      FromTU, functionDecl(hasName("f")));
+  FunctionDecl *ToF = Import(FromF, Lang_CXX11);
+  EXPECT_TRUE(ToF);
+}
+
+TEST_P(ASTImporterOptionSpecificTestBase,
+       ImportExistingFriendClassTemplateDef) {
+  auto Code =
+      R"(
+        template <class T1, class T2>
+        struct Base {
+          template <class U1, class U2>
+          friend struct Class;
+        };
+        template <class T1, class T2>
+        struct Class { };
+        )";
+
+  TranslationUnitDecl *ToTU = getToTuDecl(Code, Lang_CXX);
+  TranslationUnitDecl *FromTU = getTuDecl(Code, Lang_CXX, "input.cc");
+
+  auto *ToClassProto = FirstDeclMatcher<ClassTemplateDecl>().match(
+      ToTU, classTemplateDecl(hasName("Class")));
+  auto *ToClassDef = LastDeclMatcher<ClassTemplateDecl>().match(
+      ToTU, classTemplateDecl(hasName("Class")));
+  ASSERT_FALSE(ToClassProto->isThisDeclarationADefinition());
+  ASSERT_TRUE(ToClassDef->isThisDeclarationADefinition());
+  // Previous friend decl is not linked to it!
+  ASSERT_FALSE(ToClassDef->getPreviousDecl());
+  ASSERT_EQ(ToClassDef->getMostRecentDecl(), ToClassDef);
+  ASSERT_EQ(ToClassProto->getMostRecentDecl(), ToClassProto);
+
+  auto *FromClassProto = FirstDeclMatcher<ClassTemplateDecl>().match(
+      FromTU, classTemplateDecl(hasName("Class")));
+  auto *FromClassDef = LastDeclMatcher<ClassTemplateDecl>().match(
+      FromTU, classTemplateDecl(hasName("Class")));
+  ASSERT_FALSE(FromClassProto->isThisDeclarationADefinition());
+  ASSERT_TRUE(FromClassDef->isThisDeclarationADefinition());
+  ASSERT_FALSE(FromClassDef->getPreviousDecl());
+  ASSERT_EQ(FromClassDef->getMostRecentDecl(), FromClassDef);
+  ASSERT_EQ(FromClassProto->getMostRecentDecl(), FromClassProto);
+
+  auto *ImportedDef = Import(FromClassDef, Lang_CXX);
+  // At import we should find the definition for 'Class' even if the
+  // prototype (inside 'friend') for it comes first in the AST and is not
+  // linked to the definition.
+  EXPECT_EQ(ImportedDef, ToClassDef);
+}  
+  
+struct LLDBLookupTest : ASTImporterOptionSpecificTestBase {
+  LLDBLookupTest() {
+    Creator = [](ASTContext &ToContext, FileManager &ToFileManager,
+                 ASTContext &FromContext, FileManager &FromFileManager,
+                 bool MinimalImport,
+                 const std::shared_ptr<ASTImporterSharedState> &SharedState) {
+      return new ASTImporter(ToContext, ToFileManager, FromContext,
+                             FromFileManager, MinimalImport,
+                             // We use the regular lookup.
+                             /*SharedState=*/nullptr);
+    };
+  }
+};
+
+TEST_P(LLDBLookupTest, ImporterShouldFindInTransparentContext) {
+  TranslationUnitDecl *ToTU = getToTuDecl(
+      R"(
+      extern "C" {
+        class X{};
+      };
+      )",
+      Lang_CXX);
+  auto *ToX = FirstDeclMatcher<CXXRecordDecl>().match(
+      ToTU, cxxRecordDecl(hasName("X")));
+
+  // Set up a stub external storage.
+  ToTU->setHasExternalLexicalStorage(true);
+  // Set up DeclContextBits.HasLazyExternalLexicalLookups to true.
+  ToTU->setMustBuildLookupTable();
+  struct TestExternalASTSource : ExternalASTSource {};
+  ToTU->getASTContext().setExternalSource(new TestExternalASTSource());
+
+  Decl *FromTU = getTuDecl(
+      R"(
+        class X;
+      )",
+      Lang_CXX);
+  auto *FromX = FirstDeclMatcher<CXXRecordDecl>().match(
+      FromTU, cxxRecordDecl(hasName("X")));
+  auto *ImportedX = Import(FromX, Lang_CXX);
+  // The lookup must find the existing class definition in the LinkageSpecDecl.
+  // Then the importer renders the existing and the new decl into one chain.
+  EXPECT_EQ(ImportedX->getCanonicalDecl(), ToX->getCanonicalDecl());
+}
+
+struct SVEBuiltins : ASTImporterOptionSpecificTestBase {};
+
+TEST_P(SVEBuiltins, ImportTypes) {
+  static const char *const TypeNames[] = {
+    "__SVInt8_t",
+    "__SVInt16_t",
+    "__SVInt32_t",
+    "__SVInt64_t",
+    "__SVUint8_t",
+    "__SVUint16_t",
+    "__SVUint32_t",
+    "__SVUint64_t",
+    "__SVFloat16_t",
+    "__SVFloat32_t",
+    "__SVFloat64_t",
+    "__SVBool_t"
+  };
+
+  TranslationUnitDecl *ToTU = getToTuDecl("", Lang_CXX);
+  TranslationUnitDecl *FromTU = getTuDecl("", Lang_CXX, "input.cc");
+  for (auto *TypeName : TypeNames) {
+    auto *ToTypedef = FirstDeclMatcher<TypedefDecl>().match(
+      ToTU, typedefDecl(hasName(TypeName)));
+    QualType ToType = ToTypedef->getUnderlyingType();
+
+    auto *FromTypedef = FirstDeclMatcher<TypedefDecl>().match(
+      FromTU, typedefDecl(hasName(TypeName)));
+    QualType FromType = FromTypedef->getUnderlyingType();
+
+    QualType ImportedType = ImportType(FromType, FromTypedef, Lang_CXX);
+    EXPECT_EQ(ImportedType, ToType);
+  }
+}
+
+TEST_P(ASTImporterOptionSpecificTestBase, ImportOfDefaultImplicitFunctions) {
+  // Test that import of implicit functions works and the functions
+  // are merged into one chain.
+  auto GetDeclToImport = [this](StringRef File) {
+    Decl *FromTU = getTuDecl(
+        R"(
+        struct X { };
+        // Force generating some implicit operator definitions for X.
+        void f() { X x1, x2; x1 = x2; X *x3 = new X; delete x3; }
+        )",
+        Lang_CXX11, File);
+    auto *FromD = FirstDeclMatcher<CXXRecordDecl>().match(
+        FromTU, cxxRecordDecl(hasName("X"), unless(isImplicit())));
+    // Destructor is picked as one example of implicit function.
+    return FromD->getDestructor();
+  };
+
+  auto *ToD1 = Import(GetDeclToImport("input1.cc"), Lang_CXX11);
+  ASSERT_TRUE(ToD1);
+
+  auto *ToD2 = Import(GetDeclToImport("input2.cc"), Lang_CXX11);
+  ASSERT_TRUE(ToD2);
+
+  EXPECT_EQ(ToD1->getCanonicalDecl(), ToD2->getCanonicalDecl());
+}
+
+TEST_P(ASTImporterOptionSpecificTestBase,
+       ImportOfExplicitlyDefaultedOrDeleted) {
+  Decl *FromTU = getTuDecl(
+      R"(
+        struct X { X() = default; X(const X&) = delete; };
+      )",
+      Lang_CXX11);
+  auto *FromX = FirstDeclMatcher<CXXRecordDecl>().match(
+      FromTU, cxxRecordDecl(hasName("X")));
+  auto *ImportedX = Import(FromX, Lang_CXX11);
+  auto *Constr1 = FirstDeclMatcher<CXXConstructorDecl>().match(
+      ImportedX, cxxConstructorDecl(hasName("X"), unless(isImplicit())));
+  auto *Constr2 = LastDeclMatcher<CXXConstructorDecl>().match(
+      ImportedX, cxxConstructorDecl(hasName("X"), unless(isImplicit())));
+
+  ASSERT_TRUE(ImportedX);
+  EXPECT_TRUE(Constr1->isDefaulted());
+  EXPECT_TRUE(Constr1->isExplicitlyDefaulted());
+  EXPECT_TRUE(Constr2->isDeletedAsWritten());
+  EXPECT_EQ(ImportedX->isAggregate(), FromX->isAggregate());
+}
+
+INSTANTIATE_TEST_CASE_P(ParameterizedTests, SVEBuiltins,
+                        ::testing::Values(ArgVector{"-target",
+                                                    "aarch64-linux-gnu"}), );
+
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ASTImporterLookupTableTest,
                         DefaultTestValuesForRunOptions, );
 
@@ -5113,6 +5396,9 @@ INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportFriendFunctionTemplates,
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportClasses,
                         DefaultTestValuesForRunOptions, );
 
+INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportFunctionTemplates,
+                        DefaultTestValuesForRunOptions, );
+
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportFriendFunctions,
                         DefaultTestValuesForRunOptions, );
 
@@ -5128,6 +5414,10 @@ INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportImplicitMethods,
 
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportVariables,
                         DefaultTestValuesForRunOptions, );
+
+INSTANTIATE_TEST_CASE_P(ParameterizedTests, LLDBLookupTest,
+                        DefaultTestValuesForRunOptions, );
+
 
 } // end namespace ast_matchers
 } // end namespace clang

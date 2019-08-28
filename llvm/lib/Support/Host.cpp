@@ -315,6 +315,8 @@ StringRef sys::detail::getHostCPUNameForS390x(StringRef ProcCpuinfoContent) {
         Pos += sizeof("machine = ") - 1;
         unsigned int Id;
         if (!Lines[I].drop_front(Pos).getAsInteger(10, Id)) {
+          if (Id >= 8561 && HaveVectorSupport)
+            return "arch13";
           if (Id >= 3906 && HaveVectorSupport)
             return "z14";
           if (Id >= 2964 && HaveVectorSupport)
@@ -744,6 +746,13 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
       break;
 
     default: // Unknown family 6 CPU, try to guess.
+      // TODO detect tigerlake host
+      if (Features3 & (1 << (X86::FEATURE_AVX512VP2INTERSECT - 64))) {
+        *Type = X86::INTEL_COREI7;
+        *Subtype = X86::INTEL_COREI7_TIGERLAKE;
+        break;
+      }
+
       if (Features & (1 << X86::FEATURE_AVX512VBMI2)) {
         *Type = X86::INTEL_COREI7;
         *Subtype = X86::INTEL_COREI7_ICELAKE_CLIENT;
@@ -1032,7 +1041,7 @@ static void getAvailableFeatures(unsigned ECX, unsigned EDX, unsigned MaxLeaf,
     setFeature(X86::FEATURE_BMI);
   if (HasLeaf7 && ((EBX >> 5) & 1) && HasAVX)
     setFeature(X86::FEATURE_AVX2);
-  if (HasLeaf7 && ((EBX >> 9) & 1))
+  if (HasLeaf7 && ((EBX >> 8) & 1))
     setFeature(X86::FEATURE_BMI2);
   if (HasLeaf7 && ((EBX >> 16) & 1) && HasAVX512Save)
     setFeature(X86::FEATURE_AVX512F);
@@ -1076,6 +1085,8 @@ static void getAvailableFeatures(unsigned ECX, unsigned EDX, unsigned MaxLeaf,
     setFeature(X86::FEATURE_AVX5124VNNIW);
   if (HasLeaf7 && ((EDX >> 3) & 1) && HasAVX512Save)
     setFeature(X86::FEATURE_AVX5124FMAPS);
+  if (HasLeaf7 && ((EDX >> 8) & 1) && HasAVX512Save)
+    setFeature(X86::FEATURE_AVX512VP2INTERSECT);
 
   unsigned MaxExtLevel;
   getX86CpuIDAndInfo(0x80000000, &MaxExtLevel, &EBX, &ECX, &EDX);

@@ -194,8 +194,8 @@ int cc1_main(ArrayRef<const char *> Argv, const char *Argv0, void *MainAddr) {
 
   // Register the support for object-file-wrapped Clang modules.
   auto PCHOps = Clang->getPCHContainerOperations();
-  PCHOps->registerWriter(llvm::make_unique<ObjectFilePCHContainerWriter>());
-  PCHOps->registerReader(llvm::make_unique<ObjectFilePCHContainerReader>());
+  PCHOps->registerWriter(std::make_unique<ObjectFilePCHContainerWriter>());
+  PCHOps->registerReader(std::make_unique<ObjectFilePCHContainerReader>());
 
   // Initialize targets first, so that --version shows registered targets.
   llvm::InitializeAllTargets();
@@ -216,9 +216,10 @@ int cc1_main(ArrayRef<const char *> Argv, const char *Argv0, void *MainAddr) {
   bool Success = CompilerInvocation::CreateFromArgs(
       Clang->getInvocation(), Argv.begin(), Argv.end(), Diags);
 
-  if (Clang->getFrontendOpts().TimeTrace)
-    llvm::timeTraceProfilerInitialize();
-
+  if (Clang->getFrontendOpts().TimeTrace) {
+    llvm::timeTraceProfilerInitialize(
+        Clang->getFrontendOpts().TimeTraceGranularity);
+  }
   // --print-supported-cpus takes priority over the actual compilation.
   if (Clang->getFrontendOpts().PrintSupportedCPUs)
     return PrintSupportedCPUs(Clang->getTargetOpts().Triple);

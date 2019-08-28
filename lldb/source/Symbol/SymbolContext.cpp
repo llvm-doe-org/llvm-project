@@ -13,7 +13,6 @@
 #include "lldb/Host/Host.h"
 #include "lldb/Host/StringConvert.h"
 #include "lldb/Symbol/Block.h"
-#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Symbol/CompileUnit.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Symbol/Symbol.h"
@@ -22,6 +21,7 @@
 #include "lldb/Symbol/Variable.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/StreamString.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -494,7 +494,8 @@ bool SymbolContext::GetParentOfInlinedScope(const Address &curr_frame_pc,
         Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_SYMBOLS));
 
         if (log) {
-          log->Printf(
+          LLDB_LOGF(
+              log,
               "warning: inlined block 0x%8.8" PRIx64
               " doesn't have a range that contains file address 0x%" PRIx64,
               curr_inlined_block->GetID(), curr_frame_pc.GetFileAddress());
@@ -503,12 +504,8 @@ bool SymbolContext::GetParentOfInlinedScope(const Address &curr_frame_pc,
         else {
           ObjectFile *objfile = nullptr;
           if (module_sp) {
-            SymbolVendor *symbol_vendor = module_sp->GetSymbolVendor();
-            if (symbol_vendor) {
-              SymbolFile *symbol_file = symbol_vendor->GetSymbolFile();
-              if (symbol_file)
-                objfile = symbol_file->GetObjectFile();
-            }
+            if (SymbolFile *symbol_file = module_sp->GetSymbolFile())
+              objfile = symbol_file->GetObjectFile();
           }
           if (objfile) {
             Host::SystemLog(

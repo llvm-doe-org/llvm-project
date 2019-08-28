@@ -346,6 +346,8 @@ Disable builtin #include directories
 
 .. option:: -noprebind
 
+.. option:: -noprofilelib
+
 .. option:: -noseglinkedit
 
 .. option:: -nostartfiles
@@ -1941,6 +1943,14 @@ Perform ThinLTO importing using provided function summary index
 .. option:: -fthreadsafe-statics, -fno-threadsafe-statics
 
 .. option:: -ftime-report
+
+.. option:: -ftime-trace
+
+Turn on time profiler
+
+.. option:: -ftime-trace-granularity=<arg>
+
+Minimum time granularity (in microseconds) traced by time profiler
 
 .. option:: -ftls-model=<arg>
 

@@ -302,13 +302,13 @@ def VLSTM : AXSI4<(outs), (ins GPRnopc:$Rn, pred:$p), IndexModeNone,
 }
 
 def : InstAlias<"vpush${p} $r", (VSTMDDB_UPD SP, pred:$p, dpr_reglist:$r), 0>,
-                Requires<[HasVFP2]>;
+                Requires<[HasFPRegs]>;
 def : InstAlias<"vpush${p} $r", (VSTMSDB_UPD SP, pred:$p, spr_reglist:$r), 0>,
-                Requires<[HasVFP2]>;
+                Requires<[HasFPRegs]>;
 def : InstAlias<"vpop${p} $r",  (VLDMDIA_UPD SP, pred:$p, dpr_reglist:$r), 0>,
-                Requires<[HasVFP2]>;
+                Requires<[HasFPRegs]>;
 def : InstAlias<"vpop${p} $r",  (VLDMSIA_UPD SP, pred:$p, spr_reglist:$r), 0>,
-                Requires<[HasVFP2]>;
+                Requires<[HasFPRegs]>;
 defm : VFPDTAnyInstAlias<"vpush${p}", "$r",
                          (VSTMSDB_UPD SP, pred:$p, spr_reglist:$r)>;
 defm : VFPDTAnyInstAlias<"vpush${p}", "$r",
@@ -857,7 +857,7 @@ multiclass vcvt_inst<string opc, bits<2> rm,
 
       let Inst{17-16} = rm;
 
-      // Encode instruction operands
+      // Encode instruction operands.
       let Inst{3-0} = Dm{3-0};
       let Inst{5}   = Dm{4};
       let Inst{8} = 1;

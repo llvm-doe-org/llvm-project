@@ -169,7 +169,7 @@ struct CompletionCandidate {
   // Returns a token identifying the overload set this is part of.
   // 0 indicates it's not part of any overload set.
   size_t overloadSet(const CodeCompleteOptions &Opts) const {
-    if (!Opts.BundleOverloads)
+    if (!Opts.BundleOverloads.getValueOr(false))
       return 0;
     llvm::SmallString<256> Scratch;
     if (IndexResult) {
@@ -327,8 +327,12 @@ struct CodeCompletionBuilder {
       auto ResolvedInserted = toHeaderFile(Header, FileName);
       if (!ResolvedInserted)
         return ResolvedInserted.takeError();
+      auto Spelled = Includes.calculateIncludePath(*ResolvedInserted, FileName);
+      if (!Spelled)
+        return llvm::createStringError(llvm::inconvertibleErrorCode(),
+                                       "Header not on include path");
       return std::make_pair(
-          Includes.calculateIncludePath(*ResolvedInserted, FileName),
+          std::move(*Spelled),
           Includes.shouldInsertInclude(*ResolvedDeclaring, *ResolvedInserted));
     };
     bool ShouldInsert = C.headerToInsertIfAllowed(Opts).hasValue();
@@ -342,8 +346,9 @@ struct CodeCompletionBuilder {
         Completion.Includes.push_back(std::move(Include));
       } else
         log("Failed to generate include insertion edits for adding header "
-            "(FileURI='{0}', IncludeHeader='{1}') into {2}",
-            C.IndexResult->CanonicalDeclaration.FileURI, Inc, FileName);
+            "(FileURI='{0}', IncludeHeader='{1}') into {2}: {3}",
+            C.IndexResult->CanonicalDeclaration.FileURI, Inc, FileName,
+            ToInclude.takeError());
     }
     // Prefer includes that do not need edits (i.e. already exist).
     std::stable_partition(Completion.Includes.begin(),
@@ -1247,7 +1252,7 @@ public:
     //   - completion results based on the AST.
     //   - partial identifier and context. We need these for the index query.
     CodeCompleteResult Output;
-    auto RecorderOwner = llvm::make_unique<CompletionRecorder>(Opts, [&]() {
+    auto RecorderOwner = std::make_unique<CompletionRecorder>(Opts, [&]() {
       assert(Recorder && "Recorder is not set");
       CCContextKind = Recorder->CCContext.getKind();
       auto Style = getFormatStyleForFile(
@@ -1386,12 +1391,12 @@ private:
     unsigned RangeEnd = HeuristicPrefix.Qualifier.begin() - Content.data(),
              RangeBegin = RangeEnd;
     for (size_t I = 0; I < 3 && RangeBegin > 0; ++I) {
-      auto PrevNL = Content.rfind('\n', RangeBegin - 1);
+      auto PrevNL = Content.rfind('\n', RangeBegin);
       if (PrevNL == StringRef::npos) {
         RangeBegin = 0;
         break;
       }
-      RangeBegin = PrevNL + 1;
+      RangeBegin = PrevNL;
     }
 
     ContextWords = collectWords(Content.slice(RangeBegin, RangeEnd));
@@ -1669,13 +1674,6 @@ private:
   }
 };
 
-template <class T> bool isExplicitTemplateSpecialization(const NamedDecl &ND) {
-  if (const auto *TD = dyn_cast<T>(&ND))
-    if (TD->getTemplateSpecializationKind() == TSK_ExplicitSpecialization)
-      return true;
-  return false;
-}
-
 } // namespace
 
 clang::CodeCompleteOptions CodeCompleteOptions::getClangCompleteOpts() const {
@@ -1758,7 +1756,7 @@ SignatureHelp signatureHelp(PathRef FileName,
   Options.IncludeBriefComments = false;
   IncludeStructure PreambleInclusions; // Unused for signatureHelp
   semaCodeComplete(
-      llvm::make_unique<SignatureHelpCollector>(Options, Index, Result),
+      std::make_unique<SignatureHelpCollector>(Options, Index, Result),
       Options,
       {FileName, Command, Preamble, Contents, *Offset, std::move(VFS)});
   return Result;
@@ -1778,9 +1776,7 @@ bool isIndexedForCodeCompletion(const NamedDecl &ND, ASTContext &ASTCtx) {
   };
   // We only complete symbol's name, which is the same as the name of the
   // *primary* template in case of template specializations.
-  if (isExplicitTemplateSpecialization<FunctionDecl>(ND) ||
-      isExplicitTemplateSpecialization<CXXRecordDecl>(ND) ||
-      isExplicitTemplateSpecialization<VarDecl>(ND))
+  if (isExplicitTemplateSpecialization(&ND))
     return false;
 
   if (InTopLevelScope(ND))

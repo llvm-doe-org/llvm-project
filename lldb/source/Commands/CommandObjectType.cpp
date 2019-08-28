@@ -95,25 +95,8 @@ static bool WarnOnPotentialUnquotedUnsignedType(Args &command,
   return false;
 }
 
-static constexpr OptionDefinition g_type_summary_add_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_ALL,                false, "category",        'w', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeName,           "Add this to the given category instead of the default one." },
-  { LLDB_OPT_SET_ALL,                false, "cascade",         'C', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeBoolean,        "If true, cascade through typedef chains." },
-  { LLDB_OPT_SET_ALL,                false, "no-value",        'v', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,           "Don't show the value, just show the summary, for this type." },
-  { LLDB_OPT_SET_ALL,                false, "skip-pointers",   'p', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,           "Don't use this format for pointers-to-type objects." },
-  { LLDB_OPT_SET_ALL,                false, "skip-references", 'r', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,           "Don't use this format for references-to-type objects." },
-  { LLDB_OPT_SET_ALL,                false, "regex",           'x', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,           "Type names are actually regular expressions." },
-  { LLDB_OPT_SET_1,                  true,  "inline-children", 'c', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,           "If true, inline all child values into summary string." },
-  { LLDB_OPT_SET_1,                  false, "omit-names",      'O', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,           "If true, omit value names in the summary display." },
-  { LLDB_OPT_SET_2,                  true,  "summary-string",  's', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeSummaryString,  "Summary string used to display text and object contents." },
-  { LLDB_OPT_SET_3,                  false, "python-script",   'o', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypePythonScript,   "Give a one-liner Python script as part of the command." },
-  { LLDB_OPT_SET_3,                  false, "python-function", 'F', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypePythonFunction, "Give the name of a Python function to use for this type." },
-  { LLDB_OPT_SET_3,                  false, "input-python",    'P', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,           "Input Python code to use for this type manually." },
-  { LLDB_OPT_SET_2 | LLDB_OPT_SET_3, false, "expand",          'e', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,           "Expand aggregate data types to show children on separate lines." },
-  { LLDB_OPT_SET_2 | LLDB_OPT_SET_3, false, "hide-empty",      'h', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,           "Do not expand aggregate data types with no children." },
-  { LLDB_OPT_SET_2 | LLDB_OPT_SET_3, false, "name",            'n', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeName,           "A name for this summary string." }
-    // clang-format on
-};
+#define LLDB_OPTIONS_type_summary_add
+#include "CommandOptions.inc"
 
 class CommandObjectTypeSummaryAdd : public CommandObjectParsed,
                                     public IOHandlerDelegateMultiline {
@@ -212,9 +195,7 @@ public:
 
                 Status error;
 
-                for (size_t i = 0; i < options->m_target_types.GetSize(); i++) {
-                  const char *type_name =
-                      options->m_target_types.GetStringAtIndex(i);
+                for (const std::string &type_name : options->m_target_types) {
                   CommandObjectTypeSummaryAdd::AddSummary(
                       ConstString(type_name), script_format,
                       (options->m_regex
@@ -297,17 +278,8 @@ static const char *g_synth_addreader_instructions =
     "        '''Optional'''\n"
     "class synthProvider:\n";
 
-static constexpr OptionDefinition g_type_synth_add_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_ALL, false, "cascade",         'C', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeBoolean,     "If true, cascade through typedef chains." },
-  { LLDB_OPT_SET_ALL, false, "skip-pointers",   'p', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,        "Don't use this format for pointers-to-type objects." },
-  { LLDB_OPT_SET_ALL, false, "skip-references", 'r', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,        "Don't use this format for references-to-type objects." },
-  { LLDB_OPT_SET_ALL, false, "category",        'w', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeName,        "Add this to the given category instead of the default one." },
-  { LLDB_OPT_SET_2,   false, "python-class",    'l', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypePythonClass, "Use this Python class to produce synthetic children." },
-  { LLDB_OPT_SET_3,   false, "input-python",    'P', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,        "Type Python code to generate a class that provides synthetic children." },
-  { LLDB_OPT_SET_ALL, false, "regex",           'x', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,        "Type names are actually regular expressions." }
-    // clang-format on
-};
+#define LLDB_OPTIONS_type_synth_add
+#include "CommandOptions.inc"
 
 class CommandObjectTypeSynthAdd : public CommandObjectParsed,
                                   public IOHandlerDelegateMultiline {
@@ -463,13 +435,10 @@ protected:
 
                 Status error;
 
-                for (size_t i = 0; i < options->m_target_types.GetSize(); i++) {
-                  const char *type_name =
-                      options->m_target_types.GetStringAtIndex(i);
-                  ConstString const_type_name(type_name);
-                  if (const_type_name) {
+                for (const std::string &type_name : options->m_target_types) {
+                  if (!type_name.empty()) {
                     if (!CommandObjectTypeSynthAdd::AddSynth(
-                            const_type_name, synth_provider,
+                            ConstString(type_name), synth_provider,
                             options->m_regex
                                 ? CommandObjectTypeSynthAdd::eRegexSynth
                                 : CommandObjectTypeSynthAdd::eRegularSynth,
@@ -525,16 +494,8 @@ public:
 
 // CommandObjectTypeFormatAdd
 
-static constexpr OptionDefinition g_type_format_add_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_ALL, false, "category",        'w', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeName,    "Add this to the given category instead of the default one." },
-  { LLDB_OPT_SET_ALL, false, "cascade",         'C', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeBoolean, "If true, cascade through typedef chains." },
-  { LLDB_OPT_SET_ALL, false, "skip-pointers",   'p', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,    "Don't use this format for pointers-to-type objects." },
-  { LLDB_OPT_SET_ALL, false, "skip-references", 'r', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,    "Don't use this format for references-to-type objects." },
-  { LLDB_OPT_SET_ALL, false, "regex",           'x', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,    "Type names are actually regular expressions." },
-  { LLDB_OPT_SET_2,   false, "type",            't', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeName,    "Format variables as if they were of this type." }
-    // clang-format on
-};
+#define LLDB_OPTIONS_type_format_add
+#include "CommandOptions.inc"
 
 class CommandObjectTypeFormatAdd : public CommandObjectParsed {
 private:
@@ -730,8 +691,8 @@ protected:
 
       ConstString typeCS(arg_entry.ref);
       if (m_command_options.m_regex) {
-        RegularExpressionSP typeRX(new RegularExpression());
-        if (!typeRX->Compile(arg_entry.ref)) {
+        RegularExpressionSP typeRX(new RegularExpression(arg_entry.ref));
+        if (!typeRX->IsValid()) {
           result.AppendError(
               "regex format error (maybe this is not really a regex?)");
           result.SetStatus(eReturnStatusFailed);
@@ -748,13 +709,8 @@ protected:
   }
 };
 
-static constexpr OptionDefinition g_type_formatter_delete_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_1, false, "all",      'a', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,     "Delete from every category." },
-  { LLDB_OPT_SET_2, false, "category", 'w', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeName,     "Delete from given category." },
-  { LLDB_OPT_SET_3, false, "language", 'l', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeLanguage, "Delete from given language's category." }
-    // clang-format on
-};
+#define LLDB_OPTIONS_type_formatter_delete
+#include "CommandOptions.inc"
 
 class CommandObjectTypeFormatterDelete : public CommandObjectParsed {
 protected:
@@ -890,11 +846,8 @@ protected:
   }
 };
 
-static constexpr OptionDefinition g_type_formatter_clear_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_ALL, false, "all", 'a', OptionParser::eNoArgument, nullptr, {}, 0, eArgTypeNone, "Clear every category." }
-    // clang-format on
-};
+#define LLDB_OPTIONS_type_formatter_clear
+#include "CommandOptions.inc"
 
 class CommandObjectTypeFormatterClear : public CommandObjectParsed {
 private:
@@ -1003,13 +956,8 @@ public:
             "type format clear", "Delete all existing format styles.") {}
 };
 
-
-static constexpr OptionDefinition g_type_formatter_list_options[] = {
-  // clang-format off
-  {LLDB_OPT_SET_1, false, "category-regex", 'w', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeName,     "Only show categories matching this filter."},
-  {LLDB_OPT_SET_2, false, "language",       'l', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeLanguage, "Only show the category for a specific language."}
-  // clang-format on
-};
+#define LLDB_OPTIONS_type_formatter_list
+#include "CommandOptions.inc"
 
 template <typename FormatterType>
 class CommandObjectTypeFormatterList : public CommandObjectParsed {
@@ -1095,9 +1043,9 @@ protected:
     std::unique_ptr<RegularExpression> formatter_regex;
 
     if (m_options.m_category_regex.OptionWasSet()) {
-      category_regex.reset(new RegularExpression());
-      if (!category_regex->Compile(
-              m_options.m_category_regex.GetCurrentValueAsRef())) {
+      category_regex.reset(new RegularExpression(
+          m_options.m_category_regex.GetCurrentValueAsRef()));
+      if (!category_regex->IsValid()) {
         result.AppendErrorWithFormat(
             "syntax error in category regular expression '%s'",
             m_options.m_category_regex.GetCurrentValueAsRef().str().c_str());
@@ -1108,8 +1056,9 @@ protected:
 
     if (argc == 1) {
       const char *arg = command.GetArgumentAtIndex(0);
-      formatter_regex.reset(new RegularExpression());
-      if (!formatter_regex->Compile(llvm::StringRef::withNullAsEmpty(arg))) {
+      formatter_regex.reset(
+          new RegularExpression(llvm::StringRef::withNullAsEmpty(arg)));
+      if (!formatter_regex->IsValid()) {
         result.AppendErrorWithFormat("syntax error in regular expression '%s'",
                                      arg);
         result.SetStatus(eReturnStatusFailed);
@@ -1681,8 +1630,8 @@ bool CommandObjectTypeSummaryAdd::AddSummary(ConstString type_name,
   }
 
   if (type == eRegexSummary) {
-    RegularExpressionSP typeRX(new RegularExpression());
-    if (!typeRX->Compile(type_name.GetStringRef())) {
+    RegularExpressionSP typeRX(new RegularExpression(type_name.GetStringRef()));
+    if (!typeRX->IsValid()) {
       if (error)
         error->SetErrorString(
             "regex format error (maybe this is not really a regex?)");
@@ -1765,13 +1714,8 @@ protected:
 };
 
 // CommandObjectTypeCategoryDefine
-
-static constexpr OptionDefinition g_type_category_define_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_ALL, false, "enabled",  'e', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,     "If specified, this category will be created enabled." },
-  { LLDB_OPT_SET_ALL, false, "language", 'l', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeLanguage, "Specify the language that this category is supported for." }
-    // clang-format on
-};
+#define LLDB_OPTIONS_type_category_define
+#include "CommandOptions.inc"
 
 class CommandObjectTypeCategoryDefine : public CommandObjectParsed {
   class CommandOptions : public Options {
@@ -1870,12 +1814,8 @@ protected:
 };
 
 // CommandObjectTypeCategoryEnable
-
-static constexpr OptionDefinition g_type_category_enable_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_ALL, false, "language", 'l', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeLanguage, "Enable the category for this language." },
-    // clang-format on
-};
+#define LLDB_OPTIONS_type_category_enable
+#include "CommandOptions.inc"
 
 class CommandObjectTypeCategoryEnable : public CommandObjectParsed {
   class CommandOptions : public Options {
@@ -2043,12 +1983,8 @@ protected:
 };
 
 // CommandObjectTypeCategoryDisable
-
-OptionDefinition constexpr g_type_category_disable_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_ALL, false, "language", 'l', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeLanguage, "Enable the category for this language." }
-    // clang-format on
-};
+#define LLDB_OPTIONS_type_category_disable
+#include "CommandOptions.inc"
 
 class CommandObjectTypeCategoryDisable : public CommandObjectParsed {
   class CommandOptions : public Options {
@@ -2180,9 +2116,9 @@ protected:
     std::unique_ptr<RegularExpression> regex;
 
     if (argc == 1) {
-      regex.reset(new RegularExpression());
       const char *arg = command.GetArgumentAtIndex(0);
-      if (!regex->Compile(llvm::StringRef::withNullAsEmpty(arg))) {
+      regex.reset(new RegularExpression(llvm::StringRef::withNullAsEmpty(arg)));
+      if (!regex->IsValid()) {
         result.AppendErrorWithFormat(
             "syntax error in category regular expression '%s'", arg);
         result.SetStatus(eReturnStatusFailed);
@@ -2434,8 +2370,8 @@ bool CommandObjectTypeSynthAdd::AddSynth(ConstString type_name,
   }
 
   if (type == eRegexSynth) {
-    RegularExpressionSP typeRX(new RegularExpression());
-    if (!typeRX->Compile(type_name.GetStringRef())) {
+    RegularExpressionSP typeRX(new RegularExpression(type_name.GetStringRef()));
+    if (!typeRX->IsValid()) {
       if (error)
         error->SetErrorString(
             "regex format error (maybe this is not really a regex?)");
@@ -2453,17 +2389,8 @@ bool CommandObjectTypeSynthAdd::AddSynth(ConstString type_name,
 }
 
 #endif // LLDB_DISABLE_PYTHON
-
-static constexpr OptionDefinition g_type_filter_add_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_ALL, false, "cascade",         'C', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeBoolean,        "If true, cascade through typedef chains." },
-  { LLDB_OPT_SET_ALL, false, "skip-pointers",   'p', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,           "Don't use this format for pointers-to-type objects." },
-  { LLDB_OPT_SET_ALL, false, "skip-references", 'r', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,           "Don't use this format for references-to-type objects." },
-  { LLDB_OPT_SET_ALL, false, "category",        'w', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeName,           "Add this to the given category instead of the default one." },
-  { LLDB_OPT_SET_ALL, false, "child",           'c', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeExpressionPath, "Include this expression path in the synthetic view." },
-  { LLDB_OPT_SET_ALL, false, "regex",           'x', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,           "Type names are actually regular expressions." }
-    // clang-format on
-};
+#define LLDB_OPTIONS_type_filter_add
+#include "CommandOptions.inc"
 
 class CommandObjectTypeFilterAdd : public CommandObjectParsed {
 private:
@@ -2571,8 +2498,9 @@ private:
     }
 
     if (type == eRegexFilter) {
-      RegularExpressionSP typeRX(new RegularExpression());
-      if (!typeRX->Compile(type_name.GetStringRef())) {
+      RegularExpressionSP typeRX(
+          new RegularExpression(type_name.GetStringRef()));
+      if (!typeRX->IsValid()) {
         if (error)
           error->SetErrorString(
               "regex format error (maybe this is not really a regex?)");
@@ -2707,12 +2635,8 @@ protected:
 };
 
 // "type lookup"
-static constexpr OptionDefinition g_type_lookup_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_ALL, false, "show-help", 'h', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,     "Display available help for types" },
-  { LLDB_OPT_SET_ALL, false, "language",  'l', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeLanguage, "Which language's types should the search scope be" }
-    // clang-format on
-};
+#define LLDB_OPTIONS_type_lookup
+#include "CommandOptions.inc"
 
 class CommandObjectTypeLookup : public CommandObjectRaw {
 protected:

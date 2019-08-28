@@ -108,7 +108,7 @@ public:
            Data == X.Data;
   }
 
-  void dump() const;
+  LLVM_DUMP_METHOD void dump() const;
 };
 } // end anonymous namespace
 
@@ -135,7 +135,9 @@ static inline raw_ostream &operator<<(raw_ostream &Out, BindingKey K) {
 
 } // namespace llvm
 
-LLVM_DUMP_METHOD void BindingKey::dump() const { llvm::errs() << *this; }
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+void BindingKey::dump() const { llvm::errs() << *this; }
+#endif
 
 //===----------------------------------------------------------------------===//
 // Actual Store type.
@@ -642,14 +644,14 @@ public: // Part of public interface to class.
 std::unique_ptr<StoreManager>
 ento::CreateRegionStoreManager(ProgramStateManager &StMgr) {
   RegionStoreFeatures F = maximal_features_tag();
-  return llvm::make_unique<RegionStoreManager>(StMgr, F);
+  return std::make_unique<RegionStoreManager>(StMgr, F);
 }
 
 std::unique_ptr<StoreManager>
 ento::CreateFieldsOnlyRegionStoreManager(ProgramStateManager &StMgr) {
   RegionStoreFeatures F = minimal_features_tag();
   F.enableFields(true);
-  return llvm::make_unique<RegionStoreManager>(StMgr, F);
+  return std::make_unique<RegionStoreManager>(StMgr, F);
 }
 
 
@@ -1253,7 +1255,7 @@ RegionStoreManager::invalidateGlobalRegion(MemRegion::Kind K,
   // Bind the globals memory space to a new symbol that we will use to derive
   // the bindings for all globals.
   const GlobalsSpaceRegion *GS = MRMgr.getGlobalsRegion(K);
-  SVal V = svalBuilder.conjureSymbolVal(/* SymbolTag = */ (const void*) GS, Ex, LCtx,
+  SVal V = svalBuilder.conjureSymbolVal(/* symbolTag = */ (const void*) GS, Ex, LCtx,
                                         /* type does not matter */ Ctx.IntTy,
                                         Count);
 

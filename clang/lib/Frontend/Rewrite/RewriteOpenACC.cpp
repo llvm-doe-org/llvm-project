@@ -280,6 +280,6 @@ std::unique_ptr<ASTConsumer>
 clang::CreateOpenACCRewriter(const std::string &InFile,
                              std::unique_ptr<raw_ostream> OS,
                              OpenACCPrintKind OpenACCPrint) {
-  return llvm::make_unique<RewriteOpenACC>(InFile, std::move(OS),
-                                           OpenACCPrint);
+  return std::make_unique<RewriteOpenACC>(InFile, std::move(OS),
+                                          OpenACCPrint);
 }

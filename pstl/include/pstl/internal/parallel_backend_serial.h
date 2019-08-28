@@ -18,9 +18,11 @@
 
 #include "pstl_config.h"
 
+_PSTL_HIDE_FROM_ABI_PUSH
+
 namespace __pstl
 {
-namespace __serial
+namespace __serial_backend
 {
 
 template <typename _Tp>
@@ -126,15 +128,9 @@ __parallel_invoke(_ExecutionPolicy&&, _F1&& __f1, _F2&& __f2)
     std::forward<_F2>(__f2)();
 }
 
-} // namespace __serial
+} // namespace __serial_backend
 } // namespace __pstl
 
-namespace __pstl
-{
-namespace __par_backend
-{
-using namespace __pstl::__serial;
-}
-} // namespace __pstl
+_PSTL_HIDE_FROM_ABI_POP
 
 #endif /* _PSTL_PARALLEL_BACKEND_SERIAL_H */

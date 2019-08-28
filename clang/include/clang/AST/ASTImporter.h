@@ -87,6 +87,8 @@ class TypeSourceInfo;
     using NonEquivalentDeclSet = llvm::DenseSet<std::pair<Decl *, Decl *>>;
     using ImportedCXXBaseSpecifierMap =
         llvm::DenseMap<const CXXBaseSpecifier *, CXXBaseSpecifier *>;
+    using FileIDImportHandlerType =
+        std::function<void(FileID /*ToID*/, FileID /*FromID*/)>;
 
     // An ImportPath is the list of the AST nodes which we visit during an
     // Import call.
@@ -210,6 +212,8 @@ class TypeSourceInfo;
     };
 
   private:
+    FileIDImportHandlerType FileIDImportHandler;
+
     std::shared_ptr<ASTImporterSharedState> SharedState = nullptr;
 
     /// The path which we go through during the import of a given AST node.
@@ -310,6 +314,14 @@ class TypeSourceInfo;
 
     virtual ~ASTImporter();
 
+    /// Set a callback function for FileID import handling.
+    /// The function is invoked when a FileID is imported from the From context.
+    /// The imported FileID in the To context and the original FileID in the
+    /// From context is passed to it.
+    void setFileIDImportHandler(FileIDImportHandlerType H) {
+      FileIDImportHandler = H;
+    }
+
     /// Whether the importer will perform a minimal import, creating
     /// to-be-completed forward declarations when possible.
     bool isMinimalImport() const { return Minimal; }
@@ -365,6 +377,20 @@ class TypeSourceInfo;
     /// Return the translation unit from where the declaration was
     /// imported. If it does not exist nullptr is returned.
     TranslationUnitDecl *GetFromTU(Decl *ToD);
+
+    /// Return the declaration in the "from" context from which the declaration
+    /// in the "to" context was imported. If it was not imported or of the wrong
+    /// type a null value is returned.
+    template <typename DeclT>
+    llvm::Optional<DeclT *> getImportedFromDecl(const DeclT *ToD) const {
+      auto FromI = ImportedFromDecls.find(ToD);
+      if (FromI == ImportedFromDecls.end())
+        return {};
+      auto *FromD = dyn_cast<DeclT>(FromI->second);
+      if (!FromD)
+        return {};
+      return FromD;
+    }
 
     /// Import the given declaration context from the "from"
     /// AST context into the "to" AST context.

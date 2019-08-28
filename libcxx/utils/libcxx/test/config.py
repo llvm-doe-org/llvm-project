@@ -233,11 +233,13 @@ class Configuration(object):
         cxx_type = self.cxx.type
         if cxx_type is not None:
             assert self.cxx.version is not None
-            maj_v, min_v, _ = self.cxx.version
+            maj_v, min_v, patch_v = self.cxx.version
             self.config.available_features.add(cxx_type)
             self.config.available_features.add('%s-%s' % (cxx_type, maj_v))
             self.config.available_features.add('%s-%s.%s' % (
                 cxx_type, maj_v, min_v))
+            self.config.available_features.add('%s-%s.%s.%s' % (
+                cxx_type, maj_v, min_v, patch_v))
         self.cxx.compile_env = dict(os.environ)
         # 'CCACHE_CPP2' prevents ccache from stripping comments while
         # preprocessing. This is required to prevent stripping of '-verify'
@@ -524,6 +526,7 @@ class Configuration(object):
                 maj_v = int(maj_v)
                 if maj_v < 7:
                     possible_stds.remove('c++1z')
+                    possible_stds.remove('c++17')
                 # FIXME: How many C++14 tests actually fail under GCC 5 and 6?
                 # Should we XFAIL them individually instead?
                 if maj_v <= 6:
@@ -580,6 +583,15 @@ class Configuration(object):
         support_path = os.path.join(self.libcxx_src_root, 'test/support')
         self.cxx.compile_flags += ['-I' + support_path]
 
+        # Add includes for the PSTL headers
+        pstl_src_root = self.get_lit_conf('pstl_src_root')
+        pstl_obj_root = self.get_lit_conf('pstl_obj_root')
+        if pstl_src_root is not None and pstl_obj_root is not None:
+            self.cxx.compile_flags += ['-I' + os.path.join(pstl_src_root, 'include')]
+            self.cxx.compile_flags += ['-I' + os.path.join(pstl_obj_root, 'generated_headers')]
+            self.cxx.compile_flags += ['-I' + os.path.join(pstl_src_root, 'test')]
+            self.config.available_features.add('parallel-algorithms')
+
         # FIXME(EricWF): variant_size.pass.cpp requires a slightly larger
         # template depth with older Clang versions.
         self.cxx.addFlagIfSupported('-ftemplate-depth=270')
@@ -590,11 +602,11 @@ class Configuration(object):
         if self.cxx_stdlib_under_test != 'libstdc++' and \
            not self.is_windows:
             self.cxx.compile_flags += [
-                '-include', os.path.join(support_path, 'nasty_macros.hpp')]
+                '-include', os.path.join(support_path, 'nasty_macros.h')]
         if self.cxx_stdlib_under_test == 'msvc':
             self.cxx.compile_flags += [
                 '-include', os.path.join(support_path,
-                                         'msvc_stdlib_force_include.hpp')]
+                                         'msvc_stdlib_force_include.h')]
             pass
         if self.is_windows and self.debug_build and \
                 self.cxx_stdlib_under_test != 'msvc':
@@ -656,19 +668,18 @@ class Configuration(object):
         # The __config_site header should be non-empty. Otherwise it should
         # have never been emitted by CMake.
         assert len(feature_macros) > 0
-        # FIXME: This is a hack that should be fixed using module maps (or something)
+        # FIXME: This is a hack that should be fixed using module maps.
         # If modules are enabled then we have to lift all of the definitions
         # in __config_site onto the command line.
-        modules_enabled = self.get_modules_enabled()
+        for m in feature_macros:
+            define = '-D%s' % m
+            if feature_macros[m]:
+                define += '=%s' % (feature_macros[m])
+            self.cxx.modules_flags += [define]
         self.cxx.compile_flags += ['-Wno-macro-redefined']
         # Transform each macro name into the feature name used in the tests.
         # Ex. _LIBCPP_HAS_NO_THREADS -> libcpp-has-no-threads
         for m in feature_macros:
-            if modules_enabled:
-                define = '-D%s' % m
-                if feature_macros[m]:
-                    define += '=%s' % (feature_macros[m])
-                self.cxx.compile_flags += [define]
             if m == '_LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS' or \
                m == '_LIBCPP_HIDE_FROM_ABI_PER_TU_BY_DEFAULT':
                 continue
@@ -1013,7 +1024,7 @@ class Configuration(object):
         if os.path.isdir(module_cache):
             shutil.rmtree(module_cache)
         os.makedirs(module_cache)
-        self.cxx.modules_flags = modules_flags + \
+        self.cxx.modules_flags += modules_flags + \
             ['-fmodules-cache-path=' + module_cache]
         if enable_modules:
             self.config.available_features.add('-fmodules')

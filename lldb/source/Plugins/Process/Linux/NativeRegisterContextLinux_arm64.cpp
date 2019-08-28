@@ -112,10 +112,10 @@ NativeRegisterContextLinux::CreateHostNativeRegisterContextLinux(
     const ArchSpec &target_arch, NativeThreadProtocol &native_thread) {
   switch (target_arch.GetMachine()) {
   case llvm::Triple::arm:
-    return llvm::make_unique<NativeRegisterContextLinux_arm>(target_arch,
+    return std::make_unique<NativeRegisterContextLinux_arm>(target_arch,
                                                              native_thread);
   case llvm::Triple::aarch64:
-    return llvm::make_unique<NativeRegisterContextLinux_arm64>(target_arch,
+    return std::make_unique<NativeRegisterContextLinux_arm64>(target_arch,
                                                                native_thread);
   default:
     llvm_unreachable("have no register context for architecture");
@@ -347,8 +347,7 @@ bool NativeRegisterContextLinux_arm64::IsFPR(unsigned reg) const {
 uint32_t NativeRegisterContextLinux_arm64::NumSupportedHardwareBreakpoints() {
   Log *log(ProcessPOSIXLog::GetLogIfAllCategoriesSet(POSIX_LOG_BREAKPOINTS));
 
-  if (log)
-    log->Printf("NativeRegisterContextLinux_arm64::%s()", __FUNCTION__);
+  LLDB_LOGF(log, "NativeRegisterContextLinux_arm64::%s()", __FUNCTION__);
 
   Status error;
 
@@ -458,8 +457,7 @@ Status NativeRegisterContextLinux_arm64::GetHardwareBreakHitIndex(
     uint32_t &bp_index, lldb::addr_t trap_addr) {
   Log *log(ProcessPOSIXLog::GetLogIfAllCategoriesSet(POSIX_LOG_BREAKPOINTS));
 
-  if (log)
-    log->Printf("NativeRegisterContextLinux_arm64::%s()", __FUNCTION__);
+  LLDB_LOGF(log, "NativeRegisterContextLinux_arm64::%s()", __FUNCTION__);
 
   lldb::addr_t break_addr;
 
@@ -479,8 +477,7 @@ Status NativeRegisterContextLinux_arm64::GetHardwareBreakHitIndex(
 Status NativeRegisterContextLinux_arm64::ClearAllHardwareBreakpoints() {
   Log *log(ProcessPOSIXLog::GetLogIfAllCategoriesSet(POSIX_LOG_BREAKPOINTS));
 
-  if (log)
-    log->Printf("NativeRegisterContextLinux_arm64::%s()", __FUNCTION__);
+  LLDB_LOGF(log, "NativeRegisterContextLinux_arm64::%s()", __FUNCTION__);
 
   Status error;
 

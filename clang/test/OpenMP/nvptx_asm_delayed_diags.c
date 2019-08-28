@@ -1,13 +1,25 @@
 // RUN: %clang_cc1 -fopenmp -x c -triple i386-unknown-unknown -fopenmp-targets=nvptx-nvidia-cuda -emit-llvm-bc %s -o %t-x86-host.bc
-// RUN: %clang_cc1 -verify -fopenmp -x c -triple nvptx-unknown-unknown -fopenmp-targets=nvptx-nvidia-cuda %s -fopenmp-is-device -fopenmp-host-ir-file-path %t-x86-host.bc -fsyntax-only -Wuninitialized
-// RUN: %clang_cc1 -verify -DDIAGS -DIMMEDIATE -fopenmp -x c -triple nvptx-unknown-unknown -fopenmp-targets=nvptx-nvidia-cuda %s -fopenmp-is-device -fopenmp-host-ir-file-path %t-x86-host.bc -fsyntax-only -Wuninitialized
-// RUN: %clang_cc1 -verify -DDIAGS -DDELAYED -fopenmp -x c -triple nvptx-unknown-unknown -fopenmp-targets=nvptx-nvidia-cuda %s -fopenmp-is-device -fopenmp-host-ir-file-path %t-x86-host.bc -fsyntax-only -Wuninitialized
+// RUN: %clang_cc1 -verify -fopenmp -x c -triple nvptx-unknown-unknown -aux-triple i386-unknown-unknown -fopenmp-targets=nvptx-nvidia-cuda %s -fopenmp-is-device -fopenmp-host-ir-file-path %t-x86-host.bc -fsyntax-only -Wuninitialized
+// RUN: %clang_cc1 -verify -DDIAGS -DIMMEDIATE -fopenmp -x c -triple nvptx-unknown-unknown -aux-triple i386-unknown-unknown -fopenmp-targets=nvptx-nvidia-cuda %s -fopenmp-is-device -fopenmp-host-ir-file-path %t-x86-host.bc -fsyntax-only -Wuninitialized
+// RUN: %clang_cc1 -verify -DDIAGS -DDELAYED -fopenmp -x c -triple nvptx-unknown-unknown -aux-triple i386-unknown-unknown -fopenmp-targets=nvptx-nvidia-cuda %s -fopenmp-is-device -fopenmp-host-ir-file-path %t-x86-host.bc -fsyntax-only -Wuninitialized
 // REQUIRES: x86-registered-target
 // REQUIRES: nvptx-registered-target
 
 #ifndef DIAGS
 // expected-no-diagnostics
 #endif // DIAGS
+
+void foo(int r) {
+#ifdef IMMEDIATE
+// expected-error@+4 {{invalid input constraint 'mx' in asm}}
+#endif // IMMEDIATE
+  __asm__("PR3908 %[lf] %[xx] %[li] %[r]"
+          : [ r ] "+r"(r)
+          : [ lf ] "mx"(0), [ li ] "mr"(0), [ xx ] "x"((double)(0)));
+}
+#ifdef IMMEDIATE
+#pragma omp declare target to(foo)
+#endif //IMMEDIATE
 
 #ifdef IMMEDIATE
 #pragma omp declare target

@@ -589,6 +589,8 @@ private:
   CFGBlock *VisitStmt(Stmt *S, AddStmtChoice asc);
   CFGBlock *VisitChildren(Stmt *S);
   CFGBlock *VisitNoRecurse(Expr *E, AddStmtChoice asc);
+  CFGBlock *VisitOMPExecutableDirective(OMPExecutableDirective *D,
+                                        AddStmtChoice asc);
 
   void maybeAddScopeBeginForVarDecl(CFGBlock *B, const VarDecl *VD,
                                     const Stmt *S) {
@@ -2058,6 +2060,10 @@ CFGBlock *CFGBuilder::Visit(Stmt * S, AddStmtChoice asc) {
   if (Expr *E = dyn_cast<Expr>(S))
     S = E->IgnoreParens();
 
+  if (Context->getLangOpts().OpenMP)
+    if (auto *D = dyn_cast<OMPExecutableDirective>(S))
+      return VisitOMPExecutableDirective(D, asc);
+
   switch (S->getStmtClass()) {
     default:
       return VisitStmt(S, asc);
@@ -2925,8 +2931,8 @@ CFGBlock *CFGBuilder::VisitIfStmt(IfStmt *I) {
 
     // Add the successors.  If we know that specific branches are
     // unreachable, inform addSuccessor() of that knowledge.
-    addSuccessor(Block, ThenBlock, /* isReachable = */ !KnownVal.isFalse());
-    addSuccessor(Block, ElseBlock, /* isReachable = */ !KnownVal.isTrue());
+    addSuccessor(Block, ThenBlock, /* IsReachable = */ !KnownVal.isFalse());
+    addSuccessor(Block, ElseBlock, /* IsReachable = */ !KnownVal.isTrue());
 
     // Add the condition as the last statement in the new block.  This may
     // create new blocks as the condition may contain control-flow.  Any newly
@@ -4728,6 +4734,37 @@ CFGBlock *CFGBuilder::VisitConditionalOperatorForTemporaryDtors(
   return Block;
 }
 
+CFGBlock *CFGBuilder::VisitOMPExecutableDirective(OMPExecutableDirective *D,
+                                                  AddStmtChoice asc) {
+  if (asc.alwaysAdd(*this, D)) {
+    autoCreateBlock();
+    appendStmt(Block, D);
+  }
+
+  // Iterate over all used expression in clauses.
+  CFGBlock *B = Block;
+
+  // Reverse the elements to process them in natural order. Iterators are not
+  // bidirectional, so we need to create temp vector.
+  SmallVector<Stmt *, 8> Used(
+      OMPExecutableDirective::used_clauses_children(D->clauses()));
+  for (Stmt *S : llvm::reverse(Used)) {
+    assert(S && "Expected non-null used-in-clause child.");
+    if (CFGBlock *R = Visit(S))
+      B = R;
+  }
+  // Visit associated structured block if any.
+  if (!D->isStandaloneDirective())
+    if (Stmt *S = D->getStructuredBlock()) {
+      if (!isa<CompoundStmt>(S))
+        addLocalScopeAndDtors(S);
+      if (CFGBlock *R = addStmt(S))
+        B = R;
+    }
+
+  return B;
+}
+
 /// createBlock - Constructs and adds a new CFGBlock to the CFG.  The block has
 ///  no successors or predecessors.  If this is the first block created in the
 ///  CFG, it is automatically set to be the Entry and Exit of the CFG.
@@ -5578,6 +5615,10 @@ void CFG::print(raw_ostream &OS, const LangOptions &LO, bool ShowColors) const {
   OS.flush();
 }
 
+size_t CFGBlock::getIndexInCFG() const {
+  return llvm::find(*getParent(), this) - getParent()->begin();
+}
+
 /// dump - A simply pretty printer of a CFGBlock that outputs to stderr.
 void CFGBlock::dump(const CFG* cfg, const LangOptions &LO,
                     bool ShowColors) const {
@@ -5613,6 +5654,71 @@ void CFGBlock::printTerminatorJson(raw_ostream &Out, const LangOptions &LO,
   printTerminator(TempOut, LO);
 
   Out << JsonFormat(TempOut.str(), AddQuotes);
+}
+
+// Returns true if by simply looking at the block, we can be sure that it
+// results in a sink during analysis. This is useful to know when the analysis
+// was interrupted, and we try to figure out if it would sink eventually.
+// There may be many more reasons why a sink would appear during analysis
+// (eg. checkers may generate sinks arbitrarily), but here we only consider
+// sinks that would be obvious by looking at the CFG.
+static bool isImmediateSinkBlock(const CFGBlock *Blk) {
+  if (Blk->hasNoReturnElement())
+    return true;
+
+  // FIXME: Throw-expressions are currently generating sinks during analysis:
+  // they're not supported yet, and also often used for actually terminating
+  // the program. So we should treat them as sinks in this analysis as well,
+  // at least for now, but once we have better support for exceptions,
+  // we'd need to carefully handle the case when the throw is being
+  // immediately caught.
+  if (std::any_of(Blk->begin(), Blk->end(), [](const CFGElement &Elm) {
+        if (Optional<CFGStmt> StmtElm = Elm.getAs<CFGStmt>())
+          if (isa<CXXThrowExpr>(StmtElm->getStmt()))
+            return true;
+        return false;
+      }))
+    return true;
+
+  return false;
+}
+
+bool CFGBlock::isInevitablySinking() const {
+  const CFG &Cfg = *getParent();
+
+  const CFGBlock *StartBlk = this;
+  if (isImmediateSinkBlock(StartBlk))
+    return true;
+
+  llvm::SmallVector<const CFGBlock *, 32> DFSWorkList;
+  llvm::SmallPtrSet<const CFGBlock *, 32> Visited;
+
+  DFSWorkList.push_back(StartBlk);
+  while (!DFSWorkList.empty()) {
+    const CFGBlock *Blk = DFSWorkList.back();
+    DFSWorkList.pop_back();
+    Visited.insert(Blk);
+
+    // If at least one path reaches the CFG exit, it means that control is
+    // returned to the caller. For now, say that we are not sure what
+    // happens next. If necessary, this can be improved to analyze
+    // the parent StackFrameContext's call site in a similar manner.
+    if (Blk == &Cfg.getExit())
+      return false;
+
+    for (const auto &Succ : Blk->succs()) {
+      if (const CFGBlock *SuccBlk = Succ.getReachableBlock()) {
+        if (!isImmediateSinkBlock(SuccBlk) && !Visited.count(SuccBlk)) {
+          // If the block has reachable child blocks that aren't no-return,
+          // add them to the worklist.
+          DFSWorkList.push_back(SuccBlk);
+        }
+      }
+    }
+  }
+
+  // Nothing reached the exit. It can only mean one thing: there's no return.
+  return true;
 }
 
 const Expr *CFGBlock::getLastCondition() const {

@@ -410,6 +410,7 @@ void ScalarBitSetTraits<ELFYAML::ELF_EF>::bitset(IO &IO,
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX902, EF_AMDGPU_MACH);
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX904, EF_AMDGPU_MACH);
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX906, EF_AMDGPU_MACH);
+    BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX908, EF_AMDGPU_MACH);
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX909, EF_AMDGPU_MACH);
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX1010, EF_AMDGPU_MACH);
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX1011, EF_AMDGPU_MACH);
@@ -562,7 +563,7 @@ void ScalarEnumerationTraits<ELFYAML::ELF_SHN>::enumeration(
   ECase(SHN_HEXAGON_SCOMMON_4);
   ECase(SHN_HEXAGON_SCOMMON_8);
 #undef ECase
-  IO.enumFallback<Hex32>(Value);
+  IO.enumFallback<Hex16>(Value);
 }
 
 void ScalarEnumerationTraits<ELFYAML::ELF_STB>::enumeration(
@@ -896,8 +897,6 @@ StringRef MappingTraits<ELFYAML::Symbol>::validate(IO &IO,
                                                    ELFYAML::Symbol &Symbol) {
   if (Symbol.Index && Symbol.Section.data())
     return "Index and Section cannot both be specified for Symbol";
-  if (Symbol.Index && *Symbol.Index == ELFYAML::ELF_SHN(ELF::SHN_XINDEX))
-    return "Large indexes are not supported";
   if (Symbol.NameIndex && !Symbol.Name.empty())
     return "Name and NameIndex cannot both be specified for Symbol";
   return StringRef();
@@ -912,11 +911,13 @@ static void commonSectionMapping(IO &IO, ELFYAML::Section &Section) {
   IO.mapOptional("AddressAlign", Section.AddressAlign, Hex64(0));
   IO.mapOptional("EntSize", Section.EntSize);
 
-  // obj2yaml does not dump this field. It is expected to be empty when we are
-  // producing YAML, because yaml2obj sets an appropriate value for sh_offset
-  // automatically when it is not explicitly defined.
-  assert(!IO.outputting() || !Section.ShOffset.hasValue());
+  // obj2yaml does not dump these fields. They are expected to be empty when we
+  // are producing YAML, because yaml2obj sets appropriate values for sh_offset
+  // and sh_size automatically when they are not explicitly defined.
+  assert(!IO.outputting() ||
+         (!Section.ShOffset.hasValue() && !Section.ShSize.hasValue()));
   IO.mapOptional("ShOffset", Section.ShOffset);
+  IO.mapOptional("ShSize", Section.ShSize);
 }
 
 static void sectionMapping(IO &IO, ELFYAML::DynamicSection &Section) {
@@ -964,6 +965,11 @@ static void groupSectionMapping(IO &IO, ELFYAML::Group &Group) {
   commonSectionMapping(IO, Group);
   IO.mapOptional("Info", Group.Signature, StringRef());
   IO.mapRequired("Members", Group.Members);
+}
+
+static void sectionMapping(IO &IO, ELFYAML::SymtabShndxSection &Section) {
+  commonSectionMapping(IO, Section);
+  IO.mapRequired("Entries", Section.Entries);
 }
 
 void MappingTraits<ELFYAML::SectionOrType>::mapping(
@@ -1045,6 +1051,11 @@ void MappingTraits<std::unique_ptr<ELFYAML::Section>>::mapping(
     if (!IO.outputting())
       Section.reset(new ELFYAML::VerneedSection());
     sectionMapping(IO, *cast<ELFYAML::VerneedSection>(Section.get()));
+    break;
+  case ELF::SHT_SYMTAB_SHNDX:
+    if (!IO.outputting())
+      Section.reset(new ELFYAML::SymtabShndxSection());
+    sectionMapping(IO, *cast<ELFYAML::SymtabShndxSection>(Section.get()));
     break;
   default:
     if (!IO.outputting())

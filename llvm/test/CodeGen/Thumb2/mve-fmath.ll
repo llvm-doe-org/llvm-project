@@ -66,6 +66,30 @@ entry:
   ret <8 x half> %0
 }
 
+define arm_aapcs_vfpcc <2 x double> @sqrt_float64_t(<2 x double> %src) {
+; CHECK-LABEL: sqrt_float64_t:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .save {r7, lr}
+; CHECK-NEXT:    push {r7, lr}
+; CHECK-NEXT:    .vsave {d8, d9}
+; CHECK-NEXT:    vpush {d8, d9}
+; CHECK-NEXT:    vmov q4, q0
+; CHECK-NEXT:    vmov r0, r1, d9
+; CHECK-NEXT:    bl sqrt
+; CHECK-NEXT:    vmov r2, r3, d8
+; CHECK-NEXT:    vmov d9, r0, r1
+; CHECK-NEXT:    mov r0, r2
+; CHECK-NEXT:    mov r1, r3
+; CHECK-NEXT:    bl sqrt
+; CHECK-NEXT:    vmov d8, r0, r1
+; CHECK-NEXT:    vmov q0, q4
+; CHECK-NEXT:    vpop {d8, d9}
+; CHECK-NEXT:    pop {r7, pc}
+entry:
+  %0 = call fast <2 x double> @llvm.sqrt.v2f64(<2 x double> %src)
+  ret <2 x double> %0
+}
+
 define arm_aapcs_vfpcc <4 x float> @cos_float32_t(<4 x float> %src) {
 ; CHECK-LABEL: cos_float32_t:
 ; CHECK:       @ %bb.0: @ %entry
@@ -196,6 +220,30 @@ define arm_aapcs_vfpcc <8 x half> @cos_float16_t(<8 x half> %src) {
 entry:
   %0 = call fast <8 x half> @llvm.cos.v8f16(<8 x half> %src)
   ret <8 x half> %0
+}
+
+define arm_aapcs_vfpcc <2 x double> @cos_float64_t(<2 x double> %src) {
+; CHECK-LABEL: cos_float64_t:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .save {r7, lr}
+; CHECK-NEXT:    push {r7, lr}
+; CHECK-NEXT:    .vsave {d8, d9}
+; CHECK-NEXT:    vpush {d8, d9}
+; CHECK-NEXT:    vmov q4, q0
+; CHECK-NEXT:    vmov r0, r1, d9
+; CHECK-NEXT:    bl cos
+; CHECK-NEXT:    vmov r2, r3, d8
+; CHECK-NEXT:    vmov d9, r0, r1
+; CHECK-NEXT:    mov r0, r2
+; CHECK-NEXT:    mov r1, r3
+; CHECK-NEXT:    bl cos
+; CHECK-NEXT:    vmov d8, r0, r1
+; CHECK-NEXT:    vmov q0, q4
+; CHECK-NEXT:    vpop {d8, d9}
+; CHECK-NEXT:    pop {r7, pc}
+entry:
+  %0 = call fast <2 x double> @llvm.cos.v2f64(<2 x double> %src)
+  ret <2 x double> %0
 }
 
 define arm_aapcs_vfpcc <4 x float> @sin_float32_t(<4 x float> %src) {
@@ -330,6 +378,30 @@ entry:
   ret <8 x half> %0
 }
 
+define arm_aapcs_vfpcc <2 x double> @sin_float64_t(<2 x double> %src) {
+; CHECK-LABEL: sin_float64_t:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .save {r7, lr}
+; CHECK-NEXT:    push {r7, lr}
+; CHECK-NEXT:    .vsave {d8, d9}
+; CHECK-NEXT:    vpush {d8, d9}
+; CHECK-NEXT:    vmov q4, q0
+; CHECK-NEXT:    vmov r0, r1, d9
+; CHECK-NEXT:    bl sin
+; CHECK-NEXT:    vmov r2, r3, d8
+; CHECK-NEXT:    vmov d9, r0, r1
+; CHECK-NEXT:    mov r0, r2
+; CHECK-NEXT:    mov r1, r3
+; CHECK-NEXT:    bl sin
+; CHECK-NEXT:    vmov d8, r0, r1
+; CHECK-NEXT:    vmov q0, q4
+; CHECK-NEXT:    vpop {d8, d9}
+; CHECK-NEXT:    pop {r7, pc}
+entry:
+  %0 = call fast <2 x double> @llvm.sin.v2f64(<2 x double> %src)
+  ret <2 x double> %0
+}
+
 define arm_aapcs_vfpcc <4 x float> @exp_float32_t(<4 x float> %src) {
 ; CHECK-LABEL: exp_float32_t:
 ; CHECK:       @ %bb.0: @ %entry
@@ -460,6 +532,30 @@ define arm_aapcs_vfpcc <8 x half> @exp_float16_t(<8 x half> %src) {
 entry:
   %0 = call fast <8 x half> @llvm.exp.v8f16(<8 x half> %src)
   ret <8 x half> %0
+}
+
+define arm_aapcs_vfpcc <2 x double> @exp_float64_t(<2 x double> %src) {
+; CHECK-LABEL: exp_float64_t:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .save {r7, lr}
+; CHECK-NEXT:    push {r7, lr}
+; CHECK-NEXT:    .vsave {d8, d9}
+; CHECK-NEXT:    vpush {d8, d9}
+; CHECK-NEXT:    vmov q4, q0
+; CHECK-NEXT:    vmov r0, r1, d9
+; CHECK-NEXT:    bl exp
+; CHECK-NEXT:    vmov r2, r3, d8
+; CHECK-NEXT:    vmov d9, r0, r1
+; CHECK-NEXT:    mov r0, r2
+; CHECK-NEXT:    mov r1, r3
+; CHECK-NEXT:    bl exp
+; CHECK-NEXT:    vmov d8, r0, r1
+; CHECK-NEXT:    vmov q0, q4
+; CHECK-NEXT:    vpop {d8, d9}
+; CHECK-NEXT:    pop {r7, pc}
+entry:
+  %0 = call fast <2 x double> @llvm.exp.v2f64(<2 x double> %src)
+  ret <2 x double> %0
 }
 
 define arm_aapcs_vfpcc <4 x float> @exp2_float32_t(<4 x float> %src) {
@@ -594,6 +690,30 @@ entry:
   ret <8 x half> %0
 }
 
+define arm_aapcs_vfpcc <2 x double> @exp2_float64_t(<2 x double> %src) {
+; CHECK-LABEL: exp2_float64_t:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .save {r7, lr}
+; CHECK-NEXT:    push {r7, lr}
+; CHECK-NEXT:    .vsave {d8, d9}
+; CHECK-NEXT:    vpush {d8, d9}
+; CHECK-NEXT:    vmov q4, q0
+; CHECK-NEXT:    vmov r0, r1, d9
+; CHECK-NEXT:    bl exp2
+; CHECK-NEXT:    vmov r2, r3, d8
+; CHECK-NEXT:    vmov d9, r0, r1
+; CHECK-NEXT:    mov r0, r2
+; CHECK-NEXT:    mov r1, r3
+; CHECK-NEXT:    bl exp2
+; CHECK-NEXT:    vmov d8, r0, r1
+; CHECK-NEXT:    vmov q0, q4
+; CHECK-NEXT:    vpop {d8, d9}
+; CHECK-NEXT:    pop {r7, pc}
+entry:
+  %0 = call fast <2 x double> @llvm.exp2.v2f64(<2 x double> %src)
+  ret <2 x double> %0
+}
+
 define arm_aapcs_vfpcc <4 x float> @log_float32_t(<4 x float> %src) {
 ; CHECK-LABEL: log_float32_t:
 ; CHECK:       @ %bb.0: @ %entry
@@ -724,6 +844,30 @@ define arm_aapcs_vfpcc <8 x half> @log_float16_t(<8 x half> %src) {
 entry:
   %0 = call fast <8 x half> @llvm.log.v8f16(<8 x half> %src)
   ret <8 x half> %0
+}
+
+define arm_aapcs_vfpcc <2 x double> @log_float64_t(<2 x double> %src) {
+; CHECK-LABEL: log_float64_t:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .save {r7, lr}
+; CHECK-NEXT:    push {r7, lr}
+; CHECK-NEXT:    .vsave {d8, d9}
+; CHECK-NEXT:    vpush {d8, d9}
+; CHECK-NEXT:    vmov q4, q0
+; CHECK-NEXT:    vmov r0, r1, d9
+; CHECK-NEXT:    bl log
+; CHECK-NEXT:    vmov r2, r3, d8
+; CHECK-NEXT:    vmov d9, r0, r1
+; CHECK-NEXT:    mov r0, r2
+; CHECK-NEXT:    mov r1, r3
+; CHECK-NEXT:    bl log
+; CHECK-NEXT:    vmov d8, r0, r1
+; CHECK-NEXT:    vmov q0, q4
+; CHECK-NEXT:    vpop {d8, d9}
+; CHECK-NEXT:    pop {r7, pc}
+entry:
+  %0 = call fast <2 x double> @llvm.log.v2f64(<2 x double> %src)
+  ret <2 x double> %0
 }
 
 define arm_aapcs_vfpcc <4 x float> @log2_float32_t(<4 x float> %src) {
@@ -858,6 +1002,30 @@ entry:
   ret <8 x half> %0
 }
 
+define arm_aapcs_vfpcc <2 x double> @log2_float64_t(<2 x double> %src) {
+; CHECK-LABEL: log2_float64_t:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .save {r7, lr}
+; CHECK-NEXT:    push {r7, lr}
+; CHECK-NEXT:    .vsave {d8, d9}
+; CHECK-NEXT:    vpush {d8, d9}
+; CHECK-NEXT:    vmov q4, q0
+; CHECK-NEXT:    vmov r0, r1, d9
+; CHECK-NEXT:    bl log2
+; CHECK-NEXT:    vmov r2, r3, d8
+; CHECK-NEXT:    vmov d9, r0, r1
+; CHECK-NEXT:    mov r0, r2
+; CHECK-NEXT:    mov r1, r3
+; CHECK-NEXT:    bl log2
+; CHECK-NEXT:    vmov d8, r0, r1
+; CHECK-NEXT:    vmov q0, q4
+; CHECK-NEXT:    vpop {d8, d9}
+; CHECK-NEXT:    pop {r7, pc}
+entry:
+  %0 = call fast <2 x double> @llvm.log2.v2f64(<2 x double> %src)
+  ret <2 x double> %0
+}
+
 define arm_aapcs_vfpcc <4 x float> @log10_float32_t(<4 x float> %src) {
 ; CHECK-LABEL: log10_float32_t:
 ; CHECK:       @ %bb.0: @ %entry
@@ -988,6 +1156,30 @@ define arm_aapcs_vfpcc <8 x half> @log10_float16_t(<8 x half> %src) {
 entry:
   %0 = call fast <8 x half> @llvm.log10.v8f16(<8 x half> %src)
   ret <8 x half> %0
+}
+
+define arm_aapcs_vfpcc <2 x double> @log10_float64_t(<2 x double> %src) {
+; CHECK-LABEL: log10_float64_t:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .save {r7, lr}
+; CHECK-NEXT:    push {r7, lr}
+; CHECK-NEXT:    .vsave {d8, d9}
+; CHECK-NEXT:    vpush {d8, d9}
+; CHECK-NEXT:    vmov q4, q0
+; CHECK-NEXT:    vmov r0, r1, d9
+; CHECK-NEXT:    bl log10
+; CHECK-NEXT:    vmov r2, r3, d8
+; CHECK-NEXT:    vmov d9, r0, r1
+; CHECK-NEXT:    mov r0, r2
+; CHECK-NEXT:    mov r1, r3
+; CHECK-NEXT:    bl log10
+; CHECK-NEXT:    vmov d8, r0, r1
+; CHECK-NEXT:    vmov q0, q4
+; CHECK-NEXT:    vpop {d8, d9}
+; CHECK-NEXT:    pop {r7, pc}
+entry:
+  %0 = call fast <2 x double> @llvm.log10.v2f64(<2 x double> %src)
+  ret <2 x double> %0
 }
 
 define arm_aapcs_vfpcc <4 x float> @pow_float32_t(<4 x float> %src1, <4 x float> %src2) {
@@ -1165,6 +1357,229 @@ entry:
   ret <8 x half> %0
 }
 
+define arm_aapcs_vfpcc <2 x double> @pow_float64_t(<2 x double> %src1, <2 x double> %src2) {
+; CHECK-LABEL: pow_float64_t:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .save {r7, lr}
+; CHECK-NEXT:    push {r7, lr}
+; CHECK-NEXT:    .vsave {d8, d9, d10, d11}
+; CHECK-NEXT:    vpush {d8, d9, d10, d11}
+; CHECK-NEXT:    vmov q4, q1
+; CHECK-NEXT:    vmov q5, q0
+; CHECK-NEXT:    vmov r0, r1, d11
+; CHECK-NEXT:    vmov r2, r3, d9
+; CHECK-NEXT:    bl pow
+; CHECK-NEXT:    vmov lr, r12, d10
+; CHECK-NEXT:    vmov r2, r3, d8
+; CHECK-NEXT:    vmov d9, r0, r1
+; CHECK-NEXT:    mov r0, lr
+; CHECK-NEXT:    mov r1, r12
+; CHECK-NEXT:    bl pow
+; CHECK-NEXT:    vmov d8, r0, r1
+; CHECK-NEXT:    vmov q0, q4
+; CHECK-NEXT:    vpop {d8, d9, d10, d11}
+; CHECK-NEXT:    pop {r7, pc}
+entry:
+  %0 = call fast <2 x double> @llvm.pow.v2f64(<2 x double> %src1, <2 x double> %src2)
+  ret <2 x double> %0
+}
+
+define arm_aapcs_vfpcc <4 x float> @copysign_float32_t(<4 x float> %src1, <4 x float> %src2) {
+; CHECK-LABEL: copysign_float32_t:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .save {r4, r5, r6, lr}
+; CHECK-NEXT:    push {r4, r5, r6, lr}
+; CHECK-NEXT:    .pad #32
+; CHECK-NEXT:    sub sp, #32
+; CHECK-NEXT:    vstr s5, [sp, #8]
+; CHECK-NEXT:    ldr.w r12, [sp, #8]
+; CHECK-NEXT:    vstr s6, [sp, #16]
+; CHECK-NEXT:    ldr.w lr, [sp, #16]
+; CHECK-NEXT:    vstr s7, [sp, #24]
+; CHECK-NEXT:    lsr.w r2, r12, #31
+; CHECK-NEXT:    ldr r6, [sp, #24]
+; CHECK-NEXT:    vstr s3, [sp, #28]
+; CHECK-NEXT:    ldr r3, [sp, #28]
+; CHECK-NEXT:    vstr s4, [sp]
+; CHECK-NEXT:    ldr r0, [sp]
+; CHECK-NEXT:    vstr s0, [sp, #4]
+; CHECK-NEXT:    ldr r1, [sp, #4]
+; CHECK-NEXT:    vstr s1, [sp, #12]
+; CHECK-NEXT:    lsrs r0, r0, #31
+; CHECK-NEXT:    vstr s2, [sp, #20]
+; CHECK-NEXT:    bfi r1, r0, #31, #1
+; CHECK-NEXT:    ldr r4, [sp, #12]
+; CHECK-NEXT:    ldr r5, [sp, #20]
+; CHECK-NEXT:    bfi r4, r2, #31, #1
+; CHECK-NEXT:    lsr.w r2, lr, #31
+; CHECK-NEXT:    bfi r5, r2, #31, #1
+; CHECK-NEXT:    lsrs r2, r6, #31
+; CHECK-NEXT:    bfi r3, r2, #31, #1
+; CHECK-NEXT:    vmov s3, r3
+; CHECK-NEXT:    vmov s2, r5
+; CHECK-NEXT:    vmov s1, r4
+; CHECK-NEXT:    vmov s0, r1
+; CHECK-NEXT:    add sp, #32
+; CHECK-NEXT:    pop {r4, r5, r6, pc}
+entry:
+  %0 = call fast <4 x float> @llvm.copysign.v4f32(<4 x float> %src1, <4 x float> %src2)
+  ret <4 x float> %0
+}
+
+define arm_aapcs_vfpcc <8 x half> @copysign_float16_t(<8 x half> %src1, <8 x half> %src2) {
+; CHECK-LABEL: copysign_float16_t:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .pad #32
+; CHECK-NEXT:    sub sp, #32
+; CHECK-NEXT:    vmov.u16 r0, q1[1]
+; CHECK-NEXT:    vmov.u16 r1, q0[0]
+; CHECK-NEXT:    vmov s8, r0
+; CHECK-NEXT:    vmov.u16 r0, q1[0]
+; CHECK-NEXT:    vstr.16 s8, [sp, #24]
+; CHECK-NEXT:    vmov s8, r0
+; CHECK-NEXT:    vmov.u16 r0, q1[2]
+; CHECK-NEXT:    vstr.16 s8, [sp, #28]
+; CHECK-NEXT:    vmov s8, r0
+; CHECK-NEXT:    vmov.u16 r0, q1[3]
+; CHECK-NEXT:    vstr.16 s8, [sp, #20]
+; CHECK-NEXT:    vmov s8, r0
+; CHECK-NEXT:    vmov.u16 r0, q1[4]
+; CHECK-NEXT:    vstr.16 s8, [sp, #16]
+; CHECK-NEXT:    vmov s8, r0
+; CHECK-NEXT:    vmov.u16 r0, q1[5]
+; CHECK-NEXT:    vstr.16 s8, [sp, #12]
+; CHECK-NEXT:    vmov s8, r0
+; CHECK-NEXT:    vmov.u16 r0, q1[6]
+; CHECK-NEXT:    vstr.16 s8, [sp, #8]
+; CHECK-NEXT:    vmov s8, r0
+; CHECK-NEXT:    vmov.u16 r0, q1[7]
+; CHECK-NEXT:    vmov s4, r0
+; CHECK-NEXT:    vstr.16 s8, [sp, #4]
+; CHECK-NEXT:    vstr.16 s4, [sp]
+; CHECK-NEXT:    vmov.u16 r0, q0[1]
+; CHECK-NEXT:    vmov s4, r0
+; CHECK-NEXT:    ldrb.w r0, [sp, #25]
+; CHECK-NEXT:    vabs.f16 s4, s4
+; CHECK-NEXT:    ands r0, r0, #128
+; CHECK-NEXT:    vneg.f16 s6, s4
+; CHECK-NEXT:    it ne
+; CHECK-NEXT:    movne r0, #1
+; CHECK-NEXT:    cmp r0, #0
+; CHECK-NEXT:    vseleq.f16 s4, s4, s6
+; CHECK-NEXT:    vmov r0, s4
+; CHECK-NEXT:    vmov s4, r1
+; CHECK-NEXT:    ldrb.w r1, [sp, #29]
+; CHECK-NEXT:    vabs.f16 s4, s4
+; CHECK-NEXT:    ands r1, r1, #128
+; CHECK-NEXT:    vneg.f16 s6, s4
+; CHECK-NEXT:    it ne
+; CHECK-NEXT:    movne r1, #1
+; CHECK-NEXT:    cmp r1, #0
+; CHECK-NEXT:    vseleq.f16 s4, s4, s6
+; CHECK-NEXT:    vmov r1, s4
+; CHECK-NEXT:    vmov.16 q1[0], r1
+; CHECK-NEXT:    vmov.16 q1[1], r0
+; CHECK-NEXT:    vmov.u16 r0, q0[2]
+; CHECK-NEXT:    vmov s8, r0
+; CHECK-NEXT:    ldrb.w r0, [sp, #21]
+; CHECK-NEXT:    vabs.f16 s8, s8
+; CHECK-NEXT:    ands r0, r0, #128
+; CHECK-NEXT:    vneg.f16 s10, s8
+; CHECK-NEXT:    it ne
+; CHECK-NEXT:    movne r0, #1
+; CHECK-NEXT:    cmp r0, #0
+; CHECK-NEXT:    vseleq.f16 s8, s8, s10
+; CHECK-NEXT:    vmov r0, s8
+; CHECK-NEXT:    vmov.16 q1[2], r0
+; CHECK-NEXT:    vmov.u16 r0, q0[3]
+; CHECK-NEXT:    vmov s8, r0
+; CHECK-NEXT:    ldrb.w r0, [sp, #17]
+; CHECK-NEXT:    vabs.f16 s8, s8
+; CHECK-NEXT:    ands r0, r0, #128
+; CHECK-NEXT:    vneg.f16 s10, s8
+; CHECK-NEXT:    it ne
+; CHECK-NEXT:    movne r0, #1
+; CHECK-NEXT:    cmp r0, #0
+; CHECK-NEXT:    vseleq.f16 s8, s8, s10
+; CHECK-NEXT:    vmov r0, s8
+; CHECK-NEXT:    vmov.16 q1[3], r0
+; CHECK-NEXT:    vmov.u16 r0, q0[4]
+; CHECK-NEXT:    vmov s8, r0
+; CHECK-NEXT:    ldrb.w r0, [sp, #13]
+; CHECK-NEXT:    vabs.f16 s8, s8
+; CHECK-NEXT:    ands r0, r0, #128
+; CHECK-NEXT:    vneg.f16 s10, s8
+; CHECK-NEXT:    it ne
+; CHECK-NEXT:    movne r0, #1
+; CHECK-NEXT:    cmp r0, #0
+; CHECK-NEXT:    vseleq.f16 s8, s8, s10
+; CHECK-NEXT:    vmov r0, s8
+; CHECK-NEXT:    vmov.16 q1[4], r0
+; CHECK-NEXT:    vmov.u16 r0, q0[5]
+; CHECK-NEXT:    vmov s8, r0
+; CHECK-NEXT:    ldrb.w r0, [sp, #9]
+; CHECK-NEXT:    vabs.f16 s8, s8
+; CHECK-NEXT:    ands r0, r0, #128
+; CHECK-NEXT:    vneg.f16 s10, s8
+; CHECK-NEXT:    it ne
+; CHECK-NEXT:    movne r0, #1
+; CHECK-NEXT:    cmp r0, #0
+; CHECK-NEXT:    vseleq.f16 s8, s8, s10
+; CHECK-NEXT:    vmov r0, s8
+; CHECK-NEXT:    vmov.16 q1[5], r0
+; CHECK-NEXT:    vmov.u16 r0, q0[6]
+; CHECK-NEXT:    vmov s8, r0
+; CHECK-NEXT:    ldrb.w r0, [sp, #5]
+; CHECK-NEXT:    vabs.f16 s8, s8
+; CHECK-NEXT:    ands r0, r0, #128
+; CHECK-NEXT:    vneg.f16 s10, s8
+; CHECK-NEXT:    it ne
+; CHECK-NEXT:    movne r0, #1
+; CHECK-NEXT:    cmp r0, #0
+; CHECK-NEXT:    vseleq.f16 s8, s8, s10
+; CHECK-NEXT:    vmov r0, s8
+; CHECK-NEXT:    vmov.16 q1[6], r0
+; CHECK-NEXT:    vmov.u16 r0, q0[7]
+; CHECK-NEXT:    vmov s0, r0
+; CHECK-NEXT:    ldrb.w r0, [sp, #1]
+; CHECK-NEXT:    vabs.f16 s0, s0
+; CHECK-NEXT:    ands r0, r0, #128
+; CHECK-NEXT:    vneg.f16 s2, s0
+; CHECK-NEXT:    it ne
+; CHECK-NEXT:    movne r0, #1
+; CHECK-NEXT:    cmp r0, #0
+; CHECK-NEXT:    vseleq.f16 s0, s0, s2
+; CHECK-NEXT:    vmov r0, s0
+; CHECK-NEXT:    vmov.16 q1[7], r0
+; CHECK-NEXT:    vmov q0, q1
+; CHECK-NEXT:    add sp, #32
+; CHECK-NEXT:    bx lr
+entry:
+  %0 = call fast <8 x half> @llvm.copysign.v8f16(<8 x half> %src1, <8 x half> %src2)
+  ret <8 x half> %0
+}
+
+define arm_aapcs_vfpcc <2 x double> @copysign_float64_t(<2 x double> %src1, <2 x double> %src2) {
+; CHECK-LABEL: copysign_float64_t:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .save {r7, lr}
+; CHECK-NEXT:    push {r7, lr}
+; CHECK-NEXT:    vmov r0, r1, d3
+; CHECK-NEXT:    vmov r0, lr, d2
+; CHECK-NEXT:    vmov r0, r3, d1
+; CHECK-NEXT:    vmov r12, r2, d0
+; CHECK-NEXT:    lsrs r1, r1, #31
+; CHECK-NEXT:    bfi r3, r1, #31, #1
+; CHECK-NEXT:    lsr.w r1, lr, #31
+; CHECK-NEXT:    bfi r2, r1, #31, #1
+; CHECK-NEXT:    vmov d1, r0, r3
+; CHECK-NEXT:    vmov d0, r12, r2
+; CHECK-NEXT:    pop {r7, pc}
+entry:
+  %0 = call fast <2 x double> @llvm.copysign.v2f64(<2 x double> %src1, <2 x double> %src2)
+  ret <2 x double> %0
+}
+
 declare <4 x float> @llvm.sqrt.v4f32(<4 x float>)
 declare <4 x float> @llvm.cos.v4f32(<4 x float>)
 declare <4 x float> @llvm.sin.v4f32(<4 x float>)
@@ -1174,6 +1589,7 @@ declare <4 x float> @llvm.log.v4f32(<4 x float>)
 declare <4 x float> @llvm.log2.v4f32(<4 x float>)
 declare <4 x float> @llvm.log10.v4f32(<4 x float>)
 declare <4 x float> @llvm.pow.v4f32(<4 x float>, <4 x float>)
+declare <4 x float> @llvm.copysign.v4f32(<4 x float>, <4 x float>)
 declare <8 x half> @llvm.sqrt.v8f16(<8 x half>)
 declare <8 x half> @llvm.cos.v8f16(<8 x half>)
 declare <8 x half> @llvm.sin.v8f16(<8 x half>)
@@ -1183,4 +1599,15 @@ declare <8 x half> @llvm.log.v8f16(<8 x half>)
 declare <8 x half> @llvm.log2.v8f16(<8 x half>)
 declare <8 x half> @llvm.log10.v8f16(<8 x half>)
 declare <8 x half> @llvm.pow.v8f16(<8 x half>, <8 x half>)
+declare <8 x half> @llvm.copysign.v8f16(<8 x half>, <8 x half>)
+declare <2 x double> @llvm.sqrt.v2f64(<2 x double>)
+declare <2 x double> @llvm.cos.v2f64(<2 x double>)
+declare <2 x double> @llvm.sin.v2f64(<2 x double>)
+declare <2 x double> @llvm.exp.v2f64(<2 x double>)
+declare <2 x double> @llvm.exp2.v2f64(<2 x double>)
+declare <2 x double> @llvm.log.v2f64(<2 x double>)
+declare <2 x double> @llvm.log2.v2f64(<2 x double>)
+declare <2 x double> @llvm.log10.v2f64(<2 x double>)
+declare <2 x double> @llvm.pow.v2f64(<2 x double>, <2 x double>)
+declare <2 x double> @llvm.copysign.v2f64(<2 x double>, <2 x double>)
 

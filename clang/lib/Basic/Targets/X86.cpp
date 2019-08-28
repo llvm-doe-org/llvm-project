@@ -157,11 +157,20 @@ bool X86TargetInfo::initFeatureMap(
     // SkylakeServer cores inherits all SKL features, except SGX
     goto SkylakeCommon;
 
+  case CK_Tigerlake:
+    setFeatureEnabledImpl(Features, "avx512vp2intersect", true);
+    setFeatureEnabledImpl(Features, "movdiri", true);
+    setFeatureEnabledImpl(Features, "movdir64b", true);
+    setFeatureEnabledImpl(Features, "shstk", true);
+    // Tigerlake cores inherits IcelakeClient, except pconfig and wbnoinvd
+    goto IcelakeCommon;
+
   case CK_IcelakeServer:
     setFeatureEnabledImpl(Features, "pconfig", true);
     setFeatureEnabledImpl(Features, "wbnoinvd", true);
     LLVM_FALLTHROUGH;
   case CK_IcelakeClient:
+IcelakeCommon:
     setFeatureEnabledImpl(Features, "vaes", true);
     setFeatureEnabledImpl(Features, "gfni", true);
     setFeatureEnabledImpl(Features, "vpclmulqdq", true);
@@ -895,7 +904,7 @@ bool X86TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
 /// definitions for this particular subtarget.
 void X86TargetInfo::getTargetDefines(const LangOptions &Opts,
                                      MacroBuilder &Builder) const {
-  // Inline assembly supports X86 flag outputs. 
+  // Inline assembly supports X86 flag outputs.
   Builder.defineMacro("__GCC_ASM_FLAG_OUTPUTS__");
 
   std::string CodeModel = getTargetOpts().CodeModel;
@@ -916,6 +925,11 @@ void X86TargetInfo::getTargetDefines(const LangOptions &Opts,
   } else {
     DefineStd(Builder, "i386", Opts);
   }
+
+  Builder.defineMacro("__SEG_GS");
+  Builder.defineMacro("__SEG_FS");
+  Builder.defineMacro("__seg_gs", "__attribute__((address_space(256)))");
+  Builder.defineMacro("__seg_fs", "__attribute__((address_space(257)))");
 
   // Subtarget options.
   // FIXME: We are hard-coding the tune parameters based on the CPU, but they
@@ -995,6 +1009,7 @@ void X86TargetInfo::getTargetDefines(const LangOptions &Opts,
   case CK_Cannonlake:
   case CK_IcelakeClient:
   case CK_IcelakeServer:
+  case CK_Tigerlake:
     // FIXME: Historically, we defined this legacy name, it would be nice to
     // remove it at some point. We've never exposed fine-grained names for
     // recent primary x86 CPUs, and we should keep it that way.

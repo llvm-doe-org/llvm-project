@@ -1579,7 +1579,7 @@ public:
   /// Takes ownership of \p L.
   void addListener(std::unique_ptr<ASTReaderListener> L) {
     if (Listener)
-      L = llvm::make_unique<ChainedASTReaderListener>(std::move(L),
+      L = std::make_unique<ChainedASTReaderListener>(std::move(L),
                                                       std::move(Listener));
     Listener = std::move(L);
   }
@@ -1595,7 +1595,7 @@ public:
       auto Old = Reader.takeListener();
       if (Old) {
         Chained = true;
-        L = llvm::make_unique<ChainedASTReaderListener>(std::move(L),
+        L = std::make_unique<ChainedASTReaderListener>(std::move(L),
                                                         std::move(Old));
       }
       Reader.setListener(std::move(L));

@@ -205,8 +205,8 @@ Minimal Runtime
 
 There is a minimal UBSan runtime available suitable for use in production
 environments. This runtime has a small attack surface. It only provides very
-basic issue logging and deduplication, and does not support ``-fsanitize=vptr``
-checking.
+basic issue logging and deduplication, and does not support
+``-fsanitize=function`` and ``-fsanitize=vptr`` checking.
 
 To use the minimal runtime, add ``-fsanitize-minimal-runtime`` to the clang
 command line options. For example, if you're used to compiling with
@@ -223,6 +223,12 @@ will need to:
 #. Run your program with environment variable
    ``UBSAN_OPTIONS=print_stacktrace=1``.
 #. Make sure ``llvm-symbolizer`` binary is in ``PATH``.
+
+Logging
+=======
+
+The default log file for diagnostics is "stderr". To log diagnostics to another
+file, you can set ``UBSAN_OPTIONS=log_path=...``.
 
 Silencing Unsigned Integer Overflow
 ===================================

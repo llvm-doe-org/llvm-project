@@ -100,6 +100,7 @@ def LLVMAlpha : Package<"llvm">, ParentPackage<Alpha>;
 // intended for API modeling that is not controlled by the target triple.
 def APIModeling : Package<"apiModeling">, Hidden;
 def GoogleAPIModeling : Package<"google">, ParentPackage<APIModeling>, Hidden;
+def LLVMAPIModeling : Package<"llvm">, ParentPackage<APIModeling>, Hidden;
 
 def Debug : Package<"debug">, Hidden;
 
@@ -273,10 +274,6 @@ def NullableReturnedFromNonnullChecker : Checker<"NullableReturnedFromNonnull">,
 //===----------------------------------------------------------------------===//
 
 let ParentPackage = APIModeling in {
-
-def ReturnValueChecker : Checker<"ReturnValue">,
-  HelpText<"Model the guaranteed boolean return value of function calls">,
-  Documentation<NotDocumented>;
 
 def StdCLibraryFunctionsChecker : Checker<"StdCLibraryFunctions">,
   HelpText<"Improve modeling of the C standard library functions">,
@@ -507,6 +504,15 @@ def MoveChecker: Checker<"Move">,
   ]>,
   Documentation<HasDocumentation>;
 
+def VirtualCallModeling : Checker<"VirtualCallModeling">,
+  HelpText<"Auxiliary modeling for the virtual method call checkers">,
+  Documentation<NotDocumented>,
+  Hidden;
+
+def PureVirtualCallChecker : Checker<"PureVirtualCall">,
+  HelpText<"Check pure virtual function calls during construction/destruction">,
+  Dependencies<[VirtualCallModeling]>,
+  Documentation<HasDocumentation>;
 } // end: "cplusplus"
 
 let ParentPackage = CplusplusOptIn in {
@@ -555,14 +561,17 @@ def UninitializedObjectChecker: Checker<"UninitializedObject">,
   Documentation<HasAlphaDocumentation>;
 
 def VirtualCallChecker : Checker<"VirtualCall">,
-  HelpText<"Check virtual function calls during construction or destruction">,
+  HelpText<"Check virtual function calls during construction/destruction">,
   CheckerOptions<[
     CmdLineOption<Boolean,
                   "PureOnly",
-                  "Whether to only report calls to pure virtual methods.",
+                  "Disables the checker. Keeps cplusplus.PureVirtualCall "
+                  "enabled. This option is only provided for backwards "
+                  "compatibility.",
                   "false",
-                  Released>
+                  InAlpha>
   ]>,
+  Dependencies<[VirtualCallModeling]>,
   Documentation<HasDocumentation>;
 
 } // end: "optin.cplusplus"
@@ -802,6 +811,13 @@ let ParentPackage = Taint in {
 
 def GenericTaintChecker : Checker<"TaintPropagation">,
   HelpText<"Generate taint information used by other checkers">,
+  CheckerOptions<[
+    CmdLineOption<String,
+                  "Config",
+                  "Specifies the name of the configuration file.",
+                  "",
+                  InAlpha>,
+  ]>,
   Documentation<HasAlphaDocumentation>;
 
 } // end "alpha.security.taint"
@@ -1108,6 +1124,18 @@ def LLVMConventionsChecker : Checker<"Conventions">,
   Documentation<HasAlphaDocumentation>;
 
 } // end "llvm"
+
+let ParentPackage = LLVMAPIModeling in {
+
+def CastValueChecker : Checker<"CastValue">,
+  HelpText<"Model implementation of custom RTTIs">,
+  Documentation<NotDocumented>;
+
+def ReturnValueChecker : Checker<"ReturnValue">,
+  HelpText<"Model the guaranteed boolean return value of function calls">,
+  Documentation<NotDocumented>;
+
+} // end "apiModeling.llvm"
 
 //===----------------------------------------------------------------------===//
 // Checkers modeling Google APIs.

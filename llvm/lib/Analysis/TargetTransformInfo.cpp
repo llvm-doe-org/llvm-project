@@ -176,6 +176,10 @@ unsigned TargetTransformInfo::getInliningThresholdMultiplier() const {
   return TTIImpl->getInliningThresholdMultiplier();
 }
 
+int TargetTransformInfo::getInlinerVectorBonusPercent() const {
+  return TTIImpl->getInlinerVectorBonusPercent();
+}
+
 int TargetTransformInfo::getGEPCost(Type *PointeeType, const Value *Ptr,
                                     ArrayRef<const Value *> Operands) const {
   return TTIImpl->getGEPCost(PointeeType, Ptr, Operands);
@@ -221,6 +225,16 @@ bool llvm::TargetTransformInfo::isAlwaysUniform(const Value *V) const {
 
 unsigned TargetTransformInfo::getFlatAddressSpace() const {
   return TTIImpl->getFlatAddressSpace();
+}
+
+bool TargetTransformInfo::collectFlatAddressOperands(
+  SmallVectorImpl<int> &OpIndexes, Intrinsic::ID IID) const  {
+  return TTIImpl->collectFlatAddressOperands(OpIndexes, IID);
+}
+
+bool TargetTransformInfo::rewriteIntrinsicWithAddressSpace(
+  IntrinsicInst *II, Value *OldV, Value *NewV) const {
+  return TTIImpl->rewriteIntrinsicWithAddressSpace(II, OldV, NewV);
 }
 
 bool TargetTransformInfo::isLoweredToCall(const Function *F) const {

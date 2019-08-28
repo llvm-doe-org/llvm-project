@@ -853,7 +853,7 @@ def : MipsPat<(i64 (sext (i32 (sub GPR32:$src, GPR32:$src2)))),
               (SUBu GPR32:$src, GPR32:$src2), sub_32)>;
 def : MipsPat<(i64 (sext (i32 (mul GPR32:$src, GPR32:$src2)))),
               (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
-              (MUL GPR32:$src, GPR32:$src2), sub_32)>, ISA_MIPS3_NOT_32R6_64R6;
+              (MUL GPR32:$src, GPR32:$src2), sub_32)>, ISA_MIPS32_NOT_32R6_64R6;
 def : MipsPat<(i64 (sext (i32 (MipsMFHI ACC64:$src)))),
               (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
               (PseudoMFHI ACC64:$src), sub_32)>;
@@ -1154,6 +1154,34 @@ def SLTUImm64 : MipsAsmPseudoInst<(outs GPR64Opnd:$rs),
                                   "sltu\t$rs, $rt, $imm">, GPR_64;
 def : MipsInstAlias<"sltu\t$rs, $imm", (SLTUImm64 GPR64Opnd:$rs, GPR64Opnd:$rs,
                                                   imm64:$imm)>, GPR_64;
+
+def SGEImm64 : MipsAsmPseudoInst<(outs GPR64Opnd:$rd),
+                                 (ins GPR64Opnd:$rs, imm64:$imm),
+                                 "sge\t$rd, $rs, $imm">, GPR_64;
+def : MipsInstAlias<"sge $rs, $imm", (SGEImm64 GPR64Opnd:$rs,
+                                               GPR64Opnd:$rs,
+                                               imm64:$imm), 0>, GPR_64;
+
+def SGEUImm64 : MipsAsmPseudoInst<(outs GPR64Opnd:$rd),
+                                  (ins GPR64Opnd:$rs, imm64:$imm),
+                                  "sgeu\t$rd, $rs, $imm">, GPR_64;
+def : MipsInstAlias<"sgeu $rs, $imm", (SGEUImm64 GPR64Opnd:$rs,
+                                                 GPR64Opnd:$rs,
+                                                 imm64:$imm), 0>, GPR_64;
+
+def SGTImm64 : MipsAsmPseudoInst<(outs GPR64Opnd:$rd),
+                                 (ins GPR64Opnd:$rs, imm64:$imm),
+                                 "sgt\t$rd, $rs, $imm">, GPR_64;
+def : MipsInstAlias<"sgt $rs, $imm", (SGTImm64 GPR64Opnd:$rs,
+                                               GPR64Opnd:$rs,
+                                               imm64:$imm), 0>, GPR_64;
+
+def SGTUImm64 : MipsAsmPseudoInst<(outs GPR64Opnd:$rd),
+                                  (ins GPR64Opnd:$rs, imm64:$imm),
+                                  "sgtu\t$rd, $rs, $imm">, GPR_64;
+def : MipsInstAlias<"sgtu $rs, $imm", (SGTUImm64 GPR64Opnd:$rs,
+                                                 GPR64Opnd:$rs,
+                                                 imm64:$imm), 0>, GPR_64;
 
 def : MipsInstAlias<"rdhwr $rt, $rs",
                     (RDHWR64 GPR64Opnd:$rt, HWRegsOpnd:$rs, 0), 1>, GPR_64;

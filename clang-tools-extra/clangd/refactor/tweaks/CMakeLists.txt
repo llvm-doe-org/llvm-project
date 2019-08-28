@@ -14,6 +14,9 @@ set(LLVM_LINK_COMPONENTS
 add_clang_library(clangDaemonTweaks OBJECT
   AnnotateHighlightings.cpp
   DumpAST.cpp
+  ExpandAutoType.cpp
+  ExpandMacro.cpp
+  ExtractVariable.cpp
   RawStringLiteral.cpp
   SwapIfBranches.cpp
 
@@ -22,4 +25,5 @@ add_clang_library(clangDaemonTweaks OBJECT
   clangBasic
   clangDaemon
   clangToolingCore
+  clangToolingSyntax
   )

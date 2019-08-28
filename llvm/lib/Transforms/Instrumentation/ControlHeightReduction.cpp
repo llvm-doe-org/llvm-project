@@ -1538,10 +1538,7 @@ static bool negateICmpIfUsedByBranchOrSelectOnly(ICmpInst *ICmp,
     }
     if (auto *SI = dyn_cast<SelectInst>(U)) {
       // Swap operands
-      Value *TrueValue = SI->getTrueValue();
-      Value *FalseValue = SI->getFalseValue();
-      SI->setTrueValue(FalseValue);
-      SI->setFalseValue(TrueValue);
+      SI->swapValues();
       SI->swapProfMetadata();
       if (Scope->TrueBiasedSelects.count(SI)) {
         assert(Scope->FalseBiasedSelects.count(SI) == 0 &&
@@ -2073,7 +2070,7 @@ bool ControlHeightReductionLegacyPass::runOnFunction(Function &F) {
       getAnalysis<ProfileSummaryInfoWrapperPass>().getPSI();
   RegionInfo &RI = getAnalysis<RegionInfoPass>().getRegionInfo();
   std::unique_ptr<OptimizationRemarkEmitter> OwnedORE =
-      llvm::make_unique<OptimizationRemarkEmitter>(&F);
+      std::make_unique<OptimizationRemarkEmitter>(&F);
   return CHR(F, BFI, DT, PSI, RI, *OwnedORE.get()).run();
 }
 

@@ -639,7 +639,8 @@ struct TupleExpander : SetTheory::Expander {
     // Precompute some types.
     Record *RegisterCl = Def->getRecords().getClass("Register");
     RecTy *RegisterRecTy = RecordRecTy::get(RegisterCl);
-    StringInit *BlankName = StringInit::get("");
+    std::vector<StringRef> RegNames =
+      Def->getValueAsListOfStrings("RegAsmNames");
 
     // Zip them up.
     for (unsigned n = 0; n != Length; ++n) {
@@ -656,11 +657,20 @@ struct TupleExpander : SetTheory::Expander {
                               unsigned(Reg->getValueAsInt("CostPerUse")));
       }
 
+      StringInit *AsmName = StringInit::get("");
+      if (!RegNames.empty()) {
+        if (RegNames.size() <= n)
+          PrintFatalError(Def->getLoc(),
+                          "Register tuple definition missing name for '" +
+                            Name + "'.");
+        AsmName = StringInit::get(RegNames[n]);
+      }
+
       // Create a new Record representing the synthesized register. This record
       // is only for consumption by CodeGenRegister, it is not added to the
       // RecordKeeper.
       SynthDefs.emplace_back(
-          llvm::make_unique<Record>(Name, Def->getLoc(), Def->getRecords()));
+          std::make_unique<Record>(Name, Def->getLoc(), Def->getRecords()));
       Record *NewReg = SynthDefs.back().get();
       Elts.insert(NewReg);
 
@@ -683,9 +693,8 @@ struct TupleExpander : SetTheory::Expander {
         if (Field == "SubRegs")
           RV.setValue(ListInit::get(Tuple, RegisterRecTy));
 
-        // Provide a blank AsmName. MC hacks are required anyway.
         if (Field == "AsmName")
-          RV.setValue(BlankName);
+          RV.setValue(AsmName);
 
         // CostPerUse is aggregated from all Tuple members.
         if (Field == "CostPerUse")
@@ -1089,7 +1098,7 @@ CodeGenRegBank::CodeGenRegBank(RecordKeeper &Records,
   Sets.addFieldExpander("RegisterClass", "MemberList");
   Sets.addFieldExpander("CalleeSavedRegs", "SaveList");
   Sets.addExpander("RegisterTuples",
-                   llvm::make_unique<TupleExpander>(SynthDefs));
+                   std::make_unique<TupleExpander>(SynthDefs));
 
   // Read in the user-defined (named) sub-register indices.
   // More indices will be synthesized later.

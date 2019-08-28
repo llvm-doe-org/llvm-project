@@ -17,7 +17,6 @@
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/TargetLowering.h"
-#include "llvm/Target/TargetOptions.h"
 
 namespace llvm {
   class X86Subtarget;
@@ -143,6 +142,10 @@ namespace llvm {
       /// Special wrapper used under X86-64 PIC mode for RIP
       /// relative displacements.
       WrapperRIP,
+
+      /// Copies a 64-bit value from an MMX vector to the low word
+      /// of an XMM vector, with the high word zero filled.
+      MOVQ2DQ,
 
       /// Copies a 64-bit value from the low word of an XMM vector
       /// to an MMX vector.
@@ -840,6 +843,13 @@ namespace llvm {
 
     bool hasAndNot(SDValue Y) const override;
 
+    bool hasBitTest(SDValue X, SDValue Y) const override;
+
+    bool shouldProduceAndByConstByHoistingConstFromShiftsLHSOfAnd(
+        SDValue X, ConstantSDNode *XC, ConstantSDNode *CC, SDValue Y,
+        unsigned OldShiftOpcode, unsigned NewShiftOpcode,
+        SelectionDAG &DAG) const override;
+
     bool shouldFoldConstantShiftPairToMask(const SDNode *N,
                                            CombineLevel Level) const override;
 
@@ -912,6 +922,10 @@ namespace llvm {
                                            KnownBits &Known,
                                            TargetLoweringOpt &TLO,
                                            unsigned Depth) const override;
+
+    SDValue SimplifyMultipleUseDemandedBitsForTargetNode(
+        SDValue Op, const APInt &DemandedBits, const APInt &DemandedElts,
+        SelectionDAG &DAG, unsigned Depth) const override;
 
     const Constant *getTargetConstantFromLoad(LoadSDNode *LD) const override;
 
@@ -1094,7 +1108,8 @@ namespace llvm {
 
     bool convertSelectOfConstantsToMath(EVT VT) const override;
 
-    bool decomposeMulByConstant(EVT VT, SDValue C) const override;
+    bool decomposeMulByConstant(LLVMContext &Context, EVT VT,
+                                SDValue C) const override;
 
     bool shouldUseStrictFP_TO_INT(EVT FpVT, EVT IntVT,
                                   bool IsSigned) const override;
@@ -1127,7 +1142,9 @@ namespace llvm {
       return NumElem > 2;
     }
 
-    bool isLoadBitCastBeneficial(EVT LoadVT, EVT BitcastVT) const override;
+    bool isLoadBitCastBeneficial(EVT LoadVT, EVT BitcastVT,
+                                 const SelectionDAG &DAG,
+                                 const MachineMemOperand &MMO) const override;
 
     /// Intel processors have a unified instruction and data cache
     const char * getClearCacheBuiltinName() const override {
@@ -1192,6 +1209,8 @@ namespace llvm {
     bool supportSwiftError() const override;
 
     StringRef getStackProbeSymbolName(MachineFunction &MF) const override;
+
+    unsigned getStackProbeSize(MachineFunction &MF) const;
 
     bool hasVectorBlend() const override { return true; }
 

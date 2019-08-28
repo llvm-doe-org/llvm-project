@@ -26,6 +26,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -356,9 +357,6 @@ bool ARMConstantIslands::runOnMachineFunction(MachineFunction &mf) {
 
   HasFarJump = false;
   bool GenerateTBB = isThumb2 || (isThumb1 && SynthesizeThumb1TBB);
-
-  // This pass invalidates liveness information when it splits basic blocks.
-  MF->getRegInfo().invalidateLiveness();
 
   // Renumber all of the machine basic blocks in the function, guaranteeing that
   // the numbers agree with the position of the block in the function.
@@ -824,11 +822,6 @@ initializeFunctionInfo(const std::vector<MachineInstr*> &CPEMIs) {
             Scale = 2;  // +-(offset_8*2)
             NegOk = true;
             break;
-
-          case ARM::tLDRHi:
-            Bits = 5;
-            Scale = 2; // +(offset_5*2)
-            break;
           }
 
           // Remember that this is a user of a CP entry.
@@ -885,6 +878,13 @@ void ARMConstantIslands::updateForInsertedWaterBlock(MachineBasicBlock *NewBB) {
 MachineBasicBlock *ARMConstantIslands::splitBlockBeforeInstr(MachineInstr *MI) {
   MachineBasicBlock *OrigBB = MI->getParent();
 
+  // Collect liveness information at MI.
+  LivePhysRegs LRs(*MF->getSubtarget().getRegisterInfo());
+  LRs.addLiveOuts(*OrigBB);
+  auto LivenessEnd = ++MachineBasicBlock::iterator(MI).getReverse();
+  for (MachineInstr &LiveMI : make_range(OrigBB->rbegin(), LivenessEnd))
+    LRs.stepBackward(LiveMI);
+
   // Create a new MBB for the code after the OrigBB.
   MachineBasicBlock *NewBB =
     MF->CreateMachineBasicBlock(OrigBB->getBasicBlock());
@@ -912,6 +912,12 @@ MachineBasicBlock *ARMConstantIslands::splitBlockBeforeInstr(MachineInstr *MI) {
 
   // OrigBB branches to NewBB.
   OrigBB->addSuccessor(NewBB);
+
+  // Update live-in information in the new block.
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+  for (MCPhysReg L : LRs)
+    if (!MRI.isReserved(L))
+      NewBB->addLiveIn(L);
 
   // Update internal data structures to account for the newly inserted MBB.
   // This is almost the same as updateForInsertedWaterBlock, except that
@@ -1337,6 +1343,28 @@ void ARMConstantIslands::createNewWater(unsigned CPUserIndex,
     BaseInsertOffset =
         std::max(UserBBI.postOffset() - UPad - 8,
                  UserOffset + TII->getInstSizeInBytes(*UserMI) + 1);
+    // If the CP is referenced(ie, UserOffset) is in first four instructions
+    // after IT, this recalculated BaseInsertOffset could be in the middle of
+    // an IT block. If it is, change the BaseInsertOffset to just after the
+    // IT block. This still make the CP Entry is in range becuase of the
+    // following reasons.
+    //   1. The initial BaseseInsertOffset calculated is (UserOffset +
+    //   U.getMaxDisp() - UPad).
+    //   2. An IT block is only at most 4 instructions plus the "it" itself (18
+    //   bytes).
+    //   3. All the relevant instructions support much larger Maximum
+    //   displacement.
+    MachineBasicBlock::iterator I = UserMI;
+    ++I;
+    for (unsigned Offset = UserOffset + TII->getInstSizeInBytes(*UserMI),
+                  PredReg = 0;
+         I->getOpcode() != ARM::t2IT &&
+         getITInstrPredicate(*I, PredReg) != ARMCC::AL;
+         Offset += TII->getInstSizeInBytes(*I), I = std::next(I)) {
+      BaseInsertOffset =
+          std::max(BaseInsertOffset, Offset + TII->getInstSizeInBytes(*I) + 1);
+      assert(I != UserMBB->end() && "Fell off end of block");
+    }
     LLVM_DEBUG(dbgs() << format("Move inside block: %#x\n", BaseInsertOffset));
   }
   unsigned EndInsertOffset = BaseInsertOffset + 4 + UPad +
@@ -1397,9 +1425,10 @@ void ARMConstantIslands::createNewWater(unsigned CPUserIndex,
   }
 
   // We really must not split an IT block.
-  LLVM_DEBUG(unsigned PredReg; assert(
-                 !isThumb || getITInstrPredicate(*MI, PredReg) == ARMCC::AL));
-
+#ifndef NDEBUG
+  unsigned PredReg;
+  assert(!isThumb || getITInstrPredicate(*MI, PredReg) == ARMCC::AL);
+#endif
   NewMBB = splitBlockBeforeInstr(&*MI);
 }
 
@@ -1620,7 +1649,7 @@ ARMConstantIslands::fixupConditionalBr(ImmBranch &Br) {
   // L2:
   ARMCC::CondCodes CC = (ARMCC::CondCodes)MI->getOperand(1).getImm();
   CC = ARMCC::getOppositeCondition(CC);
-  unsigned CCReg = MI->getOperand(2).getReg();
+  Register CCReg = MI->getOperand(2).getReg();
 
   // If the branch is at the end of its MBB and that has a fall-through block,
   // direct the updated conditional branch to the fall-through block. Otherwise,
@@ -1852,7 +1881,7 @@ bool ARMConstantIslands::optimizeThumb2Branches() {
     if (!CmpMI || CmpMI->getOpcode() != ARM::tCMPi8)
       continue;
 
-    unsigned Reg = CmpMI->getOperand(0).getReg();
+    Register Reg = CmpMI->getOperand(0).getReg();
 
     // Check for Kill flags on Reg. If they are present remove them and set kill
     // on the new CBZ.
@@ -1931,8 +1960,8 @@ bool ARMConstantIslands::preserveBaseRegister(MachineInstr *JumpMI,
   //      of BaseReg, but only if the t2ADDrs can be removed.
   //    + Some instruction other than t2ADDrs computing the entry. Not seen in
   //      the wild, but we should be careful.
-  unsigned EntryReg = JumpMI->getOperand(0).getReg();
-  unsigned BaseReg = LEAMI->getOperand(0).getReg();
+  Register EntryReg = JumpMI->getOperand(0).getReg();
+  Register BaseReg = LEAMI->getOperand(0).getReg();
 
   CanDeleteLEA = true;
   BaseRegKill = false;
@@ -2009,7 +2038,7 @@ static void RemoveDeadAddBetweenLEAAndJT(MachineInstr *LEAMI,
   // but the JT now uses PC. Finds the last ADD (if any) that def's EntryReg
   // and is not clobbered / used.
   MachineInstr *RemovableAdd = nullptr;
-  unsigned EntryReg = JumpMI->getOperand(0).getReg();
+  Register EntryReg = JumpMI->getOperand(0).getReg();
 
   // Find the last ADD to set EntryReg
   MachineBasicBlock::iterator I(LEAMI);
@@ -2106,7 +2135,7 @@ bool ARMConstantIslands::optimizeThumb2JumpTables() {
       //   %idx = tLSLri %idx, 2
       //   %base = tLEApcrelJT
       //   %t = tLDRr %base, %idx
-      unsigned BaseReg = User.MI->getOperand(0).getReg();
+      Register BaseReg = User.MI->getOperand(0).getReg();
 
       if (User.MI->getIterator() == User.MI->getParent()->begin())
         continue;
@@ -2116,7 +2145,7 @@ bool ARMConstantIslands::optimizeThumb2JumpTables() {
           !Shift->getOperand(2).isKill())
         continue;
       IdxReg = Shift->getOperand(2).getReg();
-      unsigned ShiftedIdxReg = Shift->getOperand(0).getReg();
+      Register ShiftedIdxReg = Shift->getOperand(0).getReg();
 
       // It's important that IdxReg is live until the actual TBB/TBH. Most of
       // the range is checked later, but the LEA might still clobber it and not
@@ -2312,6 +2341,10 @@ adjustJTTargetBlockForward(MachineBasicBlock *BB, MachineBasicBlock *JTBB) {
     MF->CreateMachineBasicBlock(JTBB->getBasicBlock());
   MachineFunction::iterator MBBI = ++JTBB->getIterator();
   MF->insert(MBBI, NewBB);
+
+  // Copy live-in information to new block.
+  for (const MachineBasicBlock::RegisterMaskPair &RegMaskPair : BB->liveins())
+    NewBB->addLiveIn(RegMaskPair);
 
   // Add an unconditional branch from NewBB to BB.
   // There doesn't seem to be meaningful DebugInfo available; this doesn't

@@ -24,6 +24,8 @@
 #include "pstl_config.h"
 #include "unseq_backend_simd.h"
 
+_PSTL_HIDE_FROM_ABI_PUSH
+
 namespace __pstl
 {
 namespace __internal
@@ -2181,11 +2183,11 @@ __pattern_partial_sort_copy(_ExecutionPolicy&& __exec, _ForwardIterator __first,
                     _ForwardIterator __j1 = __first + (__j - __d_first);
 
                 // 1. Copy elements from input to output
-#    if !_PSTL_ICC_18_OMP_SIMD_BROKEN
+#if !_PSTL_ICC_18_OMP_SIMD_BROKEN
                     __internal::__brick_copy(__i1, __j1, __i, __is_vector);
-#    else
+#else
                     std::copy(__i1, __j1, __i);
-#    endif
+#endif
                     // 2. Sort elements in output sequence
                     std::sort(__i, __j, __comp);
                 },
@@ -2667,8 +2669,8 @@ __pattern_inplace_merge(_ExecutionPolicy&& __exec, _BidirectionalIterator __firs
             [__n, __move_values, __move_sequences](_BidirectionalIterator __f1, _BidirectionalIterator __l1,
                                                    _BidirectionalIterator __f2, _BidirectionalIterator __l2, _Tp* __f3,
                                                    _Compare __comp) {
-                (__par_backend::__serial_move_merge(__n))(__f1, __l1, __f2, __l2, __f3, __comp, __move_values,
-                                                          __move_values, __move_sequences, __move_sequences);
+                (__utils::__serial_move_merge(__n))(__f1, __l1, __f2, __l2, __f3, __comp, __move_values, __move_values,
+                                                    __move_sequences, __move_sequences);
                 return __f3 + (__l1 - __f1) + (__l2 - __f2);
             });
         __par_backend::__parallel_for(std::forward<_ExecutionPolicy>(__exec), __r, __r + __n,
@@ -3619,5 +3621,7 @@ __pattern_lexicographical_compare(_ExecutionPolicy&& __exec, _ForwardIterator1 _
 
 } // namespace __internal
 } // namespace __pstl
+
+_PSTL_HIDE_FROM_ABI_POP
 
 #endif /* _PSTL_ALGORITHM_IMPL_H */

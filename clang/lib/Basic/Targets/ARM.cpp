@@ -309,8 +309,9 @@ ARMTargetInfo::ARMTargetInfo(const llvm::Triple &Triple,
   setAtomic();
 
   // Maximum alignment for ARM NEON data types should be 64-bits (AAPCS)
+  // as well the default alignment
   if (IsAAPCS && (Triple.getEnvironment() != llvm::Triple::Android))
-    MaxVectorAlign = 64;
+    DefaultAlignForAttributeAligned = MaxVectorAlign = 64;
 
   // Do force alignment of members that follow zero length bitfields.  If
   // the alignment of the zero-length bitfield is greater than the member
@@ -321,7 +322,7 @@ ARMTargetInfo::ARMTargetInfo(const llvm::Triple &Triple,
   if (Triple.getOS() == llvm::Triple::Linux ||
       Triple.getOS() == llvm::Triple::UnknownOS)
     this->MCountName = Opts.EABIVersion == llvm::EABI::GNU
-                           ? "\01__gnu_mcount_nc"
+                           ? "llvm.arm.gnu.eabi.mcount"
                            : "\01mcount";
 
   SoftFloatABI = llvm::is_contained(Opts.FeaturesAsWritten, "+soft-float-abi");
@@ -1030,8 +1031,6 @@ WindowsARMTargetInfo::WindowsARMTargetInfo(const llvm::Triple &Triple,
 
 void WindowsARMTargetInfo::getVisualStudioDefines(const LangOptions &Opts,
                                                   MacroBuilder &Builder) const {
-  WindowsTargetInfo<ARMleTargetInfo>::getVisualStudioDefines(Opts, Builder);
-
   // FIXME: this is invalid for WindowsCE
   Builder.defineMacro("_M_ARM_NT", "1");
   Builder.defineMacro("_M_ARMT", "_M_ARM");

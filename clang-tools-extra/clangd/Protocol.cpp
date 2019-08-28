@@ -323,12 +323,17 @@ bool fromJSON(const llvm::json::Value &Params, ClientCapabilities &R) {
       }
     }
     if (auto *Help = TextDocument->getObject("signatureHelp")) {
+      R.HasSignatureHelp = true;
       if (auto *Info = Help->getObject("signatureInformation")) {
         if (auto *Parameter = Info->getObject("parameterInformation")) {
           if (auto OffsetSupport = Parameter->getBoolean("labelOffsetSupport"))
             R.OffsetsInSignatureHelp = *OffsetSupport;
         }
       }
+    }
+    if (auto *Rename = TextDocument->getObject("rename")) {
+      if (auto RenameSupport = Rename->getBoolean("prepareSupport"))
+        R.RenamePrepareSupport = *RenameSupport;
     }
   }
   if (auto *Workspace = O->getObject("workspace")) {
@@ -421,8 +426,7 @@ bool fromJSON(const llvm::json::Value &Params,
 bool fromJSON(const llvm::json::Value &Params,
               DocumentRangeFormattingParams &R) {
   llvm::json::ObjectMapper O(Params);
-  return O && O.map("textDocument", R.textDocument) &&
-         O.map("range", R.range);
+  return O && O.map("textDocument", R.textDocument) && O.map("range", R.range);
 }
 
 bool fromJSON(const llvm::json::Value &Params,
@@ -444,8 +448,8 @@ bool fromJSON(const llvm::json::Value &Params, DocumentSymbolParams &R) {
 
 llvm::json::Value toJSON(const DiagnosticRelatedInformation &DRI) {
   return llvm::json::Object{
-    {"location", DRI.location},
-    {"message", DRI.message},
+      {"location", DRI.location},
+      {"message", DRI.message},
   };
 }
 
@@ -664,6 +668,15 @@ llvm::json::Value toJSON(const TweakArgs &A) {
 
 llvm::json::Value toJSON(const ApplyWorkspaceEditParams &Params) {
   return llvm::json::Object{{"edit", Params.edit}};
+}
+
+bool fromJSON(const llvm::json::Value &Response,
+              ApplyWorkspaceEditResponse &R) {
+  llvm::json::ObjectMapper O(Response);
+  if (!O || !O.map("applied", R.applied))
+    return false;
+  O.map("failureReason", R.failureReason);
+  return true;
 }
 
 bool fromJSON(const llvm::json::Value &Params, TextDocumentPositionParams &R) {
@@ -977,6 +990,8 @@ llvm::json::Value toJSON(const TypeHierarchyItem &I) {
     Result["parents"] = I.parents;
   if (I.children)
     Result["children"] = I.children;
+  if (I.data)
+    Result["data"] = I.data;
   return std::move(Result);
 }
 
@@ -995,8 +1010,16 @@ bool fromJSON(const llvm::json::Value &Params, TypeHierarchyItem &I) {
   O.map("deprecated", I.deprecated);
   O.map("parents", I.parents);
   O.map("children", I.children);
+  O.map("data", I.data);
 
   return true;
+}
+
+bool fromJSON(const llvm::json::Value &Params,
+              ResolveTypeHierarchyItemParams &P) {
+  llvm::json::ObjectMapper O(Params);
+  return O && O.map("item", P.item) && O.map("resolve", P.resolve) &&
+         O.map("direction", P.direction);
 }
 
 bool fromJSON(const llvm::json::Value &Params, ReferenceParams &R) {

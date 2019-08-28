@@ -36,6 +36,13 @@ multiple file formats.
 
  Add a .gnu_debuglink section for ``<debug-file>`` to the output.
 
+.. option:: --add-section <section=file>
+
+ Add a section named ``<section>`` with the contents of ``<file>`` to the
+ output. For ELF objects the section will be of type `SHT_NOTE`, if the name
+ starts with ".note". Otherwise, it will have type `SHT_PROGBITS`. Can be
+ specified multiple times to add multiple sections.
+
 .. option:: --disable-deterministic-archives, -U
 
  Use real values for UIDs, GIDs and timestamps when updating archive member
@@ -141,13 +148,6 @@ The following options are implemented only for ELF objects. If used with other
 objects, :program:`llvm-objcopy` will either emit an error or silently ignore
 them.
 
-.. option:: --add-section <section=file>
-
- Add a section named ``<section>`` with the contents of ``<file>`` to the
- output. The section will be of type `SHT_NOTE`, if the name starts with
- ".note". Otherwise, it will have type `SHT_PROGBITS`. Can be specified multiple
- times to add multiple sections.
-
 .. option:: --add-symbol <name>=[<section>:]<value>[,<flags>]
 
  Add a new symbol called ``<name>`` to the output symbol table, in the section
@@ -160,6 +160,7 @@ them.
  - `weak` = the symbol will have weak binding.
  - `default` = the symbol will have default visibility.
  - `hidden` = the symbol will have hidden visibility.
+ - `protected` = the symbol will have protected visibility.
  - `file` = the symbol will be an `STT_FILE` symbol.
  - `section` = the symbol will be an `STT_SECTION` symbol.
  - `object` = the symbol will be an `STT_OBJECT` symbol.

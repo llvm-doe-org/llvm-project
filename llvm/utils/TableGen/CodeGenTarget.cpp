@@ -98,6 +98,7 @@ StringRef llvm::getEnumName(MVT::SimpleValueType T) {
   case MVT::v256i8:   return "MVT::v256i8";
   case MVT::v1i16:    return "MVT::v1i16";
   case MVT::v2i16:    return "MVT::v2i16";
+  case MVT::v3i16:    return "MVT::v3i16";
   case MVT::v4i16:    return "MVT::v4i16";
   case MVT::v8i16:    return "MVT::v8i16";
   case MVT::v16i16:   return "MVT::v16i16";
@@ -126,6 +127,7 @@ StringRef llvm::getEnumName(MVT::SimpleValueType T) {
   case MVT::v32i64:   return "MVT::v32i64";
   case MVT::v1i128:   return "MVT::v1i128";
   case MVT::v2f16:    return "MVT::v2f16";
+  case MVT::v3f16:    return "MVT::v3f16";
   case MVT::v4f16:    return "MVT::v4f16";
   case MVT::v8f16:    return "MVT::v8f16";
   case MVT::v1f32:    return "MVT::v1f32";
@@ -191,7 +193,7 @@ StringRef llvm::getEnumName(MVT::SimpleValueType T) {
   case MVT::iPTR:     return "MVT::iPTR";
   case MVT::iPTRAny:  return "MVT::iPTRAny";
   case MVT::Untyped:  return "MVT::Untyped";
-  case MVT::ExceptRef: return "MVT::ExceptRef";
+  case MVT::exnref:   return "MVT::exnref";
   default: llvm_unreachable("ILLEGAL VALUE TYPE!");
   }
 }
@@ -289,7 +291,7 @@ Record *CodeGenTarget::getAsmWriter() const {
 
 CodeGenRegBank &CodeGenTarget::getRegBank() const {
   if (!RegBank)
-    RegBank = llvm::make_unique<CodeGenRegBank>(Records, getHwModes());
+    RegBank = std::make_unique<CodeGenRegBank>(Records, getHwModes());
   return *RegBank;
 }
 
@@ -339,7 +341,7 @@ void CodeGenTarget::ReadLegalValueTypes() const {
 
 CodeGenSchedModels &CodeGenTarget::getSchedModels() const {
   if (!SchedModels)
-    SchedModels = llvm::make_unique<CodeGenSchedModels>(Records, *this);
+    SchedModels = std::make_unique<CodeGenSchedModels>(Records, *this);
   return *SchedModels;
 }
 
@@ -352,7 +354,7 @@ void CodeGenTarget::ReadInstructions() const {
 
   // Parse the instructions defined in the .td file.
   for (unsigned i = 0, e = Insts.size(); i != e; ++i)
-    Instructions[Insts[i]] = llvm::make_unique<CodeGenInstruction>(Insts[i]);
+    Instructions[Insts[i]] = std::make_unique<CodeGenInstruction>(Insts[i]);
 }
 
 static const CodeGenInstruction *
@@ -557,6 +559,7 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
   isCommutative = false;
   canThrow = false;
   isNoReturn = false;
+  isWillReturn = false;
   isCold = false;
   isNoDuplicate = false;
   isConvergent = false;
@@ -721,6 +724,8 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
       isConvergent = true;
     else if (Property->getName() == "IntrNoReturn")
       isNoReturn = true;
+    else if (Property->getName() == "IntrWillReturn")
+      isWillReturn = true;
     else if (Property->getName() == "IntrCold")
       isCold = true;
     else if (Property->getName() == "IntrSpeculatable")
@@ -730,6 +735,9 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
     else if (Property->isSubClassOf("NoCapture")) {
       unsigned ArgNo = Property->getValueAsInt("ArgNo");
       ArgumentAttributes.push_back(std::make_pair(ArgNo, NoCapture));
+    } else if (Property->isSubClassOf("NoAlias")) {
+      unsigned ArgNo = Property->getValueAsInt("ArgNo");
+      ArgumentAttributes.push_back(std::make_pair(ArgNo, NoAlias));
     } else if (Property->isSubClassOf("Returned")) {
       unsigned ArgNo = Property->getValueAsInt("ArgNo");
       ArgumentAttributes.push_back(std::make_pair(ArgNo, Returned));
@@ -754,4 +762,11 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
 
   // Sort the argument attributes for later benefit.
   llvm::sort(ArgumentAttributes);
+}
+
+bool CodeGenIntrinsic::isParamAPointer(unsigned ParamIdx) const {
+  if (ParamIdx >= IS.ParamVTs.size())
+    return false;
+  MVT ParamType = MVT(IS.ParamVTs[ParamIdx]);
+  return ParamType == MVT::iPTR || ParamType == MVT::iPTRAny;
 }

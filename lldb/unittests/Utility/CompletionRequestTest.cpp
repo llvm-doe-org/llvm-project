@@ -16,21 +16,16 @@ TEST(CompletionRequest, Constructor) {
   const unsigned cursor_pos = 3;
   const int arg_index = 1;
   const int arg_cursor_pos = 1;
-  const int match_start = 2345;
-  const int match_max_return = 12345;
   StringList matches;
   CompletionResult result;
 
-  CompletionRequest request(command, cursor_pos, match_start, match_max_return,
-                            result);
+  CompletionRequest request(command, cursor_pos, result);
   result.GetMatches(matches);
 
   EXPECT_STREQ(request.GetRawLine().str().c_str(), command.c_str());
   EXPECT_EQ(request.GetRawCursorPos(), cursor_pos);
   EXPECT_EQ(request.GetCursorIndex(), arg_index);
   EXPECT_EQ(request.GetCursorCharPosition(), arg_cursor_pos);
-  EXPECT_EQ(request.GetMatchStartPoint(), match_start);
-  EXPECT_EQ(request.GetMaxReturnElements(), match_max_return);
   EXPECT_EQ(request.GetWordComplete(), false);
 
   EXPECT_EQ(request.GetPartialParsedLine().GetArgumentCount(), 2u);
@@ -43,23 +38,23 @@ TEST(CompletionRequest, DuplicateFiltering) {
   StringList matches;
 
   CompletionResult result;
-  CompletionRequest request(command, cursor_pos, 0, 0, result);
+  CompletionRequest request(command, cursor_pos, result);
   result.GetMatches(matches);
 
-  EXPECT_EQ(0U, request.GetNumberOfMatches());
+  EXPECT_EQ(0U, result.GetNumberOfResults());
 
   // Add foo twice
   request.AddCompletion("foo");
   result.GetMatches(matches);
 
-  EXPECT_EQ(1U, request.GetNumberOfMatches());
+  EXPECT_EQ(1U, result.GetNumberOfResults());
   EXPECT_EQ(1U, matches.GetSize());
   EXPECT_STREQ("foo", matches.GetStringAtIndex(0));
 
   request.AddCompletion("foo");
   result.GetMatches(matches);
 
-  EXPECT_EQ(1U, request.GetNumberOfMatches());
+  EXPECT_EQ(1U, result.GetNumberOfResults());
   EXPECT_EQ(1U, matches.GetSize());
   EXPECT_STREQ("foo", matches.GetStringAtIndex(0));
 
@@ -67,7 +62,7 @@ TEST(CompletionRequest, DuplicateFiltering) {
   request.AddCompletion("bar");
   result.GetMatches(matches);
 
-  EXPECT_EQ(2U, request.GetNumberOfMatches());
+  EXPECT_EQ(2U, result.GetNumberOfResults());
   EXPECT_EQ(2U, matches.GetSize());
   EXPECT_STREQ("foo", matches.GetStringAtIndex(0));
   EXPECT_STREQ("bar", matches.GetStringAtIndex(1));
@@ -75,7 +70,7 @@ TEST(CompletionRequest, DuplicateFiltering) {
   request.AddCompletion("bar");
   result.GetMatches(matches);
 
-  EXPECT_EQ(2U, request.GetNumberOfMatches());
+  EXPECT_EQ(2U, result.GetNumberOfResults());
   EXPECT_EQ(2U, matches.GetSize());
   EXPECT_STREQ("foo", matches.GetStringAtIndex(0));
   EXPECT_STREQ("bar", matches.GetStringAtIndex(1));
@@ -84,7 +79,7 @@ TEST(CompletionRequest, DuplicateFiltering) {
   request.AddCompletion("foo");
   result.GetMatches(matches);
 
-  EXPECT_EQ(2U, request.GetNumberOfMatches());
+  EXPECT_EQ(2U, result.GetNumberOfResults());
   EXPECT_EQ(2U, matches.GetSize());
   EXPECT_STREQ("foo", matches.GetStringAtIndex(0));
   EXPECT_STREQ("bar", matches.GetStringAtIndex(1));
@@ -93,7 +88,7 @@ TEST(CompletionRequest, DuplicateFiltering) {
   request.AddCompletion("foobar");
   result.GetMatches(matches);
 
-  EXPECT_EQ(3U, request.GetNumberOfMatches());
+  EXPECT_EQ(3U, result.GetNumberOfResults());
   EXPECT_EQ(3U, matches.GetSize());
   EXPECT_STREQ("foo", matches.GetStringAtIndex(0));
   EXPECT_STREQ("bar", matches.GetStringAtIndex(1));
@@ -106,18 +101,18 @@ TEST(CompletionRequest, DuplicateFilteringWithComments) {
   StringList matches, descriptions;
 
   CompletionResult result;
-  CompletionRequest request(command, cursor_pos, 0, 0, result);
+  CompletionRequest request(command, cursor_pos, result);
   result.GetMatches(matches);
   result.GetDescriptions(descriptions);
 
-  EXPECT_EQ(0U, request.GetNumberOfMatches());
+  EXPECT_EQ(0U, result.GetNumberOfResults());
 
   // Add foo twice with same comment
   request.AddCompletion("foo", "comment");
   result.GetMatches(matches);
   result.GetDescriptions(descriptions);
 
-  EXPECT_EQ(1U, request.GetNumberOfMatches());
+  EXPECT_EQ(1U, result.GetNumberOfResults());
   EXPECT_EQ(1U, matches.GetSize());
   EXPECT_EQ(1U, descriptions.GetSize());
   EXPECT_STREQ("foo", matches.GetStringAtIndex(0));
@@ -127,7 +122,7 @@ TEST(CompletionRequest, DuplicateFilteringWithComments) {
   result.GetMatches(matches);
   result.GetDescriptions(descriptions);
 
-  EXPECT_EQ(1U, request.GetNumberOfMatches());
+  EXPECT_EQ(1U, result.GetNumberOfResults());
   EXPECT_EQ(1U, matches.GetSize());
   EXPECT_EQ(1U, descriptions.GetSize());
   EXPECT_STREQ("foo", matches.GetStringAtIndex(0));
@@ -138,7 +133,7 @@ TEST(CompletionRequest, DuplicateFilteringWithComments) {
   result.GetMatches(matches);
   result.GetDescriptions(descriptions);
 
-  EXPECT_EQ(2U, request.GetNumberOfMatches());
+  EXPECT_EQ(2U, result.GetNumberOfResults());
   EXPECT_EQ(2U, matches.GetSize());
   EXPECT_EQ(2U, descriptions.GetSize());
   EXPECT_STREQ("foo", matches.GetStringAtIndex(0));
@@ -148,7 +143,7 @@ TEST(CompletionRequest, DuplicateFilteringWithComments) {
   result.GetMatches(matches);
   result.GetDescriptions(descriptions);
 
-  EXPECT_EQ(3U, request.GetNumberOfMatches());
+  EXPECT_EQ(3U, result.GetNumberOfResults());
   EXPECT_EQ(3U, matches.GetSize());
   EXPECT_EQ(3U, descriptions.GetSize());
   EXPECT_STREQ("foo", matches.GetStringAtIndex(0));
@@ -163,7 +158,7 @@ TEST(CompletionRequest, DuplicateFilteringWithComments) {
   result.GetMatches(matches);
   result.GetDescriptions(descriptions);
 
-  EXPECT_EQ(4U, request.GetNumberOfMatches());
+  EXPECT_EQ(4U, result.GetNumberOfResults());
   EXPECT_EQ(4U, matches.GetSize());
   EXPECT_EQ(4U, descriptions.GetSize());
   EXPECT_STREQ("foo", matches.GetStringAtIndex(0));
@@ -182,7 +177,7 @@ TEST(CompletionRequest, TestCompletionOwnership) {
   StringList matches;
 
   CompletionResult result;
-  CompletionRequest request(command, cursor_pos, 0, 0, result);
+  CompletionRequest request(command, cursor_pos, result);
 
   std::string Temporary = "bar";
   request.AddCompletion(Temporary);
@@ -191,6 +186,6 @@ TEST(CompletionRequest, TestCompletionOwnership) {
   Temporary[0] = 'f';
 
   result.GetMatches(matches);
-  EXPECT_EQ(1U, request.GetNumberOfMatches());
+  EXPECT_EQ(1U, result.GetNumberOfResults());
   EXPECT_STREQ("bar", matches.GetStringAtIndex(0));
 }

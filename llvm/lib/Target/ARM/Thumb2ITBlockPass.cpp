@@ -87,7 +87,7 @@ static void TrackDefUses(MachineInstr *MI, RegisterSet &Defs, RegisterSet &Uses,
   for (auto &MO : MI->operands()) {
     if (!MO.isReg())
       continue;
-    unsigned Reg = MO.getReg();
+    Register Reg = MO.getReg();
     if (!Reg || Reg == ARM::ITSTATE || Reg == ARM::SP)
       continue;
     if (MO.isUse())
@@ -145,8 +145,8 @@ Thumb2ITBlock::MoveCopyOutOfITBlock(MachineInstr *MI,
          MI->getOperand(1).getSubReg() == 0 &&
          "Sub-register indices still around?");
 
-  unsigned DstReg = MI->getOperand(0).getReg();
-  unsigned SrcReg = MI->getOperand(1).getReg();
+  Register DstReg = MI->getOperand(0).getReg();
+  Register SrcReg = MI->getOperand(1).getReg();
 
   // First check if it's safe to move it.
   if (Uses.count(DstReg) || Defs.count(SrcReg))
@@ -388,8 +388,6 @@ bool MVEVPTBlock::InsertVPTBlocks(MachineBasicBlock &Block) {
 
     MachineInstrBuilder MIBuilder =
         BuildMI(Block, MBIter, dl, TII->get(ARM::MVE_VPST));
-    // The mask value for the VPST instruction is T = 0b1000 = 8
-    MIBuilder.addImm(VPTMaskValue::T);
 
     MachineBasicBlock::iterator VPSTInsertPos = MIBuilder.getInstr();
     int VPTInstCnt = 1;
@@ -400,12 +398,29 @@ bool MVEVPTBlock::InsertVPTBlocks(MachineBasicBlock &Block) {
       NextPred = getVPTInstrPredicate(*MBIter, PredReg);
     } while (NextPred != ARMVCC::None && NextPred == Pred && ++VPTInstCnt < 4);
 
+    switch (VPTInstCnt) {
+    case 1:
+      MIBuilder.addImm(VPTMaskValue::T);
+      break;
+    case 2:
+      MIBuilder.addImm(VPTMaskValue::TT);
+      break;
+    case 3:
+      MIBuilder.addImm(VPTMaskValue::TTT);
+      break;
+    case 4:
+      MIBuilder.addImm(VPTMaskValue::TTTT);
+      break;
+    default:
+      llvm_unreachable("Unexpected number of instruction in a VPT block");
+    };
+
     MachineInstr *LastMI = &*MBIter;
     finalizeBundle(Block, VPSTInsertPos.getInstrIterator(),
                    ++LastMI->getIterator());
 
     Modified = true;
-    LLVM_DEBUG(dbgs() << "VPT block created for: "; MI->dump(););
+    LLVM_DEBUG(dbgs() << "VPT block created for: "; MI->dump());
 
     ++MBIter;
   }

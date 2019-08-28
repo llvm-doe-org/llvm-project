@@ -858,7 +858,7 @@ BitcodeReader::BitcodeReader(BitstreamCursor Stream, StringRef Strtab,
                              StringRef ProducerIdentification,
                              LLVMContext &Context)
     : BitcodeReaderBase(std::move(Stream), Strtab), Context(Context),
-      ValueList(Context) {
+      ValueList(Context, Stream.SizeInBytes()) {
   this->ProducerIdentification = ProducerIdentification;
 }
 
@@ -1278,6 +1278,11 @@ static uint64_t getRawAttributeMask(Attribute::AttrKind Val) {
     return 1ULL << 61;
   case Attribute::WillReturn:
     return 1ULL << 62;
+  case Attribute::NoFree:
+    return 1ULL << 63;
+  case Attribute::NoSync:
+    llvm_unreachable("nosync attribute not supported in raw format");
+    break;
   case Attribute::Dereferenceable:
     llvm_unreachable("dereferenceable attribute not supported in raw format");
     break;
@@ -1291,6 +1296,9 @@ static uint64_t getRawAttributeMask(Attribute::AttrKind Val) {
   case Attribute::AllocSize:
     llvm_unreachable("allocsize not supported in raw format");
     break;
+  case Attribute::SanitizeMemTag:
+    llvm_unreachable("sanitize_memtag attribute not supported in raw format");
+    break;
   }
   llvm_unreachable("Unsupported attribute type");
 }
@@ -1300,10 +1308,12 @@ static void addRawAttributeValue(AttrBuilder &B, uint64_t Val) {
 
   for (Attribute::AttrKind I = Attribute::None; I != Attribute::EndAttrKinds;
        I = Attribute::AttrKind(I + 1)) {
-    if (I == Attribute::Dereferenceable ||
+    if (I == Attribute::SanitizeMemTag ||
+        I == Attribute::Dereferenceable ||
         I == Attribute::DereferenceableOrNull ||
         I == Attribute::ArgMemOnly ||
-        I == Attribute::AllocSize)
+        I == Attribute::AllocSize ||
+        I == Attribute::NoSync)
       continue;
     if (uint64_t A = (Val & getRawAttributeMask(I))) {
       if (I == Attribute::Alignment)
@@ -1442,6 +1452,8 @@ static Attribute::AttrKind getAttrFromCode(uint64_t Code) {
     return Attribute::NoCapture;
   case bitc::ATTR_KIND_NO_DUPLICATE:
     return Attribute::NoDuplicate;
+  case bitc::ATTR_KIND_NOFREE:
+    return Attribute::NoFree;
   case bitc::ATTR_KIND_NO_IMPLICIT_FLOAT:
     return Attribute::NoImplicitFloat;
   case bitc::ATTR_KIND_NO_INLINE:
@@ -1462,6 +1474,8 @@ static Attribute::AttrKind getAttrFromCode(uint64_t Code) {
     return Attribute::NoRedZone;
   case bitc::ATTR_KIND_NO_RETURN:
     return Attribute::NoReturn;
+  case bitc::ATTR_KIND_NOSYNC:
+    return Attribute::NoSync;
   case bitc::ATTR_KIND_NOCF_CHECK:
     return Attribute::NoCfCheck;
   case bitc::ATTR_KIND_NO_UNWIND:
@@ -1524,6 +1538,8 @@ static Attribute::AttrKind getAttrFromCode(uint64_t Code) {
     return Attribute::ZExt;
   case bitc::ATTR_KIND_IMMARG:
     return Attribute::ImmArg;
+  case bitc::ATTR_KIND_SANITIZE_MEMTAG:
+    return Attribute::SanitizeMemTag;
   }
 }
 
@@ -2361,6 +2377,8 @@ Error BitcodeReader::parseConstants() {
       CurTy = flattenPointerTypes(CurFullTy);
       continue;  // Skip the ValueList manipulation.
     case bitc::CST_CODE_NULL:      // NULL
+      if (CurTy->isVoidTy() || CurTy->isFunctionTy() || CurTy->isLabelTy())
+        return error("Invalid type for a constant null value");
       V = Constant::getNullValue(CurTy);
       break;
     case bitc::CST_CODE_INTEGER:   // INTEGER: [intval]
@@ -4161,6 +4179,10 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
           popValue(Record, OpNum, NextValueNo, LHS->getType(), RHS))
         return error("Invalid record");
 
+      if (OpNum >= Record.size())
+        return error(
+            "Invalid record: operand number exceeded available operands");
+
       unsigned PredVal = Record[OpNum];
       bool IsFP = LHS->getType()->isFPOrFPVectorTy();
       FastMathFlags FMF;
@@ -5292,7 +5314,7 @@ Error BitcodeReader::materializeModule() {
 
   UpgradeModuleFlags(*TheModule);
 
-  UpgradeRetainReleaseMarker(*TheModule);
+  UpgradeARCRuntime(*TheModule);
 
   return Error::success();
 }
@@ -5854,7 +5876,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
           ArrayRef<uint64_t>(Record).slice(CallGraphEdgeStartIndex),
           IsOldProfileFormat, HasProfile, HasRelBF);
       setSpecialRefs(Refs, NumRORefs, NumWORefs);
-      auto FS = llvm::make_unique<FunctionSummary>(
+      auto FS = std::make_unique<FunctionSummary>(
           Flags, InstCount, getDecodedFFlags(RawFunFlags), /*EntryCount=*/0,
           std::move(Refs), std::move(Calls), std::move(PendingTypeTests),
           std::move(PendingTypeTestAssumeVCalls),
@@ -5880,7 +5902,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       uint64_t RawFlags = Record[1];
       unsigned AliaseeID = Record[2];
       auto Flags = getDecodedGVSummaryFlags(RawFlags, Version);
-      auto AS = llvm::make_unique<AliasSummary>(Flags);
+      auto AS = std::make_unique<AliasSummary>(Flags);
       // The module path string ref set in the summary must be owned by the
       // index's module string table. Since we don't have a module path
       // string table section in the per-module index, we create a single
@@ -5914,7 +5936,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       std::vector<ValueInfo> Refs =
           makeRefList(ArrayRef<uint64_t>(Record).slice(RefArrayStart));
       auto FS =
-          llvm::make_unique<GlobalVarSummary>(Flags, GVF, std::move(Refs));
+          std::make_unique<GlobalVarSummary>(Flags, GVF, std::move(Refs));
       FS->setModulePath(getThisModule()->first());
       auto GUID = getValueInfoFromValueId(ValueID);
       FS->setOriginalName(GUID.second);
@@ -5941,7 +5963,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
         VTableFuncs.push_back({Callee, Offset});
       }
       auto VS =
-          llvm::make_unique<GlobalVarSummary>(Flags, GVF, std::move(Refs));
+          std::make_unique<GlobalVarSummary>(Flags, GVF, std::move(Refs));
       VS->setModulePath(getThisModule()->first());
       VS->setVTableFuncs(VTableFuncs);
       auto GUID = getValueInfoFromValueId(ValueID);
@@ -5999,7 +6021,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
           IsOldProfileFormat, HasProfile, false);
       ValueInfo VI = getValueInfoFromValueId(ValueID).first;
       setSpecialRefs(Refs, NumRORefs, NumWORefs);
-      auto FS = llvm::make_unique<FunctionSummary>(
+      auto FS = std::make_unique<FunctionSummary>(
           Flags, InstCount, getDecodedFFlags(RawFunFlags), EntryCount,
           std::move(Refs), std::move(Edges), std::move(PendingTypeTests),
           std::move(PendingTypeTestAssumeVCalls),
@@ -6026,7 +6048,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       uint64_t RawFlags = Record[2];
       unsigned AliaseeValueId = Record[3];
       auto Flags = getDecodedGVSummaryFlags(RawFlags, Version);
-      auto AS = llvm::make_unique<AliasSummary>(Flags);
+      auto AS = std::make_unique<AliasSummary>(Flags);
       LastSeenSummary = AS.get();
       AS->setModulePath(ModuleIdMap[ModuleId]);
 
@@ -6055,7 +6077,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       std::vector<ValueInfo> Refs =
           makeRefList(ArrayRef<uint64_t>(Record).slice(RefArrayStart));
       auto FS =
-          llvm::make_unique<GlobalVarSummary>(Flags, GVF, std::move(Refs));
+          std::make_unique<GlobalVarSummary>(Flags, GVF, std::move(Refs));
       LastSeenSummary = FS.get();
       FS->setModulePath(ModuleIdMap[ModuleId]);
       ValueInfo VI = getValueInfoFromValueId(ValueID).first;
@@ -6418,7 +6440,7 @@ BitcodeModule::getModuleImpl(LLVMContext &Context, bool MaterializeAll,
                               Context);
 
   std::unique_ptr<Module> M =
-      llvm::make_unique<Module>(ModuleIdentifier, Context);
+      std::make_unique<Module>(ModuleIdentifier, Context);
   M->setMaterializer(R);
 
   // Delay parsing Metadata if ShouldLazyLoadMetadata is true.
@@ -6465,7 +6487,7 @@ Expected<std::unique_ptr<ModuleSummaryIndex>> BitcodeModule::getSummary() {
   if (Error JumpFailed = Stream.JumpToBit(ModuleBit))
     return std::move(JumpFailed);
 
-  auto Index = llvm::make_unique<ModuleSummaryIndex>(/*HaveGVs=*/false);
+  auto Index = std::make_unique<ModuleSummaryIndex>(/*HaveGVs=*/false);
   ModuleSummaryIndexBitcodeReader R(std::move(Stream), Strtab, *Index,
                                     ModuleIdentifier, 0);
 

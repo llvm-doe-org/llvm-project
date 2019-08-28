@@ -314,11 +314,14 @@ public:
 
   bool hasSjLjLowering() const override { return true; }
 
-  bool useFloat128ManglingForLongDouble() const override {
-    return LongDoubleWidth == 128 &&
-           LongDoubleFormat == &llvm::APFloat::PPCDoubleDouble() &&
-           getTriple().isOSBinFormatELF();
+  const char *getLongDoubleMangling() const override {
+    if (LongDoubleWidth == 64)
+      return "e";
+    return LongDoubleFormat == &llvm::APFloat::PPCDoubleDouble()
+               ? "g"
+               : "u9__ieee128";
   }
+  const char *getFloat128Mangling() const override { return "u9__ieee128"; }
 };
 
 class LLVM_LIBRARY_VISIBILITY PPC32TargetInfo : public PPCTargetInfo {
@@ -345,17 +348,10 @@ public:
       break;
     }
 
-    switch (getTriple().getOS()) {
-    case llvm::Triple::FreeBSD:
-    case llvm::Triple::NetBSD:
-    case llvm::Triple::OpenBSD:
-    // FIXME: -mlong-double-128 is not yet supported on AIX.
-    case llvm::Triple::AIX:
+    if (Triple.isOSFreeBSD() || Triple.isOSNetBSD() || Triple.isOSOpenBSD() ||
+        Triple.getOS() == llvm::Triple::AIX || Triple.isMusl()) {
       LongDoubleWidth = LongDoubleAlign = 64;
       LongDoubleFormat = &llvm::APFloat::IEEEdouble();
-      break;
-    default:
-      break;
     }
 
     // PPC32 supports atomics up to 4 bytes.
@@ -386,19 +382,13 @@ public:
       ABI = Triple.getEnvironment() == llvm::Triple::ELFv2 ? "elfv2" : "elfv1";
     }
 
-    switch (Triple.getOS()) {
-    case llvm::Triple::FreeBSD:
-      LongDoubleWidth = LongDoubleAlign = 64;
-      LongDoubleFormat = &llvm::APFloat::IEEEdouble();
-      break;
-    case llvm::Triple::AIX:
-      // FIXME: -mlong-double-128 is not yet supported on AIX.
-      LongDoubleWidth = LongDoubleAlign = 64;
-      LongDoubleFormat = &llvm::APFloat::IEEEdouble();
+    if (Triple.getOS() == llvm::Triple::AIX)
       SuitableAlign = 64;
-      break;
-    default:
-      break;
+
+    if (Triple.isOSFreeBSD() || Triple.getOS() == llvm::Triple::AIX ||
+        Triple.isMusl()) {
+      LongDoubleWidth = LongDoubleAlign = 64;
+      LongDoubleFormat = &llvm::APFloat::IEEEdouble();
     }
 
     // PPC64 supports atomics up to 8 bytes.

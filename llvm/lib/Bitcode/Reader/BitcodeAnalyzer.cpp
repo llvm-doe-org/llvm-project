@@ -9,6 +9,8 @@
 #include "llvm/Bitcode/BitcodeAnalyzer.h"
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Bitcode/LLVMBitCodes.h"
+#include "llvm/Bitstream/BitCodes.h"
+#include "llvm/Bitstream/BitstreamReader.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/SHA1.h"
 
@@ -432,6 +434,13 @@ static Expected<CurStreamTypeType> ReadSignature(BitstreamCursor &Stream) {
       return std::move(Err);
     if (Signature[2] == 'A' && Signature[3] == 'G')
       return ClangSerializedDiagnosticsBitstream;
+  } else if (Signature[0] == 'R' && Signature[1] == 'M') {
+    if (Error Err = tryRead(Signature[2], 8))
+      return std::move(Err);
+    if (Error Err = tryRead(Signature[3], 8))
+      return std::move(Err);
+    if (Signature[2] == 'R' && Signature[3] == 'K')
+      return LLVMBitstreamRemarks;
   } else {
     if (Error Err = tryRead(Signature[2], 4))
       return std::move(Err);
@@ -537,8 +546,11 @@ BitcodeAnalyzer::BitcodeAnalyzer(StringRef Buffer,
 
 Error BitcodeAnalyzer::analyze(Optional<BCDumpOptions> O,
                                Optional<StringRef> CheckHash) {
-  if (Expected<CurStreamTypeType> H = analyzeHeader(O, Stream))
-    CurStreamType = *H;
+  Expected<CurStreamTypeType> MaybeType = analyzeHeader(O, Stream);
+  if (!MaybeType)
+    return MaybeType.takeError();
+  else
+    CurStreamType = *MaybeType;
 
   Stream.setBlockInfo(&BlockInfo);
 
@@ -546,11 +558,9 @@ Error BitcodeAnalyzer::analyze(Optional<BCDumpOptions> O,
   // The block info must be a top-level block.
   if (BlockInfoStream) {
     BitstreamCursor BlockInfoCursor(*BlockInfoStream);
-    CurStreamTypeType BlockInfoStreamType;
     Expected<CurStreamTypeType> H = analyzeHeader(O, BlockInfoCursor);
     if (!H)
       return H.takeError();
-    BlockInfoStreamType = *H;
 
     while (!BlockInfoCursor.AtEndOfStream()) {
       Expected<unsigned> MaybeCode = BlockInfoCursor.ReadCode();
@@ -623,6 +633,9 @@ void BitcodeAnalyzer::printStats(BCDumpOptions O,
     break;
   case ClangSerializedDiagnosticsBitstream:
     O.OS << "Clang Serialized Diagnostics\n";
+    break;
+  case LLVMBitstreamRemarks:
+    O.OS << "LLVM Remarks\n";
     break;
   }
   O.OS << "  # Toplevel Blocks: " << NumTopBlocks << "\n";

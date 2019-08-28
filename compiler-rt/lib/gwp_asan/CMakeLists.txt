@@ -7,6 +7,7 @@ set(GWP_ASAN_SOURCES
   platform_specific/mutex_posix.cpp
   guarded_pool_allocator.cpp
   random.cpp
+  stack_trace_compressor.cpp
 )
 
 set(GWP_ASAN_HEADERS
@@ -16,6 +17,7 @@ set(GWP_ASAN_HEADERS
   options.h
   options.inc
   random.h
+  stack_trace_compressor.h
 )
 
 # Ensure that GWP-ASan meets the delegated requirements of some supporting
@@ -25,8 +27,6 @@ set(GWP_ASAN_CFLAGS -fno-rtti -fno-exceptions -nostdinc++ -pthread)
 append_list_if(COMPILER_RT_HAS_FPIC_FLAG -fPIC GWP_ASAN_CFLAGS)
 append_list_if(COMPILER_RT_HAS_OMIT_FRAME_POINTER_FLAG -fno-omit-frame-pointer
                GWP_ASAN_CFLAGS)
-append_list_if(COMPILER_RT_HAS_OMIT_FRAME_POINTER_FLAG
-               -mno-omit-leaf-frame-pointer GWP_ASAN_CFLAGS)
 
 # Remove -stdlib= which is unused when passing -nostdinc++.
 string(REGEX REPLACE "-stdlib=[a-zA-Z+]*" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
@@ -98,6 +98,26 @@ if (COMPILER_RT_HAS_GWP_ASAN)
       SOURCES optional/backtrace_sanitizer_common.cpp
       ADDITIONAL_HEADERS ${GWP_ASAN_BACKTRACE_HEADERS}
       CFLAGS ${GWP_ASAN_CFLAGS} ${SANITIZER_COMMON_CFLAGS})
+
+  # Build the stack trace compressor fuzzer.
+  if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" AND
+      COMPILER_RT_BUILD_LIBFUZZER)
+    add_executable(stack_trace_compressor_fuzzer
+        stack_trace_compressor_fuzzer.cpp
+        ${GWP_ASAN_SOURCES}
+        ${GWP_ASAN_HEADERS})
+    set_target_properties(
+        stack_trace_compressor_fuzzer PROPERTIES FOLDER "Fuzzers")
+
+    # TODO(phosek): Remove -nostdlib++ and remove the "no c++ standard library
+    # for compiler-rt" dependency here.
+    target_compile_options(stack_trace_compressor_fuzzer
+        PRIVATE -nostdlib++ -fsanitize=fuzzer-no-link)
+    set_target_properties(
+        stack_trace_compressor_fuzzer PROPERTIES LINK_FLAGS -fsanitize=fuzzer)
+    add_dependencies(stack_trace_compressor_fuzzer fuzzer)
+    add_dependencies(gwp_asan stack_trace_compressor_fuzzer)
+  endif()
 endif()
 
 if(COMPILER_RT_INCLUDE_TESTS)

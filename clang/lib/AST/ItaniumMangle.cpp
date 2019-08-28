@@ -2608,30 +2608,19 @@ void CXXNameMangler::mangleType(const BuiltinType *T) {
     Out << 'd';
     break;
   case BuiltinType::LongDouble: {
-    bool UseFloat128Mangling =
-        getASTContext().getTargetInfo().useFloat128ManglingForLongDouble();
-    if (getASTContext().getLangOpts().OpenMP &&
-        getASTContext().getLangOpts().OpenMPIsDevice) {
-      UseFloat128Mangling = getASTContext()
-                                .getAuxTargetInfo()
-                                ->useFloat128ManglingForLongDouble();
-    }
-    Out << (UseFloat128Mangling ? 'g' : 'e');
+    const TargetInfo *TI = getASTContext().getLangOpts().OpenMP &&
+                                   getASTContext().getLangOpts().OpenMPIsDevice
+                               ? getASTContext().getAuxTargetInfo()
+                               : &getASTContext().getTargetInfo();
+    Out << TI->getLongDoubleMangling();
     break;
   }
   case BuiltinType::Float128: {
-    bool UseFloat128Mangling =
-        getASTContext().getTargetInfo().useFloat128ManglingForLongDouble();
-    if (getASTContext().getLangOpts().OpenMP &&
-        getASTContext().getLangOpts().OpenMPIsDevice) {
-      UseFloat128Mangling = getASTContext()
-                                .getAuxTargetInfo()
-                                ->useFloat128ManglingForLongDouble();
-    }
-    if (UseFloat128Mangling)
-      Out << "U10__float128"; // Match the GCC mangling
-    else
-      Out << 'g';
+    const TargetInfo *TI = getASTContext().getLangOpts().OpenMP &&
+                                   getASTContext().getLangOpts().OpenMPIsDevice
+                               ? getASTContext().getAuxTargetInfo()
+                               : &getASTContext().getTargetInfo();
+    Out << TI->getFloat128Mangling();
     break;
   }
   case BuiltinType::NullPtr:
@@ -2682,6 +2671,15 @@ void CXXNameMangler::mangleType(const BuiltinType *T) {
     Out << type_name.size() << type_name; \
     break;
 #include "clang/Basic/OpenCLExtensionTypes.def"
+  // The SVE types are effectively target-specific.  The mangling scheme
+  // is defined in the appendices to the Procedure Call Standard for the
+  // Arm Architecture.
+#define SVE_TYPE(Name, Id, SingletonId) \
+  case BuiltinType::Id: \
+    type_name = Name; \
+    Out << 'u' << type_name.size() << type_name; \
+    break;
+#include "clang/Basic/AArch64SVEACLETypes.def"
   }
 }
 
@@ -3798,7 +3796,7 @@ recurse:
     if (TypeSourceInfo *ScopeInfo = PDE->getScopeTypeInfo()) {
       if (Qualifier) {
         mangleUnresolvedPrefix(Qualifier,
-                               /*Recursive=*/true);
+                               /*recursive=*/true);
         mangleUnresolvedTypeOrSimpleId(ScopeInfo->getType());
         Out << 'E';
       } else {

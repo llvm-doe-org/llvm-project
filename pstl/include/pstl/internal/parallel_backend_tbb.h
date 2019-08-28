@@ -30,9 +30,11 @@
 #    error Intel(R) Threading Building Blocks 2018 is required; older versions are not supported.
 #endif
 
+_PSTL_HIDE_FROM_ABI_PUSH
+
 namespace __pstl
 {
-namespace __par_backend
+namespace __tbb_backend
 {
 
 //! Raw memory buffer with automatic freeing and no exceptions.
@@ -191,7 +193,7 @@ _Tp
 __parallel_transform_reduce(_ExecutionPolicy&&, _Index __first, _Index __last, _Up __u, _Tp __init, _Cp __combine,
                             _Rp __brick_reduce)
 {
-    __par_backend::__par_trans_red_body<_Index, _Up, _Tp, _Cp, _Rp> __body(__u, __init, __combine, __brick_reduce);
+    __tbb_backend::__par_trans_red_body<_Index, _Up, _Tp, _Cp, _Rp> __body(__u, __init, __combine, __brick_reduce);
     // The grain size of 3 is used in order to provide mininum 2 elements for each body
     tbb::this_task_arena::isolate(
         [__first, __last, &__body]() { tbb::parallel_reduce(tbb::blocked_range<_Index>(__first, __last, 3), __body); });
@@ -305,9 +307,9 @@ __upsweep(_Index __i, _Index __m, _Index __tilesize, _Tp* __r, _Index __lastsize
     {
         _Index __k = __split(__m);
         tbb::parallel_invoke(
-            [=] { __par_backend::__upsweep(__i, __k, __tilesize, __r, __tilesize, __reduce, __combine); },
+            [=] { __tbb_backend::__upsweep(__i, __k, __tilesize, __r, __tilesize, __reduce, __combine); },
             [=] {
-                __par_backend::__upsweep(__i + __k, __m - __k, __tilesize, __r + __k, __lastsize, __reduce, __combine);
+                __tbb_backend::__upsweep(__i + __k, __m - __k, __tilesize, __r + __k, __lastsize, __reduce, __combine);
             });
         if (__m == 2 * __k)
             __r[__m - 1] = __combine(__r[__k - 1], __r[__m - 1]);
@@ -325,11 +327,11 @@ __downsweep(_Index __i, _Index __m, _Index __tilesize, _Tp* __r, _Index __lastsi
     {
         const _Index __k = __split(__m);
         tbb::parallel_invoke(
-            [=] { __par_backend::__downsweep(__i, __k, __tilesize, __r, __tilesize, __initial, __combine, __scan); },
+            [=] { __tbb_backend::__downsweep(__i, __k, __tilesize, __r, __tilesize, __initial, __combine, __scan); },
             // Assumes that __combine never throws.
             //TODO: Consider adding a requirement for user functors to be constant.
             [=, &__combine] {
-                __par_backend::__downsweep(__i + __k, __m - __k, __tilesize, __r + __k, __lastsize,
+                __tbb_backend::__downsweep(__i + __k, __m - __k, __tilesize, __r + __k, __lastsize,
                                            __combine(__initial, __r[__k - 1]), __combine, __scan);
             });
     }
@@ -363,7 +365,7 @@ __parallel_strict_scan(_ExecutionPolicy&&, _Index __n, _Tp __initial, _Rp __redu
             _Index __m = (__n - 1) / __tilesize;
             __buffer<_Tp> __buf(__m + 1);
             _Tp* __r = __buf.get();
-            __par_backend::__upsweep(_Index(0), _Index(__m + 1), __tilesize, __r, __n - __m * __tilesize, __reduce,
+            __tbb_backend::__upsweep(_Index(0), _Index(__m + 1), __tilesize, __r, __n - __m * __tilesize, __reduce,
                                      __combine);
 
             // When __apex is a no-op and __combine has no side effects, a good optimizer
@@ -375,7 +377,7 @@ __parallel_strict_scan(_ExecutionPolicy&&, _Index __n, _Tp __initial, _Rp __redu
             while ((__k &= __k - 1))
                 __t = __combine(__r[__k - 1], __t);
             __apex(__combine(__initial, __t));
-            __par_backend::__downsweep(_Index(0), _Index(__m + 1), __tilesize, __r, __n - __m * __tilesize, __initial,
+            __tbb_backend::__downsweep(_Index(0), _Index(__m + 1), __tilesize, __r, __n - __m * __tilesize, __initial,
                                        __combine, __scan);
             return;
         }
@@ -862,8 +864,8 @@ class __stable_sort_task : public tbb::task
     __stable_sort_task(_RandomAccessIterator1 __xs, _RandomAccessIterator1 __xe, _RandomAccessIterator2 __zs,
                        bool __root, _Compare __comp, _LeafSort __leaf_sort, _SizeType __nsort,
                        _RandomAccessIterator1 __x_beg, _RandomAccessIterator2 __z_beg)
-        : _M_xs(__xs), _M_xe(__xe), _M_x_beg(__x_beg), _M_zs(__zs), _M_z_beg(__z_beg), _M_root(__root), _M_comp(__comp),
-          _M_leaf_sort(__leaf_sort), _M_nsort(__nsort)
+        : _M_xs(__xs), _M_xe(__xe), _M_x_beg(__x_beg), _M_zs(__zs), _M_z_beg(__z_beg), _M_comp(__comp),
+          _M_leaf_sort(__leaf_sort), _M_root(__root), _M_nsort(__nsort)
     {
     }
 };
@@ -874,8 +876,8 @@ template <typename _RandomAccessIterator1, typename _RandomAccessIterator2, type
 tbb::task*
 __stable_sort_task<_RandomAccessIterator1, _RandomAccessIterator2, _Compare, _LeafSort>::execute()
 {
-    typedef __merge_task<_RandomAccessIterator1, _RandomAccessIterator2, _Compare, __serial_destroy,
-                         __serial_move_merge>
+    typedef __merge_task<_RandomAccessIterator1, _RandomAccessIterator2, _Compare, __utils::__serial_destroy,
+                         __utils::__serial_move_merge>
         _MergeTaskType;
 
     const _SizeType __n = _M_xe - _M_xs;
@@ -897,10 +899,10 @@ __stable_sort_task<_RandomAccessIterator1, _RandomAccessIterator2, _Compare, _Le
     const _RandomAccessIterator1 __xm = _M_xs + __n / 2;
     const _RandomAccessIterator2 __zm = _M_zs + (__xm - _M_xs);
     const _RandomAccessIterator2 __ze = _M_zs + __n;
-    _MergeTaskType* __m = new (allocate_continuation())
-        _MergeTaskType(_M_xs - _M_x_beg, __xm - _M_x_beg, __xm - _M_x_beg, _M_xe - _M_x_beg, _M_zs - _M_z_beg, _M_comp,
-                       __serial_destroy(), __serial_move_merge(__nmerge), _M_nsort, _M_x_beg, _M_z_beg,
-                       /*x_orig*/ true, /*y_orig*/ true, /*root*/ _M_root);
+    _MergeTaskType* __m = new (allocate_continuation()) _MergeTaskType(
+        _M_xs - _M_x_beg, __xm - _M_x_beg, __xm - _M_x_beg, _M_xe - _M_x_beg, _M_zs - _M_z_beg, _M_comp,
+        __utils::__serial_destroy(), __utils::__serial_move_merge(__nmerge), _M_nsort, _M_x_beg, _M_z_beg,
+        /*x_orig*/ true, /*y_orig*/ true, /*root*/ _M_root);
 
     _M_root = false;
 
@@ -1049,7 +1051,9 @@ __parallel_invoke(_ExecutionPolicy&&, _F1&& __f1, _F2&& __f2)
     tbb::this_task_arena::isolate([&]() { tbb::parallel_invoke(std::forward<_F1>(__f1), std::forward<_F2>(__f2)); });
 }
 
-} // namespace __par_backend
+} // namespace __tbb_backend
 } // namespace __pstl
+
+_PSTL_HIDE_FROM_ABI_POP
 
 #endif /* _PSTL_PARALLEL_BACKEND_TBB_H */

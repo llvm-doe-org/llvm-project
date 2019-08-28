@@ -2885,6 +2885,10 @@ StringRef BuiltinType::getName(const PrintingPolicy &Policy) const {
   case Id: \
     return #ExtType;
 #include "clang/Basic/OpenCLExtensionTypes.def"
+#define SVE_TYPE(Name, Id, SingletonId) \
+  case Id: \
+    return Name;
+#include "clang/Basic/AArch64SVEACLETypes.def"
   }
 
   llvm_unreachable("Invalid builtin type.");
@@ -3886,6 +3890,9 @@ bool Type::canHaveNullability(bool ResultIfUnknown) const {
     case BuiltinType::OCLClkEvent:
     case BuiltinType::OCLQueue:
     case BuiltinType::OCLReserveID:
+#define SVE_TYPE(Name, Id, SingletonId) \
+    case BuiltinType::Id:
+#include "clang/Basic/AArch64SVEACLETypes.def"
     case BuiltinType::BuiltinFn:
     case BuiltinType::NullPtr:
     case BuiltinType::OMPArraySection:
@@ -4124,7 +4131,7 @@ CXXRecordDecl *MemberPointerType::getMostRecentCXXRecordDecl() const {
 void clang::FixedPointValueToString(SmallVectorImpl<char> &Str,
                                     llvm::APSInt Val, unsigned Scale) {
   FixedPointSemantics FXSema(Val.getBitWidth(), Scale, Val.isSigned(),
-                             /*isSaturated=*/false,
-                             /*hasUnsignedPadding=*/false);
+                             /*IsSaturated=*/false,
+                             /*HasUnsignedPadding=*/false);
   APFixedPoint(Val, FXSema).toString(Str);
 }

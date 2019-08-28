@@ -89,13 +89,14 @@ intermediate LLVM representation.
    GetElementPtr
    Frontend/PerformanceTips
    MCJITDesignAndImplementation
-   ORCv2DesignAndImplementation
+   ORCv2
    CodeOfConduct
    CompileCudaWithLLVM
    ReportingGuide
    Benchmarking
    Docker
    BuildingADistribution
+   Remarks
 
 :doc:`GettingStarted`
    Discusses how to get up and running quickly with the LLVM infrastructure.
@@ -182,6 +183,8 @@ intermediate LLVM representation.
   A best-practices guide for using LLVM's CMake build system to package and
   distribute LLVM-based tools.
 
+:doc:`Remarks`
+   A reference on the implementation of remarks in LLVM.
 
 Programming Documentation
 =========================
@@ -203,6 +206,7 @@ For developers of applications which use LLVM as a library.
    FuzzingLLVM
    ScudoHardenedAllocator
    OptBisect
+   GwpAsan
 
 :doc:`LLVM Language Reference Manual <LangRef>`
   Defines the LLVM intermediate representation and the assembly form of the
@@ -255,6 +259,9 @@ For developers of applications which use LLVM as a library.
 :doc:`OptBisect`
   A command line option for debugging optimization-induced failures.
 
+:doc:`GwpAsan`
+  A sampled heap memory error detection toolkit designed for production use.
+
 .. _index-subsystem-docs:
 
 Subsystem Documentation
@@ -271,6 +278,7 @@ For API clients and LLVM developers.
    BlockFrequencyTerminology
    BranchWeightMetadata
    Bugpoint
+   BugpointRedesign
    CodeGenerator
    ExceptionHandling
    AddingConstrainedIntrinsics
@@ -310,6 +318,7 @@ For API clients and LLVM developers.
    CFIVerify
    SpeculativeLoadHardening
    StackSafetyAnalysis
+   LoopTerminology
 
 :doc:`WritingAnLLVMPass`
    Information on how to write LLVM transformations and analyses.
@@ -360,6 +369,9 @@ For API clients and LLVM developers.
    Automatic bug finder and test-case reducer description and usage
    information.
 
+:doc:`BugpointRedesign`
+   Design doc for a redesign of the Bugpoint tool.
+
 :doc:`BitCodeFormat`
    This describes the file format and encoding used for LLVM "bc" files.
 
@@ -380,9 +392,9 @@ For API clients and LLVM developers.
 :doc:`MCJITDesignAndImplementation`
    Describes the inner workings of MCJIT execution engine.
 
-:doc:`ORCv2DesignAndImplementation`
+:doc:`ORCv2`
    Describes the design and implementation of the ORC APIs, including some
-   usage examples.
+   usage examples, and a guide for users transitioning from ORCv1 to ORCv2.
 
 :doc:`BranchWeightMetadata`
    Provides information about Branch Prediction Information.
@@ -457,6 +469,9 @@ For API clients and LLVM developers.
 :doc:`StackSafetyAnalysis`
   This document describes the design of the stack safety analysis of local
   variables.
+
+:doc:`LoopTerminology`
+  A document describing Loops and associated terms as used in LLVM.
 
 Development Process Documentation
 =================================
@@ -601,6 +616,7 @@ can be better.
 
    CodeOfConduct
    Proposals/GitHubMove
+   Proposals/LLVMLibC
    Proposals/TestSuite
    Proposals/VariableNames
    Proposals/VectorizationPlan
@@ -611,6 +627,9 @@ can be better.
 
 :doc:`Proposals/GitHubMove`
    Proposal to move from SVN/Git to GitHub.
+
+:doc:`Proposals/LLVMLibC`
+   Proposal to add a libc implementation under the LLVM project.
 
 :doc:`Proposals/TestSuite`
    Proposals for additional benchmarks/programs for llvm's test-suite.

@@ -43,10 +43,10 @@ public:
 };
 } // end anonymous namespace
 
-void ento::createSarifDiagnosticConsumer(AnalyzerOptions &AnalyzerOpts,
-                                         PathDiagnosticConsumers &C,
-                                         const std::string &Output,
-                                         const Preprocessor &) {
+void ento::createSarifDiagnosticConsumer(
+    AnalyzerOptions &AnalyzerOpts, PathDiagnosticConsumers &C,
+    const std::string &Output, const Preprocessor &,
+    const cross_tu::CrossTranslationUnitContext &) {
   C.push_back(new SarifDiagnostics(AnalyzerOpts, Output));
 }
 
@@ -335,7 +335,7 @@ void SarifDiagnostics::FlushDiagnosticsImpl(
   // file can become large very quickly, so decoding into JSON to append a run
   // may be an expensive operation.
   std::error_code EC;
-  llvm::raw_fd_ostream OS(OutputFile, EC, llvm::sys::fs::F_Text);
+  llvm::raw_fd_ostream OS(OutputFile, EC, llvm::sys::fs::OF_Text);
   if (EC) {
     llvm::errs() << "warning: could not create file: " << EC.message() << '\n';
     return;

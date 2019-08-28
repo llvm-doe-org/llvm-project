@@ -619,6 +619,7 @@ ExprResult Sema::CheckPackExpansion(Expr *Pattern, SourceLocation EllipsisLoc,
   if (!Pattern->containsUnexpandedParameterPack()) {
     Diag(EllipsisLoc, diag::err_pack_expansion_without_parameter_packs)
     << Pattern->getSourceRange();
+    CorrectDelayedTyposInExpr(Pattern);
     return ExprError();
   }
 
@@ -936,7 +937,7 @@ class ParameterPackValidatorCCC final : public CorrectionCandidateCallback {
   }
 
   std::unique_ptr<CorrectionCandidateCallback> clone() override {
-    return llvm::make_unique<ParameterPackValidatorCCC>(*this);
+    return std::make_unique<ParameterPackValidatorCCC>(*this);
   }
 };
 

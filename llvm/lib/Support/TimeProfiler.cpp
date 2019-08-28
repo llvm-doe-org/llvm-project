@@ -24,12 +24,6 @@ using namespace std::chrono;
 
 namespace llvm {
 
-static cl::opt<unsigned> TimeTraceGranularity(
-    "time-trace-granularity",
-    cl::desc(
-        "Minimum time granularity (in microseconds) traced by time profiler"),
-    cl::init(500));
-
 TimeTraceProfiler *TimeTraceProfilerInstance = nullptr;
 
 typedef duration<steady_clock::rep, steady_clock::period> DurationType;
@@ -64,8 +58,8 @@ struct TimeTraceProfiler {
     auto &E = Stack.back();
     E.Duration = steady_clock::now() - E.Start;
 
-    // Only include sections longer than TimeTraceGranularity msec.
-    if (duration_cast<microseconds>(E.Duration).count() > TimeTraceGranularity)
+    // Only include sections longer or equal to TimeTraceGranularity msec.
+    if (duration_cast<microseconds>(E.Duration).count() >= TimeTraceGranularity)
       Entries.emplace_back(E);
 
     // Track total time taken by each "name", but only the topmost levels of
@@ -161,12 +155,16 @@ struct TimeTraceProfiler {
   SmallVector<Entry, 128> Entries;
   StringMap<CountAndDurationType> CountAndTotalPerName;
   time_point<steady_clock> StartTime;
+
+  // Minimum time granularity (in microseconds)
+  unsigned TimeTraceGranularity;
 };
 
-void timeTraceProfilerInitialize() {
+void timeTraceProfilerInitialize(unsigned TimeTraceGranularity) {
   assert(TimeTraceProfilerInstance == nullptr &&
          "Profiler should not be initialized");
   TimeTraceProfilerInstance = new TimeTraceProfiler();
+  TimeTraceProfilerInstance->TimeTraceGranularity = TimeTraceGranularity;
 }
 
 void timeTraceProfilerCleanup() {

@@ -883,7 +883,8 @@ std::string TreePredicateFn::getPredCode() const {
   if (isLoad()) {
     if (!isUnindexed() && !isNonExtLoad() && !isAnyExtLoad() &&
         !isSignExtLoad() && !isZeroExtLoad() && getMemoryVT() == nullptr &&
-        getScalarMemoryVT() == nullptr)
+        getScalarMemoryVT() == nullptr && getAddressSpaces() == nullptr &&
+        getMinAlignment() < 1)
       PrintFatalError(getOrigPatFragRecord()->getRecord()->getLoc(),
                       "IsLoad cannot be used by itself");
   } else {
@@ -903,7 +904,8 @@ std::string TreePredicateFn::getPredCode() const {
 
   if (isStore()) {
     if (!isUnindexed() && !isTruncStore() && !isNonTruncStore() &&
-        getMemoryVT() == nullptr && getScalarMemoryVT() == nullptr)
+        getMemoryVT() == nullptr && getScalarMemoryVT() == nullptr &&
+        getAddressSpaces() == nullptr && getMinAlignment() < 1)
       PrintFatalError(getOrigPatFragRecord()->getRecord()->getLoc(),
                       "IsStore cannot be used by itself");
   } else {
@@ -954,13 +956,40 @@ std::string TreePredicateFn::getPredCode() const {
   }
 
   if (isLoad() || isStore() || isAtomic()) {
-    StringRef SDNodeName =
-        isLoad() ? "LoadSDNode" : isStore() ? "StoreSDNode" : "AtomicSDNode";
+    if (ListInit *AddressSpaces = getAddressSpaces()) {
+      Code += "unsigned AddrSpace = cast<MemSDNode>(N)->getAddressSpace();\n"
+        " if (";
+
+      bool First = true;
+      for (Init *Val : AddressSpaces->getValues()) {
+        if (First)
+          First = false;
+        else
+          Code += " && ";
+
+        IntInit *IntVal = dyn_cast<IntInit>(Val);
+        if (!IntVal) {
+          PrintFatalError(getOrigPatFragRecord()->getRecord()->getLoc(),
+                          "AddressSpaces element must be integer");
+        }
+
+        Code += "AddrSpace != " + utostr(IntVal->getValue());
+      }
+
+      Code += ")\nreturn false;\n";
+    }
+
+    int64_t MinAlign = getMinAlignment();
+    if (MinAlign > 0) {
+      Code += "if (cast<MemSDNode>(N)->getAlignment() < ";
+      Code += utostr(MinAlign);
+      Code += ")\nreturn false;\n";
+    }
 
     Record *MemoryVT = getMemoryVT();
 
     if (MemoryVT)
-      Code += ("if (cast<" + SDNodeName + ">(N)->getMemoryVT() != MVT::" +
+      Code += ("if (cast<MemSDNode>(N)->getMemoryVT() != MVT::" +
                MemoryVT->getName() + ") return false;\n")
                   .str();
   }
@@ -1149,6 +1178,21 @@ Record *TreePredicateFn::getMemoryVT() const {
     return nullptr;
   return R->getValueAsDef("MemoryVT");
 }
+
+ListInit *TreePredicateFn::getAddressSpaces() const {
+  Record *R = getOrigPatFragRecord()->getRecord();
+  if (R->isValueUnset("AddressSpaces"))
+    return nullptr;
+  return R->getValueAsListInit("AddressSpaces");
+}
+
+int64_t TreePredicateFn::getMinAlignment() const {
+  Record *R = getOrigPatFragRecord()->getRecord();
+  if (R->isValueUnset("MinAlignment"))
+    return 0;
+  return R->getValueAsInt("MinAlignment");
+}
+
 Record *TreePredicateFn::getScalarMemoryVT() const {
   Record *R = getOrigPatFragRecord()->getRecord();
   if (R->isValueUnset("ScalarMemoryVT"))
@@ -1345,8 +1389,10 @@ getPatternComplexity(const CodeGenDAGPatterns &CGP) const {
 ///
 std::string PatternToMatch::getPredicateCheck() const {
   SmallVector<const Predicate*,4> PredList;
-  for (const Predicate &P : Predicates)
-    PredList.push_back(&P);
+  for (const Predicate &P : Predicates) {
+    if (!P.getCondString().empty())
+      PredList.push_back(&P);
+  }
   llvm::sort(PredList, deref<llvm::less>());
 
   std::string Check;
@@ -2779,7 +2825,7 @@ TreePatternNodePtr TreePattern::ParseTreePattern(Init *TheInit,
     // chain.
     if (Int.IS.RetVTs.empty())
       Operator = getDAGPatterns().get_intrinsic_void_sdnode();
-    else if (Int.ModRef != CodeGenIntrinsic::NoMem)
+    else if (Int.ModRef != CodeGenIntrinsic::NoMem || Int.hasSideEffects)
       // Has side-effects, requires chain.
       Operator = getDAGPatterns().get_intrinsic_w_chain_sdnode();
     else // Otherwise, no chain.
@@ -3055,7 +3101,7 @@ void CodeGenDAGPatterns::ParsePatternFragments(bool OutFrags) {
 
     ListInit *LI = Frag->getValueAsListInit("Fragments");
     TreePattern *P =
-        (PatternFragments[Frag] = llvm::make_unique<TreePattern>(
+        (PatternFragments[Frag] = std::make_unique<TreePattern>(
              Frag, LI, !Frag->isSubClassOf("OutPatFrag"),
              *this)).get();
 

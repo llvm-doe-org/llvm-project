@@ -1280,12 +1280,14 @@ bool LLParser::ParseFnAttributeValuePairs(AttrBuilder &B,
     case lltok::kw_naked: B.addAttribute(Attribute::Naked); break;
     case lltok::kw_nobuiltin: B.addAttribute(Attribute::NoBuiltin); break;
     case lltok::kw_noduplicate: B.addAttribute(Attribute::NoDuplicate); break;
+    case lltok::kw_nofree: B.addAttribute(Attribute::NoFree); break;
     case lltok::kw_noimplicitfloat:
       B.addAttribute(Attribute::NoImplicitFloat); break;
     case lltok::kw_noinline: B.addAttribute(Attribute::NoInline); break;
     case lltok::kw_nonlazybind: B.addAttribute(Attribute::NonLazyBind); break;
     case lltok::kw_noredzone: B.addAttribute(Attribute::NoRedZone); break;
     case lltok::kw_noreturn: B.addAttribute(Attribute::NoReturn); break;
+    case lltok::kw_nosync: B.addAttribute(Attribute::NoSync); break;
     case lltok::kw_nocf_check: B.addAttribute(Attribute::NoCfCheck); break;
     case lltok::kw_norecurse: B.addAttribute(Attribute::NoRecurse); break;
     case lltok::kw_nounwind: B.addAttribute(Attribute::NoUnwind); break;
@@ -1309,6 +1311,8 @@ bool LLParser::ParseFnAttributeValuePairs(AttrBuilder &B,
       B.addAttribute(Attribute::SanitizeAddress); break;
     case lltok::kw_sanitize_hwaddress:
       B.addAttribute(Attribute::SanitizeHWAddress); break;
+    case lltok::kw_sanitize_memtag:
+      B.addAttribute(Attribute::SanitizeMemTag); break;
     case lltok::kw_sanitize_thread:
       B.addAttribute(Attribute::SanitizeThread); break;
     case lltok::kw_sanitize_memory:
@@ -1666,6 +1670,7 @@ bool LLParser::ParseOptionalParamAttrs(AttrBuilder &B) {
     case lltok::kw_returns_twice:
     case lltok::kw_sanitize_address:
     case lltok::kw_sanitize_hwaddress:
+    case lltok::kw_sanitize_memtag:
     case lltok::kw_sanitize_memory:
     case lltok::kw_sanitize_thread:
     case lltok::kw_speculative_load_hardening:
@@ -1764,6 +1769,7 @@ bool LLParser::ParseOptionalReturnAttrs(AttrBuilder &B) {
     case lltok::kw_returns_twice:
     case lltok::kw_sanitize_address:
     case lltok::kw_sanitize_hwaddress:
+    case lltok::kw_sanitize_memtag:
     case lltok::kw_sanitize_memory:
     case lltok::kw_sanitize_thread:
     case lltok::kw_speculative_load_hardening:
@@ -2545,6 +2551,7 @@ bool LLParser::ParseOptionalOperandBundles(
 ///
 bool LLParser::ParseArgumentList(SmallVectorImpl<ArgInfo> &ArgList,
                                  bool &isVarArg){
+  unsigned CurValID = 0;
   isVarArg = false;
   assert(Lex.getKind() == lltok::lparen);
   Lex.Lex(); // eat the (.
@@ -2568,6 +2575,12 @@ bool LLParser::ParseArgumentList(SmallVectorImpl<ArgInfo> &ArgList,
 
     if (Lex.getKind() == lltok::LocalVar) {
       Name = Lex.getStrVal();
+      Lex.Lex();
+    } else if (Lex.getKind() == lltok::LocalVarID) {
+      if (Lex.getUIntVal() != CurValID)
+        return Error(TypeLoc, "argument expected to be numbered '%" +
+                                  Twine(CurValID) + "'");
+      ++CurValID;
       Lex.Lex();
     }
 
@@ -2596,6 +2609,13 @@ bool LLParser::ParseArgumentList(SmallVectorImpl<ArgInfo> &ArgList,
         Name = Lex.getStrVal();
         Lex.Lex();
       } else {
+        if (Lex.getKind() == lltok::LocalVarID) {
+          if (Lex.getUIntVal() != CurValID)
+            return Error(TypeLoc, "argument expected to be numbered '%" +
+                                      Twine(CurValID) + "'");
+          Lex.Lex();
+        }
+        ++CurValID;
         Name = "";
       }
 
@@ -3087,7 +3107,7 @@ bool LLParser::ParseValID(ValID &ID, PerFunctionState *PFS) {
         ParseToken(lltok::rbrace, "expected end of struct constant"))
       return true;
 
-    ID.ConstantStructElts = make_unique<Constant *[]>(Elts.size());
+    ID.ConstantStructElts = std::make_unique<Constant *[]>(Elts.size());
     ID.UIntVal = Elts.size();
     memcpy(ID.ConstantStructElts.get(), Elts.data(),
            Elts.size() * sizeof(Elts[0]));
@@ -3109,7 +3129,7 @@ bool LLParser::ParseValID(ValID &ID, PerFunctionState *PFS) {
       return true;
 
     if (isPackedStruct) {
-      ID.ConstantStructElts = make_unique<Constant *[]>(Elts.size());
+      ID.ConstantStructElts = std::make_unique<Constant *[]>(Elts.size());
       memcpy(ID.ConstantStructElts.get(), Elts.data(),
              Elts.size() * sizeof(Elts[0]));
       ID.UIntVal = Elts.size();
@@ -8068,7 +8088,7 @@ bool LLParser::ParseFunctionSummary(std::string Name, GlobalValue::GUID GUID,
   if (ParseToken(lltok::rparen, "expected ')' here"))
     return true;
 
-  auto FS = llvm::make_unique<FunctionSummary>(
+  auto FS = std::make_unique<FunctionSummary>(
       GVFlags, InstCount, FFlags, /*EntryCount=*/0, std::move(Refs),
       std::move(Calls), std::move(TypeIdInfo.TypeTests),
       std::move(TypeIdInfo.TypeTestAssumeVCalls),
@@ -8128,7 +8148,7 @@ bool LLParser::ParseVariableSummary(std::string Name, GlobalValue::GUID GUID,
     return true;
 
   auto GS =
-      llvm::make_unique<GlobalVarSummary>(GVFlags, GVarFlags, std::move(Refs));
+      std::make_unique<GlobalVarSummary>(GVFlags, GVarFlags, std::move(Refs));
 
   GS->setModulePath(ModulePath);
   GS->setVTableFuncs(std::move(VTableFuncs));
@@ -8169,7 +8189,7 @@ bool LLParser::ParseAliasSummary(std::string Name, GlobalValue::GUID GUID,
   if (ParseToken(lltok::rparen, "expected ')' here"))
     return true;
 
-  auto AS = llvm::make_unique<AliasSummary>(GVFlags);
+  auto AS = std::make_unique<AliasSummary>(GVFlags);
 
   AS->setModulePath(ModulePath);
 

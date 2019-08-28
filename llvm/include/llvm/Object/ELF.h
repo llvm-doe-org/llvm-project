@@ -64,6 +64,10 @@ std::string getSecIndexForError(const ELFFile<ELFT> *Obj,
   return "[unknown index]";
 }
 
+static inline Error defaultWarningHandler(const Twine &Msg) {
+  return createError(Msg);
+}
+
 template <class ELFT>
 class ELFFile {
 public:
@@ -95,6 +99,13 @@ public:
   using Elf_Relr_Range = typename ELFT::RelrRange;
   using Elf_Phdr_Range = typename ELFT::PhdrRange;
 
+  // This is a callback that can be passed to a number of functions.
+  // It can be used to ignore non-critical errors (warnings), which is
+  // useful for dumpers, like llvm-readobj.
+  // It accepts a warning message string and returns a success
+  // when the warning should be ignored or an error otherwise.
+  using WarningHandler = llvm::function_ref<Error(const Twine &Msg)>;
+
   const uint8_t *base() const { return Buf.bytes_begin(); }
 
   size_t getBufSize() const { return Buf.size(); }
@@ -114,7 +125,9 @@ public:
   template <typename T>
   Expected<const T *> getEntry(const Elf_Shdr *Section, uint32_t Entry) const;
 
-  Expected<StringRef> getStringTable(const Elf_Shdr *Section) const;
+  Expected<StringRef>
+  getStringTable(const Elf_Shdr *Section,
+                 WarningHandler WarnHandler = &defaultWarningHandler) const;
   Expected<StringRef> getStringTableForSymtab(const Elf_Shdr &Section) const;
   Expected<StringRef> getStringTableForSymtab(const Elf_Shdr &Section,
                                               Elf_Shdr_Range Sections) const;
@@ -201,14 +214,12 @@ public:
   /// \param Err [out] an error to support fallible iteration, which should
   ///  be checked after iteration ends.
   Elf_Note_Iterator notes_begin(const Elf_Phdr &Phdr, Error &Err) const {
-    if (Phdr.p_type != ELF::PT_NOTE) {
-      // TODO: this error is untested.
-      Err = createError("attempt to iterate notes of non-note program header");
-      return Elf_Note_Iterator(Err);
-    }
+    assert(Phdr.p_type == ELF::PT_NOTE && "Phdr is not of type PT_NOTE");
+    ErrorAsOutParameter ErrAsOutParam(&Err);
     if (Phdr.p_offset + Phdr.p_filesz > getBufSize()) {
-      // TODO: this error is untested.
-      Err = createError("invalid program header offset/size");
+      Err = createError("PT_NOTE header has invalid offset (0x" +
+                        Twine::utohexstr(Phdr.p_offset) + ") or size (0x" +
+                        Twine::utohexstr(Phdr.p_filesz) + ")");
       return Elf_Note_Iterator(Err);
     }
     return Elf_Note_Iterator(base() + Phdr.p_offset, Phdr.p_filesz, Err);
@@ -222,14 +233,13 @@ public:
   /// \param Err [out] an error to support fallible iteration, which should
   ///  be checked after iteration ends.
   Elf_Note_Iterator notes_begin(const Elf_Shdr &Shdr, Error &Err) const {
-    if (Shdr.sh_type != ELF::SHT_NOTE) {
-      // TODO: this error is untested.
-      Err = createError("attempt to iterate notes of non-note section");
-      return Elf_Note_Iterator(Err);
-    }
+    assert(Shdr.sh_type == ELF::SHT_NOTE && "Shdr is not of type SHT_NOTE");
+    ErrorAsOutParameter ErrAsOutParam(&Err);
     if (Shdr.sh_offset + Shdr.sh_size > getBufSize()) {
-      // TODO: this error is untested.
-      Err = createError("invalid section offset/size");
+      Err = createError("SHT_NOTE section " + getSecIndexForError(this, &Shdr) +
+                        " has invalid offset (0x" +
+                        Twine::utohexstr(Shdr.sh_offset) + ") or size (0x" +
+                        Twine::utohexstr(Shdr.sh_size) + ")");
       return Elf_Note_Iterator(Err);
     }
     return Elf_Note_Iterator(base() + Shdr.sh_offset, Shdr.sh_size, Err);
@@ -264,7 +274,9 @@ public:
     return make_range(notes_begin(Shdr, Err), notes_end());
   }
 
-  Expected<StringRef> getSectionStringTable(Elf_Shdr_Range Sections) const;
+  Expected<StringRef> getSectionStringTable(
+      Elf_Shdr_Range Sections,
+      WarningHandler WarnHandler = &defaultWarningHandler) const;
   Expected<uint32_t> getSectionIndex(const Elf_Sym *Sym, Elf_Sym_Range Syms,
                                      ArrayRef<Elf_Word> ShndxTable) const;
   Expected<const Elf_Shdr *> getSection(const Elf_Sym *Sym,
@@ -274,12 +286,13 @@ public:
                                         Elf_Sym_Range Symtab,
                                         ArrayRef<Elf_Word> ShndxTable) const;
   Expected<const Elf_Shdr *> getSection(uint32_t Index) const;
-  Expected<const Elf_Shdr *> getSection(const StringRef SectionName) const;
 
   Expected<const Elf_Sym *> getSymbol(const Elf_Shdr *Sec,
                                       uint32_t Index) const;
 
-  Expected<StringRef> getSectionName(const Elf_Shdr *Section) const;
+  Expected<StringRef>
+  getSectionName(const Elf_Shdr *Section,
+                 WarningHandler WarnHandler = &defaultWarningHandler) const;
   Expected<StringRef> getSectionName(const Elf_Shdr *Section,
                                      StringRef DotShstrtab) const;
   template <typename T>
@@ -358,21 +371,18 @@ ELFFile<ELFT>::getSection(const Elf_Sym *Sym, Elf_Sym_Range Symbols,
 }
 
 template <class ELFT>
-inline Expected<const typename ELFT::Sym *>
-getSymbol(typename ELFT::SymRange Symbols, uint32_t Index) {
-  if (Index >= Symbols.size())
-    // TODO: this error is untested.
-    return createError("invalid symbol index");
-  return &Symbols[Index];
-}
-
-template <class ELFT>
 Expected<const typename ELFT::Sym *>
 ELFFile<ELFT>::getSymbol(const Elf_Shdr *Sec, uint32_t Index) const {
-  auto SymtabOrErr = symbols(Sec);
-  if (!SymtabOrErr)
-    return SymtabOrErr.takeError();
-  return object::getSymbol<ELFT>(*SymtabOrErr, Index);
+  auto SymsOrErr = symbols(Sec);
+  if (!SymsOrErr)
+    return SymsOrErr.takeError();
+
+  Elf_Sym_Range Symbols = *SymsOrErr;
+  if (Index >= Symbols.size())
+    return createError("unable to get symbol from section " +
+                       getSecIndexForError(this, Sec) +
+                       ": invalid symbol index (" + Twine(Index) + ")");
+  return &Symbols[Index];
 }
 
 template <class ELFT>
@@ -465,7 +475,8 @@ ELFFile<ELFT>::getRelocationSymbol(const Elf_Rel *Rel,
 
 template <class ELFT>
 Expected<StringRef>
-ELFFile<ELFT>::getSectionStringTable(Elf_Shdr_Range Sections) const {
+ELFFile<ELFT>::getSectionStringTable(Elf_Shdr_Range Sections,
+                                     WarningHandler WarnHandler) const {
   uint32_t Index = getHeader()->e_shstrndx;
   if (Index == ELF::SHN_XINDEX)
     Index = Sections[0].sh_link;
@@ -473,9 +484,9 @@ ELFFile<ELFT>::getSectionStringTable(Elf_Shdr_Range Sections) const {
   if (!Index) // no section string table.
     return "";
   if (Index >= Sections.size())
-    // TODO: this error is untested.
-    return createError("invalid section index");
-  return getStringTable(&Sections[Index]);
+    return createError("section header string table index " + Twine(Index) +
+                       " does not exist");
+  return getStringTable(&Sections[Index], WarnHandler);
 }
 
 template <class ELFT> ELFFile<ELFT>::ELFFile(StringRef Object) : Buf(Object) {}
@@ -500,7 +511,8 @@ Expected<typename ELFT::ShdrRange> ELFFile<ELFT>::sections() const {
                        Twine(getHeader()->e_shentsize));
 
   const uint64_t FileSize = Buf.size();
-  if (SectionTableOffset + sizeof(Elf_Shdr) > FileSize)
+  if (SectionTableOffset + sizeof(Elf_Shdr) > FileSize ||
+      SectionTableOffset + (uintX_t)sizeof(Elf_Shdr) < SectionTableOffset)
     return createError(
         "section header table goes past the end of the file: e_shoff = 0x" +
         Twine::utohexstr(SectionTableOffset));
@@ -518,15 +530,22 @@ Expected<typename ELFT::ShdrRange> ELFFile<ELFT>::sections() const {
     NumSections = First->sh_size;
 
   if (NumSections > UINT64_MAX / sizeof(Elf_Shdr))
-    // TODO: this error is untested.
-    return createError("section table goes past the end of file");
+    return createError("invalid number of sections specified in the NULL "
+                       "section's sh_size field (" +
+                       Twine(NumSections) + ")");
 
   const uint64_t SectionTableSize = NumSections * sizeof(Elf_Shdr);
+  if (SectionTableOffset + SectionTableSize < SectionTableOffset)
+    return createError(
+        "invalid section header table offset (e_shoff = 0x" +
+        Twine::utohexstr(SectionTableOffset) +
+        ") or invalid number of sections specified in the first section "
+        "header's sh_size field (0x" +
+        Twine::utohexstr(NumSections) + ")");
 
   // Section table goes past end of file!
   if (SectionTableOffset + SectionTableSize > FileSize)
     return createError("section table goes past the end of file");
-
   return makeArrayRef(First, NumSections);
 }
 
@@ -545,8 +564,9 @@ template <typename T>
 Expected<const T *> ELFFile<ELFT>::getEntry(const Elf_Shdr *Section,
                                             uint32_t Entry) const {
   if (sizeof(T) != Section->sh_entsize)
-    // TODO: this error is untested.
-    return createError("invalid sh_entsize");
+    return createError("section " + getSecIndexForError(this, Section) +
+                       " has invalid sh_entsize: expected " + Twine(sizeof(T)) +
+                       ", but got " + Twine(Section->sh_entsize));
   size_t Pos = Section->sh_offset + Entry * sizeof(T);
   if (Pos + sizeof(T) > Buf.size())
     return createError("unable to access section " +
@@ -566,42 +586,26 @@ ELFFile<ELFT>::getSection(uint32_t Index) const {
 }
 
 template <class ELFT>
-Expected<const typename ELFT::Shdr *>
-ELFFile<ELFT>::getSection(const StringRef SectionName) const {
-  auto TableOrErr = sections();
-  if (!TableOrErr)
-    return TableOrErr.takeError();
-  for (auto &Sec : *TableOrErr) {
-    auto SecNameOrErr = getSectionName(&Sec);
-    if (!SecNameOrErr)
-      return SecNameOrErr.takeError();
-    if (*SecNameOrErr == SectionName)
-      return &Sec;
-  }
-  // TODO: this error is untested.
-  return createError("invalid section name");
-}
-
-template <class ELFT>
 Expected<StringRef>
-ELFFile<ELFT>::getStringTable(const Elf_Shdr *Section) const {
+ELFFile<ELFT>::getStringTable(const Elf_Shdr *Section,
+                              WarningHandler WarnHandler) const {
   if (Section->sh_type != ELF::SHT_STRTAB)
-    return createError("invalid sh_type for string table section " +
-                       getSecIndexForError(this, Section) +
-                       ": expected SHT_STRTAB, but got " +
-                       object::getELFSectionTypeName(getHeader()->e_machine,
-                                                     Section->sh_type));
+    if (Error E = WarnHandler("invalid sh_type for string table section " +
+                              getSecIndexForError(this, Section) +
+                              ": expected SHT_STRTAB, but got " +
+                              object::getELFSectionTypeName(
+                                  getHeader()->e_machine, Section->sh_type)))
+      return std::move(E);
+
   auto V = getSectionContentsAsArray<char>(Section);
   if (!V)
     return V.takeError();
   ArrayRef<char> Data = *V;
   if (Data.empty())
-    // TODO: this error is untested.
-    return createError("empty string table");
+    return createError("SHT_STRTAB string table section " +
+                       getSecIndexForError(this, Section) + " is empty");
   if (Data.back() != '\0')
-    return createError(object::getELFSectionTypeName(getHeader()->e_machine,
-                                                     Section->sh_type) +
-                       " string table section " +
+    return createError("SHT_STRTAB string table section " +
                        getSecIndexForError(this, Section) +
                        " is non-null terminated");
   return StringRef(Data.begin(), Data.size());
@@ -631,8 +635,11 @@ ELFFile<ELFT>::getSHNDXTable(const Elf_Shdr &Section,
   const Elf_Shdr &SymTable = **SymTableOrErr;
   if (SymTable.sh_type != ELF::SHT_SYMTAB &&
       SymTable.sh_type != ELF::SHT_DYNSYM)
-    // TODO: this error is untested.
-    return createError("invalid sh_type");
+    return createError("SHT_SYMTAB_SHNDX section is linked with " +
+                       object::getELFSectionTypeName(getHeader()->e_machine,
+                                                     SymTable.sh_type) +
+                       " section (expected SHT_SYMTAB/SHT_DYNSYM)");
+
   if (V.size() != (SymTable.sh_size / sizeof(Elf_Sym)))
     return createError("SHT_SYMTAB_SHNDX section has sh_size (" +
                        Twine(SymTable.sh_size) +
@@ -667,11 +674,12 @@ ELFFile<ELFT>::getStringTableForSymtab(const Elf_Shdr &Sec,
 
 template <class ELFT>
 Expected<StringRef>
-ELFFile<ELFT>::getSectionName(const Elf_Shdr *Section) const {
+ELFFile<ELFT>::getSectionName(const Elf_Shdr *Section,
+                              WarningHandler WarnHandler) const {
   auto SectionsOrErr = sections();
   if (!SectionsOrErr)
     return SectionsOrErr.takeError();
-  auto Table = getSectionStringTable(*SectionsOrErr);
+  auto Table = getSectionStringTable(*SectionsOrErr, WarnHandler);
   if (!Table)
     return Table.takeError();
   return getSectionName(Section, *Table);

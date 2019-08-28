@@ -49,6 +49,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <cassert>
+#include <cstdlib>
 #include <iterator>
 #include <memory>
 #include <utility>
@@ -1237,7 +1238,7 @@ MemorySSA::AccessList *MemorySSA::getOrCreateAccessList(const BasicBlock *BB) {
   auto Res = PerBlockAccesses.insert(std::make_pair(BB, nullptr));
 
   if (Res.second)
-    Res.first->second = llvm::make_unique<AccessList>();
+    Res.first->second = std::make_unique<AccessList>();
   return Res.first->second.get();
 }
 
@@ -1245,7 +1246,7 @@ MemorySSA::DefsList *MemorySSA::getOrCreateDefsList(const BasicBlock *BB) {
   auto Res = PerBlockDefs.insert(std::make_pair(BB, nullptr));
 
   if (Res.second)
-    Res.first->second = llvm::make_unique<DefsList>();
+    Res.first->second = std::make_unique<DefsList>();
   return Res.first->second.get();
 }
 
@@ -1554,10 +1555,10 @@ MemorySSA::CachingWalker<AliasAnalysis> *MemorySSA::getWalkerImpl() {
 
   if (!WalkerBase)
     WalkerBase =
-        llvm::make_unique<ClobberWalkerBase<AliasAnalysis>>(this, AA, DT);
+        std::make_unique<ClobberWalkerBase<AliasAnalysis>>(this, AA, DT);
 
   Walker =
-      llvm::make_unique<CachingWalker<AliasAnalysis>>(this, WalkerBase.get());
+      std::make_unique<CachingWalker<AliasAnalysis>>(this, WalkerBase.get());
   return Walker.get();
 }
 
@@ -1567,10 +1568,10 @@ MemorySSAWalker *MemorySSA::getSkipSelfWalker() {
 
   if (!WalkerBase)
     WalkerBase =
-        llvm::make_unique<ClobberWalkerBase<AliasAnalysis>>(this, AA, DT);
+        std::make_unique<ClobberWalkerBase<AliasAnalysis>>(this, AA, DT);
 
   SkipWalker =
-      llvm::make_unique<SkipSelfWalker<AliasAnalysis>>(this, WalkerBase.get());
+      std::make_unique<SkipSelfWalker<AliasAnalysis>>(this, WalkerBase.get());
   return SkipWalker.get();
  }
 
@@ -1687,13 +1688,15 @@ MemoryPhi *MemorySSA::createMemoryPhi(BasicBlock *BB) {
 
 MemoryUseOrDef *MemorySSA::createDefinedAccess(Instruction *I,
                                                MemoryAccess *Definition,
-                                               const MemoryUseOrDef *Template) {
+                                               const MemoryUseOrDef *Template,
+                                               bool CreationMustSucceed) {
   assert(!isa<PHINode>(I) && "Cannot create a defined access for a PHI");
   MemoryUseOrDef *NewAccess = createNewAccess(I, AA, Template);
-  assert(
-      NewAccess != nullptr &&
-      "Tried to create a memory access for a non-memory touching instruction");
-  NewAccess->setDefiningAccess(Definition);
+  if (CreationMustSucceed)
+    assert(NewAccess != nullptr && "Tried to create a memory access for a "
+                                   "non-memory touching instruction");
+  if (NewAccess)
+    NewAccess->setDefiningAccess(Definition);
   return NewAccess;
 }
 
@@ -1850,6 +1853,7 @@ void MemorySSA::verifyMemorySSA() const {
   verifyDomination(F);
   verifyOrdering(F);
   verifyDominationNumbers(F);
+  verifyPrevDefInPhis(F);
   // Previously, the verification used to also verify that the clobberingAccess
   // cached by MemorySSA is the same as the clobberingAccess found at a later
   // query to AA. This does not hold true in general due to the current fragility
@@ -1860,6 +1864,40 @@ void MemorySSA::verifyMemorySSA() const {
   // random, in the worst case we'd need to rebuild MemorySSA from scratch after
   // every transformation, which defeats the purpose of using it. For such an
   // example, see test4 added in D51960.
+}
+
+void MemorySSA::verifyPrevDefInPhis(Function &F) const {
+#ifndef NDEBUG
+  for (const BasicBlock &BB : F) {
+    if (MemoryPhi *Phi = getMemoryAccess(&BB)) {
+      for (unsigned I = 0, E = Phi->getNumIncomingValues(); I != E; ++I) {
+        auto *Pred = Phi->getIncomingBlock(I);
+        auto *IncAcc = Phi->getIncomingValue(I);
+        // If Pred has no unreachable predecessors, get last def looking at
+        // IDoms. If, while walkings IDoms, any of these has an unreachable
+        // predecessor, then the incoming def can be any access.
+        if (auto *DTNode = DT->getNode(Pred)) {
+          while (DTNode) {
+            if (auto *DefList = getBlockDefs(DTNode->getBlock())) {
+              auto *LastAcc = &*(--DefList->end());
+              assert(LastAcc == IncAcc &&
+                     "Incorrect incoming access into phi.");
+              break;
+            }
+            DTNode = DTNode->getIDom();
+          }
+        } else {
+          // If Pred has unreachable predecessors, but has at least a Def, the
+          // incoming access can be the last Def in Pred, or it could have been
+          // optimized to LoE. After an update, though, the LoE may have been
+          // replaced by another access, so IncAcc may be any access.
+          // If Pred has unreachable predecessors and no Defs, incoming access
+          // should be LoE; However, after an update, it may be any access.
+        }
+      }
+    }
+  }
+#endif
 }
 
 /// Verify that all of the blocks we believe to have valid domination numbers
@@ -2212,7 +2250,7 @@ MemorySSAAnalysis::Result MemorySSAAnalysis::run(Function &F,
                                                  FunctionAnalysisManager &AM) {
   auto &DT = AM.getResult<DominatorTreeAnalysis>(F);
   auto &AA = AM.getResult<AAManager>(F);
-  return MemorySSAAnalysis::Result(llvm::make_unique<MemorySSA>(F, &AA, &DT));
+  return MemorySSAAnalysis::Result(std::make_unique<MemorySSA>(F, &AA, &DT));
 }
 
 bool MemorySSAAnalysis::Result::invalidate(

@@ -1313,7 +1313,8 @@ static bool HoistThenElseCodeToIf(BranchInst *BI,
                              LLVMContext::MD_dereferenceable,
                              LLVMContext::MD_dereferenceable_or_null,
                              LLVMContext::MD_mem_parallel_loop_access,
-                             LLVMContext::MD_access_group};
+                             LLVMContext::MD_access_group,
+                             LLVMContext::MD_preserve_access_index};
       combineMetadata(I1, I2, KnownIDs, true);
 
       // I1 and I2 are being combined into a single instruction.  Its debug
@@ -4178,23 +4179,22 @@ bool SimplifyCFGOpt::SimplifyUnreachable(UnreachableInst *UI) {
     IRBuilder<> Builder(TI);
     if (auto *BI = dyn_cast<BranchInst>(TI)) {
       if (BI->isUnconditional()) {
-        if (BI->getSuccessor(0) == BB) {
-          new UnreachableInst(TI->getContext(), TI);
-          TI->eraseFromParent();
-          Changed = true;
-        }
+        assert(BI->getSuccessor(0) == BB && "Incorrect CFG");
+        new UnreachableInst(TI->getContext(), TI);
+        TI->eraseFromParent();
+        Changed = true;
       } else {
         Value* Cond = BI->getCondition();
         if (BI->getSuccessor(0) == BB) {
           Builder.CreateAssumption(Builder.CreateNot(Cond));
           Builder.CreateBr(BI->getSuccessor(1));
-          EraseTerminatorAndDCECond(BI);
-        } else if (BI->getSuccessor(1) == BB) {
+        } else {
+          assert(BI->getSuccessor(1) == BB && "Incorrect CFG");
           Builder.CreateAssumption(Cond);
           Builder.CreateBr(BI->getSuccessor(0));
-          EraseTerminatorAndDCECond(BI);
-          Changed = true;
         }
+        EraseTerminatorAndDCECond(BI);
+        Changed = true;
       }
     } else if (auto *SI = dyn_cast<SwitchInst>(TI)) {
       SwitchInstProfUpdateWrapper SU(*SI);
@@ -4274,6 +4274,17 @@ static bool CasesAreContiguous(SmallVectorImpl<ConstantInt *> &Cases) {
       return false;
   }
   return true;
+}
+
+static void createUnreachableSwitchDefault(SwitchInst *Switch) {
+  LLVM_DEBUG(dbgs() << "SimplifyCFG: switch default is dead.\n");
+  BasicBlock *NewDefaultBlock =
+     SplitBlockPredecessors(Switch->getDefaultDest(), Switch->getParent(), "");
+  Switch->setDefaultDest(&*NewDefaultBlock);
+  SplitBlock(&*NewDefaultBlock, &NewDefaultBlock->front());
+  auto *NewTerminator = NewDefaultBlock->getTerminator();
+  new UnreachableInst(Switch->getContext(), NewTerminator);
+  EraseTerminatorAndDCECond(NewTerminator);
 }
 
 /// Turn a switch with two reachable destinations into an integer range
@@ -4384,6 +4395,11 @@ static bool TurnSwitchRangeIntoICmp(SwitchInst *SI, IRBuilder<> &Builder) {
       cast<PHINode>(BBI)->removeIncomingValue(SI->getParent());
   }
 
+  // Clean up the default block - it may have phis or other instructions before
+  // the unreachable terminator.
+  if (!HasDefault)
+    createUnreachableSwitchDefault(SI);
+
   // Drop the switch.
   SI->eraseFromParent();
 
@@ -4428,14 +4444,7 @@ static bool eliminateDeadSwitchCases(SwitchInst *SI, AssumptionCache *AC,
   if (HasDefault && DeadCases.empty() &&
       NumUnknownBits < 64 /* avoid overflow */ &&
       SI->getNumCases() == (1ULL << NumUnknownBits)) {
-    LLVM_DEBUG(dbgs() << "SimplifyCFG: switch default is dead.\n");
-    BasicBlock *NewDefault =
-        SplitBlockPredecessors(SI->getDefaultDest(), SI->getParent(), "");
-    SI->setDefaultDest(&*NewDefault);
-    SplitBlock(&*NewDefault, &NewDefault->front());
-    auto *OldTI = NewDefault->getTerminator();
-    new UnreachableInst(SI->getContext(), OldTI);
-    EraseTerminatorAndDCECond(OldTI);
+    createUnreachableSwitchDefault(SI);
     return true;
   }
 
@@ -5025,7 +5034,7 @@ SwitchLookupTable::SwitchLookupTable(
   ArrayType *ArrayTy = ArrayType::get(ValueType, TableSize);
   Constant *Initializer = ConstantArray::get(ArrayTy, TableContents);
 
-  Array = new GlobalVariable(M, ArrayTy, /*constant=*/true,
+  Array = new GlobalVariable(M, ArrayTy, /*isConstant=*/true,
                              GlobalVariable::PrivateLinkage, Initializer,
                              "switch.table." + FuncName);
   Array->setUnnamedAddr(GlobalValue::UnnamedAddr::Global);

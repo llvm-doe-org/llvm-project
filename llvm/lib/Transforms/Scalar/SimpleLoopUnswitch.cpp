@@ -1463,8 +1463,8 @@ deleteDeadClonedBlocks(Loop &L, ArrayRef<BasicBlock *> ExitBlocks,
 
   // Remove all MemorySSA in the dead blocks
   if (MSSAU) {
-    SmallPtrSet<BasicBlock *, 16> DeadBlockSet(DeadBlocks.begin(),
-                                               DeadBlocks.end());
+    SmallSetVector<BasicBlock *, 8> DeadBlockSet(DeadBlocks.begin(),
+                                                 DeadBlocks.end());
     MSSAU->removeBlocks(DeadBlockSet);
   }
 
@@ -1482,7 +1482,7 @@ static void deleteDeadBlocksFromLoop(Loop &L,
                                      MemorySSAUpdater *MSSAU) {
   // Find all the dead blocks tied to this loop, and remove them from their
   // successors.
-  SmallPtrSet<BasicBlock *, 16> DeadBlockSet;
+  SmallSetVector<BasicBlock *, 8> DeadBlockSet;
 
   // Start with loop/exit blocks and get a transitive closure of reachable dead
   // blocks.
@@ -2552,7 +2552,7 @@ unswitchBestCondition(Loop &L, DominatorTree &DT, LoopInfo &LI,
       // We can only consider fully loop-invariant switch conditions as we need
       // to completely eliminate the switch after unswitching.
       if (!isa<Constant>(SI->getCondition()) &&
-          L.isLoopInvariant(SI->getCondition()))
+          L.isLoopInvariant(SI->getCondition()) && !BB->getUniqueSuccessor())
         UnswitchCandidates.push_back({SI, {SI->getCondition()}});
       continue;
     }
@@ -2880,7 +2880,7 @@ PreservedAnalyses SimpleLoopUnswitchPass::run(Loop &L, LoopAnalysisManager &AM,
   assert(AR.DT.verify(DominatorTree::VerificationLevel::Fast));
 
   auto PA = getLoopPassPreservedAnalyses();
-  if (EnableMSSALoopDependency)
+  if (AR.MSSA)
     PA.preserve<MemorySSAAnalysis>();
   return PA;
 }

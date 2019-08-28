@@ -6,13 +6,16 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "AST.h"
 #include "Annotations.h"
 #include "ClangdUnit.h"
 #include "SourceCode.h"
 #include "TestTU.h"
+#include "clang/AST/DeclTemplate.h"
 #include "clang/Basic/TokenKinds.h"
 #include "clang/Tooling/Syntax/Tokens.h"
 #include "llvm/Support/ScopedPrinter.h"
+#include "gmock/gmock-matchers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
@@ -21,6 +24,8 @@ namespace clangd {
 namespace {
 
 using ::testing::ElementsAre;
+using ::testing::ElementsAreArray;
+using ::testing::AllOf;
 
 TEST(ClangdUnitTest, GetBeginningOfIdentifier) {
   std::string Preamble = R"cpp(
@@ -72,6 +77,31 @@ MATCHER_P(DeclNamed, Name, "") {
   return false;
 }
 
+// Matches if the Decl has template args equal to ArgName. If the decl is a
+// NamedDecl and ArgName is an empty string it also matches.
+MATCHER_P(WithTemplateArgs, ArgName, "") {
+  if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(arg)) {
+    if (const auto *Args = FD->getTemplateSpecializationArgs()) {
+      std::string SpecializationArgs;
+      // Without the PrintingPolicy "bool" will be printed as "_Bool".
+      LangOptions LO;
+      PrintingPolicy Policy(LO);
+      Policy.adjustForCPlusPlus();
+      for (const auto Arg : Args->asArray()) {
+        if (SpecializationArgs.size() > 0)
+          SpecializationArgs += ",";
+        SpecializationArgs += Arg.getAsType().getAsString(Policy);
+      }
+      if (Args->size() == 0)
+        return ArgName == SpecializationArgs;
+      return ArgName == "<" + SpecializationArgs + ">";
+    }
+  }
+  if (const NamedDecl *ND = dyn_cast<NamedDecl>(arg))
+    return printTemplateSpecializationArgs(*ND) == ArgName;
+  return false;
+}
+
 TEST(ClangdUnitTest, TopLevelDecls) {
   TestTU TU;
   TU.HeaderCode = R"(
@@ -103,6 +133,65 @@ TEST(ClangdUnitTest, DoesNotGetIncludedTopDecls) {
   EXPECT_THAT(AST.getLocalTopLevelDecls(), ElementsAre(DeclNamed("main")));
 }
 
+TEST(ClangdUnitTest, DoesNotGetImplicitTemplateTopDecls) {
+  TestTU TU;
+  TU.Code = R"cpp(
+    template<typename T>
+    void f(T) {}
+    void s() {
+      f(10UL);
+    }
+  )cpp";
+
+  auto AST = TU.build();
+  EXPECT_THAT(AST.getLocalTopLevelDecls(),
+              ElementsAre(DeclNamed("f"), DeclNamed("s")));
+}
+
+TEST(ClangdUnitTest,
+     GetsExplicitInstantiationAndSpecializationTemplateTopDecls) {
+  TestTU TU;
+  TU.Code = R"cpp(
+    template <typename T>
+    void f(T) {}
+    template<>
+    void f(bool);
+    template void f(double);
+
+    template <class T>
+    struct V {};
+    template<class T>
+    struct V<T*> {};
+    template <>
+    struct V<bool> {};
+
+    template<class T>
+    T foo = T(10);
+    int i = foo<int>;
+    double d = foo<double>;
+
+    template <class T>
+    int foo<T*> = 0;
+    template <>
+    int foo<bool> = 0;
+  )cpp";
+
+  auto AST = TU.build();
+  EXPECT_THAT(
+      AST.getLocalTopLevelDecls(),
+      ElementsAreArray({AllOf(DeclNamed("f"), WithTemplateArgs("")),
+                        AllOf(DeclNamed("f"), WithTemplateArgs("<bool>")),
+                        AllOf(DeclNamed("f"), WithTemplateArgs("<double>")),
+                        AllOf(DeclNamed("V"), WithTemplateArgs("")),
+                        AllOf(DeclNamed("V"), WithTemplateArgs("<T *>")),
+                        AllOf(DeclNamed("V"), WithTemplateArgs("<bool>")),
+                        AllOf(DeclNamed("foo"), WithTemplateArgs("")),
+                        AllOf(DeclNamed("i"), WithTemplateArgs("")),
+                        AllOf(DeclNamed("d"), WithTemplateArgs("")),
+                        AllOf(DeclNamed("foo"), WithTemplateArgs("<T *>")),
+                        AllOf(DeclNamed("foo"), WithTemplateArgs("<bool>"))}));
+}
+
 TEST(ClangdUnitTest, TokensAfterPreamble) {
   TestTU TU;
   TU.AdditionalFiles["foo.h"] = R"(
@@ -132,6 +221,27 @@ TEST(ClangdUnitTest, TokensAfterPreamble) {
   ASSERT_FALSE(Spelled.empty());
   EXPECT_EQ(Spelled.front().kind(), tok::hash);
   EXPECT_EQ(Spelled.back().text(SM), "last_token");
+}
+
+
+TEST(ClangdUnitTest, NoCrashOnTokensWithTidyCheck) {
+  TestTU TU;
+  // this check runs the preprocessor, we need to make sure it does not break
+  // our recording logic.
+  TU.ClangTidyChecks = "modernize-use-trailing-return-type";
+  TU.Code = "inline int foo() {}";
+
+  auto AST = TU.build();
+  const syntax::TokenBuffer &T = AST.getTokens();
+  const auto &SM = AST.getSourceManager();
+
+  ASSERT_GT(T.expandedTokens().size(), 7u);
+  // Check first token after the preamble.
+  EXPECT_EQ(T.expandedTokens().front().text(SM), "inline");
+  // Last token is always 'eof'.
+  EXPECT_EQ(T.expandedTokens().back().kind(), tok::eof);
+  // Check the token before 'eof'.
+  EXPECT_EQ(T.expandedTokens().drop_back().back().text(SM), "}");
 }
 
 } // namespace
