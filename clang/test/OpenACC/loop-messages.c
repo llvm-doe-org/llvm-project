@@ -2086,19 +2086,18 @@ void fn() {
     for (int j = 0; j < 5; ++j)
       ;
   }
-  // sep-note@+3 2 {{while applying gang reduction to '#pragma acc parallel' here}}
-  // cmb-note@+2 2 {{while applying gang reduction to '#pragma acc parallel loop' here}}
-  // expected-note@+1 2 {{previous '+' reduction here}}
+  // sep-note@+2 2 {{while applying gang reduction to '#pragma acc parallel' here}}
+  // sep-note@+1 2 {{previous '+' reduction here}}
   #pragma acc parallel CMB_LOOP reduction(+:f)
   CMB_FORLOOP_HEAD
   {
-    // expected-error@+1 {{conflicting '*' reduction for variable 'f'}}
+    // sep-error@+1 {{conflicting '*' reduction for variable 'f'}}
     #pragma acc loop gang reduction(*:f)
     for (int j = 0; j < 5; ++j)
       ;
     // expected-error@+3 {{redundant '*' reduction for variable 'f'}}
     // expected-note@+2 {{previous '*' reduction here}}
-    // expected-error@+1 {{conflicting '*' reduction for variable 'f'}}
+    // sep-error@+1 {{conflicting '*' reduction for variable 'f'}}
     #pragma acc loop gang worker reduction(*:f,f)
     for (int j = 0; j < 5; ++j)
       ;
@@ -2159,8 +2158,8 @@ void fn() {
     }
   }
   // sep-note@+3 2 {{while applying gang reduction to '#pragma acc parallel' here}}
-  // cmb-note@+2 2 {{while applying gang reduction to '#pragma acc parallel loop' here}}
-  // expected-note@+1 {{previous '^' reduction here}}
+  // cmb-note@+2 1 {{while applying gang reduction to '#pragma acc parallel loop' here}}
+  // sep-note@+1 {{previous '^' reduction here}}
   #pragma acc parallel CMB_LOOP reduction(^:e)
   CMB_FORLOOP_HEAD
   {
@@ -2183,7 +2182,7 @@ void fn() {
     }
     #pragma acc loop seq
     for (int i = 0; i < 5; ++i) {
-      // expected-error@+2 {{conflicting '||' reduction for variable 'e'}}
+      // sep-error@+2 {{conflicting '||' reduction for variable 'e'}}
       // expected-note@+1 {{previous '||' reduction here}}
       #pragma acc loop gang reduction(||:e,d)
       for (int j = 0; j < 5; ++j)

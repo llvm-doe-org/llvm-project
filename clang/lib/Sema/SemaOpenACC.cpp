@@ -735,25 +735,39 @@ public:
     for (ACCClause *C : D->clauses()) {
       if (!C)
         return;
-      // A reference to a variable in a private clause does not require a data
-      // sharing clause on the directives enclosing this one, and any reference
-      // to the private copy doesn't either.  Variables in firstprivate and
-      // reduction clauses do, so it's not useful to list them in
-      // LocalDefinitions.  Moreover, if a reduction variable were listed in
-      // LocalDefinitions, we would not recognize conflicting nested reductions
-      // as being for the same variable.
       if (auto PC = dyn_cast<ACCPrivateClause>(C)) {
+        // Skip computing data-sharing attributes and gang reductions for these
+        // variables due to references to them within the construct because
+        // those references refer to local copies.
         for (const Expr *VR : PC->varlists()) {
           const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
           const VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
           LocalDefinitions.back().insert(VD);
         }
+        // Skip computing data-sharing attributes for these variables due to
+        // the references within the clause itself.
         continue;
       }
+      // Compute data-sharing attributes for these variables due to the
+      // references within the clause itself.  For clauses other than private,
+      // this is necessary because at least the variables' original values are
+      // needed.
       for (Stmt *Child : C->children()) {
         if (Child)
           Visit(Child);
       }
+      if (auto PC = dyn_cast<ACCReductionClause>(C)) {
+        // Skip computing data-sharing attributes and gang reductions for these
+        // variables due to references to them within the construct because
+        // those references refer to local copies.
+        for (const Expr *VR : PC->varlists()) {
+          const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
+          const VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
+          LocalDefinitions.back().insert(VD);
+        }
+      }
+      // firstprivate is currently impossible because we're always within an
+      // acc parallel looking at an acc loop, which does not take firstprivate.
     }
     for (auto *Child : D->children()) {
       if (Child)

@@ -596,15 +596,33 @@ this section.
       L1569-1573 says there is no gang reduction for private
       variables.  However, that text is confusing in multiple ways, so
       Clacc just follows pgcc and gcc behavior.
+    * There is discussion in the OpenACC technical committee about
+      specifying that a gang reduction on an `acc loop` implies a
+      `copy` clause on the enclosing `acc parallel` to override the
+      *imp* `firstprivate` just as a reduction on an `acc parallel` or
+      `acc parallel loop` does.  Thus, such variables wouldn't then be
+      private, and the resulting behavior would appear to agree with
+      the aforementioned behavior from gcc and pgcc.  However, every
+      proposal considered so far produces surprising or non-portable
+      behavior in some cases, so this might not materialize, and the
+      future of this behavior is unclear.
 * Given some variable *v* that is declared outside an `acc parallel`,
-  if (1) neither *exp* `firstprivate(`*v*`)` nor *exp*
-  `private(`*v*`)` on that `acc parallel`, and (2) *exp*
-  `reduction(`*o*`:`*v*`)` on any nested gang-partitioned `acc loop`,
-  then this `acc parallel` has *imp* `reduction(`*o*`:`*v*`)`.  Notes:
-    * If the first condition doesn't hold but the second does, then
-      the reduction refers to the gang-private copy of *v*, so no
-      gang-reduction is implied.  In our experiments, gcc 7.3.0 and
-      pgcc 18.4-0 also appear to have this behavior.
+  if *exp* `reduction(`*o*`:`*v*`)` on any nested gang-partitioned
+  `acc loop`, then *imp* `reduction(`*o*`:`*v*`)` on this `acc
+  parallel`.  Notes:
+    * The condition doesn't hold if *v* in the aforementioned *exp*
+      `reduction` refers to an explicitly gang-private copy of the
+      original *v*.  That is, either on the `acc parallel` or an `acc
+      loop` nested between the `acc parallel` and the gang-partitioned
+      `acc loop`, *v* might appear in an *exp* `firstprivate`, *exp*
+      `private`, or *exp* `reduction`.  Another possibility is a local
+      declaration of *v*.
+    * There is discussion in the OpenACC technical committee about the
+      right way to handle a reduction for a gang-private variable on a
+      gang-partitioned loop.  One proposal under discussion is to
+      simply ignore the reduction because it specifies a trivial
+      reduction across a single gang.  This is what Clacc does now,
+      following the above rule.
 * It is an error if, on a particular OpenACC directive, there exist
   multiple *imp|exp* `reduction` with different reduction operators
   for a single variable *v*.
