@@ -2964,7 +2964,19 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   if (Opts.OpenACC) {
     if (Opts.OpenMP)
       Diags.Report(clang::diag::err_drv_acc_omp_not_supported);
-    Opts.OpenMP = 45;
+    // We choose OpenMP 5.0 so that, for example, "acc parallel copyin(x)
+    // reduction(+:x)" can be translated to "omp target teams map(to:x)
+    // reduction(+:x)" without the OpenMP implementation complaining that map
+    // and reduction cannot be specified for the same variable.  That is,
+    // OpenMP 5.0 sec. 2.19.7.1 p. 321 L25-26 says:
+    //
+    // "A list item cannot appear in both a map clause and a data-sharing
+    // attribute clause on the same construct unless the construct is a
+    // combined construct."
+    //
+    // However, OpenMP 4.5 omits the text "unless the construct is a combined
+    // construct".
+    Opts.OpenMP = 50;
   }
 
   // Check if -fopenmp-simd is specified.
@@ -2982,9 +2994,10 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   if (Opts.OpenMP || Opts.OpenMPSimd) {
     if (int Version = getLastArgIntValue(
             Args, OPT_fopenmp_version_EQ,
-            (IsSimdSpecified || IsTargetSpecified) ? 45 : Opts.OpenMP, Diags))
+            ((IsSimdSpecified || IsTargetSpecified)) && !Opts.OpenACC
+            ? 45 : Opts.OpenMP, Diags))
       Opts.OpenMP = Version;
-    else if (IsSimdSpecified || IsTargetSpecified)
+    else if ((IsSimdSpecified || IsTargetSpecified) && !Opts.OpenACC)
       Opts.OpenMP = 45;
     // Provide diagnostic when a given target is not expected to be an OpenMP
     // device or host.

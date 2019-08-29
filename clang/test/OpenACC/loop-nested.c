@@ -227,7 +227,7 @@
 // RUN:              -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2' \
 // RUN:               %[cmb-cflags]
 // RUN:       echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:       %clang -Xclang -verify -fopenmp -o %t %t-omp.c \
+// RUN:       %clang -Xclang -verify -fopenmp %fopenmp-version -o %t %t-omp.c \
 // RUN:              -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
 // RUN:              -DITRS0=%'itrs0' -DITRS1=%'itrs1' -DITRS2=%'itrs2' \
 // RUN:               %[cmb-cflags]

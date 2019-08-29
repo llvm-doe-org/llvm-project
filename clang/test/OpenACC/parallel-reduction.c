@@ -81,8 +81,8 @@
 // RUN:   %for prt-opts {
 // RUN:     %clang -Xclang -verify %[prt-opt]=omp %[dir-cflags] %s > %t-omp.c
 // RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:     %clang -Xclang -verify -fopenmp -o %t %t-omp.c %libatomic \
-// RUN:            %[dir-cflags]
+// RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version -o %t %t-omp.c \
+// RUN:            %libatomic %[dir-cflags]
 // RUN:     %t 2 2>&1 \
 // RUN:     | FileCheck -check-prefixes=EXE,EXE-%[dir],EXE-TGT-HOST %s
 // RUN:   }

@@ -317,7 +317,7 @@
 // RUN:     %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c \
 // RUN:            -DACCC=%'accc'
 // RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:     %clang -Xclang -verify -fopenmp -o %t %t-omp.c \
+// RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version -o %t %t-omp.c \
 // RUN:            -DACCC=%'accc'
 // RUN:     %t | FileCheck -check-prefixes=%[exe] %s
 // RUN:   }
