@@ -1127,11 +1127,15 @@ possible solutions:
       yet.
 * A gang reduction specified on an orphaned `acc loop` directive
   because the enclosing compute construct to which the reduction would
-  normally be applied during translation is not statically visible.
-* `acc loop` directive that observes `num_workers` and `vector_length`
-  because the enclosing compute construct from which those clauses
-  would normally be applied during translation is not statically
-  visible.
+  normally be applied during translation is not statically visible.  A
+  restriction against this case already appears in OpenACC 2.7 (and
+  earlier), but it does not include the case of a gang reduction for a
+  gang-shared variable on a non-gang loop.  Text has been proposed for
+  inclusion in the OpenACC spec after 2.7 to clarify.
+* Orphaned `acc loop` directive that observes `num_workers` and
+  `vector_length` because the enclosing compute construct from which
+  those clauses would normally be applied during translation is not
+  statically visible.
 * Multiple reference counters because OpenMP has just one reference
   counter.
 
