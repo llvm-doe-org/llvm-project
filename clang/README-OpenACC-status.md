@@ -115,7 +115,7 @@ We have implemented and tested support for the following features:
     * `collapse` clause
     * data sharing:
         * for loop control variable:
-            * implicit `shared` if `seq` is explictly specified and
+            * implicit `shared` if `seq` is explicitly specified and
               loop control variable is assigned but not declared in
               init of attached `for` loop
             * predetermined `private` otherwise
