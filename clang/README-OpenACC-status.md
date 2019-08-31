@@ -19,11 +19,15 @@ We have implemented and tested support for the following features:
 * `parallel` directive:
     * use without clauses
     * data sharing:
-        * implicit `shared`
-        * implicit `firstprivate`
+        * implicit `copy` for non-scalars
+        * implicit `firstprivate` for scalars
+        * `copy` clause
         * `firstprivate` clause
         * `private` clause
         * `reduction` clause:
+            * supports only scalars for now
+            * implies `copy` clause (overriding the implicit
+              `firstprivate` clause)
             * `+`, `*`, `&&`, and `||` support exactly C11's
               arithmetic types (integer and floating types).
             * `max` and `min` support exactly C11's real types
@@ -34,23 +38,6 @@ We have implemented and tested support for the following features:
                 * OpenACC 2.6 sec. 2.5.12p774 mistypes `^` as `%`.
                   The latter would be nonsense as a reduction
                   operator.
-                * The interaction between `reduction` and other data
-                  sharing attributes is not exactly as specified in
-                  OpenACC 2.6.  For example, in Clacc, any gang-like
-                  reduction specified on an `acc loop` or `acc
-                  parallel loop` directive implies a reduction clause
-                  on the enclosing `acc parallel` directive, and that
-                  makes the reduction variable gang-private within the
-                  `acc parallel`, but OpenACC leaves the possibility
-                  that it could be gang-shared.  Moreover, Clacc
-                  considers `firstprivate`, `private`, and `reduction`
-                  to be contradictory specifications for a variable,
-                  but OpenACC treats `reduction` as orthogonal to the
-                  others.  OpenACC 2.6 is actually unclear in many
-                  cases about the handling of `reduction`, and many
-                  improvements have been proposed for OpenACC 2.7.  We
-                  will update Clacc as the OpenACC specification is
-                  improved.
                 * OpenACC 2.6 specifies that reduction operators
                   support "the numerical data types in C", which is
                   not terminology used by the C11 standard, and then
@@ -122,12 +109,16 @@ We have implemented and tested support for the following features:
         * implicit `shared` for other referenced variables
         * `private` clause
         * `reduction` clause:
-            * Discarded in the case of sequential loops.  This
-              decision should not impact behavior as long as the
-              operator that the loop body effectively performs on the
-              variable is the same as the `reduction` operator.
             * See `reduction` clause for `parallel` directive for
               general details about operand types and limitations.
+            * Various subtleties in the semantics of `reduction`
+              clauses on `acc loop` are discussed in the "Semantic
+              Clarifications" section in `README-OpenACC-design.md`.
+              For example, a reduction on a sequential loop specifies
+              a reduction across gangs if the reduction variable is
+              gang-shared.  Many of these subtleties are under
+              discussion among the OpenACC technical committee for
+              clarification in the OpenACC spec after 2.7.
     * detection of `break` statement for the associated loop:
         * compile error if implicit/explicit `independent`
         * no error if `seq` or `auto`
@@ -140,9 +131,11 @@ We have implemented and tested support for the following features:
           `break` statements for nested loops that are associated via
           a `collapse` clause, but that's probably a bug.
     * any number of levels of nesting within other `loop` directives
-* `acc parallel loop`:
-    * All features currently supported by `acc parallel` and `acc
-      loop` are also supported here.
+* `parallel loop` directive:
+    * All features currently supported by `parallel` and `loop`
+      directives are also supported here.
+    * `copy` clause implied by `reduction` clause (overriding the
+      implicit `firstprivate` clause)
 * language support:
     * C11 with the following extensions:
         * `__uint128_t`, `__int128_t`, `__SIZEOF_INT128__`
@@ -168,36 +161,10 @@ following features for now:
     * clauses not listed in the previous section
     * nesting (other than `loop` directives within `loop` directives
       or within `parallel` directives)
+    * non-scalars in `reduction` clauses
 * `loop` directive:
     * outside a `parallel` directive
     * `gang`, `worker`, and `vector` clause arguments
-* Implicit `copy` clause for variables specified in `reduction`
-  clauses on `acc parallel` and `acc parallel loop` directives:
-    * This behavior is proposed for OpenACC 2.7 and is more intuitive
-      than the behavior specified by OpenACC 2.6.
-    * For example, for `acc parallel loop worker reduction(*:x)`,
-      OpenACC 2.6 specifies an implicit `firstprivate(x)` on the
-      effective `acc parallel`, making the reduction useless.
-      However, the proposed OpenACC 2.7 behavior is for `copy(x)` to
-      be implied on the effective `acc parallel`, making the reduction
-      useful.
-    * Imagine if we change `worker` to `gang` in the above example.
-      The correct OpenACC 2.6 behavior is not clear because now we
-      have a gang reduction on a gang-private variable.  If we split
-      the combined directive with the reduction explicitly specified
-      only on the `acc loop`, the proposed OpenACC 2.7 behavior is
-      also not clear because `firstprivate(x)` is then implied, so we
-      again have a gang reduction on a gang-private variable.
-      `copy(x)` probably should be implied in this case.
-    * Currently, Clacc handles all gang-like reductions that would be
-      specified by the OpenACC 2.7 behavior as a reduction on the `acc
-      parallel`.  However, that means all references to the reduction
-      variable within the `acc parallel` refer to gang-private copies
-      even though the proposed OpenACC 2.7 behavior in some cases is
-      for those references to refer to the gang-shared variable.  See
-      "Unmappable Features" in README-OpenACC-design.md for details on
-      how we might or might not fix this issue in the OpenMP
-      translation.
 * language support:
     * C extensions:
         * nested function definitions

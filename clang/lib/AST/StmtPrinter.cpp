@@ -957,6 +957,14 @@ void ACCClausePrinter::VisitACCClauseList(T *Node, char StartSym) {
   }
 }
 
+void ACCClausePrinter::VisitACCCopyClause(ACCCopyClause *Node) {
+  if (!Node->varlist_empty()) {
+    OS << "copy";
+    VisitACCClauseList(Node, '(');
+    OS << ")";
+  }
+}
+
 void ACCClausePrinter::VisitACCSharedClause(ACCSharedClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "shared";

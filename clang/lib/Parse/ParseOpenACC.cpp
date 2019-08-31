@@ -170,7 +170,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
 ///  Parsing of OpenACC clauses.
 ///
 ///    clause:
-///       private-clause | firstprivate-clause | reduction-clause
+///       copy-clause | private-clause | firstprivate-clause | reduction-clause
 ///       | num_gangs-clause | num_workers-clause | vector_length-clause
 ///       | seq-clause | independent-clause | auto-clause
 ///       | gang-clause | worker-clause | vector-clause | collapse-clause
@@ -254,6 +254,7 @@ ACCClause *Parser::ParseOpenACCClause(
     }
     Clause = ParseOpenACCClause(CKind, WrongDirective);
     break;
+  case ACCC_copy:
   case ACCC_private:
   case ACCC_firstprivate:
   case ACCC_reduction:

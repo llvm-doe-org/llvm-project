@@ -9335,6 +9335,8 @@ def err_omp_lambda_capture_in_declare_target_not_to : Error<
 
 let CategoryName = "OpenACC Issue" in {
 // OpenACC support.
+def err_acc_copy_incomplete_type : Error<
+  "variable in 'copy' clause cannot have incomplete type %0">;
 def err_acc_private_incomplete_type : Error<
   "private variable cannot have incomplete type %0">;
 def err_acc_firstprivate_incomplete_type : Error<
@@ -9345,9 +9347,11 @@ def err_acc_wrong_dsa : Error<
   "%0 variable cannot be %1">;
 def note_acc_explicit_dsa : Note<
   "defined as %0">;
+def err_acc_const_copy : Error<
+  "variable in 'copy' clause cannot be const">;
 def err_acc_const_private : Error<
   "const variable cannot be private because initialization is impossible">;
-def note_acc_const_private : Note<
+def note_acc_const : Note<
   "variable %0 declared const here">;
 def err_acc_clause_not_ice : Error<
   "argument to '%0' clause must be an integer constant expression">;

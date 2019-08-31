@@ -9823,6 +9823,11 @@ public:
       SourceLocation StartLoc, SourceLocation LParenLoc,
       SourceLocation ColonLoc, SourceLocation EndLoc,
       const DeclarationNameInfo &ReductionId);
+  /// Called for well-formed 'copy' clause.
+  ACCClause *ActOnOpenACCCopyClause(ArrayRef<Expr *> VarList,
+                                    SourceLocation StartLoc,
+                                    SourceLocation LParenLoc,
+                                    SourceLocation EndLoc);
   /// Called for implicit 'shared' clause.
   ACCClause *ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList);
   /// Called on well-formed 'private' clause.

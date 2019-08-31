@@ -38,6 +38,7 @@ clang::getPrivateVarsFromClause(const ACCClause *C) {
     return cast<ACCFirstprivateClause>(C)->varlists();
   case ACCC_reduction:
     return cast<ACCReductionClause>(C)->varlists();
+  case ACCC_copy:
   case ACCC_shared:
   case ACCC_num_gangs:
   case ACCC_num_workers:
@@ -55,6 +56,23 @@ clang::getPrivateVarsFromClause(const ACCClause *C) {
     llvm_unreachable("unexpected unknown ACCClause");
   }
   llvm_unreachable("unexpected ACCClause");
+}
+
+ACCCopyClause *
+ACCCopyClause::Create(const ASTContext &C, SourceLocation StartLoc,
+                      SourceLocation LParenLoc, SourceLocation EndLoc,
+                      ArrayRef<Expr *> VL) {
+  // Allocate space for private variables and initializer expressions.
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
+  ACCCopyClause *Clause = new (Mem) ACCCopyClause(StartLoc, LParenLoc, EndLoc,
+                                                  VL.size());
+  Clause->setVarRefs(VL);
+  return Clause;
+}
+
+ACCCopyClause *ACCCopyClause::CreateEmpty(const ASTContext &C, unsigned N) {
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
+  return new (Mem) ACCCopyClause(N);
 }
 
 ACCSharedClause *

@@ -89,9 +89,7 @@ OPENACC_DIRECTIVE_EXT(parallel_loop, "parallel loop")
 // combinable with a reduction) or OPENACC_CLAUSE_AND_REDUCTION_BASE_DSA (a
 // base DSA combinable with a reduction) and never with either OPENACC_BASE_DSA
 // or OPENACC_REDUCTION_BASE_DSA directly.
-//
-// TODO: We haven't yet implemented any of the base DSAs that are combinable
-// with reductions.  An example is copy.
+OPENACC_CLAUSE_AND_REDUCTION_BASE_DSA(copy, ACCCopyClause)
 OPENACC_CLAUSE_AND_BASE_DSA(shared, ACCSharedClause)
 OPENACC_CLAUSE_AND_BASE_DSA(private, ACCPrivateClause)
 OPENACC_CLAUSE_AND_BASE_DSA(firstprivate, ACCFirstprivateClause)
@@ -108,7 +106,7 @@ OPENACC_CLAUSE(vector, ACCVectorClause)
 OPENACC_CLAUSE(collapse, ACCCollapseClause)
 
 // Explicit clauses and base DSAs allowed for OpenACC directive 'parallel'.
-OPENACC_PARALLEL_BASE_DSA(shared)
+OPENACC_PARALLEL_CLAUSE_AND_BASE_DSA(copy)
 OPENACC_PARALLEL_CLAUSE_AND_BASE_DSA(private)
 OPENACC_PARALLEL_CLAUSE_AND_BASE_DSA(firstprivate)
 OPENACC_PARALLEL_CLAUSE(reduction)
@@ -130,6 +128,7 @@ OPENACC_LOOP_CLAUSE(collapse)
 
 // Explicit clauses allowed for OpenACC directive 'parallel loop'.  DSAs are
 // checked only for effective directives, so there's need to list them here.
+OPENACC_PARALLEL_LOOP_CLAUSE(copy)
 OPENACC_PARALLEL_LOOP_CLAUSE(private)
 OPENACC_PARALLEL_LOOP_CLAUSE(firstprivate)
 OPENACC_PARALLEL_LOOP_CLAUSE(reduction)

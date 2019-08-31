@@ -550,79 +550,137 @@ this section.
 
 ### Basic Data Sharing ###
 
-* It is an error if a variable has more than one of *exp*
-  `firstprivate`, *exp* `private`, or *exp* `reduction` on an OpenACC
-  directive.  Notes:
-    * These have contradictory specifications for initialization of
-      the local copy of the variable.
-    * Relative to `firstprivate` and `private`, `reduction` has a
+* It is an error if a variable has more than one of *exp* `copy`,
+  *exp* `firstprivate`, or *exp* `private` an OpenACC directive.
+  Notes:
+    * Relative to `copy` and `firstprivate`, `private` has a
+      contradictory specification for initialization of the local copy
+      of the variable.
+    * Relative to `firstprivate` and `private`, `copy` has a
       contradictory specification for storing data back to the
       original variable.
-* While OpenACC does not define a `shared` clause, Clacc assigns the
-  OpenMP *imp* `shared` semantics to any variable that is referenced
-  within an OpenACC construct and declared outside it and for which
-  OpenACC semantics do not specify `firstprivate`, `private`, or
-  `reduction`.
-    * TODO: This really doesn't make sense for `omp distribute`
-      because a team-private variable cannot become team-shared at the
-      `omp distribute`.  It probably doesn't make sense for `omp
-      simd`, which doesn't permit `shared` either.  Anyway, as noted
-      in the mappings below, Clacc relies on implicit data sharing
-      there because *exp* `shared` isn't permitted, so the
-      implementation seems right, but our description here seems
-      misleading.
-* *exp* `firstprivate`, *exp* `private`, or *exp* `reduction` for a
-  variable of incomplete type is an error.  Notes:
+    * On a combined construct, `copy` and `firstprivate` apply to the
+      effective `acc parallel`, and `private` applies to the effective
+      `acc loop`.  Thus, specifying a variable in either `copy` or
+      `firstprivate` and also in `private` wouldn't be contradictory.
+      However, it is surely a mistake as it specifies copying in a
+      value you cannot then access or copying out an unchanged value.
+      Thus, the above restriction applies to a combined construct as
+      well.
+* It is an error if a variable has *exp* `reduction` as well as either
+  *exp* `firstprivate` or *exp* `private` on an OpenACC directive.
+  Notes:
+    * These have contradictory specifications for initialization of
+      the local copy of the variable and for storing data back to the
+      original variable.
+    * On a combined construct, `firstprivate` applies to the effective
+      `acc parallel`, and `reduction` applies to the effective `acc
+      loop`.  Thus, specifying a variable in both wouldn't be
+      contradictory.  However, it is surely a mistake as you cannot
+      access the reduced value.  Thus, the above restriction applies
+      to a combined construct as well.
+* *exp* `copy`, *exp* `firstprivate`, *exp* `private`, or *exp*
+  `reduction` for a variable of incomplete type is an error.  Notes:
     * A local copy must be allocated in each of these cases, but
       allocation is impossible for incomplete types.
-* *exp* `private` or *exp* `reduction` for a `const` variable is an
-  error.  Notes:
+* *exp* `copy`, *exp* `private`, or *exp* `reduction` for a `const`
+  variable is an error.  Notes:
     * The local copy of a `const` private variable would remain
       uninitialized throughout its lifetime.
     * A reduction assigns to both the original variable and a local
       copy after its initialization, but `const` prevents that.
+    * `copy` assigns to the original, but `const` prevents that.
     * `firstprivate` is fine for a `const` variable.  The local copy
       will have the original variable's value throughout its lifetime.
+* An *imp* `copy` for a reduction variable overrides an *imp*
+  `firstprivate` when the variable is a scalar.  Text to make this
+  overriding behavior clear has been proposed for inclusion in the
+  OpenACC spec after 2.7.
+* While OpenACC does not define a `shared` clause, this design
+  document and Clacc's implementation use the concept of *imp*
+  `shared` for any variable that is referenced within an OpenACC
+  `loop` construct, that is declared outside it, and for which OpenACC
+  semantics do not specify `private` or `reduction`.  Notes:
+    * `shared` really just indicates that references to the variable
+      within the `loop` construct reference the original variable.
+    * In many cases, Clacc translates `shared` to OpenMP's `shared`
+      clause.  However, `omp distribute` and `omp simd` do not accept
+      *exp* `shared`.  As noted in the mappings below, Clacc relies on
+      OpenMP implicit data sharing attributes in those cases, and the
+      semantics are the desired OpenACC semantics.
 
 ### Reductions ###
 
-* Given some variable *v*, rules to assign *imp* `shared(`*v*`)` or
-  *imp* `firstprivate(`*v*`)` on an `acc parallel` directive are
-  ignored if the following rule would then produce an *imp*
-  `reduction` for *v* on that `acc parallel`.  Notes:
-    * In our experiments, both gcc 7.3.0 and pgcc 18.10-0 perform a
-      gang reduction as described in this rule and the following rule
-      when *v* is *imp* `firstprivate`, but OpenACC 2.7 sec. 2.9.11
-      L1569-1573 says there is no gang reduction for private
-      variables.  However, that text is confusing in multiple ways, so
-      Clacc just follows pgcc and gcc behavior.
-    * There is discussion in the OpenACC technical committee about
-      specifying that a gang reduction on an `acc loop` implies a
-      `copy` clause on the enclosing `acc parallel` to override the
-      *imp* `firstprivate` just as a reduction on an `acc parallel` or
-      `acc parallel loop` does.  Thus, such variables wouldn't then be
-      private, and the resulting behavior would appear to agree with
-      the aforementioned behavior from gcc and pgcc.  However, every
-      proposal considered so far produces surprising or non-portable
-      behavior in some cases, so this might not materialize, and the
-      future of this behavior is unclear.
-* Given some variable *v* that is declared outside an `acc parallel`,
-  if *exp* `reduction(`*o*`:`*v*`)` on any nested gang-partitioned
-  `acc loop`, then *imp* `reduction(`*o*`:`*v*`)` on this `acc
+* If *exp* `reduction(`*o*`:`*v*`)` on an `acc loop`, and if *v* is
+  gang-private, then:
+    * If the loop is sequential, the reduction is trivial.
+    * If the loop is gang-partitioned, the specified gang reduction is
+      a trivial reduction per gang.
+    * Notes:
+        * Text to clarify that such reductions are trivial has been
+          proposed for inclusion in the OpenACC spec after 2.7.
+        * In the case of a trivial gang reduction, there can still be
+          a non-trivial worker or vector reduction if the loop is also
+          worker-partitioned or vector-partitioned.
+        * A trivial reduction reduces across only one thread.  Thus,
+          the reduction specifies the creation of a single private
+          copy of *v* that is initialized and later merged back to the
+          original *v* according *o*.  The only way that behavior
+          appears to be different than just discarding the reduction
+          is if either (1) the loop body performs an operation on *v*
+          that's inconsistent with *o*, or (2) there's a race on
+          writes to the original *v* that's somehow avoided when
+          postponing the write to the exit of the loop.  Clacc makes
+          the assumption that these are likely broken use cases and
+          need not be supported.  Thus, Clacc implements these trivial
+          reductions by simply discarding them in the translation to
+          OpenMP.
+* If *exp* `reduction(`*o*`:`*v*`)` on an `acc loop`, and if *v* is
+  gang-shared, then *imp* `reduction(`*o*`:`*v*`)` on the parent `acc
   parallel`.  Notes:
-    * The condition doesn't hold if *v* in the aforementioned *exp*
-      `reduction` refers to an explicitly gang-private copy of the
-      original *v*.  That is, either on the `acc parallel` or an `acc
-      loop` nested between the `acc parallel` and the gang-partitioned
-      `acc loop`, *v* might appear in an *exp* `firstprivate`, *exp*
-      `private`, or *exp* `reduction`.  Another possibility is a local
-      declaration of *v*.
-    * There is discussion in the OpenACC technical committee about the
-      right way to handle a reduction for a gang-private variable on a
-      gang-partitioned loop.  One proposal under discussion is to
-      simply ignore the reduction because it specifies a trivial
-      reduction across a single gang.  This is what Clacc does now,
-      following the above rule.
+    * Thus, Clacc handles a loop reduction for a gang-shared variable
+      as a gang reduction even if the loop is not gang-partitioned and
+      even if the loop is sequential.  This subtle behavior comes from
+      a strict reading of the spec since OpenACC 1.0.  Text to make
+      this behavior clearer has been proposed for inclusion in the
+      OpenACC spec after 2.7.
+    * Clacc interprets this gang reduction as an *imp* `reduction` on
+      the `acc parallel` to facilitate the translation to OpenMP (for
+      example, reductions cannot be specified on `omp distribute` but
+      can be specified on `omp target teams`).  All references to *v*
+      within the `acc parallel` then refer to gang-private copies of
+      *v*.  However, under OpenACC 2.7 (and earlier), all references
+      to *v* within the `acc parallel` should still refer to the
+      original gang-shared *v* instead.  Text to specify that accesses
+      to the original gang-shared variable are undefined throughout
+      the `acc parallel` has been proposed for inclusion in the
+      OpenACC spec after 2.7.  In that case, either interpretation is
+      conforming.
+* If *exp* `reduction(`*o*`:`*v*`)` on an `acc loop`, and if the loop
+  is gang-partitioned, then *imp* `copy(`*v*`)` on the parent `acc
+  parallel` overriding any *imp* `firstprivate(`*v*`)` as long as all
+  of the following conditions hold:
+    * *not* `firstprivate(`*v*`)`, *not* `private(`*v*`)`, *not*
+      `reduction(`*o'*`:`*v*`)`, and *not* `copy(`*v*`)` on that `acc
+      parallel` and on any `acc loop` nested between it and the
+      gang-partitioned `acc loop`.
+    * There is no local declaration of *v* nested between the `acc
+      parallel` and the gang-partitioned `acc loop`.
+    * Notes:
+        * By converting *v* from gang-private to gang-shared, this
+          rule can trigger the previous rule to convert a trivial gang
+          reduction to *imp* `reduction` on the `acc parallel`.
+        * This rule does not follow OpenACC 2.7.  However, in our
+          experiments so far, both gcc 7.3.0 and pgcc 18.10-0 appear
+          to perform gang reductions and copy the reduction variable's
+          values to and from the device as specified by this rule.
+          This is true even when, without this rule, the reduction
+          variable should be *imp* `firstprivate`.
+        * There is discussion among the OpenACC technical committee
+          about adding a rule like this one to the OpenACC spec after
+          2.7.  However, every proposal considered so far produces
+          surprising or non-portable behavior in some cases, so the
+          future of this behavior is unclear.
 * It is an error if, on a particular OpenACC directive, there exist
   multiple *imp|exp* `reduction` with different reduction operators
   for a single variable *v*.
@@ -791,7 +849,7 @@ Clacc's current mapping of an `acc parallel` directive and its clauses
 to OpenMP is as follows:
 
 * `acc parallel` -> `omp target teams`
-* *imp* `shared` -> *exp* `shared`
+* *imp*|*exp* `copy` -> *exp* `map` with a `tofrom` map type.
 * *imp*|*exp* `firstprivate` -> *exp* `firstprivate`
 * *exp* `private` -> *exp* `private`
 * *imp*|*exp* `reduction` -> *exp* `reduction`
@@ -874,21 +932,13 @@ clauses to OpenMP is as follows:
         * *imp* `shared` is only for variables referenced within the
           loop but declared outside the loop, and these are already
           shared by the simple C `for` loop.
-        * *exp* `reduction` reduces across only one thread because
-          this is a sequential `acc loop`.  Thus, the `reduction`
-          should specify the creation of a single private copy of the
-          variable that is initialized and later merged back to the
-          original variable according the reduction operator.  The
-          only way that behavior appears to be different than just
-          discarding the `reduction`, as Clacc does, is if either (1)
-          the loop body performs an operation on the variable that's
-          inconsistent with the reduction operator, or (2) there's a
-          race on writes to the original variable that's somehow
-          avoided when postponing the write to the exit of the loop.
-          Clacc makes the assumption that these are likely broken use
-          cases and need not be supported.  In general, it seems
-          intuitive that a reduction on a sequential loop should have
-          no effect.
+        * *exp* `reduction` for a gang-private variable is discarded
+          here because it is a trivial reduction, as discussed under
+          "Semantic Clarifications" above.
+        * *exp* `reduction` for a gang-shared variable is discarded
+          here and is implemented instead via an *imp* `reduction` on
+          the `acc parallel`, as discussed under "Semantic
+          Clarifications" above.
 * Otherwise, *pre*|*exp* `private` -> wrap the loop in a compound
   statement and declare an uninitialized local copy of the variable.
   Notes:
@@ -999,10 +1049,12 @@ its clauses to OpenMP is as follows:
 * If *exp* `worker` or *exp* `vector`, then *exp* `reduction` -> *exp*
   `reduction`.
 * Else, translation discards *exp* `reduction`.  Notes:
-    * A gang reduction for a gang-private variable is useless and so
-      is discarded during translation.
-    * Gang reductions for other variables are also discarded here but
-      are addressed in the data sharing semantics on `acc parallel`.
+    * *exp* `reduction` for a gang-private variable is discarded here
+      because it is a trivial gang reduction, as discussed under
+      "Semantic Clarifications" above.
+    * *exp* `reduction` for a gang-shared variable is discarded here
+      and is implemented instead via an *imp* `reduction` on the `acc
+      parallel`, as discussed under "Semantic Clarifications" above.
 
 Combined Directives
 -------------------
@@ -1056,14 +1108,13 @@ as follows:
   analysis computes them only on the effective directives.
 
 The choice to map `reduction` to the effective `acc parallel` in
-addition to the effective `acc loop` doesn't follow the OpenACC 2.6
-specification.  However, strictly speaking, OpenACC 2.6 specifies
-reductions are only for scalars, which are *imp* `firstprivate`, so by
-default the reduced value from an `acc parallel loop` is not visible
-after the `acc parallel loop`.  The OpenACC technical committee is
-working to address this and other confusing points in the
-specification of reductions, and Clacc's current mapping represents
-our attempt to match the intended behavior.
+addition to the effective `acc loop` doesn't follow OpenACC 2.7.  The
+correct mapping would be to have *imp* `reduction` on the effective
+`acc parallel` because either *exp* `copy` or *imp* `copy` implied by
+*exp* `reduction` (there must be one of the two because Clacc doesn't
+permit `firstprivate` or `private` for the reduction variable on the
+same directive).  The current mapping was implemented to achieve the
+same effect before Clacc supported the `copy` clause.
 
 Unmappable Features
 -------------------
@@ -1089,42 +1140,6 @@ possible solutions:
   computed automatically.  If `acc loop vector` were mapped to `omp
   parallel for`, `vector_length` with a non-constant-expression
   argument would be possible.
-* If a variable is gang-shared within an `acc parallel` due to, for
-  example, a `copy` clause there, and if that variable is also
-  involved in a gang reduction specified on a nested `acc loop`, that
-  variable becomes gang-private throughout that `acc parallel` when
-  translated to OpenMP, where the reduction must be specified at the
-  level of the `acc parallel` (`omp target teams`):
-    * This discrepancy is mostly relevant to accesses to that variable
-      within that `acc parallel` before that `acc loop`.  Within that
-      `acc parallel` after that `acc loop`, it's probably not
-      reasonable to access the variable in either version because the
-      reduction doesn't happen until the end of the `acc parallel`.
-    * It's possible we could fix this by generating some other
-      gang-reduced variable that replaces the original variable within
-      the `acc loop gang`, but the original gang-shared variable
-      remains elsewhere in the `acc parallel`.  The gang-reduced
-      variable would be initialized as all its private copies are
-      initialized (e.g., 1 in the case of `*`), and we would need some
-      way to combine (just one multiply in the case of `*`) its
-      reduced value back into the shared copy.  To declare the
-      gang-reduced variable and combine it back into the gang-shared
-      variable, perhaps we'd break `omp target teams` into two
-      directives and add the additional code outside the `omp teams`.
-    * Anyway, to get this right, we first have to understand exactly
-      what OpenACC says about how a gang-shared variable interacts
-      with multiple `acc loop` directives that have gang-reductions
-      for that variable within a single `acc parallel`.  Does it
-      correspond to the above behavior?  Experimenting with pgcc
-      18.4-0, it doesn't seem to.  Actually, with -ta:tesla, it seems
-      to do exactly what Clacc does now when there's no `copy` clause
-      specified: there's a gang reduction implied on `acc parallel`,
-      and the variable is gang-private within.
-    * Because we have not yet implemented explicit or implicit `copy`
-      clauses, and because OpenACC 2.6 only permits reductions for
-      scalars, such a reduction variable will be `firstprivate` or
-      `private` and thus gang-private, so this issue doesn't affect us
-      yet.
 * A gang reduction specified on an orphaned `acc loop` directive
   because the enclosing compute construct to which the reduction would
   normally be applied during translation is not statically visible.  A

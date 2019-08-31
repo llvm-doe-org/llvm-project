@@ -13171,6 +13171,9 @@ void OMPClauseReader::VisitOMPIsDevicePtrClause(OMPIsDevicePtrClause *C) {
 ACCClause *ACCClauseReader::readClause() {
   ACCClause *C;
   switch ((OpenACCClauseKind)Record.readInt()) {
+  case ACCC_copy:
+    C = ACCCopyClause::CreateEmpty(Context, Record.readInt());
+    break;
   case ACCC_shared:
     C = ACCSharedClause::CreateEmpty(Context, Record.readInt());
     break;
@@ -13221,6 +13224,16 @@ ACCClause *ACCClauseReader::readClause() {
   C->setLocEnd(Record.readSourceLocation());
 
   return C;
+}
+
+void ACCClauseReader::VisitACCCopyClause(ACCCopyClause *C) {
+  C->setLParenLoc(Record.readSourceLocation());
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Record.readSubExpr());
+  C->setVarRefs(Vars);
 }
 
 void ACCClauseReader::VisitACCSharedClause(ACCSharedClause *C) {

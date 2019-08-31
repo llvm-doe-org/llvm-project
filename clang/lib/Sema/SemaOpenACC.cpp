@@ -462,8 +462,12 @@ OpenACCBaseDSAKind DSAStackTy::getImplicitBaseDSA(VarDecl *VD,
   OpenACCBaseDSAKind BaseDSAKind;
   // Here, we assume a reduction variable isn't a loop-control variable, and we
   // complain about that combination later in ActOnOpenACCLoopDirective.
-  if (HasReduction)
-    BaseDSAKind = ACC_BASE_DSA_unknown;
+  if (HasReduction) {
+    if (isOpenACCParallelDirective(getEffectiveDirective()))
+      BaseDSAKind = ACC_BASE_DSA_copy;
+    else
+      BaseDSAKind = ACC_BASE_DSA_unknown;
+  }
   else if (getLoopControlVariables().count(VD)) {
     // OpenACC 2.6 [2.6.1]:
     //   "The loop variable in a C for statement [...] that is associated
@@ -503,9 +507,12 @@ OpenACCBaseDSAKind DSAStackTy::getImplicitBaseDSA(VarDecl *VD,
   //   unsigned, with optional short, long or long long attribute), enum,
   //   float, double, long double, Complex (with optional float or long
   //   attribute) or any pointer datatype."
-  else if (VD->getType()->isScalarType() &&
-           isOpenACCParallelDirective(getEffectiveDirective()))
-    BaseDSAKind = ACC_BASE_DSA_firstprivate;
+  else if (isOpenACCParallelDirective(getEffectiveDirective())) {
+    if (VD->getType()->isScalarType())
+      BaseDSAKind = ACC_BASE_DSA_firstprivate;
+    else
+      BaseDSAKind = ACC_BASE_DSA_copy;
+  }
   else
     BaseDSAKind = ACC_BASE_DSA_shared;
   return BaseDSAKind;
@@ -562,6 +569,9 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
     SourceLocation EndLoc, const DeclarationNameInfo &ReductionId) {
   ACCClause *Res = nullptr;
   switch (Kind) {
+  case ACCC_copy:
+    Res = ActOnOpenACCCopyClause(VarList, StartLoc, LParenLoc, EndLoc);
+    break;
   case ACCC_private:
     Res = ActOnOpenACCPrivateClause(VarList, StartLoc, LParenLoc, EndLoc);
     break;
@@ -666,66 +676,148 @@ public:
     BaseVisitor::VisitDeclStmt(S);
   }
   void VisitACCExecutableDirective(ACCExecutableDirective *D) {
-    if (isOpenACCLoopDirective(D->getDirectiveKind()) &&
-        D->hasClausesOfKind<ACCGangClause>()) {
+    // If this is an acc loop, compute gang reductions implied here.
+    if (isOpenACCLoopDirective(D->getDirectiveKind())) {
+      bool HasGangPartitioning =
+          cast<ACCLoopDirective>(D)->getPartitioning().hasGangPartitioning();
       for (ACCReductionClause *C : D->getClausesOfKind<ACCReductionClause>()) {
         for (Expr *VR : C->varlists()) {
           DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
           VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
 
-          // Skip variables declared gang-local.
+          // Skip variable if it is declared locally in the gang or if it is
+          // privatized by an enclosing acc loop.
           if (LocalDefinitions.back().count(VD))
             continue;
 
-          // Skip variables that have gang-local private copies or that already
-          // have the same reduction.
+          // Skip variable if it is gang-private at the acc loop due to an
+          // explicit reduction at the acc parallel.
+          //
+          // When computing implicit gang reductions, we do not consider
+          // variable privatization due to implicit gang reductions.  Otherwise
+          // we would have a self-contradictory definition for implicit gang
+          // reductions: an acc loop's gang-shared reduction variable implies a
+          // gang reduction at the acc parallel, which makes the variable
+          // gang-private at the acc loop, so there's no implicit gang
+          // reduction, which makes the variable gang-shared at the acc loop,
+          // so there is an implicit gang reduction, and so on.  There would
+          // also be similarly confusing questions about whether gang
+          // reductions implied by sibling acc loops affect each other.
+          //
+          // Moreover, it is not actually important for application behavior
+          // whether a reduction (implicit or explicit) at the acc parallel
+          // suppresses other implicit gang reductions: once you have one gang
+          // reduction for a variable, all other gang reductions for it are
+          // redundant, so you can include or skip others without consequence
+          // for application behavior.  It does matter that you have consistent
+          // reduction operators, but errors there should be caught as part of
+          // a more general check for reduction operator consistency throughout
+          // a loop nest.  We choose to skip anyway in the case of an explicit
+          // reduction specifically to make those diagnostics less confusing:
+          // we don't want to refer to a reduction as a gang reduction if it
+          // is clearly not a gang reduction because the variable is
+          // gang-private due to an explicit reduction clause at the acc
+          // parallel.  In contrast, it might be confusing to skip in the case
+          // of an implicit reduction because then it might not be obvious that
+          // the variable is gang-private.
+          //
+          // TODO: Actually, we're also not skipping the variable if the acc
+          // loop has gang partitioning.  That enables us to continue to check
+          // for consistent reduction operators on all obvious gang reductions
+          // (gang reductions not due to a gang-shared variable because we
+          // implemented that check before the copy clause and thus before
+          // the possibility of gang-shared reduction variables).  In the
+          // future, that check should instead become part the aforementioned
+          // more general check for reduction operator consistency throughout
+          // a loop nest.  At that point, we can remove the
+          // "&& !HasGangPartitioning" below.  See related todos below.
           DSAStackTy::DSAVarData DVar = Stack->getTopDSA(VD);
-          switch (DVar.BaseDSAKind) {
+          if (!DVar.ReductionId.getName().isEmpty() && !HasGangPartitioning)
+            continue;
+
+          // Check the base DSA.
+          //
+          // The second argument to getImplicitBaseDSA specifies whether
+          // there's a (gang) reduction for this variable at the acc parallel
+          // as that can imply a copy clause.  However, here we only care about
+          // a copy clause that makes a variable gang-shared, and that doesn't
+          // happen when there's a reduction too.  Thus, for simplicity
+          // (including avoiding any consideration of implicit gang
+          // reductions), the argument is always false here.
+          OpenACCBaseDSAKind BaseDSAKind = DVar.BaseDSAKind;
+          bool BaseDSAIsExplicit = BaseDSAKind != ACC_BASE_DSA_unknown;
+          if (!BaseDSAIsExplicit)
+            BaseDSAKind = Stack->getImplicitBaseDSA(VD,
+                                                    /*HasReduction*/ false);
+          switch (BaseDSAKind) {
+          case ACC_BASE_DSA_unknown:
           case ACC_BASE_DSA_shared:
-            llvm_unreachable("unexpected as explicit data-sharing clause");
+            llvm_unreachable("unexpected base DSA");
           case ACC_BASE_DSA_private:
           case ACC_BASE_DSA_firstprivate:
-            // The variable is gang-local at the acc loop due to an explicit
-            // private or firstprivate at the acc parallel.
-            continue;
-          case ACC_BASE_DSA_unknown: {
-            if (!DVar.ReductionId.getName().isEmpty()) {
-              // Skip if we have the same reduction explicitly specified on
-              // the acc parallel.
-              if (DVar.ReductionId.getName() == C->getNameInfo().getName())
-                continue;
-              // We have a conflicting reduction operator.  Record in
-              // ImplicitGangReductions to produce a diagnostic later.  Don't
-              // record in ImplicitGangReductionMap, where it could suppress
-              // diagnostics for additional conflicts.
-              break;
-            }
+            // Skip variable if it is gang-private at the acc loop due to an
+            // explicit private or firstprivate at the acc parallel.
+            if (BaseDSAIsExplicit)
+              continue;
+            // Skip variable if it is implicitly firstprivate at the acc
+            // parallel and there is no gang partitioning at the acc loop.
+            if (!HasGangPartitioning)
+              continue;
+            // The acc loop has gang partitioning overriding the implicit
+            // firstprivate at the acc parallel.
+            //
+            // TODO: Or overriding the privatization due to an explicit
+            // reduction at the acc parallel.  This case will go away when
+            // the todo above is resolved.
+            break;
+          case ACC_BASE_DSA_copy:
+            // The variable is gang-shared.
+            //
+            // TODO: Or private due to an explicit reduction at the acc
+            // parallel but overridden by gang partitioning at the acc loop.
+            // This case will go away when the todo above is resolved.
+            break;
+          }
+
+          // We have an implicit gang reduction.  Skip if already have the same
+          // reduction.
+          if (!DVar.ReductionId.getName().isEmpty()) {
+            // Skip if we have the same reduction explicitly specified on
+            // the acc parallel.
+            if (DVar.ReductionId.getName() == C->getNameInfo().getName())
+              continue;
+            // We have a conflicting reduction operator.  Record in
+            // ImplicitGangReductions to produce a diagnostic later.  Don't
+            // record in ImplicitGangReductionMap, where it could suppress
+            // diagnostics for additional conflicts.
+          } else {
             // Skip if we have the same reduction implicitly specified by
             // another acc loop.
             auto COld = ImplicitGangReductionMap.try_emplace(VD, C);
             if (!COld.second && COld.first->second->getNameInfo().getName() ==
                                 C->getNameInfo().getName())
               continue;
-            // If we have a conflicting implicit reduction operator, follow
-            // the same behavior as for the explicit case.  Otherwise, there's
-            // no existing reduction operator.
-            break;
-          }
+            // Either there's no existing reduction operator, or there's a
+            // conflicting implicit reduction operator.  In the latter case,
+            // follow the same behavior as for the explicit case.
           }
 
           // Record the reduction.  Conflicting reduction operators will be
-          // reported when we generate the implicit clause.
+          // reported when we generate the implicit gang reduction clause.
           ImplicitGangReductions.emplace_back(C, DRE);
         }
       }
     }
+
+    // Push space for location definitions in this construct.
     LocalDefinitions.emplace_back(LocalDefinitions.back());
+
+    // Record variables privatized by this directive as local definitions so
+    // that they are skipped while computing gang reductions implied by
+    // nested directives.
     for (ACCClause *C : D->clauses()) {
       if (!C)
         return;
-      // For variables privatized here, skip computing gang reductions due to
-      // references to them within the construct because those references
-      // refer to local copies.
       for (const Expr *VR : getPrivateVarsFromClause(C)) {
         const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
         const VarDecl *VD =
@@ -733,10 +825,14 @@ public:
         LocalDefinitions.back().insert(VD);
       }
     }
+
+    // Recurse to children.
     for (auto *Child : D->children()) {
       if (Child)
         Visit(Child);
     }
+
+    // Pop local definitions in this construct.
     LocalDefinitions.pop_back();
   }
   void VisitStmt(Stmt *S) {
@@ -756,10 +852,11 @@ public:
 class ImplicitBaseDSAAdder : public StmtVisitor<ImplicitBaseDSAAdder> {
   typedef StmtVisitor<ImplicitBaseDSAAdder> BaseVisitor;
   DSAStackTy *Stack;
+  llvm::SmallVector<Expr *, 8> ImplicitCopy;
   llvm::SmallVector<Expr *, 8> ImplicitShared;
   llvm::SmallVector<Expr *, 8> ImplicitPrivate;
   llvm::SmallVector<Expr *, 8> ImplicitFirstprivate;
-  llvm::DenseSet<VarDecl *> ImplicitPrivacyVarDecls;
+  llvm::DenseSet<VarDecl *> ImplicitBaseDSADecls;
   llvm::SmallVector<llvm::DenseSet<const Decl *>, 8> LocalDefinitions;
 
 public:
@@ -777,13 +874,16 @@ public:
       DSAStackTy::DSAVarData DVar = Stack->getTopDSA(VD);
       // Stop analysis if the variable has base DSA already set.
       if (DVar.BaseDSAKind != ACC_BASE_DSA_unknown ||
-          !ImplicitPrivacyVarDecls.insert(VD).second)
+          !ImplicitBaseDSADecls.insert(VD).second)
         return;
 
       // Compute implicit base DSA.
       DVar.BaseDSAKind = Stack->getImplicitBaseDSA(
           VD, !DVar.ReductionId.getName().isEmpty());
       switch (DVar.BaseDSAKind) {
+      case ACC_BASE_DSA_copy:
+        ImplicitCopy.push_back(E);
+        break;
       case ACC_BASE_DSA_shared:
         ImplicitShared.push_back(E);
         break;
@@ -846,6 +946,7 @@ public:
     }
   }
 
+  ArrayRef<Expr *> getImplicitCopy() { return ImplicitCopy; }
   ArrayRef<Expr *> getImplicitShared() { return ImplicitShared; }
   ArrayRef<Expr *> getImplicitPrivate() { return ImplicitPrivate; }
   ArrayRef<Expr *> getImplicitFirstprivate() { return ImplicitFirstprivate; }
@@ -1025,6 +1126,14 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
       ImplicitGangAdder().Visit(AStmt);
       // Add implicit gang reductions, possibly due to any implicit gang
       // clauses added above.
+      //
+      // This depends on implicit base DSAs as computed by
+      // DSAStackTy::getImplicitBaseDSA without the influence of implicit gang
+      // reductions (see comments in ImplicitGangReductionAdder for details).
+      //
+      // The final implicit base DSAs computed by
+      // DSAStackTy::getImplicitBaseDSA with the influence of implicit gang
+      // reductions are recorded by ImplicitBaseDSAAdder afterward.
       ImplicitGangReductionAdder ReductionAdder(DSAStack);
       ReductionAdder.Visit(AStmt);
       for (ReductionVar RV : ReductionAdder.getImplicitGangReductions()) {
@@ -1038,10 +1147,18 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
           ClausesWithImplicit.push_back(Implicit);
       }
     }
-    // For referenced variables, add implicit base DSAs, possibly influenced by
-    // any implicit gang reductions added above.
+    // For referenced variables, add implicit base DSAs, possibly influenced
+    // by any implicit gang reductions added above.
     ImplicitBaseDSAAdder Adder(DSAStack);
     Adder.Visit(AStmt);
+    // Check default data sharing attributes for referenced variables.
+    if (!Adder.getImplicitCopy().empty()) {
+      ACCClause *Implicit = ActOnOpenACCCopyClause(
+          Adder.getImplicitCopy(), SourceLocation(),
+          SourceLocation(), SourceLocation());
+      assert(Implicit);
+      ClausesWithImplicit.push_back(Implicit);
+    }
     if (!Adder.getImplicitShared().empty()) {
       ACCClause *Implicit = ActOnOpenACCSharedClause(
           Adder.getImplicitShared());
@@ -1275,6 +1392,7 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr
   case ACCC_collapse:
     Res = ActOnOpenACCCollapseClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
+  case ACCC_copy:
   case ACCC_shared:
   case ACCC_private:
   case ACCC_firstprivate:
@@ -1289,6 +1407,73 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr
     llvm_unreachable("Clause is not allowed.");
   }
   return Res;
+}
+
+static VarDecl *
+getVarDeclFromVarList(Sema &S, Expr *&RefExpr, SourceLocation &ELoc,
+                      SourceRange &ERange) {
+  RefExpr = RefExpr->IgnoreParens();
+  ELoc = RefExpr->getExprLoc();
+  ERange = RefExpr->getSourceRange();
+  RefExpr = RefExpr->IgnoreParenImpCasts();
+  auto *DE = dyn_cast_or_null<DeclRefExpr>(RefExpr);
+  if (!DE || !isa<VarDecl>(DE->getDecl())) {
+    // This is reported for uses of, for example, subscript or subarray syntax.
+    S.Diag(ELoc, diag::err_acc_expected_var_name_expr)
+        << ERange;
+    return nullptr;
+  }
+  return cast<VarDecl>(DE->getDecl());
+}
+
+ACCClause *Sema::ActOnOpenACCCopyClause(ArrayRef<Expr *> VarList,
+                                        SourceLocation StartLoc,
+                                        SourceLocation LParenLoc,
+                                        SourceLocation EndLoc) {
+  SmallVector<Expr *, 8> Vars;
+  bool IsImplicitClause = StartLoc.isInvalid();
+  auto ImplicitClauseLoc = DSAStack->getConstructLoc();
+
+  for (auto &RefExpr : VarList) {
+    assert(RefExpr && "NULL expr in OpenACC copy clause.");
+    SourceLocation ELoc;
+    SourceRange ERange;
+    Expr *SimpleRefExpr = RefExpr;
+    VarDecl *VD = getVarDeclFromVarList(*this, SimpleRefExpr, ELoc, ERange);
+    if (!VD)
+      continue;
+
+    ELoc = IsImplicitClause ? ImplicitClauseLoc : ELoc;
+    QualType Type = VD->getType();
+
+    // The OpenACC 2.7 spec doesn't say, as far as I know, that a variable
+    // in a copy clause must have a complete type.  However, you cannot copy
+    // data if it doesn't have a size, and the OpenMP implementation does have
+    // this restriction for map clauses.
+    if (RequireCompleteType(ELoc, Type,
+                            diag::err_acc_copy_incomplete_type))
+      continue;
+
+    // The OpenACC 2.7 spec doesn't say, as far as I know, that a const
+    // variable cannot be in a copy clause.  However, you can never copy back
+    // to the original variable in that case.  Strangely, the OpenMP
+    // implementation currently doesn't have this restriction for map clauses
+    // with map type tofrom.
+    // TODO: Should this be isConstant?
+    if (VD->getType().isConstQualified()) {
+      Diag(ELoc, diag::err_acc_const_copy);
+      Diag(VD->getLocation(), diag::note_acc_const) << VD;
+      continue;
+    }
+
+    if (!DSAStack->addBaseDSA(VD, RefExpr->IgnoreParens(), ACC_BASE_DSA_copy))
+      Vars.push_back(RefExpr->IgnoreParens());
+  }
+
+  if (Vars.empty())
+    return nullptr;
+
+  return ACCCopyClause::Create(Context, StartLoc, LParenLoc, EndLoc, Vars);
 }
 
 ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
@@ -1317,23 +1502,6 @@ ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
   return ACCSharedClause::Create(Context, Vars);
 }
 
-static VarDecl *
-getPrivateItem(Sema &S, Expr *&RefExpr, SourceLocation &ELoc,
-               SourceRange &ERange) {
-  RefExpr = RefExpr->IgnoreParens();
-  ELoc = RefExpr->getExprLoc();
-  ERange = RefExpr->getSourceRange();
-  RefExpr = RefExpr->IgnoreParenImpCasts();
-  auto *DE = dyn_cast_or_null<DeclRefExpr>(RefExpr);
-  if (!DE || !isa<VarDecl>(DE->getDecl())) {
-    // This is reported for uses of, for example, subscript or subarray syntax.
-    S.Diag(ELoc, diag::err_acc_expected_var_name_expr)
-        << ERange;
-    return nullptr;
-  }
-  return cast<VarDecl>(DE->getDecl());
-}
-
 ACCClause *Sema::ActOnOpenACCPrivateClause(ArrayRef<Expr *> VarList,
                                            SourceLocation StartLoc,
                                            SourceLocation LParenLoc,
@@ -1344,7 +1512,7 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(ArrayRef<Expr *> VarList,
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getPrivateItem(*this, SimpleRefExpr, ELoc, ERange);
+    VarDecl *VD = getVarDeclFromVarList(*this, SimpleRefExpr, ELoc, ERange);
     if (!VD)
       continue;
 
@@ -1363,8 +1531,7 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(ArrayRef<Expr *> VarList,
     // TODO: Should this be isConstant?
     if (VD->getType().isConstQualified()) {
       Diag(ELoc, diag::err_acc_const_private);
-      Diag(VD->getLocation(), diag::note_acc_const_private)
-          << VD;
+      Diag(VD->getLocation(), diag::note_acc_const) << VD;
       continue;
     }
 
@@ -1392,7 +1559,7 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(ArrayRef<Expr *> VarList,
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getPrivateItem(*this, SimpleRefExpr, ELoc, ERange);
+    VarDecl *VD = getVarDeclFromVarList(*this, SimpleRefExpr, ELoc, ERange);
     if (!VD)
       continue;
 
@@ -1546,7 +1713,7 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getPrivateItem(*this, SimpleRefExpr, ELoc, ERange);
+    VarDecl *VD = getVarDeclFromVarList(*this, SimpleRefExpr, ELoc, ERange);
     if (!VD)
       continue;
 
@@ -1671,6 +1838,7 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
   case ACCC_vector:
     Res = ActOnOpenACCVectorClause(StartLoc, EndLoc);
     break;
+  case ACCC_copy:
   case ACCC_shared:
   case ACCC_private:
   case ACCC_firstprivate:
@@ -2286,6 +2454,8 @@ private:
     llvm::SmallVector<Expr *, 16> Vars;
     if (transformACCVarList(D, C, SkipVars, Vars))
       return OMPClauseError();
+    if (Vars.empty())
+      return OMPClauseEmpty();
     ExplicitClauseLocs L(D, C, C->getLParenLoc());
     return Rebuilder(Vars, L);
   }
@@ -2345,6 +2515,20 @@ public:
     ExplicitClauseLocs L(D, C, C->getLParenLoc());
     return getDerived().RebuildOMPCollapseClause(
         C->getCollapse(), L.LocStart, L.LParenLoc, L.LocEnd);
+  }
+
+  OMPClauseResult TransformACCCopyClause(ACCExecutableDirective *D,
+                                         OpenMPDirectiveKind TDKind,
+                                         ACCCopyClause *C) {
+    return transformACCVarListClause<ACCCopyClause>(
+        D, C, OMPC_map,
+        [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+          return getDerived().RebuildOMPMapClause(
+            llvm::None, llvm::None, CXXScopeSpec(), DeclarationNameInfo(),
+            OMPC_MAP_tofrom, /*IsMapTypeImplicit*/ false, L.LocStart,
+            L.LParenLoc, Vars,
+            OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+        });
   }
 
   OMPClauseResult TransformACCSharedClause(ACCExecutableDirective *D,

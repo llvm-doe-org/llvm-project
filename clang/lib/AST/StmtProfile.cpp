@@ -1029,6 +1029,9 @@ void ACCClauseProfiler::VisitACCClauseList(T *Node) {
   }
 }
 
+void ACCClauseProfiler::VisitACCCopyClause(const ACCCopyClause *C) {
+  VisitACCClauseList(C);
+}
 void ACCClauseProfiler::VisitACCSharedClause(const ACCSharedClause *C) {
   VisitACCClauseList(C);
 }

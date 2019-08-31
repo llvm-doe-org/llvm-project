@@ -72,7 +72,7 @@ public:
   static bool classof(const ACCClause *) { return true; }
 };
 
-/// This represents clauses with the list of variables like 'private',
+/// This represents clauses with a list of variables like 'private',
 /// 'firstprivate', 'copyin', or 'reduction' clauses in the
 /// '#pragma acc ...' directives.
 template <class T> class ACCVarListClause : public ACCClause {
@@ -149,6 +149,71 @@ public:
 /// return the expressions referencing those variables.
 llvm::iterator_range<ArrayRef<const Expr *>::iterator>
 getPrivateVarsFromClause(const ACCClause *);
+
+/// This represents the clause 'copy' for '#pragma acc ...' directives.
+///
+/// \code
+/// #pragma acc parallel copy(a,b)
+/// \endcode
+/// In this example directive '#pragma acc parallel' has clause 'copy' with
+/// the variables 'a' and 'b'.
+///
+class ACCCopyClause final
+    : public ACCVarListClause<ACCCopyClause>,
+      private llvm::TrailingObjects<ACCCopyClause, Expr *> {
+  friend TrailingObjects;
+  friend ACCVarListClause;
+  friend class ACCClauseReader;
+
+  /// Build clause with number of variables \a N.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param N Number of the variables in the clause.
+  ///
+  ACCCopyClause(SourceLocation StartLoc, SourceLocation LParenLoc,
+                SourceLocation EndLoc, unsigned N)
+      : ACCVarListClause<ACCCopyClause>(ACCC_copy, StartLoc, LParenLoc, EndLoc,
+                                        N) {}
+
+  /// Build an empty clause.
+  ///
+  /// \param N Number of variables.
+  ///
+  explicit ACCCopyClause(unsigned N)
+      : ACCVarListClause<ACCCopyClause>(ACCC_copy, SourceLocation(),
+                                        SourceLocation(), SourceLocation(),
+                                        N) {}
+
+public:
+  /// Creates clause with a list of variables \a VL.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param VL List of references to the variables.
+  ///
+  static ACCCopyClause *Create(const ASTContext &C, SourceLocation StartLoc,
+                               SourceLocation LParenLoc,
+                               SourceLocation EndLoc, ArrayRef<Expr *> VL);
+  /// Creates an empty clause with the place for \a N variables.
+  ///
+  /// \param C AST context.
+  /// \param N The number of variables.
+  ///
+  static ACCCopyClause *CreateEmpty(const ASTContext &C, unsigned N);
+
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end()));
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_copy;
+  }
+};
 
 /// This represents the implicit clause 'shared' for '#pragma acc ...'.
 ///
