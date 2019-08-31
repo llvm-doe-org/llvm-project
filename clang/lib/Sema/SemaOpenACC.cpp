@@ -60,6 +60,9 @@ public:
   /// reduction.  Each can be uncomputed, implicit, or explicit.  A base DSA
   /// can also be predetermined.  At least one of these two will eventually be
   /// computed per variable referenced by a construct.
+  ///
+  /// We also store here whether the variable has a reduction on any effective
+  /// directive that's a part of the same combined directive.
   struct DSAVarData final {
     /// If base DSA is uncomputed, then ACC_BASE_DSA_unknown.  Otherwise, not
     /// ACC_BASE_DSA_unknown.
@@ -77,6 +80,12 @@ public:
     /// clause.  If explicit reduction, then the referencing expression
     /// appearing in the associated clause on this directive.
     Expr *ReductionRefExpr = nullptr;
+    /// Whether the effective or combined directive has a reduction for this
+    /// variable.  That is, true if !ReductionID.getName().isEmpty() or if
+    /// this directive is part of a combined directive with a reduction for
+    /// this variable.  In the latter case, the effective directive with the
+    /// reduction might have been popped off the stack already.
+    bool ReductionOnEffectiveOrCombined = false;
     DSAVarData() {}
   };
 
@@ -258,7 +267,7 @@ public:
   /// Adds reduction to the specified declaration.
   bool addReduction(
       VarDecl *D, Expr *E, const DeclarationNameInfo &ReductionId,
-      bool CopiedGangReduction, int StartLevel = 0);
+      bool CopiedGangReduction);
 
   /// Returns data sharing attributes from top of the stack for the
   /// specified declaration.
@@ -382,21 +391,19 @@ bool DSAStackTy::addBaseDSA(VarDecl *VD, Expr *E,
           << getOpenACCBaseDSAName(DVar.BaseDSAKind);
       return true;
     }
+    // Complain if cannot combine with a reduction.
+    if (!DVar.ReductionId.getName().isEmpty() &&
+        !isAllowedBaseDSAForReduction(BaseDSAKind)) {
+      SemaRef.Diag(E->getExprLoc(), diag::err_acc_wrong_dsa)
+          << getOpenACCClauseName(ACCC_reduction)
+          << getOpenACCBaseDSAName(BaseDSAKind);
+      SemaRef.Diag(DVar.ReductionRefExpr->getExprLoc(),
+                   diag::note_acc_explicit_dsa)
+          << getOpenACCClauseName(ACCC_reduction);
+      return true;
+    }
     if (!Added && isAllowedBaseDSAForDirective(Itr->EffectiveDKind,
                                                BaseDSAKind)) {
-      // Complain if cannot combine with a reduction.  A reduction is added
-      // to every effective directive in a combined directive, so we only need
-      // to check for a reduction once on one of them.
-      if (!DVar.ReductionId.getName().isEmpty() &&
-          !isAllowedBaseDSAForReduction(BaseDSAKind)) {
-        SemaRef.Diag(E->getExprLoc(), diag::err_acc_wrong_dsa)
-            << getOpenACCClauseName(ACCC_reduction)
-            << getOpenACCBaseDSAName(BaseDSAKind);
-        SemaRef.Diag(DVar.ReductionRefExpr->getExprLoc(),
-                     diag::note_acc_explicit_dsa)
-            << getOpenACCClauseName(ACCC_reduction);
-        return true;
-      }
       DVar.BaseDSAKind = BaseDSAKind;
       DVar.BaseDSARefExpr = E;
       Added = true;
@@ -424,28 +431,51 @@ bool DSAStackTy::addBaseDSA(VarDecl *VD, Expr *E,
 
 bool DSAStackTy::addReduction(VarDecl *VD, Expr *E,
                               const DeclarationNameInfo &ReductionId,
-                              bool CopiedGangReduction, int StartLevel) {
+                              bool CopiedGangReduction) {
   VD = VD->getCanonicalDecl();
   assert(Stack.size() > 1 && "Data-sharing attributes stack is empty");
   assert(!ReductionId.getName().isEmpty() && "expected reduction");
-  auto I = Stack.rbegin();
-  for (int J = 0; J < StartLevel; ++J)
-    I = std::next(I);
-  DSAStackTy::DSAVarData &DVar = I->SharingMap[VD];
 
-  // Complain if any existing base DSA cannot combine with a reduction.
-  if (!isAllowedBaseDSAForReduction(DVar.BaseDSAKind)) {
-    SemaRef.Diag(E->getExprLoc(), diag::err_acc_wrong_dsa)
-        << getOpenACCBaseDSAName(DVar.BaseDSAKind)
-        << getOpenACCClauseName(ACCC_reduction);
-    if (CopiedGangReduction)
-      SemaRef.Diag(getConstructLoc(), diag::note_acc_gang_reduction_apply)
-          << getOpenACCDirectiveName(getRealDirective());
-    SemaRef.Diag(DVar.BaseDSARefExpr->getExprLoc(),
-                 diag::note_acc_explicit_dsa)
-        << getOpenACCBaseDSAName(DVar.BaseDSAKind);
-    return true;
+  // If this is not a combined directive, visit just this directive.
+  // Otherwise, climb through all effective directives for this combined
+  // directive.
+  //
+  // In this combined directive, mark every effective directive as being part
+  // of a combined directive with a reduction.
+  //
+  // In this combined directive, on every effective directive, make sure a
+  // reduction can combine with any base DSA from explicit clauses.  For
+  // example, even though reduction applies to acc loop and firstprivate
+  // applies to acc parallel, it makes no sense to specify them both for the
+  // same variable on acc parallel loop because the reduced value can then
+  // never be accessed.
+  for (auto Itr = Stack.rbegin(), End = Stack.rend(); Itr != End; ++Itr) {
+    DSAVarData &DVar = Itr->SharingMap[VD];
+    if (!isAllowedBaseDSAForReduction(DVar.BaseDSAKind)) {
+      SemaRef.Diag(E->getExprLoc(), diag::err_acc_wrong_dsa)
+          << getOpenACCBaseDSAName(DVar.BaseDSAKind)
+          << getOpenACCClauseName(ACCC_reduction);
+      if (CopiedGangReduction)
+        SemaRef.Diag(getConstructLoc(), diag::note_acc_gang_reduction_apply)
+            << getOpenACCDirectiveName(getRealDirective());
+      SemaRef.Diag(DVar.BaseDSARefExpr->getExprLoc(),
+                   diag::note_acc_explicit_dsa)
+          << getOpenACCBaseDSAName(DVar.BaseDSAKind);
+      return true;
+    }
+    DVar.ReductionOnEffectiveOrCombined = true;
+    if (Itr->RealDKind != ACCD_unknown)
+      // Either this is not a combined directive, or we've reached the
+      // outermost effective directive, so stop climbing.
+      break;
   }
+
+  // A reduction always applies to the innermost effective directive in the
+  // case of a combined directive.
+  auto Itr = Stack.rbegin();
+  assert(isAllowedClauseForDirective(Itr->EffectiveDKind, ACCC_reduction) &&
+         "expected reduction to be allowed on directive at top of stack");
+  DSAVarData &DVar = Itr->SharingMap[VD];
 
   // Complain if a variable appears in more than one (explicit) reduction on
   // the same directive.
@@ -464,15 +494,9 @@ bool DSAStackTy::addReduction(VarDecl *VD, Expr *E,
     return true;
   }
 
+  // Record the reduction.
   DVar.ReductionId = ReductionId;
   DVar.ReductionRefExpr = E;
-
-  // TODO: Currently we add reductions to all effective directives in the case
-  // of a combined directive.  See todo in
-  // Sema::ActOnOpenACCParallelLoopDirective for details.
-  if (I->RealDKind == ACCD_unknown)
-    return addReduction(VD, E, ReductionId, CopiedGangReduction,
-                        StartLevel + 1);
 
   return false;
 }
@@ -483,7 +507,7 @@ OpenACCBaseDSAKind DSAStackTy::getImplicitBaseDSA(VarDecl *VD) {
   // Here, we assume a reduction variable isn't a loop-control variable, and we
   // complain about that combination later in ActOnOpenACCLoopDirective.
   const DSAVarData &DVar = getTopDSA(VD);
-  if (!DVar.ReductionId.getName().isEmpty()) {
+  if (DVar.ReductionOnEffectiveOrCombined) {
     if (isOpenACCParallelDirective(getEffectiveDirective()))
       BaseDSAKind = ACC_BASE_DSA_copy;
     else
@@ -1317,56 +1341,31 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
 StmtResult Sema::ActOnOpenACCParallelLoopDirective(
     ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
     SourceLocation EndLoc) {
-  // OpenACC 2.6 sec. 2.11 lines 1534-1537:
-  // "The associated structured block is the loop which must immediately follow
-  // the directive. Any of the parallel or loop clauses valid in a parallel
-  // region may appear. The private and reduction clauses, which can appear on
-  // both a parallel construct and a loop construct, are treated on a parallel
-  // loop construct as if they appeared on the loop construct."
-  //
-  // TODO: OpenACC 2.7 will likely specify that a reduction on an acc parallel
-  // loop implies a copy clause, thus a gang-shared reduction variable, and thus
-  // a gang-like reduction (acc loop seq/worker/vector reduction on gang-shared
-  // variables become gang-like reductions).  The main difference between that
-  // behavior and the behavior achieved by copying the reduction to both the
-  // effective acc parallel directive and the effective acc loop directive is
-  // whether the reduction variable is gang-shared or gang-private within the
-  // effective acc parallel but outside the effective acc loop, but the user can
-  // only add code within the effective acc loop in the case of an acc parallel
-  // loop directive.  Another difference is that we currently consider a
-  // reduction clause to conflict with a firstprivate or private clause, so
-  // adding an additional reduction clause could create a conflict, but that's
-  // really a separate bug to be fixed in clacc (or maybe the spec just doesn't
-  // make sense there).  Because we have not yet implemented the copy clause,
-  // implicit or explicit, it's easiest for us to copy the reduction clause to
-  // both the effective acc parallel and acc loop directives.  Matching logic
-  // also appears in DSAStackTy::addReduction (see todo there).
+  // OpenACC 2.7 sec. 2.11, "Combined Constructs":
+  // - Lines 1617-1618:
+  //   "Any clause that is allowed on a parallel or loop construct is allowed
+  //   on the parallel loop construct;"
+  // - Lines 1633-1634:
+  //   "A private or reduction clause on a combined construct is treated as if
+  //   it appeared on the loop construct."
+  // We assume clauses apply only where they're allowed.  private and reduction
+  // are singled out above because they apply in both places, so the above
+  // clarifies that they are applied to the inner directive.  This
+  // understanding is critical to the implementations for DSAStack::addBaseDSA
+  // and DSAStackTy::addReduction as well.
   SmallVector<ACCClause *, 5> ParallelClauses;
   SmallVector<ACCClause *, 5> LoopClauses;
   for (ACCClause *C : Clauses) {
-    bool AddLoopClause = false;
-    bool AddParallelClause = false;
-    if (C->getClauseKind() == ACCC_reduction) {
-      AddLoopClause = true;
-      AddParallelClause = true;
-    }
-    else if (isAllowedClauseForDirective(ACCD_loop, C->getClauseKind()))
-      AddLoopClause = true;
-    else
-      AddParallelClause = true;
-    if (AddLoopClause) {
-      assert(isAllowedClauseForDirective(ACCD_loop, C->getClauseKind()) &&
-             "expected clause to be allowed on acc loop");
+    if (isAllowedClauseForDirective(ACCD_loop, C->getClauseKind()))
       LoopClauses.push_back(C);
-    }
-    if (AddParallelClause) {
+    else {
       assert(isAllowedClauseForDirective(ACCD_parallel, C->getClauseKind()) &&
              "expected clause to be allowed on acc parallel");
       ParallelClauses.push_back(C);
     }
   }
 
-  // Build the effective directives.
+  // Build the effective loop directive.
   StmtResult Res = ActOnOpenACCExecutableDirective(ACCD_loop, LoopClauses,
                                                    AStmt, StartLoc, EndLoc);
   // The second DSAStack->pop() happens in EndOpenACCDSABlock.
@@ -1374,6 +1373,8 @@ StmtResult Sema::ActOnOpenACCParallelLoopDirective(
   if (Res.isInvalid())
     return StmtError();
   ACCLoopDirective *LoopDir = cast<ACCLoopDirective>(Res.get());
+
+  // Build the effective parallel directive.
   Res = ActOnOpenACCExecutableDirective(ACCD_parallel, ParallelClauses,
                                         LoopDir, StartLoc, EndLoc);
   if (Res.isInvalid())

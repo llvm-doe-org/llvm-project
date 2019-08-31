@@ -1099,22 +1099,12 @@ as follows:
   is an `acc loop`, whose associated code block is the associated code
   block from the `acc parallel loop`.
 * *exp* `private` -> *exp* `private` on the effective `acc loop`.
-* *exp* `reduction` -> *exp* `reduction` on each of the effective
-  `acc parallel` and `acc loop`.
+* *exp* `reduction` -> *exp* `reduction` on the effective `acc loop`.
 * Each remaining explicit clause is permitted on only one of the
   separate OpenACC directives, and so it is mapped to that directive.
 * Predetermined and implicit attributes do not require a mapping to
   the effective directives because there are none because semantic
   analysis computes them only on the effective directives.
-
-The choice to map `reduction` to the effective `acc parallel` in
-addition to the effective `acc loop` doesn't follow OpenACC 2.7.  The
-correct mapping would be to have *imp* `reduction` on the effective
-`acc parallel` because either *exp* `copy` or *imp* `copy` implied by
-*exp* `reduction` (there must be one of the two because Clacc doesn't
-permit `firstprivate` or `private` for the reduction variable on the
-same directive).  The current mapping was implemented to achieve the
-same effect before Clacc supported the `copy` clause.
 
 Unmappable Features
 -------------------
