@@ -262,7 +262,7 @@ public:
   DSAVarData getTopDSA(VarDecl *VD);
   /// Returns predetermined or implicit base data-sharing attribute for the
   /// specified declaration.
-  OpenACCBaseDSAKind getImplicitBaseDSA(VarDecl *D, bool HasReduction);
+  OpenACCBaseDSAKind getImplicitBaseDSA(VarDecl *D);
 
   /// Returns currently analyzed directive.
   OpenACCDirectiveKind getRealDirective() const {
@@ -456,13 +456,13 @@ bool DSAStackTy::addReduction(VarDecl *VD, Expr *E,
   return false;
 }
 
-OpenACCBaseDSAKind DSAStackTy::getImplicitBaseDSA(VarDecl *VD,
-                                                  bool HasReduction) {
+OpenACCBaseDSAKind DSAStackTy::getImplicitBaseDSA(VarDecl *VD) {
   VD = VD->getCanonicalDecl();
   OpenACCBaseDSAKind BaseDSAKind;
   // Here, we assume a reduction variable isn't a loop-control variable, and we
   // complain about that combination later in ActOnOpenACCLoopDirective.
-  if (HasReduction) {
+  const DSAVarData &DVar = getTopDSA(VD);
+  if (!DVar.ReductionId.getName().isEmpty()) {
     if (isOpenACCParallelDirective(getEffectiveDirective()))
       BaseDSAKind = ACC_BASE_DSA_copy;
     else
@@ -736,19 +736,10 @@ public:
             continue;
 
           // Check the base DSA.
-          //
-          // The second argument to getImplicitBaseDSA specifies whether
-          // there's a (gang) reduction for this variable at the acc parallel
-          // as that can imply a copy clause.  However, here we only care about
-          // a copy clause that makes a variable gang-shared, and that doesn't
-          // happen when there's a reduction too.  Thus, for simplicity
-          // (including avoiding any consideration of implicit gang
-          // reductions), the argument is always false here.
           OpenACCBaseDSAKind BaseDSAKind = DVar.BaseDSAKind;
           bool BaseDSAIsExplicit = BaseDSAKind != ACC_BASE_DSA_unknown;
           if (!BaseDSAIsExplicit)
-            BaseDSAKind = Stack->getImplicitBaseDSA(VD,
-                                                    /*HasReduction*/ false);
+            BaseDSAKind = Stack->getImplicitBaseDSA(VD);
           switch (BaseDSAKind) {
           case ACC_BASE_DSA_unknown:
           case ACC_BASE_DSA_shared:
@@ -878,8 +869,7 @@ public:
         return;
 
       // Compute implicit base DSA.
-      DVar.BaseDSAKind = Stack->getImplicitBaseDSA(
-          VD, !DVar.ReductionId.getName().isEmpty());
+      DVar.BaseDSAKind = Stack->getImplicitBaseDSA(VD);
       switch (DVar.BaseDSAKind) {
       case ACC_BASE_DSA_copy:
         ImplicitCopy.push_back(E);
