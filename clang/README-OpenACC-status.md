@@ -97,8 +97,14 @@ We have implemented and tested support for the following features:
         * `vector` clause without arguments
         * For now, all three are ignored when combined with `auto`
           clause because, for now, `auto` produces a sequential loop.
-        * For now, if none of these three is specified, then a
-          sequential loop is produced.
+        * implicit `gang` clause
+            * This feature is not specified in OpenACC 2.7, but
+              existing OpenACC compilers implement it in some form.
+              Clacc attempts to mimic their behavior, but some details
+              might be different.  See the "Semantic Clarifications"
+              section in `README-OpenACC-design.md` for details.
+        * For now, if none of these clauses appear (explicitly or
+          implicitly), then a sequential loop is produced.
     * `collapse` clause
     * data sharing:
         * for loop control variable:
