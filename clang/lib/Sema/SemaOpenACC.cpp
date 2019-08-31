@@ -265,9 +265,8 @@ public:
   /// it applies is at the top of the stack.
   bool addBaseDSA(VarDecl *D, Expr *E, OpenACCBaseDSAKind A, bool IsImplicit);
   /// Adds reduction to the specified declaration.
-  bool addReduction(
-      VarDecl *D, Expr *E, const DeclarationNameInfo &ReductionId,
-      bool CopiedGangReduction);
+  bool addReduction(VarDecl *D, Expr *E,
+                    const DeclarationNameInfo &ReductionId);
 
   /// Returns data sharing attributes from top of the stack for the
   /// specified declaration.
@@ -430,8 +429,7 @@ bool DSAStackTy::addBaseDSA(VarDecl *VD, Expr *E,
 }
 
 bool DSAStackTy::addReduction(VarDecl *VD, Expr *E,
-                              const DeclarationNameInfo &ReductionId,
-                              bool CopiedGangReduction) {
+                              const DeclarationNameInfo &ReductionId) {
   VD = VD->getCanonicalDecl();
   assert(Stack.size() > 1 && "Data-sharing attributes stack is empty");
   assert(!ReductionId.getName().isEmpty() && "expected reduction");
@@ -455,9 +453,6 @@ bool DSAStackTy::addReduction(VarDecl *VD, Expr *E,
       SemaRef.Diag(E->getExprLoc(), diag::err_acc_wrong_dsa)
           << getOpenACCBaseDSAName(DVar.BaseDSAKind)
           << getOpenACCClauseName(ACCC_reduction);
-      if (CopiedGangReduction)
-        SemaRef.Diag(getConstructLoc(), diag::note_acc_gang_reduction_apply)
-            << getOpenACCDirectiveName(getRealDirective());
       SemaRef.Diag(DVar.BaseDSARefExpr->getExprLoc(),
                    diag::note_acc_explicit_dsa)
           << getOpenACCBaseDSAName(DVar.BaseDSAKind);
@@ -484,9 +479,6 @@ bool DSAStackTy::addReduction(VarDecl *VD, Expr *E,
         << (DVar.ReductionId.getName() == ReductionId.getName())
         << ACCReductionClause::printReductionOperatorToString(ReductionId)
         << VD;
-    if (CopiedGangReduction)
-      SemaRef.Diag(getConstructLoc(), diag::note_acc_gang_reduction_apply)
-          << getOpenACCDirectiveName(getRealDirective());
     SemaRef.Diag(DVar.ReductionRefExpr->getExprLoc(),
                  diag::note_acc_previous_reduction)
         << ACCReductionClause::printReductionOperatorToString(
@@ -702,16 +694,20 @@ public:
 };
 
 struct ReductionVar {
-  ACCReductionClause * const C;
-  DeclRefExpr * const RE;
-  ReductionVar(ACCReductionClause *C, DeclRefExpr *RE) : C(C), RE(RE) {}
+  ACCReductionClause *ReductionClause;
+  DeclRefExpr *RE;
+  ReductionVar() : ReductionClause(nullptr), RE(nullptr) {}
+  ReductionVar(ACCReductionClause *C, DeclRefExpr *RE)
+      : ReductionClause(C), RE(RE) {}
+  ReductionVar(const ReductionVar &O)
+      : ReductionClause(O.ReductionClause), RE(O.RE) {}
 };
 class ImplicitGangReductionAdder
     : public StmtVisitor<ImplicitGangReductionAdder> {
   typedef StmtVisitor<ImplicitGangReductionAdder> BaseVisitor;
   DSAStackTy *Stack;
   llvm::SmallVector<ReductionVar, 8> ImplicitGangReductions;
-  llvm::DenseMap<VarDecl *, ACCReductionClause *>  ImplicitGangReductionMap;
+  llvm::DenseSet<VarDecl *> ImplicitGangReductionVars;
   llvm::SmallVector<llvm::DenseSet<const Decl *>, 8> LocalDefinitions;
 
 public:
@@ -730,54 +726,35 @@ public:
           DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
           VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
 
-          // Skip variable if it is declared locally in the gang or if it is
-          // privatized by an enclosing acc loop.
+          // Skip variable if it is declared locally in the acc parallel or if
+          // it is privatized by an enclosing acc loop.
           if (LocalDefinitions.back().count(VD))
             continue;
 
           // Skip variable if it is gang-private at the acc loop due to an
-          // explicit reduction at the acc parallel.
+          // explicit reduction at the acc parallel or due to a previously
+          // computed implicit reduction at the acc parallel.  In either case,
+          // if there's a reduction here with a conflicting operator, that will
+          // be diagnosed by NestedReductionChecker.
           //
-          // When computing implicit gang reductions, we do not consider
-          // variable privatization due to implicit gang reductions.  Otherwise
-          // we would have a self-contradictory definition for implicit gang
-          // reductions: an acc loop's gang-shared reduction variable implies a
-          // gang reduction at the acc parallel, which makes the variable
-          // gang-private at the acc loop, so there's no implicit gang
-          // reduction, which makes the variable gang-shared at the acc loop,
-          // so there is an implicit gang reduction, and so on.  There would
-          // also be similarly confusing questions about whether gang
-          // reductions implied by sibling acc loops affect each other.
+          // It is not actually important for application behavior whether a
+          // reduction (implicit or explicit) at the acc parallel suppresses
+          // other implicit gang reductions with the same reduction operator:
+          // once you have one gang reduction for a variable, all other gang
+          // reductions for it with the same reduction operator are redundant,
+          // so you can include or skip the others without consequence.
           //
-          // Moreover, it is not actually important for application behavior
-          // whether a reduction (implicit or explicit) at the acc parallel
-          // suppresses other implicit gang reductions: once you have one gang
-          // reduction for a variable, all other gang reductions for it are
-          // redundant, so you can include or skip others without consequence
-          // for application behavior.  It does matter that you have consistent
-          // reduction operators, but errors there should be caught as part of
-          // a more general check for reduction operator consistency throughout
-          // a loop nest.  We choose to skip anyway in the case of an explicit
-          // reduction specifically to make those diagnostics less confusing:
-          // we don't want to refer to a reduction as a gang reduction if it
-          // is clearly not a gang reduction because the variable is
-          // gang-private due to an explicit reduction clause at the acc
-          // parallel.  In contrast, it might be confusing to skip in the case
-          // of an implicit reduction because then it might not be obvious that
-          // the variable is gang-private.
-          //
-          // TODO: Actually, we're also not skipping the variable if the acc
-          // loop has gang partitioning.  That enables us to continue to check
-          // for consistent reduction operators on all obvious gang reductions
-          // (gang reductions not due to a gang-shared variable because we
-          // implemented that check before the copy clause and thus before
-          // the possibility of gang-shared reduction variables).  In the
-          // future, that check should instead become part the aforementioned
-          // more general check for reduction operator consistency throughout
-          // a loop nest.  At that point, we can remove the
-          // "&& !HasGangPartitioning" below.  See related todos below.
+          // When computing an implicit gang reduction, we do not consider
+          // variable privatization due to itself.  Otherwise we would have a
+          // self-contradictory definition for implicit gang reductions: an acc
+          // loop's gang-shared reduction variable implies a gang reduction at
+          // the acc parallel, which makes the variable gang-private at the acc
+          // loop, so there's no implicit gang reduction, which makes the
+          // variable gang-shared at the acc loop, so there is an implicit gang
+          // reduction, and so on.
           DSAStackTy::DSAVarData DVar = Stack->getTopDSA(VD);
-          if (!DVar.ReductionId.getName().isEmpty() && !HasGangPartitioning)
+          if (!DVar.ReductionId.getName().isEmpty() ||
+              ImplicitGangReductionVars.count(VD))
             continue;
 
           // Check the base DSA.
@@ -801,51 +778,20 @@ public:
               continue;
             // The acc loop has gang partitioning overriding the implicit
             // firstprivate at the acc parallel.
-            //
-            // TODO: Or overriding the privatization due to an explicit
-            // reduction at the acc parallel.  This case will go away when
-            // the todo above is resolved.
             break;
           case ACC_BASE_DSA_copy:
             // The variable is gang-shared.
-            //
-            // TODO: Or private due to an explicit reduction at the acc
-            // parallel but overridden by gang partitioning at the acc loop.
-            // This case will go away when the todo above is resolved.
             break;
           }
 
-          // We have an implicit gang reduction.  Skip if already have the same
-          // reduction.
-          if (!DVar.ReductionId.getName().isEmpty()) {
-            // Skip if we have the same reduction explicitly specified on
-            // the acc parallel.
-            if (DVar.ReductionId.getName() == C->getNameInfo().getName())
-              continue;
-            // We have a conflicting reduction operator.  Record in
-            // ImplicitGangReductions to produce a diagnostic later.  Don't
-            // record in ImplicitGangReductionMap, where it could suppress
-            // diagnostics for additional conflicts.
-          } else {
-            // Skip if we have the same reduction implicitly specified by
-            // another acc loop.
-            auto COld = ImplicitGangReductionMap.try_emplace(VD, C);
-            if (!COld.second && COld.first->second->getNameInfo().getName() ==
-                                C->getNameInfo().getName())
-              continue;
-            // Either there's no existing reduction operator, or there's a
-            // conflicting implicit reduction operator.  In the latter case,
-            // follow the same behavior as for the explicit case.
-          }
-
-          // Record the reduction.  Conflicting reduction operators will be
-          // reported when we generate the implicit gang reduction clause.
+          // Record the reduction.
           ImplicitGangReductions.emplace_back(C, DRE);
+          ImplicitGangReductionVars.insert(VD);
         }
       }
     }
 
-    // Push space for location definitions in this construct.
+    // Push space for local definitions in this construct.
     LocalDefinitions.emplace_back(LocalDefinitions.back());
 
     // Record variables privatized by this directive as local definitions so
@@ -989,6 +935,100 @@ public:
   ImplicitBaseDSAAdder(DSAStackTy *S) : Stack(S) {
     LocalDefinitions.emplace_back();
   }
+};
+
+// OpenACC 2.7 sec. 2.9.11 L1580-1581:
+// "Reduction clauses on nested constructs for the same reduction var must
+// have the same reduction operator."
+// This examines reductions nested within implicit gang reductions as well, but
+// that is not required by OpenACC 2.7.
+class NestedReductionChecker : public StmtVisitor<NestedReductionChecker> {
+  typedef StmtVisitor<NestedReductionChecker> BaseVisitor;
+  DSAStackTy *Stack;
+  llvm::SmallVector<llvm::DenseMap<VarDecl *, ReductionVar>, 8> Privates;
+  bool Error = false;
+
+public:
+  void VisitACCExecutableDirective(ACCExecutableDirective *D) {
+    // Push space for privates in this construct.
+    Privates.emplace_back(Privates.back());
+
+    // Record variables privatized by this directive, and complain for any
+    // reduction conflicting with its immediately enclosing reduction.
+    for (ACCClause *C : D->clauses()) {
+      if (!C)
+        return;
+      if (C->getClauseKind() == ACCC_reduction) {
+        ACCReductionClause *ReductionClause = cast<ACCReductionClause>(C);
+        for (Expr *VR : ReductionClause->varlists()) {
+          // Try to record this variable's reduction.
+          DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
+          VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
+          auto Insert = Privates.back().try_emplace(VD, ReductionClause, DRE);
+
+          // If successfully recorded it because there was no enclosing clause
+          // privatizing it, then there's nothing to compare against.
+          if (Insert.second)
+            continue;
+
+          // If the enclosing privatizing clause is a reduction, complain if
+          // the reduction operator conflicts.
+          ReductionVar &EnclosingPrivate = Insert.first->second;
+          if (EnclosingPrivate.ReductionClause &&
+              ReductionClause->getNameInfo().getName() !=
+              EnclosingPrivate.ReductionClause->getNameInfo().getName()) {
+            Error = true;
+            Stack->SemaRef.Diag(DRE->getExprLoc(),
+                                diag::err_acc_conflicting_reduction)
+                << false
+                << ACCReductionClause::printReductionOperatorToString(
+                    ReductionClause->getNameInfo())
+                << VD;
+            Stack->SemaRef.Diag(EnclosingPrivate.RE->getExprLoc(),
+                                diag::note_acc_enclosing_reduction)
+                << ACCReductionClause::printReductionOperatorToString(
+                    EnclosingPrivate.ReductionClause->getNameInfo());
+            if (EnclosingPrivate.ReductionClause->getBeginLoc().isInvalid())
+              Stack->SemaRef.Diag(Stack->getConstructLoc(),
+                                  diag::note_acc_implied_as_gang_reduction);
+          }
+
+          // Record this reduction.
+          //
+          // In the case that the enclosing privatizing clause is a reduction,
+          // replacing its record with this reduction means every reduction
+          // is compared against its immediately enclosing reduction rather
+          // than the outermost reduction.  The diagnostics seem more intuitive
+          // that way.
+          EnclosingPrivate = ReductionVar(ReductionClause, DRE);
+        }
+      } else {
+        // Record variables privatized by clauses other than reductions.
+        for (Expr *VR : getPrivateVarsFromClause(C)) {
+          DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
+          VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
+          Privates.back()[VD] = ReductionVar();
+        }
+      }
+    }
+
+    // Recurse to children.
+    for (auto *Child : D->children()) {
+      if (Child)
+        Visit(Child);
+    }
+
+    // Pop privates in this construct.
+    Privates.pop_back();
+  }
+  void VisitStmt(Stmt *S) {
+    for (Stmt *C : S->children()) {
+      if (C)
+        Visit(C);
+    }
+  }
+  bool hasError() { return Error; }
+  NestedReductionChecker(DSAStackTy *S) : Stack(S) { Privates.emplace_back(); }
 };
 } // namespace
 
@@ -1174,8 +1214,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
       for (ReductionVar RV : ReductionAdder.getImplicitGangReductions()) {
         ACCClause *Implicit = ActOnOpenACCReductionClause(
             RV.RE, SourceLocation(), SourceLocation(), SourceLocation(),
-            SourceLocation(), RV.C->getNameInfo(),
-            /*CopiedGangReduction*/ true);
+            SourceLocation(), RV.ReductionClause->getNameInfo());
         if (!Implicit)
           ErrorFound = true;
         else
@@ -1221,6 +1260,12 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     Res = ActOnOpenACCParallelDirective(
         ClausesWithImplicit, AStmt, StartLoc, EndLoc,
         DSAStack->getNestedWorkerPartitioning());
+    if (!Res.isInvalid()) {
+      NestedReductionChecker Checker(DSAStack);
+      Checker.Visit(Res.get());
+      if (Checker.hasError())
+        ErrorFound = true;
+    }
     break;
   case ACCD_loop:
     Res = ActOnOpenACCLoopDirective(
@@ -1602,7 +1647,7 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(ArrayRef<Expr *> VarList,
 ACCClause *Sema::ActOnOpenACCReductionClause(
     ArrayRef<Expr *> VarList, SourceLocation StartLoc, SourceLocation LParenLoc,
     SourceLocation ColonLoc, SourceLocation EndLoc,
-    const DeclarationNameInfo &ReductionId, bool CopiedGangReduction) {
+    const DeclarationNameInfo &ReductionId) {
   DeclarationName DN = ReductionId.getName();
   OverloadedOperatorKind OOK = DN.getCXXOverloadedOperator();
   SmallVector<Expr *, 8> Vars;
@@ -1787,8 +1832,7 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     }
 
     // Record reduction item.
-    if (!DSAStack->addReduction(VD, RefExpr->IgnoreParens(), ReductionId,
-                                CopiedGangReduction))
+    if (!DSAStack->addReduction(VD, RefExpr->IgnoreParens(), ReductionId))
       Vars.push_back(RefExpr);
   }
   if (Vars.empty())

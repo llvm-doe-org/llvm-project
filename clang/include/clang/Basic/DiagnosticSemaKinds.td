@@ -9393,10 +9393,12 @@ def err_acc_reduction_on_loop_control_var : Error<
   "OpenACC loop control variable '%0' cannot have reduction">;
 def err_acc_conflicting_reduction : Error<
   "%select{conflicting|redundant}0 '%1' reduction for variable %2">;
-def note_acc_gang_reduction_apply : Note<
-  "while applying gang reduction to '#pragma acc %0' here">;
 def note_acc_previous_reduction : Note<
   "previous '%0' reduction here">;
+def note_acc_enclosing_reduction : Note<
+  "enclosing '%0' reduction here">;
+def note_acc_implied_as_gang_reduction : Note<
+  "implied as gang reduction here">;
 } // end of OpenACC category
 
 let CategoryName = "Related Result Type Issue" in {

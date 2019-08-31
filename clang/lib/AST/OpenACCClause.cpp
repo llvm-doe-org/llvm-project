@@ -29,8 +29,8 @@ ACCClause::child_range ACCClause::children() {
   llvm_unreachable("unknown ACCClause");
 }
 
-llvm::iterator_range<ArrayRef<const Expr *>::iterator>
-clang::getPrivateVarsFromClause(const ACCClause *C) {
+llvm::iterator_range<ArrayRef<Expr *>::iterator>
+clang::getPrivateVarsFromClause(ACCClause *C) {
   switch (C->getClauseKind()) {
   case ACCC_private:
     return cast<ACCPrivateClause>(C)->varlists();
@@ -50,8 +50,8 @@ clang::getPrivateVarsFromClause(const ACCClause *C) {
   case ACCC_worker:
   case ACCC_vector:
   case ACCC_collapse:
-    return llvm::iterator_range<ArrayRef<const Expr *>::iterator>(
-        llvm::makeArrayRef<const Expr *>(nullptr, (int)0));
+    return llvm::iterator_range<ArrayRef<Expr *>::iterator>(
+        llvm::makeArrayRef<Expr *>(nullptr, (int)0));
   case ACCC_unknown:
     llvm_unreachable("unexpected unknown ACCClause");
   }

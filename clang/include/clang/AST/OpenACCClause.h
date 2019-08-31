@@ -147,8 +147,8 @@ public:
 
 /// If a clause makes variables private to the construct on which it appears,
 /// return the expressions referencing those variables.
-llvm::iterator_range<ArrayRef<const Expr *>::iterator>
-getPrivateVarsFromClause(const ACCClause *);
+llvm::iterator_range<ArrayRef<Expr *>::iterator>
+getPrivateVarsFromClause(ACCClause *);
 
 /// This represents the clause 'copy' for '#pragma acc ...' directives.
 ///

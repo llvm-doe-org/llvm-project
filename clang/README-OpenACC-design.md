@@ -683,11 +683,13 @@ this section.
           future of this behavior is unclear.
 * It is an error if, on a particular OpenACC directive, there exist
   multiple *imp|exp* `reduction` with different reduction operators
-  for a single variable *v*.
-    * OpenACC 2.7 sec. 2.9.11 L1580-1581 specifies this restriction
-      for *exp* `reduction` on nested constructs, but it doesn't
-      discuss the case where sibling `acc loop` constructs specify
-      conflicting gang reductions.
+  for a single variable *v*.  Moreover, *imp* `reduction` is included
+  when applying OpenACC 2.7 sec. 2.9.11 L1580-1581.  Notes:
+    * That passage specifies this restriction for *exp* `reduction` on
+      nested constructs, but it doesn't discuss the case where sibling
+      `acc loop` constructs specify conflicting gang reductions or
+      where multiple conflicting reductions appear on the same
+      directive.
 * Variable type restrictions for `reduction` are specified in
   `README-OpenACC-status.md` as that is a highly user-visible issue.
 

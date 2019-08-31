@@ -5,9 +5,9 @@
 //
 // When CMB is set, it combines those "acc parallel" and "acc loop" directives
 // in order to check the same diagnostics but for combined "acc parallel loop"
-// directives.  In some cases (gang-reduction inter-directive conflicts),
-// combining them would defeat the purpose of the test, so it instead adds
-// "loop" and a for loop to the outer "acc parallel"
+// directives.  In some cases (reduction inter-directive conflicts), combining
+// them would defeat the purpose of the test, so it instead adds "loop" and a
+// for loop to the outer "acc parallel"
 
 // RUN: %data {
 // RUN:   (c=ERR_ACC     )
@@ -1761,7 +1761,11 @@ void fn() {
     #pragma acc CMB_PAR loop seq reduction(*:jk i)
     for (int i = 0; i < 5; ++i)
       ;
-
+  }
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
     // expected-error@+1 {{expected expression}}
     #pragma acc CMB_PAR loop private(jk ,) vector
     for (int i = 0; i < 5; ++i)
@@ -2071,108 +2075,399 @@ void fn() {
   }
 
   //--------------------------------------------------
-  // Data sharing attribute clauses: gang reduction inter-directive conflicts
+  // Data sharing attribute clauses: reduction inter-directive conflicts
   //--------------------------------------------------
 
-  // Reduction on acc parallel, non-conflicting gang reductions on acc loops.
+  // Explicit reduction on acc parallel, non-conflicting reductions on acc
+  // loops.
   #pragma acc parallel CMB_LOOP reduction(+:i,jk) copy(jk)
   CMB_FORLOOP_HEAD
   {
-    #pragma acc loop gang reduction(+:i,jk)
+    #pragma acc loop worker reduction(+:i,jk)
     for (int j = 0; j < 5; ++j)
       ;
+    #pragma acc loop reduction(+:i,jk) gang
+    for (int j = 0; j < 5; ++j)
+      ;
+    #pragma acc loop vector reduction(+:i,jk)
+    for (int j = 0; j < 5; ++j)
+      ;
+    #pragma acc loop seq reduction(+:i,jk)
+    for (int j = 0; j < 5; ++j)
+      ;
+    #pragma acc loop gang reduction(+:i,jk) worker
+    for (int j = 0; j < 5; ++j)
+      ;
+    #pragma acc loop gang reduction(+:i,jk)
+    for (int j = 0; j < 5; ++j) {
+      #pragma acc loop worker reduction(+:i,jk)
+      for (int j = 0; j < 5; ++j) {
+        #pragma acc loop vector reduction(+:i,jk)
+        for (int j = 0; j < 5; ++j)
+          ;
+      }
+    }
+    #pragma acc loop worker reduction(+:i,jk)
+    for (int j = 0; j < 5; ++j) {
+      #pragma acc loop vector reduction(+:i,jk)
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+  }
+  // Again with no gang loops.
+  #pragma acc parallel CMB_LOOP reduction(+:i,jk) copy(jk)
+  CMB_FORLOOP_HEAD
+  {
     #pragma acc loop worker reduction(+:i,jk)
     for (int j = 0; j < 5; ++j)
       ;
     #pragma acc loop vector reduction(+:i,jk)
     for (int j = 0; j < 5; ++j)
       ;
-    // expected-error@+3 {{redundant '+' reduction for variable 'i'}}
-    // expected-error@+2 {{redundant '+' reduction for variable 'jk'}}
-    // expected-note@+1 2 {{previous '+' reduction here}}
-    #pragma acc loop gang reduction(+:i,jk) reduction(+:i,jk)
+    #pragma acc loop seq reduction(+:i,jk)
     for (int j = 0; j < 5; ++j)
       ;
+    #pragma acc loop reduction(+:i,jk) vector worker
+    for (int j = 0; j < 5; ++j)
+      ;
+    #pragma acc loop reduction(+:i,jk) worker
+    for (int j = 0; j < 5; ++j) {
+      #pragma acc loop reduction(+:i,jk) vector
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
   }
 
-  // Reduction on acc parallel, conflicting gang reductions on acc loops.
-  // sep-note@+2 4 {{while applying gang reduction to '#pragma acc parallel' here}}
-  // sep-note@+1 4 {{previous '+' reduction here}}
-  #pragma acc parallel CMB_LOOP reduction(+:f,d) copy(d)
-  CMB_FORLOOP_HEAD
-  {
-    // sep-error@+2 {{conflicting '*' reduction for variable 'f'}}
-    // sep-error@+1 {{conflicting '*' reduction for variable 'd'}}
-    #pragma acc loop gang reduction(*:f,d)
-    for (int j = 0; j < 5; ++j)
-      ;
-    #pragma acc loop worker reduction(max:f,d)
-    for (int j = 0; j < 5; ++j)
-      ;
-    #pragma acc loop vector reduction(min:f,d)
-    for (int j = 0; j < 5; ++j)
-      ;
-    // expected-error@+5 {{redundant '*' reduction for variable 'f'}}
-    // expected-error@+4 {{redundant '*' reduction for variable 'd'}}
-    // expected-note@+3 2 {{previous '*' reduction here}}
-    // sep-error@+2 {{conflicting '*' reduction for variable 'f'}}
-    // sep-error@+1 {{conflicting '*' reduction for variable 'd'}}
-    #pragma acc loop gang worker reduction(*:f,f,d,d)
-    for (int j = 0; j < 5; ++j)
-      ;
-  }
-
-  // No reduction on acc parallel, non-conflicting gang reductions on acc
+  // Implicit reduction on acc parallel, non-conflicting reductions on acc
   // loops.
-  #pragma acc parallel CMB_LOOP copy(p)
-  CMB_FORLOOP_HEAD
-  {
-    #pragma acc loop gang vector reduction(max:d,p)
-    for (int j = 0; j < 5; ++j)
-      ;
-    #pragma acc loop worker reduction(min:d) reduction(max:p)
-    for (int j = 0; j < 5; ++j)
-      ;
-    #pragma acc loop vector reduction(&&:d) reduction(max:p)
-    for (int j = 0; j < 5; ++j)
-      ;
-    // expected-error@+3 {{redundant 'max' reduction for variable 'd'}}
-    // expected-error@+2 {{redundant 'max' reduction for variable 'p'}}
-    // expected-note@+1 2 {{previous 'max' reduction here}}
-    #pragma acc loop gang worker vector reduction(max:d,d,p,p)
-    for (int j = 0; j < 5; ++j)
-      ;
-  }
-
-  // No reduction on acc parallel, conflicting gang reductions on acc loops.
-  // sep-note@+2 4 {{while applying gang reduction to '#pragma acc parallel' here}}
-  // cmb-note@+1 4 {{while applying gang reduction to '#pragma acc parallel loop' here}}
   #pragma acc parallel CMB_LOOP copy(b)
   CMB_FORLOOP_HEAD
   {
-    // expected-note@+1 4 {{previous 'max' reduction here}}
-    #pragma acc loop reduction(max:p,b) gang
+    #pragma acc loop worker reduction(max:p,b)
     for (int j = 0; j < 5; ++j)
       ;
-    // expected-error@+2 {{conflicting 'min' reduction for variable 'p'}}
-    // expected-error@+1 {{conflicting 'min' reduction for variable 'b'}}
-    #pragma acc loop worker reduction(min:p,b) gang
+    #pragma acc loop reduction(max:p,b) gang worker vector
     for (int j = 0; j < 5; ++j)
       ;
-    // expected-error@+1 {{conflicting 'min' reduction for variable 'b'}}
-    #pragma acc loop worker reduction(min:p,b)
+    #pragma acc loop reduction(max:p,b) vector
     for (int j = 0; j < 5; ++j)
       ;
-    // expected-error@+1 {{conflicting 'min' reduction for variable 'b'}}
-    #pragma acc loop vector reduction(min:p,b)
+    #pragma acc loop reduction(max:p,b) seq
     for (int j = 0; j < 5; ++j)
       ;
+    #pragma acc loop gang reduction(max:p,b)
+    for (int j = 0; j < 5; ++j)
+      ;
+    #pragma acc loop gang worker reduction(max:p,b)
+    for (int j = 0; j < 5; ++j) {
+      #pragma acc loop vector reduction(max:p,b)
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+    #pragma acc loop worker reduction(max:p,b)
+    for (int j = 0; j < 5; ++j) {
+      #pragma acc loop vector reduction(max:p,b)
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+  }
+  // Again with no gang loops.
+  #pragma acc parallel CMB_LOOP copy(p)
+  CMB_FORLOOP_HEAD
+  {
+    #pragma acc loop worker reduction(max:p,b)
+    for (int j = 0; j < 5; ++j)
+      ;
+    #pragma acc loop reduction(max:p) reduction(min:b) vector
+    for (int j = 0; j < 5; ++j)
+      ;
+    #pragma acc loop reduction(max:p) reduction(&&:b) seq
+    for (int j = 0; j < 5; ++j)
+      ;
+    #pragma acc loop vector reduction(max:p) reduction(||:b) worker
+    for (int j = 0; j < 5; ++j)
+      ;
+    #pragma acc loop reduction(max:p) reduction(*:b) worker
+    for (int j = 0; j < 5; ++j) {
+      #pragma acc loop vector reduction(max:p) reduction(*:b)
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
   }
 
-  // No reduction on acc parallel, conflicting gang reductions on acc loops
-  // in sibling loop nests.
-  // sep-note@+2 4 {{while applying gang reduction to '#pragma acc parallel' here}}
-  // cmb-note@+1 4 {{while applying gang reduction to '#pragma acc parallel loop' here}}
+  // Explicit reduction on acc parallel, conflicting reductions on acc loops.
+  // expected-note@+1 14 {{enclosing '+' reduction here}}
+  #pragma acc parallel CMB_LOOP reduction(+:f,d) copy(d)
+  CMB_FORLOOP_HEAD
+  {
+    // expected-error@+2 {{conflicting 'max' reduction for variable 'f'}}
+    // expected-error@+1 {{conflicting 'max' reduction for variable 'd'}}
+    #pragma acc loop worker reduction(max:f,d)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+2 {{conflicting '*' reduction for variable 'f'}}
+    // expected-error@+1 {{conflicting '*' reduction for variable 'd'}}
+    #pragma acc loop gang reduction(*:f,d)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+2 {{conflicting 'min' reduction for variable 'f'}}
+    // expected-error@+1 {{conflicting 'min' reduction for variable 'd'}}
+    #pragma acc loop vector reduction(min:f,d)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+2 {{conflicting '&&' reduction for variable 'f'}}
+    // expected-error@+1 {{conflicting '&&' reduction for variable 'd'}}
+    #pragma acc loop seq reduction(&&:f,d)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+5 {{redundant '||' reduction for variable 'f'}}
+    // expected-error@+4 {{redundant '||' reduction for variable 'd'}}
+    // expected-note@+3 2 {{previous '||' reduction here}}
+    // expected-error@+2 {{conflicting '||' reduction for variable 'f'}}
+    // expected-error@+1 {{conflicting '||' reduction for variable 'd'}}
+    #pragma acc loop gang worker reduction(||:f,f,d,d)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+3 {{conflicting '||' reduction for variable 'f'}}
+    // expected-error@+2 {{conflicting '||' reduction for variable 'd'}}
+    // expected-note@+1 2 {{enclosing '||' reduction here}}
+    #pragma acc loop gang reduction(||:f,d)
+    for (int j = 0; j < 5; ++j) {
+      // expected-error@+3 {{conflicting '&&' reduction for variable 'f'}}
+      // expected-error@+2 {{conflicting '&&' reduction for variable 'd'}}
+      // expected-note@+1 2 {{enclosing '&&' reduction here}}
+      #pragma acc loop worker reduction(&&:f,d)
+      for (int j = 0; j < 5; ++j) {
+        // expected-error@+2 {{conflicting '*' reduction for variable 'f'}}
+        // expected-error@+1 {{conflicting '*' reduction for variable 'd'}}
+        #pragma acc loop vector reduction(*:f,d)
+        for (int j = 0; j < 5; ++j)
+          ;
+      }
+    }
+    // expected-error@+3 {{conflicting '&&' reduction for variable 'f'}}
+    // expected-error@+2 {{conflicting '&&' reduction for variable 'd'}}
+    // expected-note@+1 2 {{enclosing '&&' reduction here}}
+    #pragma acc loop worker reduction(&&:f,d)
+    for (int j = 0; j < 5; ++j) {
+      // expected-error@+2 {{conflicting '*' reduction for variable 'f'}}
+      // expected-error@+1 {{conflicting '*' reduction for variable 'd'}}
+      #pragma acc loop vector reduction(*:f,d)
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+  }
+  // Again with no gang loops.
+  // expected-note@+1 10 {{enclosing '+' reduction here}}
+  #pragma acc parallel CMB_LOOP reduction(+:f,d) copy(d)
+  CMB_FORLOOP_HEAD
+  {
+    // expected-error@+2 {{conflicting 'max' reduction for variable 'f'}}
+    // expected-error@+1 {{conflicting 'max' reduction for variable 'd'}}
+    #pragma acc loop worker reduction(max:f,d)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+2 {{conflicting 'min' reduction for variable 'f'}}
+    // expected-error@+1 {{conflicting 'min' reduction for variable 'd'}}
+    #pragma acc loop vector reduction(min:f,d)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+2 {{conflicting '*' reduction for variable 'f'}}
+    // expected-error@+1 {{conflicting '*' reduction for variable 'd'}}
+    #pragma acc loop seq reduction(*:f,d)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+5 {{redundant '&&' reduction for variable 'f'}}
+    // expected-error@+4 {{redundant '&&' reduction for variable 'd'}}
+    // expected-note@+3 2 {{previous '&&' reduction here}}
+    // expected-error@+2 {{conflicting '&&' reduction for variable 'f'}}
+    // expected-error@+1 {{conflicting '&&' reduction for variable 'd'}}
+    #pragma acc loop worker vector reduction(&&:f,f,d,d)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+3 {{conflicting '&&' reduction for variable 'f'}}
+    // expected-error@+2 {{conflicting '&&' reduction for variable 'd'}}
+    // expected-note@+1 2 {{enclosing '&&' reduction here}}
+    #pragma acc loop worker reduction(&&:f,d)
+    for (int j = 0; j < 5; ++j) {
+      // expected-error@+2 {{conflicting '||' reduction for variable 'f'}}
+      // expected-error@+1 {{conflicting '||' reduction for variable 'd'}}
+      #pragma acc loop vector reduction(||:f,d)
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+  }
+
+  // Implicit reduction on acc parallel, conflicting reductions on acc loops.
+  // expected-note@+1 12 {{implied as gang reduction here}}
+  #pragma acc parallel CMB_LOOP copy(jk)
+  CMB_FORLOOP_HEAD
+  {
+    // expected-note@+1 12 {{enclosing 'max' reduction here}}
+    #pragma acc loop gang reduction(max:d,jk)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+2 {{conflicting 'min' reduction for variable 'd'}}
+    // expected-error@+1 {{conflicting 'min' reduction for variable 'jk'}}
+    #pragma acc loop worker reduction(min:d) reduction(min:jk)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+2 {{conflicting '&&' reduction for variable 'd'}}
+    // expected-error@+1 {{conflicting '&&' reduction for variable 'jk'}}
+    #pragma acc loop vector reduction(&&:d) reduction(&&:jk)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+2 {{conflicting '||' reduction for variable 'd'}}
+    // expected-error@+1 {{conflicting '||' reduction for variable 'jk'}}
+    #pragma acc loop seq reduction(||:d) reduction(||:jk)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+5 {{redundant '+' reduction for variable 'd'}}
+    // expected-error@+4 {{redundant '+' reduction for variable 'jk'}}
+    // expected-note@+3 2 {{previous '+' reduction here}}
+    // expected-error@+2 {{conflicting '+' reduction for variable 'd'}}
+    // expected-error@+1 {{conflicting '+' reduction for variable 'jk'}}
+    #pragma acc loop gang worker vector reduction(+:d,jk) reduction(+:jk,d)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+3 {{conflicting '+' reduction for variable 'd'}}
+    // expected-error@+2 {{conflicting '+' reduction for variable 'jk'}}
+    // expected-note@+1 2 {{enclosing '+' reduction here}}
+    #pragma acc loop gang reduction(+:d,jk)
+    for (int j = 0; j < 5; ++j) {
+      // expected-error@+3 {{conflicting '*' reduction for variable 'd'}}
+      // expected-error@+2 {{conflicting '*' reduction for variable 'jk'}}
+      // expected-note@+1 2 {{enclosing '*' reduction here}}
+      #pragma acc loop worker reduction(*:d,jk)
+      for (int j = 0; j < 5; ++j) {
+        // expected-error@+2 {{conflicting 'max' reduction for variable 'd'}}
+        // expected-error@+1 {{conflicting 'max' reduction for variable 'jk'}}
+        #pragma acc loop vector reduction(max:d,jk)
+        for (int j = 0; j < 5; ++j)
+          ;
+      }
+    }
+    // expected-error@+3 {{conflicting '*' reduction for variable 'd'}}
+    // expected-error@+2 {{conflicting '*' reduction for variable 'jk'}}
+    // expected-note@+1 2 {{enclosing '*' reduction here}}
+    #pragma acc loop worker reduction(*:d,jk)
+    for (int j = 0; j < 5; ++j) {
+      // expected-error@+2 {{conflicting 'max' reduction for variable 'd'}}
+      // expected-error@+1 {{conflicting 'max' reduction for variable 'jk'}}
+      #pragma acc loop vector reduction(max:d,jk)
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+  }
+  // Again with no gang loops and worker first.
+  // expected-note@+1 4 {{implied as gang reduction here}}
+  #pragma acc parallel CMB_LOOP copy(jk)
+  CMB_FORLOOP_HEAD
+  {
+    // expected-note@+1 4 {{enclosing 'max' reduction here}}
+    #pragma acc loop worker reduction(max:d) reduction(max:jk)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+1 {{conflicting 'min' reduction for variable 'jk'}}
+    #pragma acc loop vector reduction(min:d) reduction(min:jk)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+1 {{conflicting '&&' reduction for variable 'jk'}}
+    #pragma acc loop seq reduction(&&:d) reduction(&&:jk)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+4 {{redundant '||' reduction for variable 'd'}}
+    // expected-error@+3 {{redundant '||' reduction for variable 'jk'}}
+    // expected-note@+2 2 {{previous '||' reduction here}}
+    // expected-error@+1 {{conflicting '||' reduction for variable 'jk'}}
+    #pragma acc loop worker vector reduction(||:d,jk) reduction(||:jk,d)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+2 {{conflicting '||' reduction for variable 'jk'}}
+    // expected-note@+1 2 {{enclosing '||' reduction here}}
+    #pragma acc loop worker reduction(||:d,jk)
+    for (int j = 0; j < 5; ++j) {
+      // expected-error@+2 {{conflicting '+' reduction for variable 'd'}}
+      // expected-error@+1 {{conflicting '+' reduction for variable 'jk'}}
+      #pragma acc loop vector reduction(+:d,jk)
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+  }
+  // Again with no gang loops and vector first.
+  // expected-note@+1 4 {{implied as gang reduction here}}
+  #pragma acc parallel CMB_LOOP copy(jk)
+  CMB_FORLOOP_HEAD
+  {
+    // expected-note@+1 4 {{enclosing 'max' reduction here}}
+    #pragma acc loop vector reduction(max:d) reduction(max:jk)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+1 {{conflicting 'min' reduction for variable 'jk'}}
+    #pragma acc loop seq reduction(min:d) reduction(min:jk)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+1 {{conflicting '&&' reduction for variable 'jk'}}
+    #pragma acc loop worker reduction(&&:d) reduction(&&:jk)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+4 {{redundant '||' reduction for variable 'd'}}
+    // expected-error@+3 {{redundant '||' reduction for variable 'jk'}}
+    // expected-note@+2 2 {{previous '||' reduction here}}
+    // expected-error@+1 {{conflicting '||' reduction for variable 'jk'}}
+    #pragma acc loop worker vector reduction(||:d,jk) reduction(||:jk,d)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+2 {{conflicting '||' reduction for variable 'jk'}}
+    // expected-note@+1 2 {{enclosing '||' reduction here}}
+    #pragma acc loop worker reduction(||:d,jk)
+    for (int j = 0; j < 5; ++j) {
+      // expected-error@+2 {{conflicting '+' reduction for variable 'd'}}
+      // expected-error@+1 {{conflicting '+' reduction for variable 'jk'}}
+      #pragma acc loop vector reduction(+:d,jk)
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+  }
+  // Again with no gang loops and seq first.
+  // expected-note@+1 4 {{implied as gang reduction here}}
+  #pragma acc parallel CMB_LOOP copy(f)
+  CMB_FORLOOP_HEAD
+  {
+    // expected-note@+1 4 {{enclosing 'min' reduction here}}
+    #pragma acc loop seq reduction(min:d) reduction(min:f)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+1 {{conflicting '&&' reduction for variable 'f'}}
+    #pragma acc loop vector reduction(&&:d) reduction(&&:f)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+1 {{conflicting 'max' reduction for variable 'f'}}
+    #pragma acc loop worker reduction(max:d) reduction(max:f)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+4 {{redundant '*' reduction for variable 'd'}}
+    // expected-error@+3 {{redundant '*' reduction for variable 'f'}}
+    // expected-note@+2 2 {{previous '*' reduction here}}
+    // expected-error@+1 {{conflicting '*' reduction for variable 'f'}}
+    #pragma acc loop worker vector reduction(*:d,f) reduction(*:f,d)
+    for (int j = 0; j < 5; ++j)
+      ;
+    // expected-error@+2 {{conflicting '||' reduction for variable 'f'}}
+    // expected-note@+1 2 {{enclosing '||' reduction here}}
+    #pragma acc loop worker reduction(||:d,f)
+    for (int j = 0; j < 5; ++j) {
+      // expected-error@+2 {{conflicting '+' reduction for variable 'd'}}
+      // expected-error@+1 {{conflicting '+' reduction for variable 'f'}}
+      #pragma acc loop vector reduction(+:d,f)
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+  }
+
+  // Implicit reduction on acc parallel, conflicting gang reductions on acc
+  // loops in sibling loop nests.
+  // expected-note@+1 2 {{implied as gang reduction here}}
   #pragma acc parallel CMB_LOOP copy(e)
   CMB_FORLOOP_HEAD
   {
@@ -2184,12 +2479,14 @@ void fn() {
         for (int i2 = 0; i2 < 5; ++i2) {
           #pragma acc loop auto
           for (int i3 = 0; i3 < 5; ++i3) {
-            // expected-note@+1 4 {{previous '&' reduction here}}
-            #pragma acc loop vector reduction(&:b,e) gang
+            // First is gang-partitioned.
+            // expected-note@+1 {{enclosing '&' reduction here}}
+            #pragma acc loop vector reduction(&:b) gang
             for (int j = 0; j < 5; ++j)
               ;
-            // expected-error@+1 {{conflicting '&&' reduction for variable 'e'}}
-            #pragma acc loop worker reduction(&&:b,e)
+            // First is not gang-partitioned but still has gang reduction.
+            // expected-note@+1 {{enclosing '&&' reduction here}}
+            #pragma acc loop worker reduction(&&:e)
             for (int j = 0; j < 5; ++j)
               ;
           }
@@ -2198,23 +2495,21 @@ void fn() {
     }
     #pragma acc loop seq
     for (int i = 0; i < 5; ++i) {
-      // expected-error@+2 {{conflicting '|' reduction for variable 'b'}}
       // expected-error@+1 {{conflicting '|' reduction for variable 'e'}}
-      #pragma acc loop worker reduction(|:b,e) vector gang
+      #pragma acc loop worker reduction(|:e) vector gang
       for (int j = 0; j < 5; ++j)
         ;
-      // expected-error@+1 {{conflicting '||' reduction for variable 'e'}}
-      #pragma acc loop vector reduction(||:b,e)
+      // expected-error@+1 {{conflicting '||' reduction for variable 'b'}}
+      #pragma acc loop vector reduction(||:b)
       for (int j = 0; j < 5; ++j)
         ;
     }
   }
 
-  // Local declarations prevent conflicts for gang reductions on acc loops,
+  // Local declarations prevent conflicts among gang reductions on acc loops,
   // but merely nesting in an acc loop seq doesn't.
-  // sep-note@+3 6 {{while applying gang reduction to '#pragma acc parallel' here}}
-  // cmb-note@+2 4 {{while applying gang reduction to '#pragma acc parallel loop' here}}
-  // sep-note@+1 2 {{previous '^' reduction here}}
+  // expected-note@+2 6 {{implied as gang reduction here}}
+  // expected-note@+1 6 {{enclosing '^' reduction here}}
   #pragma acc parallel CMB_LOOP reduction(^:e,jk) copy(jk,f)
   CMB_FORLOOP_HEAD
   {
@@ -2242,12 +2537,15 @@ void fn() {
     }
     #pragma acc loop seq
     for (int i = 0; i < 5; ++i) {
-      // sep-error@+3 {{conflicting '||' reduction for variable 'e'}}
-      // sep-error@+2 {{conflicting '||' reduction for variable 'jk'}}
-      // expected-note@+1 4 {{previous '||' reduction here}}
+      // expected-error@+3 {{conflicting '||' reduction for variable 'e'}}
+      // expected-error@+2 {{conflicting '||' reduction for variable 'jk'}}
+      // expected-note@+1 6 {{enclosing '||' reduction here}}
       #pragma acc loop gang reduction(||:e,d,jk,f)
       for (int j = 0; j < 5; ++j)
         ;
+      // expected-error@+4 {{conflicting 'max' reduction for variable 'e'}}
+      // expected-error@+3 {{conflicting 'max' reduction for variable 'd'}}
+      // expected-error@+2 {{conflicting 'max' reduction for variable 'jk'}}
       // expected-error@+1 {{conflicting 'max' reduction for variable 'f'}}
       #pragma acc loop worker reduction(max:e,d,jk,f)
       for (int j = 0; j < 5; ++j)
@@ -2260,20 +2558,24 @@ void fn() {
       #pragma acc loop gang reduction(+:d,f)
       for (int j = 0; j < 5; ++j)
         ;
+      // expected-error@+4 {{conflicting 'min' reduction for variable 'e'}}
+      // expected-error@+3 {{conflicting 'min' reduction for variable 'd'}}
+      // expected-error@+2 {{conflicting 'min' reduction for variable 'jk'}}
       // expected-error@+1 {{conflicting 'min' reduction for variable 'f'}}
       #pragma acc loop vector reduction(min:e,d,jk,f)
       for (int j = 0; j < 5; ++j)
         ;
     }
   }
-  // sep-note@+2 {{while applying gang reduction to '#pragma acc parallel' here}}
-  // cmb-note@+1 {{while applying gang reduction to '#pragma acc parallel loop' here}}
+
+  // Implicit gang clauses can produce implicit gang reductions.
+  // expected-note@+1 {{implied as gang reduction here}}
   #pragma acc parallel CMB_LOOP
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop seq
     for (int i = 0; i < 5; ++i) {
-      // expected-note@+1 {{previous '&&' reduction here}}
+      // expected-note@+1 {{enclosing '&&' reduction here}}
       #pragma acc loop reduction(&&:jk)
       for (int j = 0; j < 5; ++j)
         ;
@@ -2285,6 +2587,52 @@ void fn() {
       for (int j = 0; j < 5; ++j)
         ;
     }
+  }
+
+  // acc loop reductions for acc parallel firstprivate or private variables
+  // don't imply gang reductions on acc parallel.
+  #pragma acc parallel CMB_LOOP firstprivate(i) private(jk)
+  CMB_FORLOOP_HEAD
+  {
+    // expected-note@+1 2 {{enclosing '+' reduction here}}
+    #pragma acc loop gang reduction(+:i,jk)
+    for (int j = 0; j < 5; ++j) {
+      // expected-error@+2 {{conflicting '*' reduction for variable 'i'}}
+      // expected-error@+1 {{conflicting '*' reduction for variable 'jk'}}
+      #pragma acc loop worker vector reduction(*:i,jk)
+      for (int j = 0; j < 5; ++j)
+        ;
+    }
+    // No conflict because no implied enclosing gang reduction.
+    #pragma acc loop gang reduction(*:i,jk)
+    for (int j = 0; j < 5; ++j)
+      ;
+  }
+
+  // acc loop reductions for acc loop private variables don't imply gang
+  // reductions on acc parallel.
+  #pragma acc parallel CMB_LOOP copy(i,d)
+  CMB_FORLOOP_HEAD
+  {
+    #pragma acc loop seq private(i,jk)
+    for (int j = 0; j < 5; ++j) {
+      // expected-note@+1 2 {{enclosing '+' reduction here}}
+      #pragma acc loop gang reduction(+:i,jk) private(d)
+      for (int j = 0; j < 5; ++j) {
+        // expected-error@+2 {{conflicting '&&' reduction for variable 'i'}}
+        // expected-error@+1 {{conflicting '&&' reduction for variable 'jk'}}
+        #pragma acc loop worker vector reduction(&&:i,jk,d)
+        for (int j = 0; j < 5; ++j)
+          ;
+      }
+    }
+    // No conflict because no implied enclosing gang reduction.
+    #pragma acc loop gang reduction(*:jk,d)
+    for (int j = 0; j < 5; ++j)
+      ;
+    #pragma acc loop worker reduction(*:i,d)
+    for (int j = 0; j < 5; ++j)
+      ;
   }
 
   //--------------------------------------------------
