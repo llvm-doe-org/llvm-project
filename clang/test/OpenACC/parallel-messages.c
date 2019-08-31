@@ -398,18 +398,18 @@ int main() {
   // expected-note@+1 {{defined as firstprivate}}
   #pragma acc parallel LOOP copy(i) firstprivate(i,jk) copy(jk)
     FORLOOP
-  // par-error@+4 {{private variable cannot be copy}}
-  // par-note@+3 {{defined as private}}
-  // par-error@+2 {{copy variable cannot be private}}
-  // par-note@+1 {{defined as copy}}
+  // expected-error@+4 {{private variable cannot be copy}}
+  // expected-note@+3 {{defined as private}}
+  // expected-error@+2 {{copy variable cannot be private}}
+  // expected-note@+1 {{defined as copy}}
   #pragma acc parallel LOOP private(i) copy(i,jk) private(jk)
     FORLOOP
   #pragma acc parallel LOOP copy(i) reduction(+:i,jk) copy(jk)
     FORLOOP
-  // par-error@+4 {{firstprivate variable cannot be private}}
-  // par-note@+3 {{defined as firstprivate}}
-  // par-error@+2 {{private variable cannot be firstprivate}}
-  // par-note@+1 {{defined as private}}
+  // expected-error@+4 {{firstprivate variable cannot be private}}
+  // expected-note@+3 {{defined as firstprivate}}
+  // expected-error@+2 {{private variable cannot be firstprivate}}
+  // expected-note@+1 {{defined as private}}
   #pragma acc parallel LOOP firstprivate(i) private(i,jk) firstprivate(jk)
     FORLOOP
   // expected-error@+4 {{private variable cannot be reduction}}
