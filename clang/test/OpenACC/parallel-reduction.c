@@ -155,20 +155,22 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int'
-    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '+'
-    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '+'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:              impl: OMPTargetTeamsDirective
     // DMP-NEXT:                OMPNum_teamsClause
     // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:                OMPFirstprivateClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'int'
-    // DMP-NEXT:                OMPReductionClause
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:                OMPMapClause
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP:           ACCLoopDirective
     // DMP-PARLOOP-NEXT:        ACCSeqClause
     // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} '+'
@@ -176,11 +178,13 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(tofrom: acc){{$}}
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(+: acc){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(tofrom: acc){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
+    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(+: acc){{$}}
+    // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -224,20 +228,22 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'float'
-    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '*'
-    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'float'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'float'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '*'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'float'
     // DMP-NEXT:              impl: OMPTargetTeamsDirective
     // DMP-NEXT:                OMPNum_teamsClause
     // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:                OMPFirstprivateClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'float'
-    // DMP-NEXT:                OMPReductionClause
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'float'
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'float'
     // DMP-NEXT:                OMPMapClause
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'float'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'float'
     // DMP-PARLOOP:           ACCLoopDirective
     // DMP-PARLOOP-NEXT:        ACCSeqClause
     // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} '*'
@@ -245,11 +251,13 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'float'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(*: acc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(*: acc) map(tofrom: acc){{$}}
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(*: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(*: acc) map(tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(*: acc){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(*: acc) map(tofrom: acc){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(*: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(*: acc) map(tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(*: acc){{$}}
+    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(*: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(*: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -301,20 +309,22 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int *'
-    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> 'max'
-    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int *'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int *'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> 'max'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int *'
     // DMP-NEXT:              impl: OMPTargetTeamsDirective
     // DMP-NEXT:                OMPNum_teamsClause
     // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:                OMPFirstprivateClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'int *'
-    // DMP-NEXT:                OMPReductionClause
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int *'
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'int *'
     // DMP-NEXT:                OMPMapClause
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int *'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int *'
     // DMP-PARLOOP:           ACCLoopDirective
     // DMP-PARLOOP-NEXT:        ACCSeqClause
     // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} 'max'
@@ -322,11 +332,13 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int *'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(tofrom: acc){{$}}
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(max: acc){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(tofrom: acc){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(max: acc){{$}}
+    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(max: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -369,20 +381,22 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int'
-    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> 'max'
-    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> 'max'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:              impl: OMPTargetTeamsDirective
     // DMP-NEXT:                OMPNum_teamsClause
     // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:                OMPFirstprivateClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'int'
-    // DMP-NEXT:                OMPReductionClause
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:                OMPMapClause
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP:           ACCLoopDirective
     // DMP-PARLOOP-NEXT:        ACCSeqClause
     // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} 'max'
@@ -390,11 +404,13 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(tofrom: acc){{$}}
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(max: acc){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(tofrom: acc){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(max: acc){{$}}
+    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(max: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -437,20 +453,22 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'double'
-    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> 'min'
-    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'double'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'double'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> 'min'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'double'
     // DMP-NEXT:              impl: OMPTargetTeamsDirective
     // DMP-NEXT:                OMPNum_teamsClause
     // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:                OMPFirstprivateClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'double'
-    // DMP-NEXT:                OMPReductionClause
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'double'
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'double'
     // DMP-NEXT:                OMPMapClause
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'double'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'double'
     // DMP-PARLOOP:           ACCLoopDirective
     // DMP-PARLOOP-NEXT:        ACCSeqClause
     // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} 'min'
@@ -458,11 +476,13 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'double'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(min: acc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(min: acc) map(tofrom: acc){{$}}
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(min: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(min: acc) map(tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(min: acc){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(min: acc) map(tofrom: acc){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(min: acc){{$}}
+    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(min: acc) map(tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(min: acc){{$}}
+    // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(min: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(min: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -505,20 +525,22 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'char'
-    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '&'
-    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'char'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'char'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '&'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'char'
     // DMP-NEXT:              impl: OMPTargetTeamsDirective
     // DMP-NEXT:                OMPNum_teamsClause
     // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:                OMPFirstprivateClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'char'
-    // DMP-NEXT:                OMPReductionClause
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'char'
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'char'
     // DMP-NEXT:                OMPMapClause
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'char'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'char'
     // DMP-PARLOOP:           ACCLoopDirective
     // DMP-PARLOOP-NEXT:        ACCSeqClause
     // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} '&'
@@ -526,11 +548,13 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'char'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(tofrom: acc){{$}}
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(&: acc){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(tofrom: acc){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
+    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(&: acc){{$}}
+    // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(&: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -573,20 +597,22 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int'
-    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '|'
-    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '|'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:              impl: OMPTargetTeamsDirective
     // DMP-NEXT:                OMPNum_teamsClause
     // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:                OMPFirstprivateClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'int'
-    // DMP-NEXT:                OMPReductionClause
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:                OMPMapClause
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP:           ACCLoopDirective
     // DMP-PARLOOP-NEXT:        ACCSeqClause
     // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} '|'
@@ -594,11 +620,13 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(tofrom: acc){{$}}
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(|: acc){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(tofrom: acc){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
+    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(|: acc){{$}}
+    // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(|: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -641,20 +669,22 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int'
-    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '^'
-    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '^'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:              impl: OMPTargetTeamsDirective
     // DMP-NEXT:                OMPNum_teamsClause
     // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:                OMPFirstprivateClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'int'
-    // DMP-NEXT:                OMPReductionClause
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:                OMPMapClause
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP:           ACCLoopDirective
     // DMP-PARLOOP-NEXT:        ACCSeqClause
     // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} '^'
@@ -662,11 +692,13 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(3) firstprivate(val) reduction(^: acc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) firstprivate(val) reduction(^: acc) map(tofrom: acc){{$}}
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(3) firstprivate(val) reduction(^: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(3) firstprivate(val) reduction(^: acc) map(tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) firstprivate(val) map(tofrom: acc) reduction(^: acc){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(3) firstprivate(val) reduction(^: acc) map(tofrom: acc){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(3) firstprivate(val) reduction(^: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(3) firstprivate(val) reduction(^: acc) map(tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(3) firstprivate(val) map(tofrom: acc) reduction(^: acc){{$}}
+    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(3) firstprivate(val) reduction(^: acc){{$}}
     #pragma acc parallel LOOP num_gangs(3) firstprivate(val) reduction(^: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -716,20 +748,22 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int'
-    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '&&'
-    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '&&'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:              impl: OMPTargetTeamsDirective
     // DMP-NEXT:                OMPNum_teamsClause
     // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:                OMPFirstprivateClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'int'
-    // DMP-NEXT:                OMPReductionClause
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:                OMPMapClause
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP:           ACCLoopDirective
     // DMP-PARLOOP-NEXT:        ACCSeqClause
     // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} '&&'
@@ -737,11 +771,13 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&&: acc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(&&: acc) map(tofrom: acc){{$}}
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&&: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(&&: acc) map(tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(&&: acc){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(&&: acc) map(tofrom: acc){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&&: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(&&: acc) map(tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(&&: acc){{$}}
+    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&&: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(&&: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -787,20 +823,22 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int'
-    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '||'
-    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '||'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:              impl: OMPTargetTeamsDirective
     // DMP-NEXT:                OMPNum_teamsClause
     // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:                OMPFirstprivateClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'int'
-    // DMP-NEXT:                OMPReductionClause
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-NEXT:                OMPMapClause
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP:           ACCLoopDirective
     // DMP-PARLOOP-NEXT:        ACCSeqClause
     // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} '||'
@@ -808,11 +846,13 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(||: acc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(||: acc) map(tofrom: acc){{$}}
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(||: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(||: acc) map(tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(||: acc){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(||: acc) map(tofrom: acc){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(||: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(||: acc) map(tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(||: acc){{$}}
+    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(||: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(||: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -862,20 +902,22 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'enum E'
-    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '&'
-    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'enum E'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'enum E'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '&'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'enum E'
     // DMP-NEXT:              impl: OMPTargetTeamsDirective
     // DMP-NEXT:                OMPNum_teamsClause
     // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:                OMPFirstprivateClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'enum E'
-    // DMP-NEXT:                OMPReductionClause
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'enum E'
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'enum E'
     // DMP-NEXT:                OMPMapClause
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'enum E'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'enum E'
     // DMP-PARLOOP:           ACCLoopDirective
     // DMP-PARLOOP-NEXT:        ACCSeqClause
     // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} '&'
@@ -883,11 +925,13 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'enum E'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(tofrom: acc){{$}}
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(&: acc){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(tofrom: acc){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(&: acc){{$}}
+    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(&: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -935,20 +979,22 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'bool'
-    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '|'
-    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'bool'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'bool'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '|'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'bool'
     // DMP-NEXT:              impl: OMPTargetTeamsDirective
     // DMP-NEXT:                OMPNum_teamsClause
     // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:                OMPFirstprivateClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'bool'
-    // DMP-NEXT:                OMPReductionClause
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'bool'
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'bool'
     // DMP-NEXT:                OMPMapClause
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'bool'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'bool'
     // DMP-PARLOOP:           ACCLoopDirective
     // DMP-PARLOOP-NEXT:        ACCSeqClause
     // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} '|'
@@ -956,11 +1002,13 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'bool'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(tofrom: acc){{$}}
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(|: acc){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(tofrom: acc){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(|: acc){{$}}
+    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(|: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -1006,20 +1054,22 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' '_Complex float'
-    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '+'
-    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' '_Complex float'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' '_Complex float'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '+'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' '_Complex float'
     // DMP-NEXT:              impl: OMPTargetTeamsDirective
     // DMP-NEXT:                OMPNum_teamsClause
     // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:                OMPFirstprivateClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' '_Complex float'
-    // DMP-NEXT:                OMPReductionClause
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' '_Complex float'
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' '_Complex float'
     // DMP-NEXT:                OMPMapClause
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' '_Complex float'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' '_Complex float'
     // DMP-PARLOOP:           ACCLoopDirective
     // DMP-PARLOOP-NEXT:        ACCSeqClause
     // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} '+'
@@ -1027,11 +1077,13 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' '_Complex float'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(tofrom: acc){{$}}
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(+: acc){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(tofrom: acc){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(+: acc){{$}}
+    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
