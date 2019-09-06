@@ -31,7 +31,7 @@
 #else
 # define LOOP loop
 # define FORLOOP for (int i = 0; i < 2; ++i) ;
-# define FORLOOP_HEAD for (int fli = 0; fli < 2; ++fli) ;
+# define FORLOOP_HEAD for (int fli = 0; fli < 2; ++fli)
 #endif
 
 int incomplete[];
