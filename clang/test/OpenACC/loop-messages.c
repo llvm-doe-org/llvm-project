@@ -1823,8 +1823,8 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
 
-    // expected-error@+2 {{private variable cannot have incomplete type 'int []'}}
-    // expected-error@+1 {{reduction variable cannot have incomplete type 'int []'}}
+    // expected-error@+2 {{variable in 'private' clause cannot have incomplete type 'int []'}}
+    // expected-error@+1 {{variable in 'reduction' clause cannot have incomplete type 'int []'}}
     #pragma acc CMB_PAR loop worker private(incomplete) vector reduction(|:incomplete) gang
     for (int i = 0; i < 5; ++i)
       ;

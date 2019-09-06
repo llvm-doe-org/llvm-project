@@ -599,10 +599,12 @@ this section.
       contradictory.  However, it is surely a mistake as you cannot
       access the reduced value.  Thus, the above restriction applies
       to a combined construct as well.
-* *exp* `copy`, *exp* `firstprivate`, *exp* `private`, or *exp*
+* *imp*|*exp* `copy`, *exp* `firstprivate`, *exp* `private`, or *exp*
   `reduction` for a variable of incomplete type is an error.  Notes:
     * A local copy must be allocated in each of these cases, but
       allocation is impossible for incomplete types.
+    * It does not appear possible for any clause other than `copy` to
+      be *imp* for a variable of incomplete type.
 * *exp* `copy`, *exp* `private`, or *exp* `reduction` for a `const`
   variable is an error.  Notes:
     * The local copy of a `const` private variable would remain

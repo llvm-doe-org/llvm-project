@@ -1248,27 +1248,27 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
       ACCClause *Implicit = ActOnOpenACCCopyClause(
           ACCC_copy, Adder.getImplicitCopy(), SourceLocation(),
           SourceLocation(), SourceLocation());
-      assert(Implicit);
-      ClausesWithImplicit.push_back(Implicit);
+      if (Implicit)
+        ClausesWithImplicit.push_back(Implicit);
     }
     if (!Adder.getImplicitShared().empty()) {
       ACCClause *Implicit = ActOnOpenACCSharedClause(
           Adder.getImplicitShared());
-      assert(Implicit);
+      assert(Implicit && "expected successful implicit shared");
       ClausesWithImplicit.push_back(Implicit);
     }
     if (!Adder.getImplicitPrivate().empty()) {
       ACCClause *Implicit = ActOnOpenACCPrivateClause(
           Adder.getImplicitPrivate(), SourceLocation(),
           SourceLocation(), SourceLocation());
-      assert(Implicit);
+      assert(Implicit && "expected successful implicit private");
       ClausesWithImplicit.push_back(Implicit);
     }
     if (!Adder.getImplicitFirstprivate().empty()) {
       ACCClause *Implicit = ActOnOpenACCFirstprivateClause(
           Adder.getImplicitFirstprivate(), SourceLocation(),
           SourceLocation(), SourceLocation());
-      assert(Implicit);
+      assert(Implicit && "expected successful implicit firstprivate");
       ClausesWithImplicit.push_back(Implicit);
     }
     // Add implicit gang reductions, possibly due to any implicit copy clauses
@@ -1280,7 +1280,9 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
         ACCClause *Implicit = ActOnOpenACCReductionClause(
             RV.RE, SourceLocation(), SourceLocation(), SourceLocation(),
             SourceLocation(), RV.ReductionClause->getNameInfo());
-        assert(Implicit);
+        // Implicit reductions are copied from explicit reductions, which are
+        // validated already.
+        assert(Implicit && "expected successful implicit reduction");
         ClausesWithImplicit.push_back(Implicit);
       }
     }
@@ -1523,7 +1525,7 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
          "expected copy clause or alias");
   SmallVector<Expr *, 8> Vars;
   bool IsImplicitClause = StartLoc.isInvalid();
-  auto ImplicitClauseLoc = DSAStack->getConstructLoc();
+  SourceLocation ImplicitClauseLoc = DSAStack->getConstructLoc();
 
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC copy clause.");
@@ -1534,25 +1536,19 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
     if (!VD)
       continue;
 
-    ELoc = IsImplicitClause ? ImplicitClauseLoc : ELoc;
     QualType Type = VD->getType();
 
     // The OpenACC 2.7 spec doesn't say, as far as I know, that a variable
     // in a copy clause must have a complete type.  However, you cannot copy
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
-    unsigned IncompleteTypeDiagId;
-    switch (Kind) {
-#define OPENACC_CLAUSE_ALIAS_copy(Name) \
-    case ACCC_##Name:                   \
-      IncompleteTypeDiagId = diag::err_acc_##Name##_incomplete_type; \
-      break;
-#include "clang/Basic/OpenACCKinds.def"
-    default:
-      llvm_unreachable("expected copy clause or alias");
-    }
-    if (RequireCompleteType(ELoc, Type, IncompleteTypeDiagId))
+    if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
+                            IsImplicitClause, getOpenACCClauseName(Kind))) {
+      if (IsImplicitClause)
+        Diag(ImplicitClauseLoc, diag::note_acc_implicit_clause)
+          << getOpenACCClauseName(Kind);
       continue;
+    }
 
     // The OpenACC 2.7 spec doesn't say, as far as I know, that a const
     // variable cannot be in a copy clause.  However, you can never copy back
@@ -1624,8 +1620,15 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(ArrayRef<Expr *> VarList,
     // The OpenACC 2.5 spec doesn't say, as far as I know, that a private
     // variable must have a complete type.  However, you cannot copy data if it
     // doesn't have a size, and OpenMP does have this restriction.
-    if (RequireCompleteType(ELoc, Type, diag::err_acc_private_incomplete_type))
+    if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
+                            /*IsImplicitClause*/ false,
+                            getOpenACCClauseName(ACCC_private))) {
+      // Implicit private is for loop control variables, which are scalars,
+      // which cannot be incomplete.
+      assert(!IsImplicitClause &&
+             "unexpected incomplete type for implicit private");
       continue;
+    }
 
     // The OpenACC 2.5 spec doesn't say, as far as I know, that a const
     // variable cannot be private.  However, you can never initialize the
@@ -1655,7 +1658,6 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(ArrayRef<Expr *> VarList,
                                                 SourceLocation EndLoc) {
   SmallVector<Expr *, 8> Vars;
   bool IsImplicitClause = StartLoc.isInvalid();
-  auto ImplicitClauseLoc = DSAStack->getConstructLoc();
 
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC firstprivate clause.");
@@ -1666,15 +1668,19 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(ArrayRef<Expr *> VarList,
     if (!VD)
       continue;
 
-    ELoc = IsImplicitClause ? ImplicitClauseLoc : ELoc;
     QualType Type = VD->getType();
 
     // The OpenACC 2.5 spec doesn't say, as far as I know, that a private
     // variable must have a complete type.  However, you cannot copy data if it
     // doesn't have a size, and OpenMP does have this restriction.
-    if (RequireCompleteType(ELoc, Type,
-                            diag::err_acc_firstprivate_incomplete_type))
+    if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
+                            /*IsImplicitClause*/ false,
+                            getOpenACCClauseName(ACCC_firstprivate))) {
+      // Implicit firstprivate is for scalars, which cannot be incomplete.
+      assert(!IsImplicitClause &&
+             "unexpected incomplete type for implicit firstprivate");
       continue;
+    }
 
     if (!DSAStack->addBaseDSA(VD, RefExpr->IgnoreParens(),
                               ACC_BASE_DSA_firstprivate, IsImplicitClause))
@@ -1695,6 +1701,7 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
   DeclarationName DN = ReductionId.getName();
   OverloadedOperatorKind OOK = DN.getCXXOverloadedOperator();
   SmallVector<Expr *, 8> Vars;
+  bool IsImplicitClause = StartLoc.isInvalid();
 
   // OpenACC 2.6 [2.5.12, reduction clause, line 774]:
   // The list of reduction operators is here.
@@ -1825,9 +1832,15 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     // The OpenACC 2.6 spec doesn't say, as far as I know, that a private
     // variable must have a complete type.  However, you cannot copy data if
     // it doesn't have a size, and OpenMP does have this restriction.
-    if (RequireCompleteType(ELoc, Type,
-                            diag::err_acc_reduction_incomplete_type))
+    if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
+                            /*IsImplicitClause*/ false,
+                            getOpenACCClauseName(ACCC_reduction))) {
+      // Implicit reductions are copied from explicit reductions, which are
+      // validated already.
+      assert(!IsImplicitClause &&
+             "unexpected incomplete type for implicit reduction");
       continue;
+    }
 
     // The OpenACC 2.6 spec doesn't say, as far as I know, that a const
     // variable cannot be private.  However, you can never initialize the

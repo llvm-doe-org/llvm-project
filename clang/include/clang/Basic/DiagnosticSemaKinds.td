@@ -9335,16 +9335,11 @@ def err_omp_lambda_capture_in_declare_target_not_to : Error<
 
 let CategoryName = "OpenACC Issue" in {
 // OpenACC support.
-def err_acc_copy_incomplete_type : Error<
-  "variable in 'copy' clause cannot have incomplete type %0">;
-def err_acc_pcopy_incomplete_type : Error<
-  "variable in 'pcopy' clause cannot have incomplete type %0">;
-def err_acc_present_or_copy_incomplete_type : Error<
-  "variable in 'present_or_copy' clause cannot have incomplete type %0">;
-def err_acc_private_incomplete_type : Error<
-  "private variable cannot have incomplete type %0">;
-def err_acc_firstprivate_incomplete_type : Error<
-  "firstprivate variable cannot have incomplete type %0">;
+def err_acc_incomplete_type : Error<
+  "variable in %select{|implied }0'%1' clause cannot have incomplete type "
+  "%2">;
+def note_acc_implicit_clause : Note<
+  "'%0' clause implied here">;
 def err_acc_expected_var_name_expr : Error<
   "expected variable name">;
 def err_acc_conflicting_dsa : Error<
@@ -9381,8 +9376,6 @@ def note_acc_collapse_expr : Note<
   "as specified in 'collapse' clause">;
 def err_acc_unknown_reduction_operator : Error<
   "unknown reduction operator">;
-def err_acc_reduction_incomplete_type : Error<
-  "reduction variable cannot have incomplete type %0">;
 def err_acc_const_reduction_list_item : Error<
   "reduction variable cannot be const">;
 def err_acc_reduction_not_integer_type : Error<

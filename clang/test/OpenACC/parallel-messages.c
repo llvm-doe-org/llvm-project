@@ -303,13 +303,28 @@ int main() {
   // expected-error@+7 {{variable in 'copy' clause cannot have incomplete type 'int []'}}
   // expected-error@+6 {{variable in 'pcopy' clause cannot have incomplete type 'int []'}}
   // expected-error@+5 {{variable in 'present_or_copy' clause cannot have incomplete type 'int []'}}
-  // expected-error@+5 {{firstprivate variable cannot have incomplete type 'int []'}}
-  // expected-error@+4 {{private variable cannot have incomplete type 'int []'}}
-  // expected-error@+3 {{reduction variable cannot have incomplete type 'int []'}}
+  // expected-error@+5 {{variable in 'firstprivate' clause cannot have incomplete type 'int []'}}
+  // expected-error@+4 {{variable in 'private' clause cannot have incomplete type 'int []'}}
+  // expected-error@+3 {{variable in 'reduction' clause cannot have incomplete type 'int []'}}
   #pragma acc parallel LOOP \
       copy(incomplete) pcopy(incomplete) present_or_copy(incomplete) \
       firstprivate(incomplete) private(incomplete) reduction(&:incomplete)
     FORLOOP
+
+  // expected-error@+4 {{variable in implied 'copy' clause cannot have incomplete type 'int []'}}
+  // expected-note@+1 {{'copy' clause implied here}}
+  #pragma acc parallel LOOP
+    FORLOOP_HEAD {
+      i = *incomplete;
+    }
+
+  // expected-error@+3 {{variable in 'copy' clause cannot have incomplete type 'int []'}}
+  // expected-error@+4 {{variable in implied 'copy' clause cannot have incomplete type 'int []'}}
+  // expected-note@+1 {{'copy' clause implied here}}
+  #pragma acc parallel LOOP copy(incomplete)
+    FORLOOP_HEAD {
+      i = *incomplete;
+    }
 
   #pragma acc parallel LOOP firstprivate(constI, constIDecl)
     FORLOOP
