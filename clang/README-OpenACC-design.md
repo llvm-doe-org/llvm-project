@@ -542,9 +542,9 @@ Clause Aliases
 --------------
 
 Some OpenACC clauses, such as `pcopy`, are aliases for others clauses,
-such as `copy`.  Clacc's mapping for a clause alias is the same as for
-the aliased clause, so clause aliases are not documented further in
-this section.
+such as `copy`.  Clacc handles the semantics and mapping for a clause
+alias the same as for the aliased clause, so clause aliases are not
+documented further in this section.
 
 Semantic Clarifications
 -----------------------
