@@ -430,6 +430,34 @@ int main() {
   #pragma acc parallel LOOP reduction(^:f,d,fc,dc,p,a,s,u,uDecl)
     FORLOOP
 
+  // expected-error@+6 {{copy variable defined again as copy variable}}
+  // expected-note@+5 {{previously defined as copy variable here}}
+  // expected-error@+5 {{copy variable defined again as copy variable}}
+  // expected-note@+3 {{previously defined as copy variable here}}
+  // expected-error@+4 {{copy variable defined again as copy variable}}
+  // expected-note@+1 {{previously defined as copy variable here}}
+  #pragma acc parallel LOOP copy(e,e,i,jk) \
+                            copy(i)        \
+                            copy(jk)
+    FORLOOP
+  // expected-error@+6 {{firstprivate variable defined again as firstprivate variable}}
+  // expected-note@+5 {{previously defined as firstprivate variable here}}
+  // expected-error@+6 {{firstprivate variable defined again as firstprivate variable}}
+  // expected-note@+4 {{previously defined as firstprivate variable here}}
+  // expected-error@+4 {{firstprivate variable defined again as firstprivate variable}}
+  // expected-note@+1 {{previously defined as firstprivate variable here}}
+  #pragma acc parallel LOOP firstprivate(a,p,a) \
+                            firstprivate(f) \
+                            firstprivate(f,p)
+    FORLOOP
+  // expected-error@+5 3 {{private variable defined again as private variable}}
+  // expected-note@+3 3 {{previously defined as private variable here}}
+  // expected-error@+4 3 {{private variable defined again as private variable}}
+  // expected-note@+1 3 {{previously defined as private variable here}}
+  #pragma acc parallel LOOP private(d,fc,dc) \
+                            private(fc,dc,d) \
+                            private(dc,d,fc)
+    FORLOOP
   // expected-error@+6 {{redundant '&&' reduction for variable 'i'}}
   // expected-note@+5 {{previous '&&' reduction here}}
   // expected-error@+5 {{redundant '&&' reduction for variable 'jk'}}

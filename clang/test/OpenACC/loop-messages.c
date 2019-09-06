@@ -2075,6 +2075,17 @@ void fn() {
   #pragma acc parallel
 #endif
   {
+    // expected-error@+6 {{private variable defined again as private variable}}
+    // expected-note@+5 {{previously defined as private variable here}}
+    // expected-error@+5 {{private variable defined again as private variable}}
+    // expected-note@+3 {{previously defined as private variable here}}
+    // expected-error@+4 {{private variable defined again as private variable}}
+    // expected-note@+1 {{previously defined as private variable here}}
+    #pragma acc CMB_PAR loop private(i,i,jk,d) \
+                             private(jk) \
+                             private(d)
+    for (int i = 0; i < 5; ++i)
+      ;
     // expected-error@+6 {{redundant 'max' reduction for variable 'i'}}
     // expected-note@+5 {{previous 'max' reduction here}}
     // expected-error@+5 {{redundant 'max' reduction for variable 'jk'}}

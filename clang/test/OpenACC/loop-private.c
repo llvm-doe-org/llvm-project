@@ -1215,17 +1215,15 @@ int main() {
     // DMP-NEXT:        ACCPrivateClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:        ACCPrivateClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'k' 'int'
     // DMP-AIMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:   impl: [[OMPDD]]
     // DMP-OPRG-NEXT:     OMPPrivateClause
     // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'j' 'int'
     // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
     // DMP-OPRG-NEXT:     OMPPrivateClause
-    // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
     // DMP-OPRG:          ForStmt
     // DMP-OPLC-NEXT:   impl: CompoundStmt
     // DMP-OPLC-NEXT:     DeclStmt
@@ -1235,6 +1233,7 @@ int main() {
     // DMP-ONT1-NEXT:         IntegerLiteral {{.*}} 'int' 1
     // DMP-OPLC-NEXT:       OMPPrivateClause
     // DMP-OPLC-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPLC-NEXT:       OMPPrivateClause
     // DMP-OPLC-NEXT:         DeclRefExpr {{.*}} 'k' 'int'
     // DMP-OPLC:            ForStmt
     // DMP-OSEQ-NEXT:   impl: CompoundStmt
@@ -1248,8 +1247,8 @@ int main() {
     //
     // PRT-AO-OPLC-NEXT: // v----------ACC----------v
     // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
-    // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(j,i,k) private(i){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(j,i,k) private(i){{$}}
+    // PRT-A-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(j,i) private(k){{$}}
+    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(j,i) private(k){{$}}
     // PRT-A-NEXT:       for (i = 0; i < 2; ++i) {
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:         j = k = 55;
@@ -1257,7 +1256,7 @@ int main() {
     // PRT-AO-OPLC-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OPLC-NEXT: // {
     // PRT-AO-OPLC-NEXT: //   int i;
-    // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]] private(j,k){{$}}
+    // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]] private(j) private(k){{$}}
     // PRT-AO-OPLC-NEXT: //   for (i = 0; i < 2; ++i) {
     // PRT-AO-OPLC-NEXT: //     printf
     // PRT-AO-OPLC-NEXT: //     j = k = 55;
@@ -1278,15 +1277,15 @@ int main() {
     //
     // PRT-OA-OPLC-NEXT: // v----------OMP----------v
     // PRT-OA-OSEQ-NEXT: // v----------OMP----------v
-    // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(j,i,k) private(i){{$}}
-    // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(j,i,k) private(i){{$}}
+    // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(j,i) private(k){{$}}
+    // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(j,i) private(k){{$}}
     // PRT-O-OPRG-NEXT:  for (i = 0; i < 2; ++i) {
     // PRT-O-OPRG-NEXT:    printf
     // PRT-O-OPRG-NEXT:    j = k = 55;
     // PRT-O-OPRG-NEXT:  }
     // PRT-O-OPLC-NEXT:  {
     // PRT-O-OPLC-NEXT:    int i;
-    // PRT-O-OPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]] private(j,k){{$}}
+    // PRT-O-OPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]] private(j) private(k){{$}}
     // PRT-O-OPLC-NEXT:    for (i = 0; i < 2; ++i) {
     // PRT-O-OPLC-NEXT:      printf
     // PRT-O-OPLC-NEXT:      j = k = 55;
@@ -1302,14 +1301,14 @@ int main() {
     // PRT-O-OSEQ-NEXT:    }
     // PRT-O-OSEQ-NEXT:  }
     // PRT-OA-OPLC-NEXT: // ---------OMP<-ACC--------
-    // PRT-OA-OPLC-NEXT: // #pragma acc loop[[ACCC]] private(j,i,k) private(i){{$}}
+    // PRT-OA-OPLC-NEXT: // #pragma acc loop[[ACCC]] private(j,i) private(k){{$}}
     // PRT-OA-OPLC-NEXT: // for (i = 0; i < 2; ++i) {
     // PRT-OA-OPLC-NEXT: //   printf
     // PRT-OA-OPLC-NEXT: //   j = k = 55;
     // PRT-OA-OPLC-NEXT: // }
     // PRT-OA-OPLC-NEXT: // ^----------ACC----------^
     // PRT-OA-OSEQ-NEXT: // ---------OMP<-ACC--------
-    // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(j,i,k) private(i){{$}}
+    // PRT-OA-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(j,i) private(k){{$}}
     // PRT-OA-OSEQ-NEXT: // for (i = 0; i < 2; ++i) {
     // PRT-OA-OSEQ-NEXT: //   printf
     // PRT-OA-OSEQ-NEXT: //   j = k = 55;
@@ -1320,7 +1319,7 @@ int main() {
     // PRT-NOACC-NEXT:     printf
     // PRT-NOACC-NEXT:     j = k = 55;
     // PRT-NOACC-NEXT:   }
-    #pragma acc loop ACCC private(j,i,k) private(i)
+    #pragma acc loop ACCC private(j,i) private(k)
     for (i = 0; i < 2; ++i) {
       // EXE-DAG:        in loop: i=0
       // EXE-DAG:        in loop: i=1
@@ -1357,11 +1356,10 @@ int main() {
     // DMP-AW-NEXT:     ACCWorkerClause
     // DMP-AV-NEXT:     ACCVectorClause
     // DMP-NEXT:        ACCPrivateClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:        ACCPrivateClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:        effect: ACCParallelDirective
     // DMP-NEXT:          ACCNum_gangsClause
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
@@ -1375,19 +1373,17 @@ int main() {
     // DMP-AW-NEXT:           ACCWorkerClause
     // DMP-AV-NEXT:           ACCVectorClause
     // DMP-NEXT:              ACCPrivateClause
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:                DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:                DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NEXT:                DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:              ACCPrivateClause
-    // DMP-NEXT:                DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'k' 'int'
     // DMP-AIMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:         impl: [[OMPDD]]
     // DMP-OPRG-NEXT:           OMPPrivateClause
+    // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
     // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'k' 'int'
     // DMP-OPRG-NEXT:           OMPPrivateClause
-    // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'k' 'int'
     // DMP-OPRG:                ForStmt
     // DMP-OPLC-NEXT:         impl: CompoundStmt
     // DMP-OPLC-NEXT:           DeclStmt
@@ -1397,22 +1393,23 @@ int main() {
     // DMP-ONT1-NEXT:               IntegerLiteral {{.*}} 'int' 1
     // DMP-OPLC-NEXT:             OMPPrivateClause
     // DMP-OPLC-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-OPLC-NEXT:             OMPPrivateClause
     // DMP-OPLC-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
     // DMP-OPLC:                  ForStmt
     // DMP-OSEQ-NEXT:         impl: CompoundStmt
     // DMP-OSEQ-NEXT:           DeclStmt
-    // DMP-OSEQ-NEXT:             VarDecl {{.*}} j 'int'
-    // DMP-OSEQ-NEXT:           DeclStmt
     // DMP-OSEQ-NEXT:             VarDecl {{.*}} i 'int'
+    // DMP-OSEQ-NEXT:           DeclStmt
+    // DMP-OSEQ-NEXT:             VarDecl {{.*}} j 'int'
     // DMP-OSEQ-NEXT:           DeclStmt
     // DMP-OSEQ-NEXT:             VarDecl {{.*}} k 'int'
     // DMP-OSEQ-NEXT:           ForStmt
     //
     // PRT-AO-OPLC-NEXT: // v----------ACC----------v
     // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
-    // PRT-A-NEXT:       {{^ *}}#pragma acc parallel loop num_gangs(2)[[ACCC]] private(j,i,k) private(i){{$}}
+    // PRT-A-NEXT:       {{^ *}}#pragma acc parallel loop num_gangs(2)[[ACCC]] private(i,j) private(k){{$}}
     // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(j,i,k) private(i){{$}}
+    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i,j) private(k){{$}}
     // PRT-A-NEXT:       for (i = 0; i < 2; ++i) {
     // PRT-A-NEXT:         printf
     // PRT-A-NEXT:         j = k = 55;
@@ -1421,7 +1418,7 @@ int main() {
     // PRT-AO-OPLC-NEXT: // #pragma omp target teams num_teams(2){{$}}
     // PRT-AO-OPLC-NEXT: // {
     // PRT-AO-OPLC-NEXT: //   int i;
-    // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]] private(j,k){{$}}
+    // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]] private(j) private(k){{$}}
     // PRT-AO-OPLC-NEXT: //   for (i = 0; i < 2; ++i) {
     // PRT-AO-OPLC-NEXT: //     printf
     // PRT-AO-OPLC-NEXT: //     j = k = 55;
@@ -1431,8 +1428,8 @@ int main() {
     // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OSEQ-NEXT: // #pragma omp target teams num_teams(2){{$}}
     // PRT-AO-OSEQ-NEXT: // {
-    // PRT-AO-OSEQ-NEXT: //   int j;
     // PRT-AO-OSEQ-NEXT: //   int i;
+    // PRT-AO-OSEQ-NEXT: //   int j;
     // PRT-AO-OSEQ-NEXT: //   int k;
     // PRT-AO-OSEQ-NEXT: //   for (i = 0; i < 2; ++i) {
     // PRT-AO-OSEQ-NEXT: //     printf
@@ -1444,23 +1441,23 @@ int main() {
     // PRT-OA-OPLC-NEXT: // v----------OMP----------v
     // PRT-OA-OSEQ-NEXT: // v----------OMP----------v
     // PRT-O-NEXT:       {{^ *}}#pragma omp target teams num_teams(2){{$}}
-    // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(j,i,k) private(i){{$}}
-    // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2)[[ACCC]] private(j,i,k) private(i){{$}}
+    // PRT-O-OPRG-NEXT:  {{^ *}}#pragma omp [[OMPDP]] private(i,j) private(k){{$}}
+    // PRT-OA-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i,j) private(k){{$}}
     // PRT-O-OPRG-NEXT:  for (i = 0; i < 2; ++i) {
     // PRT-O-OPRG-NEXT:    printf
     // PRT-O-OPRG-NEXT:    j = k = 55;
     // PRT-O-OPRG-NEXT:  }
     // PRT-O-OPLC-NEXT:  {
     // PRT-O-OPLC-NEXT:    int i;
-    // PRT-O-OPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]] private(j,k){{$}}
+    // PRT-O-OPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]] private(j) private(k){{$}}
     // PRT-O-OPLC-NEXT:    for (i = 0; i < 2; ++i) {
     // PRT-O-OPLC-NEXT:      printf
     // PRT-O-OPLC-NEXT:      j = k = 55;
     // PRT-O-OPLC-NEXT:    }
     // PRT-O-OPLC-NEXT:  }
     // PRT-O-OSEQ-NEXT:  {
-    // PRT-O-OSEQ-NEXT:    int j;
     // PRT-O-OSEQ-NEXT:    int i;
+    // PRT-O-OSEQ-NEXT:    int j;
     // PRT-O-OSEQ-NEXT:    int k;
     // PRT-O-OSEQ-NEXT:    for (i = 0; i < 2; ++i) {
     // PRT-O-OSEQ-NEXT:      printf
@@ -1468,14 +1465,14 @@ int main() {
     // PRT-O-OSEQ-NEXT:    }
     // PRT-O-OSEQ-NEXT:  }
     // PRT-OA-OPLC-NEXT: // ---------OMP<-ACC--------
-    // PRT-OA-OPLC-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(j,i,k) private(i){{$}}
+    // PRT-OA-OPLC-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i,j) private(k){{$}}
     // PRT-OA-OPLC-NEXT: // for (i = 0; i < 2; ++i) {
     // PRT-OA-OPLC-NEXT: //   printf
     // PRT-OA-OPLC-NEXT: //   j = k = 55;
     // PRT-OA-OPLC-NEXT: // }
     // PRT-OA-OPLC-NEXT: // ^----------ACC----------^
     // PRT-OA-OSEQ-NEXT: // ---------OMP<-ACC--------
-    // PRT-OA-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(j,i,k) private(i){{$}}
+    // PRT-OA-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i,j) private(k){{$}}
     // PRT-OA-OSEQ-NEXT: // for (i = 0; i < 2; ++i) {
     // PRT-OA-OSEQ-NEXT: //   printf
     // PRT-OA-OSEQ-NEXT: //   j = k = 55;
@@ -1486,7 +1483,7 @@ int main() {
     // PRT-NOACC-NEXT:     printf
     // PRT-NOACC-NEXT:     j = k = 55;
     // PRT-NOACC-NEXT:   }
-    #pragma acc parallel loop num_gangs(2) ACCC private(j,i,k) private(i)
+    #pragma acc parallel loop num_gangs(2) ACCC private(i,j) private(k)
     for (i = 0; i < 2; ++i) {
       // EXE-DAG:        in loop: i=0
       // EXE-DAG:        in loop: i=1

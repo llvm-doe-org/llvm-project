@@ -377,12 +377,9 @@ bool DSAStackTy::addBaseDSA(VarDecl *VD, Expr *E,
   for (auto Itr = Stack.rbegin(), End = Stack.rend(); Itr != End; ++Itr) {
     DSAVarData &DVar = Itr->SharingMap[VD];
     // Complain for conflict with existing base DSA.
-    // TODO: Maybe implement a separate (differently worded) diagnostic for
-    // specifying the same attribute twice (DVar.BaseDSAKind == BaseDSAKind
-    // here).
-    if (DVar.BaseDSAKind != ACC_BASE_DSA_unknown &&
-        DVar.BaseDSAKind != BaseDSAKind) {
-      SemaRef.Diag(E->getExprLoc(), diag::err_acc_wrong_dsa)
+    if (DVar.BaseDSAKind != ACC_BASE_DSA_unknown) {
+      SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_dsa)
+          << (DVar.BaseDSAKind == BaseDSAKind)
           << getOpenACCBaseDSAName(DVar.BaseDSAKind)
           << getOpenACCBaseDSAName(BaseDSAKind);
       SemaRef.Diag(DVar.BaseDSARefExpr->getExprLoc(),
@@ -393,8 +390,8 @@ bool DSAStackTy::addBaseDSA(VarDecl *VD, Expr *E,
     // Complain if cannot combine with a reduction.
     if (!DVar.ReductionId.getName().isEmpty() &&
         !isAllowedBaseDSAForReduction(BaseDSAKind)) {
-      SemaRef.Diag(E->getExprLoc(), diag::err_acc_wrong_dsa)
-          << getOpenACCClauseName(ACCC_reduction)
+      SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_dsa)
+          << false << getOpenACCClauseName(ACCC_reduction)
           << getOpenACCBaseDSAName(BaseDSAKind);
       SemaRef.Diag(DVar.ReductionRefExpr->getExprLoc(),
                    diag::note_acc_explicit_dsa)
@@ -450,8 +447,8 @@ bool DSAStackTy::addReduction(VarDecl *VD, Expr *E,
   for (auto Itr = Stack.rbegin(), End = Stack.rend(); Itr != End; ++Itr) {
     DSAVarData &DVar = Itr->SharingMap[VD];
     if (!isAllowedBaseDSAForReduction(DVar.BaseDSAKind)) {
-      SemaRef.Diag(E->getExprLoc(), diag::err_acc_wrong_dsa)
-          << getOpenACCBaseDSAName(DVar.BaseDSAKind)
+      SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_dsa)
+          << false << getOpenACCBaseDSAName(DVar.BaseDSAKind)
           << getOpenACCClauseName(ACCC_reduction);
       SemaRef.Diag(DVar.BaseDSARefExpr->getExprLoc(),
                    diag::note_acc_explicit_dsa)

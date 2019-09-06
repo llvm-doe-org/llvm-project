@@ -121,10 +121,8 @@
 // RUN:   (mode=MODE_C2 cflags=-DSTORAGE=static pre=EXE-C,EXE-IC,EXE               )
 // RUN:   (mode=MODE_F  cflags=                 pre=EXE-F,EXE-IF,EXE-FP,EXE-IFP,EXE)
 // RUN:   (mode=MODE_F  cflags=-DSTORAGE=static pre=EXE-F,EXE-IF,EXE-FP,EXE-IFP,EXE)
-// RUN:   (mode=MODE_FF cflags=                 pre=EXE-F,EXE-IF,EXE-FP,EXE-IFP,EXE)
 // RUN:   (mode=MODE_P  cflags=                 pre=EXE-P,EXE-FP,EXE-IFP,EXE       )
 // RUN:   (mode=MODE_P  cflags=-DSTORAGE=static pre=EXE-P,EXE-FP,EXE-IFP,EXE       )
-// RUN:   (mode=MODE_PP cflags=                 pre=EXE-P,EXE-FP,EXE-IFP,EXE       )
 // RUN: }
 // RUN: %for directives {
 // RUN:   %for exes {
@@ -168,7 +166,6 @@
 // RUN: %data llvm {
 // RUN:   (mode=MODE_P  cflags=                )
 // RUN:   (mode=MODE_P  cflags=-DSTORAGE=static)
-// RUN:   (mode=MODE_PP cflags=                )
 // RUN: }
 // RUN: %for llvm {
 // RUN:   %clang -Xclang -verify -fopenacc -S -emit-llvm -o %t -DMODE=%[mode] \
@@ -204,8 +201,6 @@
 #define MODE_C2 4
 #define MODE_F  5
 #define MODE_P  6
-#define MODE_FF 7
-#define MODE_PP 8
 
 #ifndef MODE
 # error MODE undefined
@@ -221,14 +216,6 @@
 # define CLAUSE(...) firstprivate(__VA_ARGS__)
 #elif MODE == MODE_P
 # define CLAUSE(...) private(__VA_ARGS__)
-#elif MODE == MODE_FF
-// TODO: Should be an error as in gcc?  Then test in parallel-messages.c.
-// Checks that duplicate clauses don't change the behavior.
-# define CLAUSE(...) firstprivate(__VA_ARGS__) firstprivate(__VA_ARGS__)
-#elif MODE == MODE_PP
-// TODO: Should be an error as in gcc?  Then test in parallel-messages.c.
-// Checks that duplicate clauses don't change the behavior.
-# define CLAUSE(...) private(__VA_ARGS__) private(__VA_ARGS__)
 #else
 # error unknown MODE
 #endif
@@ -725,7 +712,7 @@ int main() {
 
     shadowed += 111;
 
-#if MODE == MODE_P || MODE == MODE_PP
+#if MODE == MODE_P
     // don't dereference uninitialized pointers
     gpOld = gp;
     lpOld = lp;

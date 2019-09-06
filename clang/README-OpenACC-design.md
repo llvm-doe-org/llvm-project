@@ -558,9 +558,21 @@ this section.
 
 ### Basic Data Sharing ###
 
-* It is an error if a variable has more than one of *exp* `copy`,
-  *exp* `firstprivate`, or *exp* `private` an OpenACC directive.
-  Notes:
+* It is an error if a variable appears in more than one occurrence of
+  any one of *exp* `copy`, *exp* `firstprivate`, *exp* `private`, or
+  *exp* `reduction` on an OpenACC directive.  Notes:
+    * The main motivation for this error is that such a repetition is
+      likely a mistake.
+    * gcc 7.4.0 also reports errors for this case, but pgcc 19.4-0
+      does not.
+    * OpenMP 5.0 sec. 2.19.4 p. 282 L7-9 says, "A list item may not
+      appear in more than one clause on the same directive, except
+      that it may be specified in both firstprivate and lastprivate
+      clauses."  Thus, if Clacc did not report such duplicate clauses
+      as errors, it would have to discard them when generating OpenMP.
+* It is an error if a variable appears in more than one of *exp*
+  `copy`, *exp* `firstprivate`, or *exp* `private` on an OpenACC
+  directive.  Notes:
     * Relative to `copy` and `firstprivate`, `private` has a
       contradictory specification for initialization of the local copy
       of the variable.
