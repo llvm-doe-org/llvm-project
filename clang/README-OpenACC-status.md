@@ -21,7 +21,7 @@ We have implemented and tested support for the following features:
     * data sharing:
         * implicit `copy` for non-scalars
         * implicit `firstprivate` for scalars
-        * `copy` clause
+        * `copy` clause and aliases `pcopy` and `present_or_copy`
         * `firstprivate` clause
         * `private` clause
         * `reduction` clause:

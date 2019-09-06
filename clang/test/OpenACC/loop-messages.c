@@ -8,19 +8,25 @@
 // directives.  In some cases (reduction inter-directive conflicts), combining
 // them would defeat the purpose of the test, so it instead adds "loop" and a
 // for loop to the outer "acc parallel"
+//
+// For checking the various aliases of copy, we just run the entire test case
+// once per alias.  That seems the easiest way to maintain this without losing
+// cases.  This test is very fast, so the performance impact isn't terrible.
 
 // RUN: %data {
-// RUN:   (c=ERR_ACC     )
-// RUN:   (c=ERR_OMP_INIT)
-// RUN:   (c=ERR_OMP_COND)
-// RUN:   (c=ERR_OMP_INC )
-// RUN:   (c=ERR_OMP_INC0)
-// RUN:   (c=ERR_OMP_VAR )
+// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=copy'           )
+// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=pcopy'          )
+// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=present_or_copy')
+// RUN:   (cflags=-DERR=ERR_OMP_INIT                    )
+// RUN:   (cflags=-DERR=ERR_OMP_COND                    )
+// RUN:   (cflags=-DERR=ERR_OMP_INC                     )
+// RUN:   (cflags=-DERR=ERR_OMP_INC0                    )
+// RUN:   (cflags=-DERR=ERR_OMP_VAR                     )
 // RUN: }
 // RUN: %for {
-// RUN:   %clang_cc1 -fsyntax-only -fopenacc -DERR=%[c] %s \
+// RUN:   %clang_cc1 -fsyntax-only -fopenacc %[cflags] %s \
 // RUN:              -verify=expected,sep
-// RUN:   %clang_cc1 -fsyntax-only -fopenacc -DERR=%[c] %s \
+// RUN:   %clang_cc1 -fsyntax-only -fopenacc %[cflags] %s \
 // RUN:              -verify=expected,cmb -DCMB
 // RUN: }
 //
@@ -2080,7 +2086,7 @@ void fn() {
 
   // Explicit reduction on acc parallel, non-conflicting reductions on acc
   // loops.
-  #pragma acc parallel CMB_LOOP reduction(+:i,jk) copy(jk)
+  #pragma acc parallel CMB_LOOP reduction(+:i,jk) COPY(jk)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop worker reduction(+:i,jk)
@@ -2115,7 +2121,7 @@ void fn() {
     }
   }
   // Again with no gang loops.
-  #pragma acc parallel CMB_LOOP reduction(+:i,jk) copy(jk)
+  #pragma acc parallel CMB_LOOP reduction(+:i,jk) COPY(jk)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop worker reduction(+:i,jk)
@@ -2140,7 +2146,7 @@ void fn() {
 
   // Implicit reduction on acc parallel, non-conflicting reductions on acc
   // loops.
-  #pragma acc parallel CMB_LOOP copy(b)
+  #pragma acc parallel CMB_LOOP COPY(b)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop worker reduction(max:p,b)
@@ -2172,7 +2178,7 @@ void fn() {
     }
   }
   // Again with no gang loops.
-  #pragma acc parallel CMB_LOOP copy(p)
+  #pragma acc parallel CMB_LOOP COPY(p)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop worker reduction(max:p,b)
@@ -2197,7 +2203,7 @@ void fn() {
 
   // Explicit reduction on acc parallel, conflicting reductions on acc loops.
   // expected-note@+1 14 {{enclosing '+' reduction here}}
-  #pragma acc parallel CMB_LOOP reduction(+:f,d) copy(d)
+  #pragma acc parallel CMB_LOOP reduction(+:f,d) COPY(d)
   CMB_FORLOOP_HEAD
   {
     // expected-error@+2 {{conflicting 'max' reduction for variable 'f'}}
@@ -2259,7 +2265,7 @@ void fn() {
   }
   // Again with no gang loops.
   // expected-note@+1 10 {{enclosing '+' reduction here}}
-  #pragma acc parallel CMB_LOOP reduction(+:f,d) copy(d)
+  #pragma acc parallel CMB_LOOP reduction(+:f,d) COPY(d)
   CMB_FORLOOP_HEAD
   {
     // expected-error@+2 {{conflicting 'max' reduction for variable 'f'}}
@@ -2300,7 +2306,7 @@ void fn() {
 
   // Implicit reduction on acc parallel, conflicting reductions on acc loops.
   // expected-note@+1 12 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP copy(jk)
+  #pragma acc parallel CMB_LOOP COPY(jk)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 12 {{enclosing 'max' reduction here}}
@@ -2361,7 +2367,7 @@ void fn() {
   }
   // Again with no gang loops and worker first.
   // expected-note@+1 4 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP copy(jk)
+  #pragma acc parallel CMB_LOOP COPY(jk)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 4 {{enclosing 'max' reduction here}}
@@ -2396,7 +2402,7 @@ void fn() {
   }
   // Again with no gang loops and vector first.
   // expected-note@+1 4 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP copy(jk)
+  #pragma acc parallel CMB_LOOP COPY(jk)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 4 {{enclosing 'max' reduction here}}
@@ -2431,7 +2437,7 @@ void fn() {
   }
   // Again with no gang loops and seq first.
   // expected-note@+1 4 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP copy(f)
+  #pragma acc parallel CMB_LOOP COPY(f)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 4 {{enclosing 'min' reduction here}}
@@ -2468,7 +2474,7 @@ void fn() {
   // Implicit reduction on acc parallel, conflicting gang reductions on acc
   // loops in sibling loop nests.
   // expected-note@+1 2 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP copy(e)
+  #pragma acc parallel CMB_LOOP COPY(e)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop
@@ -2510,7 +2516,7 @@ void fn() {
   // but merely nesting in an acc loop seq doesn't.
   // expected-note@+2 6 {{implied as gang reduction here}}
   // expected-note@+1 6 {{enclosing '^' reduction here}}
-  #pragma acc parallel CMB_LOOP reduction(^:e,jk) copy(jk,f)
+  #pragma acc parallel CMB_LOOP reduction(^:e,jk) COPY(jk,f)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop
@@ -2611,7 +2617,7 @@ void fn() {
 
   // acc loop reductions for acc loop private variables don't imply gang
   // reductions on acc parallel.
-  #pragma acc parallel CMB_LOOP copy(i,d)
+  #pragma acc parallel CMB_LOOP COPY(i,d)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop seq private(i,jk)

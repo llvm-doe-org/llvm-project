@@ -13170,9 +13170,12 @@ void OMPClauseReader::VisitOMPIsDevicePtrClause(OMPIsDevicePtrClause *C) {
 
 ACCClause *ACCClauseReader::readClause() {
   ACCClause *C;
-  switch ((OpenACCClauseKind)Record.readInt()) {
-  case ACCC_copy:
-    C = ACCCopyClause::CreateEmpty(Context, Record.readInt());
+  OpenACCClauseKind Kind = (OpenACCClauseKind)Record.readInt();
+  switch (Kind) {
+#define OPENACC_CLAUSE_ALIAS_copy(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+    C = ACCCopyClause::CreateEmpty(Context, Kind, Record.readInt());
     break;
   case ACCC_shared:
     C = ACCSharedClause::CreateEmpty(Context, Record.readInt());

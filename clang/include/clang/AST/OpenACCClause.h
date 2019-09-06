@@ -38,6 +38,8 @@ class ACCClause {
   SourceLocation EndLoc;
   /// Kind of the clause.
   OpenACCClauseKind Kind;
+  /// Dealiased kind of the clause.
+  OpenACCClauseKind KindDealiased;
 
   /// Sets the starting location of the clause.
   void setLocStart(SourceLocation Loc) { StartLoc = Loc; }
@@ -45,8 +47,11 @@ class ACCClause {
   void setLocEnd(SourceLocation Loc) { EndLoc = Loc; }
 
 protected:
-  ACCClause(OpenACCClauseKind K, SourceLocation StartLoc, SourceLocation EndLoc)
-      : StartLoc(StartLoc), EndLoc(EndLoc), Kind(K) {}
+  ACCClause(OpenACCClauseKind K, SourceLocation StartLoc,
+            SourceLocation EndLoc, OpenACCClauseKind KDealiased = ACCC_unknown)
+      : StartLoc(StartLoc), EndLoc(EndLoc), Kind(K),
+        KindDealiased(KDealiased == ACCC_unknown ? K : KDealiased)
+  {}
 
 public:
   /// Returns the starting location of the clause.
@@ -56,6 +61,9 @@ public:
 
   /// Returns kind of OpenACC clause (private, shared, reduction, etc.).
   OpenACCClauseKind getClauseKind() const { return Kind; }
+  /// Returns dealiased kind of OpenACC clause (for example, copy when
+  /// getClauseKind returns pcopy).
+  OpenACCClauseKind getClauseKindDealiased() const { return KindDealiased; }
 
   bool isImplicit() const { return StartLoc.isInvalid(); }
 
@@ -108,10 +116,14 @@ protected:
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
   /// \param N Number of the variables in the clause.
+  /// \param K Dealiased kind of the clause.
   ///
   ACCVarListClause(OpenACCClauseKind K, SourceLocation StartLoc,
-                   SourceLocation LParenLoc, SourceLocation EndLoc, unsigned N)
-      : ACCClause(K, StartLoc, EndLoc), LParenLoc(LParenLoc), NumVars(N) {}
+                   SourceLocation LParenLoc, SourceLocation EndLoc, unsigned N,
+                   OpenACCClauseKind KDealiased = ACCC_unknown)
+      : ACCClause(K, StartLoc, EndLoc,
+                  KDealiased == ACCC_unknown ? K : KDealiased),
+        LParenLoc(LParenLoc), NumVars(N) {}
 
 public:
   typedef MutableArrayRef<Expr *>::iterator varlist_iterator;
@@ -150,7 +162,8 @@ public:
 llvm::iterator_range<ArrayRef<Expr *>::iterator>
 getPrivateVarsFromClause(ACCClause *);
 
-/// This represents the clause 'copy' for '#pragma acc ...' directives.
+/// This represents the clause 'copy' (or any of its aliases) for
+/// '#pragma acc ...' directives.
 ///
 /// \code
 /// #pragma acc parallel copy(a,b)
@@ -167,51 +180,72 @@ class ACCCopyClause final
 
   /// Build clause with number of variables \a N.
   ///
+  /// \param Kind Which alias of the copy clause.
   /// \param StartLoc Starting location of the clause.
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
   /// \param N Number of the variables in the clause.
   ///
-  ACCCopyClause(SourceLocation StartLoc, SourceLocation LParenLoc,
-                SourceLocation EndLoc, unsigned N)
-      : ACCVarListClause<ACCCopyClause>(ACCC_copy, StartLoc, LParenLoc, EndLoc,
-                                        N) {}
+  ACCCopyClause(OpenACCClauseKind Kind, SourceLocation StartLoc,
+                SourceLocation LParenLoc, SourceLocation EndLoc, unsigned N)
+      : ACCVarListClause<ACCCopyClause>(Kind, StartLoc, LParenLoc, EndLoc,
+                                        N, ACCC_copy) {
+    assert(isClauseKind(Kind) && "expected copy clause or alias");
+  }
 
   /// Build an empty clause.
   ///
+  /// \param Kind Which alias of the copy clause.
   /// \param N Number of variables.
   ///
-  explicit ACCCopyClause(unsigned N)
-      : ACCVarListClause<ACCCopyClause>(ACCC_copy, SourceLocation(),
+  explicit ACCCopyClause(OpenACCClauseKind Kind, unsigned N)
+      : ACCVarListClause<ACCCopyClause>(Kind, SourceLocation(),
                                         SourceLocation(), SourceLocation(),
-                                        N) {}
+                                        N) {
+    assert(isClauseKind(Kind) && "expected copy clause or alias");
+  }
 
 public:
   /// Creates clause with a list of variables \a VL.
   ///
   /// \param C AST context.
+  /// \param Kind Which alias of the copy clause.
   /// \param StartLoc Starting location of the clause.
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
   /// \param VL List of references to the variables.
   ///
-  static ACCCopyClause *Create(const ASTContext &C, SourceLocation StartLoc,
+  static ACCCopyClause *Create(const ASTContext &C, OpenACCClauseKind Kind,
+                               SourceLocation StartLoc,
                                SourceLocation LParenLoc,
                                SourceLocation EndLoc, ArrayRef<Expr *> VL);
   /// Creates an empty clause with the place for \a N variables.
   ///
   /// \param C AST context.
+  /// \param Kind Which alias of the copy clause.
   /// \param N The number of variables.
   ///
-  static ACCCopyClause *CreateEmpty(const ASTContext &C, unsigned N);
+  static ACCCopyClause *CreateEmpty(const ASTContext &C,
+                                    OpenACCClauseKind Kind, unsigned N);
 
   child_range children() {
     return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
                        reinterpret_cast<Stmt **>(varlist_end()));
   }
 
+  static bool isClauseKind(OpenACCClauseKind Kind) {
+    switch (Kind) {
+#define OPENACC_CLAUSE_ALIAS_copy(Name) \
+    case ACCC_##Name:                   \
+      return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      return false;
+    }
+  }
+
   static bool classof(const ACCClause *T) {
-    return T->getClauseKind() == ACCC_copy;
+    return isClauseKind(T->getClauseKind());
   }
 };
 
@@ -925,8 +959,12 @@ public:
     // Top switch clause: visit each ACCClause.
     switch (S->getClauseKind()) {
     default: llvm_unreachable("Unknown clause kind!");
-#define OPENACC_CLAUSE(Name, Class)                              \
-    case ACCC_ ## Name : return Visit ## Class(static_cast<PTR(Class)>(S));
+#define OPENACC_CLAUSE(Name, Class) \
+    case ACCC_##Name:               \
+      return Visit ## Class(static_cast<PTR(Class)>(S));
+#define OPENACC_CLAUSE_ALIAS(ClauseAlias, AliasedClause, Class) \
+    case ACCC_##ClauseAlias:                                    \
+      return Visit ## Class(static_cast<PTR(Class)>(S));
 #include "clang/Basic/OpenACCKinds.def"
     }
   }

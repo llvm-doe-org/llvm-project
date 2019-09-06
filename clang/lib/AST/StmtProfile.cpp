@@ -1016,7 +1016,7 @@ class ACCClauseProfiler : public ConstACCClauseVisitor<ACCClauseProfiler> {
 
 public:
   ACCClauseProfiler(StmtProfiler *P) : Profiler(P) { }
-#define OPENACC_CLAUSE(Name, Class)                                             \
+#define OPENACC_CLAUSE(Name, Class) \
   void Visit##Class(const Class *C);
 #include "clang/Basic/OpenACCKinds.def"
 };
@@ -1030,6 +1030,8 @@ void ACCClauseProfiler::VisitACCClauseList(T *Node) {
 }
 
 void ACCClauseProfiler::VisitACCCopyClause(const ACCCopyClause *C) {
+  // FIXME: Should we visit the clause kind, which varies among clause
+  // aliases?
   VisitACCClauseList(C);
 }
 void ACCClauseProfiler::VisitACCSharedClause(const ACCSharedClause *C) {

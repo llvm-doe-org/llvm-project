@@ -3354,9 +3354,13 @@ bool RecursiveASTVisitor<Derived>::TraverseACCClause(ACCClause *C) {
   if (!C)
     return true;
   switch (C->getClauseKind()) {
-#define OPENACC_CLAUSE(Name, Class)                                             \
-  case ACCC_##Name:                                                            \
-    TRY_TO(Visit##Class(static_cast<Class *>(C)));                             \
+#define OPENACC_CLAUSE(Name, Class)                \
+  case ACCC_##Name:                                \
+    TRY_TO(Visit##Class(static_cast<Class *>(C))); \
+    break;
+#define OPENACC_CLAUSE_ALIAS(ClauseAlias, AliasedClause, Class) \
+  case ACCC_##ClauseAlias:                                      \
+    TRY_TO(Visit##Class(static_cast<Class *>(C)));              \
     break;
 #include "clang/Basic/OpenACCKinds.def"
   case ACCC_unknown:

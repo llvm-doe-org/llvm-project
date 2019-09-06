@@ -21,8 +21,11 @@ ACCClause::child_range ACCClause::children() {
   switch (getClauseKind()) {
   default:
     break;
-#define OPENACC_CLAUSE(Name, Class)                                           \
-  case ACCC_##Name:                                                           \
+#define OPENACC_CLAUSE(Name, Class) \
+  case ACCC_##Name:                 \
+    return static_cast<Class *>(this)->children();
+#define OPENACC_CLAUSE_ALIAS(ClauseAlias, AliasedClause, Class) \
+  case ACCC_##ClauseAlias:                                    \
     return static_cast<Class *>(this)->children();
 #include "clang/Basic/OpenACCKinds.def"
   }
@@ -38,7 +41,9 @@ clang::getPrivateVarsFromClause(ACCClause *C) {
     return cast<ACCFirstprivateClause>(C)->varlists();
   case ACCC_reduction:
     return cast<ACCReductionClause>(C)->varlists();
-  case ACCC_copy:
+#define OPENACC_CLAUSE_ALIAS_copy(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
   case ACCC_shared:
   case ACCC_num_gangs:
   case ACCC_num_workers:
@@ -59,20 +64,21 @@ clang::getPrivateVarsFromClause(ACCClause *C) {
 }
 
 ACCCopyClause *
-ACCCopyClause::Create(const ASTContext &C, SourceLocation StartLoc,
-                      SourceLocation LParenLoc, SourceLocation EndLoc,
-                      ArrayRef<Expr *> VL) {
+ACCCopyClause::Create(const ASTContext &C, OpenACCClauseKind Kind,
+                      SourceLocation StartLoc, SourceLocation LParenLoc,
+                      SourceLocation EndLoc, ArrayRef<Expr *> VL) {
   // Allocate space for private variables and initializer expressions.
   void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
-  ACCCopyClause *Clause = new (Mem) ACCCopyClause(StartLoc, LParenLoc, EndLoc,
-                                                  VL.size());
+  ACCCopyClause *Clause = new (Mem) ACCCopyClause(Kind, StartLoc, LParenLoc,
+                                                  EndLoc, VL.size());
   Clause->setVarRefs(VL);
   return Clause;
 }
 
-ACCCopyClause *ACCCopyClause::CreateEmpty(const ASTContext &C, unsigned N) {
+ACCCopyClause *ACCCopyClause::CreateEmpty(const ASTContext &C,
+                                          OpenACCClauseKind Kind, unsigned N) {
   void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
-  return new (Mem) ACCCopyClause(N);
+  return new (Mem) ACCCopyClause(Kind, N);
 }
 
 ACCSharedClause *

@@ -538,6 +538,14 @@ is, Clacc tries to make the exact behavior it intends to produce as
 explicit as possible in the generated OpenMP for the sake of
 debugging. Thus, -> *exp* appears frequently below.
 
+Clause Aliases
+--------------
+
+Some OpenACC clauses, such as `pcopy`, are aliases for others clauses,
+such as `copy`.  Clacc's mapping for a clause alias is the same as for
+the aliased clause, so clause aliases are not documented further in
+this section.
+
 Semantic Clarifications
 -----------------------
 

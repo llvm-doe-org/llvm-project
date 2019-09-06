@@ -939,7 +939,7 @@ class ACCClausePrinter : public ACCClauseVisitor<ACCClausePrinter> {
 public:
   ACCClausePrinter(raw_ostream &OS, const PrintingPolicy &Policy)
     : OS(OS), Policy(Policy) { }
-#define OPENACC_CLAUSE(Name, Class)                              \
+#define OPENACC_CLAUSE(Name, Class) \
   void Visit##Class(Class *S);
 #include "clang/Basic/OpenACCKinds.def"
 };
@@ -959,7 +959,7 @@ void ACCClausePrinter::VisitACCClauseList(T *Node, char StartSym) {
 
 void ACCClausePrinter::VisitACCCopyClause(ACCCopyClause *Node) {
   if (!Node->varlist_empty()) {
-    OS << "copy";
+    OS << getOpenACCClauseName(Node->getClauseKind());
     VisitACCClauseList(Node, '(');
     OS << ")";
   }

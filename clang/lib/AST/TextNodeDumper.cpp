@@ -329,7 +329,7 @@ void TextNodeDumper::Visit(const ACCClause *C) {
   }
   {
     ColorScope Color(OS, ShowColors, AttrColor);
-    StringRef ClauseName(getOpenACCClauseName(C->getClauseKind()));
+    StringRef ClauseName(getOpenACCClauseName(C->getClauseKindDealiased()));
     OS << "ACC" << ClauseName.substr(/*Start=*/0, /*N=*/1).upper()
        << ClauseName.drop_front() << "Clause";
   }

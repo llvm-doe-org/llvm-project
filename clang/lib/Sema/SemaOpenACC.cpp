@@ -606,8 +606,10 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
     SourceLocation EndLoc, const DeclarationNameInfo &ReductionId) {
   ACCClause *Res = nullptr;
   switch (Kind) {
-  case ACCC_copy:
-    Res = ActOnOpenACCCopyClause(VarList, StartLoc, LParenLoc, EndLoc);
+#define OPENACC_CLAUSE_ALIAS_copy(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+    Res = ActOnOpenACCCopyClause(Kind, VarList, StartLoc, LParenLoc, EndLoc);
     break;
   case ACCC_private:
     Res = ActOnOpenACCPrivateClause(VarList, StartLoc, LParenLoc, EndLoc);
@@ -1247,7 +1249,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     // Check default data sharing attributes for referenced variables.
     if (!Adder.getImplicitCopy().empty()) {
       ACCClause *Implicit = ActOnOpenACCCopyClause(
-          Adder.getImplicitCopy(), SourceLocation(),
+          ACCC_copy, Adder.getImplicitCopy(), SourceLocation(),
           SourceLocation(), SourceLocation());
       assert(Implicit);
       ClausesWithImplicit.push_back(Implicit);
@@ -1481,7 +1483,9 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr
   case ACCC_collapse:
     Res = ActOnOpenACCCollapseClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
-  case ACCC_copy:
+#define OPENACC_CLAUSE_ALIAS_copy(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
   case ACCC_shared:
   case ACCC_private:
   case ACCC_firstprivate:
@@ -1515,10 +1519,11 @@ getVarDeclFromVarList(Sema &S, Expr *&RefExpr, SourceLocation &ELoc,
   return cast<VarDecl>(DE->getDecl());
 }
 
-ACCClause *Sema::ActOnOpenACCCopyClause(ArrayRef<Expr *> VarList,
-                                        SourceLocation StartLoc,
-                                        SourceLocation LParenLoc,
-                                        SourceLocation EndLoc) {
+ACCClause *Sema::ActOnOpenACCCopyClause(
+    OpenACCClauseKind Kind, ArrayRef<Expr *> VarList, SourceLocation StartLoc,
+    SourceLocation LParenLoc, SourceLocation EndLoc) {
+  assert(ACCCopyClause::isClauseKind(Kind) &&
+         "expected copy clause or alias");
   SmallVector<Expr *, 8> Vars;
   bool IsImplicitClause = StartLoc.isInvalid();
   auto ImplicitClauseLoc = DSAStack->getConstructLoc();
@@ -1539,8 +1544,17 @@ ACCClause *Sema::ActOnOpenACCCopyClause(ArrayRef<Expr *> VarList,
     // in a copy clause must have a complete type.  However, you cannot copy
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
-    if (RequireCompleteType(ELoc, Type,
-                            diag::err_acc_copy_incomplete_type))
+    unsigned IncompleteTypeDiagId;
+    switch (Kind) {
+#define OPENACC_CLAUSE_ALIAS_copy(Name) \
+    case ACCC_##Name:                   \
+      IncompleteTypeDiagId = diag::err_acc_##Name##_incomplete_type; \
+      break;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      llvm_unreachable("expected copy clause or alias");
+    }
+    if (RequireCompleteType(ELoc, Type, IncompleteTypeDiagId))
       continue;
 
     // The OpenACC 2.7 spec doesn't say, as far as I know, that a const
@@ -1550,7 +1564,7 @@ ACCClause *Sema::ActOnOpenACCCopyClause(ArrayRef<Expr *> VarList,
     // with map type tofrom.
     // TODO: Should this be isConstant?
     if (VD->getType().isConstQualified()) {
-      Diag(ELoc, diag::err_acc_const_copy);
+      Diag(ELoc, diag::err_acc_const_in_clause) << getOpenACCClauseName(Kind);
       Diag(VD->getLocation(), diag::note_acc_const) << VD;
       continue;
     }
@@ -1563,7 +1577,8 @@ ACCClause *Sema::ActOnOpenACCCopyClause(ArrayRef<Expr *> VarList,
   if (Vars.empty())
     return nullptr;
 
-  return ACCCopyClause::Create(Context, StartLoc, LParenLoc, EndLoc, Vars);
+  return ACCCopyClause::Create(Context, Kind, StartLoc, LParenLoc, EndLoc,
+                               Vars);
 }
 
 ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
@@ -1928,7 +1943,9 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
   case ACCC_vector:
     Res = ActOnOpenACCVectorClause(StartLoc, EndLoc);
     break;
-  case ACCC_copy:
+#define OPENACC_CLAUSE_ALIAS_copy(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
   case ACCC_shared:
   case ACCC_private:
   case ACCC_firstprivate:
@@ -2467,8 +2484,11 @@ public:
 
     switch (C->getClauseKind()) {
     // Transform individual clause nodes
-  #define OPENACC_CLAUSE(Name, Class)                                         \
-    case ACCC_ ## Name :                                                      \
+  #define OPENACC_CLAUSE(Name, Class)                                    \
+    case ACCC_##Name:                                                    \
+      return getDerived().Transform ## Class(D, TDKind, cast<Class>(C));
+  #define OPENACC_CLAUSE_ALIAS(ClauseAlias, AliasedClause, Class) \
+    case ACCC_##ClauseAlias:                                      \
       return getDerived().Transform ## Class(D, TDKind, cast<Class>(C));
   #include "clang/Basic/OpenACCKinds.def"
     case ACCC_unknown:

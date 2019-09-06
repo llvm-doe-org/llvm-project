@@ -254,7 +254,9 @@ ACCClause *Parser::ParseOpenACCClause(
     }
     Clause = ParseOpenACCClause(CKind, WrongDirective);
     break;
-  case ACCC_copy:
+#define OPENACC_CLAUSE_ALIAS_copy(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
   case ACCC_private:
   case ACCC_firstprivate:
   case ACCC_reduction:
@@ -438,8 +440,11 @@ bool Parser::ParseOpenACCVarList(OpenACCDirectiveKind DKind,
   return Vars.empty() || InvalidReductionId;
 }
 
-///  Parsing of OpenACC clause 'private', 'firstprivate', or 'reduction'.
+///  Parsing of OpenACC clause 'copy' (or one of its aliases), 'private',
+/// 'firstprivate', or 'reduction'.
 ///
+///    copy-clause:
+///       'copy' '(' list ')'
 ///    private-clause:
 ///       'private' '(' list ')'
 ///    firstprivate-clause:

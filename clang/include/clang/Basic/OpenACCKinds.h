@@ -42,6 +42,8 @@ enum OpenACCBaseDSAKind {
 enum OpenACCClauseKind {
 #define OPENACC_CLAUSE(Name, Class) \
   ACCC_##Name,
+#define OPENACC_CLAUSE_ALIAS(ClauseAlias, AliasedClause, Class) \
+  ACCC_##ClauseAlias,
 #include "clang/Basic/OpenACCKinds.def"
   ACCC_unknown
 };

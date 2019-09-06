@@ -2052,11 +2052,11 @@ public:
   ///
   /// By default, performs semantic analysis to build the new OpenACC clause.
   /// Subclasses may override this routine to provide different behavior.
-  ACCClause *RebuildACCCopyClause(ArrayRef<Expr *> VarList,
-                                  SourceLocation StartLoc,
-                                  SourceLocation LParenLoc,
-                                  SourceLocation EndLoc) {
-    return getSema().ActOnOpenACCCopyClause(VarList, StartLoc, LParenLoc,
+  ACCClause *RebuildACCCopyClause(
+      OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
+      SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCCopyClause(Kind, VarList, StartLoc, LParenLoc,
                                             EndLoc);
   }
 
@@ -3536,8 +3536,11 @@ ACCClause *TreeTransform<Derived>::TransformACCClause(ACCClause *S) {
   switch (S->getClauseKind()) {
   default: break;
   // Transform individual clause nodes
-#define OPENACC_CLAUSE(Name, Class)                                            \
-  case ACCC_ ## Name :                                                         \
+#define OPENACC_CLAUSE(Name, Class) \
+  case ACCC_##Name:                 \
+    return getDerived().Transform ## Class(cast<Class>(S));
+#define OPENACC_CLAUSE_ALIAS(ClauseAlias, AliasedClause, Class) \
+  case ACCC_##ClauseAlias:                                      \
     return getDerived().Transform ## Class(cast<Class>(S));
 #include "clang/Basic/OpenACCKinds.def"
   }
@@ -9440,7 +9443,8 @@ TreeTransform<Derived>::TransformACCCopyClause(ACCCopyClause *C) {
     Vars.push_back(EVar.get());
   }
   return getDerived().RebuildACCCopyClause(
-      Vars, C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
+      C->getClauseKind(), Vars, C->getBeginLoc(), C->getLParenLoc(),
+      C->getEndLoc());
 }
 
 template <typename Derived>

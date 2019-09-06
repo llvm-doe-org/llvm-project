@@ -1,4 +1,9 @@
 // Check reduction clause on "acc loop" and on "acc parallel loop".
+//
+// For aliased clauses, we arbitrarily cycle through the aliases throughout
+// this test to give confidence they all are handled equivalently in sema and
+// codegen.  We do not attempt to check every alias in every scenario as that
+// would make the test much slower and more difficult to maintain.
 
 // Check ASTDumper.
 //
@@ -678,11 +683,11 @@ int main() {
     // DMP-NEXT:     OMPReductionClause
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) copy(out){{$}}
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) pcopy(out){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) copy(out){{$}}
-    #pragma acc parallel num_gangs(2) copy(out)
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) pcopy(out){{$}}
+    #pragma acc parallel num_gangs(2) pcopy(out)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
@@ -940,11 +945,11 @@ int main() {
     // DMP-NEXT:     OMPReductionClause
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) copy(out){{$}}
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) present_or_copy(out){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) copy(out){{$}}
-    #pragma acc parallel num_gangs(2) copy(out)
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) present_or_copy(out){{$}}
+    #pragma acc parallel num_gangs(2) present_or_copy(out)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
@@ -1443,11 +1448,11 @@ int main() {
     // DMP-NEXT:     OMPReductionClause
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) copy(out){{$}}
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) pcopy(out){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) copy(out){{$}}
-    #pragma acc parallel num_gangs(2) copy(out)
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) pcopy(out){{$}}
+    #pragma acc parallel num_gangs(2) pcopy(out)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
@@ -2823,11 +2828,11 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'int'
     // DMP-NOT:      OMP
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) copy(out2){{$}}
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) present_or_copy(out2){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: out2) firstprivate(out1){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: out2) firstprivate(out1){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) copy(out2){{$}}
-    #pragma acc parallel num_gangs(2) copy(out2)
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) present_or_copy(out2){{$}}
+    #pragma acc parallel num_gangs(2) present_or_copy(out2)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {

@@ -48,6 +48,8 @@ const char *clang::getOpenACCDirectiveName(OpenACCDirectiveKind Kind) {
 OpenACCClauseKind clang::getOpenACCClauseKind(StringRef Str) {
   return llvm::StringSwitch<OpenACCClauseKind>(Str)
 #define OPENACC_CLAUSE(Name, Class) .Case(#Name, ACCC_##Name)
+#define OPENACC_CLAUSE_ALIAS(ClauseAlias, AliasedClause, Class) \
+    .Case(#ClauseAlias, ACCC_##ClauseAlias)
 #include "clang/Basic/OpenACCKinds.def"
       .Default(ACCC_unknown);
 }
@@ -70,9 +72,12 @@ const char *clang::getOpenACCClauseName(OpenACCClauseKind Kind) {
   switch (Kind) {
   case ACCC_unknown:
     return "unknown";
-#define OPENACC_CLAUSE(Name, Class)                                            \
-  case ACCC_##Name:                                                            \
+#define OPENACC_CLAUSE(Name, Class) \
+  case ACCC_##Name:                 \
     return #Name;
+#define OPENACC_CLAUSE_ALIAS(AliasedClause, ClauseAlias, Class) \
+  case ACCC_##AliasedClause:                                    \
+    return #AliasedClause;
 #include "clang/Basic/OpenACCKinds.def"
   }
   llvm_unreachable("Invalid OpenACC clause kind");
