@@ -1837,17 +1837,6 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
 
-    // expected-error@+2 {{private variable cannot be reduction}}
-    // expected-note@+1 {{defined as private}}
-    #pragma acc CMB_PAR loop private(i) gang reduction(&:i) vector
-    for (int i = 0; i < 5; ++i)
-      ;
-    // expected-error@+2 {{reduction variable cannot be private}}
-    // expected-note@+1 {{defined as reduction}}
-    #pragma acc CMB_PAR loop gang reduction(&&:i) worker private(i) vector
-    for (int i = 0; i < 5; ++i)
-      ;
-
     // expected-error@+1 {{OpenACC loop control variable 'i' cannot have reduction}}
     #pragma acc CMB_PAR loop reduction(^:i)
     for (i = 0; i < 5; ++i)
@@ -2069,13 +2058,32 @@ void fn() {
   #pragma acc parallel
 #endif
   {
+    // expected-error@+3 {{private variable cannot be reduction variable}}
+    // expected-note@+1 {{previously defined as private variable here}}
+    #pragma acc CMB_PAR loop private(i) gang \
+                             reduction(&:i) vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+3 {{reduction variable cannot be private variable}}
+    // expected-note@+1 {{previously defined as reduction variable here}}
+    #pragma acc CMB_PAR loop gang reduction(&&:i) worker \
+                             private(i) vector
+    for (int i = 0; i < 5; ++i)
+      ;
+  }
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
     // expected-error@+6 {{redundant 'max' reduction for variable 'i'}}
     // expected-note@+5 {{previous 'max' reduction here}}
-    // expected-error@+4 {{redundant 'max' reduction for variable 'jk'}}
+    // expected-error@+5 {{redundant 'max' reduction for variable 'jk'}}
     // expected-note@+3 {{previous 'max' reduction here}}
-    // expected-error@+2 {{conflicting '*' reduction for variable 'd'}}
+    // expected-error@+4 {{conflicting '*' reduction for variable 'd'}}
     // expected-note@+1 {{previous 'max' reduction here}}
-    #pragma acc CMB_PAR loop gang reduction(max:i,i,jk,d) worker reduction(max:jk) reduction(*:d)
+    #pragma acc CMB_PAR loop gang reduction(max:i,i,jk,d) worker \
+                                  reduction(max:jk) \
+                                  reduction(*:d)
     for (int i = 0; i < 5; ++i)
       ;
   }

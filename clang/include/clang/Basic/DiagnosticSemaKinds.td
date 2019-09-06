@@ -9348,9 +9348,9 @@ def err_acc_firstprivate_incomplete_type : Error<
 def err_acc_expected_var_name_expr : Error<
   "expected variable name">;
 def err_acc_wrong_dsa : Error<
-  "%0 variable cannot be %1">;
+  "%0 variable cannot be %1 variable">;
 def note_acc_explicit_dsa : Note<
-  "defined as %0">;
+  "previously defined as %0 variable here">;
 def err_acc_const_in_clause : Error<
   "variable in '%0' clause cannot be const">;
 def err_acc_const_private : Error<

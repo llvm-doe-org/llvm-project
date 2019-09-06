@@ -432,49 +432,62 @@ int main() {
 
   // expected-error@+6 {{redundant '&&' reduction for variable 'i'}}
   // expected-note@+5 {{previous '&&' reduction here}}
-  // expected-error@+4 {{redundant '&&' reduction for variable 'jk'}}
+  // expected-error@+5 {{redundant '&&' reduction for variable 'jk'}}
   // expected-note@+3 {{previous '&&' reduction here}}
-  // expected-error@+2 {{conflicting 'max' reduction for variable 'd'}}
+  // expected-error@+4 {{conflicting 'max' reduction for variable 'd'}}
   // expected-note@+1 {{previous '&&' reduction here}}
-  #pragma acc parallel LOOP reduction(&&:i,i,jk,d) reduction(&&:jk) reduction(max:d)
+  #pragma acc parallel LOOP reduction(&&:i,i,jk,d) \
+                            reduction(&&:jk) \
+                            reduction(max:d)
     FORLOOP
 
-  // expected-error@+4 {{copy variable cannot be firstprivate}}
-  // expected-note@+3 {{defined as copy}}
-  // expected-error@+2 {{firstprivate variable cannot be copy}}
-  // expected-note@+1 {{defined as firstprivate}}
-  #pragma acc parallel LOOP copy(i) firstprivate(i,jk) copy(jk)
+  // expected-error@+5 {{copy variable cannot be firstprivate variable}}
+  // expected-note@+3 {{previously defined as copy variable here}}
+  // expected-error@+4 {{firstprivate variable cannot be copy variable}}
+  // expected-note@+2 {{previously defined as firstprivate variable here}}
+  #pragma acc parallel LOOP copy(i) \
+                            firstprivate(i,jk) \
+                            copy(jk)
     FORLOOP
-  // expected-error@+4 {{firstprivate variable cannot be copy}}
-  // expected-note@+3 {{defined as firstprivate}}
-  // expected-error@+2 {{copy variable cannot be firstprivate}}
-  // expected-note@+1 {{defined as copy}}
-  #pragma acc parallel LOOP firstprivate(a) pcopy(a,p) firstprivate(p)
+  // expected-error@+5 {{firstprivate variable cannot be copy variable}}
+  // expected-note@+3 {{previously defined as firstprivate variable here}}
+  // expected-error@+4 {{copy variable cannot be firstprivate variable}}
+  // expected-note@+2 {{previously defined as copy variable here}}
+  #pragma acc parallel LOOP firstprivate(a) \
+                            pcopy(a,p) \
+                            firstprivate(p)
     FORLOOP
-  // expected-error@+5 {{copy variable cannot be firstprivate}}
-  // expected-note@+4 {{defined as copy}}
-  // expected-error@+3 {{firstprivate variable cannot be copy}}
-  // expected-note@+2 {{defined as firstprivate}}
-  #pragma acc parallel LOOP \
-      present_or_copy(f) firstprivate(f,d) present_or_copy(d)
+  // expected-error@+5 {{copy variable cannot be firstprivate variable}}
+  // expected-note@+3 {{previously defined as copy variable here}}
+  // expected-error@+4 {{firstprivate variable cannot be copy variable}}
+  // expected-note@+2 {{previously defined as firstprivate variable here}}
+  #pragma acc parallel LOOP present_or_copy(f) \
+                            firstprivate(f,d) \
+                            present_or_copy(d)
     FORLOOP
-  // expected-error@+4 {{private variable cannot be copy}}
-  // expected-note@+3 {{defined as private}}
-  // expected-error@+2 {{copy variable cannot be private}}
-  // expected-note@+1 {{defined as copy}}
-  #pragma acc parallel LOOP private(a) copy(a,p) private(p)
+  // expected-error@+5 {{private variable cannot be copy variable}}
+  // expected-note@+3 {{previously defined as private variable here}}
+  // expected-error@+4 {{copy variable cannot be private variable}}
+  // expected-note@+2 {{previously defined as copy variable here}}
+  #pragma acc parallel LOOP private(a) \
+                            copy(a,p) \
+                            private(p)
     FORLOOP
-  // expected-error@+4 {{private variable cannot be copy}}
-  // expected-note@+3 {{defined as private}}
-  // expected-error@+2 {{copy variable cannot be private}}
-  // expected-note@+1 {{defined as copy}}
-  #pragma acc parallel LOOP pcopy(f) private(f,d) pcopy(d)
+  // expected-error@+5 {{copy variable cannot be private variable}}
+  // expected-note@+3 {{previously defined as copy variable here}}
+  // expected-error@+4 {{private variable cannot be copy variable}}
+  // expected-note@+2 {{previously defined as private variable here}}
+  #pragma acc parallel LOOP pcopy(f) \
+                            private(f,d) \
+                            pcopy(d)
     FORLOOP
-  // expected-error@+4 {{private variable cannot be copy}}
-  // expected-note@+3 {{defined as private}}
-  // expected-error@+2 {{copy variable cannot be private}}
-  // expected-note@+1 {{defined as copy}}
-  #pragma acc parallel LOOP private(i) present_or_copy(i,jk) private(jk)
+  // expected-error@+5 {{private variable cannot be copy variable}}
+  // expected-note@+3 {{previously defined as private variable here}}
+  // expected-error@+4 {{copy variable cannot be private variable}}
+  // expected-note@+2 {{previously defined as copy variable here}}
+  #pragma acc parallel LOOP private(i) \
+                            present_or_copy(i,jk) \
+                            private(jk)
     FORLOOP
   #pragma acc parallel LOOP copy(f) reduction(+:f,d) copy(d)
     FORLOOP
@@ -483,23 +496,31 @@ int main() {
   #pragma acc parallel LOOP \
       present_or_copy(fc) reduction(&&:fc,e) present_or_copy(e)
     FORLOOP
-  // expected-error@+4 {{firstprivate variable cannot be private}}
-  // expected-note@+3 {{defined as firstprivate}}
-  // expected-error@+2 {{private variable cannot be firstprivate}}
-  // expected-note@+1 {{defined as private}}
-  #pragma acc parallel LOOP firstprivate(i) private(i,jk) firstprivate(jk)
+  // expected-error@+5 {{firstprivate variable cannot be private variable}}
+  // expected-note@+3 {{previously defined as firstprivate variable here}}
+  // expected-error@+4 {{private variable cannot be firstprivate variable}}
+  // expected-note@+2 {{previously defined as private variable here}}
+  #pragma acc parallel LOOP firstprivate(i) \
+                            private(i,jk) \
+                            firstprivate(jk)
     FORLOOP
-  // expected-error@+4 {{private variable cannot be reduction}}
-  // expected-note@+3 {{defined as private}}
-  // expected-error@+2 {{firstprivate variable cannot be reduction}}
-  // expected-note@+1 {{defined as firstprivate}}
-  #pragma acc parallel LOOP private(i) reduction(min:i) firstprivate(d) reduction(+:d)
+  // expected-error@+5 {{private variable cannot be reduction variable}}
+  // expected-note@+3 {{previously defined as private variable here}}
+  // expected-error@+5 {{firstprivate variable cannot be reduction variable}}
+  // expected-note@+3 {{previously defined as firstprivate variable here}}
+  #pragma acc parallel LOOP private(i) \
+                            reduction(min:i) \
+                            firstprivate(d) \
+                            reduction(+:d)
     FORLOOP
-  // expected-error@+4 {{reduction variable cannot be private}}
-  // expected-note@+3 {{defined as reduction}}
-  // expected-error@+2 {{reduction variable cannot be firstprivate}}
-  // expected-note@+1 {{defined as reduction}}
-  #pragma acc parallel LOOP reduction(max:i) private(i) reduction(*:d) firstprivate(d)
+  // expected-error@+5 {{reduction variable cannot be private variable}}
+  // expected-note@+3 {{previously defined as reduction}}
+  // expected-error@+5 {{reduction variable cannot be firstprivate variable}}
+  // expected-note@+3 {{previously defined as reduction}}
+  #pragma acc parallel LOOP reduction(max:i) \
+                            private(i) \
+                            reduction(*:d) \
+                            firstprivate(d)
     FORLOOP
 
   //--------------------------------------------------
