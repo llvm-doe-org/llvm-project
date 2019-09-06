@@ -18,11 +18,11 @@
 // Check ASTDumper.
 //
 // RUN: %data dmps {
-// RUN:   (mode=MODE_I  pre=DMP,DMP-I,DMP-IC,DMP-IF,DMP-IP,DMP-%[dir],DMP-%[dir]-I,DMP-%[dir]-IC,DMP-%[dir]-IF,DMP-%[dir]-IP)
-// RUN:   (mode=MODE_C0 pre=DMP,DMP-C,DMP-IC,DMP-CF,DMP-CP,DMP-CFP,DMP-%[dir],DMP-%[dir]-C,DMP-%[dir]-IC,DMP-%[dir]-CF,DMP-%[dir]-CP,DMP-%[dir]-CFP)
-// RUN:   (mode=MODE_C1 pre=DMP,DMP-C,DMP-IC,DMP-CF,DMP-CP,DMP-CFP,DMP-%[dir],DMP-%[dir]-C,DMP-%[dir]-IC,DMP-%[dir]-CF,DMP-%[dir]-CP,DMP-%[dir]-CFP)
-// RUN:   (mode=MODE_C2 pre=DMP,DMP-C,DMP-IC,DMP-CF,DMP-CP,DMP-CFP,DMP-%[dir],DMP-%[dir]-C,DMP-%[dir]-IC,DMP-%[dir]-CF,DMP-%[dir]-CP,DMP-%[dir]-CFP)
-// RUN:   (mode=MODE_F  pre=DMP,DMP-F,DMP-IF,DMP-CF,DMP-FP,DMP-CFP,DMP-%[dir],DMP-%[dir]-F,DMP-%[dir]-IF,DMP-%[dir]-CF,DMP-%[dir]-FP,DMP-%[dir]-CFP)
+// RUN:   (mode=MODE_I  pre=DMP,DMP-I,DMP-IC,DMP-IF,DMP-IP,DMP-ICF,DMP-%[dir],DMP-%[dir]-I,DMP-%[dir]-IC,DMP-%[dir]-IF,DMP-%[dir]-IP,DMP-%[dir]-ICF)
+// RUN:   (mode=MODE_C0 pre=DMP,DMP-C,DMP-IC,DMP-CF,DMP-CP,DMP-ICF,DMP-CFP,DMP-%[dir],DMP-%[dir]-C,DMP-%[dir]-IC,DMP-%[dir]-CF,DMP-%[dir]-CP,DMP-%[dir]-ICF,DMP-%[dir]-CFP)
+// RUN:   (mode=MODE_C1 pre=DMP,DMP-C,DMP-IC,DMP-CF,DMP-CP,DMP-ICF,DMP-CFP,DMP-%[dir],DMP-%[dir]-C,DMP-%[dir]-IC,DMP-%[dir]-CF,DMP-%[dir]-CP,DMP-%[dir]-ICF,DMP-%[dir]-CFP)
+// RUN:   (mode=MODE_C2 pre=DMP,DMP-C,DMP-IC,DMP-CF,DMP-CP,DMP-ICF,DMP-CFP,DMP-%[dir],DMP-%[dir]-C,DMP-%[dir]-IC,DMP-%[dir]-CF,DMP-%[dir]-CP,DMP-%[dir]-ICF,DMP-%[dir]-CFP)
+// RUN:   (mode=MODE_F  pre=DMP,DMP-F,DMP-IF,DMP-CF,DMP-FP,DMP-ICF,DMP-CFP,DMP-%[dir],DMP-%[dir]-F,DMP-%[dir]-IF,DMP-%[dir]-CF,DMP-%[dir]-FP,DMP-%[dir]-ICF,DMP-%[dir]-CFP)
 // RUN:   (mode=MODE_P  pre=DMP,DMP-P,DMP-IP,DMP-CP,DMP-FP,DMP-CFP,DMP-%[dir],DMP-%[dir]-P,DMP-%[dir]-IP,DMP-%[dir]-CP,DMP-%[dir]-FP,DMP-%[dir]-CFP)
 // RUN: }
 // RUN: %for directives {
@@ -111,18 +111,18 @@
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
 // RUN: %data exes {
-// RUN:   (mode=MODE_I  cflags=                 pre=EXE-I,EXE-IC,EXE-IF,EXE-IFP,EXE)
-// RUN:   (mode=MODE_I  cflags=-DSTORAGE=static pre=EXE-I,EXE-IC,EXE-IF,EXE-IFP,EXE)
-// RUN:   (mode=MODE_C0 cflags=                 pre=EXE-C,EXE-IC,EXE               )
-// RUN:   (mode=MODE_C0 cflags=-DSTORAGE=static pre=EXE-C,EXE-IC,EXE               )
-// RUN:   (mode=MODE_C1 cflags=                 pre=EXE-C,EXE-IC,EXE               )
-// RUN:   (mode=MODE_C1 cflags=-DSTORAGE=static pre=EXE-C,EXE-IC,EXE               )
-// RUN:   (mode=MODE_C2 cflags=                 pre=EXE-C,EXE-IC,EXE               )
-// RUN:   (mode=MODE_C2 cflags=-DSTORAGE=static pre=EXE-C,EXE-IC,EXE               )
-// RUN:   (mode=MODE_F  cflags=                 pre=EXE-F,EXE-IF,EXE-FP,EXE-IFP,EXE)
-// RUN:   (mode=MODE_F  cflags=-DSTORAGE=static pre=EXE-F,EXE-IF,EXE-FP,EXE-IFP,EXE)
-// RUN:   (mode=MODE_P  cflags=                 pre=EXE-P,EXE-FP,EXE-IFP,EXE       )
-// RUN:   (mode=MODE_P  cflags=-DSTORAGE=static pre=EXE-P,EXE-FP,EXE-IFP,EXE       )
+// RUN:   (mode=MODE_I  cflags=                 pre=EXE-I,EXE-IC,EXE-IF,EXE-ICF,EXE-IFP,EXE)
+// RUN:   (mode=MODE_I  cflags=-DSTORAGE=static pre=EXE-I,EXE-IC,EXE-IF,EXE-ICF,EXE-IFP,EXE)
+// RUN:   (mode=MODE_C0 cflags=                 pre=EXE-C,EXE-IC,EXE-ICF,EXE               )
+// RUN:   (mode=MODE_C0 cflags=-DSTORAGE=static pre=EXE-C,EXE-IC,EXE-ICF,EXE               )
+// RUN:   (mode=MODE_C1 cflags=                 pre=EXE-C,EXE-IC,EXE-ICF,EXE               )
+// RUN:   (mode=MODE_C1 cflags=-DSTORAGE=static pre=EXE-C,EXE-IC,EXE-ICF,EXE               )
+// RUN:   (mode=MODE_C2 cflags=                 pre=EXE-C,EXE-IC,EXE-ICF,EXE               )
+// RUN:   (mode=MODE_C2 cflags=-DSTORAGE=static pre=EXE-C,EXE-IC,EXE-ICF,EXE               )
+// RUN:   (mode=MODE_F  cflags=                 pre=EXE-F,EXE-IF,EXE-FP,EXE-ICF,EXE-IFP,EXE)
+// RUN:   (mode=MODE_F  cflags=-DSTORAGE=static pre=EXE-F,EXE-IF,EXE-FP,EXE-ICF,EXE-IFP,EXE)
+// RUN:   (mode=MODE_P  cflags=                 pre=EXE-P,EXE-FP,EXE-IFP,EXE               )
+// RUN:   (mode=MODE_P  cflags=-DSTORAGE=static pre=EXE-P,EXE-FP,EXE-IFP,EXE               )
 // RUN: }
 // RUN: %for directives {
 // RUN:   %for exes {
@@ -206,16 +206,22 @@
 # error MODE undefined
 #elif MODE == MODE_I
 # define CLAUSE(...)
+# define CLAUSE_NOT_PRIVATE(...)
 #elif MODE == MODE_C0
 # define CLAUSE(...) copy(__VA_ARGS__)
+# define CLAUSE_NOT_PRIVATE(...) copy(__VA_ARGS__)
 #elif MODE == MODE_C1
 # define CLAUSE(...) pcopy(__VA_ARGS__)
+# define CLAUSE_NOT_PRIVATE(...) pcopy(__VA_ARGS__)
 #elif MODE == MODE_C2
 # define CLAUSE(...) present_or_copy(__VA_ARGS__)
+# define CLAUSE_NOT_PRIVATE(...) present_or_copy(__VA_ARGS__)
 #elif MODE == MODE_F
 # define CLAUSE(...) firstprivate(__VA_ARGS__)
+# define CLAUSE_NOT_PRIVATE(...) firstprivate(__VA_ARGS__)
 #elif MODE == MODE_P
 # define CLAUSE(...) private(__VA_ARGS__)
+# define CLAUSE_NOT_PRIVATE(...)
 #else
 # error unknown MODE
 #endif
@@ -308,6 +314,13 @@ int main() {
   // Implicit firstprivate that is shadowed.
   STORAGE int shadowed = 111;
 
+#if MODE != MODE_P
+  // Const scalars and non-scalars should be fine with either implicit or
+  // explicit data sharing attributes.
+  const int ci = 53;
+  const int ca[3] = {10, 11, 12};
+#endif
+
   // DMP-PARLOOP:        ACCParallelLoopDirective
   // DMP-PARLOOP-NEXT:     ACCSeqClause
   // DMP-PARLOOP-NEXT:     ACCNum_gangsClause
@@ -344,6 +357,12 @@ int main() {
   // DMP-PARLOOP-CFP-NOT:    <implicit>
   // DMP-PARLOOP-CFP-SAME:   {{$}}
   // DMP-PARLOOP-CFP-NEXT:   DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-PARLOOP-C-NEXT:   ACCCopyClause
+  // DMP-PARLOOP-F-NEXT:   ACCFirstprivateClause
+  // DMP-PARLOOP-CF-NOT:     <implicit>
+  // DMP-PARLOOP-CF-SAME:    {{$}}
+  // DMP-PARLOOP-CF-NEXT:    DeclRefExpr {{.*}} 'ci' 'const int'
+  // DMP-PARLOOP-CF-NEXT:    DeclRefExpr {{.*}} 'ca' 'const int [3]'
   // DMP-PARLOOP-NEXT:     effect: ACCParallelDirective
   // DMP-PAR:              ACCParallelDirective
   // DMP-NEXT:               ACCNum_gangsClause
@@ -377,6 +396,12 @@ int main() {
   // DMP-CF-NOT:               <implicit>
   // DMP-CF-SAME:              {{$}}
   // DMP-CF-NEXT:              DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-C-NEXT:             ACCCopyClause
+  // DMP-F-NEXT:             ACCFirstprivateClause
+  // DMP-CF-NOT:               <implicit>
+  // DMP-CF-SAME:              {{$}}
+  // DMP-CF-NEXT:              DeclRefExpr {{.*}} 'ci' 'const int'
+  // DMP-CF-NEXT:              DeclRefExpr {{.*}} 'ca' 'const int [3]'
   // DMP-PAR-P-NEXT:         ACCPrivateClause
   // DMP-PAR-P-NOT:            <implicit>
   // DMP-PAR-P-SAME:           {{$}}
@@ -410,6 +435,7 @@ int main() {
   // DMP-I-NEXT:               DeclRefExpr {{.*}} 'la' 'int [2]'
   // DMP-I-NEXT:               DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   // DMP-I-NEXT:               DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-I-NEXT:               DeclRefExpr {{.*}} 'ca' 'const int [3]'
   // DMP-I-NEXT:             ACCFirstprivateClause {{.*}} <implicit>
   // DMP-I-NEXT:               DeclRefExpr {{.*}} 'gi' 'int'
   //                           DeclRefExpr for gt is here if defined
@@ -420,6 +446,7 @@ int main() {
   //                           DeclRefExpr for lt is here if defined
   // DMP-I:                    DeclRefExpr {{.*}} 'lp' 'const int *'
   // DMP-I-NEXT:               DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-I-NEXT:               DeclRefExpr {{.*}} 'ci' 'const int'
   // DMP-NEXT:               impl: OMPTargetTeamsDirective
   // DMP-NEXT:                 OMPNum_teamsClause
   // DMP-NEXT:                   IntegerLiteral {{.*}} 'int' 2
@@ -452,6 +479,12 @@ int main() {
   // DMP-CF-NOT:                 <implicit>
   // DMP-CF-SAME:                {{$}}
   // DMP-CF-NEXT:                DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-C-NEXT:               OMPMapClause
+  // DMP-F-NEXT:               OMPFirstprivateClause
+  // DMP-CF-NOT:                 <implicit>
+  // DMP-CF-SAME:                {{$}}
+  // DMP-CF-NEXT:                DeclRefExpr {{.*}} 'ci' 'const int'
+  // DMP-CF-NEXT:                DeclRefExpr {{.*}} 'ca' 'const int [3]'
   // DMP-PAR-P-NEXT:           OMPPrivateClause
   // DMP-PAR-P-NOT:              <implicit>
   // DMP-PAR-P-SAME:             {{$}}
@@ -487,6 +520,7 @@ int main() {
   // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'la' 'int [2]'
   // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'ca' 'const int [3]'
   // DMP-I-NEXT:               OMPFirstprivateClause
   // DMP-I-NOT:                  <implicit>
   // DMP-I-SAME:                 {{$}}
@@ -499,6 +533,7 @@ int main() {
   //                             DeclRefExpr for lt is here if defined
   // DMP-I:                      DeclRefExpr {{.*}} 'lp' 'const int *'
   // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'ci' 'const int'
   // DMP-PARLOOP:            ACCLoopDirective
   // DMP-PARLOOP-NEXT:         ACCSeqClause
   // DMP-PARLOOP-P-NEXT:       ACCPrivateClause
@@ -527,23 +562,25 @@ int main() {
   // DMP-PARLOOP-P-NOT:          <implicit>
   // DMP-PARLOOP-P-SAME:         {{$}}
   // DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-PARLOOP-IF-NEXT:      ACCSharedClause {{.*}} <implicit>
-  // DMP-PARLOOP-IF-NEXT:        DeclRefExpr {{.*}} 'gi' 'int'
+  // DMP-PARLOOP-ICF-NEXT:     ACCSharedClause {{.*}} <implicit>
+  // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'gi' 'int'
   //                             DeclRefExpr for gt is here if defined
-  // DMP-PARLOOP-IF-NOT:         ACC
-  // DMP-PARLOOP-IF:             DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-PARLOOP-IF-NEXT:        DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-PARLOOP-IF-NEXT:        DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-PARLOOP-IF-NEXT:        DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-PARLOOP-IF-NEXT:        DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PARLOOP-IF-NOT:         ACC
+  // DMP-PARLOOP-ICF-NOT:        ACC
+  // DMP-PARLOOP-ICF:            DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'li' 'int'
+  // DMP-PARLOOP-ICF-NOT:        ACC
   //                             DeclRefExpr for lt is here if defined
-  // DMP-PARLOOP-IF:             DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-PARLOOP-IF-NEXT:        DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-PARLOOP-IF-NEXT:        DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-PARLOOP-IF-NEXT:        DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-PARLOOP-IF-NEXT:        DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-PARLOOP-IF-NEXT:      impl: ForStmt
+  // DMP-PARLOOP-ICF:            DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'ci' 'const int'
+  // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  // DMP-PARLOOP-ICF-NEXT:     impl: ForStmt
   // DMP-PARLOOP-P-NEXT:       impl: CompoundStmt
   // DMP-PARLOOP-P-NEXT:         DeclStmt
   // DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} gi 'int'
@@ -579,36 +616,36 @@ int main() {
   //
   // PRT-A-PAR-I:            {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2){{(.*\\$[[:space:]])*.*$}}
   // PRT-A-PARLOOP-I:        {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2){{(.*\\$[[:space:]])*.*$}}
-  // PRT-AO-I-NEXT:          {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu) firstprivate(gi,{{(gt,)?}}gp,li,{{(lt,)?}}lp,shadowed){{$}}
-  // PRT-O-I:                {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu) firstprivate(gi,{{(gt,)?}}gp,li,{{(lt,)?}}lp,shadowed){{$}}
+  // PRT-AO-I-NEXT:          {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu,ca) firstprivate(gi,{{(gt,)?}}gp,li,{{(lt,)?}}lp,shadowed,ci){{$}}
+  // PRT-O-I:                {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu,ca) firstprivate(gi,{{(gt,)?}}gp,li,{{(lt,)?}}lp,shadowed,ci){{$}}
   // PRT-OA-PAR-I-NEXT:      {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2){{(.*\\$[[:space:]])*.*$}}
   // PRT-OA-PARLOOP-I-NEXT:  {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2){{(.*\\$[[:space:]])*.*$}}
   //
-  // PRT-A-PAR-C0:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) copy\(li,(lt,)?lp,la,ls,lu,lUnref\) copy\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-PAR-C1:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{pcopy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) pcopy\(li,(lt,)?lp,la,ls,lu,lUnref\) pcopy\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-PAR-C2:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{present_or_copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) present_or_copy\(li,(lt,)?lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-PARLOOP-C0:       {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) copy\(li,(lt,)?lp,la,ls,lu,lUnref\) copy\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-PARLOOP-C1:       {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{pcopy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) pcopy\(li,(lt,)?lp,la,ls,lu,lUnref\) pcopy\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-PARLOOP-C2:       {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{present_or_copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) present_or_copy\(li,(lt,)?lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-AO-C0-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed){{$}}
-  // PRT-AO-C1-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed){{$}}
-  // PRT-AO-C2-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed){{$}}
-  // PRT-O-C0:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed){{$}}
-  // PRT-O-C1:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed){{$}}
-  // PRT-O-C2:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed){{$}}
-  // PRT-OA-PAR-C0-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) copy\(li,(lt,)?lp,la,ls,lu,lUnref\) copy\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-PAR-C1-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{pcopy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) pcopy\(li,(lt,)?lp,la,ls,lu,lUnref\) pcopy\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-PAR-C2-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{present_or_copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) present_or_copy\(li,(lt,)?lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-PARLOOP-C0-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) copy\(li,(lt,)?lp,la,ls,lu,lUnref\) copy\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-PARLOOP-C1-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{pcopy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) pcopy\(li,(lt,)?lp,la,ls,lu,lUnref\) pcopy\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-PARLOOP-C2-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{present_or_copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) present_or_copy\(li,(lt,)?lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PAR-C0:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) copy\(li,(lt,)?lp,la,ls,lu,lUnref\) copy\(shadowed\) copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PAR-C1:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{pcopy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) pcopy\(li,(lt,)?lp,la,ls,lu,lUnref\) pcopy\(shadowed\) pcopy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PAR-C2:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{present_or_copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) present_or_copy\(li,(lt,)?lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\) present_or_copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PARLOOP-C0:       {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) copy\(li,(lt,)?lp,la,ls,lu,lUnref\) copy\(shadowed\) copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PARLOOP-C1:       {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{pcopy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) pcopy\(li,(lt,)?lp,la,ls,lu,lUnref\) pcopy\(shadowed\) pcopy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PARLOOP-C2:       {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{present_or_copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) present_or_copy\(li,(lt,)?lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\) present_or_copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-AO-C0-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
+  // PRT-AO-C1-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
+  // PRT-AO-C2-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
+  // PRT-O-C0:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
+  // PRT-O-C1:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
+  // PRT-O-C2:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
+  // PRT-OA-PAR-C0-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) copy\(li,(lt,)?lp,la,ls,lu,lUnref\) copy\(shadowed\) copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PAR-C1-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{pcopy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) pcopy\(li,(lt,)?lp,la,ls,lu,lUnref\) pcopy\(shadowed\) pcopy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PAR-C2-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{present_or_copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) present_or_copy\(li,(lt,)?lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\) present_or_copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PARLOOP-C0-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) copy\(li,(lt,)?lp,la,ls,lu,lUnref\) copy\(shadowed\) copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PARLOOP-C1-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{pcopy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) pcopy\(li,(lt,)?lp,la,ls,lu,lUnref\) pcopy\(shadowed\) pcopy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PARLOOP-C2-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{present_or_copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) present_or_copy\(li,(lt,)?lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\) present_or_copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
   //
-  // PRT-A-PAR-F:            {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-PARLOOP-F:        {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-AO-F-NEXT:          {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) firstprivate(li,{{(lt,)?}}lp,la,ls,lu,lUnref) firstprivate(shadowed){{$}}
-  // PRT-O-F:                {{^ *}}#pragma omp target teams num_teams(2) firstprivate(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) firstprivate(li,{{(lt,)?}}lp,la,ls,lu,lUnref) firstprivate(shadowed){{$}}
-  // PRT-OA-PAR-F-NEXT:      {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-PARLOOP-F-NEXT:  {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PAR-F:            {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\) firstprivate\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PARLOOP-F:        {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\) firstprivate\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-AO-F-NEXT:          {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) firstprivate(li,{{(lt,)?}}lp,la,ls,lu,lUnref) firstprivate(shadowed) firstprivate(ci,ca){{$}}
+  // PRT-O-F:                {{^ *}}#pragma omp target teams num_teams(2) firstprivate(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) firstprivate(li,{{(lt,)?}}lp,la,ls,lu,lUnref) firstprivate(shadowed) firstprivate(ci,ca){{$}}
+  // PRT-OA-PAR-F-NEXT:      {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\) firstprivate\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PARLOOP-F-NEXT:  {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\) firstprivate\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
   //
   // PRT-A-PAR-P:            {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   // PRT-AO-PAR-P-NEXT:      {{^ *}}// #pragma omp target teams num_teams(2) private(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) private(li,{{(lt,)?}}lp,la,ls,lu,lUnref) private(shadowed){{$}}
@@ -657,7 +694,7 @@ int main() {
   #pragma acc parallel LOOP num_gangs(2)                       \
     CLAUSE(gi,IF_UINT128(gt,)gp, ga,gs , gu , gUnref )         \
     CLAUSE(  li,IF_UINT128(lt,)lp  ,  la  ,ls,  lu , lUnref  ) \
-    CLAUSE(shadowed)
+    CLAUSE(shadowed) CLAUSE_NOT_PRIVATE(ci, ca)
   // PRT-PARLOOP-NEXT: {{for (.*) [{]|FORLOOP_HEAD}}
   // PRT-PAR-NEXT: {{(FORLOOP_HEAD$[[:space:]])? *}}{
   FORLOOP_HEAD
@@ -718,59 +755,64 @@ int main() {
     lpOld = lp;
 #endif
     // PRT:      printf("inside :{{([^;]|[[:space:]])*}};
+    // PRT-NEXT: printf("{{([^;]|[[:space:]])*}};
     //
-    // EXE-IF:      inside : gi:55->56,{{( gt:\[1400,59\]->\[f08234,a07de1\],)?$}}
-    // EXE-C:       inside : gi:{{55|56}}->56,{{( gt:\[(1400|f08234),(59|a07de1)\]->\[f08234,a07de1\],)?$}}
-    // EXE-P:       inside : gi:{{.+}}->56,{{( gt:\[.+\]->\[f08234,a07de1\],)?$}}
-    // EXE-I-NEXT:           {{^ *(\*gp:55->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
-    // EXE-C-NEXT:           {{^ *(\*gp:(56|98)->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
-    // EXE-F-NEXT:           {{^ *(\*gp:55->98, )?}}ga:[100,200]->[101,202],
-    // EXE-P-NEXT:           {{^ *(\*gp:.+->98, )?}}ga:[{{.+,.+}}]->[101,202],
-    // EXE-IC-NEXT:          gs:[{{33|42}},{{11|1}}]->[42,1], gu.i:{{22|13}}->13,
-    // EXE-F-NEXT:           gs:[33,11]->[42,1], gu.i:22->13,
-    // EXE-P-NEXT:           gs:[{{.+,.+}}]->[42,1], gu.i:{{.+}}->13,
-    // EXE-IF-NEXT:          li:99->98,{{( lt:\[7a1,62b0\]->\[79ca,2961\],)?$}}
-    // EXE-C-NEXT:           li:{{99|98}}->98,{{( lt:\[(7a1|79ca),(62b0|2961)\]->\[79ca,2961\],)?$}}
-    // EXE-P-NEXT:           li:{{.+}}->98,{{( lt:\[.+\]->\[79ca,2961\],)?$}}
-    // EXE-I-NEXT:           {{^ *(\*lp:55->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
-    // EXE-C-NEXT:           {{^ *(\*lp:(56|98)->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
-    // EXE-F-NEXT:           {{^ *(\*lp:55->98, )?}}la:[77,88]->[55,66],
-    // EXE-P-NEXT:           {{^ *(\*lp:.+->98, )?}}la:[{{.+,.+}}]->[55,66],
-    // EXE-IC-NEXT:          ls:[{{222|333}},{{111|444}}]->[333,444], lu.i:{{167|279}}->279,
-    // EXE-F-NEXT:           ls:[222,111]->[333,444], lu.i:167->279,
-    // EXE-P-NEXT:           ls:[{{.+,.+}}]->[333,444], lu.i:{{.+}}->279,
-    // EXE-NEXT:             shadowed:
+    // It cannot all be in one printf, or nvptx64 output becomes corrupt, so
+    // break it into multiple printfs.  The order of output from different
+    // gangs is non-deterministic at the level of printfs, but it's easier to
+    // write the FileCheck DAG directives at the level of lines.
     //
-    // Duplicate that EXE block exactly except add -NEXT to the leading lines.
+    // EXE-IF-DAG:  inside : gi:55->56,{{( gt:\[1400,59\]->\[f08234,a07de1\],)?$}}
+    // EXE-C-DAG:   inside : gi:{{55|56}}->56,{{( gt:\[(1400|f08234),(59|a07de1)\]->\[f08234,a07de1\],)?$}}
+    // EXE-P-DAG:   inside : gi:{{.+}}->56,{{( gt:\[.+\]->\[f08234,a07de1\],)?$}}
+    // EXE-I-DAG:            {{^ *(\*gp:55->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
+    // EXE-C-DAG:            {{^ *(\*gp:(56|98)->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
+    // EXE-F-DAG:            {{^ *(\*gp:55->98, )?}}ga:[100,200]->[101,202],
+    // EXE-P-DAG:            {{^ *(\*gp:.+->98, )?}}ga:[{{.+,.+}}]->[101,202],
+    // EXE-IC-DAG:           gs:[{{33|42}},{{11|1}}]->[42,1], gu.i:{{22|13}}->13,
+    // EXE-F-DAG:            gs:[33,11]->[42,1], gu.i:22->13,
+    // EXE-P-DAG:            gs:[{{.+,.+}}]->[42,1], gu.i:{{.+}}->13,
+    // EXE-IF-DAG:           li:99->98,{{( lt:\[7a1,62b0\]->\[79ca,2961\],)?$}}
+    // EXE-C-DAG:            li:{{99|98}}->98,{{( lt:\[(7a1|79ca),(62b0|2961)\]->\[79ca,2961\],)?$}}
+    // EXE-P-DAG:            li:{{.+}}->98,{{( lt:\[.+\]->\[79ca,2961\],)?$}}
+    // EXE-I-DAG:            {{^ *(\*lp:55->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
+    // EXE-C-DAG:            {{^ *(\*lp:(56|98)->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
+    // EXE-F-DAG:            {{^ *(\*lp:55->98, )?}}la:[77,88]->[55,66],
+    // EXE-P-DAG:            {{^ *(\*lp:.+->98, )?}}la:[{{.+,.+}}]->[55,66],
+    // EXE-IC-DAG:           ls:[{{222|333}},{{111|444}}]->[333,444], lu.i:{{167|279}}->279,
+    // EXE-F-DAG:            ls:[222,111]->[333,444], lu.i:167->279,
+    // EXE-P-DAG:            ls:[{{.+,.+}}]->[333,444], lu.i:{{.+}}->279,
+    // EXE-DAG:              shadowed:
+    // EXE-ICF-DAG:          ci:53, ca:[10,11,12]
     //
-    // EXE-IF:      inside : gi:55->56,{{( gt:\[1400,59\]->\[f08234,a07de1\],)?$}}
-    // EXE-C:       inside : gi:{{55|56}}->56,{{( gt:\[(1400|f08234),(59|a07de1)\]->\[f08234,a07de1\],)?$}}
-    // EXE-P:       inside : gi:{{.+}}->56,{{( gt:\[.+\]->\[f08234,a07de1\],)?$}}
-    // EXE-I-NEXT:           {{^ *(\*gp:55->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
-    // EXE-C-NEXT:           {{^ *(\*gp:(56|98)->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
-    // EXE-F-NEXT:           {{^ *(\*gp:55->98, )?}}ga:[100,200]->[101,202],
-    // EXE-P-NEXT:           {{^ *(\*gp:.+->98, )?}}ga:[{{.+,.+}}]->[101,202],
-    // EXE-IC-NEXT:          gs:[{{33|42}},{{11|1}}]->[42,1], gu.i:{{22|13}}->13,
-    // EXE-F-NEXT:           gs:[33,11]->[42,1], gu.i:22->13,
-    // EXE-P-NEXT:           gs:[{{.+,.+}}]->[42,1], gu.i:{{.+}}->13,
-    // EXE-IF-NEXT:          li:99->98,{{( lt:\[7a1,62b0\]->\[79ca,2961\],)?$}}
-    // EXE-C-NEXT:           li:{{99|98}}->98,{{( lt:\[(7a1|79ca),(62b0|2961)\]->\[79ca,2961\],)?$}}
-    // EXE-P-NEXT:           li:{{.+}}->98,{{( lt:\[.+\]->\[79ca,2961\],)?$}}
-    // EXE-I-NEXT:           {{^ *(\*lp:55->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
-    // EXE-C-NEXT:           {{^ *(\*lp:(56|98)->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
-    // EXE-F-NEXT:           {{^ *(\*lp:55->98, )?}}la:[77,88]->[55,66],
-    // EXE-P-NEXT:           {{^ *(\*lp:.+->98, )?}}la:[{{.+,.+}}]->[55,66],
-    // EXE-IC-NEXT:          ls:[{{222|333}},{{111|444}}]->[333,444], lu.i:{{167|279}}->279,
-    // EXE-F-NEXT:           ls:[222,111]->[333,444], lu.i:167->279,
-    // EXE-P-NEXT:           ls:[{{.+,.+}}]->[333,444], lu.i:{{.+}}->279,
-    // EXE-NEXT:             shadowed:
+    // Duplicate that EXE block exactly.
+    //
+    // EXE-IF-DAG:  inside : gi:55->56,{{( gt:\[1400,59\]->\[f08234,a07de1\],)?$}}
+    // EXE-C-DAG:   inside : gi:{{55|56}}->56,{{( gt:\[(1400|f08234),(59|a07de1)\]->\[f08234,a07de1\],)?$}}
+    // EXE-P-DAG:   inside : gi:{{.+}}->56,{{( gt:\[.+\]->\[f08234,a07de1\],)?$}}
+    // EXE-I-DAG:            {{^ *(\*gp:55->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
+    // EXE-C-DAG:            {{^ *(\*gp:(56|98)->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
+    // EXE-F-DAG:            {{^ *(\*gp:55->98, )?}}ga:[100,200]->[101,202],
+    // EXE-P-DAG:            {{^ *(\*gp:.+->98, )?}}ga:[{{.+,.+}}]->[101,202],
+    // EXE-IC-DAG:           gs:[{{33|42}},{{11|1}}]->[42,1], gu.i:{{22|13}}->13,
+    // EXE-F-DAG:            gs:[33,11]->[42,1], gu.i:22->13,
+    // EXE-P-DAG:            gs:[{{.+,.+}}]->[42,1], gu.i:{{.+}}->13,
+    // EXE-IF-DAG:           li:99->98,{{( lt:\[7a1,62b0\]->\[79ca,2961\],)?$}}
+    // EXE-C-DAG:            li:{{99|98}}->98,{{( lt:\[(7a1|79ca),(62b0|2961)\]->\[79ca,2961\],)?$}}
+    // EXE-P-DAG:            li:{{.+}}->98,{{( lt:\[.+\]->\[79ca,2961\],)?$}}
+    // EXE-I-DAG:            {{^ *(\*lp:55->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
+    // EXE-C-DAG:            {{^ *(\*lp:(56|98)->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
+    // EXE-F-DAG:            {{^ *(\*lp:55->98, )?}}la:[77,88]->[55,66],
+    // EXE-P-DAG:            {{^ *(\*lp:.+->98, )?}}la:[{{.+,.+}}]->[55,66],
+    // EXE-IC-DAG:           ls:[{{222|333}},{{111|444}}]->[333,444], lu.i:{{167|279}}->279,
+    // EXE-F-DAG:            ls:[222,111]->[333,444], lu.i:167->279,
+    // EXE-P-DAG:            ls:[{{.+,.+}}]->[333,444], lu.i:{{.+}}->279,
+    // EXE-DAG:              shadowed:
+    // EXE-ICF-DAG:          ci:53, ca:[10,11,12]
     printf("inside : gi:%d->%d,"IF_UINT128(" gt:[%lx,%lx]->[%lx,%lx],")"\n"
            "         "IF_PTR_EXE("*gp:%d->%d, ")"ga:[%d,%d]->[%d,%d],\n"
            "         gs:[%d,%d]->[%d,%d], gu.i:%d->%d,\n"
-           "         li:%d->%d,"IF_UINT128(" lt:[%lx,%lx]->[%lx,%lx],")"\n"
-           "         "IF_PTR_EXE("*lp:%d->%d, ")"la:[%d,%d]->[%d,%d],\n"
-           "         ls:[%d,%d]->[%d,%d], lu.i:%d->%d,\n"
-           "         shadowed:%d\n",
+           "         li:%d->%d,"IF_UINT128(" lt:[%lx,%lx]->[%lx,%lx],")"\n",
            giOld, gi,
 #if HAS_UINT128
            HI_UINT128(gtOld), LW_UINT128(gtOld),
@@ -782,22 +824,36 @@ int main() {
            gaOld[0], gaOld[1], ga[0], ga[1],
            gsOld.i, gsOld.j, gs.i, gs.j,
            guOld.i, gu.i,
-           liOld, li,
+           liOld, li
 #if HAS_UINT128
+           ,
            HI_UINT128(ltOld), LW_UINT128(ltOld),
-           HI_UINT128(lt), LW_UINT128(lt),
+           HI_UINT128(lt), LW_UINT128(lt)
 #endif
+           );
+    printf("         "IF_PTR_EXE("*lp:%d->%d, ")"la:[%d,%d]->[%d,%d],\n"
+           "         ls:[%d,%d]->[%d,%d], lu.i:%d->%d,\n"
+           "         shadowed:%d,\n"
+#if MODE != MODE_P
+           "         ci:%d, ca:[%d,%d,%d]\n"
+#endif
+           ,
 #if CHECK_PTR_EXE
            *lpOld, *lp,
 #endif
            laOld[0], laOld[1], la[0], la[1],
            lsOld.i, lsOld.j, ls.i, ls.j, luOld.i, lu.i,
-           shadowed);
+           shadowed
+#if MODE != MODE_P
+           ,
+           ci, ca[0], ca[1], ca[2]
+#endif
+           );
   } // PRT-NEXT: }
   // DMP: CallExpr
   //
-  // EXE-IFP-NEXT: outside: gi:55->55,{{( gt:\[1400,59\]->\[1400,59\],)?$}}
-  // EXE-C-NEXT:   outside: gi:55->56,{{( gt:\[1400,59\]->\[f08234,a07de1\],)?$}}
+  // EXE-IFP:      outside: gi:55->55,{{( gt:\[1400,59\]->\[1400,59\],)?$}}
+  // EXE-C:        outside: gi:55->56,{{( gt:\[1400,59\]->\[f08234,a07de1\],)?$}}
   // EXE-I-NEXT:            {{^ *(\*gp:55->55, )?}}ga:[100,200]->[101,202],
   // EXE-C-NEXT:            {{^ *(\*gp:56->98, )?}}ga:[100,200]->[101,202],
   // EXE-FP-NEXT:           {{^ *(\*gp:55->55, )?}}ga:[100,200]->[100,200],
@@ -810,14 +866,19 @@ int main() {
   // EXE-FP-NEXT:           {{^ *(\*lp:55->55, )?}}la:[77,88]->[77,88],
   // EXE-IC-NEXT:           ls:[222,111]->[333,444], lu.i:167->279, lUnref:9->9,
   // EXE-FP-NEXT:           ls:[222,111]->[222,111], lu.i:167->167, lUnref:9->9,
-  // EXE-NEXT:              shadowed:111
+  // EXE-NEXT:              shadowed:111,
+  // EXE-ICF-NEXT:          ci:53, ca:[10,11,12]
   printf("outside: gi:%d->%d,"IF_UINT128(" gt:[%lx,%lx]->[%lx,%lx],")"\n"
          "         "IF_PTR_EXE("*gp:%d->%d, ")"ga:[%d,%d]->[%d,%d],\n"
          "         gs:[%d,%d]->[%d,%d], gu.i:%d->%d, gUnref:%d->%d,\n"
          "         li:%d->%d,"IF_UINT128(" lt:[%lx,%lx]->[%lx,%lx],")"\n"
          "         "IF_PTR_EXE("*lp:%d->%d, ")"la:[%d,%d]->[%d,%d],\n"
          "         ls:[%d,%d]->[%d,%d], lu.i:%d->%d, lUnref:%d->%d,\n"
-         "         shadowed:%d\n",
+         "         shadowed:%d,\n"
+#if MODE != MODE_P
+         "         ci:%d, ca:[%d,%d,%d]\n"
+#endif
+         ,
          giOld, gi,
 #if HAS_UINT128
          HI_UINT128(gtOld), LW_UINT128(gtOld),
@@ -838,7 +899,12 @@ int main() {
 #endif
          laOld[0], laOld[1], la[0], la[1],
          lsOld.i, lsOld.j, ls.i, ls.j, luOld.i, lu.i, lUnrefOld, lUnref,
-         shadowed);
+         shadowed
+#if MODE != MODE_P
+         ,
+         ci, ca[0], ca[1], ca[2]
+#endif
+         );
 
   return 0;
 }

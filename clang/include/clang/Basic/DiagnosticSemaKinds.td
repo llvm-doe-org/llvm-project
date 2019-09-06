@@ -9346,8 +9346,6 @@ def err_acc_conflicting_dsa : Error<
   "%1 variable %select{cannot be|defined again as}0 %2 variable">;
 def note_acc_explicit_dsa : Note<
   "previously defined as %0 variable here">;
-def err_acc_const_in_clause : Error<
-  "variable in '%0' clause cannot be const">;
 def err_acc_const_private : Error<
   "const variable cannot be private because initialization is impossible">;
 def note_acc_const : Note<

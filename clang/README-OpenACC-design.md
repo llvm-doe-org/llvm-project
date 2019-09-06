@@ -605,15 +605,36 @@ this section.
       allocation is impossible for incomplete types.
     * It does not appear possible for any clause other than `copy` to
       be *imp* for a variable of incomplete type.
-* *exp* `copy`, *exp* `private`, or *exp* `reduction` for a `const`
-  variable is an error.  Notes:
+* *exp* `private`, or *exp* `reduction` for a `const` variable is an
+  error.  Notes:
     * The local copy of a `const` private variable would remain
       uninitialized throughout its lifetime.
     * A reduction assigns to both the original variable and a local
       copy after its initialization, but `const` prevents that.
-    * `copy` assigns to the original, but `const` prevents that.
+    * `copy` is a strange case.  Technically, it assigns to the
+      original, and `const` prevents that.  However, there are several
+      arguments for why `copy` should be permitted for a `const`
+      variable:
+        * For shared memory, it's supposed to be fine to ignore *exp*
+          `copy` entirely, so `const` is harmless in that case.  An
+          implementation for discrete memory could optimize by not
+          assigning to the original variable because the value
+          shouldn't change because it's `const`, so `const` is
+          actually helpful here instead of problematic.
+        * It should be fine to reference a `const` non-scalar within
+          an `acc parallel` region even though the non-scalar is
+          declared outside the region, but such a non-scalar has *imp*
+          `copy`.  If *imp* `copy` must then be permitted for the
+          non-scalar, so should *exp* `copy`.
+        * Clacc translates `copy` to OpenMP's `map` clause with a map
+          type of `tofrom`, but the OpenMP implementation permits that
+          for `const` variables.
     * `firstprivate` is fine for a `const` variable.  The local copy
       will have the original variable's value throughout its lifetime.
+    * It does not appear possible for any clause other than `copy` and
+      `firstprivate` to be *imp* for a `const` variable.  `private` is
+      *imp* for loop control variables, but they obviously cannot be
+      `const` anyway.
 * An *imp* `copy` for a reduction variable overrides an *imp*
   `firstprivate` when the variable is a scalar.  Text to make this
   overriding behavior clear has been proposed for inclusion in the

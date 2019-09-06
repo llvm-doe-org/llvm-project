@@ -1550,18 +1550,6 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
       continue;
     }
 
-    // The OpenACC 2.7 spec doesn't say, as far as I know, that a const
-    // variable cannot be in a copy clause.  However, you can never copy back
-    // to the original variable in that case.  Strangely, the OpenMP
-    // implementation currently doesn't have this restriction for map clauses
-    // with map type tofrom.
-    // TODO: Should this be isConstant?
-    if (VD->getType().isConstQualified()) {
-      Diag(ELoc, diag::err_acc_const_in_clause) << getOpenACCClauseName(Kind);
-      Diag(VD->getLocation(), diag::note_acc_const) << VD;
-      continue;
-    }
-
     if (!DSAStack->addBaseDSA(VD, RefExpr->IgnoreParens(), ACC_BASE_DSA_copy,
                               IsImplicitClause))
       Vars.push_back(RefExpr->IgnoreParens());
@@ -1638,6 +1626,9 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(ArrayRef<Expr *> VarList,
     if (VD->getType().isConstQualified()) {
       Diag(ELoc, diag::err_acc_const_private);
       Diag(VD->getLocation(), diag::note_acc_const) << VD;
+      // Implicit private is for loop control variables, which cannot be const.
+      assert(!IsImplicitClause &&
+             "unexpected const type for implicit private");
       continue;
     }
 
@@ -1853,6 +1844,10 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
       Diag(VD->getLocation(),
            IsDecl ? diag::note_previous_decl : diag::note_defined_here)
           << VD;
+      // Implicit reductions are copied from explicit reductions, which are
+      // validated already.
+      assert(!IsImplicitClause &&
+             "unexpected const type for implicit reduction");
       continue;
     }
 

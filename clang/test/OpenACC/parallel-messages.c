@@ -45,10 +45,10 @@ int main() {
   double d; // expected-note 3 {{'d' defined here}}
   float _Complex fc; // expected-note 5 {{'fc' defined here}}
   double _Complex dc; // expected-note 5 {{'dc' defined here}}
-  const int constI = 5; // expected-note 4 {{variable 'constI' declared const here}}
+  const int constI = 5; // expected-note {{variable 'constI' declared const here}}
                         // expected-noacc-note@-1 {{variable 'constI' declared const here}}
                         // expected-note@-2 {{'constI' defined here}}
-  const extern int constIDecl; // expected-note 4 {{variable 'constIDecl' declared const here}}
+  const extern int constIDecl; // expected-note {{variable 'constIDecl' declared const here}}
                                // expected-noacc-note@-1 {{variable 'constIDecl' declared const here}}
                                // expected-note@-2 {{'constIDecl' declared here}}
   struct S { int i; } s; // expected-note 9 {{'s' defined here}}
@@ -326,17 +326,18 @@ int main() {
       i = *incomplete;
     }
 
+  #pragma acc parallel LOOP copy(constI, constIDecl)
+    FORLOOP
+  #pragma acc parallel LOOP pcopy(constI, constIDecl)
+    FORLOOP
+  #pragma acc parallel LOOP present_or_copy(constI, constIDecl)
+    FORLOOP
   #pragma acc parallel LOOP firstprivate(constI, constIDecl)
     FORLOOP
-  // expected-error@+6 2 {{variable in 'copy' clause cannot be const}}
-  // expected-error@+5 2 {{variable in 'pcopy' clause cannot be const}}
-  // expected-error@+5 2 {{variable in 'present_or_copy' clause cannot be const}}
-  // expected-error@+4 2 {{const variable cannot be private because initialization is impossible}}
-  // expected-error@+4 2 {{reduction variable cannot be const}}
-  #pragma acc parallel LOOP \
-      copy(constI, constIDecl) pcopy(constI, constIDecl) \
-      present_or_copy(constI, constIDecl) private(constI, constIDecl) \
-      reduction(max: constI, constIDecl)
+  // expected-error@+2 2 {{const variable cannot be private because initialization is impossible}}
+  // expected-error@+2 2 {{reduction variable cannot be const}}
+  #pragma acc parallel LOOP private(constI, constIDecl) \
+                            reduction(max: constI, constIDecl)
     FORLOOP
 
   // Make sure const qualifier isn't lost on implicitly/explicitly firstprivate
