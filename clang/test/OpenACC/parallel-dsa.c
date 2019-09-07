@@ -760,9 +760,12 @@ int main() {
     // EXE-IC-DAG:           ga:[{{100|101}},{{200|202}}]->[101,202],
     // EXE-F-DAG:            ga:[100,200]->[101,202],
     // EXE-P-DAG:            ga:[{{.+,.+}}]->[101,202],
-    // EXE-IC-DAG:           gs:[{{33|42}},{{11|1}}]->[42,1], gu.i:{{22|13}}->13,
-    // EXE-F-DAG:            gs:[33,11]->[42,1], gu.i:22->13,
-    // EXE-P-DAG:            gs:[{{.+,.+}}]->[42,1], gu.i:{{.+}}->13,
+    // EXE-IC-DAG:           gs:[{{33|42}},{{11|1}}]->[42,1],
+    // EXE-F-DAG:            gs:[33,11]->[42,1],
+    // EXE-P-DAG:            gs:[{{.+,.+}}]->[42,1],
+    // EXE-IC-DAG:           gu.i:{{22|13}}->13,
+    // EXE-F-DAG:            gu.i:22->13,
+    // EXE-F-DAG             gu.i:{{.+}}->13,
     // EXE-IF-DAG:           li:99->98,
     // EXE-C-DAG:            li:{{99|98}}->98,
     // EXE-P-DAG:            li:{{.+}}->98,
@@ -775,9 +778,12 @@ int main() {
     // EXE-IC-DAG:           la:[{{77|55}},{{88|66}}]->[55,66],
     // EXE-F-DAG:            la:[77,88]->[55,66],
     // EXE-P-DAG:            la:[{{.+,.+}}]->[55,66],
-    // EXE-IC-DAG:           ls:[{{222|333}},{{111|444}}]->[333,444], lu.i:{{167|279}}->279,
-    // EXE-F-DAG:            ls:[222,111]->[333,444], lu.i:167->279,
-    // EXE-P-DAG:            ls:[{{.+,.+}}]->[333,444], lu.i:{{.+}}->279,
+    // EXE-IC-DAG:           ls:[{{222|333}},{{111|444}}]->[333,444],
+    // EXE-F-DAG:            ls:[222,111]->[333,444],
+    // EXE-P-DAG:            ls:[{{.+,.+}}]->[333,444],
+    // EXE-IC-DAG:           lu.i:{{167|279}}->279,
+    // EXE-F-DAG:            lu.i:167->279,
+    // EXE-P-DAG:            lu.i:{{.+}}->279,
     // EXE-DAG:              shadowed:
     // EXE-ICF-DAG:          ci:53,
     // EXE-ICF-DAG:          ca:[10,11,12]
@@ -798,9 +804,12 @@ int main() {
     // EXE-IC-DAG:           ga:[{{100|101}},{{200|202}}]->[101,202],
     // EXE-F-DAG:            ga:[100,200]->[101,202],
     // EXE-P-DAG:            ga:[{{.+,.+}}]->[101,202],
-    // EXE-IC-DAG:           gs:[{{33|42}},{{11|1}}]->[42,1], gu.i:{{22|13}}->13,
-    // EXE-F-DAG:            gs:[33,11]->[42,1], gu.i:22->13,
-    // EXE-P-DAG:            gs:[{{.+,.+}}]->[42,1], gu.i:{{.+}}->13,
+    // EXE-IC-DAG:           gs:[{{33|42}},{{11|1}}]->[42,1],
+    // EXE-F-DAG:            gs:[33,11]->[42,1],
+    // EXE-P-DAG:            gs:[{{.+,.+}}]->[42,1],
+    // EXE-IC-DAG:           gu.i:{{22|13}}->13,
+    // EXE-F-DAG:            gu.i:22->13,
+    // EXE-F-DAG             gu.i:{{.+}}->13,
     // EXE-IF-DAG:           li:99->98,
     // EXE-C-DAG:            li:{{99|98}}->98,
     // EXE-P-DAG:            li:{{.+}}->98,
@@ -813,9 +822,12 @@ int main() {
     // EXE-IC-DAG:           la:[{{77|55}},{{88|66}}]->[55,66],
     // EXE-F-DAG:            la:[77,88]->[55,66],
     // EXE-P-DAG:            la:[{{.+,.+}}]->[55,66],
-    // EXE-IC-DAG:           ls:[{{222|333}},{{111|444}}]->[333,444], lu.i:{{167|279}}->279,
-    // EXE-F-DAG:            ls:[222,111]->[333,444], lu.i:167->279,
-    // EXE-P-DAG:            ls:[{{.+,.+}}]->[333,444], lu.i:{{.+}}->279,
+    // EXE-IC-DAG:           ls:[{{222|333}},{{111|444}}]->[333,444],
+    // EXE-F-DAG:            ls:[222,111]->[333,444],
+    // EXE-P-DAG:            ls:[{{.+,.+}}]->[333,444],
+    // EXE-IC-DAG:           lu.i:{{167|279}}->279,
+    // EXE-F-DAG:            lu.i:167->279,
+    // EXE-P-DAG:            lu.i:{{.+}}->279,
     // EXE-DAG:              shadowed:
     // EXE-ICF-DAG:          ci:53,
     // EXE-ICF-DAG:          ca:[10,11,12]
@@ -825,7 +837,8 @@ int main() {
            "         gt:[%lx,%lx]->[%lx,%lx],\n"
            "         *gp:%d->%d,\n"
            "         ga:[%d,%d]->[%d,%d],\n"
-           "         gs:[%d,%d]->[%d,%d], gu.i:%d->%d,\n"
+           "         gs:[%d,%d]->[%d,%d],\n"
+           "         gu.i:%d->%d,\n"
            "         li:%d->%d,\n"
            "         lt:[%lx,%lx]->[%lx,%lx],\n",
            giOld, gi,
@@ -840,13 +853,15 @@ int main() {
            HI_UINT128(lt), LW_UINT128(lt));
     printf("         *lp:%d->%d,\n"
            "         la:[%d,%d]->[%d,%d],\n"
-           "         ls:[%d,%d]->[%d,%d], lu.i:%d->%d,\n"
+           "         ls:[%d,%d]->[%d,%d],\n"
+           "         lu.i:%d->%d,\n"
            "         shadowed:%d,\n"
            "         ci:%d,\n"
            "         ca:[%d,%d,%d]\n",
            DEREF_PTR(lpOld), DEREF_PTR(lp),
            laOld[0], laOld[1], la[0], la[1],
-           lsOld.i, lsOld.j, ls.i, ls.j, luOld.i, lu.i,
+           lsOld.i, lsOld.j, ls.i, ls.j,
+           luOld.i, lu.i,
            shadowed,
            ci, ca[0],
            ca[1], ca[2]);
@@ -862,8 +877,11 @@ int main() {
   // EXE-C-NEXT:            *gp:56->{{98|9999}},
   // EXE-IC-NEXT:           ga:[100,200]->[101,202],
   // EXE-FP-NEXT:           ga:[100,200]->[100,200],
-  // EXE-IC-NEXT:           gs:[33,11]->[42,1], gu.i:22->13, gUnref:2->2,
-  // EXE-FP-NEXT:           gs:[33,11]->[33,11], gu.i:22->22, gUnref:2->2,
+  // EXE-IC-NEXT:           gs:[33,11]->[42,1],
+  // EXE-FP-NEXT:           gs:[33,11]->[33,11],
+  // EXE-IC-NEXT:           gu.i:22->13,
+  // EXE-FP-NEXT:           gu.i:22->22,
+  // EXE-NEXT:              gUnref:2->2,
   // EXE-IFP-NEXT:          li:99->99,
   // EXE-C-NEXT:            li:99->98,
   // EXE-IFP-NEXT:          lt:[7a1,62b0]->[7a1,62b0],
@@ -872,8 +890,11 @@ int main() {
   // EXE-C-NEXT:            *lp:56->{{98|9999}},
   // EXE-IC-NEXT:           la:[77,88]->[55,66],
   // EXE-FP-NEXT:           la:[77,88]->[77,88],
-  // EXE-IC-NEXT:           ls:[222,111]->[333,444], lu.i:167->279, lUnref:9->9,
-  // EXE-FP-NEXT:           ls:[222,111]->[222,111], lu.i:167->167, lUnref:9->9,
+  // EXE-IC-NEXT:           ls:[222,111]->[333,444],
+  // EXE-FP-NEXT:           ls:[222,111]->[222,111],
+  // EXE-IC-NEXT:           lu.i:167->279,
+  // EXE-FP-NEXT:           lu.i:167->167,
+  // EXE-NEXT:              lUnref:9->9,
   // EXE-NEXT:              shadowed:111,
   // EXE-NEXT:              ci:53,
   // EXE-NEXT:              ca:[10,11,12]
@@ -881,12 +902,16 @@ int main() {
          "         gt:[%lx,%lx]->[%lx,%lx],\n"
          "         *gp:%d->%d,\n"
          "         ga:[%d,%d]->[%d,%d],\n"
-         "         gs:[%d,%d]->[%d,%d], gu.i:%d->%d, gUnref:%d->%d,\n"
+         "         gs:[%d,%d]->[%d,%d],\n"
+         "         gu.i:%d->%d,\n"
+         "         gUnref:%d->%d,\n"
          "         li:%d->%d,\n"
          "         lt:[%lx,%lx]->[%lx,%lx],\n"
          "         *lp:%d->%d,\n"
          "         la:[%d,%d]->[%d,%d],\n"
-         "         ls:[%d,%d]->[%d,%d], lu.i:%d->%d, lUnref:%d->%d,\n"
+         "         ls:[%d,%d]->[%d,%d],\n"
+         "         lu.i:%d->%d,\n"
+         "         lUnref:%d->%d,\n"
          "         shadowed:%d,\n"
          "         ci:%d,\n"
          "         ca:[%d,%d,%d]\n",
@@ -900,7 +925,9 @@ int main() {
          DEREF_PTR(gp),
 #endif
          gaOld[0], gaOld[1], ga[0], ga[1],
-         gsOld.i, gsOld.j, gs.i, gs.j, guOld.i, gu.i, gUnrefOld, gUnref,
+         gsOld.i, gsOld.j, gs.i, gs.j,
+         guOld.i, gu.i,
+         gUnrefOld, gUnref,
          liOld, li,
          HI_UINT128(ltOld), LW_UINT128(ltOld),
          HI_UINT128(lt), LW_UINT128(lt),
@@ -911,7 +938,9 @@ int main() {
          DEREF_PTR(lp),
 #endif
          laOld[0], laOld[1], la[0], la[1],
-         lsOld.i, lsOld.j, ls.i, ls.j, luOld.i, lu.i, lUnrefOld, lUnref,
+         lsOld.i, lsOld.j, ls.i, ls.j,
+         luOld.i, lu.i,
+         lUnrefOld, lUnref,
          shadowed,
          ci, ca[0],
          ca[1], ca[2]);
