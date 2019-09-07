@@ -227,14 +227,23 @@
 #endif
 
 #ifdef __SIZEOF_INT128__
-# define HAS_UINT128 1
-# define IF_UINT128(...) __VA_ARGS__
-# define MK_UINT128(HI,LW) ((((__uint128_t)(HI))<<64) + (LW))
-# define HI_UINT128(X) ((uint64_t)((X)>>64))
-# define LW_UINT128(X) ((uint64_t)((X)&UINT64_MAX))
+# define MK_UINT128(Hi,Lw) ((((__uint128_t)(Hi))<<64) + (Lw))
+# define DEF_UINT128(Var, Hi, Lw) __uint128_t Var = MK_UINT128(Hi,Lw)
+# define DEF_UINT128_COPY(Var1, Var2) __uint128_t Var1 = Var2
+# define ASSIGN_UINT128(Var, Hi, Lw) Var = MK_UINT128(Hi,Lw)
+# define LIST_UINT128(Var) Var
+# define HI_UINT128(Var) ((uint64_t)((Var)>>64))
+# define LW_UINT128(Var) ((uint64_t)((Var)&UINT64_MAX))
 #else
-# define HAS_UINT128 0
-# define IF_UINT128(...)
+# define DEF_UINT128(Var, Hi, Lw) \
+  uint64_t Var##_hi = Hi, Var##_lw = Lw
+# define DEF_UINT128_COPY(Var1, Var2) \
+  uint64_t Var1##_hi = Var2##_hi, Var1##_lw = Var2##_lw
+# define ASSIGN_UINT128(Var, Hi, Lw) \
+  Var##_hi = Hi; Var##_li = Lw
+# define LIST_UINT128(Var) Var##_hi, Var##_lw
+# define HI_UINT128(Var) Var##_hi
+# define LW_UINT128(Var) Var##_lw
 #endif
 
 // FIXME: When OpenMP offloading is activated by -fopenmp-targets, pointers
@@ -258,9 +267,7 @@
 //     bits to check that all bits are passed through.
 // - explicitly private, captured decl only
 STORAGE int gi = 55;
-#if HAS_UINT128
-STORAGE __uint128_t gt = MK_UINT128(0x1400, 0x59); // t=tetra integer
-#endif
+STORAGE DEF_UINT128(gt, 0x1400, 0x59); // t=tetra integer
 STORAGE const int *gp = &gi;
 // Non-scalar global, either:
 // - implicitly shared, no capturing
@@ -276,9 +283,7 @@ STORAGE int gUnref = 2;
 int main() {
   // Scalar local: same as for scalar global
   STORAGE int li = 99;
-#if HAS_UINT128
-  STORAGE __uint128_t lt = MK_UINT128(0x7a1, 0x62b0); // t=tetra integer
-#endif
+  STORAGE DEF_UINT128(lt, 0x7a1, 0x62b0); // t=tetra integer
   STORAGE const int *lp = &gi;
   // Non-scalar local, either:
   // - implicitly shared, captured by ref without data copied
@@ -292,9 +297,7 @@ int main() {
   STORAGE int lUnref = 9;
 
   int giOld = gi;
-#if HAS_UINT128
-  __uint128_t gtOld = gt;
-#endif
+  DEF_UINT128_COPY(gtOld, gt);
   const int *gpOld = gp;
   int gaOld[2] = {ga[0], ga[1]};
   int gUnrefOld = gUnref;
@@ -302,9 +305,7 @@ int main() {
   union U guOld = gu;
 
   int liOld = li;
-#if HAS_UINT128
-  __uint128_t ltOld = lt;
-#endif
+  DEF_UINT128_COPY(ltOld, lt);
   const int *lpOld = lp;
   int laOld[2] = {la[0], la[1]};
   struct S lsOld = ls;
@@ -331,9 +332,8 @@ int main() {
   // DMP-PARLOOP-CFP-NOT:    <implicit>
   // DMP-PARLOOP-CFP-SAME:   {{$}}
   // DMP-PARLOOP-CFP-NEXT:   DeclRefExpr {{.*}} 'gi' 'int'
-  //                         DeclRefExpr for gt is here if defined
-  // DMP-PARLOOP-CFP-NOT:    ACC
-  // DMP-PARLOOP-CFP:        DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-PARLOOP-CFP-NEXT:   DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  // DMP-PARLOOP-CFP-NEXT:   DeclRefExpr {{.*}} 'gp' 'const int *'
   // DMP-PARLOOP-CFP-NEXT:   DeclRefExpr {{.*}} 'ga' 'int [2]'
   // DMP-PARLOOP-CFP-NEXT:   DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   // DMP-PARLOOP-CFP-NEXT:   DeclRefExpr {{.*}} 'gu' 'union U':'union U'
@@ -344,9 +344,8 @@ int main() {
   // DMP-PARLOOP-CFP-NOT:    <implicit>
   // DMP-PARLOOP-CFP-SAME:   {{$}}
   // DMP-PARLOOP-CFP-NEXT:   DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PARLOOP-CFP-NOT:    ACC
-  //                         DeclRefExpr for lt is here if defined
-  // DMP-PARLOOP-CFP:        DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-PARLOOP-CFP-NEXT:   DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  // DMP-PARLOOP-CFP-NEXT:   DeclRefExpr {{.*}} 'lp' 'const int *'
   // DMP-PARLOOP-CFP-NEXT:   DeclRefExpr {{.*}} 'la' 'int [2]'
   // DMP-PARLOOP-CFP-NEXT:   DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   // DMP-PARLOOP-CFP-NEXT:   DeclRefExpr {{.*}} 'lu' 'union U':'union U'
@@ -372,9 +371,8 @@ int main() {
   // DMP-CF-NOT:               <implicit>
   // DMP-CF-SAME:              {{$}}
   // DMP-CF-NEXT:              DeclRefExpr {{.*}} 'gi' 'int'
-  //                           DeclRefExpr for gt is here if defined
-  // DMP-CF-NOT:               ACC
-  // DMP-CF:                   DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-CF-NEXT:              DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  // DMP-CF-NEXT:              DeclRefExpr {{.*}} 'gp' 'const int *'
   // DMP-CF-NEXT:              DeclRefExpr {{.*}} 'ga' 'int [2]'
   // DMP-CF-NEXT:              DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   // DMP-CF-NEXT:              DeclRefExpr {{.*}} 'gu' 'union U':'union U'
@@ -384,9 +382,8 @@ int main() {
   // DMP-CF-NOT:               <implicit>
   // DMP-CF-SAME:              {{$}}
   // DMP-CF-NEXT:              DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-CF-NOT:               ACC
-  //                           DeclRefExpr for lt is here if defined
-  // DMP-CF:                   DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-CF-NEXT:              DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  // DMP-CF-NEXT:              DeclRefExpr {{.*}} 'lp' 'const int *'
   // DMP-CF-NEXT:              DeclRefExpr {{.*}} 'la' 'int [2]'
   // DMP-CF-NEXT:              DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   // DMP-CF-NEXT:              DeclRefExpr {{.*}} 'lu' 'union U':'union U'
@@ -406,9 +403,8 @@ int main() {
   // DMP-PAR-P-NOT:            <implicit>
   // DMP-PAR-P-SAME:           {{$}}
   // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'gi' 'int'
-  //                           DeclRefExpr for gt is here if defined
-  // DMP-PAR-P-NOT:            ACC
-  // DMP-PAR-P:                DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'gp' 'const int *'
   // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'ga' 'int [2]'
   // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'gu' 'union U':'union U'
@@ -417,9 +413,8 @@ int main() {
   // DMP-PAR-P-NOT:            <implicit>
   // DMP-PAR-P-SAME:           {{$}}
   // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PAR-P-NOT:            ACC
-  //                           DeclRefExpr for lt is here if defined
-  // DMP-PAR-P:                DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'lp' 'const int *'
   // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'la' 'int [2]'
   // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   // DMP-PAR-P-NEXT:           DeclRefExpr {{.*}} 'lu' 'union U':'union U'
@@ -438,13 +433,11 @@ int main() {
   // DMP-I-NEXT:               DeclRefExpr {{.*}} 'ca' 'const int [3]'
   // DMP-I-NEXT:             ACCFirstprivateClause {{.*}} <implicit>
   // DMP-I-NEXT:               DeclRefExpr {{.*}} 'gi' 'int'
-  //                           DeclRefExpr for gt is here if defined
-  // DMP-I-NOT:                ACC
-  // DMP-I:                    DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-I-NEXT:               DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  // DMP-I-NEXT:               DeclRefExpr {{.*}} 'gp' 'const int *'
   // DMP-I-NEXT:               DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-I-NOT:                ACC
-  //                           DeclRefExpr for lt is here if defined
-  // DMP-I:                    DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-I-NEXT:               DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  // DMP-I-NEXT:               DeclRefExpr {{.*}} 'lp' 'const int *'
   // DMP-I-NEXT:               DeclRefExpr {{.*}} 'shadowed' 'int'
   // DMP-I-NEXT:               DeclRefExpr {{.*}} 'ci' 'const int'
   // DMP-NEXT:               impl: OMPTargetTeamsDirective
@@ -455,9 +448,8 @@ int main() {
   // DMP-CF-NOT:                 <implicit>
   // DMP-CF-SAME:                {{$}}
   // DMP-CF-NEXT:                DeclRefExpr {{.*}} 'gi' 'int'
-  //                             DeclRefExpr for gt is here if defined
-  // DMP-CF-NOT:                 OMP
-  // DMP-CF:                     DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-CF-NEXT:                DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  // DMP-CF-NEXT:                DeclRefExpr {{.*}} 'gp' 'const int *'
   // DMP-CF-NEXT:                DeclRefExpr {{.*}} 'ga' 'int [2]'
   // DMP-CF-NEXT:                DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   // DMP-CF-NEXT:                DeclRefExpr {{.*}} 'gu' 'union U':'union U'
@@ -467,9 +459,8 @@ int main() {
   // DMP-CF-NOT:                 <implicit>
   // DMP-CF-SAME:                {{$}}
   // DMP-CF-NEXT:                DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-CF-NOT:                 OMP
-  //                             DeclRefExpr for lt is here if defined
-  // DMP-CF:                     DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-CF-NEXT:                DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  // DMP-CF-NEXT:                DeclRefExpr {{.*}} 'lp' 'const int *'
   // DMP-CF-NEXT:                DeclRefExpr {{.*}} 'la' 'int [2]'
   // DMP-CF-NEXT:                DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   // DMP-CF-NEXT:                DeclRefExpr {{.*}} 'lu' 'union U':'union U'
@@ -489,9 +480,8 @@ int main() {
   // DMP-PAR-P-NOT:              <implicit>
   // DMP-PAR-P-SAME:             {{$}}
   // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'gi' 'int'
-  //     PAR-                    DeclRefExpr for gt is here if defined
-  // DMP-PAR-P-NOT:              OMP
-  // DMP-PAR-P:                  DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'gp' 'const int *'
   // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'ga' 'int [2]'
   // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'gu' 'union U':'union U'
@@ -500,9 +490,8 @@ int main() {
   // DMP-PAR-P-NOT:              <implicit>
   // DMP-PAR-P-SAME:             {{$}}
   // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PAR-P-NOT:              OMP
-  //     PAR-                    DeclRefExpr for lt is here if defined
-  // DMP-PAR-P:                  DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'lp' 'const int *'
   // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'la' 'int [2]'
   // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   // DMP-PAR-P-NEXT:             DeclRefExpr {{.*}} 'lu' 'union U':'union U'
@@ -525,13 +514,11 @@ int main() {
   // DMP-I-NOT:                  <implicit>
   // DMP-I-SAME:                 {{$}}
   // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'gi' 'int'
-  //                             DeclRefExpr for gt is here if defined
-  // DMP-I-NOT:                  OMP
-  // DMP-I:                      DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-I-NEXT:                 DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'gp' 'const int *'
   // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-I-NOT:                  OMP
-  //                             DeclRefExpr for lt is here if defined
-  // DMP-I:                      DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-I-NEXT:                 DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'lp' 'const int *'
   // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'shadowed' 'int'
   // DMP-I-NEXT:                 DeclRefExpr {{.*}} 'ci' 'const int'
   // DMP-PARLOOP:            ACCLoopDirective
@@ -540,9 +527,8 @@ int main() {
   // DMP-PARLOOP-P-NOT:          <implicit>
   // DMP-PARLOOP-P-SAME:         {{$}}
   // DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'gi' 'int'
-  //                             DeclRefExpr for gt is here if defined
-  // DMP-PARLOOP-P-NOT:          ACC
-  // DMP-PARLOOP-P:              DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  // DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'gp' 'const int *'
   // DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
   // DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   // DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
@@ -551,9 +537,8 @@ int main() {
   // DMP-PARLOOP-P-NOT:          <implicit>
   // DMP-PARLOOP-P-SAME:         {{$}}
   // DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PARLOOP-P-NOT:          ACC
-  //                             DeclRefExpr for lt is here if defined
-  // DMP-PARLOOP-P:              DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  // DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'lp' 'const int *'
   // DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
   // DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   // DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
@@ -564,16 +549,14 @@ int main() {
   // DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
   // DMP-PARLOOP-ICF-NEXT:     ACCSharedClause {{.*}} <implicit>
   // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'gi' 'int'
-  //                             DeclRefExpr for gt is here if defined
-  // DMP-PARLOOP-ICF-NOT:        ACC
-  // DMP-PARLOOP-ICF:            DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'gp' 'const int *'
   // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
   // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
   // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PARLOOP-ICF-NOT:        ACC
-  //                             DeclRefExpr for lt is here if defined
-  // DMP-PARLOOP-ICF:            DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'lp' 'const int *'
   // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
   // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   // DMP-PARLOOP-ICF-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
@@ -585,8 +568,9 @@ int main() {
   // DMP-PARLOOP-P-NEXT:         DeclStmt
   // DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} gi 'int'
   // DMP-PARLOOP-P-NEXT:         DeclStmt
-  //                               VarDecl for gt is here if defined
-  // DMP-PARLOOP-P:                VarDecl {{.*}} gp 'const int *'
+  // DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} {{gt '__uint128_t'|gt_hi 'uint64_t'$[[:space:]]*VarDecl .* gt_lw 'uint64_t'}}
+  // DMP-PARLOOP-P-NEXT:         DeclStmt
+  // DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} gp 'const int *'
   // DMP-PARLOOP-P-NEXT:         DeclStmt
   // DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} ga 'int [2]'
   // DMP-PARLOOP-P-NEXT:         DeclStmt
@@ -598,8 +582,9 @@ int main() {
   // DMP-PARLOOP-P-NEXT:         DeclStmt
   // DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} li 'int'
   // DMP-PARLOOP-P-NEXT:         DeclStmt
-  //                               VarDecl for lt is here if defined
-  // DMP-PARLOOP-P:                VarDecl {{.*}} lp 'const int *'
+  // DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} {{lt '__uint128_t'|lt_hi 'uint64_t'$[[:space:]]*VarDecl .* lt_lw 'uint64_t'}}
+  // DMP-PARLOOP-P-NEXT:         DeclStmt
+  // DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} lp 'const int *'
   // DMP-PARLOOP-P-NEXT:         DeclStmt
   // DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} la 'int [2]'
   // DMP-PARLOOP-P-NEXT:         DeclStmt
@@ -616,84 +601,84 @@ int main() {
   //
   // PRT-A-PAR-I:            {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2){{(.*\\$[[:space:]])*.*$}}
   // PRT-A-PARLOOP-I:        {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2){{(.*\\$[[:space:]])*.*$}}
-  // PRT-AO-I-NEXT:          {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu,ca) firstprivate(gi,{{(gt,)?}}gp,li,{{(lt,)?}}lp,shadowed,ci){{$}}
-  // PRT-O-I:                {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu,ca) firstprivate(gi,{{(gt,)?}}gp,li,{{(lt,)?}}lp,shadowed,ci){{$}}
+  // PRT-AO-I-NEXT:          {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu,ca) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,li,lt{{(_hi,lt_lw)?}},lp,shadowed,ci){{$}}
+  // PRT-O-I:                {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu,ca) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,li,lt{{(_hi,lt_lw)?}},lp,shadowed,ci){{$}}
   // PRT-OA-PAR-I-NEXT:      {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2){{(.*\\$[[:space:]])*.*$}}
   // PRT-OA-PARLOOP-I-NEXT:  {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2){{(.*\\$[[:space:]])*.*$}}
   //
-  // PRT-A-PAR-C0:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) copy\(li,(lt,)?lp,la,ls,lu,lUnref\) copy\(shadowed\) copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-PAR-C1:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{pcopy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) pcopy\(li,(lt,)?lp,la,ls,lu,lUnref\) pcopy\(shadowed\) pcopy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-PAR-C2:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{present_or_copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) present_or_copy\(li,(lt,)?lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\) present_or_copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-PARLOOP-C0:       {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) copy\(li,(lt,)?lp,la,ls,lu,lUnref\) copy\(shadowed\) copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-PARLOOP-C1:       {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{pcopy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) pcopy\(li,(lt,)?lp,la,ls,lu,lUnref\) pcopy\(shadowed\) pcopy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-PARLOOP-C2:       {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{present_or_copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) present_or_copy\(li,(lt,)?lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\) present_or_copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-AO-C0-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
-  // PRT-AO-C1-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
-  // PRT-AO-C2-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
-  // PRT-O-C0:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
-  // PRT-O-C1:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
-  // PRT-O-C2:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) map(tofrom: li,{{(lt,)?}}lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
-  // PRT-OA-PAR-C0-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) copy\(li,(lt,)?lp,la,ls,lu,lUnref\) copy\(shadowed\) copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-PAR-C1-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{pcopy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) pcopy\(li,(lt,)?lp,la,ls,lu,lUnref\) pcopy\(shadowed\) pcopy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-PAR-C2-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{present_or_copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) present_or_copy\(li,(lt,)?lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\) present_or_copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-PARLOOP-C0-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) copy\(li,(lt,)?lp,la,ls,lu,lUnref\) copy\(shadowed\) copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-PARLOOP-C1-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{pcopy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) pcopy\(li,(lt,)?lp,la,ls,lu,lUnref\) pcopy\(shadowed\) pcopy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-PARLOOP-C2-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{present_or_copy\(gi,(gt,)?gp,ga,gs,gu,gUnref\) present_or_copy\(li,(lt,)?lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\) present_or_copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PAR-C0:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copy\(shadowed\) copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PAR-C1:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{pcopy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopy\(shadowed\) pcopy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PAR-C2:           {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{present_or_copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\) present_or_copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PARLOOP-C0:       {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copy\(shadowed\) copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PARLOOP-C1:       {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{pcopy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopy\(shadowed\) pcopy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PARLOOP-C2:       {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{present_or_copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\) present_or_copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-AO-C0-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
+  // PRT-AO-C1-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
+  // PRT-AO-C2-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
+  // PRT-O-C0:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
+  // PRT-O-C1:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
+  // PRT-O-C2:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed) map(tofrom: ci,ca){{$}}
+  // PRT-OA-PAR-C0-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copy\(shadowed\) copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PAR-C1-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{pcopy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopy\(shadowed\) pcopy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PAR-C2-NEXT:     {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{present_or_copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\) present_or_copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PARLOOP-C0-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copy\(shadowed\) copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PARLOOP-C1-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{pcopy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopy\(shadowed\) pcopy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PARLOOP-C2-NEXT: {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{present_or_copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copy\(shadowed\) present_or_copy\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
   //
-  // PRT-A-PAR-F:            {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\) firstprivate\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-PARLOOP-F:        {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\) firstprivate\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-AO-F-NEXT:          {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) firstprivate(li,{{(lt,)?}}lp,la,ls,lu,lUnref) firstprivate(shadowed) firstprivate(ci,ca){{$}}
-  // PRT-O-F:                {{^ *}}#pragma omp target teams num_teams(2) firstprivate(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) firstprivate(li,{{(lt,)?}}lp,la,ls,lu,lUnref) firstprivate(shadowed) firstprivate(ci,ca){{$}}
-  // PRT-OA-PAR-F-NEXT:      {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\) firstprivate\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-PARLOOP-F-NEXT:  {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{firstprivate\(gi,(gt,)?gp,ga,gs,gu,gUnref\) firstprivate\(li,(lt,)?lp,la,ls,lu,lUnref\) firstprivate\(shadowed\) firstprivate\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PAR-F:            {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{firstprivate\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) firstprivate\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) firstprivate\(shadowed\) firstprivate\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PARLOOP-F:        {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{firstprivate\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) firstprivate\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) firstprivate\(shadowed\) firstprivate\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-AO-F-NEXT:          {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) firstprivate(li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) firstprivate(shadowed) firstprivate(ci,ca){{$}}
+  // PRT-O-F:                {{^ *}}#pragma omp target teams num_teams(2) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) firstprivate(li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) firstprivate(shadowed) firstprivate(ci,ca){{$}}
+  // PRT-OA-PAR-F-NEXT:      {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{firstprivate\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) firstprivate\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) firstprivate\(shadowed\) firstprivate\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PARLOOP-F-NEXT:  {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{firstprivate\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) firstprivate\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) firstprivate\(shadowed\) firstprivate\(ci,ca\)$|(.*\\$[[:space:]])+.*$}}
   //
-  // PRT-A-PAR-P:            {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-AO-PAR-P-NEXT:      {{^ *}}// #pragma omp target teams num_teams(2) private(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) private(li,{{(lt,)?}}lp,la,ls,lu,lUnref) private(shadowed){{$}}
-  // PRT-A-PARLOOP-P:        {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-A-PAR-P:            {{^ *}}#pragma acc parallel{{ LOOP | }}num_gangs(2) {{private\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) private\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-AO-PAR-P-NEXT:      {{^ *}}// #pragma omp target teams num_teams(2) private(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) private(li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) private(shadowed){{$}}
+  // PRT-A-PARLOOP-P:        {{^ *}}#pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{private\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) private\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   // PRT-AO-PARLOOP-P-NOT:   #pragma
   // PRT-AO-PARLOOP-P:       {{^ *}}// #pragma omp target teams num_teams(2){{$}}
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}{
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  int gi;
-  //                         //{{ *}}  int gt; is here if defined
-  // PRT-AO-PARLOOP-P:       //{{ *}}  const int *gp;
+  // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  {{__uint128_t gt;|uint64_t gt_hi;$[[:space:]]*// *  uint64_t gt_lw;}}
+  // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  const int *gp;
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  int ga[2];
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  struct S gs;
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  union U gu;
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  int gUnref;
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  int li;
-  //                         //{{ *}}  int lt; is here if defined
-  // PRT-AO-PARLOOP-P:       //{{ *}}  const int *lp;
+  // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  {{__uint128_t lt;|uint64_t lt_hi;$[[:space:]]*// *  uint64_t lt_lw;}}
+  // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  const int *lp;
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  int la[2];
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  struct S ls;
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  union U lu;
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  int lUnref;
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  int shadowed;
-  // PRT-O-PAR-P:            {{^ *}}#pragma omp target teams num_teams(2) private(gi,{{(gt,)?}}gp,ga,gs,gu,gUnref) private(li,{{(lt,)?}}lp,la,ls,lu,lUnref) private(shadowed){{$}}
-  // PRT-OA-PAR-P-NEXT:      {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-O-PAR-P:            {{^ *}}#pragma omp target teams num_teams(2) private(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) private(li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) private(shadowed){{$}}
+  // PRT-OA-PAR-P-NEXT:      {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{private\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) private\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   // PRT-O-PARLOOP-P:        {{^ *}}#pragma omp target teams num_teams(2){{$}}
   // PRT-O-PARLOOP-P-NEXT:   {
   // PRT-O-PARLOOP-P-NEXT:     int gi;
-  //                           int gt; is here if defined
-  // PRT-O-PARLOOP-P:          int *gp;
+  // PRT-O-PARLOOP-P-NEXT:     {{__uint128_t gt;|uint64_t gt_hi;$[[:space:]]*  uint64_t gt_lw;}}
+  // PRT-O-PARLOOP-P-NEXT:     int *gp;
   // PRT-O-PARLOOP-P-NEXT:     int ga[2];
   // PRT-O-PARLOOP-P-NEXT:     struct S gs;
   // PRT-O-PARLOOP-P-NEXT:     union U gu;
   // PRT-O-PARLOOP-P-NEXT:     int gUnref;
   // PRT-O-PARLOOP-P-NEXT:     int li;
-  //                           int lt; is here if defined
-  // PRT-O-PARLOOP-P:          int *lp;
+  // PRT-O-PARLOOP-P-NEXT:     {{__uint128_t lt;|uint64_t lt_hi;$[[:space:]]*  uint64_t lt_lw;}}
+  // PRT-O-PARLOOP-P-NEXT:     int *lp;
   // PRT-O-PARLOOP-P-NEXT:     int la[2];
   // PRT-O-PARLOOP-P-NEXT:     struct S ls;
   // PRT-O-PARLOOP-P-NEXT:     union U lu;
   // PRT-O-PARLOOP-P-NEXT:     int lUnref;
   // PRT-O-PARLOOP-P-NEXT:     int shadowed;
   // PRT-OA-PARLOOP-P-NOT:   #pragma
-  // PRT-OA-PARLOOP-P:       {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{private\(gi,(gt,)?gp,ga,gs,gu,gUnref\) private\(li,(lt,)?lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
+  // PRT-OA-PARLOOP-P:       {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{private\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) private\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) private\(shadowed\)$|(.*\\$[[:space:]])+.*$}}
   //
   // PRT-NOT:      #pragma
-  #pragma acc parallel LOOP num_gangs(2)                       \
-    CLAUSE(gi,IF_UINT128(gt,)gp, ga,gs , gu , gUnref )         \
-    CLAUSE(  li,IF_UINT128(lt,)lp  ,  la  ,ls,  lu , lUnref  ) \
+  #pragma acc parallel LOOP num_gangs(2)                         \
+    CLAUSE(gi,LIST_UINT128(gt),gp, ga,gs , gu , gUnref )         \
+    CLAUSE(  li,LIST_UINT128(lt),lp  ,  la  ,ls,  lu , lUnref  ) \
     CLAUSE(shadowed) CLAUSE_NOT_PRIVATE(ci, ca)
   // PRT-PARLOOP-NEXT: {{for (.*) [{]|FORLOOP_HEAD}}
   // PRT-PAR-NEXT: {{(FORLOOP_HEAD$[[:space:]])? *}}{
@@ -703,9 +688,7 @@ int main() {
     // isVariableAlreadyCapturedInScopeInfo's code that suppresses adding const
     // to the captured variable in the case of OpenACC.
     int giOld = gi;
-#if HAS_UINT128
-    __uint128_t gtOld = gt;
-#endif
+    DEF_UINT128_COPY(gtOld, gt);
     // Check a decl with no init: it used to break our transform code.
     const int *gpOld;
     gpOld = gp;
@@ -714,9 +697,7 @@ int main() {
     union U guOld = gu;
 
     int liOld = li;
-#if HAS_UINT128
-    __uint128_t ltOld = lt;
-#endif
+    DEF_UINT128_COPY(ltOld, lt);
     const int *lpOld = lp;
     int laOld[2] = {la[0], la[1]};
     struct S lsOld = ls;
@@ -726,9 +707,7 @@ int main() {
     int shadowed = tmp + 111;
 
     gi = 56;
-#if HAS_UINT128
-    gt = MK_UINT128(0xf08234, 0xa07de1);
-#endif
+    ASSIGN_UINT128(gt, 0xf08234, 0xa07de1);
     gp = &li;
     ga[0] = 101;
     ga[1] = 202;
@@ -737,9 +716,7 @@ int main() {
     gu.i = 13;
 
     li = 98;
-#if HAS_UINT128
-    lt = MK_UINT128(0x79ca, 0x2961);
-#endif
+    ASSIGN_UINT128(lt, 0x79ca, 0x2961);
     lp = &li;
     la[0] = 55;
     la[1] = 66;
@@ -762,9 +739,12 @@ int main() {
     // gangs is non-deterministic at the level of printfs, but it's easier to
     // write the FileCheck DAG directives at the level of lines.
     //
-    // EXE-IF-DAG:  inside : gi:55->56,{{( gt:\[1400,59\]->\[f08234,a07de1\],)?$}}
-    // EXE-C-DAG:   inside : gi:{{55|56}}->56,{{( gt:\[(1400|f08234),(59|a07de1)\]->\[f08234,a07de1\],)?$}}
-    // EXE-P-DAG:   inside : gi:{{.+}}->56,{{( gt:\[.+\]->\[f08234,a07de1\],)?$}}
+    // EXE-IF-DAG:  inside : gi:55->56,
+    // EXE-C-DAG:   inside : gi:{{55|56}}->56,
+    // EXE-P-DAG:   inside : gi:{{.+}}->56,
+    // EXE-IF-DAG:           gt:[1400,59]->[f08234,a07de1],
+    // EXE-C-DAG:            gt:[{{1400|f08234}},{{59|a07de1}}]->[f08234,a07de1],
+    // EXE-P-DAG:            gt:[{{.+}}]->[f08234,a07de1],
     // EXE-I-DAG:            {{^ *(\*gp:55->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
     // EXE-C-DAG:            {{^ *(\*gp:(56|98)->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
     // EXE-F-DAG:            {{^ *(\*gp:55->98, )?}}ga:[100,200]->[101,202],
@@ -772,9 +752,12 @@ int main() {
     // EXE-IC-DAG:           gs:[{{33|42}},{{11|1}}]->[42,1], gu.i:{{22|13}}->13,
     // EXE-F-DAG:            gs:[33,11]->[42,1], gu.i:22->13,
     // EXE-P-DAG:            gs:[{{.+,.+}}]->[42,1], gu.i:{{.+}}->13,
-    // EXE-IF-DAG:           li:99->98,{{( lt:\[7a1,62b0\]->\[79ca,2961\],)?$}}
-    // EXE-C-DAG:            li:{{99|98}}->98,{{( lt:\[(7a1|79ca),(62b0|2961)\]->\[79ca,2961\],)?$}}
-    // EXE-P-DAG:            li:{{.+}}->98,{{( lt:\[.+\]->\[79ca,2961\],)?$}}
+    // EXE-IF-DAG:           li:99->98,
+    // EXE-C-DAG:            li:{{99|98}}->98,
+    // EXE-P-DAG:            li:{{.+}}->98,
+    // EXE-IF-DAG:           lt:[7a1,62b0]->[79ca,2961],
+    // EXE-C-DAG:            lt:[{{7a1|79ca}},{{62b0|2961}}]->[79ca,2961],
+    // EXE-P-DAG:            lt:[{{.+}}]->[79ca,2961],
     // EXE-I-DAG:            {{^ *(\*lp:55->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
     // EXE-C-DAG:            {{^ *(\*lp:(56|98)->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
     // EXE-F-DAG:            {{^ *(\*lp:55->98, )?}}la:[77,88]->[55,66],
@@ -787,9 +770,12 @@ int main() {
     //
     // Duplicate that EXE block exactly.
     //
-    // EXE-IF-DAG:  inside : gi:55->56,{{( gt:\[1400,59\]->\[f08234,a07de1\],)?$}}
-    // EXE-C-DAG:   inside : gi:{{55|56}}->56,{{( gt:\[(1400|f08234),(59|a07de1)\]->\[f08234,a07de1\],)?$}}
-    // EXE-P-DAG:   inside : gi:{{.+}}->56,{{( gt:\[.+\]->\[f08234,a07de1\],)?$}}
+    // EXE-IF-DAG:  inside : gi:55->56,
+    // EXE-C-DAG:   inside : gi:{{55|56}}->56,
+    // EXE-P-DAG:   inside : gi:{{.+}}->56,
+    // EXE-IF-DAG:           gt:[1400,59]->[f08234,a07de1],
+    // EXE-C-DAG:            gt:[{{1400|f08234}},{{59|a07de1}}]->[f08234,a07de1],
+    // EXE-P-DAG:            gt:[{{.+}}]->[f08234,a07de1],
     // EXE-I-DAG:            {{^ *(\*gp:55->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
     // EXE-C-DAG:            {{^ *(\*gp:(56|98)->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
     // EXE-F-DAG:            {{^ *(\*gp:55->98, )?}}ga:[100,200]->[101,202],
@@ -797,9 +783,12 @@ int main() {
     // EXE-IC-DAG:           gs:[{{33|42}},{{11|1}}]->[42,1], gu.i:{{22|13}}->13,
     // EXE-F-DAG:            gs:[33,11]->[42,1], gu.i:22->13,
     // EXE-P-DAG:            gs:[{{.+,.+}}]->[42,1], gu.i:{{.+}}->13,
-    // EXE-IF-DAG:           li:99->98,{{( lt:\[7a1,62b0\]->\[79ca,2961\],)?$}}
-    // EXE-C-DAG:            li:{{99|98}}->98,{{( lt:\[(7a1|79ca),(62b0|2961)\]->\[79ca,2961\],)?$}}
-    // EXE-P-DAG:            li:{{.+}}->98,{{( lt:\[.+\]->\[79ca,2961\],)?$}}
+    // EXE-IF-DAG:           li:99->98,
+    // EXE-C-DAG:            li:{{99|98}}->98,
+    // EXE-P-DAG:            li:{{.+}}->98,
+    // EXE-IF-DAG:           lt:[7a1,62b0]->[79ca,2961],
+    // EXE-C-DAG:            lt:[{{7a1|79ca}},{{62b0|2961}}]->[79ca,2961],
+    // EXE-P-DAG:            lt:[{{.+}}]->[79ca,2961],
     // EXE-I-DAG:            {{^ *(\*lp:55->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
     // EXE-C-DAG:            {{^ *(\*lp:(56|98)->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
     // EXE-F-DAG:            {{^ *(\*lp:55->98, )?}}la:[77,88]->[55,66],
@@ -809,28 +798,24 @@ int main() {
     // EXE-P-DAG:            ls:[{{.+,.+}}]->[333,444], lu.i:{{.+}}->279,
     // EXE-DAG:              shadowed:
     // EXE-ICF-DAG:          ci:53, ca:[10,11,12]
-    printf("inside : gi:%d->%d,"IF_UINT128(" gt:[%lx,%lx]->[%lx,%lx],")"\n"
+    printf("inside : gi:%d->%d,\n"
+           "         gt:[%lx,%lx]->[%lx,%lx],\n"
            "         "IF_PTR_EXE("*gp:%d->%d, ")"ga:[%d,%d]->[%d,%d],\n"
            "         gs:[%d,%d]->[%d,%d], gu.i:%d->%d,\n"
-           "         li:%d->%d,"IF_UINT128(" lt:[%lx,%lx]->[%lx,%lx],")"\n",
+           "         li:%d->%d,\n"
+           "         lt:[%lx,%lx]->[%lx,%lx],\n",
            giOld, gi,
-#if HAS_UINT128
            HI_UINT128(gtOld), LW_UINT128(gtOld),
            HI_UINT128(gt), LW_UINT128(gt),
-#endif
 #if CHECK_PTR_EXE
            *gpOld, *gp,
 #endif
            gaOld[0], gaOld[1], ga[0], ga[1],
            gsOld.i, gsOld.j, gs.i, gs.j,
            guOld.i, gu.i,
-           liOld, li
-#if HAS_UINT128
-           ,
+           liOld, li,
            HI_UINT128(ltOld), LW_UINT128(ltOld),
-           HI_UINT128(lt), LW_UINT128(lt)
-#endif
-           );
+           HI_UINT128(lt), LW_UINT128(lt));
     printf("         "IF_PTR_EXE("*lp:%d->%d, ")"la:[%d,%d]->[%d,%d],\n"
            "         ls:[%d,%d]->[%d,%d], lu.i:%d->%d,\n"
            "         shadowed:%d,\n"
@@ -852,15 +837,19 @@ int main() {
   } // PRT-NEXT: }
   // DMP: CallExpr
   //
-  // EXE-IFP:      outside: gi:55->55,{{( gt:\[1400,59\]->\[1400,59\],)?$}}
-  // EXE-C:        outside: gi:55->56,{{( gt:\[1400,59\]->\[f08234,a07de1\],)?$}}
+  // EXE-IFP:      outside: gi:55->55,
+  // EXE-C:        outside: gi:55->56,
+  // EXE-IFP:               gt:[1400,59]->[1400,59],
+  // EXE-C:                 gt:[1400,59]->[f08234,a07de1],
   // EXE-I-NEXT:            {{^ *(\*gp:55->55, )?}}ga:[100,200]->[101,202],
   // EXE-C-NEXT:            {{^ *(\*gp:56->98, )?}}ga:[100,200]->[101,202],
   // EXE-FP-NEXT:           {{^ *(\*gp:55->55, )?}}ga:[100,200]->[100,200],
   // EXE-IC-NEXT:           gs:[33,11]->[42,1], gu.i:22->13, gUnref:2->2,
   // EXE-FP-NEXT:           gs:[33,11]->[33,11], gu.i:22->22, gUnref:2->2,
-  // EXE-IFP-NEXT:          li:99->99,{{( lt:\[7a1,62b0\]->\[7a1,62b0\],)?$}}
-  // EXE-C-NEXT:            li:99->98,{{( lt:\[7a1,62b0\]->\[79ca,2961\],)?$}}
+  // EXE-IFP-NEXT:          li:99->99,
+  // EXE-C-NEXT:            li:99->98,
+  // EXE-IFP-NEXT:          lt:[7a1,62b0]->[7a1,62b0],
+  // EXE-C-NEXT:            lt:[7a1,62b0]->[79ca,2961]
   // EXE-I-NEXT:            {{^ *(\*lp:55->55, )?}}la:[77,88]->[55,66],
   // EXE-C-NEXT:            {{^ *(\*lp:56->98, )?}}la:[77,88]->[55,66],
   // EXE-FP-NEXT:           {{^ *(\*lp:55->55, )?}}la:[77,88]->[77,88],
@@ -868,10 +857,12 @@ int main() {
   // EXE-FP-NEXT:           ls:[222,111]->[222,111], lu.i:167->167, lUnref:9->9,
   // EXE-NEXT:              shadowed:111,
   // EXE-ICF-NEXT:          ci:53, ca:[10,11,12]
-  printf("outside: gi:%d->%d,"IF_UINT128(" gt:[%lx,%lx]->[%lx,%lx],")"\n"
+  printf("outside: gi:%d->%d,\n"
+         "         gt:[%lx,%lx]->[%lx,%lx],\n"
          "         "IF_PTR_EXE("*gp:%d->%d, ")"ga:[%d,%d]->[%d,%d],\n"
          "         gs:[%d,%d]->[%d,%d], gu.i:%d->%d, gUnref:%d->%d,\n"
-         "         li:%d->%d,"IF_UINT128(" lt:[%lx,%lx]->[%lx,%lx],")"\n"
+         "         li:%d->%d,\n"
+         "         lt:[%lx,%lx]->[%lx,%lx],\n"
          "         "IF_PTR_EXE("*lp:%d->%d, ")"la:[%d,%d]->[%d,%d],\n"
          "         ls:[%d,%d]->[%d,%d], lu.i:%d->%d, lUnref:%d->%d,\n"
          "         shadowed:%d,\n"
@@ -880,20 +871,16 @@ int main() {
 #endif
          ,
          giOld, gi,
-#if HAS_UINT128
          HI_UINT128(gtOld), LW_UINT128(gtOld),
          HI_UINT128(gt), LW_UINT128(gt),
-#endif
 #if CHECK_PTR_EXE
          *gpOld, *gp,
 #endif
          gaOld[0], gaOld[1], ga[0], ga[1],
          gsOld.i, gsOld.j, gs.i, gs.j, guOld.i, gu.i, gUnrefOld, gUnref,
          liOld, li,
-#if HAS_UINT128
          HI_UINT128(ltOld), LW_UINT128(ltOld),
          HI_UINT128(lt), LW_UINT128(lt),
-#endif
 #if CHECK_PTR_EXE
          *lpOld, *lp,
 #endif
