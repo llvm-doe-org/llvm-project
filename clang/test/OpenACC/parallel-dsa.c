@@ -249,13 +249,10 @@
 // FIXME: When OpenMP offloading is activated by -fopenmp-targets, pointers
 // pass into acc parallel as null, but otherwise they pass in just fine.
 // What does the OpenMP spec say is supposed to happen?
-
 #if !TGT_X86_64_EXE && !TGT_NVPTX64_EXE
-# define CHECK_PTR_EXE 1
-# define IF_PTR_EXE(...) __VA_ARGS__
+# define DEREF_PTR(Ptr) (*(Ptr))
 #else
-# define CHECK_PTR_EXE 0
-# define IF_PTR_EXE(...)
+# define DEREF_PTR(Ptr) 9999
 #endif
 
 // Scalar global, either:
@@ -745,10 +742,12 @@ int main() {
     // EXE-IF-DAG:           gt:[1400,59]->[f08234,a07de1],
     // EXE-C-DAG:            gt:[{{1400|f08234}},{{59|a07de1}}]->[f08234,a07de1],
     // EXE-P-DAG:            gt:[{{.+}}]->[f08234,a07de1],
-    // EXE-I-DAG:            {{^ *(\*gp:55->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
-    // EXE-C-DAG:            {{^ *(\*gp:(56|98)->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
-    // EXE-F-DAG:            {{^ *(\*gp:55->98, )?}}ga:[100,200]->[101,202],
-    // EXE-P-DAG:            {{^ *(\*gp:.+->98, )?}}ga:[{{.+,.+}}]->[101,202],
+    // EXE-IF-DAG:           *gp:{{55->98|9999->9999}},
+    // EXE-C-DAG:            *gp:{{(56|98)->98|9999->9999}},
+    // EXE-P-DAG:            *gp:{{.+->98|9999->9999}},
+    // EXE-IC-DAG:           ga:[{{100|101}},{{200|202}}]->[101,202],
+    // EXE-F-DAG:            ga:[100,200]->[101,202],
+    // EXE-P-DAG:            ga:[{{.+,.+}}]->[101,202],
     // EXE-IC-DAG:           gs:[{{33|42}},{{11|1}}]->[42,1], gu.i:{{22|13}}->13,
     // EXE-F-DAG:            gs:[33,11]->[42,1], gu.i:22->13,
     // EXE-P-DAG:            gs:[{{.+,.+}}]->[42,1], gu.i:{{.+}}->13,
@@ -758,10 +757,12 @@ int main() {
     // EXE-IF-DAG:           lt:[7a1,62b0]->[79ca,2961],
     // EXE-C-DAG:            lt:[{{7a1|79ca}},{{62b0|2961}}]->[79ca,2961],
     // EXE-P-DAG:            lt:[{{.+}}]->[79ca,2961],
-    // EXE-I-DAG:            {{^ *(\*lp:55->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
-    // EXE-C-DAG:            {{^ *(\*lp:(56|98)->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
-    // EXE-F-DAG:            {{^ *(\*lp:55->98, )?}}la:[77,88]->[55,66],
-    // EXE-P-DAG:            {{^ *(\*lp:.+->98, )?}}la:[{{.+,.+}}]->[55,66],
+    // EXE-IF-DAG:           *lp:{{55->98|9999->9999}},
+    // EXE-C-DAG:            *lp:{{(56|98)->98|9999->9999}},
+    // EXE-P-DAG:            *lp:{{.+->98|9999->9999}},
+    // EXE-IC-DAG:           la:[{{77|55}},{{88|66}}]->[55,66],
+    // EXE-F-DAG:            la:[77,88]->[55,66],
+    // EXE-P-DAG:            la:[{{.+,.+}}]->[55,66],
     // EXE-IC-DAG:           ls:[{{222|333}},{{111|444}}]->[333,444], lu.i:{{167|279}}->279,
     // EXE-F-DAG:            ls:[222,111]->[333,444], lu.i:167->279,
     // EXE-P-DAG:            ls:[{{.+,.+}}]->[333,444], lu.i:{{.+}}->279,
@@ -776,10 +777,12 @@ int main() {
     // EXE-IF-DAG:           gt:[1400,59]->[f08234,a07de1],
     // EXE-C-DAG:            gt:[{{1400|f08234}},{{59|a07de1}}]->[f08234,a07de1],
     // EXE-P-DAG:            gt:[{{.+}}]->[f08234,a07de1],
-    // EXE-I-DAG:            {{^ *(\*gp:55->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
-    // EXE-C-DAG:            {{^ *(\*gp:(56|98)->98, )?}}ga:[{{100|101}},{{200|202}}]->[101,202],
-    // EXE-F-DAG:            {{^ *(\*gp:55->98, )?}}ga:[100,200]->[101,202],
-    // EXE-P-DAG:            {{^ *(\*gp:.+->98, )?}}ga:[{{.+,.+}}]->[101,202],
+    // EXE-IF-DAG:           *gp:{{55->98|9999->9999}},
+    // EXE-C-DAG:            *gp:{{(56|98)->98|9999->9999}},
+    // EXE-P-DAG:            *gp:{{.+->98|9999->9999}},
+    // EXE-IC-DAG:           ga:[{{100|101}},{{200|202}}]->[101,202],
+    // EXE-F-DAG:            ga:[100,200]->[101,202],
+    // EXE-P-DAG:            ga:[{{.+,.+}}]->[101,202],
     // EXE-IC-DAG:           gs:[{{33|42}},{{11|1}}]->[42,1], gu.i:{{22|13}}->13,
     // EXE-F-DAG:            gs:[33,11]->[42,1], gu.i:22->13,
     // EXE-P-DAG:            gs:[{{.+,.+}}]->[42,1], gu.i:{{.+}}->13,
@@ -789,10 +792,12 @@ int main() {
     // EXE-IF-DAG:           lt:[7a1,62b0]->[79ca,2961],
     // EXE-C-DAG:            lt:[{{7a1|79ca}},{{62b0|2961}}]->[79ca,2961],
     // EXE-P-DAG:            lt:[{{.+}}]->[79ca,2961],
-    // EXE-I-DAG:            {{^ *(\*lp:55->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
-    // EXE-C-DAG:            {{^ *(\*lp:(56|98)->98, )?}}la:[{{77|55}},{{88|66}}]->[55,66],
-    // EXE-F-DAG:            {{^ *(\*lp:55->98, )?}}la:[77,88]->[55,66],
-    // EXE-P-DAG:            {{^ *(\*lp:.+->98, )?}}la:[{{.+,.+}}]->[55,66],
+    // EXE-IF-DAG:           *lp:{{55->98|9999->9999}},
+    // EXE-C-DAG:            *lp:{{(56|98)->98|9999->9999}},
+    // EXE-P-DAG:            *lp:{{.+->98|9999->9999}},
+    // EXE-IC-DAG:           la:[{{77|55}},{{88|66}}]->[55,66],
+    // EXE-F-DAG:            la:[77,88]->[55,66],
+    // EXE-P-DAG:            la:[{{.+,.+}}]->[55,66],
     // EXE-IC-DAG:           ls:[{{222|333}},{{111|444}}]->[333,444], lu.i:{{167|279}}->279,
     // EXE-F-DAG:            ls:[222,111]->[333,444], lu.i:167->279,
     // EXE-P-DAG:            ls:[{{.+,.+}}]->[333,444], lu.i:{{.+}}->279,
@@ -800,32 +805,30 @@ int main() {
     // EXE-ICF-DAG:          ci:53, ca:[10,11,12]
     printf("inside : gi:%d->%d,\n"
            "         gt:[%lx,%lx]->[%lx,%lx],\n"
-           "         "IF_PTR_EXE("*gp:%d->%d, ")"ga:[%d,%d]->[%d,%d],\n"
+           "         *gp:%d->%d,\n"
+           "         ga:[%d,%d]->[%d,%d],\n"
            "         gs:[%d,%d]->[%d,%d], gu.i:%d->%d,\n"
            "         li:%d->%d,\n"
            "         lt:[%lx,%lx]->[%lx,%lx],\n",
            giOld, gi,
            HI_UINT128(gtOld), LW_UINT128(gtOld),
            HI_UINT128(gt), LW_UINT128(gt),
-#if CHECK_PTR_EXE
-           *gpOld, *gp,
-#endif
+           DEREF_PTR(gpOld), DEREF_PTR(gp),
            gaOld[0], gaOld[1], ga[0], ga[1],
            gsOld.i, gsOld.j, gs.i, gs.j,
            guOld.i, gu.i,
            liOld, li,
            HI_UINT128(ltOld), LW_UINT128(ltOld),
            HI_UINT128(lt), LW_UINT128(lt));
-    printf("         "IF_PTR_EXE("*lp:%d->%d, ")"la:[%d,%d]->[%d,%d],\n"
+    printf("         *lp:%d->%d,\n"
+           "         la:[%d,%d]->[%d,%d],\n"
            "         ls:[%d,%d]->[%d,%d], lu.i:%d->%d,\n"
            "         shadowed:%d,\n"
 #if MODE != MODE_P
            "         ci:%d, ca:[%d,%d,%d]\n"
 #endif
            ,
-#if CHECK_PTR_EXE
-           *lpOld, *lp,
-#endif
+           DEREF_PTR(lpOld), DEREF_PTR(lp),
            laOld[0], laOld[1], la[0], la[1],
            lsOld.i, lsOld.j, ls.i, ls.j, luOld.i, lu.i,
            shadowed
@@ -841,29 +844,33 @@ int main() {
   // EXE-C:        outside: gi:55->56,
   // EXE-IFP:               gt:[1400,59]->[1400,59],
   // EXE-C:                 gt:[1400,59]->[f08234,a07de1],
-  // EXE-I-NEXT:            {{^ *(\*gp:55->55, )?}}ga:[100,200]->[101,202],
-  // EXE-C-NEXT:            {{^ *(\*gp:56->98, )?}}ga:[100,200]->[101,202],
-  // EXE-FP-NEXT:           {{^ *(\*gp:55->55, )?}}ga:[100,200]->[100,200],
+  // EXE-IFP-NEXT:          *gp:55->55,
+  // EXE-C-NEXT:            *gp:56->{{98|9999}},
+  // EXE-IC-NEXT:           ga:[100,200]->[101,202],
+  // EXE-FP-NEXT:           ga:[100,200]->[100,200],
   // EXE-IC-NEXT:           gs:[33,11]->[42,1], gu.i:22->13, gUnref:2->2,
   // EXE-FP-NEXT:           gs:[33,11]->[33,11], gu.i:22->22, gUnref:2->2,
   // EXE-IFP-NEXT:          li:99->99,
   // EXE-C-NEXT:            li:99->98,
   // EXE-IFP-NEXT:          lt:[7a1,62b0]->[7a1,62b0],
   // EXE-C-NEXT:            lt:[7a1,62b0]->[79ca,2961]
-  // EXE-I-NEXT:            {{^ *(\*lp:55->55, )?}}la:[77,88]->[55,66],
-  // EXE-C-NEXT:            {{^ *(\*lp:56->98, )?}}la:[77,88]->[55,66],
-  // EXE-FP-NEXT:           {{^ *(\*lp:55->55, )?}}la:[77,88]->[77,88],
+  // EXE-IFP-NEXT:          *lp:55->55,
+  // EXE-C-NEXT:            *lp:56->{{98|9999}},
+  // EXE-IC-NEXT:           la:[77,88]->[55,66],
+  // EXE-FP-NEXT:           la:[77,88]->[77,88],
   // EXE-IC-NEXT:           ls:[222,111]->[333,444], lu.i:167->279, lUnref:9->9,
   // EXE-FP-NEXT:           ls:[222,111]->[222,111], lu.i:167->167, lUnref:9->9,
   // EXE-NEXT:              shadowed:111,
   // EXE-ICF-NEXT:          ci:53, ca:[10,11,12]
   printf("outside: gi:%d->%d,\n"
          "         gt:[%lx,%lx]->[%lx,%lx],\n"
-         "         "IF_PTR_EXE("*gp:%d->%d, ")"ga:[%d,%d]->[%d,%d],\n"
+         "         *gp:%d->%d,\n"
+         "         ga:[%d,%d]->[%d,%d],\n"
          "         gs:[%d,%d]->[%d,%d], gu.i:%d->%d, gUnref:%d->%d,\n"
          "         li:%d->%d,\n"
          "         lt:[%lx,%lx]->[%lx,%lx],\n"
-         "         "IF_PTR_EXE("*lp:%d->%d, ")"la:[%d,%d]->[%d,%d],\n"
+         "         *lp:%d->%d,\n"
+         "         la:[%d,%d]->[%d,%d],\n"
          "         ls:[%d,%d]->[%d,%d], lu.i:%d->%d, lUnref:%d->%d,\n"
          "         shadowed:%d,\n"
 #if MODE != MODE_P
@@ -873,16 +880,22 @@ int main() {
          giOld, gi,
          HI_UINT128(gtOld), LW_UINT128(gtOld),
          HI_UINT128(gt), LW_UINT128(gt),
-#if CHECK_PTR_EXE
-         *gpOld, *gp,
+         *gpOld,
+#if MODE != MODE_C0 && MODE != MODE_C1 && MODE != MODE_C2
+         *gp,
+#else
+         DEREF_PTR(gp),
 #endif
          gaOld[0], gaOld[1], ga[0], ga[1],
          gsOld.i, gsOld.j, gs.i, gs.j, guOld.i, gu.i, gUnrefOld, gUnref,
          liOld, li,
          HI_UINT128(ltOld), LW_UINT128(ltOld),
          HI_UINT128(lt), LW_UINT128(lt),
-#if CHECK_PTR_EXE
-         *lpOld, *lp,
+         *lpOld,
+#if MODE != MODE_C0 && MODE != MODE_C1 && MODE != MODE_C2
+         *lp,
+#else
+         DEREF_PTR(lp),
 #endif
          laOld[0], laOld[1], la[0], la[1],
          lsOld.i, lsOld.j, ls.i, ls.j, luOld.i, lu.i, lUnrefOld, lUnref,
