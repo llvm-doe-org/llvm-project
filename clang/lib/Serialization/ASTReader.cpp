@@ -13177,6 +13177,16 @@ ACCClause *ACCClauseReader::readClause() {
 #include "clang/Basic/OpenACCKinds.def"
     C = ACCCopyClause::CreateEmpty(Context, Kind, Record.readInt());
     break;
+#define OPENACC_CLAUSE_ALIAS_copyin(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+    C = ACCCopyinClause::CreateEmpty(Context, Kind, Record.readInt());
+    break;
+#define OPENACC_CLAUSE_ALIAS_copyout(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+    C = ACCCopyoutClause::CreateEmpty(Context, Kind, Record.readInt());
+    break;
   case ACCC_shared:
     C = ACCSharedClause::CreateEmpty(Context, Record.readInt());
     break;
@@ -13230,6 +13240,26 @@ ACCClause *ACCClauseReader::readClause() {
 }
 
 void ACCClauseReader::VisitACCCopyClause(ACCCopyClause *C) {
+  C->setLParenLoc(Record.readSourceLocation());
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Record.readSubExpr());
+  C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCCopyinClause(ACCCopyinClause *C) {
+  C->setLParenLoc(Record.readSourceLocation());
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Record.readSubExpr());
+  C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCCopyoutClause(ACCCopyoutClause *C) {
   C->setLParenLoc(Record.readSourceLocation());
   unsigned NumVars = C->varlist_size();
   SmallVector<Expr *, 16> Vars;

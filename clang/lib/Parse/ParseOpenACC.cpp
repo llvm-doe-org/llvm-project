@@ -170,7 +170,10 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
 ///  Parsing of OpenACC clauses.
 ///
 ///    clause:
-///       copy-clause | private-clause | firstprivate-clause | reduction-clause
+///       copy-clause | pcopy-clause | present_or_copy-clause
+///       | copyin-clause | pcopyin-clause | present_or_copyin-clause
+///       | copyout-clause | pcopyout-clause | present_or_copyout-clause
+///       | private-clause | firstprivate-clause | reduction-clause
 ///       | num_gangs-clause | num_workers-clause | vector_length-clause
 ///       | seq-clause | independent-clause | auto-clause
 ///       | gang-clause | worker-clause | vector-clause | collapse-clause
@@ -255,6 +258,10 @@ ACCClause *Parser::ParseOpenACCClause(
     Clause = ParseOpenACCClause(CKind, WrongDirective);
     break;
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
+  case ACCC_##Name:
+#define OPENACC_CLAUSE_ALIAS_copyin(Name) \
+  case ACCC_##Name:
+#define OPENACC_CLAUSE_ALIAS_copyout(Name) \
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
   case ACCC_private:
@@ -440,11 +447,28 @@ bool Parser::ParseOpenACCVarList(OpenACCDirectiveKind DKind,
   return Vars.empty() || InvalidReductionId;
 }
 
-///  Parsing of OpenACC clause 'copy' (or one of its aliases), 'private',
-/// 'firstprivate', or 'reduction'.
+///  Parsing of OpenACC clause 'copy', 'pcopy', 'present_or_copy', 'copyin',
+///  'pcopyin', 'present_or_copyin', 'copyout', 'pcopyout',
+///  'present_or_copyout', 'private', 'firstprivate', or 'reduction'.
 ///
 ///    copy-clause:
 ///       'copy' '(' list ')'
+///    pcopy-clause:
+///       'pcopy' '(' list ')'
+///    present_or_copy-clause:
+///       'present_or_copy' '(' list ')'
+///    copyin-clause:
+///       'copyin' '(' list ')'
+///    pcopyin-clause:
+///       'pcopyin' '(' list ')'
+///    present_or_copyin-clause:
+///       'present_or_copyin' '(' list ')'
+///    copyout-clause:
+///       'copyout' '(' list ')'
+///    pcopyout-clause:
+///       'pcopyout' '(' list ')'
+///    present_or_copyout-clause:
+///       'present_or_copyout' '(' list ')'
 ///    private-clause:
 ///       'private' '(' list ')'
 ///    firstprivate-clause:

@@ -2060,6 +2060,30 @@ public:
                                             EndLoc);
   }
 
+  /// Build a new OpenACC 'copyin' clause.
+  ///
+  /// By default, performs semantic analysis to build the new OpenACC clause.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCCopyinClause(
+      OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
+      SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCCopyinClause(Kind, VarList, StartLoc,
+                                              LParenLoc, EndLoc);
+  }
+
+  /// Build a new OpenACC 'copyout' clause.
+  ///
+  /// By default, performs semantic analysis to build the new OpenACC clause.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCCopyoutClause(
+      OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
+      SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCCopyoutClause(Kind, VarList, StartLoc,
+                                               LParenLoc, EndLoc);
+  }
+
   /// Build a new OpenACC 'shared' clause.
   ///
   /// By default, performs semantic analysis to build the new OpenACC clause.
@@ -9443,6 +9467,38 @@ TreeTransform<Derived>::TransformACCCopyClause(ACCCopyClause *C) {
     Vars.push_back(EVar.get());
   }
   return getDerived().RebuildACCCopyClause(
+      C->getClauseKind(), Vars, C->getBeginLoc(), C->getLParenLoc(),
+      C->getEndLoc());
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCCopyinClause(ACCCopyinClause *C) {
+  llvm::SmallVector<Expr *, 16> Vars;
+  Vars.reserve(C->varlist_size());
+  for (auto *VE : C->varlists()) {
+    ExprResult EVar = getDerived().TransformExpr(cast<Expr>(VE));
+    if (EVar.isInvalid())
+      return nullptr;
+    Vars.push_back(EVar.get());
+  }
+  return getDerived().RebuildACCCopyinClause(
+      C->getClauseKind(), Vars, C->getBeginLoc(), C->getLParenLoc(),
+      C->getEndLoc());
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCCopyoutClause(ACCCopyoutClause *C) {
+  llvm::SmallVector<Expr *, 16> Vars;
+  Vars.reserve(C->varlist_size());
+  for (auto *VE : C->varlists()) {
+    ExprResult EVar = getDerived().TransformExpr(cast<Expr>(VE));
+    if (EVar.isInvalid())
+      return nullptr;
+    Vars.push_back(EVar.get());
+  }
+  return getDerived().RebuildACCCopyoutClause(
       C->getClauseKind(), Vars, C->getBeginLoc(), C->getLParenLoc(),
       C->getEndLoc());
 }

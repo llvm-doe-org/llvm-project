@@ -45,12 +45,18 @@ int main() {
   double d; // expected-note 3 {{'d' defined here}}
   float _Complex fc; // expected-note 5 {{'fc' defined here}}
   double _Complex dc; // expected-note 5 {{'dc' defined here}}
-  const int constI = 5; // expected-note {{variable 'constI' declared const here}}
-                        // expected-noacc-note@-1 {{variable 'constI' declared const here}}
-                        // expected-note@-2 {{'constI' defined here}}
-  const extern int constIDecl; // expected-note {{variable 'constIDecl' declared const here}}
-                               // expected-noacc-note@-1 {{variable 'constIDecl' declared const here}}
-                               // expected-note@-2 {{'constIDecl' declared here}}
+  // expected-note@+3 {{variable 'constI' declared const here}}
+  // expected-noacc-note@+2 {{variable 'constI' declared const here}}
+  // expected-note@+1 {{'constI' defined here}}
+  const int constI = 5;
+  // expected-note@+3 {{variable 'constIDecl' declared const here}}
+  // expected-noacc-note@+2 {{variable 'constIDecl' declared const here}}
+  // expected-note@+1 {{'constIDecl' declared here}}
+  const extern int constIDecl;
+  // expected-noacc-note@+1 6 {{variable 'constA' declared const here}}
+  const int constA[3];
+  // expected-noacc-note@+1 6 {{variable 'constADecl' declared const here}}
+  const extern int constADecl[3];
   struct S { int i; } s; // expected-note 9 {{'s' defined here}}
   union U { int i; } u; // expected-note 9 {{'u' defined here}}
   extern union U uDecl; // expected-note 9 {{'uDecl' declared here}}
@@ -117,6 +123,18 @@ int main() {
     FORLOOP
   #pragma acc parallel LOOP present_or_copy // expected-error {{expected '(' after 'present_or_copy'}}
     FORLOOP
+  #pragma acc parallel LOOP copyin // expected-error {{expected '(' after 'copyin'}}
+    FORLOOP
+  #pragma acc parallel LOOP pcopyin // expected-error {{expected '(' after 'pcopyin'}}
+    FORLOOP
+  #pragma acc parallel LOOP present_or_copyin // expected-error {{expected '(' after 'present_or_copyin'}}
+    FORLOOP
+  #pragma acc parallel LOOP copyout // expected-error {{expected '(' after 'copyout'}}
+    FORLOOP
+  #pragma acc parallel LOOP pcopyout // expected-error {{expected '(' after 'pcopyout'}}
+    FORLOOP
+  #pragma acc parallel LOOP present_or_copyout // expected-error {{expected '(' after 'present_or_copyout'}}
+    FORLOOP
   #pragma acc parallel LOOP firstprivate // expected-error {{expected '(' after 'firstprivate'}}
     FORLOOP
   #pragma acc parallel LOOP private // expected-error {{expected '(' after 'private'}}
@@ -142,6 +160,36 @@ int main() {
   // expected-error@+3 {{expected expression}}
   // expected-error@+2 {{expected ')'}}
   // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP copyin(
+    FORLOOP
+  // expected-error@+3 {{expected expression}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP pcopyin(
+    FORLOOP
+  // expected-error@+3 {{expected expression}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP present_or_copyin(
+    FORLOOP
+  // expected-error@+3 {{expected expression}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP copyout(
+    FORLOOP
+  // expected-error@+3 {{expected expression}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP pcopyout(
+    FORLOOP
+  // expected-error@+3 {{expected expression}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP present_or_copyout(
+    FORLOOP
+  // expected-error@+3 {{expected expression}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
   #pragma acc parallel LOOP firstprivate(
     FORLOOP
   // expected-error@+3 {{expected expression}}
@@ -156,15 +204,38 @@ int main() {
   #pragma acc parallel LOOP reduction(
     FORLOOP
 
-  #pragma acc parallel LOOP copy() // expected-error {{expected expression}}
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP copy()
     FORLOOP
-  #pragma acc parallel LOOP pcopy() // expected-error {{expected expression}}
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP pcopy()
     FORLOOP
-  #pragma acc parallel LOOP present_or_copy() // expected-error {{expected expression}}
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP present_or_copy()
     FORLOOP
-  #pragma acc parallel LOOP firstprivate() // expected-error {{expected expression}}
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP copyin()
     FORLOOP
-  #pragma acc parallel LOOP private( ) // expected-error {{expected expression}}
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP pcopyin()
+    FORLOOP
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP present_or_copyin()
+    FORLOOP
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP copyout()
+    FORLOOP
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP pcopyout()
+    FORLOOP
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP present_or_copyout()
+    FORLOOP
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP firstprivate()
+    FORLOOP
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP private( )
     FORLOOP
   // expected-error@+2 {{expected reduction operator}}
   // expected-warning@+1 {{missing ':' after reduction operator - ignoring}}
@@ -231,6 +302,18 @@ int main() {
     FORLOOP
   #pragma acc parallel LOOP present_or_copy(jk i) // expected-error {{expected ',' or ')' in 'present_or_copy' clause}}
     FORLOOP
+  #pragma acc parallel LOOP copyin(jk i) // expected-error {{expected ',' or ')' in 'copyin' clause}}
+    FORLOOP
+  #pragma acc parallel LOOP pcopyin(jk i) // expected-error {{expected ',' or ')' in 'pcopyin' clause}}
+    FORLOOP
+  #pragma acc parallel LOOP present_or_copyin(jk i) // expected-error {{expected ',' or ')' in 'present_or_copyin' clause}}
+    FORLOOP
+  #pragma acc parallel LOOP copyout(jk i) // expected-error {{expected ',' or ')' in 'copyout' clause}}
+    FORLOOP
+  #pragma acc parallel LOOP pcopyout(jk i) // expected-error {{expected ',' or ')' in 'pcopyout' clause}}
+    FORLOOP
+  #pragma acc parallel LOOP present_or_copyout(jk i) // expected-error {{expected ',' or ')' in 'present_or_copyout' clause}}
+    FORLOOP
   #pragma acc parallel LOOP firstprivate(i jk) // expected-error {{expected ',' or ')' in 'firstprivate' clause}}
     FORLOOP
   #pragma acc parallel LOOP private(jk i) // expected-error {{expected ',' or ')' in 'private' clause}}
@@ -244,6 +327,18 @@ int main() {
     FORLOOP
   #pragma acc parallel LOOP present_or_copy(jk ,) // expected-error {{expected expression}}
     FORLOOP
+  #pragma acc parallel LOOP copyin(jk ,) // expected-error {{expected expression}}
+    FORLOOP
+  #pragma acc parallel LOOP pcopyin(jk ,) // expected-error {{expected expression}}
+    FORLOOP
+  #pragma acc parallel LOOP present_or_copyin(jk ,) // expected-error {{expected expression}}
+    FORLOOP
+  #pragma acc parallel LOOP copyout(jk ,) // expected-error {{expected expression}}
+    FORLOOP
+  #pragma acc parallel LOOP pcopyout(jk ,) // expected-error {{expected expression}}
+    FORLOOP
+  #pragma acc parallel LOOP present_or_copyout(jk ,) // expected-error {{expected expression}}
+    FORLOOP
   #pragma acc parallel LOOP firstprivate(i,) // expected-error {{expected expression}}
     FORLOOP
   #pragma acc parallel LOOP private(jk, ) // expected-error {{expected expression}}
@@ -255,6 +350,7 @@ int main() {
   // Data sharing attribute clauses: arg semantics
   //--------------------------------------------------
 
+  // Unknown reduction operator.
   #pragma acc parallel LOOP reduction(foo:i) // expected-error {{unknown reduction operator}}
     FORLOOP
   #pragma acc parallel LOOP reduction(foo:bar) // expected-error {{use of undeclared identifier 'bar'}}
@@ -262,11 +358,24 @@ int main() {
   #pragma acc parallel LOOP reduction(foo:a[5]) // expected-error {{unknown reduction operator}}
     FORLOOP
 
+  // Unknown variable name.
   #pragma acc parallel LOOP copy(foo) // expected-error {{use of undeclared identifier 'foo'}}
     FORLOOP
   #pragma acc parallel LOOP pcopy(foo) // expected-error {{use of undeclared identifier 'foo'}}
     FORLOOP
   #pragma acc parallel LOOP present_or_copy(foo) // expected-error {{use of undeclared identifier 'foo'}}
+    FORLOOP
+  #pragma acc parallel LOOP copyin(foo) // expected-error {{use of undeclared identifier 'foo'}}
+    FORLOOP
+  #pragma acc parallel LOOP pcopyin(foo) // expected-error {{use of undeclared identifier 'foo'}}
+    FORLOOP
+  #pragma acc parallel LOOP present_or_copyin(foo) // expected-error {{use of undeclared identifier 'foo'}}
+    FORLOOP
+  #pragma acc parallel LOOP copyout(foo) // expected-error {{use of undeclared identifier 'foo'}}
+    FORLOOP
+  #pragma acc parallel LOOP pcopyout(foo) // expected-error {{use of undeclared identifier 'foo'}}
+    FORLOOP
+  #pragma acc parallel LOOP present_or_copyout(foo) // expected-error {{use of undeclared identifier 'foo'}}
     FORLOOP
   #pragma acc parallel LOOP firstprivate(foo) // expected-error {{use of undeclared identifier 'foo'}}
     FORLOOP
@@ -275,6 +384,7 @@ int main() {
   #pragma acc parallel LOOP reduction(max:bar) // expected-error {{use of undeclared identifier 'bar'}}
     FORLOOP
 
+  // Subarrays not permitted.
   // expected-error@+2 {{expected variable name}}
   // expected-error@+1 {{expected variable name}}
   #pragma acc parallel LOOP copy(a[0], a[0:1])
@@ -289,6 +399,30 @@ int main() {
     FORLOOP
   // expected-error@+2 {{expected variable name}}
   // expected-error@+1 {{expected variable name}}
+  #pragma acc parallel LOOP copyin(a[0], a[0:1])
+    FORLOOP
+  // expected-error@+2 {{expected variable name}}
+  // expected-error@+1 {{expected variable name}}
+  #pragma acc parallel LOOP pcopyin(a[0], a[0:1])
+    FORLOOP
+  // expected-error@+2 {{expected variable name}}
+  // expected-error@+1 {{expected variable name}}
+  #pragma acc parallel LOOP present_or_copyin(a[0], a[0:1])
+    FORLOOP
+  // expected-error@+2 {{expected variable name}}
+  // expected-error@+1 {{expected variable name}}
+  #pragma acc parallel LOOP copyout(a[0], a[0:1])
+    FORLOOP
+  // expected-error@+2 {{expected variable name}}
+  // expected-error@+1 {{expected variable name}}
+  #pragma acc parallel LOOP pcopyout(a[0], a[0:1])
+    FORLOOP
+  // expected-error@+2 {{expected variable name}}
+  // expected-error@+1 {{expected variable name}}
+  #pragma acc parallel LOOP present_or_copyout(a[0], a[0:1])
+    FORLOOP
+  // expected-error@+2 {{expected variable name}}
+  // expected-error@+1 {{expected variable name}}
   #pragma acc parallel LOOP firstprivate(a[0], a[0:1])
     FORLOOP
   // expected-error@+2 {{expected variable name}}
@@ -300,24 +434,31 @@ int main() {
   #pragma acc parallel LOOP reduction(min:a[23],a[0:10])
     FORLOOP
 
-  // expected-error@+7 {{variable in 'copy' clause cannot have incomplete type 'int []'}}
-  // expected-error@+6 {{variable in 'pcopy' clause cannot have incomplete type 'int []'}}
-  // expected-error@+5 {{variable in 'present_or_copy' clause cannot have incomplete type 'int []'}}
-  // expected-error@+5 {{variable in 'firstprivate' clause cannot have incomplete type 'int []'}}
-  // expected-error@+4 {{variable in 'private' clause cannot have incomplete type 'int []'}}
-  // expected-error@+3 {{variable in 'reduction' clause cannot have incomplete type 'int []'}}
+  // Variables of incomplete type.
+  // expected-error@+13 {{variable in 'copy' clause cannot have incomplete type 'int []'}}
+  // expected-error@+12 {{variable in 'pcopy' clause cannot have incomplete type 'int []'}}
+  // expected-error@+11 {{variable in 'present_or_copy' clause cannot have incomplete type 'int []'}}
+  // expected-error@+11 {{variable in 'copyin' clause cannot have incomplete type 'int []'}}
+  // expected-error@+10 {{variable in 'pcopyin' clause cannot have incomplete type 'int []'}}
+  // expected-error@+9 {{variable in 'present_or_copyin' clause cannot have incomplete type 'int []'}}
+  // expected-error@+9 {{variable in 'copyout' clause cannot have incomplete type 'int []'}}
+  // expected-error@+8 {{variable in 'pcopyout' clause cannot have incomplete type 'int []'}}
+  // expected-error@+7 {{variable in 'present_or_copyout' clause cannot have incomplete type 'int []'}}
+  // expected-error@+7 {{variable in 'firstprivate' clause cannot have incomplete type 'int []'}}
+  // expected-error@+6 {{variable in 'private' clause cannot have incomplete type 'int []'}}
+  // expected-error@+5 {{variable in 'reduction' clause cannot have incomplete type 'int []'}}
   #pragma acc parallel LOOP \
       copy(incomplete) pcopy(incomplete) present_or_copy(incomplete) \
+      copyin(incomplete) pcopyin(incomplete) present_or_copyin(incomplete) \
+      copyout(incomplete) pcopyout(incomplete) present_or_copyout(incomplete) \
       firstprivate(incomplete) private(incomplete) reduction(&:incomplete)
     FORLOOP
-
   // expected-error@+4 {{variable in implied 'copy' clause cannot have incomplete type 'int []'}}
   // expected-note@+1 {{'copy' clause implied here}}
   #pragma acc parallel LOOP
     FORLOOP_HEAD {
       i = *incomplete;
     }
-
   // expected-error@+3 {{variable in 'copy' clause cannot have incomplete type 'int []'}}
   // expected-error@+4 {{variable in implied 'copy' clause cannot have incomplete type 'int []'}}
   // expected-note@+1 {{'copy' clause implied here}}
@@ -326,11 +467,24 @@ int main() {
       i = *incomplete;
     }
 
+  // Variables of const type.
   #pragma acc parallel LOOP copy(constI, constIDecl)
     FORLOOP
   #pragma acc parallel LOOP pcopy(constI, constIDecl)
     FORLOOP
   #pragma acc parallel LOOP present_or_copy(constI, constIDecl)
+    FORLOOP
+  #pragma acc parallel LOOP copyin(constI, constIDecl)
+    FORLOOP
+  #pragma acc parallel LOOP pcopyin(constI, constIDecl)
+    FORLOOP
+  #pragma acc parallel LOOP present_or_copyin(constI, constIDecl)
+    FORLOOP
+  #pragma acc parallel LOOP copyout(constI, constIDecl)
+    FORLOOP
+  #pragma acc parallel LOOP pcopyout(constI, constIDecl)
+    FORLOOP
+  #pragma acc parallel LOOP present_or_copyout(constI, constIDecl)
     FORLOOP
   #pragma acc parallel LOOP firstprivate(constI, constIDecl)
     FORLOOP
@@ -340,8 +494,8 @@ int main() {
                             reduction(max: constI, constIDecl)
     FORLOOP
 
-  // Make sure const qualifier isn't lost on implicitly/explicitly firstprivate
-  // variables.
+  // Make sure const qualifier isn't lost in the case of implicit/explicit
+  // clauses that permit const variables.
   #pragma acc parallel LOOP firstprivate(constI)
     FORLOOP_HEAD {
       // expected-noacc-error@+2 {{cannot assign to variable 'constI' with const-qualified type 'const int'}}
@@ -349,7 +503,50 @@ int main() {
       constI = 5;
       constIDecl = 5;
     }
+  #pragma acc parallel LOOP copy(constADecl)
+    FORLOOP_HEAD {
+      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
+      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int [3]'}}
+      constA[0] = 5;
+      constADecl[1] = 5;
+    }
+  #pragma acc parallel LOOP pcopy(constA)
+    FORLOOP_HEAD {
+      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
+      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int [3]'}}
+      constA[0] = 5;
+      constADecl[1] = 5;
+    }
+  #pragma acc parallel LOOP present_or_copy(constADecl)
+    FORLOOP_HEAD {
+      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int [3]'}}
+      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
+      constADecl[1] = 5;
+      constA[0] = 5;
+    }
+  #pragma acc parallel LOOP copyin(constA) copyout(constADecl)
+    FORLOOP_HEAD {
+      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
+      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int [3]'}}
+      constA[0] = 5;
+      constADecl[1] = 5;
+    }
+  #pragma acc parallel LOOP pcopyin(constADecl) pcopyout(constA)
+    FORLOOP_HEAD {
+      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
+      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int [3]'}}
+      constA[0] = 5;
+      constADecl[1] = 5;
+    }
+  #pragma acc parallel LOOP present_or_copyin(constA) present_or_copyout(constADecl)
+    FORLOOP_HEAD {
+      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int [3]'}}
+      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
+      constADecl[1] = 5;
+      constA[0] = 5;
+    }
 
+  // Reduction operator doesn't permit variable type.
   #pragma acc parallel LOOP reduction(max:b,e,i,jk,f,d,p)
     FORLOOP
   // expected-error@+6 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
@@ -446,6 +643,7 @@ int main() {
   #pragma acc parallel LOOP reduction(^:f,d,fc,dc,p,a,s,u,uDecl)
     FORLOOP
 
+  // Redundant clauses.
   // expected-error@+6 {{copy variable defined again as copy variable}}
   // expected-note@+5 {{previously defined as copy variable here}}
   // expected-error@+5 {{copy variable defined again as copy variable}}
@@ -454,7 +652,117 @@ int main() {
   // expected-note@+1 {{previously defined as copy variable here}}
   #pragma acc parallel LOOP copy(e,e,i,jk) \
                             copy(i)        \
+                            pcopy(jk)
+    FORLOOP
+  // expected-error@+6 {{copy variable defined again as copy variable}}
+  // expected-note@+5 {{previously defined as copy variable here}}
+  // expected-error@+5 {{copy variable defined again as copy variable}}
+  // expected-note@+3 {{previously defined as copy variable here}}
+  // expected-error@+4 {{copy variable defined again as copy variable}}
+  // expected-note@+1 {{previously defined as copy variable here}}
+  #pragma acc parallel LOOP pcopy(e,e,i,jk) \
+                            pcopy(i)        \
+                            present_or_copy(jk)
+    FORLOOP
+  // expected-error@+6 {{copy variable defined again as copy variable}}
+  // expected-note@+5 {{previously defined as copy variable here}}
+  // expected-error@+5 {{copy variable defined again as copy variable}}
+  // expected-note@+3 {{previously defined as copy variable here}}
+  // expected-error@+4 {{copy variable defined again as copy variable}}
+  // expected-note@+1 {{previously defined as copy variable here}}
+  #pragma acc parallel LOOP copy(e,e,i,jk)      \
+                            present_or_copy(i)  \
+                            present_or_copy(jk)
+    FORLOOP
+  // expected-error@+6 {{copy variable defined again as copy variable}}
+  // expected-note@+5 {{previously defined as copy variable here}}
+  // expected-error@+5 {{copy variable defined again as copy variable}}
+  // expected-note@+3 {{previously defined as copy variable here}}
+  // expected-error@+4 {{copy variable defined again as copy variable}}
+  // expected-note@+1 {{previously defined as copy variable here}}
+  #pragma acc parallel LOOP present_or_copy(e,e,i,jk) \
+                            pcopy(i)                  \
                             copy(jk)
+    FORLOOP
+  // expected-error@+6 {{copyin variable defined again as copyin variable}}
+  // expected-note@+5 {{previously defined as copyin variable here}}
+  // expected-error@+5 {{copyin variable defined again as copyin variable}}
+  // expected-note@+3 {{previously defined as copyin variable here}}
+  // expected-error@+4 {{copyin variable defined again as copyin variable}}
+  // expected-note@+1 {{previously defined as copyin variable here}}
+  #pragma acc parallel LOOP copyin(e,e,i,jk) \
+                            copyin(i)        \
+                            pcopyin(jk)
+    FORLOOP
+  // expected-error@+6 {{copyin variable defined again as copyin variable}}
+  // expected-note@+5 {{previously defined as copyin variable here}}
+  // expected-error@+5 {{copyin variable defined again as copyin variable}}
+  // expected-note@+3 {{previously defined as copyin variable here}}
+  // expected-error@+4 {{copyin variable defined again as copyin variable}}
+  // expected-note@+1 {{previously defined as copyin variable here}}
+  #pragma acc parallel LOOP pcopyin(e,e,i,jk) \
+                            pcopyin(i)        \
+                            present_or_copyin(jk)
+    FORLOOP
+  // expected-error@+6 {{copyin variable defined again as copyin variable}}
+  // expected-note@+5 {{previously defined as copyin variable here}}
+  // expected-error@+5 {{copyin variable defined again as copyin variable}}
+  // expected-note@+3 {{previously defined as copyin variable here}}
+  // expected-error@+4 {{copyin variable defined again as copyin variable}}
+  // expected-note@+1 {{previously defined as copyin variable here}}
+  #pragma acc parallel LOOP copyin(e,e,i,jk)      \
+                            present_or_copyin(i)  \
+                            present_or_copyin(jk)
+    FORLOOP
+  // expected-error@+6 {{copyin variable defined again as copyin variable}}
+  // expected-note@+5 {{previously defined as copyin variable here}}
+  // expected-error@+5 {{copyin variable defined again as copyin variable}}
+  // expected-note@+3 {{previously defined as copyin variable here}}
+  // expected-error@+4 {{copyin variable defined again as copyin variable}}
+  // expected-note@+1 {{previously defined as copyin variable here}}
+  #pragma acc parallel LOOP present_or_copyin(e,e,i,jk) \
+                            pcopyin(i)                  \
+                            copyin(jk)
+    FORLOOP
+  // expected-error@+6 {{copyout variable defined again as copyout variable}}
+  // expected-note@+5 {{previously defined as copyout variable here}}
+  // expected-error@+5 {{copyout variable defined again as copyout variable}}
+  // expected-note@+3 {{previously defined as copyout variable here}}
+  // expected-error@+4 {{copyout variable defined again as copyout variable}}
+  // expected-note@+1 {{previously defined as copyout variable here}}
+  #pragma acc parallel LOOP copyout(e,e,i,jk) \
+                            copyout(i)        \
+                            pcopyout(jk)
+    FORLOOP
+  // expected-error@+6 {{copyout variable defined again as copyout variable}}
+  // expected-note@+5 {{previously defined as copyout variable here}}
+  // expected-error@+5 {{copyout variable defined again as copyout variable}}
+  // expected-note@+3 {{previously defined as copyout variable here}}
+  // expected-error@+4 {{copyout variable defined again as copyout variable}}
+  // expected-note@+1 {{previously defined as copyout variable here}}
+  #pragma acc parallel LOOP pcopyout(e,e,i,jk) \
+                            pcopyout(i)        \
+                            present_or_copyout(jk)
+    FORLOOP
+  // expected-error@+6 {{copyout variable defined again as copyout variable}}
+  // expected-note@+5 {{previously defined as copyout variable here}}
+  // expected-error@+5 {{copyout variable defined again as copyout variable}}
+  // expected-note@+3 {{previously defined as copyout variable here}}
+  // expected-error@+4 {{copyout variable defined again as copyout variable}}
+  // expected-note@+1 {{previously defined as copyout variable here}}
+  #pragma acc parallel LOOP copyout(e,e,i,jk)      \
+                            present_or_copyout(i)  \
+                            present_or_copyout(jk)
+    FORLOOP
+  // expected-error@+6 {{copyout variable defined again as copyout variable}}
+  // expected-note@+5 {{previously defined as copyout variable here}}
+  // expected-error@+5 {{copyout variable defined again as copyout variable}}
+  // expected-note@+3 {{previously defined as copyout variable here}}
+  // expected-error@+4 {{copyout variable defined again as copyout variable}}
+  // expected-note@+1 {{previously defined as copyout variable here}}
+  #pragma acc parallel LOOP present_or_copyout(e,e,i,jk) \
+                            pcopyout(i)                  \
+                            copyout(jk)
     FORLOOP
   // expected-error@+6 {{firstprivate variable defined again as firstprivate variable}}
   // expected-note@+5 {{previously defined as firstprivate variable here}}
@@ -485,61 +793,175 @@ int main() {
                             reduction(max:d)
     FORLOOP
 
+  // Conflicting clauses: copy and aliases vs. other clauses.
+  // expected-error@+5 {{copy variable cannot be copyin variable}}
+  // expected-note@+3 {{previously defined as copy variable here}}
+  // expected-error@+4 {{copyin variable cannot be copy variable}}
+  // expected-note@+2 {{previously defined as copyin variable here}}
+  #pragma acc parallel LOOP copy(i) \
+                            copyin(i,jk) \
+                            pcopy(jk)
+    FORLOOP
+  // expected-error@+5 {{copyin variable cannot be copy variable}}
+  // expected-note@+3 {{previously defined as copyin variable here}}
+  // expected-error@+4 {{copy variable cannot be copyin variable}}
+  // expected-note@+2 {{previously defined as copy variable here}}
+  #pragma acc parallel LOOP pcopyin(a) \
+                            present_or_copy(a,p) \
+                            present_or_copyin(p)
+    FORLOOP
+  // expected-error@+5 {{copyout variable cannot be copy variable}}
+  // expected-note@+3 {{previously defined as copyout variable here}}
+  // expected-error@+4 {{copy variable cannot be copyout variable}}
+  // expected-note@+2 {{previously defined as copy variable here}}
+  #pragma acc parallel LOOP present_or_copyout(a) \
+                            pcopy(a,p) \
+                            pcopyout(p)
+    FORLOOP
+  // expected-error@+5 {{copy variable cannot be copyout variable}}
+  // expected-note@+3 {{previously defined as copy variable here}}
+  // expected-error@+4 {{copyout variable cannot be copy variable}}
+  // expected-note@+2 {{previously defined as copyout variable here}}
+  #pragma acc parallel LOOP present_or_copy(f) \
+                            copyout(f,d) \
+                            copy(d)
+    FORLOOP
   // expected-error@+5 {{copy variable cannot be firstprivate variable}}
   // expected-note@+3 {{previously defined as copy variable here}}
   // expected-error@+4 {{firstprivate variable cannot be copy variable}}
   // expected-note@+2 {{previously defined as firstprivate variable here}}
   #pragma acc parallel LOOP copy(i) \
                             firstprivate(i,jk) \
-                            copy(jk)
+                            pcopy(jk)
     FORLOOP
   // expected-error@+5 {{firstprivate variable cannot be copy variable}}
   // expected-note@+3 {{previously defined as firstprivate variable here}}
   // expected-error@+4 {{copy variable cannot be firstprivate variable}}
   // expected-note@+2 {{previously defined as copy variable here}}
   #pragma acc parallel LOOP firstprivate(a) \
-                            pcopy(a,p) \
+                            present_or_copy(a,p) \
                             firstprivate(p)
-    FORLOOP
-  // expected-error@+5 {{copy variable cannot be firstprivate variable}}
-  // expected-note@+3 {{previously defined as copy variable here}}
-  // expected-error@+4 {{firstprivate variable cannot be copy variable}}
-  // expected-note@+2 {{previously defined as firstprivate variable here}}
-  #pragma acc parallel LOOP present_or_copy(f) \
-                            firstprivate(f,d) \
-                            present_or_copy(d)
     FORLOOP
   // expected-error@+5 {{private variable cannot be copy variable}}
   // expected-note@+3 {{previously defined as private variable here}}
   // expected-error@+4 {{copy variable cannot be private variable}}
   // expected-note@+2 {{previously defined as copy variable here}}
   #pragma acc parallel LOOP private(a) \
-                            copy(a,p) \
+                            pcopy(a,p) \
                             private(p)
     FORLOOP
   // expected-error@+5 {{copy variable cannot be private variable}}
   // expected-note@+3 {{previously defined as copy variable here}}
   // expected-error@+4 {{private variable cannot be copy variable}}
   // expected-note@+2 {{previously defined as private variable here}}
-  #pragma acc parallel LOOP pcopy(f) \
+  #pragma acc parallel LOOP present_or_copy(f) \
                             private(f,d) \
-                            pcopy(d)
+                            copy(d)
     FORLOOP
-  // expected-error@+5 {{private variable cannot be copy variable}}
+    FORLOOP
+  #pragma acc parallel LOOP present_or_copy(f) reduction(+:f,d) pcopy(d)
+    FORLOOP
+  #pragma acc parallel LOOP reduction(*:i) copy(i,jk) reduction(*:jk)
+    FORLOOP
+
+  // Conflicting clauses: copyin and aliases vs. other clauses (except copy,
+  // which is tested above).
+  // expected-error@+5 {{copyout variable cannot be copyin variable}}
+  // expected-note@+3 {{previously defined as copyout variable here}}
+  // expected-error@+4 {{copyin variable cannot be copyout variable}}
+  // expected-note@+2 {{previously defined as copyin variable here}}
+  #pragma acc parallel LOOP pcopyout(a) \
+                            present_or_copyin(a,p) \
+                            copyout(p)
+    FORLOOP
+  // expected-error@+5 {{copyin variable cannot be copyout variable}}
+  // expected-note@+3 {{previously defined as copyin variable here}}
+  // expected-error@+4 {{copyout variable cannot be copyin variable}}
+  // expected-note@+2 {{previously defined as copyout variable here}}
+  #pragma acc parallel LOOP pcopyin(f) \
+                            present_or_copyout(f,d) \
+                            copyin(d)
+    FORLOOP
+  // expected-error@+5 {{copyin variable cannot be firstprivate variable}}
+  // expected-note@+3 {{previously defined as copyin variable here}}
+  // expected-error@+4 {{firstprivate variable cannot be copyin variable}}
+  // expected-note@+2 {{previously defined as firstprivate variable here}}
+  #pragma acc parallel LOOP pcopyin(i) \
+                            firstprivate(i,jk) \
+                            present_or_copyin(jk)
+    FORLOOP
+  // expected-error@+5 {{firstprivate variable cannot be copyin variable}}
+  // expected-note@+3 {{previously defined as firstprivate variable here}}
+  // expected-error@+4 {{copyin variable cannot be firstprivate variable}}
+  // expected-note@+2 {{previously defined as copyin variable here}}
+  #pragma acc parallel LOOP firstprivate(a) \
+                            copyin(a,p) \
+                            firstprivate(p)
+    FORLOOP
+  // expected-error@+5 {{private variable cannot be copyin variable}}
   // expected-note@+3 {{previously defined as private variable here}}
-  // expected-error@+4 {{copy variable cannot be private variable}}
-  // expected-note@+2 {{previously defined as copy variable here}}
-  #pragma acc parallel LOOP private(i) \
-                            present_or_copy(i,jk) \
-                            private(jk)
+  // expected-error@+4 {{copyin variable cannot be private variable}}
+  // expected-note@+2 {{previously defined as copyin variable here}}
+  #pragma acc parallel LOOP private(a) \
+                            copyin(a,p) \
+                            private(p)
     FORLOOP
-  #pragma acc parallel LOOP copy(f) reduction(+:f,d) copy(d)
+  // expected-error@+5 {{copyin variable cannot be private variable}}
+  // expected-note@+3 {{previously defined as copyin variable here}}
+  // expected-error@+4 {{private variable cannot be copyin variable}}
+  // expected-note@+2 {{previously defined as private variable here}}
+  #pragma acc parallel LOOP pcopyin(f) \
+                            private(f,d) \
+                            present_or_copyin(d)
     FORLOOP
-  #pragma acc parallel LOOP reduction(*:i) pcopy(i,jk) reduction(*:jk)
     FORLOOP
-  #pragma acc parallel LOOP \
-      present_or_copy(fc) reduction(&&:fc,e) present_or_copy(e)
+  #pragma acc parallel LOOP pcopyin(f) reduction(+:f,d) present_or_copyin(d)
     FORLOOP
+  #pragma acc parallel LOOP reduction(*:i) pcopyin(i,jk) reduction(*:jk)
+    FORLOOP
+
+  // Conflicting clauses: copyout and aliases vs. other clauses (except copy
+  // and copyin, which are tested above).
+  // expected-error@+5 {{copyout variable cannot be firstprivate variable}}
+  // expected-note@+3 {{previously defined as copyout variable here}}
+  // expected-error@+4 {{firstprivate variable cannot be copyout variable}}
+  // expected-note@+2 {{previously defined as firstprivate variable here}}
+  #pragma acc parallel LOOP copyout(i) \
+                            firstprivate(i,jk) \
+                            pcopyout(jk)
+    FORLOOP
+  // expected-error@+5 {{firstprivate variable cannot be copyout variable}}
+  // expected-note@+3 {{previously defined as firstprivate variable here}}
+  // expected-error@+4 {{copyout variable cannot be firstprivate variable}}
+  // expected-note@+2 {{previously defined as copyout variable here}}
+  #pragma acc parallel LOOP firstprivate(a) \
+                            present_or_copyout(a,p) \
+                            firstprivate(p)
+    FORLOOP
+  // expected-error@+5 {{private variable cannot be copyout variable}}
+  // expected-note@+3 {{previously defined as private variable here}}
+  // expected-error@+4 {{copyout variable cannot be private variable}}
+  // expected-note@+2 {{previously defined as copyout variable here}}
+  #pragma acc parallel LOOP private(a) \
+                            present_or_copyout(a,p) \
+                            private(p)
+    FORLOOP
+  // expected-error@+5 {{copyout variable cannot be private variable}}
+  // expected-note@+3 {{previously defined as copyout variable here}}
+  // expected-error@+4 {{private variable cannot be copyout variable}}
+  // expected-note@+2 {{previously defined as private variable here}}
+  #pragma acc parallel LOOP pcopyout(f) \
+                            private(f,d) \
+                            copyout(d)
+    FORLOOP
+    FORLOOP
+  #pragma acc parallel LOOP present_or_copyout(f) reduction(+:f,d) pcopyout(d)
+    FORLOOP
+  #pragma acc parallel LOOP reduction(*:i) copyout(i,jk) reduction(*:jk)
+    FORLOOP
+
+  // Conflicting clauses: firstprivate vs. private vs. reduction (copy, copyin,
+  // and copyout are tested above).
   // expected-error@+5 {{firstprivate variable cannot be private variable}}
   // expected-note@+3 {{previously defined as firstprivate variable here}}
   // expected-error@+4 {{private variable cannot be firstprivate variable}}

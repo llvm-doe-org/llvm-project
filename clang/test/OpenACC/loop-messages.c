@@ -9,19 +9,26 @@
 // them would defeat the purpose of the test, so it instead adds "loop" and a
 // for loop to the outer "acc parallel"
 //
-// For checking the various aliases of copy, we just run the entire test case
-// once per alias.  That seems the easiest way to maintain this without losing
-// cases.  This test is very fast, so the performance impact isn't terrible.
+// For checking copy, copyin, copyout, and their aliases we just run the entire
+// test case once for each.  That seems the easiest way to maintain this
+// without losing cases.  This test is fast, so the performance impact isn't
+// terrible.
 
 // RUN: %data {
-// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=copy'           )
-// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=pcopy'          )
-// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=present_or_copy')
-// RUN:   (cflags=-DERR=ERR_OMP_INIT                    )
-// RUN:   (cflags=-DERR=ERR_OMP_COND                    )
-// RUN:   (cflags=-DERR=ERR_OMP_INC                     )
-// RUN:   (cflags=-DERR=ERR_OMP_INC0                    )
-// RUN:   (cflags=-DERR=ERR_OMP_VAR                     )
+// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=copy'              )
+// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=pcopy'             )
+// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=present_or_copy'   )
+// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=copyin'            )
+// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=pcopyin'           )
+// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=present_or_copyin' )
+// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=copyout'           )
+// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=pcopyout'          )
+// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=present_or_copyout')
+// RUN:   (cflags=-DERR=ERR_OMP_INIT                       )
+// RUN:   (cflags=-DERR=ERR_OMP_COND                       )
+// RUN:   (cflags=-DERR=ERR_OMP_INC                        )
+// RUN:   (cflags=-DERR=ERR_OMP_INC0                       )
+// RUN:   (cflags=-DERR=ERR_OMP_VAR                        )
 // RUN: }
 // RUN: %for {
 // RUN:   %clang_cc1 -fsyntax-only -fopenacc %[cflags] %s \

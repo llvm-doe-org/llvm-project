@@ -608,6 +608,17 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
 #include "clang/Basic/OpenACCKinds.def"
     Res = ActOnOpenACCCopyClause(Kind, VarList, StartLoc, LParenLoc, EndLoc);
     break;
+#define OPENACC_CLAUSE_ALIAS_copyin(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+    Res = ActOnOpenACCCopyinClause(Kind, VarList, StartLoc, LParenLoc, EndLoc);
+    break;
+#define OPENACC_CLAUSE_ALIAS_copyout(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+    Res = ActOnOpenACCCopyoutClause(Kind, VarList, StartLoc, LParenLoc,
+                                    EndLoc);
+    break;
   case ACCC_private:
     Res = ActOnOpenACCPrivateClause(VarList, StartLoc, LParenLoc, EndLoc);
     break;
@@ -748,6 +759,9 @@ public:
       case ACC_BASE_DSA_unknown:
         BaseDSAs = nullptr;
         break;
+      case ACC_BASE_DSA_copyin:
+      case ACC_BASE_DSA_copyout:
+        llvm_unreachable("unexpected implicit base DSA");
       }
       if (BaseDSAs) {
         BaseDSAs->push_back(E);
@@ -926,6 +940,8 @@ public:
             // Skip variable if it is privatized at the acc parallel.
             continue;
           case ACC_BASE_DSA_copy:
+          case ACC_BASE_DSA_copyin:
+          case ACC_BASE_DSA_copyout:
             // The variable is gang-shared.
             break;
           }
@@ -1484,6 +1500,10 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr
     break;
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
   case ACCC_##Name:
+#define OPENACC_CLAUSE_ALIAS_copyin(Name) \
+  case ACCC_##Name:
+#define OPENACC_CLAUSE_ALIAS_copyout(Name) \
+  case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
   case ACCC_shared:
   case ACCC_private:
@@ -1560,6 +1580,94 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
 
   return ACCCopyClause::Create(Context, Kind, StartLoc, LParenLoc, EndLoc,
                                Vars);
+}
+
+ACCClause *Sema::ActOnOpenACCCopyinClause(
+    OpenACCClauseKind Kind, ArrayRef<Expr *> VarList, SourceLocation StartLoc,
+    SourceLocation LParenLoc, SourceLocation EndLoc) {
+  assert(ACCCopyinClause::isClauseKind(Kind) &&
+         "expected copyin clause or alias");
+  SmallVector<Expr *, 8> Vars;
+  bool IsImplicitClause = StartLoc.isInvalid();
+  SourceLocation ImplicitClauseLoc = DSAStack->getConstructLoc();
+
+  for (auto &RefExpr : VarList) {
+    assert(RefExpr && "NULL expr in OpenACC copyin clause.");
+    SourceLocation ELoc;
+    SourceRange ERange;
+    Expr *SimpleRefExpr = RefExpr;
+    VarDecl *VD = getVarDeclFromVarList(*this, SimpleRefExpr, ELoc, ERange);
+    if (!VD)
+      continue;
+
+    QualType Type = VD->getType();
+
+    // The OpenACC 2.7 spec doesn't say, as far as I know, that a variable
+    // in a copyin clause must have a complete type.  However, you cannot copy
+    // data if it doesn't have a size, and the OpenMP implementation does have
+    // this restriction for map clauses.
+    if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
+                            IsImplicitClause, getOpenACCClauseName(Kind))) {
+      if (IsImplicitClause)
+        Diag(ImplicitClauseLoc, diag::note_acc_implicit_clause)
+          << getOpenACCClauseName(Kind);
+      continue;
+    }
+
+    if (!DSAStack->addBaseDSA(VD, RefExpr->IgnoreParens(), ACC_BASE_DSA_copyin,
+                              IsImplicitClause))
+      Vars.push_back(RefExpr->IgnoreParens());
+  }
+
+  if (Vars.empty())
+    return nullptr;
+
+  return ACCCopyinClause::Create(Context, Kind, StartLoc, LParenLoc, EndLoc,
+                                 Vars);
+}
+
+ACCClause *Sema::ActOnOpenACCCopyoutClause(
+    OpenACCClauseKind Kind, ArrayRef<Expr *> VarList, SourceLocation StartLoc,
+    SourceLocation LParenLoc, SourceLocation EndLoc) {
+  assert(ACCCopyoutClause::isClauseKind(Kind) &&
+         "expected copyout clause or alias");
+  SmallVector<Expr *, 8> Vars;
+  bool IsImplicitClause = StartLoc.isInvalid();
+  SourceLocation ImplicitClauseLoc = DSAStack->getConstructLoc();
+
+  for (auto &RefExpr : VarList) {
+    assert(RefExpr && "NULL expr in OpenACC copyout clause.");
+    SourceLocation ELoc;
+    SourceRange ERange;
+    Expr *SimpleRefExpr = RefExpr;
+    VarDecl *VD = getVarDeclFromVarList(*this, SimpleRefExpr, ELoc, ERange);
+    if (!VD)
+      continue;
+
+    QualType Type = VD->getType();
+
+    // The OpenACC 2.7 spec doesn't say, as far as I know, that a variable
+    // in a copyout clause must have a complete type.  However, you cannot copy
+    // data if it doesn't have a size, and the OpenMP implementation does have
+    // this restriction for map clauses.
+    if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
+                            IsImplicitClause, getOpenACCClauseName(Kind))) {
+      if (IsImplicitClause)
+        Diag(ImplicitClauseLoc, diag::note_acc_implicit_clause)
+          << getOpenACCClauseName(Kind);
+      continue;
+    }
+
+    if (!DSAStack->addBaseDSA(VD, RefExpr->IgnoreParens(),
+                              ACC_BASE_DSA_copyout, IsImplicitClause))
+      Vars.push_back(RefExpr->IgnoreParens());
+  }
+
+  if (Vars.empty())
+    return nullptr;
+
+  return ACCCopyoutClause::Create(Context, Kind, StartLoc, LParenLoc, EndLoc,
+                                  Vars);
 }
 
 ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
@@ -1949,6 +2057,10 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
     Res = ActOnOpenACCVectorClause(StartLoc, EndLoc);
     break;
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
+  case ACCC_##Name:
+#define OPENACC_CLAUSE_ALIAS_copyin(Name) \
+  case ACCC_##Name:
+#define OPENACC_CLAUSE_ALIAS_copyout(Name) \
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
   case ACCC_shared:
@@ -2641,6 +2753,34 @@ public:
           return getDerived().RebuildOMPMapClause(
             llvm::None, llvm::None, CXXScopeSpec(), DeclarationNameInfo(),
             OMPC_MAP_tofrom, /*IsMapTypeImplicit*/ false, L.LocStart,
+            L.LParenLoc, Vars,
+            OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+        });
+  }
+
+  OMPClauseResult TransformACCCopyinClause(ACCExecutableDirective *D,
+                                           OpenMPDirectiveKind TDKind,
+                                           ACCCopyinClause *C) {
+    return transformACCVarListClause<ACCCopyinClause>(
+        D, C, OMPC_map,
+        [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+          return getDerived().RebuildOMPMapClause(
+            llvm::None, llvm::None, CXXScopeSpec(), DeclarationNameInfo(),
+            OMPC_MAP_to, /*IsMapTypeImplicit*/ false, L.LocStart, L.LParenLoc,
+            Vars,
+            OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+        });
+  }
+
+  OMPClauseResult TransformACCCopyoutClause(ACCExecutableDirective *D,
+                                            OpenMPDirectiveKind TDKind,
+                                            ACCCopyoutClause *C) {
+    return transformACCVarListClause<ACCCopyoutClause>(
+        D, C, OMPC_map,
+        [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+          return getDerived().RebuildOMPMapClause(
+            llvm::None, llvm::None, CXXScopeSpec(), DeclarationNameInfo(),
+            OMPC_MAP_from, /*IsMapTypeImplicit*/ false, L.LocStart,
             L.LParenLoc, Vars,
             OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
         });

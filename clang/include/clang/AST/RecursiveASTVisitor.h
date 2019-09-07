@@ -3385,6 +3385,18 @@ bool RecursiveASTVisitor<Derived>::VisitACCCopyClause(ACCCopyClause *C) {
 }
 
 template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCCopyinClause(ACCCopyinClause *C) {
+  TRY_TO(VisitACCClauseList(C));
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCCopyoutClause(ACCCopyoutClause *C) {
+  TRY_TO(VisitACCClauseList(C));
+  return true;
+}
+
+template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCSharedClause(ACCSharedClause *C) {
   TRY_TO(VisitACCClauseList(C));
   return true;

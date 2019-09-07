@@ -9828,6 +9828,16 @@ public:
       OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
       SourceLocation StartLoc, SourceLocation LParenLoc,
       SourceLocation EndLoc);
+  /// Called for well-formed 'copyin' clause.
+  ACCClause *ActOnOpenACCCopyinClause(
+      OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
+      SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation EndLoc);
+  /// Called for well-formed 'copyout' clause.
+  ACCClause *ActOnOpenACCCopyoutClause(
+      OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
+      SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation EndLoc);
   /// Called for implicit 'shared' clause.
   ACCClause *ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList);
   /// Called on well-formed 'private' clause.

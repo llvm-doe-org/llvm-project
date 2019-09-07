@@ -218,65 +218,115 @@ int main() {
     printf("out3 = %d\n", out3);
   } // PRT-NEXT: }
 
-  // Reduction var is not private due to explicit copy clause.
+  // Reduction var is not private due to explicit copy/copyin/copyout clause.
 
   // PRT-NEXT: {
   {
-    // PRT-NEXT: double out =
-    double out = 0.3;
+    // PRT-NEXT: double out0 =
+    // PRT-NEXT: double out1 =
+    // PRT-NEXT: double out2 =
+    double out0 = 0.3;
+    double out1 = 1.4;
+    double out2 = 2.5;
     // DMP:      ACCParallelDirective
     // DMP-NEXT:   ACCNum_gangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause
     // DMP-NOT:      <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:   ACCCopyinClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:   ACCCopyoutClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'double'
     // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> '+'
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> '+'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> '+'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'double'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     OMPMapClause
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
     // DMP-NEXT:     OMPReductionClause
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:     OMPReductionClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:     OMPReductionClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) copy(out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) copy(out){{$}}
-    #pragma acc parallel num_gangs(2) copy(out)
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) copy(out0) copyin(out1) copyout(out2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: out0) map(to: out1) map(from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: out0) map(to: out1) map(from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) copy(out0) copyin(out1) copyout(out2){{$}}
+    #pragma acc parallel num_gangs(2) copy(out0) copyin(out1) copyout(out2)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // Make sure accessing out before the reduction doesn't produce a
-      // conflicting implicit firstprivate clause.
+      // Make sure accessing the variables before the reduction doesn't
+      // produce a conflicting implicit firstprivate clause.
+      // DMP: CallExpr
+      // DMP: CallExpr
       // DMP: CallExpr
       // PRT-NEXT: printf
-      // EXE-NEXT: out init = 0.0{{$}}
-      // EXE-NEXT: out init = 0.0{{$}}
-      printf("out init = %.1f\n", out);
+      // PRT-NEXT: printf
+      // PRT-NEXT: printf
+      // EXE-DAG: out0 init = 0.0{{$}}
+      // EXE-DAG: out0 init = 0.0{{$}}
+      // EXE-DAG: out1 init = 0.0{{$}}
+      // EXE-DAG: out1 init = 0.0{{$}}
+      // EXE-DAG: out2 init = 0.0{{$}}
+      // EXE-DAG: out2 init = 0.0{{$}}
+      printf("out0 init = %.1f\n", out0);
+      printf("out1 init = %.1f\n", out1);
+      printf("out2 init = %.1f\n", out2);
       // DMP:      ACCLoopDirective
       // DMP-NEXT:   ACCSeqClause
       // DMP-NEXT:   ACCReductionClause {{.*}} '+'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'double'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'double'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'double'
       // DMP-NEXT:   impl: ForStmt
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc loop seq reduction(+: out)
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop seq reduction(+: out0,out1,out2)
       // PRT-AO-SAME: {{^}} // discarded in OpenMP translation
       // PRT-A-SAME:  {{^$}}
-      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop seq reduction(+: out) // discarded in OpenMP translation{{$}}
-      #pragma acc loop seq reduction(+: out)
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop seq reduction(+: out0,out1,out2) // discarded in OpenMP translation{{$}}
+      #pragma acc loop seq reduction(+: out0,out1,out2)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 4; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '+='
-        // PRT-NEXT: out +=
-        out += -1.1;
+        // DMP: CompoundAssignOperator {{.*}} '+='
+        // DMP: CompoundAssignOperator {{.*}} '+='
+        // PRT-NEXT: out0 +=
+        // PRT-NEXT: out1 +=
+        // PRT-NEXT: out2 +=
+        out0 += -1.1;
+        out1 += -1.1;
+        out2 += -1.1;
       } // PRT-NEXT: }
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-NEXT: out = -8.5
-    printf("out = %.1f\n", out);
+    // PRT-NEXT: printf
+    // PRT-NEXT: printf
+    // EXE-NEXT: out0 = -8.5
+    // EXE-TGT-HOST-NEXT: out1 = -7.4
+    // EXE-TGT-HOST-NEXT: out2 = -6.3
+    // EXE-TGT-X86_64-NEXT: out1 = 1.4
+    // EXE-TGT-X86_64-NEXT: out2 =
+    // EXE-TGT-NVPTX64-NEXT: out1 = 1.4
+    // EXE-TGT-NVPTX64-NEXT: out2 =
+    printf("out0 = %.1f\n", out0);
+    printf("out1 = %.1f\n", out1);
+    printf("out2 = %.1f\n", out2);
   } // PRT-NEXT: }
 
   // Reduction var is not private due to copy clause implied by reduction on
@@ -661,67 +711,119 @@ int main() {
 // PRT-SRC-NEXT: #endif
 #endif
 
-  // Reduction var is not private due to explicit copy clause.
+  // Reduction var is not private due to explicit copy/copyin/copyout clause.
 
   // PRT-NEXT: {
   {
-    // PRT-NEXT: double out =
-    double out = 0.3;
+    // PRT-NEXT: double out0 =
+    // PRT-NEXT: double out1 =
+    // PRT-NEXT: double out2 =
+    double out0 = 0.3;
+    double out1 = 1.4;
+    double out2 = 2.5;
     // DMP:      ACCParallelDirective
     // DMP-NEXT:   ACCNum_gangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause
     // DMP-NOT:      <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:   ACCCopyinClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:   ACCCopyoutClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'double'
     // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> '+'
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> '+'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> '+'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'double'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     OMPMapClause
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
     // DMP-NEXT:     OMPReductionClause
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:     OMPReductionClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:     OMPReductionClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) pcopy(out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) pcopy(out){{$}}
-    #pragma acc parallel num_gangs(2) pcopy(out)
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) pcopy(out0) pcopyin(out1) pcopyout(out2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: out0) map(to: out1) map(from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: out0) map(to: out1) map(from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) pcopy(out0) pcopyin(out1) pcopyout(out2){{$}}
+    #pragma acc parallel num_gangs(2) pcopy(out0) pcopyin(out1) pcopyout(out2)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // Make sure accessing out before the reduction doesn't produce a
-      // conflicting implicit firstprivate clause.
+      // Make sure accessing the variables before the reduction doesn't
+      // produce a conflicting implicit firstprivate clause.
+      // DMP: CallExpr
+      // DMP: CallExpr
       // DMP: CallExpr
       // PRT-NEXT: printf
-      // EXE-NEXT: out init = 0.0{{$}}
-      // EXE-NEXT: out init = 0.0{{$}}
-      printf("out init = %.1f\n", out);
+      // PRT-NEXT: printf
+      // PRT-NEXT: printf
+      // EXE-DAG: out0 init = 0.0{{$}}
+      // EXE-DAG: out0 init = 0.0{{$}}
+      // EXE-DAG: out1 init = 0.0{{$}}
+      // EXE-DAG: out1 init = 0.0{{$}}
+      // EXE-DAG: out2 init = 0.0{{$}}
+      // EXE-DAG: out2 init = 0.0{{$}}
+      printf("out0 init = %.1f\n", out0);
+      printf("out1 init = %.1f\n", out1);
+      printf("out2 init = %.1f\n", out2);
       // DMP:      ACCLoopDirective
       // DMP-NEXT:   ACCAutoClause
       // DMP-NEXT:   ACCWorkerClause
       // DMP-NEXT:   ACCVectorClause
       // DMP-NEXT:   ACCReductionClause {{.*}} '+'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'double'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'double'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'double'
       // DMP-NEXT:   impl: ForStmt
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc loop auto worker vector reduction(+: out)
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop auto worker vector reduction(+: out0,out1,out2)
       // PRT-AO-SAME: {{^}} // discarded in OpenMP translation
       // PRT-A-SAME:  {{^$}}
-      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop auto worker vector reduction(+: out) // discarded in OpenMP translation{{$}}
-      #pragma acc loop auto worker vector reduction(+: out)
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop auto worker vector reduction(+: out0,out1,out2) // discarded in OpenMP translation{{$}}
+      #pragma acc loop auto worker vector reduction(+: out0,out1,out2)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 4; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '+='
-        // PRT-NEXT: out +=
-        out += -1.1;
+        // DMP: CompoundAssignOperator {{.*}} '+='
+        // DMP: CompoundAssignOperator {{.*}} '+='
+        // PRT-NEXT: out0 +=
+        // PRT-NEXT: out1 +=
+        // PRT-NEXT: out2 +=
+        out0 += -1.1;
+        out1 += -1.1;
+        out2 += -1.1;
       } // PRT-NEXT: }
     } // PRT-NEXT: }
     // DMP: CallExpr
+    // DMP: CallExpr
+    // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-NEXT: out = -8.5
-    printf("out = %.1f\n", out);
+    // PRT-NEXT: printf
+    // PRT-NEXT: printf
+    // EXE-NEXT: out0 = -8.5
+    // EXE-TGT-HOST-NEXT: out1 = -7.4
+    // EXE-TGT-HOST-NEXT: out2 = -6.3
+    // EXE-TGT-X86_64-NEXT: out1 = 1.4
+    // EXE-TGT-X86_64-NEXT: out2 =
+    // EXE-TGT-NVPTX64-NEXT: out1 = 1.4
+    // EXE-TGT-NVPTX64-NEXT: out2 =
+    printf("out0 = %.1f\n", out0);
+    printf("out1 = %.1f\n", out1);
+    printf("out2 = %.1f\n", out2);
   } // PRT-NEXT: }
 
   // Reduction var is not private due to copy clause implied by reduction on
@@ -923,68 +1025,122 @@ int main() {
     printf("out3 = %.1f + %.1fi\n", creal(out3), cimag(out3));
   } // PRT-NEXT: }
 
-  // Reduction var is not private due to explicit copy clause.
+  // Reduction var is not private due to explicit copy/copyin/copyout clause.
 
   // PRT-NEXT: {
   {
-    // PRT-NEXT: double out =
-    double out = 0.3;
+    // PRT-NEXT: double out0 =
+    // PRT-NEXT: double out1 =
+    // PRT-NEXT: double out2 =
+    double out0 = 0.3;
+    double out1 = 1.4;
+    double out2 = 2.5;
     // DMP:      ACCParallelDirective
     // DMP-NEXT:   ACCNum_gangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause
     // DMP-NOT:      <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:   ACCCopyinClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:   ACCCopyoutClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'double'
     // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> '+'
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> '+'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> '+'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'double'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     OMPMapClause
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
     // DMP-NEXT:     OMPReductionClause
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:     OMPReductionClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:     OMPReductionClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) present_or_copy(out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) present_or_copy(out){{$}}
-    #pragma acc parallel num_gangs(2) present_or_copy(out)
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) present_or_copy(out0) present_or_copyin(out1) present_or_copyout(out2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: out0) map(to: out1) map(from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: out0) map(to: out1) map(from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) present_or_copy(out0) present_or_copyin(out1) present_or_copyout(out2){{$}}
+    #pragma acc parallel num_gangs(2) present_or_copy(out0) present_or_copyin(out1) present_or_copyout(out2)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // Make sure accessing out before the reduction doesn't produce a
-      // conflicting implicit firstprivate clause.
+      // Make sure accessing the variables before the reduction doesn't
+      // produce a conflicting implicit firstprivate clause.
+      // DMP: CallExpr
+      // DMP: CallExpr
       // DMP: CallExpr
       // PRT-NEXT: printf
-      // EXE-NEXT: out init = 0.0{{$}}
-      // EXE-NEXT: out init = 0.0{{$}}
-      printf("out init = %.1f\n", out);
+      // PRT-NEXT: printf
+      // PRT-NEXT: printf
+      // EXE-DAG: out0 init = 0.0{{$}}
+      // EXE-DAG: out0 init = 0.0{{$}}
+      // EXE-DAG: out1 init = 0.0{{$}}
+      // EXE-DAG: out1 init = 0.0{{$}}
+      // EXE-DAG: out2 init = 0.0{{$}}
+      // EXE-DAG: out2 init = 0.0{{$}}
+      printf("out0 init = %.1f\n", out0);
+      printf("out1 init = %.1f\n", out1);
+      printf("out2 init = %.1f\n", out2);
       // DMP:      ACCLoopDirective
       // DMP-NEXT:   ACCWorkerClause
       // DMP-NEXT:   ACCReductionClause {{.*}} '+'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'double'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'double'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'double'
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPParallelForDirective
       // DMP-NEXT:     OMPReductionClause
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'out0' 'double'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'double'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker reduction(+: out){{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for reduction(+: out){{$}}
-      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for reduction(+: out){{$}}
-      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker reduction(+: out){{$}}
-      #pragma acc loop worker reduction(+: out)
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker reduction(+: out0,out1,out2){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for reduction(+: out0,out1,out2){{$}}
+      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for reduction(+: out0,out1,out2){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker reduction(+: out0,out1,out2){{$}}
+      #pragma acc loop worker reduction(+: out0,out1,out2)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 4; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '+='
-        // PRT-NEXT: out +=
-        out += -1.1;
+        // DMP: CompoundAssignOperator {{.*}} '+='
+        // DMP: CompoundAssignOperator {{.*}} '+='
+        // PRT-NEXT: out0 +=
+        // PRT-NEXT: out1 +=
+        // PRT-NEXT: out2 +=
+        out0 += -1.1;
+        out1 += -1.1;
+        out2 += -1.1;
       } // PRT-NEXT: }
     } // PRT-NEXT: }
     // DMP: CallExpr
+    // DMP: CallExpr
+    // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-NEXT: out = -8.5
-    printf("out = %.1f\n", out);
+    // PRT-NEXT: printf
+    // PRT-NEXT: printf
+    // EXE-NEXT: out0 = -8.5
+    // EXE-TGT-HOST-NEXT: out1 = -7.4
+    // EXE-TGT-HOST-NEXT: out2 = -6.3
+    // EXE-TGT-X86_64-NEXT: out1 = 1.4
+    // EXE-TGT-X86_64-NEXT: out2 =
+    // EXE-TGT-NVPTX64-NEXT: out1 = 1.4
+    // EXE-TGT-NVPTX64-NEXT: out2 =
+    printf("out0 = %.1f\n", out0);
+    printf("out1 = %.1f\n", out1);
+    printf("out2 = %.1f\n", out2);
   } // PRT-NEXT: }
 
   // Reduction var is not private due to copy clause implied by reduction on
@@ -1174,70 +1330,124 @@ int main() {
 // PRT-SRC-NEXT: #endif
 #endif
 
-  // Reduction var is not private due to explicit copy clause.
+  // Reduction var is not private due to explicit copy/copyin/copyout clause.
 
   // PRT-NEXT: {
   {
-    // PRT-NEXT: double out =
-    double out = 0.3;
+    // PRT-NEXT: double out0 =
+    // PRT-NEXT: double out1 =
+    // PRT-NEXT: double out2 =
+    double out0 = 0.3;
+    double out1 = 1.4;
+    double out2 = 2.5;
     // DMP:      ACCParallelDirective
     // DMP-NEXT:   ACCNum_gangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause
     // DMP-NOT:      <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:   ACCCopyinClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:   ACCCopyoutClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'double'
     // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> '+'
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> '+'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> '+'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'double'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     OMPMapClause
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
     // DMP-NEXT:     OMPReductionClause
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:     OMPReductionClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:     OMPReductionClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) copy(out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) copy(out){{$}}
-    #pragma acc parallel num_gangs(2) copy(out)
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) copy(out0) copyin(out1) copyout(out2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: out0) map(to: out1) map(from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: out0) map(to: out1) map(from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) copy(out0) copyin(out1) copyout(out2){{$}}
+    #pragma acc parallel num_gangs(2) copy(out0) copyin(out1) copyout(out2)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // Make sure accessing out before the reduction doesn't produce a
-      // conflicting implicit firstprivate clause.
+      // Make sure accessing the variables before the reduction doesn't
+      // produce a conflicting implicit firstprivate clause.
+      // DMP: CallExpr
+      // DMP: CallExpr
       // DMP: CallExpr
       // PRT-NEXT: printf
-      // EXE-NEXT: out init = 0.0{{$}}
-      // EXE-NEXT: out init = 0.0{{$}}
-      printf("out init = %.1f\n", out);
+      // PRT-NEXT: printf
+      // PRT-NEXT: printf
+      // EXE-DAG: out0 init = 0.0{{$}}
+      // EXE-DAG: out0 init = 0.0{{$}}
+      // EXE-DAG: out1 init = 0.0{{$}}
+      // EXE-DAG: out1 init = 0.0{{$}}
+      // EXE-DAG: out2 init = 0.0{{$}}
+      // EXE-DAG: out2 init = 0.0{{$}}
+      printf("out0 init = %.1f\n", out0);
+      printf("out1 init = %.1f\n", out1);
+      printf("out2 init = %.1f\n", out2);
       // DMP:      ACCLoopDirective
       // DMP-NEXT:   ACCVectorClause
       // DMP-NEXT:   ACCReductionClause {{.*}} '+'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'double'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'double'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'double'
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPParallelForSimdDirective
       // DMP-NEXT:     OMPNum_threadsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:     OMPReductionClause
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'out0' 'double'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'double'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc loop vector reduction(+: out){{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(1) reduction(+: out){{$}}
-      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(1) reduction(+: out){{$}}
-      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop vector reduction(+: out){{$}}
-      #pragma acc loop vector reduction(+: out)
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop vector reduction(+: out0,out1,out2){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(1) reduction(+: out0,out1,out2){{$}}
+      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(1) reduction(+: out0,out1,out2){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop vector reduction(+: out0,out1,out2){{$}}
+      #pragma acc loop vector reduction(+: out0,out1,out2)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 4; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '+='
-        // PRT-NEXT: out +=
-        out += -1.1;
+        // DMP: CompoundAssignOperator {{.*}} '+='
+        // DMP: CompoundAssignOperator {{.*}} '+='
+        // PRT-NEXT: out0 +=
+        // PRT-NEXT: out1 +=
+        // PRT-NEXT: out2 +=
+        out0 += -1.1;
+        out1 += -1.1;
+        out2 += -1.1;
       } // PRT-NEXT: }
     } // PRT-NEXT: }
     // DMP: CallExpr
+    // DMP: CallExpr
+    // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-NEXT: out = -8.5
-    printf("out = %.1f\n", out);
+    // PRT-NEXT: printf
+    // PRT-NEXT: printf
+    // EXE-NEXT: out0 = -8.5
+    // EXE-TGT-HOST-NEXT: out1 = -7.4
+    // EXE-TGT-HOST-NEXT: out2 = -6.3
+    // EXE-TGT-X86_64-NEXT: out1 = 1.4
+    // EXE-TGT-X86_64-NEXT: out2 =
+    // EXE-TGT-NVPTX64-NEXT: out1 = 1.4
+    // EXE-TGT-NVPTX64-NEXT: out2 =
+    printf("out0 = %.1f\n", out0);
+    printf("out1 = %.1f\n", out1);
+    printf("out2 = %.1f\n", out2);
   } // PRT-NEXT: }
 
   // Reduction var is not private due to copy clause implied by reduction on
@@ -1426,69 +1636,123 @@ int main() {
     printf("out3 = %.1f\n", out3);
   } // PRT-NEXT: }
 
-  // Reduction var is not private due to explicit copy clause.
+  // Reduction var is not private due to explicit copy/copyin/copyout clause.
 
   // PRT-NEXT: {
   {
-    // PRT-NEXT: double out =
-    double out = 0.3;
+    // PRT-NEXT: double out0 =
+    // PRT-NEXT: double out1 =
+    // PRT-NEXT: double out2 =
+    double out0 = 0.3;
+    double out1 = 1.4;
+    double out2 = 2.5;
     // DMP:      ACCParallelDirective
     // DMP-NEXT:   ACCNum_gangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause
     // DMP-NOT:      <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:   ACCCopyinClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:   ACCCopyoutClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'double'
     // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> '+'
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> '+'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:   ACCReductionClause {{.*}} <implicit> '+'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'double'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     OMPMapClause
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
     // DMP-NEXT:     OMPReductionClause
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out0' 'double'
+    // DMP-NEXT:     OMPReductionClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'double'
+    // DMP-NEXT:     OMPReductionClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) pcopy(out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: out) reduction(+: out){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) pcopy(out){{$}}
-    #pragma acc parallel num_gangs(2) pcopy(out)
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) pcopy(out0) pcopyin(out1) pcopyout(out2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: out0) map(to: out1) map(from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: out0) map(to: out1) map(from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) pcopy(out0) pcopyin(out1) pcopyout(out2){{$}}
+    #pragma acc parallel num_gangs(2) pcopy(out0) pcopyin(out1) pcopyout(out2)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // Make sure accessing out before the reduction doesn't produce a
-      // conflicting implicit firstprivate clause.
+      // Make sure accessing the variables before the reduction doesn't
+      // produce a conflicting implicit firstprivate clause.
+      // DMP: CallExpr
+      // DMP: CallExpr
       // DMP: CallExpr
       // PRT-NEXT: printf
-      // EXE-NEXT: out init = 0.0{{$}}
-      // EXE-NEXT: out init = 0.0{{$}}
-      printf("out init = %.1f\n", out);
+      // PRT-NEXT: printf
+      // PRT-NEXT: printf
+      // EXE-DAG: out0 init = 0.0{{$}}
+      // EXE-DAG: out0 init = 0.0{{$}}
+      // EXE-DAG: out1 init = 0.0{{$}}
+      // EXE-DAG: out1 init = 0.0{{$}}
+      // EXE-DAG: out2 init = 0.0{{$}}
+      // EXE-DAG: out2 init = 0.0{{$}}
+      printf("out0 init = %.1f\n", out0);
+      printf("out1 init = %.1f\n", out1);
+      printf("out2 init = %.1f\n", out2);
       // DMP:      ACCLoopDirective
       // DMP-NEXT:   ACCWorkerClause
       // DMP-NEXT:   ACCVectorClause
       // DMP-NEXT:   ACCReductionClause {{.*}} '+'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'double'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'double'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'double'
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPParallelForSimdDirective
       // DMP-NEXT:     OMPReductionClause
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'out0' 'double'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'double'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker vector reduction(+: out){{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd reduction(+: out){{$}}
-      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd reduction(+: out){{$}}
-      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector reduction(+: out){{$}}
-      #pragma acc loop worker vector reduction(+: out)
+      // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker vector reduction(+: out0,out1,out2){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd reduction(+: out0,out1,out2){{$}}
+      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd reduction(+: out0,out1,out2){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector reduction(+: out0,out1,out2){{$}}
+      #pragma acc loop worker vector reduction(+: out0,out1,out2)
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 4; ++i) {
         // DMP: CompoundAssignOperator {{.*}} '+='
-        // PRT-NEXT: out +=
-        out += -1.1;
+        // DMP: CompoundAssignOperator {{.*}} '+='
+        // DMP: CompoundAssignOperator {{.*}} '+='
+        // PRT-NEXT: out0 +=
+        // PRT-NEXT: out1 +=
+        // PRT-NEXT: out2 +=
+        out0 += -1.1;
+        out1 += -1.1;
+        out2 += -1.1;
       } // PRT-NEXT: }
     } // PRT-NEXT: }
     // DMP: CallExpr
+    // DMP: CallExpr
+    // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-NEXT: out = -8.5
-    printf("out = %.1f\n", out);
+    // PRT-NEXT: printf
+    // PRT-NEXT: printf
+    // EXE-NEXT: out0 = -8.5
+    // EXE-TGT-HOST-NEXT: out1 = -7.4
+    // EXE-TGT-HOST-NEXT: out2 = -6.3
+    // EXE-TGT-X86_64-NEXT: out1 = 1.4
+    // EXE-TGT-X86_64-NEXT: out2 =
+    // EXE-TGT-NVPTX64-NEXT: out1 = 1.4
+    // EXE-TGT-NVPTX64-NEXT: out2 =
+    printf("out0 = %.1f\n", out0);
+    printf("out1 = %.1f\n", out1);
+    printf("out2 = %.1f\n", out2);
   } // PRT-NEXT: }
 
   // Reduction var is not private due to copy clause implied by reduction on
@@ -2979,6 +3243,9 @@ int main() {
   // making out1 a gang-shared variable at the outer acc loop's out1 reduction,
   // which thus becomes a gang reduction.  out0 and out2 still have no gang
   // reductions for the same reasons as in the previous test.
+  //
+  // Also, the explicit copy has been replaced with copyin, which still
+  // shouldn't have any observable effect.
 
   // PRT-NEXT: {
   {
@@ -2996,12 +3263,12 @@ int main() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'int'
     // DMP-NEXT:   ACCReductionClause {{.*}} '+'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'int'
-    // DMP-NEXT:   ACCCopyClause
+    // DMP-NEXT:   ACCCopyinClause
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'int'
     // DMP-NEXT:   effect: ACCParallelDirective
     // DMP-NEXT:     ACCNum_gangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:     ACCCopyClause
+    // DMP-NEXT:     ACCCopyinClause
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'int'
     // DMP-NEXT:     ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'int'
@@ -3070,7 +3337,7 @@ int main() {
     // PRT-NOACC-NEXT: {{^ *}}}
     //
     // PRT-AO-NEXT: {{^ *}}// v----------ACC----------v
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(2) seq private(out0) reduction(+: out1) copy(out2){{$}}
+    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(2) seq private(out0) reduction(+: out1) copyin(out2){{$}}
     // PRT-A-NEXT:  {{^ *}}for (int i = 0; i < 2; ++i) {
     // PRT-A-NEXT:  {{^ *}}  #pragma acc loop gang reduction(+: out0,out1) private(out2){{$}}
     // PRT-A-NEXT:  {{^ *}}  for (int j = 0; j < 2; ++j) {
@@ -3083,7 +3350,7 @@ int main() {
     // PRT-A-NEXT:  {{^ *}}  }
     // PRT-A-NEXT:  {{^ *}}}
     // PRT-AO-NEXT: {{^ *}}// ---------ACC->OMP--------
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: out2) map(tofrom: out1) reduction(+: out1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(to: out2) map(tofrom: out1) reduction(+: out1){{$}}
     // PRT-AO-NEXT: {{^ *}}// {
     // PRT-AO-NEXT: {{^ *}}//   int out0;
     // PRT-AO-NEXT: {{^ *}}//   for (int i = 0; i < 2; ++i) {
@@ -3101,7 +3368,7 @@ int main() {
     // PRT-AO-NEXT: {{^ *}}// ^----------OMP----------^
     //
     // PRT-OA-NEXT: {{^ *}}// v----------OMP----------v
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: out2) map(tofrom: out1) reduction(+: out1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(to: out2) map(tofrom: out1) reduction(+: out1){{$}}
     // PRT-O-NEXT:  {{^ *}}{
     // PRT-O-NEXT:  {{^ *}}  int out0;
     // PRT-O-NEXT:  {{^ *}}  for (int i = 0; i < 2; ++i) {
@@ -3117,7 +3384,7 @@ int main() {
     // PRT-O-NEXT:  {{^ *}}  }
     // PRT-O-NEXT:  {{^ *}}}
     // PRT-OA-NEXT: {{^ *}}// ---------OMP<-ACC--------
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) seq private(out0) reduction(+: out1) copy(out2){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) seq private(out0) reduction(+: out1) copyin(out2){{$}}
     // PRT-OA-NEXT: {{^ *}}// for (int i = 0; i < 2; ++i) {
     // PRT-OA-NEXT: {{^ *}}//   #pragma acc loop gang reduction(+: out0,out1) private(out2){{$}}
     // PRT-OA-NEXT: {{^ *}}//   for (int j = 0; j < 2; ++j) {
@@ -3130,7 +3397,7 @@ int main() {
     // PRT-OA-NEXT: {{^ *}}//   }
     // PRT-OA-NEXT: {{^ *}}// }
     // PRT-OA-NEXT: {{^ *}}// ^----------ACC----------^
-    #pragma acc parallel loop num_gangs(2) seq private(out0) reduction(+: out1) copy(out2)
+    #pragma acc parallel loop num_gangs(2) seq private(out0) reduction(+: out1) copyin(out2)
     for (int i = 0; i < 2; ++i) {
       #pragma acc loop gang reduction(+: out0,out1) private(out2)
       for (int j = 0; j < 2; ++j) {

@@ -1034,6 +1034,16 @@ void ACCClauseProfiler::VisitACCCopyClause(const ACCCopyClause *C) {
   // aliases?
   VisitACCClauseList(C);
 }
+void ACCClauseProfiler::VisitACCCopyinClause(const ACCCopyinClause *C) {
+  // FIXME: Should we visit the clause kind, which varies among clause
+  // aliases?
+  VisitACCClauseList(C);
+}
+void ACCClauseProfiler::VisitACCCopyoutClause(const ACCCopyoutClause *C) {
+  // FIXME: Should we visit the clause kind, which varies among clause
+  // aliases?
+  VisitACCClauseList(C);
+}
 void ACCClauseProfiler::VisitACCSharedClause(const ACCSharedClause *C) {
   VisitACCClauseList(C);
 }

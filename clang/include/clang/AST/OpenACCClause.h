@@ -249,6 +249,180 @@ public:
   }
 };
 
+/// This represents the clause 'copyin' (or any of its aliases) for
+/// '#pragma acc ...' directives.
+///
+/// \code
+/// #pragma acc parallel copyin(a,b)
+/// \endcode
+/// In this example directive '#pragma acc parallel' has clause 'copyin' with
+/// the variables 'a' and 'b'.
+///
+class ACCCopyinClause final
+    : public ACCVarListClause<ACCCopyinClause>,
+      private llvm::TrailingObjects<ACCCopyinClause, Expr *> {
+  friend TrailingObjects;
+  friend ACCVarListClause;
+  friend class ACCClauseReader;
+
+  /// Build clause with number of variables \a N.
+  ///
+  /// \param Kind Which alias of the copyin clause.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param N Number of the variables in the clause.
+  ///
+  ACCCopyinClause(OpenACCClauseKind Kind, SourceLocation StartLoc,
+                  SourceLocation LParenLoc, SourceLocation EndLoc, unsigned N)
+      : ACCVarListClause<ACCCopyinClause>(Kind, StartLoc, LParenLoc, EndLoc,
+                                          N, ACCC_copyin) {
+    assert(isClauseKind(Kind) && "expected copyin clause or alias");
+  }
+
+  /// Build an empty clause.
+  ///
+  /// \param Kind Which alias of the copyin clause.
+  /// \param N Number of variables.
+  ///
+  explicit ACCCopyinClause(OpenACCClauseKind Kind, unsigned N)
+      : ACCVarListClause<ACCCopyinClause>(Kind, SourceLocation(),
+                                          SourceLocation(), SourceLocation(),
+                                          N) {
+    assert(isClauseKind(Kind) && "expected copyin clause or alias");
+  }
+
+public:
+  /// Creates clause with a list of variables \a VL.
+  ///
+  /// \param C AST context.
+  /// \param Kind Which alias of the copyin clause.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param VL List of references to the variables.
+  ///
+  static ACCCopyinClause *Create(const ASTContext &C, OpenACCClauseKind Kind,
+                                 SourceLocation StartLoc,
+                                 SourceLocation LParenLoc,
+                                 SourceLocation EndLoc, ArrayRef<Expr *> VL);
+  /// Creates an empty clause with the place for \a N variables.
+  ///
+  /// \param C AST context.
+  /// \param Kind Which alias of the copyin clause.
+  /// \param N The number of variables.
+  ///
+  static ACCCopyinClause *CreateEmpty(const ASTContext &C,
+                                      OpenACCClauseKind Kind, unsigned N);
+
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end()));
+  }
+
+  static bool isClauseKind(OpenACCClauseKind Kind) {
+    switch (Kind) {
+#define OPENACC_CLAUSE_ALIAS_copyin(Name) \
+    case ACCC_##Name:                   \
+      return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      return false;
+    }
+  }
+
+  static bool classof(const ACCClause *T) {
+    return isClauseKind(T->getClauseKind());
+  }
+};
+
+/// This represents the clause 'copyout' (or any of its aliases) for
+/// '#pragma acc ...' directives.
+///
+/// \code
+/// #pragma acc parallel copyout(a,b)
+/// \endcode
+/// In this example directive '#pragma acc parallel' has clause 'copyout' with
+/// the variables 'a' and 'b'.
+///
+class ACCCopyoutClause final
+    : public ACCVarListClause<ACCCopyoutClause>,
+      private llvm::TrailingObjects<ACCCopyoutClause, Expr *> {
+  friend TrailingObjects;
+  friend ACCVarListClause;
+  friend class ACCClauseReader;
+
+  /// Build clause with number of variables \a N.
+  ///
+  /// \param Kind Which alias of the copyout clause.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param N Number of the variables in the clause.
+  ///
+  ACCCopyoutClause(OpenACCClauseKind Kind, SourceLocation StartLoc,
+                   SourceLocation LParenLoc, SourceLocation EndLoc, unsigned N)
+      : ACCVarListClause<ACCCopyoutClause>(Kind, StartLoc, LParenLoc, EndLoc,
+                                           N, ACCC_copyout) {
+    assert(isClauseKind(Kind) && "expected copyout clause or alias");
+  }
+
+  /// Build an empty clause.
+  ///
+  /// \param Kind Which alias of the copyout clause.
+  /// \param N Number of variables.
+  ///
+  explicit ACCCopyoutClause(OpenACCClauseKind Kind, unsigned N)
+      : ACCVarListClause<ACCCopyoutClause>(Kind, SourceLocation(),
+                                           SourceLocation(), SourceLocation(),
+                                           N) {
+    assert(isClauseKind(Kind) && "expected copyout clause or alias");
+  }
+
+public:
+  /// Creates clause with a list of variables \a VL.
+  ///
+  /// \param C AST context.
+  /// \param Kind Which alias of the copyout clause.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param VL List of references to the variables.
+  ///
+  static ACCCopyoutClause *Create(const ASTContext &C, OpenACCClauseKind Kind,
+                                  SourceLocation StartLoc,
+                                  SourceLocation LParenLoc,
+                                  SourceLocation EndLoc, ArrayRef<Expr *> VL);
+  /// Creates an empty clause with the place for \a N variables.
+  ///
+  /// \param C AST context.
+  /// \param Kind Which alias of the copyout clause.
+  /// \param N The number of variables.
+  ///
+  static ACCCopyoutClause *CreateEmpty(const ASTContext &C,
+                                       OpenACCClauseKind Kind, unsigned N);
+
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end()));
+  }
+
+  static bool isClauseKind(OpenACCClauseKind Kind) {
+    switch (Kind) {
+#define OPENACC_CLAUSE_ALIAS_copyout(Name) \
+    case ACCC_##Name:                   \
+      return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      return false;
+    }
+  }
+
+  static bool classof(const ACCClause *T) {
+    return isClauseKind(T->getClauseKind());
+  }
+};
+
 /// This represents the implicit clause 'shared' for '#pragma acc ...'.
 ///
 /// These clauses are computed implicitly by clang.  Currently, OpenACC does

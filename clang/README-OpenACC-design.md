@@ -559,8 +559,9 @@ this section.
 ### Basic Data Sharing ###
 
 * It is an error if a variable appears in more than one occurrence of
-  any one of *exp* `copy`, *exp* `firstprivate`, *exp* `private`, or
-  *exp* `reduction` on an OpenACC directive.  Notes:
+  any one of *exp* `copy`, *exp* `copyin`, *exp* `copyout`, *exp*
+  `firstprivate`, *exp* `private`, or *exp* `reduction` on an OpenACC
+  directive.  Notes:
     * The main motivation for this error is that such a repetition is
       likely a mistake.
     * gcc 7.4.0 also reports errors for this case, but pgcc 19.4-0
@@ -571,22 +572,26 @@ this section.
       clauses."  Thus, if Clacc did not report such duplicate clauses
       as errors, it would have to discard them when generating OpenMP.
 * It is an error if a variable appears in more than one of *exp*
-  `copy`, *exp* `firstprivate`, or *exp* `private` on an OpenACC
-  directive.  Notes:
-    * Relative to `copy` and `firstprivate`, `private` has a
-      contradictory specification for initialization of the local copy
-      of the variable.
-    * Relative to `firstprivate` and `private`, `copy` has a
-      contradictory specification for storing data back to the
-      original variable.
-    * On a combined construct, `copy` and `firstprivate` apply to the
-      effective `acc parallel`, and `private` applies to the effective
-      `acc loop`.  Thus, specifying a variable in either `copy` or
-      `firstprivate` and also in `private` wouldn't be contradictory.
-      However, it is surely a mistake as it specifies copying in a
-      value you cannot then access or copying out an unchanged value.
-      Thus, the above restriction applies to a combined construct as
-      well.
+  `copy`, *exp* `copyin`, *exp* `copyout`, *exp* `firstprivate`, or
+  *exp* `private` on an OpenACC directive.  Notes:
+    * Relative to `copy`, `copyin`, and `firstprivate`, `copyout` and
+      `private` have a contradictory specification for initialization
+      of the local copy of the variable.
+    * Relative to `copyin`, `firstprivate`, and `private`, `copy` and
+      `copyout` have a contradictory specification for storing data
+      back to the original variable.
+    * On a combined construct, `copy`, `copyin`, `copyout`, and
+      `firstprivate` apply to the effective `acc parallel`, and
+      `private` applies to the effective `acc loop`.  Thus, specifying
+      a variable in any of the former clauses and also in `private`
+      wouldn't be contradictory.  However, it is surely a mistake as
+      it specifies copying in a value you cannot then access or
+      copying out an unchanged value.  Thus, the above restriction
+      applies to a combined construct as well.
+    * TODO: Is it useful to or does any existing code combine `copyin`
+      or `copyout` with `firstprivate` or `private` expecting the
+      copied value to be used or assigned in a later or earlier
+      compute region?
 * It is an error if a variable has *exp* `reduction` as well as either
   *exp* `firstprivate` or *exp* `private` on an OpenACC directive.
   Notes:
@@ -599,38 +604,45 @@ this section.
       contradictory.  However, it is surely a mistake as you cannot
       access the reduced value.  Thus, the above restriction applies
       to a combined construct as well.
-* *imp*|*exp* `copy`, *exp* `firstprivate`, *exp* `private`, or *exp*
-  `reduction` for a variable of incomplete type is an error.  Notes:
+* *imp*|*exp* `copy`, *exp* `copyin`, *exp* `copyout`, *exp*
+  `firstprivate`, *exp* `private`, or *exp* `reduction` for a variable
+  of incomplete type is an error.  Notes:
     * A local copy must be allocated in each of these cases, but
       allocation is impossible for incomplete types.
     * It does not appear possible for any clause other than `copy` to
       be *imp* for a variable of incomplete type.
-* *exp* `private`, or *exp* `reduction` for a `const` variable is an
+* *exp* `private` or *exp* `reduction` for a `const` variable is an
   error.  Notes:
     * The local copy of a `const` private variable would remain
       uninitialized throughout its lifetime.
     * A reduction assigns to both the original variable and a local
       copy after its initialization, but `const` prevents that.
-    * `copy` is a strange case.  Technically, it assigns to the
-      original, and `const` prevents that.  However, there are several
-      arguments for why `copy` should be permitted for a `const`
-      variable:
+    * `copy` and `copyout` are strange cases.  Technically, each
+      assigns to the original, and `const` prevents that.  However,
+      there are several arguments for why each should be permitted for
+      a `const` variable:
         * For shared memory, it's supposed to be fine to ignore *exp*
-          `copy` entirely, so `const` is harmless in that case.  An
-          implementation for discrete memory could optimize by not
-          assigning to the original variable because the value
-          shouldn't change because it's `const`, so `const` is
-          actually helpful here instead of problematic.
+          `copy` and *exp* `copyout` (among other clauses) entirely,
+          so `const` is harmless in that case.  An implementation for
+          discrete memory could optimize by not copying back to the
+          original variable because the value shouldn't change because
+          it's `const`, so `const` is actually helpful here instead of
+          problematic.  In the case of `copyout`, it could be argued
+          that the value to be copied back could be an uninitialized
+          value instead of the original value, but it could also be
+          argued that's poor usage of `copyout`.
         * It should be fine to reference a `const` non-scalar within
           an `acc parallel` region even though the non-scalar is
-          declared outside the region, but such a non-scalar has *imp*
-          `copy`.  If *imp* `copy` must then be permitted for the
-          non-scalar, so should *exp* `copy`.
-        * Clacc translates `copy` to OpenMP's `map` clause with a map
-          type of `tofrom`, but the OpenMP implementation permits that
-          for `const` variables.
-    * `firstprivate` is fine for a `const` variable.  The local copy
-      will have the original variable's value throughout its lifetime.
+          declared outside the region, but the `acc parallel` has
+          *imp* `copy` for such a non-scalar.  Thus, *imp* `copy` must
+          be permitted for the non-scalar, and so then should *exp*
+          `copy`.
+        * Clacc translates `copy` or `copyout` to OpenMP's `map`
+          clause with a map type of `tofrom` or `from`, and the OpenMP
+          implementation permits those for `const` variables.
+    * `copyin` and `firstprivate` are fine for a `const` variable.
+      The local copy will have the original variable's value
+      throughout its lifetime.
     * It does not appear possible for any clause other than `copy` and
       `firstprivate` to be *imp* for a `const` variable.  `private` is
       *imp* for loop control variables, but they obviously cannot be
@@ -703,9 +715,10 @@ this section.
   is gang-partitioned, then *imp* `copy(`*v*`)` on the parent `acc
   parallel` overriding any *imp* `firstprivate(`*v*`)` as long as all
   of the following conditions hold:
-    * *not* `firstprivate(`*v*`)`, *not* `private(`*v*`)`, *not*
-      `reduction(`*o'*`:`*v*`)`, and *not* `copy(`*v*`)` on that `acc
-      parallel` and on any `acc loop` nested between it and the
+    * *not* `copy(`*v*`)`, *not* `copyin(`*v*`)`, *not*
+      `copyout(`*v*`)`, *not* `firstprivate(`*v*`)`, *not*
+      `private(`*v*`)`, and *not* `reduction(`*o'*`:`*v*`)`, on that
+      `acc parallel` and on any `acc loop` nested between it and the
       gang-partitioned `acc loop`.
     * There is no local declaration of *v* nested between the `acc
       parallel` and the gang-partitioned `acc loop`.
@@ -895,6 +908,8 @@ to OpenMP is as follows:
 
 * `acc parallel` -> `omp target teams`
 * *imp*|*exp* `copy` -> *exp* `map` with a `tofrom` map type.
+* *imp*|*exp* `copyin` -> *exp* `map` with a `to` map type.
+* *imp*|*exp* `copyout` -> *exp* `map` with a `from` map type.
 * *imp*|*exp* `firstprivate` -> *exp* `firstprivate`
 * *exp* `private` -> *exp* `private`
 * *imp*|*exp* `reduction` -> *exp* `reduction`

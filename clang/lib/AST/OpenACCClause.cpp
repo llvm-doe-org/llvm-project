@@ -43,6 +43,10 @@ clang::getPrivateVarsFromClause(ACCClause *C) {
     return cast<ACCReductionClause>(C)->varlists();
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
   case ACCC_##Name:
+#define OPENACC_CLAUSE_ALIAS_copyin(Name) \
+  case ACCC_##Name:
+#define OPENACC_CLAUSE_ALIAS_copyout(Name) \
+  case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
   case ACCC_shared:
   case ACCC_num_gangs:
@@ -79,6 +83,42 @@ ACCCopyClause *ACCCopyClause::CreateEmpty(const ASTContext &C,
                                           OpenACCClauseKind Kind, unsigned N) {
   void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
   return new (Mem) ACCCopyClause(Kind, N);
+}
+
+ACCCopyinClause *
+ACCCopyinClause::Create(const ASTContext &C, OpenACCClauseKind Kind,
+                        SourceLocation StartLoc, SourceLocation LParenLoc,
+                        SourceLocation EndLoc, ArrayRef<Expr *> VL) {
+  // Allocate space for private variables and initializer expressions.
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
+  ACCCopyinClause *Clause = new (Mem) ACCCopyinClause(
+      Kind, StartLoc, LParenLoc, EndLoc, VL.size());
+  Clause->setVarRefs(VL);
+  return Clause;
+}
+
+ACCCopyinClause *ACCCopyinClause::CreateEmpty(
+    const ASTContext &C, OpenACCClauseKind Kind, unsigned N) {
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
+  return new (Mem) ACCCopyinClause(Kind, N);
+}
+
+ACCCopyoutClause *
+ACCCopyoutClause::Create(const ASTContext &C, OpenACCClauseKind Kind,
+                         SourceLocation StartLoc, SourceLocation LParenLoc,
+                         SourceLocation EndLoc, ArrayRef<Expr *> VL) {
+  // Allocate space for private variables and initializer expressions.
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
+  ACCCopyoutClause *Clause = new (Mem) ACCCopyoutClause(
+      Kind, StartLoc, LParenLoc, EndLoc, VL.size());
+  Clause->setVarRefs(VL);
+  return Clause;
+}
+
+ACCCopyoutClause *ACCCopyoutClause::CreateEmpty(
+    const ASTContext &C, OpenACCClauseKind Kind, unsigned N) {
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
+  return new (Mem) ACCCopyoutClause(Kind, N);
 }
 
 ACCSharedClause *

@@ -965,6 +965,22 @@ void ACCClausePrinter::VisitACCCopyClause(ACCCopyClause *Node) {
   }
 }
 
+void ACCClausePrinter::VisitACCCopyinClause(ACCCopyinClause *Node) {
+  if (!Node->varlist_empty()) {
+    OS << getOpenACCClauseName(Node->getClauseKind());
+    VisitACCClauseList(Node, '(');
+    OS << ")";
+  }
+}
+
+void ACCClausePrinter::VisitACCCopyoutClause(ACCCopyoutClause *Node) {
+  if (!Node->varlist_empty()) {
+    OS << getOpenACCClauseName(Node->getClauseKind());
+    VisitACCClauseList(Node, '(');
+    OS << ")";
+  }
+}
+
 void ACCClausePrinter::VisitACCSharedClause(ACCSharedClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "shared";
