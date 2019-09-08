@@ -134,6 +134,34 @@
 // RUN:    ompdk0=OSEQ ompsk0=OSIMP                  ompdk1=OPRG ompsk1=OSEXP                      ompdk2=OSEQ ompsk2=OSIMP
 // RUN:    dmp0=DMP0-ASEQ,DMP0-%[cmb]-ASEQ           dmp1=DMP1-AIMP,DMP1-AV,DMP1-ONT1              dmp2=DMP2-ASEQ
 // RUN:    exe=EXE,EXE222,EXEGR222)
+//        Above, we never managed to use gang on the innermost loop, vector
+//        on outermost loop, or vector on the innermost loop without gang,
+//        worker, or vector on enclosing loops.  It's not clear how interesting
+//        those cases are here, but they at least suppress FileCheck prefix
+//        reports about otherwise undefined prefixes: DMP2-AG, DMP0-AV,
+//        DMP0-CMB-AV, DMP0-ONT1, and DMP2-ONT1.
+// RUN:   (accc0=seq                                 accc1=seq                                     accc2=gang
+// RUN:    itrs0=2                                   itrs1=2                                       itrs2=2
+// RUN:    ompdd0=                                   ompdd1=                                       ompdd2=OMPDistributeDirective
+// RUN:    ompdp0=                                   ompdp1=                                       ompdp2=distribute
+// RUN:    ompdk0=OSEQ ompsk0=OSIMP                  ompdk1=OSEQ ompsk1=OSIMP                      ompdk2=OPRG ompsk2=OSIMP
+// RUN:    dmp0=DMP0-ASEQ,DMP0-%[cmb]-ASEQ           dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AG
+// RUN:    exe=EXE,EXE222)
+// RUN:   (accc0=vector                              accc1=seq                                     accc2=seq
+// RUN:    itrs0=2                                   itrs1=2                                       itrs2=2
+// RUN:    ompdd0=OMPParallelForSimdDirective        ompdd1=                                       ompdd2=
+// RUN:    ompdp0='parallel for simd num_threads(1)' ompdp1=                                       ompdp2=
+// RUN:    ompdk0=OPRG ompsk0=OSEXP                  ompdk1=OSEQ ompsk1=OSIMP                      ompdk2=OSEQ ompsk2=OSIMP
+// RUN:    dmp0=DMP0-AIMP,DMP0-AV,DMP0-ONT1,DMP0-%[cmb]-AIMP,DMP0-%[cmb]-AV,DMP0-%[cmb]-ONT1
+// RUN:                                              dmp1=DMP1-ASEQ                                dmp2=DMP2-ASEQ
+// RUN:    exe=EXE,EXE222,EXEGR222)
+// RUN:   (accc0=seq                                 accc1=seq                                     accc2=vector
+// RUN:    itrs0=2                                   itrs1=2                                       itrs2=2
+// RUN:    ompdd0=                                   ompdd1=                                       ompdd2=OMPParallelForSimdDirective
+// RUN:    ompdp0=                                   ompdp1=                                       ompdp2='parallel for simd num_threads(1)'
+// RUN:    ompdk0=OSEQ ompsk0=OSIMP                  ompdk1=OSEQ ompsk1=OSIMP                      ompdk2=OPRG ompsk2=OSEXP
+// RUN:    dmp0=DMP0-ASEQ,DMP0-%[cmb]-ASEQ           dmp1=DMP1-ASEQ                                dmp2=DMP2-AIMP,DMP2-AV,DMP2-ONT1
+// RUN:    exe=EXE,EXE222,EXEGR222)
 // RUN: }
 
 // Check ASTDumper.
@@ -475,31 +503,6 @@ int main() {
           // EXE224-DAG: 1, 1, 1
           // EXE224-DAG: 1, 1, 2
           // EXE224-DAG: 1, 1, 3
-
-          // EXE226-DAG: 0, 0, 0
-          // EXE226-DAG: 0, 0, 1
-          // EXE226-DAG: 0, 0, 2
-          // EXE226-DAG: 0, 0, 3
-          // EXE226-DAG: 0, 0, 4
-          // EXE226-DAG: 0, 0, 5
-          // EXE226-DAG: 0, 1, 0
-          // EXE226-DAG: 0, 1, 1
-          // EXE226-DAG: 0, 1, 2
-          // EXE226-DAG: 0, 1, 3
-          // EXE226-DAG: 0, 1, 4
-          // EXE226-DAG: 0, 1, 5
-          // EXE226-DAG: 1, 0, 0
-          // EXE226-DAG: 1, 0, 1
-          // EXE226-DAG: 1, 0, 2
-          // EXE226-DAG: 1, 0, 3
-          // EXE226-DAG: 1, 0, 4
-          // EXE226-DAG: 1, 0, 5
-          // EXE226-DAG: 1, 1, 0
-          // EXE226-DAG: 1, 1, 1
-          // EXE226-DAG: 1, 1, 2
-          // EXE226-DAG: 1, 1, 3
-          // EXE226-DAG: 1, 1, 4
-          // EXE226-DAG: 1, 1, 5
 
           // EXE242-DAG: 0, 0, 0
           // EXE242-DAG: 0, 0, 1
