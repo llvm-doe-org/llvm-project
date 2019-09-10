@@ -122,13 +122,14 @@ We have implemented and tested support for the following features:
             * See `reduction` clause for `parallel` directive for
               general details about operand types and limitations.
             * Various subtleties in the semantics of `reduction`
-              clauses on `acc loop` are discussed in the "Semantic
-              Clarifications" section in `README-OpenACC-design.md`.
-              For example, a reduction on a sequential loop specifies
-              a reduction across gangs if the reduction variable is
-              gang-shared.  Many of these subtleties are under
-              discussion among the OpenACC technical committee for
-              clarification in the OpenACC spec after 2.7.
+              clauses on `loop` directives are discussed in the
+              "Semantic Clarifications" section in
+              `README-OpenACC-design.md`.  For example, a reduction on
+              a sequential loop specifies a reduction across gangs if
+              the reduction variable is gang-shared.  Many of these
+              subtleties are under discussion among the OpenACC
+              technical committee for clarification in the OpenACC
+              spec after 2.7.
     * detection of `break` statement for the associated loop:
         * compile error if implicit/explicit `independent`
         * no error if `seq` or `auto`
