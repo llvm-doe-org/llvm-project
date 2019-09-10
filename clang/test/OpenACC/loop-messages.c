@@ -99,6 +99,39 @@ void fn() {
     #pragma acc CMB_PAR loop 500
     for (int i = 0; i < 5; ++i)
       ;
+    // sep-error@+5 {{unexpected OpenACC clause 'copy' in directive '#pragma acc loop'}}
+    // sep-error@+4 {{unexpected OpenACC clause 'pcopy' in directive '#pragma acc loop'}}
+    // sep-error@+3 {{unexpected OpenACC clause 'present_or_copy' in directive '#pragma acc loop'}}
+    // cmb-error@+2 {{copy variable defined again as copy variable}}
+    // cmb-note@+1 {{previously defined as copy variable here}}
+    #pragma acc CMB_PAR loop copy(i) pcopy(jk) present_or_copy(i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // sep-error@+5 {{unexpected OpenACC clause 'copyin' in directive '#pragma acc loop'}}
+    // sep-error@+4 {{unexpected OpenACC clause 'pcopyin' in directive '#pragma acc loop'}}
+    // sep-error@+3 {{unexpected OpenACC clause 'present_or_copyin' in directive '#pragma acc loop'}}
+    // cmb-error@+2 {{copyin variable defined again as copyin variable}}
+    // cmb-note@+1 {{previously defined as copyin variable here}}
+    #pragma acc CMB_PAR loop copyin(a) pcopyin(e) present_or_copyin(e)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // sep-error@+5 {{unexpected OpenACC clause 'copyout' in directive '#pragma acc loop'}}
+    // sep-error@+4 {{unexpected OpenACC clause 'pcopyout' in directive '#pragma acc loop'}}
+    // sep-error@+3 {{unexpected OpenACC clause 'present_or_copyout' in directive '#pragma acc loop'}}
+    // cmb-error@+2 {{copyout variable defined again as copyout variable}}
+    // cmb-note@+1 {{previously defined as copyout variable here}}
+    #pragma acc CMB_PAR loop copyout(f) pcopyout(f) present_or_copyout(d)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // cmb-error@+2 {{unexpected OpenACC clause 'shared' in directive '#pragma acc parallel loop'}}
+    // sep-error@+1 {{unexpected OpenACC clause 'shared' in directive '#pragma acc loop'}}
+    #pragma acc CMB_PAR loop shared(i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // sep-error@+1 {{unexpected OpenACC clause 'firstprivate' in directive '#pragma acc loop'}}
+    #pragma acc CMB_PAR loop firstprivate(i)
+    for (int i = 0; i < 5; ++i)
+      ;
     // sep-error@+3 {{unexpected OpenACC clause 'num_gangs' in directive '#pragma acc loop'}}
     // sep-error@+2 {{unexpected OpenACC clause 'num_workers' in directive '#pragma acc loop'}}
     // sep-error@+1 {{unexpected OpenACC clause 'vector_length' in directive '#pragma acc loop'}}
@@ -555,7 +588,7 @@ void fn() {
   }
 
   //--------------------------------------------------
-  // Associated for loop
+  // associated for loop
   //--------------------------------------------------
 
 #if !CMB

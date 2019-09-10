@@ -83,6 +83,17 @@ int main() {
   // par-error@+1 {{unexpected OpenACC clause 'seq' in directive '#pragma acc parallel'}}
   #pragma acc parallel LOOP seq
     FORLOOP
+  // par-error@+1 {{unexpected OpenACC clause 'independent' in directive '#pragma acc parallel'}}
+  #pragma acc parallel LOOP independent
+    FORLOOP
+  // par-error@+3 {{unexpected OpenACC clause 'gang' in directive '#pragma acc parallel'}}
+  // par-error@+2 {{unexpected OpenACC clause 'worker' in directive '#pragma acc parallel'}}
+  // par-error@+1 {{unexpected OpenACC clause 'vector' in directive '#pragma acc parallel'}}
+  #pragma acc parallel LOOP gang worker vector
+    FORLOOP
+  // par-error@+1 {{unexpected OpenACC clause 'auto' in directive '#pragma acc parallel'}}
+  #pragma acc parallel LOOP auto
+    FORLOOP
   // par-error@+3 {{unexpected OpenACC clause 'shared' in directive '#pragma acc parallel'}}
   // parloop-error@+2 {{unexpected OpenACC clause 'shared' in directive '#pragma acc parallel loop'}}
   // expected-error@+1 {{expected '(' after 'shared'}}
