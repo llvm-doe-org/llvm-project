@@ -186,3 +186,28 @@ Other Features
 
 We have not yet considered features that are not mentioned in either
 list above.
+
+OpenMP Exposure
+===============
+
+The Clacc user should not have to be aware that OpenMP is utilized
+internally when running Clacc in traditional OpenACC compilation mode.
+However, as listed below, there are several cases where Clacc's
+OpenACC implementation currently relies on Clang's OpenMP
+implementation in ways that expose the use of OpenMP to the Clacc
+user.  Each case is intended as a temporary strategy to accelerate
+development of Clacc, and the intention is to eliminate these cases as
+Clacc matures.  Please report any cases not listed below.
+
+* OpenMP command-line options for offloading.  Notes:
+    * For usage details, see the section "Using" in `../README.md`.
+    * For design details, see the section "Interaction with OpenMP
+      Support" in `README-OpenACC-design.md`.
+* OpenMP canonical loop form diagnostics for an OpenACC `loop`
+  directive's associated loop.  Notes:
+    * OpenACC 2.7 does not specify a canonical loop form, but Clacc is
+      bound by the forms Clang's OpenMP implementation will accept.
+    * This case will be easier to eliminate if the OpenACC
+      specification does specify a canonical loop form, [which has
+      been discussed by the OpenACC technical
+      committee](https://github.com/OpenACC/openacc-spec/issues/39).
