@@ -537,9 +537,20 @@ public:
 ///
 class ACCLoopDirective : public ACCExecutableDirective {
   friend class ASTStmtReader;
-  llvm::DenseSet<VarDecl *> LCVars;
+  MutableArrayRef<VarDecl *> LCVs;
   ACCPartitioningKind Partitioning;
   bool NestedGangPartitioning = false;
+
+  static MutableArrayRef<VarDecl *> reserveLCVs(
+      ACCLoopDirective *D, unsigned NumClauses, unsigned MaxAddClauses,
+      unsigned NumLCVs) {
+    unsigned LCVsOffset =
+        llvm::alignTo(sizeof(ACCLoopDirective), alignof(ACCClause *)) +
+        sizeof(ACCClause *) * (NumClauses + MaxAddClauses) + sizeof(Stmt *);
+    VarDecl **LCVStorage = reinterpret_cast<VarDecl **>(
+        reinterpret_cast<char *>(D) + LCVsOffset);
+    return MutableArrayRef<VarDecl *>(LCVStorage, NumLCVs);
+  }
 
   /// Build directive with the given start and end location.
   ///
@@ -547,26 +558,39 @@ class ACCLoopDirective : public ACCExecutableDirective {
   /// \param EndLoc Ending Location of the directive.
   /// \param NumClauses Starting number of clauses (implicit gang clause can be
   ///        added later).
+  /// \param NumLCVs The number of loop control variables that are assigned but
+  ///        not declared in the inits of the for loops associated with the
+  ///        directive.
   ///
   ACCLoopDirective(SourceLocation StartLoc, SourceLocation EndLoc,
-                   unsigned NumClauses)
+                   unsigned NumClauses, unsigned NumLCVs)
       : ACCExecutableDirective(this, ACCLoopDirectiveClass, ACCD_loop,
-                               StartLoc, EndLoc, NumClauses, 1, 1) {}
+                               StartLoc, EndLoc, NumClauses,
+                               /*MaxAddClauses*/ 1, /*NumChildren*/ 1),
+        LCVs(reserveLCVs(this, NumClauses, /*MaxAddClauses*/ 1, NumLCVs)) {}
 
   /// Build an empty directive.
   ///
   /// \param NumClauses Permanent number of clauses (implicit gang clause
   ///        cannot be added later).
+  /// \param NumLCVs The number of loop control variables that are assigned but
+  ///        not declared in the inits of the for loops associated with the
+  ///        directive.
   ///
-  explicit ACCLoopDirective(unsigned NumClauses)
+  explicit ACCLoopDirective(unsigned NumClauses, unsigned NumLCVs)
       : ACCExecutableDirective(this, ACCLoopDirectiveClass, ACCD_loop,
                                SourceLocation(), SourceLocation(), NumClauses,
-                               0, 1) {}
+                               /*MaxAddClauses*/ 0, /*NumChildren*/ 1),
+        LCVs(reserveLCVs(this, NumClauses, /*MaxAddClauses*/ 0, NumLCVs)) {}
 
   /// Set the loop control variables that are assigned but not declared in the
   /// inits of the for loops associated with the directive.
-  void setLoopControlVariables(const llvm::DenseSet<VarDecl *> &LCVars) {
-    this->LCVars = LCVars;
+  void setLoopControlVariables(const ArrayRef<VarDecl *> &LCVs) {
+    assert(LCVs.size() == this->LCVs.size() &&
+           "unexpected number of loop control variables");
+    unsigned I = 0;
+    for (VarDecl *LCV : LCVs)
+      this->LCVs[I++] = LCV;
   }
 
   /// Record whether an acc loop directive with gang partitioning is nested
@@ -584,24 +608,28 @@ public:
   /// \param EndLoc Ending Location of the directive.
   /// \param Clauses List of clauses.
   /// \param AssociatedStmt Statement associated with the directive.
-  /// \param LCVars Loop control variables that are assigned but not declared
-  ///        in the inits of the for loops associated with the directive.
+  /// \param LCVs Loop control variables that are assigned but not declared in
+  ///        the inits of the for loops associated with the directive.
   /// \param Partitioning How this loop is partitioned.
   /// \param NestedGangPartitioning Whether an acc loop directive with gang
   ///        partitioning is nested here.
   static ACCLoopDirective *Create(
       const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
       ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
-      const llvm::DenseSet<VarDecl *> &LCVars,
-      ACCPartitioningKind Partitioning, bool NestedGangPartitioning);
+      const ArrayRef<VarDecl *> &LCVs, ACCPartitioningKind Partitioning,
+      bool NestedGangPartitioning);
 
   /// Creates an empty directive.
   ///
   /// \param C AST context.
   /// \param NumClauses Number of clauses.
+  /// \param NumLCVs The number of loop control variables that are assigned
+  ///        but not declared in the inits of the for loops associated with the
+  ///        directive.
   ///
   static ACCLoopDirective *CreateEmpty(const ASTContext &C,
-                                       unsigned NumClauses, EmptyShell);
+                                       unsigned NumClauses, unsigned NumLCVs,
+                                       EmptyShell);
 
   static bool classof(const Stmt *T) {
     return T->getStmtClass() == ACCLoopDirectiveClass;
@@ -610,9 +638,7 @@ public:
   /// Get the loop control variables that are assigned but not declared in the
   /// init of the for loop associated with the directive, or return an empty
   /// set if none.
-  const llvm::DenseSet<VarDecl *> &getLoopControlVariables() const {
-    return LCVars;
-  }
+  const ArrayRef<VarDecl *> &getLoopControlVariables() const { return LCVs; }
 
   /// Return true if an acc loop directive with gang partitioning is nested
   /// here.

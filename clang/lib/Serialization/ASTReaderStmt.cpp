@@ -2393,13 +2393,13 @@ void ASTStmtReader::VisitACCParallelDirective(ACCParallelDirective *D) {
 
 void ASTStmtReader::VisitACCLoopDirective(ACCLoopDirective *D) {
   VisitStmt(D);
-  // The NumClauses field was read in ReadStmtFromStream.
-  Record.skipInts(1);
+  // The NumClauses and NumLCVs fields were read in ReadStmtFromStream.
+  Record.skipInts(2);
   VisitACCExecutableDirective(D);
-  uint64_t LCVCount  = Record.readInt();
-  llvm::DenseSet<VarDecl *> LCVs(LCVCount);
-  for (uint64_t I = 0; I < LCVCount; ++I)
-    LCVs.insert(Record.readDeclAs<VarDecl>());
+  uint64_t NumLCVs  = D->getLoopControlVariables().size();
+  SmallVector<VarDecl *, 5> LCVs(NumLCVs);
+  for (uint64_t I = 0; I < NumLCVs; ++I)
+    LCVs[I] = Record.readDeclAs<VarDecl>();
   D->setLoopControlVariables(LCVs);
   static_assert(sizeof(ACCPartitioningKind) <= sizeof(uint64_t),
                 "ACCPartitioningKind is too large in ASTStmtReader");
@@ -3249,7 +3249,8 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
 
     case STMT_ACC_LOOP_DIRECTIVE: {
       unsigned NumClauses = Record[ASTStmtReader::NumStmtFields];
-      S = ACCLoopDirective::CreateEmpty(Context, NumClauses, Empty);
+      unsigned NumLCVs = Record[ASTStmtReader::NumStmtFields + 1];
+      S = ACCLoopDirective::CreateEmpty(Context, NumClauses, NumLCVs, Empty);
       break;
     }
 

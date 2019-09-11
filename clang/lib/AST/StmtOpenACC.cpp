@@ -126,28 +126,30 @@ ACCLoopDirective *
 ACCLoopDirective::Create(
     const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
     ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
-    const llvm::DenseSet<VarDecl *> &LCVars,
-    ACCPartitioningKind Partitioning, bool NestedGangPartitioning) {
-  unsigned Size = llvm::alignTo(sizeof(ACCLoopDirective), alignof(ACCClause *));
+    const ArrayRef<VarDecl *> &LCVs, ACCPartitioningKind Partitioning,
+    bool NestedGangPartitioning) {
+  unsigned Size = llvm::alignTo(sizeof(ACCLoopDirective),
+                                alignof(ACCClause *));
   void *Mem = C.Allocate(Size + sizeof(ACCClause *) * (Clauses.size() + 1) +
-                         sizeof(Stmt *));
+                         sizeof(Stmt *) + sizeof(VarDecl *) * LCVs.size());
   ACCLoopDirective *Dir =
-      new (Mem) ACCLoopDirective(StartLoc, EndLoc, Clauses.size());
+      new (Mem) ACCLoopDirective(StartLoc, EndLoc, Clauses.size(),
+                                 LCVs.size());
   Dir->setClauses(Clauses);
   Dir->setAssociatedStmt(AssociatedStmt);
-  Dir->setLoopControlVariables(LCVars);
+  Dir->setLoopControlVariables(LCVs);
   Dir->setPartitioning(Partitioning);
   Dir->setNestedGangPartitioning(NestedGangPartitioning);
   return Dir;
 }
 
-ACCLoopDirective *ACCLoopDirective::CreateEmpty(const ASTContext &C,
-                                                unsigned NumClauses,
-                                                EmptyShell) {
-  unsigned Size = llvm::alignTo(sizeof(ACCLoopDirective), alignof(ACCClause *));
-  void *Mem =
-      C.Allocate(Size + sizeof(ACCClause *) * NumClauses + sizeof(Stmt *));
-  return new (Mem) ACCLoopDirective(NumClauses);
+ACCLoopDirective *ACCLoopDirective::CreateEmpty(
+    const ASTContext &C, unsigned NumClauses, unsigned NumLCVs, EmptyShell) {
+  unsigned Size = llvm::alignTo(sizeof(ACCLoopDirective),
+                                alignof(ACCClause *));
+  void *Mem = C.Allocate(Size + sizeof(ACCClause *) * NumClauses +
+                         sizeof(Stmt *) + sizeof(VarDecl *) * NumLCVs);
+  return new (Mem) ACCLoopDirective(NumClauses, NumLCVs);
 }
 
 ACCParallelLoopDirective *

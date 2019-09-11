@@ -1316,12 +1316,17 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
         ErrorFound = true;
     }
     break;
-  case ACCD_loop:
+  case ACCD_loop: {
+    const llvm::DenseSet<VarDecl *> LCVs = DSAStack->getLoopControlVariables();
+    SmallVector<VarDecl *, 5> LCVVec;
+    for (VarDecl *VD : LCVs)
+      LCVVec.push_back(VD);
     Res = ActOnOpenACCLoopDirective(
-        ClausesWithImplicit, AStmt, StartLoc, EndLoc,
-        DSAStack->getLoopControlVariables(), DSAStack->getLoopPartitioning(),
+        ClausesWithImplicit, AStmt, StartLoc, EndLoc, LCVVec,
+        DSAStack->getLoopPartitioning(),
         DSAStack->getNestedExplicitGangPartitioning());
     break;
+  }
   case ACCD_parallel_loop:
   case ACCD_unknown:
     llvm_unreachable("expected non-combined OpenACC directive");
@@ -1374,7 +1379,7 @@ void Sema::ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
 
 StmtResult Sema::ActOnOpenACCLoopDirective(
     ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-    SourceLocation EndLoc, const llvm::DenseSet<VarDecl *> &LCVars,
+    SourceLocation EndLoc, const ArrayRef<VarDecl *> &LCVs,
     ACCPartitioningKind Partitioning, bool NestedExplicitGangPartitioning) {
   if (!AStmt)
     return StmtError();
@@ -1428,7 +1433,7 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
   // OpenACC-level tools.
 
   return ACCLoopDirective::Create(Context, StartLoc, EndLoc, Clauses, AStmt,
-                                  LCVars, Partitioning,
+                                  LCVs, Partitioning,
                                   NestedExplicitGangPartitioning);
 }
 
@@ -2499,14 +2504,20 @@ public:
 
     // Build enclosing compound statement for privates if needed.
     ConditionalCompoundStmtRAII EnclosingCompoundStmt(*this);
-    if (AddScopeWithLCVPrivate || AddScopeWithAllPrivates) {
+    if (AddScopeWithAllPrivates || AddScopeWithLCVPrivate) {
+      // Build set of loop control variables unless the only use of that set
+      // below will be short-circuited.
+      const ArrayRef<VarDecl *> &LCVArray = D->getLoopControlVariables();
+      llvm::DenseSet<VarDecl *> LCVSet;
+      if (!AddScopeWithAllPrivates) {
+        LCVSet.reserve(LCVArray.size());
+        LCVSet.insert(LCVArray.begin(), LCVArray.end());
+      }
       for (ACCPrivateClause *C : D->getClausesOfKind<ACCPrivateClause>()) {
         for (Expr *VR : C->varlists()) {
           VarDecl *VD = cast<VarDecl>(cast<DeclRefExpr>(VR)->getDecl())
                         ->getCanonicalDecl();
-          if ((AddScopeWithLCVPrivate &&
-               D->getLoopControlVariables().count(VD)) ||
-              AddScopeWithAllPrivates)
+          if (AddScopeWithAllPrivates || LCVSet.count(VD))
             EnclosingCompoundStmt.addPrivateDecl(VR->getBeginLoc(),
                                                  VR->getEndLoc(), VD);
         }
@@ -2826,7 +2837,9 @@ public:
       ACCLoopDirective *LD = cast<ACCLoopDirective>(D);
       assert(LD && "expected omp simd directive to translate from acc loop"
                    " directive");
-      SkipVars = LD->getLoopControlVariables();
+      const ArrayRef<VarDecl *> &LCVArray = LD->getLoopControlVariables();
+      SkipVars.reserve(LCVArray.size());
+      SkipVars.insert(LCVArray.begin(), LCVArray.end());
     }
     return transformACCVarListClause<ACCPrivateClause>(
         D, C, OMPC_private, SkipVars,

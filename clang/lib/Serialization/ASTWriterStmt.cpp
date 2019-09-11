@@ -2356,9 +2356,9 @@ void ASTStmtWriter::VisitACCParallelDirective(ACCParallelDirective *D) {
 void ASTStmtWriter::VisitACCLoopDirective(ACCLoopDirective *D) {
   VisitStmt(D);
   Record.push_back(D->getNumClauses());
-  VisitACCExecutableDirective(D);
-  const llvm::DenseSet<VarDecl *> &LCVs = D->getLoopControlVariables();
+  const ArrayRef<VarDecl *> &LCVs = D->getLoopControlVariables();
   Record.push_back(LCVs.size());
+  VisitACCExecutableDirective(D);
   for (VarDecl *LCV : LCVs)
     Record.AddDeclRef(LCV);
   Code = serialization::STMT_ACC_LOOP_DIRECTIVE;
