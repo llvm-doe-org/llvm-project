@@ -951,9 +951,10 @@ void ACCClausePrinter::VisitACCClauseList(T *Node, char StartSym) {
        I != E; ++I) {
     assert(*I && "Expected non-null Stmt");
     OS << (I == Node->varlist_begin() ? StartSym : ',');
-    DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(*I);
-    assert(DRE); // see VisitOMPClauseList for how to handle other cases
-    DRE->getDecl()->printQualifiedName(OS);
+    if (auto *DRE = dyn_cast<DeclRefExpr>(*I))
+      DRE->getDecl()->printQualifiedName(OS);
+    else
+      (*I)->printPretty(OS, nullptr, Policy, 0);
   }
 }
 

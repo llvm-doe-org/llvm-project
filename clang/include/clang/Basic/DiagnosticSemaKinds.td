@@ -9340,8 +9340,32 @@ def err_acc_incomplete_type : Error<
   "%2">;
 def note_acc_implicit_clause : Note<
   "'%0' clause implied here">;
-def err_acc_expected_var_name_expr : Error<
-  "expected variable name">;
+def err_acc_unsupported_subarray : Error <
+  "subarray is not supported in '%0' clause">;
+def err_acc_subarray_without_colon : Error<
+  "subarray syntax must include ':'">;
+def err_acc_expected_var_name_or_subarray_expr : Error<
+  "expected variable name%select{| or subarray}0">;
+def err_acc_expected_base_var_name : Error<
+  "expected variable name as base of subarray">;
+def err_acc_unexpected_subarray : Error<
+  "OpenACC subarray is not allowed here">;
+def err_acc_typecheck_subarray_value : Error<
+  "subscripted value is not an array or pointer">;
+def err_acc_subarray_function_type : Error<
+  "subarray specified for pointer to function type %0">;
+def warn_acc_subarray_is_char : Warning<
+  "subarray %select{start|length}0 is of type 'char'">,
+  InGroup<CharSubscript>, DefaultIgnore;
+def err_acc_subarray_incomplete_type : Error<
+  "subarray specified for pointer to incomplete type %0">;
+def err_acc_subarray_not_subset_of_array : Error<
+  "subarray must be a subset of the original array">;
+def err_acc_subarray_length_negative : Error<
+  "subarray length evaluates to a negative value %0">;
+def err_acc_subarray_length_undefined : Error<
+  "subarray length is unspecified and cannot be inferred because subscripted "
+  "value is %select{not an array|an array of unknown bound}0">;
 def err_acc_conflicting_dsa : Error<
   "%1 variable %select{cannot be|defined again as}0 %2 variable">;
 def note_acc_explicit_dsa : Note<

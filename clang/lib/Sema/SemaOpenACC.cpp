@@ -1527,19 +1527,67 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr
 }
 
 static VarDecl *
-getVarDeclFromVarList(Sema &S, Expr *&RefExpr, SourceLocation &ELoc,
-                      SourceRange &ERange) {
-  RefExpr = RefExpr->IgnoreParens();
+getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
+                      SourceLocation &ELoc, SourceRange &ERange,
+                      bool AllowSubarray = false) {
   ELoc = RefExpr->getExprLoc();
   ERange = RefExpr->getSourceRange();
   RefExpr = RefExpr->IgnoreParenImpCasts();
-  auto *DE = dyn_cast_or_null<DeclRefExpr>(RefExpr);
-  if (!DE || !isa<VarDecl>(DE->getDecl())) {
-    // This is reported for uses of, for example, subscript or subarray syntax.
-    S.Diag(ELoc, diag::err_acc_expected_var_name_expr)
-        << ERange;
+
+  // If it's a subarray, extract the base variable, and complain about any
+  // subscript (masquerading as a subarray), for which OpenACC 2.7 doesn't
+  // specify a behavior.
+  bool IsSubarray = false;
+  if (auto *OASE = dyn_cast_or_null<OMPArraySectionExpr>(RefExpr)) {
+    IsSubarray = true;
+    do {
+      if (OASE->getColonLoc().isInvalid()) {
+        S.Diag(OASE->getExprLoc(), diag::err_acc_subarray_without_colon)
+            << OASE->getSourceRange();
+        if (!AllowSubarray)
+          S.Diag(OASE->getExprLoc(), diag::err_acc_unsupported_subarray)
+              << getOpenACCClauseName(CKind) << OASE->getSourceRange();
+        return nullptr;
+      }
+      RefExpr = OASE->getBase()->IgnoreParenImpCasts();
+    } while ((OASE = dyn_cast<OMPArraySectionExpr>(RefExpr)));
+  }
+
+  // Complain about any subscript, for which OpenACC 2.7 doesn't specify a
+  // behavior.
+  if (auto *ASE = dyn_cast_or_null<ArraySubscriptExpr>(RefExpr)) {
+    S.Diag(ASE->getExprLoc(), diag::err_acc_subarray_without_colon)
+        << ASE->getSourceRange();
+    if (!AllowSubarray)
+      S.Diag(ASE->getExprLoc(), diag::err_acc_unsupported_subarray)
+          << getOpenACCClauseName(CKind) << ASE->getSourceRange();
     return nullptr;
   }
+
+  // Complain if we didn't find a base variable.
+  RefExpr = RefExpr->IgnoreParenImpCasts();
+  auto *DE = dyn_cast_or_null<DeclRefExpr>(RefExpr);
+  if (!DE || !isa<VarDecl>(DE->getDecl())) {
+    if (IsSubarray) {
+      S.Diag(ELoc, diag::err_acc_expected_base_var_name) << ERange;
+      if (!AllowSubarray)
+        S.Diag(ELoc, diag::err_acc_unsupported_subarray)
+            << getOpenACCClauseName(CKind) << ERange;
+    }
+    else
+      S.Diag(ELoc, diag::err_acc_expected_var_name_or_subarray_expr)
+          << AllowSubarray << ERange;
+    return nullptr;
+  }
+
+  // Complain if we found a subarray but it's not allowed.
+  if (IsSubarray && !AllowSubarray) {
+    S.Diag(ELoc, diag::err_acc_unsupported_subarray)
+        << getOpenACCClauseName(CKind) << ERange;
+    return nullptr;
+  }
+
+  // Return the base variable.
   return cast<VarDecl>(DE->getDecl());
 }
 
@@ -1557,7 +1605,8 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, SimpleRefExpr, ELoc, ERange);
+    VarDecl *VD = getVarDeclFromVarList(*this, Kind, SimpleRefExpr, ELoc,
+                                        ERange, /*AllowSubarray*/ true);
     if (!VD)
       continue;
 
@@ -1601,7 +1650,8 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, SimpleRefExpr, ELoc, ERange);
+    VarDecl *VD = getVarDeclFromVarList(*this, Kind, SimpleRefExpr, ELoc,
+                                        ERange, /*AllowSubarray*/ true);
     if (!VD)
       continue;
 
@@ -1645,7 +1695,8 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, SimpleRefExpr, ELoc, ERange);
+    VarDecl *VD = getVarDeclFromVarList(*this, Kind, SimpleRefExpr, ELoc,
+                                         ERange, /*AllowSubarray*/ true);
     if (!VD)
       continue;
 
@@ -1712,7 +1763,8 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(ArrayRef<Expr *> VarList,
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, SimpleRefExpr, ELoc, ERange);
+    VarDecl *VD = getVarDeclFromVarList(*this, ACCC_private, SimpleRefExpr,
+                                        ELoc, ERange);
     if (!VD)
       continue;
 
@@ -1768,7 +1820,8 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(ArrayRef<Expr *> VarList,
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, SimpleRefExpr, ELoc, ERange);
+    VarDecl *VD = getVarDeclFromVarList(*this, ACCC_firstprivate,
+                                        SimpleRefExpr, ELoc, ERange);
     if (!VD)
       continue;
 
@@ -1927,7 +1980,8 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, SimpleRefExpr, ELoc, ERange);
+    VarDecl *VD = getVarDeclFromVarList(*this, ACCC_reduction, SimpleRefExpr,
+                                        ELoc, ERange);
     if (!VD)
       continue;
 
@@ -2671,11 +2725,16 @@ private:
       const llvm::DenseSet<VarDecl *> &SkipVars,
       llvm::SmallVector<Expr *, 16> &Vars) {
     Vars.reserve(C->varlist_size());
-    for (auto *VE : C->varlists()) {
-      if (SkipVars.count(cast<VarDecl>(cast<DeclRefExpr>(VE)->getDecl())
+    for (Expr *RefExpr : C->varlists()) {
+      Expr *Base = RefExpr;
+      while (auto *OASE = dyn_cast<OMPArraySectionExpr>(Base))
+        Base = OASE->getBase()->IgnoreParenImpCasts();
+      while (auto *ASE = dyn_cast<ArraySubscriptExpr>(Base))
+        Base = ASE->getBase()->IgnoreParenImpCasts();
+      if (SkipVars.count(cast<VarDecl>(cast<DeclRefExpr>(Base)->getDecl())
                              ->getCanonicalDecl()))
         continue;
-      ExprResult EVar = getDerived().TransformExpr(cast<Expr>(VE));
+      ExprResult EVar = getDerived().TransformExpr(RefExpr);
       if (EVar.isInvalid())
         return true;
       Vars.push_back(EVar.get());

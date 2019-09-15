@@ -22,10 +22,6 @@
 
 // Check -ast-print and -fopenacc[-ast]-print.
 //
-// Strip comments and blank lines so checking -fopenacc-print output is easier.
-// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
-// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
-//
 // RUN: %for directives {
 // RUN:   %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
 // RUN:          %[dir-cflags] \
@@ -35,6 +31,10 @@
 // TODO: If lit were to support %for inside a %data, we could iterate prt-opts
 // (which would need additional fields) within prt-args after the first
 // prt-args iteration, significantly shortening the prt-args definition.
+//
+// Strip comments and blank lines so checking -fopenacc-print output is easier.
+// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
+// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
 //
 // RUN: %data prt-opts {
 // RUN:   (prt-opt=-fopenacc-ast-print)

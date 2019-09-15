@@ -41,6 +41,19 @@ namespace clang {
 /// When the length is absent, it defaults to the size of the array dimension
 /// minus the lower-bound.
 /// When the lower-bound is absent it defaults to 0.
+///
+/// TODO: This class is also used for OpenACC subarrays.  When OpenACC support
+/// is merged upstream, perhaps this can be renamed to something more general
+/// like ArrayRangeExpr or ArraySubscriptExtendedExpr.  The same would likely
+/// need to be done for symbols like BuiltinType::OMPArraySection,
+/// ASTContext::OMPArraySectionTy, PREDEF_TYPE_OMP_ARRAY_SECTION, and
+/// EXPR_OMP_ARRAY_SECTION.  If it is discovered that differences need to be
+/// here due to some differences between OpenMP array sections and OpenACC
+/// subarrays, then perhaps ArrayRangeExpr can be a base class encapsulating
+/// what they have in common.  One difference that should arise is OpenMP 5.0's
+/// ability to specify a stride as a third integer, but that probably just
+/// requires an extra diagnostic rejecting that for OpenACC rather than an
+/// entirely different class.
 class OMPArraySectionExpr : public Expr {
   enum { BASE, LOWER_BOUND, LENGTH, END_EXPR };
   Stmt *SubExprs[END_EXPR];

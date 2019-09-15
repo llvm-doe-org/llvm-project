@@ -311,6 +311,9 @@ PLACEHOLDER_TYPE(BuiltinFn, BuiltinFnTy)
 PLACEHOLDER_TYPE(ARCUnbridgedCast, ARCUnbridgedCastTy)
 
 // A placeholder type for OpenMP array sections.
+// TODO: These is also used for OpenACC subarrays.  When OpenACC support is
+// merged upstream, perhaps these can be renamed to something more general like
+// ArrayRange and ArrayRangeTy.
 PLACEHOLDER_TYPE(OMPArraySection, OMPArraySectionTy)
 
 #ifdef LAST_BUILTIN_TYPE

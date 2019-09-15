@@ -26,6 +26,8 @@ We have implemented and tested support for the following features:
           `present_or_copyin`
         * `copyout` clause and aliases `pcopyout` and
           `present_or_copyout`
+        * in `copy`, `copyin`, and `copyout` clauses and their
+          aliases, subarrays specifying contiguous blocks
         * `firstprivate` clause
         * `private` clause
         * `reduction` clause:
@@ -173,6 +175,11 @@ following features for now:
     * nesting (other than `loop` directives within `loop` directives
       or within `parallel` directives)
     * non-scalars in `reduction` clauses
+    * subarrays specifying non-contiguous blocks in dynamic
+      multidimensional arrays
+    * subarrays in `firstprivate`, `private`, and `reduction` clauses
+    * subarrays with no `:` and one integer (syntactically an array
+      subscript)
 * `loop` directive:
     * outside a `parallel` directive
     * `gang`, `worker`, and `vector` clause arguments
@@ -212,3 +219,13 @@ Clacc matures.  Please report any cases not listed below.
       specification does specify a canonical loop form, [which has
       been discussed by the OpenACC technical
       committee](https://github.com/OpenACC/openacc-spec/issues/39).
+* Some OpenMP array section diagnostics for OpenACC subarrays.  Notes:
+    * For example, for non-contiguous subarrays, the diagnostics use
+      array section terminology instead.
+* `OMPArraySectionExpr` AST node for OpenACC subarrays.  Notes:
+    * This might impact Clang tool developers but should not impact
+      OpenACC application developers.
+    * It seems the most straight-forward fix would be to rename this
+      class to something more general like `ArrayRangeExpr` or
+      `ArraySubscriptExtendedExpr`.  See the todo on this class in the
+      implementation.

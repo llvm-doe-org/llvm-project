@@ -1687,9 +1687,9 @@ void fn() {
 
   //--------------------------------------------------
   // We sprinkle seq, auto, independent, gang, worker, and vector clauses
-  // throughout the following tests as the validation of the private and
-  // reduction clauses should be independent of those clauses.  The only
-  // exception is gang reductions, which interact with the parent parallel
+  // throughout the following tests as the validation of the private,
+  // reduction, and data clauses should be independent of those clauses.  The
+  // only exception is gang reductions, which interact with the parent parallel
   // directive, so we test that case more carefully at the end.
   //--------------------------------------------------
 
@@ -1822,6 +1822,30 @@ void fn() {
       ;
   }
 
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    // expected-error@+1 {{expected variable name}}
+    #pragma acc CMB_PAR loop private(-i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{expected variable name}}
+    #pragma acc CMB_PAR loop reduction(+ : (int)i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expected variable name as base of subarray}}
+    // expected-error@+1 {{subarray is not supported in 'private' clause}}
+    #pragma acc CMB_PAR loop private(((int*)a)[0:2])
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expected variable name as base of subarray}}
+    // expected-error@+1 {{subarray is not supported in 'reduction' clause}}
+    #pragma acc CMB_PAR loop reduction(*:((int*)a)[:2])
+    for (int i = 0; i < 5; ++i)
+      ;
+  }
+
   //--------------------------------------------------
   // Data sharing attribute clauses: arg semantics
   //--------------------------------------------------
@@ -1852,14 +1876,30 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
 
-    // expected-error@+2 {{expected variable name}}
-    // expected-error@+1 {{expected variable name}}
-    #pragma acc CMB_PAR loop vector private(a[9], a[0:1]) gang
+    // expected-error@+6 {{subarray syntax must include ':'}}
+    // expected-error@+5 {{subarray is not supported in 'private' clause}}
+    // expected-error@+5 {{subarray is not supported in 'private' clause}}
+    // expected-error@+5 {{subarray is not supported in 'private' clause}}
+    // expected-error@+5 {{subarray is not supported in 'private' clause}}
+    // expected-error@+5 {{subarray is not supported in 'private' clause}}
+    #pragma acc CMB_PAR loop vector private(a[9],   \
+                                            a[0:1], \
+                                            a[0:],  \
+                                            a[:1],  \
+                                            a[:]) gang
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+2 {{expected variable name}}
-    // expected-error@+1 {{expected variable name}}
-    #pragma acc CMB_PAR loop vector reduction(*:a[3:5], a[10]) worker
+    // expected-error@+6 {{subarray is not supported in 'reduction' clause}}
+    // expected-error@+6 {{subarray syntax must include ':'}}
+    // expected-error@+5 {{subarray is not supported in 'reduction' clause}}
+    // expected-error@+5 {{subarray is not supported in 'reduction' clause}}
+    // expected-error@+5 {{subarray is not supported in 'reduction' clause}}
+    // expected-error@+5 {{subarray is not supported in 'reduction' clause}}
+    #pragma acc CMB_PAR loop vector reduction(*:a[3:5], \
+                                                a[10],  \
+                                                a[2:],  \
+                                                a[:9],  \
+                                                a[:]) worker
     for (int i = 0; i < 5; ++i)
       ;
 
@@ -2725,6 +2765,9 @@ void fn() {
     ;
 }
 
+// Complete to suppress an additional warning, but it's too late for pragmas.
+int incomplete[3];
+
 // The remaining diagnostics are currently produced by OpenMP sema during the
 // transform from OpenACC to OpenMP, which is skipped if there have been any
 // previous diagnostics.  Thus, each must be tested in a separate compilation.
@@ -2874,6 +2917,3 @@ void fn() {
 #else
 # error undefined ERR
 #endif
-
-// Complete to suppress an additional warning, but it's too late for pragmas.
-int incomplete[3];

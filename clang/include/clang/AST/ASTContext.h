@@ -1038,6 +1038,9 @@ public:
 #include "clang/Basic/OpenCLImageTypes.def"
   CanQualType OCLSamplerTy, OCLEventTy, OCLClkEventTy;
   CanQualType OCLQueueTy, OCLReserveIDTy;
+  // TODO: This is also used for OpenACC subarrays.  When OpenACC support is
+  // merged upstream, perhaps this can be renamed to something more general
+  // like ArrayRangeTy.
   CanQualType OMPArraySectionTy;
 #define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
   CanQualType Id##Ty;

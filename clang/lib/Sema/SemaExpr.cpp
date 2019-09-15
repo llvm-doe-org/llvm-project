@@ -4441,6 +4441,12 @@ ExprResult Sema::ActOnOMPArraySectionExpr(Expr *Base, SourceLocation LBLoc,
                                           Expr *LowerBound,
                                           SourceLocation ColonLoc, Expr *Length,
                                           SourceLocation RBLoc) {
+  // TODO: For now, to facilitate maintenance of OpenACC support against
+  // upstream while the implementation is separate, parse and sema handle
+  // OpenACC subarrays as OpenMP array sections except we adjust diagnostics
+  // here and in Sema::CheckPlaceholderExpr to use OpenACC terminology
+  bool IsACCSubarray = getLangOpts().OpenACC;
+
   if (Base->getType()->isPlaceholderType() &&
       !Base->getType()->isSpecificPlaceholderType(
           BuiltinType::OMPArraySection)) {
@@ -4487,36 +4493,54 @@ ExprResult Sema::ActOnOMPArraySectionExpr(Expr *Base, SourceLocation LBLoc,
     ResultTy = OriginalTy->getAsArrayTypeUnsafe()->getElementType();
   } else {
     return ExprError(
-        Diag(Base->getExprLoc(), diag::err_omp_typecheck_section_value)
+        Diag(Base->getExprLoc(),
+             IsACCSubarray ? diag::err_acc_typecheck_subarray_value
+                           : diag::err_omp_typecheck_section_value)
         << Base->getSourceRange());
   }
   // C99 6.5.2.1p1
+  //
+  // PerformOpenMPImplicitIntegerConversion uses err_omp_* diagnostics, but
+  // none currently mention OpenMP or OpenMP-specific constructs, so they
+  // should work fine for OpenACC as well.
   if (LowerBound) {
     auto Res = PerformOpenMPImplicitIntegerConversion(LowerBound->getExprLoc(),
                                                       LowerBound);
-    if (Res.isInvalid())
+    if (Res.isInvalid()) {
+      // FIXME: I have not figured out how to trigger this case.  If it's
+      // possible, OpenACC needs its own diagnostic for it.
+      llvm_unreachable("expected valid result for subarray start conversion");
       return ExprError(Diag(LowerBound->getExprLoc(),
                             diag::err_omp_typecheck_section_not_integer)
                        << 0 << LowerBound->getSourceRange());
+    }
     LowerBound = Res.get();
 
     if (LowerBound->getType()->isSpecificBuiltinType(BuiltinType::Char_S) ||
         LowerBound->getType()->isSpecificBuiltinType(BuiltinType::Char_U))
-      Diag(LowerBound->getExprLoc(), diag::warn_omp_section_is_char)
+      Diag(LowerBound->getExprLoc(),
+           IsACCSubarray ? diag::warn_acc_subarray_is_char
+                         : diag::warn_omp_section_is_char)
           << 0 << LowerBound->getSourceRange();
   }
   if (Length) {
     auto Res =
         PerformOpenMPImplicitIntegerConversion(Length->getExprLoc(), Length);
-    if (Res.isInvalid())
+    if (Res.isInvalid()) {
+      // FIXME: I have not figured out how to trigger this case.  If it's
+      // possible, OpenACC needs its own diagnostic for it.
+      llvm_unreachable("expected valid result for subarray length conversion");
       return ExprError(Diag(Length->getExprLoc(),
                             diag::err_omp_typecheck_section_not_integer)
                        << 1 << Length->getSourceRange());
+    }
     Length = Res.get();
 
     if (Length->getType()->isSpecificBuiltinType(BuiltinType::Char_S) ||
         Length->getType()->isSpecificBuiltinType(BuiltinType::Char_U))
-      Diag(Length->getExprLoc(), diag::warn_omp_section_is_char)
+      Diag(Length->getExprLoc(),
+           IsACCSubarray ? diag::warn_acc_subarray_is_char
+                         : diag::warn_omp_section_is_char)
           << 1 << Length->getSourceRange();
   }
 
@@ -4525,13 +4549,18 @@ ExprResult Sema::ActOnOMPArraySectionExpr(Expr *Base, SourceLocation LBLoc,
   // type. Note that functions are not objects, and that (in C99 parlance)
   // incomplete types are not object types.
   if (ResultTy->isFunctionType()) {
-    Diag(Base->getExprLoc(), diag::err_omp_section_function_type)
+    Diag(Base->getExprLoc(),
+         IsACCSubarray ? diag::err_acc_subarray_function_type
+                       : diag::err_omp_section_function_type)
         << ResultTy << Base->getSourceRange();
     return ExprError();
   }
 
   if (RequireCompleteType(Base->getExprLoc(), ResultTy,
-                          diag::err_omp_section_incomplete_type, Base))
+                          IsACCSubarray
+                          ? diag::err_acc_subarray_incomplete_type
+                          : diag::err_omp_section_incomplete_type,
+                          Base))
     return ExprError();
 
   if (LowerBound && !OriginalTy->isAnyPointerType()) {
@@ -4541,7 +4570,9 @@ ExprResult Sema::ActOnOMPArraySectionExpr(Expr *Base, SourceLocation LBLoc,
       // The array section must be a subset of the original array.
       llvm::APSInt LowerBoundValue = Result.Val.getInt();
       if (LowerBoundValue.isNegative()) {
-        Diag(LowerBound->getExprLoc(), diag::err_omp_section_not_subset_of_array)
+        Diag(LowerBound->getExprLoc(),
+              IsACCSubarray ? diag::err_acc_subarray_not_subset_of_array
+                            : diag::err_omp_section_not_subset_of_array)
             << LowerBound->getSourceRange();
         return ExprError();
       }
@@ -4555,7 +4586,9 @@ ExprResult Sema::ActOnOMPArraySectionExpr(Expr *Base, SourceLocation LBLoc,
       // The length must evaluate to non-negative integers.
       llvm::APSInt LengthValue = Result.Val.getInt();
       if (LengthValue.isNegative()) {
-        Diag(Length->getExprLoc(), diag::err_omp_section_length_negative)
+        Diag(Length->getExprLoc(),
+             IsACCSubarray ? diag::err_acc_subarray_length_negative
+                           : diag::err_omp_section_length_negative)
             << LengthValue.toString(/*Radix=*/10, /*Signed=*/true)
             << Length->getSourceRange();
         return ExprError();
@@ -4567,7 +4600,8 @@ ExprResult Sema::ActOnOMPArraySectionExpr(Expr *Base, SourceLocation LBLoc,
     // OpenMP 4.5, [2.4 Array Sections]
     // When the size of the array dimension is not known, the length must be
     // specified explicitly.
-    Diag(ColonLoc, diag::err_omp_section_length_undefined)
+    Diag(ColonLoc, IsACCSubarray ? diag::err_acc_subarray_length_undefined
+                                 : diag::err_omp_section_length_undefined)
         << (!OriginalTy.isNull() && OriginalTy->isArrayType());
     return ExprError();
   }
@@ -17671,7 +17705,10 @@ ExprResult Sema::CheckPlaceholderExpr(Expr *E) {
 
   // Expressions of unknown type.
   case BuiltinType::OMPArraySection:
-    Diag(E->getBeginLoc(), diag::err_omp_array_section_use);
+    if (getLangOpts().OpenACC)
+      Diag(E->getBeginLoc(), diag::err_acc_unexpected_subarray);
+    else
+      Diag(E->getBeginLoc(), diag::err_omp_array_section_use);
     return ExprError();
 
   // Everything else should be impossible.

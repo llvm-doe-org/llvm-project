@@ -647,6 +647,30 @@ this section.
       `firstprivate` to be *imp* for a `const` variable.  `private` is
       *imp* for loop control variables, but they obviously cannot be
       `const` anyway.
+* It is an error to specify subarrays with no `:` and one integer.
+  Notes:
+    * This notation is syntactically identical to an array subscript.
+    * Indeed, OpenMP 5.0 sec. 2.1.5 appears to say that, if an array
+      section has no `:` and one integer, the one integer is the start
+      index and the length is one.  That's also how Clang implements
+      it for OpenMP.
+    * OpenACC 2.7 does not appear to specify a behavior for this
+      notation.  However, in our experiments, pgcc 19.4-0 implements
+      it instead as if the start index is zero and the one integer is
+      the length.
+    * If OpenACC grows a specification for this behavior, we will
+      extend Clacc to implement it.  If, before then, we discover
+      multiple applications that depend on PGI's current behavior, we
+      will consider extending Clacc to implement that.
+* It is an error to use subarrays in `firstprivate` and `private`
+  clauses.  Notes:
+    * While pgcc 19.4-0 does permit subarrays in these clauses,
+      OpenACC 2.7 doesn't clarify whether they're permitted, [as has
+      been discussed by the OpenACC technical
+      committee](https://github.com/OpenACC/openacc-spec/issues/59).
+    * OpenMP 5.0 does not permit array sections in these clauses.  See
+      OpenMP 5.0 sec. 2.1.5 p. 46 L10.  Thus, this feature is
+      currently listed under "Potentially Unmappable Features" below.
 * An *imp* `copy` for a reduction variable overrides an *imp*
   `firstprivate` when the variable is a scalar.  Text to make this
   overriding behavior clear has been proposed for inclusion in the
@@ -1166,8 +1190,8 @@ as follows:
   the effective directives because there are none because semantic
   analysis computes them only on the effective directives.
 
-Unmappable Features
--------------------
+Potentially Unmappable Features
+-------------------------------
 
 It might prove to be impossible to map some OpenACC features to
 standard OpenMP.  For such features, our plan is to map to OpenMP
@@ -1201,6 +1225,20 @@ possible solutions:
   `vector_length` because the enclosing compute construct from which
   those clauses would normally be applied during translation is not
   statically visible.
+* Subarrays specifying non-contiguous blocks in dynamic
+  multidimensional arrays because these cannot be mapped to OpenMP
+  array sections.  Notes:
+    * OpenACC 2.7 sec. 2.7.1 L1108-1109 permits such subarrays.
+    * OpenMP 5.0 sec. 2.9.7.1 p. 322 L3 does not permit such array
+      sections in `map` clauses.
+* Non-constant integer expressions in subarrays on gang-shared
+  variables in `reduction` clauses on `acc loop` constructs because
+  those clauses must be copied to the parent `acc parallel` (or rather
+  the `omp target teams`) but the expressions might evaluate to
+  different values there.
+* Subarrays in `firstprivate` and `private` clauses because OpenMP
+  does not permit array sections in those clauses.  See "Semantic
+  Clarifications" above for details.
 * Multiple reference counters because OpenMP has just one reference
   counter.
 

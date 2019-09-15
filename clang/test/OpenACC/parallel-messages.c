@@ -7,22 +7,43 @@
 // parallel" directives in order to check the same diagnostics but for combined
 // "acc parallel loop" directives.
 
+// RUN: %data {
+// RUN:   (cflags=-DERR=ERR_ACC)
+// RUN:   (cflags=-DERR=ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_AP)
+// RUN:   (cflags=-DERR=ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_PP)
+// RUN: }
+
 // OpenACC disabled
-// RUN: %clang_cc1 -verify=expected-noacc %s
-// RUN: %clang_cc1 -verify=expected-noacc %s -DADD_LOOP_TO_PAR
+// RUN: %for {
+// RUN:   %clang_cc1 -verify=noacc,expected-noacc -Wchar-subscripts %[cflags] \
+// RUN:              %s
+// RUN:   %clang_cc1 -verify=noacc,expected-noacc -Wchar-subscripts %[cflags] \
+// RUN:              -DADD_LOOP_TO_PAR %s
+// RUN: }
 
 // OpenACC enabled
-// RUN: %clang_cc1 -verify=par,acc-ignore,expected,expected-noacc -fopenacc %s
-// RUN: %clang_cc1 -verify=parloop,acc-ignore,expected,expected-noacc \
-// RUN:            -DADD_LOOP_TO_PAR -fopenacc %s
+// RUN: %for {
+// RUN:   %clang_cc1 \
+// RUN:     -verify=par,acc-ignore,expected,expected-noacc,char-subscripts \
+// RUN:     -fopenacc -Wchar-subscripts %[cflags] %s
+// RUN:   %clang_cc1 \
+// RUN:     -verify=parloop,acc-ignore,expected,expected-noacc,char-subscripts \
+// RUN:     -fopenacc -Wchar-subscripts %[cflags] -DADD_LOOP_TO_PAR %s
+// RUN: }
 
 // OpenACC enabled but optional warnings disabled
-// RUN: %clang_cc1 -verify=par,expected,expected-noacc -fopenacc %s \
-// RUN:            -Wno-openacc-ignored-clause
-// RUN: %clang_cc1 -verify=parloop,expected,expected-noacc -fopenacc %s \
-// RUN:            -DADD_LOOP_TO_PAR -Wno-openacc-ignored-clause
+// RUN: %for {
+// RUN:   %clang_cc1 -verify=par,expected,expected-noacc -fopenacc \
+// RUN:              -Wno-openacc-ignored-clause %[cflags] %s
+// RUN:   %clang_cc1 -verify=parloop,expected,expected-noacc -fopenacc \
+// RUN:              -Wno-openacc-ignored-clause %[cflags] -DADD_LOOP_TO_PAR %s
+// RUN: }
 
 // END.
+
+#define ERR_ACC                                 1
+#define ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_AP 2
+#define ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_PP 3
 
 #if !ADD_LOOP_TO_PAR
 # define LOOP
@@ -34,13 +55,18 @@
 # define FORLOOP_HEAD for (int fli = 0; fli < 2; ++fli)
 #endif
 
+#if ERR == ERR_ACC
+
 int incomplete[];
 
 int main() {
   _Bool b;
+  char c;
   enum { E1, E2 } e;
-  int i, jk, a[2], *p; // expected-note 9 {{'a' defined here}}
-                       // expected-note@-1 7 {{'p' defined here}}
+  int i, jk, a[2], m[6][2], *p; // expected-note 9 {{'a' defined here}}
+                                // expected-note@-1 7 {{'p' defined here}}
+  int (*fp)();
+  int (*ap)[];
   float f; // expected-note 3 {{'f' defined here}}
   double d; // expected-note 3 {{'d' defined here}}
   float _Complex fc; // expected-note 5 {{'fc' defined here}}
@@ -357,6 +383,123 @@ int main() {
   #pragma acc parallel LOOP reduction(*:i ,) // expected-error {{expected expression}}
     FORLOOP
 
+  // expected-error@+1 {{expected variable name or subarray}}
+  #pragma acc parallel LOOP copy((int)i)
+    FORLOOP
+  // expected-error@+1 {{expected variable name or subarray}}
+  #pragma acc parallel LOOP pcopy((int)i)
+    FORLOOP
+  // expected-error@+1 {{expected variable name or subarray}}
+  #pragma acc parallel LOOP present_or_copy((int)i)
+    FORLOOP
+  // expected-error@+1 {{expected variable name or subarray}}
+  #pragma acc parallel LOOP copyin((int)i)
+    FORLOOP
+  // expected-error@+1 {{expected variable name or subarray}}
+  #pragma acc parallel LOOP pcopyin((int)i)
+    FORLOOP
+  // expected-error@+1 {{expected variable name or subarray}}
+  #pragma acc parallel LOOP present_or_copyin((int)i)
+    FORLOOP
+  // expected-error@+1 {{expected variable name or subarray}}
+  #pragma acc parallel LOOP copyout((int)i)
+    FORLOOP
+  // expected-error@+1 {{expected variable name or subarray}}
+  #pragma acc parallel LOOP pcopyout((int)i)
+    FORLOOP
+  // expected-error@+1 {{expected variable name or subarray}}
+  #pragma acc parallel LOOP present_or_copyout((int)i)
+    FORLOOP
+  // expected-error@+1 {{expected variable name}}
+  #pragma acc parallel LOOP firstprivate((int)i)
+    FORLOOP
+  // expected-error@+1 {{expected variable name}}
+  #pragma acc parallel LOOP private((int)i)
+    FORLOOP
+  // expected-error@+1 {{expected variable name}}
+  #pragma acc parallel LOOP reduction(*:(int)i)
+    FORLOOP
+
+  // expected-error@+1 {{expected variable name as base of subarray}}
+  #pragma acc parallel LOOP copy(((int*)a)[0:2])
+    FORLOOP
+  // expected-error@+1 {{expected variable name as base of subarray}}
+  #pragma acc parallel LOOP pcopy(((int*)a)[:2])
+    FORLOOP
+  // expected-error@+1 {{expected variable name as base of subarray}}
+  #pragma acc parallel LOOP present_or_copy((*(int(*)[3])a)[0:])
+    FORLOOP
+  // expected-error@+1 {{expected variable name as base of subarray}}
+  #pragma acc parallel LOOP copyin((*((int(*)[3])a))[:])
+    FORLOOP
+  // expected-error@+1 {{expected variable name as base of subarray}}
+  #pragma acc parallel LOOP pcopyin(((int*)a)[0:2])
+    FORLOOP
+  // expected-error@+1 {{expected variable name as base of subarray}}
+  #pragma acc parallel LOOP present_or_copyin(((int*)a)[:2])
+    FORLOOP
+  // expected-error@+1 {{expected variable name as base of subarray}}
+  #pragma acc parallel LOOP copyout(((int*)a)[0:2])
+    FORLOOP
+  // expected-error@+1 {{expected variable name as base of subarray}}
+  #pragma acc parallel LOOP pcopyout(((int*)a)[:2])
+    FORLOOP
+  // expected-error@+1 {{expected variable name as base of subarray}}
+  #pragma acc parallel LOOP present_or_copyout(((int*)a)[0:2])
+    FORLOOP
+  // expected-error@+2 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{subarray is not supported in 'firstprivate' clause}}
+  #pragma acc parallel LOOP firstprivate(((int*)a)[:2])
+    FORLOOP
+  // expected-error@+2 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{subarray is not supported in 'private' clause}}
+  #pragma acc parallel LOOP private(((int*)a)[0:2])
+    FORLOOP
+  // expected-error@+2 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{subarray is not supported in 'reduction' clause}}
+  #pragma acc parallel LOOP reduction(*:((int*)a)[:2])
+    FORLOOP
+
+  // The following subarray diagnostics are built on the OpenMP array section
+  // implementation, which we assume is tested thoroughly.  Thus, we don't have
+  // exhaustive test coverage here.  Instead, we check at least one case for
+  // each diagnostic kind to give us some confidence that the OpenACC wordings
+  // for those are being used instead of the OpenMP wordings.
+  //
+  // noacc-error@+3 {{expected ']'}}
+  // noacc-note@+2 {{to match this '['}}
+  // expected-error@+1 {{OpenACC subarray is not allowed here}}
+  a[0:1] = 5;
+  // expected-error@+1 {{subscripted value is not an array or pointer}}
+  #pragma acc parallel LOOP copy(i[0:2])
+    FORLOOP
+  // char-subscripts-warning@+1 {{subarray start is of type 'char'}}
+  #pragma acc parallel LOOP pcopy(a[c:2])
+    FORLOOP
+  // char-subscripts-warning@+1 {{subarray length is of type 'char'}}
+  #pragma acc parallel LOOP present_or_copy(a[0:c])
+    FORLOOP
+  // expected-error@+1 {{subarray specified for pointer to function type 'int ()'}}
+  #pragma acc parallel LOOP copyin(fp[0:2])
+    FORLOOP
+  // expected-error@+1 {{subarray specified for pointer to incomplete type 'int []'}}
+  #pragma acc parallel LOOP pcopyin((&incomplete)[0:2])
+    FORLOOP
+  // expected-error@+1 {{subarray must be a subset of the original array}}
+  #pragma acc parallel LOOP present_or_copyin(a[-1:2])
+    FORLOOP
+  // expected-error@+1 {{subarray length evaluates to a negative value -5}}
+  #pragma acc parallel LOOP copyout(a[0:-5])
+    FORLOOP
+  #pragma acc parallel LOOP pcopyout(a[0:])
+    FORLOOP
+  // expected-error@+1 {{subarray length is unspecified and cannot be inferred because subscripted value is not an array}}
+  #pragma acc parallel LOOP present_or_copyout(p[0:])
+    FORLOOP
+  // expected-error@+1 2 {{subarray length is unspecified and cannot be inferred because subscripted value is an array of unknown bound}}
+  #pragma acc parallel LOOP copy(incomplete[0:], (*ap)[0:])
+    FORLOOP
+
   //--------------------------------------------------
   // Data sharing attribute clauses: arg semantics
   //--------------------------------------------------
@@ -395,54 +538,98 @@ int main() {
   #pragma acc parallel LOOP reduction(max:bar) // expected-error {{use of undeclared identifier 'bar'}}
     FORLOOP
 
+  // Array subscript not supported where subarray is permitted.
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  #pragma acc parallel LOOP copy(a[0], \
+                                 m[0][0:2], \
+                                 a[0:1], m[0:2][0:2])
+    FORLOOP
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  #pragma acc parallel LOOP pcopy(a[1], \
+                                  m[0:2][1], \
+                                  a[0:], m[0:2][0:2])
+    FORLOOP
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  #pragma acc parallel LOOP present_or_copy(a[i], \
+                                            m[0][1], \
+                                            a[:1], m[0:2][0:2])
+    FORLOOP
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  #pragma acc parallel LOOP copyin(a[jk], \
+                                   m[2:][1], \
+                                   a[:], m[0:2][0:2])
+    FORLOOP
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  #pragma acc parallel LOOP pcopyin(a[b], \
+                                    m[i][3], \
+                                    a[0:2], m[0:2][0:2])
+    FORLOOP
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  #pragma acc parallel LOOP present_or_copyin(a[e], \
+                                              m[jk][:i], \
+                                              a[1:], m[0:2][0:2])
+    FORLOOP
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  #pragma acc parallel LOOP copyout(a[0], \
+                                    m[i][e], \
+                                    a[0:2], m[0:2][0:2])
+    FORLOOP
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  #pragma acc parallel LOOP pcopyout(a[1], \
+                                     m[i:jk][b], \
+                                     a[:], m[0:2][0:2])
+    FORLOOP
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  #pragma acc parallel LOOP present_or_copyout(a[i], \
+                                               m[3][:], \
+                                               a[1:1], m[0:2][0:2])
+    FORLOOP
+
   // Subarrays not permitted.
-  // expected-error@+2 {{expected variable name}}
-  // expected-error@+1 {{expected variable name}}
-  #pragma acc parallel LOOP copy(a[0], a[0:1])
+  // expected-error@+6 {{subarray syntax must include ':'}}
+  // expected-error@+5 {{subarray is not supported in 'firstprivate' clause}}
+  // expected-error@+5 {{subarray is not supported in 'firstprivate' clause}}
+  // expected-error@+5 {{subarray is not supported in 'firstprivate' clause}}
+  // expected-error@+5 {{subarray is not supported in 'firstprivate' clause}}
+  // expected-error@+5 {{subarray is not supported in 'firstprivate' clause}}
+  #pragma acc parallel LOOP firstprivate(a[0],   \
+                                         a[0:1], \
+                                         a[0:],  \
+                                         a[:1],  \
+                                         a[:])
     FORLOOP
-  // expected-error@+2 {{expected variable name}}
-  // expected-error@+1 {{expected variable name}}
-  #pragma acc parallel LOOP pcopy(a[0], a[0:1])
+  // expected-error@+6 {{subarray is not supported in 'private' clause}}
+  // expected-error@+6 {{subarray syntax must include ':'}}
+  // expected-error@+5 {{subarray is not supported in 'private' clause}}
+  // expected-error@+5 {{subarray is not supported in 'private' clause}}
+  // expected-error@+5 {{subarray is not supported in 'private' clause}}
+  // expected-error@+5 {{subarray is not supported in 'private' clause}}
+  #pragma acc parallel LOOP private(a[3:5], \
+                                    a[10],  \
+                                    a[0:],  \
+                                    a[:1],  \
+                                    a[:])
     FORLOOP
-  // expected-error@+2 {{expected variable name}}
-  // expected-error@+1 {{expected variable name}}
-  #pragma acc parallel LOOP present_or_copy(a[0], a[0:1])
-    FORLOOP
-  // expected-error@+2 {{expected variable name}}
-  // expected-error@+1 {{expected variable name}}
-  #pragma acc parallel LOOP copyin(a[0], a[0:1])
-    FORLOOP
-  // expected-error@+2 {{expected variable name}}
-  // expected-error@+1 {{expected variable name}}
-  #pragma acc parallel LOOP pcopyin(a[0], a[0:1])
-    FORLOOP
-  // expected-error@+2 {{expected variable name}}
-  // expected-error@+1 {{expected variable name}}
-  #pragma acc parallel LOOP present_or_copyin(a[0], a[0:1])
-    FORLOOP
-  // expected-error@+2 {{expected variable name}}
-  // expected-error@+1 {{expected variable name}}
-  #pragma acc parallel LOOP copyout(a[0], a[0:1])
-    FORLOOP
-  // expected-error@+2 {{expected variable name}}
-  // expected-error@+1 {{expected variable name}}
-  #pragma acc parallel LOOP pcopyout(a[0], a[0:1])
-    FORLOOP
-  // expected-error@+2 {{expected variable name}}
-  // expected-error@+1 {{expected variable name}}
-  #pragma acc parallel LOOP present_or_copyout(a[0], a[0:1])
-    FORLOOP
-  // expected-error@+2 {{expected variable name}}
-  // expected-error@+1 {{expected variable name}}
-  #pragma acc parallel LOOP firstprivate(a[0], a[0:1])
-    FORLOOP
-  // expected-error@+2 {{expected variable name}}
-  // expected-error@+1 {{expected variable name}}
-  #pragma acc parallel LOOP private(a[3:5], a[10])
-    FORLOOP
-  // expected-error@+2 {{expected variable name}}
-  // expected-error@+1 {{expected variable name}}
-  #pragma acc parallel LOOP reduction(min:a[23],a[0:10])
+  // expected-error@+6 {{subarray syntax must include ':'}}
+  // expected-error@+5 {{subarray is not supported in 'reduction' clause}}
+  // expected-error@+5 {{subarray is not supported in 'reduction' clause}}
+  // expected-error@+5 {{subarray is not supported in 'reduction' clause}}
+  // expected-error@+5 {{subarray is not supported in 'reduction' clause}}
+  // expected-error@+5 {{subarray is not supported in 'reduction' clause}}
+  #pragma acc parallel LOOP reduction(min:a[23],   \
+                                          a[0:10], \
+                                          a[0:],   \
+                                          a[:1],   \
+                                          a[:])
     FORLOOP
 
   // Variables of incomplete type.
@@ -775,6 +962,18 @@ int main() {
                             pcopyout(i)                  \
                             copyout(jk)
     FORLOOP
+  // expected-error@+2 {{copy variable defined again as copy variable}}
+  // expected-note@+1 {{previously defined as copy variable here}}
+  #pragma acc parallel LOOP copy(a[0:2], a[0:2])
+    FORLOOP
+  // expected-error@+2 {{copyin variable defined again as copyin variable}}
+  // expected-note@+1 {{previously defined as copyin variable here}}
+  #pragma acc parallel LOOP copyin(a[0:1]) copyin(a[1:1])
+    FORLOOP
+  // expected-error@+2 {{copyout variable defined again as copyout variable}}
+  // expected-note@+1 {{previously defined as copyout variable here}}
+  #pragma acc parallel LOOP copyout(a[0:2]) pcopyout(a[1:1])
+    FORLOOP
   // expected-error@+6 {{firstprivate variable defined again as firstprivate variable}}
   // expected-note@+5 {{previously defined as firstprivate variable here}}
   // expected-error@+6 {{firstprivate variable defined again as firstprivate variable}}
@@ -805,12 +1004,12 @@ int main() {
     FORLOOP
 
   // Conflicting clauses: copy and aliases vs. other clauses.
-  // expected-error@+5 {{copy variable cannot be copyin variable}}
-  // expected-note@+3 {{previously defined as copy variable here}}
+  // expected-error@+5 2 {{copy variable cannot be copyin variable}}
+  // expected-note@+3 2 {{previously defined as copy variable here}}
   // expected-error@+4 {{copyin variable cannot be copy variable}}
   // expected-note@+2 {{previously defined as copyin variable here}}
-  #pragma acc parallel LOOP copy(i) \
-                            copyin(i,jk) \
+  #pragma acc parallel LOOP copy(i,a[0:1]) \
+                            copyin(i,jk,a[0:1]) \
                             pcopy(jk)
     FORLOOP
   // expected-error@+5 {{copyin variable cannot be copy variable}}
@@ -818,31 +1017,31 @@ int main() {
   // expected-error@+4 {{copy variable cannot be copyin variable}}
   // expected-note@+2 {{previously defined as copy variable here}}
   #pragma acc parallel LOOP pcopyin(a) \
-                            present_or_copy(a,p) \
+                            present_or_copy(a[0:2],p) \
                             present_or_copyin(p)
     FORLOOP
   // expected-error@+5 {{copyout variable cannot be copy variable}}
   // expected-note@+3 {{previously defined as copyout variable here}}
   // expected-error@+4 {{copy variable cannot be copyout variable}}
   // expected-note@+2 {{previously defined as copy variable here}}
-  #pragma acc parallel LOOP present_or_copyout(a) \
+  #pragma acc parallel LOOP present_or_copyout(a[0:1]) \
                             pcopy(a,p) \
                             pcopyout(p)
     FORLOOP
   // expected-error@+5 {{copy variable cannot be copyout variable}}
   // expected-note@+3 {{previously defined as copy variable here}}
-  // expected-error@+4 {{copyout variable cannot be copy variable}}
-  // expected-note@+2 {{previously defined as copyout variable here}}
+  // expected-error@+4 2 {{copyout variable cannot be copy variable}}
+  // expected-note@+2 2 {{previously defined as copyout variable here}}
   #pragma acc parallel LOOP present_or_copy(f) \
-                            copyout(f,d) \
-                            copy(d)
+                            copyout(f,d,a[0:1]) \
+                            copy(d,a[1:1])
     FORLOOP
-  // expected-error@+5 {{copy variable cannot be firstprivate variable}}
-  // expected-note@+3 {{previously defined as copy variable here}}
+  // expected-error@+5 2 {{copy variable cannot be firstprivate variable}}
+  // expected-note@+3 2 {{previously defined as copy variable here}}
   // expected-error@+4 {{firstprivate variable cannot be copy variable}}
   // expected-note@+2 {{previously defined as firstprivate variable here}}
-  #pragma acc parallel LOOP copy(i) \
-                            firstprivate(i,jk) \
+  #pragma acc parallel LOOP copy(i,a[0:2]) \
+                            firstprivate(i,jk,a) \
                             pcopy(jk)
     FORLOOP
   // expected-error@+5 {{firstprivate variable cannot be copy variable}}
@@ -850,7 +1049,7 @@ int main() {
   // expected-error@+4 {{copy variable cannot be firstprivate variable}}
   // expected-note@+2 {{previously defined as copy variable here}}
   #pragma acc parallel LOOP firstprivate(a) \
-                            present_or_copy(a,p) \
+                            present_or_copy(a[0:1],p) \
                             firstprivate(p)
     FORLOOP
   // expected-error@+5 {{private variable cannot be copy variable}}
@@ -858,7 +1057,7 @@ int main() {
   // expected-error@+4 {{copy variable cannot be private variable}}
   // expected-note@+2 {{previously defined as copy variable here}}
   #pragma acc parallel LOOP private(a) \
-                            pcopy(a,p) \
+                            pcopy(a[1:1],p) \
                             private(p)
     FORLOOP
   // expected-error@+5 {{copy variable cannot be private variable}}
@@ -868,7 +1067,6 @@ int main() {
   #pragma acc parallel LOOP present_or_copy(f) \
                             private(f,d) \
                             copy(d)
-    FORLOOP
     FORLOOP
   #pragma acc parallel LOOP present_or_copy(f) reduction(+:f,d) pcopy(d)
     FORLOOP
@@ -925,7 +1123,6 @@ int main() {
                             private(f,d) \
                             present_or_copyin(d)
     FORLOOP
-    FORLOOP
   #pragma acc parallel LOOP pcopyin(f) reduction(+:f,d) present_or_copyin(d)
     FORLOOP
   #pragma acc parallel LOOP reduction(*:i) pcopyin(i,jk) reduction(*:jk)
@@ -964,7 +1161,6 @@ int main() {
   #pragma acc parallel LOOP pcopyout(f) \
                             private(f,d) \
                             copyout(d)
-    FORLOOP
     FORLOOP
   #pragma acc parallel LOOP present_or_copyout(f) reduction(+:f,d) pcopyout(d)
     FORLOOP
@@ -1128,3 +1324,44 @@ int main() {
 
 // Complete to suppress an additional warning, but it's too late for pragmas.
 int incomplete[3];
+
+// The remaining diagnostics are currently produced by OpenMP sema during the
+// transform from OpenACC to OpenMP, which is skipped if there have been any
+// previous diagnostics.  Thus, each must be tested in a separate compilation.
+//
+// We don't check every OpenMP diagnostic case as the OpenMP tests should do
+// that.  We just check some of them (roughly one of each diagnostic kind) to
+// give us some confidence that they're handled properly by the OpenACC
+// implementation.
+//
+// TODO: We currently don't even check one of each diagnostic kind.  Look in
+// ActOnOpenMPMapClause and its callees, such as checkMappableExpressionList
+// and checkMapClauseExpressionBase in SemaOpenMP.cpp.
+
+#elif ERR == ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_AP
+
+// noacc-no-diagnostics
+
+int main() {
+  int *ap[3];
+  // expected-error@+1 {{array section does not specify contiguous storage}}
+  #pragma acc parallel LOOP copy(ap[0:2][0:3])
+    FORLOOP
+  return 0;
+}
+
+#elif ERR == ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_PP
+
+// noacc-no-diagnostics
+
+int main() {
+  int **pp;
+  // expected-error@+1 {{array section does not specify contiguous storage}}
+  #pragma acc parallel LOOP copy(pp[0:2][0:3])
+    FORLOOP
+  return 0;
+}
+
+#else
+# error undefined ERR
+#endif

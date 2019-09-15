@@ -927,6 +927,11 @@ namespace serialization {
       PREDEF_TYPE_RESERVE_ID_ID = 41,
 
       /// The placeholder type for OpenMP array section.
+      ///
+      /// TODO: This is also used for OpenACC subarrays.  When OpenACC support
+      /// is merged upstream, perhaps this can be renamed (or at least aliased
+      /// here with the same enumerator value) to something more general like
+      /// PREDEF_TYPE_ARRAY_RANGE.
       PREDEF_TYPE_OMP_ARRAY_SECTION = 42,
 
       /// The '__float128' type
@@ -1977,6 +1982,9 @@ namespace serialization {
       STMT_OMP_TARGET_TEAMS_DISTRIBUTE_PARALLEL_FOR_DIRECTIVE,
       STMT_OMP_TARGET_TEAMS_DISTRIBUTE_PARALLEL_FOR_SIMD_DIRECTIVE,
       STMT_OMP_TARGET_TEAMS_DISTRIBUTE_SIMD_DIRECTIVE,
+      // TODO: This is also used for OpenACC subarrays.  When OpenACC support
+      // is merged upstream, perhaps this can be renamed to something more
+      /// general like EXPR_ARRAY_RANGE.
       EXPR_OMP_ARRAY_SECTION,
 
       // OpenACC directives
