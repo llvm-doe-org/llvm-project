@@ -203,6 +203,35 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
       // If it is not contained and Size > 0 we should create a new entry for it.
       IsNew = true;
       uintptr_t tp = (uintptr_t)RTL->data_alloc(RTLDeviceID, Size, HstPtrBegin);
+#if OMPT_SUPPORT
+      // OpenMP 5.0 sec. 3.6.1 p. 398 L18:
+      // "The target-data-allocation event occurs when a thread allocates data
+      // on a target device."
+      // OpenMP 5.0 sec. 3.6.6 p. 404 L32:
+      // "The target-data-associate event occurs when a thread associates data
+      // on a target device."
+      // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
+      // "A registered ompt_callback_target_data_op callback is dispatched when
+      // device memory is allocated or freed, as well as when data is copied to
+      // or from a device."
+      // The callbacks must dispatch after the allocation succeeds because they
+      // require the device address.  Similarly, the callback for
+      // ompt_target_data_associate should follow the callback for
+      // ompt_target_data_alloc to reflect the order in which these events must
+      // occur.
+      if (ompt_get_enabled().ompt_callback_target_data_op) {
+        // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
+        // OpenACC support, so we haven't bothered to implement them yet.
+        ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+            TargetID, /*host_op_id*/ ompt_id_none, ompt_target_data_alloc,
+            HstPtrBegin, HOST_DEVICE, (void *)tp, DeviceID, Size,
+            /*codeptr_ra*/ NULL);
+        ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+            TargetID, /*host_op_id*/ ompt_id_none, ompt_target_data_associate,
+            HstPtrBegin, HOST_DEVICE, (void *)tp, DeviceID, Size,
+            /*codeptr_ra*/ NULL);
+      }
+#endif
       DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD ", "
          "HstEnd=" DPxMOD ", TgtBegin=" DPxMOD "\n", DPxPTR(HstPtrBase),
          DPxPTR(HstPtrBegin), DPxPTR((uintptr_t)HstPtrBegin + Size), DPxPTR(tp));
@@ -285,6 +314,37 @@ int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size, bool ForceDelete,
       assert(HT.RefCount == 0 && "did not expect a negative ref count");
       DP("Deleting tgt data " DPxMOD " of size %ld\n",
           DPxPTR(HT.TgtPtrBegin), Size);
+#if OMPT_SUPPORT
+      // OpenMP 5.0 sec. 3.6.7 p. 405 L27:
+      // "The target-data-disassociate event occurs when a thread disassociates
+      // data on a target device."
+      // OpenMP 5.0 sec. 3.6.2 p. 399 L19:
+      // "The target-data-free event occurs when a thread frees data on a
+      // target device."
+      // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
+      // "A registered ompt_callback_target_data_op callback is dispatched when
+      // device memory is allocated or freed, as well as when data is copied to
+      // or from a device."
+      // We assume the callbacks should dispatch before the free so that the
+      // device address is still valid.  Similarly, we assume the callback for
+      // ompt_target_data_disassociate should precede the callback for
+      // ompt_target_data_delete to reflect the order in which these events
+      // logically occur, even if that's not how the underlying actions are
+      // coded here.  Moreover, this ordering is for symmetry with
+      // ompt_target_data_alloc and ompt_target_data_associate.
+      if (ompt_get_enabled().ompt_callback_target_data_op) {
+        // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
+        // OpenACC support, so we haven't bothered to implement them yet.
+        ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+            TargetID, /*host_op_id*/ ompt_id_none,
+            ompt_target_data_disassociate, HstPtrBegin, HOST_DEVICE,
+            (void *)HT.TgtPtrBegin, DeviceID, Size, /*codeptr_ra*/ NULL);
+        ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+            TargetID, /*host_op_id*/ ompt_id_none, ompt_target_data_delete,
+            HstPtrBegin, HOST_DEVICE, (void *)HT.TgtPtrBegin, DeviceID, Size,
+            /*codeptr_ra*/ NULL);
+      }
+#endif
       RTL->data_delete(RTLDeviceID, (void *)HT.TgtPtrBegin);
       DP("Removing%s mapping with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD
           ", Size=%ld\n", (ForceDelete ? " (forced)" : ""),
@@ -304,6 +364,19 @@ int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size, bool ForceDelete,
 
 /// Init device, should not be called directly.
 void DeviceTy::init() {
+#if OMPT_SUPPORT
+  // FIXME: Is this the right place for this event?  Should it include global
+  // data mapping in CheckDeviceAndCtors in omptarget.cpp?
+  if (ompt_get_enabled().ompt_callback_device_initialize_start) {
+    // FIXME: Lots of missing info is needed here.
+    ompt_get_callbacks().ompt_callback(ompt_callback_device_initialize_start)(
+        /*device_num*/ DeviceID,
+        /*type*/ "<device type tracking is not yet implemented>",
+        /*device*/ NULL,
+        /*lookup*/ NULL,
+        /*documentation*/ NULL);
+  }
+#endif
   // Make call to init_requires if it exists for this plugin.
   if (RTL->init_requires)
     RTL->init_requires(RTLs.RequiresFlags);
@@ -311,6 +384,30 @@ void DeviceTy::init() {
   if (rc == OFFLOAD_SUCCESS) {
     IsInit = true;
   }
+#if OMPT_SUPPORT
+  // OpenMP 5.0 sec. 2.12.1 p. 160 L3-7:
+  // "The device-initialize event occurs in a thread that encounters the first
+  // target, target data, or target enter data construct or a device memory
+  // routine that is associated with a particular target device after the
+  // thread initiates initialization of OpenMP on the device and the device's
+  // OpenMP initialization, which may include device-side tool initialization,
+  // completes."
+  // OpenMP 5.0 sec. 4.5.2.19 p. 482 L24-25:
+  // "The OpenMP implementation invokes this callback after OpenMP is
+  // initialized for the device but before execution of any OpenMP construct is
+  // started on the device."
+  if (ompt_get_enabled().ompt_callback_device_initialize) {
+    // FIXME: Lots of missing info is needed here.
+    ompt_get_callbacks().ompt_callback(ompt_callback_device_initialize)(
+        /*device_num*/ DeviceID,
+        /*type*/ "<device type tracking is not yet implemented>",
+        /*device*/ NULL,
+        /*lookup*/ NULL,
+        /*documentation*/ NULL);
+  }
+  if (ompt_get_enabled().enabled)
+    ompt_record_device_init(DeviceID);
+#endif
 }
 
 /// Thread-safe method to initialize the device only once.
@@ -340,12 +437,54 @@ __tgt_target_table *DeviceTy::load_binary(void *Img) {
 // Submit data to device.
 int32_t DeviceTy::data_submit(void *TgtPtrBegin, void *HstPtrBegin,
     int64_t Size) {
+#if OMPT_SUPPORT
+  // OpenMP 5.0 sec. 2.19.7.1 p. 321 L15:
+  // "The target-data-op event occurs when a thread initiates a data operation
+  // on a target device."
+  // OpenMP 5.0 sec. 3.6.4 p. 401 L24:
+  // "The target-data-op event occurs when a thread transfers data on a target
+  // device."
+  // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
+  // "A registered ompt_callback_target_data_op callback is dispatched when
+  // device memory is allocated or freed, as well as when data is copied to or
+  // from a device."
+  if (ompt_get_enabled().ompt_callback_target_data_op) {
+    // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
+    // OpenACC support, so we haven't bothered to implement them yet.
+    ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+        TargetID, /*host_op_id*/ ompt_id_none,
+        ompt_target_data_transfer_to_device,
+        HstPtrBegin, HOST_DEVICE, TgtPtrBegin, DeviceID, Size,
+        /*codeptr_ra*/ NULL);
+  }
+#endif
   return RTL->data_submit(RTLDeviceID, TgtPtrBegin, HstPtrBegin, Size);
 }
 
 // Retrieve data from device.
 int32_t DeviceTy::data_retrieve(void *HstPtrBegin, void *TgtPtrBegin,
     int64_t Size) {
+#if OMPT_SUPPORT
+  // OpenMP 5.0 sec. 2.19.7.1 p. 321 L15:
+  // "The target-data-op event occurs when a thread initiates a data operation
+  // on a target device."
+  // OpenMP 5.0 sec. 3.6.4 p. 401 L24:
+  // "The target-data-op event occurs when a thread transfers data on a target
+  // device."
+  // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
+  // "A registered ompt_callback_target_data_op callback is dispatched when
+  // device memory is allocated or freed, as well as when data is copied to or
+  // from a device."
+  if (ompt_get_enabled().ompt_callback_target_data_op) {
+    // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
+    // OpenACC support, so we haven't bothered to implement them yet.
+    ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+        TargetID, /*host_op_id*/ ompt_id_none,
+        ompt_target_data_transfer_from_device,
+        TgtPtrBegin, DeviceID, HstPtrBegin, HOST_DEVICE, Size,
+        /*codeptr_ra*/ NULL);
+  }
+#endif
   return RTL->data_retrieve(RTLDeviceID, HstPtrBegin, TgtPtrBegin, Size);
 }
 
@@ -353,7 +492,7 @@ int32_t DeviceTy::data_retrieve(void *HstPtrBegin, void *TgtPtrBegin,
 int32_t DeviceTy::run_region(void *TgtEntryPtr, void **TgtVarsPtr,
     ptrdiff_t *TgtOffsets, int32_t TgtVarsSize) {
   return RTL->run_region(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtOffsets,
-      TgtVarsSize);
+      TgtVarsSize OMPT_SUPPORT_IF(, TargetID));
 }
 
 // Run team region on device.
@@ -361,7 +500,8 @@ int32_t DeviceTy::run_team_region(void *TgtEntryPtr, void **TgtVarsPtr,
     ptrdiff_t *TgtOffsets, int32_t TgtVarsSize, int32_t NumTeams,
     int32_t ThreadLimit, uint64_t LoopTripCount) {
   return RTL->run_team_region(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtOffsets,
-      TgtVarsSize, NumTeams, ThreadLimit, LoopTripCount);
+      TgtVarsSize, NumTeams, ThreadLimit, LoopTripCount
+      OMPT_SUPPORT_IF(, TargetID));
 }
 
 /// Check whether a device has an associated RTL and initialize it if it's not

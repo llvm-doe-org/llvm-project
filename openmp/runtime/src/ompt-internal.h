@@ -20,6 +20,26 @@
 
 #define _OMP_EXTERN extern "C"
 
+// FIXME: OMPT_FOR_LIBOMPTARGET is defined wherever libomptarget includes this.
+// It should probably instead include its own header file, possibly a wrapper
+// around this one.  OMPT_SUPPORT and OMPT_OPTIONAL should be set in
+// libomptarget's cmake similar to how they're set in runtime's cmake.  For
+// now, we define them unconditionally to 1 for libomptarget so we can go ahead
+// and guard uses of OMPT there.
+#ifdef OMPT_FOR_LIBOMPTARGET
+# define OMPT_SUPPORT 1
+# define OMPT_OPTIONAL 1
+# define OMPT_LIBOMPTARGET_WEAK __attribute__((weak))
+#else
+# define OMPT_LIBOMPTARGET_WEAK
+#endif
+
+#if OMPT_SUPPORT
+# define OMPT_SUPPORT_IF(...) __VA_ARGS__
+#else
+# define OMPT_SUPPORT_IF(...)
+#endif
+
 #define OMPT_INVOKER(x)                                                        \
   ((x == fork_context_gnu) ? ompt_parallel_invoker_program                     \
                            : ompt_parallel_invoker_runtime)
@@ -86,6 +106,7 @@ typedef struct {
 } ompt_thread_info_t;
 
 extern ompt_callbacks_internal_t ompt_callbacks;
+extern bool ompt_in_device_target_region;
 
 #if OMPT_SUPPORT && OMPT_OPTIONAL
 #if USE_FAST_MEMORY
@@ -111,6 +132,11 @@ void ompt_fini(void);
 int __kmp_control_tool(uint64_t command, uint64_t modifier, void *arg);
 
 extern ompt_callbacks_active_t ompt_enabled;
+ompt_callbacks_active_t ompt_get_enabled(void) OMPT_LIBOMPTARGET_WEAK;
+ompt_callbacks_internal_t ompt_get_callbacks(void) OMPT_LIBOMPTARGET_WEAK;
+uint64_t ompt_get_unique_id(void) OMPT_LIBOMPTARGET_WEAK;
+void ompt_record_device_init(int32_t device_num) OMPT_LIBOMPTARGET_WEAK;
+void ompt_toggle_in_device_target_region() OMPT_LIBOMPTARGET_WEAK;
 
 #if KMP_OS_WINDOWS
 #define UNLIKELY(x) (x)

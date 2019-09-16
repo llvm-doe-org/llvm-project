@@ -153,7 +153,15 @@
                                                                                                                          \
     macro (ompt_callback_reduction,         ompt_callback_sync_region_t,       31) /* reduction                       */ \
                                                                                                                          \
-    macro (ompt_callback_dispatch,          ompt_callback_dispatch_t,          32) /* dispatch of work                */
+    macro (ompt_callback_dispatch,          ompt_callback_dispatch_t,          32) /* dispatch of work                */ \
+                                                                                                                         \
+    /* Extension Events */                                                                                               \
+    macro (ompt_callback_device_initialize_start, ompt_callback_device_initialize_t, 100) /* device initialize start  */ \
+    macro (ompt_callback_device_finalize_start,   ompt_callback_device_finalize_t,   101) /* device finalize end      */ \
+    macro (ompt_callback_target_submit_end,       ompt_callback_target_submit_t,     102) /* target submit end        */ \
+    macro (ompt_callback_target_map_start,        ompt_callback_target_map_t,        103) /* target map start         */ \
+    macro (ompt_callback_target_map_exit_start,   ompt_callback_target_map_t,        104) /* target map exit start    */ \
+    macro (ompt_callback_target_map_exit_end,     ompt_callback_target_map_t,        105) /* target map exit end      */
 
 /*****************************************************************************
  * implementation specific types
@@ -201,7 +209,13 @@ typedef enum ompt_callbacks_t {
   ompt_callback_flush                    = 29,
   ompt_callback_cancel                   = 30,
   ompt_callback_reduction                = 31,
-  ompt_callback_dispatch                 = 32
+  ompt_callback_dispatch                 = 32,
+  ompt_callback_device_initialize_start  = 100,
+  ompt_callback_device_finalize_start    = 101,
+  ompt_callback_target_submit_end        = 102,
+  ompt_callback_target_map_start         = 103,
+  ompt_callback_target_map_exit_start    = 104,
+  ompt_callback_target_map_exit_end      = 105,
 } ompt_callbacks_t;
 
 typedef enum ompt_record_t {

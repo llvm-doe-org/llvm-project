@@ -24,11 +24,15 @@
 #include <dlfcn.h>
 #endif
 
+// FIXME: This is for OpenACC support only.
+#include <map>
+
 /*****************************************************************************
  * ompt include files
  ****************************************************************************/
 
 #include "ompt-specific.cpp"
+#include "acc_prof.h"
 
 /*****************************************************************************
  * macros
@@ -88,6 +92,12 @@ ompt_callbacks_internal_t ompt_callbacks;
 
 static ompt_start_tool_result_t *ompt_start_tool_result = NULL;
 
+// FIXME: Access to these is not thread-safe.  Does it need to be?
+unsigned ompt_device_inits_capacity = 0;
+unsigned ompt_device_inits_size = 0;
+int32_t *ompt_device_inits = NULL;
+bool ompt_in_device_target_region = false;
+
 /*****************************************************************************
  * forward declarations
  ****************************************************************************/
@@ -95,6 +105,656 @@ static ompt_start_tool_result_t *ompt_start_tool_result = NULL;
 static ompt_interface_fn_t ompt_fn_lookup(const char *s);
 
 OMPT_API_ROUTINE ompt_data_t *ompt_get_thread_data(void);
+
+/*****************************************************************************
+ * OpenACC profiling interface.
+ *
+ * FIXME: Move this to an OpenACC library.  See FIXME in ompt_try_start_tool
+ * below.
+ ****************************************************************************/
+
+// FIXME: Access to this is not thread-safe.  Does it need to be?
+std::map<ompt_id_t, int> acc_ompt_thread_device_map;
+
+static const char *acc_get_event_name(acc_event_t event) {
+  switch (event) {
+  case acc_ev_none:
+    return "acc_ev_none";
+#define EVENT(Event)       \
+  case acc_ev_##Event:     \
+    return "acc_ev_"#Event;
+  ACC_FOREACH_EVENT(EVENT)
+#undef EVENT
+  case acc_ev_last:
+    return "acc_ev_last";
+  }
+  KMP_ASSERT2(0, "unexpected acc_event_t");
+  return NULL;
+}
+
+static ompt_set_callback_t acc_ompt_set_callback = NULL;
+static int acc_ompt_initial_device_num;
+
+static acc_prof_callback acc_ev_device_init_start_callback = NULL;
+static acc_prof_callback acc_ev_device_init_end_callback = NULL;
+static acc_prof_callback acc_ev_device_shutdown_start_callback = NULL;
+static acc_prof_callback acc_ev_device_shutdown_end_callback = NULL;
+static acc_prof_callback acc_ev_runtime_shutdown_callback = NULL;
+static acc_prof_callback acc_ev_create_callback = NULL;
+static acc_prof_callback acc_ev_delete_callback = NULL;
+static acc_prof_callback acc_ev_alloc_callback = NULL;
+static acc_prof_callback acc_ev_free_callback = NULL;
+static acc_prof_callback acc_ev_enter_data_start_callback = NULL;
+static acc_prof_callback acc_ev_enter_data_end_callback = NULL;
+static acc_prof_callback acc_ev_exit_data_start_callback = NULL;
+static acc_prof_callback acc_ev_exit_data_end_callback = NULL;
+static acc_prof_callback acc_ev_compute_construct_start_callback = NULL;
+static acc_prof_callback acc_ev_compute_construct_end_callback = NULL;
+static acc_prof_callback acc_ev_enqueue_launch_start_callback = NULL;
+static acc_prof_callback acc_ev_enqueue_launch_end_callback = NULL;
+static acc_prof_callback acc_ev_enqueue_upload_start_callback = NULL;
+static acc_prof_callback acc_ev_enqueue_upload_end_callback = NULL;
+static acc_prof_callback acc_ev_enqueue_download_start_callback = NULL;
+static acc_prof_callback acc_ev_enqueue_download_end_callback = NULL;
+
+#define valid_bytes(Type, Field) \
+  (offsetof(Type, Field) + sizeof ((Type*)0)->Field)
+
+static acc_prof_info acc_get_prof_info(acc_event_t event_type,
+                                       int device_number) {
+  acc_prof_info ret;
+  ret.event_type = event_type;
+  // FIXME: Clang should set _OPENACC to the same value, and we should
+  // configure that value in one place in the code base.
+  ret.version = 201811;
+  ret.device_type = device_number == acc_ompt_initial_device_num
+                    ? acc_device_host : acc_device_not_host;
+  ret.device_number = device_number;
+  // FIXME: Is this the right thread ID?  Sometimes this returns
+  // KMP_GTID_DNE (-2 in kmp.h) for device and runtime finalization events, but
+  // that doesn't seem meaningful to the OpenACC user.  Setting to 0 in that
+  // case seems right given that 0 is what __kmp_get_gtid() normally returns
+  // and given the following text:
+  // OpenMP 5.0 sec. 3.2.4 "omp_get_thread_num" p. 338 L8-9:
+  // "The routine returns 0 if it is called from the sequential part of a
+  // program."
+  ret.thread_id = __kmp_get_gtid();
+  // FIXME: So far, it always gives me one of these, so I'd like to notice if
+  // it ever returns anything else.
+  KMP_ASSERT2(ret.thread_id == 0 || ret.thread_id == KMP_GTID_DNE,
+              "__kmp_get_gtid is useful in acc_get_prof_info");
+  if (ret.thread_id < 0)
+    ret.thread_id = 0;
+  // FIXME: We currently don't support the async clause, so this is currently
+  // always right.
+  ret.async = acc_async_sync;
+  // FIXME: OpenACC 2.7 sec. 5.2.1 L2912-2913 says, "If the runtime uses a
+  // limited number of asynchronous queues, this field contains the internal
+  // asynchronous queue number used for the event."  But it doesn't say what
+  // the field contains if the runtime doesn't, so we leave it undefined.
+  //ret.async_queue = ?;
+  // FIXME: The remaining fields of acc_prof_info are source location
+  // information.  I currently don't know how to access that.  Is it even
+  // meaningful in the case of a runtime shutdown event?
+  ret.valid_bytes = valid_bytes(acc_prof_info, async);
+  return ret;
+}
+
+static acc_event_info acc_get_data_event_info(
+    acc_event_t event_type, acc_construct_t parent_construct, bool implicit,
+    size_t bytes, const void *host_ptr, const void *device_ptr) {
+  acc_event_info ret;
+  ret.data_event.event_type = event_type;
+  ret.data_event.parent_construct = parent_construct;
+  ret.data_event.implicit = implicit;
+  ret.data_event.tool_info = NULL;
+  // FIXME: How can we get the variable name?
+  ret.data_event.var_name = NULL;
+  ret.data_event.bytes = bytes;
+  ret.data_event.host_ptr = host_ptr;
+  ret.data_event.device_ptr = device_ptr;
+  ret.data_event.valid_bytes = valid_bytes(acc_data_event_info, device_ptr);
+  return ret;
+}
+
+static acc_event_info acc_get_launch_event_info(
+    acc_event_t event_type, acc_construct_t parent_construct, bool implicit) {
+  acc_event_info ret;
+  ret.launch_event.event_type = event_type;
+  ret.launch_event.parent_construct = parent_construct;
+  ret.launch_event.implicit = implicit;
+  ret.launch_event.tool_info = NULL;
+  ret.launch_event.kernel_name = NULL;
+  ret.launch_event.valid_bytes = valid_bytes(acc_launch_event_info,
+                                             kernel_name);
+  // FIXME: The remaining fields of acc_launch_event_info are num_gangs,
+  // num_workers, and vector_length, but I don't know how to access that here.
+  // ompt_callback_target_submit{,_start} does provide requested_num_teams, but
+  // OpenACC apparently wants the number of gangs created.
+  return ret;
+}
+
+static acc_event_info acc_get_other_event_info(
+    acc_event_t event_type, acc_construct_t parent_construct, bool implicit) {
+  acc_event_info ret;
+  ret.other_event.event_type = event_type;
+  ret.other_event.parent_construct = parent_construct;
+  ret.other_event.implicit = implicit;
+  ret.other_event.tool_info = NULL;
+  ret.other_event.valid_bytes = valid_bytes(acc_other_event_info, tool_info);
+  return ret;
+}
+
+static acc_api_info acc_get_api_info(int device_number) {
+  acc_api_info ret;
+  // FIXME: We don't support any device-specific APIs yet in remaining fields,
+  // so acc_device_api_none seems like the right thing for now.
+  ret.device_api = acc_device_api_none;
+  ret.device_type = device_number == acc_ompt_initial_device_num
+                    ? acc_device_host : acc_device_not_host;
+  // FIXME: How do we choose our vendor identifier?  Does Clang's OpenMP
+  // implementation have something?
+  //ret.vendor = 0;
+  // FIXME: OpenACC 2.7 doesn't seems to say what goes here, so it must be
+  // implementation-defined.
+  //ret.device_handle = NULL;
+  //ret.context_handle = NULL;
+  //ret.async_handle = NULL;
+  ret.valid_bytes = valid_bytes(acc_api_info, device_type);
+  return ret;
+}
+
+static unsigned acc_ompt_callback_device_initialize_start_reg_counter = 0;
+static void acc_ompt_callback_device_initialize_start(
+    int device_num, const char *type, ompt_device_t *device,
+    ompt_function_lookup_t lookup, const char *documentation) {
+  acc_event_t event_type = acc_ev_device_init_start;
+  acc_prof_info pi = acc_get_prof_info(event_type, device_num);
+  // FIXME: How will we distinguish acc parallel from acc kernels, acc init,
+  // acc_init, etc.?
+  acc_event_info ei = acc_get_other_event_info(
+      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_api_info ai = acc_get_api_info(device_num);
+  acc_ev_device_init_start_callback(&pi, &ei, &ai);
+}
+
+static unsigned acc_ompt_callback_device_initialize_reg_counter = 0;
+static void acc_ompt_callback_device_initialize(
+    int device_num, const char *type, ompt_device_t *device,
+    ompt_function_lookup_t lookup, const char *documentation) {
+  acc_event_t event_type = acc_ev_device_init_end;
+  acc_prof_info pi = acc_get_prof_info(event_type, device_num);
+  // FIXME: How will we distinguish acc parallel from acc kernels, acc init,
+  // acc_init, etc.?
+  acc_event_info ei = acc_get_other_event_info(
+      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_api_info ai = acc_get_api_info(device_num);
+  acc_ev_device_init_end_callback(&pi, &ei, &ai);
+}
+
+static unsigned acc_ompt_callback_device_finalize_start_reg_counter = 0;
+static void acc_ompt_callback_device_finalize_start(int device_num) {
+  acc_event_t event_type = acc_ev_device_shutdown_start;
+  acc_prof_info pi = acc_get_prof_info(event_type, device_num);
+  // FIXME: Is acc_construct_runtime_api right?  See related fixmes in
+  // acc_ompt_finalize and acc_ompt_callback_device_finalize.
+  acc_event_info ei = acc_get_other_event_info(
+      event_type, acc_construct_runtime_api, /*implicit*/ true);
+  acc_api_info ai = acc_get_api_info(device_num);
+  acc_ev_device_shutdown_start_callback(&pi, &ei, &ai);
+}
+
+static unsigned acc_ompt_callback_device_finalize_reg_counter = 0;
+static void acc_ompt_callback_device_finalize(int device_num) {
+  acc_event_t event_type = acc_ev_device_shutdown_end;
+  acc_prof_info pi = acc_get_prof_info(event_type, device_num);
+  // FIXME: Is acc_construct_runtime_api right?  See related fixmes in
+  // acc_ompt_finalize and acc_ompt_callback_device_finalize_start.
+  acc_event_info ei = acc_get_other_event_info(
+      event_type, acc_construct_runtime_api, /*implicit*/ true);
+  acc_api_info ai = acc_get_api_info(device_num);
+  acc_ev_device_shutdown_end_callback(&pi, &ei, &ai);
+}
+
+static unsigned acc_ompt_callback_target_reg_counter = 0 ;
+static void acc_ompt_callback_target(
+    ompt_target_t kind, ompt_scope_endpoint_t endpoint, int device_num,
+    ompt_data_t *task_data, ompt_id_t target_id, const void *codeptr_ra) {
+  if (kind != ompt_target)
+    return;
+  acc_event_t event_type;
+  acc_prof_callback acc_cb;
+  switch (endpoint) {
+  case ompt_scope_begin:
+    event_type = acc_ev_compute_construct_start;
+    acc_cb = acc_ev_compute_construct_start_callback;
+    acc_ompt_thread_device_map[target_id] = device_num;
+    break;
+  case ompt_scope_end:
+    event_type = acc_ev_compute_construct_end;
+    acc_cb = acc_ev_compute_construct_end_callback;
+    break;
+  }
+  if (acc_cb) {
+    acc_prof_info pi = acc_get_prof_info(event_type, device_num);
+    // FIXME: How will we distinguish acc kernels from acc parallel?
+    acc_event_info ei = acc_get_other_event_info(
+        event_type, acc_construct_parallel, /*implicit*/ false);
+    acc_api_info ai = acc_get_api_info(device_num);
+    acc_cb(&pi, &ei, &ai);
+  }
+  if (endpoint == ompt_scope_end)
+    acc_ompt_thread_device_map.erase(target_id);
+}
+
+static unsigned acc_ompt_callback_target_map_start_reg_counter = 0;
+static void acc_ompt_callback_target_map_start(
+    ompt_id_t target_id, unsigned int nitems, void **host_addr,
+    void **device_addr, size_t *bytes, unsigned int *mapping_flags,
+    const void * codeptr_ra) {
+  acc_event_t event_type = acc_ev_enter_data_start;
+  auto itr = acc_ompt_thread_device_map.find(target_id);
+  KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
+  int device_num = itr->second;
+  acc_prof_info pi = acc_get_prof_info(event_type, device_num);
+  // FIXME: How will we distinguish acc kernels from acc parallel?
+  acc_event_info ei = acc_get_other_event_info(
+      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_api_info ai = acc_get_api_info(device_num);
+  acc_ev_enter_data_start_callback(&pi, &ei, &ai);
+}
+
+static unsigned acc_ompt_callback_target_map_reg_counter = 0;
+static void acc_ompt_callback_target_map(
+    ompt_id_t target_id, unsigned int nitems, void **host_addr,
+    void **device_addr, size_t *bytes, unsigned int *mapping_flags,
+    const void * codeptr_ra) {
+  acc_event_t event_type = acc_ev_enter_data_end;
+  auto itr = acc_ompt_thread_device_map.find(target_id);
+  KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
+  int device_num = itr->second;
+  acc_prof_info pi = acc_get_prof_info(event_type, device_num);
+  // FIXME: How will we distinguish acc kernels from acc parallel?
+  acc_event_info ei = acc_get_other_event_info(
+      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_api_info ai = acc_get_api_info(device_num);
+  acc_ev_enter_data_end_callback(&pi, &ei, &ai);
+}
+
+static unsigned acc_ompt_callback_target_map_exit_start_reg_counter = 0;
+static void acc_ompt_callback_target_map_exit_start(
+    ompt_id_t target_id, unsigned int nitems, void **host_addr,
+    void **device_addr, size_t *bytes, unsigned int *mapping_flags,
+    const void * codeptr_ra) {
+  acc_event_t event_type = acc_ev_exit_data_start;
+  auto itr = acc_ompt_thread_device_map.find(target_id);
+  KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
+  int device_num = itr->second;
+  acc_prof_info pi = acc_get_prof_info(event_type, device_num);
+  // FIXME: How will we distinguish acc kernels from acc parallel?
+  acc_event_info ei = acc_get_other_event_info(
+      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_api_info ai = acc_get_api_info(device_num);
+  acc_ev_exit_data_start_callback(&pi, &ei, &ai);
+}
+
+static unsigned acc_ompt_callback_target_map_exit_end_reg_counter = 0;
+static void acc_ompt_callback_target_map_exit_end(
+    ompt_id_t target_id, unsigned int nitems, void **host_addr,
+    void **device_addr, size_t *bytes, unsigned int *mapping_flags,
+    const void * codeptr_ra) {
+  acc_event_t event_type = acc_ev_exit_data_end;
+  auto itr = acc_ompt_thread_device_map.find(target_id);
+  KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
+  int device_num = itr->second;
+  acc_prof_info pi = acc_get_prof_info(event_type, device_num);
+  // FIXME: How will we distinguish acc kernels from acc parallel?
+  acc_event_info ei = acc_get_other_event_info(
+      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_api_info ai = acc_get_api_info(device_num);
+  acc_ev_exit_data_end_callback(&pi, &ei, &ai);
+}
+
+static unsigned acc_ompt_callback_target_submit_reg_counter = 0 ;
+static void acc_ompt_callback_target_submit(
+    ompt_id_t target_id, ompt_id_t host_op_id,
+    unsigned int requested_num_teams) {
+  acc_event_t event_type = acc_ev_enqueue_launch_start;
+  auto itr = acc_ompt_thread_device_map.find(target_id);
+  KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
+  int device_num = itr->second;
+  acc_prof_info pi = acc_get_prof_info(event_type, device_num);
+  // FIXME: How will we distinguish acc kernels from acc parallel?
+  acc_event_info ei = acc_get_launch_event_info(
+      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_api_info ai = acc_get_api_info(device_num);
+  acc_ev_enqueue_launch_start_callback(&pi, &ei, &ai);
+}
+
+static unsigned acc_ompt_callback_target_submit_end_reg_counter = 0 ;
+static void acc_ompt_callback_target_submit_end(
+    ompt_id_t target_id, ompt_id_t host_op_id,
+    unsigned int requested_num_teams) {
+  acc_event_t event_type = acc_ev_enqueue_launch_end;
+  auto itr = acc_ompt_thread_device_map.find(target_id);
+  KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
+  int device_num = itr->second;
+  acc_prof_info pi = acc_get_prof_info(event_type, device_num);
+  // FIXME: How will we distinguish acc kernels from acc parallel?
+  acc_event_info ei = acc_get_launch_event_info(
+      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_api_info ai = acc_get_api_info(device_num);
+  acc_ev_enqueue_launch_end_callback(&pi, &ei, &ai);
+}
+
+static void acc_get_target_data_op_info(
+    acc_event_t event_type, ompt_id_t target_id, int device_num, size_t bytes,
+    const void *host_ptr, const void *device_ptr, acc_prof_info *pi,
+    acc_event_info *ei, acc_api_info *ai) {
+  *pi = acc_get_prof_info(event_type, device_num);
+  // FIXME: How will we distinguish acc kernels from acc parallel?
+  // FIXME: How can we tell if this is for an implicit data attribute?
+  // Currently, we always set implicit=false.
+  *ei = acc_get_data_event_info(event_type, acc_construct_parallel,
+                                /*implicit*/ false, bytes, host_ptr,
+                                device_ptr);
+  *ai = acc_get_api_info(device_num);
+}
+
+static unsigned acc_ompt_callback_target_data_op_reg_counter = 0 ;
+static void acc_ompt_callback_target_data_op(
+    ompt_id_t target_id, ompt_id_t host_op_id, ompt_target_data_op_t optype,
+    void *src_addr, int src_device_num, void *dest_addr, int dest_device_num,
+    size_t bytes, const void *codeptr_ra) {
+  switch (optype) {
+  case ompt_target_data_associate:
+    if (acc_ev_create_callback) {
+      acc_prof_info pi;
+      acc_event_info ei;
+      acc_api_info ai;
+      acc_get_target_data_op_info(acc_ev_create, target_id, dest_device_num,
+                                  bytes, src_addr, dest_addr, &pi, &ei, &ai);
+      acc_ev_create_callback(&pi, &ei, &ai);
+    }
+    break;
+  case ompt_target_data_disassociate:
+    if (acc_ev_delete_callback) {
+      acc_prof_info pi;
+      acc_event_info ei;
+      acc_api_info ai;
+      acc_get_target_data_op_info(acc_ev_delete, target_id, dest_device_num,
+                                  bytes, src_addr, dest_addr, &pi, &ei, &ai);
+      acc_ev_delete_callback(&pi, &ei, &ai);
+    }
+    break;
+  case ompt_target_data_alloc:
+    if (acc_ev_alloc_callback) {
+      acc_prof_info pi;
+      acc_event_info ei;
+      acc_api_info ai;
+      acc_get_target_data_op_info(acc_ev_alloc, target_id, dest_device_num,
+                                  bytes, src_addr, dest_addr, &pi, &ei, &ai);
+      acc_ev_alloc_callback(&pi, &ei, &ai);
+    }
+    break;
+  case ompt_target_data_delete:
+    if (acc_ev_free_callback) {
+      acc_prof_info pi;
+      acc_event_info ei;
+      acc_api_info ai;
+      acc_get_target_data_op_info(acc_ev_free, target_id, dest_device_num,
+                                  bytes, src_addr, dest_addr, &pi, &ei, &ai);
+      acc_ev_free_callback(&pi, &ei, &ai);
+    }
+    break;
+  // FIXME: So far, the data transfer events are synchronous in LLVM's
+  // implementation (memcpy, cuMemcpyHToD, or cuMemcpyDToH) with no obvious
+  // enqueue stage.  Thus, we dispatch _start and _end callbacks back to back
+  // here.  Does that make sense?  Will that be true for all architectures?  If
+  // not, we might have to create an OMPT extension callback,
+  // ompt_callback_target_data_op_end.
+  case ompt_target_data_transfer_to_device:
+    if (acc_ev_enqueue_upload_start_callback ||
+        acc_ev_enqueue_upload_end_callback) {
+      acc_prof_info pi;
+      acc_event_info ei;
+      acc_api_info ai;
+      acc_get_target_data_op_info(acc_ev_none, target_id, dest_device_num,
+                                  bytes, src_addr, dest_addr, &pi, &ei, &ai);
+      if (acc_ev_enqueue_upload_start_callback) {
+        pi.event_type = ei.event_type = acc_ev_enqueue_upload_start;
+        acc_ev_enqueue_upload_start_callback(&pi, &ei, &ai);
+      }
+      if (acc_ev_enqueue_upload_end_callback) {
+        pi.event_type = ei.event_type = acc_ev_enqueue_upload_end;
+        acc_ev_enqueue_upload_end_callback(&pi, &ei, &ai);
+      }
+    }
+    break;
+  case ompt_target_data_transfer_from_device:
+    if (acc_ev_enqueue_download_start_callback ||
+        acc_ev_enqueue_download_end_callback) {
+      acc_prof_info pi;
+      acc_event_info ei;
+      acc_api_info ai;
+      acc_get_target_data_op_info(acc_ev_alloc, target_id, src_device_num,
+                                  bytes, dest_addr, src_addr, &pi, &ei, &ai);
+      if (acc_ev_enqueue_download_start_callback) {
+        pi.event_type = ei.event_type = acc_ev_enqueue_download_start;
+        acc_ev_enqueue_download_start_callback(&pi, &ei, &ai);
+      }
+      if (acc_ev_enqueue_download_end_callback) {
+        pi.event_type = ei.event_type = acc_ev_enqueue_download_end;
+        acc_ev_enqueue_download_end_callback(&pi, &ei, &ai);
+      }
+    }
+    break;
+  }
+}
+
+static bool acc_event_callback(
+    acc_event_t acc_event, acc_prof_callback **acc_cb_ptr,
+    unsigned *ompt_event_count, ompt_callbacks_t **ompt_events) {
+  switch (acc_event) {
+#define ACC_EVENT_CASE(AccEvent, ...)                                     \
+  case AccEvent: {                                                        \
+    *acc_cb_ptr = &AccEvent##_callback;                                   \
+    static ompt_callbacks_t ompt_event_arr[] = {__VA_ARGS__};             \
+    *ompt_event_count = sizeof ompt_event_arr / sizeof ompt_event_arr[0]; \
+    *ompt_events = ompt_event_arr;                                        \
+    return 0;                                                             \
+  }
+  // ompt_callback_target is needed for many events in order to associate the
+  // target_id with the device_num.
+  ACC_EVENT_CASE(acc_ev_device_init_start,       ompt_callback_device_initialize_start)
+  ACC_EVENT_CASE(acc_ev_device_init_end,         ompt_callback_device_initialize)
+  ACC_EVENT_CASE(acc_ev_device_shutdown_start,   ompt_callback_device_finalize_start)
+  ACC_EVENT_CASE(acc_ev_device_shutdown_end,     ompt_callback_device_finalize)
+  ACC_EVENT_CASE(acc_ev_create,                  ompt_callback_target_data_op)
+  ACC_EVENT_CASE(acc_ev_delete,                  ompt_callback_target_data_op)
+  ACC_EVENT_CASE(acc_ev_alloc,                   ompt_callback_target_data_op)
+  ACC_EVENT_CASE(acc_ev_free,                    ompt_callback_target_data_op)
+  ACC_EVENT_CASE(acc_ev_enter_data_start,        ompt_callback_target, ompt_callback_target_map_start)
+  ACC_EVENT_CASE(acc_ev_enter_data_end,          ompt_callback_target, ompt_callback_target_map)
+  ACC_EVENT_CASE(acc_ev_exit_data_start,         ompt_callback_target, ompt_callback_target_map_exit_start)
+  ACC_EVENT_CASE(acc_ev_exit_data_end,           ompt_callback_target, ompt_callback_target_map_exit_end)
+  ACC_EVENT_CASE(acc_ev_compute_construct_start, ompt_callback_target)
+  ACC_EVENT_CASE(acc_ev_compute_construct_end,   ompt_callback_target)
+  ACC_EVENT_CASE(acc_ev_enqueue_launch_start,    ompt_callback_target, ompt_callback_target_submit)
+  ACC_EVENT_CASE(acc_ev_enqueue_launch_end,      ompt_callback_target, ompt_callback_target_submit_end)
+  ACC_EVENT_CASE(acc_ev_enqueue_upload_start,    ompt_callback_target_data_op)
+  ACC_EVENT_CASE(acc_ev_enqueue_upload_end,      ompt_callback_target_data_op)
+  ACC_EVENT_CASE(acc_ev_enqueue_download_start,  ompt_callback_target_data_op)
+  ACC_EVENT_CASE(acc_ev_enqueue_download_end,    ompt_callback_target_data_op)
+#undef ACC_EVENT_CASE
+  case acc_ev_runtime_shutdown:
+    *acc_cb_ptr = &acc_ev_runtime_shutdown_callback;
+    *ompt_event_count = 0;
+    return 0;
+  }
+  return 1;
+}
+
+static void acc_ompt_event_callback(ompt_callbacks_t ompt_event,
+                                    ompt_callback_t *ompt_cb,
+                                    unsigned **ompt_reg_counter) {
+  switch (ompt_event) {
+#define OMPT_EVENT_CASE(OmptEvent)                      \
+  case OmptEvent:                                       \
+    *ompt_cb = (ompt_callback_t)acc_##OmptEvent;        \
+    *ompt_reg_counter = &acc_##OmptEvent##_reg_counter; \
+    return;
+  OMPT_EVENT_CASE(ompt_callback_device_initialize_start)
+  OMPT_EVENT_CASE(ompt_callback_device_initialize)
+  OMPT_EVENT_CASE(ompt_callback_device_finalize_start)
+  OMPT_EVENT_CASE(ompt_callback_device_finalize)
+  OMPT_EVENT_CASE(ompt_callback_target)
+  OMPT_EVENT_CASE(ompt_callback_target_map_start)
+  OMPT_EVENT_CASE(ompt_callback_target_map)
+  OMPT_EVENT_CASE(ompt_callback_target_map_exit_start)
+  OMPT_EVENT_CASE(ompt_callback_target_map_exit_end)
+  OMPT_EVENT_CASE(ompt_callback_target_submit)
+  OMPT_EVENT_CASE(ompt_callback_target_submit_end)
+  OMPT_EVENT_CASE(ompt_callback_target_data_op)
+#undef OMPT_EVENT_CASE
+  }
+  KMP_ASSERT2(0, "unexpected ompt_callbacks_t");
+}
+
+static void acc_prof_register_ompt(
+    acc_event_t acc_event, acc_prof_callback acc_cb, acc_register_t acc_info) {
+  // FIXME: Support other values of acc_info.  Probably should coordinate with
+  // fixme below about registering multiple callbacks per event.
+  if (acc_info != acc_reg) {
+    fprintf(stderr, "Warning: toggling events is not supported: %s\n",
+            acc_get_event_name(acc_event));
+    return;
+  }
+  acc_prof_callback *acc_cb_ptr;
+  unsigned ompt_event_count;
+  ompt_callbacks_t *ompt_events;
+  if (acc_event_callback(acc_event, &acc_cb_ptr, &ompt_event_count,
+                         &ompt_events)) {
+    fprintf(stderr, "Warning: attempt to register unhandled event: %s\n",
+            acc_get_event_name(acc_event));
+    return;
+  }
+  // FIXME: According to the spec, we need to store a list of callbacks per
+  // event, and we need a reference counter per callback per event so a
+  // callback can be registered multiple times for the same event without
+  // causing it to be called multiple times.  Perhaps we should then also have
+  // a hash for fast lookup.
+  if (*acc_cb_ptr) {
+    fprintf(stderr, "Warning: registering already registered events is not "
+                    "supported: %s\n",
+            acc_get_event_name(acc_event));
+    return;
+  }
+  *acc_cb_ptr = acc_cb;
+  for (unsigned i = 0; i < ompt_event_count; ++i) {
+    ompt_callback_t ompt_cb;
+    unsigned *ompt_reg_counter;
+    acc_ompt_event_callback(ompt_events[i], &ompt_cb, &ompt_reg_counter);
+    if ((*ompt_reg_counter)++)
+      continue;
+    switch (acc_ompt_set_callback(ompt_events[i], ompt_cb)) {
+    case ompt_set_error:
+      fprintf(stderr, "Warning: ompt_set_error result when registering event: "
+                      "%s\n",
+              acc_get_event_name(acc_event));
+      break;
+    case ompt_set_never:
+      fprintf(stderr, "Warning: ompt_set_never result when registering event: "
+                      "%s\n",
+              acc_get_event_name(acc_event));
+      break;
+    case ompt_set_impossible:
+      fprintf(stderr, "Warning: ompt_set_impossible result when registering "
+                      "event: %s\n",
+              acc_get_event_name(acc_event));
+      break;
+    case ompt_set_sometimes:
+    case ompt_set_sometimes_paired:
+    case ompt_set_always:
+      break;
+    }
+  }
+}
+
+// FIXME: See fixmes in acc_prof_register_ompt.
+static void acc_prof_unregister_ompt(
+    acc_event_t acc_event, acc_prof_callback acc_cb, acc_register_t acc_info) {
+  if (acc_info != acc_reg) {
+    fprintf(stderr, "Warning: toggling events is not supported: %s\n",
+            acc_get_event_name(acc_event));
+    return;
+  }
+  acc_prof_callback *acc_cb_ptr;
+  unsigned ompt_event_count;
+  ompt_callbacks_t *ompt_events;
+  if (acc_event_callback(acc_event, &acc_cb_ptr, &ompt_event_count,
+                         &ompt_events)) {
+    fprintf(stderr, "Warning: attempt to unregister unhandled event: %s\n",
+            acc_get_event_name(acc_event));
+    return;
+  }
+  if (!*acc_cb_ptr) {
+    fprintf(stderr, "Warning: attempt to unregister event not previously "
+                    "registered: %s\n",
+            acc_get_event_name(acc_event));
+    return;
+  }
+  if (*acc_cb_ptr != acc_cb) {
+    fprintf(stderr, "Warning: attempt to unregister wrong callback for event: "
+                    "%s\n",
+            acc_get_event_name(acc_event));
+    return;
+  }
+  *acc_cb_ptr = NULL;
+  for (unsigned i = 0; i < ompt_event_count; ++i) {
+    ompt_callback_t ompt_cb;
+    unsigned *ompt_reg_counter;
+    acc_ompt_event_callback(ompt_events[i], &ompt_cb, &ompt_reg_counter);
+    KMP_ASSERT2(*ompt_reg_counter,
+                "expected OMPT callback registration count to be non-zero");
+    if (--*ompt_reg_counter)
+      continue;
+    if (acc_ompt_set_callback(ompt_events[i], NULL) == ompt_set_error)
+      fprintf(stderr, "Warning: ompt_set_error result when unregistering "
+                      "event: %s\n",
+              acc_get_event_name(acc_event));
+  }
+}
+
+static int acc_ompt_initialize(ompt_function_lookup_t lookup,
+                               int initial_device_num,
+                               ompt_data_t *tool_data) {
+  acc_ompt_set_callback = (ompt_set_callback_t)lookup("ompt_set_callback");
+  acc_register_library(acc_prof_register_ompt, acc_prof_unregister_ompt,
+                       /*acc_query_fn_name*/ NULL);
+  acc_ompt_initial_device_num = initial_device_num;
+  return 1;
+}
+
+static void acc_ompt_finalize(ompt_data_t *tool_data) {
+  if (!acc_ev_runtime_shutdown_callback)
+    return;
+  acc_event_t event_type = acc_ev_runtime_shutdown;
+  acc_prof_info pi = acc_get_prof_info(event_type,
+                                       acc_ompt_initial_device_num);
+  // FIXME: Currently, the runtime shuts down only at program termination
+  // (shutdown pragmas and library calls are not yet supported, but how will we
+  // distinguish them here when they are?).  There is no parent construct in
+  // this enum that makes sense for that, but at least
+  // acc_construct_runtime_api doesn't name a specific construct.  The implicit
+  // field hopefully communicates this well enough.  See related fixmes in
+  // acc_ompt_callback_device_finalize_start and
+  // acc_ompt_callback_device_finalize.
+  acc_event_info ei = acc_get_other_event_info(
+      event_type, acc_construct_runtime_api, /*implicit*/ true);
+  acc_api_info ai = acc_get_api_info(acc_ompt_initial_device_num);
+  acc_ev_runtime_shutdown_callback(&pi, &ei, &ai);
+}
 
 /*****************************************************************************
  * initialization and finalization (private operations)
@@ -131,6 +791,13 @@ static ompt_start_tool_result_t *ompt_tool_darwin(unsigned int omp_version,
 // On Unix-like systems that support weak symbols the following implementation
 // of ompt_start_tool() will be used in case no tool-supplied implementation of
 // this function is present in the address space of a process.
+
+// FIXME: Move this to an OpenACC library.  See FIXME in ompt_try_start_tool
+// below.
+// FIXME: This needs implementations in the other branches of this #if.
+_OMP_EXTERN OMPT_WEAK_ATTRIBUTE void
+acc_register_library(acc_prof_reg reg, acc_prof_reg unref,
+                     acc_prof_lookup_func lookup) {}
 
 _OMP_EXTERN OMPT_WEAK_ATTRIBUTE ompt_start_tool_result_t *
 ompt_start_tool(unsigned int omp_version, const char *runtime_version) {
@@ -267,6 +934,27 @@ ompt_try_start_tool(unsigned int omp_version, const char *runtime_version) {
       fname = __kmp_str_token(NULL, sep, &buf);
     }
     __kmp_str_free(&libs);
+  } else {
+    // FIXME: Don't do this here.  It causes OMPT to be enabled at all times.
+    // That may impact performance, and it certainly changes error codes for
+    // some cases (including an existing test case that this causes to fail).
+    // Instead, create a separate library for OpenACC that isn't linked
+    // automatically for OpenMP apps.  It can provide an ompt_start_tool that
+    // returns an acc_register_library wrapper, and it can provide that wrapper
+    // and the above default acc_register_library.
+    static int host_device_number;
+    static ompt_data_t ompt_data;
+    static ompt_start_tool_result_t res;
+    ompt_data.ptr = &host_device_number;
+    // FIXME: We should call acc_register_library here, let it register
+    // callbacks in OpenACC-specific tables (we need to define those), check to
+    // see if anything has been registered, and then return a NULL result here
+    // if not so that we don't unnecessarily enable OMPT, especially when we're
+    // using our default empty acc_register_library.
+    res.initialize = acc_ompt_initialize;
+    res.finalize = acc_ompt_finalize;
+    res.tool_data = ompt_data;
+    ret = &res;
   }
   return ret;
 }
@@ -373,11 +1061,84 @@ void ompt_post_init() {
 }
 
 void ompt_fini() {
+  // OpenMP 5.0 sec. 2.12.1 p. 160 L12-13:
+  // "The device-finalize event for a target device that has been initialized
+  // occurs in some thread before an OpenMP implementation shuts down."
+  //
+  // OpenMP 5.0 sec. 4.5.2.20 p. 484 L12-18:
+  // "A registered callback with type signature ompt_callback_device_finalize_t
+  // is dispatched for a device immediately prior to finalizing the device.
+  // Prior to dispatching a finalization callback for a device on which tracing
+  // is active, the OpenMP implementation stops tracing on the device and
+  // synchronously flushes all trace records for the device that have not yet
+  // been reported. These trace records are flushed through one or more buffer
+  // completion callbacks with type signature ompt_callback_buffer_complete_t
+  // as needed prior to the dispatch of the callback with type signature
+  // ompt_callback_device_finalize_t."
+  //
+  // Currently, device tracing is not implemented, and there is no device
+  // finalization process in libomptarget, so we dispatch these callbacks here
+  // for all devices.
+  //
+  // The above quotes say flushing of traces occurs "prior to dispatching a
+  // finalization callback", which occurs "immediately prior to finalizing the
+  // device".  This might imply that flushing of traces is prior to and not
+  // part of the finalization process, but we assume instead that "finalizing
+  // the device" really indicates the end of the finalization process, which
+  // can thus include flushing of traces.  Thus, we add
+  // ompt_callback_device_finalize_start for the beginning of the finalization
+  // process.
   if (ompt_enabled.enabled) {
+    if (ompt_enabled.ompt_callback_device_finalize_start ||
+        ompt_enabled.ompt_callback_device_finalize) {
+      for (int i = ompt_device_inits_size - 1; i >= 0; --i) {
+        int32_t device_num = ompt_device_inits[i];
+        if (ompt_enabled.ompt_callback_device_finalize_start) {
+          ompt_callbacks.ompt_callback(ompt_callback_device_finalize_start)(
+            device_num);
+        }
+        // TODO: Based on the above discussion, flushing of traces goes here.
+        if (ompt_enabled.ompt_callback_device_finalize) {
+          ompt_callbacks.ompt_callback(ompt_callback_device_finalize)(
+            device_num);
+        }
+      }
+      ompt_device_inits_capacity = ompt_device_inits_size = 0;
+      KMP_INTERNAL_FREE(ompt_device_inits);
+      ompt_device_inits = NULL;
+    }
     ompt_start_tool_result->finalize(&(ompt_start_tool_result->tool_data));
   }
 
   memset(&ompt_enabled, 0, sizeof(ompt_enabled));
+}
+
+ompt_callbacks_active_t ompt_get_enabled() {
+  return ompt_enabled;
+}
+
+ompt_callbacks_internal_t ompt_get_callbacks() {
+  return ompt_callbacks;
+}
+
+void ompt_record_device_init(int32_t device_num) {
+  if (!ompt_device_inits_capacity) {
+    ompt_device_inits_capacity = 4;
+    ompt_device_inits = (int32_t *)KMP_INTERNAL_MALLOC(
+        ompt_device_inits_capacity * sizeof *ompt_device_inits);
+    if (!ompt_device_inits)
+      KMP_FATAL(MemoryAllocFailed);
+  } else if (ompt_device_inits_capacity < ompt_device_inits_size + 1) {
+    ompt_device_inits_capacity *= 2;
+    ompt_device_inits = (int32_t *)KMP_INTERNAL_REALLOC(
+        ompt_device_inits,
+        ompt_device_inits_capacity * sizeof *ompt_device_inits);
+  }
+  ompt_device_inits[ompt_device_inits_size++] = device_num;
+}
+
+void ompt_toggle_in_device_target_region() {
+  ompt_in_device_target_region = !ompt_in_device_target_region;
 }
 
 /*****************************************************************************
@@ -692,7 +1453,9 @@ int __kmp_control_tool(uint64_t command, uint64_t modifier, void *arg) {
  * misc
  ****************************************************************************/
 
-OMPT_API_ROUTINE uint64_t ompt_get_unique_id(void) {
+// FIXME: We expose this one to libomptarget, so we drop the OMPT_API_ROUTINE,
+// which makes it static.  Should we?
+uint64_t ompt_get_unique_id(void) {
   return __ompt_get_unique_id_internal();
 }
 

@@ -26,6 +26,12 @@ VERSION {
         # OMPT API
         #
         ompt_start_tool;     # OMPT start interface
+        acc_register_library;
+        ompt_get_enabled;
+        ompt_get_callbacks;
+        ompt_get_unique_id;
+        ompt_record_device_init;
+        ompt_toggle_in_device_target_region;
 
         # icc drops weak attribute at linking step without the following line:
         Annotate*;           # TSAN annotation

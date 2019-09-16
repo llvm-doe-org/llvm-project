@@ -249,6 +249,10 @@ set(LIBOMP_USE_DEBUGGER FALSE CACHE BOOL
 set(LIBOMP_USE_STDCPPLIB FALSE CACHE BOOL
   "Should we link to C++ library?")
 
+# FIXME: This is needed for OpenACC profiling interface support.  Separate that
+# into another library, and then remove this.
+set(LIBOMP_USE_STDCPPLIB TRUE)
+
 # Intel(R) Transactional Synchronization Extensions (Intel(R) TSX) based locks have
 # __asm code which can be troublesome for some compilers.  This feature is also x86 specific.
 # TODO: Make this a real feature check

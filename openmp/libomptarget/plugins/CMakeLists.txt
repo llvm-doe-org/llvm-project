@@ -24,6 +24,9 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "${tmachine}$")
     
       include_directories(${LIBOMPTARGET_DEP_LIBFFI_INCLUDE_DIR})
       include_directories(${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIR})
+
+      # Set the -I for headers from the runtime.
+      include_directories(${CMAKE_CURRENT_BINARY_DIR}/../../../runtime/src)
       
       # Define macro to be used as prefix of the runtime messages for this target.
       add_definitions("-DTARGET_NAME=${tmachine_name}")
@@ -83,4 +86,3 @@ add_subdirectory(x86_64)
 
 # Make sure the parent scope can see the plugins that will be created.
 set(LIBOMPTARGET_SYSTEM_TARGETS "${LIBOMPTARGET_SYSTEM_TARGETS}" PARENT_SCOPE)
-

@@ -16,6 +16,8 @@
 #include "device.h"
 #include "private.h"
 #include "rtl.h"
+#define OMPT_FOR_LIBOMPTARGET
+#include "../../runtime/src/ompt-internal.h"
 
 #include <cassert>
 #include <vector>
@@ -140,6 +142,45 @@ static int InitLibrary(DeviceTy& Device) {
             (uintptr_t)CurrHostEntry->addr + CurrHostEntry->size /*HstPtrEnd*/,
             (uintptr_t)CurrDeviceEntry->addr /*TgtPtrBegin*/,
             INF_REF_CNT /*RefCount*/));
+#if OMPT_SUPPORT
+        // FIXME: In our experiments so far, this callback describes the
+        // association of a const array's host and device addresses because it
+        // appears in a firstprivate clause on some target region.  This
+        // callback is reached when execution arrives at the first target
+        // region, which might not be the region with that firstprivate clause.
+        // There are surely other scenarios, but we haven't tried to describe
+        // the general case.
+        //
+        // The event this callback describes might them seem like part of
+        // device initialization except that device initialization might have
+        // happened on an earlier call to an OpenMP runtime library routine
+        // like omp_target_alloc.  Thus, we make no effort to ensure this
+        // callback is reached before ompt_callback_device_initialize
+        // (indicating end of device initialization) is dispatched.
+        //
+        // The event this callback describes might seem like it's instead part
+        // of the first target region except that target region might not even
+        // make use of the array.  Thus, we make no effort to ensure this is
+        // reached before ompt_callback_target with endpoint=ompt_scope_begin
+        // is dispatched for the first target region.
+        //
+        // Instead, we just let this callback dispatch between
+        // ompt_callback_device_initialize and ompt_callback_target with
+        // endpoint=ompt_scope_begin for the first target region as if this
+        // callback is a leftover part of device initialization that gets
+        // picked up immediately before entering the first target region.  Is
+        // that OK?  Will that affect the timings one might collect using the
+        // corresponding OpenACC callbacks?
+        if (ompt_get_enabled().ompt_callback_target_data_op) {
+          // FIXME: We don't yet need the host_op_id and codeptr_ra arguments
+          // for OpenACC support, so we haven't bothered to implement them yet.
+          ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+              Device.TargetID, /*host_op_id*/ ompt_id_none,
+              ompt_target_data_associate, CurrHostEntry->addr, HOST_DEVICE,
+              CurrDeviceEntry->addr, device_id, CurrHostEntry->size,
+              /*codeptr_ra*/ NULL);
+        }
+#endif
       }
     }
     Device.DataMapMtx.unlock();
@@ -209,9 +250,58 @@ static int32_t member_of(int64_t type) {
   return ((type & OMP_TGT_MAPTYPE_MEMBER_OF) >> 48) - 1;
 }
 
+#if OMPT_OPTIONAL
+// OpenMP 5.0 sec. 2.19.7.1 p. 321 L14:
+// "The target-map event occurs when a thread maps data to or from a target
+// device."
+//
+// OpenMP 5.0 sec. 4.5.2.27 p. 493 L12-20:
+// "An instance of a target, target data, target enter data, or target exit
+// data construct may contain one or more map clauses. An OpenMP implementation
+// may report the set of mappings associated with map clauses for a construct
+// with a single ompt_callback_target_map callback to report the effect of all
+// mappings or multiple ompt_callback_target_map callbacks with each reporting
+// a subset of the mappings. Furthermore, an OpenMP implementation may omit
+// mappings that it determines are unnecessary. If an OpenMP implementation
+// issues multiple ompt_callback_target_map callbacks, these callbacks may be
+// interleaved with ompt_callback_target_data_op callbacks used to report data
+// operations associated with the mappings."
+//
+// ompt_callback_target_map callback, as discussed above, is dispatched when
+// OMPT_DISPATCH_CALLBACK_TARGET_MAP is called with an empty argument.  Because
+// this callback includes device addresses, it must follow all associated
+// device allocations, and logically it then follows all associated
+// ompt_callback_target_data_op callbacks with ompt_target_data_alloc.  Because
+// it is meant to describe mappings, it also logically follows
+// ompt_callback_target_data_op callbacks with ompt_target_data_associate.
+// In other words, the ompt_callback_target_map callback corresponds to
+// acc_ev_enter_data_end, and our related extensions
+// (ompt_callback_target_map_start, ompt_callback_target_map_exit_start, and
+// ompt_callback_target_map_exit_end) correspond to acc_ev_enter_data_start,
+// acc_ev_exit_data_start, and acc_ev_exit_data_end.
+//
+// FIXME: We don't yet need the NULL arguments for OpenACC support, so we
+// haven't bothered to implement them yet, but it should be straight-forward to
+// gather them during the loop above.  We actually don't need nitems yet
+// either, but that one is trivial.
+# define OMPT_DISPATCH_CALLBACK_TARGET_MAP(SubEvent)                          \
+  do {                                                                        \
+    if (ompt_get_enabled().ompt_callback_target_map##SubEvent) {              \
+      ompt_get_callbacks().ompt_callback(ompt_callback_target_map##SubEvent)( \
+          Device.TargetID, /*nitems*/ arg_num,                                \
+          /*host_addr*/ NULL, /*device_addr*/ NULL, /*bytes*/ NULL,           \
+          /*mapping_flags*/ NULL, /*codeptr_ra*/ NULL);                       \
+    }                                                                         \
+  } while (0)
+#else
+# define OMPT_DISPATCH_CALLBACK_TARGET_MAP(SubEvent)
+#endif
+
 /// Internal function to do the mapping and transfer the data to the device
 int target_data_begin(DeviceTy &Device, int32_t arg_num,
     void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types) {
+  OMPT_DISPATCH_CALLBACK_TARGET_MAP(_start);
+
   // process each input.
   for (int32_t i = 0; i < arg_num; ++i) {
     // Ignore private variables and arrays - there is no mapping for them.
@@ -262,6 +352,7 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num,
       if (!Pointer_TgtPtrBegin) {
         DP("Call to getOrAllocTgtPtr returned null pointer (device failure or "
             "illegal mapping).\n");
+        OMPT_DISPATCH_CALLBACK_TARGET_MAP();
         return OFFLOAD_FAIL;
       }
       DP("There are %zu bytes allocated at target address " DPxMOD " - is%s new"
@@ -315,6 +406,7 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num,
         int rt = Device.data_submit(TgtPtrBegin, HstPtrBegin, data_size);
         if (rt != OFFLOAD_SUCCESS) {
           DP("Copying data to device failed.\n");
+          OMPT_DISPATCH_CALLBACK_TARGET_MAP();
           return OFFLOAD_FAIL;
         }
       }
@@ -329,6 +421,7 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num,
           sizeof(void *));
       if (rt != OFFLOAD_SUCCESS) {
         DP("Copying data to device failed.\n");
+        OMPT_DISPATCH_CALLBACK_TARGET_MAP();
         return OFFLOAD_FAIL;
       }
       // create shadow pointers for this entry
@@ -339,12 +432,15 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num,
     }
   }
 
+  OMPT_DISPATCH_CALLBACK_TARGET_MAP();
   return OFFLOAD_SUCCESS;
 }
 
 /// Internal function to undo the mapping and retrieve the data from the device.
 int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
     void **args, int64_t *arg_sizes, int64_t *arg_types) {
+  OMPT_DISPATCH_CALLBACK_TARGET_MAP(_exit_start);
+
   // process each input.
   for (int32_t i = arg_num - 1; i >= 0; --i) {
     // Ignore private variables and arrays - there is no mapping for them.
@@ -418,6 +514,7 @@ int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
           int rt = Device.data_retrieve(HstPtrBegin, TgtPtrBegin, data_size);
           if (rt != OFFLOAD_SUCCESS) {
             DP("Copying data from device failed.\n");
+            OMPT_DISPATCH_CALLBACK_TARGET_MAP(_exit_end);
             return OFFLOAD_FAIL;
           }
         }
@@ -466,12 +563,14 @@ int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
                                       HasCloseModifier);
         if (rt != OFFLOAD_SUCCESS) {
           DP("Deallocating data from device failed.\n");
+          OMPT_DISPATCH_CALLBACK_TARGET_MAP(_exit_end);
           return OFFLOAD_FAIL;
         }
       }
     }
   }
 
+  OMPT_DISPATCH_CALLBACK_TARGET_MAP(_exit_end);
   return OFFLOAD_SUCCESS;
 }
 
@@ -571,6 +670,56 @@ static bool isLambdaMapping(int64_t Mapping) {
   return (Mapping & LambdaMapping) == LambdaMapping;
 }
 
+#if OMPT_SUPPORT
+// OpenMP 5.0 sec. 2.12.5 p. 173 L24:
+// "The target-begin event occurs when a thread enters a target region."
+// OpenMP 5.0 sec. 2.12.5 p. 173 L25:
+// "The target-end event occurs when a thread exits a target region."
+// OpenMP 5.0 sec. 4.5.2.26 p. 490 L24-25 and p. 491 L21-22:
+// "The ompt_callback_target_t type is used for callbacks that are dispatched
+// when a thread begins to execute a device construct."
+// "The endpoint argument indicates that the callback signals the beginning of
+// a scope or the end of a scope."
+//
+// FIXME: Are we calling it in the right place for endpoint=ompt_scope_begin?
+// Should it be dispatched before some of the setup preceding in the various
+// callers of the "target" function below?  Should it be dispatched after some
+// of the setup in the "target" function below?  I'm not sure of the definition
+// of "enters" in the OpenMP quotes above and whether it happens before or
+// after various setup.  I'm assuming it happens before any setup unique to
+// this construct (that is, not the general device initialization that would
+// happen for any such construct that happened to execute first on that
+// device).  OpenACC 2.7 sec. 5.1.7 L2822-2823 says, "The
+// acc_ev_compute_construct_start event is triggered at entry to a compute
+// construct, before any launch events that are associated with entry to the
+// compute construct."  Thus, for the sake of our OpenACC mapping, this at
+// least needs to be before ompt_callback_target_submit-associated code.  There
+// are similar questions about the locations of the endpoint=ompt_scope_end
+// events below.  Moreover, these callbacks are also dispatched in
+// kmp_runtime.cpp for the case of no offloading, and there are similar
+// questions about the right places.  See the fixme on
+// ompt_dispatch_callback_target there.
+//
+// FIXME: We don't yet need the NULL arguments for OpenACC support, so we
+// haven't bothered to implement them yet.
+static void ompt_dispatch_callback_target(ompt_scope_endpoint_t endpoint,
+                                          DeviceTy &Device) {
+  if (endpoint == ompt_scope_begin) {
+    Device.TargetID = ompt_get_unique_id();
+    ompt_toggle_in_device_target_region();
+  }
+  if (ompt_get_enabled().ompt_callback_target) {
+    ompt_get_callbacks().ompt_callback(ompt_callback_target)(
+        ompt_target, endpoint, Device.DeviceID, /*task_data*/ NULL,
+        Device.TargetID, /*codeptr_ra*/ NULL);
+  }
+  if (endpoint == ompt_scope_end) {
+    Device.TargetID = ompt_id_none;
+    ompt_toggle_in_device_target_region();
+  }
+}
+#endif
+
 /// performs the same actions as data_begin in case arg_num is
 /// non-zero and initiates run of the offloaded region on the target platform;
 /// if arg_num is non-zero after the region execution is done it also
@@ -581,6 +730,10 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
     void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types,
     int32_t team_num, int32_t thread_limit, int IsTeamConstruct) {
   DeviceTy &Device = Devices[device_id];
+
+#if OMPT_SUPPORT
+  ompt_dispatch_callback_target(ompt_scope_begin, Device);
+#endif
 
   // Find the table information in the map or look it up in the translation
   // tables.
@@ -622,6 +775,9 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
   if (!TM) {
     DP("Host ptr " DPxMOD " does not have a matching target pointer.\n",
        DPxPTR(host_ptr));
+#if OMPT_SUPPORT
+    ompt_dispatch_callback_target(ompt_scope_end, Device);
+#endif
     return OFFLOAD_FAIL;
   }
 
@@ -638,6 +794,9 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
       arg_types);
   if (rc != OFFLOAD_SUCCESS) {
     DP("Call to target_data_begin failed, abort target.\n");
+#if OMPT_SUPPORT
+    ompt_dispatch_callback_target(ompt_scope_end, Device);
+#endif
     return OFFLOAD_FAIL;
   }
 
@@ -645,7 +804,14 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
   std::vector<ptrdiff_t> tgt_offsets;
 
   // List of (first-)private arrays allocated for this target region
-  std::vector<void *> fpArrays;
+  struct FpArray {
+#if OMPT_SUPPORT
+    int64_t Size;
+    void *HstPtrBegin;
+#endif
+    void *TgtPtrBegin;
+  };
+  std::vector<FpArray> fpArrays;
   std::vector<int> tgtArgsPositions(arg_num, -1);
 
   for (int32_t i = 0; i < arg_num; ++i) {
@@ -689,6 +855,9 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
                                     sizeof(void *));
         if (rt != OFFLOAD_SUCCESS) {
           DP("Copying data to device failed.\n");
+#if OMPT_SUPPORT
+          ompt_dispatch_callback_target(ompt_scope_end, Device);
+#endif
           return OFFLOAD_FAIL;
         }
       }
@@ -713,9 +882,36 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
             "abort target.\n",
             (arg_types[i] & OMP_TGT_MAPTYPE_TO ? "first-" : ""),
             DPxPTR(HstPtrBegin));
+#if OMPT_SUPPORT
+        ompt_dispatch_callback_target(ompt_scope_end, Device);
+#endif
         return OFFLOAD_FAIL;
       }
-      fpArrays.push_back(TgtPtrBegin);
+      FpArray fpArray;
+      fpArray.TgtPtrBegin = TgtPtrBegin;
+#if OMPT_SUPPORT
+      fpArray.Size = arg_sizes[i];
+      fpArray.HstPtrBegin = HstPtrBegin;
+      // OpenMP 5.0 sec. 3.6.1 p. 398 L18:
+      // "The target-data-allocation event occurs when a thread allocates data
+      // on a target device."
+      // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
+      // "A registered ompt_callback_target_data_op callback is dispatched when
+      // device memory is allocated or freed, as well as when data is copied to
+      // or from a device."
+      // The callback must dispatch after the allocation succeeds because it
+      // requires the device address.
+      if (ompt_get_enabled().ompt_callback_target_data_op) {
+        // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
+        // OpenACC support, so we haven't bothered to implement them yet.
+        ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+            Device.TargetID, /*host_op_id*/ ompt_id_none,
+            ompt_target_data_alloc,
+            fpArray.HstPtrBegin, HOST_DEVICE, fpArray.TgtPtrBegin, device_id,
+            fpArray.Size, /*codeptr_ra*/ NULL);
+      }
+#endif
+      fpArrays.emplace_back(fpArray);
       TgtBaseOffset = (intptr_t)HstPtrBase - (intptr_t)HstPtrBegin;
 #ifdef OMPTARGET_DEBUG
       void *TgtPtrBase = (void *)((intptr_t)TgtPtrBegin + TgtBaseOffset);
@@ -730,6 +926,9 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
         int rt = Device.data_submit(TgtPtrBegin, HstPtrBegin, arg_sizes[i]);
         if (rt != OFFLOAD_SUCCESS) {
           DP ("Copying data to device failed, failed.\n");
+#if OMPT_SUPPORT
+          ompt_dispatch_callback_target(ompt_scope_end, Device);
+#endif
           return OFFLOAD_FAIL;
         }
       }
@@ -783,14 +982,40 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
   }
   if (rc != OFFLOAD_SUCCESS) {
     DP ("Executing target region abort target.\n");
+#if OMPT_SUPPORT
+    ompt_dispatch_callback_target(ompt_scope_end, Device);
+#endif
     return OFFLOAD_FAIL;
   }
 
   // Deallocate (first-)private arrays
   for (auto it : fpArrays) {
-    int rt = Device.RTL->data_delete(Device.RTLDeviceID, it);
+#if OMPT_SUPPORT
+    if (ompt_get_enabled().ompt_callback_target_data_op) {
+      // OpenMP 5.0 sec. 3.6.2 p. 399 L19:
+      // "The target-data-free event occurs when a thread frees data on a
+      // target device."
+      // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
+      // "A registered ompt_callback_target_data_op callback is dispatched when
+      // device memory is allocated or freed, as well as when data is copied to
+      // or from a device."
+      // We assume the callbacks should dispatch before the free so that the
+      // device address is still valid.
+      // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
+      // OpenACC support, so we haven't bothered to implement them yet.
+      ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+          Device.TargetID, /*host_op_id*/ ompt_id_none,
+          ompt_target_data_delete,
+          it.HstPtrBegin, HOST_DEVICE, it.TgtPtrBegin, device_id, it.Size,
+          /*codeptr_ra*/ NULL);
+    }
+#endif
+    int rt = Device.RTL->data_delete(Device.RTLDeviceID, it.TgtPtrBegin);
     if (rt != OFFLOAD_SUCCESS) {
       DP("Deallocation of (first-)private arrays failed.\n");
+#if OMPT_SUPPORT
+      ompt_dispatch_callback_target(ompt_scope_end, Device);
+#endif
       return OFFLOAD_FAIL;
     }
   }
@@ -800,8 +1025,14 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
       arg_types);
   if (rt != OFFLOAD_SUCCESS) {
     DP("Call to target_data_end failed, abort targe.\n");
+#if OMPT_SUPPORT
+    ompt_dispatch_callback_target(ompt_scope_end, Device);
+#endif
     return OFFLOAD_FAIL;
   }
 
+#if OMPT_SUPPORT
+  ompt_dispatch_callback_target(ompt_scope_end, Device);
+#endif
   return OFFLOAD_SUCCESS;
 }

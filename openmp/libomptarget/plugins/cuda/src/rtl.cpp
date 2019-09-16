@@ -659,7 +659,8 @@ int32_t __tgt_rtl_data_delete(int32_t device_id, void *tgt_ptr) {
 
 int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num, int32_t team_num,
-    int32_t thread_limit, uint64_t loop_tripcount) {
+    int32_t thread_limit, uint64_t loop_tripcount
+    OMPT_SUPPORT_IF(, ompt_id_t target_id)) {
   // Set the context we are using.
   CUresult err = cuCtxSetCurrent(DeviceInfo.Contexts[device_id]);
   if (err != CUDA_SUCCESS) {
@@ -751,6 +752,23 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     DP("Using requested number of teams %d\n", team_num);
   }
 
+#if OMPT_SUPPORT
+  // OpenMP 5.0 sec. 2.12.5 p. 173 L26-27:
+  // "The target-submit event occurs prior to creating an initial task on a
+  // target device for a target region."
+  // OpenMP 5.0 sec. 4.5.2.28 p. 495 L2-3:
+  // "A thread dispatches a registered ompt_callback_target_submit callback on
+  // the host when a target task creates an initial task on a target device."
+  if (ompt_get_enabled().ompt_callback_target_submit) {
+    // FIXME: We don't yet need the host_op_id argument for OpenACC support,
+    // so we haven't bothered to implement it yet.
+    ompt_get_callbacks().ompt_callback(ompt_callback_target_submit)(
+        /*target_id*/ target_id,
+        /*host_op_id*/ ompt_id_none,
+        /*requested_num_teams*/ team_num);
+  }
+#endif
+
   // Run on the device.
   DP("Launch kernel with %d blocks and %d threads\n", cudaBlocksPerGrid,
      cudaThreadsPerBlock);
@@ -762,6 +780,17 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     CUDA_ERR_STRING(err);
     return OFFLOAD_FAIL;
   }
+
+#if OMPT_SUPPORT
+  if (ompt_get_enabled().ompt_callback_target_submit_end) {
+    // FIXME: We don't yet need the host_op_id argument for OpenACC support,
+    // so we haven't bothered to implement it yet.
+    ompt_get_callbacks().ompt_callback(ompt_callback_target_submit_end)(
+        /*target_id*/ target_id,
+        /*host_op_id*/ ompt_id_none,
+        /*requested_num_teams*/ team_num);
+  }
+#endif
 
   DP("Launch of entry point at " DPxMOD " successful!\n",
       DPxPTR(tgt_entry_ptr));
@@ -779,12 +808,14 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 }
 
 int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
-    void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num) {
+    void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num
+    OMPT_SUPPORT_IF(, ompt_id_t target_id)) {
   // use one team and the default number of threads.
   const int32_t team_num = 1;
   const int32_t thread_limit = 0;
   return __tgt_rtl_run_target_team_region(device_id, tgt_entry_ptr, tgt_args,
-      tgt_offsets, arg_num, team_num, thread_limit, 0);
+      tgt_offsets, arg_num, team_num, thread_limit, 0
+      OMPT_SUPPORT_IF(, target_id));
 }
 
 #ifdef __cplusplus

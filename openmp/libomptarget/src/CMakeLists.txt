@@ -41,3 +41,6 @@ if(OPENMP_CLANG_LIB_SUBDIR)
   install(TARGETS omptarget LIBRARY COMPONENT omptarget DESTINATION
     "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_LIB_SUBDIR}")
 endif()
+
+# Set the -I for headers from the runtime.
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/../../runtime/src)

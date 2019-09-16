@@ -1,0 +1,41 @@
+/*
+ * include/openacc.h.var
+ */
+
+//===----------------------------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef __OPENACC__
+#define __OPENACC__
+
+#define ACC_FOREACH_DEVICE(Macro) \
+  Macro(none)                     \
+  Macro(default)                  \
+  Macro(host)                     \
+  Macro(not_host)
+
+typedef enum acc_device_t {
+#define ACC_DEVICE_ENUMERATOR(Device) \
+  acc_device_##Device,
+ACC_FOREACH_DEVICE(ACC_DEVICE_ENUMERATOR)
+#undef ACC_DEVICE_ENUMERATOR
+} acc_device_t;
+
+#define ACC_FOREACH_ASYNC(Macro) \
+  Macro(sync,    -1)             \
+  Macro(noval,   -2)             \
+  Macro(default, -3)
+
+enum {
+#define ACC_ASYNC_ENUMERATOR(Async, Val) \
+  acc_async_##Async = Val,
+ACC_FOREACH_ASYNC(ACC_ASYNC_ENUMERATOR)
+#undef ACC_ASYNC_ENUMERATOR
+};
+
+#endif /* __OPENACC__ */

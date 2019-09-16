@@ -16,6 +16,9 @@
 
 #include <omptarget.h>
 
+#define OMPT_FOR_LIBOMPTARGET
+#include "../../runtime/src/ompt-internal.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -78,14 +81,15 @@ int32_t __tgt_rtl_data_delete(int32_t ID, void *TargetPtr);
 // to the outlined function on device side. In case of success, return zero.
 // Otherwise, return an error code.
 int32_t __tgt_rtl_run_target_region(int32_t ID, void *Entry, void **Args,
-                                    ptrdiff_t *Offsets, int32_t NumArgs);
+                                    ptrdiff_t *Offsets, int32_t NumArgs
+                                    OMPT_SUPPORT_IF(, ompt_id_t target_di));
 
 // Similar to __tgt_rtl_run_target_region, but additionally specify the
 // number of teams to be created and a number of threads in each team.
-int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
-                                         ptrdiff_t *Offsets, int32_t NumArgs,
-                                         int32_t NumTeams, int32_t ThreadLimit,
-                                         uint64_t loop_tripcount);
+int32_t __tgt_rtl_run_target_team_region(
+    int32_t ID, void *Entry, void **Args, ptrdiff_t *Offsets, int32_t NumArgs,
+    int32_t NumTeams, int32_t ThreadLimit, uint64_t loop_tripcount
+    OMPT_SUPPORT_IF(, ompt_id_t target_id));
 
 #ifdef __cplusplus
 }

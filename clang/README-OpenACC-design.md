@@ -1249,3 +1249,557 @@ C++ Issues
   const-qualified types could be relaxed in the case of mutable
   fields.  The OpenMP implementation does this, as hinted by OpenMP
   5.0 sec. 2.19.1.1 phrase "with no mutable members".
+
+OpenACC Profiling Interface
+===========================
+
+Clacc's support for the OpenACC Profiling Interface is currently an
+early prototype.  It is designed as a wrapper around OpenMP's OMPT.
+Currently, it has been tested with an extended version of LLVM's
+implementation of OMPT.
+
+Background
+----------
+
+The OpenACC Profiling Interface is an interface between an OpenACC
+runtime and an OpenACC profiling library that can be used to profile
+an OpenACC application.  An OpenACC implementation, such as Clacc, is
+responsible for providing the OpenACC compiler and the OpenACC
+runtime.  The user of that implementation is responsible for providing
+the OpenACC profiling library and the OpenACC application.
+
+The user compiles his OpenACC application using the OpenACC compiler.
+However, he can use any standard compiler to compile his OpenACC
+profiling library as it is not intended to employ OpenACC directives.
+The user then links his compiled OpenACC application, his compiled
+OpenACC profiling library, and the provided OpenACC runtime.  This
+linking step might be static or dynamic, and it might be replaced with
+dynamic loading.  For simplicity in this document, we always refer to
+this step as linking.
+
+The OpenACC Profiling Interface defines OpenACC event types,
+signatures for callback functions to respond to those event types, and
+a callback registration interface.  The user's OpenACC profiling
+library is responsible for implementing such callback functions and
+registering them for relevant event types.  The OpenACC runtime is
+responsible for receiving these registrations and, when an OpenACC
+event type occurs during the OpenACC application's execution, calling
+the registered callback function and passing the profiling data
+required by its function signature.
+
+See chapter 5 "Profiling Interface" of OpenACC 2.7 for further
+details.
+
+OMPT is similar to the OpenACC Profiling Interface such that the
+analogues of an OpenACC runtime, OpenACC profiling library, and
+OpenACC application are an OpenMP runtime, OMPT tool, and OpenMP
+application.  See chapter 4 "OMPT Interface" of OpenMP 5.0 for further
+details.
+
+Objectives
+----------
+
+There are several profiling use cases that might come to mind when
+considering that the Clacc compiler translates OpenACC to OpenMP.
+It's important to be clear about which use cases Clacc supports.  In
+short, Clacc enables OpenACC applications to be profiled using either
+OpenACC profiling libraries or OMPT tools.  The rest of this section
+explains the importance of these use cases and how, at a high level,
+Clacc enables them.  The remaining sections focus on Clacc's support
+for OpenACC profiling libraries.
+
+A traditional OpenACC runtime, such as the runtime provided by PGI, is
+not useful when an OpenACC application is compiled by the Clacc
+compiler.  The reason is that the Clacc compiler, whether in
+traditional mode or source-to-source mode, always translates OpenACC
+applications to OpenMP.  Thus, an OpenMP runtime instead is required
+to execute the application.  This requirement is a deliberate part of
+Clacc's strategy to reuse rather than duplicate the capabilities of
+OpenMP implementations, in particular the one provided by Clang and
+LLVM.
+
+To profile an OpenACC application using an OMPT tool, Clacc's OpenACC
+Profiling Interface support is irrelevant.  That is, because the Clacc
+compiler translates OpenACC directives to OpenMP, compilation with the
+Clacc compiler is sufficient to enable profiling an OpenACC
+application using an OMPT tool.  This use case may be worthwhile for
+taking advantage of existing OMPT tools, for users desiring to analyze
+how their OpenACC application interacts with an OpenMP runtime, and
+for users desiring to migrate an application from OpenACC to OpenMP.
+However, this use case is not helpful for taking advantage of existing
+OpenACC profiling libraries.  Moreover, being forced to work with or
+develop OMPT tools instead of OpenACC profiling libraries may be
+confusing for OpenACC developers.
+
+Clacc's OpenACC Profiling Interface support is designed to enable any
+OpenACC profiling library to profile any OpenACC application
+specifically when the latter is compiled by the Clacc compiler.
+Again, an OpenMP runtime is required to execute the application in
+this case, so Clacc's OpenACC Profiling Interface support is designed
+as a wrapper around the OMPT support provided by OpenMP runtimes.
+This design follows the aforementioned strategy to reuse rather than
+duplicate the capabilities of OpenMP implementations.
+
+In theory, this design does not require the original application to be
+OpenACC.  That is, Clacc's OpenACC Profiling Interface support should
+also enable any OpenACC profiling library to profile any OpenMP
+application.  However, this is not a use case we are currently
+investigating.  Moreover, our estimation at this point is that the
+OpenACC Profiling Interface lacks many features desirable for
+profiling OpenMP applications.
+
+Clacc offers no support for translating OpenACC profiling libraries
+into OMPT tools at the level of their source code.  That is, the Clacc
+compiler translates OpenACC directives within OpenACC applications,
+but it does not process any part of the OpenACC Profiling Interface
+within OpenACC profiling libraries, which are not written using
+directives.  Clacc's OpenACC Profiling Interface support is currently
+implemented fully at the level of the runtime.
+
+Design
+------
+
+Clacc's OpenACC Profiling Interface support is implemented in Clacc's
+OpenACC runtime.  It enables OpenACC profiling libraries to profile
+OpenACC applications compiled by the Clacc compiler as follows:
+
+* The user compiles his OpenACC application to binary form using
+  either (1) the Clacc compiler in traditional compilation mode or (2)
+  the Clacc compiler in source-to-source mode followed by compilation
+  to binary form using any OpenMP compiler.
+* The user compiles his OpenACC profiling library to binary form using
+  any standard compiler.  The Clacc compiler can be used if desired
+  here but is not required as no OpenACC directives should be
+  involved.
+* The user links together his compiled OpenACC application, his
+  compiled OpenACC profiling library, an OpenMP runtime that
+  implements the OMPT interface, and Clacc's OpenACC runtime.
+* At run time, Clacc's OpenACC runtime receives OpenACC callback
+  registrations for OpenACC events from the user's OpenACC profiling
+  library.  It then registers the necessary OMPT callbacks for related
+  OMPT events with the OpenMP runtime.
+* OMPT callback functions that Clacc's OpenACC runtime registers are
+  implemented within Clacc's OpenACC runtime.  These functions
+  translate the profiling data they receive into the profiling data
+  required for OpenACC callbacks.  They then call the required OpenACC
+  callback functions.
+
+### OMPT Limitations ###
+
+It is possible that Clacc's OpenACC Profiling Interface support might
+one day be compatible with any OpenMP runtime that fully supports
+OMPT.  However, the OpenMP 5.0 specification for OMPT would have to be
+extended for this to be true.  First, some events specified by the
+OpenACC Profiling Interface in OpenACC 2.7 do not correspond to events
+specified by OMPT.  Second, some profiling data specified by the
+OpenACC Profiling Interface cannot be obtained via callbacks currently
+specified by OMPT.
+
+Furthermore, upstream LLVM's OpenMP runtime support for OMPT is
+currently incomplete, specifically omitting components related to
+device offloading, which are the focus of the OpenACC Profiling
+Interface.  Of the OMPT callbacks that are required by Clacc, there is
+only one that is currently implemented in the upstream LLVM OpenMP
+runtime: the `finalize` callback set by `ompt_start_tool`.  For Clacc,
+we have prototyped support for all other required OMPT callbacks,
+which are listed in the next section.  These extensions are in a very
+early stage of development and are not ready to be submitted to
+upstream LLVM.  In some cases, we have taken short cuts that may make
+sense only in the context of Clacc.
+
+In summary, Clacc's OpenACC Profiling Interface currently depends on
+extensions to both the upstream LLVM OpenMP runtime and to OMPT
+itself.  These issues represent opportunities to contribute back to
+LLVM and to the OpenMP specification.
+
+### OpenACC to OpenMP Mapping ###
+
+The following table shows, for each OpenACC event for which an OpenACC
+profiling library registers a callback, the OMPT callbacks that are
+registered by Clacc's OpenACC Profiling Interface support.  This
+mapping is expected to be sufficient only for the OpenACC directives
+and clauses currently supported by the Clacc compiler, and so some
+OpenACC events are not yet implemented, as indicated in the table.
+OMPT callbacks that we devised for Clacc's OpenACC Profiling Interface
+support and that are not specified by OpenMP 5.0 are shown in
+**bold**.
+
+| OpenACC Event                     | Triggering OMPT Callback                                                     | Auxiliary OMPT Callback                  |
+|:----------------------------------|:-----------------------------------------------------------------------------|:-----------------------------------------|
+| `acc_ev_device_init_start`        | **`ompt_callback_device_initialize_start`**                                  |                                          |
+| `acc_ev_device_init_end`          | `ompt_callback_device_initialize`                                            |                                          |
+| `acc_ev_device_shutdown_start`    | **`ompt_callback_device_finalize_start`**                                    |                                          |
+| `acc_ev_device_shutdown_end`      | `ompt_callback_device_finalize`                                              |                                          |
+| `acc_ev_runtime_shutdown`         | `finalize` set by `ompt_start_tool`                                          |                                          |
+| `acc_ev_create`                   | `ompt_callback_target_data_op(optype=ompt_target_data_associate)`            |                                          |
+| `acc_ev_delete`                   | `ompt_callback_target_data_op(optype=ompt_target_data_disassociate)`         |                                          |
+| `acc_ev_alloc`                    | `ompt_callback_target_data_op(optype=ompt_target_data_alloc)`                |                                          |
+| `acc_ev_free`                     | `ompt_callback_target_data_op(optype=ompt_target_data_delete)`               |                                          |
+| `acc_ev_enter_data_start`         | **`ompt_callback_target_map_start`**                                         | `ompt_callback_target(kind=ompt_target)` |
+| `acc_ev_enter_data_end`           | `ompt_callback_target_map`                                                   | `ompt_callback_target(kind=ompt_target)` |
+| `acc_ev_exit_data_start`          | **`ompt_callback_target_map_exit_start`**                                    | `ompt_callback_target(kind=ompt_target)` |
+| `acc_ev_exit_data_end`            | **`ompt_callback_target_map_exit_end`**                                      | `ompt_callback_target(kind=ompt_target)` |
+| `acc_ev_update_start`             | *unimplemented*                                                              |                                          |
+| `acc_ev_update_end`               | *unimplemented*                                                              |                                          |
+| `acc_ev_compute_construct_start`  | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_begin)`          |                                          |
+| `acc_ev_compute_construct_end`    | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_end)`            |                                          |
+| `acc_ev_enqueue_launch_start`     | `ompt_callback_target_submit`                                                | `ompt_callback_target(kind=ompt_target)` |
+| `acc_ev_enqueue_launch_end`       | **`ompt_callback_target_submit_end`**                                        | `ompt_callback_target(kind=ompt_target)` |
+| `acc_ev_enqueue_upload_start`     | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_to_device)`   |                                          |
+| `acc_ev_enqueue_upload_end`       | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_to_device)`   |                                          |
+| `acc_ev_enqueue_download_start`   | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_from_device)` |                                          |
+| `acc_ev_enqueue_download_end`     | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_from_device)` |                                          |
+| `acc_ev_wait_start`               | *unimplemented*                                                              |                                          |
+| `acc_ev_wait_end`                 | *unimplemented*                                                              |                                          |
+
+One way to conceptualize of the interaction between Clacc's OpenACC
+Profiling Interface support and the OpenMP runtime is that OMPT
+callbacks trigger OpenACC events.  However, as depicted above, the
+mapping is not one-to-one.  For some OpenACC events, the profiling
+data required for the event's callback depends on profiling data
+supplied by callbacks for multiple OpenMP events.  For some OpenMP
+events, the profiling data supplied by the event's callback is
+required by the callbacks for multiple OpenACC events.
+
+For each OpenACC event, we use the term *triggering OMPT callback* for
+the OMPT callback that actually dispatches the OpenACC callback.  We
+use the term *auxiliary OMPT callback* for OMPT callbacks that merely
+gather required data.  So far, the only auxiliary OMPT callback is
+`ompt_callback_target`, which associates a device number with a
+`target_id`, which is passed to many other OMPT callbacks associated
+with the same OpenMP target region.  Sometimes, for an OMPT callback
+to serve the role specified in the above table, the data passed to the
+callback must meet certain conditions.  Those conditions, if any, are
+shown in parentheses next to the callback name in the table.
+
+Because an OpenACC profiling library can register and unregister
+callbacks for OpenACC events throughout its execution, and because the
+mapping to OpenMP callbacks is not one-to-one, Clacc maintains a
+reference count for each OMPT callback to determine when it is safe to
+unregister it from the OpenMP runtime.
+
+### OMPT Callback Timing vs. Extensions ###
+
+In some cases, the precise timing required for an OMPT event relative
+to a set of related OpenMP runtime actions was not immediately obvious
+to us when reading the OpenMP 5.0 specification.  This timing is
+particularly important when such a set corresponds to multiple OpenACC
+events but to only one OMPT event.  In that case, identifying that
+timing is key to identifying what OpenACC event the OMPT event's
+callback should trigger and what OMPT extension events are needed to
+trigger the remaining OpenACC events.  The following list explains
+Clacc's rationale for such cases:
+
+* `ompt_callback_device_initialize`
+    * OpenMP sec. 2.12.1 p. 160 L3-7:
+
+        > The device-initialize event occurs in a thread that
+        > encounters the first target, target data, or target enter
+        > data construct or a device memory routine that is associated
+        > with a particular target device after the thread initiates
+        > initialization of OpenMP on the device and the device's
+        > OpenMP initialization, which may include device-side tool
+        > initialization, completes.
+
+    * OpenMP sec. 4.5.2.19 p. 482 L24-25:
+
+         > The OpenMP implementation invokes this callback after
+         > OpenMP is initialized for the device but before execution
+         > of any OpenMP construct is started on the device.
+
+    * While the first passage above is hard to parse, combined with
+      the second passage, it seems clear that this callback triggers
+      after device initialization is complete.
+    * Clacc's implementation of this callback thus triggers
+      `acc_ev_device_init_end` instead of `acc_ev_device_init_start`.
+
+* `ompt_callback_device_finalize`
+    * OpenMP 5.0 sec. 2.12.1 p. 160 L12-13:
+
+        > The device-finalize event for a target device that has been
+        > initialized occurs in some thread before an OpenMP
+        > implementation shuts down.
+
+    * OpenMP 5.0 sec. 4.5.2.20 p. 484 L12-18:
+
+        > A registered callback with type signature
+        > ompt_callback_device_finalize_t is dispatched for a device
+        > immediately prior to finalizing the device.  Prior to
+        > dispatching a finalization callback for a device on which
+        > tracing is active, the OpenMP implementation stops tracing
+        > on the device and synchronously flushes all trace records
+        > for the device that have not yet been reported. These trace
+        > records are flushed through one or more buffer completion
+        > callbacks with type signature
+        > ompt_callback_buffer_complete_t as needed prior to the
+        > dispatch of the callback with type signature
+        > ompt_callback_device_finalize_t.
+
+    * The second passage above says flushing of traces occurs "prior
+      to dispatching a finalization callback", which occurs
+      "immediately prior to finalizing the device".  This might imply
+      that flushing of traces is prior to and not part of the
+      finalization process.  Clacc assumes instead that "finalizing
+      the device" really indicates the *end* of the finalization
+      process, which can then be considered to include flushing of
+      traces.
+    * Clacc's implementation of this callback thus triggers
+      `acc_ev_device_shutdown_end` instead of
+      `acc_ev_device_shutdown_start`, which is logically triggered
+      before flushing of traces.  (However, device traces haven't yet
+      actually been implemented in LLVM's OpenMP runtime, so these
+      events are actually triggered back to back at the moment.)
+
+* `ompt_callback_target_map`
+    * OpenMP 5.0 sec. 2.19.7.1 p. 321 L14:
+
+        > The target-map event occurs when a thread maps data to or
+        > from a target device.
+
+    * OpenMP 5.0 sec. 4.5.2.27 p. 493 L12-20:
+
+        > An instance of a target, target data, target enter data, or
+        > target exit data construct may contain one or more map
+        > clauses. An OpenMP implementation may report the set of
+        > mappings associated with map clauses for a construct with a
+        > single ompt_callback_target_map callback to report the
+        > effect of all mappings or multiple ompt_callback_target_map
+        > callbacks with each reporting a subset of the
+        > mappings. Furthermore, an OpenMP implementation may omit
+        > mappings that it determines are unnecessary. If an OpenMP
+        > implementation issues multiple ompt_callback_target_map
+        > callbacks, these callbacks may be interleaved with
+        > ompt_callback_target_data_op callbacks used to report data
+        > operations associated with the mappings.
+
+    * Based on the word "when" in the first passage, Clacc's
+      implementation of this callback should trigger either
+      `acc_ev_enter_data_start` or `acc_ev_enter_data_end` instead of
+      `acc_ev_exit_data_start` or `acc_ev_exit_data_end`.
+    * This callback requires device addresses, so it must follow all
+      associated device allocations, and logically it then follows all
+      associated `ompt_callback_target_data_op` callbacks with
+      `optype=ompt_target_data_alloc`.
+    * Because it is meant to describe mappings, it also logically
+      follows all associated `ompt_callback_target_data_op` callbacks
+      with `optype=ompt_target_data_associate`.
+    * Clacc's implementation of this callback thus triggers
+      `acc_ev_enter_data_end` not `acc_ev_enter_data_start`.
+
+* `ompt_callback_target_submit`
+    * OpenMP 5.0 sec. 2.12.5 p. 173 L26-27:
+
+        > The target-submit event occurs prior to creating an initial
+        > task on a target device for a target region.
+
+    * Based on the word "prior", Clacc's implementation of this
+      callback triggers `acc_ev_enqueue_launch_start` not
+      `acc_ev_enqueue_launch_end`.
+
+* `ompt_callback_target_data_op(optype=ompt_target_data_transfer_to_device)`
+    * OpenMP 5.0 sec. 2.19.7.1 p. 321 L15:
+
+        > The target-data-op event occurs when a thread initiates a
+        > data operation on a target device.
+
+    * Based on the word "initiate", Clacc's implementation of this
+      callback should trigger either `acc_ev_enqueue_upload_start` or
+      `acc_ev_enqueue_upload_end`.  That is, this callback indicates
+      when the transfer starts not when it completes.
+    * Currently, the data transfer actions are synchronous in LLVM's
+      OpenMP implementation (`memcpy`, `cuMemcpyHToD`, or
+      `cuMemcpyDToH`) with no obvious enqueue stage.  Clacc's
+      implementation of this callback thus triggers both
+      `acc_ev_upload_launch_start` and `acc_ev_enqueue_upload_end`
+      back to back before the data transfer.
+    * If that synchronous behavior does not hold true in the future
+      for all architectures, and there is an important enqueue stage
+      for data transfers, it might be necessary to create an OMPT
+      extension to distinguish the `acc_ev_enqueue_upload_start` and
+      `acc_ev_enqueue_upload_end` events.
+
+* `ompt_callback_target_data_op(optype=ompt_target_data_transfer_from_device)`
+    * Similar to the previous callback, Clacc's implementation of this
+      callback triggers `acc_ev_enqueue_download_start` and
+      `acc_ev_enqueue_download_end` back to back before the data
+      transfer.
+
+OpenACC Clarifications
+----------------------
+
+There are several issues related to the interpretation of the OpenACC
+specification that we need to investigate further:
+
+* The following event types never trigger when offloading is disabled
+  (that is, `-fopenmp-targets` has not been specified), but this
+  behavior is questionable:
+    * `acc_ev_device_init_start`, `acc_ev_device_init_end`
+    * `acc_ev_device_shutdown_start`, `acc_ev_device_shutdown_end`
+    * `acc_ev_enqueue_upload_start`, `acc_ev_enqueue_upload_end`
+    * `acc_ev_enqueue_download_start`, `acc_ev_enqueue_download_end`
+    * `acc_ev_create`, `acc_ev_delete`, `acc_ev_alloc`, `acc_ev_free`
+    * `acc_ev_enter_data_start`, `acc_ev_enter_data_end`
+    * `acc_ev_exit_data_start`, `acc_ev_exit_data_end`
+    * Notes:
+        * pgcc 19.4-0 with `-ta:multicore` has the same behavior.
+        * OpenACC 2.7 does not make it clear whether these event types
+          should trigger when offloading is disabled.
+* The following event types are among those that do trigger when
+  offloading is disabled, but this behavior is questionable:
+    * `acc_ev_enqueue_launch_start`, `acc_ev_enqueue_launch_end`
+    * Notes:
+        * pgcc 19.4-0 with `-ta:multicore` does not have this
+          behavior.
+        * OpenACC 2.7 does not make it clear whether these event types
+          should trigger when offloading is disabled.
+* `acc_ev_{enter,exit}_data_{start,end}`,
+  `acc_ev_{create,alloc,delete}`, and
+  `acc_ev_enqueue_{up,down}load_{start,end}` events trigger within the
+  associated `acc_ev_compute_construct_{start,end}` event pair, but
+  they trigger outside them instead when using pgcc 19.4-0.  Notes:
+    * Either behavior appears to be permitted according to OpenACC 2.7
+      sec. 5.1.7 L2825-2827, which says, "If there are data clauses on
+      the compute construct, those data clauses may be treated as part
+      of the compute construct, or as part of a data construct
+      containing the compute construct."
+    * We need to check more recent pgcc and discuss with the OpenACC
+      technical committee.
+* `acc_ev_create` triggers before the associated `acc_ev_alloc`, but
+  they trigger in the reverse order when using pgcc 19.4-0.  Notes:
+    * OpenACC 2.7 sec. 5.1.4 L2800-2802 says "An `acc_ev_create` event
+      may be preceded by an `acc_ev_alloc` event, if newly allocated
+      memory is used for this device data, or it may not, if the
+      runtime manages its own memory pool."
+    * This seems to encourage the Clacc behavior.
+    * It's not clear if this permits the pgcc 19.4-0 behavior.
+      Perhaps the `acc_ev_alloc` events represent enlargement of the
+      memory pool after `acc_ev_create` events use up bytes there.
+    * We need to check more recent pgcc and discuss with the OpenACC
+      technical committee.
+* pgcc 19.4-0 seems to trigger `acc_ev_delete` when it should trigger
+  `acc_ev_free`, which it never seems to trigger.  Notes:
+    * We need to check more recent pgcc and discuss with the OpenACC
+      technical committee.
+* OpenACC 2.7 specifies the typedef `acc_prof_lookup_func`, but it's
+  spelled `acc_prof_lookup` in pgcc 19.4-0's `acc_prof.h`.  Notes:
+    * Clacc's `acc_prof.h` typedefs one to the other in order to
+      support OpenACC profiling libraries written for the OpenACC
+      standard or for pgcc 19.4-0.
+    * We need to check a more recent pgcc, and we will raise this
+      discrepancy with the OpenACC technical committee.
+* The triggering of `acc_ev_runtime_shutdown` is questionable because
+  it never seems to trigger when using pgcc 19.4-0.
+* How should the `device_number` and source location fields of
+  `acc_prof_info` and the `parent_construct` field of `acc_event_info`
+  be set for `acc_ev_runtime_shutdown`?
+* How should `vendor`, `device_handle`, `context_handle`, and
+  `async_handle` fields of `acc_api_info` be assigned?
+
+Limitations
+-----------
+
+Limitations left to be resolved in Clacc's OpenACC Profiling Interface
+support currently include:
+
+* `acc_prof_register` and `acc_prof_unregister` must be called only
+  via the pointers obtained within `acc_register_library`.  They
+  cannot be linked and called directly.  Notes:
+    * This is because registration in OMPT cannot occur until the
+      OpenMP runtime dispatches the `initialize` callback provided to
+      `ompt_start_tool` and thus provides pointers to functions like
+      `ompt_set_callback`.  Clacc defines that `initialize` callback
+      to call `acc_register_library`, so those pointers are available
+      when `acc_register_library` is called but not before.
+    * In the future, Clacc may provide versions of `acc_prof_register`
+      and `acc_prof_unregister` that store registrations until the
+      `initialize` callback is dispatched and then uses the pointers
+      it provides thereafter.
+* For each event type, at most one occurrence of one callback can be
+  registered at a time, and it cannot be toggled.  Notes:
+    * OMPT does not appear to have such features.
+    * Fixing this likely requires building our own registration
+      tables, as for the previous limitation.
+* The following event types are not yet supported because the Clacc
+  compiler does not yet implement directives and clauses that would
+  trigger them:
+    * `acc_ev_update_start`, `acc_ev_update_end`
+    * `acc_ev_wait_start`, `acc_ev_wait_end`
+* `ACC_PROFLIB` is not yet supported.
+* Some of the data passed to the OpenACC callbacks currently have
+  questionable values or have been omitted:
+    * The `valid_bytes` field is properly set in each of these structs
+      to indicate which fields are omitted, as indicated below.
+    * Information we do not know how to obtain via OMPT might require
+      OMPT extensions.
+    * Fields not mentioned below are expected to be correctly
+      implemented.
+    * `acc_prof_info`:
+        * `thread_id` always seems to be set to `0` currently, so we
+          might not be obtaining the value correctly.
+        * `async` is always set to `acc_async_sync` because the Clacc
+          compiler does not yet support the `async` clause.  Thus,
+          this value appears to be correct according to OpenACC.
+        * `async_queue` is thus omitted.
+        * All fields describing source locations are omitted because
+          we do not know how to obtain them via OMPT.
+    * `acc_event_info`:
+        * `tool_info` is always set to `NULL`, and data cannot yet be
+          shared between `_start` and `_end` events.  This should be
+          one of the easier limitations to fix, if needed.
+        * `acc_data_event_info`:
+            * `var_name` is always set to `NULL` because we do not
+              know how to obtain it via OMPT.  Setting to `NULL` is
+              permitted by OpenACC.
+        * `acc_launch_event_info`:
+            * `kernel_name` is always set to `NULL` because we do not
+              know how to obtain it via OMPT.  Setting to `NULL` is
+              permitted by OpenACC.
+            * `num_gangs`, `num_workers`, and `vector_length` are
+              omitted because we do not know how to obtain them via
+              OMPT:
+                * The problem with `num_gangs` is that OpenACC 2.7
+                  says it's the number of gangs *created*, but the
+                  `ompt_callback_target_submit` callback only provides
+                  the number of teams *requested*.  It might possible
+                  to retrieve the required data from OMPT trace
+                  records, but we have not implemented that support
+                  yet.
+                * The problem with `num_workers` and `vector_length`
+                  is that, in contrast with OpenACC compute
+                  directives, `num_threads` and `simdlen` are not
+                  specified at the level of an OpenMP target
+                  directive.
+    * `acc_api_info`:
+        * `device_api` is always set to `acc_device_api_none` because
+          it's used to indicate the semantics of later fields we do
+          not yet support.  Thus, this value appears to be correct
+          according to OpenACC.
+        * `vendor` is omitted because we do not know the right way to
+          choose a vendor number (see "OpenACC Clarifications" above).
+        * `device_handle`, `context_handle`, and `async_handle` are
+          omitted because we have not yet determined how to properly
+          support them (see "OpenACC Clarifications" above)
+* Clacc's OpenACC Profiling Interface support is an early prototype
+  and needs more thorough testing with real OpenACC applications and
+  profiling libraries.  In particular, we took shortcuts in our
+  extensions to LLVM's OMPT support, and there might be issues with,
+  for example, thread safety.
+* The source of Clacc's OpenACC Profiling Interface support is
+  integrated with the source of LLVM's OpenMP runtime implementation.
+  Notes:
+    * The source needs to be separated into two distinct libraries
+      that can be built separately.
+    * This separation should facilitate continuous integration of
+      upstream work into Clacc, and it should facilitate the eventual
+      contribution of Clacc to upstream.
+    * This separation would also be necessary to eventually enable use
+      of Clacc's OpenACC Profiling Interface support with other OpenMP
+      runtime implementations.
+* Because Clacc's OpenACC Profiling Interface support depends on OMPT
+  extensions, any OpenMP runtime implementation must support these
+  same extensions to be usable.  Notes:
+    * A graceful mechanism to reject registration of OpenACC event
+      types for which required OMPT callbacks are not supported by the
+      linked OpenMP runtime should be devised.
+    * That mechanism could also handle unimplemented but standard OMPT
+      callbacks.

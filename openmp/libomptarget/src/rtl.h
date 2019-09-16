@@ -19,6 +19,9 @@
 #include <string>
 #include <vector>
 
+#define OMPT_FOR_LIBOMPTARGET
+#include "../../runtime/src/ompt-internal.h"
+
 // Forward declarations.
 struct DeviceTy;
 struct __tgt_bin_desc;
@@ -33,9 +36,10 @@ struct RTLInfoTy {
   typedef int32_t(data_retrieve_ty)(int32_t, void *, void *, int64_t);
   typedef int32_t(data_delete_ty)(int32_t, void *);
   typedef int32_t(run_region_ty)(int32_t, void *, void **, ptrdiff_t *,
-                                 int32_t);
+                                 int32_t OMPT_SUPPORT_IF(, ompt_id_t));
   typedef int32_t(run_team_region_ty)(int32_t, void *, void **, ptrdiff_t *,
-                                      int32_t, int32_t, int32_t, uint64_t);
+                                      int32_t, int32_t, int32_t, uint64_t
+                                      OMPT_SUPPORT_IF(, ompt_id_t));
   typedef int64_t(init_requires_ty)(int64_t);
 
   int32_t Idx;                     // RTL index, index is the number of devices

@@ -56,3 +56,6 @@ target_link_libraries(omptarget.rtl.cuda
 
 # Report to the parent scope that we are building a plugin for CUDA.
 set(LIBOMPTARGET_SYSTEM_TARGETS "${LIBOMPTARGET_SYSTEM_TARGETS} nvptx64-nvidia-cuda" PARENT_SCOPE)
+
+# Set the -I for headers from the runtime.
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/../../../runtime/src)

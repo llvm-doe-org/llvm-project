@@ -47,6 +47,7 @@
 #define ompt_callback_thread_begin_implemented ompt_event_MAY_ALWAYS
 #define ompt_callback_thread_end_implemented ompt_event_MAY_ALWAYS
 
+// FIXME: These don't trigger when offloading.  Is ALWAYS then correct?
 #define ompt_callback_parallel_begin_implemented ompt_event_MAY_ALWAYS
 #define ompt_callback_parallel_end_implemented ompt_event_MAY_ALWAYS
 
@@ -55,14 +56,23 @@
 
 #define ompt_callback_implicit_task_implemented ompt_event_MAY_ALWAYS
 
-#define ompt_callback_target_implemented ompt_event_UNIMPLEMENTED
-#define ompt_callback_target_data_op_implemented ompt_event_UNIMPLEMENTED
-#define ompt_callback_target_submit_implemented ompt_event_UNIMPLEMENTED
+// FIXME: These don't trigger unless offloading.  Is ALWAYS then correct?
+// ompt_callback_target seems reasonable when not offloading because target
+// constructs still execute on the host.  However, the others might not make
+// sense because there's no need to allocate, associate, and transfer data.
+// FIXME: ompt_callback_target_data_op with optype as ompt_target_data_alloc,
+// ompt_target_data_delete, ompt_target_data_associate, or
+// ompt_target_data_disassociate isn't implemented yet for omp_target_alloc,
+// omp_target_free, omp_target_associate_ptr, or omp_target_disassociate_ptr
+// because we don't need those yet for OpenACC support.
+#define ompt_callback_target_implemented ompt_event_MAY_ALWAYS
+#define ompt_callback_target_data_op_implemented ompt_event_MAY_ALWAYS
+#define ompt_callback_target_submit_implemented ompt_event_MAY_ALWAYS
 
 #define ompt_callback_control_tool_implemented ompt_event_MAY_ALWAYS
 
-#define ompt_callback_device_initialize_implemented ompt_event_UNIMPLEMENTED
-#define ompt_callback_device_finalize_implemented ompt_event_UNIMPLEMENTED
+#define ompt_callback_device_initialize_implemented ompt_event_MAY_ALWAYS
+#define ompt_callback_device_finalize_implemented ompt_event_MAY_ALWAYS
 
 #define ompt_callback_device_load_implemented ompt_event_UNIMPLEMENTED
 #define ompt_callback_device_unload_implemented ompt_event_UNIMPLEMENTED
@@ -84,7 +94,7 @@
 
 #define ompt_callback_master_implemented ompt_event_MAY_ALWAYS_OPTIONAL
 
-#define ompt_callback_target_map_implemented ompt_event_UNIMPLEMENTED
+#define ompt_callback_target_map_implemented ompt_event_MAY_ALWAYS_OPTIONAL
 
 #define ompt_callback_sync_region_implemented ompt_event_MAY_ALWAYS_OPTIONAL
 
@@ -102,5 +112,19 @@
 #define ompt_callback_reduction_implemented ompt_event_UNIMPLEMENTED
 
 #define ompt_callback_dispatch_implemented ompt_event_UNIMPLEMENTED
+
+/*----------------------------------------------------------------------------
+ | Extension Events
+ +--------------------------------------------------------------------------*/
+
+// FIXME: Perhaps all of these should be ompt_event_MAY_ALWAYS_OPTIONAL, or
+// perhaps there should be another category for extensions.  For now, they're
+// just mimicking whatever above event they extend.
+#define ompt_callback_device_initialize_start_implemented ompt_event_MAY_ALWAYS
+#define ompt_callback_device_finalize_start_implemented ompt_event_MAY_ALWAYS
+#define ompt_callback_target_submit_end_implemented ompt_event_MAY_ALWAYS
+#define ompt_callback_target_map_start_implemented ompt_event_MAY_ALWAYS_OPTIONAL
+#define ompt_callback_target_map_exit_start_implemented ompt_event_MAY_ALWAYS_OPTIONAL
+#define ompt_callback_target_map_exit_end_implemented ompt_event_MAY_ALWAYS_OPTIONAL
 
 #endif

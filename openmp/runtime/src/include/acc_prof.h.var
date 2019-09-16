@@ -1,0 +1,191 @@
+/*
+ * include/acc_prof.h.var
+ */
+
+//===----------------------------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef __ACC_PROF__
+#define __ACC_PROF__
+
+#include "openacc.h"
+
+#include <sys/types.h>
+
+#define ACC_FOREACH_EVENT(Macro) \
+  Macro(device_init_start)       \
+  Macro(device_init_end)         \
+  Macro(device_shutdown_start)   \
+  Macro(device_shutdown_end)     \
+  Macro(runtime_shutdown)        \
+  Macro(create)                  \
+  Macro(delete)                  \
+  Macro(alloc)                   \
+  Macro(free)                    \
+  Macro(enter_data_start)        \
+  Macro(enter_data_end)          \
+  Macro(exit_data_start)         \
+  Macro(exit_data_end)           \
+  Macro(update_start)            \
+  Macro(update_end)              \
+  Macro(compute_construct_start) \
+  Macro(compute_construct_end)   \
+  Macro(enqueue_launch_start)    \
+  Macro(enqueue_launch_end)      \
+  Macro(enqueue_upload_start)    \
+  Macro(enqueue_upload_end)      \
+  Macro(enqueue_download_start)  \
+  Macro(enqueue_download_end)    \
+  Macro(wait_start)              \
+  Macro(wait_end)
+
+typedef enum acc_event_t {
+  acc_ev_none = 0,
+#define ACC_EVENT_ENUMERATOR(Event) \
+  acc_ev_##Event,
+ACC_FOREACH_EVENT(ACC_EVENT_ENUMERATOR)
+#undef ACC_EVENT_ENUMERATOR
+  acc_ev_last
+} acc_event_t;
+
+#define ACC_FOREACH_CONSTRUCT(Macro) \
+  Macro(parallel,     0)             \
+  Macro(kernels,      1)             \
+  Macro(loop,         2)             \
+  Macro(data,         3)             \
+  Macro(enter_data,   4)             \
+  Macro(exit_data,    5)             \
+  Macro(host_data,    6)             \
+  Macro(atomic,       7)             \
+  Macro(declare,      8)             \
+  Macro(init,         9)             \
+  Macro(shutdown,    10)             \
+  Macro(set,         11)             \
+  Macro(update,      12)             \
+  Macro(routine,     13)             \
+  Macro(wait,        14)             \
+  Macro(runtime_api, 15)             \
+  Macro(serial,      16)
+
+typedef enum acc_construct_t {
+#define ACC_CONSTRUCT_ENUMERATOR(Construct, Val) \
+  acc_construct_##Construct = Val,
+ACC_FOREACH_CONSTRUCT(ACC_CONSTRUCT_ENUMERATOR)
+#undef ACC_CONSTRUCT_ENUMERATOR
+} acc_construct_t;
+
+#define ACC_FOREACH_DEVICE_API(Macro) \
+  Macro(none,   0)                    \
+  Macro(cuda,   1)                    \
+  Macro(opencl, 2)                    \
+  Macro(other,  4)
+
+typedef enum acc_device_api {
+#define ACC_DEVICE_API_ENUMERATOR(DeviceApi, Val) \
+  acc_device_api_##DeviceApi = Val,
+ACC_FOREACH_DEVICE_API(ACC_DEVICE_API_ENUMERATOR)
+#undef ACC_DEVICE_API_ENUMERATOR
+  acc_device_implementation_defined = 1000
+} acc_device_api;
+
+typedef enum acc_register_t {
+  acc_reg = 0,
+  acc_toggle = 1,
+  acc_toggle_per_thread = 2
+} acc_register_t;
+
+typedef struct acc_prof_info {
+  acc_event_t event_type;
+  int valid_bytes;
+  int version;
+  acc_device_t device_type;
+  int device_number;
+  int thread_id;
+  ssize_t async;
+  ssize_t async_queue;
+  const char *src_file;
+  const char *func_name;
+  int line_no, end_line_no;
+  int func_line_no, func_end_line_no;
+} acc_prof_info;
+
+typedef struct acc_data_event_info {
+  acc_event_t event_type;
+  int valid_bytes;
+  acc_construct_t parent_construct;
+  int implicit;
+  void* tool_info;
+  const char* var_name;
+  size_t bytes;
+  const void* host_ptr;
+  const void* device_ptr;
+} acc_data_event_info;
+
+typedef struct acc_launch_event_info {
+  acc_event_t event_type;
+  int valid_bytes;
+  acc_construct_t parent_construct;
+  int implicit;
+  void* tool_info;
+  const char* kernel_name;
+  size_t num_gangs, num_workers, vector_length;
+} acc_launch_event_info;
+
+typedef struct acc_other_event_info {
+  acc_event_t event_type;
+  int valid_bytes;
+  acc_construct_t parent_construct;
+  int implicit;
+  void* tool_info;
+} acc_other_event_info;
+
+typedef union acc_event_info {
+  acc_event_t event_type;
+  acc_data_event_info data_event;
+  acc_launch_event_info launch_event;
+  acc_other_event_info other_event;
+} acc_event_info;
+
+typedef struct acc_api_info {
+  acc_device_api device_api;
+  int valid_bytes;
+  acc_device_t device_type;
+  int vendor;
+  const void *device_handle;
+  const void *context_handle;
+  const void *async_handle;
+} acc_api_info;
+
+typedef void (*acc_prof_callback)(acc_prof_info*, acc_event_info*,
+                                  acc_api_info*);
+
+typedef void (*acc_prof_reg)(acc_event_t event_type, acc_prof_callback cb,
+                             acc_register_t info);
+
+typedef void (*acc_query_fn)();
+
+// FIXME: OpenACC 2.7 spells it acc_prof_lookup_func, but pgcc 19.4-0 spells
+// it acc_prof_lookup, so we accept either.  Check a more recent pgcc.
+typedef acc_query_fn(*acc_prof_lookup_func)(const char* acc_query_fn_name);
+typedef acc_prof_lookup_func acc_prof_lookup;
+
+// FIXME: Currently, you must access these via the pointers passed through
+// acc_register_library.
+//void acc_prof_register(acc_event_t event_type, acc_prof_callback cb,
+//                       acc_register_t info);
+//
+//void acc_prof_unregister(acc_event_t event_type, acc_prof_callback cb,
+//                         acc_register_t info);
+
+#ifdef __cplusplus
+extern "C"
+#endif
+void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
+                          acc_prof_lookup_func lookup);
+
+#endif /* __ACC_PROF__ */

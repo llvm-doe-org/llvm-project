@@ -13,6 +13,9 @@
 #ifndef _OMPTARGET_DEVICE_H
 #define _OMPTARGET_DEVICE_H
 
+#define OMPT_FOR_LIBOMPTARGET
+#include "../../runtime/src/ompt-internal.h"
+
 #include <cstddef>
 #include <climits>
 #include <list>
@@ -84,6 +87,9 @@ struct DeviceTy {
   int32_t DeviceID;
   RTLInfoTy *RTL;
   int32_t RTLDeviceID;
+#if OMPT_SUPPORT
+  ompt_id_t TargetID;
+#endif
 
   bool IsInit;
   std::once_flag InitFlag;
@@ -101,7 +107,8 @@ struct DeviceTy {
   std::map<int32_t, uint64_t> LoopTripCnt;
 
   DeviceTy(RTLInfoTy *RTL)
-      : DeviceID(-1), RTL(RTL), RTLDeviceID(-1), IsInit(false), InitFlag(),
+      : DeviceID(-1), RTL(RTL), RTLDeviceID(-1),
+        OMPT_SUPPORT_IF(TargetID(ompt_id_none),) IsInit(false), InitFlag(),
         HasPendingGlobals(false), HostDataToTargetMap(), PendingCtorsDtors(),
         ShadowPtrMap(), DataMapMtx(), PendingGlobalsMtx(), ShadowMtx() {}
 
@@ -109,7 +116,8 @@ struct DeviceTy {
   // provide a copy constructor and an assignment operator explicitly.
   DeviceTy(const DeviceTy &d)
       : DeviceID(d.DeviceID), RTL(d.RTL), RTLDeviceID(d.RTLDeviceID),
-        IsInit(d.IsInit), InitFlag(), HasPendingGlobals(d.HasPendingGlobals),
+        OMPT_SUPPORT_IF(TargetID(d.TargetID),) IsInit(d.IsInit), InitFlag(),
+        HasPendingGlobals(d.HasPendingGlobals),
         HostDataToTargetMap(d.HostDataToTargetMap),
         PendingCtorsDtors(d.PendingCtorsDtors), ShadowPtrMap(d.ShadowPtrMap),
         DataMapMtx(), PendingGlobalsMtx(), ShadowMtx(),
@@ -119,6 +127,9 @@ struct DeviceTy {
     DeviceID = d.DeviceID;
     RTL = d.RTL;
     RTLDeviceID = d.RTLDeviceID;
+#if OMPT_SUPPORT
+    TargetID = d.TargetID;
+#endif
     IsInit = d.IsInit;
     HasPendingGlobals = d.HasPendingGlobals;
     HostDataToTargetMap = d.HostDataToTargetMap;

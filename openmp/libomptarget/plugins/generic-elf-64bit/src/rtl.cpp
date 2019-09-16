@@ -295,7 +295,8 @@ int32_t __tgt_rtl_data_delete(int32_t device_id, void *tgt_ptr) {
 
 int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num, int32_t team_num,
-    int32_t thread_limit, uint64_t loop_tripcount /*not used*/) {
+    int32_t thread_limit, uint64_t loop_tripcount /*not used*/
+    OMPT_SUPPORT_IF(, ompt_id_t target_id)) {
   // ignore team num and thread limit.
 
   // Use libffi to launch execution.
@@ -319,6 +320,25 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   if (status != FFI_OK)
     return OFFLOAD_FAIL;
 
+#if OMPT_SUPPORT
+  // There's nothing to actually enqueue as we're about to call the task
+  // directly, so we just dispatch these callbacks back to back.
+  // FIXME: We don't yet need the host_op_id argument for OpenACC support,
+  // so we haven't bothered to implement it yet.
+  if (ompt_get_enabled().ompt_callback_target_submit) {
+    ompt_get_callbacks().ompt_callback(ompt_callback_target_submit)(
+        /*target_id*/ target_id,
+        /*host_op_id*/ ompt_id_none,
+        /*requested_num_teams*/ team_num);
+  }
+  if (ompt_get_enabled().ompt_callback_target_submit_end) {
+    ompt_get_callbacks().ompt_callback(ompt_callback_target_submit_end)(
+        /*target_id*/ target_id,
+        /*host_op_id*/ ompt_id_none,
+        /*requested_num_teams*/ team_num);
+  }
+#endif
+
   DP("Running entry point at " DPxMOD "...\n", DPxPTR(tgt_entry_ptr));
 
   void (*entry)(void);
@@ -328,10 +348,11 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 }
 
 int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
-    void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num) {
+    void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num
+    OMPT_SUPPORT_IF(, ompt_id_t target_id)) {
   // use one team and one thread.
   return __tgt_rtl_run_target_team_region(device_id, tgt_entry_ptr, tgt_args,
-      tgt_offsets, arg_num, 1, 1, 0);
+      tgt_offsets, arg_num, 1, 1, 0 OMPT_SUPPORT_IF(, target_id));
 }
 
 #ifdef __cplusplus
