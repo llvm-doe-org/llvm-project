@@ -56,11 +56,10 @@ configuration, the following might prove sufficient:
 ```
 $ cd $LLVM_GIT_DIR/..
 $ mkdir llvm-build && cd llvm-build
-$ cmake -G Ninja \
-        -DCMAKE_INSTALL_PREFIX=../llvm-install \
+$ cmake -DCMAKE_INSTALL_PREFIX=../llvm-install \
         -DLLVM_ENABLE_PROJECTS='clang;openmp' \
         $LLVM_GIT_DIR
-$ ninja
+$ make
 ```
 
 For further details on building OpenMP support, including another
@@ -83,9 +82,9 @@ The Clang OpenACC test suite can be run by itself or as part of larger
 test suites as follows:
 
 ```
-$ ninja check-clang-openacc
-$ ninja check-clang
-$ ninja check-all
+$ make check-clang-openacc
+$ make check-clang
+$ make check-all
 ```
 
 Using
@@ -97,26 +96,70 @@ Documentation section below).  Currently, Clacc only supports OpenACC
 programs with C as the base language.
 
 Clacc's compiler is the `clang` executable in the `bin` subdirectory
-of the LLVM build directory.  The most relevant command-line options
-are as follows:
+of the LLVM build directory.  Here's a simple example of using it:
+
+```
+$ export LD_LIBRARY_PATH=$CLACC_BUILD/lib
+$ export PATH=$CLACC_BUILD/bin:$PATH
+$ cat test.c
+#include <stdio.h>
+int main() {
+  #pragma acc parallel num_gangs(2)
+  printf("Hello World\n");
+  return 0;
+}
+```
+
+To compile and run only for host:
+
+```
+$ clang -fopenacc test.c && ./a.out
+Hello World
+Hello World
+```
+
+To compile and run for an NVIDIA GPU:
+
+```
+$ clang -fopenacc -fopenmp-targets=nvptx64-nvidia-cuda test.c && ./a.out
+Hello World
+Hello World
+```
+
+To use source-to-source mode:
+
+```
+$ clang -fopenacc-print=omp test.c
+#include <stdio.h>
+int main() {
+  #pragma omp target teams num_teams(2)
+  printf("Hello World\n");
+  return 0;
+}
+```
+
+The most relevant command-line options are as follows:
 
 * OpenACC traditional compilation mode:
     * `-fopenacc` enables OpenACC support.  Unless source-to-source
       mode is enabled as discussed below, Clacc translates OpenACC to
       OpenMP and then compiles the OpenMP.
-    * `-fopenmp-*` adjusts various OpenMP features when compiling the
-      OpenMP translation.  So far, only `-fopenmp-targets=<triples>`
-      to specify desired offloading targets has been tested.
+    * Options starting with `-fopenmp-` adjust various OpenMP features
+      when compiling the OpenMP translation.  So far, only
+      `-fopenmp-targets=<triples>` to specify desired offloading
+      targets has been tested.  `nvptx64-nvidia-cuda` is the triple
+      for NVIDIA GPUs.
 * OpenACC source-to-source mode:
     * `-fopenacc-print=omp` enables OpenACC support and prints the
       OpenMP translation instead of performing traditional
       compilation.
     * `-fopenacc-print=omp-acc` is the same except it also prints the
       original OpenACC in comments next to the OpenMP.
-    * `-fopenacc-print=acc-omp` reverses that.
+    * `-fopenacc-print=acc-omp` is the same except it prints the
+      OpenMP in comments and leaves the original OpenACC uncommented.
     * `-fopenacc` is redundant with any of those options.
-    * `-fopenmp-*` support has not yet been tested in OpenACC
-      source-to-source mode.
+    * Options starting with `-fopenmp-` have not been tested in
+      OpenACC source-to-source mode.
 * `-fopenmp` produces an error diagnostic when OpenACC support is
   enabled in either mode as Clacc currently does not support OpenACC
   and OpenMP in the same source.
