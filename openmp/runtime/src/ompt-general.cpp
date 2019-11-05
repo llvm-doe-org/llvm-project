@@ -109,8 +109,7 @@ OMPT_API_ROUTINE ompt_data_t *ompt_get_thread_data(void);
 /*****************************************************************************
  * OpenACC profiling interface.
  *
- * FIXME: Move this to an OpenACC library.  See FIXME in ompt_try_start_tool
- * below.
+ * FIXME: Move this to an OpenACC library.
  ****************************************************************************/
 
 // FIXME: Access to this is not thread-safe.  Does it need to be?
@@ -621,6 +620,58 @@ static void acc_ompt_event_callback(ompt_callbacks_t ompt_event,
   KMP_ASSERT2(0, "unexpected ompt_callbacks_t");
 }
 
+struct acc_prof_action {
+  bool reg;
+  acc_event_t event;
+  acc_prof_callback cb;
+  acc_register_t info;
+  acc_prof_action *next;
+};
+
+static acc_prof_action *acc_prof_action_head = nullptr;
+static acc_prof_action *acc_prof_action_tail = nullptr;
+
+static void acc_prof_enqueue(acc_prof_action *action) {
+  action->next = nullptr;
+  if (!acc_prof_action_head)
+    acc_prof_action_head = acc_prof_action_tail = action;
+  else {
+    acc_prof_action_tail->next = action;
+    acc_prof_action_tail = action;
+  }
+}
+
+static acc_prof_action *acc_prof_dequeue() {
+  acc_prof_action *action = acc_prof_action_head;
+  if (action) {
+    acc_prof_action_head = action->next;
+    if (!acc_prof_action_head)
+      acc_prof_action_tail = nullptr;
+    action->next = nullptr;
+  }
+  return action;
+}
+
+static void acc_prof_register_enqueue(
+    acc_event_t acc_event, acc_prof_callback acc_cb, acc_register_t acc_info) {
+  acc_prof_action *action = (acc_prof_action *)malloc(sizeof *action);
+  action->reg = true;
+  action->event = acc_event;
+  action->cb = acc_cb;
+  action->info = acc_info;
+  acc_prof_enqueue(action);
+}
+
+static void acc_prof_unregister_enqueue(
+    acc_event_t acc_event, acc_prof_callback acc_cb, acc_register_t acc_info) {
+  acc_prof_action *action = (acc_prof_action *)malloc(sizeof *action);
+  action->reg = false;
+  action->event = acc_event;
+  action->cb = acc_cb;
+  action->info = acc_info;
+  acc_prof_enqueue(action);
+}
+
 static void acc_prof_register_ompt(
     acc_event_t acc_event, acc_prof_callback acc_cb, acc_register_t acc_info) {
   // FIXME: Support other values of acc_info.  Probably should coordinate with
@@ -730,8 +781,13 @@ static int acc_ompt_initialize(ompt_function_lookup_t lookup,
                                int initial_device_num,
                                ompt_data_t *tool_data) {
   acc_ompt_set_callback = (ompt_set_callback_t)lookup("ompt_set_callback");
-  acc_register_library(acc_prof_register_ompt, acc_prof_unregister_ompt,
-                       /*acc_query_fn_name*/ NULL);
+  while (acc_prof_action *action = acc_prof_dequeue()) {
+    if (action->reg)
+      acc_prof_register_ompt(action->event, action->cb, action->info);
+    else
+      acc_prof_unregister_ompt(action->event, action->cb, action->info);
+    free(action);
+  }
   acc_ompt_initial_device_num = initial_device_num;
   return 1;
 }
@@ -792,8 +848,7 @@ static ompt_start_tool_result_t *ompt_tool_darwin(unsigned int omp_version,
 // of ompt_start_tool() will be used in case no tool-supplied implementation of
 // this function is present in the address space of a process.
 
-// FIXME: Move this to an OpenACC library.  See FIXME in ompt_try_start_tool
-// below.
+// FIXME: Move this to an OpenACC library.
 // FIXME: This needs implementations in the other branches of this #if.
 _OMP_EXTERN OMPT_WEAK_ATTRIBUTE void
 acc_register_library(acc_prof_reg reg, acc_prof_reg unref,
@@ -801,6 +856,19 @@ acc_register_library(acc_prof_reg reg, acc_prof_reg unref,
 
 _OMP_EXTERN OMPT_WEAK_ATTRIBUTE ompt_start_tool_result_t *
 ompt_start_tool(unsigned int omp_version, const char *runtime_version) {
+  acc_register_library(acc_prof_register_enqueue,
+                       acc_prof_unregister_enqueue,
+                       /*acc_query_fn_name*/ NULL);
+  if (acc_prof_action_head) {
+    static int host_device_number;
+    static ompt_data_t ompt_data;
+    static ompt_start_tool_result_t res;
+    ompt_data.ptr = &host_device_number;
+    res.initialize = acc_ompt_initialize;
+    res.finalize = acc_ompt_finalize;
+    res.tool_data = ompt_data;
+    return &res;
+  }
   ompt_start_tool_result_t *ret = NULL;
   // Search next symbol in the current address space. This can happen if the
   // runtime library is linked before the tool. Since glibc 2.2 strong symbols
@@ -934,27 +1002,6 @@ ompt_try_start_tool(unsigned int omp_version, const char *runtime_version) {
       fname = __kmp_str_token(NULL, sep, &buf);
     }
     __kmp_str_free(&libs);
-  } else {
-    // FIXME: Don't do this here.  It causes OMPT to be enabled at all times.
-    // That may impact performance, and it certainly changes error codes for
-    // some cases (including an existing test case that this causes to fail).
-    // Instead, create a separate library for OpenACC that isn't linked
-    // automatically for OpenMP apps.  It can provide an ompt_start_tool that
-    // returns an acc_register_library wrapper, and it can provide that wrapper
-    // and the above default acc_register_library.
-    static int host_device_number;
-    static ompt_data_t ompt_data;
-    static ompt_start_tool_result_t res;
-    ompt_data.ptr = &host_device_number;
-    // FIXME: We should call acc_register_library here, let it register
-    // callbacks in OpenACC-specific tables (we need to define those), check to
-    // see if anything has been registered, and then return a NULL result here
-    // if not so that we don't unnecessarily enable OMPT, especially when we're
-    // using our default empty acc_register_library.
-    res.initialize = acc_ompt_initialize;
-    res.finalize = acc_ompt_finalize;
-    res.tool_data = ompt_data;
-    ret = &res;
   }
   return ret;
 }

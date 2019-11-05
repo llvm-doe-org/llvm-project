@@ -1702,23 +1702,51 @@ Limitations left to be resolved in Clacc's OpenACC Profiling Interface
 support currently include:
 
 * `acc_prof_register` and `acc_prof_unregister` must be called only
-  via the pointers obtained within `acc_register_library`.  They
-  cannot be linked and called directly.  Notes:
-    * This is because registration in OMPT cannot occur until the
-      OpenMP runtime dispatches the `initialize` callback provided to
-      `ompt_start_tool` and thus provides pointers to functions like
-      `ompt_set_callback`.  Clacc defines that `initialize` callback
-      to call `acc_register_library`, so those pointers are available
-      when `acc_register_library` is called but not before.
-    * In the future, Clacc may provide versions of `acc_prof_register`
-      and `acc_prof_unregister` that store registrations until the
-      `initialize` callback is dispatched and then uses the pointers
-      it provides thereafter.
+  via the pointers obtained within `acc_register_library` and must be
+  called only within `acc_register_library`.  Notes:
+    * That is, `acc_prof_register` and `acc_prof_unregister` cannot be
+      linked and called directly, and the pointers passed to
+      `acc_register_library` are not intended to be stored and used
+      after `acc_register_library`.
+    * The underlying issue is that whether OMPT callbacks are desired
+      must be known at the time of `ompt_start_tool`, but OMPT
+      callback registrations cannot be performed until the OpenMP
+      runtime performs the `initialize` callback later.  The reason is
+      that, if there are no callbacks, `ompt_start_tool` should return
+      null to avoid unnecessarily enabling OMPT and potentially
+      impacting OpenMP performance, but it's the `initialize` callback
+      that receives pointers to functions like `ompt_set_callback`.
+    * Clacc addresses this issue as follows.  `acc_prof_register` and
+      `acc_prof_unregister` queue their registration actions instead
+      of performing them immediately.  Clacc implements
+      `ompt_start_tool` to call `acc_register_library` and to return
+      null if `acc_register_library` leaves the registration queue
+      empty.  Otherwise, Clacc's `ompt_start_tool` returns non-null
+      and specifies an `initialize` callback that later iterates the
+      queue and actually performs the required callback registrations.
+    * In the future, Clacc may expose `acc_prof_register` and
+      `acc_prof_unregister` for use outside of `acc_register_library`.
+      They would queue their registration actions until the
+      `initialize` callback is dispatched, and they would perform them
+      directly afterward.
+    * That change would entirely eliminate this limitation except
+      that, if neither `acc_prof_register` or `acc_prof_unregister` is
+      called by the time the OpenMP runtime calls `ompt_start_tool`,
+      OMPT would not be enabled, so calling `acc_prof_register` or
+      `acc_prof_unregister` afterward would have no effect.  To
+      address that use case, Clacc's `ompt_start_tool` could be
+      extended to check an environment variable or weakly linked
+      function that specifies whether OMPT should always be enabled.
+      Thus, the question of whether to enable profiling would become a
+      link-time or run-time switch external to the OpenACC application
+      and profiling library code.  When called too late,
+      `acc_prof_register` and `acc_prof_unregister` should also
+      produce warnings or errors advising the use of such a feature.
 * For each event type, at most one occurrence of one callback can be
   registered at a time, and it cannot be toggled.  Notes:
     * OMPT does not appear to have such features.
-    * Fixing this likely requires building our own registration
-      tables, as for the previous limitation.
+    * Eliminating this limitation requires building more sophisticated
+      OpenACC Profiling Interface callback registration tables.
 * The following event types are not yet supported because the Clacc
   compiler does not yet implement directives and clauses that would
   trigger them:
