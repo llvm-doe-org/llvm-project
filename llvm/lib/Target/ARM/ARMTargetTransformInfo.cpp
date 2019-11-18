@@ -36,6 +36,10 @@ using namespace llvm;
 
 #define DEBUG_TYPE "armtti"
 
+static cl::opt<bool> EnableMaskedLoadStores(
+  "enable-arm-maskedldst", cl::Hidden, cl::init(false),
+  cl::desc("Enable the generation of masked loads and stores"));
+
 static cl::opt<bool> DisableLowOverheadLoops(
   "disable-arm-loloops", cl::Hidden, cl::init(false),
   cl::desc("Disable the generation of low-overhead loops"));
@@ -485,6 +489,27 @@ int ARMTTIImpl::getAddressComputationCost(Type *Ty, ScalarEvolution *SE,
     return 1;
   }
   return BaseT::getAddressComputationCost(Ty, SE, Ptr);
+}
+
+bool ARMTTIImpl::isLegalMaskedLoad(Type *DataTy, MaybeAlign Alignment) {
+  if (!EnableMaskedLoadStores || !ST->hasMVEIntegerOps())
+    return false;
+
+  if (auto *VecTy = dyn_cast<VectorType>(DataTy)) {
+    // Don't support v2i1 yet.
+    if (VecTy->getNumElements() == 2)
+      return false;
+
+    // We don't support extending fp types.
+     unsigned VecWidth = DataTy->getPrimitiveSizeInBits();
+    if (VecWidth != 128 && VecTy->getElementType()->isFloatingPointTy())
+      return false;
+  }
+
+  unsigned EltWidth = DataTy->getScalarSizeInBits();
+  return (EltWidth == 32 && (!Alignment || Alignment >= 4)) ||
+         (EltWidth == 16 && (!Alignment || Alignment >= 2)) ||
+         (EltWidth == 8);
 }
 
 int ARMTTIImpl::getMemcpyCost(const Instruction *I) {
@@ -1059,11 +1084,11 @@ bool ARMTTIImpl::useReductionIntrinsic(unsigned Opcode, Type *Ty,
   case Instruction::Or:
   case Instruction::Xor:
   case Instruction::Mul:
-  case Instruction::ICmp:
   case Instruction::FCmp:
     return false;
+  case Instruction::ICmp:
   case Instruction::Add:
-    return ScalarBits * Ty->getVectorNumElements() == 128;
+    return ScalarBits < 64 && ScalarBits * Ty->getVectorNumElements() == 128;
   default:
     llvm_unreachable("Unhandled reduction opcode");
   }

@@ -122,7 +122,8 @@ public:
   /// \name Vector TTI Implementations
   /// @{
 
-  unsigned getNumberOfRegisters(bool Vector) {
+  unsigned getNumberOfRegisters(unsigned ClassID) const {
+    bool Vector = (ClassID == 1);
     if (Vector) {
       if (ST->hasNEON())
         return 16;
@@ -150,6 +151,12 @@ public:
 
   unsigned getMaxInterleaveFactor(unsigned VF) {
     return ST->getMaxInterleaveFactor();
+  }
+
+  bool isLegalMaskedLoad(Type *DataTy, MaybeAlign Alignment);
+
+  bool isLegalMaskedStore(Type *DataTy, MaybeAlign Alignment) {
+    return isLegalMaskedLoad(DataTy, Alignment);
   }
 
   int getMemcpyCost(const Instruction *I);

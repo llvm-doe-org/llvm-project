@@ -433,7 +433,7 @@ public:
 // Declare Traverse*() for all concrete Type classes.
 #define ABSTRACT_TYPE(CLASS, BASE)
 #define TYPE(CLASS, BASE) bool Traverse##CLASS##Type(CLASS##Type *T);
-#include "clang/AST/TypeNodes.def"
+#include "clang/AST/TypeNodes.inc"
   // The above header #undefs ABSTRACT_TYPE and TYPE upon exit.
 
   // Define WalkUpFrom*() and empty Visit*() for all Type classes.
@@ -446,7 +446,7 @@ public:
     return true;                                                               \
   }                                                                            \
   bool Visit##CLASS##Type(CLASS##Type *T) { return true; }
-#include "clang/AST/TypeNodes.def"
+#include "clang/AST/TypeNodes.inc"
 
 // ---- Methods on TypeLocs ----
 // FIXME: this currently just calls the matching Type methods
@@ -462,7 +462,7 @@ public:
   bool VisitTypeLoc(TypeLoc TL) { return true; }
 
   // QualifiedTypeLoc and UnqualTypeLoc are not declared in
-  // TypeNodes.def and thus need to be handled specially.
+  // TypeNodes.inc and thus need to be handled specially.
   bool WalkUpFromQualifiedTypeLoc(QualifiedTypeLoc TL) {
     return getDerived().VisitUnqualTypeLoc(TL.getUnqualifiedLoc());
   }
@@ -480,7 +480,7 @@ public:
     return true;                                                               \
   }                                                                            \
   bool Visit##CLASS##TypeLoc(CLASS##TypeLoc TL) { return true; }
-#include "clang/AST/TypeNodes.def"
+#include "clang/AST/TypeNodes.inc"
 
 // ---- Methods on Decls ----
 
@@ -684,7 +684,7 @@ bool RecursiveASTVisitor<Derived>::TraverseType(QualType T) {
 #define TYPE(CLASS, BASE)                                                      \
   case Type::CLASS:                                                            \
     DISPATCH(CLASS##Type, CLASS##Type, const_cast<Type *>(T.getTypePtr()));
-#include "clang/AST/TypeNodes.def"
+#include "clang/AST/TypeNodes.inc"
   }
 
   return true;
@@ -967,8 +967,11 @@ DEF_TRAVERSE_TYPE(AdjustedType, { TRY_TO(TraverseType(T->getOriginalType())); })
 
 DEF_TRAVERSE_TYPE(DecayedType, { TRY_TO(TraverseType(T->getOriginalType())); })
 
-DEF_TRAVERSE_TYPE(ConstantArrayType,
-                  { TRY_TO(TraverseType(T->getElementType())); })
+DEF_TRAVERSE_TYPE(ConstantArrayType, {
+  TRY_TO(TraverseType(T->getElementType()));
+  if (T->getSizeExpr())
+    TRY_TO(TraverseStmt(const_cast<Expr*>(T->getSizeExpr())));
+})
 
 DEF_TRAVERSE_TYPE(IncompleteArrayType,
                   { TRY_TO(TraverseType(T->getElementType())); })
@@ -1638,9 +1641,11 @@ template <typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseTemplateParameterListHelper(
     TemplateParameterList *TPL) {
   if (TPL) {
-    for (TemplateParameterList::iterator I = TPL->begin(), E = TPL->end();
-         I != E; ++I) {
-      TRY_TO(TraverseDecl(*I));
+    for (NamedDecl *D : *TPL) {
+      TRY_TO(TraverseDecl(D));
+    }
+    if (Expr *RequiresClause = TPL->getRequiresClause()) {
+      TRY_TO(TraverseStmt(RequiresClause));
     }
   }
   return true;
@@ -2609,6 +2614,15 @@ DEF_TRAVERSE_STMT(SEHLeaveStmt, {})
 DEF_TRAVERSE_STMT(CapturedStmt, { TRY_TO(TraverseDecl(S->getCapturedDecl())); })
 
 DEF_TRAVERSE_STMT(CXXOperatorCallExpr, {})
+DEF_TRAVERSE_STMT(CXXRewrittenBinaryOperator, {
+  if (!getDerived().shouldVisitImplicitCode()) {
+    CXXRewrittenBinaryOperator::DecomposedForm Decomposed =
+        S->getDecomposedForm();
+    TRY_TO(TraverseStmt(const_cast<Expr*>(Decomposed.LHS)));
+    TRY_TO(TraverseStmt(const_cast<Expr*>(Decomposed.RHS)));
+    ShouldVisitChildren = false;
+  }
+})
 DEF_TRAVERSE_STMT(OpaqueValueExpr, {})
 DEF_TRAVERSE_STMT(TypoExpr, {})
 DEF_TRAVERSE_STMT(CUDAKernelCallExpr, {})
@@ -2662,6 +2676,12 @@ DEF_TRAVERSE_STMT(CoyieldExpr, {
     TRY_TO_TRAVERSE_OR_ENQUEUE_STMT(S->getOperand());
     ShouldVisitChildren = false;
   }
+})
+
+DEF_TRAVERSE_STMT(ConceptSpecializationExpr, {
+  TRY_TO(TraverseTemplateArgumentLocsHelper(
+          S->getTemplateArgsAsWritten()->getTemplateArgs(),
+          S->getTemplateArgsAsWritten()->NumTemplateArgs));
 })
 
 // These literals (all of them) do not need any action.
@@ -2793,6 +2813,15 @@ DEF_TRAVERSE_STMT(OMPTaskLoopDirective,
 DEF_TRAVERSE_STMT(OMPTaskLoopSimdDirective,
                   { TRY_TO(TraverseOMPExecutableDirective(S)); })
 
+DEF_TRAVERSE_STMT(OMPMasterTaskLoopDirective,
+                  { TRY_TO(TraverseOMPExecutableDirective(S)); })
+
+DEF_TRAVERSE_STMT(OMPMasterTaskLoopSimdDirective,
+                  { TRY_TO(TraverseOMPExecutableDirective(S)); })
+
+DEF_TRAVERSE_STMT(OMPParallelMasterTaskLoopDirective,
+                  { TRY_TO(TraverseOMPExecutableDirective(S)); })
+
 DEF_TRAVERSE_STMT(OMPDistributeDirective,
                   { TRY_TO(TraverseOMPExecutableDirective(S)); })
 
@@ -2851,6 +2880,8 @@ bool RecursiveASTVisitor<Derived>::TraverseOMPClause(OMPClause *C) {
 #include "clang/Basic/OpenMPKinds.def"
   case OMPC_threadprivate:
   case OMPC_uniform:
+  case OMPC_device_type:
+  case OMPC_match:
   case OMPC_unknown:
     break;
   }
@@ -2895,6 +2926,7 @@ bool RecursiveASTVisitor<Derived>::VisitOMPIfClause(OMPIfClause *C) {
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitOMPFinalClause(OMPFinalClause *C) {
+  TRY_TO(VisitOMPClauseWithPreInit(C));
   TRY_TO(TraverseStmt(C->getCondition()));
   return true;
 }
@@ -3265,6 +3297,7 @@ bool RecursiveASTVisitor<Derived>::VisitOMPThreadLimitClause(
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitOMPPriorityClause(
     OMPPriorityClause *C) {
+  TRY_TO(VisitOMPClauseWithPreInit(C));
   TRY_TO(TraverseStmt(C->getPriority()));
   return true;
 }
@@ -3272,6 +3305,7 @@ bool RecursiveASTVisitor<Derived>::VisitOMPPriorityClause(
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitOMPGrainsizeClause(
     OMPGrainsizeClause *C) {
+  TRY_TO(VisitOMPClauseWithPreInit(C));
   TRY_TO(TraverseStmt(C->getGrainsize()));
   return true;
 }
@@ -3279,6 +3313,7 @@ bool RecursiveASTVisitor<Derived>::VisitOMPGrainsizeClause(
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitOMPNumTasksClause(
     OMPNumTasksClause *C) {
+  TRY_TO(VisitOMPClauseWithPreInit(C));
   TRY_TO(TraverseStmt(C->getNumTasks()));
   return true;
 }

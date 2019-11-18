@@ -235,10 +235,10 @@ def _SLASH_Zc_trigraphs : CLFlag<"Zc:trigraphs">,
 def _SLASH_Zc_trigraphs_off : CLFlag<"Zc:trigraphs-">,
   HelpText<"Disable trigraphs (default)">, Alias<fno_trigraphs>;
 def _SLASH_Zc_twoPhase : CLFlag<"Zc:twoPhase">,
-  HelpText<"Enable two-phase name lookup in templates (default)">,
+  HelpText<"Enable two-phase name lookup in templates">,
   Alias<fno_delayed_template_parsing>;
 def _SLASH_Zc_twoPhase_ : CLFlag<"Zc:twoPhase-">,
-  HelpText<"Disable two-phase name lookup in templates">,
+  HelpText<"Disable two-phase name lookup in templates (default)">,
   Alias<fdelayed_template_parsing>;
 def _SLASH_Z7 : CLFlag<"Z7">,
   HelpText<"Enable CodeView debug information in object files">;
@@ -401,6 +401,9 @@ def _SLASH_Zc_inline : CLIgnoredFlag<"Zc:inline">;
 def _SLASH_Zc_rvalueCast : CLIgnoredFlag<"Zc:rvalueCast">;
 def _SLASH_Zc_ternary : CLIgnoredFlag<"Zc:ternary">;
 def _SLASH_Zc_wchar_t : CLIgnoredFlag<"Zc:wchar_t">;
+def _SLASH_ZH_MD5 : CLIgnoredFlag<"ZH:MD5">;
+def _SLASH_ZH_SHA1 : CLIgnoredFlag<"ZH:SHA1">;
+def _SLASH_ZH_SHA_256 : CLIgnoredFlag<"ZH:SHA_256">;
 def _SLASH_Zm : CLIgnoredJoined<"Zm">;
 def _SLASH_Zo : CLIgnoredFlag<"Zo">;
 def _SLASH_Zo_ : CLIgnoredFlag<"Zo-">;

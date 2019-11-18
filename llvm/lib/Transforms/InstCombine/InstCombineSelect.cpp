@@ -785,6 +785,41 @@ static Value *canonicalizeSaturatedAdd(ICmpInst *Cmp, Value *TVal, Value *FVal,
   return nullptr;
 }
 
+/// Fold the following code sequence:
+/// \code
+///   int a = ctlz(x & -x);
+//    x ? 31 - a : a;
+/// \code
+///
+/// into:
+///   cttz(x)
+static Instruction *foldSelectCtlzToCttz(ICmpInst *ICI, Value *TrueVal,
+                                         Value *FalseVal,
+                                         InstCombiner::BuilderTy &Builder) {
+  unsigned BitWidth = TrueVal->getType()->getScalarSizeInBits();
+  if (!ICI->isEquality() || !match(ICI->getOperand(1), m_Zero()))
+    return nullptr;
+
+  if (ICI->getPredicate() == ICmpInst::ICMP_NE)
+    std::swap(TrueVal, FalseVal);
+
+  if (!match(FalseVal,
+             m_Xor(m_Deferred(TrueVal), m_SpecificInt(BitWidth - 1))))
+    return nullptr;
+
+  if (!match(TrueVal, m_Intrinsic<Intrinsic::ctlz>()))
+    return nullptr;
+
+  Value *X = ICI->getOperand(0);
+  auto *II = cast<IntrinsicInst>(TrueVal);
+  if (!match(II->getOperand(0), m_c_And(m_Specific(X), m_Neg(m_Specific(X)))))
+    return nullptr;
+
+  Function *F = Intrinsic::getDeclaration(II->getModule(), Intrinsic::cttz,
+                                          II->getType());
+  return CallInst::Create(F, {X, II->getArgOperand(1)});
+}
+
 /// Attempt to fold a cttz/ctlz followed by a icmp plus select into a single
 /// call to cttz/ctlz with flag 'is_zero_undef' cleared.
 ///
@@ -1091,6 +1126,7 @@ static Value *simplifyWithOpReplaced(Value *V, Value *Op, Value *ReplaceOp,
 ///   %sel = select i1 %cmp, i32 -2147483648, i32 %add
 ///
 /// We can't replace %sel with %add unless we strip away the flags.
+/// TODO: Wrapping flags could be preserved in some cases with better analysis.
 static Value *foldSelectValueEquivalence(SelectInst &Sel, ICmpInst &Cmp,
                                          const SimplifyQuery &Q) {
   if (!Cmp.isEquality())
@@ -1261,6 +1297,81 @@ static Instruction *canonicalizeClampLike(SelectInst &Sel0, ICmpInst &Cmp0,
   return MaybeReplacedHigh;
 }
 
+// If we have
+//  %cmp = icmp [canonical predicate] i32 %x, C0
+//  %r = select i1 %cmp, i32 %y, i32 C1
+// Where C0 != C1 and %x may be different from %y, see if the constant that we
+// will have if we flip the strictness of the predicate (i.e. without changing
+// the result) is identical to the C1 in select. If it matches we can change
+// original comparison to one with swapped predicate, reuse the constant,
+// and swap the hands of select.
+static Instruction *
+tryToReuseConstantFromSelectInComparison(SelectInst &Sel, ICmpInst &Cmp,
+                                         InstCombiner::BuilderTy &Builder) {
+  ICmpInst::Predicate Pred;
+  Value *X;
+  Constant *C0;
+  if (!match(&Cmp, m_OneUse(m_ICmp(
+                       Pred, m_Value(X),
+                       m_CombineAnd(m_AnyIntegralConstant(), m_Constant(C0))))))
+    return nullptr;
+
+  // If comparison predicate is non-relational, we won't be able to do anything.
+  if (ICmpInst::isEquality(Pred))
+    return nullptr;
+
+  // If comparison predicate is non-canonical, then we certainly won't be able
+  // to make it canonical; canonicalizeCmpWithConstant() already tried.
+  if (!isCanonicalPredicate(Pred))
+    return nullptr;
+
+  // If the [input] type of comparison and select type are different, lets abort
+  // for now. We could try to compare constants with trunc/[zs]ext though.
+  if (C0->getType() != Sel.getType())
+    return nullptr;
+
+  // FIXME: are there any magic icmp predicate+constant pairs we must not touch?
+
+  Value *SelVal0, *SelVal1; // We do not care which one is from where.
+  match(&Sel, m_Select(m_Value(), m_Value(SelVal0), m_Value(SelVal1)));
+  // At least one of these values we are selecting between must be a constant
+  // else we'll never succeed.
+  if (!match(SelVal0, m_AnyIntegralConstant()) &&
+      !match(SelVal1, m_AnyIntegralConstant()))
+    return nullptr;
+
+  // Does this constant C match any of the `select` values?
+  auto MatchesSelectValue = [SelVal0, SelVal1](Constant *C) {
+    return C->isElementWiseEqual(SelVal0) || C->isElementWiseEqual(SelVal1);
+  };
+
+  // If C0 *already* matches true/false value of select, we are done.
+  if (MatchesSelectValue(C0))
+    return nullptr;
+
+  // Check the constant we'd have with flipped-strictness predicate.
+  auto FlippedStrictness = getFlippedStrictnessPredicateAndConstant(Pred, C0);
+  if (!FlippedStrictness)
+    return nullptr;
+
+  // If said constant doesn't match either, then there is no hope,
+  if (!MatchesSelectValue(FlippedStrictness->second))
+    return nullptr;
+
+  // It matched! Lets insert the new comparison just before select.
+  InstCombiner::BuilderTy::InsertPointGuard Guard(Builder);
+  Builder.SetInsertPoint(&Sel);
+
+  Pred = ICmpInst::getSwappedPredicate(Pred); // Yes, swapped.
+  Value *NewCmp = Builder.CreateICmp(Pred, X, FlippedStrictness->second,
+                                     Cmp.getName() + ".inv");
+  Sel.setCondition(NewCmp);
+  Sel.swapValues();
+  Sel.swapProfMetadata();
+
+  return &Sel;
+}
+
 /// Visit a SelectInst that has an ICmpInst as its first operand.
 Instruction *InstCombiner::foldSelectInstWithICmp(SelectInst &SI,
                                                   ICmpInst *ICI) {
@@ -1275,6 +1386,10 @@ Instruction *InstCombiner::foldSelectInstWithICmp(SelectInst &SI,
 
   if (Instruction *NewAbs = canonicalizeClampLike(SI, *ICI, Builder))
     return NewAbs;
+
+  if (Instruction *NewSel =
+          tryToReuseConstantFromSelectInComparison(SI, *ICI, Builder))
+    return NewSel;
 
   bool Changed = adjustMinMax(SI, *ICI);
 
@@ -1351,6 +1466,9 @@ Instruction *InstCombiner::foldSelectInstWithICmp(SelectInst &SI,
 
   if (Instruction *V =
           foldSelectICmpAndAnd(SI.getType(), ICI, TrueVal, FalseVal, Builder))
+    return V;
+
+  if (Instruction *V = foldSelectCtlzToCttz(ICI, TrueVal, FalseVal, Builder))
     return V;
 
   if (Value *V = foldSelectICmpAndOr(ICI, TrueVal, FalseVal, Builder))
@@ -1886,6 +2004,71 @@ static Instruction *moveAddAfterMinMax(SelectPatternFlavor SPF, Value *X,
   return nullptr;
 }
 
+/// Match a sadd_sat or ssub_sat which is using min/max to clamp the value.
+Instruction *InstCombiner::matchSAddSubSat(SelectInst &MinMax1) {
+  Type *Ty = MinMax1.getType();
+
+  // We are looking for a tree of:
+  // max(INT_MIN, min(INT_MAX, add(sext(A), sext(B))))
+  // Where the min and max could be reversed
+  Instruction *MinMax2;
+  BinaryOperator *AddSub;
+  const APInt *MinValue, *MaxValue;
+  if (match(&MinMax1, m_SMin(m_Instruction(MinMax2), m_APInt(MaxValue)))) {
+    if (!match(MinMax2, m_SMax(m_BinOp(AddSub), m_APInt(MinValue))))
+      return nullptr;
+  } else if (match(&MinMax1,
+                   m_SMax(m_Instruction(MinMax2), m_APInt(MinValue)))) {
+    if (!match(MinMax2, m_SMin(m_BinOp(AddSub), m_APInt(MaxValue))))
+      return nullptr;
+  } else
+    return nullptr;
+
+  // Check that the constants clamp a saturate, and that the new type would be
+  // sensible to convert to.
+  if (!(*MaxValue + 1).isPowerOf2() || -*MinValue != *MaxValue + 1)
+    return nullptr;
+  // In what bitwidth can this be treated as saturating arithmetics?
+  unsigned NewBitWidth = (*MaxValue + 1).logBase2() + 1;
+  // FIXME: This isn't quite right for vectors, but using the scalar type is a
+  // good first approximation for what should be done there.
+  if (!shouldChangeType(Ty->getScalarType()->getIntegerBitWidth(), NewBitWidth))
+    return nullptr;
+
+  // Also make sure that the number of uses is as expected. The "3"s are for the
+  // the two items of min/max (the compare and the select).
+  if (MinMax2->hasNUsesOrMore(3) || AddSub->hasNUsesOrMore(3))
+    return nullptr;
+
+  // Create the new type (which can be a vector type)
+  Type *NewTy = Ty->getWithNewBitWidth(NewBitWidth);
+  // Match the two extends from the add/sub
+  Value *A, *B;
+  if(!match(AddSub, m_BinOp(m_SExt(m_Value(A)), m_SExt(m_Value(B)))))
+    return nullptr;
+  // And check the incoming values are of a type smaller than or equal to the
+  // size of the saturation. Otherwise the higher bits can cause different
+  // results.
+  if (A->getType()->getScalarSizeInBits() > NewBitWidth ||
+      B->getType()->getScalarSizeInBits() > NewBitWidth)
+    return nullptr;
+
+  Intrinsic::ID IntrinsicID;
+  if (AddSub->getOpcode() == Instruction::Add)
+    IntrinsicID = Intrinsic::sadd_sat;
+  else if (AddSub->getOpcode() == Instruction::Sub)
+    IntrinsicID = Intrinsic::ssub_sat;
+  else
+    return nullptr;
+
+  // Finally create and return the sat intrinsic, truncated to the new type
+  Function *F = Intrinsic::getDeclaration(MinMax1.getModule(), IntrinsicID, NewTy);
+  Value *AT = Builder.CreateSExt(A, NewTy);
+  Value *BT = Builder.CreateSExt(B, NewTy);
+  Value *Sat = Builder.CreateCall(F, {AT, BT});
+  return CastInst::Create(Instruction::SExt, Sat, Ty);
+}
+
 /// Reduce a sequence of min/max with a common operand.
 static Instruction *factorizeMinMaxTree(SelectPatternFlavor SPF, Value *LHS,
                                         Value *RHS,
@@ -2254,16 +2437,17 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
           (LHS->getType()->isFPOrFPVectorTy() &&
            ((CmpLHS != LHS && CmpLHS != RHS) ||
             (CmpRHS != LHS && CmpRHS != RHS)))) {
-        CmpInst::Predicate Pred = getMinMaxPred(SPF, SPR.Ordered);
+        CmpInst::Predicate MinMaxPred = getMinMaxPred(SPF, SPR.Ordered);
 
         Value *Cmp;
-        if (CmpInst::isIntPredicate(Pred)) {
-          Cmp = Builder.CreateICmp(Pred, LHS, RHS);
+        if (CmpInst::isIntPredicate(MinMaxPred)) {
+          Cmp = Builder.CreateICmp(MinMaxPred, LHS, RHS);
         } else {
           IRBuilder<>::FastMathFlagGuard FMFG(Builder);
-          auto FMF = cast<FPMathOperator>(SI.getCondition())->getFastMathFlags();
+          auto FMF =
+              cast<FPMathOperator>(SI.getCondition())->getFastMathFlags();
           Builder.setFastMathFlags(FMF);
-          Cmp = Builder.CreateFCmp(Pred, LHS, RHS);
+          Cmp = Builder.CreateFCmp(MinMaxPred, LHS, RHS);
         }
 
         Value *NewSI = Builder.CreateSelect(Cmp, LHS, RHS, SI.getName(), &SI);
@@ -2310,6 +2494,8 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
         return I;
 
       if (Instruction *I = factorizeMinMaxTree(SPF, LHS, RHS, Builder))
+        return I;
+      if (Instruction *I = matchSAddSubSat(SI))
         return I;
     }
   }

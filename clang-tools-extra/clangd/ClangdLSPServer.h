@@ -10,6 +10,7 @@
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_CLANGDLSPSERVER_H
 
 #include "ClangdServer.h"
+#include "Context.h"
 #include "DraftStore.h"
 #include "Features.inc"
 #include "FindSymbols.h"
@@ -55,9 +56,9 @@ private:
   // Implement DiagnosticsConsumer.
   void onDiagnosticsReady(PathRef File, std::vector<Diag> Diagnostics) override;
   void onFileUpdated(PathRef File, const TUStatus &Status) override;
-  void onHighlightingsReady(PathRef File,
-                            std::vector<HighlightingToken> Highlightings,
-                            int NumLines) override;
+  void
+  onHighlightingsReady(PathRef File,
+                       std::vector<HighlightingToken> Highlightings) override;
 
   // LSP methods. Notifications have signature void(const Params&).
   // Calls have signature void(const Params&, Callback<Response>).
@@ -107,6 +108,8 @@ private:
   void onChangeConfiguration(const DidChangeConfigurationParams &);
   void onSymbolInfo(const TextDocumentPositionParams &,
                     Callback<std::vector<SymbolDetails>>);
+  void onSelectionRange(const SelectionRangeParams &,
+                        Callback<std::vector<SelectionRange>>);
 
   std::vector<Fix> getFixes(StringRef File, const clangd::Diagnostic &D);
 
@@ -128,6 +131,12 @@ private:
   /// Sends a "publishDiagnostics" notification to the LSP client.
   void publishDiagnostics(const URIForFile &File,
                           std::vector<clangd::Diagnostic> Diagnostics);
+
+  /// Since initialization of CDBs and ClangdServer is done lazily, the
+  /// following context captures the one used while creating ClangdLSPServer and
+  /// passes it to above mentioned object instances to make sure they share the
+  /// same state.
+  Context BackgroundContext;
 
   /// Used to indicate that the 'shutdown' request was received from the
   /// Language Server client.
@@ -155,7 +164,7 @@ private:
   void call(StringRef Method, llvm::json::Value Params, Callback<Response> CB) {
     // Wrap the callback with LSP conversion and error-handling.
     auto HandleReply =
-        [CB = std::move(CB)](
+        [CB = std::move(CB), Ctx = Context::current().clone()](
             llvm::Expected<llvm::json::Value> RawResponse) mutable {
           Response Rsp;
           if (!RawResponse) {

@@ -6,9 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/Tooling/Refactoring/Transformer.h"
+#include "clang/Tooling/Transformer/Transformer.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
-#include "clang/Tooling/Refactoring/RangeSelector.h"
+#include "clang/Tooling/Transformer/RangeSelector.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/Error.h"
@@ -18,9 +18,9 @@
 using namespace clang;
 using namespace tooling;
 using namespace ast_matchers;
-
 namespace {
 using ::testing::IsEmpty;
+using transformer::RewriteRule;
 
 constexpr char KHeaderContents[] = R"cc(
   struct string {
@@ -208,7 +208,7 @@ TEST_F(TransformerTest, AddIncludeQuoted) {
 TEST_F(TransformerTest, AddIncludeAngled) {
   RewriteRule Rule = makeRule(callExpr(callee(functionDecl(hasName("f")))),
                               change(text("other()")));
-  addInclude(Rule, "clang/OtherLib.h", IncludeFormat::Angled);
+  addInclude(Rule, "clang/OtherLib.h", transformer::IncludeFormat::Angled);
 
   std::string Input = R"cc(
     int f(int x);
@@ -559,7 +559,7 @@ TEST_F(TransformerTest, OrderedRuleMultipleKinds) {
                                   change(name("fun"), text("DECL_RULE")));
 
   RewriteRule Rule = applyFirst({ReplaceF1, DeclRule, ReplaceF1OrF2});
-  EXPECT_EQ(tooling::detail::buildMatchers(Rule).size(), 2UL);
+  EXPECT_EQ(transformer::detail::buildMatchers(Rule).size(), 2UL);
   testRule(Rule, Input, Expected);
 }
 
@@ -710,6 +710,57 @@ TEST_F(TransformerTest, IdentityMacro) {
   testRule(ruleStrlenSize(), Input, Expected);
 }
 
+// Tests that two changes in a single macro expansion do not lead to conflicts
+// in applying the changes.
+TEST_F(TransformerTest, TwoChangesInOneMacroExpansion) {
+  std::string Input = R"cc(
+#define PLUS(a,b) (a) + (b)
+    int f() { return PLUS(3, 4); }
+  )cc";
+  std::string Expected = R"cc(
+#define PLUS(a,b) (a) + (b)
+    int f() { return PLUS(LIT, LIT); }
+  )cc";
+
+  testRule(makeRule(integerLiteral(), change(text("LIT"))), Input, Expected);
+}
+
+// Tests case where the rule's match spans both source from the macro and its
+// arg, with the begin location (the "anchor") being the arg.
+TEST_F(TransformerTest, MatchSpansMacroTextButChangeDoesNot) {
+  std::string Input = R"cc(
+#define PLUS_ONE(a) a + 1
+    int f() { return PLUS_ONE(3); }
+  )cc";
+  std::string Expected = R"cc(
+#define PLUS_ONE(a) a + 1
+    int f() { return PLUS_ONE(LIT); }
+  )cc";
+
+  StringRef E = "expr";
+  testRule(makeRule(binaryOperator(hasLHS(expr().bind(E))),
+                    change(node(E), text("LIT"))),
+           Input, Expected);
+}
+
+// Tests case where the rule's match spans both source from the macro and its
+// arg, with the begin location (the "anchor") being inside the macro.
+TEST_F(TransformerTest, MatchSpansMacroTextButChangeDoesNotAnchoredInMacro) {
+  std::string Input = R"cc(
+#define PLUS_ONE(a) 1 + a
+    int f() { return PLUS_ONE(3); }
+  )cc";
+  std::string Expected = R"cc(
+#define PLUS_ONE(a) 1 + a
+    int f() { return PLUS_ONE(LIT); }
+  )cc";
+
+  StringRef E = "expr";
+  testRule(makeRule(binaryOperator(hasRHS(expr().bind(E))),
+                    change(node(E), text("LIT"))),
+           Input, Expected);
+}
+
 // No rewrite is applied when the changed text does not encompass the entirety
 // of the expanded text. That is, the edit would have to be applied to the
 // macro's definition to succeed and editing the expansion point would not
@@ -744,11 +795,11 @@ TEST_F(TransformerTest, NoPartialRewriteOfMacroExpansionForMacroArgs) {
 // rules.
 TEST(TransformerDeathTest, OrderedRuleTypes) {
   RewriteRule QualTypeRule = makeRule(qualType(), change(text("Q")));
-  EXPECT_DEATH(tooling::detail::buildMatchers(QualTypeRule),
+  EXPECT_DEATH(transformer::detail::buildMatchers(QualTypeRule),
                "Matcher must be.*node matcher");
 
   RewriteRule TypeRule = makeRule(arrayType(), change(text("T")));
-  EXPECT_DEATH(tooling::detail::buildMatchers(TypeRule),
+  EXPECT_DEATH(transformer::detail::buildMatchers(TypeRule),
                "Matcher must be.*node matcher");
 }
 #endif

@@ -15,6 +15,7 @@ add_clang_unittest(ToolingTests
   CastExprTest.cpp
   CommentHandlerTest.cpp
   CompilationDatabaseTest.cpp
+  DependencyScannerTest.cpp
   DiagnosticsYamlTest.cpp
   ExecutionTest.cpp
   FixItTest.cpp
@@ -53,6 +54,7 @@ add_clang_unittest(ToolingTests
   RefactoringTest.cpp
   ReplacementsYamlTest.cpp
   RewriterTest.cpp
+  SourceCodeBuildersTest.cpp
   SourceCodeTest.cpp
   StencilTest.cpp
   ToolingTest.cpp
@@ -73,6 +75,7 @@ clang_target_link_libraries(ToolingTests
   clangToolingCore
   clangToolingInclusions
   clangToolingRefactoring
+  clangTransformer
   )
 
 target_link_libraries(ToolingTests

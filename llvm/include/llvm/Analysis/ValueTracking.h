@@ -242,19 +242,21 @@ class Value;
   /// This is a wrapper around Value::stripAndAccumulateConstantOffsets that
   /// creates and later unpacks the required APInt.
   inline Value *GetPointerBaseWithConstantOffset(Value *Ptr, int64_t &Offset,
-                                                 const DataLayout &DL) {
+                                                 const DataLayout &DL,
+                                                 bool AllowNonInbounds = true) {
     APInt OffsetAPInt(DL.getIndexTypeSizeInBits(Ptr->getType()), 0);
     Value *Base =
-        Ptr->stripAndAccumulateConstantOffsets(DL, OffsetAPInt,
-                                               /* AllowNonInbounds */ true);
+        Ptr->stripAndAccumulateConstantOffsets(DL, OffsetAPInt, AllowNonInbounds);
+
     Offset = OffsetAPInt.getSExtValue();
     return Base;
   }
-  inline const Value *GetPointerBaseWithConstantOffset(const Value *Ptr,
-                                                       int64_t &Offset,
-                                                       const DataLayout &DL) {
-    return GetPointerBaseWithConstantOffset(const_cast<Value *>(Ptr), Offset,
-                                            DL);
+  inline const Value *
+  GetPointerBaseWithConstantOffset(const Value *Ptr, int64_t &Offset,
+                                   const DataLayout &DL,
+                                   bool AllowNonInbounds = true) {
+    return GetPointerBaseWithConstantOffset(const_cast<Value *>(Ptr), Offset, DL,
+                                            AllowNonInbounds);
   }
 
   /// Returns true if the GEP is based on a pointer to a string (array of
@@ -381,6 +383,13 @@ class Value;
 
   /// Return true if the only users of this pointer are lifetime markers.
   bool onlyUsedByLifetimeMarkers(const Value *V);
+
+  /// Return true if speculation of the given load must be suppressed to avoid
+  /// ordering or interfering with an active sanitizer.  If not suppressed,
+  /// dereferenceability and alignment must be proven separately.  Note: This
+  /// is only needed for raw reasoning; if you use the interface below
+  /// (isSafeToSpeculativelyExecute), this is handled internally.
+  bool mustSuppressSpeculation(const LoadInst &LI);
 
   /// Return true if the instruction does not have any effects besides
   /// calculating the result and does not have undefined behavior.
@@ -611,12 +620,12 @@ class Value;
   SelectPatternResult matchSelectPattern(Value *V, Value *&LHS, Value *&RHS,
                                          Instruction::CastOps *CastOp = nullptr,
                                          unsigned Depth = 0);
+
   inline SelectPatternResult
-  matchSelectPattern(const Value *V, const Value *&LHS, const Value *&RHS,
-                     Instruction::CastOps *CastOp = nullptr) {
-    Value *L = const_cast<Value*>(LHS);
-    Value *R = const_cast<Value*>(RHS);
-    auto Result = matchSelectPattern(const_cast<Value*>(V), L, R);
+  matchSelectPattern(const Value *V, const Value *&LHS, const Value *&RHS) {
+    Value *L = const_cast<Value *>(LHS);
+    Value *R = const_cast<Value *>(RHS);
+    auto Result = matchSelectPattern(const_cast<Value *>(V), L, R);
     LHS = L;
     RHS = R;
     return Result;

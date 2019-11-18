@@ -5,7 +5,7 @@
 ; RUN: llvm-nm %t3.0 | FileCheck %s
 ; RUN: llvm-dis %t3.0.2.internalize.bc -o - | FileCheck %s --check-prefix=INTERN
 
-target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 
 module asm ".symver io_cancel_0_4,io_cancel@@LIBAIO_0.4"
@@ -21,6 +21,7 @@ module asm ".symver foo,foo@@VER1"
 
 define i32 @io_cancel_0_4() {
 ; CHECK-DAG: T io_cancel@@LIBAIO_0.4
+; CHECK-DAG: T io_cancel_0_4
   ret i32 0
 }
 
@@ -28,16 +29,19 @@ define internal i32 @io_cancel_local_0_4() {
 ; INTERN: llvm.compiler.used {{.*}} @io_cancel_local_0_4
 ; INTERN: define internal i32 @io_cancel_local_0_4()
 ; CHECK-DAG: t io_cancel_local@@LIBAIO_0.4
+; CHECK-DAG: t io_cancel_local_0_4
   ret i32 0
 }
 
 define weak i32 @io_cancel_weak_0_4() {
 ; CHECK-DAG: W io_cancel_weak@@LIBAIO_0.4
 ; CHECK-DAG: W io_cancel_weak@@LIBAIO_0.4.1
+; CHECK-DAG: W io_cancel_weak_0_4
 ret i32 0
 }
 
 define i32 @"\01foo"() {
 ; CHECK-DAG: T foo@@VER1
+; CHECK-DAG: T foo
   ret i32 0
 }

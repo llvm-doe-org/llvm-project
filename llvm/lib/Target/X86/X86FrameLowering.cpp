@@ -35,8 +35,8 @@
 using namespace llvm;
 
 X86FrameLowering::X86FrameLowering(const X86Subtarget &STI,
-                                   unsigned StackAlignOverride)
-    : TargetFrameLowering(StackGrowsDown, StackAlignOverride,
+                                   MaybeAlign StackAlignOverride)
+    : TargetFrameLowering(StackGrowsDown, StackAlignOverride.valueOrOne(),
                           STI.is64Bit() ? -8 : -4),
       STI(STI), TII(*STI.getInstrInfo()), TRI(STI.getRegisterInfo()) {
   // Cache a bunch of frame-related predicates for this subtarget.
@@ -1389,9 +1389,13 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       int FI;
       if (unsigned Reg = TII.isStoreToStackSlot(FrameInstr, FI)) {
         if (X86::FR64RegClass.contains(Reg)) {
+          int Offset;
           unsigned IgnoredFrameReg;
-          int Offset = getFrameIndexReference(MF, FI, IgnoredFrameReg);
-          Offset += SEHFrameOffset;
+          if (IsWin64Prologue && IsFunclet)
+            Offset = getWin64EHFrameIndexRef(MF, FI, IgnoredFrameReg);
+          else
+            Offset = getFrameIndexReference(MF, FI, IgnoredFrameReg) +
+                     SEHFrameOffset;
 
           HasWinCFI = true;
           assert(!NeedsWinFPO && "SEH_SaveXMM incompatible with FPO data");
@@ -1547,9 +1551,13 @@ X86FrameLowering::getPSPSlotOffsetFromSP(const MachineFunction &MF) const {
 
 unsigned
 X86FrameLowering::getWinEHFuncletFrameSize(const MachineFunction &MF) const {
+  const X86MachineFunctionInfo *X86FI = MF.getInfo<X86MachineFunctionInfo>();
   // This is the size of the pushed CSRs.
-  unsigned CSSize =
-      MF.getInfo<X86MachineFunctionInfo>()->getCalleeSavedFrameSize();
+  unsigned CSSize = X86FI->getCalleeSavedFrameSize();
+  // This is the size of callee saved XMMs.
+  const auto& WinEHXMMSlotInfo = X86FI->getWinEHXMMSlotInfo();
+  unsigned XMMSize = WinEHXMMSlotInfo.size() *
+                     TRI->getSpillSize(X86::VR128RegClass);
   // This is the amount of stack a funclet needs to allocate.
   unsigned UsedSize;
   EHPersonality Personality =
@@ -1569,7 +1577,7 @@ X86FrameLowering::getWinEHFuncletFrameSize(const MachineFunction &MF) const {
   unsigned FrameSizeMinusRBP = alignTo(CSSize + UsedSize, getStackAlignment());
   // Subtract out the size of the callee saved registers. This is how much stack
   // each funclet will allocate.
-  return FrameSizeMinusRBP - CSSize;
+  return FrameSizeMinusRBP + XMMSize - CSSize;
 }
 
 static bool isTailCallOpcode(unsigned Opc) {
@@ -1843,6 +1851,20 @@ int X86FrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
   return Offset + FPDelta;
 }
 
+int X86FrameLowering::getWin64EHFrameIndexRef(const MachineFunction &MF,
+                                              int FI, unsigned &FrameReg) const {
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  const X86MachineFunctionInfo *X86FI = MF.getInfo<X86MachineFunctionInfo>();
+  const auto& WinEHXMMSlotInfo = X86FI->getWinEHXMMSlotInfo();
+  const auto it = WinEHXMMSlotInfo.find(FI);
+
+  if (it == WinEHXMMSlotInfo.end())
+    return getFrameIndexReference(MF, FI, FrameReg);
+
+  FrameReg = TRI->getStackRegister();
+  return alignTo(MFI.getMaxCallFrameSize(), getStackAlignment()) + it->second;
+}
+
 int X86FrameLowering::getFrameIndexReferenceSP(const MachineFunction &MF,
                                                int FI, unsigned &FrameReg,
                                                int Adjustment) const {
@@ -1941,6 +1963,8 @@ bool X86FrameLowering::assignCalleeSavedSpillSlots(
   X86MachineFunctionInfo *X86FI = MF.getInfo<X86MachineFunctionInfo>();
 
   unsigned CalleeSavedFrameSize = 0;
+  unsigned XMMCalleeSavedFrameSize = 0;
+  auto &WinEHXMMSlotInfo = X86FI->getWinEHXMMSlotInfo();
   int SpillSlotOffset = getOffsetOfLocalArea() + X86FI->getTCReturnAddrDelta();
 
   int64_t TailCallReturnAddrDelta = X86FI->getTCReturnAddrDelta();
@@ -2018,12 +2042,20 @@ bool X86FrameLowering::assignCalleeSavedSpillSlots(
     unsigned Size = TRI->getSpillSize(*RC);
     unsigned Align = TRI->getSpillAlignment(*RC);
     // ensure alignment
-    SpillSlotOffset -= std::abs(SpillSlotOffset) % Align;
+    assert(SpillSlotOffset < 0 && "SpillSlotOffset should always < 0 on X86");
+    SpillSlotOffset = -alignTo(-SpillSlotOffset, Align);
+
     // spill into slot
     SpillSlotOffset -= Size;
     int SlotIndex = MFI.CreateFixedSpillStackObject(Size, SpillSlotOffset);
     CSI[i - 1].setFrameIdx(SlotIndex);
     MFI.ensureMaxAlignment(Align);
+
+    // Save the start offset and size of XMM in stack frame for funclets.
+    if (X86::VR128RegClass.contains(Reg)) {
+      WinEHXMMSlotInfo[SlotIndex] = XMMCalleeSavedFrameSize;
+      XMMCalleeSavedFrameSize += Size;
+    }
   }
 
   return true;
@@ -2237,7 +2269,8 @@ GetScratchRegister(bool Is64Bit, bool IsLP64, const MachineFunction &MF, bool Pr
   bool IsNested = HasNestArgument(&MF);
 
   if (CallingConvention == CallingConv::X86_FastCall ||
-      CallingConvention == CallingConv::Fast) {
+      CallingConvention == CallingConv::Fast ||
+      CallingConvention == CallingConv::Tail) {
     if (IsNested)
       report_fatal_error("Segmented stacks does not support fastcall with "
                          "nested function.");
@@ -2518,6 +2551,18 @@ static unsigned getHiPELiteral(
                      + " required but not provided");
 }
 
+// Return true if there are no non-ehpad successors to MBB and there are no
+// non-meta instructions between MBBI and MBB.end().
+static bool blockEndIsUnreachable(const MachineBasicBlock &MBB,
+                                  MachineBasicBlock::const_iterator MBBI) {
+  return std::all_of(
+             MBB.succ_begin(), MBB.succ_end(),
+             [](const MachineBasicBlock *Succ) { return Succ->isEHPad(); }) &&
+         std::all_of(MBBI, MBB.end(), [](const MachineInstr &MI) {
+           return MI.isMetaInstruction();
+         });
+}
+
 /// Erlang programs may need a special prologue to handle the stack size they
 /// might need at runtime. That is because Erlang/OTP does not implement a C
 /// stack but uses a custom implementation of hybrid stack/heap architecture.
@@ -2751,7 +2796,7 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
   unsigned Opcode = I->getOpcode();
   bool isDestroy = Opcode == TII.getCallFrameDestroyOpcode();
   DebugLoc DL = I->getDebugLoc();
-  uint64_t Amount = !reserveCallFrame ? TII.getFrameSize(*I) : 0;
+  uint64_t Amount = TII.getFrameSize(*I);
   uint64_t InternalAmt = (isDestroy || Amount) ? TII.getFrameAdjustment(*I) : 0;
   I = MBB.erase(I);
   auto InsertPos = skipDebugInstructionsForward(I, MBB.end());
@@ -2840,7 +2885,7 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
     return I;
   }
 
-  if (isDestroy && InternalAmt) {
+  if (isDestroy && InternalAmt && !blockEndIsUnreachable(MBB, I)) {
     // If we are performing frame pointer elimination and if the callee pops
     // something off the stack pointer, add it back.  We do this until we have
     // more advanced stack pointer tracking ability.

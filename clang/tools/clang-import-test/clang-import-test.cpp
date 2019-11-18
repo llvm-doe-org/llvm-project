@@ -168,9 +168,7 @@ std::unique_ptr<CompilerInstance> BuildCompilerInstance() {
   std::vector<const char *> ClangArgv(ClangArgs.size());
   std::transform(ClangArgs.begin(), ClangArgs.end(), ClangArgv.begin(),
                  [](const std::string &s) -> const char * { return s.data(); });
-  CompilerInvocation::CreateFromArgs(*Inv, ClangArgv.data(),
-                                     &ClangArgv.data()[ClangArgv.size()],
-                                     Ins->getDiagnostics());
+  CompilerInvocation::CreateFromArgs(*Inv, ClangArgv, Ins->getDiagnostics());
 
   {
     using namespace driver::types;
@@ -265,8 +263,8 @@ void AddExternalSource(CIAndOrigins &CI,
       {CI.getASTContext(), CI.getFileManager()});
   llvm::SmallVector<ExternalASTMerger::ImporterSource, 3> Sources;
   for (CIAndOrigins &Import : Imports)
-    Sources.push_back({Import.getASTContext(), Import.getFileManager(),
-                       Import.getOriginMap()});
+    Sources.emplace_back(Import.getASTContext(), Import.getFileManager(),
+                         Import.getOriginMap());
   auto ES = std::make_unique<ExternalASTMerger>(Target, Sources);
   CI.getASTContext().setExternalSource(ES.release());
   CI.getASTContext().getTranslationUnitDecl()->setHasExternalVisibleStorage();

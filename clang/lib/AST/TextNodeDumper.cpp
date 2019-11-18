@@ -223,7 +223,6 @@ void TextNodeDumper::Visit(const Decl *D) {
     return;
   }
 
-  Context = &D->getASTContext();
   {
     ColorScope Color(OS, ShowColors, DeclKindNameColor);
     OS << D->getDeclKindName() << "Decl";
@@ -660,8 +659,8 @@ static void dumpBasePath(raw_ostream &OS, const CastExpr *Node) {
     if (!First)
       OS << " -> ";
 
-    const CXXRecordDecl *RD =
-        cast<CXXRecordDecl>(Base->getType()->getAs<RecordType>()->getDecl());
+    const auto *RD =
+        cast<CXXRecordDecl>(Base->getType()->castAs<RecordType>()->getDecl());
 
     if (Base->isVirtual())
       OS << "virtual ";
@@ -711,7 +710,7 @@ void TextNodeDumper::VisitConstantExpr(const ConstantExpr *Node) {
   if (Node->getResultAPValueKind() != APValue::None) {
     ColorScope Color(OS, ShowColors, ValueColor);
     OS << " ";
-    Node->getAPValueResult().printPretty(OS, *Context, Node->getType());
+    Node->getAPValueResult().dump(OS);
   }
 }
 
@@ -1408,6 +1407,8 @@ void TextNodeDumper::VisitVarDecl(const VarDecl *D) {
       break;
     }
   }
+  if (D->needsDestruction(D->getASTContext()))
+    OS << " destroyed";
   if (D->isParameterPack())
     OS << " pack";
 }
@@ -1665,6 +1666,7 @@ void TextNodeDumper::VisitCXXRecordDecl(const CXXRecordDecl *D) {
       FLAG(hasTrivialDestructor, trivial);
       FLAG(hasNonTrivialDestructor, non_trivial);
       FLAG(hasUserDeclaredDestructor, user_declared);
+      FLAG(hasConstexprDestructor, constexpr);
       FLAG(needsImplicitDestructor, needs_implicit);
       FLAG(needsOverloadResolutionForDestructor, needs_overload_resolution);
       if (!D->needsOverloadResolutionForDestructor())
@@ -1789,6 +1791,12 @@ void TextNodeDumper::VisitLinkageSpecDecl(const LinkageSpecDecl *D) {
     break;
   case LinkageSpecDecl::lang_cxx:
     OS << " C++";
+    break;
+  case LinkageSpecDecl::lang_cxx_11:
+    OS << " C++11";
+    break;
+  case LinkageSpecDecl::lang_cxx_14:
+    OS << " C++14";
     break;
   }
 }

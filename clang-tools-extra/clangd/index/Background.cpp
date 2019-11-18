@@ -7,12 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "index/Background.h"
-#include "ClangdUnit.h"
 #include "Compiler.h"
 #include "Context.h"
 #include "FSProvider.h"
 #include "Headers.h"
 #include "Logger.h"
+#include "ParsedAST.h"
 #include "Path.h"
 #include "SourceCode.h"
 #include "Symbol.h"
@@ -69,13 +69,7 @@ public:
   llvm::StringRef resolve(llvm::StringRef FileURI) {
     auto I = URIToPathCache.try_emplace(FileURI);
     if (I.second) {
-      auto U = URI::parse(FileURI);
-      if (!U) {
-        elog("Failed to parse URI {0}: {1}", FileURI, U.takeError());
-        assert(false && "Failed to parse URI");
-        return "";
-      }
-      auto Path = URI::resolve(*U, HintPath);
+      auto Path = URI::resolve(FileURI, HintPath);
       if (!Path) {
         elog("Failed to resolve URI {0}: {1}", FileURI, Path.takeError());
         assert(false && "Failed to resolve URI");
@@ -369,11 +363,11 @@ llvm::Error BackgroundIndex::index(tooling::CompileCommand Cmd) {
   Inputs.FS = std::move(FS);
   Inputs.FS->setCurrentWorkingDirectory(Cmd.Directory);
   Inputs.CompileCommand = std::move(Cmd);
-  auto CI = buildCompilerInvocation(Inputs);
+  IgnoreDiagnostics IgnoreDiags;
+  auto CI = buildCompilerInvocation(Inputs, IgnoreDiags);
   if (!CI)
     return llvm::createStringError(llvm::inconvertibleErrorCode(),
                                    "Couldn't build compiler invocation");
-  IgnoreDiagnostics IgnoreDiags;
   auto Clang = prepareCompilerInstance(std::move(CI), /*Preamble=*/nullptr,
                                        std::move(*Buf), Inputs.FS, IgnoreDiags);
   if (!Clang)

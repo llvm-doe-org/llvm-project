@@ -197,6 +197,7 @@ class VectorType;
       VTRN,         // transpose
       VTBL1,        // 1-register shuffle with mask
       VTBL2,        // 2-register shuffle with mask
+      VMOVN,        // MVE vmovn
 
       // Vector multiply long:
       VMULLs,       // ...signed
@@ -217,6 +218,12 @@ class VectorType;
       SMLSLDX,      // Signed multiply subtract long dual exchange
       SMMLAR,       // Signed multiply long, round and add
       SMMLSR,       // Signed multiply long, subtract and round
+
+      // Single Lane QADD8 and QADD16. Only the bottom lane. That's what the b stands for.
+      QADD8b,
+      QSUB8b,
+      QADD16b,
+      QSUB16b,
 
       // Operands of the standard BUILD_VECTOR node are not legalized, which
       // is fine if BUILD_VECTORs are always lowered to shuffles or other
@@ -239,6 +246,11 @@ class VectorType;
       // Pseudo-instruction representing a memory copy using ldm/stm
       // instructions.
       MEMCPY,
+
+      // V8.1MMainline condition select
+      CSINV, // Conditional select invert.
+      CSNEG, // Conditional select negate.
+      CSINC, // Conditional select increment.
 
       // Vector load N-element structure to all lanes:
       VLD1DUP = ISD::FIRST_TARGET_MEMORY_OPCODE,
@@ -605,8 +617,8 @@ class VectorType;
     void finalizeLowering(MachineFunction &MF) const override;
 
     /// Return the correct alignment for the current calling convention.
-    unsigned getABIAlignmentForCallingConv(Type *ArgTy,
-                                           DataLayout DL) const override;
+    Align getABIAlignmentForCallingConv(Type *ArgTy,
+                                        DataLayout DL) const override;
 
     bool isDesirableToCommuteWithShift(const SDNode *N,
                                        CombineLevel Level) const override;
@@ -720,8 +732,8 @@ class VectorType;
     void lowerABS(SDNode *N, SmallVectorImpl<SDValue> &Results,
                   SelectionDAG &DAG) const;
 
-    unsigned getRegisterByName(const char* RegName, EVT VT,
-                               SelectionDAG &DAG) const override;
+    Register getRegisterByName(const char* RegName, EVT VT,
+                               const MachineFunction &MF) const override;
 
     SDValue BuildSDIVPow2(SDNode *N, const APInt &Divisor, SelectionDAG &DAG,
                           SmallVectorImpl<SDNode *> &Created) const override;
@@ -813,7 +825,7 @@ class VectorType;
     SDValue getARMCmp(SDValue LHS, SDValue RHS, ISD::CondCode CC,
                       SDValue &ARMcc, SelectionDAG &DAG, const SDLoc &dl) const;
     SDValue getVFPCmp(SDValue LHS, SDValue RHS, SelectionDAG &DAG,
-                      const SDLoc &dl, bool InvalidOnQNaN) const;
+                      const SDLoc &dl) const;
     SDValue duplicateCmp(SDValue Cmp, SelectionDAG &DAG) const;
 
     SDValue OptimizeVFPBrcond(SDValue Op, SelectionDAG &DAG) const;

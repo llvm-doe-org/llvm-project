@@ -142,16 +142,20 @@ static bool isInlineConstantIfFolded(const SIInstrInfo *TII,
   switch (Opc) {
   case AMDGPU::V_MAC_F32_e64:
   case AMDGPU::V_MAC_F16_e64:
-  case AMDGPU::V_FMAC_F32_e64: {
+  case AMDGPU::V_FMAC_F32_e64:
+  case AMDGPU::V_FMAC_F16_e64: {
     // Special case for mac. Since this is replaced with mad when folded into
     // src2, we need to check the legality for the final instruction.
     int Src2Idx = AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::src2);
     if (static_cast<int>(OpNo) == Src2Idx) {
-      bool IsFMA = Opc == AMDGPU::V_FMAC_F32_e64;
-      bool IsF32 = Opc == AMDGPU::V_MAC_F32_e64;
+      bool IsFMA = Opc == AMDGPU::V_FMAC_F32_e64 ||
+                   Opc == AMDGPU::V_FMAC_F16_e64;
+      bool IsF32 = Opc == AMDGPU::V_MAC_F32_e64 ||
+                   Opc == AMDGPU::V_FMAC_F32_e64;
 
       unsigned Opc = IsFMA ?
-        AMDGPU::V_FMA_F32 : (IsF32 ? AMDGPU::V_MAD_F32 : AMDGPU::V_MAD_F16);
+        (IsF32 ? AMDGPU::V_FMA_F32 : AMDGPU::V_FMA_F16_gfx9) :
+        (IsF32 ? AMDGPU::V_MAD_F32 : AMDGPU::V_MAD_F16);
       const MCInstrDesc &MadDesc = TII->get(Opc);
       return TII->isInlineConstant(OpToFold, MadDesc.OpInfo[OpNo].OperandType);
     }
@@ -235,9 +239,11 @@ static bool updateOperand(FoldCandidate &Fold,
 
   if ((Fold.isImm() || Fold.isFI() || Fold.isGlobal()) && Fold.needsShrink()) {
     MachineBasicBlock *MBB = MI->getParent();
-    auto Liveness = MBB->computeRegisterLiveness(&TRI, AMDGPU::VCC, MI);
-    if (Liveness != MachineBasicBlock::LQR_Dead)
+    auto Liveness = MBB->computeRegisterLiveness(&TRI, AMDGPU::VCC, MI, 16);
+    if (Liveness != MachineBasicBlock::LQR_Dead) {
+      LLVM_DEBUG(dbgs() << "Not shrinking " << MI << " due to vcc liveness\n");
       return false;
+    }
 
     MachineRegisterInfo &MRI = MBB->getParent()->getRegInfo();
     int Op32 = Fold.getShrinkOpcode();
@@ -314,12 +320,15 @@ static bool tryAddToFoldList(SmallVectorImpl<FoldCandidate> &FoldList,
     // Special case for v_mac_{f16, f32}_e64 if we are trying to fold into src2
     unsigned Opc = MI->getOpcode();
     if ((Opc == AMDGPU::V_MAC_F32_e64 || Opc == AMDGPU::V_MAC_F16_e64 ||
-         Opc == AMDGPU::V_FMAC_F32_e64) &&
+         Opc == AMDGPU::V_FMAC_F32_e64 || Opc == AMDGPU::V_FMAC_F16_e64) &&
         (int)OpNo == AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::src2)) {
-      bool IsFMA = Opc == AMDGPU::V_FMAC_F32_e64;
-      bool IsF32 = Opc == AMDGPU::V_MAC_F32_e64;
+      bool IsFMA = Opc == AMDGPU::V_FMAC_F32_e64 ||
+                   Opc == AMDGPU::V_FMAC_F16_e64;
+      bool IsF32 = Opc == AMDGPU::V_MAC_F32_e64 ||
+                   Opc == AMDGPU::V_FMAC_F32_e64;
       unsigned NewOpc = IsFMA ?
-        AMDGPU::V_FMA_F32 : (IsF32 ? AMDGPU::V_MAD_F32 : AMDGPU::V_MAD_F16);
+        (IsF32 ? AMDGPU::V_FMA_F32 : AMDGPU::V_FMA_F16_gfx9) :
+        (IsF32 ? AMDGPU::V_MAD_F32 : AMDGPU::V_MAD_F16);
 
       // Check if changing this to a v_mad_{f16, f32} instruction will allow us
       // to fold the operand.
@@ -435,7 +444,8 @@ static bool tryToFoldACImm(const SIInstrInfo *TII,
       OpTy > AMDGPU::OPERAND_REG_INLINE_AC_LAST)
     return false;
 
-  if (OpToFold.isImm() && TII->isInlineConstant(OpToFold, OpTy)) {
+  if (OpToFold.isImm() && TII->isInlineConstant(OpToFold, OpTy) &&
+      TII->isOperandLegal(*UseMI, UseOpIdx, &OpToFold)) {
     UseMI->getOperand(UseOpIdx).ChangeToImmediate(OpToFold.getImm());
     return true;
   }
@@ -480,6 +490,9 @@ static bool tryToFoldACImm(const SIInstrInfo *TII,
     if (Imm != SubImm)
       return false; // Can only fold splat constants
   }
+
+  if (!TII->isOperandLegal(*UseMI, UseOpIdx, Op))
+    return false;
 
   FoldList.push_back(FoldCandidate(UseMI, UseOpIdx, Op));
   return true;
@@ -570,13 +583,17 @@ void SIFoldOperands::foldOperand(
 
   if (FoldingImmLike && UseMI->isCopy()) {
     Register DestReg = UseMI->getOperand(0).getReg();
-    const TargetRegisterClass *DestRC = Register::isVirtualRegister(DestReg)
-                                            ? MRI->getRegClass(DestReg)
-                                            : TRI->getPhysRegClass(DestReg);
+
+    // Don't fold into a copy to a physical register. Doing so would interfere
+    // with the register coalescer's logic which would avoid redundant
+    // initalizations.
+    if (DestReg.isPhysical())
+      return;
+
+    const TargetRegisterClass *DestRC =  MRI->getRegClass(DestReg);
 
     Register SrcReg = UseMI->getOperand(1).getReg();
-    if (Register::isVirtualRegister(DestReg) &&
-        Register::isVirtualRegister(SrcReg)) {
+    if (SrcReg.isVirtual()) { // XXX - This can be an assert?
       const TargetRegisterClass * SrcRC = MRI->getRegClass(SrcReg);
       if (TRI->isSGPRClass(SrcRC) && TRI->hasVectorRegisters(DestRC)) {
         MachineRegisterInfo::use_iterator NextUse;
@@ -1082,6 +1099,13 @@ void SIFoldOperands::foldInstOperand(MachineInstr &MI,
     Copy->addImplicitDefUseOperands(*MF);
 
   for (FoldCandidate &Fold : FoldList) {
+    if (Fold.isReg() && Register::isVirtualRegister(Fold.OpToFold->getReg())) {
+      Register Reg = Fold.OpToFold->getReg();
+      MachineInstr *DefMI = Fold.OpToFold->getParent();
+      if (DefMI->readsRegister(AMDGPU::EXEC, TRI) &&
+          execMayBeModifiedBeforeUse(*MRI, Reg, *DefMI, *Fold.UseMI))
+        continue;
+    }
     if (updateOperand(Fold, *TII, *TRI, *ST)) {
       // Clear kill flags.
       if (Fold.isReg()) {
@@ -1325,6 +1349,8 @@ bool SIFoldOperands::runOnMachineFunction(MachineFunction &MF) {
 
   for (MachineBasicBlock *MBB : depth_first(&MF)) {
     MachineBasicBlock::iterator I, Next;
+
+    MachineOperand *CurrentKnownM0Val = nullptr;
     for (I = MBB->begin(); I != MBB->end(); I = Next) {
       Next = std::next(I);
       MachineInstr &MI = *I;
@@ -1337,6 +1363,25 @@ bool SIFoldOperands::runOnMachineFunction(MachineFunction &MF) {
         if (IsIEEEMode || (!HasNSZ && !MI.getFlag(MachineInstr::FmNsz)) ||
             !tryFoldOMod(MI))
           tryFoldClamp(MI);
+
+        // Saw an unknown clobber of m0, so we no longer know what it is.
+        if (CurrentKnownM0Val && MI.modifiesRegister(AMDGPU::M0, TRI))
+          CurrentKnownM0Val = nullptr;
+        continue;
+      }
+
+      // Specially track simple redefs of m0 to the same value in a block, so we
+      // can erase the later ones.
+      if (MI.getOperand(0).getReg() == AMDGPU::M0) {
+        MachineOperand &NewM0Val = MI.getOperand(1);
+        if (CurrentKnownM0Val && CurrentKnownM0Val->isIdenticalTo(NewM0Val)) {
+          MI.eraseFromParent();
+          continue;
+        }
+
+        // We aren't tracking other physical registers
+        CurrentKnownM0Val = (NewM0Val.isReg() && NewM0Val.getReg().isPhysical()) ?
+          nullptr : &NewM0Val;
         continue;
       }
 

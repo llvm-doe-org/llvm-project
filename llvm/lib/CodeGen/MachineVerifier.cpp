@@ -22,7 +22,6 @@
 // the verifier errors.
 //===----------------------------------------------------------------------===//
 
-#include "LiveRangeCalc.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
@@ -37,6 +36,7 @@
 #include "llvm/CodeGen/GlobalISel/RegisterBank.h"
 #include "llvm/CodeGen/LiveInterval.h"
 #include "llvm/CodeGen/LiveIntervals.h"
+#include "llvm/CodeGen/LiveRangeCalc.h"
 #include "llvm/CodeGen/LiveStacks.h"
 #include "llvm/CodeGen/LiveVariables.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -1368,6 +1368,20 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
         break;
       }
     }
+    switch (IntrID) {
+    case Intrinsic::memcpy:
+      if (MI->getNumOperands() != 5)
+        report("Expected memcpy intrinsic to have 5 operands", MI);
+      break;
+    case Intrinsic::memmove:
+      if (MI->getNumOperands() != 5)
+        report("Expected memmove intrinsic to have 5 operands", MI);
+      break;
+    case Intrinsic::memset:
+      if (MI->getNumOperands() != 5)
+        report("Expected memset intrinsic to have 5 operands", MI);
+      break;
+    }
     break;
   }
   case TargetOpcode::G_SEXT_INREG: {
@@ -1435,6 +1449,27 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
         report("Out of bounds shuffle index", MI);
     }
 
+    break;
+  }
+  case TargetOpcode::G_DYN_STACKALLOC: {
+    const MachineOperand &DstOp = MI->getOperand(0);
+    const MachineOperand &AllocOp = MI->getOperand(1);
+    const MachineOperand &AlignOp = MI->getOperand(2);
+
+    if (!DstOp.isReg() || !MRI->getType(DstOp.getReg()).isPointer()) {
+      report("dst operand 0 must be a pointer type", MI);
+      break;
+    }
+
+    if (!AllocOp.isReg() || !MRI->getType(AllocOp.getReg()).isScalar()) {
+      report("src operand 1 must be a scalar reg type", MI);
+      break;
+    }
+
+    if (!AlignOp.isImm()) {
+      report("src operand 2 must be an immediate type", MI);
+      break;
+    }
     break;
   }
   default:

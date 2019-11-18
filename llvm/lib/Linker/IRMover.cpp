@@ -629,7 +629,7 @@ GlobalVariable *IRLinker::copyGlobalVariableProto(const GlobalVariable *SGVar) {
                          /*init*/ nullptr, SGVar->getName(),
                          /*insertbefore*/ nullptr, SGVar->getThreadLocalMode(),
                          SGVar->getType()->getAddressSpace());
-  NewDGV->setAlignment(SGVar->getAlignment());
+  NewDGV->setAlignment(MaybeAlign(SGVar->getAlignment()));
   NewDGV->copyAttributesFrom(SGVar);
   return NewDGV;
 }
@@ -758,8 +758,18 @@ void IRLinker::computeTypeMapping() {
   }
 
   for (GlobalValue &SGV : *SrcM)
-    if (GlobalValue *DGV = getLinkedToGlobal(&SGV))
+    if (GlobalValue *DGV = getLinkedToGlobal(&SGV)) {
+      if (DGV->getType() == SGV.getType()) {
+        // If the types of DGV and SGV are the same, it means that DGV is from
+        // the source module and got added to DstM from a shared metadata.  We
+        // shouldn't map this type to itself in case the type's components get
+        // remapped to a new type from DstM (for instance, during the loop over
+        // SrcM->getIdentifiedStructTypes() below).
+        continue;
+      }
+
       TypeMap.addTypeMapping(DGV->getType(), SGV.getType());
+    }
 
   for (GlobalValue &SGV : SrcM->aliases())
     if (GlobalValue *DGV = getLinkedToGlobal(&SGV))

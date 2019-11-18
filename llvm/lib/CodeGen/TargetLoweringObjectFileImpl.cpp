@@ -155,6 +155,7 @@ void TargetLoweringObjectFileELF::Initialize(MCContext &Ctx,
     break;
   case Triple::aarch64:
   case Triple::aarch64_be:
+  case Triple::aarch64_32:
     // The small model guarantees static code/data size < 4GB, but not where it
     // will be in memory. Most of these could end up >2GB away so even a signed
     // pc-relative 32-bit address is insufficient, theoretically.
@@ -376,7 +377,7 @@ void TargetLoweringObjectFileELF::emitPersonalityValue(
                                                    ELF::SHT_PROGBITS, Flags, 0);
   unsigned Size = DL.getPointerSize();
   Streamer.SwitchSection(Sec);
-  Streamer.EmitValueToAlignment(DL.getPointerABIAlignment(0));
+  Streamer.EmitValueToAlignment(DL.getPointerABIAlignment(0).value());
   Streamer.EmitSymbolAttribute(Label, MCSA_ELF_TypeObject);
   const MCExpr *E = MCConstantExpr::create(Size, getContext());
   Streamer.emitELFSize(Label, E);
@@ -567,6 +568,8 @@ MCSection *TargetLoweringObjectFileELF::getExplicitSectionGlobal(
       SectionName = Attrs.getAttribute("bss-section").getValueAsString();
     } else if (Attrs.hasAttribute("rodata-section") && Kind.isReadOnly()) {
       SectionName = Attrs.getAttribute("rodata-section").getValueAsString();
+    } else if (Attrs.hasAttribute("relro-section") && Kind.isReadOnlyWithRel()) {
+      SectionName = Attrs.getAttribute("relro-section").getValueAsString();
     } else if (Attrs.hasAttribute("data-section") && Kind.isData()) {
       SectionName = Attrs.getAttribute("data-section").getValueAsString();
     }
@@ -1108,8 +1111,8 @@ MCSymbol *TargetLoweringObjectFileMachO::getCFIPersonalitySymbol(
 }
 
 const MCExpr *TargetLoweringObjectFileMachO::getIndirectSymViaGOTPCRel(
-    const MCSymbol *Sym, const MCValue &MV, int64_t Offset,
-    MachineModuleInfo *MMI, MCStreamer &Streamer) const {
+    const GlobalValue *GV, const MCSymbol *Sym, const MCValue &MV,
+    int64_t Offset, MachineModuleInfo *MMI, MCStreamer &Streamer) const {
   // Although MachO 32-bit targets do not explicitly have a GOTPCREL relocation
   // as 64-bit do, we replace the GOT equivalent by accessing the final symbol
   // through a non_lazy_ptr stub instead. One advantage is that it allows the
@@ -1166,12 +1169,10 @@ const MCExpr *TargetLoweringObjectFileMachO::getIndirectSymViaGOTPCRel(
   MCSymbol *Stub = Ctx.getOrCreateSymbol(Name);
 
   MachineModuleInfoImpl::StubValueTy &StubSym = MachOMMI.getGVStubEntry(Stub);
-  if (!StubSym.getPointer()) {
-    bool IsIndirectLocal = Sym->isDefined() && !Sym->isExternal();
-    // With the assumption that IsIndirectLocal == GV->hasLocalLinkage().
+
+  if (!StubSym.getPointer())
     StubSym = MachineModuleInfoImpl::StubValueTy(const_cast<MCSymbol *>(Sym),
-                                                 !IsIndirectLocal);
-  }
+                                                 !GV->hasLocalLinkage());
 
   const MCExpr *BSymExpr =
     MCSymbolRefExpr::create(BaseSym, MCSymbolRefExpr::VK_None, Ctx);
@@ -1850,6 +1851,9 @@ MCSection *TargetLoweringObjectFileXCOFF::SelectSectionForGlobal(
 
   if (Kind.isText())
     return TextSection;
+
+  if (Kind.isData())
+    return DataSection;
 
   report_fatal_error("XCOFF other section types not yet implemented.");
 }

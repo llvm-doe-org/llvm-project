@@ -258,6 +258,7 @@ class WasmObjectWriter : public MCObjectWriter {
 
   // TargetObjectWriter wrappers.
   bool is64Bit() const { return TargetObjectWriter->is64Bit(); }
+  bool isEmscripten() const { return TargetObjectWriter->isEmscripten(); }
 
   void startSection(SectionBookkeeping &Section, unsigned SectionId);
   void startCustomSection(SectionBookkeeping &Section, StringRef Name);
@@ -1349,7 +1350,9 @@ uint64_t WasmObjectWriter::writeObject(MCAssembler &Asm,
         report_fatal_error(".size expression must be evaluatable");
 
       auto &DataSection = static_cast<MCSectionWasm &>(WS.getSection());
-      assert(DataSection.isWasmData());
+      if (!DataSection.isWasmData())
+        report_fatal_error("data symbols must live in a data section: " +
+                           WS.getName());
 
       // For each data symbol, export it in the symtab as a reference to the
       // corresponding Wasm data segment.
@@ -1443,8 +1446,12 @@ uint64_t WasmObjectWriter::writeObject(MCAssembler &Asm,
       Flags |= wasm::WASM_SYMBOL_BINDING_LOCAL;
     if (WS.isUndefined())
       Flags |= wasm::WASM_SYMBOL_UNDEFINED;
-    if (WS.isExported())
-      Flags |= wasm::WASM_SYMBOL_EXPORTED;
+    if (WS.isNoStrip()) {
+      Flags |= wasm::WASM_SYMBOL_NO_STRIP;
+      if (isEmscripten()) {
+        Flags |= wasm::WASM_SYMBOL_EXPORTED;
+      }
+    }
     if (WS.getName() != WS.getImportName())
       Flags |= wasm::WASM_SYMBOL_EXPLICIT_NAME;
 

@@ -518,6 +518,7 @@ private:
                                 DIExpression::FragmentInfo Fragment,
                                 ValueOrMetadata *Desc);
   void verifyFnArgs(const DbgVariableIntrinsic &I);
+  void verifyNotEntryValue(const DbgVariableIntrinsic &I);
 
   /// Module-level debug info verification...
   void verifyCompileUnits();
@@ -673,7 +674,7 @@ void Verifier::visitGlobalVariable(const GlobalVariable &GV) {
         Assert(InitArray, "wrong initalizer for intrinsic global variable",
                Init);
         for (Value *Op : InitArray->operands()) {
-          Value *V = Op->stripPointerCastsNoFollowAliases();
+          Value *V = Op->stripPointerCasts();
           Assert(isa<GlobalVariable>(V) || isa<Function>(V) ||
                      isa<GlobalAlias>(V),
                  "invalid llvm.used member", V);
@@ -982,6 +983,9 @@ void Verifier::visitDICompositeType(const DICompositeType &N) {
            N.getRawVTableHolder());
   AssertDI(!hasConflictingReferenceFlags(N.getFlags()),
            "invalid reference flags", &N);
+  unsigned DIBlockByRefStruct = 1 << 4;
+  AssertDI((N.getFlags() & DIBlockByRefStruct) == 0,
+           "DIBlockByRefStruct on DICompositeType is no longer supported", &N);
 
   if (N.isVector()) {
     const DINodeArray Elements = N.getElements();
@@ -2501,6 +2505,15 @@ void Verifier::visitCallBrInst(CallBrInst &CBI) {
         Assert(CBI.getOperand(i) != CBI.getOperand(j),
                "Duplicate callbr destination!", &CBI);
   }
+  {
+    SmallPtrSet<BasicBlock *, 4> ArgBBs;
+    for (Value *V : CBI.args())
+      if (auto *BA = dyn_cast<BlockAddress>(V))
+        ArgBBs.insert(BA->getBasicBlock());
+    for (BasicBlock *BB : CBI.getIndirectDests())
+      Assert(ArgBBs.find(BB) != ArgBBs.end(),
+             "Indirect label missing from arglist.", &CBI);
+  }
 
   visitTerminator(CBI);
 }
@@ -2719,8 +2732,8 @@ void Verifier::visitPtrToIntInst(PtrToIntInst &I) {
          &I);
 
   if (SrcTy->isVectorTy()) {
-    VectorType *VSrc = dyn_cast<VectorType>(SrcTy);
-    VectorType *VDest = dyn_cast<VectorType>(DestTy);
+    VectorType *VSrc = cast<VectorType>(SrcTy);
+    VectorType *VDest = cast<VectorType>(DestTy);
     Assert(VSrc->getNumElements() == VDest->getNumElements(),
            "PtrToInt Vector width mismatch", &I);
   }
@@ -2744,8 +2757,8 @@ void Verifier::visitIntToPtrInst(IntToPtrInst &I) {
   Assert(SrcTy->isVectorTy() == DestTy->isVectorTy(), "IntToPtr type mismatch",
          &I);
   if (SrcTy->isVectorTy()) {
-    VectorType *VSrc = dyn_cast<VectorType>(SrcTy);
-    VectorType *VDest = dyn_cast<VectorType>(DestTy);
+    VectorType *VSrc = cast<VectorType>(SrcTy);
+    VectorType *VDest = cast<VectorType>(DestTy);
     Assert(VSrc->getNumElements() == VDest->getNumElements(),
            "IntToPtr Vector width mismatch", &I);
   }
@@ -4201,8 +4214,10 @@ void Verifier::visitInstruction(Instruction &I) {
     visitMDNode(*N);
   }
 
-  if (auto *DII = dyn_cast<DbgVariableIntrinsic>(&I))
+  if (auto *DII = dyn_cast<DbgVariableIntrinsic>(&I)) {
     verifyFragmentExpression(*DII);
+    verifyNotEntryValue(*DII);
+  }
 
   InstsInThisBlock.insert(&I);
 }
@@ -4282,6 +4297,8 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
   case Intrinsic::experimental_constrained_fdiv:
   case Intrinsic::experimental_constrained_frem:
   case Intrinsic::experimental_constrained_fma:
+  case Intrinsic::experimental_constrained_fptosi:
+  case Intrinsic::experimental_constrained_fptoui:
   case Intrinsic::experimental_constrained_fptrunc:
   case Intrinsic::experimental_constrained_fpext:
   case Intrinsic::experimental_constrained_sqrt:
@@ -4294,12 +4311,16 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
   case Intrinsic::experimental_constrained_log:
   case Intrinsic::experimental_constrained_log10:
   case Intrinsic::experimental_constrained_log2:
+  case Intrinsic::experimental_constrained_lrint:
+  case Intrinsic::experimental_constrained_llrint:
   case Intrinsic::experimental_constrained_rint:
   case Intrinsic::experimental_constrained_nearbyint:
   case Intrinsic::experimental_constrained_maxnum:
   case Intrinsic::experimental_constrained_minnum:
   case Intrinsic::experimental_constrained_ceil:
   case Intrinsic::experimental_constrained_floor:
+  case Intrinsic::experimental_constrained_lround:
+  case Intrinsic::experimental_constrained_llround:
   case Intrinsic::experimental_constrained_round:
   case Intrinsic::experimental_constrained_trunc:
     visitConstrainedFPIntrinsic(cast<ConstrainedFPIntrinsic>(Call));
@@ -4669,7 +4690,8 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
   }
   case Intrinsic::smul_fix:
   case Intrinsic::smul_fix_sat:
-  case Intrinsic::umul_fix: {
+  case Intrinsic::umul_fix:
+  case Intrinsic::umul_fix_sat: {
     Value *Op1 = Call.getArgOperand(0);
     Value *Op2 = Call.getArgOperand(1);
     Assert(Op1->getType()->isIntOrIntVectorTy(),
@@ -4751,6 +4773,31 @@ void Verifier::visitConstrainedFPIntrinsic(ConstrainedFPIntrinsic &FPI) {
     HasRoundingMD = true;
     break;
 
+  case Intrinsic::experimental_constrained_lrint:
+  case Intrinsic::experimental_constrained_llrint: {
+    Assert((NumOperands == 3), "invalid arguments for constrained FP intrinsic",
+           &FPI);
+    Type *ValTy = FPI.getArgOperand(0)->getType();
+    Type *ResultTy = FPI.getType();
+    Assert(!ValTy->isVectorTy() && !ResultTy->isVectorTy(),
+           "Intrinsic does not support vectors", &FPI);
+    HasExceptionMD = true;
+    HasRoundingMD = true;
+  } 
+    break;
+
+  case Intrinsic::experimental_constrained_lround:
+  case Intrinsic::experimental_constrained_llround: {
+    Assert((NumOperands == 2), "invalid arguments for constrained FP intrinsic",
+           &FPI);
+    Type *ValTy = FPI.getArgOperand(0)->getType();
+    Type *ResultTy = FPI.getType();
+    Assert(!ValTy->isVectorTy() && !ResultTy->isVectorTy(),
+           "Intrinsic does not support vectors", &FPI);
+    HasExceptionMD = true;
+    break;
+  } 
+
   case Intrinsic::experimental_constrained_fma:
     Assert((NumOperands == 5), "invalid arguments for constrained FP intrinsic",
            &FPI);
@@ -4771,6 +4818,33 @@ void Verifier::visitConstrainedFPIntrinsic(ConstrainedFPIntrinsic &FPI) {
            &FPI);
     HasExceptionMD = true;
     HasRoundingMD = true;
+    break;
+
+  case Intrinsic::experimental_constrained_fptosi:
+  case Intrinsic::experimental_constrained_fptoui: { 
+    Assert((NumOperands == 2),
+           "invalid arguments for constrained FP intrinsic", &FPI);
+    HasExceptionMD = true;
+
+    Value *Operand = FPI.getArgOperand(0);
+    uint64_t NumSrcElem = 0;
+    Assert(Operand->getType()->isFPOrFPVectorTy(),
+           "Intrinsic first argument must be floating point", &FPI);
+    if (auto *OperandT = dyn_cast<VectorType>(Operand->getType())) {
+      NumSrcElem = OperandT->getNumElements();
+    }
+
+    Operand = &FPI;
+    Assert((NumSrcElem > 0) == Operand->getType()->isVectorTy(),
+           "Intrinsic first argument and result disagree on vector use", &FPI);
+    Assert(Operand->getType()->isIntOrIntVectorTy(),
+           "Intrinsic result must be an integer", &FPI);
+    if (auto *OperandT = dyn_cast<VectorType>(Operand->getType())) {
+      Assert(NumSrcElem == OperandT->getNumElements(),
+             "Intrinsic first argument and result vector lengths must be equal",
+             &FPI);
+    }
+  }
     break;
 
   case Intrinsic::experimental_constrained_fptrunc:
@@ -4872,11 +4946,6 @@ void Verifier::visitDbgIntrinsic(StringRef Kind, DbgVariableIntrinsic &DII) {
   // This check is redundant with one in visitLocalVariable().
   AssertDI(isType(Var->getRawType()), "invalid type ref", Var,
            Var->getRawType());
-  if (auto *Type = dyn_cast_or_null<DIType>(Var->getRawType()))
-    if (Type->isBlockByrefStruct())
-      AssertDI(DII.getExpression() && DII.getExpression()->getNumElements(),
-               "BlockByRef variable without complex expression", Var, &DII);
-
   verifyFnArgs(DII);
 }
 
@@ -4979,6 +5048,16 @@ void Verifier::verifyFnArgs(const DbgVariableIntrinsic &I) {
   DebugFnArgs[ArgNo - 1] = Var;
   AssertDI(!Prev || (Prev == Var), "conflicting debug info for argument", &I,
            Prev, Var);
+}
+
+void Verifier::verifyNotEntryValue(const DbgVariableIntrinsic &I) {
+  DIExpression *E = dyn_cast_or_null<DIExpression>(I.getRawExpression());
+
+  // We don't know whether this intrinsic verified correctly.
+  if (!E || !E->isValid())
+    return;
+
+  AssertDI(!E->isEntryValue(), "Entry values are only allowed in MIR", &I);
 }
 
 void Verifier::verifyCompileUnits() {

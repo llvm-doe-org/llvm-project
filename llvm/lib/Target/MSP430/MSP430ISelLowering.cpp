@@ -327,8 +327,8 @@ MSP430TargetLowering::MSP430TargetLowering(const TargetMachine &TM,
   setLibcallCallingConv(RTLIB::OGT_F64, CallingConv::MSP430_BUILTIN);
   // TODO: __mspabi_srall, __mspabi_srlll, __mspabi_sllll
 
-  setMinFunctionAlignment(1);
-  setPrefFunctionAlignment(1);
+  setMinFunctionAlignment(Align(2));
+  setPrefFunctionAlignment(Align(2));
 }
 
 SDValue MSP430TargetLowering::LowerOperation(SDValue Op,
@@ -353,6 +353,9 @@ SDValue MSP430TargetLowering::LowerOperation(SDValue Op,
   }
 }
 
+unsigned MSP430TargetLowering::getShiftAmountThreshold(EVT VT) const {
+  return 2;
+}
 //===----------------------------------------------------------------------===//
 //                       MSP430 Inline Assembly Support
 //===----------------------------------------------------------------------===//

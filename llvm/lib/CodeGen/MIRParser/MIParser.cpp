@@ -641,7 +641,7 @@ bool MIParser::parseBasicBlockDefinition(
     return error(Loc, Twine("redefinition of machine basic block with id #") +
                           Twine(ID));
   if (Alignment)
-    MBB->setAlignment(Alignment);
+    MBB->setAlignment(Align(Alignment));
   if (HasAddressTaken)
     MBB->setHasAddressTaken();
   MBB->setIsEHPad(IsLandingPad);
@@ -1437,6 +1437,7 @@ bool MIParser::parseRegisterOperand(MachineOperand &Dest,
         if (MRI.getType(Reg).isValid() && MRI.getType(Reg) != Ty)
           return error("inconsistent type for generic virtual register");
 
+        MRI.setRegClassOrRegBank(Reg, static_cast<RegisterBank *>(nullptr));
         MRI.setType(Reg, Ty);
       }
     }
@@ -1455,6 +1456,7 @@ bool MIParser::parseRegisterOperand(MachineOperand &Dest,
     if (MRI.getType(Reg).isValid() && MRI.getType(Reg) != Ty)
       return error("inconsistent type for generic virtual register");
 
+    MRI.setRegClassOrRegBank(Reg, static_cast<RegisterBank *>(nullptr));
     MRI.setType(Reg, Ty);
   } else if (Register::isVirtualRegister(Reg)) {
     // Generic virtual registers must have a type.

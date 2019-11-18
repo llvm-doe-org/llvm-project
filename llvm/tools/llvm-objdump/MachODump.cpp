@@ -1945,7 +1945,7 @@ static void ProcessMachO(StringRef Name, MachOObjectFile *MachOOF,
   // the error message.
   if (Disassemble || IndirectSymbols || !FilterSections.empty() || UnwindInfo)
     if (Error Err = MachOOF->checkSymbolTable())
-      reportError(std::move(Err), ArchiveName, FileName, ArchitectureName);
+      reportError(std::move(Err), FileName, ArchiveName, ArchitectureName);
 
   if (DisassembleAll) {
     for (const SectionRef &Section : MachOOF->sections()) {
@@ -2199,7 +2199,7 @@ static void printMachOUniversalHeaders(const object::MachOUniversalBinary *UB,
     outs() << "    offset " << OFA.getOffset();
     if (OFA.getOffset() > size)
       outs() << " (past end of file)";
-    if (OFA.getOffset() % (1 << OFA.getAlign()) != 0)
+    if (OFA.getOffset() % (1ull << OFA.getAlign()) != 0)
       outs() << " (not aligned on it's alignment (2^" << OFA.getAlign() << ")";
     outs() << "\n";
     outs() << "    size " << OFA.getSize();
@@ -2219,9 +2219,8 @@ static void printArchiveChild(StringRef Filename, const Archive::Child &C,
   if (print_offset)
     outs() << C.getChildOffset() << "\t";
   sys::fs::perms Mode =
-      unwrapOrError(C.getAccessMode(), Filename,
-                    getFileNameForError(C, ChildIndex),
-                    ArchitectureName);
+      unwrapOrError(C.getAccessMode(), getFileNameForError(C, ChildIndex),
+                    Filename, ArchitectureName);
   if (verbose) {
     // FIXME: this first dash, "-", is for (Mode & S_IFMT) == S_IFREG.
     // But there is nothing in sys::fs::perms for S_IFMT or S_IFREG.
@@ -2239,14 +2238,14 @@ static void printArchiveChild(StringRef Filename, const Archive::Child &C,
     outs() << format("0%o ", Mode);
   }
 
-  outs() << format(
-      "%3d/%-3d %5" PRId64 " ",
-      unwrapOrError(C.getUID(), Filename, getFileNameForError(C, ChildIndex),
-                    ArchitectureName),
-      unwrapOrError(C.getGID(), Filename, getFileNameForError(C, ChildIndex),
-                    ArchitectureName),
-      unwrapOrError(C.getRawSize(), Filename,
-                    getFileNameForError(C, ChildIndex), ArchitectureName));
+  outs() << format("%3d/%-3d %5" PRId64 " ",
+                   unwrapOrError(C.getUID(), getFileNameForError(C, ChildIndex),
+                                 Filename, ArchitectureName),
+                   unwrapOrError(C.getGID(), getFileNameForError(C, ChildIndex),
+                                 Filename, ArchitectureName),
+                   unwrapOrError(C.getRawSize(),
+                                 getFileNameForError(C, ChildIndex), Filename,
+                                 ArchitectureName));
 
   StringRef RawLastModified = C.getRawLastModified();
   if (verbose) {
@@ -2269,8 +2268,8 @@ static void printArchiveChild(StringRef Filename, const Archive::Child &C,
     Expected<StringRef> NameOrErr = C.getName();
     if (!NameOrErr) {
       consumeError(NameOrErr.takeError());
-      outs() << unwrapOrError(C.getRawName(), Filename,
-                              getFileNameForError(C, ChildIndex),
+      outs() << unwrapOrError(C.getRawName(),
+                              getFileNameForError(C, ChildIndex), Filename,
                               ArchitectureName)
              << "\n";
     } else {
@@ -2278,9 +2277,8 @@ static void printArchiveChild(StringRef Filename, const Archive::Child &C,
       outs() << Name << "\n";
     }
   } else {
-    outs() << unwrapOrError(C.getRawName(), Filename,
-                            getFileNameForError(C, ChildIndex),
-                            ArchitectureName)
+    outs() << unwrapOrError(C.getRawName(), getFileNameForError(C, ChildIndex),
+                            Filename, ArchitectureName)
            << "\n";
   }
 }
@@ -2295,7 +2293,7 @@ static void printArchiveHeaders(StringRef Filename, Archive *A, bool verbose,
                       ArchitectureName);
 
   if (Err)
-    reportError(std::move(Err), StringRef(), Filename, ArchitectureName);
+    reportError(std::move(Err), Filename, "", ArchitectureName);
 }
 
 static bool ValidateArchFlags() {
@@ -2346,7 +2344,7 @@ void parseInputMachO(StringRef Filename) {
       Expected<std::unique_ptr<Binary>> ChildOrErr = C.getAsBinary();
       if (!ChildOrErr) {
         if (Error E = isNotObjectErrorInvalidFileType(ChildOrErr.takeError()))
-          reportError(std::move(E), Filename, getFileNameForError(C, I));
+          reportError(std::move(E), getFileNameForError(C, I), Filename);
         continue;
       }
       if (MachOObjectFile *O = dyn_cast<MachOObjectFile>(&*ChildOrErr.get())) {
@@ -2408,7 +2406,7 @@ void parseInputMachO(MachOUniversalBinary *UB) {
               ProcessMachO(Filename, MachOOF, "", ArchitectureName);
           } else if (Error E = isNotObjectErrorInvalidFileType(
                          ObjOrErr.takeError())) {
-            reportError(std::move(E), Filename, StringRef(), ArchitectureName);
+            reportError(std::move(E), "", Filename, ArchitectureName);
             continue;
           } else if (Expected<std::unique_ptr<Archive>> AOrErr =
                          I->getAsArchive()) {
@@ -2428,7 +2426,7 @@ void parseInputMachO(MachOUniversalBinary *UB) {
               if (!ChildOrErr) {
                 if (Error E =
                         isNotObjectErrorInvalidFileType(ChildOrErr.takeError()))
-                  reportError(std::move(E), Filename, getFileNameForError(C, I),
+                  reportError(std::move(E), getFileNameForError(C, I), Filename,
                               ArchitectureName);
                 continue;
               }
@@ -2489,7 +2487,7 @@ void parseInputMachO(MachOUniversalBinary *UB) {
             if (!ChildOrErr) {
               if (Error E =
                       isNotObjectErrorInvalidFileType(ChildOrErr.takeError()))
-                reportError(std::move(E), Filename, getFileNameForError(C, I));
+                reportError(std::move(E), getFileNameForError(C, I), Filename);
               continue;
             }
             if (MachOObjectFile *O =
@@ -2524,7 +2522,7 @@ void parseInputMachO(MachOUniversalBinary *UB) {
         ProcessMachO(Filename, MachOOF, "", ArchitectureName);
     } else if (Error E =
                    isNotObjectErrorInvalidFileType(ObjOrErr.takeError())) {
-      reportError(std::move(E), StringRef(), Filename, ArchitectureName);
+      reportError(std::move(E), Filename, "", ArchitectureName);
     } else if (Expected<std::unique_ptr<Archive>> AOrErr = I->getAsArchive()) {
       std::unique_ptr<Archive> &A = *AOrErr;
       outs() << "Archive : " << Filename;
@@ -2541,7 +2539,7 @@ void parseInputMachO(MachOUniversalBinary *UB) {
         Expected<std::unique_ptr<Binary>> ChildOrErr = C.getAsBinary();
         if (!ChildOrErr) {
           if (Error E = isNotObjectErrorInvalidFileType(ChildOrErr.takeError()))
-            reportError(std::move(E), Filename, getFileNameForError(C, I),
+            reportError(std::move(E), getFileNameForError(C, I), Filename,
                         ArchitectureName);
           continue;
         }
@@ -7342,10 +7340,24 @@ static void DisassembleMachO(StringRef Filename, MachOObjectFile *MachOOF,
     // A separate DSym file path was specified, parse it as a macho file,
     // get the sections and supply it to the section name parsing machinery.
     if (!DSYMFile.empty()) {
+      std::string DSYMPath(DSYMFile);
+
+      // If DSYMPath is a .dSYM directory, append the Mach-O file.
+      if (llvm::sys::fs::is_directory(DSYMPath) &&
+          llvm::sys::path::extension(DSYMPath) == ".dSYM") {
+        SmallString<128> ShortName(llvm::sys::path::filename(DSYMPath));
+        llvm::sys::path::replace_extension(ShortName, "");
+        SmallString<1024> FullPath(DSYMPath);
+        llvm::sys::path::append(FullPath, "Contents", "Resources", "DWARF",
+                                ShortName);
+        DSYMPath = FullPath.str();
+      }
+
+      // Load the file.
       ErrorOr<std::unique_ptr<MemoryBuffer>> BufOrErr =
-          MemoryBuffer::getFileOrSTDIN(DSYMFile);
+          MemoryBuffer::getFileOrSTDIN(DSYMPath);
       if (std::error_code EC = BufOrErr.getError()) {
-        reportError(errorCodeToError(EC), DSYMFile);
+        reportError(errorCodeToError(EC), DSYMPath);
         return;
       }
 
@@ -7355,13 +7367,12 @@ static void DisassembleMachO(StringRef Filename, MachOObjectFile *MachOOF,
       Expected<std::unique_ptr<Binary>> BinaryOrErr =
       createBinary(DSYMBuf.get()->getMemBufferRef());
       if (!BinaryOrErr) {
-        reportError(BinaryOrErr.takeError(), DSYMFile);
+        reportError(BinaryOrErr.takeError(), DSYMPath);
         return;
       }
 
-      // We need to keep the Binary elive with the buffer
+      // We need to keep the Binary alive with the buffer
       DSYMBinary = std::move(BinaryOrErr.get());
-    
       if (ObjectFile *O = dyn_cast<ObjectFile>(DSYMBinary.get())) {
         // this is a Mach-O object file, use it
         if (MachOObjectFile *MachDSYM = dyn_cast<MachOObjectFile>(&*O)) {
@@ -7369,7 +7380,7 @@ static void DisassembleMachO(StringRef Filename, MachOObjectFile *MachOOF,
         }
         else {
           WithColor::error(errs(), "llvm-objdump")
-            << DSYMFile << " is not a Mach-O file type.\n";
+            << DSYMPath << " is not a Mach-O file type.\n";
           return;
         }
       }
@@ -7389,19 +7400,19 @@ static void DisassembleMachO(StringRef Filename, MachOObjectFile *MachOOF,
         Triple T = MachOObjectFile::getArchTriple(CPUType, CPUSubType, nullptr,
                                                   &ArchFlag);
         Expected<std::unique_ptr<MachOObjectFile>> MachDSYM =
-            UB->getObjectForArch(ArchFlag);
+            UB->getMachOObjectForArch(ArchFlag);
         if (!MachDSYM) {
-          reportError(MachDSYM.takeError(), DSYMFile);
+          reportError(MachDSYM.takeError(), DSYMPath);
           return;
         }
     
-        // We need to keep the Binary elive with the buffer
+        // We need to keep the Binary alive with the buffer
         DbgObj = &*MachDSYM.get();
         DSYMBinary = std::move(*MachDSYM);
       }
       else {
         WithColor::error(errs(), "llvm-objdump")
-          << DSYMFile << " is not a Mach-O or Universal file type.\n";
+          << DSYMPath << " is not a Mach-O or Universal file type.\n";
         return;
       }
     }

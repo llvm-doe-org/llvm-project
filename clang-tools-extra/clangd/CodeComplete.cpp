@@ -19,7 +19,6 @@
 
 #include "CodeComplete.h"
 #include "AST.h"
-#include "ClangdUnit.h"
 #include "CodeCompletionStrings.h"
 #include "Compiler.h"
 #include "Diagnostics.h"
@@ -28,10 +27,12 @@
 #include "FuzzyMatch.h"
 #include "Headers.h"
 #include "Logger.h"
+#include "Preamble.h"
 #include "Protocol.h"
 #include "Quality.h"
 #include "SourceCode.h"
 #include "TUScheduler.h"
+#include "Threading.h"
 #include "Trace.h"
 #include "URI.h"
 #include "index/Index.h"
@@ -317,11 +318,8 @@ struct CodeCompletionBuilder {
     // Turn absolute path into a literal string that can be #included.
     auto Inserted = [&](llvm::StringRef Header)
         -> llvm::Expected<std::pair<std::string, bool>> {
-      auto DeclaringURI =
-          URI::parse(C.IndexResult->CanonicalDeclaration.FileURI);
-      if (!DeclaringURI)
-        return DeclaringURI.takeError();
-      auto ResolvedDeclaring = URI::resolve(*DeclaringURI, FileName);
+      auto ResolvedDeclaring =
+          URI::resolve(C.IndexResult->CanonicalDeclaration.FileURI, FileName);
       if (!ResolvedDeclaring)
         return ResolvedDeclaring.takeError();
       auto ResolvedInserted = toHeaderFile(Header, FileName);
@@ -1032,8 +1030,8 @@ void loadMainFilePreambleMacros(const Preprocessor &PP,
       PP.getIdentifierTable().getExternalIdentifierLookup();
   if (!PreambleIdentifiers || !PreambleMacros)
     return;
-  for (const auto &MacroName : Preamble.MainFileMacros)
-    if (auto *II = PreambleIdentifiers->get(MacroName))
+  for (const auto &MacroName : Preamble.Macros.Names)
+    if (auto *II = PreambleIdentifiers->get(MacroName.getKey()))
       if (II->isOutOfDate())
         PreambleMacros->updateOutOfDateIdentifier(*II);
 }
@@ -1053,7 +1051,9 @@ bool semaCodeComplete(std::unique_ptr<CodeCompleteConsumer> Consumer,
   ParseInput.FS = VFS;
   ParseInput.Contents = Input.Contents;
   ParseInput.Opts = ParseOptions();
-  auto CI = buildCompilerInvocation(ParseInput);
+
+  IgnoreDiagnostics IgnoreDiags;
+  auto CI = buildCompilerInvocation(ParseInput, IgnoreDiags);
   if (!CI) {
     elog("Couldn't create CompilerInvocation");
     return false;
@@ -1084,12 +1084,11 @@ bool semaCodeComplete(std::unique_ptr<CodeCompleteConsumer> Consumer,
   bool CompletingInPreamble = PreambleRegion.Size > Input.Offset;
   // NOTE: we must call BeginSourceFile after prepareCompilerInstance. Otherwise
   // the remapped buffers do not get freed.
-  IgnoreDiagnostics DummyDiagsConsumer;
   auto Clang = prepareCompilerInstance(
       std::move(CI),
       (Input.Preamble && !CompletingInPreamble) ? &Input.Preamble->Preamble
                                                 : nullptr,
-      std::move(ContentsBuffer), std::move(VFS), DummyDiagsConsumer);
+      std::move(ContentsBuffer), std::move(VFS), IgnoreDiags);
   Clang->getPreprocessorOpts().SingleFileParseMode = CompletingInPreamble;
   Clang->setCodeCompletionConsumer(Consumer.release());
 

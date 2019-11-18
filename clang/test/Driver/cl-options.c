@@ -316,19 +316,13 @@
 
 // We recognize -f[no-]delayed-template-parsing.
 // /Zc:twoPhase[-] has the opposite meaning.
-// RUN: %clang_cl -c -fmsc-version=1910 -### -- %s 2>&1 | FileCheck -check-prefix=OLDDELAYEDDEFAULT %s
-// OLDDELAYEDDEFAULT: "-fdelayed-template-parsing"
-// RUN: %clang_cl -fmsc-version=1911 -c -### -- %s 2>&1 | FileCheck -check-prefix=NEWDELAYEDDEFAULT %s
-// NEWDELAYEDDEFAULT-NOT: "-fdelayed-template-parsing"
-// RUN: %clang_cl -c -fmsc-version=1910 -fdelayed-template-parsing -### -- %s 2>&1 | FileCheck -check-prefix=DELAYEDON %s
-// RUN: %clang_cl -c -fmsc-version=1911 -fdelayed-template-parsing -### -- %s 2>&1 | FileCheck -check-prefix=DELAYEDON %s
-// RUN: %clang_cl -c -fmsc-version=1910 /Zc:twoPhase- -### -- %s 2>&1 | FileCheck -check-prefix=DELAYEDON %s
-// RUN: %clang_cl -c -fmsc-version=1911 /Zc:twoPhase- -### -- %s 2>&1 | FileCheck -check-prefix=DELAYEDON %s
+// RUN: %clang_cl -c -### -- %s 2>&1 | FileCheck -check-prefix=DELAYEDDEFAULT %s
+// DELAYEDDEFAULT: "-fdelayed-template-parsing"
+// RUN: %clang_cl -c -fdelayed-template-parsing -### -- %s 2>&1 | FileCheck -check-prefix=DELAYEDON %s
+// RUN: %clang_cl -c /Zc:twoPhase- -### -- %s 2>&1 | FileCheck -check-prefix=DELAYEDON %s
 // DELAYEDON: "-fdelayed-template-parsing"
-// RUN: %clang_cl -c -fmsc-version=1910 -fno-delayed-template-parsing -### -- %s 2>&1 | FileCheck -check-prefix=DELAYEDOFF %s
-// RUN: %clang_cl -c -fmsc-version=1911 -fno-delayed-template-parsing -### -- %s 2>&1 | FileCheck -check-prefix=DELAYEDOFF %s
-// RUN: %clang_cl -c -fmsc-version=1910 /Zc:twoPhase -### -- %s 2>&1 | FileCheck -check-prefix=DELAYEDOFF %s
-// RUN: %clang_cl -c -fmsc-version=1911 /Zc:twoPhase -### -- %s 2>&1 | FileCheck -check-prefix=DELAYEDOFF %s
+// RUN: %clang_cl -c -fno-delayed-template-parsing -### -- %s 2>&1 | FileCheck -check-prefix=DELAYEDOFF %s
+// RUN: %clang_cl -c /Zc:twoPhase -### -- %s 2>&1 | FileCheck -check-prefix=DELAYEDOFF %s
 // DELAYEDOFF-NOT: "-fdelayed-template-parsing"
 
 // RUN: %clang_cl -c -### /std:c++latest -- %s 2>&1 | FileCheck -check-prefix CHECK-LATEST-CHAR8_T %s
@@ -383,6 +377,9 @@
 // RUN:    /Zc:rvalueCast \
 // RUN:    /Zc:ternary \
 // RUN:    /Zc:wchar_t \
+// RUN:    /ZH:MD5 \
+// RUN:    /ZH:SHA1 \
+// RUN:    /ZH:SHA_256 \
 // RUN:    /Zm \
 // RUN:    /Zo \
 // RUN:    /Zo- \
@@ -656,6 +653,8 @@
 // RUN:     -fcs-profile-generate \
 // RUN:     -fcs-profile-generate=dir \
 // RUN:     -ftime-trace \
+// RUN:     -ftrivial-auto-var-init=zero \
+// RUN:     -enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang \
 // RUN:     --version \
 // RUN:     -Werror /Zs -- %s 2>&1
 

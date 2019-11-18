@@ -8,7 +8,8 @@
 
 #include "AST.h"
 #include "Annotations.h"
-#include "ClangdUnit.h"
+#include "Compiler.h"
+#include "ParsedAST.h"
 #include "SyncAPI.h"
 #include "TestFS.h"
 #include "TestTU.h"
@@ -280,7 +281,8 @@ TEST(FileIndexTest, RebuildWithPreamble) {
   )cpp";
 
   // Rebuild the file.
-  auto CI = buildCompilerInvocation(PI);
+  IgnoreDiagnostics IgnoreDiags;
+  auto CI = buildCompilerInvocation(PI, IgnoreDiags);
 
   FileIndex Index;
   bool IndexUpdated = false;
@@ -362,7 +364,7 @@ TEST(FileIndexTest, Relations) {
   uint32_t Results = 0;
   RelationsRequest Req;
   Req.Subjects.insert(A);
-  Req.Predicate = index::SymbolRole::RelationBaseOf;
+  Req.Predicate = RelationKind::BaseOf;
   Index.relations(Req, [&](const SymbolID &, const Symbol &) { ++Results; });
   EXPECT_EQ(Results, 1u);
 }

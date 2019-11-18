@@ -775,7 +775,8 @@ void ExprEngine::VisitCXXNewExpr(const CXXNewExpr *CNE, ExplodedNode *Pred,
   if (!AMgr.getAnalyzerOptions().MayInlineCXXAllocator) {
     // Invalidate placement args.
     // FIXME: Once we figure out how we want allocators to work,
-    // we should be using the usual pre-/(default-)eval-/post-call checks here.
+    // we should be using the usual pre-/(default-)eval-/post-call checkers
+    // here.
     State = Call->invalidateRegions(blockCount);
     if (!State)
       return;
@@ -803,9 +804,8 @@ void ExprEngine::VisitCXXNewExpr(const CXXNewExpr *CNE, ExplodedNode *Pred,
   if (CNE->isArray()) {
     // FIXME: allocating an array requires simulating the constructors.
     // For now, just return a symbolicated region.
-    if (const SubRegion *NewReg =
-            dyn_cast_or_null<SubRegion>(symVal.getAsRegion())) {
-      QualType ObjTy = CNE->getType()->getAs<PointerType>()->getPointeeType();
+    if (const auto *NewReg = cast_or_null<SubRegion>(symVal.getAsRegion())) {
+      QualType ObjTy = CNE->getType()->getPointeeType();
       const ElementRegion *EleReg =
           getStoreManager().GetElementZeroRegion(NewReg, ObjTy);
       Result = loc::MemRegionVal(EleReg);

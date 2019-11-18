@@ -1,4 +1,4 @@
-// RUN: %clang_analyze_cc1 \
+// RUN: %clang_analyze_cc1 -std=c++14 \
 // RUN:  -analyzer-checker=core,apiModeling.llvm.CastValue,debug.ExprInspection\
 // RUN:  -verify %s
 
@@ -15,9 +15,15 @@ struct Shape {
 
   template <typename T>
   const T *getAs() const;
+
+  virtual double area();
 };
 class Triangle : public Shape {};
-class Circle : public Shape {};
+class Circle : public Shape {
+public:
+  ~Circle();
+};
+class SuspiciouslySpecificCircle : public Circle {};
 } // namespace clang
 
 using namespace llvm;
@@ -131,3 +137,26 @@ void evalLogic(const Shape *S) {
 }
 } // namespace test_get_as
 
+namespace crashes {
+void test_non_reference_null_region_crash(Shape s) {
+  cast<Circle>(s); // no-crash
+}
+
+void test_non_reference_temporary_crash() {
+  extern std::unique_ptr<Shape> foo();
+  auto P = foo();
+  auto Q = cast<Circle>(std::move(P)); // no-crash
+}
+
+double test_virtual_method_after_call(Shape *S) {
+  if (isa<Circle>(S))
+    return S->area();
+  return S->area() / 2;
+}
+
+void test_delete_crash() {
+  extern Circle *makeCircle();
+  Shape *S = makeCircle();
+  delete cast<SuspiciouslySpecificCircle>(S);
+}
+} // namespace crashes

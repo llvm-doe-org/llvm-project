@@ -685,12 +685,6 @@ void AMDGPUPassConfig::addIRPasses() {
   // without ever running any passes on the second.
   addPass(createBarrierNoopPass());
 
-  if (TM.getTargetTriple().getArch() == Triple::amdgcn) {
-    // TODO: May want to move later or split into an early and late one.
-
-    addPass(createAMDGPUCodeGenPreparePass());
-  }
-
   // Handle uses of OpenCL image2d_t, image3d_t and sampler_t arguments.
   if (TM.getTargetTriple().getArch() == Triple::r600)
     addPass(createR600OpenCLImageTypeLoweringPass());
@@ -716,6 +710,11 @@ void AMDGPUPassConfig::addIRPasses() {
           AAR.addAAResult(WrapperPass->getResult());
         }));
     }
+  }
+
+  if (TM.getTargetTriple().getArch() == Triple::amdgcn) {
+    // TODO: May want to move later or split into an early and late one.
+    addPass(createAMDGPUCodeGenPreparePass());
   }
 
   TargetPassConfig::addIRPasses();
@@ -886,9 +885,6 @@ bool GCNPassConfig::addInstSelector() {
   addPass(createSILowerI1CopiesPass());
   addPass(createSIFixupVectorISelPass());
   addPass(createSIAddIMGInitPass());
-  // FIXME: Remove this once the phi on CF_END is cleaned up by either removing
-  // LCSSA or other ways.
-  addPass(&UnreachableMachineBlockElimID);
   return false;
 }
 
@@ -1053,7 +1049,7 @@ bool GCNTargetMachine::parseMachineFunctionInfo(
     return true;
 
   if (MFI->ScratchRSrcReg != AMDGPU::PRIVATE_RSRC_REG &&
-      !AMDGPU::SReg_128RegClass.contains(MFI->ScratchRSrcReg)) {
+      !AMDGPU::SGPR_128RegClass.contains(MFI->ScratchRSrcReg)) {
     return diagnoseRegisterClass(YamlMFI.ScratchRSrcReg);
   }
 
@@ -1102,7 +1098,7 @@ bool GCNTargetMachine::parseMachineFunctionInfo(
 
   if (YamlMFI.ArgInfo &&
       (parseAndCheckArgument(YamlMFI.ArgInfo->PrivateSegmentBuffer,
-                             AMDGPU::SReg_128RegClass,
+                             AMDGPU::SGPR_128RegClass,
                              MFI->ArgInfo.PrivateSegmentBuffer, 4, 0) ||
        parseAndCheckArgument(YamlMFI.ArgInfo->DispatchPtr,
                              AMDGPU::SReg_64RegClass, MFI->ArgInfo.DispatchPtr,

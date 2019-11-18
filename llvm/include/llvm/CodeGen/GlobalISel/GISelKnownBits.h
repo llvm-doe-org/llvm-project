@@ -47,17 +47,29 @@ public:
   APInt getKnownZeroes(Register R);
   APInt getKnownOnes(Register R);
 
+  /// \return true if 'V & Mask' is known to be zero in DemandedElts. We use
+  /// this predicate to simplify operations downstream.
+  /// Mask is known to be zero for bits that V cannot have.
+  bool maskedValueIsZero(Register Val, const APInt &Mask) {
+    return Mask.isSubsetOf(getKnownBits(Val).Zero);
+  }
+
+  /// \return true if the sign bit of Op is known to be zero.  We use this
+  /// predicate to simplify operations downstream.
+  bool signBitIsZero(Register Op);
+
   // FIXME: Is this the right place for G_FRAME_INDEX? Should it be in
   // TargetLowering?
   void computeKnownBitsForFrameIndex(Register R, KnownBits &Known,
                                      const APInt &DemandedElts,
                                      unsigned Depth = 0);
-  static unsigned inferAlignmentForFrameIdx(int FrameIdx, int Offset,
-                                            const MachineFunction &MF);
-  static void computeKnownBitsForAlignment(KnownBits &Known, unsigned Align);
+  static Align inferAlignmentForFrameIdx(int FrameIdx, int Offset,
+                                         const MachineFunction &MF);
+  static void computeKnownBitsForAlignment(KnownBits &Known,
+                                           MaybeAlign Alignment);
 
   // Try to infer alignment for MI.
-  static unsigned inferPtrAlignment(const MachineInstr &MI);
+  static MaybeAlign inferPtrAlignment(const MachineInstr &MI);
 
   // Observer API. No-op for non-caching implementation.
   void erasingInstr(MachineInstr &MI) override{};

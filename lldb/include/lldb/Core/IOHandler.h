@@ -58,8 +58,7 @@ public:
   IOHandler(Debugger &debugger, IOHandler::Type type);
 
   IOHandler(Debugger &debugger, IOHandler::Type type,
-            const lldb::StreamFileSP &input_sp,
-            const lldb::StreamFileSP &output_sp,
+            const lldb::FileSP &input_sp, const lldb::StreamFileSP &output_sp,
             const lldb::StreamFileSP &error_sp, uint32_t flags,
             repro::DataRecorder *data_recorder);
 
@@ -123,11 +122,11 @@ public:
 
   FILE *GetErrorFILE();
 
-  lldb::StreamFileSP &GetInputStreamFile();
+  lldb::FileSP &GetInputFileSP();
 
-  lldb::StreamFileSP &GetOutputStreamFile();
+  lldb::StreamFileSP &GetOutputStreamFileSP();
 
-  lldb::StreamFileSP &GetErrorStreamFile();
+  lldb::StreamFileSP &GetErrorStreamFileSP();
 
   Debugger &GetDebugger() { return m_debugger; }
 
@@ -165,7 +164,7 @@ public:
 
 protected:
   Debugger &m_debugger;
-  lldb::StreamFileSP m_input_sp;
+  lldb::FileSP m_input_sp;
   lldb::StreamFileSP m_output_sp;
   lldb::StreamFileSP m_error_sp;
   repro::DataRecorder *m_data_recorder;
@@ -199,8 +198,8 @@ public:
 
   virtual void IOHandlerDeactivated(IOHandler &io_handler) {}
 
-  virtual int IOHandlerComplete(IOHandler &io_handler,
-                                CompletionRequest &request);
+  virtual void IOHandlerComplete(IOHandler &io_handler,
+                                 CompletionRequest &request);
 
   virtual const char *IOHandlerGetFixIndentationCharacters() { return nullptr; }
 
@@ -333,7 +332,7 @@ public:
                     repro::DataRecorder *data_recorder);
 
   IOHandlerEditline(Debugger &debugger, IOHandler::Type type,
-                    const lldb::StreamFileSP &input_sp,
+                    const lldb::FileSP &input_sp,
                     const lldb::StreamFileSP &output_sp,
                     const lldb::StreamFileSP &error_sp, uint32_t flags,
                     const char *editline_name, // Used for saving history files
@@ -349,7 +348,7 @@ public:
                     const char *, bool, bool, uint32_t,
                     IOHandlerDelegate &) = delete;
 
-  IOHandlerEditline(Debugger &, IOHandler::Type, const lldb::StreamFileSP &,
+  IOHandlerEditline(Debugger &, IOHandler::Type, const lldb::FileSP &,
                     const lldb::StreamFileSP &, const lldb::StreamFileSP &,
                     uint32_t, const char *, const char *, const char *, bool,
                     bool, uint32_t, IOHandlerDelegate &) = delete;
@@ -414,7 +413,7 @@ private:
   static int FixIndentationCallback(Editline *editline, const StringList &lines,
                                     int cursor_position, void *baton);
 
-  static int AutoCompleteCallback(CompletionRequest &request, void *baton);
+  static void AutoCompleteCallback(CompletionRequest &request, void *baton);
 #endif
 
 protected:
@@ -432,6 +431,7 @@ protected:
   bool m_interrupt_exits;
   bool m_editing; // Set to true when fetching a line manually (not using
                   // libedit)
+  std::string m_line_buffer;
 };
 
 // The order of base classes is important. Look at the constructor of
@@ -445,8 +445,8 @@ public:
 
   bool GetResponse() const { return m_user_response; }
 
-  int IOHandlerComplete(IOHandler &io_handler,
-                        CompletionRequest &request) override;
+  void IOHandlerComplete(IOHandler &io_handler,
+                         CompletionRequest &request) override;
 
   void IOHandlerInputComplete(IOHandler &io_handler,
                               std::string &data) override;

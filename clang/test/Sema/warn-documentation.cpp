@@ -1050,42 +1050,42 @@ template <typename B>
 void test_attach38<int>::test_attach39(int, B);
 
 // The inline comments expect a string after the command.
-// expected-warning@+1 {{'\a' command does not have an argument}}
+// expected-warning@+1 {{'\a' command does not have a valid word argument}}
 /// \a
 int test_inline_no_argument_a_bad(int);
 
 /// \a A
 int test_inline_no_argument_a_good(int);
 
-// expected-warning@+1 {{'@b' command does not have an argument}}
+// expected-warning@+1 {{'@b' command does not have a valid word argument}}
 /// @b
 int test_inline_no_argument_b_bad(int);
 
 /// @b A
 int test_inline_no_argument_b_good(int);
 
-// expected-warning@+1 {{'\c' command does not have an argument}}
+// expected-warning@+1 {{'\c' command does not have a valid word argument}}
 /// \c
 int test_inline_no_argument_c_bad(int);
 
 /// \c A
 int test_inline_no_argument_c_good(int);
 
-// expected-warning@+1 {{'\e' command does not have an argument}}
+// expected-warning@+1 {{'\e' command does not have a valid word argument}}
 /// \e
 int test_inline_no_argument_e_bad(int);
 
 /// \e A
 int test_inline_no_argument_e_good(int);
 
-// expected-warning@+1 {{'\em' command does not have an argument}}
+// expected-warning@+1 {{'\em' command does not have a valid word argument}}
 /// \em
 int test_inline_no_argument_em_bad(int);
 
 /// \em A
 int test_inline_no_argument_em_good(int);
 
-// expected-warning@+1 {{'\p' command does not have an argument}}
+// expected-warning@+1 {{'\p' command does not have a valid word argument}}
 /// \p
 int test_inline_no_argument_p_bad(int);
 
@@ -1360,3 +1360,34 @@ using VariadicFnType2 = void (*)(int a, ...);
  */
 class EmptyNoteNoCrash {
 };
+
+namespace PR42844 { // Assertion failures when using typedefed function pointers
+typedef void (*AA)();
+typedef AA A();
+A *a; ///< \return none
+// expected-warning@-1 {{'\return' command used in a comment that is not attached to a function or method declaration}}
+
+typedef void B();
+B *b; ///< \return none
+// expected-warning@-1 {{'\return' command used in a comment that is not attached to a function or method declaration}}
+
+void CC();
+typedef void C();
+C &c = CC; ///< \return none
+// expected-warning@-1 {{'\return' command used in a comment that is not attached to a function or method declaration}}
+
+using DD = void(*)();
+using D = DD();
+D *d; ///< \return none
+// expected-warning@-1 {{'\return' command used in a comment that is not attached to a function or method declaration}}
+
+using E = void();
+E *e; ///< \return none
+// expected-warning@-1 {{'\return' command used in a comment that is not attached to a function or method declaration}}
+
+void FF();
+using F = void();
+F &f = FF; ///< \return none
+// expected-warning@-1 {{'\return' command used in a comment that is not attached to a function or method declaration}}
+
+} // namespace PR42844

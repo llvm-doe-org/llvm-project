@@ -26,7 +26,7 @@ inline llvm::Error make_string_error(const llvm::Twine &Message) {
                                              llvm::inconvertibleErrorCode());
 }
 
-/// \brief This manages file paths in the file system. All paths in the scheme
+/// This manages file paths in the file system. All paths in the scheme
 /// are absolute (with leading '/').
 /// Note that this scheme is hardcoded into the library and not registered in
 /// registry.
@@ -181,6 +181,17 @@ llvm::Expected<URI> URI::parse(llvm::StringRef OrigUri) {
   }
   U.Body = percentDecode(Uri);
   return U;
+}
+
+llvm::Expected<std::string> URI::resolve(llvm::StringRef FileURI,
+                                         llvm::StringRef HintPath) {
+  auto Uri = URI::parse(FileURI);
+  if (!Uri)
+    return Uri.takeError();
+  auto Path = URI::resolve(*Uri, HintPath);
+  if (!Path)
+    return Path.takeError();
+  return *Path;
 }
 
 llvm::Expected<URI> URI::create(llvm::StringRef AbsolutePath,

@@ -2832,7 +2832,7 @@ void fn(int j) {
     for (int i = 5; 0 <= i; --i)
       ;
     #pragma acc CMB_PAR loop independent gang
-    for (int i = 5; i && j; --i) // expected-error {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'i'}}
+    for (int i = 5; i && j; --i) // expected-error {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', '>=', or '!=') of loop variable 'i'}}
       ;
   }
 }

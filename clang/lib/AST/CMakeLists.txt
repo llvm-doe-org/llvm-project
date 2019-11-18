@@ -4,6 +4,14 @@ set(LLVM_LINK_COMPONENTS
   Support
   )
 
+# FIXME: the entry points to the interpreter should be moved out of clangAST
+# into the parser or Sema in order to allow the interpreter to be moved to
+# another library which depends on clangAST.
+clang_tablegen(Opcodes.inc
+  -gen-clang-opcodes
+  SOURCE Interp/Opcodes.td
+  TARGET Opcodes)
+
 add_clang_library(clangAST
   APValue.cpp
   ASTConsumer.cpp
@@ -15,7 +23,6 @@ add_clang_library(clangAST
   ASTStructuralEquivalence.cpp
   ASTTypeTraits.cpp
   AttrImpl.cpp
-  CXXInheritance.cpp
   Comment.cpp
   CommentBriefParser.cpp
   CommentCommandTraits.cpp
@@ -24,6 +31,7 @@ add_clang_library(clangAST
   CommentSema.cpp
   CommentedStream.cpp
   ComparisonCategories.cpp
+  CXXInheritance.cpp
   DataCollection.cpp
   Decl.cpp
   DeclarationName.cpp
@@ -44,6 +52,27 @@ add_clang_library(clangAST
   ExternalASTSource.cpp
   FormatString.cpp
   InheritViz.cpp
+  Interp/Block.cpp
+  Interp/ByteCodeEmitter.cpp
+  Interp/ByteCodeExprGen.cpp
+  Interp/ByteCodeGenError.cpp
+  Interp/ByteCodeStmtGen.cpp
+  Interp/Context.cpp
+  Interp/Descriptor.cpp
+  Interp/Disasm.cpp
+  Interp/EvalEmitter.cpp
+  Interp/Frame.cpp
+  Interp/Function.cpp
+  Interp/Interp.cpp
+  Interp/InterpFrame.cpp
+  Interp/InterpStack.cpp
+  Interp/InterpState.cpp
+  Interp/Pointer.cpp
+  Interp/PrimType.cpp
+  Interp/Program.cpp
+  Interp/Record.cpp
+  Interp/Source.cpp
+  Interp/State.cpp
   ItaniumCXXABI.cpp
   ItaniumMangle.cpp
   JSONNodeDumper.cpp
@@ -54,8 +83,8 @@ add_clang_library(clangAST
   NSAPI.cpp
   ODRHash.cpp
   OpenACCClause.cpp
-  OSLog.cpp
   OpenMPClause.cpp
+  OSLog.cpp
   ParentMap.cpp
   PrintfFormatString.cpp
   QualTypeNames.cpp
@@ -85,4 +114,7 @@ add_clang_library(clangAST
   LINK_LIBS
   clangBasic
   clangLex
+
+  DEPENDS
+  Opcodes
   )

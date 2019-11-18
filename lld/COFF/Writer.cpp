@@ -40,8 +40,9 @@ using namespace llvm::COFF;
 using namespace llvm::object;
 using namespace llvm::support;
 using namespace llvm::support::endian;
-using namespace lld;
-using namespace lld::coff;
+
+namespace lld {
+namespace coff {
 
 /* To re-generate DOSProgram:
 $ cat > /tmp/DOSProgram.asm
@@ -285,9 +286,6 @@ private:
 };
 } // anonymous namespace
 
-namespace lld {
-namespace coff {
-
 static Timer codeLayoutTimer("Code Layout", Timer::root());
 static Timer diskCommitTimer("Commit Output File", Timer::root());
 
@@ -332,9 +330,6 @@ void OutputSection::writeHeaderTo(uint8_t *buf) {
 void OutputSection::addContributingPartialSection(PartialSection *sec) {
   contribSections.push_back(sec);
 }
-
-} // namespace coff
-} // namespace lld
 
 // Check whether the target address S is in range from a relocation
 // of type relType at address P.
@@ -743,7 +738,8 @@ void Writer::addSyntheticIdata() {
   add(".idata$2", idata.dirs);
   add(".idata$4", idata.lookups);
   add(".idata$5", idata.addresses);
-  add(".idata$6", idata.hints);
+  if (!idata.hints.empty())
+    add(".idata$6", idata.hints);
   add(".idata$7", idata.dllNames);
 }
 
@@ -1519,7 +1515,8 @@ static void maybeAddAddressTakenFunction(SymbolRVASet &addressTakenSyms,
     // Absolute is never code, synthetic generally isn't and usually isn't
     // determinable.
     break;
-  case Symbol::LazyKind:
+  case Symbol::LazyArchiveKind:
+  case Symbol::LazyObjectKind:
   case Symbol::UndefinedKind:
     // Undefined symbols resolve to zero, so they don't have an RVA. Lazy
     // symbols shouldn't have relocations.
@@ -1943,3 +1940,6 @@ PartialSection *Writer::findPartialSection(StringRef name, uint32_t outChars) {
     return it->second;
   return nullptr;
 }
+
+} // namespace coff
+} // namespace lld

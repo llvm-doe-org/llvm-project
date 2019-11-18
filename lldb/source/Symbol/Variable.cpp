@@ -35,14 +35,12 @@
 using namespace lldb;
 using namespace lldb_private;
 
-// Variable constructor
-Variable::Variable(
-    lldb::user_id_t uid, const char *name,
-    const char *mangled, // The mangled or fully qualified name of the variable.
-    const lldb::SymbolFileTypeSP &symfile_type_sp, ValueType scope,
-    SymbolContextScope *context, const RangeList &scope_range,
-    Declaration *decl_ptr, const DWARFExpression &location, bool external,
-    bool artificial, bool static_member)
+Variable::Variable(lldb::user_id_t uid, const char *name, const char *mangled,
+                   const lldb::SymbolFileTypeSP &symfile_type_sp,
+                   ValueType scope, SymbolContextScope *context,
+                   const RangeList &scope_range, Declaration *decl_ptr,
+                   const DWARFExpression &location, bool external,
+                   bool artificial, bool static_member)
     : UserID(uid), m_name(name), m_mangled(ConstString(mangled)),
       m_symfile_type_sp(symfile_type_sp), m_scope(scope),
       m_owner_scope(context), m_scope_range(scope_range),
@@ -50,7 +48,6 @@ Variable::Variable(
       m_artificial(artificial), m_loc_is_const_data(false),
       m_static_member(static_member) {}
 
-// Destructor
 Variable::~Variable() {}
 
 lldb::LanguageType Variable::GetLanguage() const {
@@ -583,7 +580,6 @@ static void PrivateAutoComplete(
       case eTypeClassTypedef:
       case eTypeClassVector: {
         request.AddCompletion(prefix_path.str());
-        request.SetWordComplete(true);
       } break;
 
       case eTypeClassClass:
@@ -603,7 +599,6 @@ static void PrivateAutoComplete(
           request.AddCompletion((prefix_path + "->").str());
         else {
           request.AddCompletion(prefix_path.str());
-          request.SetWordComplete(true);
         }
       } break;
       }
@@ -749,12 +744,10 @@ static void PrivateAutoComplete(
   }
 }
 
-size_t Variable::AutoComplete(const ExecutionContext &exe_ctx,
-                              CompletionRequest &request) {
+void Variable::AutoComplete(const ExecutionContext &exe_ctx,
+                            CompletionRequest &request) {
   CompilerType compiler_type;
 
   PrivateAutoComplete(exe_ctx.GetFramePtr(), request.GetCursorArgumentPrefix(),
                       "", compiler_type, request);
-
-  return request.GetNumberOfMatches();
 }

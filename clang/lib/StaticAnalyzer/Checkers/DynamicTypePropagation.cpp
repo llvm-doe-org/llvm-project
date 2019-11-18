@@ -85,7 +85,7 @@ class DynamicTypePropagation:
 
     PathDiagnosticPieceRef VisitNode(const ExplodedNode *N,
                                      BugReporterContext &BRC,
-                                     BugReport &BR) override;
+                                     PathSensitiveBugReport &BR) override;
 
   private:
     // The tracked symbol.
@@ -394,11 +394,11 @@ static const ObjCObjectPointerType *getMostInformativeDerivedClassImpl(
   }
 
   const auto *SuperOfTo =
-      To->getObjectType()->getSuperClassType()->getAs<ObjCObjectType>();
+      To->getObjectType()->getSuperClassType()->castAs<ObjCObjectType>();
   assert(SuperOfTo);
   QualType SuperPtrOfToQual =
       C.getObjCObjectPointerType(QualType(SuperOfTo, 0));
-  const auto *SuperPtrOfTo = SuperPtrOfToQual->getAs<ObjCObjectPointerType>();
+  const auto *SuperPtrOfTo = SuperPtrOfToQual->castAs<ObjCObjectPointerType>();
   if (To->isUnspecialized())
     return getMostInformativeDerivedClassImpl(From, SuperPtrOfTo, SuperPtrOfTo,
                                               C);
@@ -827,16 +827,15 @@ void DynamicTypePropagation::checkPostObjCMessage(const ObjCMethodCall &M,
   if (MessageExpr->getReceiverKind() == ObjCMessageExpr::Class &&
       Sel.getAsString() == "class") {
     QualType ReceiverType = MessageExpr->getClassReceiver();
-    const auto *ReceiverClassType = ReceiverType->getAs<ObjCObjectType>();
+    const auto *ReceiverClassType = ReceiverType->castAs<ObjCObjectType>();
+    if (!ReceiverClassType->isSpecialized())
+      return;
+
     QualType ReceiverClassPointerType =
         C.getASTContext().getObjCObjectPointerType(
             QualType(ReceiverClassType, 0));
-
-    if (!ReceiverClassType->isSpecialized())
-      return;
     const auto *InferredType =
-        ReceiverClassPointerType->getAs<ObjCObjectPointerType>();
-    assert(InferredType);
+        ReceiverClassPointerType->castAs<ObjCObjectPointerType>();
 
     State = State->set<MostSpecializedTypeArgsMap>(RetSym, InferredType);
     C.addTransition(State);
@@ -912,8 +911,8 @@ void DynamicTypePropagation::reportGenericsBug(
   OS << "' to incompatible type '";
   QualType::print(To, Qualifiers(), OS, C.getLangOpts(), llvm::Twine());
   OS << "'";
-  std::unique_ptr<BugReport> R(
-      new BugReport(*ObjCGenericsBugType, OS.str(), N));
+  auto R = std::make_unique<PathSensitiveBugReport>(*ObjCGenericsBugType,
+                                                    OS.str(), N);
   R->markInteresting(Sym);
   R->addVisitor(std::make_unique<GenericsBugVisitor>(Sym));
   if (ReportedNode)
@@ -922,7 +921,8 @@ void DynamicTypePropagation::reportGenericsBug(
 }
 
 PathDiagnosticPieceRef DynamicTypePropagation::GenericsBugVisitor::VisitNode(
-    const ExplodedNode *N, BugReporterContext &BRC, BugReport &BR) {
+    const ExplodedNode *N, BugReporterContext &BRC,
+    PathSensitiveBugReport &BR) {
   ProgramStateRef state = N->getState();
   ProgramStateRef statePrev = N->getFirstPred()->getState();
 
@@ -937,7 +937,7 @@ PathDiagnosticPieceRef DynamicTypePropagation::GenericsBugVisitor::VisitNode(
     return nullptr;
 
   // Retrieve the associated statement.
-  const Stmt *S = PathDiagnosticLocation::getStmt(N);
+  const Stmt *S = N->getStmtForDiagnostics();
   if (!S)
     return nullptr;
 
@@ -972,8 +972,7 @@ PathDiagnosticPieceRef DynamicTypePropagation::GenericsBugVisitor::VisitNode(
   // Generate the extra diagnostic.
   PathDiagnosticLocation Pos(S, BRC.getSourceManager(),
                              N->getLocationContext());
-  return std::make_shared<PathDiagnosticEventPiece>(Pos, OS.str(), true,
-                                                    nullptr);
+  return std::make_shared<PathDiagnosticEventPiece>(Pos, OS.str(), true);
 }
 
 /// Register checkers.
