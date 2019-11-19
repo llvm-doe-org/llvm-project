@@ -1,3 +1,5 @@
+# Clacc
+
 Clacc is a project to add [OpenACC](https://www.openacc.org/) support
 to [Clang](http://clang.llvm.org/) and [LLVM](http://llvm.org/).
 Clacc is currently funded by the [U.S. Exascale Computing Project
@@ -6,8 +8,7 @@ Clacc is currently funded by the [U.S. Exascale Computing Project
 National Laboratory](https://www.ornl.gov/).  Please contact [Joel
 E. Denny](mailto:dennyje@ornl.gov) with any questions.
 
-Sharing
-=======
+## Sharing
 
 There is currently no public repo for Clacc, and we ask that you do
 not redistribute Clacc.  We'll take it public when ready, hopefully in
@@ -15,16 +16,14 @@ the coming months.  Eventually, we'll offer it to the upstream LLVM
 project, and we already make a habit of upstreaming LLVM changes that
 are not specific to OpenACC.
 
-Git Repo
-========
+## Git Repo
 
 The official Clacc git repo is:
 
 > <https://code.ornl.gov/jum/Clacc>
 
-This repo is a fork of [LLVM's
-monorepo](https://github.com/llvm-project/llvm-project-20170507).  We
-will eventually update this to LLVM's more recent monorepo.
+This repo is a fork of [LLVM's github
+repo](https://github.com/llvm/llvm-project).
 
 The branches and tags are as follows:
 
@@ -45,13 +44,16 @@ reached out to us.  Eventually, we plan to set it up for CI, etc.  If
 you see something missing that would be helpful now, let us know, and
 we'll raise the priority.
 
-Building and Testing
-====================
+## Building and Testing
 
-Clacc should be built in the same manner as upstream Clang when OpenMP
-support is desired.  At minimum, you must build the `clang` and
-`openmp` subprojects of LLVM.  For example, depending on your system
-configuration, the following might prove sufficient:
+For a brief guide to getting started with LLVM, see the section [The
+LLVM Compiler Infrastructure](#the-llvm-compiler-infrastructure)
+below, which contains the contents of the upstream LLVM `README.md`.
+
+Clacc should be built in the same manner as upstream LLVM when Clang
+and OpenMP support are desired.  At minimum, you must build the
+`clang` and `openmp` subprojects of LLVM.  For example, depending on
+your system configuration, the following might prove sufficient:
 
 ```
 $ cd $LLVM_GIT_DIR/..
@@ -67,8 +69,8 @@ build stage that improves offloading support, see the following blog:
 
 > <https://www.hahnjo.de/blog/2018/10/08/clang-7.0-openmp-offloading-nvidia.html>
 
-The Clang OpenACC test suite currently builds and runs OpenACC test
-programs.  Normally it builds them without offloading to avoid
+Clacc's Clang OpenACC test suite currently builds and runs OpenACC
+test programs.  Normally it builds them without offloading to avoid
 requiring specific hardware.  To specify hardware architectures
 available on your system so that it tests offloading to them as well,
 specify one or more of the following when running `cmake`:
@@ -78,7 +80,7 @@ specify one or more of the following when running `cmake`:
 -DCLANG_ACC_TEST_EXE_NVPTX64=True  # nvptx64-nvidia-cuda
 ```
 
-The Clang OpenACC test suite can be run by itself or as part of larger
+Clacc's Clang OpenACC test suite can be run by itself or as part of larger
 test suites as follows:
 
 ```
@@ -87,8 +89,7 @@ $ make check-clang
 $ make check-all
 ```
 
-Using
-=====
+## Using
 
 Clacc is still under development and requires significant manual
 intervention for any real application or benchmark (see the
@@ -168,8 +169,7 @@ For descriptions of all OpenACC-related and OpenMP-related
 command-line options, run Clacc's `clang -help` and search for
 `openacc` or `openmp`.
 
-Documentation
-=============
+## Documentation
 
 The following documentation is maintained in the Clacc git repo:
 
@@ -178,3 +178,12 @@ The following documentation is maintained in the Clacc git repo:
   Clacc's support for OpenACC.
 * `clang/README-OpenACC-design.md` describes the current design of
   Clacc.
+
+The [next section](#the-llvm-compiler-infrastructure) contains the
+contents of the upstream LLVM `README.md`.
+
+# The LLVM Compiler Infrastructure
+
+This directory and its subdirectories contain source code for LLVM,
+a toolkit for the construction of highly optimized compilers,
+optimizers, and runtime environments.
