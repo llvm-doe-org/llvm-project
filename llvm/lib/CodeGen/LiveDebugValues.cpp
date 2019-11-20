@@ -57,6 +57,7 @@
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Casting.h"
@@ -89,7 +90,27 @@ static Register isDbgValueDescribedByReg(const MachineInstr &MI) {
   return MI.getOperand(0).isReg() ? MI.getOperand(0).getReg() : Register();
 }
 
+/// If \p Op is a stack or frame register return true, otherwise return false.
+/// This is used to avoid basing the debug entry values on the registers, since
+/// we do not support it at the moment.
+static bool isRegOtherThanSPAndFP(const MachineOperand &Op,
+                                  const MachineInstr &MI,
+                                  const TargetRegisterInfo *TRI) {
+  if (!Op.isReg())
+    return false;
+
+  const MachineFunction *MF = MI.getParent()->getParent();
+  const TargetLowering *TLI = MF->getSubtarget().getTargetLowering();
+  unsigned SP = TLI->getStackPointerRegisterToSaveRestore();
+  Register FP = TRI->getFrameRegister(*MF);
+  Register Reg = Op.getReg();
+
+  return Reg && Reg != SP && Reg != FP;
+}
+
 namespace {
+
+using DefinedRegsSet = SmallSet<Register, 32>;
 
 class LiveDebugValues : public MachineFunctionPass {
 private:
@@ -456,6 +477,14 @@ private:
   bool isLocationSpill(const MachineInstr &MI, MachineFunction *MF,
                        unsigned &Reg);
 
+  /// Returns true if the given machine instruction is a debug value which we
+  /// can emit entry values for.
+  ///
+  /// Currently, we generate debug entry values only for parameters that are
+  /// unmodified throughout the function and located in a register.
+  bool isEntryValueCandidate(const MachineInstr &MI,
+                             const DefinedRegsSet &Regs) const;
+
   /// If a given instruction is identified as a spill, return the spill location
   /// and set \p Reg to the spilled register.
   Optional<VarLoc::SpillLoc> isRestoreInstruction(const MachineInstr &MI,
@@ -486,10 +515,8 @@ private:
                           VarLocInMBB &OutLocs, const VarLocMap &VarLocIDs);
 
   void process(MachineInstr &MI, OpenRangesSet &OpenRanges,
-               VarLocInMBB &OutLocs, VarLocMap &VarLocIDs,
-               TransferMap &Transfers, DebugParamMap &DebugEntryVals,
-               OverlapMap &OverlapFragments,
-               VarToFragments &SeenFragments);
+               VarLocMap &VarLocIDs, TransferMap &Transfers,
+               DebugParamMap &DebugEntryVals);
 
   void accumulateFragmentMap(MachineInstr &MI, VarToFragments &SeenFragments,
                              OverlapMap &OLapMap);
@@ -788,8 +815,6 @@ void LiveDebugValues::insertTransferDebugPair(
   case TransferKind::TransferRestore: {
     assert(NewReg &&
            "No register supplied when handling a restore of a debug value");
-    MachineFunction *MF = MI.getMF();
-    DIBuilder DIB(*const_cast<Function &>(MF->getFunction()).getParent());
     // DebugInstr refers to the pre-spill location, therefore we can reuse
     // its expression.
     VarLoc VL = VarLoc::CreateCopyLoc(*DebugInstr, LS, NewReg);
@@ -1001,13 +1026,17 @@ void LiveDebugValues::transferRegisterCopy(MachineInstr &MI,
                                            OpenRangesSet &OpenRanges,
                                            VarLocMap &VarLocIDs,
                                            TransferMap &Transfers) {
-  const MachineOperand *SrcRegOp, *DestRegOp;
 
-  if (!TII->isCopyInstr(MI, SrcRegOp, DestRegOp) || !SrcRegOp->isKill() ||
-      !DestRegOp->isDef())
+  auto DestSrc = TII->isCopyInstr(MI);
+  if (!DestSrc)
     return;
 
-  auto isCalleSavedReg = [&](unsigned Reg) {
+  const MachineOperand *DestRegOp = DestSrc->Destination;
+  const MachineOperand *SrcRegOp = DestSrc->Source;
+  if (!SrcRegOp->isKill() || !DestRegOp->isDef())
+    return;
+
+  auto isCalleeSavedReg = [&](unsigned Reg) {
     for (MCRegAliasIterator RAI(Reg, TRI, true); RAI.isValid(); ++RAI)
       if (CalleeSavedRegs.test(*RAI))
         return true;
@@ -1022,7 +1051,7 @@ void LiveDebugValues::transferRegisterCopy(MachineInstr &MI,
   // included, there would be a great chance that it is going to be clobbered
   // soon. It is more likely that previous register location, which is callee
   // saved, is going to stay unclobbered longer, even if it is killed.
-  if (!isCalleSavedReg(DestReg))
+  if (!isCalleeSavedReg(DestReg))
     return;
 
   for (unsigned ID : OpenRanges.getVarLocs()) {
@@ -1117,13 +1146,10 @@ void LiveDebugValues::accumulateFragmentMap(MachineInstr &MI,
   AllSeenFragments.insert(ThisFragment);
 }
 
-/// This routine creates OpenRanges and OutLocs.
+/// This routine creates OpenRanges.
 void LiveDebugValues::process(MachineInstr &MI, OpenRangesSet &OpenRanges,
-                              VarLocInMBB &OutLocs, VarLocMap &VarLocIDs,
-                              TransferMap &Transfers,
-                              DebugParamMap &DebugEntryVals,
-                              OverlapMap &OverlapFragments,
-                              VarToFragments &SeenFragments) {
+                              VarLocMap &VarLocIDs, TransferMap &Transfers,
+                              DebugParamMap &DebugEntryVals) {
   transferDebugValue(MI, OpenRanges, VarLocIDs);
   transferRegisterDef(MI, OpenRanges, VarLocIDs, Transfers,
                       DebugEntryVals);
@@ -1256,6 +1282,56 @@ void LiveDebugValues::flushPendingLocs(VarLocInMBB &PendingInLocs,
   }
 }
 
+bool LiveDebugValues::isEntryValueCandidate(
+    const MachineInstr &MI, const DefinedRegsSet &DefinedRegs) const {
+  if (!MI.isDebugValue())
+    return false;
+
+  // TODO: Add support for local variables that are expressed in terms of
+  // parameters entry values.
+  // TODO: Add support for modified arguments that can be expressed
+  // by using its entry value.
+  auto *DIVar = MI.getDebugVariable();
+  if (!DIVar->isParameter() || !DIVar->isNotModified())
+    return false;
+
+  // Do not consider parameters that belong to an inlined function.
+  if (MI.getDebugLoc()->getInlinedAt())
+    return false;
+
+  // Do not consider indirect debug values (TODO: explain why).
+  if (MI.isIndirectDebugValue())
+    return false;
+
+  // Only consider parameters that are described using registers. Parameters
+  // that are passed on the stack are not yet supported, so ignore debug
+  // values that are described by the frame or stack pointer.
+  if (!isRegOtherThanSPAndFP(MI.getOperand(0), MI, TRI))
+    return false;
+
+  // If a parameter's value has been propagated from the caller, then the
+  // parameter's DBG_VALUE may be described using a register defined by some
+  // instruction in the entry block, in which case we shouldn't create an
+  // entry value.
+  if (DefinedRegs.count(MI.getOperand(0).getReg()))
+    return false;
+
+  // TODO: Add support for parameters that are described as fragments.
+  if (MI.getDebugExpression()->isFragment())
+    return false;
+
+  return true;
+}
+
+/// Collect all register defines (including aliases) for the given instruction.
+static void collectRegDefs(const MachineInstr &MI, DefinedRegsSet &Regs,
+                           const TargetRegisterInfo *TRI) {
+  for (const MachineOperand &MO : MI.operands())
+    if (MO.isReg() && MO.isDef() && MO.getReg())
+      for (MCRegAliasIterator AI(MO.getReg(), TRI, true); AI.isValid(); ++AI)
+        Regs.insert(*AI);
+}
+
 /// Calculate the liveness information for the given machine function and
 /// extend ranges across basic blocks.
 bool LiveDebugValues::ExtendRanges(MachineFunction &MF) {
@@ -1266,12 +1342,13 @@ bool LiveDebugValues::ExtendRanges(MachineFunction &MF) {
   bool MBBJoined = false;
 
   VarLocMap VarLocIDs;         // Map VarLoc<>unique ID for use in bitvectors.
-  OverlapMap OverlapFragments; // Map of overlapping variable fragments
+  OverlapMap OverlapFragments; // Map of overlapping variable fragments.
   OpenRangesSet OpenRanges(OverlapFragments);
                               // Ranges that are open until end of bb.
   VarLocInMBB OutLocs;        // Ranges that exist beyond bb.
   VarLocInMBB InLocs;         // Ranges that are incoming after joining.
-  TransferMap Transfers;      // DBG_VALUEs associated with spills.
+  TransferMap Transfers;      // DBG_VALUEs associated with transfers (such as
+                              // spills, copies and restores).
   VarLocInMBB PendingInLocs;  // Ranges that are incoming after joining, but
                               // that we have deferred creating DBG_VALUE insts
                               // for immediately.
@@ -1291,42 +1368,24 @@ bool LiveDebugValues::ExtendRanges(MachineFunction &MF) {
                       std::greater<unsigned int>>
       Pending;
 
-  // Besides parameter's modification, check whether a DBG_VALUE is inlined
-  // in order to deduce whether the variable that it tracks comes from
-  // a different function. If that is the case we can't track its entry value.
-  auto IsUnmodifiedFuncParam = [&](const MachineInstr &MI) {
-    auto *DIVar = MI.getDebugVariable();
-    return DIVar->isParameter() && DIVar->isNotModified() &&
-           !MI.getDebugLoc()->getInlinedAt();
-  };
-
-  const TargetLowering *TLI = MF.getSubtarget().getTargetLowering();
-  unsigned SP = TLI->getStackPointerRegisterToSaveRestore();
-  Register FP = TRI->getFrameRegister(MF);
-  auto IsRegOtherThanSPAndFP = [&](const MachineOperand &Op) -> bool {
-    return Op.isReg() && Op.getReg() != SP && Op.getReg() != FP;
-  };
-
   // Working set of currently collected debug variables mapped to DBG_VALUEs
   // representing candidates for production of debug entry values.
   DebugParamMap DebugEntryVals;
 
-  MachineBasicBlock &First_MBB = *(MF.begin());
+  // Set of register defines that are seen when traversing the entry block
+  // looking for debug entry value candidates.
+  DefinedRegsSet DefinedRegs;
+
   // Only in the case of entry MBB collect DBG_VALUEs representing
   // function parameters in order to generate debug entry values for them.
-  // Currently, we generate debug entry values only for parameters that are
-  // unmodified throughout the function and located in a register.
-  // TODO: Add support for parameters that are described as fragments.
-  // TODO: Add support for modified arguments that can be expressed
-  // by using its entry value.
-  // TODO: Add support for local variables that are expressed in terms of
-  // parameters entry values.
-  for (auto &MI : First_MBB)
-    if (MI.isDebugValue() && IsUnmodifiedFuncParam(MI) &&
-        !MI.isIndirectDebugValue() && IsRegOtherThanSPAndFP(MI.getOperand(0)) &&
-        !DebugEntryVals.count(MI.getDebugVariable()) &&
-        !MI.getDebugExpression()->isFragment())
+
+  MachineBasicBlock &First_MBB = *(MF.begin());
+  for (auto &MI : First_MBB) {
+    collectRegDefs(MI, DefinedRegs, TRI);
+    if (isEntryValueCandidate(MI, DefinedRegs) &&
+        !DebugEntryVals.count(MI.getDebugVariable()))
       DebugEntryVals[MI.getDebugVariable()] = &MI;
+  }
 
   // Initialize per-block structures and scan for fragment overlaps.
   for (auto &MBB : MF) {
@@ -1379,13 +1438,12 @@ bool LiveDebugValues::ExtendRanges(MachineFunction &MF) {
         MBBJoined = false;
         Changed = true;
         // Now that we have started to extend ranges across BBs we need to
-        // examine spill instructions to see whether they spill registers that
-        // correspond to user variables.
+        // examine spill, copy and restore instructions to see whether they
+        // operate with registers that correspond to user variables.
         // First load any pending inlocs.
         OpenRanges.insertFromLocSet(PendingInLocs[MBB], VarLocIDs);
         for (auto &MI : *MBB)
-              process(MI, OpenRanges, OutLocs, VarLocIDs, Transfers,
-                      DebugEntryVals, OverlapFragments, SeenFragments);
+          process(MI, OpenRanges, VarLocIDs, Transfers, DebugEntryVals);
         OLChanged |= transferTerminator(MBB, OpenRanges, OutLocs, VarLocIDs);
 
         LLVM_DEBUG(printVarLocInMBB(MF, OutLocs, VarLocIDs,
@@ -1439,8 +1497,7 @@ bool LiveDebugValues::runOnMachineFunction(MachineFunction &MF) {
   TRI = MF.getSubtarget().getRegisterInfo();
   TII = MF.getSubtarget().getInstrInfo();
   TFI = MF.getSubtarget().getFrameLowering();
-  TFI->determineCalleeSaves(MF, CalleeSavedRegs,
-                            std::make_unique<RegScavenger>().get());
+  TFI->getCalleeSaves(MF, CalleeSavedRegs);
   LS.initialize(MF);
 
   bool Changed = ExtendRanges(MF);

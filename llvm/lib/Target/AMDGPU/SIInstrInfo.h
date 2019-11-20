@@ -192,7 +192,7 @@ public:
                                int64_t Offset1, unsigned NumLoads) const override;
 
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
-                   const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
+                   const DebugLoc &DL, MCRegister DestReg, MCRegister SrcReg,
                    bool KillSrc) const override;
 
   unsigned calculateLDSSpillAddress(MachineBasicBlock &MBB, MachineInstr &MI,
@@ -1027,6 +1027,13 @@ public:
   }
 
   void fixImplicitOperands(MachineInstr &MI) const;
+
+  MachineInstr *foldMemoryOperandImpl(MachineFunction &MF, MachineInstr &MI,
+                                      ArrayRef<unsigned> Ops,
+                                      MachineBasicBlock::iterator InsertPt,
+                                      int FrameIndex,
+                                      LiveIntervals *LIS = nullptr,
+                                      VirtRegMap *VRM = nullptr) const override;
 };
 
 /// \brief Returns true if a reg:subreg pair P has a TRC class

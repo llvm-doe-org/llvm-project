@@ -2268,7 +2268,7 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
 
     LLVM_FALLTHROUGH;
   }
-  case AMDGPU::G_GEP:
+  case AMDGPU::G_PTR_ADD:
   case AMDGPU::G_ADD:
   case AMDGPU::G_SUB:
   case AMDGPU::G_MUL:
@@ -2957,7 +2957,8 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
   case AMDGPU::G_ATOMICRMW_UMAX:
   case AMDGPU::G_ATOMICRMW_UMIN:
   case AMDGPU::G_ATOMICRMW_FADD:
-  case AMDGPU::G_ATOMIC_CMPXCHG: {
+  case AMDGPU::G_ATOMIC_CMPXCHG:
+  case AMDGPU::G_AMDGPU_ATOMIC_CMPXCHG: {
     return getDefaultMappingAllVGPR(MI);
   }
   case AMDGPU::G_BRCOND: {

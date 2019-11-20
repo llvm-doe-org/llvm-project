@@ -560,7 +560,11 @@ void llvm::sys::SetInfoSignalFunction(void (*Handler)()) {
   // Unimplemented.
 }
 
-void llvm::sys::SetPipeSignalFunction(void (*Handler)()) {
+void llvm::sys::SetOneShotPipeSignalFunction(void (*Handler)()) {
+  // Unimplemented.
+}
+
+void llvm::sys::DefaultOneShotPipeSignalHandler() {
   // Unimplemented.
 }
 

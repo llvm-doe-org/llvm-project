@@ -1,4 +1,5 @@
 import multiprocessing
+import os
 import time
 
 import lit.Test
@@ -12,7 +13,7 @@ class NopSemaphore(object):
     def release(self): pass
 
 def create_run(tests, lit_config, workers, progress_callback, timeout=None):
-    # TODO(yln) assert workers > 0
+    assert workers > 0
     if workers == 1:
         return SerialRun(tests, lit_config, progress_callback, timeout)
     return ParallelRun(tests, lit_config, progress_callback, timeout, workers)
@@ -44,28 +45,23 @@ class Run(object):
         computed. Tests which were not actually executed (for any reason) will
         be given an UNRESOLVED result.
         """
-        if not self.tests:
-            return 0.0
-
         self.failure_count = 0
         self.hit_max_failures = False
 
         # Larger timeouts (one year, positive infinity) don't work on Windows.
         one_week = 7 * 24 * 60 * 60  # days * hours * minutes * seconds
         timeout = self.timeout or one_week
+        deadline = time.time() + timeout
 
-        start = time.time()
-        deadline = start + timeout
         self._execute(deadline)
-        end = time.time()
 
         # Mark any tests that weren't run as UNRESOLVED.
         for test in self.tests:
             if test.result is None:
                 test.setResult(lit.Test.Result(lit.Test.UNRESOLVED, '', 0.0))
 
-        return end - start
-
+    # TODO(yln): as the comment says.. this is racing with the main thread waiting
+    # for results
     def _process_result(self, test, result):
         # Don't add any more test results after we've hit the maximum failure
         # count.  Otherwise we're racing with the main thread, which is going
@@ -119,15 +115,7 @@ class ParallelRun(Run):
         pool = multiprocessing.Pool(self.workers, lit.worker.initialize,
                                     (self.lit_config, semaphores))
 
-        # Install a console-control signal handler on Windows.
-        if lit.util.win32api is not None:
-            def console_ctrl_handler(type):
-                print('\nCtrl-C detected, terminating.')
-                pool.terminate()
-                pool.join()
-                lit.util.abort_now()
-                return True
-            lit.util.win32api.SetConsoleCtrlHandler(console_ctrl_handler, True)
+        self._install_win32_signal_handler(pool)
 
         async_results = [
             pool.apply_async(lit.worker.execute, args=[test],
@@ -146,7 +134,9 @@ class ParallelRun(Run):
             if self.hit_max_failures:
                 pool.terminate()
                 break
+        pool.join()
 
+    # TODO(yln): interferes with progress bar
     # Some tests use threads internally, and at least on Linux each of these
     # threads counts toward the current process limit. Try to raise the (soft)
     # process limit so that tests don't fail due to resource exhaustion.
@@ -167,4 +157,16 @@ class ParallelRun(Run):
                 self.lit_config.note('Raised process limit from %d to %d' % \
                                         (soft_limit, desired_limit))
         except Exception as ex:
-            self.lit_config.warning('Failed to raise process limit: %s' % ex)
+            # Warn, unless this is Windows, in which case this is expected.
+            if os.name != 'nt':
+                self.lit_config.warning('Failed to raise process limit: %s' % ex)
+
+    def _install_win32_signal_handler(self, pool):
+        if lit.util.win32api is not None:
+            def console_ctrl_handler(type):
+                print('\nCtrl-C detected, terminating.')
+                pool.terminate()
+                pool.join()
+                lit.util.abort_now()
+                return True
+            lit.util.win32api.SetConsoleCtrlHandler(console_ctrl_handler, True)

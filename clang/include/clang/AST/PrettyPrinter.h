@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//  This file defines the PrinterHelper interface.
+//  This file defines helper types for AST pretty-printing.
 //
 //===----------------------------------------------------------------------===//
 
@@ -42,6 +42,16 @@ enum OpenACCPrintKind {
   OpenACCPrint_OMP_HEAD
 };
 
+/// Callbacks to use to customize the behavior of the pretty-printer.
+class PrintingCallbacks {
+protected:
+  ~PrintingCallbacks() = default;
+
+public:
+  /// Remap a path to a form suitable for printing.
+  virtual std::string remapPath(StringRef Path) const { return Path; }
+};
+
 /// Describes how types, statements, expressions, and declarations should be
 /// printed.
 ///
@@ -63,8 +73,7 @@ struct PrintingPolicy {
         MSWChar(LO.MicrosoftExt && !LO.WChar), IncludeNewlines(true),
         MSVCFormatting(false), ConstantsAsWritten(false),
         SuppressImplicitBase(false), FullyQualifiedName(false),
-        RemapFilePaths(false), PrintCanonicalTypes(false),
-        OpenACCPrint(OpenACCPrint_ACC) {}
+        PrintCanonicalTypes(false), OpenACCPrint(OpenACCPrint_ACC) {}
 
   /// Adjust this printing policy for cases where it's known that we're
   /// printing C++ code (for instance, if AST dumping reaches a C++-only
@@ -238,14 +247,11 @@ struct PrintingPolicy {
   /// This is the opposite of SuppressScope and thus overrules it.
   unsigned FullyQualifiedName : 1;
 
-  /// Whether to apply -fdebug-prefix-map to any file paths.
-  unsigned RemapFilePaths : 1;
-
   /// Whether to print types as written or canonically.
   unsigned PrintCanonicalTypes : 1;
 
-  /// When RemapFilePaths is true, this function performs the action.
-  std::function<std::string(StringRef)> remapPath;
+  /// Callbacks to use to allow the behavior of printing to be customized.
+  const PrintingCallbacks *Callbacks = nullptr;
 
   /// How to print OpenACC nodes.
   OpenACCPrintKind OpenACCPrint;

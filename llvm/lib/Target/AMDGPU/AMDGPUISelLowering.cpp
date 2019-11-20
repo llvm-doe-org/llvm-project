@@ -451,9 +451,6 @@ AMDGPUTargetLowering::AMDGPUTargetLowering(const TargetMachine &TM,
   for (int I = 0; I < RTLIB::UNKNOWN_LIBCALL; ++I)
     setLibcallName(static_cast<RTLIB::Libcall>(I), nullptr);
 
-  setBooleanContents(ZeroOrNegativeOneBooleanContent);
-  setBooleanVectorContents(ZeroOrNegativeOneBooleanContent);
-
   setSchedulingPreference(Sched::RegPressure);
   setJumpIsExpensive(true);
 
@@ -1584,8 +1581,11 @@ SDValue AMDGPUTargetLowering::LowerDIVREM24(SDValue Op, SelectionDAG &DAG,
   // float fqneg = -fq;
   SDValue fqneg = DAG.getNode(ISD::FNEG, DL, FltVT, fq);
 
+  MachineFunction &MF = DAG.getMachineFunction();
+  const AMDGPUMachineFunction *MFI = MF.getInfo<AMDGPUMachineFunction>();
+
   // float fr = mad(fqneg, fb, fa);
-  unsigned OpCode = Subtarget->hasFP32Denormals() ?
+  unsigned OpCode = MFI->getMode().FP32Denormals ?
                     (unsigned)AMDGPUISD::FMAD_FTZ :
                     (unsigned)ISD::FMAD;
   SDValue fr = DAG.getNode(OpCode, DL, FltVT, fqneg, fb, fa);
@@ -1666,8 +1666,11 @@ void AMDGPUTargetLowering::LowerUDIVREM64(SDValue Op,
   }
 
   if (isTypeLegal(MVT::i64)) {
+    MachineFunction &MF = DAG.getMachineFunction();
+    const SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
+
     // Compute denominator reciprocal.
-    unsigned FMAD = Subtarget->hasFP32Denormals() ?
+    unsigned FMAD = MFI->getMode().FP32Denormals ?
                     (unsigned)AMDGPUISD::FMAD_FTZ :
                     (unsigned)ISD::FMAD;
 
@@ -4343,7 +4346,6 @@ const char* AMDGPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(BUFFER_ATOMIC_CMPSWAP)
   NODE_NAME_CASE(BUFFER_ATOMIC_FADD)
   NODE_NAME_CASE(BUFFER_ATOMIC_PK_FADD)
-  NODE_NAME_CASE(ATOMIC_FADD)
   NODE_NAME_CASE(ATOMIC_PK_FADD)
 
   case AMDGPUISD::LAST_AMDGPU_ISD_NUMBER: break;
@@ -4435,6 +4437,9 @@ void AMDGPUTargetLowering::computeKnownBitsForTargetNode(
     unsigned TrailZ = LHSKnown.countMinTrailingZeros() +
                       RHSKnown.countMinTrailingZeros();
     Known.Zero.setLowBits(std::min(TrailZ, 32u));
+    // Skip extra check if all bits are known zeros.
+    if (TrailZ >= 32)
+      break;
 
     // Truncate to 24 bits.
     LHSKnown = LHSKnown.trunc(24);

@@ -706,7 +706,7 @@ void StmtPrinter::VisitOMPCriticalDirective(OMPCriticalDirective *Node) {
   Indent() << "#pragma omp critical";
   if (Node->getDirectiveName().getName()) {
     OS << " (";
-    Node->getDirectiveName().printName(OS);
+    Node->getDirectiveName().printName(OS, Policy);
     OS << ")";
   }
   PrintOMPExecutableDirective(Node);
@@ -847,6 +847,12 @@ void StmtPrinter::VisitOMPMasterTaskLoopSimdDirective(
 void StmtPrinter::VisitOMPParallelMasterTaskLoopDirective(
     OMPParallelMasterTaskLoopDirective *Node) {
   Indent() << "#pragma omp parallel master taskloop";
+  PrintOMPExecutableDirective(Node);
+}
+
+void StmtPrinter::VisitOMPParallelMasterTaskLoopSimdDirective(
+    OMPParallelMasterTaskLoopSimdDirective *Node) {
+  Indent() << "#pragma omp parallel master taskloop simd";
   PrintOMPExecutableDirective(Node);
 }
 
@@ -1604,7 +1610,7 @@ void StmtPrinter::VisitUnaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr *Node){
 void StmtPrinter::VisitGenericSelectionExpr(GenericSelectionExpr *Node) {
   OS << "_Generic(";
   PrintExpr(Node->getControllingExpr());
-  for (const GenericSelectionExpr::Association &Assoc : Node->associations()) {
+  for (const GenericSelectionExpr::Association Assoc : Node->associations()) {
     OS << ", ";
     QualType T = Assoc.getType();
     if (T.isNull())

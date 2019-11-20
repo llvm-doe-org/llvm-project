@@ -51,6 +51,9 @@ namespace llvm {
       ///
       FSEL,
 
+      /// XSMAXCDP, XSMINCDP - C-type min/max instructions.
+      XSMAXCDP, XSMINCDP,
+
       /// FCFID - The FCFID instruction, taking an f64 operand and producing
       /// and f64 value containing the FP representation of the integer that
       /// was temporarily in the f64 operand.
@@ -647,6 +650,10 @@ namespace llvm {
       return true;
     }
 
+    bool isEqualityCmpFoldedWithSignedCmp() const override {
+      return false;
+    }
+
     bool hasAndNotCompare(SDValue) const override {
       return true;
     }
@@ -900,7 +907,8 @@ namespace llvm {
     /// than a pair of fmul and fadd instructions. fmuladd intrinsics will be
     /// expanded to FMAs when this method returns true, otherwise fmuladd is
     /// expanded to fmul + fadd.
-    bool isFMAFasterThanFMulAndFAdd(EVT VT) const override;
+    bool isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
+                                    EVT VT) const override;
 
     const MCPhysReg *getScratchRegisters(CallingConv::ID CC) const override;
 

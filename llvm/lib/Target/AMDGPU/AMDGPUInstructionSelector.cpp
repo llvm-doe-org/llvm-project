@@ -538,7 +538,7 @@ bool AMDGPUInstructionSelector::selectG_UNMERGE_VALUES(MachineInstr &MI) const {
   return true;
 }
 
-bool AMDGPUInstructionSelector::selectG_GEP(MachineInstr &I) const {
+bool AMDGPUInstructionSelector::selectG_PTR_ADD(MachineInstr &I) const {
   return selectG_ADD_SUB(I);
 }
 
@@ -1352,49 +1352,6 @@ bool AMDGPUInstructionSelector::selectG_SZA_EXT(MachineInstr &I) const {
   return false;
 }
 
-static int64_t getFPTrueImmVal(unsigned Size, bool Signed) {
-  switch (Size) {
-  case 16:
-    return Signed ? 0xBC00 : 0x3C00;
-  case 32:
-    return Signed ? 0xbf800000 : 0x3f800000;
-  case 64:
-    return Signed ? 0xbff0000000000000 : 0x3ff0000000000000;
-  default:
-    llvm_unreachable("Invalid FP type size");
-  }
-}
-
-bool AMDGPUInstructionSelector::selectG_SITOFP_UITOFP(MachineInstr &I) const {
-  MachineBasicBlock *MBB = I.getParent();
-  MachineFunction *MF = MBB->getParent();
-  MachineRegisterInfo &MRI = MF->getRegInfo();
-  Register Src = I.getOperand(1).getReg();
-  if (!isSCC(Src, MRI))
-    return selectImpl(I, *CoverageInfo);
-
-  bool Signed = I.getOpcode() == AMDGPU::G_SITOFP;
-  Register DstReg = I.getOperand(0).getReg();
-  const LLT DstTy = MRI.getType(DstReg);
-  const unsigned DstSize = DstTy.getSizeInBits();
-  const DebugLoc &DL = I.getDebugLoc();
-
-  BuildMI(*MBB, I, DL, TII.get(AMDGPU::COPY), AMDGPU::SCC)
-    .addReg(Src);
-
-  unsigned NewOpc =
-    DstSize > 32 ? AMDGPU::S_CSELECT_B64 : AMDGPU::S_CSELECT_B32;
-  auto MIB = BuildMI(*MBB, I, DL, TII.get(NewOpc), DstReg)
-    .addImm(0)
-    .addImm(getFPTrueImmVal(DstSize, Signed));
-
-  if (!constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI))
-    return false;
-
-  I.eraseFromParent();
-  return true;
-}
-
 bool AMDGPUInstructionSelector::selectG_CONSTANT(MachineInstr &I) const {
   MachineBasicBlock *BB = I.getParent();
   MachineOperand &ImmOp = I.getOperand(1);
@@ -1478,7 +1435,7 @@ void AMDGPUInstructionSelector::getAddrModeInfo(const MachineInstr &Load,
 
   assert(PtrMI);
 
-  if (PtrMI->getOpcode() != TargetOpcode::G_GEP)
+  if (PtrMI->getOpcode() != TargetOpcode::G_PTR_ADD)
     return;
 
   GEPInfo GEPInfo(*PtrMI);
@@ -1710,8 +1667,8 @@ bool AMDGPUInstructionSelector::select(MachineInstr &I) {
     return selectG_MERGE_VALUES(I);
   case TargetOpcode::G_UNMERGE_VALUES:
     return selectG_UNMERGE_VALUES(I);
-  case TargetOpcode::G_GEP:
-    return selectG_GEP(I);
+  case TargetOpcode::G_PTR_ADD:
+    return selectG_PTR_ADD(I);
   case TargetOpcode::G_IMPLICIT_DEF:
     return selectG_IMPLICIT_DEF(I);
   case TargetOpcode::G_INSERT:
@@ -1748,9 +1705,6 @@ bool AMDGPUInstructionSelector::select(MachineInstr &I) {
   case TargetOpcode::G_ZEXT:
   case TargetOpcode::G_ANYEXT:
     return selectG_SZA_EXT(I);
-  case TargetOpcode::G_SITOFP:
-  case TargetOpcode::G_UITOFP:
-    return selectG_SITOFP_UITOFP(I);
   case TargetOpcode::G_BRCOND:
     return selectG_BRCOND(I);
   case TargetOpcode::G_FRAME_INDEX:
@@ -1961,7 +1915,7 @@ AMDGPUInstructionSelector::selectFlatOffsetImpl(MachineOperand &Root) const {
     return Default;
 
   const MachineInstr *OpDef = MRI->getVRegDef(Root.getReg());
-  if (!OpDef || OpDef->getOpcode() != AMDGPU::G_GEP)
+  if (!OpDef || OpDef->getOpcode() != AMDGPU::G_PTR_ADD)
     return Default;
 
   Optional<int64_t> Offset =

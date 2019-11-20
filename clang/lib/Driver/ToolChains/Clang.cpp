@@ -302,6 +302,96 @@ static void ParseMPreferVectorWidth(const Driver &D, const ArgList &Args,
   }
 }
 
+static void getWebAssemblyTargetFeatures(const ArgList &Args,
+                                         std::vector<StringRef> &Features) {
+  handleTargetFeaturesGroup(Args, Features, options::OPT_m_wasm_Features_Group);
+}
+
+static void getTargetFeatures(const ToolChain &TC, const llvm::Triple &Triple,
+                              const ArgList &Args, ArgStringList &CmdArgs,
+                              bool ForAS) {
+  const Driver &D = TC.getDriver();
+  std::vector<StringRef> Features;
+  switch (Triple.getArch()) {
+  default:
+    break;
+  case llvm::Triple::mips:
+  case llvm::Triple::mipsel:
+  case llvm::Triple::mips64:
+  case llvm::Triple::mips64el:
+    mips::getMIPSTargetFeatures(D, Triple, Args, Features);
+    break;
+
+  case llvm::Triple::arm:
+  case llvm::Triple::armeb:
+  case llvm::Triple::thumb:
+  case llvm::Triple::thumbeb:
+    arm::getARMTargetFeatures(TC, Triple, Args, CmdArgs, Features, ForAS);
+    break;
+
+  case llvm::Triple::ppc:
+  case llvm::Triple::ppc64:
+  case llvm::Triple::ppc64le:
+    ppc::getPPCTargetFeatures(D, Triple, Args, Features);
+    break;
+  case llvm::Triple::riscv32:
+  case llvm::Triple::riscv64:
+    riscv::getRISCVTargetFeatures(D, Triple, Args, Features);
+    break;
+  case llvm::Triple::systemz:
+    systemz::getSystemZTargetFeatures(Args, Features);
+    break;
+  case llvm::Triple::aarch64:
+  case llvm::Triple::aarch64_32:
+  case llvm::Triple::aarch64_be:
+    aarch64::getAArch64TargetFeatures(D, Triple, Args, Features);
+    break;
+  case llvm::Triple::x86:
+  case llvm::Triple::x86_64:
+    x86::getX86TargetFeatures(D, Triple, Args, Features);
+    break;
+  case llvm::Triple::hexagon:
+    hexagon::getHexagonTargetFeatures(D, Args, Features);
+    break;
+  case llvm::Triple::wasm32:
+  case llvm::Triple::wasm64:
+    getWebAssemblyTargetFeatures(Args, Features);
+    break;
+  case llvm::Triple::sparc:
+  case llvm::Triple::sparcel:
+  case llvm::Triple::sparcv9:
+    sparc::getSparcTargetFeatures(D, Args, Features);
+    break;
+  case llvm::Triple::r600:
+  case llvm::Triple::amdgcn:
+    amdgpu::getAMDGPUTargetFeatures(D, Args, Features);
+    break;
+  case llvm::Triple::msp430:
+    msp430::getMSP430TargetFeatures(D, Args, Features);
+  }
+
+  // Find the last of each feature.
+  llvm::StringMap<unsigned> LastOpt;
+  for (unsigned I = 0, N = Features.size(); I < N; ++I) {
+    StringRef Name = Features[I];
+    assert(Name[0] == '-' || Name[0] == '+');
+    LastOpt[Name.drop_front(1)] = I;
+  }
+
+  for (unsigned I = 0, N = Features.size(); I < N; ++I) {
+    // If this feature was overridden, ignore it.
+    StringRef Name = Features[I];
+    llvm::StringMap<unsigned>::iterator LastI = LastOpt.find(Name.drop_front(1));
+    assert(LastI != LastOpt.end());
+    unsigned Last = LastI->second;
+    if (Last != I)
+      continue;
+
+    CmdArgs.push_back("-target-feature");
+    CmdArgs.push_back(Name.data());
+  }
+}
+
 static bool
 shouldUseExceptionTablesForObjCExceptions(const ObjCRuntime &runtime,
                                           const llvm::Triple &Triple) {
@@ -378,15 +468,20 @@ static void addExceptionArgs(const ArgList &Args, types::ID InputType,
     CmdArgs.push_back("-fexceptions");
 }
 
-static bool ShouldDisableAutolink(const ArgList &Args, const ToolChain &TC) {
+static bool ShouldEnableAutolink(const ArgList &Args, const ToolChain &TC,
+                                 const JobAction &JA) {
   bool Default = true;
   if (TC.getTriple().isOSDarwin()) {
     // The native darwin assembler doesn't support the linker_option directives,
     // so we disable them if we think the .s file will be passed to it.
     Default = TC.useIntegratedAs();
   }
-  return !Args.hasFlag(options::OPT_fautolink, options::OPT_fno_autolink,
-                       Default);
+  // The linker_option directives are intended for host compilation.
+  if (JA.isDeviceOffloading(Action::OFK_Cuda) ||
+      JA.isDeviceOffloading(Action::OFK_HIP))
+    Default = false;
+  return Args.hasFlag(options::OPT_fautolink, options::OPT_fno_autolink,
+                      Default);
 }
 
 static bool ShouldDisableDwarfDirectory(const ArgList &Args,
@@ -1257,6 +1352,7 @@ static bool isSignedCharDefault(const llvm::Triple &Triple) {
     return true;
 
   case llvm::Triple::aarch64:
+  case llvm::Triple::aarch64_32:
   case llvm::Triple::aarch64_be:
   case llvm::Triple::arm:
   case llvm::Triple::armeb:
@@ -1379,6 +1475,7 @@ void Clang::RenderTargetOptions(const llvm::Triple &EffectiveTriple,
     break;
 
   case llvm::Triple::aarch64:
+  case llvm::Triple::aarch64_32:
   case llvm::Triple::aarch64_be:
     AddAArch64TargetArgs(Args, CmdArgs);
     CmdArgs.push_back("-fallow-half-arguments-and-returns");
@@ -1430,56 +1527,6 @@ void Clang::RenderTargetOptions(const llvm::Triple &EffectiveTriple,
     AddWebAssemblyTargetArgs(Args, CmdArgs);
     break;
   }
-}
-
-// Parse -mbranch-protection=<protection>[+<protection>]* where
-//   <protection> ::= standard | none | [bti,pac-ret[+b-key,+leaf]*]
-// Returns a triple of (return address signing Scope, signing key, require
-// landing pads)
-static std::tuple<StringRef, StringRef, bool>
-ParseAArch64BranchProtection(const Driver &D, const ArgList &Args,
-                             const Arg *A) {
-  StringRef Scope = "none";
-  StringRef Key = "a_key";
-  bool IndirectBranches = false;
-
-  StringRef Value = A->getValue();
-  // This maps onto -mbranch-protection=<scope>+<key>
-
-  if (Value.equals("standard")) {
-    Scope = "non-leaf";
-    Key = "a_key";
-    IndirectBranches = true;
-
-  } else if (!Value.equals("none")) {
-    SmallVector<StringRef, 4> BranchProtection;
-    StringRef(A->getValue()).split(BranchProtection, '+');
-
-    auto Protection = BranchProtection.begin();
-    while (Protection != BranchProtection.end()) {
-      if (Protection->equals("bti"))
-        IndirectBranches = true;
-      else if (Protection->equals("pac-ret")) {
-        Scope = "non-leaf";
-        while (++Protection != BranchProtection.end()) {
-          // Inner loop as "leaf" and "b-key" options must only appear attached
-          // to pac-ret.
-          if (Protection->equals("leaf"))
-            Scope = "all";
-          else if (Protection->equals("b-key"))
-            Key = "b_key";
-          else
-            break;
-        }
-        Protection--;
-      } else
-        D.Diag(diag::err_invalid_branch_protection)
-            << *Protection << A->getAsString(Args);
-      Protection++;
-    }
-  }
-
-  return std::make_tuple(Scope, Key, IndirectBranches);
 }
 
 namespace {
@@ -1553,9 +1600,16 @@ void Clang::AddAArch64TargetArgs(const ArgList &Args,
             << Scope << A->getAsString(Args);
       Key = "a_key";
       IndirectBranches = false;
-    } else
-      std::tie(Scope, Key, IndirectBranches) =
-          ParseAArch64BranchProtection(D, Args, A);
+    } else {
+      StringRef Err;
+      llvm::AArch64::ParsedBranchProtection PBP;
+      if (!llvm::AArch64::parseBranchProtection(A->getValue(), PBP, Err))
+        D.Diag(diag::err_invalid_branch_protection)
+            << Err << A->getAsString(Args);
+      Scope = PBP.Scope;
+      Key = PBP.Key;
+      IndirectBranches = PBP.BranchTargetEnforcement;
+    }
 
     CmdArgs.push_back(
         Args.MakeArgString(Twine("-msign-return-address=") + Scope));
@@ -3145,7 +3199,6 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
   // This avoids having to monkey around further in cc1 other than to disable
   // codeview if not running in a Windows environment. Perhaps even that
   // decision should be made in the driver as well though.
-  unsigned DWARFVersion = 0;
   llvm::DebuggerKind DebuggerTuning = TC.getDefaultDebuggerTuning();
 
   bool SplitDWARFInlining =
@@ -3198,11 +3251,16 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
   }
 
   // If a -gdwarf argument appeared, remember it.
-  if (const Arg *A =
-          Args.getLastArg(options::OPT_gdwarf_2, options::OPT_gdwarf_3,
-                          options::OPT_gdwarf_4, options::OPT_gdwarf_5))
-    if (checkDebugInfoOption(A, Args, D, TC))
-      DWARFVersion = DwarfVersionNum(A->getSpelling());
+  const Arg *GDwarfN = Args.getLastArg(
+      options::OPT_gdwarf_2, options::OPT_gdwarf_3, options::OPT_gdwarf_4,
+      options::OPT_gdwarf_5, options::OPT_gdwarf);
+  bool EmitDwarf = false;
+  if (GDwarfN) {
+    if (checkDebugInfoOption(GDwarfN, Args, D, TC))
+      EmitDwarf = true;
+    else
+      GDwarfN = nullptr;
+  }
 
   if (const Arg *A = Args.getLastArg(options::OPT_gcodeview)) {
     if (checkDebugInfoOption(A, Args, D, TC))
@@ -3211,16 +3269,34 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
 
   // If the user asked for debug info but did not explicitly specify -gcodeview
   // or -gdwarf, ask the toolchain for the default format.
-  if (!EmitCodeView && DWARFVersion == 0 &&
+  if (!EmitCodeView && !EmitDwarf &&
       DebugInfoKind != codegenoptions::NoDebugInfo) {
     switch (TC.getDefaultDebugFormat()) {
     case codegenoptions::DIF_CodeView:
       EmitCodeView = true;
       break;
     case codegenoptions::DIF_DWARF:
-      DWARFVersion = TC.GetDefaultDwarfVersion();
+      EmitDwarf = true;
       break;
     }
+  }
+
+  unsigned DWARFVersion = 0;
+  unsigned DefaultDWARFVersion = ParseDebugDefaultVersion(TC, Args);
+  if (EmitDwarf) {
+    // Start with the platform default DWARF version
+    DWARFVersion = TC.GetDefaultDwarfVersion();
+    assert(DWARFVersion && "toolchain default DWARF version must be nonzero");
+
+    // If the user specified a default DWARF version, that takes precedence
+    // over the platform default.
+    if (DefaultDWARFVersion)
+      DWARFVersion = DefaultDWARFVersion;
+
+    // Override with a user-specified DWARF version
+    if (GDwarfN)
+      if (auto ExplicitVersion = DwarfVersionNum(GDwarfN->getSpelling()))
+        DWARFVersion = ExplicitVersion;
   }
 
   // -gline-directives-only supported only for the DWARF debug info.
@@ -3296,6 +3372,12 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
     }
   }
 
+  // Omit inline line tables if requested.
+  if (Args.hasFlag(options::OPT_gno_inline_line_tables,
+                   options::OPT_ginline_line_tables, false)) {
+    CmdArgs.push_back("-gno-inline-line-tables");
+  }
+
   // Adjust the debug info kind for the given toolchain.
   TC.adjustDebugInfoKind(DebugInfoKind, Args);
 
@@ -3338,6 +3420,10 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
     CmdArgs.push_back("-mllvm");
     CmdArgs.push_back("-generate-arange-section");
   }
+
+  if (Args.hasFlag(options::OPT_fforce_dwarf_frame,
+                   options::OPT_fno_force_dwarf_frame, false))
+    CmdArgs.push_back("-fforce-dwarf-frame");
 
   if (Args.hasFlag(options::OPT_fdebug_types_section,
                    options::OPT_fno_debug_types_section, false)) {
@@ -3641,6 +3727,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     Args.AddLastArg(CmdArgs, options::OPT_fthinlto_index_EQ);
   }
 
+  if (Args.getLastArg(options::OPT_fthin_link_bitcode_EQ))
+    Args.AddLastArg(CmdArgs, options::OPT_fthin_link_bitcode_EQ);
+
   if (Args.getLastArg(options::OPT_save_temps_EQ))
     Args.AddLastArg(CmdArgs, options::OPT_save_temps_EQ);
 
@@ -3718,6 +3807,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       RenderARMABI(Triple, Args, CmdArgs);
       break;
     case llvm::Triple::aarch64:
+    case llvm::Triple::aarch64_32:
     case llvm::Triple::aarch64_be:
       RenderAArch64ABI(Triple, Args, CmdArgs);
       break;
@@ -4362,7 +4452,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (ShouldDisableDwarfDirectory(Args, TC))
     CmdArgs.push_back("-fno-dwarf-directory-asm");
 
-  if (ShouldDisableAutolink(Args, TC))
+  if (!ShouldEnableAutolink(Args, TC, JA))
     CmdArgs.push_back("-fno-autolink");
 
   // Add in -fdebug-compilation-dir if necessary.
@@ -4590,6 +4680,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   if (TC.SupportsProfiling())
     Args.AddLastArg(CmdArgs, options::OPT_mfentry);
+
+  if (TC.SupportsProfiling())
+    Args.AddLastArg(CmdArgs, options::OPT_mnop_mcount);
 
   if (Args.getLastArg(options::OPT_fapple_kext) ||
       (Args.hasArg(options::OPT_mkernel) && types::isCXX(InputType)))
@@ -5134,6 +5227,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     if (A) {
       CmdArgs.push_back(A->getValue());
     } else {
+      bool hasMultipleArchs =
+          Triple.isOSDarwin() && // Only supported on Darwin platforms.
+          Args.getAllArgValues(options::OPT_arch).size() > 1;
       SmallString<128> F;
 
       if (Args.hasArg(options::OPT_c) || Args.hasArg(options::OPT_S)) {
@@ -5156,6 +5252,22 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
           F += "-";
           F += JA.getOffloadingArch();
         }
+      }
+
+      // If we're having more than one "-arch", we should name the files
+      // differently so that every cc1 invocation writes to a different file.
+      // We're doing that by appending "-<arch>" with "<arch>" being the arch
+      // name from the triple.
+      if (hasMultipleArchs) {
+        // First, remember the extension.
+        SmallString<64> OldExtension = llvm::sys::path::extension(F);
+        // then, remove it.
+        llvm::sys::path::replace_extension(F, "");
+        // attach -<arch> to it.
+        F += "-";
+        F += Triple.getArchName();
+        // put back the extension.
+        llvm::sys::path::replace_extension(F, OldExtension);
       }
 
       std::string Extension = "opt.";
@@ -5340,6 +5452,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back("-fcuda-short-ptr");
   }
 
+  if (IsHIP)
+    CmdArgs.push_back("-fcuda-allow-variadic-functions");
+
   // OpenMP offloading device jobs take the argument -fopenmp-host-ir-file-path
   // to specify the result of the compile phase on the host, so the meaningful
   // device declarations can be identified. Also, -fopenmp-is-device is passed
@@ -5404,7 +5519,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-fwhole-program-vtables");
   }
 
-  bool DefaultsSplitLTOUnit = WholeProgramVTables || Sanitize.needsLTO();
+  bool DefaultsSplitLTOUnit =
+      (WholeProgramVTables || Sanitize.needsLTO()) &&
+      (D.getLTOMode() == LTOK_Full || TC.canSplitThinLTOUnit());
   bool SplitLTOUnit =
       Args.hasFlag(options::OPT_fsplit_lto_unit,
                    options::OPT_fno_split_lto_unit, DefaultsSplitLTOUnit);
@@ -5476,11 +5593,12 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       // We only support -moutline in AArch64 right now. If we're not compiling
       // for AArch64, emit a warning and ignore the flag. Otherwise, add the
       // proper mllvm flags.
-      if (Triple.getArch() != llvm::Triple::aarch64) {
+      if (Triple.getArch() != llvm::Triple::aarch64 &&
+          Triple.getArch() != llvm::Triple::aarch64_32) {
         D.Diag(diag::warn_drv_moutline_unsupported_opt) << Triple.getArchName();
       } else {
-          CmdArgs.push_back("-mllvm");
-          CmdArgs.push_back("-enable-machine-outliner");
+        CmdArgs.push_back("-mllvm");
+        CmdArgs.push_back("-enable-machine-outliner");
       }
     } else {
       // Disable all outlining behaviour.
@@ -5976,26 +6094,19 @@ void Clang::AddClangCLArgs(const ArgList &Args, types::ID InputType,
   }
 
   if (Arg *A = Args.getLastArg(options::OPT__SLASH_guard)) {
-    SmallVector<StringRef, 1> SplitArgs;
-    StringRef(A->getValue()).split(SplitArgs, ",");
-    bool Instrument = false;
-    bool NoChecks = false;
-    for (StringRef Arg : SplitArgs) {
-      if (Arg.equals_lower("cf"))
-        Instrument = true;
-      else if (Arg.equals_lower("cf-"))
-        Instrument = false;
-      else if (Arg.equals_lower("nochecks"))
-        NoChecks = true;
-      else if (Arg.equals_lower("nochecks-"))
-        NoChecks = false;
-      else
-        D.Diag(diag::err_drv_invalid_value) << A->getSpelling() << Arg;
-    }
-    // Currently there's no support emitting CFG instrumentation; the flag only
-    // emits the table of address-taken functions.
-    if (Instrument || NoChecks)
+    StringRef GuardArgs = A->getValue();
+    // The only valid options are "cf", "cf,nochecks", and "cf-".
+    if (GuardArgs.equals_lower("cf")) {
+      // Emit CFG instrumentation and the table of address-taken functions.
       CmdArgs.push_back("-cfguard");
+    } else if (GuardArgs.equals_lower("cf,nochecks")) {
+      // Emit only the table of address-taken functions.
+      CmdArgs.push_back("-cfguard-no-checks");
+    } else if (GuardArgs.equals_lower("cf-")) {
+      // Do nothing, but we might want to emit a security warning in future.
+    } else {
+      D.Diag(diag::err_drv_invalid_value) << A->getSpelling() << GuardArgs;
+    }
   }
 }
 
@@ -6143,6 +6254,11 @@ void ClangAs::ConstructJob(Compilation &C, const JobAction &JA,
     if (WantDebug)
       DwarfVersion = DwarfVersionNum(A->getSpelling());
   }
+
+  unsigned DefaultDwarfVersion = ParseDebugDefaultVersion(getToolChain(), Args);
+  if (DwarfVersion == 0)
+    DwarfVersion = DefaultDwarfVersion;
+
   if (DwarfVersion == 0)
     DwarfVersion = getToolChain().GetDefaultDwarfVersion();
 

@@ -1332,8 +1332,11 @@ void TargetLoweringBase::computeRegisterProperties(
       MVT IntermediateVT;
       MVT RegisterVT;
       unsigned NumIntermediates;
-      NumRegistersForVT[i] = getVectorTypeBreakdownMVT(VT, IntermediateVT,
+      unsigned NumRegisters = getVectorTypeBreakdownMVT(VT, IntermediateVT,
           NumIntermediates, RegisterVT, this);
+      NumRegistersForVT[i] = NumRegisters;
+      assert(NumRegistersForVT[i] == NumRegisters &&
+             "NumRegistersForVT size cannot represent NumRegisters!");
       RegisterTypeForVT[i] = RegisterVT;
 
       MVT NVT = VT.getPow2VectorType();
@@ -1454,6 +1457,28 @@ unsigned TargetLoweringBase::getVectorTypeBreakdown(LLVMContext &Context, EVT VT
   // Otherwise, promotion or legal types use the same number of registers as
   // the vector decimated to the appropriate level.
   return NumVectorRegs;
+}
+
+bool TargetLoweringBase::isSuitableForJumpTable(const SwitchInst *SI,
+                                                uint64_t NumCases,
+                                                uint64_t Range,
+                                                ProfileSummaryInfo *PSI,
+                                                BlockFrequencyInfo *BFI) const {
+  // FIXME: This function check the maximum table size and density, but the
+  // minimum size is not checked. It would be nice if the minimum size is
+  // also combined within this function. Currently, the minimum size check is
+  // performed in findJumpTable() in SelectionDAGBuiler and
+  // getEstimatedNumberOfCaseClusters() in BasicTTIImpl.
+  const bool OptForSize =
+      SI->getParent()->getParent()->hasOptSize() ||
+      llvm::shouldOptimizeForSize(SI->getParent(), PSI, BFI);
+  const unsigned MinDensity = getMinimumJumpTableDensity(OptForSize);
+  const unsigned MaxJumpTableSize = getMaximumJumpTableSize();
+
+  // Check whether the number of cases is small enough and
+  // the range is dense enough for a jump table.
+  return (OptForSize || Range <= MaxJumpTableSize) &&
+         (NumCases * 100 >= Range * MinDensity);
 }
 
 /// Get the EVTs and ArgFlags collections that represent the legalized return
@@ -1641,6 +1666,7 @@ int TargetLoweringBase::InstructionOpcodeToISD(unsigned Opcode) const {
   case ExtractValue:   return ISD::MERGE_VALUES;
   case InsertValue:    return ISD::MERGE_VALUES;
   case LandingPad:     return 0;
+  case Freeze:         return 0;
   }
 
   llvm_unreachable("Unknown instruction type encountered!");

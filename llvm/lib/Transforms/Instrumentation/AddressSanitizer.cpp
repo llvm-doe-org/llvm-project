@@ -59,6 +59,7 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Use.h"
 #include "llvm/IR/Value.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/MC/MCSectionMachO.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Casting.h"
@@ -1808,6 +1809,8 @@ bool ModuleAddressSanitizer::ShouldInstrumentGlobal(GlobalVariable *G) {
   if (GlobalsMD.get(G).IsBlacklisted) return false;
   if (!Ty->isSized()) return false;
   if (!G->hasInitializer()) return false;
+  // Only instrument globals of default address spaces
+  if (G->getAddressSpace()) return false;
   if (GlobalWasGeneratedByCompiler(G)) return false; // Our own globals.
   // Two problems with thread-locals:
   //   - The address of the main thread's copy can't be computed at link-time.

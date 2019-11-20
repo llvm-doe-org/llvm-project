@@ -2317,6 +2317,11 @@ void ASTStmtReader::VisitOMPParallelMasterTaskLoopDirective(
   VisitOMPLoopDirective(D);
 }
 
+void ASTStmtReader::VisitOMPParallelMasterTaskLoopSimdDirective(
+    OMPParallelMasterTaskLoopSimdDirective *D) {
+  VisitOMPLoopDirective(D);
+}
+
 void ASTStmtReader::VisitOMPDistributeDirective(OMPDistributeDirective *D) {
   VisitOMPLoopDirective(D);
 }
@@ -3184,6 +3189,14 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       unsigned CollapsedNum = Record[ASTStmtReader::NumStmtFields + 1];
       S = OMPParallelMasterTaskLoopDirective::CreateEmpty(Context, NumClauses,
                                                           CollapsedNum, Empty);
+      break;
+    }
+
+    case STMT_OMP_PARALLEL_MASTER_TASKLOOP_SIMD_DIRECTIVE: {
+      unsigned NumClauses = Record[ASTStmtReader::NumStmtFields];
+      unsigned CollapsedNum = Record[ASTStmtReader::NumStmtFields + 1];
+      S = OMPParallelMasterTaskLoopSimdDirective::CreateEmpty(
+          Context, NumClauses, CollapsedNum, Empty);
       break;
     }
 

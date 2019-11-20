@@ -2993,28 +2993,6 @@ struct GNUCompatibleParamWarning {
 
 } // end anonymous namespace
 
-/// getSpecialMember - get the special member enum for a method.
-Sema::CXXSpecialMember Sema::getSpecialMember(const CXXMethodDecl *MD) {
-  if (const CXXConstructorDecl *Ctor = dyn_cast<CXXConstructorDecl>(MD)) {
-    if (Ctor->isDefaultConstructor())
-      return Sema::CXXDefaultConstructor;
-
-    if (Ctor->isCopyConstructor())
-      return Sema::CXXCopyConstructor;
-
-    if (Ctor->isMoveConstructor())
-      return Sema::CXXMoveConstructor;
-  } else if (isa<CXXDestructorDecl>(MD)) {
-    return Sema::CXXDestructor;
-  } else if (MD->isCopyAssignmentOperator()) {
-    return Sema::CXXCopyAssignment;
-  } else if (MD->isMoveAssignmentOperator()) {
-    return Sema::CXXMoveAssignment;
-  }
-
-  return Sema::CXXInvalid;
-}
-
 // Determine whether the previous declaration was a definition, implicit
 // declaration, or a declaration.
 template <typename T>
@@ -7031,6 +7009,8 @@ NamedDecl *Sema::ActOnVariableDeclarator(
           Diag(E->getExprLoc(), diag::err_asm_invalid_global_var_reg) << Label;
         else if (HasSizeMismatch)
           Diag(E->getExprLoc(), diag::err_asm_register_size_mismatch) << Label;
+        else if (!TI.isRegisterReservedGlobally(Label))
+          Diag(E->getExprLoc(), diag::err_asm_missing_fixed_reg_opt) << Label;
       }
 
       if (!R->isIntegralType(Context) && !R->isPointerType()) {
@@ -9551,6 +9531,29 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
       NewFD->dropAttr<AvailabilityAttr>();
     }
   }
+
+  // Diagnose no_builtin attribute on function declaration that are not a
+  // definition.
+  // FIXME: We should really be doing this in
+  // SemaDeclAttr.cpp::handleNoBuiltinAttr, unfortunately we only have access to
+  // the FunctionDecl and at this point of the code
+  // FunctionDecl::isThisDeclarationADefinition() which always returns `false`
+  // because Sema::ActOnStartOfFunctionDef has not been called yet.
+  if (const auto *NBA = NewFD->getAttr<NoBuiltinAttr>())
+    switch (D.getFunctionDefinitionKind()) {
+    case FDK_Defaulted:
+    case FDK_Deleted:
+      Diag(NBA->getLocation(),
+           diag::err_attribute_no_builtin_on_defaulted_deleted_function)
+          << NBA->getSpelling();
+      break;
+    case FDK_Declaration:
+      Diag(NBA->getLocation(), diag::err_attribute_no_builtin_on_non_definition)
+          << NBA->getSpelling();
+      break;
+    case FDK_Definition:
+      break;
+    }
 
   return NewFD;
 }

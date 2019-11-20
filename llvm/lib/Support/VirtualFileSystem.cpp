@@ -894,7 +894,7 @@ class InMemoryDirIterator : public llvm::vfs::detail::DirIterImpl {
     if (I != E) {
       SmallString<256> Path(RequestedDirName);
       llvm::sys::path::append(Path, I->second->getFileName());
-      sys::fs::file_type Type;
+      sys::fs::file_type Type = sys::fs::file_type::type_unknown;
       switch (I->second->getKind()) {
       case detail::IME_File:
       case detail::IME_HardLink:
@@ -1671,9 +1671,7 @@ RedirectingFileSystem::lookupPath(sys::path::const_iterator Start,
 
   // Forward the search to the next component in case this is an empty one.
   if (!FromName.empty()) {
-    if (CaseSensitive ? !Start->equals(FromName)
-                      : !Start->equals_lower(FromName))
-      // failure to match
+    if (!pathComponentMatches(*Start, FromName))
       return make_error_code(llvm::errc::no_such_file_or_directory);
 
     ++Start;
@@ -1695,6 +1693,7 @@ RedirectingFileSystem::lookupPath(sys::path::const_iterator Start,
     if (Result || Result.getError() != llvm::errc::no_such_file_or_directory)
       return Result;
   }
+
   return make_error_code(llvm::errc::no_such_file_or_directory);
 }
 
@@ -2073,7 +2072,7 @@ std::error_code VFSFromYamlDirIterImpl::incrementContent(bool IsFirstTime) {
   while (Current != End) {
     SmallString<128> PathStr(Dir);
     llvm::sys::path::append(PathStr, (*Current)->getName());
-    sys::fs::file_type Type;
+    sys::fs::file_type Type = sys::fs::file_type::type_unknown;
     switch ((*Current)->getKind()) {
     case RedirectingFileSystem::EK_Directory:
       Type = sys::fs::file_type::directory_file;

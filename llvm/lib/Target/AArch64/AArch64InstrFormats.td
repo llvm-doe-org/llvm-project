@@ -758,6 +758,13 @@ def imm0_7 : Operand<i64>, ImmLeaf<i64, [{
   let ParserMatchClass = Imm0_7Operand;
 }
 
+// imm32_0_7 predicate - True if the 32-bit immediate is in the range [0,7]
+def imm32_0_7 : Operand<i32>, ImmLeaf<i32, [{
+  return ((uint32_t)Imm) < 8;
+}]> {
+  let ParserMatchClass = Imm0_7Operand;
+}
+
 // imm32_0_15 predicate - True if the 32-bit immediate is in the range [0,15]
 def imm32_0_15 : Operand<i32>, ImmLeaf<i32, [{
   return ((uint32_t)Imm) < 16;
@@ -1427,6 +1434,7 @@ class AuthOneOperand<bits<3> opc, bits<1> M, string asm>
   let Inst{9-5} = Rn;
 }
 
+let Uses = [LR,SP] in
 class AuthReturn<bits<3> op, bits<1> M, string asm>
   : AuthBase<M, (outs), (ins), asm, "", []> {
   let Inst{24} = 0;
@@ -1463,6 +1471,9 @@ multiclass AuthLoad<bit M, string asm, Operand opr> {
 
   def : InstAlias<asm # "\t$Rt, [$Rn]",
                   (!cast<Instruction>(NAME # "indexed") GPR64:$Rt, GPR64sp:$Rn, 0)>;
+
+  def : InstAlias<asm # "\t$Rt, [$wback]!",
+                  (!cast<Instruction>(NAME # "writeback") GPR64sp:$wback, GPR64:$Rt, 0)>;
 }
 
 //---
@@ -5064,6 +5075,24 @@ multiclass SIMDThreeSameVector<bit U, bits<5> opc, string asm,
   def v2i64 : BaseSIMDThreeSameVector<1, U, 0b111, opc, V128,
                                       asm, ".2d",
          [(set (v2i64 V128:$Rd), (OpNode (v2i64 V128:$Rn), (v2i64 V128:$Rm)))]>;
+}
+
+multiclass SIMDThreeSameVectorExtraPatterns<string inst, SDPatternOperator OpNode> {
+  def : Pat<(v8i8 (OpNode V64:$LHS, V64:$RHS)),
+          (!cast<Instruction>(inst#"v8i8") V64:$LHS, V64:$RHS)>;
+  def : Pat<(v4i16 (OpNode V64:$LHS, V64:$RHS)),
+          (!cast<Instruction>(inst#"v4i16") V64:$LHS, V64:$RHS)>;
+  def : Pat<(v2i32 (OpNode V64:$LHS, V64:$RHS)),
+          (!cast<Instruction>(inst#"v2i32") V64:$LHS, V64:$RHS)>;
+
+  def : Pat<(v16i8 (OpNode V128:$LHS, V128:$RHS)),
+          (!cast<Instruction>(inst#"v16i8") V128:$LHS, V128:$RHS)>;
+  def : Pat<(v8i16 (OpNode V128:$LHS, V128:$RHS)),
+          (!cast<Instruction>(inst#"v8i16") V128:$LHS, V128:$RHS)>;
+  def : Pat<(v4i32 (OpNode V128:$LHS, V128:$RHS)),
+          (!cast<Instruction>(inst#"v4i32") V128:$LHS, V128:$RHS)>;
+  def : Pat<(v2i64 (OpNode V128:$LHS, V128:$RHS)),
+          (!cast<Instruction>(inst#"v2i64") V128:$LHS, V128:$RHS)>;
 }
 
 // As above, but D sized elements unsupported.
@@ -10034,15 +10063,20 @@ class ComplexRotationOperand<int Angle, int Remainder, string Type>
   let DiagnosticType = "InvalidComplexRotation" # Type;
   let Name = "ComplexRotation" # Type;
 }
-def complexrotateop : Operand<i32> {
+def complexrotateop : Operand<i32>, ImmLeaf<i32, [{ return Imm >= 0 && Imm <= 270;  }],
+                                                 SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant((N->getSExtValue() / 90), SDLoc(N), MVT::i32);
+}]>> {
   let ParserMatchClass = ComplexRotationOperand<90, 0, "Even">;
   let PrintMethod = "printComplexRotationOp<90, 0>";
 }
-def complexrotateopodd : Operand<i32> {
+def complexrotateopodd : Operand<i32>, ImmLeaf<i32, [{ return Imm >= 0 && Imm <= 270;  }],
+                                                 SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(((N->getSExtValue() - 90) / 180), SDLoc(N), MVT::i32);
+}]>> {
   let ParserMatchClass = ComplexRotationOperand<180, 90, "Odd">;
   let PrintMethod = "printComplexRotationOp<180, 90>";
 }
-
 let mayLoad = 0, mayStore = 0, hasSideEffects = 0 in
 class BaseSIMDThreeSameVectorComplex<bit Q, bit U, bits<2> size, bits<3> opcode,
                                      RegisterOperand regtype, Operand rottype,

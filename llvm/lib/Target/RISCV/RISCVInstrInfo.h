@@ -34,7 +34,7 @@ public:
                               int &FrameIndex) const override;
 
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
-                   const DebugLoc &DL, unsigned DstReg, unsigned SrcReg,
+                   const DebugLoc &DL, MCRegister DstReg, MCRegister SrcReg,
                    bool KillSrc) const override;
 
   void storeRegToStackSlot(MachineBasicBlock &MBB,
@@ -85,6 +85,14 @@ public:
 
   bool verifyInstruction(const MachineInstr &MI,
                          StringRef &ErrInfo) const override;
+
+  bool getMemOperandWithOffsetWidth(const MachineInstr &LdSt,
+                                    const MachineOperand *&BaseOp,
+                                    int64_t &Offset, unsigned &Width,
+                                    const TargetRegisterInfo *TRI) const;
+
+  bool areMemAccessesTriviallyDisjoint(const MachineInstr &MIa,
+                                       const MachineInstr &MIb) const override;
 
 protected:
   const RISCVSubtarget &STI;

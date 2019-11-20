@@ -255,6 +255,21 @@ public:
     return DefaultConstrainedRounding;
   }
 
+  void setConstrainedFPFunctionAttr() {
+    assert(BB && "Must have a basic block to set any function attributes!");
+
+    Function *F = BB->getParent();
+    if (!F->hasFnAttribute(Attribute::StrictFP)) {
+      F->addFnAttr(Attribute::StrictFP);
+    }
+  }
+
+  void setConstrainedFPCallAttr(CallInst *I) {
+    if (!I->hasFnAttr(Attribute::StrictFP))
+      I->addAttribute(AttributeList::FunctionIndex, Attribute::StrictFP);
+    setConstrainedFPFunctionAttr();
+  }
+
   //===--------------------------------------------------------------------===//
   // RAII helpers.
   //===--------------------------------------------------------------------===//
@@ -1479,6 +1494,7 @@ public:
 
     CallInst *C = CreateIntrinsic(ID, {L->getType()},
                                   {L, R, RoundingV, ExceptV}, nullptr, Name);
+    setConstrainedFPCallAttr(C);
     setFPAttrs(C, FPMathTag, UseFMF);
     return C;
   }
@@ -2084,6 +2100,8 @@ public:
                           Name);
       break;
     }
+    setConstrainedFPCallAttr(C);
+
     if (isa<FPMathOperator>(C))
       setFPAttrs(C, FPMathTag, UseFMF);
     return C;
@@ -2240,6 +2258,8 @@ public:
                        ArrayRef<Value *> Args = None, const Twine &Name = "",
                        MDNode *FPMathTag = nullptr) {
     CallInst *CI = CallInst::Create(FTy, Callee, Args, DefaultOperandBundles);
+    if (IsFPConstrained)
+      setConstrainedFPCallAttr(CI);
     if (isa<FPMathOperator>(CI))
       setFPAttrs(CI, FPMathTag, FMF);
     return Insert(CI, Name);
@@ -2249,6 +2269,8 @@ public:
                        ArrayRef<OperandBundleDef> OpBundles,
                        const Twine &Name = "", MDNode *FPMathTag = nullptr) {
     CallInst *CI = CallInst::Create(FTy, Callee, Args, OpBundles);
+    if (IsFPConstrained)
+      setConstrainedFPCallAttr(CI);
     if (isa<FPMathOperator>(CI))
       setFPAttrs(CI, FPMathTag, FMF);
     return Insert(CI, Name);
@@ -2368,6 +2390,10 @@ public:
   LandingPadInst *CreateLandingPad(Type *Ty, unsigned NumClauses,
                                    const Twine &Name = "") {
     return Insert(LandingPadInst::Create(Ty, NumClauses), Name);
+  }
+
+  Value *CreateFreeze(Value *V, const Twine &Name = "") {
+    return Insert(new FreezeInst(V), Name);
   }
 
   //===--------------------------------------------------------------------===//
@@ -2499,8 +2525,9 @@ public:
     return V;
   }
 
-  Value *CreatePreserveArrayAccessIndex(Value *Base, unsigned Dimension,
-                                        unsigned LastIndex, MDNode *DbgInfo) {
+  Value *CreatePreserveArrayAccessIndex(Type *ElTy, Value *Base,
+                                        unsigned Dimension, unsigned LastIndex,
+                                        MDNode *DbgInfo) {
     assert(isa<PointerType>(Base->getType()) &&
            "Invalid Base ptr type for preserve.array.access.index.");
     auto *BaseType = Base->getType();
@@ -2513,7 +2540,7 @@ public:
     IdxList.push_back(LastIndexV);
 
     Type *ResultType =
-        GetElementPtrInst::getGEPReturnType(Base, IdxList);
+        GetElementPtrInst::getGEPReturnType(ElTy, Base, IdxList);
 
     Module *M = BB->getParent()->getParent();
     Function *FnPreserveArrayAccessIndex = Intrinsic::getDeclaration(
@@ -2547,8 +2574,9 @@ public:
     return Fn;
   }
 
-  Value *CreatePreserveStructAccessIndex(Value *Base, unsigned Index,
-                                         unsigned FieldIndex, MDNode *DbgInfo) {
+  Value *CreatePreserveStructAccessIndex(Type *ElTy, Value *Base,
+                                         unsigned Index, unsigned FieldIndex,
+                                         MDNode *DbgInfo) {
     assert(isa<PointerType>(Base->getType()) &&
            "Invalid Base ptr type for preserve.struct.access.index.");
     auto *BaseType = Base->getType();
@@ -2556,7 +2584,7 @@ public:
     Value *GEPIndex = getInt32(Index);
     Constant *Zero = ConstantInt::get(Type::getInt32Ty(Context), 0);
     Type *ResultType =
-        GetElementPtrInst::getGEPReturnType(Base, {Zero, GEPIndex});
+        GetElementPtrInst::getGEPReturnType(ElTy, Base, {Zero, GEPIndex});
 
     Module *M = BB->getParent()->getParent();
     Function *FnPreserveStructAccessIndex = Intrinsic::getDeclaration(

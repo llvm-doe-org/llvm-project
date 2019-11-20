@@ -124,7 +124,11 @@ Output path for the plist report
 
 .. option:: -cfguard
 
-Emit tables required for Windows Control Flow Guard.
+Emit tables and checks for Windows Control Flow Guard.
+
+.. option:: -cfguard-no-checks
+
+Emit tables required for Windows Control Flow Guard without checks.
 
 .. option:: -client\_name<arg>
 
@@ -2426,9 +2430,30 @@ Enable XNACK (AMDGPU only)
 
 ARM
 ---
+
+.. option:: -ffixed-r6
+
+Reserve the r6 register (ARM only)
+
+.. option:: -ffixed-r7
+
+Reserve the r7 register (ARM only)
+
+.. option:: -ffixed-r8
+
+Reserve the r8 register (ARM only)
+
 .. option:: -ffixed-r9
 
 Reserve the r9 register (ARM only)
+
+.. option:: -ffixed-r10
+
+Reserve the r10 register (ARM only)
+
+.. option:: -ffixed-r11
+
+Reserve the r11 register (ARM only)
 
 .. option:: -mexecute-only, -mno-execute-only, -mpure-code
 

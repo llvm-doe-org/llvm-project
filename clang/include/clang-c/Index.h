@@ -2567,17 +2567,21 @@ enum CXCursorKind {
    */
   CXCursor_OMPMasterTaskLoopSimdDirective      = 283,
 
+  /** OpenMP parallel master taskloop simd directive.
+   */
+  CXCursor_OMPParallelMasterTaskLoopSimdDirective      = 284,
+
   /** OpenACC parallel directive.
    */
-  CXCursor_ACCParallelDirective = 284,
+  CXCursor_ACCParallelDirective = 285,
 
   /** OpenACC loop directive.
    */
-  CXCursor_ACCLoopDirective = 285,
+  CXCursor_ACCLoopDirective = 286,
 
   /** OpenACC parallel loop directive.
    */
-  CXCursor_ACCParallelLoopDirective = 286,
+  CXCursor_ACCParallelLoopDirective = 287,
 
   CXCursor_LastStmt = CXCursor_ACCParallelLoopDirective,
 

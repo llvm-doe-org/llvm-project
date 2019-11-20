@@ -28,6 +28,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Analysis/ProfileSummaryInfo.h"
 #include "llvm/CodeGen/DAGCombine.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/RuntimeLibcalls.h"
@@ -53,6 +54,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MachineValueType.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Transforms/Utils/SizeOpts.h"
 #include <algorithm>
 #include <cassert>
 #include <climits>
@@ -188,13 +190,14 @@ public:
     bool IsReturned : 1;
     bool IsSwiftSelf : 1;
     bool IsSwiftError : 1;
+    bool IsCFGuardTarget : 1;
     uint16_t Alignment = 0;
     Type *ByValType = nullptr;
 
     ArgListEntry()
         : IsSExt(false), IsZExt(false), IsInReg(false), IsSRet(false),
           IsNest(false), IsByVal(false), IsInAlloca(false), IsReturned(false),
-          IsSwiftSelf(false), IsSwiftError(false) {}
+          IsSwiftSelf(false), IsSwiftError(false), IsCFGuardTarget(false) {}
 
     void setAttributes(const CallBase *Call, unsigned ArgIdx);
 
@@ -468,6 +471,10 @@ public:
   virtual bool isCtlzFast() const {
     return false;
   }
+
+  /// Return true if instruction generated for equality comparison is folded
+  /// with instruction generated for signed comparison.
+  virtual bool isEqualityCmpFoldedWithSignedCmp() const { return true; }
 
   /// Return true if it is safe to transform an integer-domain bitwise operation
   /// into the equivalent floating-point operation. This should be set to true
@@ -1029,24 +1036,8 @@ public:
   /// Return true if lowering to a jump table is suitable for a set of case
   /// clusters which may contain \p NumCases cases, \p Range range of values.
   virtual bool isSuitableForJumpTable(const SwitchInst *SI, uint64_t NumCases,
-                                      uint64_t Range) const {
-    // FIXME: This function check the maximum table size and density, but the
-    // minimum size is not checked. It would be nice if the minimum size is
-    // also combined within this function. Currently, the minimum size check is
-    // performed in findJumpTable() in SelectionDAGBuiler and
-    // getEstimatedNumberOfCaseClusters() in BasicTTIImpl.
-    const bool OptForSize = SI->getParent()->getParent()->hasOptSize();
-    const unsigned MinDensity = getMinimumJumpTableDensity(OptForSize);
-    const unsigned MaxJumpTableSize = getMaximumJumpTableSize();
-    
-    // Check whether the number of cases is small enough and
-    // the range is dense enough for a jump table.
-    if ((OptForSize || Range <= MaxJumpTableSize) &&
-        (NumCases * 100 >= Range * MinDensity)) {
-      return true;
-    }
-    return false;
-  }
+                                      uint64_t Range, ProfileSummaryInfo *PSI,
+                                      BlockFrequencyInfo *BFI) const;
 
   /// Return true if lowering to a bit test is suitable for a set of case
   /// clusters which contains \p NumDests unique destinations, \p Low and
@@ -2504,7 +2495,8 @@ public:
   /// Return true if an fpext operation input to an \p Opcode operation is free
   /// (for instance, because half-precision floating-point numbers are
   /// implicitly extended to float-precision) for an FMA instruction.
-  virtual bool isFPExtFoldable(unsigned Opcode, EVT DestVT, EVT SrcVT) const {
+  virtual bool isFPExtFoldable(const SelectionDAG &DAG, unsigned Opcode,
+                               EVT DestVT, EVT SrcVT) const {
     assert(DestVT.isFloatingPoint() && SrcVT.isFloatingPoint() &&
            "invalid fpext types");
     return isFPExtFree(DestVT, SrcVT);
@@ -2536,8 +2528,22 @@ public:
   /// not legal, but should return true if those types will eventually legalize
   /// to types that support FMAs. After legalization, it will only be called on
   /// types that support FMAs (via Legal or Custom actions)
-  virtual bool isFMAFasterThanFMulAndFAdd(EVT) const {
+  virtual bool isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
+                                          EVT) const {
     return false;
+  }
+
+  /// IR version
+  virtual bool isFMAFasterThanFMulAndFAdd(const Function &F, Type *) const {
+    return false;
+  }
+
+  /// Returns true if the FADD or FSUB node passed could legally be combined with
+  /// an fmul to form an ISD::FMAD.
+  virtual bool isFMADLegalForFAddFSub(const SelectionDAG &DAG,
+                                      const SDNode *N) const {
+    assert(N->getOpcode() == ISD::FADD || N->getOpcode() == ISD::FSUB);
+    return isOperationLegal(ISD::FMAD, N->getValueType(0));
   }
 
   /// Return true if it's profitable to narrow operations of type VT1 to
@@ -2608,10 +2614,10 @@ public:
   // same blocks of its users.
   virtual bool shouldConsiderGEPOffsetSplit() const { return false; }
 
-  // Return the shift amount threshold for profitable transforms into shifts.
-  // Transforms creating shifts above the returned value will be avoided.
-  virtual unsigned getShiftAmountThreshold(EVT VT) const {
-    return VT.getScalarSizeInBits();
+  /// Return true if creating a shift of the type by the given
+  /// amount is not profitable.
+  virtual bool shouldAvoidTransformToShift(EVT VT, unsigned Amount) const {
+    return false;
   }
 
   //===--------------------------------------------------------------------===//
@@ -2741,7 +2747,7 @@ private:
   /// This indicates the default register class to use for each ValueType the
   /// target supports natively.
   const TargetRegisterClass *RegClassForVT[MVT::LAST_VALUETYPE];
-  unsigned char NumRegistersForVT[MVT::LAST_VALUETYPE];
+  uint16_t NumRegistersForVT[MVT::LAST_VALUETYPE];
   MVT RegisterTypeForVT[MVT::LAST_VALUETYPE];
 
   /// This indicates the "representative" register class to use for each
@@ -3030,6 +3036,11 @@ public:
                                           EVT RetVT, ArrayRef<SDValue> Ops,
                                           MakeLibCallOptions CallOptions,
                                           const SDLoc &dl) const;
+
+  std::pair<SDValue, SDValue> ExpandChainLibCall(SelectionDAG &DAG,
+                                                 RTLIB::Libcall LC,
+                                                 SDNode *Node,
+                                                 bool isSigned) const;
 
   /// Check whether parameters to a call that are passed in callee saved
   /// registers are the same as from the calling function.  This needs to be
@@ -3758,7 +3769,7 @@ public:
   /// Should SelectionDAG lower an atomic store of the given kind as a normal
   /// StoreSDNode (as opposed to an AtomicSDNode)?  NOTE: The intention is to
   /// eventually migrate all targets to the using StoreSDNodes, but porting is
-  /// being done target at a time.  
+  /// being done target at a time.
   virtual bool lowerAtomicStoreAsStoreSDNode(const StoreInst &SI) const {
     assert(SI.isAtomic() && "violated precondition");
     return false;

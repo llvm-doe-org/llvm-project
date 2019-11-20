@@ -1401,6 +1401,7 @@ let test_builder () =
     ignore (build_nuw_neg p1 "build_nuw_neg" b);
     ignore (build_fneg f1 "build_fneg" b);
     ignore (build_not p1 "build_not" b);
+    ignore (build_freeze p1 "build_freeze" b);
     ignore (build_unreachable b)
   end;
 

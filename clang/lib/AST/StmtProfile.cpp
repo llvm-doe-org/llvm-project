@@ -937,6 +937,11 @@ void StmtProfiler::VisitOMPParallelMasterTaskLoopDirective(
   VisitOMPLoopDirective(S);
 }
 
+void StmtProfiler::VisitOMPParallelMasterTaskLoopSimdDirective(
+    const OMPParallelMasterTaskLoopSimdDirective *S) {
+  VisitOMPLoopDirective(S);
+}
+
 void StmtProfiler::VisitOMPDistributeDirective(
     const OMPDistributeDirective *S) {
   VisitOMPLoopDirective(S);
@@ -1392,7 +1397,7 @@ void StmtProfiler::VisitBlockExpr(const BlockExpr *S) {
 
 void StmtProfiler::VisitGenericSelectionExpr(const GenericSelectionExpr *S) {
   VisitExpr(S);
-  for (const GenericSelectionExpr::ConstAssociation &Assoc :
+  for (const GenericSelectionExpr::ConstAssociation Assoc :
        S->associations()) {
     QualType T = Assoc.getType();
     if (T.isNull())

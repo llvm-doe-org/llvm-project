@@ -1,5 +1,6 @@
 include(CMakeParseArguments)
 include(CompilerRTUtils)
+include(BuiltinTests)
 
 set(CMAKE_LIPO "lipo" CACHE PATH "path to the lipo tool")
 
@@ -17,7 +18,7 @@ function(find_darwin_sdk_dir var sdk_name)
   if(NOT DARWIN_PREFER_PUBLIC_SDK)
     # Let's first try the internal SDK, otherwise use the public SDK.
     execute_process(
-      COMMAND xcodebuild -version -sdk ${sdk_name}.internal Path
+      COMMAND xcrun --sdk ${sdk_name}.internal --show-sdk-path
       RESULT_VARIABLE result_process
       OUTPUT_VARIABLE var_internal
       OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -26,7 +27,7 @@ function(find_darwin_sdk_dir var sdk_name)
   endif()
   if((NOT result_process EQUAL 0) OR "" STREQUAL "${var_internal}")
     execute_process(
-      COMMAND xcodebuild -version -sdk ${sdk_name} Path
+      COMMAND xcrun --sdk ${sdk_name} --show-sdk-path
       RESULT_VARIABLE result_process
       OUTPUT_VARIABLE var_internal
       OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -38,6 +39,7 @@ function(find_darwin_sdk_dir var sdk_name)
   if(result_process EQUAL 0)
     set(${var} ${var_internal} PARENT_SCOPE)
   endif()
+  message(STATUS "Checking DARWIN_${sdk_name}_SYSROOT - '${var_internal}'")
   set(DARWIN_${sdk_name}_CACHED_SYSROOT ${var_internal} CACHE STRING "Darwin SDK path for SDK ${sdk_name}." FORCE)
 endfunction()
 
@@ -48,7 +50,7 @@ function(find_darwin_sdk_version var sdk_name)
   if(NOT DARWIN_PREFER_PUBLIC_SDK)
     # Let's first try the internal SDK, otherwise use the public SDK.
     execute_process(
-      COMMAND xcodebuild -version -sdk ${sdk_name}.internal SDKVersion
+      COMMAND xcrun --sdk ${sdk_name}.internal --show-sdk-version
       RESULT_VARIABLE result_process
       OUTPUT_VARIABLE var_internal
       OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -57,7 +59,7 @@ function(find_darwin_sdk_version var sdk_name)
   endif()
   if((NOT ${result_process} EQUAL 0) OR "" STREQUAL "${var_internal}")
     execute_process(
-      COMMAND xcodebuild -version -sdk ${sdk_name} SDKVersion
+      COMMAND xcrun --sdk ${sdk_name} --show-sdk-version
       RESULT_VARIABLE result_process
       OUTPUT_VARIABLE var_internal
       OUTPUT_STRIP_TRAILING_WHITESPACE

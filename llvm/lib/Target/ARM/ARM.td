@@ -391,9 +391,11 @@ def FeatureExecuteOnly    : SubtargetFeature<"execute-only",
                                              "Enable the generation of "
                                              "execute only code.">;
 
-def FeatureReserveR9      : SubtargetFeature<"reserve-r9", "ReserveR9", "true",
-                                             "Reserve R9, making it unavailable"
-                                             " as GPR">;
+foreach i = {6-11} in
+    def FeatureReserveR#i : SubtargetFeature<"reserve-r"#i,
+                                             "ReservedGPRegisters["#i#"]", "true",
+                                             "Reserve R"#i#", making it "
+                                             "unavailable as a GPR">;
 
 def FeatureNoMovt         : SubtargetFeature<"no-movt", "NoMovt", "true",
                                              "Don't use movt/movw pairs for "
@@ -414,10 +416,6 @@ def FeatureUseMISched: SubtargetFeature<"use-misched", "UseMISched", "true",
 def FeatureNoPostRASched : SubtargetFeature<"disable-postra-scheduler",
     "DisablePostRAScheduler", "true",
     "Don't schedule again after register allocation">;
-
-// Enable use of alias analysis during code generation
-def FeatureUseAA : SubtargetFeature<"use-aa", "UseAA", "true",
-                                    "Use alias analysis during codegen">;
 
 // Armv8.5-A extensions
 
@@ -584,7 +582,6 @@ def ProcExynos  : SubtargetFeature<"exynos", "ARMProcFamily", "Exynos",
                                    "Samsung Exynos processors",
                                    [FeatureZCZeroing,
                                     FeatureUseWideStrideVFP,
-                                    FeatureUseAA,
                                     FeatureSplatVFPToNeon,
                                     FeatureSlowVGETLNi32,
                                     FeatureSlowVDUP32,
@@ -1067,13 +1064,11 @@ def : ProcessorModel<"cortex-m3",   CortexM4Model,      [ARMv7m,
                                                          ProcM3,
                                                          FeaturePrefLoopAlign32,
                                                          FeatureUseMISched,
-                                                         FeatureUseAA,
                                                          FeatureHasNoBranchPredictor]>;
 
 def : ProcessorModel<"sc300",       CortexM4Model,      [ARMv7m,
                                                          ProcM3,
                                                          FeatureUseMISched,
-                                                         FeatureUseAA,
                                                          FeatureHasNoBranchPredictor]>;
 
 def : ProcessorModel<"cortex-m4", CortexM4Model,        [ARMv7em,
@@ -1081,7 +1076,6 @@ def : ProcessorModel<"cortex-m4", CortexM4Model,        [ARMv7em,
                                                          FeaturePrefLoopAlign32,
                                                          FeatureHasSlowFPVMLx,
                                                          FeatureUseMISched,
-                                                         FeatureUseAA,
                                                          FeatureHasNoBranchPredictor]>;
 
 def : ProcNoItin<"cortex-m7",                           [ARMv7em,
@@ -1096,7 +1090,6 @@ def : ProcessorModel<"cortex-m33", CortexM4Model,       [ARMv8mMainline,
                                                          FeaturePrefLoopAlign32,
                                                          FeatureHasSlowFPVMLx,
                                                          FeatureUseMISched,
-                                                         FeatureUseAA,
                                                          FeatureHasNoBranchPredictor]>;
 
 def : ProcessorModel<"cortex-m35p", CortexM4Model,      [ARMv8mMainline,
@@ -1105,7 +1098,6 @@ def : ProcessorModel<"cortex-m35p", CortexM4Model,      [ARMv8mMainline,
                                                          FeaturePrefLoopAlign32,
                                                          FeatureHasSlowFPVMLx,
                                                          FeatureUseMISched,
-                                                         FeatureUseAA,
                                                          FeatureHasNoBranchPredictor]>;
 
 
@@ -1197,8 +1189,6 @@ def : ProcessorModel<"cyclone",     SwiftModel,         [ARMv8a, ProcSwift,
                                                          FeatureZCZeroing,
                                                          FeatureNoPostRASched]>;
 
-def : ProcNoItin<"exynos-m1",                           [ARMv8a, ProcExynos]>;
-def : ProcNoItin<"exynos-m2",                           [ARMv8a, ProcExynos]>;
 def : ProcNoItin<"exynos-m3",                           [ARMv8a, ProcExynos]>;
 def : ProcNoItin<"exynos-m4",                           [ARMv82a, ProcExynos,
                                                          FeatureFullFP16,
@@ -1215,8 +1205,7 @@ def : ProcNoItin<"kryo",                                [ARMv8a, ProcKryo,
 
 def : ProcessorModel<"cortex-r52", CortexR52Model,      [ARMv8r, ProcR52,
                                                          FeatureUseMISched,
-                                                         FeatureFPAO,
-                                                         FeatureUseAA]>;
+                                                         FeatureFPAO]>;
 
 //===----------------------------------------------------------------------===//
 // Register File Description

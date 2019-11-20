@@ -63,7 +63,7 @@ public:
   ///     the result persistent variable, and instead marks the variable
   ///     as persisting.
   ///
-  /// \param[in] delegate
+  /// \param[in] result_delegate
   ///     If non-NULL, use this delegate to report result values.  This
   ///     allows the client ClangUserExpression to report a result.
   ///
@@ -97,13 +97,6 @@ public:
   bool WillParse(ExecutionContext &exe_ctx, Materializer *materializer);
 
   void InstallCodeGenerator(clang::ASTConsumer *code_gen);
-
-  /// [Used by ClangExpressionParser] For each variable that had an unknown
-  ///     type at the beginning of parsing, determine its final type now.
-  ///
-  /// \return
-  ///     True on success; false otherwise.
-  bool ResolveUnknownTypes();
 
   /// Disable the state needed for parsing and IR transformation.
   void DidParse();
@@ -248,17 +241,6 @@ public:
   lldb::addr_t GetSymbolAddress(ConstString name,
                                 lldb::SymbolType symbol_type);
 
-  /// [Used by IRInterpreter] Get basic target information.
-  ///
-  /// \param[out] byte_order
-  ///     The byte order of the target.
-  ///
-  /// \param[out] address_byte_size
-  ///     The size of a pointer in bytes.
-  ///
-  /// \return
-  ///     True if the information could be determined; false
-  ///     otherwise.
   struct TargetInfo {
     lldb::ByteOrder byte_order;
     size_t address_byte_size;
@@ -276,9 +258,6 @@ public:
   ///
   /// \param[in] context
   ///     The NameSearchContext that can construct Decls for this name.
-  ///
-  /// \return
-  ///     True on success; false otherwise.
   void FindExternalVisibleDecls(NameSearchContext &context) override;
 
   /// Find all entities matching a given name in a given module/namespace,
@@ -296,9 +275,6 @@ public:
   /// \param[in] current_id
   ///     The ID for the current FindExternalVisibleDecls invocation,
   ///     for logging purposes.
-  ///
-  /// \return
-  ///     True on success; false otherwise.
   void FindExternalVisibleDecls(NameSearchContext &context,
                                 lldb::ModuleSP module,
                                 CompilerDeclContext &namespace_decl,
@@ -329,7 +305,7 @@ private:
       if (m_exe_ctx.GetTargetPtr())
         return m_exe_ctx.GetTargetPtr();
       else if (m_sym_ctx.target_sp)
-        m_sym_ctx.target_sp.get();
+        return m_sym_ctx.target_sp.get();
       return nullptr;
     }
 
@@ -441,9 +417,6 @@ private:
   ///     AST context.  This is only useful when the variable is being
   ///     inspected on behalf of the parser, hence the default.
   ///
-  /// \param[in] decl
-  ///     The Decl to be looked up.
-  ///
   /// \return
   ///     Return true if the value was successfully filled in.
   bool GetVariableValue(lldb::VariableSP &var,
@@ -471,7 +444,7 @@ private:
   /// \param[in] context
   ///     The NameSearchContext to use when constructing the Decl.
   ///
-  /// \param[in] pvar
+  /// \param[in] pvar_sp
   ///     The persistent variable that needs a Decl.
   ///
   /// \param[in] current_id
@@ -483,12 +456,6 @@ private:
 
   /// Use the NameSearchContext to generate a Decl for the given LLDB symbol
   /// (treated as a variable), and put it in the list of found entities.
-  ///
-  /// \param[in] context
-  ///     The NameSearchContext to use when constructing the Decl.
-  ///
-  /// \param[in] var
-  ///     The LLDB Variable that needs a Decl.
   void AddOneGenericVariable(NameSearchContext &context, const Symbol &symbol,
                              unsigned int current_id);
 

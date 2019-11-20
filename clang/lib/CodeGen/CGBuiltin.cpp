@@ -4218,7 +4218,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
   }
 
   // See if we have a target specific builtin that needs to be lowered.
-  if (Value *V = EmitTargetBuiltinExpr(BuiltinID, E))
+  if (Value *V = EmitTargetBuiltinExpr(BuiltinID, E, ReturnValue))
     return RValue::get(V);
 
   ErrorUnsupported(E, "builtin function");
@@ -4229,14 +4229,16 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
 
 static Value *EmitTargetArchBuiltinExpr(CodeGenFunction *CGF,
                                         unsigned BuiltinID, const CallExpr *E,
+                                        ReturnValueSlot ReturnValue,
                                         llvm::Triple::ArchType Arch) {
   switch (Arch) {
   case llvm::Triple::arm:
   case llvm::Triple::armeb:
   case llvm::Triple::thumb:
   case llvm::Triple::thumbeb:
-    return CGF->EmitARMBuiltinExpr(BuiltinID, E, Arch);
+    return CGF->EmitARMBuiltinExpr(BuiltinID, E, ReturnValue, Arch);
   case llvm::Triple::aarch64:
+  case llvm::Triple::aarch64_32:
   case llvm::Triple::aarch64_be:
     return CGF->EmitAArch64BuiltinExpr(BuiltinID, E, Arch);
   case llvm::Triple::bpfeb:
@@ -4268,15 +4270,16 @@ static Value *EmitTargetArchBuiltinExpr(CodeGenFunction *CGF,
 }
 
 Value *CodeGenFunction::EmitTargetBuiltinExpr(unsigned BuiltinID,
-                                              const CallExpr *E) {
+                                              const CallExpr *E,
+                                              ReturnValueSlot ReturnValue) {
   if (getContext().BuiltinInfo.isAuxBuiltinID(BuiltinID)) {
     assert(getContext().getAuxTargetInfo() && "Missing aux target info");
     return EmitTargetArchBuiltinExpr(
         this, getContext().BuiltinInfo.getAuxBuiltinID(BuiltinID), E,
-        getContext().getAuxTargetInfo()->getTriple().getArch());
+        ReturnValue, getContext().getAuxTargetInfo()->getTriple().getArch());
   }
 
-  return EmitTargetArchBuiltinExpr(this, BuiltinID, E,
+  return EmitTargetArchBuiltinExpr(this, BuiltinID, E, ReturnValue,
                                    getTarget().getTriple().getArch());
 }
 
@@ -5668,7 +5671,8 @@ Value *CodeGenFunction::EmitCommonNeonBuiltinExpr(
     llvm::Type *PTy = llvm::PointerType::getUnqual(VTy->getVectorElementType());
     // TODO: Currently in AArch32 mode the pointer operand comes first, whereas
     // in AArch64 it comes last. We may want to stick to one or another.
-    if (Arch == llvm::Triple::aarch64 || Arch == llvm::Triple::aarch64_be) {
+    if (Arch == llvm::Triple::aarch64 || Arch == llvm::Triple::aarch64_be ||
+        Arch == llvm::Triple::aarch64_32) {
       llvm::Type *Tys[2] = { VTy, PTy };
       std::rotate(Ops.begin(), Ops.begin() + 1, Ops.end());
       return EmitNeonCall(CGM.getIntrinsic(LLVMIntrinsic, Tys), Ops, "");
@@ -6004,6 +6008,7 @@ static bool HasExtraNeonArgument(unsigned BuiltinID) {
 
 Value *CodeGenFunction::EmitARMBuiltinExpr(unsigned BuiltinID,
                                            const CallExpr *E,
+                                           ReturnValueSlot ReturnValue,
                                            llvm::Triple::ArchType Arch) {
   if (auto Hint = GetValueForARMHint(BuiltinID))
     return Hint;
@@ -6050,6 +6055,16 @@ Value *CodeGenFunction::EmitARMBuiltinExpr(unsigned BuiltinID,
     llvm::Value *Arg = EmitScalarExpr(E->getArg(0));
     return Builder.CreateCall(
         CGM.getIntrinsic(Intrinsic::bitreverse, Arg->getType()), Arg, "rbit");
+  }
+
+  if (BuiltinID == ARM::BI__builtin_arm_cls) {
+    llvm::Value *Arg = EmitScalarExpr(E->getArg(0));
+    return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::arm_cls), Arg, "cls");
+  }
+  if (BuiltinID == ARM::BI__builtin_arm_cls64) {
+    llvm::Value *Arg = EmitScalarExpr(E->getArg(0));
+    return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::arm_cls64), Arg,
+                              "cls");
   }
 
   if (BuiltinID == ARM::BI__clear_cache) {
@@ -6319,6 +6334,10 @@ Value *CodeGenFunction::EmitARMBuiltinExpr(unsigned BuiltinID,
 
     return EmitSpecialRegisterBuiltin(*this, E, RegisterType, ValueType, IsRead);
   }
+
+  // Deal with MVE builtins
+  if (Value *Result = EmitARMMVEBuiltinExpr(BuiltinID, E, ReturnValue, Arch))
+    return Result;
 
   // Find out if any arguments are required to be integer constant
   // expressions.
@@ -6769,6 +6788,122 @@ Value *CodeGenFunction::EmitARMBuiltinExpr(unsigned BuiltinID,
   }
 }
 
+static llvm::Value *SignOrZeroExtend(CGBuilderTy &Builder, llvm::Value *V,
+                                     llvm::Type *T, bool Unsigned) {
+  // Helper function called by Tablegen-constructed ARM MVE builtin codegen,
+  // which finds it convenient to specify signed/unsigned as a boolean flag.
+  return Unsigned ? Builder.CreateZExt(V, T) : Builder.CreateSExt(V, T);
+}
+
+static llvm::Value *ARMMVEVectorSplat(CGBuilderTy &Builder, llvm::Value *V) {
+  // MVE-specific helper function for a vector splat, which infers the element
+  // count of the output vector by knowing that MVE vectors are all 128 bits
+  // wide.
+  unsigned Elements = 128 / V->getType()->getPrimitiveSizeInBits();
+  return Builder.CreateVectorSplat(Elements, V);
+}
+
+Value *CodeGenFunction::EmitARMMVEBuiltinExpr(unsigned BuiltinID,
+                                              const CallExpr *E,
+                                              ReturnValueSlot ReturnValue,
+                                              llvm::Triple::ArchType Arch) {
+  enum class CustomCodeGen { VLD24, VST24 } CustomCodeGenType;
+  Intrinsic::ID IRIntr;
+  unsigned NumVectors;
+
+  // Code autogenerated by Tablegen will handle all the simple builtins.
+  switch (BuiltinID) {
+    #include "clang/Basic/arm_mve_builtin_cg.inc"
+
+    // If we didn't match an MVE builtin id at all, go back to the
+    // main EmitARMBuiltinExpr.
+  default:
+    return nullptr;
+  }
+
+  // Anything that breaks from that switch is an MVE builtin that
+  // needs handwritten code to generate.
+
+  switch (CustomCodeGenType) {
+
+  case CustomCodeGen::VLD24: {
+    llvm::SmallVector<Value *, 4> Ops;
+    llvm::SmallVector<llvm::Type *, 4> Tys;
+
+    auto MvecCType = E->getType();
+    auto MvecLType = ConvertType(MvecCType);
+    assert(MvecLType->isStructTy() &&
+           "Return type for vld[24]q should be a struct");
+    assert(MvecLType->getStructNumElements() == 1 &&
+           "Return-type struct for vld[24]q should have one element");
+    auto MvecLTypeInner = MvecLType->getStructElementType(0);
+    assert(MvecLTypeInner->isArrayTy() &&
+           "Return-type struct for vld[24]q should contain an array");
+    assert(MvecLTypeInner->getArrayNumElements() == NumVectors &&
+           "Array member of return-type struct vld[24]q has wrong length");
+    auto VecLType = MvecLTypeInner->getArrayElementType();
+
+    Tys.push_back(VecLType);
+
+    auto Addr = E->getArg(0);
+    Ops.push_back(EmitScalarExpr(Addr));
+    Tys.push_back(ConvertType(Addr->getType()));
+
+    Function *F = CGM.getIntrinsic(IRIntr, makeArrayRef(Tys));
+    Value *LoadResult = Builder.CreateCall(F, Ops);
+    Value *MvecOut = UndefValue::get(MvecLType);
+    for (unsigned i = 0; i < NumVectors; ++i) {
+      Value *Vec = Builder.CreateExtractValue(LoadResult, i);
+      MvecOut = Builder.CreateInsertValue(MvecOut, Vec, {0, i});
+    }
+
+    if (ReturnValue.isNull())
+      return MvecOut;
+    else
+      return Builder.CreateStore(MvecOut, ReturnValue.getValue());
+  }
+
+  case CustomCodeGen::VST24: {
+    llvm::SmallVector<Value *, 4> Ops;
+    llvm::SmallVector<llvm::Type *, 4> Tys;
+
+    auto Addr = E->getArg(0);
+    Ops.push_back(EmitScalarExpr(Addr));
+    Tys.push_back(ConvertType(Addr->getType()));
+
+    auto MvecCType = E->getArg(1)->getType();
+    auto MvecLType = ConvertType(MvecCType);
+    assert(MvecLType->isStructTy() && "Data type for vst2q should be a struct");
+    assert(MvecLType->getStructNumElements() == 1 &&
+           "Data-type struct for vst2q should have one element");
+    auto MvecLTypeInner = MvecLType->getStructElementType(0);
+    assert(MvecLTypeInner->isArrayTy() &&
+           "Data-type struct for vst2q should contain an array");
+    assert(MvecLTypeInner->getArrayNumElements() == NumVectors &&
+           "Array member of return-type struct vld[24]q has wrong length");
+    auto VecLType = MvecLTypeInner->getArrayElementType();
+
+    Tys.push_back(VecLType);
+
+    AggValueSlot MvecSlot = CreateAggTemp(MvecCType);
+    EmitAggExpr(E->getArg(1), MvecSlot);
+    auto Mvec = Builder.CreateLoad(MvecSlot.getAddress());
+    for (unsigned i = 0; i < NumVectors; i++)
+      Ops.push_back(Builder.CreateExtractValue(Mvec, {0, i}));
+
+    Function *F = CGM.getIntrinsic(IRIntr, makeArrayRef(Tys));
+    Value *ToReturn = nullptr;
+    for (unsigned i = 0; i < NumVectors; i++) {
+      Ops.push_back(llvm::ConstantInt::get(Int32Ty, i));
+      ToReturn = Builder.CreateCall(F, Ops);
+      Ops.pop_back();
+    }
+    return ToReturn;
+  }
+  }
+  llvm_unreachable("unknown custom codegen type.");
+}
+
 static Value *EmitAArch64TblBuiltinExpr(CodeGenFunction &CGF, unsigned BuiltinID,
                                       const CallExpr *E,
                                       SmallVectorImpl<Value *> &Ops,
@@ -6998,6 +7133,17 @@ Value *CodeGenFunction::EmitAArch64BuiltinExpr(unsigned BuiltinID,
     llvm::Value *Arg = EmitScalarExpr(E->getArg(0));
     return Builder.CreateCall(
         CGM.getIntrinsic(Intrinsic::bitreverse, Arg->getType()), Arg, "rbit");
+  }
+
+  if (BuiltinID == AArch64::BI__builtin_arm_cls) {
+    llvm::Value *Arg = EmitScalarExpr(E->getArg(0));
+    return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::aarch64_cls), Arg,
+                              "cls");
+  }
+  if (BuiltinID == AArch64::BI__builtin_arm_cls64) {
+    llvm::Value *Arg = EmitScalarExpr(E->getArg(0));
+    return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::aarch64_cls64), Arg,
+                              "cls");
   }
 
   if (BuiltinID == AArch64::BI__builtin_arm_jcvt) {
@@ -14188,6 +14334,54 @@ Value *CodeGenFunction::EmitWebAssemblyBuiltinExpr(unsigned BuiltinID,
     Function *Callee = CGM.getIntrinsic(Intrinsic::wasm_bitselect,
                                      ConvertType(E->getType()));
     return Builder.CreateCall(Callee, {V1, V2, C});
+  }
+  case WebAssembly::BI__builtin_wasm_min_s_i8x16:
+  case WebAssembly::BI__builtin_wasm_min_u_i8x16:
+  case WebAssembly::BI__builtin_wasm_max_s_i8x16:
+  case WebAssembly::BI__builtin_wasm_max_u_i8x16:
+  case WebAssembly::BI__builtin_wasm_min_s_i16x8:
+  case WebAssembly::BI__builtin_wasm_min_u_i16x8:
+  case WebAssembly::BI__builtin_wasm_max_s_i16x8:
+  case WebAssembly::BI__builtin_wasm_max_u_i16x8:
+  case WebAssembly::BI__builtin_wasm_min_s_i32x4:
+  case WebAssembly::BI__builtin_wasm_min_u_i32x4:
+  case WebAssembly::BI__builtin_wasm_max_s_i32x4:
+  case WebAssembly::BI__builtin_wasm_max_u_i32x4: {
+    unsigned IntNo;
+    switch (BuiltinID) {
+    case WebAssembly::BI__builtin_wasm_min_s_i8x16:
+    case WebAssembly::BI__builtin_wasm_min_s_i16x8:
+    case WebAssembly::BI__builtin_wasm_min_s_i32x4:
+      IntNo = Intrinsic::wasm_min_signed;
+      break;
+    case WebAssembly::BI__builtin_wasm_min_u_i8x16:
+    case WebAssembly::BI__builtin_wasm_min_u_i16x8:
+    case WebAssembly::BI__builtin_wasm_min_u_i32x4:
+      IntNo = Intrinsic::wasm_min_unsigned;
+      break;
+    case WebAssembly::BI__builtin_wasm_max_s_i8x16:
+    case WebAssembly::BI__builtin_wasm_max_s_i16x8:
+    case WebAssembly::BI__builtin_wasm_max_s_i32x4:
+      IntNo = Intrinsic::wasm_max_signed;
+      break;
+    case WebAssembly::BI__builtin_wasm_max_u_i8x16:
+    case WebAssembly::BI__builtin_wasm_max_u_i16x8:
+    case WebAssembly::BI__builtin_wasm_max_u_i32x4:
+      IntNo = Intrinsic::wasm_max_unsigned;
+      break;
+    default:
+      llvm_unreachable("unexpected builtin ID");
+    }
+    Value *LHS = EmitScalarExpr(E->getArg(0));
+    Value *RHS = EmitScalarExpr(E->getArg(1));
+    Function *Callee = CGM.getIntrinsic(IntNo, ConvertType(E->getType()));
+    return Builder.CreateCall(Callee, {LHS, RHS});
+  }
+  case WebAssembly::BI__builtin_wasm_dot_s_i32x4_i16x8: {
+    Value *LHS = EmitScalarExpr(E->getArg(0));
+    Value *RHS = EmitScalarExpr(E->getArg(1));
+    Function *Callee = CGM.getIntrinsic(Intrinsic::wasm_dot);
+    return Builder.CreateCall(Callee, {LHS, RHS});
   }
   case WebAssembly::BI__builtin_wasm_any_true_i8x16:
   case WebAssembly::BI__builtin_wasm_any_true_i16x8:

@@ -67,10 +67,35 @@ multiple file formats.
 
  Print a summary of command line options.
 
+.. option:: --only-keep-debug
+
+ Produce a debug file as the output that only preserves contents of sections
+ useful for debugging purposes.
+
+ For ELF objects, this removes the contents of `SHF_ALLOC` sections that are not
+ `SHT_NOTE` by making them `SHT_NOBITS` and shrinking the program headers where
+ possible.
+
 .. option:: --only-section <section>, -j
 
  Remove all sections from the output, except for sections named ``<section>``.
  Can be specified multiple times to keep multiple sections.
+
+ For MachO objects, ``<section>`` must be formatted as
+ ``<segment name>,<section name>``.
+
+.. option:: --redefine-sym <old>=<new>
+
+ Rename symbols called ``<old>`` to ``<new>`` in the output. Can be specified
+ multiple times to rename multiple symbols.
+
+.. option:: --redefine-syms <filename>
+
+ Rename symbols in the output as described in the file ``<filename>``. In the
+ file, each line represents a single symbol to rename, with the old name and new
+ name separated by whitespace. Leading and trailing whitespace is ignored, as is
+ anything following a '#'. Can be specified multiple times to read names from
+ multiple files.
 
 .. option:: --regex
 
@@ -81,6 +106,9 @@ multiple file formats.
 
  Remove the specified section from the output. Can be specified multiple times
  to remove multiple sections simultaneously.
+
+ For MachO objects, ``<section>`` must be formatted as
+ ``<segment name>,<section name>``.
 
 .. option:: --set-section-alignment <section>=<align>
 
@@ -95,10 +123,11 @@ multiple file formats.
 .. option:: --strip-all, -S
 
  For ELF objects, remove from the output all symbols and non-alloc sections not
- within segments, except for .gnu.warning sections and the section name table.
+ within segments, except for .gnu.warning, .ARM.attribute sections and the
+ section name table.
 
- For COFF objects, remove all symbols, debug sections, and relocations from the
- output.
+ For COFF and Mach-O objects, remove all symbols, debug sections, and
+ relocations from the output.
 
 .. option:: --strip-debug, -g
 
@@ -172,11 +201,6 @@ COFF-SPECIFIC OPTIONS
 The following options are implemented only for COFF objects. If used with other
 objects, :program:`llvm-objcopy` will either emit an error or silently ignore
 them.
-
-.. option:: --only-keep-debug
-
- Remove the contents of non-debug sections from the output, but keep the section
- headers.
 
 ELF-SPECIFIC OPTIONS
 --------------------
@@ -369,19 +393,6 @@ them.
 .. option:: --preserve-dates, -p
 
  Preserve access and modification timestamps in the output.
-
-.. option:: --redefine-sym <old>=<new>
-
- Rename symbols called ``<old>`` to ``<new>`` in the output. Can be specified
- multiple times to rename multiple symbols.
-
-.. option:: --redefine-syms <filename>
-
- Rename symbols in the output as described in the file ``<filename>``. In the
- file, each line represents a single symbol to rename, with the old name and new
- name separated by an equals sign. Leading and trailing whitespace is ignored,
- as is anything following a '#'. Can be specified multiple times to read names
- from multiple files.
 
 .. option:: --rename-section <old>=<new>[,<flag>,...]
 

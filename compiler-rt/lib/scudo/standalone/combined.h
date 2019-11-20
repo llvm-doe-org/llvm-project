@@ -161,6 +161,7 @@ public:
                           uptr Alignment = MinAlignment,
                           bool ZeroContents = false) {
     initThreadMaybe();
+    ZeroContents = ZeroContents || Options.ZeroContents;
 
     if (UNLIKELY(Alignment > MaxAlignment)) {
       if (Options.MayReturnNull)
@@ -200,7 +201,8 @@ public:
         TSD->unlock();
     } else {
       ClassId = 0;
-      Block = Secondary.allocate(NeededSize, Alignment, &BlockEnd);
+      Block =
+          Secondary.allocate(NeededSize, Alignment, &BlockEnd, ZeroContents);
     }
 
     if (UNLIKELY(!Block)) {
@@ -212,7 +214,7 @@ public:
     // We only need to zero the contents for Primary backed allocations. This
     // condition is not necessarily unlikely, but since memset is costly, we
     // might as well mark it as such.
-    if (UNLIKELY((ZeroContents || Options.ZeroContents) && ClassId))
+    if (UNLIKELY(ZeroContents && ClassId))
       memset(Block, 0, PrimaryT::getSizeByClassId(ClassId));
 
     Chunk::UnpackedHeader Header = {};
@@ -220,7 +222,7 @@ public:
     if (UNLIKELY(!isAligned(UserPtr, Alignment))) {
       const uptr AlignedUserPtr = roundUpTo(UserPtr, Alignment);
       const uptr Offset = AlignedUserPtr - UserPtr;
-      DCHECK_GT(Offset, 2 * sizeof(u32));
+      DCHECK_GE(Offset, 2 * sizeof(u32));
       // The BlockMarker has no security purpose, but is specifically meant for
       // the chunk iteration function that can be used in debugging situations.
       // It is the only situation where we have to locate the start of a chunk
@@ -449,7 +451,7 @@ public:
   }
 
 private:
-  typedef MapAllocator SecondaryT;
+  using SecondaryT = typename Params::Secondary;
   typedef typename PrimaryT::SizeClassMap SizeClassMap;
 
   static const uptr MinAlignmentLog = SCUDO_MIN_ALIGNMENT_LOG;

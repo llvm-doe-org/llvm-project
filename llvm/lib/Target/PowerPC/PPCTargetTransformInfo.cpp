@@ -331,8 +331,12 @@ bool PPCTTIImpl::mightUseCTR(BasicBlock *BB,
           case Intrinsic::ceil:               Opcode = ISD::FCEIL;      break;
           case Intrinsic::trunc:              Opcode = ISD::FTRUNC;     break;
           case Intrinsic::rint:               Opcode = ISD::FRINT;      break;
+          case Intrinsic::lrint:              Opcode = ISD::LRINT;      break;
+          case Intrinsic::llrint:             Opcode = ISD::LLRINT;     break;
           case Intrinsic::nearbyint:          Opcode = ISD::FNEARBYINT; break;
           case Intrinsic::round:              Opcode = ISD::FROUND;     break;
+          case Intrinsic::lround:             Opcode = ISD::LROUND;     break;
+          case Intrinsic::llround:            Opcode = ISD::LLROUND;    break;
           case Intrinsic::minnum:             Opcode = ISD::FMINNUM;    break;
           case Intrinsic::maxnum:             Opcode = ISD::FMAXNUM;    break;
           case Intrinsic::umul_with_overflow: Opcode = ISD::UMULO;      break;
@@ -829,8 +833,9 @@ int PPCTTIImpl::getVectorInstrCost(unsigned Opcode, Type *Val, unsigned Index) {
   return Cost;
 }
 
-int PPCTTIImpl::getMemoryOpCost(unsigned Opcode, Type *Src, unsigned Alignment,
-                                unsigned AddressSpace, const Instruction *I) {
+int PPCTTIImpl::getMemoryOpCost(unsigned Opcode, Type *Src,
+                                MaybeAlign Alignment, unsigned AddressSpace,
+                                const Instruction *I) {
   // Legalize the type.
   std::pair<int, MVT> LT = TLI->getTypeLegalizationCost(DL, Src);
   assert((Opcode == Instruction::Load || Opcode == Instruction::Store) &&
@@ -888,7 +893,8 @@ int PPCTTIImpl::getMemoryOpCost(unsigned Opcode, Type *Src, unsigned Alignment,
   // to be decomposed based on the alignment factor.
 
   // Add the cost of each scalar load or store.
-  Cost += LT.first*(SrcBytes/Alignment-1);
+  assert(Alignment);
+  Cost += LT.first * ((SrcBytes / Alignment->value()) - 1);
 
   // For a vector type, there is also scalarization overhead (only for
   // stores, loads are expanded using the vector-load + permutation sequence,
@@ -919,7 +925,8 @@ int PPCTTIImpl::getInterleavedMemoryOpCost(unsigned Opcode, Type *VecTy,
   std::pair<int, MVT> LT = TLI->getTypeLegalizationCost(DL, VecTy);
 
   // Firstly, the cost of load/store operation.
-  int Cost = getMemoryOpCost(Opcode, VecTy, Alignment, AddressSpace);
+  int Cost =
+      getMemoryOpCost(Opcode, VecTy, MaybeAlign(Alignment), AddressSpace);
 
   // PPC, for both Altivec/VSX and QPX, support cheap arbitrary permutations
   // (at least in the sense that there need only be one non-loop-invariant

@@ -52,6 +52,16 @@ option(LLDB_USE_ENTITLEMENTS "When codesigning, use entitlements if available" O
 option(LLDB_BUILD_FRAMEWORK "Build LLDB.framework (Darwin only)" OFF)
 option(LLDB_NO_INSTALL_DEFAULT_RPATH "Disable default RPATH settings in binaries" OFF)
 option(LLDB_USE_SYSTEM_DEBUGSERVER "Use the system's debugserver for testing (Darwin only)." OFF)
+option(LLDB_SKIP_STRIP "Whether to skip stripping of binaries when installing lldb." OFF)
+
+if (LLDB_USE_SYSTEM_DEBUGSERVER)
+  # The custom target for the system debugserver has no install target, so we
+  # need to remove it from the LLVM_DISTRIBUTION_COMPONENTS list.
+  if (LLVM_DISTRIBUTION_COMPONENTS)
+    list(REMOVE_ITEM LLVM_DISTRIBUTION_COMPONENTS debugserver)
+    set(LLVM_DISTRIBUTION_COMPONENTS ${LLVM_DISTRIBUTION_COMPONENTS} CACHE STRING "" FORCE)
+  endif()
+endif()
 
 if(LLDB_BUILD_FRAMEWORK)
   if(NOT APPLE)
@@ -66,6 +76,9 @@ if(LLDB_BUILD_FRAMEWORK)
   set(LLDB_FRAMEWORK_VERSION A CACHE STRING "LLDB.framework version (default is A)")
   set(LLDB_FRAMEWORK_BUILD_DIR bin CACHE STRING "Output directory for LLDB.framework")
   set(LLDB_FRAMEWORK_INSTALL_DIR Library/Frameworks CACHE STRING "Install directory for LLDB.framework")
+
+  get_filename_component(LLDB_FRAMEWORK_ABSOLUTE_BUILD_DIR ${LLDB_FRAMEWORK_BUILD_DIR} ABSOLUTE
+    BASE_DIR ${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR})
 
   # Essentially, emit the framework's dSYM outside of the framework directory.
   set(LLDB_DEBUGINFO_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}/bin CACHE STRING
@@ -349,12 +362,6 @@ check_cxx_compiler_flag("-Wno-vla-extension"
 if (CXX_SUPPORTS_NO_VLA_EXTENSION)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-vla-extension")
 endif ()
-
-check_cxx_compiler_flag("-Wno-gnu-anonymous-struct"
-                        CXX_SUPPORTS_NO_GNU_ANONYMOUS_STRUCT)
-
-check_cxx_compiler_flag("-Wno-nested-anon-types"
-                        CXX_SUPPORTS_NO_NESTED_ANON_TYPES)
 
 # Disable MSVC warnings
 if( MSVC )

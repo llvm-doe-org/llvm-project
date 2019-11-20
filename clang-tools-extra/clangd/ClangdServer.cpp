@@ -367,7 +367,7 @@ tweakSelection(const Range &Sel, const InputsAndAST &AST) {
   auto End = positionToOffset(AST.Inputs.Contents, Sel.end);
   if (!End)
     return End.takeError();
-  return Tweak::Selection(AST.AST, *Begin, *End);
+  return Tweak::Selection(AST.Inputs.Index, AST.AST, *Begin, *End);
 }
 
 void ClangdServer::enumerateTweaks(PathRef File, Range Sel,
@@ -562,7 +562,7 @@ void ClangdServer::documentSymbols(llvm::StringRef File,
 }
 
 void ClangdServer::findReferences(PathRef File, Position Pos, uint32_t Limit,
-                                  Callback<std::vector<Location>> CB) {
+                                  Callback<ReferencesResult> CB) {
   auto Action = [Pos, Limit, CB = std::move(CB),
                  this](llvm::Expected<InputsAndAST> InpAST) mutable {
     if (!InpAST)

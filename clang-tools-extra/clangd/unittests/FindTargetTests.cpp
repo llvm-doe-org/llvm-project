@@ -288,8 +288,7 @@ TEST_F(TargetDeclTest, ClassTemplate) {
   )cpp";
   EXPECT_DECLS("TemplateSpecializationTypeLoc",
                {"template<> class Foo<int *>", Rel::TemplateInstantiation},
-               {"template <typename T> class Foo<type-parameter-0-0 *>",
-                Rel::TemplatePattern});
+               {"template <typename T> class Foo<T *>", Rel::TemplatePattern});
 }
 
 TEST_F(TargetDeclTest, FunctionTemplate) {
@@ -812,6 +811,7 @@ TEST_F(FindExplicitReferencesTest, All) {
            "1: targets = {func}\n"
            "2: targets = {w}, decl\n"
            "3: targets = {FuncParam}\n"},
+          // declaration references.
           {R"cpp(
              namespace ns {}
              class S {};
@@ -835,6 +835,74 @@ TEST_F(FindExplicitReferencesTest, All) {
            "8: targets = {INT2}, decl\n"
            "9: targets = {NS}, decl\n"
            "10: targets = {ns}\n"},
+          // cxx constructor initializer.
+          {R"cpp(
+             class Base {};
+             void foo() {
+               // member initializer
+               class $0^X {
+                 int $1^abc;
+                 $2^X(): $3^abc() {}
+               };
+               // base initializer
+               class $4^Derived : public $5^Base {
+                 $6^Base $7^B;
+                 $8^Derived() : $9^Base() {}
+               };
+               // delegating initializer
+               class $10^Foo {
+                 $11^Foo(int);
+                 $12^Foo(): $13^Foo(111) {}
+               };
+             }
+           )cpp",
+           "0: targets = {X}, decl\n"
+           "1: targets = {foo()::X::abc}, decl\n"
+           "2: targets = {foo()::X::X}, decl\n"
+           "3: targets = {foo()::X::abc}\n"
+           "4: targets = {Derived}, decl\n"
+           "5: targets = {Base}\n"
+           "6: targets = {Base}\n"
+           "7: targets = {foo()::Derived::B}, decl\n"
+           "8: targets = {foo()::Derived::Derived}, decl\n"
+           "9: targets = {Base}\n"
+           "10: targets = {Foo}, decl\n"
+           "11: targets = {foo()::Foo::Foo}, decl\n"
+           "12: targets = {foo()::Foo::Foo}, decl\n"
+           "13: targets = {Foo}\n"},
+          // Anonymous entities should not be reported.
+          {
+              R"cpp(
+             void foo() {
+              class {} $0^x;
+              int (*$1^fptr)(int $2^a, int) = nullptr;
+             }
+           )cpp",
+              "0: targets = {x}, decl\n"
+              "1: targets = {fptr}, decl\n"
+              "2: targets = {a}, decl\n"},
+          // Namespace aliases should be handled properly.
+          {
+              R"cpp(
+                namespace ns { struct Type {} }
+                namespace alias = ns;
+                namespace rec_alias = alias;
+
+                void foo() {
+                  $0^ns::$1^Type $2^a;
+                  $3^alias::$4^Type $5^b;
+                  $6^rec_alias::$7^Type $8^c;
+                }
+           )cpp",
+              "0: targets = {ns}\n"
+              "1: targets = {ns::Type}, qualifier = 'ns::'\n"
+              "2: targets = {a}, decl\n"
+              "3: targets = {alias}\n"
+              "4: targets = {ns::Type}, qualifier = 'alias::'\n"
+              "5: targets = {b}, decl\n"
+              "6: targets = {rec_alias}\n"
+              "7: targets = {ns::Type}, qualifier = 'rec_alias::'\n"
+              "8: targets = {c}, decl\n"},
       };
 
   for (const auto &C : Cases) {

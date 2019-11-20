@@ -217,8 +217,6 @@ private:
   SDValue JoinIntegers(SDValue Lo, SDValue Hi);
   SDValue LibCallify(RTLIB::Libcall LC, SDNode *N, bool isSigned);
 
-  std::pair<SDValue, SDValue> ExpandChainLibCall(RTLIB::Libcall LC,
-                                                 SDNode *Node, bool isSigned);
   std::pair<SDValue, SDValue> ExpandAtomic(SDNode *Node);
 
   SDValue PromoteTargetBoolean(SDValue Bool, EVT ValVT);
@@ -411,8 +409,7 @@ private:
   void ExpandIntRes_FLT_ROUNDS        (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandIntRes_FP_TO_SINT        (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandIntRes_FP_TO_UINT        (SDNode *N, SDValue &Lo, SDValue &Hi);
-  void ExpandIntRes_LLROUND           (SDNode *N, SDValue &Lo, SDValue &Hi);
-  void ExpandIntRes_LLRINT            (SDNode *N, SDValue &Lo, SDValue &Hi);
+  void ExpandIntRes_LLROUND_LLRINT    (SDNode *N, SDValue &Lo, SDValue &Hi);
 
   void ExpandIntRes_Logical           (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandIntRes_ADDSUB            (SDNode *N, SDValue &Lo, SDValue &Hi);
@@ -495,6 +492,7 @@ private:
   SDValue SoftenFloatRes_FMINNUM(SDNode *N);
   SDValue SoftenFloatRes_FMAXNUM(SDNode *N);
   SDValue SoftenFloatRes_FADD(SDNode *N);
+  SDValue SoftenFloatRes_FCBRT(SDNode *N);
   SDValue SoftenFloatRes_FCEIL(SDNode *N);
   SDValue SoftenFloatRes_FCOPYSIGN(SDNode *N);
   SDValue SoftenFloatRes_FCOS(SDNode *N);
@@ -563,6 +561,7 @@ private:
   void ExpandFloatRes_FMINNUM   (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandFloatRes_FMAXNUM   (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandFloatRes_FADD      (SDNode *N, SDValue &Lo, SDValue &Hi);
+  void ExpandFloatRes_FCBRT     (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandFloatRes_FCEIL     (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandFloatRes_FCOPYSIGN (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandFloatRes_FCOS      (SDNode *N, SDValue &Lo, SDValue &Hi);

@@ -80,10 +80,12 @@
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/ModuleSummaryIndexYAML.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/PassRegistry.h"
 #include "llvm/PassSupport.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MathExtras.h"
@@ -615,8 +617,8 @@ struct WholeProgramDevirt : public ModulePass {
 
   bool UseCommandLine = false;
 
-  ModuleSummaryIndex *ExportSummary;
-  const ModuleSummaryIndex *ImportSummary;
+  ModuleSummaryIndex *ExportSummary = nullptr;
+  const ModuleSummaryIndex *ImportSummary = nullptr;
 
   WholeProgramDevirt() : ModulePass(ID), UseCommandLine(true) {
     initializeWholeProgramDevirtPass(*PassRegistry::getPassRegistry());
@@ -709,7 +711,7 @@ void runWholeProgramDevirtOnIndex(
 
 void updateIndexWPDForExports(
     ModuleSummaryIndex &Summary,
-    function_ref<bool(StringRef, GlobalValue::GUID)> isExported,
+    function_ref<bool(StringRef, ValueInfo)> isExported,
     std::map<ValueInfo, std::vector<VTableSlotSummary>> &LocalWPDTargetsMap) {
   for (auto &T : LocalWPDTargetsMap) {
     auto &VI = T.first;
@@ -717,7 +719,7 @@ void updateIndexWPDForExports(
     assert(VI.getSummaryList().size() == 1 &&
            "Devirt of local target has more than one copy");
     auto &S = VI.getSummaryList()[0];
-    if (!isExported(S->modulePath(), VI.getGUID()))
+    if (!isExported(S->modulePath(), VI))
       continue;
 
     // It's been exported by a cross module import.
@@ -841,17 +843,35 @@ bool DevirtIndex::tryFindVirtualCallTargets(
     std::vector<ValueInfo> &TargetsForSlot, const TypeIdCompatibleVtableInfo TIdInfo,
     uint64_t ByteOffset) {
   for (const TypeIdOffsetVtableInfo P : TIdInfo) {
-    // VTable initializer should have only one summary, or all copies must be
-    // linkonce/weak ODR.
+    // Ensure that we have at most one external linkage vtable initializer.
     assert(P.VTableVI.getSummaryList().size() == 1 ||
-           llvm::all_of(
+           llvm::count_if(
                P.VTableVI.getSummaryList(),
                [&](const std::unique_ptr<GlobalValueSummary> &Summary) {
-                 return GlobalValue::isLinkOnceODRLinkage(Summary->linkage()) ||
-                        GlobalValue::isWeakODRLinkage(Summary->linkage());
-               }));
-    const auto *VS = cast<GlobalVarSummary>(P.VTableVI.getSummaryList()[0].get());
-    if (!P.VTableVI.getSummaryList()[0]->isLive())
+                 return GlobalValue::isExternalLinkage(Summary->linkage());
+               }) <= 1);
+    // Find the first non-available_externally linkage vtable initializer.
+    // We can have multiple available_externally, linkonce_odr and weak_odr
+    // vtable initializers, however we want to skip available_externally as they
+    // do not have type metadata attached, and therefore the summary will not
+    // contain any vtable functions.
+    //
+    // Also, handle the case of same-named local Vtables with the same path
+    // and therefore the same GUID. This can happen if there isn't enough
+    // distinguishing path when compiling the source file. In that case we
+    // conservatively return false early.
+    const GlobalVarSummary *VS = nullptr;
+    bool LocalFound = false;
+    for (auto &S : P.VTableVI.getSummaryList()) {
+      if (GlobalValue::isLocalLinkage(S->linkage())) {
+        if (LocalFound)
+          return false;
+        LocalFound = true;
+      }
+      if (!GlobalValue::isAvailableExternallyLinkage(S->linkage()))
+        VS = cast<GlobalVarSummary>(S.get());
+    }
+    if (!VS->isLive())
       continue;
     for (auto VTP : VS->vTableFuncs()) {
       if (VTP.VTableOffset != P.AddressPointOffset + ByteOffset)

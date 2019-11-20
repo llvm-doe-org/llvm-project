@@ -76,7 +76,9 @@ class ARMTTIImpl : public BasicTTIImplBase<ARMTTIImpl> {
       ARM::FeatureDSP, ARM::FeatureMP, ARM::FeatureVirtualization,
       ARM::FeatureMClass, ARM::FeatureRClass, ARM::FeatureAClass,
       ARM::FeatureNaClTrap, ARM::FeatureStrictAlign, ARM::FeatureLongCalls,
-      ARM::FeatureExecuteOnly, ARM::FeatureReserveR9, ARM::FeatureNoMovt,
+      ARM::FeatureExecuteOnly, ARM::FeatureReserveR6, ARM::FeatureReserveR7,
+      ARM::FeatureReserveR8, ARM::FeatureReserveR9, ARM::FeatureReserveR10,
+      ARM::FeatureReserveR11, ARM::FeatureNoMovt,
       ARM::FeatureNoNegativeImmediates
   };
 
@@ -189,7 +191,7 @@ public:
       TTI::OperandValueProperties Opd2PropInfo = TTI::OP_None,
       ArrayRef<const Value *> Args = ArrayRef<const Value *>());
 
-  int getMemoryOpCost(unsigned Opcode, Type *Src, unsigned Alignment,
+  int getMemoryOpCost(unsigned Opcode, Type *Src, MaybeAlign Alignment,
                       unsigned AddressSpace, const Instruction *I = nullptr);
 
   int getInterleavedMemoryOpCost(unsigned Opcode, Type *VecTy, unsigned Factor,
@@ -203,7 +205,12 @@ public:
                                 AssumptionCache &AC,
                                 TargetLibraryInfo *LibInfo,
                                 HardwareLoopInfo &HWLoopInfo);
-
+  bool preferPredicateOverEpilogue(Loop *L, LoopInfo *LI,
+                                   ScalarEvolution &SE,
+                                   AssumptionCache &AC,
+                                   TargetLibraryInfo *TLI,
+                                   DominatorTree *DT,
+                                   const LoopAccessInfo *LAI);
   void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
                                TTI::UnrollingPreferences &UP);
 

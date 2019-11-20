@@ -38,6 +38,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Use.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/AtomicOrdering.h"
 #include "llvm/Support/Casting.h"
@@ -1229,6 +1230,7 @@ MemorySSA::MemorySSA(Function &Func, AliasAnalysis *AA, DominatorTree *DT)
   // safe because there are no CFG changes while building MemorySSA and can
   // significantly reduce the time spent by the compiler in AA, because we will
   // make queries about all the instructions in the Function.
+  assert(AA && "No alias analysis?");
   BatchAAResults BatchAA(*AA);
   buildMemorySSA(BatchAA);
   // Intentionally leave AA to nullptr while building so we don't accidently

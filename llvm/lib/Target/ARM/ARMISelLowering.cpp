@@ -1170,9 +1170,11 @@ ARMTargetLowering::ARMTargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::UDIVREM, MVT::i32, Expand);
   }
 
-  if (Subtarget->isTargetWindows() && Subtarget->getTargetTriple().isOSMSVCRT())
-    for (auto &VT : {MVT::f32, MVT::f64})
-      setOperationAction(ISD::FPOWI, VT, Custom);
+  if (Subtarget->getTargetTriple().isOSMSVCRT()) {
+    // MSVCRT doesn't have powi; fall back to pow
+    setLibcallName(RTLIB::POWI_F32, nullptr);
+    setLibcallName(RTLIB::POWI_F64, nullptr);
+  }
 
   setOperationAction(ISD::GlobalAddress, MVT::i32,   Custom);
   setOperationAction(ISD::ConstantPool,  MVT::i32,   Custom);
@@ -1855,6 +1857,7 @@ ARMTargetLowering::getEffectiveCallingConv(CallingConv::ID CC,
   case CallingConv::ARM_AAPCS:
   case CallingConv::ARM_APCS:
   case CallingConv::GHC:
+  case CallingConv::CFGuard_Check:
     return CC;
   case CallingConv::PreserveMost:
     return CallingConv::PreserveMost;
@@ -1914,6 +1917,8 @@ CCAssignFn *ARMTargetLowering::CCAssignFnForNode(CallingConv::ID CC,
     return (Return ? RetCC_ARM_APCS : CC_ARM_APCS_GHC);
   case CallingConv::PreserveMost:
     return (Return ? RetCC_ARM_AAPCS : CC_ARM_AAPCS);
+  case CallingConv::CFGuard_Check:
+    return (Return ? RetCC_ARM_AAPCS : CC_ARM_Win32_CFGuard_Check);
   }
 }
 
@@ -3629,6 +3634,49 @@ ARMTargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG,
     EVT PtrVT = getPointerTy(DAG.getDataLayout());
     return DAG.getNode(ARMISD::THREAD_POINTER, dl, PtrVT);
   }
+  case Intrinsic::arm_cls: {
+    const SDValue &Operand = Op.getOperand(1);
+    const EVT VTy = Op.getValueType();
+    SDValue SRA =
+        DAG.getNode(ISD::SRA, dl, VTy, Operand, DAG.getConstant(31, dl, VTy));
+    SDValue XOR = DAG.getNode(ISD::XOR, dl, VTy, SRA, Operand);
+    SDValue SHL =
+        DAG.getNode(ISD::SHL, dl, VTy, XOR, DAG.getConstant(1, dl, VTy));
+    SDValue OR =
+        DAG.getNode(ISD::OR, dl, VTy, SHL, DAG.getConstant(1, dl, VTy));
+    SDValue Result = DAG.getNode(ISD::CTLZ, dl, VTy, OR);
+    return Result;
+  }
+  case Intrinsic::arm_cls64: {
+    // cls(x) = if cls(hi(x)) != 31 then cls(hi(x))
+    //          else 31 + clz(if hi(x) == 0 then lo(x) else not(lo(x)))
+    const SDValue &Operand = Op.getOperand(1);
+    const EVT VTy = Op.getValueType();
+
+    SDValue Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, VTy, Operand,
+                             DAG.getConstant(1, dl, VTy));
+    SDValue Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, VTy, Operand,
+                             DAG.getConstant(0, dl, VTy));
+    SDValue Constant0 = DAG.getConstant(0, dl, VTy);
+    SDValue Constant1 = DAG.getConstant(1, dl, VTy);
+    SDValue Constant31 = DAG.getConstant(31, dl, VTy);
+    SDValue SRAHi = DAG.getNode(ISD::SRA, dl, VTy, Hi, Constant31);
+    SDValue XORHi = DAG.getNode(ISD::XOR, dl, VTy, SRAHi, Hi);
+    SDValue SHLHi = DAG.getNode(ISD::SHL, dl, VTy, XORHi, Constant1);
+    SDValue ORHi = DAG.getNode(ISD::OR, dl, VTy, SHLHi, Constant1);
+    SDValue CLSHi = DAG.getNode(ISD::CTLZ, dl, VTy, ORHi);
+    SDValue CheckLo =
+        DAG.getSetCC(dl, MVT::i1, CLSHi, Constant31, ISD::CondCode::SETEQ);
+    SDValue HiIsZero =
+        DAG.getSetCC(dl, MVT::i1, Hi, Constant0, ISD::CondCode::SETEQ);
+    SDValue AdjustedLo =
+        DAG.getSelect(dl, VTy, HiIsZero, Lo, DAG.getNOT(dl, Lo, VTy));
+    SDValue CLZAdjustedLo = DAG.getNode(ISD::CTLZ, dl, VTy, AdjustedLo);
+    SDValue Result =
+        DAG.getSelect(dl, VTy, CheckLo,
+                      DAG.getNode(ISD::ADD, dl, VTy, CLZAdjustedLo, Constant31), CLSHi);
+    return Result;
+  }
   case Intrinsic::eh_sjlj_lsda: {
     MachineFunction &MF = DAG.getMachineFunction();
     ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
@@ -3698,6 +3746,10 @@ ARMTargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG,
   case Intrinsic::arm_neon_vtbl2:
     return DAG.getNode(ARMISD::VTBL2, SDLoc(Op), Op.getValueType(),
                        Op.getOperand(1), Op.getOperand(2), Op.getOperand(3));
+  case Intrinsic::arm_mve_pred_i2v:
+  case Intrinsic::arm_mve_pred_v2i:
+    return DAG.getNode(ARMISD::PREDICATE_CAST, SDLoc(Op), Op.getValueType(),
+                       Op.getOperand(1));
   }
 }
 
@@ -5520,9 +5572,15 @@ SDValue ARMTargetLowering::LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG) const {
 Register ARMTargetLowering::getRegisterByName(const char* RegName, EVT VT,
                                               const MachineFunction &MF) const {
   Register Reg = StringSwitch<unsigned>(RegName)
-                       .Case("sp", ARM::SP)
-                       .Default(0);
-  if (Reg)
+                     .Case("r6", ARM::R6)
+                     .Case("r7", ARM::R7)
+                     .Case("r8", ARM::R8)
+                     .Case("r9", ARM::R9)
+                     .Case("r10", ARM::R10)
+                     .Case("r11", ARM::R11)
+                     .Case("sp", ARM::SP)
+                     .Default(ARM::NoRegister);
+  if (Reg != ARM::NoRegister)
     return Reg;
   report_fatal_error(Twine("Invalid register name \""
                               + StringRef(RegName)  + "\"."));
@@ -9043,58 +9101,6 @@ static void ReplaceCMP_SWAP_64Results(SDNode *N,
   Results.push_back(SDValue(CmpSwap, 2));
 }
 
-static SDValue LowerFPOWI(SDValue Op, const ARMSubtarget &Subtarget,
-                          SelectionDAG &DAG) {
-  const auto &TLI = DAG.getTargetLoweringInfo();
-
-  assert(Subtarget.getTargetTriple().isOSMSVCRT() &&
-         "Custom lowering is MSVCRT specific!");
-
-  SDLoc dl(Op);
-  SDValue Val = Op.getOperand(0);
-  MVT Ty = Val->getSimpleValueType(0);
-  SDValue Exponent = DAG.getNode(ISD::SINT_TO_FP, dl, Ty, Op.getOperand(1));
-  SDValue Callee = DAG.getExternalSymbol(Ty == MVT::f32 ? "powf" : "pow",
-                                         TLI.getPointerTy(DAG.getDataLayout()));
-
-  TargetLowering::ArgListTy Args;
-  TargetLowering::ArgListEntry Entry;
-
-  Entry.Node = Val;
-  Entry.Ty = Val.getValueType().getTypeForEVT(*DAG.getContext());
-  Entry.IsZExt = true;
-  Args.push_back(Entry);
-
-  Entry.Node = Exponent;
-  Entry.Ty = Exponent.getValueType().getTypeForEVT(*DAG.getContext());
-  Entry.IsZExt = true;
-  Args.push_back(Entry);
-
-  Type *LCRTy = Val.getValueType().getTypeForEVT(*DAG.getContext());
-
-  // In the in-chain to the call is the entry node  If we are emitting a
-  // tailcall, the chain will be mutated if the node has a non-entry input
-  // chain.
-  SDValue InChain = DAG.getEntryNode();
-  SDValue TCChain = InChain;
-
-  const Function &F = DAG.getMachineFunction().getFunction();
-  bool IsTC = TLI.isInTailCallPosition(DAG, Op.getNode(), TCChain) &&
-              F.getReturnType() == LCRTy;
-  if (IsTC)
-    InChain = TCChain;
-
-  TargetLowering::CallLoweringInfo CLI(DAG);
-  CLI.setDebugLoc(dl)
-      .setChain(InChain)
-      .setCallee(CallingConv::ARM_AAPCS_VFP, LCRTy, Callee, std::move(Args))
-      .setTailCall(IsTC);
-  std::pair<SDValue, SDValue> CI = TLI.LowerCallTo(CLI);
-
-  // Return the chain (the DAG root) if it is a tail call
-  return !CI.second.getNode() ? DAG.getRoot() : CI.first;
-}
-
 SDValue ARMTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "Lowering node: "; Op.dump());
   switch (Op.getOpcode()) {
@@ -9184,7 +9190,6 @@ SDValue ARMTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     llvm_unreachable("Don't know how to custom lower this!");
   case ISD::FP_ROUND: return LowerFP_ROUND(Op, DAG);
   case ISD::FP_EXTEND: return LowerFP_EXTEND(Op, DAG);
-  case ISD::FPOWI: return LowerFPOWI(Op, *Subtarget, DAG);
   case ARMISD::WIN__DBZCHK: return SDValue();
   }
 }
@@ -13844,11 +13849,12 @@ static SDValue PerformExtendCombine(SDNode *N, SelectionDAG &DAG,
                                     const ARMSubtarget *ST) {
   SDValue N0 = N->getOperand(0);
 
-  // Check for sign- and zero-extensions of vector extract operations of 8-
-  // and 16-bit vector elements.  NEON supports these directly.  They are
+  // Check for sign- and zero-extensions of vector extract operations of 8- and
+  // 16-bit vector elements. NEON and MVE support these directly. They are
   // handled during DAG combining because type legalization will promote them
   // to 32-bit types and it is messy to recognize the operations after that.
-  if (ST->hasNEON() && N0.getOpcode() == ISD::EXTRACT_VECTOR_ELT) {
+  if ((ST->hasNEON() || ST->hasMVEIntegerOps()) &&
+      N0.getOpcode() == ISD::EXTRACT_VECTOR_ELT) {
     SDValue Vec = N0.getOperand(0);
     SDValue Lane = N0.getOperand(1);
     EVT VT = N->getValueType(0);
@@ -14808,6 +14814,37 @@ int ARMTargetLowering::getScalingFactorCost(const DataLayout &DL,
   return -1;
 }
 
+/// isFMAFasterThanFMulAndFAdd - Return true if an FMA operation is faster
+/// than a pair of fmul and fadd instructions. fmuladd intrinsics will be
+/// expanded to FMAs when this method returns true, otherwise fmuladd is
+/// expanded to fmul + fadd.
+///
+/// ARM supports both fused and unfused multiply-add operations; we already
+/// lower a pair of fmul and fadd to the latter so it's not clear that there
+/// would be a gain or that the gain would be worthwhile enough to risk
+/// correctness bugs.
+///
+/// For MVE, we set this to true as it helps simplify the need for some
+/// patterns (and we don't have the non-fused floating point instruction).
+bool ARMTargetLowering::isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
+                                                   EVT VT) const {
+  if (!Subtarget->hasMVEFloatOps())
+    return false;
+
+  if (!VT.isSimple())
+    return false;
+
+  switch (VT.getSimpleVT().SimpleTy) {
+  case MVT::v4f32:
+  case MVT::v8f16:
+    return true;
+  default:
+    break;
+  }
+
+  return false;
+}
+
 static bool isLegalT1AddressImmediate(int64_t V, EVT VT) {
   if (V < 0)
     return false;
@@ -14850,7 +14887,7 @@ static bool isLegalT2AddressImmediate(int64_t V, EVT VT,
     V = -V;
   }
 
-  unsigned NumBytes = std::max(VT.getSizeInBits() / 8, 1U);
+  unsigned NumBytes = std::max((unsigned)VT.getSizeInBits() / 8, 1U);
 
   // MVE: size * imm7
   if (VT.isVector() && Subtarget->hasMVEIntegerOps()) {

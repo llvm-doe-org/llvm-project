@@ -56,6 +56,7 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/User.h"
 #include "llvm/IR/Value.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Casting.h"
@@ -466,7 +467,7 @@ bool IRTranslator::translateSwitch(const User &U, MachineIRBuilder &MIB) {
     return true;
   }
 
-  SL->findJumpTables(Clusters, &SI, DefaultMBB);
+  SL->findJumpTables(Clusters, &SI, DefaultMBB, nullptr, nullptr);
 
   LLVM_DEBUG({
     dbgs() << "Case clusters: ";
@@ -885,13 +886,15 @@ bool IRTranslator::translateLoad(const User &U, MachineIRBuilder &MIRBuilder) {
       Regs.size() == 1 ? LI.getMetadata(LLVMContext::MD_range) : nullptr;
   for (unsigned i = 0; i < Regs.size(); ++i) {
     Register Addr;
-    MIRBuilder.materializeGEP(Addr, Base, OffsetTy, Offsets[i] / 8);
+    MIRBuilder.materializePtrAdd(Addr, Base, OffsetTy, Offsets[i] / 8);
 
     MachinePointerInfo Ptr(LI.getPointerOperand(), Offsets[i] / 8);
     unsigned BaseAlign = getMemOpAlignment(LI);
+    AAMDNodes AAMetadata;
+    LI.getAAMetadata(AAMetadata);
     auto MMO = MF->getMachineMemOperand(
         Ptr, Flags, (MRI->getType(Regs[i]).getSizeInBits() + 7) / 8,
-        MinAlign(BaseAlign, Offsets[i] / 8), AAMDNodes(), Ranges,
+        MinAlign(BaseAlign, Offsets[i] / 8), AAMetadata, Ranges,
         LI.getSyncScopeID(), LI.getOrdering());
     MIRBuilder.buildLoad(Regs[i], Addr, *MMO);
   }
@@ -926,13 +929,15 @@ bool IRTranslator::translateStore(const User &U, MachineIRBuilder &MIRBuilder) {
 
   for (unsigned i = 0; i < Vals.size(); ++i) {
     Register Addr;
-    MIRBuilder.materializeGEP(Addr, Base, OffsetTy, Offsets[i] / 8);
+    MIRBuilder.materializePtrAdd(Addr, Base, OffsetTy, Offsets[i] / 8);
 
     MachinePointerInfo Ptr(SI.getPointerOperand(), Offsets[i] / 8);
     unsigned BaseAlign = getMemOpAlignment(SI);
+    AAMDNodes AAMetadata;
+    SI.getAAMetadata(AAMetadata);
     auto MMO = MF->getMachineMemOperand(
         Ptr, Flags, (MRI->getType(Vals[i]).getSizeInBits() + 7) / 8,
-        MinAlign(BaseAlign, Offsets[i] / 8), AAMDNodes(), nullptr,
+        MinAlign(BaseAlign, Offsets[i] / 8), AAMetadata, nullptr,
         SI.getSyncScopeID(), SI.getOrdering());
     MIRBuilder.buildStore(Vals[i], Addr, *MMO);
   }
@@ -1080,8 +1085,8 @@ bool IRTranslator::translateGetElementPtr(const User &U,
       if (Offset != 0) {
         LLT OffsetTy = getLLTForType(*OffsetIRTy, *DL);
         auto OffsetMIB = MIRBuilder.buildConstant({OffsetTy}, Offset);
-        BaseReg =
-            MIRBuilder.buildGEP(PtrTy, BaseReg, OffsetMIB.getReg(0)).getReg(0);
+        BaseReg = MIRBuilder.buildPtrAdd(PtrTy, BaseReg, OffsetMIB.getReg(0))
+                      .getReg(0);
         Offset = 0;
       }
 
@@ -1100,14 +1105,14 @@ bool IRTranslator::translateGetElementPtr(const User &U,
       } else
         GepOffsetReg = IdxReg;
 
-      BaseReg = MIRBuilder.buildGEP(PtrTy, BaseReg, GepOffsetReg).getReg(0);
+      BaseReg = MIRBuilder.buildPtrAdd(PtrTy, BaseReg, GepOffsetReg).getReg(0);
     }
   }
 
   if (Offset != 0) {
     auto OffsetMIB =
         MIRBuilder.buildConstant(getLLTForType(*OffsetIRTy, *DL), Offset);
-    MIRBuilder.buildGEP(getOrCreateVReg(U), BaseReg, OffsetMIB.getReg(0));
+    MIRBuilder.buildPtrAdd(getOrCreateVReg(U), BaseReg, OffsetMIB.getReg(0));
     return true;
   }
 
@@ -1412,7 +1417,8 @@ bool IRTranslator::translateKnownIntrinsic(const CallInst &CI, Intrinsic::ID ID,
     Register Op1 = getOrCreateVReg(*CI.getArgOperand(1));
     Register Op2 = getOrCreateVReg(*CI.getArgOperand(2));
     if (TM.Options.AllowFPOpFusion != FPOpFusion::Strict &&
-        TLI.isFMAFasterThanFMulAndFAdd(TLI.getValueType(*DL, CI.getType()))) {
+        TLI.isFMAFasterThanFMulAndFAdd(*MF,
+                                       TLI.getValueType(*DL, CI.getType()))) {
       // TODO: Revisit this to see if we should move this part of the
       // lowering to the combiner.
       MIRBuilder.buildInstr(TargetOpcode::G_FMA, {Dst}, {Op0, Op1, Op2},
@@ -1590,6 +1596,10 @@ bool IRTranslator::translateCall(const User &U, MachineIRBuilder &MIRBuilder) {
   if (F && F->hasDLLImportStorageClass())
     return false;
 
+  // FIXME: support control flow guard targets.
+  if (CI.countOperandBundlesOfType(LLVMContext::OB_cfguardtarget))
+    return false;
+
   if (CI.isInlineAsm())
     return translateInlineAsm(CI, MIRBuilder);
 
@@ -1681,6 +1691,10 @@ bool IRTranslator::translateInvoke(const User &U,
 
   // FIXME: support whatever these are.
   if (I.countOperandBundlesOfType(LLVMContext::OB_deopt))
+    return false;
+
+  // FIXME: support control flow guard targets.
+  if (I.countOperandBundlesOfType(LLVMContext::OB_cfguardtarget))
     return false;
 
   // FIXME: support Windows exception handling.
@@ -1950,11 +1964,14 @@ bool IRTranslator::translateAtomicCmpXchg(const User &U,
   Register Cmp = getOrCreateVReg(*I.getCompareOperand());
   Register NewVal = getOrCreateVReg(*I.getNewValOperand());
 
+  AAMDNodes AAMetadata;
+  I.getAAMetadata(AAMetadata);
+
   MIRBuilder.buildAtomicCmpXchgWithSuccess(
       OldValRes, SuccessRes, Addr, Cmp, NewVal,
       *MF->getMachineMemOperand(MachinePointerInfo(I.getPointerOperand()),
                                 Flags, DL->getTypeStoreSize(ValType),
-                                getMemOpAlignment(I), AAMDNodes(), nullptr,
+                                getMemOpAlignment(I), AAMetadata, nullptr,
                                 I.getSyncScopeID(), I.getSuccessOrdering(),
                                 I.getFailureOrdering()));
   return true;
@@ -2019,12 +2036,15 @@ bool IRTranslator::translateAtomicRMW(const User &U,
     break;
   }
 
+  AAMDNodes AAMetadata;
+  I.getAAMetadata(AAMetadata);
+
   MIRBuilder.buildAtomicRMW(
       Opcode, Res, Addr, Val,
       *MF->getMachineMemOperand(MachinePointerInfo(I.getPointerOperand()),
                                 Flags, DL->getTypeStoreSize(ResType),
-                                getMemOpAlignment(I), AAMDNodes(), nullptr,
-                                I.getSyncScopeID(), I.getOrdering()));
+                                getMemOpAlignment(I), AAMetadata,
+                                nullptr, I.getSyncScopeID(), I.getOrdering()));
   return true;
 }
 

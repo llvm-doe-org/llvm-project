@@ -17,6 +17,7 @@
 #include "clang/AST/Decl.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Lex/MacroInfo.h"
+#include "llvm/ADT/StringRef.h"
 
 namespace clang {
 class SourceManager;
@@ -69,7 +70,7 @@ llvm::Optional<SymbolID> getSymbolID(const Decl *D);
 /// macro (e.g. a change in definition offset can result in a different USR). We
 /// could change these semantics in the future by reimplementing this funcure
 /// (e.g. avoid USR for macros).
-llvm::Optional<SymbolID> getSymbolID(const IdentifierInfo &II,
+llvm::Optional<SymbolID> getSymbolID(const llvm::StringRef MacroName,
                                      const MacroInfo *MI,
                                      const SourceManager &SM);
 
@@ -109,6 +110,16 @@ bool isExplicitTemplateSpecialization(const NamedDecl *D);
 ///     void ns::something::foo() -> returns 'ns::something'
 ///     void foo() -> returns null
 NestedNameSpecifierLoc getQualifierLoc(const NamedDecl &ND);
+
+// Returns a type corresponding to a declaration of that type.
+// Unlike the method on ASTContext, attempts to preserve the type as-written
+// (i.e. vector<T*> rather than vector<type-parameter-0-0 *>.
+QualType declaredType(const TypeDecl *D);
+
+/// Retrieves the deduced type at a given location (auto, decltype).
+/// Retuns None unless Loc starts an auto/decltype token.
+/// It will return the underlying type.
+llvm::Optional<QualType> getDeducedType(ASTContext &, SourceLocation Loc);
 
 } // namespace clangd
 } // namespace clang

@@ -1240,6 +1240,24 @@ public:
   /// same special member, we should act as if it is not yet declared.
   llvm::SmallPtrSet<SpecialMemberDecl, 4> SpecialMembersBeingDeclared;
 
+  /// Kinds of defaulted comparison operator functions.
+  enum class DefaultedComparisonKind : unsigned char {
+    /// This is not a defaultable comparison operator.
+    None,
+    /// This is an operator== that should be implemented as a series of
+    /// subobject comparisons.
+    Equal,
+    /// This is an operator<=> that should be implemented as a series of
+    /// subobject comparisons.
+    ThreeWay,
+    /// This is an operator!= that should be implemented as a rewrite in terms
+    /// of a == comparison.
+    NotEqual,
+    /// This is an <, <=, >, or >= that should be implemented as a rewrite in
+    /// terms of a <=> comparison.
+    Relational,
+  };
+
   /// The function definitions which were renamed as part of typo-correction
   /// to match their respective declarations. We want to keep track of them
   /// to ensure that we don't emit a "redefinition" error if we encounter a
@@ -2544,7 +2562,52 @@ public:
   bool SpecialMemberIsTrivial(CXXMethodDecl *MD, CXXSpecialMember CSM,
                               TrivialABIHandling TAH = TAH_IgnoreTrivialABI,
                               bool Diagnose = false);
-  CXXSpecialMember getSpecialMember(const CXXMethodDecl *MD);
+
+  /// For a defaulted function, the kind of defaulted function that it is.
+  class DefaultedFunctionKind {
+    CXXSpecialMember SpecialMember : 8;
+    DefaultedComparisonKind Comparison : 8;
+
+  public:
+    DefaultedFunctionKind()
+        : SpecialMember(CXXInvalid), Comparison(DefaultedComparisonKind::None) {
+    }
+    DefaultedFunctionKind(CXXSpecialMember CSM)
+        : SpecialMember(CSM), Comparison(DefaultedComparisonKind::None) {}
+    DefaultedFunctionKind(DefaultedComparisonKind Comp)
+        : SpecialMember(CXXInvalid), Comparison(Comp) {}
+
+    bool isSpecialMember() const { return SpecialMember != CXXInvalid; }
+    bool isComparison() const {
+      return Comparison != DefaultedComparisonKind::None;
+    }
+
+    explicit operator bool() const {
+      return isSpecialMember() || isComparison();
+    }
+
+    CXXSpecialMember asSpecialMember() const { return SpecialMember; }
+    DefaultedComparisonKind asComparison() const { return Comparison; }
+
+    /// Get the index of this function kind for use in diagnostics.
+    unsigned getDiagnosticIndex() const {
+      static_assert(CXXInvalid > CXXDestructor,
+                    "invalid should have highest index");
+      static_assert((unsigned)DefaultedComparisonKind::None == 0,
+                    "none should be equal to zero");
+      return SpecialMember + (unsigned)Comparison;
+    }
+  };
+
+  DefaultedFunctionKind getDefaultedFunctionKind(const FunctionDecl *FD);
+
+  CXXSpecialMember getSpecialMember(const CXXMethodDecl *MD) {
+    return getDefaultedFunctionKind(MD).asSpecialMember();
+  }
+  DefaultedComparisonKind getDefaultedComparisonKind(const FunctionDecl *FD) {
+    return getDefaultedFunctionKind(FD).asComparison();
+  }
+
   void ActOnLastBitfield(SourceLocation DeclStart,
                          SmallVectorImpl<Decl *> &AllIvarDecls);
   Decl *ActOnIvar(Scope *S, SourceLocation DeclStart,
@@ -6364,8 +6427,14 @@ public:
                                      StorageClass &SC);
   void CheckDeductionGuideTemplate(FunctionTemplateDecl *TD);
 
-  void CheckExplicitlyDefaultedSpecialMember(CXXMethodDecl *MD);
+  void CheckExplicitlyDefaultedFunction(FunctionDecl *MD);
+
+  bool CheckExplicitlyDefaultedSpecialMember(CXXMethodDecl *MD,
+                                             CXXSpecialMember CSM);
   void CheckDelayedMemberExceptionSpecs();
+
+  bool CheckExplicitlyDefaultedComparison(FunctionDecl *MD,
+                                          DefaultedComparisonKind DCK);
 
   //===--------------------------------------------------------------------===//
   // C++ Derived Classes
@@ -8835,6 +8904,9 @@ public:
     RTC_Unknown
   };
 
+  void CheckObjCMethodDirectOverrides(ObjCMethodDecl *method,
+                                      ObjCMethodDecl *overridden);
+
   void CheckObjCMethodOverrides(ObjCMethodDecl *ObjCMethod,
                                 ObjCInterfaceDecl *CurrentClass,
                                 ResultTypeCompatibilityKind RTC);
@@ -9241,21 +9313,10 @@ private:
 
 public:
   /// Struct to store the context selectors info for declare variant directive.
-  struct OpenMPDeclareVariantCtsSelectorData {
-    OMPDeclareVariantAttr::CtxSelectorSetType CtxSet =
-        OMPDeclareVariantAttr::CtxSetUnknown;
-    OMPDeclareVariantAttr::CtxSelectorType Ctx =
-        OMPDeclareVariantAttr::CtxUnknown;
-    MutableArrayRef<StringRef> ImplVendors;
-    ExprResult CtxScore;
-    explicit OpenMPDeclareVariantCtsSelectorData() = default;
-    explicit OpenMPDeclareVariantCtsSelectorData(
-        OMPDeclareVariantAttr::CtxSelectorSetType CtxSet,
-        OMPDeclareVariantAttr::CtxSelectorType Ctx,
-        MutableArrayRef<StringRef> ImplVendors, ExprResult CtxScore)
-        : CtxSet(CtxSet), Ctx(Ctx), ImplVendors(ImplVendors),
-          CtxScore(CtxScore) {}
-  };
+  using OMPCtxStringType = SmallString<8>;
+  using OMPCtxSelectorData =
+      OpenMPCtxSelectorData<OMPCtxStringType, SmallVector<OMPCtxStringType, 4>,
+                            ExprResult>;
 
   /// Checks if the variant/multiversion functions are compatible.
   bool areMultiversionVariantFunctionsCompatible(
@@ -9609,6 +9670,11 @@ public:
   StmtResult ActOnOpenMPParallelMasterTaskLoopDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
       SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
+  /// Called on well-formed '\#pragma omp parallel master taskloop simd' after
+  /// parsing of the associated statement.
+  StmtResult ActOnOpenMPParallelMasterTaskLoopSimdDirective(
+      ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// Called on well-formed '\#pragma omp distribute' after parsing
   /// of the associated statement.
   StmtResult
@@ -9728,9 +9794,9 @@ public:
   /// must be used instead of the original one, specified in \p DG.
   /// \param Data Set of context-specific data for the specified context
   /// selector.
-  void ActOnOpenMPDeclareVariantDirective(
-      FunctionDecl *FD, Expr *VariantRef, SourceRange SR,
-      const Sema::OpenMPDeclareVariantCtsSelectorData &Data);
+  void ActOnOpenMPDeclareVariantDirective(FunctionDecl *FD, Expr *VariantRef,
+                                          SourceRange SR,
+                                          ArrayRef<OMPCtxSelectorData> Data);
 
   OMPClause *ActOnOpenMPSingleExprClause(OpenMPClauseKind Kind,
                                          Expr *Expr,
@@ -11227,7 +11293,8 @@ public:
   void CodeCompleteAfterIf(Scope *S);
 
   void CodeCompleteQualifiedId(Scope *S, CXXScopeSpec &SS, bool EnteringContext,
-                               QualType BaseType, QualType PreferredType);
+                               bool IsUsingDeclaration, QualType BaseType,
+                               QualType PreferredType);
   void CodeCompleteUsing(Scope *S);
   void CodeCompleteUsingDirective(Scope *S);
   void CodeCompleteNamespaceDecl(Scope *S);
@@ -11357,6 +11424,7 @@ private:
   bool CheckARMBuiltinExclusiveCall(unsigned BuiltinID, CallExpr *TheCall,
                                     unsigned MaxWidth);
   bool CheckNeonBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
+  bool CheckMVEBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
   bool CheckARMBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
 
   bool CheckAArch64BuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
@@ -11404,6 +11472,9 @@ private:
                                    int High, bool RangeIsError = true);
   bool SemaBuiltinConstantArgMultiple(CallExpr *TheCall, int ArgNum,
                                       unsigned Multiple);
+  bool SemaBuiltinConstantArgPower2(CallExpr *TheCall, int ArgNum);
+  bool SemaBuiltinConstantArgShiftedByte(CallExpr *TheCall, int ArgNum);
+  bool SemaBuiltinConstantArgShiftedByteOrXXFF(CallExpr *TheCall, int ArgNum);
   bool SemaBuiltinARMSpecialReg(unsigned BuiltinID, CallExpr *TheCall,
                                 int ArgNum, unsigned ExpectedFieldNum,
                                 bool AllowName);

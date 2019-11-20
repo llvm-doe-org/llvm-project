@@ -1152,7 +1152,13 @@ void ClangdLSPServer::onChangeConfiguration(
 void ClangdLSPServer::onReference(const ReferenceParams &Params,
                                   Callback<std::vector<Location>> Reply) {
   Server->findReferences(Params.textDocument.uri.file(), Params.position,
-                         CCOpts.Limit, std::move(Reply));
+                         CCOpts.Limit,
+                         [Reply = std::move(Reply)](
+                             llvm::Expected<ReferencesResult> Refs) mutable {
+                           if (!Refs)
+                             return Reply(Refs.takeError());
+                           return Reply(std::move(Refs->References));
+                         });
 }
 
 void ClangdLSPServer::onSymbolInfo(const TextDocumentPositionParams &Params,
@@ -1231,7 +1237,11 @@ ClangdLSPServer::ClangdLSPServer(
   // clang-format on
 }
 
-ClangdLSPServer::~ClangdLSPServer() { IsBeingDestroyed = true; }
+ClangdLSPServer::~ClangdLSPServer() { IsBeingDestroyed = true;
+  // Explicitly destroy ClangdServer first, blocking on threads it owns.
+  // This ensures they don't access any other members.
+  Server.reset();
+}
 
 bool ClangdLSPServer::run() {
   // Run the Language Server loop.
@@ -1241,8 +1251,6 @@ bool ClangdLSPServer::run() {
     CleanExit = false;
   }
 
-  // Destroy ClangdServer to ensure all worker threads finish.
-  Server.reset();
   return CleanExit && ShutdownRequestReceived;
 }
 

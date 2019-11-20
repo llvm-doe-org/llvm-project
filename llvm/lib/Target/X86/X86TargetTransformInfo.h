@@ -51,7 +51,6 @@ class X86TTIImpl : public BasicTTIImplBase<X86TTIImpl> {
       X86::FeatureFastBEXTR,
       X86::FeatureFastHorizontalOps,
       X86::FeatureFastLZCNT,
-      X86::FeatureFastPartialYMMorZMMWrite,
       X86::FeatureFastScalarFSQRT,
       X86::FeatureFastSHLDRotate,
       X86::FeatureFastScalarShiftMasks,
@@ -77,6 +76,8 @@ class X86TTIImpl : public BasicTTIImplBase<X86TTIImpl> {
       X86::FeatureSlowSHLD,
       X86::FeatureSlowTwoMemOps,
       X86::FeatureSlowUAMem16,
+      X86::FeaturePreferMaskRegisters,
+      X86::FeatureInsertVZEROUPPER,
 
       // Perf-tuning flags.
       X86::FeatureHasFastGather,
@@ -133,7 +134,7 @@ public:
   int getCmpSelInstrCost(unsigned Opcode, Type *ValTy, Type *CondTy,
                          const Instruction *I = nullptr);
   int getVectorInstrCost(unsigned Opcode, Type *Val, unsigned Index);
-  int getMemoryOpCost(unsigned Opcode, Type *Src, unsigned Alignment,
+  int getMemoryOpCost(unsigned Opcode, Type *Src, MaybeAlign Alignment,
                       unsigned AddressSpace, const Instruction *I = nullptr);
   int getMaskedMemoryOpCost(unsigned Opcode, Type *Src, unsigned Alignment,
                             unsigned AddressSpace);

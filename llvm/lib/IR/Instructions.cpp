@@ -1217,30 +1217,31 @@ AllocaInst::AllocaInst(Type *Ty, unsigned AddrSpace, const Twine &Name,
 
 AllocaInst::AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize,
                        const Twine &Name, Instruction *InsertBefore)
-  : AllocaInst(Ty, AddrSpace, ArraySize, /*Align=*/0, Name, InsertBefore) {}
+    : AllocaInst(Ty, AddrSpace, ArraySize, /*Align=*/None, Name, InsertBefore) {
+}
 
 AllocaInst::AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize,
                        const Twine &Name, BasicBlock *InsertAtEnd)
-  : AllocaInst(Ty, AddrSpace, ArraySize, /*Align=*/0, Name, InsertAtEnd) {}
+    : AllocaInst(Ty, AddrSpace, ArraySize, /*Align=*/None, Name, InsertAtEnd) {}
 
 AllocaInst::AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize,
-                       unsigned Align, const Twine &Name,
+                       MaybeAlign Align, const Twine &Name,
                        Instruction *InsertBefore)
-  : UnaryInstruction(PointerType::get(Ty, AddrSpace), Alloca,
-                     getAISize(Ty->getContext(), ArraySize), InsertBefore),
-    AllocatedType(Ty) {
+    : UnaryInstruction(PointerType::get(Ty, AddrSpace), Alloca,
+                       getAISize(Ty->getContext(), ArraySize), InsertBefore),
+      AllocatedType(Ty) {
   setAlignment(MaybeAlign(Align));
   assert(!Ty->isVoidTy() && "Cannot allocate void!");
   setName(Name);
 }
 
 AllocaInst::AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize,
-                       unsigned Align, const Twine &Name,
+                       MaybeAlign Align, const Twine &Name,
                        BasicBlock *InsertAtEnd)
-  : UnaryInstruction(PointerType::get(Ty, AddrSpace), Alloca,
-                     getAISize(Ty->getContext(), ArraySize), InsertAtEnd),
+    : UnaryInstruction(PointerType::get(Ty, AddrSpace), Alloca,
+                       getAISize(Ty->getContext(), ArraySize), InsertAtEnd),
       AllocatedType(Ty) {
-  setAlignment(MaybeAlign(Align));
+  setAlignment(Align);
   assert(!Ty->isVoidTy() && "Cannot allocate void!");
   setName(Name);
 }
@@ -2047,7 +2048,7 @@ bool ShuffleVectorInst::isExtractSubvectorMask(ArrayRef<int> Mask,
     SubIndex = Offset;
   }
 
-  if (0 <= SubIndex) {
+  if (0 <= SubIndex && SubIndex + (int)Mask.size() <= NumSrcElts) {
     Index = SubIndex;
     return true;
   }
@@ -4091,6 +4092,22 @@ void IndirectBrInst::removeDestination(unsigned idx) {
 }
 
 //===----------------------------------------------------------------------===//
+//                            FreezeInst Implementation
+//===----------------------------------------------------------------------===//
+
+FreezeInst::FreezeInst(Value *S,
+                       const Twine &Name, Instruction *InsertBefore)
+    : UnaryInstruction(S->getType(), Freeze, S, InsertBefore) {
+  setName(Name);
+}
+
+FreezeInst::FreezeInst(Value *S,
+                       const Twine &Name, BasicBlock *InsertAtEnd)
+    : UnaryInstruction(S->getType(), Freeze, S, InsertAtEnd) {
+  setName(Name);
+}
+
+//===----------------------------------------------------------------------===//
 //                           cloneImpl() implementations
 //===----------------------------------------------------------------------===//
 
@@ -4126,9 +4143,9 @@ InsertValueInst *InsertValueInst::cloneImpl() const {
 }
 
 AllocaInst *AllocaInst::cloneImpl() const {
-  AllocaInst *Result = new AllocaInst(getAllocatedType(),
-                                      getType()->getAddressSpace(),
-                                      (Value *)getOperand(0), getAlignment());
+  AllocaInst *Result =
+      new AllocaInst(getAllocatedType(), getType()->getAddressSpace(),
+                     (Value *)getOperand(0), MaybeAlign(getAlignment()));
   Result->setUsedWithInAlloca(isUsedWithInAlloca());
   Result->setSwiftError(isSwiftError());
   return Result;
@@ -4305,4 +4322,8 @@ FuncletPadInst *FuncletPadInst::cloneImpl() const {
 UnreachableInst *UnreachableInst::cloneImpl() const {
   LLVMContext &Context = getContext();
   return new UnreachableInst(Context);
+}
+
+FreezeInst *FreezeInst::cloneImpl() const {
+  return new FreezeInst(getOperand(0));
 }

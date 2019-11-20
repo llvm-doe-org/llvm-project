@@ -1326,7 +1326,7 @@ TryUserDefinedConversion(Sema &S, Expr *From, QualType ToType,
     ICS.Ambiguous.setToType(ToType);
     for (OverloadCandidateSet::iterator Cand = Conversions.begin();
          Cand != Conversions.end(); ++Cand)
-      if (Cand->Viable)
+      if (Cand->Best)
         ICS.Ambiguous.addConversion(Cand->FoundDecl, Cand->Function);
     break;
 
@@ -3547,7 +3547,10 @@ Sema::DiagnoseMultipleUserDefinedConversion(Expr *From, QualType ToType) {
         (OvResult == OR_No_Viable_Function && !CandidateSet.empty())))
     return false;
 
-  auto Cands = CandidateSet.CompleteCandidates(*this, OCD_AllCandidates, From);
+  auto Cands = CandidateSet.CompleteCandidates(
+      *this,
+      OvResult == OR_Ambiguous ? OCD_AmbiguousCandidates : OCD_AllCandidates,
+      From);
   if (OvResult == OR_Ambiguous)
     Diag(From->getBeginLoc(), diag::err_typecheck_ambiguous_condition)
         << From->getType() << ToType << From->getSourceRange();
@@ -4571,7 +4574,7 @@ FindConversionForRefInit(Sema &S, ImplicitConversionSequence &ICS,
     ICS.setAmbiguous();
     for (OverloadCandidateSet::iterator Cand = CandidateSet.begin();
          Cand != CandidateSet.end(); ++Cand)
-      if (Cand->Viable)
+      if (Cand->Best)
         ICS.Ambiguous.addConversion(Cand->FoundDecl, Cand->Function);
     return true;
 
@@ -5367,7 +5370,10 @@ Sema::PerformObjectArgumentInitialization(Expr *From,
 
   if (!Context.hasSameType(From->getType(), DestType)) {
     CastKind CK;
-    if (FromRecordType.getAddressSpace() != DestType.getAddressSpace())
+    QualType PteeTy = DestType->getPointeeType();
+    LangAS DestAS =
+        PteeTy.isNull() ? DestType.getAddressSpace() : PteeTy.getAddressSpace();
+    if (FromRecordType.getAddressSpace() != DestAS)
       CK = CK_AddressSpaceConversion;
     else
       CK = CK_NoOp;
@@ -9622,11 +9628,13 @@ OverloadCandidateSet::BestViableFunction(Sema &S, SourceLocation Loc,
 
   // Find the best viable function.
   Best = end();
-  for (auto *Cand : Candidates)
+  for (auto *Cand : Candidates) {
+    Cand->Best = false;
     if (Cand->Viable)
       if (Best == end() ||
           isBetterOverloadCandidate(S, *Cand, *Best, Loc, Kind))
         Best = Cand;
+  }
 
   // If we didn't find any viable functions, abort.
   if (Best == end())
@@ -9634,21 +9642,32 @@ OverloadCandidateSet::BestViableFunction(Sema &S, SourceLocation Loc,
 
   llvm::SmallVector<const NamedDecl *, 4> EquivalentCands;
 
+  llvm::SmallVector<OverloadCandidate*, 4> PendingBest;
+  PendingBest.push_back(&*Best);
+  Best->Best = true;
+
   // Make sure that this function is better than every other viable
   // function. If not, we have an ambiguity.
-  for (auto *Cand : Candidates) {
-    if (Cand->Viable && Cand != Best &&
-        !isBetterOverloadCandidate(S, *Best, *Cand, Loc, Kind)) {
-      if (S.isEquivalentInternalLinkageDeclaration(Best->Function,
-                                                   Cand->Function)) {
-        EquivalentCands.push_back(Cand->Function);
-        continue;
-      }
+  while (!PendingBest.empty()) {
+    auto *Curr = PendingBest.pop_back_val();
+    for (auto *Cand : Candidates) {
+      if (Cand->Viable && !Cand->Best &&
+          !isBetterOverloadCandidate(S, *Curr, *Cand, Loc, Kind)) {
+        PendingBest.push_back(Cand);
+        Cand->Best = true;
 
-      Best = end();
-      return OR_Ambiguous;
+        if (S.isEquivalentInternalLinkageDeclaration(Cand->Function,
+                                                     Curr->Function))
+          EquivalentCands.push_back(Cand->Function);
+        else
+          Best = end();
+      }
     }
   }
+
+  // If we found more than one best candidate, this is ambiguous.
+  if (Best == end())
+    return OR_Ambiguous;
 
   // Best is the best viable function.
   if (Best->Function && Best->Function->isDeleted())
@@ -9916,7 +9935,7 @@ static void DiagnoseBadConversion(Sema &S, OverloadCandidate *Cand,
 
   std::string FnDesc;
   std::pair<OverloadCandidateKind, OverloadCandidateSelect> FnKindPair =
-      ClassifyOverloadCandidate(S, Cand->FoundDecl, Fn, Cand->RewriteKind,
+      ClassifyOverloadCandidate(S, Cand->FoundDecl, Fn, Cand->getRewriteKind(),
                                 FnDesc);
 
   Expr *FromExpr = Conv.Bad.FromExpr;
@@ -10486,8 +10505,8 @@ static void DiagnoseBadTarget(Sema &S, OverloadCandidate *Cand) {
 
   std::string FnDesc;
   std::pair<OverloadCandidateKind, OverloadCandidateSelect> FnKindPair =
-      ClassifyOverloadCandidate(S, Cand->FoundDecl, Callee, Cand->RewriteKind,
-                                FnDesc);
+      ClassifyOverloadCandidate(S, Cand->FoundDecl, Callee,
+                                Cand->getRewriteKind(), FnDesc);
 
   S.Diag(Callee->getLocation(), diag::note_ovl_candidate_bad_target)
       << (unsigned)FnKindPair.first << (unsigned)ocs_non_template
@@ -10605,8 +10624,8 @@ static void NoteFunctionCandidate(Sema &S, OverloadCandidate *Cand,
     if (Fn->isDeleted()) {
       std::string FnDesc;
       std::pair<OverloadCandidateKind, OverloadCandidateSelect> FnKindPair =
-          ClassifyOverloadCandidate(S, Cand->FoundDecl, Fn, Cand->RewriteKind,
-                                    FnDesc);
+          ClassifyOverloadCandidate(S, Cand->FoundDecl, Fn,
+                                    Cand->getRewriteKind(), FnDesc);
 
       S.Diag(Fn->getLocation(), diag::note_ovl_candidate_deleted)
           << (unsigned)FnKindPair.first << (unsigned)FnKindPair.second << FnDesc
@@ -10616,7 +10635,7 @@ static void NoteFunctionCandidate(Sema &S, OverloadCandidate *Cand,
     }
 
     // We don't really have anything else to say about viable candidates.
-    S.NoteOverloadCandidate(Cand->FoundDecl, Fn, Cand->RewriteKind);
+    S.NoteOverloadCandidate(Cand->FoundDecl, Fn, Cand->getRewriteKind());
     return;
   }
 
@@ -10649,7 +10668,7 @@ static void NoteFunctionCandidate(Sema &S, OverloadCandidate *Cand,
   case ovl_fail_trivial_conversion:
   case ovl_fail_bad_final_conversion:
   case ovl_fail_final_conversion_not_exact:
-    return S.NoteOverloadCandidate(Cand->FoundDecl, Fn, Cand->RewriteKind);
+    return S.NoteOverloadCandidate(Cand->FoundDecl, Fn, Cand->getRewriteKind());
 
   case ovl_fail_bad_conversion: {
     unsigned I = (Cand->IgnoreObjectArgument ? 1 : 0);
@@ -10660,7 +10679,7 @@ static void NoteFunctionCandidate(Sema &S, OverloadCandidate *Cand,
     // FIXME: this currently happens when we're called from SemaInit
     // when user-conversion overload fails.  Figure out how to handle
     // those conditions and diagnose them well.
-    return S.NoteOverloadCandidate(Cand->FoundDecl, Fn, Cand->RewriteKind);
+    return S.NoteOverloadCandidate(Cand->FoundDecl, Fn, Cand->getRewriteKind());
   }
 
   case ovl_fail_bad_target:
@@ -10985,7 +11004,8 @@ CompleteNonViableCandidate(Sema &S, OverloadCandidate *Cand,
         !isa<CXXConstructorDecl>(Cand->Function)) {
       // Conversion 0 is 'this', which doesn't have a corresponding parameter.
       ConvIdx = 1;
-      if (CSK == OverloadCandidateSet::CSK_Operator)
+      if (CSK == OverloadCandidateSet::CSK_Operator &&
+          Cand->Function->getDeclName().getCXXOverloadedOperator() != OO_Call)
         // Argument 0 is 'this', which doesn't have a corresponding parameter.
         ArgIdx = 1;
     }
@@ -11000,9 +11020,10 @@ CompleteNonViableCandidate(Sema &S, OverloadCandidate *Cand,
   for (unsigned ParamIdx = Reversed ? ParamTypes.size() - 1 : 0;
        ConvIdx != ConvCount;
        ++ConvIdx, ++ArgIdx, ParamIdx += (Reversed ? -1 : 1)) {
+    assert(ArgIdx < Args.size() && "no argument for this arg conversion");
     if (Cand->Conversions[ConvIdx].isInitialized()) {
       // We've already checked this conversion.
-    } else if (ArgIdx < ParamTypes.size()) {
+    } else if (ParamIdx < ParamTypes.size()) {
       if (ParamTypes[ParamIdx]->isDependentType())
         Cand->Conversions[ConvIdx].setAsIdentityConversion(
             Args[ArgIdx]->getType());
@@ -11033,15 +11054,30 @@ SmallVector<OverloadCandidate *, 32> OverloadCandidateSet::CompleteCandidates(
   for (iterator Cand = begin(), LastCand = end(); Cand != LastCand; ++Cand) {
     if (!Filter(*Cand))
       continue;
-    if (Cand->Viable)
-      Cands.push_back(Cand);
-    else if (OCD == OCD_AllCandidates) {
-      CompleteNonViableCandidate(S, Cand, Args, Kind);
-      if (Cand->Function || Cand->IsSurrogate)
-        Cands.push_back(Cand);
-      // Otherwise, this a non-viable builtin candidate.  We do not, in general,
-      // want to list every possible builtin candidate.
+    switch (OCD) {
+    case OCD_AllCandidates:
+      if (!Cand->Viable) {
+        if (!Cand->Function && !Cand->IsSurrogate) {
+          // This a non-viable builtin candidate.  We do not, in general,
+          // want to list every possible builtin candidate.
+          continue;
+        }
+        CompleteNonViableCandidate(S, Cand, Args, Kind);
+      }
+      break;
+
+    case OCD_ViableCandidates:
+      if (!Cand->Viable)
+        continue;
+      break;
+
+    case OCD_AmbiguousCandidates:
+      if (!Cand->Best)
+        continue;
+      break;
     }
+
+    Cands.push_back(Cand);
   }
 
   llvm::stable_sort(
@@ -12406,7 +12442,7 @@ static ExprResult FinishOverloadedCallExpr(Sema &SemaRef, Scope *S, Expr *Fn,
         PartialDiagnosticAt(Fn->getBeginLoc(),
                             SemaRef.PDiag(diag::err_ovl_ambiguous_call)
                                 << ULE->getName() << Fn->getSourceRange()),
-        SemaRef, OCD_ViableCandidates, Args);
+        SemaRef, OCD_AmbiguousCandidates, Args);
     break;
 
   case OR_Deleted: {
@@ -12652,7 +12688,7 @@ Sema::CreateOverloadedUnaryOp(SourceLocation OpLoc, UnaryOperatorKind Opc,
                             PDiag(diag::err_ovl_ambiguous_oper_unary)
                                 << UnaryOperator::getOpcodeStr(Opc)
                                 << Input->getType() << Input->getSourceRange()),
-        *this, OCD_ViableCandidates, ArgsArray,
+        *this, OCD_AmbiguousCandidates, ArgsArray,
         UnaryOperator::getOpcodeStr(Opc), OpLoc);
     return ExprError();
 
@@ -13061,7 +13097,7 @@ ExprResult Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
                                          << Args[1]->getType()
                                          << Args[0]->getSourceRange()
                                          << Args[1]->getSourceRange()),
-          *this, OCD_ViableCandidates, Args, BinaryOperator::getOpcodeStr(Opc),
+          *this, OCD_AmbiguousCandidates, Args, BinaryOperator::getOpcodeStr(Opc),
           OpLoc);
       return ExprError();
 
@@ -13246,7 +13282,7 @@ Sema::CreateOverloadedArraySubscriptExpr(SourceLocation LLoc,
                                         << Args[1]->getType()
                                         << Args[0]->getSourceRange()
                                         << Args[1]->getSourceRange()),
-          *this, OCD_ViableCandidates, Args, "[]", LLoc);
+          *this, OCD_AmbiguousCandidates, Args, "[]", LLoc);
       return ExprError();
 
     case OR_Deleted:
@@ -13438,7 +13474,7 @@ Sema::BuildCallToMemberFunction(Scope *S, Expr *MemExprE,
           PartialDiagnosticAt(UnresExpr->getMemberLoc(),
                               PDiag(diag::err_ovl_ambiguous_member_call)
                                   << DeclName << MemExprE->getSourceRange()),
-          *this, OCD_AllCandidates, Args);
+          *this, OCD_AmbiguousCandidates, Args);
       // FIXME: Leaking incoming expressions!
       return ExprError();
 
@@ -13670,7 +13706,7 @@ Sema::BuildCallToObjectOfClassType(Scope *S, Expr *Obj,
                             PDiag(diag::err_ovl_ambiguous_object_call)
                                 << Object.get()->getType()
                                 << Object.get()->getSourceRange()),
-        *this, OCD_ViableCandidates, Args);
+        *this, OCD_AmbiguousCandidates, Args);
     break;
 
   case OR_Deleted:
@@ -13905,7 +13941,7 @@ Sema::BuildOverloadedArrowExpr(Scope *S, Expr *Base, SourceLocation OpLoc,
         PartialDiagnosticAt(OpLoc, PDiag(diag::err_ovl_ambiguous_oper_unary)
                                        << "->" << Base->getType()
                                        << Base->getSourceRange()),
-        *this, OCD_ViableCandidates, Base);
+        *this, OCD_AmbiguousCandidates, Base);
     return ExprError();
 
   case OR_Deleted:
@@ -13985,7 +14021,7 @@ ExprResult Sema::BuildLiteralOperatorCall(LookupResult &R,
     CandidateSet.NoteCandidates(
         PartialDiagnosticAt(R.getNameLoc(), PDiag(diag::err_ovl_ambiguous_call)
                                                 << R.getLookupName()),
-        *this, OCD_ViableCandidates, Args);
+        *this, OCD_AmbiguousCandidates, Args);
     return ExprError();
   }
 

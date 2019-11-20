@@ -448,8 +448,15 @@ llvm::SmallVector<ReferenceLoc, 2> refInDecl(const Decl *D) {
       // FIXME: decide on how to surface destructors when we need them.
       if (llvm::isa<CXXDestructorDecl>(ND))
         return;
-      Refs.push_back(ReferenceLoc{
-          getQualifierLoc(*ND), ND->getLocation(), /*IsDecl=*/true, {ND}});
+      // Filter anonymous decls, name location will point outside the name token
+      // and the clients are not prepared to handle that.
+      if (ND->getDeclName().isIdentifier() &&
+          !ND->getDeclName().getAsIdentifierInfo())
+        return;
+      Refs.push_back(ReferenceLoc{getQualifierLoc(*ND),
+                                  ND->getLocation(),
+                                  /*IsDecl=*/true,
+                                  {ND}});
     }
   };
 
@@ -642,6 +649,11 @@ public:
     return RecursiveASTVisitor::TraverseNestedNameSpecifierLoc(L);
   }
 
+  bool TraverseConstructorInitializer(CXXCtorInitializer *Init) {
+    visitNode(DynTypedNode::create(*Init));
+    return RecursiveASTVisitor::TraverseConstructorInitializer(Init);
+  }
+
 private:
   /// Obtain information about a reference directly defined in \p N. Does not
   /// recurse into child nodes, e.g. do not expect references for constructor
@@ -662,20 +674,25 @@ private:
       return refInDecl(D);
     if (auto *E = N.get<Expr>())
       return refInExpr(E);
-    if (auto *NNSL = N.get<NestedNameSpecifierLoc>())
-      return {ReferenceLoc{NNSL->getPrefix(), NNSL->getLocalBeginLoc(), false,
-                           explicitReferenceTargets(DynTypedNode::create(
-                               *NNSL->getNestedNameSpecifier()))}};
+    if (auto *NNSL = N.get<NestedNameSpecifierLoc>()) {
+      // (!) 'DeclRelation::Alias' ensures we do not loose namespace aliases.
+      return {ReferenceLoc{
+          NNSL->getPrefix(), NNSL->getLocalBeginLoc(), false,
+          explicitReferenceTargets(
+              DynTypedNode::create(*NNSL->getNestedNameSpecifier()),
+              DeclRelation::Alias)}};
+    }
     if (const TypeLoc *TL = N.get<TypeLoc>())
       return refInTypeLoc(*TL);
     if (const CXXCtorInitializer *CCI = N.get<CXXCtorInitializer>()) {
-      if (CCI->isBaseInitializer())
-        return refInTypeLoc(CCI->getBaseClassLoc());
-      assert(CCI->isAnyMemberInitializer());
-      return {ReferenceLoc{NestedNameSpecifierLoc(),
-                           CCI->getMemberLocation(),
-                           /*IsDecl=*/false,
-                           {CCI->getAnyMember()}}};
+      // Other type initializers (e.g. base initializer) are handled by visiting
+      // the typeLoc.
+      if (CCI->isAnyMemberInitializer()) {
+        return {ReferenceLoc{NestedNameSpecifierLoc(),
+                             CCI->getMemberLocation(),
+                             /*IsDecl=*/false,
+                             {CCI->getAnyMember()}}};
+      }
     }
     // We do not have location information for other nodes (QualType, etc)
     return {};
@@ -714,6 +731,10 @@ void findExplicitReferences(const Decl *D,
                             llvm::function_ref<void(ReferenceLoc)> Out) {
   assert(D);
   ExplicitReferenceColletor(Out).TraverseDecl(const_cast<Decl *>(D));
+}
+void findExplicitReferences(const ASTContext &AST,
+                            llvm::function_ref<void(ReferenceLoc)> Out) {
+  ExplicitReferenceColletor(Out).TraverseAST(const_cast<ASTContext &>(AST));
 }
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, DeclRelation R) {

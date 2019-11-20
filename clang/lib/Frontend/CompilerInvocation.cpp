@@ -769,6 +769,9 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
   Opts.DebugFwdTemplateParams = Args.hasArg(OPT_debug_forward_template_params);
   Opts.EmbedSource = Args.hasArg(OPT_gembed_source);
 
+  Opts.ForceDwarfFrameSection =
+      Args.hasFlag(OPT_fforce_dwarf_frame, OPT_fno_force_dwarf_frame, false);
+
   for (const auto &Arg : Args.getAllArgValues(OPT_fdebug_prefix_map_EQ))
     Opts.DebugPrefixMap.insert(StringRef(Arg).split('='));
 
@@ -806,6 +809,7 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
   Opts.RecordCommandLine = Args.getLastArgValue(OPT_record_command_line);
   Opts.MergeAllConstants = Args.hasArg(OPT_fmerge_all_constants);
   Opts.NoCommon = Args.hasArg(OPT_fno_common);
+  Opts.NoInlineLineTables = Args.hasArg(OPT_gno_inline_line_tables);
   Opts.NoImplicitFloat = Args.hasArg(OPT_no_implicit_float);
   Opts.OptimizeSize = getOptimizationLevelSize(Args);
   Opts.SimplifyLibCalls = !(Args.hasArg(OPT_fno_builtin) ||
@@ -1003,6 +1007,7 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
   Opts.MainFileName = Args.getLastArgValue(OPT_main_file_name);
   Opts.VerifyModule = !Args.hasArg(OPT_disable_llvm_verifier);
 
+  Opts.ControlFlowGuardNoChecks = Args.hasArg(OPT_cfguard_no_checks);
   Opts.ControlFlowGuard = Args.hasArg(OPT_cfguard);
 
   Opts.DisableGCov = Args.hasArg(OPT_test_coverage);
@@ -1098,6 +1103,7 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
 
   Opts.InstrumentForProfiling = Args.hasArg(OPT_pg);
   Opts.CallFEntry = Args.hasArg(OPT_mfentry);
+  Opts.MNopMCount = Args.hasArg(OPT_mnop_mcount);
   Opts.EmitOpenCLArgMetadata = Args.hasArg(OPT_cl_kernel_arg_info);
 
   if (const Arg *A = Args.getLastArg(OPT_fcf_protection_EQ)) {
@@ -1260,13 +1266,8 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
 
   if (Arg *A = Args.getLastArg(OPT_fdenormal_fp_math_EQ)) {
     StringRef Val = A->getValue();
-    if (Val == "ieee")
-      Opts.FPDenormalMode = "ieee";
-    else if (Val == "preserve-sign")
-      Opts.FPDenormalMode = "preserve-sign";
-    else if (Val == "positive-zero")
-      Opts.FPDenormalMode = "positive-zero";
-    else
+    Opts.FPDenormalMode = llvm::parseDenormalFPAttribute(Val);
+    if (Opts.FPDenormalMode == llvm::DenormalMode::Invalid)
       Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
   }
 
@@ -1441,7 +1442,26 @@ static void ParseDependencyOutputArgs(DependencyOutputOptions &Opts,
   // Add sanitizer blacklists as extra dependencies.
   // They won't be discovered by the regular preprocessor, so
   // we let make / ninja to know about this implicit dependency.
-  Opts.ExtraDeps = Args.getAllArgValues(OPT_fdepfile_entry);
+  if (!Args.hasArg(OPT_fno_sanitize_blacklist)) {
+    for (const auto *A : Args.filtered(OPT_fsanitize_blacklist)) {
+      StringRef Val = A->getValue();
+      if (Val.find('=') == StringRef::npos)
+        Opts.ExtraDeps.push_back(Val);
+    }
+    if (Opts.IncludeSystemHeaders) {
+      for (const auto *A : Args.filtered(OPT_fsanitize_system_blacklist)) {
+        StringRef Val = A->getValue();
+        if (Val.find('=') == StringRef::npos)
+          Opts.ExtraDeps.push_back(Val);
+      }
+    }
+  }
+
+  // Propagate the extra dependencies.
+  for (const auto *A : Args.filtered(OPT_fdepfile_entry)) {
+    Opts.ExtraDeps.push_back(A->getValue());
+  }
+
   // Only the -fmodule-file=<file> form.
   for (const auto *A : Args.filtered(OPT_fmodule_file)) {
     StringRef Val = A->getValue();
@@ -2552,6 +2572,13 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     Opts.CUDADeviceApproxTranscendentals = 1;
 
   Opts.GPURelocatableDeviceCode = Args.hasArg(OPT_fgpu_rdc);
+  if (Args.hasArg(OPT_fgpu_allow_device_init)) {
+    if (Opts.HIP)
+      Opts.GPUAllowDeviceInit = 1;
+    else
+      Diags.Report(diag::warn_ignored_hip_only_option)
+          << Args.getLastArg(OPT_fgpu_allow_device_init)->getAsString(Args);
+  }
   Opts.HIPUseNewLaunchAPI = Args.hasArg(OPT_fhip_new_launch_api);
 
   if (Opts.ObjC) {
@@ -3206,6 +3233,11 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.SanitizeAddressFieldPadding =
       getLastArgIntValue(Args, OPT_fsanitize_address_field_padding, 0, Diags);
   Opts.SanitizerBlacklistFiles = Args.getAllArgValues(OPT_fsanitize_blacklist);
+  std::vector<std::string> systemBlacklists =
+      Args.getAllArgValues(OPT_fsanitize_system_blacklist);
+  Opts.SanitizerBlacklistFiles.insert(Opts.SanitizerBlacklistFiles.end(),
+                                      systemBlacklists.begin(),
+                                      systemBlacklists.end());
 
   // -fxray-instrument
   Opts.XRayInstrument =

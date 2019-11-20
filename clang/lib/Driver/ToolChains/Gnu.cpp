@@ -709,11 +709,9 @@ void tools::gnutools::Assembler::ConstructJob(Compilation &C,
     StringRef ABIName = riscv::getRISCVABI(Args, getToolChain().getTriple());
     CmdArgs.push_back("-mabi");
     CmdArgs.push_back(ABIName.data());
-    if (const Arg *A = Args.getLastArg(options::OPT_march_EQ)) {
-      StringRef MArch = A->getValue();
-      CmdArgs.push_back("-march");
-      CmdArgs.push_back(MArch.data());
-    }
+    StringRef MArchName = riscv::getRISCVArch(Args, getToolChain().getTriple());
+    CmdArgs.push_back("-march");
+    CmdArgs.push_back(MArchName.data());
     break;
   }
   case llvm::Triple::sparc:
@@ -1393,7 +1391,8 @@ bool clang::driver::findMIPSMultilibs(const Driver &D,
   addMultilibFlag(CPUName == "mips32r6", "march=mips32r6", Flags);
   addMultilibFlag(CPUName == "mips64", "march=mips64", Flags);
   addMultilibFlag(CPUName == "mips64r2" || CPUName == "mips64r3" ||
-                      CPUName == "mips64r5" || CPUName == "octeon",
+                      CPUName == "mips64r5" || CPUName == "octeon" ||
+                      CPUName == "octeon+",
                   "march=mips64r2", Flags);
   addMultilibFlag(CPUName == "mips64r6", "march=mips64r6", Flags);
   addMultilibFlag(isMicroMips(Args), "mmicromips", Flags);

@@ -183,6 +183,13 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
     addRegisterClass(MVT::nxv4f32, &AArch64::ZPRRegClass);
     addRegisterClass(MVT::nxv1f64, &AArch64::ZPRRegClass);
     addRegisterClass(MVT::nxv2f64, &AArch64::ZPRRegClass);
+
+    for (auto VT : { MVT::nxv16i8, MVT::nxv8i16, MVT::nxv4i32, MVT::nxv2i64 }) {
+      setOperationAction(ISD::SADDSAT, VT, Legal);
+      setOperationAction(ISD::UADDSAT, VT, Legal);
+      setOperationAction(ISD::SSUBSAT, VT, Legal);
+      setOperationAction(ISD::USUBSAT, VT, Legal);
+    }
   }
 
   // Compute derived properties from the register classes
@@ -525,6 +532,12 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::FSINCOS, MVT::f32, Expand);
   }
 
+  if (Subtarget->getTargetTriple().isOSMSVCRT()) {
+    // MSVCRT doesn't have powi; fall back to pow
+    setLibcallName(RTLIB::POWI_F32, nullptr);
+    setLibcallName(RTLIB::POWI_F64, nullptr);
+  }
+
   // Make floating-point constants legal for the large code model, so they don't
   // become loads from the constant pool.
   if (Subtarget->isTargetMachO() && TM.getCodeModel() == CodeModel::Large) {
@@ -734,14 +747,20 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::MUL, MVT::v4i32, Custom);
     setOperationAction(ISD::MUL, MVT::v2i64, Custom);
 
-    // Vector reductions
     for (MVT VT : { MVT::v8i8, MVT::v4i16, MVT::v2i32,
                     MVT::v16i8, MVT::v8i16, MVT::v4i32, MVT::v2i64 }) {
+      // Vector reductions
       setOperationAction(ISD::VECREDUCE_ADD, VT, Custom);
       setOperationAction(ISD::VECREDUCE_SMAX, VT, Custom);
       setOperationAction(ISD::VECREDUCE_SMIN, VT, Custom);
       setOperationAction(ISD::VECREDUCE_UMAX, VT, Custom);
       setOperationAction(ISD::VECREDUCE_UMIN, VT, Custom);
+
+      // Saturates
+      setOperationAction(ISD::SADDSAT, VT, Legal);
+      setOperationAction(ISD::UADDSAT, VT, Legal);
+      setOperationAction(ISD::SSUBSAT, VT, Legal);
+      setOperationAction(ISD::USUBSAT, VT, Legal);
     }
     for (MVT VT : { MVT::v4f16, MVT::v2f32,
                     MVT::v8f16, MVT::v4f32, MVT::v2f64 }) {
@@ -802,6 +821,9 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
   }
 
   if (Subtarget->hasSVE()) {
+    // FIXME: Add custom lowering of MLOAD to handle different passthrus (not a
+    // splat of 0 or undef) once vector selects supported in SVE codegen. See
+    // D68877 for more details.
     for (MVT VT : MVT::integer_scalable_vector_valuetypes()) {
       if (isTypeLegal(VT) && VT.getVectorElementType() != MVT::i1)
         setOperationAction(ISD::SPLAT_VECTOR, VT, Custom);
@@ -2886,6 +2908,10 @@ SDValue AArch64TargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
   }
 }
 
+bool AArch64TargetLowering::isVectorLoadExtDesirable(SDValue ExtVal) const {
+  return ExtVal.getValueType().isScalableVector();
+}
+
 // Custom lower trunc store for v4i8 vectors, since it is promoted to v4i16.
 static SDValue LowerTruncateVectorStore(SDLoc DL, StoreSDNode *ST,
                                         EVT VT, EVT MemVT,
@@ -3092,6 +3118,9 @@ CCAssignFn *AArch64TargetLowering::CCAssignFnForCall(CallingConv::ID CC,
   switch (CC) {
   default:
     report_fatal_error("Unsupported calling convention.");
+  case CallingConv::AArch64_SVE_VectorCall:
+    // Calling SVE functions is currently not yet supported.
+    report_fatal_error("Unsupported calling convention.");
   case CallingConv::WebKit_JS:
     return CC_AArch64_WebKit_JS;
   case CallingConv::GHC:
@@ -3111,8 +3140,10 @@ CCAssignFn *AArch64TargetLowering::CCAssignFnForCall(CallingConv::ID CC,
                                       : CC_AArch64_DarwinPCS_VarArg;
    case CallingConv::Win64:
     return IsVarArg ? CC_AArch64_Win64_VarArg : CC_AArch64_AAPCS;
-  case CallingConv::AArch64_VectorCall:
-    return CC_AArch64_AAPCS;
+   case CallingConv::CFGuard_Check:
+     return CC_AArch64_Win64_CFGuard_Check;
+   case CallingConv::AArch64_VectorCall:
+     return CC_AArch64_AAPCS;
   }
 }
 
@@ -8515,11 +8546,12 @@ bool AArch64TargetLowering::isProfitableToHoist(Instruction *I) const {
     return true;
 
   const TargetOptions &Options = getTargetMachine().Options;
-  const DataLayout &DL = I->getModule()->getDataLayout();
-  EVT VT = getValueType(DL, User->getOperand(0)->getType());
+  const Function *F = I->getFunction();
+  const DataLayout &DL = F->getParent()->getDataLayout();
+  Type *Ty = User->getOperand(0)->getType();
 
-  return !(isFMAFasterThanFMulAndFAdd(VT) &&
-           isOperationLegalOrCustom(ISD::FMA, VT) &&
+  return !(isFMAFasterThanFMulAndFAdd(*F, Ty) &&
+           isOperationLegalOrCustom(ISD::FMA, getValueType(DL, Ty)) &&
            (Options.AllowFPOpFusion == FPOpFusion::Fast ||
             Options.UnsafeFPMath));
 }
@@ -9176,7 +9208,8 @@ int AArch64TargetLowering::getScalingFactorCost(const DataLayout &DL,
   return -1;
 }
 
-bool AArch64TargetLowering::isFMAFasterThanFMulAndFAdd(EVT VT) const {
+bool AArch64TargetLowering::isFMAFasterThanFMulAndFAdd(
+    const MachineFunction &MF, EVT VT) const {
   VT = VT.getScalarType();
 
   if (!VT.isSimple())
@@ -9191,6 +9224,17 @@ bool AArch64TargetLowering::isFMAFasterThanFMulAndFAdd(EVT VT) const {
   }
 
   return false;
+}
+
+bool AArch64TargetLowering::isFMAFasterThanFMulAndFAdd(const Function &F,
+                                                       Type *Ty) const {
+  switch (Ty->getScalarType()->getTypeID()) {
+  case Type::FloatTyID:
+  case Type::DoubleTyID:
+    return true;
+  default:
+    return false;
+  }
 }
 
 const MCPhysReg *
@@ -9906,7 +9950,7 @@ static SDValue performBitcastCombine(SDNode *N,
 
   // Only interested in 64-bit vectors as the ultimate result.
   EVT VT = N->getValueType(0);
-  if (!VT.isVector())
+  if (!VT.isVector() || VT.isScalableVector())
     return SDValue();
   if (VT.getSimpleVT().getSizeInBits() != 64)
     return SDValue();

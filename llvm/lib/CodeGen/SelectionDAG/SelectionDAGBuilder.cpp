@@ -722,7 +722,7 @@ static void getCopyToPartsVector(SelectionDAG &DAG, const SDLoc &DL,
   unsigned IntermediateNumElts = IntermediateVT.isVector() ?
     IntermediateVT.getVectorNumElements() : 1;
 
-  // Convert the vector to the appropiate type if necessary.
+  // Convert the vector to the appropriate type if necessary.
   unsigned DestVectorNoElts = NumIntermediates * IntermediateNumElts;
 
   EVT BuiltVectorTy = EVT::getVectorVT(
@@ -2746,8 +2746,9 @@ void SelectionDAGBuilder::visitInvoke(const InvokeInst &I) {
 
   // Deopt bundles are lowered in LowerCallSiteWithDeoptBundle, and we don't
   // have to do anything here to lower funclet bundles.
-  assert(!I.hasOperandBundlesOtherThan(
-             {LLVMContext::OB_deopt, LLVMContext::OB_funclet}) &&
+  assert(!I.hasOperandBundlesOtherThan({LLVMContext::OB_deopt,
+                                        LLVMContext::OB_funclet,
+                                        LLVMContext::OB_cfguardtarget}) &&
          "Cannot lower invokes with arbitrary operand bundles yet!");
 
   const Value *Callee(I.getCalledValue());
@@ -4303,7 +4304,10 @@ void SelectionDAGBuilder::visitMaskedStore(const CallInst &I,
   MachineMemOperand *MMO =
     DAG.getMachineFunction().
     getMachineMemOperand(MachinePointerInfo(PtrOperand),
-                          MachineMemOperand::MOStore,  VT.getStoreSize(),
+                          MachineMemOperand::MOStore,
+                          // TODO: Make MachineMemOperands aware of scalable
+                          // vectors.
+                          VT.getStoreSize().getKnownMinSize(),
                           Alignment, AAInfo);
   SDValue StoreNode = DAG.getMaskedStore(getRoot(), sdl, Src0, Ptr, Mask, VT,
                                          MMO, false /* Truncating */,
@@ -4407,7 +4411,10 @@ void SelectionDAGBuilder::visitMaskedScatter(const CallInst &I) {
   const Value *MemOpBasePtr = UniformBase ? BasePtr : nullptr;
   MachineMemOperand *MMO = DAG.getMachineFunction().
     getMachineMemOperand(MachinePointerInfo(MemOpBasePtr),
-                         MachineMemOperand::MOStore,  VT.getStoreSize(),
+                         MachineMemOperand::MOStore,
+                         // TODO: Make MachineMemOperands aware of scalable
+                         // vectors.
+                         VT.getStoreSize().getKnownMinSize(),
                          Alignment, AAInfo);
   if (!UniformBase) {
     Base = DAG.getConstant(0, sdl, TLI.getPointerTy(DAG.getDataLayout()));
@@ -4462,18 +4469,24 @@ void SelectionDAGBuilder::visitMaskedLoad(const CallInst &I, bool IsExpanding) {
   const MDNode *Ranges = I.getMetadata(LLVMContext::MD_range);
 
   // Do not serialize masked loads of constant memory with anything.
-  bool AddToChain =
-      !AA || !AA->pointsToConstantMemory(MemoryLocation(
-                 PtrOperand,
-                 LocationSize::precise(
-                     DAG.getDataLayout().getTypeStoreSize(I.getType())),
-                 AAInfo));
+  MemoryLocation ML;
+  if (VT.isScalableVector())
+    ML = MemoryLocation(PtrOperand);
+  else
+    ML = MemoryLocation(PtrOperand, LocationSize::precise(
+                           DAG.getDataLayout().getTypeStoreSize(I.getType())),
+                           AAInfo);
+  bool AddToChain = !AA || !AA->pointsToConstantMemory(ML);
+
   SDValue InChain = AddToChain ? DAG.getRoot() : DAG.getEntryNode();
 
   MachineMemOperand *MMO =
     DAG.getMachineFunction().
     getMachineMemOperand(MachinePointerInfo(PtrOperand),
-                          MachineMemOperand::MOLoad,  VT.getStoreSize(),
+                          MachineMemOperand::MOLoad,
+                          // TODO: Make MachineMemOperands aware of scalable
+                          // vectors.
+                          VT.getStoreSize().getKnownMinSize(),
                           Alignment, AAInfo, Ranges);
 
   SDValue Load = DAG.getMaskedLoad(VT, sdl, InChain, Ptr, Mask, Src0, VT, MMO,
@@ -4524,7 +4537,10 @@ void SelectionDAGBuilder::visitMaskedGather(const CallInst &I) {
   MachineMemOperand *MMO =
     DAG.getMachineFunction().
     getMachineMemOperand(MachinePointerInfo(UniformBase ? BasePtr : nullptr),
-                         MachineMemOperand::MOLoad,  VT.getStoreSize(),
+                         MachineMemOperand::MOLoad,
+                         // TODO: Make MachineMemOperands aware of scalable
+                         // vectors.
+                         VT.getStoreSize().getKnownMinSize(),
                          Alignment, AAInfo, Ranges);
 
   if (!UniformBase) {
@@ -5474,7 +5490,7 @@ bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
     // is an argument. But since we already has used %a1 to describe a parameter
     // we should not handle that last dbg.value here (that would result in an
     // incorrect hoisting of the DBG_VALUE to the function entry).
-    // Notice that we allow one dbg.value per IR level argument, to accomodate
+    // Notice that we allow one dbg.value per IR level argument, to accommodate
     // for the situation with fragments above.
     if (VariableIsFunctionInputArg) {
       unsigned ArgNo = Arg->getArgNo();
@@ -5489,7 +5505,6 @@ bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
   MachineFunction &MF = DAG.getMachineFunction();
   const TargetInstrInfo *TII = DAG.getSubtarget().getInstrInfo();
 
-  bool IsIndirect = false;
   Optional<MachineOperand> Op;
   // Some arguments' frame index is recorded during argument lowering.
   int FI = FuncInfo.getArgumentFrameIndex(Arg);
@@ -5511,7 +5526,6 @@ bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
     }
     if (Reg) {
       Op = MachineOperand::CreateReg(Reg, false);
-      IsIndirect = IsDbgDeclare;
     }
   }
 
@@ -5555,7 +5569,6 @@ bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
       }
 
       Op = MachineOperand::CreateReg(VMI->second, false);
-      IsIndirect = IsDbgDeclare;
     } else if (ArgRegsAndSizes.size() > 1) {
       // This was split due to the calling convention, and no virtual register
       // mapping exists for the value.
@@ -5569,9 +5582,26 @@ bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
 
   assert(Variable->isValidLocationForIntrinsic(DL) &&
          "Expected inlined-at fields to agree");
-  IsIndirect = (Op->isReg()) ? IsIndirect : true;
-  if (IsIndirect)
+
+  // If the argument arrives in a stack slot, then what the IR thought was a
+  // normal Value is actually in memory, and we must add a deref to load it.
+  if (Op->isFI()) {
+    int FI = Op->getIndex();
+    unsigned Size = DAG.getMachineFunction().getFrameInfo().getObjectSize(FI);
+    if (Expr->isImplicit()) {
+      SmallVector<uint64_t, 2> Ops = {dwarf::DW_OP_deref_size, Size};
+      Expr = DIExpression::prependOpcodes(Expr, Ops);
+    } else {
+      Expr = DIExpression::prepend(Expr, DIExpression::DerefBefore);
+    }
+  }
+
+  // If this location was specified with a dbg.declare, then it and its
+  // expression calculate the address of the variable. Append a deref to
+  // force it to be a memory location.
+  if (IsDbgDeclare)
     Expr = DIExpression::append(Expr, {dwarf::DW_OP_deref});
+
   FuncInfo.ArgDbgValues.push_back(
       BuildMI(MF, DL, TII->get(TargetOpcode::DBG_VALUE), false,
               *Op, Variable, Expr));
@@ -6139,7 +6169,7 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
   case Intrinsic::fmuladd: {
     EVT VT = TLI.getValueType(DAG.getDataLayout(), I.getType());
     if (TM.Options.AllowFPOpFusion != FPOpFusion::Strict &&
-        TLI.isFMAFasterThanFMulAndFAdd(VT)) {
+        TLI.isFMAFasterThanFMulAndFAdd(DAG.getMachineFunction(), VT)) {
       setValue(&I, DAG.getNode(ISD::FMA, sdl,
                                getValue(I.getArgOperand(0)).getValueType(),
                                getValue(I.getArgOperand(0)),
@@ -6876,6 +6906,26 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
 void SelectionDAGBuilder::visitConstrainedFPIntrinsic(
     const ConstrainedFPIntrinsic &FPI) {
   SDLoc sdl = getCurSDLoc();
+
+  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+  SmallVector<EVT, 4> ValueVTs;
+  ComputeValueVTs(TLI, DAG.getDataLayout(), FPI.getType(), ValueVTs);
+  ValueVTs.push_back(MVT::Other); // Out chain
+
+  SDValue Chain = getRoot();
+  SmallVector<SDValue, 4> Opers;
+  Opers.push_back(Chain);
+  if (FPI.isUnaryOp()) {
+    Opers.push_back(getValue(FPI.getArgOperand(0)));
+  } else if (FPI.isTernaryOp()) {
+    Opers.push_back(getValue(FPI.getArgOperand(0)));
+    Opers.push_back(getValue(FPI.getArgOperand(1)));
+    Opers.push_back(getValue(FPI.getArgOperand(2)));
+  } else {
+    Opers.push_back(getValue(FPI.getArgOperand(0)));
+    Opers.push_back(getValue(FPI.getArgOperand(1)));
+  }
+
   unsigned Opcode;
   switch (FPI.getIntrinsicID()) {
   default: llvm_unreachable("Impossible intrinsic");  // Can't reach here.
@@ -6905,6 +6955,8 @@ void SelectionDAGBuilder::visitConstrainedFPIntrinsic(
     break;
   case Intrinsic::experimental_constrained_fptrunc:
     Opcode = ISD::STRICT_FP_ROUND;
+    Opers.push_back(DAG.getTargetConstant(0, sdl,
+                      TLI.getPointerTy(DAG.getDataLayout())));
     break;
   case Intrinsic::experimental_constrained_fpext:
     Opcode = ISD::STRICT_FP_EXTEND;
@@ -6976,31 +7028,9 @@ void SelectionDAGBuilder::visitConstrainedFPIntrinsic(
     Opcode = ISD::STRICT_FTRUNC;
     break;
   }
-  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
-  SDValue Chain = getRoot();
-  SmallVector<EVT, 4> ValueVTs;
-  ComputeValueVTs(TLI, DAG.getDataLayout(), FPI.getType(), ValueVTs);
-  ValueVTs.push_back(MVT::Other); // Out chain
 
   SDVTList VTs = DAG.getVTList(ValueVTs);
-  SDValue Result;
-  if (Opcode == ISD::STRICT_FP_ROUND)
-    Result = DAG.getNode(Opcode, sdl, VTs,
-                          { Chain, getValue(FPI.getArgOperand(0)),
-                               DAG.getTargetConstant(0, sdl,
-                               TLI.getPointerTy(DAG.getDataLayout())) });
-  else if (FPI.isUnaryOp())
-    Result = DAG.getNode(Opcode, sdl, VTs,
-                         { Chain, getValue(FPI.getArgOperand(0)) });
-  else if (FPI.isTernaryOp())
-    Result = DAG.getNode(Opcode, sdl, VTs,
-                         { Chain, getValue(FPI.getArgOperand(0)),
-                                  getValue(FPI.getArgOperand(1)),
-                                  getValue(FPI.getArgOperand(2)) });
-  else
-    Result = DAG.getNode(Opcode, sdl, VTs,
-                         { Chain, getValue(FPI.getArgOperand(0)),
-                           getValue(FPI.getArgOperand(1))  });
+  SDValue Result = DAG.getNode(Opcode, sdl, VTs, Opers);
 
   if (FPI.getExceptionBehavior() !=
       ConstrainedFPIntrinsic::ExceptionBehavior::ebIgnore) {
@@ -7140,6 +7170,18 @@ void SelectionDAGBuilder::LowerCallTo(ImmutableCallSite CS, SDValue Callee,
     // might point to function-local memory), we can't meaningfully tail-call.
     if (Entry.IsSRet && isa<Instruction>(V))
       isTailCall = false;
+  }
+
+  // If call site has a cfguardtarget operand bundle, create and add an
+  // additional ArgListEntry.
+  if (auto Bundle = CS.getOperandBundle(LLVMContext::OB_cfguardtarget)) {
+    TargetLowering::ArgListEntry Entry;
+    Value *V = Bundle->Inputs[0];
+    SDValue ArgNode = getValue(V);
+    Entry.Node = ArgNode;
+    Entry.Ty = V->getType();
+    Entry.IsCFGuardTarget = true;
+    Args.push_back(Entry);
   }
 
   // Check if target-independent constraints permit a tail call here.
@@ -7683,8 +7725,10 @@ void SelectionDAGBuilder::visitCall(const CallInst &I) {
 
   // Deopt bundles are lowered in LowerCallSiteWithDeoptBundle, and we don't
   // have to do anything here to lower funclet bundles.
-  assert(!I.hasOperandBundlesOtherThan(
-             {LLVMContext::OB_deopt, LLVMContext::OB_funclet}) &&
+  // CFGuardTarget bundles are lowered in LowerCallTo.
+  assert(!I.hasOperandBundlesOtherThan({LLVMContext::OB_deopt,
+                                        LLVMContext::OB_funclet,
+                                        LLVMContext::OB_cfguardtarget}) &&
          "Cannot lower calls with arbitrary operand bundles!");
 
   SDValue Callee = getValue(I.getCalledValue());
@@ -8678,7 +8722,7 @@ void SelectionDAGBuilder::visitStackmap(const CallInst &CI) {
   Callee = getValue(CI.getCalledValue());
   NullPtr = DAG.getIntPtrConstant(0, DL, true);
 
-  // The stackmap intrinsic only records the live variables (the arguemnts
+  // The stackmap intrinsic only records the live variables (the arguments
   // passed to it) and emits NOPS (if requested). Unlike the patchpoint
   // intrinsic, this won't be lowered to a function call. This means we don't
   // have to worry about calling conventions and target specific lowering code.
@@ -9027,6 +9071,7 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
     Entry.IsReturned = false;
     Entry.IsSwiftSelf = false;
     Entry.IsSwiftError = false;
+    Entry.IsCFGuardTarget = false;
     Entry.Alignment = Align;
     CLI.getArgs().insert(CLI.getArgs().begin(), Entry);
     CLI.NumFixedArgs += 1;
@@ -9139,6 +9184,8 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
         Flags.setSwiftSelf();
       if (Args[i].IsSwiftError)
         Flags.setSwiftError();
+      if (Args[i].IsCFGuardTarget)
+        Flags.setCFGuardTarget();
       if (Args[i].IsByVal)
         Flags.setByVal();
       if (Args[i].IsInAlloca) {
@@ -9214,9 +9261,11 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
 
       for (unsigned j = 0; j != NumParts; ++j) {
         // if it isn't first piece, alignment must be 1
+        // For scalable vectors the scalable part is currently handled
+        // by individual targets, so we just use the known minimum size here.
         ISD::OutputArg MyFlags(Flags, Parts[j].getValueType(), VT,
-                               i < CLI.NumFixedArgs,
-                               i, j*Parts[j].getValueType().getStoreSize());
+                    i < CLI.NumFixedArgs, i,
+                    j*Parts[j].getValueType().getStoreSize().getKnownMinSize());
         if (NumParts > 1 && j == 0)
           MyFlags.Flags.setSplit();
         else if (j != 0) {
@@ -9685,8 +9734,11 @@ void SelectionDAGISel::LowerArguments(const Function &F) {
       unsigned NumRegs = TLI->getNumRegistersForCallingConv(
           *CurDAG->getContext(), F.getCallingConv(), VT);
       for (unsigned i = 0; i != NumRegs; ++i) {
+        // For scalable vectors, use the minimum size; individual targets
+        // are responsible for handling scalable vector arguments and
+        // return values.
         ISD::InputArg MyFlags(Flags, RegisterVT, VT, isArgValueUsed,
-                              ArgNo, PartBase+i*RegisterVT.getStoreSize());
+                 ArgNo, PartBase+i*RegisterVT.getStoreSize().getKnownMinSize());
         if (NumRegs > 1 && i == 0)
           MyFlags.Flags.setSplit();
         // if it isn't first piece, alignment must be 1
@@ -9699,7 +9751,7 @@ void SelectionDAGISel::LowerArguments(const Function &F) {
       }
       if (NeedsRegBlock && Value == NumValues - 1)
         Ins[Ins.size() - 1].Flags.setInConsecutiveRegsLast();
-      PartBase += VT.getStoreSize();
+      PartBase += VT.getStoreSize().getKnownMinSize();
     }
   }
 
@@ -9795,7 +9847,7 @@ void SelectionDAGISel::LowerArguments(const Function &F) {
       unsigned NumParts = TLI->getNumRegistersForCallingConv(
           *CurDAG->getContext(), F.getCallingConv(), VT);
 
-      // Even an apparant 'unused' swifterror argument needs to be returned. So
+      // Even an apparent 'unused' swifterror argument needs to be returned. So
       // we do generate a copy for it that can be used on return from the
       // function.
       if (ArgHasUses || isSwiftErrorArg) {
@@ -10508,7 +10560,7 @@ void SelectionDAGBuilder::visitSwitch(const SwitchInst &SI) {
     return;
   }
 
-  SL->findJumpTables(Clusters, &SI, DefaultMBB);
+  SL->findJumpTables(Clusters, &SI, DefaultMBB, nullptr, nullptr);
   SL->findBitTestClusters(Clusters, &SI);
 
   LLVM_DEBUG({
@@ -10556,4 +10608,9 @@ void SelectionDAGBuilder::visitSwitch(const SwitchInst &SI) {
 
     lowerWorkItem(W, SI.getCondition(), SwitchMBB, DefaultMBB);
   }
+}
+
+void SelectionDAGBuilder::visitFreeze(const FreezeInst &I) {
+  SDValue N = getValue(I.getOperand(0));
+  setValue(&I, N);
 }

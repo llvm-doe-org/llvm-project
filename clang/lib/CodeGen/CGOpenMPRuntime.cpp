@@ -6711,6 +6711,7 @@ emitNumTeamsForTargetDirective(CodeGenFunction &CGF,
   case OMPD_master_taskloop:
   case OMPD_master_taskloop_simd:
   case OMPD_parallel_master_taskloop:
+  case OMPD_parallel_master_taskloop_simd:
   case OMPD_requires:
   case OMPD_unknown:
     break;
@@ -7020,6 +7021,7 @@ emitNumThreadsForTargetDirective(CodeGenFunction &CGF,
   case OMPD_master_taskloop:
   case OMPD_master_taskloop_simd:
   case OMPD_parallel_master_taskloop:
+  case OMPD_parallel_master_taskloop_simd:
   case OMPD_requires:
   case OMPD_unknown:
     break;
@@ -7941,17 +7943,17 @@ public:
            "Expect a executable directive");
     const auto *CurExecDir = CurDir.get<const OMPExecutableDirective *>();
     for (const auto *C : CurExecDir->getClausesOfKind<OMPMapClause>())
-      for (const auto &L : C->component_lists()) {
+      for (const auto L : C->component_lists()) {
         InfoGen(L.first, L.second, C->getMapType(), C->getMapTypeModifiers(),
             /*ReturnDevicePointer=*/false, C->isImplicit());
       }
     for (const auto *C : CurExecDir->getClausesOfKind<OMPToClause>())
-      for (const auto &L : C->component_lists()) {
+      for (const auto L : C->component_lists()) {
         InfoGen(L.first, L.second, OMPC_MAP_to, llvm::None,
             /*ReturnDevicePointer=*/false, C->isImplicit());
       }
     for (const auto *C : CurExecDir->getClausesOfKind<OMPFromClause>())
-      for (const auto &L : C->component_lists()) {
+      for (const auto L : C->component_lists()) {
         InfoGen(L.first, L.second, OMPC_MAP_from, llvm::None,
             /*ReturnDevicePointer=*/false, C->isImplicit());
       }
@@ -7967,7 +7969,7 @@ public:
 
     for (const auto *C :
          CurExecDir->getClausesOfKind<OMPUseDevicePtrClause>()) {
-      for (const auto &L : C->component_lists()) {
+      for (const auto L : C->component_lists()) {
         assert(!L.second.empty() && "Not expecting empty list of components!");
         const ValueDecl *VD = L.second.back().getAssociatedDeclaration();
         VD = cast<ValueDecl>(VD->getCanonicalDecl());
@@ -8120,7 +8122,7 @@ public:
 
     for (const auto *C : CurMapperDir->clauselists()) {
       const auto *MC = cast<OMPMapClause>(C);
-      for (const auto &L : MC->component_lists()) {
+      for (const auto L : MC->component_lists()) {
         InfoGen(L.first, L.second, MC->getMapType(), MC->getMapTypeModifiers(),
                 /*ReturnDevicePointer=*/false, MC->isImplicit());
       }
@@ -8289,7 +8291,7 @@ public:
            "Expect a executable directive");
     const auto *CurExecDir = CurDir.get<const OMPExecutableDirective *>();
     for (const auto *C : CurExecDir->getClausesOfKind<OMPMapClause>()) {
-      for (const auto &L : C->decl_component_lists(VD)) {
+      for (const auto L : C->decl_component_lists(VD)) {
         assert(L.first == VD &&
                "We got information for the wrong declaration??");
         assert(!L.second.empty() &&
@@ -8442,7 +8444,7 @@ public:
     // Map other list items in the map clause which are not captured variables
     // but "declare target link" global variables.
     for (const auto *C : CurExecDir->getClausesOfKind<OMPMapClause>()) {
-      for (const auto &L : C->component_lists()) {
+      for (const auto L : C->component_lists()) {
         if (!L.first)
           continue;
         const auto *VD = dyn_cast<VarDecl>(L.first);
@@ -8794,6 +8796,7 @@ getNestedDistributeDirective(ASTContext &Ctx, const OMPExecutableDirective &D) {
     case OMPD_master_taskloop:
     case OMPD_master_taskloop_simd:
     case OMPD_parallel_master_taskloop:
+    case OMPD_parallel_master_taskloop_simd:
     case OMPD_requires:
     case OMPD_unknown:
       llvm_unreachable("Unexpected directive.");
@@ -9559,6 +9562,7 @@ void CGOpenMPRuntime::scanForTargetRegionsFunctions(const Stmt *S,
     case OMPD_master_taskloop:
     case OMPD_master_taskloop_simd:
     case OMPD_parallel_master_taskloop:
+    case OMPD_parallel_master_taskloop_simd:
     case OMPD_requires:
     case OMPD_unknown:
       llvm_unreachable("Unknown target directive for OpenMP device codegen.");
@@ -10177,6 +10181,7 @@ void CGOpenMPRuntime::emitTargetDataStandAloneCall(
     case OMPD_master_taskloop:
     case OMPD_master_taskloop_simd:
     case OMPD_parallel_master_taskloop:
+    case OMPD_parallel_master_taskloop_simd:
     case OMPD_target:
     case OMPD_target_simd:
     case OMPD_target_teams_distribute:
@@ -11026,12 +11031,16 @@ Address CGOpenMPRuntime::getAddressOfLocalVariable(CodeGenFunction &CGF,
   return Address(Addr, Align);
 }
 
+namespace {
+using OMPContextSelectorData =
+    OpenMPCtxSelectorData<StringRef, ArrayRef<StringRef>, llvm::APSInt>;
+using CompleteOMPContextSelectorData = SmallVector<OMPContextSelectorData, 4>;
+} // anonymous namespace
+
 /// Checks current context and returns true if it matches the context selector.
-template <OMPDeclareVariantAttr::CtxSelectorSetType CtxSet,
-          OMPDeclareVariantAttr::CtxSelectorType Ctx>
-static bool checkContext(const OMPDeclareVariantAttr *A) {
-  assert(CtxSet != OMPDeclareVariantAttr::CtxSetUnknown &&
-         Ctx != OMPDeclareVariantAttr::CtxUnknown &&
+template <OpenMPContextSelectorSetKind CtxSet, OpenMPContextSelectorKind Ctx>
+static bool checkContext(const OMPContextSelectorData &Data) {
+  assert(Data.CtxSet != OMP_CTX_SET_unknown && Data.Ctx != OMP_CTX_unknown &&
          "Unknown context selector or context selector set.");
   return false;
 }
@@ -11039,48 +11048,89 @@ static bool checkContext(const OMPDeclareVariantAttr *A) {
 /// Checks for implementation={vendor(<vendor>)} context selector.
 /// \returns true iff <vendor>="llvm", false otherwise.
 template <>
-bool checkContext<OMPDeclareVariantAttr::CtxSetImplementation,
-                  OMPDeclareVariantAttr::CtxVendor>(
-    const OMPDeclareVariantAttr *A) {
-  return llvm::all_of(A->implVendors(),
+bool checkContext<OMP_CTX_SET_implementation, OMP_CTX_vendor>(
+    const OMPContextSelectorData &Data) {
+  return llvm::all_of(Data.Names,
                       [](StringRef S) { return !S.compare_lower("llvm"); });
 }
 
-static bool greaterCtxScore(ASTContext &Ctx, const Expr *LHS, const Expr *RHS) {
-  // If both scores are unknown, choose the very first one.
-  if (!LHS && !RHS)
-    return true;
-  // If only one is known, return this one.
-  if (LHS && !RHS)
-    return true;
-  if (!LHS && RHS)
-    return false;
-  llvm::APSInt LHSVal = LHS->EvaluateKnownConstInt(Ctx);
-  llvm::APSInt RHSVal = RHS->EvaluateKnownConstInt(Ctx);
-  return llvm::APSInt::compareValues(LHSVal, RHSVal) >= 0;
+bool matchesContext(const CompleteOMPContextSelectorData &ContextData) {
+  for (const OMPContextSelectorData &Data : ContextData) {
+    switch (Data.CtxSet) {
+    case OMP_CTX_SET_implementation:
+      switch (Data.Ctx) {
+      case OMP_CTX_vendor:
+        if (!checkContext<OMP_CTX_SET_implementation, OMP_CTX_vendor>(Data))
+          return false;
+        break;
+      case OMP_CTX_unknown:
+        llvm_unreachable("Unexpected context selector kind.");
+      }
+      break;
+    case OMP_CTX_SET_unknown:
+      llvm_unreachable("Unexpected context selector set kind.");
+    }
+  }
+  return true;
 }
 
-namespace {
-/// Comparator for the priority queue for context selector.
-class OMPDeclareVariantAttrComparer
-    : public std::greater<const OMPDeclareVariantAttr *> {
-private:
-  ASTContext &Ctx;
-
-public:
-  OMPDeclareVariantAttrComparer(ASTContext &Ctx) : Ctx(Ctx) {}
-  bool operator()(const OMPDeclareVariantAttr *LHS,
-                  const OMPDeclareVariantAttr *RHS) const {
-    const Expr *LHSExpr = nullptr;
-    const Expr *RHSExpr = nullptr;
-    if (LHS->getCtxScore() == OMPDeclareVariantAttr::ScoreSpecified)
-      LHSExpr = LHS->getScore();
-    if (RHS->getCtxScore() == OMPDeclareVariantAttr::ScoreSpecified)
-      RHSExpr = RHS->getScore();
-    return greaterCtxScore(Ctx, LHSExpr, RHSExpr);
+static CompleteOMPContextSelectorData
+translateAttrToContextSelectorData(ASTContext &C,
+                                   const OMPDeclareVariantAttr *A) {
+  CompleteOMPContextSelectorData Data;
+  for (unsigned I = 0, E = A->scores_size(); I < E; ++I) {
+    Data.emplace_back();
+    auto CtxSet = static_cast<OpenMPContextSelectorSetKind>(
+        *std::next(A->ctxSelectorSets_begin(), I));
+    auto Ctx = static_cast<OpenMPContextSelectorKind>(
+        *std::next(A->ctxSelectors_begin(), I));
+    Data.back().CtxSet = CtxSet;
+    Data.back().Ctx = Ctx;
+    const Expr *Score = *std::next(A->scores_begin(), I);
+    Data.back().Score = Score->EvaluateKnownConstInt(C);
+    switch (CtxSet) {
+    case OMP_CTX_SET_implementation:
+      switch (Ctx) {
+      case OMP_CTX_vendor:
+        Data.back().Names =
+            llvm::makeArrayRef(A->implVendors_begin(), A->implVendors_end());
+        break;
+      case OMP_CTX_unknown:
+        llvm_unreachable("Unexpected context selector kind.");
+      }
+      break;
+    case OMP_CTX_SET_unknown:
+      llvm_unreachable("Unexpected context selector set kind.");
+    }
   }
-};
-} // anonymous namespace
+  return Data;
+}
+
+static bool greaterCtxScore(const CompleteOMPContextSelectorData &LHS,
+                            const CompleteOMPContextSelectorData &RHS) {
+  // Score is calculated as sum of all scores + 1.
+  llvm::APSInt LHSScore(llvm::APInt(64, 1), /*isUnsigned=*/false);
+  for (const OMPContextSelectorData &Data : LHS) {
+    if (Data.Score.getBitWidth() > LHSScore.getBitWidth()) {
+      LHSScore = LHSScore.extend(Data.Score.getBitWidth()) + Data.Score;
+    } else if (Data.Score.getBitWidth() < LHSScore.getBitWidth()) {
+      LHSScore += Data.Score.extend(LHSScore.getBitWidth());
+    } else {
+      LHSScore += Data.Score;
+    }
+  }
+  llvm::APSInt RHSScore(llvm::APInt(64, 1), /*isUnsigned=*/false);
+  for (const OMPContextSelectorData &Data : RHS) {
+    if (Data.Score.getBitWidth() > RHSScore.getBitWidth()) {
+      RHSScore = RHSScore.extend(Data.Score.getBitWidth()) + Data.Score;
+    } else if (Data.Score.getBitWidth() < RHSScore.getBitWidth()) {
+      RHSScore += Data.Score.extend(RHSScore.getBitWidth());
+    } else {
+      RHSScore += Data.Score;
+    }
+  }
+  return llvm::APSInt::compareValues(LHSScore, RHSScore) >= 0;
+}
 
 /// Finds the variant function that matches current context with its context
 /// selector.
@@ -11089,39 +11139,19 @@ static const FunctionDecl *getDeclareVariantFunction(ASTContext &Ctx,
   if (!FD->hasAttrs() || !FD->hasAttr<OMPDeclareVariantAttr>())
     return FD;
   // Iterate through all DeclareVariant attributes and check context selectors.
-  auto &&Comparer = [&Ctx](const OMPDeclareVariantAttr *LHS,
-                           const OMPDeclareVariantAttr *RHS) {
-    const Expr *LHSExpr = nullptr;
-    const Expr *RHSExpr = nullptr;
-    if (LHS->getCtxScore() == OMPDeclareVariantAttr::ScoreSpecified)
-      LHSExpr = LHS->getScore();
-    if (RHS->getCtxScore() == OMPDeclareVariantAttr::ScoreSpecified)
-      RHSExpr = RHS->getScore();
-    return greaterCtxScore(Ctx, LHSExpr, RHSExpr);
-  };
   const OMPDeclareVariantAttr *TopMostAttr = nullptr;
+  CompleteOMPContextSelectorData TopMostData;
   for (const auto *A : FD->specific_attrs<OMPDeclareVariantAttr>()) {
-    const OMPDeclareVariantAttr *SelectedAttr = nullptr;
-    switch (A->getCtxSelectorSet()) {
-    case OMPDeclareVariantAttr::CtxSetImplementation:
-      switch (A->getCtxSelector()) {
-      case OMPDeclareVariantAttr::CtxVendor:
-        if (checkContext<OMPDeclareVariantAttr::CtxSetImplementation,
-                         OMPDeclareVariantAttr::CtxVendor>(A))
-          SelectedAttr = A;
-        break;
-      case OMPDeclareVariantAttr::CtxUnknown:
-        llvm_unreachable(
-            "Unknown context selector in implementation selector set.");
-      }
-      break;
-    case OMPDeclareVariantAttr::CtxSetUnknown:
-      llvm_unreachable("Unknown context selector set.");
-    }
+    CompleteOMPContextSelectorData Data =
+        translateAttrToContextSelectorData(Ctx, A);
+    if (!matchesContext(Data))
+      continue;
     // If the attribute matches the context, find the attribute with the highest
     // score.
-    if (SelectedAttr && (!TopMostAttr || !Comparer(TopMostAttr, SelectedAttr)))
-      TopMostAttr = SelectedAttr;
+    if (!TopMostAttr || !greaterCtxScore(TopMostData, Data)) {
+      TopMostAttr = A;
+      TopMostData.swap(Data);
+    }
   }
   if (!TopMostAttr)
     return FD;
