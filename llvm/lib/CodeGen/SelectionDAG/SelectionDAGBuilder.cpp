@@ -28,10 +28,12 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/BranchProbabilityInfo.h"
+#include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/Analysis/EHPersonalities.h"
 #include "llvm/Analysis/Loads.h"
 #include "llvm/Analysis/MemoryLocation.h"
+#include "llvm/Analysis/ProfileSummaryInfo.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Analysis/VectorUtils.h"
@@ -4293,6 +4295,7 @@ void SelectionDAGBuilder::visitMaskedStore(const CallInst &I,
   SDValue Ptr = getValue(PtrOperand);
   SDValue Src0 = getValue(Src0Operand);
   SDValue Mask = getValue(MaskOperand);
+  SDValue Offset = DAG.getUNDEF(Ptr.getValueType());
 
   EVT VT = Src0.getValueType();
   if (!Alignment)
@@ -4309,9 +4312,9 @@ void SelectionDAGBuilder::visitMaskedStore(const CallInst &I,
                           // vectors.
                           VT.getStoreSize().getKnownMinSize(),
                           Alignment, AAInfo);
-  SDValue StoreNode = DAG.getMaskedStore(getRoot(), sdl, Src0, Ptr, Mask, VT,
-                                         MMO, false /* Truncating */,
-                                         IsCompressing);
+  SDValue StoreNode =
+      DAG.getMaskedStore(getRoot(), sdl, Src0, Ptr, Offset, Mask, VT, MMO,
+                         ISD::UNINDEXED, false /* Truncating */, IsCompressing);
   DAG.setRoot(StoreNode);
   setValue(&I, StoreNode);
 }
@@ -4459,6 +4462,7 @@ void SelectionDAGBuilder::visitMaskedLoad(const CallInst &I, bool IsExpanding) {
   SDValue Ptr = getValue(PtrOperand);
   SDValue Src0 = getValue(Src0Operand);
   SDValue Mask = getValue(MaskOperand);
+  SDValue Offset = DAG.getUNDEF(Ptr.getValueType());
 
   EVT VT = Src0.getValueType();
   if (!Alignment)
@@ -4489,8 +4493,9 @@ void SelectionDAGBuilder::visitMaskedLoad(const CallInst &I, bool IsExpanding) {
                           VT.getStoreSize().getKnownMinSize(),
                           Alignment, AAInfo, Ranges);
 
-  SDValue Load = DAG.getMaskedLoad(VT, sdl, InChain, Ptr, Mask, Src0, VT, MMO,
-                                   ISD::NON_EXTLOAD, IsExpanding);
+  SDValue Load =
+      DAG.getMaskedLoad(VT, sdl, InChain, Ptr, Offset, Mask, Src0, VT, MMO,
+                        ISD::UNINDEXED, ISD::NON_EXTLOAD, IsExpanding);
   if (AddToChain)
     PendingLoads.push_back(Load.getValue(1));
   setValue(&I, Load);
@@ -5360,8 +5365,8 @@ static SDValue ExpandPowI(const SDLoc &DL, SDValue LHS, SDValue RHS,
     if (Val == 0)
       return DAG.getConstantFP(1.0, DL, LHS.getValueType());
 
-    const Function &F = DAG.getMachineFunction().getFunction();
-    if (!F.hasOptSize() ||
+    bool OptForSize = DAG.shouldOptForSize();
+    if (!OptForSize ||
         // If optimizing for size, don't insert too many multiplies.
         // This inserts up to 5 multiplies.
         countPopulation(Val) + Log2_32(Val) < 7) {
@@ -6132,38 +6137,9 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
                              getValue(I.getArgOperand(1)),
                              getValue(I.getArgOperand(2))));
     return;
-  case Intrinsic::experimental_constrained_fadd:
-  case Intrinsic::experimental_constrained_fsub:
-  case Intrinsic::experimental_constrained_fmul:
-  case Intrinsic::experimental_constrained_fdiv:
-  case Intrinsic::experimental_constrained_frem:
-  case Intrinsic::experimental_constrained_fma:
-  case Intrinsic::experimental_constrained_fptosi:
-  case Intrinsic::experimental_constrained_fptoui:
-  case Intrinsic::experimental_constrained_fptrunc:
-  case Intrinsic::experimental_constrained_fpext:
-  case Intrinsic::experimental_constrained_sqrt:
-  case Intrinsic::experimental_constrained_pow:
-  case Intrinsic::experimental_constrained_powi:
-  case Intrinsic::experimental_constrained_sin:
-  case Intrinsic::experimental_constrained_cos:
-  case Intrinsic::experimental_constrained_exp:
-  case Intrinsic::experimental_constrained_exp2:
-  case Intrinsic::experimental_constrained_log:
-  case Intrinsic::experimental_constrained_log10:
-  case Intrinsic::experimental_constrained_log2:
-  case Intrinsic::experimental_constrained_lrint:
-  case Intrinsic::experimental_constrained_llrint:
-  case Intrinsic::experimental_constrained_rint:
-  case Intrinsic::experimental_constrained_nearbyint:
-  case Intrinsic::experimental_constrained_maxnum:
-  case Intrinsic::experimental_constrained_minnum:
-  case Intrinsic::experimental_constrained_ceil:
-  case Intrinsic::experimental_constrained_floor:
-  case Intrinsic::experimental_constrained_lround:
-  case Intrinsic::experimental_constrained_llround:
-  case Intrinsic::experimental_constrained_round:
-  case Intrinsic::experimental_constrained_trunc:
+#define INSTRUCTION(NAME, NARG, ROUND_MODE, INTRINSIC, DAGN)                   \
+  case Intrinsic::INTRINSIC:
+#include "llvm/IR/ConstrainedOps.def"
     visitConstrainedFPIntrinsic(cast<ConstrainedFPIntrinsic>(I));
     return;
   case Intrinsic::fmuladd: {
@@ -6929,111 +6905,21 @@ void SelectionDAGBuilder::visitConstrainedFPIntrinsic(
   unsigned Opcode;
   switch (FPI.getIntrinsicID()) {
   default: llvm_unreachable("Impossible intrinsic");  // Can't reach here.
-  case Intrinsic::experimental_constrained_fadd:
-    Opcode = ISD::STRICT_FADD;
+#define INSTRUCTION(NAME, NARG, ROUND_MODE, INTRINSIC, DAGN)                   \
+  case Intrinsic::INTRINSIC:                                                   \
+    Opcode = ISD::STRICT_##DAGN;                                               \
     break;
-  case Intrinsic::experimental_constrained_fsub:
-    Opcode = ISD::STRICT_FSUB;
-    break;
-  case Intrinsic::experimental_constrained_fmul:
-    Opcode = ISD::STRICT_FMUL;
-    break;
-  case Intrinsic::experimental_constrained_fdiv:
-    Opcode = ISD::STRICT_FDIV;
-    break;
-  case Intrinsic::experimental_constrained_frem:
-    Opcode = ISD::STRICT_FREM;
-    break;
-  case Intrinsic::experimental_constrained_fma:
-    Opcode = ISD::STRICT_FMA;
-    break;
-  case Intrinsic::experimental_constrained_fptosi:
-    Opcode = ISD::STRICT_FP_TO_SINT;
-    break;
-  case Intrinsic::experimental_constrained_fptoui:
-    Opcode = ISD::STRICT_FP_TO_UINT;
-    break;
-  case Intrinsic::experimental_constrained_fptrunc:
-    Opcode = ISD::STRICT_FP_ROUND;
-    Opers.push_back(DAG.getTargetConstant(0, sdl,
-                      TLI.getPointerTy(DAG.getDataLayout())));
-    break;
-  case Intrinsic::experimental_constrained_fpext:
-    Opcode = ISD::STRICT_FP_EXTEND;
-    break;
-  case Intrinsic::experimental_constrained_sqrt:
-    Opcode = ISD::STRICT_FSQRT;
-    break;
-  case Intrinsic::experimental_constrained_pow:
-    Opcode = ISD::STRICT_FPOW;
-    break;
-  case Intrinsic::experimental_constrained_powi:
-    Opcode = ISD::STRICT_FPOWI;
-    break;
-  case Intrinsic::experimental_constrained_sin:
-    Opcode = ISD::STRICT_FSIN;
-    break;
-  case Intrinsic::experimental_constrained_cos:
-    Opcode = ISD::STRICT_FCOS;
-    break;
-  case Intrinsic::experimental_constrained_exp:
-    Opcode = ISD::STRICT_FEXP;
-    break;
-  case Intrinsic::experimental_constrained_exp2:
-    Opcode = ISD::STRICT_FEXP2;
-    break;
-  case Intrinsic::experimental_constrained_log:
-    Opcode = ISD::STRICT_FLOG;
-    break;
-  case Intrinsic::experimental_constrained_log10:
-    Opcode = ISD::STRICT_FLOG10;
-    break;
-  case Intrinsic::experimental_constrained_log2:
-    Opcode = ISD::STRICT_FLOG2;
-    break;
-  case Intrinsic::experimental_constrained_lrint:
-    Opcode = ISD::STRICT_LRINT;
-    break;
-  case Intrinsic::experimental_constrained_llrint:
-    Opcode = ISD::STRICT_LLRINT;
-    break;
-  case Intrinsic::experimental_constrained_rint:
-    Opcode = ISD::STRICT_FRINT;
-    break;
-  case Intrinsic::experimental_constrained_nearbyint:
-    Opcode = ISD::STRICT_FNEARBYINT;
-    break;
-  case Intrinsic::experimental_constrained_maxnum:
-    Opcode = ISD::STRICT_FMAXNUM;
-    break;
-  case Intrinsic::experimental_constrained_minnum:
-    Opcode = ISD::STRICT_FMINNUM;
-    break;
-  case Intrinsic::experimental_constrained_ceil:
-    Opcode = ISD::STRICT_FCEIL;
-    break;
-  case Intrinsic::experimental_constrained_floor:
-    Opcode = ISD::STRICT_FFLOOR;
-    break;
-  case Intrinsic::experimental_constrained_lround:
-    Opcode = ISD::STRICT_LROUND;
-    break;
-  case Intrinsic::experimental_constrained_llround:
-    Opcode = ISD::STRICT_LLROUND;
-    break;
-  case Intrinsic::experimental_constrained_round:
-    Opcode = ISD::STRICT_FROUND;
-    break;
-  case Intrinsic::experimental_constrained_trunc:
-    Opcode = ISD::STRICT_FTRUNC;
-    break;
+#include "llvm/IR/ConstrainedOps.def"
   }
+
+  if (Opcode == ISD::STRICT_FP_ROUND)
+    Opers.push_back(
+        DAG.getTargetConstant(0, sdl, TLI.getPointerTy(DAG.getDataLayout())));
 
   SDVTList VTs = DAG.getVTList(ValueVTs);
   SDValue Result = DAG.getNode(Opcode, sdl, VTs, Opers);
 
-  if (FPI.getExceptionBehavior() !=
-      ConstrainedFPIntrinsic::ExceptionBehavior::ebIgnore) {
+  if (FPI.getExceptionBehavior() != fp::ExceptionBehavior::ebIgnore) {
     SDNodeFlags Flags;
     Flags.setFPExcept(true);
     Result->setFlags(Flags);
@@ -10560,7 +10446,7 @@ void SelectionDAGBuilder::visitSwitch(const SwitchInst &SI) {
     return;
   }
 
-  SL->findJumpTables(Clusters, &SI, DefaultMBB, nullptr, nullptr);
+  SL->findJumpTables(Clusters, &SI, DefaultMBB, DAG.getPSI(), DAG.getBFI());
   SL->findBitTestClusters(Clusters, &SI);
 
   LLVM_DEBUG({

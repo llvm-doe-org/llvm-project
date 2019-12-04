@@ -64,6 +64,8 @@ LLVM_YAML_STRONG_TYPEDEF(uint32_t, MIPS_AFL_ASE)
 LLVM_YAML_STRONG_TYPEDEF(uint32_t, MIPS_AFL_FLAGS1)
 LLVM_YAML_STRONG_TYPEDEF(uint32_t, MIPS_ISA)
 
+LLVM_YAML_STRONG_TYPEDEF(StringRef, YAMLFlowString)
+
 // For now, hardcode 64 bits everywhere that 32 or 64 would be needed
 // since 64-bit can hold 32-bit values too.
 struct FileHeader {
@@ -149,6 +151,7 @@ struct Chunk {
     Addrsig,
     Fill,
     LinkerOptions,
+    DependentLibraries,
   };
 
   ChunkKind Kind;
@@ -321,7 +324,8 @@ struct VerneedEntry {
 };
 
 struct VerneedSection : Section {
-  std::vector<VerneedEntry> VerneedV;
+  Optional<yaml::BinaryRef> Content;
+  Optional<std::vector<VerneedEntry>> VerneedV;
   llvm::yaml::Hex64 Info;
 
   VerneedSection() : Section(ChunkKind::Verneed) {}
@@ -366,6 +370,17 @@ struct LinkerOptionsSection : Section {
   }
 };
 
+struct DependentLibrariesSection : Section {
+  Optional<std::vector<YAMLFlowString>> Libs;
+  Optional<yaml::BinaryRef> Content;
+
+  DependentLibrariesSection() : Section(ChunkKind::DependentLibraries) {}
+
+  static bool classof(const Chunk *S) {
+    return S->Kind == ChunkKind::DependentLibraries;
+  }
+};
+
 struct SymverSection : Section {
   std::vector<uint16_t> Entries;
 
@@ -383,7 +398,9 @@ struct VerdefEntry {
 };
 
 struct VerdefSection : Section {
-  std::vector<VerdefEntry> Entries;
+  Optional<std::vector<VerdefEntry>> Entries;
+  Optional<yaml::BinaryRef> Content;
+
   llvm::yaml::Hex64 Info;
 
   VerdefSection() : Section(ChunkKind::Verdef) {}

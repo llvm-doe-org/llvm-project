@@ -107,7 +107,7 @@ namespace {
             dyn_cast<MaterializeTemporaryExpr>(Base)) {
       SmallVector<const Expr *, 2> CommaLHSs;
       SmallVector<SubobjectAdjustment, 2> Adjustments;
-      const Expr *Temp = MTE->GetTemporaryExpr();
+      const Expr *Temp = MTE->getSubExpr();
       const Expr *Inner = Temp->skipRValueSubobjectAdjustments(CommaLHSs,
                                                                Adjustments);
       // Keep any cv-qualifiers from the reference if we generated a temporary
@@ -763,11 +763,8 @@ namespace {
     /// we will evaluate.
     unsigned StepsLeft;
 
-    /// Force the use of the experimental new constant interpreter, bailing out
-    /// with an error if a feature is not supported.
-    bool ForceNewConstInterp;
-
-    /// Enable the experimental new constant interpreter.
+    /// Enable the experimental new constant interpreter. If an expression is
+    /// not supported by the interpreter, an error is triggered.
     bool EnableNewConstInterp;
 
     /// BottomFrame - The frame in which evaluation started. This must be
@@ -921,10 +918,8 @@ namespace {
     EvalInfo(const ASTContext &C, Expr::EvalStatus &S, EvaluationMode Mode)
         : Ctx(const_cast<ASTContext &>(C)), EvalStatus(S), CurrentCall(nullptr),
           CallStackDepth(0), NextCallIndex(1),
-          StepsLeft(getLangOpts().ConstexprStepLimit),
-          ForceNewConstInterp(getLangOpts().ForceNewConstInterp),
-          EnableNewConstInterp(ForceNewConstInterp ||
-                               getLangOpts().EnableNewConstInterp),
+          StepsLeft(C.getLangOpts().ConstexprStepLimit),
+          EnableNewConstInterp(C.getLangOpts().EnableNewConstInterp),
           BottomFrame(*this, SourceLocation(), nullptr, nullptr, nullptr),
           EvaluatingDecl((const ValueDecl *)nullptr),
           EvaluatingDeclValue(nullptr), HasActiveDiagnostic(false),
@@ -2075,7 +2070,7 @@ static bool CheckLValueConstantExpression(EvalInfo &Info, SourceLocation Loc,
         return false;
       }
 
-      APValue *V = Info.Ctx.getMaterializedTemporaryValue(MTE, false);
+      APValue *V = MTE->getOrCreateValue(false);
       assert(V && "evasluation result refers to uninitialised temporary");
       if (!CheckEvaluationResult(CheckEvaluationResultKind::ConstantExpression,
                                  Info, MTE->getExprLoc(), TempType, *V,
@@ -3679,7 +3674,7 @@ static CompleteObject findCompleteObject(EvalInfo &Info, const Expr *E,
           return CompleteObject();
         }
 
-        BaseVal = Info.Ctx.getMaterializedTemporaryValue(MTE, false);
+        BaseVal = MTE->getOrCreateValue(false);
         assert(BaseVal && "got reference to unevaluated temporary");
       } else {
         if (!IsAccess)
@@ -7470,8 +7465,8 @@ bool LValueExprEvaluator::VisitMaterializeTemporaryExpr(
   // Walk through the expression to find the materialized temporary itself.
   SmallVector<const Expr *, 2> CommaLHSs;
   SmallVector<SubobjectAdjustment, 2> Adjustments;
-  const Expr *Inner = E->GetTemporaryExpr()->
-      skipRValueSubobjectAdjustments(CommaLHSs, Adjustments);
+  const Expr *Inner =
+      E->getSubExpr()->skipRValueSubobjectAdjustments(CommaLHSs, Adjustments);
 
   // If we passed any comma operators, evaluate their LHSs.
   for (unsigned I = 0, N = CommaLHSs.size(); I != N; ++I)
@@ -7483,7 +7478,7 @@ bool LValueExprEvaluator::VisitMaterializeTemporaryExpr(
   // value for use outside this evaluation.
   APValue *Value;
   if (E->getStorageDuration() == SD_Static) {
-    Value = Info.Ctx.getMaterializedTemporaryValue(E, true);
+    Value = E->getOrCreateValue(true);
     *Value = APValue();
     Result.set(E);
   } else {
@@ -9031,7 +9026,7 @@ bool RecordExprEvaluator::VisitCXXConstructExpr(const CXXConstructExpr *E,
   if (E->isElidable() && !ZeroInit)
     if (const MaterializeTemporaryExpr *ME
           = dyn_cast<MaterializeTemporaryExpr>(E->getArg(0)))
-      return Visit(ME->GetTemporaryExpr());
+      return Visit(ME->getSubExpr());
 
   if (ZeroInit && !ZeroInitialization(E, T))
     return false;
@@ -13400,32 +13395,25 @@ static bool EvaluateInPlace(APValue &Result, EvalInfo &Info, const LValue &This,
 /// EvaluateAsRValue - Try to evaluate this expression, performing an implicit
 /// lvalue-to-rvalue cast if it is an lvalue.
 static bool EvaluateAsRValue(EvalInfo &Info, const Expr *E, APValue &Result) {
-   if (Info.EnableNewConstInterp) {
-    auto &InterpCtx = Info.Ctx.getInterpContext();
-    switch (InterpCtx.evaluateAsRValue(Info, E, Result)) {
-    case interp::InterpResult::Success:
-      return true;
-    case interp::InterpResult::Fail:
+  if (Info.EnableNewConstInterp) {
+    if (!Info.Ctx.getInterpContext().evaluateAsRValue(Info, E, Result))
       return false;
-    case interp::InterpResult::Bail:
-      break;
+  } else {
+    if (E->getType().isNull())
+      return false;
+
+    if (!CheckLiteralType(Info, E))
+      return false;
+
+    if (!::Evaluate(Result, Info, E))
+      return false;
+
+    if (E->isGLValue()) {
+      LValue LV;
+      LV.setFrom(Info.Ctx, Result);
+      if (!handleLValueToRValueConversion(Info, E, E->getType(), LV, Result))
+        return false;
     }
-  }
-
-  if (E->getType().isNull())
-    return false;
-
-  if (!CheckLiteralType(Info, E))
-    return false;
-
-  if (!::Evaluate(Result, Info, E))
-    return false;
-
-  if (E->isGLValue()) {
-    LValue LV;
-    LV.setFrom(Info.Ctx, Result);
-    if (!handleLValueToRValueConversion(Info, E, E->getType(), LV, Result))
-      return false;
   }
 
   // Check this core constant expression is a constant expression.
@@ -13637,46 +13625,36 @@ bool Expr::EvaluateAsInitializer(APValue &Value, const ASTContext &Ctx,
 
   if (Info.EnableNewConstInterp) {
     auto &InterpCtx = const_cast<ASTContext &>(Ctx).getInterpContext();
-    switch (InterpCtx.evaluateAsInitializer(Info, VD, Value)) {
-    case interp::InterpResult::Fail:
-      // Bail out if an error was encountered.
+    if (!InterpCtx.evaluateAsInitializer(Info, VD, Value))
       return false;
-    case interp::InterpResult::Success:
-      // Evaluation succeeded and value was set.
-      return CheckConstantExpression(Info, DeclLoc, DeclTy, Value);
-    case interp::InterpResult::Bail:
-      // Evaluate the value again for the tree evaluator to use.
-      break;
+  } else {
+    LValue LVal;
+    LVal.set(VD);
+
+    // C++11 [basic.start.init]p2:
+    //  Variables with static storage duration or thread storage duration shall
+    //  be zero-initialized before any other initialization takes place.
+    // This behavior is not present in C.
+    if (Ctx.getLangOpts().CPlusPlus && !VD->hasLocalStorage() &&
+        !DeclTy->isReferenceType()) {
+      ImplicitValueInitExpr VIE(DeclTy);
+      if (!EvaluateInPlace(Value, Info, LVal, &VIE,
+                           /*AllowNonLiteralTypes=*/true))
+        return false;
     }
-  }
 
-  LValue LVal;
-  LVal.set(VD);
-
-  // C++11 [basic.start.init]p2:
-  //  Variables with static storage duration or thread storage duration shall be
-  //  zero-initialized before any other initialization takes place.
-  // This behavior is not present in C.
-  if (Ctx.getLangOpts().CPlusPlus && !VD->hasLocalStorage() &&
-      !DeclTy->isReferenceType()) {
-    ImplicitValueInitExpr VIE(DeclTy);
-    if (!EvaluateInPlace(Value, Info, LVal, &VIE,
-                         /*AllowNonLiteralTypes=*/true))
+    if (!EvaluateInPlace(Value, Info, LVal, this,
+                         /*AllowNonLiteralTypes=*/true) ||
+        EStatus.HasSideEffects)
       return false;
+
+    // At this point, any lifetime-extended temporaries are completely
+    // initialized.
+    Info.performLifetimeExtension();
+
+    if (!Info.discardCleanups())
+      llvm_unreachable("Unhandled cleanup; missing full expression marker?");
   }
-
-  if (!EvaluateInPlace(Value, Info, LVal, this,
-                       /*AllowNonLiteralTypes=*/true) ||
-      EStatus.HasSideEffects)
-    return false;
-
-  // At this point, any lifetime-extended temporaries are completely
-  // initialized.
-  Info.performLifetimeExtension();
-
-  if (!Info.discardCleanups())
-    llvm_unreachable("Unhandled cleanup; missing full expression marker?");
-
   return CheckConstantExpression(Info, DeclLoc, DeclTy, Value) &&
          CheckMemoryLeaks(Info);
 }
@@ -14415,14 +14393,8 @@ bool Expr::isPotentialConstantExpr(const FunctionDecl *FD,
 
   // The constexpr VM attempts to compile all methods to bytecode here.
   if (Info.EnableNewConstInterp) {
-    auto &InterpCtx = Info.Ctx.getInterpContext();
-    switch (InterpCtx.isPotentialConstantExpr(Info, FD)) {
-    case interp::InterpResult::Success:
-    case interp::InterpResult::Fail:
-      return Diags.empty();
-    case interp::InterpResult::Bail:
-      break;
-    }
+    Info.Ctx.getInterpContext().isPotentialConstantExpr(Info, FD);
+    return Diags.empty();
   }
 
   const CXXMethodDecl *MD = dyn_cast<CXXMethodDecl>(FD);

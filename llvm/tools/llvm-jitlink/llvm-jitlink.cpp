@@ -57,6 +57,10 @@ static cl::list<std::string>
                cl::ZeroOrMore);
 
 static cl::opt<std::string>
+    CheckName("check-name", cl::desc("Name of checks to match against"),
+              cl::init("jitlink-check"));
+
+static cl::opt<std::string>
     EntryPointName("entry", cl::desc("Symbol to call as main entry point"),
                    cl::init(""));
 
@@ -604,11 +608,12 @@ Error loadObjects(Session &S) {
 
     // Set every dylib to link against every other, in command line order.
     for (auto *JD : S.JDSearchOrder) {
-      JITDylibSearchList O;
+      auto LookupFlags = JITDylibLookupFlags::MatchExportedSymbolsOnly;
+      JITDylibSearchOrder O;
       for (auto *JD2 : S.JDSearchOrder) {
         if (JD2 == JD)
           continue;
-        O.push_back(std::make_pair(JD2, false));
+        O.push_back(std::make_pair(JD2, LookupFlags));
       }
       JD->setSearchOrder(std::move(O));
     }
@@ -741,10 +746,11 @@ Error runChecks(Session &S) {
       S.TT.isLittleEndian() ? support::little : support::big,
       Disassembler.get(), InstPrinter.get(), dbgs());
 
+  std::string CheckLineStart = "# " + CheckName + ":";
   for (auto &CheckFile : CheckFiles) {
     auto CheckerFileBuf =
         ExitOnErr(errorOrToExpected(MemoryBuffer::getFile(CheckFile)));
-    if (!Checker.checkAllRulesInBuffer("# jitlink-check:", &*CheckerFileBuf))
+    if (!Checker.checkAllRulesInBuffer(CheckLineStart, &*CheckerFileBuf))
       ExitOnErr(make_error<StringError>(
           "Some checks in " + CheckFile + " failed", inconvertibleErrorCode()));
   }
@@ -761,25 +767,6 @@ static void dumpSessionStats(Session &S) {
 
 static Expected<JITEvaluatedSymbol> getMainEntryPoint(Session &S) {
   return S.ES.lookup(S.JDSearchOrder, EntryPointName);
-}
-
-Expected<int> runEntryPoint(Session &S, JITEvaluatedSymbol EntryPoint) {
-  assert(EntryPoint.getAddress() && "Entry point address should not be null");
-
-  constexpr const char *JITProgramName = "<llvm-jitlink jit'd code>";
-  auto PNStorage = std::make_unique<char[]>(strlen(JITProgramName) + 1);
-  strcpy(PNStorage.get(), JITProgramName);
-
-  std::vector<const char *> EntryPointArgs;
-  EntryPointArgs.push_back(PNStorage.get());
-  for (auto &InputArg : InputArgv)
-    EntryPointArgs.push_back(InputArg.data());
-  EntryPointArgs.push_back(nullptr);
-
-  using MainTy = int (*)(int, const char *[]);
-  MainTy EntryPointPtr = reinterpret_cast<MainTy>(EntryPoint.getAddress());
-
-  return EntryPointPtr(EntryPointArgs.size() - 1, EntryPointArgs.data());
 }
 
 struct JITLinkTimers {
@@ -835,8 +822,10 @@ int main(int argc, char *argv[]) {
 
   int Result = 0;
   {
+    using MainTy = int (*)(int, char *[]);
+    auto EntryFn = jitTargetAddressToFunction<MainTy>(EntryPoint.getAddress());
     TimeRegion TR(Timers ? &Timers->RunTimer : nullptr);
-    Result = ExitOnErr(runEntryPoint(S, EntryPoint));
+    Result = runAsMain(EntryFn, InputArgv, StringRef(InputFiles.front()));
   }
 
   return Result;

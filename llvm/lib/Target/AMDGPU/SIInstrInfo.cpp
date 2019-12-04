@@ -6211,7 +6211,11 @@ MachineInstrBuilder SIInstrInfo::getAddNoCarry(MachineBasicBlock &MBB,
   if (ST.hasAddNoCarry())
     return BuildMI(MBB, I, DL, get(AMDGPU::V_ADD_U32_e32), DestReg);
 
-  Register UnusedCarry = RS.scavengeRegister(RI.getBoolRC(), I, 0, false);
+  // If available, prefer to use vcc.
+  Register UnusedCarry = !RS.isRegUsed(AMDGPU::VCC)
+                             ? Register(RI.getVCC())
+                             : RS.scavengeRegister(RI.getBoolRC(), I, 0, false);
+
   // TODO: Users need to deal with this.
   if (!UnusedCarry.isValid())
     return MachineInstrBuilder();
@@ -6329,6 +6333,26 @@ static SIEncodingFamily subtargetEncodingFamily(const GCNSubtarget &ST) {
   llvm_unreachable("Unknown subtarget generation!");
 }
 
+bool SIInstrInfo::isAsmOnlyOpcode(int MCOp) const {
+  switch(MCOp) {
+  // These opcodes use indirect register addressing so
+  // they need special handling by codegen (currently missing).
+  // Therefore it is too risky to allow these opcodes
+  // to be selected by dpp combiner or sdwa peepholer.
+  case AMDGPU::V_MOVRELS_B32_dpp_gfx10:
+  case AMDGPU::V_MOVRELS_B32_sdwa_gfx10:
+  case AMDGPU::V_MOVRELD_B32_dpp_gfx10:
+  case AMDGPU::V_MOVRELD_B32_sdwa_gfx10:
+  case AMDGPU::V_MOVRELSD_B32_dpp_gfx10:
+  case AMDGPU::V_MOVRELSD_B32_sdwa_gfx10:
+  case AMDGPU::V_MOVRELSD_2_B32_dpp_gfx10:
+  case AMDGPU::V_MOVRELSD_2_B32_sdwa_gfx10:
+    return true;
+  default:
+    return false;
+  }
+}
+
 int SIInstrInfo::pseudoToMCOpcode(int Opcode) const {
   SIEncodingFamily Gen = subtargetEncodingFamily(ST);
 
@@ -6365,6 +6389,9 @@ int SIInstrInfo::pseudoToMCOpcode(int Opcode) const {
   // (uint16_t)-1 means that Opcode is a pseudo instruction that has
   // no encoding in the given subtarget generation.
   if (MCOp == (uint16_t)-1)
+    return -1;
+
+  if (isAsmOnlyOpcode(MCOp))
     return -1;
 
   return MCOp;

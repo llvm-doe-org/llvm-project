@@ -877,10 +877,6 @@ ASTContext::~ASTContext() {
        A != AEnd; ++A)
     A->second->~AttrVec();
 
-  for (std::pair<const MaterializeTemporaryExpr *, APValue *> &MTVPair :
-       MaterializedTemporaryValues)
-    MTVPair.second->~APValue();
-
   for (const auto &Value : ModuleInitializers)
     Value.second->~PerModuleInitializers();
 
@@ -3879,10 +3875,11 @@ QualType ASTContext::getFunctionTypeInternal(
   auto ESH = FunctionProtoType::getExceptionSpecSize(
       EPI.ExceptionSpec.Type, EPI.ExceptionSpec.Exceptions.size());
   size_t Size = FunctionProtoType::totalSizeToAlloc<
-      QualType, FunctionType::FunctionTypeExtraBitfields,
+      QualType, SourceLocation, FunctionType::FunctionTypeExtraBitfields,
       FunctionType::ExceptionType, Expr *, FunctionDecl *,
       FunctionProtoType::ExtParameterInfo, Qualifiers>(
-      NumArgs, FunctionProtoType::hasExtraBitfields(EPI.ExceptionSpec.Type),
+      NumArgs, EPI.Variadic,
+      FunctionProtoType::hasExtraBitfields(EPI.ExceptionSpec.Type),
       ESH.NumExceptionType, ESH.NumExprPtr, ESH.NumFunctionDeclPtr,
       EPI.ExtParameterInfos ? NumArgs : 0,
       EPI.TypeQuals.hasNonFastQualifiers() ? 1 : 0);
@@ -10324,21 +10321,6 @@ unsigned ASTContext::getParameterIndex(const ParmVarDecl *D) const {
   assert(I != ParamIndices.end() &&
          "ParmIndices lacks entry set by ParmVarDecl");
   return I->second;
-}
-
-APValue *
-ASTContext::getMaterializedTemporaryValue(const MaterializeTemporaryExpr *E,
-                                          bool MayCreate) {
-  assert(E && E->getStorageDuration() == SD_Static &&
-         "don't need to cache the computed value for this temporary");
-  if (MayCreate) {
-    APValue *&MTVI = MaterializedTemporaryValues[E];
-    if (!MTVI)
-      MTVI = new (*this) APValue;
-    return MTVI;
-  }
-
-  return MaterializedTemporaryValues.lookup(E);
 }
 
 QualType ASTContext::getStringLiteralArrayType(QualType EltTy,

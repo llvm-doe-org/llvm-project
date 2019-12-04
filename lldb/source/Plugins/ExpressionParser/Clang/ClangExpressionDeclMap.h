@@ -372,6 +372,130 @@ private:
   /// from persistent variables.
   uint64_t GetParserID() { return (uint64_t) this; }
 
+  /// Should be called on all copied functions.
+  void MaybeRegisterFunctionBody(clang::FunctionDecl *copied_function_decl);
+
+  /// Searches the persistent decls of the target for entities with the
+  /// given name.
+  ///
+  /// \param[in] context
+  ///     The NameSearchContext that can construct Decls for this name.
+  ///
+  /// \param[in] name
+  ///     The name of the entities that need to be found.
+  ///
+  /// \param[in] current_id
+  ///     The ID for the current FindExternalVisibleDecls invocation,
+  ///     for logging purposes.
+  void SearchPersistenDecls(NameSearchContext &context, const ConstString name,
+                            unsigned int current_id);
+
+  /// Handles looking up $__lldb_class which requires special treatment.
+  ///
+  /// \param[in] context
+  ///     The NameSearchContext that can construct Decls for this name.
+  ///
+  /// \param[in] current_id
+  ///     The ID for the current FindExternalVisibleDecls invocation,
+  ///     for logging purposes.
+  void LookUpLldbClass(NameSearchContext &context, unsigned int current_id);
+
+  /// Handles looking up $__lldb_objc_class which requires special treatment.
+  ///
+  /// \param[in] context
+  ///     The NameSearchContext that can construct Decls for this name.
+  ///
+  /// \param[in] current_id
+  ///     The ID for the current FindExternalVisibleDecls invocation,
+  ///     for logging purposes.
+  void LookUpLldbObjCClass(NameSearchContext &context, unsigned int current_id);
+
+  /// Handles looking up the synthetic namespace that contains our local
+  /// variables for the current frame.
+  ///
+  /// \param[in] sym_ctx
+  ///     The current SymbolContext of this frame.
+  ///
+  /// \param[in] name_context
+  ///     The NameSearchContext that can construct Decls for this name.
+  void LookupLocalVarNamespace(SymbolContext &sym_ctx,
+                               NameSearchContext &name_context);
+
+  /// Lookup entities in the ClangModulesDeclVendor.
+  /// \param[in] context
+  ///     The NameSearchContext that can construct Decls for this name.
+  ///
+  /// \param[in] name
+  ///     The name of the entities that need to be found.
+  ///
+  /// \param[in] current_id
+  ///     The ID for the current FindExternalVisibleDecls invocation,
+  ///     for logging purposes.
+  void LookupInModulesDeclVendor(NameSearchContext &context, ConstString name,
+                                 unsigned current_id);
+
+  /// Looks up a local variable.
+  ///
+  /// \param[in] context
+  ///     The NameSearchContext that can construct Decls for this name.
+  ///
+  /// \param[in] name
+  ///     The name of the entities that need to be found.
+  ///
+  /// \param[in] current_id
+  ///     The ID for the current FindExternalVisibleDecls invocation,
+  ///     for logging purposes.
+  ///
+  /// \param[in] sym_ctx
+  ///     The current SymbolContext of this frame.
+  ///
+  /// \param[in] namespace_decl
+  ///     The parent namespace if there is one.
+  ///
+  /// \return
+  ///    True iff a local variable was found.
+  bool LookupLocalVariable(NameSearchContext &context, ConstString name,
+                           unsigned current_id, SymbolContext &sym_ctx,
+                           CompilerDeclContext &namespace_decl);
+
+  /// Searches for functions in the given SymbolContextList.
+  ///
+  /// \param[in] sc_list
+  ///     The SymbolContextList to search.
+  ///
+  /// \param[in] frame_decl_context
+  ///     The current DeclContext of the current frame.
+  ///
+  /// \return
+  ///     A SymbolContextList with any found functions in the front and
+  ///     any unknown SymbolContexts which are not functions in the back.
+  ///     The SymbolContexts for the functions are ordered by how close they are
+  ///     to the DeclContext for the given frame DeclContext.
+  SymbolContextList SearchFunctionsInSymbolContexts(
+      const SymbolContextList &sc_list,
+      const CompilerDeclContext &frame_decl_context);
+
+  /// Looks up a function.
+  ///
+  /// \param[in] context
+  ///     The NameSearchContext that can construct Decls for this name.
+  ///
+  /// \param[in] module_sp
+  ///     If non-NULL, the module to query.
+  ///
+  /// \param[in] name
+  ///     The name of the function that should be find.
+  ///
+  /// \param[in] namespace_decl
+  ///     If valid and module is non-NULL, the parent namespace.
+  ///
+  /// \param[in] current_id
+  ///     The ID for the current FindExternalVisibleDecls invocation,
+  ///     for logging purposes.
+  void LookupFunction(NameSearchContext &context, lldb::ModuleSP module_sp,
+                      ConstString name, CompilerDeclContext &namespace_decl,
+                      unsigned current_id);
+
   /// Given a target, find a variable that matches the given name and type.
   ///
   /// \param[in] target

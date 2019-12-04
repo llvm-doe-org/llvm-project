@@ -52,6 +52,7 @@
 #include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/IR/CallSite.h"
@@ -926,6 +927,14 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
     if (Subtarget.hasP9Altivec()) {
       setOperationAction(ISD::INSERT_VECTOR_ELT, MVT::v8i16, Custom);
       setOperationAction(ISD::INSERT_VECTOR_ELT, MVT::v16i8, Custom);
+
+      setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::v4i8,  Legal);
+      setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::v4i16, Legal);
+      setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::v4i32, Legal);
+      setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::v2i8,  Legal);
+      setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::v2i16, Legal);
+      setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::v2i32, Legal);
+      setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::v2i64, Legal);
     }
   }
 
@@ -1193,7 +1202,7 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
   if (Subtarget.isDarwin())
     setPrefFunctionAlignment(Align(16));
 
-  switch (Subtarget.getDarwinDirective()) {
+  switch (Subtarget.getCPUDirective()) {
   default: break;
   case PPC::DIR_970:
   case PPC::DIR_A2:
@@ -1208,6 +1217,7 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
   case PPC::DIR_PWR7:
   case PPC::DIR_PWR8:
   case PPC::DIR_PWR9:
+  case PPC::DIR_PWR_FUTURE:
     setPrefLoopAlignment(Align(16));
     setPrefFunctionAlignment(Align(16));
     break;
@@ -1222,15 +1232,15 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
 
   // The Freescale cores do better with aggressive inlining of memcpy and
   // friends. GCC uses same threshold of 128 bytes (= 32 word stores).
-  if (Subtarget.getDarwinDirective() == PPC::DIR_E500mc ||
-      Subtarget.getDarwinDirective() == PPC::DIR_E5500) {
+  if (Subtarget.getCPUDirective() == PPC::DIR_E500mc ||
+      Subtarget.getCPUDirective() == PPC::DIR_E5500) {
     MaxStoresPerMemset = 32;
     MaxStoresPerMemsetOptSize = 16;
     MaxStoresPerMemcpy = 32;
     MaxStoresPerMemcpyOptSize = 8;
     MaxStoresPerMemmove = 32;
     MaxStoresPerMemmoveOptSize = 8;
-  } else if (Subtarget.getDarwinDirective() == PPC::DIR_A2) {
+  } else if (Subtarget.getCPUDirective() == PPC::DIR_A2) {
     // The A2 also benefits from (very) aggressive inlining of memcpy and
     // friends. The overhead of a the function call, even when warm, can be
     // over one hundred cycles.
@@ -2749,14 +2759,14 @@ unsigned PPCTargetLowering::getJumpTableEncoding() const {
 bool PPCTargetLowering::isJumpTableRelative() const {
   if (UseAbsoluteJumpTables)
     return false;
-  if (Subtarget.isPPC64())
+  if (Subtarget.isPPC64() || Subtarget.isAIXABI())
     return true;
   return TargetLowering::isJumpTableRelative();
 }
 
 SDValue PPCTargetLowering::getPICJumpTableRelocBase(SDValue Table,
                                                     SelectionDAG &DAG) const {
-  if (!Subtarget.isPPC64())
+  if (!Subtarget.isPPC64() || Subtarget.isAIXABI())
     return TargetLowering::getPICJumpTableRelocBase(Table, DAG);
 
   switch (getTargetMachine().getCodeModel()) {
@@ -2773,7 +2783,7 @@ const MCExpr *
 PPCTargetLowering::getPICJumpTableRelocBaseExpr(const MachineFunction *MF,
                                                 unsigned JTI,
                                                 MCContext &Ctx) const {
-  if (!Subtarget.isPPC64())
+  if (!Subtarget.isPPC64() || Subtarget.isAIXABI())
     return TargetLowering::getPICJumpTableRelocBaseExpr(MF, JTI, Ctx);
 
   switch (getTargetMachine().getCodeModel()) {
@@ -3408,15 +3418,16 @@ SDValue PPCTargetLowering::LowerFormalArguments(
     SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
     const SmallVectorImpl<ISD::InputArg> &Ins, const SDLoc &dl,
     SelectionDAG &DAG, SmallVectorImpl<SDValue> &InVals) const {
+  if (Subtarget.isAIXABI())
+    return LowerFormalArguments_AIX(Chain, CallConv, isVarArg, Ins, dl, DAG,
+                                    InVals);
   if (Subtarget.is64BitELFABI())
     return LowerFormalArguments_64SVR4(Chain, CallConv, isVarArg, Ins, dl, DAG,
                                        InVals);
-  else if (Subtarget.is32BitELFABI())
+  if (Subtarget.is32BitELFABI())
     return LowerFormalArguments_32SVR4(Chain, CallConv, isVarArg, Ins, dl, DAG,
                                        InVals);
 
-  // FIXME: We are using this for both AIX and Darwin. We should add appropriate
-  // AIX testing, and rename it appropriately.
   return LowerFormalArguments_Darwin(Chain, CallConv, isVarArg, Ins, dl, DAG,
                                      InVals);
 }
@@ -5317,8 +5328,23 @@ SDValue PPCTargetLowering::FinishCall(
     // C-linkage name.
     GlobalAddressSDNode *G = cast<GlobalAddressSDNode>(Callee);
     auto &Context = DAG.getMachineFunction().getMMI().getContext();
-    MCSymbol *S = Context.getOrCreateSymbol(Twine(".") +
-                                            Twine(G->getGlobal()->getName()));
+
+    const GlobalObject *GO = cast<GlobalObject>(G->getGlobal());
+    MCSymbolXCOFF *S = cast<MCSymbolXCOFF>(Context.getOrCreateSymbol(
+        Twine(".") + Twine(GO->getName())));
+
+    if (GO && GO->isDeclaration() && !S->hasContainingCsect()) {
+      // On AIX, an undefined symbol needs to be associated with a
+      // MCSectionXCOFF to get the correct storage mapping class.
+      // In this case, XCOFF::XMC_PR.
+      const XCOFF::StorageClass SC =
+          TargetLoweringObjectFileXCOFF::getStorageClassForGlobal(GO);
+      MCSectionXCOFF *Sec =
+          Context.getXCOFFSection(S->getName(), XCOFF::XMC_PR, XCOFF::XTY_ER,
+                                  SC, SectionKind::getMetadata());
+      S->setContainingCsect(Sec);
+    }
+
     Callee = DAG.getMCSymbol(S, PtrVT);
     // Replace the GlobalAddressSDNode Callee with the MCSymbolSDNode.
     Ops[1] = Callee;
@@ -6781,6 +6807,117 @@ static bool CC_AIX(unsigned ValNo, MVT ValVT, MVT LocVT,
     return false;
   }
   }
+}
+
+static const TargetRegisterClass *getRegClassForSVT(MVT::SimpleValueType SVT,
+                                                    bool IsPPC64) {
+  assert((IsPPC64 || SVT != MVT::i64) &&
+         "i64 should have been split for 32-bit codegen.");
+
+  switch (SVT) {
+  default:
+    report_fatal_error("Unexpected value type for formal argument");
+  case MVT::i1:
+  case MVT::i32:
+  case MVT::i64:
+    return IsPPC64 ? &PPC::G8RCRegClass : &PPC::GPRCRegClass;
+  case MVT::f32:
+    return &PPC::F4RCRegClass;
+  case MVT::f64:
+    return &PPC::F8RCRegClass;
+  }
+}
+
+static SDValue truncateScalarIntegerArg(ISD::ArgFlagsTy Flags, EVT ValVT,
+                                        SelectionDAG &DAG, SDValue ArgValue,
+                                        MVT LocVT, const SDLoc &dl) {
+  assert(ValVT.isScalarInteger() && LocVT.isScalarInteger());
+  assert(ValVT.getSizeInBits() < LocVT.getSizeInBits());
+
+  if (Flags.isSExt())
+    ArgValue = DAG.getNode(ISD::AssertSext, dl, LocVT, ArgValue,
+                           DAG.getValueType(ValVT));
+  else if (Flags.isZExt())
+    ArgValue = DAG.getNode(ISD::AssertZext, dl, LocVT, ArgValue,
+                           DAG.getValueType(ValVT));
+
+  return DAG.getNode(ISD::TRUNCATE, dl, ValVT, ArgValue);
+}
+
+SDValue PPCTargetLowering::LowerFormalArguments_AIX(
+    SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
+    const SmallVectorImpl<ISD::InputArg> &Ins, const SDLoc &dl,
+    SelectionDAG &DAG, SmallVectorImpl<SDValue> &InVals) const {
+
+  assert((CallConv == CallingConv::C || CallConv == CallingConv::Cold ||
+          CallConv == CallingConv::Fast) &&
+         "Unexpected calling convention!");
+
+  if (isVarArg)
+    report_fatal_error("This call type is unimplemented on AIX.");
+
+  if (getTargetMachine().Options.GuaranteedTailCallOpt)
+    report_fatal_error("Tail call support is unimplemented on AIX.");
+
+  if (useSoftFloat())
+    report_fatal_error("Soft float support is unimplemented on AIX.");
+
+  const PPCSubtarget &Subtarget =
+      static_cast<const PPCSubtarget &>(DAG.getSubtarget());
+  if (Subtarget.hasQPX())
+    report_fatal_error("QPX support is not supported on AIX.");
+
+  const bool IsPPC64 = Subtarget.isPPC64();
+  const unsigned PtrByteSize = IsPPC64 ? 8 : 4;
+
+  // Assign locations to all of the incoming arguments.
+  SmallVector<CCValAssign, 16> ArgLocs;
+  MachineFunction &MF = DAG.getMachineFunction();
+  CCState CCInfo(CallConv, isVarArg, MF, ArgLocs, *DAG.getContext());
+
+  // Reserve space for the linkage area on the stack.
+  const unsigned LinkageSize = Subtarget.getFrameLowering()->getLinkageSize();
+  // On AIX a minimum of 8 words is saved to the parameter save area.
+  const unsigned MinParameterSaveArea = 8 * PtrByteSize;
+  CCInfo.AllocateStack(LinkageSize + MinParameterSaveArea, PtrByteSize);
+  CCInfo.AnalyzeFormalArguments(Ins, CC_AIX);
+
+  for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
+    CCValAssign &VA = ArgLocs[i];
+    SDValue ArgValue;
+    ISD::ArgFlagsTy Flags = Ins[i].Flags;
+    if (VA.isRegLoc()) {
+      EVT ValVT = VA.getValVT();
+      MVT LocVT = VA.getLocVT();
+      MVT::SimpleValueType SVT = ValVT.getSimpleVT().SimpleTy;
+      unsigned VReg =
+          MF.addLiveIn(VA.getLocReg(), getRegClassForSVT(SVT, IsPPC64));
+      ArgValue = DAG.getCopyFromReg(Chain, dl, VReg, LocVT);
+      if (ValVT.isScalarInteger() &&
+          (ValVT.getSizeInBits() < LocVT.getSizeInBits())) {
+        ArgValue =
+            truncateScalarIntegerArg(Flags, ValVT, DAG, ArgValue, LocVT, dl);
+      }
+      InVals.push_back(ArgValue);
+    } else {
+      report_fatal_error("Handling of formal arguments on the stack is "
+                         "unimplemented!");
+    }
+  }
+
+  // Area that is at least reserved in the caller of this function.
+  unsigned MinReservedArea = CCInfo.getNextStackOffset();
+
+  // Set the size that is at least reserved in caller of this function. Tail
+  // call optimized function's reserved stack space needs to be aligned so
+  // that taking the difference between two stack areas will result in an
+  // aligned stack.
+  MinReservedArea =
+      EnsureStackAlignment(Subtarget.getFrameLowering(), MinReservedArea);
+  PPCFunctionInfo *FuncInfo = MF.getInfo<PPCFunctionInfo>();
+  FuncInfo->setMinReservedArea(MinReservedArea);
+
+  return Chain;
 }
 
 SDValue PPCTargetLowering::LowerCall_AIX(
@@ -11697,7 +11834,7 @@ unsigned PPCTargetLowering::combineRepeatedFPDivisors() const {
   // Combine multiple FDIVs with the same divisor into multiple FMULs by the
   // reciprocal if there are two or more FDIVs (for embedded cores with only
   // one FP pipeline) for three or more FDIVs (for generic OOO cores).
-  switch (Subtarget.getDarwinDirective()) {
+  switch (Subtarget.getCPUDirective()) {
   default:
     return 3;
   case PPC::DIR_440:
@@ -14170,7 +14307,7 @@ void PPCTargetLowering::computeKnownBitsForTargetNode(const SDValue Op,
 }
 
 Align PPCTargetLowering::getPrefLoopAlignment(MachineLoop *ML) const {
-  switch (Subtarget.getDarwinDirective()) {
+  switch (Subtarget.getCPUDirective()) {
   default: break;
   case PPC::DIR_970:
   case PPC::DIR_PWR4:
@@ -14180,7 +14317,8 @@ Align PPCTargetLowering::getPrefLoopAlignment(MachineLoop *ML) const {
   case PPC::DIR_PWR6X:
   case PPC::DIR_PWR7:
   case PPC::DIR_PWR8:
-  case PPC::DIR_PWR9: {
+  case PPC::DIR_PWR9:
+  case PPC::DIR_PWR_FUTURE: {
     if (!ML)
       break;
 
@@ -14368,6 +14506,17 @@ PPCTargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
       return std::make_pair(0U, &PPC::VSFRCRegClass);
   }
 
+  // If we name a VSX register, we can't defer to the base class because it
+  // will not recognize the correct register (their names will be VSL{0-31}
+  // and V{0-31} so they won't match). So we match them here.
+  if (Constraint.size() > 3 && Constraint[1] == 'v' && Constraint[2] == 's') {
+    int VSNum = atoi(Constraint.data() + 3);
+    assert(VSNum >= 0 && VSNum <= 63 &&
+           "Attempted to access a vsr out of range");
+    if (VSNum < 32)
+      return std::make_pair(PPC::VSL0 + VSNum, &PPC::VSRCRegClass);
+    return std::make_pair(PPC::V0 + VSNum - 32, &PPC::VSRCRegClass);
+  }
   std::pair<unsigned, const TargetRegisterClass *> R =
       TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
 
@@ -15338,7 +15487,7 @@ SDValue PPCTargetLowering::combineMUL(SDNode *N, DAGCombinerInfo &DCI) const {
     return SDValue();
 
   auto IsProfitable = [this](bool IsNeg, bool IsAddOne, EVT VT) -> bool {
-    switch (this->Subtarget.getDarwinDirective()) {
+    switch (this->Subtarget.getCPUDirective()) {
     default:
       // TODO: enhance the condition for subtarget before pwr8
       return false;
@@ -15348,6 +15497,7 @@ SDValue PPCTargetLowering::combineMUL(SDNode *N, DAGCombinerInfo &DCI) const {
       // vector        7       2      2
       return true;
     case PPC::DIR_PWR9:
+    case PPC::DIR_PWR_FUTURE:
       //  type        mul     add    shl
       // scalar        5       2      2
       // vector        7       2      2

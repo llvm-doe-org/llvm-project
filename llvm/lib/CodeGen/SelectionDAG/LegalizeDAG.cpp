@@ -176,8 +176,8 @@ private:
                                const SDLoc &dl);
   SDValue PromoteLegalINT_TO_FP(SDValue LegalOp, EVT DestVT, bool isSigned,
                                 const SDLoc &dl);
-  SDValue PromoteLegalFP_TO_INT(SDValue LegalOp, EVT DestVT, bool isSigned,
-                                const SDLoc &dl);
+  void PromoteLegalFP_TO_INT(SDNode *N, const SDLoc &dl,
+                             SmallVectorImpl<SDValue> &Results);
 
   SDValue ExpandBITREVERSE(SDValue Op, const SDLoc &dl);
   SDValue ExpandBSWAP(SDValue Op, const SDLoc &dl);
@@ -1023,8 +1023,8 @@ void SelectionDAGLegalize::LegalizeOp(SDNode *Node) {
     // These pseudo-ops are the same as the other STRICT_ ops except
     // they are registered with setOperationAction() using the input type
     // instead of the output type.
-    Action = TLI.getStrictFPOperationAction(Node->getOpcode(),
-                                            Node->getOperand(1).getValueType());
+    Action = TLI.getOperationAction(Node->getOpcode(),
+                                    Node->getOperand(1).getValueType());
     break;
   case ISD::SIGN_EXTEND_INREG: {
     EVT InnerType = cast<VTSDNode>(Node->getOperand(1))->getVT();
@@ -2098,9 +2098,14 @@ void SelectionDAGLegalize::ExpandFPLibCall(SDNode* Node,
   }
 
   if (Node->isStrictFPOpcode()) {
+    EVT RetVT = Node->getValueType(0);
+    SmallVector<SDValue, 4> Ops(Node->op_begin() + 1, Node->op_end());
+    TargetLowering::MakeLibCallOptions CallOptions;
     // FIXME: This doesn't support tail calls.
-    std::pair<SDValue, SDValue> Tmp = TLI.ExpandChainLibCall(DAG, LC, Node,
-                                                             false);
+    std::pair<SDValue, SDValue> Tmp = TLI.makeLibCall(DAG, LC, RetVT,
+                                                      Ops, CallOptions,
+                                                      SDLoc(Node),
+                                                      Node->getOperand(0));
     Results.push_back(Tmp.first);
     Results.push_back(Tmp.second);
   } else {
@@ -2149,9 +2154,14 @@ void SelectionDAGLegalize::ExpandArgFPLibCall(SDNode* Node,
   }
 
   if (Node->isStrictFPOpcode()) {
+    EVT RetVT = Node->getValueType(0);
+    SmallVector<SDValue, 4> Ops(Node->op_begin() + 1, Node->op_end());
+    TargetLowering::MakeLibCallOptions CallOptions;
     // FIXME: This doesn't support tail calls.
-    std::pair<SDValue, SDValue> Tmp = TLI.ExpandChainLibCall(DAG, LC, Node,
-                                                             false);
+    std::pair<SDValue, SDValue> Tmp = TLI.makeLibCall(DAG, LC, RetVT,
+                                                      Ops, CallOptions,
+                                                      SDLoc(Node),
+                                                      Node->getOperand(0));
     Results.push_back(Tmp.first);
     Results.push_back(Tmp.second);
   } else {
@@ -2480,9 +2490,13 @@ SDValue SelectionDAGLegalize::PromoteLegalINT_TO_FP(SDValue LegalOp, EVT DestVT,
 /// we promote it.  At this point, we know that the result and operand types are
 /// legal for the target, and that there is a legal FP_TO_UINT or FP_TO_SINT
 /// operation that returns a larger result.
-SDValue SelectionDAGLegalize::PromoteLegalFP_TO_INT(SDValue LegalOp, EVT DestVT,
-                                                    bool isSigned,
-                                                    const SDLoc &dl) {
+void SelectionDAGLegalize::PromoteLegalFP_TO_INT(SDNode *N, const SDLoc &dl,
+                                                 SmallVectorImpl<SDValue> &Results) {
+  bool IsStrict = N->isStrictFPOpcode();
+  bool IsSigned = N->getOpcode() == ISD::FP_TO_SINT ||
+                  N->getOpcode() == ISD::STRICT_FP_TO_SINT;
+  EVT DestVT = N->getValueType(0);
+  SDValue LegalOp = N->getOperand(IsStrict ? 1 : 0);
   // First step, figure out the appropriate FP_TO*INT operation to use.
   EVT NewOutTy = DestVT;
 
@@ -2495,26 +2509,32 @@ SDValue SelectionDAGLegalize::PromoteLegalFP_TO_INT(SDValue LegalOp, EVT DestVT,
 
     // A larger signed type can hold all unsigned values of the requested type,
     // so using FP_TO_SINT is valid
-    if (TLI.isOperationLegalOrCustom(ISD::FP_TO_SINT, NewOutTy)) {
-      OpToUse = ISD::FP_TO_SINT;
+    OpToUse = IsStrict ? ISD::STRICT_FP_TO_SINT : ISD::FP_TO_SINT;
+    if (TLI.isOperationLegalOrCustom(OpToUse, NewOutTy))
       break;
-    }
 
     // However, if the value may be < 0.0, we *must* use some FP_TO_SINT.
-    if (!isSigned && TLI.isOperationLegalOrCustom(ISD::FP_TO_UINT, NewOutTy)) {
-      OpToUse = ISD::FP_TO_UINT;
+    OpToUse = IsStrict ? ISD::STRICT_FP_TO_UINT : ISD::FP_TO_UINT;
+    if (!IsSigned && TLI.isOperationLegalOrCustom(OpToUse, NewOutTy))
       break;
-    }
 
     // Otherwise, try a larger type.
   }
 
   // Okay, we found the operation and type to use.
-  SDValue Operation = DAG.getNode(OpToUse, dl, NewOutTy, LegalOp);
+  SDValue Operation;
+  if (IsStrict) {
+    SDVTList VTs = DAG.getVTList(NewOutTy, MVT::Other);
+    Operation = DAG.getNode(OpToUse, dl, VTs, N->getOperand(0), LegalOp);
+  } else
+    Operation = DAG.getNode(OpToUse, dl, NewOutTy, LegalOp);
 
   // Truncate the result of the extended FP_TO_*INT operation to the desired
   // size.
-  return DAG.getNode(ISD::TRUNCATE, dl, DestVT, Operation);
+  SDValue Trunc = DAG.getNode(ISD::TRUNCATE, dl, DestVT, Operation);
+  Results.push_back(Trunc);
+  if (IsStrict)
+    Results.push_back(Operation.getValue(1));
 }
 
 /// Legalize a BITREVERSE scalar/vector operation as a series of mask + shifts.
@@ -2795,12 +2815,18 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     break;
   }
   case ISD::STRICT_FP_ROUND:
-    // This expansion does not honor the "strict" properties anyway,
-    // so prefer falling back to the non-strict operation if legal.
+    // When strict mode is enforced we can't do expansion because it
+    // does not honor the "strict" properties. Only libcall is allowed.
+    if (TLI.isStrictFPEnabled())
+      break;
+    // We might as well mutate to FP_ROUND when FP_ROUND operation is legal
+    // since this operation is more efficient than stack operation.
     if (TLI.getStrictFPOperationAction(Node->getOpcode(),
                                        Node->getValueType(0))
         == TargetLowering::Legal)
       break;
+    // We fall back to use stack operation when the FP_ROUND operation
+    // isn't available.
     Tmp1 = EmitStackConvert(Node->getOperand(1), 
                             Node->getValueType(0),
                             Node->getValueType(0), dl, Node->getOperand(0));
@@ -2815,12 +2841,18 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     Results.push_back(Tmp1);
     break;
   case ISD::STRICT_FP_EXTEND:
-    // This expansion does not honor the "strict" properties anyway,
-    // so prefer falling back to the non-strict operation if legal.
+    // When strict mode is enforced we can't do expansion because it
+    // does not honor the "strict" properties. Only libcall is allowed.
+    if (TLI.isStrictFPEnabled())
+      break;
+    // We might as well mutate to FP_EXTEND when FP_EXTEND operation is legal
+    // since this operation is more efficient than stack operation.
     if (TLI.getStrictFPOperationAction(Node->getOpcode(),
                                        Node->getValueType(0))
         == TargetLowering::Legal)
       break;
+    // We fall back to use stack operation when the FP_EXTEND operation
+    // isn't available.
     Tmp1 = EmitStackConvert(Node->getOperand(1),
                             Node->getOperand(1).getValueType(),
                             Node->getValueType(0), dl, Node->getOperand(0));
@@ -3660,7 +3692,7 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     }
 
     SDValue Result = DAG.getBuildVector(Node->getValueType(0), dl, Scalars);
-    ReplaceNode(SDValue(Node, 0), Result);
+    Results.push_back(Result);
     break;
   }
   case ISD::VECREDUCE_FADD:
@@ -3688,10 +3720,12 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
   case ISD::INTRINSIC_WO_CHAIN:
   case ISD::INTRINSIC_VOID:
     // FIXME: Custom lowering for these operations shouldn't return null!
-    break;
+    // Return true so that we don't call ConvertNodeToLibcall which also won't
+    // do anything.
+    return true;
   }
 
-  if (Results.empty() && Node->isStrictFPOpcode()) {
+  if (!TLI.isStrictFPEnabled() && Results.empty() && Node->isStrictFPOpcode()) {
     // FIXME: We were asked to expand a strict floating-point operation,
     // but there is currently no expansion implemented that would preserve
     // the "strict" properties.  For now, we just fall back to the non-strict
@@ -3776,8 +3810,13 @@ void SelectionDAGLegalize::ConvertNodeToLibcall(SDNode *Node) {
     RTLIB::Libcall LC = RTLIB::getSYNC(Opc, VT);
     assert(LC != RTLIB::UNKNOWN_LIBCALL && "Unexpected atomic op or value type!");
 
-    std::pair<SDValue, SDValue> Tmp = TLI.ExpandChainLibCall(DAG, LC, Node,
-                                                             false);
+    EVT RetVT = Node->getValueType(0);
+    SmallVector<SDValue, 4> Ops(Node->op_begin() + 1, Node->op_end());
+    TargetLowering::MakeLibCallOptions CallOptions;
+    std::pair<SDValue, SDValue> Tmp = TLI.makeLibCall(DAG, LC, RetVT,
+                                                      Ops, CallOptions,
+                                                      SDLoc(Node),
+                                                      Node->getOperand(0));
     Results.push_back(Tmp.first);
     Results.push_back(Tmp.second);
     break;
@@ -4009,6 +4048,7 @@ void SelectionDAGLegalize::ConvertNodeToLibcall(SDNode *Node) {
                        RTLIB::LLRINT_PPCF128, Results);
     break;
   case ISD::FDIV:
+  case ISD::STRICT_FDIV:
     ExpandFPLibCall(Node, RTLIB::DIV_F32, RTLIB::DIV_F64,
                     RTLIB::DIV_F80, RTLIB::DIV_F128,
                     RTLIB::DIV_PPCF128, Results);
@@ -4026,11 +4066,13 @@ void SelectionDAGLegalize::ConvertNodeToLibcall(SDNode *Node) {
                     RTLIB::FMA_PPCF128, Results);
     break;
   case ISD::FADD:
+  case ISD::STRICT_FADD:
     ExpandFPLibCall(Node, RTLIB::ADD_F32, RTLIB::ADD_F64,
                     RTLIB::ADD_F80, RTLIB::ADD_F128,
                     RTLIB::ADD_PPCF128, Results);
     break;
   case ISD::FMUL:
+  case ISD::STRICT_FMUL:
     ExpandFPLibCall(Node, RTLIB::MUL_F32, RTLIB::MUL_F64,
                     RTLIB::MUL_F80, RTLIB::MUL_F128,
                     RTLIB::MUL_PPCF128, Results);
@@ -4048,6 +4090,7 @@ void SelectionDAGLegalize::ConvertNodeToLibcall(SDNode *Node) {
     break;
   }
   case ISD::FSUB:
+  case ISD::STRICT_FSUB:
     ExpandFPLibCall(Node, RTLIB::SUB_F32, RTLIB::SUB_F64,
                     RTLIB::SUB_F80, RTLIB::SUB_F128,
                     RTLIB::SUB_PPCF128, Results);
@@ -4181,10 +4224,10 @@ void SelectionDAGLegalize::PromoteNode(SDNode *Node) {
     break;
   }
   case ISD::FP_TO_UINT:
+  case ISD::STRICT_FP_TO_UINT:
   case ISD::FP_TO_SINT:
-    Tmp1 = PromoteLegalFP_TO_INT(Node->getOperand(0), Node->getValueType(0),
-                                 Node->getOpcode() == ISD::FP_TO_SINT, dl);
-    Results.push_back(Tmp1);
+  case ISD::STRICT_FP_TO_SINT:
+    PromoteLegalFP_TO_INT(Node, dl, Results);
     break;
   case ISD::UINT_TO_FP:
   case ISD::SINT_TO_FP:

@@ -11417,10 +11417,9 @@ void Sema::setupImplicitSpecialMemberType(CXXMethodDecl *SpecialMem,
   // Build an exception specification pointing back at this constructor.
   FunctionProtoType::ExtProtoInfo EPI = getImplicitMethodEPI(*this, SpecialMem);
 
-  if (getLangOpts().OpenCLCPlusPlus) {
-    // OpenCL: Implicitly defaulted special member are of the generic address
-    // space.
-    EPI.TypeQuals.addAddressSpace(LangAS::opencl_generic);
+  LangAS AS = getDefaultCXXMethodAddrSpace();
+  if (AS != LangAS::Default) {
+    EPI.TypeQuals.addAddressSpace(AS);
   }
 
   auto QT = Context.getFunctionType(ResultTy, Args, EPI);
@@ -12330,8 +12329,9 @@ CXXMethodDecl *Sema::DeclareImplicitCopyAssignment(CXXRecordDecl *ClassDecl) {
     return nullptr;
 
   QualType ArgType = Context.getTypeDeclType(ClassDecl);
-  if (Context.getLangOpts().OpenCLCPlusPlus)
-    ArgType = Context.getAddrSpaceQualType(ArgType, LangAS::opencl_generic);
+  LangAS AS = getDefaultCXXMethodAddrSpace();
+  if (AS != LangAS::Default)
+    ArgType = Context.getAddrSpaceQualType(ArgType, AS);
   QualType RetType = Context.getLValueReferenceType(ArgType);
   bool Const = ClassDecl->implicitCopyAssignmentHasConstParam();
   if (Const)
@@ -12432,11 +12432,12 @@ static void diagnoseDeprecatedCopyOperation(Sema &S, CXXMethodDecl *CopyOp) {
     assert(UserDeclaredOperation);
   }
 
-  if (UserDeclaredOperation) {
+  if (UserDeclaredOperation && UserDeclaredOperation->isUserProvided()) {
     S.Diag(UserDeclaredOperation->getLocation(),
-         diag::warn_deprecated_copy_operation)
-      << RD << /*copy assignment*/!isa<CXXConstructorDecl>(CopyOp)
-      << /*destructor*/isa<CXXDestructorDecl>(UserDeclaredOperation);
+           isa<CXXDestructorDecl>(UserDeclaredOperation)
+               ? diag::warn_deprecated_copy_dtor_operation
+               : diag::warn_deprecated_copy_operation)
+        << RD << /*copy assignment*/ !isa<CXXConstructorDecl>(CopyOp);
   }
 }
 
@@ -12655,8 +12656,9 @@ CXXMethodDecl *Sema::DeclareImplicitMoveAssignment(CXXRecordDecl *ClassDecl) {
   // constructor rules.
 
   QualType ArgType = Context.getTypeDeclType(ClassDecl);
-  if (Context.getLangOpts().OpenCLCPlusPlus)
-    ArgType = Context.getAddrSpaceQualType(ArgType, LangAS::opencl_generic);
+  LangAS AS = getDefaultCXXMethodAddrSpace();
+  if (AS != LangAS::Default)
+    ArgType = Context.getAddrSpaceQualType(ArgType, AS);
   QualType RetType = Context.getLValueReferenceType(ArgType);
   ArgType = Context.getRValueReferenceType(ArgType);
 
@@ -13033,8 +13035,9 @@ CXXConstructorDecl *Sema::DeclareImplicitCopyConstructor(
   if (Const)
     ArgType = ArgType.withConst();
 
-  if (Context.getLangOpts().OpenCLCPlusPlus)
-    ArgType = Context.getAddrSpaceQualType(ArgType, LangAS::opencl_generic);
+  LangAS AS = getDefaultCXXMethodAddrSpace();
+  if (AS != LangAS::Default)
+    ArgType = Context.getAddrSpaceQualType(ArgType, AS);
 
   ArgType = Context.getLValueReferenceType(ArgType);
 
@@ -13165,8 +13168,9 @@ CXXConstructorDecl *Sema::DeclareImplicitMoveConstructor(
   QualType ClassType = Context.getTypeDeclType(ClassDecl);
 
   QualType ArgType = ClassType;
-  if (Context.getLangOpts().OpenCLCPlusPlus)
-    ArgType = Context.getAddrSpaceQualType(ClassType, LangAS::opencl_generic);
+  LangAS AS = getDefaultCXXMethodAddrSpace();
+  if (AS != LangAS::Default)
+    ArgType = Context.getAddrSpaceQualType(ClassType, AS);
   ArgType = Context.getRValueReferenceType(ArgType);
 
   bool Constexpr = defaultedSpecialMemberIsConstexpr(*this, ClassDecl,
@@ -14205,10 +14209,6 @@ Decl *Sema::ActOnStartLinkageSpecification(Scope *S, SourceLocation ExternLoc,
     Language = LinkageSpecDecl::lang_c;
   else if (Lang == "C++")
     Language = LinkageSpecDecl::lang_cxx;
-  else if (Lang == "C++11")
-    Language = LinkageSpecDecl::lang_cxx_11;
-  else if (Lang == "C++14")
-    Language = LinkageSpecDecl::lang_cxx_14;
   else {
     Diag(LangStr->getExprLoc(), diag::err_language_linkage_spec_unknown)
       << LangStr->getSourceRange();

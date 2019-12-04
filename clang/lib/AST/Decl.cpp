@@ -901,6 +901,10 @@ LinkageComputer::getLVForNamespaceScopeDecl(const NamedDecl *D,
   if (!isExternallyVisible(LV.getLinkage()))
     return LinkageInfo(LV.getLinkage(), DefaultVisibility, false);
 
+  // Mark the symbols as hidden when compiling for the device.
+  if (Context.getLangOpts().OpenMP && Context.getLangOpts().OpenMPIsDevice)
+    LV.mergeVisibility(HiddenVisibility, /*newExplicit=*/false);
+
   return LV;
 }
 
@@ -3350,6 +3354,22 @@ SourceRange FunctionDecl::getReturnTypeSourceRange() const {
     return SourceRange();
 
   return RTRange;
+}
+
+SourceRange FunctionDecl::getParametersSourceRange() const {
+  unsigned NP = getNumParams();
+  SourceLocation EllipsisLoc = getEllipsisLoc();
+
+  if (NP == 0 && EllipsisLoc.isInvalid())
+    return SourceRange();
+
+  SourceLocation Begin =
+      NP > 0 ? ParamInfo[0]->getSourceRange().getBegin() : EllipsisLoc;
+  SourceLocation End = EllipsisLoc.isValid()
+                           ? EllipsisLoc
+                           : ParamInfo[NP - 1]->getSourceRange().getEnd();
+
+  return SourceRange(Begin, End);
 }
 
 SourceRange FunctionDecl::getExceptionSpecSourceRange() const {

@@ -629,7 +629,10 @@ public:
     return MinVecRegSize;
   }
 
-  /// Check if ArrayType or StructType is isomorphic to some VectorType.
+  /// Check if homogeneous aggregate is isomorphic to some VectorType.
+  /// Accepts homogeneous multidimensional aggregate of scalars/vectors like
+  /// {[4 x i16], [4 x i16]}, { <2 x float>, <2 x float> },
+  /// {{{i16, i16}, {i16, i16}}, {{i16, i16}, {i16, i16}}} and so on.
   ///
   /// \returns number of elements in vector if isomorphism exists, 0 otherwise.
   unsigned canMapToVector(Type *T, const DataLayout &DL) const;
@@ -3086,27 +3089,29 @@ void BoUpSLP::buildTree_rec(ArrayRef<Value *> VL, unsigned Depth,
 }
 
 unsigned BoUpSLP::canMapToVector(Type *T, const DataLayout &DL) const {
-  unsigned N;
-  Type *EltTy;
-  auto *ST = dyn_cast<StructType>(T);
-  if (ST) {
-    N = ST->getNumElements();
-    EltTy = *ST->element_begin();
-  } else {
-    N = cast<ArrayType>(T)->getNumElements();
-    EltTy = cast<ArrayType>(T)->getElementType();
+  unsigned N = 1;
+  Type *EltTy = T;
+
+  while (isa<CompositeType>(EltTy)) {
+    if (auto *ST = dyn_cast<StructType>(EltTy)) {
+      // Check that struct is homogeneous.
+      for (const auto *Ty : ST->elements())
+        if (Ty != *ST->element_begin())
+          return 0;
+      N *= ST->getNumElements();
+      EltTy = *ST->element_begin();
+    } else {
+      auto *SeqT = cast<SequentialType>(EltTy);
+      N *= SeqT->getNumElements();
+      EltTy = SeqT->getElementType();
+    }
   }
+
   if (!isValidElementType(EltTy))
     return 0;
   uint64_t VTSize = DL.getTypeStoreSizeInBits(VectorType::get(EltTy, N));
   if (VTSize < MinVecRegSize || VTSize > MaxVecRegSize || VTSize != DL.getTypeStoreSizeInBits(T))
     return 0;
-  if (ST) {
-    // Check that struct is homogeneous.
-    for (const auto *Ty : ST->elements())
-      if (Ty != EltTy)
-        return 0;
-  }
   return N;
 }
 
@@ -6653,7 +6658,7 @@ public:
 
   /// Attempt to vectorize the tree found by
   /// matchAssociativeReduction.
-  bool tryToReduce(BoUpSLP &V, TargetTransformInfo *TTI, bool Try2WayRdx) {
+  bool tryToReduce(BoUpSLP &V, TargetTransformInfo *TTI) {
     if (ReducedVals.empty())
       return false;
 
@@ -6661,14 +6666,11 @@ public:
     // to a nearby power-of-2. Can safely generate oversized
     // vectors and rely on the backend to split them to legal sizes.
     unsigned NumReducedVals = ReducedVals.size();
-    if (Try2WayRdx && NumReducedVals != 2)
-      return false;
-    unsigned MinRdxVals = Try2WayRdx ? 2 : 4;
-    if (NumReducedVals < MinRdxVals)
+    if (NumReducedVals < 4)
       return false;
 
     unsigned ReduxWidth = PowerOf2Floor(NumReducedVals);
-    unsigned MinRdxWidth = Log2_32(MinRdxVals);
+
     Value *VectorizedTree = nullptr;
 
     // FIXME: Fast-math-flags should be set based on the instructions in the
@@ -6686,13 +6688,25 @@ public:
       assert(Pair.first && "DebugLoc must be set.");
       ExternallyUsedValues[Pair.second].push_back(Pair.first);
     }
+
+    // The compare instruction of a min/max is the insertion point for new
+    // instructions and may be replaced with a new compare instruction.
+    auto getCmpForMinMaxReduction = [](Instruction *RdxRootInst) {
+      assert(isa<SelectInst>(RdxRootInst) &&
+             "Expected min/max reduction to have select root instruction");
+      Value *ScalarCond = cast<SelectInst>(RdxRootInst)->getCondition();
+      assert(isa<Instruction>(ScalarCond) &&
+             "Expected min/max reduction to have compare condition");
+      return cast<Instruction>(ScalarCond);
+    };
+
     // The reduction root is used as the insertion point for new instructions,
     // so set it as externally used to prevent it from being deleted.
     ExternallyUsedValues[ReductionRoot];
     SmallVector<Value *, 16> IgnoreList;
     for (auto &V : ReductionOps)
       IgnoreList.append(V.begin(), V.end());
-    while (i < NumReducedVals - ReduxWidth + 1 && ReduxWidth > MinRdxWidth) {
+    while (i < NumReducedVals - ReduxWidth + 1 && ReduxWidth > 2) {
       auto VL = makeArrayRef(&ReducedVals[i], ReduxWidth);
       V.buildTree(VL, ExternallyUsedValues, IgnoreList);
       Optional<ArrayRef<unsigned>> Order = V.bestOrder();
@@ -6741,15 +6755,6 @@ public:
       DebugLoc Loc = cast<Instruction>(ReducedVals[i])->getDebugLoc();
       Value *VectorizedRoot = V.vectorizeTree(ExternallyUsedValues);
 
-      auto getCmpForMinMaxReduction = [](Instruction *RdxRootInst) {
-        assert(isa<SelectInst>(RdxRootInst) &&
-               "Expected min/max reduction to have select root instruction");
-        Value *ScalarCond = cast<SelectInst>(RdxRootInst)->getCondition();
-        assert(isa<Instruction>(ScalarCond) &&
-               "Expected min/max reduction to have compare condition");
-        return cast<Instruction>(ScalarCond);
-      };
-
       // Emit a reduction. For min/max, the root is a select, but the insertion
       // point is the compare condition of that select.
       Instruction *RdxRootInst = cast<Instruction>(ReductionRoot);
@@ -6793,8 +6798,20 @@ public:
           VectorizedTree = VectReductionData.createOp(Builder, "op.extra", I);
         }
       }
-      // Update users.
+
+      // Update users. For a min/max reduction that ends with a compare and
+      // select, we also have to RAUW for the compare instruction feeding the
+      // reduction root. That's because the original compare may have extra uses
+      // besides the final select of the reduction.
+      if (ReductionData.isMinMax()) {
+        if (auto *VecSelect = dyn_cast<SelectInst>(VectorizedTree)) {
+          Instruction *ScalarCmp =
+              getCmpForMinMaxReduction(cast<Instruction>(ReductionRoot));
+          ScalarCmp->replaceAllUsesWith(VecSelect->getCondition());
+        }
+      }
       ReductionRoot->replaceAllUsesWith(VectorizedTree);
+
       // Mark all scalar reduction ops for deletion, they are replaced by the
       // vector reductions.
       V.eraseInstructions(IgnoreList);
@@ -6920,45 +6937,54 @@ private:
 ///  %rb = insertelement <4 x float> %ra, float %s1, i32 1
 ///  %rc = insertelement <4 x float> %rb, float %s2, i32 2
 ///  %rd = insertelement <4 x float> %rc, float %s3, i32 3
-///  starting from the last insertelement instruction.
+///  starting from the last insertelement or insertvalue instruction.
 ///
-/// Returns true if it matches
-static bool findBuildVector(InsertElementInst *LastInsertElem,
-                            TargetTransformInfo *TTI,
-                            SmallVectorImpl<Value *> &BuildVectorOpds,
-                            int &UserCost) {
-  UserCost = 0;
-  Value *V = nullptr;
-  do {
-    if (auto *CI = dyn_cast<ConstantInt>(LastInsertElem->getOperand(2))) {
-      UserCost += TTI->getVectorInstrCost(Instruction::InsertElement,
-                                          LastInsertElem->getType(),
-                                          CI->getZExtValue());
-    }
-    BuildVectorOpds.push_back(LastInsertElem->getOperand(1));
-    V = LastInsertElem->getOperand(0);
-    if (isa<UndefValue>(V))
-      break;
-    LastInsertElem = dyn_cast<InsertElementInst>(V);
-    if (!LastInsertElem || !LastInsertElem->hasOneUse())
-      return false;
-  } while (true);
-  std::reverse(BuildVectorOpds.begin(), BuildVectorOpds.end());
-  return true;
-}
-
-/// Like findBuildVector, but looks for construction of aggregate.
+/// Also recognize aggregates like {<2 x float>, <2 x float>},
+/// {{float, float}, {float, float}}, [2 x {float, float}] and so on.
+/// See llvm/test/Transforms/SLPVectorizer/X86/pr42022.ll for examples.
+///
+/// Assume LastInsertInst is of InsertElementInst or InsertValueInst type.
 ///
 /// \return true if it matches.
-static bool findBuildAggregate(InsertValueInst *IV,
-                               SmallVectorImpl<Value *> &BuildVectorOpds) {
+static bool findBuildAggregate(Value *LastInsertInst, TargetTransformInfo *TTI,
+                               SmallVectorImpl<Value *> &BuildVectorOpds,
+                               int &UserCost) {
+  assert((isa<InsertElementInst>(LastInsertInst) ||
+          isa<InsertValueInst>(LastInsertInst)) &&
+         "Expected insertelement or insertvalue instruction!");
+  UserCost = 0;
   do {
-    BuildVectorOpds.push_back(IV->getInsertedValueOperand());
-    Value *V = IV->getAggregateOperand();
-    if (isa<UndefValue>(V))
+    Value *InsertedOperand;
+    if (auto *IE = dyn_cast<InsertElementInst>(LastInsertInst)) {
+      InsertedOperand = IE->getOperand(1);
+      LastInsertInst = IE->getOperand(0);
+      if (auto *CI = dyn_cast<ConstantInt>(IE->getOperand(2))) {
+        UserCost += TTI->getVectorInstrCost(Instruction::InsertElement,
+                                            IE->getType(), CI->getZExtValue());
+      }
+    } else {
+      auto *IV = cast<InsertValueInst>(LastInsertInst);
+      InsertedOperand = IV->getInsertedValueOperand();
+      LastInsertInst = IV->getAggregateOperand();
+    }
+    if (isa<InsertElementInst>(InsertedOperand) ||
+        isa<InsertValueInst>(InsertedOperand)) {
+      int TmpUserCost;
+      SmallVector<Value *, 8> TmpBuildVectorOpds;
+      if (!findBuildAggregate(InsertedOperand, TTI, TmpBuildVectorOpds,
+                              TmpUserCost))
+        return false;
+      BuildVectorOpds.append(TmpBuildVectorOpds.rbegin(),
+                             TmpBuildVectorOpds.rend());
+      UserCost += TmpUserCost;
+    } else {
+      BuildVectorOpds.push_back(InsertedOperand);
+    }
+    if (isa<UndefValue>(LastInsertInst))
       break;
-    IV = dyn_cast<InsertValueInst>(V);
-    if (!IV || !IV->hasOneUse())
+    if ((!isa<InsertValueInst>(LastInsertInst) &&
+         !isa<InsertElementInst>(LastInsertInst)) ||
+        !LastInsertInst->hasOneUse())
       return false;
   } while (true);
   std::reverse(BuildVectorOpds.begin(), BuildVectorOpds.end());
@@ -7033,7 +7059,7 @@ static Value *getReductionValue(const DominatorTree *DT, PHINode *P,
 /// performed.
 static bool tryToVectorizeHorReductionOrInstOperands(
     PHINode *P, Instruction *Root, BasicBlock *BB, BoUpSLP &R,
-    TargetTransformInfo *TTI, bool Try2WayRdx,
+    TargetTransformInfo *TTI,
     const function_ref<bool(Instruction *, BoUpSLP &)> Vectorize) {
   if (!ShouldVectorizeHor)
     return false;
@@ -7064,7 +7090,7 @@ static bool tryToVectorizeHorReductionOrInstOperands(
     if (BI || SI) {
       HorizontalReduction HorRdx;
       if (HorRdx.matchAssociativeReduction(P, Inst)) {
-        if (HorRdx.tryToReduce(R, TTI, Try2WayRdx)) {
+        if (HorRdx.tryToReduce(R, TTI)) {
           Res = true;
           // Set P to nullptr to avoid re-analysis of phi node in
           // matchAssociativeReduction function unless this is the root node.
@@ -7107,8 +7133,7 @@ static bool tryToVectorizeHorReductionOrInstOperands(
 
 bool SLPVectorizerPass::vectorizeRootInstruction(PHINode *P, Value *V,
                                                  BasicBlock *BB, BoUpSLP &R,
-                                                 TargetTransformInfo *TTI,
-                                                 bool Try2WayRdx) {
+                                                 TargetTransformInfo *TTI) {
   if (!V)
     return false;
   auto *I = dyn_cast<Instruction>(V);
@@ -7121,31 +7146,32 @@ bool SLPVectorizerPass::vectorizeRootInstruction(PHINode *P, Value *V,
   auto &&ExtraVectorization = [this](Instruction *I, BoUpSLP &R) -> bool {
     return tryToVectorize(I, R);
   };
-  return tryToVectorizeHorReductionOrInstOperands(P, I, BB, R, TTI, Try2WayRdx,
+  return tryToVectorizeHorReductionOrInstOperands(P, I, BB, R, TTI,
                                                   ExtraVectorization);
 }
 
 bool SLPVectorizerPass::vectorizeInsertValueInst(InsertValueInst *IVI,
                                                  BasicBlock *BB, BoUpSLP &R) {
+  int UserCost = 0;
   const DataLayout &DL = BB->getModule()->getDataLayout();
   if (!R.canMapToVector(IVI->getType(), DL))
     return false;
 
   SmallVector<Value *, 16> BuildVectorOpds;
-  if (!findBuildAggregate(IVI, BuildVectorOpds))
+  if (!findBuildAggregate(IVI, TTI, BuildVectorOpds, UserCost))
     return false;
 
   LLVM_DEBUG(dbgs() << "SLP: array mappable to vector: " << *IVI << "\n");
   // Aggregate value is unlikely to be processed in vector register, we need to
   // extract scalars into scalar registers, so NeedExtraction is set true.
-  return tryToVectorizeList(BuildVectorOpds, R);
+  return tryToVectorizeList(BuildVectorOpds, R, UserCost);
 }
 
 bool SLPVectorizerPass::vectorizeInsertElementInst(InsertElementInst *IEI,
                                                    BasicBlock *BB, BoUpSLP &R) {
   int UserCost;
   SmallVector<Value *, 16> BuildVectorOpds;
-  if (!findBuildVector(IEI, TTI, BuildVectorOpds, UserCost) ||
+  if (!findBuildAggregate(IEI, TTI, BuildVectorOpds, UserCost) ||
       (llvm::all_of(BuildVectorOpds,
                     [](Value *V) { return isa<ExtractElementInst>(V); }) &&
        isShuffle(BuildVectorOpds)))
@@ -7315,23 +7341,6 @@ bool SLPVectorizerPass::vectorizeChainsInBlock(BasicBlock *BB, BoUpSLP &R) {
     if (isa<InsertElementInst>(it) || isa<CmpInst>(it) ||
         isa<InsertValueInst>(it))
       PostProcessInstructions.push_back(&*it);
-  }
-
-  // Make a final attempt to match a 2-way reduction if nothing else worked.
-  // We do not try this above because it may interfere with other vectorization
-  // attempts.
-  // TODO: The constraints are copied from the above call to
-  //       vectorizeRootInstruction(), but that might be too restrictive?
-  BasicBlock::iterator LastInst = --BB->end();
-  if (!Changed && LastInst->use_empty() &&
-      (LastInst->getType()->isVoidTy() || isa<CallInst>(LastInst) ||
-       isa<InvokeInst>(LastInst))) {
-    if (ShouldStartVectorizeHorAtStore || !isa<StoreInst>(LastInst)) {
-      for (auto *V : LastInst->operand_values()) {
-        Changed |= vectorizeRootInstruction(nullptr, V, BB, R, TTI,
-                                            /* Try2WayRdx */ true);
-      }
-    }
   }
 
   return Changed;

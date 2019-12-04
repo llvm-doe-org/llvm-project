@@ -551,9 +551,13 @@ def err_access_decl : Error<
   "use using declarations instead">;
 def warn_deprecated_copy_operation : Warning<
   "definition of implicit copy %select{constructor|assignment operator}1 "
-  "for %0 is deprecated because it has a user-declared "
-  "%select{copy %select{assignment operator|constructor}1|destructor}2">,
-  InGroup<Deprecated>, DefaultIgnore;
+  "for %0 is deprecated because it has a user-declared copy "
+  "%select{assignment operator|constructor}1">,
+  InGroup<DeprecatedCopy>, DefaultIgnore;
+def warn_deprecated_copy_dtor_operation : Warning<
+  "definition of implicit copy %select{constructor|assignment operator}1 "
+  "for %0 is deprecated because it has a user-declared destructor">,
+  InGroup<DeprecatedCopyDtor>, DefaultIgnore;
 def warn_cxx17_compat_exception_spec_in_signature : Warning<
   "mangled name of %0 will change in C++17 due to non-throwing exception "
   "specification in function signature">, InGroup<CXX17CompatMangling>;
@@ -7430,10 +7434,8 @@ def err_atomic_op_needs_trivial_copy : Error<
 def err_atomic_op_needs_atomic_int_or_ptr : Error<
   "address argument to atomic operation must be a pointer to %select{|atomic }0"
   "integer or pointer (%1 invalid)">;
-def err_atomic_op_needs_int32_or_ptr : Error<
-  "address argument to atomic operation must be a pointer to signed or unsigned 32-bit integer">;
-def err_atomic_op_bitwise_needs_atomic_int : Error<
-  "address argument to bitwise atomic operation must be a pointer to "
+def err_atomic_op_needs_atomic_int : Error<
+  "address argument to atomic operation must be a pointer to "
   "%select{|atomic }0integer (%1 invalid)">;
 def warn_atomic_op_has_invalid_memory_order : Warning<
   "memory order argument to atomic operation is invalid">,
@@ -7741,8 +7743,6 @@ let CategoryName = "Inline Assembly Issue" in {
   def err_asm_unknown_register_name : Error<"unknown register name '%0' in asm">;
   def err_asm_invalid_global_var_reg : Error<"register '%0' unsuitable for "
     "global register variables on this target">;
-  def err_asm_missing_fixed_reg_opt : Error<"-ffixed-%0 is required for "
-    "global named register variable declaration">;
   def err_asm_register_size_mismatch : Error<"size of register '%0' does not "
     "match variable size">;
   def err_asm_bad_register_type : Error<"bad type for named register variable">;
@@ -8426,7 +8426,7 @@ def warn_tautological_overlap_comparison : Warning<
 
 def warn_stringcompare : Warning<
   "result of comparison against %select{a string literal|@encode}0 is "
-  "unspecified (use strncmp instead)">,
+  "unspecified (use an explicit string comparison function instead)">,
   InGroup<StringCompare>;
 
 def warn_identity_field_assign : Warning<
@@ -8740,6 +8740,12 @@ def err_32_bit_builtin_64_bit_tgt : Error<
   "this builtin is only available on 32-bit targets">;
 def err_builtin_x64_aarch64_only : Error<
   "this builtin is only available on x86-64 and aarch64 targets">;
+def err_mips_builtin_requires_dsp : Error<
+  "this builtin requires 'dsp' ASE, please use -mdsp">;
+def err_mips_builtin_requires_dspr2 : Error<
+  "this builtin requires 'dsp r2' ASE, please use -mdspr2">;
+def err_mips_builtin_requires_msa : Error<
+  "this builtin requires 'msa' ASE, please use -mmsa">;
 def err_ppc_builtin_only_on_pwr7 : Error<
   "this builtin is only valid on POWER7 or later CPUs">;
 def err_x86_builtin_invalid_rounding : Error<
@@ -9290,7 +9296,7 @@ def ext_omp_loop_not_canonical_init : ExtWarn<
   "('var = init' or 'T var = init')">, InGroup<OpenMPLoopForm>;
 def err_omp_loop_not_canonical_cond : Error<
   "condition of OpenMP for loop must be a relational comparison "
-	"('<', '<=', '>', %select{or '>='|'>=', or '!='}0) of loop variable %1">;
+  "('<', '<=', '>', %select{or '>='|'>=', or '!='}0) of loop variable %1">;
 def err_omp_loop_not_canonical_incr : Error<
   "increment clause of OpenMP for loop must perform simple addition "
   "or subtraction on loop variable %0">;
@@ -10193,4 +10199,19 @@ def err_bit_cast_non_trivially_copyable : Error<
   "__builtin_bit_cast %select{source|destination}0 type must be trivially copyable">;
 def err_bit_cast_type_size_mismatch : Error<
   "__builtin_bit_cast source size does not equal destination size (%0 vs %1)">;
+
+// SYCL-specific diagnostics
+def warn_sycl_kernel_num_of_template_params : Warning<
+  "'sycl_kernel' attribute only applies to a function template with at least"
+  " two template parameters">, InGroup<IgnoredAttributes>;
+def warn_sycl_kernel_invalid_template_param_type : Warning<
+  "template parameter of a function template with the 'sycl_kernel' attribute"
+  " cannot be a non-type template parameter">, InGroup<IgnoredAttributes>;
+def warn_sycl_kernel_num_of_function_params : Warning<
+  "function template with 'sycl_kernel' attribute must have a single parameter">,
+  InGroup<IgnoredAttributes>;
+def warn_sycl_kernel_return_type : Warning<
+  "function template with 'sycl_kernel' attribute must have a 'void' return type">,
+  InGroup<IgnoredAttributes>;
+
 } // end of sema component.

@@ -604,7 +604,7 @@ SymbolFileDWARFDebugMap::CompileUnitInfo *
 SymbolFileDWARFDebugMap::GetCompUnitInfo(const CompileUnit &comp_unit) {
   const uint32_t cu_count = GetNumCompileUnits();
   for (uint32_t i = 0; i < cu_count; ++i) {
-    if (comp_unit == m_compile_unit_infos[i].compile_unit_sp.get())
+    if (&comp_unit == m_compile_unit_infos[i].compile_unit_sp.get())
       return &m_compile_unit_infos[i];
   }
   return nullptr;
@@ -1076,7 +1076,7 @@ void SymbolFileDWARFDebugMap::GetTypes(SymbolContextScope *sc_scope,
   }
 }
 
-std::vector<lldb_private::CallEdge>
+std::vector<std::unique_ptr<lldb_private::CallEdge>>
 SymbolFileDWARFDebugMap::ParseCallEdgesInFunction(UserID func_id) {
   uint32_t oso_idx = GetOSOIndexFromUserID(func_id.GetID());
   SymbolFileDWARF *oso_dwarf = GetSymbolFileByOSOIndex(oso_idx);

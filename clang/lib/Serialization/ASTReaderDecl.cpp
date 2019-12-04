@@ -50,7 +50,7 @@
 #include "clang/Serialization/ASTBitCodes.h"
 #include "clang/Serialization/ASTReader.h"
 #include "clang/Serialization/ContinuousRangeMap.h"
-#include "clang/Serialization/Module.h"
+#include "clang/Serialization/ModuleFile.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/STLExtras.h"
@@ -405,6 +405,7 @@ namespace clang {
     void VisitBlockDecl(BlockDecl *BD);
     void VisitCapturedDecl(CapturedDecl *CD);
     void VisitEmptyDecl(EmptyDecl *D);
+    void VisitLifetimeExtendedTemporaryDecl(LifetimeExtendedTemporaryDecl *D);
 
     std::pair<uint64_t, uint64_t> VisitDeclContext(DeclContext *DC);
 
@@ -422,6 +423,8 @@ namespace clang {
 
     template<typename T>
     void mergeMergeable(Mergeable<T> *D);
+
+    void mergeMergeable(LifetimeExtendedTemporaryDecl *D);
 
     void mergeTemplatePattern(RedeclarableTemplateDecl *D,
                               RedeclarableTemplateDecl *Existing,
@@ -2349,6 +2352,17 @@ void ASTDeclReader::VisitEmptyDecl(EmptyDecl *D) {
   VisitDecl(D);
 }
 
+void ASTDeclReader::VisitLifetimeExtendedTemporaryDecl(
+    LifetimeExtendedTemporaryDecl *D) {
+  VisitDecl(D);
+  D->ExtendingDecl = ReadDeclAs<ValueDecl>();
+  D->ExprWithTemporary = Record.readStmt();
+  if (Record.readInt())
+    D->Value = new (D->getASTContext()) APValue(Record.readAPValue());
+  D->ManglingNumber = Record.readInt();
+  mergeMergeable(D);
+}
+
 std::pair<uint64_t, uint64_t>
 ASTDeclReader::VisitDeclContext(DeclContext *DC) {
   uint64_t LexicalOffset = ReadLocalOffset();
@@ -2542,6 +2556,25 @@ static bool allowODRLikeMergeInC(NamedDecl *ND) {
   if (isa<EnumConstantDecl>(ND))
     return true;
   return false;
+}
+
+/// Attempts to merge LifetimeExtendedTemporaryDecl with
+/// identical class definitions from two different modules.
+void ASTDeclReader::mergeMergeable(LifetimeExtendedTemporaryDecl *D) {
+  // If modules are not available, there is no reason to perform this merge.
+  if (!Reader.getContext().getLangOpts().Modules)
+    return;
+
+  LifetimeExtendedTemporaryDecl *LETDecl = D;
+
+  LifetimeExtendedTemporaryDecl *&LookupResult =
+      Reader.LETemporaryForMerging[std::make_pair(
+          LETDecl->getExtendingDecl(), LETDecl->getManglingNumber())];
+  if (LookupResult)
+    Reader.getContext().setPrimaryMergedDecl(LETDecl,
+                                             LookupResult->getCanonicalDecl());
+  else
+    LookupResult = LETDecl;
 }
 
 /// Attempts to merge the given declaration (D) with another declaration
@@ -3886,6 +3919,9 @@ Decl *ASTReader::ReadDeclRecord(DeclID ID) {
     break;
   case DECL_EMPTY:
     D = EmptyDecl::CreateDeserialized(Context, ID);
+    break;
+  case DECL_LIFETIME_EXTENDED_TEMPORARY:
+    D = LifetimeExtendedTemporaryDecl::CreateDeserialized(Context, ID);
     break;
   case DECL_OBJC_TYPE_PARAM:
     D = ObjCTypeParamDecl::CreateDeserialized(Context, ID);

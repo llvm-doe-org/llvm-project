@@ -414,6 +414,7 @@ static void assertIsZero(int *i) {
 }
 #endif
 
+#if !defined(__Fuchsia__) && !defined(_WIN32)
 /* Write a partial profile to \p Filename, which is required to be backed by
  * the open file object \p File. */
 static int writeProfileWithFileObject(const char *Filename, FILE *File) {
@@ -433,14 +434,15 @@ static void unlockProfile(int *ProfileRequiresUnlock, FILE *File) {
   lprofUnlockFileHandle(File);
   *ProfileRequiresUnlock = 0;
 }
+#endif // !defined(__Fuchsia__) && !defined(_WIN32)
 
 static void initializeProfileForContinuousMode(void) {
-#if defined(__Fuchsia__) || defined(_WIN32)
-  PROF_ERR("%s\n", "Continuous mode not yet supported on Fuchsia or Windows.");
-#else // defined(__Fuchsia__) || defined(_WIN32)
   if (!__llvm_profile_is_continuous_mode_enabled())
     return;
 
+#if defined(__Fuchsia__) || defined(_WIN32)
+  PROF_ERR("%s\n", "Continuous mode not yet supported on Fuchsia or Windows.");
+#else // defined(__Fuchsia__) || defined(_WIN32)
   /* Get the sizes of various profile data sections. Taken from
    * __llvm_profile_get_size_for_buffer(). */
   const __llvm_profile_data *DataBegin = __llvm_profile_begin_data();

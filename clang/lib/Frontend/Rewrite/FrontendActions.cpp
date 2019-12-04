@@ -21,7 +21,7 @@
 #include "clang/Rewrite/Frontend/FixItRewriter.h"
 #include "clang/Rewrite/Frontend/Rewriters.h"
 #include "clang/Serialization/ASTReader.h"
-#include "clang/Serialization/Module.h"
+#include "clang/Serialization/ModuleFile.h"
 #include "clang/Serialization/ModuleManager.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/CrashRecoveryContext.h"
@@ -231,7 +231,7 @@ public:
       return;
 
     serialization::ModuleFile *MF =
-        CI.getModuleManager()->getModuleManager().lookup(*File);
+        CI.getASTReader()->getModuleManager().lookup(*File);
     assert(MF && "missing module file for loaded module?");
 
     // Not interested in PCH / preambles.
@@ -304,8 +304,8 @@ bool RewriteIncludesAction::BeginSourceFileAction(CompilerInstance &CI) {
   // If we're rewriting imports, set up a listener to track when we import
   // module files.
   if (CI.getPreprocessorOutputOpts().RewriteImports) {
-    CI.createModuleManager();
-    CI.getModuleManager()->addListener(
+    CI.createASTReader();
+    CI.getASTReader()->addListener(
         std::make_unique<RewriteImportsListener>(CI, OutputStream));
   }
 

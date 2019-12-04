@@ -137,7 +137,7 @@ Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
       OriginalLexicalContext(nullptr), MSStructPragmaOn(false),
       MSPointerToMemberRepresentationMethod(
           LangOpts.getMSPointerToMemberRepresentationMethod()),
-      VtorDispStack(MSVtorDispAttr::Mode(LangOpts.VtorDispMode)), PackStack(0),
+      VtorDispStack(LangOpts.getVtorDispMode()), PackStack(0),
       DataSegStack(nullptr), BSSSegStack(nullptr), ConstSegStack(nullptr),
       CodeSegStack(nullptr), CurInitSeg(nullptr), VisContext(nullptr),
       PragmaAttributeCurrentTargetDecl(nullptr),
@@ -192,6 +192,9 @@ Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
   PP.addPPCallbacks(std::move(Callbacks));
   SemaPPCallbackHandler->set(*this);
 }
+
+// Anchor Sema's type info to this TU.
+void Sema::anchor() {}
 
 void Sema::addImplicitTypedef(StringRef Name, QualType T) {
   DeclarationName DN = &Context.Idents.get(Name);
@@ -1292,6 +1295,12 @@ NamedDecl *Sema::getCurFunctionOrMethodDecl() {
   if (isa<ObjCMethodDecl>(DC) || isa<FunctionDecl>(DC))
     return cast<NamedDecl>(DC);
   return nullptr;
+}
+
+LangAS Sema::getDefaultCXXMethodAddrSpace() const {
+  if (getLangOpts().OpenCL)
+    return LangAS::opencl_generic;
+  return LangAS::Default;
 }
 
 void Sema::EmitCurrentDiagnostic(unsigned DiagID) {

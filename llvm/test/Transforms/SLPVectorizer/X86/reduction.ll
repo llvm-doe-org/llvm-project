@@ -91,7 +91,7 @@ define i32 @horiz_max_multiple_uses([32 x i32]* %x, i32* %p) {
 ; CHECK-NEXT:    [[TMP5:%.*]] = select i1 [[TMP4]], i32 [[TMP3]], i32 [[T4]]
 ; CHECK-NEXT:    [[C012345:%.*]] = icmp sgt i32 [[TMP5]], [[T5]]
 ; CHECK-NEXT:    [[T17:%.*]] = select i1 [[C012345]], i32 [[TMP5]], i32 [[T5]]
-; CHECK-NEXT:    [[THREE_OR_FOUR:%.*]] = select i1 undef, i32 3, i32 4
+; CHECK-NEXT:    [[THREE_OR_FOUR:%.*]] = select i1 [[TMP4]], i32 3, i32 4
 ; CHECK-NEXT:    store i32 [[THREE_OR_FOUR]], i32* [[P:%.*]], align 8
 ; CHECK-NEXT:    ret i32 [[T17]]
 ;
@@ -129,16 +129,15 @@ define i32 @horiz_max_multiple_uses([32 x i32]* %x, i32* %p) {
 define i1 @bad_insertpoint_rdx([8 x i32]* %p) #0 {
 ; CHECK-LABEL: @bad_insertpoint_rdx(
 ; CHECK-NEXT:    [[ARRAYIDX22:%.*]] = getelementptr inbounds [8 x i32], [8 x i32]* [[P:%.*]], i64 0, i64 0
-; CHECK-NEXT:    [[TMP1:%.*]] = bitcast i32* [[ARRAYIDX22]] to <2 x i32>*
-; CHECK-NEXT:    [[TMP2:%.*]] = load <2 x i32>, <2 x i32>* [[TMP1]], align 16
-; CHECK-NEXT:    [[RDX_SHUF:%.*]] = shufflevector <2 x i32> [[TMP2]], <2 x i32> undef, <2 x i32> <i32 1, i32 undef>
-; CHECK-NEXT:    [[RDX_MINMAX_CMP:%.*]] = icmp sgt <2 x i32> [[TMP2]], [[RDX_SHUF]]
-; CHECK-NEXT:    [[RDX_MINMAX_SELECT:%.*]] = select <2 x i1> [[RDX_MINMAX_CMP]], <2 x i32> [[TMP2]], <2 x i32> [[RDX_SHUF]]
-; CHECK-NEXT:    [[TMP3:%.*]] = extractelement <2 x i32> [[RDX_MINMAX_SELECT]], i32 0
-; CHECK-NEXT:    [[TMP4:%.*]] = icmp sgt i32 [[TMP3]], 0
-; CHECK-NEXT:    [[OP_EXTRA:%.*]] = select i1 [[TMP4]], i32 [[TMP3]], i32 0
-; CHECK-NEXT:    [[SPEC_STORE_SELECT87:%.*]] = zext i1 undef to i32
-; CHECK-NEXT:    [[CMP23_2:%.*]] = icmp sgt i32 [[SPEC_STORE_SELECT87]], [[OP_EXTRA]]
+; CHECK-NEXT:    [[T0:%.*]] = load i32, i32* [[ARRAYIDX22]], align 16
+; CHECK-NEXT:    [[CMP23:%.*]] = icmp sgt i32 [[T0]], 0
+; CHECK-NEXT:    [[SPEC_SELECT:%.*]] = select i1 [[CMP23]], i32 [[T0]], i32 0
+; CHECK-NEXT:    [[ARRAYIDX22_1:%.*]] = getelementptr inbounds [8 x i32], [8 x i32]* [[P]], i64 0, i64 1
+; CHECK-NEXT:    [[T1:%.*]] = load i32, i32* [[ARRAYIDX22_1]], align 4
+; CHECK-NEXT:    [[CMP23_1:%.*]] = icmp sgt i32 [[T1]], [[SPEC_SELECT]]
+; CHECK-NEXT:    [[SPEC_STORE_SELECT87:%.*]] = zext i1 [[CMP23_1]] to i32
+; CHECK-NEXT:    [[SPEC_SELECT88:%.*]] = select i1 [[CMP23_1]], i32 [[T1]], i32 [[SPEC_SELECT]]
+; CHECK-NEXT:    [[CMP23_2:%.*]] = icmp sgt i32 [[SPEC_STORE_SELECT87]], [[SPEC_SELECT88]]
 ; CHECK-NEXT:    ret i1 [[CMP23_2]]
 ;
   %arrayidx22 = getelementptr inbounds [8 x i32], [8 x i32]* %p, i64 0, i64 0

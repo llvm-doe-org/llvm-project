@@ -483,6 +483,8 @@ private:
 
   // Convert Float Results to Integer.
   void SoftenFloatResult(SDNode *N, unsigned ResNo);
+  SDValue SoftenFloatRes_Unary(SDNode *N, RTLIB::Libcall LC);
+  SDValue SoftenFloatRes_Binary(SDNode *N, RTLIB::Libcall LC);
   SDValue SoftenFloatRes_MERGE_VALUES(SDNode *N, unsigned ResNo);
   SDValue SoftenFloatRes_BITCAST(SDNode *N);
   SDValue SoftenFloatRes_BUILD_PAIR(SDNode *N);
@@ -528,9 +530,9 @@ private:
 
   // Convert Float Operand to Integer.
   bool SoftenFloatOperand(SDNode *N, unsigned OpNo);
+  SDValue SoftenFloatOp_Unary(SDNode *N, RTLIB::Libcall LC);
   SDValue SoftenFloatOp_BITCAST(SDNode *N);
   SDValue SoftenFloatOp_BR_CC(SDNode *N);
-  SDValue SoftenFloatOp_FP_EXTEND(SDNode *N);
   SDValue SoftenFloatOp_FP_ROUND(SDNode *N);
   SDValue SoftenFloatOp_FP_TO_XINT(SDNode *N);
   SDValue SoftenFloatOp_LROUND(SDNode *N);
@@ -540,6 +542,7 @@ private:
   SDValue SoftenFloatOp_SELECT_CC(SDNode *N);
   SDValue SoftenFloatOp_SETCC(SDNode *N);
   SDValue SoftenFloatOp_STORE(SDNode *N, unsigned OpNo);
+  SDValue SoftenFloatOp_FCOPYSIGN(SDNode *N);
 
   //===--------------------------------------------------------------------===//
   // Float Expansion Support: LegalizeFloatTypes.cpp

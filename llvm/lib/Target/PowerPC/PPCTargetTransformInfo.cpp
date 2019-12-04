@@ -554,7 +554,7 @@ bool PPCTTIImpl::isHardwareLoopProfitable(Loop *L, ScalarEvolution &SE,
 
 void PPCTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
                                          TTI::UnrollingPreferences &UP) {
-  if (ST->getDarwinDirective() == PPC::DIR_A2) {
+  if (ST->getCPUDirective() == PPC::DIR_A2) {
     // The A2 is in-order with a deep pipeline, and concatenation unrolling
     // helps expose latency-hiding opportunities to the instruction scheduler.
     UP.Partial = UP.Runtime = true;
@@ -580,7 +580,7 @@ bool PPCTTIImpl::enableAggressiveInterleaving(bool LoopHasReductions) {
   // on combining the loads generated for consecutive accesses, and failure to
   // do so is particularly expensive. This makes it much more likely (compared
   // to only using concatenation unrolling).
-  if (ST->getDarwinDirective() == PPC::DIR_A2)
+  if (ST->getCPUDirective() == PPC::DIR_A2)
     return true;
 
   return LoopHasReductions;
@@ -650,9 +650,10 @@ unsigned PPCTTIImpl::getCacheLineSize() const {
     return CacheLineSize;
 
   // On P7, P8 or P9 we have a cache line size of 128.
-  unsigned Directive = ST->getDarwinDirective();
+  unsigned Directive = ST->getCPUDirective();
+  // Assume that Future CPU has the same cache line size as the others.
   if (Directive == PPC::DIR_PWR7 || Directive == PPC::DIR_PWR8 ||
-      Directive == PPC::DIR_PWR9)
+      Directive == PPC::DIR_PWR9 || Directive == PPC::DIR_PWR_FUTURE)
     return 128;
 
   // On other processors return a default of 64 bytes.
@@ -666,7 +667,7 @@ unsigned PPCTTIImpl::getPrefetchDistance() const {
 }
 
 unsigned PPCTTIImpl::getMaxInterleaveFactor(unsigned VF) {
-  unsigned Directive = ST->getDarwinDirective();
+  unsigned Directive = ST->getCPUDirective();
   // The 440 has no SIMD support, but floating-point instructions
   // have a 5-cycle latency, so unroll by 5x for latency hiding.
   if (Directive == PPC::DIR_440)
@@ -684,8 +685,9 @@ unsigned PPCTTIImpl::getMaxInterleaveFactor(unsigned VF) {
   // For P7 and P8, floating-point instructions have a 6-cycle latency and
   // there are two execution units, so unroll by 12x for latency hiding.
   // FIXME: the same for P9 as previous gen until POWER9 scheduling is ready
+  // Assume that future is the same as the others.
   if (Directive == PPC::DIR_PWR7 || Directive == PPC::DIR_PWR8 ||
-      Directive == PPC::DIR_PWR9)
+      Directive == PPC::DIR_PWR9 || Directive == PPC::DIR_PWR_FUTURE)
     return 12;
 
   // For most things, modern systems have two execution units (and

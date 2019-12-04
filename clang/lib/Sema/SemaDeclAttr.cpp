@@ -3885,7 +3885,7 @@ void Sema::CheckAlignasUnderalignment(Decl *D) {
 
 bool Sema::checkMSInheritanceAttrOnDefinition(
     CXXRecordDecl *RD, SourceRange Range, bool BestCase,
-    MSInheritanceAttr::Spelling SemanticSpelling) {
+    MSInheritanceModel ExplicitModel) {
   assert(RD->hasDefinition() && "RD has no definition!");
 
   // We may not have seen base specifiers or any virtual methods yet.  We will
@@ -3894,14 +3894,14 @@ bool Sema::checkMSInheritanceAttrOnDefinition(
     return false;
 
   // The unspecified model never matches what a definition could need.
-  if (SemanticSpelling == MSInheritanceAttr::Keyword_unspecified_inheritance)
+  if (ExplicitModel == MSInheritanceModel::Unspecified)
     return false;
 
   if (BestCase) {
-    if (RD->calculateInheritanceModel() == SemanticSpelling)
+    if (RD->calculateInheritanceModel() == ExplicitModel)
       return false;
   } else {
-    if (RD->calculateInheritanceModel() <= SemanticSpelling)
+    if (RD->calculateInheritanceModel() <= ExplicitModel)
       return false;
   }
 
@@ -5458,8 +5458,7 @@ static void handleMSInheritanceAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
     return;
   }
   MSInheritanceAttr *IA = S.mergeMSInheritanceAttr(
-      D, AL, /*BestCase=*/true,
-      (MSInheritanceAttr::Spelling)AL.getSemanticSpelling());
+      D, AL, /*BestCase=*/true, (MSInheritanceModel)AL.getSemanticSpelling());
   if (IA) {
     D->addAttr(IA);
     S.Consumer.AssignInheritanceModel(cast<CXXRecordDecl>(D));
@@ -6112,9 +6111,9 @@ static void handleDLLAttr(Sema &S, Decl *D, const ParsedAttr &A) {
 MSInheritanceAttr *
 Sema::mergeMSInheritanceAttr(Decl *D, const AttributeCommonInfo &CI,
                              bool BestCase,
-                             MSInheritanceAttr::Spelling SemanticSpelling) {
+                             MSInheritanceModel Model) {
   if (MSInheritanceAttr *IA = D->getAttr<MSInheritanceAttr>()) {
-    if (IA->getSemanticSpelling() == SemanticSpelling)
+    if (IA->getInheritanceModel() == Model)
       return nullptr;
     Diag(IA->getLocation(), diag::err_mismatched_ms_inheritance)
         << 1 /*previous declaration*/;
@@ -6125,7 +6124,7 @@ Sema::mergeMSInheritanceAttr(Decl *D, const AttributeCommonInfo &CI,
   auto *RD = cast<CXXRecordDecl>(D);
   if (RD->hasDefinition()) {
     if (checkMSInheritanceAttrOnDefinition(RD, CI.getRange(), BestCase,
-                                           SemanticSpelling)) {
+                                           Model)) {
       return nullptr;
     }
   } else {
@@ -6411,6 +6410,45 @@ static void handleOpenCLAccessAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   }
 
   D->addAttr(::new (S.Context) OpenCLAccessAttr(S.Context, AL));
+}
+
+static void handleSYCLKernelAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  // The 'sycl_kernel' attribute applies only to function templates.
+  const auto *FD = cast<FunctionDecl>(D);
+  const FunctionTemplateDecl *FT = FD->getDescribedFunctionTemplate();
+  assert(FT && "Function template is expected");
+
+  // Function template must have at least two template parameters.
+  const TemplateParameterList *TL = FT->getTemplateParameters();
+  if (TL->size() < 2) {
+    S.Diag(FT->getLocation(), diag::warn_sycl_kernel_num_of_template_params);
+    return;
+  }
+
+  // Template parameters must be typenames.
+  for (unsigned I = 0; I < 2; ++I) {
+    const NamedDecl *TParam = TL->getParam(I);
+    if (isa<NonTypeTemplateParmDecl>(TParam)) {
+      S.Diag(FT->getLocation(),
+             diag::warn_sycl_kernel_invalid_template_param_type);
+      return;
+    }
+  }
+
+  // Function must have at least one argument.
+  if (getFunctionOrMethodNumParams(D) != 1) {
+    S.Diag(FT->getLocation(), diag::warn_sycl_kernel_num_of_function_params);
+    return;
+  }
+
+  // Function must return void.
+  QualType RetTy = getFunctionOrMethodResultType(D);
+  if (!RetTy->isVoidType()) {
+    S.Diag(FT->getLocation(), diag::warn_sycl_kernel_return_type);
+    return;
+  }
+
+  handleSimpleAttribute<SYCLKernelAttr>(S, D, AL);
 }
 
 static void handleDestroyAttr(Sema &S, Decl *D, const ParsedAttr &A) {
@@ -6739,6 +6777,9 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     break;
   case ParsedAttr::AT_Flatten:
     handleSimpleAttribute<FlattenAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_SYCLKernel:
+    handleSYCLKernelAttr(S, D, AL);
     break;
   case ParsedAttr::AT_Format:
     handleFormatAttr(S, D, AL);

@@ -2740,7 +2740,8 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
                                    OPT_fno_dollars_in_identifiers,
                                    Opts.DollarIdents);
   Opts.PascalStrings = Args.hasArg(OPT_fpascal_strings);
-  Opts.VtorDispMode = getLastArgIntValue(Args, OPT_vtordisp_mode_EQ, 1, Diags);
+  Opts.setVtorDispMode(
+      MSVtorDispMode(getLastArgIntValue(Args, OPT_vtordisp_mode_EQ, 1, Diags)));
   Opts.Borland = Args.hasArg(OPT_fborland_extensions);
   Opts.WritableStrings = Args.hasArg(OPT_fwritable_strings);
   Opts.ConstStrings = Args.hasFlag(OPT_fconst_strings, OPT_fno_const_strings,
@@ -2799,6 +2800,9 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     && Opts.OpenCLVersion == 200);
   Opts.BlocksRuntimeOptional = Args.hasArg(OPT_fblocks_runtime_optional);
   Opts.Coroutines = Opts.CPlusPlus2a || Args.hasArg(OPT_fcoroutines_ts);
+
+  Opts.ConvergentFunctions = Opts.OpenCL || (Opts.CUDA && Opts.CUDAIsDevice) ||
+    Args.hasArg(OPT_fconvergent_functions);
 
   Opts.DoubleSquareBracketAttributes =
       Args.hasFlag(OPT_fdouble_square_bracket_attributes,
@@ -2874,8 +2878,6 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
       getLastArgIntValue(Args, OPT_fconstexpr_steps, 1048576, Diags);
   Opts.EnableNewConstInterp =
       Args.hasArg(OPT_fexperimental_new_constant_interpreter);
-  Opts.ForceNewConstInterp =
-      Args.hasArg(OPT_fforce_experimental_new_constant_interpreter);
   Opts.BracketDepth = getLastArgIntValue(Args, OPT_fbracket_depth, 256, Diags);
   Opts.DelayedTemplateParsing = Args.hasArg(OPT_fdelayed_template_parsing);
   Opts.NumLargeByValueCopy =
@@ -3366,6 +3368,9 @@ static void ParsePreprocessorArgs(PreprocessorOptions &Opts, ArgList &Args,
   Opts.DumpDeserializedPCHDecls = Args.hasArg(OPT_dump_deserialized_pch_decls);
   for (const auto *A : Args.filtered(OPT_error_on_deserialized_pch_decl))
     Opts.DeserializedPCHDeclsToErrorOn.insert(A->getValue());
+
+  for (const auto &A : Args.getAllArgValues(OPT_fmacro_prefix_map_EQ))
+    Opts.MacroPrefixMap.insert(StringRef(A).split('='));
 
   if (const Arg *A = Args.getLastArg(OPT_preamble_bytes_EQ)) {
     StringRef Value(A->getValue());

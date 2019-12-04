@@ -549,7 +549,8 @@ Error opts::symbols::findVariables(lldb_private::Module &Module) {
     CompUnitSP CU;
     for (size_t Ind = 0; !CU && Ind < Module.GetNumCompileUnits(); ++Ind) {
       CompUnitSP Candidate = Module.GetCompileUnitAtIndex(Ind);
-      if (!Candidate || Candidate->GetFilename().GetStringRef() != File)
+      if (!Candidate ||
+          Candidate->GetPrimaryFile().GetFilename().GetStringRef() != File)
         continue;
       if (CU)
         return make_string_error("Multiple compile units for file `{0}` found.",
@@ -623,7 +624,7 @@ Error opts::symbols::dumpClangAST(lldb_private::Module &Module) {
     return make_string_error("Module has no symbol file.");
 
   llvm::Expected<TypeSystem &> type_system_or_err =
-      symfile->GetTypeSystemForLanguage(eLanguageTypeC_plus_plus);
+      symfile->GetTypeSystemForLanguage(eLanguageTypeObjC_plus_plus);
   if (!type_system_or_err)
     return make_string_error("Can't retrieve ClangASTContext");
 
@@ -653,7 +654,8 @@ Error opts::symbols::verify(lldb_private::Module &Module) {
     if (!comp_unit)
       return make_string_error("Connot parse compile unit {0}.", i);
 
-    outs() << "Processing '" << comp_unit->GetFilename().AsCString()
+    outs() << "Processing '"
+           << comp_unit->GetPrimaryFile().GetFilename().AsCString()
            << "' compile unit.\n";
 
     LineTable *lt = comp_unit->GetLineTable();

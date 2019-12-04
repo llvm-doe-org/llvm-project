@@ -3647,7 +3647,7 @@ ExprResult TreeTransform<Derived>::TransformInitializer(Expr *Init,
     Init = AIL->getCommonExpr();
 
   if (MaterializeTemporaryExpr *MTE = dyn_cast<MaterializeTemporaryExpr>(Init))
-    Init = MTE->GetTemporaryExpr();
+    Init = MTE->getSubExpr();
 
   while (CXXBindTemporaryExpr *Binder = dyn_cast<CXXBindTemporaryExpr>(Init))
     Init = Binder->getSubExpr();
@@ -4756,14 +4756,6 @@ QualType TreeTransform<Derived>::TransformDecayedType(TypeLocBuilder &TLB,
   return Result;
 }
 
-/// Helper to deduce addr space of a pointee type in OpenCL mode.
-/// If the type is updated it will be overwritten in PointeeType param.
-inline void deduceOpenCLPointeeAddrSpace(Sema &SemaRef, QualType &PointeeType) {
-  if (PointeeType.getAddressSpace() == LangAS::Default)
-    PointeeType = SemaRef.Context.getAddrSpaceQualType(PointeeType,
-                                                       LangAS::opencl_generic);
-}
-
 template<typename Derived>
 QualType TreeTransform<Derived>::TransformPointerType(TypeLocBuilder &TLB,
                                                       PointerTypeLoc TL) {
@@ -4771,9 +4763,6 @@ QualType TreeTransform<Derived>::TransformPointerType(TypeLocBuilder &TLB,
     = getDerived().TransformType(TLB, TL.getPointeeLoc());
   if (PointeeType.isNull())
     return QualType();
-
-  if (SemaRef.getLangOpts().OpenCL)
-    deduceOpenCLPointeeAddrSpace(SemaRef, PointeeType);
 
   QualType Result = TL.getType();
   if (PointeeType->getAs<ObjCObjectType>()) {
@@ -4813,9 +4802,6 @@ TreeTransform<Derived>::TransformBlockPointerType(TypeLocBuilder &TLB,
   if (PointeeType.isNull())
     return QualType();
 
-  if (SemaRef.getLangOpts().OpenCL)
-    deduceOpenCLPointeeAddrSpace(SemaRef, PointeeType);
-
   QualType Result = TL.getType();
   if (getDerived().AlwaysRebuild() ||
       PointeeType != TL.getPointeeLoc().getType()) {
@@ -4844,9 +4830,6 @@ TreeTransform<Derived>::TransformReferenceType(TypeLocBuilder &TLB,
   QualType PointeeType = getDerived().TransformType(TLB, TL.getPointeeLoc());
   if (PointeeType.isNull())
     return QualType();
-
-  if (SemaRef.getLangOpts().OpenCL)
-    deduceOpenCLPointeeAddrSpace(SemaRef, PointeeType);
 
   QualType Result = TL.getType();
   if (getDerived().AlwaysRebuild() ||
@@ -12633,7 +12616,7 @@ template<typename Derived>
 ExprResult
 TreeTransform<Derived>::TransformMaterializeTemporaryExpr(
                                                   MaterializeTemporaryExpr *E) {
-  return getDerived().TransformExpr(E->GetTemporaryExpr());
+  return getDerived().TransformExpr(E->getSubExpr());
 }
 
 template<typename Derived>

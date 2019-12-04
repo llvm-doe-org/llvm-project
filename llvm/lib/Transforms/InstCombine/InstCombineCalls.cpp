@@ -2279,6 +2279,21 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
 
     break;
   }
+  case Intrinsic::copysign: {
+    const APFloat *C;
+    if (match(II->getArgOperand(1), m_APFloat(C))) {
+      // If we know the sign bit of the sign argument, reduce to FABS/FNABS:
+      // copysign X, PosC --> fabs X
+      // copysign X, NegC --> fneg (fabs X)
+      Value *Fabs = Builder.CreateUnaryIntrinsic(Intrinsic::fabs,
+                                                 II->getArgOperand(0), II);
+      if (C->isNegative())
+        Fabs = Builder.CreateFNegFMF(Fabs, II);
+
+      return replaceInstUsesWith(*II, Fabs);
+    }
+    break;
+  }
   case Intrinsic::fabs: {
     Value *Cond;
     Constant *LHS, *RHS;
@@ -3314,6 +3329,19 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     if (match(Arg, m_Intrinsic<Intrinsic::arm_mve_pred_v2i>(m_Value(ArgArg))) &&
         II->getType() == ArgArg->getType())
       return replaceInstUsesWith(*II, ArgArg);
+    Constant *XorMask;
+    if (match(Arg,
+              m_Xor(m_Intrinsic<Intrinsic::arm_mve_pred_v2i>(m_Value(ArgArg)),
+                    m_Constant(XorMask))) &&
+        II->getType() == ArgArg->getType()) {
+      if (auto *CI = dyn_cast<ConstantInt>(XorMask)) {
+        if (CI->getValue().trunc(16).isAllOnesValue()) {
+          auto TrueVector = Builder.CreateVectorSplat(
+              II->getType()->getVectorNumElements(), Builder.getTrue());
+          return BinaryOperator::Create(Instruction::Xor, ArgArg, TrueVector);
+        }
+      }
+    }
     KnownBits ScalarKnown(32);
     if (SimplifyDemandedBits(II, 0, APInt::getLowBitsSet(32, 16),
                              ScalarKnown, 0))
@@ -4060,12 +4088,12 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     // Is this guard followed by another guard?  We scan forward over a small
     // fixed window of instructions to handle common cases with conditions
     // computed between guards.
-    Instruction *NextInst = II->getNextNode();
+    Instruction *NextInst = II->getNextNonDebugInstruction();
     for (unsigned i = 0; i < GuardWideningWindow; i++) {
       // Note: Using context-free form to avoid compile time blow up
       if (!isSafeToSpeculativelyExecute(NextInst))
         break;
-      NextInst = NextInst->getNextNode();
+      NextInst = NextInst->getNextNonDebugInstruction();
     }
     Value *NextCond = nullptr;
     if (match(NextInst,
@@ -4077,10 +4105,10 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
         return eraseInstFromFunction(*NextInst);
 
       // Otherwise canonicalize guard(a); guard(b) -> guard(a & b).
-      Instruction* MoveI = II->getNextNode();
+      Instruction *MoveI = II->getNextNonDebugInstruction();
       while (MoveI != NextInst) {
         auto *Temp = MoveI;
-        MoveI = MoveI->getNextNode();
+        MoveI = MoveI->getNextNonDebugInstruction();
         Temp->moveBefore(II);
       }
       II->setArgOperand(0, Builder.CreateAnd(CurrCond, NextCond));

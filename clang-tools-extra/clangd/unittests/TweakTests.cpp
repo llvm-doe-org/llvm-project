@@ -269,7 +269,7 @@ TEST_F(ExtractVariableTest, Test) {
   EXPECT_UNAVAILABLE(UnavailableCases);
 
   // vector of pairs of input and output strings
-  const std::vector<std::pair<llvm::StringLiteral, llvm::StringLiteral>>
+  const std::vector<std::pair<std::string, std::string>>
       InputOutputs = {
           // extraction from variable declaration/assignment
           {R"cpp(void varDecl() {
@@ -321,17 +321,10 @@ TEST_F(ExtractVariableTest, Test) {
                    if(1)
                     LOOP(5 + [[3]])
                  })cpp",
-           /*FIXME: It should be extracted like this. SelectionTree needs to be
-             * fixed for macros.
             R"cpp(#define LOOP(x) while (1) {a = x;}
-                void f(int a) {
-                  auto dummy = 3; if(1)
-                   LOOP(5 + dummy)
-                })cpp"},*/
-           R"cpp(#define LOOP(x) while (1) {a = x;}
                  void f(int a) {
-                   auto dummy = LOOP(5 + 3); if(1)
-                    dummy
+                   auto dummy = 3; if(1)
+                    LOOP(5 + dummy)
                  })cpp"},
           {R"cpp(#define LOOP(x) do {x;} while(1);
                  void f(int a) {
@@ -644,13 +637,18 @@ void f(const int c) {
   )cpp";
   EXPECT_EQ(apply(TemplateFailInput), "unavailable");
 
-  // FIXME: This should be extractable after selectionTree works correctly for
-  // macros (currently it doesn't select anything for the following case)
-  std::string MacroFailInput = R"cpp(
+  std::string MacroInput = R"cpp(
     #define F(BODY) void f() { BODY }
     F ([[int x = 0;]])
   )cpp";
-  EXPECT_EQ(apply(MacroFailInput), "unavailable");
+  std::string MacroOutput = R"cpp(
+    #define F(BODY) void f() { BODY }
+    void extracted() {
+int x = 0;
+}
+F (extracted();)
+  )cpp";
+  EXPECT_EQ(apply(MacroInput), MacroOutput);
 
   // Shouldn't crash.
   EXPECT_EQ(apply("void f([[int a]]);"), "unavailable");
@@ -1665,6 +1663,148 @@ TEST_F(DefineInlineTest, HandleMacros) {
   };
   for (const auto &Case : Cases)
     EXPECT_EQ(apply(Case.first), Case.second) << Case.first;
+}
+
+TEST_F(DefineInlineTest, DropCommonNameSpecifiers) {
+  struct {
+    llvm::StringRef Test;
+    llvm::StringRef Expected;
+  } Cases[] = {
+      {R"cpp(
+        namespace a { namespace b { void aux(); } }
+        namespace ns1 {
+          void foo();
+          namespace qq { void test(); }
+          namespace ns2 {
+            void bar();
+            namespace ns3 { void baz(); }
+          }
+        }
+
+        using namespace a;
+        using namespace a::b;
+        using namespace ns1::qq;
+        void ns1::ns2::ns3::b^az() {
+          foo();
+          bar();
+          baz();
+          ns1::ns2::ns3::baz();
+          aux();
+          test();
+        })cpp",
+       R"cpp(
+        namespace a { namespace b { void aux(); } }
+        namespace ns1 {
+          void foo();
+          namespace qq { void test(); }
+          namespace ns2 {
+            void bar();
+            namespace ns3 { void baz(){
+          foo();
+          bar();
+          baz();
+          ns1::ns2::ns3::baz();
+          a::b::aux();
+          qq::test();
+        } }
+          }
+        }
+
+        using namespace a;
+        using namespace a::b;
+        using namespace ns1::qq;
+        )cpp"},
+      {R"cpp(
+        namespace ns1 {
+          namespace qq { struct Foo { struct Bar {}; }; using B = Foo::Bar; }
+          namespace ns2 { void baz(); }
+        }
+
+        using namespace ns1::qq;
+        void ns1::ns2::b^az() { Foo f; B b; })cpp",
+       R"cpp(
+        namespace ns1 {
+          namespace qq { struct Foo { struct Bar {}; }; using B = Foo::Bar; }
+          namespace ns2 { void baz(){ qq::Foo f; qq::B b; } }
+        }
+
+        using namespace ns1::qq;
+        )cpp"},
+      {R"cpp(
+        namespace ns1 {
+          namespace qq {
+            template<class T> struct Foo { template <class U> struct Bar {}; };
+            template<class T, class U>
+            using B = typename Foo<T>::template Bar<U>;
+          }
+          namespace ns2 { void baz(); }
+        }
+
+        using namespace ns1::qq;
+        void ns1::ns2::b^az() { B<int, bool> b; })cpp",
+       R"cpp(
+        namespace ns1 {
+          namespace qq {
+            template<class T> struct Foo { template <class U> struct Bar {}; };
+            template<class T, class U>
+            using B = typename Foo<T>::template Bar<U>;
+          }
+          namespace ns2 { void baz(){ qq::B<int, bool> b; } }
+        }
+
+        using namespace ns1::qq;
+        )cpp"},
+  };
+  for (const auto &Case : Cases)
+    EXPECT_EQ(apply(Case.Test), Case.Expected) << Case.Test;
+}
+
+TEST_F(DefineInlineTest, QualifyWithUsingDirectives) {
+  llvm::StringRef Test = R"cpp(
+    namespace a {
+      void bar();
+      namespace b { struct Foo{}; void aux(); }
+      namespace c { void cux(); }
+    }
+    using namespace a;
+    using X = b::Foo;
+    void foo();
+
+    using namespace b;
+    using namespace c;
+    void ^foo() {
+      cux();
+      bar();
+      X x;
+      aux();
+      using namespace c;
+      // FIXME: The last reference to cux() in body of foo should not be
+      // qualified, since there is a using directive inside the function body.
+      cux();
+    })cpp";
+  llvm::StringRef Expected = R"cpp(
+    namespace a {
+      void bar();
+      namespace b { struct Foo{}; void aux(); }
+      namespace c { void cux(); }
+    }
+    using namespace a;
+    using X = b::Foo;
+    void foo(){
+      c::cux();
+      bar();
+      X x;
+      b::aux();
+      using namespace c;
+      // FIXME: The last reference to cux() in body of foo should not be
+      // qualified, since there is a using directive inside the function body.
+      c::cux();
+    }
+
+    using namespace b;
+    using namespace c;
+    )cpp";
+  EXPECT_EQ(apply(Test), Expected) << Test;
 }
 
 } // namespace

@@ -2711,6 +2711,20 @@ Sema::PerformObjectMemberConversion(Expr *From,
       FromRecordType = FromType;
       DestType = DestRecordType;
     }
+
+    LangAS FromAS = FromRecordType.getAddressSpace();
+    LangAS DestAS = DestRecordType.getAddressSpace();
+    if (FromAS != DestAS) {
+      QualType FromRecordTypeWithoutAS =
+          Context.removeAddrSpaceQualType(FromRecordType);
+      QualType FromTypeWithDestAS =
+          Context.getAddrSpaceQualType(FromRecordTypeWithoutAS, DestAS);
+      if (PointerConversions)
+        FromTypeWithDestAS = Context.getPointerType(FromTypeWithDestAS);
+      From = ImpCastExprToType(From, FromTypeWithDestAS,
+                               CK_AddressSpaceConversion, From->getValueKind())
+                 .get();
+    }
   } else {
     // No conversion necessary.
     return From;
@@ -7680,7 +7694,7 @@ static bool IsArithmeticBinaryExpr(Expr *E, BinaryOperatorKind *Opcode,
   E = E->IgnoreConversionOperator();
   E = E->IgnoreImpCasts();
   if (auto *MTE = dyn_cast<MaterializeTemporaryExpr>(E)) {
-    E = MTE->GetTemporaryExpr();
+    E = MTE->getSubExpr();
     E = E->IgnoreImpCasts();
   }
 
@@ -8736,7 +8750,7 @@ namespace {
 struct OriginalOperand {
   explicit OriginalOperand(Expr *Op) : Orig(Op), Conversion(nullptr) {
     if (auto *MTE = dyn_cast<MaterializeTemporaryExpr>(Op))
-      Op = MTE->GetTemporaryExpr();
+      Op = MTE->getSubExpr();
     if (auto *BTE = dyn_cast<CXXBindTemporaryExpr>(Op))
       Op = BTE->getSubExpr();
     if (auto *ICE = dyn_cast<ImplicitCastExpr>(Op)) {
@@ -10358,7 +10372,6 @@ static void diagnoseTautologicalComparison(Sema &S, SourceLocation Loc,
   QualType RHSType = RHS->getType();
   if (LHSType->hasFloatingRepresentation() ||
       (LHSType->isBlockPointerType() && !BinaryOperator::isEqualityOp(Opc)) ||
-      LHS->getBeginLoc().isMacroID() || RHS->getBeginLoc().isMacroID() ||
       S.inTemplateInstantiation())
     return;
 
@@ -10386,45 +10399,51 @@ static void diagnoseTautologicalComparison(Sema &S, SourceLocation Loc,
     AlwaysEqual, // std::strong_ordering::equal from operator<=>
   };
 
-  if (Expr::isSameComparisonOperand(LHS, RHS)) {
-    unsigned Result;
-    switch (Opc) {
-    case BO_EQ: case BO_LE: case BO_GE:
-      Result = AlwaysTrue;
-      break;
-    case BO_NE: case BO_LT: case BO_GT:
-      Result = AlwaysFalse;
-      break;
-    case BO_Cmp:
-      Result = AlwaysEqual;
-      break;
-    default:
-      Result = AlwaysConstant;
-      break;
+  if (!LHS->getBeginLoc().isMacroID() && !RHS->getBeginLoc().isMacroID()) {
+    if (Expr::isSameComparisonOperand(LHS, RHS)) {
+      unsigned Result;
+      switch (Opc) {
+      case BO_EQ:
+      case BO_LE:
+      case BO_GE:
+        Result = AlwaysTrue;
+        break;
+      case BO_NE:
+      case BO_LT:
+      case BO_GT:
+        Result = AlwaysFalse;
+        break;
+      case BO_Cmp:
+        Result = AlwaysEqual;
+        break;
+      default:
+        Result = AlwaysConstant;
+        break;
+      }
+      S.DiagRuntimeBehavior(Loc, nullptr,
+                            S.PDiag(diag::warn_comparison_always)
+                                << 0 /*self-comparison*/
+                                << Result);
+    } else if (checkForArray(LHSStripped) && checkForArray(RHSStripped)) {
+      // What is it always going to evaluate to?
+      unsigned Result;
+      switch (Opc) {
+      case BO_EQ: // e.g. array1 == array2
+        Result = AlwaysFalse;
+        break;
+      case BO_NE: // e.g. array1 != array2
+        Result = AlwaysTrue;
+        break;
+      default: // e.g. array1 <= array2
+        // The best we can say is 'a constant'
+        Result = AlwaysConstant;
+        break;
+      }
+      S.DiagRuntimeBehavior(Loc, nullptr,
+                            S.PDiag(diag::warn_comparison_always)
+                                << 1 /*array comparison*/
+                                << Result);
     }
-    S.DiagRuntimeBehavior(Loc, nullptr,
-                          S.PDiag(diag::warn_comparison_always)
-                              << 0 /*self-comparison*/
-                              << Result);
-  } else if (checkForArray(LHSStripped) && checkForArray(RHSStripped)) {
-    // What is it always going to evaluate to?
-    unsigned Result;
-    switch(Opc) {
-    case BO_EQ: // e.g. array1 == array2
-      Result = AlwaysFalse;
-      break;
-    case BO_NE: // e.g. array1 != array2
-      Result = AlwaysTrue;
-      break;
-    default: // e.g. array1 <= array2
-      // The best we can say is 'a constant'
-      Result = AlwaysConstant;
-      break;
-    }
-    S.DiagRuntimeBehavior(Loc, nullptr,
-                          S.PDiag(diag::warn_comparison_always)
-                              << 1 /*array comparison*/
-                              << Result);
   }
 
   if (isa<CastExpr>(LHSStripped))
@@ -10433,7 +10452,7 @@ static void diagnoseTautologicalComparison(Sema &S, SourceLocation Loc,
     RHSStripped = RHSStripped->IgnoreParenCasts();
 
   // Warn about comparisons against a string constant (unless the other
-  // operand is null); the user probably wants strcmp.
+  // operand is null); the user probably wants string comparison function.
   Expr *LiteralString = nullptr;
   Expr *LiteralStringStripped = nullptr;
   if ((isa<StringLiteral>(LHSStripped) || isa<ObjCEncodeExpr>(LHSStripped)) &&

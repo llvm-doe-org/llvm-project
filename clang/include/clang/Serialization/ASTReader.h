@@ -37,7 +37,7 @@
 #include "clang/Sema/IdentifierResolver.h"
 #include "clang/Serialization/ASTBitCodes.h"
 #include "clang/Serialization/ContinuousRangeMap.h"
-#include "clang/Serialization/Module.h"
+#include "clang/Serialization/ModuleFile.h"
 #include "clang/Serialization/ModuleFileExtension.h"
 #include "clang/Serialization/ModuleManager.h"
 #include "llvm/ADT/APFloat.h"
@@ -551,6 +551,14 @@ private:
   /// within them, and those anonymous declarations.
   llvm::DenseMap<Decl*, llvm::SmallVector<NamedDecl*, 2>>
     AnonymousDeclarationsForMerging;
+
+  /// Key used to identify LifetimeExtendedTemporaryDecl for merging,
+  /// containing the lifetime-extending declaration and the mangling number.
+  using LETemporaryKey = std::pair<Decl *, unsigned>;
+
+  /// Map of already deserialiazed temporaries.
+  llvm::DenseMap<LETemporaryKey, LifetimeExtendedTemporaryDecl *>
+      LETemporaryForMerging;
 
   struct FileDeclsInfo {
     ModuleFile *Mod = nullptr;
