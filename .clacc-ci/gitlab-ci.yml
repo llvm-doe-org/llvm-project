@@ -1,0 +1,282 @@
+# Instead of using artifacts, just build in an NFS-mounted directory,
+# $BUILD_DIR, that's unique to each pipeline in case there are concurrent
+# pipelines.  Why not use artifacts?
+#
+# - LLVM's build directory is huge.  For me, it's 46G when including just
+#   the clang and openmp subprojects, which are required for Clacc, and it's
+#   85G when including nearly all subprojects.
+# - At this size, it takes a long time to upload/download between stages and
+#   can be rejected as an upload because of its size.  For me, it added 20
+#   min to the already 30 min build of that 46G and then was rejected.
+# - Artifacts are posted for download and stored long past when it's useful
+#   for humans to download the LLVM build directory, which is typically
+#   never.
+# - We could squash the pipeline to one stage to avoid the need for
+#   artifacts, but pipeline stages are a convenient way to view results when
+#   debugging.
+#
+# The NFS solution used here is based on the following comment (which is in
+# response to a proposal for a gitlab feature that would solve this
+# problem):
+#
+#   https://gitlab.com/gitlab-org/gitlab/issues/29265#note_225288132
+#
+# However, because the NFS-mounted build directory name is different for
+# each pipeline, ccache misses if we compile within it.  Thus, at the start
+# of each job, we rename the build directory to a common name, "build", and
+# move it to within the git clone, where it's safe during the job.  At the
+# end of the job, we move it back outside the git clone to where it's safe
+# between jobs.  We do not schedule concurrent jobs accessing the build
+# directory.
+variables:
+  BUILD_DIR: ../$CI_PROJECT_PATH_SLUG-$CI_PIPELINE_ID-$BUILD_ID-build
+  BUILD_DIRS_ALL: ../$CI_PROJECT_PATH_SLUG-*-*-build
+  GIT_CLEAN_FLAGS: -ffdx -e build -e builds-old
+  SRUN_ALLOCATE_FAIL: 'srun: error: Unable to allocate'
+
+stages:
+  - setup
+  - config
+  - build
+  - test-clacc
+  - test-all
+  - cleanup
+
+.clacc:
+  only: [/^clacc$/, /^clacc-/, /-openacc$/, /-openacc-/]
+  except: [/^clacc-ci-/]
+
+.not-clacc:
+  only: [/^clacc-ci-/, /^jdenny-/]
+  except: [/-openacc$/, /-openacc-/]
+
+.python2:
+  variables:
+    BUILD_ID: python2
+    PYTHON_EXECUTABLE: /usr/bin/python2
+
+.python3:
+  variables:
+    BUILD_ID: python3
+    PYTHON_EXECUTABLE: /usr/bin/python3
+
+default:
+  before_script:
+    - module load gnu/9.1.0
+    - pwd
+    - rm -rf build builds-old || true
+    - if test -d build; then
+        echo warning":" failed to remove old build directory;
+        mkdir -p builds-old && mv build builds-old/$CI_JOB_ID;
+      fi
+    - echo $BUILD_DIR
+    - mv $BUILD_DIR build
+    - cd build
+  after_script:
+    - mv build $BUILD_DIR
+    - ccache -s
+    - du -hs $BUILD_DIR
+
+#-------------------------------------------------
+# utilities
+#-------------------------------------------------
+
+.utility:
+  tags: [kold]
+  variables:
+    GIT_STRATEGY: none
+  dependencies: []
+  before_script: []
+  after_script: []
+
+.setup:
+  extends: .utility
+  stage: setup
+  script:
+    - echo $BUILD_DIR
+    - mkdir $BUILD_DIR
+
+.cleanup:
+  extends: .utility
+  stage: cleanup
+  when: always
+  script:
+    - echo $BUILD_DIR
+    - rm -rf $BUILD_DIR
+
+setup (python2):
+  extends: [.python2, .setup]
+
+setup (python3):
+  extends: [.python3, .setup]
+
+cleanup (python2, clacc):
+  extends: [.python2, .clacc, .cleanup]
+  needs: ["test-all (python2, clacc)"]
+
+cleanup (python2):
+  extends: [.python2, .not-clacc, .cleanup]
+  needs: [test-all (python2)]
+
+cleanup (python3):
+  extends: [.python3, .cleanup]
+  needs: [test-all (python3)]
+
+cleanup-all-builds:
+  extends: .utility
+  stage: setup
+  when: manual
+  script:
+    - echo $BUILD_DIRS_ALL
+    - rm -rf $BUILD_DIRS_ALL
+
+#-------------------------------------------------
+# config
+#-------------------------------------------------
+
+.config:
+  stage: config
+  tags: [kold]
+  script:
+    #   'srun -I -n1'
+    - for launch in
+        '';
+      do
+        echo "Trying to launch with '$launch'..." &&
+        echo 0 > ../cmake-status.txt &&
+        (time $launch cmake3
+           -G Ninja
+           -DCMAKE_BUILD_TYPE=Debug
+           -DLLVM_CCACHE_BUILD=ON
+           -DLLVM_USE_SPLIT_DWARF=true
+           -DLLVM_USE_LINKER=gold
+           -DCMAKE_C_COMPILER=gcc
+           -DCMAKE_CXX_COMPILER=g++
+           -DLLVM_ENABLE_PROJECTS='clang;openmp'
+           -DPYTHON_EXECUTABLE=$PYTHON_EXECUTABLE
+           -DCLANG_ACC_TEST_EXE_X86_64=False
+           -DCLANG_ACC_TEST_EXE_NVPTX64=False
+           -DLLVM_LIT_ARGS='-s -vv --show-unsupported --show-xfail'
+           ../llvm
+         || echo $? > ../cmake-status.txt)
+        |& tee ../cmake-log.txt &&
+        if ! grep -q '$SRUN_ALLOCATE_FAIL' ../cmake-log.txt; then
+          break;
+        fi
+      done &&
+      (exit `cat ../cmake-status.txt`)
+    - cp CMakeCache.txt ..
+  artifacts:
+    when: always
+    paths: [cmake-log.txt, CMakeCache.txt]
+
+config (python2):
+  extends: [.python2, .config]
+  needs: [setup (python2)]
+
+config (python3):
+  extends: [.python3, .config]
+  needs: [setup (python3)]
+  when: delayed
+  start_in: 40 minutes
+
+#-------------------------------------------------
+# build
+#-------------------------------------------------
+
+.build:
+  stage: build
+  tags: [kold]
+  dependencies: []
+  script:
+    #   'srun -I -n1 -c80'
+    #   'srun -I -n1 -c64'
+    #   'srun -I -n1 -c32'
+    - for launch in
+        '';
+      do
+        echo "Trying to launch with '$launch'..." &&
+        echo 0 > ../build-status.txt &&
+        (time $launch ninja-build
+         || echo $? > ../build-status.txt)
+        |& tee ../build-log.txt &&
+        if ! grep -q '$SRUN_ALLOCATE_FAIL' ../build-log.txt; then
+          break;
+        fi
+      done &&
+      (exit `cat ../build-status.txt`)
+  artifacts:
+    when: always
+    paths: [build-log.txt]
+
+build (python2):
+  extends: [.python2, .build]
+  needs: [config (python2)]
+
+build (python3):
+  extends: [.python3, .build]
+  needs: [config (python3)]
+
+#-------------------------------------------------
+# tests
+#
+# Run Clacc tests before check-all and in a separate stage.  This permits us
+# to discover Clacc test fails sooner after a push, and it makes it easy to
+# see whether all Clacc tests have succeeded without the need to hunt the
+# results of a check-all that has failed due to some upstream problem that
+# does not concern Clacc.  check-all then repeats those Clacc tests
+# unfortunately, but that's ok as the Clacc tests are relatively fast.
+#
+# The additional build required for the test suite can be very noisy and
+# exceed the log output limit.  Run that first, grep for key text, and
+# make the full version an artifact.
+#
+# When there are fails, the test suite run can also be very noisy too and
+# exceed the log output limit.  It's hard to grep for just the important
+# stuff, so just print it all but also dump to an artifact.
+#-------------------------------------------------
+
+.test:
+  tags: [kold]
+  dependencies: []
+  script:
+    # When there are fails, the
+    - echo $CHECK_TARGETS
+    - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
+      ninja-build $CHECK_TARGETS
+      |& tee ../test-build-log.txt
+      | grep '^\[[0-9]\+/[0-9]\+]\|\<error:'
+    - time FILECHECK_OPTS='-dump-input=fail -vv -color'
+      ninja-build $CHECK_TARGETS
+      |& tee ../test-run-log.txt
+  artifacts:
+    when: always
+    paths: [test-build-log.txt, test-run-log.txt]
+
+.test-clacc:
+  extends: [.clacc, .test]
+  stage: test-clacc
+  variables:
+    CHECK_TARGETS: 'check-clang-openacc check-libomp'
+
+.test-all:
+  extends: [.test]
+  stage: test-all
+  variables:
+    CHECK_TARGETS: check-all
+
+test-clacc (python2):
+  extends: [.python2, .test-clacc]
+  needs: [build (python2)]
+
+test-all (python2, clacc):
+  extends: [.python2, .clacc, .test-all]
+  needs: [test-clacc (python2)]
+
+test-all (python2):
+  extends: [.python2, .not-clacc, .test-all]
+  needs: [build (python2)]
+
+test-all (python3):
+  extends: [.python3, .test-all]
+  needs: [build (python3)]
