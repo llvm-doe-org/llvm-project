@@ -158,7 +158,7 @@ Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
       CurrentInstantiationScope(nullptr), DisableTypoCorrection(false),
       TyposCorrected(0), AnalysisWarnings(*this),
       ThreadSafetyDeclCache(nullptr), VarDataSharingAttributesStack(nullptr),
-      OpenACCDataSharingAttributesStack(nullptr),
+      OpenACCDirectiveStack(nullptr),
       CurScope(nullptr), Ident_super(nullptr), Ident___float128(nullptr) {
   TUScope = nullptr;
   isConstantEvaluatedOverride = false;
@@ -183,8 +183,8 @@ Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
   // Initialization of data sharing attributes stack for OpenMP
   InitDataSharingAttributesStack();
 
-  // Initialization of data sharing attributes stack for OpenACC
-  InitOpenACCDataSharingAttributesStack();
+  // Initialization of directive stack for OpenACC.
+  InitOpenACCDirectiveStack();
 
   std::unique_ptr<sema::SemaPPCallbacks> Callbacks =
       std::make_unique<sema::SemaPPCallbacks>();
@@ -388,8 +388,8 @@ Sema::~Sema() {
   // Destroys data sharing attributes stack for OpenMP
   DestroyDataSharingAttributesStack();
 
-  // Destroys data sharing attributes stack for OpenACC
-  DestroyOpenACCDataSharingAttributesStack();
+  // Destroys directive stack for OpenACC.
+  DestroyOpenACCDirectiveStack();
 
   // Detach from the PP callback handler which outlives Sema since it's owned
   // by the preprocessor.

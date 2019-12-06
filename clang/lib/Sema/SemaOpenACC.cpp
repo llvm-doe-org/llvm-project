@@ -36,21 +36,18 @@
 using namespace clang;
 
 //===----------------------------------------------------------------------===//
-// Stack of data-sharing attributes for variables
+// OpenACC directive stack
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Stack for tracking declarations used in OpenACC directives and
-/// clauses and their data-sharing attributes.
-///
-/// FIXME: This is no longer about just data sharing attributes.  We should
-/// probably rename it to something more general.
+/// Stack for tracking OpenACC directives and their various properties, such
+/// as data-sharing attributes.
 ///
 /// In the case of a combined directive, we push two entries on the stack, one
 /// for each effective directive.  Because the entries are pushed and popped
 /// together, an iteration of the stack that encounters one entry for a
 /// combined directive can always assume another entry follows.
-class DSAStackTy final {
+class DirStackTy final {
 public:
   Sema &SemaRef;
 
@@ -91,7 +88,7 @@ public:
 
 private:
   typedef llvm::DenseMap<VarDecl *, DSAVarData> DSAMapTy;
-  struct SharingMapTy final {
+  struct DirStackEntryTy final {
     DSAMapTy SharingMap;
     llvm::DenseSet<VarDecl *> LCVs;
     /// The real directive kind.  In the case of a combined directive, there
@@ -104,14 +101,6 @@ private:
     OpenACCDirectiveKind EffectiveDKind = ACCD_unknown;
     ACCPartitioningKind LoopDirectiveKind;
     SourceLocation ConstructLoc;
-    // FIXME: LoopBreakLoc isn't directly for data sharing attributes, but I
-    // don't know of a better place to put it as it's tied to the Directive
-    // recorded here in   Perhaps we should just rename DSAStack, etc. to
-    // something more general?  We are considering making the presence of a
-    // break statement influence the decision of whether to partition in the
-    // case of "acc loop auto", and that could influence data sharing of the
-    // loop control variable, but that seems like a weak justification for
-    // putting it here.
     SourceLocation LoopBreakLoc; // invalid if no break statement or not loop
     unsigned AssociatedLoops = 1; // from collapse clause
     unsigned AssociatedLoopsParsed = 0; // how many have been parsed so far
@@ -125,38 +114,36 @@ private:
     // True if this directive has a (separate or combined with this directive)
     // nested acc loop directive with worker partitioning.
     bool NestedWorkerPartitioning = false;
-    SharingMapTy(OpenACCDirectiveKind RealDKind,
-                 OpenACCDirectiveKind EffectiveDKind, SourceLocation Loc)
+    DirStackEntryTy(OpenACCDirectiveKind RealDKind,
+                    OpenACCDirectiveKind EffectiveDKind, SourceLocation Loc)
         : RealDKind(RealDKind), EffectiveDKind(EffectiveDKind),
           ConstructLoc(Loc) {}
-    SharingMapTy() {}
+    DirStackEntryTy() {}
   };
 
-  typedef SmallVector<SharingMapTy, 4> StackTy;
-
-  /// Stack of used declaration and their data-sharing attributes.
-  StackTy Stack;
+  /// The underlying directive stack.
+  SmallVector<DirStackEntryTy, 4> Stack;
 
   bool isStackEmpty() const {
     return Stack.empty();
   }
 
 public:
-  explicit DSAStackTy(Sema &S) : SemaRef(S), Stack(1) {}
+  explicit DirStackTy(Sema &S) : SemaRef(S), Stack(1) {}
 
   void push(OpenACCDirectiveKind RealDKind,
             OpenACCDirectiveKind EffectiveDKind, SourceLocation Loc) {
-    Stack.push_back(SharingMapTy(RealDKind, EffectiveDKind, Loc));
+    Stack.push_back(DirStackEntryTy(RealDKind, EffectiveDKind, Loc));
   }
 
   void pop() {
-    assert(Stack.size() > 1 && "Data-sharing attributes stack is empty!");
+    assert(Stack.size() > 1 && "Directive stack is empty!");
     Stack.pop_back();
   }
 
   /// Register break statement in current acc loop.
   void addLoopBreakStatement(SourceLocation BreakLoc) {
-    assert(!isStackEmpty() && "Data-sharing attributes stack is empty");
+    assert(!isStackEmpty() && "Directive stack is empty");
     assert(isOpenACCLoopDirective(getEffectiveDirective())
            && "Break statement must be added only to loop directive");
     assert(BreakLoc.isValid() && "Expected valid break location");
@@ -166,13 +153,13 @@ public:
   /// Return the location of the first break statement for this loop
   /// directive or return an invalid location if none.
   SourceLocation getLoopBreakStatement() const {
-    assert(!isStackEmpty() && "Data-sharing attributes stack is empty");
+    assert(!isStackEmpty() && "Directive stack is empty");
     return Stack.back().LoopBreakLoc;
   }
   /// Register specified variable as acc loop control variable that is
   /// assigned but not declared in for loop init.
   void addLoopControlVariable(VarDecl *VD) {
-    assert(!isStackEmpty() && "Data-sharing attributes stack is empty");
+    assert(!isStackEmpty() && "Directive stack is empty");
     assert(isOpenACCLoopDirective(getEffectiveDirective())
            && "Loop control variable must be added only to loop directive");
     Stack.back().LCVs.insert(VD->getCanonicalDecl());
@@ -181,12 +168,12 @@ public:
   /// assigned but not declared in the inits of the for loops associated with
   /// the current directive, or return an empty set if none.
   const llvm::DenseSet<VarDecl *> &getLoopControlVariables() const {
-    assert(!isStackEmpty() && "Data-sharing attributes stack is empty");
+    assert(!isStackEmpty() && "Directive stack is empty");
     return Stack.back().LCVs;
   }
   /// Register the current directive's loop partitioning kind.
   void setLoopPartitioning(ACCPartitioningKind Kind) {
-    assert(!isStackEmpty() && "Data-sharing attributes stack is empty");
+    assert(!isStackEmpty() && "Directive stack is empty");
     Stack.back().LoopDirectiveKind = Kind;
     /// Mark all ancestor directives (including the effective parent
     /// directive if this is the effective child directive in a combined
@@ -214,7 +201,7 @@ public:
   /// been parsed.  This also does not include implicit gang clauses, which are
   /// not computed until the enclosing compute construct is fully parsed.
   ACCPartitioningKind getLoopPartitioning() const {
-    assert(!isStackEmpty() && "Data-sharing attributes stack is empty");
+    assert(!isStackEmpty() && "Directive stack is empty");
     return Stack.back().LoopDirectiveKind;
   }
   /// Iterate through the ancestor directives until finding either (1) an acc
@@ -348,10 +335,10 @@ public:
 };
 } // namespace
 
-bool DSAStackTy::addBaseDSA(VarDecl *VD, Expr *E,
+bool DirStackTy::addBaseDSA(VarDecl *VD, Expr *E,
                             OpenACCBaseDSAKind BaseDSAKind, bool IsImplicit) {
   VD = VD->getCanonicalDecl();
-  assert(Stack.size() > 1 && "Data-sharing attributes stack is empty");
+  assert(Stack.size() > 1 && "Directive stack is empty");
 
   // If this is not a combined directive, or if this is an implicit clause,
   // visit just this directive.  Otherwise, climb through all effective
@@ -425,10 +412,10 @@ bool DSAStackTy::addBaseDSA(VarDecl *VD, Expr *E,
   return false;
 }
 
-bool DSAStackTy::addReduction(VarDecl *VD, Expr *E,
+bool DirStackTy::addReduction(VarDecl *VD, Expr *E,
                               const DeclarationNameInfo &ReductionId) {
   VD = VD->getCanonicalDecl();
-  assert(Stack.size() > 1 && "Data-sharing attributes stack is empty");
+  assert(Stack.size() > 1 && "Directive stack is empty");
   assert(!ReductionId.getName().isEmpty() && "expected reduction");
 
   // If this is not a combined directive, visit just this directive.
@@ -490,7 +477,7 @@ bool DSAStackTy::addReduction(VarDecl *VD, Expr *E,
   return false;
 }
 
-OpenACCBaseDSAKind DSAStackTy::getImplicitBaseDSA(VarDecl *VD) {
+OpenACCBaseDSAKind DirStackTy::getImplicitBaseDSA(VarDecl *VD) {
   VD = VD->getCanonicalDecl();
   OpenACCBaseDSAKind BaseDSAKind;
   // Here, we assume a reduction variable isn't a loop-control variable, and we
@@ -552,7 +539,7 @@ OpenACCBaseDSAKind DSAStackTy::getImplicitBaseDSA(VarDecl *VD) {
   return BaseDSAKind;
 }
 
-DSAStackTy::DSAVarData DSAStackTy::getTopDSA(VarDecl *VD) {
+DirStackTy::DSAVarData DirStackTy::getTopDSA(VarDecl *VD) {
   VD = VD->getCanonicalDecl();
   DSAVarData DVar;
 
@@ -568,24 +555,24 @@ DSAStackTy::DSAVarData DSAStackTy::getTopDSA(VarDecl *VD) {
   return DVar;
 }
 
-void Sema::InitOpenACCDataSharingAttributesStack() {
-  OpenACCDataSharingAttributesStack = new DSAStackTy(*this);
+void Sema::InitOpenACCDirectiveStack() {
+  OpenACCDirectiveStack = new DirStackTy(*this);
 }
 
-#define DSAStack static_cast<DSAStackTy *>(OpenACCDataSharingAttributesStack)
+#define DirStack static_cast<DirStackTy *>(OpenACCDirectiveStack)
 
-void Sema::DestroyOpenACCDataSharingAttributesStack() { delete DSAStack; }
+void Sema::DestroyOpenACCDirectiveStack() { delete DirStack; }
 
 void Sema::StartOpenACCDSABlock(OpenACCDirectiveKind RealDKind,
                                 SourceLocation Loc) {
   switch (RealDKind) {
   case ACCD_parallel:
   case ACCD_loop:
-    DSAStack->push(RealDKind, RealDKind, Loc);
+    DirStack->push(RealDKind, RealDKind, Loc);
     break;
   case ACCD_parallel_loop:
-    DSAStack->push(RealDKind, ACCD_parallel, Loc);
-    DSAStack->push(ACCD_unknown, ACCD_loop, Loc);
+    DirStack->push(RealDKind, ACCD_parallel, Loc);
+    DirStack->push(ACCD_unknown, ACCD_loop, Loc);
     break;
   case ACCD_unknown:
     llvm_unreachable("expected acc directive");
@@ -650,14 +637,14 @@ void Sema::EndOpenACCClause() {
 }
 
 void Sema::EndOpenACCDSABlock() {
-  // For a combined directive, the first DSAStack->pop() happens after the
+  // For a combined directive, the first DirStack->pop() happens after the
   // inner effective directive is "acted upon" (AST node is constructed), so
-  // this is the second DSAStack->pop(), which happens after the entire
+  // this is the second DirStack->pop(), which happens after the entire
   // combined directive is acted upon.  However, if there was an error, we
   // need to pop the entire combined directive.
   for (OpenACCDirectiveKind DKind = ACCD_unknown; DKind == ACCD_unknown;
-       DSAStack->pop())
-    DKind = DSAStack->getEffectiveDirective();
+       DirStack->pop())
+    DKind = DirStack->getEffectiveDirective();
   DiscardCleanupsInEvaluationContext();
   PopExpressionEvaluationContext();
 }
@@ -705,7 +692,7 @@ public:
 
 class ImplicitBaseDSAAdder : public StmtVisitor<ImplicitBaseDSAAdder> {
   typedef StmtVisitor<ImplicitBaseDSAAdder> BaseVisitor;
-  DSAStackTy *Stack;
+  DirStackTy *Stack;
   typedef llvm::SmallVector<Expr *, 8> BaseDSAVector;
   BaseDSAVector ImplicitCopy;
   BaseDSAVector ImplicitShared;
@@ -798,7 +785,7 @@ public:
           if (LocalDefinitions.back().count(VD))
             continue;
           // Skip variable if there's an explicit clause already.
-          DSAStackTy::DSAVarData DVar = Stack->getTopDSA(VD);
+          DirStackTy::DSAVarData DVar = Stack->getTopDSA(VD);
           if (DVar.BaseDSAKind != ACC_BASE_DSA_unknown ||
               !DVar.ReductionId.getName().isEmpty())
             continue;
@@ -862,7 +849,7 @@ public:
   ArrayRef<Expr *> getImplicitPrivate() { return ImplicitPrivate; }
   ArrayRef<Expr *> getImplicitFirstprivate() { return ImplicitFirstprivate; }
 
-  ImplicitBaseDSAAdder(DSAStackTy *S) : Stack(S) {
+  ImplicitBaseDSAAdder(DirStackTy *S) : Stack(S) {
     LocalDefinitions.emplace_back();
   }
 };
@@ -879,7 +866,7 @@ struct ReductionVar {
 class ImplicitGangReductionAdder
     : public StmtVisitor<ImplicitGangReductionAdder> {
   typedef StmtVisitor<ImplicitGangReductionAdder> BaseVisitor;
-  DSAStackTy *Stack;
+  DirStackTy *Stack;
   llvm::SmallVector<ReductionVar, 8> ImplicitGangReductions;
   llvm::DenseSet<VarDecl *> ImplicitGangReductionVars;
   llvm::SmallVector<llvm::DenseSet<const Decl *>, 8> LocalDefinitions;
@@ -924,7 +911,7 @@ public:
           // loop, so there's no implicit gang reduction, which makes the
           // variable gang-shared at the acc loop, so there is an implicit gang
           // reduction, and so on.
-          DSAStackTy::DSAVarData DVar = Stack->getTopDSA(VD);
+          DirStackTy::DSAVarData DVar = Stack->getTopDSA(VD);
           if (!DVar.ReductionId.getName().isEmpty() ||
               ImplicitGangReductionVars.count(VD))
             continue;
@@ -988,7 +975,7 @@ public:
   ArrayRef<ReductionVar> getImplicitGangReductions() {
     return ImplicitGangReductions;
   }
-  ImplicitGangReductionAdder(DSAStackTy *S) : Stack(S) {
+  ImplicitGangReductionAdder(DirStackTy *S) : Stack(S) {
     LocalDefinitions.emplace_back();
   }
 };
@@ -1000,7 +987,7 @@ public:
 // that is not required by OpenACC 2.7.
 class NestedReductionChecker : public StmtVisitor<NestedReductionChecker> {
   typedef StmtVisitor<NestedReductionChecker> BaseVisitor;
-  DSAStackTy *Stack;
+  DirStackTy *Stack;
   llvm::SmallVector<llvm::DenseMap<VarDecl *, ReductionVar>, 8> Privates;
   bool Error = false;
 
@@ -1084,7 +1071,7 @@ public:
     }
   }
   bool hasError() { return Error; }
-  NestedReductionChecker(DSAStackTy *S) : Stack(S) { Privates.emplace_back(); }
+  NestedReductionChecker(DirStackTy *S) : Stack(S) { Privates.emplace_back(); }
 };
 } // namespace
 
@@ -1095,7 +1082,7 @@ bool Sema::ActOnOpenACCRegionStart(
   // Check directive nesting.
   SourceLocation ParentLoc;
   OpenACCDirectiveKind ParentDKind =
-      DSAStack->getRealParentDirective(ParentLoc);
+      DirStack->getRealParentDirective(ParentLoc);
   if (!isAllowedParentForDirective(DKind, ParentDKind)) {
     // The OpenACC 2.6 spec doesn't say that an acc parallel or acc parallel
     // loop cannot be nested within another acc construct, but gcc 7.3.0 and
@@ -1145,7 +1132,7 @@ bool Sema::ActOnOpenACCRegionStart(
     OpenACCDirectiveKind ParentDKind;
     SourceLocation ParentLoopLoc;
     ACCPartitioningKind ParentLoopKind =
-        DSAStack->getParentLoopPartitioning(ParentDKind, ParentLoopLoc);
+        DirStack->getParentLoopPartitioning(ParentDKind, ParentLoopLoc);
     if (ParentLoopKind.hasGangClause() && LoopKind.hasGangClause()) {
       // OpenACC 2.6, sec. 2.9.2:
       // "The region of a loop with the gang clause may not contain another
@@ -1195,7 +1182,7 @@ bool Sema::ActOnOpenACCRegionStart(
       LoopKind.setSeqComputed();
 
     // Record partitioning on stack.
-    DSAStack->setLoopPartitioning(LoopKind);
+    DirStack->setLoopPartitioning(LoopKind);
   }
   return ErrorFound;
 }
@@ -1234,7 +1221,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
   llvm::SmallVector<ACCClause *, 8> ClausesWithImplicit;
   bool ErrorFound = false;
   ClausesWithImplicit.append(Clauses.begin(), Clauses.end());
-  ACCPartitioningKind LoopKind = DSAStack->getLoopPartitioning();
+  ACCPartitioningKind LoopKind = DirStack->getLoopPartitioning();
   if (LoopKind.hasIndependentImplicit()) {
     ACCClause *Implicit = ActOnOpenACCIndependentClause(SourceLocation(),
                                                         SourceLocation());
@@ -1242,7 +1229,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     ClausesWithImplicit.push_back(Implicit);
   }
   if (LoopKind.hasIndependent()) {
-    SourceLocation BreakLoc = DSAStack->getLoopBreakStatement();
+    SourceLocation BreakLoc = DirStack->getLoopBreakStatement();
     if (BreakLoc.isValid()) {
       Diag(BreakLoc, diag::err_acc_loop_cannot_use_stmt) << "break";
       ErrorFound = true;
@@ -1257,7 +1244,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
       ImplicitGangAdder().Visit(AStmt);
     // For referenced variables, add implicit base DSAs, possibly influenced
     // by any implicit gang clauses added above.
-    ImplicitBaseDSAAdder Adder(DSAStack);
+    ImplicitBaseDSAAdder Adder(DirStack);
     Adder.Visit(AStmt);
     // Check default data sharing attributes for referenced variables.
     if (!Adder.getImplicitCopy().empty()) {
@@ -1290,7 +1277,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     // Add implicit gang reductions, possibly due to any implicit copy clauses
     // added above.
     if (isOpenACCParallelDirective(DKind)) {
-      ImplicitGangReductionAdder ReductionAdder(DSAStack);
+      ImplicitGangReductionAdder ReductionAdder(DirStack);
       ReductionAdder.Visit(AStmt);
       for (ReductionVar RV : ReductionAdder.getImplicitGangReductions()) {
         ACCClause *Implicit = ActOnOpenACCReductionClause(
@@ -1308,23 +1295,23 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
   case ACCD_parallel:
     Res = ActOnOpenACCParallelDirective(
         ClausesWithImplicit, AStmt, StartLoc, EndLoc,
-        DSAStack->getNestedWorkerPartitioning());
+        DirStack->getNestedWorkerPartitioning());
     if (!Res.isInvalid()) {
-      NestedReductionChecker Checker(DSAStack);
+      NestedReductionChecker Checker(DirStack);
       Checker.Visit(Res.get());
       if (Checker.hasError())
         ErrorFound = true;
     }
     break;
   case ACCD_loop: {
-    const llvm::DenseSet<VarDecl *> LCVs = DSAStack->getLoopControlVariables();
+    const llvm::DenseSet<VarDecl *> LCVs = DirStack->getLoopControlVariables();
     SmallVector<VarDecl *, 5> LCVVec;
     for (VarDecl *VD : LCVs)
       LCVVec.push_back(VD);
     Res = ActOnOpenACCLoopDirective(
         ClausesWithImplicit, AStmt, StartLoc, EndLoc, LCVVec,
-        DSAStack->getLoopPartitioning(),
-        DSAStack->getNestedExplicitGangPartitioning());
+        DirStack->getLoopPartitioning(),
+        DirStack->getNestedExplicitGangPartitioning());
     break;
   }
   case ACCD_parallel_loop:
@@ -1352,8 +1339,8 @@ StmtResult Sema::ActOnOpenACCParallelDirective(
 void Sema::ActOnOpenACCLoopInitialization(SourceLocation ForLoc, Stmt *Init) {
   assert(getLangOpts().OpenACC && "OpenACC is not active.");
   assert(Init && "Expected loop in canonical form.");
-  if (DSAStack->getAssociatedLoopsParsed() < DSAStack->getAssociatedLoops() &&
-      isOpenACCLoopDirective(DSAStack->getEffectiveDirective())) {
+  if (DirStack->getAssociatedLoopsParsed() < DirStack->getAssociatedLoops() &&
+      isOpenACCLoopDirective(DirStack->getEffectiveDirective())) {
     if (Expr *E = dyn_cast<Expr>(Init))
       Init = E->IgnoreParens();
     if (auto *BO = dyn_cast<BinaryOperator>(Init)) {
@@ -1362,11 +1349,11 @@ void Sema::ActOnOpenACCLoopInitialization(SourceLocation ForLoc, Stmt *Init) {
         if (auto *DRE = dyn_cast<DeclRefExpr>(LHS)) {
           auto *VD = dyn_cast<VarDecl>(DRE->getDecl());
           assert(VD);
-          DSAStack->addLoopControlVariable(VD);
+          DirStack->addLoopControlVariable(VD);
         }
       }
     }
-    DSAStack->incAssociatedLoopsParsed();
+    DirStack->incAssociatedLoopsParsed();
   }
 }
 
@@ -1374,7 +1361,7 @@ void Sema::ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
                                           Scope *CurScope) {
   assert(getLangOpts().OpenACC && "OpenACC is not active.");
   if (CurScope->getBreakParent()->isOpenACCLoopScope())
-    DSAStack->addLoopBreakStatement(BreakLoc);
+    DirStack->addLoopBreakStatement(BreakLoc);
 }
 
 StmtResult Sema::ActOnOpenACCLoopDirective(
@@ -1389,14 +1376,14 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
   // associated with the loop construct."
   // Complain if there aren't enough.
   Stmt *LoopStmt = AStmt;
-  for (unsigned LoopI = 0, LoopCount = DSAStack->getAssociatedLoops();
+  for (unsigned LoopI = 0, LoopCount = DirStack->getAssociatedLoops();
        LoopI < LoopCount; ++LoopI)
   {
     LoopStmt = LoopStmt->IgnoreContainers();
     auto *LoopFor = dyn_cast_or_null<ForStmt>(LoopStmt);
     if (!LoopFor) {
       Diag(LoopStmt->getBeginLoc(), diag::err_acc_not_for)
-          << getOpenACCDirectiveName(DSAStack->getRealDirective());
+          << getOpenACCDirectiveName(DirStack->getRealDirective());
       auto CollapseClauses =
           ACCExecutableDirective::getClausesOfKind<ACCCollapseClause>(Clauses);
       if (CollapseClauses.begin() != CollapseClauses.end()) {
@@ -1416,7 +1403,7 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
       for (Expr *VR : RC->varlists()) {
         VarDecl *VD = cast<VarDecl>(cast<DeclRefExpr>(VR)->getDecl())
                       ->getCanonicalDecl();
-        if (DSAStack->getLoopControlVariables().count(VD)) {
+        if (DirStack->getLoopControlVariables().count(VD)) {
            Diag(VR->getEndLoc(), diag::err_acc_reduction_on_loop_control_var)
                << VD->getName() << VR->getSourceRange();
            return StmtError();
@@ -1450,8 +1437,8 @@ StmtResult Sema::ActOnOpenACCParallelLoopDirective(
   // We assume clauses apply only where they're allowed.  private and reduction
   // are singled out above because they apply in both places, so the above
   // clarifies that they are applied to the inner directive.  This
-  // understanding is critical to the implementations for DSAStack::addBaseDSA
-  // and DSAStackTy::addReduction as well.
+  // understanding is critical to the implementations for DirStack::addBaseDSA
+  // and DirStackTy::addReduction as well.
   SmallVector<ACCClause *, 5> ParallelClauses;
   SmallVector<ACCClause *, 5> LoopClauses;
   for (ACCClause *C : Clauses) {
@@ -1467,8 +1454,8 @@ StmtResult Sema::ActOnOpenACCParallelLoopDirective(
   // Build the effective loop directive.
   StmtResult Res = ActOnOpenACCExecutableDirective(ACCD_loop, LoopClauses,
                                                    AStmt, StartLoc, EndLoc);
-  // The second DSAStack->pop() happens in EndOpenACCDSABlock.
-  DSAStack->pop();
+  // The second DirStack->pop() happens in EndOpenACCDSABlock.
+  DirStack->pop();
   if (Res.isInvalid())
     return StmtError();
   ACCLoopDirective *LoopDir = cast<ACCLoopDirective>(Res.get());
@@ -1598,7 +1585,7 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
          "expected copy clause or alias");
   SmallVector<Expr *, 8> Vars;
   bool IsImplicitClause = StartLoc.isInvalid();
-  SourceLocation ImplicitClauseLoc = DSAStack->getConstructLoc();
+  SourceLocation ImplicitClauseLoc = DirStack->getConstructLoc();
 
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC copy clause.");
@@ -1624,7 +1611,7 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
       continue;
     }
 
-    if (!DSAStack->addBaseDSA(VD, RefExpr->IgnoreParens(), ACC_BASE_DSA_copy,
+    if (!DirStack->addBaseDSA(VD, RefExpr->IgnoreParens(), ACC_BASE_DSA_copy,
                               IsImplicitClause))
       Vars.push_back(RefExpr->IgnoreParens());
   }
@@ -1643,7 +1630,7 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
          "expected copyin clause or alias");
   SmallVector<Expr *, 8> Vars;
   bool IsImplicitClause = StartLoc.isInvalid();
-  SourceLocation ImplicitClauseLoc = DSAStack->getConstructLoc();
+  SourceLocation ImplicitClauseLoc = DirStack->getConstructLoc();
 
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC copyin clause.");
@@ -1669,7 +1656,7 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
       continue;
     }
 
-    if (!DSAStack->addBaseDSA(VD, RefExpr->IgnoreParens(), ACC_BASE_DSA_copyin,
+    if (!DirStack->addBaseDSA(VD, RefExpr->IgnoreParens(), ACC_BASE_DSA_copyin,
                               IsImplicitClause))
       Vars.push_back(RefExpr->IgnoreParens());
   }
@@ -1688,7 +1675,7 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
          "expected copyout clause or alias");
   SmallVector<Expr *, 8> Vars;
   bool IsImplicitClause = StartLoc.isInvalid();
-  SourceLocation ImplicitClauseLoc = DSAStack->getConstructLoc();
+  SourceLocation ImplicitClauseLoc = DirStack->getConstructLoc();
 
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC copyout clause.");
@@ -1714,7 +1701,7 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
       continue;
     }
 
-    if (!DSAStack->addBaseDSA(VD, RefExpr->IgnoreParens(),
+    if (!DirStack->addBaseDSA(VD, RefExpr->IgnoreParens(),
                               ACC_BASE_DSA_copyout, IsImplicitClause))
       Vars.push_back(RefExpr->IgnoreParens());
   }
@@ -1735,7 +1722,7 @@ ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
     auto *VD = dyn_cast_or_null<VarDecl>(DE->getDecl());
     assert(VD && "OpenACC implicit shared clause for non-VarDecl");
 
-    if (!DSAStack->addBaseDSA(VD, RefExpr->IgnoreParens(),
+    if (!DirStack->addBaseDSA(VD, RefExpr->IgnoreParens(),
                               ACC_BASE_DSA_shared, /*IsImplicit*/ true))
       Vars.push_back(RefExpr->IgnoreParens());
     else
@@ -1797,7 +1784,7 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(ArrayRef<Expr *> VarList,
       continue;
     }
 
-    if (!DSAStack->addBaseDSA(VD, RefExpr->IgnoreParens(),
+    if (!DirStack->addBaseDSA(VD, RefExpr->IgnoreParens(),
                               ACC_BASE_DSA_private, IsImplicitClause))
       Vars.push_back(RefExpr->IgnoreParens());
   }
@@ -1839,7 +1826,7 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(ArrayRef<Expr *> VarList,
       continue;
     }
 
-    if (!DSAStack->addBaseDSA(VD, RefExpr->IgnoreParens(),
+    if (!DirStack->addBaseDSA(VD, RefExpr->IgnoreParens(),
                               ACC_BASE_DSA_firstprivate, IsImplicitClause))
       Vars.push_back(RefExpr->IgnoreParens());
   }
@@ -2051,7 +2038,7 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     }
 
     // Record reduction item.
-    if (!DSAStack->addReduction(VD, RefExpr->IgnoreParens(), ReductionId))
+    if (!DirStack->addReduction(VD, RefExpr->IgnoreParens(), ReductionId))
       Vars.push_back(RefExpr);
   }
   if (Vars.empty())
@@ -2230,7 +2217,7 @@ ACCClause *Sema::ActOnOpenACCCollapseClause(Expr *Collapse,
   if (PosIntError == IsPositiveIntegerValue(Collapse, *this, ACCC_collapse,
                                             true))
     return nullptr;
-  DSAStack->setAssociatedLoops(
+  DirStack->setAssociatedLoops(
       Collapse->EvaluateKnownConstInt(Context).getExtValue());
   return new (Context) ACCCollapseClause(Collapse, StartLoc, LParenLoc,
                                          EndLoc);
@@ -2973,7 +2960,7 @@ public:
 } // namespace
 
 bool Sema::transformACCToOMP(ACCExecutableDirective *D) {
-  if (DSAStack->getRealDirective() != ACCD_unknown)
+  if (DirStack->getRealDirective() != ACCD_unknown)
     return false;
   if (TransformACCToOMP(*this).TransformStmt(D).isInvalid())
     return true;

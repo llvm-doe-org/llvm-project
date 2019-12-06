@@ -10099,10 +10099,9 @@ public:
   // OpenACC directives and clauses.
   //
 private:
-  void *OpenACCDataSharingAttributesStack;
-  /// Initialization of data-sharing attributes stack.
-  void InitOpenACCDataSharingAttributesStack();
-  void DestroyOpenACCDataSharingAttributesStack();
+  void *OpenACCDirectiveStack;
+  void InitOpenACCDirectiveStack();
+  void DestroyOpenACCDirectiveStack();
 
 public:
   /// Called on start of new data sharing attribute block.
