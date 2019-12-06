@@ -3064,9 +3064,9 @@ int main() {
   // its copy clause on the acc parallel.
   //
   // Because out0 and out2 are in private clauses but out1 is in a reduction
-  // clause on an outer acc loop, the acc parallel doesn't need a data-sharing
-  // clause for out0 or out2, but it does need out1 in an (implicit)
-  // firstprivate in order to access its original value.
+  // clause on an outer acc loop, the acc parallel doesn't need a data clause
+  // for out0 or out2, but it does need out1 in an (implicit) firstprivate in
+  // order to access its original value.
 
   // PRT-NEXT: {
   {

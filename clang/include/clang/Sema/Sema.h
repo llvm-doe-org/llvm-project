@@ -10104,14 +10104,14 @@ private:
   void DestroyOpenACCDirectiveStack();
 
 public:
-  /// Called on start of new data sharing attribute block.
+  /// Called on start of new data attribute block.
   void StartOpenACCDSABlock(OpenACCDirectiveKind RealDKind,
                             SourceLocation Loc);
   /// Start analysis of clauses.
   void StartOpenACCClause(OpenACCClauseKind K);
   /// End analysis of clauses.
   void EndOpenACCClause();
-  /// Called on end of data sharing attribute block.
+  /// Called on end of data attribute block.
   void EndOpenACCDSABlock();
 
   /// Check if the current region is an OpenACC loop region and if it

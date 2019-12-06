@@ -18,7 +18,7 @@ We have implemented and tested support for the following features:
     * host, x86_64, or nvptx64
 * `parallel` directive:
     * use without clauses
-    * data sharing:
+    * data attributes:
         * implicit `copy` for non-scalars
         * implicit `firstprivate` for scalars
         * `copy` clause and aliases `pcopy` and `present_or_copy`
@@ -112,7 +112,7 @@ We have implemented and tested support for the following features:
         * For now, if none of these clauses appear (explicitly or
           implicitly), then a sequential loop is produced.
     * `collapse` clause
-    * data sharing:
+    * data attributes:
         * for loop control variable:
             * implicit `shared` if `seq` is explicitly specified and
               loop control variable is assigned but not declared in

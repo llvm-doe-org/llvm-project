@@ -30,7 +30,7 @@ enum OpenACCDirectiveKind {
   ACCD_unknown
 };
 
-/// OpenACC base data-sharing attributes.
+/// OpenACC base data attributes.
 enum OpenACCBaseDSAKind {
 #define OPENACC_BASE_DSA(Name) \
   ACC_BASE_DSA_##Name,

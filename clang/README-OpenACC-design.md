@@ -403,11 +403,11 @@ Interaction with OpenMP Support
 
 Even though Clacc translates OpenACC to OpenMP, Clacc currently does
 not support OpenACC and OpenMP in the same source.  Doing so would
-require, for example, extensions to data sharing analyses to consider
-the interactions between OpenACC and OpenMP directives and clauses.
-Thus, Clacc reports an error diagnostic if `-fopenmp` is specified on
-the Clang command line when OpenACC support is enabled by any
-`-fopenacc*` option.  To implement this, Clacc extends the Clang
+require, for example, extensions to data attribute analyses to
+consider the interactions between OpenACC and OpenMP directives and
+clauses.  Thus, Clacc reports an error diagnostic if `-fopenmp` is
+specified on the Clang command line when OpenACC support is enabled by
+any `-fopenacc*` option.  To implement this, Clacc extends the Clang
 driver to just pass the relevant command-line options to the Clang
 front end, and it extends the front end to produce the error
 diagnostic.  Thus, specifying `-cc1` to bypass the driver does not
@@ -556,7 +556,7 @@ behavior of the Clang OpenMP implementation that brought the need for
 those assumptions to our attention.  We describe those assumptions in
 this section.
 
-### Basic Data Sharing ###
+### Basic Data Attributes ###
 
 * It is an error if a variable appears in more than one occurrence of
   any one of *exp* `copy`, *exp* `copyin`, *exp* `copyout`, *exp*
@@ -837,7 +837,7 @@ this section.
       are actually useful given their dependence on the exact
       partitioning chosen by the compiler.
 * For any `acc loop` directive, *exp* `reduction` is not permitted on
-  a loop control variable regardless of its data sharing.  Notes:
+  a loop control variable regardless of its data attributes.  Notes:
     * For consistency with parallelized `acc loop` directives, this
       rule applies for sequential `acc loop` directives even
       though the mapping for them discards the `reduction`.

@@ -1694,7 +1694,7 @@ void fn() {
   //--------------------------------------------------
 
   //--------------------------------------------------
-  // Data sharing attributes clauses: syntax
+  // Data clauses: syntax
   //--------------------------------------------------
 
 #if !CMB
@@ -1847,7 +1847,7 @@ void fn() {
   }
 
   //--------------------------------------------------
-  // Data sharing attribute clauses: arg semantics
+  // Data clauses: arg semantics
   //--------------------------------------------------
 
 #if !CMB
@@ -2180,7 +2180,7 @@ void fn() {
   }
 
   //--------------------------------------------------
-  // Data sharing attribute clauses: reduction inter-directive conflicts
+  // Data clauses: reduction inter-directive conflicts
   //--------------------------------------------------
 
   // Explicit reduction on acc parallel, non-conflicting reductions on acc

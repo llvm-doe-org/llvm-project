@@ -1,4 +1,4 @@
-// Check correct loop partitioning and implicit data sharing on "acc loop"
+// Check correct loop partitioning and implicit data attributes on "acc loop"
 // and "acc parallel loop".
 //
 // Abbreviations:

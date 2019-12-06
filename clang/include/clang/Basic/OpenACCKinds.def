@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 /// \file
 /// This file defines the list of supported OpenACC directives, clauses, and
-/// data-sharing attributes.
+/// data attributes.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -86,7 +86,7 @@ OPENACC_DIRECTIVE(parallel)
 OPENACC_DIRECTIVE(loop)
 OPENACC_DIRECTIVE_EXT(parallel_loop, "parallel loop")
 
-// OpenACC clauses and base data-sharing attributes (DSAs).
+// OpenACC clauses and base data attributes (DSAs).
 //
 // We define base DSAs as DSAs other than reductions.  For any variable on any
 // OpenACC construct, the base DSAs are mutually exclusive, but most can be

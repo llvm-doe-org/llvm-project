@@ -1,11 +1,11 @@
-// Check implicit and explicit data sharing attributes on "acc parallel".
+// Check implicit and explicit data attributes on "acc parallel".
 //
 // When ADD_LOOP_TO_PAR is not set, this file checks implicit and explicit
-// data sharing attributes on "acc parallel" without "loop".
+// data attributes on "acc parallel" without "loop".
 //
 // When ADD_LOOP_TO_PAR is set, it adds "loop seq" and a for loop to those "acc
-// parallel" directives in order to check data sharing attributes for combined
-// "acc parallel loop" directives.
+// parallel" directives in order to check data attributes for combined "acc
+// parallel loop" directives.
 //
 // RUN: %data directives {
 // RUN:   (dir=PAR     dir-cflags=                 )
@@ -386,7 +386,7 @@ int main() {
   STORAGE int shadowed = 111;
 
   // Const scalars and non-scalars should be fine with either implicit or
-  // explicit data sharing attributes.
+  // explicit data attributes.
   CONST int ci = 53;
   CONST int ca[3] = {10, 11, 12};
 

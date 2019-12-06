@@ -41,7 +41,7 @@ using namespace clang;
 
 namespace {
 /// Stack for tracking OpenACC directives and their various properties, such
-/// as data-sharing attributes.
+/// as data attributes.
 ///
 /// In the case of a combined directive, we push two entries on the stack, one
 /// for each effective directive.  Because the entries are pushed and popped
@@ -51,7 +51,7 @@ class DirStackTy final {
 public:
   Sema &SemaRef;
 
-  /// Represents a variable's data-sharing attributes (DSAs) on a directive.
+  /// Represents a variable's data attributes (DSAs) on a directive.
   ///
   /// There are potentially two DSAs per variable: the base DSA and a
   /// reduction.  Each can be uncomputed, implicit, or explicit.  A base DSA
@@ -255,11 +255,11 @@ public:
   bool addReduction(VarDecl *D, Expr *E,
                     const DeclarationNameInfo &ReductionId);
 
-  /// Returns data sharing attributes from top of the stack for the
-  /// specified declaration.
+  /// Returns data attributes from top of the stack for the specified
+  /// declaration.
   DSAVarData getTopDSA(VarDecl *VD);
-  /// Returns predetermined or implicit base data-sharing attribute for the
-  /// specified declaration.
+  /// Returns predetermined or implicit base data attribute for the specified
+  /// declaration.
   OpenACCBaseDSAKind getImplicitBaseDSA(VarDecl *D);
 
   /// Returns currently analyzed directive.
@@ -496,8 +496,8 @@ OpenACCBaseDSAKind DirStackTy::getImplicitBaseDSA(VarDecl *VD) {
     //   that will execute each iteration of the loop."
     //
     //   If the loop control variable is assigned but not declared in the for
-    //   init, we need to specify a data sharing clause.  The OpenACC spec does
-    //   not appear to clarify the end of the scope of the private copy, so we
+    //   init, we need to specify a data clause.  The OpenACC spec does not
+    //   appear to clarify the end of the scope of the private copy, so we
     //   make what appears to be the intuitive choice for each case below.
     if (getLoopPartitioning().hasSeqExplicit())
       // In the case of a loop with an explicit seq, we assume the normal
@@ -1200,12 +1200,11 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
 
   // Our strategy for combined directives is to "act on" the clauses (already
   // done) as if they're on the same directive so that we can catch conflicts
-  // (for data sharing attributes, for example) that wouldn't arise if they
-  // were on separate nested directives.  Then we act on the directive as if
-  // it's two separate nested directives, acting on the effective innermost
-  // directive first.  The AST node for the combined directive contains AST
-  // nodes for the effective nested directives, facilitating translation to
-  // OpenMP.
+  // (for data attributes, for example) that wouldn't arise if they were on
+  // separate nested directives.  Then we act on the directive as if it's two
+  // separate nested directives, acting on the effective innermost directive
+  // first.  The AST node for the combined directive contains AST nodes for the
+  // effective nested directives, facilitating translation to OpenMP.
   if (isOpenACCCombinedDirective(DKind)) {
     switch (DKind) {
     case ACCD_parallel_loop:
@@ -1246,7 +1245,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     // by any implicit gang clauses added above.
     ImplicitBaseDSAAdder Adder(DirStack);
     Adder.Visit(AStmt);
-    // Check default data sharing attributes for referenced variables.
+    // Check default data attributes for referenced variables.
     if (!Adder.getImplicitCopy().empty()) {
       ACCClause *Implicit = ActOnOpenACCCopyClause(
           ACCC_copy, Adder.getImplicitCopy(), SourceLocation(),
@@ -1726,11 +1725,11 @@ ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
                               ACC_BASE_DSA_shared, /*IsImplicit*/ true))
       Vars.push_back(RefExpr->IgnoreParens());
     else
-      // Assert that the variable does not appear in an explicit data sharing
-      // clause on the same directive.  If the OpenACC spec grows an explicit
-      // shared clause one day, this assert should be removed.
+      // Assert that the variable does not appear in an explicit data clause on
+      // the same directive.  If the OpenACC spec grows an explicit shared
+      // clause one day, this assert should be removed.
       llvm_unreachable("implicit shared clause unexpectedly generated for"
-                       " variable in explicit data sharing clause");
+                       " variable in explicit data clause");
   }
 
   if (Vars.empty())

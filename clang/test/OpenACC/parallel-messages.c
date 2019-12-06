@@ -151,7 +151,7 @@ int main() {
     FORLOOP
 
   //--------------------------------------------------
-  // Data sharing attribute clauses: syntax
+  // Data clauses: syntax
   //--------------------------------------------------
 
   #pragma acc parallel LOOP copy // expected-error {{expected '(' after 'copy'}}
@@ -501,7 +501,7 @@ int main() {
     FORLOOP
 
   //--------------------------------------------------
-  // Data sharing attribute clauses: arg semantics
+  // Data clauses: arg semantics
   //--------------------------------------------------
 
   // Unknown reduction operator.
