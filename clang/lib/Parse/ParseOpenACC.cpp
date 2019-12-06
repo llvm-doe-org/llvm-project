@@ -109,7 +109,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
     if (isOpenACCLoopDirective(DKind))
       ScopeFlags |= Scope::OpenACCLoopDirectiveScope;
     ParseScope ACCDirectiveScope(this, ScopeFlags);
-    Actions.StartOpenACCDSABlock(DKind, Loc);
+    Actions.StartOpenACCDABlock(DKind, Loc);
 
     while (Tok.isNot(tok::annot_pragma_openacc_end)) {
       OpenACCClauseKind CKind =
@@ -143,7 +143,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
         DKind, Clauses, AssociatedStmt.get(), Loc, EndLoc);
 
     // Exit scope.
-    Actions.EndOpenACCDSABlock();
+    Actions.EndOpenACCDABlock();
     ACCDirectiveScope.Exit();
     // Don't bother translating to OpenMP if we've encountered errors or we
     // might end up with redundant diagnostics, some of which might mention

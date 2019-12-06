@@ -51,24 +51,24 @@ class DirStackTy final {
 public:
   Sema &SemaRef;
 
-  /// Represents a variable's data attributes (DSAs) on a directive.
+  /// Represents a variable's data attributes (DAs) on a directive.
   ///
-  /// There are potentially two DSAs per variable: the base DSA and a
-  /// reduction.  Each can be uncomputed, implicit, or explicit.  A base DSA
-  /// can also be predetermined.  At least one of these two will eventually be
-  /// computed per variable referenced by a construct.
+  /// There are potentially two DAs per variable: the base DA and a reduction.
+  /// Each can be uncomputed, implicit, or explicit.  A base DA can also be
+  /// predetermined.  At least one of these two will eventually be computed per
+  /// variable referenced by a construct.
   ///
   /// We also store here whether the variable has a reduction on any effective
   /// directive that's a part of the same combined directive.
-  struct DSAVarData final {
-    /// If base DSA is uncomputed, then ACC_BASE_DSA_unknown.  Otherwise, not
-    /// ACC_BASE_DSA_unknown.
-    OpenACCBaseDSAKind BaseDSAKind = ACC_BASE_DSA_unknown;
-    /// If base DSA is uncomputed, then nullptr.  If predetermined or implicit,
+  struct DAVarData final {
+    /// If base DA is uncomputed, then ACC_BASE_DA_unknown.  Otherwise, not
+    /// ACC_BASE_DA_unknown.
+    OpenACCBaseDAKind BaseDAKind = ACC_BASE_DA_unknown;
+    /// If base DA is uncomputed, then nullptr.  If predetermined or implicit,
     /// then a referencing expression within the directive's region.  If
     /// explicit, then the referencing expression appearing in the associated
     /// clause.
-    Expr *BaseDSARefExpr = nullptr;
+    Expr *BaseDARefExpr = nullptr;
     /// If reduction is uncomputed, then default-constructed
     /// (ReductionID.getName().isEmpty()).  Otherwise, the reduction ID.
     DeclarationNameInfo ReductionId;
@@ -83,13 +83,13 @@ public:
     /// this variable.  In the latter case, the effective directive with the
     /// reduction might have been popped off the stack already.
     bool ReductionOnEffectiveOrCombined = false;
-    DSAVarData() {}
+    DAVarData() {}
   };
 
 private:
-  typedef llvm::DenseMap<VarDecl *, DSAVarData> DSAMapTy;
+  typedef llvm::DenseMap<VarDecl *, DAVarData> DAMapTy;
   struct DirStackEntryTy final {
-    DSAMapTy SharingMap;
+    DAMapTy DAMap;
     llvm::DenseSet<VarDecl *> LCVs;
     /// The real directive kind.  In the case of a combined directive, there
     /// are two consecutive entries: the outer has RealDKind as the combined
@@ -246,21 +246,21 @@ public:
     return Stack.back().NestedWorkerPartitioning;
   }
 
-  /// Adds base DSA to the specified declaration.
+  /// Adds base DA to the specified declaration.
   ///
   /// Assumes implicit clause is added only when effective directive to which
   /// it applies is at the top of the stack.
-  bool addBaseDSA(VarDecl *D, Expr *E, OpenACCBaseDSAKind A, bool IsImplicit);
+  bool addBaseDA(VarDecl *D, Expr *E, OpenACCBaseDAKind A, bool IsImplicit);
   /// Adds reduction to the specified declaration.
   bool addReduction(VarDecl *D, Expr *E,
                     const DeclarationNameInfo &ReductionId);
 
   /// Returns data attributes from top of the stack for the specified
   /// declaration.
-  DSAVarData getTopDSA(VarDecl *VD);
+  DAVarData getTopDA(VarDecl *VD);
   /// Returns predetermined or implicit base data attribute for the specified
   /// declaration.
-  OpenACCBaseDSAKind getImplicitBaseDSA(VarDecl *D);
+  OpenACCBaseDAKind getImplicitBaseDA(VarDecl *D);
 
   /// Returns currently analyzed directive.
   OpenACCDirectiveKind getRealDirective() const {
@@ -335,8 +335,8 @@ public:
 };
 } // namespace
 
-bool DirStackTy::addBaseDSA(VarDecl *VD, Expr *E,
-                            OpenACCBaseDSAKind BaseDSAKind, bool IsImplicit) {
+bool DirStackTy::addBaseDA(VarDecl *VD, Expr *E,
+                           OpenACCBaseDAKind BaseDAKind, bool IsImplicit) {
   VD = VD->getCanonicalDecl();
   assert(Stack.size() > 1 && "Directive stack is empty");
 
@@ -362,33 +362,33 @@ bool DirStackTy::addBaseDSA(VarDecl *VD, Expr *E,
   // loop.)
   bool Added = false;
   for (auto Itr = Stack.rbegin(), End = Stack.rend(); Itr != End; ++Itr) {
-    DSAVarData &DVar = Itr->SharingMap[VD];
-    // Complain for conflict with existing base DSA.
-    if (DVar.BaseDSAKind != ACC_BASE_DSA_unknown) {
-      SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_dsa)
-          << (DVar.BaseDSAKind == BaseDSAKind)
-          << getOpenACCBaseDSAName(DVar.BaseDSAKind)
-          << getOpenACCBaseDSAName(BaseDSAKind);
-      SemaRef.Diag(DVar.BaseDSARefExpr->getExprLoc(),
-                   diag::note_acc_explicit_dsa)
-          << getOpenACCBaseDSAName(DVar.BaseDSAKind);
+    DAVarData &DVar = Itr->DAMap[VD];
+    // Complain for conflict with existing base DA.
+    if (DVar.BaseDAKind != ACC_BASE_DA_unknown) {
+      SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_da)
+          << (DVar.BaseDAKind == BaseDAKind)
+          << getOpenACCBaseDAName(DVar.BaseDAKind)
+          << getOpenACCBaseDAName(BaseDAKind);
+      SemaRef.Diag(DVar.BaseDARefExpr->getExprLoc(),
+                   diag::note_acc_explicit_da)
+          << getOpenACCBaseDAName(DVar.BaseDAKind);
       return true;
     }
     // Complain if cannot combine with a reduction.
     if (!DVar.ReductionId.getName().isEmpty() &&
-        !isAllowedBaseDSAForReduction(BaseDSAKind)) {
-      SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_dsa)
+        !isAllowedBaseDAForReduction(BaseDAKind)) {
+      SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_da)
           << false << getOpenACCClauseName(ACCC_reduction)
-          << getOpenACCBaseDSAName(BaseDSAKind);
+          << getOpenACCBaseDAName(BaseDAKind);
       SemaRef.Diag(DVar.ReductionRefExpr->getExprLoc(),
-                   diag::note_acc_explicit_dsa)
+                   diag::note_acc_explicit_da)
           << getOpenACCClauseName(ACCC_reduction);
       return true;
     }
-    if (!Added && isAllowedBaseDSAForDirective(Itr->EffectiveDKind,
-                                               BaseDSAKind)) {
-      DVar.BaseDSAKind = BaseDSAKind;
-      DVar.BaseDSARefExpr = E;
+    if (!Added && isAllowedBaseDAForDirective(Itr->EffectiveDKind,
+                                              BaseDAKind)) {
+      DVar.BaseDAKind = BaseDAKind;
+      DVar.BaseDARefExpr = E;
       Added = true;
       if (IsImplicit)
         // As a precondition, an implicit clause is added when the effective
@@ -408,7 +408,7 @@ bool DirStackTy::addBaseDSA(VarDecl *VD, Expr *E,
       break;
   }
 
-  assert(Added && "expected base DSA to be allowed for directive");
+  assert(Added && "expected base DA to be allowed for directive");
   return false;
 }
 
@@ -426,20 +426,20 @@ bool DirStackTy::addReduction(VarDecl *VD, Expr *E,
   // of a combined directive with a reduction.
   //
   // In this combined directive, on every effective directive, make sure a
-  // reduction can combine with any base DSA from explicit clauses.  For
+  // reduction can combine with any base DA from explicit clauses.  For
   // example, even though reduction applies to acc loop and firstprivate
   // applies to acc parallel, it makes no sense to specify them both for the
   // same variable on acc parallel loop because the reduced value can then
   // never be accessed.
   for (auto Itr = Stack.rbegin(), End = Stack.rend(); Itr != End; ++Itr) {
-    DSAVarData &DVar = Itr->SharingMap[VD];
-    if (!isAllowedBaseDSAForReduction(DVar.BaseDSAKind)) {
-      SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_dsa)
-          << false << getOpenACCBaseDSAName(DVar.BaseDSAKind)
+    DAVarData &DVar = Itr->DAMap[VD];
+    if (!isAllowedBaseDAForReduction(DVar.BaseDAKind)) {
+      SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_da)
+          << false << getOpenACCBaseDAName(DVar.BaseDAKind)
           << getOpenACCClauseName(ACCC_reduction);
-      SemaRef.Diag(DVar.BaseDSARefExpr->getExprLoc(),
-                   diag::note_acc_explicit_dsa)
-          << getOpenACCBaseDSAName(DVar.BaseDSAKind);
+      SemaRef.Diag(DVar.BaseDARefExpr->getExprLoc(),
+                   diag::note_acc_explicit_da)
+          << getOpenACCBaseDAName(DVar.BaseDAKind);
       return true;
     }
     DVar.ReductionOnEffectiveOrCombined = true;
@@ -454,7 +454,7 @@ bool DirStackTy::addReduction(VarDecl *VD, Expr *E,
   auto Itr = Stack.rbegin();
   assert(isAllowedClauseForDirective(Itr->EffectiveDKind, ACCC_reduction) &&
          "expected reduction to be allowed on directive at top of stack");
-  DSAVarData &DVar = Itr->SharingMap[VD];
+  DAVarData &DVar = Itr->DAMap[VD];
 
   // Complain if a variable appears in more than one (explicit) reduction on
   // the same directive.
@@ -477,17 +477,17 @@ bool DirStackTy::addReduction(VarDecl *VD, Expr *E,
   return false;
 }
 
-OpenACCBaseDSAKind DirStackTy::getImplicitBaseDSA(VarDecl *VD) {
+OpenACCBaseDAKind DirStackTy::getImplicitBaseDA(VarDecl *VD) {
   VD = VD->getCanonicalDecl();
-  OpenACCBaseDSAKind BaseDSAKind;
+  OpenACCBaseDAKind BaseDAKind;
   // Here, we assume a reduction variable isn't a loop-control variable, and we
   // complain about that combination later in ActOnOpenACCLoopDirective.
-  const DSAVarData &DVar = getTopDSA(VD);
+  const DAVarData &DVar = getTopDA(VD);
   if (DVar.ReductionOnEffectiveOrCombined) {
     if (isOpenACCParallelDirective(getEffectiveDirective()))
-      BaseDSAKind = ACC_BASE_DSA_copy;
+      BaseDAKind = ACC_BASE_DA_copy;
     else
-      BaseDSAKind = ACC_BASE_DSA_unknown;
+      BaseDAKind = ACC_BASE_DA_unknown;
   }
   else if (getLoopControlVariables().count(VD)) {
     // OpenACC 2.6 [2.6.1]:
@@ -507,14 +507,14 @@ OpenACCBaseDSAKind DirStackTy::getImplicitBaseDSA(VarDecl *VD) {
       // predetermined private, and this doesn't seem to contradict the
       // specification that it be private to the one thread that executes the
       // loop.
-      BaseDSAKind = ACC_BASE_DSA_shared;
+      BaseDAKind = ACC_BASE_DA_shared;
     else
       // Private is consistent with OpenMP in all cases here except vector
       // partitioning.  That is, OpenMP simd makes it predetermined linear,
       // which has lastprivate-like semantics.  However, for consistency, we
       // assume the intuitive semantics of private in all cases here: the
       // private copy goes out of scope at the end of the loop.
-      BaseDSAKind = ACC_BASE_DSA_private;
+      BaseDAKind = ACC_BASE_DA_private;
   }
   // OpenACC 2.5 [2.5.1.588-590]:
   //   "A scalar variable referenced in the parallel construct that does not
@@ -530,18 +530,18 @@ OpenACCBaseDSAKind DirStackTy::getImplicitBaseDSA(VarDecl *VD) {
   //   attribute) or any pointer datatype."
   else if (isOpenACCParallelDirective(getEffectiveDirective())) {
     if (VD->getType()->isScalarType())
-      BaseDSAKind = ACC_BASE_DSA_firstprivate;
+      BaseDAKind = ACC_BASE_DA_firstprivate;
     else
-      BaseDSAKind = ACC_BASE_DSA_copy;
+      BaseDAKind = ACC_BASE_DA_copy;
   }
   else
-    BaseDSAKind = ACC_BASE_DSA_shared;
-  return BaseDSAKind;
+    BaseDAKind = ACC_BASE_DA_shared;
+  return BaseDAKind;
 }
 
-DirStackTy::DSAVarData DirStackTy::getTopDSA(VarDecl *VD) {
+DirStackTy::DAVarData DirStackTy::getTopDA(VarDecl *VD) {
   VD = VD->getCanonicalDecl();
-  DSAVarData DVar;
+  DAVarData DVar;
 
   if (Stack.size() == 1) {
     // Not in OpenACC execution region and top scope was already checked.
@@ -549,8 +549,8 @@ DirStackTy::DSAVarData DirStackTy::getTopDSA(VarDecl *VD) {
   }
 
   auto I = Stack.rbegin();
-  if (I->SharingMap.count(VD))
-    DVar = I->SharingMap[VD];
+  if (I->DAMap.count(VD))
+    DVar = I->DAMap[VD];
 
   return DVar;
 }
@@ -563,8 +563,8 @@ void Sema::InitOpenACCDirectiveStack() {
 
 void Sema::DestroyOpenACCDirectiveStack() { delete DirStack; }
 
-void Sema::StartOpenACCDSABlock(OpenACCDirectiveKind RealDKind,
-                                SourceLocation Loc) {
+void Sema::StartOpenACCDABlock(OpenACCDirectiveKind RealDKind,
+                               SourceLocation Loc) {
   switch (RealDKind) {
   case ACCD_parallel:
   case ACCD_loop:
@@ -636,7 +636,7 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
 void Sema::EndOpenACCClause() {
 }
 
-void Sema::EndOpenACCDSABlock() {
+void Sema::EndOpenACCDABlock() {
   // For a combined directive, the first DirStack->pop() happens after the
   // inner effective directive is "acted upon" (AST node is constructed), so
   // this is the second DirStack->pop(), which happens after the entire
@@ -690,20 +690,20 @@ public:
   }
 };
 
-class ImplicitBaseDSAAdder : public StmtVisitor<ImplicitBaseDSAAdder> {
-  typedef StmtVisitor<ImplicitBaseDSAAdder> BaseVisitor;
+class ImplicitBaseDAAdder : public StmtVisitor<ImplicitBaseDAAdder> {
+  typedef StmtVisitor<ImplicitBaseDAAdder> BaseVisitor;
   DirStackTy *Stack;
-  typedef llvm::SmallVector<Expr *, 8> BaseDSAVector;
-  BaseDSAVector ImplicitCopy;
-  BaseDSAVector ImplicitShared;
-  BaseDSAVector ImplicitPrivate;
-  BaseDSAVector ImplicitFirstprivate;
-  struct BaseDSAEntry {
-    OpenACCBaseDSAKind BaseDSAKind;
-    BaseDSAVector::iterator Itr;
-    BaseDSAEntry() : BaseDSAKind(ACC_BASE_DSA_unknown) {}
+  typedef llvm::SmallVector<Expr *, 8> BaseDAVector;
+  BaseDAVector ImplicitCopy;
+  BaseDAVector ImplicitShared;
+  BaseDAVector ImplicitPrivate;
+  BaseDAVector ImplicitFirstprivate;
+  struct BaseDAEntry {
+    OpenACCBaseDAKind BaseDAKind;
+    BaseDAVector::iterator Itr;
+    BaseDAEntry() : BaseDAKind(ACC_BASE_DA_unknown) {}
   };
-  llvm::DenseMap<VarDecl *, BaseDSAEntry> ImplicitBaseDSAEntries;
+  llvm::DenseMap<VarDecl *, BaseDAEntry> ImplicitBaseDAEntries;
   llvm::SmallVector<llvm::DenseSet<const Decl *>, 8> LocalDefinitions;
 
 public:
@@ -719,40 +719,40 @@ public:
         return;
 
       // Skip variable if there's an explicit clause already.
-      if (Stack->getTopDSA(VD).BaseDSAKind != ACC_BASE_DSA_unknown)
+      if (Stack->getTopDA(VD).BaseDAKind != ACC_BASE_DA_unknown)
         return;
 
       // Skip variable if an implicit clause has already been computed.
-      BaseDSAEntry &Entry = ImplicitBaseDSAEntries[VD];
-      if (Entry.BaseDSAKind != ACC_BASE_DSA_unknown)
+      BaseDAEntry &Entry = ImplicitBaseDAEntries[VD];
+      if (Entry.BaseDAKind != ACC_BASE_DA_unknown)
         return;
 
-      // Compute implicit base DSA.
-      Entry.BaseDSAKind = Stack->getImplicitBaseDSA(VD);
-      BaseDSAVector *BaseDSAs;
-      switch (Entry.BaseDSAKind) {
-      case ACC_BASE_DSA_copy:
-        BaseDSAs = &ImplicitCopy;
+      // Compute implicit base DA.
+      Entry.BaseDAKind = Stack->getImplicitBaseDA(VD);
+      BaseDAVector *BaseDAs;
+      switch (Entry.BaseDAKind) {
+      case ACC_BASE_DA_copy:
+        BaseDAs = &ImplicitCopy;
         break;
-      case ACC_BASE_DSA_shared:
-        BaseDSAs = &ImplicitShared;
+      case ACC_BASE_DA_shared:
+        BaseDAs = &ImplicitShared;
         break;
-      case ACC_BASE_DSA_private:
-        BaseDSAs = &ImplicitPrivate;
+      case ACC_BASE_DA_private:
+        BaseDAs = &ImplicitPrivate;
         break;
-      case ACC_BASE_DSA_firstprivate:
-        BaseDSAs = &ImplicitFirstprivate;
+      case ACC_BASE_DA_firstprivate:
+        BaseDAs = &ImplicitFirstprivate;
         break;
-      case ACC_BASE_DSA_unknown:
-        BaseDSAs = nullptr;
+      case ACC_BASE_DA_unknown:
+        BaseDAs = nullptr;
         break;
-      case ACC_BASE_DSA_copyin:
-      case ACC_BASE_DSA_copyout:
-        llvm_unreachable("unexpected implicit base DSA");
+      case ACC_BASE_DA_copyin:
+      case ACC_BASE_DA_copyout:
+        llvm_unreachable("unexpected implicit base DA");
       }
-      if (BaseDSAs) {
-        BaseDSAs->push_back(E);
-        Entry.Itr = BaseDSAs->end() - 1;
+      if (BaseDAs) {
+        BaseDAs->push_back(E);
+        Entry.Itr = BaseDAs->end() - 1;
       }
     }
   }
@@ -785,29 +785,29 @@ public:
           if (LocalDefinitions.back().count(VD))
             continue;
           // Skip variable if there's an explicit clause already.
-          DirStackTy::DSAVarData DVar = Stack->getTopDSA(VD);
-          if (DVar.BaseDSAKind != ACC_BASE_DSA_unknown ||
+          DirStackTy::DAVarData DVar = Stack->getTopDA(VD);
+          if (DVar.BaseDAKind != ACC_BASE_DA_unknown ||
               !DVar.ReductionId.getName().isEmpty())
             continue;
           // Skip variable if an implicit copy clause has already been
           // computed.
-          BaseDSAEntry &Entry = ImplicitBaseDSAEntries[VD];
-          if (Entry.BaseDSAKind == ACC_BASE_DSA_copy)
+          BaseDAEntry &Entry = ImplicitBaseDAEntries[VD];
+          if (Entry.BaseDAKind == ACC_BASE_DA_copy)
             continue;
           // Override any implicit firstprivate clause.
-          if (Entry.BaseDSAKind == ACC_BASE_DSA_firstprivate)
+          if (Entry.BaseDAKind == ACC_BASE_DA_firstprivate)
             ImplicitFirstprivate.erase(Entry.Itr);
           else
-            assert(Entry.BaseDSAKind == ACC_BASE_DSA_unknown &&
-                   "expected implicit base DSA for reduction variable to be"
+            assert(Entry.BaseDAKind == ACC_BASE_DA_unknown &&
+                   "expected implicit base DA for reduction variable to be"
                    " copy, firstprivate, or unknown");
-          Entry.BaseDSAKind = ACC_BASE_DSA_copy;
+          Entry.BaseDAKind = ACC_BASE_DA_copy;
           ImplicitCopy.push_back(DRE);
           Entry.Itr = ImplicitCopy.end() - 1;
         }
       }
 
-      // For clauses other than private, compute base DSA attribute for the
+      // For clauses other than private, compute base DA attribute for the
       // variables due to the references within the clause itself.  This is
       // necessary because at least the variables' original values are needed.
       if (C->getClauseKind() != ACCC_private) {
@@ -818,7 +818,7 @@ public:
       }
 
       // Record variables privatized by this directive as local definitions so
-      // that they are skipped while computing base DSAs implied by nested
+      // that they are skipped while computing base DAs implied by nested
       // references.
       for (const Expr *VR : getPrivateVarsFromClause(C)) {
         const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
@@ -849,7 +849,7 @@ public:
   ArrayRef<Expr *> getImplicitPrivate() { return ImplicitPrivate; }
   ArrayRef<Expr *> getImplicitFirstprivate() { return ImplicitFirstprivate; }
 
-  ImplicitBaseDSAAdder(DirStackTy *S) : Stack(S) {
+  ImplicitBaseDAAdder(DirStackTy *S) : Stack(S) {
     LocalDefinitions.emplace_back();
   }
 };
@@ -911,24 +911,24 @@ public:
           // loop, so there's no implicit gang reduction, which makes the
           // variable gang-shared at the acc loop, so there is an implicit gang
           // reduction, and so on.
-          DirStackTy::DSAVarData DVar = Stack->getTopDSA(VD);
+          DirStackTy::DAVarData DVar = Stack->getTopDA(VD);
           if (!DVar.ReductionId.getName().isEmpty() ||
               ImplicitGangReductionVars.count(VD))
             continue;
 
-          // Check the base DSA.
-          OpenACCBaseDSAKind BaseDSAKind = DVar.BaseDSAKind;
-          switch (BaseDSAKind) {
-          case ACC_BASE_DSA_unknown:
-          case ACC_BASE_DSA_shared:
-            llvm_unreachable("unexpected base DSA on acc parallel");
-          case ACC_BASE_DSA_private:
-          case ACC_BASE_DSA_firstprivate:
+          // Check the base DA.
+          OpenACCBaseDAKind BaseDAKind = DVar.BaseDAKind;
+          switch (BaseDAKind) {
+          case ACC_BASE_DA_unknown:
+          case ACC_BASE_DA_shared:
+            llvm_unreachable("unexpected base DA on acc parallel");
+          case ACC_BASE_DA_private:
+          case ACC_BASE_DA_firstprivate:
             // Skip variable if it is privatized at the acc parallel.
             continue;
-          case ACC_BASE_DSA_copy:
-          case ACC_BASE_DSA_copyin:
-          case ACC_BASE_DSA_copyout:
+          case ACC_BASE_DA_copy:
+          case ACC_BASE_DA_copyin:
+          case ACC_BASE_DA_copyout:
             // The variable is gang-shared.
             break;
           }
@@ -1241,9 +1241,9 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     // Add implicit gang clauses.
     if (isOpenACCParallelDirective(DKind))
       ImplicitGangAdder().Visit(AStmt);
-    // For referenced variables, add implicit base DSAs, possibly influenced
+    // For referenced variables, add implicit base DAs, possibly influenced
     // by any implicit gang clauses added above.
-    ImplicitBaseDSAAdder Adder(DirStack);
+    ImplicitBaseDAAdder Adder(DirStack);
     Adder.Visit(AStmt);
     // Check default data attributes for referenced variables.
     if (!Adder.getImplicitCopy().empty()) {
@@ -1436,7 +1436,7 @@ StmtResult Sema::ActOnOpenACCParallelLoopDirective(
   // We assume clauses apply only where they're allowed.  private and reduction
   // are singled out above because they apply in both places, so the above
   // clarifies that they are applied to the inner directive.  This
-  // understanding is critical to the implementations for DirStack::addBaseDSA
+  // understanding is critical to the implementations for DirStack::addBaseDA
   // and DirStackTy::addReduction as well.
   SmallVector<ACCClause *, 5> ParallelClauses;
   SmallVector<ACCClause *, 5> LoopClauses;
@@ -1453,7 +1453,7 @@ StmtResult Sema::ActOnOpenACCParallelLoopDirective(
   // Build the effective loop directive.
   StmtResult Res = ActOnOpenACCExecutableDirective(ACCD_loop, LoopClauses,
                                                    AStmt, StartLoc, EndLoc);
-  // The second DirStack->pop() happens in EndOpenACCDSABlock.
+  // The second DirStack->pop() happens in EndOpenACCDABlock.
   DirStack->pop();
   if (Res.isInvalid())
     return StmtError();
@@ -1610,8 +1610,8 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
       continue;
     }
 
-    if (!DirStack->addBaseDSA(VD, RefExpr->IgnoreParens(), ACC_BASE_DSA_copy,
-                              IsImplicitClause))
+    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_copy,
+                             IsImplicitClause))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -1655,8 +1655,8 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
       continue;
     }
 
-    if (!DirStack->addBaseDSA(VD, RefExpr->IgnoreParens(), ACC_BASE_DSA_copyin,
-                              IsImplicitClause))
+    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_copyin,
+                             IsImplicitClause))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -1700,8 +1700,8 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
       continue;
     }
 
-    if (!DirStack->addBaseDSA(VD, RefExpr->IgnoreParens(),
-                              ACC_BASE_DSA_copyout, IsImplicitClause))
+    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(),
+                             ACC_BASE_DA_copyout, IsImplicitClause))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -1721,8 +1721,8 @@ ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
     auto *VD = dyn_cast_or_null<VarDecl>(DE->getDecl());
     assert(VD && "OpenACC implicit shared clause for non-VarDecl");
 
-    if (!DirStack->addBaseDSA(VD, RefExpr->IgnoreParens(),
-                              ACC_BASE_DSA_shared, /*IsImplicit*/ true))
+    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(),
+                             ACC_BASE_DA_shared, /*IsImplicit*/ true))
       Vars.push_back(RefExpr->IgnoreParens());
     else
       // Assert that the variable does not appear in an explicit data clause on
@@ -1783,8 +1783,8 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(ArrayRef<Expr *> VarList,
       continue;
     }
 
-    if (!DirStack->addBaseDSA(VD, RefExpr->IgnoreParens(),
-                              ACC_BASE_DSA_private, IsImplicitClause))
+    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(),
+                             ACC_BASE_DA_private, IsImplicitClause))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -1825,8 +1825,8 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(ArrayRef<Expr *> VarList,
       continue;
     }
 
-    if (!DirStack->addBaseDSA(VD, RefExpr->IgnoreParens(),
-                              ACC_BASE_DSA_firstprivate, IsImplicitClause))
+    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(),
+                             ACC_BASE_DA_firstprivate, IsImplicitClause))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -2437,7 +2437,7 @@ public:
         EnclosingCompoundStmt.addUnusedExpr(E);
     }
 
-    // Start OpenMP DSA block.
+    // Start OpenMP DA block.
     getSema().StartOpenMPDSABlock(OMPD_target_teams, DeclarationNameInfo(),
                                   /*CurScope=*/nullptr, D->getBeginLoc());
 
@@ -2575,7 +2575,7 @@ public:
       return Res;
     }
 
-    // Start OpenMP DSA block.
+    // Start OpenMP DA block.
     getSema().StartOpenMPDSABlock(TDKind, DeclarationNameInfo(),
                                   /*CurScope=*/nullptr, D->getBeginLoc());
 

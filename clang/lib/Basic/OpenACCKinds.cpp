@@ -54,17 +54,17 @@ OpenACCClauseKind clang::getOpenACCClauseKind(StringRef Str) {
       .Default(ACCC_unknown);
 }
 
-const char *clang::getOpenACCBaseDSAName(OpenACCBaseDSAKind Kind) {
-  assert(Kind <= ACC_BASE_DSA_unknown);
+const char *clang::getOpenACCBaseDAName(OpenACCBaseDAKind Kind) {
+  assert(Kind <= ACC_BASE_DA_unknown);
   switch (Kind) {
-  case ACC_BASE_DSA_unknown:
+  case ACC_BASE_DA_unknown:
     return "unknown";
-#define OPENACC_BASE_DSA(Name) \
-  case ACC_BASE_DSA_##Name:    \
+#define OPENACC_BASE_DA(Name) \
+  case ACC_BASE_DA_##Name:    \
     return #Name;
 #include "clang/Basic/OpenACCKinds.def"
   }
-  llvm_unreachable("Invalid OpenACC DSA kind");
+  llvm_unreachable("Invalid OpenACC DA kind");
 }
 
 const char *clang::getOpenACCClauseName(OpenACCClauseKind Kind) {
@@ -83,13 +83,13 @@ const char *clang::getOpenACCClauseName(OpenACCClauseKind Kind) {
   llvm_unreachable("Invalid OpenACC clause kind");
 }
 
-bool clang::isAllowedBaseDSAForReduction(OpenACCBaseDSAKind BaseDSAKind) {
-  assert(BaseDSAKind <= ACC_BASE_DSA_unknown);
-  switch (BaseDSAKind) {
-  case ACC_BASE_DSA_unknown:
+bool clang::isAllowedBaseDAForReduction(OpenACCBaseDAKind BaseDAKind) {
+  assert(BaseDAKind <= ACC_BASE_DA_unknown);
+  switch (BaseDAKind) {
+  case ACC_BASE_DA_unknown:
     return true;
-#define OPENACC_REDUCTION_BASE_DSA(Name) \
-  case ACC_BASE_DSA_##Name:              \
+#define OPENACC_REDUCTION_BASE_DA(Name) \
+  case ACC_BASE_DA_##Name:              \
     return true;
 #include "clang/Basic/OpenACCKinds.def"
   default:
@@ -98,14 +98,14 @@ bool clang::isAllowedBaseDSAForReduction(OpenACCBaseDSAKind BaseDSAKind) {
   return false;
 }
 
-bool clang::isAllowedBaseDSAForDirective(OpenACCDirectiveKind DKind,
-                                         OpenACCBaseDSAKind BaseDSAKind) {
-  assert(BaseDSAKind <= ACC_BASE_DSA_unknown);
+bool clang::isAllowedBaseDAForDirective(OpenACCDirectiveKind DKind,
+                                        OpenACCBaseDAKind BaseDAKind) {
+  assert(BaseDAKind <= ACC_BASE_DA_unknown);
   switch (DKind) {
   case ACCD_parallel:
-    switch (BaseDSAKind) {
-#define OPENACC_PARALLEL_BASE_DSA(Name) \
-    case ACC_BASE_DSA_##Name:           \
+    switch (BaseDAKind) {
+#define OPENACC_PARALLEL_BASE_DA(Name) \
+    case ACC_BASE_DA_##Name:           \
       return true;
 #include "clang/Basic/OpenACCKinds.def"
     default:
@@ -113,9 +113,9 @@ bool clang::isAllowedBaseDSAForDirective(OpenACCDirectiveKind DKind,
     }
     break;
   case ACCD_loop:
-    switch (BaseDSAKind) {
-#define OPENACC_LOOP_BASE_DSA(Name) \
-  case ACC_BASE_DSA_##Name:         \
+    switch (BaseDAKind) {
+#define OPENACC_LOOP_BASE_DA(Name) \
+  case ACC_BASE_DA_##Name:         \
     return true;
 #include "clang/Basic/OpenACCKinds.def"
     default:
@@ -123,9 +123,9 @@ bool clang::isAllowedBaseDSAForDirective(OpenACCDirectiveKind DKind,
     }
     break;
   case ACCD_parallel_loop:
-    switch (BaseDSAKind) {
-#define OPENACC_PARALLEL_LOOP_BASE_DSA(Name) \
-  case ACC_BASE_DSA_##Name:                  \
+    switch (BaseDAKind) {
+#define OPENACC_PARALLEL_LOOP_BASE_DA(Name) \
+  case ACC_BASE_DA_##Name:                  \
     return true;
 #include "clang/Basic/OpenACCKinds.def"
     default:

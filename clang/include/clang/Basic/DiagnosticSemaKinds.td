@@ -9673,9 +9673,9 @@ def err_acc_subarray_length_negative : Error<
 def err_acc_subarray_length_undefined : Error<
   "subarray length is unspecified and cannot be inferred because subscripted "
   "value is %select{not an array|an array of unknown bound}0">;
-def err_acc_conflicting_dsa : Error<
+def err_acc_conflicting_da : Error<
   "%1 variable %select{cannot be|defined again as}0 %2 variable">;
-def note_acc_explicit_dsa : Note<
+def note_acc_explicit_da : Note<
   "previously defined as %0 variable here">;
 def err_acc_const_private : Error<
   "const variable cannot be private because initialization is impossible">;

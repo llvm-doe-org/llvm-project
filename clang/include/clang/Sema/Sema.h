@@ -10105,14 +10105,13 @@ private:
 
 public:
   /// Called on start of new data attribute block.
-  void StartOpenACCDSABlock(OpenACCDirectiveKind RealDKind,
-                            SourceLocation Loc);
+  void StartOpenACCDABlock(OpenACCDirectiveKind RealDKind, SourceLocation Loc);
   /// Start analysis of clauses.
   void StartOpenACCClause(OpenACCClauseKind K);
   /// End analysis of clauses.
   void EndOpenACCClause();
   /// Called on end of data attribute block.
-  void EndOpenACCDSABlock();
+  void EndOpenACCDABlock();
 
   /// Check if the current region is an OpenACC loop region and if it
   /// is, mark loop control variable, used in \p Init for loop initialization,
