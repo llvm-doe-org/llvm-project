@@ -156,7 +156,7 @@ cleanup-all-builds:
            -DPYTHON_EXECUTABLE=$PYTHON_EXECUTABLE
            -DCLANG_ACC_TEST_EXE_X86_64=False
            -DCLANG_ACC_TEST_EXE_NVPTX64=False
-           -DLLVM_LIT_ARGS='-s -vv --show-unsupported --show-xfail'
+           -DLLVM_LIT_ARGS='-s -vv'
            ../llvm
          || echo $? > ../cmake-status.txt)
         |& tee ../cmake-log.txt &&
@@ -240,18 +240,23 @@ build (python3):
   tags: [kold]
   dependencies: []
   script:
-    # When there are fails, the
     - echo $CHECK_TARGETS
     - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
       ninja-build $CHECK_TARGETS
       |& tee ../test-build-log.txt
       | grep '^\[[0-9]\+/[0-9]\+]\|\<error:'
-    - time FILECHECK_OPTS='-dump-input=fail -vv -color'
-      ninja-build $CHECK_TARGETS
-      |& tee ../test-run-log.txt
+    - for check_target in $CHECK_TARGETS; do
+        echo "check_target=$check_target" &&
+        time FILECHECK_OPTS='-dump-input=fail -vv -color'
+             LIT_OPTS="--xunit-xml-output `pwd`/../$check_target.xml"
+             ninja-build $check_target
+        |& tee ../$check_target-log.txt;
+      done
   artifacts:
     when: always
-    paths: [test-build-log.txt, test-run-log.txt]
+    paths: [test-build-log.txt, check-*-log.txt, check-*.xml]
+    reports:
+      junit: check-*.xml
 
 .test-clacc:
   extends: [.clacc, .test]
