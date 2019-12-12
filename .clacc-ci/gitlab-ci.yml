@@ -21,18 +21,17 @@
 #
 #   https://gitlab.com/gitlab-org/gitlab/issues/29265#note_225288132
 #
-# However, because the NFS-mounted build directory name is different for
-# each pipeline, ccache misses if we compile within it.  Thus, at the start
-# of each job, we rename the build directory to a common name, "build", and
-# move it to within the git clone, where it's safe during the job.  At the
-# end of the job, we move it back outside the git clone to where it's safe
-# between jobs.  We do not schedule concurrent jobs accessing the build
-# directory.
+# However, because the NFS-mounted build directory name is different for each
+# pipeline, ccache misses if we compile within it.  Thus, we set
+# CCACHE_NOHASHDIR and CCACHE_BASEDIR (neither alone proves sufficient), as
+# suggested by the ccache manual.  CCACHE_NOHASHDIR can lead to incorrect
+# directory names in debugging symbols, but currently we don't expect those to
+# matter to our CI builds.
 variables:
-  BUILD_DIR: ../$CI_PROJECT_PATH_SLUG-$CI_PIPELINE_ID-$BUILD_ID-build
-  BUILD_DIRS_ALL: ../$CI_PROJECT_PATH_SLUG-*-*-build
-  GIT_CLEAN_FLAGS: -ffdx -e build -e builds-old
+  BUILD_DIR_PROJ: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds
+  BUILD_DIR: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-$BUILD_ID
   SRUN_ALLOCATE_FAIL: 'srun: error: Unable to allocate'
+  LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
 
 stages:
   - setup
@@ -51,13 +50,13 @@ stages:
   except: [/-openacc$/, /-openacc-/]
 
 .python2:
-  tags: [shell, kold00]
+  tags: [shell, kold]
   variables:
     BUILD_ID: python2
     PYTHON_EXECUTABLE: /usr/bin/python2
 
 .python3:
-  tags: [shell, kold01]
+  tags: [shell, kold]
   variables:
     BUILD_ID: python3
     PYTHON_EXECUTABLE: /usr/bin/python3
@@ -66,26 +65,18 @@ default:
   before_script:
     - module load gnu/9.1.0
     - pwd
-    - rm -rf build builds-old || true
-    - if test -d build; then
-        echo warning":" failed to remove old build directory;
-        mkdir -p builds-old && mv build builds-old/$CI_JOB_ID;
-      fi
     - echo $BUILD_DIR
-    - mv $BUILD_DIR build
-    - cd build
+    - cd $BUILD_DIR/build
   after_script:
-    - mv build $BUILD_DIR
-    - ccache -s
-    - du -hs $BUILD_DIR
+    - echo "$LLVM_CCACHE_PARAMS"
+    - env $LLVM_CCACHE_PARAMS ccache -sp
+    - du -hs $BUILD_DIR/build
 
 #-------------------------------------------------
 # utilities
 #-------------------------------------------------
 
 .utility:
-  variables:
-    GIT_STRATEGY: none
   dependencies: []
   before_script: []
   after_script: []
@@ -94,16 +85,32 @@ default:
   extends: .utility
   stage: setup
   script:
+    - pwd
+    - echo $BUILD_DIR_PROJ
+    - mkdir -p $BUILD_DIR_PROJ
     - echo $BUILD_DIR
     - mkdir $BUILD_DIR
+    - mkdir $BUILD_DIR/build
+    # Clone the runner's git clone into the NFS-mounted build directory.  We
+    # cannot use the runner's git clone directly because its location relative
+    # to the build directory varies across runners, and that would cause ccache
+    # to miss whenever the runner changes no matter how we set CCACHE_BASEDIR.
+    # We've also tried creating a symlink to the runner's git clone at the
+    # start of every job, but that causes ccache to miss in the same manner, so
+    # apparently the symlink is expanded somewhere.
+    - time git clone `pwd` $BUILD_DIR/source
 
 .cleanup:
   extends: .utility
   stage: cleanup
   when: always
+  variables:
+    GIT_STRATEGY: none
   script:
+    - pwd
     - echo $BUILD_DIR
     - rm -rf $BUILD_DIR
+    - rmdir $BUILD_DIR_PROJ || true
 
 setup (python2):
   extends: [.python2, .setup]
@@ -123,19 +130,16 @@ cleanup (python3):
   extends: [.python3, .cleanup]
   needs: [test-all (python3)]
 
-.cleanup-all-builds:
+z-cleanup-all-builds:
   extends: .utility
   stage: setup
   when: manual
+  tags: [shell, kold]
+  variables:
+    GIT_STRATEGY: none
   script:
-    - echo $BUILD_DIRS_ALL
-    - rm -rf $BUILD_DIRS_ALL
-
-z-cleanup-all-builds (python2):
-  extends: [.python2, .cleanup-all-builds]
-
-z-cleanup-all-builds (python3):
-  extends: [.python3, .cleanup-all-builds]
+    - echo $BUILD_DIR_PROJ
+    - rm -rf $BUILD_DIR_PROJ
 
 #-------------------------------------------------
 # config
@@ -143,6 +147,8 @@ z-cleanup-all-builds (python3):
 
 .config:
   stage: config
+  variables:
+    GIT_STRATEGY: none
   script:
     #   'srun -I -n1'
     - for launch in
@@ -162,16 +168,17 @@ z-cleanup-all-builds (python3):
            -DPYTHON_EXECUTABLE=$PYTHON_EXECUTABLE
            -DCLANG_ACC_TEST_EXE_X86_64=False
            -DCLANG_ACC_TEST_EXE_NVPTX64=False
+           -DLLVM_CCACHE_PARAMS="$LLVM_CCACHE_PARAMS"
            -DLLVM_LIT_ARGS='-s -vv'
-           ../llvm
+           ../source/llvm
          || echo $? > ../cmake-status.txt)
-        |& tee ../cmake-log.txt &&
-        if ! grep -q '$SRUN_ALLOCATE_FAIL' ../cmake-log.txt; then
+        |& tee $CI_PROJECT_DIR/cmake-log.txt &&
+        if ! grep -q '$SRUN_ALLOCATE_FAIL' $CI_PROJECT_DIR/cmake-log.txt; then
           break;
         fi
       done &&
       (exit `cat ../cmake-status.txt`)
-    - cp CMakeCache.txt ..
+    - cp CMakeCache.txt $CI_PROJECT_DIR
   artifacts:
     when: always
     paths: [cmake-log.txt, CMakeCache.txt]
@@ -191,6 +198,8 @@ config (python3):
 .build:
   stage: build
   dependencies: []
+  variables:
+    GIT_STRATEGY: none
   script:
     #   'srun -I -n1 -c80'
     #   'srun -I -n1 -c64'
@@ -202,8 +211,8 @@ config (python3):
         echo 0 > ../build-status.txt &&
         (time $launch ninja-build
          || echo $? > ../build-status.txt)
-        |& tee ../build-log.txt &&
-        if ! grep -q '$SRUN_ALLOCATE_FAIL' ../build-log.txt; then
+        |& tee $CI_PROJECT_DIR/build-log.txt &&
+        if ! grep -q '$SRUN_ALLOCATE_FAIL' $CI_PROJECT_DIR/build-log.txt; then
           break;
         fi
       done &&
@@ -241,18 +250,20 @@ build (python3):
 
 .test:
   dependencies: []
+  variables:
+    GIT_STRATEGY: none
   script:
     - echo $CHECK_TARGETS
     - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
       ninja-build $CHECK_TARGETS
-      |& tee ../test-build-log.txt
+      |& tee $CI_PROJECT_DIR/test-build-log.txt
       | grep '^\[[0-9]\+/[0-9]\+]\|\<error:'
     - for check_target in $CHECK_TARGETS; do
         echo "check_target=$check_target" &&
         time FILECHECK_OPTS='-dump-input=fail -vv -color'
-             LIT_OPTS="--xunit-xml-output `pwd`/../$check_target.xml"
+             LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/$check_target.xml"
              ninja-build $check_target
-        |& tee ../$check_target-log.txt;
+        |& tee $CI_PROJECT_DIR/$check_target-log.txt;
       done
   artifacts:
     when: always
