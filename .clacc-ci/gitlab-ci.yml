@@ -51,11 +51,13 @@ stages:
   except: [/-openacc$/, /-openacc-/]
 
 .python2:
+  tags: [shell, kold00]
   variables:
     BUILD_ID: python2
     PYTHON_EXECUTABLE: /usr/bin/python2
 
 .python3:
+  tags: [shell, kold01]
   variables:
     BUILD_ID: python3
     PYTHON_EXECUTABLE: /usr/bin/python3
@@ -82,7 +84,6 @@ default:
 #-------------------------------------------------
 
 .utility:
-  tags: [kold]
   variables:
     GIT_STRATEGY: none
   dependencies: []
@@ -122,7 +123,7 @@ cleanup (python3):
   extends: [.python3, .cleanup]
   needs: [test-all (python3)]
 
-cleanup-all-builds:
+.cleanup-all-builds:
   extends: .utility
   stage: setup
   when: manual
@@ -130,13 +131,18 @@ cleanup-all-builds:
     - echo $BUILD_DIRS_ALL
     - rm -rf $BUILD_DIRS_ALL
 
+z-cleanup-all-builds (python2):
+  extends: [.python2, .cleanup-all-builds]
+
+z-cleanup-all-builds (python3):
+  extends: [.python3, .cleanup-all-builds]
+
 #-------------------------------------------------
 # config
 #-------------------------------------------------
 
 .config:
   stage: config
-  tags: [kold]
   script:
     #   'srun -I -n1'
     - for launch in
@@ -177,8 +183,6 @@ config (python2):
 config (python3):
   extends: [.python3, .config]
   needs: [setup (python3)]
-  when: delayed
-  start_in: 40 minutes
 
 #-------------------------------------------------
 # build
@@ -186,7 +190,6 @@ config (python3):
 
 .build:
   stage: build
-  tags: [kold]
   dependencies: []
   script:
     #   'srun -I -n1 -c80'
@@ -237,7 +240,6 @@ build (python3):
 #-------------------------------------------------
 
 .test:
-  tags: [kold]
   dependencies: []
   script:
     - echo $CHECK_TARGETS
