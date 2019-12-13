@@ -110,6 +110,9 @@ default:
     - pwd
     - echo $BUILD_DIR
     - rm -rf $BUILD_DIR
+    # Try to remove anything older than 12 hours that was left by previous
+    # (likely canceled) pipelines for this project.
+    - find $BUILD_DIR_PROJ -mmin +720 -delete || true
     - rmdir $BUILD_DIR_PROJ || true
 
 setup (python2):
