@@ -156,7 +156,12 @@ bool isImplementationDetail(const Decl *D) {
                             D->getASTContext().getSourceManager());
 }
 
-SourceLocation findName(const clang::Decl *D) { return D->getLocation(); }
+SourceLocation nameLocation(const clang::Decl &D, const SourceManager &SM) {
+  auto L = D.getLocation();
+  if (isSpelledInSource(L, SM))
+    return SM.getSpellingLoc(L);
+  return SM.getExpansionLoc(L);
+}
 
 std::string printQualifiedName(const NamedDecl &ND) {
   std::string QName;
@@ -372,7 +377,7 @@ public:
     // Loc of "auto" in operator auto()
     if (CurLoc.isInvalid() && dyn_cast<CXXConversionDecl>(D))
       CurLoc = D->getTypeSourceInfo()->getTypeLoc().getBeginLoc();
-    // Loc of "auto" in function with traling return type (c++11).
+    // Loc of "auto" in function with trailing return type (c++11).
     if (CurLoc.isInvalid())
       CurLoc = D->getSourceRange().getBegin();
     if (CurLoc != SearchedLocation)

@@ -52,6 +52,40 @@ nodeToString(const ast_type_traits::DynTypedNode &N) {
   return S;
 }
 
+// Given a dependent type and a member name, heuristically resolve the
+// name to one or more declarations.
+// The current heuristic is simply to look up the name in the primary
+// template. This is a heuristic because the template could potentially
+// have specializations that declare different members.
+// Multiple declarations could be returned if the name is overloaded
+// (e.g. an overloaded method in the primary template).
+// This heuristic will give the desired answer in many cases, e.g.
+// for a call to vector<T>::size().
+std::vector<const NamedDecl *>
+getMembersReferencedViaDependentName(const Type *T, const DeclarationName &Name,
+                                     bool IsNonstaticMember) {
+  if (!T)
+    return {};
+  if (auto *ICNT = T->getAs<InjectedClassNameType>()) {
+    T = ICNT->getInjectedSpecializationType().getTypePtrOrNull();
+  }
+  auto *TST = T->getAs<TemplateSpecializationType>();
+  if (!TST)
+    return {};
+  const ClassTemplateDecl *TD = dyn_cast_or_null<ClassTemplateDecl>(
+      TST->getTemplateName().getAsTemplateDecl());
+  if (!TD)
+    return {};
+  CXXRecordDecl *RD = TD->getTemplatedDecl();
+  if (!RD->hasDefinition())
+    return {};
+  RD = RD->getDefinition();
+  return RD->lookupDependentName(Name, [=](const NamedDecl *D) {
+    return IsNonstaticMember ? D->isCXXInstanceMember()
+                             : !D->isCXXInstanceMember();
+  });
+}
+
 // TargetFinder locates the entities that an AST node refers to.
 //
 // Typically this is (possibly) one declaration and (possibly) one type, but
@@ -79,9 +113,9 @@ nodeToString(const ast_type_traits::DynTypedNode &N) {
 // formally size() is unresolved, but the primary template is a good guess.
 // This affects:
 //  - DependentTemplateSpecializationType,
-//  - DependentScopeMemberExpr
-//  - DependentScopeDeclRefExpr
 //  - DependentNameType
+//  - UnresolvedUsingValueDecl
+//  - UnresolvedUsingTypenameDecl
 struct TargetFinder {
   using RelSet = DeclRelationSet;
   using Rel = DeclRelation;
@@ -197,6 +231,9 @@ public:
         for (auto *D : OE->decls())
           Outer.add(D, Flags);
       }
+      void VisitSizeOfPackExpr(const SizeOfPackExpr *SE) {
+        Outer.add(SE->getPack(), Flags);
+      }
       void VisitCXXConstructExpr(const CXXConstructExpr *CCE) {
         Outer.add(CCE->getConstructor(), Flags);
       }
@@ -208,6 +245,32 @@ public:
             // We don't know which designator was intended, we assume the outer.
             break;
           }
+      }
+      void
+      VisitCXXDependentScopeMemberExpr(const CXXDependentScopeMemberExpr *E) {
+        const Type *BaseType = E->getBaseType().getTypePtrOrNull();
+        if (E->isArrow()) {
+          // FIXME: Handle smart pointer types by looking up operator->
+          // in the primary template.
+          if (!BaseType || !BaseType->isPointerType()) {
+            return;
+          }
+          BaseType = BaseType->getAs<PointerType>()
+                         ->getPointeeType()
+                         .getTypePtrOrNull();
+        }
+        for (const NamedDecl *D :
+             getMembersReferencedViaDependentName(BaseType, E->getMember(),
+                                                  /*IsNonstaticMember=*/true)) {
+          Outer.add(D, Flags);
+        }
+      }
+      void VisitDependentScopeDeclRefExpr(const DependentScopeDeclRefExpr *E) {
+        for (const NamedDecl *D : getMembersReferencedViaDependentName(
+                 E->getQualifier()->getAsType(), E->getDeclName(),
+                 /*IsNonstaticMember=*/false)) {
+          Outer.add(D, Flags);
+        }
       }
       void VisitObjCIvarRefExpr(const ObjCIvarRefExpr *OIRE) {
         Outer.add(OIRE->getDecl(), Flags);
@@ -494,6 +557,13 @@ llvm::SmallVector<ReferenceLoc, 2> refInExpr(const Expr *E) {
                                   llvm::SmallVector<const NamedDecl *, 1>(
                                       E->decls().begin(), E->decls().end())});
     }
+
+    void VisitSizeOfPackExpr(const SizeOfPackExpr *E) {
+      Refs.push_back(ReferenceLoc{NestedNameSpecifierLoc(),
+                                  E->getPackLoc(),
+                                  /*IsDecl=*/false,
+                                  {E->getPack()}});
+    }
   };
 
   Visitor V;
@@ -579,10 +649,10 @@ llvm::SmallVector<ReferenceLoc, 2> refInTypeLoc(TypeLoc L) {
   return {*V.Ref};
 }
 
-class ExplicitReferenceColletor
-    : public RecursiveASTVisitor<ExplicitReferenceColletor> {
+class ExplicitReferenceCollector
+    : public RecursiveASTVisitor<ExplicitReferenceCollector> {
 public:
-  ExplicitReferenceColletor(llvm::function_ref<void(ReferenceLoc)> Out)
+  ExplicitReferenceCollector(llvm::function_ref<void(ReferenceLoc)> Out)
       : Out(Out) {
     assert(Out);
   }
@@ -728,16 +798,16 @@ private:
 void findExplicitReferences(const Stmt *S,
                             llvm::function_ref<void(ReferenceLoc)> Out) {
   assert(S);
-  ExplicitReferenceColletor(Out).TraverseStmt(const_cast<Stmt *>(S));
+  ExplicitReferenceCollector(Out).TraverseStmt(const_cast<Stmt *>(S));
 }
 void findExplicitReferences(const Decl *D,
                             llvm::function_ref<void(ReferenceLoc)> Out) {
   assert(D);
-  ExplicitReferenceColletor(Out).TraverseDecl(const_cast<Decl *>(D));
+  ExplicitReferenceCollector(Out).TraverseDecl(const_cast<Decl *>(D));
 }
 void findExplicitReferences(const ASTContext &AST,
                             llvm::function_ref<void(ReferenceLoc)> Out) {
-  ExplicitReferenceColletor(Out).TraverseAST(const_cast<ASTContext &>(AST));
+  ExplicitReferenceCollector(Out).TraverseAST(const_cast<ASTContext &>(AST));
 }
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, DeclRelation R) {

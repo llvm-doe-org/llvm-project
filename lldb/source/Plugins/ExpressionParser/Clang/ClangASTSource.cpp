@@ -120,14 +120,17 @@ void ClangASTSource::InstallASTContext(ClangASTContext &clang_ast_context,
       // Update the scratch AST context's merger to reflect any new sources we
       // might have come across since the last time an expression was parsed.
 
-      auto scratch_ast_context = static_cast<ClangASTContextForExpressions*>(
-          m_target->GetScratchClangASTContext());
+      if (auto *clang_ast_context = ClangASTContext::GetScratch(*m_target)) {
 
-      scratch_ast_context->GetMergerUnchecked().AddSources(sources);
+        auto scratch_ast_context =
+            static_cast<ClangASTContextForExpressions *>(clang_ast_context);
 
-      sources.push_back({*scratch_ast_context->getASTContext(),
-                         *scratch_ast_context->getFileManager(),
-                         scratch_ast_context->GetOriginMap()});
+        scratch_ast_context->GetMergerUnchecked().AddSources(sources);
+
+        sources.push_back({*scratch_ast_context->getASTContext(),
+                           *scratch_ast_context->getFileManager(),
+                           scratch_ast_context->GetOriginMap()});
+      }
     }
 
     m_merger_up =
@@ -145,7 +148,7 @@ ClangASTSource::~ClangASTSource() {
   // demand by passing false to
   // Target::GetScratchClangASTContext(create_on_demand).
   ClangASTContext *scratch_clang_ast_context =
-      m_target->GetScratchClangASTContext(false);
+      ClangASTContext::GetScratch(*m_target, false);
 
   if (!scratch_clang_ast_context)
     return;
@@ -435,13 +438,11 @@ void ClangASTSource::CompleteType(clang::ObjCInterfaceDecl *interface_decl) {
     return;
   }
 
-  Decl *original_decl = nullptr;
-  ASTContext *original_ctx = nullptr;
+  ClangASTImporter::DeclOrigin original = m_ast_importer_sp->GetDeclOrigin(interface_decl);
 
-  if (m_ast_importer_sp->ResolveDeclOrigin(interface_decl, &original_decl,
-                                           &original_ctx)) {
+  if (original.Valid()) {
     if (ObjCInterfaceDecl *original_iface_decl =
-            dyn_cast<ObjCInterfaceDecl>(original_decl)) {
+            dyn_cast<ObjCInterfaceDecl>(original.decl)) {
       ObjCInterfaceDecl *complete_iface_decl =
           GetCompleteObjCInterface(original_iface_decl);
 
@@ -524,8 +525,6 @@ void ClangASTSource::FindExternalLexicalDecls(
   } else if (!m_ast_importer_sp)
     return;
 
-  ClangASTMetrics::RegisterLexicalQuery();
-
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
 
   const Decl *context_decl = dyn_cast<Decl>(decl_context);
@@ -564,40 +563,38 @@ void ClangASTSource::FindExternalLexicalDecls(
           current_id, static_cast<const void *>(m_ast_context));
   }
 
-  Decl *original_decl = nullptr;
-  ASTContext *original_ctx = nullptr;
+  ClangASTImporter::DeclOrigin original = m_ast_importer_sp->GetDeclOrigin(context_decl);
 
-  if (!m_ast_importer_sp->ResolveDeclOrigin(context_decl, &original_decl,
-                                            &original_ctx))
+  if (!original.Valid())
     return;
 
   LLDB_LOG(
       log, "  FELD[{0}] Original decl (ASTContext*){1:x} (Decl*){2:x}:\n{3}",
-      current_id, static_cast<void *>(original_ctx),
-      static_cast<void *>(original_decl), ClangUtil::DumpDecl(original_decl));
+      current_id, static_cast<void *>(original.ctx),
+      static_cast<void *>(original.decl), ClangUtil::DumpDecl(original.decl));
 
   if (ObjCInterfaceDecl *original_iface_decl =
-          dyn_cast<ObjCInterfaceDecl>(original_decl)) {
+          dyn_cast<ObjCInterfaceDecl>(original.decl)) {
     ObjCInterfaceDecl *complete_iface_decl =
         GetCompleteObjCInterface(original_iface_decl);
 
     if (complete_iface_decl && (complete_iface_decl != original_iface_decl)) {
-      original_decl = complete_iface_decl;
-      original_ctx = &complete_iface_decl->getASTContext();
+      original.decl = complete_iface_decl;
+      original.ctx = &complete_iface_decl->getASTContext();
 
       m_ast_importer_sp->SetDeclOrigin(context_decl, complete_iface_decl);
     }
   }
 
-  if (TagDecl *original_tag_decl = dyn_cast<TagDecl>(original_decl)) {
-    ExternalASTSource *external_source = original_ctx->getExternalSource();
+  if (TagDecl *original_tag_decl = dyn_cast<TagDecl>(original.decl)) {
+    ExternalASTSource *external_source = original.ctx->getExternalSource();
 
     if (external_source)
       external_source->CompleteType(original_tag_decl);
   }
 
   const DeclContext *original_decl_context =
-      dyn_cast<DeclContext>(original_decl);
+      dyn_cast<DeclContext>(original.decl);
 
   if (!original_decl_context)
     return;
@@ -670,8 +667,6 @@ void ClangASTSource::FindExternalLexicalDecls(
 
 void ClangASTSource::FindExternalVisibleDecls(NameSearchContext &context) {
   assert(m_ast_context);
-
-  ClangASTMetrics::RegisterVisibleQuery();
 
   const ConstString name(context.m_decl_name.getAsString().c_str());
 
@@ -1037,11 +1032,10 @@ public:
 
 template <class D>
 DeclFromUser<D> DeclFromParser<D>::GetOrigin(ClangASTSource &source) {
-  DeclFromUser<> origin_decl;
-  source.ResolveDeclOrigin(this->decl, &origin_decl.decl, nullptr);
-  if (origin_decl.IsInvalid())
+  ClangASTImporter::DeclOrigin origin = source.GetDeclOrigin(this->decl);
+  if (!origin.Valid())
     return DeclFromUser<D>();
-  return DeclFromUser<D>(dyn_cast<D>(origin_decl.decl));
+  return DeclFromUser<D>(dyn_cast<D>(origin.decl));
 }
 
 template <class D>
@@ -1165,17 +1159,13 @@ void ClangASTSource::FindObjCMethodDecls(NameSearchContext &context) {
     return;
 
   do {
-    Decl *original_decl = nullptr;
-    ASTContext *original_ctx = nullptr;
+    ClangASTImporter::DeclOrigin original = m_ast_importer_sp->GetDeclOrigin(interface_decl);
 
-    m_ast_importer_sp->ResolveDeclOrigin(interface_decl, &original_decl,
-                                         &original_ctx);
-
-    if (!original_decl)
+    if (!original.Valid())
       break;
 
     ObjCInterfaceDecl *original_interface_decl =
-        dyn_cast<ObjCInterfaceDecl>(original_decl);
+        dyn_cast<ObjCInterfaceDecl>(original.decl);
 
     if (FindObjCMethodDeclsWithOrigin(current_id, context,
                                       original_interface_decl, "at origin"))
@@ -1714,8 +1704,6 @@ bool ClangASTSource::layoutRecordType(const RecordDecl *record, uint64_t &size,
                                       FieldOffsetMap &field_offsets,
                                       BaseOffsetMap &base_offsets,
                                       BaseOffsetMap &virtual_base_offsets) {
-  ClangASTMetrics::RegisterRecordLayout();
-
   static unsigned int invocation_id = 0;
   unsigned int current_id = invocation_id++;
 
@@ -2007,17 +1995,14 @@ clang::Decl *ClangASTSource::CopyDecl(Decl *src_decl) {
   }
 }
 
-bool ClangASTSource::ResolveDeclOrigin(const clang::Decl *decl,
-                                       clang::Decl **original_decl,
-                                       clang::ASTContext **original_ctx) {
+ClangASTImporter::DeclOrigin ClangASTSource::GetDeclOrigin(const clang::Decl *decl) {
   if (m_ast_importer_sp) {
-    return m_ast_importer_sp->ResolveDeclOrigin(decl, original_decl,
-                                                original_ctx);
+    return m_ast_importer_sp->GetDeclOrigin(decl);
   } else if (m_merger_up) {
-    return false; // Implement this correctly in ExternalASTMerger
+    return ClangASTImporter::DeclOrigin(); // Implement this correctly in ExternalASTMerger
   } else {
     // this can happen early enough that no ExternalASTSource is installed.
-    return false;
+    return ClangASTImporter::DeclOrigin();
   }
 }
 
@@ -2032,16 +2017,13 @@ CompilerType ClangASTSource::GuardedCopyType(const CompilerType &src_type) {
   if (src_ast == nullptr)
     return CompilerType();
 
-  ClangASTMetrics::RegisterLLDBImport();
-
   SetImportInProgress(true);
 
   QualType copied_qual_type;
 
   if (m_ast_importer_sp) {
-    copied_qual_type =
-        m_ast_importer_sp->CopyType(m_ast_context, src_ast->getASTContext(),
-                                    ClangUtil::GetQualType(src_type));
+    copied_qual_type = ClangUtil::GetQualType(
+        m_ast_importer_sp->CopyType(*m_clang_ast_context, src_type));
   } else if (m_merger_up) {
     copied_qual_type =
         CopyTypeWithMerger(*src_ast->getASTContext(), *m_merger_up,

@@ -134,7 +134,8 @@ private:
                                      ArrayRef<int> Mask) const;
 
   bool LegalizeSetCCCondCode(EVT VT, SDValue &LHS, SDValue &RHS, SDValue &CC,
-                             bool &NeedInvert, const SDLoc &dl);
+                             bool &NeedInvert, const SDLoc &dl, SDValue &Chain,
+                             bool IsSignaling = false);
 
   SDValue ExpandLibCall(RTLIB::Libcall LC, SDNode *Node, bool isSigned);
 
@@ -469,8 +470,7 @@ SDValue SelectionDAGLegalize::OptimizeFloatStore(StoreSDNode* ST) {
 
         Lo = DAG.getStore(Chain, dl, Lo, Ptr, ST->getPointerInfo(), Alignment,
                           MMOFlags, AAInfo);
-        Ptr = DAG.getNode(ISD::ADD, dl, Ptr.getValueType(), Ptr,
-                          DAG.getConstant(4, dl, Ptr.getValueType()));
+        Ptr = DAG.getMemBasePlusOffset(Ptr, 4, dl);
         Hi = DAG.getStore(Chain, dl, Hi, Ptr,
                           ST->getPointerInfo().getWithOffset(4),
                           MinAlign(Alignment, 4U), MMOFlags, AAInfo);
@@ -580,9 +580,7 @@ void SelectionDAGLegalize::LegalizeStoreOps(SDNode *Node) {
 
       // Store the remaining ExtraWidth bits.
       IncrementSize = RoundWidth / 8;
-      Ptr = DAG.getNode(ISD::ADD, dl, Ptr.getValueType(), Ptr,
-                        DAG.getConstant(IncrementSize, dl,
-                                        Ptr.getValueType()));
+      Ptr = DAG.getMemBasePlusOffset(Ptr, IncrementSize, dl);
       Hi = DAG.getNode(
           ISD::SRL, dl, Value.getValueType(), Value,
           DAG.getConstant(RoundWidth, dl,
@@ -796,9 +794,7 @@ void SelectionDAGLegalize::LegalizeLoadOps(SDNode *Node) {
 
       // Load the remaining ExtraWidth bits.
       IncrementSize = RoundWidth / 8;
-      Ptr = DAG.getNode(ISD::ADD, dl, Ptr.getValueType(), Ptr,
-                         DAG.getConstant(IncrementSize, dl,
-                                         Ptr.getValueType()));
+      Ptr = DAG.getMemBasePlusOffset(Ptr, IncrementSize, dl);
       Hi = DAG.getExtLoad(ExtType, dl, Node->getValueType(0), Chain, Ptr,
                           LD->getPointerInfo().getWithOffset(IncrementSize),
                           ExtraVT, MinAlign(Alignment, IncrementSize), MMOFlags,
@@ -827,9 +823,7 @@ void SelectionDAGLegalize::LegalizeLoadOps(SDNode *Node) {
 
       // Load the remaining ExtraWidth bits.
       IncrementSize = RoundWidth / 8;
-      Ptr = DAG.getNode(ISD::ADD, dl, Ptr.getValueType(), Ptr,
-                         DAG.getConstant(IncrementSize, dl,
-                                         Ptr.getValueType()));
+      Ptr = DAG.getMemBasePlusOffset(Ptr, IncrementSize, dl);
       Lo = DAG.getExtLoad(ISD::ZEXTLOAD, dl, Node->getValueType(0), Chain, Ptr,
                           LD->getPointerInfo().getWithOffset(IncrementSize),
                           ExtraVT, MinAlign(Alignment, IncrementSize), MMOFlags,
@@ -1036,11 +1030,17 @@ void SelectionDAGLegalize::LegalizeOp(SDNode *Node) {
                                     Node->getOperand(2).getValueType());
     break;
   case ISD::SELECT_CC:
+  case ISD::STRICT_FSETCC:
+  case ISD::STRICT_FSETCCS:
   case ISD::SETCC:
   case ISD::BR_CC: {
     unsigned CCOperand = Node->getOpcode() == ISD::SELECT_CC ? 4 :
+                         Node->getOpcode() == ISD::STRICT_FSETCC ? 3 :
+                         Node->getOpcode() == ISD::STRICT_FSETCCS ? 3 :
                          Node->getOpcode() == ISD::SETCC ? 2 : 1;
-    unsigned CompareOperand = Node->getOpcode() == ISD::BR_CC ? 2 : 0;
+    unsigned CompareOperand = Node->getOpcode() == ISD::BR_CC ? 2 :
+                              Node->getOpcode() == ISD::STRICT_FSETCC ? 1 :
+                              Node->getOpcode() == ISD::STRICT_FSETCCS ? 1 : 0;
     MVT OpVT = Node->getOperand(CompareOperand).getSimpleValueType();
     ISD::CondCode CCCode =
         cast<CondCodeSDNode>(Node->getOperand(CCOperand))->get();
@@ -1411,7 +1411,7 @@ SDValue SelectionDAGLegalize::ExpandVectorBuildThroughStack(SDNode* Node) {
     unsigned Offset = TypeByteSize*i;
 
     SDValue Idx = DAG.getConstant(Offset, dl, FIPtr.getValueType());
-    Idx = DAG.getNode(ISD::ADD, dl, FIPtr.getValueType(), FIPtr, Idx);
+    Idx = DAG.getMemBasePlusOffset(FIPtr, Idx, dl);
 
     // If the destination vector element type is narrower than the source
     // element type, only store the bits necessary.
@@ -1474,8 +1474,7 @@ void SelectionDAGLegalize::getSignAsIntValue(FloatSignAsInt &State,
   } else {
     // Advance the pointer so that the loaded byte will contain the sign bit.
     unsigned ByteOffset = (FloatVT.getSizeInBits() / 8) - 1;
-    IntPtr = DAG.getNode(ISD::ADD, DL, StackPtr.getValueType(), StackPtr,
-                      DAG.getConstant(ByteOffset, DL, StackPtr.getValueType()));
+    IntPtr = DAG.getMemBasePlusOffset(StackPtr, ByteOffset, DL);
     State.IntPointerInfo = MachinePointerInfo::getFixedStack(MF, FI,
                                                              ByteOffset);
   }
@@ -1632,10 +1631,9 @@ void SelectionDAGLegalize::ExpandDYNAMIC_STACKALLOC(SDNode* Node,
 /// of a true/false result.
 ///
 /// \returns true if the SetCC has been legalized, false if it hasn't.
-bool SelectionDAGLegalize::LegalizeSetCCCondCode(EVT VT, SDValue &LHS,
-                                                 SDValue &RHS, SDValue &CC,
-                                                 bool &NeedInvert,
-                                                 const SDLoc &dl) {
+bool SelectionDAGLegalize::LegalizeSetCCCondCode(
+    EVT VT, SDValue &LHS, SDValue &RHS, SDValue &CC, bool &NeedInvert,
+    const SDLoc &dl, SDValue &Chain, bool IsSignaling) {
   MVT OpVT = LHS.getSimpleValueType();
   ISD::CondCode CCCode = cast<CondCodeSDNode>(CC)->get();
   NeedInvert = false;
@@ -1653,7 +1651,7 @@ bool SelectionDAGLegalize::LegalizeSetCCCondCode(EVT VT, SDValue &LHS,
     }
     // Swapping operands didn't work. Try inverting the condition.
     bool NeedSwap = false;
-    InvCC = getSetCCInverse(CCCode, OpVT.isInteger());
+    InvCC = getSetCCInverse(CCCode, OpVT);
     if (!TLI.isCondCodeLegalOrCustom(InvCC, OpVT)) {
       // If inverting the condition is not enough, try swapping operands
       // on top of it.
@@ -1718,13 +1716,16 @@ bool SelectionDAGLegalize::LegalizeSetCCCondCode(EVT VT, SDValue &LHS,
     if (CCCode != ISD::SETO && CCCode != ISD::SETUO) {
       // If we aren't the ordered or unorder operation,
       // then the pattern is (LHS CC1 RHS) Opc (LHS CC2 RHS).
-      SetCC1 = DAG.getSetCC(dl, VT, LHS, RHS, CC1);
-      SetCC2 = DAG.getSetCC(dl, VT, LHS, RHS, CC2);
+      SetCC1 = DAG.getSetCC(dl, VT, LHS, RHS, CC1, Chain, IsSignaling);
+      SetCC2 = DAG.getSetCC(dl, VT, LHS, RHS, CC2, Chain, IsSignaling);
     } else {
       // Otherwise, the pattern is (LHS CC1 LHS) Opc (RHS CC2 RHS)
-      SetCC1 = DAG.getSetCC(dl, VT, LHS, LHS, CC1);
-      SetCC2 = DAG.getSetCC(dl, VT, RHS, RHS, CC2);
+      SetCC1 = DAG.getSetCC(dl, VT, LHS, LHS, CC1, Chain, IsSignaling);
+      SetCC2 = DAG.getSetCC(dl, VT, RHS, RHS, CC2, Chain, IsSignaling);
     }
+    if (Chain)
+      Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other, SetCC1.getValue(1),
+                          SetCC2.getValue(1));
     LHS = DAG.getNode(Opc, dl, VT, SetCC1, SetCC2);
     RHS = SDValue();
     CC  = SDValue();
@@ -3518,12 +3519,19 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     }
     Results.push_back(Tmp1);
     break;
-  case ISD::SETCC: {
-    Tmp1 = Node->getOperand(0);
-    Tmp2 = Node->getOperand(1);
-    Tmp3 = Node->getOperand(2);
-    bool Legalized = LegalizeSetCCCondCode(Node->getValueType(0), Tmp1, Tmp2,
-                                           Tmp3, NeedInvert, dl);
+  case ISD::SETCC:
+  case ISD::STRICT_FSETCC:
+  case ISD::STRICT_FSETCCS: {
+    bool IsStrict = Node->getOpcode() != ISD::SETCC;
+    bool IsSignaling = Node->getOpcode() == ISD::STRICT_FSETCCS;
+    SDValue Chain = IsStrict ? Node->getOperand(0) : SDValue();
+    unsigned Offset = IsStrict ? 1 : 0;
+    Tmp1 = Node->getOperand(0 + Offset);
+    Tmp2 = Node->getOperand(1 + Offset);
+    Tmp3 = Node->getOperand(2 + Offset);
+    bool Legalized =
+        LegalizeSetCCCondCode(Node->getValueType(0), Tmp1, Tmp2, Tmp3,
+                              NeedInvert, dl, Chain, IsSignaling);
 
     if (Legalized) {
       // If we expanded the SETCC by swapping LHS and RHS, or by inverting the
@@ -3538,8 +3546,15 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
         Tmp1 = DAG.getLogicalNOT(dl, Tmp1, Tmp1->getValueType(0));
 
       Results.push_back(Tmp1);
+      if (IsStrict)
+        Results.push_back(Chain);
+
       break;
     }
+
+    // FIXME: It seems Legalized is false iff CCCode is Legal. I don't
+    // understand if this code is useful for strict nodes.
+    assert(!IsStrict && "Don't know how to expand for strict nodes.");
 
     // Otherwise, SETCC for the given comparison type must be completely
     // illegal; expand it into a SELECT_CC.
@@ -3563,11 +3578,13 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     break;
   }
   case ISD::SELECT_CC: {
+    // TODO: need to add STRICT_SELECT_CC and STRICT_SELECT_CCS
     Tmp1 = Node->getOperand(0);   // LHS
     Tmp2 = Node->getOperand(1);   // RHS
     Tmp3 = Node->getOperand(2);   // True
     Tmp4 = Node->getOperand(3);   // False
     EVT VT = Node->getValueType(0);
+    SDValue Chain;
     SDValue CC = Node->getOperand(4);
     ISD::CondCode CCOp = cast<CondCodeSDNode>(CC)->get();
 
@@ -3589,8 +3606,7 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     // Try to legalize by inverting the condition.  This is for targets that
     // might support an ordered version of a condition, but not the unordered
     // version (or vice versa).
-    ISD::CondCode InvCC = ISD::getSetCCInverse(CCOp,
-                                               Tmp1.getValueType().isInteger());
+    ISD::CondCode InvCC = ISD::getSetCCInverse(CCOp, Tmp1.getValueType());
     if (TLI.isCondCodeLegalOrCustom(InvCC, Tmp1.getSimpleValueType())) {
       // Use the new condition code and swap true and false
       Legalized = true;
@@ -3610,9 +3626,8 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     }
 
     if (!Legalized) {
-      Legalized = LegalizeSetCCCondCode(
-          getSetCCResultType(Tmp1.getValueType()), Tmp1, Tmp2, CC, NeedInvert,
-          dl);
+      Legalized = LegalizeSetCCCondCode(getSetCCResultType(Tmp1.getValueType()),
+                                        Tmp1, Tmp2, CC, NeedInvert, dl, Chain);
 
       assert(Legalized && "Can't legalize SELECT_CC with legal condition!");
 
@@ -3638,13 +3653,16 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     break;
   }
   case ISD::BR_CC: {
+    // TODO: need to add STRICT_BR_CC and STRICT_BR_CCS
+    SDValue Chain;
     Tmp1 = Node->getOperand(0);              // Chain
     Tmp2 = Node->getOperand(2);              // LHS
     Tmp3 = Node->getOperand(3);              // RHS
     Tmp4 = Node->getOperand(1);              // CC
 
-    bool Legalized = LegalizeSetCCCondCode(getSetCCResultType(
-        Tmp2.getValueType()), Tmp2, Tmp3, Tmp4, NeedInvert, dl);
+    bool Legalized =
+        LegalizeSetCCCondCode(getSetCCResultType(Tmp2.getValueType()), Tmp2,
+                              Tmp3, Tmp4, NeedInvert, dl, Chain);
     (void)Legalized;
     assert(Legalized && "Can't legalize BR_CC with legal condition!");
 

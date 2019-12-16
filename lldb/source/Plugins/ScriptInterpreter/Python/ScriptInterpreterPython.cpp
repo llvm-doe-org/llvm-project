@@ -6,11 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifdef LLDB_DISABLE_PYTHON
+#include "lldb/Host/Config.h"
 
-// Python is disabled in this build
-
-#else
+#if LLDB_ENABLE_PYTHON
 
 // LLDB Python header must be included first
 #include "lldb-python.h"
@@ -3295,4 +3293,4 @@ void ScriptInterpreterPythonImpl::AddToSysPath(AddLocation location,
 //
 // void ScriptInterpreterPythonImpl::Terminate() { Py_Finalize (); }
 
-#endif // LLDB_DISABLE_PYTHON
+#endif

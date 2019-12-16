@@ -953,7 +953,7 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
         << Args.getLastArg(OPT_mthread_model)->getAsString(Args)
         << Opts.ThreadModel;
   Opts.TrapFuncName = Args.getLastArgValue(OPT_ftrap_function_EQ);
-  Opts.UseInitArray = Args.hasArg(OPT_fuse_init_array);
+  Opts.UseInitArray = !Args.hasArg(OPT_fno_use_init_array);
 
   Opts.FunctionSections = Args.hasFlag(OPT_ffunction_sections,
                                        OPT_fno_function_sections, false);
@@ -3014,6 +3014,8 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
       Opts.OpenMP && !Args.hasArg(options::OPT_fnoopenmp_use_tls);
   Opts.OpenMPIsDevice =
       Opts.OpenMP && Args.hasArg(options::OPT_fopenmp_is_device);
+  Opts.OpenMPIRBuilder =
+      Opts.OpenMP && Args.hasArg(options::OPT_fopenmp_enable_irbuilder);
   bool IsTargetSpecified =
       Opts.OpenMPIsDevice || Args.hasArg(options::OPT_fopenmp_targets_EQ);
 
@@ -3070,7 +3072,8 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
       llvm::Triple TT(A->getValue(i));
 
       if (TT.getArch() == llvm::Triple::UnknownArch ||
-          !(TT.getArch() == llvm::Triple::ppc ||
+          !(TT.getArch() == llvm::Triple::aarch64 ||
+            TT.getArch() == llvm::Triple::ppc ||
             TT.getArch() == llvm::Triple::ppc64 ||
             TT.getArch() == llvm::Triple::ppc64le ||
             TT.getArch() == llvm::Triple::nvptx ||
@@ -3144,6 +3147,34 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     else
       Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
   }
+
+  LangOptions::FPRoundingModeKind FPRM = LangOptions::FPR_ToNearest;
+  if (Args.hasArg(OPT_frounding_math)) {
+    FPRM = LangOptions::FPR_Dynamic;
+  }
+  Opts.setFPRoundingMode(FPRM);
+
+  if (Args.hasArg(OPT_ftrapping_math)) {
+    Opts.setFPExceptionMode(LangOptions::FPE_Strict);
+  }
+
+  if (Args.hasArg(OPT_fno_trapping_math)) {
+    Opts.setFPExceptionMode(LangOptions::FPE_Ignore);
+  }
+
+  LangOptions::FPExceptionModeKind FPEB = LangOptions::FPE_Ignore;
+  if (Arg *A = Args.getLastArg(OPT_ffp_exception_behavior_EQ)) {
+    StringRef Val = A->getValue();
+    if (Val.equals("ignore"))
+      FPEB = LangOptions::FPE_Ignore;
+    else if (Val.equals("maytrap"))
+      FPEB = LangOptions::FPE_MayTrap;
+    else if (Val.equals("strict"))
+      FPEB = LangOptions::FPE_Strict;
+    else
+      Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
+  }
+  Opts.setFPExceptionMode(FPEB);
 
   Opts.RetainCommentsFromSystemHeaders =
       Args.hasArg(OPT_fretain_comments_from_system_headers);

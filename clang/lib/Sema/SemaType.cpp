@@ -1980,7 +1980,7 @@ bool Sema::CheckQualifiedFunctionForTypeId(QualType T, SourceLocation Loc) {
 static QualType deduceOpenCLPointeeAddrSpace(Sema &S, QualType PointeeType) {
   if (!PointeeType->isUndeducedAutoType() && !PointeeType->isDependentType() &&
       !PointeeType->isSamplerT() &&
-      !PointeeType.getQualifiers().hasAddressSpace())
+      !PointeeType.hasAddressSpace())
     PointeeType = S.getASTContext().getAddrSpaceQualType(
         PointeeType,
         S.getLangOpts().OpenCLCPlusPlus || S.getLangOpts().OpenCLVersion == 200
@@ -7407,6 +7407,16 @@ static void HandleLifetimeBoundAttr(TypeProcessingState &State,
   }
 }
 
+static bool isAddressSpaceKind(const ParsedAttr &attr) {
+  auto attrKind = attr.getKind();
+
+  return attrKind == ParsedAttr::AT_AddressSpace ||
+         attrKind == ParsedAttr::AT_OpenCLPrivateAddressSpace ||
+         attrKind == ParsedAttr::AT_OpenCLGlobalAddressSpace ||
+         attrKind == ParsedAttr::AT_OpenCLLocalAddressSpace ||
+         attrKind == ParsedAttr::AT_OpenCLConstantAddressSpace ||
+         attrKind == ParsedAttr::AT_OpenCLGenericAddressSpace;
+}
 
 static void processTypeAttrs(TypeProcessingState &state, QualType &type,
                              TypeAttrLocation TAL,
@@ -7445,11 +7455,11 @@ static void processTypeAttrs(TypeProcessingState &state, QualType &type,
           if (!IsTypeAttr)
             continue;
         }
-      } else if (TAL != TAL_DeclChunk &&
-                 attr.getKind() != ParsedAttr::AT_AddressSpace) {
+      } else if (TAL != TAL_DeclChunk && !isAddressSpaceKind(attr)) {
         // Otherwise, only consider type processing for a C++11 attribute if
         // it's actually been applied to a type.
-        // We also allow C++11 address_space attributes to pass through.
+        // We also allow C++11 address_space and
+        // OpenCL language address space attributes to pass through.
         continue;
       }
     }

@@ -30,57 +30,6 @@
 
 namespace lldb_private {
 
-class ClangASTMetrics {
-public:
-  static void DumpCounters(Log *log);
-  static void ClearLocalCounters() { local_counters = {0, 0, 0, 0, 0, 0}; }
-
-  static void RegisterVisibleQuery() {
-    ++global_counters.m_visible_query_count;
-    ++local_counters.m_visible_query_count;
-  }
-
-  static void RegisterLexicalQuery() {
-    ++global_counters.m_lexical_query_count;
-    ++local_counters.m_lexical_query_count;
-  }
-
-  static void RegisterLLDBImport() {
-    ++global_counters.m_lldb_import_count;
-    ++local_counters.m_lldb_import_count;
-  }
-
-  static void RegisterClangImport() {
-    ++global_counters.m_clang_import_count;
-    ++local_counters.m_clang_import_count;
-  }
-
-  static void RegisterDeclCompletion() {
-    ++global_counters.m_decls_completed_count;
-    ++local_counters.m_decls_completed_count;
-  }
-
-  static void RegisterRecordLayout() {
-    ++global_counters.m_record_layout_count;
-    ++local_counters.m_record_layout_count;
-  }
-
-private:
-  struct Counters {
-    uint64_t m_visible_query_count;
-    uint64_t m_lexical_query_count;
-    uint64_t m_lldb_import_count;
-    uint64_t m_clang_import_count;
-    uint64_t m_decls_completed_count;
-    uint64_t m_record_layout_count;
-  };
-
-  static Counters global_counters;
-  static Counters local_counters;
-
-  static void DumpCounters(Log *log, Counters &counters);
-};
-
 class ClangASTImporter {
 public:
   struct LayoutInfo {
@@ -99,21 +48,12 @@ public:
       : m_file_manager(clang::FileSystemOptions(),
                        FileSystem::Instance().GetVirtualFileSystem()) {}
 
-  clang::QualType CopyType(clang::ASTContext *dst_ctx,
-                           clang::ASTContext *src_ctx, clang::QualType type);
-
-  lldb::opaque_compiler_type_t CopyType(clang::ASTContext *dst_ctx,
-                                        clang::ASTContext *src_ctx,
-                                        lldb::opaque_compiler_type_t type);
-
   CompilerType CopyType(ClangASTContext &dst, const CompilerType &src_type);
 
   clang::Decl *CopyDecl(clang::ASTContext *dst_ctx, clang::ASTContext *src_ctx,
                         clang::Decl *decl);
 
-  lldb::opaque_compiler_type_t DeportType(clang::ASTContext *dst_ctx,
-                                          clang::ASTContext *src_ctx,
-                                          lldb::opaque_compiler_type_t type);
+  CompilerType DeportType(ClangASTContext &dst, const CompilerType &src_type);
 
   clang::Decl *DeportDecl(clang::ASTContext *dst_ctx,
                           clang::ASTContext *src_ctx, clang::Decl *decl);
@@ -146,19 +86,6 @@ public:
   bool CompleteAndFetchChildren(clang::QualType type);
 
   bool RequireCompleteType(clang::QualType type);
-
-  bool ResolveDeclOrigin(const clang::Decl *decl, clang::Decl **original_decl,
-                         clang::ASTContext **original_ctx) {
-    DeclOrigin origin = GetDeclOrigin(decl);
-
-    if (original_decl)
-      *original_decl = origin.decl;
-
-    if (original_ctx)
-      *original_ctx = origin.ctx;
-
-    return origin.Valid();
-  }
 
   void SetDeclOrigin(const clang::Decl *decl, clang::Decl *original_decl);
 
@@ -233,7 +160,7 @@ public:
     clang::Decl *decl;
   };
 
-  typedef std::map<const clang::Decl *, DeclOrigin> OriginMap;
+  typedef llvm::DenseMap<const clang::Decl *, DeclOrigin> OriginMap;
 
   /// Listener interface used by the ASTImporterDelegate to inform other code
   /// about decls that have been imported the first time.
@@ -313,7 +240,7 @@ public:
     /// ASTContext. Used by the CxxModuleHandler to mark declarations that
     /// were created from the 'std' C++ module to prevent that the Importer
     /// tries to sync them with the broken equivalent in the debug info AST.
-    std::set<clang::Decl *> m_decls_to_ignore;
+    llvm::SmallPtrSet<clang::Decl *, 16> m_decls_to_ignore;
     ClangASTImporter &m_master;
     clang::ASTContext *m_source_ctx;
     CxxModuleHandler *m_std_handler = nullptr;
@@ -322,8 +249,8 @@ public:
   };
 
   typedef std::shared_ptr<ASTImporterDelegate> ImporterDelegateSP;
-  typedef std::map<clang::ASTContext *, ImporterDelegateSP> DelegateMap;
-  typedef std::map<const clang::NamespaceDecl *, NamespaceMapSP>
+  typedef llvm::DenseMap<clang::ASTContext *, ImporterDelegateSP> DelegateMap;
+  typedef llvm::DenseMap<const clang::NamespaceDecl *, NamespaceMapSP>
       NamespaceMetaMap;
 
   struct ASTContextMetadata {
@@ -340,7 +267,7 @@ public:
   };
 
   typedef std::shared_ptr<ASTContextMetadata> ASTContextMetadataSP;
-  typedef std::map<const clang::ASTContext *, ASTContextMetadataSP>
+  typedef llvm::DenseMap<const clang::ASTContext *, ASTContextMetadataSP>
       ContextMetadataMap;
 
   ContextMetadataMap m_metadata_map;

@@ -215,7 +215,6 @@ private:
   SDValue DisintegrateMERGE_VALUES(SDNode *N, unsigned ResNo);
 
   SDValue JoinIntegers(SDValue Lo, SDValue Hi);
-  SDValue LibCallify(RTLIB::Libcall LC, SDNode *N, bool isSigned);
 
   std::pair<SDValue, SDValue> ExpandAtomic(SDNode *Node);
 
@@ -225,11 +224,6 @@ private:
   void SplitInteger(SDValue Op, SDValue &Lo, SDValue &Hi);
   void SplitInteger(SDValue Op, EVT LoVT, EVT HiVT,
                     SDValue &Lo, SDValue &Hi);
-
-  void AddToWorklist(SDNode *N) {
-    N->setNodeId(ReadyToProcess);
-    Worklist.push_back(N);
-  }
 
   //===--------------------------------------------------------------------===//
   // Integer Promotion Support: LegalizeIntegerTypes.cpp
@@ -560,6 +554,10 @@ private:
   // Float Result Expansion.
   void ExpandFloatResult(SDNode *N, unsigned ResNo);
   void ExpandFloatRes_ConstantFP(SDNode *N, SDValue &Lo, SDValue &Hi);
+  void ExpandFloatRes_Unary(SDNode *N, RTLIB::Libcall LC,
+                            SDValue &Lo, SDValue &Hi);
+  void ExpandFloatRes_Binary(SDNode *N, RTLIB::Libcall LC,
+                             SDValue &Lo, SDValue &Hi);
   void ExpandFloatRes_FABS      (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandFloatRes_FMINNUM   (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandFloatRes_FMAXNUM   (SDNode *N, SDValue &Lo, SDValue &Hi);

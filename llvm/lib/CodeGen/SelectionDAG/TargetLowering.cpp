@@ -390,8 +390,10 @@ void TargetLowering::softenSetCCOperands(SelectionDAG &DAG, EVT VT,
   NewRHS = DAG.getConstant(0, dl, RetVT);
 
   CCCode = getCmpLibcallCC(LC1);
-  if (ShouldInvertCC)
-    CCCode = getSetCCInverse(CCCode, /*isInteger=*/true);
+  if (ShouldInvertCC) {
+    assert(RetVT.isInteger());
+    CCCode = getSetCCInverse(CCCode, RetVT);
+  }
 
   if (LC2 != RTLIB::UNKNOWN_LIBCALL) {
     SDValue Tmp = DAG.getNode(
@@ -1540,6 +1542,16 @@ bool TargetLowering::SimplifyDemandedBits(
       return true;
     Known.One = Known2.One.reverseBits();
     Known.Zero = Known2.Zero.reverseBits();
+    break;
+  }
+  case ISD::BSWAP: {
+    SDValue Src = Op.getOperand(0);
+    APInt DemandedSrcBits = DemandedBits.byteSwap();
+    if (SimplifyDemandedBits(Src, DemandedSrcBits, DemandedElts, Known2, TLO,
+                             Depth + 1))
+      return true;
+    Known.One = Known2.One.byteSwap();
+    Known.Zero = Known2.Zero.byteSwap();
     break;
   }
   case ISD::SIGN_EXTEND_INREG: {
@@ -2812,7 +2824,8 @@ SDValue TargetLowering::foldSetCCWithAnd(EVT VT, SDValue N0, SDValue N1,
     // Note that where Y is variable and is known to have at most one bit set
     // (for example, if it is Z & 1) we cannot do this; the expressions are not
     // equivalent when Y == 0.
-    Cond = ISD::getSetCCInverse(Cond, /*isInteger=*/true);
+    assert(OpVT.isInteger());
+    Cond = ISD::getSetCCInverse(Cond, OpVT);
     if (DCI.isBeforeLegalizeOps() ||
         isCondCodeLegal(Cond, N0.getSimpleValueType()))
       return DAG.getSetCC(DL, VT, N0, Zero, Cond);
@@ -2901,7 +2914,8 @@ SDValue TargetLowering::optimizeSetCCOfSignedTruncationCheck(
     // What if we invert constants? (and the target predicate)
     I1.negate();
     I01.negate();
-    NewCond = getSetCCInverse(NewCond, /*isInteger=*/true);
+    assert(XVT.isInteger());
+    NewCond = getSetCCInverse(NewCond, XVT);
     if (!checkConstants())
       return SDValue();
     // Great, e.g. got  icmp uge i16 (add i16 %x, -128), -256
@@ -3137,7 +3151,8 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
         // (ctpop x) != 1 --> (x == 0) || ((x & x-1) != 0)
         SDValue Zero = DAG.getConstant(0, dl, CTVT);
         SDValue NegOne = DAG.getAllOnesConstant(dl, CTVT);
-        ISD::CondCode InvCond = ISD::getSetCCInverse(Cond, true);
+        assert(CTVT.isInteger());
+        ISD::CondCode InvCond = ISD::getSetCCInverse(Cond, CTVT);
         SDValue Add = DAG.getNode(ISD::ADD, dl, CTVT, CTOp, NegOne);
         SDValue And = DAG.getNode(ISD::AND, dl, CTVT, CTOp, Add);
         SDValue LHS = DAG.getSetCC(dl, VT, CTOp, Zero, InvCond);
@@ -3228,7 +3243,7 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
 
           ISD::CondCode InvCond = ISD::getSetCCInverse(
               cast<CondCodeSDNode>(TopSetCC.getOperand(2))->get(),
-              TopSetCC.getOperand(0).getValueType().isInteger());
+              TopSetCC.getOperand(0).getValueType());
           return DAG.getSetCC(dl, VT, TopSetCC.getOperand(0),
                                       TopSetCC.getOperand(1),
                                       InvCond);
@@ -3277,11 +3292,9 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
         EVT newVT = EVT::getIntegerVT(*DAG.getContext(), bestWidth);
         if (newVT.isRound() &&
             shouldReduceLoadWidth(Lod, ISD::NON_EXTLOAD, newVT)) {
-          EVT PtrType = Lod->getOperand(1).getValueType();
           SDValue Ptr = Lod->getBasePtr();
           if (bestOffset != 0)
-            Ptr = DAG.getNode(ISD::ADD, dl, PtrType, Lod->getBasePtr(),
-                              DAG.getConstant(bestOffset, dl, PtrType));
+            Ptr = DAG.getMemBasePlusOffset(Ptr, bestOffset, dl);
           unsigned NewAlign = MinAlign(Lod->getAlignment(), bestOffset);
           SDValue NewLoad = DAG.getLoad(
               newVT, dl, Lod->getChain(), Ptr,
@@ -3392,8 +3405,7 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
           return DAG.getNode(ISD::TRUNCATE, dl, VT, N0);
         // Invert the condition.
         ISD::CondCode CC = cast<CondCodeSDNode>(N0.getOperand(2))->get();
-        CC = ISD::getSetCCInverse(CC,
-                                  N0.getOperand(0).getValueType().isInteger());
+        CC = ISD::getSetCCInverse(CC, N0.getOperand(0).getValueType());
         if (DCI.isBeforeLegalizeOps() ||
             isCondCodeLegal(CC, N0.getOperand(0).getSimpleValueType()))
           return DAG.getSetCC(dl, VT, N0.getOperand(0), N0.getOperand(1), CC);
@@ -6064,28 +6076,28 @@ bool TargetLowering::expandFP_TO_UINT(SDNode *Node, SDValue &Result,
     // Expand based on maximum range of FP_TO_SINT, if the value exceeds the
     // signmask then offset (the result of which should be fully representable).
     // Sel = Src < 0x8000000000000000
-    // Val = select Sel, Src, Src - 0x8000000000000000
-    // Ofs = select Sel, 0, 0x8000000000000000
-    // Result = fp_to_sint(Val) ^ Ofs
+    // FltOfs = select Sel, 0, 0x8000000000000000
+    // IntOfs = select Sel, 0, 0x8000000000000000
+    // Result = fp_to_sint(Src - FltOfs) ^ IntOfs
 
     // TODO: Should any fast-math-flags be set for the FSUB?
-    SDValue SrcBiased;
-    if (Node->isStrictFPOpcode())
-      SrcBiased = DAG.getNode(ISD::STRICT_FSUB, dl, { SrcVT, MVT::Other }, 
-                              { Node->getOperand(0), Src, Cst });
-    else
-      SrcBiased = DAG.getNode(ISD::FSUB, dl, SrcVT, Src, Cst);
-    SDValue Val = DAG.getSelect(dl, SrcVT, Sel, Src, SrcBiased);
-    SDValue Ofs = DAG.getSelect(dl, DstVT, Sel, DAG.getConstant(0, dl, DstVT),
-                                DAG.getConstant(SignMask, dl, DstVT));
+    SDValue FltOfs = DAG.getSelect(dl, SrcVT, Sel,
+                                   DAG.getConstantFP(0.0, dl, SrcVT), Cst);
+    SDValue IntOfs = DAG.getSelect(dl, DstVT, Sel,
+                                   DAG.getConstant(0, dl, DstVT),
+                                   DAG.getConstant(SignMask, dl, DstVT));
     SDValue SInt;
     if (Node->isStrictFPOpcode()) {
+      SDValue Val = DAG.getNode(ISD::STRICT_FSUB, dl, { SrcVT, MVT::Other }, 
+                                { Node->getOperand(0), Src, FltOfs });
       SInt = DAG.getNode(ISD::STRICT_FP_TO_SINT, dl, { DstVT, MVT::Other }, 
-                         { SrcBiased.getValue(1), Val });
+                         { Val.getValue(1), Val });
       Chain = SInt.getValue(1);
-    } else
+    } else {
+      SDValue Val = DAG.getNode(ISD::FSUB, dl, SrcVT, Src, FltOfs);
       SInt = DAG.getNode(ISD::FP_TO_SINT, dl, DstVT, Val);
-    Result = DAG.getNode(ISD::XOR, dl, DstVT, SInt, Ofs);
+    }
+    Result = DAG.getNode(ISD::XOR, dl, DstVT, SInt, IntOfs);
   } else {
     // Expand based on maximum range of FP_TO_SINT:
     // True = fp_to_sint(Src)
@@ -6223,6 +6235,26 @@ SDValue TargetLowering::expandFMINNUM_FMAXNUM(SDNode *Node,
       return DAG.getNode(IEEE2018Op, dl, VT, Node->getOperand(0),
                          Node->getOperand(1), Node->getFlags());
     }
+  }
+
+  // If none of the above worked, but there are no NaNs, then expand to
+  // a compare/select sequence.  This is required for correctness since
+  // InstCombine might have canonicalized a fcmp+select sequence to a
+  // FMINNUM/FMAXNUM node.  If we were to fall through to the default
+  // expansion to libcall, we might introduce a link-time dependency
+  // on libm into a file that originally did not have one.
+  if (Node->getFlags().hasNoNaNs()) {
+    ISD::CondCode Pred =
+        Node->getOpcode() == ISD::FMINNUM ? ISD::SETLT : ISD::SETGT;
+    SDValue Op1 = Node->getOperand(0);
+    SDValue Op2 = Node->getOperand(1);
+    SDValue SelCC = DAG.getSelectCC(dl, Op1, Op2, Op1, Op2, Pred);
+    // Copy FMF flags, but always set the no-signed-zeros flag
+    // as this is implied by the FMINNUM/FMAXNUM semantics.
+    SDNodeFlags Flags = Node->getFlags();
+    Flags.setNoSignedZeros(true);
+    SelCC->setFlags(Flags);
+    return SelCC;
   }
 
   return SDValue();
@@ -6882,7 +6914,7 @@ SDValue TargetLowering::getVectorElementPointer(SelectionDAG &DAG,
 
   Index = DAG.getNode(ISD::MUL, dl, IdxVT, Index,
                       DAG.getConstant(EltSize, dl, IdxVT));
-  return DAG.getNode(ISD::ADD, dl, IdxVT, VecPtr, Index);
+  return DAG.getMemBasePlusOffset(VecPtr, Index, dl);
 }
 
 //===----------------------------------------------------------------------===//

@@ -7,12 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "CommandObjectScript.h"
-
-
 #include "lldb/Core/Debugger.h"
-
 #include "lldb/DataFormatters/DataVisualization.h"
-
+#include "lldb/Host/Config.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
 #include "lldb/Interpreter/CommandReturnObject.h"
 #include "lldb/Interpreter/ScriptInterpreter.h"
@@ -35,13 +32,7 @@ CommandObjectScript::~CommandObjectScript() {}
 
 bool CommandObjectScript::DoExecute(llvm::StringRef command,
                                     CommandReturnObject &result) {
-#ifdef LLDB_DISABLE_PYTHON
-  // if we ever support languages other than Python this simple #ifdef won't
-  // work
-  result.AppendError("your copy of LLDB does not support scripting.");
-  result.SetStatus(eReturnStatusFailed);
-  return false;
-#else
+#if LLDB_ENABLE_PYTHON
   if (m_interpreter.GetDebugger().GetScriptLanguage() ==
       lldb::eScriptLanguageNone) {
     result.AppendError(
@@ -75,5 +66,11 @@ bool CommandObjectScript::DoExecute(llvm::StringRef command,
     result.SetStatus(eReturnStatusFailed);
 
   return result.Succeeded();
+#else
+  // if we ever support languages other than Python this simple #ifdef won't
+  // work
+  result.AppendError("your copy of LLDB does not support scripting.");
+  result.SetStatus(eReturnStatusFailed);
+  return false;
 #endif
 }

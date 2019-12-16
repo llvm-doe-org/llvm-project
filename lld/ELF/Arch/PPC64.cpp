@@ -201,7 +201,7 @@ public:
   RelType getDynRel(RelType type) const override;
   void writePltHeader(uint8_t *buf) const override;
   void writePlt(uint8_t *buf, uint64_t gotPltEntryAddr, uint64_t pltEntryAddr,
-                int32_t index, unsigned relOff) const override;
+                int32_t index) const override;
   void relocateOne(uint8_t *loc, RelType type, uint64_t val) const override;
   void writeGotHeader(uint8_t *buf) const override;
   bool needsThunk(RelExpr expr, RelType type, const InputFile *file,
@@ -669,8 +669,7 @@ void PPC64::writePltHeader(uint8_t *buf) const {
 }
 
 void PPC64::writePlt(uint8_t *buf, uint64_t gotPltEntryAddr,
-                     uint64_t pltEntryAddr, int32_t index,
-                     unsigned relOff) const {
+                     uint64_t pltEntryAddr, int32_t index) const {
   int32_t offset = pltHeaderSize + index * pltEntrySize;
   // bl __glink_PLTresolve
   write32(buf, 0x48000000 | ((-offset) & 0x03FFFFFc));
@@ -899,7 +898,7 @@ void PPC64::relocateOne(uint8_t *loc, RelType type, uint64_t val) const {
 }
 
 bool PPC64::needsThunk(RelExpr expr, RelType type, const InputFile *file,
-                       uint64_t branchAddr, const Symbol &s, int64_t /*a*/) const {
+                       uint64_t branchAddr, const Symbol &s, int64_t a) const {
   if (type != R_PPC64_REL14 && type != R_PPC64_REL24)
     return false;
 
@@ -916,7 +915,7 @@ bool PPC64::needsThunk(RelExpr expr, RelType type, const InputFile *file,
   // a range-extending thunk.
   // See the comment in getRelocTargetVA() about R_PPC64_CALL.
   return !inBranchRange(type, branchAddr,
-                        s.getVA() +
+                        s.getVA(a) +
                             getPPC64GlobalEntryToLocalEntryOffset(s.stOther));
 }
 

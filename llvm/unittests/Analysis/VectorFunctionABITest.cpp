@@ -89,7 +89,7 @@ private:
 protected:
   // Referencies to the parser output field.
   unsigned &VF = Info.Shape.VF;
-  VFISAKind &ISA = Info.Shape.ISA;
+  VFISAKind &ISA = Info.ISA;
   SmallVector<VFParameter, 8> &Parameters = Info.Shape.Parameters;
   StringRef &ScalarName = Info.ScalarName;
   StringRef &VectorName = Info.VectorName;
@@ -445,6 +445,45 @@ TEST_F(VFABIParserTest, ParseMaskingAVX512) {
   EXPECT_EQ(Parameters[0], VFParameter({0, VFParamKind::Vector}));
   EXPECT_EQ(Parameters[1], VFParameter({1, VFParamKind::GlobalPredicate}));
   EXPECT_EQ(ScalarName, "sin");
+}
+
+TEST_F(VFABIParserTest, ParseMaskingLLVM) {
+  EXPECT_TRUE(invokeParser("_ZGV_LLVM_M2v_sin(custom_vector_sin)"));
+  EXPECT_EQ(VF, (unsigned)2);
+  EXPECT_TRUE(IsMasked());
+  EXPECT_FALSE(IsScalable);
+  EXPECT_EQ(ISA, VFISAKind::LLVM);
+  EXPECT_EQ(Parameters.size(), (unsigned)2);
+  EXPECT_EQ(Parameters[0], VFParameter({0, VFParamKind::Vector}));
+  EXPECT_EQ(Parameters[1], VFParameter({1, VFParamKind::GlobalPredicate}));
+  EXPECT_EQ(ScalarName, "sin");
+  EXPECT_EQ(VectorName, "custom_vector_sin");
+}
+
+TEST_F(VFABIParserTest, ParseScalableMaskingLLVM) {
+  EXPECT_TRUE(invokeParser("_ZGV_LLVM_Mxv_sin(custom_vector_sin)"));
+  EXPECT_TRUE(IsMasked());
+  EXPECT_TRUE(IsScalable);
+  EXPECT_EQ(ISA, VFISAKind::LLVM);
+  EXPECT_EQ(Parameters.size(), (unsigned)2);
+  EXPECT_EQ(Parameters[0], VFParameter({0, VFParamKind::Vector}));
+  EXPECT_EQ(Parameters[1], VFParameter({1, VFParamKind::GlobalPredicate}));
+  EXPECT_EQ(ScalarName, "sin");
+  EXPECT_EQ(VectorName, "custom_vector_sin");
+}
+
+TEST_F(VFABIParserTest, ParseScalableMaskingLLVMSincos) {
+  EXPECT_TRUE(invokeParser("_ZGV_LLVM_Mxvl8l8_sincos(custom_vector_sincos)"));
+  EXPECT_TRUE(IsMasked());
+  EXPECT_TRUE(IsScalable);
+  EXPECT_EQ(ISA, VFISAKind::LLVM);
+  EXPECT_EQ(Parameters.size(), (unsigned)4);
+  EXPECT_EQ(Parameters[0], VFParameter({0, VFParamKind::Vector}));
+  EXPECT_EQ(Parameters[1], VFParameter({1, VFParamKind::OMP_Linear, 8}));
+  EXPECT_EQ(Parameters[2], VFParameter({2, VFParamKind::OMP_Linear, 8}));
+  EXPECT_EQ(Parameters[3], VFParameter({3, VFParamKind::GlobalPredicate}));
+  EXPECT_EQ(ScalarName, "sincos");
+  EXPECT_EQ(VectorName, "custom_vector_sincos");
 }
 
 class VFABIAttrTest : public testing::Test {

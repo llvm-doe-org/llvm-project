@@ -162,11 +162,6 @@ uint64_t Symbol::getGotPltOffset() const {
   return (pltIndex + target->gotPltHeaderEntriesNum) * config->wordsize;
 }
 
-uint64_t Symbol::getPPC64LongBranchOffset() const {
-  assert(ppc64BranchltIndex != 0xffff);
-  return ppc64BranchltIndex * config->wordsize;
-}
-
 uint64_t Symbol::getPltVA() const {
   PltSection *plt = isInIplt ? in.iplt : in.plt;
   uint64_t outVA =
@@ -177,12 +172,6 @@ uint64_t Symbol::getPltVA() const {
   if (config->emachine == EM_MIPS && isMicroMips())
     outVA |= 1;
   return outVA;
-}
-
-uint64_t Symbol::getPPC64LongBranchTableVA() const {
-  assert(ppc64BranchltIndex != 0xffff);
-  return in.ppc64LongBranchTarget->getVA() +
-         ppc64BranchltIndex * config->wordsize;
 }
 
 uint64_t Symbol::getSize() const {
@@ -340,6 +329,34 @@ void maybeWarnUnorderableSymbol(const Symbol *sym) {
     report(": unable to order synthetic symbol: ");
   else if (d && !d->section->repl->isLive())
     report(": unable to order discarded symbol: ");
+}
+
+// Returns true if a symbol can be replaced at load-time by a symbol
+// with the same name defined in other ELF executable or DSO.
+bool computeIsPreemptible(const Symbol &sym) {
+  assert(!sym.isLocal());
+
+  // Only symbols with default visibility that appear in dynsym can be
+  // preempted. Symbols with protected visibility cannot be preempted.
+  if (!sym.includeInDynsym() || sym.visibility != STV_DEFAULT)
+    return false;
+
+  // At this point copy relocations have not been created yet, so any
+  // symbol that is not defined locally is preemptible.
+  if (!sym.isDefined())
+    return true;
+
+  if (!config->shared)
+    return false;
+
+  // If the dynamic list is present, it specifies preemptable symbols in a DSO.
+  if (config->hasDynamicList)
+    return sym.inDynamicList;
+
+  // -Bsymbolic means that definitions are not preempted.
+  if (config->bsymbolic || (config->bsymbolicFunctions && sym.isFunc()))
+    return false;
+  return true;
 }
 
 static uint8_t getMinVisibility(uint8_t va, uint8_t vb) {
@@ -603,7 +620,18 @@ void Symbol::resolveCommon(const CommonSymbol &other) {
     return;
 
   if (cmp > 0) {
-    replace(other);
+    if (auto *s = dyn_cast<SharedSymbol>(this)) {
+      // Increase st_size if the shared symbol has a larger st_size. The shared
+      // symbol may be created from common symbols. The fact that some object
+      // files were linked into a shared object first should not change the
+      // regular rule that picks the largest st_size.
+      uint64_t size = s->size;
+      replace(other);
+      if (size > cast<CommonSymbol>(this)->size)
+        cast<CommonSymbol>(this)->size = size;
+    } else {
+      replace(other);
+    }
     return;
   }
 
@@ -644,6 +672,12 @@ template <class LazyT> void Symbol::resolveLazy(const LazyT &other) {
 }
 
 void Symbol::resolveShared(const SharedSymbol &other) {
+  if (isCommon()) {
+    // See the comment in resolveCommon() above.
+    if (other.size > cast<CommonSymbol>(this)->size)
+      cast<CommonSymbol>(this)->size = other.size;
+    return;
+  }
   if (visibility == STV_DEFAULT && (isUndefined() || isLazy())) {
     // An undefined symbol with non default visibility must be satisfied
     // in the same DSO.

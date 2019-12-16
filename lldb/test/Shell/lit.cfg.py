@@ -38,6 +38,10 @@ config.test_source_root = os.path.dirname(__file__)
 # test_exec_root: The root path where tests should be run.
 config.test_exec_root = os.path.join(config.lldb_obj_root, 'test')
 
+# Propagate LLDB_CAPTURE_REPRODUCER
+if 'LLDB_CAPTURE_REPRODUCER' in os.environ:
+  config.environment['LLDB_CAPTURE_REPRODUCER'] = os.environ[
+      'LLDB_CAPTURE_REPRODUCER']
 
 llvm_config.use_default_substitutions()
 toolchain.use_lldb_substitutions(config)
@@ -96,7 +100,7 @@ if 'native' in config.available_features:
         else:
             lit_config.warning("lit-cpuid failed: %s" % err)
 
-if not config.lldb_disable_python:
+if config.lldb_enable_python:
     config.available_features.add('python')
 
 if config.lldb_enable_lzma:
