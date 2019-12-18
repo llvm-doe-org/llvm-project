@@ -835,20 +835,20 @@ int main() {
       // DMP-AW-NEXT:           ACCWorkerClause
       // DMP-AV-NEXT:           ACCVectorClause
       // DMP-AIMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
+      // DMP-APLC-NEXT:         ACCPrivateClause {{.*}} <implicit>
+      // DMP-APLC-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
       // DMP-NEXT:              ACCSharedClause {{.*}} <implicit>
       // DMP-ASLC-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
       // DMP-NEXT:                DeclRefExpr {{.*}} 'k' 'int'
-      // DMP-APLC-NEXT:         ACCPrivateClause {{.*}} <implicit>
-      // DMP-APLC-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
       // DMP-AGIMP-NEXT:        ACCGangClause {{.*}} <implicit>
       // DMP-OPRG-NEXT:         impl: [[OMPDD]]
+      // DMP-OPRG-NEXT:           OMPPrivateClause
+      // DMP-OPRG-NOT:              <implicit>
+      // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
       // DMP-OPRG-NEXT:           OMPSharedClause
       // DMP-OPRG-OSIMP-SAME:       <implicit>
       // DMP-OPRG-OSEXP-NOT:        <implicit>
       // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'k' 'int'
-      // DMP-OPRG-NEXT:           OMPPrivateClause
-      // DMP-OPRG-NOT:              <implicit>
-      // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
       // DMP-OPRG:                ForStmt
       // DMP-OPRGPLC-NEXT:      impl: CompoundStmt
       // DMP-OPRGPLC-NEXT:        DeclStmt
@@ -869,7 +869,7 @@ int main() {
       // PRT-AO-OSEQ-SAME:          {{^}} // discarded in OpenMP translation
       // PRT-A-SAME:                {{^$}}
       // PRT-AO-OPRG-OSIMP-NEXT:    // #pragma omp [[OMPDP]] private(j){{$}}
-      // PRT-AO-OPRG-OSEXP-NEXT:    // #pragma omp [[OMPDP]] shared(k) private(j){{$}}
+      // PRT-AO-OPRG-OSEXP-NEXT:    // #pragma omp [[OMPDP]] private(j) shared(k){{$}}
       // PRT-A-NEXT:                for (j ={{.*}}) {
       // PRT-A-NEXT:                  printf
       // PRT-A-NEXT:                  for (k ={{.*}})
@@ -901,7 +901,7 @@ int main() {
       // PRT-OA-OPRGPLC-NEXT:       // v----------OMP----------v
       // PRT-OA-OSEQPLC-NEXT:       // v----------OMP----------v
       // PRT-O-OPRG-OSIMP-NEXT:     {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
-      // PRT-O-OPRG-OSEXP-NEXT:     {{^ *}}#pragma omp [[OMPDP]] shared(k) private(j){{$}}
+      // PRT-O-OPRG-OSEXP-NEXT:     {{^ *}}#pragma omp [[OMPDP]] private(j) shared(k){{$}}
       // PRT-OA-OPRG-NEXT:          // #pragma acc loop[[ACCC]]{{$}}
       // PRT-OA-OSEQ-NEXT:          // #pragma acc loop[[ACCC]] // discarded in OpenMP translation{{$}}
       // PRT-O-OPRGPLC-NEXT:        {
@@ -1151,20 +1151,20 @@ int main() {
     // DMP-AW-NEXT:             ACCWorkerClause
     // DMP-AV-NEXT:             ACCVectorClause
     // DMP-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:                ACCSharedClause {{.*}} <implicit>
     // DMP-ASLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <implicit>
-    // DMP-APLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
     // DMP-AGIMP-NEXT:          ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:           impl: [[OMPDD]]
+    // DMP-OPRG-NEXT:             OMPPrivateClause
+    // DMP-OPRG-NOT:                <implicit>
+    // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
     // DMP-OPRG-NEXT:             OMPSharedClause
     // DMP-OPRG-OSIMP-SAME:         <implicit>
     // DMP-OPRG-OSEXP-NOT:          <implicit>
     // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-OPRG-NEXT:             OMPPrivateClause
-    // DMP-OPRG-NOT:                <implicit>
-    // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
     // DMP-OPRG:                  ForStmt
     // DMP-OPRGPLC-NEXT:        impl: CompoundStmt
     // DMP-OPRGPLC-NEXT:          DeclStmt
@@ -1184,7 +1184,7 @@ int main() {
     // PRT-A-NEXT:                {{^ *}}#pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
     // PRT-AO-OPRG-NEXT:          // #pragma omp target teams num_teams(3) firstprivate(k){{$}}
     // PRT-AO-OPRG-OSIMP-NEXT:    // #pragma omp [[OMPDP]] private(j){{$}}
-    // PRT-AO-OPRG-OSEXP-NEXT:    // #pragma omp [[OMPDP]] shared(k) private(j){{$}}
+    // PRT-AO-OPRG-OSEXP-NEXT:    // #pragma omp [[OMPDP]] private(j) shared(k){{$}}
     // PRT-AO-OSEQ-NEXT:          // #pragma omp target teams num_teams(3) firstprivate(j,k){{$}}
     // PRT-A-NEXT:                for (j ={{.*}}) {
     // PRT-A-NEXT:                  printf
@@ -1223,7 +1223,7 @@ int main() {
     // PRT-O-OPRGPLC-NEXT:       {{^ *}}#pragma omp target teams num_teams(3) firstprivate(k){{$}}
     // PRT-O-OSEQPLC-NEXT:       {{^ *}}#pragma omp target teams num_teams(3) firstprivate(k){{$}}
     // PRT-O-OPRG-OSIMP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
-    // PRT-O-OPRG-OSEXP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] shared(k) private(j){{$}}
+    // PRT-O-OPRG-OSEXP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] private(j) shared(k){{$}}
     // PRT-OA-OPRG-NEXT:         // #pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
     // PRT-OA-OSEQ-NEXT:         // #pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
     // PRT-O-OPRGPLC-NEXT:       {
@@ -1331,20 +1331,20 @@ int main() {
     // DMP-AW-NEXT:             ACCWorkerClause
     // DMP-AV-NEXT:             ACCVectorClause
     // DMP-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:                ACCSharedClause {{.*}} <implicit>
     // DMP-ASLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <implicit>
-    // DMP-APLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
     // DMP-AGIMP-NEXT:          ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:           impl: [[OMPDD]]
+    // DMP-OPRG-NEXT:             OMPPrivateClause
+    // DMP-OPRG-NOT:                <implicit>
+    // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
     // DMP-OPRG-NEXT:             OMPSharedClause
     // DMP-OPRG-OSIMP-SAME:         <implicit>
     // DMP-OPRG-OSEXP-NOT:          <implicit>
     // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-OPRG-NEXT:             OMPPrivateClause
-    // DMP-OPRG-NOT:                <implicit>
-    // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
     // DMP-OPRG:                  ForStmt
     // DMP-OPRGPLC-NEXT:        impl: CompoundStmt
     // DMP-OPRGPLC-NEXT:          DeclStmt
@@ -1365,7 +1365,7 @@ int main() {
     // PRT-AO-OPRG-NEXT:          // #pragma omp target teams num_teams(3) firstprivate(j) firstprivate(k){{$}}
     // PRT-AO-OSEQ-NEXT:          // #pragma omp target teams num_teams(3) firstprivate(j) firstprivate(k){{$}}
     // PRT-AO-OPRG-OSIMP-NEXT:    // #pragma omp [[OMPDP]] private(j){{$}}
-    // PRT-AO-OPRG-OSEXP-NEXT:    // #pragma omp [[OMPDP]] shared(k) private(j){{$}}
+    // PRT-AO-OPRG-OSEXP-NEXT:    // #pragma omp [[OMPDP]] private(j) shared(k){{$}}
     // PRT-A-NEXT:                for (j ={{.*}}) {
     // PRT-A-NEXT:                  printf
     // PRT-A-NEXT:                  for (k ={{.*}})
@@ -1400,7 +1400,7 @@ int main() {
     // PRT-OA-OSEQPLC-NEXT:      // v----------OMP----------v
     // PRT-O-NEXT:               {{^ *}}#pragma omp target teams num_teams(3) firstprivate(j) firstprivate(k){{$}}
     // PRT-O-OPRG-OSIMP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] private(j){{$}}
-    // PRT-O-OPRG-OSEXP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] shared(k) private(j){{$}}
+    // PRT-O-OPRG-OSEXP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] private(j) shared(k){{$}}
     // PRT-OA-OPRG-NEXT:         // #pragma acc parallel loop[[ACCC]] num_gangs(3) firstprivate(j){{$}}
     // PRT-OA-OSEQ-NEXT:         // #pragma acc parallel loop[[ACCC]] num_gangs(3) firstprivate(j){{$}}
     // PRT-O-OPRGPLC-NEXT:       {
@@ -1890,10 +1890,10 @@ int main() {
     // DMP-AW-NEXT:         ACCWorkerClause
     // DMP-AV-NEXT:         ACCVectorClause
     // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-    // DMP-ASLC-NEXT:       ACCSharedClause {{.*}} <implicit>
-    // DMP-ASLC-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
     // DMP-APLC-NEXT:       ACCPrivateClause {{.*}} <implicit>
     // DMP-APLC-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-ASLC-NEXT:       ACCSharedClause {{.*}} <implicit>
+    // DMP-ASLC-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
     // DMP-AGIMP-NEXT:      ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:       impl: [[OMPDD]]
     // DMP-OPRG-NEXT:         OMPPrivateClause
@@ -2023,10 +2023,10 @@ int main() {
     // DMP-AW-NEXT:            ACCWorkerClause
     // DMP-AV-NEXT:            ACCVectorClause
     // DMP-AIMP-NEXT:          ACCIndependentClause {{.*}} <implicit>
-    // DMP-ASLC-NEXT:          ACCSharedClause {{.*}} <implicit>
-    // DMP-ASLC-NEXT:            DeclRefExpr {{.*}} 'j' 'int'
     // DMP-APLC-NEXT:          ACCPrivateClause {{.*}} <implicit>
     // DMP-APLC-NEXT:            DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-ASLC-NEXT:          ACCSharedClause {{.*}} <implicit>
+    // DMP-ASLC-NEXT:            DeclRefExpr {{.*}} 'j' 'int'
     // DMP-AGIMP-NEXT:         ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:          impl: [[OMPDD]]
     // DMP-OPRG-NEXT:            OMPPrivateClause

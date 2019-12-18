@@ -1181,21 +1181,21 @@ int main() {
     // DMP-NEXT:   ACCCollapseClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 2
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-    // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:   ACCPrivateClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:   impl: OMPDistributeDirective
     // DMP-NEXT:     OMPCollapseClause
     // DMP-NEXT:       ConstantExpr {{.*}} 'int'
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:     OMPPrivateClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:       DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
     // DMP:          ForStmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc loop gang collapse(2){{$}}
@@ -1258,29 +1258,29 @@ int main() {
     // DMP-NEXT:   ACCCollapseClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 2
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-    // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:   ACCPrivateClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:   impl: OMPParallelForDirective
     // DMP-NEXT:     OMPNum_threadsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 8
     // DMP-NEXT:     OMPCollapseClause
     // DMP-NEXT:       ConstantExpr {{.*}} 'int'
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:     OMPSharedClause
-    // DMP-NOT:        <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:     OMPPrivateClause {{.*}}
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:       DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:     OMPSharedClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
     // DMP:          ForStmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker collapse(2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for num_threads(8) collapse(2) shared(k) private(i,j){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for num_threads(8) collapse(2) shared(k) private(i,j){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for num_threads(8) collapse(2) private(i,j) shared(k){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for num_threads(8) collapse(2) private(i,j) shared(k){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker collapse(2){{$}}
     // PRT-NEXT:    for (i ={{.*}})
     #pragma acc loop worker collapse(2)
@@ -1335,10 +1335,10 @@ int main() {
     // DMP-NEXT:       ACCCollapseClause
     // DMP-NEXT:         IntegerLiteral {{.*}} 2
     // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-    // DMP-NEXT:       ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:         DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:       ACCPrivateClause {{.*}} <implicit>
     // DMP-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:       ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:       impl: CompoundStmt
     // DMP-NEXT:         DeclStmt
     // DMP-NEXT:           VarDecl {{.*}} j 'int'

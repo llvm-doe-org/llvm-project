@@ -588,10 +588,10 @@ this section.
       it specifies copying in a value you cannot then access or
       copying out an unchanged value.  Thus, the above restriction
       applies to a combined construct as well.
-    * TODO: Is it useful to or does any existing code combine `copyin`
-      or `copyout` with `firstprivate` or `private` expecting the
-      copied value to be used or assigned in a later or earlier
-      compute region?
+    * TODO: Does any existing code combine either `copy`, `copyin`, or
+      `copyout` with either `firstprivate` or `private` expecting the
+      device copy to be accessed elsewhere or via an alias even though
+      it's inaccessible (lexically) within the construct?
 * It is an error if a variable has *exp* `reduction` as well as either
   *exp* `firstprivate` or *exp* `private` on an OpenACC directive.
   Notes:
@@ -687,6 +687,52 @@ this section.
       *exp* `shared`.  As noted in the mappings below, Clacc relies on
       OpenMP implicit data sharing attributes in those cases, and the
       semantics are the desired OpenACC semantics.
+* Identifying a data attribute as *pre* instead of *imp* only matters
+  for combined constructs.  Notes:
+    * OpenACC 3.0 sec. 2.6 "Data Environment" says "Variables with
+      predetermined data attributes may not appear in a data clause
+      that conflicts with that data attribute."  That is, the
+      difference between *pre* and *imp* is that a variable with a
+      *pre* data attribute is not permitted to have a conflicting
+      *exp* data clause, but a variable with an *imp* data attribute
+      is.  The definition of "conflicts" is not specified.
+    * OpenACC 3.0 sec. 2.6.1 "Variables with Predetermined Data
+      Attributes" describes loop control variables and locally
+      declared variables as being *pre* `private` within their
+      contexts.  It does not describe any other *pre* data attributes.
+    * In the case of locally declared variables:
+        * The only *exp* data clauses that could refer to them would
+          be on directives nested within the scope of the variable
+          declarations, and those cannot expand the visibility of the
+          variables, so conflicts don't seem possible.
+    * In the case of loop control variables:
+        * `acc loop` does not support any data clauses listed in
+          OpenACC 3.0 sec. 2.7 "Data Clauses".  Even if we think of
+          *exp* `private` and *exp* `reduction` as data clauses,
+          there's no clarification that those conflict with *pre*
+          `private`.
+		* Even so, it's probably reasonable to assume that `private`
+          generally conflicts with `reduction` on either an `acc loop`
+          or combined construct.  Under OpenACC 3.0, this conflict is
+          probably the only way to draw a distinction between *pre*
+          and *imp*:
+            * However, as discussed under "Loop Control Variables"
+              below, Clacc does not permit *exp* `reduction` for loop
+              control variables generally.  This is true whether Clacc
+              considers the loop control variable to be *pre*
+              `private` or *imp* `shared`.  Thus, this restriction is
+              not derived from *pre*, and so, under Clacc, *pre* has
+              no significance on a standalone `acc loop`.
+            * On a combined construct, a data clause from OpenACC 3.0
+              sec. 2.7 "Data Clauses" or a `firstprivate` might be
+              viewed as conflicting with *pre* `private`.  However,
+              such clauses apply to the effective compute construct
+              while *pre* `private` applies to the effective loop
+              construct, so they could instead be viewed as not
+              conflicting.  Clacc takes the former view for
+              consistency with its handling of *exp* `private` on a
+              combined construct, as discussed above.  FIXME:
+              Actually, Clacc takes the later view currently.
 
 ### Reductions ###
 
