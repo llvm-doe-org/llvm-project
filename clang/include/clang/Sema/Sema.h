@@ -10113,10 +10113,9 @@ public:
   /// Called on end of data attribute block.
   void EndOpenACCDABlock();
 
-  /// Check if the current region is an OpenACC loop region and if it
-  /// is, mark loop control variable, used in \p Init for loop initialization,
-  /// as private by default.
-  /// \param Init First part of the for loop.
+  /// If the current region is an OpenACC loop region, record any loop control
+  /// variables assigned but not declared in \p Init, the init of the attached
+  /// for loop.
   void ActOnOpenACCLoopInitialization(SourceLocation ForLoc, Stmt *Init);
   /// Record a break statement appearing in the scope of an OpenACC loop
   /// directive.

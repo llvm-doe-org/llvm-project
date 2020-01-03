@@ -1899,7 +1899,8 @@ StmtResult Parser::ParseForStatement(SourceLocation *TrailingElseLoc) {
     if (getLangOpts().OpenMP && FirstPart.isUsable()) {
       Actions.ActOnOpenMPLoopInitialization(ForLoc, FirstPart.get());
     }
-    // In OpenACC loop region, loop control variable must be private.
+    // In OpenACC loop region, data attributes must be computed for loop
+    // control variables.
     if (getLangOpts().OpenACC && FirstPart.isUsable()) {
       Actions.ActOnOpenACCLoopInitialization(ForLoc, FirstPart.get());
     }
