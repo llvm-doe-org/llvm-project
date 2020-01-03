@@ -104,15 +104,16 @@ private:
     SourceLocation LoopBreakLoc; // invalid if no break statement or not loop
     unsigned AssociatedLoops = 1; // from collapse clause
     unsigned AssociatedLoopsParsed = 0; // how many have been parsed so far
-    // True if this directive has a (separate or combined with this directive)
-    // nested acc loop directive with explicit gang partitioning.
+    // True if this is an effective compute or loop directive and has an
+    // effective nested loop directive with explicit gang partitioning.
     //
     // Implicit gang clauses are later added by ImplicitGangAdder after the
     // entire parallel construct is parsed and thus after this stack is popped
-    // for all nested loop directives, so we don't bother to update this then.
+    // for all effective nested loop directives, so we don't bother to update
+    // this then.
     bool NestedExplicitGangPartitioning = false;
-    // True if this directive has a (separate or combined with this directive)
-    // nested acc loop directive with worker partitioning.
+    // True if this is an effective compute or loop directive and has an
+    // effective nested loop directive with worker partitioning.
     bool NestedWorkerPartitioning = false;
     DirStackEntryTy(OpenACCDirectiveKind RealDKind,
                     OpenACCDirectiveKind EffectiveDKind, SourceLocation Loc)
@@ -172,12 +173,12 @@ public:
     return Stack.back().LCVs;
   }
   /// Register the current directive's loop partitioning kind.
+  ///
+  /// As part of that, mark all effective ancestor compute or loop directives
+  /// as containing any explicit gang or worker partitioning.
   void setLoopPartitioning(ACCPartitioningKind Kind) {
     assert(!isStackEmpty() && "Directive stack is empty");
     Stack.back().LoopDirectiveKind = Kind;
-    /// Mark all ancestor directives (including the effective parent
-    /// directive if this is the effective child directive in a combined
-    /// directive) as containing explicit gang or worker partitioning.
     if (Kind.hasGangPartitioning() || Kind.hasWorkerPartitioning()) {
       assert(isOpenACCLoopDirective(getEffectiveDirective()) &&
              "expected gang/worker partitioning to be on a loop directive");
@@ -191,6 +192,10 @@ public:
           I->NestedExplicitGangPartitioning = true;
         if (Kind.hasWorkerPartitioning())
           I->NestedWorkerPartitioning = true;
+        // Outside a compute directive, we expect only data directives, which
+        // need not be marked.
+        if (isOpenACCComputeDirective(I->EffectiveDKind))
+          break;
       }
     }
   }
@@ -228,20 +233,19 @@ public:
     }
     return ACCPartitioningKind();
   }
-  /// Does this directive have a nested acc loop directive (either a separate
-  /// directive or an effective child directive in a combined directive) with
-  /// explicit gang partitioning?
+  /// Is this an effective compute or loop directive with an effective nested
+  /// loop directive with explicit gang partitioning?
   ///
   /// Implicit gang clauses are later added by ImplicitGangAdder after the
   /// entire parallel construct is parsed and thus after this stack is popped
-  /// for all nested loop directives, so we don't bother to update this then.
+  /// for all effective nested loop directives, so we don't bother to update
+  /// this then.
   bool getNestedExplicitGangPartitioning() const {
     assert(!isStackEmpty());
     return Stack.back().NestedExplicitGangPartitioning;
   }
-  /// Does this directive have a nested acc loop directive (either a separate
-  /// directive or an effective child directive in a combined directive) with
-  /// worker partitioning?
+  /// Is this an effective compute or loop directive with an effective nested
+  /// loop directive with worker partitioning?
   bool getNestedWorkerPartitioning() const {
     assert(!isStackEmpty());
     return Stack.back().NestedWorkerPartitioning;
