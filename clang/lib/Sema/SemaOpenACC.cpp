@@ -184,9 +184,9 @@ public:
       for (auto I = std::next(Stack.rbegin()), E = std::prev(Stack.rend());
            I != E; ++I) {
         assert((isOpenACCLoopDirective(I->EffectiveDKind) ||
-                isOpenACCParallelDirective(I->EffectiveDKind)) &&
+                isOpenACCComputeDirective(I->EffectiveDKind)) &&
                "expected gang/worker partitioning to be nested in acc loop or"
-               " parallel directive");
+               " compute directive");
         if (Kind.hasGangPartitioning())
           I->NestedExplicitGangPartitioning = true;
         if (Kind.hasWorkerPartitioning())
