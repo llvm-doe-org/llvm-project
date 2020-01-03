@@ -44,9 +44,9 @@ namespace {
 /// as data attributes.
 ///
 /// In the case of a combined directive, we push two entries on the stack, one
-/// for each effective directive.  Because the entries are pushed and popped
-/// together, an iteration of the stack that encounters one entry for a
-/// combined directive can always assume another entry follows.
+/// for each effective directive.  They are not popped at the same time, so
+/// outer effective directives are sometimes present when inner effective
+/// directives are not.
 class DirStackTy final {
 public:
   Sema &SemaRef;
