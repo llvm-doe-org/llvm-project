@@ -95,10 +95,10 @@ private:
     /// are two consecutive entries: the outer has RealDKind as the combined
     /// directive kind, the inner has RealDKind has ACCD_unknown, and both
     /// have EffectiveDKind != ACCD_unknown.
-    OpenACCDirectiveKind RealDKind = ACCD_unknown;
+    OpenACCDirectiveKind RealDKind;
     /// The effective directive kind, which is always the same as RealDKind in
     /// the case of a non-combined directive.
-    OpenACCDirectiveKind EffectiveDKind = ACCD_unknown;
+    OpenACCDirectiveKind EffectiveDKind;
     ACCPartitioningKind LoopDirectiveKind;
     SourceLocation ConstructLoc;
     SourceLocation LoopBreakLoc; // invalid if no break statement or not loop
@@ -119,18 +119,13 @@ private:
                     OpenACCDirectiveKind EffectiveDKind, SourceLocation Loc)
         : RealDKind(RealDKind), EffectiveDKind(EffectiveDKind),
           ConstructLoc(Loc) {}
-    DirStackEntryTy() {}
   };
 
   /// The underlying directive stack.
   SmallVector<DirStackEntryTy, 4> Stack;
 
-  bool isStackEmpty() const {
-    return Stack.empty();
-  }
-
 public:
-  explicit DirStackTy(Sema &S) : SemaRef(S), Stack(1) {}
+  explicit DirStackTy(Sema &S) : SemaRef(S) {}
 
   void push(OpenACCDirectiveKind RealDKind,
             OpenACCDirectiveKind EffectiveDKind, SourceLocation Loc) {
@@ -138,13 +133,13 @@ public:
   }
 
   void pop() {
-    assert(Stack.size() > 1 && "Directive stack is empty!");
+    assert(!Stack.empty() && "expected non-empty directive stack");
     Stack.pop_back();
   }
 
   /// Register break statement in current acc loop.
   void addLoopBreakStatement(SourceLocation BreakLoc) {
-    assert(!isStackEmpty() && "Directive stack is empty");
+    assert(!Stack.empty() && "expected non-empty directive stack");
     assert(isOpenACCLoopDirective(getEffectiveDirective())
            && "Break statement must be added only to loop directive");
     assert(BreakLoc.isValid() && "Expected valid break location");
@@ -154,13 +149,13 @@ public:
   /// Return the location of the first break statement for this loop
   /// directive or return an invalid location if none.
   SourceLocation getLoopBreakStatement() const {
-    assert(!isStackEmpty() && "Directive stack is empty");
+    assert(!Stack.empty() && "expected non-empty directive stack");
     return Stack.back().LoopBreakLoc;
   }
   /// Register specified variable as acc loop control variable that is
   /// assigned but not declared in for loop init.
   void addLoopControlVariable(VarDecl *VD) {
-    assert(!isStackEmpty() && "Directive stack is empty");
+    assert(!Stack.empty() && "expected non-empty directive stack");
     assert(isOpenACCLoopDirective(getEffectiveDirective())
            && "Loop control variable must be added only to loop directive");
     Stack.back().LCVs.insert(VD->getCanonicalDecl());
@@ -169,7 +164,7 @@ public:
   /// assigned but not declared in the inits of the for loops associated with
   /// the current directive, or return an empty set if none.
   const llvm::DenseSet<VarDecl *> &getLoopControlVariables() const {
-    assert(!isStackEmpty() && "Directive stack is empty");
+    assert(!Stack.empty() && "expected non-empty directive stack");
     return Stack.back().LCVs;
   }
   /// Register the current directive's loop partitioning kind.
@@ -177,13 +172,12 @@ public:
   /// As part of that, mark all effective ancestor compute or loop directives
   /// as containing any explicit gang or worker partitioning.
   void setLoopPartitioning(ACCPartitioningKind Kind) {
-    assert(!isStackEmpty() && "Directive stack is empty");
+    assert(!Stack.empty() && "expected non-empty directive stack");
     Stack.back().LoopDirectiveKind = Kind;
     if (Kind.hasGangPartitioning() || Kind.hasWorkerPartitioning()) {
       assert(isOpenACCLoopDirective(getEffectiveDirective()) &&
              "expected gang/worker partitioning to be on a loop directive");
-      for (auto I = std::next(Stack.rbegin()), E = std::prev(Stack.rend());
-           I != E; ++I) {
+      for (auto I = std::next(Stack.rbegin()), E = Stack.rend(); I != E; ++I) {
         assert((isOpenACCLoopDirective(I->EffectiveDKind) ||
                 isOpenACCComputeDirective(I->EffectiveDKind)) &&
                "expected gang/worker partitioning to be nested in acc loop or"
@@ -206,7 +200,7 @@ public:
   /// been parsed.  This also does not include implicit gang clauses, which are
   /// not computed until the enclosing compute construct is fully parsed.
   ACCPartitioningKind getLoopPartitioning() const {
-    assert(!isStackEmpty() && "Directive stack is empty");
+    assert(!Stack.empty() && "expected non-empty directive stack");
     return Stack.back().LoopDirectiveKind;
   }
   /// Iterate through the ancestor directives until finding either (1) an acc
@@ -241,13 +235,13 @@ public:
   /// for all effective nested loop directives, so we don't bother to update
   /// this then.
   bool getNestedExplicitGangPartitioning() const {
-    assert(!isStackEmpty());
+    assert(!Stack.empty() && "expected non-empty directive stack");
     return Stack.back().NestedExplicitGangPartitioning;
   }
   /// Is this an effective compute or loop directive with an effective nested
   /// loop directive with worker partitioning?
   bool getNestedWorkerPartitioning() const {
-    assert(!isStackEmpty());
+    assert(!Stack.empty() && "expected non-empty directive stack");
     return Stack.back().NestedWorkerPartitioning;
   }
 
@@ -272,7 +266,7 @@ public:
     auto I = Stack.rbegin();
     if (I == Stack.rend())
       return ACCD_unknown;
-    while (I->RealDKind == ACCD_unknown && I->EffectiveDKind != ACCD_unknown)
+    while (I->RealDKind == ACCD_unknown)
       I = std::next(I);
     return I->RealDKind;
   }
@@ -280,7 +274,7 @@ public:
   /// Returns the effective directive currently being analyzed (always the
   /// same as getRealDirective unless the latter is a combined directive).
   OpenACCDirectiveKind getEffectiveDirective() const {
-    return isStackEmpty() ? ACCD_unknown : Stack.back().EffectiveDKind;
+    return Stack.empty() ? ACCD_unknown : Stack.back().EffectiveDKind;
   }
 
   /// Returns the real directive for construct enclosing currently analyzed
@@ -291,13 +285,13 @@ public:
     auto I = Stack.rbegin();
     if (I == Stack.rend())
       return ACCD_unknown;
-    while (I->RealDKind == ACCD_unknown && I->EffectiveDKind != ACCD_unknown)
+    while (I->RealDKind == ACCD_unknown)
       I = std::next(I);
     // Find real parent directive.
     I = std::next(I);
     if (I == Stack.rend())
       return ACCD_unknown;
-    while (I->RealDKind == ACCD_unknown && I->EffectiveDKind != ACCD_unknown)
+    while (I->RealDKind == ACCD_unknown)
       I = std::next(I);
     ParentLoc = I->ConstructLoc;
     return I->RealDKind;
@@ -317,23 +311,23 @@ public:
 
   /// Set associated loop count (collapse value) for the region.
   void setAssociatedLoops(unsigned Val) {
-    assert(!isStackEmpty());
+    assert(!Stack.empty() && "expected non-empty directive stack");
     assert(Stack.back().AssociatedLoops == 1);
     assert(Stack.back().AssociatedLoopsParsed == 0);
     Stack.back().AssociatedLoops = Val;
   }
   /// Return associated loop count (collapse value) for the region.
   unsigned getAssociatedLoops() const {
-    return isStackEmpty() ? 0 : Stack.back().AssociatedLoops;
+    return Stack.empty() ? 0 : Stack.back().AssociatedLoops;
   }
   /// Increment associated loops parsed in region so far.
   void incAssociatedLoopsParsed() {
-    assert(!isStackEmpty());
+    assert(!Stack.empty() && "expected non-empty directive stack");
     ++Stack.back().AssociatedLoopsParsed;
   }
   /// Get associated loops parsed in region so far.
   unsigned getAssociatedLoopsParsed() {
-    return isStackEmpty() ? 0 : Stack.back().AssociatedLoopsParsed;
+    return Stack.empty() ? 0 : Stack.back().AssociatedLoopsParsed;
   }
 
   SourceLocation getConstructLoc() { return Stack.back().ConstructLoc; }
@@ -343,7 +337,7 @@ public:
 bool DirStackTy::addBaseDA(VarDecl *VD, Expr *E,
                            OpenACCBaseDAKind BaseDAKind, bool IsImplicit) {
   VD = VD->getCanonicalDecl();
-  assert(Stack.size() > 1 && "Directive stack is empty");
+  assert(!Stack.empty() && "expected non-empty directive stack");
 
   // If this is not a combined directive, or if this is an implicit clause,
   // visit just this directive.  Otherwise, climb through all effective
@@ -420,7 +414,7 @@ bool DirStackTy::addBaseDA(VarDecl *VD, Expr *E,
 bool DirStackTy::addReduction(VarDecl *VD, Expr *E,
                               const DeclarationNameInfo &ReductionId) {
   VD = VD->getCanonicalDecl();
-  assert(Stack.size() > 1 && "Directive stack is empty");
+  assert(!Stack.empty() && "expected non-empty directive stack");
   assert(!ReductionId.getName().isEmpty() && "expected reduction");
 
   // If this is not a combined directive, visit just this directive.
@@ -548,7 +542,7 @@ DirStackTy::DAVarData DirStackTy::getTopDA(VarDecl *VD) {
   VD = VD->getCanonicalDecl();
   DAVarData DVar;
 
-  if (Stack.size() == 1) {
+  if (Stack.empty()) {
     // Not in OpenACC execution region and top scope was already checked.
     return DVar;
   }
