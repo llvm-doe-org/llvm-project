@@ -791,15 +791,22 @@ this section.
       OpenACC compiler to leave such a loop as a normal sequential
       loop in C, where the variable would normally have `shared`
       semantics in that its final value is visible after the loop.
-    * OpenACC 2.7 sec. 2.6.1 L876-879 only requires that the variable
-      is private to each thread executing the loop.  Only one thread
-      executes a sequential loop, and it's the same thread that
+    * OpenACC 3.0 sec. 2.6.1 L1038-1039 only requires that the
+      variable is private to each thread executing the loop.  Only one
+      thread executes a sequential loop, and it's the same thread that
       executes outside the loop.  The specification does not appear to
       clarify whether the variable's privacy is also limited to the
       loop's region.  Clacc uses the interpretation that, as explained
       above, seems more useful.
     * In our experiments, this choice is consistent with pgcc 19.4-0,
       but gcc 8.3.0 assumes *pre* `private` instead.
+    * Clacc chooses *imp* instead of *pre* for this data attribute so
+      that it can be overridden by *exp* `private`.  When the loop
+      control variable is *exp* `private`, it is still private to the
+      one thread executing the loop, so the *exp* `private` doesn't
+      conflict with the predetermined privacy described by the spec,
+      so it should be permitted according to OpenACC 3.0 sec. 2.6
+      L1023-1024.
 * For any other `acc loop` directive, the loop control variable is
   *pre* `private`.  Notes:
     * OpenACC 2.7 sec. 2.6.1 L876-879 only requires that the variable
