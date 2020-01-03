@@ -257,8 +257,10 @@ public:
   /// Returns data attributes from top of the stack for the specified
   /// declaration.
   DAVarData getTopDA(VarDecl *VD);
-  /// Returns predetermined or implicit base data attribute for the specified
-  /// declaration.
+  /// Computes the predetermined base data attribute for the specified
+  /// declaration or ACC_BASE_DA_unknown if none.
+  OpenACCBaseDAKind getPredeterminedBaseDA(VarDecl *D);
+  /// Computes the implicit base data attribute for the specified declaration.
   OpenACCBaseDAKind getImplicitBaseDA(VarDecl *D);
 
   /// Returns currently analyzed directive.
@@ -476,12 +478,35 @@ bool DirStackTy::addReduction(VarDecl *VD, Expr *E,
   return false;
 }
 
+OpenACCBaseDAKind DirStackTy::getPredeterminedBaseDA(VarDecl *VD) {
+  VD = VD->getCanonicalDecl();
+  const DAVarData &DVar = getTopDA(VD);
+  if (!DVar.ReductionOnEffectiveOrCombined &&
+      getLoopControlVariables().count(VD) &&
+      !getLoopPartitioning().hasSeqExplicit())
+  {
+    // OpenACC 3.0 sec. 2.6.1 L1038-1039:
+    //   "The loop variable in a C for statement [...] that is associated with
+    //   a loop directive is predetermined to be private to each thread that
+    //   will execute each iteration of the loop."
+    //
+    // See the section "Loop Control Variables" in the Clang OpenACC design
+    // document for the interpretation used here.
+    // DirStackTy::getImplicitBaseDA handles the case with a seq clause.
+    //
+    // We assume a reduction variable isn't a loop-control variable, and we
+    // complain about that combination later in ActOnOpenACCLoopDirective.
+    return ACC_BASE_DA_private;
+  }
+  return ACC_BASE_DA_unknown;
+}
+
 OpenACCBaseDAKind DirStackTy::getImplicitBaseDA(VarDecl *VD) {
   VD = VD->getCanonicalDecl();
   OpenACCBaseDAKind BaseDAKind;
-  // Here, we assume a reduction variable isn't a loop-control variable, and we
-  // complain about that combination later in ActOnOpenACCLoopDirective.
   const DAVarData &DVar = getTopDA(VD);
+  // We assume a reduction variable isn't a loop-control variable, and we
+  // complain about that combination later in ActOnOpenACCLoopDirective.
   if (DVar.ReductionOnEffectiveOrCombined) {
     if (isOpenACCParallelDirective(getEffectiveDirective()))
       BaseDAKind = ACC_BASE_DA_copy;
@@ -489,31 +514,19 @@ OpenACCBaseDAKind DirStackTy::getImplicitBaseDA(VarDecl *VD) {
       BaseDAKind = ACC_BASE_DA_unknown;
   }
   else if (getLoopControlVariables().count(VD)) {
-    // OpenACC 2.6 [2.6.1]:
-    //   "The loop variable in a C for statement [...] that is associated
-    //   with a loop directive is predetermined to be private to each thread
-    //   that will execute each iteration of the loop."
+    // OpenACC 3.0 sec. 2.6.1 L1038-1039:
+    //   "The loop variable in a C for statement [...] that is associated with
+    //   a loop directive is predetermined to be private to each thread that
+    //   will execute each iteration of the loop."
     //
-    //   If the loop control variable is assigned but not declared in the for
-    //   init, we need to specify a data clause.  The OpenACC spec does not
-    //   appear to clarify the end of the scope of the private copy, so we
-    //   make what appears to be the intuitive choice for each case below.
-    if (getLoopPartitioning().hasSeqExplicit())
-      // In the case of a loop with an explicit seq, we assume the normal
-      // behavior of a sequential loop in C: the loop control variable takes
-      // its final value computed by the loop.  We implement this behavior by
-      // making the loop control variable implicitly shared instead of
-      // predetermined private, and this doesn't seem to contradict the
-      // specification that it be private to the one thread that executes the
-      // loop.
-      BaseDAKind = ACC_BASE_DA_shared;
-    else
-      // Private is consistent with OpenMP in all cases here except vector
-      // partitioning.  That is, OpenMP simd makes it predetermined linear,
-      // which has lastprivate-like semantics.  However, for consistency, we
-      // assume the intuitive semantics of private in all cases here: the
-      // private copy goes out of scope at the end of the loop.
-      BaseDAKind = ACC_BASE_DA_private;
+    // See the section "Loop Control Variables" in the Clang OpenACC design
+    // document for the interpretation used here.
+    // DirStackTy::getPredeterminedBaseDA handles the case without a seq
+    // clause.
+    assert(getLoopPartitioning().hasSeqExplicit() &&
+           "expected predetermined private for loop control variable with "
+           "explicit seq");
+    BaseDAKind = ACC_BASE_DA_shared;
   }
   // OpenACC 2.5 [2.5.1.588-590]:
   //   "A scalar variable referenced in the parallel construct that does not
@@ -721,13 +734,21 @@ public:
       if (Stack->getTopDA(VD).BaseDAKind != ACC_BASE_DA_unknown)
         return;
 
-      // Skip variable if an implicit clause has already been computed.
+      // Skip variable if an implicit or predetermined clause has already been
+      // computed.
       BaseDAEntry &Entry = ImplicitBaseDAEntries[VD];
       if (Entry.BaseDAKind != ACC_BASE_DA_unknown)
         return;
 
-      // Compute implicit base DA.
-      Entry.BaseDAKind = Stack->getImplicitBaseDA(VD);
+      // Compute predetermined base DA.
+      Entry.BaseDAKind = Stack->getPredeterminedBaseDA(VD);
+
+      // Compute implicit base DA if we don't already have a predetermined
+      // base DA.
+      if (Entry.BaseDAKind == ACC_BASE_DA_unknown)
+        Entry.BaseDAKind = Stack->getImplicitBaseDA(VD);
+
+      // Add base DA to the appropriate list.
       BaseDAVector *BaseDAs;
       switch (Entry.BaseDAKind) {
       case ACC_BASE_DA_copy:
@@ -747,7 +768,7 @@ public:
         break;
       case ACC_BASE_DA_copyin:
       case ACC_BASE_DA_copyout:
-        llvm_unreachable("unexpected implicit base DA");
+        llvm_unreachable("unexpected predetermined or implicit base DA");
       }
       if (BaseDAs) {
         BaseDAs->push_back(E);
