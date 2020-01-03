@@ -503,17 +503,15 @@ OpenACCBaseDAKind DirStackTy::getPredeterminedBaseDA(VarDecl *VD) {
 
 OpenACCBaseDAKind DirStackTy::getImplicitBaseDA(VarDecl *VD) {
   VD = VD->getCanonicalDecl();
-  OpenACCBaseDAKind BaseDAKind;
   const DAVarData &DVar = getTopDA(VD);
   // We assume a reduction variable isn't a loop-control variable, and we
   // complain about that combination later in ActOnOpenACCLoopDirective.
   if (DVar.ReductionOnEffectiveOrCombined) {
     if (isOpenACCParallelDirective(getEffectiveDirective()))
-      BaseDAKind = ACC_BASE_DA_copy;
-    else
-      BaseDAKind = ACC_BASE_DA_unknown;
+      return ACC_BASE_DA_copy;
+    return ACC_BASE_DA_unknown;
   }
-  else if (getLoopControlVariables().count(VD)) {
+  if (getLoopControlVariables().count(VD)) {
     // OpenACC 3.0 sec. 2.6.1 L1038-1039:
     //   "The loop variable in a C for statement [...] that is associated with
     //   a loop directive is predetermined to be private to each thread that
@@ -526,29 +524,26 @@ OpenACCBaseDAKind DirStackTy::getImplicitBaseDA(VarDecl *VD) {
     assert(getLoopPartitioning().hasSeqExplicit() &&
            "expected predetermined private for loop control variable with "
            "explicit seq");
-    BaseDAKind = ACC_BASE_DA_shared;
+    return ACC_BASE_DA_shared;
   }
-  // OpenACC 2.5 [2.5.1.588-590]:
-  //   "A scalar variable referenced in the parallel construct that does not
-  //   appear in a data clause for the construct or any enclosing data
-  //   construct will be treated as if it appeared in a firstprivate clause."
-  // OpenACC 2.5 [Glossary.2870]:
-  //   "Scalar datatype - an intrinsic or built-in datatype that is not an
-  //   array or aggregate datatype."
-  // OpenACC 2.5 [Glossary.2871-2874]:
-  //   "In C, scalar datatypes are char (signed or unsigned), int (signed or
-  //   unsigned, with optional short, long or long long attribute), enum,
-  //   float, double, long double, Complex (with optional float or long
-  //   attribute) or any pointer datatype."
-  else if (isOpenACCParallelDirective(getEffectiveDirective())) {
+  if (isOpenACCParallelDirective(getEffectiveDirective())) {
+    // OpenACC 2.5 [2.5.1.588-590]:
+    //   "A scalar variable referenced in the parallel construct that does not
+    //   appear in a data clause for the construct or any enclosing data
+    //   construct will be treated as if it appeared in a firstprivate clause."
+    // OpenACC 2.5 [Glossary.2870]:
+    //   "Scalar datatype - an intrinsic or built-in datatype that is not an
+    //   array or aggregate datatype."
+    // OpenACC 2.5 [Glossary.2871-2874]:
+    //   "In C, scalar datatypes are char (signed or unsigned), int (signed or
+    //   unsigned, with optional short, long or long long attribute), enum,
+    //   float, double, long double, Complex (with optional float or long
+    //   attribute) or any pointer datatype."
     if (VD->getType()->isScalarType())
-      BaseDAKind = ACC_BASE_DA_firstprivate;
-    else
-      BaseDAKind = ACC_BASE_DA_copy;
+      return ACC_BASE_DA_firstprivate;
+    return ACC_BASE_DA_copy;
   }
-  else
-    BaseDAKind = ACC_BASE_DA_shared;
-  return BaseDAKind;
+  return ACC_BASE_DA_shared;
 }
 
 DirStackTy::DAVarData DirStackTy::getTopDA(VarDecl *VD) {
