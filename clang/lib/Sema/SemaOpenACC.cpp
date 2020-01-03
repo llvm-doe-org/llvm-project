@@ -213,9 +213,10 @@ public:
   ACCPartitioningKind getParentLoopPartitioning(
       OpenACCDirectiveKind &ParentDir, SourceLocation &ParentLoc) const {
     for (auto I = std::next(Stack.rbegin()), E = Stack.rend(); I != E; ++I) {
+      if (isOpenACCComputeDirective(I->EffectiveDKind))
+        return ACCPartitioningKind();
       const ACCPartitioningKind &ParentKind = I->LoopDirectiveKind;
-      if (isOpenACCComputeDirective(I->EffectiveDKind) ||
-          ParentKind.hasGangClause() || ParentKind.hasWorkerClause() ||
+      if (ParentKind.hasGangClause() || ParentKind.hasWorkerClause() ||
           ParentKind.hasVectorClause())
       {
         while (I->RealDKind == ACCD_unknown)
