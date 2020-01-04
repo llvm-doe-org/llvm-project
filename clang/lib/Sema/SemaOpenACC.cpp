@@ -480,9 +480,7 @@ bool DirStackTy::addReduction(VarDecl *VD, Expr *E,
 
 OpenACCBaseDAKind DirStackTy::getPredeterminedBaseDA(VarDecl *VD) {
   VD = VD->getCanonicalDecl();
-  const DAVarData &DVar = getTopDA(VD);
-  if (!DVar.ReductionOnEffectiveOrCombined &&
-      getLoopControlVariables().count(VD) &&
+  if (getLoopControlVariables().count(VD) &&
       !getLoopPartitioning().hasSeqExplicit())
   {
     // OpenACC 3.0 sec. 2.6.1 L1038-1039:
@@ -493,9 +491,6 @@ OpenACCBaseDAKind DirStackTy::getPredeterminedBaseDA(VarDecl *VD) {
     // See the section "Loop Control Variables" in the Clang OpenACC design
     // document for the interpretation used here.
     // DirStackTy::getImplicitBaseDA handles the case with a seq clause.
-    //
-    // We assume a reduction variable isn't a loop-control variable, and we
-    // complain about that combination later in ActOnOpenACCLoopDirective.
     return ACC_BASE_DA_private;
   }
   return ACC_BASE_DA_unknown;
@@ -504,20 +499,11 @@ OpenACCBaseDAKind DirStackTy::getPredeterminedBaseDA(VarDecl *VD) {
 OpenACCBaseDAKind DirStackTy::getImplicitBaseDA(VarDecl *VD) {
   VD = VD->getCanonicalDecl();
   const DAVarData &DVar = getTopDA(VD);
-  // We assume a reduction variable isn't a loop-control variable, and we
-  // complain about that combination later in ActOnOpenACCLoopDirective.
-  if (DVar.ReductionOnEffectiveOrCombined) {
-    // OpenACC 3.0 sec. 2.5.13 "reduction clause" L984-985:
-    //   "It implies a copy data clause for each reduction var, unless a data
-    //   clause for that variable appears on the compute construct."
-    // OpenACC 3.0 sec. 2.11 "Combined Constructs" L1958-1959:
-    //   "In addition, a reduction clause on a combined construct implies a
-    //   copy data clause for each reduction variable, unless a data clause for
-    //   that variable appears on the combined construct."
-    if (isOpenACCParallelDirective(getEffectiveDirective()))
-      return ACC_BASE_DA_copy;
-    return ACC_BASE_DA_unknown;
-  }
+  // The order of the next two checks shouldn't matter as we've already
+  // rejected this combination.
+  assert((!getLoopControlVariables().count(VD) ||
+          !DVar.ReductionOnEffectiveOrCombined) &&
+         "expected acc loop control var not to be reduction var");
   if (getLoopControlVariables().count(VD)) {
     // OpenACC 3.0 sec. 2.6.1 "Variables with Predetermined Data Attributes"
     // L1038-1039:
@@ -533,6 +519,18 @@ OpenACCBaseDAKind DirStackTy::getImplicitBaseDA(VarDecl *VD) {
            "expected predetermined private for loop control variable with "
            "explicit seq");
     return ACC_BASE_DA_shared;
+  }
+  if (DVar.ReductionOnEffectiveOrCombined) {
+    // OpenACC 3.0 sec. 2.5.13 "reduction clause" L984-985:
+    //   "It implies a copy data clause for each reduction var, unless a data
+    //   clause for that variable appears on the compute construct."
+    // OpenACC 3.0 sec. 2.11 "Combined Constructs" L1958-1959:
+    //   "In addition, a reduction clause on a combined construct implies a
+    //   copy data clause for each reduction variable, unless a data clause for
+    //   that variable appears on the combined construct."
+    if (isOpenACCParallelDirective(getEffectiveDirective()))
+      return ACC_BASE_DA_copy;
+    return ACC_BASE_DA_unknown;
   }
   if (isOpenACCParallelDirective(getEffectiveDirective())) {
     // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L835-838:
@@ -1272,6 +1270,25 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     // Add implicit gang clauses.
     if (isOpenACCParallelDirective(DKind))
       ImplicitGangAdder().Visit(AStmt);
+
+    // Complain for reductions on acc loop control variables.  This restriction
+    // is not clearly specified in OpenACC 3.0.  See the section "Loop Control
+    // Variables" in the Clang OpenACC design document.
+    for (VarDecl *VD : DirStack->getLoopControlVariables()) {
+      const DirStackTy::DAVarData &DVar = DirStack->getTopDA(VD);
+      if (!DVar.ReductionId.getName().isEmpty()) {
+        Diag(DVar.ReductionRefExpr->getEndLoc(),
+             diag::err_acc_reduction_on_loop_control_var)
+            << VD->getName() << DVar.ReductionRefExpr->getSourceRange();
+        ErrorFound = true;
+      }
+    }
+
+    // ImplicitBaseDAAdder assumes predetermined and explicit DAs have no
+    // errors.
+    if (ErrorFound)
+      return StmtError();
+
     // For referenced variables, add implicit base DAs, possibly influenced
     // by any implicit gang clauses added above.
     ImplicitBaseDAAdder Adder(DirStack);
@@ -1304,6 +1321,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
       assert(Implicit && "expected successful implicit firstprivate");
       ClausesWithImplicit.push_back(Implicit);
     }
+
     // Add implicit gang reductions, possibly due to any implicit copy clauses
     // added above.
     if (isOpenACCParallelDirective(DKind)) {
@@ -1425,21 +1443,6 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
     }
     LoopStmt = LoopFor->getBody();
     assert(LoopStmt);
-  }
-
-  // Complain if we have a reduction on an acc loop control variable.
-  for (ACCClause *C : Clauses) {
-    if (ACCReductionClause *RC = dyn_cast_or_null<ACCReductionClause>(C)) {
-      for (Expr *VR : RC->varlists()) {
-        VarDecl *VD = cast<VarDecl>(cast<DeclRefExpr>(VR)->getDecl())
-                      ->getCanonicalDecl();
-        if (DirStack->getLoopControlVariables().count(VD)) {
-           Diag(VR->getEndLoc(), diag::err_acc_reduction_on_loop_control_var)
-               << VD->getName() << VR->getSourceRange();
-           return StmtError();
-        }
-      }
-    }
   }
 
   // FIXME: Much more validation of the for statement should be performed.  To
