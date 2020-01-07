@@ -9717,6 +9717,8 @@ def err_acc_reduction_not_real_or_pointer_type : Error<
   "OpenACC reduction operator '%0' argument must be of real or pointer type">;
 def err_acc_reduction_on_loop_control_var : Error<
   "OpenACC loop control variable '%0' cannot have reduction">;
+def note_acc_loop_control_var : Note<
+  "'%0' is an OpenACC loop control variable here">;
 def err_acc_conflicting_reduction : Error<
   "%select{conflicting|redundant}0 '%1' reduction for variable %2">;
 def note_acc_previous_reduction : Note<

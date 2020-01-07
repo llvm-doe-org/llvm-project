@@ -1289,12 +1289,15 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     // Variables" in the Clang OpenACC design document.
     for (std::pair<Expr *, VarDecl *> LCV :
              DirStack->getLoopControlVariables()) {
+      Expr *RefExpr = LCV.first;
       VarDecl *VD = LCV.second;
       const DirStackTy::DAVarData &DVar = DirStack->getTopDA(VD);
       if (!DVar.ReductionId.getName().isEmpty()) {
         Diag(DVar.ReductionRefExpr->getEndLoc(),
              diag::err_acc_reduction_on_loop_control_var)
             << VD->getName() << DVar.ReductionRefExpr->getSourceRange();
+        Diag(RefExpr->getExprLoc(), diag::note_acc_loop_control_var)
+            << VD->getName() << RefExpr->getSourceRange();
         ErrorFound = true;
       }
     }

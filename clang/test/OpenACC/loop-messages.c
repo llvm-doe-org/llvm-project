@@ -1917,15 +1917,18 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
 
-    // expected-error@+1 {{OpenACC loop control variable 'i' cannot have reduction}}
+    // expected-error@+2 {{OpenACC loop control variable 'i' cannot have reduction}}
+    // expected-note@+2 {{'i' is an OpenACC loop control variable here}}
     #pragma acc CMB_PAR loop reduction(^:i)
     for (i = 0; i < 5; ++i)
       ;
-    // expected-error@+1 {{OpenACC loop control variable 'i' cannot have reduction}}
+    // expected-error@+2 {{OpenACC loop control variable 'i' cannot have reduction}}
+    // expected-note@+2 {{'i' is an OpenACC loop control variable here}}
     #pragma acc CMB_PAR loop reduction(^:jk, i) gang
     for (i = 0; i < 5; ++i)
       ;
-    // expected-error@+1 {{OpenACC loop control variable 'i' cannot have reduction}}
+    // expected-error@+2 {{OpenACC loop control variable 'i' cannot have reduction}}
+    // expected-note@+2 {{'i' is an OpenACC loop control variable here}}
     #pragma acc CMB_PAR loop reduction(^:jk) reduction(+:i) worker
     for (i = 0; i < 5; ++i)
       ;
@@ -1934,31 +1937,36 @@ void fn() {
     for (int foo = 0; foo < 5; ++foo)
       ;
 
-    // expected-error@+1 {{OpenACC loop control variable 'i' cannot have reduction}}
+    // expected-error@+2 {{OpenACC loop control variable 'i' cannot have reduction}}
+    // expected-note@+2 {{'i' is an OpenACC loop control variable here}}
     #pragma acc CMB_PAR loop reduction(*:i) vector collapse(2)
     for (i = 0; i < 5; ++i)
       for (jk = 0; jk < 5; ++jk)
         ;
-    // expected-error@+1 {{OpenACC loop control variable 'jk' cannot have reduction}}
+    // expected-error@+2 {{OpenACC loop control variable 'jk' cannot have reduction}}
+    // expected-note@+3 {{'jk' is an OpenACC loop control variable here}}
     #pragma acc CMB_PAR loop reduction(max:jk) vector collapse(2)
     for (i = 0; i < 5; ++i)
       for (jk = 0; jk < 5; ++jk)
         ;
     {
       int i, j, k;
-      // expected-error@+1 {{OpenACC loop control variable 'i' cannot have reduction}}
+      // expected-error@+2 {{OpenACC loop control variable 'i' cannot have reduction}}
+      // expected-note@+2 {{'i' is an OpenACC loop control variable here}}
       #pragma acc CMB_PAR loop reduction(min:i) vector collapse(3)
       for (i = 0; i < 5; ++i)
         for (j = 0; j < 5; ++j)
           for (k = 0; k < 5; ++k)
             ;
-      // expected-error@+1 {{OpenACC loop control variable 'j' cannot have reduction}}
+      // expected-error@+2 {{OpenACC loop control variable 'j' cannot have reduction}}
+      // expected-note@+3 {{'j' is an OpenACC loop control variable here}}
       #pragma acc CMB_PAR loop reduction(&:i,j,k) vector collapse(3)
       for (int i = 0; i < 5; ++i)
         for (j = 0; j < 5; ++j)
           for (int k = 0; k < 5; ++k)
             ;
-      // expected-error@+1 {{OpenACC loop control variable 'k' cannot have reduction}}
+      // expected-error@+2 {{OpenACC loop control variable 'k' cannot have reduction}}
+      // expected-note@+4 {{'k' is an OpenACC loop control variable here}}
       #pragma acc CMB_PAR loop reduction(|:k) vector collapse(3)
       for (i = 0; i < 5; ++i)
         for (j = 0; j < 5; ++j)
