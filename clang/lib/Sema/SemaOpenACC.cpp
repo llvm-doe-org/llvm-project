@@ -89,7 +89,8 @@ public:
 private:
   struct DirStackEntryTy final {
     llvm::DenseMap<VarDecl *, DAVarData> DAMap;
-    llvm::DenseSet<VarDecl *> LCVs;
+    llvm::DenseSet<VarDecl *> LCVSet;
+    llvm::SmallVector<std::pair<Expr *, VarDecl *>, 4> LCVVec;
     /// The real directive kind.  In the case of a combined directive, there
     /// are two consecutive entries: the outer has RealDKind as the combined
     /// directive kind, the inner has RealDKind has ACCD_unknown, and both
@@ -151,20 +152,36 @@ public:
     assert(!Stack.empty() && "expected non-empty directive stack");
     return Stack.back().LoopBreakLoc;
   }
-  /// Register specified variable as acc loop control variable that is
-  /// assigned but not declared in for loop init.
-  void addLoopControlVariable(VarDecl *VD) {
+  /// Register the given expression as a loop control variable reference in an
+  /// assignment but not a declaration in a for loop init associated with the
+  /// current acc loop directive.
+  void addLoopControlVariable(DeclRefExpr *DRE) {
     assert(!Stack.empty() && "expected non-empty directive stack");
-    assert(isOpenACCLoopDirective(getEffectiveDirective())
-           && "Loop control variable must be added only to loop directive");
-    Stack.back().LCVs.insert(VD->getCanonicalDecl());
+    assert(isOpenACCLoopDirective(getEffectiveDirective()) &&
+           "expected loop control variable to be added to loop directive");
+    auto *VD = dyn_cast<VarDecl>(DRE->getDecl());
+    assert(VD && "expected loop control variable to have a VarDecl");
+    VD = VD->getCanonicalDecl();
+    Stack.back().LCVSet.insert(VD);
+    Stack.back().LCVVec.emplace_back(DRE, VD);
   }
-  /// Get the canonical declarations for the loop control variables that are
-  /// assigned but not declared in the inits of the for loops associated with
-  /// the current directive, or return an empty set if none.
-  const llvm::DenseSet<VarDecl *> &getLoopControlVariables() const {
+  /// Is the specified variable a loop control variable that is assigned but
+  /// not declared in the init of a for loop associated with the current
+  /// directive?
+  bool hasLoopControlVariable(VarDecl *VD) const {
     assert(!Stack.empty() && "expected non-empty directive stack");
-    return Stack.back().LCVs;
+    return Stack.back().LCVSet.count(VD->getCanonicalDecl());
+  }
+  /// Get the loop control variables that are assigned but not declared in the
+  /// inits of the for loops associated with the current directive, or return
+  /// an empty list if none.
+  ///
+  /// Each item in the list is a pair consisting of (a) the expression that
+  /// references the variable in the assignment and (b) the canonical
+  /// declaration for the variable.
+  ArrayRef<std::pair<Expr *, VarDecl *>> getLoopControlVariables() const {
+    assert(!Stack.empty() && "expected non-empty directive stack");
+    return Stack.back().LCVVec;
   }
   /// Register the current directive's loop partitioning kind.
   ///
@@ -479,9 +496,7 @@ bool DirStackTy::addReduction(VarDecl *VD, Expr *E,
 
 OpenACCBaseDAKind DirStackTy::getPredeterminedBaseDA(VarDecl *VD) {
   VD = VD->getCanonicalDecl();
-  if (getLoopControlVariables().count(VD) &&
-      !getLoopPartitioning().hasSeqExplicit())
-  {
+  if (hasLoopControlVariable(VD) && !getLoopPartitioning().hasSeqExplicit()) {
     // OpenACC 3.0 sec. 2.6.1 L1038-1039:
     //   "The loop variable in a C for statement [...] that is associated with
     //   a loop directive is predetermined to be private to each thread that
@@ -500,10 +515,9 @@ OpenACCBaseDAKind DirStackTy::getImplicitBaseDA(VarDecl *VD) {
   const DAVarData &DVar = getTopDA(VD);
   // The order of the next two checks shouldn't matter as we've already
   // rejected this combination.
-  assert((!getLoopControlVariables().count(VD) ||
-          !DVar.ReductionOnEffectiveOrCombined) &&
-         "expected acc loop control var not to be reduction var");
-  if (getLoopControlVariables().count(VD)) {
+  assert((!hasLoopControlVariable(VD) || !DVar.ReductionOnEffectiveOrCombined)
+         && "expected acc loop control var not to be reduction var");
+  if (hasLoopControlVariable(VD)) {
     // OpenACC 3.0 sec. 2.6.1 "Variables with Predetermined Data Attributes"
     // L1038-1039:
     //   "The loop variable in a C for statement [...] that is associated with
@@ -1273,7 +1287,9 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     // Complain for reductions on acc loop control variables.  This restriction
     // is not clearly specified in OpenACC 3.0.  See the section "Loop Control
     // Variables" in the Clang OpenACC design document.
-    for (VarDecl *VD : DirStack->getLoopControlVariables()) {
+    for (std::pair<Expr *, VarDecl *> LCV :
+             DirStack->getLoopControlVariables()) {
+      VarDecl *VD = LCV.second;
       const DirStackTy::DAVarData &DVar = DirStack->getTopDA(VD);
       if (!DVar.ReductionId.getName().isEmpty()) {
         Diag(DVar.ReductionRefExpr->getEndLoc(),
@@ -1351,12 +1367,12 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     }
     break;
   case ACCD_loop: {
-    const llvm::DenseSet<VarDecl *> LCVs = DirStack->getLoopControlVariables();
-    SmallVector<VarDecl *, 5> LCVVec;
-    for (VarDecl *VD : LCVs)
-      LCVVec.push_back(VD);
+    SmallVector<VarDecl *, 5> LCVVars;
+    for (std::pair<Expr *, VarDecl *> LCV :
+             DirStack->getLoopControlVariables())
+      LCVVars.push_back(LCV.second);
     Res = ActOnOpenACCLoopDirective(
-        ClausesWithImplicit, AStmt, StartLoc, EndLoc, LCVVec,
+        ClausesWithImplicit, AStmt, StartLoc, EndLoc, LCVVars,
         DirStack->getLoopPartitioning(),
         DirStack->getNestedExplicitGangPartitioning());
     break;
@@ -1393,11 +1409,8 @@ void Sema::ActOnOpenACCLoopInitialization(SourceLocation ForLoc, Stmt *Init) {
     if (auto *BO = dyn_cast<BinaryOperator>(Init)) {
       if (BO->getOpcode() == BO_Assign) {
         auto *LHS = BO->getLHS()->IgnoreParens();
-        if (auto *DRE = dyn_cast<DeclRefExpr>(LHS)) {
-          auto *VD = dyn_cast<VarDecl>(DRE->getDecl());
-          assert(VD);
-          DirStack->addLoopControlVariable(VD);
-        }
+        if (auto *DRE = dyn_cast<DeclRefExpr>(LHS))
+          DirStack->addLoopControlVariable(DRE);
       }
     }
     DirStack->incAssociatedLoopsParsed();
