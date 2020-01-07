@@ -87,9 +87,8 @@ public:
   };
 
 private:
-  typedef llvm::DenseMap<VarDecl *, DAVarData> DAMapTy;
   struct DirStackEntryTy final {
-    DAMapTy DAMap;
+    llvm::DenseMap<VarDecl *, DAVarData> DAMap;
     llvm::DenseSet<VarDecl *> LCVs;
     /// The real directive kind.  In the case of a combined directive, there
     /// are two consecutive entries: the outer has RealDKind as the combined
