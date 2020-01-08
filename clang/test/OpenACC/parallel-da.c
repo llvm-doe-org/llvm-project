@@ -12,7 +12,7 @@
 // RUN:   (dir=PARLOOP dir-cflags=-DADD_LOOP_TO_PAR)
 // RUN: }
 
-// Check ASTDumper.
+// Check -ast-dump before and after AST serialization.
 //
 // RUN: %data dmps {
 // RUN:   (mode=MODE_I   pre=DMP,DMP-I,DMP-ICCiCoF,DMP-%[dir],DMP-%[dir]-I,DMP-%[dir]-ICCiCoF)
@@ -33,11 +33,15 @@
 // RUN:     %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc \
 // RUN:            -DMODE=%[mode] %[dir-cflags] %s \
 // RUN:     | FileCheck -check-prefixes=%[pre] %s
+// RUN:     %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast \
+// RUN:            -DMODE=%[mode] %[dir-cflags] %s
+// RUN:     %clang_cc1 -ast-dump-all %t.ast \
+// RUN:     | FileCheck -check-prefixes=%[pre] %s
 // RUN:   }
 // RUN: }
 
-// Check ASTWriterStmt, ASTReaderStmt, StmtPrinter, and
-// ACCParallelDirective::CreateEmpty (used by ASTReaderStmt).
+// Check -ast-print after AST serialization.  -ast-print before serialization
+// is indirectly checked below via -fopenacc[-ast]-print.
 //
 // RUN: %data asts {
 // RUN:   (mode=MODE_I   pre=PRT,PRT-I,PRT-%[dir],PRT-%[dir]-I,PRT-A,PRT-A-I,PRT-A-%[dir],PRT-A-%[dir]-I)

@@ -5,10 +5,13 @@
 // codegen.  We do not attempt to check every alias in every scenario as that
 // would make the test much slower and more difficult to maintain.
 
-// Check ASTDumper.
+// Check -ast-dump before and after AST serialization.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
 // RUN: | FileCheck -check-prefix=DMP %s
+// RUN: %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %s
+// RUN: %clang_cc1 -ast-dump-all %t.ast \
+// RUN: | FileCheck -check-prefixes=DMP %s
 
 // Check -ast-print and -fopenacc[-ast]-print.
 //
@@ -43,10 +46,11 @@
 // RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN: }
 
-// Check ASTWriterStmt, ASTReaderStmt, StmtPrinter, and
-// ACCLoopDirective::CreateEmpty (used by ASTReaderStmt).  Some data related to
-// printing (where to print comments about discarded directives) is serialized
-// and deserialized, so it's worthwhile to try all OpenACC printing modes.
+// Check -ast-print after AST serialization.
+//
+// Some data related to printing (where to print comments about discarded
+// directives) is serialized and deserialized, so it's worthwhile to try all
+// OpenACC printing modes.
 //
 // RUN: %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -o %t.ast
 // RUN: %for prt-args {

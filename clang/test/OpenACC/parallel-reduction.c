@@ -12,11 +12,14 @@
 // RUN:   (dir=PARLOOP dir-cflags=-DADD_LOOP_TO_PAR dir-loop=' loop seq')
 // RUN: }
 
-// Check ASTDumper.
+// Check -ast-dump before and after AST serialization.
 //
 // RUN: %for directives {
 // RUN:   %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
 // RUN:          %[dir-cflags] \
+// RUN:   | FileCheck -check-prefixes=DMP,DMP-%[dir] %s
+// RUN:   %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %[dir-cflags] %s
+// RUN:   %clang_cc1 -ast-dump-all %t.ast \
 // RUN:   | FileCheck -check-prefixes=DMP,DMP-%[dir] %s
 // RUN: }
 
@@ -58,10 +61,11 @@
 // RUN:   }
 // RUN: }
 
-// Check ASTWriterStmt, ASTReaderStmt, StmtPrinter, and
-// ACCLoopDirective::CreateEmpty (used by ASTReaderStmt).  Some data related to
-// printing (where to print comments about discarded directives) is serialized
-// and deserialized, so it's worthwhile to try all OpenACC printing modes.
+// Check -ast-print after AST serialization.
+//
+// Some data related to printing (where to print comments about discarded
+// directives) is serialized and deserialized, so it's worthwhile to try all
+// OpenACC printing modes.
 //
 // RUN: %for directives {
 // RUN:   %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -o %t.ast \
@@ -970,37 +974,37 @@ int main() {
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
-    // DMP-NEXT:              DeclRefExpr {{.*}} 'val' 'bool'
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'val' '{{bool|_Bool}}'
     // DMP-NEXT:            ACCReductionClause {{.*}} '|'
-    // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'bool'
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' '{{bool|_Bool}}'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
     // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
-    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'bool'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' '{{bool|_Bool}}'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
-    // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'bool'
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' '{{bool|_Bool}}'
     // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '|'
-    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'bool'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' '{{bool|_Bool}}'
     // DMP-NEXT:              impl: OMPTargetTeamsDirective
     // DMP-NEXT:                OMPNum_teamsClause
     // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:                OMPFirstprivateClause
     // DMP-NOT:                   <implicit>
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'bool'
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' '{{bool|_Bool}}'
     // DMP-PAR-NEXT:            OMPReductionClause
-    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'bool'
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' '{{bool|_Bool}}'
     // DMP-NEXT:                OMPMapClause
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'bool'
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' '{{bool|_Bool}}'
     // DMP-PARLOOP-NEXT:        OMPReductionClause
-    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'bool'
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' '{{bool|_Bool}}'
     // DMP-PARLOOP:           ACCLoopDirective
     // DMP-PARLOOP-NEXT:        ACCSeqClause
     // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} '|'
-    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'bool'
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' '{{bool|_Bool}}'
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
-    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'bool'
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' '{{bool|_Bool}}'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(tofrom: acc){{$}}
@@ -1015,7 +1019,7 @@ int main() {
     // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
     // PRT-PARLOOP-NEXT: {{for (.*)|FORLOOP_HEAD}}
     FORLOOP_HEAD
-      // DMP: CompoundAssignOperator {{.*}} 'bool' '|='
+      // DMP: CompoundAssignOperator {{.*}} '{{bool|_Bool}}' '|='
       // PRT-NEXT: acc |= val;
       acc |= val;
     // DMP: CallExpr

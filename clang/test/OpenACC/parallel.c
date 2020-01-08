@@ -12,11 +12,14 @@
 // RUN:   (dir=PARLOOP dir-cflags=-DADD_LOOP_TO_PAR)
 // RUN: }
 
-// Check ASTDumper.
+// Check -ast-dump before and after AST serialization.
 //
 // RUN: %for directives {
 // RUN:   %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
 // RUN:          %[dir-cflags] \
+// RUN:   | FileCheck -check-prefixes=DMP,DMP-%[dir] %s
+// RUN:   %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %[dir-cflags] %s
+// RUN:   %clang_cc1 -ast-dump-all %t.ast \
 // RUN:   | FileCheck -check-prefixes=DMP,DMP-%[dir] %s
 // RUN: }
 
@@ -58,10 +61,11 @@
 // RUN:   }
 // RUN: }
 
-// Check ASTWriterStmt, ASTReaderStmt, StmtPrinter, and
-// ACCLoopDirective::CreateEmpty (used by ASTReaderStmt).  Some data related to
-// printing (where to print comments about discarded directives) is serialized
-// and deserialized, so it's worthwhile to try all OpenACC printing modes.
+// Check -ast-print after AST serialization.
+//
+// Some data related to printing (where to print comments about discarded
+// directives) is serialized and deserialized, so it's worthwhile to try all
+// OpenACC printing modes.
 //
 // RUN: %for directives {
 // RUN:   %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -o %t.ast \

@@ -12,11 +12,15 @@
 // RUN:   (accc=copyout ompmt=from   fc=CO)
 // RUN: }
 
-// Check ASTDumper.
+// Check -ast-dump before and after AST serialization.
 //
 // RUN: %for clauses {
 // RUN:   %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc \
 // RUN:          -DACCC=%[accc] %s \
+// RUN:   | FileCheck -check-prefixes=DMP,DMP-%[fc] %s
+// RUN:   %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast \
+// RUN:          -DACCC=%[accc] %s
+// RUN:   %clang_cc1 -ast-dump-all %t.ast \
 // RUN:   | FileCheck -check-prefixes=DMP,DMP-%[fc] %s
 // RUN: }
 
@@ -56,10 +60,11 @@
 // RUN:   }
 // RUN: }
 
-// Check ASTWriterStmt, ASTReaderStmt, StmtPrinter, and
-// ACCLoopDirective::CreateEmpty (used by ASTReaderStmt).  Some data related to
-// printing (where to print comments about discarded directives) is serialized
-// and deserialized, so it's worthwhile to try all OpenACC printing modes.
+// Check -ast-print after AST serialization.
+//
+// Some data related to printing (where to print comments about discarded
+// directives) is serialized and deserialized, so it's worthwhile to try all
+// OpenACC printing modes.
 //
 // RUN: %for clauses {
 // RUN:   %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast -DACCC=%[accc] \

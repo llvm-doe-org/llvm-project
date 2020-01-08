@@ -230,7 +230,7 @@ class ACCCopyClause final
   /// \param Kind Which alias of the copy clause.
   /// \param N Number of variables.
   explicit ACCCopyClause(OpenACCClauseKind Kind, unsigned N)
-      : ACCVarListClause<ACCCopyClause>(Kind, N) {
+      : ACCVarListClause<ACCCopyClause>(Kind, N, ACCC_copy) {
     assert(isClauseKind(Kind) && "expected copy clause or alias");
   }
 
@@ -311,7 +311,7 @@ class ACCCopyinClause final
   /// \param Kind Which alias of the copyin clause.
   /// \param N Number of variables.
   explicit ACCCopyinClause(OpenACCClauseKind Kind, unsigned N)
-      : ACCVarListClause<ACCCopyinClause>(Kind, N) {
+      : ACCVarListClause<ACCCopyinClause>(Kind, N, ACCC_copyin) {
     assert(isClauseKind(Kind) && "expected copyin clause or alias");
   }
 
@@ -392,7 +392,7 @@ class ACCCopyoutClause final
   /// \param Kind Which alias of the copyout clause.
   /// \param N Number of variables.
   explicit ACCCopyoutClause(OpenACCClauseKind Kind, unsigned N)
-      : ACCVarListClause<ACCCopyoutClause>(Kind, N) {
+      : ACCVarListClause<ACCCopyoutClause>(Kind, N, ACCC_copyout) {
     assert(isClauseKind(Kind) && "expected copyout clause or alias");
   }
 

@@ -164,7 +164,7 @@
 // RUN:    exe=EXE,EXE222,EXEGR222)
 // RUN: }
 
-// Check ASTDumper.
+// Check -ast-dump before and after AST serialization.
 //
 // RUN: %for cmbs {
 // RUN:   %for loop-clauses {
@@ -172,6 +172,18 @@
 // RUN:            -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
 // RUN:            -DITRS0=%[itrs0] -DITRS1=%[itrs1] -DITRS2=%[itrs2] \
 // RUN:            %[cmb-cflags] \
+// RUN:     | FileCheck %s \
+// RUN:         -check-prefixes=DMP,DMP-%[cmb] \
+// RUN:         -check-prefixes=%[dmp0],DMP0-%[ompdk0],DMP0-%[ompdk0]-%[ompsk0] \
+// RUN:         -check-prefixes=DMP0-%[cmb]-%[ompdk0],DMP0-%[cmb]-%[ompdk0]-%[cmb]-%[ompsk0] \
+// RUN:         -check-prefixes=%[dmp1],DMP1-%[ompdk1],DMP1-%[ompdk1]-%[ompsk1] \
+// RUN:         -check-prefixes=%[dmp2],DMP2-%[ompdk2],DMP2-%[ompdk2]-%[ompsk2] \
+// RUN:         -DOMPDD0=%'ompdd0' -DOMPDD1=%'ompdd1' -DOMPDD2=%'ompdd2'
+// RUN:     %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %s \
+// RUN:            -DACCC0=%'accc0' -DACCC1=%'accc1' -DACCC2=%'accc2' \
+// RUN:            -DITRS0=%[itrs0] -DITRS1=%[itrs1] -DITRS2=%[itrs2] \
+// RUN:            %[cmb-cflags]
+// RUN:     %clang_cc1 -ast-dump-all %t.ast \
 // RUN:     | FileCheck %s \
 // RUN:         -check-prefixes=DMP,DMP-%[cmb] \
 // RUN:         -check-prefixes=%[dmp0],DMP0-%[ompdk0],DMP0-%[ompdk0]-%[ompsk0] \
@@ -225,10 +237,11 @@
 // RUN:   }
 // RUN: }
 
-// Check ASTWriterStmt, ASTReaderStmt, StmtPrinter, and
-// ACCLoopDirective::CreateEmpty (used by ASTReaderStmt).  Some data related to
-// printing (where to print comments about discarded directives) is serialized
-// and deserialized, so it's worthwhile to try all OpenACC printing modes.
+// Check -ast-print after AST serialization.
+//
+// Some data related to printing (where to print comments about discarded
+// directives) is serialized and deserialized, so it's worthwhile to try all
+// OpenACC printing modes.
 //
 // RUN: %for cmbs {
 // RUN:   %for loop-clauses {
