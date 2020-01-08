@@ -126,7 +126,8 @@ ACCSharedClause *
 ACCSharedClause::Create(const ASTContext &C, ArrayRef<Expr *> VL) {
   // Allocate space for variables.
   void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
-  ACCSharedClause *Clause = new (Mem) ACCSharedClause(VL.size());
+  ACCSharedClause *Clause = new (Mem) ACCSharedClause(
+      SourceLocation(), SourceLocation(), SourceLocation(), VL.size());
   Clause->setVarRefs(VL);
   return Clause;
 }
