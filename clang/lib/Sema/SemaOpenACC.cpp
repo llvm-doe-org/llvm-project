@@ -1650,6 +1650,21 @@ getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
   return cast<VarDecl>(DE->getDecl());
 }
 
+static bool RequireCompleteTypeACC(
+    Sema &SemaRef, QualType Type, OpenACCDetermination Determination,
+    OpenACCClauseKind CKind, SourceLocation ConstructLoc, SourceLocation ELoc)
+{
+  if (SemaRef.RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
+                                  Determination, getOpenACCClauseName(CKind)))
+  {
+    if (Determination != ACC_EXPLICIT)
+      SemaRef.Diag(ConstructLoc, diag::note_acc_clause_determination)
+          << Determination << getOpenACCClauseName(CKind);
+    return true;
+  }
+  return false;
+}
+
 ACCClause *Sema::ActOnOpenACCCopyClause(
     OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
     OpenACCDetermination Determination, SourceLocation StartLoc,
@@ -1674,13 +1689,9 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
     // in a copy clause must have a complete type.  However, you cannot copy
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
-    if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
-                            Determination, getOpenACCClauseName(Kind))) {
-      if (Determination != ACC_EXPLICIT)
-        Diag(DirStack->getConstructLoc(), diag::note_acc_clause_determination)
-            << Determination << getOpenACCClauseName(Kind);
+    if (RequireCompleteTypeACC(*this, Type, Determination, Kind,
+                               DirStack->getConstructLoc(), ELoc))
       continue;
-    }
 
     if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_copy,
                              Determination != ACC_EXPLICIT))
@@ -1717,10 +1728,9 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
     // in a copyin clause must have a complete type.  However, you cannot copy
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
-    if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
-                            ACC_EXPLICIT, getOpenACCClauseName(Kind))) {
+    if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
+                               DirStack->getConstructLoc(), ELoc))
       continue;
-    }
 
     if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_copyin,
                              /*IsImplicitClause=*/false))
@@ -1757,10 +1767,9 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
     // in a copyout clause must have a complete type.  However, you cannot copy
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
-    if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
-                            ACC_EXPLICIT, getOpenACCClauseName(Kind))) {
+    if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
+                               DirStack->getConstructLoc(), ELoc))
       continue;
-    }
 
     if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_copyout,
                              /*IsImplicitClause=*/false))
@@ -1819,15 +1828,9 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
     // The OpenACC 2.5 spec doesn't say, as far as I know, that a private
     // variable must have a complete type.  However, you cannot copy data if it
     // doesn't have a size, and OpenMP does have this restriction.
-    if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
-                            ACC_EXPLICIT, getOpenACCClauseName(ACCC_private)))
-    {
-      // Predetermined private is for loop control variables, which are
-      // scalars, which cannot be incomplete.
-      assert(Determination == ACC_EXPLICIT &&
-             "unexpected incomplete type for computed private");
+    if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_private,
+                               DirStack->getConstructLoc(), ELoc))
       continue;
-    }
 
     // The OpenACC 2.5 spec doesn't say, as far as I know, that a const
     // variable cannot be private.  However, you can never initialize the
@@ -1875,14 +1878,9 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(
     // The OpenACC 2.5 spec doesn't say, as far as I know, that a private
     // variable must have a complete type.  However, you cannot copy data if it
     // doesn't have a size, and OpenMP does have this restriction.
-    if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
-                            ACC_EXPLICIT,
-                            getOpenACCClauseName(ACCC_firstprivate))) {
-      // Implicit firstprivate is for scalars, which cannot be incomplete.
-      assert(Determination == ACC_EXPLICIT &&
-             "unexpected incomplete type for computed firstprivate");
+    if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_firstprivate,
+                               DirStack->getConstructLoc(), ELoc))
       continue;
-    }
 
     if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(),
                              ACC_BASE_DA_firstprivate,
@@ -2035,15 +2033,9 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     // The OpenACC 2.6 spec doesn't say, as far as I know, that a private
     // variable must have a complete type.  However, you cannot copy data if
     // it doesn't have a size, and OpenMP does have this restriction.
-    if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
-                            ACC_EXPLICIT,
-                            getOpenACCClauseName(ACCC_reduction))) {
-      // Implicit reductions are copied from explicit reductions, which are
-      // validated already.
-      assert(Determination == ACC_EXPLICIT &&
-             "unexpected incomplete type for computed reduction");
+    if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_reduction,
+                               DirStack->getConstructLoc(), ELoc))
       continue;
-    }
 
     // The OpenACC 2.6 spec doesn't say, as far as I know, that a const
     // variable cannot be private.  However, you can never initialize the
