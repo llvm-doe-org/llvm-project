@@ -7135,6 +7135,7 @@ void OMPClauseWriter::VisitOMPAtomicDefaultMemOrderClause(
 void ACCClauseWriter::writeClause(ACCClause *C) {
   Record.push_back(C->getClauseKind());
   Visit(C);
+  Record.push_back(C->getDetermination());
   Record.AddSourceLocation(C->getBeginLoc());
   Record.AddSourceLocation(C->getEndLoc());
 }

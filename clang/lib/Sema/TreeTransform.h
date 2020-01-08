@@ -2070,10 +2070,10 @@ public:
   /// Subclasses may override this routine to provide different behavior.
   ACCClause *RebuildACCCopyClause(
       OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
-      SourceLocation StartLoc, SourceLocation LParenLoc,
-      SourceLocation EndLoc) {
-    return getSema().ActOnOpenACCCopyClause(Kind, VarList, StartLoc, LParenLoc,
-                                            EndLoc);
+      OpenACCDetermination Determination, SourceLocation StartLoc,
+      SourceLocation LParenLoc, SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCCopyClause(Kind, VarList, Determination,
+                                            StartLoc, LParenLoc, EndLoc);
   }
 
   /// Build a new OpenACC 'copyin' clause.
@@ -2112,24 +2112,24 @@ public:
   ///
   /// By default, performs semantic analysis to build the new OpenACC clause.
   /// Subclasses may override this routine to provide different behavior.
-  ACCClause *RebuildACCPrivateClause(ArrayRef<Expr *> VarList,
-                                     SourceLocation StartLoc,
-                                     SourceLocation LParenLoc,
-                                     SourceLocation EndLoc) {
-    return getSema().ActOnOpenACCPrivateClause(VarList, StartLoc, LParenLoc,
-                                               EndLoc);
+  ACCClause *RebuildACCPrivateClause(
+      ArrayRef<Expr *> VarList, OpenACCDetermination Determination,
+      SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCPrivateClause(VarList, Determination,
+                                               StartLoc, LParenLoc, EndLoc);
   }
 
   /// Build a new OpenACC 'firstprivate' clause.
   ///
   /// By default, performs semantic analysis to build the new OpenACC clause.
   /// Subclasses may override this routine to provide different behavior.
-  ACCClause *RebuildACCFirstprivateClause(ArrayRef<Expr *> VarList,
-                                          SourceLocation StartLoc,
-                                          SourceLocation LParenLoc,
-                                          SourceLocation EndLoc) {
-    return getSema().ActOnOpenACCFirstprivateClause(VarList, StartLoc, LParenLoc,
-                                                    EndLoc);
+  ACCClause *RebuildACCFirstprivateClause(
+      ArrayRef<Expr *> VarList, OpenACCDetermination Determination,
+      SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCFirstprivateClause(
+        VarList, Determination, StartLoc, LParenLoc, EndLoc);
   }
 
   /// Build a new OpenACC 'reduction' clause.
@@ -2137,12 +2137,13 @@ public:
   /// By default, performs semantic analysis to build the new OpenACC clause.
   /// Subclasses may override this routine to provide different behavior.
   ACCClause *RebuildACCReductionClause(
-      ArrayRef<Expr *> VarList, SourceLocation StartLoc,
-      SourceLocation LParenLoc, SourceLocation ColonLoc, SourceLocation EndLoc,
+      ArrayRef<Expr *> VarList, OpenACCDetermination Determination,
+      SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation ColonLoc, SourceLocation EndLoc,
       const DeclarationNameInfo &ReductionId) {
-    return getSema().ActOnOpenACCReductionClause(VarList, StartLoc, LParenLoc,
-                                                 ColonLoc, EndLoc,
-                                                 ReductionId);
+    return getSema().ActOnOpenACCReductionClause(
+        VarList, Determination, StartLoc, LParenLoc, ColonLoc, EndLoc,
+        ReductionId);
   }
 
   /// Build a new OpenACC 'collapse' clause.
@@ -9551,8 +9552,8 @@ TreeTransform<Derived>::TransformACCCopyClause(ACCCopyClause *C) {
     Vars.push_back(EVar.get());
   }
   return getDerived().RebuildACCCopyClause(
-      C->getClauseKind(), Vars, C->getBeginLoc(), C->getLParenLoc(),
-      C->getEndLoc());
+      C->getClauseKind(), Vars, C->getDetermination(), C->getBeginLoc(),
+      C->getLParenLoc(), C->getEndLoc());
 }
 
 template <typename Derived>
@@ -9613,7 +9614,8 @@ TreeTransform<Derived>::TransformACCPrivateClause(ACCPrivateClause *C) {
     Vars.push_back(EVar.get());
   }
   return getDerived().RebuildACCPrivateClause(
-      Vars, C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
+      Vars, C->getDetermination(), C->getBeginLoc(), C->getLParenLoc(),
+      C->getEndLoc());
 }
 
 template <typename Derived>
@@ -9628,7 +9630,8 @@ ACCClause *TreeTransform<Derived>::TransformACCFirstprivateClause(
     Vars.push_back(EVar.get());
   }
   return getDerived().RebuildACCFirstprivateClause(
-      Vars, C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
+      Vars, C->getDetermination(), C->getBeginLoc(), C->getLParenLoc(),
+      C->getEndLoc());
 }
 
 template <typename Derived>
@@ -9649,8 +9652,8 @@ ACCClause *TreeTransform<Derived>::TransformACCReductionClause(
       return nullptr;
   }
   return getDerived().RebuildACCReductionClause(
-      Vars, C->getBeginLoc(), C->getLParenLoc(), C->getColonLoc(),
-      C->getEndLoc(), NameInfo);
+      Vars, C->getDetermination(), C->getBeginLoc(), C->getLParenLoc(),
+      C->getColonLoc(), C->getEndLoc(), NameInfo);
 }
 
 template <typename Derived>

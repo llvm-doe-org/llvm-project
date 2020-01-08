@@ -1125,7 +1125,7 @@ void StmtPrinter::PrintACCExecutableDirectiveHead(
   ArrayRef<ACCClause *> Clauses = S->clauses();
   for (ArrayRef<ACCClause *>::iterator I = Clauses.begin(), E = Clauses.end();
        I != E; ++I)
-    if (*I && !(*I)->isImplicit()) {
+    if (*I && (*I)->getDetermination() == ACC_EXPLICIT) {
       OS << ' ';
       Printer.Visit(*I);
     }

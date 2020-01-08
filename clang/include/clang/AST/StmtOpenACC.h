@@ -655,7 +655,8 @@ public:
   void addImplicitGangClause() {
     assert(!hasClausesOfKind<ACCGangClause>() &&
            "expected loop directive not to already have a gang clause");
-    addClause(new ACCGangClause());
+    addClause(new ACCGangClause(ACC_IMPLICIT, SourceLocation(),
+                                SourceLocation()));
     Partitioning.setGang();
   }
 };

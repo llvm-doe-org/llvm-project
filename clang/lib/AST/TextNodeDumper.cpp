@@ -334,7 +334,7 @@ void TextNodeDumper::Visit(const ACCClause *C) {
   }
   dumpPointer(C);
   dumpSourceRange(SourceRange(C->getBeginLoc(), C->getEndLoc()));
-  if (C->isImplicit())
+  if (C->getDetermination() != ACC_EXPLICIT)
     OS << " <implicit>";
   if (auto Reduction = dyn_cast<ACCReductionClause>(C)) {
     OS << " '";

@@ -10157,6 +10157,8 @@ public:
                                           SourceLocation StartLoc,
                                           SourceLocation LParenLoc,
                                           SourceLocation EndLoc);
+  /// Called on well-formed clauses that take no arguments.  Assumes they are
+  /// explicit clauses.
   ACCClause *ActOnOpenACCClause(OpenACCClauseKind Kind,
                                 SourceLocation StartLoc,
                                 SourceLocation EndLoc);
@@ -10164,13 +10166,15 @@ public:
   ACCClause *ActOnOpenACCSeqClause(SourceLocation StartLoc,
                                    SourceLocation EndLoc);
   /// Called on well-formed 'independent' clause.
-  ACCClause *ActOnOpenACCIndependentClause(SourceLocation StartLoc,
+  ACCClause *ActOnOpenACCIndependentClause(OpenACCDetermination Determination,
+                                           SourceLocation StartLoc,
                                            SourceLocation EndLoc);
   /// Called on well-formed 'auto' clause.
   ACCClause *ActOnOpenACCAutoClause(SourceLocation StartLoc,
                                     SourceLocation EndLoc);
   /// Called on well-formed 'gang' clause.
-  ACCClause *ActOnOpenACCGangClause(SourceLocation StartLoc,
+  ACCClause *ActOnOpenACCGangClause(OpenACCDetermination Determination,
+                                    SourceLocation StartLoc,
                                     SourceLocation EndLoc);
   /// Called on well-formed 'worker' clause.
   ACCClause *ActOnOpenACCWorkerClause(SourceLocation StartLoc,
@@ -10178,6 +10182,8 @@ public:
   /// Called on well-formed 'vector' clause.
   ACCClause *ActOnOpenACCVectorClause(SourceLocation StartLoc,
                                       SourceLocation EndLoc);
+  /// Called on well-formed clauses that take variable lists.  Assumes they
+  /// are explicit clauses.
   ACCClause *ActOnOpenACCVarListClause(
       OpenACCClauseKind Kind, ArrayRef<Expr *> Vars,
       SourceLocation StartLoc, SourceLocation LParenLoc,
@@ -10186,8 +10192,8 @@ public:
   /// Called for well-formed 'copy' clause.
   ACCClause *ActOnOpenACCCopyClause(
       OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
-      SourceLocation StartLoc, SourceLocation LParenLoc,
-      SourceLocation EndLoc);
+      OpenACCDetermination Determination, SourceLocation StartLoc,
+      SourceLocation LParenLoc, SourceLocation EndLoc);
   /// Called for well-formed 'copyin' clause.
   ACCClause *ActOnOpenACCCopyinClause(
       OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
@@ -10201,19 +10207,20 @@ public:
   /// Called for implicit 'shared' clause.
   ACCClause *ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList);
   /// Called on well-formed 'private' clause.
-  ACCClause *ActOnOpenACCPrivateClause(ArrayRef<Expr *> VarList,
-                                       SourceLocation StartLoc,
-                                       SourceLocation LParenLoc,
-                                       SourceLocation EndLoc);
+  ACCClause *ActOnOpenACCPrivateClause(
+      ArrayRef<Expr *> VarList, OpenACCDetermination Determination,
+      SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation EndLoc);
   /// Called on well-formed 'firstprivate' clause.
-  ACCClause *ActOnOpenACCFirstprivateClause(ArrayRef<Expr *> VarList,
-                                            SourceLocation StartLoc,
-                                            SourceLocation LParenLoc,
-                                            SourceLocation EndLoc);
+  ACCClause *ActOnOpenACCFirstprivateClause(
+      ArrayRef<Expr *> VarList, OpenACCDetermination Determination,
+      SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation EndLoc);
   /// Called on well-formed 'reduction' clause.
   ACCClause *ActOnOpenACCReductionClause(
-      ArrayRef<Expr *> VarList, SourceLocation StartLoc,
-      SourceLocation LParenLoc, SourceLocation ColonLoc, SourceLocation EndLoc,
+      ArrayRef<Expr *> VarList, OpenACCDetermination Determination,
+      SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation ColonLoc, SourceLocation EndLoc,
       const DeclarationNameInfo &ReductionId);
   /// Called on well-formed 'num_gangs' clause.
   ACCClause *ActOnOpenACCNumGangsClause(Expr *NumGangs,

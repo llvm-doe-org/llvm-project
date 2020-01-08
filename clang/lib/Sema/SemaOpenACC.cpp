@@ -54,26 +54,26 @@ public:
   /// Represents a variable's data attributes (DAs) on a directive.
   ///
   /// There are potentially two DAs per variable: the base DA and a reduction.
-  /// Each can be unrecorded, implicit, or explicit.  A base DA can also be
-  /// predetermined.  At least one of these two DAs will eventually be recorded
-  /// per variable referenced by a construct.
+  /// Each can be undetermined, implicit, or explicit.  A base DA can also be
+  /// predetermined.  At least one of these two DAs will eventually be
+  /// determined per variable referenced by a construct.
   ///
   /// We also store here whether the variable has a reduction on any effective
   /// directive that's a part of the same combined directive.
   struct DAVarData final {
-    /// If base DA is unrecorded, then ACC_BASE_DA_unknown.  Otherwise, not
+    /// If base DA is undetermined, then ACC_BASE_DA_unknown.  Otherwise, not
     /// ACC_BASE_DA_unknown.
     OpenACCBaseDAKind BaseDAKind = ACC_BASE_DA_unknown;
-    /// If base DA is unrecorded, then nullptr.  If predetermined or implicit,
-    /// then a referencing expression within the directive's region.  If
-    /// explicit, then the referencing expression appearing in the associated
-    /// clause.
+    /// If base DA is undetermined, then nullptr.  If predetermined or
+    /// implicit, then a referencing expression within the directive's region.
+    /// If explicit, then the referencing expression appearing in the
+    /// associated clause.
     Expr *BaseDARefExpr = nullptr;
-    /// If reduction is unrecorded, then default-constructed
+    /// If reduction is undetermined, then default-constructed
     /// (ReductionID.getName().isEmpty()).  Otherwise, the reduction ID.
     DeclarationNameInfo ReductionId;
-    /// If reduction is unrecorded, then nullptr.  If implicit reduction, then
-    /// a referencing expression within a descendant directive's reduction
+    /// If reduction is undetermined, then nullptr.  If implicit reduction,
+    /// then a referencing expression within a descendant directive's reduction
     /// clause.  If explicit reduction, then the referencing expression
     /// appearing in the associated clause on this directive.
     Expr *ReductionRefExpr = nullptr;
@@ -625,7 +625,8 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
-    Res = ActOnOpenACCCopyClause(Kind, VarList, StartLoc, LParenLoc, EndLoc);
+    Res = ActOnOpenACCCopyClause(Kind, VarList, ACC_EXPLICIT, StartLoc,
+                                 LParenLoc, EndLoc);
     break;
 #define OPENACC_CLAUSE_ALIAS_copyin(Name) \
   case ACCC_##Name:
@@ -639,14 +640,17 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
                                     EndLoc);
     break;
   case ACCC_private:
-    Res = ActOnOpenACCPrivateClause(VarList, StartLoc, LParenLoc, EndLoc);
+    Res = ActOnOpenACCPrivateClause(VarList, ACC_EXPLICIT, StartLoc, LParenLoc,
+                                    EndLoc);
     break;
   case ACCC_firstprivate:
-    Res = ActOnOpenACCFirstprivateClause(VarList, StartLoc, LParenLoc, EndLoc);
+    Res = ActOnOpenACCFirstprivateClause(VarList, ACC_EXPLICIT, StartLoc,
+                                         LParenLoc, EndLoc);
     break;
   case ACCC_reduction:
-    Res = ActOnOpenACCReductionClause(VarList, StartLoc, LParenLoc, ColonLoc,
-                                      EndLoc, ReductionId);
+    Res = ActOnOpenACCReductionClause(VarList, ACC_EXPLICIT, StartLoc,
+                                      LParenLoc, ColonLoc, EndLoc,
+                                      ReductionId);
     break;
   case ACCC_shared:
   case ACCC_num_gangs:
@@ -1253,8 +1257,8 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
   ComputedClauses.append(Clauses.begin(), Clauses.end());
   ACCPartitioningKind LoopKind = DirStack->getLoopPartitioning();
   if (LoopKind.hasIndependentImplicit()) {
-    ACCClause *Implicit = ActOnOpenACCIndependentClause(SourceLocation(),
-                                                        SourceLocation());
+    ACCClause *Implicit = ActOnOpenACCIndependentClause(
+        ACC_IMPLICIT, SourceLocation(), SourceLocation());
     assert(Implicit);
     ComputedClauses.push_back(Implicit);
   }
@@ -1321,9 +1325,9 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
       }
     }
     if (!PrePrivate.empty()) {
-      ACCClause *Pre = ActOnOpenACCPrivateClause(PrePrivate, SourceLocation(),
-                                                 SourceLocation(),
-                                                 SourceLocation());
+      ACCClause *Pre = ActOnOpenACCPrivateClause(
+          PrePrivate, ACC_PREDETERMINED, SourceLocation(), SourceLocation(),
+          SourceLocation());
       assert(Pre && "expected successful predetermined private");
       ComputedClauses.push_back(Pre);
     }
@@ -1340,7 +1344,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     // Check default data attributes for referenced variables.
     if (!Adder.getImplicitCopy().empty()) {
       ACCClause *Implicit = ActOnOpenACCCopyClause(
-          ACCC_copy, Adder.getImplicitCopy(), SourceLocation(),
+          ACCC_copy, Adder.getImplicitCopy(), ACC_IMPLICIT, SourceLocation(),
           SourceLocation(), SourceLocation());
       if (Implicit)
         ComputedClauses.push_back(Implicit);
@@ -1353,7 +1357,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     }
     if (!Adder.getImplicitFirstprivate().empty()) {
       ACCClause *Implicit = ActOnOpenACCFirstprivateClause(
-          Adder.getImplicitFirstprivate(), SourceLocation(),
+          Adder.getImplicitFirstprivate(), ACC_IMPLICIT, SourceLocation(),
           SourceLocation(), SourceLocation());
       assert(Implicit && "expected successful implicit firstprivate");
       ComputedClauses.push_back(Implicit);
@@ -1366,8 +1370,9 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
       ReductionAdder.Visit(AStmt);
       for (ReductionVar RV : ReductionAdder.getImplicitGangReductions()) {
         ACCClause *Implicit = ActOnOpenACCReductionClause(
-            RV.RE, SourceLocation(), SourceLocation(), SourceLocation(),
-            SourceLocation(), RV.ReductionClause->getNameInfo());
+            RV.RE, ACC_IMPLICIT, SourceLocation(), SourceLocation(),
+            SourceLocation(), SourceLocation(),
+            RV.ReductionClause->getNameInfo());
         // Implicit reductions are copied from explicit reductions, which are
         // validated already.
         assert(Implicit && "expected successful implicit reduction");
@@ -1646,13 +1651,12 @@ getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
 }
 
 ACCClause *Sema::ActOnOpenACCCopyClause(
-    OpenACCClauseKind Kind, ArrayRef<Expr *> VarList, SourceLocation StartLoc,
+    OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
+    OpenACCDetermination Determination, SourceLocation StartLoc,
     SourceLocation LParenLoc, SourceLocation EndLoc) {
   assert(ACCCopyClause::isClauseKind(Kind) &&
          "expected copy clause or alias");
   SmallVector<Expr *, 8> Vars;
-  bool IsImplicitClause = StartLoc.isInvalid();
-  SourceLocation ImplicitClauseLoc = DirStack->getConstructLoc();
 
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC copy clause.");
@@ -1671,23 +1675,23 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
-                            IsImplicitClause, getOpenACCClauseName(Kind))) {
-      if (IsImplicitClause)
-        Diag(ImplicitClauseLoc, diag::note_acc_implicit_clause)
-          << getOpenACCClauseName(Kind);
+                            Determination, getOpenACCClauseName(Kind))) {
+      if (Determination != ACC_EXPLICIT)
+        Diag(DirStack->getConstructLoc(), diag::note_acc_clause_determination)
+            << Determination << getOpenACCClauseName(Kind);
       continue;
     }
 
     if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_copy,
-                             IsImplicitClause))
+                             Determination != ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
   if (Vars.empty())
     return nullptr;
 
-  return ACCCopyClause::Create(Context, Kind, StartLoc, LParenLoc, EndLoc,
-                               Vars);
+  return ACCCopyClause::Create(Context, Kind, Determination, StartLoc,
+                               LParenLoc, EndLoc, Vars);
 }
 
 ACCClause *Sema::ActOnOpenACCCopyinClause(
@@ -1696,8 +1700,6 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
   assert(ACCCopyinClause::isClauseKind(Kind) &&
          "expected copyin clause or alias");
   SmallVector<Expr *, 8> Vars;
-  bool IsImplicitClause = StartLoc.isInvalid();
-  SourceLocation ImplicitClauseLoc = DirStack->getConstructLoc();
 
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC copyin clause.");
@@ -1716,15 +1718,12 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
-                            IsImplicitClause, getOpenACCClauseName(Kind))) {
-      if (IsImplicitClause)
-        Diag(ImplicitClauseLoc, diag::note_acc_implicit_clause)
-          << getOpenACCClauseName(Kind);
+                            ACC_EXPLICIT, getOpenACCClauseName(Kind))) {
       continue;
     }
 
     if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_copyin,
-                             IsImplicitClause))
+                             /*IsImplicitClause=*/false))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -1741,8 +1740,6 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
   assert(ACCCopyoutClause::isClauseKind(Kind) &&
          "expected copyout clause or alias");
   SmallVector<Expr *, 8> Vars;
-  bool IsImplicitClause = StartLoc.isInvalid();
-  SourceLocation ImplicitClauseLoc = DirStack->getConstructLoc();
 
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC copyout clause.");
@@ -1761,15 +1758,12 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
-                            IsImplicitClause, getOpenACCClauseName(Kind))) {
-      if (IsImplicitClause)
-        Diag(ImplicitClauseLoc, diag::note_acc_implicit_clause)
-          << getOpenACCClauseName(Kind);
+                            ACC_EXPLICIT, getOpenACCClauseName(Kind))) {
       continue;
     }
 
-    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(),
-                             ACC_BASE_DA_copyout, IsImplicitClause))
+    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_copyout,
+                             /*IsImplicitClause=*/false))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -1806,12 +1800,10 @@ ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
   return ACCSharedClause::Create(Context, Vars);
 }
 
-ACCClause *Sema::ActOnOpenACCPrivateClause(ArrayRef<Expr *> VarList,
-                                           SourceLocation StartLoc,
-                                           SourceLocation LParenLoc,
-                                           SourceLocation EndLoc) {
+ACCClause *Sema::ActOnOpenACCPrivateClause(
+    ArrayRef<Expr *> VarList, OpenACCDetermination Determination,
+    SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc) {
   SmallVector<Expr *, 8> Vars;
-  bool IsImplicitClause = StartLoc.isInvalid();
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC private clause.");
     SourceLocation ELoc;
@@ -1828,12 +1820,12 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(ArrayRef<Expr *> VarList,
     // variable must have a complete type.  However, you cannot copy data if it
     // doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
-                            /*IsImplicitClause*/ false,
-                            getOpenACCClauseName(ACCC_private))) {
-      // Implicit private is for loop control variables, which are scalars,
-      // which cannot be incomplete.
-      assert(!IsImplicitClause &&
-             "unexpected incomplete type for implicit private");
+                            ACC_EXPLICIT, getOpenACCClauseName(ACCC_private)))
+    {
+      // Predetermined private is for loop control variables, which are
+      // scalars, which cannot be incomplete.
+      assert(Determination == ACC_EXPLICIT &&
+             "unexpected incomplete type for computed private");
       continue;
     }
 
@@ -1846,28 +1838,27 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(ArrayRef<Expr *> VarList,
       Diag(ELoc, diag::err_acc_const_private);
       Diag(VD->getLocation(), diag::note_acc_const) << VD;
       // Implicit private is for loop control variables, which cannot be const.
-      assert(!IsImplicitClause &&
-             "unexpected const type for implicit private");
+      assert(Determination == ACC_EXPLICIT &&
+             "unexpected const type for computed private");
       continue;
     }
 
-    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(),
-                             ACC_BASE_DA_private, IsImplicitClause))
+    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_private,
+                             Determination != ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
   if (Vars.empty())
     return nullptr;
 
-  return ACCPrivateClause::Create(Context, StartLoc, LParenLoc, EndLoc, Vars);
+  return ACCPrivateClause::Create(Context, Determination, StartLoc, LParenLoc,
+                                  EndLoc, Vars);
 }
 
-ACCClause *Sema::ActOnOpenACCFirstprivateClause(ArrayRef<Expr *> VarList,
-                                                SourceLocation StartLoc,
-                                                SourceLocation LParenLoc,
-                                                SourceLocation EndLoc) {
+ACCClause *Sema::ActOnOpenACCFirstprivateClause(
+    ArrayRef<Expr *> VarList, OpenACCDetermination Determination,
+    SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc) {
   SmallVector<Expr *, 8> Vars;
-  bool IsImplicitClause = StartLoc.isInvalid();
 
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC firstprivate clause.");
@@ -1885,34 +1876,34 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(ArrayRef<Expr *> VarList,
     // variable must have a complete type.  However, you cannot copy data if it
     // doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
-                            /*IsImplicitClause*/ false,
+                            ACC_EXPLICIT,
                             getOpenACCClauseName(ACCC_firstprivate))) {
       // Implicit firstprivate is for scalars, which cannot be incomplete.
-      assert(!IsImplicitClause &&
-             "unexpected incomplete type for implicit firstprivate");
+      assert(Determination == ACC_EXPLICIT &&
+             "unexpected incomplete type for computed firstprivate");
       continue;
     }
 
     if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(),
-                             ACC_BASE_DA_firstprivate, IsImplicitClause))
+                             ACC_BASE_DA_firstprivate,
+                             Determination != ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
   if (Vars.empty())
     return nullptr;
 
-  return ACCFirstprivateClause::Create(Context, StartLoc, LParenLoc, EndLoc,
-                                       Vars);
+  return ACCFirstprivateClause::Create(Context, Determination, StartLoc,
+                                       LParenLoc, EndLoc, Vars);
 }
 
 ACCClause *Sema::ActOnOpenACCReductionClause(
-    ArrayRef<Expr *> VarList, SourceLocation StartLoc, SourceLocation LParenLoc,
-    SourceLocation ColonLoc, SourceLocation EndLoc,
-    const DeclarationNameInfo &ReductionId) {
+    ArrayRef<Expr *> VarList, OpenACCDetermination Determination,
+    SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation ColonLoc,
+    SourceLocation EndLoc, const DeclarationNameInfo &ReductionId) {
   DeclarationName DN = ReductionId.getName();
   OverloadedOperatorKind OOK = DN.getCXXOverloadedOperator();
   SmallVector<Expr *, 8> Vars;
-  bool IsImplicitClause = StartLoc.isInvalid();
 
   // OpenACC 2.6 [2.5.12, reduction clause, line 774]:
   // The list of reduction operators is here.
@@ -2045,12 +2036,12 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     // variable must have a complete type.  However, you cannot copy data if
     // it doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
-                            /*IsImplicitClause*/ false,
+                            ACC_EXPLICIT,
                             getOpenACCClauseName(ACCC_reduction))) {
       // Implicit reductions are copied from explicit reductions, which are
       // validated already.
-      assert(!IsImplicitClause &&
-             "unexpected incomplete type for implicit reduction");
+      assert(Determination == ACC_EXPLICIT &&
+             "unexpected incomplete type for computed reduction");
       continue;
     }
 
@@ -2067,8 +2058,8 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
           << VD;
       // Implicit reductions are copied from explicit reductions, which are
       // validated already.
-      assert(!IsImplicitClause &&
-             "unexpected const type for implicit reduction");
+      assert(Determination == ACC_EXPLICIT &&
+             "unexpected const type for computed reduction");
       continue;
     }
 
@@ -2110,8 +2101,9 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
   }
   if (Vars.empty())
     return nullptr;
-  return ACCReductionClause::Create(Context, StartLoc, LParenLoc, ColonLoc,
-                                    EndLoc, Vars, ReductionId);
+  return ACCReductionClause::Create(Context, Determination, StartLoc,
+                                    LParenLoc, ColonLoc, EndLoc, Vars,
+                                    ReductionId);
 }
 
 enum PosIntResult {PosIntConst, PosIntNonConst, PosIntError};
@@ -2155,13 +2147,13 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
     Res = ActOnOpenACCSeqClause(StartLoc, EndLoc);
     break;
   case ACCC_independent:
-    Res = ActOnOpenACCIndependentClause(StartLoc, EndLoc);
+    Res = ActOnOpenACCIndependentClause(ACC_EXPLICIT, StartLoc, EndLoc);
     break;
   case ACCC_auto:
     Res = ActOnOpenACCAutoClause(StartLoc, EndLoc);
     break;
   case ACCC_gang:
-    Res = ActOnOpenACCGangClause(StartLoc, EndLoc);
+    Res = ActOnOpenACCGangClause(ACC_EXPLICIT, StartLoc, EndLoc);
     break;
   case ACCC_worker:
     Res = ActOnOpenACCWorkerClause(StartLoc, EndLoc);
@@ -2195,9 +2187,10 @@ ACCClause *Sema::ActOnOpenACCSeqClause(SourceLocation StartLoc,
   return new (Context) ACCSeqClause(StartLoc, EndLoc);
 }
 
-ACCClause *Sema::ActOnOpenACCIndependentClause(SourceLocation StartLoc,
-                                               SourceLocation EndLoc) {
-  return new (Context) ACCIndependentClause(StartLoc, EndLoc);
+ACCClause *Sema::ActOnOpenACCIndependentClause(
+    OpenACCDetermination Determination, SourceLocation StartLoc,
+    SourceLocation EndLoc) {
+  return new (Context) ACCIndependentClause(Determination, StartLoc, EndLoc);
 }
 
 ACCClause *Sema::ActOnOpenACCAutoClause(SourceLocation StartLoc,
@@ -2205,9 +2198,10 @@ ACCClause *Sema::ActOnOpenACCAutoClause(SourceLocation StartLoc,
   return new (Context) ACCAutoClause(StartLoc, EndLoc);
 }
 
-ACCClause *Sema::ActOnOpenACCGangClause(SourceLocation StartLoc,
+ACCClause *Sema::ActOnOpenACCGangClause(OpenACCDetermination Determination,
+                                        SourceLocation StartLoc,
                                         SourceLocation EndLoc) {
-  return new (Context) ACCGangClause(StartLoc, EndLoc);
+  return new (Context) ACCGangClause(Determination, StartLoc, EndLoc);
 }
 
 ACCClause *Sema::ActOnOpenACCWorkerClause(SourceLocation StartLoc,

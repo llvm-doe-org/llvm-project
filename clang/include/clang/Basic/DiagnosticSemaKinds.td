@@ -9643,10 +9643,10 @@ def err_omp_one_defaultmap_each_category: Error<
 let CategoryName = "OpenACC Issue" in {
 // OpenACC support.
 def err_acc_incomplete_type : Error<
-  "variable in %select{|implied }0'%1' clause cannot have incomplete type "
-  "%2">;
-def note_acc_implicit_clause : Note<
-  "'%0' clause implied here">;
+  "variable in %select{|predetermined |implied |}0'%1' clause cannot have "
+  "incomplete type %2">;
+def note_acc_clause_determination : Note<
+  "'%1' clause %select{|predetermined |implied |}0here">;
 def err_acc_unsupported_subarray : Error <
   "subarray is not supported in '%0' clause">;
 def err_acc_subarray_without_colon : Error<

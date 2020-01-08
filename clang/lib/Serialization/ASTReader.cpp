@@ -13314,6 +13314,7 @@ ACCClause *ACCClauseReader::readClause() {
     llvm_unreachable("Clause is not known");
   }
   Visit(C);
+  C->setDetermination((OpenACCDetermination)Record.readInt());
   C->setLocStart(Record.readSourceLocation());
   C->setLocEnd(Record.readSourceLocation());
 

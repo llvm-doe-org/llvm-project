@@ -30,6 +30,16 @@ enum OpenACCDirectiveKind {
   ACCD_unknown
 };
 
+/// How OpenACC clauses or data attributes are determined.
+///
+/// Some diagnostics depend on the exact values here.
+enum OpenACCDetermination {
+  ACC_UNDETERMINED,  ///< undetermined
+  ACC_PREDETERMINED, ///< predetermined
+  ACC_IMPLICIT,      ///< implicitly determined
+  ACC_EXPLICIT,      ///< explicitly determined
+};
+
 /// OpenACC base data attributes.
 enum OpenACCBaseDAKind {
 #define OPENACC_BASE_DA(Name) \

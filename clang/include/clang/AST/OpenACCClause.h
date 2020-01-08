@@ -28,44 +28,53 @@ namespace clang {
 //===----------------------------------------------------------------------===//
 
 /// This is a basic class for representing single OpenACC clause.
-///
 class ACCClause {
   friend class ACCClauseReader;
 
-  /// Starting location of the clause (the clause keyword).
-  SourceLocation StartLoc;
-  /// Ending location of the clause.
-  SourceLocation EndLoc;
   /// Kind of the clause.
   OpenACCClauseKind Kind;
   /// Dealiased kind of the clause.
   OpenACCClauseKind KindDealiased;
 
+  /// How the clause was determined.
+  OpenACCDetermination Determination;
+  /// Starting location of the clause (the clause keyword).
+  SourceLocation StartLoc;
+  /// Ending location of the clause.
+  SourceLocation EndLoc;
+
+  /// Set how the clause was determined.
+  void setDetermination(OpenACCDetermination D) { Determination = D; }
   /// Sets the starting location of the clause.
   void setLocStart(SourceLocation Loc) { StartLoc = Loc; }
   /// Sets the ending location of the clause.
   void setLocEnd(SourceLocation Loc) { EndLoc = Loc; }
 
 protected:
-  ACCClause(OpenACCClauseKind K, SourceLocation StartLoc,
-            SourceLocation EndLoc, OpenACCClauseKind KDealiased = ACCC_unknown)
-      : StartLoc(StartLoc), EndLoc(EndLoc), Kind(K),
-        KindDealiased(KDealiased == ACCC_unknown ? K : KDealiased)
-  {}
+  ACCClause(OpenACCClauseKind K, OpenACCDetermination Determination,
+            SourceLocation StartLoc, SourceLocation EndLoc,
+            OpenACCClauseKind KDealiased = ACCC_unknown)
+      : Kind(K), KindDealiased(KDealiased == ACCC_unknown ? K : KDealiased),
+        Determination(Determination), StartLoc(StartLoc), EndLoc(EndLoc)
+  {
+    assert((Determination == ACC_EXPLICIT) == (!StartLoc.isInvalid() &&
+                                               !EndLoc.isInvalid()) &&
+           "expected valid clause location for and only for explicit clause");
+  }
 
 public:
-  /// Returns the starting location of the clause.
-  SourceLocation getBeginLoc() const { return StartLoc; }
-  /// Returns the ending location of the clause.
-  SourceLocation getEndLoc() const { return EndLoc; }
-
   /// Returns kind of OpenACC clause (private, shared, reduction, etc.).
   OpenACCClauseKind getClauseKind() const { return Kind; }
   /// Returns dealiased kind of OpenACC clause (for example, copy when
   /// getClauseKind returns pcopy).
   OpenACCClauseKind getClauseKindDealiased() const { return KindDealiased; }
 
-  bool isImplicit() const { return StartLoc.isInvalid(); }
+  /// How was the clause determined?
+  OpenACCDetermination getDetermination() const { return Determination; }
+  /// Returns the starting location of the clause.
+  SourceLocation getBeginLoc() const { return StartLoc; }
+  /// Returns the ending location of the clause.
+  SourceLocation getEndLoc() const { return EndLoc; }
 
   typedef StmtIterator child_iterator;
   typedef ConstStmtIterator const_child_iterator;
@@ -112,16 +121,17 @@ protected:
   /// Build a clause with \a N variables
   ///
   /// \param K Kind of the clause.
+  /// \param Determination How the clause was determined.
   /// \param StartLoc Starting location of the clause (the clause keyword).
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
   /// \param N Number of the variables in the clause.
   /// \param K Dealiased kind of the clause.
-  ///
-  ACCVarListClause(OpenACCClauseKind K, SourceLocation StartLoc,
-                   SourceLocation LParenLoc, SourceLocation EndLoc, unsigned N,
+  ACCVarListClause(OpenACCClauseKind K, OpenACCDetermination Determination,
+                   SourceLocation StartLoc, SourceLocation LParenLoc,
+                   SourceLocation EndLoc, unsigned N,
                    OpenACCClauseKind KDealiased = ACCC_unknown)
-      : ACCClause(K, StartLoc, EndLoc,
+      : ACCClause(K, Determination, StartLoc, EndLoc,
                   KDealiased == ACCC_unknown ? K : KDealiased),
         LParenLoc(LParenLoc), NumVars(N) {}
 
@@ -170,7 +180,6 @@ getPrivateVarsFromClause(ACCClause *);
 /// \endcode
 /// In this example directive '#pragma acc parallel' has clause 'copy' with
 /// the variables 'a' and 'b'.
-///
 class ACCCopyClause final
     : public ACCVarListClause<ACCCopyClause>,
       private llvm::TrailingObjects<ACCCopyClause, Expr *> {
@@ -181,15 +190,16 @@ class ACCCopyClause final
   /// Build clause with number of variables \a N.
   ///
   /// \param Kind Which alias of the copy clause.
+  /// \param Determination How the clause was determined.
   /// \param StartLoc Starting location of the clause.
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
   /// \param N Number of the variables in the clause.
-  ///
-  ACCCopyClause(OpenACCClauseKind Kind, SourceLocation StartLoc,
-                SourceLocation LParenLoc, SourceLocation EndLoc, unsigned N)
-      : ACCVarListClause<ACCCopyClause>(Kind, StartLoc, LParenLoc, EndLoc,
-                                        N, ACCC_copy) {
+  ACCCopyClause(OpenACCClauseKind Kind, OpenACCDetermination Determination,
+                SourceLocation StartLoc, SourceLocation LParenLoc,
+                SourceLocation EndLoc, unsigned N)
+      : ACCVarListClause<ACCCopyClause>(Kind, Determination, StartLoc,
+                                        LParenLoc, EndLoc, N, ACCC_copy) {
     assert(isClauseKind(Kind) && "expected copy clause or alias");
   }
 
@@ -197,11 +207,10 @@ class ACCCopyClause final
   ///
   /// \param Kind Which alias of the copy clause.
   /// \param N Number of variables.
-  ///
   explicit ACCCopyClause(OpenACCClauseKind Kind, unsigned N)
-      : ACCVarListClause<ACCCopyClause>(Kind, SourceLocation(),
+      : ACCVarListClause<ACCCopyClause>(Kind, ACC_UNDETERMINED,
                                         SourceLocation(), SourceLocation(),
-                                        N) {
+                                        SourceLocation(), N) {
     assert(isClauseKind(Kind) && "expected copy clause or alias");
   }
 
@@ -210,21 +219,20 @@ public:
   ///
   /// \param C AST context.
   /// \param Kind Which alias of the copy clause.
+  /// \param Determination How the clause was determined.
   /// \param StartLoc Starting location of the clause.
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
   /// \param VL List of references to the variables.
-  ///
-  static ACCCopyClause *Create(const ASTContext &C, OpenACCClauseKind Kind,
-                               SourceLocation StartLoc,
-                               SourceLocation LParenLoc,
-                               SourceLocation EndLoc, ArrayRef<Expr *> VL);
+  static ACCCopyClause *Create(
+      const ASTContext &C, OpenACCClauseKind Kind,
+      OpenACCDetermination Determination, SourceLocation StartLoc,
+      SourceLocation LParenLoc, SourceLocation EndLoc, ArrayRef<Expr *> VL);
   /// Creates an empty clause with the place for \a N variables.
   ///
   /// \param C AST context.
   /// \param Kind Which alias of the copy clause.
   /// \param N The number of variables.
-  ///
   static ACCCopyClause *CreateEmpty(const ASTContext &C,
                                     OpenACCClauseKind Kind, unsigned N);
 
@@ -257,7 +265,6 @@ public:
 /// \endcode
 /// In this example directive '#pragma acc parallel' has clause 'copyin' with
 /// the variables 'a' and 'b'.
-///
 class ACCCopyinClause final
     : public ACCVarListClause<ACCCopyinClause>,
       private llvm::TrailingObjects<ACCCopyinClause, Expr *> {
@@ -272,11 +279,10 @@ class ACCCopyinClause final
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
   /// \param N Number of the variables in the clause.
-  ///
   ACCCopyinClause(OpenACCClauseKind Kind, SourceLocation StartLoc,
                   SourceLocation LParenLoc, SourceLocation EndLoc, unsigned N)
-      : ACCVarListClause<ACCCopyinClause>(Kind, StartLoc, LParenLoc, EndLoc,
-                                          N, ACCC_copyin) {
+      : ACCVarListClause<ACCCopyinClause>(Kind, ACC_EXPLICIT, StartLoc,
+                                          LParenLoc, EndLoc, N, ACCC_copyin) {
     assert(isClauseKind(Kind) && "expected copyin clause or alias");
   }
 
@@ -284,11 +290,10 @@ class ACCCopyinClause final
   ///
   /// \param Kind Which alias of the copyin clause.
   /// \param N Number of variables.
-  ///
   explicit ACCCopyinClause(OpenACCClauseKind Kind, unsigned N)
-      : ACCVarListClause<ACCCopyinClause>(Kind, SourceLocation(),
+      : ACCVarListClause<ACCCopyinClause>(Kind, ACC_UNDETERMINED,
                                           SourceLocation(), SourceLocation(),
-                                          N) {
+                                          SourceLocation(), N) {
     assert(isClauseKind(Kind) && "expected copyin clause or alias");
   }
 
@@ -301,7 +306,6 @@ public:
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
   /// \param VL List of references to the variables.
-  ///
   static ACCCopyinClause *Create(const ASTContext &C, OpenACCClauseKind Kind,
                                  SourceLocation StartLoc,
                                  SourceLocation LParenLoc,
@@ -311,7 +315,6 @@ public:
   /// \param C AST context.
   /// \param Kind Which alias of the copyin clause.
   /// \param N The number of variables.
-  ///
   static ACCCopyinClause *CreateEmpty(const ASTContext &C,
                                       OpenACCClauseKind Kind, unsigned N);
 
@@ -344,7 +347,6 @@ public:
 /// \endcode
 /// In this example directive '#pragma acc parallel' has clause 'copyout' with
 /// the variables 'a' and 'b'.
-///
 class ACCCopyoutClause final
     : public ACCVarListClause<ACCCopyoutClause>,
       private llvm::TrailingObjects<ACCCopyoutClause, Expr *> {
@@ -359,11 +361,11 @@ class ACCCopyoutClause final
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
   /// \param N Number of the variables in the clause.
-  ///
   ACCCopyoutClause(OpenACCClauseKind Kind, SourceLocation StartLoc,
                    SourceLocation LParenLoc, SourceLocation EndLoc, unsigned N)
-      : ACCVarListClause<ACCCopyoutClause>(Kind, StartLoc, LParenLoc, EndLoc,
-                                           N, ACCC_copyout) {
+      : ACCVarListClause<ACCCopyoutClause>(Kind, ACC_EXPLICIT, StartLoc,
+                                           LParenLoc, EndLoc, N, ACCC_copyout)
+  {
     assert(isClauseKind(Kind) && "expected copyout clause or alias");
   }
 
@@ -371,11 +373,10 @@ class ACCCopyoutClause final
   ///
   /// \param Kind Which alias of the copyout clause.
   /// \param N Number of variables.
-  ///
   explicit ACCCopyoutClause(OpenACCClauseKind Kind, unsigned N)
-      : ACCVarListClause<ACCCopyoutClause>(Kind, SourceLocation(),
+      : ACCVarListClause<ACCCopyoutClause>(Kind, ACC_UNDETERMINED,
                                            SourceLocation(), SourceLocation(),
-                                           N) {
+                                           SourceLocation(), N) {
     assert(isClauseKind(Kind) && "expected copyout clause or alias");
   }
 
@@ -388,7 +389,6 @@ public:
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
   /// \param VL List of references to the variables.
-  ///
   static ACCCopyoutClause *Create(const ASTContext &C, OpenACCClauseKind Kind,
                                   SourceLocation StartLoc,
                                   SourceLocation LParenLoc,
@@ -398,7 +398,6 @@ public:
   /// \param C AST context.
   /// \param Kind Which alias of the copyout clause.
   /// \param N The number of variables.
-  ///
   static ACCCopyoutClause *CreateEmpty(const ASTContext &C,
                                        OpenACCClauseKind Kind, unsigned N);
 
@@ -427,7 +426,6 @@ public:
 ///
 /// These clauses are computed implicitly by clang.  Currently, OpenACC does
 /// not define an explicit version, so clang does not accept one.
-///
 class ACCSharedClause final
     : public ACCVarListClause<ACCSharedClause>,
       private llvm::TrailingObjects<ACCSharedClause, Expr *> {
@@ -439,7 +437,8 @@ class ACCSharedClause final
   ///
   /// \param N Number of the variables in the clause.
   explicit ACCSharedClause(unsigned N)
-      : ACCVarListClause<ACCSharedClause>(ACCC_shared, SourceLocation(), SourceLocation(),
+      : ACCVarListClause<ACCSharedClause>(ACCC_shared, ACC_IMPLICIT,
+                                          SourceLocation(), SourceLocation(),
                                           SourceLocation(), N) {}
 
 public:
@@ -447,13 +446,11 @@ public:
   ///
   /// \param C AST context.
   /// \param VL List of references to the variables.
-  ///
   static ACCSharedClause *Create(const ASTContext &C, ArrayRef<Expr *> VL);
   /// Creates an empty clause with the place for \a N variables.
   ///
   /// \param C AST context.
   /// \param N The number of variables.
-  ///
   static ACCSharedClause *CreateEmpty(const ASTContext &C, unsigned N);
 
   child_range children() {
@@ -473,7 +470,6 @@ public:
 /// \endcode
 /// In this example directive '#pragma acc parallel' has clause 'private'
 /// with the variables 'a' and 'b'.
-///
 class ACCPrivateClause final
     : public ACCVarListClause<ACCPrivateClause>,
       private llvm::TrailingObjects<ACCPrivateClause, Expr *> {
@@ -483,42 +479,41 @@ class ACCPrivateClause final
 
   /// Build clause with number of variables \a N.
   ///
+  /// \param Determination How the clause was determined.
   /// \param StartLoc Starting location of the clause.
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
   /// \param N Number of the variables in the clause.
-  ///
-  ACCPrivateClause(SourceLocation StartLoc, SourceLocation LParenLoc,
-                   SourceLocation EndLoc, unsigned N)
-      : ACCVarListClause<ACCPrivateClause>(ACCC_private, StartLoc, LParenLoc,
-                                           EndLoc, N) {}
+  ACCPrivateClause(OpenACCDetermination Determination, SourceLocation StartLoc,
+                   SourceLocation LParenLoc, SourceLocation EndLoc, unsigned N)
+      : ACCVarListClause<ACCPrivateClause>(ACCC_private, Determination,
+                                           StartLoc, LParenLoc, EndLoc, N) {}
 
   /// Build an empty clause.
   ///
   /// \param N Number of variables.
-  ///
   explicit ACCPrivateClause(unsigned N)
-      : ACCVarListClause<ACCPrivateClause>(ACCC_private, SourceLocation(),
+      : ACCVarListClause<ACCPrivateClause>(ACCC_private, ACC_UNDETERMINED,
                                            SourceLocation(), SourceLocation(),
-                                           N) {}
+                                           SourceLocation(), N) {}
 
 public:
   /// Creates clause with a list of variables \a VL.
   ///
   /// \param C AST context.
+  /// \param Determination How the clause was determined.
   /// \param StartLoc Starting location of the clause.
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
   /// \param VL List of references to the variables.
-  ///
-  static ACCPrivateClause *Create(const ASTContext &C, SourceLocation StartLoc,
-                                  SourceLocation LParenLoc,
-                                  SourceLocation EndLoc, ArrayRef<Expr *> VL);
+  static ACCPrivateClause *Create(
+      const ASTContext &C, OpenACCDetermination Determination,
+      SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc,
+      ArrayRef<Expr *> VL);
   /// Creates an empty clause with the place for \a N variables.
   ///
   /// \param C AST context.
   /// \param N The number of variables.
-  ///
   static ACCPrivateClause *CreateEmpty(const ASTContext &C, unsigned N);
 
   child_range children() {
@@ -539,7 +534,6 @@ public:
 /// \endcode
 /// In this example directive '#pragma acc parallel' has clause 'firstprivate'
 /// with the variables 'a' and 'b'.
-///
 class ACCFirstprivateClause final
     : public ACCVarListClause<ACCFirstprivateClause>,
       private llvm::TrailingObjects<ACCFirstprivateClause, Expr *> {
@@ -549,42 +543,42 @@ class ACCFirstprivateClause final
 
   /// Build clause with number of variables \a N.
   ///
+  /// \param Determination How the clause was determined.
   /// \param StartLoc Starting location of the clause.
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
   /// \param N Number of the variables in the clause.
-  ///
-  ACCFirstprivateClause(SourceLocation StartLoc, SourceLocation LParenLoc,
+  ACCFirstprivateClause(OpenACCDetermination Determination,
+                        SourceLocation StartLoc, SourceLocation LParenLoc,
                         SourceLocation EndLoc, unsigned N)
-      : ACCVarListClause<ACCFirstprivateClause>(ACCC_firstprivate, StartLoc,
-                                                LParenLoc, EndLoc, N) {}
+      : ACCVarListClause<ACCFirstprivateClause>(
+          ACCC_firstprivate, Determination, StartLoc, LParenLoc, EndLoc, N) {}
 
   /// Build an empty clause.
   ///
   /// \param N Number of variables.
-  ///
   explicit ACCFirstprivateClause(unsigned N)
       : ACCVarListClause<ACCFirstprivateClause>(
-            ACCC_firstprivate, SourceLocation(), SourceLocation(),
-            SourceLocation(), N) {}
+            ACCC_firstprivate, ACC_UNDETERMINED, SourceLocation(),
+            SourceLocation(), SourceLocation(), N) {}
 
 public:
   /// Creates clause with a list of variables \a VL.
   ///
   /// \param C AST context.
+  /// \param Determination How the clause was determined.
   /// \param StartLoc Starting location of the clause.
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
   /// \param VL List of references to the original variables.
-  ///
   static ACCFirstprivateClause *
-  Create(const ASTContext &C, SourceLocation StartLoc, SourceLocation LParenLoc,
+  Create(const ASTContext &C, OpenACCDetermination Determination,
+         SourceLocation StartLoc, SourceLocation LParenLoc,
          SourceLocation EndLoc, ArrayRef<Expr *> VL);
   /// Creates an empty clause with the place for \a N variables.
   ///
   /// \param C AST context.
   /// \param N The number of variables.
-  ///
   static ACCFirstprivateClause *CreateEmpty(const ASTContext &C, unsigned N);
 
   child_range children() {
@@ -619,26 +613,28 @@ class ACCReductionClause final
 
   /// Build clause with number of variables \a N.
   ///
+  /// \param Determination How the clause was determined.
   /// \param StartLoc Starting location of the clause.
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
   /// \param ColonLoc Location of ':'.
   /// \param N Number of the variables in the clause.
   /// \param NameInfo The full name info for reduction operator.
-  ACCReductionClause(SourceLocation StartLoc, SourceLocation LParenLoc,
-                     SourceLocation ColonLoc, SourceLocation EndLoc, unsigned N,
-                     const DeclarationNameInfo &NameInfo)
-      : ACCVarListClause<ACCReductionClause>(ACCC_reduction, StartLoc,
-                                             LParenLoc, EndLoc, N),
+  ACCReductionClause(OpenACCDetermination Determination,
+                     SourceLocation StartLoc, SourceLocation LParenLoc,
+                     SourceLocation ColonLoc, SourceLocation EndLoc,
+                     unsigned N, const DeclarationNameInfo &NameInfo)
+      : ACCVarListClause<ACCReductionClause>(ACCC_reduction, Determination,
+                                             StartLoc, LParenLoc, EndLoc, N),
         ColonLoc(ColonLoc), NameInfo(NameInfo) {}
 
   /// Build an empty clause.
   ///
   /// \param N Number of variables.
   explicit ACCReductionClause(unsigned N)
-      : ACCVarListClause<ACCReductionClause>(ACCC_reduction, SourceLocation(),
-                                             SourceLocation(), SourceLocation(),
-                                             N) {}
+      : ACCVarListClause<ACCReductionClause>(
+          ACCC_reduction, ACC_UNDETERMINED, SourceLocation(), SourceLocation(),
+          SourceLocation(), N) {}
 
   /// Sets location of ':' symbol in clause.
   void setColonLoc(SourceLocation CL) { ColonLoc = CL; }
@@ -649,6 +645,7 @@ class ACCReductionClause final
 public:
   /// Creates clause with a list of variables \a VL.
   ///
+  /// \param Determination How the clause was determined.
   /// \param StartLoc Starting location of the clause.
   /// \param LParenLoc Location of '('.
   /// \param ColonLoc Location of ':'.
@@ -656,9 +653,9 @@ public:
   /// \param VL The variables in the clause.
   /// \param NameInfo The full name info for reduction operator.
   static ACCReductionClause *
-  Create(const ASTContext &C, SourceLocation StartLoc,
-         SourceLocation LParenLoc, SourceLocation ColonLoc,
-         SourceLocation EndLoc, ArrayRef<Expr *> VL,
+  Create(const ASTContext &C, OpenACCDetermination Determination,
+         SourceLocation StartLoc, SourceLocation LParenLoc,
+         SourceLocation ColonLoc, SourceLocation EndLoc, ArrayRef<Expr *> VL,
          const DeclarationNameInfo &NameInfo);
 
   /// Creates an empty clause with the place for \a N variables.
@@ -741,13 +738,15 @@ public:
   /// \param EndLoc Ending location of the clause.
   ACCNumGangsClause(Expr *E, SourceLocation StartLoc, SourceLocation LParenLoc,
                     SourceLocation EndLoc)
-      : ACCClause(ACCC_num_gangs, StartLoc, EndLoc), LParenLoc(LParenLoc),
-        NumGangs(E) {
+      : ACCClause(ACCC_num_gangs, ACC_EXPLICIT, StartLoc, EndLoc),
+        LParenLoc(LParenLoc), NumGangs(E) {
   }
 
   /// Build an empty clause.
   ACCNumGangsClause()
-      : ACCClause(ACCC_num_gangs, SourceLocation(), SourceLocation()) {}
+      : ACCClause(ACCC_num_gangs, ACC_UNDETERMINED, SourceLocation(),
+                  SourceLocation())
+  {}
 
   /// Sets the location of '('.
   void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
@@ -802,13 +801,14 @@ public:
   /// \param EndLoc Ending location of the clause.
   ACCNumWorkersClause(Expr *E, SourceLocation StartLoc, SourceLocation LParenLoc,
                       SourceLocation EndLoc)
-      : ACCClause(ACCC_num_workers, StartLoc, EndLoc), LParenLoc(LParenLoc),
-        NumWorkers(E) {
+      : ACCClause(ACCC_num_workers, ACC_EXPLICIT, StartLoc, EndLoc),
+        LParenLoc(LParenLoc), NumWorkers(E) {
   }
 
   /// Build an empty clause.
   ACCNumWorkersClause()
-      : ACCClause(ACCC_num_workers, SourceLocation(), SourceLocation()) {}
+      : ACCClause(ACCC_num_workers, ACC_UNDETERMINED, SourceLocation(),
+                  SourceLocation()) {}
 
   /// Returns the location of '('.
   SourceLocation getLParenLoc() const { return LParenLoc; }
@@ -860,13 +860,14 @@ public:
   /// \param EndLoc Ending location of the clause.
   ACCVectorLengthClause(Expr *E, SourceLocation StartLoc, SourceLocation LParenLoc,
                         SourceLocation EndLoc)
-      : ACCClause(ACCC_vector_length, StartLoc, EndLoc), LParenLoc(LParenLoc),
-        VectorLength(E) {
+      : ACCClause(ACCC_vector_length, ACC_EXPLICIT, StartLoc, EndLoc),
+        LParenLoc(LParenLoc), VectorLength(E) {
   }
 
   /// Build an empty clause.
   ACCVectorLengthClause()
-      : ACCClause(ACCC_vector_length, SourceLocation(), SourceLocation()) {}
+      : ACCClause(ACCC_vector_length, ACC_UNDETERMINED, SourceLocation(),
+                  SourceLocation()) {}
 
   /// Returns the location of '('.
   SourceLocation getLParenLoc() const { return LParenLoc; }
@@ -900,11 +901,13 @@ public:
   /// \param StartLoc Starting location of the clause.
   /// \param EndLoc Ending location of the clause.
   ACCSeqClause(SourceLocation StartLoc, SourceLocation EndLoc)
-      : ACCClause(ACCC_seq, StartLoc, EndLoc) {}
+      : ACCClause(ACCC_seq, ACC_EXPLICIT, StartLoc, EndLoc) {}
 
   /// Build an empty clause.
   ACCSeqClause()
-      : ACCClause(ACCC_seq, SourceLocation(), SourceLocation()) {}
+      : ACCClause(ACCC_seq, ACC_UNDETERMINED, SourceLocation(),
+                  SourceLocation())
+  {}
 
   child_range children() {
     return child_range(child_iterator(), child_iterator());
@@ -926,14 +929,17 @@ class ACCIndependentClause : public ACCClause {
 public:
   /// Build 'independent' clause.
   ///
+  /// \param Determination How the clause was determined.
   /// \param StartLoc Starting location of the clause.
   /// \param EndLoc Ending location of the clause.
-  ACCIndependentClause(SourceLocation StartLoc, SourceLocation EndLoc)
-      : ACCClause(ACCC_independent, StartLoc, EndLoc) {}
+  ACCIndependentClause(OpenACCDetermination Determination,
+                       SourceLocation StartLoc, SourceLocation EndLoc)
+      : ACCClause(ACCC_independent, Determination, StartLoc, EndLoc) {}
 
   /// Build an empty clause.
   ACCIndependentClause()
-      : ACCClause(ACCC_independent, SourceLocation(), SourceLocation()) {}
+      : ACCClause(ACCC_independent, ACC_UNDETERMINED, SourceLocation(),
+                  SourceLocation()) {}
 
   child_range children() {
     return child_range(child_iterator(), child_iterator());
@@ -958,11 +964,13 @@ public:
   /// \param StartLoc Starting location of the clause.
   /// \param EndLoc Ending location of the clause.
   ACCAutoClause(SourceLocation StartLoc, SourceLocation EndLoc)
-      : ACCClause(ACCC_auto, StartLoc, EndLoc) {}
+      : ACCClause(ACCC_auto, ACC_EXPLICIT, StartLoc, EndLoc) {}
 
   /// Build an empty clause.
   ACCAutoClause()
-      : ACCClause(ACCC_auto, SourceLocation(), SourceLocation()) {}
+      : ACCClause(ACCC_auto, ACC_UNDETERMINED, SourceLocation(),
+                  SourceLocation())
+  {}
 
   child_range children() {
     return child_range(child_iterator(), child_iterator());
@@ -983,13 +991,18 @@ class ACCGangClause : public ACCClause {
 public:
   /// Build 'gang' clause.
   ///
+  /// \param Determination How the clause was determined.
   /// \param StartLoc Starting location of the clause.
   /// \param EndLoc Ending location of the clause.
-  ACCGangClause(SourceLocation StartLoc, SourceLocation EndLoc)
-      : ACCClause(ACCC_gang, StartLoc, EndLoc) {}
+  ACCGangClause(OpenACCDetermination Determination, SourceLocation StartLoc,
+                SourceLocation EndLoc)
+      : ACCClause(ACCC_gang, Determination, StartLoc, EndLoc) {}
 
   /// Build an empty clause.
-  ACCGangClause() : ACCClause(ACCC_gang, SourceLocation(), SourceLocation()) {}
+  ACCGangClause()
+    : ACCClause(ACCC_gang, ACC_UNDETERMINED, SourceLocation(),
+                SourceLocation())
+  {}
 
   child_range children() {
     return child_range(child_iterator(), child_iterator());
@@ -1013,11 +1026,12 @@ public:
   /// \param StartLoc Starting location of the clause.
   /// \param EndLoc Ending location of the clause.
   ACCWorkerClause(SourceLocation StartLoc, SourceLocation EndLoc)
-      : ACCClause(ACCC_worker, StartLoc, EndLoc) {}
+      : ACCClause(ACCC_worker, ACC_EXPLICIT, StartLoc, EndLoc) {}
 
   /// Build an empty clause.
   ACCWorkerClause()
-      : ACCClause(ACCC_worker, SourceLocation(), SourceLocation()) {}
+      : ACCClause(ACCC_worker, ACC_UNDETERMINED, SourceLocation(),
+                  SourceLocation()) {}
 
   child_range children() {
     return child_range(child_iterator(), child_iterator());
@@ -1041,11 +1055,12 @@ public:
   /// \param StartLoc Starting location of the clause.
   /// \param EndLoc Ending location of the clause.
   ACCVectorClause(SourceLocation StartLoc, SourceLocation EndLoc)
-      : ACCClause(ACCC_vector, StartLoc, EndLoc) {}
+      : ACCClause(ACCC_vector, ACC_EXPLICIT, StartLoc, EndLoc) {}
 
   /// Build an empty clause.
   ACCVectorClause()
-      : ACCClause(ACCC_vector, SourceLocation(), SourceLocation()) {}
+      : ACCClause(ACCC_vector, ACC_UNDETERMINED, SourceLocation(),
+                  SourceLocation()) {}
 
   child_range children() {
     return child_range(child_iterator(), child_iterator());
@@ -1090,13 +1105,15 @@ public:
   /// \param EndLoc Ending location of the clause.
   ACCCollapseClause(Expr *E, SourceLocation StartLoc, SourceLocation LParenLoc,
                     SourceLocation EndLoc)
-      : ACCClause(ACCC_collapse, StartLoc, EndLoc), LParenLoc(LParenLoc),
-        Collapse(E) {
+      : ACCClause(ACCC_collapse, ACC_EXPLICIT, StartLoc, EndLoc),
+        LParenLoc(LParenLoc), Collapse(E) {
   }
 
   /// Build an empty clause.
   ACCCollapseClause()
-      : ACCClause(ACCC_collapse, SourceLocation(), SourceLocation()) {}
+      : ACCClause(ACCC_collapse, ACC_UNDETERMINED, SourceLocation(),
+                  SourceLocation())
+  {}
 
   /// Returns the location of '('.
   SourceLocation getLParenLoc() const { return LParenLoc; }

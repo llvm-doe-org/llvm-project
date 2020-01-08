@@ -69,12 +69,13 @@ clang::getPrivateVarsFromClause(ACCClause *C) {
 
 ACCCopyClause *
 ACCCopyClause::Create(const ASTContext &C, OpenACCClauseKind Kind,
+                      OpenACCDetermination Determination,
                       SourceLocation StartLoc, SourceLocation LParenLoc,
                       SourceLocation EndLoc, ArrayRef<Expr *> VL) {
   // Allocate space for private variables and initializer expressions.
   void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
-  ACCCopyClause *Clause = new (Mem) ACCCopyClause(Kind, StartLoc, LParenLoc,
-                                                  EndLoc, VL.size());
+  ACCCopyClause *Clause = new (Mem) ACCCopyClause(
+      Kind, Determination, StartLoc, LParenLoc, EndLoc, VL.size());
   Clause->setVarRefs(VL);
   return Clause;
 }
@@ -137,13 +138,15 @@ ACCSharedClause *ACCSharedClause::CreateEmpty(const ASTContext &C,
 }
 
 ACCPrivateClause *
-ACCPrivateClause::Create(const ASTContext &C, SourceLocation StartLoc,
-                         SourceLocation LParenLoc, SourceLocation EndLoc,
-                         ArrayRef<Expr *> VL) {
+ACCPrivateClause::Create(
+    const ASTContext &C, OpenACCDetermination Determination,
+    SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc,
+    ArrayRef<Expr *> VL) {
   // Allocate space for private variables and initializer expressions.
   void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
   ACCPrivateClause *Clause =
-      new (Mem) ACCPrivateClause(StartLoc, LParenLoc, EndLoc, VL.size());
+      new (Mem) ACCPrivateClause(Determination, StartLoc, LParenLoc, EndLoc,
+                                 VL.size());
   Clause->setVarRefs(VL);
   return Clause;
 }
@@ -155,12 +158,14 @@ ACCPrivateClause *ACCPrivateClause::CreateEmpty(const ASTContext &C,
 }
 
 ACCFirstprivateClause *
-ACCFirstprivateClause::Create(const ASTContext &C, SourceLocation StartLoc,
-                              SourceLocation LParenLoc, SourceLocation EndLoc,
-                              ArrayRef<Expr *> VL) {
+ACCFirstprivateClause::Create(
+    const ASTContext &C, OpenACCDetermination Determination,
+    SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc,
+    ArrayRef<Expr *> VL) {
   void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
   ACCFirstprivateClause *Clause =
-      new (Mem) ACCFirstprivateClause(StartLoc, LParenLoc, EndLoc, VL.size());
+      new (Mem) ACCFirstprivateClause(Determination, StartLoc, LParenLoc,
+                                      EndLoc, VL.size());
   Clause->setVarRefs(VL);
   return Clause;
 }
@@ -172,14 +177,15 @@ ACCFirstprivateClause *ACCFirstprivateClause::CreateEmpty(const ASTContext &C,
 }
 
 ACCReductionClause *
-ACCReductionClause::Create(const ASTContext &C, SourceLocation StartLoc,
-                           SourceLocation LParenLoc, SourceLocation ColonLoc,
-                           SourceLocation EndLoc, ArrayRef<Expr *> VL,
-                           const DeclarationNameInfo &NameInfo) {
+ACCReductionClause::Create(
+    const ASTContext &C, OpenACCDetermination Determination,
+    SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation ColonLoc,
+    SourceLocation EndLoc, ArrayRef<Expr *> VL,
+    const DeclarationNameInfo &NameInfo) {
   void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
   ACCReductionClause *Clause =
-      new (Mem) ACCReductionClause(StartLoc, LParenLoc, ColonLoc, EndLoc, VL.size(),
-                                   NameInfo);
+      new (Mem) ACCReductionClause(Determination, StartLoc, LParenLoc,
+                                   ColonLoc, EndLoc, VL.size(), NameInfo);
   Clause->setVarRefs(VL);
   return Clause;
 }
