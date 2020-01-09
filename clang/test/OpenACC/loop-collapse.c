@@ -1185,7 +1185,7 @@ int main() {
     // DMP-NEXT:   ACCCollapseClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 2
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-    // DMP-NEXT:   ACCPrivateClause {{.*}} <implicit>
+    // DMP-NEXT:   ACCPrivateClause {{.*}} <predetermined>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
@@ -1262,7 +1262,7 @@ int main() {
     // DMP-NEXT:   ACCCollapseClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 2
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-    // DMP-NEXT:   ACCPrivateClause {{.*}} <implicit>
+    // DMP-NEXT:   ACCPrivateClause {{.*}} <predetermined>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
@@ -1339,7 +1339,7 @@ int main() {
     // DMP-NEXT:       ACCCollapseClause
     // DMP-NEXT:         IntegerLiteral {{.*}} 2
     // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-    // DMP-NEXT:       ACCPrivateClause {{.*}} <implicit>
+    // DMP-NEXT:       ACCPrivateClause {{.*}} <predetermined>
     // DMP-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:       ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:         DeclRefExpr {{.*}} 'k' 'int'

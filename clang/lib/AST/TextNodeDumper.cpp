@@ -334,8 +334,18 @@ void TextNodeDumper::Visit(const ACCClause *C) {
   }
   dumpPointer(C);
   dumpSourceRange(SourceRange(C->getBeginLoc(), C->getEndLoc()));
-  if (C->getDetermination() != ACC_EXPLICIT)
+  switch (C->getDetermination()) {
+  case ACC_PREDETERMINED:
+    OS << " <predetermined>";
+    break;
+  case ACC_IMPLICIT:
     OS << " <implicit>";
+    break;
+  case ACC_EXPLICIT:
+    break;
+  case ACC_UNDETERMINED:
+    llvm_unreachable("expected clause determination to be set to determined");
+  }
   if (auto Reduction = dyn_cast<ACCReductionClause>(C)) {
     OS << " '";
     Reduction->printReductionOperator(OS);

@@ -842,7 +842,7 @@ int main() {
       // DMP-AW-NEXT:           ACCWorkerClause
       // DMP-AV-NEXT:           ACCVectorClause
       // DMP-AIMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
-      // DMP-APLC-NEXT:         ACCPrivateClause {{.*}} <implicit>
+      // DMP-APLC-NEXT:         ACCPrivateClause {{.*}} <predetermined>
       // DMP-APLC-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
       // DMP-NEXT:              ACCSharedClause {{.*}} <implicit>
       // DMP-ASLC-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
@@ -1158,7 +1158,7 @@ int main() {
     // DMP-AW-NEXT:             ACCWorkerClause
     // DMP-AV-NEXT:             ACCVectorClause
     // DMP-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
-    // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <predetermined>
     // DMP-APLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:                ACCSharedClause {{.*}} <implicit>
     // DMP-ASLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
@@ -1338,7 +1338,7 @@ int main() {
     // DMP-AW-NEXT:             ACCWorkerClause
     // DMP-AV-NEXT:             ACCVectorClause
     // DMP-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
-    // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <predetermined>
     // DMP-APLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:                ACCSharedClause {{.*}} <implicit>
     // DMP-ASLC-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
@@ -1508,7 +1508,7 @@ int main() {
       // DMP-AV-NEXT:           ACCVectorClause
       // DMP-AIMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
       // DMP-ASLC-NEXT:         ACCSharedClause {{.*}} <implicit>
-      // DMP-APLC-NEXT:         ACCPrivateClause {{.*}} <implicit>
+      // DMP-APLC-NEXT:         ACCPrivateClause {{.*}} <predetermined>
       // DMP-NEXT:                DeclRefExpr {{.*}} 'tentativeDef' 'int'
       // DMP-AGIMP-NEXT:        ACCGangClause {{.*}} <implicit>
       // DMP-OPRG-NEXT:         impl: [[OMPDD]]
@@ -1640,7 +1640,7 @@ int main() {
     // DMP-AV-NEXT:             ACCVectorClause
     // DMP-AIMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
     // DMP-ASLC-NEXT:           ACCSharedClause {{.*}} <implicit>
-    // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:           ACCPrivateClause {{.*}} <predetermined>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'tentativeDef' 'int'
     // DMP-AGIMP-NEXT:          ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:           impl: [[OMPDD]]
@@ -1897,7 +1897,7 @@ int main() {
     // DMP-AW-NEXT:         ACCWorkerClause
     // DMP-AV-NEXT:         ACCVectorClause
     // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-    // DMP-APLC-NEXT:       ACCPrivateClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:       ACCPrivateClause {{.*}} <predetermined>
     // DMP-APLC-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
     // DMP-ASLC-NEXT:       ACCSharedClause {{.*}} <implicit>
     // DMP-ASLC-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
@@ -2030,7 +2030,7 @@ int main() {
     // DMP-AW-NEXT:            ACCWorkerClause
     // DMP-AV-NEXT:            ACCVectorClause
     // DMP-AIMP-NEXT:          ACCIndependentClause {{.*}} <implicit>
-    // DMP-APLC-NEXT:          ACCPrivateClause {{.*}} <implicit>
+    // DMP-APLC-NEXT:          ACCPrivateClause {{.*}} <predetermined>
     // DMP-APLC-NEXT:            DeclRefExpr {{.*}} 'j' 'int'
     // DMP-ASLC-NEXT:          ACCSharedClause {{.*}} <implicit>
     // DMP-ASLC-NEXT:            DeclRefExpr {{.*}} 'j' 'int'
