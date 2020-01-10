@@ -261,23 +261,27 @@ public:
     return Stack.back().NestedWorkerPartitioning;
   }
 
-  /// For the given variable, selects the correct effective directive and
-  /// records the given base DA on it, and diagnoses conflicts with existing
-  /// DAs on remaining effective directives of the same combined directive.
+  /// For the given variable and given base DA, selects the effective
+  /// directive to which it applies, records the DA there, and diagnoses
+  /// conflicts with existing DAs on any effective directive of the same
+  /// combined directive.
   ///
   /// Generally, must not be called for a DA that should be suppressed by
-  /// another DA, or a spurious diagnostic will be produced.  Specifically,
-  /// for a specific variable and effective directive, a predetermined DA is
-  /// suppressed by the same explicit DA, and an implicit DA is suppressed by
-  /// any explicit or predetermined DA.
+  /// another DA for the same variable applied to the same effective directive,
+  /// or a spurious diagnostic will be produced.  Specifically, it is the
+  /// caller's responsibility to suppress (1) a predetermined DA if the same
+  /// explicit DA is specified and (2) an implicit DA if any explicit or
+  /// predetermined DA is specified.
   ///
   /// Must be called for an implicit DA only when the effective directive to
   /// which it applies (as opposed to a child effective directive in the same
   /// combined directive) is at the top of the stack.
-  bool addBaseDA(VarDecl *D, Expr *E, OpenACCBaseDAKind A, bool IsImplicit);
+  bool addBaseDA(VarDecl *VD, Expr *E, OpenACCBaseDAKind BaseDAKind,
+                 OpenACCDetermination Determination);
   /// Adds reduction to the specified declaration.
   bool addReduction(VarDecl *D, Expr *E,
-                    const DeclarationNameInfo &ReductionId);
+                    const DeclarationNameInfo &ReductionId,
+                    OpenACCDetermination Determination);
 
   /// Returns data attributes from top of the stack for the specified
   /// declaration.
@@ -358,8 +362,8 @@ public:
 };
 } // namespace
 
-bool DirStackTy::addBaseDA(VarDecl *VD, Expr *E,
-                           OpenACCBaseDAKind BaseDAKind, bool IsImplicit) {
+bool DirStackTy::addBaseDA(VarDecl *VD, Expr *E, OpenACCBaseDAKind BaseDAKind,
+                           OpenACCDetermination Determination) {
   VD = VD->getCanonicalDecl();
   assert(!Stack.empty() && "expected non-empty directive stack");
 
@@ -382,24 +386,20 @@ bool DirStackTy::addBaseDA(VarDecl *VD, Expr *E,
   // loop because the initial value provided by firstprivate can then never be
   // accessed.  (For exactly that reason, we never compute an implicit
   // firstprivate for a variable with a private clause on an acc parallel
-  // loop.)
-  //
-  // FIXME: Currently, a predetermined DA is handled here like an implicit DA.
-  // As a result, conflicts between predetermined private and explicit
-  // firstprivate, copy, etc. on a combined construct are not diagnosed.
+  // loop.)  See the section "Basic Data Attributes" in the Clang OpenACC
+  // design document.
   bool Added = false;
   for (auto Itr = Stack.rbegin(), End = Stack.rend(); Itr != End; ++Itr) {
     DAVarData &DVar = Itr->DAMap[VD];
     // Complain for conflict with existing base DA.
     //
-    // A predetermined DA does not conflict with the same explicit DA, but
-    // addBaseDA has a precondition to avoid adding the predetermined DA in
-    // that scenario.
+    // Some DAs should be suppressed by rather than conflict with existing DAs,
+    // but addBaseDA has preconditions to avoid those scenarios.
     if (DVar.BaseDAKind != ACC_BASE_DA_unknown) {
       SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_da)
           << (DVar.BaseDAKind == BaseDAKind)
           << getOpenACCBaseDAName(DVar.BaseDAKind)
-          << getOpenACCBaseDAName(BaseDAKind);
+          << Determination << getOpenACCBaseDAName(BaseDAKind);
       SemaRef.Diag(DVar.BaseDARefExpr->getExprLoc(),
                    diag::note_acc_explicit_da)
           << getOpenACCBaseDAName(DVar.BaseDAKind);
@@ -410,7 +410,7 @@ bool DirStackTy::addBaseDA(VarDecl *VD, Expr *E,
         !isAllowedBaseDAForReduction(BaseDAKind)) {
       SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_da)
           << false << getOpenACCClauseName(ACCC_reduction)
-          << getOpenACCBaseDAName(BaseDAKind);
+          << Determination << getOpenACCBaseDAName(BaseDAKind);
       SemaRef.Diag(DVar.ReductionRefExpr->getExprLoc(),
                    diag::note_acc_explicit_da)
           << getOpenACCClauseName(ACCC_reduction);
@@ -421,7 +421,7 @@ bool DirStackTy::addBaseDA(VarDecl *VD, Expr *E,
       DVar.BaseDAKind = BaseDAKind;
       DVar.BaseDARefExpr = E;
       Added = true;
-      if (IsImplicit)
+      if (Determination == ACC_IMPLICIT)
         // As a precondition, an implicit clause is added when the effective
         // directive to which it applies is at the top of the stack.  It might
         // appear to conflict with clauses lower on the stack, but don't
@@ -431,8 +431,9 @@ bool DirStackTy::addBaseDA(VarDecl *VD, Expr *E,
         // it would always conflict.  So stop climbing.
         break;
     }
-    assert(!IsImplicit && "expected implicit clause to be allowed on directive"
-                          " at top of stack");
+    assert(Determination != ACC_IMPLICIT &&
+           "expected implicit clause to be allowed on directive at top of "
+           "stack");
     if (Itr->RealDKind != ACCD_unknown)
       // Either this is not a combined directive, or we've reached the
       // outermost effective directive, so stop climbing.
@@ -444,7 +445,8 @@ bool DirStackTy::addBaseDA(VarDecl *VD, Expr *E,
 }
 
 bool DirStackTy::addReduction(VarDecl *VD, Expr *E,
-                              const DeclarationNameInfo &ReductionId) {
+                              const DeclarationNameInfo &ReductionId,
+                              OpenACCDetermination Determination) {
   VD = VD->getCanonicalDecl();
   assert(!Stack.empty() && "expected non-empty directive stack");
   assert(!ReductionId.getName().isEmpty() && "expected reduction");
@@ -467,7 +469,7 @@ bool DirStackTy::addReduction(VarDecl *VD, Expr *E,
     if (!isAllowedBaseDAForReduction(DVar.BaseDAKind)) {
       SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_da)
           << false << getOpenACCBaseDAName(DVar.BaseDAKind)
-          << getOpenACCClauseName(ACCC_reduction);
+          << Determination << getOpenACCClauseName(ACCC_reduction);
       SemaRef.Diag(DVar.BaseDARefExpr->getExprLoc(),
                    diag::note_acc_explicit_da)
           << getOpenACCBaseDAName(DVar.BaseDAKind);
@@ -1317,8 +1319,9 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
         //   "Variables with predetermined data attributes may not appear in a
         //   data clause that conflicts with that data attribute."
         // As far as we know, it's not actually possible to create such a
-        // conflict.  See the section "Basic Data Attributes" in the Clang
-        // OpenACC design document for further discussion.
+        // conflict except with a DA on the parent effective directive in a
+        // combined directive.  See the section "Basic Data Attributes" in the
+        // Clang OpenACC design document for further discussion.
         assert(DVar.BaseDAKind == ACC_BASE_DA_unknown &&
                "expected no explicit attribute when predetermined attribute");
         PrePrivate.push_back(RefExpr);
@@ -1328,8 +1331,10 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
       ACCClause *Pre = ActOnOpenACCPrivateClause(
           PrePrivate, ACC_PREDETERMINED, SourceLocation(), SourceLocation(),
           SourceLocation());
-      assert(Pre && "expected successful predetermined private");
-      ComputedClauses.push_back(Pre);
+      if (Pre)
+        ComputedClauses.push_back(Pre);
+      else
+        ErrorFound = true;
     }
 
     // ImplicitBaseDAAdder assumes predetermined and explicit DAs have no
@@ -1346,6 +1351,8 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
       ACCClause *Implicit = ActOnOpenACCCopyClause(
           ACCC_copy, Adder.getImplicitCopy(), ACC_IMPLICIT, SourceLocation(),
           SourceLocation(), SourceLocation());
+      // Implicit copy can be for an array, which can be of incomplete type,
+      // which isn't permitted in copy, so we check for failure here.
       if (Implicit)
         ComputedClauses.push_back(Implicit);
     }
@@ -1694,7 +1701,7 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
       continue;
 
     if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_copy,
-                             Determination != ACC_EXPLICIT))
+                             Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -1733,7 +1740,7 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
       continue;
 
     if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_copyin,
-                             /*IsImplicitClause=*/false))
+                             ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -1772,7 +1779,7 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
       continue;
 
     if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_copyout,
-                             /*IsImplicitClause=*/false))
+                             ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -1793,7 +1800,7 @@ ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
     assert(VD && "OpenACC implicit shared clause for non-VarDecl");
 
     if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(),
-                             ACC_BASE_DA_shared, /*IsImplicit*/ true))
+                             ACC_BASE_DA_shared, ACC_IMPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
     else
       // Assert that the variable does not appear in an explicit data clause on
@@ -1847,7 +1854,7 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
     }
 
     if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_private,
-                             Determination != ACC_EXPLICIT))
+                             Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -1883,8 +1890,7 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(
       continue;
 
     if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(),
-                             ACC_BASE_DA_firstprivate,
-                             Determination != ACC_EXPLICIT))
+                             ACC_BASE_DA_firstprivate, Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -2088,7 +2094,8 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     }
 
     // Record reduction item.
-    if (!DirStack->addReduction(VD, RefExpr->IgnoreParens(), ReductionId))
+    if (!DirStack->addReduction(VD, RefExpr->IgnoreParens(), ReductionId,
+                                Determination))
       Vars.push_back(RefExpr);
   }
   if (Vars.empty())

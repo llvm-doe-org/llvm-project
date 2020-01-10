@@ -9674,7 +9674,8 @@ def err_acc_subarray_length_undefined : Error<
   "subarray length is unspecified and cannot be inferred because subscripted "
   "value is %select{not an array|an array of unknown bound}0">;
 def err_acc_conflicting_da : Error<
-  "%1 variable %select{cannot be|defined again as}0 %2 variable">;
+  "%1 variable %select{cannot be|defined again as}0 "
+  "%select{|predetermined |implied |}2%3 variable">;
 def note_acc_explicit_da : Note<
   "previously defined as %0 variable here">;
 def err_acc_const_private : Error<

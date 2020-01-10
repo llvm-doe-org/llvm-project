@@ -52,10 +52,14 @@
 #if !CMB
 # define CMB_PAR
 # define CMB_LOOP
+# define CMB_LOOP_COLLAPSE(N)
+# define CMB_LOOP_SEQ
 # define CMB_FORLOOP_HEAD
 #else
 # define CMB_PAR parallel
-# define CMB_LOOP loop seq
+# define CMB_LOOP loop
+# define CMB_LOOP_COLLAPSE(N) loop collapse(N)
+# define CMB_LOOP_SEQ loop seq
 # define CMB_FORLOOP_HEAD for (int fli = 0; fli < 2; ++fli)
 #endif
 
@@ -1850,6 +1854,7 @@ void fn() {
   // Data clauses: arg semantics
   //--------------------------------------------------
 
+  // Unknown reduction operator.
 #if !CMB
   #pragma acc parallel
 #endif
@@ -1866,7 +1871,13 @@ void fn() {
     #pragma acc CMB_PAR loop worker reduction(foo : a[3])
     for (int i = 0; i < 5; ++i)
       ;
+  }
 
+  // Unknown variable name.
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
     // expected-error@+1 {{use of undeclared identifier 'foo'}}
     #pragma acc CMB_PAR loop private(foo ) gang
     for (int i = 0; i < 5; ++i)
@@ -1875,7 +1886,13 @@ void fn() {
     #pragma acc CMB_PAR loop reduction(*: bar ) worker
     for (int i = 0; i < 5; ++i)
       ;
+  }
 
+  // Subarrays not permitted.
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
     // expected-error@+6 {{subarray syntax must include ':'}}
     // expected-error@+5 {{subarray is not supported in 'private' clause}}
     // expected-error@+5 {{subarray is not supported in 'private' clause}}
@@ -1902,13 +1919,25 @@ void fn() {
                                                 a[:]) worker
     for (int i = 0; i < 5; ++i)
       ;
+  }
 
+  // Variables of incomplete type.
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
     // expected-error@+2 {{variable in 'private' clause cannot have incomplete type 'int []'}}
     // expected-error@+1 {{variable in 'reduction' clause cannot have incomplete type 'int []'}}
     #pragma acc CMB_PAR loop worker private(incomplete) vector reduction(|:incomplete) gang
     for (int i = 0; i < 5; ++i)
       ;
+  }
 
+  // Variables of const type.
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
     // expected-error@+4 {{const variable cannot be private because initialization is impossible}}
     // expected-error@+3 {{const variable cannot be private because initialization is impossible}}
     // expected-error@+2 {{reduction variable cannot be const}}
@@ -1916,7 +1945,13 @@ void fn() {
     #pragma acc CMB_PAR loop private(constI, constIDecl) reduction(+: constI, constIDecl)
     for (int i = 0; i < 5; ++i)
       ;
+  }
 
+  // Reduction on loop control variable.
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
     // expected-error@+2 {{OpenACC loop control variable 'i' cannot have reduction}}
     // expected-note@+2 {{'i' is an OpenACC loop control variable here}}
     #pragma acc CMB_PAR loop reduction(^:i)
@@ -1975,6 +2010,7 @@ void fn() {
     }
   }
 
+  // Reduction operator doesn't permit variable type.
 #if !CMB
   #pragma acc parallel
 #endif
@@ -1992,7 +2028,6 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
   }
-
 #if !CMB
   #pragma acc parallel
 #endif
@@ -2010,7 +2045,6 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
   }
-
 #if !CMB
   #pragma acc parallel
 #endif
@@ -2027,7 +2061,6 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
   }
-
 #if !CMB
   #pragma acc parallel
 #endif
@@ -2044,7 +2077,6 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
   }
-
 #if !CMB
   #pragma acc parallel
 #endif
@@ -2061,7 +2093,6 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
   }
-
 #if !CMB
   #pragma acc parallel
 #endif
@@ -2078,7 +2109,6 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
   }
-
 #if !CMB
   #pragma acc parallel
 #endif
@@ -2099,7 +2129,6 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
   }
-
 #if !CMB
   #pragma acc parallel
 #endif
@@ -2120,7 +2149,6 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
   }
-
 #if !CMB
   #pragma acc parallel
 #endif
@@ -2142,23 +2170,7 @@ void fn() {
       ;
   }
 
-#if !CMB
-  #pragma acc parallel
-#endif
-  {
-    // expected-error@+3 {{private variable cannot be reduction variable}}
-    // expected-note@+1 {{previously defined as private variable here}}
-    #pragma acc CMB_PAR loop private(i) gang \
-                             reduction(&:i) vector
-    for (int i = 0; i < 5; ++i)
-      ;
-    // expected-error@+3 {{reduction variable cannot be private variable}}
-    // expected-note@+1 {{previously defined as reduction variable here}}
-    #pragma acc CMB_PAR loop gang reduction(&&:i) worker \
-                             private(i) vector
-    for (int i = 0; i < 5; ++i)
-      ;
-  }
+  // Redundant clauses.
 #if !CMB
   #pragma acc parallel
 #endif
@@ -2187,13 +2199,76 @@ void fn() {
       ;
   }
 
+  // Conflicting clauses.
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    // expected-error@+3 {{private variable cannot be reduction variable}}
+    // expected-note@+1 {{previously defined as private variable here}}
+    #pragma acc CMB_PAR loop private(i) gang \
+                             reduction(&:i) vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+3 {{reduction variable cannot be private variable}}
+    // expected-note@+1 {{previously defined as reduction variable here}}
+    #pragma acc CMB_PAR loop gang reduction(&&:i) worker \
+                             private(i) vector
+    for (int i = 0; i < 5; ++i)
+      ;
+  }
+
+  // Conflicting predetermined private (for loop control variables).
+  //
+  // parallel-messages.c checks conflicts with explicit private.
+  //
+  // Reductions for loop control variables are a separate restriction and are
+  // checked above.
+  //
+  // The only remaining conflicts are with clauses that are permitted only on
+  // the parallel construct, and those conflicts only occur on a combined
+  // construct.
+  // cmb-error-re@+6 {{{{copy|copyin|copyout}} variable cannot be predetermined private variable}}
+  // cmb-note-re@+1 {{previously defined as {{copy|copyin|copyout}} variable here}}
+  #pragma acc parallel CMB_LOOP COPY(i)
+#if !CMB
+  #pragma acc loop
+#endif
+  for (i = 0; i < 5; ++i)
+    ;
+  // cmb-error@+6 {{firstprivate variable cannot be predetermined private variable}}
+  // cmb-note@+1 {{previously defined as firstprivate variable here}}
+  #pragma acc parallel CMB_LOOP firstprivate(i)
+#if !CMB
+  #pragma acc loop
+#endif
+  for (i = 0; i < 5; ++i)
+    ;
+  {
+    int i, j, k, l, m;
+    // cmb-error-re@+9 {{{{copy|copyin|copyout}} variable cannot be predetermined private variable}}
+    // cmb-error@+9 {{firstprivate variable cannot be predetermined private variable}}
+    // cmb-note-re@+2 {{previously defined as {{copy|copyin|copyout}} variable here}}
+    // cmb-note@+1 {{previously defined as firstprivate variable here}}
+    #pragma acc parallel CMB_LOOP_COLLAPSE(3) COPY(j, l) firstprivate(k, m)
+#if !CMB
+    #pragma acc loop collapse(3)
+#endif
+    for (i = 0; i < 5; ++i)
+      for (j = 0; j < 5; ++j)
+        for (k = 0; k < 5; ++k)
+          for (l = 0; l < 5; ++l)
+            for (m = 0; m < 5; ++m)
+              ;
+  }
+
   //--------------------------------------------------
   // Data clauses: reduction inter-directive conflicts
   //--------------------------------------------------
 
   // Explicit reduction on acc parallel, non-conflicting reductions on acc
   // loops.
-  #pragma acc parallel CMB_LOOP reduction(+:i,jk) COPY(jk)
+  #pragma acc parallel CMB_LOOP_SEQ reduction(+:i,jk) COPY(jk)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop worker reduction(+:i,jk)
@@ -2228,7 +2303,7 @@ void fn() {
     }
   }
   // Again with no gang loops.
-  #pragma acc parallel CMB_LOOP reduction(+:i,jk) COPY(jk)
+  #pragma acc parallel CMB_LOOP_SEQ reduction(+:i,jk) COPY(jk)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop worker reduction(+:i,jk)
@@ -2253,7 +2328,7 @@ void fn() {
 
   // Implicit reduction on acc parallel, non-conflicting reductions on acc
   // loops.
-  #pragma acc parallel CMB_LOOP COPY(b)
+  #pragma acc parallel CMB_LOOP_SEQ COPY(b)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop worker reduction(max:p,b)
@@ -2285,7 +2360,7 @@ void fn() {
     }
   }
   // Again with no gang loops.
-  #pragma acc parallel CMB_LOOP COPY(p)
+  #pragma acc parallel CMB_LOOP_SEQ COPY(p)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop worker reduction(max:p,b)
@@ -2310,7 +2385,7 @@ void fn() {
 
   // Explicit reduction on acc parallel, conflicting reductions on acc loops.
   // expected-note@+1 14 {{enclosing '+' reduction here}}
-  #pragma acc parallel CMB_LOOP reduction(+:f,d) COPY(d)
+  #pragma acc parallel CMB_LOOP_SEQ reduction(+:f,d) COPY(d)
   CMB_FORLOOP_HEAD
   {
     // expected-error@+2 {{conflicting 'max' reduction for variable 'f'}}
@@ -2372,7 +2447,7 @@ void fn() {
   }
   // Again with no gang loops.
   // expected-note@+1 10 {{enclosing '+' reduction here}}
-  #pragma acc parallel CMB_LOOP reduction(+:f,d) COPY(d)
+  #pragma acc parallel CMB_LOOP_SEQ reduction(+:f,d) COPY(d)
   CMB_FORLOOP_HEAD
   {
     // expected-error@+2 {{conflicting 'max' reduction for variable 'f'}}
@@ -2413,7 +2488,7 @@ void fn() {
 
   // Implicit reduction on acc parallel, conflicting reductions on acc loops.
   // expected-note@+1 12 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP COPY(jk)
+  #pragma acc parallel CMB_LOOP_SEQ COPY(jk)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 12 {{enclosing 'max' reduction here}}
@@ -2474,7 +2549,7 @@ void fn() {
   }
   // Again with no gang loops and worker first.
   // expected-note@+1 4 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP COPY(jk)
+  #pragma acc parallel CMB_LOOP_SEQ COPY(jk)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 4 {{enclosing 'max' reduction here}}
@@ -2509,7 +2584,7 @@ void fn() {
   }
   // Again with no gang loops and vector first.
   // expected-note@+1 4 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP COPY(jk)
+  #pragma acc parallel CMB_LOOP_SEQ COPY(jk)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 4 {{enclosing 'max' reduction here}}
@@ -2544,7 +2619,7 @@ void fn() {
   }
   // Again with no gang loops and seq first.
   // expected-note@+1 4 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP COPY(f)
+  #pragma acc parallel CMB_LOOP_SEQ COPY(f)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 4 {{enclosing 'min' reduction here}}
@@ -2581,7 +2656,7 @@ void fn() {
   // Implicit reduction on acc parallel, conflicting gang reductions on acc
   // loops in sibling loop nests.
   // expected-note@+1 2 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP COPY(e)
+  #pragma acc parallel CMB_LOOP_SEQ COPY(e)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop
@@ -2623,7 +2698,7 @@ void fn() {
   // but merely nesting in an acc loop seq doesn't.
   // expected-note@+2 6 {{implied as gang reduction here}}
   // expected-note@+1 6 {{enclosing '^' reduction here}}
-  #pragma acc parallel CMB_LOOP reduction(^:e,jk) COPY(jk,f)
+  #pragma acc parallel CMB_LOOP_SEQ reduction(^:e,jk) COPY(jk,f)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop
@@ -2683,7 +2758,7 @@ void fn() {
 
   // Implicit gang clauses can produce implicit gang reductions.
   // expected-note@+1 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP
+  #pragma acc parallel CMB_LOOP_SEQ
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop seq
@@ -2704,7 +2779,7 @@ void fn() {
 
   // acc loop reductions for acc parallel firstprivate or private variables
   // don't imply gang reductions on acc parallel.
-  #pragma acc parallel CMB_LOOP firstprivate(i) private(jk)
+  #pragma acc parallel CMB_LOOP_SEQ firstprivate(i) private(jk)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 2 {{enclosing '+' reduction here}}
@@ -2724,7 +2799,7 @@ void fn() {
 
   // acc loop reductions for acc loop private variables don't imply gang
   // reductions on acc parallel.
-  #pragma acc parallel CMB_LOOP COPY(i,d)
+  #pragma acc parallel CMB_LOOP_SEQ COPY(i,d)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop seq private(i,jk)
