@@ -25,8 +25,8 @@
 //   OSIMP   = OpenMP shared implicit
 //   OSEXP   = OpenMP shared explicit
 //   ONT1    = OpenMP num_threads(1)
-//   PART    = partitioned
-//   NOPART  = not partitioned
+//   PART    = partitioned (or additionally partitioned if with GPART)
+//   NOPART  = not partitioned (or not additionally partitioned if with GPART)
 //   GREDUN  = gang-redundant
 //   GPART   = gang-partitioned
 //   SLC     = shared loop control variable
@@ -50,7 +50,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AGIMP
-// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-NOPART-GPART,EXE-PLC)
 // RUN:   (accc=seq
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -66,7 +66,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AGIMP
-// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-NOPART-GPART,EXE-PLC)
 // RUN:   (accc=auto
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -84,7 +84,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AG
-// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-NOPART-GPART,EXE-PLC)
 // RUN:   (accc=worker
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPParallelForDirective
@@ -108,7 +108,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AG
-// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-NOPART-GPART,EXE-PLC)
 // RUN:   (accc='independent worker'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPParallelForDirective
@@ -158,7 +158,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AG,DMP-AW
-// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='independent gang worker'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPDistributeParallelForDirective
@@ -166,7 +166,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AG,DMP-AW
-// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='gang vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPDistributeSimdDirective
@@ -174,7 +174,7 @@
 // RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AG,DMP-AV
-// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='independent gang vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPDistributeSimdDirective
@@ -182,7 +182,7 @@
 // RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AG,DMP-AV
-// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='worker vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPParallelForSimdDirective
@@ -206,7 +206,7 @@
 // RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AG,DMP-AW,DMP-AV
-// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='independent gang worker vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPDistributeParallelForSimdDirective
@@ -214,7 +214,7 @@
 // RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AG,DMP-AW,DMP-AV
-// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PLC)
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='auto gang worker'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -497,11 +497,11 @@ int main() {
         for (j = 0; j < 2; ++j)
           ;
 
-        // If gang-redundant, every gang should see old value at i = 0, new value
-        // at i = 1 if sequential, and either value at i = 1 if otherwise
+        // If gang-redundant, every gang should see old value at i = 0, new
+	// value at i = 1 if sequential, and either value at i = 1 if otherwise
         // partitioned.  If gang-partitioned, each of two gangs should see old
-        // value at the gang's one assigned iteration, and one gang shouldn't see
-        // anything.
+        // value at the gang's one assigned iteration, and one gang shouldn't
+	// see anything.
         if (loopOnly == 88) // check old before new in case assign between
           save.readLoopOnlyOld = true;
         else if (loopOnly == 77 && i == 1)
@@ -511,10 +511,10 @@ int main() {
         if (i == 0)
           loopOnly = 77;
 
-        // At least one gang should see old value at i = 0, every gang should see
-        // new value at i = 1 if sequential, and gangs can see either value (or
-        // no value in case of the gang not assigned an iteration under gang
-        // partitioning) at i = 1 if partitioned in any way.
+        // At least one gang should see old value at i = 0, every gang should
+	// see new value at i = 1 if sequential, and gangs can see either value
+	// (or no value in case of the gang not assigned an iteration under
+	// gang partitioning) at i = 1 if partitioned in any way.
         if (loopOnlyArr[0] == 88) // check old before new in case assign between
           save.readLoopOnlyArrOld = true;
         else if (loopOnlyArr[0] == 77)
@@ -525,8 +525,11 @@ int main() {
           loopOnlyArr[0] = 77;
       } // PRT: }
 
-      // Should see j value assigned inside loop except that, if
-      // gang-partitioned, one of the three gangs won't run it.
+      // If gang-redundant and not otherwise partitioned, each gang should see
+      // the j value assigned by the loop above.  If gang-partitioned but not
+      // otherwise partitioned, each gang that is assigned an i iteration will
+      // see the j value assigned by the loop above, and remaining gangs will
+      // not.  If otherwise partitioned, there's a race.
       if (j == 0)
         save.declNestedLoopOld = true;
       else if (j == 2)
@@ -552,15 +555,17 @@ int main() {
     // EXE-NEXT: save.readLoopOnlyArrErr=0
     printf("save.readLoopOnlyArrErr=%d\n", save.readLoopOnlyArrErr);
 
-    // EXE-GREDUN-NEXT: save.declNestedLoopOld=0
-    // EXE-GPART-NEXT:  save.declNestedLoopOld=1
+    // EXE-NOPART-GREDUN-NEXT: save.declNestedLoopOld=0
+    // EXE-NOPART-GPART-NEXT:  save.declNestedLoopOld=1
     printf("save.declNestedLoopOld=%d\n", save.declNestedLoopOld);
-    // EXE-NEXT: save.declNestedLoopNew=1
+    // EXE-NOPART-GREDUN-NEXT: save.declNestedLoopNew=1
+    // EXE-NOPART-GPART-NEXT:  save.declNestedLoopNew=1
     printf("save.declNestedLoopNew=%d\n", save.declNestedLoopNew);
-    // EXE-NEXT: save.declNestedLoopErr=0
+    // EXE-NOPART-GREDUN-NEXT: save.declNestedLoopErr=0
+    // EXE-NOPART-GPART-NEXT:  save.declNestedLoopErr=0
     printf("save.declNestedLoopErr=%d\n", save.declNestedLoopErr);
 
-    // EXE-NEXT: loopOnly=88
+    // EXE:      loopOnly=88
     printf("loopOnly=%d\n", loopOnly);
     // EXE-NEXT: loopOnlyArr[0]=77
     printf("loopOnlyArr[0]=%d\n", loopOnlyArr[0]);
@@ -758,10 +763,13 @@ int main() {
     printf("save.readLoopOnlyArrErr=%d\n", save.readLoopOnlyArrErr);
 
     // EXE-NOPART-GREDUN-NEXT: save.declNestedLoopOld=0
+    // EXE-NOPART-GPART-NEXT:  save.declNestedLoopOld=0
     printf("save.declNestedLoopOld=%d\n", save.declNestedLoopOld);
     // EXE-NOPART-GREDUN-NEXT: save.declNestedLoopNew=1
+    // EXE-NOPART-GPART-NEXT:  save.declNestedLoopNew=1
     printf("save.declNestedLoopNew=%d\n", save.declNestedLoopNew);
     // EXE-NOPART-GREDUN-NEXT: save.declNestedLoopErr=0
+    // EXE-NOPART-GPART-NEXT:  save.declNestedLoopErr=0
     printf("save.declNestedLoopErr=%d\n", save.declNestedLoopErr);
 
     // EXE:      loopOnly=88
@@ -969,8 +977,11 @@ int main() {
         save.assignLoopNew = true;
       else
         save.assignLoopErr = true;
-      // Should see k value assigned inside loop except that, if
-      // gang-partitioned, one of the three gangs won't run it.
+      // If gang-redundant and not otherwise partitioned, each gang should see
+      // the k value assigned by the loop above.  If gang-partitioned but not
+      // otherwise partitioned, each gang that is assigned a j iteration will
+      // see the k value assigned by the loop above, and remaining gangs will
+      // not.  If otherwise partitioned, there's a race.
       if (k == 888)
         save.assignNestedLoopOld = true;
       else if (k == 2)
@@ -1082,15 +1093,17 @@ int main() {
     // EXE-NEXT: save.assignLoopErr=0
     printf("save.assignLoopErr=%d\n", save.assignLoopErr);
 
-    // EXE-GREDUN-NEXT: save.assignNestedLoopOld=0
-    // EXE-GPART-NEXT:  save.assignNestedLoopOld=1
+    // EXE-NOPART-GREDUN-NEXT: save.assignNestedLoopOld=0
+    // EXE-NOPART-GPART-NEXT:  save.assignNestedLoopOld=1
     printf("save.assignNestedLoopOld=%d\n", save.assignNestedLoopOld);
-    // EXE-NEXT: save.assignNestedLoopNew=1
+    // EXE-NOPART-GREDUN-NEXT: save.assignNestedLoopNew=1
+    // EXE-NOPART-GPART-NEXT:  save.assignNestedLoopNew=1
     printf("save.assignNestedLoopNew=%d\n", save.assignNestedLoopNew);
-    // EXE-NEXT: save.assignNestedLoopErr=0
+    // EXE-NOPART-GREDUN-NEXT: save.assignNestedLoopErr=0
+    // EXE-NOPART-GPART-NEXT:  save.assignNestedLoopErr=0
     printf("save.assignNestedLoopErr=%d\n", save.assignNestedLoopErr);
 
-    // EXE-NEXT: save.readInLaterLoopOld=1
+    // EXE: save.readInLaterLoopOld=1
     printf("save.readInLaterLoopOld=%d\n", save.readInLaterLoopOld);
     // EXE-NOPART-NEXT:       save.readInLaterLoopNew=1
     // EXE-GPART-NEXT:        save.readInLaterLoopNew=0
