@@ -513,39 +513,51 @@ bool DirStackTy::addReduction(VarDecl *VD, Expr *E,
 OpenACCBaseDAKind DirStackTy::getImplicitBaseDA(VarDecl *VD) {
   VD = VD->getCanonicalDecl();
   const DAVarData &DVar = getTopDA(VD);
-  // The order of the next two checks shouldn't matter as we've already
-  // rejected this combination.
-  assert((!hasLoopControlVariable(VD) || !DVar.ReductionOnEffectiveOrCombined)
-         && "expected acc loop control var not to be reduction var");
-  if (hasLoopControlVariable(VD)) {
+  if (isOpenACCLoopDirective(getEffectiveDirective())) {
+    if (DVar.ReductionOnEffectiveOrCombined) {
+      // We've already rejected reductions on loop control variables.
+      assert(!hasLoopControlVariable(VD) &&
+             "expected acc loop control var not to be reduction var");
+      return ACC_BASE_DA_unknown;
+    }
     // OpenACC 3.0 sec. 2.6.1 "Variables with Predetermined Data Attributes"
     // L1038-1039:
-    //   "The loop variable in a C for statement [...] that is associated with
-    //   a loop directive is predetermined to be private to each thread that
-    //   will execute each iteration of the loop."
+    //   "The loop variable in a C for statement [...] that is associated
+    //   with a loop directive is predetermined to be private to each thread
+    //   that will execute each iteration of the loop."
     //
     // See the section "Loop Control Variables" in the Clang OpenACC design
     // document for the interpretation used here.
     // Sema::ActOnOpenACCExecutableDirective handles the case without a seq
     // clause.
-    assert(getLoopPartitioning().hasSeqExplicit() &&
+    assert((!hasLoopControlVariable(VD) ||
+            getLoopPartitioning().hasSeqExplicit()) &&
            "expected predetermined private for loop control variable with "
            "explicit seq");
+    // See the section "Basic Data Attributes" in the Clang OpenACC design
+    // document for discussion of the shared data attribute.
     return ACC_BASE_DA_shared;
   }
-  if (DVar.ReductionOnEffectiveOrCombined) {
-    // OpenACC 3.0 sec. 2.5.13 "reduction clause" L984-985:
-    //   "It implies a copy data clause for each reduction var, unless a data
-    //   clause for that variable appears on the compute construct."
-    // OpenACC 3.0 sec. 2.11 "Combined Constructs" L1958-1959:
-    //   "In addition, a reduction clause on a combined construct implies a
-    //   copy data clause for each reduction variable, unless a data clause for
-    //   that variable appears on the combined construct."
-    if (isOpenACCParallelDirective(getEffectiveDirective()))
-      return ACC_BASE_DA_copy;
-    return ACC_BASE_DA_unknown;
-  }
   if (isOpenACCParallelDirective(getEffectiveDirective())) {
+    if (!VD->getType()->isScalarType()) {
+      // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L830-833:
+      //   "If there is no default(present) clause on the construct, an array
+      //   or composite variable referenced in the parallel construct that does
+      //   not appear in a data clause for the construct or any enclosing data
+      //   construct will be treated as if it appeared in a copy clause for
+      //   the parallel construct."
+      return ACC_BASE_DA_copy;
+    }
+    if (DVar.ReductionOnEffectiveOrCombined) {
+      // OpenACC 3.0 sec. 2.5.13 "reduction clause" L984-985:
+      //   "It implies a copy data clause for each reduction var, unless a data
+      //   clause for that variable appears on the compute construct."
+      // OpenACC 3.0 sec. 2.11 "Combined Constructs" L1958-1959:
+      //   "In addition, a reduction clause on a combined construct implies a
+      //   copy data clause for each reduction variable, unless a data clause
+      //   for that variable appears on the combined construct."
+      return ACC_BASE_DA_copy;
+    }
     // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L835-838:
     //   "A scalar variable referenced in the parallel construct that does not
     //   appear in a data clause for the construct or any enclosing data
@@ -558,19 +570,9 @@ OpenACCBaseDAKind DirStackTy::getImplicitBaseDA(VarDecl *VD) {
     //   long or long long attribute), enum, float, double, long double,
     //   _Complex (with optional float or long attribute), or any pointer
     //   datatype."
-    if (VD->getType()->isScalarType())
-      return ACC_BASE_DA_firstprivate;
-    // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L830-833:
-    //   "If there is no default(present) clause on the construct, an array or
-    //   composite variable referenced in the parallel construct that does not
-    //   appear in a data clause for the construct or any enclosing data
-    //   construct will be treated as if it appeared in a copy clause for the
-    //   parallel construct."
-    return ACC_BASE_DA_copy;
+    return ACC_BASE_DA_firstprivate;
   }
-  // See the section "Basic Data Attributes" in the Clang OpenACC design
-  // document.
-  return ACC_BASE_DA_shared;
+  llvm_unreachable("unexpected effective directive");
 }
 
 DirStackTy::DAVarData DirStackTy::getTopDA(VarDecl *VD) {
