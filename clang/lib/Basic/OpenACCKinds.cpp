@@ -28,7 +28,7 @@ OpenACCDirectiveKind clang::getOpenACCDirectiveKind(StringRef Str) {
       .Default(ACCD_unknown);
 }
 
-const char *clang::getOpenACCDirectiveName(OpenACCDirectiveKind Kind) {
+const char *clang::getOpenACCName(OpenACCDirectiveKind Kind) {
   assert(Kind <= ACCD_unknown);
   switch (Kind) {
   case ACCD_unknown:
@@ -54,20 +54,36 @@ OpenACCClauseKind clang::getOpenACCClauseKind(StringRef Str) {
       .Default(ACCC_unknown);
 }
 
-const char *clang::getOpenACCBaseDAName(OpenACCBaseDAKind Kind) {
-  assert(Kind <= ACC_BASE_DA_unknown);
+const char *clang::getOpenACCName(OpenACCDMAKind Kind) {
+  assert(Kind <= ACC_DMA_unknown);
   switch (Kind) {
-  case ACC_BASE_DA_unknown:
+  case ACC_DMA_unknown:
     return "unknown";
-#define OPENACC_BASE_DA(Name) \
-  case ACC_BASE_DA_##Name:    \
+#define OPENACC_DMA(Name) \
+  case ACC_DMA_##Name:    \
     return #Name;
 #include "clang/Basic/OpenACCKinds.def"
   }
-  llvm_unreachable("Invalid OpenACC DA kind");
+  llvm_unreachable("Invalid OpenACC DMA kind");
 }
 
-const char *clang::getOpenACCClauseName(OpenACCClauseKind Kind) {
+const char *clang::getOpenACCName(OpenACCDSAKind Kind) {
+  assert(Kind <= ACC_DSA_unknown);
+  switch (Kind) {
+  case ACC_DSA_unknown:
+    return "unknown";
+#define OPENACC_DSA_UNMAPPABLE(Name) \
+  case ACC_DSA_##Name:    \
+    return #Name;
+#define OPENACC_DSA_MAPPABLE(Name) \
+  case ACC_DSA_##Name:    \
+    return #Name;
+#include "clang/Basic/OpenACCKinds.def"
+  }
+  llvm_unreachable("Invalid OpenACC DSA kind");
+}
+
+const char *clang::getOpenACCName(OpenACCClauseKind Kind) {
   assert(Kind <= ACCC_unknown);
   switch (Kind) {
   case ACCC_unknown:
@@ -83,29 +99,39 @@ const char *clang::getOpenACCClauseName(OpenACCClauseKind Kind) {
   llvm_unreachable("Invalid OpenACC clause kind");
 }
 
-bool clang::isAllowedBaseDAForReduction(OpenACCBaseDAKind BaseDAKind) {
-  assert(BaseDAKind <= ACC_BASE_DA_unknown);
-  switch (BaseDAKind) {
-  case ACC_BASE_DA_unknown:
-    return true;
-#define OPENACC_REDUCTION_BASE_DA(Name) \
-  case ACC_BASE_DA_##Name:              \
-    return true;
-#include "clang/Basic/OpenACCKinds.def"
-  default:
-    break;
-  }
-  return false;
+bool clang::isAllowedDSAForDMA(OpenACCDMAKind DMAKind,
+                               OpenACCDSAKind DSAKind) {
+  return isAllowedDSAForDMA(DSAKind, DMAKind);
 }
 
-bool clang::isAllowedBaseDAForDirective(OpenACCDirectiveKind DKind,
-                                        OpenACCBaseDAKind BaseDAKind) {
-  assert(BaseDAKind <= ACC_BASE_DA_unknown);
+bool clang::isAllowedDSAForDMA(OpenACCDSAKind DSAKind, OpenACCDMAKind DMAKind)
+{
+  assert(DMAKind <= ACC_DMA_unknown);
+  assert(DSAKind <= ACC_DSA_unknown);
+  if (DMAKind == ACC_DMA_nomap || DMAKind == ACC_DMA_unknown)
+    return true;
+  switch (DSAKind) {
+  case ACC_DSA_unknown:
+    return true;
+#define OPENACC_DSA_UNMAPPABLE(Name) \
+  case ACC_DSA_##Name:              \
+    return false;
+#define OPENACC_DSA_MAPPABLE(Name) \
+  case ACC_DSA_##Name:              \
+    return true;
+#include "clang/Basic/OpenACCKinds.def"
+  }
+  llvm_unreachable("Invalid OpenACC DSA");
+}
+
+bool clang::isAllowedDAForDirective(OpenACCDirectiveKind DKind,
+                                    OpenACCDMAKind DMAKind) {
+  assert(DMAKind <= ACC_DMA_unknown);
   switch (DKind) {
   case ACCD_parallel:
-    switch (BaseDAKind) {
-#define OPENACC_PARALLEL_BASE_DA(Name) \
-    case ACC_BASE_DA_##Name:           \
+    switch (DMAKind) {
+#define OPENACC_PARALLEL_DMA(Name) \
+    case ACC_DMA_##Name:           \
       return true;
 #include "clang/Basic/OpenACCKinds.def"
     default:
@@ -113,9 +139,9 @@ bool clang::isAllowedBaseDAForDirective(OpenACCDirectiveKind DKind,
     }
     break;
   case ACCD_loop:
-    switch (BaseDAKind) {
-#define OPENACC_LOOP_BASE_DA(Name) \
-  case ACC_BASE_DA_##Name:         \
+    switch (DMAKind) {
+#define OPENACC_LOOP_DMA(Name) \
+  case ACC_DMA_##Name:         \
     return true;
 #include "clang/Basic/OpenACCKinds.def"
     default:
@@ -123,9 +149,49 @@ bool clang::isAllowedBaseDAForDirective(OpenACCDirectiveKind DKind,
     }
     break;
   case ACCD_parallel_loop:
-    switch (BaseDAKind) {
-#define OPENACC_PARALLEL_LOOP_BASE_DA(Name) \
-  case ACC_BASE_DA_##Name:                  \
+    switch (DMAKind) {
+#define OPENACC_PARALLEL_LOOP_DMA(Name) \
+  case ACC_DMA_##Name:                  \
+    return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      break;
+    }
+    break;
+  case ACCD_unknown:
+    llvm_unreachable("unexpected unknown directive");
+  }
+  return false;
+}
+
+bool clang::isAllowedDAForDirective(OpenACCDirectiveKind DKind,
+                                    OpenACCDSAKind DSAKind) {
+  assert(DSAKind <= ACC_DSA_unknown);
+  switch (DKind) {
+  case ACCD_parallel:
+    switch (DSAKind) {
+#define OPENACC_PARALLEL_DSA(Name) \
+    case ACC_DSA_##Name:           \
+      return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      break;
+    }
+    break;
+  case ACCD_loop:
+    switch (DSAKind) {
+#define OPENACC_LOOP_DSA(Name) \
+  case ACC_DSA_##Name:         \
+    return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      break;
+    }
+    break;
+  case ACCD_parallel_loop:
+    switch (DSAKind) {
+#define OPENACC_PARALLEL_LOOP_DSA(Name) \
+  case ACC_DSA_##Name:                  \
     return true;
 #include "clang/Basic/OpenACCKinds.def"
     default:

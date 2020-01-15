@@ -10189,6 +10189,8 @@ public:
       SourceLocation StartLoc, SourceLocation LParenLoc,
       SourceLocation ColonLoc, SourceLocation EndLoc,
       const DeclarationNameInfo &ReductionId);
+  /// Called for implicit 'nomap' clause.
+  ACCClause *ActOnOpenACCNomapClause(ArrayRef<Expr *> VarList);
   /// Called for well-formed 'copy' clause.
   ACCClause *ActOnOpenACCCopyClause(
       OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,

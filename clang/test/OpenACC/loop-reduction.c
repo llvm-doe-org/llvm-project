@@ -126,6 +126,10 @@ int main() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'int'
     // DMP-NEXT:   ACCPrivateClause
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out3' 'int'
+    // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'int'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'int'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out3' 'int'
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'int'
     // DMP-NEXT:   ACCFirstprivateClause {{.*}} <implicit>
@@ -606,6 +610,10 @@ int main() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' '_Bool'
     // DMP-NEXT:   ACCPrivateClause
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out3' '_Bool'
+    // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' '_Bool'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' '_Bool'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out3' '_Bool'
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' '_Bool'
     // DMP-NEXT:   ACCFirstprivateClause {{.*}} <implicit>
@@ -913,6 +921,10 @@ int main() {
     // DMP-NEXT:   ACCFirstprivateClause
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' '_Complex double'
     // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out3' '_Complex double'
+    // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' '_Complex double'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' '_Complex double'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out3' '_Complex double'
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' '_Complex double'
@@ -1231,6 +1243,10 @@ int main() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'long'
     // DMP-NEXT:   ACCPrivateClause
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out3' 'long'
+    // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'long'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'long'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out3' 'long'
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'long'
     // DMP-NEXT:   ACCFirstprivateClause {{.*}} <implicit>
@@ -1536,6 +1552,10 @@ int main() {
     // DMP-NEXT:   ACCFirstprivateClause
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'float'
     // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out3' 'float'
+    // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'float'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'float'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out3' 'float'
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'float'
@@ -3005,6 +3025,9 @@ int main() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'int'
     // DMP-NEXT:   ACCFirstprivateClause
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'int'
+    // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'int'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'int'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
@@ -3085,6 +3108,8 @@ int main() {
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'int'
+    // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'int'
     // DMP-NEXT:   ACCFirstprivateClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out1' 'int'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective

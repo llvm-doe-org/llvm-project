@@ -32,20 +32,30 @@ enum OpenACCDirectiveKind {
 
 /// How OpenACC clauses or data attributes are determined.
 ///
-/// Some diagnostics depend on the exact values here.
+/// Some diagnostics depend on the exact values here, so do not reorder.
 enum OpenACCDetermination {
   ACC_UNDETERMINED,  ///< undetermined
-  ACC_PREDETERMINED, ///< predetermined
-  ACC_IMPLICIT,      ///< implicitly determined
   ACC_EXPLICIT,      ///< explicitly determined
+  ACC_PREDETERMINED, ///< predetermined
+  ACC_IMPLICIT       ///< implicitly determined
 };
 
-/// OpenACC base data attributes.
-enum OpenACCBaseDAKind {
-#define OPENACC_BASE_DA(Name) \
-  ACC_BASE_DA_##Name,
+/// OpenACC data mapping attributes.
+enum OpenACCDMAKind {
+#define OPENACC_DMA(Name) \
+  ACC_DMA_##Name,
 #include "clang/Basic/OpenACCKinds.def"
-  ACC_BASE_DA_unknown
+  ACC_DMA_unknown
+};
+
+/// OpenACC data sharing attributes.
+enum OpenACCDSAKind {
+#define OPENACC_DSA_MAPPABLE(Name) \
+  ACC_DSA_##Name,
+#define OPENACC_DSA_UNMAPPABLE(Name) \
+  ACC_DSA_##Name,
+#include "clang/Basic/OpenACCKinds.def"
+  ACC_DSA_unknown
 };
 
 /// OpenACC clauses.
@@ -59,19 +69,26 @@ enum OpenACCClauseKind {
 };
 
 OpenACCDirectiveKind getOpenACCDirectiveKind(llvm::StringRef Str);
-const char *getOpenACCDirectiveName(OpenACCDirectiveKind Kind);
+const char *getOpenACCName(OpenACCDirectiveKind Kind);
 
 OpenACCClauseKind getOpenACCClauseKind(llvm::StringRef Str);
-const char *getOpenACCBaseDAName(OpenACCBaseDAKind Kind);
-const char *getOpenACCClauseName(OpenACCClauseKind Kind);
+const char *getOpenACCName(OpenACCDMAKind Kind);
+const char *getOpenACCName(OpenACCDSAKind Kind);
+const char *getOpenACCName(OpenACCClauseKind Kind);
 
-/// Is BaseDAKind allowed as a base DA for a reduction?
-bool isAllowedBaseDAForReduction(OpenACCBaseDAKind BaseDAKind);
+/// Is DSAKind permitted to be combined with the given DMA?
+bool isAllowedDSAForDMA(OpenACCDSAKind DSAKind, OpenACCDMAKind DMAKind);
+bool isAllowedDSAForDMA(OpenACCDMAKind DMAKind, OpenACCDSAKind DSAKind);
 
-/// Is BaseDAKind allowed as a DA on DKind?  Must not be ACCD_unknown or
-/// ACC_BASE_DA_unknown.
-bool isAllowedBaseDAForDirective(OpenACCDirectiveKind DKind,
-                                 OpenACCBaseDAKind BaseDAKind);
+/// Is DMAKind allowed as a DMA on DKind?  Must not be ACCD_unknown or
+/// ACC_DMA_unknown.
+bool isAllowedDAForDirective(OpenACCDirectiveKind DKind,
+                             OpenACCDMAKind DMAKind);
+
+/// Is DSAKind allowed as a DSA on DKind?  Must not be ACCD_unknown or
+/// ACC_DSA_unknown.
+bool isAllowedDAForDirective(OpenACCDirectiveKind DKind,
+                             OpenACCDSAKind DSAKind);
 
 /// Is CKind allowed as a clause for DKind?  Must not be ACCD_unknown or
 /// ACCC_unknown.

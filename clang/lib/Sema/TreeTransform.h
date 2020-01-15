@@ -2064,6 +2064,14 @@ public:
                                                     LParenLoc, EndLoc);
   }
 
+  /// Build a new OpenACC 'nomap' clause.
+  ///
+  /// By default, performs semantic analysis to build the new OpenACC clause.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCNomapClause(ArrayRef<Expr *> VarList) {
+    return getSema().ActOnOpenACCNomapClause(VarList);
+  }
+
   /// Build a new OpenACC 'copy' clause.
   ///
   /// By default, performs semantic analysis to build the new OpenACC clause.
@@ -9538,6 +9546,20 @@ TreeTransform<Derived>::TransformACCVectorLengthClause(ACCVectorLengthClause *C)
     return nullptr;
   return getDerived().RebuildACCVectorLengthClause(
       E.get(), C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCNomapClause(ACCNomapClause *C) {
+  llvm::SmallVector<Expr *, 16> Vars;
+  Vars.reserve(C->varlist_size());
+  for (auto *VE : C->varlists()) {
+    ExprResult EVar = getDerived().TransformExpr(cast<Expr>(VE));
+    if (EVar.isInvalid())
+      return nullptr;
+    Vars.push_back(EVar.get());
+  }
+  return getDerived().RebuildACCNomapClause(Vars);
 }
 
 template <typename Derived>

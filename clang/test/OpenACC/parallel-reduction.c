@@ -159,6 +159,8 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'val' 'int'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '+'
@@ -232,6 +234,8 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'float'
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'val' 'float'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'float'
     // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '*'
@@ -313,6 +317,8 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int *'
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'val' 'int *'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int *'
     // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> 'max'
@@ -385,6 +391,8 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'val' 'int'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> 'max'
@@ -457,6 +465,8 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'double'
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'val' 'double'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'double'
     // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> 'min'
@@ -529,6 +539,8 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'char'
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'val' 'char'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'char'
     // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '&'
@@ -601,6 +613,8 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'val' 'int'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '|'
@@ -673,6 +687,8 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'val' 'int'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '^'
@@ -752,6 +768,8 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'val' 'int'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '&&'
@@ -827,6 +845,8 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'val' 'int'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '||'
@@ -906,6 +926,8 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'enum E'
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'val' 'enum E'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'enum E'
     // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '&'
@@ -983,6 +1005,8 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' '{{bool|_Bool}}'
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'val' '{{bool|_Bool}}'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' '{{bool|_Bool}}'
     // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '|'
@@ -1058,6 +1082,8 @@ int main() {
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
     // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' '_Complex float'
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'val' '_Complex float'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' '_Complex float'
     // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '+'

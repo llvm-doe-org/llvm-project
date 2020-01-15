@@ -173,6 +173,8 @@ int main() {
     // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -182,11 +184,13 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:        OMPSharedClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:1])
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:1])
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:1])
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:1])
+    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:1]){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:1]) shared(arr1){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:1]) shared(arr1){{$}}
+    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:1]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr1[0:1])
     for (int i = 0; i < 1; ++i)
       arr1[i] = 99;
@@ -226,6 +230,8 @@ int main() {
     // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -235,11 +241,13 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:        OMPSharedClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:2])
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:2])
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:2])
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:2])
+    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:2]){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:2]) shared(arr1){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:2]) shared(arr1){{$}}
+    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:2]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr1[0:2])
     for (int i = 0; i < 2; ++i)
       arr1[i] = 99;
@@ -280,6 +288,8 @@ int main() {
     // DMP-NEXT:            DeclRefExpr {{.*}} 'pi' 'int *'
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'pi' 'int *'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -289,11 +299,13 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'pi' 'int *'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:        OMPSharedClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'pi' 'int *'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](pi[0:3])
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pi[0:3])
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: pi[0:3])
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pi[0:3])
+    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](pi[0:3]){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pi[0:3]) shared(pi){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: pi[0:3]) shared(pi){{$}}
+    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pi[0:3]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(pi[0:3])
     for (int i = 0; i < 3; ++i)
       pi[i] = 99;
@@ -333,6 +345,8 @@ int main() {
     // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -342,11 +356,13 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:        OMPSharedClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[1:3])
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[1:3])
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[1:3])
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[1:3])
+    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[1:3]){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[1:3]) shared(arr1){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[1:3]) shared(arr1){{$}}
+    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[1:3]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr1[1:3])
     for (int i = 1; i < 4; ++i)
       arr1[i] = 99;
@@ -389,6 +405,8 @@ int main() {
     // DMP-NEXT:            DeclRefExpr {{.*}} 'start' 'int'
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'length' 'int'
+    // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -400,11 +418,13 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'start' 'int'
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:              DeclRefExpr {{.*}} 'length' 'int'
+    // DMP-NEXT:        OMPSharedClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:length])
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:length])
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:length])
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:length])
+    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:length]){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:length]) shared(arr1){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:length]) shared(arr1){{$}}
+    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:length]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr1[start:length])
     for (int i = 2; i < 5; ++i)
       arr1[i] = 99;
@@ -446,6 +466,8 @@ int main() {
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'length' 'int'
+    // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -456,11 +478,13 @@ int main() {
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:              DeclRefExpr {{.*}} 'length' 'int'
+    // DMP-NEXT:        OMPSharedClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:length])
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:length])
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:length])
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:length])
+    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:length]){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:length]) shared(arr1){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:length]) shared(arr1){{$}}
+    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:length]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr1[:length])
     for (int i = 0; i < 5; ++i)
       arr1[i] = 99;
@@ -502,6 +526,8 @@ int main() {
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'start' 'int'
     // DMP-NEXT:          <<<NULL>>>
+    // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -512,11 +538,13 @@ int main() {
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:              DeclRefExpr {{.*}} 'start' 'int'
     // DMP-NEXT:            <<<NULL>>>
+    // DMP-NEXT:        OMPSharedClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:])
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:])
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:])
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:])
+    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:]){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:]) shared(arr1){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:]) shared(arr1){{$}}
+    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr1[start:])
     for (int i = 3; i < 6; ++i)
       arr1[i] = 99;
@@ -557,6 +585,8 @@ int main() {
     // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:          <<<NULL>>>
+    // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -566,11 +596,13 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:            <<<NULL>>>
+    // DMP-NEXT:        OMPSharedClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:])
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:])
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:])
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:])
+    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:]){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:]) shared(arr1){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:]) shared(arr1){{$}}
+    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr1[:])
     for (int i = 0; i < 6; ++i)
       arr1[i] = 99;
@@ -614,6 +646,8 @@ int main() {
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -626,11 +660,13 @@ int main() {
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:        OMPSharedClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr2[2:3][0:2])
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[2:3][0:2])
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[2:3][0:2])
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr2[2:3][0:2])
+    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr2[2:3][0:2]){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[2:3][0:2]) shared(arr2){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[2:3][0:2]) shared(arr2){{$}}
+    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr2[2:3][0:2]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr2[2:3][0:2])
     for (int i = 2; i < 5; ++i)
       for (int j = 0; j < 2; ++j)
@@ -675,6 +711,8 @@ int main() {
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -687,11 +725,13 @@ int main() {
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:        OMPSharedClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr2[3:1][1:1])
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[3:1][1:1])
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[3:1][1:1])
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr2[3:1][1:1])
+    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr2[3:1][1:1]){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[3:1][1:1]) shared(arr2){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[3:1][1:1]) shared(arr2){{$}}
+    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr2[3:1][1:1]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr2[3:1][1:1])
     for (int i = 3; i < 4; ++i)
       for (int j = 1; j < 2; ++j)
@@ -737,6 +777,8 @@ int main() {
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:          <<<NULL>>>
+    // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'pa' 'int (*)[2]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -749,11 +791,13 @@ int main() {
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:            <<<NULL>>>
+    // DMP-NEXT:        OMPSharedClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'pa' 'int (*)[2]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](pa[1:3][:])
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pa[1:3][:])
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: pa[1:3][:])
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pa[1:3][:])
+    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](pa[1:3][:]){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pa[1:3][:]) shared(pa){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: pa[1:3][:]) shared(pa){{$}}
+    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pa[1:3][:]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(pa[1:3][:])
     for (int i = 1; i < 4; ++i)
       for (int j = 0; j < 2; ++j)
@@ -802,6 +846,8 @@ int main() {
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'ap' 'int *[6]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -814,11 +860,13 @@ int main() {
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:        OMPSharedClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'ap' 'int *[6]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](ap[2:1][0:2])
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[2:1][0:2])
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[2:1][0:2])
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](ap[2:1][0:2])
+    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](ap[2:1][0:2]){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[2:1][0:2]) shared(ap){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[2:1][0:2]) shared(ap){{$}}
+    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](ap[2:1][0:2]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(ap[2:1][0:2])
     for (int i = 2; i < 3; ++i)
       for (int j = 0; j < 2; ++j)
@@ -867,6 +915,8 @@ int main() {
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'ap' 'int *[6]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -879,11 +929,13 @@ int main() {
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:        OMPSharedClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'ap' 'int *[6]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](ap[5:1][0:1])
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[5:1][0:1])
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[5:1][0:1])
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](ap[5:1][0:1])
+    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](ap[5:1][0:1]){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[5:1][0:1]) shared(ap){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[5:1][0:1]) shared(ap){{$}}
+    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](ap[5:1][0:1]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(ap[5:1][0:1])
     for (int i = 5; i < 6; ++i)
       for (int j = 0; j < 1; ++j)
@@ -933,6 +985,8 @@ int main() {
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'pp' 'int **'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -945,11 +999,13 @@ int main() {
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:        OMPSharedClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'pp' 'int **'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](pp[3:1][0:2])
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[3:1][0:2])
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[3:1][0:2])
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pp[3:1][0:2])
+    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](pp[3:1][0:2]){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[3:1][0:2]) shared(pp){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[3:1][0:2]) shared(pp){{$}}
+    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pp[3:1][0:2]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(pp[3:1][0:2])
     for (int i = 3; i < 4; ++i)
       for (int j = 0; j < 2; ++j)
@@ -999,6 +1055,8 @@ int main() {
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'pp' 'int **'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -1011,11 +1069,13 @@ int main() {
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:        OMPSharedClause
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'pp' 'int **'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](pp[4:1][1:1])
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[4:1][1:1])
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[4:1][1:1])
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pp[4:1][1:1])
+    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](pp[4:1][1:1]){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[4:1][1:1]) shared(pp){{$}}
+    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[4:1][1:1]) shared(pp){{$}}
+    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pp[4:1][1:1]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(pp[4:1][1:1])
     for (int i = 4; i < 5; ++i)
       for (int j = 1; j < 2; ++j)

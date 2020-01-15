@@ -398,7 +398,12 @@ int main() {
     // DMP:      ACCParallelDirective
     // DMP-NEXT:   ACCNum_gangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnly' 'int'
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'save'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'save'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
     // DMP-NEXT:   ACCFirstprivateClause {{.*}} <implicit>
@@ -410,13 +415,17 @@ int main() {
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:     OMPSharedClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
     // DMP-NEXT:     OMPFirstprivateClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(3) map(tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(3) map(tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(3){{$}}
     #pragma acc parallel num_gangs(3)
     // DMP: CompoundStmt
@@ -620,7 +629,13 @@ int main() {
     // DMP-NEXT:            effect: ACCParallelDirective
     // DMP-NEXT:              ACCNum_gangsClause
     // DMP-NEXT:                IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'loopOnly' 'int'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'save'
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:              ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'save'
     // DMP-NEXT:                DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
     // DMP-NEXT:              ACCFirstprivateClause {{.*}} <implicit>
@@ -630,6 +645,10 @@ int main() {
     // DMP-NEXT:                OMPNum_teamsClause
     // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:                OMPMapClause
+    // DMP-NOT:                   <implicit>
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'save'
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:                OMPSharedClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'save'
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
@@ -679,13 +698,13 @@ int main() {
     // DMP-OSEQPLC-NEXT:        impl: ForStmt
     //
     // PRT-A-NEXT:                {{^ *}}#pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
-    // PRT-AO-NEXT:               {{^ *}}// #pragma omp target teams num_teams(3) map(tofrom: save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    // PRT-AO-NEXT:               {{^ *}}// #pragma omp target teams num_teams(3) map(tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
     // PRT-AO-OPRG-OSIMP-NEXT:    {{^ *}}// #pragma omp [[OMPDP]]{{$}}
     // PRT-AO-OPRGPLC-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
     // PRT-AO-OPRG-OSEXP-NEXT:    {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
     // PRT-AO-OPRGPLC-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
     //
-    // PRT-O-NEXT:               {{^ *}}#pragma omp target teams num_teams(3) map(tofrom: save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    // PRT-O-NEXT:               {{^ *}}#pragma omp target teams num_teams(3) map(tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
     // PRT-O-OPRG-OSIMP-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
     // PRT-O-OPRGPLC-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
     // PRT-O-OPRG-OSEXP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
@@ -818,16 +837,21 @@ int main() {
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'save'
+    // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'save'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
+    // DMP-NEXT:     OMPSharedClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
     //
     // PRT-A:       {{^ *}}#pragma acc parallel num_gangs(3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(tofrom: save){{$}}
-    // PRT-O:       {{^ *}}#pragma omp target teams num_teams(3) map(tofrom: save){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(tofrom: save) shared(save){{$}}
+    // PRT-O:       {{^ *}}#pragma omp target teams num_teams(3) map(tofrom: save) shared(save){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(3){{$}}
     #pragma acc parallel num_gangs(3)
     // DMP: CompoundStmt
@@ -1149,6 +1173,9 @@ int main() {
     // DMP-NEXT:            effect: ACCParallelDirective
     // DMP-NEXT:              ACCNum_gangsClause
     // DMP-NEXT:                IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-ASLC-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:              ACCFirstprivateClause {{.*}} <implicit>
     // DMP-ASLC-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:                DeclRefExpr {{.*}} 'k' 'int'
@@ -1308,7 +1335,9 @@ int main() {
     // DMP:           ACCParallelDirective
     // DMP-NEXT:        ACCNum_gangsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 3
-    // DMP-ASLC-NEXT:   ACCFirstprivateClause
+    // DMP-ASLC-NEXT:   ACCNomapClause {{.*}} <implicit>
+    // DMP-ASLC-NEXT:     DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-ASLC-NEXT:   ACCFirstprivateClause {{.*}} <implicit>
     // DMP-ASLC-NEXT:     DeclRefExpr {{.*}} 'tentativeDef' 'int'
     // DMP-NEXT:        impl: OMPTargetTeamsDirective
     // DMP-NEXT:          OMPNum_teamsClause
@@ -1456,7 +1485,9 @@ int main() {
     // DMP-NEXT:            effect: ACCParallelDirective
     // DMP-NEXT:              ACCNum_gangsClause
     // DMP-NEXT:                IntegerLiteral {{.*}} 'int' 3
-    // DMP-ASLC-NEXT:         ACCFirstprivateClause
+    // DMP-ASLC-NEXT:         ACCNomapClause {{.*}} <implicit>
+    // DMP-ASLC-NEXT:           DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-ASLC-NEXT:         ACCFirstprivateClause {{.*}} <implicit>
     // DMP-ASLC-NEXT:           DeclRefExpr {{.*}} 'tentativeDef' 'int'
     // DMP-NEXT:              impl: OMPTargetTeamsDirective
     // DMP-NEXT:                OMPNum_teamsClause
@@ -1847,7 +1878,9 @@ int main() {
     // DMP-NEXT:           effect: ACCParallelDirective
     // DMP-NEXT:             ACCNum_gangsClause
     // DMP-NEXT:               IntegerLiteral {{.*}} 'int' 1
-    // DMP-ASLC-NEXT:        ACCFirstprivateClause
+    // DMP-ASLC-NEXT:        ACCNomapClause {{.*}} <implicit>
+    // DMP-ASLC-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-ASLC-NEXT:        ACCFirstprivateClause {{.*}} <implicit>
     // DMP-ASLC-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:             impl: OMPTargetTeamsDirective
     // DMP-NEXT:               OMPNum_teamsClause
@@ -1977,6 +2010,8 @@ int main() {
     // DMP:      ACCParallelDirective
     // DMP-NEXT:   ACCNum_gangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'const int'
     // DMP-NEXT:   ACCFirstprivateClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'const int'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective

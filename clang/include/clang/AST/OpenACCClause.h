@@ -194,6 +194,56 @@ public:
 llvm::iterator_range<ArrayRef<Expr *>::iterator>
 getPrivateVarsFromClause(ACCClause *);
 
+/// This represents the implicit clause 'nomap' for '#pragma acc ...'.
+///
+/// These clauses are computed implicitly by Clang.  Currently, OpenACC does
+/// not define an explicit version, so Clang does not accept one.
+class ACCNomapClause final
+    : public ACCVarListClause<ACCNomapClause>,
+      private llvm::TrailingObjects<ACCNomapClause, Expr *> {
+  friend TrailingObjects;
+  friend ACCVarListClause;
+  friend class ACCClauseReader;
+
+  /// Build clause with number of variables \a N.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param N Number of the variables in the clause.
+  explicit ACCNomapClause(SourceLocation StartLoc, SourceLocation LParenLoc,
+                          SourceLocation EndLoc, unsigned N)
+      : ACCVarListClause<ACCNomapClause>(ACCC_nomap, ACC_IMPLICIT,
+                                         StartLoc, LParenLoc, EndLoc, N) {}
+
+  /// Build an empty clause.
+  ///
+  /// \param N Number of the variables in the clause.
+  explicit ACCNomapClause(unsigned N)
+      : ACCVarListClause<ACCNomapClause>(ACCC_nomap, N) {}
+
+public:
+  /// Creates clause with a list of variables \a VL.
+  ///
+  /// \param C AST context.
+  /// \param VL List of references to the variables.
+  static ACCNomapClause *Create(const ASTContext &C, ArrayRef<Expr *> VL);
+  /// Creates an empty clause with the place for \a N variables.
+  ///
+  /// \param C AST context.
+  /// \param N The number of variables.
+  static ACCNomapClause *CreateEmpty(const ASTContext &C, unsigned N);
+
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end()));
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_nomap;
+  }
+};
+
 /// This represents the clause 'copy' (or any of its aliases) for
 /// '#pragma acc ...' directives.
 ///
@@ -440,8 +490,8 @@ public:
 
 /// This represents the implicit clause 'shared' for '#pragma acc ...'.
 ///
-/// These clauses are computed implicitly by clang.  Currently, OpenACC does
-/// not define an explicit version, so clang does not accept one.
+/// These clauses are computed implicitly by Clang.  Currently, OpenACC does
+/// not define an explicit version, so Clang does not accept one.
 class ACCSharedClause final
     : public ACCVarListClause<ACCSharedClause>,
       private llvm::TrailingObjects<ACCSharedClause, Expr *> {

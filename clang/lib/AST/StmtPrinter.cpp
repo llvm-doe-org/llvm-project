@@ -982,9 +982,17 @@ void ACCClausePrinter::VisitACCClauseList(T *Node, char StartSym) {
   }
 }
 
+void ACCClausePrinter::VisitACCNomapClause(ACCNomapClause *Node) {
+  if (!Node->varlist_empty()) {
+    OS << "nomap";
+    VisitACCClauseList(Node, '(');
+    OS << ")";
+  }
+}
+
 void ACCClausePrinter::VisitACCCopyClause(ACCCopyClause *Node) {
   if (!Node->varlist_empty()) {
-    OS << getOpenACCClauseName(Node->getClauseKind());
+    OS << getOpenACCName(Node->getClauseKind());
     VisitACCClauseList(Node, '(');
     OS << ")";
   }
@@ -992,7 +1000,7 @@ void ACCClausePrinter::VisitACCCopyClause(ACCCopyClause *Node) {
 
 void ACCClausePrinter::VisitACCCopyinClause(ACCCopyinClause *Node) {
   if (!Node->varlist_empty()) {
-    OS << getOpenACCClauseName(Node->getClauseKind());
+    OS << getOpenACCName(Node->getClauseKind());
     VisitACCClauseList(Node, '(');
     OS << ")";
   }
@@ -1000,7 +1008,7 @@ void ACCClausePrinter::VisitACCCopyinClause(ACCCopyinClause *Node) {
 
 void ACCClausePrinter::VisitACCCopyoutClause(ACCCopyoutClause *Node) {
   if (!Node->varlist_empty()) {
-    OS << getOpenACCClauseName(Node->getClauseKind());
+    OS << getOpenACCName(Node->getClauseKind());
     VisitACCClauseList(Node, '(');
     OS << ")";
   }
@@ -1120,7 +1128,7 @@ Stmt *StmtPrinter::PrintOMPExecutableDirectiveHead(Stmt *S, bool Com,
 void StmtPrinter::PrintACCExecutableDirectiveHead(
     ACCExecutableDirective *S, bool ComACC, bool ComDirectiveDiscardedForOMP) {
   Indent() << (ComACC?"// ":"") << "#pragma acc "
-           << getOpenACCDirectiveName(S->getDirectiveKind());
+           << getOpenACCName(S->getDirectiveKind());
   ACCClausePrinter Printer(OS, Policy);
   ArrayRef<ACCClause *> Clauses = S->clauses();
   for (ArrayRef<ACCClause *>::iterator I = Clauses.begin(), E = Clauses.end();

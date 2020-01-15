@@ -74,7 +74,7 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
   case ACCD_loop:
   case ACCD_parallel_loop:
     Diag(Tok, diag::err_acc_unexpected_directive)
-        << getOpenACCDirectiveName(DKind);
+        << getOpenACCName(DKind);
     break;
   }
   while (Tok.isNot(tok::annot_pragma_openacc_end))
@@ -186,8 +186,8 @@ ACCClause *Parser::ParseOpenACCClause(
   bool WrongDirective = false;
   // Check if clause is allowed for the given directive.
   if (CKind != ACCC_unknown && !isAllowedClauseForDirective(DKind, CKind)) {
-    Diag(Tok, diag::err_acc_unexpected_clause) << getOpenACCClauseName(CKind)
-                                               << getOpenACCDirectiveName(DKind);
+    Diag(Tok, diag::err_acc_unexpected_clause) << getOpenACCName(CKind)
+                                               << getOpenACCName(DKind);
     ErrorFound = true;
     WrongDirective = true;
   }
@@ -199,7 +199,7 @@ ACCClause *Parser::ParseOpenACCClause(
   case ACCC_collapse:
     if (FirstClauses[CKind]) {
       Diag(Tok, diag::err_acc_more_one_clause)
-          << getOpenACCDirectiveName(DKind) << getOpenACCClauseName(CKind);
+          << getOpenACCName(DKind) << getOpenACCName(CKind);
       ErrorFound = true;
     }
     Clause = ParseOpenACCSingleExprClause(CKind, WrongDirective);
@@ -215,7 +215,7 @@ ACCClause *Parser::ParseOpenACCClause(
     // issue.
     if (FirstClauses[CKind]) {
       Diag(Tok, diag::err_acc_more_one_clause)
-          << getOpenACCDirectiveName(DKind) << getOpenACCClauseName(CKind);
+          << getOpenACCName(DKind) << getOpenACCName(CKind);
       ErrorFound = true;
     }
     else {
@@ -230,7 +230,7 @@ ACCClause *Parser::ParseOpenACCClause(
             FirstClauses[CKindOther = ACCC_independent] ||
             FirstClauses[CKindOther = ACCC_auto]) {
           Diag(Tok, diag::err_acc_mutually_exclusive_clauses)
-              << getOpenACCClauseName(CKind) << getOpenACCClauseName(CKindOther);
+              << getOpenACCName(CKind) << getOpenACCName(CKindOther);
           ErrorFound = true;
         }
       }
@@ -243,7 +243,7 @@ ACCClause *Parser::ParseOpenACCClause(
             FirstClauses[CKindOther = ACCC_worker] ||
             FirstClauses[CKindOther = ACCC_vector]) {
           Diag(Tok, diag::err_acc_mutually_exclusive_clauses)
-              << getOpenACCClauseName(CKind) << getOpenACCClauseName(CKindOther);
+              << getOpenACCName(CKind) << getOpenACCName(CKindOther);
           ErrorFound = true;
         }
       }
@@ -251,7 +251,7 @@ ACCClause *Parser::ParseOpenACCClause(
                 CKind == ACCC_vector) &&
                FirstClauses[ACCC_seq]) {
         Diag(Tok, diag::err_acc_mutually_exclusive_clauses)
-            << getOpenACCClauseName(CKind) << getOpenACCClauseName(ACCC_seq);
+            << getOpenACCName(CKind) << getOpenACCName(ACCC_seq);
         ErrorFound = true;
       }
     }
@@ -269,16 +269,16 @@ ACCClause *Parser::ParseOpenACCClause(
   case ACCC_reduction:
     Clause = ParseOpenACCVarListClause(DKind, CKind, WrongDirective);
     break;
+  case ACCC_nomap:
   case ACCC_shared:
     assert((ErrorFound && WrongDirective) &&
-           "Clause is predetermined or implicit only but was permitted on a"
-           " directive");
+           "expected clause not to be permitted on a directive");
     // Discard any var list.
     ParseOpenACCVarListClause(DKind, CKind, WrongDirective);
     break;
   case ACCC_unknown:
     Diag(Tok, diag::warn_acc_extra_tokens_at_eol)
-        << getOpenACCDirectiveName(DKind);
+        << getOpenACCName(DKind);
     SkipUntil(tok::annot_pragma_openacc_end, StopBeforeMatch);
     break;
   }
@@ -319,7 +319,7 @@ ACCClause *Parser::ParseOpenACCSingleExprClause(OpenACCClauseKind Kind,
   SourceLocation LLoc = Tok.getLocation();
   SourceLocation RLoc;
 
-  ExprResult Val = ParseOpenACCParensExpr(getOpenACCClauseName(Kind), RLoc);
+  ExprResult Val = ParseOpenACCParensExpr(getOpenACCName(Kind), RLoc);
 
   if (Val.isInvalid())
     return nullptr;
@@ -399,7 +399,7 @@ bool Parser::ParseOpenACCVarList(OpenACCDirectiveKind DKind,
   // Parse '('.
   BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_openacc_end);
   if (T.expectAndConsume(diag::err_expected_lparen_after,
-                         getOpenACCClauseName(Kind)))
+                         getOpenACCName(Kind)))
     return true;
 
   // Handle reduction-identifier for reduction clause.
@@ -440,7 +440,7 @@ bool Parser::ParseOpenACCVarList(OpenACCDirectiveKind DKind,
     else if (Tok.isNot(tok::r_paren) &&
              Tok.isNot(tok::annot_pragma_openacc_end))
       Diag(Tok, diag::err_acc_expected_punc)
-          << getOpenACCClauseName(Kind);
+          << getOpenACCName(Kind);
   }
 
   // Parse ')'.

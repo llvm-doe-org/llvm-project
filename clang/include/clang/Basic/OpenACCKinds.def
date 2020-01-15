@@ -18,11 +18,14 @@
 #ifndef OPENACC_DIRECTIVE_EXT
 #  define OPENACC_DIRECTIVE_EXT(Name, Str)
 #endif
-#ifndef OPENACC_BASE_DA
-#  define OPENACC_BASE_DA(Name)
+#ifndef OPENACC_DMA
+#  define OPENACC_DMA(Name)
 #endif
-#ifndef OPENACC_REDUCTION_BASE_DA
-#  define OPENACC_REDUCTION_BASE_DA(Name)
+#ifndef OPENACC_DSA_MAPPABLE
+#  define OPENACC_DSA_MAPPABLE(Name)
+#endif
+#ifndef OPENACC_DSA_UNMAPPABLE
+#  define OPENACC_DSA_UNMAPPABLE(Name)
 #endif
 #ifndef OPENACC_CLAUSE
 #  define OPENACC_CLAUSE(Name, Class)
@@ -40,11 +43,23 @@
 #ifndef OPENACC_CLAUSE_ALIAS_copyout
 #  define OPENACC_CLAUSE_ALIAS_copyout(Name)
 #endif
-#ifndef OPENACC_PARALLEL_BASE_DA
-#  define OPENACC_PARALLEL_BASE_DA(Name)
+#ifndef OPENACC_PARALLEL_DMA
+#  define OPENACC_PARALLEL_DMA(Name)
 #endif
-#ifndef OPENACC_LOOP_BASE_DA
-#  define OPENACC_LOOP_BASE_DA(Name)
+#ifndef OPENACC_PARALLEL_DSA
+#  define OPENACC_PARALLEL_DSA(Name)
+#endif
+#ifndef OPENACC_LOOP_DMA
+#  define OPENACC_LOOP_DMA(Name)
+#endif
+#ifndef OPENACC_LOOP_DSA
+#  define OPENACC_LOOP_DSA(Name)
+#endif
+#ifndef OPENACC_PARALLEL_LOOP_DMA
+#  define OPENACC_PARALLEL_LOOP_DMA(Name)
+#endif
+#ifndef OPENACC_PARALLEL_LOOP_DSA
+#  define OPENACC_PARALLEL_LOOP_DSA(Name)
 #endif
 #ifndef OPENACC_PARALLEL_CLAUSE
 #  define OPENACC_PARALLEL_CLAUSE(Name)
@@ -68,91 +83,130 @@
 #define OPENACC_ALIASED_CLAUSE(Def, Name, Class) \
   Def(Name, Class)                               \
   OPENACC_CLAUSE_ALIAS_##Name(Name)
-#define OPENACC_CLAUSE_AND_BASE_DA(Name, Class) \
-  OPENACC_BASE_DA(Name)                         \
-  OPENACC_CLAUSE(Name, Class)
-#define OPENACC_CLAUSE_AND_REDUCTION_BASE_DA(Name, Class) \
-  OPENACC_CLAUSE_AND_BASE_DA(Name, Class)                 \
-  OPENACC_REDUCTION_BASE_DA(Name)
-#define OPENACC_PARALLEL_CLAUSE_AND_BASE_DA(Name) \
-  OPENACC_PARALLEL_BASE_DA(Name)                  \
-  OPENACC_PARALLEL_CLAUSE(Name)
-#define OPENACC_LOOP_CLAUSE_AND_BASE_DA(Name) \
-  OPENACC_LOOP_BASE_DA(Name)                  \
-  OPENACC_LOOP_CLAUSE(Name)
+#define OPENACC_CLAUSE_AND_DMA(Name, Class) \
+  OPENACC_CLAUSE(Name, Class)               \
+  OPENACC_DMA(Name)
+#define OPENACC_CLAUSE_AND_DSA_MAPPABLE(Name, Class) \
+  OPENACC_CLAUSE(Name, Class)                        \
+  OPENACC_DSA_MAPPABLE(Name)
+#define OPENACC_CLAUSE_AND_DSA_UNMAPPABLE(Name, Class) \
+  OPENACC_CLAUSE(Name, Class)                          \
+  OPENACC_DSA_UNMAPPABLE(Name)
+#define OPENACC_PARALLEL_CLAUSE_AND_DMA(Name) \
+  OPENACC_PARALLEL_CLAUSE(Name)               \
+  OPENACC_PARALLEL_DMA(Name)
+#define OPENACC_PARALLEL_CLAUSE_AND_DSA(Name) \
+  OPENACC_PARALLEL_CLAUSE(Name)               \
+  OPENACC_PARALLEL_DSA(Name)
+#define OPENACC_LOOP_CLAUSE_AND_DSA(Name) \
+  OPENACC_LOOP_CLAUSE(Name)               \
+  OPENACC_LOOP_DSA(Name)
 
 // OpenACC directives.
 OPENACC_DIRECTIVE(parallel)
 OPENACC_DIRECTIVE(loop)
 OPENACC_DIRECTIVE_EXT(parallel_loop, "parallel loop")
 
-// OpenACC clauses and base data attributes (DAs).
+// Specifying and iterating OpenACC clauses, data attributes (DAs), data
+// mapping attributes (DMAs), data sharing attributes (DSAs), and clause
+// aliases.
 //
-// We define base DAs as DAs other than reductions.  For any variable on any
-// OpenACC construct, the base DAs are mutually exclusive, but most can be
-// combined with a reduction.  The exceptions are firstprivate, private, and
-// shared.  The OpenACC 2.6 spec doesn't actually say that these combinations
-// are not permitted (and shared is not actually part of the OpenACC spec).
-// However, a reduction implies visibility at the beginning and end of the
-// construct and privacy within (among gangs or loop iterations), so any of
-// firstprivate, private, and shared would contradict the reduction.  The
-// OpenMP implementation also has this restriction.
+// Clang partitions OpenACC DAs into DMAs and DSAs:
 //
-// Every base DA is also a clause and has an ACC*Clause class so it can be
-// stored like a predetermined/implicit clause even if it's not permitted as
-// an explicit clause on any directive (e.g., ACCSharedClause).  Thus, define
-// every base DA with either OPENACC_CLAUSE_AND_BASE_DA (a base DA not
-// combinable with a reduction) or OPENACC_CLAUSE_AND_REDUCTION_BASE_DA (a
-// base DA combinable with a reduction) and never with either OPENACC_BASE_DA
-// or OPENACC_REDUCTION_BASE_DA directly.
+//   - The DMAs are the following plus their aliases:
+//     - nomap (default)
+//     - copy
+//     - copyin
+//     - copyout
+//   - The DSAs are the following:
+//     - shared (default)
+//     - reduction
+//     - firstprivate
+//     - private
+//
+// Every variable referenced in an OpenACC construct has at most one DMA and
+// one DSA on that construct.  The default DA in each group is not specified by
+// OpenACC 3.0.  Clang implicitly determines it on a construct if the OpenACC
+// spec specifies no other explicitly determined, predetermined, or implicitly
+// determined DA from that group and the group is relevant to the construct
+// (for example, DMAs are not relevant to acc loop).  The DAs in each group are
+// mutually exclusive.  Mappable DSAs can be combined with any DMA.  Unmappable
+// DSAs can be combined with nomap but no other DMA.
+//
+// Every DA is also a clause and has an ACC*Clause class so it can be stored
+// like a predetermined or implicit clause even if it's not permitted as
+// an explicit clause on any directive (e.g., ACCSharedClause).
 //
 // Among a set of aliases for a clause, one is the canonical name used in most
 // occurrences in the OpenACC spec and other documentation.  For brevity, we
 // refer to it as the "aliased clause" (such as "copy") and the others as the
-// "clause aliases" (such as "pcopy" and "present_or_copy").  An aliased clause
-// should be defined below with OPENACC_ALIASED_CLAUSE such that the first
-// argument is the macro that is determined by the discussion in the previous
-// paragraphs, and it should be defined later as being permitted on various
-// directives with OPENACC_<Directive>_CLAUSE[_AND_BASE_DA].  Every clause
-// alias should be defined below with only OPENACC_CLAUSE_ALIAS such that the
-// specified ACC*Clause class is the same as for the aliased clause, and it
-// should also be defined later as being permitted on various directives with
-// only OPENACC_<Directive>_CLAUSE.  Clang handles each clause alias exactly
-// like the aliased clause except it parses and prints each clause alias
-// (including in parser diagnostics) under its own name.  Thus, each clause
-// alias has a separate member in OpenACCClauseKind but not in
-// OpenACCBaseDAKind, where at most the aliased clause appears (sema
-// diagnostics often use just the aliased clause's name).  A clause alias
-// shares the same ACC*Clause class as the aliased clause, but objects of the
-// class store the individual OpenACCClauseKind so they can be printed
-// correctly.  So that an aliased clause and all its aliases are handled
-// consistently, Clang should never reference their OpenACCClauseKind members
-// directly except that the member for the aliased clause must be referenced
-// within the ACC*Clause class and when constructing the ACC*Clause object for
-// an implicit clause.  In all other cases, they should all be handled with a
-// common pattern, as follows. To iterate the OpenACCClauseKind members for a
-// specific aliased clause and all its aliases, Clang should define
-// OPENACC_CLAUSE_ALIAS_<AliasedClause> and then include this file.  To iterate
-// the OpenACCClauseKind members for all aliased clauses and their aliases,
-// Clang should define OPENACC_CLAUSE and OPENACC_CLAUSE_ALIAS and then include
-// this file.  Finally, to iterate all ACC*Clause classes, Clang should define
-// only OPENACC_CLAUSE and then include this file.
-OPENACC_ALIASED_CLAUSE(OPENACC_CLAUSE_AND_REDUCTION_BASE_DA,
-                       copy, ACCCopyClause)
+// "clause aliases" (such as "pcopy" and "present_or_copy").  Clang handles
+// each clause alias exactly like the aliased clause except it parses and
+// prints each clause alias (including in parser diagnostics) under its own
+// name.  Thus, each clause alias has a separate member in OpenACCClauseKind
+// but not in OpenACCDMAKind or OpenACCDSAKind, where at most the aliased
+// clause appears (sema diagnostics often use just the aliased clause's name).
+// A clause alias shares the same ACC*Clause class as the aliased clause, but
+// objects of the class store the individual OpenACCClauseKind so they can be
+// printed correctly.
+//
+// Below, define clauses, DAs, and clause aliases as follows:
+//
+//   - OPENACC_CLAUSE_AND_(DMA|DSA_MAPPABLE|DSA_UNMAPPABLE): Specify one of
+//     these for each DA clause unless it is an aliased clause or clause alias.
+//   - OPENACC_CLAUSE: Specify this for each non-DA clause.  Don't specify this
+//     directly for DA clauses as it's implied by the DA macros above.
+//   - OPENACC_ALIASED_CLAUSE: Specify this for each aliased clause.  The first
+//     argument is the macro above that would be appropriate for this clause if
+//     it had no aliases.
+//   - OPENACC_CLAUSE_ALIAS: Specify this for each clause alias.  The specified
+//     ACC*Clause class must be the same as for the aliased clause.
+//   - OPENACC_(DMA|DSA_MAPPABLE|DSA_UNMAPPABLE): Don't specify these directly
+//     as they're implied by the DA macros above.
+//
+// Below, define what clauses and DAs are permitted on each directive
+// <Directive> as follows:
+//
+//   - OPENACC_<Directive>_CLAUSE_AND_(DMA|DSA): Specify one of these for each
+//     DA clause that is permitted as an explicit clause on <Directive> (e.g.,
+//     don't specify this for shared as it's not permitted to be explicit) and
+//     that is not a clause alias (but it's fine if it's an aliased clause).
+//   - OPENACC_<Directive>_CLAUSE: Specify this for each non-DA clause and each
+//     clause alias (but not an aliased clause).
+//   - OPENACC_<Directive>_(DMA|DSA): Specify one of these for each DA that is
+//     not permitted as an explicit clause on <Directive> but is permitted as a
+//     DA (e.g., shared).
+//
+// So that an aliased clause and all its aliases are handled consistently,
+// Clang should never reference their OpenACCClauseKind members directly except
+// that the member for the aliased clause must be referenced within the
+// ACC*Clause class and when constructing the ACC*Clause object for an implicit
+// clause.  In all other cases, handle them with a common pattern, as follows:
+//
+//    - Define OPENACC_CLAUSE_ALIAS_<AliasedClause> and then include this file
+//      to iterate the OpenACCClauseKind members for a specific aliased clause
+//      and all its aliases.
+//    - Define OPENACC_CLAUSE and OPENACC_CLAUSE_ALIAS and then include this
+//      file to iterate the OpenACCClauseKind members for all aliased clauses
+//      and their aliases.
+//    - Define OPENACC_CLAUSE and then include this file to iterate all
+//      ACC*Clause classes.
+
+// Clauses, DAs, and clause aliases.
+OPENACC_CLAUSE_AND_DMA(nomap, ACCNomapClause)
+OPENACC_ALIASED_CLAUSE(OPENACC_CLAUSE_AND_DMA, copy, ACCCopyClause)
 OPENACC_CLAUSE_ALIAS(pcopy, copy, ACCCopyClause)
 OPENACC_CLAUSE_ALIAS(present_or_copy, copy, ACCCopyClause)
-OPENACC_ALIASED_CLAUSE(OPENACC_CLAUSE_AND_REDUCTION_BASE_DA,
-                       copyin, ACCCopyinClause)
+OPENACC_ALIASED_CLAUSE(OPENACC_CLAUSE_AND_DMA, copyin, ACCCopyinClause)
 OPENACC_CLAUSE_ALIAS(pcopyin, copyin, ACCCopyinClause)
 OPENACC_CLAUSE_ALIAS(present_or_copyin, copyin, ACCCopyinClause)
-OPENACC_ALIASED_CLAUSE(OPENACC_CLAUSE_AND_REDUCTION_BASE_DA,
-                       copyout, ACCCopyoutClause)
+OPENACC_ALIASED_CLAUSE(OPENACC_CLAUSE_AND_DMA, copyout, ACCCopyoutClause)
 OPENACC_CLAUSE_ALIAS(pcopyout, copyout, ACCCopyoutClause)
 OPENACC_CLAUSE_ALIAS(present_or_copyout, copyout, ACCCopyoutClause)
-OPENACC_CLAUSE_AND_BASE_DA(shared, ACCSharedClause)
-OPENACC_CLAUSE_AND_BASE_DA(private, ACCPrivateClause)
-OPENACC_CLAUSE_AND_BASE_DA(firstprivate, ACCFirstprivateClause)
-OPENACC_CLAUSE(reduction, ACCReductionClause)
+OPENACC_CLAUSE_AND_DSA_MAPPABLE(shared, ACCSharedClause)
+OPENACC_CLAUSE_AND_DSA_MAPPABLE(reduction, ACCReductionClause)
+OPENACC_CLAUSE_AND_DSA_UNMAPPABLE(private, ACCPrivateClause)
+OPENACC_CLAUSE_AND_DSA_UNMAPPABLE(firstprivate, ACCFirstprivateClause)
 OPENACC_CLAUSE(num_gangs, ACCNumGangsClause)
 OPENACC_CLAUSE(num_workers, ACCNumWorkersClause)
 OPENACC_CLAUSE(vector_length, ACCVectorLengthClause)
@@ -164,37 +218,39 @@ OPENACC_CLAUSE(worker, ACCWorkerClause)
 OPENACC_CLAUSE(vector, ACCVectorClause)
 OPENACC_CLAUSE(collapse, ACCCollapseClause)
 
-// Explicit clauses and base DAs allowed for OpenACC directive 'parallel'.
-OPENACC_PARALLEL_CLAUSE_AND_BASE_DA(copy)
+// Explicit clauses and DAs allowed for OpenACC directive 'parallel'.
+OPENACC_PARALLEL_DMA(nomap)
+OPENACC_PARALLEL_CLAUSE_AND_DMA(copy)
 OPENACC_PARALLEL_CLAUSE(pcopy)
 OPENACC_PARALLEL_CLAUSE(present_or_copy)
-OPENACC_PARALLEL_CLAUSE_AND_BASE_DA(copyin)
+OPENACC_PARALLEL_CLAUSE_AND_DMA(copyin)
 OPENACC_PARALLEL_CLAUSE(pcopyin)
 OPENACC_PARALLEL_CLAUSE(present_or_copyin)
-OPENACC_PARALLEL_CLAUSE_AND_BASE_DA(copyout)
+OPENACC_PARALLEL_CLAUSE_AND_DMA(copyout)
 OPENACC_PARALLEL_CLAUSE(pcopyout)
 OPENACC_PARALLEL_CLAUSE(present_or_copyout)
-OPENACC_PARALLEL_CLAUSE_AND_BASE_DA(private)
-OPENACC_PARALLEL_CLAUSE_AND_BASE_DA(firstprivate)
-OPENACC_PARALLEL_CLAUSE(reduction)
+OPENACC_PARALLEL_DSA(shared)
+OPENACC_PARALLEL_CLAUSE_AND_DSA(reduction)
+OPENACC_PARALLEL_CLAUSE_AND_DSA(private)
+OPENACC_PARALLEL_CLAUSE_AND_DSA(firstprivate)
 OPENACC_PARALLEL_CLAUSE(num_gangs)
 OPENACC_PARALLEL_CLAUSE(num_workers)
 OPENACC_PARALLEL_CLAUSE(vector_length)
 
-// Explicit clauses and base DAs allowed for OpenACC directive 'loop'.
+// Explicit clauses and DAs allowed for OpenACC directive 'loop'.
 OPENACC_LOOP_CLAUSE(seq)
 OPENACC_LOOP_CLAUSE(independent)
 OPENACC_LOOP_CLAUSE(auto)
 OPENACC_LOOP_CLAUSE(gang)
 OPENACC_LOOP_CLAUSE(worker)
 OPENACC_LOOP_CLAUSE(vector)
-OPENACC_LOOP_BASE_DA(shared)
-OPENACC_LOOP_CLAUSE_AND_BASE_DA(private)
-OPENACC_LOOP_CLAUSE(reduction)
+OPENACC_LOOP_DSA(shared)
+OPENACC_LOOP_CLAUSE_AND_DSA(private)
+OPENACC_LOOP_CLAUSE_AND_DSA(reduction)
 OPENACC_LOOP_CLAUSE(collapse)
 
 // Explicit clauses allowed for OpenACC directive 'parallel loop'.  DAs are
-// checked only for effective directives, so there's need to list them here.
+// checked only for effective directives, so there's no need to list them here.
 OPENACC_PARALLEL_LOOP_CLAUSE(copy)
 OPENACC_PARALLEL_LOOP_CLAUSE(pcopy)
 OPENACC_PARALLEL_LOOP_CLAUSE(present_or_copy)
@@ -231,15 +287,20 @@ OPENACC_PARALLEL_LOOP_PARENT(unknown)
 
 #undef OPENACC_DIRECTIVE
 #undef OPENACC_DIRECTIVE_EXT
-#undef OPENACC_BASE_DA
-#undef OPENACC_REDUCTION_BASE_DA
+#undef OPENACC_DMA
+#undef OPENACC_DSA_MAPPABLE
+#undef OPENACC_DSA_UNMAPPABLE
 #undef OPENACC_CLAUSE
 #undef OPENACC_CLAUSE_ALIAS
 #undef OPENACC_CLAUSE_ALIAS_copy
 #undef OPENACC_CLAUSE_ALIAS_copyin
 #undef OPENACC_CLAUSE_ALIAS_copyout
-#undef OPENACC_PARALLEL_BASE_DA
-#undef OPENACC_LOOP_BASE_DA
+#undef OPENACC_PARALLEL_DMA
+#undef OPENACC_PARALLEL_DSA
+#undef OPENACC_LOOP_DMA
+#undef OPENACC_LOOP_DSA
+#undef OPENACC_PARALLEL_LOOP_DMA
+#undef OPENACC_PARALLEL_LOOP_DSA
 #undef OPENACC_PARALLEL_CLAUSE
 #undef OPENACC_LOOP_CLAUSE
 #undef OPENACC_PARALLEL_LOOP_CLAUSE
@@ -247,7 +308,9 @@ OPENACC_PARALLEL_LOOP_PARENT(unknown)
 #undef OPENACC_LOOP_PARENT
 #undef OPENACC_PARALLEL_LOOP_PARENT
 #undef OPENACC_ALIASED_CLAUSE
-#undef OPENACC_CLAUSE_AND_BASE_DA
-#undef OPENACC_CLAUSE_AND_REDUCTION_BASE_DA
-#undef OPENACC_PARALLEL_CLAUSE_AND_BASE_DA
-#undef OPENACC_LOOP_CLAUSE_AND_BASE_DA
+#undef OPENACC_CLAUSE_AND_DMA
+#undef OPENACC_CLAUSE_AND_DSA_MAPPABLE
+#undef OPENACC_CLAUSE_AND_DSA_UNMAPPABLE
+#undef OPENACC_PARALLEL_CLAUSE_AND_DMA
+#undef OPENACC_PARALLEL_CLAUSE_AND_DSA
+#undef OPENACC_LOOP_CLAUSE_AND_DSA

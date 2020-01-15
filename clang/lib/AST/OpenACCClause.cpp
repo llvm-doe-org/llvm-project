@@ -41,6 +41,7 @@ clang::getPrivateVarsFromClause(ACCClause *C) {
     return cast<ACCFirstprivateClause>(C)->varlists();
   case ACCC_reduction:
     return cast<ACCReductionClause>(C)->varlists();
+  case ACCC_nomap:
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
   case ACCC_##Name:
 #define OPENACC_CLAUSE_ALIAS_copyin(Name) \
@@ -65,6 +66,22 @@ clang::getPrivateVarsFromClause(ACCClause *C) {
     llvm_unreachable("unexpected unknown ACCClause");
   }
   llvm_unreachable("unexpected ACCClause");
+}
+
+ACCNomapClause *
+ACCNomapClause::Create(const ASTContext &C, ArrayRef<Expr *> VL) {
+  // Allocate space for variables.
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
+  ACCNomapClause *Clause = new (Mem) ACCNomapClause(
+      SourceLocation(), SourceLocation(), SourceLocation(), VL.size());
+  Clause->setVarRefs(VL);
+  return Clause;
+}
+
+ACCNomapClause *ACCNomapClause::CreateEmpty(const ASTContext &C,
+                                            unsigned N) {
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
+  return new (Mem) ACCNomapClause(N);
 }
 
 ACCCopyClause *

@@ -550,19 +550,91 @@ Semantic Clarifications
 -----------------------
 
 While developing this mapping, we found we had to make assumptions
-about a number of aspects of OpenACC semantics in C that are not clear
-in the OpenACC specification.  In many cases, it was the related
-behavior of the Clang OpenMP implementation that brought the need for
-those assumptions to our attention.  We describe those assumptions in
-this section.
+about some aspects of OpenACC semantics in C that are not clear in the
+OpenACC specification.  In many cases, it was the related behavior of
+the Clang OpenMP implementation that brought the need for those
+assumptions to our attention.  We describe those assumptions in this
+section.  We are working with the OpenACC technical committee to
+clarify these points in future versions of the OpenACC specification.
 
 ### Basic Data Attributes ###
 
-* It is an error if a variable appears in more than one occurrence of
-  any one of *exp* `copy`, *exp* `copyin`, *exp* `copyout`, *exp*
-  `firstprivate`, *exp* `private`, or *exp* `reduction` on an OpenACC
-  directive.  Notes:
-    * The main motivation for this error is that such a repetition is
+* Clacc models data attributes (DAs) by partitioning them into two
+  groups:
+    * Data mapping attributes (DMAs), which describe the mapping and
+      transfer of data between host and device:
+        * `nomap` (default)
+        * `copy`
+        * `copyin`
+        * `copyout`
+        * Others not yet implemented by Clacc.
+    * Data sharing attributes (DSAs), which describe the sharing of
+      data among gangs, workers, or vector lanes:
+        * `shared` (default, mappable)
+        * `reduction` (mappable)
+        * `firstprivate` (unmappable)
+        * `private` (unmappable)
+    * DA combinations:
+        * Every variable referenced in a construct and declared
+          outside it has at most one DMA and one DSA on the associated
+          directive.
+        * Mappable DSAs can be combined with any DMA.
+        * Unmappable DSAs can be combined with `nomap` but no other
+          DMA.
+        * The restrictions for *exp* DAs that enforce these rules are
+          discussed later in this section.
+    * Relevant DAs:
+        * A variable cannot have any DA from a group on a directive if
+          that group is irrelevant to that directive.
+        * DMAs are relevant only to `acc parallel`.
+        * DSAs are relevant only to `acc parallel` and `acc loop`.
+        * Relevance does not indicate that all members of a group are
+          permitted.  For example, `firstprivate` is not permitted on
+          `acc loop`.
+    * Default DA:
+        * Each group has one default DA.
+        * It is not permitted as *exp* and is never computed as *pre*.
+        * It is computed as *imp* for a variable on a directive if (1)
+          the group is relevant to the directive and (2) there is no
+          other *exp*, *pre*, or *imp* DA from that group for that
+          variable on that directive.
+        * `nomap` indicates no data mapping of a variable between
+          device and host.
+        * `shared` indicates no privatization of a variable.  That is,
+          references to the variable within the construct refer to the
+          original variable, which is shared among the gangs, workers,
+          or vector lanes executing the construct.
+    * Notes:
+        * The OpenACC 3.0 specification does not categorize DAs into
+          these groups, and this categorization is not strictly
+          necessary to specify OpenACC semantics unambiguously.
+          However, Clacc employs this categorization as it seems to
+          simplify and clarify documentation, discussion, and
+          implementation.
+        * The OpenMP 5.0 specification does employ these two groups
+          with the same high-level semantics (but the DAs within the
+          groups are not precisely the same as in Clacc).  Thus,
+          additional benefits of employing this categorization in
+          Clacc are that it might prove recognizable to potential
+          Clacc contributors and that it facilitates OpenACC
+          translation to OpenMP.
+        * The default DA in each group is not specified as a DA by
+          OpenACC 3.0:
+            * As noted in the mappings below, Clacc does not translate
+              `nomap`, which is merely a placeholder indicating no
+              mapping attribute was determined.
+            * As noted in the mappings below, in many cases, Clacc
+              translates `shared` to OpenMP's `shared` clause.
+              However, `omp distribute` and `omp simd` do not accept
+              *exp* `shared`, so Clacc then relies on OpenMP implicit
+              data sharing attributes, and the semantics are the
+              desired OpenACC semantics.
+        * Otherwise, the DMAs are listed in OpenACC 3.0 sec. 2.7 "Data
+          Clauses", and the DSAs are described in the sections for the
+          directives that permit them.
+* It is an error if, on any OpenACC directive, a variable appears more
+  than once per *exp* DA.  Notes:
+    * The main motivation for this error is that such redundancy is
       likely a mistake.
     * gcc 7.4.0 also reports errors for this case, but pgcc 19.4-0
       does not.
@@ -571,66 +643,74 @@ this section.
       that it may be specified in both firstprivate and lastprivate
       clauses."  Thus, if Clacc did not report such duplicate clauses
       as errors, it would have to discard them when generating OpenMP.
-* It is an error if a variable appears in more than one of *exp*
-  `copy`, *exp* `copyin`, *exp* `copyout`, *exp* `firstprivate`, or
-  *exp* `private` on an OpenACC directive.  Notes:
-    * Relative to `copy`, `copyin`, and `firstprivate`, `copyout` and
-      `private` have a contradictory specification for initialization
-      of the local copy of the variable.
-    * Relative to `copyin`, `firstprivate`, and `private`, `copy` and
-      `copyout` have a contradictory specification for storing data
-      back to the original variable.
-    * On a combined directive, `copy`, `copyin`, `copyout`, and
-      `firstprivate` apply to the effective `acc parallel`, and
-      `private` applies to the effective `acc loop`.  Thus, specifying
-      a variable in any of the former clauses and also in `private`
-      wouldn't be contradictory.  However, it is surely a mistake as
-      it specifies copying in a value you cannot then access or
-      copying out an unchanged value.  Thus, the above restriction
-      applies to a combined directive as well.
-    * TODO: Does any existing code combine either `copy`, `copyin`, or
-      `copyout` with either `firstprivate` or `private` expecting the
-      device copy to be accessed elsewhere or via an alias even though
-      it's inaccessible (lexically) within the construct?
-* It is an error if a variable has *exp* `reduction` as well as either
-  *exp* `firstprivate` or *exp* `private` on an OpenACC directive.
-  Notes:
-    * These have contradictory specifications for initialization of
-      the local copy of the variable and for storing data back to the
-      original variable.
+* It is an error if, on any OpenACC directive, a variable appears in
+  more than one *exp* DMA.  Notes:
+    * In OpenACC 3.0, it seems clear that DMAs are intended to be
+      mutually exclusive options along a single dimension.  For
+      example, `copy`, `copyin`, and `copyout` have contradictory
+      specifications for initialization of the local copy of the
+      variable and for storing data back to the original variable.
+    * No *pre* DMA is specified by OpenACC 3.0 or implemented by
+      Clacc.
+* It is an error if, on any OpenACC directive, a variable appears in
+  more than one *exp*|*pre* DSA.  Notes:
+    * On a non-combined directive, DSAs have contradictory
+      specifications for initialization of the local copy of the
+      variable and for storing data back to the original variable.
     * On a combined directive, `firstprivate` applies to the effective
-      `acc parallel`, and `reduction` applies to the effective `acc
-      loop`.  Thus, specifying a variable in both wouldn't be
-      contradictory.  However, it is surely a mistake as you cannot
-      access the reduced value.  Thus, the above restriction applies
-      to a combined directive as well.
-* *imp*|*exp* `copy`, *exp* `copyin`, *exp* `copyout`, *exp*
-  `firstprivate`, *exp* `private`, or *exp* `reduction` for a variable
-  of incomplete type is an error.  Notes:
-    * A local copy must be allocated in each of these cases, but
-      allocation is impossible for incomplete types.
-    * It does not appear possible for any clause other than `copy` to
-      be *imp* for a variable of incomplete type.
+      `acc parallel`, but `reduction` and `private` apply to the
+      effective `acc loop`.  Thus, specifying a variable in both
+      `firstprivate` and either `reduction` or `private` on a combined
+      directive might not seem contradictory.  However, it is surely a
+      mistake.  In the case of `reduction`, you cannot access the
+      reduced value.  In the case of `private`, you cannot access the
+      initialized value.  Thus, the above restriction fully applies to
+      a combined directive as well.
+* It is an error if, on any OpenACC directive, a variable appears in
+  an *exp* DMA and an unmappable *exp* DSA.  Notes:
+    * Due to variable privatization within the construct, unmappable
+      DSAs appear to circumvent the benefits of any reference
+      counting, allocations, or data transfers specified by a DMA on
+      the same directive.
+    * That seems equally true on a combined directive even though DMAs
+      apply to the effective `acc parallel` while `private` applies to
+      the effective `acc loop`.
+    * The only mappable *exp* DSA is `reduction`.  In OpenACC 3.0, it
+      is specifically meant to combine with DMAs and even implies a
+      DMA, `copy`.
+    * TODO: Does any existing OpenACC code combine a DMA with either
+      `firstprivate` or `private` expecting the non-privatized device
+      copy to be accessed elsewhere or via an alias even though it's
+      inaccessible (lexically) within the construct?
+* *exp*|*imp* DA for a variable of incomplete type is an error.
+  Notes:
+    * A private or device copy is assumed to be allocatable in each of
+      these cases, but allocation is impossible for incomplete types.
+    * It does not appear possible for any DA other than `copy`,
+      `nomap`, or `shared` to be *imp* for a variable of incomplete
+      type.
 * *exp* `private` or *exp* `reduction` for a `const` variable is an
   error.  Notes:
-    * The local copy of a `const` private variable would remain
-      uninitialized throughout its lifetime.
-    * A reduction assigns to both the original variable and a local
-      copy after its initialization, but `const` prevents that.
-    * `copy` and `copyout` are strange cases.  Technically, each
-      assigns to the original, and `const` prevents that.  However,
-      there are several arguments for why each should be permitted for
-      a `const` variable:
+    * Private copies of a `const` private variable would remain
+      uninitialized throughout their lifetime.
+    * A reduction assigns to both the original variable and the
+      private copies after their initialization, but `const` prevents
+      that.
+    * *exp* `copy` and *exp* `copyout` are strange cases.
+      Technically, each assigns to the original, and `const` prevents
+      that.  However, there are several arguments for why each should
+      be permitted for a `const` variable:
         * For shared memory, it's supposed to be fine to ignore *exp*
-          `copy` and *exp* `copyout` (among other clauses) entirely,
-          so `const` is harmless in that case.  An implementation for
-          discrete memory could optimize by not copying back to the
-          original variable because the value shouldn't change because
-          it's `const`, so `const` is actually helpful here instead of
+          `copy` and *exp* `copyout` (or any DMA) entirely, so `const`
+          is harmless in that case.  An implementation for discrete
+          memory could optimize by not copying back to the original
+          variable because the value shouldn't change because it's
+          `const`, so `const` is actually helpful here instead of
           problematic.  In the case of `copyout`, it could be argued
           that the value to be copied back could be an uninitialized
           value instead of the original value, but it could also be
-          argued that's poor usage of `copyout`.
+          argued that's poor usage of `copyout`.  TODO: Actually, is
+          there any good usage for `copyout` with the `const` case?
         * It should be fine to reference a `const` non-scalar within
           an `acc parallel` region even though the non-scalar is
           declared outside the region, but the `acc parallel` has
@@ -640,13 +720,16 @@ this section.
         * Clacc translates `copy` or `copyout` to OpenMP's `map`
           clause with a map type of `tofrom` or `from`, and the OpenMP
           implementation permits those for `const` variables.
-    * `copyin` and `firstprivate` are fine for a `const` variable.
-      The local copy will have the original variable's value
-      throughout its lifetime.
-    * It does not appear possible for any clause other than `copy` and
-      `firstprivate` to be *imp* for a `const` variable.  `private` is
-      *imp* for loop control variables, but they obviously cannot be
-      `const` anyway.
+    * *exp* `copyin` or *exp* `firstprivate` is fine for a `const`
+      variable.  The local copy will have the original variable's
+      value throughout its lifetime.
+    * *imp* `copy` or *imp* `firstprivate` for a `const` variable
+      should be fine for the same reasons as their *exp* versions.
+    * *imp* `nomap` and *imp* `shared` are the only remaining *imp*
+      DAs.  These don't imply any specific initialization or other
+      write and so should be fine for a `const` variable.
+    * `private` is *pre* for loop control variables, but they
+      obviously cannot be `const` anyway, so it's a moot point.
 * It is an error to specify subarrays with no `:` and one integer.
   Notes:
     * This notation is syntactically identical to an array subscript.
@@ -675,46 +758,33 @@ this section.
   `firstprivate` when the variable is a scalar.  Text to make this
   overriding behavior clear has been proposed for inclusion in the
   OpenACC spec after 2.7.
-* While OpenACC does not define a `shared` clause, this design
-  document and Clacc's implementation use the concept of *imp*
-  `shared` for any variable that is referenced within an OpenACC
-  `loop` construct, that is declared outside it, and for which OpenACC
-  semantics do not specify `private` or `reduction`.  Notes:
-    * `shared` really just indicates that references to the variable
-      within the `loop` construct reference the original variable.
-    * In many cases, Clacc translates `shared` to OpenMP's `shared`
-      clause.  However, `omp distribute` and `omp simd` do not accept
-      *exp* `shared`.  As noted in the mappings below, Clacc relies on
-      OpenMP implicit data sharing attributes in those cases, and the
-      semantics are the desired OpenACC semantics.
-* Identifying a data attribute as *pre* instead of *imp* only matters
-  for combined directives.  Notes:
+* Identifying a DA as *pre* instead of *imp* only matters for combined
+  directives.  Notes:
     * OpenACC 3.0 sec. 2.6 "Data Environment" says "Variables with
       predetermined data attributes may not appear in a data clause
       that conflicts with that data attribute."
         * That is, the difference between *pre* and *imp* is that a
-          variable with a *pre* data attribute is not permitted to
-          have a conflicting *exp* data clause, but a variable with an
-          *imp* data attribute is.
-        * `firstprivate`, `private`, and `reduction` are not listed in
-          OpenACC 3.0 sec. 2.7 "Data Clauses".  For the sake of this
-          discussion, we assume they are also data clauses and
+          variable with a *pre* DA is not permitted to have a
+          conflicting *exp* data clause, but a variable with an *imp*
+          DA is (and then the *imp* DA is overridden).
+        * DSAs are not listed in OpenACC 3.0 sec. 2.7 "Data Clauses".
+          However, we assume they are also considered data clauses and
           attributes.
         * The definition of "conflicts" is not specified.  We assume a
           conflict is a different data clause or attribute for the
           same variable on the same effective directive.
-    * The only *pre* data attributes described by OpenACC 3.0
-      sec. 2.6.1 "Variables with Predetermined Data Attributes" are:
+    * The only *pre* DAs described by OpenACC 3.0 sec. 2.6.1
+      "Variables with Predetermined Data Attributes" are:
         * *pre* `private` for locally declared variables:
-            * The only *exp* data clauses that could refer to them
-              would be on directives nested within the scope of the
-              variable declarations, and those cannot expand the
-              visibility of the variables, so conflicts with *pre*
-              `private` don't seem possible.
+            * The only *exp* DAs that could refer to them would be on
+              directives nested within the scope of the variable
+              declarations, and those cannot expand the visibility of
+              the variables, so conflicts with *pre* `private` don't
+              seem possible.
         * *pre* `private` for loop control variables:
-            * On a non-combined `acc loop`, the only supported data
-              clauses are *exp* `private` and *exp* `reduction`, and
-              so the latter is the only possible conflict with *pre*
+            * On a non-combined `acc loop`, the only supported *exp*
+              DAs are *exp* `private` and *exp* `reduction`, and so
+              the latter is the only possible conflict with *pre*
               `private`:
                 * However, as discussed under "Loop Control Variables"
                   below, Clacc does not permit *exp* `reduction` for
@@ -732,11 +802,11 @@ this section.
                   the restriction against *exp* `reduction` for a loop
                   control variable is not derived from *pre* `private`
                   under Clacc.
-                * All *exp* data clauses other than `private` and
-                  `reduction` could be viewed as conflicting with
-                  *pre* `private` except that they all apply to the
-                  effective compute construct while *pre* `private`
-                  applies to the effective loop construct:
+                * All *exp* DAs other than `private` and `reduction`
+                  could be viewed as conflicting with *pre* `private`
+                  except that they all apply to the effective compute
+                  construct while *pre* `private` applies to the
+                  effective loop construct:
                     * Thus, under OpenACC 3.0, they might not be
                       viewed as conflicting.
                     * Nevertheless, Clacc views them as conflicting
@@ -1005,12 +1075,14 @@ Clacc's current mapping of an `acc parallel` directive and its clauses
 to OpenMP is as follows:
 
 * `acc parallel` -> `omp target teams`
+* Translation discards *imp* `nomap`.
 * *imp*|*exp* `copy` -> *exp* `map` with a `tofrom` map type.
 * *imp*|*exp* `copyin` -> *exp* `map` with a `to` map type.
 * *imp*|*exp* `copyout` -> *exp* `map` with a `from` map type.
+* *imp* `shared` -> *exp* `shared`
+* *imp*|*exp* `reduction` -> *exp* `reduction`
 * *imp*|*exp* `firstprivate` -> *exp* `firstprivate`
 * *exp* `private` -> *exp* `private`
-* *imp*|*exp* `reduction` -> *exp* `reduction`
 * *exp* `num_gangs` -> *exp* `num_teams`
 * If *exp* `num_workers` with a non-constant-expression argument, and
   if there is a nested worker-partitioned `acc loop`, then *exp*

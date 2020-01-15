@@ -1168,6 +1168,8 @@ int main() {
     // DMP:      ACCParallelDirective
     // DMP-NEXT:   ACCNum_gangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 8
+    // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:   ACCFirstprivateClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
@@ -1246,6 +1248,8 @@ int main() {
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   ACCNum_workersClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 8
+    // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:   ACCFirstprivateClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
@@ -1329,6 +1333,8 @@ int main() {
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:     ACCVector_lengthClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 8
+    // DMP-NEXT:     ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:     ACCFirstprivateClause {{.*}} <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:     impl: OMPTargetTeamsDirective

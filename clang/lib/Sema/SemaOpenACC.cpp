@@ -53,34 +53,38 @@ public:
 
   /// Represents a variable's data attributes (DAs) on a directive.
   ///
-  /// There are potentially two DAs per variable: the base DA and a reduction.
-  /// Each can be undetermined, implicit, or explicit.  A base DA can also be
-  /// predetermined.  At least one of these two DAs will eventually be
-  /// determined per variable referenced by a construct.
+  /// There are two DAs per variable: a DMA and a DSA.  Each can be
+  /// undetermined, explicitly determined, predetermined, or implicitly
+  /// determined (except that there currently is no case of a predetermined
+  /// DMA).  Each will eventually be determined per variable referenced in a
+  /// construct to which it is relevant (for example, DMAs are irrelevant to
+  /// acc loop).
   ///
   /// We also store here whether the variable has a reduction on any effective
   /// directive that's a part of the same combined directive.
   struct DAVarData final {
-    /// If base DA is undetermined, then ACC_BASE_DA_unknown.  Otherwise, not
-    /// ACC_BASE_DA_unknown.
-    OpenACCBaseDAKind BaseDAKind = ACC_BASE_DA_unknown;
-    /// If base DA is undetermined, then nullptr.  If predetermined or
+    /// If the DMA is undetermined, then ACC_DMA_unknown.  Otherwise, not
+    /// ACC_DMA_unknown.
+    OpenACCDMAKind DMAKind = ACC_DMA_unknown;
+    /// If the DSA is undetermined, then ACC_DSA_unknown.  Otherwise, not
+    /// ACC_DSA_unknown.
+    OpenACCDSAKind DSAKind = ACC_DSA_unknown;
+    /// If the DMA is undetermined, then nullptr.  If explicit, then the
+    /// referencing expression appearing in the associated clause.  If
     /// implicit, then a referencing expression within the directive's region.
-    /// If explicit, then the referencing expression appearing in the
-    /// associated clause.
-    Expr *BaseDARefExpr = nullptr;
-    /// If reduction is undetermined, then default-constructed
-    /// (ReductionID.getName().isEmpty()).  Otherwise, the reduction ID.
+    Expr *DMARefExpr = nullptr;
+    /// If the DSA is undetermined, then nullptr.  If explicit, then the
+    /// referencing expression appearing in the associated clause.  If
+    /// predetermined or implicit, then a referencing expression within the
+    /// directive's region.
+    Expr *DSARefExpr = nullptr;
+    /// If DSAKind is ACC_DSA_reduction, then the reduction ID.  Otherwise,
+    /// undefined.
     DeclarationNameInfo ReductionId;
-    /// If reduction is undetermined, then nullptr.  If implicit reduction,
-    /// then a referencing expression within a descendant directive's reduction
-    /// clause.  If explicit reduction, then the referencing expression
-    /// appearing in the associated clause on this directive.
-    Expr *ReductionRefExpr = nullptr;
     /// Whether the effective or combined directive has a reduction for this
-    /// variable.  That is, true if !ReductionID.getName().isEmpty() or if
-    /// this directive is part of a combined directive with a reduction for
-    /// this variable.  In the latter case, the effective directive with the
+    /// variable.  That is, true if DSAKind = ACC_DSA_reduction or if this
+    /// directive is part of a combined directive with a reduction for this
+    /// variable.  In the latter case, the effective directive with the
     /// reduction might have been popped off the stack already.
     bool ReductionOnEffectiveOrCombined = false;
     DAVarData() {}
@@ -261,10 +265,84 @@ public:
     return Stack.back().NestedWorkerPartitioning;
   }
 
-  /// For the given variable and given base DA, selects the effective
-  /// directive to which it applies, records the DA there, and diagnoses
-  /// conflicts with existing DAs on any effective directive of the same
-  /// combined directive.
+private:
+  struct DMATraits {
+    typedef OpenACCDMAKind KindTy;
+    static const OpenACCDMAKind KindUnknown = ACC_DMA_unknown;
+    static OpenACCDMAKind &Kind(DAVarData &DAVar) { return DAVar.DMAKind; }
+    static Expr * &RefExpr(DAVarData &DAVar) { return DAVar.DMARefExpr; }
+    static void checkReductionIdArg(OpenACCDMAKind K,
+                                    const DeclarationNameInfo &ReductionId) {
+      assert(ReductionId.getName().isEmpty() &&
+             "expected reduction ID for and only for reduction");
+    }
+    static bool checkReductionConflict(
+        Sema &SemaRef, VarDecl *VD, Expr *E, OpenACCDMAKind K, DAVarData DVar,
+        const DeclarationNameInfo &ReductionId) {
+      return false;
+    }
+    static void setReductionFields(bool AddHere, OpenACCDMAKind K,
+                                   DAVarData &DVar,
+                                   const DeclarationNameInfo &ReductionId) {
+    }
+  };
+  struct DSATraits {
+    typedef OpenACCDSAKind KindTy;
+    static const OpenACCDSAKind KindUnknown = ACC_DSA_unknown;
+    static OpenACCDSAKind &Kind(DAVarData &DAVar) { return DAVar.DSAKind; }
+    static Expr * &RefExpr(DAVarData &DAVar) { return DAVar.DSARefExpr; }
+    static void checkReductionIdArg(OpenACCDSAKind K,
+                                    const DeclarationNameInfo &ReductionId) {
+      assert(((K == ACC_DSA_reduction) == !ReductionId.getName().isEmpty()) &&
+             "expected reduction ID for and only for reduction");
+    }
+    static bool checkReductionConflict(
+        Sema &SemaRef, VarDecl *VD, Expr *E, OpenACCDSAKind K, DAVarData DVar,
+        const DeclarationNameInfo &ReductionId) {
+      if (K == ACC_DSA_reduction && Kind(DVar) == ACC_DSA_reduction) {
+        SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_reduction)
+            << (DVar.ReductionId.getName() == ReductionId.getName())
+            << ACCReductionClause::printReductionOperatorToString(ReductionId)
+            << VD;
+        SemaRef.Diag(DVar.DSARefExpr->getExprLoc(),
+                     diag::note_acc_previous_reduction)
+            << ACCReductionClause::printReductionOperatorToString(
+                DVar.ReductionId);
+        return true;
+      }
+      return false;
+    }
+    static void setReductionFields(bool AddHere, OpenACCDSAKind K,
+                                   DAVarData &DVar,
+                                   const DeclarationNameInfo &ReductionId) {
+      if (K != ACC_DSA_reduction)
+        return;
+      if (AddHere)
+        DVar.ReductionId = ReductionId;
+      DVar.ReductionOnEffectiveOrCombined = true;
+    }
+  };
+  /// Encapsulates commonalities between implement addDMA and addDSA.  Each
+  /// of DA and OtherDA is one of DMATraits or DSATraits.
+  template <typename DA, typename OtherDA>
+  bool addDA(VarDecl *VD, Expr *E, typename DA::KindTy DAKind,
+             OpenACCDetermination Determination,
+             const DeclarationNameInfo &ReductionId = DeclarationNameInfo());
+public:
+  ///@{
+  /// For the given variable and given DA, selects the innermost effective
+  /// directive to which it applies within the current real directive, records
+  /// the DA on that effective directive, and diagnoses conflicts with existing
+  /// DAs on any effective directive within the current real directive.  If the
+  /// given DA is a reduction, marks every effective directive of the current
+  /// real directive as being part of a real directive with a reduction.
+  ///
+  /// To select the directive to which the DA applies, we have to climb the
+  /// directive stack because we parse and "act on" all explicit clauses before
+  /// we pop the inner effective directive off the stack, and not all explicit
+  /// clauses apply there.  The approach of applying to the first allowed is
+  /// based on the comments in Sema::ActOnOpenACCParallelLoopDirective, and it
+  /// must be kept in sync with the approach there.
   ///
   /// Generally, must not be called for a DA that should be suppressed by
   /// another DA for the same variable applied to the same effective directive,
@@ -276,18 +354,23 @@ public:
   /// Must be called for an implicit DA only when the effective directive to
   /// which it applies (as opposed to a child effective directive in the same
   /// combined directive) is at the top of the stack.
-  bool addBaseDA(VarDecl *VD, Expr *E, OpenACCBaseDAKind BaseDAKind,
-                 OpenACCDetermination Determination);
-  /// Adds reduction to the specified declaration.
-  bool addReduction(VarDecl *D, Expr *E,
-                    const DeclarationNameInfo &ReductionId,
-                    OpenACCDetermination Determination);
+  ///
+  /// The given DA must not be ACC_DMA_unknown or ACC_DSA_unknown.
+  bool addDMA(VarDecl *VD, Expr *E, OpenACCDMAKind DMAKind,
+              OpenACCDetermination Determination) {
+    return addDA<DMATraits, DSATraits>(VD, E, DMAKind, Determination);
+  }
+  bool addDSA(VarDecl *VD, Expr *E, OpenACCDSAKind DSAKind,
+              OpenACCDetermination Determination,
+              const DeclarationNameInfo &ReductionId = DeclarationNameInfo()) {
+    return addDA<DSATraits, DMATraits>(VD, E, DSAKind, Determination,
+                                       ReductionId);
+  }
+  ///@}
 
   /// Returns data attributes from top of the stack for the specified
   /// declaration.
   DAVarData getTopDA(VarDecl *VD);
-  /// Computes the implicit base data attribute for the specified declaration.
-  OpenACCBaseDAKind getImplicitBaseDA(VarDecl *D);
 
   /// Returns currently analyzed directive.
   OpenACCDirectiveKind getRealDirective() const {
@@ -362,75 +445,69 @@ public:
 };
 } // namespace
 
-bool DirStackTy::addBaseDA(VarDecl *VD, Expr *E, OpenACCBaseDAKind BaseDAKind,
-                           OpenACCDetermination Determination) {
+template <typename DA, typename OtherDA>
+bool DirStackTy::addDA(VarDecl *VD, Expr *E, typename DA::KindTy DAKind,
+                       OpenACCDetermination Determination,
+                       const DeclarationNameInfo &ReductionId) {
   VD = VD->getCanonicalDecl();
   assert(!Stack.empty() && "expected non-empty directive stack");
+  assert(DAKind != DA::KindUnknown && "expected known DA");
+  DA::checkReductionIdArg(DAKind, ReductionId);
 
   // If this is not a combined directive, or if this is an implicit clause,
   // visit just this directive.  Otherwise, climb through all effective
-  // directives for this combined directive.
-  //
-  // Add the data attribute to the first effective directive on which it's
-  // allowed.  We have to climb for this purpose because we parse and "act on"
-  // all explicit clauses before we pop the inner effective directive off the
-  // stack, and not all explicit clauses apply there.  The approach of applying
-  // to the first allowed is based on the comments in
-  // Sema::ActOnOpenACCParallelLoopDirective, and it must be kept in sync with
-  // the approach there.
-  //
-  // On all effective directives for this combined directive, make sure there
-  // isn't a conflict for this data attribute.  For example, even though
-  // private applies to acc loop and firstprivate applies to acc parallel, it
-  // makes no sense to specify them both for the same variable on acc parallel
-  // loop because the initial value provided by firstprivate can then never be
-  // accessed.  (For exactly that reason, we never compute an implicit
-  // firstprivate for a variable with a private clause on an acc parallel
-  // loop.)  See the section "Basic Data Attributes" in the Clang OpenACC
-  // design document.
+  // directives for the current combined directive.
   bool Added = false;
   for (auto Itr = Stack.rbegin(), End = Stack.rend(); Itr != End; ++Itr) {
     DAVarData &DVar = Itr->DAMap[VD];
-    // Complain for conflict with existing base DA.
+    // Complain for conflict with existing DA.
+    //
+    // See the section "Basic Data Attributes" in the Clang OpenACC design
+    // document.
     //
     // Some DAs should be suppressed by rather than conflict with existing DAs,
-    // but addBaseDA has preconditions to avoid those scenarios.
-    if (DVar.BaseDAKind != ACC_BASE_DA_unknown) {
+    // but addDMA and addDSA have preconditions to avoid those scenarios.
+    if (DA::Kind(DVar) != DA::KindUnknown) {
+      if (DA::checkReductionConflict(SemaRef, VD, E, DAKind, DVar,
+                                     ReductionId))
+        return true;
       SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_da)
-          << (DVar.BaseDAKind == BaseDAKind)
-          << getOpenACCBaseDAName(DVar.BaseDAKind)
-          << Determination << getOpenACCBaseDAName(BaseDAKind);
-      SemaRef.Diag(DVar.BaseDARefExpr->getExprLoc(),
-                   diag::note_acc_explicit_da)
-          << getOpenACCBaseDAName(DVar.BaseDAKind);
+          << (DA::Kind(DVar) == DAKind) << getOpenACCName(DA::Kind(DVar))
+          << Determination << getOpenACCName(DAKind);
+      SemaRef.Diag(DA::RefExpr(DVar)->getExprLoc(), diag::note_acc_explicit_da)
+          << getOpenACCName(DA::Kind(DVar));
       return true;
     }
-    // Complain if cannot combine with a reduction.
-    if (!DVar.ReductionId.getName().isEmpty() &&
-        !isAllowedBaseDAForReduction(BaseDAKind)) {
+    if (!isAllowedDSAForDMA(DAKind, OtherDA::Kind(DVar))) {
       SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_da)
-          << false << getOpenACCClauseName(ACCC_reduction)
-          << Determination << getOpenACCBaseDAName(BaseDAKind);
-      SemaRef.Diag(DVar.ReductionRefExpr->getExprLoc(),
+          << false << getOpenACCName(OtherDA::Kind(DVar))
+          << Determination << getOpenACCName(DAKind);
+      SemaRef.Diag(OtherDA::RefExpr(DVar)->getExprLoc(),
                    diag::note_acc_explicit_da)
-          << getOpenACCClauseName(ACCC_reduction);
+          << getOpenACCName(OtherDA::Kind(DVar));
       return true;
     }
-    if (!Added && isAllowedBaseDAForDirective(Itr->EffectiveDKind,
-                                              BaseDAKind)) {
-      DVar.BaseDAKind = BaseDAKind;
-      DVar.BaseDARefExpr = E;
-      Added = true;
-      if (Determination == ACC_IMPLICIT)
-        // As a precondition, an implicit clause is added when the effective
-        // directive to which it applies is at the top of the stack.  It might
-        // appear to conflict with clauses lower on the stack, but don't
-        // complain because the user did nothing wrong.  Specifically, implicit
-        // shared on an acc loop shouldn't be checked against any explicit
-        // clause for the same variable on the enclosing acc parallel because
-        // it would always conflict.  So stop climbing.
-        break;
+    if (isAllowedDAForDirective(Itr->EffectiveDKind, DAKind)) {
+      DA::setReductionFields(!Added, DAKind, DVar, ReductionId);
+      if (!Added) {
+        DA::Kind(DVar) = DAKind;
+        DA::RefExpr(DVar) = E;
+        Added = true;
+        if (Determination == ACC_IMPLICIT)
+          // Stop climbing or there might be spurious diagnostics about
+          // conflicts with effective ancestor directives within the same real
+          // directive.  For example, implicit shared on an effective acc loop
+          // might conflict with explicit firstprivate on an effective parent
+          // acc parallel.
+          break;
+      }
     }
+    // As a precondition, an implicit clause is added when the effective
+    // directive to which it applies is at the top of the stack.  Otherwise,
+    // there might be spurious diagnostics about conflicts with effective
+    // descendant directives within the same real directive.  For example,
+    // implicit firstprivate on an effective acc parallel might conflict with
+    // implicit shared on an effective child acc loop.
     assert(Determination != ACC_IMPLICIT &&
            "expected implicit clause to be allowed on directive at top of "
            "stack");
@@ -440,139 +517,8 @@ bool DirStackTy::addBaseDA(VarDecl *VD, Expr *E, OpenACCBaseDAKind BaseDAKind,
       break;
   }
 
-  assert(Added && "expected base DA to be allowed for directive");
+  assert(Added && "expected DA to be allowed for directive");
   return false;
-}
-
-bool DirStackTy::addReduction(VarDecl *VD, Expr *E,
-                              const DeclarationNameInfo &ReductionId,
-                              OpenACCDetermination Determination) {
-  VD = VD->getCanonicalDecl();
-  assert(!Stack.empty() && "expected non-empty directive stack");
-  assert(!ReductionId.getName().isEmpty() && "expected reduction");
-
-  // If this is not a combined directive, visit just this directive.
-  // Otherwise, climb through all effective directives for this combined
-  // directive.
-  //
-  // In this combined directive, mark every effective directive as being part
-  // of a combined directive with a reduction.
-  //
-  // In this combined directive, on every effective directive, make sure a
-  // reduction can combine with any base DA from explicit clauses.  For
-  // example, even though reduction applies to acc loop and firstprivate
-  // applies to acc parallel, it makes no sense to specify them both for the
-  // same variable on acc parallel loop because the reduced value can then
-  // never be accessed.
-  for (auto Itr = Stack.rbegin(), End = Stack.rend(); Itr != End; ++Itr) {
-    DAVarData &DVar = Itr->DAMap[VD];
-    if (!isAllowedBaseDAForReduction(DVar.BaseDAKind)) {
-      SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_da)
-          << false << getOpenACCBaseDAName(DVar.BaseDAKind)
-          << Determination << getOpenACCClauseName(ACCC_reduction);
-      SemaRef.Diag(DVar.BaseDARefExpr->getExprLoc(),
-                   diag::note_acc_explicit_da)
-          << getOpenACCBaseDAName(DVar.BaseDAKind);
-      return true;
-    }
-    DVar.ReductionOnEffectiveOrCombined = true;
-    if (Itr->RealDKind != ACCD_unknown)
-      // Either this is not a combined directive, or we've reached the
-      // outermost effective directive, so stop climbing.
-      break;
-  }
-
-  // A reduction always applies to the innermost effective directive in the
-  // case of a combined directive.
-  auto Itr = Stack.rbegin();
-  assert(isAllowedClauseForDirective(Itr->EffectiveDKind, ACCC_reduction) &&
-         "expected reduction to be allowed on directive at top of stack");
-  DAVarData &DVar = Itr->DAMap[VD];
-
-  // Complain if a variable appears in more than one (explicit) reduction on
-  // the same directive.
-  if (!DVar.ReductionId.getName().isEmpty()) {
-    SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_reduction)
-        << (DVar.ReductionId.getName() == ReductionId.getName())
-        << ACCReductionClause::printReductionOperatorToString(ReductionId)
-        << VD;
-    SemaRef.Diag(DVar.ReductionRefExpr->getExprLoc(),
-                 diag::note_acc_previous_reduction)
-        << ACCReductionClause::printReductionOperatorToString(
-            DVar.ReductionId);
-    return true;
-  }
-
-  // Record the reduction.
-  DVar.ReductionId = ReductionId;
-  DVar.ReductionRefExpr = E;
-
-  return false;
-}
-
-OpenACCBaseDAKind DirStackTy::getImplicitBaseDA(VarDecl *VD) {
-  VD = VD->getCanonicalDecl();
-  const DAVarData &DVar = getTopDA(VD);
-  if (isOpenACCLoopDirective(getEffectiveDirective())) {
-    if (DVar.ReductionOnEffectiveOrCombined) {
-      // We've already rejected reductions on loop control variables.
-      assert(!hasLoopControlVariable(VD) &&
-             "expected acc loop control var not to be reduction var");
-      return ACC_BASE_DA_unknown;
-    }
-    // OpenACC 3.0 sec. 2.6.1 "Variables with Predetermined Data Attributes"
-    // L1038-1039:
-    //   "The loop variable in a C for statement [...] that is associated
-    //   with a loop directive is predetermined to be private to each thread
-    //   that will execute each iteration of the loop."
-    //
-    // See the section "Loop Control Variables" in the Clang OpenACC design
-    // document for the interpretation used here.
-    // Sema::ActOnOpenACCExecutableDirective handles the case without a seq
-    // clause.
-    assert((!hasLoopControlVariable(VD) ||
-            getLoopPartitioning().hasSeqExplicit()) &&
-           "expected predetermined private for loop control variable with "
-           "explicit seq");
-    // See the section "Basic Data Attributes" in the Clang OpenACC design
-    // document for discussion of the shared data attribute.
-    return ACC_BASE_DA_shared;
-  }
-  if (isOpenACCParallelDirective(getEffectiveDirective())) {
-    if (!VD->getType()->isScalarType()) {
-      // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L830-833:
-      //   "If there is no default(present) clause on the construct, an array
-      //   or composite variable referenced in the parallel construct that does
-      //   not appear in a data clause for the construct or any enclosing data
-      //   construct will be treated as if it appeared in a copy clause for
-      //   the parallel construct."
-      return ACC_BASE_DA_copy;
-    }
-    if (DVar.ReductionOnEffectiveOrCombined) {
-      // OpenACC 3.0 sec. 2.5.13 "reduction clause" L984-985:
-      //   "It implies a copy data clause for each reduction var, unless a data
-      //   clause for that variable appears on the compute construct."
-      // OpenACC 3.0 sec. 2.11 "Combined Constructs" L1958-1959:
-      //   "In addition, a reduction clause on a combined construct implies a
-      //   copy data clause for each reduction variable, unless a data clause
-      //   for that variable appears on the combined construct."
-      return ACC_BASE_DA_copy;
-    }
-    // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L835-838:
-    //   "A scalar variable referenced in the parallel construct that does not
-    //   appear in a data clause for the construct or any enclosing data
-    //   construct will be treated as if it appeared in a firstprivate clause
-    //   unless a reduction would otherwise imply a copy clause for it."
-    // OpenACC 3.0 sec. 6 "Glossary" L3841-3845:
-    //   "Scalar datatype - an intrinsic or built-in datatype that is not an
-    //   array or aggregate datatype. [...] In C, scalar datatypes are char
-    //   (signed or unsigned), int (signed or unsigned, with optional short,
-    //   long or long long attribute), enum, float, double, long double,
-    //   _Complex (with optional float or long attribute), or any pointer
-    //   datatype."
-    return ACC_BASE_DA_firstprivate;
-  }
-  llvm_unreachable("unexpected effective directive");
 }
 
 DirStackTy::DAVarData DirStackTy::getTopDA(VarDecl *VD) {
@@ -656,6 +602,7 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
                                       LParenLoc, ColonLoc, EndLoc,
                                       ReductionId);
     break;
+  case ACCC_nomap:
   case ACCC_shared:
   case ACCC_num_gangs:
   case ACCC_num_workers:
@@ -668,7 +615,7 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
   case ACCC_vector:
   case ACCC_collapse:
   case ACCC_unknown:
-    llvm_unreachable("Clause is not allowed.");
+    llvm_unreachable("expected explicit variable list clause");
   }
   return Res;
 }
@@ -730,19 +677,137 @@ public:
   }
 };
 
-class ImplicitBaseDAAdder : public StmtVisitor<ImplicitBaseDAAdder> {
-  typedef StmtVisitor<ImplicitBaseDAAdder> BaseVisitor;
-  DirStackTy *Stack;
-  typedef llvm::SmallVector<Expr *, 8> BaseDAVector;
-  BaseDAVector ImplicitCopy;
-  BaseDAVector ImplicitShared;
-  BaseDAVector ImplicitFirstprivate;
-  struct BaseDAEntry {
-    OpenACCBaseDAKind BaseDAKind;
-    BaseDAVector::iterator Itr;
-    BaseDAEntry() : BaseDAKind(ACC_BASE_DA_unknown) {}
+/// Table to track implicit DAs on a directive as they're computed by
+/// \c ImplicitDAAdder and \c ImplicitGangReductionAdder.
+///
+/// Implicit DAs are not converted to clauses on the directive or stored as DAs
+/// on the directive stack until all implicit DAs on the directive have been
+/// computed.  The reason is that sometimes an implicit DA previously computed
+/// must be overridden by a new implicit DA (for example, implicit gang
+/// reduction overrides implicit shared).  This table's main benefit is its
+/// facility to remove previously recorded implicit DAs.  Once both implicit DA
+/// passes are finished, implicit DAs are extracted from this table, converted
+/// to clauses on the directive, and stored as DAs on the directive stack, and
+/// this table is discarded.
+class ImplicitDATable {
+public:
+  struct Implier {
+    /// The referencing expression that produced the implicit DA.
+    DeclRefExpr *DRE;
+    /// The reduction clause that produced the implicit DA, or nullptr if the
+    /// implicit DA is not a reduction.
+    ACCReductionClause *ReductionClause;
+    Implier(DeclRefExpr *DRE, ACCReductionClause *C = nullptr)
+      : DRE(DRE), ReductionClause(C) {}
   };
-  llvm::DenseMap<VarDecl *, BaseDAEntry> ImplicitBaseDAEntries;
+  typedef std::list<Implier> ImpliersTy;
+
+private:
+  ///@{
+  /// This is where we build all the data that will be needed to convert
+  /// implicit DAs to clauses on the directive and to store them on the
+  /// directive stack.  For the sake of the test suite at least, we maintain
+  /// these in a deterministic order (specifically the order computed), and we
+  /// choose linked lists so we can efficiently remove implicit DAs when
+  /// overridden.
+  ImpliersTy NomapImpliers;
+  ImpliersTy CopyImpliers;
+  ImpliersTy SharedImpliers;
+  ImpliersTy ReductionImpliers;
+  ImpliersTy FirstprivateImpliers;
+  ///@}
+
+public:
+  /// A map entry recording a single variable's implicit DMA and DSA, if any,
+  /// and their locations in the above lists.
+  class Entry {
+    OpenACCDMAKind DMAKind;
+    OpenACCDSAKind DSAKind;
+    ImpliersTy::iterator DMAImplier;
+    ImpliersTy::iterator DSAImplier;
+    ImplicitDATable *Table;
+  public:
+    Entry(ImplicitDATable *Table)
+        : DMAKind(ACC_DMA_unknown), DSAKind(ACC_DSA_unknown),
+          DMAImplier(), DSAImplier(), Table(Table) {}
+    OpenACCDMAKind getDMAKind() const { return DMAKind; }
+    OpenACCDSAKind getDSAKind() const { return DSAKind; }
+    void unsetDMA() {
+      assert(DMAKind != ACC_DMA_unknown && "expected set DMA");
+      Table->getImpliers(DMAKind).erase(DMAImplier);
+      DMAKind = ACC_DMA_unknown;
+    }
+    void unsetDSA() {
+      assert(DSAKind != ACC_DSA_unknown && "expected set DSA");
+      Table->getImpliers(DSAKind).erase(DSAImplier);
+      DSAKind = ACC_DSA_unknown;
+    }
+    void setDMA(OpenACCDMAKind Kind, DeclRefExpr *E) {
+      assert(DMAKind == ACC_DMA_unknown && "expected unset DMA");
+      DMAKind = Kind;
+      ImpliersTy &Impliers = Table->getImpliers(DMAKind);
+      Impliers.emplace_back(E);
+      DMAImplier = std::prev(Impliers.end());
+    }
+    void setDSA(OpenACCDSAKind Kind, DeclRefExpr *E,
+                ACCReductionClause *ReductionClause = nullptr) {
+      assert(DSAKind == ACC_DSA_unknown && "expected unset DSA");
+      assert((Kind == ACC_DSA_reduction) == (ReductionClause != nullptr) &&
+             "expected clause for and only for reduction DSA");
+      DSAKind = Kind;
+      ImpliersTy &Impliers = Table->getImpliers(DSAKind);
+      Impliers.emplace_back(E, ReductionClause);
+      DSAImplier = std::prev(Impliers.end());
+    }
+  };
+
+private:
+  llvm::DenseMap<VarDecl *, Entry> Map;
+
+public:
+  Entry &lookup(VarDecl *VD) {
+    return Map.try_emplace(VD, Entry(this)).first->second;
+  }
+  ImpliersTy &getImpliers(OpenACCDMAKind DMAKind) {
+    switch (DMAKind) {
+    case ACC_DMA_nomap:
+      return NomapImpliers;
+    case ACC_DMA_copy:
+      return CopyImpliers;
+    case ACC_DMA_copyin:
+    case ACC_DMA_copyout:
+    case ACC_DMA_unknown:
+      llvm_unreachable("unexpected implicit DMA");
+    }
+  }
+  ImpliersTy &getImpliers(OpenACCDSAKind DSAKind) {
+    switch (DSAKind) {
+    case ACC_DSA_shared:
+      return SharedImpliers;
+    case ACC_DSA_reduction:
+      return ReductionImpliers;
+    case ACC_DSA_firstprivate:
+      return FirstprivateImpliers;
+    case ACC_DSA_private:
+    case ACC_DSA_unknown:
+      llvm_unreachable("unexpected implicit DSA");
+    }
+  }
+  template <typename DAKindTy>
+  bool buildRefList(DAKindTy DAKind, SmallVectorImpl<Expr *> &ExprVec) {
+    ExprVec.clear();
+    for (auto I : getImpliers(DAKind))
+      ExprVec.push_back(I.DRE);
+    return !ExprVec.empty();
+  }
+};
+
+/// Computes all implicit DAs except implicit reductions, which are computed
+/// by \c ImplicitGangReductionAdder.
+class ImplicitDAAdder : public StmtVisitor<ImplicitDAAdder> {
+  typedef StmtVisitor<ImplicitDAAdder> BaseVisitor;
+  DirStackTy *Stack;
+  ImplicitDATable &ImplicitDAs;
   llvm::SmallVector<llvm::DenseSet<const Decl *>, 8> LocalDefinitions;
 
 public:
@@ -757,43 +822,102 @@ public:
       if (LocalDefinitions.back().count(VD))
         return;
 
-      // Skip variable if an implicit base DA has already been computed.
-      BaseDAEntry &Entry = ImplicitBaseDAEntries[VD];
-      if (Entry.BaseDAKind != ACC_BASE_DA_unknown)
+      // Skip variable if an implicit DA has already been computed.
+      ImplicitDATable::Entry &ImplicitDA = ImplicitDAs.lookup(VD);
+      if (ImplicitDA.getDMAKind() != ACC_DMA_unknown ||
+          ImplicitDA.getDSAKind() != ACC_DSA_unknown)
         return;
 
-      // Skip variable if there's a predetermined or explicit base DA.
+      // Get predetermined and explicit DAs.
       const DirStackTy::DAVarData &DVar = Stack->getTopDA(VD);
-      if (DVar.BaseDAKind != ACC_BASE_DA_unknown)
-        return;
 
-      // Compute implicit base DA.
-      Entry.BaseDAKind = Stack->getImplicitBaseDA(VD);
+      // Below, we assume DSAKind == ACC_DSA_reduction implies
+      // ReductionOnEffectiveOrCombined.
+      assert((DVar.DSAKind != ACC_DSA_reduction ||
+              DVar.ReductionOnEffectiveOrCombined) &&
+             "expected reduction to be set consistently");
 
-      // Add base DA to the appropriate list.
-      BaseDAVector *BaseDAs;
-      switch (Entry.BaseDAKind) {
-      case ACC_BASE_DA_copy:
-        BaseDAs = &ImplicitCopy;
-        break;
-      case ACC_BASE_DA_shared:
-        BaseDAs = &ImplicitShared;
-        break;
-      case ACC_BASE_DA_firstprivate:
-        BaseDAs = &ImplicitFirstprivate;
-        break;
-      case ACC_BASE_DA_unknown:
-        BaseDAs = nullptr;
-        break;
-      case ACC_BASE_DA_copyin:
-      case ACC_BASE_DA_copyout:
-      case ACC_BASE_DA_private:
-        llvm_unreachable("unexpected implicit base DA");
-      }
-      if (BaseDAs) {
-        BaseDAs->push_back(E);
-        Entry.Itr = BaseDAs->end() - 1;
-      }
+      // Compute implicit DAs.
+      VD = VD->getCanonicalDecl();
+      OpenACCDMAKind DMAKind = ACC_DMA_unknown;
+      OpenACCDSAKind DSAKind = ACC_DSA_unknown;
+      if (isOpenACCLoopDirective(Stack->getEffectiveDirective())) {
+        if (DVar.DSAKind == ACC_DSA_unknown) {
+          // OpenACC 3.0 sec. 2.6.1 "Variables with Predetermined Data
+          // Attributes" L1038-1039:
+          //   "The loop variable in a C for statement [...] that is associated
+          //   with a loop directive is predetermined to be private to each
+          //   thread that will execute each iteration of the loop."
+          //
+          // See the section "Loop Control Variables" in the Clang OpenACC
+          // design document for the interpretation used here.
+          // Sema::ActOnOpenACCExecutableDirective handles the case without a
+          // seq clause.
+          //
+          // We've already rejected reductions on loop control variables.
+          assert((!DVar.ReductionOnEffectiveOrCombined ||
+                  !Stack->hasLoopControlVariable(VD)) &&
+                 "expected acc loop control var not to be reduction var");
+          assert((!Stack->hasLoopControlVariable(VD) ||
+                  Stack->getLoopPartitioning().hasSeqExplicit()) &&
+                 "expected predetermined private for loop control variable "
+                 "with explicit seq");
+          // See the section "Basic Data Attributes" in the Clang OpenACC
+          // design document for discussion of the shared data attribute.
+          DSAKind = ACC_DSA_shared;
+        }
+      } else if (isOpenACCParallelDirective(Stack->getEffectiveDirective())) {
+        if (DVar.DMAKind != ACC_DMA_unknown ||
+            (DVar.DSAKind != ACC_DSA_unknown &&
+             DVar.DSAKind != ACC_DSA_reduction)) {
+          // There's a predetermined or explicit DA other than a reduction
+          // (which would imply a copy clause), so there's no implicit DA other
+          // than the defaults.
+        } else if (!VD->getType()->isScalarType()) {
+          // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L830-833:
+          //   "If there is no default(present) clause on the construct, an
+          //   array or composite variable referenced in the parallel construct
+          //   that does not appear in a data clause for the construct or any
+          //   enclosing data construct will be treated as if it appeared in a
+          //   copy clause for the parallel construct."
+          DMAKind = ACC_DMA_copy;
+        } else if (DVar.ReductionOnEffectiveOrCombined) {
+          // OpenACC 3.0 sec. 2.5.13 "reduction clause" L984-985:
+          //   "It implies a copy data clause for each reduction var, unless a
+          //   data clause for that variable appears on the compute construct."
+          // OpenACC 3.0 sec. 2.11 "Combined Constructs" L1958-1959:
+          //   "In addition, a reduction clause on a combined construct implies
+          //   a copy data clause for each reduction variable, unless a data
+          //   clause for that variable appears on the combined construct."
+          DMAKind = ACC_DMA_copy;
+        } else {
+          // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L835-838:
+          //   "A scalar variable referenced in the parallel construct that
+          //   does not appear in a data clause for the construct or any
+          //   enclosing data construct will be treated as if it appeared in a
+          //   firstprivate clause unless a reduction would otherwise imply a
+          //   copy clause for it."
+          // OpenACC 3.0 sec. 6 "Glossary" L3841-3845:
+          //   "Scalar datatype - an intrinsic or built-in datatype that is not
+          //   an array or aggregate datatype. [...] In C, scalar datatypes are
+          //   char (signed or unsigned), int (signed or unsigned, with
+          //   optional short, long or long long attribute), enum, float,
+          //   double, long double, _Complex (with optional float or long
+          //   attribute), or any pointer datatype."
+          DSAKind = ACC_DSA_firstprivate;
+        }
+        if (DMAKind == ACC_DMA_unknown && DVar.DMAKind == ACC_DMA_unknown)
+          DMAKind = ACC_DMA_nomap;
+        if (DSAKind == ACC_DSA_unknown && DVar.DSAKind == ACC_DSA_unknown)
+          DSAKind = ACC_DSA_shared;
+      } else
+        llvm_unreachable("unexpected effective directive");
+
+      // Store implicit DAs for later conversion to clause objects.
+      if (DMAKind != ACC_DMA_unknown)
+        ImplicitDA.setDMA(DMAKind, E);
+      if (DSAKind != ACC_DSA_unknown)
+        ImplicitDA.setDSA(DSAKind, E);
     }
   }
   void VisitMemberExpr(MemberExpr *E) {
@@ -824,32 +948,45 @@ public:
           // Skip variable if it is locally declared or privatized by a clause.
           if (LocalDefinitions.back().count(VD))
             continue;
-          // Skip variable if there's an explicit clause already.
+          // Skip variable if there's a conflicting explicit DA or reduction
+          // already.  Generally, all DMAs conflict with each other.  There
+          // happens to exist no explicit DSA that doesn't conflict with copy
+          // except reduction, but that implies copy anyway.  (And there's no
+          // possible predetermined DA on a compute directive.)
           DirStackTy::DAVarData DVar = Stack->getTopDA(VD);
-          if (DVar.BaseDAKind != ACC_BASE_DA_unknown ||
-              !DVar.ReductionId.getName().isEmpty())
+          if (DVar.DMAKind != ACC_DMA_unknown ||
+              DVar.DSAKind != ACC_DSA_unknown) {
+            assert((DVar.DSAKind == ACC_DSA_unknown ||
+                    DVar.DSAKind == ACC_DSA_reduction ||
+                    !isAllowedDSAForDMA(DVar.DSAKind, ACC_DMA_copy)) &&
+                   "expected explicit DSA to conflict with copy");
             continue;
+          }
           // Skip variable if an implicit copy clause has already been
           // computed.
-          BaseDAEntry &Entry = ImplicitBaseDAEntries[VD];
-          if (Entry.BaseDAKind == ACC_BASE_DA_copy)
+          ImplicitDATable::Entry &ImplicitDA = ImplicitDAs.lookup(VD);
+          if (ImplicitDA.getDMAKind() == ACC_DMA_copy)
             continue;
           // Override any implicit firstprivate clause.
-          if (Entry.BaseDAKind == ACC_BASE_DA_firstprivate)
-            ImplicitFirstprivate.erase(Entry.Itr);
-          else
-            assert(Entry.BaseDAKind == ACC_BASE_DA_unknown &&
-                   "expected implicit base DA for reduction variable to be"
-                   " copy, firstprivate, or unknown");
-          Entry.BaseDAKind = ACC_BASE_DA_copy;
-          ImplicitCopy.push_back(DRE);
-          Entry.Itr = ImplicitCopy.end() - 1;
+          if (ImplicitDA.getDSAKind() == ACC_DSA_firstprivate) {
+            assert(ImplicitDA.getDMAKind() == ACC_DMA_nomap &&
+                   "expected acc parallel implicit DMA for firstprivate"
+                   " variable to be nomap");
+            ImplicitDA.unsetDMA();
+            ImplicitDA.unsetDSA();
+          } else
+            assert(ImplicitDA.getDMAKind() == ACC_DMA_unknown &&
+                   ImplicitDA.getDSAKind() == ACC_DSA_unknown &&
+                   "expected acc parallel implicit DA for child acc loop"
+                   " reduction variable to be copy, firstprivate, or none");
+          ImplicitDA.setDMA(ACC_DMA_copy, DRE);
+          ImplicitDA.setDSA(ACC_DSA_shared, DRE);
         }
       }
 
-      // For clauses other than private, compute base DA attribute for the
-      // variables due to the references within the clause itself.  This is
-      // necessary because at least the variables' original values are needed.
+      // For clauses other than private, compute DA for the variables due to
+      // the references within the clause itself.  This is necessary because at
+      // least the variables' original values are needed.
       if (C->getClauseKind() != ACCC_private) {
         for (Stmt *Child : C->children()) {
           if (Child)
@@ -858,7 +995,7 @@ public:
       }
 
       // Record variables privatized by this directive as local definitions so
-      // that they are skipped while computing base DAs implied by nested
+      // that they are skipped while computing DAs implied by nested
       // references.
       for (const Expr *VR : getPrivateVarsFromClause(C)) {
         const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
@@ -884,30 +1021,30 @@ public:
     }
   }
 
-  ArrayRef<Expr *> getImplicitCopy() { return ImplicitCopy; }
-  ArrayRef<Expr *> getImplicitShared() { return ImplicitShared; }
-  ArrayRef<Expr *> getImplicitFirstprivate() { return ImplicitFirstprivate; }
-
-  ImplicitBaseDAAdder(DirStackTy *S) : Stack(S) {
+  ImplicitDAAdder(DirStackTy *S, ImplicitDATable &T)
+      : Stack(S), ImplicitDAs(T) {
     LocalDefinitions.emplace_back();
   }
 };
 
-struct ReductionVar {
-  ACCReductionClause *ReductionClause;
-  DeclRefExpr *RE;
-  ReductionVar() : ReductionClause(nullptr), RE(nullptr) {}
-  ReductionVar(ACCReductionClause *C, DeclRefExpr *RE)
-      : ReductionClause(C), RE(RE) {}
-  ReductionVar(const ReductionVar &O)
-      : ReductionClause(O.ReductionClause), RE(O.RE) {}
-};
+// OpenACC 3.0 sec. 2.9.11 L1753-1757:
+// "After the loop, the values for each thread are combined using the specified
+// reduction operator, and the result combined with the value of the original
+// var and stored in the original var.  If the original var is not private,
+// this update occurs by the end of the compute region, and any access to the
+// original var is undefined within the compute region.  Otherwise, the update
+// occurs at the end of the loop."
+//
+// Clang implements the case of the non-private original var by adding an
+// (implied) gang reduction to the parent compute construct.  This means that
+// the original var becomes privatized (per gang) within the compute region.
+// Non-portable OpenACC code can take advantage of that behavior, but portable
+// OpenACC code must regard accesses to it there as undefined.
 class ImplicitGangReductionAdder
     : public StmtVisitor<ImplicitGangReductionAdder> {
   typedef StmtVisitor<ImplicitGangReductionAdder> BaseVisitor;
   DirStackTy *Stack;
-  llvm::SmallVector<ReductionVar, 8> ImplicitGangReductions;
-  llvm::DenseSet<VarDecl *> ImplicitGangReductionVars;
+  ImplicitDATable &ImplicitDAs;
   llvm::SmallVector<llvm::DenseSet<const Decl *>, 8> LocalDefinitions;
 
 public:
@@ -951,30 +1088,23 @@ public:
           // variable gang-shared at the acc loop, so there is an implicit gang
           // reduction, and so on.
           DirStackTy::DAVarData DVar = Stack->getTopDA(VD);
-          if (!DVar.ReductionId.getName().isEmpty() ||
-              ImplicitGangReductionVars.count(VD))
+          ImplicitDATable::Entry &ImplicitDA = ImplicitDAs.lookup(VD);
+          if (DVar.DSAKind == ACC_DSA_reduction ||
+              ImplicitDA.getDSAKind() == ACC_DSA_reduction)
             continue;
 
-          // Check the base DA.
-          OpenACCBaseDAKind BaseDAKind = DVar.BaseDAKind;
-          switch (BaseDAKind) {
-          case ACC_BASE_DA_unknown:
-          case ACC_BASE_DA_shared:
-            llvm_unreachable("unexpected base DA on acc parallel");
-          case ACC_BASE_DA_private:
-          case ACC_BASE_DA_firstprivate:
-            // Skip variable if it is privatized at the acc parallel.
-            continue;
-          case ACC_BASE_DA_copy:
-          case ACC_BASE_DA_copyin:
-          case ACC_BASE_DA_copyout:
-            // The variable is gang-shared.
-            break;
+          // The reduction can be added regardless of the DMA.
+          assert(isAllowedDSAForDMA(ACC_DSA_reduction, DVar.DMAKind) &&
+                 isAllowedDSAForDMA(ACC_DSA_reduction, ImplicitDA.getDMAKind())
+                 && "expected reduction not to conflict with DMA");
+
+          // If it's not privatized, then record the reduction.
+          if (ImplicitDA.getDSAKind() == ACC_DSA_shared) {
+            assert(DVar.DSAKind == ACC_DSA_unknown &&
+                   "expected no implicit DSA with explicit/predetermined DSA");
+            ImplicitDA.unsetDSA();
+            ImplicitDA.setDSA(ACC_DSA_reduction, DRE, C);
           }
-
-          // Record the reduction.
-          ImplicitGangReductions.emplace_back(C, DRE);
-          ImplicitGangReductionVars.insert(VD);
         }
       }
     }
@@ -1011,10 +1141,8 @@ public:
         Visit(C);
     }
   }
-  ArrayRef<ReductionVar> getImplicitGangReductions() {
-    return ImplicitGangReductions;
-  }
-  ImplicitGangReductionAdder(DirStackTy *S) : Stack(S) {
+  ImplicitGangReductionAdder(DirStackTy *S, ImplicitDATable &T)
+      : Stack(S), ImplicitDAs(T) {
     LocalDefinitions.emplace_back();
   }
 };
@@ -1025,6 +1153,13 @@ public:
 // This examines reductions nested within implicit gang reductions as well, but
 // that is not required by OpenACC 2.7.
 class NestedReductionChecker : public StmtVisitor<NestedReductionChecker> {
+  struct ReductionVar {
+    ACCReductionClause *ReductionClause;
+    DeclRefExpr *RE;
+    ReductionVar() : ReductionClause(nullptr), RE(nullptr) {}
+    ReductionVar(ACCReductionClause *C, DeclRefExpr *RE)
+        : ReductionClause(C), RE(RE) {}
+  };
   typedef StmtVisitor<NestedReductionChecker> BaseVisitor;
   DirStackTy *Stack;
   llvm::SmallVector<llvm::DenseMap<VarDecl *, ReductionVar>, 8> Privates;
@@ -1128,13 +1263,12 @@ bool Sema::ActOnOpenACCRegionStart(
     // pgcc 18.4-0 don't permit that for simple cases I've tried.
     if (ParentDKind == ACCD_unknown)
       Diag(StartLoc, diag::err_acc_orphaned_directive)
-          << getOpenACCDirectiveName(DKind);
+          << getOpenACCName(DKind);
     else {
       Diag(StartLoc, diag::err_acc_directive_bad_nesting)
-          << getOpenACCDirectiveName(ParentDKind)
-          << getOpenACCDirectiveName(DKind);
+          << getOpenACCName(ParentDKind) << getOpenACCName(DKind);
       Diag(ParentLoc, diag::note_acc_enclosing_directive)
-          << getOpenACCDirectiveName(ParentDKind);
+          << getOpenACCName(ParentDKind);
     }
     ErrorFound = true;
   }
@@ -1177,10 +1311,10 @@ bool Sema::ActOnOpenACCRegionStart(
       // "The region of a loop with the gang clause may not contain another
       // loop with the gang clause unless within a nested compute region."
       Diag(StartLoc, diag::err_acc_loop_bad_nested_partitioning)
-          << getOpenACCDirectiveName(ParentDKind) << "gang"
-          << getOpenACCDirectiveName(DKind) << "gang";
+          << getOpenACCName(ParentDKind) << "gang"
+          << getOpenACCName(DKind) << "gang";
       Diag(ParentLoopLoc, diag::note_acc_enclosing_directive)
-          << getOpenACCDirectiveName(ParentDKind);
+          << getOpenACCName(ParentDKind);
       ErrorFound = true;
     }
     else if (ParentLoopKind.hasWorkerClause() &&
@@ -1189,11 +1323,10 @@ bool Sema::ActOnOpenACCRegionStart(
       // "The region of a loop with the worker clause may not contain a loop
       // with a gang or worker clause unless within a nested compute region."
       Diag(StartLoc, diag::err_acc_loop_bad_nested_partitioning)
-          << getOpenACCDirectiveName(ParentDKind) << "worker"
-          << getOpenACCDirectiveName(DKind)
+          << getOpenACCName(ParentDKind) << "worker" << getOpenACCName(DKind)
           << (LoopKind.hasGangClause() ? "gang" : "worker");
       Diag(ParentLoopLoc, diag::note_acc_enclosing_directive)
-          << getOpenACCDirectiveName(ParentDKind);
+          << getOpenACCName(ParentDKind);
       ErrorFound = true;
     }
     else if (ParentLoopKind.hasVectorClause() &&
@@ -1204,13 +1337,12 @@ bool Sema::ActOnOpenACCRegionStart(
       // with the gang, worker, or vector clause unless within a nested compute
       // region."
       Diag(StartLoc, diag::err_acc_loop_bad_nested_partitioning)
-          << getOpenACCDirectiveName(ParentDKind) << "vector"
-          << getOpenACCDirectiveName(DKind)
+          << getOpenACCName(ParentDKind) << "vector" << getOpenACCName(DKind)
           << (LoopKind.hasGangClause()
                   ? "gang"
                   : LoopKind.hasWorkerClause() ? "worker" : "vector");
       Diag(ParentLoopLoc, diag::note_acc_enclosing_directive)
-          << getOpenACCDirectiveName(ParentDKind);
+          << getOpenACCName(ParentDKind);
       ErrorFound = true;
     }
 
@@ -1293,10 +1425,10 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
       //
       // This restriction is not clearly specified in OpenACC 3.0.  See the
       // section "Loop Control Variables" in the Clang OpenACC design document.
-      if (!DVar.ReductionId.getName().isEmpty()) {
-        Diag(DVar.ReductionRefExpr->getEndLoc(),
+      if (DVar.DSAKind == ACC_DSA_reduction) {
+        Diag(DVar.DSARefExpr->getEndLoc(),
              diag::err_acc_reduction_on_loop_control_var)
-            << VD->getName() << DVar.ReductionRefExpr->getSourceRange();
+            << VD->getName() << DVar.DSARefExpr->getSourceRange();
         Diag(RefExpr->getExprLoc(), diag::note_acc_loop_control_var)
             << VD->getName() << RefExpr->getSourceRange();
         ErrorFound = true;
@@ -1309,14 +1441,14 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
       //   that will execute each iteration of the loop."
       //
       // See the section "Loop Control Variables" in the Clang OpenACC design
-      // document for the interpretation used here.
-      // DirStackTy::getImplicitBaseDA handles the case with a seq clause.
+      // document for the interpretation used here.  ImplicitDAAdder handles
+      // the case with a seq clause.
       //
       // To avoid a spurious diagnostic about a conflicting (redundant) DA,
       // skip any variable for which there's already an explicit private
       // clause.
       if (!DirStack->getLoopPartitioning().hasSeqExplicit() &&
-          DVar.BaseDAKind != ACC_BASE_DA_private) {
+          DVar.DSAKind != ACC_DSA_private) {
         // OpenACC 3.0 sec. 2.6 "Data Environment" L1023-1024:
         //   "Variables with predetermined data attributes may not appear in a
         //   data clause that conflicts with that data attribute."
@@ -1324,7 +1456,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
         // conflict except with a DA on the parent effective directive in a
         // combined directive.  See the section "Basic Data Attributes" in the
         // Clang OpenACC design document for further discussion.
-        assert(DVar.BaseDAKind == ACC_BASE_DA_unknown &&
+        assert(DVar.DSAKind == ACC_DSA_unknown &&
                "expected no explicit attribute when predetermined attribute");
         PrePrivate.push_back(RefExpr);
       }
@@ -1339,54 +1471,61 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
         ErrorFound = true;
     }
 
-    // ImplicitBaseDAAdder assumes predetermined and explicit DAs have no
-    // errors.
+    // ImplicitDAAdder assumes predetermined and explicit DAs have no errors.
     if (ErrorFound)
       return StmtError();
 
-    // For referenced variables, add implicit base DAs, possibly influenced
-    // by any implicit gang clauses added above.
-    ImplicitBaseDAAdder Adder(DirStack);
+    // For referenced variables, add implicit DAs, possibly influenced by any
+    // implicit gang clauses added above.
+    ImplicitDATable ImplicitDAs;
+    ImplicitDAAdder Adder(DirStack, ImplicitDAs);
     Adder.Visit(AStmt);
-    // Check default data attributes for referenced variables.
-    if (!Adder.getImplicitCopy().empty()) {
+
+    // Add implicit gang reductions, possibly due to any implicit copy clauses
+    // added above.
+    if (isOpenACCParallelDirective(DKind)) {
+      ImplicitGangReductionAdder ReductionAdder(DirStack, ImplicitDAs);
+      ReductionAdder.Visit(AStmt);
+    }
+
+    // Act on all implicit data attributes to convert them to clauses and to
+    // record them on the directive stack.
+    SmallVector<Expr *, 8> ExprVec;
+    if (ImplicitDAs.buildRefList(ACC_DMA_nomap, ExprVec)) {
+      ACCClause *Implicit = ActOnOpenACCNomapClause(ExprVec);
+      assert(Implicit && "expected successful implicit nomap");
+      ComputedClauses.push_back(Implicit);
+    }
+    if (ImplicitDAs.buildRefList(ACC_DMA_copy, ExprVec)) {
       ACCClause *Implicit = ActOnOpenACCCopyClause(
-          ACCC_copy, Adder.getImplicitCopy(), ACC_IMPLICIT, SourceLocation(),
-          SourceLocation(), SourceLocation());
+          ACCC_copy, ExprVec, ACC_IMPLICIT, SourceLocation(), SourceLocation(),
+          SourceLocation());
       // Implicit copy can be for an array, which can be of incomplete type,
       // which isn't permitted in copy, so we check for failure here.
       if (Implicit)
         ComputedClauses.push_back(Implicit);
     }
-    if (!Adder.getImplicitShared().empty()) {
-      ACCClause *Implicit = ActOnOpenACCSharedClause(
-          Adder.getImplicitShared());
+    if (ImplicitDAs.buildRefList(ACC_DSA_shared, ExprVec)) {
+      ACCClause *Implicit = ActOnOpenACCSharedClause(ExprVec);
       assert(Implicit && "expected successful implicit shared");
       ComputedClauses.push_back(Implicit);
     }
-    if (!Adder.getImplicitFirstprivate().empty()) {
+    if (ImplicitDAs.buildRefList(ACC_DSA_firstprivate, ExprVec)) {
       ACCClause *Implicit = ActOnOpenACCFirstprivateClause(
-          Adder.getImplicitFirstprivate(), ACC_IMPLICIT, SourceLocation(),
-          SourceLocation(), SourceLocation());
+          ExprVec, ACC_IMPLICIT, SourceLocation(), SourceLocation(),
+          SourceLocation());
       assert(Implicit && "expected successful implicit firstprivate");
       ComputedClauses.push_back(Implicit);
     }
-
-    // Add implicit gang reductions, possibly due to any implicit copy clauses
-    // added above.
-    if (isOpenACCParallelDirective(DKind)) {
-      ImplicitGangReductionAdder ReductionAdder(DirStack);
-      ReductionAdder.Visit(AStmt);
-      for (ReductionVar RV : ReductionAdder.getImplicitGangReductions()) {
-        ACCClause *Implicit = ActOnOpenACCReductionClause(
-            RV.RE, ACC_IMPLICIT, SourceLocation(), SourceLocation(),
-            SourceLocation(), SourceLocation(),
-            RV.ReductionClause->getNameInfo());
-        // Implicit reductions are copied from explicit reductions, which are
-        // validated already.
-        assert(Implicit && "expected successful implicit reduction");
-        ComputedClauses.push_back(Implicit);
-      }
+    for (auto I : ImplicitDAs.getImpliers(ACC_DSA_reduction)) {
+      ACCClause *Implicit = ActOnOpenACCReductionClause(
+          I.DRE, ACC_IMPLICIT, SourceLocation(), SourceLocation(),
+          SourceLocation(), SourceLocation(),
+          I.ReductionClause->getNameInfo());
+      // Implicit reductions are copied from explicit reductions, which are
+      // validated already.
+      assert(Implicit && "expected successful implicit reduction");
+      ComputedClauses.push_back(Implicit);
     }
   }
 
@@ -1479,7 +1618,7 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
     auto *LoopFor = dyn_cast_or_null<ForStmt>(LoopStmt);
     if (!LoopFor) {
       Diag(LoopStmt->getBeginLoc(), diag::err_acc_not_for)
-          << getOpenACCDirectiveName(DirStack->getRealDirective());
+          << getOpenACCName(DirStack->getRealDirective());
       auto CollapseClauses =
           ACCExecutableDirective::getClausesOfKind<ACCCollapseClause>(Clauses);
       if (CollapseClauses.begin() != CollapseClauses.end()) {
@@ -1518,8 +1657,8 @@ StmtResult Sema::ActOnOpenACCParallelLoopDirective(
   // We assume clauses apply only where they're allowed.  private and reduction
   // are singled out above because they apply in both places, so the above
   // clarifies that they are applied to the inner directive.  This
-  // understanding is critical to the implementations for DirStack::addBaseDA
-  // and DirStackTy::addReduction as well.
+  // understanding is critical to the implementations for DirStack::addDMA and
+  // DirStack::addDSA as well.
   SmallVector<ACCClause *, 5> ParallelClauses;
   SmallVector<ACCClause *, 5> LoopClauses;
   for (ACCClause *C : Clauses) {
@@ -1571,6 +1710,7 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr
   case ACCC_collapse:
     Res = ActOnOpenACCCollapseClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
+  case ACCC_nomap:
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
   case ACCC_##Name:
 #define OPENACC_CLAUSE_ALIAS_copyin(Name) \
@@ -1614,7 +1754,7 @@ getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
             << OASE->getSourceRange();
         if (!AllowSubarray)
           S.Diag(OASE->getExprLoc(), diag::err_acc_unsupported_subarray)
-              << getOpenACCClauseName(CKind) << OASE->getSourceRange();
+              << getOpenACCName(CKind) << OASE->getSourceRange();
         return nullptr;
       }
       RefExpr = OASE->getBase()->IgnoreParenImpCasts();
@@ -1628,7 +1768,7 @@ getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
         << ASE->getSourceRange();
     if (!AllowSubarray)
       S.Diag(ASE->getExprLoc(), diag::err_acc_unsupported_subarray)
-          << getOpenACCClauseName(CKind) << ASE->getSourceRange();
+          << getOpenACCName(CKind) << ASE->getSourceRange();
     return nullptr;
   }
 
@@ -1640,7 +1780,7 @@ getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
       S.Diag(ELoc, diag::err_acc_expected_base_var_name) << ERange;
       if (!AllowSubarray)
         S.Diag(ELoc, diag::err_acc_unsupported_subarray)
-            << getOpenACCClauseName(CKind) << ERange;
+            << getOpenACCName(CKind) << ERange;
     }
     else
       S.Diag(ELoc, diag::err_acc_expected_var_name_or_subarray_expr)
@@ -1651,7 +1791,7 @@ getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
   // Complain if we found a subarray but it's not allowed.
   if (IsSubarray && !AllowSubarray) {
     S.Diag(ELoc, diag::err_acc_unsupported_subarray)
-        << getOpenACCClauseName(CKind) << ERange;
+        << getOpenACCName(CKind) << ERange;
     return nullptr;
   }
 
@@ -1664,14 +1804,40 @@ static bool RequireCompleteTypeACC(
     OpenACCClauseKind CKind, SourceLocation ConstructLoc, SourceLocation ELoc)
 {
   if (SemaRef.RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
-                                  Determination, getOpenACCClauseName(CKind)))
+                                  Determination, getOpenACCName(CKind)))
   {
     if (Determination != ACC_EXPLICIT)
       SemaRef.Diag(ConstructLoc, diag::note_acc_clause_determination)
-          << Determination << getOpenACCClauseName(CKind);
+          << Determination << getOpenACCName(CKind);
     return true;
   }
   return false;
+}
+
+ACCClause *Sema::ActOnOpenACCNomapClause(ArrayRef<Expr *> VarList) {
+  SmallVector<Expr *, 8> Vars;
+  for (auto &RefExpr : VarList) {
+    assert(RefExpr && "NULL expr in OpenACC implicit nomap clause.");
+    auto *DE = dyn_cast_or_null<DeclRefExpr>(RefExpr->IgnoreParens());
+    assert(DE && "OpenACC implicit nomap clause for non-DeclRefExpr");
+    auto *VD = dyn_cast_or_null<VarDecl>(DE->getDecl());
+    assert(VD && "OpenACC implicit nomap clause for non-VarDecl");
+
+    if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_nomap,
+                          ACC_IMPLICIT))
+      Vars.push_back(RefExpr->IgnoreParens());
+    else
+      // Assert that the variable does not appear in an explicit data clause on
+      // the same directive.  If the OpenACC spec grows an explicit nomap
+      // clause one day, this assert should be removed.
+      llvm_unreachable("implicit nomap clause unexpectedly generated for"
+                       " variable in conflicting explicit data clause");
+  }
+
+  if (Vars.empty())
+    return nullptr;
+
+  return ACCNomapClause::Create(Context, Vars);
 }
 
 ACCClause *Sema::ActOnOpenACCCopyClause(
@@ -1702,8 +1868,8 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
                                DirStack->getConstructLoc(), ELoc))
       continue;
 
-    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_copy,
-                             Determination))
+    if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_copy,
+                          Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -1741,8 +1907,8 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
                                DirStack->getConstructLoc(), ELoc))
       continue;
 
-    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_copyin,
-                             ACC_EXPLICIT))
+    if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_copyin,
+                          ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -1780,8 +1946,8 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
                                DirStack->getConstructLoc(), ELoc))
       continue;
 
-    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_copyout,
-                             ACC_EXPLICIT))
+    if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_copyout,
+                          ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -1801,15 +1967,15 @@ ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
     auto *VD = dyn_cast_or_null<VarDecl>(DE->getDecl());
     assert(VD && "OpenACC implicit shared clause for non-VarDecl");
 
-    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(),
-                             ACC_BASE_DA_shared, ACC_IMPLICIT))
+    if (!DirStack->addDSA(VD, RefExpr->IgnoreParens(), ACC_DSA_shared,
+                          ACC_IMPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
     else
       // Assert that the variable does not appear in an explicit data clause on
       // the same directive.  If the OpenACC spec grows an explicit shared
       // clause one day, this assert should be removed.
       llvm_unreachable("implicit shared clause unexpectedly generated for"
-                       " variable in explicit data clause");
+                       " variable in conflicting explicit data clause");
   }
 
   if (Vars.empty())
@@ -1855,8 +2021,8 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
       continue;
     }
 
-    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(), ACC_BASE_DA_private,
-                             Determination))
+    if (!DirStack->addDSA(VD, RefExpr->IgnoreParens(), ACC_DSA_private,
+                          Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -1891,8 +2057,8 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(
                                DirStack->getConstructLoc(), ELoc))
       continue;
 
-    if (!DirStack->addBaseDA(VD, RefExpr->IgnoreParens(),
-                             ACC_BASE_DA_firstprivate, Determination))
+    if (!DirStack->addDSA(VD, RefExpr->IgnoreParens(), ACC_DSA_firstprivate,
+                          Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -2096,8 +2262,8 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     }
 
     // Record reduction item.
-    if (!DirStack->addReduction(VD, RefExpr->IgnoreParens(), ReductionId,
-                                Determination))
+    if (!DirStack->addDSA(VD, RefExpr->IgnoreParens(), ACC_DSA_reduction,
+                          Determination, ReductionId))
       Vars.push_back(RefExpr);
   }
   if (Vars.empty())
@@ -2126,13 +2292,13 @@ static PosIntResult IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
   if (!ValExpr->isIntegerConstantExpr(Result, SemaRef.Context)) {
     if (ErrorIfNotConst) {
       SemaRef.Diag(Loc, diag::err_acc_clause_not_ice)
-          << getOpenACCClauseName(CKind) << ValExpr->getSourceRange();
+          << getOpenACCName(CKind) << ValExpr->getSourceRange();
       return PosIntError;
     }
     return PosIntNonConst;
   } else if (!Result.isStrictlyPositive()) {
     SemaRef.Diag(Loc, diag::err_acc_clause_not_positive_ice)
-        << getOpenACCClauseName(CKind) << ValExpr->getSourceRange();
+        << getOpenACCName(CKind) << ValExpr->getSourceRange();
     return PosIntError;
   }
 
@@ -2162,6 +2328,7 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
   case ACCC_vector:
     Res = ActOnOpenACCVectorClause(StartLoc, EndLoc);
     break;
+  case ACCC_nomap:
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
   case ACCC_##Name:
 #define OPENACC_CLAUSE_ALIAS_copyin(Name) \
@@ -2266,7 +2433,7 @@ ACCClause *Sema::ActOnOpenACCVectorLengthClause(Expr *VectorLength,
     return nullptr;
   if (Res == PosIntNonConst)
     Diag(VectorLength->getExprLoc(), diag::warn_acc_clause_ignored_not_ice)
-        << getOpenACCClauseName(ACCC_vector_length)
+        << getOpenACCName(ACCC_vector_length)
         << VectorLength->getSourceRange();
   return new (Context) ACCVectorLengthClause(VectorLength, StartLoc, LParenLoc,
                                              EndLoc);
@@ -2861,6 +3028,12 @@ public:
     ExplicitClauseLocs L(D, C, C->getLParenLoc());
     return getDerived().RebuildOMPCollapseClause(
         C->getCollapse(), L.LocStart, L.LParenLoc, L.LocEnd);
+  }
+
+  OMPClauseResult TransformACCNomapClause(ACCExecutableDirective *D,
+                                          OpenMPDirectiveKind TDKind,
+                                          ACCNomapClause *C) {
+    return OMPClauseEmpty();
   }
 
   OMPClauseResult TransformACCCopyClause(ACCExecutableDirective *D,

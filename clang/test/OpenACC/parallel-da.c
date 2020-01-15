@@ -443,6 +443,7 @@ int main() {
   // DMP-PAR:                   ACCParallelDirective
   // DMP-NEXT:                    ACCNum_gangsClause
   // DMP-NEXT:                      IntegerLiteral {{.*}} 'int' 2
+
   // DMP-C-NEXT:                  ACCCopyClause
   // DMP-Ci-NEXT:                 ACCCopyinClause
   // DMP-Co-NEXT:                 ACCCopyoutClause
@@ -478,6 +479,26 @@ int main() {
   // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'shadowed' 'int'
   // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ci' 'const int'
   // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  // DMP-CCiCo-NEXT:              ACCSharedClause {{.*}} <implicit>
+  // DMP-F-NEXT:                  ACCNomapClause {{.*}} <implicit>
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'gi' 'int'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'li' 'int'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ci' 'const int'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  // DMP-CCiCoF-NOT:                DeclRefExpr {{.*}} 'gUnref' 'int'
+  // DMP-CCiCoF-NOT:                DeclRefExpr {{.*}} 'lUnref' 'int'
+
   // DMP-PAR-P-NEXT:              ACCPrivateClause
   // DMP-PAR-P-NOT:                 <implicit>
   // DMP-PAR-P-SAME:                {{$}}
@@ -505,7 +526,44 @@ int main() {
                                     // The test omits const when testing private.
   // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'ci' 'int'
   // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'ca' 'int [3]'
+  // DMP-PAR-P-NEXT:              ACCNomapClause {{.*}} <implicit>
+  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'gi' 'int'
+  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'li' 'int'
+  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'shadowed' 'int'
+                                    // The test omits const when testing private.
+  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'ci' 'int'
+  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'ca' 'int [3]'
+  // DMP-PAR-P-NOT:                 DeclRefExpr {{.*}} 'gUnref' 'int'
+  // DMP-PAR-P-NOT:                 DeclRefExpr {{.*}} 'lUnref' 'int'
+
+  // DMP-I-NEXT:                  ACCNomapClause {{.*}} <implicit>
+  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'gi' 'int'
+  // DMP-I-NEXT:                    DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'li' 'int'
+  // DMP-I-NEXT:                    DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'ci' 'const int'
   // DMP-I-NEXT:                  ACCCopyClause {{.*}} <implicit>
+  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  // DMP-I-NEXT:                  ACCSharedClause {{.*}} <implicit>
   // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'ga' 'int [2]'
   // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'gu' 'union U':'union U'
@@ -522,9 +580,11 @@ int main() {
   // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'lp' 'const int *'
   // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'shadowed' 'int'
   // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'ci' 'const int'
+
   // DMP-NEXT:                    impl: OMPTargetTeamsDirective
   // DMP-NEXT:                      OMPNum_teamsClause
   // DMP-NEXT:                        IntegerLiteral {{.*}} 'int' 2
+
   // DMP-CCiCo-NEXT:                OMPMapClause
   // DMP-F-NEXT:                    OMPFirstprivateClause
   // DMP-CCiCoF-NOT:                  <implicit>
@@ -554,6 +614,27 @@ int main() {
   // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'shadowed' 'int'
   // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'ci' 'const int'
   // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  // DMP-CCiCo-NEXT:                OMPSharedClause
+  // DMP-CCiCo-NOT:                   <implicit>
+  // DMP-CCiCo-SAME:                  {{$}}
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'gi' 'int'
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'li' 'int'
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'ci' 'const int'
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  // DMP-CCiCo-NOT:                   DeclRefExpr {{.*}} 'gUnref' 'int'
+  // DMP-CCiCo-NOT:                   DeclRefExpr {{.*}} 'lUnref' 'int'
+
   // DMP-PAR-P-NEXT:                OMPPrivateClause
   // DMP-PAR-P-NOT:                   <implicit>
   // DMP-PAR-P-SAME:                  {{$}}
@@ -581,7 +662,18 @@ int main() {
                                       // The test omits const when testing private.
   // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'ci' 'int'
   // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'ca' 'int [3]'
+
   // DMP-I-NEXT:                    OMPMapClause
+  // DMP-I-NOT:                       <implicit>
+  // DMP-I-SAME:                      {{$}}
+  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  // DMP-I-NEXT:                    OMPSharedClause
   // DMP-I-NOT:                       <implicit>
   // DMP-I-SAME:                      {{$}}
   // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'ga' 'int [2]'
@@ -602,8 +694,10 @@ int main() {
   // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'lp' 'const int *'
   // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'shadowed' 'int'
   // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'ci' 'const int'
+
   // DMP-PARLOOP:                 ACCLoopDirective
   // DMP-PARLOOP-NEXT:              ACCSeqClause
+
   // DMP-PARLOOP-P-NEXT:            ACCPrivateClause
   // DMP-PARLOOP-P-NOT:               <implicit>
   // DMP-PARLOOP-P-SAME:              {{$}}
@@ -689,8 +783,8 @@ int main() {
   // PRT-NOT:       #pragma
   //
   // PRT-A-I:                {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2){{(.*\\$[[:space:]])*.*$}}
-  // PRT-AO-I-NEXT:          {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu,ca) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,li,lt{{(_hi,lt_lw)?}},lp,shadowed,ci){{$}}
-  // PRT-O-I:                {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu,ca) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,li,lt{{(_hi,lt_lw)?}},lp,shadowed,ci){{$}}
+  // PRT-AO-I-NEXT:          {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu,ca) shared(ga,gs,gu,la,ls,lu,ca) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,li,lt{{(_hi,lt_lw)?}},lp,shadowed,ci){{$}}
+  // PRT-O-I:                {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu,ca) shared(ga,gs,gu,la,ls,lu,ca) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,li,lt{{(_hi,lt_lw)?}},lp,shadowed,ci){{$}}
   // PRT-OA-I-NEXT:          {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2){{(.*\\$[[:space:]])*.*$}}
   //
   // PRT-A-C0:               {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
@@ -702,24 +796,24 @@ int main() {
   // PRT-A-Co0:              {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{copyout\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copyout\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copyout\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
   // PRT-A-Co1:              {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcopyout\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopyout\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopyout\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
   // PRT-A-Co2:              {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_copyout\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copyout\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copyout\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-AO-C0-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca){{$}}
-  // PRT-AO-C1-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca){{$}}
-  // PRT-AO-C2-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca){{$}}
-  // PRT-AO-Ci0-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca){{$}}
-  // PRT-AO-Ci1-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca){{$}}
-  // PRT-AO-Ci2-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca){{$}}
-  // PRT-AO-Co0-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca){{$}}
-  // PRT-AO-Co1-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca){{$}}
-  // PRT-AO-Co2-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca){{$}}
-  // PRT-O-C0:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca){{$}}
-  // PRT-O-C1:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca){{$}}
-  // PRT-O-C2:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca){{$}}
-  // PRT-O-Ci0:              {{^ *}}#pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca){{$}}
-  // PRT-O-Ci1:              {{^ *}}#pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca){{$}}
-  // PRT-O-Ci2:              {{^ *}}#pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca){{$}}
-  // PRT-O-Co0:              {{^ *}}#pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca){{$}}
-  // PRT-O-Co1:              {{^ *}}#pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca){{$}}
-  // PRT-O-Co2:              {{^ *}}#pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca){{$}}
+  // PRT-AO-C0-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-AO-C1-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-AO-C2-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-AO-Ci0-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-AO-Ci1-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-AO-Ci2-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-AO-Co0-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-AO-Co1-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-AO-Co2-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-O-C0:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-O-C1:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-O-C2:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-O-Ci0:              {{^ *}}#pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-O-Ci1:              {{^ *}}#pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-O-Ci2:              {{^ *}}#pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-O-Co0:              {{^ *}}#pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-O-Co1:              {{^ *}}#pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  // PRT-O-Co2:              {{^ *}}#pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
   // PRT-OA-C0-NEXT:         {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
   // PRT-OA-C1-NEXT:         {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcopy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
   // PRT-OA-C2-NEXT:         {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
