@@ -274,6 +274,10 @@ OPENACC_PARALLEL_LOOP_CLAUSE(worker)
 OPENACC_PARALLEL_LOOP_CLAUSE(vector)
 OPENACC_PARALLEL_LOOP_CLAUSE(collapse)
 
+// The OpenACC 2.6 spec doesn't say that an acc parallel or acc parallel loop
+// cannot be nested within another acc construct, but gcc 7.3.0 and pgcc
+// 18.4-0 don't permit that for simple cases I've tried.
+
 // Parent directives allowed for 'parallel'.
 OPENACC_PARALLEL_PARENT(unknown)
 

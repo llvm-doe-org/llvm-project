@@ -487,6 +487,7 @@ bool DirStackTy::addDA(VarDecl *VD, Expr *E, typename DA::KindTy DAKind,
           << getOpenACCName(OtherDA::Kind(DVar));
       return true;
     }
+    // Complain for conflict with directive.
     if (isAllowedDAForDirective(Itr->EffectiveDKind, DAKind)) {
       DA::setReductionFields(!Added, DAKind, DVar, ReductionId);
       if (!Added) {
@@ -631,6 +632,8 @@ void Sema::EndOpenACCDABlock() {
 }
 
 namespace {
+/// See the section "Implicit Gang Clauses" in the Clang OpenACC design
+/// document.
 class ImplicitGangAdder : public StmtVisitor<ImplicitGangAdder> {
 public:
   void VisitACCExecutableDirective(ACCExecutableDirective *D) {
@@ -1252,9 +1255,6 @@ bool Sema::ActOnOpenACCRegionStart(
   OpenACCDirectiveKind ParentDKind =
       DirStack->getRealParentDirective(ParentLoc);
   if (!isAllowedParentForDirective(DKind, ParentDKind)) {
-    // The OpenACC 2.6 spec doesn't say that an acc parallel or acc parallel
-    // loop cannot be nested within another acc construct, but gcc 7.3.0 and
-    // pgcc 18.4-0 don't permit that for simple cases I've tried.
     if (ParentDKind == ACCD_unknown)
       Diag(StartLoc, diag::err_acc_orphaned_directive)
           << getOpenACCName(DKind);
@@ -1382,6 +1382,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     }
   }
 
+  // Compute implicit independent clause.
   llvm::SmallVector<ACCClause *, 8> ComputedClauses;
   bool ErrorFound = false;
   ComputedClauses.append(Clauses.begin(), Clauses.end());
@@ -1392,6 +1393,8 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     assert(Implicit);
     ComputedClauses.push_back(Implicit);
   }
+
+  // Complain for break statement in loop with independent clause.
   if (LoopKind.hasIndependent()) {
     SourceLocation BreakLoc = DirStack->getLoopBreakStatement();
     if (BreakLoc.isValid()) {
@@ -1469,8 +1472,8 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     if (ErrorFound)
       return StmtError();
 
-    // For referenced variables, add implicit DAs, possibly influenced by any
-    // implicit gang clauses added above.
+    // For referenced variables, add implicit DAs other than reductions,
+    // possibly influenced by any implicit gang clauses added above.
     ImplicitDATable ImplicitDAs;
     ImplicitDAAdder Adder(DirStack, ImplicitDAs);
     Adder.Visit(AStmt);
@@ -1523,6 +1526,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     }
   }
 
+  // Act on the directive.
   switch (DKind) {
   case ACCD_parallel:
     Res = ActOnOpenACCParallelDirective(
