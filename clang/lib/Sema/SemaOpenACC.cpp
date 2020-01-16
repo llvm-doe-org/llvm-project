@@ -2668,7 +2668,6 @@ public:
     // Transform OpenACC clauses.
     llvm::SmallVector<OMPClause *, 16> TClauses;
     size_t TClausesEmptyCount;
-    size_t NumClausesAdded = 0;
     transformACCClauses(D, OMPD_target_teams, TClauses, TClausesEmptyCount);
 
     // Transform associated statement.
@@ -2682,8 +2681,7 @@ public:
     // any.
     StmtResult Res;
     if (AssociatedStmt.isInvalid() ||
-        TClauses.size() != D->clauses().size() - TClausesEmptyCount +
-                           NumClausesAdded)
+        TClauses.size() != D->clauses().size() - TClausesEmptyCount)
       Res = StmtError();
     else
       Res = getDerived().RebuildOMPExecutableDirective(
