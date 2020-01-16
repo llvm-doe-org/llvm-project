@@ -523,18 +523,12 @@ bool DirStackTy::addDA(VarDecl *VD, Expr *E, typename DA::KindTy DAKind,
 
 DirStackTy::DAVarData DirStackTy::getTopDA(VarDecl *VD) {
   VD = VD->getCanonicalDecl();
-  DAVarData DVar;
-
-  if (Stack.empty()) {
-    // Not in OpenACC execution region and top scope was already checked.
-    return DVar;
-  }
-
+  assert(!Stack.empty() && "expected non-empty directive stack");
   auto I = Stack.rbegin();
-  if (I->DAMap.count(VD))
-    DVar = I->DAMap[VD];
-
-  return DVar;
+  auto DAItr = I->DAMap.find(VD);
+  if (DAItr != I->DAMap.end())
+    return DAItr->second;
+  return DAVarData();
 }
 
 void Sema::InitOpenACCDirectiveStack() {
