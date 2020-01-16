@@ -491,19 +491,19 @@ Notation
 For conciseness, we use the following notation when describing clauses
 and data attributes:
 
-* *pre* labels a data attribute that is predetermined by the compiler
-  (that is, cannot be overridden by an explicit clause) and is not
-  specified by an explicit clause.
-* *imp* labels a data attribute that is implicitly determined by the
-  compiler (that is, can be overridden by an explicit clause) and is
-  not specified by an explicit clause.
 * *exp* labels a clause, possibly specifying a data attribute, that is
   explicitly specified in the source.
-* *not* labels a clause that is not explicitly specified.
+* *pre* labels a data attribute that is predetermined by the compiler
+  (that is, cannot be overridden by an *exp* clause) and is not
+  specified by an *exp* clause.
+* *imp* labels a data attribute that is implicitly determined by the
+  compiler (that is, can be overridden by an *exp* clause) and is not
+  specified by an *exp* clause.
+* *not* labels a clause that is not *exp*.
 * The notation *L C* -> *L' C'* specifies that clause or data
   attribute *C* under the condition identified by label *L* maps to
   clause or data attribute *C'* under the condition identified by
-  label *L'*, where a label is *pre*, *imp*, *exp*, or *not*.
+  label *L'*, where a label is *exp*, *pre*, *imp*, or *not*.
 * The notation *L*|*L' C* -> *L'' C'* specifies both of the following
   mappings:
     * *L C* -> *L'' C'*
@@ -1076,12 +1076,12 @@ to OpenMP is as follows:
 
 * `acc parallel` -> `omp target teams`
 * Translation discards *imp* `nomap`.
-* *imp*|*exp* `copy` -> *exp* `map` with a `tofrom` map type.
-* *imp*|*exp* `copyin` -> *exp* `map` with a `to` map type.
-* *imp*|*exp* `copyout` -> *exp* `map` with a `from` map type.
+* *exp*|*imp* `copy` -> *exp* `map` with a `tofrom` map type.
+* *exp*|*imp* `copyin` -> *exp* `map` with a `to` map type.
+* *exp*|*imp* `copyout` -> *exp* `map` with a `from` map type.
 * *imp* `shared` -> *exp* `shared`
-* *imp*|*exp* `reduction` -> *exp* `reduction`
-* *imp*|*exp* `firstprivate` -> *exp* `firstprivate`
+* *exp*|*imp* `reduction` -> *exp* `reduction`
+* *exp*|*imp* `firstprivate` -> *exp* `firstprivate`
 * *exp* `private` -> *exp* `private`
 * *exp* `num_gangs` -> *exp* `num_teams`
 * If *exp* `num_workers` with a non-constant-expression argument, and
@@ -1131,7 +1131,7 @@ following are true:
     * The third case (without the other two) would certainly be the
       more straightforward case to improve because OpenACC specifies
       that the loop iterations are then required to be
-      data-independent (that is, *imp*|*exp* `independent`).  This is
+      data-independent (that is, *exp*|*imp* `independent`).  This is
       a case where a simple AST-level analysis could go a long way for
       existing OpenACC applications that expect a descriptive
       interpretation: Clacc could add whichever of `worker` or
@@ -1169,7 +1169,7 @@ clauses to OpenMP is as follows:
           here and is implemented instead via an *imp* `reduction` on
           the `acc parallel`, as discussed under "Semantic
           Clarifications" above.
-* Otherwise, *pre*|*exp* `private` -> wrap the loop in a compound
+* Otherwise, *exp*|*pre* `private` -> wrap the loop in a compound
   statement and declare an uninitialized local copy of the variable.
   Notes:
     * exp `private` just needs to be local to the one thread executing
@@ -1213,7 +1213,7 @@ In that case, Clacc's current mapping of the `acc loop` directive and
 its clauses to OpenMP is as follows:
 
 * `acc loop` -> `omp`
-* *imp*|*exp* `gang` -> `distribute`
+* *exp*|*imp* `gang` -> `distribute`
 * *exp* `worker` -> `parallel for`
 * If neither this nor any ancestor `acc loop` is gang-partitioned or
   worker-partitioned, then -> `parallel for` and -> *exp*
@@ -1261,7 +1261,7 @@ its clauses to OpenMP is as follows:
       refer to a variable from the enclosing scope.
 * If *exp* `vector` and the loop control variable is just assigned
   instead of declared in the init of the attached `for` loop, then
-  *pre*|*exp* `private` for that variable -> *pre* `linear`.  Then,
+  *exp*|*pre* `private` for that variable -> *pre* `linear`.  Then,
   wrap the `omp simd` in a compound statement, and declare an
   uninitialized local copy of the loop control variable.  Notes:
     * For `omp simd`, OpenMP 4.5 specifies *pre* `linear` here
@@ -1275,7 +1275,7 @@ its clauses to OpenMP is as follows:
       rely on the behavior of *pre* `linear` and thus on Clang's or
       some other target compiler's OpenMP implementation to extract it
       for us.
-* In all other cases, *pre*|*exp* `private` -> *exp* `private`.
+* In all other cases, *exp*|*pre* `private` -> *exp* `private`.
 * If *exp* `worker` or *exp* `vector`, then *exp* `reduction` -> *exp*
   `reduction`.
 * Else, translation discards *exp* `reduction`.  Notes:
