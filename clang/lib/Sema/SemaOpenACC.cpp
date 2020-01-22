@@ -610,7 +610,7 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
   case ACCC_vector:
   case ACCC_collapse:
   case ACCC_unknown:
-    llvm_unreachable("expected explicit variable list clause");
+    llvm_unreachable("expected explicit clause that accepts a variable list");
   }
   return Res;
 }
@@ -774,7 +774,7 @@ public:
     case ACC_DMA_copyin:
     case ACC_DMA_copyout:
     case ACC_DMA_unknown:
-      llvm_unreachable("unexpected implicit DMA");
+      llvm_unreachable("expected DMA that can be implicit");
     }
   }
   ImpliersTy &getImpliers(OpenACCDSAKind DSAKind) {
@@ -787,7 +787,7 @@ public:
       return FirstprivateImpliers;
     case ACC_DSA_private:
     case ACC_DSA_unknown:
-      llvm_unreachable("unexpected implicit DSA");
+      llvm_unreachable("expected DSA that can be implicit");
     }
   }
   template <typename DAKindTy>
@@ -1727,7 +1727,7 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr
   case ACCC_worker:
   case ACCC_vector:
   case ACCC_unknown:
-    llvm_unreachable("Clause is not allowed.");
+    llvm_unreachable("expected clause that takes a single expression");
   }
   return Res;
 }
@@ -2343,7 +2343,7 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
   case ACCC_vector_length:
   case ACCC_collapse:
   case ACCC_unknown:
-    llvm_unreachable("Clause is not allowed.");
+    llvm_unreachable("expected clause that accepts no arguments");
   }
   return Res;
 }

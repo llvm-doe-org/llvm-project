@@ -10138,7 +10138,7 @@ public:
   /// Called on well-formed '\#pragma acc parallel' after parsing
   /// of the associated statement.
   StmtResult ActOnOpenACCParallelDirective(
-      ArrayRef<ACCClause *> Clasues, Stmt *AStmt, SourceLocation StartLoc,
+      ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
       SourceLocation EndLoc, bool NestedWorkerPartitioning);
   /// Called on well-formed '\#pragma acc loop' after parsing
   /// of the associated statement.
@@ -10191,17 +10191,17 @@ public:
       const DeclarationNameInfo &ReductionId);
   /// Called for implicit 'nomap' clause.
   ACCClause *ActOnOpenACCNomapClause(ArrayRef<Expr *> VarList);
-  /// Called for well-formed 'copy' clause.
+  /// Called for well-formed 'copy' clause or an alias.
   ACCClause *ActOnOpenACCCopyClause(
       OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
       OpenACCDetermination Determination, SourceLocation StartLoc,
       SourceLocation LParenLoc, SourceLocation EndLoc);
-  /// Called for well-formed 'copyin' clause.
+  /// Called for well-formed 'copyin' clause or an alias.
   ACCClause *ActOnOpenACCCopyinClause(
       OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
       SourceLocation StartLoc, SourceLocation LParenLoc,
       SourceLocation EndLoc);
-  /// Called for well-formed 'copyout' clause.
+  /// Called for well-formed 'copyout' clause or an alias.
   ACCClause *ActOnOpenACCCopyoutClause(
       OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
       SourceLocation StartLoc, SourceLocation LParenLoc,

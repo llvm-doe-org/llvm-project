@@ -9474,9 +9474,8 @@ StmtResult TreeTransform<Derived>::TransformACCExecutableDirective(
       Body = getDerived().TransformStmt(CS);
     }
     AssociatedStmt = getDerived().getSema().ActOnOpenACCRegionEnd(Body);
-    if (AssociatedStmt.isInvalid()) {
+    if (AssociatedStmt.isInvalid())
       return StmtError();
-    }
   }
   if (TClauses.size() != Clauses.size())
     return StmtError();
