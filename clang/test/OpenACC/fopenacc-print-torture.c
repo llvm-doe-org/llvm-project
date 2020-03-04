@@ -51,9 +51,11 @@ int main() {
   // PRT-NEXT:  float f = 0;
   // PRT-NEXT:  int non_const_expr = 2;
   // PRT-NEXT:  int var, i;
+  // PRT-NEXT:  const int *ptr = 0;
   float f = 0;
   int non_const_expr = 2;
   int var, i;
+  const int *ptr = 0;
 
   //--------------------------------------------------
   // Directive only rewrite, not nested.
@@ -154,14 +156,22 @@ int main() {
   //--------------------------------------------------
   // Full construct rewrite, outer directive only.
   //
-  // Check for corruption due to the way Clang records the end location.
-  // Clang selects different end tokens in different cases, and Clang records
-  // the start location not end location of that end token as the end location
-  // of the associated statement.  RewriteOpenACC has to adjust for all these
-  // cases.
+  // Check for corruption due to the way Clang records the end location of a
+  // statement.  RewriteOpenACC and the getConstructRange function it calls
+  // on ACCExecutableDirective have to handle many cases.  Important issues
+  // include whether the end location of the outer ACCExecutableDirective's
+  // associated statement is actually for its last token or the token before
+  // that, whether each of those tokens is represented by any descendant node,
+  // and whether each of those tokens is part of a macro expansion.
+  // fopenacc-print-messages.c covers macro expansion cases that cannot be
+  // handled and so produce error diagnostics.
+  //
+  // FIXME: In the cases of macro expansions within associated statements, the
+  // OpenMP version is fully expanded.  Eventually, we'd like to prevent that.
   //--------------------------------------------------
 
-  // Null statement: Clang selects semicolon as end token.
+  // Null statement: There are no descendants, and the end location is from the
+  // final semicolon.
 
   // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
@@ -197,9 +207,10 @@ int main() {
   for (int i = 0; i < 5; ++i)
     ;
 
+  //    PRT-NEXT:  #define MAC for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc parallel loop vector
-  //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:  MAC
   //  PRT-A-NEXT:    ;
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams
@@ -221,22 +232,26 @@ int main() {
   //  PRT-O-NEXT:  }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
-  // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  // MAC
   // PRT-OA-NEXT:  //   ;
   // PRT-OA-NEXT:  // ^----------ACC----------^
+  //    PRT-NEXT:  #undef MAC
+  #define MAC for (i = 0; i < 5; ++i)
   #pragma acc parallel loop vector
-  for (i = 0; i < 5; ++i)
+  MAC
     ;
+  #undef MAC
 
-  // Compound statement: Clang selects closing brace as end token.
+  // Compound statement: The end location is from the closing brace, which is
+  // not a descendant.
 
+  //    PRT-NEXT:  #define MAC var = non_const_expr;
   // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   //  PRT-A-NEXT:  #pragma acc loop worker
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i) {
   //  PRT-A-NEXT:    var = 5;
-  //  PRT-A-NEXT:    var = non_const_expr;
-  //  PRT-A-NEXT:  }
+  //  PRT-A-NEXT:    MAC}
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
@@ -264,15 +279,16 @@ int main() {
   // PRT-OA-NEXT:  // #pragma acc loop worker
   // PRT-OA-NEXT:  // for (int i = 0; i < 5; ++i) {
   // PRT-OA-NEXT:  //   var = 5;
-  // PRT-OA-NEXT:  //   var = non_const_expr;
-  // PRT-OA-NEXT:  // }
+  // PRT-OA-NEXT:  //   MAC}
   // PRT-OA-NEXT:  // ^----------ACC----------^
+  //    PRT-NEXT:  #undef MAC
+  #define MAC var = non_const_expr;
   #pragma acc parallel num_workers(non_const_expr)
   #pragma acc loop worker
   for (int i = 0; i < 5; ++i) {
     var = 5;
-    var = non_const_expr;
-  }
+    MAC}
+  #undef MAC
 
   // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc parallel loop vector
@@ -315,8 +331,10 @@ int main() {
     var = non_const_expr;
   }
 
-  // Expression statement: Clang selects token before semicolon as end token.
+  // Expression statement: The end location is from the token before the
+  // semicolon, and only the preceding token might be a descendant.
 
+  // Preceding token is a descendant.
   // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   //  PRT-A-NEXT:  #pragma acc loop worker
@@ -351,10 +369,12 @@ int main() {
   for (int i = 0; i < 5; ++i)
     var = non_const_expr;
 
+  // Preceding token is a descendant and is expanded from a macro.
+  //    PRT-NEXT:  #define MAC non_const_expr
   // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc parallel loop vector
   //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
-  //  PRT-A-NEXT:    var = non_const_expr ;
+  //  PRT-A-NEXT:    var = MAC ;
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
   // PRT-AO-NEXT:  // {
@@ -376,23 +396,397 @@ int main() {
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
-  // PRT-OA-NEXT:  //   var = non_const_expr ;
+  // PRT-OA-NEXT:  //   var = MAC ;
+  // PRT-OA-NEXT:  // ^----------ACC----------^
+  //    PRT-NEXT:  #undef MAC
+  #define MAC non_const_expr
+  #pragma acc parallel loop vector
+  for (i = 0; i < 5; ++i)
+    var = MAC ;
+  #undef MAC
+
+  // Preceding token is closing parenthesis in ParenExpr.
+  //    PRT-NEXT:  #define MAC (non_const_expr)
+  // PRT-AO-NEXT:  // v----------ACC----------v
+  //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
+  //  PRT-A-NEXT:  #pragma acc loop worker
+  //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:    var = MAC ;
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
+  // PRT-AO-NEXT:  // {
+  // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
+  // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(var,non_const_expr)
+  // PRT-AO-NEXT:  //         #pragma omp parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
+  // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //                 var = (non_const_expr);
+  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
+  //
+  // PRT-OA-NEXT:  // v----------OMP----------v
+  //  PRT-O-NEXT:  {
+  //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
+  //  PRT-O-NEXT:      #pragma omp target teams firstprivate(var,non_const_expr)
+  //  PRT-O-NEXT:          #pragma omp parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
+  //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                  var = (non_const_expr);
+  //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:  // #pragma acc parallel num_workers(non_const_expr)
+  // PRT-OA-NEXT:  // #pragma acc loop worker
+  // PRT-OA-NEXT:  // for (int i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  //   var = MAC ;
+  // PRT-OA-NEXT:  // ^----------ACC----------^
+  //    PRT-NEXT:  #undef MAC
+  #define MAC (non_const_expr)
+  #pragma acc parallel num_workers(non_const_expr)
+  #pragma acc loop worker
+  for (int i = 0; i < 5; ++i)
+    var = MAC ;
+  #undef MAC
+
+  // Preceding token is closing parenthesis in CallExpr.
+  //    PRT-NEXT:  #define MAC printf
+  // PRT-AO-NEXT:  // v----------ACC----------v
+  //  PRT-A-NEXT:  #pragma acc parallel loop vector
+  //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:    MAC("hello world\n");
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
+  // PRT-AO-NEXT:  // #pragma omp target teams
+  // PRT-AO-NEXT:  // {
+  // PRT-AO-NEXT:  //     int i;
+  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1)
+  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //             printf("hello world\n");
+  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
+  //
+  // PRT-OA-NEXT:  // v----------OMP----------v
+  //  PRT-O-NEXT:  #pragma omp target teams
+  //  PRT-O-NEXT:  {
+  //  PRT-O-NEXT:      int i;
+  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1)
+  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:              printf("hello world\n");
+  //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:  // #pragma acc parallel loop vector
+  // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  //   MAC("hello world\n");
+  // PRT-OA-NEXT:  // ^----------ACC----------^
+  //    PRT-NEXT:  #undef MAC
+  #define MAC printf
+  #pragma acc parallel loop vector
+  for (i = 0; i < 5; ++i)
+    MAC("hello world\n");
+  #undef MAC
+
+  // Preceding token is closing parenthesis in GenericSelectionExpr.
+  // PRT-AO-NEXT:  // v----------ACC----------v
+  //  PRT-A-NEXT:  #pragma acc parallel loop vector
+  //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:    var = _Generic(var, int : 0, default : 1);
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
+  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
+  // PRT-AO-NEXT:  // {
+  // PRT-AO-NEXT:  //     int i;
+  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var)
+  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //             var = _Generic(var, int: 0, default: 1);
+  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
+  //
+  // PRT-OA-NEXT:  // v----------OMP----------v
+  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
+  //  PRT-O-NEXT:  {
+  //  PRT-O-NEXT:      int i;
+  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var)
+  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:              var = _Generic(var, int: 0, default: 1);
+  //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:  // #pragma acc parallel loop vector
+  // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  //   var = _Generic(var, int : 0, default : 1);
   // PRT-OA-NEXT:  // ^----------ACC----------^
   #pragma acc parallel loop vector
   for (i = 0; i < 5; ++i)
-    var = non_const_expr ;
+    var = _Generic(var, int : 0, default : 1);
+
+  // Preceding token is closing brace in InitListExpr.
+  // PRT-AO-NEXT:  // v----------ACC----------v
+  //  PRT-A-NEXT:  #pragma acc parallel loop vector
+  //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:    ptr = (int[]){0,1};
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
+  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(ptr)
+  // PRT-AO-NEXT:  // {
+  // PRT-AO-NEXT:  //     int i;
+  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(ptr)
+  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //             ptr = (int [2]){0, 1};
+  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
+  //
+  // PRT-OA-NEXT:  // v----------OMP----------v
+  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(ptr)
+  //  PRT-O-NEXT:  {
+  //  PRT-O-NEXT:      int i;
+  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(ptr)
+  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:              ptr = (int [2]){0, 1};
+  //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:  // #pragma acc parallel loop vector
+  // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  //   ptr = (int[]){0,1};
+  // PRT-OA-NEXT:  // ^----------ACC----------^
+  #pragma acc parallel loop vector
+  for (i = 0; i < 5; ++i)
+    ptr = (int[]){0,1};
+
+  // Preceding token is closing bracket in ArraySubscriptExpr.
+  // PRT-AO-NEXT:  // v----------ACC----------v
+  //  PRT-A-NEXT:  #pragma acc parallel loop vector
+  //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:    var = ptr[0];
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
+  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,ptr)
+  // PRT-AO-NEXT:  // {
+  // PRT-AO-NEXT:  //     int i;
+  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var,ptr)
+  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //             var = ptr[0];
+  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
+  //
+  // PRT-OA-NEXT:  // v----------OMP----------v
+  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,ptr)
+  //  PRT-O-NEXT:  {
+  //  PRT-O-NEXT:      int i;
+  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var,ptr)
+  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:              var = ptr[0];
+  //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:  // #pragma acc parallel loop vector
+  // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  //   var = ptr[0];
+  // PRT-OA-NEXT:  // ^----------ACC----------^
+  #pragma acc parallel loop vector
+  for (i = 0; i < 5; ++i)
+    var = ptr[0];
+
+  // Preceding token is closing parenthesis in UnaryExprOrTypeTraitExprClass
+  // for sizeof(type), which has no descendant.
+  // PRT-AO-NEXT:  // v----------ACC----------v
+  //  PRT-A-NEXT:  #pragma acc parallel loop vector
+  //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:    var = sizeof(int);
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
+  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
+  // PRT-AO-NEXT:  // {
+  // PRT-AO-NEXT:  //     int i;
+  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var)
+  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //             var = sizeof(int);
+  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
+  //
+  // PRT-OA-NEXT:  // v----------OMP----------v
+  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
+  //  PRT-O-NEXT:  {
+  //  PRT-O-NEXT:      int i;
+  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var)
+  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:              var = sizeof(int);
+  //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:  // #pragma acc parallel loop vector
+  // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  //   var = sizeof(int);
+  // PRT-OA-NEXT:  // ^----------ACC----------^
+  #pragma acc parallel loop vector
+  for (i = 0; i < 5; ++i)
+    var = sizeof(int);
+
+  // Preceding token is closing parenthesis in UnaryExprOrTypeTraitExprClass
+  // for _Alignof(type), which has no descendant.
+  // PRT-AO-NEXT:  // v----------ACC----------v
+  //  PRT-A-NEXT:  #pragma acc parallel loop vector
+  //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:    var = _Alignof(int);
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
+  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
+  // PRT-AO-NEXT:  // {
+  // PRT-AO-NEXT:  //     int i;
+  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var)
+  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //             var = _Alignof(int);
+  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
+  //
+  // PRT-OA-NEXT:  // v----------OMP----------v
+  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
+  //  PRT-O-NEXT:  {
+  //  PRT-O-NEXT:      int i;
+  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var)
+  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:              var = _Alignof(int);
+  //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:  // #pragma acc parallel loop vector
+  // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  //   var = _Alignof(int);
+  // PRT-OA-NEXT:  // ^----------ACC----------^
+  #pragma acc parallel loop vector
+  for (i = 0; i < 5; ++i)
+    var = _Alignof(int);
+
+  // Preceding token is closing parenthesis in UnaryExprOrTypeTraitExprClass
+  // for sizeof(variable-array-type), which has a descendant.
+  // PRT-AO-NEXT:  // v----------ACC----------v
+  //  PRT-A-NEXT:  #pragma acc parallel loop vector
+  //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:    var = sizeof(int[i]);
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
+  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
+  // PRT-AO-NEXT:  // {
+  // PRT-AO-NEXT:  //     int i;
+  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var)
+  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //             var = sizeof(int [i]);
+  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
+  //
+  // PRT-OA-NEXT:  // v----------OMP----------v
+  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
+  //  PRT-O-NEXT:  {
+  //  PRT-O-NEXT:      int i;
+  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var)
+  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:              var = sizeof(int [i]);
+  //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:  // #pragma acc parallel loop vector
+  // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  //   var = sizeof(int[i]);
+  // PRT-OA-NEXT:  // ^----------ACC----------^
+  #pragma acc parallel loop vector
+  for (i = 0; i < 5; ++i)
+    var = sizeof(int[i]);
+
+  // Preceding token is closing parenthesis in UnaryExprOrTypeTraitExprClass
+  // for _Alignof(variable-array-type), which has a descendant.
+  // PRT-AO-NEXT:  // v----------ACC----------v
+  //  PRT-A-NEXT:  #pragma acc parallel loop vector
+  //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:    var = _Alignof(int[i]);
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
+  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
+  // PRT-AO-NEXT:  // {
+  // PRT-AO-NEXT:  //     int i;
+  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var)
+  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //             var = _Alignof(int [i]);
+  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
+  //
+  // PRT-OA-NEXT:  // v----------OMP----------v
+  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
+  //  PRT-O-NEXT:  {
+  //  PRT-O-NEXT:      int i;
+  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var)
+  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:              var = _Alignof(int [i]);
+  //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:  // #pragma acc parallel loop vector
+  // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  //   var = _Alignof(int[i]);
+  // PRT-OA-NEXT:  // ^----------ACC----------^
+  #pragma acc parallel loop vector
+  for (i = 0; i < 5; ++i)
+    var = _Alignof(int[i]);
+
+  // Preceding token is not a closing parenthesis in
+  // UnaryExprOrTypeTraitExprClass for sizeof expr, which has a descendant.
+  // PRT-AO-NEXT:  // v----------ACC----------v
+  //  PRT-A-NEXT:  #pragma acc parallel loop vector
+  //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:    var = sizeof i;
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
+  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
+  // PRT-AO-NEXT:  // {
+  // PRT-AO-NEXT:  //     int i;
+  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var)
+  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //             var = sizeof i;
+  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
+  //
+  // PRT-OA-NEXT:  // v----------OMP----------v
+  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
+  //  PRT-O-NEXT:  {
+  //  PRT-O-NEXT:      int i;
+  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var)
+  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:              var = sizeof i;
+  //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:  // #pragma acc parallel loop vector
+  // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  //   var = sizeof i;
+  // PRT-OA-NEXT:  // ^----------ACC----------^
+  #pragma acc parallel loop vector
+  for (i = 0; i < 5; ++i)
+    var = sizeof i;
+
+  // Preceding token is closing parenthesis in UnaryExprOrTypeTraitExprClass
+  // for sizeof(expr), which has a ParenExpr descendant.
+  // PRT-AO-NEXT:  // v----------ACC----------v
+  //  PRT-A-NEXT:  #pragma acc parallel loop vector
+  //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:    var = sizeof(i);
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
+  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
+  // PRT-AO-NEXT:  // {
+  // PRT-AO-NEXT:  //     int i;
+  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var)
+  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //             var = sizeof (i);
+  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
+  //
+  // PRT-OA-NEXT:  // v----------OMP----------v
+  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
+  //  PRT-O-NEXT:  {
+  //  PRT-O-NEXT:      int i;
+  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var)
+  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:              var = sizeof (i);
+  //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:  // #pragma acc parallel loop vector
+  // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  //   var = sizeof(i);
+  // PRT-OA-NEXT:  // ^----------ACC----------^
+  #pragma acc parallel loop vector
+  for (i = 0; i < 5; ++i)
+    var = sizeof(i);
 
   //--------------------------------------------------
   // Full construct rewrite, inner directive only.
   //--------------------------------------------------
 
-  // Null statement: Clang selects semicolon as end token.
+  // Null statement: There are no descendants, and the end location is from the
+  // final semicolon.
 
+  //    PRT-NEXT:  #define MAC (i = 0; i < 5; ++i)
   //  PRT-A-NEXT:  #pragma acc parallel
   // PRT-AO-NEXT:  // #pragma omp target teams
   // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc loop vector
-  //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:  for MAC
   //  PRT-A-NEXT:    ;
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
@@ -414,13 +808,16 @@ int main() {
   //  PRT-O-NEXT:  }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc loop vector
-  // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  // for MAC
   // PRT-OA-NEXT:  //   ;
   // PRT-OA-NEXT:  // ^----------ACC----------^
+  //    PRT-NEXT:  #undef MAC
+  #define MAC (i = 0; i < 5; ++i)
   #pragma acc parallel
   #pragma acc loop vector
-  for (i = 0; i < 5; ++i)
+  for MAC
     ;
+  #undef MAC
 
   //  PRT-A-NEXT:  #pragma acc parallel loop worker
   // PRT-AO-NEXT:  // #pragma omp target teams
@@ -464,15 +861,17 @@ int main() {
       ;
   }
 
-  // Compound statement: Clang selects closing brace as end token.
+  // Compound statement: The end location is from the closing brace, which is
+  // not a descendant.
 
+  //    PRT-NEXT:  #define MAC var = non_const_expr;
   //  PRT-A-NEXT:  #pragma acc parallel
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
   // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc loop vector
   //  PRT-A-NEXT:  for (i = 0; i < 5; ++i) {
   //  PRT-A-NEXT:    var = 5;
-  //  PRT-A-NEXT:    var = non_const_expr ;
+  //  PRT-A-NEXT:    MAC
   //  PRT-A-NEXT:  }
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
@@ -500,15 +899,18 @@ int main() {
   // PRT-OA-NEXT:  // #pragma acc loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i) {
   // PRT-OA-NEXT:  //   var = 5;
-  // PRT-OA-NEXT:  //   var = non_const_expr ;
+  // PRT-OA-NEXT:  //   MAC
   // PRT-OA-NEXT:  // }
   // PRT-OA-NEXT:  // ^----------ACC----------^
+  //    PRT-NEXT:  #undef MAC
+  #define MAC var = non_const_expr;
   #pragma acc parallel
   #pragma acc loop vector
   for (i = 0; i < 5; ++i) {
     var = 5;
-    var = non_const_expr ;
+    MAC
   }
+  #undef MAC
 
   //  PRT-A-NEXT:  #pragma acc parallel loop worker
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
@@ -562,42 +964,10 @@ int main() {
     }
   }
 
-  // Expression statement: Clang selects token before semicolon as end token.
+  // Expression statement: The end location is from the token before the
+  // semicolon, and only the preceding token might be a descendant.
 
-  //  PRT-A-NEXT:  #pragma acc parallel
-  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
-  // PRT-AO-NEXT:  // v----------ACC----------v
-  //  PRT-A-NEXT:  #pragma acc loop vector
-  //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
-  //  PRT-A-NEXT:    var = non_const_expr ;
-  // PRT-AO-NEXT:  // ---------ACC->OMP--------
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
-  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             var = non_const_expr;
-  // PRT-AO-NEXT:  // }
-  // PRT-AO-NEXT:  // ^----------OMP----------^
-  //
-  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,non_const_expr)
-  // PRT-OA-NEXT:  // #pragma acc parallel
-  // PRT-OA-NEXT:  // v----------OMP----------v
-  //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
-  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              var = non_const_expr;
-  //  PRT-O-NEXT:  }
-  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
-  // PRT-OA-NEXT:  // #pragma acc loop vector
-  // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
-  // PRT-OA-NEXT:  //   var = non_const_expr ;
-  // PRT-OA-NEXT:  // ^----------ACC----------^
-  #pragma acc parallel
-  #pragma acc loop vector
-  for (i = 0; i < 5; ++i)
-    var = non_const_expr ;
-
+  // Preceding token is a descendant.
   //  PRT-A-NEXT:  #pragma acc parallel loop worker
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
   // PRT-AO-NEXT:  // #pragma omp parallel for shared(var,non_const_expr)
@@ -638,6 +1008,127 @@ int main() {
     #pragma acc loop vector
     for (i = 0; i < 5; ++i)
       var = non_const_expr;
+  }
+
+  // Preceding token is a descendant and is expanded from a macro.
+  //    PRT-NEXT:  #define MAC for (i = 0; i < 5; ++i) \
+  //    PRT-NEXT:                var = non_const_expr
+  //  PRT-A-NEXT:  #pragma acc parallel
+  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
+  // PRT-AO-NEXT:  // v----------ACC----------v
+  //  PRT-A-NEXT:  #pragma acc loop vector
+  //  PRT-A-NEXT:  MAC;
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
+  // PRT-AO-NEXT:  // {
+  // PRT-AO-NEXT:  //     int i;
+  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //             var = non_const_expr;
+  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
+  //
+  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,non_const_expr)
+  // PRT-OA-NEXT:  // #pragma acc parallel
+  // PRT-OA-NEXT:  // v----------OMP----------v
+  //  PRT-O-NEXT:  {
+  //  PRT-O-NEXT:      int i;
+  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:              var = non_const_expr;
+  //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:  // #pragma acc loop vector
+  // PRT-OA-NEXT:  // MAC;
+  // PRT-OA-NEXT:  // ^----------ACC----------^
+  //    PRT-NEXT:  #undef MAC
+  #define MAC for (i = 0; i < 5; ++i) \
+                var = non_const_expr
+  #pragma acc parallel
+  #pragma acc loop vector
+  MAC;
+  #undef MAC
+
+  // Preceding token is closing parenthesis in ParenExpr and is expanded from
+  // a macro.
+  //    PRT-NEXT:  #define MAC non_const_expr)
+  //  PRT-A-NEXT:  #pragma acc parallel
+  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
+  // PRT-AO-NEXT:  // v----------ACC----------v
+  //  PRT-A-NEXT:  #pragma acc loop vector
+  //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:    var = (MAC;
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
+  // PRT-AO-NEXT:  // {
+  // PRT-AO-NEXT:  //     int i;
+  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //             var = (non_const_expr);
+  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  // ^----------OMP----------^
+  //
+  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,non_const_expr)
+  // PRT-OA-NEXT:  // #pragma acc parallel
+  // PRT-OA-NEXT:  // v----------OMP----------v
+  //  PRT-O-NEXT:  {
+  //  PRT-O-NEXT:      int i;
+  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:              var = (non_const_expr);
+  //  PRT-O-NEXT:  }
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:  // #pragma acc loop vector
+  // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  //   var = (MAC;
+  // PRT-OA-NEXT:  // ^----------ACC----------^
+  //    PRT-NEXT:  #undef MAC
+  #define MAC non_const_expr)
+  #pragma acc parallel
+  #pragma acc loop vector
+  for (i = 0; i < 5; ++i)
+    var = (MAC;
+  #undef MAC
+
+  // Preceding token is closing parenthesis in CallExpr.
+  //  PRT-A-NEXT:  #pragma acc parallel loop gang
+  // PRT-AO-NEXT:  // #pragma omp target teams
+  // PRT-AO-NEXT:  // #pragma omp distribute
+  //  PRT-A-NEXT:  for (int j = 0; j < 5; ++j) {
+  // PRT-AO-NEXT:    // v----------ACC----------v
+  //  PRT-A-NEXT:    #pragma acc loop vector
+  //  PRT-A-NEXT:    for (i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:      printf("hello world\n");
+  // PRT-AO-NEXT:    // ---------ACC->OMP--------
+  // PRT-AO-NEXT:    // {
+  // PRT-AO-NEXT:    //     int i;
+  // PRT-AO-NEXT:    //     #pragma omp simd
+  // PRT-AO-NEXT:    //         for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:    //             printf("hello world\n");
+  // PRT-AO-NEXT:    // }
+  // PRT-AO-NEXT:    // ^----------OMP----------^
+  //  PRT-A-NEXT:  }
+  //
+  //  PRT-O-NEXT:  #pragma omp target teams
+  //  PRT-O-NEXT:  #pragma omp distribute
+  // PRT-OA-NEXT:  // #pragma acc parallel loop gang
+  //  PRT-O-NEXT:  for (int j = 0; j < 5; ++j) {
+  // PRT-OA-NEXT:    // v----------OMP----------v
+  //  PRT-O-NEXT:    {
+  //  PRT-O-NEXT:        int i;
+  //  PRT-O-NEXT:        #pragma omp simd
+  //  PRT-O-NEXT:            for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                printf("hello world\n");
+  //  PRT-O-NEXT:    }
+  // PRT-OA-NEXT:    // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:    // #pragma acc loop vector
+  // PRT-OA-NEXT:    // for (i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:    //   printf("hello world\n");
+  // PRT-OA-NEXT:    // ^----------ACC----------^
+  //  PRT-O-NEXT:  }
+  #pragma acc parallel loop gang
+  for (int j = 0; j < 5; ++j) {
+    #pragma acc loop vector
+    for (i = 0; i < 5; ++i)
+      printf("hello world\n");
   }
 
   //--------------------------------------------------
@@ -844,7 +1335,10 @@ int main() {
     var = non_const_expr;
 
   //--------------------------------------------------
-  // cpp macro expansion in OpenACC.
+  // cpp macro expansion in clauses.
+  //
+  // FIXME: The OpenMP version is fully expanded.  Eventually, we'd like to
+  // prevent that.
   //--------------------------------------------------
 
   //  PRT-A-NEXT:  #pragma acc parallel vector_length(TWO)
@@ -852,15 +1346,126 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams
   // PRT-OA-NEXT:  // #pragma acc parallel vector_length(TWO)
   #pragma acc parallel vector_length(TWO)
-  //  PRT-A-NEXT:  #pragma acc loop gang
-  // PRT-AO-NEXT:  // #pragma omp distribute
-  //  PRT-O-NEXT:  #pragma omp distribute
-  // PRT-OA-NEXT:  // #pragma acc loop gang
-  #pragma acc loop gang
-  // PRT-NEXT:  for (int i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:  #pragma acc loop gang vector
+  // PRT-AO-NEXT:  // #pragma omp distribute simd simdlen(2)
+  //  PRT-O-NEXT:  #pragma omp distribute simd simdlen(2)
+  // PRT-OA-NEXT:  // #pragma acc loop gang vector
+  #pragma acc loop gang vector
+  //    PRT-NEXT:  for (int i = 0; i < 5; ++i)
   for (int i = 0; i < 5; ++i)
-  // PRT-NEXT:    ;
+  //    PRT-NEXT:    ;
     ;
+
+  // Macro is at end of directive and only directive is rewritten.
+  // Fortunately, Clang's end location for a directive is after the last
+  // clause, so the rewrite succeeds.
+
+  //    PRT-NEXT:  #define MAC vector_length(TWO)
+  #define MAC vector_length(TWO)
+  //  PRT-A-NEXT:  #pragma acc parallel MAC
+  // PRT-AO-NEXT:  // #pragma omp target teams
+  //  PRT-O-NEXT:  #pragma omp target teams
+  // PRT-OA-NEXT:  // #pragma acc parallel MAC
+  #pragma acc parallel MAC
+  //  PRT-A-NEXT:  #pragma acc loop gang vector
+  // PRT-AO-NEXT:  // #pragma omp distribute simd simdlen(2)
+  //  PRT-O-NEXT:  #pragma omp distribute simd simdlen(2)
+  // PRT-OA-NEXT:  // #pragma acc loop gang vector
+  #pragma acc loop gang vector
+  //    PRT-NEXT:  for (int i = 0; i < 5; ++i)
+  for (int i = 0; i < 5; ++i)
+  //    PRT-NEXT:    ;
+    ;
+  //    PRT-NEXT:  #undef MAC
+  #undef MAC
+
+  //--------------------------------------------------
+  // _Pragma form forces full construct rewrite.
+  //
+  // If _Pragma were in a macro expansion, the rewrite would just fail with a
+  // diagnostic.  FIXME: However, when outside a macro expansion, the end
+  // location Clang assigns the _Pragma is unusable unfortunately, so a full
+  // rewrite is required.
+  //--------------------------------------------------
+
+  // PRT-AO-NEXT:  // v----------ACC----------v
+  //  PRT-A-NEXT:  _Pragma("acc parallel")
+  //  PRT-A-NEXT:  #pragma acc loop gang
+  //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:    ;
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
+  // PRT-AO-NEXT:  // #pragma omp target teams
+  // PRT-AO-NEXT:  //     #pragma omp distribute
+  // PRT-AO-NEXT:  //         for (int i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //             ;
+  // PRT-AO-NEXT:  // ^----------OMP----------^
+  //
+  // PRT-OA-NEXT:  // v----------OMP----------v
+  //  PRT-O-NEXT:  #pragma omp target teams
+  //  PRT-O-NEXT:      #pragma omp distribute
+  //  PRT-O-NEXT:          for (int i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:              ;
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:  // _Pragma("acc parallel")
+  // PRT-OA-NEXT:  // #pragma acc loop gang
+  // PRT-OA-NEXT:  // for (int i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  //   ;
+  // PRT-OA-NEXT:  // ^----------ACC----------^
+  _Pragma("acc parallel")
+  #pragma acc loop gang
+  for (int i = 0; i < 5; ++i)
+    ;
+
+  //  PRT-A-NEXT:  #pragma acc parallel
+  // PRT-AO-NEXT:  // #pragma omp target teams
+  //  PRT-O-NEXT:  #pragma omp target teams
+  // PRT-OA-NEXT:  // #pragma acc parallel
+  //
+  // PRT-AO-NEXT:  // v----------ACC----------v
+  //  PRT-A-NEXT:  _Pragma("acc loop gang")
+  //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:    ;
+  // PRT-AO-NEXT:  // ---------ACC->OMP--------
+  // PRT-AO-NEXT:  // #pragma omp distribute
+  // PRT-AO-NEXT:  //     for (int i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //         ;
+  // PRT-AO-NEXT:  // ^----------OMP----------^
+  //
+  // PRT-OA-NEXT:  // v----------OMP----------v
+  //  PRT-O-NEXT:  #pragma omp distribute
+  //  PRT-O-NEXT:      for (int i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:          ;
+  // PRT-OA-NEXT:  // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:  // _Pragma("acc loop gang")
+  // PRT-OA-NEXT:  // for (int i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:  //   ;
+  // PRT-OA-NEXT:  // ^----------ACC----------^
+  #pragma acc parallel
+  _Pragma("acc loop gang")
+  for (int i = 0; i < 5; ++i)
+    ;
+
+  //--------------------------------------------------
+  // Associated statement end is in macro expansion, but only directive needs
+  // to be rewritten.   Directive appears to end in macro expansion, but Clang
+  // doesn't record #pragma end locations that way.  Thus, rewrite succeeds.
+  //--------------------------------------------------
+
+  //    PRT-NEXT:  #define MAC1 num_gangs(1)
+  //    PRT-NEXT:  #define MAC2 ;
+  //  PRT-A-NEXT:  #pragma acc parallel MAC1
+  // PRT-AO-NEXT:  // #pragma omp target teams num_teams(1)
+  //  PRT-O-NEXT:  #pragma omp target teams num_teams(1)
+  // PRT-OA-NEXT:  // #pragma acc parallel MAC1
+  //    PRT-NEXT:    MAC2
+  //    PRT-NEXT:  #undef MAC1
+  //    PRT-NEXT:  #undef MAC2
+  #define MAC1 num_gangs(1)
+  #define MAC2 ;
+  #pragma acc parallel MAC1
+    MAC2
+  #undef MAC1
+  #undef MAC2
 
   //--------------------------------------------------
   // Line continuations.

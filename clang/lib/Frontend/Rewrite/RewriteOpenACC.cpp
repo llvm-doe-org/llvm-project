@@ -16,6 +16,7 @@
 #include "clang/AST/CommentedStream.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/StmtOpenACC.h"
+#include "clang/Basic/DiagnosticFrontend.h"
 #include "clang/Lex/Lexer.h"
 #include "clang/Rewrite/Core/Rewriter.h"
 
@@ -61,47 +62,118 @@ public:
     SourceManager &SM = Context->getSourceManager();
     const LangOptions &LO = Context->getLangOpts();
 
-    // FIXME: The end location of ACCNode's pragma alone (that is, not
-    // including the associated statement) is wrong for the _Pragma form: it's
-    // the start location for some reason.  That's fine when we're getting
-    // locations from an associated statement, but we'll need to fix the
-    // location somehow in other cases.
-    //
-    // FIXME: Can we issue warnings when pragmas are not rewritable because
-    // they're behind macros?  Try Rewriter::isRewritable.
-
     // We cannot rewrite if the OpenMP node failed to be constructed.
     if (!ACCNode->hasOMPNode())
       return false;
 
-    // TODO: Handle standalone directives.
+    // TODO: Handle standalone directives.  See fixme below about _Pragma form
+    // without associated statement.
     assert(ACCNode->hasAssociatedStmt() &&
            "rewrite of standalone OpenACC directive not yet implemented");
 
-    // Are we rewriting the entire OpenACC construct or just the directive?
+    // Are we rewriting the full OpenACC construct or just the directive?
+    //
+    // TODO: If the start or end location of the text that needs to be
+    // rewritten appears within a macro expansion (as indicated by
+    // isRewritable), we do not attempt to rewrite, and we produce a
+    // diagnostic.  Those cases make it difficult to rewrite precisely the
+    // right text.  It might be possible to handle some subcases, but we
+    // haven't implemented that handling yet.
+    //
+    // #pragma form works as follows.  It should not be possible in C/C++
+    // syntax for the start location, which points to the "#pragma" itself, to
+    // appear in a macro expansion.  Moreover, Clang's end token for the
+    // directive is tok::annot_pragma_openacc_end, which points at the end of
+    // the line not the last token within the directive.  Thus, even if the
+    // final clauses of the directive expand from a macro, the end location is
+    // not within a macro expansion either.
+    //
+    // _Pragma form works as follows.  If it appears inside a macro expansion,
+    // its start and end locations are identified as not rewritable, and so we
+    // complain and refuse to rewrite.  FIXME: If it does not appear inside a
+    // macro expansion (that's probably rare as that seems to be its purpose in
+    // life), its end location is identified as not rewritable and appears to
+    // be unusable for the sake of rewriting anyway (we think the spelling
+    // column counts the number of characters in the _Pragma string, but we
+    // haven't verified that against the parser implementation).  In that case,
+    // we force a full construct rewrite so that we don't need the _Pragma's
+    // end location, and we then complain if there is no associated statement.
+    //
+    // If a full construct rewrite is required, either because of _Pragma form
+    // or because the associated statement requires modification, we also check
+    // the end location of the associated statement and complain if it appears
+    // within a macro expansion.
+    //
+    // In summary, we complain if either (1) the start of the pragma appears in
+    // a macro expansion (must be _Pragma form), (2) the associated statement
+    // must be rewritten (always true for _Pragma form) but its last token
+    // appears in a macro expansion, or (3) there is no associated statement
+    // and we have _Pragma form.
     PrintingPolicy Policy(Context->getLangOpts());
-    bool DirectiveOnly = !ACCNode->ompStmtPrintsDifferently(Policy, Context);
     SourceRange DirectiveRange = ACCNode->getDirectiveRange();
+    if (!Rewrite.isRewritable(DirectiveRange.getBegin())) {
+      Context->getDiagnostics().Report(DirectiveRange.getBegin(),
+                                       diag::err_rewrite_acc_start_in_macro);
+      return false;
+    }
+    bool DirectiveOnly = !ACCNode->ompStmtPrintsDifferently(Policy, Context) &&
+                         Rewrite.isRewritable(DirectiveRange.getEnd());
     SourceRange RewriteRange;
     if (DirectiveOnly)
       RewriteRange = DirectiveRange;
     else {
-      // FIXME: The end location for a construct is often wrong for Rewriter.
-      // First, unless a statement is a compound statement or a null statement,
-      // the statement's end location points at the last token before the final
-      // semicolon.  Second, for any statement, the end location points at the
-      // start of a token not the end.  This hack works around all that so far,
-      // but surely there's a better way.
-      RewriteRange = ACCNode->getConstructRange();
+      bool FinalSemicolonIsNext;
+      RewriteRange = ACCNode->getConstructRange(&FinalSemicolonIsNext);
       SourceLocation End = RewriteRange.getEnd();
-      Token Tok;
-      Lexer::getRawToken(End, Tok, SM, LO);
-      if (Tok.getKind() != tok::semi && Tok.getKind() != tok::r_brace) {
-        Optional<Token> Opt = Lexer::findNextToken(End, SM, LO);
-        assert(Opt.hasValue() && Opt.getValue().getKind() == tok::semi &&
+      if (FinalSemicolonIsNext) {
+#ifndef NDEBUG
+        Token Tok;
+        Lexer::getRawToken(SM.getSpellingLoc(End), Tok, SM, LO);
+        assert(Tok.getKind() != tok::semi &&
+               "expected getConstructRange's end token not to be a semicolon");
+#endif
+        Optional<Token> Next = Lexer::findNextToken(End, SM, LO);
+        // If Tok is expanded from a macro and is not the last token in the
+        // expansion, findNextToken refuses to look for the next token and
+        // returns None.  Assume the final semicolon is the next token and is
+        // thus within the expansion, and so refuse to rewrite.
+        if (!Next.hasValue()) {
+          Context->getDiagnostics().Report(
+              End, diag::err_rewrite_acc_end_in_macro);
+          return false;
+        }
+        // If Next is an identifier, assume it's a macro whose expansion's
+        // first token is the final semicolon, and so refuse to rewrite.
+        if (Next.getValue().getKind() == tok::raw_identifier) {
+          Context->getDiagnostics().Report(
+              Next.getValue().getLocation(),
+              diag::err_rewrite_acc_end_in_macro);
+          return false;
+        }
+        assert(Next.getValue().getKind() == tok::semi &&
                "expected semicolon at end of OpenACC associated statement");
-        End = Opt.getValue().getLocation();
+        End = Next.getValue().getLocation();
+        assert(Rewrite.isRewritable(End) &&
+               "expected Lexer::findNextToken not to return token within "
+               "macro expansion");
+      } else if (!Rewrite.isRewritable(End)) {
+        // The final token (semicolon or closing brace) is within a macro
+        // expansion, so refuse to rewrite.
+        //
+        // FIXME: This should always happen if there's no associated
+        // statement and we have _Pragma form, but the following diagnostic
+        // would then be misleading.  Currently, Clang doesn't support OpenACC
+        // constructs without associated statements, so we haven't developed a
+        // diagnostic yet.  The cleanest approach will probably be to check
+        // !Rewrite.isRewritable(DirectiveRange.getEnd()) &&
+        // !ACCNode->hasAssociatedStmt() right before assigning
+        // DirectiveOnly above, which happens after checking
+        // !Rewrite.isRewritable(DirectiveRange.getBegin()).
+        Context->getDiagnostics().Report(
+            End, diag::err_rewrite_acc_end_in_macro);
+        return false;
       }
+      // The end location points at the start of a token not the end.
       End = Lexer::getLocForEndOfToken(End, 0, SM, LO);
       RewriteRange.setEnd(End);
     }

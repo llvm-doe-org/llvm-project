@@ -14,6 +14,9 @@ We have implemented and tested support for the following features:
     * `-Wsource-uses-openacc`
     * `-Wopenacc-ignored-clause`
     * `-fopenmp-targets=<triples>` for traditional compilation mode
+    * Notes:
+        * See the section "Using" in `../README.md` for an
+          introduction to Clacc's command-line options.
 * offloading targets:
     * host, x86_64, or nvptx64
 * `parallel` directive:
@@ -188,6 +191,40 @@ following features for now:
         * nested function definitions
     * C++
     * Objective-C/C++
+* source-to-source mode using `-fopenacc-print`:
+    * Preprocessor macros appearing within OpenACC clauses or
+      associated statements are expanded in the OpenMP translation.
+      Notes:
+        * See the "Source-to-Source Translation" section in
+          `README-OpenACC-design.md` for an explanation of why this
+          happens and how Clacc might evolve to prevent it in the
+          future.
+    * Preprocessor macro usage can sometimes prevent OpenACC
+      constructs from being translated:
+        * Clacc cannot translate an OpenACC construct if it meets
+          either of the following conditions:
+            * The construct's first token is expanded from a
+              preprocessor macro.  Notes:
+                * C/C++ syntax limits this case to the `_Pragma` form.
+                  That is, it's not possible for `#pragma` form.
+            * The associated statement must be rewritten but its last
+              token is expanded from a preprocessor macro.  Notes:
+                * In the case of `#pragma` form, whether the
+                  associated statement must be rewritten depends on
+                  Clacc's mapping for the construct to OpenMP.
+                * In the case of `_Pragma` form, currently the
+                  associated statement must always be rewritten.  Due
+                  to the first condition above, this case is only
+                  relevant when `_Pragma` form is used outside a
+                  preprocessor macro.
+        * Clacc reports an error diagnostic for every such OpenACC
+          construct in the source file.  Clacc then prints a version
+          of the source in which all OpenACC constructs are
+          transformed except the reported ones.
+        * For a full transformation of the source file in this case,
+          try `-fopenacc-ast-print` instead.  However, its output
+          looks like the preprocessor output, which is not appropriate
+          for some use cases.
 
 Other Features
 ==============

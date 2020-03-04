@@ -277,4 +277,11 @@ def warn_profile_data_misexpect : Warning<
   DefaultIgnore;
 } // end of instrumentation issue category
 
+let CategoryName = "RewriteOpenACC" in {
+def err_rewrite_acc_start_in_macro : Error<
+  "cannot rewrite OpenACC construct starting within a macro expansion">;
+def err_rewrite_acc_end_in_macro : Error<
+  "cannot rewrite OpenACC construct ending within a macro expansion">;
+} // end of RewriteOpenACC category
+
 }

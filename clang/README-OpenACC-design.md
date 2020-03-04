@@ -385,15 +385,28 @@ modifies the original input buffer and thus can avoid these problems
 in most cases.  That is, `-fopenacc-print` examines the OpenACC
 subtrees and the OpenMP subtrees computed by `TransformACCToOMP` as
 needed to modify the input buffer in the manner requested by the
-argument to `-fopenacc-print`.  For OpenMP subtrees containing
-directives and other code not appearing in the original source and
-thus not in the input buffer, it still employs `-ast-print`
-functionality, but at least the above problems are not pervasive in
-the output.  In the future, we might experiment with using some means
-such as source locations to track which portions of an OpenMP subtree
-were copied verbatim from the OpenACC subtree and then overriding
-`-ast-print` functionality to print just those portions using the
-original input buffer.
+argument to `-fopenacc-print`.
+
+Limitations
+-----------
+
+For OpenMP subtrees containing directives and other code not appearing
+in the original source and thus not in the input buffer,
+`-fopenacc-print` still employs `-ast-print` functionality.  Thus, the
+`-fopenacc-ast-print` problems mentioned in the previous section are
+still present within the OpenMP constructs in the source produced by
+`-fopenacc-print`, but at least they are not pervasive throughout the
+rest of the generated source.  In the future, we might experiment with
+using some means such as source locations to track which portions of
+an OpenMP subtree were copied verbatim from the OpenACC subtree and
+then overriding `-ast-print` functionality to print just those
+portions using the original input buffer.
+
+The `Rewrite` facility is challenging to use when either boundary of a
+region of text to be rewritten is expanded from a preprocessor macro.
+See `-fopenacc-print` in the section `Skipped Features` in
+`README-OpenACC-status.md` for details on how this currently limits
+`-fopenacc-print`.
 
 Interaction with OpenMP Support
 ===============================
