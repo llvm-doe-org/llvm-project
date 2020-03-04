@@ -17,7 +17,7 @@
 
 #include "clang/AST/Expr.h"
 #include "clang/AST/OpenACCClause.h"
-#include "clang/AST/Stmt.h"
+#include "clang/AST/StmtDirective.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/Basic/OpenACCKinds.h"
 #include "clang/Basic/SourceLocation.h"
@@ -31,7 +31,7 @@ namespace clang {
 /// This is a basic class for representing single OpenACC executable
 /// directive.
 ///
-class ACCExecutableDirective : public Stmt {
+class ACCExecutableDirective : public ExecutableDirective {
   friend class ASTStmtReader;
   /// Kind of the directive.
   OpenACCDirectiveKind Kind;
@@ -95,7 +95,7 @@ protected:
                          SourceLocation StartLoc, SourceLocation EndLoc,
                          unsigned NumClauses, unsigned MaxAddClauses,
                          unsigned NumChildren)
-      : Stmt(SC), Kind(K), StartLoc(std::move(StartLoc)),
+      : ExecutableDirective(SC), Kind(K), StartLoc(std::move(StartLoc)),
         EndLoc(std::move(EndLoc)), NumClauses(NumClauses),
         MaxAddClauses(MaxAddClauses), NumChildren(NumChildren),
         ClausesOffset(llvm::alignTo(sizeof(T), alignof(ACCClause *))),
@@ -270,32 +270,6 @@ public:
   SourceLocation getBeginLoc() const { return StartLoc; }
   /// Returns ending location of directive.
   SourceLocation getEndLoc() const { return EndLoc; }
-  /// Gets the source range covering the '#pragma' through the end of any
-  /// associated statement but potentially without any final semicolon.
-  ///
-  /// If FinalSemicolonIsNext != nullptr, *FinalSemicolonIsNext is set to
-  /// indicate whether the result does not include a final semicolon
-  /// (currently, this happens when the associated statement ends with an
-  /// expression statement, which is represented by Expr, which does include
-  /// NullStmt). If true and the caller wants to find the final semicolon,
-  /// the caller can re-lex the input starting at the result's end location,
-  /// which points at the token before the final semicolon.  However, the
-  /// caller must be sure to handle cases where either of these tokens
-  /// appears in a macro expansion, which can affect re-lexing and the
-  /// interpretation of a SourceLocation.  Because we haven't found a
-  /// re-lexing technique that can always determine the final semicolon's
-  /// location in such cases, and because some callers don't care if the result
-  /// includes the final semicolon, we don't try to handle the re-lexing here.
-  ///
-  /// FIXME: Can we change the parser to store the semicolon location as a new
-  /// field within an Expr when used as a statement?  Then we could return
-  /// correct locations here.
-  SourceRange getConstructRange(bool *FinalSemicolonIsNext = nullptr) const;
-  /// Gets the source range covering the '#pragma' through the end of just
-  /// the directive without any associated statement.
-  SourceRange getDirectiveRange() const {
-    return SourceRange(StartLoc, EndLoc);
-  }
 
   /// Get number of clauses.
   unsigned getNumClauses() const { return NumClauses; }

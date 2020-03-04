@@ -95,6 +95,7 @@ add_clang_library(clangAST
   SelectorLocationsKind.cpp
   Stmt.cpp
   StmtCXX.cpp
+  StmtDirective.cpp
   StmtIterator.cpp
   StmtObjC.cpp
   StmtOpenACC.cpp

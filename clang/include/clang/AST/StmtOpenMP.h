@@ -16,8 +16,8 @@
 
 #include "clang/AST/Expr.h"
 #include "clang/AST/OpenMPClause.h"
-#include "clang/AST/Stmt.h"
 #include "clang/AST/StmtCXX.h"
+#include "clang/AST/StmtDirective.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/SourceLocation.h"
 
@@ -30,7 +30,7 @@ namespace clang {
 /// This is a basic class for representing single OpenMP executable
 /// directive.
 ///
-class OMPExecutableDirective : public Stmt {
+class OMPExecutableDirective : public ExecutableDirective {
   friend class ASTStmtReader;
   /// Kind of the directive.
   OpenMPDirectiveKind Kind;
@@ -67,7 +67,7 @@ protected:
   OMPExecutableDirective(const T *, StmtClass SC, OpenMPDirectiveKind K,
                          SourceLocation StartLoc, SourceLocation EndLoc,
                          unsigned NumClauses, unsigned NumChildren)
-      : Stmt(SC), Kind(K), StartLoc(std::move(StartLoc)),
+      : ExecutableDirective(SC), Kind(K), StartLoc(std::move(StartLoc)),
         EndLoc(std::move(EndLoc)), NumClauses(NumClauses),
         NumChildren(NumChildren),
         ClausesOffset(llvm::alignTo(sizeof(T), alignof(OMPClause *))) {}
