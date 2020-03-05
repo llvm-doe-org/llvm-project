@@ -284,9 +284,13 @@ public:
   bool hasAssociatedStmt() const { return NumChildren > 0; }
 
   /// Returns statement associated with the directive.
-  Stmt *getAssociatedStmt() const {
+  const Stmt *getAssociatedStmt() const {
     assert(hasAssociatedStmt() && "no associated statement.");
-    return const_cast<Stmt *>(*child_begin());
+    return *child_begin();
+  }
+  Stmt *getAssociatedStmt() {
+    assert(hasAssociatedStmt() && "no associated statement.");
+    return *child_begin();
   }
 
   /// Returns the outermost effective directive (whose associated statement is
