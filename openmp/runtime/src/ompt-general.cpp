@@ -93,9 +93,9 @@ ompt_callbacks_internal_t ompt_callbacks;
 static ompt_start_tool_result_t *ompt_start_tool_result = NULL;
 
 // FIXME: Access to these is not thread-safe.  Does it need to be?
-unsigned ompt_device_inits_capacity = 0;
-unsigned ompt_device_inits_size = 0;
-int32_t *ompt_device_inits = NULL;
+static unsigned ompt_device_inits_capacity = 0;
+static unsigned ompt_device_inits_size = 0;
+static int32_t *ompt_device_inits = NULL;
 bool ompt_in_device_target_region = false;
 
 /*****************************************************************************
@@ -113,7 +113,7 @@ OMPT_API_ROUTINE ompt_data_t *ompt_get_thread_data(void);
  ****************************************************************************/
 
 // FIXME: Access to this is not thread-safe.  Does it need to be?
-std::map<ompt_id_t, int> acc_ompt_thread_device_map;
+static std::map<ompt_id_t, int> acc_ompt_thread_device_map;
 
 static const char *acc_get_event_name(acc_event_t event) {
   switch (event) {
