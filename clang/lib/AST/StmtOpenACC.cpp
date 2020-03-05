@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the subclesses of Stmt class declared in StmtOpenACC.h
+// This file implements the subclasses of Stmt class declared in StmtOpenACC.h
 //
 //===----------------------------------------------------------------------===//
 

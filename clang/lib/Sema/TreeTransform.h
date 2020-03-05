@@ -13900,7 +13900,7 @@ class TransformContext : public TreeTransform<Derived> {
   typedef TreeTransform<Derived> BaseTransform;
 public:
   TransformContext(Sema &SemaRef) : BaseTransform(SemaRef) {}
-  // FIXME: What does this really do?  Is TransformDefintiion needed when we
+  // FIXME: What does this really do?  Is TransformDefinition needed when we
   // have this?
   bool AlwaysRebuild() { return true; }
   // If there might be an existing mapping for D and you want to push a new

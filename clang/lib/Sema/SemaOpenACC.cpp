@@ -2642,7 +2642,7 @@ public:
     // Declare a num_workers variable in an enclosing compound statement, if
     // needed.
     assert(NumWorkersVarDecl == nullptr && NumWorkersExpr == nullptr &&
-            VectorLengthExpr == nullptr &&
+           VectorLengthExpr == nullptr &&
            "unexpected nested acc parallel directive");
     auto NumWorkersClauses = D->getClausesOfKind<ACCNumWorkersClause>();
     if (NumWorkersClauses.begin() != NumWorkersClauses.end()) {
