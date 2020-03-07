@@ -152,6 +152,9 @@ We have implemented and tested support for the following features:
       directives are also supported here.
     * `copy` clause implied by `reduction` clause (overriding the
       implicit `firstprivate` clause)
+* OpenACC Profiling Interface
+    * See the section "OpenACC Profiling Interface" in
+      `README-OpenACC-design.md` for features and limitations.
 * language support:
     * C11 with the following extensions:
         * `__uint128_t`, `__int128_t`, `__SIZEOF_INT128__`
