@@ -357,7 +357,7 @@ void CodeGenFunction::EmitStmt(const Stmt *S, ArrayRef<const Attr *> Attrs) {
   case Stmt::ACCParallelDirectiveClass:
   case Stmt::ACCLoopDirectiveClass:
   case Stmt::ACCParallelLoopDirectiveClass:
-    EmitStmt(cast<ACCExecutableDirective>(*S).getOMPNode());
+    EmitACCExecutableDirective(cast<ACCExecutableDirective>(*S));
     break;
   }
 }

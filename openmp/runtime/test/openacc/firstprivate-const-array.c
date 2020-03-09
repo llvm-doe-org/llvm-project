@@ -30,7 +30,10 @@
 // RUN:       -match-full-lines -strict-whitespace \
 // RUN:       -implicit-check-not=acc_ev_ -check-prefixes=CHECK,%[fc] \
 // RUN:       -DVERSION=%acc-version -DHOST_DEV=%acc-host-dev \
-// RUN:       -DOFF_DEV=0 -DTHREAD_ID=0
+// RUN:       -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 -DSRC_FILE=%s \
+// RUN:       -DLINE_NO0=20000 -DEND_LINE_NO0=20001 \
+// RUN:       -DLINE_NO1=30000 -DEND_LINE_NO1=40000 \
+// RUN:       -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=50000
 // RUN: }
 //
 // END.
@@ -45,6 +48,7 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
   register_all_callbacks(reg);
 }
 
+#line 10000
 int main() {
   const int carr[10] = {30, 31, 32, 33, 34, 35, 36, 37, 38, 39};
 
@@ -62,9 +66,12 @@ int main() {
   //
   //      OFF:acc_ev_create
   // OFF-NEXT:  acc_prof_info
-  // OFF-NEXT:    event_type=6, valid_bytes=32, version=[[VERSION]],
+  // OFF-NEXT:    event_type=6, valid_bytes=72, version=[[VERSION]],
   // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
-  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NEXT:    line_no=[[LINE_NO0]], end_line_no=[[END_LINE_NO0]],
+  // OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NEXT:  acc_data_event_info
   // OFF-NEXT:    event_type=6, valid_bytes=56,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
@@ -81,6 +88,7 @@ int main() {
   //   OFF:acc_ev_enter_data_end
   // CHECK:acc_ev_enqueue_launch_start
   // CHECK:acc_ev_enqueue_launch_end
+#line 20000
   #pragma acc parallel num_gangs(1)
     ;
   //   OFF:acc_ev_exit_data_start
@@ -96,9 +104,12 @@ int main() {
   //
   //      OFF:acc_ev_enter_data_start
   // OFF-NEXT:  acc_prof_info
-  // OFF-NEXT:    event_type=10, valid_bytes=32, version=[[VERSION]],
+  // OFF-NEXT:    event_type=10, valid_bytes=72, version=[[VERSION]],
   // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
-  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NEXT:    line_no=[[LINE_NO1]], end_line_no=[[END_LINE_NO1]],
+  // OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NEXT:  acc_other_event_info
   // OFF-NEXT:    event_type=10, valid_bytes=24,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
@@ -108,9 +119,12 @@ int main() {
   // OFF-NEXT:    device_type=acc_device_not_host
   // OFF-NEXT:acc_ev_enqueue_upload_start
   // OFF-NEXT:  acc_prof_info
-  // OFF-NEXT:    event_type=20, valid_bytes=32, version=[[VERSION]],
+  // OFF-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
   // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
-  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NEXT:    line_no=[[LINE_NO1]], end_line_no=[[END_LINE_NO1]],
+  // OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NEXT:  acc_data_event_info
   // OFF-NEXT:    event_type=20, valid_bytes=56,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
@@ -123,9 +137,12 @@ int main() {
   // OFF-NEXT:    device_type=acc_device_not_host
   // OFF-NEXT:acc_ev_enqueue_upload_end
   // OFF-NEXT:  acc_prof_info
-  // OFF-NEXT:    event_type=21, valid_bytes=32, version=[[VERSION]],
+  // OFF-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
   // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
-  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NEXT:    line_no=[[LINE_NO1]], end_line_no=[[END_LINE_NO1]],
+  // OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NEXT:  acc_data_event_info
   // OFF-NEXT:    event_type=21, valid_bytes=56,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
@@ -138,9 +155,12 @@ int main() {
   // OFF-NEXT:    device_type=acc_device_not_host
   // OFF-NEXT:acc_ev_enter_data_end
   // OFF-NEXT:  acc_prof_info
-  // OFF-NEXT:    event_type=11, valid_bytes=32, version=[[VERSION]],
+  // OFF-NEXT:    event_type=11, valid_bytes=72, version=[[VERSION]],
   // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
-  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NEXT:    line_no=[[LINE_NO1]], end_line_no=[[END_LINE_NO1]],
+  // OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NEXT:  acc_other_event_info
   // OFF-NEXT:    event_type=11, valid_bytes=24,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
@@ -152,6 +172,7 @@ int main() {
   // CHECK:acc_ev_enqueue_launch_start
   // CHECK:acc_ev_enqueue_launch_end
 
+#line 30000
   #pragma acc parallel firstprivate(carr) num_gangs(1)
   for (int j = 0; j < 10; ++j)
     // Because of firstprivate, carr's address is different here even when not
@@ -176,15 +197,19 @@ int main() {
     //  OFF-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[7]=37
     //  OFF-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[8]=38
     //  OFF-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[9]=39
+#line 40000
     printf("inside: carr=%p, carr[%d]=%d\n", carr, j, carr[j]);
 
   // Exit data for carr.
   //
   // OFF-NEXT:acc_ev_exit_data_start
   // OFF-NEXT:  acc_prof_info
-  // OFF-NEXT:    event_type=12, valid_bytes=32, version=[[VERSION]],
+  // OFF-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
   // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
-  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NEXT:    line_no=[[LINE_NO1]], end_line_no=[[END_LINE_NO1]],
+  // OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NEXT:  acc_other_event_info
   // OFF-NEXT:    event_type=12, valid_bytes=24,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
@@ -194,9 +219,12 @@ int main() {
   // OFF-NEXT:    device_type=acc_device_not_host
   // OFF-NEXT:acc_ev_exit_data_end
   // OFF-NEXT:  acc_prof_info
-  // OFF-NEXT:    event_type=13, valid_bytes=32, version=[[VERSION]],
+  // OFF-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
   // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
-  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NEXT:    line_no=[[LINE_NO1]], end_line_no=[[END_LINE_NO1]],
+  // OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NEXT:  acc_other_event_info
   // OFF-NEXT:    event_type=13, valid_bytes=24,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
@@ -211,6 +239,7 @@ int main() {
   printf("after kernels\n");
 
   return 0;
+#line 50000
 }
 
 //   OFF:acc_ev_device_shutdown_start

@@ -16,6 +16,7 @@
 #include "CodeGenModule.h"
 #include "TargetInfo.h"
 #include "clang/AST/Stmt.h"
+#include "clang/AST/StmtOpenACC.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/AST/DeclOpenMP.h"
 #include "clang/Basic/PrettyStackTrace.h"
@@ -5325,4 +5326,11 @@ void CodeGenFunction::EmitSimpleOMPExecutableDirective(
       isOpenMPSimdDirective(D.getDirectiveKind()) ? OMPD_simd
                                                   : D.getDirectiveKind(),
       CodeGen);
+}
+
+void
+CodeGenFunction::EmitACCExecutableDirective(const ACCExecutableDirective &D) {
+  CGM.getOpenMPRuntime().enterOpenACCConstruct();
+  EmitStmt(D.getOMPNode());
+  CGM.getOpenMPRuntime().exitOpenACCConstruct();
 }

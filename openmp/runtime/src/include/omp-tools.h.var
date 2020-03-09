@@ -48,7 +48,8 @@
     macro(ompt_get_proc_id)                 \
                                             \
     macro(ompt_get_target_info)             \
-    macro(ompt_get_num_devices)
+    macro(ompt_get_num_devices)             \
+    macro(ompt_get_directive_info)
 
 #define FOREACH_OMPT_STATE(macro)                                                                \
                                                                                                 \
@@ -599,6 +600,17 @@ typedef int (*ompt_get_target_info_t) (
 typedef int (*ompt_get_num_devices_t) (void);
 
 typedef void (*ompt_finalize_tool_t) (void);
+
+typedef struct ompt_directive_info_t {
+  const char *src_file;
+  const char *func_name;
+  int line_no;
+  int end_line_no;
+  int func_line_no;
+  int func_end_line_no;
+} ompt_directive_info_t;
+
+typedef ompt_directive_info_t *(*ompt_get_directive_info_t) (void);
 
 typedef int (*ompt_get_device_num_procs_t) (
   ompt_device_t *device

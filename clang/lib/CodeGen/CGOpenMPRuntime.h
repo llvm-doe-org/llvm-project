@@ -317,6 +317,7 @@ private:
 
   QualType IdentQTy;
   llvm::StructType *IdentTy = nullptr;
+  bool IsInOpenACCConstruct = false;
   /// Map for SourceLocation and OpenMP runtime library debug locations.
   typedef llvm::DenseMap<unsigned, llvm::Value *> OpenMPDebugLocMapTy;
   OpenMPDebugLocMapTy OpenMPDebugLocMap;
@@ -1500,6 +1501,34 @@ public:
                              const OMPExecutableDirective &D,
                              SourceLocation Loc, llvm::Function *OutlinedFn,
                              ArrayRef<llvm::Value *> CapturedVars);
+  /// Emits a __kmpc_set_directive_info call to associate information for an
+  /// OpenMP directive D with a runtime call that is about to be emitted.
+  /// After both of those are emitted, emitClearDirectiveInfoCall should be
+  /// called to emit a __kmpc_set_directive_info call to clear this information
+  /// before any subsequent runtime call.
+  ///
+  /// TODO: Ultimately, we'd like to extend the OpenMP runtime API functions
+  /// that __kmpc_set_directive_info calls enclose so that they instead accept
+  /// this directive info directly, perhaps via an ident_t.  Until then, these
+  /// __kmpc_set_directive_info calls might interfere with OpenMP
+  /// optimizations.
+  ///
+  /// TODO: For now, __kmpc_set_directive_info calls are only emitted for
+  /// OpenMP directives translated from OpenACC directives (as indicated by
+  /// IsInOpenACCConstruct) for the sake of OpenACC Profiling Interface
+  /// support.  Ultimately, we'd like this directive info to be available even
+  /// when the original source is OpenMP.  That way, if upstream Clang (after
+  /// OpenACC support is upstream) is used to translate OpenACC to OpenMP, but
+  /// if a proprietary version of Clang is used to compile that OpenMP for a
+  /// specific architecture that upstream Clang doesn't support as well, the
+  /// OpenACC Profiling Interface support works just as well.  However, for
+  /// now, we don't want to interfere with OpenMP optimizations when the source
+  /// is OpenMP, and we're not yet focused on optimizations for OpenACC, so we
+  /// constrain this to the OpenACC case.
+  virtual void emitSetDirectiveInfoCall(CodeGenFunction &CGF,
+                                        const OMPExecutableDirective &D);
+  /// Must be paired with emitSetDirectiveInfoCall.
+  virtual void emitClearDirectiveInfoCall(CodeGenFunction &CGF);
 
   /// Emits call to void __kmpc_push_num_teams(ident_t *loc, kmp_int32
   /// global_tid, kmp_int32 num_teams, kmp_int32 thread_limit) to generate code
@@ -1663,6 +1692,9 @@ public:
 
   /// Emits the definition of the declare variant function.
   virtual bool emitDeclareVariant(GlobalDecl GD, bool IsForDefinition);
+
+  void enterOpenACCConstruct() { IsInOpenACCConstruct = true; }
+  void exitOpenACCConstruct() { IsInOpenACCConstruct = false; }
 };
 
 /// Class supports emissionof SIMD-only code.

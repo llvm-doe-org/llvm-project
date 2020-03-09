@@ -704,6 +704,10 @@ enum OpenMPRTLFunction {
   OMPRTL__kmpc_alloc,
   // Call to void __kmpc_free(int gtid, void *ptr, omp_allocator_handle_t al);
   OMPRTL__kmpc_free,
+  // Call to void __kmpc_set_directive_info(const char *src_file,
+  // const char *func_name, int line_no, int end_line_no, int func_line_no,
+  // int func_end_line_no);
+  OMPRTL__kmpc_set_directive_info,
 
   //
   // Offloading related calls
@@ -2337,6 +2341,18 @@ llvm::FunctionCallee CGOpenMPRuntime::createRuntimeFunction(unsigned Function) {
     auto *FnTy =
         llvm::FunctionType::get(CGM.VoidTy, TypeParams, /*isVarArg=*/false);
     RTLFn = CGM.CreateRuntimeFunction(FnTy, /*Name=*/"__kmpc_free");
+    break;
+  }
+  case OMPRTL__kmpc_set_directive_info: {
+    // Build void __kmpc_set_directive_info(const char *src_file,
+    // const char *func_name, int line_no, int end_line_no, int func_line_no,
+    // int func_end_line_no);
+    llvm::Type *TypeParams[] = {CGM.Int8PtrTy, CGM.Int8PtrTy, CGM.IntTy,
+                                CGM.IntTy, CGM.IntTy, CGM.IntTy};
+    auto *FnTy =
+        llvm::FunctionType::get(CGM.VoidTy, TypeParams, /*isVarArg=*/false);
+    RTLFn = CGM.CreateRuntimeFunction(FnTy,
+                                      /*Name=*/"__kmpc_set_directive_info");
     break;
   }
   case OMPRTL__kmpc_push_target_tripcount: {
@@ -9269,10 +9285,15 @@ void CGOpenMPRuntime::emitTargetCall(
                                        MapTypesArray,
                                        NumTeams,
                                        NumThreads};
+      // TODO: emit*DirectiveInfoCall probably also make sense around the
+      // OMPRTL__tgt_target* call in the "else" below.  However, so far, that
+      // doesn't appear to be useful for OpenACC support.
+      emitSetDirectiveInfoCall(CGF, D);
       Return = CGF.EmitRuntimeCall(
           createRuntimeFunction(HasNowait ? OMPRTL__tgt_target_teams_nowait
                                           : OMPRTL__tgt_target_teams),
           OffloadingArgs);
+      emitClearDirectiveInfoCall(CGF);
     } else {
       llvm::Value *OffloadingArgs[] = {DeviceID,
                                        OutlinedFnID,
@@ -9300,7 +9321,9 @@ void CGOpenMPRuntime::emitTargetCall(
       CapturedVars.clear();
       CGF.GenerateOpenMPCapturedVars(CS, CapturedVars);
     }
+    emitSetDirectiveInfoCall(CGF, D);
     emitOutlinedFunctionCall(CGF, D.getBeginLoc(), OutlinedFn, CapturedVars);
+    emitClearDirectiveInfoCall(CGF);
     CGF.EmitBranch(OffloadContBlock);
 
     CGF.EmitBlock(OffloadContBlock, /*IsFinished=*/true);
@@ -9416,12 +9439,14 @@ void CGOpenMPRuntime::emitTargetCall(
 
   auto &&TargetElseGen = [this, &ElseGen, &D, RequiresOuterTask](
                              CodeGenFunction &CGF, PrePostActionTy &) {
+    emitSetDirectiveInfoCall(CGF, D);
     if (RequiresOuterTask) {
       CodeGenFunction::OMPTargetDataInfo InputInfo;
       CGF.EmitOMPTargetTaskBasedDirective(D, ElseGen, InputInfo);
     } else {
       emitInlinedDirective(CGF, D.getDirectiveKind(), ElseGen);
     }
+    emitClearDirectiveInfoCall(CGF);
   };
 
   // If we have a target function ID it means that we need to support
@@ -9927,6 +9952,50 @@ void CGOpenMPRuntime::emitTeamsCall(CodeGenFunction &CGF,
 
   llvm::FunctionCallee RTLFn = createRuntimeFunction(OMPRTL__kmpc_fork_teams);
   CGF.EmitRuntimeCall(RTLFn, RealArgs);
+}
+
+void CGOpenMPRuntime::emitSetDirectiveInfoCall(
+    CodeGenFunction &CGF, const OMPExecutableDirective &D) {
+  if (!IsInOpenACCConstruct)
+    return;
+  SourceManager &SM = CGF.getContext().getSourceManager();
+  SourceRange ConstructRange = D.getConstructRange();
+  const NamedDecl *Func = cast<NamedDecl>(CGF.CurFuncDecl);
+  PresumedLoc DirBeginLoc = SM.getPresumedLoc(ConstructRange.getBegin());
+  PresumedLoc DirEndLoc = SM.getPresumedLoc(ConstructRange.getEnd());
+  PresumedLoc FuncBeginLoc = SM.getPresumedLoc(Func->getBeginLoc());
+  PresumedLoc FuncEndLoc = SM.getPresumedLoc(Func->getEndLoc());
+
+  // Due to preprocessing, the file name might vary among the various locations
+  // used here.  Use the file name associated with the beginning of the
+  // directive.
+  llvm::Value *SrcFile =
+      CGF.Builder.CreateGlobalStringPtr(DirBeginLoc.getFilename());
+  llvm::Value *FuncName = CGF.Builder.CreateGlobalStringPtr(Func->getName());
+  llvm::Value *LineNo = llvm::ConstantInt::get(CGM.IntTy,
+                                               DirBeginLoc.getLine());
+  llvm::Value *EndLineNo = llvm::ConstantInt::get(CGM.IntTy,
+                                                  DirEndLoc.getLine());
+  llvm::Value *FuncLineNo = llvm::ConstantInt::get(CGM.IntTy,
+                                                   FuncBeginLoc.getLine());
+  llvm::Value *FuncEndLineNo = llvm::ConstantInt::get(CGM.IntTy,
+                                                      FuncEndLoc.getLine());
+
+  llvm::Value *LocArgs[] = {SrcFile, FuncName, LineNo, EndLineNo, FuncLineNo,
+                            FuncEndLineNo};
+  CGF.EmitRuntimeCall(createRuntimeFunction(OMPRTL__kmpc_set_directive_info),
+                      LocArgs);
+}
+
+void CGOpenMPRuntime::emitClearDirectiveInfoCall(CodeGenFunction &CGF) {
+  if (!IsInOpenACCConstruct)
+    return;
+  llvm::Value *CharNullPtr = llvm::ConstantPointerNull::get(CGM.Int8PtrTy);
+  llvm::Value *IntZero = llvm::ConstantInt::getNullValue(CGM.IntTy);
+  llvm::Value *LocArgs[] = {CharNullPtr, CharNullPtr, IntZero, IntZero,
+                            IntZero, IntZero};
+  CGF.EmitRuntimeCall(createRuntimeFunction(OMPRTL__kmpc_set_directive_info),
+                      LocArgs);
 }
 
 void CGOpenMPRuntime::emitNumTeamsClause(CodeGenFunction &CGF,

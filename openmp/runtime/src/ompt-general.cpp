@@ -93,6 +93,7 @@ ompt_callbacks_internal_t ompt_callbacks;
 static ompt_start_tool_result_t *ompt_start_tool_result = NULL;
 
 // FIXME: Access to these is not thread-safe.  Does it need to be?
+ompt_directive_info_t ompt_directive_info = {NULL, NULL, 0, 0, 0, 0};
 static unsigned ompt_device_inits_capacity = 0;
 static unsigned ompt_device_inits_size = 0;
 static int32_t *ompt_device_inits = NULL;
@@ -132,6 +133,7 @@ static const char *acc_get_event_name(acc_event_t event) {
 }
 
 static ompt_set_callback_t acc_ompt_set_callback = NULL;
+static ompt_get_directive_info_t acc_ompt_get_directive_info = NULL;
 static int acc_ompt_initial_device_num;
 
 static acc_prof_callback acc_ev_device_init_start_callback = NULL;
@@ -190,15 +192,32 @@ static acc_prof_info acc_get_prof_info(acc_event_t event_type,
   // FIXME: OpenACC 2.7 sec. 5.2.1 L2912-2913 says, "If the runtime uses a
   // limited number of asynchronous queues, this field contains the internal
   // asynchronous queue number used for the event."  But it doesn't say what
-  // the field contains if the runtime doesn't, so we leave it undefined.
-  //ret.async_queue = ?;
-  // FIXME: The remaining fields of acc_prof_info are source location
-  // information.  I currently don't know how to access that.  Is it even
-  // meaningful in the case of a runtime shutdown event?
-  ret.valid_bytes = valid_bytes(acc_prof_info, async);
+  // the field contains if the runtime doesn't, so we guess -1.
+  ret.async_queue = -1;
+  // The remaining fields of acc_prof_info are source location information.
+  // If the OpenMP runtime doesn't support the ompt_get_directive_info entry
+  // point, just nullify the fields.  FIXME: That will make sense when we
+  // separate the OpenACC runtime from LLVM's OpenMP runtime, thus creating the
+  // possibility of linking the OpenACC runtime with alternate OpenMP runtimes.
+  if (acc_ompt_get_directive_info) {
+    ompt_directive_info_t *directive_info = acc_ompt_get_directive_info();
+    ret.src_file = directive_info->src_file;
+    ret.func_name = directive_info->func_name;
+    ret.line_no = directive_info->line_no;
+    ret.end_line_no = directive_info->end_line_no;
+    ret.func_line_no = directive_info->func_line_no;
+    ret.func_end_line_no = directive_info->func_end_line_no;
+  } else {
+    ret.src_file = NULL;
+    ret.func_name = NULL;
+    ret.line_no = 0;
+    ret.end_line_no = 0;
+    ret.func_line_no = 0;
+    ret.func_end_line_no = 0;
+  }
+  ret.valid_bytes = valid_bytes(acc_prof_info, func_end_line_no);
   return ret;
 }
-
 static acc_event_info acc_get_data_event_info(
     acc_event_t event_type, acc_construct_t parent_construct, bool implicit,
     size_t bytes, const void *host_ptr, const void *device_ptr) {
@@ -781,6 +800,8 @@ static int acc_ompt_initialize(ompt_function_lookup_t lookup,
                                int initial_device_num,
                                ompt_data_t *tool_data) {
   acc_ompt_set_callback = (ompt_set_callback_t)lookup("ompt_set_callback");
+  acc_ompt_get_directive_info =
+      (ompt_get_directive_info_t)lookup("ompt_get_directive_info");
   while (acc_prof_action *action = acc_prof_dequeue()) {
     if (action->reg)
       acc_prof_register_ompt(action->event, action->cb, action->info);
@@ -1536,6 +1557,14 @@ OMPT_API_ROUTINE int ompt_get_target_info(uint64_t *device_num,
 
 OMPT_API_ROUTINE int ompt_get_num_devices(void) {
   return 1; // only one device (the current device) is available
+}
+
+/*****************************************************************************
+ * Extensions originally added for OpenACC support
+ ****************************************************************************/
+
+OMPT_API_ROUTINE ompt_directive_info_t *ompt_get_directive_info(void) {
+  return &ompt_directive_info;
 }
 
 /*****************************************************************************

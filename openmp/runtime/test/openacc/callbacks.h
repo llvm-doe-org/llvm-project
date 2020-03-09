@@ -44,10 +44,17 @@ static void print_prof_info(acc_prof_info *pi) {
   printf("  acc_prof_info\n"
          "    event_type=%d, valid_bytes=%d, version=%d,\n"
          "    device_type=%s, device_number=%d,\n"
-         "    thread_id=%d, async=%s\n",
+         "    thread_id=%d, async=%s, async_queue=%zd,\n"
+         "    src_file=%s, func_name=%s,\n"
+         "    line_no=%d, end_line_no=%d,\n"
+         "    func_line_no=%d, func_end_line_no=%d\n",
          pi->event_type, pi->valid_bytes, pi->version,
          deviceToStr(pi->device_type), pi->device_number,
-         pi->thread_id, asyncToStr(pi->async));
+         pi->thread_id, asyncToStr(pi->async), pi->async_queue,
+         pi->src_file ? pi->src_file : "(null)",
+         pi->func_name ? pi->func_name : "(null)",
+         pi->line_no, pi->end_line_no,
+         pi->func_line_no, pi->func_end_line_no);
 }
 
 static void print_other_event_info(acc_other_event_info *oi) {

@@ -3908,6 +3908,16 @@ static inline void __kmp_resume_if_hard_paused() {
   }
 }
 
+/* ------------------------------------------------------------------------ */
+//
+// Extensions that support OpenACC but that might be more generally useful.
+//
+
+// Records directive info for upcoming runtime calls.
+void __kmpc_set_directive_info(const char *src_file, const char *func_name,
+                               int line_no, int end_line_no, int func_line_no,
+                               int func_end_line_no);
+
 #ifdef __cplusplus
 }
 #endif

@@ -4382,6 +4382,9 @@ private:
   llvm::Value *EmitX86CpuSupports(uint64_t Mask);
   llvm::Value *EmitX86CpuInit();
   llvm::Value *FormResolverCondition(const MultiVersionResolverOption &RO);
+
+public:
+  void EmitACCExecutableDirective(const ACCExecutableDirective &D);
 };
 
 inline DominatingLLVMValue::saved_type

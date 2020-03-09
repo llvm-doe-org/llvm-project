@@ -137,6 +137,7 @@ ompt_callbacks_internal_t ompt_get_callbacks(void) OMPT_LIBOMPTARGET_WEAK;
 uint64_t ompt_get_unique_id(void) OMPT_LIBOMPTARGET_WEAK;
 void ompt_record_device_init(int32_t device_num) OMPT_LIBOMPTARGET_WEAK;
 void ompt_toggle_in_device_target_region() OMPT_LIBOMPTARGET_WEAK;
+extern ompt_directive_info_t ompt_directive_info;
 
 #if KMP_OS_WINDOWS
 #define UNLIKELY(x) (x)

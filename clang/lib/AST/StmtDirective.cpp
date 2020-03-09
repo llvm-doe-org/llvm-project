@@ -74,6 +74,10 @@ SourceRange ExecutableDirective::getConstructRange(
           S = Child;
       }
       break;
+    case CapturedStmtClass:
+      // The last child might not have the last token.
+      S = cast<CapturedStmt>(S)->getCapturedStmt();
+      break;
     case ArraySubscriptExprClass:
     case CallExprClass:
     case CompoundStmtClass:
