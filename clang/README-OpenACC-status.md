@@ -18,7 +18,10 @@ We have implemented and tested support for the following features:
         * See the section "Using" in `../README.md` for an
           introduction to Clacc's command-line options.
 * offloading targets:
-    * host, x86_64, or nvptx64
+    * host: omit `-fopenmp-targets` or set
+      `OMP_TARGET_OFFLOAD=disabled` in run-time environment
+    * x86_64: `-fopenmp-targets=x86_64-unknown-linux-gnu`
+    * NVIDIA GPU: `-fopenmp-targets=nvptx64-nvidia-cuda`
 * `parallel` directive:
     * use without clauses
     * data attributes:
