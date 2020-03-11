@@ -191,20 +191,20 @@ void fn() {
     #pragma acc CMB_PAR loop auto auto
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+1 {{unexpected OpenACC 'independent' clause, 'seq' is specified already}}
+    // expected-error@+1 {{unexpected OpenACC clause 'independent', 'seq' is specified already}}
     #pragma acc CMB_PAR loop seq independent
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+1 {{unexpected OpenACC 'seq' clause, 'auto' is specified already}}
+    // expected-error@+1 {{unexpected OpenACC clause 'seq', 'auto' is specified already}}
     #pragma acc CMB_PAR loop auto seq
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+1 {{unexpected OpenACC 'auto' clause, 'independent' is specified already}}
+    // expected-error@+1 {{unexpected OpenACC clause 'auto', 'independent' is specified already}}
     #pragma acc CMB_PAR loop independent auto
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+2 {{unexpected OpenACC 'seq' clause, 'auto' is specified already}}
-    // expected-error@+1 {{unexpected OpenACC 'independent' clause, 'seq' is specified already}}
+    // expected-error@+2 {{unexpected OpenACC clause 'seq', 'auto' is specified already}}
+    // expected-error@+1 {{unexpected OpenACC clause 'independent', 'seq' is specified already}}
     #pragma acc CMB_PAR loop auto seq independent
     for (int i = 0; i < 5; ++i)
       ;
@@ -266,15 +266,15 @@ void fn() {
     #pragma acc CMB_PAR loop gang worker vector auto
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+1 {{unexpected OpenACC 'gang' clause, 'seq' is specified already}}
+    // expected-error@+1 {{unexpected OpenACC clause 'gang', 'seq' is specified already}}
     #pragma acc CMB_PAR loop seq gang
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+1 {{unexpected OpenACC 'seq' clause, 'worker' is specified already}}
+    // expected-error@+1 {{unexpected OpenACC clause 'seq', 'worker' is specified already}}
     #pragma acc CMB_PAR loop worker seq
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+3 {{unexpected OpenACC 'seq' clause, 'vector' is specified already}}
+    // expected-error@+3 {{unexpected OpenACC clause 'seq', 'vector' is specified already}}
     // sep-error@+2 {{directive '#pragma acc loop' cannot contain more than one 'vector' clause}}
     // cmb-error@+1 {{directive '#pragma acc parallel loop' cannot contain more than one 'vector' clause}}
     #pragma acc CMB_PAR loop vector seq vector

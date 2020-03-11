@@ -1244,7 +1244,7 @@ def err_acc_expected_punc : Error<
 def err_acc_unexpected_clause : Error<
   "unexpected OpenACC clause '%0' in directive '#pragma acc %1'">;
 def err_acc_mutually_exclusive_clauses : Error<
-  "unexpected OpenACC '%0' clause, '%1' is specified already">;
+  "unexpected OpenACC clause '%0', '%1' is specified already">;
 def err_acc_expected_reduction_operator : Error<
   "expected reduction operator">;
 
