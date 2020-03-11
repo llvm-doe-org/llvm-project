@@ -88,7 +88,7 @@
 // RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version -o %t %t-omp.c \
 // RUN:            %libatomic %[dir-cflags]
 // RUN:     %t 2 2>&1 \
-// RUN:     | FileCheck -check-prefixes=EXE,EXE-%[dir],EXE-TGT-HOST %s
+// RUN:     | FileCheck -check-prefixes=EXE,EXE-%[dir],EXE-TGT-HOST,EXE-%[dir]-TGT-HOST %s
 // RUN:   }
 // RUN: }
 
@@ -105,7 +105,7 @@
 // RUN:                      %[tgt-cflags] %[dir-cflags] -DTGT_%[tgt]_EXE
 // RUN:     %[run-if] %t 2 > %t.out 2>&1
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:                         -check-prefixes=EXE,EXE-%[dir],EXE-TGT-%[tgt]
+// RUN:                         -check-prefixes=EXE,EXE-%[dir],EXE-TGT-%[tgt],EXE-%[dir]-TGT-%[tgt]
 // RUN:   }
 // RUN: }
 
@@ -1128,6 +1128,225 @@ int main() {
     // EXE-PAR-NEXT:     acc = 18.0 + 13.0i
     // EXE-PARLOOP-NEXT: acc = 26.0 + 25.0i
     printf("acc = %.1f + %.1fi\n", creal(acc), cimag(acc));
+  }
+  // PRT-NEXT: }
+
+  //--------------------------------------------------
+  // Explicit copy already present
+  //--------------------------------------------------
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int acc = 10;
+    // PRT-NEXT: int val = 2;
+    int acc = 10;
+    int val = 2;
+    // DMP-PAR:           ACCParallelDirective
+    // DMP-PARLOOP:       ACCParallelLoopDirective
+    // DMP-PARLOOP-NEXT:    ACCSeqClause
+    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
+    // DMP-NEXT:            ACCFirstprivateClause {{.*}}
+    // DMP-NOT:               <implicit>
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-NEXT:            ACCReductionClause {{.*}} '+'
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-NEXT:            ACCCopyClause {{.*}}
+    // DMP-NOT:               <implicit>
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
+    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
+    // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
+    // DMP-PARLOOP-NOT:         <implicit>
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-PARLOOP-NEXT:      ACCCopyClause {{.*}}
+    // DMP-PARLOOP-NOT:         <implicit>
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '+'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-NEXT:              impl: OMPTargetTeamsDirective
+    // DMP-NEXT:                OMPNum_teamsClause
+    // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
+    // DMP-NEXT:                OMPFirstprivateClause
+    // DMP-NOT:                   <implicit>
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-NEXT:                OMPMapClause
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP:           ACCLoopDirective
+    // DMP-PARLOOP-NEXT:        ACCSeqClause
+    // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} '+'
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
+    //
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copy(acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(+: acc){{$}}
+    //
+    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(tofrom: acc) reduction(+: acc){{$}}
+    // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copy(acc){{$}}
+    #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc) copy(acc)
+    // DMP-PAR-NOT:      ForStmt
+    // DMP-PARLOOP-NEXT: impl: ForStmt
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for \(.*\)|FORLOOP_HEAD}}
+    FORLOOP_HEAD
+      // DMP: CompoundAssignOperator {{.*}} 'int' '+='
+      // PRT-NEXT: acc += val;
+      acc += val;
+    // DMP: CallExpr
+    // PRT-NEXT: printf
+    // EXE-PAR-NEXT: acc = 18
+    // EXE-PARLOOP-NEXT: acc = 26
+    printf("acc = %d\n", acc);
+  }
+  // PRT-NEXT: }
+
+  //--------------------------------------------------
+  // Explicit copyin already present
+  //--------------------------------------------------
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int acc = 10;
+    // PRT-NEXT: int val = 2;
+    int acc = 10;
+    int val = 2;
+    // DMP-PAR:           ACCParallelDirective
+    // DMP-PARLOOP:       ACCParallelLoopDirective
+    // DMP-PARLOOP-NEXT:    ACCSeqClause
+    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
+    // DMP-NEXT:            ACCFirstprivateClause {{.*}}
+    // DMP-NOT:               <implicit>
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-NEXT:            ACCReductionClause {{.*}} '+'
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-NEXT:            ACCCopyinClause {{.*}}
+    // DMP-NOT:               <implicit>
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
+    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
+    // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
+    // DMP-PARLOOP-NOT:         <implicit>
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-PARLOOP-NEXT:      ACCCopyinClause {{.*}}
+    // DMP-PARLOOP-NOT:         <implicit>
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-NEXT:              ACCNomapClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '+'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-NEXT:              impl: OMPTargetTeamsDirective
+    // DMP-NEXT:                OMPNum_teamsClause
+    // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
+    // DMP-NEXT:                OMPFirstprivateClause
+    // DMP-NOT:                   <implicit>
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'val' 'int'
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-NEXT:                OMPMapClause
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP:           ACCLoopDirective
+    // DMP-PARLOOP-NEXT:        ACCSeqClause
+    // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} '+'
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
+    //
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copyin(acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(to: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(to: acc) reduction(+: acc){{$}}
+    //
+    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(to: acc){{$}}
+    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(to: acc) reduction(+: acc){{$}}
+    // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copyin(acc){{$}}
+    #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc) copyin(acc)
+    // DMP-PAR-NOT:      ForStmt
+    // DMP-PARLOOP-NEXT: impl: ForStmt
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for \(.*\)|FORLOOP_HEAD}}
+    FORLOOP_HEAD
+      // DMP: CompoundAssignOperator {{.*}} 'int' '+='
+      // PRT-NEXT: acc += val;
+      acc += val;
+    // DMP: CallExpr
+    // PRT-NEXT: printf
+    // EXE-PAR-TGT-HOST-NEXT: acc = 18
+    // EXE-PARLOOP-TGT-HOST-NEXT: acc = 26
+    // EXE-TGT-X86_64-NEXT: acc = 10
+    // EXE-TGT-NVPTX64-NEXT: acc = 10
+    printf("acc = %d\n", acc);
+  }
+  // PRT-NEXT: }
+
+  //--------------------------------------------------
+  // Reduction implies copy even if reduction var is unreferenced
+  //--------------------------------------------------
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int acc = 10;
+    int acc = 10;
+    // DMP-PAR:           ACCParallelDirective
+    // DMP-PARLOOP:       ACCParallelLoopDirective
+    // DMP-PARLOOP-NEXT:    ACCSeqClause
+    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
+    // DMP-NEXT:            ACCReductionClause {{.*}} '+'
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
+    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
+    // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:      ACCReductionClause {{.*}} <implicit> '+'
+    // DMP-PARLOOP-NEXT:        DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-NEXT:              impl: OMPTargetTeamsDirective
+    // DMP-NEXT:                OMPNum_teamsClause
+    // DMP-NEXT:                  IntegerLiteral {{.*}} 'int' 4
+    // DMP-PAR-NEXT:            OMPReductionClause
+    // DMP-PAR-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-NEXT:                OMPMapClause
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP-NEXT:        OMPReductionClause
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int'
+    // DMP-PARLOOP:           ACCLoopDirective
+    // DMP-PARLOOP-NEXT:        ACCSeqClause
+    // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} '+'
+    // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int'
+    //
+    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) reduction(+: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) reduction(+: acc) map(tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) map(tofrom: acc) reduction(+: acc){{$}}
+    //
+    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) reduction(+: acc) map(tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) map(tofrom: acc) reduction(+: acc){{$}}
+    // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(+: acc){{$}}
+    #pragma acc parallel LOOP num_gangs(4) reduction(+: acc)
+    // DMP-PAR-NOT:      ForStmt
+    // DMP-PARLOOP-NEXT: impl: ForStmt
+    // PRT-PAR-SAME: {{$([[:space:]] *FORLOOP_HEAD)?}}
+    // PRT-PARLOOP-NEXT: {{for \(.*\)|FORLOOP_HEAD}}
+    FORLOOP_HEAD
+      // DMP: NullStmt
+      // PRT-NEXT: ;
+      ;
+    // DMP: CallExpr
+    // PRT-NEXT: printf
+    // EXE-NEXT: acc = 10
+    printf("acc = %d\n", acc);
   }
   // PRT-NEXT: }
 

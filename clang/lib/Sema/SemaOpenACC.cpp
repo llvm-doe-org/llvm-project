@@ -59,9 +59,6 @@ public:
   /// DMA).  Each will eventually be determined per variable referenced in a
   /// construct to which it is relevant (for example, DMAs are irrelevant to
   /// acc loop).
-  ///
-  /// We also store here whether the variable has a reduction on any effective
-  /// directive that's a part of the same combined directive.
   struct DAVarData final {
     /// If the DMA is undetermined, then ACC_DMA_unknown.  Otherwise, not
     /// ACC_DMA_unknown.
@@ -81,18 +78,13 @@ public:
     /// If DSAKind is ACC_DSA_reduction, then the reduction ID.  Otherwise,
     /// undefined.
     DeclarationNameInfo ReductionId;
-    /// Whether the effective or combined directive has a reduction for this
-    /// variable.  That is, true if DSAKind = ACC_DSA_reduction or if this
-    /// directive is part of a combined directive with a reduction for this
-    /// variable.  In the latter case, the effective directive with the
-    /// reduction might have been popped off the stack already.
-    bool ReductionOnEffectiveOrCombined = false;
     DAVarData() {}
   };
 
 private:
   struct DirStackEntryTy final {
     llvm::DenseMap<VarDecl *, DAVarData> DAMap;
+    llvm::SmallVector<Expr *, 4> ReductionVarsOnEffectiveOrCombined;
     llvm::DenseSet<VarDecl *> LCVSet;
     llvm::SmallVector<std::pair<Expr *, VarDecl *>, 4> LCVVec;
     /// The real directive kind.  In the case of a combined directive, there
@@ -155,6 +147,13 @@ public:
   SourceLocation getLoopBreakStatement() const {
     assert(!Stack.empty() && "expected non-empty directive stack");
     return Stack.back().LoopBreakLoc;
+  }
+  /// Get all reduction variables on the effective or combined directive.  In
+  /// the latter case, the effective directive with the reduction might have
+  /// been popped off the stack already.
+  const llvm::SmallVectorImpl<Expr *> &getReductionVars() const {
+    assert(!Stack.empty() && "expected non-empty directive stack");
+    return Stack.back().ReductionVarsOnEffectiveOrCombined;
   }
   /// Register the given expression as a loop control variable reference in an
   /// assignment but not a declaration in a for loop init associated with the
@@ -282,7 +281,8 @@ private:
       return false;
     }
     static void setReductionFields(bool AddHere, OpenACCDMAKind K,
-                                   DAVarData &DVar,
+                                   DirStackEntryTy &StackEntry,
+                                   DAVarData &DVar, Expr *RefExpr,
                                    const DeclarationNameInfo &ReductionId) {
     }
   };
@@ -313,13 +313,14 @@ private:
       return false;
     }
     static void setReductionFields(bool AddHere, OpenACCDSAKind K,
-                                   DAVarData &DVar,
+                                   DirStackEntryTy &StackEntry,
+                                   DAVarData &DVar, Expr *RefExpr,
                                    const DeclarationNameInfo &ReductionId) {
       if (K != ACC_DSA_reduction)
         return;
       if (AddHere)
         DVar.ReductionId = ReductionId;
-      DVar.ReductionOnEffectiveOrCombined = true;
+      StackEntry.ReductionVarsOnEffectiveOrCombined.push_back(RefExpr);
     }
   };
   /// Encapsulates commonalities between implement addDMA and addDSA.  Each
@@ -489,7 +490,7 @@ bool DirStackTy::addDA(VarDecl *VD, Expr *E, typename DA::KindTy DAKind,
     }
     // Complain for conflict with directive.
     if (isAllowedDAForDirective(Itr->EffectiveDKind, DAKind)) {
-      DA::setReductionFields(!Added, DAKind, DVar, ReductionId);
+      DA::setReductionFields(!Added, DAKind, *Itr, DVar, E, ReductionId);
       if (!Added) {
         DA::Kind(DVar) = DAKind;
         DA::RefExpr(DVar) = E;
@@ -828,12 +829,6 @@ public:
       // Get predetermined and explicit DAs.
       const DirStackTy::DAVarData &DVar = Stack->getTopDA(VD);
 
-      // Below, we assume DSAKind == ACC_DSA_reduction implies
-      // ReductionOnEffectiveOrCombined.
-      assert((DVar.DSAKind != ACC_DSA_reduction ||
-              DVar.ReductionOnEffectiveOrCombined) &&
-             "expected reduction to be set consistently");
-
       // Compute implicit DAs.
       VD = VD->getCanonicalDecl();
       OpenACCDMAKind DMAKind = ACC_DMA_unknown;
@@ -850,11 +845,6 @@ public:
           // design document for the interpretation used here.
           // Sema::ActOnOpenACCExecutableDirective handles the case without a
           // seq clause.
-          //
-          // We've already rejected reductions on loop control variables.
-          assert((!DVar.ReductionOnEffectiveOrCombined ||
-                  !Stack->hasLoopControlVariable(VD)) &&
-                 "expected acc loop control var not to be reduction var");
           assert((!Stack->hasLoopControlVariable(VD) ||
                   Stack->getLoopPartitioning().hasSeqExplicit()) &&
                  "expected predetermined private for loop control variable "
@@ -865,11 +855,9 @@ public:
         }
       } else if (isOpenACCParallelDirective(Stack->getEffectiveDirective())) {
         if (DVar.DMAKind != ACC_DMA_unknown ||
-            (DVar.DSAKind != ACC_DSA_unknown &&
-             DVar.DSAKind != ACC_DSA_reduction)) {
-          // There's a predetermined or explicit DA other than a reduction
-          // (which would imply a copy clause), so there's no implicit DA other
-          // than the defaults.
+            DVar.DSAKind != ACC_DSA_unknown) {
+          // There's a predetermined or explicit DA, so there's no implicit DA
+          // other than the defaults.
         } else if (!VD->getType()->isScalarType()) {
           // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L830-833:
           //   "If there is no default(present) clause on the construct, an
@@ -877,15 +865,6 @@ public:
           //   that does not appear in a data clause for the construct or any
           //   enclosing data construct will be treated as if it appeared in a
           //   copy clause for the parallel construct."
-          DMAKind = ACC_DMA_copy;
-        } else if (DVar.ReductionOnEffectiveOrCombined) {
-          // OpenACC 3.0 sec. 2.5.13 "reduction clause" L984-985:
-          //   "It implies a copy data clause for each reduction var, unless a
-          //   data clause for that variable appears on the compute construct."
-          // OpenACC 3.0 sec. 2.11 "Combined Constructs" L1958-1959:
-          //   "In addition, a reduction clause on a combined construct implies
-          //   a copy data clause for each reduction variable, unless a data
-          //   clause for that variable appears on the combined construct."
           DMAKind = ACC_DMA_copy;
         } else {
           // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L835-838:
@@ -1020,6 +999,36 @@ public:
 
   ImplicitDAAdder(DirStackTy *S, ImplicitDATable &T)
       : Stack(S), ImplicitDAs(T) {
+    // OpenACC 3.0 sec. 2.5.13 "reduction clause" L984-985:
+    //   "It implies a copy data clause for each reduction var, unless a data
+    //   clause for that variable appears on the compute construct."
+    // OpenACC 3.0 sec. 2.11 "Combined Constructs" L1958-1959:
+    //   "In addition, a reduction clause on a combined construct implies a
+    //   copy data clause for each reduction variable, unless a data clause for
+    //   that variable appears on the combined construct."
+    // A copy DMA is implied by a reduction clause even for a reduction
+    // variable that is not referenced within the construct, so it is handled
+    // here rather than in VisitDeclRefExpr.
+    if (Stack->getEffectiveDirective() == ACCD_parallel) {
+      for (Expr *VR : Stack->getReductionVars()) {
+        DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
+        VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
+        const DirStackTy::DAVarData &DVar = Stack->getTopDA(VD);
+        if (DVar.DMAKind != ACC_DMA_unknown)
+          continue;
+        ImplicitDATable::Entry &ImplicitDA = ImplicitDAs.lookup(VD);
+        assert(ImplicitDA.getDMAKind() == ACC_DMA_unknown &&
+               ImplicitDA.getDSAKind() == ACC_DSA_unknown &&
+               "expected no implicit DA to be set yet");
+        ImplicitDA.setDMA(ACC_DMA_copy, DRE);
+        if (DVar.DSAKind == ACC_DSA_unknown)
+          ImplicitDA.setDSA(ACC_DSA_shared, DRE);
+        else
+          assert(DVar.DSAKind == ACC_DSA_reduction &&
+                 "expected any explicit DSA for reduction var to be "
+                 "reduction");
+      }
+    }
     LocalDefinitions.emplace_back();
   }
 };
