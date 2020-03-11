@@ -91,24 +91,44 @@ void fn() {
   extern struct S sDecl; // expected-note 9 {{'sDecl' declared here}}
 
   //--------------------------------------------------
-  // Basic clause syntax
+  // No clauses
   //--------------------------------------------------
 
 #if !CMB
   #pragma acc parallel
 #endif
   {
+    #pragma acc CMB_PAR loop
+    for (int i = 0; i < 5; ++i)
+      ;
+  }
+
+  //--------------------------------------------------
+  // Unrecognized clauses
+  //--------------------------------------------------
+
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    // Bogus clauses.
+
     // sep-warning@+2 {{extra tokens at the end of '#pragma acc loop' are ignored}}
     // cmb-warning@+1 {{extra tokens at the end of '#pragma acc parallel loop' are ignored}}
     #pragma acc CMB_PAR loop 500
     for (int i = 0; i < 5; ++i)
       ;
+
+    // Clauses not permitted here.
+
+    // sep-error@+7 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc loop'}}
+    // cmb-error@+6 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc parallel loop'}}
     // sep-error@+5 {{unexpected OpenACC clause 'copy' in directive '#pragma acc loop'}}
     // sep-error@+4 {{unexpected OpenACC clause 'pcopy' in directive '#pragma acc loop'}}
     // sep-error@+3 {{unexpected OpenACC clause 'present_or_copy' in directive '#pragma acc loop'}}
     // cmb-error@+2 {{copy variable defined again as copy variable}}
     // cmb-note@+1 {{previously defined as copy variable here}}
-    #pragma acc CMB_PAR loop copy(i) pcopy(jk) present_or_copy(i)
+    #pragma acc CMB_PAR loop nomap(i) copy(i) pcopy(jk) present_or_copy(i)
     for (int i = 0; i < 5; ++i)
       ;
     // sep-error@+5 {{unexpected OpenACC clause 'copyin' in directive '#pragma acc loop'}}
