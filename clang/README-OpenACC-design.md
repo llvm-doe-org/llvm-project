@@ -1090,8 +1090,8 @@ to OpenMP is as follows:
 * `acc parallel` -> `omp target teams`
 * Translation discards *imp* `nomap`.
 * *exp*|*imp* `copy` -> *exp* `map` with a `tofrom` map type.
-* *exp*|*imp* `copyin` -> *exp* `map` with a `to` map type.
-* *exp*|*imp* `copyout` -> *exp* `map` with a `from` map type.
+* *exp* `copyin` -> *exp* `map` with a `to` map type.
+* *exp* `copyout` -> *exp* `map` with a `from` map type.
 * *imp* `shared` -> *exp* `shared`
 * *exp*|*imp* `reduction` -> *exp* `reduction`
 * *exp*|*imp* `firstprivate` -> *exp* `firstprivate`
