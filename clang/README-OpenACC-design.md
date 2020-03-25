@@ -588,8 +588,7 @@ clarify these points in future versions of the OpenACC specification.
         * `firstprivate` (unmappable)
         * `private` (unmappable)
     * DA combinations:
-        * Every variable referenced in a construct and declared
-          outside it has at most one DMA and one DSA on the associated
+        * Every variable has at most one DMA and one DSA on a
           directive.
         * Mappable DSAs can be combined with any DMA.
         * Unmappable DSAs can be combined with `nomap` but no other
@@ -599,7 +598,7 @@ clarify these points in future versions of the OpenACC specification.
     * Relevant DAs:
         * A variable cannot have any DA from a group on a directive if
           that group is irrelevant to that directive.
-        * DMAs are relevant only to `acc parallel`.
+        * DMAs are relevant only to `acc data` and `acc parallel`.
         * DSAs are relevant only to `acc parallel` and `acc loop`.
         * Relevance does not indicate that all members of a group are
           permitted.  For example, `firstprivate` is not permitted on
@@ -633,9 +632,12 @@ clarify these points in future versions of the OpenACC specification.
           translation to OpenMP.
         * The default DA in each group is not specified as a DA by
           OpenACC 3.0:
-            * As noted in the mappings below, Clacc does not translate
-              `nomap`, which is merely a placeholder indicating no
-              mapping attribute was determined.
+            * As noted in the mappings below, Clacc's translation
+              sometimes discards `nomap`, which is then merely a
+              placeholder indicating no mapping attribute was
+              determined.  However, Clacc sometimes translates it to
+              suppress OpenMP's *imp* DAs, which do not always have
+              the desired semantics.
             * As noted in the mappings below, in many cases, Clacc
               translates `shared` to OpenMP's `shared` clause.
               However, `omp distribute` and `omp simd` do not accept
@@ -767,6 +769,16 @@ clarify these points in future versions of the OpenACC specification.
     * OpenMP 5.0 does not permit array sections in these clauses.  See
       OpenMP 5.0 sec. 2.1.5 p. 46 L10.  Thus, this feature is
       currently listed under "Potentially Unmappable Features" below.
+* Behavior is undefined if a subarray specified for a variable in a
+  DMA on an `acc parallel` or `acc data` directive is not fully
+  contained within any subarray specified for the same variable in a
+  DMA on any enclosing `acc data` directive.  Notes:
+    * This case does not appear to be well defined by OpenACC 3.0 or
+      OpenMP 5.0, but our understanding is that it will be clarified
+      in OpenMP 5.1.  For now, Clacc handles this case by deferring to
+      the OpenMP implementation's handling.
+    * For further discussion, see the notes on the translation of
+      `nomap` in the "Parallel Directives" section below.
 * An *imp* `copy` for a reduction variable overrides an *imp*
   `firstprivate` when the variable is a scalar.  Text to make this
   overriding behavior clear has been proposed for inclusion in the
@@ -1081,6 +1093,17 @@ Currently, it works as follows in Clacc:
       have *exp* `gang`.  Notes:
         * The point here is to chose the outermost construct possible.
 
+Data Directives
+---------------
+
+Clacc's current mapping of an `acc data` directive and its clauses to
+OpenMP is as follows:
+
+* `acc data` -> `omp target data`
+* *exp* `copy` -> *exp* `map` with a `tofrom` map type.
+* *exp* `copyin` -> *exp* `map` with a `to` map type.
+* *exp* `copyout` -> *exp* `map` with a `from` map type.
+
 Parallel Directives
 -------------------
 
@@ -1088,7 +1111,114 @@ Clacc's current mapping of an `acc parallel` directive and its clauses
 to OpenMP is as follows:
 
 * `acc parallel` -> `omp target teams`
-* Translation discards *imp* `nomap`.
+* If there exists a scalar variable that is *imp* `nomap` and *imp*
+  `shared` on the `acc parallel`, then -> `defaultmap(tofrom:scalar)`.
+  Beyond that, the translation discards *imp* `nomap`.  Notes:
+    * There is a discrepancy between the OpenACC and OpenMP
+      specifications that requires careful consideration here:
+        * OpenACC: For any variable, OpenACC's *imp* DAs that normally
+          apply on the `acc parallel` when there's no *exp* DA there
+          are suppressed by any *exp* DMA on an enclosing `acc data`.
+          In Clacc, this suppression is what causes a variable to be
+          both *imp* `nomap` and *imp* `shared` on the `acc parallel`.
+        * OpenMP: For any variable, OpenMP's *imp* DAs that normally
+          apply on the `omp target teams` when there's no *exp* DA
+          there are *not suppressed* by any *exp* DMA on an enclosing
+          `omp target data`.
+    * Thus, when a variable is both *imp* `nomap` and *imp* `shared`
+      on the `acc parallel` and thus there is an enclosing `acc data`
+      with an *exp* DMA for the same variable, Clacc's translation
+      must override any OpenMP *imp* DAs on the `omp target teams` if
+      they don't have the correct semantics for OpenACC, as discussed
+      below.
+    * In the case of an array:
+        * Clacc does not override the *imp* `map` specified by OpenMP
+          5.0 sec. 2.19.7 "Data-Mapping Attribute Rules, Clauses, and
+          Directives" p. 315 L5-6, which says:
+
+            > If a variable is not a scalar then it is treated as if
+            > it had appeared in a map clause with a map-type of
+            > tofrom.
+
+        * It is unclear whether this *imp* `map` specifies the entire
+          array or some array section that is already mapped.  It is
+          our understanding that some clarification in the direction
+          of the latter will appear in OpenMP 5.1.
+        * If a subarray is specified for the array on the enclosing
+          `acc data`, and thus if an array section is specified for
+          the array on the corresponding `omp target data`, then we
+          must consider if this *imp* `map` on the `omp target teams`
+          violates OpenMP 5.0 sec. 2.19.7.1, "map Clause",
+          "Restrictions", p. 321 L9-12, which says:
+
+            > If any part of the original storage of a list item with
+            > an explicit data-mapping attribute has corresponding
+            > storage in the device data environment prior to a task
+            > encountering the construct associated with the map
+            > clause, all of the original storage must have
+            > corresponding storage in the device data environment
+            > prior to the task encountering the construct.
+
+        * We are unsure whether the phrases "with an explicit
+          data-mapping attribute" and "the map clause" are intended to
+          refer to the same thing.  It is our understanding that the
+          former phrase is intended to relax this restriction in the
+          case of this *imp* `map`, and so the code that Clacc
+          generates appears to conform to OpenMP 5.0.
+        * At the time of this writing, Clang's OpenMP support
+          implements only the OpenMP 4.5 version of the above
+          restriction, which does not include the phrase "with an
+          explicit data-mapping attribute".  Thus, this *imp* `map`
+          clause normally produces an error diagnostic.  However,
+          apparently due to a bug, Clang happens to suppress the
+          diagnostic when *exp* `shared` is specified for the array.
+          Fortunately, Clacc always specifies *exp* `shared` here as
+          the translation of the *imp* `shared` from the `acc
+          parallel`, so Clacc effectively sees OpenMP 5.0 behavior.
+        * Neither OpenACC 3.0 nor OpenMP 5.0 appear to clarify how
+          references to an array in an `acc parallel` or `omp target
+          teams` are mapped if multiple enclosing `acc data` or `omp
+          target data` directives specify conflicting array sections
+          for the array.  It is our understanding that some
+          clarification will appear in OpenMP 5.1.  Until OpenACC
+          includes a similar clarification, Clacc assumes the
+          semantics of OpenMP.  See "Basic Data Attributes" above.
+        * As an alternative to depending on the *imp* `map` clause,
+          our related assumptions about the OpenMP 5.0 spec, and
+          Clang's apparent bug in the case of *exp* `shared`, Clacc
+          could have attempted to copy any subarray specification from
+          the enclosing `acc data` to an *exp* `map` clause here.
+          Again, the OpenACC spec doesn't yet clarify which `acc data`
+          would be appropriate.  Moreover, if any expression in that
+          subarray specification were non-constant, Clacc would have
+          to extract it from the original subarray, store it in a
+          local variable, and reference that variable in both array
+          section specifications to guarantee the correct value.  This
+          approach would be more complicated to implement and
+          maintain, and the OpenMP code produced by source-to-source
+          mode could be significantly more challenging to read.
+    * In the case of a scalar:
+        * The normal OpenMP *imp* DA is `firstprivate`, which
+          obviously does not have the `shared` behavior required by
+          OpenACC.
+        * The `defaultmap(tofrom:scalar)` in the translation overrides
+          this *imp* `firstprivate`.
+        * As an alternative to using `defaultmap`, Clacc could have
+          generated an *exp* `map` clause per scalar.  However, this
+          would be less consistent with the handling of arrays, and so
+          the OpenMP code produced by source-to-source mode would be
+          more confusing to understand.
+    * Regardless of variable type, the variable should already be
+      present on the device due to the enclosing `acc data`, and so no
+      new allocation or data transfers are expected to be possible
+      regardless of the map type.  Because Clacc depends on the
+      implicit `tofrom` for non-scalars, Clacc chooses `tofrom` for
+      scalars for consistency.
+    * The reference counter for the variable will be affected by the
+      `map` clauses even though OpenACC doesn't specify that behavior.
+      However, this behavior shouldn't be observable given that it's
+      OpenACC's structured reference counter, which is guaranteed not
+      to fall to zero before the enclosing `acc data` ends either way.
 * *exp*|*imp* `copy` -> *exp* `map` with a `tofrom` map type.
 * *exp* `copyin` -> *exp* `map` with a `to` map type.
 * *exp* `copyout` -> *exp* `map` with a `from` map type.
@@ -1605,33 +1735,33 @@ OMPT callbacks that we devised for Clacc's OpenACC Profiling Interface
 support and that are not specified by OpenMP 5.0 are shown in
 **bold**.
 
-| OpenACC Event                     | Triggering OMPT Callback                                                     | Auxiliary OMPT Callback                  |
-|:----------------------------------|:-----------------------------------------------------------------------------|:-----------------------------------------|
-| `acc_ev_device_init_start`        | **`ompt_callback_device_initialize_start`**                                  |                                          |
-| `acc_ev_device_init_end`          | `ompt_callback_device_initialize`                                            |                                          |
-| `acc_ev_device_shutdown_start`    | **`ompt_callback_device_finalize_start`**                                    |                                          |
-| `acc_ev_device_shutdown_end`      | `ompt_callback_device_finalize`                                              |                                          |
-| `acc_ev_runtime_shutdown`         | `finalize` set by `ompt_start_tool`                                          |                                          |
-| `acc_ev_create`                   | `ompt_callback_target_data_op(optype=ompt_target_data_associate)`            |                                          |
-| `acc_ev_delete`                   | `ompt_callback_target_data_op(optype=ompt_target_data_disassociate)`         |                                          |
-| `acc_ev_alloc`                    | `ompt_callback_target_data_op(optype=ompt_target_data_alloc)`                |                                          |
-| `acc_ev_free`                     | `ompt_callback_target_data_op(optype=ompt_target_data_delete)`               |                                          |
-| `acc_ev_enter_data_start`         | **`ompt_callback_target_map_start`**                                         | `ompt_callback_target(kind=ompt_target)` |
-| `acc_ev_enter_data_end`           | `ompt_callback_target_map`                                                   | `ompt_callback_target(kind=ompt_target)` |
-| `acc_ev_exit_data_start`          | **`ompt_callback_target_map_exit_start`**                                    | `ompt_callback_target(kind=ompt_target)` |
-| `acc_ev_exit_data_end`            | **`ompt_callback_target_map_exit_end`**                                      | `ompt_callback_target(kind=ompt_target)` |
-| `acc_ev_update_start`             | *unimplemented*                                                              |                                          |
-| `acc_ev_update_end`               | *unimplemented*                                                              |                                          |
-| `acc_ev_compute_construct_start`  | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_begin)`          |                                          |
-| `acc_ev_compute_construct_end`    | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_end)`            |                                          |
-| `acc_ev_enqueue_launch_start`     | `ompt_callback_target_submit`                                                | `ompt_callback_target(kind=ompt_target)` |
-| `acc_ev_enqueue_launch_end`       | **`ompt_callback_target_submit_end`**                                        | `ompt_callback_target(kind=ompt_target)` |
-| `acc_ev_enqueue_upload_start`     | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_to_device)`   |                                          |
-| `acc_ev_enqueue_upload_end`       | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_to_device)`   |                                          |
-| `acc_ev_enqueue_download_start`   | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_from_device)` |                                          |
-| `acc_ev_enqueue_download_end`     | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_from_device)` |                                          |
-| `acc_ev_wait_start`               | *unimplemented*                                                              |                                          |
-| `acc_ev_wait_end`                 | *unimplemented*                                                              |                                          |
+| OpenACC Event                     | Triggering OMPT Callback                                                     | Auxiliary OMPT Callback                                         |
+|:----------------------------------|:-----------------------------------------------------------------------------|:----------------------------------------------------------------|
+| `acc_ev_device_init_start`        | **`ompt_callback_device_initialize_start`**                                  |                                                                 |
+| `acc_ev_device_init_end`          | `ompt_callback_device_initialize`                                            |                                                                 |
+| `acc_ev_device_shutdown_start`    | **`ompt_callback_device_finalize_start`**                                    |                                                                 |
+| `acc_ev_device_shutdown_end`      | `ompt_callback_device_finalize`                                              |                                                                 |
+| `acc_ev_runtime_shutdown`         | `finalize` set by `ompt_start_tool`                                          |                                                                 |
+| `acc_ev_create`                   | `ompt_callback_target_data_op(optype=ompt_target_data_associate)`            |                                                                 |
+| `acc_ev_delete`                   | `ompt_callback_target_data_op(optype=ompt_target_data_disassociate)`         |                                                                 |
+| `acc_ev_alloc`                    | `ompt_callback_target_data_op(optype=ompt_target_data_alloc)`                |                                                                 |
+| `acc_ev_free`                     | `ompt_callback_target_data_op(optype=ompt_target_data_delete)`               |                                                                 |
+| `acc_ev_enter_data_start`         | **`ompt_callback_target_map_start`**                                         | `ompt_callback_target(kind=ompt_target|ompt_target_enter_data)` |
+| `acc_ev_enter_data_end`           | `ompt_callback_target_map`                                                   | `ompt_callback_target(kind=ompt_target|ompt_target_enter_data)` |
+| `acc_ev_exit_data_start`          | **`ompt_callback_target_map_exit_start`**                                    | `ompt_callback_target(kind=ompt_target|ompt_target_exit_data)`  |
+| `acc_ev_exit_data_end`            | **`ompt_callback_target_map_exit_end`**                                      | `ompt_callback_target(kind=ompt_target|ompt_target_exit_data)`  |
+| `acc_ev_update_start`             | *unimplemented*                                                              |                                                                 |
+| `acc_ev_update_end`               | *unimplemented*                                                              |                                                                 |
+| `acc_ev_compute_construct_start`  | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_begin)`          |                                                                 |
+| `acc_ev_compute_construct_end`    | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_end)`            |                                                                 |
+| `acc_ev_enqueue_launch_start`     | `ompt_callback_target_submit`                                                | `ompt_callback_target(kind=ompt_target)`                        |
+| `acc_ev_enqueue_launch_end`       | **`ompt_callback_target_submit_end`**                                        | `ompt_callback_target(kind=ompt_target)`                        |
+| `acc_ev_enqueue_upload_start`     | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_to_device)`   |                                                                 |
+| `acc_ev_enqueue_upload_end`       | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_to_device)`   |                                                                 |
+| `acc_ev_enqueue_download_start`   | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_from_device)` |                                                                 |
+| `acc_ev_enqueue_download_end`     | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_from_device)` |                                                                 |
+| `acc_ev_wait_start`               | *unimplemented*                                                              |                                                                 |
+| `acc_ev_wait_end`                 | *unimplemented*                                                              |                                                                 |
 
 One way to conceptualize of the interaction between Clacc's OpenACC
 Profiling Interface support and the OpenMP runtime is that OMPT
@@ -1837,6 +1967,7 @@ is `ompt_get_directive_info_t`:
 // backward compatibility guarantees.
 typedef enum ompt_directive_kind_t {
   ompt_directive_unknown = 0,
+  ompt_directive_target_data,
   ompt_directive_target_teams
 } ompt_directive_kind_t;
 

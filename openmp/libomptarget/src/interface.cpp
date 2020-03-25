@@ -16,6 +16,8 @@
 #include "device.h"
 #include "private.h"
 #include "rtl.h"
+#define OMPT_FOR_LIBOMPTARGET
+#include "../../runtime/src/ompt-internal.h"
 
 #include <cassert>
 #include <cstdlib>
@@ -89,6 +91,22 @@ EXTERN void __tgt_unregister_lib(__tgt_bin_desc *desc) {
 /// creates host-to-target data mapping, stores it in the
 /// libomptarget.so internal structure (an entry in a stack of data maps)
 /// and passes the data to the device.
+//
+// OpenMP 5.0 sec. 2.12.3 p. 165 L22-23:
+// "The target-enter-data-begin event occurs when a thread enters a target
+// enter data region."
+// "The target-enter-data-end event occurs when a thread exits a target enter
+// data region."
+// OpenMP 5.0 sec. 2.12.2 p. 162 L29-30:
+// "The events associated with entering a target data region are the same
+// events as associated with a target enter data construct, described in
+// Section 2.12.3 on page 164."
+// OpenMP 5.0 sec. 4.5.2.26 p. 490 L24-25 and p. 491 L20-22:
+// "The ompt_callback_target_t type is used for callbacks that are dispatched
+// when a thread begins to execute a device construct."
+// "The kind argument indicates the kind of target region."
+// "The endpoint argument indicates that the callback signals the beginning of
+/// a scope or the end of a scope."
 EXTERN void __tgt_target_data_begin(int64_t device_id, int32_t arg_num,
     void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types) {
   if (IsOffloadDisabled()) return;
@@ -102,13 +120,22 @@ EXTERN void __tgt_target_data_begin(int64_t device_id, int32_t arg_num,
     DP("Use default device id %" PRId64 "\n", device_id);
   }
 
+  DeviceTy& Device = Devices[device_id];
+
+#if OMPT_SUPPORT
+  ompt_dispatch_callback_target(ompt_target_enter_data, ompt_scope_begin,
+                                Device);
+#endif
+
   if (CheckDeviceAndCtors(device_id) != OFFLOAD_SUCCESS) {
     DP("Failed to get device %" PRId64 " ready\n", device_id);
+    #if OMPT_SUPPORT
+      ompt_dispatch_callback_target(ompt_target_enter_data, ompt_scope_end,
+                                    Device);
+    #endif
     HandleTargetOutcome(false);
     return;
   }
-
-  DeviceTy& Device = Devices[device_id];
 
 #ifdef OMPTARGET_DEBUG
   for (int i=0; i<arg_num; ++i) {
@@ -120,6 +147,10 @@ EXTERN void __tgt_target_data_begin(int64_t device_id, int32_t arg_num,
 
   int rc = target_data_begin(Device, arg_num, args_base,
       args, arg_sizes, arg_types);
+#if OMPT_SUPPORT
+  ompt_dispatch_callback_target(ompt_target_enter_data, ompt_scope_end,
+                                Device);
+#endif
   HandleTargetOutcome(rc == OFFLOAD_SUCCESS);
 }
 
@@ -137,6 +168,22 @@ EXTERN void __tgt_target_data_begin_nowait(int64_t device_id, int32_t arg_num,
 /// passes data from the target, releases target memory and destroys
 /// the host-target mapping (top entry from the stack of data maps)
 /// created by the last __tgt_target_data_begin.
+//
+// OpenMP 5.0 sec. 2.12.4 p. 168 L22-23:
+// "The target-exit-data-begin event occurs when a thread enters a target exit
+// data region."
+// "The target-exit-data-end event occurs when a thread exits a target exit
+// data region."
+// OpenMP 5.0 sec. 2.12.2 p. 162 L31-32:
+// "The events associated with exiting a target data region are the same
+// events as associated with a target exit data construct, described in
+// Section 2.12.4 on page 166."
+// OpenMP 5.0 sec. 4.5.2.26 p. 490 L24-25 and p. 491 L20-22:
+// "The ompt_callback_target_t type is used for callbacks that are dispatched
+// when a thread begins to execute a device construct."
+// "The kind argument indicates the kind of target region."
+// "The endpoint argument indicates that the callback signals the beginning of
+// a scope or the end of a scope."
 EXTERN void __tgt_target_data_end(int64_t device_id, int32_t arg_num,
     void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types) {
   if (IsOffloadDisabled()) return;
@@ -163,6 +210,11 @@ EXTERN void __tgt_target_data_end(int64_t device_id, int32_t arg_num,
     return;
   }
 
+#if OMPT_SUPPORT
+  ompt_dispatch_callback_target(ompt_target_exit_data, ompt_scope_begin,
+                                Device);
+#endif
+
 #ifdef OMPTARGET_DEBUG
   for (int i=0; i<arg_num; ++i) {
     DP("Entry %2d: Base=" DPxMOD ", Begin=" DPxMOD ", Size=%" PRId64
@@ -173,6 +225,10 @@ EXTERN void __tgt_target_data_end(int64_t device_id, int32_t arg_num,
 
   int rc = target_data_end(Device, arg_num, args_base,
       args, arg_sizes, arg_types);
+  #if OMPT_SUPPORT
+    ompt_dispatch_callback_target(ompt_target_exit_data, ompt_scope_end,
+                                  Device);
+  #endif
   HandleTargetOutcome(rc == OFFLOAD_SUCCESS);
 }
 

@@ -77,6 +77,30 @@ bool ACCExecutableDirective::ompStmtPrintsDifferently(
   return ACCStr != OMPStr;
 }
 
+ACCDataDirective *ACCDataDirective::Create(
+    const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
+    ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt) {
+  unsigned Size =
+      llvm::alignTo(sizeof(ACCDataDirective), alignof(ACCClause *));
+  void *Mem =
+      C.Allocate(Size + sizeof(ACCClause *) * Clauses.size() + sizeof(Stmt *));
+  ACCDataDirective *Dir =
+      new (Mem) ACCDataDirective(StartLoc, EndLoc, Clauses.size());
+  Dir->setClauses(Clauses);
+  Dir->setAssociatedStmt(AssociatedStmt);
+  return Dir;
+}
+
+ACCDataDirective *ACCDataDirective::CreateEmpty(const ASTContext &C,
+                                                unsigned NumClauses,
+                                                EmptyShell) {
+  unsigned Size =
+      llvm::alignTo(sizeof(ACCDataDirective), alignof(ACCClause *));
+  void *Mem =
+      C.Allocate(Size + sizeof(ACCClause *) * NumClauses + sizeof(Stmt *));
+  return new (Mem) ACCDataDirective(NumClauses);
+}
+
 ACCParallelDirective *ACCParallelDirective::Create(
     const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
     ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,

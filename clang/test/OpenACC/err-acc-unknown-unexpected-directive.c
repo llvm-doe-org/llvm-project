@@ -6,6 +6,24 @@
 
 // noacc-no-diagnostics
 
+#pragma acc // expected-error {{unknown or unsupported OpenACC directive}}
+#pragma acc foobar // expected-error {{unknown or unsupported OpenACC directive}}
+#pragma acc data // expected-error {{unexpected OpenACC directive '#pragma acc data'}}
+#pragma acc parallel // expected-error {{unexpected OpenACC directive '#pragma acc parallel'}}
+#pragma acc loop // expected-error {{unexpected OpenACC directive '#pragma acc loop'}}
+#pragma acc parallel loop // expected-error {{unexpected OpenACC directive '#pragma acc parallel loop'}}
+
+#pragma acc routine seq // expected-error {{unknown or unsupported OpenACC directive}}
+int main() {
+#pragma acc // expected-error {{unknown or unsupported OpenACC directive}}
+  ;
+#pragma acc foobar // expected-error {{unknown or unsupported OpenACC directive}}
+  ;
+#pragma acc routine seq // expected-error {{unknown or unsupported OpenACC directive}}
+  ;
+  return 0;
+}
+
 struct S {
   #pragma acc // expected-error {{unknown or unsupported OpenACC directive}}
   int i;
@@ -23,18 +41,3 @@ union U {
   #pragma acc loop // expected-error {{unexpected OpenACC directive '#pragma acc loop'}}
   int k;
 };
-
-#pragma acc // expected-error {{unknown or unsupported OpenACC directive}}
-#pragma acc foobar // expected-error {{unknown or unsupported OpenACC directive}}
-#pragma acc parallel loop // expected-error {{unexpected OpenACC directive '#pragma acc parallel loop'}}
-
-#pragma acc routine seq // expected-error {{unknown or unsupported OpenACC directive}}
-int main() {
-#pragma acc // expected-error {{unknown or unsupported OpenACC directive}}
-  ;
-#pragma acc foobar // expected-error {{unknown or unsupported OpenACC directive}}
-  ;
-#pragma acc routine seq // expected-error {{unknown or unsupported OpenACC directive}}
-  ;
-  return 0;
-}

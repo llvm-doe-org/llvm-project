@@ -9728,6 +9728,8 @@ def note_acc_enclosing_reduction : Note<
   "enclosing '%0' reduction here">;
 def note_acc_implied_as_gang_reduction : Note<
   "implied as gang reduction here">;
+def err_acc_no_data_clause : Error<
+  "expected at least one data clause for '#pragma acc %0'">;
 } // end of OpenACC category
 
 let CategoryName = "Related Result Type Issue" in {

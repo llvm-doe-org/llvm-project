@@ -1393,6 +1393,7 @@ int main() {
 // Complete to suppress an additional warning, but it's too late for pragmas.
 int incomplete[3];
 
+//--------------------------------------------------
 // The remaining diagnostics are currently produced by OpenMP sema during the
 // transform from OpenACC to OpenMP, which is skipped if there have been any
 // previous diagnostics.  Thus, each must be tested in a separate compilation.
@@ -1405,6 +1406,7 @@ int incomplete[3];
 // TODO: We currently don't even check one of each diagnostic kind.  Look in
 // ActOnOpenMPMapClause and its callees, such as checkMappableExpressionList
 // and checkMapClauseExpressionBase in SemaOpenMP.cpp.
+//--------------------------------------------------
 
 #elif ERR == ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_AP
 

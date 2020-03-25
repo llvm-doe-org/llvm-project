@@ -2002,6 +2002,7 @@ namespace serialization {
       EXPR_OMP_ARRAY_SECTION,
 
       // OpenACC directives
+      STMT_ACC_DATA_DIRECTIVE,
       STMT_ACC_PARALLEL_DIRECTIVE,
       STMT_ACC_LOOP_DIRECTIVE,
       STMT_ACC_PARALLEL_LOOP_DIRECTIVE,

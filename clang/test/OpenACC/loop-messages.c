@@ -2866,11 +2866,32 @@ void fn() {
   #pragma acc loop vector
   for (int i = 0; i < 5; ++i)
     ;
+
+  //--------------------------------------------------
+  // Bad parent.
+  //--------------------------------------------------
+
+  // expected-error@+3 {{'#pragma acc loop' cannot be nested within '#pragma acc data'}}
+  // expected-note@+1 {{enclosing '#pragma acc data'}}
+  #pragma acc data copy(i)
+  #pragma acc loop
+  for (int i = 0; i < 5; ++i)
+    ;
+
+  // expected-error@+4 {{'#pragma acc loop' cannot be nested within '#pragma acc data'}}
+  // expected-note@+2 {{enclosing '#pragma acc data'}}
+  #pragma acc data copy(i)
+  #pragma acc data copy(jk)
+  #pragma acc loop
+  for (int i = 0; i < 5; ++i)
+    ;
+
 }
 
 // Complete to suppress an additional warning, but it's too late for pragmas.
 int incomplete[3];
 
+//--------------------------------------------------
 // The remaining diagnostics are currently produced by OpenMP sema during the
 // transform from OpenACC to OpenMP, which is skipped if there have been any
 // previous diagnostics.  Thus, each must be tested in a separate compilation.
@@ -2879,6 +2900,7 @@ int incomplete[3];
 // that.  We just check some of them (roughly one of each diagnostic kind) to
 // give us some confidence that they're handled properly by the OpenACC
 // implementation.
+//--------------------------------------------------
 
 #elif ERR == ERR_OMP_INIT
 

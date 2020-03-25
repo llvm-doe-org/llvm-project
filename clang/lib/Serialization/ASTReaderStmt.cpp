@@ -2429,6 +2429,13 @@ void ASTStmtReader::VisitACCExecutableDirective(ACCExecutableDirective *E) {
   E->setOMPNode(OMPNode, DirectiveDiscardedForOMP);
 }
 
+void ASTStmtReader::VisitACCDataDirective(ACCDataDirective *D) {
+  VisitStmt(D);
+  // The NumClauses field was read in ReadStmtFromStream.
+  Record.skipInts(1);
+  VisitACCExecutableDirective(D);
+}
+
 void ASTStmtReader::VisitACCParallelDirective(ACCParallelDirective *D) {
   VisitStmt(D);
   // The NumClauses field was read in ReadStmtFromStream.
@@ -3316,6 +3323,12 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       auto CollapsedNum = Record[ASTStmtReader::NumStmtFields + 1];
       S = OMPTargetTeamsDistributeSimdDirective::CreateEmpty(
           Context, NumClauses, CollapsedNum, Empty);
+      break;
+    }
+
+    case STMT_ACC_DATA_DIRECTIVE: {
+      unsigned NumClauses = Record[ASTStmtReader::NumStmtFields];
+      S = ACCDataDirective::CreateEmpty(Context, NumClauses, Empty);
       break;
     }
 

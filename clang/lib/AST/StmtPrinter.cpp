@@ -1241,6 +1241,10 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
   }
 }
 
+void StmtPrinter::VisitACCDataDirective(ACCDataDirective *Node) {
+  PrintACCExecutableDirective(Node);
+}
+
 void StmtPrinter::VisitACCParallelDirective(ACCParallelDirective *Node) {
   PrintACCExecutableDirective(Node);
 }

@@ -354,6 +354,7 @@ void CodeGenFunction::EmitStmt(const Stmt *S, ArrayRef<const Attr *> Attrs) {
     EmitOMPTargetTeamsDistributeSimdDirective(
         cast<OMPTargetTeamsDistributeSimdDirective>(*S));
     break;
+  case Stmt::ACCDataDirectiveClass:
   case Stmt::ACCParallelDirectiveClass:
   case Stmt::ACCLoopDirectiveClass:
   case Stmt::ACCParallelLoopDirectiveClass:

@@ -128,6 +128,16 @@ bool clang::isAllowedDAForDirective(OpenACCDirectiveKind DKind,
                                     OpenACCDMAKind DMAKind) {
   assert(DMAKind <= ACC_DMA_unknown);
   switch (DKind) {
+  case ACCD_data:
+    switch (DMAKind) {
+#define OPENACC_DATA_DMA(Name) \
+    case ACC_DMA_##Name:           \
+      return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      break;
+    }
+    break;
   case ACCD_parallel:
     switch (DMAKind) {
 #define OPENACC_PARALLEL_DMA(Name) \
@@ -168,6 +178,16 @@ bool clang::isAllowedDAForDirective(OpenACCDirectiveKind DKind,
                                     OpenACCDSAKind DSAKind) {
   assert(DSAKind <= ACC_DSA_unknown);
   switch (DKind) {
+  case ACCD_data:
+    switch (DSAKind) {
+#define OPENACC_DATA_DSA(Name) \
+    case ACC_DSA_##Name:       \
+      return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      break;
+    }
+    break;
   case ACCD_parallel:
     switch (DSAKind) {
 #define OPENACC_PARALLEL_DSA(Name) \
@@ -208,6 +228,16 @@ bool clang::isAllowedClauseForDirective(OpenACCDirectiveKind DKind,
                                         OpenACCClauseKind CKind) {
   assert(CKind <= ACCC_unknown);
   switch (DKind) {
+  case ACCD_data:
+    switch (CKind) {
+#define OPENACC_DATA_CLAUSE(Name) \
+    case ACCC_##Name:             \
+      return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      break;
+    }
+    break;
   case ACCD_parallel:
     switch (CKind) {
 #define OPENACC_PARALLEL_CLAUSE(Name) \
@@ -247,6 +277,16 @@ bool clang::isAllowedClauseForDirective(OpenACCDirectiveKind DKind,
 bool clang::isAllowedParentForDirective(OpenACCDirectiveKind DKind,
                                         OpenACCDirectiveKind ParentDKind) {
   switch (DKind) {
+  case ACCD_data:
+    switch (ParentDKind) {
+#define OPENACC_DATA_PARENT(Name) \
+    case ACCD_##Name:             \
+      return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      break;
+    }
+    break;
   case ACCD_parallel:
     switch (ParentDKind) {
 #define OPENACC_PARALLEL_PARENT(Name) \
@@ -285,6 +325,7 @@ bool clang::isAllowedParentForDirective(OpenACCDirectiveKind DKind,
 
 int clang::getOpenACCEffectiveDirectives(OpenACCDirectiveKind DKind) {
   switch (DKind) {
+  case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
     return 1;

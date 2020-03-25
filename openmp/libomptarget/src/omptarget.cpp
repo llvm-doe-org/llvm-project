@@ -671,6 +671,33 @@ static bool isLambdaMapping(int64_t Mapping) {
 }
 
 #if OMPT_SUPPORT
+void ompt_dispatch_callback_target(
+    ompt_target_t kind, ompt_scope_endpoint_t endpoint, DeviceTy &Device) {
+  if (endpoint == ompt_scope_begin) {
+    Device.TargetID = ompt_get_unique_id();
+    ompt_toggle_in_device_target_region();
+  }
+  // FIXME: We don't yet need the NULL arguments for OpenACC support, so we
+  // haven't bothered to implement them yet.
+  if (ompt_get_enabled().ompt_callback_target) {
+    ompt_get_callbacks().ompt_callback(ompt_callback_target)(
+        kind, endpoint, Device.DeviceID, /*task_data*/ NULL, Device.TargetID,
+        /*codeptr_ra*/ NULL);
+  }
+  if (endpoint == ompt_scope_end) {
+    Device.TargetID = ompt_id_none;
+    ompt_toggle_in_device_target_region();
+  }
+}
+#endif
+
+/// performs the same actions as data_begin in case arg_num is
+/// non-zero and initiates run of the offloaded region on the target platform;
+/// if arg_num is non-zero after the region execution is done it also
+/// performs the same action as data_update and data_end above. This function
+/// returns 0 if it was able to transfer the execution to a target and an
+/// integer different from zero otherwise.
+//
 // OpenMP 5.0 sec. 2.12.5 p. 173 L24:
 // "The target-begin event occurs when a thread enters a target region."
 // OpenMP 5.0 sec. 2.12.5 p. 173 L25:
@@ -699,40 +726,14 @@ static bool isLambdaMapping(int64_t Mapping) {
 // kmp_runtime.cpp for the case of no offloading, and there are similar
 // questions about the right places.  See the fixme on
 // ompt_dispatch_callback_target there.
-//
-// FIXME: We don't yet need the NULL arguments for OpenACC support, so we
-// haven't bothered to implement them yet.
-static void ompt_dispatch_callback_target(ompt_scope_endpoint_t endpoint,
-                                          DeviceTy &Device) {
-  if (endpoint == ompt_scope_begin) {
-    Device.TargetID = ompt_get_unique_id();
-    ompt_toggle_in_device_target_region();
-  }
-  if (ompt_get_enabled().ompt_callback_target) {
-    ompt_get_callbacks().ompt_callback(ompt_callback_target)(
-        ompt_target, endpoint, Device.DeviceID, /*task_data*/ NULL,
-        Device.TargetID, /*codeptr_ra*/ NULL);
-  }
-  if (endpoint == ompt_scope_end) {
-    Device.TargetID = ompt_id_none;
-    ompt_toggle_in_device_target_region();
-  }
-}
-#endif
 
-/// performs the same actions as data_begin in case arg_num is
-/// non-zero and initiates run of the offloaded region on the target platform;
-/// if arg_num is non-zero after the region execution is done it also
-/// performs the same action as data_update and data_end above. This function
-/// returns 0 if it was able to transfer the execution to a target and an
-/// integer different from zero otherwise.
 int target(int64_t device_id, void *host_ptr, int32_t arg_num,
     void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types,
     int32_t team_num, int32_t thread_limit, int IsTeamConstruct) {
   DeviceTy &Device = Devices[device_id];
 
 #if OMPT_SUPPORT
-  ompt_dispatch_callback_target(ompt_scope_begin, Device);
+  ompt_dispatch_callback_target(ompt_target, ompt_scope_begin, Device);
 #endif
 
   // Find the table information in the map or look it up in the translation
@@ -776,7 +777,7 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
     DP("Host ptr " DPxMOD " does not have a matching target pointer.\n",
        DPxPTR(host_ptr));
 #if OMPT_SUPPORT
-    ompt_dispatch_callback_target(ompt_scope_end, Device);
+    ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
 #endif
     return OFFLOAD_FAIL;
   }
@@ -795,7 +796,7 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
   if (rc != OFFLOAD_SUCCESS) {
     DP("Call to target_data_begin failed, abort target.\n");
 #if OMPT_SUPPORT
-    ompt_dispatch_callback_target(ompt_scope_end, Device);
+    ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
 #endif
     return OFFLOAD_FAIL;
   }
@@ -856,7 +857,7 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
         if (rt != OFFLOAD_SUCCESS) {
           DP("Copying data to device failed.\n");
 #if OMPT_SUPPORT
-          ompt_dispatch_callback_target(ompt_scope_end, Device);
+          ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
 #endif
           return OFFLOAD_FAIL;
         }
@@ -883,7 +884,7 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
             (arg_types[i] & OMP_TGT_MAPTYPE_TO ? "first-" : ""),
             DPxPTR(HstPtrBegin));
 #if OMPT_SUPPORT
-        ompt_dispatch_callback_target(ompt_scope_end, Device);
+        ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
 #endif
         return OFFLOAD_FAIL;
       }
@@ -927,7 +928,7 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
         if (rt != OFFLOAD_SUCCESS) {
           DP ("Copying data to device failed, failed.\n");
 #if OMPT_SUPPORT
-          ompt_dispatch_callback_target(ompt_scope_end, Device);
+          ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
 #endif
           return OFFLOAD_FAIL;
         }
@@ -983,7 +984,7 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
   if (rc != OFFLOAD_SUCCESS) {
     DP ("Executing target region abort target.\n");
 #if OMPT_SUPPORT
-    ompt_dispatch_callback_target(ompt_scope_end, Device);
+    ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
 #endif
     return OFFLOAD_FAIL;
   }
@@ -1014,7 +1015,7 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
     if (rt != OFFLOAD_SUCCESS) {
       DP("Deallocation of (first-)private arrays failed.\n");
 #if OMPT_SUPPORT
-      ompt_dispatch_callback_target(ompt_scope_end, Device);
+      ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
 #endif
       return OFFLOAD_FAIL;
     }
@@ -1026,13 +1027,13 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
   if (rt != OFFLOAD_SUCCESS) {
     DP("Call to target_data_end failed, abort targe.\n");
 #if OMPT_SUPPORT
-    ompt_dispatch_callback_target(ompt_scope_end, Device);
+    ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
 #endif
     return OFFLOAD_FAIL;
   }
 
 #if OMPT_SUPPORT
-  ompt_dispatch_callback_target(ompt_scope_end, Device);
+  ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
 #endif
   return OFFLOAD_SUCCESS;
 }

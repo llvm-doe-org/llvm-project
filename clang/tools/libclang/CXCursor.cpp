@@ -730,6 +730,9 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::OMPTargetTeamsDistributeSimdDirectiveClass:
     K = CXCursor_OMPTargetTeamsDistributeSimdDirective;
     break;
+  case Stmt::ACCDataDirectiveClass:
+    K = CXCursor_ACCDataDirective;
+    break;
   case Stmt::ACCParallelDirectiveClass:
     K = CXCursor_ACCParallelDirective;
     break;

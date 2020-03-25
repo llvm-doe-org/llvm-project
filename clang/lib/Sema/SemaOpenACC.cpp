@@ -373,6 +373,9 @@ public:
   /// declaration.
   DAVarData getTopDA(VarDecl *VD);
 
+  /// Returns true if the declaration has a DMA anywhere on the stack.
+  bool hasVisibleDMA(VarDecl *VD);
+
   /// Returns currently analyzed directive.
   OpenACCDirectiveKind getRealDirective() const {
     auto I = Stack.rbegin();
@@ -533,6 +536,17 @@ DirStackTy::DAVarData DirStackTy::getTopDA(VarDecl *VD) {
   return DAVarData();
 }
 
+bool DirStackTy::hasVisibleDMA(VarDecl *VD) {
+  VD = VD->getCanonicalDecl();
+  assert(!Stack.empty() && "expected non-empty directive stack");
+  for (auto I = Stack.rbegin(), E = Stack.rend(); I != E; ++I) {
+    auto DAItr = I->DAMap.find(VD);
+    if (DAItr != I->DAMap.end() && DAItr->second.DMAKind != ACC_DMA_unknown)
+      return true;
+  }
+  return false;
+}
+
 void Sema::InitOpenACCDirectiveStack() {
   OpenACCDirectiveStack = new DirStackTy(*this);
 }
@@ -544,6 +558,7 @@ void Sema::DestroyOpenACCDirectiveStack() { delete DirStack; }
 void Sema::StartOpenACCDABlock(OpenACCDirectiveKind RealDKind,
                                SourceLocation Loc) {
   switch (RealDKind) {
+  case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
     DirStack->push(RealDKind, RealDKind, Loc);
@@ -854,10 +869,9 @@ public:
           DSAKind = ACC_DSA_shared;
         }
       } else if (isOpenACCParallelDirective(Stack->getEffectiveDirective())) {
-        if (DVar.DMAKind != ACC_DMA_unknown ||
-            DVar.DSAKind != ACC_DSA_unknown) {
-          // There's a predetermined or explicit DA, so there's no implicit DA
-          // other than the defaults.
+        if (Stack->hasVisibleDMA(VD) || DVar.DSAKind != ACC_DSA_unknown) {
+          // There's a visible explicit DMA, or there's a predetermined or
+          // explicit DSA, so there's no implicit DA other than the defaults.
         } else if (!VD->getType()->isScalarType()) {
           // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L830-833:
           //   "If there is no default(present) clause on the construct, an
@@ -1384,6 +1398,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     case ACCD_parallel_loop:
       return ActOnOpenACCParallelLoopDirective(Clauses, AStmt, StartLoc,
                                                EndLoc);
+    case ACCD_data:
     case ACCD_parallel:
     case ACCD_loop:
     case ACCD_unknown:
@@ -1414,8 +1429,12 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     // execution, probably with a warning, or is an error better for that
     // case?
   }
-  if (AStmt) {
-    // Add implicit gang clauses.
+
+  // Compute implicit gang clauses, predetermined DAs, and implicit DAs.
+  // Complain about reductions for loop control variables.
+  if (AStmt && (isOpenACCParallelDirective(DKind) ||
+                isOpenACCLoopDirective(DKind))) {
+    // Add implicit gang clauses to acc loops nested in the acc parallel.
     if (isOpenACCParallelDirective(DKind))
       ImplicitGangAdder().Visit(AStmt);
 
@@ -1537,6 +1556,9 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
 
   // Act on the directive.
   switch (DKind) {
+  case ACCD_data:
+    Res = ActOnOpenACCDataDirective(ComputedClauses, AStmt, StartLoc, EndLoc);
+    break;
   case ACCD_parallel:
     Res = ActOnOpenACCParallelDirective(
         ComputedClauses, AStmt, StartLoc, EndLoc,
@@ -1567,6 +1589,59 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
   if (ErrorFound)
     return StmtError();
   return Res;
+}
+
+StmtResult Sema::ActOnOpenACCDataDirective(
+    ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
+    SourceLocation EndLoc) {
+  if (!AStmt)
+    return StmtError();
+
+  // OpenACC 3.0 sec. 2.6.5 "Data Construct" L1117-1118:
+  // "At least one copy, copyin, copyout, create, no_create, present,
+  // deviceptr, attach, or default clause must appear on a data construct."
+  bool Found = false;
+  for (ACCClause *C : Clauses) {
+    switch (C->getClauseKind()) {
+#define OPENACC_CLAUSE_ALIAS_copy(Name) \
+    case ACCC_##Name:
+#define OPENACC_CLAUSE_ALIAS_copyin(Name) \
+    case ACCC_##Name:
+#define OPENACC_CLAUSE_ALIAS_copyout(Name) \
+    case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+      Found = true;
+      break;
+    case ACCC_nomap:
+    case ACCC_shared:
+    case ACCC_private:
+    case ACCC_firstprivate:
+    case ACCC_reduction:
+    case ACCC_num_gangs:
+    case ACCC_num_workers:
+    case ACCC_vector_length:
+    case ACCC_seq:
+    case ACCC_independent:
+    case ACCC_auto:
+    case ACCC_gang:
+    case ACCC_worker:
+    case ACCC_vector:
+    case ACCC_collapse:
+    case ACCC_unknown:
+      llvm_unreachable("expected clause permitted on 'acc data' directive");
+    }
+    if (Found)
+      break;
+  }
+  if (!Found) {
+    Diag(StartLoc, diag::err_acc_no_data_clause)
+        << getOpenACCName(ACCD_data);
+    return StmtError();
+  }
+
+  getCurFunction()->setHasBranchProtectedScope();
+
+  return ACCDataDirective::Create(Context, StartLoc, EndLoc, Clauses, AStmt);
 }
 
 StmtResult Sema::ActOnOpenACCParallelDirective(
@@ -2644,9 +2719,56 @@ private:
   };
 
 public:
+  StmtResult TransformACCDataDirective(ACCDataDirective *D) {
+    // Start OpenMP DA block.
+    getSema().StartOpenMPDSABlock(OMPD_target_data, DeclarationNameInfo(),
+                                  /*CurScope=*/nullptr, D->getBeginLoc());
+
+    // Transform OpenACC clauses.
+    llvm::SmallVector<OMPClause *, 16> TClauses;
+    size_t TClausesEmptyCount;
+    transformACCClauses(D, OMPD_target_data, TClauses, TClausesEmptyCount);
+
+    // Transform associated statement.
+    StmtResult AssociatedStmt = transformACCAssociatedStmt(D, OMPD_target_data,
+                                                           TClauses);
+
+    // Build OpenMP directive and finalize enclosing compound statement, if
+    // any.
+    StmtResult Res;
+    if (AssociatedStmt.isInvalid() ||
+        TClauses.size() != D->clauses().size() - TClausesEmptyCount)
+      Res = StmtError();
+    else
+      Res = getDerived().RebuildOMPExecutableDirective(
+          OMPD_target_data, DeclarationNameInfo(), OMPD_unknown, TClauses,
+          AssociatedStmt.get(), D->getBeginLoc(), D->getEndLoc());
+    getSema().EndOpenMPDSABlock(Res.get());
+    if (!Res.isInvalid())
+      D->setOMPNode(Res.get());
+    return Res;
+  }
+
+  template<typename Derived, typename OperationType>
+  bool iterateACCVarList(ACCVarListClause<Derived> *C,
+                         OperationType Operation) {
+    for (Expr *RefExpr : C->varlists()) {
+      Expr *Base = RefExpr;
+      while (auto *OASE = dyn_cast<OMPArraySectionExpr>(Base))
+        Base = OASE->getBase()->IgnoreParenImpCasts();
+      while (auto *ASE = dyn_cast<ArraySubscriptExpr>(Base))
+        Base = ASE->getBase()->IgnoreParenImpCasts();
+      VarDecl *VD = cast<VarDecl>(cast<DeclRefExpr>(Base)->getDecl())
+                        ->getCanonicalDecl();
+      if (Operation(RefExpr, VD))
+        return true;
+    }
+    return false;
+  }
+
   StmtResult TransformACCParallelDirective(ACCParallelDirective *D) {
     ConditionalCompoundStmtRAII EnclosingCompoundStmt(*this);
-    ASTContext &Context = this->getSema().getASTContext();
+    ASTContext &Context = getSema().getASTContext();
 
     // Declare a num_workers variable in an enclosing compound statement, if
     // needed.
@@ -2683,6 +2805,48 @@ public:
     size_t TClausesEmptyCount;
     transformACCClauses(D, OMPD_target_teams, TClauses, TClausesEmptyCount);
 
+    // Add defaultmap(tofrom:scalar) if there's a scalar variable with both
+    // an implicit nomap clause and an implicit shared clause.
+    size_t NumClausesAdded = 0;
+    class NomapSharedVar {
+      bool Nomap = false;
+      bool Shared = false;
+    public:
+      bool addNomap() { Nomap = true; return Shared; }
+      bool addShared() { Shared = true; return Nomap; }
+    };
+    llvm::DenseMap<const VarDecl *, NomapSharedVar> NomapSharedVars;
+    for (ACCClause *C : D->clauses()) {
+      bool Found = false;
+      switch (C->getClauseKind()) {
+      case ACCC_nomap:
+        iterateACCVarList(cast<ACCNomapClause>(C), [&](Expr *, VarDecl *VD) {
+          if (!VD->getType()->isScalarType())
+            return false;
+          return Found |= NomapSharedVars[VD].addNomap();
+        });
+        break;
+      case ACCC_shared:
+        iterateACCVarList(cast<ACCSharedClause>(C), [&](Expr *, VarDecl *VD) {
+          if (!VD->getType()->isScalarType())
+            return false;
+          return Found |= NomapSharedVars[VD].addShared();
+        });
+        break;
+      default:
+        continue;
+      }
+      if (Found) {
+        TClauses.push_back(
+            getSema().ActOnOpenMPDefaultmapClause(
+                OMPC_DEFAULTMAP_MODIFIER_tofrom, OMPC_DEFAULTMAP_scalar,
+                D->getEndLoc(), D->getEndLoc(), D->getEndLoc(), D->getEndLoc(),
+                D->getEndLoc()));
+        ++NumClausesAdded;
+        break;
+      }
+    }
+
     // Transform associated statement.
     StmtResult AssociatedStmt = transformACCAssociatedStmt(D, OMPD_target_teams,
                                                            TClauses);
@@ -2694,7 +2858,8 @@ public:
     // any.
     StmtResult Res;
     if (AssociatedStmt.isInvalid() ||
-        TClauses.size() != D->clauses().size() - TClausesEmptyCount)
+        TClauses.size() != D->clauses().size() - TClausesEmptyCount +
+                           NumClausesAdded)
       Res = StmtError();
     else
       Res = getDerived().RebuildOMPExecutableDirective(
@@ -2943,30 +3108,25 @@ private:
   template<typename Derived>
   bool transformACCVarList(
       ACCExecutableDirective *D, ACCVarListClause<Derived> *C,
-      const llvm::DenseSet<VarDecl *> &SkipVars,
+      const llvm::DenseSet<const VarDecl *> &SkipVars,
       llvm::SmallVector<Expr *, 16> &Vars) {
     Vars.reserve(C->varlist_size());
-    for (Expr *RefExpr : C->varlists()) {
-      Expr *Base = RefExpr;
-      while (auto *OASE = dyn_cast<OMPArraySectionExpr>(Base))
-        Base = OASE->getBase()->IgnoreParenImpCasts();
-      while (auto *ASE = dyn_cast<ArraySubscriptExpr>(Base))
-        Base = ASE->getBase()->IgnoreParenImpCasts();
-      if (SkipVars.count(cast<VarDecl>(cast<DeclRefExpr>(Base)->getDecl())
-                             ->getCanonicalDecl()))
-        continue;
+    return iterateACCVarList(C, [&SkipVars, &Vars, this](Expr *RefExpr,
+                                                         VarDecl *VD) {
+      if (SkipVars.count(VD))
+        return false;
       ExprResult EVar = getDerived().TransformExpr(RefExpr);
       if (EVar.isInvalid())
         return true;
       Vars.push_back(EVar.get());
-    }
-    return false;
+      return false;
+    });
   }
 
   template<typename Derived, typename RebuilderType>
   OMPClauseResult transformACCVarListClause(
       ACCExecutableDirective *D, ACCVarListClause<Derived> *C,
-      OpenMPClauseKind TCKind, const llvm::DenseSet<VarDecl *> &SkipVars,
+      OpenMPClauseKind TCKind, const llvm::DenseSet<const VarDecl *> &SkipVars,
       RebuilderType Rebuilder) {
     OpenMPStartEndClauseRAII ClauseRAII(getSema(), TCKind);
     llvm::SmallVector<Expr *, 16> Vars;
@@ -2982,8 +3142,8 @@ private:
   OMPClauseResult transformACCVarListClause(
       ACCExecutableDirective *D, ACCVarListClause<Derived> *C,
       OpenMPClauseKind TCKind, RebuilderType Rebuilder) {
-    return transformACCVarListClause(D, C, TCKind, llvm::DenseSet<VarDecl *>(),
-                                     Rebuilder);
+    return transformACCVarListClause(
+        D, C, TCKind, llvm::DenseSet<const VarDecl *>(), Rebuilder);
   }
 
   class OMPVarListClauseRebuilder {
@@ -3118,9 +3278,9 @@ public:
     // loop.  So that the OpenACC implementation doesn't have to replicate the
     // OpenMP implementation for that computation, we instead omit the linear
     // clause.
-    llvm::DenseSet<VarDecl *> SkipVars;
+    llvm::DenseSet<const VarDecl *> SkipVars;
     if (isOpenMPSimdDirective(TDKind)) {
-      ACCLoopDirective *LD = cast<ACCLoopDirective>(D);
+      ACCLoopDirective *LD = dyn_cast_or_null<ACCLoopDirective>(D);
       assert(LD && "expected omp simd directive to translate from acc loop"
                    " directive");
       const ArrayRef<VarDecl *> &LCVArray = LD->getLoopControlVariables();

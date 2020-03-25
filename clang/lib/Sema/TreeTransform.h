@@ -9487,6 +9487,15 @@ StmtResult TreeTransform<Derived>::TransformACCExecutableDirective(
 
 template <typename Derived>
 StmtResult
+TreeTransform<Derived>::TransformACCDataDirective(ACCDataDirective *D) {
+  getDerived().getSema().StartOpenACCDABlock(ACCD_data, D->getBeginLoc());
+  StmtResult Res = getDerived().TransformACCExecutableDirective(D);
+  getDerived().getSema().EndOpenACCDABlock();
+  return Res;
+}
+
+template <typename Derived>
+StmtResult
 TreeTransform<Derived>::TransformACCParallelDirective(ACCParallelDirective *D) {
   getDerived().getSema().StartOpenACCDABlock(ACCD_parallel, D->getBeginLoc());
   StmtResult Res = getDerived().TransformACCExecutableDirective(D);

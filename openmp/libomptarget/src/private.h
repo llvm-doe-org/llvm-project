@@ -102,4 +102,9 @@ extern int DebugLevel;
 #define DP(...) {}
 #endif // OMPTARGET_DEBUG
 
+#if OMPT_SUPPORT
+void ompt_dispatch_callback_target(
+    ompt_target_t kind, ompt_scope_endpoint_t endpoint, DeviceTy &Device);
+#endif
+
 #endif

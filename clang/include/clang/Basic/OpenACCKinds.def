@@ -43,6 +43,12 @@
 #ifndef OPENACC_CLAUSE_ALIAS_copyout
 #  define OPENACC_CLAUSE_ALIAS_copyout(Name)
 #endif
+#ifndef OPENACC_DATA_DMA
+#  define OPENACC_DATA_DMA(Name)
+#endif
+#ifndef OPENACC_DATA_DSA
+#  define OPENACC_DATA_DSA(Name)
+#endif
 #ifndef OPENACC_PARALLEL_DMA
 #  define OPENACC_PARALLEL_DMA(Name)
 #endif
@@ -61,6 +67,9 @@
 #ifndef OPENACC_PARALLEL_LOOP_DSA
 #  define OPENACC_PARALLEL_LOOP_DSA(Name)
 #endif
+#ifndef OPENACC_DATA_CLAUSE
+#  define OPENACC_DATA_CLAUSE(Name)
+#endif
 #ifndef OPENACC_PARALLEL_CLAUSE
 #  define OPENACC_PARALLEL_CLAUSE(Name)
 #endif
@@ -69,6 +78,9 @@
 #endif
 #ifndef OPENACC_PARALLEL_LOOP_CLAUSE
 #  define OPENACC_PARALLEL_LOOP_CLAUSE(Name)
+#endif
+#ifndef OPENACC_DATA_PARENT
+#  define OPENACC_DATA_PARENT(Name)
 #endif
 #ifndef OPENACC_PARALLEL_PARENT
 #  define OPENACC_PARALLEL_PARENT(Name)
@@ -92,6 +104,9 @@
 #define OPENACC_CLAUSE_AND_DSA_UNMAPPABLE(Name, Class) \
   OPENACC_CLAUSE(Name, Class)                          \
   OPENACC_DSA_UNMAPPABLE(Name)
+#define OPENACC_DATA_CLAUSE_AND_DMA(Name) \
+  OPENACC_DATA_CLAUSE(Name)               \
+  OPENACC_DATA_DMA(Name)
 #define OPENACC_PARALLEL_CLAUSE_AND_DMA(Name) \
   OPENACC_PARALLEL_CLAUSE(Name)               \
   OPENACC_PARALLEL_DMA(Name)
@@ -103,6 +118,7 @@
   OPENACC_LOOP_DSA(Name)
 
 // OpenACC directives.
+OPENACC_DIRECTIVE(data)
 OPENACC_DIRECTIVE(parallel)
 OPENACC_DIRECTIVE(loop)
 OPENACC_DIRECTIVE_EXT(parallel_loop, "parallel loop")
@@ -124,14 +140,14 @@ OPENACC_DIRECTIVE_EXT(parallel_loop, "parallel loop")
 //     - firstprivate
 //     - private
 //
-// Every variable referenced in an OpenACC construct has at most one DMA and
-// one DSA on that construct.  The default DA in each group is not specified by
-// OpenACC 3.0.  Clang implicitly determines it on a construct if the OpenACC
-// spec specifies no other explicitly determined, predetermined, or implicitly
-// determined DA from that group and the group is relevant to the construct
-// (for example, DMAs are not relevant to acc loop).  The DAs in each group are
-// mutually exclusive.  Mappable DSAs can be combined with any DMA.  Unmappable
-// DSAs can be combined with nomap but no other DMA.
+// Every variable has at most one DMA and one DSA on an OpenACC construct.  The
+// default DA in each group is not specified by OpenACC 3.0.  Clang can
+// implicitly determine it on a construct if the OpenACC spec specifies no
+// other explicitly determined, predetermined, or implicitly determined DA from
+// that group and the group is relevant to the construct (for example, DMAs are
+// not relevant to acc loop).  The DAs in each group are mutually exclusive.
+//  Mappable DSAs can be combined with any DMA.  Unmappable DSAs can be
+// combined with nomap but no other DMA.
 //
 // Every DA is also a clause and has an ACC*Clause class so it can be stored
 // like a predetermined or implicit clause even if it's not permitted as
@@ -218,6 +234,18 @@ OPENACC_CLAUSE(worker, ACCWorkerClause)
 OPENACC_CLAUSE(vector, ACCVectorClause)
 OPENACC_CLAUSE(collapse, ACCCollapseClause)
 
+// Explicit clauses and DAs allowed for OpenACC directive 'data'.
+OPENACC_DATA_DMA(nomap)
+OPENACC_DATA_CLAUSE_AND_DMA(copy)
+OPENACC_DATA_CLAUSE(pcopy)
+OPENACC_DATA_CLAUSE(present_or_copy)
+OPENACC_DATA_CLAUSE_AND_DMA(copyin)
+OPENACC_DATA_CLAUSE(pcopyin)
+OPENACC_DATA_CLAUSE(present_or_copyin)
+OPENACC_DATA_CLAUSE_AND_DMA(copyout)
+OPENACC_DATA_CLAUSE(pcopyout)
+OPENACC_DATA_CLAUSE(present_or_copyout)
+
 // Explicit clauses and DAs allowed for OpenACC directive 'parallel'.
 OPENACC_PARALLEL_DMA(nomap)
 OPENACC_PARALLEL_CLAUSE_AND_DMA(copy)
@@ -274,12 +302,17 @@ OPENACC_PARALLEL_LOOP_CLAUSE(worker)
 OPENACC_PARALLEL_LOOP_CLAUSE(vector)
 OPENACC_PARALLEL_LOOP_CLAUSE(collapse)
 
+// Parent directives allowed for 'data'.
+OPENACC_DATA_PARENT(unknown)
+OPENACC_DATA_PARENT(data)
+
 // The OpenACC 2.6 spec doesn't say that an acc parallel or acc parallel loop
 // cannot be nested within another acc construct, but gcc 7.3.0 and pgcc
 // 18.4-0 don't permit that for simple cases I've tried.
 
 // Parent directives allowed for 'parallel'.
 OPENACC_PARALLEL_PARENT(unknown)
+OPENACC_PARALLEL_PARENT(data)
 
 // Parent directives allowed for 'loop'.
 OPENACC_LOOP_PARENT(parallel)
@@ -288,6 +321,7 @@ OPENACC_LOOP_PARENT(parallel_loop)
 
 // Parent directives allowed for 'parallel_loop'.
 OPENACC_PARALLEL_LOOP_PARENT(unknown)
+OPENACC_PARALLEL_LOOP_PARENT(data)
 
 #undef OPENACC_DIRECTIVE
 #undef OPENACC_DIRECTIVE_EXT
@@ -299,15 +333,19 @@ OPENACC_PARALLEL_LOOP_PARENT(unknown)
 #undef OPENACC_CLAUSE_ALIAS_copy
 #undef OPENACC_CLAUSE_ALIAS_copyin
 #undef OPENACC_CLAUSE_ALIAS_copyout
+#undef OPENACC_DATA_DMA
+#undef OPENACC_DATA_DSA
 #undef OPENACC_PARALLEL_DMA
 #undef OPENACC_PARALLEL_DSA
 #undef OPENACC_LOOP_DMA
 #undef OPENACC_LOOP_DSA
 #undef OPENACC_PARALLEL_LOOP_DMA
 #undef OPENACC_PARALLEL_LOOP_DSA
+#undef OPENACC_DATA_CLAUSE
 #undef OPENACC_PARALLEL_CLAUSE
 #undef OPENACC_LOOP_CLAUSE
 #undef OPENACC_PARALLEL_LOOP_CLAUSE
+#undef OPENACC_DATA_PARENT
 #undef OPENACC_PARALLEL_PARENT
 #undef OPENACC_LOOP_PARENT
 #undef OPENACC_PARALLEL_LOOP_PARENT
@@ -315,6 +353,7 @@ OPENACC_PARALLEL_LOOP_PARENT(unknown)
 #undef OPENACC_CLAUSE_AND_DMA
 #undef OPENACC_CLAUSE_AND_DSA_MAPPABLE
 #undef OPENACC_CLAUSE_AND_DSA_UNMAPPABLE
+#undef OPENACC_DATA_CLAUSE_AND_DMA
 #undef OPENACC_PARALLEL_CLAUSE_AND_DMA
 #undef OPENACC_PARALLEL_CLAUSE_AND_DSA
 #undef OPENACC_LOOP_CLAUSE_AND_DSA

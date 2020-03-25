@@ -316,6 +316,55 @@ public:
   }
 };
 
+/// This represents '#pragma acc data' directive.
+///
+class ACCDataDirective : public ACCExecutableDirective {
+  friend class ASTStmtReader;
+
+  /// Build directive with the given start and end location.
+  ///
+  /// \param StartLoc Starting location of the directive (directive keyword).
+  /// \param EndLoc Ending Location of the directive.
+  /// \param NumClauses Number of clauses.
+  ///
+  ACCDataDirective(SourceLocation StartLoc, SourceLocation EndLoc,
+                   unsigned NumClauses)
+      : ACCExecutableDirective(this, ACCDataDirectiveClass, ACCD_data,
+                               StartLoc, EndLoc, NumClauses, 0, 1)
+        {}
+
+  /// Build an empty directive.
+  explicit ACCDataDirective(unsigned NumClauses)
+      : ACCExecutableDirective(this, ACCDataDirectiveClass, ACCD_data,
+                               SourceLocation(), SourceLocation(), NumClauses,
+                               0, 1)
+        {}
+
+public:
+  /// Creates directive.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the directive kind.
+  /// \param EndLoc Ending Location of the directive.
+  /// \param Clauses List of clauses.
+  /// \param AssociatedStmt Statement associated with the directive.
+  static ACCDataDirective *
+  Create(const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
+         ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt);
+
+  /// Creates an empty directive.
+  ///
+  /// \param C AST context.
+  /// \param NumClauses Number of clauses.
+  ///
+  static ACCDataDirective *CreateEmpty(const ASTContext &C,
+                                       unsigned NumClauses, EmptyShell);
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == ACCDataDirectiveClass;
+  }
+};
+
 /// This represents '#pragma acc parallel' directive.
 ///
 class ACCParallelDirective : public ACCExecutableDirective {

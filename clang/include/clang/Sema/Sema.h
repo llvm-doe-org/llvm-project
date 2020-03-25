@@ -10135,6 +10135,11 @@ public:
   StmtResult ActOnOpenACCExecutableDirective(
       OpenACCDirectiveKind Kind, ArrayRef<ACCClause *> Clauses, Stmt *AStmt,
       SourceLocation StartLoc, SourceLocation EndLoc);
+  /// Called on well-formed '\#pragma acc data' after parsing of the associated
+  /// statement.
+  StmtResult ActOnOpenACCDataDirective(
+      ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
+      SourceLocation EndLoc);
   /// Called on well-formed '\#pragma acc parallel' after parsing
   /// of the associated statement.
   StmtResult ActOnOpenACCParallelDirective(

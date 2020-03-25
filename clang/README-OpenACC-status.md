@@ -22,6 +22,13 @@ We have implemented and tested support for the following features:
       `OMP_TARGET_OFFLOAD=disabled` in run-time environment
     * x86_64: `-fopenmp-targets=x86_64-unknown-linux-gnu`
     * NVIDIA GPU: `-fopenmp-targets=nvptx64-nvidia-cuda`
+* `data` directive:
+    * `copy` clause and aliases `pcopy` and `present_or_copy`
+    * `copyin` clause and aliases `pcopyin` and
+      `present_or_copyin`
+    * `copyout` clause and aliases `pcopyout` and
+      `present_or_copyout`
+    * any number of levels of nesting within other `data` directives
 * `parallel` directive:
     * use without clauses
     * data attributes:
@@ -96,6 +103,7 @@ We have implemented and tested support for the following features:
               compiler to ignore `vector_length` as a hint, so we
               choose to ignore it and warn in the case of a
               non-constant expression.
+    * nesting within a `data` directive
 * `loop` directive within a `parallel` directive:
     * use without clauses
     * partitionability:
@@ -181,17 +189,23 @@ following features for now:
     * other `-fopenmp-*` options
 * all directives:
     * clauses not listed in the previous section
-    * nesting (other than `loop` directives within `loop` directives
-      or within `parallel` directives)
     * non-scalars in `reduction` clauses
     * subarrays specifying non-contiguous blocks in dynamic
       multidimensional arrays
     * subarrays in `firstprivate`, `private`, and `reduction` clauses
     * subarrays with no `:` and one integer (syntactically an array
       subscript)
+* `data` directive:
+    * With no nested directive, the OpenMP runtime currently produces
+      an error.  This is a bug in the `omp target data` implementation
+      that has been fixed upstream, but the fix has not yet been
+      merged into Clacc.
 * `loop` directive:
-    * outside a `parallel` directive
+    * outside a `parallel` directive (that is, an orphaned loop)
     * `gang`, `worker`, and `vector` clause arguments
+* `data`, `parallel`, and `parallel loop` directive:
+    * inside a `parallel`, `loop`, or `parallel loop` directive (we're
+      not aware of any implementation that supports this)
 * language support:
     * C extensions:
         * nested function definitions

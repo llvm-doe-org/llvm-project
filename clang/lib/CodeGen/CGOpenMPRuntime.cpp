@@ -9975,7 +9975,8 @@ void CGOpenMPRuntime::emitSetDirectiveInfoCall(
   // TODO: These values comes from enum ompt_directive_kind_t in
   // openmp/runtime/src/include/omp-tools.h.var.  Find a clean way to ensure
   // these stay in sync.
-  case OMPD_target_teams: KindRaw = 1; break;
+  case OMPD_target_data: KindRaw = 1; break;
+  case OMPD_target_teams: KindRaw = 2; break;
   default:
     // Other cases just aren't calling this yet, in part because of the check
     // for IsInOpenACCConstruct above.
@@ -10098,8 +10099,10 @@ void CGOpenMPRuntime::emitTargetDataCalls(
     llvm::Value *OffloadingArgs[] = {
         DeviceID,         PointerNum,    BasePointersArrayArg,
         PointersArrayArg, SizesArrayArg, MapTypesArrayArg};
+    emitSetDirectiveInfoCall(CGF, D);
     CGF.EmitRuntimeCall(createRuntimeFunction(OMPRTL__tgt_target_data_begin),
                         OffloadingArgs);
+    emitClearDirectiveInfoCall(CGF);
 
     // If device pointer privatization is required, emit the body of the region
     // here. It will have to be duplicated: with and without privatization.
@@ -10108,8 +10111,8 @@ void CGOpenMPRuntime::emitTargetDataCalls(
   };
 
   // Generate code for the closing of the data region.
-  auto &&EndThenGen = [this, Device, &Info](CodeGenFunction &CGF,
-                                            PrePostActionTy &) {
+  auto &&EndThenGen = [this, &D, Device, &Info](CodeGenFunction &CGF,
+                                                PrePostActionTy &) {
     assert(Info.isValid() && "Invalid data environment closing arguments.");
 
     llvm::Value *BasePointersArrayArg = nullptr;
@@ -10134,8 +10137,10 @@ void CGOpenMPRuntime::emitTargetDataCalls(
     llvm::Value *OffloadingArgs[] = {
         DeviceID,         PointerNum,    BasePointersArrayArg,
         PointersArrayArg, SizesArrayArg, MapTypesArrayArg};
+    emitSetDirectiveInfoCall(CGF, D);
     CGF.EmitRuntimeCall(createRuntimeFunction(OMPRTL__tgt_target_data_end),
                         OffloadingArgs);
+    emitClearDirectiveInfoCall(CGF);
   };
 
   // If we need device pointer privatization, we need to emit the body of the

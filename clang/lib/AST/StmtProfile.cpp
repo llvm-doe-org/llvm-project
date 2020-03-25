@@ -1122,6 +1122,10 @@ StmtProfiler::VisitACCExecutableDirective(const ACCExecutableDirective *S) {
       P.Visit(*I);
 }
 
+void StmtProfiler::VisitACCDataDirective(const ACCDataDirective *S) {
+  VisitACCExecutableDirective(S);
+}
+
 void StmtProfiler::VisitACCParallelDirective(const ACCParallelDirective *S) {
   VisitACCExecutableDirective(S);
 }

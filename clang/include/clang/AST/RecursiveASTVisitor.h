@@ -3387,6 +3387,9 @@ bool RecursiveASTVisitor<Derived>::TraverseACCExecutableDirective(
   return true;
 }
 
+DEF_TRAVERSE_STMT(ACCDataDirective,
+                  { TRY_TO(TraverseACCExecutableDirective(S)); })
+
 DEF_TRAVERSE_STMT(ACCParallelDirective,
                   { TRY_TO(TraverseACCExecutableDirective(S)); })
 

@@ -253,6 +253,9 @@ static acc_event_info acc_get_other_event_info(acc_event_t event_type) {
              "kind=ompt_directve_unknown");
       ret.other_event.parent_construct = acc_construct_runtime_api;
       break;
+    case ompt_directive_target_data:
+      ret.other_event.parent_construct = acc_construct_data;
+      break;
     case ompt_directive_target_teams:
       ret.other_event.parent_construct = acc_construct_parallel;
       break;
@@ -352,21 +355,29 @@ static unsigned acc_ompt_callback_target_reg_counter = 0 ;
 static void acc_ompt_callback_target(
     ompt_target_t kind, ompt_scope_endpoint_t endpoint, int device_num,
     ompt_data_t *task_data, ompt_id_t target_id, const void *codeptr_ra) {
-  if (kind != ompt_target)
-    return;
   acc_event_t event_type;
-  acc_prof_callback acc_cb;
-  switch (endpoint) {
-  case ompt_scope_begin:
-    event_type = acc_ev_compute_construct_start;
-    acc_cb = acc_ev_compute_construct_start_callback;
-    acc_ompt_thread_device_map[target_id] = device_num;
+  acc_prof_callback acc_cb = nullptr;
+  switch (kind) {
+  case ompt_target:
+    switch (endpoint) {
+    case ompt_scope_begin:
+      event_type = acc_ev_compute_construct_start;
+      acc_cb = acc_ev_compute_construct_start_callback;
+      break;
+    case ompt_scope_end:
+      event_type = acc_ev_compute_construct_end;
+      acc_cb = acc_ev_compute_construct_end_callback;
+      break;
+    }
     break;
-  case ompt_scope_end:
-    event_type = acc_ev_compute_construct_end;
-    acc_cb = acc_ev_compute_construct_end_callback;
+  case ompt_target_enter_data:
+  case ompt_target_exit_data:
     break;
+  case ompt_target_update:
+    return;
   }
+  if (endpoint == ompt_scope_begin)
+    acc_ompt_thread_device_map[target_id] = device_num;
   if (acc_cb) {
     acc_prof_info pi = acc_get_prof_info(event_type, device_num);
     acc_event_info ei = acc_get_other_event_info(event_type);

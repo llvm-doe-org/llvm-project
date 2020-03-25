@@ -70,6 +70,7 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
   case ACCD_unknown:
     Diag(Tok, diag::err_acc_unknown_directive);
     break;
+  case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
   case ACCD_parallel_loop:
@@ -86,7 +87,9 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
 ///  Parsing of declarative or executable OpenACC directives.
 ///
 ///       executable-directive:
-///         annot_pragma_openacc 'parallel' | 'loop' | 'parallel loop' {clause}
+///         annot_pragma_openacc
+///         'data' | 'parallel' | 'loop' | 'parallel loop'
+///         {clause}
 ///         annot_pragma_openacc_end
 ///
 StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
@@ -101,6 +104,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
   StmtResult Directive = StmtError();
 
   switch (DKind) {
+  case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
   case ACCD_parallel_loop: {

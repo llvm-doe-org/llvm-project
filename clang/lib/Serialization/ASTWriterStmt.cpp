@@ -2397,6 +2397,13 @@ void ASTStmtWriter::VisitACCExecutableDirective(ACCExecutableDirective *E) {
     Record.AddStmt(nullptr);
 }
 
+void ASTStmtWriter::VisitACCDataDirective(ACCDataDirective *D) {
+  VisitStmt(D);
+  Record.push_back(D->getNumClauses());
+  VisitACCExecutableDirective(D);
+  Code = serialization::STMT_ACC_DATA_DIRECTIVE;
+}
+
 void ASTStmtWriter::VisitACCParallelDirective(ACCParallelDirective *D) {
   VisitStmt(D);
   Record.push_back(D->getNumClauses());
