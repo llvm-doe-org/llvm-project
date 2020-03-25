@@ -601,7 +601,14 @@ typedef int (*ompt_get_num_devices_t) (void);
 
 typedef void (*ompt_finalize_tool_t) (void);
 
+typedef enum ompt_directive_kind_t {
+  ompt_directive_unknown = 0,
+  ompt_directive_target_teams
+} ompt_directive_kind_t;
+
 typedef struct ompt_directive_info_t {
+  ompt_directive_kind_t kind;
+  int is_explicit_event;
   const char *src_file;
   const char *func_name;
   int line_no;

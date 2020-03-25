@@ -1565,10 +1565,10 @@ of its intended design in two ways:
   other OpenMP runtimes cannot be used.
 * Some OpenACC profiling data that is available when the user compiles
   his OpenACC application using the Clacc compiler's traditional
-  compilation mode is not available when using source-to-source mode
-  followed by a foreign OpenMP compiler.  The reason is that this
-  profiling data is made available via extensions to the LLVM IR
-  codegen phase for OpenMP in Clacc's version of Clang.
+  compilation mode is not available or can be inaccurate when using
+  source-to-source mode followed by a foreign OpenMP compiler.  The
+  reason is that this profiling data is made available via extensions
+  to the LLVM IR codegen phase for OpenMP in Clacc's version of Clang.
 
 These OMPT limitations, OMPT extensions, and Clang extensions are
 described in the sections "OpenACC to OpenMP Mapping: Events" and
@@ -1815,11 +1815,12 @@ data that depends on OMPT extensions and Clacc compiler extensions.
 
 For now, the only profiling data that Clacc supports and that requires
 extensions beyond the new OMPT callbacks discussed in section "OpenACC
-to OpenMP Mapping: Events" is the source location information of the
-`acc_prof_info` structure.  In the remainder of this section, we
-explain these extensions.  As Clacc grows support for additional
-profiling data, we expect Clacc will reuse these or similar
-extensions.
+to OpenMP Mapping: Events" are (1) the `parent_construct` and
+`implicit` fields common to all members of the `acc_event_info` union
+and (2) the source location information of the `acc_prof_info`
+structure.  In the remainder of this section, we explain these
+extensions.  As Clacc grows support for additional profiling data, we
+expect Clacc will reuse these or similar extensions.
 
 Clacc's version of the LLVM OpenMP runtime extends OpenMP 5.0
 sec. 4.6.1 "Entry Points in the OMPT Callback Interface" with a new
@@ -1829,7 +1830,21 @@ associated with the callback.  The type signature of this entry point
 is `ompt_get_directive_info_t`:
 
 ```
+// TODO: The members listed below are those currently needed for
+// Clacc, but obviously there are more directives in OpenMP that
+// should have members here.  A specific value for each member can be
+// specified later (perhaps during standardization) for the sake of
+// backward compatibility guarantees.
+typedef enum ompt_directive_kind_t {
+  ompt_directive_unknown = 0,
+  ompt_directive_target_teams
+} ompt_directive_kind_t;
+
+// All fields are designed so that null-initialization is a reasonable
+// default indicating no directive or runtime call information.
 typedef struct ompt_directive_info_t {
+  ompt_directive_kind_t kind;
+  int is_explicit_event;
   const char *src_file;
   const char *func_name;
   int line_no;
@@ -1852,19 +1867,22 @@ available to the OpenMP runtime.  For this purpose, Clacc extends this
 phase to instrument OpenMP runtime calls corresponding to OpenMP
 directives that are translated from OpenACC directives.  Thus, the
 required directive information is available only when using Clacc's
-compiler in traditional compilation mode.  When using Clacc's compiler
-in source-to-source mode followed by a foreign OpenMP compiler, we
-expect that the foreign OpenMP runtime's entry point lookup function
-would simply return null for such a non-standard entry point.  In that
-case, Clacc's OpenACC runtime passes null values for the directive
-information on to the OpenACC callbacks.  Of course, if the entry
-point is one day standardized, it will then be the responsibility of
-the foreign OpenMP compiler to provide the required directive
-information to its OpenMP runtime, which would then expose it via the
-`ompt_get_directive_info` entry point, just as Clacc's compiler and
-OpenMP runtime do now.  At that point, this directive information will
-be available to OpenACC profiling libraries regardless of which Clacc
-compiler mode the user uses to compile his OpenACC application.
+compiler in traditional compilation mode.
+
+When using Clacc's compiler in source-to-source mode followed by a
+foreign OpenMP compiler, we expect that the foreign OpenMP runtime's
+entry point lookup function would simply return null for such a
+non-standard entry point.  In that case, Clacc's OpenACC runtime
+passes values indicating no directive information to the OpenACC
+callbacks (see the "Limitations" section below for details).  Of
+course, if the entry point is one day standardized, it will then be
+the responsibility of the foreign OpenMP compiler to provide the
+required directive information to its OpenMP runtime, which would then
+expose it via the `ompt_get_directive_info` entry point, just as
+Clacc's compiler and OpenMP runtime do now.  At that point, this
+directive information will be available to OpenACC profiling libraries
+regardless of which Clacc compiler mode the user uses to compile his
+OpenACC application.
 
 As an alternative to the above OMPT and LLVM IR codegen extensions, we
 also considered a source-level design.  That is, we considered
@@ -1971,8 +1989,17 @@ specification that we need to investigate further:
 * The triggering of `acc_ev_runtime_shutdown` is questionable because
   it never seems to trigger when using pgcc 19.4-0.
 * How should the `device_number` and source location fields of
-  `acc_prof_info` and the `parent_construct` field of `acc_event_info`
-  be set for `acc_ev_runtime_shutdown`?
+  `acc_prof_info` and the `parent_construct` and `implicit` fields of
+  `acc_event_info` be set for `acc_ev_runtime_shutdown`?  Clacc
+  currently sets `device_number` to the host device, source location
+  fields to null, `parent_construct` to `acc_construct_runtime_api`,
+  and `implicit` to `true`.  Likewise for
+  `acc_ev_device_shutdown_start` and `acc_ev_device_shutdown_end`
+  except Clacc sets `device_number` to the device being shut down.
+  `acc_construct_runtime_api` really isn't appropriate in these cases,
+  and OpenACC should probably specify a new member of
+  `acc_construct_t` that makes sense for these events, perhaps
+  `acc_construct_internal`.
 * How should `vendor`, `device_handle`, `context_handle`, and
   `async_handle` fields of `acc_api_info` be assigned?
 
@@ -2067,6 +2094,20 @@ support currently include:
             * See the section "OpenACC to OpenMP Mapping: Profiling
               Data" for further discussion.
     * `acc_event_info`:
+        * `parent_construct` and `implicit`:
+            * We do not know how to obtain this information via OMPT.
+            * When compiling the OpenACC application using Clacc's
+              compiler in traditional compilation mode, these fields
+              are set correctly (but see the section "OpenACC
+              Clarifications" above for the case of shutdown events).
+            * When compiling the OpenACC application using Clacc's
+              compiler in source-to-source mode, these fields are
+              always set to `acc_construct_runtime_api` and `true` as
+              if all events are triggered internally and thus have no
+              connection back to specific directives or runtime calls.
+              This behavior does not conform to OpenACC 2.7.
+            * See the section "OpenACC to OpenMP Mapping: Profiling
+              Data" for further discussion.
         * `tool_info` is always set to `NULL`, and data cannot yet be
           shared between `_start` and `_end` events.  This should be
           one of the easier limitations to fix, if needed.
@@ -2121,10 +2162,10 @@ support currently include:
       runtime implementations.
 * Clacc's OpenACC Profiling Interface support depends on OMPT
   extensions.  As a result, any OpenMP runtime implementation must
-  support these extensions to be usable.  Moreover, any OpenMP
+  support some of these extensions to be usable.  Moreover, any OpenMP
   compiler used after Clacc's source-to-source mode when compiling an
   OpenACC application must support the extensions, or some profiling
-  data will not be available.  Notes:
+  data will not be available or will be inaccurate.  Notes:
     * A graceful mechanism to reject registration of OpenACC event
       types for which required OMPT callbacks are not supported by the
       linked OpenMP runtime should be devised.

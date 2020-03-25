@@ -93,7 +93,8 @@ ompt_callbacks_internal_t ompt_callbacks;
 static ompt_start_tool_result_t *ompt_start_tool_result = NULL;
 
 // FIXME: Access to these is not thread-safe.  Does it need to be?
-ompt_directive_info_t ompt_directive_info = {NULL, NULL, 0, 0, 0, 0};
+ompt_directive_info_t ompt_directive_info = {ompt_directive_unknown, 0, NULL,
+                                             NULL, 0, 0, 0, 0};
 static unsigned ompt_device_inits_capacity = 0;
 static unsigned ompt_device_inits_size = 0;
 static int32_t *ompt_device_inits = NULL;
@@ -218,14 +219,55 @@ static acc_prof_info acc_get_prof_info(acc_event_t event_type,
   ret.valid_bytes = valid_bytes(acc_prof_info, func_end_line_no);
   return ret;
 }
-static acc_event_info acc_get_data_event_info(
-    acc_event_t event_type, acc_construct_t parent_construct, bool implicit,
-    size_t bytes, const void *host_ptr, const void *device_ptr) {
+
+static acc_event_info acc_get_other_event_info(acc_event_t event_type) {
   acc_event_info ret;
-  ret.data_event.event_type = event_type;
-  ret.data_event.parent_construct = parent_construct;
-  ret.data_event.implicit = implicit;
-  ret.data_event.tool_info = NULL;
+  ret.other_event.event_type = event_type;
+  // When ompt_get_directive_info returns kind=ompt_directive_unknown, we
+  // assume the event was triggered internally and thus has no connection back
+  // to a specific directive or runtime call.  There's no acc_construct_t
+  // member in OpenACC 3.0 that makes sense for this case, so we pick
+  // parent_construct=acc_construct_runtime_api and implicit=true to try to
+  // indicate an internal call.  FIXME: OpenACC should be extended with
+  // something like acc_construct_internal.
+  //
+  // This case occurs when the event is acc_ev_runtime_shutdown,
+  // acc_ev_device_shutdown_start, or acc_ev_device_shutdown_end without a
+  // triggering directive or runtime API call.  This case also currently also
+  // occurs if the compiler or OpenMP runtime isn't able to provide the
+  // required directive info.  Thus, for this case, ompt_get_directive_info,
+  // if available as an entry point, should always return a default-initialized
+  // ompt_directive_info_t, which has is_explicit_event=false.
+  if (!acc_ompt_get_directive_info) {
+    ret.other_event.parent_construct = acc_construct_runtime_api;
+    ret.other_event.implicit = true;
+  } else {
+    ompt_directive_info_t *directive_info = acc_ompt_get_directive_info();
+    switch (directive_info->kind) {
+    case ompt_directive_unknown:
+      // TODO: Once we provide directive info for runtime calls, for which
+      // is_explicit_event should be true, create an ompt_directive_runtime_api
+      // instead of reusing ompt_directive_unknown.
+      assert(!directive_info->is_explicit_event &&
+             "expected is_explicit_event=false for "
+             "kind=ompt_directve_unknown");
+      ret.other_event.parent_construct = acc_construct_runtime_api;
+      break;
+    case ompt_directive_target_teams:
+      ret.other_event.parent_construct = acc_construct_parallel;
+      break;
+    }
+    ret.other_event.implicit = !directive_info->is_explicit_event;
+  }
+  ret.other_event.tool_info = NULL;
+  ret.other_event.valid_bytes = valid_bytes(acc_other_event_info, tool_info);
+  return ret;
+}
+
+static acc_event_info acc_get_data_event_info(
+    acc_event_t event_type, size_t bytes, const void *host_ptr,
+    const void *device_ptr) {
+  acc_event_info ret = acc_get_other_event_info(event_type);
   // FIXME: How can we get the variable name?
   ret.data_event.var_name = NULL;
   ret.data_event.bytes = bytes;
@@ -235,13 +277,8 @@ static acc_event_info acc_get_data_event_info(
   return ret;
 }
 
-static acc_event_info acc_get_launch_event_info(
-    acc_event_t event_type, acc_construct_t parent_construct, bool implicit) {
-  acc_event_info ret;
-  ret.launch_event.event_type = event_type;
-  ret.launch_event.parent_construct = parent_construct;
-  ret.launch_event.implicit = implicit;
-  ret.launch_event.tool_info = NULL;
+static acc_event_info acc_get_launch_event_info(acc_event_t event_type) {
+  acc_event_info ret = acc_get_other_event_info(event_type);
   ret.launch_event.kernel_name = NULL;
   ret.launch_event.valid_bytes = valid_bytes(acc_launch_event_info,
                                              kernel_name);
@@ -249,17 +286,6 @@ static acc_event_info acc_get_launch_event_info(
   // num_workers, and vector_length, but I don't know how to access that here.
   // ompt_callback_target_submit{,_start} does provide requested_num_teams, but
   // OpenACC apparently wants the number of gangs created.
-  return ret;
-}
-
-static acc_event_info acc_get_other_event_info(
-    acc_event_t event_type, acc_construct_t parent_construct, bool implicit) {
-  acc_event_info ret;
-  ret.other_event.event_type = event_type;
-  ret.other_event.parent_construct = parent_construct;
-  ret.other_event.implicit = implicit;
-  ret.other_event.tool_info = NULL;
-  ret.other_event.valid_bytes = valid_bytes(acc_other_event_info, tool_info);
   return ret;
 }
 
@@ -288,10 +314,7 @@ static void acc_ompt_callback_device_initialize_start(
     ompt_function_lookup_t lookup, const char *documentation) {
   acc_event_t event_type = acc_ev_device_init_start;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
-  // FIXME: How will we distinguish acc parallel from acc kernels, acc init,
-  // acc_init, etc.?
-  acc_event_info ei = acc_get_other_event_info(
-      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_event_info ei = acc_get_other_event_info(event_type);
   acc_api_info ai = acc_get_api_info(device_num);
   acc_ev_device_init_start_callback(&pi, &ei, &ai);
 }
@@ -302,10 +325,7 @@ static void acc_ompt_callback_device_initialize(
     ompt_function_lookup_t lookup, const char *documentation) {
   acc_event_t event_type = acc_ev_device_init_end;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
-  // FIXME: How will we distinguish acc parallel from acc kernels, acc init,
-  // acc_init, etc.?
-  acc_event_info ei = acc_get_other_event_info(
-      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_event_info ei = acc_get_other_event_info(event_type);
   acc_api_info ai = acc_get_api_info(device_num);
   acc_ev_device_init_end_callback(&pi, &ei, &ai);
 }
@@ -314,10 +334,7 @@ static unsigned acc_ompt_callback_device_finalize_start_reg_counter = 0;
 static void acc_ompt_callback_device_finalize_start(int device_num) {
   acc_event_t event_type = acc_ev_device_shutdown_start;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
-  // FIXME: Is acc_construct_runtime_api right?  See related fixmes in
-  // acc_ompt_finalize and acc_ompt_callback_device_finalize.
-  acc_event_info ei = acc_get_other_event_info(
-      event_type, acc_construct_runtime_api, /*implicit*/ true);
+  acc_event_info ei = acc_get_other_event_info(event_type);
   acc_api_info ai = acc_get_api_info(device_num);
   acc_ev_device_shutdown_start_callback(&pi, &ei, &ai);
 }
@@ -326,10 +343,7 @@ static unsigned acc_ompt_callback_device_finalize_reg_counter = 0;
 static void acc_ompt_callback_device_finalize(int device_num) {
   acc_event_t event_type = acc_ev_device_shutdown_end;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
-  // FIXME: Is acc_construct_runtime_api right?  See related fixmes in
-  // acc_ompt_finalize and acc_ompt_callback_device_finalize_start.
-  acc_event_info ei = acc_get_other_event_info(
-      event_type, acc_construct_runtime_api, /*implicit*/ true);
+  acc_event_info ei = acc_get_other_event_info(event_type);
   acc_api_info ai = acc_get_api_info(device_num);
   acc_ev_device_shutdown_end_callback(&pi, &ei, &ai);
 }
@@ -355,9 +369,7 @@ static void acc_ompt_callback_target(
   }
   if (acc_cb) {
     acc_prof_info pi = acc_get_prof_info(event_type, device_num);
-    // FIXME: How will we distinguish acc kernels from acc parallel?
-    acc_event_info ei = acc_get_other_event_info(
-        event_type, acc_construct_parallel, /*implicit*/ false);
+    acc_event_info ei = acc_get_other_event_info(event_type);
     acc_api_info ai = acc_get_api_info(device_num);
     acc_cb(&pi, &ei, &ai);
   }
@@ -375,9 +387,7 @@ static void acc_ompt_callback_target_map_start(
   KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
   int device_num = itr->second;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
-  // FIXME: How will we distinguish acc kernels from acc parallel?
-  acc_event_info ei = acc_get_other_event_info(
-      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_event_info ei = acc_get_other_event_info(event_type);
   acc_api_info ai = acc_get_api_info(device_num);
   acc_ev_enter_data_start_callback(&pi, &ei, &ai);
 }
@@ -392,9 +402,7 @@ static void acc_ompt_callback_target_map(
   KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
   int device_num = itr->second;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
-  // FIXME: How will we distinguish acc kernels from acc parallel?
-  acc_event_info ei = acc_get_other_event_info(
-      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_event_info ei = acc_get_other_event_info(event_type);
   acc_api_info ai = acc_get_api_info(device_num);
   acc_ev_enter_data_end_callback(&pi, &ei, &ai);
 }
@@ -409,9 +417,7 @@ static void acc_ompt_callback_target_map_exit_start(
   KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
   int device_num = itr->second;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
-  // FIXME: How will we distinguish acc kernels from acc parallel?
-  acc_event_info ei = acc_get_other_event_info(
-      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_event_info ei = acc_get_other_event_info(event_type);
   acc_api_info ai = acc_get_api_info(device_num);
   acc_ev_exit_data_start_callback(&pi, &ei, &ai);
 }
@@ -426,9 +432,7 @@ static void acc_ompt_callback_target_map_exit_end(
   KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
   int device_num = itr->second;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
-  // FIXME: How will we distinguish acc kernels from acc parallel?
-  acc_event_info ei = acc_get_other_event_info(
-      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_event_info ei = acc_get_other_event_info(event_type);
   acc_api_info ai = acc_get_api_info(device_num);
   acc_ev_exit_data_end_callback(&pi, &ei, &ai);
 }
@@ -442,9 +446,7 @@ static void acc_ompt_callback_target_submit(
   KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
   int device_num = itr->second;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
-  // FIXME: How will we distinguish acc kernels from acc parallel?
-  acc_event_info ei = acc_get_launch_event_info(
-      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_event_info ei = acc_get_launch_event_info(event_type);
   acc_api_info ai = acc_get_api_info(device_num);
   acc_ev_enqueue_launch_start_callback(&pi, &ei, &ai);
 }
@@ -458,9 +460,7 @@ static void acc_ompt_callback_target_submit_end(
   KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
   int device_num = itr->second;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
-  // FIXME: How will we distinguish acc kernels from acc parallel?
-  acc_event_info ei = acc_get_launch_event_info(
-      event_type, acc_construct_parallel, /*implicit*/ false);
+  acc_event_info ei = acc_get_launch_event_info(event_type);
   acc_api_info ai = acc_get_api_info(device_num);
   acc_ev_enqueue_launch_end_callback(&pi, &ei, &ai);
 }
@@ -470,12 +470,7 @@ static void acc_get_target_data_op_info(
     const void *host_ptr, const void *device_ptr, acc_prof_info *pi,
     acc_event_info *ei, acc_api_info *ai) {
   *pi = acc_get_prof_info(event_type, device_num);
-  // FIXME: How will we distinguish acc kernels from acc parallel?
-  // FIXME: How can we tell if this is for an implicit data attribute?
-  // Currently, we always set implicit=false.
-  *ei = acc_get_data_event_info(event_type, acc_construct_parallel,
-                                /*implicit*/ false, bytes, host_ptr,
-                                device_ptr);
+  *ei = acc_get_data_event_info(event_type, bytes, host_ptr, device_ptr);
   *ai = acc_get_api_info(device_num);
 }
 
@@ -819,16 +814,7 @@ static void acc_ompt_finalize(ompt_data_t *tool_data) {
   acc_event_t event_type = acc_ev_runtime_shutdown;
   acc_prof_info pi = acc_get_prof_info(event_type,
                                        acc_ompt_initial_device_num);
-  // FIXME: Currently, the runtime shuts down only at program termination
-  // (shutdown pragmas and library calls are not yet supported, but how will we
-  // distinguish them here when they are?).  There is no parent construct in
-  // this enum that makes sense for that, but at least
-  // acc_construct_runtime_api doesn't name a specific construct.  The implicit
-  // field hopefully communicates this well enough.  See related fixmes in
-  // acc_ompt_callback_device_finalize_start and
-  // acc_ompt_callback_device_finalize.
-  acc_event_info ei = acc_get_other_event_info(
-      event_type, acc_construct_runtime_api, /*implicit*/ true);
+  acc_event_info ei = acc_get_other_event_info(event_type);
   acc_api_info ai = acc_get_api_info(acc_ompt_initial_device_num);
   acc_ev_runtime_shutdown_callback(&pi, &ei, &ai);
 }

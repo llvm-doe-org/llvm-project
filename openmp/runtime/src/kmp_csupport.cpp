@@ -4188,10 +4188,13 @@ int __kmpc_pause_resource(kmp_pause_status_t level) {
   return __kmp_pause_resource(level);
 }
 
-void __kmpc_set_directive_info(const char *src_file, const char *func_name,
-                               int line_no, int end_line_no, int func_line_no,
-                               int func_end_line_no) {
+void __kmpc_set_directive_info(
+    int kind, int is_explicit_event, const char *src_file,
+    const char *func_name, int line_no, int end_line_no, int func_line_no,
+    int func_end_line_no) {
 #if OMPT_SUPPORT
+  ompt_directive_info.kind = (ompt_directive_kind_t)kind;
+  ompt_directive_info.is_explicit_event = is_explicit_event;
   ompt_directive_info.src_file = src_file;
   ompt_directive_info.func_name = func_name;
   ompt_directive_info.line_no = line_no;

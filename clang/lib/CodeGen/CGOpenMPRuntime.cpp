@@ -704,9 +704,9 @@ enum OpenMPRTLFunction {
   OMPRTL__kmpc_alloc,
   // Call to void __kmpc_free(int gtid, void *ptr, omp_allocator_handle_t al);
   OMPRTL__kmpc_free,
-  // Call to void __kmpc_set_directive_info(const char *src_file,
-  // const char *func_name, int line_no, int end_line_no, int func_line_no,
-  // int func_end_line_no);
+  // Call to void __kmpc_set_directive_info(int kind, int is_explicit_event,
+  // const char *src_file, const char *func_name, int line_no, int end_line_no,
+  // int func_line_no, int func_end_line_no);
   OMPRTL__kmpc_set_directive_info,
 
   //
@@ -2344,11 +2344,12 @@ llvm::FunctionCallee CGOpenMPRuntime::createRuntimeFunction(unsigned Function) {
     break;
   }
   case OMPRTL__kmpc_set_directive_info: {
-    // Build void __kmpc_set_directive_info(const char *src_file,
-    // const char *func_name, int line_no, int end_line_no, int func_line_no,
-    // int func_end_line_no);
-    llvm::Type *TypeParams[] = {CGM.Int8PtrTy, CGM.Int8PtrTy, CGM.IntTy,
-                                CGM.IntTy, CGM.IntTy, CGM.IntTy};
+    // Build void __kmpc_set_directive_info(int kind, int is_explicit_event,
+    // const char *src_file, const char *func_name, int line_no,
+    // int end_line_no, int func_line_no, int func_end_line_no);
+    llvm::Type *TypeParams[] = {CGM.IntTy, CGM.IntTy, CGM.Int8PtrTy,
+                                CGM.Int8PtrTy, CGM.IntTy, CGM.IntTy, CGM.IntTy,
+                                CGM.IntTy};
     auto *FnTy =
         llvm::FunctionType::get(CGM.VoidTy, TypeParams, /*isVarArg=*/false);
     RTLFn = CGM.CreateRuntimeFunction(FnTy,
@@ -9969,6 +9970,24 @@ void CGOpenMPRuntime::emitSetDirectiveInfoCall(
   // Due to preprocessing, the file name might vary among the various locations
   // used here.  Use the file name associated with the beginning of the
   // directive.
+  int KindRaw;
+  switch (D.getDirectiveKind()) {
+  // TODO: These values comes from enum ompt_directive_kind_t in
+  // openmp/runtime/src/include/omp-tools.h.var.  Find a clean way to ensure
+  // these stay in sync.
+  case OMPD_target_teams: KindRaw = 1; break;
+  default:
+    // Other cases just aren't calling this yet, in part because of the check
+    // for IsInOpenACCConstruct above.
+    llvm_unreachable("unexpected OpenMP directive kind for "
+                     "__kmpc_set_directive_info call");
+  }
+  llvm::Value *Kind = llvm::ConstantInt::get(CGM.IntTy, KindRaw);
+  // TODO: For now, we only call this for explicit constructs, in part because
+  // of the check for IsInOpenACCConstruct above.  In the future, there may be
+  // cases where we must indicate an implicit event according to the OpenACC
+  // specification.
+  llvm::Value *Explicit = llvm::ConstantInt::get(CGM.IntTy, 1);
   llvm::Value *SrcFile =
       CGF.Builder.CreateGlobalStringPtr(DirBeginLoc.getFilename());
   llvm::Value *FuncName = CGF.Builder.CreateGlobalStringPtr(Func->getName());
@@ -9981,10 +10000,10 @@ void CGOpenMPRuntime::emitSetDirectiveInfoCall(
   llvm::Value *FuncEndLineNo = llvm::ConstantInt::get(CGM.IntTy,
                                                       FuncEndLoc.getLine());
 
-  llvm::Value *LocArgs[] = {SrcFile, FuncName, LineNo, EndLineNo, FuncLineNo,
-                            FuncEndLineNo};
+  llvm::Value *Args[] = {Kind, Explicit, SrcFile, FuncName, LineNo, EndLineNo,
+                         FuncLineNo, FuncEndLineNo};
   CGF.EmitRuntimeCall(createRuntimeFunction(OMPRTL__kmpc_set_directive_info),
-                      LocArgs);
+                      Args);
 }
 
 void CGOpenMPRuntime::emitClearDirectiveInfoCall(CodeGenFunction &CGF) {
@@ -9992,10 +10011,13 @@ void CGOpenMPRuntime::emitClearDirectiveInfoCall(CodeGenFunction &CGF) {
     return;
   llvm::Value *CharNullPtr = llvm::ConstantPointerNull::get(CGM.Int8PtrTy);
   llvm::Value *IntZero = llvm::ConstantInt::getNullValue(CGM.IntTy);
-  llvm::Value *LocArgs[] = {CharNullPtr, CharNullPtr, IntZero, IntZero,
-                            IntZero, IntZero};
+  // TODO: The value of the first argument comes from enum
+  // ompt_directive_kind_t in openmp/runtime/src/include/omp-tools.h.var.  Find
+  // a clean way to ensure these stay in sync.
+  llvm::Value *Args[] = {IntZero, IntZero, CharNullPtr, CharNullPtr, IntZero,
+                         IntZero, IntZero, IntZero};
   CGF.EmitRuntimeCall(createRuntimeFunction(OMPRTL__kmpc_set_directive_info),
-                      LocArgs);
+                      Args);
 }
 
 void CGOpenMPRuntime::emitNumTeamsClause(CodeGenFunction &CGF,
