@@ -549,7 +549,7 @@ implicit or predetermined attributes of OpenMP except for cases where
 an explicit clause is not permitted or is difficult to produce.  That
 is, Clacc tries to make the exact behavior it intends to produce as
 explicit as possible in the generated OpenMP for the sake of
-debugging. Thus, -> *exp* appears frequently below.
+debugging.  Thus, -> *exp* appears frequently below.
 
 Clause Aliases
 --------------
@@ -607,9 +607,12 @@ clarify these points in future versions of the OpenACC specification.
         * Each group has one default DA.
         * It is not permitted as *exp* and is never computed as *pre*.
         * It is computed as *imp* for a variable on a directive if (1)
-          the group is relevant to the directive and (2) there is no
+          the group is relevant to the directive, (2) there is no
           other *exp*, *pre*, or *imp* DA from that group for that
-          variable on that directive.
+          variable on that directive, and (3) the variable needs a DA
+          on that directive (for most directives, that means the
+          variable is referenced on or within the directive and
+          declared outside it).
         * `nomap` indicates no data mapping of a variable between
           device and host.
         * `shared` indicates no privatization of a variable.  That is,
@@ -641,9 +644,9 @@ clarify these points in future versions of the OpenACC specification.
             * As noted in the mappings below, in many cases, Clacc
               translates `shared` to OpenMP's `shared` clause.
               However, `omp distribute` and `omp simd` do not accept
-              *exp* `shared`, so Clacc then relies on OpenMP implicit
-              data sharing attributes, and the semantics are the
-              desired OpenACC semantics.
+              *exp* `shared`, so Clacc then relies on OpenMP *imp*
+              DSAs, and the semantics are the desired OpenACC
+              semantics.
         * Otherwise, the DMAs are listed in OpenACC 3.0 sec. 2.7 "Data
           Clauses", and the DSAs are described in the sections for the
           directives that permit them.
@@ -1219,9 +1222,9 @@ to OpenMP is as follows:
       However, this behavior shouldn't be observable given that it's
       OpenACC's structured reference counter, which is guaranteed not
       to fall to zero before the enclosing `acc data` ends either way.
-* *exp*|*imp* `copy` -> *exp* `map` with a `tofrom` map type.
-* *exp* `copyin` -> *exp* `map` with a `to` map type.
-* *exp* `copyout` -> *exp* `map` with a `from` map type.
+* *exp*|*imp* `copy` -> *exp* `map` with a `tofrom` map type
+* *exp* `copyin` -> *exp* `map` with a `to` map type
+* *exp* `copyout` -> *exp* `map` with a `from` map type
 * *imp* `shared` -> *exp* `shared`
 * *exp*|*imp* `reduction` -> *exp* `reduction`
 * *exp*|*imp* `firstprivate` -> *exp* `firstprivate`
