@@ -177,6 +177,8 @@ public:
 
   void SetupMachineFunction(MachineFunction &MF) override;
 
+  const MCExpr *lowerConstant(const Constant *CV) override;
+
   void EmitGlobalVariable(const GlobalVariable *GV) override;
 
   void EmitFunctionDescriptor() override;
@@ -506,9 +508,9 @@ void PPCAsmPrinter::EmitTlsCall(const MachineInstr *MI,
           (!Subtarget->isPPC64() && MI->getOperand(1).getReg() == PPC::R3)) &&
          "GETtls[ld]ADDR[32] must read GPR3");
 
-  if (!Subtarget->isPPC64() && !Subtarget->isDarwin() &&
-      isPositionIndependent())
+  if (Subtarget->is32BitELFABI() && isPositionIndependent())
     Kind = MCSymbolRefExpr::VK_PLT;
+
   const MCExpr *TlsRef =
     MCSymbolRefExpr::create(TlsGetAddr, Kind, OutContext);
 
@@ -1763,6 +1765,26 @@ void PPCAIXAsmPrinter::ValidateGV(const GlobalVariable *GV) {
     report_fatal_error("COMDAT not yet supported by AIX.");
 }
 
+const MCExpr *PPCAIXAsmPrinter::lowerConstant(const Constant *CV) {
+  if (const Function *F = dyn_cast<Function>(CV)) {
+    MCSymbolXCOFF *FSym = cast<MCSymbolXCOFF>(getSymbol(F));
+    if (!FSym->hasContainingCsect()) {
+      const XCOFF::StorageClass SC =
+          F->isDeclaration()
+              ? TargetLoweringObjectFileXCOFF::getStorageClassForGlobal(F)
+              : XCOFF::C_HIDEXT;
+      MCSectionXCOFF *Csect = OutStreamer->getContext().getXCOFFSection(
+          FSym->getName(), XCOFF::XMC_DS,
+          F->isDeclaration() ? XCOFF::XTY_ER : XCOFF::XTY_SD, SC,
+          SectionKind::getData());
+      FSym->setContainingCsect(Csect);
+    }
+    return MCSymbolRefExpr::create(
+        FSym->getContainingCsect()->getQualNameSymbol(), OutContext);
+  }
+  return PPCAsmPrinter::lowerConstant(CV);
+}
+
 void PPCAIXAsmPrinter::EmitGlobalVariable(const GlobalVariable *GV) {
   ValidateGV(GV);
 
@@ -1778,8 +1800,7 @@ void PPCAIXAsmPrinter::EmitGlobalVariable(const GlobalVariable *GV) {
   SectionKind GVKind = getObjFileLowering().getKindForGlobal(GV, TM);
   if ((!GVKind.isCommon() && !GVKind.isBSS() && !GVKind.isData() &&
        !GVKind.isReadOnly()) ||
-      GVKind.isMergeable2ByteCString() || GVKind.isMergeable4ByteCString() ||
-      GVKind.isMergeableConst())
+      GVKind.isMergeable2ByteCString() || GVKind.isMergeable4ByteCString())
     report_fatal_error("Encountered a global variable kind that is "
                        "not supported yet.");
 

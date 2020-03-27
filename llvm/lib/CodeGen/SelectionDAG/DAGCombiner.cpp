@@ -3104,6 +3104,20 @@ SDValue DAGCombiner::visitSUB(SDNode *N) {
                        DAG.getNode(ISD::SUB, DL, VT, N1.getOperand(1),
                                    N1.getOperand(0)));
 
+  // A - (A & B)  ->  A & (~B)
+  if (N1.getOpcode() == ISD::AND) {
+    SDValue A = N1.getOperand(0);
+    SDValue B = N1.getOperand(1);
+    if (A != N0)
+      std::swap(A, B);
+    if (A == N0 &&
+        (N1.hasOneUse() || isConstantOrConstantVector(B, /*NoOpaques=*/true))) {
+      SDValue InvB =
+          DAG.getNode(ISD::XOR, DL, VT, B, DAG.getAllOnesConstant(DL, VT));
+      return DAG.getNode(ISD::AND, DL, VT, A, InvB);
+    }
+  }
+
   // fold (X - (-Y * Z)) -> (X + (Y * Z))
   if (N1.getOpcode() == ISD::MUL && N1.hasOneUse()) {
     if (N1.getOperand(0).getOpcode() == ISD::SUB &&
@@ -7106,6 +7120,13 @@ SDValue DAGCombiner::visitXOR(SDNode *N) {
                        DAG.getAllOnesConstant(DL, VT));
   }
 
+  // fold (not (add X, -1)) -> (neg X)
+  if (isAllOnesConstant(N1) && N0.getOpcode() == ISD::ADD &&
+      isAllOnesOrAllOnesSplat(N0.getOperand(1))) {
+    return DAG.getNode(ISD::SUB, DL, VT, DAG.getConstant(0, DL, VT),
+                       N0.getOperand(0));
+  }
+
   // fold (xor (and x, y), y) -> (and (not x), y)
   if (N0Opcode == ISD::AND && N0.hasOneUse() && N0->getOperand(1) == N1) {
     SDValue X = N0.getOperand(0);
@@ -7712,8 +7733,9 @@ SDValue DAGCombiner::visitSRA(SDNode *N) {
     if (VT.isVector())
       ExtVT = EVT::getVectorVT(*DAG.getContext(),
                                ExtVT, VT.getVectorNumElements());
-    if ((!LegalOperations ||
-         TLI.isOperationLegal(ISD::SIGN_EXTEND_INREG, ExtVT)))
+    if (!LegalOperations ||
+        TLI.getOperationAction(ISD::SIGN_EXTEND_INREG, ExtVT) ==
+        TargetLowering::Legal)
       return DAG.getNode(ISD::SIGN_EXTEND_INREG, SDLoc(N), VT,
                          N0.getOperand(0), DAG.getValueType(ExtVT));
   }
@@ -12617,6 +12639,15 @@ SDValue DAGCombiner::visitFMA(SDNode *N) {
     }
   }
 
+  // fold ((fma (fneg X), Y, (fneg Z)) -> fneg (fma X, Y, Z))
+  // fold ((fma X, (fneg Y), (fneg Z)) -> fneg (fma X, Y, Z))
+  if (!TLI.isFNegFree(VT) &&
+      TLI.isNegatibleForFree(SDValue(N, 0), DAG, LegalOperations,
+                             ForCodeSize) == 2)
+    return DAG.getNode(ISD::FNEG, DL, VT,
+                       TLI.getNegatedExpression(SDValue(N, 0), DAG,
+                                                LegalOperations, ForCodeSize),
+                       Flags);
   return SDValue();
 }
 
@@ -13349,6 +13380,16 @@ SDValue DAGCombiner::visitFNEG(SDNode *N) {
 
   if (TLI.isNegatibleForFree(N0, DAG, LegalOperations, ForCodeSize))
     return TLI.getNegatedExpression(N0, DAG, LegalOperations, ForCodeSize);
+
+  // -(X-Y) -> (Y-X) is unsafe because when X==Y, -0.0 != +0.0 FIXME: This is
+  // duplicated in isNegatibleForFree, but isNegatibleForFree doesn't know it
+  // was called from a context with a nsz flag if the input fsub does not.
+  if (N0.getOpcode() == ISD::FSUB &&
+      (DAG.getTarget().Options.NoSignedZerosFPMath ||
+       N->getFlags().hasNoSignedZeros()) && N0.hasOneUse()) {
+    return DAG.getNode(ISD::FSUB, SDLoc(N), VT, N0.getOperand(1),
+                       N0.getOperand(0), N->getFlags());
+  }
 
   // Transform fneg(bitconvert(x)) -> bitconvert(x ^ sign) to avoid loading
   // constant pool values.
@@ -18534,19 +18575,41 @@ SDValue DAGCombiner::visitEXTRACT_SUBVECTOR(SDNode *N) {
     }
   }
 
-  // Combine:
-  //    (extract_subvec (concat V1, V2, ...), i)
-  // Into:
-  //    Vi if possible
-  // Only operand 0 is checked as 'concat' assumes all inputs of the same
-  // type.
-  if (V.getOpcode() == ISD::CONCAT_VECTORS && isa<ConstantSDNode>(Index) &&
-      V.getOperand(0).getValueType() == NVT) {
-    unsigned Idx = N->getConstantOperandVal(1);
-    unsigned NumElems = NVT.getVectorNumElements();
-    assert((Idx % NumElems) == 0 &&
-           "IDX in concat is not a multiple of the result vector length.");
-    return V->getOperand(Idx / NumElems);
+  if (V.getOpcode() == ISD::CONCAT_VECTORS && isa<ConstantSDNode>(Index)) {
+    EVT ConcatSrcVT = V.getOperand(0).getValueType();
+    assert(ConcatSrcVT.getVectorElementType() == NVT.getVectorElementType() &&
+           "Concat and extract subvector do not change element type");
+
+    unsigned ExtIdx = N->getConstantOperandVal(1);
+    unsigned ExtNumElts = NVT.getVectorNumElements();
+    assert(ExtIdx % ExtNumElts == 0 &&
+           "Extract index is not a multiple of the input vector length.");
+
+    unsigned ConcatSrcNumElts = ConcatSrcVT.getVectorNumElements();
+    unsigned ConcatOpIdx = ExtIdx / ConcatSrcNumElts;
+
+    // If the concatenated source types match this extract, it's a direct
+    // simplification:
+    // extract_subvec (concat V1, V2, ...), i --> Vi
+    if (ConcatSrcNumElts == ExtNumElts)
+      return V.getOperand(ConcatOpIdx);
+
+    // If the concatenated source vectors are a multiple length of this extract,
+    // then extract a fraction of one of those source vectors directly from a
+    // concat operand. Example:
+    //   v2i8 extract_subvec (v16i8 concat (v8i8 X), (v8i8 Y), 14 -->
+    //   v2i8 extract_subvec v8i8 Y, 6
+    if (ConcatSrcNumElts % ExtNumElts == 0) {
+      SDLoc DL(N);
+      unsigned NewExtIdx = ExtIdx - ConcatOpIdx * ConcatSrcNumElts;
+      assert(NewExtIdx + ExtNumElts <= ConcatSrcNumElts &&
+             "Trying to extract from >1 concat operand?");
+      assert(NewExtIdx % ExtNumElts == 0 &&
+             "Extract index is not a multiple of the input vector length.");
+      SDValue NewIndexC = DAG.getIntPtrConstant(NewExtIdx, DL);
+      return DAG.getNode(ISD::EXTRACT_SUBVECTOR, DL, NVT,
+                         V.getOperand(ConcatOpIdx), NewIndexC);
+    }
   }
 
   V = peekThroughBitcasts(V);
@@ -19254,6 +19317,30 @@ SDValue DAGCombiner::visitVECTOR_SHUFFLE(SDNode *N) {
       return V;
   }
 
+  // A shuffle of a concat of the same narrow vector can be reduced to use
+  // only low-half elements of a concat with undef:
+  // shuf (concat X, X), undef, Mask --> shuf (concat X, undef), undef, Mask'
+  if (N0.getOpcode() == ISD::CONCAT_VECTORS && N1.isUndef() &&
+      N0.getNumOperands() == 2 &&
+      N0.getOperand(0) == N0.getOperand(1)) {
+    int HalfNumElts = (int)NumElts / 2;
+    SmallVector<int, 8> NewMask;
+    for (unsigned i = 0; i != NumElts; ++i) {
+      int Idx = SVN->getMaskElt(i);
+      if (Idx >= HalfNumElts) {
+        assert(Idx < (int)NumElts && "Shuffle mask chooses undef op");
+        Idx -= HalfNumElts;
+      }
+      NewMask.push_back(Idx);
+    }
+    if (TLI.isShuffleMaskLegal(NewMask, VT)) {
+      SDValue UndefVec = DAG.getUNDEF(N0.getOperand(0).getValueType());
+      SDValue NewCat = DAG.getNode(ISD::CONCAT_VECTORS, SDLoc(N), VT,
+                                   N0.getOperand(0), UndefVec);
+      return DAG.getVectorShuffle(VT, SDLoc(N), NewCat, N1, NewMask);
+    }
+  }
+
   // Attempt to combine a shuffle of 2 inputs of 'scalar sources' -
   // BUILD_VECTOR or SCALAR_TO_VECTOR into a single BUILD_VECTOR.
   if (Level < AfterLegalizeDAG && TLI.isTypeLegal(VT))
@@ -19738,8 +19825,10 @@ SDValue DAGCombiner::XformToShuffleWithZero(SDNode *N) {
       int EltIdx = i / Split;
       int SubIdx = i % Split;
       SDValue Elt = RHS.getOperand(EltIdx);
+      // X & undef --> 0 (not undef). So this lane must be converted to choose
+      // from the zero constant vector (same as if the element had all 0-bits).
       if (Elt.isUndef()) {
-        Indices.push_back(-1);
+        Indices.push_back(i + NumSubElts);
         continue;
       }
 
@@ -19752,14 +19841,10 @@ SDValue DAGCombiner::XformToShuffleWithZero(SDNode *N) {
         return SDValue();
 
       // Extract the sub element from the constant bit mask.
-      if (DAG.getDataLayout().isBigEndian()) {
-        Bits.lshrInPlace((Split - SubIdx - 1) * NumSubBits);
-      } else {
-        Bits.lshrInPlace(SubIdx * NumSubBits);
-      }
-
-      if (Split > 1)
-        Bits = Bits.trunc(NumSubBits);
+      if (DAG.getDataLayout().isBigEndian())
+        Bits = Bits.extractBits(NumSubBits, (Split - SubIdx - 1) * NumSubBits);
+      else
+        Bits = Bits.extractBits(NumSubBits, SubIdx * NumSubBits);
 
       if (Bits.isAllOnesValue())
         Indices.push_back(i);

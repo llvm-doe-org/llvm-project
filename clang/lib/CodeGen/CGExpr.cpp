@@ -1011,6 +1011,9 @@ EmitComplexPrePostIncDec(const UnaryOperator *E, LValue LV,
 
   // Store the updated result through the lvalue.
   EmitStoreOfComplex(IncVal, LV, /*init*/ false);
+  if (getLangOpts().OpenMP)
+    CGM.getOpenMPRuntime().checkAndEmitLastprivateConditional(*this,
+                                                              E->getSubExpr());
 
   // If this is a postinc, return the value read from memory, otherwise use the
   // updated value.
@@ -4619,8 +4622,15 @@ RValue CodeGenFunction::EmitSimpleCallExpr(const CallExpr *E,
 }
 
 static CGCallee EmitDirectCallee(CodeGenFunction &CGF, const FunctionDecl *FD) {
+
   if (auto builtinID = FD->getBuiltinID()) {
-    return CGCallee::forBuiltin(builtinID, FD);
+    // Replaceable builtin provide their own implementation of a builtin. Unless
+    // we are in the builtin implementation itself, don't call the actual
+    // builtin. If we are in the builtin implementation, avoid trivial infinite
+    // recursion.
+    if (!FD->isInlineBuiltinDeclaration() ||
+        CGF.CurFn->getName() == FD->getName())
+      return CGCallee::forBuiltin(builtinID, FD);
   }
 
   llvm::Constant *calleePtr = EmitFunctionDeclPointer(CGF.CGM, FD);
@@ -4717,6 +4727,9 @@ LValue CodeGenFunction::EmitBinaryOperatorLValue(const BinaryOperator *E) {
     if (RV.isScalar())
       EmitNullabilityCheck(LV, RV.getScalarVal(), E->getExprLoc());
     EmitStoreThroughLValue(RV, LV);
+    if (getLangOpts().OpenMP)
+      CGM.getOpenMPRuntime().checkAndEmitLastprivateConditional(*this,
+                                                                E->getLHS());
     return LV;
   }
 

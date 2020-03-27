@@ -47,6 +47,7 @@
 #include "clang/Sema/ObjCMethodList.h"
 #include "clang/Sema/Ownership.h"
 #include "clang/Sema/Scope.h"
+#include "clang/Sema/SemaConcept.h"
 #include "clang/Sema/TypoCorrection.h"
 #include "clang/Sema/Weak.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -56,6 +57,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TinyPtrVector.h"
+#include "llvm/Frontend/OpenMP/OMPConstants.h"
 #include <deque>
 #include <memory>
 #include <string>
@@ -2299,6 +2301,8 @@ public:
                                 SkipBodyInfo *SkipBody = nullptr);
   Decl *ActOnStartOfFunctionDef(Scope *S, Decl *D,
                                 SkipBodyInfo *SkipBody = nullptr);
+  void ActOnStartTrailingRequiresClause(Scope *S, Declarator &D);
+  ExprResult ActOnFinishTrailingRequiresClause(ExprResult ConstraintExpr);
   void ActOnStartOfObjCMethodDef(Scope *S, Decl *D);
   bool isObjCMethodDecl(Decl *D) {
     return D && isa<ObjCMethodDecl>(D);
@@ -2883,7 +2887,8 @@ public:
                              NamedDecl *&OldDecl,
                              bool IsForUsingDecl);
   bool IsOverload(FunctionDecl *New, FunctionDecl *Old, bool IsForUsingDecl,
-                  bool ConsiderCudaAttrs = true);
+                  bool ConsiderCudaAttrs = true,
+                  bool ConsiderRequiresClauses = true);
 
   ImplicitConversionSequence
   TryImplicitConversion(Expr *From, QualType ToType,
@@ -3248,10 +3253,9 @@ public:
                                      bool *pHadMultipleCandidates = nullptr);
 
   FunctionDecl *
-  resolveAddressOfOnlyViableOverloadCandidate(Expr *E,
-                                              DeclAccessPair &FoundResult);
+  resolveAddressOfSingleOverloadCandidate(Expr *E, DeclAccessPair &FoundResult);
 
-  bool resolveAndFixAddressOfOnlyViableOverloadCandidate(
+  bool resolveAndFixAddressOfSingleOverloadCandidate(
       ExprResult &SrcExpr, bool DoFunctionPointerConversion = false);
 
   FunctionDecl *
@@ -6034,7 +6038,8 @@ public:
                                        TypeSourceInfo *MethodType,
                                        SourceLocation EndLoc,
                                        ArrayRef<ParmVarDecl *> Params,
-                                       ConstexprSpecKind ConstexprKind);
+                                       ConstexprSpecKind ConstexprKind,
+                                       Expr *TrailingRequiresClause);
 
   /// Number lambda for linkage purposes if necessary.
   void handleLambdaNumbering(
@@ -6168,16 +6173,35 @@ public:
                                            Expr *Src);
 
   /// Check whether the given expression is a valid constraint expression.
-  /// A diagnostic is emitted if it is not, and false is returned.
-  bool CheckConstraintExpression(Expr *CE);
+  /// A diagnostic is emitted if it is not, false is returned, and
+  /// PossibleNonPrimary will be set to true if the failure might be due to a
+  /// non-primary expression being used as an atomic constraint.
+  bool CheckConstraintExpression(Expr *CE, Token NextToken = Token(),
+                                 bool *PossibleNonPrimary = nullptr,
+                                 bool IsTrailingRequiresClause = false);
+
+  /// Check whether the given type-dependent expression will be the name of a
+  /// function or another callable function-like entity (e.g. a function
+  // template or overload set) for any substitution.
+  bool IsDependentFunctionNameExpr(Expr *E);
 
 private:
-  /// \brief Caches pairs of template-like decls whose associated constraints
-  /// were checked for subsumption and whether or not the first's constraints
-  /// did in fact subsume the second's.
+  /// Caches pairs of template-like decls whose associated constraints were
+  /// checked for subsumption and whether or not the first's constraints did in
+  /// fact subsume the second's.
   llvm::DenseMap<std::pair<NamedDecl *, NamedDecl *>, bool> SubsumptionCache;
+  /// Caches the normalized associated constraints of declarations (concepts or
+  /// constrained declarations). If an error occurred while normalizing the
+  /// associated constraints of the template or concept, nullptr will be cached
+  /// here.
+  llvm::DenseMap<NamedDecl *, NormalizedConstraint *>
+      NormalizationCache;
 
 public:
+  const NormalizedConstraint *
+  getNormalizedAssociatedConstraints(
+      NamedDecl *ConstrainedDecl, ArrayRef<const Expr *> AssociatedConstraints);
+
   /// \brief Check whether the given declaration's associated constraints are
   /// at least as constrained than another declaration's according to the
   /// partial ordering of constraints.
@@ -6189,6 +6213,13 @@ public:
   bool IsAtLeastAsConstrained(NamedDecl *D1, ArrayRef<const Expr *> AC1,
                               NamedDecl *D2, ArrayRef<const Expr *> AC2,
                               bool &Result);
+
+  /// If D1 was not at least as constrained as D2, but would've been if a pair
+  /// of atomic constraints involved had been declared in a concept and not
+  /// repeated in two separate places in code.
+  /// \returns true if such a diagnostic was emitted, false otherwise.
+  bool MaybeEmitAmbiguousAtomicConstraintsDiagnostic(NamedDecl *D1,
+      ArrayRef<const Expr *> AC1, NamedDecl *D2, ArrayRef<const Expr *> AC2);
 
   /// \brief Check whether the given list of constraint expressions are
   /// satisfied (as if in a 'conjunction') given template arguments.
@@ -8643,6 +8674,10 @@ public:
 
   void InstantiateExceptionSpec(SourceLocation PointOfInstantiation,
                                 FunctionDecl *Function);
+  bool CheckInstantiatedFunctionTemplateConstraints(
+      SourceLocation PointOfInstantiation, FunctionDecl *Decl,
+      ArrayRef<TemplateArgument> TemplateArgs,
+      ConstraintSatisfaction &Satisfaction);
   FunctionDecl *InstantiateFunctionDeclaration(FunctionTemplateDecl *FTD,
                                                const TemplateArgumentList *Args,
                                                SourceLocation Loc);
@@ -10066,7 +10101,7 @@ public:
                                       SourceLocation LParenLoc,
                                       SourceLocation EndLoc);
   /// Called on well-formed 'proc_bind' clause.
-  OMPClause *ActOnOpenMPProcBindClause(OpenMPProcBindClauseKind Kind,
+  OMPClause *ActOnOpenMPProcBindClause(llvm::omp::ProcBindKind Kind,
                                        SourceLocation KindLoc,
                                        SourceLocation StartLoc,
                                        SourceLocation LParenLoc,
@@ -10144,11 +10179,10 @@ public:
       OpenMPClauseKind Kind, ArrayRef<Expr *> Vars, Expr *TailExpr,
       const OMPVarListLocTy &Locs, SourceLocation ColonLoc,
       CXXScopeSpec &ReductionOrMapperIdScopeSpec,
-      DeclarationNameInfo &ReductionOrMapperId, OpenMPDependClauseKind DepKind,
-      OpenMPLinearClauseKind LinKind,
+      DeclarationNameInfo &ReductionOrMapperId, int ExtraModifier,
       ArrayRef<OpenMPMapModifierKind> MapTypeModifiers,
-      ArrayRef<SourceLocation> MapTypeModifiersLoc, OpenMPMapClauseKind MapType,
-      bool IsMapTypeImplicit, SourceLocation DepLinMapLoc);
+      ArrayRef<SourceLocation> MapTypeModifiersLoc, bool IsMapTypeImplicit,
+      SourceLocation DepLinMapLastLoc);
   /// Called on well-formed 'allocate' clause.
   OMPClause *
   ActOnOpenMPAllocateClause(Expr *Allocator, ArrayRef<Expr *> VarList,
@@ -10165,10 +10199,10 @@ public:
                                            SourceLocation LParenLoc,
                                            SourceLocation EndLoc);
   /// Called on well-formed 'lastprivate' clause.
-  OMPClause *ActOnOpenMPLastprivateClause(ArrayRef<Expr *> VarList,
-                                          SourceLocation StartLoc,
-                                          SourceLocation LParenLoc,
-                                          SourceLocation EndLoc);
+  OMPClause *ActOnOpenMPLastprivateClause(
+      ArrayRef<Expr *> VarList, OpenMPLastprivateModifier LPKind,
+      SourceLocation LPKindLoc, SourceLocation ColonLoc,
+      SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc);
   /// Called on well-formed 'shared' clause.
   OMPClause *ActOnOpenMPSharedClause(ArrayRef<Expr *> VarList,
                                      SourceLocation StartLoc,
@@ -10711,10 +10745,11 @@ public:
     /// whether T1 is reference-compatible with T2.
     enum ReferenceConversions {
       Qualification = 0x1,
-      Function = 0x2,
-      DerivedToBase = 0x4,
-      ObjC = 0x8,
-      ObjCLifetime = 0x10,
+      NestedQualification = 0x2,
+      Function = 0x4,
+      DerivedToBase = 0x8,
+      ObjC = 0x10,
+      ObjCLifetime = 0x20,
 
       LLVM_MARK_AS_BITMASK_ENUM(/*LargestValue=*/ObjCLifetime)
     };

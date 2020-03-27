@@ -1256,6 +1256,8 @@ unsigned IRTranslator::getSimpleIntrinsicOpcode(Intrinsic::ID ID) {
       return TargetOpcode::G_FSQRT;
     case Intrinsic::trunc:
       return TargetOpcode::G_INTRINSIC_TRUNC;
+    case Intrinsic::readcyclecounter:
+      return TargetOpcode::G_READCYCLECOUNTER;
   }
   return Intrinsic::not_intrinsic;
 }
@@ -1524,6 +1526,13 @@ bool IRTranslator::translateKnownIntrinsic(const CallInst &CI, Intrinsic::ID ID,
   case Intrinsic::sideeffect:
     // Discard annotate attributes, assumptions, and artificial side-effects.
     return true;
+  case Intrinsic::read_register: {
+    Value *Arg = CI.getArgOperand(0);
+    MIRBuilder.buildInstr(TargetOpcode::G_READ_REGISTER)
+      .addDef(getOrCreateVReg(CI))
+      .addMetadata(cast<MDNode>(cast<MetadataAsValue>(Arg)->getMetadata()));
+    return true;
+  }
   }
   return false;
 }

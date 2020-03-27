@@ -55,9 +55,13 @@ public:
   bool isA(const void *ClassID) const override { return ClassID == &ID; }
   static bool classof(const TypeSystem *ts) { return ts->isA(&ID); }
 
-  // Constructors and Destructors
-  explicit ClangASTContext(llvm::StringRef triple = "");
-  explicit ClangASTContext(ArchSpec arch);
+  /// Constructs a ClangASTContext with an ASTContext using the given triple.
+  ///
+  /// \param triple The llvm::Triple used for the ASTContext. The triple defines
+  ///               certain characteristics of the ASTContext and its types
+  ///               (e.g., whether certain primitive types exist or what their
+  ///               signedness is).
+  explicit ClangASTContext(llvm::Triple triple);
 
   /// Constructs a ClangASTContext that uses an existing ASTContext internally.
   /// Useful when having an existing ASTContext created by Clang.
@@ -132,20 +136,10 @@ public:
   void SetMetadataAsUserID(const clang::Type *type, lldb::user_id_t user_id);
 
   void SetMetadata(const clang::Decl *object, ClangASTMetadata &meta_data);
+
   void SetMetadata(const clang::Type *object, ClangASTMetadata &meta_data);
-  ClangASTMetadata *GetMetadata(const clang::Decl *object) {
-    return GetMetadata(&getASTContext(), object);
-  }
-
-  static ClangASTMetadata *GetMetadata(clang::ASTContext *ast,
-                                       const clang::Decl *object);
-
-  ClangASTMetadata *GetMetadata(const clang::Type *object) {
-    return GetMetadata(&getASTContext(), object);
-  }
-
-  static ClangASTMetadata *GetMetadata(clang::ASTContext *ast,
-                                       const clang::Type *object);
+  ClangASTMetadata *GetMetadata(const clang::Decl *object);
+  ClangASTMetadata *GetMetadata(const clang::Type *object);
 
   // Basic Types
   CompilerType GetBuiltinTypeForEncodingAndBitSize(lldb::Encoding encoding,
@@ -155,9 +149,9 @@ public:
 
   static lldb::BasicType GetBasicTypeEnumeration(ConstString name);
 
-  CompilerType GetBuiltinTypeForDWARFEncodingAndBitSize(const char *type_name,
-                                                        uint32_t dw_ate,
-                                                        uint32_t bit_size);
+  CompilerType
+  GetBuiltinTypeForDWARFEncodingAndBitSize(llvm::StringRef type_name,
+                                           uint32_t dw_ate, uint32_t bit_size);
 
   CompilerType GetCStringType(bool is_const);
 
@@ -174,11 +168,27 @@ public:
   static bool AreTypesSame(CompilerType type1, CompilerType type2,
                            bool ignore_qualifiers = false);
 
-  static CompilerType GetTypeForDecl(clang::NamedDecl *decl);
+  /// Creates a CompilerType form the given QualType with the current
+  /// ClangASTContext instance as the CompilerType's typesystem.
+  /// \param qt The QualType for a type that belongs to the ASTContext of this
+  ///           ClangASTContext.
+  /// \return The CompilerType representing the given QualType. If the
+  ///         QualType's type pointer is a nullptr then the function returns an
+  ///         invalid CompilerType.
+  CompilerType GetType(clang::QualType qt) {
+    if (qt.getTypePtrOrNull() == nullptr)
+      return CompilerType();
+    // Check that the type actually belongs to this ClangASTContext.
+    assert(qt->getAsTagDecl() == nullptr ||
+           &qt->getAsTagDecl()->getASTContext() == &getASTContext());
+    return CompilerType(this, qt.getAsOpaquePtr());
+  }
 
-  static CompilerType GetTypeForDecl(clang::TagDecl *decl);
+  CompilerType GetTypeForDecl(clang::NamedDecl *decl);
 
-  static CompilerType GetTypeForDecl(clang::ObjCInterfaceDecl *objc_decl);
+  CompilerType GetTypeForDecl(clang::TagDecl *decl);
+
+  CompilerType GetTypeForDecl(clang::ObjCInterfaceDecl *objc_decl);
 
   template <typename RecordDeclType>
   CompilerType
@@ -325,36 +335,16 @@ public:
                             const CompilerType &function_Type, int storage,
                             bool is_inline);
 
-  static CompilerType CreateFunctionType(clang::ASTContext *ast,
-                                         const CompilerType &result_type,
-                                         const CompilerType *args,
-                                         unsigned num_args, bool is_variadic,
-                                         unsigned type_quals,
-                                         clang::CallingConv cc);
-
-  static CompilerType CreateFunctionType(clang::ASTContext *ast,
-                                         const CompilerType &result_type,
-                                         const CompilerType *args,
-                                         unsigned num_args, bool is_variadic,
-                                         unsigned type_quals) {
-    return ClangASTContext::CreateFunctionType(
-        ast, result_type, args, num_args, is_variadic, type_quals, clang::CC_C);
-  }
+  CompilerType CreateFunctionType(const CompilerType &result_type,
+                                  const CompilerType *args, unsigned num_args,
+                                  bool is_variadic, unsigned type_quals,
+                                  clang::CallingConv cc);
 
   CompilerType CreateFunctionType(const CompilerType &result_type,
                                   const CompilerType *args, unsigned num_args,
                                   bool is_variadic, unsigned type_quals) {
-    return ClangASTContext::CreateFunctionType(
-        &getASTContext(), result_type, args, num_args, is_variadic, type_quals);
-  }
-
-  CompilerType CreateFunctionType(const CompilerType &result_type,
-                                  const CompilerType *args, unsigned num_args,
-                                  bool is_variadic, unsigned type_quals,
-                                  clang::CallingConv cc) {
-    return ClangASTContext::CreateFunctionType(&getASTContext(), result_type,
-                                               args, num_args, is_variadic,
-                                               type_quals, cc);
+    return CreateFunctionType(result_type, args, num_args, is_variadic,
+                              type_quals, clang::CC_C);
   }
 
   clang::ParmVarDecl *CreateParameterDeclaration(clang::DeclContext *decl_ctx,
@@ -382,15 +372,9 @@ public:
 
   // Integer type functions
 
-  static CompilerType GetIntTypeFromBitSize(clang::ASTContext *ast,
-                                            size_t bit_size, bool is_signed);
+  CompilerType GetIntTypeFromBitSize(size_t bit_size, bool is_signed);
 
-  CompilerType GetPointerSizedIntType(bool is_signed) {
-    return GetPointerSizedIntType(&getASTContext(), is_signed);
-  }
-
-  static CompilerType GetPointerSizedIntType(clang::ASTContext *ast,
-                                             bool is_signed);
+  CompilerType GetPointerSizedIntType(bool is_signed);
 
   // Floating point functions
 
@@ -943,7 +927,7 @@ public:
   clang::DeclarationName
   GetDeclarationName(const char *name, const CompilerType &function_clang_type);
 
-protected:
+private:
   const clang::ClassTemplateSpecializationDecl *
   GetAsTemplateSpecialization(lldb::opaque_compiler_type_t type);
 
@@ -962,16 +946,23 @@ protected:
   std::unique_ptr<clang::Builtin::Context> m_builtins_up;
   std::unique_ptr<DWARFASTParserClang> m_dwarf_ast_parser_up;
   std::unique_ptr<PDBASTParser> m_pdb_ast_parser_up;
-  std::unique_ptr<ClangASTSource> m_scratch_ast_source_up;
   std::unique_ptr<clang::MangleContext> m_mangle_ctx_up;
   uint32_t m_pointer_byte_size = 0;
   bool m_ast_owned = false;
+
+  typedef llvm::DenseMap<const clang::Decl *, ClangASTMetadata> DeclMetadataMap;
+  /// Maps Decls to their associated ClangASTMetadata.
+  DeclMetadataMap m_decl_metadata;
+
+  typedef llvm::DenseMap<const clang::Type *, ClangASTMetadata> TypeMetadataMap;
+  /// Maps Types to their associated ClangASTMetadata.
+  TypeMetadataMap m_type_metadata;
+
   /// The sema associated that is currently used to build this ASTContext.
   /// May be null if we are already done parsing this ASTContext or the
   /// ASTContext wasn't created by parsing source code.
   clang::Sema *m_sema = nullptr;
 
-private:
   // For ClangASTContext only
   ClangASTContext(const ClangASTContext &);
   const ClangASTContext &operator=(const ClangASTContext &);
@@ -982,9 +973,11 @@ private:
 
 class ClangASTContextForExpressions : public ClangASTContext {
 public:
-  ClangASTContextForExpressions(Target &target, ArchSpec arch);
+  ClangASTContextForExpressions(Target &target, llvm::Triple triple);
 
   ~ClangASTContextForExpressions() override = default;
+
+  void Finalize() override;
 
   UserExpression *
   GetUserExpression(llvm::StringRef expr, llvm::StringRef prefix,
@@ -1007,6 +1000,7 @@ private:
   std::unique_ptr<PersistentExpressionState>
       m_persistent_variables; // These are the persistent variables associated
                               // with this process for the expression parser
+  std::unique_ptr<ClangASTSource> m_scratch_ast_source_up;
 };
 
 } // namespace lldb_private
