@@ -466,7 +466,6 @@ ARMTargetLowering::ARMTargetLowering(const TargetMachine &TM,
         { RTLIB::OGE_F32, "__gesf2vfp",    ISD::SETNE },
         { RTLIB::OGT_F32, "__gtsf2vfp",    ISD::SETNE },
         { RTLIB::UO_F32,  "__unordsf2vfp", ISD::SETNE },
-        { RTLIB::O_F32,   "__unordsf2vfp", ISD::SETEQ },
 
         // Double-precision comparisons.
         { RTLIB::OEQ_F64, "__eqdf2vfp",    ISD::SETNE },
@@ -476,7 +475,6 @@ ARMTargetLowering::ARMTargetLowering(const TargetMachine &TM,
         { RTLIB::OGE_F64, "__gedf2vfp",    ISD::SETNE },
         { RTLIB::OGT_F64, "__gtdf2vfp",    ISD::SETNE },
         { RTLIB::UO_F64,  "__unorddf2vfp", ISD::SETNE },
-        { RTLIB::O_F64,   "__unorddf2vfp", ISD::SETEQ },
 
         // Floating-point to integer conversions.
         // i64 conversions are done via library routines even when generating VFP
@@ -540,7 +538,6 @@ ARMTargetLowering::ARMTargetLowering(const TargetMachine &TM,
       { RTLIB::OGE_F64, "__aeabi_dcmpge", CallingConv::ARM_AAPCS, ISD::SETNE },
       { RTLIB::OGT_F64, "__aeabi_dcmpgt", CallingConv::ARM_AAPCS, ISD::SETNE },
       { RTLIB::UO_F64,  "__aeabi_dcmpun", CallingConv::ARM_AAPCS, ISD::SETNE },
-      { RTLIB::O_F64,   "__aeabi_dcmpun", CallingConv::ARM_AAPCS, ISD::SETEQ },
 
       // Single-precision floating-point arithmetic helper functions
       // RTABI chapter 4.1.2, Table 4
@@ -558,7 +555,6 @@ ARMTargetLowering::ARMTargetLowering(const TargetMachine &TM,
       { RTLIB::OGE_F32, "__aeabi_fcmpge", CallingConv::ARM_AAPCS, ISD::SETNE },
       { RTLIB::OGT_F32, "__aeabi_fcmpgt", CallingConv::ARM_AAPCS, ISD::SETNE },
       { RTLIB::UO_F32,  "__aeabi_fcmpun", CallingConv::ARM_AAPCS, ISD::SETNE },
-      { RTLIB::O_F32,   "__aeabi_fcmpun", CallingConv::ARM_AAPCS, ISD::SETEQ },
 
       // Floating-point to integer conversions.
       // RTABI chapter 4.1.2, Table 6
@@ -916,8 +912,6 @@ ARMTargetLowering::ARMTargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::FMA, MVT::v4f32, Expand);
     }
 
-    setTargetDAGCombine(ISD::INTRINSIC_VOID);
-    setTargetDAGCombine(ISD::INTRINSIC_W_CHAIN);
     setTargetDAGCombine(ISD::INTRINSIC_WO_CHAIN);
     setTargetDAGCombine(ISD::SHL);
     setTargetDAGCombine(ISD::SRL);
@@ -946,6 +940,8 @@ ARMTargetLowering::ARMTargetLowering(const TargetMachine &TM,
     setTargetDAGCombine(ISD::SIGN_EXTEND);
     setTargetDAGCombine(ISD::ZERO_EXTEND);
     setTargetDAGCombine(ISD::ANY_EXTEND);
+    setTargetDAGCombine(ISD::INTRINSIC_W_CHAIN);
+    setTargetDAGCombine(ISD::INTRINSIC_VOID);
   }
 
   if (!Subtarget->hasFP64()) {
@@ -13285,6 +13281,128 @@ static SDValue PerformVLDCombine(SDNode *N,
   return CombineBaseUpdate(N, DCI);
 }
 
+static SDValue PerformMVEVLDCombine(SDNode *N,
+                                    TargetLowering::DAGCombinerInfo &DCI) {
+  if (DCI.isBeforeLegalize() || DCI.isCalledByLegalizer())
+    return SDValue();
+
+  SelectionDAG &DAG = DCI.DAG;
+  SDValue Addr = N->getOperand(2);
+  MemSDNode *MemN = cast<MemSDNode>(N);
+  SDLoc dl(N);
+
+  // For the stores, where there are multiple intrinsics we only actually want
+  // to post-inc the last of the them.
+  unsigned IntNo = cast<ConstantSDNode>(N->getOperand(1))->getZExtValue();
+  if (IntNo == Intrinsic::arm_mve_vst2q &&
+      cast<ConstantSDNode>(N->getOperand(5))->getZExtValue() != 1)
+    return SDValue();
+  if (IntNo == Intrinsic::arm_mve_vst4q &&
+      cast<ConstantSDNode>(N->getOperand(7))->getZExtValue() != 3)
+    return SDValue();
+
+  // Search for a use of the address operand that is an increment.
+  for (SDNode::use_iterator UI = Addr.getNode()->use_begin(),
+                            UE = Addr.getNode()->use_end();
+       UI != UE; ++UI) {
+    SDNode *User = *UI;
+    if (User->getOpcode() != ISD::ADD ||
+        UI.getUse().getResNo() != Addr.getResNo())
+      continue;
+
+    // Check that the add is independent of the load/store.  Otherwise, folding
+    // it would create a cycle. We can avoid searching through Addr as it's a
+    // predecessor to both.
+    SmallPtrSet<const SDNode *, 32> Visited;
+    SmallVector<const SDNode *, 16> Worklist;
+    Visited.insert(Addr.getNode());
+    Worklist.push_back(N);
+    Worklist.push_back(User);
+    if (SDNode::hasPredecessorHelper(N, Visited, Worklist) ||
+        SDNode::hasPredecessorHelper(User, Visited, Worklist))
+      continue;
+
+    // Find the new opcode for the updating load/store.
+    bool isLoadOp = true;
+    unsigned NewOpc = 0;
+    unsigned NumVecs = 0;
+    switch (IntNo) {
+    default:
+      llvm_unreachable("unexpected intrinsic for MVE VLDn combine");
+    case Intrinsic::arm_mve_vld2q:
+      NewOpc = ARMISD::VLD2_UPD;
+      NumVecs = 2;
+      break;
+    case Intrinsic::arm_mve_vld4q:
+      NewOpc = ARMISD::VLD4_UPD;
+      NumVecs = 4;
+      break;
+    case Intrinsic::arm_mve_vst2q:
+      NewOpc = ARMISD::VST2_UPD;
+      NumVecs = 2;
+      isLoadOp = false;
+      break;
+    case Intrinsic::arm_mve_vst4q:
+      NewOpc = ARMISD::VST4_UPD;
+      NumVecs = 4;
+      isLoadOp = false;
+      break;
+    }
+
+    // Find the size of memory referenced by the load/store.
+    EVT VecTy;
+    if (isLoadOp) {
+      VecTy = N->getValueType(0);
+    } else {
+      VecTy = N->getOperand(3).getValueType();
+    }
+
+    unsigned NumBytes = NumVecs * VecTy.getSizeInBits() / 8;
+
+    // If the increment is a constant, it must match the memory ref size.
+    SDValue Inc = User->getOperand(User->getOperand(0) == Addr ? 1 : 0);
+    ConstantSDNode *CInc = dyn_cast<ConstantSDNode>(Inc.getNode());
+    if (!CInc || CInc->getZExtValue() != NumBytes)
+      continue;
+
+    // Create the new updating load/store node.
+    // First, create an SDVTList for the new updating node's results.
+    EVT Tys[6];
+    unsigned NumResultVecs = (isLoadOp ? NumVecs : 0);
+    unsigned n;
+    for (n = 0; n < NumResultVecs; ++n)
+      Tys[n] = VecTy;
+    Tys[n++] = MVT::i32;
+    Tys[n] = MVT::Other;
+    SDVTList SDTys = DAG.getVTList(makeArrayRef(Tys, NumResultVecs + 2));
+
+    // Then, gather the new node's operands.
+    SmallVector<SDValue, 8> Ops;
+    Ops.push_back(N->getOperand(0)); // incoming chain
+    Ops.push_back(N->getOperand(2)); // ptr
+    Ops.push_back(Inc);
+
+    for (unsigned i = 3; i < N->getNumOperands(); ++i)
+      Ops.push_back(N->getOperand(i));
+
+    SDValue UpdN = DAG.getMemIntrinsicNode(NewOpc, dl, SDTys, Ops, VecTy,
+                                           MemN->getMemOperand());
+
+    // Update the uses.
+    SmallVector<SDValue, 5> NewResults;
+    for (unsigned i = 0; i < NumResultVecs; ++i)
+      NewResults.push_back(SDValue(UpdN.getNode(), i));
+
+    NewResults.push_back(SDValue(UpdN.getNode(), NumResultVecs + 1)); // chain
+    DCI.CombineTo(N, NewResults);
+    DCI.CombineTo(User, SDValue(UpdN.getNode(), NumResultVecs));
+
+    break;
+  }
+
+  return SDValue();
+}
+
 /// CombineVLDDUP - For a VDUPLANE node N, check if its source operand is a
 /// vldN-lane (N > 1) intrinsic, and if all the other uses of that intrinsic
 /// are also VDUPLANEs.  If so, combine them to a vldN-dup operation and
@@ -14748,6 +14866,11 @@ SDValue ARMTargetLowering::PerformDAGCombine(SDNode *N,
     case Intrinsic::arm_neon_vst3lane:
     case Intrinsic::arm_neon_vst4lane:
       return PerformVLDCombine(N, DCI);
+    case Intrinsic::arm_mve_vld2q:
+    case Intrinsic::arm_mve_vld4q:
+    case Intrinsic::arm_mve_vst2q:
+    case Intrinsic::arm_mve_vst4q:
+      return PerformMVEVLDCombine(N, DCI);
     default: break;
     }
     break;
@@ -16596,6 +16719,34 @@ bool ARMTargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
     Info.offset = 0;
     Info.align.reset();
     // volatile stores with NEON intrinsics not supported
+    Info.flags = MachineMemOperand::MOStore;
+    return true;
+  }
+  case Intrinsic::arm_mve_vld2q:
+  case Intrinsic::arm_mve_vld4q: {
+    Info.opc = ISD::INTRINSIC_W_CHAIN;
+    // Conservatively set memVT to the entire set of vectors loaded.
+    Type *VecTy = cast<CompositeType>(I.getType())->getTypeAtIndex(1);
+    unsigned Factor = Intrinsic == Intrinsic::arm_mve_vld2q ? 2 : 4;
+    Info.memVT = EVT::getVectorVT(VecTy->getContext(), MVT::i64, Factor * 2);
+    Info.ptrVal = I.getArgOperand(0);
+    Info.offset = 0;
+    Info.align = Align(VecTy->getScalarSizeInBits() / 8);
+    // volatile loads with MVE intrinsics not supported
+    Info.flags = MachineMemOperand::MOLoad;
+    return true;
+  }
+  case Intrinsic::arm_mve_vst2q:
+  case Intrinsic::arm_mve_vst4q: {
+    Info.opc = ISD::INTRINSIC_VOID;
+    // Conservatively set memVT to the entire set of vectors stored.
+    Type *VecTy = I.getArgOperand(1)->getType();
+    unsigned Factor = Intrinsic == Intrinsic::arm_mve_vst2q ? 2 : 4;
+    Info.memVT = EVT::getVectorVT(VecTy->getContext(), MVT::i64, Factor * 2);
+    Info.ptrVal = I.getArgOperand(0);
+    Info.offset = 0;
+    Info.align = Align(VecTy->getScalarSizeInBits() / 8);
+    // volatile stores with MVE intrinsics not supported
     Info.flags = MachineMemOperand::MOStore;
     return true;
   }

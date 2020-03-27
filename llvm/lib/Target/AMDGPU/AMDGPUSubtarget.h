@@ -724,6 +724,10 @@ public:
     return ScalarFlatScratchInsts;
   }
 
+  bool hasMultiDwordFlatScratchAddressing() const {
+    return getGeneration() >= GFX9;
+  }
+
   bool hasFlatSegmentOffsetBug() const {
     return HasFlatSegmentOffsetBug;
   }
@@ -1212,6 +1216,8 @@ public:
   unsigned getMinWavesPerEU() const override {
     return AMDGPU::IsaInfo::getMinWavesPerEU(this);
   }
+
+  void adjustSchedDependency(SUnit *Src, SUnit *Dst, SDep &Dep) const override;
 };
 
 class R600Subtarget final : public R600GenSubtargetInfo,

@@ -380,8 +380,9 @@ void DWARFUnit::AddUnitDIE(const DWARFDebugInfoEntry &cu_die) {
                .GetByteSize() > 0)
     dwo_cu->SetRangesBase(llvm::DWARFListTableHeader::getHeaderSize(DWARF32));
 
-  if (GetVersion() >= 5 &&
-      m_dwo_symbol_file->get_debug_loclists_data().GetByteSize() > 0)
+  if (GetVersion() >= 5 && m_dwo_symbol_file->GetDWARFContext()
+                                   .getOrLoadLocListsData()
+                                   .GetByteSize() > 0)
     dwo_cu->SetLoclistsBase(llvm::DWARFListTableHeader::getHeaderSize(DWARF32));
   dwo_cu->SetBaseAddress(GetBaseAddress());
 
@@ -455,7 +456,8 @@ void DWARFUnit::SetLoclistsBase(dw_addr_t loclists_base) {
   m_loclist_table_header.emplace(".debug_loclists", "locations");
   uint64_t offset = loclists_base - header_size;
   if (llvm::Error E = m_loclist_table_header->extract(
-          m_dwarf.get_debug_loclists_data().GetAsLLVM(), &offset)) {
+          m_dwarf.GetDWARFContext().getOrLoadLocListsData().GetAsLLVM(),
+          &offset)) {
     GetSymbolFileDWARF().GetObjectFile()->GetModule()->ReportError(
         "Failed to extract location list table at offset 0x%" PRIx64 ": %s",
         loclists_base, toString(std::move(E)).c_str());
@@ -474,8 +476,9 @@ DWARFUnit::GetLocationTable(const DataExtractor &data) const {
 }
 
 const DWARFDataExtractor &DWARFUnit::GetLocationData() const {
-  return GetVersion() >= 5 ? GetSymbolFileDWARF().get_debug_loclists_data()
-                           : GetSymbolFileDWARF().get_debug_loc_data();
+  DWARFContext &Ctx = GetSymbolFileDWARF().GetDWARFContext();
+  return GetVersion() >= 5 ? Ctx.getOrLoadLocListsData()
+                           : Ctx.getOrLoadLocData();
 }
 
 void DWARFUnit::SetRangesBase(dw_addr_t ranges_base) {
@@ -735,25 +738,6 @@ removeHostnameFromPathname(llvm::StringRef path_from_dwarf) {
   return path;
 }
 
-static FileSpec resolveCompDir(const FileSpec &path) {
-  bool is_symlink = SymbolFileDWARF::GetSymlinkPaths().FindFileIndex(
-                        0, path, /*full*/ true) != UINT32_MAX;
-
-  if (!is_symlink)
-    return path;
-
-  namespace fs = llvm::sys::fs;
-  if (fs::get_file_type(path.GetPath(), false) != fs::file_type::symlink_file)
-    return path;
-
-  FileSpec resolved_symlink;
-  const auto error = FileSystem::Instance().Readlink(path, resolved_symlink);
-  if (error.Success())
-    return resolved_symlink;
-
-  return path;
-}
-
 void DWARFUnit::ComputeCompDirAndGuessPathStyle() {
   m_comp_dir = FileSpec();
   const DWARFDebugInfoEntry *die = GetUnitDIEPtrOnly();
@@ -765,7 +749,7 @@ void DWARFUnit::ComputeCompDirAndGuessPathStyle() {
   if (!comp_dir.empty()) {
     FileSpec::Style comp_dir_style =
         FileSpec::GuessPathStyle(comp_dir).getValueOr(FileSpec::Style::native);
-    m_comp_dir = resolveCompDir(FileSpec(comp_dir, comp_dir_style));
+    m_comp_dir = FileSpec(comp_dir, comp_dir_style);
   } else {
     // Try to detect the style based on the DW_AT_name attribute, but just store
     // the detected style in the m_comp_dir field.
@@ -790,7 +774,8 @@ void DWARFUnit::ComputeAbsolutePath() {
     m_file_spec->MakeAbsolute(GetCompilationDirectory());
 }
 
-SymbolFileDWARFDwo *DWARFUnit::GetDwoSymbolFile() const {
+SymbolFileDWARFDwo *DWARFUnit::GetDwoSymbolFile() {
+  ExtractUnitDIEIfNeeded();
   return m_dwo_symbol_file.get();
 }
 

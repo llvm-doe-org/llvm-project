@@ -2994,6 +2994,9 @@ static QualType GetDeclSpecTypeForDeclarator(TypeProcessingState &state,
     case DeclaratorContext::PrototypeContext:
       Error = 0;
       break;
+    case DeclaratorContext::RequiresExprContext:
+      Error = 21;
+      break;
     case DeclaratorContext::LambdaExprParameterContext:
       // In C++14, generic lambdas allow 'auto' in their parameters.
       if (!SemaRef.getLangOpts().CPlusPlus14 ||
@@ -3016,7 +3019,8 @@ static QualType GetDeclSpecTypeForDeclarator(TypeProcessingState &state,
                 SemaRef.Context, SemaRef.Context.getTranslationUnitDecl(),
                 /*KeyLoc*/ SourceLocation(), /*NameLoc*/ D.getBeginLoc(),
                 TemplateParameterDepth, AutoParameterPosition,
-                /*Identifier*/ nullptr, false, IsParameterPack);
+                /*Identifier*/ nullptr, false, IsParameterPack,
+                /*HasTypeConstraint=*/false);
         CorrespondingTemplateParam->setImplicit();
         LSI->TemplateParams.push_back(CorrespondingTemplateParam);
         // Replace the 'auto' in the function parameter with this invented
@@ -3220,6 +3224,7 @@ static QualType GetDeclSpecTypeForDeclarator(TypeProcessingState &state,
     case DeclaratorContext::ObjCParameterContext:
     case DeclaratorContext::ObjCResultContext:
     case DeclaratorContext::KNRTypeListContext:
+    case DeclaratorContext::RequiresExprContext:
       // C++ [dcl.fct]p6:
       //   Types shall not be defined in return or parameter types.
       DiagID = diag::err_type_defined_in_param_type;
@@ -4278,6 +4283,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
     case DeclaratorContext::TemplateTypeArgContext:
     case DeclaratorContext::TypeNameContext:
     case DeclaratorContext::FunctionalCastContext:
+    case DeclaratorContext::RequiresExprContext:
       // Don't infer in these contexts.
       break;
     }
@@ -5226,6 +5232,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
     switch (D.getContext()) {
     case DeclaratorContext::PrototypeContext:
     case DeclaratorContext::LambdaExprParameterContext:
+    case DeclaratorContext::RequiresExprContext:
       // C++0x [dcl.fct]p13:
       //   [...] When it is part of a parameter-declaration-clause, the
       //   parameter pack is a function parameter pack (14.5.3). The type T
@@ -7359,6 +7366,23 @@ static void HandleNeonVectorTypeAttr(QualType &CurType, const ParsedAttr &Attr,
   CurType = S.Context.getVectorType(CurType, numElts, VecKind);
 }
 
+static void HandleArmMveStrictPolymorphismAttr(TypeProcessingState &State,
+                                               QualType &CurType,
+                                               ParsedAttr &Attr) {
+  const VectorType *VT = dyn_cast<VectorType>(CurType);
+  if (!VT || VT->getVectorKind() != VectorType::NeonVector) {
+    State.getSema().Diag(Attr.getLoc(),
+                         diag::err_attribute_arm_mve_polymorphism);
+    Attr.setInvalid();
+    return;
+  }
+
+  CurType =
+      State.getAttributedType(createSimpleAttr<ArmMveStrictPolymorphismAttr>(
+                                  State.getSema().Context, Attr),
+                              CurType, CurType);
+}
+
 /// Handle OpenCL Access Qualifier Attribute.
 static void HandleOpenCLAccessAttr(QualType &CurType, const ParsedAttr &Attr,
                                    Sema &S) {
@@ -7543,6 +7567,11 @@ static void processTypeAttrs(TypeProcessingState &state, QualType &type,
                                VectorType::NeonPolyVector);
       attr.setUsedAsTypeAttr();
       break;
+    case ParsedAttr::AT_ArmMveStrictPolymorphism: {
+      HandleArmMveStrictPolymorphismAttr(state, type, attr);
+      attr.setUsedAsTypeAttr();
+      break;
+    }
     case ParsedAttr::AT_OpenCLAccess:
       HandleOpenCLAccessAttr(type, attr, state.getSema());
       attr.setUsedAsTypeAttr();
