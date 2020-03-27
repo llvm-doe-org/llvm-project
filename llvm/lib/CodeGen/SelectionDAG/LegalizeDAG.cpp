@@ -2399,10 +2399,11 @@ SDValue SelectionDAGLegalize::ExpandLegalINT_TO_FP(SDNode *Node,
     if (Node->isStrictFPOpcode()) {
       Sub = DAG.getNode(ISD::STRICT_FSUB, dl, {MVT::f64, MVT::Other},
                         {Node->getOperand(0), Load, Bias});
+      Chain = Sub.getValue(1);
       if (DestVT != Sub.getValueType()) {
         std::pair<SDValue, SDValue> ResultPair;
         ResultPair =
-            DAG.getStrictFPExtendOrRound(Sub, SDValue(Node, 1), dl, DestVT);
+            DAG.getStrictFPExtendOrRound(Sub, Chain, dl, DestVT);
         Result = ResultPair.first;
         Chain = ResultPair.second;
       }
@@ -2532,6 +2533,7 @@ void SelectionDAGLegalize::PromoteLegalINT_TO_FP(
                                  dl, NewInTy, LegalOp)});
     Results.push_back(Res);
     Results.push_back(Res.getValue(1));
+    return;
   }
 
   Results.push_back(

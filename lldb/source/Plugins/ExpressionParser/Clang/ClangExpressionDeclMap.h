@@ -283,6 +283,14 @@ public:
                                 CompilerDeclContext &namespace_decl,
                                 unsigned int current_id);
 
+protected:
+  /// Retrieves the declaration with the given name from the storage of
+  /// persistent declarations.
+  ///
+  /// \return
+  ///     A persistent decl with the given name or a nullptr.
+  virtual clang::NamedDecl *GetPersistentDecl(ConstString name);
+
 private:
   ExpressionVariableList
       m_found_entities; ///< All entities that were looked up for the parser.
@@ -513,17 +521,11 @@ private:
   /// \param[in] namespace_decl
   ///     If non-NULL and module is non-NULL, the parent namespace.
   ///
-  /// \param[in] type
-  ///     The required type for the variable.  This function may be called
-  ///     during parsing, in which case we don't know its type; hence the
-  ///     default.
-  ///
   /// \return
   ///     The LLDB Variable found, or NULL if none was found.
   lldb::VariableSP FindGlobalVariable(Target &target, lldb::ModuleSP &module,
                                       ConstString name,
-                                      CompilerDeclContext *namespace_decl,
-                                      TypeFromUser *type = nullptr);
+                                      CompilerDeclContext *namespace_decl);
 
   /// Get the value of a variable in a given execution context and return the
   /// associated Types if needed.

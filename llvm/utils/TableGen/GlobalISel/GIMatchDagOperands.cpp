@@ -143,9 +143,9 @@ GIMatchDagOperandListContext::makeTwoMOPredicateOperandList() {
 void GIMatchDagOperandListContext::print(raw_ostream &OS) const {
   OS << "GIMatchDagOperandListContext {\n"
      << "  OperandLists {\n";
-  for (const auto &I : OperandLists) {
+  for (const auto &I : OperandListsOwner) {
     OS << "    ";
-    I.print(OS);
+    I->print(OS);
     OS << "\n";
   }
   OS << "  }\n"

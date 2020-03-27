@@ -1,6 +1,7 @@
 // RUN: llvm-tblgen -I %p/../../../include -gen-global-isel-combiner \
 // RUN:     -combiners=MyCombiner -gicombiner-stop-after-parse %s \
 // RUN:     -o /dev/null -debug 2>&1 | FileCheck %s
+// REQUIRES: asserts
 
 include "llvm/Target/Target.td"
 include "llvm/Target/GlobalISel/Combine.td"
@@ -41,8 +42,8 @@ def trivial : GICombineRule<
 // Run it through graphviz to produce a nice DAG showing the matcher behaviour.
 // CHECK-NEXT: digraph "trivial" {
 // CHECK-NEXT:   rankdir="BT"
-// CHECK-NEXT:   Node[[N1:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon0_0|MOV|Match starts here|$d=getOperand(0), $s=getOperand(1)|{{0x[0-9a-f]+}}|{<d0>#0 $dst|<d1>#1 $src1}}",color=red]
-// CHECK-NEXT:   Pred[[P1:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred0_1|$mi.getOpcode() == MOV|{{0x[0-9a-f]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
+// CHECK-NEXT:   Node[[N1:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon0_0|MOV|Match starts here|$d=getOperand(0), $s=getOperand(1)|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $dst|<d1>#1 $src1}}",color=red]
+// CHECK-NEXT:   Pred[[P1:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred0_1|$mi.getOpcode() == MOV|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
 // CHECK-NEXT:   Node[[N1]]:e -> Pred[[P1]]:d1:s [style=dotted]
 // CHECK-NEXT: {{^}$}}
 
@@ -66,11 +67,11 @@ def simple : GICombineRule<
 
 // CHECK-NEXT: digraph "simple" {
 // CHECK-NEXT:   rankdir="BT"
-// CHECK-NEXT:   Node[[N1:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon1_0|MOV|$t=getOperand(0), $s=getOperand(1)|{{0x[0-9a-f]+}}|{<d0>#0 $dst|<d1>#1 $src1}}"]
-// CHECK-NEXT:   Node[[N2:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon1_2|MOV|Match starts here|$d=getOperand(0), $t=getOperand(1)|{{0x[0-9a-f]+}}|{<d0>#0 $dst|<d1>#1 $src1}}",color=red]
+// CHECK-NEXT:   Node[[N1:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon1_0|MOV|$t=getOperand(0), $s=getOperand(1)|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $dst|<d1>#1 $src1}}"]
+// CHECK-NEXT:   Node[[N2:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon1_2|MOV|Match starts here|$d=getOperand(0), $t=getOperand(1)|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $dst|<d1>#1 $src1}}",color=red]
 // CHECK-NEXT:   Node[[N2]]:s1:n -> Node[[N1]]:d0:s [label="$t"]
-// CHECK-NEXT:   Pred[[P1:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred1_1|$mi.getOpcode() == MOV|{{0x[0-9a-f]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
-// CHECK-NEXT:   Pred[[P2:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred1_3|$mi.getOpcode() == MOV|{{0x[0-9a-f]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
+// CHECK-NEXT:   Pred[[P1:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred1_1|$mi.getOpcode() == MOV|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
+// CHECK-NEXT:   Pred[[P2:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred1_3|$mi.getOpcode() == MOV|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
 // CHECK-NEXT:   Node[[N1]]:e -> Pred[[P1]]:d1:s [style=dotted]
 // CHECK-NEXT:   Node[[N2]]:e -> Pred[[P2]]:d1:s [style=dotted]
 // CHECK-NEXT: {{^}$}}
@@ -103,15 +104,15 @@ def multiroot : GICombineRule<
 
 // CHECK-NEXT: digraph "multiroot" {
 // CHECK-NEXT:   rankdir="BT"
-// CHECK-NEXT:   Node[[N1:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon2_0|MOV|$s=getOperand(0), $s2=getOperand(1)|{{0x[0-9a-f]+}}|{<d0>#0 $dst|<d1>#1 $src1}}"]
-// CHECK-NEXT:   Node[[N2:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon2_2|MOV|Match starts here|$d1=getOperand(0), $s=getOperand(1)|{{0x[0-9a-f]+}}|{<d0>#0 $dst|<d1>#1 $src1}}",color=red]
-// CHECK-NEXT:   Node[[N3:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon2_4|MOV|Match starts here|$d2=getOperand(0), $s=getOperand(1)|{{0x[0-9a-f]+}}|{<d0>#0 $dst|<d1>#1 $src1}}",color=red]
+// CHECK-NEXT:   Node[[N1:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon2_0|MOV|$s=getOperand(0), $s2=getOperand(1)|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $dst|<d1>#1 $src1}}"]
+// CHECK-NEXT:   Node[[N2:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon2_2|MOV|Match starts here|$d1=getOperand(0), $s=getOperand(1)|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $dst|<d1>#1 $src1}}",color=red]
+// CHECK-NEXT:   Node[[N3:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon2_4|MOV|Match starts here|$d2=getOperand(0), $s=getOperand(1)|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $dst|<d1>#1 $src1}}",color=red]
 // CHECK-NEXT:   Node[[N2]]:s1:n -> Node[[N1]]:d0:s [label="$s"]
 // CHECK-NEXT:   Node[[N3]]:s1:n -> Node[[N1]]:d0:s [label="$s"]
-// CHECK-NEXT:   Pred[[P1:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred2_1|$mi.getOpcode() == MOV|{{0x[0-9a-f]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
-// CHECK-NEXT:   Pred[[P2:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred2_3|$mi.getOpcode() == MOV|{{0x[0-9a-f]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
-// CHECK-NEXT:   Pred[[P3:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred2_5|$mi.getOpcode() == MOV|{{0x[0-9a-f]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
-// CHECK-NEXT:   Pred[[P4:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi0|<s2>#2 $mi1}|__anonpred2_6|$mi0 == $mi1|{{0x[0-9a-f]+}}|{<d0>#0 $$|<d1>#1 $mi0|<d2>#2 $mi1}}",style=dotted]
+// CHECK-NEXT:   Pred[[P1:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred2_1|$mi.getOpcode() == MOV|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
+// CHECK-NEXT:   Pred[[P2:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred2_3|$mi.getOpcode() == MOV|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
+// CHECK-NEXT:   Pred[[P3:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred2_5|$mi.getOpcode() == MOV|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
+// CHECK-NEXT:   Pred[[P4:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi0|<s2>#2 $mi1}|__anonpred2_6|$mi0 == $mi1|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $$|<d1>#1 $mi0|<d2>#2 $mi1}}",style=dotted]
 // CHECK-NEXT:   Node[[N1]]:e -> Pred[[P1]]:d1:s [style=dotted]
 // CHECK-NEXT:   Node[[N2]]:e -> Pred[[P2]]:d1:s [style=dotted]
 // CHECK-NEXT:   Node[[N3]]:e -> Pred[[P3]]:d1:s [style=dotted]
@@ -147,15 +148,15 @@ def nonstandardroot : GICombineRule<
 
 // CHECK-NEXT: digraph "nonstandardroot" {
 // CHECK-NEXT:   rankdir="BT"
-// CHECK-NEXT:   Node[[N1:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon3_0|MOV|Match starts here|$s=getOperand(0), $s2=getOperand(1)|{{0x[0-9a-f]+}}|{<d0>#0 $dst|<d1>#1 $src1}}",color=red]
-// CHECK-NEXT:   Node[[N2:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon3_2|MOV|$d1=getOperand(0), $s=getOperand(1)|{{0x[0-9a-f]+}}|{<d0>#0 $dst|<d1>#1 $src1}}"]
-// CHECK-NEXT:   Node[[N3:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon3_4|MOV|$d2=getOperand(0), $s=getOperand(1)|{{0x[0-9a-f]+}}|{<d0>#0 $dst|<d1>#1 $src1}}"]
+// CHECK-NEXT:   Node[[N1:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon3_0|MOV|Match starts here|$s=getOperand(0), $s2=getOperand(1)|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $dst|<d1>#1 $src1}}",color=red]
+// CHECK-NEXT:   Node[[N2:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon3_2|MOV|$d1=getOperand(0), $s=getOperand(1)|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $dst|<d1>#1 $src1}}"]
+// CHECK-NEXT:   Node[[N3:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon3_4|MOV|$d2=getOperand(0), $s=getOperand(1)|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $dst|<d1>#1 $src1}}"]
 // CHECK-NEXT:   Node[[N2]]:s1:n -> Node[[N1]]:d0:s [label="$s",dir=back,arrowtail=crow]
 // CHECK-NEXT:   Node[[N3]]:s1:n -> Node[[N1]]:d0:s [label="$s",dir=back,arrowtail=crow]
-// CHECK-NEXT:   Pred[[P1:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred3_1|$mi.getOpcode() == MOV|{{0x[0-9a-f]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
-// CHECK-NEXT:   Pred[[P2:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred3_3|$mi.getOpcode() == MOV|{{0x[0-9a-f]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
-// CHECK-NEXT:   Pred[[P3:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred3_5|$mi.getOpcode() == MOV|{{0x[0-9a-f]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
-// CHECK-NEXT:   Pred[[P4:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi0|<s2>#2 $mi1}|__anonpred3_6|$mi0 == $mi1|{{0x[0-9a-f]+}}|{<d0>#0 $$|<d1>#1 $mi0|<d2>#2 $mi1}}",style=dotted]
+// CHECK-NEXT:   Pred[[P1:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred3_1|$mi.getOpcode() == MOV|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
+// CHECK-NEXT:   Pred[[P2:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred3_3|$mi.getOpcode() == MOV|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
+// CHECK-NEXT:   Pred[[P3:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred3_5|$mi.getOpcode() == MOV|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
+// CHECK-NEXT:   Pred[[P4:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi0|<s2>#2 $mi1}|__anonpred3_6|$mi0 == $mi1|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $$|<d1>#1 $mi0|<d2>#2 $mi1}}",style=dotted]
 // CHECK-NEXT:   Node[[N1]]:e -> Pred[[P1]]:d1:s [style=dotted]
 // CHECK-NEXT:   Node[[N2]]:e -> Pred[[P2]]:d1:s [style=dotted]
 // CHECK-NEXT:   Node[[N3]]:e -> Pred[[P3]]:d1:s [style=dotted]
@@ -185,11 +186,11 @@ def multiref_use : GICombineRule<
 
 // CHECK-NEXT: digraph "multiref_use" {
 // CHECK-NEXT:   rankdir="BT"
-// CHECK-NEXT:   Node[[N1:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon4_0|MOV|Match starts here|$d1=getOperand(0), $s=getOperand(1)|{{0x[0-9a-f]+}}|{<d0>#0 $dst|<d1>#1 $src1}}",color=red]
-// CHECK-NEXT:   Node[[N2:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon4_2|MOV|Match starts here|$d2=getOperand(0), $s=getOperand(1)|{{0x[0-9a-f]+}}|{<d0>#0 $dst|<d1>#1 $src1}}",color=red]
-// CHECK-NEXT:   Pred[[P1:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred4_1|$mi.getOpcode() == MOV|{{0x[0-9a-f]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
-// CHECK-NEXT:   Pred[[P2:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred4_3|$mi.getOpcode() == MOV|{{0x[0-9a-f]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
-// CHECK-NEXT:   Pred[[P3:0x[0-9a-f]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi0|<s2>#2 $mi1}|__anonpred4_4|$mi0 == $mi1|{{0x[0-9a-f]+}}|{<d0>#0 $$|<d1>#1 $mi0|<d2>#2 $mi1}}",style=dotted]
+// CHECK-NEXT:   Node[[N1:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon4_0|MOV|Match starts here|$d1=getOperand(0), $s=getOperand(1)|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $dst|<d1>#1 $src1}}",color=red]
+// CHECK-NEXT:   Node[[N2:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $dst|<s1>#1 $src1}|__anon4_2|MOV|Match starts here|$d2=getOperand(0), $s=getOperand(1)|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $dst|<d1>#1 $src1}}",color=red]
+// CHECK-NEXT:   Pred[[P1:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred4_1|$mi.getOpcode() == MOV|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
+// CHECK-NEXT:   Pred[[P2:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi}|__anonpred4_3|$mi.getOpcode() == MOV|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $$|<d1>#1 $mi}}",style=dotted]
+// CHECK-NEXT:   Pred[[P3:(0x)?[0-9a-fA-F]+]] [shape=record,label="{{[{]{}}<s0>#0 $$|<s1>#1 $mi0|<s2>#2 $mi1}|__anonpred4_4|$mi0 == $mi1|{{(0x)?[0-9a-fA-F]+}}|{<d0>#0 $$|<d1>#1 $mi0|<d2>#2 $mi1}}",style=dotted]
 // CHECK-NEXT:   Node[[N1]]:e -> Pred[[P1]]:d1:s [style=dotted]
 // CHECK-NEXT:   Node[[N2]]:e -> Pred[[P2]]:d1:s [style=dotted]
 // CHECK-NEXT:   Node[[N1]]:s1:n -> Pred[[P3]]:d1:s [style=dotted]
@@ -207,8 +208,8 @@ def MyCombiner: GICombinerHelper<"GenMyCombiner", [
 // Verify we're sharing operand lists correctly
 // CHECK-LABEL: GIMatchDagOperandListContext {
 // CHECK-NEXT:    OperandLists {
-// CHECK-NEXT:      0:dst<def>, 1:src1
-// CHECK-NEXT:      0:$<def>, 1:mi
-// CHECK-NEXT:      0:$<def>, 1:mi0, 2:mi1
+// CHECK-NEXT:      0:dst<def>, 1:src1{{$}}
+// CHECK-NEXT:      0:$<def>, 1:mi{{$}}
+// CHECK-NEXT:      0:$<def>, 1:mi0, 2:mi1{{$}}
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
