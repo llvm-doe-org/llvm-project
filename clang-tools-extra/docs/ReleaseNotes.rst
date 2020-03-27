@@ -105,6 +105,12 @@ Improvements to clang-tidy
   :doc:`bugprone-bad-signal-to-kill-thread
   <clang-tidy/checks/bugprone-bad-signal-to-kill-thread>` was added.
 
+- New :doc:`cert-oop58-cpp
+  <clang-tidy/checks/cert-oop58-cpp>` check.
+
+  Finds assignments to the copied object and its direct or indirect members
+  in copy constructors and copy assignment operators.
+
 - New :doc:`cppcoreguidelines-init-variables
   <clang-tidy/checks/cppcoreguidelines-init-variables>` check.
 
@@ -172,6 +178,12 @@ Improvements to clang-tidy
 
   Finds classes, structs, and unions that contain redundant member
   access specifiers.
+
+- Improved :doc:`readability-magic-numbers
+  <clang-tidy/checks/readability-magic-numbers>` check.
+
+  The check now supports the ``IgnoreBitFieldsWidths`` option to suppress
+  the warning for numbers used to specify bit field widths.
 
 - New :doc:`readability-make-member-function-const
   <clang-tidy/checks/readability-make-member-function-const>` check.

@@ -217,87 +217,10 @@ public:
   Stream &operator<<(uint16_t uval) = delete;
   Stream &operator<<(uint32_t uval) = delete;
   Stream &operator<<(uint64_t uval) = delete;
-
-  /// Output a int8_t \a sval to the stream \a s.
-  ///
-  /// \param[in] sval
-  ///     A int8_t value.
-  ///
-  /// \return
-  ///     A reference to this class so multiple things can be streamed
-  ///     in one statement.
-  Stream &operator<<(int8_t sval);
-
-  /// Output a int16_t \a sval to the stream \a s.
-  ///
-  /// \param[in] sval
-  ///     A int16_t value.
-  ///
-  /// \return
-  ///     A reference to this class so multiple things can be streamed
-  ///     in one statement.
-  Stream &operator<<(int16_t sval);
-
-  /// Output a int32_t \a sval to the stream \a s.
-  ///
-  /// \param[in] sval
-  ///     A int32_t value.
-  ///
-  /// \return
-  ///     A reference to this class so multiple things can be streamed
-  ///     in one statement.
-  Stream &operator<<(int32_t sval);
-
-  /// Output a int64_t \a sval to the stream \a s.
-  ///
-  /// \param[in] sval
-  ///     A int64_t value.
-  ///
-  /// \return
-  ///     A reference to this class so multiple things can be streamed
-  ///     in one statement.
-  Stream &operator<<(int64_t sval);
-
-  /// Output an address value to this stream.
-  ///
-  /// Put an address \a addr out to the stream with optional \a prefix and \a
-  /// suffix strings.
-  ///
-  /// \param[in] addr
-  ///     An address value.
-  ///
-  /// \param[in] addr_size
-  ///     Size in bytes of the address, used for formatting.
-  ///
-  /// \param[in] prefix
-  ///     A prefix C string. If nullptr, no prefix will be output.
-  ///
-  /// \param[in] suffix
-  ///     A suffix C string. If nullptr, no suffix will be output.
-  void Address(uint64_t addr, uint32_t addr_size, const char *prefix = nullptr,
-               const char *suffix = nullptr);
-
-  /// Output an address range to this stream.
-  ///
-  /// Put an address range \a lo_addr - \a hi_addr out to the stream with
-  /// optional \a prefix and \a suffix strings.
-  ///
-  /// \param[in] lo_addr
-  ///     The start address of the address range.
-  ///
-  /// \param[in] hi_addr
-  ///     The end address of the address range.
-  ///
-  /// \param[in] addr_size
-  ///     Size in bytes of the address, used for formatting.
-  ///
-  /// \param[in] prefix
-  ///     A prefix C string. If nullptr, no prefix will be output.
-  ///
-  /// \param[in] suffix
-  ///     A suffix C string. If nullptr, no suffix will be output.
-  void AddressRange(uint64_t lo_addr, uint64_t hi_addr, uint32_t addr_size,
-                    const char *prefix = nullptr, const char *suffix = nullptr);
+  Stream &operator<<(int8_t sval) = delete;
+  Stream &operator<<(int16_t sval) = delete;
+  Stream &operator<<(int32_t sval) = delete;
+  Stream &operator<<(int64_t sval) = delete;
 
   /// Output a C string to the stream.
   ///
@@ -487,6 +410,54 @@ protected:
   };
   RawOstreamForward m_forwarder;
 };
+
+/// Output an address value to this stream.
+///
+/// Put an address \a addr out to the stream with optional \a prefix and \a
+/// suffix strings.
+///
+/// \param[in] s
+///     The output stream.
+///
+/// \param[in] addr
+///     An address value.
+///
+/// \param[in] addr_size
+///     Size in bytes of the address, used for formatting.
+///
+/// \param[in] prefix
+///     A prefix C string. If nullptr, no prefix will be output.
+///
+/// \param[in] suffix
+///     A suffix C string. If nullptr, no suffix will be output.
+void DumpAddress(llvm::raw_ostream &s, uint64_t addr, uint32_t addr_size,
+                 const char *prefix = nullptr, const char *suffix = nullptr);
+
+/// Output an address range to this stream.
+///
+/// Put an address range \a lo_addr - \a hi_addr out to the stream with
+/// optional \a prefix and \a suffix strings.
+///
+/// \param[in] s
+///     The output stream.
+///
+/// \param[in] lo_addr
+///     The start address of the address range.
+///
+/// \param[in] hi_addr
+///     The end address of the address range.
+///
+/// \param[in] addr_size
+///     Size in bytes of the address, used for formatting.
+///
+/// \param[in] prefix
+///     A prefix C string. If nullptr, no prefix will be output.
+///
+/// \param[in] suffix
+///     A suffix C string. If nullptr, no suffix will be output.
+void DumpAddressRange(llvm::raw_ostream &s, uint64_t lo_addr, uint64_t hi_addr,
+                      uint32_t addr_size, const char *prefix = nullptr,
+                      const char *suffix = nullptr);
 
 } // namespace lldb_private
 

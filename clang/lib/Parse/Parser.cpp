@@ -278,6 +278,10 @@ bool Parser::SkipUntil(ArrayRef<tok::TokenKind> Toks, SkipUntilFlags Flags) {
     case tok::annot_pragma_openmp:
     case tok::annot_pragma_openmp_end:
       // Stop before an OpenMP pragma boundary.
+      if (OpenMPDirectiveParsing)
+        return false;
+      ConsumeAnnotationToken();
+      break;
     case tok::annot_pragma_openacc:
     case tok::annot_pragma_openacc_end:
       // Stop before an OpenACC pragma boundary.

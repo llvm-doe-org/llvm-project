@@ -261,6 +261,11 @@ def vecspltisw : PatLeaf<(build_vector), [{
   return PPC::get_VSPLTI_elt(N, 4, *CurDAG).getNode() != nullptr;
 }], VSPLTISW_get_imm>;
 
+def immEQOneV : PatLeaf<(build_vector), [{
+  if (ConstantSDNode *C = cast<BuildVectorSDNode>(N)->getConstantSplatNode())
+    return C->isOne();
+  return false;
+}]>;
 //===----------------------------------------------------------------------===//
 // Helpers for defining instructions that directly correspond to intrinsics.
 
@@ -518,19 +523,19 @@ def VANDC : VXForm_1<1092, (outs vrrc:$vD), (ins vrrc:$vA, vrrc:$vB),
 def VCFSX  : VXForm_1<842, (outs vrrc:$vD), (ins u5imm:$UIMM, vrrc:$vB),
                       "vcfsx $vD, $vB, $UIMM", IIC_VecFP,
                       [(set v4f32:$vD,
-                             (int_ppc_altivec_vcfsx v4i32:$vB, imm:$UIMM))]>;
+                             (int_ppc_altivec_vcfsx v4i32:$vB, timm:$UIMM))]>;
 def VCFUX  : VXForm_1<778, (outs vrrc:$vD), (ins u5imm:$UIMM, vrrc:$vB),
                       "vcfux $vD, $vB, $UIMM", IIC_VecFP,
                       [(set v4f32:$vD,
-                             (int_ppc_altivec_vcfux v4i32:$vB, imm:$UIMM))]>;
+                             (int_ppc_altivec_vcfux v4i32:$vB, timm:$UIMM))]>;
 def VCTSXS : VXForm_1<970, (outs vrrc:$vD), (ins u5imm:$UIMM, vrrc:$vB),
                       "vctsxs $vD, $vB, $UIMM", IIC_VecFP,
                       [(set v4i32:$vD,
-                             (int_ppc_altivec_vctsxs v4f32:$vB, imm:$UIMM))]>;
+                             (int_ppc_altivec_vctsxs v4f32:$vB, timm:$UIMM))]>;
 def VCTUXS : VXForm_1<906, (outs vrrc:$vD), (ins u5imm:$UIMM, vrrc:$vB),
                       "vctuxs $vD, $vB, $UIMM", IIC_VecFP,
                       [(set v4i32:$vD,
-                             (int_ppc_altivec_vctuxs v4f32:$vB, imm:$UIMM))]>;
+                             (int_ppc_altivec_vctuxs v4f32:$vB, timm:$UIMM))]>;
 
 // Defines with the UIM field set to 0 for floating-point
 // to integer (fp_to_sint/fp_to_uint) conversions and integer
@@ -1091,6 +1096,20 @@ def : Pat<(v4f32 (vselect v4i32:$vA, v4f32:$vB, v4f32:$vC)),
           (VSEL $vC, $vB, $vA)>;
 def : Pat<(v2f64 (vselect v2i64:$vA, v2f64:$vB, v2f64:$vC)),
           (VSEL $vC, $vB, $vA)>;
+
+// Vector Integer Average Instructions
+def : Pat<(v4i32 (sra (sub v4i32:$vA, (vnot_ppc v4i32:$vB)),
+          (v4i32 (immEQOneV)))), (v4i32 (VAVGSW $vA, $vB))>;
+def : Pat<(v8i16 (sra (sub v8i16:$vA, (v8i16 (bitconvert(vnot_ppc v4i32:$vB)))),
+          (v8i16 (immEQOneV)))), (v8i16 (VAVGSH $vA, $vB))>;
+def : Pat<(v16i8 (sra (sub v16i8:$vA, (v16i8 (bitconvert(vnot_ppc v4i32:$vB)))),
+          (v16i8 (immEQOneV)))), (v16i8 (VAVGSB $vA, $vB))>;
+def : Pat<(v4i32 (srl (sub v4i32:$vA, (vnot_ppc v4i32:$vB)),
+          (v4i32 (immEQOneV)))), (v4i32 (VAVGUW $vA, $vB))>;
+def : Pat<(v8i16 (srl (sub v8i16:$vA, (v8i16 (bitconvert(vnot_ppc v4i32:$vB)))),
+          (v8i16 (immEQOneV)))), (v8i16 (VAVGUH $vA, $vB))>;
+def : Pat<(v16i8 (srl (sub v16i8:$vA, (v16i8 (bitconvert(vnot_ppc v4i32:$vB)))),
+          (v16i8 (immEQOneV)))), (v16i8 (VAVGUB $vA, $vB))>;
 
 } // end HasAltivec
 

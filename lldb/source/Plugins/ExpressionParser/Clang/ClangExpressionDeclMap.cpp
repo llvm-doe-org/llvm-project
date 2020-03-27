@@ -65,9 +65,10 @@ const char *g_lldb_local_vars_namespace_cstr = "$__lldb_local_vars";
 ClangExpressionDeclMap::ClangExpressionDeclMap(
     bool keep_result_in_memory,
     Materializer::PersistentVariableDelegate *result_delegate,
-    ExecutionContext &exe_ctx, ValueObject *ctx_obj)
-    : ClangASTSource(exe_ctx.GetTargetSP()), m_found_entities(),
-      m_struct_members(), m_keep_result_in_memory(keep_result_in_memory),
+    const lldb::TargetSP &target, const lldb::ClangASTImporterSP &importer,
+    ValueObject *ctx_obj)
+    : ClangASTSource(target, importer), m_found_entities(), m_struct_members(),
+      m_keep_result_in_memory(keep_result_in_memory),
       m_result_delegate(result_delegate), m_ctx_obj(ctx_obj), m_parser_vars(),
       m_struct_vars() {
   EnableStructVars();
@@ -84,8 +85,6 @@ ClangExpressionDeclMap::~ClangExpressionDeclMap() {
 
 bool ClangExpressionDeclMap::WillParse(ExecutionContext &exe_ctx,
                                        Materializer *materializer) {
-  ClangASTMetrics::ClearLocalCounters();
-
   EnableParserVars();
   m_parser_vars->m_exe_ctx = exe_ctx;
 
@@ -110,7 +109,7 @@ bool ClangExpressionDeclMap::WillParse(ExecutionContext &exe_ctx,
     m_parser_vars->m_persistent_vars = llvm::cast<ClangPersistentVariables>(
         target->GetPersistentExpressionStateForLanguage(eLanguageTypeC));
 
-    if (!target->GetScratchClangASTContext())
+    if (!ClangASTContext::GetScratch(*target))
       return false;
   }
 
@@ -127,11 +126,6 @@ void ClangExpressionDeclMap::InstallCodeGenerator(
 }
 
 void ClangExpressionDeclMap::DidParse() {
-  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
-
-  if (log)
-    ClangASTMetrics::DumpCounters(log);
-
   if (m_parser_vars) {
     for (size_t entity_index = 0, num_entities = m_found_entities.GetSize();
          entity_index < num_entities; ++entity_index) {
@@ -180,55 +174,15 @@ ClangExpressionDeclMap::TargetInfo ClangExpressionDeclMap::GetTargetInfo() {
   return ret;
 }
 
-static clang::QualType ExportAllDeclaredTypes(
-    clang::ExternalASTMerger &parent_merger, clang::ExternalASTMerger &merger,
-    clang::ASTContext &source, clang::FileManager &source_file_manager,
-    const clang::ExternalASTMerger::OriginMap &source_origin_map,
-    clang::FileID file, clang::QualType root) {
-  // Mark the source as temporary to make sure all declarations from the
-  // AST are exported. Also add the parent_merger as the merger into the
-  // source AST so that the merger can track back any declarations from
-  // the persistent ASTs we used as sources.
-  clang::ExternalASTMerger::ImporterSource importer_source(
-      source, source_file_manager, source_origin_map, /*Temporary*/ true,
-      &parent_merger);
-  merger.AddSources(importer_source);
-  clang::ASTImporter &exporter = merger.ImporterForOrigin(source);
-  llvm::Expected<clang::QualType> ret_or_error = exporter.Import(root);
-  merger.RemoveSources(importer_source);
-  if (ret_or_error) {
-    return *ret_or_error;
-  } else {
-    Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS);
-    LLDB_LOG_ERROR(log, ret_or_error.takeError(), "Couldn't import type: {0}");
-    return clang::QualType();
-  }
-}
-
 TypeFromUser ClangExpressionDeclMap::DeportType(ClangASTContext &target,
                                                 ClangASTContext &source,
                                                 TypeFromParser parser_type) {
-  assert(&target == m_target->GetScratchClangASTContext());
+  assert(&target == ClangASTContext::GetScratch(*m_target));
   assert((TypeSystem *)&source == parser_type.GetTypeSystem());
   assert(source.getASTContext() == m_ast_context);
 
   if (m_ast_importer_sp) {
-    return TypeFromUser(m_ast_importer_sp->DeportType(
-                            target.getASTContext(), source.getASTContext(),
-                            parser_type.GetOpaqueQualType()),
-                        &target);
-  } else if (m_merger_up) {
-    clang::FileID source_file =
-        source.getASTContext()->getSourceManager().getFileID(
-            source.getASTContext()->getTranslationUnitDecl()->getLocation());
-    auto scratch_ast_context = static_cast<ClangASTContextForExpressions *>(
-        m_target->GetScratchClangASTContext());
-    clang::QualType exported_type = ExportAllDeclaredTypes(
-        *m_merger_up.get(), scratch_ast_context->GetMergerUnchecked(),
-        *source.getASTContext(), *source.getFileManager(),
-        m_merger_up->GetOrigins(), source_file,
-        clang::QualType::getFromOpaquePtr(parser_type.GetOpaqueQualType()));
-    return TypeFromUser(exported_type.getAsOpaquePtr(), &target);
+    return TypeFromUser(m_ast_importer_sp->DeportType(target, parser_type));
   } else {
     lldbassert(0 && "No mechanism for deporting a type!");
     return TypeFromUser();
@@ -255,8 +209,11 @@ bool ClangExpressionDeclMap::AddPersistentVariable(const NamedDecl *decl,
     if (target == nullptr)
       return false;
 
-    TypeFromUser user_type =
-        DeportType(*target->GetScratchClangASTContext(), *ast, parser_type);
+    auto *clang_ast_context = ClangASTContext::GetScratch(*target);
+    if (!clang_ast_context)
+      return false;
+
+    TypeFromUser user_type = DeportType(*clang_ast_context, *ast, parser_type);
 
     uint32_t offset = m_parser_vars->m_materializer->AddResultVariable(
         user_type, is_lvalue, m_keep_result_in_memory, m_result_delegate, err);
@@ -291,7 +248,9 @@ bool ClangExpressionDeclMap::AddPersistentVariable(const NamedDecl *decl,
   if (target == nullptr)
     return false;
 
-  ClangASTContext *context(target->GetScratchClangASTContext());
+  ClangASTContext *context = ClangASTContext::GetScratch(*target);
+  if (!context)
+    return false;
 
   TypeFromUser user_type = DeportType(*context, *ast, parser_type);
 
@@ -685,8 +644,6 @@ void ClangExpressionDeclMap::FindExternalVisibleDecls(
     NameSearchContext &context) {
   assert(m_ast_context);
 
-  ClangASTMetrics::RegisterVisibleQuery();
-
   const ConstString name(context.m_decl_name.getAsString().c_str());
 
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
@@ -781,12 +738,14 @@ void ClangExpressionDeclMap::SearchPersistenDecls(NameSearchContext &context,
                                                   const ConstString name,
                                                   unsigned int current_id) {
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
+  if (!m_parser_vars)
+    return;
   Target *target = m_parser_vars->m_exe_ctx.GetTargetPtr();
   if (!target)
     return;
 
   ClangASTContext *scratch_clang_ast_context =
-      target->GetScratchClangASTContext();
+      ClangASTContext::GetScratch(*target);
 
   if (!scratch_clang_ast_context)
     return;
@@ -1092,6 +1051,9 @@ void ClangExpressionDeclMap::LookupInModulesDeclVendor(
     NameSearchContext &context, ConstString name, unsigned current_id) {
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
 
+  if (!m_target)
+    return;
+
   auto *modules_decl_vendor = m_target->GetClangModulesDeclVendor();
   if (!modules_decl_vendor)
     return;
@@ -1280,6 +1242,8 @@ void ClangExpressionDeclMap::LookupFunction(NameSearchContext &context,
                                             ConstString name,
                                             CompilerDeclContext &namespace_decl,
                                             unsigned current_id) {
+  if (!m_parser_vars)
+    return;
 
   Target *target = m_parser_vars->m_exe_ctx.GetTargetPtr();
 
@@ -1410,9 +1374,14 @@ void ClangExpressionDeclMap::FindExternalVisibleDecls(
 
   // Only look for functions by name out in our symbols if the function doesn't
   // start with our phony prefix of '$'
-  Target *target = m_parser_vars->m_exe_ctx.GetTargetPtr();
-  StackFrame *frame = m_parser_vars->m_exe_ctx.GetFramePtr();
+
+  Target *target = nullptr;
+  StackFrame *frame = nullptr;
   SymbolContext sym_ctx;
+  if (m_parser_vars) {
+    target = m_parser_vars->m_exe_ctx.GetTargetPtr();
+    frame = m_parser_vars->m_exe_ctx.GetFramePtr();
+  }
   if (frame != nullptr)
     sym_ctx = frame->GetSymbolContext(lldb::eSymbolContextFunction |
                                       lldb::eSymbolContextBlock);
@@ -1723,7 +1692,9 @@ void ClangExpressionDeclMap::AddOneGenericVariable(NameSearchContext &context,
   if (target == nullptr)
     return;
 
-  ClangASTContext *scratch_ast_context = target->GetScratchClangASTContext();
+  ClangASTContext *scratch_ast_context = ClangASTContext::GetScratch(*target);
+  if (!scratch_ast_context)
+    return;
 
   TypeFromUser user_type(scratch_ast_context->GetBasicType(eBasicTypeVoid)
                              .GetPointerType()

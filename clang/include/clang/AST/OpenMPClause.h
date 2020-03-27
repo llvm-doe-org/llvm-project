@@ -111,7 +111,7 @@ class OMPClauseWithPreInit {
   Stmt *PreInit = nullptr;
 
   /// Region that captures the associated stmt.
-  OpenMPDirectiveKind CaptureRegion = OMPD_unknown;
+  OpenMPDirectiveKind CaptureRegion = llvm::omp::OMPD_unknown;
 
 protected:
   OMPClauseWithPreInit(const OMPClause *This) {
@@ -119,7 +119,9 @@ protected:
   }
 
   /// Set pre-initialization statement for the clause.
-  void setPreInitStmt(Stmt *S, OpenMPDirectiveKind ThisRegion = OMPD_unknown) {
+  void
+  setPreInitStmt(Stmt *S,
+                 OpenMPDirectiveKind ThisRegion = llvm::omp::OMPD_unknown) {
     PreInit = S;
     CaptureRegion = ThisRegion;
   }
@@ -432,7 +434,7 @@ class OMPIfClause : public OMPClause, public OMPClauseWithPreInit {
   SourceLocation ColonLoc;
 
   /// Directive name modifier for the clause.
-  OpenMPDirectiveKind NameModifier = OMPD_unknown;
+  OpenMPDirectiveKind NameModifier = llvm::omp::OMPD_unknown;
 
   /// Name modifier location.
   SourceLocation NameModifierLoc;
@@ -6237,6 +6239,79 @@ public:
 
   static bool classof(const OMPClause *T) {
     return T->getClauseKind() == OMPC_is_device_ptr;
+  }
+};
+
+/// This represents clause 'nontemporal' in the '#pragma omp ...' directives.
+///
+/// \code
+/// #pragma omp simd nontemporal(a)
+/// \endcode
+/// In this example directive '#pragma omp simd' has clause 'nontemporal' for
+/// the variable 'a'.
+class OMPNontemporalClause final
+    : public OMPVarListClause<OMPNontemporalClause>,
+      private llvm::TrailingObjects<OMPNontemporalClause, Expr *> {
+  friend class OMPClauseReader;
+  friend OMPVarListClause;
+  friend TrailingObjects;
+
+  /// Build clause with number of variables \a N.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param N Number of the variables in the clause.
+  OMPNontemporalClause(SourceLocation StartLoc, SourceLocation LParenLoc,
+                       SourceLocation EndLoc, unsigned N)
+      : OMPVarListClause<OMPNontemporalClause>(OMPC_nontemporal, StartLoc,
+                                               LParenLoc, EndLoc, N) {}
+
+  /// Build an empty clause.
+  ///
+  /// \param N Number of variables.
+  explicit OMPNontemporalClause(unsigned N)
+      : OMPVarListClause<OMPNontemporalClause>(
+            OMPC_nontemporal, SourceLocation(), SourceLocation(),
+            SourceLocation(), N) {}
+
+public:
+  /// Creates clause with a list of variables \a VL.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param VL List of references to the variables.
+  static OMPNontemporalClause *
+  Create(const ASTContext &C, SourceLocation StartLoc, SourceLocation LParenLoc,
+         SourceLocation EndLoc, ArrayRef<Expr *> VL);
+
+  /// Creates an empty clause with the place for \a N variables.
+  ///
+  /// \param C AST context.
+  /// \param N The number of variables.
+  static OMPNontemporalClause *CreateEmpty(const ASTContext &C, unsigned N);
+
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end()));
+  }
+
+  const_child_range children() const {
+    auto Children = const_cast<OMPNontemporalClause *>(this)->children();
+    return const_child_range(Children.begin(), Children.end());
+  }
+
+  child_range used_children() {
+    return child_range(child_iterator(), child_iterator());
+  }
+  const_child_range used_children() const {
+    return const_child_range(const_child_iterator(), const_child_iterator());
+  }
+
+  static bool classof(const OMPClause *T) {
+    return T->getClauseKind() == OMPC_nontemporal;
   }
 };
 

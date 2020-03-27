@@ -174,11 +174,11 @@ static void dumpSectionContents(raw_ostream &OS, LinkGraph &G) {
 
   std::sort(Sections.begin(), Sections.end(),
             [](const Section *LHS, const Section *RHS) {
-              if (LHS->symbols_empty() && RHS->symbols_empty())
+              if (llvm::empty(LHS->symbols()) && llvm::empty(RHS->symbols()))
                 return false;
-              if (LHS->symbols_empty())
+              if (llvm::empty(LHS->symbols()))
                 return false;
-              if (RHS->symbols_empty())
+              if (llvm::empty(RHS->symbols()))
                 return true;
               SectionRange LHSRange(*LHS);
               SectionRange RHSRange(*RHS);
@@ -187,7 +187,7 @@ static void dumpSectionContents(raw_ostream &OS, LinkGraph &G) {
 
   for (auto *S : Sections) {
     OS << S->getName() << " content:";
-    if (S->symbols_empty()) {
+    if (llvm::empty(S->symbols())) {
       OS << "\n  section empty\n";
       continue;
     }
@@ -397,7 +397,8 @@ static std::unique_ptr<jitlink::JITLinkMemoryManager> createMemoryManager() {
 }
 
 Session::Session(Triple TT)
-    : MemMgr(createMemoryManager()), ObjLayer(ES, *MemMgr), TT(std::move(TT)) {
+    : MainJD(ES.createJITDylib("<main>")), ObjLayer(ES, createMemoryManager()),
+      TT(std::move(TT)) {
 
   /// Local ObjectLinkingLayer::Plugin class to forward modifyPassConfig to the
   /// Session.
@@ -560,7 +561,7 @@ Error loadProcessSymbols(Session &S) {
   auto FilterMainEntryPoint = [InternedEntryPointName](SymbolStringPtr Name) {
     return Name != InternedEntryPointName;
   };
-  S.ES.getMainJITDylib().addGenerator(
+  S.MainJD.addGenerator(
       ExitOnErr(orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(
           GlobalPrefix, FilterMainEntryPoint)));
 
@@ -589,10 +590,9 @@ Error loadObjects(Session &S) {
   LLVM_DEBUG(dbgs() << "Creating JITDylibs...\n");
   {
     // Create a "main" JITLinkDylib.
-    auto &MainJD = S.ES.getMainJITDylib();
-    IdxToJLD[0] = &MainJD;
-    S.JDSearchOrder.push_back(&MainJD);
-    LLVM_DEBUG(dbgs() << "  0: " << MainJD.getName() << "\n");
+    IdxToJLD[0] = &S.MainJD;
+    S.JDSearchOrder.push_back(&S.MainJD);
+    LLVM_DEBUG(dbgs() << "  0: " << S.MainJD.getName() << "\n");
 
     // Add any extra JITLinkDylibs from the command line.
     std::string JDNamePrefix("lib");

@@ -263,7 +263,7 @@ NetBSD
 
 Current stable NetBSD release doesn't ship with libpanel(3), therefore it's
 required to disable curses(3) support with the
-``-DLLDB_DISABLE_CURSES:BOOL=TRUE`` option. To make sure check if
+``-DLLDB_ENABLE_CURSES:BOOL=FALSE`` option. To make sure check if
 ``/usr/include/panel.h`` exists in your system.
 
 macOS
@@ -401,9 +401,9 @@ further by passing the appropriate cmake options, such as:
 
 ::
 
-  -DLLDB_DISABLE_LIBEDIT=1
-  -DLLDB_DISABLE_CURSES=1
-  -DLLDB_DISABLE_PYTHON=1
+  -DLLDB_ENABLE_PYTHON=0
+  -DLLDB_ENABLE_LIBEDIT=0
+  -DLLDB_ENABLE_CURSES=0
   -DLLVM_ENABLE_TERMINFO=0
 
 In this case you, will often not need anything other than the standard C and
@@ -453,9 +453,9 @@ to prepare the cmake build with the following parameters:
   -DLLVM_HOST_TRIPLE=aarch64-unknown-linux-gnu \
   -DLLVM_TABLEGEN=<path-to-host>/bin/llvm-tblgen \
   -DCLANG_TABLEGEN=<path-to-host>/bin/clang-tblgen \
-  -DLLDB_DISABLE_PYTHON=1 \
-  -DLLDB_DISABLE_LIBEDIT=1 \
-  -DLLDB_DISABLE_CURSES=1
+  -DLLDB_ENABLE_PYTHON=0 \
+  -DLLDB_ENABLE_LIBEDIT=0 \
+  -DLLDB_ENABLE_CURSES=0
 
 An alternative (and recommended) way to compile LLDB is with clang.
 Unfortunately, clang is not able to find all the include paths necessary for a
@@ -471,7 +471,7 @@ options. In my case it was sufficient to add the following arguments to
   -I /usr/aarch64-linux-gnu/include
 
 If you wanted to build a full version of LLDB and avoid passing
-``-DLLDB_DISABLE_PYTHON`` and other options, you would need to obtain the
+``-DLLDB_ENABLE_PYTHON=0`` and other options, you would need to obtain the
 target versions of the respective libraries. The easiest way to achieve this is
 to use the qemu-debootstrap utility, which can prepare a system image using
 qemu and chroot to simulate the target environment. Then you can install the

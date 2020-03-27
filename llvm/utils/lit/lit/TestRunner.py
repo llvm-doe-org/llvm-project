@@ -1105,6 +1105,20 @@ def getDefaultSubstitutions(test, tmpDir, tmpBase, normalize_slashes=False):
             ('%/T', tmpDir.replace('\\', '/')),
             ])
 
+    # "%{/[STpst]:regex_replacement}" should be normalized like "%/[STpst]" but we're
+    # also in a regex replacement context of a s@@@ regex.
+    def regex_escape(s):
+        s = s.replace('@', '\@')
+        s = s.replace('&', '\&')
+        return s
+    substitutions.extend([
+            ('%{/s:regex_replacement}', regex_escape(sourcepath.replace('\\', '/'))),
+            ('%{/S:regex_replacement}', regex_escape(sourcedir.replace('\\', '/'))),
+            ('%{/p:regex_replacement}', regex_escape(sourcedir.replace('\\', '/'))),
+            ('%{/t:regex_replacement}', regex_escape(tmpBase.replace('\\', '/')) + '.tmp'),
+            ('%{/T:regex_replacement}', regex_escape(tmpDir.replace('\\', '/'))),
+            ])
+
     # "%:[STpst]" are normalized paths without colons and without a leading
     # slash.
     substitutions.extend([
@@ -1234,7 +1248,7 @@ class PdataPforState(object):
                 return output
             match = re.search(self.REF_RE, line)
             if match:
-                raise ValueError("outside %for, {ref} is undefined"
+                raise ValueError("Outside %for, {ref} is undefined"
                                  .format(ref=match.group(0)))
             return False
         assert not line_continued, \
@@ -1253,8 +1267,8 @@ class PdataPforState(object):
         self.pdata_id = self.parsePdirOpenLine("%data", line_number, line,
                                                line_continued)
         if self.pdata_id in self.pdatas:
-            raise ValueError("%data '{pdata_id}' already defined on line"
-                             " {line}".format(
+            raise ValueError("%data '{pdata_id}' already defined on line "
+                             "{line}".format(
                                  pdata_id = self.pdata_id,
                                  line = self.pdatas[self.pdata_id]
                                         .line_number))
@@ -1278,8 +1292,8 @@ class PdataPforState(object):
         pfor_id = self.parsePdirOpenLine("%for", line_number, line,
                                          line_continued)
         if not pfor_id in self.pdatas:
-            raise ValueError("%for specifies undefined %data identifier"
-                             " '{pfor_id}'".format(pfor_id=pfor_id))
+            raise ValueError("%for specifies undefined %data identifier "
+                             "'{pfor_id}'".format(pfor_id=pfor_id))
         self.context = self.IN_FOR
         self.pfors.append(self.Pfor(pfor_id, line_number))
 
@@ -1287,14 +1301,14 @@ class PdataPforState(object):
         assert pdir[0:1] == '%', "directive expected to start with %"
         match = re.match('\\s*(%{tk})'.format(tk=self.ID_RE), line)
         if not match or match.group(1) != pdir:
-            raise ValueError("in line containing '{pdir}', '{pdir}' expected"
-                             " immediately after '{keyword}'"
+            raise ValueError("In line containing '{pdir}', '{pdir}' expected "
+                             "immediately after '{keyword}'"
                              .format(pdir=pdir, keyword=self.keyword))
         match = re.compile('\\s*({tk}|{{)'.format(tk=self.ID_RE)) \
                 .match(line, match.end())
         if not match:
-            raise ValueError("after '{pdir}', expected opening '{{' or"
-                             " {id_diag}".format(
+            raise ValueError("After '{pdir}', expected opening '{{' or "
+                             "{id_diag}".format(
                                  pdir=pdir, id_diag=self.ID_DIAG))
         if match.group(1) == '{':
             pdir_id = ''
@@ -1302,44 +1316,44 @@ class PdataPforState(object):
             pdir_id = match.group(1)
             match = re.compile('\\s*{').match(line, match.end())
             if not match:
-                raise ValueError("after '{pdir} {pdir_id}', expected opening"
-                                 " '{{'".format(pdir=pdir, pdir_id=pdir_id))
+                raise ValueError("After '{pdir} {pdir_id}', expected opening "
+                                 "'{{'".format(pdir=pdir, pdir_id=pdir_id))
         match = re.compile('\\s*$').match(line, match.end())
         if not match:
-            raise ValueError("after {pdir} '{pdir_id}' opening '{{', expected"
-                             " end of line".format(pdir=pdir, pdir_id=pdir_id))
+            raise ValueError("After {pdir} '{pdir_id}' opening '{{', expected "
+                             "end of line".format(pdir=pdir, pdir_id=pdir_id))
         if line_continued:
-            raise ValueError("{pdir} '{pdir_id}' opened after unterminated"
-                             " run line".format(pdir=pdir, pdir_id=pdir_id))
+            raise ValueError("{pdir} '{pdir_id}' opened after unterminated "
+                             "run line".format(pdir=pdir, pdir_id=pdir_id))
         return pdir_id
 
     def parseInPdata(self, line_number, line):
         pdata = self.pdatas[self.pdata_id]
         if line.find("%data") != -1:
-            raise ValueError("in %data '{pdata_id}' opened on line {line},"
-                             " found nested %data".format(
+            raise ValueError("In %data '{pdata_id}' opened on line {line}, "
+                             "found nested %data".format(
                                  pdata_id=self.pdata_id,
                                  line=pdata.line_number))
         if line.find("%for") != -1:
-            raise ValueError("in %data '{pdata_id}' opened on line {line},"
-                             " found nested %for".format(
+            raise ValueError("In %data '{pdata_id}' opened on line {line}, "
+                             "found nested %for".format(
                                  pdata_id=self.pdata_id,
                                  line=pdata.line_number))
         itr_count = len(pdata.iterations)
         match = re.match('\\s*([(}])', line)
         if not match:
             if itr_count == 0:
-                raise ValueError("in %data '{pdata_id}', expected '(' to open"
-                                 " first iteration"
+                raise ValueError("In %data '{pdata_id}', expected '(' to open "
+                                 "first iteration"
                                  .format(pdata_id=self.pdata_id))
-            raise ValueError("in %data '{pdata_id}', expected '}}' to close"
-                             " %data or '(' to open iteration {itr_next}"
+            raise ValueError("In %data '{pdata_id}', expected '}}' to close "
+                             "%data or '(' to open iteration {itr_next}"
                              .format(pdata_id=self.pdata_id,
                                      itr_next=itr_count + 1))
         if match.group(1) == '}': # end of %data
             if not re.compile('\\s*$').match(line, match.end()):
-                raise ValueError("after %data '{pdata_id}' closing '}}',"
-                                 " expected end of line".format(
+                raise ValueError("After %data '{pdata_id}' closing '}}', "
+                                 "expected end of line".format(
                                      pdata_id=self.pdata_id))
             if itr_count == 0:
                 raise ValueError("%data '{pdata_id}' has no iterations"
@@ -1358,13 +1372,13 @@ class PdataPforState(object):
         iterations = self.pdatas[self.pdata_id].iterations
         itr_count = len(iterations)
         if line.find("%data") != -1:
-            raise ValueError("in %data '{pdata_id}' iteration {itr} opened on"
-                             " line {line}, found nested %data".format(
+            raise ValueError("In %data '{pdata_id}' iteration {itr} opened on "
+                             "line {line}, found nested %data".format(
                                  pdata_id=self.pdata_id, itr=itr_count,
                                  line=iterations[-1].line_number))
         if line.find("%for") != -1:
-            raise ValueError("in %data '{pdata_id}' iteration {itr} opened on"
-                             " line {line}, found nested %for".format(
+            raise ValueError("In %data '{pdata_id}' iteration {itr} opened on "
+                             "line {line}, found nested %for".format(
                                  pdata_id=self.pdata_id, itr=itr_count,
                                  line=iterations[-1].line_number))
         while line_pos < len(line):
@@ -1373,13 +1387,13 @@ class PdataPforState(object):
             field_count = len(iterations[-1].fields)
             if not match:
                 if field_count == 0:
-                    raise ValueError("in %data '{pdata_id}' iteration {itr},"
-                                     " expected first field {id_diag}".format(
+                    raise ValueError("In %data '{pdata_id}' iteration {itr}, "
+                                     "expected first field {id_diag}".format(
                                          pdata_id=self.pdata_id,
                                          itr=itr_count, id_diag=self.ID_DIAG))
-                raise ValueError("in %data '{pdata_id}' iteration {itr},"
-                                 " expected either ')' to close iteration or"
-                                 " field {field_next} {id_diag}".format(
+                raise ValueError("In %data '{pdata_id}' iteration {itr}, "
+                                 "expected either ')' to close iteration or "
+                                 "field {field_next} {id_diag}".format(
                                      pdata_id=self.pdata_id, itr=itr_count,
                                      field_next=field_count + 1,
                                      id_diag=self.ID_DIAG))
@@ -1387,13 +1401,13 @@ class PdataPforState(object):
             # check for end of iteration
             if match.group(1) == ')':
                 if not re.compile('\\s*$').match(line, match.end()):
-                    raise ValueError("after %data '{pdata_id}' iteration {itr}"
-                                     " closing ')', expected end of line"
+                    raise ValueError("After %data '{pdata_id}' iteration "
+                                     "{itr} closing ')', expected end of line"
                                      .format(pdata_id=self.pdata_id,
                                              itr=itr_count))
                 if field_count == 0:
-                    raise ValueError("%data '{pdata_id}' iteration {itr} has"
-                                     " no fields".format(
+                    raise ValueError("%data '{pdata_id}' iteration {itr} has "
+                                     "no fields".format(
                                          pdata_id=self.pdata_id,
                                          itr=itr_count, field=field_count))
                 if itr_count > 1 and len(iterations[-1].fields) != \
@@ -1410,9 +1424,9 @@ class PdataPforState(object):
                             if len(fields) > 0:
                                 fields += ', '
                             fields += "'{field}'".format(field=field)
-                    raise ValueError("%data '{pdata_id}' iteration {itr} is"
-                                     " missing the following fields, which are"
-                                     " in previous iterations: {fields}"
+                    raise ValueError("%data '{pdata_id}' iteration {itr} is "
+                                     "missing the following fields, which are "
+                                     "in previous iterations: {fields}"
                                      .format(pdata_id=self.pdata_id,
                                              itr=itr_count, fields=fields))
                 self.context = self.IN_PDATA
@@ -1426,20 +1440,20 @@ class PdataPforState(object):
             field = match.group(1)
             line_pos = match.end()
             if line[line_pos : line_pos + 1] != '=':
-                raise ValueError("after %data '{pdata_id}' iteration {itr}"
-                                 " field identifier '{field}', expected '='"
+                raise ValueError("After %data '{pdata_id}' iteration {itr} "
+                                 "field identifier '{field}', expected '='"
                                  .format(pdata_id=self.pdata_id, itr=itr_count,
                                          field=field))
             line_pos += 1
             if itr_count > 1 and not field in iterations[-2].fields:
-                 raise ValueError("%data '{pdata_id}' iteration {itr} has"
-                                  " field '{field}', which does not exist in"
-                                  " previous iterations".format(
+                 raise ValueError("%data '{pdata_id}' iteration {itr} has "
+                                  "field '{field}', which does not exist in "
+                                  "previous iterations".format(
                                       pdata_id=self.pdata_id, itr=itr_count,
                                       field=field))
             if field in iterations[-1].fields:
-                 raise ValueError("%data '{pdata_id}' iteration {itr} field"
-                                  " '{field}' defined multiple times".format(
+                 raise ValueError("%data '{pdata_id}' iteration {itr} field "
+                                  "'{field}' defined multiple times".format(
                                       pdata_id=self.pdata_id, itr=itr_count,
                                       field=field))
             value_parser = self.PdataValueParser(line_number, line, line_pos,
@@ -1477,9 +1491,9 @@ class PdataPforState(object):
                 self.value += self.line[self.line_pos + 1]
                 self.line_pos += 2
                 return
-            raise ValueError("in %data '{pdata_id}' iteration {itr} field"
-                             " '{field}' value, unexpected end of line after"
-                             " backslash".format(
+            raise ValueError("In %data '{pdata_id}' iteration {itr} field "
+                             "'{field}' value, unexpected end of line after "
+                             "backslash".format(
                                  pdata_id=self.pdata_id, itr=self.itr_count,
                                  field=self.field))
 
@@ -1490,9 +1504,9 @@ class PdataPforState(object):
                 self.value += self.line[self.line_pos + 1 : close]
                 self.line_pos = close + 1
                 return
-            raise ValueError("in %data '{pdata_id}' iteration {itr} field"
-                             " '{field}' value, unexpected end of line within"
-                             " single-quotes: {seq}".format(
+            raise ValueError("In %data '{pdata_id}' iteration {itr} field "
+                             "'{field}' value, unexpected end of line within "
+                             "single-quotes: {seq}".format(
                                  pdata_id=self.pdata_id, itr=self.itr_count,
                                  field=self.field,
                                  seq=self.line[self.line_pos:]))
@@ -1510,18 +1524,18 @@ class PdataPforState(object):
                 else:
                     self.value += self.line[self.line_pos]
                     self.line_pos += 1
-            raise ValueError("in %data '{pdata_id}' iteration {itr} field"
-                             " '{field}' value, unexpected end of line within"
-                             " double-quotes: {seq}".format(
+            raise ValueError("In %data '{pdata_id}' iteration {itr} field "
+                             "'{field}' value, unexpected end of line within "
+                             "double-quotes: {seq}".format(
                                  pdata_id=self.pdata_id, itr=self.itr_count,
                                  field=self.field, seq=self.line[start:]))
 
     def parseInPfor(self, line_number, line, output):
         pfor = self.pfors[-1]
         if line.find("%data") != -1:
-            raise ValueError("in %for '{pfor_id}' opened on line {line}, found"
-                             " nested %data".format(pfor_id=pfor.id,
-                                                    line=pfor.line_number))
+            raise ValueError("In %for '{pfor_id}' opened on line {line}, "
+                             "found nested %data".format(
+                                 pfor_id=pfor.id, line=pfor.line_number))
         line_continued = pfor.output and pfor.output[-1][-1] == '\\'
         if line.find("%for") != -1:
             self.parsePforOpenLine(line_number, line, line_continued)
@@ -1531,8 +1545,8 @@ class PdataPforState(object):
             return False # just a run line
         # found %for closing line
         if not re.compile('\\s*$').match(line, match.end()):
-            raise ValueError("after %for '{pfor_id}' closing '}}', expected"
-                             " end of line".format(pfor_id=pfor.id))
+            raise ValueError("After %for '{pfor_id}' closing '}}', expected "
+                             "end of line".format(pfor_id=pfor.id))
         if not pfor.output:
             raise ValueError("%for '{pfor_id}' has no run lines"
                              .format(pfor_id=pfor.id))
@@ -1544,8 +1558,8 @@ class PdataPforState(object):
         # potentially much later in the file and likely be harder to
         # understand.
         if line_continued:
-            raise ValueError("%for '{pfor_id}' has unterminated run lines"
-                             " (with '\\')".format(pfor_id=pfor.id))
+            raise ValueError("%for '{pfor_id}' has unterminated run lines "
+                             "(with '\\')".format(pfor_id=pfor.id))
         assert not output or output[-1][-1] != '\\', \
                "continued line expected to be reported at %for open"
         assert pfor.id in self.pdatas, \
@@ -1581,19 +1595,19 @@ class PdataPforState(object):
                     if not field in itr.fields:
                         if len(self.pfors) > 1:
                             return ref # let the parent %for look it up
-                        raise ValueError("in command pipeline starting on line"
-                                         " {cmd_line}, {ref} is undefined"
+                        raise ValueError("In command pipeline starting on "
+                                         "line {cmd_line}, {ref} is undefined"
                                          .format(cmd_line=cmd_line, ref=ref))
                     for pfor_par in reversed(self.pfors[:-1]):
                         pdata_par = self.pdatas[pfor_par.id]
                         if field in pdata_par.iterations[0].fields:
                             raise ValueError(
-                                "in command pipeline starting on line"
-                                " {cmd_line}, {ref} is ambiguous\n"
-                                "defined in %data '{id0}' opened on line"
-                                " {line0}\n"
-                                "defined in %data '{id1}' opened on line"
-                                " {line1}"
+                                "In command pipeline starting on line "
+                                "{cmd_line}, {ref} is ambiguous\n"
+                                "defined in %data '{id0}' opened on line "
+                                "{line0}\n"
+                                "defined in %data '{id1}' opened on line "
+                                "{line1}"
                                 .format(cmd_line=cmd_line, ref=ref,
                                         id0=pfor.id,
                                         line0=pdata.line_number,
@@ -1669,8 +1683,10 @@ class IntegratedTestKeywordParser(object):
             self.parsed_lines += [(line_number, line)]
             self.value = self.parser(line_number, line, self.value)
         except ValueError as e:
-            raise ValueError(str(e) + ("\nin %s directive on test line %d" %
-                                       (self.keyword, line_number)))
+            raise ValueError(
+                "{err}\n"
+                "in {keyword} directive on test line {line}".format(
+                    err=e, keyword=self.keyword, line=line_number))
 
     def getValue(self):
         return self.value
@@ -1750,20 +1766,6 @@ class IntegratedTestKeywordParser(object):
                 BooleanExpression.evaluate(s, [])
         return output
 
-    @staticmethod
-    def _handleRequiresAny(line_number, line, output):
-        """A custom parser to transform REQUIRES-ANY: into REQUIRES:"""
-
-        # Extract the conditions specified in REQUIRES-ANY: as written.
-        conditions = []
-        IntegratedTestKeywordParser._handleList(line_number, line, conditions)
-
-        # Output a `REQUIRES: a || b || c` expression in its place.
-        expression = ' || '.join(conditions)
-        IntegratedTestKeywordParser._handleBooleanExpr(line_number,
-                                                       expression, output)
-        return output
-
 def parseIntegratedTestScript(test, additional_parsers=[],
                               require_script=True):
     """parseIntegratedTestScript - Scan an LLVM/Clang style integrated test
@@ -1787,9 +1789,6 @@ def parseIntegratedTestScript(test, additional_parsers=[],
                                     initial_value=test.xfails),
         IntegratedTestKeywordParser('REQUIRES:', ParserKind.BOOLEAN_EXPR,
                                     initial_value=test.requires),
-        IntegratedTestKeywordParser('REQUIRES-ANY:', ParserKind.CUSTOM,
-                                    IntegratedTestKeywordParser._handleRequiresAny, 
-                                    initial_value=test.requires), 
         IntegratedTestKeywordParser('UNSUPPORTED:', ParserKind.BOOLEAN_EXPR,
                                     initial_value=test.unsupported),
         IntegratedTestKeywordParser('END.', ParserKind.TAG)
@@ -1812,7 +1811,10 @@ def parseIntegratedTestScript(test, additional_parsers=[],
             parseIntegratedTestScriptCommands(sourcepath,
                                               keyword_parsers.keys()):
         parser = keyword_parsers[command_type]
-        parser.parseLine(line_number, ln)
+        try:
+            parser.parseLine(line_number, ln)
+        except ValueError as e:
+            return lit.Test.Result(Test.UNRESOLVED, str(e))
         if command_type == 'END.' and parser.getValue() is True:
             break
 

@@ -7,8 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Core/IOHandlerCursesGUI.h"
+#include "lldb/Host/Config.h"
 
-#ifndef LLDB_DISABLE_CURSES
+#if LLDB_ENABLE_CURSES
 #include <curses.h>
 #include <panel.h>
 #endif
@@ -30,7 +31,7 @@
 #include "lldb/Interpreter/CommandCompletions.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
 
-#ifndef LLDB_DISABLE_CURSES
+#if LLDB_ENABLE_CURSES
 #include "lldb/Breakpoint/BreakpointLocation.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ValueObject.h"
@@ -73,7 +74,7 @@ using llvm::Optional;
 using llvm::StringRef;
 
 // we may want curses to be disabled for some builds for instance, windows
-#ifndef LLDB_DISABLE_CURSES
+#if LLDB_ENABLE_CURSES
 
 #define KEY_RETURN 10
 #define KEY_ESCAPE 27
@@ -1460,6 +1461,8 @@ public:
     }
     return *this;
   }
+
+  TreeItem(const TreeItem &) = default;
 
   size_t GetDepth() const {
     if (m_parent)
@@ -3322,7 +3325,7 @@ public:
           if (context_changed)
             m_selected_line = m_pc_line;
 
-          if (m_file_sp && m_file_sp->FileSpecMatches(m_sc.line_entry.file)) {
+          if (m_file_sp && m_file_sp->GetFileSpec() == m_sc.line_entry.file) {
             // Same file, nothing to do, we should either have the lines or not
             // (source file missing)
             if (m_selected_line >= static_cast<size_t>(m_first_visible_line)) {
@@ -4061,4 +4064,4 @@ bool IOHandlerCursesGUI::Interrupt() { return false; }
 
 void IOHandlerCursesGUI::GotEOF() {}
 
-#endif // LLDB_DISABLE_CURSES
+#endif // LLDB_ENABLE_CURSES

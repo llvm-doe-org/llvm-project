@@ -24,6 +24,9 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
 
+#define GEN_CHECK_COMPRESS_INSTR
+#include "RISCVGenCompressInstEmitter.inc"
+
 #define GET_INSTRINFO_CTOR_DTOR
 #include "RISCVGenInstrInfo.inc"
 
@@ -451,7 +454,18 @@ unsigned RISCVInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   unsigned Opcode = MI.getOpcode();
 
   switch (Opcode) {
-  default: { return get(Opcode).getSize(); }
+  default: {
+    if (MI.getParent() && MI.getParent()->getParent()) {
+      const auto MF = MI.getMF();
+      const auto &TM = static_cast<const RISCVTargetMachine &>(MF->getTarget());
+      const MCRegisterInfo &MRI = *TM.getMCRegisterInfo();
+      const MCSubtargetInfo &STI = *TM.getMCSubtargetInfo();
+      const RISCVSubtarget &ST = MF->getSubtarget<RISCVSubtarget>();
+      if (isCompressibleInst(MI, &ST, MRI, STI))
+        return 2;
+    }
+    return get(Opcode).getSize();
+  }
   case TargetOpcode::EH_LABEL:
   case TargetOpcode::IMPLICIT_DEF:
   case TargetOpcode::KILL:
@@ -548,7 +562,8 @@ bool RISCVInstrInfo::verifyInstruction(const MachineInstr &MI,
 bool RISCVInstrInfo::getMemOperandWithOffsetWidth(
     const MachineInstr &LdSt, const MachineOperand *&BaseReg, int64_t &Offset,
     unsigned &Width, const TargetRegisterInfo *TRI) const {
-  assert(LdSt.mayLoadOrStore() && "Expected a memory operation.");
+  if (!LdSt.mayLoadOrStore())
+    return false;
 
   // Here we assume the standard RISC-V ISA, which uses a base+offset
   // addressing mode. You'll need to relax these conditions to support custom
@@ -596,4 +611,29 @@ bool RISCVInstrInfo::areMemAccessesTriviallyDisjoint(
     }
   }
   return false;
+}
+
+std::pair<unsigned, unsigned>
+RISCVInstrInfo::decomposeMachineOperandsTargetFlags(unsigned TF) const {
+  const unsigned Mask = RISCVII::MO_DIRECT_FLAG_MASK;
+  return std::make_pair(TF & Mask, TF & ~Mask);
+}
+
+ArrayRef<std::pair<unsigned, const char *>>
+RISCVInstrInfo::getSerializableDirectMachineOperandTargetFlags() const {
+  using namespace RISCVII;
+  static const std::pair<unsigned, const char *> TargetFlags[] = {
+      {MO_CALL, "riscv-call"},
+      {MO_PLT, "riscv-plt"},
+      {MO_LO, "riscv-lo"},
+      {MO_HI, "riscv-hi"},
+      {MO_PCREL_LO, "riscv-pcrel-lo"},
+      {MO_PCREL_HI, "riscv-pcrel-hi"},
+      {MO_GOT_HI, "riscv-got-hi"},
+      {MO_TPREL_LO, "riscv-tprel-lo"},
+      {MO_TPREL_HI, "riscv-tprel-hi"},
+      {MO_TPREL_ADD, "riscv-tprel-add"},
+      {MO_TLS_GOT_HI, "riscv-tls-got-hi"},
+      {MO_TLS_GD_HI, "riscv-tls-gd-hi"}};
+  return makeArrayRef(TargetFlags);
 }

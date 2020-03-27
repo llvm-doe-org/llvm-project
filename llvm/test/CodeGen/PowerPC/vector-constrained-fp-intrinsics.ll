@@ -468,12 +468,13 @@ define <3 x double> @constrained_vector_frem_v3f64() #0 {
 ; PC64LE-NEXT:    lfs 1, .LCPI8_3@toc@l(3)
 ; PC64LE-NEXT:    bl fmod
 ; PC64LE-NEXT:    nop
+; PC64LE-NEXT:    xxswapd 0, 63
 ; PC64LE-NEXT:    li 3, 64
-; PC64LE-NEXT:    fmr 3, 1
-; PC64LE-NEXT:    xxlor 1, 63, 63
-; PC64LE-NEXT:    lfd 31, 88(1) # 8-byte Folded Reload
 ; PC64LE-NEXT:    xxlor 2, 63, 63
+; PC64LE-NEXT:    lfd 31, 88(1) # 8-byte Folded Reload
 ; PC64LE-NEXT:    lxvd2x 63, 1, 3 # 16-byte Folded Reload
+; PC64LE-NEXT:    fmr 3, 1
+; PC64LE-NEXT:    fmr 1, 0
 ; PC64LE-NEXT:    addi 1, 1, 96
 ; PC64LE-NEXT:    ld 0, 16(1)
 ; PC64LE-NEXT:    mtlr 0
@@ -509,10 +510,11 @@ define <3 x double> @constrained_vector_frem_v3f64() #0 {
 ; PC64LE9-NEXT:    bl fmod
 ; PC64LE9-NEXT:    nop
 ; PC64LE9-NEXT:    fmr 3, 1
-; PC64LE9-NEXT:    xscpsgndp 1, 63, 63
+; PC64LE9-NEXT:    xxswapd 1, 63
 ; PC64LE9-NEXT:    xscpsgndp 2, 63, 63
 ; PC64LE9-NEXT:    lxv 63, 48(1) # 16-byte Folded Reload
 ; PC64LE9-NEXT:    lfd 31, 72(1) # 8-byte Folded Reload
+; PC64LE9-NEXT:    # kill: def $f1 killed $f1 killed $vsl1
 ; PC64LE9-NEXT:    addi 1, 1, 80
 ; PC64LE9-NEXT:    ld 0, 16(1)
 ; PC64LE9-NEXT:    mtlr 0
@@ -1715,12 +1717,13 @@ define <3 x double> @constrained_vector_pow_v3f64() #0 {
 ; PC64LE-NEXT:    lfd 1, .LCPI33_3@toc@l(3)
 ; PC64LE-NEXT:    bl pow
 ; PC64LE-NEXT:    nop
+; PC64LE-NEXT:    xxswapd 0, 63
 ; PC64LE-NEXT:    li 3, 64
-; PC64LE-NEXT:    fmr 3, 1
-; PC64LE-NEXT:    xxlor 1, 63, 63
-; PC64LE-NEXT:    lfd 31, 88(1) # 8-byte Folded Reload
 ; PC64LE-NEXT:    xxlor 2, 63, 63
+; PC64LE-NEXT:    lfd 31, 88(1) # 8-byte Folded Reload
 ; PC64LE-NEXT:    lxvd2x 63, 1, 3 # 16-byte Folded Reload
+; PC64LE-NEXT:    fmr 3, 1
+; PC64LE-NEXT:    fmr 1, 0
 ; PC64LE-NEXT:    addi 1, 1, 96
 ; PC64LE-NEXT:    ld 0, 16(1)
 ; PC64LE-NEXT:    mtlr 0
@@ -1756,10 +1759,11 @@ define <3 x double> @constrained_vector_pow_v3f64() #0 {
 ; PC64LE9-NEXT:    bl pow
 ; PC64LE9-NEXT:    nop
 ; PC64LE9-NEXT:    fmr 3, 1
-; PC64LE9-NEXT:    xscpsgndp 1, 63, 63
+; PC64LE9-NEXT:    xxswapd 1, 63
 ; PC64LE9-NEXT:    xscpsgndp 2, 63, 63
 ; PC64LE9-NEXT:    lxv 63, 48(1) # 16-byte Folded Reload
 ; PC64LE9-NEXT:    lfd 31, 72(1) # 8-byte Folded Reload
+; PC64LE9-NEXT:    # kill: def $f1 killed $f1 killed $vsl1
 ; PC64LE9-NEXT:    addi 1, 1, 80
 ; PC64LE9-NEXT:    ld 0, 16(1)
 ; PC64LE9-NEXT:    mtlr 0
@@ -2113,11 +2117,12 @@ define <3 x double> @constrained_vector_powi_v3f64() #0 {
 ; PC64LE-NEXT:    lfd 1, .LCPI38_2@toc@l(3)
 ; PC64LE-NEXT:    bl __powidf2
 ; PC64LE-NEXT:    nop
+; PC64LE-NEXT:    xxswapd 0, 63
 ; PC64LE-NEXT:    li 3, 64
-; PC64LE-NEXT:    fmr 3, 1
-; PC64LE-NEXT:    xxlor 1, 63, 63
 ; PC64LE-NEXT:    xxlor 2, 63, 63
 ; PC64LE-NEXT:    lxvd2x 63, 1, 3 # 16-byte Folded Reload
+; PC64LE-NEXT:    fmr 3, 1
+; PC64LE-NEXT:    fmr 1, 0
 ; PC64LE-NEXT:    addi 1, 1, 80
 ; PC64LE-NEXT:    ld 0, 16(1)
 ; PC64LE-NEXT:    mtlr 0
@@ -2150,9 +2155,10 @@ define <3 x double> @constrained_vector_powi_v3f64() #0 {
 ; PC64LE9-NEXT:    bl __powidf2
 ; PC64LE9-NEXT:    nop
 ; PC64LE9-NEXT:    fmr 3, 1
-; PC64LE9-NEXT:    xscpsgndp 1, 63, 63
+; PC64LE9-NEXT:    xxswapd 1, 63
 ; PC64LE9-NEXT:    xscpsgndp 2, 63, 63
 ; PC64LE9-NEXT:    lxv 63, 48(1) # 16-byte Folded Reload
+; PC64LE9-NEXT:    # kill: def $f1 killed $f1 killed $vsl1
 ; PC64LE9-NEXT:    addi 1, 1, 64
 ; PC64LE9-NEXT:    ld 0, 16(1)
 ; PC64LE9-NEXT:    mtlr 0
@@ -2477,11 +2483,12 @@ define <3 x double> @constrained_vector_sin_v3f64() #0 {
 ; PC64LE-NEXT:    lfd 1, .LCPI43_2@toc@l(3)
 ; PC64LE-NEXT:    bl sin
 ; PC64LE-NEXT:    nop
+; PC64LE-NEXT:    xxswapd 0, 63
 ; PC64LE-NEXT:    li 3, 64
-; PC64LE-NEXT:    fmr 3, 1
-; PC64LE-NEXT:    xxlor 1, 63, 63
 ; PC64LE-NEXT:    xxlor 2, 63, 63
 ; PC64LE-NEXT:    lxvd2x 63, 1, 3 # 16-byte Folded Reload
+; PC64LE-NEXT:    fmr 3, 1
+; PC64LE-NEXT:    fmr 1, 0
 ; PC64LE-NEXT:    addi 1, 1, 80
 ; PC64LE-NEXT:    ld 0, 16(1)
 ; PC64LE-NEXT:    mtlr 0
@@ -2511,9 +2518,10 @@ define <3 x double> @constrained_vector_sin_v3f64() #0 {
 ; PC64LE9-NEXT:    bl sin
 ; PC64LE9-NEXT:    nop
 ; PC64LE9-NEXT:    fmr 3, 1
-; PC64LE9-NEXT:    xscpsgndp 1, 63, 63
+; PC64LE9-NEXT:    xxswapd 1, 63
 ; PC64LE9-NEXT:    xscpsgndp 2, 63, 63
 ; PC64LE9-NEXT:    lxv 63, 48(1) # 16-byte Folded Reload
+; PC64LE9-NEXT:    # kill: def $f1 killed $f1 killed $vsl1
 ; PC64LE9-NEXT:    addi 1, 1, 64
 ; PC64LE9-NEXT:    ld 0, 16(1)
 ; PC64LE9-NEXT:    mtlr 0
@@ -2828,11 +2836,12 @@ define <3 x double> @constrained_vector_cos_v3f64() #0 {
 ; PC64LE-NEXT:    lfd 1, .LCPI48_2@toc@l(3)
 ; PC64LE-NEXT:    bl cos
 ; PC64LE-NEXT:    nop
+; PC64LE-NEXT:    xxswapd 0, 63
 ; PC64LE-NEXT:    li 3, 64
-; PC64LE-NEXT:    fmr 3, 1
-; PC64LE-NEXT:    xxlor 1, 63, 63
 ; PC64LE-NEXT:    xxlor 2, 63, 63
 ; PC64LE-NEXT:    lxvd2x 63, 1, 3 # 16-byte Folded Reload
+; PC64LE-NEXT:    fmr 3, 1
+; PC64LE-NEXT:    fmr 1, 0
 ; PC64LE-NEXT:    addi 1, 1, 80
 ; PC64LE-NEXT:    ld 0, 16(1)
 ; PC64LE-NEXT:    mtlr 0
@@ -2862,9 +2871,10 @@ define <3 x double> @constrained_vector_cos_v3f64() #0 {
 ; PC64LE9-NEXT:    bl cos
 ; PC64LE9-NEXT:    nop
 ; PC64LE9-NEXT:    fmr 3, 1
-; PC64LE9-NEXT:    xscpsgndp 1, 63, 63
+; PC64LE9-NEXT:    xxswapd 1, 63
 ; PC64LE9-NEXT:    xscpsgndp 2, 63, 63
 ; PC64LE9-NEXT:    lxv 63, 48(1) # 16-byte Folded Reload
+; PC64LE9-NEXT:    # kill: def $f1 killed $f1 killed $vsl1
 ; PC64LE9-NEXT:    addi 1, 1, 64
 ; PC64LE9-NEXT:    ld 0, 16(1)
 ; PC64LE9-NEXT:    mtlr 0
@@ -3179,11 +3189,12 @@ define <3 x double> @constrained_vector_exp_v3f64() #0 {
 ; PC64LE-NEXT:    lfd 1, .LCPI53_2@toc@l(3)
 ; PC64LE-NEXT:    bl exp
 ; PC64LE-NEXT:    nop
+; PC64LE-NEXT:    xxswapd 0, 63
 ; PC64LE-NEXT:    li 3, 64
-; PC64LE-NEXT:    fmr 3, 1
-; PC64LE-NEXT:    xxlor 1, 63, 63
 ; PC64LE-NEXT:    xxlor 2, 63, 63
 ; PC64LE-NEXT:    lxvd2x 63, 1, 3 # 16-byte Folded Reload
+; PC64LE-NEXT:    fmr 3, 1
+; PC64LE-NEXT:    fmr 1, 0
 ; PC64LE-NEXT:    addi 1, 1, 80
 ; PC64LE-NEXT:    ld 0, 16(1)
 ; PC64LE-NEXT:    mtlr 0
@@ -3213,9 +3224,10 @@ define <3 x double> @constrained_vector_exp_v3f64() #0 {
 ; PC64LE9-NEXT:    bl exp
 ; PC64LE9-NEXT:    nop
 ; PC64LE9-NEXT:    fmr 3, 1
-; PC64LE9-NEXT:    xscpsgndp 1, 63, 63
+; PC64LE9-NEXT:    xxswapd 1, 63
 ; PC64LE9-NEXT:    xscpsgndp 2, 63, 63
 ; PC64LE9-NEXT:    lxv 63, 48(1) # 16-byte Folded Reload
+; PC64LE9-NEXT:    # kill: def $f1 killed $f1 killed $vsl1
 ; PC64LE9-NEXT:    addi 1, 1, 64
 ; PC64LE9-NEXT:    ld 0, 16(1)
 ; PC64LE9-NEXT:    mtlr 0
@@ -3530,11 +3542,12 @@ define <3 x double> @constrained_vector_exp2_v3f64() #0 {
 ; PC64LE-NEXT:    lfd 1, .LCPI58_2@toc@l(3)
 ; PC64LE-NEXT:    bl exp2
 ; PC64LE-NEXT:    nop
+; PC64LE-NEXT:    xxswapd 0, 63
 ; PC64LE-NEXT:    li 3, 64
-; PC64LE-NEXT:    fmr 3, 1
-; PC64LE-NEXT:    xxlor 1, 63, 63
 ; PC64LE-NEXT:    xxlor 2, 63, 63
 ; PC64LE-NEXT:    lxvd2x 63, 1, 3 # 16-byte Folded Reload
+; PC64LE-NEXT:    fmr 3, 1
+; PC64LE-NEXT:    fmr 1, 0
 ; PC64LE-NEXT:    addi 1, 1, 80
 ; PC64LE-NEXT:    ld 0, 16(1)
 ; PC64LE-NEXT:    mtlr 0
@@ -3564,9 +3577,10 @@ define <3 x double> @constrained_vector_exp2_v3f64() #0 {
 ; PC64LE9-NEXT:    bl exp2
 ; PC64LE9-NEXT:    nop
 ; PC64LE9-NEXT:    fmr 3, 1
-; PC64LE9-NEXT:    xscpsgndp 1, 63, 63
+; PC64LE9-NEXT:    xxswapd 1, 63
 ; PC64LE9-NEXT:    xscpsgndp 2, 63, 63
 ; PC64LE9-NEXT:    lxv 63, 48(1) # 16-byte Folded Reload
+; PC64LE9-NEXT:    # kill: def $f1 killed $f1 killed $vsl1
 ; PC64LE9-NEXT:    addi 1, 1, 64
 ; PC64LE9-NEXT:    ld 0, 16(1)
 ; PC64LE9-NEXT:    mtlr 0
@@ -3881,11 +3895,12 @@ define <3 x double> @constrained_vector_log_v3f64() #0 {
 ; PC64LE-NEXT:    lfd 1, .LCPI63_2@toc@l(3)
 ; PC64LE-NEXT:    bl log
 ; PC64LE-NEXT:    nop
+; PC64LE-NEXT:    xxswapd 0, 63
 ; PC64LE-NEXT:    li 3, 64
-; PC64LE-NEXT:    fmr 3, 1
-; PC64LE-NEXT:    xxlor 1, 63, 63
 ; PC64LE-NEXT:    xxlor 2, 63, 63
 ; PC64LE-NEXT:    lxvd2x 63, 1, 3 # 16-byte Folded Reload
+; PC64LE-NEXT:    fmr 3, 1
+; PC64LE-NEXT:    fmr 1, 0
 ; PC64LE-NEXT:    addi 1, 1, 80
 ; PC64LE-NEXT:    ld 0, 16(1)
 ; PC64LE-NEXT:    mtlr 0
@@ -3915,9 +3930,10 @@ define <3 x double> @constrained_vector_log_v3f64() #0 {
 ; PC64LE9-NEXT:    bl log
 ; PC64LE9-NEXT:    nop
 ; PC64LE9-NEXT:    fmr 3, 1
-; PC64LE9-NEXT:    xscpsgndp 1, 63, 63
+; PC64LE9-NEXT:    xxswapd 1, 63
 ; PC64LE9-NEXT:    xscpsgndp 2, 63, 63
 ; PC64LE9-NEXT:    lxv 63, 48(1) # 16-byte Folded Reload
+; PC64LE9-NEXT:    # kill: def $f1 killed $f1 killed $vsl1
 ; PC64LE9-NEXT:    addi 1, 1, 64
 ; PC64LE9-NEXT:    ld 0, 16(1)
 ; PC64LE9-NEXT:    mtlr 0
@@ -4232,11 +4248,12 @@ define <3 x double> @constrained_vector_log10_v3f64() #0 {
 ; PC64LE-NEXT:    lfd 1, .LCPI68_2@toc@l(3)
 ; PC64LE-NEXT:    bl log10
 ; PC64LE-NEXT:    nop
+; PC64LE-NEXT:    xxswapd 0, 63
 ; PC64LE-NEXT:    li 3, 64
-; PC64LE-NEXT:    fmr 3, 1
-; PC64LE-NEXT:    xxlor 1, 63, 63
 ; PC64LE-NEXT:    xxlor 2, 63, 63
 ; PC64LE-NEXT:    lxvd2x 63, 1, 3 # 16-byte Folded Reload
+; PC64LE-NEXT:    fmr 3, 1
+; PC64LE-NEXT:    fmr 1, 0
 ; PC64LE-NEXT:    addi 1, 1, 80
 ; PC64LE-NEXT:    ld 0, 16(1)
 ; PC64LE-NEXT:    mtlr 0
@@ -4266,9 +4283,10 @@ define <3 x double> @constrained_vector_log10_v3f64() #0 {
 ; PC64LE9-NEXT:    bl log10
 ; PC64LE9-NEXT:    nop
 ; PC64LE9-NEXT:    fmr 3, 1
-; PC64LE9-NEXT:    xscpsgndp 1, 63, 63
+; PC64LE9-NEXT:    xxswapd 1, 63
 ; PC64LE9-NEXT:    xscpsgndp 2, 63, 63
 ; PC64LE9-NEXT:    lxv 63, 48(1) # 16-byte Folded Reload
+; PC64LE9-NEXT:    # kill: def $f1 killed $f1 killed $vsl1
 ; PC64LE9-NEXT:    addi 1, 1, 64
 ; PC64LE9-NEXT:    ld 0, 16(1)
 ; PC64LE9-NEXT:    mtlr 0
@@ -4583,11 +4601,12 @@ define <3 x double> @constrained_vector_log2_v3f64() #0 {
 ; PC64LE-NEXT:    lfd 1, .LCPI73_2@toc@l(3)
 ; PC64LE-NEXT:    bl log2
 ; PC64LE-NEXT:    nop
+; PC64LE-NEXT:    xxswapd 0, 63
 ; PC64LE-NEXT:    li 3, 64
-; PC64LE-NEXT:    fmr 3, 1
-; PC64LE-NEXT:    xxlor 1, 63, 63
 ; PC64LE-NEXT:    xxlor 2, 63, 63
 ; PC64LE-NEXT:    lxvd2x 63, 1, 3 # 16-byte Folded Reload
+; PC64LE-NEXT:    fmr 3, 1
+; PC64LE-NEXT:    fmr 1, 0
 ; PC64LE-NEXT:    addi 1, 1, 80
 ; PC64LE-NEXT:    ld 0, 16(1)
 ; PC64LE-NEXT:    mtlr 0
@@ -4617,9 +4636,10 @@ define <3 x double> @constrained_vector_log2_v3f64() #0 {
 ; PC64LE9-NEXT:    bl log2
 ; PC64LE9-NEXT:    nop
 ; PC64LE9-NEXT:    fmr 3, 1
-; PC64LE9-NEXT:    xscpsgndp 1, 63, 63
+; PC64LE9-NEXT:    xxswapd 1, 63
 ; PC64LE9-NEXT:    xscpsgndp 2, 63, 63
 ; PC64LE9-NEXT:    lxv 63, 48(1) # 16-byte Folded Reload
+; PC64LE9-NEXT:    # kill: def $f1 killed $f1 killed $vsl1
 ; PC64LE9-NEXT:    addi 1, 1, 64
 ; PC64LE9-NEXT:    ld 0, 16(1)
 ; PC64LE9-NEXT:    mtlr 0
@@ -4934,11 +4954,12 @@ define <3 x double> @constrained_vector_rint_v3f64() #0 {
 ; PC64LE-NEXT:    lfd 1, .LCPI78_2@toc@l(3)
 ; PC64LE-NEXT:    bl rint
 ; PC64LE-NEXT:    nop
+; PC64LE-NEXT:    xxswapd 0, 63
 ; PC64LE-NEXT:    li 3, 64
-; PC64LE-NEXT:    fmr 3, 1
-; PC64LE-NEXT:    xxlor 1, 63, 63
 ; PC64LE-NEXT:    xxlor 2, 63, 63
 ; PC64LE-NEXT:    lxvd2x 63, 1, 3 # 16-byte Folded Reload
+; PC64LE-NEXT:    fmr 3, 1
+; PC64LE-NEXT:    fmr 1, 0
 ; PC64LE-NEXT:    addi 1, 1, 80
 ; PC64LE-NEXT:    ld 0, 16(1)
 ; PC64LE-NEXT:    mtlr 0
@@ -4968,9 +4989,10 @@ define <3 x double> @constrained_vector_rint_v3f64() #0 {
 ; PC64LE9-NEXT:    bl rint
 ; PC64LE9-NEXT:    nop
 ; PC64LE9-NEXT:    fmr 3, 1
-; PC64LE9-NEXT:    xscpsgndp 1, 63, 63
+; PC64LE9-NEXT:    xxswapd 1, 63
 ; PC64LE9-NEXT:    xscpsgndp 2, 63, 63
 ; PC64LE9-NEXT:    lxv 63, 48(1) # 16-byte Folded Reload
+; PC64LE9-NEXT:    # kill: def $f1 killed $f1 killed $vsl1
 ; PC64LE9-NEXT:    addi 1, 1, 64
 ; PC64LE9-NEXT:    ld 0, 16(1)
 ; PC64LE9-NEXT:    mtlr 0
@@ -5285,11 +5307,12 @@ define <3 x double> @constrained_vector_nearby_v3f64() #0 {
 ; PC64LE-NEXT:    lfd 1, .LCPI83_2@toc@l(3)
 ; PC64LE-NEXT:    bl nearbyint
 ; PC64LE-NEXT:    nop
+; PC64LE-NEXT:    xxswapd 0, 63
 ; PC64LE-NEXT:    li 3, 64
-; PC64LE-NEXT:    fmr 3, 1
-; PC64LE-NEXT:    xxlor 1, 63, 63
 ; PC64LE-NEXT:    xxlor 2, 63, 63
 ; PC64LE-NEXT:    lxvd2x 63, 1, 3 # 16-byte Folded Reload
+; PC64LE-NEXT:    fmr 3, 1
+; PC64LE-NEXT:    fmr 1, 0
 ; PC64LE-NEXT:    addi 1, 1, 80
 ; PC64LE-NEXT:    ld 0, 16(1)
 ; PC64LE-NEXT:    mtlr 0
@@ -5319,9 +5342,10 @@ define <3 x double> @constrained_vector_nearby_v3f64() #0 {
 ; PC64LE9-NEXT:    bl nearbyint
 ; PC64LE9-NEXT:    nop
 ; PC64LE9-NEXT:    fmr 3, 1
-; PC64LE9-NEXT:    xscpsgndp 1, 63, 63
+; PC64LE9-NEXT:    xxswapd 1, 63
 ; PC64LE9-NEXT:    xscpsgndp 2, 63, 63
 ; PC64LE9-NEXT:    lxv 63, 48(1) # 16-byte Folded Reload
+; PC64LE9-NEXT:    # kill: def $f1 killed $f1 killed $vsl1
 ; PC64LE9-NEXT:    addi 1, 1, 64
 ; PC64LE9-NEXT:    ld 0, 16(1)
 ; PC64LE9-NEXT:    mtlr 0
@@ -5466,7 +5490,6 @@ define <1 x float> @constrained_vector_maxnum_v1f32() #0 {
 entry:
   %max = call <1 x float> @llvm.experimental.constrained.maxnum.v1f32(
                                <1 x float> <float 42.0>, <1 x float> <float 41.0>,
-                               metadata !"round.dynamic",
                                metadata !"fpexcept.strict") #1
   ret <1 x float> %max
 }
@@ -5531,7 +5554,6 @@ entry:
   %max = call <2 x double> @llvm.experimental.constrained.maxnum.v2f64(
                                 <2 x double> <double 43.0, double 42.0>,
                                 <2 x double> <double 41.0, double 40.0>,
-                                metadata !"round.dynamic",
                                 metadata !"fpexcept.strict") #1
   ret <2 x double> %max
 }
@@ -5634,7 +5656,6 @@ entry:
   %max = call <3 x float> @llvm.experimental.constrained.maxnum.v3f32(
                               <3 x float> <float 43.0, float 44.0, float 45.0>,
                               <3 x float> <float 41.0, float 42.0, float 43.0>,
-                              metadata !"round.dynamic",
                               metadata !"fpexcept.strict") #1
   ret <3 x float> %max
 }
@@ -5672,11 +5693,12 @@ define <3 x double> @constrained_vector_max_v3f64() #0 {
 ; PC64LE-NEXT:    lfs 1, .LCPI88_4@toc@l(3)
 ; PC64LE-NEXT:    bl fmax
 ; PC64LE-NEXT:    nop
+; PC64LE-NEXT:    xxswapd 0, 63
 ; PC64LE-NEXT:    li 3, 64
-; PC64LE-NEXT:    fmr 3, 1
-; PC64LE-NEXT:    xxlor 1, 63, 63
 ; PC64LE-NEXT:    xxlor 2, 63, 63
 ; PC64LE-NEXT:    lxvd2x 63, 1, 3 # 16-byte Folded Reload
+; PC64LE-NEXT:    fmr 3, 1
+; PC64LE-NEXT:    fmr 1, 0
 ; PC64LE-NEXT:    addi 1, 1, 80
 ; PC64LE-NEXT:    ld 0, 16(1)
 ; PC64LE-NEXT:    mtlr 0
@@ -5712,9 +5734,10 @@ define <3 x double> @constrained_vector_max_v3f64() #0 {
 ; PC64LE9-NEXT:    bl fmax
 ; PC64LE9-NEXT:    nop
 ; PC64LE9-NEXT:    fmr 3, 1
-; PC64LE9-NEXT:    xscpsgndp 1, 63, 63
+; PC64LE9-NEXT:    xxswapd 1, 63
 ; PC64LE9-NEXT:    xscpsgndp 2, 63, 63
 ; PC64LE9-NEXT:    lxv 63, 48(1) # 16-byte Folded Reload
+; PC64LE9-NEXT:    # kill: def $f1 killed $f1 killed $vsl1
 ; PC64LE9-NEXT:    addi 1, 1, 64
 ; PC64LE9-NEXT:    ld 0, 16(1)
 ; PC64LE9-NEXT:    mtlr 0
@@ -5723,7 +5746,6 @@ entry:
   %max = call <3 x double> @llvm.experimental.constrained.maxnum.v3f64(
                           <3 x double> <double 43.0, double 44.0, double 45.0>,
                           <3 x double> <double 40.0, double 41.0, double 42.0>,
-                          metadata !"round.dynamic",
                           metadata !"fpexcept.strict") #1
   ret <3 x double> %max
 }
@@ -5834,7 +5856,6 @@ entry:
                                               double 46.0, double 47.0>,
                                 <4 x double> <double 40.0, double 41.0,
                                               double 42.0, double 43.0>,
-                                metadata !"round.dynamic",
                                 metadata !"fpexcept.strict") #1
   ret <4 x double> %max
 }
@@ -5878,7 +5899,6 @@ define <1 x float> @constrained_vector_minnum_v1f32() #0 {
  entry:
   %min = call <1 x float> @llvm.experimental.constrained.minnum.v1f32(
                                <1 x float> <float 42.0>, <1 x float> <float 41.0>,
-                               metadata !"round.dynamic",
                                metadata !"fpexcept.strict") #1
   ret <1 x float> %min
 }
@@ -5943,7 +5963,6 @@ entry:
   %min = call <2 x double> @llvm.experimental.constrained.minnum.v2f64(
                                 <2 x double> <double 43.0, double 42.0>,
                                 <2 x double> <double 41.0, double 40.0>,
-                                metadata !"round.dynamic",
                                 metadata !"fpexcept.strict") #1
   ret <2 x double> %min
 }
@@ -6046,7 +6065,6 @@ entry:
   %min = call <3 x float> @llvm.experimental.constrained.minnum.v3f32(
                               <3 x float> <float 43.0, float 44.0, float 45.0>,
                               <3 x float> <float 41.0, float 42.0, float 43.0>,
-                              metadata !"round.dynamic",
                               metadata !"fpexcept.strict") #1
   ret <3 x float> %min
 }
@@ -6084,11 +6102,12 @@ define <3 x double> @constrained_vector_min_v3f64() #0 {
 ; PC64LE-NEXT:    lfs 1, .LCPI93_4@toc@l(3)
 ; PC64LE-NEXT:    bl fmin
 ; PC64LE-NEXT:    nop
+; PC64LE-NEXT:    xxswapd 0, 63
 ; PC64LE-NEXT:    li 3, 64
-; PC64LE-NEXT:    fmr 3, 1
-; PC64LE-NEXT:    xxlor 1, 63, 63
 ; PC64LE-NEXT:    xxlor 2, 63, 63
 ; PC64LE-NEXT:    lxvd2x 63, 1, 3 # 16-byte Folded Reload
+; PC64LE-NEXT:    fmr 3, 1
+; PC64LE-NEXT:    fmr 1, 0
 ; PC64LE-NEXT:    addi 1, 1, 80
 ; PC64LE-NEXT:    ld 0, 16(1)
 ; PC64LE-NEXT:    mtlr 0
@@ -6124,9 +6143,10 @@ define <3 x double> @constrained_vector_min_v3f64() #0 {
 ; PC64LE9-NEXT:    bl fmin
 ; PC64LE9-NEXT:    nop
 ; PC64LE9-NEXT:    fmr 3, 1
-; PC64LE9-NEXT:    xscpsgndp 1, 63, 63
+; PC64LE9-NEXT:    xxswapd 1, 63
 ; PC64LE9-NEXT:    xscpsgndp 2, 63, 63
 ; PC64LE9-NEXT:    lxv 63, 48(1) # 16-byte Folded Reload
+; PC64LE9-NEXT:    # kill: def $f1 killed $f1 killed $vsl1
 ; PC64LE9-NEXT:    addi 1, 1, 64
 ; PC64LE9-NEXT:    ld 0, 16(1)
 ; PC64LE9-NEXT:    mtlr 0
@@ -6135,7 +6155,6 @@ entry:
  %min = call <3 x double> @llvm.experimental.constrained.minnum.v3f64(
                           <3 x double> <double 43.0, double 44.0, double 45.0>,
                           <3 x double> <double 40.0, double 41.0, double 42.0>,
-                          metadata !"round.dynamic",
                           metadata !"fpexcept.strict") #1
   ret <3 x double> %min
 }
@@ -6246,7 +6265,6 @@ entry:
                                               double 46.0, double 47.0>,
                                 <4 x double> <double 40.0, double 41.0,
                                               double 42.0, double 43.0>,
-                                metadata !"round.dynamic",
                                 metadata !"fpexcept.strict") #1
   ret <4 x double> %min
 }
@@ -6546,7 +6564,6 @@ define <1 x float> @constrained_vector_ceil_v1f32() #0 {
 entry:
   %ceil = call <1 x float> @llvm.experimental.constrained.ceil.v1f32(
                                <1 x float> <float 1.5>,
-                               metadata !"round.dynamic",
                                metadata !"fpexcept.strict") #1
   ret <1 x float> %ceil
 }
@@ -6571,7 +6588,6 @@ define <2 x double> @constrained_vector_ceil_v2f64() #0 {
 entry:
   %ceil = call <2 x double> @llvm.experimental.constrained.ceil.v2f64(
                                 <2 x double> <double 1.1, double 1.9>,
-                                metadata !"round.dynamic",
                                 metadata !"fpexcept.strict") #1
   ret <2 x double> %ceil
 }
@@ -6627,7 +6643,6 @@ define <3 x float> @constrained_vector_ceil_v3f32() #0 {
 entry:
   %ceil = call <3 x float> @llvm.experimental.constrained.ceil.v3f32(
                               <3 x float> <float 1.5, float 2.5, float 3.5>,
-                              metadata !"round.dynamic",
                               metadata !"fpexcept.strict") #1
   ret <3 x float> %ceil
 }
@@ -6664,7 +6679,6 @@ define <3 x double> @constrained_vector_ceil_v3f64() #0 {
 entry:
   %ceil = call <3 x double> @llvm.experimental.constrained.ceil.v3f64(
                           <3 x double> <double 1.1, double 1.9, double 1.5>,
-                          metadata !"round.dynamic",
                           metadata !"fpexcept.strict") #1
   ret <3 x double> %ceil
 }
@@ -6690,7 +6704,6 @@ define <1 x float> @constrained_vector_floor_v1f32() #0 {
 entry:
   %floor = call <1 x float> @llvm.experimental.constrained.floor.v1f32(
                                <1 x float> <float 1.5>,
-                               metadata !"round.dynamic",
                                metadata !"fpexcept.strict") #1
   ret <1 x float> %floor
 }
@@ -6716,7 +6729,6 @@ define <2 x double> @constrained_vector_floor_v2f64() #0 {
 entry:
   %floor = call <2 x double> @llvm.experimental.constrained.floor.v2f64(
                                 <2 x double> <double 1.1, double 1.9>,
-                                metadata !"round.dynamic",
                                 metadata !"fpexcept.strict") #1
   ret <2 x double> %floor
 }
@@ -6772,7 +6784,6 @@ define <3 x float> @constrained_vector_floor_v3f32() #0 {
 entry:
   %floor = call <3 x float> @llvm.experimental.constrained.floor.v3f32(
                               <3 x float> <float 1.5, float 2.5, float 3.5>,
-                              metadata !"round.dynamic",
                               metadata !"fpexcept.strict") #1
   ret <3 x float> %floor
 }
@@ -6809,7 +6820,6 @@ define <3 x double> @constrained_vector_floor_v3f64() #0 {
 entry:
   %floor = call <3 x double> @llvm.experimental.constrained.floor.v3f64(
                           <3 x double> <double 1.1, double 1.9, double 1.5>,
-                          metadata !"round.dynamic",
                           metadata !"fpexcept.strict") #1
   ret <3 x double> %floor
 }
@@ -6835,7 +6845,6 @@ define <1 x float> @constrained_vector_round_v1f32() #0 {
 entry:
   %round = call <1 x float> @llvm.experimental.constrained.round.v1f32(
                                <1 x float> <float 1.5>,
-                               metadata !"round.dynamic",
                                metadata !"fpexcept.strict") #1
   ret <1 x float> %round
 }
@@ -6860,7 +6869,6 @@ define <2 x double> @constrained_vector_round_v2f64() #0 {
 entry:
   %round = call <2 x double> @llvm.experimental.constrained.round.v2f64(
                                 <2 x double> <double 1.1, double 1.9>,
-                                metadata !"round.dynamic",
                                 metadata !"fpexcept.strict") #1
   ret <2 x double> %round
 }
@@ -6916,7 +6924,6 @@ define <3 x float> @constrained_vector_round_v3f32() #0 {
 entry:
   %round = call <3 x float> @llvm.experimental.constrained.round.v3f32(
                               <3 x float> <float 1.5, float 2.5, float 3.5>,
-                              metadata !"round.dynamic",
                               metadata !"fpexcept.strict") #1
   ret <3 x float> %round
 }
@@ -6954,7 +6961,6 @@ define <3 x double> @constrained_vector_round_v3f64() #0 {
 entry:
   %round = call <3 x double> @llvm.experimental.constrained.round.v3f64(
                           <3 x double> <double 1.1, double 1.9, double 1.5>,
-                          metadata !"round.dynamic",
                           metadata !"fpexcept.strict") #1
   ret <3 x double> %round
 }
@@ -6980,7 +6986,6 @@ define <1 x float> @constrained_vector_trunc_v1f32() #0 {
 entry:
   %trunc = call <1 x float> @llvm.experimental.constrained.trunc.v1f32(
                                <1 x float> <float 1.5>,
-                               metadata !"round.dynamic",
                                metadata !"fpexcept.strict") #1
   ret <1 x float> %trunc
 }
@@ -7005,7 +7010,6 @@ define <2 x double> @constrained_vector_trunc_v2f64() #0 {
 entry:
   %trunc = call <2 x double> @llvm.experimental.constrained.trunc.v2f64(
                                 <2 x double> <double 1.1, double 1.9>,
-                                metadata !"round.dynamic",
                                 metadata !"fpexcept.strict") #1
   ret <2 x double> %trunc
 }
@@ -7061,7 +7065,6 @@ define <3 x float> @constrained_vector_trunc_v3f32() #0 {
 entry:
   %trunc = call <3 x float> @llvm.experimental.constrained.trunc.v3f32(
                               <3 x float> <float 1.5, float 2.5, float 3.5>,
-                              metadata !"round.dynamic",
                               metadata !"fpexcept.strict") #1
   ret <3 x float> %trunc
 }
@@ -7098,7 +7101,6 @@ define <3 x double> @constrained_vector_trunc_v3f64() #0 {
 entry:
   %trunc = call <3 x double> @llvm.experimental.constrained.trunc.v3f64(
                           <3 x double> <double 1.1, double 1.9, double 1.5>,
-                          metadata !"round.dynamic",
                           metadata !"fpexcept.strict") #1
   ret <3 x double> %trunc
 }
@@ -7124,14 +7126,14 @@ declare <2 x double> @llvm.experimental.constrained.log10.v2f64(<2 x double>, me
 declare <2 x double> @llvm.experimental.constrained.log2.v2f64(<2 x double>, metadata, metadata)
 declare <2 x double> @llvm.experimental.constrained.rint.v2f64(<2 x double>, metadata, metadata)
 declare <2 x double> @llvm.experimental.constrained.nearbyint.v2f64(<2 x double>, metadata, metadata)
-declare <2 x double> @llvm.experimental.constrained.maxnum.v2f64(<2 x double>, <2 x double>, metadata, metadata)
-declare <2 x double> @llvm.experimental.constrained.minnum.v2f64(<2 x double>, <2 x double>, metadata, metadata)
+declare <2 x double> @llvm.experimental.constrained.maxnum.v2f64(<2 x double>, <2 x double>, metadata)
+declare <2 x double> @llvm.experimental.constrained.minnum.v2f64(<2 x double>, <2 x double>, metadata)
 declare <2 x float> @llvm.experimental.constrained.fptrunc.v2f32.v2f64(<2 x double>, metadata, metadata)
 declare <2 x double> @llvm.experimental.constrained.fpext.v2f64.v2f32(<2 x float>, metadata)
-declare <2 x double> @llvm.experimental.constrained.ceil.v2f64(<2 x double>, metadata, metadata)
-declare <2 x double> @llvm.experimental.constrained.floor.v2f64(<2 x double>, metadata, metadata)
-declare <2 x double> @llvm.experimental.constrained.round.v2f64(<2 x double>, metadata, metadata)
-declare <2 x double> @llvm.experimental.constrained.trunc.v2f64(<2 x double>, metadata, metadata)
+declare <2 x double> @llvm.experimental.constrained.ceil.v2f64(<2 x double>, metadata)
+declare <2 x double> @llvm.experimental.constrained.floor.v2f64(<2 x double>, metadata)
+declare <2 x double> @llvm.experimental.constrained.round.v2f64(<2 x double>, metadata)
+declare <2 x double> @llvm.experimental.constrained.trunc.v2f64(<2 x double>, metadata)
 
 ; Scalar width declarations
 declare <1 x float> @llvm.experimental.constrained.fadd.v1f32(<1 x float>, <1 x float>, metadata, metadata)
@@ -7151,14 +7153,14 @@ declare <1 x float> @llvm.experimental.constrained.log10.v1f32(<1 x float>, meta
 declare <1 x float> @llvm.experimental.constrained.log2.v1f32(<1 x float>, metadata, metadata)
 declare <1 x float> @llvm.experimental.constrained.rint.v1f32(<1 x float>, metadata, metadata)
 declare <1 x float> @llvm.experimental.constrained.nearbyint.v1f32(<1 x float>, metadata, metadata)
-declare <1 x float> @llvm.experimental.constrained.maxnum.v1f32(<1 x float>, <1 x float>, metadata, metadata)
-declare <1 x float> @llvm.experimental.constrained.minnum.v1f32(<1 x float>, <1 x float>, metadata, metadata)
+declare <1 x float> @llvm.experimental.constrained.maxnum.v1f32(<1 x float>, <1 x float>, metadata)
+declare <1 x float> @llvm.experimental.constrained.minnum.v1f32(<1 x float>, <1 x float>, metadata)
 declare <1 x float> @llvm.experimental.constrained.fptrunc.v1f32.v1f64(<1 x double>, metadata, metadata)
 declare <1 x double> @llvm.experimental.constrained.fpext.v1f64.v1f32(<1 x float>, metadata)
-declare <1 x float> @llvm.experimental.constrained.ceil.v1f32(<1 x float>, metadata, metadata)
-declare <1 x float> @llvm.experimental.constrained.floor.v1f32(<1 x float>, metadata, metadata)
-declare <1 x float> @llvm.experimental.constrained.round.v1f32(<1 x float>, metadata, metadata)
-declare <1 x float> @llvm.experimental.constrained.trunc.v1f32(<1 x float>, metadata, metadata)
+declare <1 x float> @llvm.experimental.constrained.ceil.v1f32(<1 x float>, metadata)
+declare <1 x float> @llvm.experimental.constrained.floor.v1f32(<1 x float>, metadata)
+declare <1 x float> @llvm.experimental.constrained.round.v1f32(<1 x float>, metadata)
+declare <1 x float> @llvm.experimental.constrained.trunc.v1f32(<1 x float>, metadata)
 
 ; Illegal width declarations
 declare <3 x float> @llvm.experimental.constrained.fadd.v3f32(<3 x float>, <3 x float>, metadata, metadata)
@@ -7195,20 +7197,20 @@ declare <3 x float> @llvm.experimental.constrained.rint.v3f32(<3 x float>, metad
 declare <3 x double> @llvm.experimental.constrained.rint.v3f64(<3 x double>, metadata, metadata)
 declare <3 x float> @llvm.experimental.constrained.nearbyint.v3f32(<3 x float>, metadata, metadata)
 declare <3 x double> @llvm.experimental.constrained.nearbyint.v3f64(<3 x double>, metadata, metadata)
-declare <3 x float> @llvm.experimental.constrained.maxnum.v3f32(<3 x float>, <3 x float>, metadata, metadata)
-declare <3 x double> @llvm.experimental.constrained.maxnum.v3f64(<3 x double>, <3 x double>, metadata, metadata)
-declare <3 x float> @llvm.experimental.constrained.minnum.v3f32(<3 x float>, <3 x float>, metadata, metadata)
-declare <3 x double> @llvm.experimental.constrained.minnum.v3f64(<3 x double>, <3 x double>, metadata, metadata)
+declare <3 x float> @llvm.experimental.constrained.maxnum.v3f32(<3 x float>, <3 x float>, metadata)
+declare <3 x double> @llvm.experimental.constrained.maxnum.v3f64(<3 x double>, <3 x double>, metadata)
+declare <3 x float> @llvm.experimental.constrained.minnum.v3f32(<3 x float>, <3 x float>, metadata)
+declare <3 x double> @llvm.experimental.constrained.minnum.v3f64(<3 x double>, <3 x double>, metadata)
 declare <3 x float> @llvm.experimental.constrained.fptrunc.v3f32.v3f64(<3 x double>, metadata, metadata)
 declare <3 x double> @llvm.experimental.constrained.fpext.v3f64.v3f32(<3 x float>, metadata)
-declare <3 x float> @llvm.experimental.constrained.ceil.v3f32(<3 x float>, metadata, metadata)
-declare <3 x double> @llvm.experimental.constrained.ceil.v3f64(<3 x double>, metadata, metadata)
-declare <3 x float> @llvm.experimental.constrained.floor.v3f32(<3 x float>, metadata, metadata)
-declare <3 x double> @llvm.experimental.constrained.floor.v3f64(<3 x double>, metadata, metadata)
-declare <3 x float> @llvm.experimental.constrained.round.v3f32(<3 x float>, metadata, metadata)
-declare <3 x double> @llvm.experimental.constrained.round.v3f64(<3 x double>, metadata, metadata)
-declare <3 x float> @llvm.experimental.constrained.trunc.v3f32(<3 x float>, metadata, metadata)
-declare <3 x double> @llvm.experimental.constrained.trunc.v3f64(<3 x double>, metadata, metadata)
+declare <3 x float> @llvm.experimental.constrained.ceil.v3f32(<3 x float>, metadata)
+declare <3 x double> @llvm.experimental.constrained.ceil.v3f64(<3 x double>, metadata)
+declare <3 x float> @llvm.experimental.constrained.floor.v3f32(<3 x float>, metadata)
+declare <3 x double> @llvm.experimental.constrained.floor.v3f64(<3 x double>, metadata)
+declare <3 x float> @llvm.experimental.constrained.round.v3f32(<3 x float>, metadata)
+declare <3 x double> @llvm.experimental.constrained.round.v3f64(<3 x double>, metadata)
+declare <3 x float> @llvm.experimental.constrained.trunc.v3f32(<3 x float>, metadata)
+declare <3 x double> @llvm.experimental.constrained.trunc.v3f64(<3 x double>, metadata)
 
 ; Double width declarations
 declare <4 x double> @llvm.experimental.constrained.fadd.v4f64(<4 x double>, <4 x double>, metadata, metadata)
@@ -7228,11 +7230,11 @@ declare <4 x double> @llvm.experimental.constrained.log10.v4f64(<4 x double>, me
 declare <4 x double> @llvm.experimental.constrained.log2.v4f64(<4 x double>, metadata, metadata)
 declare <4 x double> @llvm.experimental.constrained.rint.v4f64(<4 x double>, metadata, metadata)
 declare <4 x double> @llvm.experimental.constrained.nearbyint.v4f64(<4 x double>, metadata, metadata)
-declare <4 x double> @llvm.experimental.constrained.maxnum.v4f64(<4 x double>, <4 x double>, metadata, metadata)
-declare <4 x double> @llvm.experimental.constrained.minnum.v4f64(<4 x double>, <4 x double>, metadata, metadata)
+declare <4 x double> @llvm.experimental.constrained.maxnum.v4f64(<4 x double>, <4 x double>, metadata)
+declare <4 x double> @llvm.experimental.constrained.minnum.v4f64(<4 x double>, <4 x double>, metadata)
 declare <4 x float> @llvm.experimental.constrained.fptrunc.v4f32.v4f64(<4 x double>, metadata, metadata)
 declare <4 x double> @llvm.experimental.constrained.fpext.v4f64.v4f32(<4 x float>, metadata)
-declare <4 x double> @llvm.experimental.constrained.ceil.v4f64(<4 x double>, metadata, metadata)
-declare <4 x double> @llvm.experimental.constrained.floor.v4f64(<4 x double>, metadata, metadata)
-declare <4 x double> @llvm.experimental.constrained.round.v4f64(<4 x double>, metadata, metadata)
-declare <4 x double> @llvm.experimental.constrained.trunc.v4f64(<4 x double>, metadata, metadata)
+declare <4 x double> @llvm.experimental.constrained.ceil.v4f64(<4 x double>, metadata)
+declare <4 x double> @llvm.experimental.constrained.floor.v4f64(<4 x double>, metadata)
+declare <4 x double> @llvm.experimental.constrained.round.v4f64(<4 x double>, metadata)
+declare <4 x double> @llvm.experimental.constrained.trunc.v4f64(<4 x double>, metadata)

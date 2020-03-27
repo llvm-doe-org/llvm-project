@@ -485,8 +485,11 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
         llvm::makeArrayRef(ClangdServerOpts.QueryDriverGlobs),
         std::move(BaseCDB));
   }
+  auto Mangler = CommandMangler::detect();
+  if (ClangdServerOpts.ResourceDir)
+    Mangler.ResourceDir = *ClangdServerOpts.ResourceDir;
   CDB.emplace(BaseCDB.get(), Params.initializationOptions.fallbackFlags,
-              ClangdServerOpts.ResourceDir);
+              tooling::ArgumentsAdjuster(Mangler));
   {
     // Switch caller's context with LSPServer's background context. Since we
     // rather want to propagate information from LSPServer's context into the
@@ -1088,10 +1091,10 @@ void ClangdLSPServer::onHover(const TextDocumentPositionParams &Params,
                       R.range = (*H)->SymRange;
                       switch (HoverContentFormat) {
                       case MarkupKind::PlainText:
-                        R.contents.value = (*H)->present().renderAsPlainText();
+                        R.contents.value = (*H)->present().asPlainText();
                         return Reply(std::move(R));
                       case MarkupKind::Markdown:
-                        R.contents.value = (*H)->present().renderAsMarkdown();
+                        R.contents.value = (*H)->present().asMarkdown();
                         return Reply(std::move(R));
                       };
                       llvm_unreachable("unhandled MarkupKind");

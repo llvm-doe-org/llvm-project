@@ -26,6 +26,13 @@ class Type;
 #define TYPE(DERIVED, BASE) class DERIVED##Type;
 #include "clang/AST/TypeNodes.inc"
 class CXXCtorInitializer;
+class OMPClause;
+#define OPENMP_CLAUSE(KIND, CLASSNAME) class CLASSNAME;
+#include "clang/Basic/OpenMPKinds.def"
+class ACCClause;
+#define OPENACC_CLAUSE(KIND, CLASSNAME) class CLASSNAME;
+#include "clang/Basic/OpenACCKinds.def"
+
 
 } // end namespace clang
 
