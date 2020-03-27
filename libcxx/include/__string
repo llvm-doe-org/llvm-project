@@ -72,7 +72,6 @@ _LIBCPP_BEGIN_NAMESPACE_STD
 
 // The the extern template ABI lists are kept outside of <string> to improve the
 // readability of that header.
-
 #define _LIBCPP_STRING_EXTERN_TEMPLATE_LIST(_Func, _CharType) \
   _Func(_LIBCPP_FUNC_VIS basic_string<_CharType>& basic_string<_CharType>::replace(size_type, size_type, value_type const*, size_type)) \
   _Func(_LIBCPP_FUNC_VIS basic_string<_CharType>::size_type basic_string<_CharType>::rfind(value_type const*, size_type, size_type) const) \
@@ -105,7 +104,7 @@ _LIBCPP_BEGIN_NAMESPACE_STD
   _Func(_LIBCPP_FUNC_VIS void basic_string<_CharType>::push_back(value_type)) \
   _Func(_LIBCPP_FUNC_VIS basic_string<_CharType>& basic_string<_CharType>::append(size_type, value_type)) \
   _Func(_LIBCPP_FUNC_VIS basic_string<_CharType>::size_type basic_string<_CharType>::rfind(value_type, size_type) const) \
-  _Func(_LIBCPP_FUNC_VIS basic_string<_CharType>::size_type basic_string<_CharType>::npos) \
+  _Func(_LIBCPP_FUNC_VIS const basic_string<_CharType>::size_type basic_string<_CharType>::npos) \
   _Func(_LIBCPP_FUNC_VIS basic_string<_CharType>& basic_string<_CharType>::assign(size_type, value_type)) \
   _Func(_LIBCPP_FUNC_VIS basic_string<_CharType>& basic_string<_CharType>::erase(size_type, size_type)) \
   _Func(_LIBCPP_FUNC_VIS basic_string<_CharType>& basic_string<_CharType>::append(basic_string const&, size_type, size_type)) \

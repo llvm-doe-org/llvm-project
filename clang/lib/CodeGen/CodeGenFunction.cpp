@@ -799,11 +799,13 @@ void CodeGenFunction::StartFunction(GlobalDecl GD, QualType RetTy,
           FD->getBody()->getStmtClass() == Stmt::CoroutineBodyStmtClass)
         SanOpts.Mask &= ~SanitizerKind::Null;
 
-  // Apply xray attributes to the function (as a string, for now)
   if (D) {
+    // Apply xray attributes to the function (as a string, for now)
     if (const auto *XRayAttr = D->getAttr<XRayInstrumentAttr>()) {
       if (CGM.getCodeGenOpts().XRayInstrumentationBundle.has(
-              XRayInstrKind::Function)) {
+              XRayInstrKind::FunctionEntry) ||
+          CGM.getCodeGenOpts().XRayInstrumentationBundle.has(
+              XRayInstrKind::FunctionExit)) {
         if (XRayAttr->alwaysXRayInstrument() && ShouldXRayInstrumentFunction())
           Fn->addFnAttr("function-instrument", "xray-always");
         if (XRayAttr->neverXRayInstrument())
@@ -812,12 +814,32 @@ void CodeGenFunction::StartFunction(GlobalDecl GD, QualType RetTy,
           if (ShouldXRayInstrumentFunction())
             Fn->addFnAttr("xray-log-args",
                           llvm::utostr(LogArgs->getArgumentCount()));
+        if (!CGM.getCodeGenOpts().XRayInstrumentationBundle.has(
+                XRayInstrKind::FunctionExit)) {
+          Fn->addFnAttr("xray-skip-exit");
+        }
+        if (!CGM.getCodeGenOpts().XRayInstrumentationBundle.has(
+                XRayInstrKind::FunctionEntry)) {
+          Fn->addFnAttr("xray-skip-entry");
+        }
       }
     } else {
       if (ShouldXRayInstrumentFunction() && !CGM.imbueXRayAttrs(Fn, Loc))
         Fn->addFnAttr(
             "xray-instruction-threshold",
             llvm::itostr(CGM.getCodeGenOpts().XRayInstructionThreshold));
+      if (CGM.getCodeGenOpts().XRayIgnoreLoops) {
+        Fn->addFnAttr("xray-ignore-loops");
+      }
+    }
+
+    if (const auto *Attr = D->getAttr<PatchableFunctionEntryAttr>()) {
+      // Attr->getStart is currently ignored.
+      Fn->addFnAttr("patchable-function-entry",
+                    std::to_string(Attr->getCount()));
+    } else if (unsigned Count = CGM.getCodeGenOpts().PatchableFunctionEntryCount) {
+      Fn->addFnAttr("patchable-function-entry",
+                    std::to_string(Count));
     }
   }
 
@@ -2101,7 +2123,7 @@ void CodeGenFunction::EmitDeclRefExprDbgValue(const DeclRefExpr *E,
                                               const APValue &Init) {
   assert(Init.hasValue() && "Invalid DeclRefExpr initializer!");
   if (CGDebugInfo *Dbg = getDebugInfo())
-    if (CGM.getCodeGenOpts().getDebugInfo() >= codegenoptions::LimitedDebugInfo)
+    if (CGM.getCodeGenOpts().hasReducedDebugInfo())
       Dbg->EmitGlobalVariable(E->getDecl(), Init);
 }
 

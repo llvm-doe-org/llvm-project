@@ -73,6 +73,7 @@
 #include "Plugins/ObjectFile/ELF/ObjectFileELF.h"
 #include "Plugins/ObjectFile/Mach-O/ObjectFileMachO.h"
 #include "Plugins/ObjectFile/PECOFF/ObjectFilePECOFF.h"
+#include "Plugins/ObjectFile/wasm/ObjectFileWasm.h"
 #include "Plugins/OperatingSystem/Python/OperatingSystemPython.h"
 #include "Plugins/Platform/Android/PlatformAndroid.h"
 #include "Plugins/Platform/FreeBSD/PlatformFreeBSD.h"
@@ -94,19 +95,13 @@
 #include "Plugins/SymbolFile/PDB/SymbolFilePDB.h"
 #include "Plugins/SymbolFile/Symtab/SymbolFileSymtab.h"
 #include "Plugins/SymbolVendor/ELF/SymbolVendorELF.h"
+#include "Plugins/SymbolVendor/wasm/SymbolVendorWasm.h"
 #include "Plugins/SystemRuntime/MacOSX/SystemRuntimeMacOSX.h"
 #include "Plugins/UnwindAssembly/InstEmulation/UnwindAssemblyInstEmulation.h"
 #include "Plugins/UnwindAssembly/x86/UnwindAssembly-x86.h"
 
 #if defined(__APPLE__)
 #include "Plugins/DynamicLoader/Darwin-Kernel/DynamicLoaderDarwinKernel.h"
-#include "Plugins/Platform/MacOSX/PlatformAppleTVSimulator.h"
-#include "Plugins/Platform/MacOSX/PlatformAppleWatchSimulator.h"
-#include "Plugins/Platform/MacOSX/PlatformDarwinKernel.h"
-#include "Plugins/Platform/MacOSX/PlatformRemoteAppleBridge.h"
-#include "Plugins/Platform/MacOSX/PlatformRemoteAppleTV.h"
-#include "Plugins/Platform/MacOSX/PlatformRemoteAppleWatch.h"
-#include "Plugins/Platform/MacOSX/PlatformiOSSimulator.h"
 #include "Plugins/Process/MacOSX-Kernel/ProcessKDP.h"
 #include "Plugins/SymbolVendor/MacOSX/SymbolVendorMacOSX.h"
 #endif
@@ -177,6 +172,7 @@ llvm::Error SystemInitializerFull::Initialize() {
   ObjectFileELF::Initialize();
   ObjectFileMachO::Initialize();
   ObjectFilePECOFF::Initialize();
+  wasm::ObjectFileWasm::Initialize();
 
   ObjectContainerBSDArchive::Initialize();
   ObjectContainerUniversalMachO::Initialize();
@@ -203,10 +199,6 @@ llvm::Error SystemInitializerFull::Initialize() {
   platform_android::PlatformAndroid::Initialize();
   PlatformRemoteiOS::Initialize();
   PlatformMacOSX::Initialize();
-#if defined(__APPLE__)
-  PlatformiOSSimulator::Initialize();
-  PlatformDarwinKernel::Initialize();
-#endif
 
   // Initialize LLVM and Clang
   llvm::InitializeAllTargets();
@@ -240,6 +232,7 @@ llvm::Error SystemInitializerFull::Initialize() {
   SymbolFileDWARF::Initialize();
   SymbolFilePDB::Initialize();
   SymbolFileSymtab::Initialize();
+  wasm::SymbolVendorWasm::Initialize();
   UnwindAssemblyInstEmulation::Initialize();
   UnwindAssembly_x86::Initialize();
 
@@ -269,11 +262,6 @@ llvm::Error SystemInitializerFull::Initialize() {
 #if defined(__APPLE__)
   SymbolVendorMacOSX::Initialize();
   ProcessKDP::Initialize();
-  PlatformAppleTVSimulator::Initialize();
-  PlatformAppleWatchSimulator::Initialize();
-  PlatformRemoteAppleTV::Initialize();
-  PlatformRemoteAppleWatch::Initialize();
-  PlatformRemoteAppleBridge::Initialize();
   DynamicLoaderDarwinKernel::Initialize();
 #endif
 
@@ -332,6 +320,7 @@ void SystemInitializerFull::Terminate() {
   ThreadSanitizerRuntime::Terminate();
   UndefinedBehaviorSanitizerRuntime::Terminate();
   MainThreadCheckerRuntime::Terminate();
+  wasm::SymbolVendorWasm::Terminate();
   SymbolVendorELF::Terminate();
   breakpad::SymbolFileBreakpad::Terminate();
   SymbolFileDWARF::Terminate();
@@ -361,11 +350,6 @@ void SystemInitializerFull::Terminate() {
   DynamicLoaderDarwinKernel::Terminate();
   ProcessKDP::Terminate();
   SymbolVendorMacOSX::Terminate();
-  PlatformAppleTVSimulator::Terminate();
-  PlatformAppleWatchSimulator::Terminate();
-  PlatformRemoteAppleTV::Terminate();
-  PlatformRemoteAppleWatch::Terminate();
-  PlatformRemoteAppleBridge::Terminate();
 #endif
 
 #if defined(__FreeBSD__)
@@ -383,10 +367,6 @@ void SystemInitializerFull::Terminate() {
   DynamicLoaderStatic::Terminate();
   DynamicLoaderWindowsDYLD::Terminate();
 
-#if LLDB_ENABLE_PYTHON
-  OperatingSystemPython::Terminate();
-#endif
-
   platform_freebsd::PlatformFreeBSD::Terminate();
   platform_linux::PlatformLinux::Terminate();
   platform_netbsd::PlatformNetBSD::Terminate();
@@ -395,18 +375,27 @@ void SystemInitializerFull::Terminate() {
   platform_android::PlatformAndroid::Terminate();
   PlatformMacOSX::Terminate();
   PlatformRemoteiOS::Terminate();
-#if defined(__APPLE__)
-  PlatformiOSSimulator::Terminate();
-  PlatformDarwinKernel::Terminate();
-#endif
 
   breakpad::ObjectFileBreakpad::Terminate();
   ObjectFileELF::Terminate();
   ObjectFileMachO::Terminate();
   ObjectFilePECOFF::Terminate();
+  wasm::ObjectFileWasm::Terminate();
 
   ObjectContainerBSDArchive::Terminate();
   ObjectContainerUniversalMachO::Terminate();
+
+#if LLDB_ENABLE_PYTHON
+  OperatingSystemPython::Terminate();
+#endif
+
+#if LLDB_ENABLE_PYTHON
+  ScriptInterpreterPython::Terminate();
+#endif
+
+#if LLDB_ENABLE_LUA
+  ScriptInterpreterLua::Terminate();
+#endif
 
   // Now shutdown the common parts, in reverse order.
   SystemInitializerCommon::Terminate();

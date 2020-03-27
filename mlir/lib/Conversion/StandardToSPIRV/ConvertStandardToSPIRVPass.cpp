@@ -51,6 +51,9 @@ FuncOpConversion::matchAndRewrite(FuncOp funcOp, ArrayRef<Value> operands,
   {
     for (auto argType : enumerate(funcOp.getType().getInputs())) {
       auto convertedType = typeConverter.convertType(argType.value());
+      if (!convertedType) {
+        return matchFailure();
+      }
       signatureConverter.addInputs(argType.index(), convertedType);
     }
   }
@@ -64,19 +67,20 @@ FuncOpConversion::matchAndRewrite(FuncOp funcOp, ArrayRef<Value> operands,
 }
 
 void ConvertStandardToSPIRVPass::runOnModule() {
-  OwningRewritePatternList patterns;
-  auto context = &getContext();
-  auto module = getModule();
+  MLIRContext *context = &getContext();
+  ModuleOp module = getModule();
 
   SPIRVTypeConverter typeConverter;
+  OwningRewritePatternList patterns;
   populateStandardToSPIRVPatterns(context, typeConverter, patterns);
   patterns.insert<FuncOpConversion>(context, typeConverter);
-  ConversionTarget target(*(module.getContext()));
-  target.addLegalDialect<spirv::SPIRVDialect>();
-  target.addDynamicallyLegalOp<FuncOp>(
+
+  std::unique_ptr<ConversionTarget> target = spirv::SPIRVConversionTarget::get(
+      spirv::lookupTargetEnvOrDefault(module), context);
+  target->addDynamicallyLegalOp<FuncOp>(
       [&](FuncOp op) { return typeConverter.isSignatureLegal(op.getType()); });
 
-  if (failed(applyPartialConversion(module, target, patterns))) {
+  if (failed(applyPartialConversion(module, *target, patterns))) {
     return signalPassFailure();
   }
 }

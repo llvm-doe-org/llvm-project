@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Analysis/Loads.h"
 #include "llvm/Analysis/MemoryLocation.h"
@@ -930,13 +931,13 @@ void MachineOperand::print(raw_ostream &OS, ModuleSlotTracker &MST,
   }
   case MachineOperand::MO_ShuffleMask:
     OS << "shufflemask(";
-    const Constant* C = getShuffleMask();
-    const int NumElts = C->getType()->getVectorNumElements();
-
+    ArrayRef<int> Mask = getShuffleMask();
     StringRef Separator;
-    for (int I = 0; I != NumElts; ++I) {
-      OS << Separator;
-      C->getAggregateElement(I)->printAsOperand(OS, false, MST);
+    for (int Elt : Mask) {
+      if (Elt == -1)
+        OS << Separator << "undef";
+      else
+        OS << Separator << Elt;
       Separator = ", ";
     }
 
