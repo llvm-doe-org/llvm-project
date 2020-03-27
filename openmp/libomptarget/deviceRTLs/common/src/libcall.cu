@@ -1,4 +1,4 @@
-//===------------ libcall.cu - NVPTX OpenMP user calls ----------- CUDA -*-===//
+//===------------ libcall.cu - OpenMP GPU user calls ------------- CUDA -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -358,7 +358,7 @@ EXTERN void omp_unset_lock(omp_lock_t *lock) {
 
 EXTERN int omp_test_lock(omp_lock_t *lock) {
   int rc = __kmpc_impl_test_lock(lock);
-  PRINT(LD_IO, "call omp_test_lock() return %d\n", ret);
+  PRINT(LD_IO, "call omp_test_lock() return %d\n", rc);
   return rc;
 }
 
