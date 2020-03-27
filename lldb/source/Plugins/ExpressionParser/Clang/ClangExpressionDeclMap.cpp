@@ -179,7 +179,7 @@ TypeFromUser ClangExpressionDeclMap::DeportType(ClangASTContext &target,
                                                 TypeFromParser parser_type) {
   assert(&target == ClangASTContext::GetScratch(*m_target));
   assert((TypeSystem *)&source == parser_type.GetTypeSystem());
-  assert(source.getASTContext() == m_ast_context);
+  assert(&source.getASTContext() == m_ast_context);
 
   if (m_ast_importer_sp) {
     return TypeFromUser(m_ast_importer_sp->DeportType(target, parser_type));
@@ -597,7 +597,7 @@ addr_t ClangExpressionDeclMap::GetSymbolAddress(ConstString name,
 
 lldb::VariableSP ClangExpressionDeclMap::FindGlobalVariable(
     Target &target, ModuleSP &module, ConstString name,
-    CompilerDeclContext *namespace_decl, TypeFromUser *type) {
+    CompilerDeclContext *namespace_decl) {
   VariableList vars;
 
   if (module && namespace_decl)
@@ -605,19 +605,9 @@ lldb::VariableSP ClangExpressionDeclMap::FindGlobalVariable(
   else
     target.GetImages().FindGlobalVariables(name, -1, vars);
 
-  if (vars.GetSize()) {
-    if (type) {
-      for (VariableSP var_sp : vars) {
-        if (ClangASTContext::AreTypesSame(
-                *type, var_sp->GetType()->GetFullCompilerType()))
-          return var_sp;
-      }
-    } else {
-      return vars.GetVariableAtIndex(0);
-    }
-  }
-
-  return VariableSP();
+  if (vars.GetSize() == 0)
+    return VariableSP();
+  return vars.GetVariableAtIndex(0);
 }
 
 ClangASTContext *ClangExpressionDeclMap::GetClangASTContext() {
@@ -682,9 +672,9 @@ void ClangExpressionDeclMap::FindExternalVisibleDecls(
           dyn_cast<NamespaceDecl>(context.m_decl_context)) {
     if (namespace_context->getName().str() ==
         std::string(g_lldb_local_vars_namespace_cstr)) {
-      CompilerDeclContext compiler_decl_ctx(
-          GetClangASTContext(), const_cast<void *>(static_cast<const void *>(
-                                    context.m_decl_context)));
+      CompilerDeclContext compiler_decl_ctx =
+          m_clang_ast_context->CreateDeclContext(
+              const_cast<clang::DeclContext *>(context.m_decl_context));
       FindExternalVisibleDecls(context, lldb::ModuleSP(), compiler_decl_ctx,
                                current_id);
       return;
@@ -734,29 +724,24 @@ void ClangExpressionDeclMap::MaybeRegisterFunctionBody(
   }
 }
 
+clang::NamedDecl *ClangExpressionDeclMap::GetPersistentDecl(ConstString name) {
+  if (!m_parser_vars)
+    return nullptr;
+  Target *target = m_parser_vars->m_exe_ctx.GetTargetPtr();
+  if (!target)
+    return nullptr;
+
+  ClangASTContext::GetScratch(*target);
+
+  return m_parser_vars->m_persistent_vars->GetPersistentDecl(name);
+}
+
 void ClangExpressionDeclMap::SearchPersistenDecls(NameSearchContext &context,
                                                   const ConstString name,
                                                   unsigned int current_id) {
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
-  if (!m_parser_vars)
-    return;
-  Target *target = m_parser_vars->m_exe_ctx.GetTargetPtr();
-  if (!target)
-    return;
 
-  ClangASTContext *scratch_clang_ast_context =
-      ClangASTContext::GetScratch(*target);
-
-  if (!scratch_clang_ast_context)
-    return;
-
-  ASTContext *scratch_ast_context = scratch_clang_ast_context->getASTContext();
-
-  if (!scratch_ast_context)
-    return;
-
-  NamedDecl *persistent_decl =
-      m_parser_vars->m_persistent_vars->GetPersistentDecl(name);
+  NamedDecl *persistent_decl = GetPersistentDecl(name);
 
   if (!persistent_decl)
     return;
@@ -1409,6 +1394,10 @@ void ClangExpressionDeclMap::FindExternalVisibleDecls(
     if (name.GetStringRef().startswith("$__lldb"))
       return;
 
+    // No ParserVars means we can't do register or variable lookup.
+    if (!m_parser_vars)
+      return;
+
     ExpressionVariableSP pvar_sp(
         m_parser_vars->m_persistent_vars->GetVariable(name));
 
@@ -1444,8 +1433,7 @@ void ClangExpressionDeclMap::FindExternalVisibleDecls(
   if (target) {
     ValueObjectSP valobj;
     VariableSP var;
-    var =
-        FindGlobalVariable(*target, module_sp, name, &namespace_decl, nullptr);
+    var = FindGlobalVariable(*target, module_sp, name, &namespace_decl);
 
     if (var) {
       valobj = ValueObjectVariable::Create(target, var);
@@ -1517,15 +1505,6 @@ bool ClangExpressionDeclMap::GetVariableValue(VariableSP &var,
   if (!clang_ast) {
     if (log)
       log->PutCString("Skipped a definition because it has no Clang AST");
-    return false;
-  }
-
-  ASTContext *ast = clang_ast->getASTContext();
-
-  if (!ast) {
-    if (log)
-      log->PutCString(
-          "There is no AST context for the current execution context");
     return false;
   }
 

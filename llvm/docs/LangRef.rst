@@ -14466,7 +14466,7 @@ vector must have <M> * <N> elements.
 
 
 '``llvm.matrix.columnwise.load.*``' Intrinsic
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Syntax:
 """""""
@@ -14492,7 +14492,7 @@ The <Rows> and <Cols> arguments must be constant integers. The returned vector
 must have <Rows> * <Cols> elements. %Stride must be >= <Rows>.
 
 '``llvm.matrix.columnwise.store.*``' Intrinsic
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Syntax:
 """""""
@@ -16530,6 +16530,70 @@ Semantics:
 """"""""""
 
 This function follows the IEEE-754 semantics for minNum.
+
+
+'``llvm.experimental.constrained.maximum``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+
+::
+
+      declare <type>
+      @llvm.experimental.constrained.maximum(<type> <op1>, <type> <op2>
+                                             metadata <exception behavior>)
+
+Overview:
+"""""""""
+
+The '``llvm.experimental.constrained.maximum``' intrinsic returns the maximum
+of the two arguments, propagating NaNs and treating -0.0 as less than +0.0.
+
+Arguments:
+""""""""""
+
+The first two arguments and the return value are floating-point numbers
+of the same type.
+
+The third argument specifies the exception behavior as described above.
+
+Semantics:
+""""""""""
+
+This function follows semantics specified in the draft of IEEE 754-2018.
+
+
+'``llvm.experimental.constrained.minimum``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+
+::
+
+      declare <type>
+      @llvm.experimental.constrained.minimum(<type> <op1>, <type> <op2>
+                                             metadata <exception behavior>)
+
+Overview:
+"""""""""
+
+The '``llvm.experimental.constrained.minimum``' intrinsic returns the minimum
+of the two arguments, propagating NaNs and treating -0.0 as less than +0.0.
+
+Arguments:
+""""""""""
+
+The first two arguments and the return value are floating-point numbers
+of the same type.
+
+The third argument specifies the exception behavior as described above.
+
+Semantics:
+""""""""""
+
+This function follows semantics specified in the draft of IEEE 754-2018.
 
 
 '``llvm.experimental.constrained.ceil``' Intrinsic

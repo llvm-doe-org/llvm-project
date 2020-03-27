@@ -347,8 +347,9 @@ bool MCObjectStreamer::changeSectionImpl(MCSection *Section,
     report_fatal_error("Cannot evaluate subsection number");
   if (IntSubsection < 0 || IntSubsection > 8192)
     report_fatal_error("Subsection number out of range");
+  CurSubsectionIdx = unsigned(IntSubsection);
   CurInsertionPoint =
-      Section->getSubsectionInsertionPoint(unsigned(IntSubsection));
+      Section->getSubsectionInsertionPoint(CurSubsectionIdx);
   return Created;
 }
 
@@ -363,6 +364,13 @@ bool MCObjectStreamer::mayHaveInstructions(MCSection &Sec) const {
 
 void MCObjectStreamer::EmitInstruction(const MCInst &Inst,
                                        const MCSubtargetInfo &STI) {
+  getAssembler().getBackend().alignBranchesBegin(*this, Inst);
+  EmitInstructionImpl(Inst, STI);
+  getAssembler().getBackend().alignBranchesEnd(*this, Inst);
+}
+
+void MCObjectStreamer::EmitInstructionImpl(const MCInst &Inst,
+                                           const MCSubtargetInfo &STI) {
   MCStreamer::EmitInstruction(Inst, STI);
 
   MCSection *Sec = getCurrentSectionOnly();
