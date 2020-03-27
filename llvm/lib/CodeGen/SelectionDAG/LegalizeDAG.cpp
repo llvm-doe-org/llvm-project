@@ -1129,7 +1129,9 @@ void SelectionDAGLegalize::LegalizeOp(SDNode *Node) {
   case ISD::SMULFIX:
   case ISD::SMULFIXSAT:
   case ISD::UMULFIX:
-  case ISD::UMULFIXSAT: {
+  case ISD::UMULFIXSAT:
+  case ISD::SDIVFIX:
+  case ISD::UDIVFIX: {
     unsigned Scale = Node->getConstantOperandVal(2);
     Action = TLI.getFixedPointOperationAction(Node->getOpcode(),
                                               Node->getValueType(0), Scale);
@@ -3417,6 +3419,24 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
   case ISD::UMULFIXSAT:
     Results.push_back(TLI.expandFixedPointMul(Node, DAG));
     break;
+  case ISD::SDIVFIX:
+  case ISD::UDIVFIX:
+    if (SDValue V = TLI.expandFixedPointDiv(Node->getOpcode(), SDLoc(Node),
+                                            Node->getOperand(0),
+                                            Node->getOperand(1),
+                                            Node->getConstantOperandVal(2),
+                                            DAG)) {
+      Results.push_back(V);
+      break;
+    }
+    // FIXME: We might want to retry here with a wider type if we fail, if that
+    // type is legal.
+    // FIXME: Technically, so long as we only have sdivfixes where BW+Scale is
+    // <= 128 (which is the case for all of the default Embedded-C types),
+    // we will only get here with types and scales that we could always expand
+    // if we were allowed to generate libcalls to division functions of illegal
+    // type. But we cannot do that.
+    llvm_unreachable("Cannot expand DIVFIX!");
   case ISD::ADDCARRY:
   case ISD::SUBCARRY: {
     SDValue LHS = Node->getOperand(0);
@@ -4487,6 +4507,21 @@ void SelectionDAGLegalize::PromoteNode(SDNode *Node) {
     Results.push_back(DAG.getNode(ISD::FP_ROUND, dl, OVT,
                                   Tmp3, DAG.getIntPtrConstant(0, dl)));
     break;
+  case ISD::STRICT_FREM:
+  case ISD::STRICT_FPOW:
+    Tmp1 = DAG.getNode(ISD::STRICT_FP_EXTEND, dl, {NVT, MVT::Other},
+                       {Node->getOperand(0), Node->getOperand(1)});
+    Tmp2 = DAG.getNode(ISD::STRICT_FP_EXTEND, dl, {NVT, MVT::Other},
+                       {Node->getOperand(0), Node->getOperand(2)});
+    Tmp3 = DAG.getNode(ISD::TokenFactor, dl, MVT::Other, Tmp1.getValue(1),
+                       Tmp2.getValue(1));
+    Tmp1 = DAG.getNode(Node->getOpcode(), dl, {NVT, MVT::Other},
+                       {Tmp3, Tmp1, Tmp2});
+    Tmp1 = DAG.getNode(ISD::STRICT_FP_ROUND, dl, {OVT, MVT::Other},
+                       {Tmp1.getValue(1), Tmp1, DAG.getIntPtrConstant(0, dl)});
+    Results.push_back(Tmp1);
+    Results.push_back(Tmp1.getValue(1));
+    break;
   case ISD::FMA:
     Tmp1 = DAG.getNode(ISD::FP_EXTEND, dl, NVT, Node->getOperand(0));
     Tmp2 = DAG.getNode(ISD::FP_EXTEND, dl, NVT, Node->getOperand(1));
@@ -4532,6 +4567,22 @@ void SelectionDAGLegalize::PromoteNode(SDNode *Node) {
     Tmp2 = DAG.getNode(Node->getOpcode(), dl, NVT, Tmp1);
     Results.push_back(DAG.getNode(ISD::FP_ROUND, dl, OVT,
                                   Tmp2, DAG.getIntPtrConstant(0, dl)));
+    break;
+  case ISD::STRICT_FFLOOR:
+  case ISD::STRICT_FCEIL:
+  case ISD::STRICT_FSIN:
+  case ISD::STRICT_FCOS:
+  case ISD::STRICT_FLOG:
+  case ISD::STRICT_FLOG10:
+  case ISD::STRICT_FEXP:
+    Tmp1 = DAG.getNode(ISD::STRICT_FP_EXTEND, dl, {NVT, MVT::Other},
+                       {Node->getOperand(0), Node->getOperand(1)});
+    Tmp2 = DAG.getNode(Node->getOpcode(), dl, {NVT, MVT::Other},
+                       {Tmp1.getValue(1), Tmp1});
+    Tmp3 = DAG.getNode(ISD::STRICT_FP_ROUND, dl, {OVT, MVT::Other},
+                       {Tmp2.getValue(1), Tmp2, DAG.getIntPtrConstant(0, dl)});
+    Results.push_back(Tmp3);
+    Results.push_back(Tmp3.getValue(1));
     break;
   case ISD::BUILD_VECTOR: {
     MVT EltVT = OVT.getVectorElementType();

@@ -5873,7 +5873,9 @@ QualType Sema::CXXCheckConditionalOperands(ExprResult &Cond, ExprResult &LHS,
     // DerivedToBase was already handled by the class-specific case above.
     // FIXME: Should we allow ObjC conversions here?
     const ReferenceConversions AllowedConversions =
-        ReferenceConversions::Qualification | ReferenceConversions::Function;
+        ReferenceConversions::Qualification |
+        ReferenceConversions::NestedQualification |
+        ReferenceConversions::Function;
 
     ReferenceConversions RefConv;
     if (CompareReferenceRelationship(QuestionLoc, LTy, RTy, &RefConv) ==

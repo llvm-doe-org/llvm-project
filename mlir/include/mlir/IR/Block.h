@@ -18,7 +18,7 @@
 
 namespace mlir {
 /// `Block` represents an ordered list of `Operation`s.
-class Block : public IRObjectWithUseList,
+class Block : public IRObjectWithUseList<BlockOperand>,
               public llvm::ilist_node_with_parent<Block, Region> {
 public:
   explicit Block() {}
@@ -78,6 +78,11 @@ public:
 
   /// Add one value to the argument list.
   BlockArgument addArgument(Type type);
+
+  /// Insert one value to the position in the argument list indicated by the
+  /// given iterator. The existing arguments are shifted. The block is expected
+  /// not to have predecessors.
+  BlockArgument insertArgument(args_iterator it, Type type);
 
   /// Add one argument to the argument list for each type specified in the list.
   iterator_range<args_iterator> addArguments(ArrayRef<Type> types);

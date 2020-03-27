@@ -20,11 +20,11 @@
 #else
 /* We are using this library */
 #define MLIR_RUNNER_UTILS_EXPORT __declspec(dllimport)
-#endif
-#endif
+#endif // mlir_runner_utils_EXPORTS
+#endif // MLIR_RUNNER_UTILS_EXPORT
 #else
 #define MLIR_RUNNER_UTILS_EXPORT
-#endif
+#endif // _WIN32
 
 template <typename T, int N> struct StridedMemRefType;
 template <typename StreamType, typename T, int N>
@@ -129,7 +129,7 @@ template <int N, int... Dims> struct StaticSizeMult<N, Dims...> {
   static constexpr int value = N * StaticSizeMult<Dims...>::value;
 };
 
-static void printSpace(std::ostream &os, int count) {
+static inline void printSpace(std::ostream &os, int count) {
   for (int i = 0; i < count; ++i) {
     os << ' ';
   }
