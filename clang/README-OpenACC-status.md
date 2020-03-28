@@ -195,11 +195,6 @@ following features for now:
     * subarrays in `firstprivate`, `private`, and `reduction` clauses
     * subarrays with no `:` and one integer (syntactically an array
       subscript)
-* `data` directive:
-    * With no nested directive, the OpenMP runtime currently produces
-      an error.  This is a bug in the `omp target data` implementation
-      that has been fixed upstream, but the fix has not yet been
-      merged into Clacc.
 * `loop` directive:
     * outside a `parallel` directive (that is, an orphaned loop)
     * `gang`, `worker`, and `vector` clause arguments

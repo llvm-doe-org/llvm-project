@@ -89,6 +89,176 @@ int main() {
   printf("start\n");
 
   //--------------------------------------------------
+  // Check acc data without nested directive.
+  //--------------------------------------------------
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: c =
+    // PRT-NEXT: ci =
+    // PRT-NEXT: co =
+    int  c = 10;
+    int ci = 20;
+    int co = 30;
+    // DMP:      ACCDataDirective
+    // DMP-NEXT:   ACCCopyClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int'
+    // DMP-NEXT:   ACCCopyinClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'int'
+    // DMP-NEXT:   ACCCopyoutClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int'
+    // DMP-NEXT:   impl: OMPTargetDataDirective
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int'
+    // DMP-NOT:      OMP
+    //
+    // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(c) copyin(ci) copyout(co){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(tofrom: c) map(to: ci) map(from: co){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(tofrom: c) map(to: ci) map(from: co){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(c) copyin(ci) copyout(co){{$}}
+    #pragma acc data copy(c) copyin(ci) copyout(co)
+    // DMP: CompoundStmt
+    // PRT-NEXT: {
+    {
+      // PRT-NEXT: c +=
+      // PRT-NEXT: ci +=
+      // PRT-NEXT: co +=
+       c += 100;
+      ci += 100;
+      co += 100;
+      // PRT-NEXT: printf(
+      // PRT:      );
+      //      EXE-NEXT: Inside acc data:
+      // EXE-HOST-NEXT:   c=110, ci=120, co=130
+      //  EXE-DEV-NEXT:   c=110, ci=120, co=130
+      printf("Inside acc data:\n"
+             "  c=%3d, ci=%3d, co=%3d\n",
+             c, ci, co);
+    } // PRT-NEXT: }
+    // PRT-NEXT: printf(
+    // PRT:      );
+    //      EXE-NEXT: After acc data:
+    // EXE-HOST-NEXT:   c=110, ci=120, co=130
+    //  EXE-DEV-NEXT:   c= 10, ci=120, co=
+    printf("After acc data:\n"
+           "  c=%3d, ci=%3d, co=%3d\n",
+           c, ci, co);
+  } // PRT-NEXT: }
+
+  //--------------------------------------------------
+  // Check acc data with nested acc data.
+  //--------------------------------------------------
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: c0 =
+    // PRT-NEXT: c1 =
+    // PRT-NEXT: c2 =
+    int c0 = 10;
+    int c1 = 20;
+    int c2 = 30;
+    // DMP:      ACCDataDirective
+    // DMP-NEXT:   ACCCopyClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'c0' 'int'
+    // DMP-NEXT:   impl: OMPTargetDataDirective
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'c0' 'int'
+    // DMP-NOT:      OMP
+    //
+    // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(c0){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(tofrom: c0){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(tofrom: c0){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(c0){{$}}
+    #pragma acc data copy(c0)
+    // DMP: CompoundStmt
+    // PRT-NEXT: {
+    {
+      // PRT-NEXT: c0 +=
+      // PRT-NEXT: c1 +=
+      // PRT-NEXT: c2 +=
+      c0 += 100;
+      c1 += 100;
+      c2 += 100;
+      // DMP:      ACCDataDirective
+      // DMP-NEXT:   ACCCopyClause
+      // DMP-NOT:      <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c0' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c1' 'int'
+      // DMP-NEXT:   impl: OMPTargetDataDirective
+      // DMP-NEXT:     OMPMapClause
+      // DMP-NOT:        <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c0' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c1' 'int'
+      // DMP-NOT:      OMP
+      //
+      // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(c0,c1){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(tofrom: c0,c1){{$}}
+      // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(tofrom: c0,c1){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(c0,c1){{$}}
+      #pragma acc data copy(c0,c1)
+      // DMP: CompoundStmt
+      // PRT-NEXT: {
+      {
+        // PRT-NEXT: c0 +=
+        // PRT-NEXT: c1 +=
+        // PRT-NEXT: c2 +=
+        c0 += 1000;
+        c1 += 1000;
+        c2 += 1000;
+        // DMP:      ACCDataDirective
+        // DMP-NEXT:   ACCCopyClause
+        // DMP-NOT:      <implicit>
+        // DMP-NEXT:     DeclRefExpr {{.*}} 'c0' 'int'
+        // DMP-NEXT:     DeclRefExpr {{.*}} 'c1' 'int'
+        // DMP-NEXT:     DeclRefExpr {{.*}} 'c2' 'int'
+        // DMP-NEXT:   impl: OMPTargetDataDirective
+        // DMP-NEXT:     OMPMapClause
+        // DMP-NOT:        <implicit>
+        // DMP-NEXT:       DeclRefExpr {{.*}} 'c0' 'int'
+        // DMP-NEXT:       DeclRefExpr {{.*}} 'c1' 'int'
+        // DMP-NEXT:       DeclRefExpr {{.*}} 'c2' 'int'
+        // DMP-NOT:      OMP
+        //
+        // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(c0,c1,c2){{$}}
+        // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(tofrom: c0,c1,c2){{$}}
+        // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(tofrom: c0,c1,c2){{$}}
+        // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(c0,c1,c2){{$}}
+        #pragma acc data copy(c0,c1,c2)
+        // DMP: CompoundStmt
+        // PRT-NEXT: {
+        {
+          // PRT-NEXT: c0 +=
+          // PRT-NEXT: c1 +=
+          // PRT-NEXT: c2 +=
+          c0 += 10000;
+          c1 += 10000;
+          c2 += 10000;
+        } // PRT-NEXT: }
+      } // PRT-NEXT: }
+    } // PRT-NEXT: }
+    // PRT-NEXT: printf(
+    // PRT:      );
+    //      EXE-NEXT: After acc data:
+    // EXE-HOST-NEXT:   c0=11110, c1=11120, c2=11130
+    //  EXE-DEV-NEXT:   c0=   10, c1=  120, c2= 1130
+    printf("After acc data:\n"
+           "  c0=%5d, c1=%5d, c2=%5d\n",
+           c0, c1, c2);
+  } // PRT-NEXT: }
+
+  //--------------------------------------------------
   // Check that every data clause is accepted and suppresses data clauses on
   // nested acc parallel (and on its OpenMP translation).
   //
