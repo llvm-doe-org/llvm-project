@@ -1,6 +1,6 @@
 //===- Attribute.cpp - Attribute wrapper class ----------------------------===//
 //
-// Part of the MLIR Project, under the Apache License v2.0 with LLVM Exceptions.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
@@ -73,6 +73,14 @@ StringRef tblgen::Attribute::getStorageType() const {
 StringRef tblgen::Attribute::getReturnType() const {
   const auto *init = def->getValueInit("returnType");
   return getValueAsString(init);
+}
+
+// Return the type constraint corresponding to the type of this attribute, or
+// None if this is not a TypedAttr.
+llvm::Optional<tblgen::Type> tblgen::Attribute::getValueType() const {
+  if (auto *defInit = dyn_cast<llvm::DefInit>(def->getValueInit("valueType")))
+    return tblgen::Type(defInit->getDef());
+  return llvm::None;
 }
 
 StringRef tblgen::Attribute::getConvertFromStorageCall() const {
@@ -152,6 +160,10 @@ bool tblgen::EnumAttrCase::isStrCase() const {
 
 StringRef tblgen::EnumAttrCase::getSymbol() const {
   return def->getValueAsString("symbol");
+}
+
+StringRef tblgen::EnumAttrCase::getStr() const {
+  return def->getValueAsString("str");
 }
 
 int64_t tblgen::EnumAttrCase::getValue() const {

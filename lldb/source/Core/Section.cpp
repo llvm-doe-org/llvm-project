@@ -1,4 +1,4 @@
-//===-- Section.cpp ---------------------------------------------*- C++ -*-===//
+//===-- Section.cpp -------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -68,6 +68,8 @@ const char *Section::GetTypeAsCString() const {
     return "dwarf-aranges";
   case eSectionTypeDWARFDebugCuIndex:
     return "dwarf-cu-index";
+  case eSectionTypeDWARFDebugTuIndex:
+    return "dwarf-tu-index";
   case eSectionTypeDWARFDebugFrame:
     return "dwarf-frame";
   case eSectionTypeDWARFDebugInfo:

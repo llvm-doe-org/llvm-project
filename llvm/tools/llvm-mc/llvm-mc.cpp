@@ -399,7 +399,7 @@ int main(int argc, char **argv) {
   }
   for (const auto &Arg : DebugPrefixMap) {
     const auto &KV = StringRef(Arg).split('=');
-    Ctx.addDebugPrefixMapEntry(KV.first, KV.second);
+    Ctx.addDebugPrefixMapEntry(std::string(KV.first), std::string(KV.second));
   }
   if (!MainFileName.empty())
     Ctx.setMainFileName(MainFileName);
@@ -473,9 +473,6 @@ int main(int argc, char **argv) {
     Str.reset(TheTarget->createNullStreamer(Ctx));
   } else {
     assert(FileType == OFT_ObjectFile && "Invalid file type!");
-
-    // Don't waste memory on names of temp labels.
-    Ctx.setUseNamesOnTempLabels(false);
 
     if (!Out->os().supportsSeeking()) {
       BOS = std::make_unique<buffer_ostream>(Out->os());

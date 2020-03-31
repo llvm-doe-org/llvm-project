@@ -651,7 +651,7 @@ class, as shown in this example:
 
    (lldb) type summary add -P Rectangle
    Enter your Python command(s). Type 'DONE' to end.
-   def function (valobj,internal_dict):
+   def function (valobj,internal_dict,options):
       height_val = valobj.GetChildMemberWithName('height')
       width_val = valobj.GetChildMemberWithName('width')
       height = height_val.GetValueAsUnsigned(0)
@@ -698,6 +698,12 @@ that (yet) via this method call, and you must use ``GetChildAtIndex()``
 querying it for the array items one by one. Also, handling custom formats is
 something you have to deal with on your own.
 
+``options`` Python summary formatters can optionally define this
+third argument, which is an object of type ``lldb.SBTypeSummaryOptions``,
+allowing for a few customizations of the result. The decision to
+adopt or not this third argument - and the meaning of options 
+thereof - is up to the individual formatter's writer.
+
 Other than interactively typing a Python script there are two other ways for
 you to input a Python script as a summary:
 
@@ -715,14 +721,6 @@ you to input a Python script as a summary:
   or somehow loaded it from a file, using the command script import command.
   LLDB will emit a warning if it is unable to find the function you passed, but
   will still register the binding.
-
-Starting in SVN r222593, Python summary formatters can optionally define a
-third argument: options
-
-This is an object of type ``lldb.SBTypeSummaryOptions`` that can be passed into
-the formatter, allowing for a few customizations of the result. The decision to
-adopt or not this third argument - and the meaning of options thereof - is
-within the individual formatters' writer.
 
 Regular Expression Typenames
 ----------------------------
@@ -846,7 +844,7 @@ adheres to a given interface (the word is italicized because Python has no
 explicit notion of interface, by that word we mean a given set of methods must
 be implemented by the Python class):
 
-::
+.. code-block:: python
 
    class SyntheticChildrenProvider:
       def __init__(self, valobj, internal_dict):
@@ -885,7 +883,28 @@ returning default no-children responses.
 
 If a synthetic child provider supplies a special child named
 ``$$dereference$$`` then it will be used when evaluating ``operator *`` and
-``operator ->`` in the frame variable command and related SB API functions.
+``operator ->`` in the frame variable command and related SB API
+functions. It is possible to declare this synthetic child without
+including it in the range of children displayed by LLDB. For example,
+this subset of a synthetic children provider class would allow the
+synthetic value to be dereferenced without actually showing any
+synthtic children in the UI:
+
+.. code-block:: python
+
+      class SyntheticChildrenProvider:
+          [...]
+          def num_children(self):
+              return 0
+          def get_child_index(self, name):
+              if name == '$$dereference$$':
+                  return 0
+              return -1
+          def get_child_at_index(self, index):
+              if index == 0:
+                  return <valobj resulting from dereference>
+              return None
+
 
 For examples of how synthetic children are created, you are encouraged to look
 at examples/synthetic in the LLDB trunk. Please, be aware that the code in

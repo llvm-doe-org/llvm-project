@@ -42,7 +42,7 @@ struct PrintedDecl {
     llvm::StringRef FirstLine =
         llvm::StringRef(OS.str()).take_until([](char C) { return C == '\n'; });
     FirstLine = FirstLine.rtrim(" {");
-    Name = FirstLine.rtrim(" {");
+    Name = std::string(FirstLine.rtrim(" {"));
   }
 
   std::string Name;
@@ -75,10 +75,9 @@ protected:
     auto TU = TestTU::withCode(A.code());
     TU.ExtraArgs = Flags;
     auto AST = TU.build();
-    EXPECT_THAT(AST.getDiagnostics(), ::testing::IsEmpty()) << Code;
     llvm::Annotations::Range R = A.range();
-    SelectionTree Selection(AST.getASTContext(), AST.getTokens(), R.Begin,
-                            R.End);
+    auto Selection = SelectionTree::createRight(
+        AST.getASTContext(), AST.getTokens(), R.Begin, R.End);
     const SelectionTree::Node *N = Selection.commonAncestor();
     if (!N) {
       ADD_FAILURE() << "No node selected!\n" << Code;
@@ -216,8 +215,7 @@ TEST_F(TargetDeclTest, NestedNameSpecifier) {
     template <typename T>
     int x = [[T::]]y;
   )cpp";
-  // FIXME: We don't do a good job printing TemplateTypeParmDecls, apparently!
-  EXPECT_DECLS("NestedNameSpecifierLoc", "");
+  EXPECT_DECLS("NestedNameSpecifierLoc", "typename T");
 
   Code = R"cpp(
     namespace a { int x; }
@@ -242,6 +240,13 @@ TEST_F(TargetDeclTest, Types) {
   )cpp";
   EXPECT_DECLS("TypedefTypeLoc", {"typedef S X", Rel::Alias},
                {"struct S", Rel::Underlying});
+  Code = R"cpp(
+    namespace ns { struct S{}; }
+    typedef ns::S X;
+    [[X]] x;
+  )cpp";
+  EXPECT_DECLS("TypedefTypeLoc", {"typedef ns::S X", Rel::Alias},
+               {"struct S", Rel::Underlying});
 
   // FIXME: Auto-completion in a template requires disabling delayed template
   // parsing.
@@ -250,8 +255,7 @@ TEST_F(TargetDeclTest, Types) {
     template<class T>
     void foo() { [[T]] x; }
   )cpp";
-  // FIXME: We don't do a good job printing TemplateTypeParmDecls, apparently!
-  EXPECT_DECLS("TemplateTypeParmTypeLoc", "");
+  EXPECT_DECLS("TemplateTypeParmTypeLoc", "class T");
   Flags.clear();
 
   // FIXME: Auto-completion in a template requires disabling delayed template
@@ -284,8 +288,15 @@ TEST_F(TargetDeclTest, Types) {
       static const int size = sizeof...([[E]]);
     };
   )cpp";
-  // FIXME: We don't do a good job printing TemplateTypeParmDecls, apparently!
-  EXPECT_DECLS("SizeOfPackExpr", "");
+  EXPECT_DECLS("SizeOfPackExpr", "typename ...E");
+
+  Code = R"cpp(
+    template <typename T>
+    class Foo {
+      void f([[Foo]] x);
+    };
+  )cpp";
+  EXPECT_DECLS("InjectedClassNameTypeLoc", "class Foo");
 }
 
 TEST_F(TargetDeclTest, ClassTemplate) {
@@ -297,6 +308,16 @@ TEST_F(TargetDeclTest, ClassTemplate) {
   EXPECT_DECLS("TemplateSpecializationTypeLoc",
                {"template<> class Foo<42>", Rel::TemplateInstantiation},
                {"class Foo", Rel::TemplatePattern});
+
+  Code = R"cpp(
+    template<typename T> class Foo {};
+    // The "Foo<int>" SpecializationDecl is incomplete, there is no
+    // instantiation happening.
+    void func([[Foo<int>]] *);
+  )cpp";
+  EXPECT_DECLS("TemplateSpecializationTypeLoc",
+               {"class Foo", Rel::TemplatePattern},
+               {"template<> class Foo<int>", Rel::TemplateInstantiation});
 
   Code = R"cpp(
     // Explicit specialization.
@@ -329,6 +350,24 @@ TEST_F(TargetDeclTest, ClassTemplate) {
   Flags.push_back("-std=c++17");
   EXPECT_DECLS("DeducedTemplateSpecializationTypeLoc",
                {"struct Test", Rel::TemplatePattern});
+}
+
+TEST_F(TargetDeclTest, Concept) {
+  Code = R"cpp(
+    template <typename T>
+    concept Fooable = requires (T t) { t.foo(); };
+
+    template <typename T> requires [[Fooable]]<T>
+    void bar(T t) {
+      t.foo();
+    }
+  )cpp";
+  Flags.push_back("-std=c++2a");
+  EXPECT_DECLS(
+      "ConceptSpecializationExpr",
+      // FIXME: Should we truncate the pretty-printed form of a concept decl
+      // somewhere?
+      {"template <typename T> concept Fooable = requires (T t) { t.foo(); };"});
 }
 
 TEST_F(TargetDeclTest, FunctionTemplate) {
@@ -511,7 +550,8 @@ TEST_F(TargetDeclTest, ObjC) {
       [[f.x]].y = 0;
     }
   )cpp";
-  EXPECT_DECLS("OpaqueValueExpr", "@property(atomic, retain, readwrite) I *x");
+  EXPECT_DECLS("ObjCPropertyRefExpr",
+               "@property(atomic, retain, readwrite) I *x");
 
   Code = R"cpp(
     @protocol Foo
@@ -558,19 +598,15 @@ protected:
   /// See actual tests for examples of annotation format.
   AllRefs annotateReferencesInFoo(llvm::StringRef Code) {
     TestTU TU;
-    TU.Code = Code;
+    TU.Code = std::string(Code);
 
     // FIXME: Auto-completion in a template requires disabling delayed template
     // parsing.
     TU.ExtraArgs.push_back("-fno-delayed-template-parsing");
-    TU.ExtraArgs.push_back("-std=c++17");
+    TU.ExtraArgs.push_back("-std=c++2a");
+    TU.ExtraArgs.push_back("-xobjective-c++");
 
     auto AST = TU.build();
-    for (auto &D : AST.getDiagnostics()) {
-      if (D.Severity > DiagnosticsEngine::Warning)
-        ADD_FAILURE() << D << Code;
-    }
-
     auto *TestDecl = &findDecl(AST, "foo");
     if (auto *T = llvm::dyn_cast<FunctionTemplateDecl>(TestDecl))
       TestDecl = T->getTemplatedDecl();
@@ -622,7 +658,7 @@ protected:
 
     std::string DumpedReferences;
     for (unsigned I = 0; I < Refs.size(); ++I)
-      DumpedReferences += llvm::formatv("{0}: {1}\n", I, Refs[I]);
+      DumpedReferences += std::string(llvm::formatv("{0}: {1}\n", I, Refs[I]));
 
     return AllRefs{std::move(AnnotatedCode), std::move(DumpedReferences)};
   }
@@ -733,21 +769,17 @@ TEST_F(FindExplicitReferencesTest, All) {
        {R"cpp(
             namespace foo {
               template <typename $0^T>
-              class $1^$2^Bar {
-                ~$3^Bar();
-                void $4^f($5^Bar);
+              class $1^Bar {
+                ~$2^Bar();
+                void $3^f($4^Bar);
               };
             }
           )cpp",
         "0: targets = {foo::Bar::T}, decl\n"
-        // FIXME: avoid the 2 duplicated foo::Bar references below, the first
-        // one comes from ClassTemplateDecl; the second comes from the
-        // underlying CXXRecordDecl.
         "1: targets = {foo::Bar}, decl\n"
-        "2: targets = {foo::Bar}, decl\n"
-        "3: targets = {foo::Bar}\n"
-        "4: targets = {foo::Bar::f}, decl\n"
-        "5: targets = {foo::Bar}\n"},
+        "2: targets = {foo::Bar}\n"
+        "3: targets = {foo::Bar::f}, decl\n"
+        "4: targets = {foo::Bar}\n"},
        // MemberExpr should know their using declaration.
        {R"cpp(
             struct X { void func(int); };
@@ -798,6 +830,10 @@ TEST_F(FindExplicitReferencesTest, All) {
         "1: targets = {vector}\n"
         "2: targets = {x}\n"},
        // Handle UnresolvedLookupExpr.
+       // FIXME
+       // This case fails when expensive checks are enabled.
+       // Seems like the order of ns1::func and ns2::func isn't defined.
+       #ifndef EXPENSIVE_CHECKS
        {R"cpp(
             namespace ns1 { void func(char*); }
             namespace ns2 { void func(int*); }
@@ -811,6 +847,7 @@ TEST_F(FindExplicitReferencesTest, All) {
         )cpp",
         "0: targets = {ns1::func, ns2::func}\n"
         "1: targets = {t}\n"},
+        #endif
        // Handle UnresolvedMemberExpr.
        {R"cpp(
             struct X {
@@ -1047,7 +1084,131 @@ TEST_F(FindExplicitReferencesTest, All) {
               }
             )cpp",
            "0: targets = {Test}\n"
-           "1: targets = {a}, decl\n"}};
+           "1: targets = {a}, decl\n"},
+       // Templates
+       {R"cpp(
+            namespace foo {
+              template <typename $0^T>
+              class $1^Bar {};
+            }
+          )cpp",
+        "0: targets = {foo::Bar::T}, decl\n"
+        "1: targets = {foo::Bar}, decl\n"},
+       // Templates
+       {R"cpp(
+            namespace foo {
+              template <typename $0^T>
+              void $1^func();
+            }
+          )cpp",
+        "0: targets = {T}, decl\n"
+        "1: targets = {foo::func}, decl\n"},
+       // Templates
+       {R"cpp(
+            namespace foo {
+              template <typename $0^T>
+              $1^T $2^x;
+            }
+          )cpp",
+        "0: targets = {foo::T}, decl\n"
+        "1: targets = {foo::T}\n"
+        "2: targets = {foo::x}, decl\n"},
+       // Templates
+       {R"cpp(
+            template<typename T> class vector {};
+            namespace foo {
+              template <typename $0^T>
+              using $1^V = $2^vector<$3^T>;
+            }
+          )cpp",
+        "0: targets = {foo::T}, decl\n"
+        "1: targets = {foo::V}, decl\n"
+        "2: targets = {vector}\n"
+        "3: targets = {foo::T}\n"},
+       // Concept
+       {
+           R"cpp(
+              template <typename T>
+              concept Drawable = requires (T t) { t.draw(); };
+
+              namespace foo {
+                template <typename $0^T> requires $1^Drawable<$2^T>
+                void $3^bar($4^T $5^t) {
+                  $6^t.draw();
+                }
+              }
+          )cpp",
+           "0: targets = {T}, decl\n"
+           "1: targets = {Drawable}\n"
+           "2: targets = {T}\n"
+           "3: targets = {foo::bar}, decl\n"
+           "4: targets = {T}\n"
+           "5: targets = {t}, decl\n"
+           "6: targets = {t}\n"},
+       // Objective-C: properties
+       {
+           R"cpp(
+            @interface I {}
+            @property(retain) I* x;
+            @property(retain) I* y;
+            @end
+            I *f;
+            void foo() {
+              $0^f.$1^x.$2^y = 0;
+            }
+          )cpp",
+           "0: targets = {f}\n"
+           "1: targets = {I::x}\n"
+           "2: targets = {I::y}\n"},
+       // Objective-C: implicit properties
+       {
+           R"cpp(
+            @interface I {}
+            -(I*)x;
+            -(void)setY:(I*)y;
+            @end
+            I *f;
+            void foo() {
+              $0^f.$1^x.$2^y = 0;
+            }
+          )cpp",
+           "0: targets = {f}\n"
+           "1: targets = {I::x}\n"
+           "2: targets = {I::setY:}\n"},
+       // Designated initializers.
+       {R"cpp(
+            void foo() {
+              struct $0^Foo {
+                int $1^Bar;
+              };
+              $2^Foo $3^f { .$4^Bar = 42 };
+            }
+        )cpp",
+        "0: targets = {Foo}, decl\n"
+        "1: targets = {foo()::Foo::Bar}, decl\n"
+        "2: targets = {Foo}\n"
+        "3: targets = {f}, decl\n"
+        "4: targets = {foo()::Foo::Bar}\n"},
+       {R"cpp(
+            void foo() {
+              struct $0^Baz {
+                int $1^Field;
+              };
+              struct $2^Bar {
+                $3^Baz $4^Foo;
+              };
+              $5^Bar $6^bar { .$7^Foo.$8^Field = 42 };
+            }
+        )cpp",
+        "0: targets = {Baz}, decl\n"
+        "1: targets = {foo()::Baz::Field}, decl\n"
+        "2: targets = {Bar}, decl\n"
+        "3: targets = {Baz}\n"
+        "4: targets = {foo()::Bar::Foo}, decl\n"
+        "5: targets = {Bar}\n"
+        "6: targets = {bar}, decl\n"
+        "7: targets = {foo()::Bar::Foo}\n"
+        "8: targets = {foo()::Baz::Field}\n"}};
 
   for (const auto &C : Cases) {
     llvm::StringRef ExpectedCode = C.first;

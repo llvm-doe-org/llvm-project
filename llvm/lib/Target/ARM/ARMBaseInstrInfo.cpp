@@ -495,6 +495,24 @@ bool ARMBaseInstrInfo::isPredicated(const MachineInstr &MI) const {
   return PIdx != -1 && MI.getOperand(PIdx).getImm() != ARMCC::AL;
 }
 
+std::string ARMBaseInstrInfo::createMIROperandComment(const MachineInstr &MI,
+                                                      const MachineOperand &Op,
+                                                      unsigned OpIdx) const {
+  // Only support immediates for now.
+  if (Op.getType() != MachineOperand::MO_Immediate)
+    return std::string();
+
+  // And print its corresponding condition code if the immediate is a
+  // predicate.
+  int FirstPredOp = MI.findFirstPredOperandIdx();
+  if (FirstPredOp != (int) OpIdx)
+    return std::string();
+
+  std::string CC = "CC::";
+  CC += ARMCondCodeToString((ARMCC::CondCodes)Op.getImm());
+  return CC;
+}
+
 bool ARMBaseInstrInfo::PredicateInstruction(
     MachineInstr &MI, ArrayRef<MachineOperand> Pred) const {
   unsigned Opc = MI.getOpcode();
@@ -1023,7 +1041,7 @@ ARMBaseInstrInfo::AddDReg(MachineInstrBuilder &MIB, unsigned Reg,
 
 void ARMBaseInstrInfo::
 storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
-                    unsigned SrcReg, bool isKill, int FI,
+                    Register SrcReg, bool isKill, int FI,
                     const TargetRegisterClass *RC,
                     const TargetRegisterInfo *TRI) const {
   MachineFunction &MF = *MBB.getParent();
@@ -1264,7 +1282,7 @@ unsigned ARMBaseInstrInfo::isStoreToStackSlotPostFE(const MachineInstr &MI,
 
 void ARMBaseInstrInfo::
 loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
-                     unsigned DestReg, int FI,
+                     Register DestReg, int FI,
                      const TargetRegisterClass *RC,
                      const TargetRegisterInfo *TRI) const {
   DebugLoc DL;

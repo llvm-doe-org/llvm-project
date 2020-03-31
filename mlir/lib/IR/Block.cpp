@@ -1,6 +1,6 @@
 //===- Block.cpp - MLIR Block Class ---------------------------------------===//
 //
-// Part of the MLIR Project, under the Apache License v2.0 with LLVM Exceptions.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
@@ -170,20 +170,21 @@ BlockArgument Block::insertArgument(unsigned index, Type type) {
 void Block::eraseArgument(unsigned index, bool updatePredTerms) {
   assert(index < arguments.size());
 
+  // If requested, update predecessors. We do this first since this block might
+  // be a predecessor of itself and use this block argument as a successor
+  // operand.
+  if (updatePredTerms) {
+    // Erase this argument from each of the predecessor's terminator.
+    for (auto predIt = pred_begin(), predE = pred_end(); predIt != predE;
+         ++predIt) {
+      auto *predTerminator = (*predIt)->getTerminator();
+      predTerminator->eraseSuccessorOperand(predIt.getSuccessorIndex(), index);
+    }
+  }
+
   // Delete the argument.
   arguments[index].destroy();
   arguments.erase(arguments.begin() + index);
-
-  // If we aren't updating predecessors, there is nothing left to do.
-  if (!updatePredTerms)
-    return;
-
-  // Erase this argument from each of the predecessor's terminator.
-  for (auto predIt = pred_begin(), predE = pred_end(); predIt != predE;
-       ++predIt) {
-    auto *predTerminator = (*predIt)->getTerminator();
-    predTerminator->eraseSuccessorOperand(predIt.getSuccessorIndex(), index);
-  }
 }
 
 /// Insert one value to the given position of the argument list. The existing

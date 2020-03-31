@@ -113,8 +113,9 @@ unsigned DwarfCompileUnit::getOrCreateSourceID(const DIFile *File) {
   // extend .file to support this.
   unsigned CUID = Asm->OutStreamer->hasRawTextSupport() ? 0 : getUniqueID();
   if (!File)
-    return Asm->OutStreamer->EmitDwarfFileDirective(0, "", "", None, None, CUID);
-  return Asm->OutStreamer->EmitDwarfFileDirective(
+    return Asm->OutStreamer->emitDwarfFileDirective(0, "", "", None, None,
+                                                    CUID);
+  return Asm->OutStreamer->emitDwarfFileDirective(
       0, File->getDirectory(), File->getFilename(), getMD5AsBytes(File),
       File->getSource(), CUID);
 }
@@ -953,7 +954,6 @@ DwarfCompileUnit::getDwarf5OrGNUAttr(dwarf::Attribute Attr) const {
     return dwarf::DW_AT_GNU_call_site_target;
   case dwarf::DW_AT_call_origin:
     return dwarf::DW_AT_abstract_origin;
-  case dwarf::DW_AT_call_pc:
   case dwarf::DW_AT_call_return_pc:
     return dwarf::DW_AT_low_pc;
   case dwarf::DW_AT_call_value:
@@ -978,7 +978,7 @@ DwarfCompileUnit::getDwarf5OrGNULocationAtom(dwarf::LocationAtom Loc) const {
 }
 
 DIE &DwarfCompileUnit::constructCallSiteEntryDIE(DIE &ScopeDIE,
-                                                 const DISubprogram *CalleeSP,
+                                                 DIE *CalleeDIE,
                                                  bool IsTail,
                                                  const MCSymbol *PCAddr,
                                                  unsigned CallReg) {
@@ -991,8 +991,7 @@ DIE &DwarfCompileUnit::constructCallSiteEntryDIE(DIE &ScopeDIE,
     addAddress(CallSiteDIE, getDwarf5OrGNUAttr(dwarf::DW_AT_call_target),
                MachineLocation(CallReg));
   } else {
-    DIE *CalleeDIE = getDIE(CalleeSP);
-    assert(CalleeDIE && "Could not find DIE for call site entry origin");
+    assert(CalleeDIE && "No DIE for call site entry origin");
     addDIEEntry(CallSiteDIE, getDwarf5OrGNUAttr(dwarf::DW_AT_call_origin),
                 *CalleeDIE);
   }
@@ -1132,7 +1131,7 @@ void DwarfCompileUnit::emitHeader(bool UseOffsets) {
   // Don't bother labeling the .dwo unit, as its offset isn't used.
   if (!Skeleton && !DD->useSectionsAsReferences()) {
     LabelBegin = Asm->createTempSymbol("cu_begin");
-    Asm->OutStreamer->EmitLabel(LabelBegin);
+    Asm->OutStreamer->emitLabel(LabelBegin);
   }
 
   dwarf::UnitType UT = Skeleton ? dwarf::DW_UT_split_compile

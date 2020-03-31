@@ -1,6 +1,6 @@
 //===- ConvertConst.cpp - Quantizes constant ops --------------------------===//
 //
-// Part of the MLIR Project, under the Apache License v2.0 with LLVM Exceptions.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
@@ -10,7 +10,7 @@
 #include "mlir/Dialect/QuantOps/QuantOps.h"
 #include "mlir/Dialect/QuantOps/QuantizeUtils.h"
 #include "mlir/Dialect/QuantOps/UniformSupport.h"
-#include "mlir/Dialect/StandardOps/Ops.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
@@ -90,8 +90,8 @@ QuantizedConstRewrite::matchAndRewrite(QuantizeCastOp qbarrier,
       rewriter.getContext());
   auto newConstOp =
       rewriter.create<ConstantOp>(fusedLoc, newConstValueType, newConstValue);
-  rewriter.replaceOpWithNewOp<StorageCastOp>({qbarrier.arg()}, qbarrier,
-                                             qbarrier.getType(), newConstOp);
+  rewriter.replaceOpWithNewOp<StorageCastOp>(qbarrier, qbarrier.getType(),
+                                             newConstOp);
   return matchSuccess();
 }
 

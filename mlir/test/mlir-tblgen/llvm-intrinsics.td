@@ -6,16 +6,24 @@
 // includes from the main file to avoid unnecessary dependencies and decrease
 // the test cost. The command-line flags further ensure a specific intrinsic is
 // processed and we only check the ouptut below.
+// We also verify emission of type specialization for overloadable intrinsics.
 //
 // RUN: cat %S/../../../llvm/include/llvm/IR/Intrinsics.td \
 // RUN: | grep -v "llvm/IR/Intrinsics" \
-// RUN: | mlir-tblgen -gen-llvmir-intrinsics -I %S/../../../llvm/include/ --llvmir-intrinsics-filter=vastart \
+// RUN: | mlir-tblgen -gen-llvmir-intrinsics -I %S/../../../llvm/include/ --llvmir-intrinsics-filter=ptrmask \
 // RUN: | FileCheck %s
 
-// CHECK-LABEL: def LLVM_vastart
-// CHECK: LLVM_Op<"intr
-// CHECK: Arguments<(ins
-// CHECK: Results<(outs
+// CHECK-LABEL: def LLVM_ptrmask
+// CHECK: LLVM_IntrOp<"ptrmask
+// The result of this intrinsic result is overloadable.
+// CHECK: [0]
+// Both its operands are overloadable.
+// CHECK: [0, 1]
+// It has no additional traits.
+// CHECK: []
+// It has a result.
+// CHECK: 1>
+// CHECK: Arguments<(ins LLVM_Type, LLVM_Type
 
 //---------------------------------------------------------------------------//
 
@@ -30,3 +38,11 @@
 // RUN: | FileCheck --check-prefix=ODS %s
 
 // ODS-LABEL: class vastart
+
+// RUN: cat %S/../../../llvm/include/llvm/IR/Intrinsics.td \
+// RUN: | grep -v "llvm/IR/Intrinsics" \
+// RUN: | mlir-tblgen -gen-llvmir-intrinsics -I %S/../../../llvm/include/ --llvmir-intrinsics-filter=ptrmask -dialect-opclass-base My_OpBase \
+// RUN: | FileCheck %s --check-prefix=DIALECT-OPBASE
+
+// DIALECT-OPBASE-LABEL: def LLVM_ptrmask
+// DIALECT-OPBASE: My_OpBase<"ptrmask

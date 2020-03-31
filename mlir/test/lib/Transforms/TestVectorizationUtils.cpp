@@ -1,6 +1,6 @@
 //===- VectorizerTestPass.cpp - VectorizerTestPass Pass Impl --------------===//
 //
-// Part of the MLIR Project, under the Apache License v2.0 with LLVM Exceptions.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
@@ -281,12 +281,9 @@ void VectorizerTestPass::runOnFunction() {
   }
 }
 
-std::unique_ptr<OpPassBase<FuncOp>> mlir::createVectorizerTestPass() {
-  return std::make_unique<VectorizerTestPass>();
+namespace mlir {
+void registerVectorizerTestPass() {
+  PassRegistration<VectorizerTestPass> pass(
+      "affine-vectorizer-test", "Tests vectorizer standalone functionality.");
 }
-
-static PassRegistration<VectorizerTestPass>
-    pass("affine-vectorizer-test",
-         "Tests vectorizer standalone functionality.");
-
-#undef DEBUG_TYPE
+} // namespace mlir

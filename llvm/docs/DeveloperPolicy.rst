@@ -160,7 +160,7 @@ larger features. Accepted ways to speed up review times for your patches are:
 Developers should participate in code reviews as both reviewers and
 reviewees. If someone is kind enough to review your code, you should return the
 favor for someone else.  Note that anyone is welcome to review and give feedback
-on a patch, but only people with Subversion write access can approve it.
+on a patch, but only people with GitHub commit access can approve it.
 
 There is a web based code review tool that can optionally be used
 for code reviews. See :doc:`Phabricator`.
@@ -325,9 +325,9 @@ Below are some guidelines about the format of the message itself:
   and in-code comments, ex. capitalization, full stop, etc.
 
 * If the commit is a bug fix on top of another recently committed patch, or a
-  revert or reapply of a patch, include the svn revision number of the prior
-  related commit. This could be as simple as "Revert rNNNN because it caused
-  PR#".
+  revert or reapply of a patch, include the git commit hash of the prior
+  related commit. This could be as simple as "Revert commit NNNN because it
+  caused PR#".
 
 For minor violations of these recommendations, the community normally favors
 reminding the contributor of this policy over reverting. Minor corrections and
@@ -384,8 +384,8 @@ after they are committed, depending on the nature of the change).  You are
 encouraged to review other peoples' patches as well, but you aren't required
 to do so.
 
-Current Contributors - Transfering from SVN
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Current Contributors - Transferring from SVN
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 If you had commit access to SVN and would like to request commit access to
 GitHub, please email `llvm-admin <mailto:llvm-admin@lists.llvm.org>`_ with your
 SVN username and GitHub username.
@@ -570,9 +570,15 @@ and then trying to fix emergent problems in-tree is problematic for a variety
 of reasons.
 
 For these reasons, new targets are *always* added as *experimental* until
-they can be proven stable, and later moved to non-experimental. The difference
-between both classes is that experimental targets are not built by default
-(need to be added to -DLLVM_TARGETS_TO_BUILD at CMake time).
+they can be proven stable, and later moved to non-experimental. The differences
+between both classes are:
+
+* Experimental targets are not built by default (they need to be explicitly
+  enabled at CMake time).
+
+* Test failures, bugs, and build breakages that only appear when the
+  experimental target is enabled, caused by changes unrelated to the target, are
+  the responsibility of the community behind the target to fix.
 
 The basic rules for a back-end to be upstreamed in **experimental** mode are:
 
@@ -744,7 +750,7 @@ OpenMP, etc), Polly, and all other subprojects.  There are a few exceptions:
   is used by LLVM.
 * Some subprojects are impractical or uninteresting to relicense (e.g. llvm-gcc
   and dragonegg). These will be split off from the LLVM project (e.g. to
-  separate Github projects), allowing interested people to continue their
+  separate GitHub projects), allowing interested people to continue their
   development elsewhere.
 
 To relicense LLVM, we will be seeking approval from all of the copyright holders
@@ -875,7 +881,7 @@ holds though)::
 
    Q2: If at any time after my contribution, I am able to license other patent
    claims that would have been subject to Apache's Grant of Patent License if
-   they were licenseable by me at the time of my contribution, do those other
+   they were licensable by me at the time of my contribution, do those other
    claims become subject to the Grant of Patent License?
 
    A2: Yes.

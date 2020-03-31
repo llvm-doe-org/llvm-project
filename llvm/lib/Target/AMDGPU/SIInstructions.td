@@ -27,9 +27,6 @@ include "BUFInstructions.td"
 defm EXP : EXP_m<0>;
 defm EXP_DONE : EXP_m<1>;
 
-// FIXME: GlobalISel successfully imports this pattern, but fails to
-// select because the i1 done_val does a type check on done_val, which
-// only works on register operands.
 class ExpPattern<ValueType vt, Instruction Inst, int done_val> : GCNPat<
   (int_amdgcn_exp timm:$tgt, timm:$en,
                   (vt ExpSrc0:$src0), (vt ExpSrc1:$src1),
@@ -109,7 +106,7 @@ defm V_INTERP_MOV_F32 : VINTRP_m <
   (outs VINTRPDst:$vdst),
   (ins InterpSlot:$vsrc, Attr:$attr, AttrChan:$attrchan),
   "v_interp_mov_f32$vdst, $vsrc, $attr$attrchan",
-  [(set f32:$vdst, (int_amdgcn_interp_mov (i32 imm:$vsrc),
+  [(set f32:$vdst, (int_amdgcn_interp_mov (i32 timm:$vsrc),
                    (i32 timm:$attrchan), (i32 timm:$attr), M0))]>;
 
 } // End Uses = [M0, EXEC]
@@ -169,7 +166,8 @@ def WWM : PseudoInstSI <(outs unknown:$vdst), (ins unknown:$src0)>;
 } // End let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Uses = [EXEC]
 
 def ENTER_WWM : SPseudoInstSI <(outs SReg_1:$sdst), (ins i64imm:$src0)> {
-  let Defs = [EXEC];
+  let Uses = [EXEC];
+  let Defs = [EXEC, SCC];
   let hasSideEffects = 0;
   let mayLoad = 0;
   let mayStore = 0;
@@ -732,12 +730,6 @@ def : GCNPat<
 >;
 
 def : Pat <
-  // -1.0 as i32 (LowerINTRINSIC_VOID converts all other constants to -1.0)
-  (AMDGPUkill (i32 -1082130432)),
-  (SI_KILL_I1_PSEUDO (i1 0), 0)
->;
-
-def : Pat <
   (int_amdgcn_kill i1:$src),
   (SI_KILL_I1_PSEUDO SCSrc_i1:$src, 0)
 >;
@@ -745,11 +737,6 @@ def : Pat <
 def : Pat <
   (int_amdgcn_kill (i1 (not i1:$src))),
   (SI_KILL_I1_PSEUDO SCSrc_i1:$src, -1)
->;
-
-def : Pat <
-  (AMDGPUkill i32:$src),
-  (SI_KILL_F32_COND_IMM_PSEUDO VSrc_b32:$src, 0, 3) // 3 means SETOGE
 >;
 
 def : Pat <
@@ -888,18 +875,22 @@ def : FMADModsPat<V_MAD_F16, AMDGPUfmad_ftz, f16> {
   let SubtargetPredicate = Has16BitInsts;
 }
 
-multiclass SelectPat <ValueType vt> {
-  def : GCNPat <
-    (vt (select i1:$src0, (VOP3Mods_f32 vt:$src1, i32:$src1_mods),
-                          (VOP3Mods_f32 vt:$src2, i32:$src2_mods))),
-    (V_CNDMASK_B32_e64 $src2_mods, $src2, $src1_mods, $src1, $src0)
-  >;
-}
+class VOPSelectModsPat <ValueType vt> : GCNPat <
+  (vt (select i1:$src0, (VOP3Mods vt:$src1, i32:$src1_mods),
+                        (VOP3Mods vt:$src2, i32:$src2_mods))),
+  (V_CNDMASK_B32_e64 FP32InputMods:$src2_mods, VSrc_b32:$src2,
+                     FP32InputMods:$src1_mods, VSrc_b32:$src1, SSrc_i1:$src0)
+>;
 
-defm : SelectPat <i16>;
-defm : SelectPat <i32>;
-defm : SelectPat <f16>;
-defm : SelectPat <f32>;
+class VOPSelectPat <ValueType vt> : GCNPat <
+  (vt (select i1:$src0, vt:$src1, vt:$src2)),
+  (V_CNDMASK_B32_e64 0, VSrc_b32:$src2, 0, VSrc_b32:$src1, SSrc_i1:$src0)
+>;
+
+def : VOPSelectModsPat <i32>;
+def : VOPSelectModsPat <f32>;
+def : VOPSelectPat <f16>;
+def : VOPSelectPat <i16>;
 
 let AddedComplexity = 1 in {
 def : GCNPat <
@@ -1132,6 +1123,8 @@ def : BitConvert <v4f32, v2f64, VReg_128>;
 def : BitConvert <v4i32, v2f64, VReg_128>;
 def : BitConvert <v2i64, v2f64, VReg_128>;
 def : BitConvert <v2f64, v2i64, VReg_128>;
+def : BitConvert <v4f32, v2i64, VReg_128>;
+def : BitConvert <v2i64, v4f32, VReg_128>;
 
 // 160-bit bitcast
 def : BitConvert <v5i32, v5f32, SGPR_160>;
@@ -1788,9 +1781,77 @@ def : GCNPat <
 def : GCNPat <
   (i32 (bswap i32:$a)),
   (V_BFI_B32 (S_MOV_B32 (i32 0x00ff00ff)),
-             (V_ALIGNBIT_B32 $a, $a, (i32 24)),
-             (V_ALIGNBIT_B32 $a, $a, (i32 8)))
+             (V_ALIGNBIT_B32 VSrc_b32:$a, VSrc_b32:$a, (i32 24)),
+             (V_ALIGNBIT_B32 VSrc_b32:$a, VSrc_b32:$a, (i32 8)))
 >;
+
+// FIXME: This should have been narrowed to i32 during legalization.
+// This pattern should also be skipped for GlobalISel
+def : GCNPat <
+  (i64 (bswap i64:$a)),
+  (REG_SEQUENCE VReg_64,
+  (V_BFI_B32 (S_MOV_B32 (i32 0x00ff00ff)),
+             (V_ALIGNBIT_B32 (i32 (EXTRACT_SUBREG VReg_64:$a, sub1)),
+                             (i32 (EXTRACT_SUBREG VReg_64:$a, sub1)),
+                             (i32 24)),
+             (V_ALIGNBIT_B32 (i32 (EXTRACT_SUBREG VReg_64:$a, sub1)),
+                             (i32 (EXTRACT_SUBREG VReg_64:$a, sub1)),
+                             (i32 8))),
+  sub0,
+  (V_BFI_B32 (S_MOV_B32 (i32 0x00ff00ff)),
+             (V_ALIGNBIT_B32 (i32 (EXTRACT_SUBREG VReg_64:$a, sub0)),
+                             (i32 (EXTRACT_SUBREG VReg_64:$a, sub0)),
+                             (i32 24)),
+             (V_ALIGNBIT_B32 (i32 (EXTRACT_SUBREG VReg_64:$a, sub0)),
+                             (i32 (EXTRACT_SUBREG VReg_64:$a, sub0)),
+                             (i32 8))),
+  sub1)
+>;
+
+// FIXME: The AddedComplexity should not be needed, but in GlobalISel
+// the BFI pattern ends up taking precedence without it.
+let SubtargetPredicate = isGFX8Plus, AddedComplexity = 1 in {
+// Magic number: 3 | (2 << 8) | (1 << 16) | (0 << 24)
+//
+// My reading of the manual suggests we should be using src0 for the
+// register value, but this is what seems to work.
+def : GCNPat <
+  (i32 (bswap i32:$a)),
+  (V_PERM_B32 (i32 0), VSrc_b32:$a, (S_MOV_B32 (i32 0x00010203)))
+>;
+
+// FIXME: This should have been narrowed to i32 during legalization.
+// This pattern should also be skipped for GlobalISel
+def : GCNPat <
+  (i64 (bswap i64:$a)),
+  (REG_SEQUENCE VReg_64,
+  (V_PERM_B32 (i32 0), (EXTRACT_SUBREG VReg_64:$a, sub1),
+              (S_MOV_B32 (i32 0x00010203))),
+  sub0,
+  (V_PERM_B32 (i32 0), (EXTRACT_SUBREG VReg_64:$a, sub0),
+              (S_MOV_B32 (i32 0x00010203))),
+  sub1)
+>;
+
+// Magic number: 1 | (0 << 8) | (12 << 16) | (12 << 24)
+// The 12s emit 0s.
+def : GCNPat <
+  (i16 (bswap i16:$a)),
+  (V_PERM_B32 (i32 0), VSrc_b32:$a, (S_MOV_B32 (i32 0x0c0c0001)))
+>;
+
+def : GCNPat <
+  (i32 (zext (bswap i16:$a))),
+  (V_PERM_B32 (i32 0), VSrc_b32:$a, (S_MOV_B32 (i32 0x0c0c0001)))
+>;
+
+// Magic number: 1 | (0 << 8) | (3 << 16) | (2 << 24)
+def : GCNPat <
+  (v2i16 (bswap v2i16:$a)),
+  (V_PERM_B32 (i32 0), VSrc_b32:$a, (S_MOV_B32 (i32 0x02030001)))
+>;
+
+}
 
 let OtherPredicates = [NoFP16Denormals] in {
 def : GCNPat<
@@ -1957,11 +2018,12 @@ def : GCNPat <
 >;
 
 def : GCNPat <
-  (i64 (int_amdgcn_mov_dpp i64:$src, timm:$dpp_ctrl, timm:$row_mask, timm:$bank_mask,
-                           timm:$bound_ctrl)),
-  (V_MOV_B64_DPP_PSEUDO $src, $src, (as_i32imm $dpp_ctrl),
-                        (as_i32imm $row_mask), (as_i32imm $bank_mask),
-                        (as_i1imm $bound_ctrl))
+  (i64 (int_amdgcn_mov_dpp i64:$src, timm:$dpp_ctrl, timm:$row_mask,
+                           timm:$bank_mask, timm:$bound_ctrl)),
+  (V_MOV_B64_DPP_PSEUDO VReg_64:$src, VReg_64:$src,
+                        (as_i32timm $dpp_ctrl), (as_i32timm $row_mask),
+                        (as_i32timm $bank_mask),
+                        (as_i1timm $bound_ctrl))
 >;
 
 def : GCNPat <
@@ -1985,6 +2047,11 @@ let SubtargetPredicate = isGFX6 in {
 //    fract(x) = isnan(x) ? x : min(V_FRACT(x), 0.99999999999999999)
 
 // Convert floor(x) to (x - fract(x))
+
+// Don't bother handling this for GlobalISel, it's handled during
+// lowering.
+//
+// FIXME: DAG should also custom lower this.
 def : GCNPat <
   (f64 (ffloor (f64 (VOP3Mods f64:$x, i32:$mods)))),
   (V_ADD_F64
@@ -2145,13 +2212,135 @@ def G_AMDGPU_FFBH_U32 : AMDGPUGenericInstruction {
   let hasSideEffects = 0;
 }
 
+def G_AMDGPU_RCP_IFLAG : AMDGPUGenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type1:$src);
+  let hasSideEffects = 0;
+}
+
+class BufferLoadGenericInstruction : AMDGPUGenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type1:$rsrc, type2:$vindex, type2:$voffset,
+                           type2:$soffset, untyped_imm_0:$offset,
+                           untyped_imm_0:$cachepolicy, untyped_imm_0:$idxen);
+  let hasSideEffects = 0;
+  let mayLoad = 1;
+}
+
+class TBufferLoadGenericInstruction : AMDGPUGenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type1:$rsrc, type2:$vindex, type2:$voffset,
+                           type2:$soffset, untyped_imm_0:$offset, untyped_imm_0:$format,
+                           untyped_imm_0:$cachepolicy, untyped_imm_0:$idxen);
+  let hasSideEffects = 0;
+  let mayLoad = 1;
+}
+
+def G_AMDGPU_BUFFER_LOAD_UBYTE : BufferLoadGenericInstruction;
+def G_AMDGPU_BUFFER_LOAD_SBYTE : BufferLoadGenericInstruction;
+def G_AMDGPU_BUFFER_LOAD_USHORT : BufferLoadGenericInstruction;
+def G_AMDGPU_BUFFER_LOAD_SSHORT : BufferLoadGenericInstruction;
+def G_AMDGPU_BUFFER_LOAD : BufferLoadGenericInstruction;
+def G_AMDGPU_BUFFER_LOAD_FORMAT : BufferLoadGenericInstruction;
+def G_AMDGPU_BUFFER_LOAD_FORMAT_D16 : BufferLoadGenericInstruction;
+def G_AMDGPU_TBUFFER_LOAD_FORMAT : TBufferLoadGenericInstruction;
+def G_AMDGPU_TBUFFER_LOAD_FORMAT_D16 : TBufferLoadGenericInstruction;
+
+class BufferStoreGenericInstruction : AMDGPUGenericInstruction {
+  let OutOperandList = (outs);
+  let InOperandList = (ins type0:$vdata, type1:$rsrc, type2:$vindex, type2:$voffset,
+                           type2:$soffset, untyped_imm_0:$offset,
+                           untyped_imm_0:$cachepolicy, untyped_imm_0:$idxen);
+  let hasSideEffects = 0;
+  let mayStore = 1;
+}
+
+class TBufferStoreGenericInstruction : AMDGPUGenericInstruction {
+  let OutOperandList = (outs);
+  let InOperandList = (ins type0:$vdata, type1:$rsrc, type2:$vindex, type2:$voffset,
+                           type2:$soffset, untyped_imm_0:$offset,
+                           untyped_imm_0:$format,
+                           untyped_imm_0:$cachepolicy, untyped_imm_0:$idxen);
+  let hasSideEffects = 0;
+  let mayStore = 1;
+}
+
+def G_AMDGPU_BUFFER_STORE : BufferStoreGenericInstruction;
+def G_AMDGPU_BUFFER_STORE_BYTE : BufferStoreGenericInstruction;
+def G_AMDGPU_BUFFER_STORE_SHORT : BufferStoreGenericInstruction;
+def G_AMDGPU_BUFFER_STORE_FORMAT : BufferStoreGenericInstruction;
+def G_AMDGPU_BUFFER_STORE_FORMAT_D16 : BufferStoreGenericInstruction;
+def G_AMDGPU_TBUFFER_STORE_FORMAT : TBufferStoreGenericInstruction;
+def G_AMDGPU_TBUFFER_STORE_FORMAT_D16 : TBufferStoreGenericInstruction;
+
+def G_AMDGPU_FMIN_LEGACY : AMDGPUGenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type0:$src0, type0:$src1);
+  let hasSideEffects = 0;
+}
+
+def G_AMDGPU_FMAX_LEGACY : AMDGPUGenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type0:$src0, type0:$src1);
+  let hasSideEffects = 0;
+}
+
 // Atomic cmpxchg. $cmpval ad $newval are packed in a single vector
 // operand Expects a MachineMemOperand in addition to explicit
 // operands.
 def G_AMDGPU_ATOMIC_CMPXCHG : AMDGPUGenericInstruction {
   let OutOperandList = (outs type0:$oldval);
-  let InOperandList = (ins ptype1:$addr, type0:$cmpval_nnenwval);
+  let InOperandList = (ins ptype1:$addr, type0:$cmpval_newval);
   let hasSideEffects = 0;
   let mayLoad = 1;
   let mayStore = 1;
+}
+
+let Namespace = "AMDGPU" in {
+def G_AMDGPU_ATOMIC_INC : G_ATOMICRMW_OP;
+def G_AMDGPU_ATOMIC_DEC : G_ATOMICRMW_OP;
+}
+
+class BufferAtomicGenericInstruction : AMDGPUGenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type0:$vdata, type1:$rsrc, type2:$vindex, type2:$voffset,
+                           type2:$soffset, untyped_imm_0:$offset,
+                           untyped_imm_0:$cachepolicy, untyped_imm_0:$idxen);
+  let hasSideEffects = 0;
+  let mayLoad = 1;
+  let mayStore = 1;
+}
+
+def G_AMDGPU_BUFFER_ATOMIC_SWAP : BufferAtomicGenericInstruction;
+def G_AMDGPU_BUFFER_ATOMIC_ADD : BufferAtomicGenericInstruction;
+def G_AMDGPU_BUFFER_ATOMIC_SUB : BufferAtomicGenericInstruction;
+def G_AMDGPU_BUFFER_ATOMIC_SMIN : BufferAtomicGenericInstruction;
+def G_AMDGPU_BUFFER_ATOMIC_UMIN : BufferAtomicGenericInstruction;
+def G_AMDGPU_BUFFER_ATOMIC_SMAX : BufferAtomicGenericInstruction;
+def G_AMDGPU_BUFFER_ATOMIC_UMAX : BufferAtomicGenericInstruction;
+def G_AMDGPU_BUFFER_ATOMIC_AND : BufferAtomicGenericInstruction;
+def G_AMDGPU_BUFFER_ATOMIC_OR : BufferAtomicGenericInstruction;
+def G_AMDGPU_BUFFER_ATOMIC_XOR : BufferAtomicGenericInstruction;
+def G_AMDGPU_BUFFER_ATOMIC_INC : BufferAtomicGenericInstruction;
+def G_AMDGPU_BUFFER_ATOMIC_DEC : BufferAtomicGenericInstruction;
+
+def G_AMDGPU_BUFFER_ATOMIC_CMPSWAP : AMDGPUGenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type0:$vdata, type0:$cmp, type1:$rsrc, type2:$vindex,
+                           type2:$voffset, type2:$soffset, untyped_imm_0:$offset,
+                           untyped_imm_0:$cachepolicy, untyped_imm_0:$idxen);
+  let hasSideEffects = 0;
+  let mayLoad = 1;
+  let mayStore = 1;
+}
+
+// Wrapper around llvm.amdgcn.s.buffer.load. This is mostly needed as
+// a workaround for the intrinsic being defined as readnone, but
+// really needs a memory operand.
+def G_AMDGPU_S_BUFFER_LOAD : AMDGPUGenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type1:$rsrc, type2:$offset, untyped_imm_0:$cachepolicy);
+  let hasSideEffects = 0;
+  let mayLoad = 1;
+  let mayStore = 0;
 }

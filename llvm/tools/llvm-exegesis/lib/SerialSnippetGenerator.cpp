@@ -8,8 +8,9 @@
 
 #include "SerialSnippetGenerator.h"
 
-#include "MCInstrDescView.h"
 #include "CodeTemplate.h"
+#include "MCInstrDescView.h"
+#include "Target.h"
 #include <algorithm>
 #include <numeric>
 #include <vector>
@@ -48,7 +49,16 @@ computeAliasingInstructions(const LLVMState &State, const Instruction *Instr,
     if (OtherOpcode == Instr->Description.getOpcode())
       continue;
     const Instruction &OtherInstr = State.getIC().getInstr(OtherOpcode);
+    const MCInstrDesc &OtherInstrDesc = OtherInstr.Description;
+    // Ignore instructions that we cannot run.
+    if (OtherInstrDesc.isPseudo() ||
+        OtherInstrDesc.isBranch() || OtherInstrDesc.isIndirectBranch() ||
+        OtherInstrDesc.isCall() || OtherInstrDesc.isReturn()) {
+          continue;
+    }
     if (OtherInstr.hasMemoryOperands())
+      continue;
+    if (!State.getExegesisTarget().allowAsBackToBack(OtherInstr))
       continue;
     if (Instr->hasAliasingRegistersThrough(OtherInstr, ForbiddenRegisters))
       AliasingInstructions.push_back(&OtherInstr);
@@ -77,7 +87,7 @@ static ExecutionMode getExecutionModes(const Instruction &Instr,
 }
 
 static void appendCodeTemplates(const LLVMState &State,
-                                const Instruction *Instr,
+                                InstructionTemplate Variant,
                                 const BitVector &ForbiddenRegisters,
                                 ExecutionMode ExecutionModeBit,
                                 StringRef ExecutionClassDescription,
@@ -92,8 +102,8 @@ static void appendCodeTemplates(const LLVMState &State,
     // serial.
     CodeTemplate CT;
     CT.Execution = ExecutionModeBit;
-    CT.Info = ExecutionClassDescription;
-    CT.Instructions.push_back(Instr);
+    CT.Info = std::string(ExecutionClassDescription);
+    CT.Instructions.push_back(std::move(Variant));
     CodeTemplates.push_back(std::move(CT));
     return;
   }
@@ -105,27 +115,28 @@ static void appendCodeTemplates(const LLVMState &State,
   case ExecutionMode::SERIAL_VIA_EXPLICIT_REGS: {
     // Making the execution of this instruction serial by selecting one def
     // register to alias with one use register.
-    const AliasingConfigurations SelfAliasing(*Instr, *Instr);
+    const AliasingConfigurations SelfAliasing(Variant.getInstr(),
+                                              Variant.getInstr());
     assert(!SelfAliasing.empty() && !SelfAliasing.hasImplicitAliasing() &&
            "Instr must alias itself explicitly");
-    InstructionTemplate IT(Instr);
     // This is a self aliasing instruction so defs and uses are from the same
-    // instance, hence twice IT in the following call.
-    setRandomAliasing(SelfAliasing, IT, IT);
+    // instance, hence twice Variant in the following call.
+    setRandomAliasing(SelfAliasing, Variant, Variant);
     CodeTemplate CT;
     CT.Execution = ExecutionModeBit;
-    CT.Info = ExecutionClassDescription;
-    CT.Instructions.push_back(std::move(IT));
+    CT.Info = std::string(ExecutionClassDescription);
+    CT.Instructions.push_back(std::move(Variant));
     CodeTemplates.push_back(std::move(CT));
     return;
   }
   case ExecutionMode::SERIAL_VIA_NON_MEMORY_INSTR: {
+    const Instruction &Instr = Variant.getInstr();
     // Select back-to-back non-memory instruction.
     for (const auto *OtherInstr : computeAliasingInstructions(
-             State, Instr, kMaxAliasingInstructions, ForbiddenRegisters)) {
-      const AliasingConfigurations Forward(*Instr, *OtherInstr);
-      const AliasingConfigurations Back(*OtherInstr, *Instr);
-      InstructionTemplate ThisIT(Instr);
+             State, &Instr, kMaxAliasingInstructions, ForbiddenRegisters)) {
+      const AliasingConfigurations Forward(Instr, *OtherInstr);
+      const AliasingConfigurations Back(*OtherInstr, Instr);
+      InstructionTemplate ThisIT(Variant);
       InstructionTemplate OtherIT(OtherInstr);
       if (!Forward.hasImplicitAliasing())
         setRandomAliasing(Forward, ThisIT, OtherIT);
@@ -133,7 +144,7 @@ static void appendCodeTemplates(const LLVMState &State,
         setRandomAliasing(Back, OtherIT, ThisIT);
       CodeTemplate CT;
       CT.Execution = ExecutionModeBit;
-      CT.Info = ExecutionClassDescription;
+      CT.Info = std::string(ExecutionClassDescription);
       CT.Instructions.push_back(std::move(ThisIT));
       CT.Instructions.push_back(std::move(OtherIT));
       CodeTemplates.push_back(std::move(CT));
@@ -149,12 +160,13 @@ SerialSnippetGenerator::~SerialSnippetGenerator() = default;
 
 Expected<std::vector<CodeTemplate>>
 SerialSnippetGenerator::generateCodeTemplates(
-    const Instruction &Instr, const BitVector &ForbiddenRegisters) const {
+    InstructionTemplate Variant, const BitVector &ForbiddenRegisters) const {
   std::vector<CodeTemplate> Results;
-  const ExecutionMode EM = getExecutionModes(Instr, ForbiddenRegisters);
+  const ExecutionMode EM =
+      getExecutionModes(Variant.getInstr(), ForbiddenRegisters);
   for (const auto EC : kExecutionClasses) {
     for (const auto ExecutionModeBit : getExecutionModeBits(EM & EC.Mask))
-      appendCodeTemplates(State, &Instr, ForbiddenRegisters, ExecutionModeBit,
+      appendCodeTemplates(State, Variant, ForbiddenRegisters, ExecutionModeBit,
                           EC.Description, Results);
     if (!Results.empty())
       break;

@@ -162,8 +162,9 @@ public:
   void print(const MachineInstr &MI);
   void printStackObjectReference(int FrameIndex);
   void print(const MachineInstr &MI, unsigned OpIdx,
-             const TargetRegisterInfo *TRI, bool ShouldPrintRegisterTies,
-             LLT TypeToPrint, bool PrintDef = true);
+             const TargetRegisterInfo *TRI, const TargetInstrInfo *TII,
+             bool ShouldPrintRegisterTies, LLT TypeToPrint,
+             bool PrintDef = true);
 };
 
 } // end namespace llvm
@@ -390,8 +391,8 @@ void MIRPrinter::convertStackObjects(yaml::MachineFunction &YMF,
     yaml::MachineStackObject YamlObject;
     YamlObject.ID = ID;
     if (const auto *Alloca = MFI.getObjectAllocation(I))
-      YamlObject.Name.Value =
-          Alloca->hasName() ? Alloca->getName() : "<unnamed alloca>";
+      YamlObject.Name.Value = std::string(
+          Alloca->hasName() ? Alloca->getName() : "<unnamed alloca>");
     YamlObject.Type = MFI.isSpillSlotObjectIndex(I)
                           ? yaml::MachineStackObject::SpillSlot
                           : MFI.isVariableSizedObjectIndex(I)
@@ -629,7 +630,7 @@ void MIPrinter::print(const MachineBasicBlock &MBB) {
     OS << "landing-pad";
     HasAttributes = true;
   }
-  if (MBB.getAlignment() != Align::None()) {
+  if (MBB.getAlignment() != Align(1)) {
     OS << (HasAttributes ? ", " : " (");
     OS << "align " << MBB.getAlignment().value();
     HasAttributes = true;
@@ -721,7 +722,7 @@ void MIPrinter::print(const MachineInstr &MI) {
        ++I) {
     if (I)
       OS << ", ";
-    print(MI, I, TRI, ShouldPrintRegisterTies,
+    print(MI, I, TRI, TII, ShouldPrintRegisterTies,
           MI.getTypeToPrint(I, PrintedTypes, MRI),
           /*PrintDef=*/false);
   }
@@ -763,7 +764,7 @@ void MIPrinter::print(const MachineInstr &MI) {
   for (; I < E; ++I) {
     if (NeedComma)
       OS << ", ";
-    print(MI, I, TRI, ShouldPrintRegisterTies,
+    print(MI, I, TRI, TII, ShouldPrintRegisterTies,
           MI.getTypeToPrint(I, PrintedTypes, MRI));
     NeedComma = true;
   }
@@ -822,11 +823,20 @@ void MIPrinter::printStackObjectReference(int FrameIndex) {
                                             Operand.Name);
 }
 
+static std::string formatOperandComment(std::string Comment) {
+  if (Comment.empty())
+    return Comment;
+  return std::string(" /* " + Comment + " */");
+}
+
 void MIPrinter::print(const MachineInstr &MI, unsigned OpIdx,
                       const TargetRegisterInfo *TRI,
+                      const TargetInstrInfo *TII,
                       bool ShouldPrintRegisterTies, LLT TypeToPrint,
                       bool PrintDef) {
   const MachineOperand &Op = MI.getOperand(OpIdx);
+  std::string MOComment = TII->createMIROperandComment(MI, Op, OpIdx);
+
   switch (Op.getType()) {
   case MachineOperand::MO_Immediate:
     if (MI.isOperandSubregIdx(OpIdx)) {
@@ -858,6 +868,7 @@ void MIPrinter::print(const MachineInstr &MI, unsigned OpIdx,
     const TargetIntrinsicInfo *TII = MI.getMF()->getTarget().getIntrinsicInfo();
     Op.print(OS, MST, TypeToPrint, OpIdx, PrintDef, /*IsStandalone=*/false,
              ShouldPrintRegisterTies, TiedOperandIdx, TRI, TII);
+      OS << formatOperandComment(MOComment);
     break;
   }
   case MachineOperand::MO_FrameIndex:

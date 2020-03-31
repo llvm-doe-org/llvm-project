@@ -188,6 +188,8 @@ public:
 
     eCore_arc, // little endian ARC
 
+    eCore_avr,
+
     eCore_wasm32,
 
     kNumCores,
@@ -539,4 +541,4 @@ bool ParseMachCPUDashSubtypeTriple(llvm::StringRef triple_str, ArchSpec &arch);
 
 } // namespace lldb_private
 
-#endif // #ifndef LLDB_UTILITY_ARCHSPEC_H
+#endif // LLDB_UTILITY_ARCHSPEC_H

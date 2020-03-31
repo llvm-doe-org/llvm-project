@@ -1318,19 +1318,6 @@ LinkageInfo LinkageComputer::getLVForLocalDecl(const NamedDecl *D,
                      LV.isVisibilityExplicit());
 }
 
-static inline const CXXRecordDecl*
-getOutermostEnclosingLambda(const CXXRecordDecl *Record) {
-  const CXXRecordDecl *Ret = Record;
-  while (Record && Record->isLambda()) {
-    Ret = Record;
-    if (!Record->getParent()) break;
-    // Get the Containing Class of this Lambda Class
-    Record = dyn_cast_or_null<CXXRecordDecl>(
-      Record->getParent()->getParent());
-  }
-  return Ret;
-}
-
 LinkageInfo LinkageComputer::computeLVForDecl(const NamedDecl *D,
                                               LVComputationKind computation,
                                               bool IgnoreVarTypeLinkage) {
@@ -1396,25 +1383,9 @@ LinkageInfo LinkageComputer::computeLVForDecl(const NamedDecl *D,
           return getInternalLinkageFor(D);
         }
 
-        // This lambda has its linkage/visibility determined:
-        //  - either by the outermost lambda if that lambda has no mangling
-        //    number.
-        //  - or by the parent of the outer most lambda
-        // This prevents infinite recursion in settings such as nested lambdas
-        // used in NSDMI's, for e.g.
-        //  struct L {
-        //    int t{};
-        //    int t2 = ([](int a) { return [](int b) { return b; };})(t)(t);
-        //  };
-        const CXXRecordDecl *OuterMostLambda =
-            getOutermostEnclosingLambda(Record);
-        if (OuterMostLambda->hasKnownLambdaInternalLinkage() ||
-            !OuterMostLambda->getLambdaManglingNumber())
-          return getInternalLinkageFor(D);
-
         return getLVForClosure(
-                  OuterMostLambda->getDeclContext()->getRedeclContext(),
-                  OuterMostLambda->getLambdaContextDecl(), computation);
+                  Record->getDeclContext()->getRedeclContext(),
+                  Record->getLambdaContextDecl(), computation);
       }
 
       break;
@@ -2981,7 +2952,8 @@ bool FunctionDecl::isReservedGlobalPlacementOperator() const {
   return (proto->getParamType(1).getCanonicalType() == Context.VoidPtrTy);
 }
 
-bool FunctionDecl::isReplaceableGlobalAllocationFunction(bool *IsAligned) const {
+bool FunctionDecl::isReplaceableGlobalAllocationFunction(
+    Optional<unsigned> *AlignmentParam, bool *IsNothrow) const {
   if (getDeclName().getNameKind() != DeclarationName::CXXOperatorName)
     return false;
   if (getDeclName().getCXXOverloadedOperator() != OO_New &&
@@ -3028,9 +3000,9 @@ bool FunctionDecl::isReplaceableGlobalAllocationFunction(bool *IsAligned) const 
   // In C++17, the next parameter can be a 'std::align_val_t' for aligned
   // new/delete.
   if (Ctx.getLangOpts().AlignedAllocation && !Ty.isNull() && Ty->isAlignValT()) {
-    if (IsAligned)
-      *IsAligned = true;
     Consume();
+    if (AlignmentParam)
+      *AlignmentParam = Params;
   }
 
   // Finally, if this is not a sized delete, the final parameter can
@@ -3039,8 +3011,11 @@ bool FunctionDecl::isReplaceableGlobalAllocationFunction(bool *IsAligned) const 
     Ty = Ty->getPointeeType();
     if (Ty.getCVRQualifiers() != Qualifiers::Const)
       return false;
-    if (Ty->isNothrowT())
+    if (Ty->isNothrowT()) {
+      if (IsNothrow)
+        *IsNothrow = true;
       Consume();
+    }
   }
 
   return Params == FPT->getNumParams();

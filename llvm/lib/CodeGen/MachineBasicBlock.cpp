@@ -326,7 +326,7 @@ void MachineBasicBlock::print(raw_ostream &OS, ModuleSlotTracker &MST,
     OS << "landing-pad";
     HasAttributes = true;
   }
-  if (getAlignment() != Align::None()) {
+  if (getAlignment() != Align(1)) {
     OS << (HasAttributes ? ", " : " (");
     OS << "align " << Log2(getAlignment());
     HasAttributes = true;
@@ -871,8 +871,9 @@ bool MachineBasicBlock::canFallThrough() {
   return getFallThrough() != nullptr;
 }
 
-MachineBasicBlock *MachineBasicBlock::SplitCriticalEdge(MachineBasicBlock *Succ,
-                                                        Pass &P) {
+MachineBasicBlock *MachineBasicBlock::SplitCriticalEdge(
+    MachineBasicBlock *Succ, Pass &P,
+    std::vector<SparseBitVector<>> *LiveInSets) {
   if (!canSplitCriticalEdge(Succ))
     return nullptr;
 
@@ -1003,7 +1004,10 @@ MachineBasicBlock *MachineBasicBlock::SplitCriticalEdge(MachineBasicBlock *Succ,
       }
     }
     // Update relevant live-through information.
-    LV->addNewBlock(NMBB, this, Succ);
+    if (LiveInSets != nullptr)
+      LV->addNewBlock(NMBB, this, Succ, *LiveInSets);
+    else
+      LV->addNewBlock(NMBB, this, Succ);
   }
 
   if (LIS) {
@@ -1109,8 +1113,12 @@ bool MachineBasicBlock::canSplitCriticalEdge(
   if (Succ->isEHPad())
     return false;
 
-  const MachineFunction *MF = getParent();
+  // Splitting the critical edge to a callbr's indirect block isn't advised.
+  // Don't do it in this generic function.
+  if (isInlineAsmBrIndirectTarget(Succ))
+    return false;
 
+  const MachineFunction *MF = getParent();
   // Performance might be harmed on HW that implements branching using exec mask
   // where both sides of the branches are always executed.
   if (MF->getTarget().requiresStructuredCFG())

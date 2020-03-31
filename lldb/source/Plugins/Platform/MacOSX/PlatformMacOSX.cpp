@@ -1,4 +1,4 @@
-//===-- PlatformMacOSX.cpp --------------------------------------*- C++ -*-===//
+//===-- PlatformMacOSX.cpp ------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "PlatformMacOSX.h"
+#include "PlatformRemoteiOS.h"
+#if defined(__APPLE__)
 #include "PlatformAppleTVSimulator.h"
 #include "PlatformAppleWatchSimulator.h"
 #include "PlatformDarwinKernel.h"
@@ -14,6 +16,7 @@
 #include "PlatformRemoteAppleTV.h"
 #include "PlatformRemoteAppleWatch.h"
 #include "PlatformiOSSimulator.h"
+#endif
 #include "lldb/Breakpoint/BreakpointLocation.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleList.h"
@@ -36,10 +39,14 @@
 using namespace lldb;
 using namespace lldb_private;
 
+LLDB_PLUGIN_DEFINE(PlatformMacOSX)
+
 static uint32_t g_initialize_count = 0;
 
 void PlatformMacOSX::Initialize() {
   PlatformDarwin::Initialize();
+  PlatformRemoteiOS::Initialize();
+#if defined(__APPLE__)
   PlatformiOSSimulator::Initialize();
   PlatformDarwinKernel::Initialize();
   PlatformAppleTVSimulator::Initialize();
@@ -47,6 +54,7 @@ void PlatformMacOSX::Initialize() {
   PlatformRemoteAppleTV::Initialize();
   PlatformRemoteAppleWatch::Initialize();
   PlatformRemoteAppleBridge::Initialize();
+#endif
 
   if (g_initialize_count++ == 0) {
 #if defined(__APPLE__)
@@ -67,6 +75,7 @@ void PlatformMacOSX::Terminate() {
     }
   }
 
+#if defined(__APPLE__)
   PlatformRemoteAppleBridge::Terminate();
   PlatformRemoteAppleWatch::Terminate();
   PlatformRemoteAppleTV::Terminate();
@@ -74,6 +83,8 @@ void PlatformMacOSX::Terminate() {
   PlatformAppleTVSimulator::Terminate();
   PlatformDarwinKernel::Terminate();
   PlatformiOSSimulator::Terminate();
+#endif
+  PlatformRemoteiOS::Terminate();
   PlatformDarwin::Terminate();
 }
 

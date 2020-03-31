@@ -260,6 +260,7 @@ The ``sycl_kernel`` attribute specifies that a function template will be used
 to outline device code and to generate an OpenCL kernel.
 Here is a code example of the SYCL program, which demonstrates the compiler's
 outlining job:
+
 .. code-block:: c++
 
   int foo(int x) { return ++x; }
@@ -282,27 +283,29 @@ compilation of functions for the device part can be found in the SYCL 1.2.1
 specification Section 6.4.
 To show to the compiler entry point to the "device part" of the code, the SYCL
 runtime can use the ``sycl_kernel`` attribute in the following way:
-.. code-block:: c++
-namespace cl {
-namespace sycl {
-class handler {
-  template <typename KernelName, typename KernelType/*, ...*/>
-  __attribute__((sycl_kernel)) void sycl_kernel_function(KernelType KernelFuncObj) {
-    // ...
-    KernelFuncObj();
-  }
 
-  template <typename KernelName, typename KernelType, int Dims>
-  void parallel_for(range<Dims> NumWorkItems, KernelType KernelFunc) {
-#ifdef __SYCL_DEVICE_ONLY__
-    sycl_kernel_function<KernelName, KernelType, Dims>(KernelFunc);
-#else
-    // Host implementation
-#endif
-  }
-};
-} // namespace sycl
-} // namespace cl
+.. code-block:: c++
+
+  namespace cl {
+  namespace sycl {
+  class handler {
+    template <typename KernelName, typename KernelType/*, ...*/>
+    __attribute__((sycl_kernel)) void sycl_kernel_function(KernelType KernelFuncObj) {
+      // ...
+      KernelFuncObj();
+    }
+
+    template <typename KernelName, typename KernelType, int Dims>
+    void parallel_for(range<Dims> NumWorkItems, KernelType KernelFunc) {
+  #ifdef __SYCL_DEVICE_ONLY__
+      sycl_kernel_function<KernelName, KernelType, Dims>(KernelFunc);
+  #else
+      // Host implementation
+  #endif
+    }
+  };
+  } // namespace sycl
+  } // namespace cl
 
 The compiler will also generate an OpenCL kernel using the function marked with
 the ``sycl_kernel`` attribute.
@@ -3995,8 +3998,6 @@ def PatchableFunctionEntryDocs : Documentation {
 before the function entry and N-M NOPs after the function entry. This attribute
 takes precedence over the command line option ``-fpatchable-function-entry=N,M``.
 ``M`` defaults to 0 if omitted.
-
-Currently, only M=0 is supported.
 }];
 }
 
@@ -4117,7 +4118,7 @@ documentation for more information.
 def ObjCDirectMembersDocs : Documentation {
   let Category = DocCatDecl;
   let Content = [{
-The ``objc_direct_members`` attribute can be placed on an  Objective-C
+The ``objc_direct_members`` attribute can be placed on an Objective-C
 ``@interface`` or ``@implementation`` to mark that methods declared
 therein should be considered direct by default.  See the documentation
 for ``objc_direct`` for more information about direct methods.
@@ -4126,9 +4127,7 @@ When ``objc_direct_members`` is placed on an ``@interface`` block, every
 method in the block is considered to be declared as direct.  This includes any
 implicit method declarations introduced by property declarations.  If the method
 redeclares a non-direct method, the declaration is ill-formed, exactly as if the
-method was annotated with the ``objc_direct`` attribute.  ``objc_direct_members``
-cannot be placed on the primary interface of a class, only on category or class
-extension interfaces.
+method was annotated with the ``objc_direct`` attribute.
 
 When ``objc_direct_members`` is placed on an ``@implementation`` block,
 methods defined in the block are considered to be declared as direct unless

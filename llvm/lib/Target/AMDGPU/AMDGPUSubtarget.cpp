@@ -150,7 +150,9 @@ GCNSubtarget::initializeSubtargetDependencies(const Triple &TT,
 
   HasFminFmaxLegacy = getGeneration() < AMDGPUSubtarget::VOLCANIC_ISLANDS;
 
-  if (DoesNotSupportXNACK && EnableXNACK) {
+  // Disable XNACK on targets where it is not enabled by default unless it is
+  // explicitly requested.
+  if (!FS.contains("+xnack") && DoesNotSupportXNACK && EnableXNACK) {
     ToggleFeature(AMDGPU::FeatureXNACK);
     EnableXNACK = false;
   }
@@ -241,6 +243,7 @@ GCNSubtarget::GCNSubtarget(const Triple &TT, StringRef GPU, StringRef FS,
     HasDPP(false),
     HasDPP8(false),
     HasR128A16(false),
+    HasGFX10A16(false),
     HasNSAEncoding(false),
     HasDLInsts(false),
     HasDot1Insts(false),
@@ -497,7 +500,7 @@ uint64_t AMDGPUSubtarget::getExplicitKernArgSize(const Function &F,
 
   const DataLayout &DL = F.getParent()->getDataLayout();
   uint64_t ExplicitArgBytes = 0;
-  MaxAlign = Align::None();
+  MaxAlign = Align(1);
 
   for (const Argument &Arg : F.args()) {
     Type *ArgTy = Arg.getType();
@@ -754,53 +757,6 @@ void GCNSubtarget::adjustSchedDependency(SUnit *Src, SUnit *Dst,
 }
 
 namespace {
-struct MemOpClusterMutation : ScheduleDAGMutation {
-  const SIInstrInfo *TII;
-
-  MemOpClusterMutation(const SIInstrInfo *tii) : TII(tii) {}
-
-  void apply(ScheduleDAGInstrs *DAG) override {
-    SUnit *SUa = nullptr;
-    // Search for two consequent memory operations and link them
-    // to prevent scheduler from moving them apart.
-    // In DAG pre-process SUnits are in the original order of
-    // the instructions before scheduling.
-    for (SUnit &SU : DAG->SUnits) {
-      MachineInstr &MI2 = *SU.getInstr();
-      if (!MI2.mayLoad() && !MI2.mayStore()) {
-        SUa = nullptr;
-        continue;
-      }
-      if (!SUa) {
-        SUa = &SU;
-        continue;
-      }
-
-      MachineInstr &MI1 = *SUa->getInstr();
-      if ((TII->isVMEM(MI1) && TII->isVMEM(MI2)) ||
-          (TII->isFLAT(MI1) && TII->isFLAT(MI2)) ||
-          (TII->isSMRD(MI1) && TII->isSMRD(MI2)) ||
-          (TII->isDS(MI1)   && TII->isDS(MI2))) {
-        SU.addPredBarrier(SUa);
-
-        for (const SDep &SI : SU.Preds) {
-          if (SI.getSUnit() != SUa)
-            SUa->addPred(SDep(SI.getSUnit(), SDep::Artificial));
-        }
-
-        if (&SU != &DAG->ExitSU) {
-          for (const SDep &SI : SUa->Succs) {
-            if (SI.getSUnit() != &SU)
-              SI.getSUnit()->addPred(SDep(&SU, SDep::Artificial));
-          }
-        }
-      }
-
-      SUa = &SU;
-    }
-  }
-};
-
 struct FillMFMAShadowMutation : ScheduleDAGMutation {
   const SIInstrInfo *TII;
 
@@ -927,7 +883,6 @@ struct FillMFMAShadowMutation : ScheduleDAGMutation {
 
 void GCNSubtarget::getPostRAMutations(
     std::vector<std::unique_ptr<ScheduleDAGMutation>> &Mutations) const {
-  Mutations.push_back(std::make_unique<MemOpClusterMutation>(&InstrInfo));
   Mutations.push_back(std::make_unique<FillMFMAShadowMutation>(&InstrInfo));
 }
 

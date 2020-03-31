@@ -660,7 +660,9 @@ void TargetLoweringBase::initActions() {
     setOperationAction(ISD::UMULFIX, VT, Expand);
     setOperationAction(ISD::UMULFIXSAT, VT, Expand);
     setOperationAction(ISD::SDIVFIX, VT, Expand);
+    setOperationAction(ISD::SDIVFIXSAT, VT, Expand);
     setOperationAction(ISD::UDIVFIX, VT, Expand);
+    setOperationAction(ISD::UDIVFIXSAT, VT, Expand);
 
     // Overflow operations default to expand
     setOperationAction(ISD::SADDO, VT, Expand);
@@ -702,7 +704,7 @@ void TargetLoweringBase::initActions() {
     }
 
     // Constrained floating-point operations default to expand.
-#define INSTRUCTION(NAME, NARG, ROUND_MODE, INTRINSIC, DAGN)                   \
+#define DAG_INSTRUCTION(NAME, NARG, ROUND_MODE, INTRINSIC, DAGN)               \
     setOperationAction(ISD::STRICT_##DAGN, VT, Expand);
 #include "llvm/IR/ConstrainedOps.def"
 
@@ -811,6 +813,7 @@ TargetLoweringBase::getTypeConversion(LLVMContext &Context, EVT VT) const {
     LegalizeTypeAction LA = ValueTypeActions.getTypeAction(SVT);
 
     assert((LA == TypeLegal || LA == TypeSoftenFloat ||
+            LA == TypeSoftPromoteHalf ||
             (NVT.isVector() ||
              ValueTypeActions.getTypeAction(NVT) != TypePromoteInteger)) &&
            "Promote may not follow Expand or Promote");
@@ -1065,7 +1068,7 @@ TargetLoweringBase::emitPatchPoint(MachineInstr &InitialMI,
           MF.getDataLayout().getPointerSize(), MFI.getObjectAlignment(FI));
       MIB->addMemOperand(MF, MMO);
     }
-    
+
     // Replace the instruction and update the operand index.
     MBB->insert(MachineBasicBlock::iterator(MI), MIB);
     OperIdx += (MIB->getNumOperands() - MI->getNumOperands()) - 1;
@@ -1229,10 +1232,18 @@ void TargetLoweringBase::computeRegisterProperties(
   // promote it to f32, because there are no f16 library calls (except for
   // conversions).
   if (!isTypeLegal(MVT::f16)) {
-    NumRegistersForVT[MVT::f16] = NumRegistersForVT[MVT::f32];
-    RegisterTypeForVT[MVT::f16] = RegisterTypeForVT[MVT::f32];
-    TransformToType[MVT::f16] = MVT::f32;
-    ValueTypeActions.setTypeAction(MVT::f16, TypePromoteFloat);
+    // Allow targets to control how we legalize half.
+    if (softPromoteHalfType()) {
+      NumRegistersForVT[MVT::f16] = NumRegistersForVT[MVT::i16];
+      RegisterTypeForVT[MVT::f16] = RegisterTypeForVT[MVT::i16];
+      TransformToType[MVT::f16] = MVT::f32;
+      ValueTypeActions.setTypeAction(MVT::f16, TypeSoftPromoteHalf);
+    } else {
+      NumRegistersForVT[MVT::f16] = NumRegistersForVT[MVT::f32];
+      RegisterTypeForVT[MVT::f16] = RegisterTypeForVT[MVT::f32];
+      TransformToType[MVT::f16] = MVT::f32;
+      ValueTypeActions.setTypeAction(MVT::f16, TypePromoteFloat);
+    }
   }
 
   // Loop over all of the vector value types to see which need transformations.

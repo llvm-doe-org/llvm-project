@@ -62,7 +62,8 @@ llvm::Error GsymCreator::encode(FileWriter &O) const {
   if (Funcs.size() > UINT32_MAX)
     return createStringError(std::errc::invalid_argument,
                              "too many FunctionInfos");
-  const uint64_t MinAddr = Funcs.front().startAddress();
+
+  const uint64_t MinAddr = BaseAddress ? *BaseAddress : Funcs.front().startAddress();
   const uint64_t MaxAddr = Funcs.back().startAddress();
   const uint64_t AddrDelta = MaxAddr - MinAddr;
   Header Hdr;
@@ -203,9 +204,8 @@ llvm::Error GsymCreator::finalize(llvm::raw_ostream &OS) {
           // that have debug info are last in the sort.
           if (*Prev == *Curr) {
             // FunctionInfo entries match exactly (range, lines, inlines)
-            OS << "warning: duplicate function info entries, removing "
-                  "duplicate:\n"
-               << *Curr << '\n';
+            OS << "warning: duplicate function info entries for range: "
+               << Curr->Range << '\n';
             Curr = Funcs.erase(Prev);
           } else {
             if (!Prev->hasRichInfo() && Curr->hasRichInfo()) {
@@ -239,20 +239,43 @@ llvm::Error GsymCreator::finalize(llvm::raw_ostream &OS) {
     Prev = Curr++;
   }
 
+  // If our last function info entry doesn't have a size and if we have valid
+  // text ranges, we should set the size of the last entry since any search for
+  // a high address might match our last entry. By fixing up this size, we can
+  // help ensure we don't cause lookups to always return the last symbol that
+  // has no size when doing lookups.
+  if (!Funcs.empty() && Funcs.back().Range.size() == 0 && ValidTextRanges) {
+    if (auto Range = ValidTextRanges->getRangeThatContains(
+          Funcs.back().Range.Start)) {
+      Funcs.back().Range.End = Range->End;
+    }
+  }
   OS << "Pruned " << NumBefore - Funcs.size() << " functions, ended with "
      << Funcs.size() << " total\n";
   return Error::success();
 }
 
-uint32_t GsymCreator::insertString(StringRef S) {
-  std::lock_guard<std::recursive_mutex> Guard(Mutex);
+uint32_t GsymCreator::insertString(StringRef S, bool Copy) {
   if (S.empty())
     return 0;
+  std::lock_guard<std::recursive_mutex> Guard(Mutex);
+  if (Copy) {
+    // We need to provide backing storage for the string if requested
+    // since StringTableBuilder stores references to strings. Any string
+    // that comes from a section in an object file doesn't need to be
+    // copied, but any string created by code will need to be copied.
+    // This allows GsymCreator to be really fast when parsing DWARF and
+    // other object files as most strings don't need to be copied.
+    CachedHashStringRef CHStr(S);
+    if (!StrTab.contains(CHStr))
+      S = StringStorage.insert(S).first->getKey();
+  }
   return StrTab.add(S);
 }
 
 void GsymCreator::addFunctionInfo(FunctionInfo &&FI) {
   std::lock_guard<std::recursive_mutex> Guard(Mutex);
+  Ranges.insert(FI.Range);
   Funcs.emplace_back(FI);
 }
 
@@ -272,4 +295,20 @@ void GsymCreator::forEachFunctionInfo(
     if (!Callback(FI))
       break;
   }
+}
+
+size_t GsymCreator::getNumFunctionInfos() const{
+  std::lock_guard<std::recursive_mutex> Guard(Mutex);
+  return Funcs.size();
+}
+
+bool GsymCreator::IsValidTextAddress(uint64_t Addr) const {
+  if (ValidTextRanges)
+    return ValidTextRanges->contains(Addr);
+  return true; // No valid text ranges has been set, so accept all ranges.
+}
+
+bool GsymCreator::hasFunctionInfoForAddress(uint64_t Addr) const {
+  std::lock_guard<std::recursive_mutex> Guard(Mutex);
+  return Ranges.contains(Addr);
 }
