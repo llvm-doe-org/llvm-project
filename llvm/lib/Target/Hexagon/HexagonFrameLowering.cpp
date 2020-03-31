@@ -591,7 +591,7 @@ void HexagonFrameLowering::insertPrologueInBlock(MachineBasicBlock &MBB,
   auto &HII = *HST.getInstrInfo();
   auto &HRI = *HST.getRegisterInfo();
 
-  unsigned MaxAlign = std::max(MFI.getMaxAlignment(), getStackAlignment());
+  Align MaxAlign = std::max(MFI.getMaxAlign(), getStackAlign());
 
   // Calculate the total stack frame size.
   // Get the number of bytes to allocate from the FrameInfo.
@@ -603,7 +603,7 @@ void HexagonFrameLowering::insertPrologueInBlock(MachineBasicBlock &MBB,
   FrameSize = MaxCFA + alignTo(FrameSize, MaxAlign);
   MFI.setStackSize(FrameSize);
 
-  bool AlignStack = (MaxAlign > getStackAlignment());
+  bool AlignStack = (MaxAlign > getStackAlign());
 
   // Get the number of bytes to allocate from the FrameInfo.
   unsigned NumBytes = MFI.getStackSize();
@@ -742,7 +742,7 @@ void HexagonFrameLowering::insertPrologueInBlock(MachineBasicBlock &MBB,
     if (AlignStack) {
       BuildMI(MBB, InsertPt, dl, HII.get(Hexagon::A2_andir), SP)
           .addReg(SP)
-          .addImm(-int64_t(MaxAlign));
+          .addImm(-int64_t(MaxAlign.value()));
     }
     // If the stack-checking is enabled, and we spilled the callee-saved
     // registers inline (i.e. did not use a spill function), then call
@@ -893,7 +893,7 @@ void HexagonFrameLowering::insertAllocframe(MachineBasicBlock &MBB,
   // Create a dummy memory operand to avoid allocframe from being treated as
   // a volatile memory reference.
   auto *MMO = MF.getMachineMemOperand(MachinePointerInfo::getStack(MF, 0),
-                                      MachineMemOperand::MOStore, 4, 4);
+                                      MachineMemOperand::MOStore, 4, Align(4));
 
   DebugLoc dl = MBB.findDebugLoc(InsertPt);
   unsigned SP = HRI.getStackRegister();
@@ -1507,7 +1507,7 @@ void HexagonFrameLowering::processFunctionBeforeFrameFinalized(
   // via AP, which may not be available at the particular place in the program.
   MachineFrameInfo &MFI = MF.getFrameInfo();
   bool HasAlloca = MFI.hasVarSizedObjects();
-  bool NeedsAlign = (MFI.getMaxAlignment() > getStackAlignment());
+  bool NeedsAlign = (MFI.getMaxAlign() > getStackAlign());
 
   if (!HasAlloca || !NeedsAlign)
     return;
@@ -1547,12 +1547,11 @@ void HexagonFrameLowering::processFunctionBeforeFrameFinalized(
           if (auto *FS = dyn_cast_or_null<FixedStackPseudoSourceValue>(PV)) {
             int FI = FS->getFrameIndex();
             if (DealignSlots.count(FI)) {
-              unsigned A = MFI.getObjectAlignment(FI);
-              auto *NewMMO = MF.getMachineMemOperand(MMO->getPointerInfo(),
-                                MMO->getFlags(), MMO->getSize(), A,
-                                MMO->getAAInfo(), MMO->getRanges(),
-                                MMO->getSyncScopeID(), MMO->getOrdering(),
-                                MMO->getFailureOrdering());
+              auto *NewMMO = MF.getMachineMemOperand(
+                  MMO->getPointerInfo(), MMO->getFlags(), MMO->getSize(),
+                  MFI.getObjectAlign(FI), MMO->getAAInfo(), MMO->getRanges(),
+                  MMO->getSyncScopeID(), MMO->getOrdering(),
+                  MMO->getFailureOrdering());
               new_memops.push_back(NewMMO);
               KeepOld = false;
               continue;
@@ -1711,9 +1710,8 @@ bool HexagonFrameLowering::assignCalleeSavedSpillSlots(MachineFunction &MF,
     const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(R);
     unsigned Size = TRI->getSpillSize(*RC);
     int Off = MinOffset - Size;
-    unsigned Align = std::min(TRI->getSpillAlignment(*RC), getStackAlignment());
-    assert(isPowerOf2_32(Align));
-    Off &= -Align;
+    Align Alignment = std::min(TRI->getSpillAlign(*RC), getStackAlign());
+    Off &= -Alignment.value();
     int FI = MFI.CreateFixedSpillStackObject(Size, Off);
     MinOffset = std::min(MinOffset, Off);
     CSI.push_back(CalleeSavedInfo(R, FI));

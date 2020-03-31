@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "mlir/Dialect/AffineOps/EDSC/Intrinsics.h"
+#include "mlir/Dialect/Affine/EDSC/Intrinsics.h"
 #include "mlir/Dialect/Linalg/EDSC/Intrinsics.h"
 #include "mlir/Dialect/Linalg/IR/LinalgTypes.h"
 #include "mlir/Dialect/Linalg/Passes.h"
@@ -22,6 +22,7 @@
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Support/Functional.h"
 #include "mlir/Support/LLVM.h"
 #include "mlir/Support/STLExtras.h"
 #include "mlir/Transforms/FoldUtils.h"
@@ -37,13 +38,6 @@ using namespace mlir::loop;
 using folded_affine_min = folded::ValueBuilder<AffineMinOp>;
 
 #define DEBUG_TYPE "linalg-tiling"
-
-static llvm::cl::OptionCategory clOptionsCategory(DEBUG_TYPE " options");
-static llvm::cl::list<unsigned>
-    clTileSizes("linalg-tile-sizes",
-                llvm::cl::desc("Tile sizes by which to tile linalg operations"),
-                llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated,
-                llvm::cl::cat(clOptionsCategory));
 
 static bool isZero(Value v) {
   return isa_and_nonnull<ConstantIndexOp>(v.getDefiningOp()) &&
@@ -263,7 +257,8 @@ makeTiledViews(OpBuilder &b, Location loc, LinalgOp linalgOp,
     Value view = *(viewIteratorBegin + viewIndex);
     auto viewType = view.getType().cast<MemRefType>();
     unsigned rank = viewType.getRank();
-    auto map = loopToOperandRangesMaps(linalgOp)[viewIndex];
+    auto mapAttr = linalgOp.indexing_maps()[viewIndex];
+    auto map = mapAttr.cast<AffineMapAttr>().getValue();
     // If the view is not tiled, we can use it as is.
     if (!isTiled(map, tileSizes)) {
       res.push_back(view);
@@ -340,6 +335,15 @@ Optional<TiledLinalgOp> static tileLinalgOpImpl(OpBuilder &b, LinalgOp op,
              tileSizes.size() &&
          "expected matching number of tile sizes and loops");
 
+  if (auto convOp = dyn_cast<linalg::ConvOp>(op.getOperation())) {
+    // For conv op only support tiling along batch dimension (which is the first
+    // loop).
+    if (convOp.padding() &&
+        !llvm::all_of(tileSizes.drop_front(),
+                      [](Value val) { return isZero(val); }))
+      return llvm::None;
+  }
+
   // If permutation is empty, use the identity. Build the permutation map
   // otherwise.
   auto invPermutationMap = AffineMap::getMultiDimIdentityMap(
@@ -355,8 +359,10 @@ Optional<TiledLinalgOp> static tileLinalgOpImpl(OpBuilder &b, LinalgOp op,
   auto viewSizes = getViewSizes(b, op);
   // The flattened loopToOperandRangesMaps is expected to be an invertible
   // permutation map (asserted in the inverse calculation).
-  auto viewSizesToLoopsMap =
-      inversePermutation(concatAffineMaps(loopToOperandRangesMaps(op)));
+  auto mapsRange = op.indexing_maps().getAsRange<AffineMapAttr>();
+  auto maps =
+      functional::map([](AffineMapAttr a) { return a.getValue(); }, mapsRange);
+  auto viewSizesToLoopsMap = inversePermutation(concatAffineMaps(maps));
   assert(viewSizesToLoopsMap && "expected invertible map");
 
   SmallVector<SubViewOp::Range, 4> loopRanges;
@@ -410,7 +416,7 @@ Optional<TiledLinalgOp> static tileLinalgOpImpl(OpBuilder &b, LinalgOp op,
 }
 
 template <typename LoopTy>
-Optional<TiledLinalgOp>
+static Optional<TiledLinalgOp>
 tileLinalgOpImpl(OpBuilder &b, LinalgOp op, ArrayRef<int64_t> tileSizes,
                  ArrayRef<unsigned> permutation, OperationFolder *folder) {
   assert(op.hasBufferSemantics() && "expected linalg op with buffer semantics");
@@ -426,6 +432,14 @@ tileLinalgOpImpl(OpBuilder &b, LinalgOp op, ArrayRef<int64_t> tileSizes,
   // If only 0 tilings are left, then return.
   if (llvm::all_of(tileSizes, [](int64_t v) { return v == 0; }))
     return llvm::None;
+
+  if (auto convOp = dyn_cast<linalg::ConvOp>(op.getOperation())) {
+    // For conv op only support tiling along batch dimension (which is the first
+    // loop).
+    if (convOp.padding() && !llvm::all_of(tileSizes.drop_front(),
+                                          [](int64_t val) { return val == 0; }))
+      return llvm::None;
+  }
 
   // Create a builder for tile size constants.
   OpBuilder::InsertionGuard g(b);
@@ -487,9 +501,7 @@ static void tileLinalgOps(FuncOp f, ArrayRef<int64_t> tileSizes) {
       op.erase();
   });
   f.walk([](LinalgOp op) {
-    if (!op.getOperation()->hasNoSideEffect())
-      return;
-    if (op.getOperation()->use_empty())
+    if (isOpTriviallyDead(op))
       op.erase();
   });
 }
@@ -499,15 +511,19 @@ namespace {
 template <typename LoopTy>
 struct LinalgTilingPass : public FunctionPass<LinalgTilingPass<LoopTy>> {
   LinalgTilingPass() = default;
+  LinalgTilingPass(const LinalgTilingPass &) {}
   LinalgTilingPass(ArrayRef<int64_t> sizes) {
-    this->tileSizes.assign(sizes.begin(), sizes.end());
+    this->tileSizes->assign(sizes.begin(), sizes.end());
   }
 
   void runOnFunction() override {
     tileLinalgOps<LoopTy>(this->getFunction(), tileSizes);
   }
 
-  SmallVector<int64_t, 8> tileSizes;
+  Pass::ListOption<int64_t> tileSizes{
+      *this, "linalg-tile-sizes",
+      llvm::cl::desc("Tile sizes by which to tile linalg operations"),
+      llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated};
 };
 
 } // namespace
@@ -523,17 +539,9 @@ mlir::createLinalgTilingToParallelLoopsPass(ArrayRef<int64_t> tileSizes) {
 }
 
 static PassRegistration<LinalgTilingPass<loop::ForOp>>
-    tiling_pass("linalg-tile", "Tile operations in the linalg dialect", [] {
-      auto pass = std::make_unique<LinalgTilingPass<loop::ForOp>>();
-      pass->tileSizes.assign(clTileSizes.begin(), clTileSizes.end());
-      return pass;
-    });
+    tiling_pass("linalg-tile", "Tile operations in the linalg dialect");
 
 static PassRegistration<LinalgTilingPass<loop::ParallelOp>>
     tiling_to_parallel_loops(
         "linalg-tile-to-parallel-loops",
-        "Tile operations in the linalg dialect to parallel loops", [] {
-          auto pass = std::make_unique<LinalgTilingPass<loop::ParallelOp>>();
-          pass->tileSizes.assign(clTileSizes.begin(), clTileSizes.end());
-          return pass;
-        });
+        "Tile operations in the linalg dialect to parallel loops");

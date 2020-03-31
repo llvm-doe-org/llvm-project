@@ -1238,7 +1238,7 @@ void PPCInstrInfo::storeRegToStackSlotNoUpd(
   MachineMemOperand *MMO = MF.getMachineMemOperand(
       MachinePointerInfo::getFixedStack(MF, FrameIdx),
       MachineMemOperand::MOStore, MFI.getObjectSize(FrameIdx),
-      MFI.getObjectAlignment(FrameIdx));
+      MFI.getObjectAlign(FrameIdx));
   NewMIs.back()->addMemOperand(MF, MMO);
 }
 
@@ -1301,7 +1301,7 @@ void PPCInstrInfo::loadRegFromStackSlotNoUpd(
   MachineMemOperand *MMO = MF.getMachineMemOperand(
       MachinePointerInfo::getFixedStack(MF, FrameIdx),
       MachineMemOperand::MOLoad, MFI.getObjectSize(FrameIdx),
-      MFI.getObjectAlignment(FrameIdx));
+      MFI.getObjectAlign(FrameIdx));
   NewMIs.back()->addMemOperand(MF, MMO);
 }
 
@@ -2597,6 +2597,13 @@ bool PPCInstrInfo::foldFrameOffset(MachineInstr &MI) const {
         return true;
     return false;
   };
+
+  // We are trying to replace the ImmOpNo with ScaleReg. Give up if it is
+  // treated as special zero when ScaleReg is R0/X0 register.
+  if (III.ZeroIsSpecialOrig == III.ImmOpNo &&
+      (ScaleReg == PPC::R0 || ScaleReg == PPC::X0))
+    return false;
+
   // Make sure no other def for ToBeChangedReg and ScaleReg between ADD Instr
   // and Imm Instr.
   if (NewDefFor(ToBeChangedReg, *ADDMI, MI) || NewDefFor(ScaleReg, *ADDMI, MI))
@@ -2879,7 +2886,7 @@ bool PPCInstrInfo::convertToImmediateForm(MachineInstr &MI,
     APInt InVal((Opc == PPC::RLDICL || Opc == PPC::RLDICL_rec) ? 64 : 32,
                 SExtImm, true);
     InVal = InVal.rotl(SH);
-    uint64_t Mask = (1LLU << (63 - MB + 1)) - 1;
+    uint64_t Mask = MB == 0 ? -1LLU : (1LLU << (63 - MB + 1)) - 1;
     InVal &= Mask;
     // Can't replace negative values with an LI as that will sign-extend
     // and not clear the left bits. If we're setting the CR bit, we will use
