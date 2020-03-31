@@ -1,6 +1,6 @@
 //===- FxpMathConfig.cpp - Reference fixed point config -------------------===//
 //
-// Part of the MLIR Project, under the Apache License v2.0 with LLVM Exceptions.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
@@ -17,7 +17,7 @@
 #include "mlir/Dialect/FxpMathOps/FxpMathOps.h"
 #include "mlir/Dialect/QuantOps/QuantOps.h"
 #include "mlir/Dialect/QuantOps/QuantTypes.h"
-#include "mlir/Dialect/StandardOps/Ops.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Quantizer/Support/ConstraintAnalysisGraph.h"

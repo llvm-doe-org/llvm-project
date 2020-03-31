@@ -166,8 +166,9 @@ class Register<string n, list<string> altNames = []> {
   // CostPerUse - Additional cost of instructions using this register compared
   // to other registers in its class. The register allocator will try to
   // minimize the number of instructions using a register with a CostPerUse.
-  // This is used by the x86-64 and ARM Thumb targets where some registers
-  // require larger instruction encodings.
+  // This is used by the ARC target, by the ARM Thumb and x86-64 targets, where
+  // some registers require larger instruction encodings, by the RISC-V target,
+  // where some registers preclude using some C instructions.
   int CostPerUse = 0;
 
   // CoveredBySubRegs - When this bit is set, the value of this register is
@@ -274,6 +275,17 @@ class RegisterClass<string namespace, list<ValueType> regTypes, int alignment,
   // useful as it is sometimes beneficial to assign registers to highly
   // constrained classes first. The value has to be in the range [0,63].
   int AllocationPriority = 0;
+
+  // Generate register pressure set for this register class and any class
+  // synthesized from it. Set to 0 to inhibit unneeded pressure sets.
+  bit GeneratePressureSet = 1;
+
+  // Weight override for register pressure calculation. This is the value
+  // TargetRegisterClass::getRegClassWeight() will return. The weight is in
+  // units of pressure for this register class. If unset tablegen will
+  // calculate a weight based on a number of register units in this register
+  // class registers. The weight is per register.
+  int Weight = ?;
 
   // The diagnostic type to present when referencing this operand in a match
   // failure error message. If this is empty, the default Match_InvalidOperand
@@ -887,6 +899,10 @@ def untyped_imm_0 : TypedOperand<"OPERAND_GENERIC_IMM_0"> {
 /// zero_reg definition - Special node to stand for the zero register.
 ///
 def zero_reg;
+
+/// undef_tied_input - Special node to indicate an input register tied
+/// to an output which defaults to IMPLICIT_DEF.
+def undef_tied_input;
 
 /// All operands which the MC layer classifies as predicates should inherit from
 /// this class in some manner. This is already handled for the most commonly

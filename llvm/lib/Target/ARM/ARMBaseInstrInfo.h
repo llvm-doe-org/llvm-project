@@ -146,6 +146,11 @@ public:
   // Predication support.
   bool isPredicated(const MachineInstr &MI) const override;
 
+  // MIR printer helper function to annotate Operands with a comment.
+  std::string createMIROperandComment(const MachineInstr &MI,
+                                      const MachineOperand &Op,
+                                      unsigned OpIdx) const override;
+
   ARMCC::CondCodes getPredicate(const MachineInstr &MI) const {
     int PIdx = MI.findFirstPredOperandIdx();
     return PIdx != -1 ? (ARMCC::CondCodes)MI.getOperand(PIdx).getImm()
@@ -207,13 +212,13 @@ public:
 
   void storeRegToStackSlot(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator MBBI,
-                           unsigned SrcReg, bool isKill, int FrameIndex,
+                           Register SrcReg, bool isKill, int FrameIndex,
                            const TargetRegisterClass *RC,
                            const TargetRegisterInfo *TRI) const override;
 
   void loadRegFromStackSlot(MachineBasicBlock &MBB,
                             MachineBasicBlock::iterator MBBI,
-                            unsigned DestReg, int FrameIndex,
+                            Register DestReg, int FrameIndex,
                             const TargetRegisterClass *RC,
                             const TargetRegisterInfo *TRI) const override;
 

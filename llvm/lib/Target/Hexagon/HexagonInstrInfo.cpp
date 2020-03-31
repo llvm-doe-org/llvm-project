@@ -888,7 +888,7 @@ void HexagonInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
 }
 
 void HexagonInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
-      MachineBasicBlock::iterator I, unsigned SrcReg, bool isKill, int FI,
+      MachineBasicBlock::iterator I, Register SrcReg, bool isKill, int FI,
       const TargetRegisterClass *RC, const TargetRegisterInfo *TRI) const {
   DebugLoc DL = MBB.findDebugLoc(I);
   MachineFunction &MF = *MBB.getParent();
@@ -934,7 +934,7 @@ void HexagonInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
 }
 
 void HexagonInstrInfo::loadRegFromStackSlot(
-    MachineBasicBlock &MBB, MachineBasicBlock::iterator I, unsigned DestReg,
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator I, Register DestReg,
     int FI, const TargetRegisterClass *RC,
     const TargetRegisterInfo *TRI) const {
   DebugLoc DL = MBB.findDebugLoc(I);
@@ -2946,12 +2946,16 @@ bool HexagonInstrInfo::addLatencyToSchedule(const MachineInstr &MI1,
 }
 
 /// Get the base register and byte offset of a load/store instr.
-bool HexagonInstrInfo::getMemOperandWithOffset(
-    const MachineInstr &LdSt, const MachineOperand *&BaseOp, int64_t &Offset,
-    const TargetRegisterInfo *TRI) const {
+bool HexagonInstrInfo::getMemOperandsWithOffset(
+    const MachineInstr &LdSt, SmallVectorImpl<const MachineOperand *> &BaseOps,
+    int64_t &Offset, bool &OffsetIsScalable, const TargetRegisterInfo *TRI) const {
   unsigned AccessSize = 0;
-  BaseOp = getBaseAndOffset(LdSt, Offset, AccessSize);
-  return BaseOp != nullptr && BaseOp->isReg();
+  OffsetIsScalable = false;
+  const MachineOperand *BaseOp = getBaseAndOffset(LdSt, Offset, AccessSize);
+  if (!BaseOp || !BaseOp->isReg())
+    return false;
+  BaseOps.push_back(BaseOp);
+  return true;
 }
 
 /// Can these instructions execute at the same time in a bundle.
@@ -4481,7 +4485,7 @@ uint64_t HexagonInstrInfo::getType(const MachineInstr &MI) const {
   return (F >> HexagonII::TypePos) & HexagonII::TypeMask;
 }
 
-unsigned HexagonInstrInfo::getUnits(const MachineInstr &MI) const {
+InstrStage::FuncUnits HexagonInstrInfo::getUnits(const MachineInstr &MI) const {
   const InstrItineraryData &II = *Subtarget.getInstrItineraryData();
   const InstrStage &IS = *II.beginStage(MI.getDesc().getSchedClass());
 

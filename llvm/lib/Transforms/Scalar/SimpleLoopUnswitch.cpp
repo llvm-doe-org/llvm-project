@@ -26,7 +26,9 @@
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/MemorySSA.h"
 #include "llvm/Analysis/MemorySSAUpdater.h"
+#include "llvm/Analysis/MustExecute.h"
 #include "llvm/Analysis/Utils/Local.h"
+#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
@@ -180,11 +182,14 @@ static void buildPartialUnswitchConditionalBranch(BasicBlock &BB,
                                                   ArrayRef<Value *> Invariants,
                                                   bool Direction,
                                                   BasicBlock &UnswitchedSucc,
-                                                  BasicBlock &NormalSucc) {
+                                                  BasicBlock &NormalSucc,
+                                                  bool InsertFreeze) {
   IRBuilder<> IRB(&BB);
-  
+
   Value *Cond = Direction ? IRB.CreateOr(Invariants) :
     IRB.CreateAnd(Invariants);
+  if (InsertFreeze)
+    Cond = IRB.CreateFreeze(Cond, Cond->getName() + ".fr");
   IRB.CreateCondBr(Cond, Direction ? &UnswitchedSucc : &NormalSucc,
                    Direction ? &NormalSucc : &UnswitchedSucc);
 }
@@ -498,7 +503,7 @@ static bool unswitchTrivialBranch(Loop &L, BranchInst &BI, DominatorTree &DT,
                  Instruction::And &&
              "Must have an `and` of `i1`s for the condition!");
     buildPartialUnswitchConditionalBranch(*OldPH, Invariants, ExitDirection,
-                                          *UnswitchedBB, *NewPH);
+                                          *UnswitchedBB, *NewPH, false);
   }
 
   // Update the dominator tree with the added edge.
@@ -2009,6 +2014,10 @@ static void unswitchNontrivialInvariants(
       SE->forgetTopmostLoop(&L);
   }
 
+  ICFLoopSafetyInfo SafetyInfo(&DT);
+  SafetyInfo.computeLoopSafetyInfo(&L);
+  bool InsertFreeze = !SafetyInfo.isGuaranteedToExecute(TI, &DT, &L);
+
   // If the edge from this terminator to a successor dominates that successor,
   // store a map from each block in its dominator subtree to it. This lets us
   // tell when cloning for a particular successor if a block is dominated by
@@ -2066,6 +2075,12 @@ static void unswitchNontrivialInvariants(
       BasicBlock *ClonedPH = ClonedPHs.begin()->second;
       BI->setSuccessor(ClonedSucc, ClonedPH);
       BI->setSuccessor(1 - ClonedSucc, LoopPH);
+      if (InsertFreeze) {
+        auto Cond = BI->getCondition();
+        if (!isGuaranteedNotToBeUndefOrPoison(Cond))
+          BI->setCondition(new FreezeInst(Cond, Cond->getName() + ".fr", BI));
+      }
+
       DTUpdates.push_back({DominatorTree::Insert, SplitBB, ClonedPH});
     } else {
       assert(SI && "Must either be a branch or switch!");
@@ -2079,6 +2094,12 @@ static void unswitchNontrivialInvariants(
           Case.setSuccessor(LoopPH);
         else
           Case.setSuccessor(ClonedPHs.find(Case.getCaseSuccessor())->second);
+
+      if (InsertFreeze) {
+        auto Cond = SI->getCondition();
+        if (!isGuaranteedNotToBeUndefOrPoison(Cond))
+          SI->setCondition(new FreezeInst(Cond, Cond->getName() + ".fr", SI));
+      }
 
       // We need to use the set to populate domtree updates as even when there
       // are multiple cases pointing at the same successor we only want to
@@ -2156,7 +2177,7 @@ static void unswitchNontrivialInvariants(
     // When doing a partial unswitch, we have to do a bit more work to build up
     // the branch in the split block.
     buildPartialUnswitchConditionalBranch(*SplitBB, Invariants, Direction,
-                                          *ClonedPH, *LoopPH);
+                                          *ClonedPH, *LoopPH, InsertFreeze);
     DTUpdates.push_back({DominatorTree::Insert, SplitBB, ClonedPH});
 
     if (MSSAU) {
@@ -2465,7 +2486,7 @@ turnGuardIntoBranch(IntrinsicInst *GI, Loop &L,
 /// unswitch candidates, making adequate predictions instead of wild guesses.
 /// That requires knowing not just the number of "remaining" candidates but
 /// also costs of unswitching for each of these candidates.
-static int calculateUnswitchCostMultiplier(
+static int CalculateUnswitchCostMultiplier(
     Instruction &TI, Loop &L, LoopInfo &LI, DominatorTree &DT,
     ArrayRef<std::pair<Instruction *, TinyPtrVector<Value *>>>
         UnswitchCandidates) {
@@ -2754,7 +2775,7 @@ unswitchBestCondition(Loop &L, DominatorTree &DT, LoopInfo &LI,
     // exponential behavior of loop-unswitch.
     if (EnableUnswitchCostMultiplier) {
       int CostMultiplier =
-          calculateUnswitchCostMultiplier(TI, L, LI, DT, UnswitchCandidates);
+          CalculateUnswitchCostMultiplier(TI, L, LI, DT, UnswitchCandidates);
       assert(
           (CostMultiplier > 0 && CostMultiplier <= UnswitchThreshold) &&
           "cost multiplier needs to be in the range of 1..UnswitchThreshold");
@@ -2868,7 +2889,7 @@ PreservedAnalyses SimpleLoopUnswitchPass::run(Loop &L, LoopAnalysisManager &AM,
 
   // Save the current loop name in a variable so that we can report it even
   // after it has been deleted.
-  std::string LoopName = L.getName();
+  std::string LoopName = std::string(L.getName());
 
   auto UnswitchCB = [&L, &U, &LoopName](bool CurrentLoopValid,
                                         ArrayRef<Loop *> NewLoops) {
@@ -2982,10 +3003,6 @@ bool SimpleLoopUnswitchLegacyPass::runOnLoop(Loop *L, LPPassManager &LPM) {
 
   if (MSSA && VerifyMemorySSA)
     MSSA->verifyMemorySSA();
-
-  // If anything was unswitched, also clear any cached information about this
-  // loop.
-  LPM.deleteSimpleAnalysisLoop(L);
 
   // Historically this pass has had issues with the dominator tree so verify it
   // in asserts builds.

@@ -154,7 +154,7 @@ static Optional<std::string> findFile(StringRef path1, const Twine &path2) {
   SmallString<128> s;
   path::append(s, path1, path2);
   if (fs::exists(s))
-    return s.str().str();
+    return std::string(s);
   return None;
 }
 
@@ -361,7 +361,7 @@ static void readConfigs(opt::InputArgList &args) {
     config->features =
         llvm::Optional<std::vector<std::string>>(std::vector<std::string>());
     for (StringRef s : arg->getValues())
-      config->features->push_back(s);
+      config->features->push_back(std::string(s));
   }
 }
 
@@ -452,7 +452,7 @@ static void handleLibcall(StringRef name) {
 static UndefinedGlobal *
 createUndefinedGlobal(StringRef name, llvm::wasm::WasmGlobalType *type) {
   auto *sym = cast<UndefinedGlobal>(symtab->addUndefinedGlobal(
-      name, name, defaultModule, WASM_SYMBOL_UNDEFINED, nullptr, type));
+      name, None, None, WASM_SYMBOL_UNDEFINED, nullptr, type));
   config->allowUndefinedSymbols.insert(sym->getName());
   sym->isUsedInRegularObj = true;
   return sym;
@@ -572,7 +572,7 @@ static std::string createResponseFile(const opt::InputArgList &args) {
       os << toString(*arg) << "\n";
     }
   }
-  return data.str();
+  return std::string(data.str());
 }
 
 // The --wrap option is a feature to rename symbols so that you can write
@@ -590,7 +590,7 @@ struct WrappedSymbol {
 };
 
 static Symbol *addUndefined(StringRef name) {
-  return symtab->addUndefinedFunction(name, "", "", WASM_SYMBOL_UNDEFINED,
+  return symtab->addUndefinedFunction(name, None, None, WASM_SYMBOL_UNDEFINED,
                                       nullptr, nullptr, false);
 }
 

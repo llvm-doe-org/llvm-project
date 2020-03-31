@@ -155,7 +155,8 @@ def PPCSExtVElems  : SDNode<"PPCISD::SExtVElems", SDT_PPCSExtVElems, []>;
 
 // Extract FPSCR (not modeled at the DAG level).
 def PPCmffs   : SDNode<"PPCISD::MFFS",
-                       SDTypeProfile<1, 0, [SDTCisVT<0, f64>]>, []>;
+                       SDTypeProfile<1, 0, [SDTCisVT<0, f64>]>,
+                       [SDNPHasChain]>;
 
 // Perform FADD in round-to-zero mode.
 def PPCfaddrtz: SDNode<"PPCISD::FADDRTZ", SDTFPBinOp, []>;
@@ -723,6 +724,26 @@ def s17imm  : Operand<i32> {
   let ParserMatchClass = PPCS17ImmAsmOperand;
   let DecoderMethod = "decodeSImmOperand<16>";
 }
+def PPCS34ImmAsmOperand : AsmOperandClass {
+  let Name = "S34Imm";
+  let PredicateMethod = "isS34Imm";
+  let RenderMethod = "addImmOperands";
+}
+def s34imm : Operand<i64> {
+  let PrintMethod = "printS34ImmOperand";
+  let ParserMatchClass = PPCS34ImmAsmOperand;
+  let DecoderMethod = "decodeSImmOperand<34>";
+}
+def PPCImmZeroAsmOperand : AsmOperandClass {
+  let Name = "ImmZero";
+  let PredicateMethod = "isImmZero";
+  let RenderMethod = "addImmOperands";
+}
+def immZero : Operand<i32> {
+  let PrintMethod = "printImmZeroOperand";
+  let ParserMatchClass = PPCImmZeroAsmOperand;
+  let DecoderMethod = "decodeImmZeroOperand";
+}
 
 def fpimm0 : PatLeaf<(fpimm), [{ return N->isExactlyValue(+0.0); }]>;
 
@@ -783,6 +804,30 @@ def PPCRegGxRCNoR0Operand : AsmOperandClass {
 def ptr_rc_nor0 : Operand<iPTR>, PointerLikeRegClass<1> {
   let ParserMatchClass = PPCRegGxRCNoR0Operand;
 }
+
+// New addressing modes with 34 bit immediates.
+def PPCDispRI34Operand : AsmOperandClass {
+  let Name = "DispRI34"; let PredicateMethod = "isS34Imm";
+  let RenderMethod = "addImmOperands";
+}
+def dispRI34 : Operand<iPTR> {
+  let ParserMatchClass = PPCDispRI34Operand;
+}
+def memri34 : Operand<iPTR> { // memri, imm is a 34-bit value.
+  let PrintMethod = "printMemRegImm34";
+  let MIOperandInfo = (ops dispRI34:$imm, ptr_rc_nor0:$reg);
+  let EncoderMethod = "getMemRI34Encoding";
+  let DecoderMethod = "decodeMemRI34Operands";
+}
+// memri, imm is a 34-bit value for pc-relative instructions where
+// base register is set to zero.
+def memri34_pcrel : Operand<iPTR> { // memri, imm is a 34-bit value.
+  let PrintMethod = "printMemRegImm34PCRel";
+  let MIOperandInfo = (ops dispRI34:$imm, immZero:$reg);
+  let EncoderMethod = "getMemRI34PCRelEncoding";
+  let DecoderMethod = "decodeMemRI34PCRelOperands";
+}
+
 // A version of ptr_rc usable with the asm parser.
 def PPCRegGxRCOperand : AsmOperandClass {
   let Name = "RegGxRC"; let PredicateMethod = "isRegNumber";
@@ -2281,10 +2326,15 @@ let isCodeGenOnly = 1 in {
   }
 }
 
+// We used to have EIEIO as value but E[0-9A-Z] is a reserved name
+def EnforceIEIO : XForm_24_eieio<31, 854, (outs), (ins),
+                                 "eieio", IIC_LdStLoad, []>;
+
 def : Pat<(int_ppc_sync),   (SYNC 0)>, Requires<[HasSYNC]>;
 def : Pat<(int_ppc_lwsync), (SYNC 1)>, Requires<[HasSYNC]>;
 def : Pat<(int_ppc_sync),   (MSYNC)>, Requires<[HasOnlyMSYNC]>;
 def : Pat<(int_ppc_lwsync), (MSYNC)>, Requires<[HasOnlyMSYNC]>;
+def : Pat<(int_ppc_eieio),  (EnforceIEIO)>;
 
 //===----------------------------------------------------------------------===//
 // PPC32 Arithmetic Instructions.
@@ -3331,6 +3381,10 @@ def crnot : OutPatFrag<(ops node:$in),
 def       : Pat<(not i1:$in),
                 (crnot $in)>;
 
+// Prefixed instructions may require access to the above defs at a later
+// time so we include this after the def.
+include "PPCInstrPrefix.td"
+
 // Patterns for arithmetic i1 operations.
 def : Pat<(add i1:$a, i1:$b),
           (CRXOR $a, $b)>;
@@ -4128,10 +4182,6 @@ def ISYNC : XLForm_2_ext<19, 150, 0, 0, 0, (outs), (ins),
 def ICBI : XForm_1a<31, 982, (outs), (ins memrr:$src),
                     "icbi $src", IIC_LdStICBI, []>;
 
-// We used to have EIEIO as value but E[0-9A-Z] is a reserved name
-def EnforceIEIO : XForm_24_eieio<31, 854, (outs), (ins),
-                           "eieio", IIC_LdStLoad, []>;
-
 def WAIT : XForm_24_sync<31, 30, (outs), (ins i32imm:$L),
                          "wait $L", IIC_LdStLoad, []>;
 
@@ -4420,6 +4470,11 @@ def DCBTSTT  : PPCAsmPseudo<"dcbtstt $dst", (ins memrr:$dst)>;
 def DCBFx  : PPCAsmPseudo<"dcbf $dst", (ins memrr:$dst)>;
 def DCBFL  : PPCAsmPseudo<"dcbfl $dst", (ins memrr:$dst)>;
 def DCBFLP : PPCAsmPseudo<"dcbflp $dst", (ins memrr:$dst)>;
+
+def : Pat<(int_ppc_dcbfl xoaddr:$dst),
+          (DCBFL xoaddr:$dst)>;
+def : Pat<(int_ppc_dcbflp xoaddr:$dst),
+          (DCBFLP xoaddr:$dst)>;
 
 def : InstAlias<"crset $bx", (CREQV crbitrc:$bx, crbitrc:$bx, crbitrc:$bx)>;
 def : InstAlias<"crclr $bx", (CRXOR crbitrc:$bx, crbitrc:$bx, crbitrc:$bx)>;

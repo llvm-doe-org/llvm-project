@@ -1,6 +1,6 @@
 //===- LLVMDialect.h - MLIR LLVM IR dialect ---------------------*- C++ -*-===//
 //
-// Part of the MLIR Project, under the Apache License v2.0 with LLVM Exceptions.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
@@ -137,7 +137,10 @@ public:
     return getStructTy(&elt1.getDialect(), fields);
   }
   static LLVMType getVectorTy(LLVMType elementType, unsigned numElements);
+
+  /// Void type utilities.
   static LLVMType getVoidTy(LLVMDialect *dialect);
+  bool isVoidTy();
 
   // Creation and setting of LLVM's identified struct types
   static LLVMType createStructTy(LLVMDialect *dialect,

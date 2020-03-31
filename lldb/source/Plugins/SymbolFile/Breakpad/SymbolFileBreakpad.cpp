@@ -1,4 +1,4 @@
-//===-- SymbolFileBreakpad.cpp ----------------------------------*- C++ -*-===//
+//===-- SymbolFileBreakpad.cpp --------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -24,6 +24,8 @@
 using namespace lldb;
 using namespace lldb_private;
 using namespace lldb_private::breakpad;
+
+LLDB_PLUGIN_DEFINE(SymbolFileBreakpad)
 
 char SymbolFileBreakpad::ID;
 
@@ -292,7 +294,7 @@ uint32_t SymbolFileBreakpad::ResolveSymbolContext(
 }
 
 void SymbolFileBreakpad::FindFunctions(
-    ConstString name, const CompilerDeclContext *parent_decl_ctx,
+    ConstString name, const CompilerDeclContext &parent_decl_ctx,
     FunctionNameType name_type_mask, bool include_inlines,
     SymbolContextList &sc_list) {
   // TODO
@@ -305,7 +307,7 @@ void SymbolFileBreakpad::FindFunctions(const RegularExpression &regex,
 }
 
 void SymbolFileBreakpad::FindTypes(
-    ConstString name, const CompilerDeclContext *parent_decl_ctx,
+    ConstString name, const CompilerDeclContext &parent_decl_ctx,
     uint32_t max_matches, llvm::DenseSet<SymbolFile *> &searched_symbol_files,
     TypeMap &types) {}
 

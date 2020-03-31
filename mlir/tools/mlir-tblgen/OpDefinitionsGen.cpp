@@ -1,6 +1,6 @@
 //===- OpDefinitionsGen.cpp - MLIR op definitions generator ---------------===//
 //
-// Part of the MLIR Project, under the Apache License v2.0 with LLVM Exceptions.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
@@ -11,7 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "OpFormatGen.h"
 #include "mlir/Support/STLExtras.h"
+#include "mlir/Support/StringExtras.h"
 #include "mlir/TableGen/Format.h"
 #include "mlir/TableGen/GenInfo.h"
 #include "mlir/TableGen/OpClass.h"
@@ -91,6 +93,17 @@ static const char *const opCommentHeader = R"(
 // Utility structs and functions
 //===----------------------------------------------------------------------===//
 
+// Replaces all occurrences of `match` in `str` with `substitute`.
+static std::string replaceAllSubstrs(std::string str, const std::string &match,
+                                     const std::string &substitute) {
+  std::string::size_type scanLoc = 0, matchLoc = std::string::npos;
+  while ((matchLoc = str.find(match, scanLoc)) != std::string::npos) {
+    str = str.replace(matchLoc, match.size(), substitute);
+    scanLoc = matchLoc + substitute.size();
+  }
+  return str;
+}
+
 // Returns whether the record has a value of the given name that can be returned
 // via getValueAsString.
 static inline bool hasStringAttribute(const Record &record,
@@ -102,9 +115,9 @@ static inline bool hasStringAttribute(const Record &record,
 static std::string getArgumentName(const Operator &op, int index) {
   const auto &operand = op.getOperand(index);
   if (!operand.name.empty())
-    return operand.name;
+    return std::string(operand.name);
   else
-    return formatv("{0}_{1}", generatedArgName, index);
+    return std::string(formatv("{0}_{1}", generatedArgName, index));
 }
 
 // Returns true if we can use unwrapped value for the given `attr` in builders.
@@ -158,6 +171,9 @@ private:
   // Generates getters for the attributes.
   void genAttrGetters();
 
+  // Generates setter for the attributes.
+  void genAttrSetters();
+
   // Generates getters for named operands.
   void genNamedOperandGetters();
 
@@ -166,6 +182,9 @@ private:
 
   // Generates getters for named regions.
   void genNamedRegionGetters();
+
+  // Generates getters for named successors.
+  void genNamedSuccessorGetters();
 
   // Generates builder methods for the operation.
   void genBuilder();
@@ -250,6 +269,10 @@ private:
   // The generated code will be attached to `body`.
   void genRegionVerifier(OpMethodBody &body);
 
+  // Generates verify statements for successors in the operation.
+  // The generated code will be attached to `body`.
+  void genSuccessorVerifier(OpMethodBody &body);
+
   // Generates the traits used by the object.
   void genTraits();
 
@@ -286,7 +309,9 @@ OpEmitter::OpEmitter(const Operator &op)
   genNamedOperandGetters();
   genNamedResultGetters();
   genNamedRegionGetters();
+  genNamedSuccessorGetters();
   genAttrGetters();
+  genAttrSetters();
   genBuilder();
   genParser();
   genPrinter();
@@ -294,6 +319,7 @@ OpEmitter::OpEmitter(const Operator &op)
   genCanonicalizerDecls();
   genFolderDecls();
   genOpInterfaceMethods();
+  generateOpFormat(op, opClass);
 }
 
 void OpEmitter::emitDecl(const Operator &op, raw_ostream &os) {
@@ -328,8 +354,8 @@ void OpEmitter::genAttrGetters() {
       // Returns the default value if not set.
       // TODO: this is inefficient, we are recreating the attribute for every
       // call. This should be set instead.
-      std::string defaultValue =
-          tgfmt(attr.getConstBuilderTemplate(), &fctx, attr.getDefaultValue());
+      std::string defaultValue = std::string(
+          tgfmt(attr.getConstBuilderTemplate(), &fctx, attr.getDefaultValue()));
       body << "    if (!attr)\n      return "
            << tgfmt(attr.getConvertFromStorageCall(),
                     &fctx.withSelf(defaultValue))
@@ -364,6 +390,25 @@ void OpEmitter::genAttrGetters() {
       emitAttrWithStorageType(name, attr);
       emitAttrWithReturnType(name, attr);
     }
+  }
+}
+
+void OpEmitter::genAttrSetters() {
+  // Generate raw named setter type. This is a wrapper class that allows setting
+  // to the attributes via setters instead of having to use the string interface
+  // for better compile time verification.
+  auto emitAttrWithStorageType = [&](StringRef name, Attribute attr) {
+    auto &method = opClass.newMethod("void", (name + "Attr").str(),
+                                     (attr.getStorageType() + " attr").str());
+    auto &body = method.body();
+    body << "  this->getOperation()->setAttr(\"" << name << "\", attr);";
+  };
+
+  for (auto &namedAttr : op.getAttributes()) {
+    const auto &name = namedAttr.name;
+    const auto &attr = namedAttr.attr;
+    if (!attr.isDerivedAttr())
+      emitAttrWithStorageType(name, attr);
   }
 }
 
@@ -539,6 +584,42 @@ void OpEmitter::genNamedRegionGetters() {
       auto &m = opClass.newMethod("Region &", region.name);
       m.body() << formatv("  return this->getOperation()->getRegion({0});", i);
     }
+  }
+}
+
+void OpEmitter::genNamedSuccessorGetters() {
+  unsigned numSuccessors = op.getNumSuccessors();
+  for (unsigned i = 0; i < numSuccessors; ++i) {
+    const NamedSuccessor &successor = op.getSuccessor(i);
+    if (successor.name.empty())
+      continue;
+
+    // Generate the accessors for a variadic successor.
+    if (successor.isVariadic()) {
+      // Generate the getter.
+      auto &m = opClass.newMethod("SuccessorRange", successor.name);
+      m.body() << formatv(
+          "  return {std::next(this->getOperation()->successor_begin(), {0}), "
+          "this->getOperation()->successor_end()};",
+          i);
+      continue;
+    }
+
+    // Generate the block getter.
+    auto &m = opClass.newMethod("Block *", successor.name);
+    m.body() << formatv("  return this->getOperation()->getSuccessor({0});", i);
+
+    // Generate the all-operands getter.
+    auto &operandsMethod = opClass.newMethod(
+        "Operation::operand_range", (successor.name + "Operands").str());
+    operandsMethod.body() << formatv(
+        " return this->getOperation()->getSuccessorOperands({0});", i);
+
+    // Generate the individual-operand getter.
+    auto &operandMethod = opClass.newMethod(
+        "Value", (successor.name + "Operand").str(), "unsigned index");
+    operandMethod.body() << formatv(
+        " return this->getOperation()->getSuccessorOperand({0}, index);", i);
   }
 }
 
@@ -832,8 +913,9 @@ void OpEmitter::genCollectiveParamBuilder() {
   // Generate builder that infers type too.
   // TODO(jpienaar): Subsume this with general checking if type can be infered
   // automatically.
-  // TODO(jpienaar): Expand to handle regions.
-  if (op.getTrait("InferTypeOpInterface::Trait") && op.getNumRegions() == 0)
+  // TODO(jpienaar): Expand to handle regions and successors.
+  if (op.getTrait("InferTypeOpInterface::Trait") && op.getNumRegions() == 0 &&
+      op.getNumSuccessors() == 0)
     genInferedTypeCollectiveParamBuilder();
 }
 
@@ -855,9 +937,9 @@ void OpEmitter::buildParamList(std::string &paramList,
     // Add parameters for all return types
     for (int i = 0; i < numResults; ++i) {
       const auto &result = op.getResult(i);
-      std::string resultName = result.name;
+      std::string resultName = std::string(result.name);
       if (resultName.empty())
-        resultName = formatv("resultType{0}", i);
+        resultName = std::string(formatv("resultType{0}", i));
 
       paramList.append(result.isVariadic() ? ", ArrayRef<Type> " : ", Type ");
       paramList.append(resultName);
@@ -918,18 +1000,18 @@ void OpEmitter::buildParamList(std::string &paramList,
 
       switch (attrParamKind) {
       case AttrParamKind::WrappedAttr:
-        paramList.append(attr.getStorageType());
+        paramList.append(std::string(attr.getStorageType()));
         break;
       case AttrParamKind::UnwrappedValue:
         if (canUseUnwrappedRawValue(attr)) {
-          paramList.append(attr.getReturnType());
+          paramList.append(std::string(attr.getReturnType()));
         } else {
-          paramList.append(attr.getStorageType());
+          paramList.append(std::string(attr.getStorageType()));
         }
         break;
       }
       paramList.append(" ");
-      paramList.append(namedAttr.name);
+      paramList.append(std::string(namedAttr.name));
 
       // Attach default value if requested and possible.
       if (attrParamKind == AttrParamKind::UnwrappedValue &&
@@ -938,24 +1020,35 @@ void OpEmitter::buildParamList(std::string &paramList,
         paramList.append(" = ");
         if (isString)
           paramList.append("\"");
-        paramList.append(attr.getDefaultValue());
+        paramList.append(std::string(attr.getDefaultValue()));
         if (isString)
           paramList.append("\"");
       }
       ++numAttrs;
     }
   }
+
+  /// Insert parameters for the block and operands for each successor.
+  const char *variadicSuccCode =
+      ", ArrayRef<Block *> {0}, ArrayRef<ValueRange> {0}Operands";
+  const char *succCode = ", Block *{0}, ValueRange {0}Operands";
+  for (const NamedSuccessor &namedSuccessor : op.getSuccessors()) {
+    if (namedSuccessor.isVariadic())
+      paramList += llvm::formatv(variadicSuccCode, namedSuccessor.name).str();
+    else
+      paramList += llvm::formatv(succCode, namedSuccessor.name).str();
+  }
 }
 
 void OpEmitter::genCodeForAddingArgAndRegionForBuilder(OpMethodBody &body,
                                                        bool isRawValueAttr) {
-  // Push all operands to the result
+  // Push all operands to the result.
   for (int i = 0, e = op.getNumOperands(); i < e; ++i) {
     body << "  " << builderOpState << ".addOperands(" << getArgumentName(op, i)
          << ");\n";
   }
 
-  // Push all attributes to the result
+  // Push all attributes to the result.
   for (const auto &namedAttr : op.getAttributes()) {
     auto &attr = namedAttr.attr;
     if (!attr.isDerivedAttr()) {
@@ -968,8 +1061,19 @@ void OpEmitter::genCodeForAddingArgAndRegionForBuilder(OpMethodBody &body,
         // instance.
         FmtContext fctx;
         fctx.withBuilder("(*odsBuilder)");
+
+        std::string builderTemplate =
+            std::string(attr.getConstBuilderTemplate());
+
+        // For StringAttr, its constant builder call will wrap the input in
+        // quotes, which is correct for normal string literals, but incorrect
+        // here given we use function arguments. So we need to strip the
+        // wrapping quotes.
+        if (StringRef(builderTemplate).contains("\"$0\""))
+          builderTemplate = replaceAllSubstrs(builderTemplate, "\"$0\"", "$0");
+
         std::string value =
-            tgfmt(attr.getConstBuilderTemplate(), &fctx, namedAttr.name);
+            std::string(tgfmt(builderTemplate, &fctx, namedAttr.name));
         body << formatv("  {0}.addAttribute(\"{1}\", {2});\n", builderOpState,
                         namedAttr.name, value);
       } else {
@@ -982,10 +1086,23 @@ void OpEmitter::genCodeForAddingArgAndRegionForBuilder(OpMethodBody &body,
     }
   }
 
-  // Create the correct number of regions
+  // Create the correct number of regions.
   if (int numRegions = op.getNumRegions()) {
     for (int i = 0; i < numRegions; ++i)
       body << "  (void)" << builderOpState << ".addRegion();\n";
+  }
+
+  // Push all successors to the result.
+  for (const NamedSuccessor &namedSuccessor : op.getSuccessors()) {
+    if (namedSuccessor.isVariadic()) {
+      body << formatv("  for (int i = 0, e = {1}.size(); i != e; ++i)\n"
+                      "    {0}.addSuccessor({1}[i], {1}Operands[i]);\n",
+                      builderOpState, namedSuccessor.name);
+      continue;
+    }
+
+    body << formatv("  {0}.addSuccessor({1}, {1}Operands);\n", builderOpState,
+                    namedSuccessor.name);
   }
 }
 
@@ -1042,7 +1159,8 @@ void OpEmitter::genOpInterfaceMethods() {
 }
 
 void OpEmitter::genParser() {
-  if (!hasStringAttribute(def, "parser"))
+  if (!hasStringAttribute(def, "parser") ||
+      hasStringAttribute(def, "assemblyFormat"))
     return;
 
   auto &method = opClass.newMethod(
@@ -1055,6 +1173,9 @@ void OpEmitter::genParser() {
 }
 
 void OpEmitter::genPrinter() {
+  if (hasStringAttribute(def, "assemblyFormat"))
+    return;
+
   auto valueInit = def.getValueInit("printer");
   CodeInit *codeInit = dyn_cast<CodeInit>(valueInit);
   if (!codeInit)
@@ -1075,29 +1196,55 @@ void OpEmitter::genVerifier() {
   auto &method = opClass.newMethod("LogicalResult", "verify", /*params=*/"");
   auto &body = method.body();
 
+  const char *checkAttrSizedValueSegmentsCode = R"(
+  auto sizeAttr = getAttrOfType<DenseIntElementsAttr>("{0}");
+  auto numElements = sizeAttr.getType().cast<ShapedType>().getNumElements();
+  if (numElements != {1}) {{
+    return emitOpError("'{0}' attribute for specifying {2} segments "
+                       "must have {1} elements");
+  }
+  )";
+
+  // Verify a few traits first so that we can use
+  // getODSOperands()/getODSResults() in the rest of the verifier.
+  for (auto &trait : op.getTraits()) {
+    if (auto *t = dyn_cast<tblgen::NativeOpTrait>(&trait)) {
+      if (t->getTrait() == "OpTrait::AttrSizedOperandSegments") {
+        body << formatv(checkAttrSizedValueSegmentsCode,
+                        "operand_segment_sizes", op.getNumOperands(),
+                        "operand");
+      } else if (t->getTrait() == "OpTrait::AttrSizedResultSegments") {
+        body << formatv(checkAttrSizedValueSegmentsCode, "result_segment_sizes",
+                        op.getNumResults(), "result");
+      }
+    }
+  }
+
   // Populate substitutions for attributes and named operands and results.
   for (const auto &namedAttr : op.getAttributes())
     verifyCtx.addSubst(namedAttr.name,
                        formatv("this->getAttr(\"{0}\")", namedAttr.name));
   for (int i = 0, e = op.getNumOperands(); i < e; ++i) {
     auto &value = op.getOperand(i);
-    // Skip from from first variadic operands for now. Else getOperand index
-    // used below doesn't match.
+    if (value.name.empty())
+      continue;
+
     if (value.isVariadic())
-      break;
-    if (!value.name.empty())
+      verifyCtx.addSubst(value.name, formatv("this->getODSOperands({0})", i));
+    else
       verifyCtx.addSubst(value.name,
-                         formatv("this->getOperation()->getOperand({0})", i));
+                         formatv("(*this->getODSOperands({0}).begin())", i));
   }
   for (int i = 0, e = op.getNumResults(); i < e; ++i) {
     auto &value = op.getResult(i);
-    // Skip from from first variadic results for now. Else getResult index used
-    // below doesn't match.
+    if (value.name.empty())
+      continue;
+
     if (value.isVariadic())
-      break;
-    if (!value.name.empty())
+      verifyCtx.addSubst(value.name, formatv("this->getODSResults({0})", i));
+    else
       verifyCtx.addSubst(value.name,
-                         formatv("this->getOperation()->getResult({0})", i));
+                         formatv("(*this->getODSResults({0}).begin())", i));
   }
 
   // Verify the attributes have the correct type.
@@ -1137,14 +1284,8 @@ void OpEmitter::genVerifier() {
     body << "  }\n";
   }
 
-  const char *code = R"(
-  auto sizeAttr = getAttrOfType<DenseIntElementsAttr>("{0}");
-  auto numElements = sizeAttr.getType().cast<ShapedType>().getNumElements();
-  if (numElements != {1}) {{
-    return emitOpError("'{0}' attribute for specifying {2} segments "
-                       "must have {1} elements");
-  }
-  )";
+  genOperandResultVerifier(body, op.getOperands(), "operand");
+  genOperandResultVerifier(body, op.getResults(), "result");
 
   for (auto &trait : op.getTraits()) {
     if (auto *t = dyn_cast<tblgen::PredOpTrait>(&trait)) {
@@ -1152,24 +1293,11 @@ void OpEmitter::genVerifier() {
                     "return emitOpError(\"failed to verify that $1\");\n  }\n",
                     &verifyCtx, tgfmt(t->getPredTemplate(), &verifyCtx),
                     t->getDescription());
-    } else if (auto *t = dyn_cast<tblgen::NativeOpTrait>(&trait)) {
-      if (t->getTrait() == "OpTrait::AttrSizedOperandSegments") {
-        body << formatv(code, "operand_segment_sizes", op.getNumOperands(),
-                        "operand");
-      } else if (t->getTrait() == "OpTrait::AttrSizedResultSegments") {
-        body << formatv(code, "result_segment_sizes", op.getNumResults(),
-                        "result");
-      }
     }
   }
 
-  // These should happen after we verified the traits because
-  // getODSOperands()/getODSResults() may depend on traits (e.g.,
-  // AttrSizedOperandSegments/AttrSizedResultSegments).
-  genOperandResultVerifier(body, op.getOperands(), "operand");
-  genOperandResultVerifier(body, op.getResults(), "result");
-
   genRegionVerifier(body);
+  genSuccessorVerifier(body);
 
   if (hasCustomVerify) {
     FmtContext fctx;
@@ -1230,9 +1358,9 @@ void OpEmitter::genRegionVerifier(OpMethodBody &body) {
   for (unsigned i = 0; i < numRegions; ++i) {
     const auto &region = op.getRegion(i);
 
-    std::string name = formatv("#{0}", i);
+    std::string name = std::string(formatv("#{0}", i));
     if (!region.name.empty()) {
-      name += formatv(" ('{0}')", region.name);
+      name += std::string(formatv(" ('{0}')", region.name));
     }
 
     auto getRegion = formatv("this->getOperation()->getRegion({0})", i).str();
@@ -1245,6 +1373,58 @@ void OpEmitter::genRegionVerifier(OpMethodBody &body) {
                     "constraint: {2}\");\n  }\n",
                     constraint, name, region.constraint.getDescription());
   }
+}
+
+void OpEmitter::genSuccessorVerifier(OpMethodBody &body) {
+  unsigned numSuccessors = op.getNumSuccessors();
+
+  const char *checkSuccessorSizeCode = R"(
+  if (this->getOperation()->getNumSuccessors() {0} {1}) {
+    return emitOpError("has incorrect number of successors: expected{2} {1}"
+                       " but found ")
+             << this->getOperation()->getNumSuccessors();
+  }
+  )";
+
+  // Verify this op has the correct number of successors.
+  unsigned numVariadicSuccessors = op.getNumVariadicSuccessors();
+  if (numVariadicSuccessors == 0) {
+    body << formatv(checkSuccessorSizeCode, "!=", numSuccessors, "");
+  } else if (numVariadicSuccessors != numSuccessors) {
+    body << formatv(checkSuccessorSizeCode, "<",
+                    numSuccessors - numVariadicSuccessors, " at least");
+  }
+
+  // If we have no successors, there is nothing more to do.
+  if (numSuccessors == 0)
+    return;
+
+  body << "{\n";
+  body << "    unsigned index = 0; (void)index;\n";
+
+  for (unsigned i = 0; i < numSuccessors; ++i) {
+    const auto &successor = op.getSuccessor(i);
+    if (successor.constraint.getPredicate().isNull())
+      continue;
+
+    body << "    for (Block *successor : ";
+    body << formatv(successor.isVariadic() ? "{0}()"
+                                           : "ArrayRef<Block *>({0}())",
+                    successor.name);
+    body << ") {\n";
+    auto constraint = tgfmt(successor.constraint.getConditionTemplate(),
+                            &verifyCtx.withSelf("successor"))
+                          .str();
+
+    body << formatv(
+        "      (void)successor;\n"
+        "      if (!({0})) {\n        "
+        "return emitOpError(\"successor #\") << index << \"('{2}') failed to "
+        "verify constraint: {3}\";\n      }\n",
+        constraint, i, successor.name, successor.constraint.getDescription());
+    body << "    }\n";
+  }
+  body << "  }\n";
 }
 
 void OpEmitter::genTraits() {
@@ -1284,7 +1464,9 @@ void OpEmitter::genTraits() {
   int numVariadicOperands = op.getNumVariadicOperands();
 
   // Add operand size trait.
-  if (numVariadicOperands != 0) {
+  // Note: Successor operands are also included in the operation's operand list,
+  // so we always need to use VariadicOperands in the presence of successors.
+  if (numVariadicOperands != 0 || op.getNumSuccessors()) {
     if (numOperands == numVariadicOperands)
       opClass.addTrait("OpTrait::VariadicOperands");
     else

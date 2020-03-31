@@ -32,7 +32,7 @@ class RewriteOpenACC : public ASTConsumer,
   OpenACCPrintKind OpenACCPrint;
 
 public:
-  RewriteOpenACC(std::string InFileName, std::unique_ptr<raw_ostream> OS,
+  RewriteOpenACC(StringRef InFileName, std::unique_ptr<raw_ostream> OS,
                  OpenACCPrintKind OpenACCPrint)
       : InFileName(InFileName), OutFile(std::move(OS)), Context(nullptr),
         OpenACCPrint(OpenACCPrint) {}
@@ -349,9 +349,7 @@ public:
 } // end anonymous namespace
 
 std::unique_ptr<ASTConsumer>
-clang::CreateOpenACCRewriter(const std::string &InFile,
-                             std::unique_ptr<raw_ostream> OS,
+clang::CreateOpenACCRewriter(StringRef InFile, std::unique_ptr<raw_ostream> OS,
                              OpenACCPrintKind OpenACCPrint) {
-  return std::make_unique<RewriteOpenACC>(InFile, std::move(OS),
-                                          OpenACCPrint);
+  return std::make_unique<RewriteOpenACC>(InFile, std::move(OS), OpenACCPrint);
 }

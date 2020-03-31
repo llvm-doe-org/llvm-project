@@ -1182,7 +1182,7 @@ public:
 template<class ImplClass, template <typename> class Ptr, typename RetTy>
 class ACCClauseVisitorBase {
 public:
-#define PTR(CLASS) typename Ptr<CLASS>::type
+#define PTR(CLASS) Ptr<CLASS>
 #define DISPATCH(CLASS) \
   return static_cast<ImplClass*>(this)->Visit##CLASS(static_cast<PTR(CLASS)>(S))
 
@@ -1209,15 +1209,14 @@ public:
 #undef DISPATCH
 };
 
-template <typename T>
-using const_ptr = typename std::add_pointer<typename std::add_const<T>::type>;
+template <typename T> using const_ptr = std::add_pointer_t<std::add_const_t<T>>;
 
-template<class ImplClass, typename RetTy = void>
-class ACCClauseVisitor :
-      public ACCClauseVisitorBase <ImplClass, std::add_pointer, RetTy> {};
-template<class ImplClass, typename RetTy = void>
-class ConstACCClauseVisitor :
-      public ACCClauseVisitorBase <ImplClass, const_ptr, RetTy> {};
+template <class ImplClass, typename RetTy = void>
+class ACCClauseVisitor
+    : public ACCClauseVisitorBase<ImplClass, std::add_pointer_t, RetTy> {};
+template <class ImplClass, typename RetTy = void>
+class ConstACCClauseVisitor
+    : public ACCClauseVisitorBase<ImplClass, const_ptr, RetTy> {};
 } // end namespace clang
 
 #endif // LLVM_CLANG_AST_OPENACCCLAUSE_H

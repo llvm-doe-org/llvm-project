@@ -75,7 +75,7 @@ private:
   bool StackRealignable;
 public:
   TargetFrameLowering(StackDirection D, Align StackAl, int LAO,
-                      Align TransAl = Align::None(), bool StackReal = true)
+                      Align TransAl = Align(1), bool StackReal = true)
       : StackDir(D), StackAlignment(StackAl), TransientStackAlignment(TransAl),
         LocalAreaOffset(LAO), StackRealignable(StackReal) {}
 
@@ -213,7 +213,7 @@ public:
   /// storeRegToStackSlot(). Returns false otherwise.
   virtual bool spillCalleeSavedRegisters(MachineBasicBlock &MBB,
                                          MachineBasicBlock::iterator MI,
-                                        const std::vector<CalleeSavedInfo> &CSI,
+                                         ArrayRef<CalleeSavedInfo> CSI,
                                          const TargetRegisterInfo *TRI) const {
     return false;
   }

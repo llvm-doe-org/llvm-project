@@ -97,9 +97,10 @@ runFindDocumentHighlights(ClangdServer &Server, PathRef File, Position Pos) {
 }
 
 llvm::Expected<FileEdits> runRename(ClangdServer &Server, PathRef File,
-                                    Position Pos, llvm::StringRef NewName) {
+                                    Position Pos, llvm::StringRef NewName,
+                                    const RenameOptions &RenameOpts) {
   llvm::Optional<llvm::Expected<FileEdits>> Result;
-  Server.rename(File, Pos, NewName, /*WantFormat=*/false, capture(Result));
+  Server.rename(File, Pos, NewName, RenameOpts, capture(Result));
   return std::move(*Result);
 }
 
@@ -125,7 +126,7 @@ runDocumentSymbols(ClangdServer &Server, PathRef File) {
 
 SymbolSlab runFuzzyFind(const SymbolIndex &Index, llvm::StringRef Query) {
   FuzzyFindRequest Req;
-  Req.Query = Query;
+  Req.Query = std::string(Query);
   Req.AnyScope = true;
   return runFuzzyFind(Index, Req);
 }

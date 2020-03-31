@@ -1,6 +1,6 @@
 //===- Matchers.h - Various common matchers ---------------------*- C++ -*-===//
 //
-// Part of the MLIR Project, under the Apache License v2.0 with LLVM Exceptions.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
@@ -93,7 +93,7 @@ struct constant_int_op_binder {
       return false;
     auto type = op->getResult(0).getType();
 
-    if (type.isIntOrIndex()) {
+    if (type.isSignlessIntOrIndex()) {
       return attr_value_binder<IntegerAttr>(bind_value).match(attr);
     }
     if (type.isa<VectorType>() || type.isa<RankedTensorType>()) {
