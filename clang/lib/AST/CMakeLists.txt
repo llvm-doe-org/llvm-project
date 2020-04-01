@@ -33,6 +33,7 @@ add_clang_library(clangAST
   CommentSema.cpp
   CommentedStream.cpp
   ComparisonCategories.cpp
+  ComputeDependence.cpp
   CXXInheritance.cpp
   DataCollection.cpp
   Decl.cpp

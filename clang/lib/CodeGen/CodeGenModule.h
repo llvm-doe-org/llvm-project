@@ -26,6 +26,7 @@
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/Module.h"
 #include "clang/Basic/SanitizerBlacklist.h"
+#include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/XRayLists.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SetVector.h"
@@ -1023,6 +1024,9 @@ public:
   /// for the uninstrumented functions.
   void EmitDeferredUnusedCoverageMappings();
 
+  /// Emit an alias for "main" if it has no arguments (needed for wasm).
+  void EmitMainVoidAlias();
+
   /// Tell the consumer that this variable has been instantiated.
   void HandleCXXStaticMemberVarInstantiation(VarDecl *VD);
 
@@ -1033,7 +1037,7 @@ public:
   void MaybeHandleStaticInExternC(const SomeDecl *D, llvm::GlobalValue *GV);
 
   /// Add a global to a list to be added to the llvm.used metadata.
-  void addUsedGlobal(llvm::GlobalValue *GV);
+  void addUsedGlobal(llvm::GlobalValue *GV, bool SkipCheck = false);
 
   /// Add a global to a list to be added to the llvm.compiler.used metadata.
   void addCompilerUsedGlobal(llvm::GlobalValue *GV);
@@ -1293,11 +1297,6 @@ public:
   /// \param D Requires declaration
   void EmitOMPRequiresDecl(const OMPRequiresDecl *D);
 
-  /// Emits the definition of \p OldGD function with body from \p NewGD.
-  /// Required for proper handling of declare variant directive on the GPU.
-  void emitOpenMPDeviceFunctionRedefinition(GlobalDecl OldGD, GlobalDecl NewGD,
-                                            llvm::GlobalValue *GV);
-
   /// Returns whether the given record has hidden LTO visibility and therefore
   /// may participate in (single-module) CFI and whole-program vtable
   /// optimization.
@@ -1507,6 +1506,10 @@ private:
 
   /// Emits target specific Metadata for global declarations.
   void EmitTargetMetadata();
+
+  /// Emit the module flag metadata used to pass options controlling the
+  /// the backend to LLVM.
+  void EmitBackendOptionsMetadata(const CodeGenOptions CodeGenOpts);
 
   /// Emits OpenCL specific Metadata e.g. OpenCL version.
   void EmitOpenCLMetadata();

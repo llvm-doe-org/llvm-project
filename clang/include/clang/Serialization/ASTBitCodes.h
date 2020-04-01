@@ -650,7 +650,10 @@ namespace serialization {
       PP_CONDITIONAL_STACK = 62,
 
       /// A table of skipped ranges within the preprocessing record.
-      PPD_SKIPPED_RANGES = 63
+      PPD_SKIPPED_RANGES = 63,
+
+      /// Record code for the Decls to be checked for deferred diags.
+      DECLS_TO_CHECK_FOR_DEFERRED_DIAGS = 64,
     };
 
     /// Record types used within a source manager block.
@@ -1017,6 +1020,9 @@ namespace serialization {
 
       /// \brief The '_Sat unsigned long _Fract' type
       PREDEF_TYPE_SAT_ULONG_FRACT_ID = 69,
+
+      /// The placeholder type for OpenMP array shaping operation.
+      PREDEF_TYPE_OMP_ARRAY_SHAPING = 70,
 
       /// OpenCL image types with auto numeration
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
@@ -1636,6 +1642,9 @@ namespace serialization {
       /// An AtomicExpr record.
       EXPR_ATOMIC,
 
+      /// A RecoveryExpr record.
+      EXPR_RECOVERY,
+
       // Objective-C
 
       /// An ObjCStringLiteral record.
@@ -1830,6 +1839,8 @@ namespace serialization {
       STMT_OMP_BARRIER_DIRECTIVE,
       STMT_OMP_TASKWAIT_DIRECTIVE,
       STMT_OMP_FLUSH_DIRECTIVE,
+      STMT_OMP_DEPOBJ_DIRECTIVE,
+      STMT_OMP_SCAN_DIRECTIVE,
       STMT_OMP_ORDERED_DIRECTIVE,
       STMT_OMP_ATOMIC_DIRECTIVE,
       STMT_OMP_TARGET_DIRECTIVE,
@@ -1868,6 +1879,7 @@ namespace serialization {
       // is merged upstream, perhaps this can be renamed to something more
       /// general like EXPR_ARRAY_RANGE.
       EXPR_OMP_ARRAY_SECTION,
+      EXPR_OMP_ARRAY_SHAPING,
 
       // OpenACC directives
       STMT_ACC_DATA_DIRECTIVE,
@@ -1912,6 +1924,9 @@ namespace serialization {
       CTOR_INITIALIZER_MEMBER,
       CTOR_INITIALIZER_INDIRECT_MEMBER
     };
+
+    /// Kinds of cleanup objects owned by ExprWithCleanups.
+    enum CleanupObjectKind { COK_Block, COK_CompoundLiteral };
 
     /// Describes the redeclarations of a declaration.
     struct LocalRedeclarationsInfo {

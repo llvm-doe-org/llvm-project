@@ -3316,7 +3316,8 @@ public:
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
           CXXScopeSpec Spec;
           return getDerived().RebuildOMPReductionClause(
-            Vars, L.LocStart, L.LParenLoc, C->getColonLoc(), L.LocEnd, Spec,
+            Vars, OMPC_REDUCTION_unknown, L.LocStart, L.LParenLoc,
+            /*ModifierLoc=*/SourceLocation(), C->getColonLoc(), L.LocEnd, Spec,
             C->getNameInfo(), ArrayRef<Expr*>());
         });
   }

@@ -1,4 +1,4 @@
-// RUN: mlir-opt -split-input-file -test-legalize-patterns -verify-diagnostics %s | FileCheck %s
+// RUN: mlir-opt -allow-unregistered-dialect -split-input-file -test-legalize-patterns -verify-diagnostics %s | FileCheck %s
 
 // CHECK-LABEL: verifyDirectPattern
 func @verifyDirectPattern() -> i32 {
@@ -21,6 +21,13 @@ func @remap_input_1_to_0(i16)
 func @remap_input_1_to_1(%arg0: i64) {
   // CHECK-NEXT: "test.valid"{{.*}} : (f64)
   "test.invalid"(%arg0) : (i64) -> ()
+}
+
+// CHECK-LABEL: func @remap_call_1_to_1(%arg0: f64)
+func @remap_call_1_to_1(%arg0: i64) {
+  // CHECK-NEXT: call @remap_input_1_to_1(%arg0) : (f64) -> ()
+  call @remap_input_1_to_1(%arg0) : (i64) -> ()
+  return
 }
 
 // CHECK-LABEL: func @remap_input_1_to_N({{.*}}f16, {{.*}}f16)

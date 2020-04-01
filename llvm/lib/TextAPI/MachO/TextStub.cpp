@@ -450,10 +450,8 @@ template <> struct MappingTraits<const InterfaceFile *> {
       if (File->isInstallAPI())
         Flags |= TBDFlags::InstallAPI;
 
-      for (const auto &Iter : File->umbrellas()) {
-        ParentUmbrella = Iter.second;
-        break;
-      }
+      if (!File->umbrellas().empty())
+        ParentUmbrella = File->umbrellas().begin()->second;
 
       std::set<ArchitectureSet> ArchSet;
       for (const auto &Library : File->allowableClients())
@@ -959,7 +957,8 @@ template <> struct MappingTraits<const InterfaceFile *> {
 
           for (auto &sym : CurrentSection.WeakSymbols)
             File->addSymbol(SymbolKind::GlobalSymbol, sym,
-                            CurrentSection.Targets);
+                            CurrentSection.Targets, SymbolFlags::WeakDefined);
+
           for (auto &sym : CurrentSection.TlvSymbols)
             File->addSymbol(SymbolKind::GlobalSymbol, sym,
                             CurrentSection.Targets,
