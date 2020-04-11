@@ -13,15 +13,15 @@ We have implemented and tested support for the following features:
     * `-fopenacc[-ast]-print=acc|omp|acc-omp|omp-acc`
     * `-Wsource-uses-openacc`
     * `-Wopenacc-ignored-clause`
-    * `-fopenmp-targets=<triples>` for traditional compilation mode
+    * omitted `-fopenmp-targets` for targeting host
+    * `-fopenmp-targets=<triples>` for specifying offloading targets
+      in traditional compilation mode
     * Notes:
         * See the section "Using" in `../README.md` for an
-          introduction to Clacc's command-line options.
-* offloading targets:
-    * host: omit `-fopenmp-targets` or set
-      `OMP_TARGET_OFFLOAD=disabled` in run-time environment
-    * x86_64: `-fopenmp-targets=x86_64-unknown-linux-gnu`
-    * NVIDIA GPU: `-fopenmp-targets=nvptx64-nvidia-cuda`
+          introduction to Clacc's command-line options and for a list
+          of tested offloading target triples.
+* run-time environment variables:
+    * `OMP_TARGET_OFFLOAD=disabled` for targeting host
 * `data` directive:
     * `copy` clause and aliases `pcopy` and `present_or_copy`
     * `copyin` clause and aliases `pcopyin` and

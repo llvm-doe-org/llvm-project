@@ -145,11 +145,14 @@ The most relevant command-line options are as follows:
     * `-fopenacc` enables OpenACC support.  Unless source-to-source
       mode is enabled as discussed below, Clacc translates OpenACC to
       OpenMP and then compiles the OpenMP.
-    * Options starting with `-fopenmp-` adjust various OpenMP features
-      when compiling the OpenMP translation.  So far, only
-      `-fopenmp-targets=<triples>` to specify desired offloading
-      targets has been tested.  `nvptx64-nvidia-cuda` is the triple
-      for NVIDIA GPUs.
+    * Without `-fopenmp-targets`, the host is targeted.
+    * `-fopenmp-targets=<triples>` specifies desired offloading
+      targets.  So far, the following triples have been tested:
+        * `x86_64-unknown-linux-gnu` for x86_64.
+        * `nvptx64-nvidia-cuda` for NVIDIA GPUs.
+    * In general, options starting with `-fopenmp-` adjust various
+      OpenMP features when compiling the OpenMP translation.  So far,
+      only `-fopenmp-targets=<triples>` has been tested.
 * OpenACC source-to-source mode:
     * `-fopenacc-print=omp` enables OpenACC support and prints the
       OpenMP translation instead of performing traditional
