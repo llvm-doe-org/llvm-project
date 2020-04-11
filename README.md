@@ -80,13 +80,14 @@ specify one or more of the following when running `cmake`:
 -DCLANG_ACC_TEST_EXE_NVPTX64=True  # nvptx64-nvidia-cuda
 ```
 
-Clacc's Clang OpenACC test suite can be run by itself or as part of larger
-test suites as follows:
+Test suites checking Clacc's OpenACC support can be run by themselves
+or as part of larger test suites, as follows:
 
 ```
-$ make check-clang-openacc
-$ make check-clang
-$ make check-all
+$ make check-clang-openacc # OpenACC directives
+$ make check-clang         # all of Clang including OpenACC directives
+$ make check-libomp        # OpenMP runtime and OpenACC Profiling Interface
+$ make check-all           # all LLVM subprojects
 ```
 
 ## Using
