@@ -34,6 +34,10 @@
 // RUN:    tgt-host-or-off=OFF
 // RUN:    tgt-cflags=-fopenmp-targets=%run-x86_64-triple
 // RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],X86_64,X86_64-%[dir-fc1],X86_64-%[dir-fc2])
+// RUN:   (run-if=%run-if-ppc64le
+// RUN:    tgt-host-or-off=OFF
+// RUN:    tgt-cflags=-fopenmp-targets=%run-ppc64le-triple
+// RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],PPC64LE,PPC64LE-%[dir-fc1],PPC64LE-%[dir-fc2])
 // RUN:   (run-if=%run-if-nvptx64
 // RUN:    tgt-host-or-off=OFF
 // RUN:    tgt-cflags=-fopenmp-targets=%run-nvptx64-triple

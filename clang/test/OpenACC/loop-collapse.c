@@ -67,6 +67,7 @@
 // RUN: %data tgts {
 // RUN:   (run-if=                tgt-cflags=                                    )
 // RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple)
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
 // RUN: }
 // RUN: %for tgts {

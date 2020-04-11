@@ -94,6 +94,7 @@
 // RUN: %data tgts {
 // RUN:   (run-if=                tgt=HOST    tgt-cflags=                                    )
 // RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
+// RUN:   (run-if=%run-if-ppc64le tgt=PPC64LE tgt-cflags=-fopenmp-targets=%run-ppc64le-triple)
 // RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
 // RUN: }
 // RUN: %for clauses {
@@ -199,6 +200,7 @@ int main() {
     // EXE-CO-NEXT:             arr1[0:1] after: <99, 11, 11, 11, 11, 11>
     // EXE-TGT-HOST-CI-NEXT:    arr1[0:1] after: <99, 11, 11, 11, 11, 11>
     // EXE-TGT-X86_64-CI-NEXT:  arr1[0:1] after: <11, 11, 11, 11, 11, 11>
+    // EXE-TGT-PPC64LE-CI-NEXT: arr1[0:1] after: <11, 11, 11, 11, 11, 11>
     // EXE-TGT-NVPTX64-CI-NEXT: arr1[0:1] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[0:1] after", arr1, n);
   }
@@ -256,6 +258,7 @@ int main() {
     // EXE-CO-NEXT:             arr1[0:2] after: <99, 99, 11, 11, 11, 11>
     // EXE-TGT-HOST-CI-NEXT:    arr1[0:2] after: <99, 99, 11, 11, 11, 11>
     // EXE-TGT-X86_64-CI-NEXT:  arr1[0:2] after: <11, 11, 11, 11, 11, 11>
+    // EXE-TGT-PPC64LE-CI-NEXT: arr1[0:2] after: <11, 11, 11, 11, 11, 11>
     // EXE-TGT-NVPTX64-CI-NEXT: arr1[0:2] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[0:2] after", arr1, n);
   }
@@ -314,6 +317,7 @@ int main() {
     // EXE-CO-NEXT:             pi[0:3] after: <99, 99, 99, 11, 11, 11>
     // EXE-TGT-HOST-CI-NEXT:    pi[0:3] after: <99, 99, 99, 11, 11, 11>
     // EXE-TGT-X86_64-CI-NEXT:  pi[0:3] after: <11, 11, 11, 11, 11, 11>
+    // EXE-TGT-PPC64LE-CI-NEXT: pi[0:3] after: <11, 11, 11, 11, 11, 11>
     // EXE-TGT-NVPTX64-CI-NEXT: pi[0:3] after: <11, 11, 11, 11, 11, 11>
     printArr1("pi[0:3] after", arr1, n);
   }
@@ -371,6 +375,7 @@ int main() {
     // EXE-CO-NEXT:             arr1[1:3] after: <11, 99, 99, 99, 11, 11>
     // EXE-TGT-HOST-CI-NEXT:    arr1[1:3] after: <11, 99, 99, 99, 11, 11>
     // EXE-TGT-X86_64-CI-NEXT:  arr1[1:3] after: <11, 11, 11, 11, 11, 11>
+    // EXE-TGT-PPC64LE-CI-NEXT: arr1[1:3] after: <11, 11, 11, 11, 11, 11>
     // EXE-TGT-NVPTX64-CI-NEXT: arr1[1:3] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[1:3] after", arr1, n);
   }
@@ -433,6 +438,7 @@ int main() {
     // EXE-CO-NEXT:             arr1[start:length] after: <11, 11, 99, 99, 99, 11>
     // EXE-TGT-HOST-CI-NEXT:    arr1[start:length] after: <11, 11, 99, 99, 99, 11>
     // EXE-TGT-X86_64-CI-NEXT:  arr1[start:length] after: <11, 11, 11, 11, 11, 11>
+    // EXE-TGT-PPC64LE-CI-NEXT: arr1[start:length] after: <11, 11, 11, 11, 11, 11>
     // EXE-TGT-NVPTX64-CI-NEXT: arr1[start:length] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[start:length] after", arr1, n);
   }
@@ -493,6 +499,7 @@ int main() {
     // EXE-CO-NEXT:             arr1[:length] after: <99, 99, 99, 99, 99, 11>
     // EXE-TGT-HOST-CI-NEXT:    arr1[:length] after: <99, 99, 99, 99, 99, 11>
     // EXE-TGT-X86_64-CI-NEXT:  arr1[:length] after: <11, 11, 11, 11, 11, 11>
+    // EXE-TGT-PPC64LE-CI-NEXT: arr1[:length] after: <11, 11, 11, 11, 11, 11>
     // EXE-TGT-NVPTX64-CI-NEXT: arr1[:length] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[:length] after", arr1, n);
   }
@@ -553,6 +560,7 @@ int main() {
     // EXE-CO-NEXT:             arr1[start:] after: <11, 11, 11, 99, 99, 99>
     // EXE-TGT-HOST-CI-NEXT:    arr1[start:] after: <11, 11, 11, 99, 99, 99>
     // EXE-TGT-X86_64-CI-NEXT:  arr1[start:] after: <11, 11, 11, 11, 11, 11>
+    // EXE-TGT-PPC64LE-CI-NEXT: arr1[start:] after: <11, 11, 11, 11, 11, 11>
     // EXE-TGT-NVPTX64-CI-NEXT: arr1[start:] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[start:] after", arr1, n);
   }
@@ -611,6 +619,7 @@ int main() {
     // EXE-CO-NEXT:             arr1[:] after: <99, 99, 99, 99, 99, 99>
     // EXE-TGT-HOST-CI-NEXT:    arr1[:] after: <99, 99, 99, 99, 99, 99>
     // EXE-TGT-X86_64-CI-NEXT:  arr1[:] after: <11, 11, 11, 11, 11, 11>
+    // EXE-TGT-PPC64LE-CI-NEXT: arr1[:] after: <11, 11, 11, 11, 11, 11>
     // EXE-TGT-NVPTX64-CI-NEXT: arr1[:] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[:] after", arr1, n);
   }
@@ -676,6 +685,7 @@ int main() {
     // EXE-CO-NEXT:             arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
     // EXE-TGT-HOST-CI-NEXT:    arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
     // EXE-TGT-X86_64-CI-NEXT:  arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    // EXE-TGT-PPC64LE-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     // EXE-TGT-NVPTX64-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("arr2[2:3][0:2] after", arr2, n);
   }
@@ -741,6 +751,7 @@ int main() {
     // EXE-CO-NEXT:             arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
     // EXE-TGT-HOST-CI-NEXT:    arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
     // EXE-TGT-X86_64-CI-NEXT:  arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    // EXE-TGT-PPC64LE-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     // EXE-TGT-NVPTX64-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("arr2[2:3][0:2] after", arr2, n);
   }
@@ -807,6 +818,7 @@ int main() {
     // EXE-CO-NEXT:             pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
     // EXE-TGT-HOST-CI-NEXT:    pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
     // EXE-TGT-X86_64-CI-NEXT:  pa[1:3][:] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    // EXE-TGT-PPC64LE-CI-NEXT: pa[1:3][:] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     // EXE-TGT-NVPTX64-CI-NEXT: pa[1:3][:] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("pa[1:3][:] after", arr2, n);
   }
@@ -876,6 +888,7 @@ int main() {
     // EXE-CO-NEXT:             ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
     // EXE-TGT-HOST-CI-NEXT:    ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
     // EXE-TGT-X86_64-CI-NEXT:  ap[2:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    // EXE-TGT-PPC64LE-CI-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     // EXE-TGT-NVPTX64-CI-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("ap[2:1][0:2] after", arr2, 6);
   }
@@ -945,6 +958,7 @@ int main() {
     // EXE-CO-NEXT:             ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
     // EXE-TGT-HOST-CI-NEXT:    ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
     // EXE-TGT-X86_64-CI-NEXT:  ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    // EXE-TGT-PPC64LE-CI-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     // EXE-TGT-NVPTX64-CI-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("ap[5:1][0:1] after", arr2, 6);
   }
@@ -1015,6 +1029,7 @@ int main() {
     // EXE-CO-NEXT:             pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
     // EXE-TGT-HOST-CI-NEXT:    pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
     // EXE-TGT-X86_64-CI-NEXT:  pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    // EXE-TGT-PPC64LE-CI-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     // EXE-TGT-NVPTX64-CI-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("pp[3:1][0:2] after", arr2, 6);
   }
@@ -1085,6 +1100,7 @@ int main() {
     // EXE-CO-NEXT:             pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
     // EXE-TGT-HOST-CI-NEXT:    pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
     // EXE-TGT-X86_64-CI-NEXT:  pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    // EXE-TGT-PPC64LE-CI-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     // EXE-TGT-NVPTX64-CI-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("pp[4:1][1:1] after", arr2, 6);
   }

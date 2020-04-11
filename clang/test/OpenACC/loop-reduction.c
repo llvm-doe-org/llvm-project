@@ -76,6 +76,7 @@
 // RUN: %data tgts {
 // RUN:   (run-if=                tgt=HOST    tgt-cflags=                                    )
 // RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
+// RUN:   (run-if=%run-if-ppc64le tgt=PPC64LE tgt-cflags=-fopenmp-targets=%run-ppc64le-triple)
 // RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
 // RUN: }
 // RUN: %for tgts {
@@ -330,6 +331,8 @@ int main() {
     // EXE-TGT-HOST-NEXT: out2 = -6.3
     // EXE-TGT-X86_64-NEXT: out1 = 1.4
     // EXE-TGT-X86_64-NEXT: out2 =
+    // EXE-TGT-PPC64LE-NEXT: out1 = 1.4
+    // EXE-TGT-PPC64LE-NEXT: out2 =
     // EXE-TGT-NVPTX64-NEXT: out1 = 1.4
     // EXE-TGT-NVPTX64-NEXT: out2 =
     printf("out0 = %.1f\n", out0);
@@ -683,6 +686,8 @@ int main() {
       // EXE-TGT-HOST-DAG: out1 = 0
       // EXE-TGT-X86_64-DAG: out1 = 0
       // EXE-TGT-X86_64-DAG: out1 = 0
+      // EXE-TGT-PPC64LE-DAG: out1 = 0
+      // EXE-TGT-PPC64LE-DAG: out1 = 0
       printf("out1 = %d\n", out1);
       // DMP: CallExpr
       // PRT-NEXT: printf
@@ -690,6 +695,8 @@ int main() {
       // EXE-TGT-HOST-DAG: out2 = 0
       // EXE-TGT-X86_64-DAG: out2 = 0
       // EXE-TGT-X86_64-DAG: out2 = 0
+      // EXE-TGT-PPC64LE-DAG: out2 = 0
+      // EXE-TGT-PPC64LE-DAG: out2 = 0
       printf("out2 = %d\n", out2);
       // DMP: CallExpr
       // PRT-NEXT: printf
@@ -697,27 +704,33 @@ int main() {
       // EXE-TGT-HOST-DAG: in: 11
       // EXE-TGT-X86_64-DAG: in: 11
       // EXE-TGT-X86_64-DAG: in: 11
+      // EXE-TGT-PPC64LE-DAG: in: 11
+      // EXE-TGT-PPC64LE-DAG: in: 11
       printf("in: %d\n", in);
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
     // EXE-TGT-HOST-NEXT: out0 = 0
     // EXE-TGT-X86_64-NEXT: out0 = 0
+    // EXE-TGT-PPC64LE-NEXT: out0 = 0
     printf("out0 = %d\n", out0);
     // DMP: CallExpr
     // PRT-NEXT: printf
     // EXE-TGT-HOST-NEXT: out1 = 1
     // EXE-TGT-X86_64-NEXT: out1 = 1
+    // EXE-TGT-PPC64LE-NEXT: out1 = 1
     printf("out1 = %d\n", out1);
     // DMP: CallExpr
     // PRT-NEXT: printf
     // EXE-TGT-HOST-NEXT: out2 = 1
     // EXE-TGT-X86_64-NEXT: out2 = 1
+    // EXE-TGT-PPC64LE-NEXT: out2 = 1
     printf("out2 = %d\n", out2);
     // DMP: CallExpr
     // PRT-NEXT: printf
     // EXE-TGT-HOST-NEXT: out3 = 1
     // EXE-TGT-X86_64-NEXT: out3 = 1
+    // EXE-TGT-PPC64LE-NEXT: out3 = 1
     printf("out3 = %d\n", out3);
   } // PRT-NEXT: }
 // PRT-SRC-NEXT: #endif
@@ -831,6 +844,8 @@ int main() {
     // EXE-TGT-HOST-NEXT: out2 = -6.3
     // EXE-TGT-X86_64-NEXT: out1 = 1.4
     // EXE-TGT-X86_64-NEXT: out2 =
+    // EXE-TGT-PPC64LE-NEXT: out1 = 1.4
+    // EXE-TGT-PPC64LE-NEXT: out2 =
     // EXE-TGT-NVPTX64-NEXT: out1 = 1.4
     // EXE-TGT-NVPTX64-NEXT: out2 =
     printf("out0 = %.1f\n", out0);
@@ -892,6 +907,7 @@ int main() {
     // PRT-NEXT: printf
     // EXE-TGT-HOST-NEXT: out = 0
     // EXE-TGT-X86_64-NEXT: out = 0
+    // EXE-TGT-PPC64LE-NEXT: out = 0
     printf("out = %d\n", out);
   } // PRT-NEXT: }
 // PRT-SRC-NEXT: #endif
@@ -1008,12 +1024,16 @@ int main() {
       // EXE-TGT-HOST-DAG: out1: 0.0 + 0.0i
       // EXE-TGT-X86_64-DAG: out1: 0.0 + 0.0i
       // EXE-TGT-X86_64-DAG: out1: 0.0 + 0.0i
+      // EXE-TGT-PPC64LE-DAG: out1: 0.0 + 0.0i
+      // EXE-TGT-PPC64LE-DAG: out1: 0.0 + 0.0i
       printf("out1: %.1f + %.1fi\n", creal(out1), cimag(out1));
       // PRT-NEXT: printf
       // EXE-TGT-HOST-DAG: out2: 0.0 + 0.0i
       // EXE-TGT-HOST-DAG: out2: 0.0 + 0.0i
       // EXE-TGT-X86_64-DAG: out2: 0.0 + 0.0i
       // EXE-TGT-X86_64-DAG: out2: 0.0 + 0.0i
+      // EXE-TGT-PPC64LE-DAG: out2: 0.0 + 0.0i
+      // EXE-TGT-PPC64LE-DAG: out2: 0.0 + 0.0i
       printf("out2: %.1f + %.1fi\n", creal(out2), cimag(out2));
 // PRT-SRC-NEXT: #endif
 #endif
@@ -1152,6 +1172,8 @@ int main() {
     // EXE-TGT-HOST-NEXT: out2 = -6.3
     // EXE-TGT-X86_64-NEXT: out1 = 1.4
     // EXE-TGT-X86_64-NEXT: out2 =
+    // EXE-TGT-PPC64LE-NEXT: out1 = 1.4
+    // EXE-TGT-PPC64LE-NEXT: out2 =
     // EXE-TGT-NVPTX64-NEXT: out1 = 1.4
     // EXE-TGT-NVPTX64-NEXT: out2 =
     printf("out0 = %.1f\n", out0);
@@ -1220,10 +1242,11 @@ int main() {
   //--------------------------------------------------
 
   // Reduction var is private.
-  // OpenMP offloading from x86_64 to nvptx64 isn't supported for long double.
+  // OpenMP offloading to nvptx64 isn't supported for long double.
+  // OpenMP offloading to ppc64le isn't supported for long double.
 
-// PRT-SRC-NEXT: #if !TGT_NVPTX64_EXE
-#if !TGT_NVPTX64_EXE
+// PRT-SRC-NEXT: #if !TGT_PPC64LE_EXE && !TGT_NVPTX64_EXE
+#if !TGT_PPC64LE_EXE && !TGT_NVPTX64_EXE
   // PRT-NEXT: {
   {
     // PRT-NEXT: long out0 = 5;
@@ -1463,6 +1486,8 @@ int main() {
     // EXE-TGT-HOST-NEXT: out2 = -6.3
     // EXE-TGT-X86_64-NEXT: out1 = 1.4
     // EXE-TGT-X86_64-NEXT: out2 =
+    // EXE-TGT-PPC64LE-NEXT: out1 = 1.4
+    // EXE-TGT-PPC64LE-NEXT: out2 =
     // EXE-TGT-NVPTX64-NEXT: out1 = 1.4
     // EXE-TGT-NVPTX64-NEXT: out2 =
     printf("out0 = %.1f\n", out0);
@@ -1772,6 +1797,8 @@ int main() {
     // EXE-TGT-HOST-NEXT: out2 = -6.3
     // EXE-TGT-X86_64-NEXT: out1 = 1.4
     // EXE-TGT-X86_64-NEXT: out2 =
+    // EXE-TGT-PPC64LE-NEXT: out1 = 1.4
+    // EXE-TGT-PPC64LE-NEXT: out2 =
     // EXE-TGT-NVPTX64-NEXT: out1 = 1.4
     // EXE-TGT-NVPTX64-NEXT: out2 =
     printf("out0 = %.1f\n", out0);

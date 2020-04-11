@@ -77,6 +77,7 @@ specify one or more of the following when running `cmake`:
 
 ```
 -DCLANG_ACC_TEST_EXE_X86_64=True   # x86_64-unknown-linux-gnu
+-DCLANG_ACC_TEST_EXE_PPC64LE=True  # ppc64le-unknown-linux-gnu
 -DCLANG_ACC_TEST_EXE_NVPTX64=True  # nvptx64-nvidia-cuda
 ```
 
@@ -150,6 +151,7 @@ The most relevant command-line options are as follows:
     * `-fopenmp-targets=<triples>` specifies desired offloading
       targets.  So far, the following triples have been tested:
         * `x86_64-unknown-linux-gnu` for x86_64.
+        * `ppc64le-unknown-linux-gnu` for Power9.
         * `nvptx64-nvidia-cuda` for NVIDIA GPUs.
     * In general, options starting with `-fopenmp-` adjust various
       OpenMP features when compiling the OpenMP translation.  So far,

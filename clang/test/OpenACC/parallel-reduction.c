@@ -97,6 +97,7 @@
 // RUN: %data tgts {
 // RUN:   (run-if=                tgt=HOST    tgt-cflags=                                    )
 // RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
+// RUN:   (run-if=%run-if-ppc64le tgt=PPC64LE tgt-cflags=-fopenmp-targets=%run-ppc64le-triple)
 // RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
 // RUN: }
 // RUN: %for directives {
@@ -291,8 +292,8 @@ int main() {
   // pass into acc parallel as null, but otherwise they pass in just fine.
   // What does the OpenMP spec say is supposed to happen?
 
-// PRT-SRC-NEXT: #if !TGT_X86_64_EXE && !TGT_NVPTX64_EXE
-#if !TGT_X86_64_EXE && !TGT_NVPTX64_EXE
+// PRT-SRC-NEXT: #if !TGT_X86_64_EXE && !TGT_PPC64LE_EXE && !TGT_NVPTX64_EXE
+#if !TGT_X86_64_EXE && !TGT_PPC64LE_EXE && !TGT_NVPTX64_EXE
   // PRT-NEXT: {
   {
     // PRT-NEXT: int arr[]
@@ -1050,6 +1051,7 @@ int main() {
     // PRT-NEXT: printf
     // EXE-TGT-HOST-NEXT: acc: 1
     // EXE-TGT-X86_64-NEXT: acc: 1
+    // EXE-TGT-PPC64LE-NEXT: acc: 1
     printf("acc: %d\n", acc);
   }
   // PRT-NEXT: }
@@ -1286,6 +1288,7 @@ int main() {
     // EXE-PAR-TGT-HOST-NEXT: acc = 18
     // EXE-PARLOOP-TGT-HOST-NEXT: acc = 26
     // EXE-TGT-X86_64-NEXT: acc = 10
+    // EXE-TGT-PPC64LE-NEXT: acc = 10
     // EXE-TGT-NVPTX64-NEXT: acc = 10
     printf("acc = %d\n", acc);
   }

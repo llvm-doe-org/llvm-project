@@ -16,11 +16,12 @@
 // RUN: }
 //      # Without offloading, none of the above events are produced, so just
 //      # skip that case.  It's unlikely that nvptx64 offloading covers any
-//      # important logic here beyond what x86_64 offloading covers, but it
-//      # triples the test's run time for me, so skip that case too.
+//      # important logic here beyond what x86_64 or ppc64le offloading covers,
+//      # but it triples the test's run time for me, so skip that case too.
 // RUN: %data tgts {
 // XUN:   (run-if=                tgt-cflags=                                    )
 // RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple)
 // XUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
 // RUN: }
 // RUN: %for tgts {

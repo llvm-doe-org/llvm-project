@@ -67,6 +67,7 @@
 // RUN: %data tgts {
 // RUN:   (run-if=                tgt=HOST    tgt-cflags=                                     host-or-dev=HOST)
 // RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host-or-dev=DEV )
+// RUN:   (run-if=%run-if-ppc64le tgt=PPC64LE tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host-or-dev=DEV )
 // RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host-or-dev=DEV )
 // RUN: }
 // RUN: %for tgts {
