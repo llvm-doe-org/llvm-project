@@ -13,18 +13,18 @@
 def SVE8BitLslImm : ComplexPattern<i32, 2, "SelectSVE8BitLslImm", [imm]>;
 def SVELShiftImm64 : ComplexPattern<i32, 1, "SelectSVEShiftImm64<0, 64>", []>;
 
-// Non-faulting loads - node definitions
+// Non-faulting & first-faulting loads - node definitions
 //
 def SDT_AArch64_LDNF1 : SDTypeProfile<1, 3, [
   SDTCisVec<0>, SDTCisVec<1>, SDTCisPtrTy<2>,
   SDTCVecEltisVT<1,i1>, SDTCisSameNumEltsAs<0,1>
 ]>;
 
-def AArch64ldnf1 : SDNode<"AArch64ISD::LDNF1", SDT_AArch64_LDNF1, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ldff1 : SDNode<"AArch64ISD::LDFF1", SDT_AArch64_LDNF1, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
+def AArch64ldnf1 : SDNode<"AArch64ISD::LDNF1", SDT_AArch64_LDNF1, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
+def AArch64ldff1 : SDNode<"AArch64ISD::LDFF1", SDT_AArch64_LDNF1, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
 
-def AArch64ldnf1s : SDNode<"AArch64ISD::LDNF1S", SDT_AArch64_LDNF1, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ldff1s : SDNode<"AArch64ISD::LDFF1S", SDT_AArch64_LDNF1, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
+def AArch64ldnf1s : SDNode<"AArch64ISD::LDNF1S", SDT_AArch64_LDNF1, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
+def AArch64ldff1s : SDNode<"AArch64ISD::LDFF1S", SDT_AArch64_LDNF1, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
 
 // Gather loads - node definitions
 //
@@ -38,37 +38,37 @@ def SDT_AArch64_GATHER_VS : SDTypeProfile<1, 4, [
   SDTCVecEltisVT<1,i1>, SDTCisSameNumEltsAs<0,1>
 ]>;
 
-def AArch64ld1_gather              : SDNode<"AArch64ISD::GLD1",             SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ld1_gather_scaled       : SDNode<"AArch64ISD::GLD1_SCALED",      SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ld1_gather_uxtw         : SDNode<"AArch64ISD::GLD1_UXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ld1_gather_sxtw         : SDNode<"AArch64ISD::GLD1_SXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ld1_gather_uxtw_scaled  : SDNode<"AArch64ISD::GLD1_UXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ld1_gather_sxtw_scaled  : SDNode<"AArch64ISD::GLD1_SXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ld1_gather_imm          : SDNode<"AArch64ISD::GLD1_IMM",         SDT_AArch64_GATHER_VS, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
+def AArch64ld1_gather             : SDNode<"AArch64ISD::GLD1",             SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad]>;
+def AArch64ld1_gather_scaled      : SDNode<"AArch64ISD::GLD1_SCALED",      SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad]>;
+def AArch64ld1_gather_uxtw        : SDNode<"AArch64ISD::GLD1_UXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad]>;
+def AArch64ld1_gather_sxtw        : SDNode<"AArch64ISD::GLD1_SXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad]>;
+def AArch64ld1_gather_uxtw_scaled : SDNode<"AArch64ISD::GLD1_UXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad]>;
+def AArch64ld1_gather_sxtw_scaled : SDNode<"AArch64ISD::GLD1_SXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad]>;
+def AArch64ld1_gather_imm         : SDNode<"AArch64ISD::GLD1_IMM",         SDT_AArch64_GATHER_VS, [SDNPHasChain, SDNPMayLoad]>;
 
-def AArch64ld1s_gather             : SDNode<"AArch64ISD::GLD1S",             SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ld1s_gather_scaled      : SDNode<"AArch64ISD::GLD1S_SCALED",      SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ld1s_gather_uxtw        : SDNode<"AArch64ISD::GLD1S_UXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ld1s_gather_sxtw        : SDNode<"AArch64ISD::GLD1S_SXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ld1s_gather_uxtw_scaled : SDNode<"AArch64ISD::GLD1S_UXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ld1s_gather_sxtw_scaled : SDNode<"AArch64ISD::GLD1S_SXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ld1s_gather_imm         : SDNode<"AArch64ISD::GLD1S_IMM",         SDT_AArch64_GATHER_VS, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
+def AArch64ld1s_gather             : SDNode<"AArch64ISD::GLD1S",             SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad]>;
+def AArch64ld1s_gather_scaled      : SDNode<"AArch64ISD::GLD1S_SCALED",      SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad]>;
+def AArch64ld1s_gather_uxtw        : SDNode<"AArch64ISD::GLD1S_UXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad]>;
+def AArch64ld1s_gather_sxtw        : SDNode<"AArch64ISD::GLD1S_SXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad]>;
+def AArch64ld1s_gather_uxtw_scaled : SDNode<"AArch64ISD::GLD1S_UXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad]>;
+def AArch64ld1s_gather_sxtw_scaled : SDNode<"AArch64ISD::GLD1S_SXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad]>;
+def AArch64ld1s_gather_imm         : SDNode<"AArch64ISD::GLD1S_IMM",         SDT_AArch64_GATHER_VS, [SDNPHasChain, SDNPMayLoad]>;
 
-def AArch64ldff1_gather              : SDNode<"AArch64ISD::GLDFF1",             SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ldff1_gather_scaled       : SDNode<"AArch64ISD::GLDFF1_SCALED",      SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ldff1_gather_uxtw         : SDNode<"AArch64ISD::GLDFF1_UXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ldff1_gather_sxtw         : SDNode<"AArch64ISD::GLDFF1_SXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ldff1_gather_uxtw_scaled  : SDNode<"AArch64ISD::GLDFF1_UXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ldff1_gather_sxtw_scaled  : SDNode<"AArch64ISD::GLDFF1_SXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ldff1_gather_imm          : SDNode<"AArch64ISD::GLDFF1_IMM",         SDT_AArch64_GATHER_VS, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
+def AArch64ldff1_gather             : SDNode<"AArch64ISD::GLDFF1",             SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
+def AArch64ldff1_gather_scaled      : SDNode<"AArch64ISD::GLDFF1_SCALED",      SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
+def AArch64ldff1_gather_uxtw        : SDNode<"AArch64ISD::GLDFF1_UXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
+def AArch64ldff1_gather_sxtw        : SDNode<"AArch64ISD::GLDFF1_SXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
+def AArch64ldff1_gather_uxtw_scaled : SDNode<"AArch64ISD::GLDFF1_UXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
+def AArch64ldff1_gather_sxtw_scaled : SDNode<"AArch64ISD::GLDFF1_SXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
+def AArch64ldff1_gather_imm         : SDNode<"AArch64ISD::GLDFF1_IMM",         SDT_AArch64_GATHER_VS, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
 
-def AArch64ldff1s_gather             : SDNode<"AArch64ISD::GLDFF1S",             SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ldff1s_gather_scaled      : SDNode<"AArch64ISD::GLDFF1S_SCALED",      SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ldff1s_gather_uxtw        : SDNode<"AArch64ISD::GLDFF1S_UXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ldff1s_gather_sxtw        : SDNode<"AArch64ISD::GLDFF1S_SXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ldff1s_gather_uxtw_scaled : SDNode<"AArch64ISD::GLDFF1S_UXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ldff1s_gather_sxtw_scaled : SDNode<"AArch64ISD::GLDFF1S_SXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
-def AArch64ldff1s_gather_imm         : SDNode<"AArch64ISD::GLDFF1S_IMM",         SDT_AArch64_GATHER_VS, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue]>;
+def AArch64ldff1s_gather             : SDNode<"AArch64ISD::GLDFF1S",             SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
+def AArch64ldff1s_gather_scaled      : SDNode<"AArch64ISD::GLDFF1S_SCALED",      SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
+def AArch64ldff1s_gather_uxtw        : SDNode<"AArch64ISD::GLDFF1S_UXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
+def AArch64ldff1s_gather_sxtw        : SDNode<"AArch64ISD::GLDFF1S_SXTW",        SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
+def AArch64ldff1s_gather_uxtw_scaled : SDNode<"AArch64ISD::GLDFF1S_UXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
+def AArch64ldff1s_gather_sxtw_scaled : SDNode<"AArch64ISD::GLDFF1S_SXTW_SCALED", SDT_AArch64_GATHER_SV, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
+def AArch64ldff1s_gather_imm         : SDNode<"AArch64ISD::GLDFF1S_IMM",         SDT_AArch64_GATHER_VS, [SDNPHasChain, SDNPMayLoad, SDNPOptInGlue, SDNPOutGlue]>;
 
 def AArch64ldnt1_gather  : SDNode<"AArch64ISD::GLDNT1",  SDT_AArch64_GATHER_VS, [SDNPHasChain, SDNPMayLoad]>;
 def AArch64ldnt1s_gather : SDNode<"AArch64ISD::GLDNT1S", SDT_AArch64_GATHER_VS, [SDNPHasChain, SDNPMayLoad]>;
@@ -85,13 +85,13 @@ def SDT_AArch64_SCATTER_VS : SDTypeProfile<0, 5, [
   SDTCVecEltisVT<1,i1>, SDTCisSameNumEltsAs<0,1>
 ]>;
 
-def AArch64st1_scatter             : SDNode<"AArch64ISD::SST1",             SDT_AArch64_SCATTER_SV, [SDNPHasChain, SDNPMayStore, SDNPOptInGlue]>;
-def AArch64st1_scatter_scaled      : SDNode<"AArch64ISD::SST1_SCALED",      SDT_AArch64_SCATTER_SV, [SDNPHasChain, SDNPMayStore, SDNPOptInGlue]>;
-def AArch64st1_scatter_uxtw        : SDNode<"AArch64ISD::SST1_UXTW",        SDT_AArch64_SCATTER_SV, [SDNPHasChain, SDNPMayStore, SDNPOptInGlue]>;
-def AArch64st1_scatter_sxtw        : SDNode<"AArch64ISD::SST1_SXTW",        SDT_AArch64_SCATTER_SV, [SDNPHasChain, SDNPMayStore, SDNPOptInGlue]>;
-def AArch64st1_scatter_uxtw_scaled : SDNode<"AArch64ISD::SST1_UXTW_SCALED", SDT_AArch64_SCATTER_SV, [SDNPHasChain, SDNPMayStore, SDNPOptInGlue]>;
-def AArch64st1_scatter_sxtw_scaled : SDNode<"AArch64ISD::SST1_SXTW_SCALED", SDT_AArch64_SCATTER_SV, [SDNPHasChain, SDNPMayStore, SDNPOptInGlue]>;
-def AArch64st1_scatter_imm         : SDNode<"AArch64ISD::SST1_IMM",         SDT_AArch64_SCATTER_VS, [SDNPHasChain, SDNPMayStore, SDNPOptInGlue]>;
+def AArch64st1_scatter             : SDNode<"AArch64ISD::SST1",             SDT_AArch64_SCATTER_SV, [SDNPHasChain, SDNPMayStore]>;
+def AArch64st1_scatter_scaled      : SDNode<"AArch64ISD::SST1_SCALED",      SDT_AArch64_SCATTER_SV, [SDNPHasChain, SDNPMayStore]>;
+def AArch64st1_scatter_uxtw        : SDNode<"AArch64ISD::SST1_UXTW",        SDT_AArch64_SCATTER_SV, [SDNPHasChain, SDNPMayStore]>;
+def AArch64st1_scatter_sxtw        : SDNode<"AArch64ISD::SST1_SXTW",        SDT_AArch64_SCATTER_SV, [SDNPHasChain, SDNPMayStore]>;
+def AArch64st1_scatter_uxtw_scaled : SDNode<"AArch64ISD::SST1_UXTW_SCALED", SDT_AArch64_SCATTER_SV, [SDNPHasChain, SDNPMayStore]>;
+def AArch64st1_scatter_sxtw_scaled : SDNode<"AArch64ISD::SST1_SXTW_SCALED", SDT_AArch64_SCATTER_SV, [SDNPHasChain, SDNPMayStore]>;
+def AArch64st1_scatter_imm         : SDNode<"AArch64ISD::SST1_IMM",         SDT_AArch64_SCATTER_VS, [SDNPHasChain, SDNPMayStore]>;
 
 def AArch64stnt1_scatter : SDNode<"AArch64ISD::SSTNT1", SDT_AArch64_SCATTER_VS, [SDNPHasChain, SDNPMayStore]>;
 
@@ -146,12 +146,12 @@ let Predicates = [HasSVE] in {
   def  SETFFR     : sve_int_setffr<"setffr", int_aarch64_sve_setffr>;
   def  WRFFR      : sve_int_wrffr<"wrffr", int_aarch64_sve_wrffr>;
 
-  defm ADD_ZZZ   : sve_int_bin_cons_arit_0<0b000, "add", add>;
-  defm SUB_ZZZ   : sve_int_bin_cons_arit_0<0b001, "sub", sub>;
-  defm SQADD_ZZZ : sve_int_bin_cons_arit_0<0b100, "sqadd", saddsat>;
-  defm UQADD_ZZZ : sve_int_bin_cons_arit_0<0b101, "uqadd", uaddsat>;
-  defm SQSUB_ZZZ : sve_int_bin_cons_arit_0<0b110, "sqsub", ssubsat>;
-  defm UQSUB_ZZZ : sve_int_bin_cons_arit_0<0b111, "uqsub", usubsat>;
+  defm ADD_ZZZ   : sve_int_bin_cons_arit_0<0b000, "add", add, null_frag>;
+  defm SUB_ZZZ   : sve_int_bin_cons_arit_0<0b001, "sub", sub, null_frag>;
+  defm SQADD_ZZZ : sve_int_bin_cons_arit_0<0b100, "sqadd", saddsat, int_aarch64_sve_sqadd_x>;
+  defm UQADD_ZZZ : sve_int_bin_cons_arit_0<0b101, "uqadd", uaddsat, int_aarch64_sve_uqadd_x>;
+  defm SQSUB_ZZZ : sve_int_bin_cons_arit_0<0b110, "sqsub", ssubsat, int_aarch64_sve_sqsub_x>;
+  defm UQSUB_ZZZ : sve_int_bin_cons_arit_0<0b111, "uqsub", usubsat, int_aarch64_sve_uqsub_x>;
 
   defm AND_ZZZ : sve_int_bin_cons_log<0b00, "and", and>;
   defm ORR_ZZZ : sve_int_bin_cons_log<0b01, "orr", or>;
@@ -167,13 +167,13 @@ let Predicates = [HasSVE] in {
   defm AND_ZPmZ : sve_int_bin_pred_log<0b010, "and", int_aarch64_sve_and>;
   defm BIC_ZPmZ : sve_int_bin_pred_log<0b011, "bic", int_aarch64_sve_bic>;
 
-  defm ADD_ZI   : sve_int_arith_imm0<0b000, "add", add>;
-  defm SUB_ZI   : sve_int_arith_imm0<0b001, "sub", sub>;
+  defm ADD_ZI   : sve_int_arith_imm0<0b000, "add", add, null_frag>;
+  defm SUB_ZI   : sve_int_arith_imm0<0b001, "sub", sub, null_frag>;
   defm SUBR_ZI  : sve_int_arith_imm0_subr<0b011, "subr", sub>;
-  defm SQADD_ZI : sve_int_arith_imm0<0b100, "sqadd", saddsat>;
-  defm UQADD_ZI : sve_int_arith_imm0<0b101, "uqadd", uaddsat>;
-  defm SQSUB_ZI : sve_int_arith_imm0<0b110, "sqsub", ssubsat>;
-  defm UQSUB_ZI : sve_int_arith_imm0<0b111, "uqsub", usubsat>;
+  defm SQADD_ZI : sve_int_arith_imm0<0b100, "sqadd", saddsat, int_aarch64_sve_sqadd_x>;
+  defm UQADD_ZI : sve_int_arith_imm0<0b101, "uqadd", uaddsat, int_aarch64_sve_uqadd_x>;
+  defm SQSUB_ZI : sve_int_arith_imm0<0b110, "sqsub", ssubsat, int_aarch64_sve_sqsub_x>;
+  defm UQSUB_ZI : sve_int_arith_imm0<0b111, "uqsub", usubsat, int_aarch64_sve_uqsub_x>;
 
   defm MAD_ZPmZZ : sve_int_mladdsub_vvv_pred<0b0, "mad", int_aarch64_sve_mad>;
   defm MSB_ZPmZZ : sve_int_mladdsub_vvv_pred<0b1, "msb", int_aarch64_sve_msb>;

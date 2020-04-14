@@ -16,7 +16,6 @@
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringMap.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Regex.h"
@@ -27,21 +26,16 @@
 using namespace mlir;
 using namespace mlir::detail;
 
-static llvm::cl::opt<bool> printStackTraceOnDiagnostic(
-    "mlir-print-stacktrace-on-diagnostic",
-    llvm::cl::desc("When a diagnostic is emitted, also print the stack trace "
-                   "as an attached note"));
-
 //===----------------------------------------------------------------------===//
 // DiagnosticArgument
 //===----------------------------------------------------------------------===//
 
-// Construct from an Attribute.
+/// Construct from an Attribute.
 DiagnosticArgument::DiagnosticArgument(Attribute attr)
     : kind(DiagnosticArgumentKind::Attribute),
       opaqueVal(reinterpret_cast<intptr_t>(attr.getAsOpaquePointer())) {}
 
-// Construct from a Type.
+/// Construct from a Type.
 DiagnosticArgument::DiagnosticArgument(Type val)
     : kind(DiagnosticArgumentKind::Type),
       opaqueVal(reinterpret_cast<intptr_t>(val.getAsOpaquePointer())) {}
@@ -70,9 +64,6 @@ void DiagnosticArgument::print(raw_ostream &os) const {
     break;
   case DiagnosticArgumentKind::Integer:
     os << getAsInteger();
-    break;
-  case DiagnosticArgumentKind::Operation:
-    getAsOperation().print(os, OpPrintingFlags().useLocalScope());
     break;
   case DiagnosticArgumentKind::String:
     os << getAsString();
@@ -129,6 +120,14 @@ Diagnostic &Diagnostic::operator<<(OperationName val) {
   // the lifetime of its data.
   arguments.push_back(DiagnosticArgument(val.getStringRef()));
   return *this;
+}
+
+/// Stream in an Operation.
+Diagnostic &Diagnostic::operator<<(Operation &val) {
+  std::string str;
+  llvm::raw_string_ostream os(str);
+  os << val;
+  return *this << os.str();
 }
 
 /// Outputs this diagnostic to a stream.
@@ -278,13 +277,14 @@ void DiagnosticEngine::emit(Diagnostic diag) {
 /// diagnostic.
 static InFlightDiagnostic
 emitDiag(Location location, DiagnosticSeverity severity, const Twine &message) {
-  auto &diagEngine = location->getContext()->getDiagEngine();
+  MLIRContext *ctx = location->getContext();
+  auto &diagEngine = ctx->getDiagEngine();
   auto diag = diagEngine.emit(location, severity);
   if (!message.isTriviallyEmpty())
     diag << message;
 
   // Add the stack trace as a note if necessary.
-  if (printStackTraceOnDiagnostic) {
+  if (ctx->shouldPrintStackTraceOnDiagnostic()) {
     std::string bt;
     {
       llvm::raw_string_ostream stream(bt);

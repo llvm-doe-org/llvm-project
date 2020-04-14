@@ -285,7 +285,7 @@ static bool isCommutative(Instruction *I) {
 static Optional<TargetTransformInfo::ShuffleKind>
 isShuffle(ArrayRef<Value *> VL) {
   auto *EI0 = cast<ExtractElementInst>(VL[0]);
-  unsigned Size = EI0->getVectorOperandType()->getVectorNumElements();
+  unsigned Size = EI0->getVectorOperandType()->getNumElements();
   Value *Vec1 = nullptr;
   Value *Vec2 = nullptr;
   enum ShuffleMode { Unknown, Select, Permute };
@@ -294,7 +294,7 @@ isShuffle(ArrayRef<Value *> VL) {
     auto *EI = cast<ExtractElementInst>(VL[I]);
     auto *Vec = EI->getVectorOperand();
     // All vector operands must have the same number of vector elements.
-    if (Vec->getType()->getVectorNumElements() != Size)
+    if (cast<VectorType>(Vec->getType())->getNumElements() != Size)
       return None;
     auto *Idx = dyn_cast<ConstantInt>(EI->getIndexOperand());
     if (!Idx)
@@ -3131,7 +3131,8 @@ unsigned BoUpSLP::canMapToVector(Type *T, const DataLayout &DL) const {
   unsigned N = 1;
   Type *EltTy = T;
 
-  while (isa<StructType>(EltTy) || isa<SequentialType>(EltTy)) {
+  while (isa<StructType>(EltTy) || isa<ArrayType>(EltTy) ||
+         isa<VectorType>(EltTy)) {
     if (auto *ST = dyn_cast<StructType>(EltTy)) {
       // Check that struct is homogeneous.
       for (const auto *Ty : ST->elements())
@@ -3139,10 +3140,13 @@ unsigned BoUpSLP::canMapToVector(Type *T, const DataLayout &DL) const {
           return 0;
       N *= ST->getNumElements();
       EltTy = *ST->element_begin();
+    } else if (auto *AT = dyn_cast<ArrayType>(EltTy)) {
+      N *= AT->getNumElements();
+      EltTy = AT->getElementType();
     } else {
-      auto *SeqT = cast<SequentialType>(EltTy);
-      N *= SeqT->getNumElements();
-      EltTy = SeqT->getElementType();
+      auto *VT = cast<VectorType>(EltTy);
+      N *= VT->getNumElements();
+      EltTy = VT->getElementType();
     }
   }
 
@@ -3178,7 +3182,7 @@ bool BoUpSLP::canReuseExtract(ArrayRef<Value *> VL, Value *OpValue,
     if (!LI || !LI->isSimple() || !LI->hasNUses(VL.size()))
       return false;
   } else {
-    NElts = Vec->getType()->getVectorNumElements();
+    NElts = cast<VectorType>(Vec->getType())->getNumElements();
   }
 
   if (NElts != VL.size())
@@ -4367,11 +4371,9 @@ Value *BoUpSLP::vectorizeTree(TreeEntry *E) {
       if (getTreeEntry(PO))
         ExternalUses.push_back(ExternalUser(PO, cast<User>(VecPtr), 0));
 
-      MaybeAlign Alignment = MaybeAlign(LI->getAlignment());
-      LI = Builder.CreateLoad(VecTy, VecPtr);
-      if (!Alignment)
-        Alignment = MaybeAlign(DL->getABITypeAlignment(ScalarLoadTy));
-      LI->setAlignment(Alignment);
+      Align Alignment = DL->getValueOrABITypeAlignment(LI->getAlign(),
+                                                       ScalarLoadTy);
+      LI = Builder.CreateAlignedLoad(VecTy, VecPtr, Alignment);
       Value *V = propagateMetadata(LI, E->Scalars);
       if (IsReorder) {
         OrdersType Mask;

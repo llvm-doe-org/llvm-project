@@ -31,20 +31,20 @@ OMPClause::child_range OMPClause::children() {
   switch (getClauseKind()) {
   default:
     break;
-#define OPENMP_CLAUSE(Name, Class)                                             \
-  case OMPC_##Name:                                                            \
+#define OMP_CLAUSE_CLASS(Enum, Str, Class)                                           \
+  case Enum:                                                                   \
     return static_cast<Class *>(this)->children();
-#include "clang/Basic/OpenMPKinds.def"
+#include "llvm/Frontend/OpenMP/OMPKinds.def"
   }
   llvm_unreachable("unknown OMPClause");
 }
 
 OMPClause::child_range OMPClause::used_children() {
   switch (getClauseKind()) {
-#define OPENMP_CLAUSE(Name, Class)                                             \
-  case OMPC_##Name:                                                            \
+#define OMP_CLAUSE_CLASS(Enum, Str, Class)                                           \
+  case Enum:                                                                   \
     return static_cast<Class *>(this)->used_children();
-#include "clang/Basic/OpenMPKinds.def"
+#include "llvm/Frontend/OpenMP/OMPKinds.def"
   case OMPC_threadprivate:
   case OMPC_uniform:
   case OMPC_device_type:
@@ -1754,7 +1754,7 @@ void OMPClausePrinter::VisitOMPMapClause(OMPMapClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "map(";
     if (Node->getMapType() != OMPC_MAP_unknown) {
-      for (unsigned I = 0; I < OMPMapClause::NumberOfModifiers; ++I) {
+      for (unsigned I = 0; I < NumberOfOMPMapClauseModifiers; ++I) {
         if (Node->getMapTypeModifier(I) != OMPC_MAP_MODIFIER_unknown) {
           OS << getOpenMPSimpleClauseTypeName(OMPC_map,
                                               Node->getMapTypeModifier(I));
@@ -1831,9 +1831,11 @@ void OMPClausePrinter::VisitOMPDefaultmapClause(OMPDefaultmapClause *Node) {
   OS << "defaultmap(";
   OS << getOpenMPSimpleClauseTypeName(OMPC_defaultmap,
                                       Node->getDefaultmapModifier());
-  OS << ": ";
-  OS << getOpenMPSimpleClauseTypeName(OMPC_defaultmap,
-    Node->getDefaultmapKind());
+  if (Node->getDefaultmapKind() != OMPC_DEFAULTMAP_unknown) {
+    OS << ": ";
+    OS << getOpenMPSimpleClauseTypeName(OMPC_defaultmap,
+                                        Node->getDefaultmapKind());
+  }
   OS << ")";
 }
 
@@ -1883,11 +1885,8 @@ void OMPClausePrinter::VisitOMPExclusiveClause(OMPExclusiveClause *Node) {
 }
 
 void OMPTraitInfo::getAsVariantMatchInfo(ASTContext &ASTCtx,
-                                         VariantMatchInfo &VMI,
-                                         bool DeviceSetOnly) const {
+                                         VariantMatchInfo &VMI) const {
   for (const OMPTraitSet &Set : Sets) {
-    if (DeviceSetOnly && Set.Kind != TraitSet::device)
-      continue;
     for (const OMPTraitSelector &Selector : Set.Selectors) {
 
       // User conditions are special as we evaluate the condition here.
@@ -1899,20 +1898,25 @@ void OMPTraitInfo::getAsVariantMatchInfo(ASTContext &ASTCtx,
                    TraitProperty::user_condition_unknown &&
                "Ill-formed user condition, expected unknown trait property!");
 
-        llvm::APInt CondVal =
-            Selector.ScoreOrCondition->EvaluateKnownConstInt(ASTCtx);
-        VMI.addTrait(CondVal.isNullValue()
-                         ? TraitProperty::user_condition_false
-                         : TraitProperty::user_condition_true);
+        llvm::APSInt CondVal;
+        if (Selector.ScoreOrCondition->isIntegerConstantExpr(CondVal, ASTCtx))
+          VMI.addTrait(CondVal.isNullValue()
+                          ? TraitProperty::user_condition_false
+                          : TraitProperty::user_condition_true);
+        else
+          VMI.addTrait(TraitProperty::user_condition_false);
         continue;
       }
 
-      llvm::APInt Score;
+      llvm::APSInt Score;
       llvm::APInt *ScorePtr = nullptr;
       if (Selector.ScoreOrCondition) {
-        Score = Selector.ScoreOrCondition->EvaluateKnownConstInt(ASTCtx);
-        ScorePtr = &Score;
+        if (Selector.ScoreOrCondition->isIntegerConstantExpr(Score, ASTCtx))
+          ScorePtr = &Score;
+        else
+          VMI.addTrait(TraitProperty::user_condition_false);
       }
+
       for (const OMPTraitProperty &Property : Selector.Properties)
         VMI.addTrait(Set.Kind, Property.Kind, ScorePtr);
 
@@ -1934,14 +1938,14 @@ void OMPTraitInfo::getAsVariantMatchInfo(ASTContext &ASTCtx,
 void OMPTraitInfo::print(llvm::raw_ostream &OS,
                          const PrintingPolicy &Policy) const {
   bool FirstSet = true;
-  for (const OMPTraitInfo::OMPTraitSet &Set : Sets) {
+  for (const OMPTraitSet &Set : Sets) {
     if (!FirstSet)
       OS << ", ";
     FirstSet = false;
     OS << getOpenMPContextTraitSetName(Set.Kind) << "={";
 
     bool FirstSelector = true;
-    for (const OMPTraitInfo::OMPTraitSelector &Selector : Set.Selectors) {
+    for (const OMPTraitSelector &Selector : Set.Selectors) {
       if (!FirstSelector)
         OS << ", ";
       FirstSelector = false;
@@ -1967,8 +1971,7 @@ void OMPTraitInfo::print(llvm::raw_ostream &OS,
         }
 
         bool FirstProperty = true;
-        for (const OMPTraitInfo::OMPTraitProperty &Property :
-             Selector.Properties) {
+        for (const OMPTraitProperty &Property : Selector.Properties) {
           if (!FirstProperty)
             OS << ", ";
           FirstProperty = false;
@@ -1984,9 +1987,9 @@ void OMPTraitInfo::print(llvm::raw_ostream &OS,
 std::string OMPTraitInfo::getMangledName() const {
   std::string MangledName;
   llvm::raw_string_ostream OS(MangledName);
-  for (const OMPTraitInfo::OMPTraitSet &Set : Sets) {
+  for (const OMPTraitSet &Set : Sets) {
     OS << '.' << 'S' << unsigned(Set.Kind);
-    for (const OMPTraitInfo::OMPTraitSelector &Selector : Set.Selectors) {
+    for (const OMPTraitSelector &Selector : Set.Selectors) {
 
       bool AllowsTraitScore = false;
       bool RequiresProperty = false;
@@ -1998,7 +2001,7 @@ std::string OMPTraitInfo::getMangledName() const {
           Selector.Kind == TraitSelector::user_condition)
         continue;
 
-      for (const OMPTraitInfo::OMPTraitProperty &Property : Selector.Properties)
+      for (const OMPTraitProperty &Property : Selector.Properties)
         OS << '.' << 'P'
            << getOpenMPContextTraitPropertyName(Property.Kind);
     }

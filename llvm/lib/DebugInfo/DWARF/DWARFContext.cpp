@@ -763,7 +763,7 @@ const DWARFUnitIndex &DWARFContext::getTUIndex() {
 
   DataExtractor TUIndexData(DObj->getTUIndexSection(), isLittleEndian(), 0);
 
-  TUIndex = std::make_unique<DWARFUnitIndex>(DW_SECT_TYPES);
+  TUIndex = std::make_unique<DWARFUnitIndex>(DW_SECT_EXT_TYPES);
   TUIndex->parse(TUIndexData);
   return *TUIndex;
 }
@@ -959,7 +959,7 @@ void DWARFContext::parseNormalUnits() {
   });
   NormalUnits.finishedInfoUnits();
   DObj->forEachTypesSections([&](const DWARFSection &S) {
-    NormalUnits.addUnitsForSection(*this, S, DW_SECT_TYPES);
+    NormalUnits.addUnitsForSection(*this, S, DW_SECT_EXT_TYPES);
   });
 }
 
@@ -971,7 +971,7 @@ void DWARFContext::parseDWOUnits(bool Lazy) {
   });
   DWOUnits.finishedInfoUnits();
   DObj->forEachTypesDWOSections([&](const DWARFSection &S) {
-    DWOUnits.addUnitsForDWOSection(*this, S, DW_SECT_TYPES, Lazy);
+    DWOUnits.addUnitsForDWOSection(*this, S, DW_SECT_EXT_TYPES, Lazy);
   });
 }
 
@@ -1620,7 +1620,7 @@ public:
     }
   }
   DWARFObjInMemory(const object::ObjectFile &Obj, const LoadedObjectInfo *L,
-                   function_ref<void(Error)> HandleError)
+                   function_ref<void(Error)> HandleError, function_ref<void(Error)> HandleWarning )
       : IsLittleEndian(Obj.isLittleEndian()),
         AddressSize(Obj.getBytesInAddress()), FileName(Obj.getFileName()),
         Obj(&Obj) {
@@ -1797,7 +1797,8 @@ public:
         } else {
           SmallString<32> Type;
           Reloc.getTypeName(Type);
-          HandleError(
+          // FIXME: Support more relocations & change this to an error
+          HandleWarning(
               createError("failed to compute relocation: " + Type + ", ",
                           errorCodeToError(object_error::parse_failed)));
         }
@@ -1932,7 +1933,7 @@ DWARFContext::create(const object::ObjectFile &Obj, const LoadedObjectInfo *L,
                      std::function<void(Error)> RecoverableErrorHandler,
                      std::function<void(Error)> WarningHandler) {
   auto DObj =
-      std::make_unique<DWARFObjInMemory>(Obj, L, RecoverableErrorHandler);
+      std::make_unique<DWARFObjInMemory>(Obj, L, RecoverableErrorHandler, WarningHandler);
   return std::make_unique<DWARFContext>(std::move(DObj), std::move(DWPName),
                                         RecoverableErrorHandler,
                                         WarningHandler);

@@ -605,6 +605,7 @@ void ASTStmtReader::VisitIntegerLiteral(IntegerLiteral *E) {
 void ASTStmtReader::VisitFixedPointLiteral(FixedPointLiteral *E) {
   VisitExpr(E);
   E->setLocation(readSourceLocation());
+  E->setScale(Record.readInt());
   E->setValue(Record.getContext(), Record.readAPInt());
 }
 
@@ -944,6 +945,13 @@ void ASTStmtReader::VisitOMPIteratorExpr(OMPIteratorExpr *E) {
     if (Step)
       SecColonLoc = readSourceLocation();
     E->setIteratorRange(I, Begin, ColonLoc, End, SecColonLoc, Step);
+    // Deserialize helpers
+    OMPIteratorHelperData HD;
+    HD.CounterVD = cast_or_null<VarDecl>(Record.readDeclRef());
+    HD.Upper = Record.readSubExpr();
+    HD.Update = Record.readSubExpr();
+    HD.CounterUpdate = Record.readSubExpr();
+    E->setHelper(I, HD);
   }
 }
 
@@ -2848,6 +2856,10 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
 
     case EXPR_INTEGER_LITERAL:
       S = IntegerLiteral::Create(Context, Empty);
+      break;
+
+    case EXPR_FIXEDPOINT_LITERAL:
+      S = FixedPointLiteral::Create(Context, Empty);
       break;
 
     case EXPR_FLOATING_LITERAL:

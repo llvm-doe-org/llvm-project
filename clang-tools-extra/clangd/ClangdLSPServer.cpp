@@ -15,6 +15,7 @@
 #include "Protocol.h"
 #include "SemanticHighlighting.h"
 #include "SourceCode.h"
+#include "TUScheduler.h"
 #include "Trace.h"
 #include "URI.h"
 #include "refactor/Tweak.h"
@@ -408,7 +409,8 @@ private:
   //  - cleans up the entry in RequestCancelers when it's no longer needed
   // If a client reuses an ID, the last wins and the first cannot be canceled.
   Context cancelableRequestContext(const llvm::json::Value &ID) {
-    auto Task = cancelableTask();
+    auto Task = cancelableTask(
+        /*Reason=*/static_cast<int>(ErrorCode::RequestCancelled));
     auto StrID = llvm::to_string(ID);  // JSON-serialize ID for map key.
     auto Cookie = NextRequestCookie++; // No lock, only called on main thread.
     {
@@ -567,7 +569,12 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
                            {"version", getClangToolFullVersion("clangd")}}},
        {"capabilities",
         llvm::json::Object{
-            {"textDocumentSync", (int)TextDocumentSyncKind::Incremental},
+            {"textDocumentSync",
+             llvm::json::Object{
+                 {"openClose", true},
+                 {"change", (int)TextDocumentSyncKind::Incremental},
+                 {"save", true},
+             }},
             {"documentFormattingProvider", true},
             {"documentRangeFormattingProvider", true},
             {"documentOnTypeFormattingProvider",
@@ -682,7 +689,16 @@ void ClangdLSPServer::onDocumentDidChange(
                       WantDiags, Params.forceRebuild);
 }
 
+void ClangdLSPServer::onDocumentDidSave(
+    const DidSaveTextDocumentParams &Params) {
+  reparseOpenFilesIfNeeded([](llvm::StringRef) { return true; });
+}
+
 void ClangdLSPServer::onFileEvent(const DidChangeWatchedFilesParams &Params) {
+  // We could also reparse all open files here. However:
+  //  - this could be frequent, and revalidating all the preambles isn't free
+  //  - this is useful e.g. when switching git branches, but we're likely to see
+  //    fresh headers but still have the old-branch main-file content
   Server->onFileEvent(Params);
 }
 
@@ -1178,7 +1194,8 @@ void ClangdLSPServer::applyConfiguration(
     }
   }
 
-  reparseOpenedFiles(ModifiedFiles);
+  reparseOpenFilesIfNeeded(
+      [&](llvm::StringRef File) { return ModifiedFiles.count(File) != 0; });
 }
 
 void ClangdLSPServer::publishTheiaSemanticHighlighting(
@@ -1356,6 +1373,7 @@ ClangdLSPServer::ClangdLSPServer(
   MsgHandler->bind("textDocument/didOpen", &ClangdLSPServer::onDocumentDidOpen);
   MsgHandler->bind("textDocument/didClose", &ClangdLSPServer::onDocumentDidClose);
   MsgHandler->bind("textDocument/didChange", &ClangdLSPServer::onDocumentDidChange);
+  MsgHandler->bind("textDocument/didSave", &ClangdLSPServer::onDocumentDidSave);
   MsgHandler->bind("workspace/didChangeWatchedFiles", &ClangdLSPServer::onFileEvent);
   MsgHandler->bind("workspace/didChangeConfiguration", &ClangdLSPServer::onChangeConfiguration);
   MsgHandler->bind("textDocument/symbolInfo", &ClangdLSPServer::onSymbolInfo);
@@ -1368,7 +1386,8 @@ ClangdLSPServer::ClangdLSPServer(
   // clang-format on
 }
 
-ClangdLSPServer::~ClangdLSPServer() { IsBeingDestroyed = true;
+ClangdLSPServer::~ClangdLSPServer() {
+  IsBeingDestroyed = true;
   // Explicitly destroy ClangdServer first, blocking on threads it owns.
   // This ensures they don't access any other members.
   Server.reset();
@@ -1556,19 +1575,18 @@ void ClangdLSPServer::onFileUpdated(PathRef File, const TUStatus &Status) {
   // two statuses are running faster in practice, which leads the UI constantly
   // changing, and doesn't provide much value. We may want to emit status at a
   // reasonable time interval (e.g. 0.5s).
-  if (Status.Action.S == TUAction::BuildingFile ||
-      Status.Action.S == TUAction::RunningAction)
+  if (Status.PreambleActivity == PreambleAction::Idle &&
+      (Status.ASTActivity.K == ASTAction::Building ||
+       Status.ASTActivity.K == ASTAction::RunningAction))
     return;
   notify("textDocument/clangd.fileStatus", Status.render(File));
 }
 
-void ClangdLSPServer::reparseOpenedFiles(
-    const llvm::StringSet<> &ModifiedFiles) {
-  if (ModifiedFiles.empty())
-    return;
+void ClangdLSPServer::reparseOpenFilesIfNeeded(
+    llvm::function_ref<bool(llvm::StringRef File)> Filter) {
   // Reparse only opened files that were modified.
   for (const Path &FilePath : DraftMgr.getActiveFiles())
-    if (ModifiedFiles.find(FilePath) != ModifiedFiles.end())
+    if (Filter(FilePath))
       if (auto Draft = DraftMgr.getDraft(FilePath)) // else disappeared in race?
         Server->addDocument(FilePath, std::move(Draft->Contents),
                             encodeVersion(Draft->Version),

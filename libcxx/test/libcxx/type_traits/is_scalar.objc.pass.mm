@@ -17,7 +17,6 @@
 // Make sure we report that blocks are scalar types.
 
 #include <type_traits>
-#include <optional>
 
 struct Foo { };
 template <int> struct Arg { };
@@ -35,6 +34,5 @@ static_assert(std::is_scalar<Foo (^)(Arg<0>, Arg<1>, Arg<2>)>::value, "");
 
 
 int main(int, char**) {
-    std::optional<Foo (^)(Arg<0>)> opt; (void)opt;
     return 0;
 }

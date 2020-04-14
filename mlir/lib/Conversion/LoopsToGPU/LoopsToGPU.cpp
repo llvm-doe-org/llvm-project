@@ -506,16 +506,36 @@ struct ParallelToGpuLaunchLowering : public OpRewritePattern<ParallelOp> {
 /// `upperBound`.
 static Value deriveStaticUpperBound(Value upperBound,
                                     PatternRewriter &rewriter) {
-  if (AffineMinOp minOp =
-          dyn_cast_or_null<AffineMinOp>(upperBound.getDefiningOp())) {
+  if (auto op = dyn_cast_or_null<ConstantIndexOp>(upperBound.getDefiningOp())) {
+    return op;
+  }
+
+  if (auto minOp = dyn_cast_or_null<AffineMinOp>(upperBound.getDefiningOp())) {
     for (const AffineExpr &result : minOp.map().getResults()) {
-      if (AffineConstantExpr constExpr =
-              result.dyn_cast<AffineConstantExpr>()) {
+      if (auto constExpr = result.dyn_cast<AffineConstantExpr>()) {
         return rewriter.create<ConstantIndexOp>(minOp.getLoc(),
                                                 constExpr.getValue());
       }
     }
   }
+
+  if (auto multiplyOp = dyn_cast_or_null<MulIOp>(upperBound.getDefiningOp())) {
+    if (auto lhs = dyn_cast_or_null<ConstantIndexOp>(
+            deriveStaticUpperBound(multiplyOp.getOperand(0), rewriter)
+                .getDefiningOp()))
+      if (auto rhs = dyn_cast_or_null<ConstantIndexOp>(
+              deriveStaticUpperBound(multiplyOp.getOperand(1), rewriter)
+                  .getDefiningOp())) {
+        // Assumptions about the upper bound of minimum computations no longer
+        // work if multiplied by a negative value, so abort in this case.
+        if (lhs.getValue() < 0 || rhs.getValue() < 0)
+          return {};
+
+        return rewriter.create<ConstantIndexOp>(
+            multiplyOp.getLoc(), lhs.getValue() * rhs.getValue());
+      }
+  }
+
   return {};
 }
 
@@ -742,7 +762,7 @@ static LogicalResult processParallelLoop(
 /// the hardware id might iterate over additional indices. The transformation
 /// caters for this by predicating the created sequence of instructions on
 /// the actual loop bound. This only works if an static upper bound for the
-/// dynamic loop bound can be defived, currently via analyzing `affine.min`
+/// dynamic loop bound can be derived, currently via analyzing `affine.min`
 /// operations.
 LogicalResult
 ParallelToGpuLaunchLowering::matchAndRewrite(ParallelOp parallelOp,

@@ -102,11 +102,13 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AssumeBundleQueries.h"
+#include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/CGSCCPassManager.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/InlineCost.h"
 #include "llvm/Analysis/LazyCallGraph.h"
 #include "llvm/Analysis/MustExecute.h"
+#include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/IR/CallSite.h"
@@ -566,8 +568,19 @@ struct InformationCache {
   InformationCache(const Module &M, AnalysisGetter &AG,
                    SetVector<Function *> *CGSCC)
       : DL(M.getDataLayout()),
-        Explorer(/* ExploreInterBlock */ true, /* ExploreCFGForward */ true,
-                 /* ExploreCFGBackward */ true),
+        Explorer(
+            /* ExploreInterBlock */ true, /* ExploreCFGForward */ true,
+            /* ExploreCFGBackward */ true,
+            /* LIGetter */
+            [&](const Function &F) { return AG.getAnalysis<LoopAnalysis>(F); },
+            /* DTGetter */
+            [&](const Function &F) {
+              return AG.getAnalysis<DominatorTreeAnalysis>(F);
+            },
+            /* PDTGetter */
+            [&](const Function &F) {
+              return AG.getAnalysis<PostDominatorTreeAnalysis>(F);
+            }),
         AG(AG), CGSCC(CGSCC) {}
 
   /// A map type from opcodes to instructions with this opcode.
@@ -880,6 +893,12 @@ struct Attributor {
 
   /// Record that \p F is deleted after information was manifested.
   void deleteAfterManifest(Function &F) { ToBeDeletedFunctions.insert(&F); }
+
+  /// If \p V is assumed to be a constant, return it, if it is unclear yet,
+  /// return None, otherwise return `nullptr`.
+  Optional<Constant *> getAssumedConstant(const Value &V,
+                                          const AbstractAttribute &AA,
+                                          bool &UsedAssumedInformation);
 
   /// Return true if \p AA (or its context instruction) is assumed dead.
   ///
@@ -1903,7 +1922,10 @@ raw_ostream &operator<<(raw_ostream &OS, const AbstractState &State);
 template <typename base_ty, base_ty BestState, base_ty WorstState>
 raw_ostream &
 operator<<(raw_ostream &OS,
-           const IntegerStateBase<base_ty, BestState, WorstState> &State);
+           const IntegerStateBase<base_ty, BestState, WorstState> &S) {
+  return OS << "(" << S.getKnown() << "-" << S.getAssumed() << ")"
+            << static_cast<const AbstractState &>(S);
+}
 raw_ostream &operator<<(raw_ostream &OS, const IntegerRangeState &State);
 ///}
 
@@ -2094,14 +2116,14 @@ struct AAReachability : public StateWrapper<BooleanState, AbstractAttribute>,
   /// determines (and caches) reachability.
   bool isAssumedReachable(const Instruction *From,
                           const Instruction *To) const {
-    return true;
+    return isPotentiallyReachable(From, To);
   }
 
   /// Returns true if 'From' instruction is known to reach, 'To' instruction.
   /// Users should provide two positions they are interested in, and the class
   /// determines (and caches) reachability.
   bool isKnownReachable(const Instruction *From, const Instruction *To) const {
-    return true;
+    return isPotentiallyReachable(From, To);
   }
 
   /// Return an IR position, see struct IRPosition.
@@ -2219,6 +2241,11 @@ public:
 
   /// Create an abstract attribute view for the position \p IRP.
   static AAIsDead &createForPosition(const IRPosition &IRP, Attributor &A);
+
+  /// Determine if \p F might catch asynchronous exceptions.
+  static bool mayCatchAsynchronousExceptions(const Function &F) {
+    return F.hasPersonalityFn() && !canSimplifyInvokeNoUnwind(&F);
+  }
 
   /// Unique ID (due to the unique address)
   static const char ID;

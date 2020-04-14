@@ -19,7 +19,6 @@
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Pass/Pass.h"
-#include "mlir/Support/Functional.h"
 #include "mlir/Support/STLExtras.h"
 #include "mlir/Transforms/Passes.h"
 
@@ -32,8 +31,6 @@
 using namespace mlir;
 
 using llvm::SetVector;
-
-using functional::map;
 
 static llvm::cl::OptionCategory clOptionsCategory(DEBUG_TYPE " options");
 
@@ -72,7 +69,8 @@ static llvm::cl::opt<bool> clTestNormalizeMaps(
     llvm::cl::cat(clOptionsCategory));
 
 namespace {
-struct VectorizerTestPass : public FunctionPass<VectorizerTestPass> {
+struct VectorizerTestPass
+    : public PassWrapper<VectorizerTestPass, FunctionPass> {
   static constexpr auto kTestAffineMapOpName = "test_affine_map";
   static constexpr auto kTestAffineMapAttrName = "affine_map";
 
@@ -128,7 +126,6 @@ void VectorizerTestPass::testVectorShapeRatio(llvm::raw_ostream &outs) {
 }
 
 static NestedPattern patternTestSlicingOps() {
-  using functional::map;
   using matcher::Op;
   // Match all operations with the kTestSlicingOpName name.
   auto filter = [](Operation &op) {

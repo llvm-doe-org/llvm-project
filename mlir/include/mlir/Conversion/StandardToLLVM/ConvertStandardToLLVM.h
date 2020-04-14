@@ -127,7 +127,7 @@ public:
                                    Location loc) override;
 
   /// Gets the LLVM representation of the index type. The returned type is an
-  /// integer type with the size confgured for this type converter.
+  /// integer type with the size configured for this type converter.
   LLVM::LLVMType getIndexType();
 
   /// Gets the bitwidth of the index type when converted to LLVM.
@@ -398,6 +398,29 @@ public:
   Value createIndexConstant(ConversionPatternRewriter &builder, Location loc,
                             uint64_t value) const;
 
+  // Given subscript indices and array sizes in row-major order,
+  //   i_n, i_{n-1}, ..., i_1
+  //   s_n, s_{n-1}, ..., s_1
+  // obtain a value that corresponds to the linearized subscript
+  //   \sum_k i_k * \prod_{j=1}^{k-1} s_j
+  // by accumulating the running linearized value.
+  // Note that `indices` and `allocSizes` are passed in the same order as they
+  // appear in load/store operations and memref type declarations.
+  Value linearizeSubscripts(ConversionPatternRewriter &builder, Location loc,
+                            ArrayRef<Value> indices,
+                            ArrayRef<Value> allocSizes) const;
+
+  // This is a strided getElementPtr variant that linearizes subscripts as:
+  //   `base_offset + index_0 * stride_0 + ... + index_n * stride_n`.
+  Value getStridedElementPtr(Location loc, Type elementTypePtr,
+                             Value descriptor, ArrayRef<Value> indices,
+                             ArrayRef<int64_t> strides, int64_t offset,
+                             ConversionPatternRewriter &rewriter) const;
+
+  Value getDataPtr(Location loc, MemRefType type, Value memRefDesc,
+                   ArrayRef<Value> indices, ConversionPatternRewriter &rewriter,
+                   llvm::Module &module) const;
+
 protected:
   /// Reference to the type converter, with potential extensions.
   LLVMTypeConverter &typeConverter;
@@ -417,7 +440,7 @@ public:
 
 namespace LLVM {
 namespace detail {
-/// Replaces the given operaiton "op" with a new operation of type "targetOp"
+/// Replaces the given operation "op" with a new operation of type "targetOp"
 /// and given operands.
 LogicalResult oneToOneRewrite(Operation *op, StringRef targetOp,
                               ValueRange operands,
@@ -435,7 +458,7 @@ LogicalResult vectorOneToOneRewrite(Operation *op, StringRef targetOp,
 /// "TargetOp" where the latter belongs to the LLVM dialect or an equivalent.
 /// Upholds a convention that multi-result operations get converted into an
 /// operation returning the LLVM IR structure type, in which case individual
-/// values must be extacted from using LLVM::ExtractValueOp before being used.
+/// values must be extracted from using LLVM::ExtractValueOp before being used.
 template <typename SourceOp, typename TargetOp>
 class OneToOneConvertToLLVMPattern : public ConvertOpToLLVMPattern<SourceOp> {
 public:

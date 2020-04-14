@@ -130,6 +130,22 @@ TEST_F(TargetDeclTest, Exprs) {
     }
   )cpp";
   EXPECT_DECLS("CXXOperatorCallExpr", "void operator()(int n)");
+
+  Code = R"cpp(
+    void test() {
+      goto [[label]];
+    label:
+      return;
+    }
+  )cpp";
+  EXPECT_DECLS("GotoStmt", "label:");
+  Code = R"cpp(
+    void test() {
+    [[label]]:
+      return;
+    }
+  )cpp";
+  EXPECT_DECLS("LabelStmt", "label:");
 }
 
 TEST_F(TargetDeclTest, Recovery) {
@@ -604,7 +620,7 @@ protected:
   };
 
   /// Parses \p Code, finds function or namespace '::foo' and annotates its body
-  /// with results of findExplicitReferecnces.
+  /// with results of findExplicitReferences.
   /// See actual tests for examples of annotation format.
   AllRefs annotateReferencesInFoo(llvm::StringRef Code) {
     TestTU TU;

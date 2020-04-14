@@ -35,6 +35,8 @@
 #include "llvm/ADT/PointerEmbeddedInt.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
+#include <set>
+
 using namespace clang;
 using namespace llvm::omp;
 
@@ -669,6 +671,16 @@ public:
   }
   /// Check whether the implicit-behavior has been set in defaultmap
   bool checkDefaultmapCategory(OpenMPDefaultmapClauseKind VariableCategory) {
+    if (VariableCategory == OMPC_DEFAULTMAP_unknown)
+      return getTopOfStack()
+                     .DefaultmapMap[OMPC_DEFAULTMAP_aggregate]
+                     .ImplicitBehavior != OMPC_DEFAULTMAP_MODIFIER_unknown ||
+             getTopOfStack()
+                     .DefaultmapMap[OMPC_DEFAULTMAP_scalar]
+                     .ImplicitBehavior != OMPC_DEFAULTMAP_MODIFIER_unknown ||
+             getTopOfStack()
+                     .DefaultmapMap[OMPC_DEFAULTMAP_pointer]
+                     .ImplicitBehavior != OMPC_DEFAULTMAP_MODIFIER_unknown;
     return getTopOfStack().DefaultmapMap[VariableCategory].ImplicitBehavior !=
            OMPC_DEFAULTMAP_MODIFIER_unknown;
   }
@@ -2098,18 +2110,22 @@ VarDecl *Sema::isOpenMPCapturedDecl(ValueDecl *D, bool CheckScopeInfo,
          isImplicitOrExplicitTaskingRegion(DSAStack->getCurrentDirective())) ||
         (VD && DSAStack->isForceVarCapturing()))
       return VD ? VD : Info.second;
-    DSAStackTy::DSAVarData DVarPrivate =
+    DSAStackTy::DSAVarData DVarTop =
         DSAStack->getTopDSA(D, DSAStack->isClauseParsingMode());
-    if (DVarPrivate.CKind != OMPC_unknown && isOpenMPPrivate(DVarPrivate.CKind))
-      return VD ? VD : cast<VarDecl>(DVarPrivate.PrivateCopy->getDecl());
+    if (DVarTop.CKind != OMPC_unknown && isOpenMPPrivate(DVarTop.CKind))
+      return VD ? VD : cast<VarDecl>(DVarTop.PrivateCopy->getDecl());
     // Threadprivate variables must not be captured.
-    if (isOpenMPThreadPrivate(DVarPrivate.CKind))
+    if (isOpenMPThreadPrivate(DVarTop.CKind))
       return nullptr;
     // The variable is not private or it is the variable in the directive with
     // default(none) clause and not used in any clause.
-    DVarPrivate = DSAStack->hasDSA(D, isOpenMPPrivate,
-                                   [](OpenMPDirectiveKind) { return true; },
-                                   DSAStack->isClauseParsingMode());
+    DSAStackTy::DSAVarData DVarPrivate = DSAStack->hasDSA(
+        D, isOpenMPPrivate, [](OpenMPDirectiveKind) { return true; },
+        DSAStack->isClauseParsingMode());
+    // Global shared must not be captured.
+    if (VD && !VD->hasLocalStorage() && DVarPrivate.CKind == OMPC_unknown &&
+        (DSAStack->getDefaultDSA() != DSA_none || DVarTop.CKind == OMPC_shared))
+      return nullptr;
     if (DVarPrivate.CKind != OMPC_unknown ||
         (VD && DSAStack->getDefaultDSA() == DSA_none))
       return VD ? VD : cast<VarDecl>(DVarPrivate.PrivateCopy->getDecl());
@@ -2231,7 +2247,7 @@ void Sema::setOpenMPCaptureKind(FieldDecl *FD, const ValueDecl *D,
     }
   }
   if (OMPC != OMPC_unknown)
-    FD->addAttr(OMPCaptureKindAttr::CreateImplicit(Context, OMPC));
+    FD->addAttr(OMPCaptureKindAttr::CreateImplicit(Context, unsigned(OMPC)));
 }
 
 bool Sema::isOpenMPTargetCapturedDecl(const ValueDecl *D, unsigned Level,
@@ -5543,10 +5559,51 @@ static void setPrototype(Sema &S, FunctionDecl *FD, FunctionDecl *FDWithProto,
   FD->setParams(Params);
 }
 
+Sema::OMPDeclareVariantScope::OMPDeclareVariantScope(OMPTraitInfo &TI)
+    : TI(&TI), NameSuffix(TI.getMangledName()) {}
+
 FunctionDecl *
 Sema::ActOnStartOfFunctionDefinitionInOpenMPDeclareVariantScope(Scope *S,
                                                                 Declarator &D) {
-  auto *BaseFD = cast<FunctionDecl>(ActOnDeclarator(S, D));
+  IdentifierInfo *BaseII = D.getIdentifier();
+  LookupResult Lookup(*this, DeclarationName(BaseII), D.getIdentifierLoc(),
+                      LookupOrdinaryName);
+  LookupParsedName(Lookup, S, &D.getCXXScopeSpec());
+
+  TypeSourceInfo *TInfo = GetTypeForDeclarator(D, S);
+  QualType FType = TInfo->getType();
+
+  bool IsConstexpr = D.getDeclSpec().getConstexprSpecifier() == CSK_constexpr;
+  bool IsConsteval = D.getDeclSpec().getConstexprSpecifier() == CSK_consteval;
+
+  FunctionDecl *BaseFD = nullptr;
+  for (auto *Candidate : Lookup) {
+    auto *UDecl = dyn_cast<FunctionDecl>(Candidate->getUnderlyingDecl());
+    if (!UDecl)
+      continue;
+
+    // Don't specialize constexpr/consteval functions with
+    // non-constexpr/consteval functions.
+    if (UDecl->isConstexpr() && !IsConstexpr)
+      continue;
+    if (UDecl->isConsteval() && !IsConsteval)
+      continue;
+
+    QualType NewType = Context.mergeFunctionTypes(
+        FType, UDecl->getType(), /* OfBlockPointer */ false,
+        /* Unqualified */ false, /* AllowCXX */ true);
+    if (NewType.isNull())
+      continue;
+
+    // Found a base!
+    BaseFD = UDecl;
+    break;
+  }
+  if (!BaseFD) {
+    BaseFD = cast<FunctionDecl>(ActOnDeclarator(S, D));
+    BaseFD->setImplicit(true);
+  }
+
   OMPDeclareVariantScope &DVScope = OMPDeclareVariantScopes.back();
   std::string MangledName;
   MangledName += D.getIdentifier()->getName();
@@ -5575,11 +5632,9 @@ void Sema::ActOnFinishedFunctionDefinitionInOpenMPDeclareVariantScope(
   auto *OMPDeclareVariantA = OMPDeclareVariantAttr::CreateImplicit(
       Context, VariantFuncRef, DVScope.TI);
   BaseFD->addAttr(OMPDeclareVariantA);
-
-  BaseFD->setImplicit(true);
 }
 
-ExprResult Sema::ActOnOpenMPCall(Sema &S, ExprResult Call, Scope *Scope,
+ExprResult Sema::ActOnOpenMPCall(ExprResult Call, Scope *Scope,
                                  SourceLocation LParenLoc,
                                  MultiExprArg ArgExprs,
                                  SourceLocation RParenLoc, Expr *ExecConfig) {
@@ -5596,8 +5651,8 @@ ExprResult Sema::ActOnOpenMPCall(Sema &S, ExprResult Call, Scope *Scope,
   if (!CalleeFnDecl->hasAttr<OMPDeclareVariantAttr>())
     return Call;
 
-  ASTContext &Context = S.getASTContext();
-  OMPContext OMPCtx(S.getLangOpts().OpenMPIsDevice,
+  ASTContext &Context = getASTContext();
+  OMPContext OMPCtx(getLangOpts().OpenMPIsDevice,
                     Context.getTargetInfo().getTriple());
 
   SmallVector<Expr *, 4> Exprs;
@@ -5609,8 +5664,8 @@ ExprResult Sema::ActOnOpenMPCall(Sema &S, ExprResult Call, Scope *Scope,
 
       VariantMatchInfo VMI;
       OMPTraitInfo &TI = A->getTraitInfo();
-      TI.getAsVariantMatchInfo(Context, VMI, /* DeviceSetOnly */ false);
-      if (!isVariantApplicableInContext(VMI, OMPCtx))
+      TI.getAsVariantMatchInfo(Context, VMI);
+      if (!isVariantApplicableInContext(VMI, OMPCtx, /* DeviceSetOnly */ false))
         continue;
 
       VMIs.push_back(VMI);
@@ -5645,12 +5700,12 @@ ExprResult Sema::ActOnOpenMPCall(Sema &S, ExprResult Call, Scope *Scope,
       if (auto *SpecializedMethod = dyn_cast<CXXMethodDecl>(BestDecl)) {
         auto *MemberCall = dyn_cast<CXXMemberCallExpr>(CE);
         BestExpr = MemberExpr::CreateImplicit(
-            S.Context, MemberCall->getImplicitObjectArgument(),
-            /* IsArrow */ false, SpecializedMethod, S.Context.BoundMemberTy,
+            Context, MemberCall->getImplicitObjectArgument(),
+            /* IsArrow */ false, SpecializedMethod, Context.BoundMemberTy,
             MemberCall->getValueKind(), MemberCall->getObjectKind());
       }
-      NewCall = S.BuildCallExpr(Scope, BestExpr, LParenLoc, ArgExprs, RParenLoc,
-                                ExecConfig);
+      NewCall = BuildCallExpr(Scope, BestExpr, LParenLoc, ArgExprs, RParenLoc,
+                              ExecConfig);
       if (NewCall.isUsable())
         break;
     }
@@ -5661,7 +5716,6 @@ ExprResult Sema::ActOnOpenMPCall(Sema &S, ExprResult Call, Scope *Scope,
 
   if (!NewCall.isUsable())
     return Call;
-
   return PseudoObjectExpr::Create(Context, CE, {NewCall.get()}, 0);
 }
 
@@ -16994,6 +17048,21 @@ static void checkMappableExpressionList(
         continue;
       }
 
+      // target, target data
+      // OpenMP 5.0 [2.12.2, Restrictions, p. 163]
+      // OpenMP 5.0 [2.12.5, Restrictions, p. 174]
+      // A map-type in a map clause must be to, from, tofrom or alloc
+      if ((DKind == OMPD_target_data ||
+           isOpenMPTargetExecutionDirective(DKind)) &&
+          !(MapType == OMPC_MAP_to || MapType == OMPC_MAP_from ||
+            MapType == OMPC_MAP_tofrom || MapType == OMPC_MAP_alloc)) {
+        SemaRef.Diag(StartLoc, diag::err_omp_invalid_map_type_for_directive)
+            << (IsMapTypeImplicit ? 1 : 0)
+            << getOpenMPSimpleClauseTypeName(OMPC_map, MapType)
+            << getOpenMPDirectiveName(DKind);
+        continue;
+      }
+
       // OpenMP 4.5 [2.15.5.1, Restrictions, p.3]
       // A list item cannot appear in both a map clause and a data-sharing
       // attribute clause on the same construct
@@ -17054,7 +17123,7 @@ OMPClause *Sema::ActOnOpenMPMapClause(
   OpenMPMapModifierKind Modifiers[] = {OMPC_MAP_MODIFIER_unknown,
                                        OMPC_MAP_MODIFIER_unknown,
                                        OMPC_MAP_MODIFIER_unknown};
-  SourceLocation ModifiersLoc[OMPMapClause::NumberOfModifiers];
+  SourceLocation ModifiersLoc[NumberOfOMPMapClauseModifiers];
 
   // Process map-type-modifiers, flag errors for duplicate modifiers.
   unsigned Count = 0;
@@ -17064,7 +17133,7 @@ OMPClause *Sema::ActOnOpenMPMapClause(
       Diag(MapTypeModifiersLoc[I], diag::err_omp_duplicate_map_type_modifier);
       continue;
     }
-    assert(Count < OMPMapClause::NumberOfModifiers &&
+    assert(Count < NumberOfOMPMapClauseModifiers &&
            "Modifiers exceed the allowed number of map type modifiers");
     Modifiers[Count] = MapTypeModifiers[I];
     ModifiersLoc[Count] = MapTypeModifiersLoc[I];
@@ -17750,7 +17819,8 @@ OMPClause *Sema::ActOnOpenMPDefaultmapClause(
     }
   } else {
     bool isDefaultmapModifier = (M != OMPC_DEFAULTMAP_MODIFIER_unknown);
-    bool isDefaultmapKind = (Kind != OMPC_DEFAULTMAP_unknown);
+    bool isDefaultmapKind = (Kind != OMPC_DEFAULTMAP_unknown) ||
+                            (LangOpts.OpenMP >= 50 && KindLoc.isInvalid());
     if (!isDefaultmapKind || !isDefaultmapModifier) {
       std::string ModifierValue = "'alloc', 'from', 'to', 'tofrom', "
                                   "'firstprivate', 'none', 'default'";
@@ -17778,7 +17848,14 @@ OMPClause *Sema::ActOnOpenMPDefaultmapClause(
       return nullptr;
     }
   }
-  DSAStack->setDefaultDMAAttr(M, Kind, StartLoc);
+  if (Kind == OMPC_DEFAULTMAP_unknown) {
+    // Variable category is not specified - mark all categories.
+    DSAStack->setDefaultDMAAttr(M, OMPC_DEFAULTMAP_aggregate, StartLoc);
+    DSAStack->setDefaultDMAAttr(M, OMPC_DEFAULTMAP_scalar, StartLoc);
+    DSAStack->setDefaultDMAAttr(M, OMPC_DEFAULTMAP_pointer, StartLoc);
+  } else {
+    DSAStack->setDefaultDMAAttr(M, Kind, StartLoc);
+  }
 
   return new (Context)
       OMPDefaultmapClause(StartLoc, LParenLoc, MLoc, KindLoc, EndLoc, Kind, M);

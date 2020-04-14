@@ -35,6 +35,8 @@ class VPRecipeBuilder {
   /// The profitablity analysis.
   LoopVectorizationCostModel &CM;
 
+  PredicatedScalarEvolution &PSE;
+
   VPBuilder &Builder;
 
   /// When we if-convert we need to create edge masks. We have to cache values
@@ -107,13 +109,19 @@ public:
   /// full if-conversion.
   VPBlendRecipe *tryToBlend(Instruction *I, VPlanPtr &Plan);
 
+  /// Handle call instruction. If \p I is a call that can be widened for \p
+  /// Range.Start, return a new VPWidenCallRecipe. Range.End may be decreased to
+  /// ensure same decision from \p Range.Start to \p Range.End.
+  VPWidenCallRecipe *tryToWidenCall(Instruction *I, VFRange &Range,
+                                    VPlan &Plan);
+
+  VPWidenSelectRecipe *tryToWidenSelect(Instruction *I, VFRange &Range);
+
   /// Check if \p I can be widened within the given VF \p Range. If \p I can be
-  /// widened for \p Range.Start, check if the last recipe of \p VPBB can be
-  /// extended to include \p I or else build a new VPWidenRecipe for it and
-  /// append it to \p VPBB. Return true if \p I can be widened for Range.Start,
-  /// false otherwise. Range.End may be decreased to ensure same decision from
-  /// \p Range.Start to \p Range.End.
-  bool tryToWiden(Instruction *I, VPBasicBlock *VPBB, VFRange &Range);
+  /// widened for \p Range.Start, build a new VPWidenRecipe and return it.
+  /// Range.End may be decreased to ensure same decision from \p Range.Start to
+  /// \p Range.End.
+  VPWidenRecipe *tryToWiden(Instruction *I, VFRange &Range);
 
   /// Create a replicating region for instruction \p I that requires
   /// predication. \p PredRecipe is a VPReplicateRecipe holding \p I.
@@ -123,8 +131,10 @@ public:
 public:
   VPRecipeBuilder(Loop *OrigLoop, const TargetLibraryInfo *TLI,
                   LoopVectorizationLegality *Legal,
-                  LoopVectorizationCostModel &CM, VPBuilder &Builder)
-      : OrigLoop(OrigLoop), TLI(TLI), Legal(Legal), CM(CM), Builder(Builder) {}
+                  LoopVectorizationCostModel &CM,
+                  PredicatedScalarEvolution &PSE, VPBuilder &Builder)
+      : OrigLoop(OrigLoop), TLI(TLI), Legal(Legal), CM(CM), PSE(PSE),
+        Builder(Builder) {}
 
   /// Check if a recipe can be create for \p I withing the given VF \p Range.
   /// If a recipe can be created, it adds it to \p VPBB.

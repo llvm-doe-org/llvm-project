@@ -28,7 +28,7 @@ namespace {
 // top level decl.
 //
 // Currently this only removes qualifier from under the cursor. In the future,
-// we should improve this to remove qualifier from all occurences of this
+// we should improve this to remove qualifier from all occurrences of this
 // symbol.
 class AddUsing : public Tweak {
 public:
@@ -206,9 +206,11 @@ bool AddUsing::prepare(const Selection &Inputs) {
     Name = D->getDecl()->getName();
   } else if (auto *T = Node->ASTNode.get<TypeLoc>()) {
     if (auto E = T->getAs<ElaboratedTypeLoc>()) {
-      QualifierToRemove = E.getQualifierLoc();
-      Name =
-          E.getType().getUnqualifiedType().getBaseTypeIdentifier()->getName();
+      if (auto *BaseTypeIdentifier =
+              E.getType().getUnqualifiedType().getBaseTypeIdentifier()) {
+        Name = BaseTypeIdentifier->getName();
+        QualifierToRemove = E.getQualifierLoc();
+      }
     }
   }
 

@@ -202,6 +202,11 @@ SITargetLowering::SITargetLowering(const TargetMachine &TM,
   setTruncStoreAction(MVT::v8i32, MVT::v8i8, Expand);
   setTruncStoreAction(MVT::v16i32, MVT::v16i8, Expand);
   setTruncStoreAction(MVT::v32i32, MVT::v32i8, Expand);
+  setTruncStoreAction(MVT::v2i16, MVT::v2i8, Expand);
+  setTruncStoreAction(MVT::v4i16, MVT::v4i8, Expand);
+  setTruncStoreAction(MVT::v8i16, MVT::v8i8, Expand);
+  setTruncStoreAction(MVT::v16i16, MVT::v16i8, Expand);
+  setTruncStoreAction(MVT::v32i16, MVT::v32i8, Expand);
 
   setOperationAction(ISD::GlobalAddress, MVT::i32, Custom);
   setOperationAction(ISD::GlobalAddress, MVT::i64, Custom);
@@ -2459,7 +2464,7 @@ void SITargetLowering::passSpecialInputs(
     SDValue Chain) const {
   // If we don't have a call site, this was a call inserted by
   // legalization. These can never use special inputs.
-  if (!CLI.CS)
+  if (!CLI.CB)
     return;
 
   SelectionDAG &DAG = CLI.DAG;
@@ -2470,7 +2475,7 @@ void SITargetLowering::passSpecialInputs(
 
   const AMDGPUFunctionArgInfo *CalleeArgInfo
     = &AMDGPUArgumentUsageInfo::FixedABIFunctionInfo;
-  if (const Function *CalleeFunc = CLI.CS.getCalledFunction()) {
+  if (const Function *CalleeFunc = CLI.CB->getCalledFunction()) {
     auto &ArgUsageInfo =
       DAG.getPass()->getAnalysis<AMDGPUArgumentUsageInfo>();
     CalleeArgInfo = &ArgUsageInfo.lookupFuncArgInfo(*CalleeFunc);
@@ -2721,10 +2726,11 @@ SDValue SITargetLowering::LowerCall(CallLoweringInfo &CLI,
                               "unsupported call to variadic function ");
   }
 
-  if (!CLI.CS.getInstruction())
+  if (!CLI.CB)
     report_fatal_error("unsupported libcall legalization");
 
-  if (!AMDGPUTargetMachine::EnableFixedFunctionABI && !CLI.CS.getCalledFunction()) {
+  if (!AMDGPUTargetMachine::EnableFixedFunctionABI &&
+      !CLI.CB->getCalledFunction()) {
     return lowerUnhandledCall(CLI, InVals,
                               "unsupported indirect call to function ");
   }
@@ -2744,7 +2750,7 @@ SDValue SITargetLowering::LowerCall(CallLoweringInfo &CLI,
   if (IsTailCall) {
     IsTailCall = isEligibleForTailCallOptimization(
       Callee, CallConv, IsVarArg, Outs, OutVals, Ins, DAG);
-    if (!IsTailCall && CLI.CS && CLI.CS.isMustTailCall()) {
+    if (!IsTailCall && CLI.CB && CLI.CB->isMustTailCall()) {
       report_fatal_error("failed to perform tail call elimination on a call "
                          "site marked musttail");
     }
@@ -3941,8 +3947,8 @@ bool SITargetLowering::isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
   return false;
 }
 
-bool SITargetLowering::isFMADLegalForFAddFSub(const SelectionDAG &DAG,
-                                              const SDNode *N) const {
+bool SITargetLowering::isFMADLegal(const SelectionDAG &DAG,
+                                   const SDNode *N) const {
   // TODO: Check future ftz flag
   // v_mad_f32/v_mac_f32 do not support denormals.
   EVT VT = N->getValueType(0);
@@ -4563,7 +4569,6 @@ SDValue SITargetLowering::LowerBRCOND(SDValue BRCOND,
     };
     SDValue NewBR = DAG.getNode(ISD::BR, DL, BR->getVTList(), Ops);
     DAG.ReplaceAllUsesWith(BR, NewBR.getNode());
-    BR = NewBR.getNode();
   }
 
   SDValue Chain = SDValue(Result, Result->getNumValues() - 1);
@@ -9914,6 +9919,8 @@ SDValue SITargetLowering::performCvtF32UByteNCombine(SDNode *N,
 
   SDValue Src = N->getOperand(0);
   SDValue Shift = N->getOperand(0);
+
+  // TODO: Extend type shouldn't matter (assuming legal types).
   if (Shift.getOpcode() == ISD::ZERO_EXTEND)
     Shift = Shift.getOperand(0);
 
@@ -10862,8 +10869,8 @@ bool SITargetLowering::isSDNodeSourceOfDivergence(const SDNode * N,
       const GCNSubtarget &ST = MF->getSubtarget<GCNSubtarget>();
       const MachineRegisterInfo &MRI = MF->getRegInfo();
       const SIRegisterInfo &TRI = ST.getInstrInfo()->getRegisterInfo();
-      unsigned Reg = R->getReg();
-      if (Register::isPhysicalRegister(Reg))
+      Register Reg = R->getReg();
+      if (Reg.isPhysical())
         return !TRI.isSGPRReg(MRI, Reg);
 
       if (MRI.isLiveIn(Reg)) {
@@ -10983,6 +10990,10 @@ SITargetLowering::getRegClassFor(MVT VT, bool isDivergent) const {
   return RC;
 }
 
+// FIXME: This is a workaround for DivergenceAnalysis not understanding always
+// uniform values (as produced by the mask results of control flow intrinsics)
+// used outside of divergent blocks. The phi users need to also be treated as
+// always uniform.
 static bool hasCFUser(const Value *V, SmallPtrSet<const Value *, 16> &Visited,
                       unsigned WaveSize) {
   // FIXME: We asssume we never cast the mask results of a control flow
@@ -11033,36 +11044,16 @@ static bool hasCFUser(const Value *V, SmallPtrSet<const Value *, 16> &Visited,
 
 bool SITargetLowering::requiresUniformRegister(MachineFunction &MF,
                                                const Value *V) const {
-  if (const IntrinsicInst *Intrinsic = dyn_cast<IntrinsicInst>(V)) {
-    switch (Intrinsic->getIntrinsicID()) {
-    default:
-      return false;
-    case Intrinsic::amdgcn_if_break:
-      return true;
-    }
-  }
-  if (const ExtractValueInst *ExtValue = dyn_cast<ExtractValueInst>(V)) {
-    if (const IntrinsicInst *Intrinsic =
-            dyn_cast<IntrinsicInst>(ExtValue->getOperand(0))) {
-      switch (Intrinsic->getIntrinsicID()) {
-      default:
-        return false;
-      case Intrinsic::amdgcn_if:
-      case Intrinsic::amdgcn_else: {
-        ArrayRef<unsigned> Indices = ExtValue->getIndices();
-        if (Indices.size() == 1 && Indices[0] == 1) {
-          return true;
-        }
-      }
-      }
-    }
-  }
   if (const CallInst *CI = dyn_cast<CallInst>(V)) {
     if (isa<InlineAsm>(CI->getCalledValue())) {
+      // FIXME: This cannot give a correct answer. This should only trigger in
+      // the case where inline asm returns mixed SGPR and VGPR results, used
+      // outside the defining block. We don't have a specific result to
+      // consider, so this assumes if any value is SGPR, the overall register
+      // also needs to be SGPR.
       const SIRegisterInfo *SIRI = Subtarget->getRegisterInfo();
-      ImmutableCallSite CS(CI);
       TargetLowering::AsmOperandInfoVector TargetConstraints = ParseConstraints(
-          MF.getDataLayout(), Subtarget->getRegisterInfo(), CS);
+          MF.getDataLayout(), Subtarget->getRegisterInfo(), *CI);
       for (auto &TC : TargetConstraints) {
         if (TC.Type == InlineAsm::isOutput) {
           ComputeConstraintToUse(TC, SDValue());

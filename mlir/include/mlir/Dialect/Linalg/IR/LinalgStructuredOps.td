@@ -821,4 +821,18 @@ def IndexedGenericOp : GenericOpBase<"indexed_generic"> {
   let hasFolder = 1;
 }
 
+//===----------------------------------------------------------------------===//
+// Named Linalg ops, implemented as a declarative configurations of generic ops.
+//===----------------------------------------------------------------------===//
+
+def NamedStructuredOpTraits : NativeOpTrait<"linalg::NamedStructuredOpTraits">;
+
+class LinalgNamedStructured_Op<string mnemonic, list<OpTrait> props>
+  : Op<Linalg_Dialect, mnemonic,
+       !listconcat(props, [StructuredOpTraits, LinalgStructuredInterface])> {
+  string spec = ?;
+  let assemblyFormat = "`(` operands `)` attr-dict `:` "
+    "functional-type(operands, results)";
+}
+
 #endif // LINALG_STRUCTURED_OPS

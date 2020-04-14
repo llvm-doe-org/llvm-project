@@ -116,7 +116,7 @@ parseEnumStrAttr(EnumClass &value, OpAsmParser &parser,
            << attrName << " attribute specified as string";
   }
   auto attrOptional =
-      spirv::symbolizeEnum<EnumClass>()(attrVal.cast<StringAttr>().getValue());
+      spirv::symbolizeEnum<EnumClass>(attrVal.cast<StringAttr>().getValue());
   if (!attrOptional) {
     return parser.emitError(loc, "invalid ")
            << attrName << " attribute specification: " << attrVal;
@@ -151,7 +151,7 @@ parseEnumKeywordAttr(EnumClass &value, OpAsmParser &parser,
   auto loc = parser.getCurrentLocation();
   if (parser.parseKeyword(&keyword))
     return failure();
-  if (Optional<EnumClass> attr = spirv::symbolizeEnum<EnumClass>()(keyword)) {
+  if (Optional<EnumClass> attr = spirv::symbolizeEnum<EnumClass>(keyword)) {
     value = attr.getValue();
     return success();
   }
@@ -2533,7 +2533,7 @@ static LogicalResult verify(spirv::UnreachableOp unreachableOp) {
   if (block->hasNoPredecessors())
     return success();
 
-  // TODO(antiagainst): further verification needs to analyze reachablility from
+  // TODO(antiagainst): further verification needs to analyze reachability from
   // the entry block.
 
   return success();

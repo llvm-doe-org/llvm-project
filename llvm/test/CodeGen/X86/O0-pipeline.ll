@@ -55,6 +55,7 @@
 ; CHECK-NEXT:       Fast Register Allocator
 ; CHECK-NEXT:       Bundle Machine CFG Edges
 ; CHECK-NEXT:       X86 FP Stackifier
+; CHECK-NEXT:       Fixup Statepoint Caller Saved
 ; CHECK-NEXT:       Lazy Machine Block Frequency Analysis
 ; CHECK-NEXT:       Machine Optimization Remark Emitter
 ; CHECK-NEXT:       Prologue/Epilogue Insertion & Frame Finalization
@@ -74,6 +75,7 @@
 ; CHECK-NEXT:       Live DEBUG_VALUE analysis
 ; CHECK-NEXT:       X86 Indirect Thunks
 ; CHECK-NEXT:       Check CFA info and insert CFI instructions if needed
+; CHECK-NEXT:       X86 Load Value Injection (LVI) Ret-Hardening
 ; CHECK-NEXT:       Lazy Machine Block Frequency Analysis
 ; CHECK-NEXT:       Machine Optimization Remark Emitter
 ; CHECK-NEXT:       X86 Assembly Printer

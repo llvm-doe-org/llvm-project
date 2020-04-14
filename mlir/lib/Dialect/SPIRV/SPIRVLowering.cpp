@@ -18,7 +18,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Debug.h"
 
-#include <cstdint>
 #include <functional>
 
 #define DEBUG_TYPE "mlir-spirv-lowering"
@@ -138,7 +137,6 @@ SPIRVTypeConverter::getMemorySpaceForStorageClass(spirv::StorageClass storage) {
   switch (storage) { STORAGE_SPACE_MAP_LIST(STORAGE_SPACE_MAP_FN) }
 #undef STORAGE_SPACE_MAP_FN
   llvm_unreachable("unhandled storage class!");
-  return UINT32_MAX;
 }
 
 Optional<spirv::StorageClass>
@@ -470,8 +468,8 @@ FuncOpConversion::matchAndRewrite(FuncOp funcOp, ArrayRef<Value> operands,
 
   // Copy over all attributes other than the function name and type.
   for (const auto &namedAttr : funcOp.getAttrs()) {
-    if (!namedAttr.first.is(impl::getTypeAttrName()) &&
-        !namedAttr.first.is(SymbolTable::getSymbolAttrName()))
+    if (namedAttr.first != impl::getTypeAttrName() &&
+        namedAttr.first != SymbolTable::getSymbolAttrName())
       newFuncOp.setAttr(namedAttr.first, namedAttr.second);
   }
 
