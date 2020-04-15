@@ -20,7 +20,6 @@
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Support/LLVM.h"
-#include "mlir/Support/STLExtras.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/FoldUtils.h"
 
@@ -253,7 +252,8 @@ public:
       // so having a max op is enough.
       auto maxMap = AffineMap::get(/*dimCount=*/1, 0,
                                    {getAffineDimExpr(/*position=*/0, context),
-                                    getAffineConstantExpr(0, context)});
+                                    getAffineConstantExpr(0, context)},
+                                   context);
       clampedImIdx.push_back(
           affine_max(dim.getType(), maxMap, ValueRange{dim}));
     }
