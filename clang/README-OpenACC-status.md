@@ -12,15 +12,23 @@ We have implemented and tested support for the following features:
 * command-line options:
     * `-f[no-]openacc`
     * `-fopenacc[-ast]-print=acc|omp|acc-omp|omp-acc`
+        * See the section "Source-to-Source Translation" in
+          `README-OpenACC-design.md` for design details.
+    * `-fopenmp-targets=<triples>` for offloading in traditional
+      compilation mode, and omitted for targeting host
+        * See the section "Using" in `../README.md` for a list of
+          tested offloading target triples.
+        * See the section "Interaction with OpenMP Support" in
+          `README-OpenACC-design.md` for design details.
     * `-Wsource-uses-openacc`
     * `-Wopenacc-ignored-clause`
-    * omitted `-fopenmp-targets` for targeting host
-    * `-fopenmp-targets=<triples>` for specifying offloading targets
-      in traditional compilation mode
+        * See the discussion of the `vector_length` clause below.
     * Notes:
         * See the section "Using" in `../README.md` for an
-          introduction to Clacc's command-line options and for a list
-          of tested offloading target triples.
+          introduction to Clacc's command-line options.
+        * For brief descriptions of all OpenACC-related and
+          OpenMP-related command-line options, run Clacc's `clang
+          -help` and search for `openacc` or `openmp`.
 * run-time environment variables:
     * `OMP_TARGET_OFFLOAD=disabled` for targeting host
 * `data` directive:

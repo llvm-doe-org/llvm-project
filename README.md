@@ -171,9 +171,12 @@ The most relevant command-line options are as follows:
   enabled in either mode as Clacc currently does not support OpenACC
   and OpenMP in the same source.
 
-For descriptions of all OpenACC-related and OpenMP-related
+For brief descriptions of all OpenACC-related and OpenMP-related
 command-line options, run Clacc's `clang -help` and search for
-`openacc` or `openmp`.
+`openacc` or `openmp`.  The section "Supported Features" in
+`clang/README-OpenACC-status.md` also provides a full list of
+OpenACC-related command-line options and cross-references to related
+status and design documentation.
 
 ## Documentation
 
