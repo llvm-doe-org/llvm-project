@@ -37,19 +37,17 @@ We have implemented and tested support for the following features:
       `present_or_copyin`
     * `copyout` clause and aliases `pcopyout` and
       `present_or_copyout`
+    * in `copy`, `copyin`, and `copyout` clauses and their aliases,
+      subarrays specifying contiguous blocks
     * any number of levels of nesting within other `data` directives
 * `parallel` directive:
     * use without clauses
     * data attributes:
         * implicit `copy` for non-scalars
         * implicit `firstprivate` for scalars
-        * `copy` clause and aliases `pcopy` and `present_or_copy`
-        * `copyin` clause and aliases `pcopyin` and
-          `present_or_copyin`
-        * `copyout` clause and aliases `pcopyout` and
-          `present_or_copyout`
-        * in `copy`, `copyin`, and `copyout` clauses and their
-          aliases, subarrays specifying contiguous blocks
+        * For `copy`, `copyin`, and `copyout` clauses and
+          their aliases, support is the same as for the `data`
+          directive, as described above.
         * `firstprivate` clause
         * `private` clause
         * `reduction` clause:
