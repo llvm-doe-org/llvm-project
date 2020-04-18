@@ -258,6 +258,74 @@ int main() {
   #pragma acc parallel LOOP reduction(
     FORLOOP
 
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP copy(i
+    FORLOOP
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP pcopy( jk
+    FORLOOP
+  // expected-error@+3 {{expected expression}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP present_or_copy(i,
+    FORLOOP
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP copyin( i, jk
+    FORLOOP
+  // expected-error@+3 {{expected expression}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP pcopyin(i,jk,
+    FORLOOP
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP present_or_copyin(i,jk,p
+    FORLOOP
+  // expected-error@+3 {{use of undeclared identifier 'foobar'}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP copyout(foobar
+    FORLOOP
+  // expected-error@+4 {{use of undeclared identifier 'foobar'}}
+  // expected-error@+3 {{expected expression}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP pcopyout(foobar,
+    FORLOOP
+  // expected-error@+3 {{use of undeclared identifier 'foobar'}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP present_or_copyout(i, foobar, jk
+    FORLOOP
+  // expected-error@+4 {{use of undeclared identifier 'foobar'}}
+  // expected-error@+3 {{expected expression}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP firstprivate(foobar, i,
+    FORLOOP
+  // expected-error@+4 {{use of undeclared identifier 'foobar'}}
+  // expected-error@+3 {{use of undeclared identifier 'foobar'}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP private(foobar, foobar
+    FORLOOP
+  // expected-warning@+7 {{missing ':' after reduction operator - ignoring}}
+  // expected-error@+6 {{expected expression}}
+  // expected-error@+5 {{use of undeclared identifier 'foobar'}}
+  // expected-error@+4 {{expected expression}}
+  // expected-error@+3 {{expected ')'}}
+  // expected-note@+2 {{to match this '('}}
+  // expected-error@+1 {{unknown reduction operator}}
+  #pragma acc parallel LOOP reduction(i, jk, foobar,
+    FORLOOP
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP reduction(+:i, jk
+    FORLOOP
+
   // expected-error@+1 {{expected expression}}
   #pragma acc parallel LOOP copy()
     FORLOOP

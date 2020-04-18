@@ -396,6 +396,7 @@ bool Parser::ParseOpenACCVarList(OpenACCDirectiveKind DKind,
                                  OpenACCClauseKind Kind,
                                  SmallVectorImpl<Expr *> &Vars,
                                  SourceLocation &ColonLoc,
+                                 SourceLocation &EndLoc,
                                  DeclarationNameInfo &ReductionId) {
   UnqualifiedId UnqualifiedReductionId;
   bool InvalidReductionId = false;
@@ -448,7 +449,9 @@ bool Parser::ParseOpenACCVarList(OpenACCDirectiveKind DKind,
   }
 
   // Parse ')'.
-  T.consumeClose();
+  EndLoc = Tok.getLocation();
+  if (!T.consumeClose())
+    EndLoc = T.getCloseLocation();
   return Vars.empty() || InvalidReductionId;
 }
 
@@ -487,13 +490,14 @@ ACCClause *Parser::ParseOpenACCVarListClause(OpenACCDirectiveKind DKind,
   SourceLocation LOpen = ConsumeToken();
   SmallVector<Expr *, 4> Vars;
   SourceLocation ColonLoc;
+  SourceLocation EndLoc;
   DeclarationNameInfo ReductionId;
 
-  if (ParseOpenACCVarList(DKind, Kind, Vars, ColonLoc, ReductionId))
+  if (ParseOpenACCVarList(DKind, Kind, Vars, ColonLoc, EndLoc, ReductionId))
     return nullptr;
 
   if (ParseOnly)
     return nullptr;
-  return Actions.ActOnOpenACCVarListClause(
-      Kind, Vars, Loc, LOpen, ColonLoc, Tok.getLocation(), ReductionId);
+  return Actions.ActOnOpenACCVarListClause(Kind, Vars, Loc, LOpen, ColonLoc,
+                                           EndLoc, ReductionId);
 }

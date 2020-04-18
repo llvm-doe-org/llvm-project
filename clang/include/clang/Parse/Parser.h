@@ -3179,7 +3179,7 @@ public:
   /// Parses clauses with list.
   bool ParseOpenACCVarList(OpenACCDirectiveKind DKind, OpenACCClauseKind Kind,
                            SmallVectorImpl<Expr *> &Vars,
-                           SourceLocation &ColonLoc,
+                           SourceLocation &ColonLoc, SourceLocation &EndLoc,
                            DeclarationNameInfo &ReductionId);
 
 private:

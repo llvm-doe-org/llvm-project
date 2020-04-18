@@ -1746,6 +1746,24 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
 
+    // expected-error@+2 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop worker private(i
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-warning@+4 {{missing ':' after reduction operator - ignoring}}
+    // expected-error@+3 {{expected expression}}
+    // expected-error@+2 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop vector reduction(jk
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop vector reduction(+: jk
+    for (int i = 0; i < 5; ++i)
+      ;
+
     // expected-error@+1 {{expected expression}}
     #pragma acc CMB_PAR loop gang worker private()
     for (int i = 0; i < 5; ++i)

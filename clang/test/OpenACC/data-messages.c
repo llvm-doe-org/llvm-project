@@ -154,8 +154,9 @@ int main() {
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data copyout()
     ;
-  // expected-error@+1 {{expected ',' or ')' in 'pcopy' clause}}
-  #pragma acc data pcopy(jk i)
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc data pcopy(jk
     ;
   // expected-error@+1 {{expected expression}}
   #pragma acc data pcopyin(jk ,)
