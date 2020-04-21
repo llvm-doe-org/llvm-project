@@ -217,23 +217,6 @@ struct IRPosition {
     return IRPosition(const_cast<CallBase &>(CB), Kind(ArgNo));
   }
 
-  /// Create a position describing the function scope of \p ICS.
-  static const IRPosition callsite_function(ImmutableCallSite ICS) {
-    return IRPosition::callsite_function(cast<CallBase>(*ICS.getInstruction()));
-  }
-
-  /// Create a position describing the returned value of \p ICS.
-  static const IRPosition callsite_returned(ImmutableCallSite ICS) {
-    return IRPosition::callsite_returned(cast<CallBase>(*ICS.getInstruction()));
-  }
-
-  /// Create a position describing the argument of \p ICS at position \p ArgNo.
-  static const IRPosition callsite_argument(ImmutableCallSite ICS,
-                                            unsigned ArgNo) {
-    return IRPosition::callsite_argument(cast<CallBase>(*ICS.getInstruction()),
-                                         ArgNo);
-  }
-
   /// Create a position describing the argument of \p ACS at position \p ArgNo.
   static const IRPosition callsite_argument(AbstractCallSite ACS,
                                             unsigned ArgNo) {
@@ -418,9 +401,9 @@ struct IRPosition {
       return;
 
     AttributeList AttrList;
-    CallSite CS = CallSite(&getAnchorValue());
-    if (CS)
-      AttrList = CS.getAttributes();
+    auto *CB = dyn_cast<CallBase>(&getAnchorValue());
+    if (CB)
+      AttrList = CB->getAttributes();
     else
       AttrList = getAssociatedFunction()->getAttributes();
 
@@ -428,8 +411,8 @@ struct IRPosition {
     for (Attribute::AttrKind AK : AKs)
       AttrList = AttrList.removeAttribute(Ctx, getAttrIdx(), AK);
 
-    if (CS)
-      CS.setAttributes(AttrList);
+    if (CB)
+      CB->setAttributes(AttrList);
     else
       getAssociatedFunction()->setAttributes(AttrList);
   }
@@ -566,8 +549,8 @@ private:
 /// instance down in the abstract attributes.
 struct InformationCache {
   InformationCache(const Module &M, AnalysisGetter &AG,
-                   SetVector<Function *> *CGSCC)
-      : DL(M.getDataLayout()),
+                   BumpPtrAllocator &Allocator, SetVector<Function *> *CGSCC)
+      : DL(M.getDataLayout()), Allocator(Allocator),
         Explorer(
             /* ExploreInterBlock */ true, /* ExploreCFGForward */ true,
             /* ExploreCFGBackward */ true,
@@ -584,7 +567,10 @@ struct InformationCache {
         AG(AG), CGSCC(CGSCC) {}
 
   ~InformationCache() {
-    DeleteContainerSeconds(FuncInfoMap);
+    // The FunctionInfo objects are allocated via a BumpPtrAllocator, we call
+    // the destructor manually.
+    for (auto &It : FuncInfoMap)
+      It.getSecond()->~FunctionInfo();
   }
 
   /// A map type from opcodes to instructions with this opcode.
@@ -669,7 +655,7 @@ private:
   FunctionInfo &getFunctionInfo(const Function &F) {
     FunctionInfo *&FI = FuncInfoMap[&F];
     if (!FI) {
-      FI = new FunctionInfo();
+      FI = new (Allocator) FunctionInfo();
       initializeInformationCache(F, *FI);
     }
     return *FI;
@@ -683,6 +669,9 @@ private:
 
   /// The datalayout used in the module.
   const DataLayout &DL;
+
+  /// The allocator used to allocate memory, e.g. for `FunctionInfo`s.
+  BumpPtrAllocator &Allocator;
 
   /// MustBeExecutedContextExplorer
   MustBeExecutedContextExplorer Explorer;
@@ -744,7 +733,8 @@ struct Attributor {
   Attributor(SetVector<Function *> &Functions, InformationCache &InfoCache,
              CallGraphUpdater &CGUpdater, unsigned DepRecomputeInterval,
              DenseSet<const char *> *Whitelist = nullptr)
-      : Functions(Functions), InfoCache(InfoCache), CGUpdater(CGUpdater),
+      : Allocator(InfoCache.Allocator), Functions(Functions),
+        InfoCache(InfoCache), CGUpdater(CGUpdater),
         DepRecomputeInterval(DepRecomputeInterval), Whitelist(Whitelist) {}
 
   ~Attributor();
@@ -1117,7 +1107,7 @@ struct Attributor {
   const DataLayout &getDataLayout() const { return InfoCache.DL; }
 
   /// The allocator used to allocate memory, e.g. for `AbstractAttribute`s.
-  BumpPtrAllocator Allocator;
+  BumpPtrAllocator &Allocator;
 
 private:
   /// Check \p Pred on all call sites of \p Fn.

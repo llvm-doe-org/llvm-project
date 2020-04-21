@@ -33,6 +33,7 @@
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/EndianStream.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/LEB128.h"
 #include "llvm/Support/MathExtras.h"
@@ -925,8 +926,8 @@ bool MCAssembler::relaxInstruction(MCAsmLayout &Layout,
 
   // Relax the fragment.
 
-  MCInst Relaxed;
-  getBackend().relaxInstruction(F.getInst(), *F.getSubtargetInfo(), Relaxed);
+  MCInst Relaxed = F.getInst();
+  getBackend().relaxInstruction(Relaxed, *F.getSubtargetInfo());
 
   // Encode the new instruction.
   //

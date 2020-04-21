@@ -33,6 +33,7 @@
 #include <sstream>
 #include <set>
 #include <cctype>
+#include <tuple>
 
 using namespace llvm;
 
@@ -455,12 +456,30 @@ void SVEType::applyModifier(char Mod) {
     Bitwidth = ElementBitwidth;
     NumVectors = 0;
     break;
+  case 'e':
+    Signed = false;
+    ElementBitwidth /= 2;
+    break;
+  case 'h':
+    ElementBitwidth /= 2;
+    break;
+  case 'q':
+    ElementBitwidth /= 4;
+    break;
+  case 'o':
+    ElementBitwidth *= 4;
+    break;
   case 'P':
     Signed = true;
     Float = false;
     Predicate = true;
     Bitwidth = 16;
     ElementBitwidth = 1;
+    break;
+  case 'u':
+    Predicate = false;
+    Signed = false;
+    Float = false;
     break;
   case 'i':
     Predicate = false;
@@ -909,9 +928,10 @@ void SVEEmitter::createHeader(raw_ostream &OS) {
   std::stable_sort(
       Defs.begin(), Defs.end(), [](const std::unique_ptr<Intrinsic> &A,
                                    const std::unique_ptr<Intrinsic> &B) {
-        return A->getGuard() < B->getGuard() ||
-               (unsigned)A->getClassKind() < (unsigned)B->getClassKind() ||
-               A->getName() < B->getName();
+        auto ToTuple = [](const std::unique_ptr<Intrinsic> &I) {
+          return std::make_tuple(I->getGuard(), (unsigned)I->getClassKind(), I->getName());
+        };
+        return ToTuple(A) < ToTuple(B);
       });
 
   StringRef InGuard = "";

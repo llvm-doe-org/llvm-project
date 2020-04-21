@@ -1482,6 +1482,11 @@ QualType Sema::UsualArithmeticConversions(ExprResult &LHS, ExprResult &RHS,
   if (LHSType == RHSType)
     return LHSType;
 
+  // ExtInt types aren't subject to conversions between them or normal integers,
+  // so this fails. 
+  if(LHSType->isExtIntType() || RHSType->isExtIntType())
+    return QualType();
+
   // At this point, we have two different arithmetic types.
 
   // Diagnose attempts to convert between __float128 and long double where
@@ -4261,6 +4266,7 @@ static void captureVariablyModifiedType(ASTContext &Context, QualType T,
     case Type::ObjCObjectPointer:
     case Type::ObjCTypeParam:
     case Type::Pipe:
+    case Type::ExtInt:
       llvm_unreachable("type class is never variably-modified!");
     case Type::Adjusted:
       T = cast<AdjustedType>(Ty)->getOriginalType();
@@ -9277,7 +9283,7 @@ Sema::CheckSingleAssignmentConstraints(QualType LHSType, ExprResult &CallerRHS,
     if (getLangOpts().ObjC &&
         (CheckObjCBridgeRelatedConversions(E->getBeginLoc(), LHSType,
                                            E->getType(), E, Diagnose) ||
-         ConversionToObjCStringLiteralCheck(LHSType, E, Diagnose))) {
+         CheckConversionToObjCLiteral(LHSType, E, Diagnose))) {
       if (!Diagnose)
         return Incompatible;
       // Replace the expression with a corrected version and continue so we
@@ -10431,14 +10437,19 @@ static void DiagnoseBadShiftValues(Sema& S, ExprResult &LHS, ExprResult &RHS,
                             << RHS.get()->getSourceRange());
     return;
   }
-  llvm::APInt LeftBits(Right.getBitWidth(),
-                       S.Context.getTypeSize(LHS.get()->getType()));
+
+  QualType LHSExprType = LHS.get()->getType();
+  uint64_t LeftSize = LHSExprType->isExtIntType()
+                          ? S.Context.getIntWidth(LHSExprType)
+                          : S.Context.getTypeSize(LHSExprType);
+  llvm::APInt LeftBits(Right.getBitWidth(), LeftSize);
   if (Right.uge(LeftBits)) {
     S.DiagRuntimeBehavior(Loc, RHS.get(),
                           S.PDiag(diag::warn_shift_gt_typewidth)
                             << RHS.get()->getSourceRange());
     return;
   }
+
   if (Opc != BO_Shl)
     return;
 
@@ -13639,14 +13650,6 @@ ExprResult Sema::CreateBuiltinBinOp(SourceLocation OpLoc,
   if (ResultTy.isNull() || LHS.isInvalid() || RHS.isInvalid())
     return ExprError();
 
-  // The LHS is not converted to the result type for fixed-point compound
-  // assignment as the common type is computed on demand. Reset the CompLHSTy
-  // to the LHS type we would have gotten after unary conversions.
-  if (!CompLHSTy.isNull() &&
-      (LHS.get()->getType()->isFixedPointType() ||
-       RHS.get()->getType()->isFixedPointType()))
-    CompLHSTy = UsualUnaryConversions(LHS.get()).get()->getType();
-
   if (ResultTy->isRealFloatingType() &&
       (getLangOpts().getFPRoundingMode() != RoundingMode::NearestTiesToEven ||
        getLangOpts().getFPExceptionMode() != LangOptions::FPE_Ignore))
@@ -13704,6 +13707,12 @@ ExprResult Sema::CreateBuiltinBinOp(SourceLocation OpLoc,
     VK = VK_LValue;
     OK = LHS.get()->getObjectKind();
   }
+
+  // The LHS is not converted to the result type for fixed-point compound
+  // assignment as the common type is computed on demand. Reset the CompLHSTy
+  // to the LHS type we would have gotten after unary conversions.
+  if (CompResultTy->isFixedPointType())
+    CompLHSTy = UsualUnaryConversions(LHS.get()).get()->getType();
 
   if (ConvertHalfVec)
     return convertHalfVecBinOp(*this, LHS, RHS, Opc, ResultTy, VK, OK, true,
@@ -15219,21 +15228,15 @@ ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentKind Kind,
       SourceLocExpr(Context, Kind, BuiltinLoc, RPLoc, ParentContext);
 }
 
-bool Sema::ConversionToObjCStringLiteralCheck(QualType DstType, Expr *&Exp,
-                                              bool Diagnose) {
+bool Sema::CheckConversionToObjCLiteral(QualType DstType, Expr *&Exp,
+                                        bool Diagnose) {
   if (!getLangOpts().ObjC)
     return false;
 
   const ObjCObjectPointerType *PT = DstType->getAs<ObjCObjectPointerType>();
   if (!PT)
     return false;
-
-  if (!PT->isObjCIdType()) {
-    // Check if the destination is the 'NSString' interface.
-    const ObjCInterfaceDecl *ID = PT->getInterfaceDecl();
-    if (!ID || !ID->getIdentifier()->isStr("NSString"))
-      return false;
-  }
+  const ObjCInterfaceDecl *ID = PT->getInterfaceDecl();
 
   // Ignore any parens, implicit casts (should only be
   // array-to-pointer decays), and not-so-opaque values.  The last is
@@ -15243,15 +15246,41 @@ bool Sema::ConversionToObjCStringLiteralCheck(QualType DstType, Expr *&Exp,
     if (OV->getSourceExpr())
       SrcExpr = OV->getSourceExpr()->IgnoreParenImpCasts();
 
-  StringLiteral *SL = dyn_cast<StringLiteral>(SrcExpr);
-  if (!SL || !SL->isAscii())
-    return false;
-  if (Diagnose) {
-    Diag(SL->getBeginLoc(), diag::err_missing_atsign_prefix)
-        << FixItHint::CreateInsertion(SL->getBeginLoc(), "@");
-    Exp = BuildObjCStringLiteral(SL->getBeginLoc(), SL).get();
+  if (auto *SL = dyn_cast<StringLiteral>(SrcExpr)) {
+    if (!PT->isObjCIdType() &&
+        !(ID && ID->getIdentifier()->isStr("NSString")))
+      return false;
+    if (!SL->isAscii())
+      return false;
+
+    if (Diagnose) {
+      Diag(SL->getBeginLoc(), diag::err_missing_atsign_prefix)
+          << /*string*/0 << FixItHint::CreateInsertion(SL->getBeginLoc(), "@");
+      Exp = BuildObjCStringLiteral(SL->getBeginLoc(), SL).get();
+    }
+    return true;
   }
-  return true;
+
+  if ((isa<IntegerLiteral>(SrcExpr) || isa<CharacterLiteral>(SrcExpr) ||
+      isa<FloatingLiteral>(SrcExpr) || isa<ObjCBoolLiteralExpr>(SrcExpr) ||
+      isa<CXXBoolLiteralExpr>(SrcExpr)) &&
+      !SrcExpr->isNullPointerConstant(
+          getASTContext(), Expr::NPC_NeverValueDependent)) {
+    if (!ID || !ID->getIdentifier()->isStr("NSNumber"))
+      return false;
+    if (Diagnose) {
+      Diag(SrcExpr->getBeginLoc(), diag::err_missing_atsign_prefix)
+          << /*number*/1
+          << FixItHint::CreateInsertion(SrcExpr->getBeginLoc(), "@");
+      Expr *NumLit =
+          BuildObjCNumericLiteral(SrcExpr->getBeginLoc(), SrcExpr).get();
+      if (NumLit)
+        Exp = NumLit;
+    }
+    return true;
+  }
+
+  return false;
 }
 
 static bool maybeDiagnoseAssignmentToFunction(Sema &S, QualType DstType,

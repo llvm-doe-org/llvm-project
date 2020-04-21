@@ -11996,7 +11996,12 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
                                    /*TreatUnavailableAsInvalid=*/false);
     ExprResult Result = InitSeq.Perform(*this, Entity, Kind, Args, &DclT);
     if (Result.isInvalid()) {
-      VDecl->setInvalidDecl();
+      // If the provied initializer fails to initialize the var decl,
+      // we attach a recovery expr for better recovery.
+      auto RecoveryExpr =
+          CreateRecoveryExpr(Init->getBeginLoc(), Init->getEndLoc(), Args);
+      if (RecoveryExpr.get())
+        VDecl->setInit(RecoveryExpr.get());
       return;
     }
 
@@ -12554,12 +12559,17 @@ void Sema::ActOnUninitializedDecl(Decl *RealDecl) {
     InitializationSequence InitSeq(*this, Entity, Kind, None);
     ExprResult Init = InitSeq.Perform(*this, Entity, Kind, None);
 
-    // If default-init fails, leave var uninitialized but valid, for recovery.
-
     if (Init.get()) {
       Var->setInit(MaybeCreateExprWithCleanups(Init.get()));
       // This is important for template substitution.
       Var->setInitStyle(VarDecl::CallInit);
+    } else if (Init.isInvalid()) {
+      // If default-init fails, attach a recovery-expr initializer to track
+      // that initialization was attempted and failed.
+      auto RecoveryExpr =
+          CreateRecoveryExpr(Var->getLocation(), Var->getLocation(), {});
+      if (RecoveryExpr.get())
+        Var->setInit(RecoveryExpr.get());
     }
 
     CheckCompleteVariableDeclaration(Var);
@@ -14811,12 +14821,16 @@ bool Sema::CheckEnumUnderlyingType(TypeSourceInfo *TI) {
   if (T->isDependentType())
     return false;
 
+  // This doesn't use 'isIntegralType' despite the error message mentioning
+  // integral type because isIntegralType would also allow enum types in C.
   if (const BuiltinType *BT = T->getAs<BuiltinType>())
     if (BT->isInteger())
       return false;
 
-  Diag(UnderlyingLoc, diag::err_enum_invalid_underlying) << T;
-  return true;
+  if (T->isExtIntType())
+    return false;
+
+  return Diag(UnderlyingLoc, diag::err_enum_invalid_underlying) << T;
 }
 
 /// Check whether this is a valid redeclaration of a previous enumeration.

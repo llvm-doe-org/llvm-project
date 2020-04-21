@@ -149,6 +149,7 @@ static std::tuple<ELFKind, uint16_t, uint8_t> parseEmulation(StringRef emul) {
           .Cases("elf_amd64", "elf_x86_64", {ELF64LEKind, EM_X86_64})
           .Case("elf_i386", {ELF32LEKind, EM_386})
           .Case("elf_iamcu", {ELF32LEKind, EM_IAMCU})
+          .Case("elf64_sparc", {ELF64BEKind, EM_SPARCV9})
           .Default({ELFNoneKind, EM_NONE});
 
   if (ret.first == ELFNoneKind)
@@ -1145,6 +1146,14 @@ static void readConfigs(opt::InputArgList &args) {
       for (StringRef s : args::getLines(*buffer))
         config->versionDefinitions[VER_NDX_GLOBAL].patterns.push_back(
             {s, /*isExternCpp=*/false, /*hasWildcard=*/false});
+  }
+
+  for (opt::Arg *arg : args.filtered(OPT_warn_backrefs_exclude)) {
+    StringRef pattern(arg->getValue());
+    if (Expected<GlobPattern> pat = GlobPattern::create(pattern))
+      config->warnBackrefsExclude.push_back(std::move(*pat));
+    else
+      error(arg->getSpelling() + ": " + toString(pat.takeError()));
   }
 
   // Parses -dynamic-list and -export-dynamic-symbol. They make some
