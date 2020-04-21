@@ -103,7 +103,6 @@ default:
 .cleanup:
   extends: .utility
   stage: cleanup
-  when: always
   variables:
     GIT_STRATEGY: none
   script:
