@@ -56,13 +56,24 @@ bool ACCExecutableDirective::ompStmtPrintsDifferently(
   if (!hasAssociatedStmt())
     return false;
   Stmt *ACCStmt = getAssociatedStmt();
+  // If the associated statement is an OpenACC node, print its OpenMP node
+  // directly instead of printing it via the OpenACC node.  This matters in the
+  // case of a combined OpenACC construct, for which indentation of the OpenMP
+  // translations of the effective OpenACC directives is aligned when printing
+  // via the OpenACC node but progressively indented when printing the OpenMP
+  // nodes directly.  A difference in indentation is not a good reason to
+  // return true.
+  if (auto *ACCDir = dyn_cast<ACCExecutableDirective>(ACCStmt)) {
+    if (ACCDir->hasOMPNode())
+      ACCStmt = ACCDir->getOMPNode();
+  }
   Stmt *OMPStmt = getOMPNode();
   for (int i = 0, e = getOpenACCEffectiveDirectives(getDirectiveKind());
        i < e; ++i) {
     if (auto *OMPDir = dyn_cast<OMPExecutableDirective>(OMPStmt))
       OMPStmt = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
   }
-  if (ACCStmt == OMPStmt) // we probably will never implement such a case
+  if (ACCStmt == OMPStmt)
     return false;
   PrintingPolicy PolicyOMP = Policy;
   PolicyOMP.OpenACCPrint = OpenACCPrint_OMP;
@@ -72,8 +83,12 @@ bool ACCExecutableDirective::ompStmtPrintsDifferently(
   OMPStmt->printPretty(OMPStrStr, nullptr, PolicyOMP, 0, "\n", Context);
   ACCStrStr.flush();
   OMPStrStr.flush();
-  // llvm::errs() << '\n' << "<<<<" << '\n' << ACCStr << '\n' << "----" << '\n'
-  //     << OMPStr << '\n' << ">>>>" << '\n';
+  //llvm::errs() << '\n'
+  //    << "<<<< (" << ACCStmt->getStmtClassName() << ")\n"
+  //    << ACCStr << '\n'
+  //    << "---- (" << OMPStmt->getStmtClassName() << ")\n"
+  //    << OMPStr << '\n'
+  //    << ">>>>" << '\n';
   return ACCStr != OMPStr;
 }
 

@@ -119,6 +119,34 @@ int main() {
       // PRT-NEXT:      ;
       ;
 
+  // The following case is special in that an OpenACC construct has an
+  // associated statement that is a combined OpenACC construct.  The issue is
+  // that, for the combined OpenACC construct, the indentation of the OpenMP
+  // translations of the effective OpenACC directives is aligned when printing
+  // via the OpenACC node but progressively indented when printing the OpenMP
+  // nodes directly.  Thus, when Clang checks to see if the original associated
+  // statement is identical to its OpenMP translatation in order to decide
+  // whether it should print them separately for acc-omp or omp-acc mode, it
+  // cannot simply print them both as OpenMP and compare the results or they
+  // will look different due merely to indentation.
+
+  //  PRT-A-NEXT:  #pragma acc data copy(i)
+  // PRT-AO-NEXT:  // #pragma omp target data map(tofrom: i)
+  //  PRT-O-NEXT:  #pragma omp target data map(tofrom: i)
+  // PRT-OA-NEXT:  // #pragma acc data copy(i)
+  #pragma acc data copy(i)
+  //  PRT-A-NEXT:  #pragma acc parallel loop gang
+  // PRT-AO-NEXT:  // #pragma omp target teams
+  // PRT-AO-NEXT:  // #pragma omp distribute
+  //  PRT-O-NEXT:  #pragma omp target teams
+  //  PRT-O-NEXT:  #pragma omp distribute
+  // PRT-OA-NEXT:  // #pragma acc parallel loop gang
+  #pragma acc parallel loop gang
+  // PRT-NEXT:  for (int i = 0; i < 5; ++i)
+  for (int i = 0; i < 5; ++i)
+    // PRT-NEXT:    ;
+    ;
+
   //--------------------------------------------------
   // Directive only rewrite, but directive discarded.
   //--------------------------------------------------
