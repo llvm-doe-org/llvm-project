@@ -31,10 +31,8 @@
 // RUN:   (cflags=-DERR=ERR_OMP_VAR                        )
 // RUN: }
 // RUN: %for {
-// RUN:   %clang_cc1 -fsyntax-only -fopenacc %[cflags] %s \
-// RUN:              -verify=expected,sep
-// RUN:   %clang_cc1 -fsyntax-only -fopenacc %[cflags] %s \
-// RUN:              -verify=expected,cmb -DCMB
+// RUN:   %clang_cc1 -fopenacc %[cflags] %s -verify=expected,sep
+// RUN:   %clang_cc1 -fopenacc %[cflags] %s -verify=expected,cmb -DCMB
 // RUN: }
 //
 // END.
@@ -669,6 +667,12 @@ void fn() {
         break;
       }
     }
+
+    // A break in a context where it's not permitted in C used to cause the
+    // OpenACC implementation to fail because the expected "break parent"
+    // doesn't exist.
+    // expected-error@+1 {{'break' statement not in loop or switch statement}}
+    break;
   }
 
   //--------------------------------------------------

@@ -1677,8 +1677,10 @@ void Sema::ActOnOpenACCLoopInitialization(SourceLocation ForLoc, Stmt *Init) {
 void Sema::ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
                                           Scope *CurScope) {
   assert(getLangOpts().OpenACC && "OpenACC is not active.");
-  if (CurScope->getBreakParent()->isOpenACCLoopScope())
-    DirStack->addLoopBreakStatement(BreakLoc);
+  if (Scope *S = CurScope->getBreakParent()) {
+    if (S->isOpenACCLoopScope())
+      DirStack->addLoopBreakStatement(BreakLoc);
+  }
 }
 
 StmtResult Sema::ActOnOpenACCLoopDirective(
