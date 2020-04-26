@@ -60,7 +60,6 @@ enum {
   EVENT_ENQUEUE_LAUNCH_END,
 };
 
-// ERR-NOT:{{.}}
 void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
                           acc_prof_lookup lookup) {
   // These events share ompt_callback_target as an auxiliary callback except
@@ -234,3 +233,6 @@ int main() {
   return 0;
 #line 30000
 }
+
+// NONE-NOT: {{.}}
+// ERR-NOT:{{.}}

@@ -16,10 +16,18 @@
 // REQUIRES: ompt
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                                     fc=HOST       )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  fc=OFF,X86_64 )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple fc=OFF,PPC64LE)
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple fc=OFF,NVPTX64)
+// RUN:   (run-if=
+// RUN:    tgt-cflags=
+// RUN:    fc=HOST       )
+// RUN:   (run-if=%run-if-x86_64
+// RUN:    tgt-cflags=-fopenmp-targets=%run-x86_64-triple
+// RUN:    fc=OFF,X86_64 )
+// RUN:   (run-if=%run-if-ppc64le
+// RUN:    tgt-cflags=-fopenmp-targets=%run-ppc64le-triple
+// RUN:    fc=OFF,PPC64LE)
+// RUN:   (run-if=%run-if-nvptx64
+// RUN:    tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -DNVPTX64'
+// RUN:    fc=OFF,NVPTX64)
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc %flags %s -o %t \
@@ -175,35 +183,50 @@ int main() {
 
 #line 30000
   #pragma acc parallel firstprivate(carr) num_gangs(1)
-  for (int j = 0; j < 10; ++j)
+  for (int j = 0; j < 10; ++j) {
     // Because of firstprivate, carr's address is different here even when not
     // offloading.
-    //      HOST:inside: carr=[[CARR_HOST_PTR_IN_KERNEL:0x[a-z0-9]+]], carr[0]=30
-    // HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[1]=31
-    // HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[2]=32
-    // HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[3]=33
-    // HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[4]=34
-    // HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[5]=35
-    // HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[6]=36
-    // HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[7]=37
-    // HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[8]=38
-    // HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[9]=39
-    //       OFF:inside: carr=[[CARR_DEVICE_PTR]], carr[0]=30
-    //  OFF-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[1]=31
-    //  OFF-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[2]=32
-    //  OFF-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[3]=33
-    //  OFF-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[4]=34
-    //  OFF-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[5]=35
-    //  OFF-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[6]=36
-    //  OFF-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[7]=37
-    //  OFF-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[8]=38
-    //  OFF-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[9]=39
-#line 40000
+    //         HOST:inside: carr=[[CARR_HOST_PTR_IN_KERNEL:0x[a-z0-9]+]], carr[0]=30
+    //    HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[1]=31
+    //    HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[2]=32
+    //    HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[3]=33
+    //    HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[4]=34
+    //    HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[5]=35
+    //    HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[6]=36
+    //    HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[7]=37
+    //    HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[8]=38
+    //    HOST-NEXT:inside: carr=[[CARR_HOST_PTR_IN_KERNEL]], carr[9]=39
+    //       X86_64:inside: carr=[[CARR_DEVICE_PTR]], carr[0]=30
+    //  X86_64-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[1]=31
+    //  X86_64-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[2]=32
+    //  X86_64-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[3]=33
+    //  X86_64-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[4]=34
+    //  X86_64-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[5]=35
+    //  X86_64-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[6]=36
+    //  X86_64-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[7]=37
+    //  X86_64-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[8]=38
+    //  X86_64-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[9]=39
+    //      PPC64LE:inside: carr=[[CARR_DEVICE_PTR]], carr[0]=30
+    // PPC64LE-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[1]=31
+    // PPC64LE-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[2]=32
+    // PPC64LE-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[3]=33
+    // PPC64LE-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[4]=34
+    // PPC64LE-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[5]=35
+    // PPC64LE-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[6]=36
+    // PPC64LE-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[7]=37
+    // PPC64LE-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[8]=38
+    // PPC64LE-NEXT:inside: carr=[[CARR_DEVICE_PTR]], carr[9]=39
+    // We omit NVPTX64 here because exit events might trigger before kernel
+    // execution due to the use of CUDA streams.
+#ifndef NVPTX64
     printf("inside: carr=%p, carr[%d]=%d\n", carr, j, carr[j]);
+#endif
+#line 40000
+  }
 
   // Exit data for carr.
   //
-  // OFF-NEXT:acc_ev_exit_data_start
+  //      OFF:acc_ev_exit_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
   // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],

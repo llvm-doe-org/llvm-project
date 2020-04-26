@@ -158,15 +158,8 @@ def TypeArrayAttrOp : TEST_Op<"type_array_attr"> {
   let arguments = (ins TypeArrayAttr:$attr);
 }
 def TypeStringAttrWithTypeOp : TEST_Op<"string_attr_with_type"> {
-  let arguments = (ins StrAttr:$attr);
-  let printer = [{ p << getAttr("attr"); }];
-  let parser = [{
-    Attribute attr;
-    Type stringType = OpaqueType::get(Identifier::get("foo",
-                                      result.getContext()), "string",
-                                      result.getContext());
-    return parser.parseAttribute(attr, stringType, "attr", result.attributes);
-  }];
+  let arguments = (ins TypedStrAttr<AnyType>:$attr);
+  let assemblyFormat = "$attr attr-dict";
 }
 
 def StrCaseA: StrEnumAttrCase<"A">;
@@ -206,6 +199,7 @@ def I64EnumAttrOp : TEST_Op<"i64_enum_attr"> {
 def IntAttrOp : TEST_Op<"int_attrs"> {
   let arguments = (ins
     AnyI32Attr:$any_i32_attr,
+    IndexAttr:$index_attr,
     UI32Attr:$ui32_attr,
     SI32Attr:$si32_attr
   );
@@ -240,6 +234,15 @@ def RankedIntElementsAttrOp : TEST_Op<"ranked_int_elements_attr"> {
       RankedI32ElementsAttr<[2]>:$vector_i32_attr,
       RankedI64ElementsAttr<[4, 8]>:$matrix_i64_attr
   );
+}
+
+def DerivedTypeAttrOp : TEST_Op<"derived_type_attr", []> {
+  let results = (outs AnyTensor:$output);
+  DerivedTypeAttr element_dtype =
+    DerivedTypeAttr<"return getElementTypeOrSelf(output().getType());">;
+  DerivedAttr size = DerivedAttr<"int",
+    "return output().getType().cast<ShapedType>().getSizeInBits();",
+    "$_builder.getI32IntegerAttr($_self)">;
 }
 
 //===----------------------------------------------------------------------===//
@@ -506,6 +509,20 @@ def StringAttrPrettyNameOp
 
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
+}
+
+//===----------------------------------------------------------------------===//
+// Test Locations
+//===----------------------------------------------------------------------===//
+
+def TestLocationSrcOp : TEST_Op<"loc_src"> {
+  let arguments = (ins I32:$input);
+  let results = (outs I32:$output);
+}
+
+def TestLocationDstOp : TEST_Op<"loc_dst", [SameOperandsAndResultType]> {
+  let arguments = (ins I32:$input);
+  let results = (outs I32:$output);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1003,6 +1020,19 @@ def : Pat<(OneI32ResultOp),
               ConstantAttr<I32Attr, "2">)>;
 
 //===----------------------------------------------------------------------===//
+// Test Patterns (Location)
+
+// Test that we can specify locations for generated ops.
+def : Pat<(TestLocationSrcOp:$res1
+           (TestLocationSrcOp:$res2
+            (TestLocationSrcOp:$res3 $input))),
+          (TestLocationDstOp
+            (TestLocationDstOp
+              (TestLocationDstOp $input, (location $res1)),
+              (location "named")),
+            (location "fused", $res2, $res3))>;
+
+//===----------------------------------------------------------------------===//
 // Test Legalization
 //===----------------------------------------------------------------------===//
 
@@ -1041,6 +1071,12 @@ def : Pat<(ILLegalOpE), (LegalOpA Test_LegalizerEnum_Success)>;
 def TestRewriteOp : TEST_Op<"rewrite">,
   Arguments<(ins AnyType)>, Results<(outs AnyType)>;
 def : Pat<(TestRewriteOp $input), (replaceWithValue $input)>;
+
+// Check that patterns can specify bounded recursion when rewriting.
+def TestRecursiveRewriteOp : TEST_Op<"recursive_rewrite"> {
+  let arguments = (ins I64Attr:$depth);
+  let assemblyFormat = "$depth attr-dict";
+}
 
 //===----------------------------------------------------------------------===//
 // Test Type Legalization
@@ -1153,39 +1189,41 @@ def FormatBuildableTypeOp : TEST_Op<"format_buildable_type_op"> {
 }
 
 // Test various mixings of result type formatting.
-class FormatResultBase<string name, string fmt> : TEST_Op<name> {
+class FormatResultBase<string suffix, string fmt>
+    : TEST_Op<"format_result_" # suffix # "_op"> {
   let results = (outs I64:$buildable_res, AnyMemRef:$result);
   let assemblyFormat = fmt;
 }
-def FormatResultAOp : FormatResultBase<"format_result_a_op", [{
+def FormatResultAOp : FormatResultBase<"a", [{
   type($result) attr-dict
 }]>;
-def FormatResultBOp : FormatResultBase<"format_result_b_op", [{
+def FormatResultBOp : FormatResultBase<"b", [{
   type(results) attr-dict
 }]>;
-def FormatResultCOp : FormatResultBase<"format_result_c_op", [{
+def FormatResultCOp : FormatResultBase<"c", [{
   functional-type($buildable_res, $result) attr-dict
 }]>;
 
 // Test various mixings of operand type formatting.
-class FormatOperandBase<string name, string fmt> : TEST_Op<name> {
+class FormatOperandBase<string suffix, string fmt>
+    : TEST_Op<"format_operand_" # suffix # "_op"> {
   let arguments = (ins I64:$buildable, AnyMemRef:$operand);
   let assemblyFormat = fmt;
 }
 
-def FormatOperandAOp : FormatOperandBase<"format_operand_a_op", [{
+def FormatOperandAOp : FormatOperandBase<"a", [{
   operands `:` type(operands) attr-dict
 }]>;
-def FormatOperandBOp : FormatOperandBase<"format_operand_b_op", [{
+def FormatOperandBOp : FormatOperandBase<"b", [{
   operands `:` type($operand) attr-dict
 }]>;
-def FormatOperandCOp : FormatOperandBase<"format_operand_c_op", [{
+def FormatOperandCOp : FormatOperandBase<"c", [{
   $buildable `,` $operand `:` type(operands) attr-dict
 }]>;
-def FormatOperandDOp : FormatOperandBase<"format_operand_d_op", [{
+def FormatOperandDOp : FormatOperandBase<"d", [{
   $buildable `,` $operand `:` type($operand) attr-dict
 }]>;
-def FormatOperandEOp : FormatOperandBase<"format_operand_e_op", [{
+def FormatOperandEOp : FormatOperandBase<"e", [{
   $buildable `,` $operand `:` type($buildable) `,` type($operand) attr-dict
 }]>;
 
@@ -1193,6 +1231,25 @@ def FormatSuccessorAOp : TEST_Op<"format_successor_a_op", [Terminator]> {
   let successors = (successor VariadicSuccessor<AnySuccessor>:$targets);
   let assemblyFormat = "$targets attr-dict";
 }
+
+// Test various mixings of optional operand and result type formatting.
+class FormatOptionalOperandResultOpBase<string suffix, string fmt>
+    : TEST_Op<"format_optional_operand_result_" # suffix # "_op",
+              [AttrSizedOperandSegments]> {
+  let arguments = (ins Optional<I64>:$optional, Variadic<I64>:$variadic);
+  let results = (outs Optional<I64>:$optional_res);
+  let assemblyFormat = fmt;
+}
+
+def FormatOptionalOperandResultAOp : FormatOptionalOperandResultOpBase<"a", [{
+  `(` $optional `:` type($optional) `)` `:` type($optional_res)
+  (`[` $variadic^ `]`)? attr-dict
+}]>;
+
+def FormatOptionalOperandResultBOp : FormatOptionalOperandResultOpBase<"b", [{
+  (`(` $optional^ `:` type($optional) `)`)? `:` type($optional_res)
+  (`[` $variadic^ `]`)? attr-dict
+}]>;
 
 //===----------------------------------------------------------------------===//
 // Test SideEffects

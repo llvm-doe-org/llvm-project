@@ -28,7 +28,7 @@ kmp_target_offload_kind_t TargetOffloadPolicy = tgt_default;
 std::mutex TargetOffloadMtx;
 
 ////////////////////////////////////////////////////////////////////////////////
-/// manage the success or failure of a target constuct
+/// manage the success or failure of a target construct
 
 static void HandleDefaultTargetOffload() {
   TargetOffloadMtx.lock();
@@ -120,7 +120,7 @@ EXTERN void __tgt_target_data_begin(int64_t device_id, int32_t arg_num,
     DP("Use default device id %" PRId64 "\n", device_id);
   }
 
-  DeviceTy& Device = Devices[device_id];
+  DeviceTy &Device = Devices[device_id];
 
 #if OMPT_SUPPORT
   ompt_dispatch_callback_target(ompt_target_enter_data, ompt_scope_begin,
@@ -138,15 +138,15 @@ EXTERN void __tgt_target_data_begin(int64_t device_id, int32_t arg_num,
   }
 
 #ifdef OMPTARGET_DEBUG
-  for (int i=0; i<arg_num; ++i) {
+  for (int i = 0; i < arg_num; ++i) {
     DP("Entry %2d: Base=" DPxMOD ", Begin=" DPxMOD ", Size=%" PRId64
-        ", Type=0x%" PRIx64 "\n", i, DPxPTR(args_base[i]), DPxPTR(args[i]),
-        arg_sizes[i], arg_types[i]);
+       ", Type=0x%" PRIx64 "\n",
+       i, DPxPTR(args_base[i]), DPxPTR(args[i]), arg_sizes[i], arg_types[i]);
   }
 #endif
 
-  int rc = target_data_begin(Device, arg_num, args_base,
-      args, arg_sizes, arg_types);
+  int rc = target_data_begin(Device, arg_num, args_base, args, arg_sizes,
+                             arg_types, nullptr);
 #if OMPT_SUPPORT
   ompt_dispatch_callback_target(ompt_target_enter_data, ompt_scope_end,
                                 Device);
@@ -223,8 +223,8 @@ EXTERN void __tgt_target_data_end(int64_t device_id, int32_t arg_num,
   }
 #endif
 
-  int rc = target_data_end(Device, arg_num, args_base,
-      args, arg_sizes, arg_types);
+  int rc = target_data_end(Device, arg_num, args_base, args, arg_sizes,
+                           arg_types, nullptr);
   #if OMPT_SUPPORT
     ompt_dispatch_callback_target(ompt_target_exit_data, ompt_scope_end,
                                   Device);

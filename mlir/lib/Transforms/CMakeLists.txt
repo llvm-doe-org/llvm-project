@@ -13,6 +13,7 @@ add_mlir_library(MLIRTransforms
   OpStats.cpp
   ParallelLoopCollapsing.cpp
   PipelineDataTransfer.cpp
+  SCCP.cpp
   StripDebugInfo.cpp
   SymbolDCE.cpp
   ViewOpGraph.cpp
@@ -23,11 +24,12 @@ add_mlir_library(MLIRTransforms
 
   DEPENDS
   MLIRStandardOpsIncGen
+  MLIRTransformsPassIncGen
   )
 
 target_link_libraries(MLIRTransforms
   PUBLIC
-  MLIRAffine
+  MLIRAffineOps
   MLIRAnalysis
   MLIRLoopLikeInterface
   MLIRLoopOps

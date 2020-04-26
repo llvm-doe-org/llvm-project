@@ -40,7 +40,7 @@
 // RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],PPC64LE,PPC64LE-%[dir-fc1],PPC64LE-%[dir-fc2])
 // RUN:   (run-if=%run-if-nvptx64
 // RUN:    tgt-host-or-off=OFF
-// RUN:    tgt-cflags=-fopenmp-targets=%run-nvptx64-triple
+// RUN:    tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -DNVPTX64'
 // RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],NVPTX64,NVPTX64-%[dir-fc1],NVPTX64-%[dir-fc2])
 // RUN: }
 //      # Check offloading compilation both with and without offloading at run
@@ -79,10 +79,17 @@
 // expected-no-diagnostics
 
 #include "callbacks.h"
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define DIR_DATA     1
 #define DIR_PAR      2
 #define DIR_DATAPAR  3
+
+#ifndef NVPTX64
+# define NVPTX64 0
+#endif
 
 // ERR-NOT:{{.}}
 void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
@@ -92,6 +99,10 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
 
 #line 10000
 int main() {
+  const char *ompTargetOffload = getenv("OMP_TARGET_OFFLOAD");
+  bool offloadDisabled = ompTargetOffload && !strcmp(ompTargetOffload,
+                                                     "disabled");
+
   // CHECK-NOT:{{.}}
 
   int arr0[2] = {10, 11};
@@ -480,16 +491,24 @@ int main() {
 #endif
 #if DIR == DIR_PAR || DIR == DIR_DATAPAR
       for (int j = 0; j < 2; ++j) {
-        // HOST-HASPAR-NEXT:inside: arr0=[[ARR0_HOST_PTR]], arr0[0]=10
-        // HOST-HASPAR-NEXT:inside: arr1=[[ARR1_HOST_PTR]], arr1[0]=20
-        // HOST-HASPAR-NEXT:inside: arr0=[[ARR0_HOST_PTR]], arr0[1]=11
-        // HOST-HASPAR-NEXT:inside: arr1=[[ARR1_HOST_PTR]], arr1[1]=21
-        //  OFF-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[0]=10
-        //  OFF-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[0]=20
-        //  OFF-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[1]=11
-        //  OFF-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[1]=21
-        printf("inside: arr0=%p, arr0[%d]=%d\n", arr0, j, arr0[j]);
-        printf("inside: arr1=%p, arr1[%d]=%d\n", arr1, j, arr1[j]);
+        //    HOST-HASPAR-NEXT:inside: arr0=[[ARR0_HOST_PTR]], arr0[0]=10
+        //    HOST-HASPAR-NEXT:inside: arr1=[[ARR1_HOST_PTR]], arr1[0]=20
+        //    HOST-HASPAR-NEXT:inside: arr0=[[ARR0_HOST_PTR]], arr0[1]=11
+        //    HOST-HASPAR-NEXT:inside: arr1=[[ARR1_HOST_PTR]], arr1[1]=21
+        //  X86_64-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[0]=10
+        //  X86_64-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[0]=20
+        //  X86_64-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[1]=11
+        //  X86_64-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[1]=21
+        // PPC64LE-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[0]=10
+        // PPC64LE-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[0]=20
+        // PPC64LE-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[1]=11
+        // PPC64LE-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[1]=21
+        // We omit NVPTX64 here because exit events might trigger before kernel
+        // execution due to the use of CUDA streams.
+        if (!NVPTX64 || offloadDisabled) {
+          printf("inside: arr0=%p, arr0[%d]=%d\n", arr0, j, arr0[j]);
+          printf("inside: arr1=%p, arr1[%d]=%d\n", arr1, j, arr1[j]);
+        }
       #line 80000
       }
 #endif

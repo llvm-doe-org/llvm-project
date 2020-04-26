@@ -8,6 +8,7 @@ add_llvm_library(MLIRTestTransforms
   TestGpuMemoryPromotion.cpp
   TestGpuParallelLoopMapping.cpp
   TestInlining.cpp
+  TestLinalgMatmulToVector.cpp
   TestLinalgTransforms.cpp
   TestLiveness.cpp
   TestLoopMapping.cpp
@@ -24,6 +25,7 @@ add_llvm_library(MLIRTestTransforms
 
   DEPENDS
   MLIRStandardOpsIncGen
+  MLIRTestLinalgMatmulToVectorPatternsIncGen
   MLIRTestLinalgTransformPatternsIncGen
   MLIRTestVectorTransformPatternsIncGen
 )
@@ -35,7 +37,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/../DeclarativeTransforms)
 
 target_link_libraries(MLIRTestTransforms
   PUBLIC
-  MLIRAffine
+  MLIRAffineOps
   MLIRAnalysis
   MLIREDSC
   MLIRGPU

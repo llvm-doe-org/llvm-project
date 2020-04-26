@@ -10,6 +10,7 @@ add_lld_library(lldMachO2
   OutputSegment.cpp
   SymbolTable.cpp
   Symbols.cpp
+  SyntheticSections.cpp
   Target.cpp
   Writer.cpp
 
@@ -17,9 +18,6 @@ add_lld_library(lldMachO2
   ${LLVM_TARGETS_TO_BUILD}
   BinaryFormat
   Core
-  DebugInfoDWARF
-  LTO
-  MC
   Object
   Option
   Support

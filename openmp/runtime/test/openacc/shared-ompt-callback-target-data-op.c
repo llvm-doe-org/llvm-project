@@ -55,7 +55,6 @@ enum {
   EVENT_ENQUEUE_DOWNLOAD_END,
 };
 
-// ERR-NOT:{{.}}
 void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
                           acc_prof_lookup lookup) {
   // These events share ompt_callback_target_data_op as a triggering OMPT
@@ -114,3 +113,6 @@ int main() {
     printf("arr[%d]=%d\n", j, arr[j]);
   return 0;
 }
+
+// NONE-NOT: {{.}}
+// ERR-NOT:{{.}}

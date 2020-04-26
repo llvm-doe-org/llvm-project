@@ -91,7 +91,7 @@ enum ActionKind {
   GeneratePCH,
 
   /// Generate Interface Stub Files.
-  GenerateInterfaceIfsExpV1,
+  GenerateInterfaceStubs,
 
   /// Only execute frontend initialization.
   InitOnly,

@@ -1699,7 +1699,7 @@ void AArch64FrameLowering::emitEpilogue(MachineFunction &MF,
 /// SP-relative and simple call frames aren't used.
 int AArch64FrameLowering::getFrameIndexReference(const MachineFunction &MF,
                                                  int FI,
-                                                 unsigned &FrameReg) const {
+                                                 Register &FrameReg) const {
   return resolveFrameIndexReference(
              MF, FI, FrameReg,
              /*PreferFP=*/
@@ -1742,7 +1742,7 @@ int AArch64FrameLowering::getSEHFrameIndexOffset(const MachineFunction &MF,
 }
 
 StackOffset AArch64FrameLowering::resolveFrameIndexReference(
-    const MachineFunction &MF, int FI, unsigned &FrameReg, bool PreferFP,
+    const MachineFunction &MF, int FI, Register &FrameReg, bool PreferFP,
     bool ForSimm) const {
   const auto &MFI = MF.getFrameInfo();
   int64_t ObjectOffset = MFI.getObjectOffset(FI);
@@ -1754,7 +1754,7 @@ StackOffset AArch64FrameLowering::resolveFrameIndexReference(
 
 StackOffset AArch64FrameLowering::resolveFrameOffsetReference(
     const MachineFunction &MF, int64_t ObjectOffset, bool isFixed, bool isSVE,
-    unsigned &FrameReg, bool PreferFP, bool ForSimm) const {
+    Register &FrameReg, bool PreferFP, bool ForSimm) const {
   const auto &MFI = MF.getFrameInfo();
   const auto *RegInfo = static_cast<const AArch64RegisterInfo *>(
       MF.getSubtarget().getRegisterInfo());
@@ -2099,8 +2099,8 @@ static void computeCalleeSaveRegisterPairs(
       FixupDone = true;
       ByteOffset -= 8;
       assert(ByteOffset % 16 == 0);
-      assert(MFI.getObjectAlignment(RPI.FrameIdx) <= 16);
-      MFI.setObjectAlignment(RPI.FrameIdx, 16);
+      assert(MFI.getObjectAlign(RPI.FrameIdx) <= Align(16));
+      MFI.setObjectAlignment(RPI.FrameIdx, Align(16));
     }
 
     int Offset = RPI.isScalable() ? ScalableByteOffset : ByteOffset;
@@ -2590,12 +2590,12 @@ static int64_t determineSVEStackObjectOffsets(MachineFrameInfo &MFI,
   // Then process all callee saved slots.
   if (getSVECalleeSaveSlotRange(MFI, MinCSFrameIndex, MaxCSFrameIndex)) {
     // Make sure to align the last callee save slot.
-    MFI.setObjectAlignment(MaxCSFrameIndex, 16U);
+    MFI.setObjectAlignment(MaxCSFrameIndex, Align(16));
 
     // Assign offsets to the callee save slots.
     for (int I = MinCSFrameIndex; I <= MaxCSFrameIndex; ++I) {
       Offset += MFI.getObjectSize(I);
-      Offset = alignTo(Offset, MFI.getObjectAlignment(I));
+      Offset = alignTo(Offset, MFI.getObjectAlign(I));
       if (AssignOffsets)
         Assign(I, -Offset);
     }
@@ -2617,15 +2617,15 @@ static int64_t determineSVEStackObjectOffsets(MachineFrameInfo &MFI,
 
   // Allocate all SVE locals and spills
   for (unsigned FI : ObjectsToAllocate) {
-    unsigned Align = MFI.getObjectAlignment(FI);
+    Align Alignment = MFI.getObjectAlign(FI);
     // FIXME: Given that the length of SVE vectors is not necessarily a power of
     // two, we'd need to align every object dynamically at runtime if the
     // alignment is larger than 16. This is not yet supported.
-    if (Align > 16)
+    if (Alignment > Align(16))
       report_fatal_error(
           "Alignment of scalable vectors > 16 bytes is not yet supported");
 
-    Offset = alignTo(Offset + MFI.getObjectSize(FI), Align);
+    Offset = alignTo(Offset + MFI.getObjectSize(FI), Alignment);
     if (AssignOffsets)
       Assign(FI, -Offset);
   }
@@ -2895,7 +2895,7 @@ void TagStoreEdit::emitCode(MachineBasicBlock::iterator &InsertI,
   Size = LastTagStore.Offset - FirstTagStore.Offset + LastTagStore.Size;
   DL = TagStores[0].MI->getDebugLoc();
 
-  unsigned Reg;
+  Register Reg;
   FrameRegOffset = TFI->resolveFrameOffsetReference(
       *MF, FirstTagStore.Offset, false /*isFixed*/, false /*isSVE*/, Reg,
       /*PreferFP=*/false, /*ForSimm=*/true);
@@ -3089,7 +3089,7 @@ void AArch64FrameLowering::processFunctionBeforeFrameIndicesReplaced(
 /// before the update.  This is easily retrieved as it is exactly the offset
 /// that is set in processFunctionBeforeFrameFinalized.
 int AArch64FrameLowering::getFrameIndexReferencePreferSP(
-    const MachineFunction &MF, int FI, unsigned &FrameReg,
+    const MachineFunction &MF, int FI, Register &FrameReg,
     bool IgnoreSPUpdates) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   if (IgnoreSPUpdates) {

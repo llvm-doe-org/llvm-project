@@ -605,6 +605,7 @@ void ASTStmtReader::VisitIntegerLiteral(IntegerLiteral *E) {
 void ASTStmtReader::VisitFixedPointLiteral(FixedPointLiteral *E) {
   VisitExpr(E);
   E->setLocation(readSourceLocation());
+  E->setScale(Record.readInt());
   E->setValue(Record.getContext(), Record.readAPInt());
 }
 
@@ -927,6 +928,33 @@ void ASTStmtReader::VisitOMPArrayShapingExpr(OMPArrayShapingExpr *E) {
   E->setRParenLoc(readSourceLocation());
 }
 
+void ASTStmtReader::VisitOMPIteratorExpr(OMPIteratorExpr *E) {
+  VisitExpr(E);
+  unsigned NumIters = Record.readInt();
+  E->setIteratorKwLoc(readSourceLocation());
+  E->setLParenLoc(readSourceLocation());
+  E->setRParenLoc(readSourceLocation());
+  for (unsigned I = 0; I < NumIters; ++I) {
+    E->setIteratorDeclaration(I, Record.readDeclRef());
+    E->setAssignmentLoc(I, readSourceLocation());
+    Expr *Begin = Record.readSubExpr();
+    Expr *End = Record.readSubExpr();
+    Expr *Step = Record.readSubExpr();
+    SourceLocation ColonLoc = readSourceLocation();
+    SourceLocation SecColonLoc;
+    if (Step)
+      SecColonLoc = readSourceLocation();
+    E->setIteratorRange(I, Begin, ColonLoc, End, SecColonLoc, Step);
+    // Deserialize helpers
+    OMPIteratorHelperData HD;
+    HD.CounterVD = cast_or_null<VarDecl>(Record.readDeclRef());
+    HD.Upper = Record.readSubExpr();
+    HD.Update = Record.readSubExpr();
+    HD.CounterUpdate = Record.readSubExpr();
+    E->setHelper(I, HD);
+  }
+}
+
 void ASTStmtReader::VisitCallExpr(CallExpr *E) {
   VisitExpr(E);
   unsigned NumArgs = Record.readInt();
@@ -1023,12 +1051,16 @@ void ASTStmtReader::VisitCastExpr(CastExpr *E) {
 }
 
 void ASTStmtReader::VisitBinaryOperator(BinaryOperator *E) {
+  bool hasFP_Features;
+  BinaryOperator::Opcode opc;
   VisitExpr(E);
+  E->setHasStoredFPFeatures(hasFP_Features = Record.readInt());
+  E->setOpcode(opc = (BinaryOperator::Opcode)Record.readInt());
   E->setLHS(Record.readSubExpr());
   E->setRHS(Record.readSubExpr());
-  E->setOpcode((BinaryOperator::Opcode)Record.readInt());
   E->setOperatorLoc(readSourceLocation());
-  E->setFPFeatures(FPOptions(Record.readInt()));
+  if (hasFP_Features)
+    E->setStoredFPFeatures(FPOptions(Record.readInt()));
 }
 
 void ASTStmtReader::VisitCompoundAssignOperator(CompoundAssignOperator *E) {
@@ -1720,14 +1752,10 @@ void ASTStmtReader::VisitCXXNullPtrLiteralExpr(CXXNullPtrLiteralExpr *E) {
 void ASTStmtReader::VisitCXXTypeidExpr(CXXTypeidExpr *E) {
   VisitExpr(E);
   E->setSourceRange(readSourceRange());
-  if (E->isTypeOperand()) { // typeid(int)
-    E->setTypeOperandSourceInfo(
-        readTypeSourceInfo());
-    return;
-  }
-
-  // typeid(42+2)
-  E->setExprOperand(Record.readSubExpr());
+  if (E->isTypeOperand())
+    E->Operand = readTypeSourceInfo();
+  else
+    E->Operand = Record.readSubExpr();
 }
 
 void ASTStmtReader::VisitCXXThisExpr(CXXThisExpr *E) {
@@ -2132,16 +2160,11 @@ void ASTStmtReader::VisitMSPropertySubscriptExpr(MSPropertySubscriptExpr *E) {
 void ASTStmtReader::VisitCXXUuidofExpr(CXXUuidofExpr *E) {
   VisitExpr(E);
   E->setSourceRange(readSourceRange());
-  std::string UuidStr = readString();
-  E->setUuidStr(StringRef(UuidStr).copy(Record.getContext()));
-  if (E->isTypeOperand()) { // __uuidof(ComType)
-    E->setTypeOperandSourceInfo(
-        readTypeSourceInfo());
-    return;
-  }
-
-  // __uuidof(expr)
-  E->setExprOperand(Record.readSubExpr());
+  E->Guid = readDeclAs<MSGuidDecl>();
+  if (E->isTypeOperand())
+    E->Operand = readTypeSourceInfo();
+  else
+    E->Operand = Record.readSubExpr();
 }
 
 void ASTStmtReader::VisitSEHLeaveStmt(SEHLeaveStmt *S) {
@@ -2891,6 +2914,10 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       S = IntegerLiteral::Create(Context, Empty);
       break;
 
+    case EXPR_FIXEDPOINT_LITERAL:
+      S = FixedPointLiteral::Create(Context, Empty);
+      break;
+
     case EXPR_FLOATING_LITERAL:
       S = FloatingLiteral::Create(Context, Empty);
       break;
@@ -2948,6 +2975,11 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
           Context, Record[ASTStmtReader::NumExprFields]);
       break;
 
+    case EXPR_OMP_ITERATOR:
+      S = OMPIteratorExpr::CreateEmpty(Context,
+                                       Record[ASTStmtReader::NumExprFields]);
+      break;
+
     case EXPR_CALL:
       S = CallExpr::CreateEmpty(
           Context, /*NumArgs=*/Record[ASTStmtReader::NumExprFields], Empty);
@@ -2966,11 +2998,13 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       break;
 
     case EXPR_BINARY_OPERATOR:
-      S = new (Context) BinaryOperator(Empty);
+      S = BinaryOperator::CreateEmpty(Context,
+                                      Record[ASTStmtReader::NumExprFields]);
       break;
 
     case EXPR_COMPOUND_ASSIGN_OPERATOR:
-      S = new (Context) CompoundAssignOperator(Empty);
+      S = CompoundAssignOperator::CreateEmpty(
+          Context, Record[ASTStmtReader::NumExprFields]);
       break;
 
     case EXPR_CONDITIONAL_OPERATOR:

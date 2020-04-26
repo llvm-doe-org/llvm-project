@@ -40,11 +40,16 @@ using llvm::SetVector;
 const StringLiteral mlir::linalg::LinalgTransforms::kLinalgTransformMarker =
     "__internal_linalg_transform__";
 
-LogicalResult mlir::linalg::tileLinalgOpAndSetMarker(
-    PatternRewriter &rewriter, Operation *op, ArrayRef<int64_t> sizes,
-    StringRef linalgMarker, ArrayRef<unsigned> permutation) {
+using TileFn = Optional<TiledLinalgOp>(OpBuilder &, LinalgOp, ArrayRef<int64_t>,
+                                       ArrayRef<unsigned>, OperationFolder *);
+
+static LogicalResult
+tileLinalgOpAndSetMarkerImpl(TileFn tileFn, PatternRewriter &rewriter,
+                             Operation *op, ArrayRef<int64_t> sizes,
+                             StringRef linalgMarker,
+                             ArrayRef<unsigned> permutation) {
   assert(permutation.empty() || permutation.size() == sizes.size());
-  auto tileRes = tileLinalgOperation(rewriter, op, sizes, permutation);
+  auto tileRes = tileFn(rewriter, op, sizes, permutation, /*folder=*/nullptr);
   if (!tileRes)
     return failure();
   tileRes->op.setAttr(LinalgTransforms::kLinalgTransformMarker,
@@ -52,10 +57,26 @@ LogicalResult mlir::linalg::tileLinalgOpAndSetMarker(
   return success();
 }
 
-LogicalResult mlir::linalg::tileAndFuseLinalgOpAndSetMarker(
+LogicalResult mlir::linalg::tileLinalgOpAndSetMarker(
     PatternRewriter &rewriter, Operation *op, ArrayRef<int64_t> sizes,
-    ArrayRef<int64_t> operandIndicesToFuse, StringRef linalgMarker) {
-  auto tileRes = tileLinalgOperation(rewriter, op, sizes);
+    StringRef linalgMarker, ArrayRef<unsigned> permutation) {
+  return tileLinalgOpAndSetMarkerImpl(tileLinalgOp, rewriter, op, sizes,
+                                      linalgMarker, permutation);
+}
+LogicalResult mlir::linalg::tileLinalgOpToParallelLoopsAndSetMarker(
+    PatternRewriter &rewriter, Operation *op, ArrayRef<int64_t> sizes,
+    StringRef linalgMarker, ArrayRef<unsigned> permutation) {
+  return tileLinalgOpAndSetMarkerImpl(tileLinalgOpToParallelLoops, rewriter, op,
+                                      sizes, linalgMarker, permutation);
+}
+
+static LogicalResult
+tileAndFuseLinalgOpAndSetMarkerImpl(TileFn tileFn, PatternRewriter &rewriter,
+                                    Operation *op, ArrayRef<int64_t> sizes,
+                                    ArrayRef<int64_t> operandIndicesToFuse,
+                                    StringRef linalgMarker) {
+  auto tileRes =
+      tileFn(rewriter, op, sizes, /*permutation=*/{}, /*folder=*/nullptr);
   if (!tileRes)
     return failure();
   tileRes->op.setAttr(LinalgTransforms::kLinalgTransformMarker,
@@ -87,6 +108,20 @@ LogicalResult mlir::linalg::tileAndFuseLinalgOpAndSetMarker(
   for (auto *originalProducer : originalProducers)
     rewriter.eraseOp(originalProducer);
   return success();
+}
+
+LogicalResult mlir::linalg::tileAndFuseLinalgOpAndSetMarker(
+    PatternRewriter &rewriter, Operation *op, ArrayRef<int64_t> sizes,
+    ArrayRef<int64_t> operandIndicesToFuse, StringRef linalgMarker) {
+  return tileAndFuseLinalgOpAndSetMarkerImpl(
+      tileLinalgOp, rewriter, op, sizes, operandIndicesToFuse, linalgMarker);
+}
+LogicalResult mlir::linalg::tileAndFuseLinalgOpToParallelLoopsAndSetMarker(
+    PatternRewriter &rewriter, Operation *op, ArrayRef<int64_t> sizes,
+    ArrayRef<int64_t> operandIndicesToFuse, StringRef linalgMarker) {
+  return tileAndFuseLinalgOpAndSetMarkerImpl(
+      tileLinalgOpToParallelLoops, rewriter, op, sizes, operandIndicesToFuse,
+      linalgMarker);
 }
 
 bool mlir::linalg::detail::isProducedByOpOfTypeImpl(
@@ -256,11 +291,13 @@ mlir::linalg::permuteGenericLinalgOp(PatternRewriter &rewriter, Operation *op,
   auto linOp = cast<LinalgOp>(op);
   auto permutationMap = inversePermutation(
       AffineMap::getPermutationMap(permutation, rewriter.getContext()));
+  assert(permutationMap && "expected permutation to be invertible");
   SmallVector<AffineMap, 4> newIndexingMap;
   auto indexingMaps = linOp.indexing_maps().getValue();
   for (unsigned i = 0, e = linOp.getNumInputsAndOutputs(); i != e; ++i) {
-    AffineMap m = indexingMaps[i].cast<AffineMapAttr>().getValue().compose(
-        permutationMap);
+    AffineMap m = indexingMaps[i].cast<AffineMapAttr>().getValue();
+    if (!permutationMap.isEmpty())
+      m = m.compose(permutationMap);
     newIndexingMap.push_back(m);
   }
   auto itTypes = linOp.iterator_types().getValue();
@@ -301,6 +338,25 @@ mlir::linalg::promoteSubviewsLinalgOp(PatternRewriter &rewriter,
   assert(succeeded(promoteSubviewsLinalgOpPrecondition(op)) &&
          "DRR failure case must be a precondition");
 
+  LinalgOp linOp = cast<LinalgOp>(op);
+  SmallVector<int64_t, 4> toPromote;
+  int64_t nBuffers = linOp.getNumInputsAndOutputBuffers();
+  toPromote.reserve(nBuffers);
+  for (int64_t i = 0; i < nBuffers; ++i)
+    toPromote.push_back(i);
+  return promoteSelectedSubviewsLinalgOpAndSetMarker(rewriter, op, toPromote);
+}
+
+SmallVector<Value, 0> mlir::linalg::promoteSelectedSubviewsLinalgOpAndSetMarker(
+    PatternRewriter &rewriter, Operation *op,
+    ArrayRef<int64_t> operandIndicesToPromote, StringRef linalgMarker,
+    int64_t alignment) {
+  LLVM_DEBUG(dbgs() << "\n[" DEBUG_TYPE "]: Promote subviews for linalg op: "
+                    << *op << ":\n");
+
+  assert(succeeded(promoteSubviewsLinalgOpPrecondition(op)) &&
+         "DRR failure case must be a precondition");
+
   if (auto convOp = dyn_cast<linalg::ConvOp>(op)) {
     // TODO(ntv): add a level of indirection to linalg.generic.
     if (convOp.padding())
@@ -311,11 +367,17 @@ mlir::linalg::promoteSubviewsLinalgOp(PatternRewriter &rewriter,
   assert(linOp.hasBufferSemantics() &&
          "expected linalg op with buffer semantics");
   SetVector<Value> subViews;
-  for (auto it : linOp.getInputsAndOutputBuffers())
-    if (auto sv = dyn_cast_or_null<SubViewOp>(it.getDefiningOp()))
+  for (int64_t index : operandIndicesToPromote)
+    if (auto sv =
+            dyn_cast_or_null<SubViewOp>(linOp.getBuffer(index).getDefiningOp()))
       subViews.insert(sv);
+
   if (!subViews.empty()) {
-    promoteSubViewOperands(rewriter, linOp, subViews);
+    auto newOp =
+        promoteSubViewOperands(rewriter, linOp, subViews, false, alignment);
+    if (!linalgMarker.empty())
+      newOp.setAttr(LinalgTransforms::kLinalgTransformMarker,
+                    rewriter.getStringAttr(linalgMarker));
     return {};
   }
   llvm_unreachable("DRR failure case must be a precondition");

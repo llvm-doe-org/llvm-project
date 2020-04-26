@@ -495,10 +495,17 @@ bool ARMBaseInstrInfo::isPredicated(const MachineInstr &MI) const {
   return PIdx != -1 && MI.getOperand(PIdx).getImm() != ARMCC::AL;
 }
 
-std::string ARMBaseInstrInfo::createMIROperandComment(const MachineInstr &MI,
-                                                      const MachineOperand &Op,
-                                                      unsigned OpIdx) const {
-  // Only support immediates for now.
+std::string ARMBaseInstrInfo::createMIROperandComment(
+    const MachineInstr &MI, const MachineOperand &Op, unsigned OpIdx,
+    const TargetRegisterInfo *TRI) const {
+
+  // First, let's see if there is a generic comment for this operand
+  std::string GenericComment =
+      TargetInstrInfo::createMIROperandComment(MI, Op, OpIdx, TRI);
+  if (!GenericComment.empty())
+    return GenericComment;
+
+  // If not, check if we have an immediate operand.
   if (Op.getType() != MachineOperand::MO_Immediate)
     return std::string();
 
@@ -829,7 +836,7 @@ void llvm::addUnpredicatedMveVpredNOp(MachineInstrBuilder &MIB) {
 }
 
 void llvm::addUnpredicatedMveVpredROp(MachineInstrBuilder &MIB,
-                                      unsigned DestReg) {
+                                      Register DestReg) {
   addUnpredicatedMveVpredNOp(MIB);
   MIB.addReg(DestReg, RegState::Undef);
 }
@@ -1736,7 +1743,7 @@ static unsigned duplicateCPV(MachineFunction &MF, unsigned &CPI) {
 
 void ARMBaseInstrInfo::reMaterialize(MachineBasicBlock &MBB,
                                      MachineBasicBlock::iterator I,
-                                     unsigned DestReg, unsigned SubIdx,
+                                     Register DestReg, unsigned SubIdx,
                                      const MachineInstr &Orig,
                                      const TargetRegisterInfo &TRI) const {
   unsigned Opcode = Orig.getOpcode();
@@ -2168,7 +2175,7 @@ ARMBaseInstrInfo::isProfitableToUnpredicate(MachineBasicBlock &TMBB,
 /// condition, otherwise returns AL. It also returns the condition code
 /// register by reference.
 ARMCC::CondCodes llvm::getInstrPredicate(const MachineInstr &MI,
-                                         unsigned &PredReg) {
+                                         Register &PredReg) {
   int PIdx = MI.findFirstPredOperandIdx();
   if (PIdx == -1) {
     PredReg = 0;
@@ -2198,7 +2205,7 @@ MachineInstr *ARMBaseInstrInfo::commuteInstructionImpl(MachineInstr &MI,
   case ARM::MOVCCr:
   case ARM::t2MOVCCr: {
     // MOVCC can be commuted by inverting the condition.
-    unsigned PredReg = 0;
+    Register PredReg;
     ARMCC::CondCodes CC = getInstrPredicate(MI, PredReg);
     // MOVCC AL can't be inverted. Shouldn't happen.
     if (CC == ARMCC::AL || PredReg != ARM::CPSR)
@@ -2219,9 +2226,9 @@ MachineInstr *ARMBaseInstrInfo::commuteInstructionImpl(MachineInstr &MI,
 /// Identify instructions that can be folded into a MOVCC instruction, and
 /// return the defining instruction.
 MachineInstr *
-ARMBaseInstrInfo::canFoldIntoMOVCC(unsigned Reg, const MachineRegisterInfo &MRI,
+ARMBaseInstrInfo::canFoldIntoMOVCC(Register Reg, const MachineRegisterInfo &MRI,
                                    const TargetInstrInfo *TII) const {
-  if (!Register::isVirtualRegister(Reg))
+  if (!Reg.isVirtual())
     return nullptr;
   if (!MRI.hasOneNonDBGUse(Reg))
     return nullptr;
@@ -2401,9 +2408,9 @@ unsigned llvm::convertAddSubFlagsOpcode(unsigned OldOpc) {
 
 void llvm::emitARMRegPlusImmediate(MachineBasicBlock &MBB,
                                    MachineBasicBlock::iterator &MBBI,
-                                   const DebugLoc &dl, unsigned DestReg,
-                                   unsigned BaseReg, int NumBytes,
-                                   ARMCC::CondCodes Pred, unsigned PredReg,
+                                   const DebugLoc &dl, Register DestReg,
+                                   Register BaseReg, int NumBytes,
+                                   ARMCC::CondCodes Pred, Register PredReg,
                                    const ARMBaseInstrInfo &TII,
                                    unsigned MIFlags) {
   if (NumBytes == 0 && DestReg != BaseReg) {
@@ -2563,7 +2570,7 @@ bool llvm::tryFoldSPUpdateIntoPushPop(const ARMSubtarget &Subtarget,
 }
 
 bool llvm::rewriteARMFrameIndex(MachineInstr &MI, unsigned FrameRegIdx,
-                                unsigned FrameReg, int &Offset,
+                                Register FrameReg, int &Offset,
                                 const ARMBaseInstrInfo &TII) {
   unsigned Opcode = MI.getOpcode();
   const MCInstrDesc &Desc = MI.getDesc();
@@ -2719,8 +2726,8 @@ bool llvm::rewriteARMFrameIndex(MachineInstr &MI, unsigned FrameRegIdx,
 /// in SrcReg and SrcReg2 if having two register operands, and the value it
 /// compares against in CmpValue. Return true if the comparison instruction
 /// can be analyzed.
-bool ARMBaseInstrInfo::analyzeCompare(const MachineInstr &MI, unsigned &SrcReg,
-                                      unsigned &SrcReg2, int &CmpMask,
+bool ARMBaseInstrInfo::analyzeCompare(const MachineInstr &MI, Register &SrcReg,
+                                      Register &SrcReg2, int &CmpMask,
                                       int &CmpValue) const {
   switch (MI.getOpcode()) {
   default: break;
@@ -2756,7 +2763,7 @@ bool ARMBaseInstrInfo::analyzeCompare(const MachineInstr &MI, unsigned &SrcReg,
 /// operates on the given source register and applies the same mask
 /// as a 'tst' instruction. Provide a limited look-through for copies.
 /// When successful, MI will hold the found instruction.
-static bool isSuitableForMask(MachineInstr *&MI, unsigned SrcReg,
+static bool isSuitableForMask(MachineInstr *&MI, Register SrcReg,
                               int CmpMask, bool CommonUse) {
   switch (MI->getOpcode()) {
     case ARM::ANDri:
@@ -2791,7 +2798,7 @@ inline static ARMCC::CondCodes getCmpToAddCondition(ARMCC::CondCodes CC) {
 /// CMPrr(r0, r1) can be made redundant by ADDr[ri](r0, r1, X).
 /// This function can be extended later on.
 inline static bool isRedundantFlagInstr(const MachineInstr *CmpI,
-                                        unsigned SrcReg, unsigned SrcReg2,
+                                        Register SrcReg, Register SrcReg2,
                                         int ImmValue, const MachineInstr *OI,
                                         bool &IsThumb1) {
   if ((CmpI->getOpcode() == ARM::CMPrr || CmpI->getOpcode() == ARM::t2CMPrr) &&
@@ -2927,7 +2934,7 @@ static bool isOptimizeCompareCandidate(MachineInstr *MI, bool &IsThumb1) {
 /// operands are swapped: SUBrr(r1,r2) and CMPrr(r2,r1), by updating the
 /// condition code of instructions which use the flags.
 bool ARMBaseInstrInfo::optimizeCompareInstr(
-    MachineInstr &CmpInstr, unsigned SrcReg, unsigned SrcReg2, int CmpMask,
+    MachineInstr &CmpInstr, Register SrcReg, Register SrcReg2, int CmpMask,
     int CmpValue, const MachineRegisterInfo *MRI) const {
   // Get the unique definition of SrcReg.
   MachineInstr *MI = MRI->getUniqueVRegDef(SrcReg);
@@ -3214,7 +3221,7 @@ bool ARMBaseInstrInfo::shouldSink(const MachineInstr &MI) const {
     return true;
   MachineBasicBlock::const_iterator Next = &MI;
   ++Next;
-  unsigned SrcReg, SrcReg2;
+  Register SrcReg, SrcReg2;
   int CmpMask, CmpValue;
   bool IsThumb1;
   if (Next != MI.getParent()->end() &&
@@ -3225,7 +3232,7 @@ bool ARMBaseInstrInfo::shouldSink(const MachineInstr &MI) const {
 }
 
 bool ARMBaseInstrInfo::FoldImmediate(MachineInstr &UseMI, MachineInstr &DefMI,
-                                     unsigned Reg,
+                                     Register Reg,
                                      MachineRegisterInfo *MRI) const {
   // Fold large immediates into add, sub, or, xor.
   unsigned DefOpc = DefMI.getOpcode();
@@ -5452,7 +5459,7 @@ MachineInstr *llvm::findCMPToFoldIntoCBZ(MachineInstr *Br,
   if (CmpMI->getOpcode() != ARM::tCMPi8 && CmpMI->getOpcode() != ARM::t2CMPri)
     return nullptr;
   Register Reg = CmpMI->getOperand(0).getReg();
-  unsigned PredReg = 0;
+  Register PredReg;
   ARMCC::CondCodes Pred = getInstrPredicate(*CmpMI, PredReg);
   if (Pred != ARMCC::AL || CmpMI->getOperand(1).getImm() != 0)
     return nullptr;

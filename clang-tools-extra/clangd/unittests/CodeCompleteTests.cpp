@@ -112,9 +112,8 @@ CodeCompleteResult completions(const TestTU &TU, Position Point,
     ADD_FAILURE() << "Couldn't build CompilerInvocation";
     return {};
   }
-  auto Preamble =
-      buildPreamble(testPath(TU.Filename), *CI, /*OldPreamble=*/nullptr, Inputs,
-                    /*InMemory=*/true, /*Callback=*/nullptr);
+  auto Preamble = buildPreamble(testPath(TU.Filename), *CI, Inputs,
+                                /*InMemory=*/true, /*Callback=*/nullptr);
   return codeComplete(testPath(TU.Filename), Inputs.CompileCommand,
                       Preamble.get(), TU.Code, Point, Inputs.FS, Opts);
 }
@@ -127,7 +126,6 @@ CodeCompleteResult completions(llvm::StringRef Text,
   Annotations Test(Text);
   auto TU = TestTU::withCode(Test.code());
   // To make sure our tests for completiopns inside templates work on Windows.
-  TU.ExtraArgs = {"-fno-delayed-template-parsing"};
   TU.Filename = FilePath.str();
   return completions(TU, Test.point(), std::move(IndexSymbols),
                      std::move(Opts));
@@ -519,16 +517,16 @@ TEST(CompletionTest, Kinds) {
           AllOf(Named("complete_static_member"),
                 Kind(CompletionItemKind::Property))));
 
-   Results = completions(
+  Results = completions(
       R"cpp(
         enum Color {
           Red
         };
         Color u = ^
       )cpp");
-   EXPECT_THAT(Results.Completions,
-               Contains(
-                   AllOf(Named("Red"), Kind(CompletionItemKind::EnumMember))));
+  EXPECT_THAT(
+      Results.Completions,
+      Contains(AllOf(Named("Red"), Kind(CompletionItemKind::EnumMember))));
 }
 
 TEST(CompletionTest, NoDuplicates) {
@@ -598,7 +596,7 @@ TEST(CompletionTest, ContextWords) {
   auto Finish = Color::^
   )cpp");
   // Yellow would normally sort last (alphabetic).
-  // But the recent mention shuold bump it up.
+  // But the recent mention should bump it up.
   ASSERT_THAT(Results.Completions,
               HasSubsequence(Named("YELLOW"), Named("BLUE")));
 }
@@ -664,7 +662,7 @@ TEST(CompletionTest, IncludeInsertionPreprocessorIntegrationTests) {
   Symbol Sym = cls("ns::X");
   Sym.CanonicalDeclaration.FileURI = BarURI.c_str();
   Sym.IncludeHeaders.emplace_back(BarURI, 1);
-  // Shoten include path based on search directory and insert.
+  // Shorten include path based on search directory and insert.
   Annotations Test("int main() { ns::^ }");
   TU.Code = Test.code().str();
   auto Results = completions(TU, Test.point(), {Sym});
@@ -696,7 +694,7 @@ TEST(CompletionTest, NoIncludeInsertionWhenDeclFoundInFile) {
   SymY.CanonicalDeclaration.FileURI = BarURI.c_str();
   SymX.IncludeHeaders.emplace_back("<bar>", 1);
   SymY.IncludeHeaders.emplace_back("<bar>", 1);
-  // Shoten include path based on search directory and insert.
+  // Shorten include path based on search directory and insert.
   auto Results = completions(R"cpp(
           namespace ns {
             class X;
@@ -977,7 +975,7 @@ TEST(CompletionTest, IgnoreCompleteInExcludedPPBranchWithRecoveryContext) {
 
     int foo(int param_in_foo) {
 #if 0
-  // In recorvery mode, "param_in_foo" will also be suggested among many other
+  // In recovery mode, "param_in_foo" will also be suggested among many other
   // unrelated symbols; however, this is really a special case where this works.
   // If the #if block is outside of the function, "param_in_foo" is still
   // suggested, but "bar" and "foo" are missing. So the recovery mode doesn't
@@ -1047,11 +1045,14 @@ SignatureHelp signatures(llvm::StringRef Text, Position Point,
     ADD_FAILURE() << "Couldn't build CompilerInvocation";
     return {};
   }
-  auto Preamble =
-      buildPreamble(testPath(TU.Filename), *CI, /*OldPreamble=*/nullptr, Inputs,
-                    /*InMemory=*/true, /*Callback=*/nullptr);
-  return signatureHelp(testPath(TU.Filename), Inputs.CompileCommand,
-                       Preamble.get(), Text, Point, Inputs.FS, Index.get());
+  auto Preamble = buildPreamble(testPath(TU.Filename), *CI, Inputs,
+                                /*InMemory=*/true, /*Callback=*/nullptr);
+  if (!Preamble) {
+    ADD_FAILURE() << "Couldn't build Preamble";
+    return {};
+  }
+  return signatureHelp(testPath(TU.Filename), Inputs.CompileCommand, *Preamble,
+                       Text, Point, Inputs.FS, Index.get());
 }
 
 SignatureHelp signatures(llvm::StringRef Text,
@@ -1183,6 +1184,31 @@ TEST(SignatureHelpTest, OpeningParen) {
               Code.point("p"))
         << "Test source:" << Test;
   }
+}
+
+TEST(SignatureHelpTest, StalePreamble) {
+  TestTU TU;
+  TU.Code = "";
+  IgnoreDiagnostics Diags;
+  auto Inputs = TU.inputs();
+  auto CI = buildCompilerInvocation(Inputs, Diags);
+  ASSERT_TRUE(CI);
+  auto EmptyPreamble = buildPreamble(testPath(TU.Filename), *CI, Inputs,
+                                     /*InMemory=*/true, /*Callback=*/nullptr);
+  ASSERT_TRUE(EmptyPreamble);
+
+  TU.AdditionalFiles["a.h"] = "int foo(int x);";
+  const Annotations Test(R"cpp(
+    #include "a.h"
+    void bar() { foo(^2); })cpp");
+  TU.Code = Test.code().str();
+  Inputs = TU.inputs();
+  auto Results =
+      signatureHelp(testPath(TU.Filename), Inputs.CompileCommand,
+                    *EmptyPreamble, TU.Code, Test.point(), Inputs.FS, nullptr);
+  EXPECT_THAT(Results.signatures, ElementsAre(Sig("foo([[int x]]) -> int")));
+  EXPECT_EQ(0, Results.activeSignature);
+  EXPECT_EQ(0, Results.activeParameter);
 }
 
 class IndexRequestCollector : public SymbolIndex {
@@ -1709,7 +1735,7 @@ TEST(CompletionTest, FixItForArrowToDot) {
 
   CodeCompleteOptions Opts;
   Opts.IncludeFixIts = true;
-  const char* Code =
+  const char *Code =
       R"cpp(
         class Auxilary {
          public:
@@ -1743,7 +1769,7 @@ TEST(CompletionTest, FixItForArrowToDot) {
 TEST(CompletionTest, FixItForDotToArrow) {
   CodeCompleteOptions Opts;
   Opts.IncludeFixIts = true;
-  const char* Code =
+  const char *Code =
       R"cpp(
         class Auxilary {
          public:
@@ -1847,7 +1873,7 @@ TEST(CompletionTest, CompletionTokenRange) {
       R"cpp(
         #include "foo/abc/[[fo^o.h"]]
       )cpp",
-      };
+  };
   for (const auto &Text : TestCodes) {
     Annotations TestCode(Text);
     TU.Code = TestCode.code().str();
@@ -2219,10 +2245,9 @@ TEST(CompletionTest, NoInsertIncludeIfOnePresent) {
   Sym.IncludeHeaders.emplace_back("\"foo.h\"", 2);
   Sym.IncludeHeaders.emplace_back("\"bar.h\"", 1000);
 
-  EXPECT_THAT(
-      completions(TU, Test.point(), {Sym}).Completions,
-      UnorderedElementsAre(
-          AllOf(Named("Func"), HasInclude("\"foo.h\""), Not(InsertInclude()))));
+  EXPECT_THAT(completions(TU, Test.point(), {Sym}).Completions,
+              UnorderedElementsAre(AllOf(Named("Func"), HasInclude("\"foo.h\""),
+                                         Not(InsertInclude()))));
 }
 
 TEST(CompletionTest, MergeMacrosFromIndexAndSema) {
@@ -2658,6 +2683,20 @@ TEST(CompletionTest, NoCrashWithIncompleteLambda) {
 
   auto Signatures = signatures("auto x() { x(^").signatures;
   EXPECT_THAT(Signatures, Contains(Sig("x() -> auto")));
+}
+
+TEST(CompletionTest, DelayedTemplateParsing) {
+  Annotations Test(R"cpp(
+    int xxx;
+    template <typename T> int foo() { return xx^; }
+  )cpp");
+  auto TU = TestTU::withCode(Test.code());
+  // Even though delayed-template-parsing is on, we will disable it to provide
+  // completion in templates.
+  TU.ExtraArgs.push_back("-fdelayed-template-parsing");
+
+  EXPECT_THAT(completions(TU, Test.point()).Completions,
+              Contains(Named("xxx")));
 }
 
 TEST(CompletionTest, CompletionRange) {

@@ -124,6 +124,56 @@ class FloatArithmeticOp<string mnemonic, list<OpTrait> traits = []> :
     ArithmeticOp<mnemonic, traits>,
     Arguments<(ins FloatLike:$lhs, FloatLike:$rhs)>;
 
+// Base class for memref allocating ops: alloca and alloc.
+//
+//   %0 = alloclike(%m)[%s] : memref<8x?xf32, (d0, d1)[s0] -> ((d0 + s0), d1)>
+//
+class AllocLikeOp<string mnemonic, list<OpTrait> traits = []> :
+    Std_Op<mnemonic, traits> {
+
+  let arguments = (ins Variadic<Index>:$value,
+                   Confined<OptionalAttr<I64Attr>, [IntMinValue<0>]>:$alignment);
+  let results = (outs AnyMemRef);
+
+  let builders = [OpBuilder<
+    "Builder *builder, OperationState &result, MemRefType memrefType", [{
+       result.types.push_back(memrefType);
+     }]>,
+    OpBuilder<
+    "Builder *builder, OperationState &result, MemRefType memrefType, " #
+    "ValueRange operands, IntegerAttr alignment = IntegerAttr()", [{
+       result.addOperands(operands);
+       result.types.push_back(memrefType);
+       if (alignment)
+         result.addAttribute(getAlignmentAttrName(), alignment);
+     }]>];
+
+  let extraClassDeclaration = [{
+    static StringRef getAlignmentAttrName() { return "alignment"; }
+
+    MemRefType getType() { return getResult().getType().cast<MemRefType>(); }
+
+    /// Returns the number of symbolic operands (the ones in square brackets),
+    /// which bind to the symbols of the memref's layout map.
+    unsigned getNumSymbolicOperands() {
+      return getNumOperands() - getType().getNumDynamicDims();
+    }
+
+    /// Returns the symbolic operands (the ones in square brackets), which bind
+    /// to the symbols of the memref's layout map.
+    operand_range getSymbolicOperands() {
+      return {operand_begin() + getType().getNumDynamicDims(), operand_end()};
+    }
+
+    /// Returns the dynamic sizes for this alloc operation if specified.
+    operand_range getDynamicSizes() { return getOperands(); }
+  }];
+
+  let parser = [{ return ::parseAllocLikeOp(parser, result); }];
+
+  let hasCanonicalizer = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // AbsFOp
 //===----------------------------------------------------------------------===//
@@ -225,7 +275,7 @@ def AddIOp : IntArithmeticOp<"addi", [Commutative]> {
 // AllocOp
 //===----------------------------------------------------------------------===//
 
-def AllocOp : Std_Op<"alloc"> {
+def AllocOp : AllocLikeOp<"alloc"> {
   let summary = "memory allocation operation";
   let description = [{
     The `alloc` operation allocates a region of memory, as specified by its
@@ -234,7 +284,7 @@ def AllocOp : Std_Op<"alloc"> {
     Example:
 
     ```mlir
-    %0 = alloc() : memref<8x64xf32, (d0, d1) -> (d0, d1), 1>
+    %0 = alloc() : memref<8x64xf32, 1>
     ```
 
     The optional list of dimension operands are bound to the dynamic dimensions
@@ -242,7 +292,7 @@ def AllocOp : Std_Op<"alloc"> {
     bound to the second dimension of the memref (which is dynamic).
 
     ```mlir
-    %0 = alloc(%d) : memref<8x?xf32, (d0, d1) -> (d0, d1), 1>
+    %0 = alloc(%d) : memref<8x?xf32, 1>
     ```
 
     The optional list of symbol operands are bound to the symbols of the
@@ -250,7 +300,8 @@ def AllocOp : Std_Op<"alloc"> {
     the symbol 's0' in the affine map specified in the allocs memref type.
 
     ```mlir
-    %0 = alloc()[%s] : memref<8x64xf32, (d0, d1)[s0] -> ((d0 + s0), d1), 1>
+    %0 = alloc()[%s] : memref<8x64xf32,
+                              affine_map<(d0, d1)[s0] -> ((d0 + s0), d1)>, 1>
     ```
 
     This operation returns a single ssa value of memref type, which can be used
@@ -262,49 +313,52 @@ def AllocOp : Std_Op<"alloc"> {
 
     ```mlir
     %0 = alloc()[%s] {alignment = 8} :
-      memref<8x64xf32, (d0, d1)[s0] -> ((d0 + s0), d1), 1>
+      memref<8x64xf32, affine_map<(d0, d1)[s0] -> ((d0 + s0), d1)>, 1>
     ```
   }];
+}
 
-  let arguments = (ins Variadic<Index>:$value,
-                   Confined<OptionalAttr<I64Attr>, [IntMinValue<0>]>:$alignment);
-  let results = (outs AnyMemRef);
+//===----------------------------------------------------------------------===//
+// AllocaOp
+//===----------------------------------------------------------------------===//
 
-  let builders = [OpBuilder<
-    "Builder *builder, OperationState &result, MemRefType memrefType", [{
-       result.types.push_back(memrefType);
-     }]>,
-    OpBuilder<
-    "Builder *builder, OperationState &result, MemRefType memrefType, " #
-    "ArrayRef<Value> operands, IntegerAttr alignment = IntegerAttr()", [{
-       result.addOperands(operands);
-       result.types.push_back(memrefType);
-       if (alignment)
-         result.addAttribute(getAlignmentAttrName(), alignment);
-     }]>];
+def AllocaOp : AllocLikeOp<"alloca"> {
+  let summary = "stack memory allocation operation";
+  let description = [{
+    The `alloca` operation allocates memory on the stack, to be automatically
+    released when control transfers back from the region of its closest
+    surrounding operation with an
+    [`AutomaticAllocationScope`](../Traits.md#automaticallocationscope) trait.
+    The amount of memory allocated is specified by its memref and additional
+    operands. For example:
 
-  let extraClassDeclaration = [{
-    static StringRef getAlignmentAttrName() { return "alignment"; }
+    ```mlir
+		%0 = alloca() : memref<8x64xf32>
+    ```
 
-    MemRefType getType() { return getResult().getType().cast<MemRefType>(); }
+    The optional list of dimension operands are bound to the dynamic dimensions
+    specified in its memref type. In the example below, the SSA value '%d' is
+    bound to the second dimension of the memref (which is dynamic).
 
-    /// Returns the number of symbolic operands (the ones in square brackets),
-    /// which bind to the symbols of the memref's layout map.
-    unsigned getNumSymbolicOperands() {
-      return getNumOperands() - getType().getNumDynamicDims();
-    }
+    ```mlir
+		%0 = alloca(%d) : memref<8x?xf32>
+    ```
 
-    /// Returns the symbolic operands (the ones in square brackets), which bind
-    /// to the symbols of the memref's layout map.
-    operand_range getSymbolicOperands() {
-      return {operand_begin() + getType().getNumDynamicDims(), operand_end()};
-    }
+    The optional list of symbol operands are bound to the symbols of the
+    memref's affine map. In the example below, the SSA value '%s' is bound to
+    the symbol 's0' in the affine map specified in the allocs memref type.
 
-    /// Returns the dynamic sizes for this alloc operation if specified.
-    operand_range getDynamicSizes() { return getOperands(); }
+    ```mlir
+		%0 = alloca()[%s] : memref<8x64xf32,
+                               affine_map<(d0, d1)[s0] -> ((d0 + s0), d1)>>
+    ```
+
+    This operation returns a single SSA value of memref type, which can be used
+    by subsequent load and store operations. An optional alignment attribute, if
+    specified, guarantees alignment at least to that boundary. If not specified,
+    an alignment on any convenient boundary compatible with the type will be
+    chosen.
   }];
-
-  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -349,7 +403,7 @@ def AssumeAlignmentOp : Std_Op<"assume_alignment"> {
   let summary =
       "assertion that gives alignment information to the input memref";
   let description = [{
-    The `assume_alignment` operation takes a memref and a integer of alignment
+    The `assume_alignment` operation takes a memref and an integer of alignment
     value, and internally annotates the buffer with the given alignment. If
     the buffer isn't aligned to the given alignment, the behavior is undefined.
 
@@ -430,6 +484,77 @@ def AtomicRMWOp : Std_Op<"atomic_rmw", [
   }];
 }
 
+def GenericAtomicRMWOp : Std_Op<"generic_atomic_rmw", [
+      SingleBlockImplicitTerminator<"AtomicYieldOp">,
+      TypesMatchWith<"result type matches element type of memref",
+                     "memref", "result",
+                     "$_self.cast<MemRefType>().getElementType()">
+    ]> {
+  let summary = "atomic read-modify-write operation with a region";
+  let description = [{
+    The `atomic_rmw` operation provides a way to perform a read-modify-write
+    sequence that is free from data races. The memref operand represents the
+    buffer that the read and write will be performed against, as accessed by
+    the specified indices. The arity of the indices is the rank of the memref.
+    The result represents the latest value that was stored. The region contains
+    the code for the modification itself. The entry block has a single argument
+    that represents the value stored in `memref[indices]` before the write is
+    performed.
+
+    Example:
+
+    ```mlir
+    %x = generic_atomic_rmw %I[%i] : memref<10xf32> {
+      ^bb0(%current_value : f32):
+        %c1 = constant 1.0 : f32
+        %inc = addf %c1, %current_value : f32
+        atomic_yield %inc : f32
+    }
+    ```
+  }];
+
+  let arguments = (ins
+      MemRefOf<[AnySignlessInteger, AnyFloat]>:$memref,
+      Variadic<Index>:$indices);
+
+  let results = (outs
+      AnyTypeOf<[AnySignlessInteger, AnyFloat]>:$result);
+
+  let regions = (region AnyRegion:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<"Builder *builder, OperationState &result, "
+              "Value memref, ValueRange ivs">
+  ];
+
+  let extraClassDeclaration = [{
+    OpBuilder getBodyBuilder() {
+      assert(!body().empty() && "Unexpected empty 'body' region.");
+      Block &block = body().front();
+      return OpBuilder(&block, block.end());
+    }
+    // The value stored in memref[ivs].
+    Value getCurrentValue() {
+      return body().front().getArgument(0);
+    }
+  }];
+}
+
+def AtomicYieldOp : Std_Op<"atomic_yield", [
+      HasParent<"GenericAtomicRMWOp">,
+      NoSideEffect,
+      Terminator
+    ]> {
+  let summary = "yield operation for GenericAtomicRMWOp";
+  let description = [{
+    "atomic_yield" yields an SSA value from a GenericAtomicRMWOp region.
+  }];
+
+  let arguments = (ins AnyType:$result);
+  let assemblyFormat = "$result attr-dict `:` type($result)";
+}
+
 //===----------------------------------------------------------------------===//
 // BranchOp
 //===----------------------------------------------------------------------===//
@@ -471,6 +596,10 @@ def BranchOp : Std_Op<"br",
 
     /// Erase the operand at 'index' from the operand list.
     void eraseOperand(unsigned index);
+
+    /// Returns the successor that would be chosen with the given constant
+    /// operands. Returns nullptr if a single successor could not be chosen.
+    Block *getSuccessorForOperands(ArrayRef<Attribute>);
   }];
 
   let hasCanonicalizer = 1;
@@ -796,16 +925,16 @@ def CmpIOp : Std_Op<"cmpi",
     attributes: integers require sign specification while floats require various
     floating point-related particularities, e.g., `-ffast-math` behavior,
     IEEE754 compliance, etc
-    ([rationale](../Rationale.md#splitting-floating-point-vs-integer-operations)).
+    ([rationale](../Rationale/Rationale.md#splitting-floating-point-vs-integer-operations)).
     The type of comparison is specified as attribute to avoid introducing ten
     similar operations, taking into account that they are often implemented
     using the same operation downstream
-    ([rationale](../Rationale.md#specifying-comparison-kind-as-attribute)). The
+    ([rationale](../Rationale/Rationale.md#specifying-comparison-kind-as-attribute)). The
     separation between signed and unsigned order comparisons is necessary
     because of integers being signless. The comparison operation must know how
     to interpret values with the foremost bit being set: negatives in two's
     complement or large positives
-    ([rationale](../Rationale.md#specifying-sign-in-integer-comparison-operations)).
+    ([rationale](../Rationale/Rationale.md#specifying-sign-in-integer-comparison-operations)).
 
     Example:
 
@@ -967,6 +1096,10 @@ def CondBranchOp : Std_Op<"cond_br",
       eraseSuccessorOperand(falseIndex, index);
     }
 
+    /// Returns the successor that would be chosen with the given constant
+    /// operands. Returns nullptr if a single successor could not be chosen.
+    Block *getSuccessorForOperands(ArrayRef<Attribute> operands);
+
   private:
     /// Get the index of the first true destination operand.
     unsigned getTrueDestOperandIndex() { return 1; }
@@ -1023,7 +1156,7 @@ def ConstantOp : Std_Op<"constant",
     MLIR does not allow direct references to functions in SSA operands because
     the compiler is multithreaded, and disallowing SSA values to directly
     reference a function simplifies this
-    ([rationale](../Rationale.md#multithreading-the-compiler)).
+    ([rationale](../Rationale/Rationale.md#multithreading-the-compiler)).
   }];
 
   let arguments = (ins AnyAttr:$value);
@@ -1732,7 +1865,7 @@ def RemFOp : FloatArithmeticOp<"remf"> {
 // ReturnOp
 //===----------------------------------------------------------------------===//
 
-def ReturnOp : Std_Op<"return", [NoSideEffect, HasParent<"FuncOp">,
+def ReturnOp : Std_Op<"return", [NoSideEffect, HasParent<"FuncOp">, ReturnLike,
                                  Terminator]> {
   let summary = "return operation";
   let description = [{

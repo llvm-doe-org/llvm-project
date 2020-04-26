@@ -337,13 +337,16 @@ def AffineIfOp : Affine_Op<"if",
     /// list of AffineIf is not resizable.
     void setConditional(IntegerSet set, ValueRange operands);
 
+    /// Returns true if an else block exists.
+    bool hasElse() { return !elseRegion().empty(); }
+
     Block *getThenBlock() {
       assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
       return &thenRegion().front();
     }
 
     Block *getElseBlock() {
-      assert(!elseRegion().empty() && "Empty 'else' region.");
+      assert(hasElse() && "Empty 'else' region.");
       return &elseRegion().front();
     }
 
@@ -353,12 +356,13 @@ def AffineIfOp : Affine_Op<"if",
       return OpBuilder(&body, std::prev(body.end()));
     }
     OpBuilder getElseBodyBuilder() {
-      assert(!elseRegion().empty() && "Unexpected empty 'else' region.");
+      assert(hasElse() && "No 'else' block");
       Block &body = elseRegion().front();
       return OpBuilder(&body, std::prev(body.end()));
     }
   }];
 
+  let hasCanonicalizer = 1;
   let hasFolder = 1;
 }
 
@@ -490,6 +494,9 @@ def AffineParallelOp : Affine_Op<"parallel", [ImplicitAffineTerminator]> {
 
     Block *getBody();
     OpBuilder getBodyBuilder();
+    MutableArrayRef<BlockArgument> getIVs() {
+      return getBody()->getArguments();
+    }
     void setSteps(ArrayRef<int64_t> newSteps);
 
     static StringRef getLowerBoundsMapAttrName() { return "lowerBoundsMap"; }

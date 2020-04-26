@@ -35,7 +35,7 @@ ParseInputs TestTU::inputs() const {
   Files[ImportThunk] = ThunkContents;
 
   ParseInputs Inputs;
-  auto& Argv = Inputs.CompileCommand.CommandLine;
+  auto &Argv = Inputs.CompileCommand.CommandLine;
   Argv = {"clang"};
   // FIXME: this shouldn't need to be conditional, but it breaks a
   // GoToDefinition test for some reason (getMacroArgExpandedLocation fails).
@@ -56,6 +56,7 @@ ParseInputs TestTU::inputs() const {
   Inputs.Contents = Code;
   Inputs.FS = buildTestFS(Files);
   Inputs.Opts = ParseOptions();
+  Inputs.Opts.BuildRecoveryAST = true;
   Inputs.Opts.ClangTidyOpts.Checks = ClangTidyChecks;
   Inputs.Opts.ClangTidyOpts.WarningsAsErrors = ClangTidyWarningsAsErrors;
   Inputs.Index = ExternalIndex;
@@ -70,8 +71,7 @@ ParsedAST TestTU::build() const {
   auto CI = buildCompilerInvocation(Inputs, Diags);
   assert(CI && "Failed to build compilation invocation.");
   auto Preamble =
-      buildPreamble(testPath(Filename), *CI,
-                    /*OldPreamble=*/nullptr, Inputs,
+      buildPreamble(testPath(Filename), *CI, Inputs,
                     /*StoreInMemory=*/true, /*PreambleCallback=*/nullptr);
   auto AST = buildAST(testPath(Filename), std::move(CI), Diags.take(), Inputs,
                       Preamble);
@@ -88,7 +88,7 @@ ParsedAST TestTU::build() const {
     if (llvm::StringRef(Code).contains(Marker) ||
         llvm::StringRef(HeaderCode).contains(Marker))
       return true;
-    for (const auto& KV : this->AdditionalFiles)
+    for (const auto &KV : this->AdditionalFiles)
       if (llvm::StringRef(KV.second).contains(Marker))
         return true;
     return false;
@@ -116,9 +116,10 @@ SymbolSlab TestTU::headerSymbols() const {
 std::unique_ptr<SymbolIndex> TestTU::index() const {
   auto AST = build();
   auto Idx = std::make_unique<FileIndex>(/*UseDex=*/true);
-  Idx->updatePreamble(Filename, /*Version=*/"null", AST.getASTContext(),
-                      AST.getPreprocessorPtr(), AST.getCanonicalIncludes());
-  Idx->updateMain(Filename, AST);
+  Idx->updatePreamble(testPath(Filename), /*Version=*/"null",
+                      AST.getASTContext(), AST.getPreprocessorPtr(),
+                      AST.getCanonicalIncludes());
+  Idx->updateMain(testPath(Filename), AST);
   return std::move(Idx);
 }
 

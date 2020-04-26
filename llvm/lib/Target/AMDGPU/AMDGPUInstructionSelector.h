@@ -92,6 +92,7 @@ private:
   bool selectG_SZA_EXT(MachineInstr &I) const;
   bool selectG_CONSTANT(MachineInstr &I) const;
   bool selectG_FNEG(MachineInstr &I) const;
+  bool selectG_FABS(MachineInstr &I) const;
   bool selectG_AND_OR_XOR(MachineInstr &I) const;
   bool selectG_ADD_SUB(MachineInstr &I) const;
   bool selectG_UADDO_USUBO_UADDE_USUBE(MachineInstr &I) const;
@@ -104,6 +105,7 @@ private:
   bool selectG_INSERT(MachineInstr &I) const;
 
   bool selectInterpP1F16(MachineInstr &MI) const;
+  bool selectDivScale(MachineInstr &MI) const;
   bool selectG_INTRINSIC(MachineInstr &I) const;
 
   bool selectEndCfIntrinsic(MachineInstr &MI) const;

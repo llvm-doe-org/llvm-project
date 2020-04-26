@@ -303,8 +303,9 @@ static int32_t member_of(int64_t type) {
 #endif
 
 /// Internal function to do the mapping and transfer the data to the device
-int target_data_begin(DeviceTy &Device, int32_t arg_num,
-    void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types) {
+int target_data_begin(DeviceTy &Device, int32_t arg_num, void **args_base,
+                      void **args, int64_t *arg_sizes, int64_t *arg_types,
+                      __tgt_async_info *async_info_ptr) {
   OMPT_DISPATCH_CALLBACK_TARGET_MAP(_start);
 
   // process each input.
@@ -376,6 +377,7 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num,
       // NULL, so getOrAlloc() returning NULL is not an error.
       DP("Call to getOrAllocTgtPtr returned null pointer (device failure or "
           "illegal mapping).\n");
+      return OFFLOAD_FAIL;
     }
     DP("There are %" PRId64 " bytes allocated at target address " DPxMOD
         " - is%s new\n", data_size, DPxPTR(TgtPtrBegin),
@@ -407,8 +409,9 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num,
 
       if (copy && !IsHostPtr) {
         DP("Moving %" PRId64 " bytes (hst:" DPxMOD ") -> (tgt:" DPxMOD ")\n",
-            data_size, DPxPTR(HstPtrBegin), DPxPTR(TgtPtrBegin));
-        int rt = Device.data_submit(TgtPtrBegin, HstPtrBegin, data_size);
+           data_size, DPxPTR(HstPtrBegin), DPxPTR(TgtPtrBegin));
+        int rt = Device.data_submit(TgtPtrBegin, HstPtrBegin, data_size,
+                                    async_info_ptr);
         if (rt != OFFLOAD_SUCCESS) {
           DP("Copying data to device failed.\n");
           OMPT_DISPATCH_CALLBACK_TARGET_MAP();
@@ -423,7 +426,7 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num,
       uint64_t Delta = (uint64_t)HstPtrBegin - (uint64_t)HstPtrBase;
       void *TgtPtrBase = (void *)((uint64_t)TgtPtrBegin - Delta);
       int rt = Device.data_submit(Pointer_TgtPtrBegin, &TgtPtrBase,
-          sizeof(void *));
+                                  sizeof(void *), async_info_ptr);
       if (rt != OFFLOAD_SUCCESS) {
         DP("Copying data to device failed.\n");
         OMPT_DISPATCH_CALLBACK_TARGET_MAP();
@@ -443,7 +446,8 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num,
 
 /// Internal function to undo the mapping and retrieve the data from the device.
 int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
-    void **args, int64_t *arg_sizes, int64_t *arg_types) {
+                    void **args, int64_t *arg_sizes, int64_t *arg_types,
+                    __tgt_async_info *async_info_ptr) {
   OMPT_DISPATCH_CALLBACK_TARGET_MAP(_exit_start);
 
   // process each input.
@@ -515,8 +519,9 @@ int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
             !(RTLs->RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY &&
               TgtPtrBegin == HstPtrBegin)) {
           DP("Moving %" PRId64 " bytes (tgt:" DPxMOD ") -> (hst:" DPxMOD ")\n",
-              data_size, DPxPTR(TgtPtrBegin), DPxPTR(HstPtrBegin));
-          int rt = Device.data_retrieve(HstPtrBegin, TgtPtrBegin, data_size);
+             data_size, DPxPTR(TgtPtrBegin), DPxPTR(HstPtrBegin));
+          int rt = Device.data_retrieve(HstPtrBegin, TgtPtrBegin, data_size,
+                                        async_info_ptr);
           if (rt != OFFLOAD_SUCCESS) {
             DP("Copying data from device failed.\n");
             OMPT_DISPATCH_CALLBACK_TARGET_MAP(_exit_end);
@@ -608,7 +613,7 @@ int target_data_update(DeviceTy &Device, int32_t arg_num,
     if (arg_types[i] & OMP_TGT_MAPTYPE_FROM) {
       DP("Moving %" PRId64 " bytes (tgt:" DPxMOD ") -> (hst:" DPxMOD ")\n",
           arg_sizes[i], DPxPTR(TgtPtrBegin), DPxPTR(HstPtrBegin));
-      int rt = Device.data_retrieve(HstPtrBegin, TgtPtrBegin, MapSize);
+      int rt = Device.data_retrieve(HstPtrBegin, TgtPtrBegin, MapSize, nullptr);
       if (rt != OFFLOAD_SUCCESS) {
         DP("Copying data from device failed.\n");
         return OFFLOAD_FAIL;
@@ -635,7 +640,7 @@ int target_data_update(DeviceTy &Device, int32_t arg_num,
     if (arg_types[i] & OMP_TGT_MAPTYPE_TO) {
       DP("Moving %" PRId64 " bytes (hst:" DPxMOD ") -> (tgt:" DPxMOD ")\n",
           arg_sizes[i], DPxPTR(HstPtrBegin), DPxPTR(TgtPtrBegin));
-      int rt = Device.data_submit(TgtPtrBegin, HstPtrBegin, MapSize);
+      int rt = Device.data_submit(TgtPtrBegin, HstPtrBegin, MapSize, nullptr);
       if (rt != OFFLOAD_SUCCESS) {
         DP("Copying data to device failed.\n");
         return OFFLOAD_FAIL;
@@ -655,7 +660,7 @@ int target_data_update(DeviceTy &Device, int32_t arg_num,
             "pointer " DPxMOD "\n", DPxPTR(it->second.TgtPtrVal),
             DPxPTR(it->second.TgtPtrAddr));
         rt = Device.data_submit(it->second.TgtPtrAddr,
-            &it->second.TgtPtrVal, sizeof(void *));
+            &it->second.TgtPtrVal, sizeof(void *), nullptr);
         if (rt != OFFLOAD_SUCCESS) {
           DP("Copying data to device failed.\n");
           Device.ShadowMtx.unlock();
@@ -795,9 +800,11 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
   TrlTblMtx->unlock();
   assert(TargetTable && "Global data has not been mapped\n");
 
+  __tgt_async_info AsyncInfo;
+
   // Move data to device.
   int rc = target_data_begin(Device, arg_num, args_base, args, arg_sizes,
-      arg_types);
+                             arg_types, &AsyncInfo);
   if (rc != OFFLOAD_SUCCESS) {
     DP("Call to target_data_begin failed, abort target.\n");
 #if OMPT_SUPPORT
@@ -858,7 +865,7 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
         DP("Update lambda reference (" DPxMOD ") -> [" DPxMOD "]\n",
            DPxPTR(Pointer_TgtPtrBegin), DPxPTR(TgtPtrBegin));
         int rt = Device.data_submit(TgtPtrBegin, &Pointer_TgtPtrBegin,
-                                    sizeof(void *));
+                                    sizeof(void *), &AsyncInfo);
         if (rt != OFFLOAD_SUCCESS) {
           DP("Copying data to device failed.\n");
 #if OMPT_SUPPORT
@@ -929,9 +936,10 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
 #endif
       // If first-private, copy data from host
       if (arg_types[i] & OMP_TGT_MAPTYPE_TO) {
-        int rt = Device.data_submit(TgtPtrBegin, HstPtrBegin, arg_sizes[i]);
+        int rt = Device.data_submit(TgtPtrBegin, HstPtrBegin, arg_sizes[i],
+                                    &AsyncInfo);
         if (rt != OFFLOAD_SUCCESS) {
-          DP ("Copying data to device failed, failed.\n");
+          DP("Copying data to device failed, failed.\n");
 #if OMPT_SUPPORT
           ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
 #endif
@@ -980,11 +988,12 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
       DPxPTR(TargetTable->EntriesBegin[TM->Index].addr), TM->Index);
   if (IsTeamConstruct) {
     rc = Device.run_team_region(TargetTable->EntriesBegin[TM->Index].addr,
-        &tgt_args[0], &tgt_offsets[0], tgt_args.size(), team_num,
-        thread_limit, ltc);
+                                &tgt_args[0], &tgt_offsets[0], tgt_args.size(),
+                                team_num, thread_limit, ltc, &AsyncInfo);
   } else {
     rc = Device.run_region(TargetTable->EntriesBegin[TM->Index].addr,
-        &tgt_args[0], &tgt_offsets[0], tgt_args.size());
+                           &tgt_args[0], &tgt_offsets[0], tgt_args.size(),
+                           &AsyncInfo);
   }
   if (rc != OFFLOAD_SUCCESS) {
     DP ("Executing target region abort target.\n");
@@ -1028,13 +1037,23 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
 
   // Move data from device.
   int rt = target_data_end(Device, arg_num, args_base, args, arg_sizes,
-      arg_types);
+                           arg_types, &AsyncInfo);
   if (rt != OFFLOAD_SUCCESS) {
     DP("Call to target_data_end failed, abort targe.\n");
 #if OMPT_SUPPORT
     ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
 #endif
     return OFFLOAD_FAIL;
+  }
+
+  if (Device.RTL->synchronize) {
+    int64_t rt = Device.RTL->synchronize(device_id, &AsyncInfo);
+    if (rt != OFFLOAD_SUCCESS) {
+#if OMPT_SUPPORT
+      ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
+#endif
+      return OFFLOAD_FAIL;
+    }
   }
 
 #if OMPT_SUPPORT

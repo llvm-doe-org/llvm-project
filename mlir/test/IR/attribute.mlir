@@ -8,6 +8,8 @@ func @int_attrs_pass() {
   "test.int_attrs"() {
     // CHECK: any_i32_attr = 5 : ui32
     any_i32_attr = 5 : ui32,
+    // CHECK-SAME: index_attr = 8 : index
+    index_attr = 8 : index,
     // CHECK-SAME: si32_attr = 7 : si32
     si32_attr = 7 : si32,
     // CHECK-SAME: ui32_attr = 6 : ui32
@@ -17,6 +19,7 @@ func @int_attrs_pass() {
   "test.int_attrs"() {
     // CHECK: any_i32_attr = 5 : si32
     any_i32_attr = 5 : si32,
+    index_attr = 8 : index,
     si32_attr = 7 : si32,
     ui32_attr = 6 : ui32
   } : () -> ()
@@ -24,6 +27,7 @@ func @int_attrs_pass() {
   "test.int_attrs"() {
     // CHECK: any_i32_attr = 5 : i32
     any_i32_attr = 5 : i32,
+    index_attr = 8 : index,
     si32_attr = 7 : si32,
     ui32_attr = 6 : ui32
   } : () -> ()
@@ -79,7 +83,15 @@ func @int_attrs_pass() {
     // CHECK-SAME: attr_18 = 9223372036854775807 : si64
     attr_18 = 9223372036854775807 : si64,
     // CHECK-SAME: attr_19 = 18446744073709551615 : ui64
-    attr_19 = 18446744073709551615 : ui64
+    attr_19 = 18446744073709551615 : ui64,
+    // CHECK-SAME: attr_20 = 1 : ui1
+    attr_20 = 1 : ui1,
+    // CHECK-SAME: attr_21 = -1 : si1
+    attr_21 = -1 : si1,
+    // CHECK-SAME: attr_22 = 79228162514264337593543950335 : ui96
+    attr_22 = 79228162514264337593543950335 : ui96,
+    // CHECK-SAME: attr_23 = -39614081257132168796771975168 : si96
+    attr_23 = -39614081257132168796771975168 : si96
   } : () -> ()
 
   return
@@ -114,6 +126,7 @@ func @wrong_int_attrs_signedness_fail() {
   // expected-error @+1 {{'si32_attr' failed to satisfy constraint: 32-bit signed integer attribute}}
   "test.int_attrs"() {
     any_i32_attr = 5 : i32,
+    index_attr = 8 : index,
     si32_attr = 7 : ui32,
     ui32_attr = 6 : ui32
   } : () -> ()
@@ -126,6 +139,7 @@ func @wrong_int_attrs_signedness_fail() {
   // expected-error @+1 {{'ui32_attr' failed to satisfy constraint: 32-bit unsigned integer attribute}}
   "test.int_attrs"() {
     any_i32_attr = 5 : i32,
+    index_attr = 8 : index,
     si32_attr = 7 : si32,
     ui32_attr = 6 : si32
   } : () -> ()
@@ -247,7 +261,7 @@ func @non_type_in_type_array_attr_fail() {
 // CHECK-LABEL: func @string_attr_custom_type
 func @string_attr_custom_type() {
   // CHECK: "string_data" : !foo.string
-  test.string_attr_with_type "string_data"
+  test.string_attr_with_type "string_data" : !foo.string
   return
 }
 

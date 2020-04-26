@@ -68,20 +68,20 @@ bool Type::canLosslesslyBitCastTo(Type *Ty) const {
     return false;
 
   // Vector -> Vector conversions are always lossless if the two vector types
-  // have the same size, otherwise not.  Also, 64-bit vector types can be
-  // converted to x86mmx.
-  if (auto *thisPTy = dyn_cast<VectorType>(this)) {
-    if (auto *thatPTy = dyn_cast<VectorType>(Ty))
-      return thisPTy->getBitWidth() == thatPTy->getBitWidth();
-    if (Ty->getTypeID() == Type::X86_MMXTyID &&
-        thisPTy->getBitWidth() == 64)
-      return true;
-  }
+  // have the same size, otherwise not.
+  if (isa<VectorType>(this) && isa<VectorType>(Ty))
+    return getPrimitiveSizeInBits() == Ty->getPrimitiveSizeInBits();
 
-  if (this->getTypeID() == Type::X86_MMXTyID)
-    if (auto *thatPTy = dyn_cast<VectorType>(Ty))
-      if (thatPTy->getBitWidth() == 64)
-        return true;
+  //  64-bit fixed width vector types can be losslessly converted to x86mmx.
+  if (((isa<VectorType>(this) &&
+        !cast<VectorType>(this)->getElementCount().Scalable) &&
+       Ty->isX86_MMXTy()) &&
+      getPrimitiveSizeInBits().getFixedSize() == 64)
+    return true;
+  if ((isX86_MMXTy() && (isa<VectorType>(Ty) &&
+                         !cast<VectorType>(Ty)->getElementCount().Scalable)) &&
+      Ty->getPrimitiveSizeInBits().getFixedSize() == 64)
+    return true;
 
   // At this point we have only various mismatches of the first class types
   // remaining and ptr->ptr. Just select the lossless conversions. Everything
@@ -125,7 +125,10 @@ TypeSize Type::getPrimitiveSizeInBits() const {
     return TypeSize::Fixed(cast<IntegerType>(this)->getBitWidth());
   case Type::VectorTyID: {
     const VectorType *VTy = cast<VectorType>(this);
-    return TypeSize(VTy->getBitWidth(), VTy->isScalable());
+    ElementCount EC = VTy->getElementCount();
+    TypeSize ETS = VTy->getElementType()->getPrimitiveSizeInBits();
+    assert(!ETS.isScalable() && "Vector type should have fixed-width elements");
+    return {ETS.getFixedSize() * EC.Min, EC.Scalable};
   }
   default: return TypeSize::Fixed(0);
   }
@@ -553,7 +556,11 @@ bool StructType::indexValid(const Value *V) const {
 //===----------------------------------------------------------------------===//
 
 ArrayType::ArrayType(Type *ElType, uint64_t NumEl)
-  : SequentialType(ArrayTyID, ElType, NumEl) {}
+    : Type(ElType->getContext(), ArrayTyID), ContainedType(ElType),
+      NumElements(NumEl) {
+  ContainedTys = &ContainedType;
+  NumContainedTys = 1;
+}
 
 ArrayType *ArrayType::get(Type *ElementType, uint64_t NumElements) {
   assert(isValidElementType(ElementType) && "Invalid type for array element!");
@@ -580,7 +587,11 @@ bool ArrayType::isValidElementType(Type *ElemTy) {
 //===----------------------------------------------------------------------===//
 
 VectorType::VectorType(Type *ElType, ElementCount EC)
-  : SequentialType(VectorTyID, ElType, EC.Min), Scalable(EC.Scalable) {}
+    : Type(ElType->getContext(), VectorTyID), ContainedType(ElType),
+      NumElements(EC.Min), Scalable(EC.Scalable) {
+  ContainedTys = &ContainedType;
+  NumContainedTys = 1;
+}
 
 VectorType *VectorType::get(Type *ElementType, ElementCount EC) {
   assert(EC.Min > 0 && "#Elements of a VectorType must be greater than 0");

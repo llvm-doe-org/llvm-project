@@ -116,10 +116,16 @@ class InlineCostCallAnalyzer;
 // This struct is used to store information about inline cost of a
 // particular instruction
 struct InstructionCostDetail {
-  int CostBefore;
-  int CostAfter;
-  int ThresholdBefore;
-  int ThresholdAfter;
+  int CostBefore = 0;
+  int CostAfter = 0;
+  int ThresholdBefore = 0;
+  int ThresholdAfter = 0;
+
+  int getThresholdDelta() const { return ThresholdAfter - ThresholdBefore; }
+
+  int getCostDelta() const { return CostAfter - CostBefore; }
+
+  bool hasThresholdChanged() const { return ThresholdAfter != ThresholdBefore; }
 };
 
 class CostAnnotationWriter : public AssemblyAnnotationWriter {
@@ -722,16 +728,16 @@ void CostAnnotationWriter::emitInstructionAnnot(
     // The cost of inlining of the given instruction is printed always.
     // The threshold delta is printed only when it is non-zero. It happens
     // when we decided to give a bonus at a particular instruction.
-    OS << "; cost before = " << CostThresholdMap[I].CostBefore <<
-              ", cost after = " << CostThresholdMap[I].CostAfter <<
-              ", threshold before = " << CostThresholdMap[I].ThresholdBefore <<
-              ", threshold after = " << CostThresholdMap[I].ThresholdAfter <<
-              ", ";
-    OS << "cost delta = " << CostThresholdMap[I].CostAfter -
-                                CostThresholdMap[I].CostBefore;
-    if (CostThresholdMap[I].ThresholdAfter != CostThresholdMap[I].ThresholdBefore)
-      OS << ", threshold delta = " << CostThresholdMap[I].ThresholdAfter -
-                                CostThresholdMap[I].ThresholdBefore;
+    assert(CostThresholdMap.count(I) > 0 &&
+           "Expected each instruction to have an instruction annotation");
+    const auto &Record = CostThresholdMap[I];
+    OS << "; cost before = " << Record.CostBefore
+       << ", cost after = " << Record.CostAfter
+       << ", threshold before = " << Record.ThresholdBefore
+       << ", threshold after = " << Record.ThresholdAfter << ", ";
+    OS << "cost delta = " << Record.getCostDelta();
+    if (Record.hasThresholdChanged())
+      OS << ", threshold delta = " << Record.getThresholdDelta();
     OS << "\n";
 }
 
@@ -1167,7 +1173,7 @@ bool InlineCostCallAnalyzer::isColdCallSite(CallBase &Call,
   // If global profile summary is available, then callsite's coldness is
   // determined based on that.
   if (PSI && PSI->hasProfileSummary())
-    return PSI->isColdCallSite(CallSite(&Call), CallerBFI);
+    return PSI->isColdCallSite(Call, CallerBFI);
 
   // Otherwise we need BFI to be available.
   if (!CallerBFI)
@@ -1191,8 +1197,7 @@ InlineCostCallAnalyzer::getHotCallSiteThreshold(CallBase &Call,
 
   // If global profile summary is available, then callsite's hotness is
   // determined based on that.
-  if (PSI && PSI->hasProfileSummary() &&
-      PSI->isHotCallSite(CallSite(&Call), CallerBFI))
+  if (PSI && PSI->hasProfileSummary() && PSI->isHotCallSite(Call, CallerBFI))
     return Params.HotCallSiteThreshold;
 
   // Otherwise we need BFI to be available and to have a locally hot callsite
