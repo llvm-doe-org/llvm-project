@@ -83,8 +83,6 @@ def main(builtin_params={}):
 
     filtered_tests = filtered_tests[:opts.max_tests]
 
-    opts.workers = min(len(filtered_tests), opts.workers)
-
     start = time.time()
     run_tests(filtered_tests, lit_config, opts, len(discovered_tests))
     elapsed = time.time() - start
@@ -190,14 +188,16 @@ def filter_by_shard(tests, run, shards, lit_config):
 
 
 def run_tests(tests, lit_config, opts, discovered_tests):
+    workers = min(len(tests), opts.workers)
     display = lit.display.create_display(opts, len(tests), discovered_tests,
-                                         opts.workers)
+                                         workers)
+
     def progress_callback(test):
         display.update(test)
         if opts.order == 'failing-first':
             touch_file(test)
 
-    run = lit.run.Run(tests, lit_config, opts.workers, progress_callback,
+    run = lit.run.Run(tests, lit_config, workers, progress_callback,
                       opts.max_failures, opts.timeout)
 
     display.print_header()
@@ -252,29 +252,34 @@ def print_histogram(tests):
     lit.util.printHistogram(test_times, title='Tests')
 
 
+def add_result_category(result_code, label):
+    assert isinstance(result_code, lit.Test.ResultCode)
+    category = (result_code, "%s Tests" % label, label)
+    result_codes.append(category)
+
+
 # Status code, summary label, group label
-failure_codes = [
+result_codes = [
+    # Passes
+    (lit.Test.SKIPPED,     'Skipped Tests',       'Skipped'),
+    (lit.Test.UNSUPPORTED, 'Unsupported Tests',   'Unsupported'),
+    (lit.Test.PASS,        'Expected Passes',     ''),
+    (lit.Test.FLAKYPASS,   'Passes With Retry',   ''),
+    (lit.Test.XFAIL,       'Expected Failures',   'Expected Failing'),
+    # Failures
     (lit.Test.UNRESOLVED,  'Unresolved Tests',    'Unresolved'),
     (lit.Test.TIMEOUT,     'Individual Timeouts', 'Timed Out'),
     (lit.Test.FAIL,        'Unexpected Failures', 'Failing'),
     (lit.Test.XPASS,       'Unexpected Passes',   'Unexpected Passing')
 ]
 
-all_codes = [
-    (lit.Test.SKIPPED,     'Skipped Tests',     'Skipped'),
-    (lit.Test.UNSUPPORTED, 'Unsupported Tests', 'Unsupported'),
-    (lit.Test.PASS,        'Expected Passes',   ''),
-    (lit.Test.FLAKYPASS,   'Passes With Retry', ''),
-    (lit.Test.XFAIL,       'Expected Failures', 'Expected Failing'),
-] + failure_codes
-
 
 def print_results(tests, elapsed, opts):
-    tests_by_code = {code: [] for (code, _, _) in all_codes}
+    tests_by_code = {code: [] for (code, _, _) in result_codes}
     for test in tests:
         tests_by_code[test.result.code].append(test)
 
-    for (code, _, group_label) in all_codes:
+    for (code, _, group_label) in result_codes:
         print_group(code, group_label, tests_by_code[code], opts)
 
     print_summary(tests_by_code, opts.quiet, elapsed)
@@ -300,7 +305,7 @@ def print_summary(tests_by_code, quiet, elapsed):
     if not quiet:
         print('\nTesting Time: %.2fs' % elapsed)
 
-    codes = failure_codes if quiet else all_codes
+    codes = [c for c in result_codes if not quiet or c.isFailure]
     groups = [(label, len(tests_by_code[code])) for code, label, _ in codes]
     groups = [(label, count) for label, count in groups if count]
     if not groups:

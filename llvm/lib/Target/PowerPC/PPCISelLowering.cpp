@@ -55,7 +55,6 @@
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/ValueTypes.h"
-#include "llvm/IR/CallSite.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
@@ -2589,6 +2588,11 @@ bool PPCTargetLowering::SelectAddressRegRegOnly(SDValue N, SDValue &Base,
   return true;
 }
 
+template <typename Ty> static bool isValidPCRelNode(SDValue N) {
+  Ty *PCRelCand = dyn_cast<Ty>(N);
+  return PCRelCand && (PCRelCand->getTargetFlags() & PPCII::MO_PCREL_FLAG);
+}
+
 /// Returns true if this address is a PC Relative address.
 /// PC Relative addresses are marked with the flag PPCII::MO_PCREL_FLAG
 /// or if the node opcode is PPCISD::MAT_PCREL_ADDR.
@@ -2597,12 +2601,11 @@ bool PPCTargetLowering::SelectAddressPCRel(SDValue N, SDValue &Base) const {
   Base = N;
   if (N.getOpcode() == PPCISD::MAT_PCREL_ADDR)
     return true;
-  if (ConstantPoolSDNode *CPN = dyn_cast<ConstantPoolSDNode>(N))
-    if (CPN->getTargetFlags() & PPCII::MO_PCREL_FLAG)
-      return true;
-  if (GlobalAddressSDNode *GAN = dyn_cast<GlobalAddressSDNode>(N))
-    if (GAN->getTargetFlags() & PPCII::MO_PCREL_FLAG)
-      return true;
+  if (isValidPCRelNode<ConstantPoolSDNode>(N) ||
+      isValidPCRelNode<GlobalAddressSDNode>(N) ||
+      isValidPCRelNode<JumpTableSDNode>(N) ||
+      isValidPCRelNode<BlockAddressSDNode>(N))
+    return true;
   return false;
 }
 
@@ -2811,7 +2814,7 @@ SDValue PPCTargetLowering::LowerConstantPool(SDValue Op,
   // 64-bit SVR4 ABI and AIX ABI code are always position-independent.
   // The actual address of the GlobalValue is stored in the TOC.
   if (Subtarget.is64BitELFABI() || Subtarget.isAIXABI()) {
-    if (Subtarget.hasPCRelativeMemops()) {
+    if (Subtarget.isUsingPCRelativeCalls()) {
       SDLoc DL(CP);
       EVT Ty = getPointerTy(DAG.getDataLayout());
       SDValue ConstPool = DAG.getTargetConstantPool(C, Ty,
@@ -2895,6 +2898,16 @@ SDValue PPCTargetLowering::LowerJumpTable(SDValue Op, SelectionDAG &DAG) const {
   EVT PtrVT = Op.getValueType();
   JumpTableSDNode *JT = cast<JumpTableSDNode>(Op);
 
+  // isUsingPCRelativeCalls() returns true when PCRelative is enabled
+  if (Subtarget.isUsingPCRelativeCalls()) {
+    SDLoc DL(JT);
+    EVT Ty = getPointerTy(DAG.getDataLayout());
+    SDValue GA =
+        DAG.getTargetJumpTable(JT->getIndex(), Ty, PPCII::MO_PCREL_FLAG);
+    SDValue MatAddr = DAG.getNode(PPCISD::MAT_PCREL_ADDR, DL, Ty, GA);
+    return MatAddr;
+  }
+
   // 64-bit SVR4 ABI and AIX ABI code are always position-independent.
   // The actual address of the GlobalValue is stored in the TOC.
   if (Subtarget.is64BitELFABI() || Subtarget.isAIXABI()) {
@@ -2923,6 +2936,16 @@ SDValue PPCTargetLowering::LowerBlockAddress(SDValue Op,
   EVT PtrVT = Op.getValueType();
   BlockAddressSDNode *BASDN = cast<BlockAddressSDNode>(Op);
   const BlockAddress *BA = BASDN->getBlockAddress();
+
+  // isUsingPCRelativeCalls() returns true when PCRelative is enabled
+  if (Subtarget.isUsingPCRelativeCalls()) {
+    SDLoc DL(BASDN);
+    EVT Ty = getPointerTy(DAG.getDataLayout());
+    SDValue GA = DAG.getTargetBlockAddress(BA, Ty, BASDN->getOffset(),
+                                           PPCII::MO_PCREL_FLAG);
+    SDValue MatAddr = DAG.getNode(PPCISD::MAT_PCREL_ADDR, DL, Ty, GA);
+    return MatAddr;
+  }
 
   // 64-bit SVR4 ABI and AIX ABI code are always position-independent.
   // The actual BlockAddress is stored in the TOC.
@@ -4757,16 +4780,6 @@ bool PPCTargetLowering::IsEligibleForTailCallOptimization_64SVR4(
     const SmallVectorImpl<ISD::InputArg> &Ins, SelectionDAG &DAG) const {
   bool TailCallOpt = getTargetMachine().Options.GuaranteedTailCallOpt;
 
-  // FIXME: Tail calls are currently disabled when using PC Relative addressing.
-  // The issue is that PC Relative is only partially implemented and so there
-  // is currently a mix of functions that require the TOC and functions that do
-  // not require it. If we have A calls B calls C and both A and B require the
-  // TOC and C does not and is marked as clobbering R2 then it is not safe for
-  // B to tail call C. Since we do not have the information of whether or not
-  // a funciton needs to use the TOC here in this function we need to be
-  // conservatively safe and disable all tail calls for now.
-  if (Subtarget.isUsingPCRelativeCalls()) return false;
-
   if (DisableSCO && !TailCallOpt) return false;
 
   // Variadic argument functions are not supported.
@@ -4806,15 +4819,22 @@ bool PPCTargetLowering::IsEligibleForTailCallOptimization_64SVR4(
       needStackSlotPassParameters(Subtarget, Outs))
     return false;
 
-  // No TCO/SCO on indirect call because Caller have to restore its TOC
-  if (!isFunctionGlobalAddress(Callee) &&
-      !isa<ExternalSymbolSDNode>(Callee))
+  // All variants of 64-bit ELF ABIs without PC-Relative addressing require that
+  // the caller and callee share the same TOC for TCO/SCO. If the caller and
+  // callee potentially have different TOC bases then we cannot tail call since
+  // we need to restore the TOC pointer after the call.
+  // ref: https://bugzilla.mozilla.org/show_bug.cgi?id=973977
+  // We cannot guarantee this for indirect calls or calls to external functions.
+  // When PC-Relative addressing is used, the concept of the TOC is no longer
+  // applicable so this check is not required.
+  // Check first for indirect calls.
+  if (!Subtarget.isUsingPCRelativeCalls() &&
+      !isFunctionGlobalAddress(Callee) && !isa<ExternalSymbolSDNode>(Callee))
     return false;
 
-  // If the caller and callee potentially have different TOC bases then we
-  // cannot tail call since we need to restore the TOC pointer after the call.
-  // ref: https://bugzilla.mozilla.org/show_bug.cgi?id=973977
-  if (!callsShareTOCBase(&Caller, Callee, getTargetMachine()))
+  // Check if we share the TOC base.
+  if (!Subtarget.isUsingPCRelativeCalls() &&
+      !callsShareTOCBase(&Caller, Callee, getTargetMachine()))
     return false;
 
   // TCO allows altering callee ABI, so we don't have to check further.
@@ -4826,11 +4846,14 @@ bool PPCTargetLowering::IsEligibleForTailCallOptimization_64SVR4(
   // If callee use the same argument list that caller is using, then we can
   // apply SCO on this case. If it is not, then we need to check if callee needs
   // stack for passing arguments.
-  assert(CB && "Expected to have a CallBase!");
-  if (!hasSameArgumentList(&Caller, *CB) &&
-      needStackSlotPassParameters(Subtarget, Outs)) {
+  // PC Relative tail calls may not have a CallBase.
+  // If there is no CallBase we cannot verify if we have the same argument
+  // list so assume that we don't have the same argument list.
+  if (CB && !hasSameArgumentList(&Caller, *CB) &&
+      needStackSlotPassParameters(Subtarget, Outs))
     return false;
-  }
+  else if (!CB && needStackSlotPassParameters(Subtarget, Outs))
+    return false;
 
   return true;
 }
@@ -5140,6 +5163,12 @@ static bool isIndirectCall(const SDValue &Callee, SelectionDAG &DAG,
   return true;
 }
 
+// AIX and 64-bit ELF ABIs w/o PCRel require a TOC save/restore around calls.
+static inline bool isTOCSaveRestoreRequired(const PPCSubtarget &Subtarget) {
+  return Subtarget.isAIXABI() ||
+         (Subtarget.is64BitELFABI() && !Subtarget.isUsingPCRelativeCalls());
+}
+
 static unsigned getCallOpcode(PPCTargetLowering::CallFlags CFlags,
                               const Function &Caller,
                               const SDValue &Callee,
@@ -5156,20 +5185,12 @@ static unsigned getCallOpcode(PPCTargetLowering::CallFlags CFlags,
     // pointer is modeled by using a pseudo instruction for the call opcode that
     // represents the 2 instruction sequence of an indirect branch and link,
     // immediately followed by a load of the TOC pointer from the the stack save
-    // slot into gpr2.
-    if (Subtarget.isAIXABI() || Subtarget.is64BitELFABI())
-      return PPCISD::BCTRL_LOAD_TOC;
-
-    // An indirect call that does not need a TOC restore.
-    return PPCISD::BCTRL;
+    // slot into gpr2. For 64-bit ELFv2 ABI with PCRel, do not restore the TOC
+    // as it is not saved or used.
+    return isTOCSaveRestoreRequired(Subtarget) ? PPCISD::BCTRL_LOAD_TOC
+                                               : PPCISD::BCTRL;
   }
 
-  // FIXME: At this moment indirect calls are treated ahead of the
-  // PC Relative condition because binaries can still contain a possible
-  // mix of functions that use a TOC and functions that do not use a TOC.
-  // Once the PC Relative feature is complete this condition should be moved
-  // up ahead of the indirect calls and should return a PPCISD::BCTRL for
-  // that case.
   if (Subtarget.isUsingPCRelativeCalls()) {
     assert(Subtarget.is64BitELFABI() && "PC Relative is only on ELF ABI.");
     return PPCISD::CALL_NOTOC;
@@ -5347,7 +5368,7 @@ static void prepareDescriptorIndirectCall(SelectionDAG &DAG, SDValue &Callee,
                          MachineMemOperand::MOInvariant)
                       : MachineMemOperand::MONone;
 
-  MachinePointerInfo MPI(CB ? CB->getCalledValue() : nullptr);
+  MachinePointerInfo MPI(CB ? CB->getCalledOperand() : nullptr);
 
   // Registers used in building the DAG.
   const MCRegister EnvPtrReg = Subtarget.getEnvironmentPointerRegister();
@@ -5427,7 +5448,9 @@ buildCallOperands(SmallVectorImpl<SDValue> &Ops,
     // pointer from the linkage area. The operand for the TOC restore is an add
     // of the TOC save offset to the stack pointer. This must be the second
     // operand: after the chain input but before any other variadic arguments.
-    if (Subtarget.is64BitELFABI() || Subtarget.isAIXABI()) {
+    // For 64-bit ELFv2 ABI with PCRel, do not restore the TOC as it is not
+    // saved or used.
+    if (isTOCSaveRestoreRequired(Subtarget)) {
       const MCRegister StackPtrReg = Subtarget.getStackPointerRegister();
 
       SDValue StackPtr = DAG.getRegister(StackPtrReg, RegVT);
@@ -5511,13 +5534,18 @@ SDValue PPCTargetLowering::FinishCall(
 
   // Emit tail call.
   if (CFlags.IsTailCall) {
+    // Indirect tail call when using PC Relative calls do not have the same
+    // constraints.
     assert(((Callee.getOpcode() == ISD::Register &&
              cast<RegisterSDNode>(Callee)->getReg() == PPC::CTR) ||
             Callee.getOpcode() == ISD::TargetExternalSymbol ||
             Callee.getOpcode() == ISD::TargetGlobalAddress ||
-            isa<ConstantSDNode>(Callee)) &&
-           "Expecting a global address, external symbol, absolute value or "
-           "register");
+            isa<ConstantSDNode>(Callee) ||
+            (CFlags.IsIndirect && Subtarget.isUsingPCRelativeCalls())) &&
+           "Expecting a global address, external symbol, absolute value, "
+           "register or an indirect tail call when PC Relative calls are "
+           "used.");
+    // PC Relative calls also use TC_RETURN as the way to mark tail calls.
     assert(CallOpc == PPCISD::TC_RETURN &&
            "Unexpected call opcode for a tail call.");
     DAG.getMachineFunction().getFrameInfo().setHasTailCall();
@@ -5575,17 +5603,19 @@ PPCTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       if (!getTargetMachine().Options.GuaranteedTailCallOpt)
         ++NumSiblingCalls;
 
-      assert(isa<GlobalAddressSDNode>(Callee) &&
+      // PC Relative calls no longer guarantee that the callee is a Global
+      // Address Node. The callee could be an indirect tail call in which
+      // case the SDValue for the callee could be a load (to load the address
+      // of a function pointer) or it may be a register copy (to move the
+      // address of the callee from a function parameter into a virtual
+      // register). It may also be an ExternalSymbolSDNode (ex memcopy).
+      assert((Subtarget.isUsingPCRelativeCalls() ||
+              isa<GlobalAddressSDNode>(Callee)) &&
              "Callee should be an llvm::Function object.");
-      LLVM_DEBUG(
-          const GlobalValue *GV =
-              cast<GlobalAddressSDNode>(Callee)->getGlobal();
-          const unsigned Width =
-              80 - strlen("TCO caller: ") - strlen(", callee linkage: 0, 0");
-          dbgs() << "TCO caller: "
-                 << left_justify(DAG.getMachineFunction().getName(), Width)
-                 << ", callee linkage: " << GV->getVisibility() << ", "
-                 << GV->getLinkage() << "\n");
+
+      LLVM_DEBUG(dbgs() << "TCO caller: " << DAG.getMachineFunction().getName()
+                        << "\nTCO callee: ");
+      LLVM_DEBUG(Callee.dump());
     }
   }
 
@@ -6497,17 +6527,21 @@ SDValue PPCTargetLowering::LowerCall_64SVR4(
   // See prepareDescriptorIndirectCall and buildCallOperands for more
   // information about calls through function pointers in the 64-bit SVR4 ABI.
   if (CFlags.IsIndirect) {
-    assert(!CFlags.IsTailCall &&  "Indirect tails calls not supported");
-    // Load r2 into a virtual register and store it to the TOC save area.
-    setUsesTOCBasePtr(DAG);
-    SDValue Val = DAG.getCopyFromReg(Chain, dl, PPC::X2, MVT::i64);
-    // TOC save area offset.
-    unsigned TOCSaveOffset = Subtarget.getFrameLowering()->getTOCSaveOffset();
-    SDValue PtrOff = DAG.getIntPtrConstant(TOCSaveOffset, dl);
-    SDValue AddPtr = DAG.getNode(ISD::ADD, dl, PtrVT, StackPtr, PtrOff);
-    Chain = DAG.getStore(
-        Val.getValue(1), dl, Val, AddPtr,
-        MachinePointerInfo::getStack(DAG.getMachineFunction(), TOCSaveOffset));
+    // For 64-bit ELFv2 ABI with PCRel, do not save the TOC of the
+    // caller in the TOC save area.
+    if (isTOCSaveRestoreRequired(Subtarget)) {
+      assert(!CFlags.IsTailCall && "Indirect tails calls not supported");
+      // Load r2 into a virtual register and store it to the TOC save area.
+      setUsesTOCBasePtr(DAG);
+      SDValue Val = DAG.getCopyFromReg(Chain, dl, PPC::X2, MVT::i64);
+      // TOC save area offset.
+      unsigned TOCSaveOffset = Subtarget.getFrameLowering()->getTOCSaveOffset();
+      SDValue PtrOff = DAG.getIntPtrConstant(TOCSaveOffset, dl);
+      SDValue AddPtr = DAG.getNode(ISD::ADD, dl, PtrVT, StackPtr, PtrOff);
+      Chain = DAG.getStore(Val.getValue(1), dl, Val, AddPtr,
+                           MachinePointerInfo::getStack(
+                               DAG.getMachineFunction(), TOCSaveOffset));
+    }
     // In the ELFv2 ABI, R12 must contain the address of an indirect callee.
     // This does not mean the MTCTR instruction must use R12; it's easier
     // to model this as an extra parameter, so do that.
@@ -7198,20 +7232,24 @@ SDValue PPCTargetLowering::LowerFormalArguments_AIX(
       unsigned Offset = 0;
       HandleRegLoc(VA.getLocReg(), Offset);
       Offset += PtrByteSize;
-      for (; Offset != StackSize; Offset += PtrByteSize) {
-        assert(I != End &&
-               "Expecting enough RegLocs to copy entire ByVal arg.");
-
-        if (!ArgLocs[I].isRegLoc())
-          report_fatal_error("Passing ByVals split between registers and stack "
-                             "not yet implemented.");
-
+      for (; Offset != StackSize && ArgLocs[I].isRegLoc();
+           Offset += PtrByteSize) {
         assert(ArgLocs[I].getValNo() == VA.getValNo() &&
-               "Expecting more RegLocs for ByVal argument.");
+               "RegLocs should be for ByVal argument.");
 
         const CCValAssign RL = ArgLocs[I++];
         HandleRegLoc(RL.getLocReg(), Offset);
       }
+
+      if (Offset != StackSize) {
+        assert(ArgLocs[I].getValNo() == VA.getValNo() &&
+               "Expected MemLoc for remaining bytes.");
+        assert(ArgLocs[I].isMemLoc() && "Expected MemLoc for remaining bytes.");
+        // Consume the MemLoc.The InVal has already been emitted, so nothing
+        // more needs to be done.
+        ++I;
+      }
+
       continue;
     }
 

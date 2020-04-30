@@ -130,7 +130,6 @@ class Configuration(object):
         self.configure_obj_root()
         self.configure_cxx_stdlib_under_test()
         self.configure_cxx_library_root()
-        self.configure_use_clang_verify()
         self.configure_use_thread_safety()
         self.configure_ccache()
         self.configure_compile_flags()
@@ -323,16 +322,6 @@ class Configuration(object):
             if self.get_lit_conf('enable_experimental') is None:
                 self.config.enable_experimental = 'true'
 
-    def configure_use_clang_verify(self):
-        '''If set, run clang with -verify on failing tests.'''
-        self.use_clang_verify = self.get_lit_bool('use_clang_verify')
-        if self.use_clang_verify is None:
-            # NOTE: We do not test for the -verify flag directly because
-            #   -verify will always exit with non-zero on an empty file.
-            self.use_clang_verify = self.cxx.isVerifySupported()
-            self.lit_config.note(
-                "inferred use_clang_verify as: %r" % self.use_clang_verify)
-
     def configure_use_thread_safety(self):
         '''If set, run clang with -verify on failing tests.'''
         has_thread_safety = self.cxx.hasCompileFlag('-Werror=thread-safety')
@@ -424,6 +413,9 @@ class Configuration(object):
         if '__cpp_concepts' not in macros or \
                 intMacroValue(macros['__cpp_concepts']) < 201811:
             self.config.available_features.add('libcpp-no-concepts')
+
+        if sys.platform.lower().strip() == 'win32':
+            self.config.available_features.add('host-windows')
 
         if self.target_info.is_windows():
             self.config.available_features.add('windows')
@@ -650,7 +642,7 @@ class Configuration(object):
     def configure_compile_flags_exceptions(self):
         enable_exceptions = self.get_lit_bool('enable_exceptions', True)
         if not enable_exceptions:
-            self.config.available_features.add('libcpp-no-exceptions')
+            self.config.available_features.add('no-exceptions')
             self.cxx.compile_flags += ['-fno-exceptions']
 
     def configure_compile_flags_rtti(self):

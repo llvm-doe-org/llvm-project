@@ -650,8 +650,7 @@ SizeOffsetType ObjectSizeOffsetVisitor::visitAllocaInst(AllocaInst &I) {
   if (!I.getAllocatedType()->isSized())
     return unknown();
 
-  if (I.getAllocatedType()->isVectorTy() &&
-      cast<VectorType>(I.getAllocatedType())->isScalable())
+  if (isa<ScalableVectorType>(I.getAllocatedType()))
     return unknown();
 
   APInt Size(IntTyBits, DL.getTypeAllocSize(I.getAllocatedType()));
@@ -674,7 +673,7 @@ SizeOffsetType ObjectSizeOffsetVisitor::visitAllocaInst(AllocaInst &I) {
 
 SizeOffsetType ObjectSizeOffsetVisitor::visitArgument(Argument &A) {
   // No interprocedural analysis is done at the moment.
-  if (!A.hasByValOrInAllocaAttr()) {
+  if (!A.hasPassPointeeByValueAttr()) {
     ++ObjectVisitorArgument;
     return unknown();
   }
