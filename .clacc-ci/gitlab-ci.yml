@@ -169,7 +169,8 @@ z-cleanup-all-builds:
            -DGCC_INSTALL_PREFIX=$GCC_DIR
            -DLLVM_ENABLE_PROJECTS='clang;openmp'
            -DPYTHON_EXECUTABLE=$PYTHON_EXECUTABLE
-           -DCLANG_ACC_TEST_EXE_X86_64=False
+           -DCLANG_ACC_TEST_EXE_X86_64=True
+           -DCLANG_ACC_TEST_EXE_PPC64LE=False
            -DCLANG_ACC_TEST_EXE_NVPTX64=False
            -DLLVM_CCACHE_PARAMS="$LLVM_CCACHE_PARAMS"
            -DLLVM_LIT_ARGS='-s -vv'
