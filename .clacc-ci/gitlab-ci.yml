@@ -166,6 +166,7 @@ z-cleanup-all-builds:
            -DLLVM_USE_LINKER=gold
            -DCMAKE_C_COMPILER=gcc
            -DCMAKE_CXX_COMPILER=g++
+           -DGCC_INSTALL_PREFIX=$GCC_DIR
            -DLLVM_ENABLE_PROJECTS='clang;openmp'
            -DPYTHON_EXECUTABLE=$PYTHON_EXECUTABLE
            -DCLANG_ACC_TEST_EXE_X86_64=False
