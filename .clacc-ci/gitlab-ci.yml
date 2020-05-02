@@ -30,6 +30,7 @@
 variables:
   BUILD_DIR_PROJ: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds
   BUILD_DIR: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-$BUILD_ID
+  BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
   SRUN_ALLOCATE_FAIL: 'srun: error: Unable to allocate'
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
 
@@ -132,7 +133,18 @@ cleanup (python3):
   extends: [.python3, .cleanup]
   needs: [test-all (python3)]
 
-z-cleanup-all-builds:
+z-cleanup-pipeline-builds:
+  extends: .utility
+  stage: setup
+  when: manual
+  tags: [shell, kold]
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - echo $BUILD_DIRS
+    - rm -rf $BUILD_DIRS
+
+z-cleanup-project-builds:
   extends: .utility
   stage: setup
   when: manual
