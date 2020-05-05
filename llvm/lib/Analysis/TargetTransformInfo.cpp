@@ -11,7 +11,6 @@
 #include "llvm/Analysis/LoopIterator.h"
 #include "llvm/Analysis/TargetTransformInfoImpl.h"
 #include "llvm/IR/CFG.h"
-#include "llvm/IR/CallSite.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
@@ -179,8 +178,9 @@ unsigned TargetTransformInfo::getEstimatedNumberOfCaseClusters(
 }
 
 int TargetTransformInfo::getUserCost(const User *U,
-                                     ArrayRef<const Value *> Operands) const {
-  int Cost = TTIImpl->getUserCost(U, Operands);
+                                     ArrayRef<const Value *> Operands,
+                                     enum TargetCostKind CostKind) const {
+  int Cost = TTIImpl->getUserCost(U, Operands, CostKind);
   assert(Cost >= 0 && "TTI should not produce negative costs!");
   return Cost;
 }
@@ -368,9 +368,9 @@ bool TargetTransformInfo::useColdCCForColdCall(Function &F) const {
   return TTIImpl->useColdCCForColdCall(F);
 }
 
-unsigned TargetTransformInfo::getScalarizationOverhead(Type *Ty, bool Insert,
-                                                       bool Extract) const {
-  return TTIImpl->getScalarizationOverhead(Ty, Insert, Extract);
+unsigned TargetTransformInfo::getScalarizationOverhead(
+    Type *Ty, const APInt &DemandedElts, bool Insert, bool Extract) const {
+  return TTIImpl->getScalarizationOverhead(Ty, DemandedElts, Insert, Extract);
 }
 
 unsigned TargetTransformInfo::getOperandsScalarizationOverhead(
@@ -1153,7 +1153,7 @@ matchVectorSplittingReduction(const ExtractElementInst *ReduxRoot,
 int TargetTransformInfo::getInstructionThroughput(const Instruction *I) const {
   switch (I->getOpcode()) {
   case Instruction::GetElementPtr:
-    return getUserCost(I);
+    return getUserCost(I, TCK_RecipThroughput);
 
   case Instruction::Ret:
   case Instruction::PHI:

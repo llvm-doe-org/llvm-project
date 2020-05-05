@@ -76,7 +76,8 @@ struct PrintingPolicy {
         MSWChar(LO.MicrosoftExt && !LO.WChar), IncludeNewlines(true),
         MSVCFormatting(false), ConstantsAsWritten(false),
         SuppressImplicitBase(false), FullyQualifiedName(false),
-        PrintCanonicalTypes(false), OpenACCPrint(OpenACCPrint_ACC) {}
+        PrintCanonicalTypes(false), PrintInjectedClassNameWithArguments(true),
+	OpenACCPrint(OpenACCPrint_ACC) {}
 
   /// Adjust this printing policy for cases where it's known that we're
   /// printing C++ code (for instance, if AST dumping reaches a C++-only
@@ -256,6 +257,11 @@ struct PrintingPolicy {
 
   /// Whether to print types as written or canonically.
   unsigned PrintCanonicalTypes : 1;
+
+  /// Whether to print an InjectedClassNameType with template arguments or as
+  /// written. When a template argument is unnamed, printing it results in
+  /// invalid C++ code.
+  unsigned PrintInjectedClassNameWithArguments : 1;
 
   /// Callbacks to use to allow the behavior of printing to be customized.
   const PrintingCallbacks *Callbacks = nullptr;
