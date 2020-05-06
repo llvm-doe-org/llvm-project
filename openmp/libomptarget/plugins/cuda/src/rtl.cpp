@@ -748,13 +748,12 @@ public:
     return OFFLOAD_SUCCESS;
   }
 
-  int runTargetTeamRegion(const int DeviceId, const void *TgtEntryPtr,
-                          void **TgtArgs, ptrdiff_t *TgtOffsets,
-                          const int ArgNum, const int TeamNum,
-                          const int ThreadLimit,
-                          const unsigned int LoopTripCount,
-                          __tgt_async_info *AsyncInfo
-                          OMPT_SUPPORT_IF(, ompt_id_t target_id)) const {
+  int runTargetTeamRegion(
+      const int DeviceId, const void *TgtEntryPtr, void **TgtArgs,
+      ptrdiff_t *TgtOffsets, const int ArgNum, const int TeamNum,
+      const int ThreadLimit, const unsigned int LoopTripCount,
+      __tgt_async_info *AsyncInfo
+      OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) const {
     CUresult Err = cuCtxSetCurrent(DeviceData[DeviceId].Context);
     if (!checkResult(Err, "Error returned from cuCtxSetCurrent\n"))
       return OFFLOAD_FAIL;
@@ -842,20 +841,20 @@ public:
     }
 
 #if OMPT_SUPPORT
-  // OpenMP 5.0 sec. 2.12.5 p. 173 L26-27:
-  // "The target-submit event occurs prior to creating an initial task on a
-  // target device for a target region."
-  // OpenMP 5.0 sec. 4.5.2.28 p. 495 L2-3:
-  // "A thread dispatches a registered ompt_callback_target_submit callback on
-  // the host when a target task creates an initial task on a target device."
-  if (ompt_get_enabled().ompt_callback_target_submit) {
-    // FIXME: We don't yet need the host_op_id argument for OpenACC support,
-    // so we haven't bothered to implement it yet.
-    ompt_get_callbacks().ompt_callback(ompt_callback_target_submit)(
-        /*target_id*/ target_id,
-        /*host_op_id*/ ompt_id_none,
-        /*requested_num_teams*/ TeamNum);
-  }
+    // OpenMP 5.0 sec. 2.12.5 p. 173 L26-27:
+    // "The target-submit event occurs prior to creating an initial task on a
+    // target device for a target region."
+    // OpenMP 5.0 sec. 4.5.2.28 p. 495 L2-3:
+    // "A thread dispatches a registered ompt_callback_target_submit callback on
+    // the host when a target task creates an initial task on a target device."
+    if (ompt_api->ompt_get_enabled().ompt_callback_target_submit) {
+      // FIXME: We don't yet need the host_op_id argument for OpenACC support,
+      // so we haven't bothered to implement it yet.
+      ompt_api->ompt_get_callbacks().ompt_callback(ompt_callback_target_submit)(
+          /*target_id*/ ompt_api->target_id,
+          /*host_op_id*/ ompt_id_none,
+          /*requested_num_teams*/ TeamNum);
+    }
 #endif
 
     // Run on the device.
@@ -871,14 +870,14 @@ public:
       return OFFLOAD_FAIL;
 
 #if OMPT_SUPPORT
-  if (ompt_get_enabled().ompt_callback_target_submit_end) {
-    // FIXME: We don't yet need the host_op_id argument for OpenACC support,
-    // so we haven't bothered to implement it yet.
-    ompt_get_callbacks().ompt_callback(ompt_callback_target_submit_end)(
-        /*target_id*/ target_id,
-        /*host_op_id*/ ompt_id_none,
-        /*requested_num_teams*/ TeamNum);
-  }
+    if (ompt_api->ompt_get_enabled().ompt_callback_target_submit_end) {
+      // FIXME: We don't yet need the host_op_id argument for OpenACC support,
+      // so we haven't bothered to implement it yet.
+      ompt_get_callbacks().ompt_callback(ompt_callback_target_submit_end)(
+          /*target_id*/ ompt_api->target_id,
+          /*host_op_id*/ ompt_id_none,
+          /*requested_num_teams*/ TeamNum);
+    }
 #endif
 
     DP("Launch of entry point at " DPxMOD " successful!\n",
@@ -1004,13 +1003,13 @@ int32_t __tgt_rtl_run_target_team_region(
     int32_t device_id, void *tgt_entry_ptr, void **tgt_args,
     ptrdiff_t *tgt_offsets, int32_t arg_num, int32_t team_num,
     int32_t thread_limit, uint64_t loop_tripcount
-    OMPT_SUPPORT_IF(, ompt_id_t target_id)) {
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(DeviceRTL.isValidDeviceId(device_id) && "device_id is invalid");
 
   __tgt_async_info async_info;
   const int32_t rc = __tgt_rtl_run_target_team_region_async(
       device_id, tgt_entry_ptr, tgt_args, tgt_offsets, arg_num, team_num,
-      thread_limit, loop_tripcount, &async_info OMPT_SUPPORT_IF(, target_id));
+      thread_limit, loop_tripcount, &async_info OMPT_SUPPORT_IF(, ompt_api));
   if (rc != OFFLOAD_SUCCESS)
     return OFFLOAD_FAIL;
 
@@ -1021,25 +1020,26 @@ int32_t __tgt_rtl_run_target_team_region_async(
     int32_t device_id, void *tgt_entry_ptr, void **tgt_args,
     ptrdiff_t *tgt_offsets, int32_t arg_num, int32_t team_num,
     int32_t thread_limit, uint64_t loop_tripcount,
-    __tgt_async_info *async_info_ptr OMPT_SUPPORT_IF(, ompt_id_t target_id)) {
+    __tgt_async_info *async_info_ptr
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(DeviceRTL.isValidDeviceId(device_id) && "device_id is invalid");
 
   return DeviceRTL.runTargetTeamRegion(
       device_id, tgt_entry_ptr, tgt_args, tgt_offsets, arg_num, team_num,
       thread_limit, loop_tripcount, async_info_ptr
-      OMPT_SUPPORT_IF(, target_id));
+      OMPT_SUPPORT_IF(, ompt_api));
 }
 
-int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
-                                    void **tgt_args, ptrdiff_t *tgt_offsets,
-                                    int32_t arg_num
-                                    OMPT_SUPPORT_IF(, ompt_id_t target_id)) {
+int32_t __tgt_rtl_run_target_region(
+    int32_t device_id, void *tgt_entry_ptr, void **tgt_args,
+    ptrdiff_t *tgt_offsets, int32_t arg_num
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(DeviceRTL.isValidDeviceId(device_id) && "device_id is invalid");
 
   __tgt_async_info async_info;
   const int32_t rc = __tgt_rtl_run_target_region_async(
       device_id, tgt_entry_ptr, tgt_args, tgt_offsets, arg_num, &async_info
-      OMPT_SUPPORT_IF(, target_id));
+      OMPT_SUPPORT_IF(, ompt_api));
   if (rc != OFFLOAD_SUCCESS)
     return OFFLOAD_FAIL;
 
@@ -1049,13 +1049,13 @@ int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
 int32_t __tgt_rtl_run_target_region_async(
     int32_t device_id, void *tgt_entry_ptr, void **tgt_args,
     ptrdiff_t *tgt_offsets, int32_t arg_num, __tgt_async_info *async_info_ptr
-    OMPT_SUPPORT_IF(, ompt_id_t target_id)) {
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(DeviceRTL.isValidDeviceId(device_id) && "device_id is invalid");
 
   return __tgt_rtl_run_target_team_region_async(
       device_id, tgt_entry_ptr, tgt_args, tgt_offsets, arg_num,
       /* team num*/ 1, /* thread_limit */ 1, /* loop_tripcount */ 0,
-      async_info_ptr OMPT_SUPPORT_IF(, target_id));
+      async_info_ptr OMPT_SUPPORT_IF(, ompt_api));
 }
 
 int32_t __tgt_rtl_synchronize(int32_t device_id,

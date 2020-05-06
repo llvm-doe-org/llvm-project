@@ -91,14 +91,15 @@ int32_t __tgt_rtl_data_delete(int32_t ID, void *TargetPtr);
 // synchronous; otherwise it is asynchronous. However, AsyncInfoPtr may be
 // ignored on some platforms, like x86_64. In that case, it is synchronous. In
 // case of success, return zero. Otherwise, return an error code.
-int32_t __tgt_rtl_run_target_region(int32_t ID, void *Entry, void **Args,
-                                    ptrdiff_t *Offsets, int32_t NumArgs
-                                    OMPT_SUPPORT_IF(, ompt_id_t target_id));
+int32_t __tgt_rtl_run_target_region(
+    int32_t ID, void *Entry, void **Args, ptrdiff_t *Offsets, int32_t NumArgs
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
 
 // Asynchronous version of __tgt_rtl_run_target_region
 int32_t __tgt_rtl_run_target_region_async(
     int32_t ID, void *Entry, void **Args, ptrdiff_t *Offsets, int32_t NumArgs,
-    __tgt_async_info *AsyncInfoPtr OMPT_SUPPORT_IF(, ompt_id_t target_id));
+    __tgt_async_info *AsyncInfoPtr
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
 
 // Similar to __tgt_rtl_run_target_region, but additionally specify the
 // number of teams to be created and a number of threads in each team. If
@@ -108,13 +109,14 @@ int32_t __tgt_rtl_run_target_region_async(
 int32_t __tgt_rtl_run_target_team_region(
     int32_t ID, void *Entry, void **Args, ptrdiff_t *Offsets, int32_t NumArgs,
     int32_t NumTeams, int32_t ThreadLimit, uint64_t loop_tripcount
-    OMPT_SUPPORT_IF(, ompt_id_t target_id));
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
 
 // Asynchronous version of __tgt_rtl_run_target_team_region
 int32_t __tgt_rtl_run_target_team_region_async(
     int32_t ID, void *Entry, void **Args, ptrdiff_t *Offsets, int32_t NumArgs,
     int32_t NumTeams, int32_t ThreadLimit, uint64_t loop_tripcount,
-    __tgt_async_info *AsyncInfoPtr OMPT_SUPPORT_IF(, ompt_id_t target_id));
+    __tgt_async_info *AsyncInfoPtr
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
 
 // Device synchronization. In case of success, return zero. Otherwise, return an
 // error code.

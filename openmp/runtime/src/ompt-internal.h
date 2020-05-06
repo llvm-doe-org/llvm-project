@@ -139,6 +139,26 @@ void ompt_record_device_init(int32_t device_num) OMPT_LIBOMPTARGET_WEAK;
 void ompt_toggle_in_device_target_region() OMPT_LIBOMPTARGET_WEAK;
 extern ompt_directive_info_t ompt_directive_info;
 
+// This struct is passed into target plugins where they require target_id or
+// OMPT functions from libomp.so.  Target plugins must call such functions via
+// this struct rather than depend on weak linking of them (above), or else
+// openmp/libomptarget/test/offloading/dynamic_module_load.c will fail.
+// However, weak linking of the above functions is still required so that
+// libomptarget.so can see them and assign the fields of this struct.
+//
+// The issue is that, target plugins successfully link against such libomp.so
+// functions when the OpenMP application and thus libomp.so and libomptarget.so
+// are not dlopened.  However, if the OpenMP application is dlopened, as in the
+// aforementioned test case, then libomp.so symbols are not visible to target
+// plugins.
+//
+// TODO: Is there a better way to do this?
+typedef struct {
+  ompt_id_t target_id;
+  ompt_callbacks_active_t (*ompt_get_enabled)(void);
+  ompt_callbacks_internal_t (*ompt_get_callbacks)(void);
+} ompt_plugin_api_t;
+
 #if KMP_OS_WINDOWS
 #define UNLIKELY(x) (x)
 #define OMPT_NOINLINE __declspec(noinline)

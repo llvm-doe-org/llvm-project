@@ -216,17 +216,19 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
       // ompt_target_data_associate should follow the callback for
       // ompt_target_data_alloc to reflect the order in which these events must
       // occur.
-      if (ompt_get_enabled().ompt_callback_target_data_op) {
+      if (OmptApi.ompt_get_enabled().ompt_callback_target_data_op) {
         // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
         // OpenACC support, so we haven't bothered to implement them yet.
-        ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-            TargetID, /*host_op_id*/ ompt_id_none, ompt_target_data_alloc,
-            HstPtrBegin, HOST_DEVICE, (void *)tp, DeviceID, Size,
-            /*codeptr_ra*/ NULL);
-        ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-            TargetID, /*host_op_id*/ ompt_id_none, ompt_target_data_associate,
-            HstPtrBegin, HOST_DEVICE, (void *)tp, DeviceID, Size,
-            /*codeptr_ra*/ NULL);
+        OmptApi.ompt_get_callbacks().ompt_callback(
+            ompt_callback_target_data_op)(
+            OmptApi.target_id, /*host_op_id*/ ompt_id_none,
+            ompt_target_data_alloc, HstPtrBegin, HOST_DEVICE, (void *)tp,
+            DeviceID, Size, /*codeptr_ra*/ NULL);
+        OmptApi.ompt_get_callbacks().ompt_callback(
+            ompt_callback_target_data_op)(
+            OmptApi.target_id, /*host_op_id*/ ompt_id_none,
+            ompt_target_data_associate, HstPtrBegin, HOST_DEVICE, (void *)tp,
+            DeviceID, Size, /*codeptr_ra*/ NULL);
       }
 #endif
       DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD ", "
@@ -327,17 +329,19 @@ int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size, bool ForceDelete,
       // logically occur, even if that's not how the underlying actions are
       // coded here.  Moreover, this ordering is for symmetry with
       // ompt_target_data_alloc and ompt_target_data_associate.
-      if (ompt_get_enabled().ompt_callback_target_data_op) {
+      if (OmptApi.ompt_get_enabled().ompt_callback_target_data_op) {
         // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
         // OpenACC support, so we haven't bothered to implement them yet.
-        ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-            TargetID, /*host_op_id*/ ompt_id_none,
+        OmptApi.ompt_get_callbacks().ompt_callback(
+            ompt_callback_target_data_op)(
+            OmptApi.target_id, /*host_op_id*/ ompt_id_none,
             ompt_target_data_disassociate, HstPtrBegin, HOST_DEVICE,
             (void *)HT.TgtPtrBegin, DeviceID, Size, /*codeptr_ra*/ NULL);
-        ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-            TargetID, /*host_op_id*/ ompt_id_none, ompt_target_data_delete,
-            HstPtrBegin, HOST_DEVICE, (void *)HT.TgtPtrBegin, DeviceID, Size,
-            /*codeptr_ra*/ NULL);
+        OmptApi.ompt_get_callbacks().ompt_callback(
+            ompt_callback_target_data_op)(
+            OmptApi.target_id, /*host_op_id*/ ompt_id_none,
+            ompt_target_data_delete, HstPtrBegin, HOST_DEVICE,
+            (void *)HT.TgtPtrBegin, DeviceID, Size, /*codeptr_ra*/ NULL);
       }
 #endif
       RTL->data_delete(RTLDeviceID, (void *)HT.TgtPtrBegin);
@@ -362,9 +366,10 @@ void DeviceTy::init() {
 #if OMPT_SUPPORT
   // FIXME: Is this the right place for this event?  Should it include global
   // data mapping in CheckDeviceAndCtors in omptarget.cpp?
-  if (ompt_get_enabled().ompt_callback_device_initialize_start) {
+  if (OmptApi.ompt_get_enabled().ompt_callback_device_initialize_start) {
     // FIXME: Lots of missing info is needed here.
-    ompt_get_callbacks().ompt_callback(ompt_callback_device_initialize_start)(
+    OmptApi.ompt_get_callbacks().ompt_callback(
+        ompt_callback_device_initialize_start)(
         /*device_num*/ DeviceID,
         /*type*/ "<device type tracking is not yet implemented>",
         /*device*/ NULL,
@@ -391,16 +396,16 @@ void DeviceTy::init() {
   // "The OpenMP implementation invokes this callback after OpenMP is
   // initialized for the device but before execution of any OpenMP construct is
   // started on the device."
-  if (ompt_get_enabled().ompt_callback_device_initialize) {
+  if (OmptApi.ompt_get_enabled().ompt_callback_device_initialize) {
     // FIXME: Lots of missing info is needed here.
-    ompt_get_callbacks().ompt_callback(ompt_callback_device_initialize)(
+    OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_device_initialize)(
         /*device_num*/ DeviceID,
         /*type*/ "<device type tracking is not yet implemented>",
         /*device*/ NULL,
         /*lookup*/ NULL,
         /*documentation*/ NULL);
   }
-  if (ompt_get_enabled().enabled)
+  if (OmptApi.ompt_get_enabled().enabled)
     ompt_record_device_init(DeviceID);
 #endif
 }
@@ -443,14 +448,13 @@ int32_t DeviceTy::data_submit(void *TgtPtrBegin, void *HstPtrBegin,
   // "A registered ompt_callback_target_data_op callback is dispatched when
   // device memory is allocated or freed, as well as when data is copied to or
   // from a device."
-  if (ompt_get_enabled().ompt_callback_target_data_op) {
+  if (OmptApi.ompt_get_enabled().ompt_callback_target_data_op) {
     // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
     // OpenACC support, so we haven't bothered to implement them yet.
-    ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-        TargetID, /*host_op_id*/ ompt_id_none,
-        ompt_target_data_transfer_to_device,
-        HstPtrBegin, HOST_DEVICE, TgtPtrBegin, DeviceID, Size,
-        /*codeptr_ra*/ NULL);
+    OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+        OmptApi.target_id, /*host_op_id*/ ompt_id_none,
+        ompt_target_data_transfer_to_device, HstPtrBegin, HOST_DEVICE,
+        TgtPtrBegin, DeviceID, Size, /*codeptr_ra*/ NULL);
   }
 #endif
   if (!AsyncInfoPtr || !RTL->data_submit_async || !RTL->synchronize)
@@ -474,14 +478,13 @@ int32_t DeviceTy::data_retrieve(void *HstPtrBegin, void *TgtPtrBegin,
   // "A registered ompt_callback_target_data_op callback is dispatched when
   // device memory is allocated or freed, as well as when data is copied to or
   // from a device."
-  if (ompt_get_enabled().ompt_callback_target_data_op) {
+  if (OmptApi.ompt_get_enabled().ompt_callback_target_data_op) {
     // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
     // OpenACC support, so we haven't bothered to implement them yet.
-    ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-        TargetID, /*host_op_id*/ ompt_id_none,
-        ompt_target_data_transfer_from_device,
-        TgtPtrBegin, DeviceID, HstPtrBegin, HOST_DEVICE, Size,
-        /*codeptr_ra*/ NULL);
+    OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+        OmptApi.target_id, /*host_op_id*/ ompt_id_none,
+        ompt_target_data_transfer_from_device, TgtPtrBegin, DeviceID,
+        HstPtrBegin, HOST_DEVICE, Size, /*codeptr_ra*/ NULL);
   }
 #endif
   if (!AsyncInfoPtr || !RTL->data_retrieve_async || !RTL->synchronize)
@@ -497,11 +500,11 @@ int32_t DeviceTy::run_region(void *TgtEntryPtr, void **TgtVarsPtr,
                              __tgt_async_info *AsyncInfoPtr) {
   if (!AsyncInfoPtr || !RTL->run_region || !RTL->synchronize)
     return RTL->run_region(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtOffsets,
-                           TgtVarsSize OMPT_SUPPORT_IF(, TargetID));
+                           TgtVarsSize OMPT_SUPPORT_IF(, &OmptApi));
   else
     return RTL->run_region_async(RTLDeviceID, TgtEntryPtr, TgtVarsPtr,
                                  TgtOffsets, TgtVarsSize, AsyncInfoPtr
-                                 OMPT_SUPPORT_IF(, TargetID));
+                                 OMPT_SUPPORT_IF(, &OmptApi));
 }
 
 // Run team region on device.
@@ -513,12 +516,11 @@ int32_t DeviceTy::run_team_region(void *TgtEntryPtr, void **TgtVarsPtr,
   if (!AsyncInfoPtr || !RTL->run_team_region_async || !RTL->synchronize)
     return RTL->run_team_region(RTLDeviceID, TgtEntryPtr, TgtVarsPtr,
                                 TgtOffsets, TgtVarsSize, NumTeams, ThreadLimit,
-                                LoopTripCount OMPT_SUPPORT_IF(, TargetID));
+                                LoopTripCount OMPT_SUPPORT_IF(, &OmptApi));
   else
-    return RTL->run_team_region_async(RTLDeviceID, TgtEntryPtr, TgtVarsPtr,
-                                      TgtOffsets, TgtVarsSize, NumTeams,
-                                      ThreadLimit, LoopTripCount, AsyncInfoPtr
-                                      OMPT_SUPPORT_IF(, TargetID));
+    return RTL->run_team_region_async(
+        RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtOffsets, TgtVarsSize, NumTeams,
+        ThreadLimit, LoopTripCount, AsyncInfoPtr OMPT_SUPPORT_IF(, &OmptApi));
 }
 
 /// Check whether a device has an associated RTL and initialize it if it's not

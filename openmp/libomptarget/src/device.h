@@ -116,7 +116,7 @@ struct DeviceTy {
   RTLInfoTy *RTL;
   int32_t RTLDeviceID;
 #if OMPT_SUPPORT
-  ompt_id_t TargetID;
+  ompt_plugin_api_t OmptApi;
 #endif
 
   bool IsInit;
@@ -135,16 +135,19 @@ struct DeviceTy {
   std::map<int32_t, uint64_t> LoopTripCnt;
 
   DeviceTy(RTLInfoTy *RTL)
-      : DeviceID(-1), RTL(RTL), RTLDeviceID(-1),
-        OMPT_SUPPORT_IF(TargetID(ompt_id_none),) IsInit(false), InitFlag(),
+      : DeviceID(-1), RTL(RTL), RTLDeviceID(-1), IsInit(false), InitFlag(),
         HasPendingGlobals(false), HostDataToTargetMap(), PendingCtorsDtors(),
-        ShadowPtrMap(), DataMapMtx(), PendingGlobalsMtx(), ShadowMtx() {}
+        ShadowPtrMap(), DataMapMtx(), PendingGlobalsMtx(), ShadowMtx() {
+    OmptApi.target_id = ompt_id_none;
+    OmptApi.ompt_get_enabled = ompt_get_enabled;
+    OmptApi.ompt_get_callbacks = ompt_get_callbacks;
+  }
 
   // The existence of mutexes makes DeviceTy non-copyable. We need to
   // provide a copy constructor and an assignment operator explicitly.
   DeviceTy(const DeviceTy &d)
       : DeviceID(d.DeviceID), RTL(d.RTL), RTLDeviceID(d.RTLDeviceID),
-        OMPT_SUPPORT_IF(TargetID(d.TargetID),) IsInit(d.IsInit), InitFlag(),
+        OMPT_SUPPORT_IF(OmptApi(d.OmptApi),) IsInit(d.IsInit), InitFlag(),
         HasPendingGlobals(d.HasPendingGlobals),
         HostDataToTargetMap(d.HostDataToTargetMap),
         PendingCtorsDtors(d.PendingCtorsDtors), ShadowPtrMap(d.ShadowPtrMap),
@@ -156,7 +159,7 @@ struct DeviceTy {
     RTL = d.RTL;
     RTLDeviceID = d.RTLDeviceID;
 #if OMPT_SUPPORT
-    TargetID = d.TargetID;
+    OmptApi = d.OmptApi;
 #endif
     IsInit = d.IsInit;
     HasPendingGlobals = d.HasPendingGlobals;

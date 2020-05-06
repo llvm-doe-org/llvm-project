@@ -40,19 +40,19 @@ struct RTLInfoTy {
   typedef int32_t(data_retrieve_async_ty)(int32_t, void *, void *, int64_t,
                                           __tgt_async_info *);
   typedef int32_t(data_delete_ty)(int32_t, void *);
-  typedef int32_t(run_region_ty)(int32_t, void *, void **, ptrdiff_t *,
-                                 int32_t OMPT_SUPPORT_IF(, ompt_id_t));
-  typedef int32_t(run_region_async_ty)(int32_t, void *, void **, ptrdiff_t *,
-                                       int32_t, __tgt_async_info *
-                                       OMPT_SUPPORT_IF(, ompt_id_t));
-  typedef int32_t(run_team_region_ty)(int32_t, void *, void **, ptrdiff_t *,
-                                      int32_t, int32_t, int32_t, uint64_t
-                                      OMPT_SUPPORT_IF(, ompt_id_t));
-  typedef int32_t(run_team_region_async_ty)(int32_t, void *, void **,
-                                            ptrdiff_t *, int32_t, int32_t,
-                                            int32_t, uint64_t,
-                                            __tgt_async_info *
-                                            OMPT_SUPPORT_IF(, ompt_id_t));
+  typedef int32_t(run_region_ty)(
+      int32_t, void *, void **, ptrdiff_t *, int32_t
+      OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
+  typedef int32_t(run_region_async_ty)(
+      int32_t, void *, void **, ptrdiff_t *, int32_t, __tgt_async_info *
+      OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
+  typedef int32_t(run_team_region_ty)(
+      int32_t, void *, void **, ptrdiff_t *, int32_t, int32_t, int32_t, uint64_t
+      OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
+  typedef int32_t(run_team_region_async_ty)(
+      int32_t, void *, void **, ptrdiff_t *, int32_t, int32_t, int32_t,
+      uint64_t, __tgt_async_info *
+      OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
   typedef int64_t(init_requires_ty)(int64_t);
   typedef int64_t(synchronize_ty)(int64_t, __tgt_async_info *);
 

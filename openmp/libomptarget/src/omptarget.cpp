@@ -176,11 +176,12 @@ static int InitLibrary(DeviceTy& Device) {
         // picked up immediately before entering the first target region.  Is
         // that OK?  Will that affect the timings one might collect using the
         // corresponding OpenACC callbacks?
-        if (ompt_get_enabled().ompt_callback_target_data_op) {
+        if (Device.OmptApi.ompt_get_enabled().ompt_callback_target_data_op) {
           // FIXME: We don't yet need the host_op_id and codeptr_ra arguments
           // for OpenACC support, so we haven't bothered to implement them yet.
-          ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-              Device.TargetID, /*host_op_id*/ ompt_id_none,
+          Device.OmptApi.ompt_get_callbacks().ompt_callback(
+              ompt_callback_target_data_op)(
+              Device.OmptApi.target_id, /*host_op_id*/ ompt_id_none,
               ompt_target_data_associate, CurrHostEntry->addr, HOST_DEVICE,
               CurrDeviceEntry->addr, device_id, CurrHostEntry->size,
               /*codeptr_ra*/ NULL);
@@ -289,14 +290,16 @@ static int32_t member_of(int64_t type) {
 // haven't bothered to implement them yet, but it should be straight-forward to
 // gather them during the loop above.  We actually don't need nitems yet
 // either, but that one is trivial.
-# define OMPT_DISPATCH_CALLBACK_TARGET_MAP(SubEvent)                          \
-  do {                                                                        \
-    if (ompt_get_enabled().ompt_callback_target_map##SubEvent) {              \
-      ompt_get_callbacks().ompt_callback(ompt_callback_target_map##SubEvent)( \
-          Device.TargetID, /*nitems*/ arg_num,                                \
-          /*host_addr*/ NULL, /*device_addr*/ NULL, /*bytes*/ NULL,           \
-          /*mapping_flags*/ NULL, /*codeptr_ra*/ NULL);                       \
-    }                                                                         \
+# define OMPT_DISPATCH_CALLBACK_TARGET_MAP(SubEvent)                           \
+  do {                                                                         \
+    if (Device.OmptApi.ompt_get_enabled()                                      \
+            .ompt_callback_target_map##SubEvent) {                             \
+      Device.OmptApi.ompt_get_callbacks().ompt_callback(                       \
+          ompt_callback_target_map##SubEvent)(                                 \
+          Device.OmptApi.target_id, /*nitems*/ arg_num, /*host_addr*/ NULL,    \
+          /*device_addr*/ NULL, /*bytes*/ NULL, /*mapping_flags*/ NULL,        \
+          /*codeptr_ra*/ NULL);                                                \
+    }                                                                          \
   } while (0)
 #else
 # define OMPT_DISPATCH_CALLBACK_TARGET_MAP(SubEvent)
@@ -684,18 +687,18 @@ static bool isLambdaMapping(int64_t Mapping) {
 void ompt_dispatch_callback_target(
     ompt_target_t kind, ompt_scope_endpoint_t endpoint, DeviceTy &Device) {
   if (endpoint == ompt_scope_begin) {
-    Device.TargetID = ompt_get_unique_id();
+    Device.OmptApi.target_id = ompt_get_unique_id();
     ompt_toggle_in_device_target_region();
   }
   // FIXME: We don't yet need the NULL arguments for OpenACC support, so we
   // haven't bothered to implement them yet.
-  if (ompt_get_enabled().ompt_callback_target) {
-    ompt_get_callbacks().ompt_callback(ompt_callback_target)(
-        kind, endpoint, Device.DeviceID, /*task_data*/ NULL, Device.TargetID,
-        /*codeptr_ra*/ NULL);
+  if (Device.OmptApi.ompt_get_enabled().ompt_callback_target) {
+    Device.OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target)(
+        kind, endpoint, Device.DeviceID, /*task_data*/ NULL,
+        Device.OmptApi.target_id, /*codeptr_ra*/ NULL);
   }
   if (endpoint == ompt_scope_end) {
-    Device.TargetID = ompt_id_none;
+    Device.OmptApi.target_id = ompt_id_none;
     ompt_toggle_in_device_target_region();
   }
 }
@@ -914,14 +917,14 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
       // or from a device."
       // The callback must dispatch after the allocation succeeds because it
       // requires the device address.
-      if (ompt_get_enabled().ompt_callback_target_data_op) {
+      if (Device.OmptApi.ompt_get_enabled().ompt_callback_target_data_op) {
         // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
         // OpenACC support, so we haven't bothered to implement them yet.
-        ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-            Device.TargetID, /*host_op_id*/ ompt_id_none,
-            ompt_target_data_alloc,
-            fpArray.HstPtrBegin, HOST_DEVICE, fpArray.TgtPtrBegin, device_id,
-            fpArray.Size, /*codeptr_ra*/ NULL);
+        Device.OmptApi.ompt_get_callbacks().ompt_callback(
+            ompt_callback_target_data_op)(
+            Device.OmptApi.target_id, /*host_op_id*/ ompt_id_none,
+            ompt_target_data_alloc, fpArray.HstPtrBegin, HOST_DEVICE,
+            fpArray.TgtPtrBegin, device_id, fpArray.Size, /*codeptr_ra*/ NULL);
       }
 #endif
       fpArrays.emplace_back(fpArray);
@@ -1006,7 +1009,7 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
   // Deallocate (first-)private arrays
   for (auto it : fpArrays) {
 #if OMPT_SUPPORT
-    if (ompt_get_enabled().ompt_callback_target_data_op) {
+    if (Device.OmptApi.ompt_get_enabled().ompt_callback_target_data_op) {
       // OpenMP 5.0 sec. 3.6.2 p. 399 L19:
       // "The target-data-free event occurs when a thread frees data on a
       // target device."
@@ -1018,11 +1021,11 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
       // device address is still valid.
       // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
       // OpenACC support, so we haven't bothered to implement them yet.
-      ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-          Device.TargetID, /*host_op_id*/ ompt_id_none,
-          ompt_target_data_delete,
-          it.HstPtrBegin, HOST_DEVICE, it.TgtPtrBegin, device_id, it.Size,
-          /*codeptr_ra*/ NULL);
+      Device.OmptApi.ompt_get_callbacks().ompt_callback(
+          ompt_callback_target_data_op)(
+          Device.OmptApi.target_id, /*host_op_id*/ ompt_id_none,
+          ompt_target_data_delete, it.HstPtrBegin, HOST_DEVICE, it.TgtPtrBegin,
+          device_id, it.Size, /*codeptr_ra*/ NULL);
     }
 #endif
     int rt = Device.RTL->data_delete(Device.RTLDeviceID, it.TgtPtrBegin);
