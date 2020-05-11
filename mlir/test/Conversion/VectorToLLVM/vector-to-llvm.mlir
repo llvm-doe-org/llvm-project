@@ -418,6 +418,21 @@ func @vector_type_cast(%arg0: memref<8x8x8xf32>) -> memref<vector<8x8x8xf32>> {
 //       CHECK:   llvm.mlir.constant(0 : index
 //       CHECK:   llvm.insertvalue {{.*}}[2] : !llvm<"{ [8 x [8 x <8 x float>]]*, [8 x [8 x <8 x float>]]*, i64 }">
 
+func @vector_type_cast_non_zero_addrspace(%arg0: memref<8x8x8xf32, 3>) -> memref<vector<8x8x8xf32>, 3> {
+  %0 = vector.type_cast %arg0: memref<8x8x8xf32, 3> to memref<vector<8x8x8xf32>, 3>
+  return %0 : memref<vector<8x8x8xf32>, 3>
+}
+// CHECK-LABEL: llvm.func @vector_type_cast_non_zero_addrspace
+//       CHECK:   llvm.mlir.undef : !llvm<"{ [8 x [8 x <8 x float>]] addrspace(3)*, [8 x [8 x <8 x float>]] addrspace(3)*, i64 }">
+//       CHECK:   %[[allocated:.*]] = llvm.extractvalue {{.*}}[0] : !llvm<"{ float addrspace(3)*, float addrspace(3)*, i64, [3 x i64], [3 x i64] }">
+//       CHECK:   %[[allocatedBit:.*]] = llvm.bitcast %[[allocated]] : !llvm<"float addrspace(3)*"> to !llvm<"[8 x [8 x <8 x float>]] addrspace(3)*">
+//       CHECK:   llvm.insertvalue %[[allocatedBit]], {{.*}}[0] : !llvm<"{ [8 x [8 x <8 x float>]] addrspace(3)*, [8 x [8 x <8 x float>]] addrspace(3)*, i64 }">
+//       CHECK:   %[[aligned:.*]] = llvm.extractvalue {{.*}}[1] : !llvm<"{ float addrspace(3)*, float addrspace(3)*, i64, [3 x i64], [3 x i64] }">
+//       CHECK:   %[[alignedBit:.*]] = llvm.bitcast %[[aligned]] : !llvm<"float addrspace(3)*"> to !llvm<"[8 x [8 x <8 x float>]] addrspace(3)*">
+//       CHECK:   llvm.insertvalue %[[alignedBit]], {{.*}}[1] : !llvm<"{ [8 x [8 x <8 x float>]] addrspace(3)*, [8 x [8 x <8 x float>]] addrspace(3)*, i64 }">
+//       CHECK:   llvm.mlir.constant(0 : index
+//       CHECK:   llvm.insertvalue {{.*}}[2] : !llvm<"{ [8 x [8 x <8 x float>]] addrspace(3)*, [8 x [8 x <8 x float>]] addrspace(3)*, i64 }">
+
 func @vector_print_scalar_i1(%arg0: i1) {
   vector.print %arg0 : i1
   return
@@ -803,7 +818,7 @@ func @transfer_read_1d(%A : memref<?xf32>, %base: index) -> vector<17xf32> {
 //       CHECK: %[[PASS_THROUGH:.*]] =  llvm.mlir.constant(dense<7.000000e+00> :
 //  CHECK-SAME:  vector<17xf32>) : !llvm<"<17 x float>">
 //       CHECK: %[[loaded:.*]] = llvm.intr.masked.load %[[vecPtr]], %[[mask]],
-//  CHECK-SAME: %[[PASS_THROUGH]] {alignment = 1 : i32} :
+//  CHECK-SAME: %[[PASS_THROUGH]] {alignment = 128 : i32} :
 //  CHECK-SAME: (!llvm<"<17 x float>*">, !llvm<"<17 x i1>">, !llvm<"<17 x float>">) -> !llvm<"<17 x float>">
 
 //
@@ -835,7 +850,7 @@ func @transfer_read_1d(%A : memref<?xf32>, %base: index) -> vector<17xf32> {
 //
 // 5. Rewrite as a masked write.
 //       CHECK: llvm.intr.masked.store %[[loaded]], %[[vecPtr_b]], %[[mask_b]]
-//  CHECK-SAME: {alignment = 1 : i32} :
+//  CHECK-SAME: {alignment = 128 : i32} :
 //  CHECK-SAME: !llvm<"<17 x float>">, !llvm<"<17 x i1>"> into !llvm<"<17 x float>*">
 
 func @transfer_read_2d_to_1d(%A : memref<?x?xf32>, %base0: index, %base1: index) -> vector<17xf32> {

@@ -985,11 +985,16 @@ public:
   void Post(const parser::EndAssociateStmt &);
   void Post(const parser::Association &);
   void Post(const parser::SelectTypeStmt &);
+  void Post(const parser::SelectRankStmt &);
   bool Pre(const parser::SelectTypeConstruct &);
   void Post(const parser::SelectTypeConstruct &);
   bool Pre(const parser::SelectTypeConstruct::TypeCase &);
   void Post(const parser::SelectTypeConstruct::TypeCase &);
+  // Creates Block scopes with neither symbol name nor symbol details.
+  bool Pre(const parser::SelectRankConstruct::RankCase &);
+  void Post(const parser::SelectRankConstruct::RankCase &);
   void Post(const parser::TypeGuardStmt::Guard &);
+  void Post(const parser::SelectRankCaseStmt::Rank &);
   bool Pre(const parser::ChangeTeamStmt &);
   void Post(const parser::EndChangeTeamStmt &);
   void Post(const parser::CoarrayAssociation &);
@@ -3679,7 +3684,7 @@ bool DeclarationVisitor::Pre(const parser::DerivedTypeDef &x) {
     if (symbol->has<TypeParamDetails>() && !paramNames.count(name)) {
       SayDerivedType(name,
           "'%s' is not a type parameter of this derived type"_err_en_US,
-          currScope()); // C742
+          currScope()); // C741
     }
   }
   Walk(std::get<std::list<parser::Statement<parser::PrivateOrSequence>>>(x.t));
@@ -3820,12 +3825,48 @@ void DeclarationVisitor::Post(const parser::ComponentDecl &x) {
       !attrs.HasAny({Attr::PUBLIC, Attr::PRIVATE})) {
     attrs.set(Attr::PRIVATE);
   }
-  if (!attrs.HasAny({Attr::POINTER, Attr::ALLOCATABLE})) {
-    if (const auto *declType{GetDeclTypeSpec()}) {
-      if (const auto *derived{declType->AsDerived()}) {
+  if (const auto *declType{GetDeclTypeSpec()}) {
+    if (const auto *derived{declType->AsDerived()}) {
+      if (!attrs.HasAny({Attr::POINTER, Attr::ALLOCATABLE})) {
         if (derivedTypeInfo_.type == &derived->typeSymbol()) { // C744
           Say("Recursive use of the derived type requires "
               "POINTER or ALLOCATABLE"_err_en_US);
+        }
+      }
+      if (!coarraySpec().empty()) { // C747
+        if (IsTeamType(derived)) {
+          Say("A coarray component may not be of type TEAM_TYPE from "
+              "ISO_FORTRAN_ENV"_err_en_US);
+        } else {
+          if (IsIsoCType(derived)) {
+            Say("A coarray component may not be of type C_PTR or C_FUNPTR from "
+                "ISO_C_BINDING"_err_en_US);
+          }
+        }
+      }
+      if (auto it{FindCoarrayUltimateComponent(*derived)}) { // C748
+        std::string ultimateName{it.BuildResultDesignatorName()};
+        // Strip off the leading "%"
+        if (ultimateName.length() > 1) {
+          ultimateName.erase(0, 1);
+          if (attrs.HasAny({Attr::POINTER, Attr::ALLOCATABLE})) {
+            evaluate::AttachDeclaration(
+                Say(name.source,
+                    "A component with a POINTER or ALLOCATABLE attribute may "
+                    "not "
+                    "be of a type with a coarray ultimate component (named "
+                    "'%s')"_err_en_US,
+                    ultimateName),
+                derived->typeSymbol());
+          }
+          if (!arraySpec().empty() || !coarraySpec().empty()) {
+            evaluate::AttachDeclaration(
+                Say(name.source,
+                    "An array or coarray component may not be of a type with a "
+                    "coarray ultimate component (named '%s')"_err_en_US,
+                    ultimateName),
+                derived->typeSymbol());
+          }
         }
       }
     }
@@ -4340,9 +4381,8 @@ void DeclarationVisitor::CheckSaveStmts() {
               " common block name '%s'"_err_en_US);
         }
       } else {
-        for (const Symbol &object :
-            symbol->get<CommonBlockDetails>().objects()) {
-          SetSaveAttr(*const_cast<Symbol *>(&object));
+        for (auto &object : symbol->get<CommonBlockDetails>().objects()) {
+          SetSaveAttr(*object);
         }
       }
     }
@@ -4741,7 +4781,7 @@ Symbol *DeclarationVisitor::MakeTypeSymbol(
     const SourceName &name, Details &&details) {
   Scope &derivedType{currScope()};
   CHECK(derivedType.IsDerivedType());
-  if (auto *symbol{FindInScope(derivedType, name)}) {
+  if (auto *symbol{FindInScope(derivedType, name)}) { // C742
     Say2(name,
         "Type parameter, component, or procedure binding '%s'"
         " already defined in this type"_err_en_US,
@@ -5098,11 +5138,28 @@ void ConstructVisitor::Post(const parser::SelectTypeStmt &x) {
   }
 }
 
+void ConstructVisitor::Post(const parser::SelectRankStmt &x) {
+  auto &association{GetCurrentAssociation()};
+  if (const std::optional<parser::Name> &name{std::get<1>(x.t)}) {
+    // This isn't a name in the current scope, it is in each SelectRankCaseStmt
+    MakePlaceholder(*name, MiscDetails::Kind::SelectRankAssociateName);
+    association.name = &*name;
+  }
+}
+
 bool ConstructVisitor::Pre(const parser::SelectTypeConstruct::TypeCase &) {
   PushScope(Scope::Kind::Block, nullptr);
   return true;
 }
 void ConstructVisitor::Post(const parser::SelectTypeConstruct::TypeCase &) {
+  PopScope();
+}
+
+bool ConstructVisitor::Pre(const parser::SelectRankConstruct::RankCase &) {
+  PushScope(Scope::Kind::Block, nullptr);
+  return true;
+}
+void ConstructVisitor::Post(const parser::SelectRankConstruct::RankCase &) {
   PopScope();
 }
 
@@ -5114,6 +5171,20 @@ void ConstructVisitor::Post(const parser::TypeGuardStmt::Guard &x) {
       symbol->SetType(*type);
     }
     SetAttrsFromAssociation(*symbol);
+  }
+}
+
+void ConstructVisitor::Post(const parser::SelectRankCaseStmt::Rank &x) {
+  if (auto *symbol{MakeAssocEntity()}) {
+    SetTypeFromAssociation(*symbol);
+    SetAttrsFromAssociation(*symbol);
+    if (const auto *init{std::get_if<parser::ScalarIntConstantExpr>(&x.u)}) {
+      MaybeIntExpr expr{EvaluateIntExpr(*init)};
+      if (auto val{evaluate::ToInt64(expr)}) {
+        auto &details{symbol->get<AssocEntityDetails>()};
+        details.set_rank(*val);
+      }
+    }
   }
 }
 
@@ -6656,11 +6727,9 @@ void OmpAttributeVisitor::ResolveOmpObject(
               // 2.15.3 When a named common block appears in a list, it has the
               // same meaning as if every explicit member of the common block
               // appeared in the list
-              for (const Symbol &object :
-                  symbol->get<CommonBlockDetails>().objects()) {
-                Symbol &mutableObject{const_cast<Symbol &>(object)};
+              for (auto &object : symbol->get<CommonBlockDetails>().objects()) {
                 if (auto *resolvedObject{
-                        ResolveOmp(mutableObject, ompFlag, currScope())}) {
+                        ResolveOmp(*object, ompFlag, currScope())}) {
                   AddToContextObjectWithDSA(*resolvedObject, ompFlag);
                 }
               }

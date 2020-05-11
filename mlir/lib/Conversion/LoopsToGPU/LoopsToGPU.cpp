@@ -18,7 +18,7 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/GPU/GPUDialect.h"
 #include "mlir/Dialect/GPU/ParallelLoopMapper.h"
-#include "mlir/Dialect/LoopOps/LoopOps.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/BlockAndValueMapping.h"
@@ -34,7 +34,7 @@
 #define DEBUG_TYPE "loops-to-gpu"
 
 using namespace mlir;
-using namespace mlir::loop;
+using namespace mlir::scf;
 
 using llvm::seq;
 
@@ -136,7 +136,6 @@ static LogicalResult checkLoopNestMappable(OpTy forOp, unsigned numBlockDims,
     return success();
   }
 
-  OpBuilder builder(forOp.getOperation());
   if (numBlockDims > 3) {
     return forOp.emitError("cannot map to more than 3 block dimensions");
   }
@@ -487,7 +486,7 @@ LogicalResult mlir::convertLoopNestToGPULaunch(ForOp forOp,
   return ::convertLoopNestToGPULaunch(forOp, numBlockDims, numThreadDims);
 }
 
-LogicalResult mlir::convertLoopToGPULaunch(loop::ForOp forOp,
+LogicalResult mlir::convertLoopToGPULaunch(scf::ForOp forOp,
                                            ArrayRef<Value> numWorkGroups,
                                            ArrayRef<Value> workGroupSizes) {
   return ::convertLoopToGPULaunch(forOp, numWorkGroups, workGroupSizes);
@@ -705,7 +704,7 @@ static LogicalResult processParallelLoop(
           CmpIOp pred = rewriter.create<CmpIOp>(
               loc, CmpIPredicate::slt, newIndex,
               cloningMap.lookupOrDefault(originalBound));
-          loop::IfOp ifOp = rewriter.create<loop::IfOp>(loc, pred, false);
+          scf::IfOp ifOp = rewriter.create<scf::IfOp>(loc, pred, false);
           rewriter.setInsertionPointToStart(&ifOp.thenRegion().front());
           // Put a sentinel into the worklist so we know when to pop out of the
           // if body again. We use the launchOp here, as that cannot be part of
@@ -715,7 +714,7 @@ static LogicalResult processParallelLoop(
       }
     } else {
       // Create a sequential for loop.
-      auto loopOp = rewriter.create<loop::ForOp>(
+      auto loopOp = rewriter.create<scf::ForOp>(
           loc, cloningMap.lookupOrDefault(lowerBound),
           cloningMap.lookupOrDefault(upperBound),
           cloningMap.lookupOrDefault(step));

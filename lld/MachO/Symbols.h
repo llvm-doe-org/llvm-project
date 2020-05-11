@@ -77,11 +77,13 @@ public:
 
   DylibFile *file;
   uint32_t gotIndex = UINT32_MAX;
+  uint32_t stubsIndex = UINT32_MAX;
+  uint32_t lazyBindOffset = UINT32_MAX;
 };
 
 inline uint64_t Symbol::getVA() const {
   if (auto *d = dyn_cast<Defined>(this))
-    return d->isec->addr + d->value;
+    return d->isec->getVA() + d->value;
   return 0;
 }
 

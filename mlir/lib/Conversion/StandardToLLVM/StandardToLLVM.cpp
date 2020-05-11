@@ -138,6 +138,7 @@ LLVMTypeConverter::LLVMTypeConverter(
         module->getDataLayout().getPointerSizeInBits();
 
   // Register conversions for the standard types.
+  addConversion([&](ComplexType type) { return convertComplexType(type); });
   addConversion([&](FloatType type) { return convertFloatType(type); });
   addConversion([&](FunctionType type) { return convertFunctionType(type); });
   addConversion([&](IndexType type) { return convertIndexType(type); });
@@ -189,6 +190,17 @@ Type LLVMTypeConverter::convertFloatType(FloatType type) {
   default:
     llvm_unreachable("non-float type in convertFloatType");
   }
+}
+
+// Convert a `ComplexType` to an LLVM type. The result is a complex number
+// struct with entries for the
+//   1. real part and for the
+//   2. imaginary part.
+static constexpr unsigned kRealPosInComplexNumberStruct = 0;
+static constexpr unsigned kImaginaryPosInComplexNumberStruct = 1;
+Type LLVMTypeConverter::convertComplexType(ComplexType type) {
+  auto elementType = convertType(type.getElementType()).cast<LLVM::LLVMType>();
+  return LLVM::LLVMType::getStructTy(llvmDialect, {elementType, elementType});
 }
 
 // Except for signatures, MLIR function types are converted into LLVM
@@ -392,6 +404,7 @@ ConvertToLLVMPattern::ConvertToLLVMPattern(StringRef rootOpName,
 /*============================================================================*/
 /* StructBuilder implementation                                               */
 /*============================================================================*/
+
 StructBuilder::StructBuilder(Value v) : value(v) {
   assert(value != nullptr && "value cannot be null");
   structType = value.getType().dyn_cast<LLVM::LLVMType>();
@@ -410,6 +423,35 @@ void StructBuilder::setPtr(OpBuilder &builder, Location loc, unsigned pos,
   value = builder.create<LLVM::InsertValueOp>(loc, structType, value, ptr,
                                               builder.getI64ArrayAttr(pos));
 }
+
+/*============================================================================*/
+/* ComplexStructBuilder implementation                                        */
+/*============================================================================*/
+
+ComplexStructBuilder ComplexStructBuilder::undef(OpBuilder &builder,
+                                                 Location loc, Type type) {
+  Value val = builder.create<LLVM::UndefOp>(loc, type.cast<LLVM::LLVMType>());
+  return ComplexStructBuilder(val);
+}
+
+void ComplexStructBuilder::setReal(OpBuilder &builder, Location loc,
+                                   Value real) {
+  setPtr(builder, loc, kRealPosInComplexNumberStruct, real);
+}
+
+Value ComplexStructBuilder::real(OpBuilder &builder, Location loc) {
+  return extractPtr(builder, loc, kRealPosInComplexNumberStruct);
+}
+
+void ComplexStructBuilder::setImaginary(OpBuilder &builder, Location loc,
+                                        Value imaginary) {
+  setPtr(builder, loc, kImaginaryPosInComplexNumberStruct, imaginary);
+}
+
+Value ComplexStructBuilder::imaginary(OpBuilder &builder, Location loc) {
+  return extractPtr(builder, loc, kImaginaryPosInComplexNumberStruct);
+}
+
 /*============================================================================*/
 /* MemRefDescriptor implementation                                            */
 /*============================================================================*/
@@ -1284,6 +1326,140 @@ using UnsignedShiftRightOpLowering =
     OneToOneConvertToLLVMPattern<UnsignedShiftRightOp, LLVM::LShrOp>;
 using XOrOpLowering = VectorConvertToLLVMPattern<XOrOp, LLVM::XOrOp>;
 
+// Lowerings for operations on complex numbers.
+
+struct CreateComplexOpLowering
+    : public ConvertOpToLLVMPattern<CreateComplexOp> {
+  using ConvertOpToLLVMPattern<CreateComplexOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto complexOp = cast<CreateComplexOp>(op);
+    OperandAdaptor<CreateComplexOp> transformed(operands);
+
+    // Pack real and imaginary part in a complex number struct.
+    auto loc = op->getLoc();
+    auto structType = typeConverter.convertType(complexOp.getType());
+    auto complexStruct = ComplexStructBuilder::undef(rewriter, loc, structType);
+    complexStruct.setReal(rewriter, loc, transformed.real());
+    complexStruct.setImaginary(rewriter, loc, transformed.imaginary());
+
+    rewriter.replaceOp(op, {complexStruct});
+    return success();
+  }
+};
+
+struct ReOpLowering : public ConvertOpToLLVMPattern<ReOp> {
+  using ConvertOpToLLVMPattern<ReOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    OperandAdaptor<ReOp> transformed(operands);
+
+    // Extract real part from the complex number struct.
+    ComplexStructBuilder complexStruct(transformed.complex());
+    Value real = complexStruct.real(rewriter, op->getLoc());
+    rewriter.replaceOp(op, real);
+
+    return success();
+  }
+};
+
+struct ImOpLowering : public ConvertOpToLLVMPattern<ImOp> {
+  using ConvertOpToLLVMPattern<ImOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    OperandAdaptor<ImOp> transformed(operands);
+
+    // Extract imaginary part from the complex number struct.
+    ComplexStructBuilder complexStruct(transformed.complex());
+    Value imaginary = complexStruct.imaginary(rewriter, op->getLoc());
+    rewriter.replaceOp(op, imaginary);
+
+    return success();
+  }
+};
+
+struct BinaryComplexOperands {
+  Value lhsReal, lhsImag, rhsReal, rhsImag;
+};
+
+template <typename OpTy>
+BinaryComplexOperands
+unpackBinaryComplexOperands(OpTy op, ArrayRef<Value> operands,
+                            ConversionPatternRewriter &rewriter) {
+  auto bop = cast<OpTy>(op);
+  auto loc = bop.getLoc();
+  OperandAdaptor<OpTy> transformed(operands);
+
+  // Extract real and imaginary values from operands.
+  BinaryComplexOperands unpacked;
+  ComplexStructBuilder lhs(transformed.lhs());
+  unpacked.lhsReal = lhs.real(rewriter, loc);
+  unpacked.lhsImag = lhs.imaginary(rewriter, loc);
+  ComplexStructBuilder rhs(transformed.rhs());
+  unpacked.rhsReal = rhs.real(rewriter, loc);
+  unpacked.rhsImag = rhs.imaginary(rewriter, loc);
+
+  return unpacked;
+}
+
+struct AddCFOpLowering : public ConvertOpToLLVMPattern<AddCFOp> {
+  using ConvertOpToLLVMPattern<AddCFOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(Operation *operation, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto op = cast<AddCFOp>(operation);
+    auto loc = op.getLoc();
+    BinaryComplexOperands arg =
+        unpackBinaryComplexOperands<AddCFOp>(op, operands, rewriter);
+
+    // Initialize complex number struct for result.
+    auto structType = this->typeConverter.convertType(op.getType());
+    auto result = ComplexStructBuilder::undef(rewriter, loc, structType);
+
+    // Emit IR to add complex numbers.
+    Value real = rewriter.create<LLVM::FAddOp>(loc, arg.lhsReal, arg.rhsReal);
+    Value imag = rewriter.create<LLVM::FAddOp>(loc, arg.lhsImag, arg.rhsImag);
+    result.setReal(rewriter, loc, real);
+    result.setImaginary(rewriter, loc, imag);
+
+    rewriter.replaceOp(op, {result});
+    return success();
+  }
+};
+
+struct SubCFOpLowering : public ConvertOpToLLVMPattern<SubCFOp> {
+  using ConvertOpToLLVMPattern<SubCFOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(Operation *operation, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto op = cast<SubCFOp>(operation);
+    auto loc = op.getLoc();
+    BinaryComplexOperands arg =
+        unpackBinaryComplexOperands<SubCFOp>(op, operands, rewriter);
+
+    // Initialize complex number struct for result.
+    auto structType = this->typeConverter.convertType(op.getType());
+    auto result = ComplexStructBuilder::undef(rewriter, loc, structType);
+
+    // Emit IR to substract complex numbers.
+    Value real = rewriter.create<LLVM::FSubOp>(loc, arg.lhsReal, arg.rhsReal);
+    Value imag = rewriter.create<LLVM::FSubOp>(loc, arg.lhsImag, arg.rhsImag);
+    result.setReal(rewriter, loc, real);
+    result.setImaginary(rewriter, loc, imag);
+
+    rewriter.replaceOp(op, {result});
+    return success();
+  }
+};
+
 // Check if the MemRefType `type` is supported by the lowering. We currently
 // only support memrefs with identity maps.
 static bool isSupportedMemRefType(MemRefType type) {
@@ -2128,6 +2304,11 @@ struct FPExtLowering
   using Super::Super;
 };
 
+struct FPToSILowering
+    : public OneToOneConvertToLLVMPattern<FPToSIOp, LLVM::FPToSIOp> {
+  using Super::Super;
+};
+
 struct FPTruncLowering
     : public OneToOneConvertToLLVMPattern<FPTruncOp, LLVM::FPTruncOp> {
   using Super::Super;
@@ -2495,35 +2676,31 @@ struct ViewOpLowering : public ConvertOpToLLVMPattern<ViewOp> {
     auto successStrides = getStridesAndOffset(viewMemRefType, strides, offset);
     if (failed(successStrides))
       return op->emitWarning("cannot cast to non-strided shape"), failure();
+    assert(offset == 0 && "expected offset to be 0");
 
     // Create the descriptor.
     MemRefDescriptor sourceMemRef(adaptor.source());
     auto targetMemRef = MemRefDescriptor::undef(rewriter, loc, targetDescTy);
 
     // Field 1: Copy the allocated pointer, used for malloc/free.
-    Value extracted = sourceMemRef.allocatedPtr(rewriter, loc);
+    Value allocatedPtr = sourceMemRef.allocatedPtr(rewriter, loc);
     Value bitcastPtr = rewriter.create<LLVM::BitcastOp>(
-        loc, targetElementTy.getPointerTo(), extracted);
+        loc, targetElementTy.getPointerTo(), allocatedPtr);
     targetMemRef.setAllocatedPtr(rewriter, loc, bitcastPtr);
 
     // Field 2: Copy the actual aligned pointer to payload.
-    extracted = sourceMemRef.alignedPtr(rewriter, loc);
+    Value alignedPtr = sourceMemRef.alignedPtr(rewriter, loc);
+    alignedPtr = rewriter.create<LLVM::GEPOp>(loc, alignedPtr.getType(),
+                                              alignedPtr, adaptor.byte_shift());
     bitcastPtr = rewriter.create<LLVM::BitcastOp>(
-        loc, targetElementTy.getPointerTo(), extracted);
+        loc, targetElementTy.getPointerTo(), alignedPtr);
     targetMemRef.setAlignedPtr(rewriter, loc, bitcastPtr);
 
-    // Field 3: Copy the offset in aligned pointer.
-    unsigned numDynamicSizes = llvm::size(viewOp.getDynamicSizes());
-    (void)numDynamicSizes;
-    bool hasDynamicOffset = offset == MemRefType::getDynamicStrideOrOffset();
-    auto sizeAndOffsetOperands = adaptor.operands();
-    assert(llvm::size(sizeAndOffsetOperands) ==
-           numDynamicSizes + (hasDynamicOffset ? 1 : 0));
-    Value baseOffset = !hasDynamicOffset
-                           ? createIndexConstant(rewriter, loc, offset)
-                           // TODO(ntv): better adaptor.
-                           : sizeAndOffsetOperands.front();
-    targetMemRef.setOffset(rewriter, loc, baseOffset);
+    // Field 3: The offset in the resulting type must be 0. This is because of
+    // the type change: an offset on srcType* may not be expressible as an
+    // offset on dstType*.
+    targetMemRef.setOffset(rewriter, loc,
+                           createIndexConstant(rewriter, loc, offset));
 
     // Early exit for 0-D corner case.
     if (viewMemRefType.getRank() == 0)
@@ -2533,14 +2710,10 @@ struct ViewOpLowering : public ConvertOpToLLVMPattern<ViewOp> {
     if (strides.back() != 1)
       return op->emitWarning("cannot cast to non-contiguous shape"), failure();
     Value stride = nullptr, nextSize = nullptr;
-    // Drop the dynamic stride from the operand list, if present.
-    ArrayRef<Value> sizeOperands(sizeAndOffsetOperands);
-    if (hasDynamicOffset)
-      sizeOperands = sizeOperands.drop_front();
     for (int i = viewMemRefType.getRank() - 1; i >= 0; --i) {
       // Update size.
       Value size =
-          getSize(rewriter, loc, viewMemRefType.getShape(), sizeOperands, i);
+          getSize(rewriter, loc, viewMemRefType.getShape(), adaptor.sizes(), i);
       targetMemRef.setSize(rewriter, loc, i, size);
       // Update stride.
       stride = getStride(rewriter, loc, strides, nextSize, stride, i);
@@ -2638,113 +2811,6 @@ struct AtomicRMWOpLowering : public LoadStoreOpLowering<AtomicRMWOp> {
     rewriter.replaceOpWithNewOp<LLVM::AtomicRMWOp>(
         op, resultType, *maybeKind, dataPtr, adaptor.value(),
         LLVM::AtomicOrdering::acq_rel);
-    return success();
-  }
-};
-
-/// Wrap a llvm.cmpxchg operation in a while loop so that the operation can be
-/// retried until it succeeds in atomically storing a new value into memory.
-///
-///      +---------------------------------+
-///      |   <code before the AtomicRMWOp> |
-///      |   <compute initial %loaded>     |
-///      |   br loop(%loaded)              |
-///      +---------------------------------+
-///             |
-///  -------|   |
-///  |      v   v
-///  |   +--------------------------------+
-///  |   | loop(%loaded):                 |
-///  |   |   <body contents>              |
-///  |   |   %pair = cmpxchg              |
-///  |   |   %ok = %pair[0]               |
-///  |   |   %new = %pair[1]              |
-///  |   |   cond_br %ok, end, loop(%new) |
-///  |   +--------------------------------+
-///  |          |        |
-///  |-----------        |
-///                      v
-///      +--------------------------------+
-///      | end:                           |
-///      |   <code after the AtomicRMWOp> |
-///      +--------------------------------+
-///
-struct AtomicCmpXchgOpLowering : public LoadStoreOpLowering<AtomicRMWOp> {
-  using Base::Base;
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto atomicOp = cast<AtomicRMWOp>(op);
-    auto maybeKind = matchSimpleAtomicOp(atomicOp);
-    if (maybeKind)
-      return failure();
-
-    LLVM::FCmpPredicate predicate;
-    switch (atomicOp.kind()) {
-    case AtomicRMWKind::maxf:
-      predicate = LLVM::FCmpPredicate::ogt;
-      break;
-    case AtomicRMWKind::minf:
-      predicate = LLVM::FCmpPredicate::olt;
-      break;
-    default:
-      return failure();
-    }
-
-    OperandAdaptor<AtomicRMWOp> adaptor(operands);
-    auto loc = op->getLoc();
-    auto valueType = adaptor.value().getType().cast<LLVM::LLVMType>();
-
-    // Split the block into initial, loop, and ending parts.
-    auto *initBlock = rewriter.getInsertionBlock();
-    auto initPosition = rewriter.getInsertionPoint();
-    auto *loopBlock = rewriter.splitBlock(initBlock, initPosition);
-    auto loopArgument = loopBlock->addArgument(valueType);
-    auto loopPosition = rewriter.getInsertionPoint();
-    auto *endBlock = rewriter.splitBlock(loopBlock, loopPosition);
-
-    // Compute the loaded value and branch to the loop block.
-    rewriter.setInsertionPointToEnd(initBlock);
-    auto memRefType = atomicOp.getMemRefType();
-    auto dataPtr = getDataPtr(loc, memRefType, adaptor.memref(),
-                              adaptor.indices(), rewriter, getModule());
-    Value init = rewriter.create<LLVM::LoadOp>(loc, dataPtr);
-    rewriter.create<LLVM::BrOp>(loc, init, loopBlock);
-
-    // Prepare the body of the loop block.
-    rewriter.setInsertionPointToStart(loopBlock);
-    auto predicateI64 =
-        rewriter.getI64IntegerAttr(static_cast<int64_t>(predicate));
-    auto boolType = LLVM::LLVMType::getInt1Ty(&getDialect());
-    auto lhs = loopArgument;
-    auto rhs = adaptor.value();
-    auto cmp =
-        rewriter.create<LLVM::FCmpOp>(loc, boolType, predicateI64, lhs, rhs);
-    auto select = rewriter.create<LLVM::SelectOp>(loc, cmp, lhs, rhs);
-
-    // Prepare the epilog of the loop block.
-    rewriter.setInsertionPointToEnd(loopBlock);
-    // Append the cmpxchg op to the end of the loop block.
-    auto successOrdering = LLVM::AtomicOrdering::acq_rel;
-    auto failureOrdering = LLVM::AtomicOrdering::monotonic;
-    auto pairType = LLVM::LLVMType::getStructTy(valueType, boolType);
-    auto cmpxchg = rewriter.create<LLVM::AtomicCmpXchgOp>(
-        loc, pairType, dataPtr, loopArgument, select, successOrdering,
-        failureOrdering);
-    // Extract the %new_loaded and %ok values from the pair.
-    Value newLoaded = rewriter.create<LLVM::ExtractValueOp>(
-        loc, valueType, cmpxchg, rewriter.getI64ArrayAttr({0}));
-    Value ok = rewriter.create<LLVM::ExtractValueOp>(
-        loc, boolType, cmpxchg, rewriter.getI64ArrayAttr({1}));
-
-    // Conditionally branch to the end or back to the loop depending on %ok.
-    rewriter.create<LLVM::CondBrOp>(loc, ok, endBlock, ArrayRef<Value>(),
-                                    loopBlock, newLoaded);
-
-    // The 'result' of the atomic_rmw op is the newly loaded value.
-    rewriter.replaceOp(op, {newLoaded});
-
     return success();
   }
 };
@@ -2880,11 +2946,11 @@ void mlir::populateStdToLLVMNonMemoryConversionPatterns(
   // clang-format off
   patterns.insert<
       AbsFOpLowering,
+      AddCFOpLowering,
       AddFOpLowering,
       AddIOpLowering,
       AllocaOpLowering,
       AndOpLowering,
-      AtomicCmpXchgOpLowering,
       AtomicRMWOpLowering,
       BranchOpLowering,
       CallIndirectOpLowering,
@@ -2896,6 +2962,7 @@ void mlir::populateStdToLLVMNonMemoryConversionPatterns(
       CopySignOpLowering,
       CosOpLowering,
       ConstLLVMOpLowering,
+      CreateComplexOpLowering,
       DialectCastOpLowering,
       DivFOpLowering,
       ExpOpLowering,
@@ -2905,13 +2972,16 @@ void mlir::populateStdToLLVMNonMemoryConversionPatterns(
       Log10OpLowering,
       Log2OpLowering,
       FPExtLowering,
+      FPToSILowering,
       FPTruncLowering,
+      ImOpLowering,
       IndexCastOpLowering,
       MulFOpLowering,
       MulIOpLowering,
       NegFOpLowering,
       OrOpLowering,
       PrefetchOpLowering,
+      ReOpLowering,
       RemFOpLowering,
       ReturnOpLowering,
       RsqrtOpLowering,
@@ -2925,6 +2995,7 @@ void mlir::populateStdToLLVMNonMemoryConversionPatterns(
       SplatOpLowering,
       SplatNdOpLowering,
       SqrtOpLowering,
+      SubCFOpLowering,
       SubFOpLowering,
       SubIOpLowering,
       TruncateIOpLowering,

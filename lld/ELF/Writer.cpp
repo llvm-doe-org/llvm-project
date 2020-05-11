@@ -22,9 +22,9 @@
 #include "lld/Common/Filesystem.h"
 #include "lld/Common/Memory.h"
 #include "lld/Common/Strings.h"
-#include "lld/Common/Threads.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/Support/Parallel.h"
 #include "llvm/Support/RandomNumberGenerator.h"
 #include "llvm/Support/SHA1.h"
 #include "llvm/Support/TimeProfiler.h"
@@ -122,13 +122,18 @@ StringRef getOutputSectionName(const InputSectionBase *s) {
   // When no SECTIONS is specified, emulate GNU ld's internal linker scripts
   // by grouping sections with certain prefixes.
 
-  // GNU ld places text sections with prefix ".text.hot.", ".text.unlikely.",
-  // ".text.startup." or ".text.exit." before others. We provide an option -z
-  // keep-text-section-prefix to group such sections into separate output
-  // sections. This is more flexible. See also sortISDBySectionOrder().
+  // GNU ld places text sections with prefix ".text.hot.", ".text.unknown.",
+  // ".text.unlikely.", ".text.startup." or ".text.exit." before others.
+  // We provide an option -z keep-text-section-prefix to group such sections
+  // into separate output sections. This is more flexible. See also
+  // sortISDBySectionOrder().
+  // ".text.unknown" means the hotness of the section is unknown. When
+  // SampleFDO is used, if a function doesn't have sample, it could be very
+  // cold or it could be a new function never being sampled. Those functions
+  // will be kept in the ".text.unknown" section.
   if (config->zKeepTextSectionPrefix)
-    for (StringRef v :
-         {".text.hot.", ".text.unlikely.", ".text.startup.", ".text.exit."})
+    for (StringRef v : {".text.hot.", ".text.unknown.", ".text.unlikely.",
+                        ".text.startup.", ".text.exit."})
       if (isSectionPrefix(v, s->name))
         return v.drop_back();
 
@@ -153,14 +158,23 @@ template <class ELFT> void writeResult() {
 }
 
 static void removeEmptyPTLoad(std::vector<PhdrEntry *> &phdrs) {
-  llvm::erase_if(phdrs, [&](const PhdrEntry *p) {
-    if (p->p_type != PT_LOAD)
-      return false;
-    if (!p->firstSec)
-      return true;
-    uint64_t size = p->lastSec->addr + p->lastSec->size - p->firstSec->addr;
-    return size == 0;
-  });
+  auto it = std::stable_partition(
+      phdrs.begin(), phdrs.end(), [&](const PhdrEntry *p) {
+        if (p->p_type != PT_LOAD)
+          return true;
+        if (!p->firstSec)
+          return false;
+        uint64_t size = p->lastSec->addr + p->lastSec->size - p->firstSec->addr;
+        return size != 0;
+      });
+
+  // Clear OutputSection::ptLoad for sections contained in removed
+  // segments.
+  DenseSet<PhdrEntry *> removed(it, phdrs.end());
+  for (OutputSection *sec : outputSections)
+    if (removed.count(sec->ptLoad))
+      sec->ptLoad = nullptr;
+  phdrs.erase(it, phdrs.end());
 }
 
 void copySectionsIntoPartitions() {
@@ -1596,7 +1610,7 @@ static bool compareByFilePosition(InputSection *a, InputSection *b) {
   OutputSection *bOut = lb->getParent();
 
   if (aOut != bOut)
-    return aOut->sectionIndex < bOut->sectionIndex;
+    return aOut->addr < bOut->addr;
   return la->outSecOff < lb->outSecOff;
 }
 
@@ -1666,11 +1680,13 @@ template <class ELFT> void Writer<ELFT>::finalizeAddressDependentContent() {
   AArch64Err843419Patcher a64p;
   ARMErr657417Patcher a32p;
   script->assignAddresses();
-  // .ARM.exidx does not require precise addresses, but it does require the
-  // relative addresses of OutputSections because linker scripts can assign
-  // Virtual Addresses to OutputSections that are not monotonically increasing.
+  // .ARM.exidx and SHF_LINK_ORDER do not require precise addresses, but they
+  // do require the relative addresses of OutputSections because linker scripts
+  // can assign Virtual Addresses to OutputSections that are not monotonically
+  // increasing.
   for (Partition &part : partitions)
     finalizeSynthetic(part.armExidx);
+  resolveShfLinkOrder();
 
   // Converts call x@GDPLT to call __tls_get_addr
   if (config->emachine == EM_HEXAGON)
@@ -2104,12 +2120,6 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
   if (!script->hasSectionsCommand && !config->relocatable)
     fixSectionAlignments();
 
-  // SHFLinkOrder processing must be processed after relative section placements are
-  // known but before addresses are allocated.
-  resolveShfLinkOrder();
-  if (errorCount())
-    return;
-
   // This is used to:
   // 1) Create "thunks":
   //    Jump instructions in many ISAs have small displacements, and therefore
@@ -2132,6 +2142,8 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
   //    sometimes using forward symbol declarations. We want to set the correct
   //    values. They also might change after adding the thunks.
   finalizeAddressDependentContent();
+  if (errorCount())
+    return;
 
   // finalizeAddressDependentContent may have added local symbols to the static symbol table.
   finalizeSynthetic(in.symTab);

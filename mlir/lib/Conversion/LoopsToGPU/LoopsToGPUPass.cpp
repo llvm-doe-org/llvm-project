@@ -11,7 +11,7 @@
 #include "mlir/Conversion/LoopsToGPU/LoopsToGPU.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/GPU/GPUDialect.h"
-#include "mlir/Dialect/LoopOps/LoopOps.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -22,7 +22,7 @@
 #define LOOPOP_TO_GPU_PASS_NAME "convert-loop-op-to-gpu"
 
 using namespace mlir;
-using namespace mlir::loop;
+using namespace mlir::scf;
 
 namespace {
 // A pass that traverses top-level loops in the function and converts them to
@@ -36,18 +36,17 @@ struct ForLoopMapper : public ConvertSimpleLoopsToGPUBase<ForLoopMapper> {
   }
 
   void runOnFunction() override {
-    for (Block &block : getFunction())
-      for (Operation &op : llvm::make_early_inc_range(block)) {
-        if (auto forOp = dyn_cast<AffineForOp>(&op)) {
-          if (failed(convertAffineLoopNestToGPULaunch(forOp, numBlockDims,
-                                                      numThreadDims)))
-            signalPassFailure();
-        } else if (auto forOp = dyn_cast<ForOp>(&op)) {
-          if (failed(convertLoopNestToGPULaunch(forOp, numBlockDims,
-                                                numThreadDims)))
-            signalPassFailure();
-        }
+    for (Operation &op : llvm::make_early_inc_range(getFunction().getOps())) {
+      if (auto forOp = dyn_cast<AffineForOp>(&op)) {
+        if (failed(convertAffineLoopNestToGPULaunch(forOp, numBlockDims,
+                                                    numThreadDims)))
+          signalPassFailure();
+      } else if (auto forOp = dyn_cast<ForOp>(&op)) {
+        if (failed(
+                convertLoopNestToGPULaunch(forOp, numBlockDims, numThreadDims)))
+          signalPassFailure();
       }
+    }
   }
 };
 
@@ -81,14 +80,10 @@ struct ImperfectlyNestedForLoopMapper
           funcOp.getLoc(), builder.getIntegerAttr(builder.getIndexType(), val));
       workGroupSizeVal.push_back(constOp);
     }
-    for (Block &block : getFunction()) {
-      for (Operation &op : llvm::make_early_inc_range(block)) {
-        if (auto forOp = dyn_cast<ForOp>(&op)) {
-          if (failed(convertLoopToGPULaunch(forOp, numWorkGroupsVal,
-                                            workGroupSizeVal))) {
-            return signalPassFailure();
-          }
-        }
+    for (ForOp forOp : llvm::make_early_inc_range(funcOp.getOps<ForOp>())) {
+      if (failed(convertLoopToGPULaunch(forOp, numWorkGroupsVal,
+                                        workGroupSizeVal))) {
+        return signalPassFailure();
       }
     }
   }
@@ -103,8 +98,8 @@ struct ParallelLoopToGpuPass
     target.addLegalDialect<StandardOpsDialect>();
     target.addLegalDialect<AffineDialect>();
     target.addLegalDialect<gpu::GPUDialect>();
-    target.addLegalDialect<loop::LoopOpsDialect>();
-    target.addIllegalOp<loop::ParallelOp>();
+    target.addLegalDialect<scf::SCFDialect>();
+    target.addIllegalOp<scf::ParallelOp>();
     if (failed(applyPartialConversion(getOperation(), target, patterns)))
       signalPassFailure();
   }

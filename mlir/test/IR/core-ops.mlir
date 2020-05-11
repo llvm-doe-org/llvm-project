@@ -8,10 +8,6 @@
 
 // CHECK: #map1 = affine_map<()[s0] -> (s0 + 1)>
 
-// CHECK-DAG: #[[VIEW_MAP1:map[0-9]+]] = affine_map<(d0, d1) -> (d0 * 4 + d1)>
-// CHECK-DAG: #[[VIEW_MAP2:map[0-9]+]] = affine_map<(d0, d1)[s0, s1] -> (d0 * s1 + d1 + s0)>
-// CHECK-DAG: #[[VIEW_MAP3:map[0-9]+]] = affine_map<(d0, d1)[s0] -> (d0 * s0 + d1)>
-
 // CHECK-DAG: #[[BASE_MAP0:map[0-9]+]] = affine_map<(d0, d1, d2) -> (d0 * 64 + d1 * 4 + d2)>
 // CHECK-DAG: #[[BASE_MAP3:map[0-9]+]] = affine_map<(d0, d1, d2)[s0, s1, s2, s3] -> (d0 * s1 + s0 + d1 * s2 + d2 * s3)>
 // CHECK-DAG: #[[SUBVIEW_MAP0:map[0-9]+]] = affine_map<(d0, d1, d2)[s0, s1, s2, s3] -> (d0 * s1 + d1 * s2 + d2 * s3 + s0)>
@@ -85,6 +81,24 @@ func @standard_instrs(tensor<4x4x?xf32>, f32, i32, index, i64, f16) {
 
   // CHECK: %13 = muli %4, %4 : i32
   %i6 = muli %i2, %i2 : i32
+
+  // CHECK: %[[C0:.*]] = create_complex %[[F2:.*]], %[[F2]] : complex<f32>
+  %c0 = "std.create_complex"(%f2, %f2) : (f32, f32) -> complex<f32>
+
+  // CHECK: %[[C1:.*]] = create_complex %[[F2]], %[[F2]] : complex<f32>
+  %c1 = create_complex %f2, %f2 : complex<f32>
+
+  // CHECK: %[[REAL0:.*]] = re %[[CPLX0:.*]] : complex<f32>
+  %real0 = "std.re"(%c0) : (complex<f32>) -> f32
+
+  // CHECK: %[[REAL1:.*]] = re %[[CPLX0]] : complex<f32>
+  %real1 = re %c0 : complex<f32>
+
+  // CHECK: %[[IMAG0:.*]] = im %[[CPLX0]] : complex<f32>
+  %imag0 = "std.im"(%c0) : (complex<f32>) -> f32
+
+  // CHECK: %[[IMAG1:.*]] = im %[[CPLX0]] : complex<f32>
+  %imag1 = im %c0 : complex<f32>
 
   // CHECK: %c42_i32 = constant 42 : i32
   %x = "std.constant"(){value = 42 : i32} : () -> i32
@@ -515,6 +529,30 @@ func @standard_instrs(tensor<4x4x?xf32>, f32, i32, index, i64, f16) {
   // CHECK: %{{[0-9]+}} = rsqrt %arg1 : f32
   %145 = rsqrt %f : f32
 
+  // CHECK: %{{[0-9]+}} = sin %arg1 : f32
+  %146 = "std.sin"(%f) : (f32) -> f32
+
+  // CHECK: %{{[0-9]+}} = sin %arg1 : f32
+  %147 = sin %f : f32
+
+  // CHECK: %{{[0-9]+}} = sin %cst_8 : vector<4xf32>
+  %148 = sin %vcf32 : vector<4xf32>
+
+  // CHECK: %{{[0-9]+}} = sin %arg0 : tensor<4x4x?xf32>
+  %149 = sin %t : tensor<4x4x?xf32>
+
+  // CHECK: = fptosi {{.*}} : f32 to i32
+  %159 = fptosi %f : f32 to i32
+
+  // CHECK: = fptosi {{.*}} : f32 to i64
+  %160 = fptosi %f : f32 to i64
+
+  // CHECK: = fptosi {{.*}} : f16 to i32
+  %161 = fptosi %half : f16 to i32
+
+  // CHECK: = fptosi {{.*}} : f16 to i64
+  %162 = fptosi %half : f16 to i64
+
   return
 }
 
@@ -650,29 +688,17 @@ func @memref_cast(%arg0: memref<4xf32>, %arg1 : memref<?xf32>, %arg2 : memref<64
 func @memref_view(%arg0 : index, %arg1 : index, %arg2 : index) {
   %0 = alloc() : memref<2048xi8>
   // Test two dynamic sizes and dynamic offset.
-  // CHECK: %{{.*}} = std.view %0[%arg2][%arg0, %arg1] : memref<2048xi8> to memref<?x?xf32, #[[VIEW_MAP2]]>
-  %1 = view %0[%arg2][%arg0, %arg1]
-    : memref<2048xi8> to memref<?x?xf32, affine_map<(d0, d1)[s0, s1] -> (d0 * s1 + d1 + s0)>>
-
-  // Test two dynamic sizes and static offset.
-  // CHECK: %{{.*}} = std.view %0[][%arg0, %arg1] : memref<2048xi8> to memref<?x?xf32, #[[VIEW_MAP3]]>
-  %2 = view %0[][%arg0, %arg1]
-    : memref<2048xi8> to memref<?x?xf32, affine_map<(d0, d1)[s0] -> (d0 * s0 + d1)>>
+  // CHECK: %{{.*}} = std.view %0[%arg2][%arg0, %arg1] : memref<2048xi8> to memref<?x?xf32>
+  %1 = view %0[%arg2][%arg0, %arg1] : memref<2048xi8> to memref<?x?xf32>
 
   // Test one dynamic size and dynamic offset.
-  // CHECK: %{{.*}} = std.view %0[%arg2][%arg1] : memref<2048xi8> to memref<4x?xf32, #[[VIEW_MAP2]]>
-  %3 = view %0[%arg2][%arg1]
-    : memref<2048xi8> to memref<4x?xf32, affine_map<(d0, d1)[s0, s1] -> (d0 * s1 + d1 + s0)>>
-
-  // Test one dynamic size and static offset.
-  // CHECK: %{{.*}} = std.view %0[][%arg0] : memref<2048xi8> to memref<?x4xf32, #[[VIEW_MAP1]]>
-  %4 = view %0[][%arg0]
-    : memref<2048xi8> to memref<?x4xf32, affine_map<(d0, d1) -> (d0 * 4 + d1)>>
+  // CHECK: %{{.*}} = std.view %0[%arg2][%arg1] : memref<2048xi8> to memref<4x?xf32>
+  %3 = view %0[%arg2][%arg1] : memref<2048xi8> to memref<4x?xf32>
 
   // Test static sizes and static offset.
-  // CHECK: %{{.*}} = std.view %0[][] : memref<2048xi8> to memref<64x4xf32, #[[VIEW_MAP1]]>
-  %5 = view %0[][]
-    : memref<2048xi8> to memref<64x4xf32, affine_map<(d0, d1) -> (d0 * 4 + d1)>>
+  // CHECK: %{{.*}} = std.view %0[{{.*}}][] : memref<2048xi8> to memref<64x4xf32>
+  %c0 = constant 0: index
+  %5 = view %0[%c0][] : memref<2048xi8> to memref<64x4xf32>
   return
 }
 
