@@ -291,11 +291,18 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
   setOperationAction(ISD::STRICT_FSUB, MVT::f32, Legal);
   setOperationAction(ISD::STRICT_FMUL, MVT::f32, Legal);
   setOperationAction(ISD::STRICT_FDIV, MVT::f32, Legal);
+  setOperationAction(ISD::STRICT_FMA, MVT::f32, Legal);
 
   setOperationAction(ISD::STRICT_FADD, MVT::f64, Legal);
   setOperationAction(ISD::STRICT_FSUB, MVT::f64, Legal);
   setOperationAction(ISD::STRICT_FMUL, MVT::f64, Legal);
   setOperationAction(ISD::STRICT_FDIV, MVT::f64, Legal);
+  setOperationAction(ISD::STRICT_FMA, MVT::f64, Legal);
+
+  if (Subtarget.hasFSQRT()) {
+    setOperationAction(ISD::STRICT_FSQRT, MVT::f32, Legal);
+    setOperationAction(ISD::STRICT_FSQRT, MVT::f64, Legal);
+  }
 
   // We don't support sin/cos/sqrt/fmod/pow
   setOperationAction(ISD::FSIN , MVT::f64, Expand);
@@ -933,11 +940,19 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
       setOperationAction(ISD::STRICT_FSUB, MVT::v4f32, Legal);
       setOperationAction(ISD::STRICT_FMUL, MVT::v4f32, Legal);
       setOperationAction(ISD::STRICT_FDIV, MVT::v4f32, Legal);
+      setOperationAction(ISD::STRICT_FMA, MVT::v4f32, Legal);
+      setOperationAction(ISD::STRICT_FSQRT, MVT::v4f32, Legal);
+      setOperationAction(ISD::STRICT_FMAXNUM, MVT::v4f32, Legal);
+      setOperationAction(ISD::STRICT_FMINNUM, MVT::v4f32, Legal);
 
       setOperationAction(ISD::STRICT_FADD, MVT::v2f64, Legal);
       setOperationAction(ISD::STRICT_FSUB, MVT::v2f64, Legal);
       setOperationAction(ISD::STRICT_FMUL, MVT::v2f64, Legal);
       setOperationAction(ISD::STRICT_FDIV, MVT::v2f64, Legal);
+      setOperationAction(ISD::STRICT_FMA, MVT::v2f64, Legal);
+      setOperationAction(ISD::STRICT_FSQRT, MVT::v2f64, Legal);
+      setOperationAction(ISD::STRICT_FMAXNUM, MVT::v2f64, Legal);
+      setOperationAction(ISD::STRICT_FMINNUM, MVT::v2f64, Legal);
 
       addRegisterClass(MVT::v2i64, &PPC::VSRCRegClass);
     }
@@ -1001,6 +1016,8 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
         setOperationAction(ISD::STRICT_FSUB, MVT::f128, Legal);
         setOperationAction(ISD::STRICT_FMUL, MVT::f128, Legal);
         setOperationAction(ISD::STRICT_FDIV, MVT::f128, Legal);
+        setOperationAction(ISD::STRICT_FMA, MVT::f128, Legal);
+        setOperationAction(ISD::STRICT_FSQRT, MVT::f128, Legal);
       }
       setOperationAction(ISD::FP_EXTEND, MVT::v2f32, Custom);
       setOperationAction(ISD::BSWAP, MVT::v8i16, Legal);
@@ -7975,6 +7992,7 @@ SDValue PPCTargetLowering::LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const {
   SDValue LHS = Op.getOperand(0), RHS = Op.getOperand(1);
   SDValue TV  = Op.getOperand(2), FV  = Op.getOperand(3);
   SDLoc dl(Op);
+  SDNodeFlags Flags = Op.getNode()->getFlags();
 
   // We have xsmaxcdp/xsmincdp which are OK to emit even in the
   // presence of infinities.
@@ -7995,14 +8013,9 @@ SDValue PPCTargetLowering::LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const {
   // general, fsel-based lowering of select is a finite-math-only optimization.
   // For more information, see section F.3 of the 2.06 ISA specification.
   // With ISA 3.0
-  if (!DAG.getTarget().Options.NoInfsFPMath ||
-      !DAG.getTarget().Options.NoNaNsFPMath)
+  if ((!DAG.getTarget().Options.NoInfsFPMath && !Flags.hasNoInfs()) ||
+      (!DAG.getTarget().Options.NoNaNsFPMath && !Flags.hasNoNaNs()))
     return Op;
-
-  // TODO: Propagate flags from the select rather than global settings.
-  SDNodeFlags Flags;
-  Flags.setNoInfs(true);
-  Flags.setNoNaNs(true);
 
   // If the RHS of the comparison is a 0.0, we don't need to do the
   // subtraction at all.

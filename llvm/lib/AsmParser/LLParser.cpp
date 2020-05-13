@@ -1306,6 +1306,7 @@ bool LLParser::ParseFnAttributeValuePairs(AttrBuilder &B,
       B.addAttribute(Attribute::NoImplicitFloat); break;
     case lltok::kw_noinline: B.addAttribute(Attribute::NoInline); break;
     case lltok::kw_nonlazybind: B.addAttribute(Attribute::NonLazyBind); break;
+    case lltok::kw_nomerge: B.addAttribute(Attribute::NoMerge); break;
     case lltok::kw_noredzone: B.addAttribute(Attribute::NoRedZone); break;
     case lltok::kw_noreturn: B.addAttribute(Attribute::NoReturn); break;
     case lltok::kw_nosync: B.addAttribute(Attribute::NoSync); break;
@@ -1698,6 +1699,7 @@ bool LLParser::ParseOptionalParamAttrs(AttrBuilder &B) {
     case lltok::kw_noimplicitfloat:
     case lltok::kw_noinline:
     case lltok::kw_nonlazybind:
+    case lltok::kw_nomerge:
     case lltok::kw_noredzone:
     case lltok::kw_noreturn:
     case lltok::kw_nocf_check:
@@ -1797,6 +1799,7 @@ bool LLParser::ParseOptionalReturnAttrs(AttrBuilder &B) {
     case lltok::kw_noimplicitfloat:
     case lltok::kw_noinline:
     case lltok::kw_nonlazybind:
+    case lltok::kw_nomerge:
     case lltok::kw_noredzone:
     case lltok::kw_noreturn:
     case lltok::kw_nocf_check:
@@ -4877,21 +4880,24 @@ bool LLParser::ParseDIMacroFile(MDNode *&Result, bool IsDistinct) {
 }
 
 /// ParseDIModule:
-///   ::= !DIModule(scope: !0, name: "SomeModule", configMacros: "-DNDEBUG",
-///                 includePath: "/usr/include", apinotes: "module.apinotes")
+///   ::= !DIModule(scope: !0, name: "SomeModule", configMacros:
+///   "-DNDEBUG", includePath: "/usr/include", apinotes: "module.apinotes",
+///   file: !1, line: 4)
 bool LLParser::ParseDIModule(MDNode *&Result, bool IsDistinct) {
 #define VISIT_MD_FIELDS(OPTIONAL, REQUIRED)                                    \
   REQUIRED(scope, MDField, );                                                  \
   REQUIRED(name, MDStringField, );                                             \
   OPTIONAL(configMacros, MDStringField, );                                     \
   OPTIONAL(includePath, MDStringField, );                                      \
-  OPTIONAL(apinotes, MDStringField, );
+  OPTIONAL(apinotes, MDStringField, );                                         \
+  OPTIONAL(file, MDField, );                                                   \
+  OPTIONAL(line, LineField, );
   PARSE_MD_FIELDS();
 #undef VISIT_MD_FIELDS
 
-  Result =
-      GET_OR_DISTINCT(DIModule, (Context, scope.Val, name.Val, configMacros.Val,
-                                 includePath.Val, apinotes.Val));
+  Result = GET_OR_DISTINCT(DIModule, (Context, file.Val, scope.Val, name.Val,
+                                      configMacros.Val, includePath.Val,
+                                      apinotes.Val, line.Val));
   return false;
 }
 

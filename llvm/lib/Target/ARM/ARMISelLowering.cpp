@@ -9554,7 +9554,7 @@ void ARMTargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
   unsigned PCAdj = (isThumb || isThumb2) ? 4 : 8;
   ARMConstantPoolValue *CPV =
     ARMConstantPoolMBB::Create(F.getContext(), DispatchBB, PCLabelId, PCAdj);
-  unsigned CPI = MCP->getConstantPoolIndex(CPV, 4);
+  unsigned CPI = MCP->getConstantPoolIndex(CPV, Align(4));
 
   const TargetRegisterClass *TRC = isThumb ? &ARM::tGPRRegClass
                                            : &ARM::GPRRegClass;
@@ -9843,10 +9843,8 @@ void ARMTargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
       const Constant *C = ConstantInt::get(Int32Ty, NumLPads);
 
       // MachineConstantPool wants an explicit alignment.
-      unsigned Align = MF->getDataLayout().getPrefTypeAlignment(Int32Ty);
-      if (Align == 0)
-        Align = MF->getDataLayout().getTypeAllocSize(C->getType());
-      unsigned Idx = ConstantPool->getConstantPoolIndex(C, Align);
+      Align Alignment = MF->getDataLayout().getPrefTypeAlign(Int32Ty);
+      unsigned Idx = ConstantPool->getConstantPoolIndex(C, Alignment);
 
       Register VReg1 = MRI->createVirtualRegister(TRC);
       BuildMI(DispatchBB, dl, TII->get(ARM::tLDRpci))
@@ -9945,10 +9943,8 @@ void ARMTargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
       const Constant *C = ConstantInt::get(Int32Ty, NumLPads);
 
       // MachineConstantPool wants an explicit alignment.
-      unsigned Align = MF->getDataLayout().getPrefTypeAlignment(Int32Ty);
-      if (Align == 0)
-        Align = MF->getDataLayout().getTypeAllocSize(C->getType());
-      unsigned Idx = ConstantPool->getConstantPoolIndex(C, Align);
+      Align Alignment = MF->getDataLayout().getPrefTypeAlign(Int32Ty);
+      unsigned Idx = ConstantPool->getConstantPoolIndex(C, Alignment);
 
       Register VReg1 = MRI->createVirtualRegister(TRC);
       BuildMI(DispatchBB, dl, TII->get(ARM::LDRcp))
@@ -10349,7 +10345,7 @@ ARMTargetLowering::EmitStructByval(MachineInstr &MI,
 
     // MachineConstantPool wants an explicit alignment.
     Align Alignment = MF->getDataLayout().getPrefTypeAlign(Int32Ty);
-    unsigned Idx = ConstantPool->getConstantPoolIndex(C, Alignment.value());
+    unsigned Idx = ConstantPool->getConstantPoolIndex(C, Alignment);
     MachineMemOperand *CPMMO =
         MF->getMachineMemOperand(MachinePointerInfo::getConstantPool(*MF),
                                  MachineMemOperand::MOLoad, 4, Align(4));
@@ -15711,6 +15707,12 @@ bool ARMTargetLowering::shouldSinkOperands(Instruction *I,
     auto *Sub = cast<Instruction>(*I->users().begin());
     return Sub->getOpcode() == Instruction::FSub && Sub->getOperand(1) == I;
   };
+  auto IsFMS = [&](Instruction *I) {
+    if (match(I->getOperand(0), m_FNeg(m_Value())) ||
+        match(I->getOperand(1), m_FNeg(m_Value())))
+      return true;
+    return false;
+  };
 
   auto IsSinker = [&](Instruction *I, int Operand) {
     switch (I->getOpcode()) {
@@ -15728,32 +15730,66 @@ bool ARMTargetLowering::shouldSinkOperands(Instruction *I,
     case Instruction::LShr:
     case Instruction::AShr:
       return Operand == 1;
+    case Instruction::Call:
+      if (auto *II = dyn_cast<IntrinsicInst>(I)) {
+        switch (II->getIntrinsicID()) {
+        case Intrinsic::fma:
+          return !IsFMS(I);
+        default:
+          return false;
+        }
+      }
+      return false;
     default:
       return false;
     }
   };
 
-  int Op = 0;
-  if (!isa<ShuffleVectorInst>(I->getOperand(Op)))
-    Op = 1;
-  if (!IsSinker(I, Op))
-    return false;
-  if (!match(I->getOperand(Op),
-             m_ShuffleVector(m_InsertElement(m_Undef(), m_Value(), m_ZeroInt()),
-                             m_Undef(), m_ZeroMask()))) {
-    return false;
+  for (auto OpIdx : enumerate(I->operands())) {
+    Instruction *Op = dyn_cast<Instruction>(OpIdx.value().get());
+    // Make sure we are not already sinking this operand
+    if (!Op || any_of(Ops, [&](Use *U) { return U->get() == Op; }))
+      continue;
+
+    Instruction *Shuffle = Op;
+    if (Shuffle->getOpcode() == Instruction::BitCast)
+      Shuffle = dyn_cast<Instruction>(Shuffle->getOperand(0));
+    // We are looking for a splat that can be sunk.
+    if (!Shuffle ||
+        !match(Shuffle, m_ShuffleVector(
+                            m_InsertElement(m_Undef(), m_Value(), m_ZeroInt()),
+                            m_Undef(), m_ZeroMask())))
+      continue;
+    if (!IsSinker(I, OpIdx.index()))
+      continue;
+
+    // All uses of the shuffle should be sunk to avoid duplicating it across gpr
+    // and vector registers
+    for (Use &U : Op->uses()) {
+      Instruction *Insn = cast<Instruction>(U.getUser());
+      if (!IsSinker(Insn, U.getOperandNo()))
+        return false;
+    }
+
+    Ops.push_back(&Shuffle->getOperandUse(0));
+    if (Shuffle != Op)
+      Ops.push_back(&Op->getOperandUse(0));
+    Ops.push_back(&OpIdx.value());
   }
-  Instruction *Shuffle = cast<Instruction>(I->getOperand(Op));
-  // All uses of the shuffle should be sunk to avoid duplicating it across gpr
-  // and vector registers
-  for (Use &U : Shuffle->uses()) {
-    Instruction *Insn = cast<Instruction>(U.getUser());
-    if (!IsSinker(Insn, U.getOperandNo()))
-      return false;
-  }
-  Ops.push_back(&Shuffle->getOperandUse(0));
-  Ops.push_back(&I->getOperandUse(Op));
   return true;
+}
+
+Type *ARMTargetLowering::shouldConvertSplatType(ShuffleVectorInst *SVI) const {
+  if (!Subtarget->hasMVEIntegerOps())
+    return nullptr;
+  Type *SVIType = SVI->getType();
+  Type *ScalarType = SVIType->getScalarType();
+
+  if (ScalarType->isFloatTy())
+    return Type::getInt32Ty(SVIType->getContext());
+  if (ScalarType->isHalfTy())
+    return Type::getInt16Ty(SVIType->getContext());
+  return nullptr;
 }
 
 bool ARMTargetLowering::isVectorLoadExtDesirable(SDValue ExtVal) const {
