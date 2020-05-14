@@ -938,9 +938,8 @@ unsigned SITargetLowering::getVectorTypeBreakdownForCallingConv(
 static EVT memVTFromImageData(Type *Ty, unsigned DMaskLanes) {
   assert(DMaskLanes != 0);
 
-  if (auto *VT = dyn_cast<VectorType>(Ty)) {
-    unsigned NumElts = std::min(DMaskLanes,
-                                static_cast<unsigned>(VT->getNumElements()));
+  if (auto *VT = dyn_cast<FixedVectorType>(Ty)) {
+    unsigned NumElts = std::min(DMaskLanes, VT->getNumElements());
     return EVT::getVectorVT(Ty->getContext(),
                             EVT::getEVT(VT->getElementType()),
                             NumElts);
@@ -4914,7 +4913,7 @@ SDValue SITargetLowering::getSegmentAperture(unsigned AS, const SDLoc &DL,
 
   MachineFunction &MF = DAG.getMachineFunction();
   SIMachineFunctionInfo *Info = MF.getInfo<SIMachineFunctionInfo>();
-  unsigned UserSGPR = Info->getQueuePtrUserSGPR();
+  Register UserSGPR = Info->getQueuePtrUserSGPR();
   assert(UserSGPR != AMDGPU::NoRegister);
 
   SDValue QueuePtr = CreateLiveInRegister(
