@@ -130,10 +130,10 @@ int main(int argc, char *argv[]) {
   // DMP-PAR:          ACCParallelDirective
   // DMP-PARLOOP:      ACCParallelLoopDirective
   // DMP-PARLOOP-NEXT:   ACCSeqClause
-  // DMP-NEXT:           ACCNum_gangsClause
+  // DMP-NEXT:           ACCNumGangsClause
   // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 4
   // DMP-PARLOOP-NEXT:   effect: ACCParallelDirective
-  // DMP-PARLOOP-NEXT:     ACCNum_gangsClause
+  // DMP-PARLOOP-NEXT:     ACCNumGangsClause
   // DMP-PARLOOP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   // DMP-NEXT:             impl: OMPTargetTeamsDirective
   // DMP-NEXT:               OMPNum_teamsClause
@@ -204,10 +204,10 @@ int main(int argc, char *argv[]) {
   // DMP-PAR:          ACCParallelDirective
   // DMP-PARLOOP:      ACCParallelLoopDirective
   // DMP-PARLOOP-NEXT:   ACCSeqClause
-  // DMP-NEXT:           ACCNum_gangsClause
+  // DMP-NEXT:           ACCNumGangsClause
   // DMP-NEXT:             CallExpr {{.*}} 'int'
   // DMP-PARLOOP:        effect: ACCParallelDirective
-  // DMP-PARLOOP-NEXT:     ACCNum_gangsClause
+  // DMP-PARLOOP-NEXT:     ACCNumGangsClause
   // DMP-PARLOOP-NEXT:       CallExpr {{.*}} 'int'
   // DMP:                  impl: OMPTargetTeamsDirective
   // DMP-NEXT:               OMPNum_teamsClause

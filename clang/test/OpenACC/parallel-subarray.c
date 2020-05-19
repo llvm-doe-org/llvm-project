@@ -164,7 +164,7 @@ int main() {
     printArr1("arr1[0:1] before", arr1, n);
 
     // DMP:         ACCParallelDirective
-    // DMP-NEXT:      ACCNum_gangsClause
+    // DMP-NEXT:      ACCNumGangsClause
     // DMP-NEXT:        IntegerLiteral {{.*}} 'int' 1
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
@@ -222,7 +222,7 @@ int main() {
     printArr1("arr1[0:2] before", arr1, n);
 
     // DMP:         ACCParallelDirective
-    // DMP-NEXT:      ACCNum_gangsClause
+    // DMP-NEXT:      ACCNumGangsClause
     // DMP-NEXT:        IntegerLiteral {{.*}} 'int' 1
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
@@ -281,7 +281,7 @@ int main() {
     printArr1("pi[0:3] before", arr1, n);
 
     // DMP:         ACCParallelDirective
-    // DMP-NEXT:      ACCNum_gangsClause
+    // DMP-NEXT:      ACCNumGangsClause
     // DMP-NEXT:        IntegerLiteral {{.*}} 'int' 1
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
@@ -339,7 +339,7 @@ int main() {
     printArr1("arr1[1:3] before", arr1, n);
 
     // DMP:         ACCParallelDirective
-    // DMP-NEXT:      ACCNum_gangsClause
+    // DMP-NEXT:      ACCNumGangsClause
     // DMP-NEXT:        IntegerLiteral {{.*}} 'int' 1
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
@@ -398,7 +398,7 @@ int main() {
     printArr1("arr1[start:length] before", arr1, n);
 
     // DMP:         ACCParallelDirective
-    // DMP-NEXT:      ACCNum_gangsClause
+    // DMP-NEXT:      ACCNumGangsClause
     // DMP-NEXT:        IntegerLiteral {{.*}} 'int' 1
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
@@ -461,7 +461,7 @@ int main() {
     printArr1("arr1[:length] before", arr1, n);
 
     // DMP:         ACCParallelDirective
-    // DMP-NEXT:      ACCNum_gangsClause
+    // DMP-NEXT:      ACCNumGangsClause
     // DMP-NEXT:        IntegerLiteral {{.*}} 'int' 1
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
@@ -522,7 +522,7 @@ int main() {
     printArr1("arr1[start:] before", arr1, n);
 
     // DMP:         ACCParallelDirective
-    // DMP-NEXT:      ACCNum_gangsClause
+    // DMP-NEXT:      ACCNumGangsClause
     // DMP-NEXT:        IntegerLiteral {{.*}} 'int' 1
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
@@ -583,7 +583,7 @@ int main() {
     printArr1("arr1[:] before", arr1, n);
 
     // DMP:         ACCParallelDirective
-    // DMP-NEXT:      ACCNum_gangsClause
+    // DMP-NEXT:      ACCNumGangsClause
     // DMP-NEXT:        IntegerLiteral {{.*}} 'int' 1
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
@@ -642,7 +642,7 @@ int main() {
     printArr2("arr2[2:3][0:2] before", arr2, n);
 
     // DMP:         ACCParallelDirective
-    // DMP-NEXT:      ACCNum_gangsClause
+    // DMP-NEXT:      ACCNumGangsClause
     // DMP-NEXT:        IntegerLiteral {{.*}} 'int' 1
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
@@ -708,7 +708,7 @@ int main() {
     printArr2("arr2[3:1][1:1] before", arr2, n);
 
     // DMP:         ACCParallelDirective
-    // DMP-NEXT:      ACCNum_gangsClause
+    // DMP-NEXT:      ACCNumGangsClause
     // DMP-NEXT:        IntegerLiteral {{.*}} 'int' 1
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
@@ -775,7 +775,7 @@ int main() {
     printArr2("pa[1:3][:] before", arr2, n);
 
     // DMP:         ACCParallelDirective
-    // DMP-NEXT:      ACCNum_gangsClause
+    // DMP-NEXT:      ACCNumGangsClause
     // DMP-NEXT:        IntegerLiteral {{.*}} 'int' 1
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
@@ -845,7 +845,7 @@ int main() {
     printArr2("ap[2:1][0:2] before", arr2, 6);
 
     // DMP:         ACCParallelDirective
-    // DMP-NEXT:      ACCNum_gangsClause
+    // DMP-NEXT:      ACCNumGangsClause
     // DMP-NEXT:        IntegerLiteral {{.*}} 'int' 1
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
@@ -915,7 +915,7 @@ int main() {
     printArr2("ap[5:1][0:1] before", arr2, 6);
 
     // DMP:         ACCParallelDirective
-    // DMP-NEXT:      ACCNum_gangsClause
+    // DMP-NEXT:      ACCNumGangsClause
     // DMP-NEXT:        IntegerLiteral {{.*}} 'int' 1
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
@@ -986,7 +986,7 @@ int main() {
     printArr2("pp[3:1][0:2] before", arr2, 6);
 
     // DMP:         ACCParallelDirective
-    // DMP-NEXT:      ACCNum_gangsClause
+    // DMP-NEXT:      ACCNumGangsClause
     // DMP-NEXT:        IntegerLiteral {{.*}} 'int' 1
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
@@ -1057,7 +1057,7 @@ int main() {
     printArr2("pp[4:1][1:1] before", arr2, 6);
 
     // DMP:         ACCParallelDirective
-    // DMP-NEXT:      ACCNum_gangsClause
+    // DMP-NEXT:      ACCNumGangsClause
     // DMP-NEXT:        IntegerLiteral {{.*}} 'int' 1
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause

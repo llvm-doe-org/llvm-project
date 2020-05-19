@@ -104,11 +104,11 @@ int main(int argc, char *argv[]) {
   // PRT-NEXT: {
   {
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
@@ -180,19 +180,19 @@ int main(int argc, char *argv[]) {
   // PRT-NEXT: {
   {
     // DMP:      ACCParallelLoopDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCSeqClause
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:     ACCNumWorkersClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:     ACCVectorLengthClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     impl: OMPTargetTeamsDirective
     // DMP-NEXT:       OMPNum_teamsClause
@@ -241,18 +241,18 @@ int main(int argc, char *argv[]) {
   {
     // DMP:      ACCParallelLoopDirective
     // DMP-NEXT:   ACCGangClause
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:     ACCNumWorkersClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:     ACCVectorLengthClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     impl: OMPTargetTeamsDirective
     // DMP-NEXT:       OMPNum_teamsClause
@@ -306,11 +306,11 @@ int main(int argc, char *argv[]) {
   // PRT-NEXT: {
   {
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
@@ -522,18 +522,18 @@ int main(int argc, char *argv[]) {
   {
     // DMP:      ACCParallelLoopDirective
     // DMP-NEXT:   ACCWorkerClause
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:     ACCNumWorkersClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:     ACCVectorLengthClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:     impl: OMPTargetTeamsDirective
     // DMP-NEXT:       OMPNum_teamsClause
@@ -591,18 +591,18 @@ int main(int argc, char *argv[]) {
   {
     // DMP:      ACCParallelLoopDirective
     // DMP-NEXT:   ACCVectorClause
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:     ACCNumWorkersClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:     ACCVectorLengthClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:     impl: OMPTargetTeamsDirective
     // DMP-NEXT:       OMPNum_teamsClause
@@ -661,11 +661,11 @@ int main(int argc, char *argv[]) {
   // PRT-NEXT: {
   {
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
@@ -805,18 +805,18 @@ int main(int argc, char *argv[]) {
     // DMP:      ACCParallelLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCVectorClause
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:     ACCNumWorkersClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:     ACCVectorLengthClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:     impl: OMPTargetTeamsDirective
     // DMP-NEXT:       OMPNum_teamsClause
@@ -863,18 +863,18 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:   ACCGangClause
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCVectorClause
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:     ACCNumWorkersClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:     ACCVectorLengthClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:     impl: OMPTargetTeamsDirective
     // DMP-NEXT:       OMPNum_teamsClause
@@ -920,18 +920,18 @@ int main(int argc, char *argv[]) {
   {
     // DMP:      ACCParallelLoopDirective
     // DMP-NEXT:   ACCGangClause
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:     ACCNumWorkersClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:     ACCVectorLengthClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:     impl: OMPTargetTeamsDirective
     // DMP-NEXT:       OMPNum_teamsClause
@@ -1000,11 +1000,11 @@ int main(int argc, char *argv[]) {
     int nw = 2;
 
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP:          DeclRefExpr {{.*}} 'nw' 'int'
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
@@ -1137,19 +1137,19 @@ int main(int argc, char *argv[]) {
     int nw = 2;
 
     // DMP:      ACCParallelLoopDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP:          DeclRefExpr {{.*}} 'nw' 'int'
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   ACCSeqClause
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:     ACCNumWorkersClause
     // DMP:            DeclRefExpr {{.*}} 'nw' 'int'
-    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:     ACCVectorLengthClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:     impl: OMPTargetTeamsDirective
     // DMP-NEXT:       OMPNum_teamsClause
@@ -1188,18 +1188,18 @@ int main(int argc, char *argv[]) {
     // DMP:      ACCParallelLoopDirective
     // DMP-NEXT:   ACCGangClause
     // DMP-NEXT:   ACCVectorClause
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP:          DeclRefExpr {{.*}} 'nw' 'int'
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:     ACCNumWorkersClause
     // DMP:            DeclRefExpr {{.*}} 'nw' 'int'
-    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:     ACCVectorLengthClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:     impl: OMPTargetTeamsDirective
     // DMP-NEXT:       OMPNum_teamsClause
@@ -1245,12 +1245,12 @@ int main(int argc, char *argv[]) {
   // PRT-NEXT: {
   {
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     CallExpr
     // DMP:            DeclRefExpr {{.*}} 'foo'
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   impl: CompoundStmt
     // DMP-NEXT:     CStyleCastExpr {{.*}} 'void' <ToVoid>
@@ -1344,24 +1344,24 @@ int main(int argc, char *argv[]) {
     int nw = 1;
     // DMP:      ACCParallelLoopDirective
     // DMP-NEXT:   ACCGangClause
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     ParenExpr
     // DMP-NEXT:       BinaryOperator {{.*}} 'int' '='
     // DMP-NEXT:         DeclRefExpr {{.*}} 'nw' 'int'
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:     ACCNumWorkersClause
     // DMP-NEXT:       ParenExpr
     // DMP-NEXT:         BinaryOperator {{.*}} 'int' '='
     // DMP-NEXT:           DeclRefExpr {{.*}} 'nw' 'int'
     // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:     ACCVectorLengthClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:     impl: CompoundStmt
     // DMP-NEXT:       CStyleCastExpr {{.*}} 'void' <ToVoid>
@@ -1468,11 +1468,11 @@ int main(int argc, char *argv[]) {
     // PRT-NEXT: int nw = 2;
     int nw = 2;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP:          DeclRefExpr {{.*}} 'nw' 'int'
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   impl: CompoundStmt
     // DMP-NEXT:     DeclStmt
@@ -1564,18 +1564,18 @@ int main(int argc, char *argv[]) {
 
     // DMP:      ACCParallelLoopDirective
     // DMP-NEXT:   ACCWorkerClause
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP:          DeclRefExpr {{.*}} 'nw' 'int'
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:     ACCNumWorkersClause
     // DMP:            DeclRefExpr {{.*}} 'nw' 'int'
-    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:     ACCVectorLengthClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:     impl: CompoundStmt
     // DMP-NEXT:       DeclStmt
@@ -1681,12 +1681,12 @@ int main(int argc, char *argv[]) {
   // PRT-NEXT: {
   {
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     CallExpr
     // DMP:            DeclRefExpr {{.*}} 'foo'
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   impl: CompoundStmt
     // DMP-NEXT:     DeclStmt
@@ -1916,11 +1916,11 @@ int main(int argc, char *argv[]) {
     // PRT-NEXT: int vl = 2;
     int vl = 2;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP:          DeclRefExpr {{.*}} 'vl' 'int'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
@@ -1978,19 +1978,19 @@ int main(int argc, char *argv[]) {
     int vl = 1;
     // DMP:      ACCParallelLoopDirective
     // DMP-NEXT:   ACCVectorClause
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     UnaryOperator {{.*}} 'int' prefix '++'
     // DMP-NEXT:       DeclRefExpr {{.*}} 'vl' 'int'
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:     ACCNum_workersClause
+    // DMP-NEXT:     ACCNumWorkersClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:     ACCVector_lengthClause
+    // DMP-NEXT:     ACCVectorLengthClause
     // DMP-NEXT:       UnaryOperator {{.*}} 'int' prefix '++'
     // DMP-NEXT:         DeclRefExpr {{.*}} 'vl' 'int'
     // DMP-NEXT:     impl: CompoundStmt
@@ -2075,11 +2075,11 @@ int main(int argc, char *argv[]) {
     // PRT-NEXT: int vl = 3;
     int vl = 3;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     UnaryOperator {{.*}} 'int' postfix '--'
     // DMP-NEXT:       DeclRefExpr {{.*}} 'vl' 'int'
     // DMP-NEXT:   impl: CompoundStmt
@@ -2165,12 +2165,12 @@ int main(int argc, char *argv[]) {
   // PRT-NEXT: {
   {
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:   ACCNum_workersClause
+    // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     CallExpr
     // DMP:            DeclRefExpr {{.*}} 'foo'
-    // DMP-NEXT:   ACCVector_lengthClause
+    // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     CallExpr
     // DMP:            DeclRefExpr {{.*}} 'bar'
     // DMP-NEXT:   impl: CompoundStmt

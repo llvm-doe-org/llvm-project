@@ -119,7 +119,7 @@ int main() {
     int out2 = 30;
     int out3 = 40;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCReductionClause {{.*}} '*'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'int'
@@ -238,7 +238,7 @@ int main() {
     double out1 = 1.4;
     double out2 = 2.5;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause
     // DMP-NOT:      <implicit>
@@ -348,13 +348,13 @@ int main() {
     // PRT-NEXT: int out = 10;
     int out = 10;
     // DMP:      ACCParallelLoopDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCSeqClause
     // DMP-NEXT:   ACCReductionClause {{.*}} '*'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'int'
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'int'
@@ -406,7 +406,7 @@ int main() {
     // PRT-SAME: } out = E0;
     enum E {E0, E1} out = E0;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCReductionClause {{.*}} 'max'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'enum E'
@@ -482,7 +482,7 @@ int main() {
     // PRT-SAME: } out = E0;
     enum E {E0, E1} out = E0;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'enum E'
@@ -537,12 +537,12 @@ int main() {
     // PRT-SAME: } out = E0;
     enum E {E0, E1} out = E0;
     // DMP:      ACCParallelLoopDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCReductionClause {{.*}} 'max'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'enum E'
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'enum E'
@@ -605,7 +605,7 @@ int main() {
     _Bool out2 = 1;
     _Bool out3 = 1;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCReductionClause {{.*}} '&'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' '_Bool'
@@ -747,7 +747,7 @@ int main() {
     double out1 = 1.4;
     double out2 = 2.5;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause
     // DMP-NOT:      <implicit>
@@ -867,10 +867,10 @@ int main() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' '_Bool'
     // DMP-NEXT:   ACCAutoClause
     // DMP-NEXT:   ACCWorkerClause
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' '_Bool'
@@ -930,7 +930,7 @@ int main() {
     _Complex double out2 = 4;
     _Complex double out3 = 5;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCReductionClause {{.*}} '&&'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' '_Complex double'
@@ -1072,7 +1072,7 @@ int main() {
     double out1 = 1.4;
     double out2 = 2.5;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause
     // DMP-NOT:      <implicit>
@@ -1189,13 +1189,13 @@ int main() {
     // PRT-NEXT: _Complex double out = 2;
     _Complex double out = 2;
     // DMP:      ACCParallelLoopDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCReductionClause {{.*}} '&&'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' '_Complex double'
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' '_Complex double'
@@ -1258,7 +1258,7 @@ int main() {
     long out2 = 7;
     long out3 = 8;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCReductionClause {{.*}} '+'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'long'
@@ -1384,7 +1384,7 @@ int main() {
     double out1 = 1.4;
     double out2 = 2.5;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause
     // DMP-NOT:      <implicit>
@@ -1503,13 +1503,13 @@ int main() {
     // PRT-NEXT: long out = 5;
     long out = 5;
     // DMP:      ACCParallelLoopDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCReductionClause {{.*}} '+'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'long'
     // DMP-NEXT:   ACCVectorClause
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'long'
@@ -1570,7 +1570,7 @@ int main() {
     float out2 = -7;
     float out3 = -8;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCReductionClause {{.*}} '*'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'float'
@@ -1696,7 +1696,7 @@ int main() {
     double out1 = 1.4;
     double out2 = 2.5;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause
     // DMP-NOT:      <implicit>
@@ -1814,14 +1814,14 @@ int main() {
     // PRT-NEXT: float out = -5;
     float out = -5;
     // DMP:      ACCParallelLoopDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCVectorClause
     // DMP-NEXT:   ACCReductionClause {{.*}} '*'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'float'
     // DMP-NEXT:   ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'float'
@@ -1882,7 +1882,7 @@ int main() {
     // PRT-NEXT: double out =
     double out = 0.3;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCReductionClause {{.*}} '+'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
@@ -1953,7 +1953,7 @@ int main() {
     // PRT-NEXT: double out =
     double out = 0.3;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
@@ -2013,13 +2013,13 @@ int main() {
     // PRT-NEXT: double out =
     double out = 0.3;
     // DMP:      ACCParallelLoopDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCGangClause
     // DMP-NEXT:   ACCReductionClause {{.*}} '+'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'double'
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
@@ -2069,7 +2069,7 @@ int main() {
     // PRT-NEXT: int out = 3;
     int out = 3;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCReductionClause {{.*}} '+'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'int'
@@ -2137,13 +2137,13 @@ int main() {
     int out = 3;
     // DMP:      ACCParallelLoopDirective
     // DMP-NEXT:   ACCGangClause
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCReductionClause {{.*}} '+'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'int'
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'int'
@@ -2199,7 +2199,7 @@ int main() {
     // PRT-NEXT: int out = 3;
     int out = 3;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'int'
@@ -2270,10 +2270,10 @@ int main() {
     // DMP-NEXT:   ACCGangClause
     // DMP-NEXT:   ACCReductionClause {{.*}} '+'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'int'
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'int'
@@ -2325,7 +2325,7 @@ int main() {
     // PRT-NEXT: int out = 3;
     int out = 3;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'int'
@@ -2393,7 +2393,7 @@ int main() {
     // PRT-NEXT: int out = 3;
     int out = 3;
     // DMP:      ACCParallelLoopDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCGangClause
     // DMP-NEXT:   ACCWorkerClause
@@ -2401,7 +2401,7 @@ int main() {
     // DMP-NEXT:   ACCReductionClause {{.*}} '+'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'int'
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'int'
@@ -2454,7 +2454,7 @@ int main() {
     // PRT-NEXT: int out = 3;
     int out = 3;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'int'
@@ -2557,13 +2557,13 @@ int main() {
     // PRT-NEXT: int out = 3;
     int out = 3;
     // DMP:      ACCParallelLoopDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCGangClause
     // DMP-NEXT:   ACCReductionClause {{.*}} '+'
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'int'
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'int'
@@ -2659,7 +2659,7 @@ int main() {
     // PRT-NEXT: int out = 5;
     int out = 5;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'int'
@@ -2737,7 +2737,7 @@ int main() {
     // PRT-NEXT: int out = 5;
     int out = 5;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'int'
@@ -2820,7 +2820,7 @@ int main() {
     // PRT-NEXT: int out = 5;
     int out = 5;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'int'
@@ -2931,10 +2931,10 @@ int main() {
     // PRT-NEXT: int out = 5;
     int out = 5;
     // DMP:      ACCParallelLoopDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'int'
@@ -3046,7 +3046,7 @@ int main() {
     int out0 = 5;
     int out1 = 5;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCPrivateClause
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out0' 'int'
@@ -3131,7 +3131,7 @@ int main() {
     int out1 = 6;
     int out2 = 7;
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCCopyClause
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'int'
@@ -3312,7 +3312,7 @@ int main() {
     int out1 = 6;
     int out2 = 7;
     // DMP:      ACCParallelLoopDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:   ACCSeqClause
     // DMP-NEXT:   ACCPrivateClause
@@ -3322,7 +3322,7 @@ int main() {
     // DMP-NEXT:   ACCCopyinClause
     // DMP-NEXT:     DeclRefExpr {{.*}} 'out2' 'int'
     // DMP-NEXT:   effect: ACCParallelDirective
-    // DMP-NEXT:     ACCNum_gangsClause
+    // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     ACCCopyinClause
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'int'

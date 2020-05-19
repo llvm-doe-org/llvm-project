@@ -106,11 +106,11 @@ int main() {
   printf("acc loop enclosing\n");
 
   // DMP:      ACCParallelDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-  // DMP-NEXT:   ACCNum_workersClause
+  // DMP-NEXT:   ACCNumWorkersClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-  // DMP-NEXT:   ACCVector_lengthClause
+  // DMP-NEXT:   ACCVectorLengthClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
@@ -394,12 +394,12 @@ int main() {
   printf("acc parallel loop gang enclosing\n");
 
   // DMP:      ACCParallelLoopDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   ACCGangClause
   // DMP-NOT:      <implicit>
   // DMP-NEXT:   effect: ACCParallelDirective
-  // DMP-NEXT:     ACCNum_gangsClause
+  // DMP-NEXT:     ACCNumGangsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
@@ -452,16 +452,16 @@ int main() {
   printf("acc parallel loop worker enclosing\n");
 
   // DMP:      ACCParallelLoopDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-  // DMP-NEXT:   ACCNum_workersClause
+  // DMP-NEXT:   ACCNumWorkersClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   ACCWorkerClause
   // DMP-NOT:      <implicit>
   // DMP-NEXT:   effect: ACCParallelDirective
-  // DMP-NEXT:     ACCNum_gangsClause
+  // DMP-NEXT:     ACCNumGangsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
-  // DMP-NEXT:     ACCNum_workersClause
+  // DMP-NEXT:     ACCNumWorkersClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
@@ -516,16 +516,16 @@ int main() {
   printf("acc parallel loop vector enclosing\n");
 
   // DMP:      ACCParallelLoopDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-  // DMP-NEXT:   ACCVector_lengthClause
+  // DMP-NEXT:   ACCVectorLengthClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   ACCVectorClause
   // DMP-NOT:      <implicit>
   // DMP-NEXT:   effect: ACCParallelDirective
-  // DMP-NEXT:     ACCNum_gangsClause
+  // DMP-NEXT:     ACCNumGangsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
-  // DMP-NEXT:     ACCVector_lengthClause
+  // DMP-NEXT:     ACCVectorLengthClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
@@ -583,12 +583,12 @@ int main() {
   printf("acc parallel loop seq enclosing\n");
 
   // DMP:      ACCParallelLoopDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   ACCSeqClause
   // DMP-NOT:      <implicit>
   // DMP-NEXT:   effect: ACCParallelDirective
-  // DMP-NEXT:     ACCNum_gangsClause
+  // DMP-NEXT:     ACCNumGangsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
@@ -639,12 +639,12 @@ int main() {
   printf("acc parallel loop auto enclosing\n");
 
   // DMP:      ACCParallelLoopDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   ACCAutoClause
   // DMP-NOT:      <implicit>
   // DMP-NEXT:   effect: ACCParallelDirective
-  // DMP-NEXT:     ACCNum_gangsClause
+  // DMP-NEXT:     ACCNumGangsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
@@ -695,14 +695,14 @@ int main() {
   printf("acc parallel loop gang auto enclosing\n");
 
   // DMP:      ACCParallelLoopDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   ACCGangClause
   // DMP-NOT:      <implicit>
   // DMP-NEXT:   ACCAutoClause
   // DMP-NOT:      <implicit>
   // DMP-NEXT:   effect: ACCParallelDirective
-  // DMP-NEXT:     ACCNum_gangsClause
+  // DMP-NEXT:     ACCNumGangsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
@@ -761,11 +761,11 @@ int main() {
   printf("acc loop enclosed\n");
 
   // DMP:      ACCParallelDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-  // DMP-NEXT:   ACCNum_workersClause
+  // DMP-NEXT:   ACCNumWorkersClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-  // DMP-NEXT:   ACCVector_lengthClause
+  // DMP-NEXT:   ACCVectorLengthClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
@@ -1041,10 +1041,10 @@ int main() {
   printf("acc parallel loop gang enclosed\n");
 
   // DMP:      ACCParallelLoopDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   effect: ACCParallelDirective
-  // DMP-NEXT:     ACCNum_gangsClause
+  // DMP-NEXT:     ACCNumGangsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
@@ -1095,14 +1095,14 @@ int main() {
   printf("acc parallel loop worker enclosed\n");
 
   // DMP:      ACCParallelLoopDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-  // DMP-NEXT:   ACCNum_workersClause
+  // DMP-NEXT:   ACCNumWorkersClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   effect: ACCParallelDirective
-  // DMP-NEXT:     ACCNum_gangsClause
+  // DMP-NEXT:     ACCNumGangsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
-  // DMP-NEXT:     ACCNum_workersClause
+  // DMP-NEXT:     ACCNumWorkersClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
@@ -1160,14 +1160,14 @@ int main() {
   printf("acc parallel loop vector enclosed\n");
 
   // DMP:      ACCParallelLoopDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
-  // DMP-NEXT:   ACCVector_lengthClause
+  // DMP-NEXT:   ACCVectorLengthClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   effect: ACCParallelDirective
-  // DMP-NEXT:     ACCNum_gangsClause
+  // DMP-NEXT:     ACCNumGangsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
-  // DMP-NEXT:     ACCVector_lengthClause
+  // DMP-NEXT:     ACCVectorLengthClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
@@ -1225,10 +1225,10 @@ int main() {
   printf("acc parallel loop seq enclosed\n");
 
   // DMP:      ACCParallelLoopDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   effect: ACCParallelDirective
-  // DMP-NEXT:     ACCNum_gangsClause
+  // DMP-NEXT:     ACCNumGangsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
@@ -1281,10 +1281,10 @@ int main() {
   printf("acc parallel loop auto enclosed\n");
 
   // DMP:      ACCParallelLoopDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   effect: ACCParallelDirective
-  // DMP-NEXT:     ACCNum_gangsClause
+  // DMP-NEXT:     ACCNumGangsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
@@ -1337,10 +1337,10 @@ int main() {
   printf("acc parallel loop gang auto enclosed\n");
 
   // DMP:      ACCParallelLoopDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   effect: ACCParallelDirective
-  // DMP-NEXT:     ACCNum_gangsClause
+  // DMP-NEXT:     ACCNumGangsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
@@ -1399,7 +1399,7 @@ int main() {
   printf("multilevel, separate\n");
 
   // DMP:      ACCParallelDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
@@ -1472,10 +1472,10 @@ int main() {
   } // PRT-NEXT: }
 
   // DMP:      ACCParallelLoopDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   effect: ACCParallelDirective
-  // DMP-NEXT:     ACCNum_gangsClause
+  // DMP-NEXT:     ACCNumGangsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
@@ -1553,7 +1553,7 @@ int main() {
   printf("siblings, separate, gang first\n");
 
   // DMP:      ACCParallelDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
@@ -1640,10 +1640,10 @@ int main() {
   printf("siblings, combined, gang first\n");
 
   // DMP:      ACCParallelLoopDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   effect: ACCParallelDirective
-  // DMP-NEXT:     ACCNum_gangsClause
+  // DMP-NEXT:     ACCNumGangsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
@@ -1724,7 +1724,7 @@ int main() {
   printf("siblings, separate, gang second\n");
 
   // DMP:      ACCParallelDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
@@ -1811,10 +1811,10 @@ int main() {
   printf("siblings, combined, gang second\n");
 
   // DMP:      ACCParallelLoopDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   effect: ACCParallelDirective
-  // DMP-NEXT:     ACCNum_gangsClause
+  // DMP-NEXT:     ACCNumGangsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause

@@ -335,7 +335,7 @@ int main() {
   printf("%s > %s > %s\n", XSTR(ACCC0), XSTR(ACCC1), XSTR(ACCC2));
 
   // DMP-CMB:            ACCParallelLoopDirective
-  // DMP-CMB-NEXT:         ACCNum_gangsClause
+  // DMP-CMB-NEXT:         ACCNumGangsClause
   // DMP-CMB-NEXT:           IntegerLiteral {{.*}} 'int' 2
   // DMP0-CMB-AG-NEXT:     ACCGangClause
   // DMP0-CMB-AW-NEXT:     ACCWorkerClause
@@ -343,7 +343,7 @@ int main() {
   // DMP0-CMB-ASEQ-NEXT:   ACCSeqClause
   // DMP-SEP:              {{^[^a-z]*}}ACCParallelDirective
   // DMP-CMB-NEXT:         effect: ACCParallelDirective
-  // DMP-NEXT:               ACCNum_gangsClause
+  // DMP-NEXT:               ACCNumGangsClause
   // DMP-NEXT:                 IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:               impl: OMPTargetTeamsDirective
   // DMP-NEXT:                 OMPNum_teamsClause

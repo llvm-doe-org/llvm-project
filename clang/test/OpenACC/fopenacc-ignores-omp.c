@@ -85,7 +85,7 @@ int main() {
   //--------------------------------------------------
 
   // DMP:      ACCParallelDirective
-  // DMP-NEXT:   ACCNum_gangsClause
+  // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
@@ -124,7 +124,7 @@ int main() {
   //--------------------------------------------------
 
   // DMP:      ACCParallelDirective
-  // DMP-NEXT:   ACCNum_workersClause
+  // DMP-NEXT:   ACCNumWorkersClause
   // DMP-NEXT:     ParenExpr
   // DMP-NEXT:       BinaryOperator
   // DMP-NEXT:         DeclRefExpr

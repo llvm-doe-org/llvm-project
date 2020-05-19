@@ -361,7 +361,7 @@ int main() {
       // Check suppression of implicit data clauses.
       //
       // DMP:      ACCParallelDirective
-      // DMP-NEXT:   ACCNum_gangsClause
+      // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co0' 'int'
@@ -463,7 +463,7 @@ int main() {
       // suppressed).
       //
       // DMP:      ACCParallelDirective
-      // DMP-NEXT:   ACCNum_gangsClause
+      // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCCopyClause
       // DMP-NOT:      <implicit>
@@ -641,7 +641,7 @@ int main() {
       // Check suppression of implicit data clauses.
       //
       // DMP:      ACCParallelDirective
-      // DMP-NEXT:   ACCNum_gangsClause
+      // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int [1]'
@@ -704,7 +704,7 @@ int main() {
       // suppressed).
       //
       // DMP:      ACCParallelDirective
-      // DMP-NEXT:   ACCNum_gangsClause
+      // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCCopyinClause
       // DMP-NOT:      <implicit>
@@ -834,7 +834,7 @@ int main() {
       // Check suppression of implicit data clauses.
       //
       // DMP:      ACCParallelDirective
-      // DMP-NEXT:   ACCNum_gangsClause
+      // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'struct T'
@@ -897,7 +897,7 @@ int main() {
       // suppressed).
       //
       // DMP:      ACCParallelDirective
-      // DMP-NEXT:   ACCNum_gangsClause
+      // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCCopyoutClause
       // DMP-NOT:      <implicit>
@@ -1041,7 +1041,7 @@ int main() {
       // Check suppression of implicit data clauses.
       //
       // DMP:      ACCParallelDirective
-      // DMP-NEXT:   ACCNum_gangsClause
+      // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int'
@@ -1106,7 +1106,7 @@ int main() {
       // suppressed).
       //
       // DMP:      ACCParallelDirective
-      // DMP-NEXT:   ACCNum_gangsClause
+      // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCCopyClause
       // DMP-NOT:      <implicit>
@@ -1224,7 +1224,7 @@ int main() {
       // Check suppression of implicit data clauses.
       //
       // DMP:      ACCParallelDirective
-      // DMP-NEXT:   ACCNum_gangsClause
+      // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int [5]'
@@ -1278,7 +1278,7 @@ int main() {
       // suppressed).
       //
       // DMP:      ACCParallelDirective
-      // DMP-NEXT:   ACCNum_gangsClause
+      // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCCopyClause
       // DMP-NOT:      <implicit>
@@ -1403,7 +1403,7 @@ int main() {
       // Check suppression of implicit data clauses.
       //
       // DMP:      ACCParallelDirective
-      // DMP-NEXT:   ACCNum_gangsClause
+      // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int [5]'
@@ -1457,7 +1457,7 @@ int main() {
       // suppressed).
       //
       // DMP:      ACCParallelDirective
-      // DMP-NEXT:   ACCNum_gangsClause
+      // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCCopyClause
       // DMP-NOT:      <implicit>
@@ -1630,7 +1630,7 @@ int main() {
     // Check suppression of implicit data clauses.
     //
     // DMP:      ACCParallelDirective
-    // DMP-NEXT:   ACCNum_gangsClause
+    // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'arr0' 'int [5]'

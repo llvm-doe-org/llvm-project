@@ -299,7 +299,7 @@ int main() {
     // PRT-NEXT: int i = 99;
     int i = 99;
     // DMP:           ACCParallelLoopDirective
-    // DMP-NEXT:        ACCNum_gangsClause
+    // DMP-NEXT:        ACCNumGangsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
     // DMP-ASEQ-NEXT:   ACCSeqClause
     // DMP-ASEQ-NOT:      <implicit>
@@ -309,7 +309,7 @@ int main() {
     // DMP-NEXT:        ACCPrivateClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
     // DMP:             effect: ACCParallelDirective
-    // DMP-NEXT:          ACCNum_gangsClause
+    // DMP-NEXT:          ACCNumGangsClause
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:          impl: OMPTargetTeamsDirective
     // DMP-NEXT:            OMPNum_teamsClause
@@ -651,7 +651,7 @@ int main() {
   // PRT-NEXT: {
   {
     // DMP:           ACCParallelLoopDirective
-    // DMP-NEXT:        ACCNum_gangsClause
+    // DMP-NEXT:        ACCNumGangsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
     // DMP-ASEQ-NEXT:   ACCSeqClause
     // DMP-ASEQ-NOT:      <implicit>
@@ -661,7 +661,7 @@ int main() {
     // DMP-NEXT:        ACCPrivateClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'tentativeDef' 'int'
     // DMP:             effect: ACCParallelDirective
-    // DMP-NEXT:          ACCNum_gangsClause
+    // DMP-NEXT:          ACCNumGangsClause
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:          impl: OMPTargetTeamsDirective
     // DMP-NEXT:            OMPNum_teamsClause
@@ -852,7 +852,7 @@ int main() {
     // PRT-NEXT: int i = 99;
     int i = 99;
     // DMP:           ACCParallelLoopDirective
-    // DMP-NEXT:        ACCNum_gangsClause
+    // DMP-NEXT:        ACCNumGangsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
     // DMP-ASEQ-NEXT:   ACCSeqClause
     // DMP-ASEQ-NOT:      <implicit>
@@ -862,7 +862,7 @@ int main() {
     // DMP-NEXT:        ACCPrivateClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
     // DMP:             effect: ACCParallelDirective
-    // DMP-NEXT:          ACCNum_gangsClause
+    // DMP-NEXT:          ACCNumGangsClause
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:          impl: OMPTargetTeamsDirective
     // DMP-NEXT:            OMPNum_teamsClause
@@ -1072,7 +1072,7 @@ int main() {
     // PRT-NEXT: int i = 99;
     int i = 99;
     // DMP:           ACCParallelLoopDirective
-    // DMP-NEXT:        ACCNum_gangsClause
+    // DMP-NEXT:        ACCNumGangsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
     // DMP-ASEQ-NEXT:   ACCSeqClause
     // DMP-ASEQ-NOT:      <implicit>
@@ -1082,7 +1082,7 @@ int main() {
     // DMP-NEXT:        ACCPrivateClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:        effect: ACCParallelDirective
-    // DMP-NEXT:          ACCNum_gangsClause
+    // DMP-NEXT:          ACCNumGangsClause
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:          impl: OMPTargetTeamsDirective
     // DMP-NEXT:            OMPNum_teamsClause
@@ -1355,7 +1355,7 @@ int main() {
     int j = 88;
     int k = 77;
     // DMP:           ACCParallelLoopDirective
-    // DMP-NEXT:        ACCNum_gangsClause
+    // DMP-NEXT:        ACCNumGangsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
     // DMP-ASEQ-NEXT:   ACCSeqClause
     // DMP-ASEQ-NOT:      <implicit>
@@ -1368,7 +1368,7 @@ int main() {
     // DMP-NEXT:        ACCPrivateClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:        effect: ACCParallelDirective
-    // DMP-NEXT:          ACCNum_gangsClause
+    // DMP-NEXT:          ACCNumGangsClause
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:          impl: OMPTargetTeamsDirective
     // DMP-NEXT:            OMPNum_teamsClause

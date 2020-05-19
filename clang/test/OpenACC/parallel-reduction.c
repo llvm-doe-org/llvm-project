@@ -147,7 +147,7 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
@@ -155,7 +155,7 @@ int main() {
     // DMP-NEXT:            ACCReductionClause {{.*}} '+'
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
@@ -222,7 +222,7 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
@@ -230,7 +230,7 @@ int main() {
     // DMP-NEXT:            ACCReductionClause {{.*}} '*'
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'float'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
@@ -305,7 +305,7 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
@@ -313,7 +313,7 @@ int main() {
     // DMP-NEXT:            ACCReductionClause {{.*}} 'max'
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int *'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
@@ -379,7 +379,7 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
@@ -387,7 +387,7 @@ int main() {
     // DMP-NEXT:            ACCReductionClause {{.*}} 'max'
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
@@ -453,7 +453,7 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
@@ -461,7 +461,7 @@ int main() {
     // DMP-NEXT:            ACCReductionClause {{.*}} 'min'
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'double'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
@@ -527,7 +527,7 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
@@ -535,7 +535,7 @@ int main() {
     // DMP-NEXT:            ACCReductionClause {{.*}} '&'
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'char'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
@@ -601,7 +601,7 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
@@ -609,7 +609,7 @@ int main() {
     // DMP-NEXT:            ACCReductionClause {{.*}} '|'
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
@@ -675,7 +675,7 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
@@ -683,7 +683,7 @@ int main() {
     // DMP-NEXT:            ACCReductionClause {{.*}} '^'
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 3
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
@@ -756,7 +756,7 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
@@ -764,7 +764,7 @@ int main() {
     // DMP-NEXT:            ACCReductionClause {{.*}} '&&'
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
@@ -833,7 +833,7 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
@@ -841,7 +841,7 @@ int main() {
     // DMP-NEXT:            ACCReductionClause {{.*}} '||'
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
@@ -914,7 +914,7 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
@@ -922,7 +922,7 @@ int main() {
     // DMP-NEXT:            ACCReductionClause {{.*}} '&'
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'enum E'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
@@ -993,7 +993,7 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
@@ -1001,7 +1001,7 @@ int main() {
     // DMP-NEXT:            ACCReductionClause {{.*}} '|'
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' '{{bool|_Bool}}'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
@@ -1071,7 +1071,7 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
@@ -1079,7 +1079,7 @@ int main() {
     // DMP-NEXT:            ACCReductionClause {{.*}} '+'
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' '_Complex float'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
@@ -1146,7 +1146,7 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
@@ -1157,7 +1157,7 @@ int main() {
     // DMP-NOT:               <implicit>
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
@@ -1225,7 +1225,7 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCFirstprivateClause {{.*}}
     // DMP-NOT:               <implicit>
@@ -1236,7 +1236,7 @@ int main() {
     // DMP-NOT:               <implicit>
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-PARLOOP-NEXT:      ACCFirstprivateClause {{.*}}
     // DMP-PARLOOP-NOT:         <implicit>
@@ -1305,12 +1305,12 @@ int main() {
     // DMP-PAR:           ACCParallelDirective
     // DMP-PARLOOP:       ACCParallelLoopDirective
     // DMP-PARLOOP-NEXT:    ACCSeqClause
-    // DMP-NEXT:            ACCNum_gangsClause
+    // DMP-NEXT:            ACCNumGangsClause
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            ACCReductionClause {{.*}} '+'
     // DMP-NEXT:              DeclRefExpr {{.*}} 'acc' 'int'
     // DMP-PARLOOP-NEXT:    effect: ACCParallelDirective
-    // DMP-PARLOOP-NEXT:      ACCNum_gangsClause
+    // DMP-PARLOOP-NEXT:      ACCNumGangsClause
     // DMP-PARLOOP-NEXT:        IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'acc' 'int'

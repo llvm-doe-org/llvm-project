@@ -333,8 +333,17 @@ void TextNodeDumper::Visit(const ACCClause *C) {
   {
     ColorScope Color(OS, ShowColors, AttrColor);
     StringRef ClauseName(getOpenACCName(C->getClauseKindDealiased()));
-    OS << "ACC" << ClauseName.substr(/*Start=*/0, /*N=*/1).upper()
-       << ClauseName.drop_front() << "Clause";
+    OS << "ACC";
+    bool Upper = true;
+    for (char C : ClauseName) {
+      if (C == '_')
+        Upper = true;
+      else {
+        OS << (Upper ? toUppercase(C) : C);
+        Upper = false;
+      }
+    }
+    OS << "Clause";
   }
   dumpPointer(C);
   dumpSourceRange(SourceRange(C->getBeginLoc(), C->getEndLoc()));
