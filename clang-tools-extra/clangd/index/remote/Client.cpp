@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <grpcpp/grpcpp.h>
+#include <grpc++/grpc++.h>
 
 #include "Client.h"
 #include "Index.grpc.pb.h"
@@ -14,7 +14,6 @@
 #include "marshalling/Marshalling.h"
 #include "support/Logger.h"
 #include "support/Trace.h"
-#include "llvm/Support/YAMLTraits.h"
 
 namespace clang {
 namespace clangd {

@@ -194,8 +194,7 @@ Instruction *InstCombiner::SimplifyAnyMemTransfer(AnyMemTransferInst *MI) {
   Value *Dest = Builder.CreateBitCast(MI->getArgOperand(0), NewDstPtrTy);
   LoadInst *L = Builder.CreateLoad(IntType, Src);
   // Alignment from the mem intrinsic will be better, so use it.
-  L->setAlignment(
-      MaybeAlign(CopySrcAlign)); // FIXME: Check if we can use Align instead.
+  L->setAlignment(*CopySrcAlign);
   if (CopyMD)
     L->setMetadata(LLVMContext::MD_tbaa, CopyMD);
   MDNode *LoopMemParallelMD =
@@ -1942,9 +1941,10 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     if (Changed) return II;
   }
 
-  // For vector result intrinsics, use the generic demanded vector support.
-  if (auto *IIVTy = dyn_cast<VectorType>(II->getType())) {
-    auto VWidth = IIVTy->getNumElements();
+  // For fixed width vector result intrinsics, use the generic demanded vector
+  // support.
+  if (auto *IIFVTy = dyn_cast<FixedVectorType>(II->getType())) {
+    auto VWidth = IIFVTy->getNumElements();
     APInt UndefElts(VWidth, 0);
     APInt AllOnesEltMask(APInt::getAllOnesValue(VWidth));
     if (Value *V = SimplifyDemandedVectorElts(II, AllOnesEltMask, UndefElts)) {
@@ -2464,7 +2464,7 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
                                    &DT) >= 16) {
       Value *Ptr = Builder.CreateBitCast(II->getArgOperand(0),
                                          PointerType::getUnqual(II->getType()));
-      return new LoadInst(II->getType(), Ptr);
+      return new LoadInst(II->getType(), Ptr, "", false, Align(16));
     }
     break;
   case Intrinsic::ppc_vsx_lxvw4x:
@@ -2511,7 +2511,7 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
                                    &DT) >= 32) {
       Value *Ptr = Builder.CreateBitCast(II->getArgOperand(0),
                                          PointerType::getUnqual(II->getType()));
-      return new LoadInst(II->getType(), Ptr);
+      return new LoadInst(II->getType(), Ptr, "", false, Align(32));
     }
     break;
   case Intrinsic::ppc_qpx_qvstfs:

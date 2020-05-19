@@ -183,11 +183,10 @@ WebAssemblyTargetLowering::WebAssemblyTargetLowering(
       setCondCodeAction(static_cast<ISD::CondCode>(CC), MVT::v2i64, Custom);
 
     // 64x2 conversions are not in the spec
-    if (!Subtarget->hasUnimplementedSIMD128())
-      for (auto Op :
-           {ISD::SINT_TO_FP, ISD::UINT_TO_FP, ISD::FP_TO_SINT, ISD::FP_TO_UINT})
-        for (auto T : {MVT::v2i64, MVT::v2f64})
-          setOperationAction(Op, T, Expand);
+    for (auto Op :
+         {ISD::SINT_TO_FP, ISD::UINT_TO_FP, ISD::FP_TO_SINT, ISD::FP_TO_UINT})
+      for (auto T : {MVT::v2i64, MVT::v2f64})
+        setOperationAction(Op, T, Expand);
   }
 
   // As a special case, these operators use the type to mean the type to
@@ -1353,6 +1352,24 @@ SDValue WebAssemblyTargetLowering::LowerIntrinsic(SDValue Op,
                            SymNode,          // exception symbol
                            Op.getOperand(3)  // thrown value
                        });
+  }
+
+  case Intrinsic::wasm_shuffle: {
+    // Drop in-chain and replace undefs, but otherwise pass through unchanged
+    SDValue Ops[18];
+    size_t OpIdx = 0;
+    Ops[OpIdx++] = Op.getOperand(1);
+    Ops[OpIdx++] = Op.getOperand(2);
+    while (OpIdx < 18) {
+      const SDValue &MaskIdx = Op.getOperand(OpIdx + 1);
+      if (MaskIdx.isUndef() ||
+          cast<ConstantSDNode>(MaskIdx.getNode())->getZExtValue() >= 32) {
+        Ops[OpIdx++] = DAG.getConstant(0, DL, MVT::i32);
+      } else {
+        Ops[OpIdx++] = MaskIdx;
+      }
+    }
+    return DAG.getNode(WebAssemblyISD::SHUFFLE, DL, Op.getValueType(), Ops);
   }
   }
 }

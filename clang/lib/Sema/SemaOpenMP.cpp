@@ -79,6 +79,15 @@ public:
       llvm::SmallVector<std::pair<Expr *, OverloadedOperatorKind>, 4>;
   using DoacrossDependMapTy =
       llvm::DenseMap<OMPDependClause *, OperatorOffsetTy>;
+  /// Kind of the declaration used in the uses_allocators clauses.
+  enum class UsesAllocatorsDeclKind {
+    /// Predefined allocator
+    PredefinedAllocator,
+    /// User-defined allocator
+    UserDefinedAllocator,
+    /// The declaration that represent allocator trait
+    AllocatorTrait,
+  };
 
 private:
   struct DSAInfo {
@@ -170,7 +179,8 @@ private:
     llvm::SmallVector<DeclRefExpr *, 4> DeclareTargetLinkVarDecls;
     /// List of decls used in inclusive/exclusive clauses of the scan directive.
     llvm::DenseSet<CanonicalDeclPtr<Decl>> UsedInScanDirective;
-    llvm::DenseSet<CanonicalDeclPtr<const Decl>> UsesAllocatorsDecls;
+    llvm::DenseMap<CanonicalDeclPtr<const Decl>, UsesAllocatorsDeclKind>
+        UsesAllocatorsDecls;
     SharingMapTy(OpenMPDirectiveKind DKind, DeclarationNameInfo Name,
                  Scope *CurScope, SourceLocation Loc)
         : Directive(DKind), DirectiveName(Name), CurScope(CurScope),
@@ -519,11 +529,15 @@ public:
   getTopMostTaskgroupReductionData(const ValueDecl *D, SourceRange &SR,
                                    const Expr *&ReductionRef,
                                    Expr *&TaskgroupDescriptor) const;
-  /// Return reduction reference expression for the current taskgroup.
+  /// Return reduction reference expression for the current taskgroup or
+  /// parallel/worksharing directives with task reductions.
   Expr *getTaskgroupReductionRef() const {
-    assert(getTopOfStack().Directive == OMPD_taskgroup &&
-           "taskgroup reference expression requested for non taskgroup "
-           "directive.");
+    assert((getTopOfStack().Directive == OMPD_taskgroup ||
+            ((isOpenMPParallelDirective(getTopOfStack().Directive) ||
+              isOpenMPWorksharingDirective(getTopOfStack().Directive)) &&
+             !isOpenMPSimdDirective(getTopOfStack().Directive))) &&
+           "taskgroup reference expression requested for non taskgroup or "
+           "parallel/worksharing directive.");
     return getTopOfStack().TaskgroupReductionRef;
   }
   /// Checks if the given \p VD declaration is actually a taskgroup reduction
@@ -1015,16 +1029,25 @@ public:
   }
 
   /// Marks decl as used in uses_allocators clause as the allocator.
-  void addUsesAllocatorsDecl(const Decl *D) {
-    getTopOfStack().UsesAllocatorsDecls.insert(D);
+  void addUsesAllocatorsDecl(const Decl *D, UsesAllocatorsDeclKind Kind) {
+    getTopOfStack().UsesAllocatorsDecls.try_emplace(D, Kind);
   }
   /// Checks if specified decl is used in uses allocator clause as the
   /// allocator.
-  bool isUsesAllocatorsDecl(unsigned Level, const Decl *D) const {
-    return getStackElemAtLevel(Level).UsesAllocatorsDecls.count(D) > 0;
+  Optional<UsesAllocatorsDeclKind> isUsesAllocatorsDecl(unsigned Level,
+                                                        const Decl *D) const {
+    const SharingMapTy &StackElem = getTopOfStack();
+    auto I = StackElem.UsesAllocatorsDecls.find(D);
+    if (I == StackElem.UsesAllocatorsDecls.end())
+      return None;
+    return I->getSecond();
   }
-  bool isUsesAllocatorsDecl(const Decl *D) const {
-    return getTopOfStack().UsesAllocatorsDecls.count(D) > 0;
+  Optional<UsesAllocatorsDeclKind> isUsesAllocatorsDecl(const Decl *D) const {
+    const SharingMapTy &StackElem = getTopOfStack();
+    auto I = StackElem.UsesAllocatorsDecls.find(D);
+    if (I == StackElem.UsesAllocatorsDecls.end())
+      return None;
+    return I->getSecond();
   }
 };
 
@@ -1351,7 +1374,10 @@ void DSAStackTy::addTaskgroupReductionData(const ValueDecl *D, SourceRange SR,
       "Additional reduction info may be specified only for reduction items.");
   ReductionData &ReductionData = getTopOfStack().ReductionMap[D];
   assert(ReductionData.ReductionRange.isInvalid() &&
-         getTopOfStack().Directive == OMPD_taskgroup &&
+         (getTopOfStack().Directive == OMPD_taskgroup ||
+          ((isOpenMPParallelDirective(getTopOfStack().Directive) ||
+            isOpenMPWorksharingDirective(getTopOfStack().Directive)) &&
+           !isOpenMPSimdDirective(getTopOfStack().Directive))) &&
          "Additional reduction info may be specified only once for reduction "
          "items.");
   ReductionData.set(BOK, SR);
@@ -1374,7 +1400,10 @@ void DSAStackTy::addTaskgroupReductionData(const ValueDecl *D, SourceRange SR,
       "Additional reduction info may be specified only for reduction items.");
   ReductionData &ReductionData = getTopOfStack().ReductionMap[D];
   assert(ReductionData.ReductionRange.isInvalid() &&
-         getTopOfStack().Directive == OMPD_taskgroup &&
+         (getTopOfStack().Directive == OMPD_taskgroup ||
+          ((isOpenMPParallelDirective(getTopOfStack().Directive) ||
+            isOpenMPWorksharingDirective(getTopOfStack().Directive)) &&
+           !isOpenMPSimdDirective(getTopOfStack().Directive))) &&
          "Additional reduction info may be specified only once for reduction "
          "items.");
   ReductionData.set(ReductionRef, SR);
@@ -1395,7 +1424,8 @@ const DSAStackTy::DSAVarData DSAStackTy::getTopMostTaskgroupReductionData(
   assert(!isStackEmpty() && "Data-sharing attributes stack is empty.");
   for (const_iterator I = begin() + 1, E = end(); I != E; ++I) {
     const DSAInfo &Data = I->SharingMap.lookup(D);
-    if (Data.Attributes != OMPC_reduction || I->Directive != OMPD_taskgroup)
+    if (Data.Attributes != OMPC_reduction ||
+        Data.Modifier != OMPC_REDUCTION_task)
       continue;
     const ReductionData &ReductionData = I->ReductionMap.lookup(D);
     if (!ReductionData.ReductionOp ||
@@ -1407,8 +1437,8 @@ const DSAStackTy::DSAVarData DSAStackTy::getTopMostTaskgroupReductionData(
                                        "expression for the descriptor is not "
                                        "set.");
     TaskgroupDescriptor = I->TaskgroupReductionRef;
-    return DSAVarData(OMPD_taskgroup, OMPC_reduction, Data.RefExpr.getPointer(),
-                      Data.PrivateCopy, I->DefaultAttrLoc, /*Modifier=*/0);
+    return DSAVarData(I->Directive, OMPC_reduction, Data.RefExpr.getPointer(),
+                      Data.PrivateCopy, I->DefaultAttrLoc, OMPC_REDUCTION_task);
   }
   return DSAVarData();
 }
@@ -1420,7 +1450,8 @@ const DSAStackTy::DSAVarData DSAStackTy::getTopMostTaskgroupReductionData(
   assert(!isStackEmpty() && "Data-sharing attributes stack is empty.");
   for (const_iterator I = begin() + 1, E = end(); I != E; ++I) {
     const DSAInfo &Data = I->SharingMap.lookup(D);
-    if (Data.Attributes != OMPC_reduction || I->Directive != OMPD_taskgroup)
+    if (Data.Attributes != OMPC_reduction ||
+        Data.Modifier != OMPC_REDUCTION_task)
       continue;
     const ReductionData &ReductionData = I->ReductionMap.lookup(D);
     if (!ReductionData.ReductionOp ||
@@ -1432,8 +1463,8 @@ const DSAStackTy::DSAVarData DSAStackTy::getTopMostTaskgroupReductionData(
                                        "expression for the descriptor is not "
                                        "set.");
     TaskgroupDescriptor = I->TaskgroupReductionRef;
-    return DSAVarData(OMPD_taskgroup, OMPC_reduction, Data.RefExpr.getPointer(),
-                      Data.PrivateCopy, I->DefaultAttrLoc, /*Modifier=*/0);
+    return DSAVarData(I->Directive, OMPC_reduction, Data.RefExpr.getPointer(),
+                      Data.PrivateCopy, I->DefaultAttrLoc, OMPC_REDUCTION_task);
   }
   return DSAVarData();
 }
@@ -2222,6 +2253,13 @@ OpenMPClauseKind Sema::isOpenMPPrivateDecl(ValueDecl *D, unsigned Level,
             D, [](OpenMPClauseKind K) { return K == OMPC_copyin; }, Level))
       return OMPC_private;
   }
+  // User-defined allocators are private since they must be defined in the
+  // context of target region.
+  if (DSAStack->hasExplicitDirective(isOpenMPTargetExecutionDirective, Level) &&
+      DSAStack->isUsesAllocatorsDecl(Level, D).getValueOr(
+          DSAStackTy::UsesAllocatorsDeclKind::AllocatorTrait) ==
+          DSAStackTy::UsesAllocatorsDeclKind::UserDefinedAllocator)
+    return OMPC_private;
   return (DSAStack->hasExplicitDSA(
               D, [](OpenMPClauseKind K) { return K == OMPC_private; }, Level) ||
           (DSAStack->isClauseParsingMode() &&
@@ -2229,7 +2267,12 @@ OpenMPClauseKind Sema::isOpenMPPrivateDecl(ValueDecl *D, unsigned Level,
           // Consider taskgroup reduction descriptor variable a private
           // to avoid possible capture in the region.
           (DSAStack->hasExplicitDirective(
-               [](OpenMPDirectiveKind K) { return K == OMPD_taskgroup; },
+               [](OpenMPDirectiveKind K) {
+                 return K == OMPD_taskgroup ||
+                        ((isOpenMPParallelDirective(K) ||
+                          isOpenMPWorksharingDirective(K)) &&
+                         !isOpenMPSimdDirective(K));
+               },
                Level) &&
            DSAStack->isTaskgroupReductionRef(D, Level)))
              ? OMPC_private
@@ -2539,7 +2582,7 @@ void Sema::EndOpenMPDSABlock(Stmt *CurDirective) {
           if (!DRE)
             continue;
           ValueDecl *VD = DRE->getDecl();
-          if (!VD)
+          if (!VD || !isa<VarDecl>(VD))
             continue;
           DSAStackTy::DSAVarData DVar =
               DSAStack->getTopDSA(VD, /*FromParent=*/false);
@@ -2891,15 +2934,14 @@ Sema::CheckOMPThreadPrivateDecl(SourceLocation Loc, ArrayRef<Expr *> VarList) {
 static OMPAllocateDeclAttr::AllocatorTypeTy
 getAllocatorKind(Sema &S, DSAStackTy *Stack, Expr *Allocator) {
   if (!Allocator)
-    return OMPAllocateDeclAttr::OMPDefaultMemAlloc;
+    return OMPAllocateDeclAttr::OMPNullMemAlloc;
   if (Allocator->isTypeDependent() || Allocator->isValueDependent() ||
       Allocator->isInstantiationDependent() ||
       Allocator->containsUnexpandedParameterPack())
     return OMPAllocateDeclAttr::OMPUserDefinedMemAlloc;
   auto AllocatorKindRes = OMPAllocateDeclAttr::OMPUserDefinedMemAlloc;
   const Expr *AE = Allocator->IgnoreParenImpCasts();
-  for (int I = OMPAllocateDeclAttr::OMPDefaultMemAlloc;
-       I < OMPAllocateDeclAttr::OMPUserDefinedMemAlloc; ++I) {
+  for (int I = 0; I < OMPAllocateDeclAttr::OMPUserDefinedMemAlloc; ++I) {
     auto AllocatorKind = static_cast<OMPAllocateDeclAttr::AllocatorTypeTy>(I);
     const Expr *DefAllocator = Stack->getAllocator(AllocatorKind);
     llvm::FoldingSetNodeID AEId, DAEId;
@@ -3261,7 +3303,7 @@ public:
           !Stack->isImplicitTaskFirstprivate(VD))
         return;
       // Skip allocators in uses_allocators clauses.
-      if (Stack->isUsesAllocatorsDecl(VD))
+      if (Stack->isUsesAllocatorsDecl(VD).hasValue())
         return;
 
       DSAStackTy::DSAVarData DVar = Stack->getTopDSA(VD, /*FromParent=*/false);
@@ -4193,7 +4235,8 @@ StmtResult Sema::ActOnOpenMPRegionEnd(StmtResult S,
   SmallVector<const OMPClauseWithPreInit *, 4> PICs;
   // This is required for proper codegen.
   for (OMPClause *Clause : Clauses) {
-    if (isOpenMPTaskingDirective(DSAStack->getCurrentDirective()) &&
+    if (!LangOpts.OpenMPSimd &&
+        isOpenMPTaskingDirective(DSAStack->getCurrentDirective()) &&
         Clause->getClauseKind() == OMPC_in_reduction) {
       // Capture taskgroup task_reduction descriptors inside the tasking regions
       // with the corresponding in_reduction items.
@@ -4294,6 +4337,21 @@ StmtResult Sema::ActOnOpenMPRegionEnd(StmtResult S,
             for (Decl *D : DS->decls())
               MarkVariableReferenced(D->getLocation(), cast<VarDecl>(D));
           }
+        }
+      }
+    }
+    if (ThisCaptureRegion == OMPD_target) {
+      // Capture allocator traits in the target region. They are used implicitly
+      // and, thus, are not captured by default.
+      for (OMPClause *C : Clauses) {
+        if (const auto *UAC = dyn_cast<OMPUsesAllocatorsClause>(C)) {
+          for (unsigned I = 0, End = UAC->getNumberOfAllocators(); I < End;
+               ++I) {
+            OMPUsesAllocatorsClause::Data D = UAC->getAllocatorData(I);
+            if (Expr *E = D.AllocatorTraits)
+              MarkDeclarationsReferencedInExpr(E);
+          }
+          continue;
         }
       }
     }
@@ -4724,7 +4782,10 @@ class AllocatorChecker final : public ConstStmtVisitor<AllocatorChecker, bool> {
 
 public:
   bool VisitDeclRefExpr(const DeclRefExpr *E) {
-    return !S->isUsesAllocatorsDecl(E->getDecl());
+    return S->isUsesAllocatorsDecl(E->getDecl())
+               .getValueOr(
+                   DSAStackTy::UsesAllocatorsDeclKind::AllocatorTrait) ==
+           DSAStackTy::UsesAllocatorsDeclKind::AllocatorTrait;
   }
   bool VisitStmt(const Stmt *S) {
     for (const Stmt *Child : S->children()) {
@@ -6137,6 +6198,7 @@ StmtResult Sema::ActOnOpenMPParallelDirective(ArrayRef<OMPClause *> Clauses,
   setFunctionHasBranchProtectedScope();
 
   return OMPParallelDirective::Create(Context, StartLoc, EndLoc, Clauses, AStmt,
+                                      DSAStack->getTaskgroupReductionRef(),
                                       DSAStack->isCancelRegion());
 }
 
@@ -8620,8 +8682,9 @@ Sema::ActOnOpenMPForDirective(ArrayRef<OMPClause *> Clauses, Stmt *AStmt,
   }
 
   setFunctionHasBranchProtectedScope();
-  return OMPForDirective::Create(Context, StartLoc, EndLoc, NestedLoopCount,
-                                 Clauses, AStmt, B, DSAStack->isCancelRegion());
+  return OMPForDirective::Create(
+      Context, StartLoc, EndLoc, NestedLoopCount, Clauses, AStmt, B,
+      DSAStack->getTaskgroupReductionRef(), DSAStack->isCancelRegion());
 }
 
 StmtResult Sema::ActOnOpenMPForSimdDirective(
@@ -8698,6 +8761,7 @@ StmtResult Sema::ActOnOpenMPSectionsDirective(ArrayRef<OMPClause *> Clauses,
   setFunctionHasBranchProtectedScope();
 
   return OMPSectionsDirective::Create(Context, StartLoc, EndLoc, Clauses, AStmt,
+                                      DSAStack->getTaskgroupReductionRef(),
                                       DSAStack->isCancelRegion());
 }
 
@@ -8858,9 +8922,9 @@ StmtResult Sema::ActOnOpenMPParallelForDirective(
   }
 
   setFunctionHasBranchProtectedScope();
-  return OMPParallelForDirective::Create(Context, StartLoc, EndLoc,
-                                         NestedLoopCount, Clauses, AStmt, B,
-                                         DSAStack->isCancelRegion());
+  return OMPParallelForDirective::Create(
+      Context, StartLoc, EndLoc, NestedLoopCount, Clauses, AStmt, B,
+      DSAStack->getTaskgroupReductionRef(), DSAStack->isCancelRegion());
 }
 
 StmtResult Sema::ActOnOpenMPParallelForSimdDirective(
@@ -8924,8 +8988,9 @@ Sema::ActOnOpenMPParallelMasterDirective(ArrayRef<OMPClause *> Clauses,
 
   setFunctionHasBranchProtectedScope();
 
-  return OMPParallelMasterDirective::Create(Context, StartLoc, EndLoc, Clauses,
-                                            AStmt);
+  return OMPParallelMasterDirective::Create(
+      Context, StartLoc, EndLoc, Clauses, AStmt,
+      DSAStack->getTaskgroupReductionRef());
 }
 
 StmtResult
@@ -8964,7 +9029,8 @@ Sema::ActOnOpenMPParallelSectionsDirective(ArrayRef<OMPClause *> Clauses,
   setFunctionHasBranchProtectedScope();
 
   return OMPParallelSectionsDirective::Create(
-      Context, StartLoc, EndLoc, Clauses, AStmt, DSAStack->isCancelRegion());
+      Context, StartLoc, EndLoc, Clauses, AStmt,
+      DSAStack->getTaskgroupReductionRef(), DSAStack->isCancelRegion());
 }
 
 /// detach and mergeable clauses are mutially exclusive, check for it.
@@ -10016,8 +10082,9 @@ Sema::ActOnOpenMPTargetParallelDirective(ArrayRef<OMPClause *> Clauses,
 
   setFunctionHasBranchProtectedScope();
 
-  return OMPTargetParallelDirective::Create(Context, StartLoc, EndLoc, Clauses,
-                                            AStmt, DSAStack->isCancelRegion());
+  return OMPTargetParallelDirective::Create(
+      Context, StartLoc, EndLoc, Clauses, AStmt,
+      DSAStack->getTaskgroupReductionRef(), DSAStack->isCancelRegion());
 }
 
 StmtResult Sema::ActOnOpenMPTargetParallelForDirective(
@@ -10069,9 +10136,9 @@ StmtResult Sema::ActOnOpenMPTargetParallelForDirective(
   }
 
   setFunctionHasBranchProtectedScope();
-  return OMPTargetParallelForDirective::Create(Context, StartLoc, EndLoc,
-                                               NestedLoopCount, Clauses, AStmt,
-                                               B, DSAStack->isCancelRegion());
+  return OMPTargetParallelForDirective::Create(
+      Context, StartLoc, EndLoc, NestedLoopCount, Clauses, AStmt, B,
+      DSAStack->getTaskgroupReductionRef(), DSAStack->isCancelRegion());
 }
 
 /// Check for existence of a map clause in the list of clauses.
@@ -10683,7 +10750,7 @@ StmtResult Sema::ActOnOpenMPDistributeParallelForDirective(
   setFunctionHasBranchProtectedScope();
   return OMPDistributeParallelForDirective::Create(
       Context, StartLoc, EndLoc, NestedLoopCount, Clauses, AStmt, B,
-      DSAStack->isCancelRegion());
+      DSAStack->getTaskgroupReductionRef(), DSAStack->isCancelRegion());
 }
 
 StmtResult Sema::ActOnOpenMPDistributeParallelForSimdDirective(
@@ -11124,7 +11191,7 @@ StmtResult Sema::ActOnOpenMPTeamsDistributeParallelForDirective(
 
   return OMPTeamsDistributeParallelForDirective::Create(
       Context, StartLoc, EndLoc, NestedLoopCount, Clauses, AStmt, B,
-      DSAStack->isCancelRegion());
+      DSAStack->getTaskgroupReductionRef(), DSAStack->isCancelRegion());
 }
 
 StmtResult Sema::ActOnOpenMPTargetTeamsDirective(ArrayRef<OMPClause *> Clauses,
@@ -11253,7 +11320,7 @@ StmtResult Sema::ActOnOpenMPTargetTeamsDistributeParallelForDirective(
   setFunctionHasBranchProtectedScope();
   return OMPTargetTeamsDistributeParallelForDirective::Create(
       Context, StartLoc, EndLoc, NestedLoopCount, Clauses, AStmt, B,
-      DSAStack->isCancelRegion());
+      DSAStack->getTaskgroupReductionRef(), DSAStack->isCancelRegion());
 }
 
 StmtResult Sema::ActOnOpenMPTargetTeamsDistributeParallelForSimdDirective(
@@ -12481,8 +12548,7 @@ static bool findOMPAllocatorHandleT(Sema &S, SourceLocation Loc,
     return true;
   // Build the predefined allocator expressions.
   bool ErrorFound = false;
-  for (int I = OMPAllocateDeclAttr::OMPDefaultMemAlloc;
-       I < OMPAllocateDeclAttr::OMPUserDefinedMemAlloc; ++I) {
+  for (int I = 0; I < OMPAllocateDeclAttr::OMPUserDefinedMemAlloc; ++I) {
     auto AllocatorKind = static_cast<OMPAllocateDeclAttr::AllocatorTypeTy>(I);
     StringRef Allocator =
         OMPAllocateDeclAttr::ConvertAllocatorTypeTyToStr(AllocatorKind);
@@ -15103,9 +15169,17 @@ static bool actOnOMPReductionKindClause(
     }
     // All reduction items are still marked as reduction (to do not increase
     // code base size).
-    Stack->addDSA(D, RefExpr->IgnoreParens(), OMPC_reduction, Ref,
-                  RD.RedModifier);
-    if (CurrDir == OMPD_taskgroup) {
+    unsigned Modifier = RD.RedModifier;
+    // Consider task_reductions as reductions with task modifier. Required for
+    // correct analysis of in_reduction clauses.
+    if (CurrDir == OMPD_taskgroup && ClauseKind == OMPC_task_reduction)
+      Modifier = OMPC_REDUCTION_task;
+    Stack->addDSA(D, RefExpr->IgnoreParens(), OMPC_reduction, Ref, Modifier);
+    if (Modifier == OMPC_REDUCTION_task &&
+        (CurrDir == OMPD_taskgroup ||
+         ((isOpenMPParallelDirective(CurrDir) ||
+           isOpenMPWorksharingDirective(CurrDir)) &&
+          !isOpenMPSimdDirective(CurrDir)))) {
       if (DeclareReductionRef.isUsable())
         Stack->addTaskgroupReductionData(D, ReductionIdRange,
                                          DeclareReductionRef.get());
@@ -18602,8 +18676,7 @@ OMPClause *Sema::ActOnOpenMPUsesAllocatorClause(
       !findOMPAlloctraitT(*this, StartLoc, DSAStack))
     return nullptr;
   llvm::SmallSet<CanonicalDeclPtr<Decl>, 4> PredefinedAllocators;
-  for (int I = OMPAllocateDeclAttr::OMPDefaultMemAlloc;
-       I < OMPAllocateDeclAttr::OMPUserDefinedMemAlloc; ++I) {
+  for (int I = 0; I < OMPAllocateDeclAttr::OMPUserDefinedMemAlloc; ++I) {
     auto AllocatorKind = static_cast<OMPAllocateDeclAttr::AllocatorTypeTy>(I);
     StringRef Allocator =
         OMPAllocateDeclAttr::ConvertAllocatorTypeTyToStr(AllocatorKind);
@@ -18663,7 +18736,11 @@ OMPClause *Sema::ActOnOpenMPUsesAllocatorClause(
       // No allocator traits - just convert it to rvalue.
       if (!D.AllocatorTraits)
         AllocatorExpr = DefaultLvalueConversion(AllocatorExpr).get();
-      DSAStack->addUsesAllocatorsDecl(DRE->getDecl());
+      DSAStack->addUsesAllocatorsDecl(
+          DRE->getDecl(),
+          IsPredefinedAllocator
+              ? DSAStackTy::UsesAllocatorsDeclKind::PredefinedAllocator
+              : DSAStackTy::UsesAllocatorsDeclKind::UserDefinedAllocator);
     }
     Expr *AllocatorTraitsExpr = nullptr;
     if (D.AllocatorTraits) {
@@ -18691,6 +18768,12 @@ OMPClause *Sema::ActOnOpenMPUsesAllocatorClause(
               << AllocatorTraitsExpr->getType();
           continue;
         }
+        // Do not map by default allocator traits if it is a standalone
+        // variable.
+        if (auto *DRE = dyn_cast<DeclRefExpr>(AllocatorTraitsExpr))
+          DSAStack->addUsesAllocatorsDecl(
+              DRE->getDecl(),
+              DSAStackTy::UsesAllocatorsDeclKind::AllocatorTrait);
       }
     }
     OMPUsesAllocatorsClause::Data &NewD = NewData.emplace_back();

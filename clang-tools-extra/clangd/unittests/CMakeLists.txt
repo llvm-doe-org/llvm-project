@@ -34,6 +34,7 @@ add_unittest(ClangdUnitTests ClangdTests
   CodeCompletionStringsTests.cpp
   CollectMacrosTests.cpp
   CompileCommandsTests.cpp
+  CompilerTests.cpp
   DexTests.cpp
   DiagnosticsTests.cpp
   DraftStoreTests.cpp
@@ -42,7 +43,6 @@ add_unittest(ClangdUnitTests ClangdTests
   FileIndexTests.cpp
   FindSymbolsTests.cpp
   FindTargetTests.cpp
-  FormattedStringTests.cpp
   FormatTests.cpp
   FSTests.cpp
   FuzzyMatchTests.cpp
@@ -82,7 +82,9 @@ add_unittest(ClangdUnitTests ClangdTests
   support/CancellationTests.cpp
   support/ContextTests.cpp
   support/FunctionTests.cpp
+  support/MarkupTests.cpp
   support/ThreadingTests.cpp
+  support/TestTracer.cpp
   support/TraceTests.cpp
 
   $<TARGET_OBJECTS:obj.clangDaemonTweaks>

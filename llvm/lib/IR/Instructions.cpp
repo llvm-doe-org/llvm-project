@@ -1326,6 +1326,15 @@ void LoadInst::AssertOK() {
          "Alignment required for atomic load");
 }
 
+Align computeLoadAlign(Type *Ty, BasicBlock *BB) {
+  const DataLayout &DL = BB->getModule()->getDataLayout();
+  return DL.getABITypeAlign(Ty);
+}
+
+Align computeLoadAlign(Type *Ty, Instruction *I) {
+  return computeLoadAlign(Ty, I->getParent());
+}
+
 LoadInst::LoadInst(Type *Ty, Value *Ptr, const Twine &Name,
                    Instruction *InsertBef)
     : LoadInst(Ty, Ptr, Name, /*isVolatile=*/false, InsertBef) {}
@@ -1336,36 +1345,38 @@ LoadInst::LoadInst(Type *Ty, Value *Ptr, const Twine &Name,
 
 LoadInst::LoadInst(Type *Ty, Value *Ptr, const Twine &Name, bool isVolatile,
                    Instruction *InsertBef)
-    : LoadInst(Ty, Ptr, Name, isVolatile, /*Align=*/None, InsertBef) {}
+    : LoadInst(Ty, Ptr, Name, isVolatile, computeLoadAlign(Ty, InsertBef),
+               InsertBef) {}
 
 LoadInst::LoadInst(Type *Ty, Value *Ptr, const Twine &Name, bool isVolatile,
                    BasicBlock *InsertAE)
-    : LoadInst(Ty, Ptr, Name, isVolatile, /*Align=*/None, InsertAE) {}
+    : LoadInst(Ty, Ptr, Name, isVolatile, computeLoadAlign(Ty, InsertAE),
+               InsertAE) {}
 
 LoadInst::LoadInst(Type *Ty, Value *Ptr, const Twine &Name, bool isVolatile,
-                   MaybeAlign Align, Instruction *InsertBef)
+                   Align Align, Instruction *InsertBef)
     : LoadInst(Ty, Ptr, Name, isVolatile, Align, AtomicOrdering::NotAtomic,
                SyncScope::System, InsertBef) {}
 
 LoadInst::LoadInst(Type *Ty, Value *Ptr, const Twine &Name, bool isVolatile,
-                   MaybeAlign Align, BasicBlock *InsertAE)
+                   Align Align, BasicBlock *InsertAE)
     : LoadInst(Ty, Ptr, Name, isVolatile, Align, AtomicOrdering::NotAtomic,
                SyncScope::System, InsertAE) {}
 
 LoadInst::LoadInst(Type *Ty, Value *Ptr, const Twine &Name, bool isVolatile,
-                   MaybeAlign Align, AtomicOrdering Order, SyncScope::ID SSID,
+                   Align Align, AtomicOrdering Order, SyncScope::ID SSID,
                    Instruction *InsertBef)
     : UnaryInstruction(Ty, Load, Ptr, InsertBef) {
   assert(Ty == cast<PointerType>(Ptr->getType())->getElementType());
   setVolatile(isVolatile);
-  setAlignment(MaybeAlign(Align));
+  setAlignment(Align);
   setAtomic(Order, SSID);
   AssertOK();
   setName(Name);
 }
 
 LoadInst::LoadInst(Type *Ty, Value *Ptr, const Twine &Name, bool isVolatile,
-                   MaybeAlign Align, AtomicOrdering Order, SyncScope::ID SSID,
+                   Align Align, AtomicOrdering Order, SyncScope::ID SSID,
                    BasicBlock *InsertAE)
     : UnaryInstruction(Ty, Load, Ptr, InsertAE) {
   assert(Ty == cast<PointerType>(Ptr->getType())->getElementType());
@@ -1376,8 +1387,8 @@ LoadInst::LoadInst(Type *Ty, Value *Ptr, const Twine &Name, bool isVolatile,
   setName(Name);
 }
 
-void LoadInst::setAlignment(MaybeAlign Align) {
-  assert((!Align || *Align <= MaximumAlignment) &&
+void LoadInst::setAlignment(Align Align) {
+  assert(Align <= MaximumAlignment &&
          "Alignment is greater than MaximumAlignment!");
   setInstructionSubclassData((getSubclassDataFromInstruction() & ~(31 << 1)) |
                              (encode(Align) << 1));
@@ -1916,11 +1927,11 @@ void ShuffleVectorInst::commute() {
 bool ShuffleVectorInst::isValidOperands(const Value *V1, const Value *V2,
                                         ArrayRef<int> Mask) {
   // V1 and V2 must be vectors of the same type.
-  if (!V1->getType()->isVectorTy() || V1->getType() != V2->getType())
+  if (!isa<VectorType>(V1->getType()) || V1->getType() != V2->getType())
     return false;
 
   // Make sure the mask elements make sense.
-  int V1Size = cast<VectorType>(V1->getType())->getNumElements();
+  int V1Size = cast<VectorType>(V1->getType())->getElementCount().Min;
   for (int Elem : Mask)
     if (Elem != UndefMaskElem && Elem >= V1Size * 2)
       return false;
@@ -4233,8 +4244,7 @@ AllocaInst *AllocaInst::cloneImpl() const {
 
 LoadInst *LoadInst::cloneImpl() const {
   return new LoadInst(getType(), getOperand(0), Twine(), isVolatile(),
-                      MaybeAlign(getAlignment()), getOrdering(),
-                      getSyncScopeID());
+                      getAlign(), getOrdering(), getSyncScopeID());
 }
 
 StoreInst *StoreInst::cloneImpl() const {

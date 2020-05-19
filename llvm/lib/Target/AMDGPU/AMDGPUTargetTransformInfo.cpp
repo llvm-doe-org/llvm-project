@@ -275,15 +275,11 @@ unsigned GCNTTIImpl::getLoadStoreVecRegBitWidth(unsigned AddrSpace) const {
     return 512;
   }
 
-  if (AddrSpace == AMDGPUAS::FLAT_ADDRESS ||
-      AddrSpace == AMDGPUAS::LOCAL_ADDRESS ||
-      AddrSpace == AMDGPUAS::REGION_ADDRESS)
-    return 128;
-
   if (AddrSpace == AMDGPUAS::PRIVATE_ADDRESS)
     return 8 * ST->getMaxPrivateElementSize();
 
-  llvm_unreachable("unhandled address space");
+  // Common to flat, global, local and region. Assume for unknown addrspace.
+  return 128;
 }
 
 bool GCNTTIImpl::isLegalToVectorizeMemChain(unsigned ChainSizeInBytes,
@@ -422,6 +418,7 @@ bool GCNTTIImpl::getTgtMemIntrinsic(IntrinsicInst *Inst,
 }
 
 int GCNTTIImpl::getArithmeticInstrCost(unsigned Opcode, Type *Ty,
+                                       TTI::TargetCostKind CostKind,
                                        TTI::OperandValueKind Opd1Info,
                                        TTI::OperandValueKind Opd2Info,
                                        TTI::OperandValueProperties Opd1PropInfo,
@@ -430,7 +427,8 @@ int GCNTTIImpl::getArithmeticInstrCost(unsigned Opcode, Type *Ty,
                                        const Instruction *CxtI) {
   EVT OrigTy = TLI->getValueType(DL, Ty);
   if (!OrigTy.isSimple()) {
-    return BaseT::getArithmeticInstrCost(Opcode, Ty, Opd1Info, Opd2Info,
+    return BaseT::getArithmeticInstrCost(Opcode, Ty, CostKind, Opd1Info,
+                                         Opd2Info,
                                          Opd1PropInfo, Opd2PropInfo);
   }
 
@@ -542,7 +540,8 @@ int GCNTTIImpl::getArithmeticInstrCost(unsigned Opcode, Type *Ty,
     break;
   }
 
-  return BaseT::getArithmeticInstrCost(Opcode, Ty, Opd1Info, Opd2Info,
+  return BaseT::getArithmeticInstrCost(Opcode, Ty, CostKind, Opd1Info,
+                                       Opd2Info,
                                        Opd1PropInfo, Opd2PropInfo);
 }
 
@@ -562,13 +561,15 @@ static bool intrinsicHasPackedVectorBenefit(Intrinsic::ID ID) {
 template <typename T>
 int GCNTTIImpl::getIntrinsicInstrCost(Intrinsic::ID ID, Type *RetTy,
                                       ArrayRef<T *> Args, FastMathFlags FMF,
-                                      unsigned VF, const Instruction *I) {
+                                      unsigned VF,
+                                      TTI::TargetCostKind CostKind,
+                                      const Instruction *I) {
   if (!intrinsicHasPackedVectorBenefit(ID))
-    return BaseT::getIntrinsicInstrCost(ID, RetTy, Args, FMF, VF, I);
+    return BaseT::getIntrinsicInstrCost(ID, RetTy, Args, FMF, VF, CostKind, I);
 
   EVT OrigTy = TLI->getValueType(DL, RetTy);
   if (!OrigTy.isSimple()) {
-    return BaseT::getIntrinsicInstrCost(ID, RetTy, Args, FMF, VF, I);
+    return BaseT::getIntrinsicInstrCost(ID, RetTy, Args, FMF, VF, CostKind, I);
   }
 
   // Legalize the type.
@@ -597,31 +598,36 @@ int GCNTTIImpl::getIntrinsicInstrCost(Intrinsic::ID ID, Type *RetTy,
 
 int GCNTTIImpl::getIntrinsicInstrCost(Intrinsic::ID ID, Type *RetTy,
                                       ArrayRef<Value *> Args, FastMathFlags FMF,
-                                      unsigned VF, const Instruction *I) {
-  return getIntrinsicInstrCost<Value>(ID, RetTy, Args, FMF, VF, I);
+                                      unsigned VF,
+                                      TTI::TargetCostKind CostKind,
+                                      const Instruction *I) {
+  return getIntrinsicInstrCost<Value>(ID, RetTy, Args, FMF, VF, CostKind, I);
 }
 
 int GCNTTIImpl::getIntrinsicInstrCost(Intrinsic::ID ID, Type *RetTy,
                                       ArrayRef<Type *> Tys, FastMathFlags FMF,
                                       unsigned ScalarizationCostPassed,
+                                      TTI::TargetCostKind CostKind,
                                       const Instruction *I) {
   return getIntrinsicInstrCost<Type>(ID, RetTy, Tys, FMF,
-                                     ScalarizationCostPassed, I);
+                                     ScalarizationCostPassed, CostKind, I);
 }
 
-unsigned GCNTTIImpl::getCFInstrCost(unsigned Opcode) {
+unsigned GCNTTIImpl::getCFInstrCost(unsigned Opcode,
+                                    TTI::TargetCostKind CostKind) {
   // XXX - For some reason this isn't called for switch.
   switch (Opcode) {
   case Instruction::Br:
   case Instruction::Ret:
     return 10;
   default:
-    return BaseT::getCFInstrCost(Opcode);
+    return BaseT::getCFInstrCost(Opcode, CostKind);
   }
 }
 
 int GCNTTIImpl::getArithmeticReductionCost(unsigned Opcode, VectorType *Ty,
-                                           bool IsPairwise) {
+                                           bool IsPairwise,
+                                           TTI::TargetCostKind CostKind) {
   EVT OrigTy = TLI->getValueType(DL, Ty);
 
   // Computes cost on targets that have packed math instructions(which support
@@ -629,15 +635,15 @@ int GCNTTIImpl::getArithmeticReductionCost(unsigned Opcode, VectorType *Ty,
   if (IsPairwise ||
       !ST->hasVOP3PInsts() ||
       OrigTy.getScalarSizeInBits() != 16)
-    return BaseT::getArithmeticReductionCost(Opcode, Ty, IsPairwise);
+    return BaseT::getArithmeticReductionCost(Opcode, Ty, IsPairwise, CostKind);
 
   std::pair<int, MVT> LT = TLI->getTypeLegalizationCost(DL, Ty);
   return LT.first * getFullRateInstrCost();
 }
 
 int GCNTTIImpl::getMinMaxReductionCost(VectorType *Ty, VectorType *CondTy,
-                                          bool IsPairwise,
-                                          bool IsUnsigned) {
+                                       bool IsPairwise, bool IsUnsigned,
+                                       TTI::TargetCostKind CostKind) {
   EVT OrigTy = TLI->getValueType(DL, Ty);
 
   // Computes cost on targets that have packed math instructions(which support
@@ -645,7 +651,8 @@ int GCNTTIImpl::getMinMaxReductionCost(VectorType *Ty, VectorType *CondTy,
   if (IsPairwise ||
       !ST->hasVOP3PInsts() ||
       OrigTy.getScalarSizeInBits() != 16)
-    return BaseT::getMinMaxReductionCost(Ty, CondTy, IsPairwise, IsUnsigned);
+    return BaseT::getMinMaxReductionCost(Ty, CondTy, IsPairwise, IsUnsigned,
+                                         CostKind);
 
   std::pair<int, MVT> LT = TLI->getTypeLegalizationCost(DL, Ty);
   return LT.first * getHalfRateInstrCost();
@@ -902,7 +909,7 @@ bool GCNTTIImpl::rewriteIntrinsicWithAddressSpace(
 unsigned GCNTTIImpl::getShuffleCost(TTI::ShuffleKind Kind, VectorType *VT,
                                     int Index, VectorType *SubTp) {
   if (ST->hasVOP3PInsts()) {
-    if (VT->getNumElements() == 2 &&
+    if (cast<FixedVectorType>(VT)->getNumElements() == 2 &&
         DL.getTypeSizeInBits(VT->getElementType()) == 16) {
       // With op_sel VOP3P instructions freely can access the low half or high
       // half of a register, so any swizzle is free.
@@ -979,7 +986,7 @@ GCNTTIImpl::getUserCost(const User *U, ArrayRef<const Value *> Operands,
       if (auto *FPMO = dyn_cast<FPMathOperator>(II))
         FMF = FPMO->getFastMathFlags();
       return getIntrinsicInstrCost(II->getIntrinsicID(), II->getType(), Args,
-                                   FMF, 1, II);
+                                   FMF, 1, CostKind, II);
     } else {
       return BaseT::getUserCost(U, Operands, CostKind);
     }
@@ -1031,7 +1038,7 @@ GCNTTIImpl::getUserCost(const User *U, ArrayRef<const Value *> Operands,
   case Instruction::BitCast:
   case Instruction::AddrSpaceCast: {
     return getCastInstrCost(I->getOpcode(), I->getType(),
-                            I->getOperand(0)->getType(), I);
+                            I->getOperand(0)->getType(), CostKind, I);
   }
   case Instruction::Add:
   case Instruction::FAdd:
@@ -1052,7 +1059,7 @@ GCNTTIImpl::getUserCost(const User *U, ArrayRef<const Value *> Operands,
   case Instruction::Or:
   case Instruction::Xor:
   case Instruction::FNeg: {
-    return getArithmeticInstrCost(I->getOpcode(), I->getType(),
+    return getArithmeticInstrCost(I->getOpcode(), I->getType(), CostKind,
                                   TTI::OK_AnyValue, TTI::OK_AnyValue,
                                   TTI::OP_None, TTI::OP_None, Operands, I);
   }
@@ -1127,14 +1134,15 @@ unsigned R600TTIImpl::getMaxInterleaveFactor(unsigned VF) {
   return 8;
 }
 
-unsigned R600TTIImpl::getCFInstrCost(unsigned Opcode) {
+unsigned R600TTIImpl::getCFInstrCost(unsigned Opcode,
+                                     TTI::TargetCostKind CostKind) {
   // XXX - For some reason this isn't called for switch.
   switch (Opcode) {
   case Instruction::Br:
   case Instruction::Ret:
     return 10;
   default:
-    return BaseT::getCFInstrCost(Opcode);
+    return BaseT::getCFInstrCost(Opcode, CostKind);
   }
 }
 
