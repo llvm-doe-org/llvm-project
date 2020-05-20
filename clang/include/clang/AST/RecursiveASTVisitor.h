@@ -3623,6 +3623,12 @@ bool RecursiveASTVisitor<Derived>::VisitACCNomapClause(ACCNomapClause *C) {
 }
 
 template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCPresentClause(ACCPresentClause *C) {
+  TRY_TO(VisitACCClauseList(C));
+  return true;
+}
+
+template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCCopyClause(ACCCopyClause *C) {
   TRY_TO(VisitACCClauseList(C));
   return true;

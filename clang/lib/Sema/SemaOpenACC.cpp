@@ -583,6 +583,10 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
     SourceLocation EndLoc, const DeclarationNameInfo &ReductionId) {
   ACCClause *Res = nullptr;
   switch (Kind) {
+  case ACCC_present:
+    Res = ActOnOpenACCPresentClause(VarList, ACC_EXPLICIT, StartLoc, LParenLoc,
+                                    EndLoc);
+    break;
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
@@ -787,6 +791,7 @@ public:
       return NomapImpliers;
     case ACC_DMA_copy:
       return CopyImpliers;
+    case ACC_DMA_present:
     case ACC_DMA_copyin:
     case ACC_DMA_copyout:
     case ACC_DMA_unknown:
@@ -1603,6 +1608,7 @@ StmtResult Sema::ActOnOpenACCDataDirective(
   bool Found = false;
   for (ACCClause *C : Clauses) {
     switch (C->getClauseKind()) {
+    case ACCC_present:
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
     case ACCC_##Name:
 #define OPENACC_CLAUSE_ALIAS_copyin(Name) \
@@ -1795,6 +1801,7 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr
     Res = ActOnOpenACCCollapseClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
   case ACCC_nomap:
+  case ACCC_present:
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
   case ACCC_##Name:
 #define OPENACC_CLAUSE_ALIAS_copyin(Name) \
@@ -1922,6 +1929,42 @@ ACCClause *Sema::ActOnOpenACCNomapClause(ArrayRef<Expr *> VarList) {
     return nullptr;
 
   return ACCNomapClause::Create(Context, Vars);
+}
+
+ACCClause *Sema::ActOnOpenACCPresentClause(
+    ArrayRef<Expr *> VarList, OpenACCDetermination Determination,
+    SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc) {
+  SmallVector<Expr *, 8> Vars;
+  for (auto &RefExpr : VarList) {
+    assert(RefExpr && "NULL expr in OpenACC present clause.");
+    SourceLocation ELoc;
+    SourceRange ERange;
+    Expr *SimpleRefExpr = RefExpr;
+    VarDecl *VD = getVarDeclFromVarList(*this, ACCC_present, SimpleRefExpr,
+                                        ELoc, ERange, /*AllowSubarray*/ true);
+    if (!VD)
+      continue;
+
+    QualType Type = VD->getType();
+
+    // The OpenACC 3.0 spec doesn't say, as far as I know, that a variable
+    // in a present clause must have a complete type.  However, without its
+    // size, we cannot know if it's fully present.  Besides, it translates to
+    // an OpenMP map clause, which does require a complete type.
+    if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_present,
+                               DirStack->getConstructLoc(), ELoc))
+      continue;
+
+    if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_present,
+                          Determination))
+      Vars.push_back(RefExpr->IgnoreParens());
+  }
+
+  if (Vars.empty())
+    return nullptr;
+
+  return ACCPresentClause::Create(Context, Determination, StartLoc, LParenLoc,
+                                  EndLoc, Vars);
 }
 
 ACCClause *Sema::ActOnOpenACCCopyClause(
@@ -2413,6 +2456,7 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
     Res = ActOnOpenACCVectorClause(StartLoc, EndLoc);
     break;
   case ACCC_nomap:
+  case ACCC_present:
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
   case ACCC_##Name:
 #define OPENACC_CLAUSE_ALIAS_copyin(Name) \
@@ -3201,6 +3245,39 @@ public:
                                           OpenMPDirectiveKind TDKind,
                                           ACCNomapClause *C) {
     return OMPClauseEmpty();
+  }
+
+  OMPClauseResult TransformACCPresentClause(ACCExecutableDirective *D,
+                                            OpenMPDirectiveKind TDKind,
+                                            ACCPresentClause *C) {
+    SmallVector<OpenMPMapModifierKind, 1> MapMods;
+    switch (getSema().LangOpts.getOpenACCPresentOMP()) {
+    case LangOptions::OpenACCPresentOMP_Present:
+      MapMods.push_back(OMPC_MAP_MODIFIER_present);
+      getSema().Diag(C->getBeginLoc(), diag::warn_acc_omp_map_present)
+          << getOpenACCName(C->getClauseKind())
+          << C->getSourceRange();
+      getSema().Diag(C->getBeginLoc(), diag::note_acc_alternate_omp)
+          << getOpenACCName(C->getClauseKind())
+          << LangOptions::getOpenACCPresentOMPValue(
+              LangOptions::OpenACCPresentOMP_Alloc);
+      getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_diag);
+      break;
+    case LangOptions::OpenACCPresentOMP_Alloc:
+      break;
+    }
+    return transformACCVarListClause<ACCPresentClause>(
+        D, C, OMPC_map,
+        [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+          SmallVector<SourceLocation, 1> MapModLocs;
+          for (int i = 0, e = MapMods.size(); i < e; ++i)
+            MapModLocs.push_back(L.LParenLoc);
+          return getDerived().RebuildOMPMapClause(
+            MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
+            OMPC_MAP_alloc, /*IsMapTypeImplicit*/ false, L.LocStart,
+            L.LParenLoc, Vars,
+            OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+        });
   }
 
   OMPClauseResult TransformACCCopyClause(ACCExecutableDirective *D,

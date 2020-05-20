@@ -174,7 +174,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
 ///  Parsing of OpenACC clauses.
 ///
 ///    clause:
-///       copy-clause | pcopy-clause | present_or_copy-clause
+///       present | copy-clause | pcopy-clause | present_or_copy-clause
 ///       | copyin-clause | pcopyin-clause | present_or_copyin-clause
 ///       | copyout-clause | pcopyout-clause | present_or_copyout-clause
 ///       | private-clause | firstprivate-clause | reduction-clause
@@ -261,6 +261,7 @@ ACCClause *Parser::ParseOpenACCClause(
     }
     Clause = ParseOpenACCClause(CKind, WrongDirective);
     break;
+  case ACCC_present:
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
   case ACCC_##Name:
 #define OPENACC_CLAUSE_ALIAS_copyin(Name) \

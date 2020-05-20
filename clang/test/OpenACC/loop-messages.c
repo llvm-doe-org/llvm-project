@@ -9,12 +9,13 @@
 // them would defeat the purpose of the test, so it instead adds "loop" and a
 // for loop to the outer "acc parallel"
 //
-// For checking copy, copyin, copyout, and their aliases we just run the entire
-// test case once for each.  That seems the easiest way to maintain this
-// without losing cases.  This test is fast, so the performance impact isn't
-// terrible.
+// For checking present, copy, copyin, copyout, and their aliases we just run
+// the entire test case once for each.  That seems the easiest way to maintain
+// this without losing cases.  This test is fast, so the performance impact
+// isn't terrible.
 
 // RUN: %data {
+// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=present'           )
 // RUN:   (cflags='-DERR=ERR_ACC -DCOPY=copy'              )
 // RUN:   (cflags='-DERR=ERR_ACC -DCOPY=pcopy'             )
 // RUN:   (cflags='-DERR=ERR_ACC -DCOPY=present_or_copy'   )
@@ -117,32 +118,15 @@ void fn() {
     for (int i = 0; i < 5; ++i)
       ;
 
-    // Clauses not permitted here.
+    // Well formed clauses not permitted here.
 
-    // sep-error@+7 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc loop'}}
-    // cmb-error@+6 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc parallel loop'}}
-    // sep-error@+5 {{unexpected OpenACC clause 'copy' in directive '#pragma acc loop'}}
-    // sep-error@+4 {{unexpected OpenACC clause 'pcopy' in directive '#pragma acc loop'}}
-    // sep-error@+3 {{unexpected OpenACC clause 'present_or_copy' in directive '#pragma acc loop'}}
-    // cmb-error@+2 {{copy variable defined again as copy variable}}
-    // cmb-note@+1 {{previously defined as copy variable here}}
-    #pragma acc CMB_PAR loop nomap(i) copy(i) pcopy(jk) present_or_copy(i)
+    // sep-error-re@+1 {{unexpected OpenACC clause '{{present|copy|pcopy|present_or_copy|copyin|pcopyin|present_or_copyin|copyout|pcopyout|present_or_copyout}}' in directive '#pragma acc loop'}}
+    #pragma acc CMB_PAR loop COPY(i)
     for (int i = 0; i < 5; ++i)
       ;
-    // sep-error@+5 {{unexpected OpenACC clause 'copyin' in directive '#pragma acc loop'}}
-    // sep-error@+4 {{unexpected OpenACC clause 'pcopyin' in directive '#pragma acc loop'}}
-    // sep-error@+3 {{unexpected OpenACC clause 'present_or_copyin' in directive '#pragma acc loop'}}
-    // cmb-error@+2 {{copyin variable defined again as copyin variable}}
-    // cmb-note@+1 {{previously defined as copyin variable here}}
-    #pragma acc CMB_PAR loop copyin(a) pcopyin(e) present_or_copyin(e)
-    for (int i = 0; i < 5; ++i)
-      ;
-    // sep-error@+5 {{unexpected OpenACC clause 'copyout' in directive '#pragma acc loop'}}
-    // sep-error@+4 {{unexpected OpenACC clause 'pcopyout' in directive '#pragma acc loop'}}
-    // sep-error@+3 {{unexpected OpenACC clause 'present_or_copyout' in directive '#pragma acc loop'}}
-    // cmb-error@+2 {{copyout variable defined again as copyout variable}}
-    // cmb-note@+1 {{previously defined as copyout variable here}}
-    #pragma acc CMB_PAR loop copyout(f) pcopyout(f) present_or_copyout(d)
+    // sep-error@+2 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc loop'}}
+    // cmb-error@+1 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc parallel loop'}}
+    #pragma acc CMB_PAR loop nomap(i)
     for (int i = 0; i < 5; ++i)
       ;
     // cmb-error@+2 {{unexpected OpenACC clause 'shared' in directive '#pragma acc parallel loop'}}
@@ -2270,8 +2254,8 @@ void fn() {
   // The only remaining conflicts are with clauses that are permitted only on
   // the parallel construct, and those conflicts only occur on a combined
   // construct.
-  // cmb-error-re@+6 {{{{copy|copyin|copyout}} variable cannot be predetermined private variable}}
-  // cmb-note-re@+1 {{previously defined as {{copy|copyin|copyout}} variable here}}
+  // cmb-error-re@+6 {{{{present|copy|copyin|copyout}} variable cannot be predetermined private variable}}
+  // cmb-note-re@+1 {{previously defined as {{present|copy|copyin|copyout}} variable here}}
   #pragma acc parallel CMB_LOOP COPY(i)
 #if !CMB
   #pragma acc loop
@@ -2288,9 +2272,9 @@ void fn() {
     ;
   {
     int i, j, k, l, m;
-    // cmb-error-re@+9 {{{{copy|copyin|copyout}} variable cannot be predetermined private variable}}
+    // cmb-error-re@+9 {{{{present|copy|copyin|copyout}} variable cannot be predetermined private variable}}
     // cmb-error@+9 {{firstprivate variable cannot be predetermined private variable}}
-    // cmb-note-re@+2 {{previously defined as {{copy|copyin|copyout}} variable here}}
+    // cmb-note-re@+2 {{previously defined as {{present|copy|copyin|copyout}} variable here}}
     // cmb-note@+1 {{previously defined as firstprivate variable here}}
     #pragma acc parallel CMB_LOOP_COLLAPSE(3) COPY(j, l) firstprivate(k, m)
 #if !CMB
@@ -2895,15 +2879,15 @@ void fn() {
 
   // expected-error@+3 {{'#pragma acc loop' cannot be nested within '#pragma acc data'}}
   // expected-note@+1 {{enclosing '#pragma acc data'}}
-  #pragma acc data copy(i)
+  #pragma acc data COPY(i)
   #pragma acc loop
   for (int i = 0; i < 5; ++i)
     ;
 
   // expected-error@+4 {{'#pragma acc loop' cannot be nested within '#pragma acc data'}}
   // expected-note@+2 {{enclosing '#pragma acc data'}}
-  #pragma acc data copy(i)
-  #pragma acc data copy(jk)
+  #pragma acc data COPY(i)
+  #pragma acc data COPY(jk)
   #pragma acc loop
   for (int i = 0; i < 5; ++i)
     ;

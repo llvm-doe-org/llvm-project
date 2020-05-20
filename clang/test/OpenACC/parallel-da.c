@@ -1,6 +1,7 @@
-// Check implicit and explicit data attributes on "acc parallel", except
-// reductions are checked in parallel-reduction.c, and the effect of an
-// enclosing "acc data" is checked in "data.c".
+// Check implicit and explicit data attributes on "acc parallel" except:
+// - Reductions are checked in parallel-reduction.c.
+// - The present clause is checked in present.c.
+// - The effect of an enclosing "acc data" is checked in "data.c".
 //
 // When ADD_LOOP_TO_PAR is not set, this file checks implicit and explicit
 // data attributes on "acc parallel" without "loop".

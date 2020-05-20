@@ -131,6 +131,7 @@ OPENACC_DIRECTIVE_EXT(parallel_loop, "parallel loop")
 //
 //   - The DMAs are the following plus their aliases:
 //     - nomap (default)
+//     - present
 //     - copy
 //     - copyin
 //     - copyout
@@ -210,6 +211,7 @@ OPENACC_DIRECTIVE_EXT(parallel_loop, "parallel loop")
 
 // Clauses, DAs, and clause aliases.
 OPENACC_CLAUSE_AND_DMA(nomap, ACCNomapClause)
+OPENACC_CLAUSE_AND_DMA(present, ACCPresentClause)
 OPENACC_ALIASED_CLAUSE(OPENACC_CLAUSE_AND_DMA, copy, ACCCopyClause)
 OPENACC_CLAUSE_ALIAS(pcopy, copy, ACCCopyClause)
 OPENACC_CLAUSE_ALIAS(present_or_copy, copy, ACCCopyClause)
@@ -236,6 +238,7 @@ OPENACC_CLAUSE(collapse, ACCCollapseClause)
 
 // Explicit clauses and DAs allowed for OpenACC directive 'data'.
 OPENACC_DATA_DMA(nomap)
+OPENACC_DATA_CLAUSE_AND_DMA(present)
 OPENACC_DATA_CLAUSE_AND_DMA(copy)
 OPENACC_DATA_CLAUSE(pcopy)
 OPENACC_DATA_CLAUSE(present_or_copy)
@@ -248,6 +251,7 @@ OPENACC_DATA_CLAUSE(present_or_copyout)
 
 // Explicit clauses and DAs allowed for OpenACC directive 'parallel'.
 OPENACC_PARALLEL_DMA(nomap)
+OPENACC_PARALLEL_CLAUSE_AND_DMA(present)
 OPENACC_PARALLEL_CLAUSE_AND_DMA(copy)
 OPENACC_PARALLEL_CLAUSE(pcopy)
 OPENACC_PARALLEL_CLAUSE(present_or_copy)
@@ -279,6 +283,7 @@ OPENACC_LOOP_CLAUSE(collapse)
 
 // Explicit clauses allowed for OpenACC directive 'parallel loop'.  DAs are
 // checked only for effective directives, so there's no need to list them here.
+OPENACC_PARALLEL_LOOP_CLAUSE(present)
 OPENACC_PARALLEL_LOOP_CLAUSE(copy)
 OPENACC_PARALLEL_LOOP_CLAUSE(pcopy)
 OPENACC_PARALLEL_LOOP_CLAUSE(present_or_copy)

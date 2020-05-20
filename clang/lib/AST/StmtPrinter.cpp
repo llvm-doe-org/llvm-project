@@ -1003,6 +1003,14 @@ void ACCClausePrinter::VisitACCNomapClause(ACCNomapClause *Node) {
   }
 }
 
+void ACCClausePrinter::VisitACCPresentClause(ACCPresentClause *Node) {
+  if (!Node->varlist_empty()) {
+    OS << "present";
+    VisitACCClauseList(Node, '(');
+    OS << ")";
+  }
+}
+
 void ACCClausePrinter::VisitACCCopyClause(ACCCopyClause *Node) {
   if (!Node->varlist_empty()) {
     OS << getOpenACCName(Node->getClauseKind());

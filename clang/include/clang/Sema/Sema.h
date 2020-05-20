@@ -10903,6 +10903,11 @@ public:
       const DeclarationNameInfo &ReductionId);
   /// Called for implicit 'nomap' clause.
   ACCClause *ActOnOpenACCNomapClause(ArrayRef<Expr *> VarList);
+  /// Called for well-formed 'present' clause.
+  ACCClause *ActOnOpenACCPresentClause(
+      ArrayRef<Expr *> VarList, OpenACCDetermination Determination,
+      SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation EndLoc);
   /// Called for well-formed 'copy' clause or an alias.
   ACCClause *ActOnOpenACCCopyClause(
       OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,

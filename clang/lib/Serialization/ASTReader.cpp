@@ -12854,6 +12854,9 @@ ACCClause *ACCClauseReader::readClause() {
   case ACCC_nomap:
     C = ACCNomapClause::CreateEmpty(Context, Record.readInt());
     break;
+  case ACCC_present:
+    C = ACCPresentClause::CreateEmpty(Context, Record.readInt());
+    break;
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
@@ -12923,6 +12926,16 @@ ACCClause *ACCClauseReader::readClause() {
 }
 
 void ACCClauseReader::VisitACCNomapClause(ACCNomapClause *C) {
+  C->setLParenLoc(Record.readSourceLocation());
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Record.readSubExpr());
+  C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCPresentClause(ACCPresentClause *C) {
   C->setLParenLoc(Record.readSourceLocation());
   unsigned NumVars = C->varlist_size();
   SmallVector<Expr *, 16> Vars;

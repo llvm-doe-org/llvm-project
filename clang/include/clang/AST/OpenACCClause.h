@@ -87,6 +87,8 @@ public:
   SourceLocation getBeginLoc() const { return StartLoc; }
   /// Returns the ending location of the clause.
   SourceLocation getEndLoc() const { return EndLoc; }
+  /// Returns the source range of the clause.
+  SourceRange getSourceRange() const { return SourceRange(StartLoc, EndLoc); }
 
   typedef StmtIterator child_iterator;
   typedef ConstStmtIterator const_child_iterator;
@@ -241,6 +243,70 @@ public:
 
   static bool classof(const ACCClause *T) {
     return T->getClauseKind() == ACCC_nomap;
+  }
+};
+
+/// This represents the clause 'present' (or any of its aliases) for
+/// '#pragma acc ...' directives.
+///
+/// \code
+/// #pragma acc parallel present(a,b)
+/// \endcode
+/// In this example directive '#pragma acc parallel' has clause 'present' with
+/// the variables 'a' and 'b'.
+class ACCPresentClause final
+    : public ACCVarListClause<ACCPresentClause>,
+      private llvm::TrailingObjects<ACCPresentClause, Expr *> {
+  friend TrailingObjects;
+  friend ACCVarListClause;
+  friend class ACCClauseReader;
+
+  /// Build clause with number of variables \a N.
+  ///
+  /// \param Determination How the clause was determined.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param N Number of the variables in the clause.
+  ACCPresentClause(OpenACCDetermination Determination, SourceLocation StartLoc,
+                   SourceLocation LParenLoc, SourceLocation EndLoc, unsigned N)
+      : ACCVarListClause<ACCPresentClause>(ACCC_present, Determination,
+                                           StartLoc, LParenLoc, EndLoc, N)
+  {}
+
+  /// Build an empty clause.
+  ///
+  /// \param N Number of variables.
+  explicit ACCPresentClause(unsigned N)
+      : ACCVarListClause<ACCPresentClause>(ACCC_present, N) {
+  }
+
+public:
+  /// Creates clause with a list of variables \a VL.
+  ///
+  /// \param C AST context.
+  /// \param Determination How the clause was determined.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param VL List of references to the variables.
+  static ACCPresentClause *Create(
+      const ASTContext &C, OpenACCDetermination Determination,
+      SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc,
+      ArrayRef<Expr *> VL);
+  /// Creates an empty clause with the place for \a N variables.
+  ///
+  /// \param C AST context.
+  /// \param N The number of variables.
+  static ACCPresentClause *CreateEmpty(const ASTContext &C, unsigned N);
+
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end()));
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_present;
   }
 };
 

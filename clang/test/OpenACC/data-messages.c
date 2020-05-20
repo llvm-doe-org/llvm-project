@@ -48,6 +48,8 @@ int main() {
     ;
 
   // Any data clause is sufficient to suppress that diagnostic.
+  #pragma acc data present(i)
+    ;
   #pragma acc data copy(i)
     ;
   #pragma acc data pcopy(i)
@@ -140,6 +142,9 @@ int main() {
   // a cross section of cases here to confirm it works for the data directive.
   //--------------------------------------------------
 
+  // expected-error@+1 {{expected ',' or ')' in 'present' clause}}
+  #pragma acc data present(i jk)
+    ;
   // expected-error@+2 {{expected '(' after 'copy'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data copy

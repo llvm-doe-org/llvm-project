@@ -1,4 +1,5 @@
-// Check subarrays in clauses on "acc parallel".
+// Check subarrays in clauses on "acc parallel" except the present clause is
+// checked in present.c.
 //
 // We cannot access elements that aren't mapped without risking run-time
 // crashes, so we cannot check that those elements actually aren't mapped

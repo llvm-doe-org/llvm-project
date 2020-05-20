@@ -10368,6 +10368,17 @@ def note_acc_implied_as_gang_reduction : Note<
   "implied as gang reduction here">;
 def err_acc_no_data_clause : Error<
   "expected at least one data clause for '#pragma acc %0'">;
+def warn_acc_omp_map_present : Warning<
+  "the OpenACC '%0' clause translation uses the 'present' map type modifier, "
+  "which is an OpenMP TR8 feature that might not be supported yet by other "
+  "compilers">,
+  InGroup<OpenACCOMPMapPresent>, DefaultIgnore;
+def note_acc_alternate_omp : Note<
+  "an alternative OpenMP translation can be specified with, for example, "
+  "'-fopenacc-%0-omp=%1'">;
+def note_acc_disable_diag : Note<
+  "or you can just disable this diagnostic with "
+  "'-Wno-openacc-omp-map-present'">;
 } // end of OpenACC category
 
 let CategoryName = "Related Result Type Issue" in {

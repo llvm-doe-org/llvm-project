@@ -577,6 +577,7 @@ clarify these points in future versions of the OpenACC specification.
     * Data mapping attributes (DMAs), which describe the mapping and
       transfer of data between host and device:
         * `nomap` (default)
+        * `present`
         * `copy`
         * `copyin`
         * `copyout`
@@ -703,7 +704,9 @@ clarify these points in future versions of the OpenACC specification.
 * *exp*|*imp* DA for a variable of incomplete type is an error.
   Notes:
     * A private or device copy is assumed to be allocatable in each of
-      these cases, but allocation is impossible for incomplete types.
+      these cases, but creating a new allocation or checking for a
+      full existing allocation is impossible for incomplete types
+      because the size is unknown.
     * It does not appear possible for any DA other than `copy`,
       `nomap`, or `shared` to be *imp* for a variable of incomplete
       type.
@@ -741,6 +744,9 @@ clarify these points in future versions of the OpenACC specification.
     * *exp* `copyin` or *exp* `firstprivate` is fine for a `const`
       variable.  The local copy will have the original variable's
       value throughout its lifetime.
+    * *exp* `present` is fine for a `const` variable as the
+      initialization could have happened at the time of the
+      allocation.
     * *imp* `copy` or *imp* `firstprivate` for a `const` variable
       should be fine for the same reasons as their *exp* versions.
     * *imp* `nomap` and *imp* `shared` are the only remaining *imp*
@@ -1103,6 +1109,52 @@ Clacc's current mapping of an `acc data` directive and its clauses to
 OpenMP is as follows:
 
 * `acc data` -> `omp target data`
+* *exp* `present` is translated according to the
+  `-fopenacc-present-omp=KIND` command-line option:
+    * `KIND` is one of:
+        * `present` (default):
+            * *exp* `present` -> *exp* `map` with a `present,alloc`
+              map type.
+        * `alloc`:
+            * *exp* `present` -> *exp* `map` with an `alloc` map type.
+    * Notes:
+        * See the discussion of the `present` clause under "Supported
+          Features" in `README-OpenACC-status.md` for a description of
+          associated diagnostics and for an explanation of the impact
+          of this design on Clacc users.
+        * Clacc does not currently support translating `present` to
+          calls to `omp_target_is_present` for the following reasons:
+            * `omp_target_is_present` is fine for checking that data
+              is present when the data is a single byte.  However, it
+              does not provide a means to check a range of *N* bytes
+              without requiring O(*N*) calls.  Checking for just the
+              first and last bytes would be O(1), but that would not
+              handle some cases where the first and last byte are part
+              of multiple, separate, possibly non-contiguous
+              subarrays.
+            * A runtime error must be triggered when data is not
+              present.  However, we are not aware of any OpenMP 5.0
+              API for triggering a runtime error.  `fprintf`,
+              `stderr`, and `abort` might provide an obvious
+              mechanism, but that might not be how other runtime
+              errors are handled by every OpenMP runtime that might be
+              used by every OpenMP compiler.  Do they print to
+              `stderr`, a log, or both?  Does the runtime need to be
+              shut down somehow before `abort`?  Moreover, there are
+              plans to introduce a runtime-error handling extension to
+              the OpenACC Profiling Interface, but there's no obvious
+              way for it to intercept calls to `fprintf` and `abort`.
+            * Clacc would need to insert either includes of headers
+              like `stdio.h` and `omp.h` or at least local
+              declarations of symbols like `omp_target_is_present`,
+              `omp_get_default_device`, `fprintf`, `stderr`, and
+              `abort`.  Either way, such symbols could potentially
+              conflict with user-defined symbols or preprocessor macro
+              definitions.
+            * We will reconsider adding support for such a translation
+              if there is user demand, but we suspect the likelihood
+              that OpenMP TR8's `present` map type modifier will be
+              standardized means this option is likely not worthwhile.
 * *exp* `copy` -> *exp* `map` with a `tofrom` map type.
 * *exp* `copyin` -> *exp* `map` with a `to` map type.
 * *exp* `copyout` -> *exp* `map` with a `from` map type.
@@ -1222,9 +1274,8 @@ to OpenMP is as follows:
       However, this behavior shouldn't be observable given that it's
       OpenACC's structured reference counter, which is guaranteed not
       to fall to zero before the enclosing `acc data` ends either way.
-* *exp*|*imp* `copy` -> *exp* `map` with a `tofrom` map type
-* *exp* `copyin` -> *exp* `map` with a `to` map type
-* *exp* `copyout` -> *exp* `map` with a `from` map type
+* All DMAs are mapped in the same manner as when appearing on an `acc
+  data`.  *imp* `copy` is mapped in the same manner as *exp* `copy`.
 * *imp* `shared` -> *exp* `shared`
 * *exp*|*imp* `reduction` -> *exp* `reduction`
 * *exp*|*imp* `firstprivate` -> *exp* `firstprivate`

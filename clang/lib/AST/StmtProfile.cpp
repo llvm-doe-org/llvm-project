@@ -1110,6 +1110,9 @@ void ACCClauseProfiler::VisitACCClauseList(T *Node) {
 void ACCClauseProfiler::VisitACCNomapClause(const ACCNomapClause *C) {
   VisitACCClauseList(C);
 }
+void ACCClauseProfiler::VisitACCPresentClause(const ACCPresentClause *C) {
+  VisitACCClauseList(C);
+}
 void ACCClauseProfiler::VisitACCCopyClause(const ACCCopyClause *C) {
   // FIXME: Should we visit the clause kind, which varies among clause
   // aliases?

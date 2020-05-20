@@ -1751,6 +1751,17 @@ def fopenacc_ast_print_EQ : Joined<["-"], "fopenacc-ast-print=">,
            " a result, the output will have preprocessor expansions and"
            " reformatting.">,
   Values<"acc,omp,acc-omp,omp-acc">;
+def fopenacc_present_omp_EQ : Joined<["-"], "fopenacc-present-omp=">,
+  Flags<[CC1Option, NoArgumentUnused]>, Group<f_Group>,
+  MetaVarName<"<translation>">,
+  HelpText<"Adjust the OpenMP translation of OpenACC 'present' clauses. "
+           "'present' (default) specifies the 'present' map type modifier, an "
+           "OpenMP TR8 feature that fully implements the 'present' clause "
+           "semantics.  'alloc' specifies the standard OpenMP 'alloc' map "
+           "type without a modifier, which suffices for OpenACC applications "
+           "that are robust enough not to produce the runtime error specified "
+           "by the OpenACC 'present' clause.">,
+  Values<"present,alloc">;
 
 def fno_optimize_sibling_calls : Flag<["-"], "fno-optimize-sibling-calls">, Group<f_Group>;
 def foptimize_sibling_calls : Flag<["-"], "foptimize-sibling-calls">, Group<f_Group>;
