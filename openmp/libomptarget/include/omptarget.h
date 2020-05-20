@@ -51,6 +51,11 @@ enum tgt_map_type {
   OMP_TGT_MAPTYPE_CLOSE           = 0x400,
   // runtime error if not already allocated
   OMP_TGT_MAPTYPE_PRESENT         = 0x800,
+  // skip allocation if not already allocated
+  // This is an OpenMP extension for the sake of OpenACC support.
+  // TODO: Currently, it is not well tested outside of translations from OpenACC
+  // to OpenMP, so it is not yet recommended for general use in OpenMP code.
+  OMP_TGT_MAPTYPE_NO_ALLOC        = 0x1000,
   // member of struct, member given by [16 MSBs] - 1
   OMP_TGT_MAPTYPE_MEMBER_OF       = 0xffff000000000000
 };

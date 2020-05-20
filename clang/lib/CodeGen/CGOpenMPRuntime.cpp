@@ -7840,6 +7840,12 @@ public:
     OMP_MAP_CLOSE = 0x400,
     /// Produce a runtime error if the data is not already allocated.
     OMP_MAP_PRESENT = 0x800,
+    // Skip allocating the data if it is not already allocated.
+    // This is an OpenMP extension for the sake of OpenACC support.
+    // TODO: Currently, it is not well tested outside of translations from
+    // OpenACC to OpenMP, so it is not yet recommended for general use in
+    // OpenMP code.
+    OMP_MAP_NO_ALLOC = 0x1000,
     /// The 16 MSBs of the flags indicate whether the entry is member of some
     /// struct/class.
     OMP_MAP_MEMBER_OF = 0xffff000000000000,
@@ -8059,6 +8065,9 @@ private:
     if (llvm::find(MapModifiers, OMPC_MAP_MODIFIER_present)
         != MapModifiers.end())
       Bits |= OMP_MAP_PRESENT;
+    if (llvm::find(MapModifiers, OMPC_MAP_MODIFIER_no_alloc)
+        != MapModifiers.end())
+      Bits |= OMP_MAP_NO_ALLOC;
     return Bits;
   }
 

@@ -154,7 +154,7 @@ LookupResult DeviceTy::lookupMapping(void *HstPtrBegin, int64_t Size) {
 // to do an illegal mapping.
 void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
     int64_t Size, bool &IsNew, bool &IsHostPtr, bool IsImplicit,
-    bool UpdateRefCount, bool HasCloseModifier, bool HasPresentModifier) {
+    bool UpdateRefCount, bool HasCloseModifier, bool DoNotAllocate) {
   void *rc = NULL;
   IsHostPtr = false;
   IsNew = false;
@@ -196,9 +196,8 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
          DPxPTR((uintptr_t)HstPtrBegin), Size, (UpdateRefCount ? " updated" : ""));
       IsHostPtr = true;
       rc = HstPtrBegin;
-    } else if (HasPresentModifier) {
-      DP("Mapping required but does not exist%s for HstPtrBegin=" DPxMOD
-         ", Size=%ld\n",
+    } else if (DoNotAllocate) {
+      DP("Mapping does not exist%s for HstPtrBegin=" DPxMOD ", Size=%ld\n",
          (IsImplicit ? " (implicit)" : ""), DPxPTR(HstPtrBegin), Size);
     } else {
       // If it is not contained and Size > 0 we should create a new entry for it.
@@ -252,14 +251,15 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
 // Return the target pointer begin (where the data will be moved).
 // Decrement the reference counter if called from target_data_end.
 void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
-    bool UpdateRefCount, bool &IsHostPtr) {
+    bool UpdateRefCount, bool &IsHostPtr, bool MustContain) {
   void *rc = NULL;
   IsHostPtr = false;
   IsLast = false;
   DataMapMtx.lock();
   LookupResult lr = lookupMapping(HstPtrBegin, Size);
 
-  if (lr.Flags.IsContained || lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) {
+  if (lr.Flags.IsContained ||
+      (!MustContain && (lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter))) {
     auto &HT = *lr.Entry;
     IsLast = HT.getRefCount() == 1;
 

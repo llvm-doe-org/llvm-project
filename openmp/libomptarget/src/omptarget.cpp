@@ -347,6 +347,7 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num, void **args_base,
     // a close map modifier was associated with a map that contained a to.
     bool HasCloseModifier = arg_types[i] & OMP_TGT_MAPTYPE_CLOSE;
     bool HasPresentModifier = arg_types[i] & OMP_TGT_MAPTYPE_PRESENT;
+    bool HasNoAllocModifier = arg_types[i] & OMP_TGT_MAPTYPE_NO_ALLOC;
     // UpdateRef is based on MEMBER_OF instead of TARGET_PARAM because if we
     // have reached this point via __tgt_target_data_begin and not __tgt_target
     // then no argument is marked as TARGET_PARAM ("omp target data map" is not
@@ -376,13 +377,17 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num, void **args_base,
 
     void *TgtPtrBegin = Device.getOrAllocTgtPtr(HstPtrBegin, HstPtrBase,
         data_size, IsNew, IsHostPtr, IsImplicit, UpdateRef, HasCloseModifier,
-        HasPresentModifier);
+        HasPresentModifier || HasNoAllocModifier);
     // If data_size==0, then the argument could be a zero-length pointer to
     // NULL, so getOrAlloc() returning NULL is not an error.
     if (!TgtPtrBegin && data_size) {
       DP("Call to getOrAllocTgtPtr returned null pointer (%s).\n",
-         HasPresentModifier ? "'present' map type modifier"
-                            : "device failure or illegal mapping");
+         HasPresentModifier
+             ? "'present' map type modifier"
+             : HasNoAllocModifier ? "'no_alloc' map type modifier"
+                                  : "device failure or illegal mapping");
+      if (!HasPresentModifier && HasNoAllocModifier)
+        continue;
       OMPT_DISPATCH_CALLBACK_TARGET_MAP();
       return OFFLOAD_FAIL;
     }
@@ -488,13 +493,19 @@ int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
         (arg_types[i] & OMP_TGT_MAPTYPE_PTR_AND_OBJ);
     bool ForceDelete = arg_types[i] & OMP_TGT_MAPTYPE_DELETE;
     bool HasCloseModifier = arg_types[i] & OMP_TGT_MAPTYPE_CLOSE;
+    bool HasNoAllocModifier = arg_types[i] & OMP_TGT_MAPTYPE_NO_ALLOC;
 
     // If PTR_AND_OBJ, HstPtrBegin is address of pointee
     void *TgtPtrBegin = Device.getTgtPtrBegin(HstPtrBegin, data_size, IsLast,
-        UpdateRef, IsHostPtr);
-    DP("There are %" PRId64 " bytes allocated at target address " DPxMOD
-        " - is%s last\n", data_size, DPxPTR(TgtPtrBegin),
-        (IsLast ? "" : " not"));
+        UpdateRef, IsHostPtr, HasNoAllocModifier);
+    if (!TgtPtrBegin) {
+      DP("Data is not allocated on device\n");
+      assert(!IsLast && "expected no deallocation for unallocated data");
+    } else {
+      DP("There are %" PRId64 " bytes allocated at target address " DPxMOD
+          " - is%s last\n", data_size, DPxPTR(TgtPtrBegin),
+          (IsLast ? "" : " not"));
+    }
 
     bool DelEntry = IsLast || ForceDelete;
 
