@@ -9,22 +9,23 @@
 // them would defeat the purpose of the test, so it instead adds "loop" and a
 // for loop to the outer "acc parallel"
 //
-// For checking present, copy, copyin, copyout, and their aliases we just run
-// the entire test case once for each.  That seems the easiest way to maintain
-// this without losing cases.  This test is fast, so the performance impact
-// isn't terrible.
+// For checking present, copy, copyin, copyout, no_create, and their aliases we
+// just run the entire test case once for each.  That seems the easiest way to
+// maintain this without losing cases.  This test is fast, so the performance
+// impact isn't terrible.
 
 // RUN: %data {
-// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=present'           )
-// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=copy'              )
-// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=pcopy'             )
-// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=present_or_copy'   )
-// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=copyin'            )
-// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=pcopyin'           )
-// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=present_or_copyin' )
-// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=copyout'           )
-// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=pcopyout'          )
-// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=present_or_copyout')
+// RUN:   (cflags='-DERR=ERR_ACC -DDATA=present'           )
+// RUN:   (cflags='-DERR=ERR_ACC -DDATA=copy'              )
+// RUN:   (cflags='-DERR=ERR_ACC -DDATA=pcopy'             )
+// RUN:   (cflags='-DERR=ERR_ACC -DDATA=present_or_copy'   )
+// RUN:   (cflags='-DERR=ERR_ACC -DDATA=copyin'            )
+// RUN:   (cflags='-DERR=ERR_ACC -DDATA=pcopyin'           )
+// RUN:   (cflags='-DERR=ERR_ACC -DDATA=present_or_copyin' )
+// RUN:   (cflags='-DERR=ERR_ACC -DDATA=copyout'           )
+// RUN:   (cflags='-DERR=ERR_ACC -DDATA=pcopyout'          )
+// RUN:   (cflags='-DERR=ERR_ACC -DDATA=present_or_copyout')
+// RUN:   (cflags='-DERR=ERR_ACC -DDATA=no_create'         )
 // RUN:   (cflags=-DERR=ERR_OMP_INIT                       )
 // RUN:   (cflags=-DERR=ERR_OMP_COND                       )
 // RUN:   (cflags=-DERR=ERR_OMP_INC                        )
@@ -120,8 +121,8 @@ void fn() {
 
     // Well formed clauses not permitted here.
 
-    // sep-error-re@+1 {{unexpected OpenACC clause '{{present|copy|pcopy|present_or_copy|copyin|pcopyin|present_or_copyin|copyout|pcopyout|present_or_copyout}}' in directive '#pragma acc loop'}}
-    #pragma acc CMB_PAR loop COPY(i)
+    // sep-error-re@+1 {{unexpected OpenACC clause '{{present|copy|pcopy|present_or_copy|copyin|pcopyin|present_or_copyin|copyout|pcopyout|present_or_copyout|no_create}}' in directive '#pragma acc loop'}}
+    #pragma acc CMB_PAR loop DATA(i)
     for (int i = 0; i < 5; ++i)
       ;
     // sep-error@+2 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc loop'}}
@@ -2254,9 +2255,9 @@ void fn() {
   // The only remaining conflicts are with clauses that are permitted only on
   // the parallel construct, and those conflicts only occur on a combined
   // construct.
-  // cmb-error-re@+6 {{{{present|copy|copyin|copyout}} variable cannot be predetermined private variable}}
-  // cmb-note-re@+1 {{previously defined as {{present|copy|copyin|copyout}} variable here}}
-  #pragma acc parallel CMB_LOOP COPY(i)
+  // cmb-error-re@+6 {{{{present|copy|copyin|copyout|no_create}} variable cannot be predetermined private variable}}
+  // cmb-note-re@+1 {{previously defined as {{present|copy|copyin|copyout|no_create}} variable here}}
+  #pragma acc parallel CMB_LOOP DATA(i)
 #if !CMB
   #pragma acc loop
 #endif
@@ -2272,11 +2273,11 @@ void fn() {
     ;
   {
     int i, j, k, l, m;
-    // cmb-error-re@+9 {{{{present|copy|copyin|copyout}} variable cannot be predetermined private variable}}
+    // cmb-error-re@+9 {{{{present|copy|copyin|copyout|no_create}} variable cannot be predetermined private variable}}
     // cmb-error@+9 {{firstprivate variable cannot be predetermined private variable}}
-    // cmb-note-re@+2 {{previously defined as {{present|copy|copyin|copyout}} variable here}}
+    // cmb-note-re@+2 {{previously defined as {{present|copy|copyin|copyout|no_create}} variable here}}
     // cmb-note@+1 {{previously defined as firstprivate variable here}}
-    #pragma acc parallel CMB_LOOP_COLLAPSE(3) COPY(j, l) firstprivate(k, m)
+    #pragma acc parallel CMB_LOOP_COLLAPSE(3) DATA(j, l) firstprivate(k, m)
 #if !CMB
     #pragma acc loop collapse(3)
 #endif
@@ -2294,7 +2295,7 @@ void fn() {
 
   // Explicit reduction on acc parallel, non-conflicting reductions on acc
   // loops.
-  #pragma acc parallel CMB_LOOP_SEQ reduction(+:i,jk) COPY(jk)
+  #pragma acc parallel CMB_LOOP_SEQ reduction(+:i,jk) DATA(jk)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop worker reduction(+:i,jk)
@@ -2329,7 +2330,7 @@ void fn() {
     }
   }
   // Again with no gang loops.
-  #pragma acc parallel CMB_LOOP_SEQ reduction(+:i,jk) COPY(jk)
+  #pragma acc parallel CMB_LOOP_SEQ reduction(+:i,jk) DATA(jk)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop worker reduction(+:i,jk)
@@ -2354,7 +2355,7 @@ void fn() {
 
   // Implicit reduction on acc parallel, non-conflicting reductions on acc
   // loops.
-  #pragma acc parallel CMB_LOOP_SEQ COPY(b)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(b)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop worker reduction(max:p,b)
@@ -2386,7 +2387,7 @@ void fn() {
     }
   }
   // Again with no gang loops.
-  #pragma acc parallel CMB_LOOP_SEQ COPY(p)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(p)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop worker reduction(max:p,b)
@@ -2411,7 +2412,7 @@ void fn() {
 
   // Explicit reduction on acc parallel, conflicting reductions on acc loops.
   // expected-note@+1 14 {{enclosing '+' reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ reduction(+:f,d) COPY(d)
+  #pragma acc parallel CMB_LOOP_SEQ reduction(+:f,d) DATA(d)
   CMB_FORLOOP_HEAD
   {
     // expected-error@+2 {{conflicting 'max' reduction for variable 'f'}}
@@ -2473,7 +2474,7 @@ void fn() {
   }
   // Again with no gang loops.
   // expected-note@+1 10 {{enclosing '+' reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ reduction(+:f,d) COPY(d)
+  #pragma acc parallel CMB_LOOP_SEQ reduction(+:f,d) DATA(d)
   CMB_FORLOOP_HEAD
   {
     // expected-error@+2 {{conflicting 'max' reduction for variable 'f'}}
@@ -2514,7 +2515,7 @@ void fn() {
 
   // Implicit reduction on acc parallel, conflicting reductions on acc loops.
   // expected-note@+1 12 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ COPY(jk)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(jk)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 12 {{enclosing 'max' reduction here}}
@@ -2575,7 +2576,7 @@ void fn() {
   }
   // Again with no gang loops and worker first.
   // expected-note@+1 4 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ COPY(jk)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(jk)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 4 {{enclosing 'max' reduction here}}
@@ -2610,7 +2611,7 @@ void fn() {
   }
   // Again with no gang loops and vector first.
   // expected-note@+1 4 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ COPY(jk)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(jk)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 4 {{enclosing 'max' reduction here}}
@@ -2645,7 +2646,7 @@ void fn() {
   }
   // Again with no gang loops and seq first.
   // expected-note@+1 4 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ COPY(f)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(f)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 4 {{enclosing 'min' reduction here}}
@@ -2682,7 +2683,7 @@ void fn() {
   // Implicit reduction on acc parallel, conflicting gang reductions on acc
   // loops in sibling loop nests.
   // expected-note@+1 2 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ COPY(e)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(e)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop
@@ -2724,7 +2725,7 @@ void fn() {
   // but merely nesting in an acc loop seq doesn't.
   // expected-note@+2 6 {{implied as gang reduction here}}
   // expected-note@+1 6 {{enclosing '^' reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ reduction(^:e,jk) COPY(jk,f)
+  #pragma acc parallel CMB_LOOP_SEQ reduction(^:e,jk) DATA(jk,f)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop
@@ -2825,7 +2826,7 @@ void fn() {
 
   // acc loop reductions for acc loop private variables don't imply gang
   // reductions on acc parallel.
-  #pragma acc parallel CMB_LOOP_SEQ COPY(i,d)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(i,d)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop seq private(i,jk)
@@ -2879,15 +2880,15 @@ void fn() {
 
   // expected-error@+3 {{'#pragma acc loop' cannot be nested within '#pragma acc data'}}
   // expected-note@+1 {{enclosing '#pragma acc data'}}
-  #pragma acc data COPY(i)
+  #pragma acc data DATA(i)
   #pragma acc loop
   for (int i = 0; i < 5; ++i)
     ;
 
   // expected-error@+4 {{'#pragma acc loop' cannot be nested within '#pragma acc data'}}
   // expected-note@+2 {{enclosing '#pragma acc data'}}
-  #pragma acc data COPY(i)
-  #pragma acc data COPY(jk)
+  #pragma acc data DATA(i)
+  #pragma acc data DATA(jk)
   #pragma acc loop
   for (int i = 0; i < 5; ++i)
     ;

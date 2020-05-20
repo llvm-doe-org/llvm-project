@@ -604,6 +604,9 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
     Res = ActOnOpenACCCopyoutClause(Kind, VarList, StartLoc, LParenLoc,
                                     EndLoc);
     break;
+  case ACCC_no_create:
+    Res = ActOnOpenACCNoCreateClause(VarList, StartLoc, LParenLoc, EndLoc);
+    break;
   case ACCC_private:
     Res = ActOnOpenACCPrivateClause(VarList, ACC_EXPLICIT, StartLoc, LParenLoc,
                                     EndLoc);
@@ -794,6 +797,7 @@ public:
     case ACC_DMA_present:
     case ACC_DMA_copyin:
     case ACC_DMA_copyout:
+    case ACC_DMA_no_create:
     case ACC_DMA_unknown:
       llvm_unreachable("expected DMA that can be implicit");
     }
@@ -1616,6 +1620,7 @@ StmtResult Sema::ActOnOpenACCDataDirective(
 #define OPENACC_CLAUSE_ALIAS_copyout(Name) \
     case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
+    case ACCC_no_create:
       Found = true;
       break;
     case ACCC_nomap:
@@ -1809,6 +1814,7 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr
 #define OPENACC_CLAUSE_ALIAS_copyout(Name) \
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
+  case ACCC_no_create:
   case ACCC_shared:
   case ACCC_private:
   case ACCC_firstprivate:
@@ -2083,6 +2089,41 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
 
   return ACCCopyoutClause::Create(Context, Kind, StartLoc, LParenLoc, EndLoc,
                                   Vars);
+}
+
+ACCClause *Sema::ActOnOpenACCNoCreateClause(
+    ArrayRef<Expr *> VarList, SourceLocation StartLoc, SourceLocation LParenLoc,
+    SourceLocation EndLoc) {
+  SmallVector<Expr *, 8> Vars;
+  for (auto &RefExpr : VarList) {
+    assert(RefExpr && "NULL expr in OpenACC no_create clause.");
+    SourceLocation ELoc;
+    SourceRange ERange;
+    Expr *SimpleRefExpr = RefExpr;
+    VarDecl *VD = getVarDeclFromVarList(*this, ACCC_no_create, SimpleRefExpr,
+                                        ELoc, ERange, /*AllowSubarray*/ true);
+    if (!VD)
+      continue;
+
+    QualType Type = VD->getType();
+
+    // The OpenACC 3.0 spec doesn't say, as far as I know, that a variable
+    // in a no_create clause must have a complete type.  However, without its
+    // size, we cannot know if it's fully present.  Besides, it translates to
+    // an OpenMP map clause, which does require a complete type.
+    if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_no_create,
+                               DirStack->getConstructLoc(), ELoc))
+      continue;
+
+    if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_no_create,
+                          ACC_EXPLICIT))
+      Vars.push_back(RefExpr->IgnoreParens());
+  }
+
+  if (Vars.empty())
+    return nullptr;
+
+  return ACCNoCreateClause::Create(Context, StartLoc, LParenLoc, EndLoc, Vars);
 }
 
 ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
@@ -2464,6 +2505,7 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
 #define OPENACC_CLAUSE_ALIAS_copyout(Name) \
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
+  case ACCC_no_create:
   case ACCC_shared:
   case ACCC_private:
   case ACCC_firstprivate:
@@ -3261,7 +3303,9 @@ public:
           << getOpenACCName(C->getClauseKind())
           << LangOptions::getOpenACCPresentOMPValue(
               LangOptions::OpenACCPresentOMP_Alloc);
-      getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_diag);
+      getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_diag)
+          << DiagnosticIDs::getWarningOptionForDiag(
+              diag::warn_acc_omp_map_present);
       break;
     case LangOptions::OpenACCPresentOMP_Alloc:
       break;
@@ -3317,6 +3361,41 @@ public:
           return getDerived().RebuildOMPMapClause(
             llvm::None, llvm::None, CXXScopeSpec(), DeclarationNameInfo(),
             OMPC_MAP_from, /*IsMapTypeImplicit*/ false, L.LocStart,
+            L.LParenLoc, Vars,
+            OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+        });
+  }
+
+  OMPClauseResult TransformACCNoCreateClause(ACCExecutableDirective *D,
+                                             OpenMPDirectiveKind TDKind,
+                                             ACCNoCreateClause *C) {
+    SmallVector<OpenMPMapModifierKind, 1> MapMods;
+    switch (getSema().LangOpts.getOpenACCNoCreateOMP()) {
+    case LangOptions::OpenACCNoCreateOMP_NoAlloc:
+      MapMods.push_back(OMPC_MAP_MODIFIER_no_alloc);
+      getSema().Diag(C->getBeginLoc(), diag::warn_acc_omp_map_no_alloc)
+          << getOpenACCName(C->getClauseKind())
+          << C->getSourceRange();
+      getSema().Diag(C->getBeginLoc(), diag::note_acc_alternate_omp)
+          << "no-create"
+          << LangOptions::getOpenACCNoCreateOMPValue(
+              LangOptions::OpenACCNoCreateOMP_Alloc);
+      getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_diag)
+          << DiagnosticIDs::getWarningOptionForDiag(
+              diag::warn_acc_omp_map_no_alloc);
+      break;
+    case LangOptions::OpenACCNoCreateOMP_Alloc:
+      break;
+    }
+    return transformACCVarListClause<ACCNoCreateClause>(
+        D, C, OMPC_map,
+        [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+          SmallVector<SourceLocation, 1> MapModLocs;
+          for (int i = 0, e = MapMods.size(); i < e; ++i)
+            MapModLocs.push_back(L.LParenLoc);
+          return getDerived().RebuildOMPMapClause(
+            MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
+            OMPC_MAP_alloc, /*IsMapTypeImplicit*/ false, L.LocStart,
             L.LParenLoc, Vars,
             OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
         });

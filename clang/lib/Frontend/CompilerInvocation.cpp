@@ -3102,6 +3102,21 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
       Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
   }
 
+  // Check if -fopenacc-no-create-omp is specified.
+  if (Arg *A = Args.getLastArg(OPT_fopenacc_no_create_omp_EQ)) {
+    StringRef Val = A->getValue();
+    unsigned I;
+    for (I = 0; I <= (unsigned)LangOptions::OpenACCNoCreateOMP_Last; ++I) {
+      auto K = (LangOptions::OpenACCNoCreateOMPKind)I;
+      if (Val == LangOptions::getOpenACCNoCreateOMPValue(K)) {
+        Opts.setOpenACCNoCreateOMP(K);
+        break;
+      }
+    }
+    if (I == LangOptions::OpenACCNoCreateOMP_Last + 1)
+      Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
+  }
+
   // Check if -fopenmp is specified and set default version to 4.5.
   Opts.OpenMP = Args.hasArg(options::OPT_fopenmp) ? 45 : 0;
 

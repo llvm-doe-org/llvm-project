@@ -6781,6 +6781,13 @@ void ACCClauseWriter::VisitACCCopyoutClause(ACCCopyoutClause *C) {
     Record.AddStmt(VE);
 }
 
+void ACCClauseWriter::VisitACCNoCreateClause(ACCNoCreateClause *C) {
+  Record.push_back(C->varlist_size());
+  Record.AddSourceLocation(C->getLParenLoc());
+  for (auto *VE : C->varlists())
+    Record.AddStmt(VE);
+}
+
 void ACCClauseWriter::VisitACCSharedClause(ACCSharedClause *C) {
   Record.push_back(C->varlist_size());
   Record.AddSourceLocation(C->getLParenLoc());

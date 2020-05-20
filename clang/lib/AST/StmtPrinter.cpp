@@ -1035,6 +1035,14 @@ void ACCClausePrinter::VisitACCCopyoutClause(ACCCopyoutClause *Node) {
   }
 }
 
+void ACCClausePrinter::VisitACCNoCreateClause(ACCNoCreateClause *Node) {
+  if (!Node->varlist_empty()) {
+    OS << "no_create";
+    VisitACCClauseList(Node, '(');
+    OS << ")";
+  }
+}
+
 void ACCClausePrinter::VisitACCSharedClause(ACCSharedClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "shared";

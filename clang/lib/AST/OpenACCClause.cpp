@@ -50,6 +50,7 @@ clang::getPrivateVarsFromClause(ACCClause *C) {
 #define OPENACC_CLAUSE_ALIAS_copyout(Name) \
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
+  case ACCC_no_create:
   case ACCC_shared:
   case ACCC_num_gangs:
   case ACCC_num_workers:
@@ -157,6 +158,24 @@ ACCCopyoutClause *ACCCopyoutClause::CreateEmpty(
     const ASTContext &C, OpenACCClauseKind Kind, unsigned N) {
   void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
   return new (Mem) ACCCopyoutClause(Kind, N);
+}
+
+ACCNoCreateClause *
+ACCNoCreateClause::Create(const ASTContext &C, SourceLocation StartLoc,
+                          SourceLocation LParenLoc, SourceLocation EndLoc,
+                          ArrayRef<Expr *> VL) {
+  // Allocate space for private variables and initializer expressions.
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
+  ACCNoCreateClause *Clause = new (Mem) ACCNoCreateClause(StartLoc, LParenLoc,
+                                                          EndLoc, VL.size());
+  Clause->setVarRefs(VL);
+  return Clause;
+}
+
+ACCNoCreateClause *ACCNoCreateClause::CreateEmpty(const ASTContext &C,
+                                                  unsigned N) {
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
+  return new (Mem) ACCNoCreateClause(N);
 }
 
 ACCSharedClause *

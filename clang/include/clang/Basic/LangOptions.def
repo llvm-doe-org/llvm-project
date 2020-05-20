@@ -234,6 +234,9 @@ LANGOPT(OpenACC           , 1, 0, "OpenACC support")
 ENUM_LANGOPT(OpenACCPresentOMP, OpenACCPresentOMPKind, 1,
              OpenACCPresentOMP_Present,
              "The OpenMP translation of the OpenACC 'present' clause")
+ENUM_LANGOPT(OpenACCNoCreateOMP, OpenACCNoCreateOMPKind, 1,
+             OpenACCNoCreateOMP_NoAlloc,
+             "The OpenMP translation of the OpenACC 'no_create' clause")
 LANGOPT(RenderScript      , 1, 0, "RenderScript")
 
 LANGOPT(CUDAIsDevice      , 1, 0, "compiling for CUDA device")

@@ -68,6 +68,8 @@ int main() {
     ;
   #pragma acc data present_or_copyout(i)
     ;
+  #pragma acc data no_create(i)
+    ;
 
   //--------------------------------------------------
   // Unrecognized clauses
@@ -181,6 +183,10 @@ int main() {
   // expected-error@+2 {{subarray length is unspecified and cannot be inferred because subscripted value is not an array}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data present_or_copyout(p[0:])
+    ;
+  // expected-error@+2 {{subscripted value is not an array or pointer}}
+  // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
+  #pragma acc data no_create(i[0:2])
     ;
 
   //--------------------------------------------------

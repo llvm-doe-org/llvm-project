@@ -1128,6 +1128,9 @@ void ACCClauseProfiler::VisitACCCopyoutClause(const ACCCopyoutClause *C) {
   // aliases?
   VisitACCClauseList(C);
 }
+void ACCClauseProfiler::VisitACCNoCreateClause(const ACCNoCreateClause *C) {
+  VisitACCClauseList(C);
+}
 void ACCClauseProfiler::VisitACCSharedClause(const ACCSharedClause *C) {
   VisitACCClauseList(C);
 }

@@ -4106,8 +4106,10 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // warning options so the user can override.
   const Arg *OpenACCPrint = Args.getLastArg(
       options::OPT_fopenacc_print_EQ, options::OPT_fopenacc_ast_print_EQ);
-  if (OpenACCPrint && StringRef(OpenACCPrint->getValue()) != "acc")
+  if (OpenACCPrint && StringRef(OpenACCPrint->getValue()) != "acc") {
     CmdArgs.push_back("-Werror=openacc-omp-map-present");
+    CmdArgs.push_back("-Werror=openacc-omp-map-no-alloc");
+  }
 
   // Select the appropriate action.
   RewriteKind rewriteKind = RK_None;
@@ -5280,6 +5282,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddLastArg(CmdArgs, options::OPT_fopenacc_print_EQ);
   Args.AddLastArg(CmdArgs, options::OPT_fopenacc_ast_print_EQ);
   Args.AddAllArgs(CmdArgs, options::OPT_fopenacc_present_omp_EQ);
+  Args.AddAllArgs(CmdArgs, options::OPT_fopenacc_no_create_omp_EQ);
 
   const SanitizerArgs &Sanitize = TC.getSanitizerArgs();
   Sanitize.addArgs(TC, Args, CmdArgs, InputType);

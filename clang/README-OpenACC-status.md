@@ -23,11 +23,16 @@ We have implemented and tested support for the following features:
     * `-fopenacc-present-omp=KIND` where `KIND` is either `present` or
       `alloc`
         * See the discussion of the `present` clause below.
+    * `-fopenacc-no-create-omp=KIND` where `KIND` is either `no_alloc`
+      or `alloc`
+        * See the discussion of the `no_create` clause below.
     * `-Wsource-uses-openacc`
     * `-Wopenacc-ignored-clause`
         * See the discussion of the `vector_length` clause below.
     * `-Wopenacc-omp-map-present`
         * See the discussion of the `present` clause below.
+    * `-Wopenacc-omp-map-no-alloc`
+        * See the discussion of the `no_create` clause below.
     * Notes:
         * See the section "Using" in `../README.md` for an
           introduction to Clacc's command-line options.
@@ -37,61 +42,103 @@ We have implemented and tested support for the following features:
 * run-time environment variables:
     * `OMP_TARGET_OFFLOAD=disabled` for targeting host
 * `data` directive:
-    * `present` clause
+    * `present` and `no_create` clauses
         * Traditional compilation mode:
-            * The `present` clause is fully supported.
+            * The `present` and `no_create` clauses are fully
+              supported.
             * Although the traditional compilation mode user typically
-              does not need to be aware, the OpenMP translation of the
-              `present` clause uses an OpenMP TR8 feature: the
-              `present` map type modifier.  This modifier is combined
-              with the OpenMP `alloc` map type as opposed to, for
-              example, `tofrom` in order to suppress device-to-host
-              transfers in the case that there is a reference count
-              decrement within the associated region.
+              does not need to be aware, the OpenMP translation of
+              these clauses uses the following features:
+                * The `present` translation uses an OpenMP
+                  TR8 feature: the `present` map type modifier.
+                * The `no_create` translation uses a Clacc-specific
+                  OpenMP extension: the `no_alloc` map type modifier.
+            * In each case, the map type modifier is combined with the
+              OpenMP `alloc` map type as opposed to, for example,
+              `tofrom` in order to suppress device-to-host transfers
+              in the case that there is a reference count decrement
+              within the associated region.
             * If desired, it is possible to adjust the translation or
               related diagnostics by using the command-line options
               discussed below for source-to-source mode.  The
               difference is that, by default in traditional
               compilation mode, the related diagnostics are disabled.
         * Source-to-source mode:
-            * Occurrences of the `present` clause produce a
-              compile-time error diagnostic by default.  The purpose
-              of the diagnostic is to ensure the user is aware that
-              the translation includes the `present` map type modifier
-              because it is unlikely to be supported yet by foreign
-              OpenMP compilers.
+            * Occurrences of the `present` or `no_create` clause
+              produce a compile-time error diagnostic by default.  The
+              purpose of the diagnostic is to ensure the user is aware
+              that the translation includes the `present` or
+              `no_alloc` map type modifier because it is unlikely to
+              be supported yet by foreign OpenMP compilers.
             * The diagnostic is actually the warning enabled by
-              `-Wopenacc-omp-map-present`, which is enabled and
+              `-Wopenacc-omp-map-present` or
+              `-Wopenacc-omp-map-no-alloc`, which is enabled and
               treated as an error by default in source-to-source mode.
-            * To work around this issue, the following command-line
-              options can be specified:
-                * `-Wno-error=openacc-omp-map-present` converts the
+            * To work around this issue, any of the following
+              command-line options can be specified:
+                * `-Wno-error=openacc-omp-map-present` or
+                  `-Wno-error=openacc-omp-map-no-alloc` converts the
                   diagnostic to a warning to make it easier to find
                   all occurrences.
-                * `-Wno-openacc-omp-map-present` disables the
+                * `-Wno-openacc-omp-map-present` or
+                  `-Wno-openacc-omp-map-no-alloc` disables the
                   diagnostic entirely.  This is useful if the
                   generated OpenMP will not be compiled or if the
                   OpenMP compiler actually already supports the
-                  `present` map type modifier.
+                  `present` or `no_alloc` map type modifier.
                 * `-fopenacc-present-omp=alloc` suppresses the
-                  diagnostic by changing the translation to use the
-                  standard OpenMP `alloc` map type without the
-                  `present` modifier.  In this case, there is no
+                  diagnostic for `present` by changing its translation
+                  to use the standard OpenMP `alloc` map type without
+                  the `present` modifier.  In this case, there is no
                   runtime error when the specified variable is not
                   present on the device.  However, this translation
                   should be sufficient for OpenACC applications that
                   are robust enough not to actually encounter this
                   runtime error.
+                * `-fopenacc-no-create-omp=alloc` suppresses the
+                  diagnostic for `no_create` by changing its
+                  translation to use the standard OpenMP map type
+                  `alloc` without the `no_alloc` modifier:
+                    * This translation is probably only useful when
+                      both of the following conditions are met:
+                        * Application behavior is being testing with
+                          small data sets in initial attempts to port
+                          to OpenMP.
+                        * The application guarantees that, for every
+                          variable specified in a `no_create` clause,
+                          if the variable is not already present on
+                          the device, then it is not accessed within
+                          the associated region.
+                    * The reason for these conditions is that,
+                      contrary to `no_create` semantics, this
+                      translation allocates the specified data when it
+                      is not already present on the device, and the
+                      impact can include:
+                        * Performance degradation.
+                        * Device memory exhaustion.
+                        * Incorrect run-time behavior when there's a
+                          statically or dynamically nested data clause
+                          or runtime library call for the specified
+                          data.  For example, if there's a nested
+                          `copy` clause, its data transfers are now
+                          suppressed.  If a nested data clause
+                          specifies a conflicting subarray, a run-time
+                          error might now occur.
+                * There are various other imperfect translations of
+                  these clauses to standard OpenMP that might be
+                  useful under other conditions.  We will consider
+                  adding support if there is user demand.
         * `-fopenacc[-ast]-print=acc`, `-ast-print`, `-ast-dump`,
           etc. mode:
             * Debugging modes like these do not actually print OpenMP
-              source code, so they leave the aforementioned diagnostic
-              disabled as in traditional compilation mode.
-        * Currently, Clacc's implementation of the OpenMP TR8
-          `present` map type modifier is not well tested outside of
-          Clacc translations from OpenACC to OpenMP.  Thus, it is not
-          yet recommended for use in hand-written OpenMP code as it
-          might not integrate well with some OpenMP features.
+              source code, so they leave the aforementioned
+              diagnostics disabled as in traditional compilation mode.
+        * Currently, Clacc's implementations of the OpenMP TR8
+          `present` map type modifier and Clacc's `no_alloc` map type
+          modifier extension for OpenMP are not well tested outside of
+          Clacc's translations from OpenACC to OpenMP.  Thus, they are
+          not yet recommended for use in hand-written OpenMP code as
+          they might not integrate well with some OpenMP features.
         * See the section "Data Directives" in
           `README-OpenACC-design.md` for a discussion of alternative
           translations that we considered for the OpenACC `present`
@@ -101,17 +148,18 @@ We have implemented and tested support for the following features:
       `present_or_copyin`
     * `copyout` clause and aliases `pcopyout` and
       `present_or_copyout`
-    * in `present`, `copy`, `copyin`, and `copyout` clauses and their
-      aliases, subarrays specifying contiguous blocks
+    * in `present`, `copy`, `copyin`, `copyout`, and `no_create`
+      clauses and their aliases, subarrays specifying contiguous
+      blocks
     * any number of levels of nesting within other `data` directives
 * `parallel` directive:
     * use without clauses
     * data attributes:
         * implicit `copy` for non-scalars
         * implicit `firstprivate` for scalars
-        * For `present`, `copy`, `copyin`, and `copyout` clauses and
-          their aliases, support is the same as for the `data`
-          directive, as described above.
+        * For `present`, `copy`, `copyin`, `copyout`, and `no_create`
+          clauses and their aliases, support is the same as for the
+          `data` directive, as described above.
         * `firstprivate` clause
         * `private` clause
         * `reduction` clause:
@@ -371,6 +419,9 @@ specification.  Currently, Clacc uses OpenMP extensions as follows:
 * The `present` clause translation depends on the OpenMP TR8 map type
   modifier `present` by default:
     * See the discussion of the `present` clause above for details.
+* The `no_create` clause translation depends on the map type modifier
+  `no_alloc` by default:
+    * See the discussion of the `no_create` clause above for details.
 * Some features of the OpenACC Profiling Interface depend on OMPT
   extensions:
     * See the section "OpenACC Profiling Interface" in

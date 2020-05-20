@@ -1762,6 +1762,16 @@ def fopenacc_present_omp_EQ : Joined<["-"], "fopenacc-present-omp=">,
            "that are robust enough not to produce the runtime error specified "
            "by the OpenACC 'present' clause.">,
   Values<"present,alloc">;
+def fopenacc_no_create_omp_EQ : Joined<["-"], "fopenacc-no-create-omp=">,
+  Flags<[CC1Option, NoArgumentUnused]>, Group<f_Group>,
+  MetaVarName<"<translation>">,
+  HelpText<"Adjust the OpenMP translation of OpenACC 'no_create' clauses. "
+           "'no_alloc' (default) specifies the 'no_alloc' map type modifier, "
+           "an OpenMP extension that fully implements the 'no_create' clause "
+           "semantics.  'alloc' specifies the standard OpenMP 'alloc' map "
+           "type without a modifier, which might be useful for testing while "
+           "porting some OpenACC applications to OpenMP.">,
+  Values<"no_alloc,alloc">;
 
 def fno_optimize_sibling_calls : Flag<["-"], "fno-optimize-sibling-calls">, Group<f_Group>;
 def foptimize_sibling_calls : Flag<["-"], "foptimize-sibling-calls">, Group<f_Group>;

@@ -123,6 +123,21 @@ public:
     llvm_unreachable("unexpected OpenACCPresentOMPKind");
   }
 
+  enum OpenACCNoCreateOMPKind {
+    OpenACCNoCreateOMP_NoAlloc,
+    OpenACCNoCreateOMP_Alloc,
+    OpenACCNoCreateOMP_Last = OpenACCNoCreateOMP_Alloc
+  };
+  static StringRef getOpenACCNoCreateOMPValue(OpenACCNoCreateOMPKind K) {
+    switch (K) {
+    case OpenACCNoCreateOMP_NoAlloc:
+      return "no_alloc";
+    case OpenACCNoCreateOMP_Alloc:
+      return "alloc";
+    }
+    llvm_unreachable("unexpected OpenACCNoCreateOMPKind");
+  }
+
   enum AddrSpaceMapMangling { ASMM_Target, ASMM_On, ASMM_Off };
 
   // Corresponds to _MSC_VER

@@ -581,6 +581,7 @@ clarify these points in future versions of the OpenACC specification.
         * `copy`
         * `copyin`
         * `copyout`
+        * `no_create`
         * Others not yet implemented by Clacc.
     * Data sharing attributes (DSAs), which describe the sharing of
       data among gangs, workers, or vector lanes:
@@ -744,9 +745,9 @@ clarify these points in future versions of the OpenACC specification.
     * *exp* `copyin` or *exp* `firstprivate` is fine for a `const`
       variable.  The local copy will have the original variable's
       value throughout its lifetime.
-    * *exp* `present` is fine for a `const` variable as the
-      initialization could have happened at the time of the
-      allocation.
+    * *exp* `present` or *exp* `no_create` is fine for a `const`
+      variable as the initialization could have happened at the time
+      of the allocation.
     * *imp* `copy` or *imp* `firstprivate` for a `const` variable
       should be fine for the same reasons as their *exp* versions.
     * *imp* `nomap` and *imp* `shared` are the only remaining *imp*
@@ -1158,6 +1159,20 @@ OpenMP is as follows:
 * *exp* `copy` -> *exp* `map` with a `tofrom` map type.
 * *exp* `copyin` -> *exp* `map` with a `to` map type.
 * *exp* `copyout` -> *exp* `map` with a `from` map type.
+* *exp* `no_create` is translated according to the
+  `-fopenacc-no-create-omp=KIND` command-line option:
+    * `KIND` is one of:
+        * `no_alloc` (default):
+            * *exp* `no_create` -> *exp* `map` with a `no_alloc,alloc`
+              map type.
+        * `alloc`:
+            * *exp* `no_create` -> *exp* `map` with an `alloc` map
+              type.
+    * Notes:
+        * See the discussion of the `no_create` clause under
+          "Supported Features" in `README-OpenACC-status.md` for a
+          description of associated diagnostics and for an explanation
+          of the impact of this design on Clacc users.
 
 Parallel Directives
 -------------------

@@ -135,6 +135,7 @@ OPENACC_DIRECTIVE_EXT(parallel_loop, "parallel loop")
 //     - copy
 //     - copyin
 //     - copyout
+//     - no_create
 //   - The DSAs are the following:
 //     - shared (default)
 //     - reduction
@@ -221,6 +222,7 @@ OPENACC_CLAUSE_ALIAS(present_or_copyin, copyin, ACCCopyinClause)
 OPENACC_ALIASED_CLAUSE(OPENACC_CLAUSE_AND_DMA, copyout, ACCCopyoutClause)
 OPENACC_CLAUSE_ALIAS(pcopyout, copyout, ACCCopyoutClause)
 OPENACC_CLAUSE_ALIAS(present_or_copyout, copyout, ACCCopyoutClause)
+OPENACC_CLAUSE_AND_DMA(no_create, ACCNoCreateClause)
 OPENACC_CLAUSE_AND_DSA_MAPPABLE(shared, ACCSharedClause)
 OPENACC_CLAUSE_AND_DSA_MAPPABLE(reduction, ACCReductionClause)
 OPENACC_CLAUSE_AND_DSA_UNMAPPABLE(private, ACCPrivateClause)
@@ -248,6 +250,7 @@ OPENACC_DATA_CLAUSE(present_or_copyin)
 OPENACC_DATA_CLAUSE_AND_DMA(copyout)
 OPENACC_DATA_CLAUSE(pcopyout)
 OPENACC_DATA_CLAUSE(present_or_copyout)
+OPENACC_DATA_CLAUSE_AND_DMA(no_create)
 
 // Explicit clauses and DAs allowed for OpenACC directive 'parallel'.
 OPENACC_PARALLEL_DMA(nomap)
@@ -261,6 +264,7 @@ OPENACC_PARALLEL_CLAUSE(present_or_copyin)
 OPENACC_PARALLEL_CLAUSE_AND_DMA(copyout)
 OPENACC_PARALLEL_CLAUSE(pcopyout)
 OPENACC_PARALLEL_CLAUSE(present_or_copyout)
+OPENACC_PARALLEL_CLAUSE_AND_DMA(no_create)
 OPENACC_PARALLEL_DSA(shared)
 OPENACC_PARALLEL_CLAUSE_AND_DSA(reduction)
 OPENACC_PARALLEL_CLAUSE_AND_DSA(private)
@@ -293,6 +297,7 @@ OPENACC_PARALLEL_LOOP_CLAUSE(present_or_copyin)
 OPENACC_PARALLEL_LOOP_CLAUSE(copyout)
 OPENACC_PARALLEL_LOOP_CLAUSE(pcopyout)
 OPENACC_PARALLEL_LOOP_CLAUSE(present_or_copyout)
+OPENACC_PARALLEL_LOOP_CLAUSE(no_create)
 OPENACC_PARALLEL_LOOP_CLAUSE(private)
 OPENACC_PARALLEL_LOOP_CLAUSE(firstprivate)
 OPENACC_PARALLEL_LOOP_CLAUSE(reduction)

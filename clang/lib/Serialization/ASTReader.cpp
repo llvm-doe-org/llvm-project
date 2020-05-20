@@ -12872,6 +12872,9 @@ ACCClause *ACCClauseReader::readClause() {
 #include "clang/Basic/OpenACCKinds.def"
     C = ACCCopyoutClause::CreateEmpty(Context, Kind, Record.readInt());
     break;
+  case ACCC_no_create:
+    C = ACCNoCreateClause::CreateEmpty(Context, Record.readInt());
+    break;
   case ACCC_shared:
     C = ACCSharedClause::CreateEmpty(Context, Record.readInt());
     break;
@@ -12966,6 +12969,16 @@ void ACCClauseReader::VisitACCCopyinClause(ACCCopyinClause *C) {
 }
 
 void ACCClauseReader::VisitACCCopyoutClause(ACCCopyoutClause *C) {
+  C->setLParenLoc(Record.readSourceLocation());
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Record.readSubExpr());
+  C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCNoCreateClause(ACCNoCreateClause *C) {
   C->setLParenLoc(Record.readSourceLocation());
   unsigned NumVars = C->varlist_size();
   SmallVector<Expr *, 16> Vars;

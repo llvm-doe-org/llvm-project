@@ -246,8 +246,7 @@ public:
   }
 };
 
-/// This represents the clause 'present' (or any of its aliases) for
-/// '#pragma acc ...' directives.
+/// This represents the clause 'present' for '#pragma acc ...' directives.
 ///
 /// \code
 /// #pragma acc parallel present(a,b)
@@ -551,6 +550,66 @@ public:
 
   static bool classof(const ACCClause *T) {
     return isClauseKind(T->getClauseKind());
+  }
+};
+
+/// This represents the clause 'no_create' for '#pragma acc ...' directives.
+///
+/// \code
+/// #pragma acc parallel no_create(a,b)
+/// \endcode
+/// In this example directive '#pragma acc parallel' has clause 'no_create' with
+/// the variables 'a' and 'b'.
+class ACCNoCreateClause final
+    : public ACCVarListClause<ACCNoCreateClause>,
+      private llvm::TrailingObjects<ACCNoCreateClause, Expr *> {
+  friend TrailingObjects;
+  friend ACCVarListClause;
+  friend class ACCClauseReader;
+
+  /// Build clause with number of variables \a N.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param N Number of the variables in the clause.
+  ACCNoCreateClause(SourceLocation StartLoc, SourceLocation LParenLoc,
+                    SourceLocation EndLoc, unsigned N)
+      : ACCVarListClause<ACCNoCreateClause>(ACCC_no_create, ACC_EXPLICIT,
+                                            StartLoc, LParenLoc, EndLoc, N)
+  {}
+
+  /// Build an empty clause.
+  ///
+  /// \param N Number of variables.
+  explicit ACCNoCreateClause(unsigned N)
+      : ACCVarListClause<ACCNoCreateClause>(ACCC_no_create, N) {
+  }
+
+public:
+  /// Creates clause with a list of variables \a VL.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param VL List of references to the variables.
+  static ACCNoCreateClause *Create(
+      const ASTContext &C, SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation EndLoc, ArrayRef<Expr *> VL);
+  /// Creates an empty clause with the place for \a N variables.
+  ///
+  /// \param C AST context.
+  /// \param N The number of variables.
+  static ACCNoCreateClause *CreateEmpty(const ASTContext &C, unsigned N);
+
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end()));
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_no_create;
   }
 };
 

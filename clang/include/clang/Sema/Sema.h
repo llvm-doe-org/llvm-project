@@ -10923,6 +10923,10 @@ public:
       OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
       SourceLocation StartLoc, SourceLocation LParenLoc,
       SourceLocation EndLoc);
+  /// Called for well-formed 'no_create' clause.
+  ACCClause *ActOnOpenACCNoCreateClause(
+      ArrayRef<Expr *> VarList, SourceLocation StartLoc,
+      SourceLocation LParenLoc, SourceLocation EndLoc);
   /// Called for implicit 'shared' clause.
   ACCClause *ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList);
   /// Called on well-formed 'private' clause.
