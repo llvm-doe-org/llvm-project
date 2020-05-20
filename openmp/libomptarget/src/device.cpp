@@ -154,7 +154,7 @@ LookupResult DeviceTy::lookupMapping(void *HstPtrBegin, int64_t Size) {
 // to do an illegal mapping.
 void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
     int64_t Size, bool &IsNew, bool &IsHostPtr, bool IsImplicit,
-    bool UpdateRefCount, bool HasCloseModifier) {
+    bool UpdateRefCount, bool HasCloseModifier, bool HasPresentModifier) {
   void *rc = NULL;
   IsHostPtr = false;
   IsNew = false;
@@ -196,6 +196,10 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
          DPxPTR((uintptr_t)HstPtrBegin), Size, (UpdateRefCount ? " updated" : ""));
       IsHostPtr = true;
       rc = HstPtrBegin;
+    } else if (HasPresentModifier) {
+      DP("Mapping required but does not exist%s for HstPtrBegin=" DPxMOD
+         ", Size=%ld\n",
+         (IsImplicit ? " (implicit)" : ""), DPxPTR(HstPtrBegin), Size);
     } else {
       // If it is not contained and Size > 0 we should create a new entry for it.
       IsNew = true;

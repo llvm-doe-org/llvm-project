@@ -346,6 +346,7 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num, void **args_base,
     // Force the creation of a device side copy of the data when:
     // a close map modifier was associated with a map that contained a to.
     bool HasCloseModifier = arg_types[i] & OMP_TGT_MAPTYPE_CLOSE;
+    bool HasPresentModifier = arg_types[i] & OMP_TGT_MAPTYPE_PRESENT;
     // UpdateRef is based on MEMBER_OF instead of TARGET_PARAM because if we
     // have reached this point via __tgt_target_data_begin and not __tgt_target
     // then no argument is marked as TARGET_PARAM ("omp target data map" is not
@@ -374,12 +375,14 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num, void **args_base,
     }
 
     void *TgtPtrBegin = Device.getOrAllocTgtPtr(HstPtrBegin, HstPtrBase,
-        data_size, IsNew, IsHostPtr, IsImplicit, UpdateRef, HasCloseModifier);
+        data_size, IsNew, IsHostPtr, IsImplicit, UpdateRef, HasCloseModifier,
+        HasPresentModifier);
+    // If data_size==0, then the argument could be a zero-length pointer to
+    // NULL, so getOrAlloc() returning NULL is not an error.
     if (!TgtPtrBegin && data_size) {
-      // If data_size==0, then the argument could be a zero-length pointer to
-      // NULL, so getOrAlloc() returning NULL is not an error.
-      DP("Call to getOrAllocTgtPtr returned null pointer (device failure or "
-          "illegal mapping).\n");
+      DP("Call to getOrAllocTgtPtr returned null pointer (%s).\n",
+         HasPresentModifier ? "'present' map type modifier"
+                            : "device failure or illegal mapping");
       OMPT_DISPATCH_CALLBACK_TARGET_MAP();
       return OFFLOAD_FAIL;
     }

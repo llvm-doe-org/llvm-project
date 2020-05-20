@@ -7838,6 +7838,8 @@ public:
     /// Close is a hint to the runtime to allocate memory close to
     /// the target device.
     OMP_MAP_CLOSE = 0x400,
+    /// Produce a runtime error if the data is not already allocated.
+    OMP_MAP_PRESENT = 0x800,
     /// The 16 MSBs of the flags indicate whether the entry is member of some
     /// struct/class.
     OMP_MAP_MEMBER_OF = 0xffff000000000000,
@@ -8054,6 +8056,9 @@ private:
     if (llvm::find(MapModifiers, OMPC_MAP_MODIFIER_close)
         != MapModifiers.end())
       Bits |= OMP_MAP_CLOSE;
+    if (llvm::find(MapModifiers, OMPC_MAP_MODIFIER_present)
+        != MapModifiers.end())
+      Bits |= OMP_MAP_PRESENT;
     return Bits;
   }
 
@@ -8713,7 +8718,8 @@ public:
                                                   /*isSigned=*/false);
     Sizes.push_back(Size);
     // Map type is always TARGET_PARAM
-    Types.push_back(OMP_MAP_TARGET_PARAM);
+    Types.push_back(OMP_MAP_TARGET_PARAM |
+                    ((*CurTypes.begin()) & OMP_MAP_PRESENT));
     // Remove TARGET_PARAM flag from the first element
     (*CurTypes.begin()) &= ~OMP_MAP_TARGET_PARAM;
 
@@ -9278,6 +9284,62 @@ public:
             /*IsFirstComponentList=*/true, C->isImplicit());
         assert(!PartialStruct.Base.isValid() &&
                "No partial structs for declare target link expected.");
+      }
+    }
+  }
+
+  /// Generate the base pointers, section pointers, sizes and map types
+  /// associated with variables with "present" map type modifiers.
+  void generateInfoForMapTypeModPresent(
+      MapBaseValuesArrayTy &BasePointers, MapValuesArrayTy &Pointers,
+      MapValuesArrayTy &Sizes, MapFlagsArrayTy &Types,
+      llvm::DenseSet<const ValueDecl *> CapturedVarSet) {
+    assert(CurDir.is<const OMPExecutableDirective *>() &&
+           "Expect an executable directive");
+    const auto *CurExecDir = CurDir.get<const OMPExecutableDirective *>();
+    // Map other list items in the map clause which are not captured variables
+    // but "declare target link" global variables.
+    for (const auto *C : CurExecDir->getClausesOfKind<OMPMapClause>()) {
+      ArrayRef<OpenMPMapModifierKind> Mods = C->getMapTypeModifiers();
+      if (llvm::find(Mods, OMPC_MAP_MODIFIER_present) == Mods.end())
+        continue;
+      for (const auto L : C->component_lists()) {
+        if (!L.first)
+          continue;
+        const auto *VD = dyn_cast<VarDecl>(L.first);
+        if (!VD)
+          continue;
+
+        // If it was captured because it was referenced in the construct, don't
+        // generate another map entry.  Thus, IsFirstComponentList below is
+        // false, suppressing the flag OMP_TGT_MAPTYPE_TARGET_PARAM.
+        if (CapturedVarSet.count(VD))
+          continue;
+
+        // Temporary versions of arrays
+        MapBaseValuesArrayTy CurBasePointers;
+        MapValuesArrayTy CurPointers;
+        MapValuesArrayTy CurSizes;
+        MapFlagsArrayTy CurTypes;
+        StructRangeInfoTy PartialStruct;
+
+        generateInfoForComponentList(
+            C->getMapType(), C->getMapTypeModifiers(), L.second,
+            CurBasePointers, CurPointers, CurSizes, CurTypes, PartialStruct,
+            /*IsFirstComponentList=*/false, C->isImplicit());
+
+        // If there is an entry in PartialStruct it means we have a struct with
+        // individual members mapped. Emit an extra combined entry.
+        if (PartialStruct.Base.isValid())
+          emitCombinedEntry(BasePointers, Pointers, Sizes, Types, CurTypes,
+                            PartialStruct);
+
+        // We need to append the results of this capture to what we already
+        // have.
+        BasePointers.append(CurBasePointers.begin(), CurBasePointers.end());
+        Pointers.append(CurPointers.begin(), CurPointers.end());
+        Sizes.append(CurSizes.begin(), CurSizes.end());
+        Types.append(CurTypes.begin(), CurTypes.end());
       }
     }
   }
@@ -10171,6 +10233,7 @@ void CGOpenMPRuntime::emitTargetCall(
     // Get mappable expression information.
     MappableExprsHandler MEHandler(D, CGF);
     llvm::DenseMap<llvm::Value *, llvm::Value *> LambdaPointers;
+    llvm::DenseSet<const ValueDecl *> CapturedVarSet;
 
     auto RI = CS.getCapturedRecordDecl()->field_begin();
     auto CV = CapturedVars.begin();
@@ -10199,6 +10262,8 @@ void CGOpenMPRuntime::emitTargetCall(
         // just do a default mapping.
         MEHandler.generateInfoForCapture(CI, *CV, CurBasePointers, CurPointers,
                                          CurSizes, CurMapTypes, PartialStruct);
+        if (!CI->capturesThis())
+          CapturedVarSet.insert(CI->getCapturedVar()->getCanonicalDecl());
         if (CurBasePointers.empty())
           MEHandler.generateDefaultMapInfo(*CI, **RI, *CV, CurBasePointers,
                                            CurPointers, CurSizes, CurMapTypes);
@@ -10236,6 +10301,10 @@ void CGOpenMPRuntime::emitTargetCall(
     // but "declare target link" global variables.
     MEHandler.generateInfoForDeclareTargetLink(BasePointers, Pointers, Sizes,
                                                MapTypes);
+    // Map other list items in the map clause which are not captured variables
+    // but have "present" map type modifiers.
+    MEHandler.generateInfoForMapTypeModPresent(BasePointers, Pointers, Sizes,
+                                               MapTypes, CapturedVarSet);
 
     TargetDataInfo Info;
     // Fill up the arrays and create the arguments.

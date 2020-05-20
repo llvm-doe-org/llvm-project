@@ -3094,7 +3094,8 @@ bool Parser::parseMapTypeModifiers(OpenMPVarListDataTy &Data) {
   while (getCurToken().isNot(tok::colon)) {
     OpenMPMapModifierKind TypeModifier = isMapModifier(*this);
     if (TypeModifier == OMPC_MAP_MODIFIER_always ||
-        TypeModifier == OMPC_MAP_MODIFIER_close) {
+        TypeModifier == OMPC_MAP_MODIFIER_close ||
+        TypeModifier == OMPC_MAP_MODIFIER_present) {
       Data.MapTypeModifiers.push_back(TypeModifier);
       Data.MapTypeModifiersLoc.push_back(Tok.getLocation());
       ConsumeToken();
