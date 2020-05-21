@@ -320,8 +320,8 @@
 # define LW_UINT128(Var) Var##_lw
 #endif
 
-// Passing const variable to private isn't permitted.
-#if MODE == MODE_P
+// Passing const variable to copyout or private isn't permitted.
+#if MODE == MODE_Co0 || MODE == MODE_Co1 || MODE == MODE_Co2 || MODE == MODE_P
 # define CONST
 #else
 # define CONST const
@@ -438,8 +438,8 @@ int main() {
   // DMP-PARLOOP-CCiCoFP-NOT:     <implicit>
   // DMP-PARLOOP-CCiCoFP-SAME:    {{$}}
   // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-PARLOOP-CCiCoF-NEXT:     DeclRefExpr {{.*}} 'ci' 'const int'
-  // DMP-PARLOOP-CCiCoF-NEXT:     DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  // DMP-PARLOOP-CCiCoF-NEXT:     DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
+  // DMP-PARLOOP-CCiCoF-NEXT:     DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
                                   // The test omits const when testing private.
   // DMP-PARLOOP-P-NEXT:          DeclRefExpr {{.*}} 'ci' 'int'
   // DMP-PARLOOP-P-NEXT:          DeclRefExpr {{.*}} 'ca' 'int [3]'
@@ -481,8 +481,8 @@ int main() {
   // DMP-CCiCoF-NOT:                <implicit>
   // DMP-CCiCoF-SAME:               {{$}}
   // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ci' 'const int'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
   // DMP-CCiCo-NEXT:              ACCSharedClause {{.*}} <implicit>
   // DMP-F-NEXT:                  ACCNomapClause {{.*}} <implicit>
   // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'gi' 'int'
@@ -498,8 +498,8 @@ int main() {
   // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'lu' 'union U':'union U'
   // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ci' 'const int'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
+  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
   // DMP-CCiCoF-NOT:                DeclRefExpr {{.*}} 'gUnref' 'int'
   // DMP-CCiCoF-NOT:                DeclRefExpr {{.*}} 'lUnref' 'int'
 
@@ -616,8 +616,8 @@ int main() {
   // DMP-CCiCoF-NOT:                  <implicit>
   // DMP-CCiCoF-SAME:                 {{$}}
   // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'ci' 'const int'
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
+  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
   // DMP-CCiCo-NEXT:                OMPSharedClause
   // DMP-CCiCo-NOT:                   <implicit>
   // DMP-CCiCo-SAME:                  {{$}}
@@ -634,8 +634,8 @@ int main() {
   // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'lu' 'union U':'union U'
   // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'ci' 'const int'
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
+  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
   // DMP-CCiCo-NOT:                   DeclRefExpr {{.*}} 'gUnref' 'int'
   // DMP-CCiCo-NOT:                   DeclRefExpr {{.*}} 'lUnref' 'int'
 
@@ -743,8 +743,8 @@ int main() {
   // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'lu' 'union U':'union U'
   // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'ci' 'const int'
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
+  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
   // DMP-PARLOOP-ICCiCoF-NEXT:      impl: ForStmt
   // DMP-PARLOOP-P-NEXT:            impl: CompoundStmt
   // DMP-PARLOOP-P-NEXT:              DeclStmt

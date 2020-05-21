@@ -10316,8 +10316,8 @@ def err_acc_conflicting_da : Error<
   "%select{||predetermined |implied }2%3 variable">;
 def note_acc_explicit_da : Note<
   "previously defined as %0 variable here">;
-def err_acc_const_private : Error<
-  "const variable cannot be private because initialization is impossible">;
+def err_acc_const_da : Error<
+  "const variable cannot be %0 because initialization is impossible">;
 def note_acc_const : Note<
   "variable %0 declared const here">;
 def err_acc_clause_not_ice : Error<

@@ -71,17 +71,17 @@ int main() {
   double d; // expected-note 3 {{'d' defined here}}
   float _Complex fc; // expected-note 5 {{'fc' defined here}}
   double _Complex dc; // expected-note 5 {{'dc' defined here}}
-  // expected-note@+3 {{variable 'constI' declared const here}}
+  // expected-note@+3 4 {{variable 'constI' declared const here}}
   // expected-noacc-note@+2 3 {{variable 'constI' declared const here}}
   // expected-note@+1 {{'constI' defined here}}
   const int constI = 5;
-  // expected-note@+3 {{variable 'constIDecl' declared const here}}
+  // expected-note@+3 4 {{variable 'constIDecl' declared const here}}
   // expected-noacc-note@+2 3 {{variable 'constIDecl' declared const here}}
   // expected-note@+1 {{'constIDecl' declared here}}
   const extern int constIDecl;
-  // expected-noacc-note@+1 6 {{variable 'constA' declared const here}}
+  // expected-noacc-note@+1 5 {{variable 'constA' declared const here}}
   const int constA[3];
-  // expected-noacc-note@+1 6 {{variable 'constADecl' declared const here}}
+  // expected-noacc-note@+1 4 {{variable 'constADecl' declared const here}}
   const extern int constADecl[3];
   struct S { int i; } s; // expected-note 9 {{'s' defined here}}
   union U { int i; } u; // expected-note 9 {{'u' defined here}}
@@ -889,10 +889,13 @@ int main() {
     FORLOOP
   #pragma acc parallel LOOP present_or_copyin(constI, constIDecl)
     FORLOOP
+  // expected-error@+1 2 {{const variable cannot be copyout because initialization is impossible}}
   #pragma acc parallel LOOP copyout(constI, constIDecl)
     FORLOOP
+  // expected-error@+1 2 {{const variable cannot be copyout because initialization is impossible}}
   #pragma acc parallel LOOP pcopyout(constI, constIDecl)
     FORLOOP
+  // expected-error@+1 2 {{const variable cannot be copyout because initialization is impossible}}
   #pragma acc parallel LOOP present_or_copyout(constI, constIDecl)
     FORLOOP
   #pragma acc parallel LOOP no_create(constI, constIDecl)
@@ -942,25 +945,16 @@ int main() {
       constADecl[1] = 5;
       constA[0] = 5;
     }
-  #pragma acc parallel LOOP copyin(constA) copyout(constADecl)
+  #pragma acc parallel LOOP copyin(constA) pcopyin(constADecl)
     FORLOOP_HEAD {
       // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
       // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int [3]'}}
       constA[0] = 5;
       constADecl[1] = 5;
     }
-  #pragma acc parallel LOOP pcopyin(constADecl) pcopyout(constA)
+  #pragma acc parallel LOOP present_or_copyin(constA)
     FORLOOP_HEAD {
-      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
-      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int [3]'}}
-      constA[0] = 5;
-      constADecl[1] = 5;
-    }
-  #pragma acc parallel LOOP present_or_copyin(constA) present_or_copyout(constADecl)
-    FORLOOP_HEAD {
-      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int [3]'}}
-      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
-      constADecl[1] = 5;
+      // expected-noacc-error@+1 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
       constA[0] = 5;
     }
   #pragma acc parallel LOOP no_create(constI)

@@ -2079,6 +2079,17 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
                                DirStack->getConstructLoc(), ELoc))
       continue;
 
+    // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
+    // variable cannot be copyout.  However, you can never initialize the
+    // device copy of such a variable, and that uninitialized value would be
+    // copied back to the host.
+    if (Type.isConstant(Context)) {
+      Diag(ELoc, diag::err_acc_const_da)
+          << getOpenACCName(ACCC_copyout) << ERange;
+      Diag(VD->getLocation(), diag::note_acc_const) << VD;
+      continue;
+    }
+
     if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_copyout,
                           ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
@@ -2179,9 +2190,9 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
     // variable cannot be private.  However, you can never initialize the
     // private version of such a variable, and OpenMP does have this
     // restriction.
-    // TODO: Should this be isConstant?
-    if (VD->getType().isConstQualified()) {
-      Diag(ELoc, diag::err_acc_const_private);
+    if (Type.isConstant(Context)) {
+      Diag(ELoc, diag::err_acc_const_da)
+          << getOpenACCName(ACCC_private) << ERange;
       Diag(VD->getLocation(), diag::note_acc_const) << VD;
       // Implicit private is for loop control variables, which cannot be const.
       assert(Determination == ACC_EXPLICIT &&

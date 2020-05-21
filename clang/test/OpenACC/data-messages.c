@@ -34,6 +34,7 @@ int main() {
   float f;
   const int constI = 5;
   const extern int constIDecl;
+  // expected-note@+2 {{variable 'constA' declared const here}}
   // expected-noacc-note@+1 {{variable 'constA' declared const here}}
   const int constA[3];
   // expected-noacc-note@+1 {{variable 'constADecl' declared const here}}
@@ -211,6 +212,7 @@ int main() {
     ;
   #pragma acc data pcopy(constI, constIDecl)
     ;
+  // expected-error@+1 {{const variable cannot be copyout because initialization is impossible}}
   #pragma acc data pcopyin(constADecl) pcopyout(constA)
   {
     // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}

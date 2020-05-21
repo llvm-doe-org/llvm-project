@@ -711,37 +711,38 @@ clarify these points in future versions of the OpenACC specification.
     * It does not appear possible for any DA other than `copy`,
       `nomap`, or `shared` to be *imp* for a variable of incomplete
       type.
-* *exp* `private` or *exp* `reduction` for a `const` variable is an
-  error.  Notes:
-    * Private copies of a `const` private variable would remain
-      uninitialized throughout their lifetime.
-    * A reduction assigns to both the original variable and the
-      private copies after their initialization, but `const` prevents
-      that.
-    * *exp* `copy` and *exp* `copyout` are strange cases.
-      Technically, each assigns to the original, and `const` prevents
-      that.  However, there are several arguments for why each should
-      be permitted for a `const` variable:
+* *exp* `copyout`, *exp* `private`, or *exp* `reduction` for a `const`
+  variable is an error.  Notes:
+    * There are several reasons:
+        * Except in the case of `reduction`, device/private copies
+          would remain uninitialized throughout their lifetimes
+          because the application is not permitted to write to them.
+        * A `reduction` is pointless if the application cannot write
+          to the private copies after initialization.
+        * In the case of `copyout` or `reduction`, the runtime must
+          write to the original variable at the end of the region.
+          Those writes would violate `const`, particularly if they
+          would alter known data.  In the case of `copyout`, the new
+          data would likely be uninitialized values.
+    * *exp* `copy` is a subtle case.  Technically, it writes to the
+      original, and `const` prevents that.  However, there are several
+      arguments for why it should be permitted for a `const` variable:
         * For shared memory, it's supposed to be fine to ignore *exp*
-          `copy` and *exp* `copyout` (or any DMA) entirely, so `const`
-          is harmless in that case.  An implementation for discrete
-          memory could optimize by not copying back to the original
-          variable because the value shouldn't change because it's
-          `const`, so `const` is actually helpful here instead of
-          problematic.  In the case of `copyout`, it could be argued
-          that the value to be copied back could be an uninitialized
-          value instead of the original value, but it could also be
-          argued that's poor usage of `copyout`.  TODO: Actually, is
-          there any good usage for `copyout` with the `const` case?
+          `copy` (or any DMA) entirely, so `const` is harmless in that
+          case.
+        * For discrete memory, an implementation could optimize by not
+          copying back to the original variable because the value
+          shouldn't change because it's `const`, so `const` is
+          actually helpful here instead of problematic.
         * It should be fine to reference a `const` non-scalar within
           an `acc parallel` region even though the non-scalar is
           declared outside the region, but the `acc parallel` has
           *imp* `copy` for such a non-scalar.  Thus, *imp* `copy` must
           be permitted for the non-scalar, and so then should *exp*
           `copy`.
-        * Clacc translates `copy` or `copyout` to OpenMP's `map`
-          clause with a map type of `tofrom` or `from`, and the OpenMP
-          implementation permits those for `const` variables.
+        * Clacc translates `copy` to OpenMP's `map` clause with a map
+          type of `tofrom`, and the OpenMP implementation permits
+          those for `const` variables.
     * *exp* `copyin` or *exp* `firstprivate` is fine for a `const`
       variable.  The local copy will have the original variable's
       value throughout its lifetime.
