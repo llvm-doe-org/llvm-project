@@ -38,6 +38,7 @@
 // RUN: }
 // RUN: %for prt-args {
 // RUN:   %clang -Xclang -verify %[prt] %t-acc.c \
+// RUN:          -Wno-openacc-omp-map-no-alloc -Wno-openacc-omp-map-present \
 // RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN: }
 
@@ -50,13 +51,15 @@
 // RUN: %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -o %t.ast
 // RUN: %for prt-args {
 // RUN:   %clang %[prt] %t.ast 2>&1 \
+// RUN:          -Wno-openacc-omp-map-no-alloc -Wno-openacc-omp-map-present \
 // RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN: }
 
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
 // RUN: %for prt-opts {
-// RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c
+// RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c \
+// RUN:          -Wno-openacc-omp-map-no-alloc -Wno-openacc-omp-map-present
 // RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:   %clang -Xclang -verify -fopenmp %fopenmp-version -o %t %t-omp.c
 // RUN:   %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-TGT-HOST,EXE-HOST %s
@@ -83,25 +86,96 @@
 
 #include <stdio.h>
 
-// PRT: int main() {
+struct T { int i; };
+
+int pr;
+int prArr[1];
+struct T prStruct;
+
+void test();
+
 int main() {
+  // This encloses all tests so we can check the effect of the present clause on
+  // statically nested directives without a runtime error.
+  //
+  //      DMP: ACCDataDirective
+  // DMP-NEXT:   ACCCreateClause
+  //  DMP-NOT:     <implicit>
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'pr' 'int'
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'prStruct' 'struct T'
+  // DMP-NEXT:   impl: OMPTargetDataDirective
+  // DMP-NEXT:     OMPMapClause
+  //  DMP-NOT:       <implicit>
+  // DMP-NEXT:       DeclRefExpr {{.*}} 'pr' 'int'
+  // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int [1]'
+  // DMP-NEXT:       DeclRefExpr {{.*}} 'prStruct' 'struct T'
+  #pragma acc data create(pr,prArr,prStruct)
+  test();
+}
+
+void prSet() {
+  pr = 90;
+  prArr[0] = 90;
+  prStruct.i = 90;
+  // We call this between tests.
+  //
+  //      DMP: ACCParallelDirective
+  // DMP-NEXT:   ACCNumGangsClause
+  // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:   ACCPresentClause
+  //  DMP-NOT:     <implicit>
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'pr' 'int'
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'prStruct' 'struct T'
+  // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'pr' 'int'
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'prStruct' 'struct T'
+  // DMP-NEXT:   impl: OMPTargetTeamsDirective
+  // DMP-NEXT:     OMPNum_teamsClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:     OMPMapClause
+  //  DMP-NOT:       <implicit>
+  // DMP-NEXT:       DeclRefExpr {{.*}} 'pr' 'int'
+  // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int [1]'
+  // DMP-NEXT:       DeclRefExpr {{.*}} 'prStruct' 'struct T'
+  #pragma acc parallel num_gangs(1) present(pr, prArr, prStruct)
+  {
+    pr = 90;
+    prArr[0] = 90;
+    prStruct.i = 90;
+  }
+}
+
+// PRT: void test() {
+void test() {
   // PRT-NEXT: printf("start\n");
   // EXE: start
   printf("start\n");
 
   //--------------------------------------------------
-  // Check acc data without nested directive.
+  // Check acc data without statically nested directive.
   //--------------------------------------------------
 
   // PRT-NEXT: {
   {
+    // PRT-NEXT: prSet();
     // PRT-NEXT: c =
     // PRT-NEXT: ci =
     // PRT-NEXT: co =
+    // PRT-NEXT: cr =
+    // PRT-NEXT: nc =
+    prSet();
     int  c = 10;
     int ci = 20;
     int co = 30;
+    int cr = 40;
+    int nc = 50;
     // DMP:      ACCDataDirective
+    // DMP-NEXT:   ACCPresentClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'pr' 'int'
     // DMP-NEXT:   ACCCopyClause
     // DMP-NOT:      <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int'
@@ -111,7 +185,16 @@ int main() {
     // DMP-NEXT:   ACCCopyoutClause
     // DMP-NOT:      <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int'
+    // DMP-NEXT:   ACCCreateClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int'
+    // DMP-NEXT:   ACCNoCreateClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int'
     // DMP-NEXT:   impl: OMPTargetDataDirective
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'pr' 'int'
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int'
@@ -121,39 +204,51 @@ int main() {
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int'
     // DMP-NOT:      OMP
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(c) copyin(ci) copyout(co){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(tofrom: c) map(to: ci) map(from: co){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(tofrom: c) map(to: ci) map(from: co){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(c) copyin(ci) copyout(co){{$}}
-    #pragma acc data copy(c) copyin(ci) copyout(co)
+    // PRT-A-NEXT:  {{^ *}}#pragma acc data present(pr) copy(c) copyin(ci) copyout(co) create(cr) no_create(nc){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(present,alloc: pr) map(tofrom: c) map(to: ci) map(from: co) map(alloc: cr) map(no_alloc,alloc: nc){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(present,alloc: pr) map(tofrom: c) map(to: ci) map(from: co) map(alloc: cr) map(no_alloc,alloc: nc){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc data present(pr) copy(c) copyin(ci) copyout(co) create(cr) no_create(nc){{$}}
+    #pragma acc data present(pr) copy(c) copyin(ci) copyout(co) create(cr) no_create(nc)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
+      // PRT-NEXT: pr +=
       // PRT-NEXT: c +=
       // PRT-NEXT: ci +=
       // PRT-NEXT: co +=
+      // PRT-NEXT: cr +=
+      // PRT-NEXT: nc +=
+      pr += 100;
        c += 100;
       ci += 100;
       co += 100;
+      cr += 100;
+      nc += 100;
       // PRT-NEXT: printf(
       // PRT:      );
       //      EXE-NEXT: Inside acc data:
-      // EXE-HOST-NEXT:   c=110, ci=120, co=130
-      //  EXE-DEV-NEXT:   c=110, ci=120, co=130
+      // EXE-HOST-NEXT:   pr=190, c=110, ci=120, co=130, cr=140, nc=150
+      //  EXE-DEV-NEXT:   pr=190, c=110, ci=120, co=130, cr=140, nc=150
       printf("Inside acc data:\n"
-             "  c=%3d, ci=%3d, co=%3d\n",
-             c, ci, co);
+             "  pr=%3d, c=%3d, ci=%3d, co=%3d, cr=%3d, nc=%3d\n",
+             pr, c, ci, co, cr, nc);
     } // PRT-NEXT: }
     // PRT-NEXT: printf(
     // PRT:      );
     //      EXE-NEXT: After acc data:
-    // EXE-HOST-NEXT:   c=110, ci=120, co=130
-    //  EXE-DEV-NEXT:   c= 10, ci=120, co=
+    // EXE-HOST-NEXT:   pr=190, c=110, ci=120, co=130, cr=140, nc=150
+    //  EXE-DEV-NEXT:   pr=190, c= 10, ci=120, co={{.+}}, cr=140, nc=150
     printf("After acc data:\n"
-           "  c=%3d, ci=%3d, co=%3d\n",
-           c, ci, co);
+           "  pr=%3d, c=%3d, ci=%3d, co=%3d, cr=%3d, nc=%3d\n",
+           pr, c, ci, co, cr, nc);
   } // PRT-NEXT: }
 
   //--------------------------------------------------
@@ -270,12 +365,18 @@ int main() {
 
   // PRT-NEXT: {
   {
-    // PRT-NEXT: c0 =
-    // PRT: co2 =
+    // PRT-NEXT: prSet();
+    // PRT: nc =
+    prSet();
     int  c0 = 10,  c1 = 11,  c2 = 12;
     int ci0 = 20, ci1 = 21, ci2 = 22;
     int co0 = 30, co1 = 31, co2 = 32;
+    int cr0 = 40, cr1 = 41, cr2 = 42;
+    int nc = 50;
     // DMP:      ACCDataDirective
+    // DMP-NEXT:   ACCPresentClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'pr' 'int'
     // DMP-NEXT:   ACCCopyClause
     // DMP-NOT:      <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'c0' 'int'
@@ -303,7 +404,22 @@ int main() {
     // DMP-NEXT:   ACCCopyoutClause
     // DMP-NOT:      <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'co2' 'int'
+    // DMP-NEXT:   ACCCreateClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'cr0' 'int'
+    // DMP-NEXT:   ACCCreateClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'cr1' 'int'
+    // DMP-NEXT:   ACCCreateClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'cr2' 'int'
+    // DMP-NEXT:   ACCNoCreateClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int'
     // DMP-NEXT:   impl: OMPTargetDataDirective
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'pr' 'int'
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'c0' 'int'
@@ -331,34 +447,68 @@ int main() {
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'co2' 'int'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'cr0' 'int'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'cr1' 'int'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'cr2' 'int'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int'
     // DMP-NOT:      OMP
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(c0) pcopy(c1) present_or_copy(c2){{( *\\$[[:space:]])?}}
-    // PRT-A-SAME:  {{^ *}}copyin(ci0) pcopyin(ci1) present_or_copyin(ci2){{( *\\$[[:space:]])?}}
-    // PRT-A-SAME:  {{^ *}}copyout(co0) pcopyout(co1) present_or_copyout(co2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(tofrom: c0) map(tofrom: c1) map(tofrom: c2)
+    //  PRT-A-NEXT: {{^ *}}#pragma acc data present(pr){{( *\\$[[:space:]])?}}
+    //  PRT-A-SAME: {{^ *}}copy(c0) pcopy(c1) present_or_copy(c2){{( *\\$[[:space:]])?}}
+    //  PRT-A-SAME: {{^ *}}copyin(ci0) pcopyin(ci1) present_or_copyin(ci2){{( *\\$[[:space:]])?}}
+    //  PRT-A-SAME: {{^ *}}copyout(co0) pcopyout(co1) present_or_copyout(co2){{( *\\$[[:space:]])?}}
+    //  PRT-A-SAME: {{^ *}}create(cr0) pcreate(cr1) present_or_create(cr2){{( *\\$[[:space:]])?}}
+    //  PRT-A-SAME: {{^ *}}no_create(nc){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(present,alloc: pr)
+    // PRT-AO-SAME: {{^ *}}map(tofrom: c0) map(tofrom: c1) map(tofrom: c2)
     // PRT-AO-SAME: {{^ *}}map(to: ci0) map(to: ci1) map(to: ci2)
-    // PRT-AO-SAME: {{^ *}}map(from: co0) map(from: co1) map(from: co2){{$}}
+    // PRT-AO-SAME: {{^ *}}map(from: co0) map(from: co1) map(from: co2)
+    // PRT-AO-SAME: {{^ *}}map(alloc: cr0) map(alloc: cr1) map(alloc: cr2)
+    // PRT-AO-SAME: {{^ *}}map(no_alloc,alloc: nc){{$}}
     //
-    // PRT-O-NEXT: {{^ *}}#pragma omp target data map(tofrom: c0) map(tofrom: c1) map(tofrom: c2)
-    // PRT-O-SAME: {{^ *}}map(to: ci0) map(to: ci1) map(to: ci2)
-    // PRT-O-SAME: {{^ *}}map(from: co0) map(from: co1) map(from: co2){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(c0) pcopy(c1) present_or_copy(c2){{( *\\$[[:space:]] *//)?}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(present,alloc: pr)
+    //  PRT-O-SAME: {{^ *}}map(tofrom: c0) map(tofrom: c1) map(tofrom: c2)
+    //  PRT-O-SAME: {{^ *}}map(to: ci0) map(to: ci1) map(to: ci2)
+    //  PRT-O-SAME: {{^ *}}map(from: co0) map(from: co1) map(from: co2)
+    //  PRT-O-SAME: {{^ *}}map(alloc: cr0) map(alloc: cr1) map(alloc: cr2)
+    //  PRT-O-SAME: {{^ *}}map(no_alloc,alloc: nc){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc data present(pr){{( *\\$[[:space:]] *//)?}}
+    // PRT-OA-SAME: {{^ *}}copy(c0) pcopy(c1) present_or_copy(c2){{( *\\$[[:space:]] *//)?}}
     // PRT-OA-SAME: {{^ *}}copyin(ci0) pcopyin(ci1) present_or_copyin(ci2){{( *\\$[[:space:]] *//)?}}
-    // PRT-OA-SAME: {{^ *}}copyout(co0) pcopyout(co1) present_or_copyout(co2){{$}}
-    #pragma acc data copy(c0) pcopy(c1) present_or_copy(c2)             \
+    // PRT-OA-SAME: {{^ *}}copyout(co0) pcopyout(co1) present_or_copyout(co2){{( *\\$[[:space:]] *//)?}}
+    // PRT-OA-SAME: {{^ *}}create(cr0) pcreate(cr1) present_or_create(cr2){{( *\\$[[:space:]] *//)?}}
+    // PRT-OA-SAME: {{^ *}}no_create(nc){{$}}
+    #pragma acc data present(pr)                                        \
+                     copy(c0) pcopy(c1) present_or_copy(c2)             \
                      copyin(ci0) pcopyin(ci1) present_or_copyin(ci2)    \
-                     copyout(co0) pcopyout(co1) present_or_copyout(co2)
+                     copyout(co0) pcopyout(co1) present_or_copyout(co2) \
+                     create(cr0) pcreate(cr1) present_or_create(cr2)    \
+                     no_create(nc)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // PRT-NEXT: c0 +=
-      // PRT: co2 +=
+      // PRT-NEXT: pr +=
+      // PRT: nc +=
+       pr += 100;
        c0 += 100;  c1 += 100;  c2 += 100;
       ci0 += 100; ci1 += 100; ci2 += 100;
       co0 += 100; co1 += 100; co2 += 100;
+      cr0 += 100; cr1 += 100; cr2 += 100;
+       nc += 100;
 
       // Check suppression of implicit data clauses.
+      //
+      // FIXME: Is this handling the outer no_create correctly?  OpenACC says
+      // there should be no implicit data attribute here, which means nc
+      // shouldn't be allocated here, but does it get allocated here by OpenMP?
       //
       // DMP:      ACCParallelDirective
       // DMP-NEXT:   ACCNumGangsClause
@@ -367,6 +517,11 @@ int main() {
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co0' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co1' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co2' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr0' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr1' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr2' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'pr' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c0' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c1' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c2' 'int'
@@ -377,6 +532,11 @@ int main() {
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co0' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co1' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co2' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr0' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr1' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr2' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'pr' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c0' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c1' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c2' 'int'
@@ -391,6 +551,11 @@ int main() {
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co0' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co1' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co2' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr0' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr1' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr2' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'pr' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c0' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c1' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c2' 'int'
@@ -403,11 +568,11 @@ int main() {
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}shared(co0,co1,co2,c0,c1,c2,ci0,ci1,ci2)
+      // PRT-AO-SAME: {{^ *}}shared(co0,co1,co2,cr0,cr1,cr2,nc,pr,c0,c1,c2,ci0,ci1,ci2)
       // PRT-AO-SAME: {{^ *}}defaultmap(tofrom: scalar){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}shared(co0,co1,co2,c0,c1,c2,ci0,ci1,ci2)
+      // PRT-O-SAME:  {{^ *}}shared(co0,co1,co2,cr0,cr1,cr2,nc,pr,c0,c1,c2,ci0,ci1,ci2)
       // PRT-O-SAME:  {{^ *}}defaultmap(tofrom: scalar){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       #pragma acc parallel num_gangs(1)
@@ -416,57 +581,85 @@ int main() {
       {
         // Don't use these uninitialized.
         // PRT-NEXT: co0 =
-        // PRT: co2 =
-        co0 = 40; co1 = 41; co2 = 42;
+        // PRT: cr2 =
+        co0 = 35; co1 = 36; co2 = 37;
+        cr0 = 45; cr1 = 46; cr2 = 47;
+        // Reference nc to trigger any implicit attributes, but nc shouldn't be
+        // allocated, so don't actually access it at run time.
+        // PRT-NEXT: if
+        // PRT-NEXT: nc =
+        if (!cr0)
+          nc = 55;
         // PRT-NEXT: printf(
         // PRT:      );
         //      EXE-NEXT: In first acc parallel:
+        // EXE-HOST-NEXT:    pr= 190
         // EXE-HOST-NEXT:    c0= 110,  c1= 111,  c2= 112
         // EXE-HOST-NEXT:   ci0= 120, ci1= 121, ci2= 122
-        // EXE-HOST-NEXT:   co0=  40, co1=  41, co2=  42
+        // EXE-HOST-NEXT:   co0=  35, co1=  36, co2=  37
+        // EXE-HOST-NEXT:   cr0=  45, cr1=  46, cr2=  47
+        //  EXE-DEV-NEXT:    pr=  90
         //  EXE-DEV-NEXT:    c0=  10,  c1=  11,  c2=  12
         //  EXE-DEV-NEXT:   ci0=  20, ci1=  21, ci2=  22
-        //  EXE-DEV-NEXT:   co0=  40, co1=  41, co2=  42
+        //  EXE-DEV-NEXT:   co0=  35, co1=  36, co2=  37
+        //  EXE-DEV-NEXT:   cr0=  45, cr1=  46, cr2=  47
         printf("In first acc parallel:\n"
+               "   pr=%4d\n"
                "   c0=%4d,  c1=%4d,  c2=%4d\n"
                "  ci0=%4d, ci1=%4d, ci2=%4d\n"
-               "  co0=%4d, co1=%4d, co2=%4d\n",
-               c0, c1, c2, ci0, ci1, ci2, co0, co1, co2);
-        // PRT-NEXT: c0 +=
-        // PRT: co2 +=
+               "  co0=%4d, co1=%4d, co2=%4d\n"
+               "  cr0=%4d, cr1=%4d, cr2=%4d\n",
+               pr, c0, c1, c2, ci0, ci1, ci2, co0, co1, co2, cr0, cr1, cr2);
+        // PRT-NEXT: pr +=
+        // PRT: cr2 +=
+         pr += 1000;
          c0 += 1000;  c1 += 1000;  c2 += 1000;
         ci0 += 1000; ci1 += 1000; ci2 += 1000;
         co0 += 1000; co1 += 1000; co2 += 1000;
+        cr0 += 1000; cr1 += 1000; cr2 += 1000;
       } // PRT-NEXT: }
 
       // PRT-NEXT: printf(
       // PRT:      );
       //      EXE-NEXT: After first acc parallel:
+      // EXE-HOST-NEXT:    pr=1190
       // EXE-HOST-NEXT:    c0=1110,  c1=1111,  c2=1112
       // EXE-HOST-NEXT:   ci0=1120, ci1=1121, ci2=1122
-      // EXE-HOST-NEXT:   co0=1040, co1=1041, co2=1042
+      // EXE-HOST-NEXT:   co0=1035, co1=1036, co2=1037
+      // EXE-HOST-NEXT:   cr0=1045, cr1=1046, cr2=1047
+      // EXE-HOST-NEXT:    nc= 150
+      //  EXE-DEV-NEXT:    pr= 190
       //  EXE-DEV-NEXT:    c0= 110,  c1= 111,  c2= 112
       //  EXE-DEV-NEXT:   ci0= 120, ci1= 121, ci2= 122
       //  EXE-DEV-NEXT:   co0= 130, co1= 131, co2= 132
+      //  EXE-DEV-NEXT:   cr0= 140, cr1= 141, cr2= 142
+      //  EXE-DEV-NEXT:    nc= 150
       printf("After first acc parallel:\n"
+             "   pr=%4d\n"
              "   c0=%4d,  c1=%4d,  c2=%4d\n"
              "  ci0=%4d, ci1=%4d, ci2=%4d\n"
-             "  co0=%4d, co1=%4d, co2=%4d\n",
-             c0, c1, c2, ci0, ci1, ci2, co0, co1, co2);
-      // PRT-NEXT: c0 +=
-      // PRT: co2 +=
+             "  co0=%4d, co1=%4d, co2=%4d\n"
+             "  cr0=%4d, cr1=%4d, cr2=%4d\n"
+             "   nc=%4d\n",
+             pr, c0, c1, c2, ci0, ci1, ci2, co0, co1, co2, cr0, cr1, cr2, nc);
+      // PRT-NEXT: pr +=
+      // PRT: nc +=
+       pr += 100;
        c0 += 100;  c1 += 100;  c2 += 100;
       ci0 += 100; ci1 += 100; ci2 += 100;
       co0 += 100; co1 += 100; co2 += 100;
+      cr0 += 100; cr1 += 100; cr2 += 100;
+       nc += 100;
 
       // Check suppression of explicit data clauses (only data transfers are
-      // suppressed).
+      // suppressed except no_create suppresses nothing).
       //
       // DMP:      ACCParallelDirective
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCCopyClause
       // DMP-NOT:      <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'pr' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c0' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c1' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c2' 'int'
@@ -476,7 +669,12 @@ int main() {
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co0' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co1' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co2' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr0' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr1' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr2' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int'
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'pr' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c0' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c1' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c2' 'int'
@@ -486,11 +684,16 @@ int main() {
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co0' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co1' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co2' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr0' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr1' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr2' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int'
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:     OMPMapClause
       // DMP-NOT:        <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'pr' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c0' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c1' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c2' 'int'
@@ -500,8 +703,13 @@ int main() {
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co0' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co1' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co2' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr0' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr1' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr2' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int'
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'pr' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c0' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c1' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c2' 'int'
@@ -511,79 +719,116 @@ int main() {
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co0' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co1' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co2' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr0' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr1' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr2' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int'
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1)
-      // PRT-A-SAME:  {{^ *}}copy(c0,c1,c2,ci0,ci1,ci2,co0,co1,co2){{$}}
+      // PRT-A-SAME:  {{^ *}}copy(pr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(tofrom: c0,c1,c2,ci0,ci1,ci2,co0,co1,co2)
-      // PRT-AO-SAME: {{^ *}}shared(c0,c1,c2,ci0,ci1,ci2,co0,co1,co2){{$}}
+      // PRT-AO-SAME: {{^ *}}map(tofrom: pr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc)
+      // PRT-AO-SAME: {{^ *}}shared(pr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}map(tofrom: c0,c1,c2,ci0,ci1,ci2,co0,co1,co2)
-      // PRT-O-SAME:  {{^ *}}shared(c0,c1,c2,ci0,ci1,ci2,co0,co1,co2){{$}}
+      // PRT-O-SAME:  {{^ *}}map(tofrom: pr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc)
+      // PRT-O-SAME:  {{^ *}}shared(pr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1)
-      // PRT-OA-SAME: {{^ *}}copy(c0,c1,c2,ci0,ci1,ci2,co0,co1,co2){{$}}
-      #pragma acc parallel num_gangs(1) copy(c0,c1,c2,ci0,ci1,ci2,co0,co1,co2)
+      // PRT-OA-SAME: {{^ *}}copy(pr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc){{$}}
+      #pragma acc parallel num_gangs(1) copy(pr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc)
       // DMP: CompoundStmt
       // PRT-NEXT: {
       {
         // PRT-NEXT: printf(
         // PRT:      );
         //      EXE-NEXT: In second acc parallel:
+        // EXE-HOST-NEXT:    pr=1290
         // EXE-HOST-NEXT:    c0=1210,  c1=1211,  c2=1212
         // EXE-HOST-NEXT:   ci0=1220, ci1=1221, ci2=1222
-        // EXE-HOST-NEXT:   co0=1140, co1=1141, co2=1142
+        // EXE-HOST-NEXT:   co0=1135, co1=1136, co2=1137
+        // EXE-HOST-NEXT:   cr0=1145, cr1=1146, cr2=1147
+        // EXE-HOST-NEXT:    nc= 250
+        //  EXE-DEV-NEXT:    pr=1090
         //  EXE-DEV-NEXT:    c0=1010,  c1=1011,  c2=1012
         //  EXE-DEV-NEXT:   ci0=1020, ci1=1021, ci2=1022
-        //  EXE-DEV-NEXT:   co0=1040, co1=1041, co2=1042
+        //  EXE-DEV-NEXT:   co0=1035, co1=1036, co2=1037
+        //  EXE-DEV-NEXT:   cr0=1045, cr1=1046, cr2=1047
+        //  EXE-DEV-NEXT:    nc= 250
         printf("In second acc parallel:\n"
+               "   pr=%4d\n"
                "   c0=%4d,  c1=%4d,  c2=%4d\n"
                "  ci0=%4d, ci1=%4d, ci2=%4d\n"
-               "  co0=%4d, co1=%4d, co2=%4d\n",
-               c0, c1, c2, ci0, ci1, ci2, co0, co1, co2);
-        // PRT-NEXT: c0 +=
-        // PRT: co2 +=
+               "  co0=%4d, co1=%4d, co2=%4d\n"
+               "  cr0=%4d, cr1=%4d, cr2=%4d\n"
+               "   nc=%4d\n",
+               pr, c0, c1, c2, ci0, ci1, ci2, co0, co1, co2, cr0, cr1, cr2, nc);
+        // PRT-NEXT: pr +=
+        // PRT: nc +=
+         pr += 1000;
          c0 += 1000;  c1 += 1000;  c2 += 1000;
         ci0 += 1000; ci1 += 1000; ci2 += 1000;
         co0 += 1000; co1 += 1000; co2 += 1000;
+        cr0 += 1000; cr1 += 1000; cr2 += 1000;
+         nc += 1000;
       } // PRT-NEXT: }
 
       // PRT-NEXT: printf(
       // PRT:      );
       //      EXE-NEXT: After second acc parallel:
+      // EXE-HOST-NEXT:    pr=2290
       // EXE-HOST-NEXT:    c0=2210,  c1=2211,  c2=2212
       // EXE-HOST-NEXT:   ci0=2220, ci1=2221, ci2=2222
-      // EXE-HOST-NEXT:   co0=2140, co1=2141, co2=2142
+      // EXE-HOST-NEXT:   co0=2135, co1=2136, co2=2137
+      // EXE-HOST-NEXT:   cr0=2145, cr1=2146, cr2=2147
+      // EXE-HOST-NEXT:    nc=1250
+      //  EXE-DEV-NEXT:    pr= 290
       //  EXE-DEV-NEXT:    c0= 210,  c1= 211,  c2= 212
       //  EXE-DEV-NEXT:   ci0= 220, ci1= 221, ci2= 222
       //  EXE-DEV-NEXT:   co0= 230, co1= 231, co2= 232
+      //  EXE-DEV-NEXT:   cr0= 240, cr1= 241, cr2= 242
+      //  EXE-DEV-NEXT:    nc=1250
       printf("After second acc parallel:\n"
+             "   pr=%4d\n"
              "   c0=%4d,  c1=%4d,  c2=%4d\n"
              "  ci0=%4d, ci1=%4d, ci2=%4d\n"
-             "  co0=%4d, co1=%4d, co2=%4d\n",
-             c0, c1, c2, ci0, ci1, ci2, co0, co1, co2);
-      // PRT-NEXT: c0 +=
-      // PRT: co2 +=
+             "  co0=%4d, co1=%4d, co2=%4d\n"
+             "  cr0=%4d, cr1=%4d, cr2=%4d\n"
+             "   nc=%4d\n",
+             pr, c0, c1, c2, ci0, ci1, ci2, co0, co1, co2, cr0, cr1, cr2, nc);
+      // PRT-NEXT: pr +=
+      // PRT: nc +=
+       pr += 100;
        c0 += 100;  c1 += 100;  c2 += 100;
       ci0 += 100; ci1 += 100; ci2 += 100;
       co0 += 100; co1 += 100; co2 += 100;
+      cr0 += 100; cr1 += 100; cr2 += 100;
+       nc += 100;
     } // PRT-NEXT: }
 
     // PRT-NEXT: printf(
     // PRT:      );
     //      EXE-NEXT: After acc data:
+    // EXE-HOST-NEXT:    pr=2390
     // EXE-HOST-NEXT:    c0=2310,  c1=2311,  c2=2312
     // EXE-HOST-NEXT:   ci0=2320, ci1=2321, ci2=2322
-    // EXE-HOST-NEXT:   co0=2240, co1=2241, co2=2242
+    // EXE-HOST-NEXT:   co0=2235, co1=2236, co2=2237
+    // EXE-HOST-NEXT:   cr0=2245, cr1=2246, cr2=2247
+    // EXE-HOST-NEXT:    nc=1350
+    //  EXE-DEV-NEXT:    pr= 390
     //  EXE-DEV-NEXT:    c0=2010,  c1=2011,  c2=2012
     //  EXE-DEV-NEXT:   ci0= 320, ci1= 321, ci2= 322
-    //  EXE-DEV-NEXT:   co0=2040, co1=2041, co2=2042
+    //  EXE-DEV-NEXT:   co0=2035, co1=2036, co2=2037
+    //  EXE-DEV-NEXT:   cr0= 340, cr1= 341, cr2= 342
+    //  EXE-DEV-NEXT:    nc=1350
     printf("After acc data:\n"
+           "   pr=%4d\n"
            "   c0=%4d,  c1=%4d,  c2=%4d\n"
            "  ci0=%4d, ci1=%4d, ci2=%4d\n"
-           "  co0=%4d, co1=%4d, co2=%4d\n",
-           c0, c1, c2, ci0, ci1, ci2, co0, co1, co2);
+           "  co0=%4d, co1=%4d, co2=%4d\n"
+           "  cr0=%4d, cr1=%4d, cr2=%4d\n"
+           "   nc=%4d\n",
+           pr, c0, c1, c2, ci0, ci1, ci2, co0, co1, co2, cr0, cr1, cr2, nc);
   } // PRT-NEXT: }
 
   //--------------------------------------------------
@@ -596,12 +841,18 @@ int main() {
 
   // PRT-NEXT: {
   {
-    // PRT-NEXT: c[] =
-    // PRT: co[] = {30};
+    // PRT-NEXT: prSet();
+    // PRT: nc[] = {50};
+    prSet();
     int  c[] = {10};
     int ci[] = {20};
     int co[] = {30};
+    int cr[] = {40};
+    int nc[] = {50};
     // DMP:      ACCDataDirective
+    // DMP-NEXT:   ACCPresentClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
     // DMP-NEXT:   ACCCopyClause
     // DMP-NOT:      <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int [1]'
@@ -611,7 +862,16 @@ int main() {
     // DMP-NEXT:   ACCCopyoutClause
     // DMP-NOT:      <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int [1]'
+    // DMP-NEXT:   ACCCreateClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int [1]'
+    // DMP-NEXT:   ACCNoCreateClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int [1]'
     // DMP-NEXT:   impl: OMPTargetDataDirective
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int [1]'
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int [1]'
@@ -621,34 +881,63 @@ int main() {
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int [1]'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int [1]'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int [1]'
     // DMP-NOT:      OMP
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(c) copyin(ci) copyout(co){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(tofrom: c) map(to: ci) map(from: co){{$}}
+    //  PRT-A-NEXT: {{^ *}}#pragma acc data present(prArr){{( *\\$[[:space:]])?}}
+    //  PRT-A-SAME: {{^ *}}copy(c) copyin(ci) copyout(co){{( *\\$[[:space:]])?}}
+    //  PRT-A-SAME: {{^ *}}create(cr) no_create(nc){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(present,alloc: prArr)
+    // PRT-AO-SAME: {{^  *}}map(tofrom: c) map(to: ci) map(from: co)
+    // PRT-AO-SAME: {{^  *}}map(alloc: cr) map(no_alloc,alloc: nc){{$}}
     //
-    // PRT-O-NEXT: {{^ *}}#pragma omp target data map(tofrom: c) map(to: ci) map(from: co){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(c) copyin(ci) copyout(co){{$}}
-    #pragma acc data copy(c) copyin(ci) copyout(co)
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(present,alloc: prArr)
+    //  PRT-O-SAME: {{^  *}}map(tofrom: c) map(to: ci) map(from: co)
+    //  PRT-O-SAME: {{^  *}}map(alloc: cr) map(no_alloc,alloc: nc){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc data present(prArr){{( *\\$[[:space:]] *//)?}}
+    // PRT-OA-SAME: {{^ *}}copy(c) copyin(ci) copyout(co){{( *\\$[[:space:]] *//)?}}
+    // PRT-OA-SAME: {{^ *}}create(cr) no_create(nc){{$}}
+    #pragma acc data present(prArr) \
+                     copy(c) copyin(ci) copyout(co) \
+                     create(cr) no_create(nc)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // PRT-NEXT: c[0] +=
-      // PRT: co[0] +=
-       c[0] += 100;
-      ci[0] += 100;
-      co[0] += 100;
+      // PRT-NEXT: prArr[0] +=
+      // PRT: nc[0] +=
+      prArr[0] += 100;
+          c[0] += 100;
+         ci[0] += 100;
+         co[0] += 100;
+         cr[0] += 100;
+         nc[0] += 100;
 
       // Check suppression of implicit data clauses.
+      //
+      // FIXME: Is this handling the outer no_create correctly?  OpenACC says
+      // there should be no implicit data attribute here, which means nc
+      // shouldn't be allocated here, but does it get allocated here by OpenMP?
       //
       // DMP:      ACCParallelDirective
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int [1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int [1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int [1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int [1]'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'int [1]'
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int [1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int [1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int [1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int [1]'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'int [1]'
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
@@ -657,124 +946,196 @@ int main() {
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int [1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int [1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int [1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int [1]'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int [1]'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int [1]'
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}shared(co,c,ci){{$}}
+      // PRT-AO-SAME: {{^ *}}shared(co,cr,nc,prArr,c,ci){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}shared(co,c,ci){{$}}
+      // PRT-O-SAME:  {{^ *}}shared(co,cr,nc,prArr,c,ci){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       #pragma acc parallel num_gangs(1)
       // DMP: CompoundStmt
       // PRT-NEXT: {
       {
-        // Don't use this uninitialized.
+        // Don't use these uninitialized.
         // PRT-NEXT: co[0] =
-        co[0] = 40;
+        // PRT: cr[0] =
+        co[0] = 35;
+        cr[0] = 45;
+        // Reference nc to trigger any implicit attributes, but nc shouldn't be
+        // allocated, so don't actually access it at run time.
+        // PRT-NEXT: if
+        // PRT-NEXT: nc[0] = 55;
+        if (!cr[0])
+          nc[0] = 55;
         // PRT-NEXT: printf(
         // PRT:      );
         //      EXE-NEXT: In first acc parallel:
-        // EXE-HOST-NEXT:   c[0]= 110, ci[0]= 120, co[0]=  40
-        //  EXE-DEV-NEXT:   c[0]=  10, ci[0]=  20, co[0]=  40
+        // EXE-HOST-NEXT:   prArr[0]= 190
+        // EXE-HOST-NEXT:       c[0]= 110, ci[0]= 120, co[0]=  35
+        // EXE-HOST-NEXT:      cr[0]=  45
+        //  EXE-DEV-NEXT:   prArr[0]=  90
+        //  EXE-DEV-NEXT:       c[0]=  10, ci[0]=  20, co[0]=  35
+        //  EXE-DEV-NEXT:      cr[0]=  45
         printf("In first acc parallel:\n"
-               "  c[0]=%4d, ci[0]=%4d, co[0]=%4d\n",
-               c[0], ci[0], co[0]);
-        // PRT-NEXT: c[0] +=
-        // PRT: co[0] +=
-        c[0] += 1000; ci[0] += 1000; co[0] += 1000;
+               "  prArr[0]=%4d\n"
+               "      c[0]=%4d, ci[0]=%4d, co[0]=%4d\n"
+               "     cr[0]=%4d\n",
+               prArr[0], c[0], ci[0], co[0], cr[0]);
+        // PRT-NEXT: prArr[0] +=
+        // PRT: cr[0] +=
+        prArr[0] += 1000;
+            c[0] += 1000;
+           ci[0] += 1000;
+           co[0] += 1000;
+           cr[0] += 1000;
       } // PRT-NEXT: }
 
       // PRT-NEXT: printf(
       // PRT:      );
       //      EXE-NEXT: After first acc parallel:
-      // EXE-HOST-NEXT:   c[0]=1110, ci[0]=1120, co[0]=1040
-      //  EXE-DEV-NEXT:   c[0]= 110, ci[0]= 120, co[0]= 130
+      // EXE-HOST-NEXT:   prArr[0]=1190
+      // EXE-HOST-NEXT:       c[0]=1110, ci[0]=1120, co[0]=1035
+      // EXE-HOST-NEXT:      cr[0]=1045, nc[0]= 150
+      //  EXE-DEV-NEXT:   prArr[0]= 190
+      //  EXE-DEV-NEXT:       c[0]= 110, ci[0]= 120, co[0]= 130
+      //  EXE-DEV-NEXT:      cr[0]= 140, nc[0]= 150
       printf("After first acc parallel:\n"
-             "  c[0]=%4d, ci[0]=%4d, co[0]=%4d\n",
-             c[0], ci[0], co[0]);
-      // PRT-NEXT: c[0] +=
-      // PRT: co[0] +=
-      c[0] += 100; ci[0] += 100; co[0] += 100;
+             "  prArr[0]=%4d\n"
+             "      c[0]=%4d, ci[0]=%4d, co[0]=%4d\n"
+             "     cr[0]=%4d, nc[0]=%4d\n",
+             prArr[0], c[0], ci[0], co[0], cr[0], nc[0]);
+      // PRT-NEXT: prArr[0] +=
+      // PRT: nc[0] +=
+      prArr[0] += 100;
+          c[0] += 100;
+         ci[0] += 100;
+         co[0] += 100;
+         cr[0] += 100;
+         nc[0] += 100;
 
       // Check suppression of explicit data clauses (only data transfers are
-      // suppressed).
+      // suppressed except no_create suppresses nothing).
       //
       // DMP:      ACCParallelDirective
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCCopyinClause
       // DMP-NOT:      <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int [1]'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'int [1]'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int [1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int [1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int [1]'
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int [1]'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'int [1]'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int [1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int [1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int [1]'
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:     OMPMapClause
       // DMP-NOT:        <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int [1]'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int [1]'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int [1]'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int [1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int [1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int [1]'
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int [1]'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int [1]'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int [1]'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int [1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int [1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int [1]'
       // DMP-NOT:      OMP
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) copyin(c,ci,co){{$}}
+      // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) copyin(prArr,c,ci,co,cr,nc){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(to: c,ci,co) shared(c,ci,co){{$}}
+      // PRT-AO-SAME: {{^ *}}map(to: prArr,c,ci,co,cr,nc) shared(prArr,c,ci,co,cr,nc){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}map(to: c,ci,co) shared(c,ci,co){{$}}
-      // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copyin(c,ci,co){{$}}
-      #pragma acc parallel num_gangs(1) copyin(c,ci,co)
+      // PRT-O-SAME:  {{^ *}}map(to: prArr,c,ci,co,cr,nc) shared(prArr,c,ci,co,cr,nc){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copyin(prArr,c,ci,co,cr,nc){{$}}
+      #pragma acc parallel num_gangs(1) copyin(prArr,c,ci,co,cr,nc)
       // DMP: CompoundStmt
       // PRT-NEXT: {
       {
         // PRT-NEXT: printf(
         // PRT:      );
         //      EXE-NEXT: In second acc parallel:
-        // EXE-HOST-NEXT:   c[0]=1210, ci[0]=1220, co[0]=1140
-        //  EXE-DEV-NEXT:   c[0]=1010, ci[0]=1020, co[0]=1040
+        // EXE-HOST-NEXT:   prArr[0]=1290
+        // EXE-HOST-NEXT:       c[0]=1210, ci[0]=1220, co[0]=1135
+        // EXE-HOST-NEXT:      cr[0]=1145, nc[0]= 250
+        //  EXE-DEV-NEXT:   prArr[0]=1090
+        //  EXE-DEV-NEXT:       c[0]=1010, ci[0]=1020, co[0]=1035
+        //  EXE-DEV-NEXT:      cr[0]=1045, nc[0]= 250
         printf("In second acc parallel:\n"
-               "  c[0]=%4d, ci[0]=%4d, co[0]=%4d\n",
-               c[0], ci[0], co[0]);
-        // PRT-NEXT: c[0] +=
-        // PRT: co[0] +=
-         c[0] += 1000; ci[0] += 1000; co[0] += 1000;
+               "  prArr[0]=%4d\n"
+               "      c[0]=%4d, ci[0]=%4d, co[0]=%4d\n"
+               "     cr[0]=%4d, nc[0]=%4d\n",
+               prArr[0], c[0], ci[0], co[0], cr[0], nc[0]);
+        // PRT-NEXT: prArr[0] +=
+        // PRT: nc[0] +=
+        prArr[0] += 1000;
+            c[0] += 1000;
+           ci[0] += 1000;
+           co[0] += 1000;
+           cr[0] += 1000;
+           nc[0] += 1000;
       } // PRT-NEXT: }
 
       // PRT-NEXT: printf(
       // PRT:      );
       //      EXE-NEXT: After second acc parallel:
-      // EXE-HOST-NEXT:   c[0]=2210, ci[0]=2220, co[0]=2140
-      //  EXE-DEV-NEXT:   c[0]= 210, ci[0]= 220, co[0]= 230
+      // EXE-HOST-NEXT:   prArr[0]=2290
+      // EXE-HOST-NEXT:       c[0]=2210, ci[0]=2220, co[0]=2135
+      // EXE-HOST-NEXT:      cr[0]=2145, nc[0]=1250
+      //  EXE-DEV-NEXT:   prArr[0]= 290
+      //  EXE-DEV-NEXT:       c[0]= 210, ci[0]= 220, co[0]= 230
+      //  EXE-DEV-NEXT:      cr[0]= 240, nc[0]= 250
       printf("After second acc parallel:\n"
-             "   c[0]=%4d, ci[0]=%4d, co[0]=%4d\n",
-             c[0], ci[0], co[0]);
-      // PRT-NEXT: c[0] +=
-      // PRT: co[0] +=
-      c[0] += 100; ci[0] += 100; co[0] += 100;
+             "   prArr[0]=%4d\n"
+             "       c[0]=%4d, ci[0]=%4d, co[0]=%4d\n"
+             "      cr[0]=%4d, nc[0]=%4d\n",
+             prArr[0], c[0], ci[0], co[0], cr[0], nc[0]);
+      // PRT-NEXT: prArr[0] +=
+      // PRT: nc[0] +=
+      prArr[0] += 100;
+          c[0] += 100;
+         ci[0] += 100;
+         co[0] += 100;
+         cr[0] += 100;
+         nc[0] += 100;
     } // PRT-NEXT: }
 
     // PRT-NEXT: printf(
     // PRT:      );
     //      EXE-NEXT: After acc data:
-    // EXE-HOST-NEXT:   c[0]=2310, ci[0]=2320, co[0]=2240
-    //  EXE-DEV-NEXT:   c[0]=2010, ci[0]= 320, co[0]=2040
+    // EXE-HOST-NEXT:   prArr[0]=2390
+    // EXE-HOST-NEXT:       c[0]=2310, ci[0]=2320, co[0]=2235
+    // EXE-HOST-NEXT:      cr[0]=2245, nc[0]=1350
+    //  EXE-DEV-NEXT:   prArr[0]= 390
+    //  EXE-DEV-NEXT:       c[0]=2010, ci[0]= 320, co[0]=2035
+    //  EXE-DEV-NEXT:      cr[0]= 340, nc[0]= 350
     printf("After acc data:\n"
-           "  c[0]=%4d, ci[0]=%4d, co[0]=%4d\n",
-           c[0], ci[0], co[0]);
+           "   prArr[0]=%4d\n"
+           "       c[0]=%4d, ci[0]=%4d, co[0]=%4d\n"
+           "      cr[0]=%4d, nc[0]=%4d\n",
+           prArr[0], c[0], ci[0], co[0], cr[0], nc[0]);
   } // PRT-NEXT: }
 
   //--------------------------------------------------
@@ -786,15 +1147,18 @@ int main() {
 
   // PRT-NEXT: {
   {
-    // PRT-NEXT: struct T {
-    // PRT: }
-    struct T { int i; };
-    // PRT-NEXT: c =
-    // PRT: co = {30};
+    // PRT-NEXT: prSet();
+    // PRT: nc = {50};
+    prSet();
     struct T  c = {10};
     struct T ci = {20};
     struct T co = {30};
+    struct T cr = {40};
+    struct T nc = {50};
     // DMP:      ACCDataDirective
+    // DMP-NEXT:   ACCPresentClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'prStruct' 'struct T'
     // DMP-NEXT:   ACCCopyClause
     // DMP-NOT:      <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'struct T'
@@ -804,7 +1168,16 @@ int main() {
     // DMP-NEXT:   ACCCopyoutClause
     // DMP-NOT:      <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'struct T'
+    // DMP-NEXT:   ACCCreateClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'struct T'
+    // DMP-NEXT:   ACCNoCreateClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'struct T'
     // DMP-NEXT:   impl: OMPTargetDataDirective
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'prStruct' 'struct T'
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'struct T'
@@ -814,34 +1187,63 @@ int main() {
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'struct T'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'struct T'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'struct T'
     // DMP-NOT:      OMP
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(c) copyin(ci) copyout(co){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(tofrom: c) map(to: ci) map(from: co){{$}}
+    //  PRT-A-NEXT: {{^ *}}#pragma acc data present(prStruct){{( *\\$[[:space:]])?}}
+    //  PRT-A-SAME: {{^ *}}copy(c) copyin(ci) copyout(co){{( *\\$[[:space:]])?}}
+    //  PRT-A-SAME: {{^ *}}create(cr) no_create(nc){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(present,alloc: prStruct)
+    // PRT-AO-SAME: {{^  *}}map(tofrom: c) map(to: ci) map(from: co)
+    // PRT-AO-SAME: {{^  *}}map(alloc: cr) map(no_alloc,alloc: nc){{$}}
     //
-    // PRT-O-NEXT: {{^ *}}#pragma omp target data map(tofrom: c) map(to: ci) map(from: co){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(c) copyin(ci) copyout(co){{$}}
-    #pragma acc data copy(c) copyin(ci) copyout(co)
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(present,alloc: prStruct)
+    //  PRT-O-SAME: {{^  *}}map(tofrom: c) map(to: ci) map(from: co)
+    //  PRT-O-SAME: {{^  *}}map(alloc: cr) map(no_alloc,alloc: nc){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc data present(prStruct){{( *\\$[[:space:]] *//)?}}
+    // PRT-OA-SAME: {{^ *}}copy(c) copyin(ci) copyout(co){{( *\\$[[:space:]] *//)?}}
+    // PRT-OA-SAME: {{^ *}}create(cr) no_create(nc){{$}}
+    #pragma acc data present(prStruct) \
+                     copy(c) copyin(ci) copyout(co) \
+                     create(cr) no_create(nc)
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // PRT-NEXT: c.i +=
-      // PRT: co.i +=
-       c.i += 100;
-      ci.i += 100;
-      co.i += 100;
+      // PRT-NEXT: prStruct.i +=
+      // PRT: nc.i +=
+      prStruct.i += 100;
+             c.i += 100;
+            ci.i += 100;
+            co.i += 100;
+            cr.i += 100;
+            nc.i += 100;
 
       // Check suppression of implicit data clauses.
+      //
+      // FIXME: Is this handling the outer no_create correctly?  OpenACC says
+      // there should be no implicit data attribute here, which means nc
+      // shouldn't be allocated here, but does it get allocated here by OpenMP?
       //
       // DMP:      ACCParallelDirective
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'struct T'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'struct T'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'struct T'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prStruct' 'struct T'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'struct T'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'struct T'
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'struct T'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'struct T'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'struct T'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prStruct' 'struct T'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'struct T'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'struct T'
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
@@ -850,16 +1252,19 @@ int main() {
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'struct T'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'struct T'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'struct T'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prStruct' 'struct T'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'struct T'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'struct T'
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}shared(co,c,ci){{$}}
+      // PRT-AO-SAME: {{^ *}}shared(co,cr,nc,prStruct,c,ci){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}shared(co,c,ci){{$}}
+      // PRT-O-SAME:  {{^ *}}shared(co,cr,nc,prStruct,c,ci){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       #pragma acc parallel num_gangs(1)
       // DMP: CompoundStmt
@@ -867,107 +1272,179 @@ int main() {
       {
         // Don't use this uninitialized.
         // PRT-NEXT: co.i =
-        co.i = 40;
+        // PRT: cr.i =
+        co.i = 35;
+        cr.i = 45;
+        // Reference nc to trigger any implicit attributes, but nc shouldn't be
+        // allocated, so don't actually access it at run time.
+        // PRT-NEXT: if
+        // PRT-NEXT: nc.i = 55;
+        if (!cr.i)
+          nc.i = 55;
         // PRT-NEXT: printf(
         // PRT:      );
         //      EXE-NEXT: In first acc parallel:
-        // EXE-HOST-NEXT:   c.i= 110, ci.i= 120, co.i=  40
-        //  EXE-DEV-NEXT:   c.i=  10, ci.i=  20, co.i=  40
+        // EXE-HOST-NEXT:   prStruct.i= 190
+        // EXE-HOST-NEXT:          c.i= 110, ci.i= 120, co.i=  35
+        // EXE-HOST-NEXT:         cr.i=  45
+        //  EXE-DEV-NEXT:   prStruct.i=  90
+        //  EXE-DEV-NEXT:          c.i=  10, ci.i=  20, co.i=  35
+        //  EXE-DEV-NEXT:         cr.i=  45
         printf("In first acc parallel:\n"
-               "  c.i=%4d, ci.i=%4d, co.i=%4d\n",
-               c.i, ci.i, co.i);
-        // PRT-NEXT: c.i +=
-        // PRT: co.i +=
-        c.i += 1000; ci.i += 1000; co.i += 1000;
+               "  prStruct.i=%4d\n"
+               "         c.i=%4d, ci.i=%4d, co.i=%4d\n"
+               "        cr.i=%4d\n",
+               prStruct.i, c.i, ci.i, co.i, cr.i);
+        // PRT-NEXT: prStruct.i +=
+        // PRT: cr.i +=
+        prStruct.i += 1000;
+               c.i += 1000;
+              ci.i += 1000;
+              co.i += 1000;
+              cr.i += 1000;
       } // PRT-NEXT: }
 
       // PRT-NEXT: printf(
       // PRT:      );
       //      EXE-NEXT: After first acc parallel:
-      // EXE-HOST-NEXT:   c.i=1110, ci.i=1120, co.i=1040
-      //  EXE-DEV-NEXT:   c.i= 110, ci.i= 120, co.i= 130
+      // EXE-HOST-NEXT:   prStruct.i=1190
+      // EXE-HOST-NEXT:          c.i=1110, ci.i=1120, co.i=1035
+      // EXE-HOST-NEXT:         cr.i=1045, nc.i= 150
+      //  EXE-DEV-NEXT:   prStruct.i= 190
+      //  EXE-DEV-NEXT:          c.i= 110, ci.i= 120, co.i= 130
+      //  EXE-DEV-NEXT:         cr.i= 140, nc.i= 150
       printf("After first acc parallel:\n"
-             "  c.i=%4d, ci.i=%4d, co.i=%4d\n",
-             c.i, ci.i, co.i);
-      // PRT-NEXT: c.i +=
-      // PRT: co.i +=
-      c.i += 100; ci.i += 100; co.i += 100;
+             "  prStruct.i=%4d\n"
+             "         c.i=%4d, ci.i=%4d, co.i=%4d\n"
+             "        cr.i=%4d, nc.i=%4d\n",
+             prStruct.i, c.i, ci.i, co.i, cr.i, nc.i);
+      // PRT-NEXT: prStruct.i +=
+      // PRT: nc.i +=
+      prStruct.i += 100;
+             c.i += 100;
+            ci.i += 100;
+            co.i += 100;
+            cr.i += 100;
+            nc.i += 100;
 
       // Check suppression of explicit data clauses (only data transfers are
-      // suppressed).
+      // suppressed except no_create suppresses nothing).
       //
       // DMP:      ACCParallelDirective
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCCopyoutClause
       // DMP-NOT:      <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prStruct' 'struct T'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'struct T'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'struct T'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'struct T'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'struct T'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'struct T'
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'struct T'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prStruct' 'struct T'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'struct T'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'struct T'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'struct T'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'struct T'
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:     OMPMapClause
       // DMP-NOT:        <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prStruct' 'struct T'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'struct T'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'struct T'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'struct T'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'struct T'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'struct T'
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'struct T'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prStruct' 'struct T'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'struct T'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'struct T'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'struct T'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'struct T'
       // DMP-NOT:      OMP
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) copyout(c,ci,co){{$}}
+      // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) copyout(prStruct,c,ci,co,cr,nc){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(from: c,ci,co) shared(c,ci,co){{$}}
+      // PRT-AO-SAME: {{^ *}}map(from: prStruct,c,ci,co,cr,nc) shared(nc,prStruct,c,ci,co,cr){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}map(from: c,ci,co) shared(c,ci,co){{$}}
-      // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copyout(c,ci,co){{$}}
-      #pragma acc parallel num_gangs(1) copyout(c,ci,co)
+      // PRT-O-SAME:  {{^ *}}map(from: prStruct,c,ci,co,cr,nc) shared(nc,prStruct,c,ci,co,cr){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copyout(prStruct,c,ci,co,cr,nc){{$}}
+      #pragma acc parallel num_gangs(1) copyout(prStruct,c,ci,co,cr,nc)
       // DMP: CompoundStmt
       // PRT-NEXT: {
       {
+        // Don't use this uninitialized.
+        // PRT-NEXT: nc.i =
+        nc.i = 55;
         // PRT-NEXT: printf(
         // PRT:      );
         //      EXE-NEXT: In second acc parallel:
-        // EXE-HOST-NEXT:   c.i=1210, ci.i=1220, co.i=1140
-        //  EXE-DEV-NEXT:   c.i=1010, ci.i=1020, co.i=1040
+        // EXE-HOST-NEXT:   prStruct.i=1290
+        // EXE-HOST-NEXT:          c.i=1210, ci.i=1220, co.i=1135
+        // EXE-HOST-NEXT:         cr.i=1145, nc.i=  55
+        //  EXE-DEV-NEXT:   prStruct.i=1090
+        //  EXE-DEV-NEXT:          c.i=1010, ci.i=1020, co.i=1035
+        //  EXE-DEV-NEXT:         cr.i=1045, nc.i=  55
         printf("In second acc parallel:\n"
-               "  c.i=%4d, ci.i=%4d, co.i=%4d\n",
-               c.i, ci.i, co.i);
-        // PRT-NEXT: c.i +=
-        // PRT: co.i +=
-         c.i += 1000; ci.i += 1000; co.i += 1000;
+               "  prStruct.i=%4d\n"
+               "         c.i=%4d, ci.i=%4d, co.i=%4d\n"
+               "        cr.i=%4d, nc.i=%4d\n",
+               prStruct.i, c.i, ci.i, co.i, cr.i, nc.i);
+        // PRT-NEXT: prStruct.i +=
+        // PRT: nc.i +=
+        prStruct.i += 1000;
+               c.i += 1000;
+              ci.i += 1000;
+              co.i += 1000;
+              cr.i += 1000;
+              nc.i += 1000;
       } // PRT-NEXT: }
 
       // PRT-NEXT: printf(
       // PRT:      );
       //      EXE-NEXT: After second acc parallel:
-      // EXE-HOST-NEXT:   c.i=2210, ci.i=2220, co.i=2140
-      //  EXE-DEV-NEXT:   c.i= 210, ci.i= 220, co.i= 230
+      // EXE-HOST-NEXT:   prStruct.i=2290
+      // EXE-HOST-NEXT:          c.i=2210, ci.i=2220, co.i=2135
+      // EXE-HOST-NEXT:         cr.i=2145, nc.i=1055
+      //  EXE-DEV-NEXT:   prStruct.i= 290
+      //  EXE-DEV-NEXT:          c.i= 210, ci.i= 220, co.i= 230
+      //  EXE-DEV-NEXT:         cr.i= 240, nc.i=1055
       printf("After second acc parallel:\n"
-             "   c.i=%4d, ci.i=%4d, co.i=%4d\n",
-             c.i, ci.i, co.i);
-      // PRT-NEXT: c.i +=
-      // PRT: co.i +=
-      c.i += 100; ci.i += 100; co.i += 100;
+             "   prStruct.i=%4d\n"
+             "          c.i=%4d, ci.i=%4d, co.i=%4d\n"
+             "         cr.i=%4d, nc.i=%4d\n",
+             prStruct.i, c.i, ci.i, co.i, cr.i, nc.i);
+      // PRT-NEXT: prStruct.i +=
+      // PRT: nc.i +=
+      prStruct.i += 100;
+             c.i += 100;
+            ci.i += 100;
+            co.i += 100;
+            cr.i += 100;
+            nc.i += 100;
     } // PRT-NEXT: }
 
     // PRT-NEXT: printf(
     // PRT:      );
     //      EXE-NEXT: After acc data:
-    // EXE-HOST-NEXT:   c.i=2310, ci.i=2320, co.i=2240
-    //  EXE-DEV-NEXT:   c.i=2010, ci.i= 320, co.i=2040
+    // EXE-HOST-NEXT:   prStruct.i=2390
+    // EXE-HOST-NEXT:          c.i=2310, ci.i=2320, co.i=2235
+    // EXE-HOST-NEXT:         cr.i=2245, nc.i=1155
+    //  EXE-DEV-NEXT:   prStruct.i= 390
+    //  EXE-DEV-NEXT:          c.i=2010, ci.i= 320, co.i=2035
+    //  EXE-DEV-NEXT:         cr.i= 340, nc.i=1155
     printf("After acc data:\n"
-           "  c.i=%4d, ci.i=%4d, co.i=%4d\n",
-           c.i, ci.i, co.i);
+           "   prStruct.i=%4d\n"
+           "          c.i=%4d, ci.i=%4d, co.i=%4d\n"
+           "         cr.i=%4d, nc.i=%4d\n",
+           prStruct.i, c.i, ci.i, co.i, cr.i, nc.i);
   } // PRT-NEXT: }
 
   //--------------------------------------------------
@@ -1181,7 +1658,7 @@ int main() {
 
   //--------------------------------------------------
   // Check that a data clause for a subarray from an enclosing acc data
-  // directives suppresses an implicit data clause on a nested acc parallel.
+  // directive suppresses an implicit data clause on a nested acc parallel.
   //--------------------------------------------------
 
   // PRT-NEXT: {
@@ -1671,8 +2148,5 @@ int main() {
            "  arr0[3]=%4d, arr1[0]=%4d\n",
            arr0[3], arr1[0]);
   } // PRT-NEXT: }
-
-  // PRT-NEXT: return 0;
-  return 0;
 } // PRT-NEXT: }
 // EXE-NOT: {{.}}
