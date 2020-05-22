@@ -116,6 +116,21 @@ int main() {
 
   // OUT-PAR:acc_ev_compute_construct_start
   //     OUT:acc_ev_enter_data_start
+  //     OUT:acc_ev_alloc
+  //     OUT:acc_ev_create
+  //     OUT:acc_ev_enter_data_end
+  // OUT-PAR:acc_ev_enqueue_launch_start
+  // OUT-PAR:acc_ev_enqueue_launch_end
+  #pragma acc DIRECTIVE create(x)
+  x = 5;
+  //     OUT:acc_ev_exit_data_start
+  //     OUT:acc_ev_delete
+  //     OUT:acc_ev_free
+  //     OUT:acc_ev_exit_data_end
+  // OUT-PAR:acc_ev_compute_construct_end
+
+  // OUT-PAR:acc_ev_compute_construct_start
+  //     OUT:acc_ev_enter_data_start
   //     OUT:acc_ev_enter_data_end
   // OUT-PAR:acc_ev_enqueue_launch_start
   // OUT-PAR:acc_ev_enqueue_launch_end
@@ -178,6 +193,17 @@ int main() {
     // OUT-PAR:acc_ev_enqueue_launch_start
     // OUT-PAR:acc_ev_enqueue_launch_end
     #pragma acc DIRECTIVE copyout(x)
+    x = 5;
+    //     OUT:acc_ev_exit_data_start
+    //     OUT:acc_ev_exit_data_end
+    // OUT-PAR:acc_ev_compute_construct_end
+
+    // OUT-PAR:acc_ev_compute_construct_start
+    //     OUT:acc_ev_enter_data_start
+    //     OUT:acc_ev_enter_data_end
+    // OUT-PAR:acc_ev_enqueue_launch_start
+    // OUT-PAR:acc_ev_enqueue_launch_end
+    #pragma acc DIRECTIVE create(x)
     x = 5;
     //     OUT:acc_ev_exit_data_start
     //     OUT:acc_ev_exit_data_end

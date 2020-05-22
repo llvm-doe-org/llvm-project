@@ -177,6 +177,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
 ///       present | copy-clause | pcopy-clause | present_or_copy-clause
 ///       | copyin-clause | pcopyin-clause | present_or_copyin-clause
 ///       | copyout-clause | pcopyout-clause | present_or_copyout-clause
+///       | create-clause | pcreate-clause | present_or_create-clause
 ///       | no_create-clause
 ///       | private-clause | firstprivate-clause | reduction-clause
 ///       | num_gangs-clause | num_workers-clause | vector_length-clause
@@ -268,6 +269,8 @@ ACCClause *Parser::ParseOpenACCClause(
 #define OPENACC_CLAUSE_ALIAS_copyin(Name) \
   case ACCC_##Name:
 #define OPENACC_CLAUSE_ALIAS_copyout(Name) \
+  case ACCC_##Name:
+#define OPENACC_CLAUSE_ALIAS_create(Name) \
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
   case ACCC_no_create:

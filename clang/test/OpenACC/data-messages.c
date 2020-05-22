@@ -9,10 +9,16 @@
 
 // OpenACC disabled
 // RUN: %for {
-// RUN:   %clang_cc1 -verify=noacc,expected-noacc %[cflags] %s
+// RUN:   %clang_cc1 -verify=noacc,expected-noacc -Wchar-subscripts %[cflags] %s
 // RUN: }
 
 // OpenACC enabled
+// RUN: %for {
+// RUN:   %clang_cc1 -verify=expected,expected-noacc,char-subscripts -fopenacc \
+// RUN:              -Wchar-subscripts %[cflags] %s
+// RUN: }
+
+// OpenACC enabled but optional warnings disabled
 // RUN: %for {
 // RUN:   %clang_cc1 -verify=expected,expected-noacc -fopenacc %[cflags] %s
 // RUN: }
@@ -29,8 +35,10 @@
 int incomplete[];
 
 int main() {
+  char c;
   enum { E1, E2 } e;
   int i, jk, a[2], m[6][2], *p;
+  int (*fp)();
   float f;
   const int constI = 5;
   const extern int constIDecl;
@@ -68,6 +76,8 @@ int main() {
   #pragma acc data pcopyout(i)
     ;
   #pragma acc data present_or_copyout(i)
+    ;
+  #pragma acc data create(i)
     ;
   #pragma acc data no_create(i)
     ;
@@ -145,49 +155,59 @@ int main() {
   // a cross section of cases here to confirm it works for the data directive.
   //--------------------------------------------------
 
-  // expected-error@+1 {{expected ',' or ')' in 'present' clause}}
-  #pragma acc data present(i jk)
-    ;
-  // expected-error@+2 {{expected '(' after 'copy'}}
+  // expected-error@+2 {{expected '(' after 'present'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
-  #pragma acc data copy
+  #pragma acc data present
     ;
   // expected-error@+4 {{expected expression}}
   // expected-error@+3 {{expected ')'}}
   // expected-note@+2 {{to match this '('}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
-  #pragma acc data copyin(
-    ;
-  // expected-error@+2 {{expected expression}}
-  // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
-  #pragma acc data copyout()
+  #pragma acc data copy(
     ;
   // expected-error@+2 {{expected ')'}}
   // expected-note@+1 {{to match this '('}}
   #pragma acc data pcopy(jk
+    ;
+  // expected-error@+2 {{expected expression}}
+  // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
+  #pragma acc data present_or_copy()
+    ;
+  // expected-error@+1 {{expected ',' or ')' in 'copyin' clause}}
+  #pragma acc data copyin(i jk)
     ;
   // expected-error@+1 {{expected expression}}
   #pragma acc data pcopyin(jk ,)
     ;
   // expected-error@+2 {{expected variable name or subarray}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
-  #pragma acc data pcopyout((int)i)
+  #pragma acc data present_or_copyin((int)i)
     ;
   // expected-error@+2 {{expected variable name as base of subarray}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
-  #pragma acc data present_or_copy((*(int(*)[3])a)[0:])
-    ;
-  // expected-error@+2 {{subarray must be a subset of the original array}}
-  // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
-  #pragma acc data present_or_copyin(a[-1:2])
-    ;
-  // expected-error@+2 {{subarray length is unspecified and cannot be inferred because subscripted value is not an array}}
-  // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
-  #pragma acc data present_or_copyout(p[0:])
+  #pragma acc data copyout((*(int(*)[3])a)[0:])
     ;
   // expected-error@+2 {{subscripted value is not an array or pointer}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
-  #pragma acc data no_create(i[0:2])
+  #pragma acc data pcopyout(i[c:c])
+    ;
+  // expected-error@+2 {{subscripted value is not an array or pointer}}
+  // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
+  #pragma acc data present_or_copyout(i[0:2])
+    ;
+  // char-subscripts-warning@+1 {{subarray start is of type 'char'}}
+  #pragma acc data create(a[c:2])
+    ;
+  // char-subscripts-warning@+1 {{subarray length is of type 'char'}}
+  #pragma acc data pcreate(a[0:c])
+    ;
+  // expected-error@+2 {{subarray specified for pointer to function type 'int ()'}}
+  // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
+  #pragma acc data present_or_create(fp[0:2])
+    ;
+  // expected-error@+2 {{subarray specified for pointer to incomplete type 'int []'}}
+  // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
+  #pragma acc data no_create((&incomplete)[0:2])
     ;
 
   //--------------------------------------------------

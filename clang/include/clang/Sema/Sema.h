@@ -10923,6 +10923,11 @@ public:
       OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
       SourceLocation StartLoc, SourceLocation LParenLoc,
       SourceLocation EndLoc);
+  /// Called for well-formed 'create' clause or an alias.
+  ACCClause *ActOnOpenACCCreateClause(
+      OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
+      SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation EndLoc);
   /// Called for well-formed 'no_create' clause.
   ACCClause *ActOnOpenACCNoCreateClause(
       ArrayRef<Expr *> VarList, SourceLocation StartLoc,

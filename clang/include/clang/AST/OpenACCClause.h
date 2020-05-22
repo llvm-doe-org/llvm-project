@@ -553,6 +553,87 @@ public:
   }
 };
 
+/// This represents the clause 'create' (or any of its aliases) for
+/// '#pragma acc ...' directives.
+///
+/// \code
+/// #pragma acc parallel create(a,b)
+/// \endcode
+/// In this example directive '#pragma acc parallel' has clause 'create' with
+/// the variables 'a' and 'b'.
+class ACCCreateClause final
+    : public ACCVarListClause<ACCCreateClause>,
+      private llvm::TrailingObjects<ACCCreateClause, Expr *> {
+  friend TrailingObjects;
+  friend ACCVarListClause;
+  friend class ACCClauseReader;
+
+  /// Build clause with number of variables \a N.
+  ///
+  /// \param Kind Which alias of the create clause.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param N Number of the variables in the clause.
+  ACCCreateClause(OpenACCClauseKind Kind, SourceLocation StartLoc,
+                  SourceLocation LParenLoc, SourceLocation EndLoc, unsigned N)
+      : ACCVarListClause<ACCCreateClause>(Kind, ACC_EXPLICIT, StartLoc,
+                                          LParenLoc, EndLoc, N, ACCC_create)
+  {
+    assert(isClauseKind(Kind) && "expected create clause or alias");
+  }
+
+  /// Build an empty clause.
+  ///
+  /// \param Kind Which alias of the create clause.
+  /// \param N Number of variables.
+  explicit ACCCreateClause(OpenACCClauseKind Kind, unsigned N)
+      : ACCVarListClause<ACCCreateClause>(Kind, N, ACCC_create) {
+    assert(isClauseKind(Kind) && "expected create clause or alias");
+  }
+
+public:
+  /// Creates clause with a list of variables \a VL.
+  ///
+  /// \param C AST context.
+  /// \param Kind Which alias of the create clause.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param VL List of references to the variables.
+  static ACCCreateClause *Create(const ASTContext &C, OpenACCClauseKind Kind,
+                                 SourceLocation StartLoc,
+                                 SourceLocation LParenLoc,
+                                 SourceLocation EndLoc, ArrayRef<Expr *> VL);
+  /// Creates an empty clause with the place for \a N variables.
+  ///
+  /// \param C AST context.
+  /// \param Kind Which alias of the create clause.
+  /// \param N The number of variables.
+  static ACCCreateClause *CreateEmpty(const ASTContext &C,
+                                      OpenACCClauseKind Kind, unsigned N);
+
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end()));
+  }
+
+  static bool isClauseKind(OpenACCClauseKind Kind) {
+    switch (Kind) {
+#define OPENACC_CLAUSE_ALIAS_create(Name) \
+    case ACCC_##Name:                   \
+      return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      return false;
+    }
+  }
+
+  static bool classof(const ACCClause *T) {
+    return isClauseKind(T->getClauseKind());
+  }
+};
+
 /// This represents the clause 'no_create' for '#pragma acc ...' directives.
 ///
 /// \code

@@ -2241,6 +2241,18 @@ public:
                                                LParenLoc, EndLoc);
   }
 
+  /// Build a new OpenACC 'create' clause.
+  ///
+  /// By default, performs semantic analysis to build the new OpenACC clause.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCCreateClause(
+      OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
+      SourceLocation StartLoc, SourceLocation LParenLoc,
+      SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCCreateClause(Kind, VarList, StartLoc,
+                                              LParenLoc, EndLoc);
+  }
+
   /// Build a new OpenACC 'no_create' clause.
   ///
   /// By default, performs semantic analysis to build the new OpenACC clause.
@@ -10207,6 +10219,22 @@ TreeTransform<Derived>::TransformACCCopyoutClause(ACCCopyoutClause *C) {
     Vars.push_back(EVar.get());
   }
   return getDerived().RebuildACCCopyoutClause(
+      C->getClauseKind(), Vars, C->getBeginLoc(), C->getLParenLoc(),
+      C->getEndLoc());
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCCreateClause(ACCCreateClause *C) {
+  llvm::SmallVector<Expr *, 16> Vars;
+  Vars.reserve(C->varlist_size());
+  for (auto *VE : C->varlists()) {
+    ExprResult EVar = getDerived().TransformExpr(cast<Expr>(VE));
+    if (EVar.isInvalid())
+      return nullptr;
+    Vars.push_back(EVar.get());
+  }
+  return getDerived().RebuildACCCreateClause(
       C->getClauseKind(), Vars, C->getBeginLoc(), C->getLParenLoc(),
       C->getEndLoc());
 }

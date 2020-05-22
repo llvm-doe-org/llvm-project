@@ -43,6 +43,9 @@
 #ifndef OPENACC_CLAUSE_ALIAS_copyout
 #  define OPENACC_CLAUSE_ALIAS_copyout(Name)
 #endif
+#ifndef OPENACC_CLAUSE_ALIAS_create
+#  define OPENACC_CLAUSE_ALIAS_create(Name)
+#endif
 #ifndef OPENACC_DATA_DMA
 #  define OPENACC_DATA_DMA(Name)
 #endif
@@ -135,6 +138,7 @@ OPENACC_DIRECTIVE_EXT(parallel_loop, "parallel loop")
 //     - copy
 //     - copyin
 //     - copyout
+//     - create
 //     - no_create
 //   - The DSAs are the following:
 //     - shared (default)
@@ -222,6 +226,9 @@ OPENACC_CLAUSE_ALIAS(present_or_copyin, copyin, ACCCopyinClause)
 OPENACC_ALIASED_CLAUSE(OPENACC_CLAUSE_AND_DMA, copyout, ACCCopyoutClause)
 OPENACC_CLAUSE_ALIAS(pcopyout, copyout, ACCCopyoutClause)
 OPENACC_CLAUSE_ALIAS(present_or_copyout, copyout, ACCCopyoutClause)
+OPENACC_ALIASED_CLAUSE(OPENACC_CLAUSE_AND_DMA, create, ACCCreateClause)
+OPENACC_CLAUSE_ALIAS(pcreate, create, ACCCreateClause)
+OPENACC_CLAUSE_ALIAS(present_or_create, create, ACCCreateClause)
 OPENACC_CLAUSE_AND_DMA(no_create, ACCNoCreateClause)
 OPENACC_CLAUSE_AND_DSA_MAPPABLE(shared, ACCSharedClause)
 OPENACC_CLAUSE_AND_DSA_MAPPABLE(reduction, ACCReductionClause)
@@ -250,6 +257,9 @@ OPENACC_DATA_CLAUSE(present_or_copyin)
 OPENACC_DATA_CLAUSE_AND_DMA(copyout)
 OPENACC_DATA_CLAUSE(pcopyout)
 OPENACC_DATA_CLAUSE(present_or_copyout)
+OPENACC_DATA_CLAUSE_AND_DMA(create)
+OPENACC_DATA_CLAUSE(pcreate)
+OPENACC_DATA_CLAUSE(present_or_create)
 OPENACC_DATA_CLAUSE_AND_DMA(no_create)
 
 // Explicit clauses and DAs allowed for OpenACC directive 'parallel'.
@@ -264,6 +274,9 @@ OPENACC_PARALLEL_CLAUSE(present_or_copyin)
 OPENACC_PARALLEL_CLAUSE_AND_DMA(copyout)
 OPENACC_PARALLEL_CLAUSE(pcopyout)
 OPENACC_PARALLEL_CLAUSE(present_or_copyout)
+OPENACC_PARALLEL_CLAUSE_AND_DMA(create)
+OPENACC_PARALLEL_CLAUSE(pcreate)
+OPENACC_PARALLEL_CLAUSE(present_or_create)
 OPENACC_PARALLEL_CLAUSE_AND_DMA(no_create)
 OPENACC_PARALLEL_DSA(shared)
 OPENACC_PARALLEL_CLAUSE_AND_DSA(reduction)
@@ -297,6 +310,9 @@ OPENACC_PARALLEL_LOOP_CLAUSE(present_or_copyin)
 OPENACC_PARALLEL_LOOP_CLAUSE(copyout)
 OPENACC_PARALLEL_LOOP_CLAUSE(pcopyout)
 OPENACC_PARALLEL_LOOP_CLAUSE(present_or_copyout)
+OPENACC_PARALLEL_LOOP_CLAUSE(create)
+OPENACC_PARALLEL_LOOP_CLAUSE(pcreate)
+OPENACC_PARALLEL_LOOP_CLAUSE(present_or_create)
 OPENACC_PARALLEL_LOOP_CLAUSE(no_create)
 OPENACC_PARALLEL_LOOP_CLAUSE(private)
 OPENACC_PARALLEL_LOOP_CLAUSE(firstprivate)
@@ -343,6 +359,7 @@ OPENACC_PARALLEL_LOOP_PARENT(data)
 #undef OPENACC_CLAUSE_ALIAS_copy
 #undef OPENACC_CLAUSE_ALIAS_copyin
 #undef OPENACC_CLAUSE_ALIAS_copyout
+#undef OPENACC_CLAUSE_ALIAS_create
 #undef OPENACC_DATA_DMA
 #undef OPENACC_DATA_DSA
 #undef OPENACC_PARALLEL_DMA

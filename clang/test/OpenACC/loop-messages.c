@@ -9,10 +9,10 @@
 // them would defeat the purpose of the test, so it instead adds "loop" and a
 // for loop to the outer "acc parallel"
 //
-// For checking present, copy, copyin, copyout, no_create, and their aliases we
-// just run the entire test case once for each.  That seems the easiest way to
-// maintain this without losing cases.  This test is fast, so the performance
-// impact isn't terrible.
+// For checking present, copy, copyin, copyout, create, no_create, and their
+// aliases we just run the entire test case once for each.  That seems the
+// easiest way to maintain this without losing cases.  This test is fast, so the
+// performance impact isn't terrible.
 
 // RUN: %data {
 // RUN:   (cflags='-DERR=ERR_ACC -DDATA=present'           )
@@ -25,6 +25,9 @@
 // RUN:   (cflags='-DERR=ERR_ACC -DDATA=copyout'           )
 // RUN:   (cflags='-DERR=ERR_ACC -DDATA=pcopyout'          )
 // RUN:   (cflags='-DERR=ERR_ACC -DDATA=present_or_copyout')
+// RUN:   (cflags='-DERR=ERR_ACC -DDATA=create'            )
+// RUN:   (cflags='-DERR=ERR_ACC -DDATA=pcreate'           )
+// RUN:   (cflags='-DERR=ERR_ACC -DDATA=present_or_create' )
 // RUN:   (cflags='-DERR=ERR_ACC -DDATA=no_create'         )
 // RUN:   (cflags=-DERR=ERR_OMP_INIT                       )
 // RUN:   (cflags=-DERR=ERR_OMP_COND                       )
@@ -121,7 +124,7 @@ void fn() {
 
     // Well formed clauses not permitted here.
 
-    // sep-error-re@+1 {{unexpected OpenACC clause '{{present|copy|pcopy|present_or_copy|copyin|pcopyin|present_or_copyin|copyout|pcopyout|present_or_copyout|no_create}}' in directive '#pragma acc loop'}}
+    // sep-error-re@+1 {{unexpected OpenACC clause '{{present|copy|pcopy|present_or_copy|copyin|pcopyin|present_or_copyin|copyout|pcopyout|present_or_copyout|create|pcreate|present_or_create|no_create}}' in directive '#pragma acc loop'}}
     #pragma acc CMB_PAR loop DATA(i)
     for (int i = 0; i < 5; ++i)
       ;
@@ -2255,8 +2258,8 @@ void fn() {
   // The only remaining conflicts are with clauses that are permitted only on
   // the parallel construct, and those conflicts only occur on a combined
   // construct.
-  // cmb-error-re@+6 {{{{present|copy|copyin|copyout|no_create}} variable cannot be predetermined private variable}}
-  // cmb-note-re@+1 {{previously defined as {{present|copy|copyin|copyout|no_create}} variable here}}
+  // cmb-error-re@+6 {{{{present|copy|copyin|copyout|create|no_create}} variable cannot be predetermined private variable}}
+  // cmb-note-re@+1 {{previously defined as {{present|copy|copyin|copyout|create|no_create}} variable here}}
   #pragma acc parallel CMB_LOOP DATA(i)
 #if !CMB
   #pragma acc loop
@@ -2273,9 +2276,9 @@ void fn() {
     ;
   {
     int i, j, k, l, m;
-    // cmb-error-re@+9 {{{{present|copy|copyin|copyout|no_create}} variable cannot be predetermined private variable}}
+    // cmb-error-re@+9 {{{{present|copy|copyin|copyout|create|no_create}} variable cannot be predetermined private variable}}
     // cmb-error@+9 {{firstprivate variable cannot be predetermined private variable}}
-    // cmb-note-re@+2 {{previously defined as {{present|copy|copyin|copyout|no_create}} variable here}}
+    // cmb-note-re@+2 {{previously defined as {{present|copy|copyin|copyout|create|no_create}} variable here}}
     // cmb-note@+1 {{previously defined as firstprivate variable here}}
     #pragma acc parallel CMB_LOOP_COLLAPSE(3) DATA(j, l) firstprivate(k, m)
 #if !CMB

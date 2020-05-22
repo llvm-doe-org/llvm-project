@@ -19,18 +19,21 @@
 // Check -ast-dump before and after AST serialization.
 //
 // RUN: %data dmps {
-// RUN:   (mode=MODE_I   pre=DMP,DMP-I,DMP-ICCiCoF,DMP-%[dir],DMP-%[dir]-I,DMP-%[dir]-ICCiCoF)
-// RUN:   (mode=MODE_C0  pre=DMP,DMP-C,DMP-ICCiCoF,DMP-CCiCo,DMP-CCiCoF,DMP-CCiCoFP,DMP-%[dir],DMP-%[dir]-C,DMP-%[dir]-ICCiCoF,DMP-%[dir]-CCiCo,DMP-%[dir]-CCiCoF,DMP-%[dir]-CCiCoFP)
-// RUN:   (mode=MODE_C1  pre=DMP,DMP-C,DMP-ICCiCoF,DMP-CCiCo,DMP-CCiCoF,DMP-CCiCoFP,DMP-%[dir],DMP-%[dir]-C,DMP-%[dir]-ICCiCoF,DMP-%[dir]-CCiCo,DMP-%[dir]-CCiCoF,DMP-%[dir]-CCiCoFP)
-// RUN:   (mode=MODE_C2  pre=DMP,DMP-C,DMP-ICCiCoF,DMP-CCiCo,DMP-CCiCoF,DMP-CCiCoFP,DMP-%[dir],DMP-%[dir]-C,DMP-%[dir]-ICCiCoF,DMP-%[dir]-CCiCo,DMP-%[dir]-CCiCoF,DMP-%[dir]-CCiCoFP)
-// RUN:   (mode=MODE_Ci0 pre=DMP,DMP-Ci,DMP-ICCiCoF,DMP-CCiCo,DMP-CCiCoF,DMP-CCiCoFP,DMP-%[dir],DMP-%[dir]-Ci,DMP-%[dir]-ICCiCoF,DMP-%[dir]-CCiCo,DMP-%[dir]-CCiCoF,DMP-%[dir]-CCiCoFP)
-// RUN:   (mode=MODE_Ci1 pre=DMP,DMP-Ci,DMP-ICCiCoF,DMP-CCiCo,DMP-CCiCoF,DMP-CCiCoFP,DMP-%[dir],DMP-%[dir]-Ci,DMP-%[dir]-ICCiCoF,DMP-%[dir]-CCiCo,DMP-%[dir]-CCiCoF,DMP-%[dir]-CCiCoFP)
-// RUN:   (mode=MODE_Ci2 pre=DMP,DMP-Ci,DMP-ICCiCoF,DMP-CCiCo,DMP-CCiCoF,DMP-CCiCoFP,DMP-%[dir],DMP-%[dir]-Ci,DMP-%[dir]-ICCiCoF,DMP-%[dir]-CCiCo,DMP-%[dir]-CCiCoF,DMP-%[dir]-CCiCoFP)
-// RUN:   (mode=MODE_Co0 pre=DMP,DMP-Co,DMP-ICCiCoF,DMP-CCiCo,DMP-CCiCoF,DMP-CCiCoFP,DMP-%[dir],DMP-%[dir]-Co,DMP-%[dir]-ICCiCoF,DMP-%[dir]-CCiCo,DMP-%[dir]-CCiCoF,DMP-%[dir]-CCiCoFP)
-// RUN:   (mode=MODE_Co1 pre=DMP,DMP-Co,DMP-ICCiCoF,DMP-CCiCo,DMP-CCiCoF,DMP-CCiCoFP,DMP-%[dir],DMP-%[dir]-Co,DMP-%[dir]-ICCiCoF,DMP-%[dir]-CCiCo,DMP-%[dir]-CCiCoF,DMP-%[dir]-CCiCoFP)
-// RUN:   (mode=MODE_Co2 pre=DMP,DMP-Co,DMP-ICCiCoF,DMP-CCiCo,DMP-CCiCoF,DMP-CCiCoFP,DMP-%[dir],DMP-%[dir]-Co,DMP-%[dir]-ICCiCoF,DMP-%[dir]-CCiCo,DMP-%[dir]-CCiCoF,DMP-%[dir]-CCiCoFP)
-// RUN:   (mode=MODE_F   pre=DMP,DMP-F,DMP-ICCiCoF,DMP-CCiCoF,DMP-CCiCoFP,DMP-%[dir],DMP-%[dir]-F,DMP-%[dir]-ICCiCoF,DMP-%[dir]-CCiCoF,DMP-%[dir]-CCiCoFP)
-// RUN:   (mode=MODE_P   pre=DMP,DMP-P,DMP-CCiCoFP,DMP-%[dir],DMP-%[dir]-P,DMP-%[dir]-CCiCoFP)
+// RUN:   (mode=MODE_I   pre=DMP,DMP-I,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-I,DMP-%[dir]-ICCiCoCrF                                                                    )
+// RUN:   (mode=MODE_C0  pre=DMP,DMP-C,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-C,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF  )
+// RUN:   (mode=MODE_C1  pre=DMP,DMP-C,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-C,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF  )
+// RUN:   (mode=MODE_C2  pre=DMP,DMP-C,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-C,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF  )
+// RUN:   (mode=MODE_Ci0 pre=DMP,DMP-Ci,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Ci,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Ci1 pre=DMP,DMP-Ci,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Ci,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Ci2 pre=DMP,DMP-Ci,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Ci,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Co0 pre=DMP,DMP-Co,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Co,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Co1 pre=DMP,DMP-Co,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Co,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Co2 pre=DMP,DMP-Co,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Co,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Cr0 pre=DMP,DMP-Cr,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Cr,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Cr1 pre=DMP,DMP-Cr,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Cr,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Cr2 pre=DMP,DMP-Cr,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Cr,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_F   pre=DMP,DMP-F,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-F,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF                                 )
+// RUN:   (mode=MODE_P   pre=DMP,DMP-P,DMP-CCiCoCrFP,DMP-%[dir],DMP-%[dir]-P,DMP-%[dir]-CCiCoCrFP                                                                                                     )
 // RUN: }
 // RUN: %for directives {
 // RUN:   %for dmps {
@@ -58,6 +61,9 @@
 // RUN:   (mode=MODE_Co0 pre=PRT,PRT-Co0,PRT-%[dir],PRT-%[dir]-Co0,PRT-A,PRT-A-Co0,PRT-A-%[dir],PRT-A-%[dir]-Co0)
 // RUN:   (mode=MODE_Co1 pre=PRT,PRT-Co1,PRT-%[dir],PRT-%[dir]-Co1,PRT-A,PRT-A-Co1,PRT-A-%[dir],PRT-A-%[dir]-Co1)
 // RUN:   (mode=MODE_Co2 pre=PRT,PRT-Co2,PRT-%[dir],PRT-%[dir]-Co2,PRT-A,PRT-A-Co2,PRT-A-%[dir],PRT-A-%[dir]-Co2)
+// RUN:   (mode=MODE_Cr0 pre=PRT,PRT-Cr0,PRT-%[dir],PRT-%[dir]-Cr0,PRT-A,PRT-A-Cr0,PRT-A-%[dir],PRT-A-%[dir]-Cr0)
+// RUN:   (mode=MODE_Cr1 pre=PRT,PRT-Cr1,PRT-%[dir],PRT-%[dir]-Cr1,PRT-A,PRT-A-Cr1,PRT-A-%[dir],PRT-A-%[dir]-Cr1)
+// RUN:   (mode=MODE_Cr2 pre=PRT,PRT-Cr2,PRT-%[dir],PRT-%[dir]-Cr2,PRT-A,PRT-A-Cr2,PRT-A-%[dir],PRT-A-%[dir]-Cr2)
 // RUN:   (mode=MODE_F   pre=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-A,PRT-A-F,PRT-A-%[dir],PRT-A-%[dir]-F)
 // RUN:   (mode=MODE_P   pre=PRT,PRT-P,PRT-%[dir],PRT-%[dir]-P,PRT-A,PRT-A-P,PRT-A-%[dir],PRT-A-%[dir]-P)
 // RUN: }
@@ -135,6 +141,21 @@
 // RUN:   (mode=MODE_Co2 prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-Co2,PRT-%[dir],PRT-%[dir]-Co2,PRT-A,PRT-A-Co2,PRT-A-%[dir],PRT-A-%[dir]-Co2,PRT-AO,PRT-AO-Co2,PRT-AO-%[dir],PRT-AO-%[dir]-Co2)
 // RUN:   (mode=MODE_Co2 prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-Co2,PRT-%[dir],PRT-%[dir]-Co2,PRT-O,PRT-O-Co2,PRT-O-%[dir],PRT-O-%[dir]-Co2,PRT-OA,PRT-OA-Co2,PRT-OA-%[dir],PRT-OA-%[dir]-Co2)
 //
+// RUN:   (mode=MODE_Cr0 prt=%[prt-opt]=acc     prt-chk=PRT,PRT-Cr0,PRT-%[dir],PRT-%[dir]-Cr0,PRT-A,PRT-A-Cr0,PRT-A-%[dir],PRT-A-%[dir]-Cr0                                                  )
+// RUN:   (mode=MODE_Cr0 prt=%[prt-opt]=omp     prt-chk=PRT,PRT-Cr0,PRT-%[dir],PRT-%[dir]-Cr0,PRT-O,PRT-O-Cr0,PRT-O-%[dir],PRT-O-%[dir]-Cr0                                                  )
+// RUN:   (mode=MODE_Cr0 prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-Cr0,PRT-%[dir],PRT-%[dir]-Cr0,PRT-A,PRT-A-Cr0,PRT-A-%[dir],PRT-A-%[dir]-Cr0,PRT-AO,PRT-AO-Cr0,PRT-AO-%[dir],PRT-AO-%[dir]-Cr0)
+// RUN:   (mode=MODE_Cr0 prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-Cr0,PRT-%[dir],PRT-%[dir]-Cr0,PRT-O,PRT-O-Cr0,PRT-O-%[dir],PRT-O-%[dir]-Cr0,PRT-OA,PRT-OA-Cr0,PRT-OA-%[dir],PRT-OA-%[dir]-Cr0)
+//
+// RUN:   (mode=MODE_Cr1 prt=%[prt-opt]=acc     prt-chk=PRT,PRT-Cr1,PRT-%[dir],PRT-%[dir]-Cr1,PRT-A,PRT-A-Cr1,PRT-A-%[dir],PRT-A-%[dir]-Cr1                                                  )
+// RUN:   (mode=MODE_Cr1 prt=%[prt-opt]=omp     prt-chk=PRT,PRT-Cr1,PRT-%[dir],PRT-%[dir]-Cr1,PRT-O,PRT-O-Cr1,PRT-O-%[dir],PRT-O-%[dir]-Cr1                                                  )
+// RUN:   (mode=MODE_Cr1 prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-Cr1,PRT-%[dir],PRT-%[dir]-Cr1,PRT-A,PRT-A-Cr1,PRT-A-%[dir],PRT-A-%[dir]-Cr1,PRT-AO,PRT-AO-Cr1,PRT-AO-%[dir],PRT-AO-%[dir]-Cr1)
+// RUN:   (mode=MODE_Cr1 prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-Cr1,PRT-%[dir],PRT-%[dir]-Cr1,PRT-O,PRT-O-Cr1,PRT-O-%[dir],PRT-O-%[dir]-Cr1,PRT-OA,PRT-OA-Cr1,PRT-OA-%[dir],PRT-OA-%[dir]-Cr1)
+//
+// RUN:   (mode=MODE_Cr2 prt=%[prt-opt]=acc     prt-chk=PRT,PRT-Cr2,PRT-%[dir],PRT-%[dir]-Cr2,PRT-A,PRT-A-Cr2,PRT-A-%[dir],PRT-A-%[dir]-Cr2                                                  )
+// RUN:   (mode=MODE_Cr2 prt=%[prt-opt]=omp     prt-chk=PRT,PRT-Cr2,PRT-%[dir],PRT-%[dir]-Cr2,PRT-O,PRT-O-Cr2,PRT-O-%[dir],PRT-O-%[dir]-Cr2                                                  )
+// RUN:   (mode=MODE_Cr2 prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-Cr2,PRT-%[dir],PRT-%[dir]-Cr2,PRT-A,PRT-A-Cr2,PRT-A-%[dir],PRT-A-%[dir]-Cr2,PRT-AO,PRT-AO-Cr2,PRT-AO-%[dir],PRT-AO-%[dir]-Cr2)
+// RUN:   (mode=MODE_Cr2 prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-Cr2,PRT-%[dir],PRT-%[dir]-Cr2,PRT-O,PRT-O-Cr2,PRT-O-%[dir],PRT-O-%[dir]-Cr2,PRT-OA,PRT-OA-Cr2,PRT-OA-%[dir],PRT-OA-%[dir]-Cr2)
+//
 // RUN:   (mode=MODE_F  prt=%[prt-opt]=acc     prt-chk=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-A,PRT-A-F,PRT-A-%[dir],PRT-A-%[dir]-F                                              )
 // RUN:   (mode=MODE_F  prt=%[prt-opt]=omp     prt-chk=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-O,PRT-O-F,PRT-O-%[dir],PRT-O-%[dir]-F                                              )
 // RUN:   (mode=MODE_F  prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-A,PRT-A-F,PRT-A-%[dir],PRT-A-%[dir]-F,PRT-AO,PRT-AO-F,PRT-AO-%[dir],PRT-AO-%[dir]-F)
@@ -157,33 +178,34 @@
 
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
-// We targeting the host, memory is shared, so copy, copyin, copyout, and their
-// aliases all act like copy.
+// When we are targeting the host, memory is shared, so copy, copyin, copyout,
+// create, and their aliases all act like copy.
+//
 // RUN: %data exes {
-// RUN:   (mode=MODE_I   cflags=                 pre-host=EXE-I,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-ICiFP,EXE-IF,EXE pre-tgt=EXE-I,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-ICiFP,EXE-IF,EXE  )
-// RUN:   (mode=MODE_I   cflags=-DSTORAGE=static pre-host=EXE-I,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-ICiFP,EXE-IF,EXE pre-tgt=EXE-I,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-ICiFP,EXE-IF,EXE  )
-// RUN:   (mode=MODE_C0  cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE   )
-// RUN:   (mode=MODE_C0  cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE   )
-// RUN:   (mode=MODE_C1  cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE   )
-// RUN:   (mode=MODE_C1  cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE   )
-// RUN:   (mode=MODE_C2  cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE   )
-// RUN:   (mode=MODE_C2  cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE   )
-// RUN:   (mode=MODE_Ci0 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICiFP,EXE-CCi,EXE-CiFP,EXE)
-// RUN:   (mode=MODE_Ci0 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICiFP,EXE-CCi,EXE-CiFP,EXE)
-// RUN:   (mode=MODE_Ci1 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICiFP,EXE-CCi,EXE-CiFP,EXE)
-// RUN:   (mode=MODE_Ci1 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICiFP,EXE-CCi,EXE-CiFP,EXE)
-// RUN:   (mode=MODE_Ci2 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICiFP,EXE-CCi,EXE-CiFP,EXE)
-// RUN:   (mode=MODE_Ci2 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICiFP,EXE-CCi,EXE-CiFP,EXE)
-// RUN:   (mode=MODE_Co0 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoP,EXE                                )
-// RUN:   (mode=MODE_Co0 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoP,EXE                                )
-// RUN:   (mode=MODE_Co1 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoP,EXE                                )
-// RUN:   (mode=MODE_Co1 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoP,EXE                                )
-// RUN:   (mode=MODE_Co2 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoP,EXE                                )
-// RUN:   (mode=MODE_Co2 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE  pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoP,EXE                                )
-// RUN:   (mode=MODE_F   cflags=                 pre-host=EXE-F,EXE-ICCiF,EXE-ICCiFP,EXE-ICiFP,EXE-CiFP,EXE-IF,EXE          pre-tgt=EXE-F,EXE-ICCiF,EXE-ICCiFP,EXE-ICiFP,EXE-CiFP,EXE-IF,EXE           )
-// RUN:   (mode=MODE_F   cflags=-DSTORAGE=static pre-host=EXE-F,EXE-ICCiF,EXE-ICCiFP,EXE-ICiFP,EXE-CiFP,EXE-IF,EXE          pre-tgt=EXE-F,EXE-ICCiF,EXE-ICCiFP,EXE-ICiFP,EXE-CiFP,EXE-IF,EXE           )
-// RUN:   (mode=MODE_P   cflags=                 pre-host=EXE-P,EXE-CoP,EXE-ICCiFP,EXE-ICiFP,EXE-CiFP,EXE                   pre-tgt=EXE-P,EXE-ICCiFP,EXE-ICiFP,EXE-CiFP,EXE                            )
-// RUN:   (mode=MODE_P   cflags=-DSTORAGE=static pre-host=EXE-P,EXE-CoP,EXE-ICCiFP,EXE-ICiFP,EXE-CiFP,EXE                   pre-tgt=EXE-P,EXE-ICCiFP,EXE-ICiFP,EXE-CiFP,EXE                            )
+// RUN:   (mode=MODE_I   cflags=                 pre-host=EXE-I,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-ICiCrFP,EXE-IF,EXE pre-tgt=EXE-I,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-ICiCrFP,EXE-IF,EXE    )
+// RUN:   (mode=MODE_I   cflags=-DSTORAGE=static pre-host=EXE-I,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-ICiCrFP,EXE-IF,EXE pre-tgt=EXE-I,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-ICiCrFP,EXE-IF,EXE    )
+// RUN:   (mode=MODE_C0  cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE       )
+// RUN:   (mode=MODE_C0  cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE       )
+// RUN:   (mode=MODE_C1  cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE       )
+// RUN:   (mode=MODE_C1  cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE       )
+// RUN:   (mode=MODE_C2  cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE       )
+// RUN:   (mode=MODE_C2  cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE       )
+// RUN:   (mode=MODE_Ci0 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CCi,EXE-CiCrFP,EXE)
+// RUN:   (mode=MODE_Ci0 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CCi,EXE-CiCrFP,EXE)
+// RUN:   (mode=MODE_Ci1 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CCi,EXE-CiCrFP,EXE)
+// RUN:   (mode=MODE_Ci1 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CCi,EXE-CiCrFP,EXE)
+// RUN:   (mode=MODE_Ci2 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CCi,EXE-CiCrFP,EXE)
+// RUN:   (mode=MODE_Ci2 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CCi,EXE-CiCrFP,EXE)
+// RUN:   (mode=MODE_Co0 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoCrP,EXE                                    )
+// RUN:   (mode=MODE_Co0 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoCrP,EXE                                    )
+// RUN:   (mode=MODE_Co1 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoCrP,EXE                                    )
+// RUN:   (mode=MODE_Co1 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoCrP,EXE                                    )
+// RUN:   (mode=MODE_Co2 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoCrP,EXE                                    )
+// RUN:   (mode=MODE_Co2 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoCrP,EXE                                    )
+// RUN:   (mode=MODE_F   cflags=                 pre-host=EXE-F,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE-IF,EXE        pre-tgt=EXE-F,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE-IF,EXE           )
+// RUN:   (mode=MODE_F   cflags=-DSTORAGE=static pre-host=EXE-F,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE-IF,EXE        pre-tgt=EXE-F,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE-IF,EXE           )
+// RUN:   (mode=MODE_P   cflags=                 pre-host=EXE-P,EXE-CoCrP,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE               pre-tgt=EXE-P,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE                            )
+// RUN:   (mode=MODE_P   cflags=-DSTORAGE=static pre-host=EXE-P,EXE-CoCrP,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE               pre-tgt=EXE-P,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE                            )
 // RUN: }
 // RUN: %for directives {
 // RUN:   %for exes {
@@ -266,8 +288,11 @@
 #define MODE_Co0 8
 #define MODE_Co1 9
 #define MODE_Co2 10
-#define MODE_F   11
-#define MODE_P   12
+#define MODE_Cr0 11
+#define MODE_Cr1 12
+#define MODE_Cr2 13
+#define MODE_F   14
+#define MODE_P   15
 
 #ifndef MODE
 # error MODE undefined
@@ -291,6 +316,12 @@
 # define CLAUSE(...) pcopyout(__VA_ARGS__)
 #elif MODE == MODE_Co2
 # define CLAUSE(...) present_or_copyout(__VA_ARGS__)
+#elif MODE == MODE_Cr0
+# define CLAUSE(...) create(__VA_ARGS__)
+#elif MODE == MODE_Cr1
+# define CLAUSE(...) pcreate(__VA_ARGS__)
+#elif MODE == MODE_Cr2
+# define CLAUSE(...) present_or_create(__VA_ARGS__)
 #elif MODE == MODE_F
 # define CLAUSE(...) firstprivate(__VA_ARGS__)
 #elif MODE == MODE_P
@@ -320,8 +351,9 @@
 # define LW_UINT128(Var) Var##_lw
 #endif
 
-// Passing const variable to copyout or private isn't permitted.
-#if MODE == MODE_Co0 || MODE == MODE_Co1 || MODE == MODE_Co2 || MODE == MODE_P
+// Passing const variable to copyout, create, or private isn't permitted.
+#if MODE == MODE_Co0 || MODE == MODE_Co1 || MODE == MODE_Co2 || \
+    MODE == MODE_Cr0 || MODE == MODE_Cr1 || MODE == MODE_Cr2 || MODE == MODE_P
 # define CONST
 #else
 # define CONST const
@@ -398,445 +430,463 @@ int main() {
   CONST int ci = 53;
   CONST int ca[3] = {10, 11, 12};
 
-  // DMP-PARLOOP:             ACCParallelLoopDirective
-  // DMP-PARLOOP-NEXT:          ACCSeqClause
-  // DMP-PARLOOP-NEXT:          ACCNumGangsClause
-  // DMP-PARLOOP-NEXT:            IntegerLiteral {{.*}} 'int' 2
-  // DMP-PARLOOP-C-NEXT:        ACCCopyClause
-  // DMP-PARLOOP-Ci-NEXT:       ACCCopyinClause
-  // DMP-PARLOOP-Co-NEXT:       ACCCopyoutClause
-  // DMP-PARLOOP-F-NEXT:        ACCFirstprivateClause
-  // DMP-PARLOOP-P-NEXT:        ACCPrivateClause
-  // DMP-PARLOOP-CCiCoFP-NOT:     <implicit>
-  // DMP-PARLOOP-CCiCoFP-SAME:    {{$}}
-  // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} 'gi' 'int'
-  // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
-  // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} 'gUnref' 'int'
-  // DMP-PARLOOP-C-NEXT:        ACCCopyClause
-  // DMP-PARLOOP-Ci-NEXT:       ACCCopyinClause
-  // DMP-PARLOOP-Co-NEXT:       ACCCopyoutClause
-  // DMP-PARLOOP-F-NEXT:        ACCFirstprivateClause
-  // DMP-PARLOOP-P-NEXT:        ACCPrivateClause
-  // DMP-PARLOOP-CCiCoFP-NOT:     <implicit>
-  // DMP-PARLOOP-CCiCoFP-SAME:    {{$}}
-  // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
-  // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} 'lUnref' 'int'
-  // DMP-PARLOOP-C-NEXT:        ACCCopyClause
-  // DMP-PARLOOP-Ci-NEXT:       ACCCopyinClause
-  // DMP-PARLOOP-Co-NEXT:       ACCCopyoutClause
-  // DMP-PARLOOP-F-NEXT:        ACCFirstprivateClause
-  // DMP-PARLOOP-P-NEXT:        ACCPrivateClause
-  // DMP-PARLOOP-CCiCoFP-NOT:     <implicit>
-  // DMP-PARLOOP-CCiCoFP-SAME:    {{$}}
-  // DMP-PARLOOP-CCiCoFP-NEXT:    DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-PARLOOP-CCiCoF-NEXT:     DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
-  // DMP-PARLOOP-CCiCoF-NEXT:     DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
-                                  // The test omits const when testing private.
-  // DMP-PARLOOP-P-NEXT:          DeclRefExpr {{.*}} 'ci' 'int'
-  // DMP-PARLOOP-P-NEXT:          DeclRefExpr {{.*}} 'ca' 'int [3]'
-  // DMP-PARLOOP-NEXT:          effect: ACCParallelDirective
-  // DMP-PAR:                   ACCParallelDirective
-  // DMP-NEXT:                    ACCNumGangsClause
-  // DMP-NEXT:                      IntegerLiteral {{.*}} 'int' 2
+  //                DMP-PARLOOP: ACCParallelLoopDirective
+  //           DMP-PARLOOP-NEXT:   ACCSeqClause
+  //           DMP-PARLOOP-NEXT:   ACCNumGangsClause
+  //           DMP-PARLOOP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+  //         DMP-PARLOOP-C-NEXT:   ACCCopyClause
+  //        DMP-PARLOOP-Ci-NEXT:   ACCCopyinClause
+  //        DMP-PARLOOP-Co-NEXT:   ACCCopyoutClause
+  //        DMP-PARLOOP-Cr-NEXT:   ACCCreateClause
+  //         DMP-PARLOOP-F-NEXT:   ACCFirstprivateClause
+  //         DMP-PARLOOP-P-NEXT:   ACCPrivateClause
+  //  DMP-PARLOOP-CCiCoCrFP-NOT:     <implicit>
+  // DMP-PARLOOP-CCiCoCrFP-SAME:     {{$}}
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'gi' 'int'
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'gUnref' 'int'
+  //         DMP-PARLOOP-C-NEXT:   ACCCopyClause
+  //        DMP-PARLOOP-Ci-NEXT:   ACCCopyinClause
+  //        DMP-PARLOOP-Co-NEXT:   ACCCopyoutClause
+  //        DMP-PARLOOP-Cr-NEXT:   ACCCreateClause
+  //         DMP-PARLOOP-F-NEXT:   ACCFirstprivateClause
+  //         DMP-PARLOOP-P-NEXT:   ACCPrivateClause
+  //  DMP-PARLOOP-CCiCoCrFP-NOT:     <implicit>
+  // DMP-PARLOOP-CCiCoCrFP-SAME:     {{$}}
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'li' 'int'
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'lUnref' 'int'
+  //         DMP-PARLOOP-C-NEXT:   ACCCopyClause
+  //        DMP-PARLOOP-Ci-NEXT:   ACCCopyinClause
+  //        DMP-PARLOOP-Co-NEXT:   ACCCopyoutClause
+  //        DMP-PARLOOP-Cr-NEXT:   ACCCreateClause
+  //         DMP-PARLOOP-F-NEXT:   ACCFirstprivateClause
+  //         DMP-PARLOOP-P-NEXT:   ACCPrivateClause
+  //  DMP-PARLOOP-CCiCoCrFP-NOT:     <implicit>
+  // DMP-PARLOOP-CCiCoCrFP-SAME:     {{$}}
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
 
-  // DMP-C-NEXT:                  ACCCopyClause
-  // DMP-Ci-NEXT:                 ACCCopyinClause
-  // DMP-Co-NEXT:                 ACCCopyoutClause
-  // DMP-F-NEXT:                  ACCFirstprivateClause
-  // DMP-CCiCoF-NOT:                <implicit>
-  // DMP-CCiCoF-SAME:               {{$}}
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'gi' 'int'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'gUnref' 'int'
-  // DMP-C-NEXT:                  ACCCopyClause
-  // DMP-Ci-NEXT:                 ACCCopyinClause
-  // DMP-Co-NEXT:                 ACCCopyoutClause
-  // DMP-F-NEXT:                  ACCFirstprivateClause
-  // DMP-CCiCoF-NOT:                <implicit>
-  // DMP-CCiCoF-SAME:               {{$}}
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'lUnref' 'int'
-  // DMP-C-NEXT:                  ACCCopyClause
-  // DMP-Ci-NEXT:                 ACCCopyinClause
-  // DMP-Co-NEXT:                 ACCCopyoutClause
-  // DMP-F-NEXT:                  ACCFirstprivateClause
-  // DMP-CCiCoF-NOT:                <implicit>
-  // DMP-CCiCoF-SAME:               {{$}}
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
-  // DMP-CCiCo-NEXT:              ACCSharedClause {{.*}} <implicit>
-  // DMP-F-NEXT:                  ACCNomapClause {{.*}} <implicit>
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'gi' 'int'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
-  // DMP-CCiCoF-NEXT:               DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
-  // DMP-CCiCoF-NOT:                DeclRefExpr {{.*}} 'gUnref' 'int'
-  // DMP-CCiCoF-NOT:                DeclRefExpr {{.*}} 'lUnref' 'int'
+  //           DMP-PARLOOP-NEXT:   effect: ACCParallelDirective
+  //                    DMP-PAR:   ACCParallelDirective
+  //                   DMP-NEXT:     ACCNumGangsClause
+  //                   DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
 
-  // DMP-PAR-P-NEXT:              ACCPrivateClause
-  // DMP-PAR-P-NOT:                 <implicit>
-  // DMP-PAR-P-SAME:                {{$}}
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'gi' 'int'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'gUnref' 'int'
-  // DMP-PAR-P-NEXT:              ACCPrivateClause
-  // DMP-PAR-P-NOT:                 <implicit>
-  // DMP-PAR-P-SAME:                {{$}}
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'lUnref' 'int'
-  // DMP-PAR-P-NEXT:              ACCPrivateClause
-  // DMP-PAR-P-NOT:                 <implicit>
-  // DMP-PAR-P-SAME:                {{$}}
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'shadowed' 'int'
-                                    // The test omits const when testing private.
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'ci' 'int'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'ca' 'int [3]'
-  // DMP-PAR-P-NEXT:              ACCNomapClause {{.*}} <implicit>
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'gi' 'int'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'shadowed' 'int'
-                                    // The test omits const when testing private.
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'ci' 'int'
-  // DMP-PAR-P-NEXT:                DeclRefExpr {{.*}} 'ca' 'int [3]'
-  // DMP-PAR-P-NOT:                 DeclRefExpr {{.*}} 'gUnref' 'int'
-  // DMP-PAR-P-NOT:                 DeclRefExpr {{.*}} 'lUnref' 'int'
+  //                 DMP-C-NEXT:     ACCCopyClause
+  //                DMP-Ci-NEXT:     ACCCopyinClause
+  //                DMP-Co-NEXT:     ACCCopyoutClause
+  //                DMP-Cr-NEXT:     ACCCreateClause
+  //                 DMP-F-NEXT:     ACCFirstprivateClause
+  //           DMP-CCiCoCrF-NOT:       <implicit>
+  //          DMP-CCiCoCrF-SAME:       {{$}}
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gi' 'int'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gp' 'const int *'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gUnref' 'int'
+  //                 DMP-C-NEXT:     ACCCopyClause
+  //                DMP-Ci-NEXT:     ACCCopyinClause
+  //                DMP-Co-NEXT:     ACCCopyoutClause
+  //                DMP-Cr-NEXT:     ACCCreateClause
+  //                 DMP-F-NEXT:     ACCFirstprivateClause
+  //           DMP-CCiCoCrF-NOT:       <implicit>
+  //          DMP-CCiCoCrF-SAME:       {{$}}
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'li' 'int'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'lp' 'const int *'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'lUnref' 'int'
+  //                 DMP-C-NEXT:     ACCCopyClause
+  //                DMP-Ci-NEXT:     ACCCopyinClause
+  //                DMP-Co-NEXT:     ACCCopyoutClause
+  //                DMP-Cr-NEXT:     ACCCreateClause
+  //                 DMP-F-NEXT:     ACCFirstprivateClause
+  //           DMP-CCiCoCrF-NOT:       <implicit>
+  //          DMP-CCiCoCrF-SAME:       {{$}}
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'shadowed' 'int'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
+  //           DMP-CCiCoCr-NEXT:     ACCSharedClause {{.*}} <implicit>
+  //                 DMP-F-NEXT:     ACCNomapClause {{.*}} <implicit>
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gi' 'int'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gp' 'const int *'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'li' 'int'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'lp' 'const int *'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'shadowed' 'int'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
+  //           DMP-CCiCoCrF-NOT:       DeclRefExpr {{.*}} 'gUnref' 'int'
+  //           DMP-CCiCoCrF-NOT:       DeclRefExpr {{.*}} 'lUnref' 'int'
 
-  // DMP-I-NEXT:                  ACCNomapClause {{.*}} <implicit>
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'gi' 'int'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'ci' 'const int'
-  // DMP-I-NEXT:                  ACCCopyClause {{.*}} <implicit>
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'ca' 'const int [3]'
-  // DMP-I-NEXT:                  ACCSharedClause {{.*}} <implicit>
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'ca' 'const int [3]'
-  // DMP-I-NEXT:                  ACCFirstprivateClause {{.*}} <implicit>
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'gi' 'int'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-I-NEXT:                    DeclRefExpr {{.*}} 'ci' 'const int'
+  //             DMP-PAR-P-NEXT:     ACCPrivateClause
+  //              DMP-PAR-P-NOT:       <implicit>
+  //             DMP-PAR-P-SAME:       {{$}}
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gi' 'int'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gp' 'const int *'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gUnref' 'int'
+  //             DMP-PAR-P-NEXT:     ACCPrivateClause
+   //             DMP-PAR-P-NOT:       <implicit>
+  //             DMP-PAR-P-SAME:       {{$}}
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'li' 'int'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'lp' 'const int *'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'lUnref' 'int'
+  //             DMP-PAR-P-NEXT:     ACCPrivateClause
+  //              DMP-PAR-P-NOT:       <implicit>
+  //             DMP-PAR-P-SAME:       {{$}}
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'shadowed' 'int'
+                                       // The test omits const when testing private.
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ci' 'int'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ca' 'int [3]'
+  //             DMP-PAR-P-NEXT:     ACCNomapClause {{.*}} <implicit>
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gi' 'int'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gp' 'const int *'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'li' 'int'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'lp' 'const int *'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'shadowed' 'int'
+                                       // The test omits const when testing private.
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ci' 'int'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ca' 'int [3]'
+  //              DMP-PAR-P-NOT:       DeclRefExpr {{.*}} 'gUnref' 'int'
+  //              DMP-PAR-P-NOT:       DeclRefExpr {{.*}} 'lUnref' 'int'
 
-  // DMP-NEXT:                    impl: OMPTargetTeamsDirective
-  // DMP-NEXT:                      OMPNum_teamsClause
-  // DMP-NEXT:                        IntegerLiteral {{.*}} 'int' 2
+  //                 DMP-I-NEXT:     ACCNomapClause {{.*}} <implicit>
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'gi' 'int'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'gp' 'const int *'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'li' 'int'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'lp' 'const int *'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'shadowed' 'int'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ci' 'const int'
+  //                 DMP-I-NEXT:     ACCCopyClause {{.*}} <implicit>
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  //                 DMP-I-NEXT:     ACCSharedClause {{.*}} <implicit>
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  //                 DMP-I-NEXT:     ACCFirstprivateClause {{.*}} <implicit>
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'gi' 'int'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'gp' 'const int *'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'li' 'int'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'lp' 'const int *'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'shadowed' 'int'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ci' 'const int'
 
-  // DMP-CCiCo-NEXT:                OMPMapClause
-  // DMP-F-NEXT:                    OMPFirstprivateClause
-  // DMP-CCiCoF-NOT:                  <implicit>
-  // DMP-CCiCoF-SAME:                 {{$}}
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'gi' 'int'
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'gUnref' 'int'
-  // DMP-CCiCo-NEXT:                OMPMapClause
-  // DMP-F-NEXT:                    OMPFirstprivateClause
-  // DMP-CCiCoF-NOT:                  <implicit>
-  // DMP-CCiCoF-SAME:                 {{$}}
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'lUnref' 'int'
-  // DMP-CCiCo-NEXT:                OMPMapClause
-  // DMP-F-NEXT:                    OMPFirstprivateClause
-  // DMP-CCiCoF-NOT:                  <implicit>
-  // DMP-CCiCoF-SAME:                 {{$}}
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
-  // DMP-CCiCoF-NEXT:                 DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
-  // DMP-CCiCo-NEXT:                OMPSharedClause
-  // DMP-CCiCo-NOT:                   <implicit>
-  // DMP-CCiCo-SAME:                  {{$}}
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'gi' 'int'
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
-  // DMP-CCiCo-NEXT:                  DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
-  // DMP-CCiCo-NOT:                   DeclRefExpr {{.*}} 'gUnref' 'int'
-  // DMP-CCiCo-NOT:                   DeclRefExpr {{.*}} 'lUnref' 'int'
+  //                   DMP-NEXT:     impl: OMPTargetTeamsDirective
+  //                   DMP-NEXT:       OMPNum_teamsClause
+  //                   DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
 
-  // DMP-PAR-P-NEXT:                OMPPrivateClause
-  // DMP-PAR-P-NOT:                   <implicit>
-  // DMP-PAR-P-SAME:                  {{$}}
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'gi' 'int'
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'gUnref' 'int'
-  // DMP-PAR-P-NEXT:                OMPPrivateClause
-  // DMP-PAR-P-NOT:                   <implicit>
-  // DMP-PAR-P-SAME:                  {{$}}
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'lUnref' 'int'
-  // DMP-PAR-P-NEXT:                OMPPrivateClause
-  // DMP-PAR-P-NOT:                   <implicit>
-  // DMP-PAR-P-SAME:                  {{$}}
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'shadowed' 'int'
-                                      // The test omits const when testing private.
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'ci' 'int'
-  // DMP-PAR-P-NEXT:                  DeclRefExpr {{.*}} 'ca' 'int [3]'
+  //           DMP-CCiCoCr-NEXT:       OMPMapClause
+  //                 DMP-F-NEXT:       OMPFirstprivateClause
+  //           DMP-CCiCoCrF-NOT:         <implicit>
+  //          DMP-CCiCoCrF-SAME:         {{$}}
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gi' 'int'
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gp' 'const int *'
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gUnref' 'int'
+  //           DMP-CCiCoCr-NEXT:       OMPMapClause
+  //                 DMP-F-NEXT:       OMPFirstprivateClause
+  //           DMP-CCiCoCrF-NOT:         <implicit>
+  //          DMP-CCiCoCrF-SAME:         {{$}}
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'li' 'int'
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'lp' 'const int *'
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'lUnref' 'int'
+  //           DMP-CCiCoCr-NEXT:       OMPMapClause
+  //                 DMP-F-NEXT:       OMPFirstprivateClause
+  //           DMP-CCiCoCrF-NOT:         <implicit>
+  //          DMP-CCiCoCrF-SAME:         {{$}}
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
+  //           DMP-CCiCoCr-NEXT:       OMPSharedClause
+  //            DMP-CCiCoCr-NOT:         <implicit>
+  //           DMP-CCiCoCr-SAME:         {{$}}
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'gi' 'int'
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'gp' 'const int *'
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'li' 'int'
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'lp' 'const int *'
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
+  //            DMP-CCiCoCr-NOT:         DeclRefExpr {{.*}} 'gUnref' 'int'
+  //            DMP-CCiCoCr-NOT:         DeclRefExpr {{.*}} 'lUnref' 'int'
 
-  // DMP-I-NEXT:                    OMPMapClause
-  // DMP-I-NOT:                       <implicit>
-  // DMP-I-SAME:                      {{$}}
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'ca' 'const int [3]'
-  // DMP-I-NEXT:                    OMPSharedClause
-  // DMP-I-NOT:                       <implicit>
-  // DMP-I-SAME:                      {{$}}
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'ca' 'const int [3]'
-  // DMP-I-NEXT:                    OMPFirstprivateClause
-  // DMP-I-NOT:                       <implicit>
-  // DMP-I-SAME:                      {{$}}
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'gi' 'int'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-I-NEXT:                      DeclRefExpr {{.*}} 'ci' 'const int'
+  //             DMP-PAR-P-NEXT:       OMPPrivateClause
+  //              DMP-PAR-P-NOT:         <implicit>
+  //             DMP-PAR-P-SAME:         {{$}}
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'gi' 'int'
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'gp' 'const int *'
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'gUnref' 'int'
+  //             DMP-PAR-P-NEXT:       OMPPrivateClause
+  //              DMP-PAR-P-NOT:         <implicit>
+  //             DMP-PAR-P-SAME:         {{$}}
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'li' 'int'
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'lp' 'const int *'
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'lUnref' 'int'
+  //             DMP-PAR-P-NEXT:       OMPPrivateClause
+  //              DMP-PAR-P-NOT:         <implicit>
+  //             DMP-PAR-P-SAME:         {{$}}
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
+                                         // The test omits const when testing private.
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'ci' 'int'
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'ca' 'int [3]'
 
-  // DMP-PARLOOP:                 ACCLoopDirective
-  // DMP-PARLOOP-NEXT:              ACCSeqClause
+  //                 DMP-I-NEXT:       OMPMapClause
+  //                  DMP-I-NOT:         <implicit>
+  //                 DMP-I-SAME:         {{$}}
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  //                 DMP-I-NEXT:       OMPSharedClause
+  //                  DMP-I-NOT:         <implicit>
+  //                 DMP-I-SAME:         {{$}}
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  //                 DMP-I-NEXT:       OMPFirstprivateClause
+  //                  DMP-I-NOT:         <implicit>
+  //                 DMP-I-SAME:         {{$}}
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'gi' 'int'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'gp' 'const int *'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'li' 'int'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'lp' 'const int *'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ci' 'const int'
 
-  // DMP-PARLOOP-P-NEXT:            ACCPrivateClause
-  // DMP-PARLOOP-P-NOT:               <implicit>
-  // DMP-PARLOOP-P-SAME:              {{$}}
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} 'gi' 'int'
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} 'gUnref' 'int'
-  // DMP-PARLOOP-P-NEXT:            ACCPrivateClause
-  // DMP-PARLOOP-P-NOT:               <implicit>
-  // DMP-PARLOOP-P-SAME:              {{$}}
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} 'lUnref' 'int'
-  // DMP-PARLOOP-P-NEXT:            ACCPrivateClause
-  // DMP-PARLOOP-P-NOT:               <implicit>
-  // DMP-PARLOOP-P-SAME:              {{$}}
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} 'shadowed' 'int'
-                                      // The test omits const when testing private.
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} 'ci' 'int'
-  // DMP-PARLOOP-P-NEXT:              DeclRefExpr {{.*}} 'ca' 'int [3]'
-  // DMP-PARLOOP-ICCiCoF-NEXT:      ACCSharedClause {{.*}} <implicit>
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'gi' 'int'
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'ga' 'int [2]'
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'li' 'int'
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'la' 'int [2]'
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'shadowed' 'int'
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
-  // DMP-PARLOOP-ICCiCoF-NEXT:        DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
-  // DMP-PARLOOP-ICCiCoF-NEXT:      impl: ForStmt
-  // DMP-PARLOOP-P-NEXT:            impl: CompoundStmt
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} gi 'int'
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} {{gt '__uint128_t'|gt_hi 'uint64_t'$[[:space:]]*VarDecl .* gt_lw 'uint64_t'}}
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} gp 'const int *'
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} ga 'int [2]'
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} gs 'struct S':'struct S'
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} gu 'union U':'union U'
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} gUnref 'int'
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} li 'int'
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} {{lt '__uint128_t'|lt_hi 'uint64_t'$[[:space:]]*VarDecl .* lt_lw 'uint64_t'}}
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} lp 'const int *'
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} la 'int [2]'
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} ls 'struct S':'struct S'
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} lu 'union U':'union U'
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} lUnref 'int'
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} shadowed 'int'
-                                      // The test omits const when testing private.
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} ci 'int'
-  // DMP-PARLOOP-P-NEXT:              DeclStmt
-  // DMP-PARLOOP-P-NEXT:                VarDecl {{.*}} ca 'int [3]'
-  // DMP-PARLOOP-P-NEXT:              ForStmt
-  //
+  //                DMP-PARLOOP:     ACCLoopDirective
+  //           DMP-PARLOOP-NEXT:       ACCSeqClause
+
+  //         DMP-PARLOOP-P-NEXT:       ACCPrivateClause
+  //          DMP-PARLOOP-P-NOT:         <implicit>
+  //         DMP-PARLOOP-P-SAME:         {{$}}
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'gi' 'int'
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'gp' 'const int *'
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'gUnref' 'int'
+  //         DMP-PARLOOP-P-NEXT:       ACCPrivateClause
+  //          DMP-PARLOOP-P-NOT:         <implicit>
+  //         DMP-PARLOOP-P-SAME:         {{$}}
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'li' 'int'
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'lp' 'const int *'
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'lUnref' 'int'
+  //         DMP-PARLOOP-P-NEXT:       ACCPrivateClause
+  //          DMP-PARLOOP-P-NOT:         <implicit>
+  //         DMP-PARLOOP-P-SAME:         {{$}}
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
+                                         // The test omits const when testing private.
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'ci' 'int'
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'ca' 'int [3]'
+
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:       ACCSharedClause {{.*}} <implicit>
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gi' 'int'
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gp' 'const int *'
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'li' 'int'
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'lp' 'const int *'
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
+
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:       impl: ForStmt
+  //         DMP-PARLOOP-P-NEXT:       impl: CompoundStmt
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} gi 'int'
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} {{gt '__uint128_t'|gt_hi 'uint64_t'$[[:space:]]*VarDecl .* gt_lw 'uint64_t'}}
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} gp 'const int *'
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} ga 'int [2]'
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} gs 'struct S':'struct S'
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} gu 'union U':'union U'
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} gUnref 'int'
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} li 'int'
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} {{lt '__uint128_t'|lt_hi 'uint64_t'$[[:space:]]*VarDecl .* lt_lw 'uint64_t'}}
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} lp 'const int *'
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} la 'int [2]'
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} ls 'struct S':'struct S'
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} lu 'union U':'union U'
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} lUnref 'int'
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} shadowed 'int'
+                                         // The test omits const when testing private.
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} ci 'int'
+  //         DMP-PARLOOP-P-NEXT:         DeclStmt
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} ca 'int [3]'
+  //         DMP-PARLOOP-P-NEXT:         ForStmt
+
   // PRT-NOT:       #pragma
   //
-  // PRT-A-I:                {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2){{(.*\\$[[:space:]])*.*$}}
-  // PRT-AO-I-NEXT:          {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu,ca) shared(ga,gs,gu,la,ls,lu,ca) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,li,lt{{(_hi,lt_lw)?}},lp,shadowed,ci){{$}}
-  // PRT-O-I:                {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu,ca) shared(ga,gs,gu,la,ls,lu,ca) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,li,lt{{(_hi,lt_lw)?}},lp,shadowed,ci){{$}}
-  // PRT-OA-I-NEXT:          {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2){{(.*\\$[[:space:]])*.*$}}
+  //               PRT-A-I:  {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2){{(.*\\$[[:space:]])*.*$}}
+  //         PRT-AO-I-NEXT:  {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu,ca) shared(ga,gs,gu,la,ls,lu,ca) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,li,lt{{(_hi,lt_lw)?}},lp,shadowed,ci){{$}}
+  //               PRT-O-I:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: ga,gs,gu,la,ls,lu,ca) shared(ga,gs,gu,la,ls,lu,ca) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,li,lt{{(_hi,lt_lw)?}},lp,shadowed,ci){{$}}
+  //         PRT-OA-I-NEXT:  {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2){{(.*\\$[[:space:]])*.*$}}
   //
-  // PRT-A-C0:               {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-C1:               {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcopy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-C2:               {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-Ci0:              {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{copyin\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copyin\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copyin\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-Ci1:              {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcopyin\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopyin\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopyin\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-Ci2:              {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_copyin\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copyin\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copyin\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-Co0:              {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{copyout\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copyout\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copyout\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-Co1:              {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcopyout\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopyout\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopyout\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-A-Co2:              {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_copyout\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copyout\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copyout\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-AO-C0-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-AO-C1-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-AO-C2-NEXT:         {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-AO-Ci0-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-AO-Ci1-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-AO-Ci2-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-AO-Co0-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-AO-Co1-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-AO-Co2-NEXT:        {{^ *}}// #pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-O-C0:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-O-C1:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-O-C2:               {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-O-Ci0:              {{^ *}}#pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-O-Ci1:              {{^ *}}#pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-O-Ci2:              {{^ *}}#pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-O-Co0:              {{^ *}}#pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-O-Co1:              {{^ *}}#pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-O-Co2:              {{^ *}}#pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
-  // PRT-OA-C0-NEXT:         {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-C1-NEXT:         {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcopy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-C2-NEXT:         {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-Ci0-NEXT:        {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{copyin\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copyin\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copyin\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-Ci1-NEXT:        {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcopyin\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopyin\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopyin\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-Ci2-NEXT:        {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_copyin\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copyin\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copyin\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-Co0-NEXT:        {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{copyout\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copyout\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copyout\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-Co1-NEXT:        {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcopyout\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopyout\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopyout\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-OA-Co2-NEXT:        {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_copyout\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copyout\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copyout\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //              PRT-A-C0:  {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //              PRT-A-C1:  {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcopy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //              PRT-A-C2:  {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //             PRT-A-Ci0:  {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{copyin\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copyin\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copyin\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //             PRT-A-Ci1:  {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcopyin\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopyin\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopyin\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //             PRT-A-Ci2:  {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_copyin\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copyin\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copyin\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //             PRT-A-Co0:  {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{copyout\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copyout\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copyout\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //             PRT-A-Co1:  {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcopyout\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopyout\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopyout\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //             PRT-A-Co2:  {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_copyout\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copyout\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copyout\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //             PRT-A-Cr0:  {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{create\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) create\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) create\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //             PRT-A-Cr1:  {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcreate\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcreate\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcreate\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //             PRT-A-Cr2:  {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_create\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_create\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_create\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //        PRT-AO-C0-NEXT:  {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //        PRT-AO-C1-NEXT:  {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //        PRT-AO-C2-NEXT:  {{^ *}}// #pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //       PRT-AO-Ci0-NEXT:  {{^ *}}// #pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //       PRT-AO-Ci1-NEXT:  {{^ *}}// #pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //       PRT-AO-Ci2-NEXT:  {{^ *}}// #pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //       PRT-AO-Co0-NEXT:  {{^ *}}// #pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //       PRT-AO-Co1-NEXT:  {{^ *}}// #pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //       PRT-AO-Co2-NEXT:  {{^ *}}// #pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //       PRT-AO-Cr0-NEXT:  {{^ *}}// #pragma omp target teams num_teams(2) map(alloc: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(alloc: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(alloc: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //       PRT-AO-Cr1-NEXT:  {{^ *}}// #pragma omp target teams num_teams(2) map(alloc: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(alloc: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(alloc: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //       PRT-AO-Cr2-NEXT:  {{^ *}}// #pragma omp target teams num_teams(2) map(alloc: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(alloc: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(alloc: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //              PRT-O-C0:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //              PRT-O-C1:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //              PRT-O-C2:  {{^ *}}#pragma omp target teams num_teams(2) map(tofrom: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(tofrom: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(tofrom: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //             PRT-O-Ci0:  {{^ *}}#pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //             PRT-O-Ci1:  {{^ *}}#pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //             PRT-O-Ci2:  {{^ *}}#pragma omp target teams num_teams(2) map(to: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(to: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(to: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //             PRT-O-Co0:  {{^ *}}#pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //             PRT-O-Co1:  {{^ *}}#pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //             PRT-O-Co2:  {{^ *}}#pragma omp target teams num_teams(2) map(from: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(from: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(from: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //             PRT-O-Cr0:  {{^ *}}#pragma omp target teams num_teams(2) map(alloc: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(alloc: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(alloc: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //             PRT-O-Cr1:  {{^ *}}#pragma omp target teams num_teams(2) map(alloc: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(alloc: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(alloc: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //             PRT-O-Cr2:  {{^ *}}#pragma omp target teams num_teams(2) map(alloc: gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) map(alloc: li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) map(alloc: shadowed,ci,ca) shared(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,shadowed,ci,ca){{$}}
+  //        PRT-OA-C0-NEXT:  {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //        PRT-OA-C1-NEXT:  {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcopy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //        PRT-OA-C2-NEXT:  {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_copy\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copy\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copy\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //       PRT-OA-Ci0-NEXT:  {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{copyin\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copyin\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copyin\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //       PRT-OA-Ci1-NEXT:  {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcopyin\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopyin\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopyin\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //       PRT-OA-Ci2-NEXT:  {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_copyin\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copyin\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copyin\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //       PRT-OA-Co0-NEXT:  {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{copyout\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) copyout\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) copyout\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //       PRT-OA-Co1-NEXT:  {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcopyout\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcopyout\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcopyout\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //       PRT-OA-Co2-NEXT:  {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_copyout\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_copyout\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_copyout\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //       PRT-OA-Cr0-NEXT:  {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{create\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) create\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) create\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //       PRT-OA-Cr1-NEXT:  {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{pcreate\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) pcreate\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) pcreate\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //       PRT-OA-Cr2-NEXT:  {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{present_or_create\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) present_or_create\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) present_or_create\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
   //
-  // PRT-A-F:                {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{firstprivate\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) firstprivate\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) firstprivate\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-AO-F-NEXT:          {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) firstprivate(li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) firstprivate(shadowed,ci,ca){{$}}
-  // PRT-O-F:                {{^ *}}#pragma omp target teams num_teams(2) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) firstprivate(li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) firstprivate(shadowed,ci,ca){{$}}
-  // PRT-OA-F-NEXT:          {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{firstprivate\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) firstprivate\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) firstprivate\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //               PRT-A-F:  {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{firstprivate\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) firstprivate\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) firstprivate\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //         PRT-AO-F-NEXT:  {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) firstprivate(li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) firstprivate(shadowed,ci,ca){{$}}
+  //               PRT-O-F:  {{^ *}}#pragma omp target teams num_teams(2) firstprivate(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) firstprivate(li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) firstprivate(shadowed,ci,ca){{$}}
+  //         PRT-OA-F-NEXT:  {{^ *}}// #pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{firstprivate\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) firstprivate\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) firstprivate\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
   //
-  // PRT-A-P:                {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{private\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) private\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) private\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-AO-PAR-P-NEXT:      {{^ *}}// #pragma omp target teams num_teams(2) private(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) private(li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) private(shadowed,ci,ca){{$}}
-  // PRT-AO-PARLOOP-P-NOT:   #pragma
-  // PRT-AO-PARLOOP-P:       {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //               PRT-A-P:  {{^ *}}#pragma acc parallel{{ LOOP | loop seq | }}num_gangs(2) {{private\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) private\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) private\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //     PRT-AO-PAR-P-NEXT:  {{^ *}}// #pragma omp target teams num_teams(2) private(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) private(li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) private(shadowed,ci,ca){{$}}
+  //  PRT-AO-PARLOOP-P-NOT:  #pragma
+  //      PRT-AO-PARLOOP-P:  {{^ *}}// #pragma omp target teams num_teams(2){{$}}
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}{
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  int gi;
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  {{__uint128_t gt;|uint64_t gt_hi;$[[:space:]]*// *  uint64_t gt_lw;}}
@@ -857,32 +907,32 @@ int main() {
                                        // private.
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  int ci;
   // PRT-AO-PARLOOP-P-NEXT:  //{{ *}}  int ca[3];
-  // PRT-O-PAR-P:            {{^ *}}#pragma omp target teams num_teams(2) private(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) private(li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) private(shadowed,ci,ca){{$}}
-  // PRT-OA-PAR-P-NEXT:      {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{private\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) private\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) private\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
-  // PRT-O-PARLOOP-P:        {{^ *}}#pragma omp target teams num_teams(2){{$}}
-  // PRT-O-PARLOOP-P-NEXT:   {
-  // PRT-O-PARLOOP-P-NEXT:     int gi;
-  // PRT-O-PARLOOP-P-NEXT:     {{__uint128_t gt;|uint64_t gt_hi;$[[:space:]]*  uint64_t gt_lw;}}
-  // PRT-O-PARLOOP-P-NEXT:     int *gp;
-  // PRT-O-PARLOOP-P-NEXT:     int ga[2];
-  // PRT-O-PARLOOP-P-NEXT:     struct S gs;
-  // PRT-O-PARLOOP-P-NEXT:     union U gu;
-  // PRT-O-PARLOOP-P-NEXT:     int gUnref;
-  // PRT-O-PARLOOP-P-NEXT:     int li;
-  // PRT-O-PARLOOP-P-NEXT:     {{__uint128_t lt;|uint64_t lt_hi;$[[:space:]]*  uint64_t lt_lw;}}
-  // PRT-O-PARLOOP-P-NEXT:     int *lp;
-  // PRT-O-PARLOOP-P-NEXT:     int la[2];
-  // PRT-O-PARLOOP-P-NEXT:     struct S ls;
-  // PRT-O-PARLOOP-P-NEXT:     union U lu;
-  // PRT-O-PARLOOP-P-NEXT:     int lUnref;
-  // PRT-O-PARLOOP-P-NEXT:     int shadowed;
+  //           PRT-O-PAR-P:  {{^ *}}#pragma omp target teams num_teams(2) private(gi,gt{{(_hi,gt_lw)?}},gp,ga,gs,gu,gUnref) private(li,lt{{(_hi,lt_lw)?}},lp,la,ls,lu,lUnref) private(shadowed,ci,ca){{$}}
+  //     PRT-OA-PAR-P-NEXT:  {{^ *}}// #pragma acc parallel{{ LOOP | }}num_gangs(2) {{private\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) private\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) private\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //       PRT-O-PARLOOP-P:  {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  //  PRT-O-PARLOOP-P-NEXT:  {
+  //  PRT-O-PARLOOP-P-NEXT:    int gi;
+  //  PRT-O-PARLOOP-P-NEXT:    {{__uint128_t gt;|uint64_t gt_hi;$[[:space:]]*  uint64_t gt_lw;}}
+  //  PRT-O-PARLOOP-P-NEXT:    int *gp;
+  //  PRT-O-PARLOOP-P-NEXT:    int ga[2];
+  //  PRT-O-PARLOOP-P-NEXT:    struct S gs;
+  //  PRT-O-PARLOOP-P-NEXT:    union U gu;
+  //  PRT-O-PARLOOP-P-NEXT:    int gUnref;
+  //  PRT-O-PARLOOP-P-NEXT:    int li;
+  //  PRT-O-PARLOOP-P-NEXT:    {{__uint128_t lt;|uint64_t lt_hi;$[[:space:]]*  uint64_t lt_lw;}}
+  //  PRT-O-PARLOOP-P-NEXT:    int *lp;
+  //  PRT-O-PARLOOP-P-NEXT:    int la[2];
+  //  PRT-O-PARLOOP-P-NEXT:    struct S ls;
+  //  PRT-O-PARLOOP-P-NEXT:    union U lu;
+  //  PRT-O-PARLOOP-P-NEXT:    int lUnref;
+  //  PRT-O-PARLOOP-P-NEXT:    int shadowed;
                                // The test omits const when testing private.
-  // PRT-O-PARLOOP-P-NEXT:     int ci;
-  // PRT-O-PARLOOP-P-NEXT:     int ca[3];
-  // PRT-OA-PARLOOP-P-NOT:   #pragma
-  // PRT-OA-PARLOOP-P:       {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{private\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) private\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) private\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
+  //  PRT-O-PARLOOP-P-NEXT:    int ci;
+  //  PRT-O-PARLOOP-P-NEXT:    int ca[3];
+  //  PRT-OA-PARLOOP-P-NOT:  #pragma
+  //      PRT-OA-PARLOOP-P:  {{^ *}}// #pragma acc parallel {{LOOP|loop seq}} num_gangs(2) {{private\(gi,gt(_hi,gt_lw)?,gp,ga,gs,gu,gUnref\) private\(li,lt(_hi,lt_lw)?,lp,la,ls,lu,lUnref\) private\(shadowed,ci,ca\)$|(.*\\$[[:space:]])+.*$}}
   //
-  // PRT-NOT:      #pragma
+  //               PRT-NOT:  #pragma
   #pragma acc parallel LOOP num_gangs(2)                         \
     CLAUSE(gi,LIST_UINT128(gt),gp, ga,gs , gu , gUnref )         \
     CLAUSE(  li,LIST_UINT128(lt),lp  ,  la  ,ls,  lu , lUnref  ) \
@@ -946,91 +996,91 @@ int main() {
     // gangs is non-deterministic at the level of printfs, but it's easier to
     // write the FileCheck DAG directives at the level of lines.
     //
-    // EXE-IF-DAG:  inside : gi:55->56,
-    // EXE-CCi-DAG: inside : gi:{{55|56}}->56,
-    // EXE-CoP-DAG: inside : gi:{{.+}}->56,
-    // EXE-IF-DAG:           gt:[1400,59]->[f08234,a07de1],
-    // EXE-CCi-DAG:          gt:[{{1400|f08234}},{{59|a07de1}}]->[f08234,a07de1],
-    // EXE-CoP-DAG:          gt:[{{.+}}]->[f08234,a07de1],
-    // EXE-IF-DAG:           *gp:{{55->98|9999->9999}},
-    // EXE-CCi-DAG:          *gp:{{(56|98)->98|9999->9999}},
-    // EXE-CoP-DAG:          *gp:{{.+->98|9999->9999}},
-    // EXE-ICCi-DAG:         ga:[{{100|101}},{{200|202}}]->[101,202],
-    // EXE-F-DAG:            ga:[100,200]->[101,202],
-    // EXE-CoP-DAG:          ga:[{{.+,.+}}]->[101,202],
-    // EXE-ICCi-DAG:         gs:[{{33|42}},{{11|1}}]->[42,1],
-    // EXE-F-DAG:            gs:[33,11]->[42,1],
-    // EXE-CoP-DAG:          gs:[{{.+,.+}}]->[42,1],
-    // EXE-ICCi-DAG:         gu.i:{{22|13}}->13,
-    // EXE-F-DAG:            gu.i:22->13,
-    // EXE-CoP-DAG:          gu.i:{{.+}}->13,
-    // EXE-IF-DAG:           li:99->98,
-    // EXE-CCi-DAG:          li:{{99|98}}->98,
-    // EXE-CoP-DAG:          li:{{.+}}->98,
-    // EXE-IF-DAG:           lt:[7a1,62b0]->[79ca,2961],
-    // EXE-CCi-DAG:          lt:[{{7a1|79ca}},{{62b0|2961}}]->[79ca,2961],
-    // EXE-CoP-DAG:          lt:[{{.+}}]->[79ca,2961],
-    // EXE-IF-DAG:           *lp:{{55->98|9999->9999}},
-    // EXE-CCi-DAG:          *lp:{{(56|98)->98|9999->9999}},
-    // EXE-CoP-DAG:          *lp:{{.+->98|9999->9999}},
-    // EXE-ICCi-DAG:         la:[{{77|55}},{{88|66}}]->[55,66],
-    // EXE-F-DAG:            la:[77,88]->[55,66],
-    // EXE-CoP-DAG:          la:[{{.+,.+}}]->[55,66],
-    // EXE-ICCi-DAG:         ls:[{{222|333}},{{111|444}}]->[333,444],
-    // EXE-F-DAG:            ls:[222,111]->[333,444],
-    // EXE-CoP-DAG:          ls:[{{.+,.+}}]->[333,444],
-    // EXE-ICCi-DAG:         lu.i:{{167|279}}->279,
-    // EXE-F-DAG:            lu.i:167->279,
-    // EXE-CoP-DAG:          lu.i:{{.+}}->279,
-    // EXE-DAG:              shadowed:
-    // EXE-ICCiF-DAG:        ci:53,
-    // EXE-CoP-DAG:          ci:
-    // EXE-ICCiF-DAG:        ca:[10,11,12]
-    // EXE-CoP-DAG:          ca:[{{.+}},{{.+}},{{.+}}]
+    //      EXE-IF-DAG: inside : gi:55->56,
+    //     EXE-CCi-DAG: inside : gi:{{55|56}}->56,
+    //   EXE-CoCrP-DAG: inside : gi:{{.+}}->56,
+    //      EXE-IF-DAG:          gt:[1400,59]->[f08234,a07de1],
+    //     EXE-CCi-DAG:          gt:[{{1400|f08234}},{{59|a07de1}}]->[f08234,a07de1],
+    //   EXE-CoCrP-DAG:          gt:[{{.+}}]->[f08234,a07de1],
+    //      EXE-IF-DAG:          *gp:{{55->98|9999->9999}},
+    //     EXE-CCi-DAG:          *gp:{{(56|98)->98|9999->9999}},
+    //   EXE-CoCrP-DAG:          *gp:{{.+->98|9999->9999}},
+    //    EXE-ICCi-DAG:          ga:[{{100|101}},{{200|202}}]->[101,202],
+    //       EXE-F-DAG:          ga:[100,200]->[101,202],
+    //   EXE-CoCrP-DAG:          ga:[{{.+,.+}}]->[101,202],
+    //    EXE-ICCi-DAG:          gs:[{{33|42}},{{11|1}}]->[42,1],
+    //       EXE-F-DAG:          gs:[33,11]->[42,1],
+    //   EXE-CoCrP-DAG:          gs:[{{.+,.+}}]->[42,1],
+    //    EXE-ICCi-DAG:          gu.i:{{22|13}}->13,
+    //       EXE-F-DAG:          gu.i:22->13,
+    //   EXE-CoCrP-DAG:          gu.i:{{.+}}->13,
+    //      EXE-IF-DAG:          li:99->98,
+    //     EXE-CCi-DAG:          li:{{99|98}}->98,
+    //   EXE-CoCrP-DAG:          li:{{.+}}->98,
+    //      EXE-IF-DAG:          lt:[7a1,62b0]->[79ca,2961],
+    //     EXE-CCi-DAG:          lt:[{{7a1|79ca}},{{62b0|2961}}]->[79ca,2961],
+    //   EXE-CoCrP-DAG:          lt:[{{.+}}]->[79ca,2961],
+    //      EXE-IF-DAG:          *lp:{{55->98|9999->9999}},
+    //     EXE-CCi-DAG:          *lp:{{(56|98)->98|9999->9999}},
+    //   EXE-CoCrP-DAG:          *lp:{{.+->98|9999->9999}},
+    //    EXE-ICCi-DAG:          la:[{{77|55}},{{88|66}}]->[55,66],
+    //       EXE-F-DAG:          la:[77,88]->[55,66],
+    //   EXE-CoCrP-DAG:          la:[{{.+,.+}}]->[55,66],
+    //    EXE-ICCi-DAG:          ls:[{{222|333}},{{111|444}}]->[333,444],
+    //       EXE-F-DAG:          ls:[222,111]->[333,444],
+    //   EXE-CoCrP-DAG:          ls:[{{.+,.+}}]->[333,444],
+    //    EXE-ICCi-DAG:          lu.i:{{167|279}}->279,
+    //       EXE-F-DAG:          lu.i:167->279,
+    //   EXE-CoCrP-DAG:          lu.i:{{.+}}->279,
+    //         EXE-DAG:          shadowed:
+    //   EXE-ICCiF-DAG:          ci:53,
+    //   EXE-CoCrP-DAG:          ci:
+    //   EXE-ICCiF-DAG:          ca:[10,11,12]
+    //   EXE-CoCrP-DAG:          ca:[{{.+}},{{.+}},{{.+}}]
     //
     // Duplicate that EXE block exactly.
     //
-    // EXE-IF-DAG:  inside : gi:55->56,
-    // EXE-CCi-DAG: inside : gi:{{55|56}}->56,
-    // EXE-CoP-DAG: inside : gi:{{.+}}->56,
-    // EXE-IF-DAG:           gt:[1400,59]->[f08234,a07de1],
-    // EXE-CCi-DAG:          gt:[{{1400|f08234}},{{59|a07de1}}]->[f08234,a07de1],
-    // EXE-CoP-DAG:          gt:[{{.+}}]->[f08234,a07de1],
-    // EXE-IF-DAG:           *gp:{{55->98|9999->9999}},
-    // EXE-CCi-DAG:          *gp:{{(56|98)->98|9999->9999}},
-    // EXE-CoP-DAG:          *gp:{{.+->98|9999->9999}},
-    // EXE-ICCi-DAG:         ga:[{{100|101}},{{200|202}}]->[101,202],
-    // EXE-F-DAG:            ga:[100,200]->[101,202],
-    // EXE-CoP-DAG:          ga:[{{.+,.+}}]->[101,202],
-    // EXE-ICCi-DAG:         gs:[{{33|42}},{{11|1}}]->[42,1],
-    // EXE-F-DAG:            gs:[33,11]->[42,1],
-    // EXE-CoP-DAG:          gs:[{{.+,.+}}]->[42,1],
-    // EXE-ICCi-DAG:         gu.i:{{22|13}}->13,
-    // EXE-F-DAG:            gu.i:22->13,
-    // EXE-CoP-DAG:          gu.i:{{.+}}->13,
-    // EXE-IF-DAG:           li:99->98,
-    // EXE-CCi-DAG:          li:{{99|98}}->98,
-    // EXE-CoP-DAG:          li:{{.+}}->98,
-    // EXE-IF-DAG:           lt:[7a1,62b0]->[79ca,2961],
-    // EXE-CCi-DAG:          lt:[{{7a1|79ca}},{{62b0|2961}}]->[79ca,2961],
-    // EXE-CoP-DAG:          lt:[{{.+}}]->[79ca,2961],
-    // EXE-IF-DAG:           *lp:{{55->98|9999->9999}},
-    // EXE-CCi-DAG:          *lp:{{(56|98)->98|9999->9999}},
-    // EXE-CoP-DAG:          *lp:{{.+->98|9999->9999}},
-    // EXE-ICCi-DAG:         la:[{{77|55}},{{88|66}}]->[55,66],
-    // EXE-F-DAG:            la:[77,88]->[55,66],
-    // EXE-CoP-DAG:          la:[{{.+,.+}}]->[55,66],
-    // EXE-ICCi-DAG:         ls:[{{222|333}},{{111|444}}]->[333,444],
-    // EXE-F-DAG:            ls:[222,111]->[333,444],
-    // EXE-CoP-DAG:          ls:[{{.+,.+}}]->[333,444],
-    // EXE-ICCi-DAG:         lu.i:{{167|279}}->279,
-    // EXE-F-DAG:            lu.i:167->279,
-    // EXE-CoP-DAG:          lu.i:{{.+}}->279,
-    // EXE-DAG:              shadowed:
-    // EXE-ICCiF-DAG:        ci:53,
-    // EXE-CoP-DAG:          ci:
-    // EXE-ICCiF-DAG:        ca:[10,11,12]
-    // EXE-CoP-DAG:          ca:[{{.+}},{{.+}},{{.+}}]
+    //      EXE-IF-DAG: inside : gi:55->56,
+    //     EXE-CCi-DAG: inside : gi:{{55|56}}->56,
+    //   EXE-CoCrP-DAG: inside : gi:{{.+}}->56,
+    //      EXE-IF-DAG:          gt:[1400,59]->[f08234,a07de1],
+    //     EXE-CCi-DAG:          gt:[{{1400|f08234}},{{59|a07de1}}]->[f08234,a07de1],
+    //   EXE-CoCrP-DAG:          gt:[{{.+}}]->[f08234,a07de1],
+    //      EXE-IF-DAG:          *gp:{{55->98|9999->9999}},
+    //     EXE-CCi-DAG:          *gp:{{(56|98)->98|9999->9999}},
+    //   EXE-CoCrP-DAG:          *gp:{{.+->98|9999->9999}},
+    //    EXE-ICCi-DAG:          ga:[{{100|101}},{{200|202}}]->[101,202],
+    //       EXE-F-DAG:          ga:[100,200]->[101,202],
+    //   EXE-CoCrP-DAG:          ga:[{{.+,.+}}]->[101,202],
+    //    EXE-ICCi-DAG:          gs:[{{33|42}},{{11|1}}]->[42,1],
+    //       EXE-F-DAG:          gs:[33,11]->[42,1],
+    //   EXE-CoCrP-DAG:          gs:[{{.+,.+}}]->[42,1],
+    //    EXE-ICCi-DAG:          gu.i:{{22|13}}->13,
+    //       EXE-F-DAG:          gu.i:22->13,
+    //   EXE-CoCrP-DAG:          gu.i:{{.+}}->13,
+    //      EXE-IF-DAG:          li:99->98,
+    //     EXE-CCi-DAG:          li:{{99|98}}->98,
+    //   EXE-CoCrP-DAG:          li:{{.+}}->98,
+    //      EXE-IF-DAG:          lt:[7a1,62b0]->[79ca,2961],
+    //     EXE-CCi-DAG:          lt:[{{7a1|79ca}},{{62b0|2961}}]->[79ca,2961],
+    //   EXE-CoCrP-DAG:          lt:[{{.+}}]->[79ca,2961],
+    //      EXE-IF-DAG:          *lp:{{55->98|9999->9999}},
+    //     EXE-CCi-DAG:          *lp:{{(56|98)->98|9999->9999}},
+    //   EXE-CoCrP-DAG:          *lp:{{.+->98|9999->9999}},
+    //    EXE-ICCi-DAG:          la:[{{77|55}},{{88|66}}]->[55,66],
+    //       EXE-F-DAG:          la:[77,88]->[55,66],
+    //   EXE-CoCrP-DAG:          la:[{{.+,.+}}]->[55,66],
+    //    EXE-ICCi-DAG:          ls:[{{222|333}},{{111|444}}]->[333,444],
+    //       EXE-F-DAG:          ls:[222,111]->[333,444],
+    //   EXE-CoCrP-DAG:          ls:[{{.+,.+}}]->[333,444],
+    //    EXE-ICCi-DAG:          lu.i:{{167|279}}->279,
+    //       EXE-F-DAG:          lu.i:167->279,
+    //   EXE-CoCrP-DAG:          lu.i:{{.+}}->279,
+    //         EXE-DAG:          shadowed:
+    //   EXE-ICCiF-DAG:          ci:53,
+    //   EXE-CoCrP-DAG:          ci:
+    //   EXE-ICCiF-DAG:          ca:[10,11,12]
+    //   EXE-CoCrP-DAG:          ca:[{{.+}},{{.+}},{{.+}}]
     printf("inside : gi:%d->%d,\n"
            "         gt:[%lx,%lx]->[%lx,%lx],\n"
            "         *gp:%d->%d,\n"
@@ -1067,38 +1117,38 @@ int main() {
 
   // DMP: CallExpr
   //
-  // EXE-ICiFP:      outside: gi:55->55,
-  // EXE-CCo:        outside: gi:55->56,
-  // EXE-ICiFP-NEXT:          gt:[1400,59]->[1400,59],
-  // EXE-CCo-NEXT:            gt:[1400,59]->[f08234,a07de1],
-  // EXE-ICiFP-NEXT:          *gp:55->55,
-  // EXE-CCo-NEXT:            *gp:56->{{98|9999}},
-  // EXE-ICCo-NEXT:           ga:[100,200]->[101,202],
-  // EXE-CiFP-NEXT:           ga:[100,200]->[100,200],
-  // EXE-ICCo-NEXT:           gs:[33,11]->[42,1],
-  // EXE-CiFP-NEXT:           gs:[33,11]->[33,11],
-  // EXE-ICCo-NEXT:           gu.i:22->13,
-  // EXE-CiFP-NEXT:           gu.i:22->22,
-  // EXE-NEXT:                gUnref:2->2,
-  // EXE-ICiFP-NEXT:          li:99->99,
-  // EXE-CCo-NEXT:            li:99->98,
-  // EXE-ICiFP-NEXT:          lt:[7a1,62b0]->[7a1,62b0],
-  // EXE-CCo-NEXT:            lt:[7a1,62b0]->[79ca,2961]
-  // EXE-ICiFP-NEXT:          *lp:55->55,
-  // EXE-CCo-NEXT:            *lp:56->{{98|9999}},
-  // EXE-ICCo-NEXT:           la:[77,88]->[55,66],
-  // EXE-CiFP-NEXT:           la:[77,88]->[77,88],
-  // EXE-ICCo-NEXT:           ls:[222,111]->[333,444],
-  // EXE-CiFP-NEXT:           ls:[222,111]->[222,111],
-  // EXE-ICCo-NEXT:           lu.i:167->279,
-  // EXE-CiFP-NEXT:           lu.i:167->167,
-  // EXE-NEXT:                lUnref:9->9,
-  // EXE-ICCiFP-NEXT:         shadowed:111,
-  // EXE-Co-NEXT:             shadowed:
-  // EXE-ICCiFP-NEXT:         ci:53,
-  // EXE-Co-NEXT:             ci:
-  // EXE-ICCiFP-NEXT:         ca:[10,11,12]
-  // EXE-Co-NEXT:             ca:[{{.*}},{{.*}},{{.*}}]
+  //       EXE-ICiCrFP: outside: gi:55->55,
+  //           EXE-CCo: outside: gi:55->56,
+  //  EXE-ICiCrFP-NEXT:          gt:[1400,59]->[1400,59],
+  //      EXE-CCo-NEXT:          gt:[1400,59]->[f08234,a07de1],
+  //  EXE-ICiCrFP-NEXT:          *gp:55->55,
+  //      EXE-CCo-NEXT:          *gp:56->{{98|9999}},
+  //     EXE-ICCo-NEXT:          ga:[100,200]->[101,202],
+  //   EXE-CiCrFP-NEXT:          ga:[100,200]->[100,200],
+  //     EXE-ICCo-NEXT:          gs:[33,11]->[42,1],
+  //   EXE-CiCrFP-NEXT:          gs:[33,11]->[33,11],
+  //     EXE-ICCo-NEXT:          gu.i:22->13,
+  //   EXE-CiCrFP-NEXT:          gu.i:22->22,
+  //          EXE-NEXT:          gUnref:2->2,
+  //  EXE-ICiCrFP-NEXT:          li:99->99,
+  //      EXE-CCo-NEXT:          li:99->98,
+  //  EXE-ICiCrFP-NEXT:          lt:[7a1,62b0]->[7a1,62b0],
+  //      EXE-CCo-NEXT:          lt:[7a1,62b0]->[79ca,2961]
+  //  EXE-ICiCrFP-NEXT:          *lp:55->55,
+  //      EXE-CCo-NEXT:          *lp:56->{{98|9999}},
+  //     EXE-ICCo-NEXT:          la:[77,88]->[55,66],
+  //   EXE-CiCrFP-NEXT:          la:[77,88]->[77,88],
+  //     EXE-ICCo-NEXT:          ls:[222,111]->[333,444],
+  //   EXE-CiCrFP-NEXT:          ls:[222,111]->[222,111],
+  //     EXE-ICCo-NEXT:          lu.i:167->279,
+  //   EXE-CiCrFP-NEXT:          lu.i:167->167,
+  //          EXE-NEXT:          lUnref:9->9,
+  // EXE-ICCiCrFP-NEXT:          shadowed:111,
+  //       EXE-Co-NEXT:          shadowed:
+  // EXE-ICCiCrFP-NEXT:          ci:53,
+  //       EXE-Co-NEXT:          ci:
+  // EXE-ICCiCrFP-NEXT:          ca:[10,11,12]
+  //       EXE-Co-NEXT:          ca:[{{.*}},{{.*}},{{.*}}]
   printf("outside: gi:%d->%d,\n"
          "         gt:[%lx,%lx]->[%lx,%lx],\n"
          "         *gp:%d->%d,\n"

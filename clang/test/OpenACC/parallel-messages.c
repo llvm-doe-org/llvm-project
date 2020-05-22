@@ -71,11 +71,11 @@ int main() {
   double d; // expected-note 3 {{'d' defined here}}
   float _Complex fc; // expected-note 5 {{'fc' defined here}}
   double _Complex dc; // expected-note 5 {{'dc' defined here}}
-  // expected-note@+3 4 {{variable 'constI' declared const here}}
+  // expected-note@+3 7 {{variable 'constI' declared const here}}
   // expected-noacc-note@+2 3 {{variable 'constI' declared const here}}
   // expected-note@+1 {{'constI' defined here}}
   const int constI = 5;
-  // expected-note@+3 4 {{variable 'constIDecl' declared const here}}
+  // expected-note@+3 7 {{variable 'constIDecl' declared const here}}
   // expected-noacc-note@+2 3 {{variable 'constIDecl' declared const here}}
   // expected-note@+1 {{'constIDecl' declared here}}
   const extern int constIDecl;
@@ -189,6 +189,15 @@ int main() {
   // expected-error@+1 {{expected '(' after 'present_or_copyout'}}
   #pragma acc parallel LOOP present_or_copyout
     FORLOOP
+  // expected-error@+1 {{expected '(' after 'create'}}
+  #pragma acc parallel LOOP create
+    FORLOOP
+  // expected-error@+1 {{expected '(' after 'pcreate'}}
+  #pragma acc parallel LOOP pcreate
+    FORLOOP
+  // expected-error@+1 {{expected '(' after 'present_or_create'}}
+  #pragma acc parallel LOOP present_or_create
+    FORLOOP
   // expected-error@+1 {{expected '(' after 'no_create'}}
   #pragma acc parallel LOOP no_create
     FORLOOP
@@ -251,6 +260,21 @@ int main() {
   // expected-error@+2 {{expected ')'}}
   // expected-note@+1 {{to match this '('}}
   #pragma acc parallel LOOP present_or_copyout(
+    FORLOOP
+  // expected-error@+3 {{expected expression}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP create(
+    FORLOOP
+  // expected-error@+3 {{expected expression}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP pcreate(
+    FORLOOP
+  // expected-error@+3 {{expected expression}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP present_or_create(
     FORLOOP
   // expected-error@+3 {{expected expression}}
   // expected-error@+2 {{expected ')'}}
@@ -320,6 +344,22 @@ int main() {
   // expected-note@+1 {{to match this '('}}
   #pragma acc parallel LOOP present_or_copyout(i, foobar, jk
     FORLOOP
+  // expected-error@+3 {{use of undeclared identifier 'foobar'}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP create(foobar
+    FORLOOP
+  // expected-error@+4 {{use of undeclared identifier 'foobar'}}
+  // expected-error@+3 {{expected expression}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP pcreate(foobar,
+    FORLOOP
+  // expected-error@+3 {{use of undeclared identifier 'foobar'}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP present_or_create(i, foobar, jk
+    FORLOOP
   // expected-error@+2 {{expected ')'}}
   // expected-note@+1 {{to match this '('}}
   #pragma acc parallel LOOP no_create(i
@@ -379,6 +419,15 @@ int main() {
     FORLOOP
   // expected-error@+1 {{expected expression}}
   #pragma acc parallel LOOP present_or_copyout()
+    FORLOOP
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP create()
+    FORLOOP
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP pcreate()
+    FORLOOP
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP present_or_create()
     FORLOOP
   // expected-error@+1 {{expected expression}}
   #pragma acc parallel LOOP no_create()
@@ -478,6 +527,15 @@ int main() {
   // expected-error@+1 {{expected ',' or ')' in 'present_or_copyout' clause}}
   #pragma acc parallel LOOP present_or_copyout(jk i)
     FORLOOP
+  // expected-error@+1 {{expected ',' or ')' in 'create' clause}}
+  #pragma acc parallel LOOP create(jk i)
+    FORLOOP
+  // expected-error@+1 {{expected ',' or ')' in 'pcreate' clause}}
+  #pragma acc parallel LOOP pcreate(jk i)
+    FORLOOP
+  // expected-error@+1 {{expected ',' or ')' in 'present_or_create' clause}}
+  #pragma acc parallel LOOP present_or_create(jk i)
+    FORLOOP
   // expected-error@+1 {{expected ',' or ')' in 'no_create' clause}}
   #pragma acc parallel LOOP no_create(i jk)
     FORLOOP
@@ -520,6 +578,15 @@ int main() {
     FORLOOP
   // expected-error@+1 {{expected expression}}
   #pragma acc parallel LOOP present_or_copyout(jk ,)
+    FORLOOP
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP create(jk ,)
+    FORLOOP
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP pcreate(jk ,)
+    FORLOOP
+  // expected-error@+1 {{expected expression}}
+  #pragma acc parallel LOOP present_or_create(jk ,)
     FORLOOP
   // expected-error@+1 {{expected expression}}
   #pragma acc parallel LOOP no_create(i,)
@@ -565,6 +632,15 @@ int main() {
   #pragma acc parallel LOOP present_or_copyout((int)i)
     FORLOOP
   // expected-error@+1 {{expected variable name or subarray}}
+  #pragma acc parallel LOOP create((int)i)
+    FORLOOP
+  // expected-error@+1 {{expected variable name or subarray}}
+  #pragma acc parallel LOOP pcreate((int)i)
+    FORLOOP
+  // expected-error@+1 {{expected variable name or subarray}}
+  #pragma acc parallel LOOP present_or_create((int)i)
+    FORLOOP
+  // expected-error@+1 {{expected variable name or subarray}}
   #pragma acc parallel LOOP no_create((int)jk)
     FORLOOP
   // expected-error@+1 {{expected variable name}}
@@ -606,6 +682,15 @@ int main() {
     FORLOOP
   // expected-error@+1 {{expected variable name as base of subarray}}
   #pragma acc parallel LOOP present_or_copyout(((int*)a)[0:2])
+    FORLOOP
+  // expected-error@+1 {{expected variable name as base of subarray}}
+  #pragma acc parallel LOOP create(((int*)a)[0:2])
+    FORLOOP
+  // expected-error@+1 {{expected variable name as base of subarray}}
+  #pragma acc parallel LOOP pcreate(((int*)a)[:2])
+    FORLOOP
+  // expected-error@+1 {{expected variable name as base of subarray}}
+  #pragma acc parallel LOOP present_or_create(((int*)a)[0:2])
     FORLOOP
   // expected-error@+1 {{expected variable name as base of subarray}}
   #pragma acc parallel LOOP no_create(((int*)a)[1:1])
@@ -663,7 +748,7 @@ int main() {
   #pragma acc parallel LOOP present_or_copyout(p[0:])
     FORLOOP
   // expected-error@+1 2 {{subarray length is unspecified and cannot be inferred because subscripted value is an array of unknown bound}}
-  #pragma acc parallel LOOP no_create(incomplete[0:], (*ap)[0:])
+  #pragma acc parallel LOOP create(incomplete[0:]) no_create((*ap)[0:])
     FORLOOP
 
   //--------------------------------------------------
@@ -713,6 +798,15 @@ int main() {
     FORLOOP
   // expected-error@+1 {{use of undeclared identifier 'foo'}}
   #pragma acc parallel LOOP present_or_copyout(foo)
+    FORLOOP
+  // expected-error@+1 {{use of undeclared identifier 'foo'}}
+  #pragma acc parallel LOOP create(foo)
+    FORLOOP
+  // expected-error@+1 {{use of undeclared identifier 'foo'}}
+  #pragma acc parallel LOOP pcreate(foo)
+    FORLOOP
+  // expected-error@+1 {{use of undeclared identifier 'foo'}}
+  #pragma acc parallel LOOP present_or_create(foo)
     FORLOOP
   // expected-error@+1 {{use of undeclared identifier 'foo'}}
   #pragma acc parallel LOOP no_create(foo)
@@ -791,6 +885,24 @@ int main() {
     FORLOOP
   // expected-error@+2 {{subarray syntax must include ':'}}
   // expected-error@+2 {{subarray syntax must include ':'}}
+  #pragma acc parallel LOOP create(a[0], \
+                                   m[i][e], \
+                                   a[0:2], m[0:2][0:2])
+    FORLOOP
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  #pragma acc parallel LOOP pcreate(a[1], \
+                                    m[i:jk][b], \
+                                    a[:], m[0:2][0:2])
+    FORLOOP
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  #pragma acc parallel LOOP present_or_create(a[i], \
+                                              m[3][:], \
+                                              a[1:1], m[0:2][0:2])
+    FORLOOP
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{subarray syntax must include ':'}}
   #pragma acc parallel LOOP no_create(a[0], \
                                       m[0][0:2], \
                                       a[0:1], m[0:2][0:2])
@@ -837,25 +949,29 @@ int main() {
 
   // Variables of incomplete type.
 
-  // expected-error@+15 {{variable in 'present' clause cannot have incomplete type 'int []'}}
-  // expected-error@+15 {{variable in 'copy' clause cannot have incomplete type 'int []'}}
-  // expected-error@+14 {{variable in 'pcopy' clause cannot have incomplete type 'int []'}}
-  // expected-error@+13 {{variable in 'present_or_copy' clause cannot have incomplete type 'int []'}}
-  // expected-error@+13 {{variable in 'copyin' clause cannot have incomplete type 'int []'}}
-  // expected-error@+12 {{variable in 'pcopyin' clause cannot have incomplete type 'int []'}}
-  // expected-error@+11 {{variable in 'present_or_copyin' clause cannot have incomplete type 'int []'}}
-  // expected-error@+11 {{variable in 'copyout' clause cannot have incomplete type 'int []'}}
-  // expected-error@+10 {{variable in 'pcopyout' clause cannot have incomplete type 'int []'}}
-  // expected-error@+9  {{variable in 'present_or_copyout' clause cannot have incomplete type 'int []'}}
-  // expected-error@+9  {{variable in 'no_create' clause cannot have incomplete type 'int []'}}
-  // expected-error@+9  {{variable in 'firstprivate' clause cannot have incomplete type 'int []'}}
-  // expected-error@+8  {{variable in 'private' clause cannot have incomplete type 'int []'}}
-  // expected-error@+7  {{variable in 'reduction' clause cannot have incomplete type 'int []'}}
+  // expected-error@+18 {{variable in 'present' clause cannot have incomplete type 'int []'}}
+  // expected-error@+18 {{variable in 'copy' clause cannot have incomplete type 'int []'}}
+  // expected-error@+17 {{variable in 'pcopy' clause cannot have incomplete type 'int []'}}
+  // expected-error@+16 {{variable in 'present_or_copy' clause cannot have incomplete type 'int []'}}
+  // expected-error@+16 {{variable in 'copyin' clause cannot have incomplete type 'int []'}}
+  // expected-error@+15 {{variable in 'pcopyin' clause cannot have incomplete type 'int []'}}
+  // expected-error@+14 {{variable in 'present_or_copyin' clause cannot have incomplete type 'int []'}}
+  // expected-error@+14 {{variable in 'copyout' clause cannot have incomplete type 'int []'}}
+  // expected-error@+13 {{variable in 'pcopyout' clause cannot have incomplete type 'int []'}}
+  // expected-error@+12 {{variable in 'present_or_copyout' clause cannot have incomplete type 'int []'}}
+  // expected-error@+12 {{variable in 'create' clause cannot have incomplete type 'int []'}}
+  // expected-error@+11 {{variable in 'pcreate' clause cannot have incomplete type 'int []'}}
+  // expected-error@+10 {{variable in 'present_or_create' clause cannot have incomplete type 'int []'}}
+  // expected-error@+10 {{variable in 'no_create' clause cannot have incomplete type 'int []'}}
+  // expected-error@+10 {{variable in 'firstprivate' clause cannot have incomplete type 'int []'}}
+  // expected-error@+9  {{variable in 'private' clause cannot have incomplete type 'int []'}}
+  // expected-error@+8  {{variable in 'reduction' clause cannot have incomplete type 'int []'}}
   #pragma acc parallel LOOP \
       present(incomplete) \
       copy(incomplete) pcopy(incomplete) present_or_copy(incomplete) \
       copyin(incomplete) pcopyin(incomplete) present_or_copyin(incomplete) \
       copyout(incomplete) pcopyout(incomplete) present_or_copyout(incomplete) \
+      create(incomplete) pcreate(incomplete) present_or_create(incomplete) \
       no_create(incomplete) \
       firstprivate(incomplete) private(incomplete) reduction(&:incomplete)
     FORLOOP
@@ -897,6 +1013,15 @@ int main() {
     FORLOOP
   // expected-error@+1 2 {{const variable cannot be copyout because initialization is impossible}}
   #pragma acc parallel LOOP present_or_copyout(constI, constIDecl)
+    FORLOOP
+  // expected-error@+1 2 {{const variable cannot be create because initialization is impossible}}
+  #pragma acc parallel LOOP create(constI, constIDecl)
+    FORLOOP
+  // expected-error@+1 2 {{const variable cannot be create because initialization is impossible}}
+  #pragma acc parallel LOOP pcreate(constI, constIDecl)
+    FORLOOP
+  // expected-error@+1 2 {{const variable cannot be create because initialization is impossible}}
+  #pragma acc parallel LOOP present_or_create(constI, constIDecl)
     FORLOOP
   #pragma acc parallel LOOP no_create(constI, constIDecl)
     FORLOOP
@@ -1192,6 +1317,46 @@ int main() {
                             pcopyout(i)                  \
                             copyout(jk)
     FORLOOP
+  // expected-error@+6 {{create variable defined again as create variable}}
+  // expected-note@+5 {{previously defined as create variable here}}
+  // expected-error@+5 {{create variable defined again as create variable}}
+  // expected-note@+3 {{previously defined as create variable here}}
+  // expected-error@+4 {{create variable defined again as create variable}}
+  // expected-note@+1 {{previously defined as create variable here}}
+  #pragma acc parallel LOOP create(e,e,i,jk) \
+                            create(i)        \
+                            pcreate(jk)
+    FORLOOP
+  // expected-error@+6 {{create variable defined again as create variable}}
+  // expected-note@+5 {{previously defined as create variable here}}
+  // expected-error@+5 {{create variable defined again as create variable}}
+  // expected-note@+3 {{previously defined as create variable here}}
+  // expected-error@+4 {{create variable defined again as create variable}}
+  // expected-note@+1 {{previously defined as create variable here}}
+  #pragma acc parallel LOOP pcreate(e,e,i,jk) \
+                            pcreate(i)        \
+                            present_or_create(jk)
+    FORLOOP
+  // expected-error@+6 {{create variable defined again as create variable}}
+  // expected-note@+5 {{previously defined as create variable here}}
+  // expected-error@+5 {{create variable defined again as create variable}}
+  // expected-note@+3 {{previously defined as create variable here}}
+  // expected-error@+4 {{create variable defined again as create variable}}
+  // expected-note@+1 {{previously defined as create variable here}}
+  #pragma acc parallel LOOP create(e,e,i,jk)      \
+                            present_or_create(i)  \
+                            present_or_create(jk)
+    FORLOOP
+  // expected-error@+6 {{create variable defined again as create variable}}
+  // expected-note@+5 {{previously defined as create variable here}}
+  // expected-error@+5 {{create variable defined again as create variable}}
+  // expected-note@+3 {{previously defined as create variable here}}
+  // expected-error@+4 {{create variable defined again as create variable}}
+  // expected-note@+1 {{previously defined as create variable here}}
+  #pragma acc parallel LOOP present_or_create(e,e,i,jk) \
+                            pcreate(i)                  \
+                            create(jk)
+    FORLOOP
   // expected-error@+2 {{copy variable defined again as copy variable}}
   // expected-note@+1 {{previously defined as copy variable here}}
   #pragma acc parallel LOOP copy(a[0:2], a[0:2])
@@ -1203,6 +1368,10 @@ int main() {
   // expected-error@+2 {{copyout variable defined again as copyout variable}}
   // expected-note@+1 {{previously defined as copyout variable here}}
   #pragma acc parallel LOOP copyout(a[0:2]) pcopyout(a[1:1])
+    FORLOOP
+  // expected-error@+2 {{create variable defined again as create variable}}
+  // expected-note@+1 {{previously defined as create variable here}}
+  #pragma acc parallel LOOP create(a[1:1]) pcreate(a[0:1])
     FORLOOP
   // expected-error@+4 {{no_create variable defined again as no_create variable}}
   // expected-note@+3 {{previously defined as no_create variable here}}
@@ -1288,6 +1457,22 @@ int main() {
   // expected-note@+2 2 {{previously defined as copyout variable here}}
   #pragma acc parallel LOOP present(f) \
                             copyout(f,d,a[0:1]) \
+                            present(d,a[1:1])
+    FORLOOP
+  // expected-error@+5 {{create variable cannot be present variable}}
+  // expected-note@+3 {{previously defined as create variable here}}
+  // expected-error@+4 {{present variable cannot be create variable}}
+  // expected-note@+2 {{previously defined as present variable here}}
+  #pragma acc parallel LOOP present_or_create(a[0:1]) \
+                            present(a,p) \
+                            pcreate(p)
+    FORLOOP
+  // expected-error@+5 {{present variable cannot be create variable}}
+  // expected-note@+3 {{previously defined as present variable here}}
+  // expected-error@+4 2 {{create variable cannot be present variable}}
+  // expected-note@+2 2 {{previously defined as create variable here}}
+  #pragma acc parallel LOOP present(f) \
+                            create(f,d,a[0:1]) \
                             present(d,a[1:1])
     FORLOOP
   // expected-error@+5 {{present variable cannot be no_create variable}}
@@ -1378,6 +1563,22 @@ int main() {
                             copyout(f,d,a[0:1]) \
                             copy(d,a[1:1])
     FORLOOP
+  // expected-error@+5 {{create variable cannot be copy variable}}
+  // expected-note@+3 {{previously defined as create variable here}}
+  // expected-error@+4 {{copy variable cannot be create variable}}
+  // expected-note@+2 {{previously defined as copy variable here}}
+  #pragma acc parallel LOOP present_or_create(a[0:1]) \
+                            pcopy(a,p) \
+                            pcreate(p)
+    FORLOOP
+  // expected-error@+5 {{copy variable cannot be create variable}}
+  // expected-note@+3 {{previously defined as copy variable here}}
+  // expected-error@+4 2 {{create variable cannot be copy variable}}
+  // expected-note@+2 2 {{previously defined as create variable here}}
+  #pragma acc parallel LOOP present_or_copy(f) \
+                            create(f,d,a[0:1]) \
+                            copy(d,a[1:1])
+    FORLOOP
   // expected-error@+5 {{no_create variable cannot be copy variable}}
   // expected-note@+3 {{previously defined as no_create variable here}}
   // expected-error@+4 {{copy variable cannot be no_create variable}}
@@ -1450,6 +1651,22 @@ int main() {
                             present_or_copyout(f,d) \
                             copyin(d)
     FORLOOP
+  // expected-error@+5 {{create variable cannot be copyin variable}}
+  // expected-note@+3 {{previously defined as create variable here}}
+  // expected-error@+4 {{copyin variable cannot be create variable}}
+  // expected-note@+2 {{previously defined as copyin variable here}}
+  #pragma acc parallel LOOP pcreate(a) \
+                            present_or_copyin(a,p) \
+                            create(p)
+    FORLOOP
+  // expected-error@+5 {{copyin variable cannot be create variable}}
+  // expected-note@+3 {{previously defined as copyin variable here}}
+  // expected-error@+4 {{create variable cannot be copyin variable}}
+  // expected-note@+2 {{previously defined as create variable here}}
+  #pragma acc parallel LOOP pcopyin(f) \
+                            present_or_create(f,d) \
+                            copyin(d)
+    FORLOOP
   // expected-error@+5 {{copyin variable cannot be firstprivate variable}}
   // expected-note@+3 {{previously defined as copyin variable here}}
   // expected-error@+4 {{firstprivate variable cannot be copyin variable}}
@@ -1506,6 +1723,22 @@ int main() {
   // Conflicting clauses: copyout and aliases vs. other clauses (except
   // present, copy, and copyin, which are tested above).
 
+  // expected-error@+5 {{create variable cannot be copyout variable}}
+  // expected-note@+3 {{previously defined as create variable here}}
+  // expected-error@+4 {{copyout variable cannot be create variable}}
+  // expected-note@+2 {{previously defined as copyout variable here}}
+  #pragma acc parallel LOOP create(a) \
+                            present_or_copyout(a,p) \
+                            create(p)
+    FORLOOP
+  // expected-error@+5 {{copyout variable cannot be create variable}}
+  // expected-note@+3 {{previously defined as copyout variable here}}
+  // expected-error@+4 {{create variable cannot be copyout variable}}
+  // expected-note@+2 {{previously defined as create variable here}}
+  #pragma acc parallel LOOP pcopyout(f) \
+                            create(f,d) \
+                            copyout(d)
+    FORLOOP
   // expected-error@+5 {{no_create variable cannot be copyout variable}}
   // expected-note@+3 {{previously defined as no_create variable here}}
   // expected-error@+4 {{copyout variable cannot be no_create variable}}
@@ -1559,8 +1792,64 @@ int main() {
   #pragma acc parallel LOOP reduction(*:i) copyout(i,jk) reduction(*:jk)
     FORLOOP
 
+  // Conflicting clauses: create and aliases vs. other clauses (except
+  // present, copy, copyin, and copyout which are tested above).
+
+  // expected-error@+5 {{no_create variable cannot be create variable}}
+  // expected-note@+3 {{previously defined as no_create variable here}}
+  // expected-error@+4 {{create variable cannot be no_create variable}}
+  // expected-note@+2 {{previously defined as create variable here}}
+  #pragma acc parallel LOOP no_create(a) \
+                            present_or_create(a,p) \
+                            no_create(p)
+    FORLOOP
+  // expected-error@+5 {{create variable cannot be no_create variable}}
+  // expected-note@+3 {{previously defined as create variable here}}
+  // expected-error@+4 {{no_create variable cannot be create variable}}
+  // expected-note@+2 {{previously defined as no_create variable here}}
+  #pragma acc parallel LOOP pcreate(f) \
+                            no_create(f,d) \
+                            create(d)
+    FORLOOP
+  // expected-error@+5 {{create variable cannot be firstprivate variable}}
+  // expected-note@+3 {{previously defined as create variable here}}
+  // expected-error@+4 {{firstprivate variable cannot be create variable}}
+  // expected-note@+2 {{previously defined as firstprivate variable here}}
+  #pragma acc parallel LOOP create(i) \
+                            firstprivate(i,jk) \
+                            pcreate(jk)
+    FORLOOP
+  // expected-error@+5 {{firstprivate variable cannot be create variable}}
+  // expected-note@+3 {{previously defined as firstprivate variable here}}
+  // expected-error@+4 {{create variable cannot be firstprivate variable}}
+  // expected-note@+2 {{previously defined as create variable here}}
+  #pragma acc parallel LOOP firstprivate(a) \
+                            present_or_create(a,p) \
+                            firstprivate(p)
+    FORLOOP
+  // expected-error@+5 {{private variable cannot be create variable}}
+  // expected-note@+3 {{previously defined as private variable here}}
+  // expected-error@+4 {{create variable cannot be private variable}}
+  // expected-note@+2 {{previously defined as create variable here}}
+  #pragma acc parallel LOOP private(a) \
+                            present_or_create(a,p) \
+                            private(p)
+    FORLOOP
+  // expected-error@+5 {{create variable cannot be private variable}}
+  // expected-note@+3 {{previously defined as create variable here}}
+  // expected-error@+4 {{private variable cannot be create variable}}
+  // expected-note@+2 {{previously defined as private variable here}}
+  #pragma acc parallel LOOP pcreate(f) \
+                            private(f,d) \
+                            create(d)
+    FORLOOP
+  #pragma acc parallel LOOP present_or_create(f) reduction(+:f,d) pcreate(d)
+    FORLOOP
+  #pragma acc parallel LOOP reduction(*:i) create(i,jk) reduction(*:jk)
+    FORLOOP
+
   // Conflicting clauses: no_create vs. other clauses (except present, copy,
-  // copyin, and copyout, which are tested above).
+  // copyin, copyout, and create, which are tested above).
 
   // expected-error@+5 {{no_create variable cannot be firstprivate variable}}
   // expected-note@+3 {{previously defined as no_create variable here}}
@@ -1600,7 +1889,7 @@ int main() {
     FORLOOP
 
   // Conflicting clauses: firstprivate vs. private vs. reduction (present, copy,
-  // copyin, copyout, and no_create are tested above).
+  // copyin, copyout, create, and no_create are tested above).
 
   // expected-error@+5 {{firstprivate variable cannot be private variable}}
   // expected-note@+3 {{previously defined as firstprivate variable here}}

@@ -11,6 +11,7 @@
 // RUN:   (accc=copy    ompmt=tofrom fc=C )
 // RUN:   (accc=copyin  ompmt=to     fc=CI)
 // RUN:   (accc=copyout ompmt=from   fc=CO)
+// RUN:   (accc=create  ompmt=alloc  fc=CR)
 // RUN: }
 
 // Check -ast-dump before and after AST serialization.
@@ -93,10 +94,10 @@
 // Check execution with normal compilation.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt=HOST    tgt-cflags=                                    )
-// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
-// RUN:   (run-if=%run-if-ppc64le tgt=PPC64LE tgt-cflags=-fopenmp-targets=%run-ppc64le-triple)
-// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
+// RUN:   (run-if=                tgt=HOST tgt-cflags=                                    )
+// RUN:   (run-if=%run-if-x86_64  tgt=OFF  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
+// RUN:   (run-if=%run-if-ppc64le tgt=OFF  tgt-cflags=-fopenmp-targets=%run-ppc64le-triple)
+// RUN:   (run-if=%run-if-nvptx64 tgt=OFF  tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
 // RUN: }
 // RUN: %for clauses {
 // RUN:   %for tgts {
@@ -170,6 +171,7 @@ int main() {
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
     // DMP-CO-NEXT:   ACCCopyoutClause
+    // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
@@ -197,12 +199,12 @@ int main() {
     for (int i = 0; i < 1; ++i)
       arr1[i] = 99;
 
-    // EXE-C-NEXT:              arr1[0:1] after: <99, 11, 11, 11, 11, 11>
-    // EXE-CO-NEXT:             arr1[0:1] after: <99, 11, 11, 11, 11, 11>
-    // EXE-TGT-HOST-CI-NEXT:    arr1[0:1] after: <99, 11, 11, 11, 11, 11>
-    // EXE-TGT-X86_64-CI-NEXT:  arr1[0:1] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-PPC64LE-CI-NEXT: arr1[0:1] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-NVPTX64-CI-NEXT: arr1[0:1] after: <11, 11, 11, 11, 11, 11>
+    //           EXE-C-NEXT: arr1[0:1] after: <99, 11, 11, 11, 11, 11>
+    //          EXE-CO-NEXT: arr1[0:1] after: <99, 11, 11, 11, 11, 11>
+    // EXE-TGT-HOST-CI-NEXT: arr1[0:1] after: <99, 11, 11, 11, 11, 11>
+    // EXE-TGT-HOST-CR-NEXT: arr1[0:1] after: <99, 11, 11, 11, 11, 11>
+    //  EXE-TGT-OFF-CI-NEXT: arr1[0:1] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-TGT-OFF-CR-NEXT: arr1[0:1] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[0:1] after", arr1, n);
   }
 
@@ -228,6 +230,7 @@ int main() {
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
     // DMP-CO-NEXT:   ACCCopyoutClause
+    // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
@@ -255,12 +258,12 @@ int main() {
     for (int i = 0; i < 2; ++i)
       arr1[i] = 99;
 
-    // EXE-C-NEXT:              arr1[0:2] after: <99, 99, 11, 11, 11, 11>
-    // EXE-CO-NEXT:             arr1[0:2] after: <99, 99, 11, 11, 11, 11>
-    // EXE-TGT-HOST-CI-NEXT:    arr1[0:2] after: <99, 99, 11, 11, 11, 11>
-    // EXE-TGT-X86_64-CI-NEXT:  arr1[0:2] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-PPC64LE-CI-NEXT: arr1[0:2] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-NVPTX64-CI-NEXT: arr1[0:2] after: <11, 11, 11, 11, 11, 11>
+    //           EXE-C-NEXT: arr1[0:2] after: <99, 99, 11, 11, 11, 11>
+    //          EXE-CO-NEXT: arr1[0:2] after: <99, 99, 11, 11, 11, 11>
+    // EXE-TGT-HOST-CI-NEXT: arr1[0:2] after: <99, 99, 11, 11, 11, 11>
+    // EXE-TGT-HOST-CR-NEXT: arr1[0:2] after: <99, 99, 11, 11, 11, 11>
+    //  EXE-TGT-OFF-CI-NEXT: arr1[0:2] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-TGT-OFF-CR-NEXT: arr1[0:2] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[0:2] after", arr1, n);
   }
 
@@ -287,6 +290,7 @@ int main() {
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
     // DMP-CO-NEXT:   ACCCopyoutClause
+    // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int *' <LValueToRValue>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'pi' 'int *'
@@ -314,12 +318,12 @@ int main() {
     for (int i = 0; i < 3; ++i)
       pi[i] = 99;
 
-    // EXE-C-NEXT:              pi[0:3] after: <99, 99, 99, 11, 11, 11>
-    // EXE-CO-NEXT:             pi[0:3] after: <99, 99, 99, 11, 11, 11>
-    // EXE-TGT-HOST-CI-NEXT:    pi[0:3] after: <99, 99, 99, 11, 11, 11>
-    // EXE-TGT-X86_64-CI-NEXT:  pi[0:3] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-PPC64LE-CI-NEXT: pi[0:3] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-NVPTX64-CI-NEXT: pi[0:3] after: <11, 11, 11, 11, 11, 11>
+    //           EXE-C-NEXT: pi[0:3] after: <99, 99, 99, 11, 11, 11>
+    //          EXE-CO-NEXT: pi[0:3] after: <99, 99, 99, 11, 11, 11>
+    // EXE-TGT-HOST-CI-NEXT: pi[0:3] after: <99, 99, 99, 11, 11, 11>
+    // EXE-TGT-HOST-CR-NEXT: pi[0:3] after: <99, 99, 99, 11, 11, 11>
+    //  EXE-TGT-OFF-CI-NEXT: pi[0:3] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-TGT-OFF-CR-NEXT: pi[0:3] after: <11, 11, 11, 11, 11, 11>
     printArr1("pi[0:3] after", arr1, n);
   }
 
@@ -345,6 +349,7 @@ int main() {
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
     // DMP-CO-NEXT:   ACCCopyoutClause
+    // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
@@ -372,12 +377,12 @@ int main() {
     for (int i = 1; i < 4; ++i)
       arr1[i] = 99;
 
-    // EXE-C-NEXT:              arr1[1:3] after: <11, 99, 99, 99, 11, 11>
-    // EXE-CO-NEXT:             arr1[1:3] after: <11, 99, 99, 99, 11, 11>
-    // EXE-TGT-HOST-CI-NEXT:    arr1[1:3] after: <11, 99, 99, 99, 11, 11>
-    // EXE-TGT-X86_64-CI-NEXT:  arr1[1:3] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-PPC64LE-CI-NEXT: arr1[1:3] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-NVPTX64-CI-NEXT: arr1[1:3] after: <11, 11, 11, 11, 11, 11>
+    //           EXE-C-NEXT: arr1[1:3] after: <11, 99, 99, 99, 11, 11>
+    //          EXE-CO-NEXT: arr1[1:3] after: <11, 99, 99, 99, 11, 11>
+    // EXE-TGT-HOST-CI-NEXT: arr1[1:3] after: <11, 99, 99, 99, 11, 11>
+    // EXE-TGT-HOST-CR-NEXT: arr1[1:3] after: <11, 99, 99, 99, 11, 11>
+    //  EXE-TGT-OFF-CI-NEXT: arr1[1:3] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-TGT-OFF-CR-NEXT: arr1[1:3] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[1:3] after", arr1, n);
   }
 
@@ -404,6 +409,7 @@ int main() {
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
     // DMP-CO-NEXT:   ACCCopyoutClause
+    // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
@@ -435,12 +441,12 @@ int main() {
     for (int i = 2; i < 5; ++i)
       arr1[i] = 99;
 
-    // EXE-C-NEXT:              arr1[start:length] after: <11, 11, 99, 99, 99, 11>
-    // EXE-CO-NEXT:             arr1[start:length] after: <11, 11, 99, 99, 99, 11>
-    // EXE-TGT-HOST-CI-NEXT:    arr1[start:length] after: <11, 11, 99, 99, 99, 11>
-    // EXE-TGT-X86_64-CI-NEXT:  arr1[start:length] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-PPC64LE-CI-NEXT: arr1[start:length] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-NVPTX64-CI-NEXT: arr1[start:length] after: <11, 11, 11, 11, 11, 11>
+    //           EXE-C-NEXT: arr1[start:length] after: <11, 11, 99, 99, 99, 11>
+    //          EXE-CO-NEXT: arr1[start:length] after: <11, 11, 99, 99, 99, 11>
+    // EXE-TGT-HOST-CI-NEXT: arr1[start:length] after: <11, 11, 99, 99, 99, 11>
+    // EXE-TGT-HOST-CR-NEXT: arr1[start:length] after: <11, 11, 99, 99, 99, 11>
+    //  EXE-TGT-OFF-CI-NEXT: arr1[start:length] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-TGT-OFF-CR-NEXT: arr1[start:length] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[start:length] after", arr1, n);
   }
 
@@ -467,6 +473,7 @@ int main() {
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
     // DMP-CO-NEXT:   ACCCopyoutClause
+    // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
@@ -496,12 +503,12 @@ int main() {
     for (int i = 0; i < 5; ++i)
       arr1[i] = 99;
 
-    // EXE-C-NEXT:              arr1[:length] after: <99, 99, 99, 99, 99, 11>
-    // EXE-CO-NEXT:             arr1[:length] after: <99, 99, 99, 99, 99, 11>
-    // EXE-TGT-HOST-CI-NEXT:    arr1[:length] after: <99, 99, 99, 99, 99, 11>
-    // EXE-TGT-X86_64-CI-NEXT:  arr1[:length] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-PPC64LE-CI-NEXT: arr1[:length] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-NVPTX64-CI-NEXT: arr1[:length] after: <11, 11, 11, 11, 11, 11>
+    //           EXE-C-NEXT: arr1[:length] after: <99, 99, 99, 99, 99, 11>
+    //          EXE-CO-NEXT: arr1[:length] after: <99, 99, 99, 99, 99, 11>
+    // EXE-TGT-HOST-CI-NEXT: arr1[:length] after: <99, 99, 99, 99, 99, 11>
+    // EXE-TGT-HOST-CR-NEXT: arr1[:length] after: <99, 99, 99, 99, 99, 11>
+    //  EXE-TGT-OFF-CI-NEXT: arr1[:length] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-TGT-OFF-CR-NEXT: arr1[:length] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[:length] after", arr1, n);
   }
 
@@ -528,6 +535,7 @@ int main() {
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
     // DMP-CO-NEXT:   ACCCopyoutClause
+    // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
@@ -557,12 +565,12 @@ int main() {
     for (int i = 3; i < 6; ++i)
       arr1[i] = 99;
 
-    // EXE-C-NEXT:              arr1[start:] after: <11, 11, 11, 99, 99, 99>
-    // EXE-CO-NEXT:             arr1[start:] after: <11, 11, 11, 99, 99, 99>
-    // EXE-TGT-HOST-CI-NEXT:    arr1[start:] after: <11, 11, 11, 99, 99, 99>
-    // EXE-TGT-X86_64-CI-NEXT:  arr1[start:] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-PPC64LE-CI-NEXT: arr1[start:] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-NVPTX64-CI-NEXT: arr1[start:] after: <11, 11, 11, 11, 11, 11>
+    //           EXE-C-NEXT: arr1[start:] after: <11, 11, 11, 99, 99, 99>
+    //          EXE-CO-NEXT: arr1[start:] after: <11, 11, 11, 99, 99, 99>
+    // EXE-TGT-HOST-CI-NEXT: arr1[start:] after: <11, 11, 11, 99, 99, 99>
+    // EXE-TGT-HOST-CR-NEXT: arr1[start:] after: <11, 11, 11, 99, 99, 99>
+    //  EXE-TGT-OFF-CI-NEXT: arr1[start:] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-TGT-OFF-CR-NEXT: arr1[start:] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[start:] after", arr1, n);
   }
 
@@ -589,6 +597,7 @@ int main() {
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
     // DMP-CO-NEXT:   ACCCopyoutClause
+    // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
@@ -616,12 +625,12 @@ int main() {
     for (int i = 0; i < 6; ++i)
       arr1[i] = 99;
 
-    // EXE-C-NEXT:              arr1[:] after: <99, 99, 99, 99, 99, 99>
-    // EXE-CO-NEXT:             arr1[:] after: <99, 99, 99, 99, 99, 99>
-    // EXE-TGT-HOST-CI-NEXT:    arr1[:] after: <99, 99, 99, 99, 99, 99>
-    // EXE-TGT-X86_64-CI-NEXT:  arr1[:] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-PPC64LE-CI-NEXT: arr1[:] after: <11, 11, 11, 11, 11, 11>
-    // EXE-TGT-NVPTX64-CI-NEXT: arr1[:] after: <11, 11, 11, 11, 11, 11>
+    //           EXE-C-NEXT: arr1[:] after: <99, 99, 99, 99, 99, 99>
+    //          EXE-CO-NEXT: arr1[:] after: <99, 99, 99, 99, 99, 99>
+    // EXE-TGT-HOST-CI-NEXT: arr1[:] after: <99, 99, 99, 99, 99, 99>
+    // EXE-TGT-HOST-CR-NEXT: arr1[:] after: <99, 99, 99, 99, 99, 99>
+    //  EXE-TGT-OFF-CI-NEXT: arr1[:] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-TGT-OFF-CR-NEXT: arr1[:] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[:] after", arr1, n);
   }
 
@@ -648,6 +657,7 @@ int main() {
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
     // DMP-CO-NEXT:   ACCCopyoutClause
+    // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int (*)[2]' <ArrayToPointerDecay>
@@ -682,12 +692,12 @@ int main() {
       for (int j = 0; j < 2; ++j)
         arr2[i][j] = 99;
 
-    // EXE-C-NEXT:              arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
-    // EXE-CO-NEXT:             arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
-    // EXE-TGT-HOST-CI-NEXT:    arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
-    // EXE-TGT-X86_64-CI-NEXT:  arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-PPC64LE-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-NVPTX64-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //           EXE-C-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
+    //          EXE-CO-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
+    // EXE-TGT-HOST-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
+    // EXE-TGT-HOST-CR-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
+    //  EXE-TGT-OFF-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-TGT-OFF-CR-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("arr2[2:3][0:2] after", arr2, n);
   }
 
@@ -714,6 +724,7 @@ int main() {
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
     // DMP-CO-NEXT:   ACCCopyoutClause
+    // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int (*)[2]' <ArrayToPointerDecay>
@@ -748,12 +759,12 @@ int main() {
       for (int j = 1; j < 2; ++j)
         arr2[i][j] = 99;
 
-    // EXE-C-NEXT:              arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
-    // EXE-CO-NEXT:             arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
-    // EXE-TGT-HOST-CI-NEXT:    arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
-    // EXE-TGT-X86_64-CI-NEXT:  arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-PPC64LE-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-NVPTX64-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //           EXE-C-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
+    //          EXE-CO-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
+    // EXE-TGT-HOST-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
+    // EXE-TGT-HOST-CR-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
+    //  EXE-TGT-OFF-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-TGT-OFF-CR-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("arr2[2:3][0:2] after", arr2, n);
   }
 
@@ -781,6 +792,7 @@ int main() {
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
     // DMP-CO-NEXT:   ACCCopyoutClause
+    // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int (*)[2]' <LValueToRValue>
@@ -815,12 +827,12 @@ int main() {
       for (int j = 0; j < 2; ++j)
         pa[i][j] = 99;
 
-    // EXE-C-NEXT:              pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
-    // EXE-CO-NEXT:             pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
-    // EXE-TGT-HOST-CI-NEXT:    pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
-    // EXE-TGT-X86_64-CI-NEXT:  pa[1:3][:] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-PPC64LE-CI-NEXT: pa[1:3][:] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-NVPTX64-CI-NEXT: pa[1:3][:] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //           EXE-C-NEXT: pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
+    //          EXE-CO-NEXT: pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
+    // EXE-TGT-HOST-CI-NEXT: pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
+    // EXE-TGT-HOST-CR-NEXT: pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
+    //  EXE-TGT-OFF-CI-NEXT: pa[1:3][:] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-TGT-OFF-CR-NEXT: pa[1:3][:] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("pa[1:3][:] after", arr2, n);
   }
 
@@ -851,6 +863,7 @@ int main() {
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
     // DMP-CO-NEXT:   ACCCopyoutClause
+    // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int **' <ArrayToPointerDecay>
@@ -885,12 +898,12 @@ int main() {
       for (int j = 0; j < 2; ++j)
         ap[i][j] = 99;
 
-    // EXE-C-NEXT:              ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-CO-NEXT:             ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-HOST-CI-NEXT:    ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-X86_64-CI-NEXT:  ap[2:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-PPC64LE-CI-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-NVPTX64-CI-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //           EXE-C-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
+    //          EXE-CO-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
+    // EXE-TGT-HOST-CI-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
+    // EXE-TGT-HOST-CR-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-TGT-OFF-CI-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-TGT-OFF-CR-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("ap[2:1][0:2] after", arr2, 6);
   }
 
@@ -921,6 +934,7 @@ int main() {
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
     // DMP-CO-NEXT:   ACCCopyoutClause
+    // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int **' <ArrayToPointerDecay>
@@ -955,12 +969,12 @@ int main() {
       for (int j = 0; j < 1; ++j)
         ap[i][j] = 99;
 
-    // EXE-C-NEXT:              ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
-    // EXE-CO-NEXT:             ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
-    // EXE-TGT-HOST-CI-NEXT:    ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
-    // EXE-TGT-X86_64-CI-NEXT:  ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-PPC64LE-CI-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-NVPTX64-CI-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //           EXE-C-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
+    //          EXE-CO-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
+    // EXE-TGT-HOST-CI-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
+    // EXE-TGT-HOST-CR-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
+    //  EXE-TGT-OFF-CI-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-TGT-OFF-CR-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("ap[5:1][0:1] after", arr2, 6);
   }
 
@@ -992,6 +1006,7 @@ int main() {
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
     // DMP-CO-NEXT:   ACCCopyoutClause
+    // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int **' <LValueToRValue>
@@ -1026,12 +1041,12 @@ int main() {
       for (int j = 0; j < 2; ++j)
         pp[i][j] = 99;
 
-    // EXE-C-NEXT:              pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
-    // EXE-CO-NEXT:             pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
-    // EXE-TGT-HOST-CI-NEXT:    pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
-    // EXE-TGT-X86_64-CI-NEXT:  pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-PPC64LE-CI-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-NVPTX64-CI-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //           EXE-C-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
+    //          EXE-CO-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
+    // EXE-TGT-HOST-CI-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
+    // EXE-TGT-HOST-CR-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
+    //  EXE-TGT-OFF-CI-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-TGT-OFF-CR-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("pp[3:1][0:2] after", arr2, 6);
   }
 
@@ -1063,6 +1078,7 @@ int main() {
     // DMP-C-NEXT:    ACCCopyClause
     // DMP-CI-NEXT:   ACCCopyinClause
     // DMP-CO-NEXT:   ACCCopyoutClause
+    // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int **' <LValueToRValue>
@@ -1097,12 +1113,12 @@ int main() {
       for (int j = 1; j < 2; ++j)
         pp[i][j] = 99;
 
-    // EXE-C-NEXT:              pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
-    // EXE-CO-NEXT:             pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
-    // EXE-TGT-HOST-CI-NEXT:    pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
-    // EXE-TGT-X86_64-CI-NEXT:  pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-PPC64LE-CI-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-NVPTX64-CI-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //           EXE-C-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
+    //          EXE-CO-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
+    // EXE-TGT-HOST-CI-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
+    // EXE-TGT-HOST-CR-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
+    //  EXE-TGT-OFF-CI-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-TGT-OFF-CR-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("pp[4:1][1:1] after", arr2, 6);
   }
 

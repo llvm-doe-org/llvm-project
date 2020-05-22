@@ -1035,6 +1035,14 @@ void ACCClausePrinter::VisitACCCopyoutClause(ACCCopyoutClause *Node) {
   }
 }
 
+void ACCClausePrinter::VisitACCCreateClause(ACCCreateClause *Node) {
+  if (!Node->varlist_empty()) {
+    OS << getOpenACCName(Node->getClauseKind());
+    VisitACCClauseList(Node, '(');
+    OS << ")";
+  }
+}
+
 void ACCClausePrinter::VisitACCNoCreateClause(ACCNoCreateClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "no_create";

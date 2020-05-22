@@ -581,6 +581,7 @@ clarify these points in future versions of the OpenACC specification.
         * `copy`
         * `copyin`
         * `copyout`
+        * `create`
         * `no_create`
         * Others not yet implemented by Clacc.
     * Data sharing attributes (DSAs), which describe the sharing of
@@ -711,8 +712,8 @@ clarify these points in future versions of the OpenACC specification.
     * It does not appear possible for any DA other than `copy`,
       `nomap`, or `shared` to be *imp* for a variable of incomplete
       type.
-* *exp* `copyout`, *exp* `private`, or *exp* `reduction` for a `const`
-  variable is an error.  Notes:
+* *exp* `copyout`, *exp* `create`, *exp* `private`, or *exp*
+  `reduction` for a `const` variable is an error.  Notes:
     * There are several reasons:
         * Except in the case of `reduction`, device/private copies
           would remain uninitialized throughout their lifetimes
@@ -912,11 +913,9 @@ clarify these points in future versions of the OpenACC specification.
   is gang-partitioned, then *imp* `copy(`*v*`)` on the parent `acc
   parallel` overriding any *imp* `firstprivate(`*v*`)` as long as all
   of the following conditions hold:
-    * *not* `copy(`*v*`)`, *not* `copyin(`*v*`)`, *not*
-      `copyout(`*v*`)`, *not* `firstprivate(`*v*`)`, *not*
-      `private(`*v*`)`, and *not* `reduction(`*o'*`:`*v*`)`, on that
-      `acc parallel` and on any `acc loop` nested between it and the
-      gang-partitioned `acc loop`.
+    * There is no *exp* DA for that variable on that `acc parallel` or
+      on any `acc loop` nested between it and the gang-partitioned
+      `acc loop`.
     * There is no local declaration of *v* nested between the `acc
       parallel` and the gang-partitioned `acc loop`.
     * Notes:
@@ -1160,6 +1159,7 @@ OpenMP is as follows:
 * *exp* `copy` -> *exp* `map` with a `tofrom` map type.
 * *exp* `copyin` -> *exp* `map` with a `to` map type.
 * *exp* `copyout` -> *exp* `map` with a `from` map type.
+* *exp* `create` -> *exp* `map` with an `alloc` map type.
 * *exp* `no_create` is translated according to the
   `-fopenacc-no-create-omp=KIND` command-line option:
     * `KIND` is one of:

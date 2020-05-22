@@ -148,18 +148,19 @@ We have implemented and tested support for the following features:
       `present_or_copyin`
     * `copyout` clause and aliases `pcopyout` and
       `present_or_copyout`
-    * in `present`, `copy`, `copyin`, `copyout`, and `no_create`
-      clauses and their aliases, subarrays specifying contiguous
-      blocks
+    * `create` clause and aliases `pcreate` and `present_or_create`
+    * in `present`, `copy`, `copyin`, `copyout`, `create`, and
+      `no_create` clauses and their aliases, subarrays specifying
+      contiguous blocks
     * any number of levels of nesting within other `data` directives
 * `parallel` directive:
     * use without clauses
     * data attributes:
         * implicit `copy` for non-scalars
         * implicit `firstprivate` for scalars
-        * For `present`, `copy`, `copyin`, `copyout`, and `no_create`
-          clauses and their aliases, support is the same as for the
-          `data` directive, as described above.
+        * For `present`, `copy`, `copyin`, `copyout`, `create`, and
+          `no_create` clauses and their aliases, support is the same
+          as for the `data` directive, as described above.
         * `firstprivate` clause
         * `private` clause
         * `reduction` clause:
@@ -314,6 +315,8 @@ following features for now:
     * subarrays in `firstprivate`, `private`, and `reduction` clauses
     * subarrays with no `:` and one integer (syntactically an array
       subscript)
+    * `readonly` and `zero` modifiers in `copyin`, `copyout`, and
+      `create` clauses
 * `loop` directive:
     * outside a `parallel` directive (that is, an orphaned loop)
     * `gang`, `worker`, and `vector` clause arguments
