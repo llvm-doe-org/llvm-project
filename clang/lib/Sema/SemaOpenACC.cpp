@@ -2693,6 +2693,8 @@ ACCClause *Sema::ActOnOpenACCCollapseClause(Expr *Collapse,
                                          EndLoc);
 }
 
+#undef DirStack
+
 namespace {
 class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
   typedef TransformContext<TransformACCToOMP> BaseTransform;
@@ -2722,6 +2724,81 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
   /// OpenMP directive.  It is set back to its previous value after the
   /// translation of the associated statement.
   OpenMPDirectiveKind ParentLoopOMPKind = OMPD_unknown;
+
+  /// A variable's DA data.
+  struct DAVarData {
+    /// If the DMA is undetermined, then ACC_DMA_unknown.  Otherwise, not
+    /// ACC_DMA_unknown.
+    OpenACCDMAKind DMAKind = ACC_DMA_unknown;
+    /// If the DSA is undetermined, then ACC_DSA_unknown.  Otherwise, not
+    /// ACC_DSA_unknown.
+    OpenACCDSAKind DSAKind = ACC_DSA_unknown;
+  };
+
+  /// Data we store per effective OpenACC directive while transforming them.
+  struct DirStackEntry {
+    /// Map from all variables with DAs on this OpenACC directive to those DAs.
+    /// This is set before OpenACC clauses are translated.
+    llvm::DenseMap<VarDecl *, DAVarData> DAMap;
+  };
+  /// This stack is pushed and popped at each effective OpenACC directive.
+  SmallVector<DirStackEntry, 4> DirStack;
+  /// An RAII object to push and pop entries in DirStack.
+  class DirStackEntryRAII {
+  private:
+    TransformACCToOMP &Transform;
+
+  public:
+    /// Push D's DAs onto Transform.DirStack.
+    DirStackEntryRAII(TransformACCToOMP &Transform, ACCExecutableDirective *D)
+        : Transform(Transform) {
+      Transform.DirStack.emplace_back();
+
+      // Collect DAs from clauses on D.
+      DAVarData ClauseDAs;
+      auto RecordClauseDAs = [&](Expr *E, VarDecl *VD) {
+        DAVarData &VarDAs = Transform.DirStack.back().DAMap[VD];
+        if (ClauseDAs.DMAKind != ACC_DMA_unknown) {
+          assert(VarDAs.DMAKind == ACC_DMA_unknown &&
+                 "expected at most one DMA per variable");
+          VarDAs.DMAKind = ClauseDAs.DMAKind;
+        }
+        if (ClauseDAs.DSAKind != ACC_DSA_unknown) {
+          assert(VarDAs.DSAKind == ACC_DSA_unknown &&
+                 "expected at most one DSA per variable");
+          VarDAs.DSAKind = ClauseDAs.DSAKind;
+        }
+        return false;
+      };
+      for (ACCClause *C : D->clauses()) {
+        switch (C->getClauseKind()) {
+#define OPENACC_DMA(Name, Class)                                        \
+        case ACCC_##Name:                                               \
+          ClauseDAs.DMAKind = ACC_DMA_##Name;                           \
+          ClauseDAs.DSAKind = ACC_DSA_unknown;                          \
+          Transform.iterateACCVarList(cast<Class>(C), RecordClauseDAs); \
+          break;
+#define OPENACC_DSA_UNMAPPABLE(Name, Class)                             \
+        case ACCC_##Name:                                               \
+          ClauseDAs.DMAKind = ACC_DMA_unknown;                          \
+          ClauseDAs.DSAKind = ACC_DSA_##Name;                           \
+          Transform.iterateACCVarList(cast<Class>(C), RecordClauseDAs); \
+          break;
+#define OPENACC_DSA_MAPPABLE(Name, Class)                               \
+        case ACCC_##Name:                                               \
+          ClauseDAs.DMAKind = ACC_DMA_unknown;                          \
+          ClauseDAs.DSAKind = ACC_DSA_##Name;                           \
+          Transform.iterateACCVarList(cast<Class>(C), RecordClauseDAs); \
+          break;
+#include "clang/Basic/OpenACCKinds.def"
+        default:
+          break;
+        }
+      }
+    }
+    /// Pop top directive's data from Transform.DirStack.
+    ~DirStackEntryRAII() { Transform.DirStack.pop_back(); }
+  };
 
   using OMPClauseResult = ActionResult<OMPClause *>;
   inline OMPClauseResult OMPClauseError() { return OMPClauseResult(true); }
@@ -2992,6 +3069,8 @@ public:
   TransformACCToOMP(Sema &SemaRef) : BaseTransform(SemaRef) {}
 
   StmtResult TransformACCDataDirective(ACCDataDirective *D) {
+    DirStackEntryRAII TheDirStackEntryRAII(*this, D);
+
     // Start OpenMP DA block.
     getSema().StartOpenMPDSABlock(OMPD_target_data, DeclarationNameInfo(),
                                   /*CurScope=*/nullptr, D->getBeginLoc());
@@ -3022,6 +3101,7 @@ public:
   }
 
   StmtResult TransformACCParallelDirective(ACCParallelDirective *D) {
+    DirStackEntryRAII TheDirStackEntryRAII(*this, D);
     ConditionalCompoundStmtRAII EnclosingCompoundStmt(*this);
     ASTContext &Context = getSema().getASTContext();
 
@@ -3128,6 +3208,8 @@ public:
   }
 
   StmtResult TransformACCLoopDirective(ACCLoopDirective *D) {
+    DirStackEntryRAII TheDirStackEntryRAII(*this, D);
+
     // What OpenACC clauses do we have?
     ACCPartitioningKind Partitioning = D->getPartitioning();
 
@@ -3601,7 +3683,8 @@ public:
 } // namespace
 
 bool Sema::transformACCToOMP(ACCExecutableDirective *D) {
-  if (DirStack->getRealDirective() != ACCD_unknown)
+  if (static_cast<DirStackTy *>(OpenACCDirectiveStack)->getRealDirective() !=
+      ACCD_unknown)
     return false;
   if (TransformACCToOMP(*this).TransformStmt(D).isInvalid())
     return true;

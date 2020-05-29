@@ -42,7 +42,7 @@ enum OpenACCDetermination {
 
 /// OpenACC data mapping attributes.
 enum OpenACCDMAKind {
-#define OPENACC_DMA(Name) \
+#define OPENACC_DMA(Name, Class) \
   ACC_DMA_##Name,
 #include "clang/Basic/OpenACCKinds.def"
   ACC_DMA_unknown
@@ -50,9 +50,9 @@ enum OpenACCDMAKind {
 
 /// OpenACC data sharing attributes.
 enum OpenACCDSAKind {
-#define OPENACC_DSA_MAPPABLE(Name) \
+#define OPENACC_DSA_MAPPABLE(Name, Class) \
   ACC_DSA_##Name,
-#define OPENACC_DSA_UNMAPPABLE(Name) \
+#define OPENACC_DSA_UNMAPPABLE(Name, Class) \
   ACC_DSA_##Name,
 #include "clang/Basic/OpenACCKinds.def"
   ACC_DSA_unknown

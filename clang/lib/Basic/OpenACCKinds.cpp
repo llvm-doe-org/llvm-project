@@ -59,8 +59,8 @@ const char *clang::getOpenACCName(OpenACCDMAKind Kind) {
   switch (Kind) {
   case ACC_DMA_unknown:
     return "unknown";
-#define OPENACC_DMA(Name) \
-  case ACC_DMA_##Name:    \
+#define OPENACC_DMA(Name, Class) \
+  case ACC_DMA_##Name:           \
     return #Name;
 #include "clang/Basic/OpenACCKinds.def"
   }
@@ -72,11 +72,11 @@ const char *clang::getOpenACCName(OpenACCDSAKind Kind) {
   switch (Kind) {
   case ACC_DSA_unknown:
     return "unknown";
-#define OPENACC_DSA_UNMAPPABLE(Name) \
-  case ACC_DSA_##Name:    \
+#define OPENACC_DSA_UNMAPPABLE(Name, Class) \
+  case ACC_DSA_##Name:                      \
     return #Name;
-#define OPENACC_DSA_MAPPABLE(Name) \
-  case ACC_DSA_##Name:    \
+#define OPENACC_DSA_MAPPABLE(Name, Class) \
+  case ACC_DSA_##Name:                    \
     return #Name;
 #include "clang/Basic/OpenACCKinds.def"
   }
@@ -113,11 +113,11 @@ bool clang::isAllowedDSAForDMA(OpenACCDSAKind DSAKind, OpenACCDMAKind DMAKind)
   switch (DSAKind) {
   case ACC_DSA_unknown:
     return true;
-#define OPENACC_DSA_UNMAPPABLE(Name) \
-  case ACC_DSA_##Name:              \
+#define OPENACC_DSA_UNMAPPABLE(Name, Class) \
+  case ACC_DSA_##Name:                      \
     return false;
-#define OPENACC_DSA_MAPPABLE(Name) \
-  case ACC_DSA_##Name:              \
+#define OPENACC_DSA_MAPPABLE(Name, Class) \
+  case ACC_DSA_##Name:                    \
     return true;
 #include "clang/Basic/OpenACCKinds.def"
   }

@@ -19,13 +19,13 @@
 #  define OPENACC_DIRECTIVE_EXT(Name, Str)
 #endif
 #ifndef OPENACC_DMA
-#  define OPENACC_DMA(Name)
+#  define OPENACC_DMA(Name, Class)
 #endif
 #ifndef OPENACC_DSA_MAPPABLE
-#  define OPENACC_DSA_MAPPABLE(Name)
+#  define OPENACC_DSA_MAPPABLE(Name, Class)
 #endif
 #ifndef OPENACC_DSA_UNMAPPABLE
-#  define OPENACC_DSA_UNMAPPABLE(Name)
+#  define OPENACC_DSA_UNMAPPABLE(Name, Class)
 #endif
 #ifndef OPENACC_CLAUSE
 #  define OPENACC_CLAUSE(Name, Class)
@@ -100,13 +100,13 @@
   OPENACC_CLAUSE_ALIAS_##Name(Name)
 #define OPENACC_CLAUSE_AND_DMA(Name, Class) \
   OPENACC_CLAUSE(Name, Class)               \
-  OPENACC_DMA(Name)
+  OPENACC_DMA(Name, Class)
 #define OPENACC_CLAUSE_AND_DSA_MAPPABLE(Name, Class) \
   OPENACC_CLAUSE(Name, Class)                        \
-  OPENACC_DSA_MAPPABLE(Name)
+  OPENACC_DSA_MAPPABLE(Name, Class)
 #define OPENACC_CLAUSE_AND_DSA_UNMAPPABLE(Name, Class) \
   OPENACC_CLAUSE(Name, Class)                          \
-  OPENACC_DSA_UNMAPPABLE(Name)
+  OPENACC_DSA_UNMAPPABLE(Name, Class)
 #define OPENACC_DATA_CLAUSE_AND_DMA(Name) \
   OPENACC_DATA_CLAUSE(Name)               \
   OPENACC_DATA_DMA(Name)
