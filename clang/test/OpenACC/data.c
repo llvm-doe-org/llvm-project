@@ -835,7 +835,8 @@ void test() {
   // Repeat except...
   //
   // Don't bother checking clause aliases again.
-  // Check array types.
+  // Check array types (including not adding defaultmap for scalars with
+  // suppressed OpenACC implicit DAs).
   // Check suppression of inner copyin clause data transfers.
   //--------------------------------------------------
 
@@ -1141,7 +1142,8 @@ void test() {
   //--------------------------------------------------
   // Repeat except...
   //
-  // Check struct types.
+  // Check struct types (including not adding defaultmap for scalars with
+  // suppressed OpenACC implicit DAs).
   // Check suppression of inner copyout clause data transfers.
   //--------------------------------------------------
 
@@ -2147,6 +2149,77 @@ void test() {
     printf("After acc data:\n"
            "  arr0[3]=%4d, arr1[0]=%4d\n",
            arr0[3], arr1[0]);
+  } // PRT-NEXT: }
+
+  //--------------------------------------------------
+  // defaultmap for scalars with suppressed OpenACC implicit DAs: Check that an
+  // an explicit DSA prevents adding it.
+  //
+  // The case where implicit DAs are not suppressed by an enclosing acc data and
+  // thus prevent defaultmap is tested in, for example, parallel-da.c.
+  //
+  // Cases where it isn't added because the variable is non-scalar are tested
+  // above.
+  //--------------------------------------------------
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int x =
+    int x = 10;
+    //  PRT-A-NEXT: {{^ *}}#pragma acc data copy(x){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(tofrom: x){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(tofrom: x){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(x){{$}}
+    #pragma acc data copy(x)
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1) firstprivate(x){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) firstprivate(x){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) firstprivate(x){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) firstprivate(x){{$}}
+    #pragma acc parallel num_gangs(1) firstprivate(x)
+    // PRT-NEXT: x +=
+    x += 100;
+    // PRT-NEXT: printf(
+    // EXE-NEXT: x=10
+    printf("x=%d\n", x);
+  } // PRT-NEXT: }
+
+  //--------------------------------------------------
+  // defaultmap for scalars with suppressed OpenACC implicit DAs: Check that the
+  // record of the need for it doesn't accidentally persist to a sibling acc
+  // parallel.
+  //--------------------------------------------------
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int x =
+    // PRT-NEXT: int y =
+    int x = 10;
+    int y = 20;
+    //  PRT-A-NEXT: {{^ *}}#pragma acc data copy(x){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(tofrom: x){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(tofrom: x){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(x){{$}}
+    #pragma acc data copy(x)
+    // PRT-NEXT: {
+    {
+      //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) shared(x) defaultmap(tofrom: scalar){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) shared(x) defaultmap(tofrom: scalar){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
+      #pragma acc parallel num_gangs(1)
+      // PRT-NEXT: x +=
+      x += 100;
+      //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) firstprivate(y){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) firstprivate(y){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
+      #pragma acc parallel num_gangs(1)
+      // PRT-NEXT: y +=
+      y += 200;
+    } // PRT-NEXT: }
+    // PRT-NEXT: printf(
+    // EXE-NEXT: x=110, y=20
+    printf("x=%d, y=%d\n", x, y);
   } // PRT-NEXT: }
 } // PRT-NEXT: }
 // EXE-NOT: {{.}}

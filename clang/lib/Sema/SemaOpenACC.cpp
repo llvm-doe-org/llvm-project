@@ -2740,6 +2740,10 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     /// Map from all variables with DAs on this OpenACC directive to those DAs.
     /// This is set before OpenACC clauses are translated.
     llvm::DenseMap<VarDecl *, DAVarData> DAMap;
+    /// TransformACC*Clause functions set this to true to indicate that a
+    /// defaultmap(tofrom:scalar) is required on the OpenMP directive, and
+    /// transformACCClauses creates that clause afterward.
+    bool NeedsDefaultmapForScalars = false;
   };
   /// This stack is pushed and popped at each effective OpenACC directive.
   SmallVector<DirStackEntry, 4> DirStack;
@@ -2847,7 +2851,8 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
   void transformACCClauses(ACCExecutableDirective *D,
                            OpenMPDirectiveKind TDKind,
                            llvm::SmallVectorImpl<OMPClause *> &TClauses,
-                           size_t &TClausesEmptyCount) {
+                           size_t &TClausesEmptyCount,
+                           size_t &NumClausesAdded) {
     TClausesEmptyCount = 0;
     ArrayRef<ACCClause *> Clauses = D->clauses();
     TClauses.reserve(Clauses.size());
@@ -2860,6 +2865,13 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
         ++TClausesEmptyCount;
       else if (!ClauseResult.isInvalid())
         TClauses.push_back(ClauseResult.get());
+    }
+    if (DirStack.back().NeedsDefaultmapForScalars) {
+      TClauses.push_back(getSema().ActOnOpenMPDefaultmapClause(
+          OMPC_DEFAULTMAP_MODIFIER_tofrom, OMPC_DEFAULTMAP_scalar,
+          D->getEndLoc(), D->getEndLoc(), D->getEndLoc(), D->getEndLoc(),
+          D->getEndLoc()));
+      ++NumClausesAdded;
     }
   }
 
@@ -3078,7 +3090,9 @@ public:
     // Transform OpenACC clauses.
     llvm::SmallVector<OMPClause *, 16> TClauses;
     size_t TClausesEmptyCount;
-    transformACCClauses(D, OMPD_target_data, TClauses, TClausesEmptyCount);
+    size_t NumClausesAdded = 0;
+    transformACCClauses(D, OMPD_target_data, TClauses, TClausesEmptyCount,
+                        NumClausesAdded);
 
     // Transform associated statement.
     StmtResult AssociatedStmt = transformACCAssociatedStmt(D, OMPD_target_data,
@@ -3088,7 +3102,8 @@ public:
     // any.
     StmtResult Res;
     if (AssociatedStmt.isInvalid() ||
-        TClauses.size() != D->clauses().size() - TClausesEmptyCount)
+        TClauses.size() !=
+            D->clauses().size() - TClausesEmptyCount + NumClausesAdded)
       Res = StmtError();
     else
       Res = getDerived().RebuildOMPExecutableDirective(
@@ -3138,49 +3153,9 @@ public:
     // Transform OpenACC clauses.
     llvm::SmallVector<OMPClause *, 16> TClauses;
     size_t TClausesEmptyCount;
-    transformACCClauses(D, OMPD_target_teams, TClauses, TClausesEmptyCount);
-
-    // Add defaultmap(tofrom:scalar) if there's a scalar variable with both
-    // an implicit nomap clause and an implicit shared clause.
     size_t NumClausesAdded = 0;
-    class NomapSharedVar {
-      bool Nomap = false;
-      bool Shared = false;
-    public:
-      bool addNomap() { Nomap = true; return Shared; }
-      bool addShared() { Shared = true; return Nomap; }
-    };
-    llvm::DenseMap<const VarDecl *, NomapSharedVar> NomapSharedVars;
-    for (ACCClause *C : D->clauses()) {
-      bool Found = false;
-      switch (C->getClauseKind()) {
-      case ACCC_nomap:
-        iterateACCVarList(cast<ACCNomapClause>(C), [&](Expr *, VarDecl *VD) {
-          if (!VD->getType()->isScalarType())
-            return false;
-          return Found |= NomapSharedVars[VD].addNomap();
-        });
-        break;
-      case ACCC_shared:
-        iterateACCVarList(cast<ACCSharedClause>(C), [&](Expr *, VarDecl *VD) {
-          if (!VD->getType()->isScalarType())
-            return false;
-          return Found |= NomapSharedVars[VD].addShared();
-        });
-        break;
-      default:
-        continue;
-      }
-      if (Found) {
-        TClauses.push_back(
-            getSema().ActOnOpenMPDefaultmapClause(
-                OMPC_DEFAULTMAP_MODIFIER_tofrom, OMPC_DEFAULTMAP_scalar,
-                D->getEndLoc(), D->getEndLoc(), D->getEndLoc(), D->getEndLoc(),
-                D->getEndLoc()));
-        ++NumClausesAdded;
-        break;
-      }
-    }
+    transformACCClauses(D, OMPD_target_teams, TClauses, TClausesEmptyCount,
+                        NumClausesAdded);
 
     // Transform associated statement.
     StmtResult AssociatedStmt = transformACCAssociatedStmt(D, OMPD_target_teams,
@@ -3345,7 +3320,8 @@ public:
 
     // Transform OpenACC clauses.
     size_t TClausesEmptyCount;
-    transformACCClauses(D, TDKind, TClauses, TClausesEmptyCount);
+    transformACCClauses(D, TDKind, TClauses, TClausesEmptyCount,
+                        NumClausesAdded);
 
     // Transform associated statement.
     OpenMPDirectiveKind ParentLoopOMPKindOld = ParentLoopOMPKind;
@@ -3436,6 +3412,16 @@ public:
   OMPClauseResult TransformACCNomapClause(ACCExecutableDirective *D,
                                           OpenMPDirectiveKind TDKind,
                                           ACCNomapClause *C) {
+    // For each nomap shared variable, if it's a scalar, a defaultmap for
+    // scalars is required here.
+    iterateACCVarList(C, [&](Expr *RefExpr, VarDecl *VD) {
+      const DAVarData &VarDAs = DirStack.back().DAMap[VD];
+      assert(VarDAs.DMAKind == ACC_DMA_nomap &&
+             "expected nomap clauses to record ACC_DMA_nomap");
+      if (VarDAs.DSAKind == ACC_DSA_shared && VD->getType()->isScalarType())
+        DirStack.back().NeedsDefaultmapForScalars = true;
+      return false;
+    });
     return OMPClauseEmpty();
   }
 
