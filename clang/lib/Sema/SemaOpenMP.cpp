@@ -16651,7 +16651,7 @@ static bool checkMapConflicts(
     Sema &SemaRef, DSAStackTy *DSAS, const ValueDecl *VD, const Expr *E,
     bool CurrentRegionOnly,
     OMPClauseMappableExprCommon::MappableExprComponentListRef CurComponents,
-    OpenMPClauseKind CKind) {
+    OpenMPClauseKind CKind, ArrayRef<OpenMPMapModifierKind> Modifiers = None) {
   assert(VD && E);
   SourceLocation ELoc = E->getExprLoc();
   SourceRange ERange = E->getSourceRange();
@@ -16879,7 +16879,10 @@ static bool checkMapConflicts(
   //  then the list item must also have a corresponding list item in the device
   //  data environment prior to the task encountering the construct.
   //
-  if (EnclosingExpr && !IsEnclosedByDataEnvironmentExpr) {
+  bool HasNoAllocMod =
+      Modifiers.end() != std::find(Modifiers.begin(), Modifiers.end(),
+                                   OMPC_MAP_MODIFIER_no_alloc);
+  if (EnclosingExpr && !IsEnclosedByDataEnvironmentExpr && !HasNoAllocMod) {
     SemaRef.Diag(ELoc,
                  diag::err_omp_original_storage_is_shared_and_does_not_contain)
         << ERange;
@@ -17039,6 +17042,7 @@ static void checkMappableExpressionList(
     CXXScopeSpec &MapperIdScopeSpec, DeclarationNameInfo MapperId,
     ArrayRef<Expr *> UnresolvedMappers,
     OpenMPMapClauseKind MapType = OMPC_MAP_unknown,
+    ArrayRef<OpenMPMapModifierKind> Modifiers = None,
     bool IsMapTypeImplicit = false) {
   // We only expect mappable expressions in 'to', 'from', and 'map' clauses.
   assert((CKind == OMPC_map || CKind == OMPC_to || CKind == OMPC_from) &&
@@ -17184,7 +17188,8 @@ static void checkMappableExpressionList(
       break;
     if (CKind == OMPC_map &&
         checkMapConflicts(SemaRef, DSAS, CurDeclaration, SimpleExpr,
-                          /*CurrentRegionOnly=*/false, CurComponents, CKind))
+                          /*CurrentRegionOnly=*/false, CurComponents, CKind,
+                          Modifiers))
       break;
 
     // OpenMP 4.5 [2.10.5, target update Construct]
@@ -17352,7 +17357,7 @@ OMPClause *Sema::ActOnOpenMPMapClause(
   MappableVarListInfo MVLI(VarList);
   checkMappableExpressionList(*this, DSAStack, OMPC_map, MVLI, Locs.StartLoc,
                               MapperIdScopeSpec, MapperId, UnresolvedMappers,
-                              MapType, IsMapTypeImplicit);
+                              MapType, Modifiers, IsMapTypeImplicit);
 
   // We need to produce a map clause even if we don't have variables so that
   // other diagnostics related with non-existing map clauses are accurate.
