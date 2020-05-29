@@ -2706,6 +2706,9 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     /// If the DSA is undetermined, then ACC_DSA_unknown.  Otherwise, not
     /// ACC_DSA_unknown.
     OpenACCDSAKind DSAKind = ACC_DSA_unknown;
+    /// If no DMA is visible, then ACC_DMA_unknown.  Otherwise, not
+    /// ACC_DMA_unknown.
+    OpenACCDMAKind VisibleDMAKind = ACC_DMA_unknown;
   };
 
   /// Data we store per effective OpenACC directive while transforming them.
@@ -2762,7 +2765,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
         if (ClauseDAs.DMAKind != ACC_DMA_unknown) {
           assert(VarDAs.DMAKind == ACC_DMA_unknown &&
                  "expected at most one DMA per variable");
-          VarDAs.DMAKind = ClauseDAs.DMAKind;
+          VarDAs.DMAKind = VarDAs.VisibleDMAKind = ClauseDAs.DMAKind;
         }
         if (ClauseDAs.DSAKind != ACC_DSA_unknown) {
           assert(VarDAs.DSAKind == ACC_DSA_unknown &&
@@ -2801,6 +2804,15 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
       if (Transform.DirStack.size() == 1)
         return;
       DirStackEntry &ParentDirEntry = *(Transform.DirStack.rbegin() + 1);
+
+      // Collect visible DMAs from parent directive.
+      for (auto ParentEntry : ParentDirEntry.DAMap) {
+        VarDecl *VD = ParentEntry.first;
+        const DAVarData &ParentDAs = ParentEntry.second;
+        DAVarData &DAs = DirEntry.DAMap[VD];
+        if (DAs.VisibleDMAKind == ACC_DMA_unknown)
+          DAs.VisibleDMAKind = ParentDAs.VisibleDMAKind;
+      }
 
       // Copy data from parent directive.
       DirEntry.NumWorkersVarDecl = ParentDirEntry.NumWorkersVarDecl;
@@ -3413,17 +3425,48 @@ public:
   OMPClauseResult TransformACCNomapClause(ACCExecutableDirective *D,
                                           OpenMPDirectiveKind TDKind,
                                           ACCNomapClause *C) {
-    // For each nomap shared variable, if it's a scalar, a defaultmap for
-    // scalars is required here.
+    // For each nomap shared variable:
+    // - If it has a visible no_create at the parent directive and no_create
+    //   maps to no_alloc, then add a no_alloc here for it.
+    // - Otherwise, if it's a scalar, a defaultmap for scalars is required here.
+    bool NoCreateOMPNoAlloc;
+    switch (getSema().LangOpts.getOpenACCNoCreateOMP()) {
+    case LangOptions::OpenACCNoCreateOMP_NoAlloc:
+      NoCreateOMPNoAlloc = true;
+      break;
+    case LangOptions::OpenACCNoCreateOMP_Alloc:
+      NoCreateOMPNoAlloc = false;
+      break;
+    }
+    llvm::DenseSet<const VarDecl *> SkipVars;
     iterateACCVarList(C, [&](Expr *RefExpr, VarDecl *VD) {
       const DAVarData &VarDAs = DirStack.back().DAMap[VD];
       assert(VarDAs.DMAKind == ACC_DMA_nomap &&
              "expected nomap clauses to record ACC_DMA_nomap");
+      if (VarDAs.DSAKind == ACC_DSA_shared && DirStack.size() > 1 &&
+          (DirStack.rbegin() + 1)->DAMap[VD].VisibleDMAKind ==
+              ACC_DMA_no_create &&
+          NoCreateOMPNoAlloc) {
+        getSema().Diag(D->getEndLoc(),
+                       diag::warn_acc_omp_map_no_alloc_from_visible)
+            << getOpenACCName(C->getClauseKind());
+        return false;
+      }
+      SkipVars.insert(VD);
       if (VarDAs.DSAKind == ACC_DSA_shared && VD->getType()->isScalarType())
         DirStack.back().NeedsDefaultmapForScalars = true;
       return false;
     });
-    return OMPClauseEmpty();
+    return transformACCVarListClause<ACCNomapClause>(
+        D, C, OMPC_map, SkipVars,
+        [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+          SmallVector<SourceLocation, 1> MapModLocs;
+          return getDerived().RebuildOMPMapClause(
+              {OMPC_MAP_MODIFIER_no_alloc}, {L.LParenLoc}, CXXScopeSpec(),
+              DeclarationNameInfo(), OMPC_MAP_alloc, /*IsMapTypeImplicit*/
+              false, L.LocStart, L.LParenLoc, Vars,
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+        });
   }
 
   OMPClauseResult TransformACCPresentClause(ACCExecutableDirective *D,

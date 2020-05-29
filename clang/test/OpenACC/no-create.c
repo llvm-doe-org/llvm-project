@@ -1,11 +1,14 @@
 // Check no_create clauses on different constructs and with different values of
 // -fopenacc-no-create-omp.  Diagnostics about no-alloc in the translation are
-// tested in warn-acc-omp-map-no-alloc.c.
+// tested in warn-acc-omp-map-no-alloc.c.  data.c tests various interactions
+// with explicit DAs and the defaultmap added for scalars with suppressed
+// OpenACC implicit DAs.
 //
 // The various cases covered here should be kept consistent with present.c.
 // For example, a subarray that extends a subarray already present is
 // consistently considered not present, so the present clause produces a runtime
-// error and the no_create clause doesn't allocate.
+// error and the no_create clause doesn't allocate.  However, INHERITED cases
+// have no meaning for the present clause.
 
 // Check bad -fopenacc-no-create-omp values.
 //
@@ -31,41 +34,45 @@
 // Define some interrelated data we use several times below.
 //
 // RUN: %data no-create-opts {
-// RUN:   (no-create-opt=-Wno-openacc-omp-map-no-alloc                                    no-create-mt=no_alloc,alloc noAlloc-unless-alloc=NO-ALLOC noAllocDisjoint-unless-allocDisjoint=NO-ALLOC-DISJOINT noAllocExtends-unless-allocExtends=NO-ALLOC-EXTENDS noAllocConcat2-unless-allocConcat2=NO-ALLOC-CONCAT2 not-if-alloc=   )
-// RUN:   (no-create-opt='-fopenacc-no-create-omp=no_alloc -Wno-openacc-omp-map-no-alloc' no-create-mt=no_alloc,alloc noAlloc-unless-alloc=NO-ALLOC noAllocDisjoint-unless-allocDisjoint=NO-ALLOC-DISJOINT noAllocExtends-unless-allocExtends=NO-ALLOC-EXTENDS noAllocConcat2-unless-allocConcat2=NO-ALLOC-CONCAT2 not-if-alloc=   )
-// RUN:   (no-create-opt=-fopenacc-no-create-omp=alloc                                    no-create-mt=alloc          noAlloc-unless-alloc=ALLOC    noAllocDisjoint-unless-allocDisjoint=ALLOC-DISJOINT    noAllocExtends-unless-allocExtends=ALLOC-EXTENDS    noAllocConcat2-unless-allocConcat2=ALLOC-CONCAT2    not-if-alloc=not)
+// RUN:   (no-create-opt=-Wno-openacc-omp-map-no-alloc                                    no-create-mt=no_alloc,alloc noAlloc-unless-alloc=NO-ALLOC noAllocDisjoint-unless-allocDisjoint=NO-ALLOC-DISJOINT noAllocExtends-unless-allocExtends=NO-ALLOC-EXTENDS noAllocConcat2-unless-allocConcat2=NO-ALLOC-CONCAT2 noAllocInherited-unless-allocInherited=NO-ALLOC-INHERITED not-if-alloc=   )
+// RUN:   (no-create-opt='-fopenacc-no-create-omp=no_alloc -Wno-openacc-omp-map-no-alloc' no-create-mt=no_alloc,alloc noAlloc-unless-alloc=NO-ALLOC noAllocDisjoint-unless-allocDisjoint=NO-ALLOC-DISJOINT noAllocExtends-unless-allocExtends=NO-ALLOC-EXTENDS noAllocConcat2-unless-allocConcat2=NO-ALLOC-CONCAT2 noAllocInherited-unless-allocInherited=NO-ALLOC-INHERITED not-if-alloc=   )
+// RUN:   (no-create-opt=-fopenacc-no-create-omp=alloc                                    no-create-mt=alloc          noAlloc-unless-alloc=ALLOC    noAllocDisjoint-unless-allocDisjoint=ALLOC-DISJOINT    noAllocExtends-unless-allocExtends=ALLOC-EXTENDS    noAllocConcat2-unless-allocConcat2=ALLOC-CONCAT2    noAllocInherited-unless-allocInherited=ALLOC-INHERITED    not-if-alloc=not)
 // RUN: }
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                                     present-unless-host=HOST    noAlloc-unless-hostOrAlloc=HOST                    noAllocDisjoint-unless-hostOrAllocDisjoint=HOST                                    noAllocExtends-unless-hostOrAllocExtends=HOST                                  noAllocConcat2-unless-hostOrAllocConcat2=HOST                                  not-if-off-and-alloc=               )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  present-unless-host=PRESENT noAlloc-unless-hostOrAlloc=%[noAlloc-unless-alloc] noAllocDisjoint-unless-hostOrAllocDisjoint=%[noAllocDisjoint-unless-allocDisjoint] noAllocExtends-unless-hostOrAllocExtends=%[noAllocExtends-unless-allocExtends] noAllocConcat2-unless-hostOrAllocConcat2=%[noAllocConcat2-unless-allocConcat2] not-if-off-and-alloc=%[not-if-alloc])
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple present-unless-host=PRESENT noAlloc-unless-hostOrAlloc=%[noAlloc-unless-alloc] noAllocDisjoint-unless-hostOrAllocDisjoint=%[noAllocDisjoint-unless-allocDisjoint] noAllocExtends-unless-hostOrAllocExtends=%[noAllocExtends-unless-allocExtends] noAllocConcat2-unless-hostOrAllocConcat2=%[noAllocConcat2-unless-allocConcat2] not-if-off-and-alloc=%[not-if-alloc])
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple present-unless-host=PRESENT noAlloc-unless-hostOrAlloc=%[noAlloc-unless-alloc] noAllocDisjoint-unless-hostOrAllocDisjoint=%[noAllocDisjoint-unless-allocDisjoint] noAllocExtends-unless-hostOrAllocExtends=%[noAllocExtends-unless-allocExtends] noAllocConcat2-unless-hostOrAllocConcat2=%[noAllocConcat2-unless-allocConcat2] not-if-off-and-alloc=%[not-if-alloc])
+// RUN:   (run-if=                tgt-cflags=                                     present-unless-host=HOST    noAlloc-unless-hostOrAlloc=HOST                    noAllocDisjoint-unless-hostOrAllocDisjoint=HOST                                    noAllocExtends-unless-hostOrAllocExtends=HOST                                  noAllocConcat2-unless-hostOrAllocConcat2=HOST                                  presentInherited-unless-host=HOST              noAllocInherited-unless-hostOrAllocInherited=HOST                                    not-if-off-and-alloc=               )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  present-unless-host=PRESENT noAlloc-unless-hostOrAlloc=%[noAlloc-unless-alloc] noAllocDisjoint-unless-hostOrAllocDisjoint=%[noAllocDisjoint-unless-allocDisjoint] noAllocExtends-unless-hostOrAllocExtends=%[noAllocExtends-unless-allocExtends] noAllocConcat2-unless-hostOrAllocConcat2=%[noAllocConcat2-unless-allocConcat2] presentInherited-unless-host=PRESENT-INHERITED noAllocInherited-unless-hostOrAllocInherited=%[noAllocInherited-unless-allocInherited] not-if-off-and-alloc=%[not-if-alloc])
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple present-unless-host=PRESENT noAlloc-unless-hostOrAlloc=%[noAlloc-unless-alloc] noAllocDisjoint-unless-hostOrAllocDisjoint=%[noAllocDisjoint-unless-allocDisjoint] noAllocExtends-unless-hostOrAllocExtends=%[noAllocExtends-unless-allocExtends] noAllocConcat2-unless-hostOrAllocConcat2=%[noAllocConcat2-unless-allocConcat2] presentInherited-unless-host=PRESENT-INHERITED noAllocInherited-unless-hostOrAllocInherited=%[noAllocInherited-unless-allocInherited] not-if-off-and-alloc=%[not-if-alloc])
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple present-unless-host=PRESENT noAlloc-unless-hostOrAlloc=%[noAlloc-unless-alloc] noAllocDisjoint-unless-hostOrAllocDisjoint=%[noAllocDisjoint-unless-allocDisjoint] noAllocExtends-unless-hostOrAllocExtends=%[noAllocExtends-unless-allocExtends] noAllocConcat2-unless-hostOrAllocConcat2=%[noAllocConcat2-unless-allocConcat2] presentInherited-unless-host=PRESENT-INHERITED noAllocInherited-unless-hostOrAllocInherited=%[noAllocInherited-unless-allocInherited] not-if-off-and-alloc=%[not-if-alloc])
 // RUN: }
 //      # "acc parallel loop" should be about the same as "acc parallel", so a
 //      # few cases are probably sufficient for it.
 // RUN: %data cases {
-// RUN:   (case=CASE_DATA_SCALAR_PRESENT             exe=%[present-unless-host]                        data-or-par=DATA  not-if-fail=                       )
-// RUN:   (case=CASE_DATA_SCALAR_ABSENT              exe=%[noAlloc-unless-hostOrAlloc]                 data-or-par=DATA  not-if-fail=                       )
-// RUN:   (case=CASE_DATA_ARRAY_PRESENT              exe=%[present-unless-host]                        data-or-par=DATA  not-if-fail=                       )
-// RUN:   (case=CASE_DATA_ARRAY_ABSENT               exe=%[noAlloc-unless-hostOrAlloc]                 data-or-par=DATA  not-if-fail=                       )
-// RUN:   (case=CASE_DATA_SUBARRAY_PRESENT           exe=%[present-unless-host]                        data-or-par=DATA  not-if-fail=                       )
-// RUN:   (case=CASE_DATA_SUBARRAY_DISJOINT          exe=%[noAllocDisjoint-unless-hostOrAllocDisjoint] data-or-par=DATA  not-if-fail=                       )
-// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_START     exe=%[noAllocExtends-unless-hostOrAllocExtends]   data-or-par=DATA  not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_END       exe=%[noAllocExtends-unless-hostOrAllocExtends]   data-or-par=DATA  not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_DATA_SUBARRAY_CONCAT2           exe=%[noAllocConcat2-unless-hostOrAllocConcat2]   data-or-par=DATA  not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_PARALLEL_SCALAR_PRESENT         exe=%[present-unless-host]                        data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_SCALAR_ABSENT          exe=%[noAlloc-unless-hostOrAlloc]                 data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_ARRAY_PRESENT          exe=%[present-unless-host]                        data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_ARRAY_ABSENT           exe=%[noAlloc-unless-hostOrAlloc]                 data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_PRESENT       exe=%[present-unless-host]                        data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_DISJOINT      exe=%[noAllocDisjoint-unless-hostOrAllocDisjoint] data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_START exe=%[noAllocExtends-unless-hostOrAllocExtends]   data-or-par=PAR   not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_END   exe=%[noAllocExtends-unless-hostOrAllocExtends]   data-or-par=PAR   not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_CONCAT2       exe=%[noAllocConcat2-unless-hostOrAllocConcat2]   data-or-par=PAR   not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_PRESENT    exe=%[present-unless-host]                        data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_ABSENT     exe=%[noAlloc-unless-hostOrAlloc]                 data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_CONST_PRESENT                   exe=%[present-unless-host]                        data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_CONST_ABSENT                    exe=%[noAlloc-unless-hostOrAlloc]                 data-or-par=PAR   not-if-fail=                       )
+// RUN:   (case=CASE_DATA_SCALAR_PRESENT             exe=%[present-unless-host]                          data-or-par=DATA  not-if-fail=                       )
+// RUN:   (case=CASE_DATA_SCALAR_ABSENT              exe=%[noAlloc-unless-hostOrAlloc]                   data-or-par=DATA  not-if-fail=                       )
+// RUN:   (case=CASE_DATA_ARRAY_PRESENT              exe=%[present-unless-host]                          data-or-par=DATA  not-if-fail=                       )
+// RUN:   (case=CASE_DATA_ARRAY_ABSENT               exe=%[noAlloc-unless-hostOrAlloc]                   data-or-par=DATA  not-if-fail=                       )
+// RUN:   (case=CASE_DATA_SUBARRAY_PRESENT           exe=%[present-unless-host]                          data-or-par=DATA  not-if-fail=                       )
+// RUN:   (case=CASE_DATA_SUBARRAY_DISJOINT          exe=%[noAllocDisjoint-unless-hostOrAllocDisjoint]   data-or-par=DATA  not-if-fail=                       )
+// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_START     exe=%[noAllocExtends-unless-hostOrAllocExtends]     data-or-par=DATA  not-if-fail=%[not-if-off-and-alloc])
+// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_END       exe=%[noAllocExtends-unless-hostOrAllocExtends]     data-or-par=DATA  not-if-fail=%[not-if-off-and-alloc])
+// RUN:   (case=CASE_DATA_SUBARRAY_CONCAT2           exe=%[noAllocConcat2-unless-hostOrAllocConcat2]     data-or-par=DATA  not-if-fail=%[not-if-off-and-alloc])
+// RUN:   (case=CASE_PARALLEL_SCALAR_PRESENT         exe=%[present-unless-host]                          data-or-par=PAR   not-if-fail=                       )
+// RUN:   (case=CASE_PARALLEL_SCALAR_ABSENT          exe=%[noAlloc-unless-hostOrAlloc]                   data-or-par=PAR   not-if-fail=                       )
+// RUN:   (case=CASE_PARALLEL_ARRAY_PRESENT          exe=%[present-unless-host]                          data-or-par=PAR   not-if-fail=                       )
+// RUN:   (case=CASE_PARALLEL_ARRAY_ABSENT           exe=%[noAlloc-unless-hostOrAlloc]                   data-or-par=PAR   not-if-fail=                       )
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_PRESENT       exe=%[present-unless-host]                          data-or-par=PAR   not-if-fail=                       )
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_DISJOINT      exe=%[noAllocDisjoint-unless-hostOrAllocDisjoint]   data-or-par=PAR   not-if-fail=                       )
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_START exe=%[noAllocExtends-unless-hostOrAllocExtends]     data-or-par=PAR   not-if-fail=%[not-if-off-and-alloc])
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_END   exe=%[noAllocExtends-unless-hostOrAllocExtends]     data-or-par=PAR   not-if-fail=%[not-if-off-and-alloc])
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_CONCAT2       exe=%[noAllocConcat2-unless-hostOrAllocConcat2]     data-or-par=PAR   not-if-fail=%[not-if-off-and-alloc])
+// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_PRESENT    exe=%[present-unless-host]                          data-or-par=PAR   not-if-fail=                       )
+// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_ABSENT     exe=%[noAlloc-unless-hostOrAlloc]                   data-or-par=PAR   not-if-fail=                       )
+// RUN:   (case=CASE_CONST_PRESENT                   exe=%[present-unless-host]                          data-or-par=PAR   not-if-fail=                       )
+// RUN:   (case=CASE_CONST_ABSENT                    exe=%[noAlloc-unless-hostOrAlloc]                   data-or-par=PAR   not-if-fail=                       )
+// RUN:   (case=CASE_INHERITED_PRESENT               exe=%[presentInherited-unless-host]                 data-or-par=PAR   not-if-fail=                       )
+// RUN:   (case=CASE_INHERITED_ABSENT                exe=%[noAllocInherited-unless-hostOrAllocInherited] data-or-par=PAR   not-if-fail=                       )
+// RUN:   (case=CASE_INHERITED_SUBARRAY_PRESENT      exe=%[presentInherited-unless-host]                 data-or-par=PAR   not-if-fail=                       )
+// RUN:   (case=CASE_INHERITED_SUBARRAY_ABSENT       exe=%[noAllocInherited-unless-hostOrAllocInherited] data-or-par=PAR   not-if-fail=                       )
 // RUN: }
 
 // Check -ast-dump before and after AST serialization.
@@ -76,11 +83,11 @@
 // RUN: %for no-create-opts {
 // RUN:   %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
 // RUN:          %[no-create-opt] \
-// RUN:   | FileCheck -check-prefixes=DMP %s
+// RUN:   | FileCheck -check-prefixes=DMP,DMP-%[noAlloc-unless-alloc] %s
 // RUN:   %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %s \
 // RUN:          %[no-create-opt]
 // RUN:   %clang_cc1 -ast-dump-all %t.ast \
-// RUN:   | FileCheck -check-prefixes=DMP %s
+// RUN:   | FileCheck -check-prefixes=DMP,DMP-%[noAlloc-unless-alloc] %s
 // RUN: }
 
 // Check -ast-print and -fopenacc[-ast]-print.
@@ -104,15 +111,15 @@
 // RUN:   (prt-opt=-fopenacc-print    )
 // RUN: }
 // RUN: %data prt-args {
-// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-A       )
-// RUN:   (prt=-fopenacc-ast-print=acc                      prt-chk=PRT,PRT-A       )
-// RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT,PRT-O       )
-// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT,PRT-A,PRT-AO)
-// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT,PRT-O,PRT-OA)
-// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT,PRT-A       )
-// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT,PRT-O       )
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT,PRT-A,PRT-AO)
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT,PRT-O,PRT-OA)
+// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-A,PRT-A-%[noAlloc-unless-alloc]                                      )
+// RUN:   (prt=-fopenacc-ast-print=acc                      prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-A,PRT-A-%[noAlloc-unless-alloc]                                      )
+// RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-O,PRT-O-%[noAlloc-unless-alloc]                                      )
+// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-A,PRT-A-%[noAlloc-unless-alloc],PRT-AO,PRT-AO-%[noAlloc-unless-alloc])
+// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-O,PRT-O-%[noAlloc-unless-alloc],PRT-OA,PRT-OA-%[noAlloc-unless-alloc])
+// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-A,PRT-A-%[noAlloc-unless-alloc]                                      )
+// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-O,PRT-O-%[noAlloc-unless-alloc]                                      )
+// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-A,PRT-A-%[noAlloc-unless-alloc],PRT-AO,PRT-AO-%[noAlloc-unless-alloc])
+// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-O,PRT-O-%[noAlloc-unless-alloc],PRT-OA,PRT-OA-%[noAlloc-unless-alloc])
 // RUN: }
 // RUN: %for no-create-opts {
 // RUN:   %for prt-args {
@@ -218,7 +225,11 @@
   Macro(CASE_PARALLEL_LOOP_SCALAR_PRESENT)    \
   Macro(CASE_PARALLEL_LOOP_SCALAR_ABSENT)     \
   Macro(CASE_CONST_PRESENT)                   \
-  Macro(CASE_CONST_ABSENT)
+  Macro(CASE_CONST_ABSENT)                    \
+  Macro(CASE_INHERITED_PRESENT)               \
+  Macro(CASE_INHERITED_ABSENT)                \
+  Macro(CASE_INHERITED_SUBARRAY_PRESENT)      \
+  Macro(CASE_INHERITED_SUBARRAY_ABSENT)
 
 enum Case {
 #define AddCase(CaseName) \
@@ -715,6 +726,185 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  //         DMP-LABEL: CASE_INHERITED_PRESENT
+  //               DMP: ACCDataDirective
+  //          DMP-NEXT:   ACCCreateClause
+  //          DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
+  //          DMP-NEXT:   impl: OMPTargetDataDirective
+  //          DMP-NEXT:     OMPMapClause
+  //          DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+  //               DMP:   ACCDataDirective
+  //          DMP-NEXT:     ACCNoCreateClause
+  //          DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+  //          DMP-NEXT:     impl: OMPTargetDataDirective
+  //          DMP-NEXT:       OMPMapClause
+  //          DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
+  //               DMP:     ACCParallelDirective
+  //          DMP-NEXT:       ACCNomapClause
+  //          DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
+  //          DMP-NEXT:       ACCSharedClause
+  //          DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
+  //          DMP-NEXT:       impl: OMPTargetTeamsDirective
+  // DMP-NO-ALLOC-NEXT:         OMPMapClause
+  // DMP-NO-ALLOC-NEXT:           DeclRefExpr {{.*}} 'x' 'int'
+  //          DMP-NEXT:         OMPSharedClause
+  //          DMP-NEXT:           DeclRefExpr {{.*}} 'x' 'int'
+  //    DMP-ALLOC-NEXT:         DefaultmapClause
+  //
+  //            PRT-LABEL: case CASE_INHERITED_PRESENT:
+  //             PRT-NEXT: {
+  //             PRT-NEXT:   int x;
+  //
+  //           PRT-A-NEXT:   #pragma acc data create(x){{$}}
+  //          PRT-AO-NEXT:   // #pragma omp target data map(alloc: x){{$}}
+  //           PRT-A-NEXT:   #pragma acc data no_create(x){{$}}
+  //          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
+  //           PRT-A-NEXT:   #pragma acc parallel{{$}}
+  // PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x){{$}}
+  //    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams shared(x) defaultmap(tofrom: scalar){{$}}
+  //
+  //           PRT-O-NEXT:   #pragma omp target data map(alloc: x){{$}}
+  //          PRT-OA-NEXT:   // #pragma acc data create(x){{$}}
+  //           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
+  //          PRT-OA-NEXT:   // #pragma acc data no_create(x){{$}}
+  //  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x){{$}}
+  //     PRT-O-ALLOC-NEXT:   #pragma omp target teams shared(x) defaultmap(tofrom: scalar){{$}}
+  //          PRT-OA-NEXT:   // #pragma acc parallel{{$}}
+  //
+  //             PRT-NEXT:   x = 1;
+  //             PRT-NEXT:   break;
+  //             PRT-NEXT: }
+  case CASE_INHERITED_PRESENT:
+  {
+    int x;
+    #pragma acc data create(x)
+    #pragma acc data no_create(x)
+    #pragma acc parallel
+    x = 1;
+    break;
+  }
+
+  //         DMP-LABEL: CASE_INHERITED_ABSENT
+  //               DMP: ACCDataDirective
+  //          DMP-NEXT:   ACCNoCreateClause
+  //          DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
+  //          DMP-NEXT:   impl: OMPTargetDataDirective
+  //          DMP-NEXT:     OMPMapClause
+  //          DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+  //               DMP:   ACCParallelDirective
+  //          DMP-NEXT:     ACCNomapClause
+  //          DMP-NEXT:       DeclRefExpr {{.*}} 'use' 'int'
+  //          DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+  //          DMP-NEXT:     ACCSharedClause
+  //          DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+  //          DMP-NEXT:     ACCFirstprivateClause
+  //          DMP-NEXT:       DeclRefExpr {{.*}} 'use' 'int'
+  //          DMP-NEXT:     impl: OMPTargetTeamsDirective
+  // DMP-NO-ALLOC-NEXT:       OMPMapClause
+  // DMP-NO-ALLOC-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
+  //          DMP-NEXT:       OMPSharedClause
+  //          DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
+  //          DMP-NEXT:       OMPFirstprivateClause
+  //          DMP-NEXT:         DeclRefExpr {{.*}} 'use' 'int'
+  //    DMP-ALLOC-NEXT:       DefaultmapClause
+  //
+  //            PRT-LABEL: case CASE_INHERITED_ABSENT:
+  //             PRT-NEXT: {
+  //             PRT-NEXT:   int x;
+  //             PRT-NEXT:   int use = 0;
+  //
+  //           PRT-A-NEXT:   #pragma acc data no_create(x){{$}}
+  //          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
+  //           PRT-A-NEXT:   #pragma acc parallel{{$}}
+  // PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x) firstprivate(use){{$}}
+  //    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams shared(x) firstprivate(use) defaultmap(tofrom: scalar){{$}}
+  //
+  //           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
+  //          PRT-OA-NEXT:   // #pragma acc data no_create(x){{$}}
+  //  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x) firstprivate(use){{$}}
+  //     PRT-O-ALLOC-NEXT:   #pragma omp target teams shared(x) firstprivate(use) defaultmap(tofrom: scalar){{$}}
+  //          PRT-OA-NEXT:   // #pragma acc parallel{{$}}
+  //
+  //             PRT-NEXT:   if (use)
+  //             PRT-NEXT:     x = 1;
+  //             PRT-NEXT:   break;
+  //             PRT-NEXT: }
+  case CASE_INHERITED_ABSENT:
+  {
+    int x;
+    int use = 0;
+    #pragma acc data no_create(x)
+    #pragma acc parallel
+    if (use)
+      x = 1;
+    break;
+  }
+
+  //            PRT-LABEL: case CASE_INHERITED_SUBARRAY_PRESENT:
+  //             PRT-NEXT: {
+  //             PRT-NEXT:   int arr[] =
+  //
+  //           PRT-A-NEXT:   #pragma acc data create(arr){{$}}
+  //          PRT-AO-NEXT:   // #pragma omp target data map(alloc: arr){{$}}
+  //           PRT-A-NEXT:   #pragma acc data no_create(arr[1:2]){{$}}
+  //          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2]){{$}}
+  //           PRT-A-NEXT:   #pragma acc parallel{{$}}
+  // PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: arr) shared(arr){{$}}
+  //    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams shared(arr){{$}}
+  //
+  //           PRT-O-NEXT:   #pragma omp target data map(alloc: arr){{$}}
+  //          PRT-OA-NEXT:   // #pragma acc data create(arr){{$}}
+  //           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2]){{$}}
+  //          PRT-OA-NEXT:   // #pragma acc data no_create(arr[1:2]){{$}}
+  //  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: arr) shared(arr){{$}}
+  //     PRT-O-ALLOC-NEXT:   #pragma omp target teams shared(arr){{$}}
+  //          PRT-OA-NEXT:   // #pragma acc parallel{{$}}
+  //
+  //             PRT-NEXT:   arr[1] = 1;
+  //             PRT-NEXT:   break;
+  //             PRT-NEXT: }
+  case CASE_INHERITED_SUBARRAY_PRESENT:
+  {
+    int arr[] = {10, 20, 30, 40, 50};
+    #pragma acc data create(arr)
+    #pragma acc data no_create(arr[1:2])
+    #pragma acc parallel
+    arr[1] = 1;
+    break;
+  }
+
+  //            PRT-LABEL: case CASE_INHERITED_SUBARRAY_ABSENT:
+  //             PRT-NEXT: {
+  //             PRT-NEXT:   int arr[] =
+  //             PRT-NEXT:   int use = 0;
+  //
+  //           PRT-A-NEXT:   #pragma acc data no_create(arr[1:2]){{$}}
+  //          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2]){{$}}
+  //           PRT-A-NEXT:   #pragma acc parallel{{$}}
+  // PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: arr) shared(arr) firstprivate(use){{$}}
+  //    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams shared(arr) firstprivate(use){{$}}
+  //
+  //           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2]){{$}}
+  //          PRT-OA-NEXT:   // #pragma acc data no_create(arr[1:2]){{$}}
+  //  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: arr) shared(arr) firstprivate(use){{$}}
+  //     PRT-O-ALLOC-NEXT:   #pragma omp target teams shared(arr) firstprivate(use){{$}}
+  //          PRT-OA-NEXT:   // #pragma acc parallel{{$}}
+  //
+  //             PRT-NEXT:   if (use)
+  //             PRT-NEXT:     arr[1] = 1;
+  //             PRT-NEXT:   break;
+  //             PRT-NEXT: }
+  case CASE_INHERITED_SUBARRAY_ABSENT:
+  {
+    int arr[] = {10, 20, 30, 40, 50};
+    int use = 0;
+    #pragma acc data no_create(arr[1:2])
+    #pragma acc parallel
+    if (use)
+      arr[1] = 1;
+    break;
+  }
+
   case CASE_END:
     fprintf(stderr, "unexpected CASE_END\n");
     break;
@@ -830,6 +1020,35 @@ int main(int argc, char *argv[]) {
   //      EXE-ALLOC-CONCAT2: Libomptarget --> Explicit extension of mapping is not allowed
   //      EXE-ALLOC-CONCAT2: Libomptarget --> Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping)
   //      EXE-ALLOC-CONCAT2: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+
+  // EXE-PRESENT-INHERITED: Libomptarget --> Entering data begin region
+  // EXE-PRESENT-INHERITED: Libomptarget --> Creating new map entry
+  // EXE-PRESENT-INHERITED: Libomptarget --> Entering data begin region
+  // EXE-PRESENT-INHERITED: Libomptarget --> Mapping exists {{.*}} updated RefCount=2
+  // EXE-PRESENT-INHERITED: Libomptarget --> Entering target region
+  // EXE-PRESENT-INHERITED: Libomptarget --> Mapping exists {{.*}} updated RefCount=3
+  // EXE-PRESENT-INHERITED: Libomptarget --> Launching target execution
+  // EXE-PRESENT-INHERITED: Libomptarget --> Entering data end region
+  // EXE-PRESENT-INHERITED: Libomptarget --> Mapping exists {{.*}} updated RefCount=1
+  // EXE-PRESENT-INHERITED: Libomptarget --> Entering data end region
+  // EXE-PRESENT-INHERITED: Libomptarget --> Mapping exists
+  // EXE-PRESENT-INHERITED: Libomptarget --> Removing mapping
+
+  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Entering data begin region
+  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Mapping does not exist
+  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Call to getOrAllocTgtPtr returned null pointer ('no_alloc' map type modifier)
+  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Entering target region
+  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Launching target execution
+  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Entering data end region
+  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Data is not allocated on device
+
+  // EXE-ALLOC-INHERITED: Libomptarget --> Entering data begin region
+  // EXE-ALLOC-INHERITED: Libomptarget --> Creating new map entry
+  // EXE-ALLOC-INHERITED: Libomptarget --> Entering target region
+  // EXE-ALLOC-INHERITED: Libomptarget --> Launching target execution
+  // EXE-ALLOC-INHERITED: Libomptarget --> Entering data end region
+  // EXE-ALLOC-INHERITED: Libomptarget --> Mapping exists
+  // EXE-ALLOC-INHERITED: Libomptarget --> Removing mapping
 
   return 0;
 }

@@ -47,12 +47,15 @@ int main() {
   // warn-note@+2    2 {{an alternative OpenMP translation can be specified with, for example, '-fopenacc-no-create-omp=alloc'}}
   // warn-note@+1    2 {{or you can just disable this diagnostic with '-Wno-openacc-omp-map-no-alloc'}}
   #pragma acc data no_create(x, y) no_create(z)
-    ;
+  // error-error@+2 {{the translation of a visible OpenACC 'nomap' clause produces a 'no_alloc' map type modifier here}}
+  // warn-warning@+1 {{the translation of a visible OpenACC 'nomap' clause produces a 'no_alloc' map type modifier here}}
+  #pragma acc parallel
+  x = 5;
   // warn-warning@+3 {{the OpenACC 'no_create' clause translation uses the 'no_alloc' map type modifier}}
   // warn-note@+2    {{an alternative OpenMP translation can be specified with, for example, '-fopenacc-no-create-omp=alloc'}}
   // warn-note@+1    {{or you can just disable this diagnostic with '-Wno-openacc-omp-map-no-alloc'}}
   #pragma acc parallel no_create(x)
-    ;
+  ;
   // warn-warning@+3 {{the OpenACC 'no_create' clause translation uses the 'no_alloc' map type modifier}}
   // warn-note@+2    {{an alternative OpenMP translation can be specified with, for example, '-fopenacc-no-create-omp=alloc'}}
   // warn-note@+1    {{or you can just disable this diagnostic with '-Wno-openacc-omp-map-no-alloc'}}

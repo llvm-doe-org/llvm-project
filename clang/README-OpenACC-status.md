@@ -65,12 +65,12 @@ We have implemented and tested support for the following features:
               compilation mode, the related diagnostics are disabled.
         * Source-to-source mode:
             * Occurrences of the `present` or `no_create` clause
-              produce a compile-time error diagnostic by default.  The
-              purpose of the diagnostic is to ensure the user is aware
-              that the translation includes the `present` or
-              `no_alloc` map type modifier because it is unlikely to
-              be supported yet by foreign OpenMP compilers.
-            * The diagnostic is actually the warning enabled by
+              produce compile-time error diagnostics by default.  The
+              purpose of the diagnostics is to ensure the user is
+              aware that the OpenMP translation includes the `present`
+              or `no_alloc` map type modifier because it is unlikely
+              to be supported yet by foreign OpenMP compilers.
+            * The diagnostics are actually warnings enabled by
               `-Wopenacc-omp-map-present` or
               `-Wopenacc-omp-map-no-alloc`, which is enabled and
               treated as an error by default in source-to-source mode.
@@ -87,47 +87,49 @@ We have implemented and tested support for the following features:
                   OpenMP compiler actually already supports the
                   `present` or `no_alloc` map type modifier.
                 * `-fopenacc-present-omp=alloc` suppresses the
-                  diagnostic for `present` by changing its translation
-                  to use the standard OpenMP `alloc` map type without
-                  the `present` modifier.  In this case, there is no
-                  runtime error when the specified variable is not
-                  present on the device.  However, this translation
-                  should be sufficient for OpenACC applications that
-                  are robust enough not to actually encounter this
-                  runtime error.
+                  diagnostic for the OpenACC `present` clause by
+                  changing its translation to use the standard OpenMP
+                  `alloc` map type without the `present` modifier.
+                  Contrary to OpenACC `present` clause semantics, this
+                  translation does not produce a runtime error when
+                  the specified variable is not present on the device.
+                  However, this translation should be sufficient for
+                  OpenACC applications that are robust enough not to
+                  actually encounter this runtime error.
                 * `-fopenacc-no-create-omp=alloc` suppresses the
-                  diagnostic for `no_create` by changing its
-                  translation to use the standard OpenMP map type
-                  `alloc` without the `no_alloc` modifier:
-                    * This translation is probably only useful when
-                      both of the following conditions are met:
-                        * Application behavior is being testing with
-                          small data sets in initial attempts to port
-                          to OpenMP.
-                        * The application guarantees that, for every
-                          variable specified in a `no_create` clause,
-                          if the variable is not already present on
-                          the device, then it is not accessed within
-                          the associated region.
-                    * The reason for these conditions is that,
-                      contrary to `no_create` semantics, this
-                      translation allocates the specified data when it
-                      is not already present on the device, and the
-                      impact can include:
-                        * Performance degradation.
-                        * Device memory exhaustion.
-                        * Incorrect run-time behavior when there's a
-                          statically or dynamically nested data clause
-                          or runtime library call for the specified
-                          data.  For example, if there's a nested
-                          `copy` clause, its data transfers are now
-                          suppressed.  If a nested data clause
-                          specifies a conflicting subarray, a run-time
-                          error might now occur.
+                  diagnostic for the OpenACC `no_create` clause by
+                  changing its translation to use the standard OpenMP
+                  map type `alloc` without the `no_alloc` modifier.
+                  Contrary to OpenACC `no_create` clause semantics,
+                  this translation attempts to allocate the specified
+                  data when it is not already present on the device.
+                  Thus, this translation is probably only useful when
+                  all of the following conditions are met:
+                    * The application is being tested with smaller
+                      data sets, perhaps in initial attempts to port
+                      to OpenMP.  Otherwise, the unexpected
+                      allocations could produce performance
+                      degradation or memory exhaustion.
+                    * Any subarray specified in a `no_create` clause
+                      never conflicts with any subarray already
+                      present on the device or any subarray
+                      specification encountered during the execution
+                      of the associated region.  The unexpected
+                      allocations can cause such subarray conflicts to
+                      produce compile-time or runtime errors.
+                    * For any variable specified in a `no_create`
+                      clause, no data transfers for that variable are
+                      encountered during the execution of the
+                      associated region.  The unexpected allocations
+                      can suppress those data transfers.
                 * There are various other imperfect translations of
                   these clauses to standard OpenMP that might be
                   useful under other conditions.  We will consider
-                  adding support if there is user demand.
+                  adding support if there is user demand.  See the
+                  section "Data Directives" in
+                  `README-OpenACC-design.md` for a discussion of
+                  alternative translations that we considered for the
+                  OpenACC `present` clause.
         * `-fopenacc[-ast]-print=acc`, `-ast-print`, `-ast-dump`,
           etc. mode:
             * Debugging modes like these do not actually print OpenMP
@@ -139,10 +141,6 @@ We have implemented and tested support for the following features:
           Clacc's translations from OpenACC to OpenMP.  Thus, they are
           not yet recommended for use in hand-written OpenMP code as
           they might not integrate well with some OpenMP features.
-        * See the section "Data Directives" in
-          `README-OpenACC-design.md` for a discussion of alternative
-          translations that we considered for the OpenACC `present`
-          clause.
     * `copy` clause and aliases `pcopy` and `present_or_copy`
     * `copyin` clause and aliases `pcopyin` and
       `present_or_copyin`

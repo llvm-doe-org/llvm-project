@@ -10378,6 +10378,10 @@ def warn_acc_omp_map_no_alloc : Warning<
   "which is an OpenMP extension that might not be supported by other "
   "compilers">,
   InGroup<OpenACCOMPMapNoAlloc>, DefaultIgnore;
+def warn_acc_omp_map_no_alloc_from_visible : Warning<
+  "the translation of a visible OpenACC '%0' clause produces a 'no_alloc' map "
+  "type modifier here to suppress the OpenMP default map type">,
+  InGroup<OpenACCOMPMapNoAlloc>, DefaultIgnore;
 def note_acc_alternate_omp : Note<
   "an alternative OpenMP translation can be specified with, for example, "
   "'-fopenacc-%0-omp=%1'">;

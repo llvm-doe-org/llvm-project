@@ -506,10 +506,6 @@ void test() {
 
       // Check suppression of implicit data clauses.
       //
-      // FIXME: Is this handling the outer no_create correctly?  OpenACC says
-      // there should be no implicit data attribute here, which means nc
-      // shouldn't be allocated here, but does it get allocated here by OpenMP?
-      //
       // DMP:      ACCParallelDirective
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
@@ -546,6 +542,9 @@ void test() {
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:     OMPMapClause
+      // DMP-NOT:        <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int'
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co0' 'int'
@@ -568,10 +567,12 @@ void test() {
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
+      // PRT-AO-SAME: {{^ *}}map(no_alloc,alloc: nc)
       // PRT-AO-SAME: {{^ *}}shared(co0,co1,co2,cr0,cr1,cr2,nc,pr,c0,c1,c2,ci0,ci1,ci2)
       // PRT-AO-SAME: {{^ *}}defaultmap(tofrom: scalar){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
+      // PRT-O-SAME:  {{^ *}}map(no_alloc,alloc: nc)
       // PRT-O-SAME:  {{^ *}}shared(co0,co1,co2,cr0,cr1,cr2,nc,pr,c0,c1,c2,ci0,ci1,ci2)
       // PRT-O-SAME:  {{^ *}}defaultmap(tofrom: scalar){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
@@ -920,10 +921,6 @@ void test() {
 
       // Check suppression of implicit data clauses.
       //
-      // FIXME: Is this handling the outer no_create correctly?  OpenACC says
-      // there should be no implicit data attribute here, which means nc
-      // shouldn't be allocated here, but does it get allocated here by OpenMP?
-      //
       // DMP:      ACCParallelDirective
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
@@ -944,6 +941,9 @@ void test() {
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:     OMPMapClause
+      // DMP-NOT:        <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int [1]'
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int [1]'
@@ -956,9 +956,11 @@ void test() {
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
+      // PRT-AO-SAME: {{^ *}}map(no_alloc,alloc: nc)
       // PRT-AO-SAME: {{^ *}}shared(co,cr,nc,prArr,c,ci){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
+      // PRT-O-SAME:  {{^ *}}map(no_alloc,alloc: nc)
       // PRT-O-SAME:  {{^ *}}shared(co,cr,nc,prArr,c,ci){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       #pragma acc parallel num_gangs(1)
@@ -1227,10 +1229,6 @@ void test() {
 
       // Check suppression of implicit data clauses.
       //
-      // FIXME: Is this handling the outer no_create correctly?  OpenACC says
-      // there should be no implicit data attribute here, which means nc
-      // shouldn't be allocated here, but does it get allocated here by OpenMP?
-      //
       // DMP:      ACCParallelDirective
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
@@ -1251,6 +1249,9 @@ void test() {
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:     OMPMapClause
+      // DMP-NOT:        <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'struct T'
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'struct T'
@@ -1263,9 +1264,11 @@ void test() {
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
+      // PRT-AO-SAME: {{^ *}}map(no_alloc,alloc: nc)
       // PRT-AO-SAME: {{^ *}}shared(co,cr,nc,prStruct,c,ci){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
+      // PRT-O-SAME:  {{^ *}}map(no_alloc,alloc: nc)
       // PRT-O-SAME:  {{^ *}}shared(co,cr,nc,prStruct,c,ci){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       #pragma acc parallel num_gangs(1)
@@ -2153,6 +2156,61 @@ void test() {
 
   //--------------------------------------------------
   // defaultmap for scalars with suppressed OpenACC implicit DAs: Check that an
+  // inherited no_alloc prevents adding it.
+  //--------------------------------------------------
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int x =
+    // PRT-NEXT: int use =
+    int x = 10;
+    int use = 0;
+    //  PRT-A-NEXT: {{^ *}}#pragma acc data no_create(x){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(no_alloc,alloc: x){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(no_alloc,alloc: x){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc data no_create(x){{$}}
+    #pragma acc data no_create(x)
+    // PRT-NEXT: {
+    {
+      // no_alloc inherited from parent.
+      //
+      //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1) copy(use){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) map(tofrom: use) map(no_alloc,alloc: x) shared(use,x){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) map(tofrom: use) map(no_alloc,alloc: x) shared(use,x){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copy(use){{$}}
+      #pragma acc parallel num_gangs(1) copy(use)
+      // PRT-NEXT: if (use)
+      // PRT-NEXT:   x +=
+      if (use)
+        x += 100;
+
+      // no_alloc inherited from grandparent.
+      //
+      //  PRT-A-NEXT: {{^ *}}#pragma acc data copy(use){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(tofrom: use){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(tofrom: use){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(use){{$}}
+      #pragma acc data copy(use)
+      // PRT-NEXT: {
+      {
+        //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1) copy(use){{$}}
+        // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) map(tofrom: use) map(no_alloc,alloc: x) shared(use,x){{$}}
+        //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) map(tofrom: use) map(no_alloc,alloc: x) shared(use,x){{$}}
+        // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copy(use){{$}}
+        #pragma acc parallel num_gangs(1) copy(use)
+        // PRT-NEXT: if (use)
+        // PRT-NEXT:   x +=
+        if (use)
+          x += 100;
+      } // PRT-NEXT: }
+    } // PRT-NEXT: }
+    // PRT-NEXT: printf(
+    // EXE-NEXT: x=10
+    printf("x=%d\n", x);
+  } // PRT-NEXT: }
+
+  //--------------------------------------------------
+  // defaultmap for scalars with suppressed OpenACC implicit DAs: Check that an
   // an explicit DSA prevents adding it.
   //
   // The case where implicit DAs are not suppressed by an enclosing acc data and
@@ -2215,6 +2273,41 @@ void test() {
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       #pragma acc parallel num_gangs(1)
       // PRT-NEXT: y +=
+      y += 200;
+    } // PRT-NEXT: }
+    // PRT-NEXT: printf(
+    // EXE-NEXT: x=110, y=20
+    printf("x=%d, y=%d\n", x, y);
+  } // PRT-NEXT: }
+
+  //--------------------------------------------------
+  // Inherited no_alloc: Check that an explicit DMA or DSA prevents it.
+  //
+  // The case where -fopenacc-no-create-omp=alloc prevents it is checked in
+  // no-create.c.
+  //--------------------------------------------------
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int x =
+    // PRT-NEXT: int y =
+    int x = 10;
+    int y = 20;
+    //  PRT-A-NEXT: {{^ *}}#pragma acc data no_create(x,y){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(no_alloc,alloc: x,y){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(no_alloc,alloc: x,y){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc data no_create(x,y){{$}}
+    #pragma acc data no_create(x,y)
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1) copy(x) firstprivate(y){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) map(tofrom: x) firstprivate(y) shared(x){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) map(tofrom: x) firstprivate(y) shared(x){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copy(x) firstprivate(y){{$}}
+    #pragma acc parallel num_gangs(1) copy(x) firstprivate(y)
+    // PRT-NEXT: {
+    {
+      // PRT-NEXT: x +=
+      // PRT-NEXT: y +=
+      x += 100;
       y += 200;
     } // PRT-NEXT: }
     // PRT-NEXT: printf(
