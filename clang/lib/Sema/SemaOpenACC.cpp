@@ -2698,33 +2698,6 @@ ACCClause *Sema::ActOnOpenACCCollapseClause(Expr *Collapse,
 namespace {
 class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
   typedef TransformContext<TransformACCToOMP> BaseTransform;
-
-  /// Before translating the associated statement of an acc parallel directive,
-  /// some of the following variables might be set.  They are set back to
-  /// nullptr after the translation of the associated statement.  Nested acc
-  /// parallel directives are not permitted, so we don't need a stack of these
-  /// variables.
-  ///
-  /// If the acc parallel directive has a num_workers or constant-expression
-  /// vector_length clause, then NumWorkersExpr or VectorLengthExpr,
-  /// respectively, is set to its value.
-  ///
-  /// If the acc parallel directive has a num_workers clause with a
-  /// non-constant expression and it has a (separate or combined with this
-  /// directive) nested acc loop directive with worker partitioning, then
-  /// NumWorkersVarDecl is set to the declaration of a constant variable
-  /// generated for the sake of OpenMP and initialized with NumWorkersExpr.
-  VarDecl *NumWorkersVarDecl = nullptr;
-  Expr *NumWorkersExpr = nullptr;
-  Expr *VectorLengthExpr = nullptr;
-
-  /// Before translating the associated statement of an OpenACC directive that
-  /// translates to an OpenMP loop-related directive (acc loop seq, for
-  /// example, does not), the following variable is set to the type of that
-  /// OpenMP directive.  It is set back to its previous value after the
-  /// translation of the associated statement.
-  OpenMPDirectiveKind ParentLoopOMPKind = OMPD_unknown;
-
   /// A variable's DA data.
   struct DAVarData {
     /// If the DMA is undetermined, then ACC_DMA_unknown.  Otherwise, not
@@ -2744,6 +2717,30 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     /// defaultmap(tofrom:scalar) is required on the OpenMP directive, and
     /// transformACCClauses creates that clause afterward.
     bool NeedsDefaultmapForScalars = false;
+    ///@{
+    /// Before translating the associated statement of an acc parallel
+    /// directive, TransformACCParallelDirective sets these as follows, and they
+    /// are copied to descendant stack entries as those entries are created.
+    ///
+    /// If the acc parallel directive has a num_workers or constant-expression
+    /// vector_length clause, then NumWorkersExpr or VectorLengthExpr,
+    /// respectively, is set to its value.
+    ///
+    /// If the acc parallel directive has a num_workers clause with a
+    /// non-constant expression and it has a (separate or combined with this
+    /// directive) nested acc loop directive with worker partitioning, then
+    /// NumWorkersVarDecl is set to the declaration of a constant variable
+    /// generated for the sake of OpenMP and initialized with NumWorkersExpr.
+    VarDecl *NumWorkersVarDecl = nullptr;
+    Expr *NumWorkersExpr = nullptr;
+    Expr *VectorLengthExpr = nullptr;
+    ///@}
+    /// Before translating the associated statement of an acc loop directive
+    /// that translates to an OpenMP loop-related directive (acc loop seq, for
+    /// example, does not), TransformACCLoopDirective sets the following
+    /// variable to the type of that OpenMP directive, and it is copied to
+    /// descendant stack entries as those entries are created.
+    OpenMPDirectiveKind LoopOMPKind = OMPD_unknown;
   };
   /// This stack is pushed and popped at each effective OpenACC directive.
   SmallVector<DirStackEntry, 4> DirStack;
@@ -2753,15 +2750,15 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     TransformACCToOMP &Transform;
 
   public:
-    /// Push D's DAs onto Transform.DirStack.
+    /// Push D's data onto Transform.DirStack.
     DirStackEntryRAII(TransformACCToOMP &Transform, ACCExecutableDirective *D)
         : Transform(Transform) {
-      Transform.DirStack.emplace_back();
+      DirStackEntry &DirEntry = Transform.DirStack.emplace_back();
 
       // Collect DAs from clauses on D.
       DAVarData ClauseDAs;
       auto RecordClauseDAs = [&](Expr *E, VarDecl *VD) {
-        DAVarData &VarDAs = Transform.DirStack.back().DAMap[VD];
+        DAVarData &VarDAs = DirEntry.DAMap[VD];
         if (ClauseDAs.DMAKind != ACC_DMA_unknown) {
           assert(VarDAs.DMAKind == ACC_DMA_unknown &&
                  "expected at most one DMA per variable");
@@ -2799,6 +2796,17 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
           break;
         }
       }
+
+      // If this is the outermost directive entry, we're done.
+      if (Transform.DirStack.size() == 1)
+        return;
+      DirStackEntry &ParentDirEntry = *(Transform.DirStack.rbegin() + 1);
+
+      // Copy data from parent directive.
+      DirEntry.NumWorkersVarDecl = ParentDirEntry.NumWorkersVarDecl;
+      DirEntry.NumWorkersExpr = ParentDirEntry.NumWorkersExpr;
+      DirEntry.VectorLengthExpr = ParentDirEntry.VectorLengthExpr;
+      DirEntry.LoopOMPKind = ParentDirEntry.LoopOMPKind;
     }
     /// Pop top directive's data from Transform.DirStack.
     ~DirStackEntryRAII() { Transform.DirStack.pop_back(); }
@@ -3117,31 +3125,29 @@ public:
 
   StmtResult TransformACCParallelDirective(ACCParallelDirective *D) {
     DirStackEntryRAII TheDirStackEntryRAII(*this, D);
+    DirStackEntry &DirEntry = DirStack.back();
     ConditionalCompoundStmtRAII EnclosingCompoundStmt(*this);
     ASTContext &Context = getSema().getASTContext();
 
     // Declare a num_workers variable in an enclosing compound statement, if
     // needed.
-    assert(NumWorkersVarDecl == nullptr && NumWorkersExpr == nullptr &&
-           VectorLengthExpr == nullptr &&
-           "unexpected nested acc parallel directive");
     auto NumWorkersClauses = D->getClausesOfKind<ACCNumWorkersClause>();
     if (NumWorkersClauses.begin() != NumWorkersClauses.end()) {
-      NumWorkersExpr = NumWorkersClauses.begin()->getNumWorkers();
+      DirEntry.NumWorkersExpr = NumWorkersClauses.begin()->getNumWorkers();
       if (D->getNestedWorkerPartitioning()) {
-        if (!NumWorkersExpr->isIntegerConstantExpr(Context))
-          NumWorkersVarDecl = EnclosingCompoundStmt.addNewPrivateDecl(
+        if (!DirEntry.NumWorkersExpr->isIntegerConstantExpr(Context))
+          DirEntry.NumWorkersVarDecl = EnclosingCompoundStmt.addNewPrivateDecl(
               "__clang_acc_num_workers__",
-              NumWorkersExpr->getType().withConst(), NumWorkersExpr,
-              NumWorkersExpr->getBeginLoc());
-      } else if (NumWorkersExpr->HasSideEffects(Context))
-        EnclosingCompoundStmt.addUnusedExpr(NumWorkersExpr);
+              DirEntry.NumWorkersExpr->getType().withConst(),
+              DirEntry.NumWorkersExpr, DirEntry.NumWorkersExpr->getBeginLoc());
+      } else if (DirEntry.NumWorkersExpr->HasSideEffects(Context))
+        EnclosingCompoundStmt.addUnusedExpr(DirEntry.NumWorkersExpr);
     }
     auto VectorLengthClauses = D->getClausesOfKind<ACCVectorLengthClause>();
     if (VectorLengthClauses.begin() != VectorLengthClauses.end()) {
       Expr *E = VectorLengthClauses.begin()->getVectorLength();
       if (E->isIntegerConstantExpr(Context))
-        VectorLengthExpr = E;
+        DirEntry.VectorLengthExpr = E;
       else if (E->HasSideEffects(Context))
         EnclosingCompoundStmt.addUnusedExpr(E);
     }
@@ -3160,9 +3166,6 @@ public:
     // Transform associated statement.
     StmtResult AssociatedStmt = transformACCAssociatedStmt(D, OMPD_target_teams,
                                                            TClauses);
-    NumWorkersVarDecl = nullptr;
-    NumWorkersExpr = nullptr;
-    VectorLengthExpr = nullptr;
 
     // Build OpenMP directive and finalize enclosing compound statement, if
     // any.
@@ -3184,6 +3187,7 @@ public:
 
   StmtResult TransformACCLoopDirective(ACCLoopDirective *D) {
     DirStackEntryRAII TheDirStackEntryRAII(*this, D);
+    DirStackEntry &DirEntry = DirStack.back();
 
     // What OpenACC clauses do we have?
     ACCPartitioningKind Partitioning = D->getPartitioning();
@@ -3204,19 +3208,19 @@ public:
       AddScopeWithAllPrivates = true;
     } else {
       if (Partitioning.hasWorkerPartitioning()) {
-        if (NumWorkersVarDecl) {
+        if (DirEntry.NumWorkersVarDecl) {
           ExprResult Res = getSema().BuildDeclRefExpr(
-              NumWorkersVarDecl,
-              NumWorkersVarDecl->getType().getNonReferenceType(), VK_RValue,
-              D->getEndLoc());
+              DirEntry.NumWorkersVarDecl,
+              DirEntry.NumWorkersVarDecl->getType().getNonReferenceType(),
+              VK_RValue, D->getEndLoc());
           assert(!Res.isInvalid() &&
                  "expected valid reference to num_workers variable");
           AddNumThreadsExpr = Res.get();
         } else
-          AddNumThreadsExpr = NumWorkersExpr;
+          AddNumThreadsExpr = DirEntry.NumWorkersExpr;
       }
       if (Partitioning.hasVectorPartitioning()) {
-        AddSimdlenExpr = VectorLengthExpr;
+        AddSimdlenExpr = DirEntry.VectorLengthExpr;
         AddScopeWithLCVPrivate = true;
       }
       if (!Partitioning.hasGangPartitioning()) {
@@ -3226,7 +3230,7 @@ public:
             TDKind = OMPD_unknown;
             AddScopeWithAllPrivates = true;
           } else { // hasVectorPartitioning
-            if (ParentLoopOMPKind == OMPD_unknown) {
+            if (DirEntry.LoopOMPKind == OMPD_unknown) {
               TDKind = OMPD_parallel_for_simd;
               AddNumThreads1 = true;
             }
@@ -3324,12 +3328,9 @@ public:
                         NumClausesAdded);
 
     // Transform associated statement.
-    OpenMPDirectiveKind ParentLoopOMPKindOld = ParentLoopOMPKind;
     if (isOpenMPLoopDirective(TDKind))
-      ParentLoopOMPKind = TDKind;
-    StmtResult AssociatedStmt = transformACCAssociatedStmt(D, TDKind,
-                                                           TClauses);
-    ParentLoopOMPKind = ParentLoopOMPKindOld;
+      DirEntry.LoopOMPKind = TDKind;
+    StmtResult AssociatedStmt = transformACCAssociatedStmt(D, TDKind, TClauses);
 
     // Build OpenMP directive and finalize enclosing compound statement, if
     // any.
