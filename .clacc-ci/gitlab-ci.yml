@@ -41,6 +41,10 @@ stages:
   - test-all
   - cleanup
 
+#-------------------------------------------------
+# branch/tag filters
+#-------------------------------------------------
+#
 .clacc:
   only: [/^clacc$/, /^clacc-/, /-openacc$/, /-openacc-/]
   except: [/^clacc-ci-/]
@@ -48,6 +52,10 @@ stages:
 .not-clacc:
   only: [/^clacc-ci-/, /^jdenny-/]
   except: [/-openacc$/, /-openacc-/]
+
+#-------------------------------------------------
+# build configurations
+#-------------------------------------------------
 
 .python2:
   tags: [shell, kold]
@@ -61,7 +69,10 @@ stages:
     BUILD_ID: python3
     PYTHON_EXECUTABLE: /usr/bin/python3
 
-default:
+.non-utility:
+  dependencies: []
+  variables:
+    GIT_STRATEGY: none
   before_script:
     - module load gnu/9.1.0
     - pwd
@@ -78,8 +89,6 @@ default:
 
 .utility:
   dependencies: []
-  before_script: []
-  after_script: []
 
 .setup:
   extends: .utility
@@ -159,9 +168,8 @@ z-cleanup-project-builds:
 #-------------------------------------------------
 
 .config:
+  extends: .non-utility
   stage: config
-  variables:
-    GIT_STRATEGY: none
   script:
     - time cmake3 -G Ninja
                   -DCMAKE_BUILD_TYPE=Debug
@@ -198,10 +206,8 @@ config (python3):
 #-------------------------------------------------
 
 .build:
+  extends: .non-utility
   stage: build
-  dependencies: []
-  variables:
-    GIT_STRATEGY: none
   script:
     - time ninja-build |& tee $CI_PROJECT_DIR/build-log.txt
   artifacts:
@@ -230,15 +236,13 @@ build (python3):
 # exceed the log output limit.  Run that first, grep for key text, and
 # make the full version an artifact.
 #
-# When there are fails, the test suite run can also be very noisy too and
+# When there are fails, the test suite run can be very noisy too and
 # exceed the log output limit.  It's hard to grep for just the important
 # stuff, so just print it all but also dump to an artifact.
 #-------------------------------------------------
 
 .test:
-  dependencies: []
-  variables:
-    GIT_STRATEGY: none
+  extends: .non-utility
   script:
     - echo $CHECK_TARGETS
     - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
