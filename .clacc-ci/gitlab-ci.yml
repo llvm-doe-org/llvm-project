@@ -57,10 +57,10 @@ stages:
 # build configurations
 #-------------------------------------------------
 
-.python2:
+.kold-python2:
   tags: [shell, kold]
   variables:
-    BUILD_ID: python2
+    BUILD_ID: kold-python2
     MODULES: gnu/9.1.0
     PYTHON_EXECUTABLE: /usr/bin/python2
     CMAKE_OFFLOAD_CONFIG:
@@ -68,10 +68,10 @@ stages:
       -DCLANG_ACC_TEST_EXE_PPC64LE=False
       -DCLANG_ACC_TEST_EXE_NVPTX64=False
 
-.python3:
+.kold-python3:
   tags: [shell, kold]
   variables:
-    BUILD_ID: python3
+    BUILD_ID: kold-python3
     MODULES: gnu/9.1.0
     PYTHON_EXECUTABLE: /usr/bin/python3
     CMAKE_OFFLOAD_CONFIG:
@@ -134,23 +134,23 @@ stages:
     - find $BUILD_DIR_PROJ -mmin +720 -delete || true
     - rmdir $BUILD_DIR_PROJ || true
 
-setup (python2):
-  extends: [.python2, .setup]
+setup (kold-python2):
+  extends: [.kold-python2, .setup]
 
-setup (python3):
-  extends: [.python3, .setup]
+setup (kold-python3):
+  extends: [.kold-python3, .setup]
 
-cleanup (python2, clacc):
-  extends: [.python2, .clacc, .cleanup]
-  needs: ["test-all (python2, clacc)"]
+cleanup (kold-python2, clacc):
+  extends: [.kold-python2, .clacc, .cleanup]
+  needs: ["test-all (kold-python2, clacc)"]
 
-cleanup (python2):
-  extends: [.python2, .not-clacc, .cleanup]
-  needs: [test-all (python2)]
+cleanup (kold-python2):
+  extends: [.kold-python2, .not-clacc, .cleanup]
+  needs: [test-all (kold-python2)]
 
-cleanup (python3):
-  extends: [.python3, .cleanup]
-  needs: [test-all (python3)]
+cleanup (kold-python3):
+  extends: [.kold-python3, .cleanup]
+  needs: [test-all (kold-python3)]
 
 z-cleanup-pipeline-builds:
   extends: .utility
@@ -206,13 +206,13 @@ z-cleanup-project-builds:
     when: always
     paths: [cmake-log.txt, CMakeCache.txt]
 
-config (python2):
-  extends: [.python2, .config]
-  needs: [setup (python2)]
+config (kold-python2):
+  extends: [.kold-python2, .config]
+  needs: [setup (kold-python2)]
 
-config (python3):
-  extends: [.python3, .config]
-  needs: [setup (python3)]
+config (kold-python3):
+  extends: [.kold-python3, .config]
+  needs: [setup (kold-python3)]
 
 #-------------------------------------------------
 # build
@@ -227,13 +227,13 @@ config (python3):
     when: always
     paths: [build-log.txt]
 
-build (python2):
-  extends: [.python2, .build]
-  needs: [config (python2)]
+build (kold-python2):
+  extends: [.kold-python2, .build]
+  needs: [config (kold-python2)]
 
-build (python3):
-  extends: [.python3, .build]
-  needs: [config (python3)]
+build (kold-python3):
+  extends: [.kold-python3, .build]
+  needs: [config (kold-python3)]
 
 #-------------------------------------------------
 # tests
@@ -287,18 +287,18 @@ build (python3):
   variables:
     CHECK_TARGETS: check-all
 
-test-clacc (python2):
-  extends: [.python2, .test-clacc]
-  needs: [build (python2)]
+test-clacc (kold-python2):
+  extends: [.kold-python2, .test-clacc]
+  needs: [build (kold-python2)]
 
-test-all (python2, clacc):
-  extends: [.python2, .clacc, .test-all]
-  needs: [test-clacc (python2)]
+test-all (kold-python2, clacc):
+  extends: [.kold-python2, .clacc, .test-all]
+  needs: [test-clacc (kold-python2)]
 
-test-all (python2):
-  extends: [.python2, .not-clacc, .test-all]
-  needs: [build (python2)]
+test-all (kold-python2):
+  extends: [.kold-python2, .not-clacc, .test-all]
+  needs: [build (kold-python2)]
 
-test-all (python3):
-  extends: [.python3, .test-all]
-  needs: [build (python3)]
+test-all (kold-python3):
+  extends: [.kold-python3, .test-all]
+  needs: [build (kold-python3)]
