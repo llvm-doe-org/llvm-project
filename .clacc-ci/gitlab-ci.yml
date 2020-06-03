@@ -31,7 +31,6 @@ variables:
   BUILD_DIR_PROJ: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds
   BUILD_DIR: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-$BUILD_ID
   BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
-  SRUN_ALLOCATE_FAIL: 'srun: error: Unable to allocate'
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
 
 stages:
@@ -164,36 +163,23 @@ z-cleanup-project-builds:
   variables:
     GIT_STRATEGY: none
   script:
-    #   'srun -I -n1'
-    - for launch in
-        '';
-      do
-        echo "Trying to launch with '$launch'..." &&
-        echo 0 > ../cmake-status.txt &&
-        (time $launch cmake3
-           -G Ninja
-           -DCMAKE_BUILD_TYPE=Debug
-           -DLLVM_CCACHE_BUILD=ON
-           -DLLVM_USE_SPLIT_DWARF=true
-           -DLLVM_USE_LINKER=gold
-           -DCMAKE_C_COMPILER=gcc
-           -DCMAKE_CXX_COMPILER=g++
-           -DGCC_INSTALL_PREFIX=$GCC_DIR
-           -DLLVM_ENABLE_PROJECTS='clang;openmp'
-           -DPYTHON_EXECUTABLE=$PYTHON_EXECUTABLE
-           -DCLANG_ACC_TEST_EXE_X86_64=True
-           -DCLANG_ACC_TEST_EXE_PPC64LE=False
-           -DCLANG_ACC_TEST_EXE_NVPTX64=False
-           -DLLVM_CCACHE_PARAMS="$LLVM_CCACHE_PARAMS"
-           -DLLVM_LIT_ARGS='-s -vv'
-           ../source/llvm
-         || echo $? > ../cmake-status.txt)
-        |& tee $CI_PROJECT_DIR/cmake-log.txt &&
-        if ! grep -q '$SRUN_ALLOCATE_FAIL' $CI_PROJECT_DIR/cmake-log.txt; then
-          break;
-        fi
-      done &&
-      (exit `cat ../cmake-status.txt`)
+    - time cmake3 -G Ninja
+                  -DCMAKE_BUILD_TYPE=Debug
+                  -DLLVM_CCACHE_BUILD=ON
+                  -DLLVM_USE_SPLIT_DWARF=true
+                  -DLLVM_USE_LINKER=gold
+                  -DCMAKE_C_COMPILER=gcc
+                  -DCMAKE_CXX_COMPILER=g++
+                  -DGCC_INSTALL_PREFIX=$GCC_DIR
+                  -DLLVM_ENABLE_PROJECTS='clang;openmp'
+                  -DPYTHON_EXECUTABLE=$PYTHON_EXECUTABLE
+                  -DCLANG_ACC_TEST_EXE_X86_64=True
+                  -DCLANG_ACC_TEST_EXE_PPC64LE=False
+                  -DCLANG_ACC_TEST_EXE_NVPTX64=False
+                  -DLLVM_CCACHE_PARAMS="$LLVM_CCACHE_PARAMS"
+                  -DLLVM_LIT_ARGS='-s -vv'
+                  ../source/llvm
+      |& tee $CI_PROJECT_DIR/cmake-log.txt
     - cp CMakeCache.txt $CI_PROJECT_DIR
   artifacts:
     when: always
@@ -217,22 +203,7 @@ config (python3):
   variables:
     GIT_STRATEGY: none
   script:
-    #   'srun -I -n1 -c80'
-    #   'srun -I -n1 -c64'
-    #   'srun -I -n1 -c32'
-    - for launch in
-        '';
-      do
-        echo "Trying to launch with '$launch'..." &&
-        echo 0 > ../build-status.txt &&
-        (time $launch ninja-build
-         || echo $? > ../build-status.txt)
-        |& tee $CI_PROJECT_DIR/build-log.txt &&
-        if ! grep -q '$SRUN_ALLOCATE_FAIL' $CI_PROJECT_DIR/build-log.txt; then
-          break;
-        fi
-      done &&
-      (exit `cat ../build-status.txt`)
+    - time ninja-build |& tee $CI_PROJECT_DIR/build-log.txt
   artifacts:
     when: always
     paths: [build-log.txt]
