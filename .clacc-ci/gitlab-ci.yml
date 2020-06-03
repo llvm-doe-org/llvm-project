@@ -61,20 +61,31 @@ stages:
   tags: [shell, kold]
   variables:
     BUILD_ID: python2
+    MODULES: gnu/9.1.0
     PYTHON_EXECUTABLE: /usr/bin/python2
+    CMAKE_OFFLOAD_CONFIG:
+      -DCLANG_ACC_TEST_EXE_X86_64=True
+      -DCLANG_ACC_TEST_EXE_PPC64LE=False
+      -DCLANG_ACC_TEST_EXE_NVPTX64=False
 
 .python3:
   tags: [shell, kold]
   variables:
     BUILD_ID: python3
+    MODULES: gnu/9.1.0
     PYTHON_EXECUTABLE: /usr/bin/python3
+    CMAKE_OFFLOAD_CONFIG:
+      -DCLANG_ACC_TEST_EXE_X86_64=True
+      -DCLANG_ACC_TEST_EXE_PPC64LE=False
+      -DCLANG_ACC_TEST_EXE_NVPTX64=False
 
 .non-utility:
   dependencies: []
   variables:
     GIT_STRATEGY: none
   before_script:
-    - module load gnu/9.1.0
+    - echo $MODULES
+    - module load $MODULES
     - pwd
     - echo $BUILD_DIR
     - cd $BUILD_DIR/build
@@ -171,6 +182,10 @@ z-cleanup-project-builds:
   extends: .non-utility
   stage: config
   script:
+    - echo $GCC_DIR
+    - echo $PYTHON_EXECUTABLE
+    - echo $LLVM_CCACHE_PARAMS
+    - echo $CMAKE_OFFLOAD_CONFIG
     - time cmake3 -G Ninja
                   -DCMAKE_BUILD_TYPE=Debug
                   -DLLVM_CCACHE_BUILD=ON
@@ -181,11 +196,9 @@ z-cleanup-project-builds:
                   -DGCC_INSTALL_PREFIX=$GCC_DIR
                   -DLLVM_ENABLE_PROJECTS='clang;openmp'
                   -DPYTHON_EXECUTABLE=$PYTHON_EXECUTABLE
-                  -DCLANG_ACC_TEST_EXE_X86_64=True
-                  -DCLANG_ACC_TEST_EXE_PPC64LE=False
-                  -DCLANG_ACC_TEST_EXE_NVPTX64=False
                   -DLLVM_CCACHE_PARAMS="$LLVM_CCACHE_PARAMS"
                   -DLLVM_LIT_ARGS='-s -vv'
+                  $CMAKE_OFFLOAD_CONFIG
                   ../source/llvm
       |& tee $CI_PROJECT_DIR/cmake-log.txt
     - cp CMakeCache.txt $CI_PROJECT_DIR
