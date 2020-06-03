@@ -147,34 +147,34 @@ stages:
     - find $BUILD_DIR_PROJ -mmin +720 -delete || true
     - rmdir $BUILD_DIR_PROJ || true
 
-setup (kold-python2):
+kold-python2 (setup):
   extends: [.kold-python2, .setup]
 
-setup (kold-python3):
+kold-python3 (setup):
   extends: [.kold-python3, .setup]
 
-setup (leconte-python3):
+leconte-python3 (setup):
   extends: [.leconte-python3, .setup]
 
-cleanup (kold-python2, clacc):
+kold-python2 (cleanup, clacc):
   extends: [.kold-python2, .clacc, .cleanup]
-  needs: ["test-all (kold-python2, clacc)"]
+  needs: ["kold-python2 (test-all, clacc)"]
 
-cleanup (kold-python2):
+kold-python2 (cleanup):
   extends: [.kold-python2, .not-clacc, .cleanup]
-  needs: [test-all (kold-python2)]
+  needs: [kold-python2 (test-all)]
 
-cleanup (kold-python3):
+kold-python3 (cleanup):
   extends: [.kold-python3, .cleanup]
-  needs: [test-all (kold-python3)]
+  needs: [kold-python3 (test-all)]
 
-cleanup (leconte-python3, clacc):
+leconte-python3 (cleanup, clacc):
   extends: [.leconte-python3, .clacc, .cleanup]
-  needs: ["test-all (leconte-python3, clacc)"]
+  needs: ["leconte-python3 (test-all, clacc)"]
 
-cleanup (leconte-python3):
+leconte-python3 (cleanup):
   extends: [.leconte-python3, .not-clacc, .cleanup]
-  needs: [test-all (leconte-python3)]
+  needs: [leconte-python3 (test-all)]
 
 z-cleanup-pipeline-builds:
   extends: .utility
@@ -230,17 +230,17 @@ z-cleanup-project-builds:
     when: always
     paths: [cmake-log.txt, CMakeCache.txt]
 
-config (kold-python2):
+kold-python2 (config):
   extends: [.kold-python2, .config]
-  needs: [setup (kold-python2)]
+  needs: [kold-python2 (setup)]
 
-config (kold-python3):
+kold-python3 (config):
   extends: [.kold-python3, .config]
-  needs: [setup (kold-python3)]
+  needs: [kold-python3 (setup)]
 
-config (leconte-python3):
+leconte-python3 (config):
   extends: [.leconte-python3, .config]
-  needs: [setup (leconte-python3)]
+  needs: [leconte-python3 (setup)]
 
 #-------------------------------------------------
 # build
@@ -255,17 +255,17 @@ config (leconte-python3):
     when: always
     paths: [build-log.txt]
 
-build (kold-python2):
+kold-python2 (build):
   extends: [.kold-python2, .build]
-  needs: [config (kold-python2)]
+  needs: [kold-python2 (config)]
 
-build (kold-python3):
+kold-python3 (build):
   extends: [.kold-python3, .build]
-  needs: [config (kold-python3)]
+  needs: [kold-python3 (config)]
 
-build (leconte-python3):
+leconte-python3 (build):
   extends: [.leconte-python3, .build]
-  needs: [config (leconte-python3)]
+  needs: [leconte-python3 (config)]
 
 #-------------------------------------------------
 # tests
@@ -319,30 +319,30 @@ build (leconte-python3):
   variables:
     CHECK_TARGETS: check-all
 
-test-clacc (kold-python2):
+kold-python2 (test-clacc):
   extends: [.kold-python2, .test-clacc]
-  needs: [build (kold-python2)]
+  needs: [kold-python2 (build)]
 
-test-all (kold-python2, clacc):
+kold-python2 (test-all, clacc):
   extends: [.kold-python2, .clacc, .test-all]
-  needs: [test-clacc (kold-python2)]
+  needs: [kold-python2 (test-clacc)]
 
-test-all (kold-python2):
+kold-python2 (test-all):
   extends: [.kold-python2, .not-clacc, .test-all]
-  needs: [build (kold-python2)]
+  needs: [kold-python2 (build)]
 
-test-all (kold-python3):
+kold-python3 (test-all):
   extends: [.kold-python3, .test-all]
-  needs: [build (kold-python3)]
+  needs: [kold-python3 (build)]
 
-test-clacc (leconte-python3):
+leconte-python3 (test-clacc):
   extends: [.leconte-python3, .test-clacc]
-  needs: [build (leconte-python3)]
+  needs: [leconte-python3 (build)]
 
-test-all (leconte-python3, clacc):
+leconte-python3 (test-all, clacc):
   extends: [.leconte-python3, .clacc, .test-all]
-  needs: [test-clacc (leconte-python3)]
+  needs: [leconte-python3 (test-clacc)]
 
-test-all (leconte-python3):
+leconte-python3 (test-all):
   extends: [.leconte-python3, .not-clacc, .test-all]
-  needs: [build (leconte-python3)]
+  needs: [leconte-python3 (build)]
