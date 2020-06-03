@@ -32,6 +32,7 @@ variables:
   BUILD_DIR: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-$BUILD_ID
   BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
+  CMAKE: cmake3
 
 stages:
   - setup
@@ -62,7 +63,7 @@ stages:
   variables:
     BUILD_ID: kold-python2
     MODULES: gnu/9.1.0
-    PYTHON_EXECUTABLE: /usr/bin/python2
+    PYTHON: /usr/bin/python2
     CMAKE_OFFLOAD_CONFIG:
       -DCLANG_ACC_TEST_EXE_X86_64=True
       -DCLANG_ACC_TEST_EXE_PPC64LE=False
@@ -73,7 +74,7 @@ stages:
   variables:
     BUILD_ID: kold-python3
     MODULES: gnu/9.1.0
-    PYTHON_EXECUTABLE: /usr/bin/python3
+    PYTHON: /usr/bin/python3
     CMAKE_OFFLOAD_CONFIG:
       -DCLANG_ACC_TEST_EXE_X86_64=True
       -DCLANG_ACC_TEST_EXE_PPC64LE=False
@@ -84,7 +85,7 @@ stages:
   variables:
     BUILD_ID: leconte-python3
     MODULES: gnu/7.5.0 cuda/10.1
-    PYTHON_EXECUTABLE: /usr/bin/python3
+    PYTHON: /usr/bin/python3
     CMAKE_OFFLOAD_CONFIG:
       -DCLANG_OPENMP_NVPTX_DEFAULT_ARCH=sm_70
       -DLIBOMPTARGET_NVPTX_COMPUTE_CAPABILITIES=70
@@ -206,11 +207,14 @@ z-cleanup-project-builds:
   extends: .non-utility
   stage: config
   script:
+    - echo $CMAKE
+    - $CMAKE --version
     - echo $GCC_DIR
-    - echo $PYTHON_EXECUTABLE
+    - echo $PYTHON
+    - $PYTHON --version
     - echo $LLVM_CCACHE_PARAMS
     - echo $CMAKE_OFFLOAD_CONFIG
-    - time cmake3 -G Ninja
+    - time $CMAKE -G Ninja
                   -DCMAKE_BUILD_TYPE=Debug
                   -DLLVM_CCACHE_BUILD=ON
                   -DLLVM_USE_SPLIT_DWARF=true
@@ -219,7 +223,7 @@ z-cleanup-project-builds:
                   -DCMAKE_CXX_COMPILER=g++
                   -DGCC_INSTALL_PREFIX=$GCC_DIR
                   -DLLVM_ENABLE_PROJECTS='clang;openmp'
-                  -DPYTHON_EXECUTABLE=$PYTHON_EXECUTABLE
+                  -DPython3_EXECUTABLE=$PYTHON
                   -DLLVM_CCACHE_PARAMS="$LLVM_CCACHE_PARAMS"
                   -DLLVM_LIT_ARGS='-s -vv'
                   $CMAKE_OFFLOAD_CONFIG
