@@ -31,8 +31,8 @@ variables:
   BUILD_DIR_PROJ: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds
   BUILD_DIR: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-$BUILD_ID
   BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
-  SRUN_ALLOCATE_FAIL: 'srun: error: Unable to allocate'
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
+  CMAKE: cmake3
 
 stages:
   - setup
@@ -42,6 +42,10 @@ stages:
   - test-all
   - cleanup
 
+#-------------------------------------------------
+# branch/tag filters
+#-------------------------------------------------
+
 .clacc:
   only: [/^clacc$/, /^clacc-/, /-openacc$/, /-openacc-/]
   except: [/^clacc-ci-/]
@@ -50,21 +54,52 @@ stages:
   only: [/^clacc-ci-/, /^jdenny-/]
   except: [/-openacc$/, /-openacc-/]
 
-.python2:
+#-------------------------------------------------
+# build configurations
+#-------------------------------------------------
+
+.kold-python2:
   tags: [shell, kold]
   variables:
-    BUILD_ID: python2
-    PYTHON_EXECUTABLE: /usr/bin/python2
+    BUILD_ID: kold-python2
+    MODULES: gnu/9.1.0
+    PYTHON: /usr/bin/python2
+    CMAKE_OFFLOAD_CONFIG:
+      -DCLANG_ACC_TEST_EXE_X86_64=True
+      -DCLANG_ACC_TEST_EXE_PPC64LE=False
+      -DCLANG_ACC_TEST_EXE_NVPTX64=False
 
-.python3:
+.kold-python3:
   tags: [shell, kold]
   variables:
-    BUILD_ID: python3
-    PYTHON_EXECUTABLE: /usr/bin/python3
+    BUILD_ID: kold-python3
+    MODULES: gnu/9.1.0
+    PYTHON: /usr/bin/python3
+    CMAKE_OFFLOAD_CONFIG:
+      -DCLANG_ACC_TEST_EXE_X86_64=True
+      -DCLANG_ACC_TEST_EXE_PPC64LE=False
+      -DCLANG_ACC_TEST_EXE_NVPTX64=False
 
-default:
+.leconte-python3:
+  tags: [shell, leconte]
+  variables:
+    BUILD_ID: leconte-python3
+    MODULES: gnu/7.5.0 cuda/10.1
+    PYTHON: /usr/bin/python3
+    CMAKE_OFFLOAD_CONFIG:
+      -DCLANG_OPENMP_NVPTX_DEFAULT_ARCH=sm_70
+      -DLIBOMPTARGET_NVPTX_COMPUTE_CAPABILITIES=70
+      -DCLANG_ACC_TEST_EXE_X86_64=False
+      -DCLANG_ACC_TEST_EXE_PPC64LE=True
+      -DCLANG_ACC_TEST_EXE_NVPTX64=True
+
+.non-utility:
+  dependencies: []
+  variables:
+    GIT_STRATEGY: none
   before_script:
-    - module load gnu/9.1.0
+    - echo $MODULES
+    - module load $MODULES
     - pwd
     - echo $BUILD_DIR
     - cd $BUILD_DIR/build
@@ -79,8 +114,6 @@ default:
 
 .utility:
   dependencies: []
-  before_script: []
-  after_script: []
 
 .setup:
   extends: .utility
@@ -115,23 +148,34 @@ default:
     - find $BUILD_DIR_PROJ -mmin +720 -delete || true
     - rmdir $BUILD_DIR_PROJ || true
 
-setup (python2):
-  extends: [.python2, .setup]
+kold-python2 (setup):
+  extends: [.kold-python2, .setup]
 
-setup (python3):
-  extends: [.python3, .setup]
+kold-python3 (setup):
+  extends: [.kold-python3, .setup]
 
-cleanup (python2, clacc):
-  extends: [.python2, .clacc, .cleanup]
-  needs: ["test-all (python2, clacc)"]
+leconte-python3 (setup):
+  extends: [.leconte-python3, .setup]
 
-cleanup (python2):
-  extends: [.python2, .not-clacc, .cleanup]
-  needs: [test-all (python2)]
+kold-python2 (cleanup, clacc):
+  extends: [.kold-python2, .clacc, .cleanup]
+  needs: ["kold-python2 (test-all, clacc)"]
 
-cleanup (python3):
-  extends: [.python3, .cleanup]
-  needs: [test-all (python3)]
+kold-python2 (cleanup):
+  extends: [.kold-python2, .not-clacc, .cleanup]
+  needs: [kold-python2 (test-all)]
+
+kold-python3 (cleanup):
+  extends: [.kold-python3, .cleanup]
+  needs: [kold-python3 (test-all)]
+
+leconte-python3 (cleanup, clacc):
+  extends: [.leconte-python3, .clacc, .cleanup]
+  needs: ["leconte-python3 (test-all, clacc)"]
+
+leconte-python3 (cleanup):
+  extends: [.leconte-python3, .not-clacc, .cleanup]
+  needs: [leconte-python3 (test-all)]
 
 z-cleanup-pipeline-builds:
   extends: .utility
@@ -160,90 +204,72 @@ z-cleanup-project-builds:
 #-------------------------------------------------
 
 .config:
+  extends: .non-utility
   stage: config
-  variables:
-    GIT_STRATEGY: none
   script:
-    #   'srun -I -n1'
-    - for launch in
-        '';
-      do
-        echo "Trying to launch with '$launch'..." &&
-        echo 0 > ../cmake-status.txt &&
-        (time $launch cmake3
-           -G Ninja
-           -DCMAKE_BUILD_TYPE=Debug
-           -DLLVM_CCACHE_BUILD=ON
-           -DLLVM_USE_SPLIT_DWARF=true
-           -DLLVM_USE_LINKER=gold
-           -DCMAKE_C_COMPILER=gcc
-           -DCMAKE_CXX_COMPILER=g++
-           -DGCC_INSTALL_PREFIX=$GCC_DIR
-           -DLLVM_ENABLE_PROJECTS='clang;openmp'
-           -DPYTHON_EXECUTABLE=$PYTHON_EXECUTABLE
-           -DCLANG_ACC_TEST_EXE_X86_64=True
-           -DCLANG_ACC_TEST_EXE_PPC64LE=False
-           -DCLANG_ACC_TEST_EXE_NVPTX64=False
-           -DLLVM_CCACHE_PARAMS="$LLVM_CCACHE_PARAMS"
-           -DLLVM_LIT_ARGS='-s -vv'
-           ../source/llvm
-         || echo $? > ../cmake-status.txt)
-        |& tee $CI_PROJECT_DIR/cmake-log.txt &&
-        if ! grep -q '$SRUN_ALLOCATE_FAIL' $CI_PROJECT_DIR/cmake-log.txt; then
-          break;
-        fi
-      done &&
-      (exit `cat ../cmake-status.txt`)
+    - echo $CMAKE
+    - $CMAKE --version
+    - echo $GCC_DIR
+    - echo $PYTHON
+    - $PYTHON --version
+    - echo $LLVM_CCACHE_PARAMS
+    - echo $CMAKE_OFFLOAD_CONFIG
+    - time $CMAKE -G Ninja
+                  -DCMAKE_BUILD_TYPE=Debug
+                  -DLLVM_CCACHE_BUILD=ON
+                  -DLLVM_USE_SPLIT_DWARF=true
+                  -DLLVM_USE_LINKER=gold
+                  -DCMAKE_C_COMPILER=gcc
+                  -DCMAKE_CXX_COMPILER=g++
+                  -DGCC_INSTALL_PREFIX=$GCC_DIR
+                  -DLLVM_ENABLE_PROJECTS='clang;openmp'
+                  -DPython3_EXECUTABLE=$PYTHON
+                  -DLLVM_CCACHE_PARAMS="$LLVM_CCACHE_PARAMS"
+                  -DLLVM_LIT_ARGS='-s -vv'
+                  $CMAKE_OFFLOAD_CONFIG
+                  ../source/llvm
+      |& tee $CI_PROJECT_DIR/cmake-log.txt
     - cp CMakeCache.txt $CI_PROJECT_DIR
   artifacts:
     when: always
     paths: [cmake-log.txt, CMakeCache.txt]
 
-config (python2):
-  extends: [.python2, .config]
-  needs: [setup (python2)]
+kold-python2 (config):
+  extends: [.kold-python2, .config]
+  needs: [kold-python2 (setup)]
 
-config (python3):
-  extends: [.python3, .config]
-  needs: [setup (python3)]
+kold-python3 (config):
+  extends: [.kold-python3, .config]
+  needs: [kold-python3 (setup)]
+
+leconte-python3 (config):
+  extends: [.leconte-python3, .config]
+  needs: [leconte-python3 (setup)]
 
 #-------------------------------------------------
 # build
 #-------------------------------------------------
 
 .build:
+  extends: .non-utility
   stage: build
-  dependencies: []
-  variables:
-    GIT_STRATEGY: none
   script:
-    #   'srun -I -n1 -c80'
-    #   'srun -I -n1 -c64'
-    #   'srun -I -n1 -c32'
-    - for launch in
-        '';
-      do
-        echo "Trying to launch with '$launch'..." &&
-        echo 0 > ../build-status.txt &&
-        (time $launch ninja-build
-         || echo $? > ../build-status.txt)
-        |& tee $CI_PROJECT_DIR/build-log.txt &&
-        if ! grep -q '$SRUN_ALLOCATE_FAIL' $CI_PROJECT_DIR/build-log.txt; then
-          break;
-        fi
-      done &&
-      (exit `cat ../build-status.txt`)
+    - time ninja-build |& tee $CI_PROJECT_DIR/build-log.txt
   artifacts:
     when: always
     paths: [build-log.txt]
 
-build (python2):
-  extends: [.python2, .build]
-  needs: [config (python2)]
+kold-python2 (build):
+  extends: [.kold-python2, .build]
+  needs: [kold-python2 (config)]
 
-build (python3):
-  extends: [.python3, .build]
-  needs: [config (python3)]
+kold-python3 (build):
+  extends: [.kold-python3, .build]
+  needs: [kold-python3 (config)]
+
+leconte-python3 (build):
+  extends: [.leconte-python3, .build]
+  needs: [leconte-python3 (config)]
 
 #-------------------------------------------------
 # tests
@@ -259,15 +285,13 @@ build (python3):
 # exceed the log output limit.  Run that first, grep for key text, and
 # make the full version an artifact.
 #
-# When there are fails, the test suite run can also be very noisy too and
+# When there are fails, the test suite run can be very noisy too and
 # exceed the log output limit.  It's hard to grep for just the important
 # stuff, so just print it all but also dump to an artifact.
 #-------------------------------------------------
 
 .test:
-  dependencies: []
-  variables:
-    GIT_STRATEGY: none
+  extends: .non-utility
   script:
     - echo $CHECK_TARGETS
     - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
@@ -299,18 +323,30 @@ build (python3):
   variables:
     CHECK_TARGETS: check-all
 
-test-clacc (python2):
-  extends: [.python2, .test-clacc]
-  needs: [build (python2)]
+kold-python2 (test-clacc):
+  extends: [.kold-python2, .test-clacc]
+  needs: [kold-python2 (build)]
 
-test-all (python2, clacc):
-  extends: [.python2, .clacc, .test-all]
-  needs: [test-clacc (python2)]
+kold-python2 (test-all, clacc):
+  extends: [.kold-python2, .clacc, .test-all]
+  needs: [kold-python2 (test-clacc)]
 
-test-all (python2):
-  extends: [.python2, .not-clacc, .test-all]
-  needs: [build (python2)]
+kold-python2 (test-all):
+  extends: [.kold-python2, .not-clacc, .test-all]
+  needs: [kold-python2 (build)]
 
-test-all (python3):
-  extends: [.python3, .test-all]
-  needs: [build (python3)]
+kold-python3 (test-all):
+  extends: [.kold-python3, .test-all]
+  needs: [kold-python3 (build)]
+
+leconte-python3 (test-clacc):
+  extends: [.leconte-python3, .test-clacc]
+  needs: [leconte-python3 (build)]
+
+leconte-python3 (test-all, clacc):
+  extends: [.leconte-python3, .clacc, .test-all]
+  needs: [leconte-python3 (test-clacc)]
+
+leconte-python3 (test-all):
+  extends: [.leconte-python3, .not-clacc, .test-all]
+  needs: [leconte-python3 (build)]
