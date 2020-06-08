@@ -73,6 +73,14 @@ public:
   /// MacroDefined calls checkMacro for macros in the main file
   void MacroDefined(const Token &MacroNameTok,
                     const MacroDirective *MD) override {
+    if (MD->getMacroInfo()->isBuiltinMacro())
+      return;
+    if (PP->getSourceManager().isWrittenInBuiltinFile(
+            MacroNameTok.getLocation()))
+      return;
+    if (PP->getSourceManager().isWrittenInCommandLineFile(
+            MacroNameTok.getLocation()))
+      return;
     Check->checkMacro(PP->getSourceManager(), MacroNameTok, MD->getMacroInfo());
   }
 
@@ -207,6 +215,8 @@ public:
 /// flag indicating the multiple resolutions.
 NameLookup findDeclInBases(const CXXRecordDecl &Parent, StringRef DeclName,
                            bool AggressiveTemplateLookup) {
+  if (!Parent.hasDefinition())
+    return NameLookup(nullptr);
   if (const NamedDecl *InClassRef = findDecl(Parent, DeclName))
     return NameLookup(InClassRef);
   const NamedDecl *Found = nullptr;

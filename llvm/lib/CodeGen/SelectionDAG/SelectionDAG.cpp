@@ -38,6 +38,7 @@
 #include "llvm/CodeGen/SelectionDAGAddressAnalysis.h"
 #include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/CodeGen/SelectionDAGTargetInfo.h"
+#include "llvm/CodeGen/TargetFrameLowering.h"
 #include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
@@ -1174,7 +1175,7 @@ SDValue SelectionDAG::getZeroExtendInReg(SDValue Op, const SDLoc &DL, EVT VT) {
          "getZeroExtendInReg type should be vector iff the operand "
          "type is vector!");
   assert((!VT.isVector() ||
-          VT.getVectorNumElements() == OpVT.getVectorNumElements()) &&
+          VT.getVectorElementCount() == OpVT.getVectorElementCount()) &&
          "Vector element counts must match in getZeroExtendInReg");
   assert(VT.bitsLE(OpVT) && "Not extending!");
   if (OpVT == VT)
@@ -1873,9 +1874,6 @@ SDValue SelectionDAG::getBlockAddress(const BlockAddress *BA, EVT VT,
 }
 
 SDValue SelectionDAG::getSrcValue(const Value *V) {
-  assert((!V || V->getType()->isPointerTy()) &&
-         "SrcValue is not a pointer?");
-
   FoldingSetNodeID ID;
   AddNodeIDNode(ID, ISD::SRCVALUE, getVTList(MVT::Other), None);
   ID.AddPointer(V);
@@ -1995,28 +1993,26 @@ SDValue SelectionDAG::expandVACopy(SDNode *Node) {
                   MachinePointerInfo(VD));
 }
 
-SDValue SelectionDAG::CreateStackTemporary(EVT VT, unsigned minAlign) {
-  MachineFrameInfo &MFI = getMachineFunction().getFrameInfo();
-  unsigned ByteSize = VT.getStoreSize();
-  Type *Ty = VT.getTypeForEVT(*getContext());
-  unsigned StackAlign =
-      std::max((unsigned)getDataLayout().getPrefTypeAlignment(Ty), minAlign);
-
-  int FrameIdx = MFI.CreateStackObject(ByteSize, StackAlign, false);
+SDValue SelectionDAG::CreateStackTemporary(TypeSize Bytes, Align Alignment) {
+  MachineFrameInfo &MFI = MF->getFrameInfo();
+  int FrameIdx = MFI.CreateStackObject(Bytes, Alignment, false);
   return getFrameIndex(FrameIdx, TLI->getFrameIndexTy(getDataLayout()));
 }
 
+SDValue SelectionDAG::CreateStackTemporary(EVT VT, unsigned minAlign) {
+  Type *Ty = VT.getTypeForEVT(*getContext());
+  Align StackAlign =
+      std::max(getDataLayout().getPrefTypeAlign(Ty), Align(minAlign));
+  return CreateStackTemporary(VT.getStoreSize(), StackAlign);
+}
+
 SDValue SelectionDAG::CreateStackTemporary(EVT VT1, EVT VT2) {
-  unsigned Bytes = std::max(VT1.getStoreSize(), VT2.getStoreSize());
+  TypeSize Bytes = std::max(VT1.getStoreSize(), VT2.getStoreSize());
   Type *Ty1 = VT1.getTypeForEVT(*getContext());
   Type *Ty2 = VT2.getTypeForEVT(*getContext());
   const DataLayout &DL = getDataLayout();
-  unsigned Align =
-      std::max(DL.getPrefTypeAlignment(Ty1), DL.getPrefTypeAlignment(Ty2));
-
-  MachineFrameInfo &MFI = getMachineFunction().getFrameInfo();
-  int FrameIdx = MFI.CreateStackObject(Bytes, Align, false);
-  return getFrameIndex(FrameIdx, TLI->getFrameIndexTy(getDataLayout()));
+  Align Align = std::max(DL.getPrefTypeAlign(Ty1), DL.getPrefTypeAlign(Ty2));
+  return CreateStackTemporary(Bytes, Align);
 }
 
 SDValue SelectionDAG::FoldSetCC(EVT VT, SDValue N1, SDValue N2,
@@ -2199,9 +2195,7 @@ SDValue SelectionDAG::GetDemandedBits(SDValue V, const APInt &DemandedBits,
                                                 *this, 0);
     break;
   case ISD::Constant: {
-    auto *CV = cast<ConstantSDNode>(V.getNode());
-    assert(CV && "Const value should be ConstSDNode.");
-    const APInt &CVal = CV->getAPIntValue();
+    const APInt &CVal = cast<ConstantSDNode>(V)->getAPIntValue();
     APInt NewVal = CVal & DemandedBits;
     if (NewVal != CVal)
       return getConstant(NewVal, SDLoc(V), V.getValueType());
@@ -3414,7 +3408,8 @@ KnownBits SelectionDAG::computeKnownBits(SDValue Op, const APInt &DemandedElts,
   }
   case ISD::FrameIndex:
   case ISD::TargetFrameIndex:
-    TLI->computeKnownBitsForFrameIndex(Op, Known, DemandedElts, *this, Depth);
+    TLI->computeKnownBitsForFrameIndex(cast<FrameIndexSDNode>(Op)->getIndex(),
+                                       Known, getMachineFunction());
     break;
 
   default:
@@ -3550,7 +3545,7 @@ unsigned SelectionDAG::ComputeNumSignBits(SDValue Op, const APInt &DemandedElts,
         continue;
 
       SDValue SrcOp = Op.getOperand(i);
-      Tmp2 = ComputeNumSignBits(Op.getOperand(i), Depth + 1);
+      Tmp2 = ComputeNumSignBits(SrcOp, Depth + 1);
 
       // BUILD_VECTOR can implicitly truncate sources, we must handle this.
       if (SrcOp.getValueSizeInBits() != VTBits) {
@@ -3661,20 +3656,14 @@ unsigned SelectionDAG::ComputeNumSignBits(SDValue Op, const APInt &DemandedElts,
   case ISD::SRA:
     Tmp = ComputeNumSignBits(Op.getOperand(0), DemandedElts, Depth + 1);
     // SRA X, C -> adds C sign bits.
-    if (const APInt *ShAmt = getValidShiftAmountConstant(Op, DemandedElts))
-      Tmp = std::min<uint64_t>(Tmp + ShAmt->getZExtValue(), VTBits);
-    else if (const APInt *ShAmt =
-                 getValidMinimumShiftAmountConstant(Op, DemandedElts))
+    if (const APInt *ShAmt =
+            getValidMinimumShiftAmountConstant(Op, DemandedElts))
       Tmp = std::min<uint64_t>(Tmp + ShAmt->getZExtValue(), VTBits);
     return Tmp;
   case ISD::SHL:
-    if (const APInt *ShAmt = getValidShiftAmountConstant(Op, DemandedElts)) {
+    if (const APInt *ShAmt =
+            getValidMaximumShiftAmountConstant(Op, DemandedElts)) {
       // shl destroys sign bits, ensure it doesn't shift out all sign bits.
-      Tmp = ComputeNumSignBits(Op.getOperand(0), DemandedElts, Depth + 1);
-      if (ShAmt->ult(Tmp))
-        return Tmp - ShAmt->getZExtValue();
-    } else if (const APInt *ShAmt =
-                   getValidMaximumShiftAmountConstant(Op, DemandedElts)) {
       Tmp = ComputeNumSignBits(Op.getOperand(0), DemandedElts, Depth + 1);
       if (ShAmt->ult(Tmp))
         return Tmp - ShAmt->getZExtValue();
@@ -4108,6 +4097,7 @@ bool SelectionDAG::isKnownNeverNaN(SDValue Op, bool SNaN, unsigned Depth) const 
   case ISD::FFLOOR:
   case ISD::FCEIL:
   case ISD::FROUND:
+  case ISD::FROUNDEVEN:
   case ISD::FRINT:
   case ISD::FNEARBYINT: {
     if (SNaN)
@@ -4917,8 +4907,14 @@ SDValue SelectionDAG::FoldConstantArithmetic(unsigned Opcode, const SDLoc &DL,
     if (GlobalAddressSDNode *GA = dyn_cast<GlobalAddressSDNode>(N2))
       return FoldSymbolOffset(Opcode, VT, GA, N1);
 
-  // For vectors, extract each constant element and fold them individually.
-  // Either input may be an undef value.
+  // TODO: All the folds below are performed lane-by-lane and assume a fixed
+  // vector width, however we should be able to do constant folds involving
+  // splat vector nodes too.
+  if (VT.isScalableVector())
+    return SDValue();
+
+  // For fixed width vectors, extract each constant element and fold them
+  // individually. Either input may be an undef value.
   auto *BV1 = dyn_cast<BuildVectorSDNode>(N1);
   if (!BV1 && !N1->isUndef())
     return SDValue();
@@ -4994,6 +4990,13 @@ SDValue SelectionDAG::FoldConstantVectorArithmetic(unsigned Opcode,
   if (!VT.isVector())
     return SDValue();
 
+  // TODO: All the folds below are performed lane-by-lane and assume a fixed
+  // vector width, however we should be able to do constant folds involving
+  // splat vector nodes too.
+  if (VT.isScalableVector())
+    return SDValue();
+
+  // From this point onwards all vectors are assumed to be fixed width.
   unsigned NumElts = VT.getVectorNumElements();
 
   auto IsScalarOrSameVectorSize = [&](const SDValue &Op) {
@@ -5353,15 +5356,19 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
     if (N1.isUndef() || N2.isUndef())
       return getUNDEF(VT);
 
-    // EXTRACT_VECTOR_ELT of out-of-bounds element is an UNDEF
-    if (N2C && N2C->getAPIntValue().uge(N1.getValueType().getVectorNumElements()))
+    // EXTRACT_VECTOR_ELT of out-of-bounds element is an UNDEF for fixed length
+    // vectors. For scalable vectors we will provide appropriate support for
+    // dealing with arbitrary indices.
+    if (N2C && N1.getValueType().isFixedLengthVector() &&
+        N2C->getAPIntValue().uge(N1.getValueType().getVectorNumElements()))
       return getUNDEF(VT);
 
     // EXTRACT_VECTOR_ELT of CONCAT_VECTORS is often formed while lowering is
-    // expanding copies of large vectors from registers.
-    if (N2C &&
-        N1.getOpcode() == ISD::CONCAT_VECTORS &&
-        N1.getNumOperands() > 0) {
+    // expanding copies of large vectors from registers. This only works for
+    // fixed length vectors, since we need to know the exact number of
+    // elements.
+    if (N2C && N1.getOperand(0).getValueType().isFixedLengthVector() &&
+        N1.getOpcode() == ISD::CONCAT_VECTORS && N1.getNumOperands() > 0) {
       unsigned Factor =
         N1.getOperand(0).getValueType().getVectorNumElements();
       return getNode(ISD::EXTRACT_VECTOR_ELT, DL, VT,
@@ -5369,10 +5376,16 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
                      getVectorIdxConstant(N2C->getZExtValue() % Factor, DL));
     }
 
-    // EXTRACT_VECTOR_ELT of BUILD_VECTOR is often formed while lowering is
-    // expanding large vector constants.
-    if (N2C && N1.getOpcode() == ISD::BUILD_VECTOR) {
-      SDValue Elt = N1.getOperand(N2C->getZExtValue());
+    // EXTRACT_VECTOR_ELT of BUILD_VECTOR or SPLAT_VECTOR is often formed while
+    // lowering is expanding large vector constants.
+    if (N2C && (N1.getOpcode() == ISD::BUILD_VECTOR ||
+                N1.getOpcode() == ISD::SPLAT_VECTOR)) {
+      assert((N1.getOpcode() != ISD::BUILD_VECTOR ||
+              N1.getValueType().isFixedLengthVector()) &&
+             "BUILD_VECTOR used for scalable vectors");
+      unsigned Index =
+          N1.getOpcode() == ISD::BUILD_VECTOR ? N2C->getZExtValue() : 0;
+      SDValue Elt = N1.getOperand(Index);
 
       if (VT != Elt.getValueType())
         // If the vector element type is not legal, the BUILD_VECTOR operands
@@ -5406,8 +5419,14 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
 
     // EXTRACT_VECTOR_ELT of v1iX EXTRACT_SUBVECTOR could be formed
     // when vector types are scalarized and v1iX is legal.
-    // vextract (v1iX extract_subvector(vNiX, Idx)) -> vextract(vNiX,Idx)
+    // vextract (v1iX extract_subvector(vNiX, Idx)) -> vextract(vNiX,Idx).
+    // Here we are completely ignoring the extract element index (N2),
+    // which is fine for fixed width vectors, since any index other than 0
+    // is undefined anyway. However, this cannot be ignored for scalable
+    // vectors - in theory we could support this, but we don't want to do this
+    // without a profitability check.
     if (N1.getOpcode() == ISD::EXTRACT_SUBVECTOR &&
+        N1.getValueType().isFixedLengthVector() &&
         N1.getValueType().getVectorNumElements() == 1) {
       return getNode(ISD::EXTRACT_VECTOR_ELT, DL, VT, N1.getOperand(0),
                      N1.getOperand(1));
@@ -5435,21 +5454,24 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
     }
     break;
   case ISD::EXTRACT_SUBVECTOR:
-    assert(VT.isVector() && N1.getValueType().isVector() &&
-           "Extract subvector VTs must be a vectors!");
-    assert(VT.getVectorElementType() ==
-               N1.getValueType().getVectorElementType() &&
+    EVT N1VT = N1.getValueType();
+    assert(VT.isVector() && N1VT.isVector() &&
+           "Extract subvector VTs must be vectors!");
+    assert(VT.getVectorElementType() == N1VT.getVectorElementType() &&
            "Extract subvector VTs must have the same element type!");
-    assert(VT.getVectorNumElements() <=
-               N1.getValueType().getVectorNumElements() &&
+    assert((VT.isFixedLengthVector() || N1VT.isScalableVector()) &&
+           "Cannot extract a scalable vector from a fixed length vector!");
+    assert((VT.isScalableVector() != N1VT.isScalableVector() ||
+            VT.getVectorMinNumElements() <= N1VT.getVectorMinNumElements()) &&
            "Extract subvector must be from larger vector to smaller vector!");
     assert(N2C && "Extract subvector index must be a constant");
-    assert(VT.getVectorNumElements() + N2C->getZExtValue() <=
-               N1.getValueType().getVectorNumElements() &&
+    assert((VT.isScalableVector() != N1VT.isScalableVector() ||
+            (VT.getVectorMinNumElements() + N2C->getZExtValue()) <=
+                N1VT.getVectorMinNumElements()) &&
            "Extract subvector overflow!");
 
     // Trivial extraction.
-    if (VT == N1.getValueType())
+    if (VT == N1VT)
       return N1;
 
     // EXTRACT_SUBVECTOR of an UNDEF is an UNDEF.
@@ -5639,22 +5661,27 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
     // Inserting undef into undef is still undef.
     if (N1.isUndef() && N2.isUndef())
       return getUNDEF(VT);
-    assert(VT.isVector() && N1.getValueType().isVector() &&
-           N2.getValueType().isVector() &&
-           "Insert subvector VTs must be a vectors");
+
+    EVT N2VT = N2.getValueType();
     assert(VT == N1.getValueType() &&
            "Dest and insert subvector source types must match!");
-    assert(N2.getSimpleValueType() <= N1.getSimpleValueType() &&
+    assert(VT.isVector() && N2VT.isVector() &&
+           "Insert subvector VTs must be vectors!");
+    assert((VT.isScalableVector() || N2VT.isFixedLengthVector()) &&
+           "Cannot insert a scalable vector into a fixed length vector!");
+    assert((VT.isScalableVector() != N2VT.isScalableVector() ||
+            VT.getVectorMinNumElements() >= N2VT.getVectorMinNumElements()) &&
            "Insert subvector must be from smaller vector to larger vector!");
     assert(isa<ConstantSDNode>(N3) &&
            "Insert subvector index must be constant");
-    assert(N2.getValueType().getVectorNumElements() +
-                   cast<ConstantSDNode>(N3)->getZExtValue() <=
-               VT.getVectorNumElements() &&
+    assert((VT.isScalableVector() != N2VT.isScalableVector() ||
+            (N2VT.getVectorMinNumElements() +
+             cast<ConstantSDNode>(N3)->getZExtValue()) <=
+                VT.getVectorMinNumElements()) &&
            "Insert subvector overflow!");
 
     // Trivial insertion.
-    if (VT == N2.getValueType())
+    if (VT == N2VT)
       return N2;
 
     // If this is an insert of an extracted vector into an undef vector, we
@@ -7416,6 +7443,7 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
     createOperands(N, Ops);
   }
 
+  N->setFlags(Flags);
   InsertNode(N);
   SDValue V(N, 0);
   NewSDValueDbgMsg(V, "Creating new node: ", this);
@@ -7497,13 +7525,14 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, SDVTList VTList,
       return SDValue(E, 0);
 
     N = newSDNode<SDNode>(Opcode, DL.getIROrder(), DL.getDebugLoc(), VTList);
-    N->setFlags(Flags);
     createOperands(N, Ops);
     CSEMap.InsertNode(N, IP);
   } else {
     N = newSDNode<SDNode>(Opcode, DL.getIROrder(), DL.getDebugLoc(), VTList);
     createOperands(N, Ops);
   }
+
+  N->setFlags(Flags);
   InsertNode(N);
   SDValue V(N, 0);
   NewSDValueDbgMsg(V, "Creating new node: ", this);

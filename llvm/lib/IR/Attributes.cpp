@@ -385,6 +385,8 @@ std::string Attribute::getAsString(bool InAttrGrp) const {
     return "noreturn";
   if (hasAttribute(Attribute::NoSync))
     return "nosync";
+  if (hasAttribute(Attribute::NullPointerIsValid))
+    return "null_pointer_is_valid";
   if (hasAttribute(Attribute::WillReturn))
     return "willreturn";
   if (hasAttribute(Attribute::NoCfCheck))
@@ -1173,6 +1175,17 @@ AttributeList AttributeList::get(LLVMContext &C, unsigned Index,
 }
 
 AttributeList AttributeList::get(LLVMContext &C, unsigned Index,
+                                 ArrayRef<Attribute::AttrKind> Kinds,
+                                 ArrayRef<uint64_t> Values) {
+  assert(Kinds.size() == Values.size() && "Mismatched attribute values.");
+  SmallVector<std::pair<unsigned, Attribute>, 8> Attrs;
+  auto VI = Values.begin();
+  for (const auto K : Kinds)
+    Attrs.emplace_back(Index, Attribute::get(C, K, *VI++));
+  return get(C, Attrs);
+}
+
+AttributeList AttributeList::get(LLVMContext &C, unsigned Index,
                                  ArrayRef<StringRef> Kinds) {
   SmallVector<std::pair<unsigned, Attribute>, 8> Attrs;
   for (const auto &K : Kinds)
@@ -1433,6 +1446,10 @@ MaybeAlign AttributeList::getParamAlignment(unsigned ArgNo) const {
 
 Type *AttributeList::getParamByValType(unsigned Index) const {
   return getAttributes(Index+FirstArgIndex).getByValType();
+}
+
+Type *AttributeList::getParamPreallocatedType(unsigned Index) const {
+  return getAttributes(Index + FirstArgIndex).getPreallocatedType();
 }
 
 MaybeAlign AttributeList::getStackAlignment(unsigned Index) const {
@@ -1930,12 +1947,12 @@ adjustMinLegalVectorWidth(Function &Caller, const Function &Callee) {
   }
 }
 
-/// If the inlined function has "null-pointer-is-valid=true" attribute,
+/// If the inlined function has null_pointer_is_valid attribute,
 /// set this attribute in the caller post inlining.
 static void
 adjustNullPointerValidAttr(Function &Caller, const Function &Callee) {
   if (Callee.nullPointerIsDefined() && !Caller.nullPointerIsDefined()) {
-    Caller.addFnAttr(Callee.getFnAttribute("null-pointer-is-valid"));
+    Caller.addFnAttr(Attribute::NullPointerIsValid);
   }
 }
 

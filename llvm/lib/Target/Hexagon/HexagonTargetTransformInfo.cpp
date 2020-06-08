@@ -131,26 +131,14 @@ unsigned HexagonTTIImpl::getCallInstrCost(Function *F, Type *RetTy,
   return BaseT::getCallInstrCost(F, RetTy, Tys, CostKind);
 }
 
-unsigned HexagonTTIImpl::getIntrinsicInstrCost(Intrinsic::ID ID, Type *RetTy,
-                                               ArrayRef<Value *> Args,
-                                               FastMathFlags FMF, unsigned VF,
-                                               TTI::TargetCostKind CostKind,
-                                               const Instruction *I) {
-  return BaseT::getIntrinsicInstrCost(ID, RetTy, Args, FMF, VF, CostKind, I);
-}
-
-unsigned HexagonTTIImpl::getIntrinsicInstrCost(Intrinsic::ID ID, Type *RetTy,
-                                               ArrayRef<Type *> Tys,
-                                               FastMathFlags FMF,
-                                               unsigned ScalarizationCostPassed,
-                                               TTI::TargetCostKind CostKind,
-                                               const Instruction *I) {
-  if (ID == Intrinsic::bswap) {
-    std::pair<int, MVT> LT = TLI.getTypeLegalizationCost(DL, RetTy);
+unsigned
+HexagonTTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
+                                      TTI::TargetCostKind CostKind) {
+  if (ICA.getID() == Intrinsic::bswap) {
+    std::pair<int, MVT> LT = TLI.getTypeLegalizationCost(DL, ICA.getReturnType());
     return LT.first + 2;
   }
-  return BaseT::getIntrinsicInstrCost(ID, RetTy, Tys, FMF,
-                                      ScalarizationCostPassed, CostKind, I);
+  return BaseT::getIntrinsicInstrCost(ICA, CostKind);
 }
 
 unsigned HexagonTTIImpl::getAddressComputationCost(Type *Tp,
@@ -164,6 +152,10 @@ unsigned HexagonTTIImpl::getMemoryOpCost(unsigned Opcode, Type *Src,
                                          TTI::TargetCostKind CostKind,
                                          const Instruction *I) {
   assert(Opcode == Instruction::Load || Opcode == Instruction::Store);
+  // TODO: Handle other cost kinds.
+  if (CostKind != TTI::TCK_RecipThroughput)
+    return 1;
+
   if (Opcode == Instruction::Store)
     return BaseT::getMemoryOpCost(Opcode, Src, Alignment, AddressSpace,
                                   CostKind, I);
@@ -275,7 +267,11 @@ unsigned HexagonTTIImpl::getCastInstrCost(unsigned Opcode, Type *DstTy,
 
     std::pair<int, MVT> SrcLT = TLI.getTypeLegalizationCost(DL, SrcTy);
     std::pair<int, MVT> DstLT = TLI.getTypeLegalizationCost(DL, DstTy);
-    return std::max(SrcLT.first, DstLT.first) + FloatFactor * (SrcN + DstN);
+    unsigned Cost = std::max(SrcLT.first, DstLT.first) + FloatFactor * (SrcN + DstN);
+    // TODO: Allow non-throughput costs that aren't binary.
+    if (CostKind != TTI::TCK_RecipThroughput)
+      return Cost == 0 ? 0 : 1;
+    return Cost;
   }
   return 1;
 }

@@ -150,6 +150,24 @@ LLVMTypeConverter::LLVMTypeConverter(
 
   // LLVMType is legal, so add a pass-through conversion.
   addConversion([](LLVM::LLVMType type) { return type; });
+
+  // Materialization for memrefs creates descriptor structs from individual
+  // values constituting them, when descriptors are used, i.e. more than one
+  // value represents a memref.
+  addMaterialization([&](PatternRewriter &rewriter,
+                         UnrankedMemRefType resultType, ValueRange inputs,
+                         Location loc) -> Optional<Value> {
+    if (inputs.size() == 1)
+      return llvm::None;
+    return UnrankedMemRefDescriptor::pack(rewriter, loc, *this, resultType,
+                                          inputs);
+  });
+  addMaterialization([&](PatternRewriter &rewriter, MemRefType resultType,
+                         ValueRange inputs, Location loc) -> Optional<Value> {
+    if (inputs.size() == 1)
+      return llvm::None;
+    return MemRefDescriptor::pack(rewriter, loc, *this, resultType, inputs);
+  });
 }
 
 /// Returns the MLIR context.
@@ -183,9 +201,7 @@ Type LLVMTypeConverter::convertFloatType(FloatType type) {
   case mlir::StandardTypes::F16:
     return LLVM::LLVMType::getHalfTy(llvmDialect);
   case mlir::StandardTypes::BF16: {
-    auto *mlirContext = llvmDialect->getContext();
-    return emitError(UnknownLoc::get(mlirContext), "unsupported type: BF16"),
-           Type();
+    return LLVM::LLVMType::getBFloatTy(llvmDialect);
   }
   default:
     llvm_unreachable("non-float type in convertFloatType");
@@ -295,22 +311,6 @@ LLVMTypeConverter::convertFunctionTypeCWrapper(FunctionType type) {
     return {};
 
   return LLVM::LLVMType::getFunctionTy(resultType, inputs, false);
-}
-
-/// Creates descriptor structs from individual values constituting them.
-Operation *LLVMTypeConverter::materializeConversion(PatternRewriter &rewriter,
-                                                    Type type,
-                                                    ArrayRef<Value> values,
-                                                    Location loc) {
-  if (auto unrankedMemRefType = type.dyn_cast<UnrankedMemRefType>())
-    return UnrankedMemRefDescriptor::pack(rewriter, loc, *this,
-                                          unrankedMemRefType, values)
-        .getDefiningOp();
-
-  auto memRefType = type.dyn_cast<MemRefType>();
-  assert(memRefType && "1->N conversion is only supported for memrefs");
-  return MemRefDescriptor::pack(rewriter, loc, *this, memRefType, values)
-      .getDefiningOp();
 }
 
 // Convert a MemRef to an LLVM type. The result is a MemRef descriptor which
@@ -795,8 +795,8 @@ Value ConvertToLLVMPattern::linearizeSubscripts(
 }
 
 Value ConvertToLLVMPattern::getStridedElementPtr(
-    Location loc, Type elementTypePtr, Value descriptor,
-    ArrayRef<Value> indices, ArrayRef<int64_t> strides, int64_t offset,
+    Location loc, Type elementTypePtr, Value descriptor, ValueRange indices,
+    ArrayRef<int64_t> strides, int64_t offset,
     ConversionPatternRewriter &rewriter) const {
   MemRefDescriptor memRefDescriptor(descriptor);
 
@@ -818,8 +818,7 @@ Value ConvertToLLVMPattern::getStridedElementPtr(
 }
 
 Value ConvertToLLVMPattern::getDataPtr(Location loc, MemRefType type,
-                                       Value memRefDesc,
-                                       ArrayRef<Value> indices,
+                                       Value memRefDesc, ValueRange indices,
                                        ConversionPatternRewriter &rewriter,
                                        llvm::Module &module) const {
   LLVM::LLVMType ptrType = MemRefDescriptor(memRefDesc).getElementType();
@@ -1675,7 +1674,7 @@ struct AllocLikeOpLowering : public ConvertOpToLLVMPattern<AllocLikeOp> {
 
   /// Allocates the underlying buffer using the right call. `allocatedBytePtr`
   /// is set to null for stack allocations. `accessAlignment` is set if
-  /// alignment is neeeded post allocation (for eg. in conjunction with malloc).
+  /// alignment is needed post allocation (for eg. in conjunction with malloc).
   Value allocateBuffer(Location loc, Value cumulativeSize, Operation *op,
                        MemRefType memRefType, Value one, Value &accessAlignment,
                        Value &allocatedBytePtr,
@@ -2003,15 +2002,14 @@ struct MemRefCastOpLowering : public ConvertOpToLLVMPattern<MemRefCastOp> {
     Type srcType = memRefCastOp.getOperand().getType();
     Type dstType = memRefCastOp.getType();
 
-    if (srcType.isa<MemRefType>() && dstType.isa<MemRefType>()) {
-      MemRefType sourceType =
-          memRefCastOp.getOperand().getType().cast<MemRefType>();
-      MemRefType targetType = memRefCastOp.getType().cast<MemRefType>();
-      return (isSupportedMemRefType(targetType) &&
-              isSupportedMemRefType(sourceType))
-                 ? success()
-                 : failure();
-    }
+    // MemRefCastOp reduce to bitcast in the ranked MemRef case and can be used
+    // for type erasure. For now they must preserve underlying element type and
+    // require source and result type to have the same rank. Therefore, perform
+    // a sanity check that the underlying structs are the same. Once op
+    // semantics are relaxed we can revisit.
+    if (srcType.isa<MemRefType>() && dstType.isa<MemRefType>())
+      return success(typeConverter.convertType(srcType) ==
+                     typeConverter.convertType(dstType));
 
     // At least one of the operands is unranked type
     assert(srcType.isa<UnrankedMemRefType>() ||
@@ -2034,10 +2032,8 @@ struct MemRefCastOpLowering : public ConvertOpToLLVMPattern<MemRefCastOp> {
     auto targetStructType = typeConverter.convertType(memRefCastOp.getType());
     auto loc = op->getLoc();
 
+    // MemRefCastOp reduce to bitcast in the ranked MemRef case.
     if (srcType.isa<MemRefType>() && dstType.isa<MemRefType>()) {
-      // memref_cast is defined for source and destination memref types with the
-      // same element type, same mappings, same address space and same rank.
-      // Therefore a simple bitcast suffices. If not it is undefined behavior.
       rewriter.replaceOpWithNewOp<LLVM::BitcastOp>(op, targetStructType,
                                                    transformed.source());
     } else if (srcType.isa<MemRefType>() && dstType.isa<UnrankedMemRefType>()) {
@@ -2605,7 +2601,7 @@ struct ViewOpLowering : public ConvertOpToLLVMPattern<ViewOp> {
   // Build and return the value for the idx^th shape dimension, either by
   // returning the constant shape dimension or counting the proper dynamic size.
   Value getSize(ConversionPatternRewriter &rewriter, Location loc,
-                ArrayRef<int64_t> shape, ArrayRef<Value> dynamicSizes,
+                ArrayRef<int64_t> shape, ValueRange dynamicSizes,
                 unsigned idx) const {
     assert(idx < shape.size());
     if (!ShapedType::isDynamic(shape[idx]))

@@ -41,9 +41,8 @@
 using namespace llvm;
 using namespace llvm::object;
 using namespace llvm::ELF;
-
-namespace lld {
-namespace elf {
+using namespace lld;
+using namespace lld::elf;
 
 // Creates an empty file to store a list of object files for final
 // linking of distributed ThinLTO.
@@ -79,7 +78,7 @@ static lto::Config createConfig() {
   // Check if basic block sections must be used.
   // Allowed values for --lto-basicblock-sections are "all", "labels",
   // "<file name specifying basic block ids>", or none.  This is the equivalent
-  // of -fbasicblock-sections= flag in clang.
+  // of -fbasic-block-sections= flag in clang.
   if (!config->ltoBasicBlockSections.empty()) {
     if (config->ltoBasicBlockSections == "all") {
       c.Options.BBSections = BasicBlockSection::All;
@@ -100,7 +99,8 @@ static lto::Config createConfig() {
     }
   }
 
-  c.Options.UniqueBBSectionNames = config->ltoUniqueBBSectionNames;
+  c.Options.UniqueBasicBlockSectionNames =
+      config->ltoUniqueBasicBlockSectionNames;
 
   if (auto relocModel = getRelocModelFromCMModel())
     c.RelocModel = *relocModel;
@@ -351,6 +351,3 @@ std::vector<InputFile *> BitcodeCompiler::compile() {
       ret.push_back(createObjectFile(*file));
   return ret;
 }
-
-} // namespace elf
-} // namespace lld

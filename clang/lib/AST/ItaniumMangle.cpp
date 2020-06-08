@@ -2764,6 +2764,11 @@ void CXXNameMangler::mangleType(const BuiltinType *T) {
     Out << TI->getFloat128Mangling();
     break;
   }
+  case BuiltinType::BFloat16: {
+    const TargetInfo *TI = &getASTContext().getTargetInfo();
+    Out << TI->getBFloat16Mangling();
+    break;
+  }
   case BuiltinType::NullPtr:
     Out << "Dn";
     break;
@@ -3162,6 +3167,7 @@ void CXXNameMangler::mangleNeonVectorType(const VectorType *T) {
     case BuiltinType::UShort:
       EltName = "poly16_t";
       break;
+    case BuiltinType::LongLong:
     case BuiltinType::ULongLong:
       EltName = "poly64_t";
       break;
@@ -3179,7 +3185,8 @@ void CXXNameMangler::mangleNeonVectorType(const VectorType *T) {
     case BuiltinType::ULongLong: EltName = "uint64_t"; break;
     case BuiltinType::Double:    EltName = "float64_t"; break;
     case BuiltinType::Float:     EltName = "float32_t"; break;
-    case BuiltinType::Half:      EltName = "float16_t";break;
+    case BuiltinType::Half:      EltName = "float16_t"; break;
+    case BuiltinType::BFloat16:  EltName = "bfloat16_t"; break;
     default:
       llvm_unreachable("unexpected Neon vector element type");
     }
@@ -3231,6 +3238,8 @@ static StringRef mangleAArch64VectorBase(const BuiltinType *EltType) {
     return "Float32";
   case BuiltinType::Double:
     return "Float64";
+  case BuiltinType::BFloat16:
+    return "BFloat16";
   default:
     llvm_unreachable("Unexpected vector element base type");
   }
@@ -4234,6 +4243,15 @@ recurse:
     break;
   }
 
+  case Expr::MatrixSubscriptExprClass: {
+    const MatrixSubscriptExpr *ME = cast<MatrixSubscriptExpr>(E);
+    Out << "ixix";
+    mangleExpression(ME->getBase());
+    mangleExpression(ME->getRowIdx());
+    mangleExpression(ME->getColumnIdx());
+    break;
+  }
+
   case Expr::CompoundAssignOperatorClass: // fallthrough
   case Expr::BinaryOperatorClass: {
     const BinaryOperator *BO = cast<BinaryOperator>(E);
@@ -4316,6 +4334,9 @@ recurse:
     break;
   case Expr::CXXConstCastExprClass:
     mangleCastExpression(E, "cc");
+    break;
+  case Expr::CXXAddrspaceCastExprClass:
+    mangleCastExpression(E, "ac");
     break;
 
   case Expr::CXXOperatorCallExprClass: {

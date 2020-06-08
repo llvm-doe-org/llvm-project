@@ -45,7 +45,7 @@ static cl::opt<bool>
 static cl::opt<int>
     InlineDeferralScale("inline-deferral-scale",
                         cl::desc("Scale to limit the cost of inline deferral"),
-                        cl::init(-1), cl::Hidden);
+                        cl::init(2), cl::Hidden);
 
 namespace {
 class DefaultInlineAdvice : public InlineAdvice {
@@ -90,8 +90,7 @@ private:
 
 } // namespace
 
-std::unique_ptr<InlineAdvice>
-DefaultInlineAdvisor::getAdvice(CallBase &CB, FunctionAnalysisManager &FAM) {
+std::unique_ptr<InlineAdvice> DefaultInlineAdvisor::getAdvice(CallBase &CB) {
   Function &Caller = *CB.getCaller();
   ProfileSummaryInfo *PSI =
       FAM.getResult<ModuleAnalysisManagerFunctionProxy>(Caller)
@@ -99,11 +98,7 @@ DefaultInlineAdvisor::getAdvice(CallBase &CB, FunctionAnalysisManager &FAM) {
               *CB.getParent()->getParent()->getParent());
 
   auto &ORE = FAM.getResult<OptimizationRemarkEmitterAnalysis>(Caller);
-  // FIXME: make GetAssumptionCache's decl similar to the other 2 below. May
-  // need changing the type of getInlineCost parameters? Also see similar case
-  // in Inliner.cpp
-  std::function<AssumptionCache &(Function &)> GetAssumptionCache =
-      [&](Function &F) -> AssumptionCache & {
+  auto GetAssumptionCache = [&](Function &F) -> AssumptionCache & {
     return FAM.getResult<AssumptionAnalysis>(F);
   };
   auto GetBFI = [&](Function &F) -> BlockFrequencyInfo & {
@@ -119,10 +114,12 @@ DefaultInlineAdvisor::getAdvice(CallBase &CB, FunctionAnalysisManager &FAM) {
     bool RemarksEnabled =
         Callee.getContext().getDiagHandlerPtr()->isMissedOptRemarkEnabled(
             DEBUG_TYPE);
-    return getInlineCost(CB, Params, CalleeTTI, GetAssumptionCache, {GetBFI},
-                         GetTLI, PSI, RemarksEnabled ? &ORE : nullptr);
+    return getInlineCost(CB, Params, CalleeTTI, GetAssumptionCache, GetTLI,
+                         GetBFI, PSI, RemarksEnabled ? &ORE : nullptr);
   };
-  auto OIC = llvm::shouldInline(CB, GetInlineCost, ORE);
+  auto OIC = llvm::shouldInline(CB, GetInlineCost, ORE,
+                                Params.EnableDeferral.hasValue() &&
+                                    Params.EnableDeferral.getValue());
   return std::make_unique<DefaultInlineAdvice>(this, CB, OIC, ORE);
 }
 
@@ -153,9 +150,10 @@ AnalysisKey InlineAdvisorAnalysis::Key;
 
 bool InlineAdvisorAnalysis::Result::tryCreate(InlineParams Params,
                                               InliningAdvisorMode Mode) {
+  auto &FAM = MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
   switch (Mode) {
   case InliningAdvisorMode::Default:
-    Advisor.reset(new DefaultInlineAdvisor(Params));
+    Advisor.reset(new DefaultInlineAdvisor(FAM, Params));
     break;
   case InliningAdvisorMode::Development:
     // To be added subsequently under conditional compilation.
@@ -302,7 +300,7 @@ void llvm::setInlineRemark(CallBase &CB, StringRef Message) {
 Optional<InlineCost>
 llvm::shouldInline(CallBase &CB,
                    function_ref<InlineCost(CallBase &CB)> GetInlineCost,
-                   OptimizationRemarkEmitter &ORE) {
+                   OptimizationRemarkEmitter &ORE, bool EnableDeferral) {
   using namespace ore;
 
   InlineCost IC = GetInlineCost(CB);
@@ -339,7 +337,8 @@ llvm::shouldInline(CallBase &CB,
   }
 
   int TotalSecondaryCost = 0;
-  if (shouldBeDeferred(Caller, IC, TotalSecondaryCost, GetInlineCost)) {
+  if (EnableDeferral &&
+      shouldBeDeferred(Caller, IC, TotalSecondaryCost, GetInlineCost)) {
     LLVM_DEBUG(dbgs() << "    NOT Inlining: " << CB
                       << " Cost = " << IC.getCost()
                       << ", outer Cost = " << TotalSecondaryCost << '\n');

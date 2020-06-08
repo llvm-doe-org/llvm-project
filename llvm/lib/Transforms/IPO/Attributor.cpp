@@ -1363,7 +1363,8 @@ bool Attributor::isValidFunctionSignatureRewrite(
   AttributeList FnAttributeList = Fn->getAttributes();
   if (FnAttributeList.hasAttrSomewhere(Attribute::Nest) ||
       FnAttributeList.hasAttrSomewhere(Attribute::StructRet) ||
-      FnAttributeList.hasAttrSomewhere(Attribute::InAlloca)) {
+      FnAttributeList.hasAttrSomewhere(Attribute::InAlloca) ||
+      FnAttributeList.hasAttrSomewhere(Attribute::Preallocated)) {
     LLVM_DEBUG(
         dbgs() << "[Attributor] Cannot rewrite due to complex attribute\n");
     return false;
@@ -1567,11 +1568,8 @@ ChangeStatus Attributor::rewriteFunctionSignatures(
       }
 
       // Copy over various properties and the new attributes.
-      uint64_t W;
-      if (OldCB->extractProfTotalWeight(W))
-        NewCB->setProfWeight(W);
+      NewCB->copyMetadata(*OldCB, {LLVMContext::MD_prof, LLVMContext::MD_dbg});
       NewCB->setCallingConv(OldCB->getCallingConv());
-      NewCB->setDebugLoc(OldCB->getDebugLoc());
       NewCB->takeName(OldCB);
       NewCB->setAttributes(AttributeList::get(
           Ctx, OldCallAttributeList.getFnAttributes(),

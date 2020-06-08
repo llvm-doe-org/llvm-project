@@ -13,7 +13,6 @@
 #include "LLParser.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/None.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/AsmParser/SlotMapping.h"
@@ -30,14 +29,10 @@
 #include "llvm/IR/GlobalIFunc.h"
 #include "llvm/IR/GlobalObject.h"
 #include "llvm/IR/InlineAsm.h"
-#include "llvm/IR/Instruction.h"
-#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/Operator.h"
-#include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 #include "llvm/IR/ValueSymbolTable.h"
 #include "llvm/Support/Casting.h"
@@ -858,6 +853,9 @@ bool LLParser::ParseSummaryEntry() {
   case lltok::kw_flags:
     result = ParseSummaryIndexFlags();
     break;
+  case lltok::kw_blockcount:
+    result = ParseBlockCount();
+    break;
   default:
     result = Error(Lex.getLoc(), "unexpected summary kind");
     break;
@@ -1316,6 +1314,8 @@ bool LLParser::ParseFnAttributeValuePairs(AttrBuilder &B,
     case lltok::kw_nocf_check: B.addAttribute(Attribute::NoCfCheck); break;
     case lltok::kw_norecurse: B.addAttribute(Attribute::NoRecurse); break;
     case lltok::kw_nounwind: B.addAttribute(Attribute::NoUnwind); break;
+    case lltok::kw_null_pointer_is_valid:
+      B.addAttribute(Attribute::NullPointerIsValid); break;
     case lltok::kw_optforfuzzing:
       B.addAttribute(Attribute::OptForFuzzing); break;
     case lltok::kw_optnone: B.addAttribute(Attribute::OptimizeNone); break;
@@ -4503,21 +4503,41 @@ bool LLParser::ParseGenericDINode(MDNode *&Result, bool IsDistinct) {
 /// ParseDISubrange:
 ///   ::= !DISubrange(count: 30, lowerBound: 2)
 ///   ::= !DISubrange(count: !node, lowerBound: 2)
+///   ::= !DISubrange(lowerBound: !node1, upperBound: !node2, stride: !node3)
 bool LLParser::ParseDISubrange(MDNode *&Result, bool IsDistinct) {
 #define VISIT_MD_FIELDS(OPTIONAL, REQUIRED)                                    \
-  REQUIRED(count, MDSignedOrMDField, (-1, -1, INT64_MAX, false));              \
-  OPTIONAL(lowerBound, MDSignedField, );
+  OPTIONAL(count, MDSignedOrMDField, (-1, -1, INT64_MAX, false));              \
+  OPTIONAL(lowerBound, MDSignedOrMDField, );                                   \
+  OPTIONAL(upperBound, MDSignedOrMDField, );                                   \
+  OPTIONAL(stride, MDSignedOrMDField, );
   PARSE_MD_FIELDS();
 #undef VISIT_MD_FIELDS
 
+  Metadata *Count = nullptr;
+  Metadata *LowerBound = nullptr;
+  Metadata *UpperBound = nullptr;
+  Metadata *Stride = nullptr;
   if (count.isMDSignedField())
-    Result = GET_OR_DISTINCT(
-        DISubrange, (Context, count.getMDSignedValue(), lowerBound.Val));
+    Count = ConstantAsMetadata::get(ConstantInt::getSigned(
+        Type::getInt64Ty(Context), count.getMDSignedValue()));
   else if (count.isMDField())
-    Result = GET_OR_DISTINCT(
-        DISubrange, (Context, count.getMDFieldValue(), lowerBound.Val));
-  else
-    return true;
+    Count = count.getMDFieldValue();
+
+  auto convToMetadata = [&](MDSignedOrMDField Bound) -> Metadata * {
+    if (Bound.isMDSignedField())
+      return ConstantAsMetadata::get(ConstantInt::getSigned(
+          Type::getInt64Ty(Context), Bound.getMDSignedValue()));
+    if (Bound.isMDField())
+      return Bound.getMDFieldValue();
+    return nullptr;
+  };
+
+  LowerBound = convToMetadata(lowerBound);
+  UpperBound = convToMetadata(upperBound);
+  Stride = convToMetadata(stride);
+
+  Result = GET_OR_DISTINCT(DISubrange,
+                           (Context, Count, LowerBound, UpperBound, Stride));
 
   return false;
 }
@@ -4617,7 +4637,8 @@ bool LLParser::ParseDICompositeType(MDNode *&Result, bool IsDistinct) {
   OPTIONAL(vtableHolder, MDField, );                                           \
   OPTIONAL(templateParams, MDField, );                                         \
   OPTIONAL(identifier, MDStringField, );                                       \
-  OPTIONAL(discriminator, MDField, );
+  OPTIONAL(discriminator, MDField, );                                          \
+  OPTIONAL(dataLocation, MDField, );
   PARSE_MD_FIELDS();
 #undef VISIT_MD_FIELDS
 
@@ -4626,8 +4647,8 @@ bool LLParser::ParseDICompositeType(MDNode *&Result, bool IsDistinct) {
     if (auto *CT = DICompositeType::buildODRType(
             Context, *identifier.Val, tag.Val, name.Val, file.Val, line.Val,
             scope.Val, baseType.Val, size.Val, align.Val, offset.Val, flags.Val,
-            elements.Val, runtimeLang.Val, vtableHolder.Val,
-            templateParams.Val, discriminator.Val)) {
+            elements.Val, runtimeLang.Val, vtableHolder.Val, templateParams.Val,
+            discriminator.Val, dataLocation.Val)) {
       Result = CT;
       return false;
     }
@@ -4639,7 +4660,7 @@ bool LLParser::ParseDICompositeType(MDNode *&Result, bool IsDistinct) {
       (Context, tag.Val, name.Val, file.Val, line.Val, scope.Val, baseType.Val,
        size.Val, align.Val, offset.Val, flags.Val, elements.Val,
        runtimeLang.Val, vtableHolder.Val, templateParams.Val, identifier.Val,
-       discriminator.Val));
+       discriminator.Val, dataLocation.Val));
   return false;
 }
 
@@ -5246,12 +5267,15 @@ bool LLParser::ConvertValIDToValue(Type *Ty, ValID &ID, Value *&V,
         !ConstantFP::isValueValidForType(Ty, ID.APFloatVal))
       return Error(ID.Loc, "floating point constant invalid for type");
 
-    // The lexer has no type info, so builds all half, float, and double FP
-    // constants as double.  Fix this here.  Long double does not need this.
+    // The lexer has no type info, so builds all half, bfloat, float, and double
+    // FP constants as double.  Fix this here.  Long double does not need this.
     if (&ID.APFloatVal.getSemantics() == &APFloat::IEEEdouble()) {
       bool Ignored;
       if (Ty->isHalfTy())
         ID.APFloatVal.convert(APFloat::IEEEhalf(), APFloat::rmNearestTiesToEven,
+                              &Ignored);
+      else if (Ty->isBFloatTy())
+        ID.APFloatVal.convert(APFloat::BFloat(), APFloat::rmNearestTiesToEven,
                               &Ignored);
       else if (Ty->isFloatTy())
         ID.APFloatVal.convert(APFloat::IEEEsingle(), APFloat::rmNearestTiesToEven,
@@ -7006,7 +7030,12 @@ int LLParser::ParseAlloc(Instruction *&Inst, PerFunctionState &PFS) {
   if (Size && !Size->getType()->isIntegerTy())
     return Error(SizeLoc, "element count must have integer type");
 
-  AllocaInst *AI = new AllocaInst(Ty, AddrSpace, Size, Alignment);
+  SmallPtrSet<Type *, 4> Visited;
+  if (!Alignment && !Ty->isSized(&Visited))
+    return Error(TyLoc, "Cannot allocate unsized type");
+  if (!Alignment)
+    Alignment = M->getDataLayout().getPrefTypeAlign(Ty);
+  AllocaInst *AI = new AllocaInst(Ty, AddrSpace, Size, *Alignment);
   AI->setUsedWithInAlloca(IsInAlloca);
   AI->setSwiftError(IsSwiftError);
   Inst = AI;
@@ -7056,7 +7085,8 @@ int LLParser::ParseLoad(Instruction *&Inst, PerFunctionState &PFS) {
   if (Ty != cast<PointerType>(Val->getType())->getElementType())
     return Error(ExplicitTypeLoc,
                  "explicit pointee type doesn't match operand's pointee type");
-  if (!Alignment && !Ty->isSized())
+  SmallPtrSet<Type *, 4> Visited;
+  if (!Alignment && !Ty->isSized(&Visited))
     return Error(ExplicitTypeLoc, "loading unsized types is not allowed");
   if (!Alignment)
     Alignment = M->getDataLayout().getABITypeAlign(Ty);
@@ -7106,8 +7136,13 @@ int LLParser::ParseStore(Instruction *&Inst, PerFunctionState &PFS) {
   if (Ordering == AtomicOrdering::Acquire ||
       Ordering == AtomicOrdering::AcquireRelease)
     return Error(Loc, "atomic store cannot use Acquire ordering");
+  SmallPtrSet<Type *, 4> Visited;
+  if (!Alignment && !Val->getType()->isSized(&Visited))
+    return Error(Loc, "storing unsized types is not allowed");
+  if (!Alignment)
+    Alignment = M->getDataLayout().getABITypeAlign(Val->getType());
 
-  Inst = new StoreInst(Val, Ptr, isVolatile, Alignment, Ordering, SSID);
+  Inst = new StoreInst(Val, Ptr, isVolatile, *Alignment, Ordering, SSID);
   return AteExtraComma ? InstExtraComma : InstNormal;
 }
 
@@ -8076,6 +8111,21 @@ bool LLParser::ParseSummaryIndexFlags() {
   if (ParseUInt64(Flags))
     return true;
   Index->setFlags(Flags);
+  return false;
+}
+
+/// ParseBlockCount
+///   ::= 'blockcount' ':' UInt64
+bool LLParser::ParseBlockCount() {
+  assert(Lex.getKind() == lltok::kw_blockcount);
+  Lex.Lex();
+
+  if (ParseToken(lltok::colon, "expected ':' here"))
+    return true;
+  uint64_t BlockCount;
+  if (ParseUInt64(BlockCount))
+    return true;
+  Index->setBlockCount(BlockCount);
   return false;
 }
 

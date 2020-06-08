@@ -7,7 +7,6 @@
 #===----------------------------------------------------------------------===##
 
 import copy
-import locale
 import os
 import platform
 import pkgutil
@@ -74,7 +73,7 @@ class Configuration(object):
         self.debug_build = self.get_lit_bool('debug_build',   default=False)
         self.exec_env = dict()
         self.use_target = False
-        self.use_system_cxx_lib = False
+        self.use_system_cxx_lib = self.get_lit_bool('use_system_cxx_lib', False)
         self.use_clang_verify = False
         self.long_tests = None
 
@@ -123,14 +122,15 @@ class Configuration(object):
     def configure(self):
         self.configure_target_info()
         self.configure_executor()
-        self.configure_use_system_cxx_lib()
         self.configure_cxx()
         self.configure_triple()
         self.configure_deployment()
         self.configure_src_root()
         self.configure_obj_root()
         self.configure_cxx_stdlib_under_test()
-        self.configure_cxx_library_root()
+        self.cxx_library_root = self.get_lit_conf('cxx_library_root', self.libcxx_obj_root)
+        self.abi_library_root = self.get_lit_conf('abi_library_path', None)
+        self.cxx_runtime_root = self.get_lit_conf('cxx_runtime_root', self.cxx_library_root)
         self.configure_compile_flags()
         self.configure_link_flags()
         self.configure_env()
@@ -168,6 +168,8 @@ class Configuration(object):
             if k not in os.environ or os.environ[k] != v:
                 show_env_vars[k] = v
         self.lit_config.note('Adding environment variables: %r' % show_env_vars)
+        self.lit_config.note("Linking against the C++ Library at {}".format(self.cxx_library_root))
+        self.lit_config.note("Running against the C++ Library at {}".format(self.cxx_runtime_root))
         sys.stderr.flush()  # Force flushing to avoid broken output on Windows
 
     def get_test_format(self):
@@ -259,29 +261,6 @@ class Configuration(object):
             else:
                 self.libcxx_obj_root = self.project_obj_root
 
-    def configure_cxx_library_root(self):
-        self.cxx_library_root = self.get_lit_conf('cxx_library_root',
-                                                  self.libcxx_obj_root)
-        self.cxx_runtime_root = self.get_lit_conf('cxx_runtime_root',
-                                                   self.cxx_library_root)
-
-    def configure_use_system_cxx_lib(self):
-        # This test suite supports testing against either the system library or
-        # the locally built one; the former mode is useful for testing ABI
-        # compatibility between the current headers and a shipping dynamic
-        # library.
-        # Default to testing against the locally built libc++ library.
-        self.use_system_cxx_lib = self.get_lit_conf('use_system_cxx_lib')
-        if self.use_system_cxx_lib == 'true':
-            self.use_system_cxx_lib = True
-        elif self.use_system_cxx_lib == 'false':
-            self.use_system_cxx_lib = False
-        elif self.use_system_cxx_lib:
-            assert os.path.isdir(self.use_system_cxx_lib), "the specified use_system_cxx_lib parameter (%s) is not a valid directory" % self.use_system_cxx_lib
-            self.use_system_cxx_lib = os.path.abspath(self.use_system_cxx_lib)
-        self.lit_config.note(
-            "inferred use_system_cxx_lib as: %r" % self.use_system_cxx_lib)
-
     def configure_cxx_stdlib_under_test(self):
         self.cxx_stdlib_under_test = self.get_lit_conf(
             'cxx_stdlib_under_test', 'libc++')
@@ -303,7 +282,6 @@ class Configuration(object):
         if additional_features:
             for f in additional_features.split(','):
                 self.config.available_features.add(f.strip())
-        self.target_info.add_locale_features(self.config.available_features)
 
         # Write an "available feature" that combines the triple when
         # use_system_cxx_lib is enabled. This is so that we can easily write
@@ -344,9 +322,6 @@ class Configuration(object):
 
         if not self.get_lit_bool('enable_filesystem', default=True):
             self.config.available_features.add('c++filesystem-disabled')
-
-        if self.get_lit_bool('has_libatomic', False):
-            self.config.available_features.add('libatomic')
 
         if self.target_info.is_windows():
             self.config.available_features.add('windows')
@@ -458,10 +433,6 @@ class Configuration(object):
             self.cxx.compile_flags += ['-I' + os.path.join(pstl_src_root, 'test')]
             self.config.available_features.add('parallel-algorithms')
 
-        # FIXME(EricWF): variant_size.pass.cpp requires a slightly larger
-        # template depth with older Clang versions.
-        self.cxx.addCompileFlagIfSupported('-ftemplate-depth=270')
-
     def configure_compile_flags_header_includes(self):
         support_path = os.path.join(self.libcxx_src_root, 'test', 'support')
         self.configure_config_site_header()
@@ -549,31 +520,22 @@ class Configuration(object):
         self.cxx.link_flags += shlex.split(link_flags_str)
 
     def configure_link_flags_cxx_library_path(self):
-        if not self.use_system_cxx_lib:
-            if self.cxx_library_root:
-                self.cxx.link_flags += ['-L' + self.cxx_library_root]
-                if self.target_info.is_windows() and self.link_shared:
-                    self.add_path(self.cxx.compile_env, self.cxx_library_root)
-            if self.cxx_runtime_root:
-                if not self.target_info.is_windows():
-                    self.cxx.link_flags += ['-Wl,-rpath,' +
-                                            self.cxx_runtime_root]
-                elif self.target_info.is_windows() and self.link_shared:
-                    self.add_path(self.exec_env, self.cxx_runtime_root)
-        elif os.path.isdir(str(self.use_system_cxx_lib)):
-            self.cxx.link_flags += ['-L' + self.use_system_cxx_lib]
+        if self.cxx_library_root:
+            self.cxx.link_flags += ['-L' + self.cxx_library_root]
+            if self.target_info.is_windows() and self.link_shared:
+                self.add_path(self.cxx.compile_env, self.cxx_library_root)
+        if self.cxx_runtime_root:
             if not self.target_info.is_windows():
                 self.cxx.link_flags += ['-Wl,-rpath,' +
-                                        self.use_system_cxx_lib]
-            if self.target_info.is_windows() and self.link_shared:
-                self.add_path(self.cxx.compile_env, self.use_system_cxx_lib)
+                                        self.cxx_runtime_root]
+            elif self.target_info.is_windows() and self.link_shared:
+                self.add_path(self.exec_env, self.cxx_runtime_root)
         additional_flags = self.get_lit_conf('test_linker_flags')
         if additional_flags:
             self.cxx.link_flags += shlex.split(additional_flags)
 
     def configure_link_flags_abi_library_path(self):
         # Configure ABI library paths.
-        self.abi_library_root = self.get_lit_conf('abi_library_path')
         if self.abi_library_root:
             self.cxx.link_flags += ['-L' + self.abi_library_root]
             if not self.target_info.is_windows():
@@ -589,10 +551,9 @@ class Configuration(object):
         if self.link_shared:
             self.cxx.link_flags += ['-lc++']
         else:
-            cxx_library_root = self.get_lit_conf('cxx_library_root')
-            if cxx_library_root:
+            if self.cxx_library_root:
                 libname = self.make_static_lib_name('c++')
-                abs_path = os.path.join(cxx_library_root, libname)
+                abs_path = os.path.join(self.cxx_library_root, libname)
                 assert os.path.exists(abs_path) and \
                        "static libc++ library does not exist"
                 self.cxx.link_flags += [abs_path]
@@ -615,10 +576,9 @@ class Configuration(object):
                 if libcxxabi_shared:
                     self.cxx.link_flags += ['-lc++abi']
                 else:
-                    cxxabi_library_root = self.get_lit_conf('abi_library_path')
-                    if cxxabi_library_root:
+                    if self.abi_library_root:
                         libname = self.make_static_lib_name('c++abi')
-                        abs_path = os.path.join(cxxabi_library_root, libname)
+                        abs_path = os.path.join(self.abi_library_root, libname)
                         self.cxx.link_libcxxabi_flag = abs_path
                         self.cxx.link_flags += [abs_path]
                     else:
@@ -671,6 +631,7 @@ class Configuration(object):
         self.cxx.addWarningFlagIfSupported('-Wno-user-defined-literals')
         self.cxx.addWarningFlagIfSupported('-Wno-noexcept-type')
         self.cxx.addWarningFlagIfSupported('-Wno-aligned-allocation-unavailable')
+        self.cxx.addWarningFlagIfSupported('-Wno-atomic-alignment')
         # These warnings should be enabled in order to support the MSVC
         # team using the test suite; They enable the warnings below and
         # expect the test suite to be clean.
@@ -771,15 +732,9 @@ class Configuration(object):
             self.cxx.useModules()
 
     def configure_substitutions(self):
-        tool_env = ''
-        if self.target_info.is_darwin():
-            # Do not pass DYLD_LIBRARY_PATH to the compiler, linker, etc. as
-            # these tools are not meant to exercise the just-built libraries.
-            tool_env += 'env DYLD_LIBRARY_PATH=""'
-
         sub = self.config.substitutions
         # Configure compiler substitutions
-        sub.append(('%{cxx}', '{} {}'.format(tool_env, pipes.quote(self.cxx.path))))
+        sub.append(('%{cxx}', pipes.quote(self.cxx.path)))
         sub.append(('%{libcxx_src_root}', self.libcxx_src_root))
         # Configure flags substitutions
         flags = self.cxx.flags + (self.cxx.modules_flags if self.cxx.use_modules else [])
@@ -920,7 +875,6 @@ class Configuration(object):
             self.cxx.compile_flags += ['-D_LIBCPP_DISABLE_AVAILABILITY']
 
     def configure_env(self):
-        self.target_info.configure_env(self.exec_env)
         self.config.environment = dict(os.environ)
 
     def add_path(self, dest_env, new_path):

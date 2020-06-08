@@ -429,8 +429,13 @@ func @dyn_shape_fold(%L : index, %M : index) -> (memref<? x ? x i32>, memref<? x
 
 #map1 = affine_map<(d0, d1)[s0, s1, s2] -> (d0 * s1 + s0 + d1 * s2)>
 #map2 = affine_map<(d0, d1, d2)[s0, s1, s2] -> (d0 * s2 + d1 * s1 + d2 + s0)>
+#map3 = affine_map<(d0, d1)[s0, s1] -> (d0 * s1 + s0 + d1)>
 
-// CHECK-LABEL: func @dim_op_fold(%arg0: index, %arg1: index, %arg2: index,
+// CHECK-LABEL: func @dim_op_fold(
+// CHECK-SAME: %[[ARG0:[a-z0-9]*]]: index
+// CHECK-SAME: %[[ARG1:[a-z0-9]*]]: index
+// CHECK-SAME: %[[ARG2:[a-z0-9]*]]: index
+// CHECK-SAME: %[[BUF:[a-z0-9]*]]: memref<?xi8>
 func @dim_op_fold(%arg0: index, %arg1: index, %arg2: index, %BUF: memref<?xi8>, %M : index, %N : index, %K : index) {
 // CHECK-SAME: [[M:arg[0-9]+]]: index
 // CHECK-SAME: [[N:arg[0-9]+]]: index
@@ -452,11 +457,20 @@ func @dim_op_fold(%arg0: index, %arg1: index, %arg2: index, %BUF: memref<?xi8>, 
       affine.for %arg5 = %l to %u {
         "foo"() : () -> ()
       }
+      %sv2 = subview %0[0, 0][17, %arg4][1, 1] : memref<?x?xf32> to memref<17x?xf32, #map3>
+      %l2 = dim %v, 1 : memref<?x?xf32>
+      %u2 = dim %sv2, 1 : memref<17x?xf32, #map3>
+      scf.for %arg5 = %l2 to %u2 step %c1 {
+        "foo"() : () -> ()
+      }
     }
   }
-  // CHECK-NEXT: affine.for %arg7 = 0 to %arg2 {
-  // CHECK-NEXT:   affine.for %arg8 = 0 to %arg0 {
-  // CHECK-NEXT:     affine.for %arg9 = %arg0 to %arg0 {
+  //      CHECK: affine.for %[[I:.*]] = 0 to %[[ARG2]] {
+  // CHECK-NEXT:   affine.for %[[J:.*]] = 0 to %[[ARG0]] {
+  // CHECK-NEXT:     affine.for %[[K:.*]] = %[[ARG0]] to %[[ARG0]] {
+  // CHECK-NEXT:       "foo"() : () -> ()
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:     scf.for %[[KK:.*]] = %[[ARG0]] to %[[J]] step %{{.*}} {
   // CHECK-NEXT:       "foo"() : () -> ()
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
@@ -956,4 +970,16 @@ func @memref_cast_folding_subview_static(%V: memref<16x16xf32>, %a: index, %b: i
   // CHECK:  subview{{.*}}: memref<16x16xf32> to memref<3x4xf32, #[[map0]]>
   // CHECK:  memref_cast{{.*}}: memref<3x4xf32, #[[map0]]> to memref<3x4xf32, #[[map1]]>
   return %1: memref<3x4xf32, offset:?, strides:[?, 1]>
+}
+
+// -----
+
+// CHECK-LABEL: func @extract_element_from_tensor_from_elements
+func @extract_element_from_tensor_from_elements(%element : index) -> index {
+  // CHECK-SAME: ([[ARG:%.*]]: index)
+  %c0 = constant 0 : index
+  %tensor = tensor_from_elements(%element) : tensor<1xindex>
+  %extracted_element = extract_element %tensor[%c0] : tensor<1xindex>
+  // CHECK: [[ARG]] : index
+  return %extracted_element : index
 }

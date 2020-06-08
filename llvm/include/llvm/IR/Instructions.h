@@ -66,21 +66,19 @@ protected:
   AllocaInst *cloneImpl() const;
 
 public:
-  explicit AllocaInst(Type *Ty, unsigned AddrSpace,
-                      Value *ArraySize = nullptr,
-                      const Twine &Name = "",
-                      Instruction *InsertBefore = nullptr);
+  explicit AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize,
+                      const Twine &Name, Instruction *InsertBefore);
   AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize,
              const Twine &Name, BasicBlock *InsertAtEnd);
 
-  AllocaInst(Type *Ty, unsigned AddrSpace,
-             const Twine &Name, Instruction *InsertBefore = nullptr);
+  AllocaInst(Type *Ty, unsigned AddrSpace, const Twine &Name,
+             Instruction *InsertBefore);
   AllocaInst(Type *Ty, unsigned AddrSpace,
              const Twine &Name, BasicBlock *InsertAtEnd);
 
-  AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize, MaybeAlign Align,
+  AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize, Align Align,
              const Twine &Name = "", Instruction *InsertBefore = nullptr);
-  AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize, MaybeAlign Align,
+  AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize, Align Align,
              const Twine &Name, BasicBlock *InsertAtEnd);
 
   /// Return true if there is an allocation size parameter to the allocation
@@ -109,16 +107,12 @@ public:
 
   /// Return the alignment of the memory that is being allocated by the
   /// instruction.
-  MaybeAlign getAlign() const {
-    return decodeMaybeAlign(getSubclassDataFromInstruction() & 31);
+  Align getAlign() const {
+    return *decodeMaybeAlign(getSubclassDataFromInstruction() & 31);
   }
   // FIXME: Remove this one transition to Align is over.
-  unsigned getAlignment() const {
-    if (const auto MA = getAlign())
-      return MA->value();
-    return 0;
-  }
-  void setAlignment(MaybeAlign Align);
+  unsigned getAlignment() const { return getAlign().value(); }
+  void setAlignment(Align Align);
 
   /// Return true if this alloca is in the entry block of the function and is a
   /// constant size. If so, the code generator will fold it into the
@@ -306,17 +300,16 @@ protected:
 public:
   StoreInst(Value *Val, Value *Ptr, Instruction *InsertBefore);
   StoreInst(Value *Val, Value *Ptr, BasicBlock *InsertAtEnd);
-  StoreInst(Value *Val, Value *Ptr, bool isVolatile = false,
-            Instruction *InsertBefore = nullptr);
+  StoreInst(Value *Val, Value *Ptr, bool isVolatile, Instruction *InsertBefore);
   StoreInst(Value *Val, Value *Ptr, bool isVolatile, BasicBlock *InsertAtEnd);
-  StoreInst(Value *Val, Value *Ptr, bool isVolatile, MaybeAlign Align,
+  StoreInst(Value *Val, Value *Ptr, bool isVolatile, Align Align,
             Instruction *InsertBefore = nullptr);
-  StoreInst(Value *Val, Value *Ptr, bool isVolatile, MaybeAlign Align,
+  StoreInst(Value *Val, Value *Ptr, bool isVolatile, Align Align,
             BasicBlock *InsertAtEnd);
-  StoreInst(Value *Val, Value *Ptr, bool isVolatile, MaybeAlign Align,
+  StoreInst(Value *Val, Value *Ptr, bool isVolatile, Align Align,
             AtomicOrdering Order, SyncScope::ID SSID = SyncScope::System,
             Instruction *InsertBefore = nullptr);
-  StoreInst(Value *Val, Value *Ptr, bool isVolatile, MaybeAlign Align,
+  StoreInst(Value *Val, Value *Ptr, bool isVolatile, Align Align,
             AtomicOrdering Order, SyncScope::ID SSID, BasicBlock *InsertAtEnd);
 
   // allocate space for exactly two operands
@@ -339,17 +332,13 @@ public:
   /// Return the alignment of the access that is being performed
   /// FIXME: Remove this function once transition to Align is over.
   /// Use getAlign() instead.
-  unsigned getAlignment() const {
-    if (const auto MA = getAlign())
-      return MA->value();
-    return 0;
+  unsigned getAlignment() const { return getAlign().value(); }
+
+  Align getAlign() const {
+    return *decodeMaybeAlign((getSubclassDataFromInstruction() >> 1) & 31);
   }
 
-  MaybeAlign getAlign() const {
-    return decodeMaybeAlign((getSubclassDataFromInstruction() >> 1) & 31);
-  }
-
-  void setAlignment(MaybeAlign Alignment);
+  void setAlignment(Align Alignment);
 
   /// Returns the ordering constraint of this store instruction.
   AtomicOrdering getOrdering() const {
@@ -5162,12 +5151,12 @@ inline Value *getPointerOperand(Value *V) {
 }
 
 /// A helper function that returns the alignment of load or store instruction.
-inline MaybeAlign getLoadStoreAlignment(Value *I) {
+inline Align getLoadStoreAlignment(Value *I) {
   assert((isa<LoadInst>(I) || isa<StoreInst>(I)) &&
          "Expected Load or Store instruction");
   if (auto *LI = dyn_cast<LoadInst>(I))
-    return MaybeAlign(LI->getAlignment());
-  return MaybeAlign(cast<StoreInst>(I)->getAlignment());
+    return LI->getAlign();
+  return cast<StoreInst>(I)->getAlign();
 }
 
 /// A helper function that returns the address space of the pointer operand of

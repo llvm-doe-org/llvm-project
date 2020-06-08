@@ -1525,6 +1525,39 @@ def ExtractElementOp : Std_Op<"extract_element",
 }
 
 //===----------------------------------------------------------------------===//
+// TensorFromElementsOp
+//===----------------------------------------------------------------------===//
+
+def TensorFromElementsOp : Std_Op<"tensor_from_elements",
+    [NoSideEffect, SameOperandsAndResultElementType]> {
+  string summary = "tensor from elements operation.";
+  string description = [{
+    Create a 1D tensor from a range of same-type arguments.
+
+    Example:
+
+    ```mlir
+    tensor_from_elements(i_1, ..., i_N) :  tensor<Nxindex>
+    ```
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$elements);
+  let results = (outs AnyTensor:$result);
+
+  let skipDefaultBuilders = 1;
+  let builders = [OpBuilder<
+    "OpBuilder &builder, OperationState &result, ValueRange elements", [{
+      assert(!elements.empty() && "expected at least one element");
+      result.addOperands(elements);
+      result.addTypes(
+          RankedTensorType::get({static_cast<int64_t>(elements.size())},
+                                *elements.getTypes().begin()));
+    }]>];
+
+  let hasCanonicalizer = 1;
+}
+
+//===----------------------------------------------------------------------===//
 // FPExtOp
 //===----------------------------------------------------------------------===//
 
@@ -1745,12 +1778,16 @@ def MemRefCastOp : CastOp<"memref_cast"> {
     The `memref_cast` operation converts a memref from one type to an equivalent
     type with a compatible shape. The source and destination types are
     compatible if:
-    a. both are ranked memref types with the same element type, affine mappings,
-    address space, and rank but where the individual dimensions may add or
-    remove constant dimensions from the memref type.
+
+    a. Both are ranked memref types with the same element type, address space,
+    and rank and:
+      1. Both have the same layout or both have compatible strided layouts.
+      2. The individual sizes (resp. offset and strides in the case of strided
+         memrefs) may convert constant dimensions to dynamic dimensions and
+         vice-versa.
 
     If the cast converts any dimensions from an unknown to a known size, then it
-    acts as an assertion that fails at runtime of the dynamic dimensions
+    acts as an assertion that fails at runtime if the dynamic dimensions
     disagree with resultant destination size.
 
     Example:
@@ -1772,7 +1809,7 @@ def MemRefCastOp : CastOp<"memref_cast"> {
                           memref<12x4xf32, offset:?, strides: [?, ?]>
     ```
 
-    b. either or both memref types are unranked with the same element type, and
+    b. Either or both memref types are unranked with the same element type, and
     address space.
 
     Example:
@@ -2680,6 +2717,21 @@ def SubViewOp : Std_Op<"subview", [
     /// Range entry contains either the dynamic value or a ConstantIndexOp
     /// constructed with `b` at location `loc`.
     SmallVector<Range, 8> getOrCreateRanges(OpBuilder &b, Location loc);
+
+    /// Return the offsets as Values. Each Value is either the dynamic
+    /// value specified in the op or a ConstantIndexOp constructed
+    /// with `b` at location `loc`
+    SmallVector<Value, 4> getOrCreateOffsets(OpBuilder &b, Location loc);
+
+    /// Return the sizes as Values. Each Value is either the dynamic
+    /// value specified in the op or a ConstantIndexOp constructed
+    /// with `b` at location `loc`
+    SmallVector<Value, 4> getOrCreateSizes(OpBuilder &b, Location loc);
+
+    /// Return the strides as Values. Each Value is either the dynamic
+    /// value specified in the op or a ConstantIndexOp constructed with
+    /// `b` at location `loc`
+    SmallVector<Value, 4> getOrCreateStrides(OpBuilder &b, Location loc);
 
     /// A subview result type can be fully inferred from the source type and the
     /// static representation of offsets, sizes and strides. Special sentinels

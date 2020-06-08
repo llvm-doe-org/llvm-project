@@ -541,3 +541,51 @@ class l {
   }
 };
 }
+
+// Implicit HD candidate competes with device candidate.
+// a and b have implicit HD copy ctor. In copy ctor of b, ctor of a is resolved.
+// copy ctor of a should win over a(short), otherwise there will be ambiguity
+// due to conversion operator.
+namespace TestImplicitHDWithD {
+  struct a {
+    __device__ a(short);
+    __device__ operator unsigned() const;
+    __device__ operator int() const;
+  };
+  struct b {
+    a d;
+  };
+  void f(b g) { b e = g; }
+}
+
+// Implicit HD candidate competes with host candidate.
+// a and b have implicit HD copy ctor. In copy ctor of b, ctor of a is resolved.
+// copy ctor of a should win over a(short), otherwise there will be ambiguity
+// due to conversion operator.
+namespace TestImplicitHDWithH {
+  struct a {
+    a(short);
+    __device__ operator unsigned() const;
+    __device__ operator int() const;
+  };
+  struct b {
+    a d;
+  };
+  void f(b g) { b e = g; }
+}
+
+// Implicit HD candidate comptes with HD candidate.
+// a and b have implicit HD copy ctor. In copy ctor of b, ctor of a is resolved.
+// copy ctor of a should win over a(short), otherwise there will be ambiguity
+// due to conversion operator.
+namespace TestImplicitHDWithHD {
+  struct a {
+    __host__ __device__ a(short);
+    __device__ operator unsigned() const;
+    __device__ operator int() const;
+  };
+  struct b {
+    a d;
+  };
+  void f(b g) { b e = g; }
+}

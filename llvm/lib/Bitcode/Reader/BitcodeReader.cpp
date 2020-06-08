@@ -152,8 +152,7 @@ static bool convertToString(ArrayRef<uint64_t> Record, unsigned Idx,
   if (Idx > Record.size())
     return true;
 
-  for (unsigned i = Idx, e = Record.size(); i != e; ++i)
-    Result += (char)Record[i];
+  Result.append(Record.begin() + Idx, Record.end());
   return false;
 }
 
@@ -1469,6 +1468,8 @@ static Attribute::AttrKind getAttrFromCode(uint64_t Code) {
     return Attribute::NoCfCheck;
   case bitc::ATTR_KIND_NO_UNWIND:
     return Attribute::NoUnwind;
+  case bitc::ATTR_KIND_NULL_POINTER_IS_VALID:
+    return Attribute::NullPointerIsValid;
   case bitc::ATTR_KIND_OPT_FOR_FUZZING:
     return Attribute::OptForFuzzing;
   case bitc::ATTR_KIND_OPTIMIZE_FOR_SIZE:
@@ -1654,7 +1655,7 @@ Error BitcodeReader::parseAttributeGroupBlock() {
         }
       }
 
-      UpgradeFramePointerAttributes(B);
+      UpgradeAttributes(B);
       MAttributeGroups[GrpID] = AttributeList::get(Context, Idx, B);
       break;
     }
@@ -1719,6 +1720,9 @@ Error BitcodeReader::parseTypeTableBody() {
       break;
     case bitc::TYPE_CODE_HALF:     // HALF
       ResultTy = Type::getHalfTy(Context);
+      break;
+    case bitc::TYPE_CODE_BFLOAT:    // BFLOAT
+      ResultTy = Type::getBFloatTy(Context);
       break;
     case bitc::TYPE_CODE_FLOAT:     // FLOAT
       ResultTy = Type::getFloatTy(Context);
@@ -2429,6 +2433,9 @@ Error BitcodeReader::parseConstants() {
       if (CurTy->isHalfTy())
         V = ConstantFP::get(Context, APFloat(APFloat::IEEEhalf(),
                                              APInt(16, (uint16_t)Record[0])));
+      else if (CurTy->isBFloatTy())
+        V = ConstantFP::get(Context, APFloat(APFloat::BFloat(),
+                                             APInt(16, (uint32_t)Record[0])));
       else if (CurTy->isFloatTy())
         V = ConstantFP::get(Context, APFloat(APFloat::IEEEsingle(),
                                              APInt(32, (uint32_t)Record[0])));
@@ -2526,21 +2533,27 @@ Error BitcodeReader::parseConstants() {
       } else if (EltTy->isHalfTy()) {
         SmallVector<uint16_t, 16> Elts(Record.begin(), Record.end());
         if (isa<VectorType>(CurTy))
-          V = ConstantDataVector::getFP(Context, Elts);
+          V = ConstantDataVector::getFP(EltTy, Elts);
         else
-          V = ConstantDataArray::getFP(Context, Elts);
+          V = ConstantDataArray::getFP(EltTy, Elts);
+      } else if (EltTy->isBFloatTy()) {
+        SmallVector<uint16_t, 16> Elts(Record.begin(), Record.end());
+        if (isa<VectorType>(CurTy))
+          V = ConstantDataVector::getFP(EltTy, Elts);
+        else
+          V = ConstantDataArray::getFP(EltTy, Elts);
       } else if (EltTy->isFloatTy()) {
         SmallVector<uint32_t, 16> Elts(Record.begin(), Record.end());
         if (isa<VectorType>(CurTy))
-          V = ConstantDataVector::getFP(Context, Elts);
+          V = ConstantDataVector::getFP(EltTy, Elts);
         else
-          V = ConstantDataArray::getFP(Context, Elts);
+          V = ConstantDataArray::getFP(EltTy, Elts);
       } else if (EltTy->isDoubleTy()) {
         SmallVector<uint64_t, 16> Elts(Record.begin(), Record.end());
         if (isa<VectorType>(CurTy))
-          V = ConstantDataVector::getFP(Context, Elts);
+          V = ConstantDataVector::getFP(EltTy, Elts);
         else
-          V = ConstantDataArray::getFP(Context, Elts);
+          V = ConstantDataArray::getFP(EltTy, Elts);
       } else {
         return error("Invalid type for value");
       }
@@ -4812,7 +4825,13 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
       const DataLayout &DL = TheModule->getDataLayout();
       unsigned AS = DL.getAllocaAddrSpace();
 
-      AllocaInst *AI = new AllocaInst(Ty, AS, Size, Align);
+      SmallPtrSet<Type *, 4> Visited;
+      if (!Align && !Ty->isSized(&Visited))
+        return error("alloca of unsized type");
+      if (!Align)
+        Align = DL.getPrefTypeAlign(Ty);
+
+      AllocaInst *AI = new AllocaInst(Ty, AS, Size, *Align);
       AI->setUsedWithInAlloca(InAlloca);
       AI->setSwiftError(SwiftError);
       I = AI;
@@ -4843,7 +4862,8 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
       MaybeAlign Align;
       if (Error Err = parseAlignmentValue(Record[OpNum], Align))
         return Err;
-      if (!Align && !Ty->isSized())
+      SmallPtrSet<Type *, 4> Visited;
+      if (!Align && !Ty->isSized(&Visited))
         return error("load of unsized type");
       if (!Align)
         Align = TheModule->getDataLayout().getABITypeAlign(Ty);
@@ -4908,7 +4928,12 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
       MaybeAlign Align;
       if (Error Err = parseAlignmentValue(Record[OpNum], Align))
         return Err;
-      I = new StoreInst(Val, Ptr, Record[OpNum + 1], Align);
+      SmallPtrSet<Type *, 4> Visited;
+      if (!Align && !Val->getType()->isSized(&Visited))
+        return error("store of unsized type");
+      if (!Align)
+        Align = TheModule->getDataLayout().getABITypeAlign(Val->getType());
+      I = new StoreInst(Val, Ptr, Record[OpNum + 1], *Align);
       InstructionList.push_back(I);
       break;
     }
@@ -4941,7 +4966,9 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
       MaybeAlign Align;
       if (Error Err = parseAlignmentValue(Record[OpNum], Align))
         return Err;
-      I = new StoreInst(Val, Ptr, Record[OpNum + 1], Align, Ordering, SSID);
+      if (!Align)
+        return error("Alignment missing from atomic store");
+      I = new StoreInst(Val, Ptr, Record[OpNum + 1], *Align, Ordering, SSID);
       InstructionList.push_back(I);
       break;
     }
@@ -6212,6 +6239,9 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
     case bitc::FS_TYPE_ID_METADATA:
       parseTypeIdCompatibleVtableSummaryRecord(Record);
       break;
+
+    case bitc::FS_BLOCK_COUNT:
+      TheIndex.addBlockCount(Record[0]);
     }
   }
   llvm_unreachable("Exit infinite loop");

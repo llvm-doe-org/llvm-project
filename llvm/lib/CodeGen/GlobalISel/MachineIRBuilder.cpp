@@ -237,17 +237,14 @@ MachineIRBuilder::materializePtrAdd(Register &Res, Register Op0,
   return buildPtrAdd(Res, Op0, Cst.getReg(0));
 }
 
-MachineInstrBuilder MachineIRBuilder::buildPtrMask(const DstOp &Res,
-                                                   const SrcOp &Op0,
-                                                   uint32_t NumBits) {
-  assert(Res.getLLTTy(*getMRI()).isPointer() &&
-         Res.getLLTTy(*getMRI()) == Op0.getLLTTy(*getMRI()) && "type mismatch");
-
-  auto MIB = buildInstr(TargetOpcode::G_PTR_MASK);
-  Res.addDefToMIB(*getMRI(), MIB);
-  Op0.addSrcToMIB(MIB);
-  MIB.addImm(NumBits);
-  return MIB;
+MachineInstrBuilder MachineIRBuilder::buildMaskLowPtrBits(const DstOp &Res,
+                                                          const SrcOp &Op0,
+                                                          uint32_t NumBits) {
+  LLT PtrTy = Res.getLLTTy(*getMRI());
+  LLT MaskTy = LLT::scalar(PtrTy.getSizeInBits());
+  Register MaskReg = getMRI()->createGenericVirtualRegister(MaskTy);
+  buildConstant(MaskReg, maskTrailingZeros<uint64_t>(NumBits));
+  return buildPtrMask(Res, Op0, MaskReg);
 }
 
 MachineInstrBuilder MachineIRBuilder::buildBr(MachineBasicBlock &Dest) {
@@ -377,6 +374,23 @@ MachineInstrBuilder MachineIRBuilder::buildLoadInstr(unsigned Opcode,
   Addr.addSrcToMIB(MIB);
   MIB.addMemOperand(&MMO);
   return MIB;
+}
+
+MachineInstrBuilder MachineIRBuilder::buildLoadFromOffset(
+  const DstOp &Dst, const SrcOp &BasePtr,
+  MachineMemOperand &BaseMMO, int64_t Offset) {
+  LLT LoadTy = Dst.getLLTTy(*getMRI());
+  MachineMemOperand *OffsetMMO =
+    getMF().getMachineMemOperand(&BaseMMO, Offset, LoadTy.getSizeInBytes());
+
+  if (Offset == 0) // This may be a size or type changing load.
+    return buildLoad(Dst, BasePtr, *OffsetMMO);
+
+  LLT PtrTy = BasePtr.getLLTTy(*getMRI());
+  LLT OffsetTy = LLT::scalar(PtrTy.getSizeInBits());
+  auto ConstOffset = buildConstant(OffsetTy, Offset);
+  auto Ptr = buildPtrAdd(PtrTy, BasePtr, ConstOffset);
+  return buildLoad(Dst, Ptr, *OffsetMMO);
 }
 
 MachineInstrBuilder MachineIRBuilder::buildStore(const SrcOp &Val,

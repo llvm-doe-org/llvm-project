@@ -340,7 +340,7 @@ void MachineFunction::RenumberBlocks(MachineBasicBlock *MBB) {
   MBBNumbering.resize(BlockNo);
 }
 
-/// This is used with -fbasicblock-sections or -fbasicblock-labels option.
+/// This is used with -fbasic-block-sections or -fbasicblock-labels option.
 /// A unary encoding of basic block labels is done to keep ".strtab" sizes
 /// small.
 void MachineFunction::createBBLabels() {
@@ -658,10 +658,10 @@ void MachineFunction::viewCFGOnly() const
 
 /// Add the specified physical register as a live-in value and
 /// create a corresponding virtual register for it.
-unsigned MachineFunction::addLiveIn(unsigned PReg,
+Register MachineFunction::addLiveIn(MCRegister PReg,
                                     const TargetRegisterClass *RC) {
   MachineRegisterInfo &MRI = getRegInfo();
-  unsigned VReg = MRI.getLiveInVirtReg(PReg);
+  Register VReg = MRI.getLiveInVirtReg(PReg);
   if (VReg) {
     const TargetRegisterClass *VRegRC = MRI.getRegClass(VReg);
     (void)VRegRC;

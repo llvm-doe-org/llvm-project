@@ -95,6 +95,7 @@ void DAGTypeLegalizer::ScalarizeVectorResult(SDNode *N, unsigned ResNo) {
   case ISD::FP_TO_UINT:
   case ISD::FRINT:
   case ISD::FROUND:
+  case ISD::FROUNDEVEN:
   case ISD::FSIN:
   case ISD::FSQRT:
   case ISD::FTRUNC:
@@ -888,6 +889,7 @@ void DAGTypeLegalizer::SplitVectorResult(SDNode *N, unsigned ResNo) {
   case ISD::FP_TO_UINT:
   case ISD::FRINT:
   case ISD::FROUND:
+  case ISD::FROUNDEVEN:
   case ISD::FSIN:
   case ISD::FSQRT:
   case ISD::FTRUNC:
@@ -1061,6 +1063,8 @@ void DAGTypeLegalizer::SplitVecRes_BITCAST(SDNode *N, SDValue &Lo,
     Lo = DAG.getNode(ISD::BITCAST, dl, LoVT, Lo);
     Hi = DAG.getNode(ISD::BITCAST, dl, HiVT, Hi);
     return;
+  case TargetLowering::TypeScalarizeScalableVector:
+    report_fatal_error("Scalarization of scalable vectors is not supported.");
   }
 
   // In the general case, convert the input to an integer and split it by hand.
@@ -1143,41 +1147,42 @@ void DAGTypeLegalizer::SplitVecRes_INSERT_SUBVECTOR(SDNode *N, SDValue &Lo,
   // boundary between the halves, we can avoid spilling the vector, and insert
   // into the lower half of the split vector directly.
   // TODO: The IdxVal == 0 constraint is artificial, we could do this whenever
-  // the index is constant and there is no boundary crossing. But those cases
-  // don't seem to get hit in practice.
-  if (ConstantSDNode *ConstIdx = dyn_cast<ConstantSDNode>(Idx)) {
-    unsigned IdxVal = ConstIdx->getZExtValue();
-    if ((IdxVal == 0) && (IdxVal + SubElems <= VecElems / 2)) {
-      EVT LoVT, HiVT;
-      std::tie(LoVT, HiVT) = DAG.GetSplitDestVTs(N->getValueType(0));
-      Lo = DAG.getNode(ISD::INSERT_SUBVECTOR, dl, LoVT, Lo, SubVec, Idx);
-      return;
-    }
+  // there is no boundary crossing. But those cases don't seem to get hit in
+  // practice.
+  unsigned IdxVal = cast<ConstantSDNode>(Idx)->getZExtValue();
+  if ((IdxVal == 0) && (IdxVal + SubElems <= VecElems / 2)) {
+    EVT LoVT, HiVT;
+    std::tie(LoVT, HiVT) = DAG.GetSplitDestVTs(N->getValueType(0));
+    Lo = DAG.getNode(ISD::INSERT_SUBVECTOR, dl, LoVT, Lo, SubVec, Idx);
+    return;
   }
 
   // Spill the vector to the stack.
   SDValue StackPtr = DAG.CreateStackTemporary(VecVT);
+  auto &MF = DAG.getMachineFunction();
+  auto FrameIndex = cast<FrameIndexSDNode>(StackPtr.getNode())->getIndex();
+  auto PtrInfo = MachinePointerInfo::getFixedStack(MF, FrameIndex);
+  Type *VecType = VecVT.getTypeForEVT(*DAG.getContext());
+  Align Alignment = DAG.getDataLayout().getPrefTypeAlign(VecType);
+
   SDValue Store =
-      DAG.getStore(DAG.getEntryNode(), dl, Vec, StackPtr, MachinePointerInfo());
+      DAG.getStore(DAG.getEntryNode(), dl, Vec, StackPtr, PtrInfo, Alignment);
 
   // Store the new subvector into the specified index.
   SDValue SubVecPtr = TLI.getVectorElementPointer(DAG, StackPtr, VecVT, Idx);
-  Type *VecType = VecVT.getTypeForEVT(*DAG.getContext());
-  Align Alignment = DAG.getDataLayout().getPrefTypeAlign(VecType);
-  Store = DAG.getStore(Store, dl, SubVec, SubVecPtr, MachinePointerInfo());
+  Store = DAG.getStore(Store, dl, SubVec, SubVecPtr,
+                       MachinePointerInfo::getUnknownStack(MF));
 
   // Load the Lo part from the stack slot.
-  Lo =
-      DAG.getLoad(Lo.getValueType(), dl, Store, StackPtr, MachinePointerInfo());
+  Lo = DAG.getLoad(Lo.getValueType(), dl, Store, StackPtr, PtrInfo, Alignment);
 
   // Increment the pointer to the other part.
   unsigned IncrementSize = Lo.getValueSizeInBits() / 8;
   StackPtr = DAG.getMemBasePlusOffset(StackPtr, IncrementSize, dl);
 
   // Load the Hi part from the stack slot.
-  Hi =
-      DAG.getLoad(Hi.getValueType(), dl, Store, StackPtr,
-                  MachinePointerInfo().getWithOffset(IncrementSize), Alignment);
+  Hi = DAG.getLoad(Hi.getValueType(), dl, Store, StackPtr,
+                   PtrInfo.getWithOffset(IncrementSize), Alignment);
 }
 
 void DAGTypeLegalizer::SplitVecRes_FPOWI(SDNode *N, SDValue &Lo,
@@ -1453,13 +1458,15 @@ void DAGTypeLegalizer::SplitVecRes_INSERT_VECTOR_ELT(SDNode *N, SDValue &Lo,
   auto &MF = DAG.getMachineFunction();
   auto FrameIndex = cast<FrameIndexSDNode>(StackPtr.getNode())->getIndex();
   auto PtrInfo = MachinePointerInfo::getFixedStack(MF, FrameIndex);
-  SDValue Store = DAG.getStore(DAG.getEntryNode(), dl, Vec, StackPtr, PtrInfo);
+  Type *VecType = VecVT.getTypeForEVT(*DAG.getContext());
+  Align Alignment = DAG.getDataLayout().getPrefTypeAlign(VecType);
+
+  SDValue Store =
+      DAG.getStore(DAG.getEntryNode(), dl, Vec, StackPtr, PtrInfo, Alignment);
 
   // Store the new element.  This may be larger than the vector element type,
   // so use a truncating store.
   SDValue EltPtr = TLI.getVectorElementPointer(DAG, StackPtr, VecVT, Idx);
-  Type *VecType = VecVT.getTypeForEVT(*DAG.getContext());
-  Align Alignment = DAG.getDataLayout().getPrefTypeAlign(VecType);
   Store = DAG.getTruncStore(Store, dl, Elt, EltPtr,
                             MachinePointerInfo::getUnknownStack(MF), EltVT);
 
@@ -1467,13 +1474,11 @@ void DAGTypeLegalizer::SplitVecRes_INSERT_VECTOR_ELT(SDNode *N, SDValue &Lo,
   std::tie(LoVT, HiVT) = DAG.GetSplitDestVTs(VecVT);
 
   // Load the Lo part from the stack slot.
-  Lo = DAG.getLoad(LoVT, dl, Store, StackPtr, PtrInfo);
+  Lo = DAG.getLoad(LoVT, dl, Store, StackPtr, PtrInfo, Alignment);
 
   // Increment the pointer to the other part.
   unsigned IncrementSize = LoVT.getSizeInBits() / 8;
-  StackPtr = DAG.getNode(ISD::ADD, dl, StackPtr.getValueType(), StackPtr,
-                         DAG.getConstant(IncrementSize, dl,
-                                         StackPtr.getValueType()));
+  StackPtr = DAG.getMemBasePlusOffset(StackPtr, IncrementSize, dl);
 
   // Load the Hi part from the stack slot.
   Hi = DAG.getLoad(HiVT, dl, Store, StackPtr,
@@ -2824,6 +2829,7 @@ void DAGTypeLegalizer::WidenVectorResult(SDNode *N, unsigned ResNo) {
   case ISD::FNEARBYINT:
   case ISD::FRINT:
   case ISD::FROUND:
+  case ISD::FROUNDEVEN:
   case ISD::FSIN:
   case ISD::FSQRT:
   case ISD::FTRUNC: {
@@ -3461,6 +3467,8 @@ SDValue DAGTypeLegalizer::WidenVecRes_BITCAST(SDNode *N) {
   switch (getTypeAction(InVT)) {
   case TargetLowering::TypeLegal:
     break;
+  case TargetLowering::TypeScalarizeScalableVector:
+    report_fatal_error("Scalarization of scalable vectors is not supported.");
   case TargetLowering::TypePromoteInteger: {
     // If the incoming type is a vector that is being promoted, then
     // we know that the elements are arranged differently and that we

@@ -356,7 +356,7 @@ void CommandInterpreter::Initialize() {
     AddAlias("p", cmd_obj_sp, "--")->SetHelpLong("");
     AddAlias("print", cmd_obj_sp, "--")->SetHelpLong("");
     AddAlias("call", cmd_obj_sp, "--")->SetHelpLong("");
-    if (auto po = AddAlias("po", cmd_obj_sp, "-O --")) {
+    if (auto *po = AddAlias("po", cmd_obj_sp, "-O --")) {
       po->SetHelp("Evaluate an expression on the current thread.  Displays any "
                   "returned value with formatting "
                   "controlled by the type's author.");
@@ -378,6 +378,16 @@ void CommandInterpreter::Initialize() {
           "evaluate EXPRESSION to get the address of an array of COUNT "
           "objects in memory, and will call po on them.");
       poarray_alias->SetHelpLong("");
+    }
+  }
+
+  cmd_obj_sp = GetCommandSPExact("platform shell", false);
+  if (cmd_obj_sp) {
+    CommandAlias *shell_alias = AddAlias("shell", cmd_obj_sp, " --host --");
+    if (shell_alias) {
+      shell_alias->SetHelp("Run a shell command on the host.");
+      shell_alias->SetHelpLong("");
+      shell_alias->SetSyntax("shell <shell-command>");
     }
   }
 
@@ -1609,6 +1619,11 @@ Status CommandInterpreter::PreprocessCommand(std::string &command) {
                                        "for debugging for the "
                                        "expression '%s'",
                                        expr_str.c_str());
+        break;
+      case eExpressionThreadVanished:
+        error.SetErrorStringWithFormat(
+            "expression thread vanished for the expression '%s'",
+            expr_str.c_str());
         break;
       }
     }

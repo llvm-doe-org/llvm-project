@@ -82,6 +82,7 @@ STATISTIC(NumFastStores, "Number of stores deleted");
 STATISTIC(NumFastOther, "Number of other instrs removed");
 STATISTIC(NumCompletePartials, "Number of stores dead by later partials");
 STATISTIC(NumModifiedStores, "Number of stores modified");
+STATISTIC(NumNoopStores, "Number of noop stores deleted");
 
 DEBUG_COUNTER(MemorySSACounter, "dse-memoryssa",
               "Controls which MemoryDefs are eliminated.");
@@ -1332,9 +1333,8 @@ static bool eliminateDeadStores(BasicBlock &BB, AliasAnalysis *AA,
 
             auto *SI = new StoreInst(
                 ConstantInt::get(Earlier->getValueOperand()->getType(), Merged),
-                Earlier->getPointerOperand(), false,
-                MaybeAlign(Earlier->getAlignment()), Earlier->getOrdering(),
-                Earlier->getSyncScopeID(), DepWrite);
+                Earlier->getPointerOperand(), false, Earlier->getAlign(),
+                Earlier->getOrdering(), Earlier->getSyncScopeID(), DepWrite);
 
             unsigned MDToKeep[] = {LLVMContext::MD_dbg, LLVMContext::MD_tbaa,
                                    LLVMContext::MD_alias_scope,
@@ -1792,7 +1792,7 @@ struct DSEState {
       return false;
 
     if (SI->getParent() == NI->getParent())
-      return ThrowingBlocks.find(SI->getParent()) != ThrowingBlocks.end();
+      return ThrowingBlocks.count(SI->getParent());
     return !ThrowingBlocks.empty();
   }
 
@@ -1822,6 +1822,21 @@ struct DSEState {
   }
 };
 
+/// \returns true if \p KillingDef stores the result of \p Load to the source of
+/// \p Load.
+static bool storeIsNoop(MemorySSA &MSSA, LoadInst *Load,
+                        MemoryDef *KillingDef) {
+  Instruction *Store = KillingDef->getMemoryInst();
+  // If the load's operand isn't the destination of the store, bail.
+  if (Load->getPointerOperand() != Store->getOperand(1))
+    return false;
+
+  // Get the defining access for the load.
+  auto *LoadAccess = MSSA.getMemoryAccess(Load)->getDefiningAccess();
+  // The store is dead if the defining accesses are the same.
+  return LoadAccess == KillingDef->getDefiningAccess();
+}
+
 bool eliminateDeadStoresMemorySSA(Function &F, AliasAnalysis &AA,
                                   MemorySSA &MSSA, DominatorTree &DT,
                                   PostDominatorTree &PDT,
@@ -1836,6 +1851,19 @@ bool eliminateDeadStoresMemorySSA(Function &F, AliasAnalysis &AA,
     if (State.SkipStores.count(KillingDef))
       continue;
     Instruction *SI = KillingDef->getMemoryInst();
+
+    // Check if we're storing a value that we just loaded.
+    if (auto *Load = dyn_cast<LoadInst>(SI->getOperand(0))) {
+      if (storeIsNoop(MSSA, Load, KillingDef)) {
+        State.deleteDeadInstruction(SI);
+        LLVM_DEBUG(dbgs() << "DSE: Remove Dead Store:\n  DEAD: " << *SI
+                          << '\n');
+        NumNoopStores++;
+        MadeChange = true;
+        continue;
+      }
+    }
+
     auto MaybeSILoc = State.getLocForWriteEx(SI);
     if (!MaybeSILoc) {
       LLVM_DEBUG(dbgs() << "Failed to find analyzable write location for "
@@ -2024,7 +2052,7 @@ public:
       PostDominatorTree &PDT =
           getAnalysis<PostDominatorTreeWrapperPass>().getPostDomTree();
 
-      eliminateDeadStoresMemorySSA(F, AA, MSSA, DT, PDT, TLI);
+      Changed = eliminateDeadStoresMemorySSA(F, AA, MSSA, DT, PDT, TLI);
     } else {
       MemoryDependenceResults &MD =
           getAnalysis<MemoryDependenceWrapperPass>().getMemDep();

@@ -62,6 +62,7 @@ enum NodeType : unsigned {
   SHL_PRED,
   SRL_PRED,
   SRA_PRED,
+  SETCC_PRED,
 
   // Arithmetic instructions which write flags.
   ADDS,
@@ -252,6 +253,7 @@ enum NodeType : unsigned {
   LDFF1,
   LDFF1S,
   LD1RQ,
+  LD1RO,
 
   // Unsigned gather loads.
   GLD1,
@@ -887,6 +889,9 @@ private:
 
   void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,
                           SelectionDAG &DAG) const override;
+  void ReplaceExtractSubVectorResults(SDNode *N,
+                                      SmallVectorImpl<SDValue> &Results,
+                                      SelectionDAG &DAG) const;
 
   bool shouldNormalizeToSelectSequence(LLVMContext &, EVT) const override;
 

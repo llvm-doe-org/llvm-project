@@ -451,7 +451,8 @@ def FeatureAtomicFaddInsts : SubtargetFeature<"atomic-fadd-insts",
   "HasAtomicFaddInsts",
   "true",
   "Has buffer_atomic_add_f32, buffer_atomic_pk_add_f16, global_atomic_add_f32, "
-  "global_atomic_pk_add_f16 instructions"
+  "global_atomic_pk_add_f16 instructions",
+  [FeatureFlatGlobalInsts]
 >;
 
 def FeatureDoesNotSupportSRAMECC : SubtargetFeature<"no-sram-ecc-support",
@@ -499,12 +500,6 @@ def FeatureNoDataDepHazard : SubtargetFeature<"no-data-dep-hazard",
 //===------------------------------------------------------------===//
 // Subtarget Features (options and debugging)
 //===------------------------------------------------------------===//
-
-def FeatureFPExceptions : SubtargetFeature<"fp-exceptions",
-  "FPExceptions",
-  "true",
-  "Enable floating point exceptions"
->;
 
 class FeatureMaxPrivateElementSize<int size> : SubtargetFeature<
   "max-private-element-size-"#size,
@@ -1052,6 +1047,9 @@ def NotLDSRequiresM0Init : Predicate<"!Subtarget->ldsRequiresM0Init()">;
 
 def HasDSAddTid : Predicate<"Subtarget->getGeneration() >= AMDGPUSubtarget::GFX9">,
   AssemblerPredicate<(all_of FeatureGFX9Insts)>;
+
+def HasLDSFPAtomics : Predicate<"Subtarget->hasLDSFPAtomics()">,
+  AssemblerPredicate<(all_of FeatureGFX8Insts)>;
 
 def HasAddNoCarryInsts : Predicate<"Subtarget->hasAddNoCarry()">,
   AssemblerPredicate<(all_of FeatureAddNoCarryInsts)>;

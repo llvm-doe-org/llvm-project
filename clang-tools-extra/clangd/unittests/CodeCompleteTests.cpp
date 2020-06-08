@@ -25,6 +25,7 @@
 #include "clang/Tooling/CompilationDatabase.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Testing/Support/Annotations.h"
 #include "llvm/Testing/Support/Error.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -107,7 +108,10 @@ CodeCompleteResult completions(const TestTU &TU, Position Point,
     Opts.Index = OverrideIndex.get();
   }
 
-  auto Inputs = TU.inputs();
+  MockFSProvider FS;
+  auto Inputs = TU.inputs(FS);
+  Inputs.Opts.BuildRecoveryAST = true;
+  Inputs.Opts.PreserveRecoveryASTType = true;
   IgnoreDiagnostics Diags;
   auto CI = buildCompilerInvocation(Inputs, Diags);
   if (!CI) {
@@ -116,8 +120,8 @@ CodeCompleteResult completions(const TestTU &TU, Position Point,
   }
   auto Preamble = buildPreamble(testPath(TU.Filename), *CI, Inputs,
                                 /*InMemory=*/true, /*Callback=*/nullptr);
-  return codeComplete(testPath(TU.Filename), Inputs.CompileCommand,
-                      Preamble.get(), TU.Code, Point, Inputs.FS, Opts);
+  return codeComplete(testPath(TU.Filename), Point, Preamble.get(), Inputs,
+                      Opts);
 }
 
 // Runs code completion.
@@ -147,8 +151,9 @@ CodeCompleteResult completionsNoCompile(llvm::StringRef Text,
 
   MockFSProvider FS;
   Annotations Test(Text);
-  return codeComplete(FilePath, tooling::CompileCommand(), /*Preamble=*/nullptr,
-                      Test.code(), Test.point(), FS.getFileSystem(), Opts);
+  ParseInputs ParseInput{tooling::CompileCommand(), &FS, Test.code().str()};
+  return codeComplete(FilePath, Test.point(), /*Preamble=*/nullptr, ParseInput,
+                      Opts);
 }
 
 Symbol withReferences(int N, Symbol S) {
@@ -752,6 +757,18 @@ TEST(CompletionTest, CompletionInPreamble) {
   EXPECT_THAT(Results, ElementsAre(Named("ifndef")));
 }
 
+TEST(CompletionTest, CompletionRecoveryASTType) {
+  auto Results = completions(R"cpp(
+    struct S { int member; };
+    S overloaded(int);
+    void foo() {
+      // No overload matches, but we have recovery-expr with the correct type.
+      overloaded().^
+    })cpp")
+                     .Completions;
+  EXPECT_THAT(Results, ElementsAre(Named("member")));
+}
+
 TEST(CompletionTest, DynamicIndexIncludeInsertion) {
   MockFSProvider FS;
   MockCompilationDatabase CDB;
@@ -1040,7 +1057,11 @@ SignatureHelp signatures(llvm::StringRef Text, Position Point,
     Index = memIndex(IndexSymbols);
 
   auto TU = TestTU::withCode(Text);
-  auto Inputs = TU.inputs();
+  MockFSProvider FS;
+  auto Inputs = TU.inputs(FS);
+  Inputs.Index = Index.get();
+  Inputs.Opts.BuildRecoveryAST = true;
+  Inputs.Opts.PreserveRecoveryASTType = true;
   IgnoreDiagnostics Diags;
   auto CI = buildCompilerInvocation(Inputs, Diags);
   if (!CI) {
@@ -1053,8 +1074,7 @@ SignatureHelp signatures(llvm::StringRef Text, Position Point,
     ADD_FAILURE() << "Couldn't build Preamble";
     return {};
   }
-  return signatureHelp(testPath(TU.Filename), Inputs.CompileCommand, *Preamble,
-                       Text, Point, Inputs.FS, Index.get());
+  return signatureHelp(testPath(TU.Filename), Point, *Preamble, Inputs);
 }
 
 SignatureHelp signatures(llvm::StringRef Text,
@@ -1192,7 +1212,8 @@ TEST(SignatureHelpTest, StalePreamble) {
   TestTU TU;
   TU.Code = "";
   IgnoreDiagnostics Diags;
-  auto Inputs = TU.inputs();
+  MockFSProvider FS;
+  auto Inputs = TU.inputs(FS);
   auto CI = buildCompilerInvocation(Inputs, Diags);
   ASSERT_TRUE(CI);
   auto EmptyPreamble = buildPreamble(testPath(TU.Filename), *CI, Inputs,
@@ -1204,10 +1225,8 @@ TEST(SignatureHelpTest, StalePreamble) {
     #include "a.h"
     void bar() { foo(^2); })cpp");
   TU.Code = Test.code().str();
-  Inputs = TU.inputs();
-  auto Results =
-      signatureHelp(testPath(TU.Filename), Inputs.CompileCommand,
-                    *EmptyPreamble, TU.Code, Test.point(), Inputs.FS, nullptr);
+  auto Results = signatureHelp(testPath(TU.Filename), Test.point(),
+                               *EmptyPreamble, TU.inputs(FS));
   EXPECT_THAT(Results.signatures, ElementsAre(Sig("foo([[int x]]) -> int")));
   EXPECT_EQ(0, Results.activeSignature);
   EXPECT_EQ(0, Results.activeParameter);
@@ -2826,6 +2845,34 @@ TEST(NoCompileCompletionTest, WithIndex) {
       Syms, Opts);
   EXPECT_THAT(Results.Completions,
               ElementsAre(AllOf(Qualifier(""), Scope("a::"))));
+}
+
+TEST(AllowImplicitCompletion, All) {
+  const char *Yes[] = {
+      "foo.^bar",
+      "foo->^bar",
+      "foo::^bar",
+      "  #  include <^foo.h>",
+      "#import <foo/^bar.h>",
+      "#include_next \"^",
+  };
+  const char *No[] = {
+      "foo>^bar",
+      "foo:^bar",
+      "foo\n^bar",
+      "#include <foo.h> //^",
+      "#include \"foo.h\"^",
+      "#error <^",
+      "#<^",
+  };
+  for (const char *Test : Yes) {
+    llvm::Annotations A(Test);
+    EXPECT_TRUE(allowImplicitCompletion(A.code(), A.point())) << Test;
+  }
+  for (const char *Test : No) {
+    llvm::Annotations A(Test);
+    EXPECT_FALSE(allowImplicitCompletion(A.code(), A.point())) << Test;
+  }
 }
 
 } // namespace

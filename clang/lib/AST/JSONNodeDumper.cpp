@@ -1,5 +1,6 @@
 #include "clang/AST/JSONNodeDumper.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/Basic/Specifiers.h"
 #include "clang/Lex/Lexer.h"
 #include "llvm/ADT/StringSwitch.h"
 
@@ -385,6 +386,7 @@ static llvm::json::Object
 createCopyAssignmentDefinitionData(const CXXRecordDecl *RD) {
   llvm::json::Object Ret;
 
+  FIELD2("simple", hasSimpleCopyAssignment);
   FIELD2("trivial", hasTrivialCopyAssignment);
   FIELD2("nonTrivial", hasNonTrivialCopyAssignment);
   FIELD2("hasConstParam", hasCopyAssignmentWithConstParam);
@@ -465,13 +467,10 @@ JSONNodeDumper::createCXXRecordDefinitionData(const CXXRecordDecl *RD) {
 #undef FIELD2
 
 std::string JSONNodeDumper::createAccessSpecifier(AccessSpecifier AS) {
-  switch (AS) {
-  case AS_none: return "none";
-  case AS_private: return "private";
-  case AS_protected: return "protected";
-  case AS_public: return "public";
-  }
-  llvm_unreachable("Unknown access specifier");
+  const auto AccessSpelling = getAccessSpelling(AS);
+  if (AccessSpelling.empty())
+    return "none";
+  return AccessSpelling.str();
 }
 
 llvm::json::Object

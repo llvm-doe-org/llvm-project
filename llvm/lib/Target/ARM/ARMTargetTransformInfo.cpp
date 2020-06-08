@@ -173,6 +173,13 @@ int ARMTTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
   int ISD = TLI->InstructionOpcodeToISD(Opcode);
   assert(ISD && "Invalid opcode");
 
+  // TODO: Allow non-throughput costs that aren't binary.
+  auto AdjustCost = [&CostKind](int Cost) {
+    if (CostKind != TTI::TCK_RecipThroughput)
+      return Cost == 0 ? 0 : 1;
+    return Cost;
+  };
+
   // Single to/from double precision conversions.
   static const CostTblEntry NEONFltDblTbl[] = {
     // Vector fptrunc/fpext conversions.
@@ -185,14 +192,14 @@ int ARMTTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
                                           ISD == ISD::FP_EXTEND)) {
     std::pair<int, MVT> LT = TLI->getTypeLegalizationCost(DL, Src);
     if (const auto *Entry = CostTableLookup(NEONFltDblTbl, ISD, LT.second))
-      return LT.first * Entry->Cost;
+      return AdjustCost(LT.first * Entry->Cost);
   }
 
   EVT SrcTy = TLI->getValueType(DL, Src);
   EVT DstTy = TLI->getValueType(DL, Dst);
 
   if (!SrcTy.isSimple() || !DstTy.isSimple())
-    return BaseT::getCastInstrCost(Opcode, Dst, Src, CostKind, I);
+    return AdjustCost(BaseT::getCastInstrCost(Opcode, Dst, Src, CostKind, I));
 
   // The extend of a load is free
   if (I && isa<LoadInst>(I->getOperand(0))) {
@@ -212,7 +219,7 @@ int ARMTTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
     };
     if (const auto *Entry = ConvertCostTableLookup(
             LoadConversionTbl, ISD, DstTy.getSimpleVT(), SrcTy.getSimpleVT()))
-      return Entry->Cost;
+      return AdjustCost(Entry->Cost);
 
     static const TypeConversionCostTblEntry MVELoadConversionTbl[] = {
         {ISD::SIGN_EXTEND, MVT::v4i32, MVT::v4i16, 0},
@@ -226,7 +233,7 @@ int ARMTTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
       if (const auto *Entry =
               ConvertCostTableLookup(MVELoadConversionTbl, ISD,
                                      DstTy.getSimpleVT(), SrcTy.getSimpleVT()))
-        return Entry->Cost;
+        return AdjustCost(Entry->Cost);
     }
   }
 
@@ -253,7 +260,7 @@ int ARMTTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
     if (auto *Entry = ConvertCostTableLookup(NEONDoubleWidthTbl, UserISD,
                                              DstTy.getSimpleVT(),
                                              SrcTy.getSimpleVT())) {
-      return Entry->Cost;
+      return AdjustCost(Entry->Cost);
     }
   }
 
@@ -347,7 +354,7 @@ int ARMTTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
     if (const auto *Entry = ConvertCostTableLookup(NEONVectorConversionTbl, ISD,
                                                    DstTy.getSimpleVT(),
                                                    SrcTy.getSimpleVT()))
-      return Entry->Cost;
+      return AdjustCost(Entry->Cost);
   }
 
   // Scalar float to integer conversions.
@@ -377,7 +384,7 @@ int ARMTTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
     if (const auto *Entry = ConvertCostTableLookup(NEONFloatConversionTbl, ISD,
                                                    DstTy.getSimpleVT(),
                                                    SrcTy.getSimpleVT()))
-      return Entry->Cost;
+      return AdjustCost(Entry->Cost);
   }
 
   // Scalar integer to float conversions.
@@ -408,7 +415,7 @@ int ARMTTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
     if (const auto *Entry = ConvertCostTableLookup(NEONIntegerConversionTbl,
                                                    ISD, DstTy.getSimpleVT(),
                                                    SrcTy.getSimpleVT()))
-      return Entry->Cost;
+      return AdjustCost(Entry->Cost);
   }
 
   // MVE extend costs, taken from codegen tests. i8->i16 or i16->i32 is one
@@ -433,7 +440,7 @@ int ARMTTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
     if (const auto *Entry = ConvertCostTableLookup(MVEVectorConversionTbl,
                                                    ISD, DstTy.getSimpleVT(),
                                                    SrcTy.getSimpleVT()))
-      return Entry->Cost * ST->getMVEVectorCostFactor();
+      return AdjustCost(Entry->Cost * ST->getMVEVectorCostFactor());
   }
 
   // Scalar integer conversion costs.
@@ -452,13 +459,14 @@ int ARMTTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
     if (const auto *Entry = ConvertCostTableLookup(ARMIntegerConversionTbl, ISD,
                                                    DstTy.getSimpleVT(),
                                                    SrcTy.getSimpleVT()))
-      return Entry->Cost;
+      return AdjustCost(Entry->Cost);
   }
 
   int BaseCost = ST->hasMVEIntegerOps() && Src->isVectorTy()
                      ? ST->getMVEVectorCostFactor()
                      : 1;
-  return BaseCost * BaseT::getCastInstrCost(Opcode, Dst, Src, CostKind, I);
+  return AdjustCost(
+    BaseCost * BaseT::getCastInstrCost(Opcode, Dst, Src, CostKind, I));
 }
 
 int ARMTTIImpl::getVectorInstrCost(unsigned Opcode, Type *ValTy,
@@ -491,7 +499,7 @@ int ARMTTIImpl::getVectorInstrCost(unsigned Opcode, Type *ValTy,
     // result anyway.
     return std::max(BaseT::getVectorInstrCost(Opcode, ValTy, Index),
                     ST->getMVEVectorCostFactor()) *
-           cast<VectorType>(ValTy)->getNumElements() / 2;
+           cast<FixedVectorType>(ValTy)->getNumElements() / 2;
   }
 
   return BaseT::getVectorInstrCost(Opcode, ValTy, Index);
@@ -572,7 +580,7 @@ bool ARMTTIImpl::isLegalMaskedLoad(Type *DataTy, MaybeAlign Alignment) {
   if (!EnableMaskedLoadStores || !ST->hasMVEIntegerOps())
     return false;
 
-  if (auto *VecTy = dyn_cast<VectorType>(DataTy)) {
+  if (auto *VecTy = dyn_cast<FixedVectorType>(DataTy)) {
     // Don't support v2i1 yet.
     if (VecTy->getNumElements() == 2)
       return false;
@@ -584,8 +592,8 @@ bool ARMTTIImpl::isLegalMaskedLoad(Type *DataTy, MaybeAlign Alignment) {
   }
 
   unsigned EltWidth = DataTy->getScalarSizeInBits();
-  return (EltWidth == 32 && (!Alignment || Alignment >= 4)) ||
-         (EltWidth == 16 && (!Alignment || Alignment >= 2)) ||
+  return (EltWidth == 32 && (!Alignment || *Alignment >= 4)) ||
+         (EltWidth == 16 && (!Alignment || *Alignment >= 2)) ||
          (EltWidth == 8);
 }
 
@@ -606,8 +614,8 @@ bool ARMTTIImpl::isLegalMaskedGather(Type *Ty, MaybeAlign Alignment) {
     return false;
 
   unsigned EltWidth = Ty->getScalarSizeInBits();
-  return ((EltWidth == 32 && (!Alignment || Alignment >= 4)) ||
-          (EltWidth == 16 && (!Alignment || Alignment >= 2)) || EltWidth == 8);
+  return ((EltWidth == 32 && (!Alignment || *Alignment >= 4)) ||
+          (EltWidth == 16 && (!Alignment || *Alignment >= 2)) || EltWidth == 8);
 }
 
 int ARMTTIImpl::getMemcpyCost(const Instruction *I) {
@@ -854,7 +862,7 @@ int ARMTTIImpl::getArithmeticInstrCost(unsigned Opcode, Type *Ty,
     return LT.first * BaseCost;
 
   // Else this is expand, assume that we need to scalarize this op.
-  if (auto *VTy = dyn_cast<VectorType>(Ty)) {
+  if (auto *VTy = dyn_cast<FixedVectorType>(Ty)) {
     unsigned Num = VTy->getNumElements();
     unsigned Cost = getArithmeticInstrCost(Opcode, Ty->getScalarType(),
                                            CostKind);
@@ -870,6 +878,15 @@ int ARMTTIImpl::getMemoryOpCost(unsigned Opcode, Type *Src,
                                 MaybeAlign Alignment, unsigned AddressSpace,
                                 TTI::TargetCostKind CostKind,
                                 const Instruction *I) {
+  // TODO: Handle other cost kinds.
+  if (CostKind != TTI::TCK_RecipThroughput)
+    return 1;
+
+  // Type legalization can't handle structs
+  if (TLI->getValueType(DL, Src,  true) == MVT::Other)
+    return BaseT::getMemoryOpCost(Opcode, Src, Alignment, AddressSpace,
+                                  CostKind);
+
   std::pair<int, MVT> LT = TLI->getTypeLegalizationCost(DL, Src);
 
   if (ST->hasNEON() && Src->isVectorTy() &&
@@ -898,8 +915,9 @@ int ARMTTIImpl::getInterleavedMemoryOpCost(
 
   if (Factor <= TLI->getMaxSupportedInterleaveFactor() && !EltIs64Bits &&
       !UseMaskForCond && !UseMaskForGaps) {
-    unsigned NumElts = cast<VectorType>(VecTy)->getNumElements();
-    auto *SubVecTy = VectorType::get(VecTy->getScalarType(), NumElts / Factor);
+    unsigned NumElts = cast<FixedVectorType>(VecTy)->getNumElements();
+    auto *SubVecTy =
+        FixedVectorType::get(VecTy->getScalarType(), NumElts / Factor);
 
     // vldN/vstN only support legal vector types of size 64 or 128 in bits.
     // Accesses having vector types that are a multiple of 128 bits can be
@@ -935,7 +953,7 @@ unsigned ARMTTIImpl::getGatherScatterOpCost(unsigned Opcode, Type *DataTy,
                                          Alignment, CostKind, I);
 
   assert(DataTy->isVectorTy() && "Can't do gather/scatters on scalar!");
-  VectorType *VTy = cast<VectorType>(DataTy);
+  auto *VTy = cast<FixedVectorType>(DataTy);
 
   // TODO: Splitting, once we do that.
 
@@ -1384,7 +1402,14 @@ bool ARMTTIImpl::preferPredicateOverEpilogue(Loop *L, LoopInfo *LI,
   return canTailPredicateLoop(L, LI, SE, DL, LAI);
 }
 
-
+bool ARMTTIImpl::emitGetActiveLaneMask(Loop *L, LoopInfo *LI,
+    ScalarEvolution &SE, bool TailFolded) const {
+  // TODO: if this loop is tail-folded, we want to emit the
+  // llvm.get.active.lane.mask intrinsic so that this can be picked up in the
+  // MVETailPredication pass that needs to know the number of elements
+  // processed by this vector loop.
+  return false;
+}
 void ARMTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
                                          TTI::UnrollingPreferences &UP) {
   // Only currently enable these preferences for M-Class cores.
@@ -1476,7 +1501,8 @@ bool ARMTTIImpl::useReductionIntrinsic(unsigned Opcode, Type *Ty,
   case Instruction::ICmp:
   case Instruction::Add:
     return ScalarBits < 64 &&
-           (ScalarBits * cast<VectorType>(Ty)->getNumElements()) % 128 == 0;
+           (ScalarBits * cast<FixedVectorType>(Ty)->getNumElements()) % 128 ==
+               0;
   default:
     llvm_unreachable("Unhandled reduction opcode");
   }
