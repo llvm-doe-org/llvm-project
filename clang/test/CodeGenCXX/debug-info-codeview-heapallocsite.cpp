@@ -32,3 +32,7 @@ extern "C" void useinvoke() {
 // CHECK-SAME:                                 name: "Foo"
 // CHECK: [[DBG_BAR]] = distinct !DICompositeType(tag: DW_TAG_structure_type,
 // CHECK-SAME:                                 name: "Bar"
+
+// a new expression in a default arg has caused crashes in the past, add here to test that edge case
+void foo(int *a = new int) {}
+void bar() { foo(); }

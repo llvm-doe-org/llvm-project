@@ -1,4 +1,4 @@
-// RUN: mlir-opt --split-input-file --convert-shape-to-std --verify-diagnostics %s | FileCheck %s --dump-input-on-failure
+// RUN: mlir-opt --split-input-file --convert-shape-to-std --verify-diagnostics %s | FileCheck %s
 
 // Convert `size` to `index` type.
 // CHECK-LABEL: @size_id
@@ -61,4 +61,17 @@ func @from_extent_tensor(%tensor : tensor<?xindex>) -> !shape.shape {
   %shape = "shape.from_extent_tensor"(%tensor)
       : (tensor<?xindex>) -> !shape.shape
   return %shape : !shape.shape
+}
+
+// -----
+
+// Lower binary ops.
+// CHECK-LABEL: @binary_ops
+// CHECK-SAME: (%[[LHS:.*]]: index, %[[RHS:.*]]: index)
+func @binary_ops(%lhs : !shape.size, %rhs : !shape.size) {
+  %sum = "shape.add"(%lhs, %rhs) : (!shape.size, !shape.size) -> !shape.size
+  // CHECK-NEXT: addi %[[LHS]], %[[RHS]] : index
+  %product = shape.mul %lhs, %rhs
+  // CHECK-NEXT: muli %[[LHS]], %[[RHS]] : index
+  return
 }
