@@ -264,7 +264,7 @@ bool InlineAsmLowering::lowerInlineAsm(
 
       OpInfo.CallOperandVal = const_cast<Value *>(Call.getArgOperand(ArgNo++));
 
-      if (const auto *BB = dyn_cast<BasicBlock>(OpInfo.CallOperandVal)) {
+      if (isa<BasicBlock>(OpInfo.CallOperandVal)) {
         LLVM_DEBUG(dbgs() << "Basic block input operands not supported yet\n");
         return false;
       }
@@ -379,7 +379,8 @@ bool InlineAsmLowering::lowerInlineAsm(
 
         for (Register Reg : OpInfo.Regs) {
           Inst.addReg(Reg,
-                      RegState::Define | getImplRegState(Reg.isPhysical()));
+                      RegState::Define | getImplRegState(Reg.isPhysical()) |
+                          (OpInfo.isEarlyClobber ? RegState::EarlyClobber : 0));
         }
 
         // Remember this output operand for later processing
@@ -424,6 +425,13 @@ bool InlineAsmLowering::lowerInlineAsm(
       }
 
       if (OpInfo.ConstraintType == TargetLowering::C_Memory) {
+
+        if (!OpInfo.isIndirect) {
+          LLVM_DEBUG(dbgs()
+                     << "Cannot indirectify memory input operands yet\n");
+          return false;
+        }
+
         assert(OpInfo.isIndirect && "Operand must be indirect to be a mem!");
 
         unsigned ConstraintID =

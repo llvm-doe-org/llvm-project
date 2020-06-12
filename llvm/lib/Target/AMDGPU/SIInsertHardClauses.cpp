@@ -76,7 +76,7 @@ HardClauseType getHardClauseType(const MachineInstr &MI) {
 
   // Don't form VALU clauses. It's not clear what benefit they give, if any.
 
-  // In practice s_nop is the only internal instructions we're likely to see.
+  // In practice s_nop is the only internal instruction we're likely to see.
   // It's safe to treat the rest as illegal.
   if (MI.getOpcode() == AMDGPU::S_NOP)
     return HARDCLAUSE_INTERNAL;
@@ -103,23 +103,25 @@ public:
     // The last non-internal instruction in the clause.
     MachineInstr *Last = nullptr;
     // The length of the clause including any internal instructions in the
-    // middle.
+    // middle or after the end of the clause.
     unsigned Length = 0;
     // The base operands of *Last.
     SmallVector<const MachineOperand *, 4> BaseOps;
   };
 
   bool emitClause(const ClauseInfo &CI, const SIInstrInfo *SII) {
-    assert(CI.Length ==
-           std::distance(CI.First->getIterator(), CI.Last->getIterator()) + 1);
-    if (CI.Length < 2)
+    // Get the size of the clause excluding any internal instructions at the
+    // end.
+    unsigned Size =
+        std::distance(CI.First->getIterator(), CI.Last->getIterator()) + 1;
+    if (Size < 2)
       return false;
-    assert(CI.Length <= 64 && "Hard clause is too long!");
+    assert(Size <= 64 && "Hard clause is too long!");
 
     auto &MBB = *CI.First->getParent();
     auto ClauseMI =
         BuildMI(MBB, *CI.First, DebugLoc(), SII->get(AMDGPU::S_CLAUSE))
-            .addImm(CI.Length - 1);
+            .addImm(Size - 1);
     finalizeBundle(MBB, ClauseMI->getIterator(),
                    std::next(CI.Last->getIterator()));
     return true;
@@ -144,10 +146,11 @@ public:
 
         int64_t Dummy1;
         bool Dummy2;
+        unsigned Dummy3;
         SmallVector<const MachineOperand *, 4> BaseOps;
         if (Type <= LAST_REAL_HARDCLAUSE_TYPE) {
-          if (!SII->getMemOperandsWithOffset(MI, BaseOps, Dummy1, Dummy2,
-                                             TRI)) {
+          if (!SII->getMemOperandsWithOffsetWidth(MI, BaseOps, Dummy1, Dummy2,
+                                                  Dummy3, TRI)) {
             // We failed to get the base operands, so we'll never clause this
             // instruction with any other, so pretend it's illegal.
             Type = HARDCLAUSE_ILLEGAL;
@@ -162,7 +165,7 @@ public:
               // scheduler it limits the size of the cluster to avoid increasing
               // register pressure too much, but this pass runs after register
               // allocation so there is no need for that kind of limit.
-              !SII->shouldClusterMemOps(CI.BaseOps, BaseOps, 2)))) {
+              !SII->shouldClusterMemOps(CI.BaseOps, BaseOps, 2, 2)))) {
           // Finish the current clause.
           Changed |= emitClause(CI, SII);
           CI = ClauseInfo();

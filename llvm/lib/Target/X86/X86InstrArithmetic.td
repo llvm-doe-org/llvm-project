@@ -1247,7 +1247,6 @@ let isCompare = 1 in {
     def TEST8ri    : BinOpRI_F<0xF6, "test", Xi8 , X86testpat, MRM0r>;
     def TEST16ri   : BinOpRI_F<0xF6, "test", Xi16, X86testpat, MRM0r>;
     def TEST32ri   : BinOpRI_F<0xF6, "test", Xi32, X86testpat, MRM0r>;
-    let Predicates = [In64BitMode] in
     def TEST64ri32 : BinOpRI_F<0xF6, "test", Xi64, X86testpat, MRM0r>;
 
     def TEST8mi    : BinOpMI_F<0xF6, "test", Xi8 , X86testpat, MRM0m>;
@@ -1306,7 +1305,6 @@ let Predicates = [HasBMI], AddedComplexity = -6 in {
 multiclass bmi_mulx<string mnemonic, RegisterClass RC, X86MemOperand x86memop,
                     X86FoldableSchedWrite sched> {
 let hasSideEffects = 0 in {
-  let isCommutable = 1 in
   def rr : I<0xF6, MRMSrcReg, (outs RC:$dst1, RC:$dst2), (ins RC:$src),
              !strconcat(mnemonic, "\t{$src, $dst2, $dst1|$dst1, $dst2, $src}"),
              []>, T8XD, VEX_4V, Sched<[sched, WriteIMulH]>;
@@ -1314,7 +1312,17 @@ let hasSideEffects = 0 in {
   let mayLoad = 1 in
   def rm : I<0xF6, MRMSrcMem, (outs RC:$dst1, RC:$dst2), (ins x86memop:$src),
              !strconcat(mnemonic, "\t{$src, $dst2, $dst1|$dst1, $dst2, $src}"),
+
              []>, T8XD, VEX_4V, Sched<[sched.Folded, WriteIMulH]>;
+
+  // Pseudo instructions to be used when the low result isn't used. The
+  // instruction is defined to keep the high if both destinations are the same.
+  def Hrr : PseudoI<(outs RC:$dst), (ins RC:$src),
+                    []>, Sched<[sched]>;
+
+  let mayLoad = 1 in
+  def Hrm : PseudoI<(outs RC:$dst), (ins x86memop:$src),
+                    []>, Sched<[sched.Folded]>;
 }
 }
 

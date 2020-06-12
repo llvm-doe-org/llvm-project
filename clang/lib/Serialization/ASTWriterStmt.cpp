@@ -772,6 +772,15 @@ void ASTStmtWriter::VisitArraySubscriptExpr(ArraySubscriptExpr *E) {
   Code = serialization::EXPR_ARRAY_SUBSCRIPT;
 }
 
+void ASTStmtWriter::VisitMatrixSubscriptExpr(MatrixSubscriptExpr *E) {
+  VisitExpr(E);
+  Record.AddStmt(E->getBase());
+  Record.AddStmt(E->getRowIdx());
+  Record.AddStmt(E->getColumnIdx());
+  Record.AddSourceLocation(E->getRBracketLoc());
+  Code = serialization::EXPR_ARRAY_SUBSCRIPT;
+}
+
 void ASTStmtWriter::VisitOMPArraySectionExpr(OMPArraySectionExpr *E) {
   VisitExpr(E);
   Record.AddStmt(E->getBase());
@@ -1630,6 +1639,11 @@ void ASTStmtWriter::VisitCXXConstCastExpr(CXXConstCastExpr *E) {
   Code = serialization::EXPR_CXX_CONST_CAST;
 }
 
+void ASTStmtWriter::VisitCXXAddrspaceCastExpr(CXXAddrspaceCastExpr *E) {
+  VisitCXXNamedCastExpr(E);
+  Code = serialization::EXPR_CXX_ADDRSPACE_CAST;
+}
+
 void ASTStmtWriter::VisitCXXFunctionalCastExpr(CXXFunctionalCastExpr *E) {
   VisitExplicitCastExpr(E);
   Record.AddSourceLocation(E->getLParenLoc());
@@ -1641,6 +1655,7 @@ void ASTStmtWriter::VisitBuiltinBitCastExpr(BuiltinBitCastExpr *E) {
   VisitExplicitCastExpr(E);
   Record.AddSourceLocation(E->getBeginLoc());
   Record.AddSourceLocation(E->getEndLoc());
+  Code = serialization::EXPR_BUILTIN_BIT_CAST;
 }
 
 void ASTStmtWriter::VisitUserDefinedLiteral(UserDefinedLiteral *E) {

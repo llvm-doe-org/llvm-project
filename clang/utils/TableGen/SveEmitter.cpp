@@ -213,13 +213,13 @@ public:
   /// Return true if the intrinsic takes a splat operand.
   bool hasSplat() const {
     // These prototype modifiers are described in arm_sve.td.
-    return Proto.find_first_of("ajfrKLR") != std::string::npos;
+    return Proto.find_first_of("ajfrKLR@") != std::string::npos;
   }
 
   /// Return the parameter index of the splat operand.
   unsigned getSplatIdx() const {
     // These prototype modifiers are described in arm_sve.td.
-    auto Idx = Proto.find_first_of("ajfrKLR");
+    auto Idx = Proto.find_first_of("ajfrKLR@");
     assert(Idx != std::string::npos && Idx > 0 &&
            "Prototype has no splat operand");
     return Idx - 1;
@@ -437,7 +437,8 @@ std::string SVEType::str() const {
       S += "x" + utostr(getNumElements());
     if (NumVectors > 1)
       S += "x" + utostr(NumVectors);
-    S += "_t";
+    if (!isScalarPredicate())
+      S += "_t";
   }
 
   if (Constant)
@@ -513,6 +514,11 @@ void SVEType::applyModifier(char Mod) {
   case 'q':
     ElementBitwidth /= 4;
     break;
+  case 'b':
+    Signed = false;
+    Float = false;
+    ElementBitwidth /= 4;
+    break;
   case 'o':
     ElementBitwidth *= 4;
     break;
@@ -533,6 +539,12 @@ void SVEType::applyModifier(char Mod) {
     NumVectors = 0;
     break;
   case 'r':
+    ElementBitwidth /= 4;
+    NumVectors = 0;
+    break;
+  case '@':
+    Signed = false;
+    Float = false;
     ElementBitwidth /= 4;
     NumVectors = 0;
     break;
@@ -1047,7 +1059,6 @@ void SVEEmitter::createHeader(raw_ostream &OS) {
   OS << "typedef __fp16 float16_t;\n";
   OS << "typedef float float32_t;\n";
   OS << "typedef double float64_t;\n";
-  OS << "typedef bool bool_t;\n\n";
 
   OS << "typedef __SVInt8_t svint8_t;\n";
   OS << "typedef __SVInt16_t svint16_t;\n";

@@ -274,7 +274,6 @@ SourceRange Stmt::getSourceRange() const {
 }
 
 SourceLocation Stmt::getBeginLoc() const {
-  //  llvm::errs() << "getBeginLoc() for " << getStmtClassName() << "\n";
   switch (getStmtClass()) {
   case Stmt::NoStmtClass: llvm_unreachable("statement without class");
 #define ABSTRACT_STMT(type)

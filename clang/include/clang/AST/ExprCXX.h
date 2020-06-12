@@ -366,7 +366,8 @@ public:
 /// This abstract class is inherited by all of the classes
 /// representing "named" casts: CXXStaticCastExpr for \c static_cast,
 /// CXXDynamicCastExpr for \c dynamic_cast, CXXReinterpretCastExpr for
-/// reinterpret_cast, and CXXConstCastExpr for \c const_cast.
+/// reinterpret_cast, CXXConstCastExpr for \c const_cast and
+/// CXXAddrspaceCastExpr for addrspace_cast (in OpenCL).
 class CXXNamedCastExpr : public ExplicitCastExpr {
 private:
   // the location of the casting op
@@ -412,6 +413,7 @@ public:
     case CXXDynamicCastExprClass:
     case CXXReinterpretCastExprClass:
     case CXXConstCastExprClass:
+    case CXXAddrspaceCastExprClass:
       return true;
     default:
       return false;
@@ -566,6 +568,41 @@ public:
 
   static bool classof(const Stmt *T) {
     return T->getStmtClass() == CXXConstCastExprClass;
+  }
+};
+
+/// A C++ addrspace_cast expression (currently only enabled for OpenCL).
+///
+/// This expression node represents a cast between pointers to objects in
+/// different address spaces e.g.,
+/// \c addrspace_cast<global int*>(PtrToGenericInt).
+///
+/// A addrspace_cast can cast address space type qualifiers but does not change
+/// the underlying value.
+class CXXAddrspaceCastExpr final
+    : public CXXNamedCastExpr,
+      private llvm::TrailingObjects<CXXAddrspaceCastExpr, CXXBaseSpecifier *> {
+  CXXAddrspaceCastExpr(QualType ty, ExprValueKind VK, CastKind Kind, Expr *op,
+                       TypeSourceInfo *writtenTy, SourceLocation l,
+                       SourceLocation RParenLoc, SourceRange AngleBrackets)
+      : CXXNamedCastExpr(CXXAddrspaceCastExprClass, ty, VK, Kind, op, 0,
+                         writtenTy, l, RParenLoc, AngleBrackets) {}
+
+  explicit CXXAddrspaceCastExpr(EmptyShell Empty)
+      : CXXNamedCastExpr(CXXAddrspaceCastExprClass, Empty, 0) {}
+
+public:
+  friend class CastExpr;
+  friend TrailingObjects;
+
+  static CXXAddrspaceCastExpr *
+  Create(const ASTContext &Context, QualType T, ExprValueKind VK, CastKind Kind,
+         Expr *Op, TypeSourceInfo *WrittenTy, SourceLocation L,
+         SourceLocation RParenLoc, SourceRange AngleBrackets);
+  static CXXAddrspaceCastExpr *CreateEmpty(const ASTContext &Context);
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == CXXAddrspaceCastExprClass;
   }
 };
 
@@ -1825,10 +1862,9 @@ class LambdaExpr final : public Expr,
   /// Construct a lambda expression.
   LambdaExpr(QualType T, SourceRange IntroducerRange,
              LambdaCaptureDefault CaptureDefault,
-             SourceLocation CaptureDefaultLoc, ArrayRef<LambdaCapture> Captures,
-             bool ExplicitParams, bool ExplicitResultType,
-             ArrayRef<Expr *> CaptureInits, SourceLocation ClosingBrace,
-             bool ContainsUnexpandedParameterPack);
+             SourceLocation CaptureDefaultLoc, bool ExplicitParams,
+             bool ExplicitResultType, ArrayRef<Expr *> CaptureInits,
+             SourceLocation ClosingBrace, bool ContainsUnexpandedParameterPack);
 
   /// Construct an empty lambda expression.
   LambdaExpr(EmptyShell Empty, unsigned NumCaptures)
@@ -1851,9 +1887,9 @@ public:
   static LambdaExpr *
   Create(const ASTContext &C, CXXRecordDecl *Class, SourceRange IntroducerRange,
          LambdaCaptureDefault CaptureDefault, SourceLocation CaptureDefaultLoc,
-         ArrayRef<LambdaCapture> Captures, bool ExplicitParams,
-         bool ExplicitResultType, ArrayRef<Expr *> CaptureInits,
-         SourceLocation ClosingBrace, bool ContainsUnexpandedParameterPack);
+         bool ExplicitParams, bool ExplicitResultType,
+         ArrayRef<Expr *> CaptureInits, SourceLocation ClosingBrace,
+         bool ContainsUnexpandedParameterPack);
 
   /// Construct a new lambda expression that will be deserialized from
   /// an external source.
@@ -2713,6 +2749,8 @@ public:
       : Expr(ArrayTypeTraitExprClass, ty, VK_RValue, OK_Ordinary), ATT(att),
         Value(value), Dimension(dimension), Loc(loc), RParen(rparen),
         QueriedType(queried) {
+    assert(att <= ATT_Last && "invalid enum value!");
+    assert(static_cast<unsigned>(att) == ATT && "ATT overflow!");
     setDependence(computeDependence(this));
   }
 
@@ -2777,6 +2815,8 @@ public:
       : Expr(ExpressionTraitExprClass, resultType, VK_RValue, OK_Ordinary),
         ET(et), Value(value), Loc(loc), RParen(rparen),
         QueriedExpression(queried) {
+    assert(et <= ET_Last && "invalid enum value!");
+    assert(static_cast<unsigned>(et) == ET && "ET overflow!");
     setDependence(computeDependence(this));
   }
 
@@ -4785,6 +4825,8 @@ public:
       : ExplicitCastExpr(BuiltinBitCastExprClass, T, VK, CK, SrcExpr, 0,
                          DstType),
         KWLoc(KWLoc), RParenLoc(RParenLoc) {}
+  BuiltinBitCastExpr(EmptyShell Empty)
+      : ExplicitCastExpr(BuiltinBitCastExprClass, Empty, 0) {}
 
   SourceLocation getBeginLoc() const LLVM_READONLY { return KWLoc; }
   SourceLocation getEndLoc() const LLVM_READONLY { return RParenLoc; }

@@ -225,7 +225,7 @@ def LLVM_AllocaOp :
     if ($alignment.hasValue()) {
       auto align = $alignment.getValue().getZExtValue();
       if (align != 0)
-        alloca->setAlignment(llvm::MaybeAlign(align));
+        alloca->setAlignment(llvm::Align(align));
     }
     $res = alloca;
   }];
@@ -790,6 +790,7 @@ def LLVM_Prefetch : LLVM_ZeroResultIntrOp<"prefetch", [0]>,
                                LLVM_Type:$hint, LLVM_Type:$cache)>;
 def LLVM_SinOp : LLVM_UnaryIntrinsicOp<"sin">;
 def LLVM_SqrtOp : LLVM_UnaryIntrinsicOp<"sqrt">;
+def LLVM_PowOp : LLVM_BinarySameArgsIntrinsicOp<"pow">;
 
 //
 // Vector Reductions.

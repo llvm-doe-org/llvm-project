@@ -664,7 +664,7 @@ public:
   ///
   /// Returns an alignment which is either specified explicitly, e.g. via
   /// align attribute of a function argument, or guaranteed by DataLayout.
-  MaybeAlign getPointerAlignment(const DataLayout &DL) const;
+  Align getPointerAlignment(const DataLayout &DL) const;
 
   /// Translate PHI node to its predecessor from the given basic block.
   ///
@@ -837,7 +837,7 @@ template <class Compare> void Value::sortUseList(Compare Cmp) {
 
   // Fix the Prev pointers.
   for (Use *I = UseList, **Prev = &UseList; I; I = I->Next) {
-    I->setPrev(Prev);
+    I->Prev = Prev;
     Prev = &I->Next;
   }
 }

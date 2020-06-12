@@ -21,7 +21,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/TargetParser.h"
+#include "llvm/Support/X86TargetParser.h"
 #include "llvm/Support/raw_ostream.h"
 #include <assert.h>
 #include <string.h>
@@ -142,6 +142,7 @@ StringRef sys::detail::getHostCPUNameForPowerPC(StringRef ProcCpuinfoContent) {
       .Case("POWER8E", "pwr8")
       .Case("POWER8NVL", "pwr8")
       .Case("POWER9", "pwr9")
+      .Case("POWER10", "pwr10")
       // FIXME: If we get a simulator or machine with the capabilities of
       // mcpu=future, we should revisit this and add the name reported by the
       // simulator/machine.
@@ -203,6 +204,7 @@ StringRef sys::detail::getHostCPUNameForARM(StringRef ProcCpuinfoContent) {
             .Case("0xd09", "cortex-a73")
             .Case("0xd0a", "cortex-a75")
             .Case("0xd0b", "cortex-a76")
+            .Case("0xd0c", "neoverse-n1")
             .Default("generic");
   }
 
@@ -583,6 +585,16 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
                                 unsigned Brand_id, unsigned Features,
                                 unsigned Features2, unsigned Features3,
                                 unsigned *Type, unsigned *Subtype) {
+  auto testFeature = [&](unsigned F) {
+    if (F < 32)
+      return (Features & (1U << (F & 0x1f))) != 0;
+    if (F < 64)
+      return (Features2 & (1U << ((F - 32) & 0x1f))) != 0;
+    if (F < 96)
+      return (Features3 & (1U << ((F - 64) & 0x1f))) != 0;
+    llvm_unreachable("Unexpected FeatureBit");
+  };
+
   if (Brand_id != 0)
     return;
   switch (Family) {
@@ -593,7 +605,7 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
     *Type = X86::INTEL_i486;
     break;
   case 5:
-    if (Features & (1 << X86::FEATURE_MMX)) {
+    if (testFeature(X86::FEATURE_MMX)) {
       *Type = X86::INTEL_PENTIUM_MMX;
       break;
     }
@@ -700,6 +712,8 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
     case 0x5e:              // Skylake desktop
     case 0x8e:              // Kaby Lake mobile
     case 0x9e:              // Kaby Lake desktop
+    case 0xa5:              // Comet Lake-H/S
+    case 0xa6:              // Comet Lake-U
       *Type = X86::INTEL_COREI7; // "skylake"
       *Subtype = X86::INTEL_COREI7_SKYLAKE;
       break;
@@ -707,9 +721,9 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
     // Skylake Xeon:
     case 0x55:
       *Type = X86::INTEL_COREI7;
-      if (Features2 & (1 << (X86::FEATURE_AVX512BF16 - 32)))
+      if (testFeature(X86::FEATURE_AVX512BF16))
         *Subtype = X86::INTEL_COREI7_COOPERLAKE; // "cooperlake"
-      else if (Features2 & (1 << (X86::FEATURE_AVX512VNNI - 32)))
+      else if (testFeature(X86::FEATURE_AVX512VNNI))
         *Subtype = X86::INTEL_COREI7_CASCADELAKE; // "cascadelake"
       else
         *Subtype = X86::INTEL_COREI7_SKYLAKE_AVX512; // "skylake-avx512"
@@ -773,50 +787,50 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
       break;
 
     default: // Unknown family 6 CPU, try to guess.
-      // TODO detect tigerlake host
-      if (Features3 & (1 << (X86::FEATURE_AVX512VP2INTERSECT - 64))) {
+      // TODO detect tigerlake host from model
+      if (testFeature(X86::FEATURE_AVX512VP2INTERSECT)) {
         *Type = X86::INTEL_COREI7;
         *Subtype = X86::INTEL_COREI7_TIGERLAKE;
         break;
       }
 
-      if (Features & (1 << X86::FEATURE_AVX512VBMI2)) {
+      if (testFeature(X86::FEATURE_AVX512VBMI2)) {
         *Type = X86::INTEL_COREI7;
         *Subtype = X86::INTEL_COREI7_ICELAKE_CLIENT;
         break;
       }
 
-      if (Features & (1 << X86::FEATURE_AVX512VBMI)) {
+      if (testFeature(X86::FEATURE_AVX512VBMI)) {
         *Type = X86::INTEL_COREI7;
         *Subtype = X86::INTEL_COREI7_CANNONLAKE;
         break;
       }
 
-      if (Features2 & (1 << (X86::FEATURE_AVX512BF16 - 32))) {
+      if (testFeature(X86::FEATURE_AVX512BF16)) {
         *Type = X86::INTEL_COREI7;
         *Subtype = X86::INTEL_COREI7_COOPERLAKE;
         break;
       }
 
-      if (Features2 & (1 << (X86::FEATURE_AVX512VNNI - 32))) {
+      if (testFeature(X86::FEATURE_AVX512VNNI)) {
         *Type = X86::INTEL_COREI7;
         *Subtype = X86::INTEL_COREI7_CASCADELAKE;
         break;
       }
 
-      if (Features & (1 << X86::FEATURE_AVX512VL)) {
+      if (testFeature(X86::FEATURE_AVX512VL)) {
         *Type = X86::INTEL_COREI7;
         *Subtype = X86::INTEL_COREI7_SKYLAKE_AVX512;
         break;
       }
 
-      if (Features & (1 << X86::FEATURE_AVX512ER)) {
+      if (testFeature(X86::FEATURE_AVX512ER)) {
         *Type = X86::INTEL_KNL; // knl
         break;
       }
 
-      if (Features3 & (1 << (X86::FEATURE_CLFLUSHOPT - 64))) {
-        if (Features3 & (1 << (X86::FEATURE_SHA - 64))) {
+      if (testFeature(X86::FEATURE_CLFLUSHOPT)) {
+        if (testFeature(X86::FEATURE_SHA)) {
           *Type = X86::INTEL_GOLDMONT;
         } else {
           *Type = X86::INTEL_COREI7;
@@ -824,23 +838,23 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
         }
         break;
       }
-      if (Features3 & (1 << (X86::FEATURE_ADX - 64))) {
+      if (testFeature(X86::FEATURE_ADX)) {
         *Type = X86::INTEL_COREI7;
         *Subtype = X86::INTEL_COREI7_BROADWELL;
         break;
       }
-      if (Features & (1 << X86::FEATURE_AVX2)) {
+      if (testFeature(X86::FEATURE_AVX2)) {
         *Type = X86::INTEL_COREI7;
         *Subtype = X86::INTEL_COREI7_HASWELL;
         break;
       }
-      if (Features & (1 << X86::FEATURE_AVX)) {
+      if (testFeature(X86::FEATURE_AVX)) {
         *Type = X86::INTEL_COREI7;
         *Subtype = X86::INTEL_COREI7_SANDYBRIDGE;
         break;
       }
-      if (Features & (1 << X86::FEATURE_SSE4_2)) {
-        if (Features3 & (1 << (X86::FEATURE_MOVBE - 64))) {
+      if (testFeature(X86::FEATURE_SSE4_2)) {
+        if (testFeature(X86::FEATURE_MOVBE)) {
           *Type = X86::INTEL_SILVERMONT;
         } else {
           *Type = X86::INTEL_COREI7;
@@ -848,13 +862,13 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
         }
         break;
       }
-      if (Features & (1 << X86::FEATURE_SSE4_1)) {
+      if (testFeature(X86::FEATURE_SSE4_1)) {
         *Type = X86::INTEL_CORE2; // "penryn"
         *Subtype = X86::INTEL_CORE2_45;
         break;
       }
-      if (Features & (1 << X86::FEATURE_SSSE3)) {
-        if (Features3 & (1 << (X86::FEATURE_MOVBE - 64))) {
+      if (testFeature(X86::FEATURE_SSSE3)) {
+        if (testFeature(X86::FEATURE_MOVBE)) {
           *Type = X86::INTEL_BONNELL; // "bonnell"
         } else {
           *Type = X86::INTEL_CORE2; // "core2"
@@ -862,24 +876,24 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
         }
         break;
       }
-      if (Features3 & (1 << (X86::FEATURE_EM64T - 64))) {
+      if (testFeature(X86::FEATURE_EM64T)) {
         *Type = X86::INTEL_CORE2; // "core2"
         *Subtype = X86::INTEL_CORE2_65;
         break;
       }
-      if (Features & (1 << X86::FEATURE_SSE3)) {
+      if (testFeature(X86::FEATURE_SSE3)) {
         *Type = X86::INTEL_CORE_DUO;
         break;
       }
-      if (Features & (1 << X86::FEATURE_SSE2)) {
+      if (testFeature(X86::FEATURE_SSE2)) {
         *Type = X86::INTEL_PENTIUM_M;
         break;
       }
-      if (Features & (1 << X86::FEATURE_SSE)) {
+      if (testFeature(X86::FEATURE_SSE)) {
         *Type = X86::INTEL_PENTIUM_III;
         break;
       }
-      if (Features & (1 << X86::FEATURE_MMX)) {
+      if (testFeature(X86::FEATURE_MMX)) {
         *Type = X86::INTEL_PENTIUM_II;
         break;
       }
@@ -888,11 +902,11 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
     }
     break;
   case 15: {
-    if (Features3 & (1 << (X86::FEATURE_EM64T - 64))) {
+    if (testFeature(X86::FEATURE_EM64T)) {
       *Type = X86::INTEL_NOCONA;
       break;
     }
-    if (Features & (1 << X86::FEATURE_SSE3)) {
+    if (testFeature(X86::FEATURE_SSE3)) {
       *Type = X86::INTEL_PRESCOTT;
       break;
     }
@@ -907,6 +921,12 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
 static void getAMDProcessorTypeAndSubtype(unsigned Family, unsigned Model,
                                           unsigned Features, unsigned *Type,
                                           unsigned *Subtype) {
+  auto testFeature = [&](unsigned F) {
+    if (F < 32)
+      return (Features & (1U << (F & 0x1f))) != 0;
+    llvm_unreachable("Unexpected FeatureBit");
+  };
+
   // FIXME: this poorly matches the generated SubtargetFeatureKV table.  There
   // appears to be no way to generate the wide variety of AMD-specific targets
   // from the information returned from CPUID.
@@ -934,14 +954,14 @@ static void getAMDProcessorTypeAndSubtype(unsigned Family, unsigned Model,
     }
     break;
   case 6:
-    if (Features & (1 << X86::FEATURE_SSE)) {
+    if (testFeature(X86::FEATURE_SSE)) {
       *Type = X86::AMD_ATHLON_XP;
       break; // "athlon-xp"
     }
     *Type = X86::AMD_ATHLON;
     break; // "athlon"
   case 15:
-    if (Features & (1 << X86::FEATURE_SSE3)) {
+    if (testFeature(X86::FEATURE_SSE3)) {
       *Type = X86::AMD_K8SSE3;
       break; // "k8-sse3"
     }
@@ -1152,14 +1172,9 @@ StringRef sys::getHostCPUName() {
   unsigned EAX = 0, EBX = 0, ECX = 0, EDX = 0;
   unsigned MaxLeaf, Vendor;
 
-#if defined(__GNUC__) || defined(__clang__)
-  //FIXME: include cpuid.h from clang or copy __get_cpuid_max here
-  // and simplify it to not invoke __cpuid (like cpu_model.c in
-  // compiler-rt/lib/builtins/cpu_model.c?
-  // Opting for the second option.
-  if(!isCpuIdSupported())
+  if (!isCpuIdSupported())
     return "generic";
-#endif
+
   if (getX86CpuIDAndInfo(0, &MaxLeaf, &Vendor, &ECX, &EDX) || MaxLeaf < 1)
     return "generic";
   getX86CpuIDAndInfo(0x1, &EAX, &EBX, &ECX, &EDX);
@@ -1491,6 +1506,8 @@ bool sys::getHostCPUFeatures(StringMap<bool> &Features) {
   Features["movdir64b"]       = HasLeaf7 && ((ECX >> 28) & 1);
   Features["enqcmd"]          = HasLeaf7 && ((ECX >> 29) & 1);
 
+  Features["avx512vp2intersect"] =
+      HasLeaf7 && ((EDX >> 8) & 1) && HasAVX512Save;
   Features["serialize"]       = HasLeaf7 && ((EDX >> 14) & 1);
   Features["tsxldtrk"]        = HasLeaf7 && ((EDX >> 16) & 1);
   // There are two CPUID leafs which information associated with the pconfig
