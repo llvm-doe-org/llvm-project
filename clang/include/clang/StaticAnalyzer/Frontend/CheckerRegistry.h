@@ -135,7 +135,7 @@ public:
              "Invalid development status!");
     }
 
-    LLVM_DUMP_METHOD void dump() const { dumpToStream(llvm::errs()); }
+    LLVM_DUMP_METHOD void dump() const;
     LLVM_DUMP_METHOD void dumpToStream(llvm::raw_ostream &Out) const;
   };
 
@@ -170,6 +170,7 @@ public:
     StateFromCmdLine State = StateFromCmdLine::State_Unspecified;
 
     ConstCheckerInfoList Dependencies;
+    ConstCheckerInfoList WeakDependencies;
 
     bool isEnabled(const CheckerManager &mgr) const {
       return State == StateFromCmdLine::State_Enabled && ShouldRegister(mgr);
@@ -194,7 +195,7 @@ public:
     // Used for lower_bound.
     explicit CheckerInfo(StringRef FullName) : FullName(FullName) {}
 
-    LLVM_DUMP_METHOD void dump() const { dumpToStream(llvm::errs()); }
+    LLVM_DUMP_METHOD void dump() const;
     LLVM_DUMP_METHOD void dumpToStream(llvm::raw_ostream &Out) const;
   };
 
@@ -214,7 +215,7 @@ public:
 
     explicit PackageInfo(StringRef FullName) : FullName(FullName) {}
 
-    LLVM_DUMP_METHOD void dump() const { dumpToStream(llvm::errs()); }
+    LLVM_DUMP_METHOD void dump() const;
     LLVM_DUMP_METHOD void dumpToStream(llvm::raw_ostream &Out) const;
   };
 
@@ -255,9 +256,13 @@ public:
                IsHidden);
   }
 
-  /// Makes the checker with the full name \p fullName depends on the checker
+  /// Makes the checker with the full name \p fullName depend on the checker
   /// called \p dependency.
   void addDependency(StringRef FullName, StringRef Dependency);
+
+  /// Makes the checker with the full name \p fullName weak depend on the
+  /// checker called \p dependency.
+  void addWeakDependency(StringRef FullName, StringRef Dependency);
 
   /// Registers an option to a given checker. A checker option will always have
   /// the following format:
@@ -312,28 +317,30 @@ private:
   /// For example, it'll return the checkers for the core package, if
   /// \p CmdLineArg is "core".
   CheckerInfoListRange getMutableCheckersForCmdLineArg(StringRef CmdLineArg);
-
-  CheckerInfoList Checkers;
-  PackageInfoList Packages;
   /// Used for couting how many checkers belong to a certain package in the
   /// \c Checkers field. For convenience purposes.
   llvm::StringMap<size_t> PackageSizes;
 
+  void resolveCheckerAndPackageOptions();
+  template <bool IsWeak> void resolveDependencies();
+
+  DiagnosticsEngine &Diags;
+  AnalyzerOptions &AnOpts;
+
+public:
+  CheckerInfoList Checkers;
+  PackageInfoList Packages;
+
   /// Contains all (Dependendent checker, Dependency) pairs. We need this, as
   /// we'll resolve dependencies after all checkers were added first.
   llvm::SmallVector<std::pair<StringRef, StringRef>, 0> Dependencies;
-  void resolveDependencies();
+  llvm::SmallVector<std::pair<StringRef, StringRef>, 0> WeakDependencies;
 
   /// Contains all (FullName, CmdLineOption) pairs. Similarly to dependencies,
   /// we only modify the actual CheckerInfo and PackageInfo objects once all
   /// of them have been added.
   llvm::SmallVector<std::pair<StringRef, CmdLineOption>, 0> PackageOptions;
   llvm::SmallVector<std::pair<StringRef, CmdLineOption>, 0> CheckerOptions;
-
-  void resolveCheckerAndPackageOptions();
-
-  DiagnosticsEngine &Diags;
-  AnalyzerOptions &AnOpts;
   CheckerInfoSet EnabledCheckers;
 };
 

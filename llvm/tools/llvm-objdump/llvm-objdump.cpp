@@ -741,9 +741,11 @@ public:
       dumpBytes(Bytes, OS);
     }
 
-    // The output of printInst starts with a tab. Print some spaces so that
-    // the tab has 1 column and advances to the target tab stop.
-    unsigned TabStop = NoShowRawInsn ? 16 : 40;
+    // The output of printInst starts with a tab. Print some spaces so that the
+    // tab has 1 column and advances to the target tab stop. Give more columns
+    // to x86 which may encode an instruction with many bytes.
+    unsigned TabStop =
+        NoShowRawInsn ? 16 : STI.getTargetTriple().isX86() ? 40 : 24;
     unsigned Column = OS.tell() - Start;
     OS.indent(Column < TabStop - 1 ? TabStop - 1 - Column : 7 - Column % 8);
 
@@ -1256,14 +1258,14 @@ static void disassembleObject(const Target *TheTarget, const ObjectFile *Obj,
   if (const auto *COFFObj = dyn_cast<COFFObjectFile>(Obj)) {
     for (const auto &ExportEntry : COFFObj->export_directories()) {
       StringRef Name;
-      if (std::error_code EC = ExportEntry.getSymbolName(Name))
-        reportError(errorCodeToError(EC), Obj->getFileName());
+      if (Error E = ExportEntry.getSymbolName(Name))
+        reportError(std::move(E), Obj->getFileName());
       if (Name.empty())
         continue;
 
       uint32_t RVA;
-      if (std::error_code EC = ExportEntry.getExportRVA(RVA))
-        reportError(errorCodeToError(EC), Obj->getFileName());
+      if (Error E = ExportEntry.getExportRVA(RVA))
+        reportError(std::move(E), Obj->getFileName());
 
       uint64_t VA = COFFObj->getImageBase() + RVA;
       auto Sec = partition_point(

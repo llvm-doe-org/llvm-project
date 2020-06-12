@@ -343,7 +343,7 @@ void BasicBlock::removePredecessor(
   // Update all PHI nodes.
   for (iterator II = begin(); isa<PHINode>(II);) {
     PHINode *PN = cast<PHINode>(II++);
-    Value *V = PN->removeIncomingValue(Pred);
+    Value *V = PN->removeIncomingValue(Pred, !KeepOneInputPHIs);
     if (MaybeDeadInstrs) {
       if (auto *I = dyn_cast<Instruction>(V))
         MaybeDeadInstrs->push_back(I);

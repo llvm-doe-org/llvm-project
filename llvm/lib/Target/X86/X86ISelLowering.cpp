@@ -34444,6 +34444,25 @@ static SDValue combineX86ShuffleChain(ArrayRef<SDValue> Inputs, SDValue Root,
     }
   }
 
+  // Attempt to combine to INSERTPS, but only if the inserted element has come
+  // from a scalar.
+  // TODO: Handle other insertions here as well?
+  if (!UnaryShuffle && AllowFloatDomain && RootSizeInBits == 128 &&
+      MaskEltSizeInBits == 32 && Subtarget.hasSSE41() &&
+      !isTargetShuffleEquivalent(Mask, {4, 1, 2, 3})) {
+    SDValue SrcV1 = V1, SrcV2 = V2;
+    if (matchShuffleAsInsertPS(SrcV1, SrcV2, PermuteImm, Zeroable, Mask, DAG) &&
+        SrcV2.getOpcode() == ISD::SCALAR_TO_VECTOR) {
+      if (Depth == 0 && Root.getOpcode() == X86ISD::INSERTPS)
+        return SDValue(); // Nothing to do!
+      Res = DAG.getNode(X86ISD::INSERTPS, DL, MVT::v4f32,
+                        DAG.getBitcast(MVT::v4f32, SrcV1),
+                        DAG.getBitcast(MVT::v4f32, SrcV2),
+                        DAG.getTargetConstant(PermuteImm, DL, MVT::i8));
+      return DAG.getBitcast(RootVT, Res);
+    }
+  }
+
   SDValue NewV1 = V1; // Save operands in case early exit happens.
   SDValue NewV2 = V2;
   if (matchBinaryShuffle(MaskVT, Mask, AllowFloatDomain, AllowIntDomain, NewV1,
@@ -42624,6 +42643,34 @@ static SDValue combineOr(SDNode *N, SelectionDAG &DAG,
 
   if (SDValue R = combineLogicBlendIntoPBLENDV(N, DAG, Subtarget))
     return R;
+
+  // Combine OR(X,KSHIFTL(Y,Elts/2)) -> CONCAT_VECTORS(X,Y) == KUNPCK(X,Y).
+  // Combine OR(KSHIFTL(X,Elts/2),Y) -> CONCAT_VECTORS(Y,X) == KUNPCK(Y,X).
+  // iff the upper elements of the non-shifted arg are zero.
+  // KUNPCK require 16+ bool vector elements.
+  if (N0.getOpcode() == X86ISD::KSHIFTL || N1.getOpcode() == X86ISD::KSHIFTL) {
+    unsigned NumElts = VT.getVectorNumElements();
+    unsigned HalfElts = NumElts / 2;
+    APInt UpperElts = APInt::getHighBitsSet(NumElts, HalfElts);
+    if (NumElts >= 16 && N1.getOpcode() == X86ISD::KSHIFTL &&
+        N1.getConstantOperandAPInt(1) == HalfElts &&
+        DAG.MaskedValueIsZero(N0, APInt(1, 1), UpperElts)) {
+      SDLoc dl(N);
+      return DAG.getNode(
+          ISD::CONCAT_VECTORS, dl, VT,
+          extractSubVector(N0, 0, DAG, dl, HalfElts),
+          extractSubVector(N1.getOperand(0), 0, DAG, dl, HalfElts));
+    }
+    if (NumElts >= 16 && N0.getOpcode() == X86ISD::KSHIFTL &&
+        N0.getConstantOperandAPInt(1) == HalfElts &&
+        DAG.MaskedValueIsZero(N1, APInt(1, 1), UpperElts)) {
+      SDLoc dl(N);
+      return DAG.getNode(
+          ISD::CONCAT_VECTORS, dl, VT,
+          extractSubVector(N1, 0, DAG, dl, HalfElts),
+          extractSubVector(N0.getOperand(0), 0, DAG, dl, HalfElts));
+    }
+  }
 
   // Attempt to recursively combine an OR of shuffles.
   if (VT.isVector() && (VT.getScalarSizeInBits() % 8) == 0) {
