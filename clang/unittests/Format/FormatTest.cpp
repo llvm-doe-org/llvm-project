@@ -606,6 +606,12 @@ TEST_F(FormatTest, FormatShortBracedStatements) {
   verifyFormat("if CONSTEXPR (true) { f(); }", AllowSimpleBracedStatements);
   verifyFormat("while (true) { f(); }", AllowSimpleBracedStatements);
   verifyFormat("for (;;) { f(); }", AllowSimpleBracedStatements);
+  verifyFormat("if (true) { fffffffffffffffffffffff(); }",
+               AllowSimpleBracedStatements);
+  verifyFormat("if (true) {\n"
+               "  ffffffffffffffffffffffff();\n"
+               "}",
+               AllowSimpleBracedStatements);
   verifyFormat("if (true) {\n"
                "  ffffffffffffffffffffffffffffffffffffffffffffffffffffff();\n"
                "}",
@@ -681,6 +687,13 @@ TEST_F(FormatTest, FormatShortBracedStatements) {
   verifyFormat("if CONSTEXPR (true) { f(); }", AllowSimpleBracedStatements);
   verifyFormat("while (true) { f(); }", AllowSimpleBracedStatements);
   verifyFormat("for (;;) { f(); }", AllowSimpleBracedStatements);
+  verifyFormat("if (true) { fffffffffffffffffffffff(); }",
+               AllowSimpleBracedStatements);
+  verifyFormat("if (true)\n"
+               "{\n"
+               "  ffffffffffffffffffffffff();\n"
+               "}",
+               AllowSimpleBracedStatements);
   verifyFormat("if (true)\n"
                "{\n"
                "  ffffffffffffffffffffffffffffffffffffffffffffffffffffff();\n"
@@ -745,7 +758,9 @@ TEST_F(FormatTest, ShortBlocksInMacrosDontMergeWithCodeAfterMacro) {
   Style.BreakBeforeBraces = FormatStyle::BS_Allman;
   EXPECT_EQ("#define A                                                  \\\n"
             "  if (HANDLEwernufrnuLwrmviferuvnierv)                     \\\n"
-            "  { RET_ERR1_ANUIREUINERUIFNIOAerwfwrvnuier; }\n"
+            "  {                                                        \\\n"
+            "    RET_ERR1_ANUIREUINERUIFNIOAerwfwrvnuier;               \\\n"
+            "  }\n"
             "X;",
             format("#define A \\\n"
                    "   if (HANDLEwernufrnuLwrmviferuvnierv) { \\\n"
@@ -6265,6 +6280,17 @@ TEST_F(FormatTest, BreaksConditionalExpressions) {
                "                                : eeeeeeeeeeeeeeeeee\n"
                "       : bbbbbbbbbbbbbbbbbbbbbbb ? 2222222222222222\n"
                "                                 : 3333333333333333;",
+               Style);
+
+  Style.AlignOperands = FormatStyle::OAS_DontAlign;
+  Style.BreakBeforeTernaryOperators = false;
+  // FIXME: Aligning the question marks is weird given DontAlign.
+  // Consider disabling this alignment in this case. Also check whether this
+  // will render the adjustment from https://reviews.llvm.org/D82199
+  // unnecessary.
+  verifyFormat("int x = aaaaaaaaaaaaaaa ? aaaaaaaaaaaaaaaaaa :\n"
+               "    bbbb                ? cccccccccccccccccc :\n"
+               "                          ddddd;\n",
                Style);
 }
 

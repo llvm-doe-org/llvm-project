@@ -690,6 +690,17 @@ DWARFDebugLine::ParsingState::handleSpecialOpcode(uint8_t Opcode,
   return {AddrAdvanceResult.AddrDelta, LineOffset};
 }
 
+/// Parse a ULEB128 using the specified \p Cursor. \returns the parsed value on
+/// success, or None if \p Cursor is in a failing state.
+template <typename T>
+static Optional<T> parseULEB128(DWARFDataExtractor &Data,
+                                DataExtractor::Cursor &Cursor) {
+  T Value = Data.getULEB128(Cursor);
+  if (Cursor)
+    return Value;
+  return None;
+}
+
 Error DWARFDebugLine::LineTable::parse(
     DWARFDataExtractor &DebugLineData, uint64_t *OffsetPtr,
     const DWARFContext &Ctx, const DWARFUnit *U,
@@ -753,34 +764,41 @@ Error DWARFDebugLine::LineTable::parse(
     Row::dumpTableHeader(*OS, /*Indent=*/Verbose ? 12 : 0);
   }
   while (*OffsetPtr < EndOffset) {
+    DataExtractor::Cursor Cursor(*OffsetPtr);
+
     if (Verbose)
       *OS << format("0x%08.08" PRIx64 ": ", *OffsetPtr);
 
     uint64_t OpcodeOffset = *OffsetPtr;
-    uint8_t Opcode = TableData.getU8(OffsetPtr);
+    uint8_t Opcode = TableData.getU8(Cursor);
     size_t RowCount = Rows.size();
 
-    if (Verbose)
+    if (Cursor && Verbose)
       *OS << format("%02.02" PRIx8 " ", Opcode);
 
     if (Opcode == 0) {
       // Extended Opcodes always start with a zero opcode followed by
       // a uleb128 length so you can skip ones you don't know about
-      DataExtractor::Cursor Cursor(*OffsetPtr);
       uint64_t Len = TableData.getULEB128(Cursor);
       uint64_t ExtOffset = Cursor.tell();
 
       // Tolerate zero-length; assume length is correct and soldier on.
       if (Len == 0) {
-        if (Verbose)
+        if (Cursor && Verbose)
           *OS << "Badly formed extended line op (length 0)\n";
-        if (!Cursor)
+        if (!Cursor) {
+          if (Verbose)
+            *OS << "\n";
           RecoverableErrorHandler(Cursor.takeError());
+        }
         *OffsetPtr = Cursor.tell();
         continue;
       }
 
       uint8_t SubOpcode = TableData.getU8(Cursor);
+      // OperandOffset will be the same as ExtOffset, if it was not possible to
+      // read the SubOpcode.
+      uint64_t OperandOffset = Cursor.tell();
       if (Verbose)
         *OS << LNExtendedString(SubOpcode);
       switch (SubOpcode) {
@@ -793,6 +811,9 @@ Error DWARFDebugLine::LineTable::parse(
         // address is that of the byte after the last target machine instruction
         // of the sequence.
         State.Row.EndSequence = true;
+        // No need to test the Cursor is valid here, since it must be to get
+        // into this code path - if it were invalid, the default case would be
+        // followed.
         if (Verbose) {
           *OS << "\n";
           OS->indent(12);
@@ -846,7 +867,7 @@ Error DWARFDebugLine::LineTable::parse(
               TableData.setAddressSize(ExtractorAddressSize);
           }
 
-          if (Verbose)
+          if (Cursor && Verbose)
             *OS << format(" (0x%16.16" PRIx64 ")", State.Row.Address.Address);
         }
         break;
@@ -881,7 +902,7 @@ Error DWARFDebugLine::LineTable::parse(
           FileEntry.ModTime = TableData.getULEB128(Cursor);
           FileEntry.Length = TableData.getULEB128(Cursor);
           Prologue.FileNames.push_back(FileEntry);
-          if (Verbose)
+          if (Cursor && Verbose)
             *OS << " (" << Name << ", dir=" << FileEntry.DirIdx << ", mod_time="
                 << format("(0x%16.16" PRIx64 ")", FileEntry.ModTime)
                 << ", length=" << FileEntry.Length << ")";
@@ -890,12 +911,12 @@ Error DWARFDebugLine::LineTable::parse(
 
       case DW_LNE_set_discriminator:
         State.Row.Discriminator = TableData.getULEB128(Cursor);
-        if (Verbose)
+        if (Cursor && Verbose)
           *OS << " (" << State.Row.Discriminator << ")";
         break;
 
       default:
-        if (Verbose)
+        if (Cursor && Verbose)
           *OS << format("Unrecognized extended op 0x%02.02" PRIx8, SubOpcode)
               << format(" length %" PRIx64, Len);
         // Len doesn't include the zero opcode byte or the length itself, but
@@ -908,14 +929,29 @@ Error DWARFDebugLine::LineTable::parse(
       // by the table. Similarly, continue from the claimed end in the event of
       // a parsing error.
       uint64_t End = ExtOffset + Len;
-      if (!Cursor)
-        RecoverableErrorHandler(Cursor.takeError());
-      else if (Cursor.tell() != End)
+      if (Cursor && Cursor.tell() != End)
         RecoverableErrorHandler(createStringError(
             errc::illegal_byte_sequence,
             "unexpected line op length at offset 0x%8.8" PRIx64
             " expected 0x%2.2" PRIx64 " found 0x%2.2" PRIx64,
             ExtOffset, Len, Cursor.tell() - ExtOffset));
+      if (!Cursor && Verbose) {
+        DWARFDataExtractor::Cursor ByteCursor(OperandOffset);
+        uint8_t Byte = TableData.getU8(ByteCursor);
+        if (ByteCursor) {
+          *OS << " (<parsing error>";
+          do {
+            *OS << format(" %2.2" PRIx8, Byte);
+            Byte = TableData.getU8(ByteCursor);
+          } while (ByteCursor);
+          *OS << ")";
+        }
+
+        // The only parse failure in this case should be if the end was reached.
+        // In that case, throw away the error, as the main Cursor's error will
+        // be sufficient.
+        consumeError(ByteCursor.takeError());
+      }
       *OffsetPtr = End;
     } else if (Opcode < Prologue.OpcodeBase) {
       if (Verbose)
@@ -938,9 +974,10 @@ Error DWARFDebugLine::LineTable::parse(
         // Takes a single unsigned LEB128 operand, multiplies it by the
         // min_inst_length field of the prologue, and adds the
         // result to the address register of the state machine.
-        {
-          uint64_t AddrOffset = State.advanceAddr(
-              TableData.getULEB128(OffsetPtr), Opcode, OpcodeOffset);
+        if (Optional<uint64_t> Operand =
+                parseULEB128<uint64_t>(TableData, Cursor)) {
+          uint64_t AddrOffset =
+              State.advanceAddr(*Operand, Opcode, OpcodeOffset);
           if (Verbose)
             *OS << " (" << AddrOffset << ")";
         }
@@ -949,25 +986,36 @@ Error DWARFDebugLine::LineTable::parse(
       case DW_LNS_advance_line:
         // Takes a single signed LEB128 operand and adds that value to
         // the line register of the state machine.
-        State.Row.Line += TableData.getSLEB128(OffsetPtr);
-        if (Verbose)
-          *OS << " (" << State.Row.Line << ")";
+        {
+          int64_t LineDelta = TableData.getSLEB128(Cursor);
+          if (Cursor) {
+            State.Row.Line += LineDelta;
+            if (Verbose)
+              *OS << " (" << State.Row.Line << ")";
+          }
+        }
         break;
 
       case DW_LNS_set_file:
         // Takes a single unsigned LEB128 operand and stores it in the file
         // register of the state machine.
-        State.Row.File = TableData.getULEB128(OffsetPtr);
-        if (Verbose)
-          *OS << " (" << State.Row.File << ")";
+        if (Optional<uint16_t> File =
+                parseULEB128<uint16_t>(TableData, Cursor)) {
+          State.Row.File = *File;
+          if (Verbose)
+            *OS << " (" << State.Row.File << ")";
+        }
         break;
 
       case DW_LNS_set_column:
         // Takes a single unsigned LEB128 operand and stores it in the
         // column register of the state machine.
-        State.Row.Column = TableData.getULEB128(OffsetPtr);
-        if (Verbose)
-          *OS << " (" << State.Row.Column << ")";
+        if (Optional<uint16_t> Column =
+                parseULEB128<uint16_t>(TableData, Cursor)) {
+          State.Row.Column = *Column;
+          if (Verbose)
+            *OS << " (" << State.Row.Column << ")";
+        }
         break;
 
       case DW_LNS_negate_stmt:
@@ -1013,10 +1061,13 @@ Error DWARFDebugLine::LineTable::parse(
         // requires the use of DW_LNS_advance_pc. Such assemblers, however,
         // can use DW_LNS_fixed_advance_pc instead, sacrificing compression.
         {
-          uint16_t PCOffset = TableData.getRelocatedValue(2, OffsetPtr);
-          State.Row.Address.Address += PCOffset;
-          if (Verbose)
-            *OS << format(" (0x%4.4" PRIx16 ")", PCOffset);
+          uint16_t PCOffset =
+              TableData.getRelocatedValue(Cursor, 2);
+          if (Cursor) {
+            State.Row.Address.Address += PCOffset;
+            if (Verbose)
+              *OS << format(" (0x%4.4" PRIx16 ")", PCOffset);
+          }
         }
         break;
 
@@ -1034,10 +1085,12 @@ Error DWARFDebugLine::LineTable::parse(
 
       case DW_LNS_set_isa:
         // Takes a single unsigned LEB128 operand and stores it in the
-        // column register of the state machine.
-        State.Row.Isa = TableData.getULEB128(OffsetPtr);
-        if (Verbose)
-          *OS << " (" << (uint64_t)State.Row.Isa << ")";
+        // ISA register of the state machine.
+        if (Optional<uint8_t> Isa = parseULEB128<uint8_t>(TableData, Cursor)) {
+          State.Row.Isa = *Isa;
+          if (Verbose)
+            *OS << " (" << (uint64_t)State.Row.Isa << ")";
+        }
         break;
 
       default:
@@ -1049,16 +1102,22 @@ Error DWARFDebugLine::LineTable::parse(
           if (Verbose)
             *OS << "Unrecognized standard opcode";
           uint8_t OpcodeLength = Prologue.StandardOpcodeLengths[Opcode - 1];
-          if (OpcodeLength != 0) {
-            if (Verbose)
-              *OS << " (operands: ";
-            for (uint8_t I = 0; I < OpcodeLength; ++I) {
-              uint64_t Value = TableData.getULEB128(OffsetPtr);
-              if (Verbose) {
-                if (I > 0)
-                  *OS << ", ";
-                *OS << format("0x%16.16" PRIx64, Value);
-              }
+          std::vector<uint64_t> Operands;
+          for (uint8_t I = 0; I < OpcodeLength; ++I) {
+            if (Optional<uint64_t> Value =
+                    parseULEB128<uint64_t>(TableData, Cursor))
+              Operands.push_back(*Value);
+            else
+              break;
+          }
+          if (Verbose && !Operands.empty()) {
+            *OS << " (operands: ";
+            bool First = true;
+            for (uint64_t Value : Operands) {
+              if (!First)
+                *OS << ", ";
+              First = false;
+              *OS << format("0x%16.16" PRIx64, Value);
             }
             if (Verbose)
               *OS << ')';
@@ -1066,6 +1125,8 @@ Error DWARFDebugLine::LineTable::parse(
         }
         break;
       }
+
+      *OffsetPtr = Cursor.tell();
     } else {
       // Special Opcodes.
       ParsingState::AddrAndLineDelta Delta =
@@ -1080,12 +1141,26 @@ Error DWARFDebugLine::LineTable::parse(
         State.Row.dump(*OS);
 
       State.appendRowToMatrix();
+      *OffsetPtr = Cursor.tell();
     }
 
     // When a row is added to the matrix, it is also dumped, which includes a
     // new line already, so don't add an extra one.
     if (Verbose && Rows.size() == RowCount)
       *OS << "\n";
+
+    // Most parse failures other than when parsing extended opcodes are due to
+    // failures to read ULEBs. Bail out of parsing, since we don't know where to
+    // continue reading from as there is no stated length for such byte
+    // sequences. Print the final trailing new line if needed before doing so.
+    if (!Cursor && Opcode != 0) {
+      if (Verbose)
+        *OS << "\n";
+      return Cursor.takeError();
+    }
+
+    if (!Cursor)
+      RecoverableErrorHandler(Cursor.takeError());
   }
 
   if (!State.Sequence.Empty)

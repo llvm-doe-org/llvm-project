@@ -7,7 +7,6 @@
 #===----------------------------------------------------------------------===##
 
 from libcxx.test.dsl import *
-import pipes
 import sys
 
 _isClang      = lambda cfg: '__clang__' in compilerMacros(cfg) and '__apple_build_version__' not in compilerMacros(cfg)
