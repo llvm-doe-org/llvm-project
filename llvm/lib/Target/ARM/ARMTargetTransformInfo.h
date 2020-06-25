@@ -153,15 +153,15 @@ public:
 
   bool isProfitableLSRChainElement(Instruction *I);
 
-  bool isLegalMaskedLoad(Type *DataTy, MaybeAlign Alignment);
+  bool isLegalMaskedLoad(Type *DataTy, Align Alignment);
 
-  bool isLegalMaskedStore(Type *DataTy, MaybeAlign Alignment) {
+  bool isLegalMaskedStore(Type *DataTy, Align Alignment) {
     return isLegalMaskedLoad(DataTy, Alignment);
   }
 
-  bool isLegalMaskedGather(Type *Ty, MaybeAlign Alignment);
+  bool isLegalMaskedGather(Type *Ty, Align Alignment);
 
-  bool isLegalMaskedScatter(Type *Ty, MaybeAlign Alignment) {
+  bool isLegalMaskedScatter(Type *Ty, Align Alignment) {
     return isLegalMaskedGather(Ty, Alignment);
   }
 
@@ -231,10 +231,11 @@ public:
                                  bool UseMaskForCond = false,
                                  bool UseMaskForGaps = false);
 
-  unsigned getGatherScatterOpCost(
-    unsigned Opcode, Type *DataTy, Value *Ptr, bool VariableMask,
-    unsigned Alignment, TTI::TargetCostKind CostKind,
-    const Instruction *I = nullptr);
+  unsigned getGatherScatterOpCost(unsigned Opcode, Type *DataTy,
+                                  const Value *Ptr, bool VariableMask,
+                                  unsigned Alignment,
+                                  TTI::TargetCostKind CostKind,
+                                  const Instruction *I = nullptr);
 
   bool isLoweredToCall(const Function *F);
   bool isHardwareLoopProfitable(Loop *L, ScalarEvolution &SE,

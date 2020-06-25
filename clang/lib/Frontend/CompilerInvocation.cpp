@@ -129,7 +129,6 @@ static llvm::Optional<unsigned> normalizeSimpleEnum(OptSpecifier Opt,
                                                     unsigned TableIndex,
                                                     const ArgList &Args,
                                                     DiagnosticsEngine &Diags) {
-  assert(TableIndex >= 0);
   assert(TableIndex < SimpleEnumValueTablesSize);
   const SimpleEnumValueTable &Table = SimpleEnumValueTables[TableIndex];
 
@@ -149,7 +148,6 @@ static llvm::Optional<unsigned> normalizeSimpleEnum(OptSpecifier Opt,
 
 static const char *denormalizeSimpleEnum(CompilerInvocation::StringAllocator SA,
                                          unsigned TableIndex, unsigned Value) {
-  assert(TableIndex >= 0);
   assert(TableIndex < SimpleEnumValueTablesSize);
   const SimpleEnumValueTable &Table = SimpleEnumValueTables[TableIndex];
   for (int I = 0, E = Table.Size; I != E; ++I)
@@ -3101,8 +3099,8 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     }
   }
 
-  // Check if -fopenmp is specified and set default version to 4.5.
-  Opts.OpenMP = Args.hasArg(options::OPT_fopenmp) ? 45 : 0;
+  // Check if -fopenmp is specified and set default version to 5.0.
+  Opts.OpenMP = Args.hasArg(options::OPT_fopenmp) ? 50 : 0;
   // Check if -fopenmp-simd is specified.
   bool IsSimdSpecified =
       Args.hasFlag(options::OPT_fopenmp_simd, options::OPT_fno_openmp_simd,
@@ -3120,10 +3118,8 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   if (Opts.OpenMP || Opts.OpenMPSimd) {
     if (int Version = getLastArgIntValue(
             Args, OPT_fopenmp_version_EQ,
-            (IsSimdSpecified || IsTargetSpecified) ? 45 : Opts.OpenMP, Diags))
+            (IsSimdSpecified || IsTargetSpecified) ? 50 : Opts.OpenMP, Diags))
       Opts.OpenMP = Version;
-    else if (IsSimdSpecified || IsTargetSpecified)
-      Opts.OpenMP = 45;
     // Provide diagnostic when a given target is not expected to be an OpenMP
     // device or host.
     if (!Opts.OpenMPIsDevice) {
@@ -3198,6 +3194,12 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   // Set CUDA mode for OpenMP target NVPTX/AMDGCN if specified in options
   Opts.OpenMPCUDAMode = Opts.OpenMPIsDevice && (T.isNVPTX() || T.isAMDGCN()) &&
                         Args.hasArg(options::OPT_fopenmp_cuda_mode);
+
+  // Set CUDA support for parallel execution of target regions for OpenMP target
+  // NVPTX/AMDGCN if specified in options.
+  Opts.OpenMPCUDATargetParallel =
+      Opts.OpenMPIsDevice && (T.isNVPTX() || T.isAMDGCN()) &&
+      Args.hasArg(options::OPT_fopenmp_cuda_parallel_target_regions);
 
   // Set CUDA mode for OpenMP target NVPTX/AMDGCN if specified in options
   Opts.OpenMPCUDAForceFullRuntime =
@@ -3932,7 +3934,7 @@ void CompilerInvocation::generateCC1CommandLine(
                                      ALIAS, ALIASARGS, FLAGS, PARAM, HELPTEXT, \
                                      METAVAR, VALUES, SPELLING, ALWAYS_EMIT,   \
                                      KEYPATH, DEFAULT_VALUE, IS_POSITIVE)      \
-  if (FLAGS & options::CC1Option &&                                            \
+  if ((FLAGS) & options::CC1Option &&                                            \
       (ALWAYS_EMIT || this->KEYPATH != DEFAULT_VALUE))                         \
     Args.push_back(SPELLING);
 
@@ -3940,7 +3942,7 @@ void CompilerInvocation::generateCC1CommandLine(
     PREFIX_TYPE, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,        \
     HELPTEXT, METAVAR, VALUES, SPELLING, ALWAYS_EMIT, KEYPATH, DEFAULT_VALUE,  \
     NORMALIZER_RET_TY, NORMALIZER, DENORMALIZER, TABLE_INDEX)                  \
-  if ((FLAGS & options::CC1Option) &&                                          \
+  if (((FLAGS) & options::CC1Option) &&                                          \
       (ALWAYS_EMIT || this->KEYPATH != DEFAULT_VALUE)) {                       \
     if (Option::KIND##Class == Option::SeparateClass) {                        \
       Args.push_back(SPELLING);                                                \

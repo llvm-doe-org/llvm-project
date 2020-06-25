@@ -144,7 +144,7 @@ public:
   int getMaskedMemoryOpCost(unsigned Opcode, Type *Src, unsigned Alignment,
                             unsigned AddressSpace,
                             TTI::TargetCostKind CostKind = TTI::TCK_SizeAndLatency);
-  int getGatherScatterOpCost(unsigned Opcode, Type *DataTy, Value *Ptr,
+  int getGatherScatterOpCost(unsigned Opcode, Type *DataTy, const Value *Ptr,
                              bool VariableMask, unsigned Alignment,
                              TTI::TargetCostKind CostKind,
                              const Instruction *I);
@@ -200,12 +200,12 @@ public:
   bool isLSRCostLess(TargetTransformInfo::LSRCost &C1,
                      TargetTransformInfo::LSRCost &C2);
   bool canMacroFuseCmp();
-  bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment);
-  bool isLegalMaskedStore(Type *DataType, MaybeAlign Alignment);
+  bool isLegalMaskedLoad(Type *DataType, Align Alignment);
+  bool isLegalMaskedStore(Type *DataType, Align Alignment);
   bool isLegalNTLoad(Type *DataType, Align Alignment);
   bool isLegalNTStore(Type *DataType, Align Alignment);
-  bool isLegalMaskedGather(Type *DataType, MaybeAlign Alignment);
-  bool isLegalMaskedScatter(Type *DataType, MaybeAlign Alignment);
+  bool isLegalMaskedGather(Type *DataType, Align Alignment);
+  bool isLegalMaskedScatter(Type *DataType, Align Alignment);
   bool isLegalMaskedExpandLoad(Type *DataType);
   bool isLegalMaskedCompressStore(Type *DataType);
   bool hasDivRemOp(Type *DataType, bool IsSigned);
@@ -230,7 +230,7 @@ public:
 private:
   int getGSScalarCost(unsigned Opcode, Type *DataTy, bool VariableMask,
                       unsigned Alignment, unsigned AddressSpace);
-  int getGSVectorCost(unsigned Opcode, Type *DataTy, Value *Ptr,
+  int getGSVectorCost(unsigned Opcode, Type *DataTy, const Value *Ptr,
                       unsigned Alignment, unsigned AddressSpace);
 
   /// @}
