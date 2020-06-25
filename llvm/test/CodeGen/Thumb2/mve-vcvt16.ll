@@ -217,15 +217,8 @@ entry:
 define arm_aapcs_vfpcc <4 x float> @load_ext_4(<4 x half>* %src) {
 ; CHECK-LABEL: load_ext_4:
 ; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    ldrd r1, r0, [r0]
-; CHECK-NEXT:    vmov.32 q1[0], r1
-; CHECK-NEXT:    vmov.32 q1[1], r0
-; CHECK-NEXT:    vmovx.f16 s0, s5
-; CHECK-NEXT:    vmovx.f16 s8, s4
-; CHECK-NEXT:    vcvtb.f32.f16 s3, s0
-; CHECK-NEXT:    vcvtb.f32.f16 s2, s5
-; CHECK-NEXT:    vcvtb.f32.f16 s1, s8
-; CHECK-NEXT:    vcvtb.f32.f16 s0, s4
+; CHECK-NEXT:    vldrh.u32 q0, [r0]
+; CHECK-NEXT:    vcvtb.f32.f16 q0, q0
 ; CHECK-NEXT:    bx lr
 entry:
   %wide.load = load <4 x half>, <4 x half>* %src, align 4
@@ -236,19 +229,10 @@ entry:
 define arm_aapcs_vfpcc <8 x float> @load_ext_8(<8 x half>* %src) {
 ; CHECK-LABEL: load_ext_8:
 ; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    vldrw.u32 q2, [r0]
-; CHECK-NEXT:    vmovx.f16 s0, s9
-; CHECK-NEXT:    vmovx.f16 s6, s8
-; CHECK-NEXT:    vcvtb.f32.f16 s3, s0
-; CHECK-NEXT:    vmovx.f16 s4, s11
-; CHECK-NEXT:    vcvtb.f32.f16 s2, s9
-; CHECK-NEXT:    vmovx.f16 s12, s10
-; CHECK-NEXT:    vcvtb.f32.f16 s1, s6
-; CHECK-NEXT:    vcvtb.f32.f16 s0, s8
-; CHECK-NEXT:    vcvtb.f32.f16 s7, s4
-; CHECK-NEXT:    vcvtb.f32.f16 s6, s11
-; CHECK-NEXT:    vcvtb.f32.f16 s5, s12
-; CHECK-NEXT:    vcvtb.f32.f16 s4, s10
+; CHECK-NEXT:    vldrh.u32 q0, [r0]
+; CHECK-NEXT:    vldrh.u32 q1, [r0, #8]
+; CHECK-NEXT:    vcvtb.f32.f16 q0, q0
+; CHECK-NEXT:    vcvtb.f32.f16 q1, q1
 ; CHECK-NEXT:    bx lr
 entry:
   %wide.load = load <8 x half>, <8 x half>* %src, align 4
@@ -259,35 +243,14 @@ entry:
 define arm_aapcs_vfpcc <16 x float> @load_ext_16(<16 x half>* %src) {
 ; CHECK-LABEL: load_ext_16:
 ; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    .vsave {d8, d9, d10}
-; CHECK-NEXT:    vpush {d8, d9, d10}
-; CHECK-NEXT:    vldrw.u32 q2, [r0]
-; CHECK-NEXT:    vldrw.u32 q4, [r0, #16]
-; CHECK-NEXT:    vmovx.f16 s0, s9
-; CHECK-NEXT:    vmovx.f16 s6, s8
-; CHECK-NEXT:    vcvtb.f32.f16 s3, s0
-; CHECK-NEXT:    vmovx.f16 s4, s11
-; CHECK-NEXT:    vcvtb.f32.f16 s2, s9
-; CHECK-NEXT:    vmovx.f16 s15, s10
-; CHECK-NEXT:    vcvtb.f32.f16 s1, s6
-; CHECK-NEXT:    vmovx.f16 s13, s17
-; CHECK-NEXT:    vcvtb.f32.f16 s0, s8
-; CHECK-NEXT:    vcvtb.f32.f16 s7, s4
-; CHECK-NEXT:    vcvtb.f32.f16 s6, s11
-; CHECK-NEXT:    vmovx.f16 s14, s16
-; CHECK-NEXT:    vcvtb.f32.f16 s5, s15
-; CHECK-NEXT:    vmovx.f16 s12, s19
-; CHECK-NEXT:    vcvtb.f32.f16 s4, s10
-; CHECK-NEXT:    vcvtb.f32.f16 s11, s13
-; CHECK-NEXT:    vcvtb.f32.f16 s10, s17
-; CHECK-NEXT:    vmovx.f16 s20, s18
-; CHECK-NEXT:    vcvtb.f32.f16 s9, s14
-; CHECK-NEXT:    vcvtb.f32.f16 s8, s16
-; CHECK-NEXT:    vcvtb.f32.f16 s15, s12
-; CHECK-NEXT:    vcvtb.f32.f16 s14, s19
-; CHECK-NEXT:    vcvtb.f32.f16 s13, s20
-; CHECK-NEXT:    vcvtb.f32.f16 s12, s18
-; CHECK-NEXT:    vpop {d8, d9, d10}
+; CHECK-NEXT:    vldrh.u32 q0, [r0]
+; CHECK-NEXT:    vldrh.u32 q1, [r0, #8]
+; CHECK-NEXT:    vldrh.u32 q2, [r0, #16]
+; CHECK-NEXT:    vldrh.u32 q3, [r0, #24]
+; CHECK-NEXT:    vcvtb.f32.f16 q0, q0
+; CHECK-NEXT:    vcvtb.f32.f16 q1, q1
+; CHECK-NEXT:    vcvtb.f32.f16 q2, q2
+; CHECK-NEXT:    vcvtb.f32.f16 q3, q3
 ; CHECK-NEXT:    bx lr
 entry:
   %wide.load = load <16 x half>, <16 x half>* %src, align 4
@@ -298,11 +261,8 @@ entry:
 define arm_aapcs_vfpcc <4 x float> @load_shuffleext_8(<8 x half>* %src) {
 ; CHECK-LABEL: load_shuffleext_8:
 ; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    vldrw.u32 q1, [r0]
-; CHECK-NEXT:    vcvtb.f32.f16 s3, s7
-; CHECK-NEXT:    vcvtb.f32.f16 s2, s6
-; CHECK-NEXT:    vcvtb.f32.f16 s1, s5
-; CHECK-NEXT:    vcvtb.f32.f16 s0, s4
+; CHECK-NEXT:    vldrw.u32 q0, [r0]
+; CHECK-NEXT:    vcvtb.f32.f16 q0, q0
 ; CHECK-NEXT:    bx lr
 entry:
   %wide.load = load <8 x half>, <8 x half>* %src, align 4
@@ -345,21 +305,8 @@ entry:
 define arm_aapcs_vfpcc void @store_trunc_4(<4 x half>* %src, <4 x float> %val) {
 ; CHECK-LABEL: store_trunc_4:
 ; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    vcvtb.f16.f32 s4, s0
-; CHECK-NEXT:    vmov r1, s4
-; CHECK-NEXT:    vcvtb.f16.f32 s4, s1
-; CHECK-NEXT:    vmov r2, s4
-; CHECK-NEXT:    vmov.16 q1[0], r1
-; CHECK-NEXT:    vcvtb.f16.f32 s8, s2
-; CHECK-NEXT:    vmov.16 q1[1], r2
-; CHECK-NEXT:    vmov r1, s8
-; CHECK-NEXT:    vcvtb.f16.f32 s0, s3
-; CHECK-NEXT:    vmov.16 q1[2], r1
-; CHECK-NEXT:    vmov r1, s0
-; CHECK-NEXT:    vmov.16 q1[3], r1
-; CHECK-NEXT:    vmov r2, s5
-; CHECK-NEXT:    vmov r1, s4
-; CHECK-NEXT:    strd r1, r2, [r0]
+; CHECK-NEXT:    vcvtb.f16.f32 q0, q0
+; CHECK-NEXT:    vstrh.32 q0, [r0]
 ; CHECK-NEXT:    bx lr
 entry:
   %e = fptrunc <4 x float> %val to <4 x half>
@@ -370,31 +317,10 @@ entry:
 define arm_aapcs_vfpcc void @store_trunc_8(<8 x half>* %src, <8 x float> %val) {
 ; CHECK-LABEL: store_trunc_8:
 ; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    vcvtb.f16.f32 s8, s0
-; CHECK-NEXT:    vmov r1, s8
-; CHECK-NEXT:    vcvtb.f16.f32 s8, s1
-; CHECK-NEXT:    vmov r2, s8
-; CHECK-NEXT:    vmov.16 q2[0], r1
-; CHECK-NEXT:    vcvtb.f16.f32 s12, s2
-; CHECK-NEXT:    vmov.16 q2[1], r2
-; CHECK-NEXT:    vmov r1, s12
-; CHECK-NEXT:    vcvtb.f16.f32 s0, s3
-; CHECK-NEXT:    vmov.16 q2[2], r1
-; CHECK-NEXT:    vmov r1, s0
-; CHECK-NEXT:    vcvtb.f16.f32 s0, s4
-; CHECK-NEXT:    vmov.16 q2[3], r1
-; CHECK-NEXT:    vmov r1, s0
-; CHECK-NEXT:    vcvtb.f16.f32 s0, s5
-; CHECK-NEXT:    vmov.16 q2[4], r1
-; CHECK-NEXT:    vmov r1, s0
-; CHECK-NEXT:    vcvtb.f16.f32 s0, s6
-; CHECK-NEXT:    vmov.16 q2[5], r1
-; CHECK-NEXT:    vmov r1, s0
-; CHECK-NEXT:    vcvtb.f16.f32 s0, s7
-; CHECK-NEXT:    vmov.16 q2[6], r1
-; CHECK-NEXT:    vmov r1, s0
-; CHECK-NEXT:    vmov.16 q2[7], r1
-; CHECK-NEXT:    vstrw.32 q2, [r0]
+; CHECK-NEXT:    vcvtb.f16.f32 q1, q1
+; CHECK-NEXT:    vcvtb.f16.f32 q0, q0
+; CHECK-NEXT:    vstrh.32 q1, [r0, #8]
+; CHECK-NEXT:    vstrh.32 q0, [r0]
 ; CHECK-NEXT:    bx lr
 entry:
   %e = fptrunc <8 x float> %val to <8 x half>
@@ -405,59 +331,14 @@ entry:
 define arm_aapcs_vfpcc void @store_trunc_16(<16 x half>* %src, <16 x float> %val) {
 ; CHECK-LABEL: store_trunc_16:
 ; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    .vsave {d8, d9, d10}
-; CHECK-NEXT:    vpush {d8, d9, d10}
-; CHECK-NEXT:    vcvtb.f16.f32 s16, s8
-; CHECK-NEXT:    vmov r1, s16
-; CHECK-NEXT:    vcvtb.f16.f32 s16, s9
-; CHECK-NEXT:    vmov r2, s16
-; CHECK-NEXT:    vmov.16 q4[0], r1
-; CHECK-NEXT:    vcvtb.f16.f32 s20, s10
-; CHECK-NEXT:    vmov.16 q4[1], r2
-; CHECK-NEXT:    vmov r1, s20
-; CHECK-NEXT:    vcvtb.f16.f32 s8, s11
-; CHECK-NEXT:    vmov.16 q4[2], r1
-; CHECK-NEXT:    vmov r1, s8
-; CHECK-NEXT:    vcvtb.f16.f32 s8, s12
-; CHECK-NEXT:    vmov.16 q4[3], r1
-; CHECK-NEXT:    vmov r1, s8
-; CHECK-NEXT:    vcvtb.f16.f32 s8, s13
-; CHECK-NEXT:    vmov.16 q4[4], r1
-; CHECK-NEXT:    vmov r1, s8
-; CHECK-NEXT:    vcvtb.f16.f32 s8, s14
-; CHECK-NEXT:    vmov.16 q4[5], r1
-; CHECK-NEXT:    vmov r1, s8
-; CHECK-NEXT:    vcvtb.f16.f32 s8, s15
-; CHECK-NEXT:    vmov.16 q4[6], r1
-; CHECK-NEXT:    vmov r1, s8
-; CHECK-NEXT:    vmov.16 q4[7], r1
-; CHECK-NEXT:    vstrw.32 q4, [r0, #16]
-; CHECK-NEXT:    vcvtb.f16.f32 s8, s0
-; CHECK-NEXT:    vmov r1, s8
-; CHECK-NEXT:    vcvtb.f16.f32 s8, s1
-; CHECK-NEXT:    vmov r2, s8
-; CHECK-NEXT:    vmov.16 q2[0], r1
-; CHECK-NEXT:    vcvtb.f16.f32 s12, s2
-; CHECK-NEXT:    vmov.16 q2[1], r2
-; CHECK-NEXT:    vmov r1, s12
-; CHECK-NEXT:    vcvtb.f16.f32 s0, s3
-; CHECK-NEXT:    vmov.16 q2[2], r1
-; CHECK-NEXT:    vmov r1, s0
-; CHECK-NEXT:    vcvtb.f16.f32 s0, s4
-; CHECK-NEXT:    vmov.16 q2[3], r1
-; CHECK-NEXT:    vmov r1, s0
-; CHECK-NEXT:    vcvtb.f16.f32 s0, s5
-; CHECK-NEXT:    vmov.16 q2[4], r1
-; CHECK-NEXT:    vmov r1, s0
-; CHECK-NEXT:    vcvtb.f16.f32 s0, s6
-; CHECK-NEXT:    vmov.16 q2[5], r1
-; CHECK-NEXT:    vmov r1, s0
-; CHECK-NEXT:    vcvtb.f16.f32 s0, s7
-; CHECK-NEXT:    vmov.16 q2[6], r1
-; CHECK-NEXT:    vmov r1, s0
-; CHECK-NEXT:    vmov.16 q2[7], r1
-; CHECK-NEXT:    vstrw.32 q2, [r0]
-; CHECK-NEXT:    vpop {d8, d9, d10}
+; CHECK-NEXT:    vcvtb.f16.f32 q3, q3
+; CHECK-NEXT:    vcvtb.f16.f32 q2, q2
+; CHECK-NEXT:    vcvtb.f16.f32 q1, q1
+; CHECK-NEXT:    vcvtb.f16.f32 q0, q0
+; CHECK-NEXT:    vstrh.32 q3, [r0, #24]
+; CHECK-NEXT:    vstrh.32 q2, [r0, #16]
+; CHECK-NEXT:    vstrh.32 q1, [r0, #8]
+; CHECK-NEXT:    vstrh.32 q0, [r0]
 ; CHECK-NEXT:    bx lr
 entry:
   %e = fptrunc <16 x float> %val to <16 x half>
