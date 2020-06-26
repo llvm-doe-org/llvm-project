@@ -1687,11 +1687,9 @@ static void AddTypeSpecifierResults(const LangOptions &LangOpts,
     Results.AddResult(Result("class", CCP_Type));
     Results.AddResult(Result("wchar_t", CCP_Type));
 
-    // typename qualified-id
+    // typename name
     Builder.AddTypedTextChunk("typename");
     Builder.AddChunk(CodeCompletionString::CK_HorizontalSpace);
-    Builder.AddPlaceholderChunk("qualifier");
-    Builder.AddTextChunk("::");
     Builder.AddPlaceholderChunk("name");
     Results.AddResult(Result(Builder.TakeString()));
 
@@ -1814,6 +1812,18 @@ static void AddTypedefResult(ResultBuilder &Results) {
   Builder.AddPlaceholderChunk("type");
   Builder.AddChunk(CodeCompletionString::CK_HorizontalSpace);
   Builder.AddPlaceholderChunk("name");
+  Builder.AddChunk(CodeCompletionString::CK_SemiColon);
+  Results.AddResult(CodeCompletionResult(Builder.TakeString()));
+}
+
+// using name = type
+static void AddUsingAliasResult(CodeCompletionBuilder &Builder,
+                                ResultBuilder &Results) {
+  Builder.AddTypedTextChunk("using");
+  Builder.AddChunk(CodeCompletionString::CK_HorizontalSpace);
+  Builder.AddPlaceholderChunk("name");
+  Builder.AddChunk(CodeCompletionString::CK_Equal);
+  Builder.AddPlaceholderChunk("type");
   Builder.AddChunk(CodeCompletionString::CK_SemiColon);
   Results.AddResult(CodeCompletionResult(Builder.TakeString()));
 }
@@ -2061,6 +2071,9 @@ static void AddOrdinaryNameResults(Sema::ParserCompletionContext CCC, Scope *S,
       Builder.AddChunk(CodeCompletionString::CK_SemiColon);
       Results.AddResult(Result(Builder.TakeString()));
 
+      if (SemaRef.getLangOpts().CPlusPlus11)
+        AddUsingAliasResult(Builder, Results);
+
       // using typename qualifier::name (only in a dependent context)
       if (SemaRef.CurContext->isDependentContext()) {
         Builder.AddTypedTextChunk("using typename");
@@ -2141,6 +2154,9 @@ static void AddOrdinaryNameResults(Sema::ParserCompletionContext CCC, Scope *S,
 
   case Sema::PCC_RecoveryInFunction:
   case Sema::PCC_Statement: {
+    if (SemaRef.getLangOpts().CPlusPlus11)
+      AddUsingAliasResult(Builder, Results);
+
     AddTypedefResult(Results);
 
     if (SemaRef.getLangOpts().CPlusPlus && Results.includeCodePatterns() &&

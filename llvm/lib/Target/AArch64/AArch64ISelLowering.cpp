@@ -177,12 +177,15 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
     addRegisterClass(MVT::nxv2f16, &AArch64::ZPRRegClass);
     addRegisterClass(MVT::nxv4f16, &AArch64::ZPRRegClass);
     addRegisterClass(MVT::nxv8f16, &AArch64::ZPRRegClass);
-    addRegisterClass(MVT::nxv2bf16, &AArch64::ZPRRegClass);
-    addRegisterClass(MVT::nxv4bf16, &AArch64::ZPRRegClass);
-    addRegisterClass(MVT::nxv8bf16, &AArch64::ZPRRegClass);
     addRegisterClass(MVT::nxv2f32, &AArch64::ZPRRegClass);
     addRegisterClass(MVT::nxv4f32, &AArch64::ZPRRegClass);
     addRegisterClass(MVT::nxv2f64, &AArch64::ZPRRegClass);
+
+    if (Subtarget->hasBF16()) {
+      addRegisterClass(MVT::nxv2bf16, &AArch64::ZPRRegClass);
+      addRegisterClass(MVT::nxv4bf16, &AArch64::ZPRRegClass);
+      addRegisterClass(MVT::nxv8bf16, &AArch64::ZPRRegClass);
+    }
 
     if (useSVEForFixedLengthVectors()) {
       for (MVT VT : MVT::integer_fixedlen_vector_valuetypes())
@@ -12037,6 +12040,7 @@ static MVT getSVEContainerType(EVT ContentTy) {
   case MVT::nxv8i8:
   case MVT::nxv8i16:
   case MVT::nxv8f16:
+  case MVT::nxv8bf16:
     return MVT::nxv8i16;
   case MVT::nxv16i8:
     return MVT::nxv16i8;
@@ -12073,6 +12077,10 @@ static SDValue performLDNT1Combine(SDNode *N, SelectionDAG &DAG) {
   SDLoc DL(N);
   EVT VT = N->getValueType(0);
   EVT PtrTy = N->getOperand(3).getValueType();
+
+  if (VT == MVT::nxv8bf16 &&
+      !static_cast<const AArch64Subtarget &>(DAG.getSubtarget()).hasBF16())
+    return SDValue();
 
   EVT LoadVT = VT;
   if (VT.isFloatingPoint())
@@ -12122,6 +12130,10 @@ static SDValue performST1Combine(SDNode *N, SelectionDAG &DAG) {
   EVT HwSrcVt = getSVEContainerType(DataVT);
   SDValue InputVT = DAG.getValueType(DataVT);
 
+  if (DataVT == MVT::nxv8bf16 &&
+      !static_cast<const AArch64Subtarget &>(DAG.getSubtarget()).hasBF16())
+    return SDValue();
+
   if (DataVT.isFloatingPoint())
     InputVT = DAG.getValueType(HwSrcVt);
 
@@ -12147,6 +12159,10 @@ static SDValue performSTNT1Combine(SDNode *N, SelectionDAG &DAG) {
   SDValue Data = N->getOperand(2);
   EVT DataVT = Data.getValueType();
   EVT PtrTy = N->getOperand(4).getValueType();
+
+  if (DataVT == MVT::nxv8bf16 &&
+      !static_cast<const AArch64Subtarget &>(DAG.getSubtarget()).hasBF16())
+    return SDValue();
 
   if (DataVT.isFloatingPoint())
     Data = DAG.getNode(ISD::BITCAST, DL, DataVT.changeTypeToInteger(), Data);
