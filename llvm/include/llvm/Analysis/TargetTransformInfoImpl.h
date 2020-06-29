@@ -607,14 +607,12 @@ public:
 
   bool isLegalToVectorizeStore(StoreInst *SI) const { return true; }
 
-  bool isLegalToVectorizeLoadChain(unsigned ChainSizeInBytes,
-                                   unsigned Alignment,
+  bool isLegalToVectorizeLoadChain(unsigned ChainSizeInBytes, Align Alignment,
                                    unsigned AddrSpace) const {
     return true;
   }
 
-  bool isLegalToVectorizeStoreChain(unsigned ChainSizeInBytes,
-                                    unsigned Alignment,
+  bool isLegalToVectorizeStoreChain(unsigned ChainSizeInBytes, Align Alignment,
                                     unsigned AddrSpace) const {
     return true;
   }
@@ -920,13 +918,17 @@ public:
                                            CostKind, I);
     }
     case Instruction::InsertElement: {
-      auto *IE = cast<InsertElementInst>(U);
+      auto *IE = dyn_cast<InsertElementInst>(U);
+      if (!IE)
+        return TTI::TCC_Basic; // FIXME
       auto *CI = dyn_cast<ConstantInt>(IE->getOperand(2));
       unsigned Idx = CI ? CI->getZExtValue() : -1;
       return TargetTTI->getVectorInstrCost(Opcode, Ty, Idx);
     }
     case Instruction::ShuffleVector: {
-      auto *Shuffle = cast<ShuffleVectorInst>(U);
+      auto *Shuffle = dyn_cast<ShuffleVectorInst>(U);
+      if (!Shuffle)
+        return TTI::TCC_Basic; // FIXME
       auto *VecTy = cast<VectorType>(U->getType());
       auto *VecSrcTy = cast<VectorType>(U->getOperand(0)->getType());
 
@@ -956,7 +958,10 @@ public:
     }
     case Instruction::ExtractElement: {
       unsigned Idx = -1;
-      auto *EEI = cast<ExtractElementInst>(U);
+      auto *EEI = dyn_cast<ExtractElementInst>(U);
+      if (!EEI)
+        return TTI::TCC_Basic; // FIXME
+
       auto *CI = dyn_cast<ConstantInt>(EEI->getOperand(1));
       if (CI)
         Idx = CI->getZExtValue();
