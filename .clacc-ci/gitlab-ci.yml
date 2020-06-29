@@ -121,6 +121,11 @@ stages:
   script:
     - pwd
     - echo $BUILD_DIR_PROJ
+    # Try to remove anything older than 6 hours that was left by a previous
+    # pipeline for this project.  Doing this in the setup stage instead of
+    # cleanup stage ensures that it runs before a new job even if prior jobs
+    # failed or were canceled.
+    - find $BUILD_DIR_PROJ -mmin +360 -delete || true
     - mkdir -p $BUILD_DIR_PROJ
     - echo $BUILD_DIR
     - mkdir $BUILD_DIR
@@ -143,9 +148,6 @@ stages:
     - pwd
     - echo $BUILD_DIR
     - rm -rf $BUILD_DIR
-    # Try to remove anything older than 12 hours that was left by previous
-    # (likely canceled) pipelines for this project.
-    - find $BUILD_DIR_PROJ -mmin +720 -delete || true
     - rmdir $BUILD_DIR_PROJ || true
 
 kold-python2 (setup):
