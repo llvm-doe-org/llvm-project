@@ -256,7 +256,7 @@ leconte-python3 (config):
   extends: .non-utility
   stage: build
   script:
-    - time ninja-build |& tee $CI_PROJECT_DIR/build-log.txt
+    - time ninja-build -l `nproc` |& tee $CI_PROJECT_DIR/build-log.txt
   artifacts:
     when: always
     paths: [build-log.txt]
