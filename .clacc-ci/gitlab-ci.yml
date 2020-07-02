@@ -128,6 +128,10 @@ stages:
     - find $BUILD_DIR_PROJ -mmin +360 -delete || true
     - mkdir -p $BUILD_DIR_PROJ
     - echo $BUILD_DIR
+    # Remove this build config's build directory if it already exists.  It
+    # might exist if, for example, this setup job previously failed due to a
+    # transient Gitlab/ExCL problem.
+    - rm -rf $BUILD_DIR
     - mkdir $BUILD_DIR
     - mkdir $BUILD_DIR/build
     # Clone the runner's git clone into the NFS-mounted build directory.  We
