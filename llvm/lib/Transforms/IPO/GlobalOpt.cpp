@@ -509,9 +509,8 @@ static GlobalVariable *SRAGlobal(GlobalVariable *GV, const DataLayout &DL) {
   std::map<unsigned, GlobalVariable *> NewGlobals;
 
   // Get the alignment of the global, either explicit or target-specific.
-  unsigned StartAlignment = GV->getAlignment();
-  if (StartAlignment == 0)
-    StartAlignment = DL.getABITypeAlignment(GV->getType());
+  Align StartAlignment =
+      DL.getValueOrABITypeAlignment(GV->getAlign(), GV->getType());
 
   // Loop over all users and create replacement variables for used aggregate
   // elements.
@@ -554,9 +553,8 @@ static GlobalVariable *SRAGlobal(GlobalVariable *GV, const DataLayout &DL) {
       // had 256 byte alignment for example, something might depend on that:
       // propagate info to each field.
       uint64_t FieldOffset = Layout.getElementOffset(ElementIdx);
-      Align NewAlign(MinAlign(StartAlignment, FieldOffset));
-      if (NewAlign >
-          Align(DL.getABITypeAlignment(STy->getElementType(ElementIdx))))
+      Align NewAlign = commonAlignment(StartAlignment, FieldOffset);
+      if (NewAlign > DL.getABITypeAlign(STy->getElementType(ElementIdx)))
         NGV->setAlignment(NewAlign);
 
       // Copy over the debug info for the variable.
@@ -565,13 +563,13 @@ static GlobalVariable *SRAGlobal(GlobalVariable *GV, const DataLayout &DL) {
       transferSRADebugInfo(GV, NGV, FragmentOffsetInBits, Size);
     } else {
       uint64_t EltSize = DL.getTypeAllocSize(ElTy);
-      Align EltAlign(DL.getABITypeAlignment(ElTy));
+      Align EltAlign = DL.getABITypeAlign(ElTy);
       uint64_t FragmentSizeInBits = DL.getTypeAllocSizeInBits(ElTy);
 
       // Calculate the known alignment of the field.  If the original aggregate
       // had 256 byte alignment for example, something might depend on that:
       // propagate info to each field.
-      Align NewAlign(MinAlign(StartAlignment, EltSize * ElementIdx));
+      Align NewAlign = commonAlignment(StartAlignment, EltSize * ElementIdx);
       if (NewAlign > EltAlign)
         NGV->setAlignment(NewAlign);
       transferSRADebugInfo(GV, NGV, FragmentSizeInBits * ElementIdx,

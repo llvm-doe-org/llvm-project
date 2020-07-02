@@ -10,8 +10,8 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/TableGen/Format.h"
 #include "mlir/TableGen/GenInfo.h"
+#include "mlir/TableGen/Interfaces.h"
 #include "mlir/TableGen/OpClass.h"
-#include "mlir/TableGen/OpInterfaces.h"
 #include "mlir/TableGen/OpTrait.h"
 #include "mlir/TableGen/Operator.h"
 #include "llvm/ADT/MapVector.h"
@@ -840,10 +840,28 @@ void OperationFormat::genParserTypeResolution(Operator &op,
   for (unsigned i = 0, e = op.getNumOperands(); i != e; ++i) {
     NamedTypeConstraint &operand = op.getOperand(i);
     body << "  if (parser.resolveOperands(" << operand.name << "Operands, ";
-    emitTypeResolver(operandTypes[i], operand.name);
 
-    // If this isn't a buildable type, verify the sizes match by adding the loc.
-    if (!operandTypes[i].getBuilderIdx())
+    // Resolve the type of this operand.
+    TypeResolution &operandType = operandTypes[i];
+    emitTypeResolver(operandType, operand.name);
+
+    // If the type is resolved by a non-variadic variable, index into the
+    // resolved type list. This allows for resolving the types of a variadic
+    // operand list from a non-variadic variable.
+    bool verifyOperandAndTypeSize = true;
+    if (auto *resolverVar = operandType.getVariable()) {
+      if (!resolverVar->isVariadic() && !operandType.getVarTransformer()) {
+        body << "[0]";
+        verifyOperandAndTypeSize = false;
+      }
+    } else {
+      verifyOperandAndTypeSize = !operandType.getBuilderIdx();
+    }
+
+    // Check to see if the sizes between the types and operands must match. If
+    // they do, provide the operand location to select the proper resolution
+    // overload.
+    if (verifyOperandAndTypeSize)
       body << ", " << operand.name << "OperandsLoc";
     body << ", result.operands))\n    return failure();\n";
   }
