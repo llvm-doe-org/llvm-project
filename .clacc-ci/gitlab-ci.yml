@@ -297,14 +297,14 @@ leconte-python3 (build):
   script:
     - echo $CHECK_TARGETS
     - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
-      ninja-build $CHECK_TARGETS
+      ninja-build -l `nproc` $CHECK_TARGETS
       |& tee $CI_PROJECT_DIR/test-build-log.txt
       | grep '^\[[0-9]\+/[0-9]\+]\|\<error:'
     - for check_target in $CHECK_TARGETS; do
         echo "check_target=$check_target" &&
         time FILECHECK_OPTS='-dump-input=fail -vv -color'
              LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/$check_target.xml"
-             ninja-build $check_target
+             ninja-build -l `nproc` $check_target
         |& tee $CI_PROJECT_DIR/$check_target-log.txt;
       done
   artifacts:
