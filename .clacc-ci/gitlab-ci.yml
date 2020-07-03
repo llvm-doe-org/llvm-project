@@ -112,11 +112,7 @@ stages:
 # utilities
 #-------------------------------------------------
 
-.utility:
-  dependencies: []
-
 .setup:
-  extends: .utility
   stage: setup
   script:
     - pwd
@@ -144,7 +140,6 @@ stages:
     - time git clone `pwd` $BUILD_DIR/source
 
 .cleanup:
-  extends: .utility
   stage: cleanup
   variables:
     GIT_STRATEGY: none
@@ -165,26 +160,35 @@ leconte-python3 (setup):
 
 kold-python2 (cleanup, clacc):
   extends: [.kold-python2, .clacc, .cleanup]
-  needs: ["kold-python2 (test-all, clacc)"]
+  needs:
+    - job: "kold-python2 (test-all, clacc)"
+      artifacts: false
 
 kold-python2 (cleanup):
   extends: [.kold-python2, .not-clacc, .cleanup]
-  needs: [kold-python2 (test-all)]
+  needs:
+    - job: kold-python2 (test-all)
+      artifacts: false
 
 kold-python3 (cleanup):
   extends: [.kold-python3, .cleanup]
-  needs: [kold-python3 (test-all)]
+  needs:
+    - job: kold-python3 (test-all)
+      artifacts: false
 
 leconte-python3 (cleanup, clacc):
   extends: [.leconte-python3, .clacc, .cleanup]
-  needs: ["leconte-python3 (test-all, clacc)"]
+  needs:
+    - job: "leconte-python3 (test-all, clacc)"
+      artifacts: false
 
 leconte-python3 (cleanup):
   extends: [.leconte-python3, .not-clacc, .cleanup]
-  needs: [leconte-python3 (test-all)]
+  needs:
+    - job: leconte-python3 (test-all)
+      artifacts: false
 
 z-cleanup-pipeline-builds:
-  extends: .utility
   stage: setup
   when: manual
   tags: [shell, kold]
@@ -195,7 +199,6 @@ z-cleanup-pipeline-builds:
     - rm -rf $BUILD_DIRS
 
 z-cleanup-project-builds:
-  extends: .utility
   stage: setup
   when: manual
   tags: [shell, kold]
@@ -242,15 +245,21 @@ z-cleanup-project-builds:
 
 kold-python2 (config):
   extends: [.kold-python2, .config]
-  needs: [kold-python2 (setup)]
+  needs:
+    - job: kold-python2 (setup)
+      artifacts: false
 
 kold-python3 (config):
   extends: [.kold-python3, .config]
-  needs: [kold-python3 (setup)]
+  needs:
+    - job: kold-python3 (setup)
+      artifacts: false
 
 leconte-python3 (config):
   extends: [.leconte-python3, .config]
-  needs: [leconte-python3 (setup)]
+  needs:
+    - job: leconte-python3 (setup)
+      artifacts: false
 
 #-------------------------------------------------
 # build
@@ -267,15 +276,21 @@ leconte-python3 (config):
 
 kold-python2 (build):
   extends: [.kold-python2, .build]
-  needs: [kold-python2 (config)]
+  needs:
+    - job: kold-python2 (config)
+      artifacts: false
 
 kold-python3 (build):
   extends: [.kold-python3, .build]
-  needs: [kold-python3 (config)]
+  needs:
+    - job: kold-python3 (config)
+      artifacts: false
 
 leconte-python3 (build):
   extends: [.leconte-python3, .build]
-  needs: [leconte-python3 (config)]
+  needs:
+    - job: leconte-python3 (config)
+      artifacts: false
 
 #-------------------------------------------------
 # tests
@@ -331,28 +346,42 @@ leconte-python3 (build):
 
 kold-python2 (test-clacc):
   extends: [.kold-python2, .test-clacc]
-  needs: [kold-python2 (build)]
+  needs:
+    - job: kold-python2 (build)
+      artifacts: false
 
 kold-python2 (test-all, clacc):
   extends: [.kold-python2, .clacc, .test-all]
-  needs: [kold-python2 (test-clacc)]
+  needs:
+    - job: kold-python2 (test-clacc)
+      artifacts: false
 
 kold-python2 (test-all):
   extends: [.kold-python2, .not-clacc, .test-all]
-  needs: [kold-python2 (build)]
+  needs:
+    - job: kold-python2 (build)
+      artifacts: false
 
 kold-python3 (test-all):
   extends: [.kold-python3, .test-all]
-  needs: [kold-python3 (build)]
+  needs:
+    - job: kold-python3 (build)
+      artifacts: false
 
 leconte-python3 (test-clacc):
   extends: [.leconte-python3, .test-clacc]
-  needs: [leconte-python3 (build)]
+  needs:
+    - job: leconte-python3 (build)
+      artifacts: false
 
 leconte-python3 (test-all, clacc):
   extends: [.leconte-python3, .clacc, .test-all]
-  needs: [leconte-python3 (test-clacc)]
+  needs:
+    - job: leconte-python3 (test-clacc)
+      artifacts: false
 
 leconte-python3 (test-all):
   extends: [.leconte-python3, .not-clacc, .test-all]
-  needs: [leconte-python3 (build)]
+  needs:
+    - job: leconte-python3 (build)
+      artifacts: false
