@@ -10957,8 +10957,9 @@ SDValue DAGCombiner::visitSIGN_EXTEND_INREG(SDNode *N) {
   unsigned VTBits = VT.getScalarSizeInBits();
   unsigned ExtVTBits = ExtVT.getScalarSizeInBits();
 
+  // sext_vector_inreg(undef) = 0 because the top bit will all be the same.
   if (N0.isUndef())
-    return DAG.getUNDEF(VT);
+    return DAG.getConstant(0, SDLoc(N), VT);
 
   // fold (sext_in_reg c1) -> c1
   if (DAG.isConstantIntBuildVectorOrConstantInt(N0))
@@ -11086,8 +11087,9 @@ SDValue DAGCombiner::visitSIGN_EXTEND_VECTOR_INREG(SDNode *N) {
   SDValue N0 = N->getOperand(0);
   EVT VT = N->getValueType(0);
 
+  // sext_vector_inreg(undef) = 0 because the top bit will all be the same.
   if (N0.isUndef())
-    return DAG.getUNDEF(VT);
+    return DAG.getConstant(0, SDLoc(N), VT);
 
   if (SDValue Res = tryToFoldExtendOfConstant(N, TLI, DAG, LegalTypes))
     return Res;
@@ -11102,8 +11104,9 @@ SDValue DAGCombiner::visitZERO_EXTEND_VECTOR_INREG(SDNode *N) {
   SDValue N0 = N->getOperand(0);
   EVT VT = N->getValueType(0);
 
+  // zext_vector_inreg(undef) = 0 because the top bits will be zero.
   if (N0.isUndef())
-    return DAG.getUNDEF(VT);
+    return DAG.getConstant(0, SDLoc(N), VT);
 
   if (SDValue Res = tryToFoldExtendOfConstant(N, TLI, DAG, LegalTypes))
     return Res;
@@ -13229,6 +13232,24 @@ SDValue DAGCombiner::visitFDIV(SDNode *N) {
         Y = N1.getOperand(0);
       }
       if (Sqrt.getNode()) {
+        // If the other multiply operand is known positive, pull it into the
+        // sqrt. That will eliminate the division if we convert to an estimate:
+        // X / (fabs(A) * sqrt(Z)) --> X / sqrt(A*A*Z) --> X * rsqrt(A*A*Z)
+        // TODO: Also fold the case where A == Z (fabs is missing).
+        if (Flags.hasAllowReassociation() && N1.hasOneUse() &&
+            N1->getFlags().hasAllowReassociation() && Sqrt.hasOneUse() &&
+            Y.getOpcode() == ISD::FABS && Y.hasOneUse()) {
+          SDValue AA = DAG.getNode(ISD::FMUL, DL, VT, Y.getOperand(0),
+                                   Y.getOperand(0), Flags);
+          SDValue AAZ =
+              DAG.getNode(ISD::FMUL, DL, VT, AA, Sqrt.getOperand(0), Flags);
+          if (SDValue Rsqrt = buildRsqrtEstimate(AAZ, Flags))
+            return DAG.getNode(ISD::FMUL, DL, VT, N0, Rsqrt, Flags);
+
+          // Estimate creation failed. Clean up speculatively created nodes.
+          recursivelyDeleteUnusedNodes(AAZ.getNode());
+        }
+
         // We found a FSQRT, so try to make this fold:
         // X / (Y * sqrt(Z)) -> X * (rsqrt(Z) / Y)
         if (SDValue Rsqrt = buildRsqrtEstimate(Sqrt.getOperand(0), Flags)) {

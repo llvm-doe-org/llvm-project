@@ -2688,12 +2688,24 @@ define <2 x i1> @icmp_and_or_lshr_cst_vec(<2 x i32> %x) {
 
 define <2 x i1> @icmp_and_or_lshr_cst_vec_nonuniform(<2 x i32> %x) {
 ; CHECK-LABEL: @icmp_and_or_lshr_cst_vec_nonuniform(
-; CHECK-NEXT:    [[SHF:%.*]] = lshr <2 x i32> [[X:%.*]], <i32 1, i32 2>
-; CHECK-NEXT:    [[OR:%.*]] = or <2 x i32> [[SHF]], [[X]]
-; CHECK-NEXT:    [[RET:%.*]] = trunc <2 x i32> [[OR]] to <2 x i1>
+; CHECK-NEXT:    [[TMP1:%.*]] = and <2 x i32> [[X:%.*]], <i32 3, i32 5>
+; CHECK-NEXT:    [[RET:%.*]] = icmp ne <2 x i32> [[TMP1]], zeroinitializer
 ; CHECK-NEXT:    ret <2 x i1> [[RET]]
 ;
   %shf = lshr <2 x i32> %x, <i32 1, i32 2>
+  %or = or <2 x i32> %shf, %x
+  %and = and <2 x i32> %or, <i32 1, i32 1>
+  %ret = icmp ne <2 x i32> %and, zeroinitializer
+  ret <2 x i1> %ret
+}
+
+define <2 x i1> @icmp_and_or_lshr_cst_vec_undef(<2 x i32> %x) {
+; CHECK-LABEL: @icmp_and_or_lshr_cst_vec_undef(
+; CHECK-NEXT:    [[TMP1:%.*]] = and <2 x i32> [[X:%.*]], <i32 3, i32 -1>
+; CHECK-NEXT:    [[RET:%.*]] = icmp ne <2 x i32> [[TMP1]], zeroinitializer
+; CHECK-NEXT:    ret <2 x i1> [[RET]]
+;
+  %shf = lshr <2 x i32> %x, <i32 1, i32 undef>
   %or = or <2 x i32> %shf, %x
   %and = and <2 x i32> %or, <i32 1, i32 1>
   %ret = icmp ne <2 x i32> %and, zeroinitializer
@@ -2718,13 +2730,27 @@ define <2 x i1> @icmp_and_or_lshr_cst_vec_commute(<2 x i32> %xp) {
 define <2 x i1> @icmp_and_or_lshr_cst_vec_nonuniform_commute(<2 x i32> %xp) {
 ; CHECK-LABEL: @icmp_and_or_lshr_cst_vec_nonuniform_commute(
 ; CHECK-NEXT:    [[X:%.*]] = srem <2 x i32> [[XP:%.*]], <i32 42, i32 42>
-; CHECK-NEXT:    [[SHF:%.*]] = lshr <2 x i32> [[X]], <i32 1, i32 2>
-; CHECK-NEXT:    [[OR:%.*]] = or <2 x i32> [[X]], [[SHF]]
-; CHECK-NEXT:    [[RET:%.*]] = trunc <2 x i32> [[OR]] to <2 x i1>
+; CHECK-NEXT:    [[TMP1:%.*]] = and <2 x i32> [[X]], <i32 3, i32 5>
+; CHECK-NEXT:    [[RET:%.*]] = icmp ne <2 x i32> [[TMP1]], zeroinitializer
 ; CHECK-NEXT:    ret <2 x i1> [[RET]]
 ;
   %x = srem <2 x i32> %xp, <i32 42, i32 -42> ; prevent complexity-based canonicalization
   %shf = lshr <2 x i32> %x, <i32 1, i32 2>
+  %or = or <2 x i32> %x, %shf
+  %and = and <2 x i32> %or, <i32 1, i32 1>
+  %ret = icmp ne <2 x i32> %and, zeroinitializer
+  ret <2 x i1> %ret
+}
+
+define <2 x i1> @icmp_and_or_lshr_cst_vec_undef_commute(<2 x i32> %xp) {
+; CHECK-LABEL: @icmp_and_or_lshr_cst_vec_undef_commute(
+; CHECK-NEXT:    [[X:%.*]] = srem <2 x i32> [[XP:%.*]], <i32 42, i32 42>
+; CHECK-NEXT:    [[TMP1:%.*]] = and <2 x i32> [[X]], <i32 3, i32 -1>
+; CHECK-NEXT:    [[RET:%.*]] = icmp ne <2 x i32> [[TMP1]], zeroinitializer
+; CHECK-NEXT:    ret <2 x i1> [[RET]]
+;
+  %x = srem <2 x i32> %xp, <i32 42, i32 -42> ; prevent complexity-based canonicalization
+  %shf = lshr <2 x i32> %x, <i32 1, i32 undef>
   %or = or <2 x i32> %x, %shf
   %and = and <2 x i32> %or, <i32 1, i32 1>
   %ret = icmp ne <2 x i32> %and, zeroinitializer

@@ -247,6 +247,20 @@ void LandingPadInst::addClause(Constant *Val) {
 //                        CallBase Implementation
 //===----------------------------------------------------------------------===//
 
+CallBase *CallBase::Create(CallBase *CB, ArrayRef<OperandBundleDef> Bundles,
+                           Instruction *InsertPt) {
+  switch (CB->getOpcode()) {
+  case Instruction::Call:
+    return CallInst::Create(cast<CallInst>(CB), Bundles, InsertPt);
+  case Instruction::Invoke:
+    return InvokeInst::Create(cast<InvokeInst>(CB), Bundles, InsertPt);
+  case Instruction::CallBr:
+    return CallBrInst::Create(cast<CallBrInst>(CB), Bundles, InsertPt);
+  default:
+    llvm_unreachable("Unknown CallBase sub-class!");
+  }
+}
+
 Function *CallBase::getCaller() { return getParent()->getParent(); }
 
 unsigned CallBase::getNumSubclassExtraOperandsDynamic() const {
@@ -960,7 +974,8 @@ CleanupReturnInst::CleanupReturnInst(const CleanupReturnInst &CRI)
                   OperandTraits<CleanupReturnInst>::op_end(this) -
                       CRI.getNumOperands(),
                   CRI.getNumOperands()) {
-  setInstructionSubclassData(CRI.getSubclassDataFromInstruction());
+  setSubclassData<Instruction::OpaqueField>(
+      CRI.getSubclassData<Instruction::OpaqueField>());
   Op<0>() = CRI.Op<0>();
   if (CRI.hasUnwindDest())
     Op<1>() = CRI.Op<1>();
@@ -968,7 +983,7 @@ CleanupReturnInst::CleanupReturnInst(const CleanupReturnInst &CRI)
 
 void CleanupReturnInst::init(Value *CleanupPad, BasicBlock *UnwindBB) {
   if (UnwindBB)
-    setInstructionSubclassData(getSubclassDataFromInstruction() | 1);
+    setSubclassData<UnwindDestField>(true);
 
   Op<0>() = CleanupPad;
   if (UnwindBB)
@@ -1072,7 +1087,7 @@ void CatchSwitchInst::init(Value *ParentPad, BasicBlock *UnwindDest,
 
   Op<0>() = ParentPad;
   if (UnwindDest) {
-    setInstructionSubclassData(getSubclassDataFromInstruction() | 1);
+    setSubclassData<UnwindDestField>(true);
     setUnwindDest(UnwindDest);
   }
 }
@@ -1296,13 +1311,6 @@ AllocaInst::AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize,
   setName(Name);
 }
 
-void AllocaInst::setAlignment(Align Align) {
-  assert(Align <= MaximumAlignment &&
-         "Alignment is greater than MaximumAlignment!");
-  setInstructionSubclassData((getSubclassDataFromInstruction() & ~31) |
-                             encode(Align));
-  assert(getAlignment() == Align.value() && "Alignment representation error!");
-}
 
 bool AllocaInst::isArrayAllocation() const {
   if (ConstantInt *CI = dyn_cast<ConstantInt>(getOperand(0)))
@@ -1394,14 +1402,6 @@ LoadInst::LoadInst(Type *Ty, Value *Ptr, const Twine &Name, bool isVolatile,
   setName(Name);
 }
 
-void LoadInst::setAlignment(Align Align) {
-  assert(Align <= MaximumAlignment &&
-         "Alignment is greater than MaximumAlignment!");
-  setInstructionSubclassData((getSubclassDataFromInstruction() & ~(31 << 1)) |
-                             (encode(Align) << 1));
-  assert(getAlign() == Align && "Alignment representation error!");
-}
-
 //===----------------------------------------------------------------------===//
 //                           StoreInst Implementation
 //===----------------------------------------------------------------------===//
@@ -1473,13 +1473,6 @@ StoreInst::StoreInst(Value *val, Value *addr, bool isVolatile, Align Align,
   AssertOK();
 }
 
-void StoreInst::setAlignment(Align Alignment) {
-  assert(Alignment <= MaximumAlignment &&
-         "Alignment is greater than MaximumAlignment!");
-  setInstructionSubclassData((getSubclassDataFromInstruction() & ~(31 << 1)) |
-                             (encode(Alignment) << 1));
-  assert(getAlign() == Alignment && "Alignment representation error!");
-}
 
 //===----------------------------------------------------------------------===//
 //                       AtomicCmpXchgInst Implementation
