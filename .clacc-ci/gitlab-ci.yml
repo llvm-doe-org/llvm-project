@@ -137,6 +137,7 @@ stages:
     # We've also tried creating a symlink to the runner's git clone at the
     # start of every job, but that causes ccache to miss in the same manner, so
     # apparently the symlink is expanded somewhere.
+    - git --version
     - time git clone `pwd` $BUILD_DIR/source
 
 .cleanup:
