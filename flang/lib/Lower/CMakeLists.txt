@@ -9,6 +9,8 @@ add_flang_library(FortranLower
   ConvertType.cpp
   DoLoopHelper.cpp
   FIRBuilder.cpp
+  IntrinsicCall.cpp
+  IO.cpp
   Mangler.cpp
   OpenMP.cpp
   PFTBuilder.cpp
