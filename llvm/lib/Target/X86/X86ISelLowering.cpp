@@ -25236,6 +25236,9 @@ SDValue X86TargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       // Clamp out of bounds shift amounts since they will otherwise be masked
       // to 8-bits which may make it no longer out of bounds.
       unsigned ShiftAmount = C->getAPIntValue().getLimitedValue(255);
+      if (ShiftAmount == 0)
+        return Op.getOperand(1);
+
       return DAG.getNode(ISD::INTRINSIC_WO_CHAIN, DL, Op.getValueType(),
                          Op.getOperand(0), Op.getOperand(1),
                          DAG.getTargetConstant(ShiftAmount, DL, MVT::i32));
@@ -35040,7 +35043,7 @@ static SDValue combineX86ShuffleChain(ArrayRef<SDValue> Inputs, SDValue Root,
         continue;
       }
       if (M == SM_SentinelZero) {
-        PSHUFBMask.push_back(DAG.getConstant(255, DL, MVT::i8));
+        PSHUFBMask.push_back(DAG.getConstant(0x80, DL, MVT::i8));
         continue;
       }
       M = Ratio * M + i % Ratio;
@@ -35071,7 +35074,7 @@ static SDValue combineX86ShuffleChain(ArrayRef<SDValue> Inputs, SDValue Root,
         continue;
       }
       if (M == SM_SentinelZero) {
-        VPPERMMask.push_back(DAG.getConstant(128, DL, MVT::i8));
+        VPPERMMask.push_back(DAG.getConstant(0x80, DL, MVT::i8));
         continue;
       }
       M = Ratio * M + i % Ratio;
@@ -36461,9 +36464,9 @@ static SDValue combineTargetShuffle(SDValue N, SelectionDAG &DAG,
         (V.getOpcode() == X86ISD::PSHUFLW ||
          V.getOpcode() == X86ISD::PSHUFHW) &&
         V.getOpcode() != N.getOpcode() &&
-        V.hasOneUse()) {
+        V.hasOneUse() && V.getOperand(0).hasOneUse()) {
       SDValue D = peekThroughOneUseBitcasts(V.getOperand(0));
-      if (D.getOpcode() == X86ISD::PSHUFD && D.hasOneUse()) {
+      if (D.getOpcode() == X86ISD::PSHUFD) {
         SmallVector<int, 4> VMask = getPSHUFShuffleMask(V);
         SmallVector<int, 4> DMask = getPSHUFShuffleMask(D);
         int NOffset = N.getOpcode() == X86ISD::PSHUFLW ? 0 : 4;
@@ -36900,10 +36903,11 @@ static SDValue combineShuffle(SDNode *N, SelectionDAG &DAG,
   // insert into a zero vector. This helps get VZEXT_MOVL closer to
   // scalar_to_vectors where 256/512 are canonicalized to an insert and a
   // 128-bit scalar_to_vector. This reduces the number of isel patterns.
-  if (N->getOpcode() == X86ISD::VZEXT_MOVL && !DCI.isBeforeLegalizeOps()) {
+  if (N->getOpcode() == X86ISD::VZEXT_MOVL && !DCI.isBeforeLegalizeOps() &&
+      N->getOperand(0).hasOneUse()) {
     SDValue V = peekThroughOneUseBitcasts(N->getOperand(0));
 
-    if (V.getOpcode() == ISD::INSERT_SUBVECTOR && V.hasOneUse() &&
+    if (V.getOpcode() == ISD::INSERT_SUBVECTOR &&
         V.getOperand(0).isUndef() && isNullConstant(V.getOperand(2))) {
       SDValue In = V.getOperand(1);
       MVT SubVT =

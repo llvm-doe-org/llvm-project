@@ -4377,7 +4377,8 @@ public:
                                     ConditionResult Cond);
   StmtResult ActOnFinishSwitchStmt(SourceLocation SwitchLoc,
                                            Stmt *Switch, Stmt *Body);
-  StmtResult ActOnWhileStmt(SourceLocation WhileLoc, ConditionResult Cond,
+  StmtResult ActOnWhileStmt(SourceLocation WhileLoc, SourceLocation LParenLoc,
+                            ConditionResult Cond, SourceLocation RParenLoc,
                             Stmt *Body);
   StmtResult ActOnDoStmt(SourceLocation DoLoc, Stmt *Body,
                          SourceLocation WhileLoc, SourceLocation CondLParen,
@@ -6964,7 +6965,7 @@ public:
 
   /// DiagnoseAbsenceOfOverrideControl - Diagnose if 'override' keyword was
   /// not used in the declaration of an overriding method.
-  void DiagnoseAbsenceOfOverrideControl(NamedDecl *D);
+  void DiagnoseAbsenceOfOverrideControl(NamedDecl *D, bool Inconsistent);
 
   /// CheckForFunctionMarkedFinal - Checks whether a virtual member function
   /// overrides a virtual member function marked 'final', according to
