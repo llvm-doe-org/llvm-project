@@ -294,6 +294,13 @@ void PassManagerBuilder::populateFunctionPassManager(
   if (LibraryInfo)
     FPM.add(new TargetLibraryInfoWrapperPass(*LibraryInfo));
 
+  // The backends do not handle matrix intrinsics currently.
+  // Make sure they are also lowered in O0.
+  // FIXME: A lightweight version of the pass should run in the backend
+  //        pipeline on demand.
+  if (EnableMatrix && OptLevel == 0)
+    FPM.add(createLowerMatrixIntrinsicsPass());
+
   if (OptLevel == 0) return;
 
   addInitialAliasAnalysisPasses(FPM);
@@ -777,7 +784,11 @@ void PassManagerBuilder::populateModulePassManager(
   // convert to more optimized IR using more aggressive simplify CFG options.
   // The extra sinking transform can create larger basic blocks, so do this
   // before SLP vectorization.
-  MPM.add(createCFGSimplificationPass(1, true, true, false, true));
+  MPM.add(createCFGSimplificationPass(SimplifyCFGOptions()
+                                          .forwardSwitchCondToPhi(true)
+                                          .convertSwitchToLookupTable(true)
+                                          .needCanonicalLoops(false)
+                                          .sinkCommonInsts(true)));
 
   if (SLPVectorize) {
     MPM.add(createSLPVectorizerPass()); // Vectorize parallel scalar chains.

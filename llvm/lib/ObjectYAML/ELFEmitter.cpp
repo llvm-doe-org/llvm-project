@@ -432,7 +432,8 @@ void ELFState<ELFT>::writeELFHeader(raw_ostream &OS, uint64_t SHOff) {
 
   if (Doc.Header.EShNum)
     Header.e_shnum = *Doc.Header.EShNum;
-  else if (!Doc.SectionHeaders)
+  else if (!Doc.SectionHeaders ||
+           (Doc.SectionHeaders->NoHeaders && !*Doc.SectionHeaders->NoHeaders))
     Header.e_shnum = Doc.getSections().size();
   else if (NoShdrs)
     Header.e_shnum = 0;
@@ -973,6 +974,8 @@ Expected<uint64_t> emitDWARF(typename ELFT::Shdr &SHeader, StringRef Name,
   else if (Name == ".debug_gnu_pubtypes")
     Err = DWARFYAML::emitPubSection(*OS, *DWARF.GNUPubTypes,
                                     DWARF.IsLittleEndian, /*IsGNUStyle=*/true);
+  else if (Name == ".debug_str_offsets")
+    Err = DWARFYAML::emitDebugStrOffsets(*OS, DWARF);
   else
     llvm_unreachable("unexpected emitDWARF() call");
 

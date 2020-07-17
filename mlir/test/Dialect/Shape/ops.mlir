@@ -6,13 +6,24 @@
 
 // CHECK-LABEL: shape_num_elements
 func @shape_num_elements(%shape : !shape.shape) -> !shape.size {
-  %init = shape.const_size 0
-  %num_elements = shape.reduce(%shape, %init) -> !shape.size {
-    ^bb0(%index: index, %dim: !shape.size, %lci: !shape.size):
-      %acc = shape.add %lci, %dim
-      shape.yield %acc : !shape.size
+  %init = shape.const_size 1
+  %num_elements = shape.reduce(%shape, %init) : !shape.shape -> !shape.size {
+    ^bb0(%index : index, %extent : !shape.size, %acc : !shape.size):
+      %acc_next = shape.mul %acc, %extent
+      shape.yield %acc_next : !shape.size
   }
   return %num_elements : !shape.size
+}
+
+// CHECK-LABEL: extent_tensor_num_elements
+func @extent_tensor_num_elements(%shape : tensor<?xindex>) -> index {
+  %init = constant 1 : index
+  %num_elements = shape.reduce(%shape, %init) : tensor<?xindex> -> index {
+    ^bb0(%index : index, %extent : index, %acc : index):
+      %acc_next = muli %acc, %extent : index
+      shape.yield %acc_next : index
+  }
+  return %num_elements : index
 }
 
 func @test_shape_num_elements_unknown() {
@@ -29,10 +40,10 @@ func @test_shape_num_elements_fixed() {
   return
 }
 
-func @test_broadcastable_fixed() {
+func @test_broadcast_fixed() {
   %0 = shape.const_shape [10, 1, 57, 92]
   %1 = shape.const_shape [4, 57, 92]
-  %2 = "shape.broadcastable"(%0, %1) : (!shape.shape, !shape.shape) -> !shape.shape
+  %2 = shape.broadcast %0, %1
   %3 = "shape.print"(%2) : (!shape.shape) -> !shape.shape
   return
 }
