@@ -117,7 +117,7 @@ unsigned DwarfCompileUnit::getOrCreateSourceID(const DIFile *File) {
     return Asm->OutStreamer->emitDwarfFileDirective(0, "", "", None, None,
                                                     CUID);
   return Asm->OutStreamer->emitDwarfFileDirective(
-      0, File->getDirectory(), File->getFilename(), getMD5AsBytes(File),
+      0, File->getDirectory(), File->getFilename(), DD->getMD5AsBytes(File),
       File->getSource(), CUID);
 }
 
@@ -803,6 +803,10 @@ static SmallVector<const DIVariable *, 2> dependencies(DbgVariable *Var) {
     return Result;
   if (auto *DLVar = Array->getDataLocation())
     Result.push_back(DLVar);
+  if (auto *AsVar = Array->getAssociated())
+    Result.push_back(AsVar);
+  if (auto *AlVar = Array->getAllocated())
+    Result.push_back(AlVar);
   for (auto *El : Array->getElements()) {
     if (auto *Subrange = dyn_cast<DISubrange>(El)) {
       if (auto Count = Subrange->getCount())

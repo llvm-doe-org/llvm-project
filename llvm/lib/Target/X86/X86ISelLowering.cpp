@@ -6916,25 +6916,16 @@ static bool getTargetShuffleMask(SDNode *N, MVT VT, bool AllowSentinelZero,
     DecodeZeroMoveLowMask(NumElems, Mask);
     IsUnary = true;
     break;
-  case X86ISD::VBROADCAST: {
-    SDValue N0 = N->getOperand(0);
-    // See if we're broadcasting from index 0 of an EXTRACT_SUBVECTOR. If so,
-    // add the pre-extracted value to the Ops vector.
-    if (N0.getOpcode() == ISD::EXTRACT_SUBVECTOR &&
-        N0.getOperand(0).getValueType() == VT &&
-        N0.getConstantOperandVal(1) == 0)
-      Ops.push_back(N0.getOperand(0));
-
-    // We only decode broadcasts of same-sized vectors, unless the broadcast
-    // came from an extract from the original width. If we found one, we
-    // pushed it the Ops vector above.
-    if (N0.getValueType() == VT || !Ops.empty()) {
+  case X86ISD::VBROADCAST:
+    // We only decode broadcasts of same-sized vectors, peeking through to
+    // extracted subvectors is likely to cause hasOneUse issues with
+    // SimplifyDemandedBits etc.
+    if (N->getOperand(0).getValueType() == VT) {
       DecodeVectorBroadcast(NumElems, Mask);
       IsUnary = true;
       break;
     }
     return false;
-  }
   case X86ISD::VPERMILPV: {
     assert(N->getOperand(0).getValueType() == VT && "Unexpected value type");
     IsUnary = true;
@@ -46131,13 +46122,22 @@ static SDValue combineFMA(SDNode *N, SelectionDAG &DAG,
   if (!TLI.isTypeLegal(VT))
     return SDValue();
 
-  EVT ScalarVT = VT.getScalarType();
-  if ((ScalarVT != MVT::f32 && ScalarVT != MVT::f64) || !Subtarget.hasAnyFMA())
-    return SDValue();
-
   SDValue A = N->getOperand(IsStrict ? 1 : 0);
   SDValue B = N->getOperand(IsStrict ? 2 : 1);
   SDValue C = N->getOperand(IsStrict ? 3 : 2);
+
+  // If the operation allows fast-math and the target does not support FMA,
+  // split this into mul+add to avoid libcall(s).
+  SDNodeFlags Flags = N->getFlags();
+  if (!IsStrict && Flags.hasAllowReassociation() &&
+      TLI.isOperationExpand(ISD::FMA, VT)) {
+    SDValue Fmul = DAG.getNode(ISD::FMUL, dl, VT, A, B, Flags);
+    return DAG.getNode(ISD::FADD, dl, VT, Fmul, C, Flags);
+  }
+
+  EVT ScalarVT = VT.getScalarType();
+  if ((ScalarVT != MVT::f32 && ScalarVT != MVT::f64) || !Subtarget.hasAnyFMA())
+    return SDValue();
 
   auto invertIfNegative = [&DAG, &TLI, &DCI](SDValue &V) {
     bool CodeSize = DAG.getMachineFunction().getFunction().hasOptSize();
