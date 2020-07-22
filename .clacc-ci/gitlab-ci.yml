@@ -429,14 +429,14 @@ kold (test-all):
     - job: kold (build)
       artifacts: false
 
-python2 (test-all):
-  extends: [.python2, .test-all]
-  needs:
-    - job: python2 (build)
-      artifacts: false
-
 release (test-all):
   extends: [.release, .test-all]
   needs:
     - job: release (build)
+      artifacts: false
+
+python2 (test-all):
+  extends: [.python2, .test-all]
+  needs:
+    - job: python2 (build)
       artifacts: false
