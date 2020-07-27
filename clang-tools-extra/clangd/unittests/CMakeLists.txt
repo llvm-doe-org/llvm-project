@@ -13,6 +13,10 @@ include_directories(
   ${CLANGD_BINARY_DIR}
   )
 
+if (CXX_SUPPORTS_SUGGEST_OVERRIDE_FLAG)
+  add_compile_options("-Wno-suggest-override")
+endif()
+
 if(CLANG_BUILT_STANDALONE)
   # LLVMTestingSupport library is needed for clangd tests.
   if (EXISTS ${LLVM_MAIN_SRC_DIR}/lib/Testing/Support
@@ -20,10 +24,6 @@ if(CLANG_BUILT_STANDALONE)
     add_subdirectory(${LLVM_MAIN_SRC_DIR}/lib/Testing/Support
       lib/Testing/Support)
   endif()
-endif()
-
-if (CXX_SUPPORTS_SUGGEST_OVERRIDE_FLAG)
-  add_definitions("-Wno-suggest-override")
 endif()
 
 if (CLANGD_ENABLE_REMOTE)

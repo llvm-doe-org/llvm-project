@@ -6,7 +6,7 @@ function(add_mlir_unittest test_dirname)
 endfunction()
 
 if (CXX_SUPPORTS_SUGGEST_OVERRIDE_FLAG)
-  add_definitions("-Wno-suggest-override")
+  add_compile_options("-Wno-suggest-override")
 endif()
 
 add_subdirectory(Analysis)

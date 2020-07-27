@@ -15,7 +15,7 @@ function(add_llvm_target_unittest test_dir_name)
 endfunction()
 
 if (CXX_SUPPORTS_SUGGEST_OVERRIDE_FLAG)
-  add_definitions("-Wno-suggest-override")
+  add_compile_options("-Wno-suggest-override")
 endif()
 
 add_subdirectory(ADT)

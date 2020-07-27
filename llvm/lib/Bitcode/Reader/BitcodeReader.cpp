@@ -20,8 +20,9 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/Bitstream/BitstreamReader.h"
 #include "llvm/Bitcode/LLVMBitCodes.h"
+#include "llvm/Bitstream/BitcodeCommon.h"
+#include "llvm/Bitstream/BitstreamReader.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/IR/Argument.h"
 #include "llvm/IR/Attributes.h"
@@ -2969,12 +2970,15 @@ Error BitcodeReader::materializeMetadata() {
   }
 
   // Upgrade "Linker Options" module flag to "llvm.linker.options" module-level
-  // metadata.
-  if (Metadata *Val = TheModule->getModuleFlag("Linker Options")) {
-    NamedMDNode *LinkerOpts =
-        TheModule->getOrInsertNamedMetadata("llvm.linker.options");
-    for (const MDOperand &MDOptions : cast<MDNode>(Val)->operands())
-      LinkerOpts->addOperand(cast<MDNode>(MDOptions));
+  // metadata. Only upgrade if the new option doesn't exist to avoid upgrade
+  // multiple times.
+  if (!TheModule->getNamedMetadata("llvm.linker.options")) {
+    if (Metadata *Val = TheModule->getModuleFlag("Linker Options")) {
+      NamedMDNode *LinkerOpts =
+          TheModule->getOrInsertNamedMetadata("llvm.linker.options");
+      for (const MDOperand &MDOptions : cast<MDNode>(Val)->operands())
+        LinkerOpts->addOperand(cast<MDNode>(MDOptions));
+    }
   }
 
   DeferredMetadataInfo.clear();
@@ -4810,17 +4814,13 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
     case bitc::FUNC_CODE_INST_ALLOCA: { // ALLOCA: [instty, opty, op, align]
       if (Record.size() != 4)
         return error("Invalid record");
-      uint64_t AlignRecord = Record[3];
-      const uint64_t InAllocaMask = uint64_t(1) << 5;
-      const uint64_t ExplicitTypeMask = uint64_t(1) << 6;
-      const uint64_t SwiftErrorMask = uint64_t(1) << 7;
-      const uint64_t FlagMask = InAllocaMask | ExplicitTypeMask |
-                                SwiftErrorMask;
-      bool InAlloca = AlignRecord & InAllocaMask;
-      bool SwiftError = AlignRecord & SwiftErrorMask;
+      using APV = AllocaPackedValues;
+      const uint64_t Rec = Record[3];
+      const bool InAlloca = Bitfield::get<APV::UsedWithInAlloca>(Rec);
+      const bool SwiftError = Bitfield::get<APV::SwiftError>(Rec);
       FullTy = getFullyStructuredTypeByID(Record[0]);
       Type *Ty = flattenPointerTypes(FullTy);
-      if ((AlignRecord & ExplicitTypeMask) == 0) {
+      if (!Bitfield::get<APV::ExplicitType>(Rec)) {
         auto *PTy = dyn_cast_or_null<PointerType>(Ty);
         if (!PTy)
           return error("Old-style alloca with a non-pointer type");
@@ -4829,7 +4829,8 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
       Type *OpTy = getTypeByID(Record[1]);
       Value *Size = getFnValueByID(Record[2], OpTy);
       MaybeAlign Align;
-      if (Error Err = parseAlignmentValue(AlignRecord & ~FlagMask, Align)) {
+      if (Error Err =
+              parseAlignmentValue(Bitfield::get<APV::Align>(Rec), Align)) {
         return Err;
       }
       if (!Ty || !Size)
@@ -5391,6 +5392,36 @@ Error BitcodeReader::materialize(GlobalValue *GV) {
         continue;
       MDLoader->setStripTBAA(true);
       stripTBAA(F->getParent());
+    }
+  }
+
+  // "Upgrade" older incorrect branch weights by dropping them.
+  for (auto &I : instructions(F)) {
+    if (auto *MD = I.getMetadata(LLVMContext::MD_prof)) {
+      if (MD->getOperand(0) != nullptr && isa<MDString>(MD->getOperand(0))) {
+        MDString *MDS = cast<MDString>(MD->getOperand(0));
+        StringRef ProfName = MDS->getString();
+        // Check consistency of !prof branch_weights metadata.
+        if (!ProfName.equals("branch_weights"))
+          continue;
+        unsigned ExpectedNumOperands = 0;
+        if (BranchInst *BI = dyn_cast<BranchInst>(&I))
+          ExpectedNumOperands = BI->getNumSuccessors();
+        else if (SwitchInst *SI = dyn_cast<SwitchInst>(&I))
+          ExpectedNumOperands = SI->getNumSuccessors();
+        else if (isa<CallInst>(&I))
+          ExpectedNumOperands = 1;
+        else if (IndirectBrInst *IBI = dyn_cast<IndirectBrInst>(&I))
+          ExpectedNumOperands = IBI->getNumDestinations();
+        else if (isa<SelectInst>(&I))
+          ExpectedNumOperands = 2;
+        else
+          continue; // ignore and continue.
+
+        // If branch weight doesn't match, just strip branch weight.
+        if (MD->getNumOperands() != 1 + ExpectedNumOperands)
+          I.setMetadata(LLVMContext::MD_prof, nullptr);
+      }
     }
   }
 

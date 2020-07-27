@@ -1,6 +1,10 @@
 add_definitions(-DGTEST_LANG_CXX11=1)
 add_definitions(-DGTEST_HAS_TR1_TUPLE=0)
 
+if (CXX_SUPPORTS_SUGGEST_OVERRIDE_FLAG)
+  add_compile_options("-Wno-suggest-override")
+endif()
+
 add_llvm_library(LLVMTestingSupport
   Annotations.cpp
   Error.cpp
@@ -14,10 +18,6 @@ add_llvm_library(LLVMTestingSupport
   LINK_COMPONENTS
   Support
   )
-
-if (CXX_SUPPORTS_SUGGEST_OVERRIDE_FLAG)
-  add_definitions("-Wno-suggest-override")
-endif()
 
 include_directories(${LLVM_MAIN_SRC_DIR}/utils/unittest/googletest/include)
 include_directories(${LLVM_MAIN_SRC_DIR}/utils/unittest/googlemock/include)
