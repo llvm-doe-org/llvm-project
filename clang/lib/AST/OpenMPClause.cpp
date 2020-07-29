@@ -17,6 +17,7 @@
 #include "clang/AST/DeclOpenMP.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/OpenMPKinds.h"
+#include "clang/Basic/TargetInfo.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -2139,9 +2140,10 @@ void OMPTraitInfo::getAsVariantMatchInfo(ASTContext &ASTCtx,
                 Selector.ScoreOrCondition->getIntegerConstantExpr(ASTCtx))
           VMI.addTrait(CondVal->isNullValue()
                            ? TraitProperty::user_condition_false
-                           : TraitProperty::user_condition_true);
+                           : TraitProperty::user_condition_true,
+                       "<condition>");
         else
-          VMI.addTrait(TraitProperty::user_condition_false);
+          VMI.addTrait(TraitProperty::user_condition_false, "<condition>");
         continue;
       }
 
@@ -2151,11 +2153,12 @@ void OMPTraitInfo::getAsVariantMatchInfo(ASTContext &ASTCtx,
         if ((Score = Selector.ScoreOrCondition->getIntegerConstantExpr(ASTCtx)))
           ScorePtr = &*Score;
         else
-          VMI.addTrait(TraitProperty::user_condition_false);
+          VMI.addTrait(TraitProperty::user_condition_false,
+                       "<non-constant-score>");
       }
 
       for (const OMPTraitProperty &Property : Selector.Properties)
-        VMI.addTrait(Set.Kind, Property.Kind, ScorePtr);
+        VMI.addTrait(Set.Kind, Property.Kind, Property.RawString, ScorePtr);
 
       if (Set.Kind != TraitSet::construct)
         continue;
@@ -2212,7 +2215,8 @@ void OMPTraitInfo::print(llvm::raw_ostream &OS,
           if (!FirstProperty)
             OS << ", ";
           FirstProperty = false;
-          OS << getOpenMPContextTraitPropertyName(Property.Kind);
+          OS << getOpenMPContextTraitPropertyName(Property.Kind,
+                                                  Property.RawString);
         }
       }
       OS << ")";
@@ -2239,7 +2243,9 @@ std::string OMPTraitInfo::getMangledName() const {
         continue;
 
       for (const OMPTraitProperty &Property : Selector.Properties)
-        OS << '$' << 'P' << getOpenMPContextTraitPropertyName(Property.Kind);
+        OS << '$' << 'P'
+           << getOpenMPContextTraitPropertyName(Property.Kind,
+                                                Property.RawString);
     }
   }
   return OS.str();
@@ -2269,8 +2275,9 @@ OMPTraitInfo::OMPTraitInfo(StringRef MangledName) {
         Selector.Properties.push_back(OMPTraitProperty());
         OMPTraitProperty &Property = Selector.Properties.back();
         std::pair<StringRef, StringRef> PropRestPair = MangledName.split('$');
-        Property.Kind =
-            getOpenMPContextTraitPropertyKind(Set.Kind, PropRestPair.first);
+        Property.RawString = PropRestPair.first;
+        Property.Kind = getOpenMPContextTraitPropertyKind(
+            Set.Kind, Selector.Kind, PropRestPair.first);
         MangledName = PropRestPair.second;
       } while (true);
     } while (true);
@@ -2287,4 +2294,25 @@ llvm::raw_ostream &clang::operator<<(llvm::raw_ostream &OS,
 llvm::raw_ostream &clang::operator<<(llvm::raw_ostream &OS,
                                      const OMPTraitInfo *TI) {
   return TI ? OS << *TI : OS;
+}
+
+TargetOMPContext::TargetOMPContext(
+    ASTContext &ASTCtx, std::function<void(StringRef)> &&DiagUnknownTrait,
+    const FunctionDecl *CurrentFunctionDecl)
+    : OMPContext(ASTCtx.getLangOpts().OpenMPIsDevice,
+                 ASTCtx.getTargetInfo().getTriple()),
+      FeatureValidityCheck([&](StringRef FeatureName) {
+        return ASTCtx.getTargetInfo().isValidFeatureName(FeatureName);
+      }),
+      DiagUnknownTrait(std::move(DiagUnknownTrait)) {
+  ASTCtx.getFunctionFeatureMap(FeatureMap, CurrentFunctionDecl);
+}
+
+bool TargetOMPContext::matchesISATrait(StringRef RawString) const {
+  auto It = FeatureMap.find(RawString);
+  if (It != FeatureMap.end())
+    return It->second;
+  if (!FeatureValidityCheck(RawString))
+    DiagUnknownTrait(RawString);
+  return false;
 }
