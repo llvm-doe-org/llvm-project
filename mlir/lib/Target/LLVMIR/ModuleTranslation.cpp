@@ -20,6 +20,7 @@
 #include "mlir/IR/Module.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Support/LLVM.h"
+#include "mlir/Target/LLVMIR/TypeTranslation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include "llvm/ADT/SetVector.h"
@@ -399,13 +400,13 @@ ModuleTranslation::convertOmpParallel(Operation &opInst,
     llvm::Instruction *codeGenIPBBTI = codeGenIPBB->getTerminator();
 
     builder.SetInsertPoint(codeGenIPBB);
-
-    for (auto &region : opInst.getRegions()) {
-      for (auto &bb : region) {
-        auto *llvmBB = llvm::BasicBlock::Create(
-            llvmContext, "omp.par.region", codeGenIP.getBlock()->getParent());
-        blockMapping[&bb] = llvmBB;
-      }
+    // ParallelOp has only `1` region associated with it.
+    auto &region = cast<omp::ParallelOp>(opInst).getRegion();
+    for (auto &bb : region) {
+      auto *llvmBB = llvm::BasicBlock::Create(
+          llvmContext, "omp.par.region", codeGenIP.getBlock()->getParent());
+      blockMapping[&bb] = llvmBB;
+    }
 
       // Then, convert blocks one by one in topological order to ensure
       // defs are converted before uses.
@@ -433,7 +434,6 @@ ModuleTranslation::convertOmpParallel(Operation &opInst,
       // Finally, after all blocks have been traversed and values mapped,
       // connect the PHI nodes to the results of preceding blocks.
       connectPHINodes(region, valueMapping, blockMapping);
-    }
   };
 
   // TODO: Perform appropriate actions according to the data-sharing
@@ -456,8 +456,12 @@ ModuleTranslation::convertOmpParallel(Operation &opInst,
   llvm::Value *ifCond = nullptr;
   llvm::Value *numThreads = nullptr;
   bool isCancellable = false;
+  // TODO: Determine the actual alloca insertion point, e.g., the function
+  // entry or the alloca insertion point as provided by the body callback
+  // above.
+  llvm::OpenMPIRBuilder::InsertPointTy allocaIP(builder.saveIP());
   builder.restoreIP(ompBuilder->CreateParallel(
-      builder, bodyGenCB, privCB, finiCB, ifCond, numThreads,
+      builder, allocaIP, bodyGenCB, privCB, finiCB, ifCond, numThreads,
       llvm::omp::OMP_PROC_BIND_default, isCancellable));
   return success();
 }
@@ -929,7 +933,9 @@ LogicalResult ModuleTranslation::convertFunctions() {
 }
 
 llvm::Type *ModuleTranslation::convertType(LLVMType type) {
-  return LLVM::convertLLVMType(type);
+  // Lock the LLVM context as we create types in it.
+  llvm::sys::SmartScopedLock<true> lock(llvmDialect->getLLVMContextMutex());
+  return LLVM::translateTypeToLLVMIR(type, llvmDialect->getLLVMContext());
 }
 
 /// A helper to look up remapped operands in the value remapping table.`

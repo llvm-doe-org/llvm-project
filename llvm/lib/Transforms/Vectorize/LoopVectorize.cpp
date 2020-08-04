@@ -6463,7 +6463,7 @@ unsigned LoopVectorizationCostModel::getInstructionCost(Instruction *I,
       assert((isa<LoadInst>(I) || isa<StoreInst>(I)) &&
              "Expected a load or a store!");
 
-      if (VF == 1)
+      if (VF == 1 || !TheLoop->contains(I))
         return TTI::CastContextHint::Normal;
 
       switch (getWideningDecision(I, VF)) {
@@ -7459,7 +7459,7 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
 
   // Finally, if tail is folded by masking, introduce selects between the phi
   // and the live-out instruction of each reduction, at the end of the latch.
-  if (CM.foldTailByMasking()) {
+  if (CM.foldTailByMasking() && !Legal->getReductionVars().empty()) {
     Builder.setInsertPoint(VPBB);
     auto *Cond = RecipeBuilder.createBlockInMask(OrigLoop->getHeader(), Plan);
     for (auto &Reduction : Legal->getReductionVars()) {
