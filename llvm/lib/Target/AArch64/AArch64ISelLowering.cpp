@@ -1076,14 +1076,17 @@ void AArch64TargetLowering::addTypeForFixedLengthSVE(MVT VT) {
 
   // Lower fixed length vector operations to scalable equivalents.
   setOperationAction(ISD::ADD, VT, Custom);
+  setOperationAction(ISD::AND, VT, Custom);
   setOperationAction(ISD::FADD, VT, Custom);
   setOperationAction(ISD::FDIV, VT, Custom);
   setOperationAction(ISD::FMA, VT, Custom);
   setOperationAction(ISD::FMUL, VT, Custom);
   setOperationAction(ISD::FSUB, VT, Custom);
   setOperationAction(ISD::LOAD, VT, Custom);
+  setOperationAction(ISD::OR, VT, Custom);
   setOperationAction(ISD::STORE, VT, Custom);
   setOperationAction(ISD::TRUNCATE, VT, Custom);
+  setOperationAction(ISD::XOR, VT, Custom);
 }
 
 void AArch64TargetLowering::addDRTypeForNEON(MVT VT) {
@@ -2544,7 +2547,10 @@ SDValue AArch64TargetLowering::LowerF128Call(SDValue Op, SelectionDAG &DAG,
   return IsStrict ? DAG.getMergeValues({Result, Chain}, dl) : Result;
 }
 
-static SDValue LowerXOR(SDValue Op, SelectionDAG &DAG) {
+SDValue AArch64TargetLowering::LowerXOR(SDValue Op, SelectionDAG &DAG) const {
+  if (useSVEForFixedLengthVectorVT(Op.getValueType()))
+    return LowerToScalableOp(Op, DAG);
+
   SDValue Sel = Op.getOperand(0);
   SDValue Other = Op.getOperand(1);
   SDLoc dl(Sel);
@@ -3536,9 +3542,8 @@ SDValue AArch64TargetLowering::LowerOperation(SDValue Op,
   case ISD::INSERT_SUBVECTOR:
     return LowerINSERT_SUBVECTOR(Op, DAG);
   case ISD::SDIV:
-    return LowerToPredicatedOp(Op, DAG, AArch64ISD::SDIV_PRED);
   case ISD::UDIV:
-    return LowerToPredicatedOp(Op, DAG, AArch64ISD::UDIV_PRED);
+    return LowerDIV(Op, DAG);
   case ISD::SMIN:
     return LowerToPredicatedOp(Op, DAG, AArch64ISD::SMIN_PRED);
   case ISD::UMIN:
@@ -3612,6 +3617,8 @@ SDValue AArch64TargetLowering::LowerOperation(SDValue Op,
     if (useSVEForFixedLengthVectorVT(Op.getValueType()))
       return LowerToPredicatedOp(Op, DAG, AArch64ISD::ADD_PRED);
     llvm_unreachable("Unexpected request to lower ISD::ADD");
+  case ISD::AND:
+    return LowerToScalableOp(Op, DAG);
   }
 }
 
@@ -4133,6 +4140,7 @@ static bool canGuaranteeTCO(CallingConv::ID CC) {
 static bool mayTailCallThisCC(CallingConv::ID CC) {
   switch (CC) {
   case CallingConv::C:
+  case CallingConv::AArch64_SVE_VectorCall:
   case CallingConv::PreserveMost:
   case CallingConv::Swift:
     return true;
@@ -4152,6 +4160,15 @@ bool AArch64TargetLowering::isEligibleForTailCallOptimization(
   MachineFunction &MF = DAG.getMachineFunction();
   const Function &CallerF = MF.getFunction();
   CallingConv::ID CallerCC = CallerF.getCallingConv();
+
+  // If this function uses the C calling convention but has an SVE signature,
+  // then it preserves more registers and should assume the SVE_VectorCall CC.
+  // The check for matching callee-saved regs will determine whether it is
+  // eligible for TCO.
+  if (CallerCC == CallingConv::C &&
+      AArch64RegisterInfo::hasSVEArgsOrReturn(&MF))
+    CallerCC = CallingConv::AArch64_SVE_VectorCall;
+
   bool CCMatch = CallerCC == CalleeCC;
 
   // When using the Windows calling convention on a non-windows OS, we want
@@ -4338,6 +4355,20 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
   AArch64FunctionInfo *FuncInfo = MF.getInfo<AArch64FunctionInfo>();
   bool TailCallOpt = MF.getTarget().Options.GuaranteedTailCallOpt;
   bool IsSibCall = false;
+
+  // Check callee args/returns for SVE registers and set calling convention
+  // accordingly.
+  if (CallConv == CallingConv::C) {
+    bool CalleeOutSVE = any_of(Outs, [](ISD::OutputArg &Out){
+      return Out.VT.isScalableVector();
+    });
+    bool CalleeInSVE = any_of(Ins, [](ISD::InputArg &In){
+      return In.VT.isScalableVector();
+    });
+
+    if (CalleeInSVE || CalleeOutSVE)
+      CallConv = CallingConv::AArch64_SVE_VectorCall;
+  }
 
   if (IsTailCall) {
     // Check if it's really possible to do a tail call.
@@ -4691,20 +4722,6 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
   for (auto &RegToPass : RegsToPass)
     Ops.push_back(DAG.getRegister(RegToPass.first,
                                   RegToPass.second.getValueType()));
-
-  // Check callee args/returns for SVE registers and set calling convention
-  // accordingly.
-  if (CallConv == CallingConv::C) {
-    bool CalleeOutSVE = any_of(Outs, [](ISD::OutputArg &Out){
-      return Out.VT.isScalableVector();
-    });
-    bool CalleeInSVE = any_of(Ins, [](ISD::InputArg &In){
-      return In.VT.isScalableVector();
-    });
-
-    if (CalleeInSVE || CalleeOutSVE)
-      CallConv = CallingConv::AArch64_SVE_VectorCall;
-  }
 
   // Add a register mask operand representing the call-preserved registers.
   const uint32_t *Mask;
@@ -8275,6 +8292,9 @@ static SDValue tryLowerToSLI(SDNode *N, SelectionDAG &DAG) {
 
 SDValue AArch64TargetLowering::LowerVectorOR(SDValue Op,
                                              SelectionDAG &DAG) const {
+  if (useSVEForFixedLengthVectorVT(Op.getValueType()))
+    return LowerToScalableOp(Op, DAG);
+
   // Attempt to form a vector S[LR]I from (or (and X, C1), (lsl Y, C2))
   if (SDValue Res = tryLowerToSLI(Op.getNode(), DAG))
     return Res;
@@ -8789,6 +8809,35 @@ SDValue AArch64TargetLowering::LowerINSERT_SUBVECTOR(SDValue Op,
     return Op;
 
   return SDValue();
+}
+
+SDValue AArch64TargetLowering::LowerDIV(SDValue Op, SelectionDAG &DAG) const {
+  EVT VT = Op.getValueType();
+  bool Signed = Op.getOpcode() == ISD::SDIV;
+  unsigned PredOpcode = Signed ? AArch64ISD::SDIV_PRED : AArch64ISD::UDIV_PRED;
+  if (VT == MVT::nxv4i32 || VT == MVT::nxv2i64)
+    return LowerToPredicatedOp(Op, DAG, PredOpcode);
+
+  // SVE doesn't have i8 and i16 DIV operations; widen them to 32-bit
+  // operations, and truncate the result.
+  EVT WidenedVT;
+  if (VT == MVT::nxv16i8)
+    WidenedVT = MVT::nxv8i16;
+  else if (VT == MVT::nxv8i16)
+    WidenedVT = MVT::nxv4i32;
+  else
+    llvm_unreachable("Unexpected Custom DIV operation");
+
+  SDLoc dl(Op);
+  unsigned UnpkLo = Signed ? AArch64ISD::SUNPKLO : AArch64ISD::UUNPKLO;
+  unsigned UnpkHi = Signed ? AArch64ISD::SUNPKHI : AArch64ISD::UUNPKHI;
+  SDValue Op0Lo = DAG.getNode(UnpkLo, dl, WidenedVT, Op.getOperand(0));
+  SDValue Op1Lo = DAG.getNode(UnpkLo, dl, WidenedVT, Op.getOperand(1));
+  SDValue Op0Hi = DAG.getNode(UnpkHi, dl, WidenedVT, Op.getOperand(0));
+  SDValue Op1Hi = DAG.getNode(UnpkHi, dl, WidenedVT, Op.getOperand(1));
+  SDValue ResultLo = DAG.getNode(Op.getOpcode(), dl, WidenedVT, Op0Lo, Op1Lo);
+  SDValue ResultHi = DAG.getNode(Op.getOpcode(), dl, WidenedVT, Op0Hi, Op1Hi);
+  return DAG.getNode(AArch64ISD::UZP1, dl, VT, ResultLo, ResultHi);
 }
 
 bool AArch64TargetLowering::isShuffleMaskLegal(ArrayRef<int> M, EVT VT) const {
@@ -15199,6 +15248,8 @@ SDValue AArch64TargetLowering::LowerFixedLengthVectorTruncateToSVE(
   return convertFromScalableVector(DAG, VT, Val);
 }
 
+// Convert vector operation 'Op' to an equivalent predicated operation whereby
+// the original operation's type is used to construct a suitable predicate.
 SDValue AArch64TargetLowering::LowerToPredicatedOp(SDValue Op,
                                                    SelectionDAG &DAG,
                                                    unsigned NewOp) const {
@@ -15209,7 +15260,7 @@ SDValue AArch64TargetLowering::LowerToPredicatedOp(SDValue Op,
   if (useSVEForFixedLengthVectorVT(VT)) {
     EVT ContainerVT = getContainerForFixedLengthVector(DAG, VT);
 
-    // Create list of operands by convereting existing ones to scalable types.
+    // Create list of operands by converting existing ones to scalable types.
     SmallVector<SDValue, 4> Operands = {Pg};
     for (const SDValue &V : Op->op_values()) {
       if (isa<CondCodeSDNode>(V)) {
@@ -15236,4 +15287,26 @@ SDValue AArch64TargetLowering::LowerToPredicatedOp(SDValue Op,
   }
 
   return DAG.getNode(NewOp, DL, VT, Operands);
+}
+
+// If a fixed length vector operation has no side effects when applied to
+// undefined elements, we can safely use scalable vectors to perform the same
+// operation without needing to worry about predication.
+SDValue AArch64TargetLowering::LowerToScalableOp(SDValue Op,
+                                                 SelectionDAG &DAG) const {
+  EVT VT = Op.getValueType();
+  assert(useSVEForFixedLengthVectorVT(VT) &&
+         "Only expected to lower fixed length vector operation!");
+  EVT ContainerVT = getContainerForFixedLengthVector(DAG, VT);
+
+  // Create list of operands by converting existing ones to scalable types.
+  SmallVector<SDValue, 4> Ops;
+  for (const SDValue &V : Op->op_values()) {
+    assert(useSVEForFixedLengthVectorVT(V.getValueType()) &&
+           "Only fixed length vectors are supported!");
+    Ops.push_back(convertToScalableVector(DAG, ContainerVT, V));
+  }
+
+  auto ScalableRes = DAG.getNode(Op.getOpcode(), SDLoc(Op), ContainerVT, Ops);
+  return convertFromScalableVector(DAG, VT, ScalableRes);
 }
