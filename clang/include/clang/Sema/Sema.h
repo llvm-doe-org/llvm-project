@@ -10853,16 +10853,12 @@ public:
   void ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
                                       Scope *CurScope);
 
-  /// Initialization of captured region for OpenACC region.
+  /// Start of OpenACC region.
   bool ActOnOpenACCRegionStart(OpenACCDirectiveKind DKind,
-                               ArrayRef<ACCClause *> Clauses, Scope *CurScope,
-                               SourceLocation StarLoc, SourceLocation EndLoc);
+                               ArrayRef<ACCClause *> Clauses,
+                               SourceLocation StartLoc);
   /// End of OpenACC region.
-  ///
-  /// \param S Statement associated with the current OpenACC region.
-  ///
-  /// \returns Statement for finished OpenACC region.
-  StmtResult ActOnOpenACCRegionEnd(StmtResult S);
+  bool ActOnOpenACCRegionEnd();
   StmtResult ActOnOpenACCExecutableDirective(
       OpenACCDirectiveKind Kind, ArrayRef<ACCClause *> Clauses, Stmt *AStmt,
       SourceLocation StartLoc, SourceLocation EndLoc);

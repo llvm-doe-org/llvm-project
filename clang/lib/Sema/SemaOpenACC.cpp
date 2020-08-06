@@ -1283,9 +1283,9 @@ public:
 };
 } // namespace
 
-bool Sema::ActOnOpenACCRegionStart(
-    OpenACCDirectiveKind DKind, ArrayRef<ACCClause *> Clauses, Scope *CurScope,
-    SourceLocation StartLoc, SourceLocation EndLoc) {
+bool Sema::ActOnOpenACCRegionStart(OpenACCDirectiveKind DKind,
+                                   ArrayRef<ACCClause *> Clauses,
+                                   SourceLocation StartLoc) {
   bool ErrorFound = false;
   // Check directive nesting.
   SourceLocation ParentLoc;
@@ -1389,11 +1389,7 @@ bool Sema::ActOnOpenACCRegionStart(
   return ErrorFound;
 }
 
-StmtResult Sema::ActOnOpenACCRegionEnd(StmtResult S) {
-  if (!S.isUsable())
-    return StmtError();
-  return S.get();
-}
+bool Sema::ActOnOpenACCRegionEnd() { return false; }
 
 StmtResult Sema::ActOnOpenACCExecutableDirective(
     OpenACCDirectiveKind DKind, ArrayRef<ACCClause *> Clauses,

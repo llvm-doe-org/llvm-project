@@ -10141,17 +10141,16 @@ StmtResult TreeTransform<Derived>::TransformACCExecutableDirective(
   StmtResult AssociatedStmt;
   {
     if (getDerived().getSema().ActOnOpenACCRegionStart(
-            D->getDirectiveKind(), TClauses, /*CurScope=*/nullptr,
-            D->getBeginLoc(), D->getEndLoc()))
+            D->getDirectiveKind(), TClauses, D->getBeginLoc()))
       return StmtError();
-    StmtResult Body;
     {
       Sema::CompoundScopeRAII CompoundScope(getSema());
       Stmt *CS = D->getAssociatedStmt();
-      Body = getDerived().TransformStmt(CS);
+      AssociatedStmt = getDerived().TransformStmt(CS);
+      if (AssociatedStmt.isInvalid())
+        return StmtError();
     }
-    AssociatedStmt = getDerived().getSema().ActOnOpenACCRegionEnd(Body);
-    if (AssociatedStmt.isInvalid())
+    if (getDerived().getSema().ActOnOpenACCRegionEnd())
       return StmtError();
   }
   if (TClauses.size() != Clauses.size())

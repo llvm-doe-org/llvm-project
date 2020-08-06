@@ -136,13 +136,9 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
     ConsumeAnnotationToken();
 
     StmtResult AssociatedStmt;
-    bool ErrorFound = false;
-    {
-      // The body is a block scope like in Lambdas and Blocks.
-      ErrorFound |= Actions.ActOnOpenACCRegionStart(
-          DKind, Clauses, getCurScope(), Loc, EndLoc);
-      AssociatedStmt = Actions.ActOnOpenACCRegionEnd(ParseStatement());
-    }
+    bool ErrorFound = Actions.ActOnOpenACCRegionStart(DKind, Clauses, Loc);
+    AssociatedStmt = ParseStatement();
+    ErrorFound |= Actions.ActOnOpenACCRegionEnd();
     Directive = Actions.ActOnOpenACCExecutableDirective(
         DKind, Clauses, AssociatedStmt.get(), Loc, EndLoc);
 
