@@ -1,10 +1,10 @@
 // Check diagnostics for "acc data".
 
 // RUN: %data {
-// RUN:   (cflags='-DERR=ERR_ACC -DCOPY=copy'         )
-// RUN:   (cflags=-DERR=ERR_OMP_SUBARRAY_DATA         )
-// RUN:   (cflags=-DERR=ERR_OMP_SUBARRAY_PAR          )
-// RUN:   (cflags=-DERR=ERR_OMP_SUBARRAY_MISSED       )
+// RUN:   (cflags=-DERR=ERR_ACC                )
+// RUN:   (cflags=-DERR=ERR_OMP_SUBARRAY_DATA  )
+// RUN:   (cflags=-DERR=ERR_OMP_SUBARRAY_PAR   )
+// RUN:   (cflags=-DERR=ERR_OMP_SUBARRAY_MISSED)
 // RUN: }
 
 // OpenACC disabled
@@ -293,9 +293,10 @@ int main() {
       ;
 
   #pragma acc parallel loop
+  for (int i = 0; i < 5; ++i)
   // expected-note@+1 {{enclosing '#pragma acc loop' here}}
   #pragma acc loop
-  for (int i = 0; i < 5; ++i)
+  for (int j = 0; j < 5; ++j)
     // expected-error@+1 {{'#pragma acc data' cannot be nested within '#pragma acc loop'}}
     #pragma acc data copy(i)
       ;
