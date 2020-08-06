@@ -67,11 +67,6 @@ public:
     if (!ACCNode->hasOMPNode())
       return false;
 
-    // TODO: Handle standalone directives.  See fixme below about _Pragma form
-    // without associated statement.
-    assert(ACCNode->hasAssociatedStmt() &&
-           "rewrite of standalone OpenACC directive not yet implemented");
-
     // Are we rewriting the full OpenACC construct or just the directive?
     //
     // TODO: If the start or end location of the text that needs to be

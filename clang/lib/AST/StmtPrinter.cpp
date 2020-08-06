@@ -1185,7 +1185,14 @@ void StmtPrinter::PrintOMPExecutableDirectiveBody(Stmt *S) {
     PrintStmt(S, 0);
     return;
   }
-  if (OMPDir->hasAssociatedStmt()) {
+  // An OpenMP standalone directive, such as "omp target update" can have a
+  // CapturedStmt as an associated statement, and that prints as an empty
+  // compound statement.  However, the printed source code shouldn't show that,
+  // so skip printing it here.  (Similarly, standalone directive visit
+  // functions, such as StmtPrinter::VisitOMPTargetUpdateDirective suppress
+  // printing of the associated statement by specifying ForceNoStmt=true when
+  // calling PrintOMPExecutableDirective.)
+  if (OMPDir->hasAssociatedStmt() && !OMPDir->isStandaloneDirective()) {
     assert(isa<CapturedStmt>(OMPDir->getAssociatedStmt()) &&
            "Expected captured statement!");
     Stmt *CS = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
@@ -1204,12 +1211,15 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
     PrintACCExecutableDirectiveBody(S);
     return;
   }
-  assert(S->hasAssociatedStmt() ==
-         (isa<OMPExecutableDirective>(S->getOMPNode())
-          ? cast<OMPExecutableDirective>(S->getOMPNode())->hasAssociatedStmt()
-          : true)
-         && "ACCExecutableDirective and its OMP node must either both or"
-            " neither have an associated statement");
+#ifndef NDEBUG
+  OMPExecutableDirective *OMPDir =
+      dyn_cast<OMPExecutableDirective>(S->getOMPNode());
+  bool OMPHasAssociatedStmt = !OMPDir || (OMPDir->hasAssociatedStmt() &&
+                                          !OMPDir->isStandaloneDirective());
+  assert(S->hasAssociatedStmt() == OMPHasAssociatedStmt &&
+         "ACCExecutableDirective and its OMP node must either both or neither "
+         "have an associated statement");
+#endif
   int EffectiveDirectives =
       getOpenACCEffectiveDirectives(S->getDirectiveKind());
   switch (Policy.OpenACCPrint) {

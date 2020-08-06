@@ -102,6 +102,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
   SourceLocation Loc = ConsumeAnnotationToken(), EndLoc;
   OpenACCDirectiveKind DKind = parseOpenACCDirectiveKind(*this);
   StmtResult Directive = StmtError();
+  bool HasAssociatedStatement = true;
 
   switch (DKind) {
   case ACCD_data:
@@ -135,9 +136,10 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
     // Consume final annot_pragma_openacc_end.
     ConsumeAnnotationToken();
 
-    StmtResult AssociatedStmt;
     bool ErrorFound = Actions.ActOnOpenACCRegionStart(DKind, Clauses, Loc);
-    AssociatedStmt = ParseStatement();
+    StmtResult AssociatedStmt;
+    if (HasAssociatedStatement)
+      AssociatedStmt = ParseStatement();
     ErrorFound |= Actions.ActOnOpenACCRegionEnd();
     Directive = Actions.ActOnOpenACCExecutableDirective(
         DKind, Clauses, AssociatedStmt.get(), Loc, EndLoc);

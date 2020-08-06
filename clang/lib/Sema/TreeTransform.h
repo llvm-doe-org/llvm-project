@@ -10138,21 +10138,19 @@ StmtResult TreeTransform<Derived>::TransformACCExecutableDirective(
       TClauses.push_back(nullptr);
     }
   }
+  if (getDerived().getSema().ActOnOpenACCRegionStart(
+          D->getDirectiveKind(), TClauses, D->getBeginLoc()))
+    return StmtError();
   StmtResult AssociatedStmt;
-  {
-    if (getDerived().getSema().ActOnOpenACCRegionStart(
-            D->getDirectiveKind(), TClauses, D->getBeginLoc()))
-      return StmtError();
-    {
-      Sema::CompoundScopeRAII CompoundScope(getSema());
-      Stmt *CS = D->getAssociatedStmt();
-      AssociatedStmt = getDerived().TransformStmt(CS);
-      if (AssociatedStmt.isInvalid())
-        return StmtError();
-    }
-    if (getDerived().getSema().ActOnOpenACCRegionEnd())
+  if (D->hasAssociatedStmt()) {
+    Sema::CompoundScopeRAII CompoundScope(getSema());
+    Stmt *CS = D->getAssociatedStmt();
+    AssociatedStmt = getDerived().TransformStmt(CS);
+    if (AssociatedStmt.isInvalid())
       return StmtError();
   }
+  if (getDerived().getSema().ActOnOpenACCRegionEnd())
+    return StmtError();
   if (TClauses.size() != Clauses.size())
     return StmtError();
 
