@@ -1384,7 +1384,7 @@ bool SITargetLowering::canMergeStoresTo(unsigned AS, EVT MemVT,
 }
 
 bool SITargetLowering::allowsMisalignedMemoryAccessesImpl(
-    unsigned Size, unsigned AddrSpace, unsigned Align,
+    unsigned Size, unsigned AddrSpace, Align Alignment,
     MachineMemOperand::Flags Flags, bool *IsFast) const {
   if (IsFast)
     *IsFast = false;
@@ -1394,7 +1394,7 @@ bool SITargetLowering::allowsMisalignedMemoryAccessesImpl(
     // ds_read/write_b64 require 8-byte alignment, but we can do a 4 byte
     // aligned, 8 byte access in a single operation using ds_read2/write2_b32
     // with adjacent offsets.
-    bool AlignedBy4 = (Align % 4 == 0);
+    bool AlignedBy4 = Alignment >= Align(4);
     if (IsFast)
       *IsFast = AlignedBy4;
 
@@ -1407,7 +1407,7 @@ bool SITargetLowering::allowsMisalignedMemoryAccessesImpl(
   if (!Subtarget->hasUnalignedScratchAccess() &&
       (AddrSpace == AMDGPUAS::PRIVATE_ADDRESS ||
        AddrSpace == AMDGPUAS::FLAT_ADDRESS)) {
-    bool AlignedBy4 = Align >= 4;
+    bool AlignedBy4 = Alignment >= Align(4);
     if (IsFast)
       *IsFast = AlignedBy4;
 
@@ -1422,7 +1422,7 @@ bool SITargetLowering::allowsMisalignedMemoryAccessesImpl(
       // 2-byte alignment is worse than 1 unless doing a 2-byte accesss.
       *IsFast = (AddrSpace == AMDGPUAS::CONSTANT_ADDRESS ||
                  AddrSpace == AMDGPUAS::CONSTANT_ADDRESS_32BIT) ?
-        Align >= 4 : Align != 2;
+        Alignment >= Align(4) : Alignment != Align(2);
     }
 
     return true;
@@ -1438,12 +1438,12 @@ bool SITargetLowering::allowsMisalignedMemoryAccessesImpl(
   if (IsFast)
     *IsFast = true;
 
-  return Size >= 32 && Align >= 4;
+  return Size >= 32 && Alignment >= Align(4);
 }
 
 bool SITargetLowering::allowsMisalignedMemoryAccesses(
-    EVT VT, unsigned AddrSpace, unsigned Align, MachineMemOperand::Flags Flags,
-    bool *IsFast) const {
+    EVT VT, unsigned AddrSpace, unsigned Alignment,
+    MachineMemOperand::Flags Flags, bool *IsFast) const {
   if (IsFast)
     *IsFast = false;
 
@@ -1457,7 +1457,7 @@ bool SITargetLowering::allowsMisalignedMemoryAccesses(
   }
 
   return allowsMisalignedMemoryAccessesImpl(VT.getSizeInBits(), AddrSpace,
-                                            Align, Flags, IsFast);
+                                            Align(Alignment), Flags, IsFast);
 }
 
 EVT SITargetLowering::getOptimalMemOpType(
@@ -6641,28 +6641,6 @@ static unsigned getBufferOffsetForMMO(SDValue VOffset,
          cast<ConstantSDNode>(Offset)->getSExtValue();
 }
 
-static unsigned getDSShaderTypeValue(const MachineFunction &MF) {
-  switch (MF.getFunction().getCallingConv()) {
-  case CallingConv::AMDGPU_PS:
-    return 1;
-  case CallingConv::AMDGPU_VS:
-    return 2;
-  case CallingConv::AMDGPU_GS:
-    return 3;
-  case CallingConv::AMDGPU_HS:
-  case CallingConv::AMDGPU_LS:
-  case CallingConv::AMDGPU_ES:
-    report_fatal_error("ds_ordered_count unsupported for this calling conv");
-  case CallingConv::AMDGPU_CS:
-  case CallingConv::AMDGPU_KERNEL:
-  case CallingConv::C:
-  case CallingConv::Fast:
-  default:
-    // Assume other calling conventions are various compute callable functions
-    return 0;
-  }
-}
-
 SDValue SITargetLowering::lowerRawBufferAtomicIntrin(SDValue Op,
                                                      SelectionDAG &DAG,
                                                      unsigned NewOpcode) const {
@@ -6755,7 +6733,8 @@ SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
       report_fatal_error("ds_ordered_count: wave_done requires wave_release");
 
     unsigned Instruction = IntrID == Intrinsic::amdgcn_ds_ordered_add ? 0 : 1;
-    unsigned ShaderType = getDSShaderTypeValue(DAG.getMachineFunction());
+    unsigned ShaderType =
+        SIInstrInfo::getDSShaderTypeValue(DAG.getMachineFunction());
     unsigned Offset0 = OrderedCountIndex << 2;
     unsigned Offset1 = WaveRelease | (WaveDone << 1) | (ShaderType << 2) |
                        (Instruction << 4);
@@ -7543,14 +7522,9 @@ SDValue SITargetLowering::LowerINTRINSIC_VOID(SDValue Op,
       Op.getOperand(2), // ptr
       Op.getOperand(3)  // vdata
     };
-    EVT VT = Op.getOperand(3).getValueType();
 
+    EVT VT = Op.getOperand(3).getValueType();
     auto *M = cast<MemSDNode>(Op);
-    if (VT.isVector()) {
-      return DAG.getMemIntrinsicNode(
-        AMDGPUISD::ATOMIC_PK_FADD, DL, Op->getVTList(), Ops, VT,
-        M->getMemOperand());
-    }
 
     return DAG.getAtomic(ISD::ATOMIC_LOAD_FADD, DL, VT,
                          DAG.getVTList(VT, MVT::Other), Ops,
