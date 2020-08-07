@@ -4,7 +4,8 @@
 // Check the following cases:
 // - A data construct by itself (-DDIR=DIR_DATA)
 // - A parallel construct by itself (-DDIR=DIR_PAR)
-// - A parallel construct nested within data constructs (-DDIR=DIR_DATAPAR)
+// - A parallel construct and update directive nested within data constructs
+//   (-DDIR=DIR_DATAPAR)
 
 // REQUIRES: ompt
 //
@@ -13,17 +14,20 @@
 // RUN:    arr-construct=data
 // RUN:    arr0-line-no=20000 arr0-end-line-no=30000
 // RUN:    arr1-line-no=20000 arr1-end-line-no=30000
-// RUN:    kern-line-no=      kern-end-line-no=     )
+// RUN:    kern-line-no=      kern-end-line-no=
+// RUN:    update0-line-no=   update1-line-no=      )
 // RUN:   (dir-cflags=-DDIR=DIR_PAR dir-fc1=PAR dir-fc2=HASPAR
 // RUN:    arr-construct=parallel
 // RUN:    arr0-line-no=40000 arr0-end-line-no=80000
 // RUN:    arr1-line-no=40000 arr1-end-line-no=80000
-// RUN:    kern-line-no=40000 kern-end-line-no=80000)
+// RUN:    kern-line-no=40000 kern-end-line-no=80000
+// RUN:    update0-line-no=   update1-line-no=      )
 // RUN:   (dir-cflags=-DDIR=DIR_DATAPAR dir-fc1=DATAPAR dir-fc2=HASPAR
 // RUN:    arr-construct=data
-// RUN:    arr0-line-no=50000 arr0-end-line-no=100000
-// RUN:    arr1-line-no=60000 arr1-end-line-no=90000
-// RUN:    kern-line-no=70000 kern-end-line-no=80000 )
+// RUN:    arr0-line-no=50000    arr0-end-line-no=120000
+// RUN:    arr1-line-no=60000    arr1-end-line-no=110000
+// RUN:    kern-line-no=70000    kern-end-line-no=80000
+// RUN:    update0-line-no=90000 update1-line-no=100000 )
 // RUN: }
 // RUN: %data tgts {
 // RUN:   (run-if=
@@ -69,7 +73,8 @@
 // RUN:           -DARR0_LINE_NO=%[arr0-line-no] -DARR0_END_LINE_NO=%[arr0-end-line-no] \
 // RUN:           -DARR1_LINE_NO=%[arr1-line-no] -DARR1_END_LINE_NO=%[arr1-end-line-no] \
 // RUN:           -DKERN_LINE_NO=%[kern-line-no] -DKERN_END_LINE_NO=%[kern-end-line-no] \
-// RUN:           -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=110000
+// RUN:           -DUPDATE0_LINE_NO=%[update0-line-no] -DUPDATE1_LINE_NO=%[update1-line-no] \
+// RUN:           -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=130000
 // RUN:     }
 // RUN:   }
 // RUN: }
@@ -107,6 +112,8 @@ int main() {
 
   int arr0[2] = {10, 11};
   int arr1[5] = {20, 21, 22, 23, 24};
+  int notPresent0[10];
+  int notPresent1[11];
 
   //      CHECK:arr0 host ptr = [[ARR0_HOST_PTR:0x[a-z0-9]+]]
   // CHECK-NEXT:arr1 host ptr = [[ARR1_HOST_PTR:0x[a-z0-9]+]]
@@ -503,8 +510,8 @@ int main() {
         // PPC64LE-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[0]=20
         // PPC64LE-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[1]=11
         // PPC64LE-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[1]=21
-        // We omit NVPTX64 here because exit events might trigger before kernel
-        // execution due to the use of CUDA streams.
+        // We omit NVPTX64 here because subsequent events might trigger before
+        // kernel execution due to the use of CUDA streams.
         if (!NVPTX64 || offloadDisabled) {
           printf("inside: arr0=%p, arr0[%d]=%d\n", arr0, j, arr0[j]);
           printf("inside: arr1=%p, arr1[%d]=%d\n", arr1, j, arr1[j]);
@@ -514,8 +521,12 @@ int main() {
 #endif
 #if DIR == DIR_DATAPAR
     #line 90000
+    #pragma acc update self(arr0, notPresent0) device(arr1, notPresent1)
+    #line 100000
+    #pragma acc update self(notPresent0) device(notPresent1)
+    #line 110000
     }
-  #line 100000
+  #line 120000
   }
 #endif
 
@@ -569,6 +580,141 @@ int main() {
   // CHECK-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   //  HOST-DATAPAR-NEXT:    device_type=acc_device_host
   //   OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
+
+  // Update directive events if -DDIR=DIR_DATAPAR.
+  //
+  // OFF-DATAPAR-NEXT:acc_ev_update_start
+  // OFF-DATAPAR-NEXT:  acc_prof_info
+  // OFF-DATAPAR-NEXT:    event_type=14, valid_bytes=72, version=[[VERSION]],
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    line_no=[[UPDATE0_LINE_NO]], end_line_no=[[UPDATE0_LINE_NO]],
+  // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
+  // OFF-DATAPAR-NEXT:  acc_other_event_info
+  // OFF-DATAPAR-NEXT:    event_type=14, valid_bytes=24,
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
+  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-DATAPAR-NEXT:  acc_api_info
+  // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
+  // OFF-DATAPAR-NEXT:acc_ev_enqueue_upload_start
+  // OFF-DATAPAR-NEXT:  acc_prof_info
+  // OFF-DATAPAR-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    line_no=[[UPDATE0_LINE_NO]], end_line_no=[[UPDATE0_LINE_NO]],
+  // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
+  // OFF-DATAPAR-NEXT:  acc_data_event_info
+  // OFF-DATAPAR-NEXT:    event_type=20, valid_bytes=56,
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
+  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=20,
+  // OFF-DATAPAR-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
+  // OFF-DATAPAR-NEXT:    device_ptr=[[ARR1_DEVICE_PTR]]
+  // OFF-DATAPAR-NEXT:  acc_api_info
+  // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
+  // OFF-DATAPAR-NEXT:acc_ev_enqueue_upload_end
+  // OFF-DATAPAR-NEXT:  acc_prof_info
+  // OFF-DATAPAR-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    line_no=[[UPDATE0_LINE_NO]], end_line_no=[[UPDATE0_LINE_NO]],
+  // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
+  // OFF-DATAPAR-NEXT:  acc_data_event_info
+  // OFF-DATAPAR-NEXT:    event_type=21, valid_bytes=56,
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
+  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=20,
+  // OFF-DATAPAR-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
+  // OFF-DATAPAR-NEXT:    device_ptr=[[ARR1_DEVICE_PTR]]
+  // OFF-DATAPAR-NEXT:  acc_api_info
+  // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
+  // OFF-DATAPAR-NEXT:acc_ev_enqueue_download_start
+  // OFF-DATAPAR-NEXT:  acc_prof_info
+  // OFF-DATAPAR-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    line_no=[[UPDATE0_LINE_NO]], end_line_no=[[UPDATE0_LINE_NO]],
+  // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
+  // OFF-DATAPAR-NEXT:  acc_data_event_info
+  // OFF-DATAPAR-NEXT:    event_type=22, valid_bytes=56,
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
+  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=8,
+  // OFF-DATAPAR-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
+  // OFF-DATAPAR-NEXT:    device_ptr=[[ARR0_DEVICE_PTR]]
+  // OFF-DATAPAR-NEXT:  acc_api_info
+  // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
+  // OFF-DATAPAR-NEXT:acc_ev_enqueue_download_end
+  // OFF-DATAPAR-NEXT:  acc_prof_info
+  // OFF-DATAPAR-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    line_no=[[UPDATE0_LINE_NO]], end_line_no=[[UPDATE0_LINE_NO]],
+  // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
+  // OFF-DATAPAR-NEXT:  acc_data_event_info
+  // OFF-DATAPAR-NEXT:    event_type=23, valid_bytes=56,
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
+  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=8,
+  // OFF-DATAPAR-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
+  // OFF-DATAPAR-NEXT:    device_ptr=[[ARR0_DEVICE_PTR]]
+  // OFF-DATAPAR-NEXT:  acc_api_info
+  // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
+  // OFF-DATAPAR-NEXT:acc_ev_update_end
+  // OFF-DATAPAR-NEXT:  acc_prof_info
+  // OFF-DATAPAR-NEXT:    event_type=15, valid_bytes=72, version=[[VERSION]],
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    line_no=[[UPDATE0_LINE_NO]], end_line_no=[[UPDATE0_LINE_NO]],
+  // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
+  // OFF-DATAPAR-NEXT:  acc_other_event_info
+  // OFF-DATAPAR-NEXT:    event_type=15, valid_bytes=24,
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
+  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-DATAPAR-NEXT:  acc_api_info
+  // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
+  // OFF-DATAPAR-NEXT:acc_ev_update_start
+  // OFF-DATAPAR-NEXT:  acc_prof_info
+  // OFF-DATAPAR-NEXT:    event_type=14, valid_bytes=72, version=[[VERSION]],
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    line_no=[[UPDATE1_LINE_NO]], end_line_no=[[UPDATE1_LINE_NO]],
+  // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
+  // OFF-DATAPAR-NEXT:  acc_other_event_info
+  // OFF-DATAPAR-NEXT:    event_type=14, valid_bytes=24,
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
+  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-DATAPAR-NEXT:  acc_api_info
+  // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
+  // OFF-DATAPAR-NEXT:acc_ev_update_end
+  // OFF-DATAPAR-NEXT:  acc_prof_info
+  // OFF-DATAPAR-NEXT:    event_type=15, valid_bytes=72, version=[[VERSION]],
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    line_no=[[UPDATE1_LINE_NO]], end_line_no=[[UPDATE1_LINE_NO]],
+  // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
+  // OFF-DATAPAR-NEXT:  acc_other_event_info
+  // OFF-DATAPAR-NEXT:    event_type=15, valid_bytes=24,
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
+  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-DATAPAR-NEXT:  acc_api_info
+  // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
 
   // Exit data for arr1.
   //
@@ -804,7 +950,7 @@ int main() {
   printf("after kernel\n");
 
   return 0;
-#line 110000
+#line 130000
 }
 
 // Device shutdown.

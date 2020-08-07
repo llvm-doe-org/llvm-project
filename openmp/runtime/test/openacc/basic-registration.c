@@ -105,16 +105,14 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
   unreg(acc_ev_enqueue_launch_start, on_enqueue_launch_start, acc_toggle_per_thread);
 
   // Check (un)registering unimplemented callbacks.
-  // ERR-NEXT:Warning: attempt to register unhandled event: acc_ev_update_start
-  // ERR-NEXT:Warning: attempt to unregister unhandled event: acc_ev_update_end
   // ERR-NEXT:Warning: attempt to unregister unhandled event: acc_ev_wait_start
   // ERR-NEXT:Warning: attempt to register unhandled event: acc_ev_wait_end
-  reg(acc_ev_update_start, on_update_start, acc_reg);
-  unreg(acc_ev_update_end, on_update_end, acc_reg);
   unreg(acc_ev_wait_start, on_wait_start, acc_reg);
   reg(acc_ev_wait_end, on_wait_end, acc_reg);
 
   // Remaining events that could be used in future extensions to this test.
+  reg(acc_ev_update_start, on_update_start, acc_reg);
+  reg(acc_ev_update_end, on_update_end, acc_reg);
   reg(acc_ev_enqueue_launch_end, on_enqueue_launch_end, acc_reg);
   reg(acc_ev_enqueue_upload_start, on_enqueue_upload_start, acc_reg);
   reg(acc_ev_enqueue_upload_end, on_enqueue_upload_end, acc_reg);

@@ -150,6 +150,8 @@ static acc_prof_callback acc_ev_enter_data_start_callback = NULL;
 static acc_prof_callback acc_ev_enter_data_end_callback = NULL;
 static acc_prof_callback acc_ev_exit_data_start_callback = NULL;
 static acc_prof_callback acc_ev_exit_data_end_callback = NULL;
+static acc_prof_callback acc_ev_update_start_callback = NULL;
+static acc_prof_callback acc_ev_update_end_callback = NULL;
 static acc_prof_callback acc_ev_compute_construct_start_callback = NULL;
 static acc_prof_callback acc_ev_compute_construct_end_callback = NULL;
 static acc_prof_callback acc_ev_enqueue_launch_start_callback = NULL;
@@ -258,6 +260,9 @@ static acc_event_info acc_get_other_event_info(acc_event_t event_type) {
       break;
     case ompt_directive_target_teams:
       ret.other_event.parent_construct = acc_construct_parallel;
+      break;
+    case ompt_directive_target_update:
+      ret.other_event.parent_construct = acc_construct_update;
       break;
     }
     ret.other_event.implicit = !directive_info->is_explicit_event;
@@ -374,7 +379,17 @@ static void acc_ompt_callback_target(
   case ompt_target_exit_data:
     break;
   case ompt_target_update:
-    return;
+    switch (endpoint) {
+    case ompt_scope_begin:
+      event_type = acc_ev_update_start;
+      acc_cb = acc_ev_update_start_callback;
+      break;
+    case ompt_scope_end:
+      event_type = acc_ev_update_end;
+      acc_cb = acc_ev_update_end_callback;
+      break;
+    }
+    break;
   }
   if (endpoint == ompt_scope_begin)
     acc_ompt_target_device_map[target_id] = device_num;
@@ -602,6 +617,8 @@ static bool acc_event_callback(
   ACC_EVENT_CASE(acc_ev_enter_data_end,          ompt_callback_target, ompt_callback_target_map)
   ACC_EVENT_CASE(acc_ev_exit_data_start,         ompt_callback_target, ompt_callback_target_map_exit_start)
   ACC_EVENT_CASE(acc_ev_exit_data_end,           ompt_callback_target, ompt_callback_target_map_exit_end)
+  ACC_EVENT_CASE(acc_ev_update_start,            ompt_callback_target)
+  ACC_EVENT_CASE(acc_ev_update_end,              ompt_callback_target)
   ACC_EVENT_CASE(acc_ev_compute_construct_start, ompt_callback_target)
   ACC_EVENT_CASE(acc_ev_compute_construct_end,   ompt_callback_target)
   ACC_EVENT_CASE(acc_ev_enqueue_launch_start,    ompt_callback_target, ompt_callback_target_submit)

@@ -1923,8 +1923,8 @@ support and that are not specified by OpenMP 5.0 are shown in
 | `acc_ev_enter_data_end`           | `ompt_callback_target_map`                                                   | `ompt_callback_target(kind=ompt_target|ompt_target_enter_data)` |
 | `acc_ev_exit_data_start`          | **`ompt_callback_target_map_exit_start`**                                    | `ompt_callback_target(kind=ompt_target|ompt_target_exit_data)`  |
 | `acc_ev_exit_data_end`            | **`ompt_callback_target_map_exit_end`**                                      | `ompt_callback_target(kind=ompt_target|ompt_target_exit_data)`  |
-| `acc_ev_update_start`             | *unimplemented*                                                              |                                                                 |
-| `acc_ev_update_end`               | *unimplemented*                                                              |                                                                 |
+| `acc_ev_update_start`             | `ompt_callback_target(kind=ompt_target_update)`                              |                                                                 |
+| `acc_ev_update_end`               | `ompt_callback_target(kind=ompt_target_update)`                              |                                                                 |
 | `acc_ev_compute_construct_start`  | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_begin)`          |                                                                 |
 | `acc_ev_compute_construct_end`    | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_end)`            |                                                                 |
 | `acc_ev_enqueue_launch_start`     | `ompt_callback_target_submit`                                                | `ompt_callback_target(kind=ompt_target)`                        |
@@ -2141,7 +2141,8 @@ is `ompt_get_directive_info_t`:
 typedef enum ompt_directive_kind_t {
   ompt_directive_unknown = 0,
   ompt_directive_target_data,
-  ompt_directive_target_teams
+  ompt_directive_target_teams,
+  ompt_directive_target_update
 } ompt_directive_kind_t;
 
 // All fields are designed so that null-initialization is a reasonable
@@ -2243,6 +2244,7 @@ specification that we need to investigate further:
     * `acc_ev_create`, `acc_ev_delete`, `acc_ev_alloc`, `acc_ev_free`
     * `acc_ev_enter_data_start`, `acc_ev_enter_data_end`
     * `acc_ev_exit_data_start`, `acc_ev_exit_data_end`
+    * `acc_ev_update_start`, `acc_ev_update_end`
     * Notes:
         * pgcc 19.4-0 with `-ta:multicore` has the same behavior.
         * OpenACC 2.7 does not make it clear whether these event types
@@ -2362,7 +2364,6 @@ support currently include:
 * The following event types are not yet supported because the Clacc
   compiler does not yet implement directives and clauses that would
   trigger them:
-    * `acc_ev_update_start`, `acc_ev_update_end`
     * `acc_ev_wait_start`, `acc_ev_wait_end`
 * `ACC_PROFLIB` is not yet supported.
 * Some of the data passed to the OpenACC callbacks currently have

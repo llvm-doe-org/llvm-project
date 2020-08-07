@@ -10198,11 +10198,12 @@ void CGOpenMPRuntime::emitSetDirectiveInfoCall(
   // directive.
   int KindRaw;
   switch (D.getDirectiveKind()) {
-  // TODO: These values comes from enum ompt_directive_kind_t in
+  // TODO: These values come from enum ompt_directive_kind_t in
   // openmp/runtime/src/include/omp-tools.h.var.  Find a clean way to ensure
   // these stay in sync.
   case OMPD_target_data: KindRaw = 1; break;
   case OMPD_target_teams: KindRaw = 2; break;
+  case OMPD_target_update: KindRaw = 3; break;
   default:
     // Other cases just aren't calling this yet, in part because of the check
     // for IsInOpenACCConstruct above.
@@ -10530,9 +10531,11 @@ void CGOpenMPRuntime::emitTargetDataStandAloneCall(
       llvm_unreachable("Unexpected standalone target data directive.");
       break;
     }
+    emitSetDirectiveInfoCall(CGF, D);
     CGF.EmitRuntimeCall(llvm::OpenMPIRBuilder::getOrCreateRuntimeFunction(
                             CGM.getModule(), RTLFn),
                         OffloadingArgs);
+    emitClearDirectiveInfoCall(CGF);
   };
 
   auto &&TargetThenGen = [this, &ThenGen, &D, &InputInfo, &MapTypesArray](

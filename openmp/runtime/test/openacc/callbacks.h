@@ -193,12 +193,14 @@ static void on_exit_data_end(acc_prof_info *pi, acc_event_info *ei,
 
 static void on_update_start(acc_prof_info *pi, acc_event_info *ei,
                             acc_api_info *ai) {
-  assert(!"acc_ev_update_start is not yet implemented\n");
+  printf("acc_ev_update_start\n");
+  print_info(pi, ei, ai);
 }
 
 static void on_update_end(acc_prof_info *pi, acc_event_info *ei,
                           acc_api_info *ai) {
-  assert(!"acc_ev_update_end is not yet implemented\n");
+  printf("acc_ev_update_end\n");
+  print_info(pi, ei, ai);
 }
 
 static void on_compute_construct_start(acc_prof_info *pi, acc_event_info *ei,
@@ -273,6 +275,8 @@ static void register_all_callbacks(acc_prof_reg reg) {
   reg(acc_ev_enter_data_end, on_enter_data_end, acc_reg);
   reg(acc_ev_exit_data_start, on_exit_data_start, acc_reg);
   reg(acc_ev_exit_data_end, on_exit_data_end, acc_reg);
+  reg(acc_ev_update_start, on_update_start, acc_reg);
+  reg(acc_ev_update_end, on_update_end, acc_reg);
   reg(acc_ev_compute_construct_start, on_compute_construct_start, acc_reg);
   reg(acc_ev_compute_construct_end, on_compute_construct_end, acc_reg);
   reg(acc_ev_enqueue_launch_start, on_enqueue_launch_start, acc_reg);

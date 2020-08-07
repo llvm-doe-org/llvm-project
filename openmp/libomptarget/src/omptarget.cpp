@@ -602,9 +602,45 @@ int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
   return OFFLOAD_SUCCESS;
 }
 
+#if OMPT_SUPPORT
+void ompt_dispatch_callback_target(ompt_target_t kind,
+                                   ompt_scope_endpoint_t endpoint,
+                                   DeviceTy &Device) {
+  if (endpoint == ompt_scope_begin) {
+    Device.OmptApi.target_id = ompt_get_unique_id();
+    ompt_toggle_in_device_target_region();
+  }
+  // FIXME: We don't yet need the NULL arguments for OpenACC support, so we
+  // haven't bothered to implement them yet.
+  if (Device.OmptApi.ompt_get_enabled().ompt_callback_target) {
+    Device.OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target)(
+        kind, endpoint, Device.DeviceID, /*task_data*/ NULL,
+        Device.OmptApi.target_id, /*codeptr_ra*/ NULL);
+  }
+  if (endpoint == ompt_scope_end) {
+    Device.OmptApi.target_id = ompt_id_none;
+    ompt_toggle_in_device_target_region();
+  }
+}
+#endif
+
+// OpenMP 5.0 sec. 2.12.6 p. 179 L22-23:
+// "The target-update-begin event occurs when a thread enters a target update.
+// region.  The target-update-end event occurs when a thread exits a target
+// update region."
+// OpenMP 5.0 sec. 4.5.2.26 p. 490 L24-25 and p. 491 L21-22:
+// "The ompt_callback_target_t type is used for callbacks that are dispatched
+// when a thread begins to execute a device construct."
+// "The endpoint argument indicates that the callback signals the beginning of
+// a scope or the end of a scope."
+
 /// Internal function to pass data to/from the target.
 int target_data_update(DeviceTy &Device, int32_t arg_num,
     void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types) {
+#if OMPT_SUPPORT
+  ompt_dispatch_callback_target(ompt_target_update, ompt_scope_begin, Device);
+#endif
+
   // process each input.
   for (int32_t i = 0; i < arg_num; ++i) {
     if ((arg_types[i] & OMP_TGT_MAPTYPE_LITERAL) ||
@@ -634,6 +670,10 @@ int target_data_update(DeviceTy &Device, int32_t arg_num,
       int rt = Device.data_retrieve(HstPtrBegin, TgtPtrBegin, MapSize, nullptr);
       if (rt != OFFLOAD_SUCCESS) {
         DP("Copying data from device failed.\n");
+#if OMPT_SUPPORT
+        ompt_dispatch_callback_target(ompt_target_update, ompt_scope_end,
+                                      Device);
+#endif
         return OFFLOAD_FAIL;
       }
 
@@ -661,6 +701,10 @@ int target_data_update(DeviceTy &Device, int32_t arg_num,
       int rt = Device.data_submit(TgtPtrBegin, HstPtrBegin, MapSize, nullptr);
       if (rt != OFFLOAD_SUCCESS) {
         DP("Copying data to device failed.\n");
+#if OMPT_SUPPORT
+        ompt_dispatch_callback_target(ompt_target_update, ompt_scope_end,
+                                      Device);
+#endif
         return OFFLOAD_FAIL;
       }
 
@@ -682,12 +726,19 @@ int target_data_update(DeviceTy &Device, int32_t arg_num,
         if (rt != OFFLOAD_SUCCESS) {
           DP("Copying data to device failed.\n");
           Device.ShadowMtx.unlock();
+#if OMPT_SUPPORT
+          ompt_dispatch_callback_target(ompt_target_update, ompt_scope_end,
+                                        Device);
+#endif
           return OFFLOAD_FAIL;
         }
       }
       Device.ShadowMtx.unlock();
     }
   }
+#if OMPT_SUPPORT
+  ompt_dispatch_callback_target(ompt_target_update, ompt_scope_end, Device);
+#endif
   return OFFLOAD_SUCCESS;
 }
 
@@ -697,27 +748,6 @@ static const unsigned LambdaMapping = OMP_TGT_MAPTYPE_PTR_AND_OBJ |
 static bool isLambdaMapping(int64_t Mapping) {
   return (Mapping & LambdaMapping) == LambdaMapping;
 }
-
-#if OMPT_SUPPORT
-void ompt_dispatch_callback_target(
-    ompt_target_t kind, ompt_scope_endpoint_t endpoint, DeviceTy &Device) {
-  if (endpoint == ompt_scope_begin) {
-    Device.OmptApi.target_id = ompt_get_unique_id();
-    ompt_toggle_in_device_target_region();
-  }
-  // FIXME: We don't yet need the NULL arguments for OpenACC support, so we
-  // haven't bothered to implement them yet.
-  if (Device.OmptApi.ompt_get_enabled().ompt_callback_target) {
-    Device.OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target)(
-        kind, endpoint, Device.DeviceID, /*task_data*/ NULL,
-        Device.OmptApi.target_id, /*codeptr_ra*/ NULL);
-  }
-  if (endpoint == ompt_scope_end) {
-    Device.OmptApi.target_id = ompt_id_none;
-    ompt_toggle_in_device_target_region();
-  }
-}
-#endif
 
 /// performs the same actions as data_begin in case arg_num is
 /// non-zero and initiates run of the offloaded region on the target platform;
