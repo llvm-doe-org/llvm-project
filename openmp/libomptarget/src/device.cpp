@@ -251,7 +251,8 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
 // Return the target pointer begin (where the data will be moved).
 // Decrement the reference counter if called from target_data_end.
 void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
-    bool UpdateRefCount, bool &IsHostPtr, bool MustContain) {
+                               bool UpdateRefCount, bool &IsHostPtr,
+                               bool MustContain) {
   void *rc = NULL;
   IsHostPtr = false;
   IsLast = false;
