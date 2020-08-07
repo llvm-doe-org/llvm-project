@@ -115,7 +115,7 @@ OMPT_API_ROUTINE ompt_data_t *ompt_get_thread_data(void);
  ****************************************************************************/
 
 // FIXME: Access to this is not thread-safe.  Does it need to be?
-static std::map<ompt_id_t, int> acc_ompt_thread_device_map;
+static std::map<ompt_id_t, int> acc_ompt_target_device_map;
 
 static const char *acc_get_event_name(acc_event_t event) {
   switch (event) {
@@ -377,7 +377,7 @@ static void acc_ompt_callback_target(
     return;
   }
   if (endpoint == ompt_scope_begin)
-    acc_ompt_thread_device_map[target_id] = device_num;
+    acc_ompt_target_device_map[target_id] = device_num;
   if (acc_cb) {
     acc_prof_info pi = acc_get_prof_info(event_type, device_num);
     acc_event_info ei = acc_get_other_event_info(event_type);
@@ -385,7 +385,7 @@ static void acc_ompt_callback_target(
     acc_cb(&pi, &ei, &ai);
   }
   if (endpoint == ompt_scope_end)
-    acc_ompt_thread_device_map.erase(target_id);
+    acc_ompt_target_device_map.erase(target_id);
 }
 
 static unsigned acc_ompt_callback_target_map_start_reg_counter = 0;
@@ -394,8 +394,8 @@ static void acc_ompt_callback_target_map_start(
     void **device_addr, size_t *bytes, unsigned int *mapping_flags,
     const void * codeptr_ra) {
   acc_event_t event_type = acc_ev_enter_data_start;
-  auto itr = acc_ompt_thread_device_map.find(target_id);
-  KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
+  auto itr = acc_ompt_target_device_map.find(target_id);
+  KMP_ASSERT2(itr != acc_ompt_target_device_map.end(), "unexpected target_id");
   int device_num = itr->second;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
   acc_event_info ei = acc_get_other_event_info(event_type);
@@ -409,8 +409,8 @@ static void acc_ompt_callback_target_map(
     void **device_addr, size_t *bytes, unsigned int *mapping_flags,
     const void * codeptr_ra) {
   acc_event_t event_type = acc_ev_enter_data_end;
-  auto itr = acc_ompt_thread_device_map.find(target_id);
-  KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
+  auto itr = acc_ompt_target_device_map.find(target_id);
+  KMP_ASSERT2(itr != acc_ompt_target_device_map.end(), "unexpected target_id");
   int device_num = itr->second;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
   acc_event_info ei = acc_get_other_event_info(event_type);
@@ -424,8 +424,8 @@ static void acc_ompt_callback_target_map_exit_start(
     void **device_addr, size_t *bytes, unsigned int *mapping_flags,
     const void * codeptr_ra) {
   acc_event_t event_type = acc_ev_exit_data_start;
-  auto itr = acc_ompt_thread_device_map.find(target_id);
-  KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
+  auto itr = acc_ompt_target_device_map.find(target_id);
+  KMP_ASSERT2(itr != acc_ompt_target_device_map.end(), "unexpected target_id");
   int device_num = itr->second;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
   acc_event_info ei = acc_get_other_event_info(event_type);
@@ -439,8 +439,8 @@ static void acc_ompt_callback_target_map_exit_end(
     void **device_addr, size_t *bytes, unsigned int *mapping_flags,
     const void * codeptr_ra) {
   acc_event_t event_type = acc_ev_exit_data_end;
-  auto itr = acc_ompt_thread_device_map.find(target_id);
-  KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
+  auto itr = acc_ompt_target_device_map.find(target_id);
+  KMP_ASSERT2(itr != acc_ompt_target_device_map.end(), "unexpected target_id");
   int device_num = itr->second;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
   acc_event_info ei = acc_get_other_event_info(event_type);
@@ -453,8 +453,8 @@ static void acc_ompt_callback_target_submit(
     ompt_id_t target_id, ompt_id_t host_op_id,
     unsigned int requested_num_teams) {
   acc_event_t event_type = acc_ev_enqueue_launch_start;
-  auto itr = acc_ompt_thread_device_map.find(target_id);
-  KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
+  auto itr = acc_ompt_target_device_map.find(target_id);
+  KMP_ASSERT2(itr != acc_ompt_target_device_map.end(), "unexpected target_id");
   int device_num = itr->second;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
   acc_event_info ei = acc_get_launch_event_info(event_type);
@@ -467,8 +467,8 @@ static void acc_ompt_callback_target_submit_end(
     ompt_id_t target_id, ompt_id_t host_op_id,
     unsigned int requested_num_teams) {
   acc_event_t event_type = acc_ev_enqueue_launch_end;
-  auto itr = acc_ompt_thread_device_map.find(target_id);
-  KMP_ASSERT2(itr != acc_ompt_thread_device_map.end(), "unexpected target_id");
+  auto itr = acc_ompt_target_device_map.find(target_id);
+  KMP_ASSERT2(itr != acc_ompt_target_device_map.end(), "unexpected target_id");
   int device_num = itr->second;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
   acc_event_info ei = acc_get_launch_event_info(event_type);
