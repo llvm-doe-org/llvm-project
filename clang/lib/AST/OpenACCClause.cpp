@@ -53,6 +53,10 @@ clang::getPrivateVarsFromClause(ACCClause *C) {
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
   case ACCC_no_create:
+#define OPENACC_CLAUSE_ALIAS_self(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+  case ACCC_device:
   case ACCC_shared:
   case ACCC_num_gangs:
   case ACCC_num_workers:
@@ -271,4 +275,40 @@ ACCReductionClause *ACCReductionClause::CreateEmpty(const ASTContext &C,
                                                     unsigned N) {
   void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
   return new (Mem) ACCReductionClause(N);
+}
+
+ACCSelfClause *
+ACCSelfClause::Create(const ASTContext &C, OpenACCClauseKind Kind,
+                      SourceLocation StartLoc, SourceLocation LParenLoc,
+                      SourceLocation EndLoc, ArrayRef<Expr *> VL) {
+  // Allocate space for private variables and initializer expressions.
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
+  ACCSelfClause *Clause =
+      new (Mem) ACCSelfClause(Kind, StartLoc, LParenLoc, EndLoc, VL.size());
+  Clause->setVarRefs(VL);
+  return Clause;
+}
+
+ACCSelfClause *ACCSelfClause::CreateEmpty(const ASTContext &C,
+                                          OpenACCClauseKind Kind, unsigned N) {
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
+  return new (Mem) ACCSelfClause(Kind, N);
+}
+
+ACCDeviceClause *ACCDeviceClause::Create(const ASTContext &C,
+                                         SourceLocation StartLoc,
+                                         SourceLocation LParenLoc,
+                                         SourceLocation EndLoc,
+                                         ArrayRef<Expr *> VL) {
+  // Allocate space for private variables and initializer expressions.
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
+  ACCDeviceClause *Clause =
+      new (Mem) ACCDeviceClause(StartLoc, LParenLoc, EndLoc, VL.size());
+  Clause->setVarRefs(VL);
+  return Clause;
+}
+
+ACCDeviceClause *ACCDeviceClause::CreateEmpty(const ASTContext &C, unsigned N) {
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
+  return new (Mem) ACCDeviceClause(N);
 }

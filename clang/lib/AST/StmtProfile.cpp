@@ -1173,6 +1173,14 @@ void ACCClauseProfiler::VisitACCReductionClause(
   Profiler->VisitName(C->getNameInfo().getName());
   VisitACCClauseList(C);
 }
+void ACCClauseProfiler::VisitACCSelfClause(const ACCSelfClause *C) {
+  // FIXME: Should we visit the clause kind, which varies among clause
+  // aliases?
+  VisitACCClauseList(C);
+}
+void ACCClauseProfiler::VisitACCDeviceClause(const ACCDeviceClause *C) {
+  VisitACCClauseList(C);
+}
 void ACCClauseProfiler::VisitACCNumGangsClause(const ACCNumGangsClause *C) {
   if (C->getNumGangs())
     Profiler->VisitStmt(C->getNumGangs());
@@ -1207,6 +1215,10 @@ StmtProfiler::VisitACCExecutableDirective(const ACCExecutableDirective *S) {
        I != E; ++I)
     if (*I)
       P.Visit(*I);
+}
+
+void StmtProfiler::VisitACCUpdateDirective(const ACCUpdateDirective *S) {
+  VisitACCExecutableDirective(S);
 }
 
 void StmtProfiler::VisitACCDataDirective(const ACCDataDirective *S) {

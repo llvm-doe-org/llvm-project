@@ -1,0 +1,404 @@
+// Check diagnostics for "acc update".
+
+// OpenACC disabled
+// RUN: %clang_cc1 -verify=noacc,expected-noacc -Wchar-subscripts %s
+
+// OpenACC enabled
+// RUN: %clang_cc1 -DACC -verify=expected,expected-noacc,char-subscripts \
+// RUN:            -fopenacc -Wchar-subscripts %s
+
+// OpenACC enabled but optional warnings disabled
+// RUN: %clang_cc1 -DACC -verify=expected,expected-noacc -fopenacc %s
+
+// END.
+
+// noacc-no-diagnostics
+
+int incomplete[];
+
+int main() {
+  char c;
+  enum { E1, E2 } e;
+  int i, jk, a[2], m[6][2], *p;
+  int (*fp)();
+  float f;
+  // expected-note@+1 2 {{variable 'constI' declared const here}}
+  const int constI = 5;
+  // expected-note@+1 {{variable 'constIDecl' declared const here}}
+  const extern int constIDecl;
+  // expected-note@+1 {{variable 'constA' declared const here}}
+  const int constA[3];
+  // expected-note@+1 2 {{variable 'constADecl' declared const here}}
+  const extern int constADecl[3];
+  struct S { int i; } s;
+
+  //--------------------------------------------------
+  // No clauses
+  //--------------------------------------------------
+
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update
+
+  // Any one of those clauses is sufficient to suppress that diagnostic.
+  #pragma acc update self(i)
+  #pragma acc update host(i)
+  #pragma acc update device(i)
+
+  //--------------------------------------------------
+  // Unrecognized clauses
+  //--------------------------------------------------
+
+  // Bogus clauses.
+
+  // expected-warning@+2 {{extra tokens at the end of '#pragma acc update' are ignored}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update foo
+  // expected-warning@+2 {{extra tokens at the end of '#pragma acc update' are ignored}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update foo bar
+
+  // Well formed clauses not permitted here.
+
+  // expected-error@+8 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc update'}}
+  // expected-error@+7 {{unexpected OpenACC clause 'present' in directive '#pragma acc update'}}
+  // expected-error@+6 {{unexpected OpenACC clause 'copy' in directive '#pragma acc update'}}
+  // expected-error@+5 {{unexpected OpenACC clause 'copyin' in directive '#pragma acc update'}}
+  // expected-error@+4 {{unexpected OpenACC clause 'copyout' in directive '#pragma acc update'}}
+  // expected-error@+3 {{unexpected OpenACC clause 'create' in directive '#pragma acc update'}}
+  // expected-error@+2 {{unexpected OpenACC clause 'no_create' in directive '#pragma acc update'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update nomap(i) present(i) copy(i) copyin(i) copyout(i) create(i) no_create(i)
+  // expected-error@+5 {{unexpected OpenACC clause 'pcopy' in directive '#pragma acc update'}}
+  // expected-error@+4 {{unexpected OpenACC clause 'pcopyin' in directive '#pragma acc update'}}
+  // expected-error@+3 {{unexpected OpenACC clause 'pcopyout' in directive '#pragma acc update'}}
+  // expected-error@+2 {{unexpected OpenACC clause 'pcreate' in directive '#pragma acc update'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update pcopy(i) pcopyin(i) pcopyout(i) pcreate(i)
+  // expected-error@+5 {{unexpected OpenACC clause 'present_or_copy' in directive '#pragma acc update'}}
+  // expected-error@+4 {{unexpected OpenACC clause 'present_or_copyin' in directive '#pragma acc update'}}
+  // expected-error@+3 {{unexpected OpenACC clause 'present_or_copyout' in directive '#pragma acc update'}}
+  // expected-error@+2 {{unexpected OpenACC clause 'present_or_create' in directive '#pragma acc update'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update present_or_copy(i) present_or_copyin(i) present_or_copyout(i) present_or_create(i)
+  // expected-error@+5 {{unexpected OpenACC clause 'shared' in directive '#pragma acc update'}}
+  // expected-error@+4 {{unexpected OpenACC clause 'reduction' in directive '#pragma acc update'}}
+  // expected-error@+3 {{unexpected OpenACC clause 'private' in directive '#pragma acc update'}}
+  // expected-error@+2 {{unexpected OpenACC clause 'firstprivate' in directive '#pragma acc update'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update shared(i, jk) reduction(+:i,jk,f) private(i) firstprivate(i)
+  // expected-error@+3 {{unexpected OpenACC clause 'num_gangs' in directive '#pragma acc update'}}
+  // expected-error@+2 {{unexpected OpenACC clause 'num_workers' in directive '#pragma acc update'}}
+  // expected-error@+1 {{unexpected OpenACC clause 'vector_length' in directive '#pragma acc update'}}
+  #pragma acc update self(i) num_gangs(1) num_workers(2) vector_length(3)
+  // expected-error@+11 {{unexpected OpenACC clause 'independent' in directive '#pragma acc update'}}
+  // expected-error@+10 {{unexpected OpenACC clause 'auto' in directive '#pragma acc update'}}
+  // expected-error@+9 {{unexpected OpenACC clause 'seq' in directive '#pragma acc update'}}
+  // expected-error@+8 {{unexpected OpenACC clause 'gang' in directive '#pragma acc update'}}
+  // expected-error@+7 {{unexpected OpenACC clause 'worker' in directive '#pragma acc update'}}
+  // expected-error@+6 {{unexpected OpenACC clause 'vector' in directive '#pragma acc update'}}
+  // expected-error@+5 {{unexpected OpenACC clause 'auto', 'independent' is specified already}}
+  // expected-error@+4 {{unexpected OpenACC clause 'seq', 'independent' is specified already}}
+  // expected-error@+3 {{unexpected OpenACC clause 'gang', 'seq' is specified already}}
+  // expected-error@+2 {{unexpected OpenACC clause 'worker', 'seq' is specified already}}
+  // expected-error@+1 {{unexpected OpenACC clause 'vector', 'seq' is specified already}}
+  #pragma acc update independent host(i) auto seq gang worker vector
+  // expected-error@+1 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc update'}}
+  #pragma acc update collapse(1) device(i)
+
+  // Malformed clauses not permitted here.
+
+  // expected-error@+2 {{unexpected OpenACC clause 'shared' in directive '#pragma acc update'}}
+  // expected-error@+1 {{expected '(' after 'shared'}}
+  #pragma acc update self(i) shared
+  // expected-error@+4 {{unexpected OpenACC clause 'shared' in directive '#pragma acc update'}}
+  // expected-error@+3 {{expected expression}}
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc update device(i) shared(
+  // expected-error@+4 {{unexpected OpenACC clause 'shared' in directive '#pragma acc update'}}
+  // expected-error@+3 {{expected ')'}}
+  // expected-note@+2 {{to match this '('}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update shared(i
+
+  //--------------------------------------------------
+  // Variable clauses: syntax
+  //
+  // Parsing of variable clauses are checked thoroughly in parallel-messages.c
+  // for data clauses, so just check a cross section of cases here to confirm it
+  // works for the update directive's variable clauses.
+  //--------------------------------------------------
+
+  // expected-error@+2 {{expected '(' after 'self'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update self
+  // expected-error@+4 {{expected expression}}
+  // expected-error@+3 {{expected ')'}}
+  // expected-note@+2 {{to match this '('}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update host(
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc update device(jk
+  // expected-error@+2 {{expected expression}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update self()
+  // expected-error@+1 {{expected ',' or ')' in 'host' clause}}
+  #pragma acc update host(i jk)
+  // expected-error@+1 {{expected expression}}
+  #pragma acc update device(jk ,)
+  // expected-error@+2 {{expected variable name or subarray}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update self((int)i)
+  // expected-error@+2 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update host((*(int(*)[3])a)[0:])
+  // expected-error@+2 {{subscripted value is not an array or pointer}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update device(i[c:c])
+  // expected-error@+2 {{subscripted value is not an array or pointer}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update self(i[0:2])
+  // char-subscripts-warning@+1 {{subarray start is of type 'char'}}
+  #pragma acc update host(a[c:2])
+  // char-subscripts-warning@+1 {{subarray length is of type 'char'}}
+  #pragma acc update device(a[0:c])
+  // expected-error@+2 {{subarray specified for pointer to function type 'int ()'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update self(fp[0:2])
+  // expected-error@+2 {{subarray specified for pointer to incomplete type 'int []'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update host((&incomplete)[0:2])
+
+  //--------------------------------------------------
+  // Variable clauses: arg semantics
+  //--------------------------------------------------
+
+  // Unknown variable name.
+
+  // expected-error@+2 {{use of undeclared identifier 'foo'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update self(foo)
+  // expected-error@+2 {{use of undeclared identifier 'foo'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update host(foo)
+  // expected-error@+2 {{use of undeclared identifier 'foo'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update device(foo)
+
+  // Array subscript not supported where subarray is permitted.
+
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  #pragma acc update self(a[jk], \
+                          m[2:][1], \
+                          a[:], m[0:2][0:2])
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  #pragma acc update host(a[jk], \
+                          m[2:][1], \
+                          a[:], m[0:2][0:2])
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{subarray syntax must include ':'}}
+  #pragma acc update device(a[jk], \
+                            m[2:][1], \
+                            a[:], m[0:2][0:2])
+
+  // Variables of incomplete type.
+
+  // expected-error@+2 {{variable in 'self' clause cannot have incomplete type 'int []'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update self(incomplete)
+  // expected-error@+2 {{variable in 'host' clause cannot have incomplete type 'int []'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update host(incomplete)
+  // expected-error@+2 {{variable in 'device' clause cannot have incomplete type 'int []'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update device(incomplete)
+
+  // Variables of const type.
+
+  // expected-error@+2 2 {{const variable cannot be updated by '#pragma acc update'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update self(constI, constIDecl)
+  // expected-error@+2 2 {{const variable cannot be updated by '#pragma acc update'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update host(constADecl) host(constA)
+  // expected-error@+2 2 {{const variable cannot be updated by '#pragma acc update'}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update device(constI) device(constADecl)
+
+  // Redundant clauses.
+
+  // expected-error@+6 {{variable 'e' appears in multiple self, host, or device clauses of the same '#pragma acc update' directive}}
+  // expected-note@+5 {{previously appeared here}}
+  // expected-error@+5 {{variable 'i' appears in multiple self, host, or device clauses of the same '#pragma acc update' directive}}
+  // expected-note@+3 {{previously appeared here}}
+  // expected-error@+4 {{variable 'jk' appears in multiple self, host, or device clauses of the same '#pragma acc update' directive}}
+  // expected-note@+1 {{previously appeared here}}
+  #pragma acc update self(e,e,i,jk) \
+                     self(i)        \
+                     host(jk)
+  // expected-error@+4 {{variable 'e' appears in multiple self, host, or device clauses of the same '#pragma acc update' directive}}
+  // expected-note@+3 {{previously appeared here}}
+  // expected-error@+3 {{variable 'i' appears in multiple self, host, or device clauses of the same '#pragma acc update' directive}}
+  // expected-note@+1 {{previously appeared here}}
+  #pragma acc update device(e,i,e,jk) \
+                     device(i)
+
+  // Conflicting clauses: different clause.
+
+  // expected-error@+7 {{variable 'i' appears in multiple self, host, or device clauses of the same '#pragma acc update' directive}}
+  // expected-note@+5 {{previously appeared here}}
+  // expected-error@+5 {{variable 'a' appears in multiple self, host, or device clauses of the same '#pragma acc update' directive}}
+  // expected-note@+3 {{previously appeared here}}
+  // expected-error@+4 {{variable 'jk' appears in multiple self, host, or device clauses of the same '#pragma acc update' directive}}
+  // expected-note@+2 {{previously appeared here}}
+  #pragma acc update device(i,a[0:1])  \
+                     self(i,jk,a[0:1]) \
+                     device(jk)
+  // expected-error@+5 {{variable 'a' appears in multiple self, host, or device clauses of the same '#pragma acc update' directive}}
+  // expected-note@+3 {{previously appeared here}}
+  // expected-error@+4 {{variable 'p' appears in multiple self, host, or device clauses of the same '#pragma acc update' directive}}
+  // expected-note@+2 {{previously appeared here}}
+  #pragma acc update self(a)          \
+                     device(a[0:2],p) \
+                     host(p)
+
+  //--------------------------------------------------
+  // Variable clauses: arg semantics not yet supported
+  //--------------------------------------------------
+
+  // Conflicting clauses: different subarray.
+
+  // expected-error@+3 {{variable 'a' appears in multiple self, host, or device clauses of the same '#pragma acc update' directive}}
+  // expected-note@+1 {{previously appeared here}}
+  #pragma acc update self(a[0:2])  \
+                     host(a[0:1])
+
+  // expected-error@+3 {{variable 'a' appears in multiple self, host, or device clauses of the same '#pragma acc update' directive}}
+  // expected-note@+1 {{previously appeared here}}
+  #pragma acc update self(a[0:2])  \
+                     device(a[0:1])
+
+  // Member of struct.
+
+  // expected-error@+2 {{expected variable name or subarray}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update self(s.i)
+
+  // expected-error@+2 {{expected variable name or subarray}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update device(s.i)
+
+  //--------------------------------------------------
+  // As immediate substatement
+  //--------------------------------------------------
+
+  // Only check the parse errors here when OpenACC directives are included.
+#ifdef ACC
+  if (i)
+    // expected-error@+1 {{'#pragma acc update' cannot be an immediate substatement}}
+    #pragma acc update self(i)
+
+  if (i)
+    ;
+  else
+    // expected-error@+1 {{'#pragma acc update' cannot be an immediate substatement}}
+    #pragma acc update self(i)
+
+  while (i)
+    // expected-error@+1 {{'#pragma acc update' cannot be an immediate substatement}}
+    #pragma acc update self(i)
+
+  do
+    // expected-error@+1 {{'#pragma acc update' cannot be an immediate substatement}}
+    #pragma acc update self(i)
+  while (i);
+
+  for (;;)
+    // expected-error@+1 {{'#pragma acc update' cannot be an immediate substatement}}
+    #pragma acc update self(i)
+
+  switch (i)
+    // expected-error@+1 {{'#pragma acc update' cannot be an immediate substatement}}
+    #pragma acc update self(i)
+
+  // Both the OpenACC 3.0 and OpenMP TR8 say the following cases (labeled
+  // statements) are not permitted, but Clang permits them for both OpenACC and
+  // OpenMP.
+  switch (i) {
+  case 0:
+    #pragma acc update self(i)
+  }
+  switch (i) {
+  default:
+    #pragma acc update self(i)
+  }
+  lab:
+    #pragma acc update self(i)
+#endif
+
+  #pragma acc data copy(i)
+  // expected-error@+1 {{'#pragma acc update' cannot be an immediate substatement}}
+  #pragma acc update self(i)
+
+  // expected-note@+1 {{enclosing '#pragma acc parallel' here}}
+  #pragma acc parallel
+  // expected-error@+2 {{'#pragma acc update' cannot be an immediate substatement}}
+  // expected-error@+1 {{'#pragma acc update' cannot be nested within '#pragma acc parallel'}}
+  #pragma acc update self(i)
+
+  //--------------------------------------------------
+  // Nesting in other constructs (not as immediate substatement)
+  //--------------------------------------------------
+
+  #pragma acc data copy(i)
+  {
+    #pragma acc update self(i)
+  }
+
+  // expected-note@+1 {{enclosing '#pragma acc parallel' here}}
+  #pragma acc parallel
+  {
+    // expected-error@+1 {{'#pragma acc update' cannot be nested within '#pragma acc parallel'}}
+    #pragma acc update self(i)
+  }
+
+  // expected-note@+1 {{enclosing '#pragma acc parallel loop' here}}
+  #pragma acc parallel loop
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{'#pragma acc update' cannot be nested within '#pragma acc parallel loop'}}
+    #pragma acc update self(i)
+  }
+
+  #pragma acc parallel
+  // expected-note@+1 {{enclosing '#pragma acc loop' here}}
+  #pragma acc loop
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{'#pragma acc update' cannot be nested within '#pragma acc loop'}}
+    #pragma acc update self(i)
+  }
+
+  #pragma acc parallel
+  // expected-note@+1 {{enclosing '#pragma acc loop' here}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{'#pragma acc update' cannot be nested within '#pragma acc loop'}}
+    #pragma acc update self(i)
+  }
+
+  #pragma acc parallel loop
+  for (int i = 0; i < 5; ++i)
+  // expected-note@+1 {{enclosing '#pragma acc loop' here}}
+  #pragma acc loop
+  for (int j = 0; j < 5; ++j) {
+    // expected-error@+1 {{'#pragma acc update' cannot be nested within '#pragma acc loop'}}
+    #pragma acc update self(i)
+  }
+
+  return 0;
+}
+
+// Complete to suppress an additional warning, but it's too late for pragmas.
+int incomplete[3];

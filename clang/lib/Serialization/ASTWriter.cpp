@@ -6881,6 +6881,20 @@ void ACCClauseWriter::VisitACCReductionClause(ACCReductionClause *C) {
     Record.AddStmt(VE);
 }
 
+void ACCClauseWriter::VisitACCSelfClause(ACCSelfClause *C) {
+  Record.push_back(C->varlist_size());
+  Record.AddSourceLocation(C->getLParenLoc());
+  for (auto *VE : C->varlists())
+    Record.AddStmt(VE);
+}
+
+void ACCClauseWriter::VisitACCDeviceClause(ACCDeviceClause *C) {
+  Record.push_back(C->varlist_size());
+  Record.AddSourceLocation(C->getLParenLoc());
+  for (auto *VE : C->varlists())
+    Record.AddStmt(VE);
+}
+
 void ACCClauseWriter::VisitACCNumGangsClause(ACCNumGangsClause *C) {
   Record.AddStmt(C->getNumGangs());
   Record.AddSourceLocation(C->getLParenLoc());

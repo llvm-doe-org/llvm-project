@@ -982,6 +982,145 @@ public:
   }
 };
 
+/// This represents the clause 'self' (or any of its aliases) for
+/// '#pragma acc ...' directives.
+///
+/// \code
+/// #pragma acc update self(a,b)
+/// \endcode
+/// In this example directive '#pragma acc update' has clause 'self' with
+/// the variables 'a' and 'b'.
+class ACCSelfClause final
+    : public ACCVarListClause<ACCSelfClause>,
+      private llvm::TrailingObjects<ACCSelfClause, Expr *> {
+  friend TrailingObjects;
+  friend ACCVarListClause;
+  friend class ACCClauseReader;
+
+  /// Build clause with number of variables \a N.
+  ///
+  /// \param Kind Which alias of the self clause.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param N Number of the variables in the clause.
+  ACCSelfClause(OpenACCClauseKind Kind, SourceLocation StartLoc,
+                SourceLocation LParenLoc, SourceLocation EndLoc, unsigned N)
+      : ACCVarListClause<ACCSelfClause>(Kind, ACC_EXPLICIT, StartLoc, LParenLoc,
+                                        EndLoc, N, ACCC_self) {
+    assert(isClauseKind(Kind) && "expected self clause or alias");
+  }
+
+  /// Build an empty clause.
+  ///
+  /// \param Kind Which alias of the self clause.
+  /// \param N Number of variables.
+  explicit ACCSelfClause(OpenACCClauseKind Kind, unsigned N)
+      : ACCVarListClause<ACCSelfClause>(Kind, N, ACCC_self) {
+    assert(isClauseKind(Kind) && "expected self clause or alias");
+  }
+
+public:
+  /// Creates clause with a list of variables \a VL.
+  ///
+  /// \param C AST context.
+  /// \param Kind Which alias of the self clause.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param VL List of references to the variables.
+  static ACCSelfClause *Create(const ASTContext &C, OpenACCClauseKind Kind,
+                               SourceLocation StartLoc,
+                               SourceLocation LParenLoc, SourceLocation EndLoc,
+                               ArrayRef<Expr *> VL);
+  /// Creates an empty clause with the place for \a N variables.
+  ///
+  /// \param C AST context.
+  /// \param Kind Which alias of the self clause.
+  /// \param N The number of variables.
+  static ACCSelfClause *CreateEmpty(const ASTContext &C, OpenACCClauseKind Kind,
+                                    unsigned N);
+
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end()));
+  }
+
+  static bool isClauseKind(OpenACCClauseKind Kind) {
+    switch (Kind) {
+#define OPENACC_CLAUSE_ALIAS_self(Name) \
+    case ACCC_##Name:                   \
+      return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      return false;
+    }
+  }
+
+  static bool classof(const ACCClause *T) {
+    return isClauseKind(T->getClauseKind());
+  }
+};
+
+/// This represents the clause 'device' (or any of its aliases) for
+/// '#pragma acc ...' directives.
+///
+/// \code
+/// #pragma acc update device(a,b)
+/// \endcode
+/// In this example directive '#pragma acc update' has clause 'device' with
+/// the variables 'a' and 'b'.
+class ACCDeviceClause final
+    : public ACCVarListClause<ACCDeviceClause>,
+      private llvm::TrailingObjects<ACCDeviceClause, Expr *> {
+  friend TrailingObjects;
+  friend ACCVarListClause;
+  friend class ACCClauseReader;
+
+  /// Build clause with number of variables \a N.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param N Number of the variables in the clause.
+  ACCDeviceClause(SourceLocation StartLoc, SourceLocation LParenLoc,
+                  SourceLocation EndLoc, unsigned N)
+      : ACCVarListClause<ACCDeviceClause>(ACCC_device, ACC_EXPLICIT, StartLoc,
+                                          LParenLoc, EndLoc, N) {}
+
+  /// Build an empty clause.
+  ///
+  /// \param N Number of variables.
+  explicit ACCDeviceClause(unsigned N)
+      : ACCVarListClause<ACCDeviceClause>(ACCC_device, N) {}
+
+public:
+  /// Creates clause with a list of variables \a VL.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param VL List of references to the variables.
+  static ACCDeviceClause *Create(const ASTContext &C, SourceLocation StartLoc,
+                                 SourceLocation LParenLoc,
+                                 SourceLocation EndLoc, ArrayRef<Expr *> VL);
+  /// Creates an empty clause with the place for \a N variables.
+  ///
+  /// \param C AST context.
+  /// \param N The number of variables.
+  static ACCDeviceClause *CreateEmpty(const ASTContext &C, unsigned N);
+
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end()));
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_device;
+  }
+};
+
 /// This represents 'num_gangs' clause in the '#pragma acc ...'
 /// directive.
 ///

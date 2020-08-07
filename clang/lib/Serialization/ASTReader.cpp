@@ -12996,6 +12996,14 @@ ACCClause *ACCClauseReader::readClause() {
   case ACCC_reduction:
     C = ACCReductionClause::CreateEmpty(Context, Record.readInt());
     break;
+#define OPENACC_CLAUSE_ALIAS_self(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+    C = ACCSelfClause::CreateEmpty(Context, Kind, Record.readInt());
+    break;
+  case ACCC_device:
+    C = ACCDeviceClause::CreateEmpty(Context, Record.readInt());
+    break;
   case ACCC_num_gangs:
     C = new (Context) ACCNumGangsClause();
     break;
@@ -13142,6 +13150,26 @@ void ACCClauseReader::VisitACCReductionClause(ACCReductionClause *C) {
   C->setColonLoc(Record.readSourceLocation());
   DeclarationNameInfo DNI = Record.readDeclarationNameInfo();
   C->setNameInfo(DNI);
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Record.readSubExpr());
+  C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCSelfClause(ACCSelfClause *C) {
+  C->setLParenLoc(Record.readSourceLocation());
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Record.readSubExpr());
+  C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCDeviceClause(ACCDeviceClause *C) {
+  C->setLParenLoc(Record.readSourceLocation());
   unsigned NumVars = C->varlist_size();
   SmallVector<Expr *, 16> Vars;
   Vars.reserve(NumVars);

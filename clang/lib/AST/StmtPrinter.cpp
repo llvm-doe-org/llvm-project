@@ -1085,6 +1085,22 @@ void ACCClausePrinter::VisitACCReductionClause(ACCReductionClause *Node) {
   }
 }
 
+void ACCClausePrinter::VisitACCSelfClause(ACCSelfClause *Node) {
+  if (!Node->varlist_empty()) {
+    OS << getOpenACCName(Node->getClauseKind());
+    VisitACCClauseList(Node, '(');
+    OS << ")";
+  }
+}
+
+void ACCClausePrinter::VisitACCDeviceClause(ACCDeviceClause *Node) {
+  if (!Node->varlist_empty()) {
+    OS << "device";
+    VisitACCClauseList(Node, '(');
+    OS << ")";
+  }
+}
+
 void ACCClausePrinter::VisitACCNumGangsClause(ACCNumGangsClause *Node) {
   OS << "num_gangs(";
   Node->getNumGangs()->printPretty(OS, nullptr, Policy, 0);
@@ -1286,6 +1302,10 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
                                     EffectiveDirectives);
     break;
   }
+}
+
+void StmtPrinter::VisitACCUpdateDirective(ACCUpdateDirective *Node) {
+  PrintACCExecutableDirective(Node);
 }
 
 void StmtPrinter::VisitACCDataDirective(ACCDataDirective *Node) {

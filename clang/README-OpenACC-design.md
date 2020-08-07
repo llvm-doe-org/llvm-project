@@ -757,6 +757,11 @@ clarify these points in future versions of the OpenACC specification.
       write and so should be fine for a `const` variable.
     * `private` is *pre* for loop control variables, but they
       obviously cannot be `const` anyway, so it's a moot point.
+* A `const` variable appearing in a `self` or `device` clause of an
+  `update` directive is an error.  Notes:
+    * It assumes the host and device copies of the variable have
+      different values and one must be updated from the other, but
+      doing so would violate `const`.
 * It is an error to specify subarrays with no `:` and one integer.
   Notes:
     * This notation is syntactically identical to an array subscript.
@@ -1102,6 +1107,61 @@ Currently, it works as follows in Clacc:
     * There is no ancestor `acc loop` construct that is permitted to
       have *exp* `gang`.  Notes:
         * The point here is to chose the outermost construct possible.
+
+### Executable Directive Placement ###
+
+`acc update` may not be an immediate substatement of any other
+statement including another directive but not including a labeled
+statement.  Notes:
+
+* Enclosing the `acc update` in a compound statement works around this
+  restriction.
+* This restriction is consistent with Clang's OpenMP support and thus
+  facilitates translation to OpenMP.
+* This restriction is not consistent with the OpenACC or OpenMP
+  specifications:
+
+    * OpenACC 3.0 sec. 2.14.4 "Update Directive" L2296-2298 states:
+
+        > The update directive is executable.  It must not appear in
+        > place of the statement following an if, while, do, switch,
+        > or label in C or C++, or in place of the statement following
+        > a logical if in Fortran.
+
+    * OpenMP 5.0 sec. 2.1.3 "Stand-Alone Directives", "Restrictions,
+      p. 43 L2-3 states:
+
+        > A stand-alone directive may not be used in place of the
+        > statement following an if, while, do, switch, or label.
+
+    * OpenMP TR8 sec. 2.1.3 "Stand-Alone Directives", "Restrictions,
+      p. 41 L26-27 states:
+
+        > A stand-alone directive may not be used in place of the
+        > statement following an if, else, while, do, for, switch, or
+        > a label.
+
+* This restriction is also not consistent with other OpenACC or OpenMP
+  compilers:
+    * pgcc 19.10-0 doesn't enforce any of these restrictions for OpenACC.
+    * gcc 7.5.0 enforces them all, including the label restriction,
+      for both OpenACC and OpenMP.  Moreover gcc's diagnostic
+      specifically says `may only be used in compound statements`.
+
+Update Directives
+-----------------
+
+Clacc's current mapping of an `acc update` directive and its clauses
+to OpenMP is as follows:
+
+* `acc update` -> `omp target update`
+* *exp* `self` -> *exp* `from`
+* *exp* `device` -> *exp* `to`
+* Notes:
+    * In the future, Clacc might add the OpenMP TR8 `present` motion
+      modifier to this translation.  See the discussion of the
+      `update` directive under "Supported Features" in
+      `README-OpenACC-status.md`.
 
 Data Directives
 ---------------

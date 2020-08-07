@@ -10862,6 +10862,10 @@ public:
   StmtResult ActOnOpenACCExecutableDirective(
       OpenACCDirectiveKind Kind, ArrayRef<ACCClause *> Clauses, Stmt *AStmt,
       SourceLocation StartLoc, SourceLocation EndLoc);
+  /// Called on well-formed '\#pragma acc update'.
+  StmtResult ActOnOpenACCUpdateDirective(ArrayRef<ACCClause *> Clauses,
+                                         SourceLocation StartLoc,
+                                         SourceLocation EndLoc);
   /// Called on well-formed '\#pragma acc data' after parsing of the associated
   /// statement.
   StmtResult ActOnOpenACCDataDirective(
@@ -10970,6 +10974,17 @@ public:
       SourceLocation StartLoc, SourceLocation LParenLoc,
       SourceLocation ColonLoc, SourceLocation EndLoc,
       const DeclarationNameInfo &ReductionId);
+  /// Called for well-formed 'self' clause or an alias.
+  ACCClause *ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
+                                    ArrayRef<Expr *> VarList,
+                                    SourceLocation StartLoc,
+                                    SourceLocation LParenLoc,
+                                    SourceLocation EndLoc);
+  /// Called for well-formed 'device' clause.
+  ACCClause *ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
+                                      SourceLocation StartLoc,
+                                      SourceLocation LParenLoc,
+                                      SourceLocation EndLoc);
   /// Called on well-formed 'num_gangs' clause.
   ACCClause *ActOnOpenACCNumGangsClause(Expr *NumGangs,
                                         SourceLocation StartLoc,

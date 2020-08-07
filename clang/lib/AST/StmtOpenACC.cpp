@@ -92,6 +92,30 @@ bool ACCExecutableDirective::ompStmtPrintsDifferently(
   return ACCStr != OMPStr;
 }
 
+ACCUpdateDirective *ACCUpdateDirective::Create(const ASTContext &C,
+                                               SourceLocation StartLoc,
+                                               SourceLocation EndLoc,
+                                               ArrayRef<ACCClause *> Clauses) {
+  unsigned Size =
+      llvm::alignTo(sizeof(ACCUpdateDirective), alignof(ACCClause *));
+  void *Mem =
+      C.Allocate(Size + sizeof(ACCClause *) * Clauses.size() + sizeof(Stmt *));
+  ACCUpdateDirective *Dir =
+      new (Mem) ACCUpdateDirective(StartLoc, EndLoc, Clauses.size());
+  Dir->setClauses(Clauses);
+  return Dir;
+}
+
+ACCUpdateDirective *ACCUpdateDirective::CreateEmpty(const ASTContext &C,
+                                                    unsigned NumClauses,
+                                                    EmptyShell) {
+  unsigned Size =
+      llvm::alignTo(sizeof(ACCUpdateDirective), alignof(ACCClause *));
+  void *Mem =
+      C.Allocate(Size + sizeof(ACCClause *) * NumClauses + sizeof(Stmt *));
+  return new (Mem) ACCUpdateDirective(NumClauses);
+}
+
 ACCDataDirective *ACCDataDirective::Create(
     const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
     ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt) {

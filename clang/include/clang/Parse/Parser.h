@@ -408,13 +408,16 @@ class Parser : public CodeCompletionHandler {
     AllowDeclarationsInC = 0x1,
     /// This context permits standalone OpenMP directives.
     AllowStandaloneOpenMPDirectives = 0x2,
+    /// This context permits executable OpenACC directives.
+    AllowExecutableOpenACCDirectives = 0x4,
     /// This context is at the top level of a GNU statement expression.
-    InStmtExpr = 0x4,
+    InStmtExpr = 0x8,
 
     /// The context of a regular substatement.
     SubStmt = 0,
     /// The context of a compound-statement.
-    Compound = AllowDeclarationsInC | AllowStandaloneOpenMPDirectives,
+    Compound = AllowDeclarationsInC | AllowStandaloneOpenMPDirectives |
+               AllowExecutableOpenACCDirectives,
 
     LLVM_MARK_AS_BITMASK_ENUM(InStmtExpr)
   };
@@ -3229,8 +3232,11 @@ public:
 
   /// Parses declarative OpenACC directives.
   DeclGroupPtrTy ParseOpenACCDeclarativeDirective();
-  /// Parses declarative or executable directive.
-  StmtResult ParseOpenACCDeclarativeOrExecutableDirective();
+  /// Parses declarative or executable OpenACC directive.
+  ///
+  /// \param StmtCtx The context in which we're parsing the directive.
+  StmtResult
+  ParseOpenACCDeclarativeOrExecutableDirective(ParsedStmtContext StmtCtx);
   /// Parses clause of kind \a CKind for directive of a kind \a Kind.
   ///
   /// \param DKind Kind of current directive.

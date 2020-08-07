@@ -390,7 +390,7 @@ Retry:
 
   case tok::annot_pragma_openacc:
     ProhibitAttributes(Attrs);
-    return ParseOpenACCDeclarativeOrExecutableDirective();
+    return ParseOpenACCDeclarativeOrExecutableDirective(StmtCtx);
 
   case tok::annot_pragma_ms_pointers_to_members:
     ProhibitAttributes(Attrs);

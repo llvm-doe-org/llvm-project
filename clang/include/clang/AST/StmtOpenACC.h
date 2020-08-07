@@ -316,6 +316,53 @@ public:
   }
 };
 
+/// This represents '#pragma acc update' directive.
+///
+class ACCUpdateDirective : public ACCExecutableDirective {
+  friend class ASTStmtReader;
+
+  /// Build directive with the given start and end location.
+  ///
+  /// \param StartLoc Starting location of the directive (directive keyword).
+  /// \param EndLoc Ending Location of the directive.
+  /// \param NumClauses Number of clauses.
+  ///
+  ACCUpdateDirective(SourceLocation StartLoc, SourceLocation EndLoc,
+                     unsigned NumClauses)
+      : ACCExecutableDirective(this, ACCUpdateDirectiveClass, ACCD_update,
+                               StartLoc, EndLoc, NumClauses, 0, 0) {}
+
+  /// Build an empty directive.
+  explicit ACCUpdateDirective(unsigned NumClauses)
+      : ACCExecutableDirective(this, ACCUpdateDirectiveClass, ACCD_update,
+                               SourceLocation(), SourceLocation(), NumClauses,
+                               0, 0) {}
+
+public:
+  /// Creates directive.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the directive kind.
+  /// \param EndLoc Ending Location of the directive.
+  /// \param Clauses List of clauses.
+  static ACCUpdateDirective *Create(const ASTContext &C,
+                                    SourceLocation StartLoc,
+                                    SourceLocation EndLoc,
+                                    ArrayRef<ACCClause *> Clauses);
+
+  /// Creates an empty directive.
+  ///
+  /// \param C AST context.
+  /// \param NumClauses Number of clauses.
+  ///
+  static ACCUpdateDirective *CreateEmpty(const ASTContext &C,
+                                         unsigned NumClauses, EmptyShell);
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == ACCUpdateDirectiveClass;
+  }
+};
+
 /// This represents '#pragma acc data' directive.
 ///
 class ACCDataDirective : public ACCExecutableDirective {

@@ -46,6 +46,15 @@
 #ifndef OPENACC_CLAUSE_ALIAS_create
 #  define OPENACC_CLAUSE_ALIAS_create(Name)
 #endif
+#ifndef OPENACC_CLAUSE_ALIAS_self
+#  define OPENACC_CLAUSE_ALIAS_self(Name)
+#endif
+#ifndef OPENACC_UPDATE_DMA
+#  define OPENACC_UPDATE_DMA(Name)
+#endif
+#ifndef OPENACC_UPDATE_DSA
+#  define OPENACC_UPDATE_DSA(Name)
+#endif
 #ifndef OPENACC_DATA_DMA
 #  define OPENACC_DATA_DMA(Name)
 #endif
@@ -70,6 +79,9 @@
 #ifndef OPENACC_PARALLEL_LOOP_DSA
 #  define OPENACC_PARALLEL_LOOP_DSA(Name)
 #endif
+#ifndef OPENACC_UPDATE_CLAUSE
+#  define OPENACC_UPDATE_CLAUSE(Name)
+#endif
 #ifndef OPENACC_DATA_CLAUSE
 #  define OPENACC_DATA_CLAUSE(Name)
 #endif
@@ -81,6 +93,9 @@
 #endif
 #ifndef OPENACC_PARALLEL_LOOP_CLAUSE
 #  define OPENACC_PARALLEL_LOOP_CLAUSE(Name)
+#endif
+#ifndef OPENACC_UPDATE_PARENT
+#  define OPENACC_UPDATE_PARENT(Name)
 #endif
 #ifndef OPENACC_DATA_PARENT
 #  define OPENACC_DATA_PARENT(Name)
@@ -121,6 +136,7 @@
   OPENACC_LOOP_DSA(Name)
 
 // OpenACC directives.
+OPENACC_DIRECTIVE(update)
 OPENACC_DIRECTIVE(data)
 OPENACC_DIRECTIVE(parallel)
 OPENACC_DIRECTIVE(loop)
@@ -176,11 +192,14 @@ OPENACC_DIRECTIVE_EXT(parallel_loop, "parallel loop")
 //
 //   - OPENACC_CLAUSE_AND_(DMA|DSA_MAPPABLE|DSA_UNMAPPABLE): Specify one of
 //     these for each DA clause unless it is an aliased clause or clause alias.
-//   - OPENACC_CLAUSE: Specify this for each non-DA clause.  Don't specify this
-//     directly for DA clauses as it's implied by the DA macros above.
+//   - OPENACC_CLAUSE: Specify this for each non-DA clause unless it is an
+//     aliased clause or clause alias.  Don't specify this directly for DA
+//     clauses as it's implied by the DA macros above.
 //   - OPENACC_ALIASED_CLAUSE: Specify this for each aliased clause.  The first
 //     argument is the macro above that would be appropriate for this clause if
-//     it had no aliases.
+//     it had no aliases.  Also, at the beginning of this file, add an empty
+//     definition for OPENACC_CLAUSE_ALIAS_<AliasedClause>(Name) when it's not
+//     already defined, and undefine it at the end of this file.
 //   - OPENACC_CLAUSE_ALIAS: Specify this for each clause alias.  The specified
 //     ACC*Clause class must be the same as for the aliased clause.
 //   - OPENACC_(DMA|DSA_MAPPABLE|DSA_UNMAPPABLE): Don't specify these directly
@@ -234,6 +253,9 @@ OPENACC_CLAUSE_AND_DSA_MAPPABLE(shared, ACCSharedClause)
 OPENACC_CLAUSE_AND_DSA_MAPPABLE(reduction, ACCReductionClause)
 OPENACC_CLAUSE_AND_DSA_UNMAPPABLE(private, ACCPrivateClause)
 OPENACC_CLAUSE_AND_DSA_UNMAPPABLE(firstprivate, ACCFirstprivateClause)
+OPENACC_ALIASED_CLAUSE(OPENACC_CLAUSE, self, ACCSelfClause)
+OPENACC_CLAUSE_ALIAS(host, self, ACCSelfClause)
+OPENACC_CLAUSE(device, ACCDeviceClause)
 OPENACC_CLAUSE(num_gangs, ACCNumGangsClause)
 OPENACC_CLAUSE(num_workers, ACCNumWorkersClause)
 OPENACC_CLAUSE(vector_length, ACCVectorLengthClause)
@@ -244,6 +266,11 @@ OPENACC_CLAUSE(gang, ACCGangClause)
 OPENACC_CLAUSE(worker, ACCWorkerClause)
 OPENACC_CLAUSE(vector, ACCVectorClause)
 OPENACC_CLAUSE(collapse, ACCCollapseClause)
+
+// Explicit clauses allowed for OpenACC directive 'update'.
+OPENACC_UPDATE_CLAUSE(self)
+OPENACC_UPDATE_CLAUSE(host)
+OPENACC_UPDATE_CLAUSE(device)
 
 // Explicit clauses and DAs allowed for OpenACC directive 'data'.
 OPENACC_DATA_DMA(nomap)
@@ -328,6 +355,10 @@ OPENACC_PARALLEL_LOOP_CLAUSE(worker)
 OPENACC_PARALLEL_LOOP_CLAUSE(vector)
 OPENACC_PARALLEL_LOOP_CLAUSE(collapse)
 
+// Parent directives allowed for 'update'.
+OPENACC_UPDATE_PARENT(unknown)
+OPENACC_UPDATE_PARENT(data)
+
 // Parent directives allowed for 'data'.
 OPENACC_DATA_PARENT(unknown)
 OPENACC_DATA_PARENT(data)
@@ -360,6 +391,9 @@ OPENACC_PARALLEL_LOOP_PARENT(data)
 #undef OPENACC_CLAUSE_ALIAS_copyin
 #undef OPENACC_CLAUSE_ALIAS_copyout
 #undef OPENACC_CLAUSE_ALIAS_create
+#undef OPENACC_CLAUSE_ALIAS_self
+#undef OPENACC_UPDATE_DMA
+#undef OPENACC_UPDATE_DSA
 #undef OPENACC_DATA_DMA
 #undef OPENACC_DATA_DSA
 #undef OPENACC_PARALLEL_DMA
@@ -368,10 +402,12 @@ OPENACC_PARALLEL_LOOP_PARENT(data)
 #undef OPENACC_LOOP_DSA
 #undef OPENACC_PARALLEL_LOOP_DMA
 #undef OPENACC_PARALLEL_LOOP_DSA
+#undef OPENACC_UPDATE_CLAUSE
 #undef OPENACC_DATA_CLAUSE
 #undef OPENACC_PARALLEL_CLAUSE
 #undef OPENACC_LOOP_CLAUSE
 #undef OPENACC_PARALLEL_LOOP_CLAUSE
+#undef OPENACC_UPDATE_PARENT
 #undef OPENACC_DATA_PARENT
 #undef OPENACC_PARALLEL_PARENT
 #undef OPENACC_LOOP_PARENT

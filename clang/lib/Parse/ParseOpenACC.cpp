@@ -70,6 +70,7 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
   case ACCD_unknown:
     Diag(Tok, diag::err_acc_unknown_directive);
     break;
+  case ACCD_update:
   case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
@@ -88,11 +89,12 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
 ///
 ///       executable-directive:
 ///         annot_pragma_openacc
-///         'data' | 'parallel' | 'loop' | 'parallel loop'
+///         'update' | 'data' | 'parallel' | 'loop' | 'parallel loop'
 ///         {clause}
 ///         annot_pragma_openacc_end
 ///
-StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
+StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
+    ParsedStmtContext StmtCtx) {
   assert(Tok.is(tok::annot_pragma_openacc) && "Not an OpenACC directive!");
   ParenBraceBracketBalancer BalancerRAIIObj(*this);
   SmallVector<ACCClause *, 5> Clauses;
@@ -105,6 +107,21 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
   bool HasAssociatedStatement = true;
 
   switch (DKind) {
+  case ACCD_update:
+    // OpenACC 3.0 sec. 2.14.4 "Update Directive" L2296-2298:
+    //   "The update directive is executable.  It must not appear in place of
+    //   the statement following an if, while, do, switch, or label in C or C++,
+    //   or in place of the statement following a logical if in Fortran."
+    // Clang does not follow this exactly.  Instead, Clang's OpenACC and OpenMP
+    // support are consistent here, facilitating translation to OpenMP.  For
+    // example, Clang does not enforce the case of labels, and Clang
+    // additionally restricts the cases of "else", "for", and other directives.
+    if ((StmtCtx & ParsedStmtContext::AllowExecutableOpenACCDirectives) ==
+        ParsedStmtContext()) {
+      Diag(Tok, diag::err_acc_immediate_substatement) << getOpenACCName(DKind);
+    }
+    HasAssociatedStatement = false;
+    LLVM_FALLTHROUGH;
   case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
@@ -178,6 +195,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective() {
 ///       | create-clause | pcreate-clause | present_or_create-clause
 ///       | no_create-clause
 ///       | private-clause | firstprivate-clause | reduction-clause
+///       | self-clause | host-clause | device-clause
 ///       | num_gangs-clause | num_workers-clause | vector_length-clause
 ///       | seq-clause | independent-clause | auto-clause
 ///       | gang-clause | worker-clause | vector-clause | collapse-clause
@@ -275,6 +293,10 @@ ACCClause *Parser::ParseOpenACCClause(
   case ACCC_private:
   case ACCC_firstprivate:
   case ACCC_reduction:
+#define OPENACC_CLAUSE_ALIAS_self(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+  case ACCC_device:
     Clause = ParseOpenACCVarListClause(DKind, CKind, WrongDirective);
     break;
   case ACCC_nomap:

@@ -2332,6 +2332,31 @@ public:
         ReductionId);
   }
 
+  /// Build a new OpenACC 'self' clause.
+  ///
+  /// By default, performs semantic analysis to build the new OpenACC clause.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCSelfClause(OpenACCClauseKind Kind,
+                                  ArrayRef<Expr *> VarList,
+                                  SourceLocation StartLoc,
+                                  SourceLocation LParenLoc,
+                                  SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCSelfClause(Kind, VarList, StartLoc, LParenLoc,
+                                            EndLoc);
+  }
+
+  /// Build a new OpenACC 'device' clause.
+  ///
+  /// By default, performs semantic analysis to build the new OpenACC clause.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCDeviceClause(ArrayRef<Expr *> VarList,
+                                    SourceLocation StartLoc,
+                                    SourceLocation LParenLoc,
+                                    SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCDeviceClause(VarList, StartLoc, LParenLoc,
+                                              EndLoc);
+  }
+
   /// Build a new OpenACC 'collapse' clause.
   ///
   /// By default, performs semantic analysis to build the new statement.
@@ -10161,6 +10186,15 @@ StmtResult TreeTransform<Derived>::TransformACCExecutableDirective(
 
 template <typename Derived>
 StmtResult
+TreeTransform<Derived>::TransformACCUpdateDirective(ACCUpdateDirective *D) {
+  getDerived().getSema().StartOpenACCDABlock(ACCD_update, D->getBeginLoc());
+  StmtResult Res = getDerived().TransformACCExecutableDirective(D);
+  getDerived().getSema().EndOpenACCDABlock();
+  return Res;
+}
+
+template <typename Derived>
+StmtResult
 TreeTransform<Derived>::TransformACCDataDirective(ACCDataDirective *D) {
   getDerived().getSema().StartOpenACCDABlock(ACCD_data, D->getBeginLoc());
   StmtResult Res = getDerived().TransformACCExecutableDirective(D);
@@ -10405,6 +10439,36 @@ ACCClause *TreeTransform<Derived>::TransformACCReductionClause(
   return getDerived().RebuildACCReductionClause(
       Vars, C->getDetermination(), C->getBeginLoc(), C->getLParenLoc(),
       C->getColonLoc(), C->getEndLoc(), NameInfo);
+}
+
+template <typename Derived>
+ACCClause *TreeTransform<Derived>::TransformACCSelfClause(ACCSelfClause *C) {
+  llvm::SmallVector<Expr *, 16> Vars;
+  Vars.reserve(C->varlist_size());
+  for (auto *VE : C->varlists()) {
+    ExprResult EVar = getDerived().TransformExpr(cast<Expr>(VE));
+    if (EVar.isInvalid())
+      return nullptr;
+    Vars.push_back(EVar.get());
+  }
+  return getDerived().RebuildACCSelfClause(C->getClauseKind(), Vars,
+                                           C->getBeginLoc(), C->getLParenLoc(),
+                                           C->getEndLoc());
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCDeviceClause(ACCDeviceClause *C) {
+  llvm::SmallVector<Expr *, 16> Vars;
+  Vars.reserve(C->varlist_size());
+  for (auto *VE : C->varlists()) {
+    ExprResult EVar = getDerived().TransformExpr(cast<Expr>(VE));
+    if (EVar.isInvalid())
+      return nullptr;
+    Vars.push_back(EVar.get());
+  }
+  return getDerived().RebuildACCDeviceClause(Vars, C->getBeginLoc(),
+                                             C->getLParenLoc(), C->getEndLoc());
 }
 
 template <typename Derived>

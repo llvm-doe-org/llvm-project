@@ -41,6 +41,26 @@ We have implemented and tested support for the following features:
           -help` and search for `openacc` or `openmp`.
 * run-time environment variables:
     * `OMP_TARGET_OFFLOAD=disabled` for targeting host
+* `update` directive:
+    * `self` clause and alias `host`
+    * `device` clause
+    * Presence restriction:
+        * OpenACC 3.0 requires variables appearing in these clauses to
+          be already present on the device.  However, while it
+          suggests a runtime error when this restriction is violated
+          by an application, it does not strictly require any specific
+          behavior.
+        * For now, Clacc produces the same behavior as OpenMP 5.0's
+          `omp target update` when this restriction is violated: no
+          data transfer occurs.
+        * Changes have been proposed to the OpenACC specification to
+          strictly require a runtime error instead, and so Clacc will
+          likely adjust its behavior in the future.  Most likely,
+          Clacc will utilize OpenMP TR8's `present` motion modifier
+          once Clang supports it.
+    * nesting within a `data` directive
+    * in `self`, `host`, and `device` clauses, subarrays specifying
+      contiguous blocks
 * `data` directive:
     * `present` and `no_create` clauses
         * Traditional compilation mode:
@@ -315,6 +335,9 @@ following features for now:
       subscript)
     * `readonly` and `zero` modifiers in `copyin`, `copyout`, and
       `create` clauses
+* `update` directive:
+    * multiple subarrays of the same array on the same directive
+    * a member of a struct or class
 * `loop` directive:
     * outside a `parallel` directive (that is, an orphaned loop)
     * `gang`, `worker`, and `vector` clause arguments

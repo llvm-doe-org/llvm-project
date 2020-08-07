@@ -2568,21 +2568,25 @@ enum CXCursorKind {
    */
   CXCursor_OMPScanDirective = 287,
 
+  /** OpenACC update directive.
+   */
+  CXCursor_ACCUpdateDirective = 288,
+
   /** OpenACC data directive.
    */
-  CXCursor_ACCDataDirective = 288,
+  CXCursor_ACCDataDirective = 289,
 
   /** OpenACC parallel directive.
    */
-  CXCursor_ACCParallelDirective = 289,
+  CXCursor_ACCParallelDirective = 290,
 
   /** OpenACC loop directive.
    */
-  CXCursor_ACCLoopDirective = 290,
+  CXCursor_ACCLoopDirective = 291,
 
   /** OpenACC parallel loop directive.
    */
-  CXCursor_ACCParallelLoopDirective = 291,
+  CXCursor_ACCParallelLoopDirective = 292,
 
   CXCursor_LastStmt = CXCursor_ACCParallelLoopDirective,
 

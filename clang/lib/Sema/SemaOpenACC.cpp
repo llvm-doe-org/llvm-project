@@ -84,6 +84,7 @@ public:
 private:
   struct DirStackEntryTy final {
     llvm::DenseMap<VarDecl *, DAVarData> DAMap;
+    llvm::DenseMap<VarDecl *, Expr *> UpdateVarSet;
     llvm::SmallVector<Expr *, 4> ReductionVarsOnEffectiveOrCombined;
     llvm::DenseSet<VarDecl *> LCVSet;
     llvm::SmallVector<std::pair<Expr *, VarDecl *>, 4> LCVVec;
@@ -376,6 +377,24 @@ public:
   /// Returns true if the declaration has a DMA anywhere on the stack.
   bool hasVisibleDMA(VarDecl *VD);
 
+  /// Records a variable appearing in an update directive clause and returns
+  /// false, or complains and returns true if it already appeared in one for
+  /// the current directive.
+  bool addUpdateVar(VarDecl *VD, Expr *E) {
+    assert(!Stack.empty() && "expected non-empty directive stack");
+    auto Itr = Stack.rbegin();
+    VD = VD->getCanonicalDecl();
+    if (Expr *OldExpr = Itr->UpdateVarSet[VD]) {
+      SemaRef.Diag(E->getExprLoc(), diag::err_acc_update_same_var)
+          << VD->getName() << E->getSourceRange();
+      SemaRef.Diag(OldExpr->getExprLoc(), diag::note_acc_update_var)
+          << OldExpr->getSourceRange();
+      return true;
+    }
+    Itr->UpdateVarSet[VD] = E;
+    return false;
+  }
+
   /// Returns currently analyzed directive.
   OpenACCDirectiveKind getRealDirective() const {
     auto I = Stack.rbegin();
@@ -558,6 +577,7 @@ void Sema::DestroyOpenACCDirectiveStack() { delete DirStack; }
 void Sema::StartOpenACCDABlock(OpenACCDirectiveKind RealDKind,
                                SourceLocation Loc) {
   switch (RealDKind) {
+  case ACCD_update:
   case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
@@ -623,6 +643,14 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
     Res = ActOnOpenACCReductionClause(VarList, ACC_EXPLICIT, StartLoc,
                                       LParenLoc, ColonLoc, EndLoc,
                                       ReductionId);
+    break;
+#define OPENACC_CLAUSE_ALIAS_self(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+    Res = ActOnOpenACCSelfClause(Kind, VarList, StartLoc, LParenLoc, EndLoc);
+    break;
+  case ACCC_device:
+    Res = ActOnOpenACCDeviceClause(VarList, StartLoc, LParenLoc, EndLoc);
     break;
   case ACCC_nomap:
   case ACCC_shared:
@@ -1408,6 +1436,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     case ACCD_parallel_loop:
       return ActOnOpenACCParallelLoopDirective(Clauses, AStmt, StartLoc,
                                                EndLoc);
+    case ACCD_update:
     case ACCD_data:
     case ACCD_parallel:
     case ACCD_loop:
@@ -1566,6 +1595,11 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
 
   // Act on the directive.
   switch (DKind) {
+  case ACCD_update:
+    assert(!AStmt &&
+           "expected no associated statement for 'acc update' directive");
+    Res = ActOnOpenACCUpdateDirective(ComputedClauses, StartLoc, EndLoc);
+    break;
   case ACCD_data:
     Res = ActOnOpenACCDataDirective(ComputedClauses, AStmt, StartLoc, EndLoc);
     break;
@@ -1601,6 +1635,35 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
   return Res;
 }
 
+StmtResult Sema::ActOnOpenACCUpdateDirective(ArrayRef<ACCClause *> Clauses,
+                                             SourceLocation StartLoc,
+                                             SourceLocation EndLoc) {
+  // OpenACC 3.0 sec. 2.14.4 "Update Directive" L1117-1118:
+  // "At least one self, host, or device clause must appear on an update
+  // directive."
+  bool Found = false;
+  for (ACCClause *C : Clauses) {
+    switch (C->getClauseKind()) {
+#define OPENACC_CLAUSE_ALIAS_self(Name) \
+    case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+    case ACCC_device:
+      Found = true;
+      break;
+    default:
+      break;
+    }
+    if (Found)
+      break;
+  }
+  if (!Found) {
+    Diag(StartLoc, diag::err_acc_no_self_host_device_clause);
+    return StmtError();
+  }
+
+  return ACCUpdateDirective::Create(Context, StartLoc, EndLoc, Clauses);
+}
+
 StmtResult Sema::ActOnOpenACCDataDirective(
     ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
     SourceLocation EndLoc) {
@@ -1631,6 +1694,10 @@ StmtResult Sema::ActOnOpenACCDataDirective(
     case ACCC_private:
     case ACCC_firstprivate:
     case ACCC_reduction:
+#define OPENACC_CLAUSE_ALIAS_self(Name) \
+    case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+    case ACCC_device:
     case ACCC_num_gangs:
     case ACCC_num_workers:
     case ACCC_vector_length:
@@ -1824,6 +1891,10 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr
   case ACCC_private:
   case ACCC_firstprivate:
   case ACCC_reduction:
+#define OPENACC_CLAUSE_ALIAS_self(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+  case ACCC_device:
   case ACCC_seq:
   case ACCC_independent:
   case ACCC_auto:
@@ -2506,6 +2577,94 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
                                     ReductionId);
 }
 
+ACCClause *Sema::ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
+                                        ArrayRef<Expr *> VarList,
+                                        SourceLocation StartLoc,
+                                        SourceLocation LParenLoc,
+                                        SourceLocation EndLoc) {
+  SmallVector<Expr *, 8> Vars;
+  for (auto &RefExpr : VarList) {
+    assert(RefExpr && "NULL expr in OpenACC self clause.");
+    SourceLocation ELoc;
+    SourceRange ERange;
+    Expr *SimpleRefExpr = RefExpr;
+    VarDecl *VD = getVarDeclFromVarList(*this, Kind, SimpleRefExpr, ELoc,
+                                        ERange, /*AllowSubarray=*/true);
+    if (!VD)
+      continue;
+
+    QualType Type = VD->getType();
+
+    // The OpenACC 2.7 spec doesn't say, as far as I know, that a variable
+    // in a self clause must have a complete type.  However, it could not
+    // have been allocated on the device copy if it didn't have a size.
+    if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
+                               DirStack->getConstructLoc(), ELoc))
+      continue;
+
+    // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
+    // variable cannot be in a self clause, but updating it seems to be a
+    // violation of const.
+    if (Type.isConstant(Context)) {
+      Diag(ELoc, diag::err_acc_const_update) << ERange;
+      Diag(VD->getLocation(), diag::note_acc_const) << VD;
+      continue;
+    }
+
+    if (!DirStack->addUpdateVar(VD, RefExpr->IgnoreParens()))
+      Vars.push_back(RefExpr->IgnoreParens());
+  }
+
+  if (Vars.empty())
+    return nullptr;
+
+  return ACCSelfClause::Create(Context, Kind, StartLoc, LParenLoc, EndLoc,
+                               Vars);
+}
+
+ACCClause *Sema::ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
+                                          SourceLocation StartLoc,
+                                          SourceLocation LParenLoc,
+                                          SourceLocation EndLoc) {
+  SmallVector<Expr *, 8> Vars;
+  for (auto &RefExpr : VarList) {
+    assert(RefExpr && "NULL expr in OpenACC device clause.");
+    SourceLocation ELoc;
+    SourceRange ERange;
+    Expr *SimpleRefExpr = RefExpr;
+    VarDecl *VD = getVarDeclFromVarList(*this, ACCC_device, SimpleRefExpr, ELoc,
+                                        ERange, /*AllowSubarray=*/true);
+    if (!VD)
+      continue;
+
+    QualType Type = VD->getType();
+
+    // The OpenACC 2.7 spec doesn't say, as far as I know, that a variable
+    // in a device clause must have a complete type.  However, it could not
+    // have been allocated on the device copy if it didn't have a size.
+    if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_device,
+                               DirStack->getConstructLoc(), ELoc))
+      continue;
+
+    // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
+    // variable cannot be in a device clause, but updating it seems to be a
+    // violation of const.
+    if (Type.isConstant(Context)) {
+      Diag(ELoc, diag::err_acc_const_update) << ERange;
+      Diag(VD->getLocation(), diag::note_acc_const) << VD;
+      continue;
+    }
+
+    if (!DirStack->addUpdateVar(VD, RefExpr->IgnoreParens()))
+      Vars.push_back(RefExpr->IgnoreParens());
+  }
+
+  if (Vars.empty())
+    return nullptr;
+
+  return ACCDeviceClause::Create(Context, StartLoc, LParenLoc, EndLoc, Vars);
+}
+
 enum PosIntResult {PosIntConst, PosIntNonConst, PosIntError};
 
 static PosIntResult IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
@@ -2577,6 +2736,10 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
   case ACCC_private:
   case ACCC_firstprivate:
   case ACCC_reduction:
+#define OPENACC_CLAUSE_ALIAS_self(Name) \
+  case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+  case ACCC_device:
   case ACCC_num_gangs:
   case ACCC_num_workers:
   case ACCC_vector_length:
@@ -3095,6 +3258,49 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
 
 public:
   TransformACCToOMP(Sema &SemaRef) : BaseTransform(SemaRef) {}
+
+  // TODO: The common parts of the next several functions could probably be
+  // captured in a template function.
+  StmtResult TransformACCUpdateDirective(ACCUpdateDirective *D) {
+    DirStackEntryRAII TheDirStackEntryRAII(*this, D);
+
+    // Start OpenMP DA block.
+    getSema().StartOpenMPDSABlock(OMPD_target_update, DeclarationNameInfo(),
+                                  /*CurScope=*/nullptr, D->getBeginLoc());
+
+    // Transform OpenACC clauses.
+    llvm::SmallVector<OMPClause *, 16> TClauses;
+    size_t TClausesEmptyCount;
+    size_t NumClausesAdded = 0;
+    transformACCClauses(D, OMPD_target_update, TClauses, TClausesEmptyCount,
+                        NumClausesAdded);
+
+    // Neither acc update nor omp target update have associated statements, but
+    // for some reason OMPTargetUpdateDirective expects one.
+    assert(!D->hasAssociatedStmt() &&
+           "expected no associated statement on 'acc update' directive");
+    getSema().ActOnOpenMPRegionStart(OMPD_target_update, nullptr);
+    StmtResult AssociatedStmt =
+        (Sema::CompoundScopeRAII(getSema()),
+         getSema().ActOnCompoundStmt(D->getEndLoc(), D->getEndLoc(), llvm::None,
+                                     /*isStmtExpr=*/false));
+    AssociatedStmt = getSema().ActOnOpenMPRegionEnd(AssociatedStmt, TClauses);
+
+    // Build OpenMP directive and finalize enclosing compound statement, if
+    // any.
+    StmtResult Res;
+    if (TClauses.size() !=
+        D->clauses().size() - TClausesEmptyCount + NumClausesAdded)
+      Res = StmtError();
+    else
+      Res = getDerived().RebuildOMPExecutableDirective(
+          OMPD_target_update, DeclarationNameInfo(), OMPD_unknown, TClauses,
+          AssociatedStmt.get(), D->getBeginLoc(), D->getEndLoc());
+    getSema().EndOpenMPDSABlock(Res.get());
+    if (!Res.isInvalid())
+      D->setOMPNode(Res.get());
+    return Res;
+  }
 
   StmtResult TransformACCDataDirective(ACCDataDirective *D) {
     DirStackEntryRAII TheDirStackEntryRAII(*this, D);
@@ -3664,9 +3870,36 @@ public:
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
           CXXScopeSpec Spec;
           return getDerived().RebuildOMPReductionClause(
-            Vars, OMPC_REDUCTION_unknown, L.LocStart, L.LParenLoc,
-            /*ModifierLoc=*/SourceLocation(), C->getColonLoc(), L.LocEnd, Spec,
-            C->getNameInfo(), ArrayRef<Expr*>());
+              Vars, OMPC_REDUCTION_unknown, L.LocStart, L.LParenLoc,
+              /*ModifierLoc=*/SourceLocation(), C->getColonLoc(), L.LocEnd,
+              Spec, C->getNameInfo(), ArrayRef<Expr *>());
+        });
+  }
+
+  OMPClauseResult TransformACCSelfClause(ACCExecutableDirective *D,
+                                         OpenMPDirectiveKind TDKind,
+                                         ACCSelfClause *C) {
+    return transformACCVarListClause<ACCSelfClause>(
+        D, C, OMPC_from,
+        [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+          CXXScopeSpec MapperIdScopeSpec;
+          DeclarationNameInfo MapperIdInfo;
+          return getDerived().RebuildOMPFromClause(
+              Vars, MapperIdScopeSpec, MapperIdInfo,
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+        });
+  }
+
+  OMPClauseResult TransformACCDeviceClause(ACCExecutableDirective *D,
+                                           OpenMPDirectiveKind TDKind,
+                                           ACCDeviceClause *C) {
+    return transformACCVarListClause<ACCDeviceClause>(
+        D, C, OMPC_to, [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+          CXXScopeSpec MapperIdScopeSpec;
+          DeclarationNameInfo MapperIdInfo;
+          return getDerived().RebuildOMPToClause(
+              Vars, MapperIdScopeSpec, MapperIdInfo,
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
         });
   }
 

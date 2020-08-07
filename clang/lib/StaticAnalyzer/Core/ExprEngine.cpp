@@ -1292,6 +1292,7 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
     case Stmt::OMPTargetTeamsDistributeParallelForDirectiveClass:
     case Stmt::OMPTargetTeamsDistributeParallelForSimdDirectiveClass:
     case Stmt::OMPTargetTeamsDistributeSimdDirectiveClass:
+    case Stmt::ACCUpdateDirectiveClass:
     case Stmt::ACCDataDirectiveClass:
     case Stmt::ACCParallelDirectiveClass:
     case Stmt::ACCLoopDirectiveClass:

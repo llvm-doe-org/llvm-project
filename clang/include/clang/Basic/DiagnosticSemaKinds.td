@@ -10333,6 +10333,12 @@ def err_acc_conflicting_da : Error<
   "%select{||predetermined |implied }2%3 variable">;
 def note_acc_explicit_da : Note<
   "previously defined as %0 variable here">;
+def err_acc_update_same_var : Error<
+  "variable '%0' appears in multiple self, host, or device clauses of the "
+  "same '#pragma acc update' directive">;
+def note_acc_update_var : Note<"previously appeared here">;
+def err_acc_const_update : Error<
+  "const variable cannot be updated by '#pragma acc update'">;
 def err_acc_const_da : Error<
   "const variable cannot be %0 because initialization is impossible">;
 def note_acc_const : Note<
@@ -10404,6 +10410,9 @@ def note_acc_alternate_omp : Note<
   "'-fopenacc-%0-omp=%1'">;
 def note_acc_disable_diag : Note<
   "or you can just disable this diagnostic with '-Wno-%0'">;
+def err_acc_no_self_host_device_clause : Error<
+  "expected at least one 'self', 'host', or 'device' clause for '#pragma acc "
+  "update'">;
 } // end of OpenACC category
 
 let CategoryName = "Related Result Type Issue" in {

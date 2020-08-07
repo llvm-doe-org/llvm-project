@@ -1351,6 +1351,8 @@ def err_acc_mutually_exclusive_clauses : Error<
   "unexpected OpenACC clause '%0', '%1' is specified already">;
 def err_acc_expected_reduction_operator : Error<
   "expected reduction operator">;
+def err_acc_immediate_substatement : Error<
+  "'#pragma acc %0' cannot be an immediate substatement">;
 
 // Pragma loop support.
 def err_pragma_loop_missing_argument : Error<
