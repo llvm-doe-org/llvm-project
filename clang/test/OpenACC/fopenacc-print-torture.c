@@ -1,6 +1,7 @@
 // This test checks -fopenacc-print output for no preprocessor expansion,
 // layout preservation, and exact formatting for many cases that are special
-// to -fopenacc-print but not so much to -fopenacc-ast-print.
+// to -fopenacc-print but not so much to -fopenacc-ast-print.  Cases that cannot
+// be rewritten are checked in fopenacc-print-messages.c instead.
 
 // Strip comments and blank lines so checking -fopenacc-print output is easier.
 // RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' > %t-acc.c
@@ -61,6 +62,12 @@ int main() {
   // Directive only rewrite, not nested.
   //--------------------------------------------------
 
+  //  PRT-A-NEXT:  #pragma acc update device(i)
+  // PRT-AO-NEXT:  // #pragma omp target update to(i)
+  //  PRT-O-NEXT:  #pragma omp target update to(i)
+  // PRT-OA-NEXT:  // #pragma acc update device(i)
+  #pragma acc update device(i)
+
   //  PRT-A-NEXT:  #pragma acc parallel
   // PRT-AO-NEXT:  // #pragma omp target teams
   //  PRT-O-NEXT:  #pragma omp target teams
@@ -84,6 +91,23 @@ int main() {
   //--------------------------------------------------
   // Directive only rewrite, nested.
   //--------------------------------------------------
+
+  //  PRT-A-NEXT:  #pragma acc data copy(i)
+  // PRT-AO-NEXT:  // #pragma omp target data map(tofrom: i)
+  //  PRT-A-NEXT:  {
+  //  PRT-A-NEXT:    #pragma acc update device(i)
+  // PRT-AO-NEXT:    // #pragma omp target update to(i)
+  //  PRT-A-NEXT:  }
+  //  PRT-O-NEXT:  #pragma omp target data map(tofrom: i)
+  // PRT-OA-NEXT:  // #pragma acc data copy(i)
+  //  PRT-O-NEXT:  {
+  //  PRT-O-NEXT:    #pragma omp target update to(i)
+  // PRT-OA-NEXT:    // #pragma acc update device(i)
+  //  PRT-O-NEXT:  }
+  #pragma acc data copy(i)
+  {
+    #pragma acc update device(i)
+  }
 
   //  PRT-A-NEXT:  #pragma acc parallel
   // PRT-AO-NEXT:  // #pragma omp target teams

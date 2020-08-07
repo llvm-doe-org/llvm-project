@@ -89,27 +89,37 @@ public:
     // complain and refuse to rewrite.  FIXME: If it does not appear inside a
     // macro expansion (that's probably rare as that seems to be its purpose in
     // life), its end location is identified as not rewritable and appears to
-    // be unusable for the sake of rewriting anyway (we think the spelling
-    // column counts the number of characters in the _Pragma string, but we
-    // haven't verified that against the parser implementation).  In that case,
-    // we force a full construct rewrite so that we don't need the _Pragma's
-    // end location, and we then complain if there is no associated statement.
+    // be unusable for the sake of rewriting anyway (based on how it renders in
+    // diagnostics, the spelling column points to the end of the _Pragma's
+    // string, but we haven't verified that against the parser implementation).
+    // In that case, we force a full construct rewrite so that we don't need the
+    // _Pragma's end location, and we complain if there is no associated
+    // statement.
     //
     // If a full construct rewrite is required, either because of _Pragma form
     // or because the associated statement requires modification, we also check
     // the end location of the associated statement and complain if it appears
     // within a macro expansion.
     //
-    // In summary, we complain if either (1) the start of the pragma appears in
-    // a macro expansion (must be _Pragma form), (2) the associated statement
-    // must be rewritten (always true for _Pragma form) but its last token
-    // appears in a macro expansion, or (3) there is no associated statement
-    // and we have _Pragma form.
+    // In summary, we complain using either:
+    // - err_rewrite_acc_start_in_macro if the start of the pragma appears in a
+    //   macro expansion (must be _Pragma form).
+    // - err_rewrite_acc_end_in_pragma_op if there is no associated statement
+    //   and we have _Pragma form.
+    // - err_rewrite_acc_end_in_macro if the associated statement must be
+    //   rewritten (always true for _Pragma form) but its last token appears in
+    //   a macro expansion.
     PrintingPolicy Policy(Context->getLangOpts());
     SourceRange DirectiveRange = ACCNode->getDirectiveRange();
     if (!Rewrite.isRewritable(DirectiveRange.getBegin())) {
       Context->getDiagnostics().Report(DirectiveRange.getBegin(),
                                        diag::err_rewrite_acc_start_in_macro);
+      return false;
+    }
+    if (!Rewrite.isRewritable(DirectiveRange.getEnd()) &&
+        !ACCNode->hasAssociatedStmt()) {
+      Context->getDiagnostics().Report(DirectiveRange.getEnd(),
+                                       diag::err_rewrite_acc_end_in_pragma_op);
       return false;
     }
     bool DirectiveOnly = !ACCNode->ompStmtPrintsDifferently(Policy, Context) &&
@@ -155,16 +165,6 @@ public:
       } else if (!Rewrite.isRewritable(End)) {
         // The final token (semicolon or closing brace) is within a macro
         // expansion, so refuse to rewrite.
-        //
-        // FIXME: This should always happen if there's no associated
-        // statement and we have _Pragma form, but the following diagnostic
-        // would then be misleading.  Currently, Clang doesn't support OpenACC
-        // constructs without associated statements, so we haven't developed a
-        // diagnostic yet.  The cleanest approach will probably be to check
-        // !Rewrite.isRewritable(DirectiveRange.getEnd()) &&
-        // !ACCNode->hasAssociatedStmt() right before assigning
-        // DirectiveOnly above, which happens after checking
-        // !Rewrite.isRewritable(DirectiveRange.getBegin()).
         Context->getDiagnostics().Report(
             End, diag::err_rewrite_acc_end_in_macro);
         return false;

@@ -44,6 +44,20 @@ int main() {
 
   //--------------------------------------------------
   // Directive in macro expansion: yes
+  // No associated statement.
+  //--------------------------------------------------
+
+  // PRT-NEXT:  #define MAC _Pragma("acc update device(i)")
+  // PRT-NEXT:  /* expected-error{{.*}} */
+  // PRT-NEXT:  MAC
+  // PRT-NEXT:  #undef MAC
+  #define MAC _Pragma("acc update device(i)")
+  /* expected-error@+1 {{cannot rewrite OpenACC construct starting within a macro expansion}} */
+  MAC
+  #undef MAC
+
+  //--------------------------------------------------
+  // Directive in macro expansion: yes
   // Associated statement ends in macro expansion: no
   //--------------------------------------------------
 
@@ -173,6 +187,16 @@ int main() {
   #undef MAC1
   #undef MAC2
   #undef MAC3
+
+  //--------------------------------------------------
+  // Directive in macro expansion: no
+  // No associated statement.
+  //--------------------------------------------------
+
+  // PRT-NEXT:  /* expected-error{{.*}} */
+  // PRT-NEXT:  _Pragma("acc update device(i)")
+  /* expected-error@+1 {{cannot rewrite OpenACC directive that has no associated statement and that appears within a _Pragma operator}} */
+  _Pragma("acc update device(i)")
 
   //--------------------------------------------------
   // Directive in macro expansion: no

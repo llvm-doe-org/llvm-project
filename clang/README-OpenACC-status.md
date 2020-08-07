@@ -357,24 +357,21 @@ following features for now:
           `README-OpenACC-design.md` for an explanation of why this
           happens and how Clacc might evolve to prevent it in the
           future.
-    * Preprocessor macro usage can sometimes prevent OpenACC
-      constructs from being translated:
-        * Clacc cannot translate an OpenACC construct if it meets
-          either of the following conditions:
-            * The construct's first token is expanded from a
-              preprocessor macro.  Notes:
-                * C/C++ syntax limits this case to the `_Pragma` form.
-                  That is, it's not possible for `#pragma` form.
+    * Preprocessor macro usage and the `_Pragma` operator form can
+      sometimes prevent OpenACC directives from being translated:
+        * Clacc cannot translate an OpenACC directive if it meets any
+          of the following conditions:
+            * The directive is expanded from a preprocessor macro and
+              thus uses `_Pragma` form.
+            * The directive uses `_Pragma` form and has no associated
+              statement.
             * The associated statement must be rewritten but its last
-              token is expanded from a preprocessor macro.  Notes:
+              token is expanded from a preprocessor macro:
                 * In the case of `#pragma` form, whether the
                   associated statement must be rewritten depends on
                   Clacc's mapping for the construct to OpenMP.
                 * In the case of `_Pragma` form, currently the
-                  associated statement must always be rewritten.  Due
-                  to the first condition above, this case is only
-                  relevant when `_Pragma` form is used outside a
-                  preprocessor macro.
+                  associated statement must always be rewritten.
         * Clacc reports an error diagnostic for every such OpenACC
           construct in the source file.  Clacc then prints a version
           of the source in which all OpenACC constructs are

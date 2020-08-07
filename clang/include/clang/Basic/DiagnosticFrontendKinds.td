@@ -289,6 +289,9 @@ def err_rewrite_acc_start_in_macro : Error<
   "cannot rewrite OpenACC construct starting within a macro expansion">;
 def err_rewrite_acc_end_in_macro : Error<
   "cannot rewrite OpenACC construct ending within a macro expansion">;
+def err_rewrite_acc_end_in_pragma_op : Error<
+  "cannot rewrite OpenACC directive that has no associated statement and that "
+  "appears within a _Pragma operator">;
 } // end of RewriteOpenACC category
 
 }
