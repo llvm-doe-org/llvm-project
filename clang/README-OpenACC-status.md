@@ -41,6 +41,7 @@ We have implemented and tested support for the following features:
           -help` and search for `openacc` or `openmp`.
 * run-time environment variables:
     * `OMP_TARGET_OFFLOAD=disabled` for targeting host
+    * `ACC_PROFLIB` for the OpenACC Profiling Interface
 * `update` directive:
     * `self` clause and alias `host`
     * `device` clause
