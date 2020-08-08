@@ -888,12 +888,33 @@ static ompt_start_tool_result_t *ompt_tool_darwin(unsigned int omp_version,
 _OMP_EXTERN OMPT_WEAK_ATTRIBUTE void
 acc_register_library(acc_prof_reg reg, acc_prof_reg unref,
                      acc_prof_lookup_func lookup) {}
+typedef void (*acc_register_library_t)(acc_prof_reg reg, acc_prof_reg unref,
+                                       acc_prof_lookup_func lookup);
 
 _OMP_EXTERN OMPT_WEAK_ATTRIBUTE ompt_start_tool_result_t *
 ompt_start_tool(unsigned int omp_version, const char *runtime_version) {
   acc_register_library(acc_prof_register_enqueue,
                        acc_prof_unregister_enqueue,
-                       /*acc_query_fn_name*/ NULL);
+                       /*acc_query_fn_name=*/NULL);
+  const char *proflibs = getenv("ACC_PROFLIB");
+  if (proflibs) {
+    char *libs = __kmp_str_format("%s", proflibs);
+    char *buf;
+    char *fname = __kmp_str_token(libs, ";", &buf);
+    while (fname) {
+      void *h = dlopen(fname, RTLD_LAZY);
+      if (!h)
+        KMP_FATAL(AccProflibFail, dlerror());
+      acc_register_library_t register_library =
+          (acc_register_library_t)dlsym(h, "acc_register_library");
+      if (!register_library)
+        KMP_FATAL(AccProflibFail, dlerror());
+      register_library(acc_prof_register_enqueue, acc_prof_unregister_enqueue,
+                       /*acc_query_fn_name=*/NULL);
+      fname = __kmp_str_token(NULL, ";", &buf);
+    }
+    __kmp_str_free(&libs);
+  }
   if (acc_prof_action_head) {
     static int host_device_number;
     static ompt_data_t ompt_data;
@@ -904,6 +925,7 @@ ompt_start_tool(unsigned int omp_version, const char *runtime_version) {
     res.tool_data = ompt_data;
     return &res;
   }
+
   ompt_start_tool_result_t *ret = NULL;
   // Search next symbol in the current address space. This can happen if the
   // runtime library is linked before the tool. Since glibc 2.2 strong symbols

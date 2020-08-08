@@ -2308,6 +2308,39 @@ specification that we need to investigate further:
   `acc_construct_internal`.
 * How should `vendor`, `device_handle`, `context_handle`, and
   `async_handle` fields of `acc_api_info` be assigned?
+* The runtime first calls any linked `acc_register_library`, and then
+  it calls the `acc_register_library` in every library listed in
+  `ACC_PROFLIB` in the order the libraries are specified.  Notes:
+
+    * pgcc 19.10-0 also calls them all and calls them in the order
+      described above.
+    * OpenACC 3.0 does not appear to specify whether the use of
+      `ACC_PROFLIB` should suppress any already linked
+      `acc_register_library`, or vice-versa.
+    * OpenACC 3.0 sec. 5.3.3 L3531-3532 does specify the order for
+      just `ACC_PROFLIB`:
+
+        > The OpenACC runtime will open these libraries and invoke the
+        > acc_register_library routine for each, in the order they
+        > appear in ACC_PROFLIB.
+
+* The runtime fails with a diagnostic if it fails to open any library
+  listed in `ACC_PROFLIB` or to find an `acc_register_library`
+  function in that library.  Notes:
+
+    * pgcc 19.10-0 prints a diagnostic for failing to open such a
+      library but does not terminate the runtime.  In this case,
+      OpenACC 3.0 sec. 5.3.3 L3512-3514 permits both pgcc's and
+      Clacc's behavior:
+
+        > The runtime will open the dynamic library (using dlopen or
+        > LoadLibraryA); if the library cannot be opened, the runtime
+        > may abort, or may continue execution with or without an
+        > error message.
+
+    * pgcc 19.10-0 does not report a failure to find
+      `acc_register_library` in such a library.  OpenACC 3.0 does not
+      appear to clarify the behavior in this case.
 
 Limitations
 -----------
@@ -2358,6 +2391,8 @@ support currently include:
       produce warnings or errors advising the use of such a feature.
 * For each event type, at most one occurrence of one callback can be
   registered at a time, and it cannot be toggled.  Notes:
+    * This limits the usefulness of listing multiple libraries in
+      `ACC_PROFLIB`.
     * OMPT does not appear to have such features.
     * Eliminating this limitation requires building more sophisticated
       OpenACC Profiling Interface callback registration tables.
@@ -2365,7 +2400,6 @@ support currently include:
   compiler does not yet implement directives and clauses that would
   trigger them:
     * `acc_ev_wait_start`, `acc_ev_wait_end`
-* `ACC_PROFLIB` is not yet supported.
 * Some of the data passed to the OpenACC callbacks currently have
   questionable values or have been omitted:
     * The `valid_bytes` field is properly set in each of these structs
