@@ -2022,12 +2022,12 @@ void test() {
   // parallel?
   //
   // The behavior in this case does not appear to be well defined in OpenACC
-  // 3.0 or OpenMP 5.0.  We assume the innermost subarray specifies the
+  // 3.0 or OpenMP 5.0.  We assume the subarray earliest in memory specifies the
   // mapping, and we check that it is indeed mapped for the acc parallel.  We
-  // could manually check that the outermost subarray isn't mapped by writing
-  // to it and observing that the new value isn't copied back to the host, but
-  // writing to unmapped memory could introduce races, so we don't check that
-  // in the test suite.
+  // could manually check that the later subarray isn't mapped by writing to it
+  // and observing that the new value isn't copied back to the host, but writing
+  // to unmapped memory could introduce races, so we don't check that in the
+  // test suite.
   //
   // The purpose of this test is to detect changes in OpenACC behavior as Clang
   // evolves to conform to future versions of the OpenMP spec.  See the section
@@ -2140,18 +2140,18 @@ void test() {
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // PRT-NEXT: arr0[3] +=
+      // PRT-NEXT: arr0[0] +=
       // PRT-NEXT: arr1[0] +=
-      arr0[3] += 1000;
+      arr0[0] += 1000;
       arr1[0] += 1000;
     } // PRT-NEXT: }
     // PRT-NEXT: printf(
     // PRT:      );
     // EXE-NEXT: After acc data:
-    // EXE-NEXT:   arr0[3]=1040, arr1[0]=1011
+    // EXE-NEXT:   arr0[0]=1010, arr1[0]=1011
     printf("After acc data:\n"
-           "  arr0[3]=%4d, arr1[0]=%4d\n",
-           arr0[3], arr1[0]);
+           "  arr0[0]=%4d, arr1[0]=%4d\n",
+           arr0[0], arr1[0]);
   } // PRT-NEXT: }
 
   //--------------------------------------------------

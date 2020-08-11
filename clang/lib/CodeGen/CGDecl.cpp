@@ -762,9 +762,8 @@ void CodeGenFunction::EmitScalarInit(const Expr *init, const ValueDecl *D,
 
   // If we're emitting a value with lifetime, we have to do the
   // initialization *before* we leave the cleanup scopes.
-  if (const FullExpr *fe = dyn_cast<FullExpr>(init))
-    init = fe->getSubExpr();
-
+  if (const ExprWithCleanups *EWC = dyn_cast<ExprWithCleanups>(init))
+    init = EWC->getSubExpr();
   CodeGenFunction::RunCleanupsScope Scope(*this);
 
   // We have to maintain the illusion that the variable is
@@ -1401,10 +1400,15 @@ CodeGenFunction::EmitAutoVarAlloca(const VarDecl &D) {
 
   Address address = Address::invalid();
   Address AllocaAddr = Address::invalid();
-  Address OpenMPLocalAddr =
-      getLangOpts().OpenMP
-          ? CGM.getOpenMPRuntime().getAddressOfLocalVariable(*this, &D)
-          : Address::invalid();
+  Address OpenMPLocalAddr = Address::invalid();
+  if (CGM.getOpenMPIRBuilder())
+    OpenMPLocalAddr = OMPBuilderCBHelpers::getAddressOfLocalVariable(*this, &D);
+  else
+    OpenMPLocalAddr =
+        getLangOpts().OpenMP
+            ? CGM.getOpenMPRuntime().getAddressOfLocalVariable(*this, &D)
+            : Address::invalid();
+
   bool NRVO = getLangOpts().ElideConstructors && D.isNRVOVariable();
 
   if (getLangOpts().OpenMP && OpenMPLocalAddr.isValid()) {

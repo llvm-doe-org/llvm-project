@@ -9,6 +9,7 @@
 #include "ElseAfterReturnCheck.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
+#include "clang/Lex/Lexer.h"
 #include "clang/Tooling/FixIt.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -188,9 +189,8 @@ void ElseAfterReturnCheck::check(const MatchFinder::MatchResult &Result) {
     if (IsLastInScope) {
       // If the if statement is the last statement its enclosing statements
       // scope, we can pull the decl out of the if statement.
-      DiagnosticBuilder Diag =
-          diag(ElseLoc, WarningMessage, clang::DiagnosticIDs::Level::Remark)
-          << ControlFlowInterruptor;
+      DiagnosticBuilder Diag = diag(ElseLoc, WarningMessage)
+                               << ControlFlowInterruptor;
       if (checkInitDeclUsageInElse(If) != nullptr) {
         Diag << tooling::fixit::createReplacement(
                     SourceRange(If->getIfLoc()),

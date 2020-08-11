@@ -426,6 +426,11 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> operands) {
   /// and(x, 0) -> 0
   if (matchPattern(rhs(), m_Zero()))
     return rhs();
+  /// and(x, allOnes) -> x
+  APInt intValue;
+  if (matchPattern(rhs(), m_ConstantInt(&intValue)) &&
+      intValue.isAllOnesValue())
+    return lhs();
   /// and(x,x) -> x
   if (lhs() == rhs())
     return rhs();
@@ -1115,7 +1120,8 @@ static LogicalResult verify(ConstantOp &op) {
     auto fn =
         op.getParentOfType<ModuleOp>().lookupSymbol<FuncOp>(fnAttr.getValue());
     if (!fn)
-      return op.emitOpError("reference to undefined function 'bar'");
+      return op.emitOpError()
+             << "reference to undefined function '" << fnAttr.getValue() << "'";
 
     // Check that the referenced function has the correct type.
     if (fn.getType() != type)
@@ -1170,8 +1176,7 @@ bool ConstantOp::isBuildableWith(Attribute value, Type type) {
   if (value.getType() != type)
     return false;
   // Finally, check that the attribute kind is handled.
-  return value.isa<IntegerAttr>() || value.isa<FloatAttr>() ||
-         value.isa<ElementsAttr>() || value.isa<UnitAttr>();
+  return value.isa<IntegerAttr, FloatAttr, ElementsAttr, UnitAttr>();
 }
 
 void ConstantFloatOp::build(OpBuilder &builder, OperationState &result,
@@ -1268,15 +1273,18 @@ void DimOp::build(OpBuilder &builder, OperationState &result,
                   Value memrefOrTensor, int64_t index) {
   auto loc = result.location;
   Value indexValue = builder.create<ConstantIndexOp>(loc, index);
+  build(builder, result, memrefOrTensor, indexValue);
+}
+
+void DimOp::build(OpBuilder &builder, OperationState &result,
+                  Value memrefOrTensor, Value index) {
   auto indexTy = builder.getIndexType();
-  build(builder, result, indexTy, memrefOrTensor, indexValue);
+  build(builder, result, indexTy, memrefOrTensor, index);
 }
 
 Optional<int64_t> DimOp::getConstantIndex() {
-  auto constantOp = index().getDefiningOp<ConstantOp>();
-  if (constantOp) {
+  if (auto constantOp = index().getDefiningOp<ConstantOp>())
     return constantOp.getValue().cast<IntegerAttr>().getInt();
-  }
   return {};
 }
 
@@ -1305,7 +1313,7 @@ static LogicalResult verify(DimOp op) {
 }
 
 OpFoldResult DimOp::fold(ArrayRef<Attribute> operands) {
-  auto index = operands[1].dyn_cast<IntegerAttr>();
+  auto index = operands[1].dyn_cast_or_null<IntegerAttr>();
 
   // All forms of folding require a known index.
   if (!index)
@@ -1700,8 +1708,8 @@ struct ExtractElementFromTensorFromElements
     if (extract.indices().size() != 1)
       return failure();
 
-    auto tensor_from_elements =
-        dyn_cast<TensorFromElementsOp>(extract.aggregate().getDefiningOp());
+    auto tensor_from_elements = dyn_cast_or_null<TensorFromElementsOp>(
+        extract.aggregate().getDefiningOp());
     if (tensor_from_elements == nullptr)
       return failure();
 
@@ -2094,7 +2102,7 @@ static LogicalResult verify(SelectOp op) {
   // If the result type is a vector or tensor, the type can be a mask with the
   // same elements.
   Type resultType = op.getType();
-  if (!resultType.isa<TensorType>() && !resultType.isa<VectorType>())
+  if (!resultType.isa<TensorType, VectorType>())
     return op.emitOpError()
            << "expected condition to be a signless i1, but got "
            << conditionType;
@@ -2213,8 +2221,7 @@ OpFoldResult SplatOp::fold(ArrayRef<Attribute> operands) {
   assert(operands.size() == 1 && "splat takes one operand");
 
   auto constOperand = operands.front();
-  if (!constOperand ||
-      (!constOperand.isa<IntegerAttr>() && !constOperand.isa<FloatAttr>()))
+  if (!constOperand || !constOperand.isa<IntegerAttr, FloatAttr>())
     return {};
 
   auto shapedType = getType().cast<ShapedType>();
@@ -2259,6 +2266,9 @@ OpFoldResult SubIOp::fold(ArrayRef<Attribute> operands) {
   // subi(x,x) -> 0
   if (getOperand(0) == getOperand(1))
     return Builder(getContext()).getZeroAttr(getType());
+  // subi(x,0) -> x
+  if (matchPattern(rhs(), m_Zero()))
+    return lhs();
 
   return constFoldBinaryOp<IntegerAttr>(operands,
                                         [](APInt a, APInt b) { return a - b; });

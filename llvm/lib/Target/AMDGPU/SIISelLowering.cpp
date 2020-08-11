@@ -35,6 +35,7 @@
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/DAGCombine.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
+#include "llvm/CodeGen/GlobalISel/GISelKnownBits.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -453,10 +454,8 @@ SITargetLowering::SITargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::FLOG10, MVT::f16, Custom);
   }
 
-  // v_mad_f32 does not support denormals. We report it as unconditionally
-  // legal, and the context where it is formed will disallow it when fp32
-  // denormals are enabled.
-  setOperationAction(ISD::FMAD, MVT::f32, Legal);
+  if (Subtarget->hasMadMacF32Insts())
+    setOperationAction(ISD::FMAD, MVT::f32, Legal);
 
   if (!Subtarget->hasBFI()) {
     // fcopysign can be done in a single instruction with BFI.
@@ -1130,6 +1129,17 @@ bool SITargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
 
     return true;
   }
+  case Intrinsic::amdgcn_global_atomic_csub: {
+    Info.opc = ISD::INTRINSIC_W_CHAIN;
+    Info.memVT = MVT::getVT(CI.getType());
+    Info.ptrVal = CI.getOperand(0);
+    Info.align.reset();
+    Info.flags = MachineMemOperand::MOLoad |
+                 MachineMemOperand::MOStore |
+                 MachineMemOperand::MODereferenceable |
+                 MachineMemOperand::MOVolatile;
+    return true;
+  }
   case Intrinsic::amdgcn_ds_gws_init:
   case Intrinsic::amdgcn_ds_gws_barrier:
   case Intrinsic::amdgcn_ds_gws_sema_v:
@@ -1568,16 +1578,15 @@ SDValue SITargetLowering::convertArgType(SelectionDAG &DAG, EVT VT, EVT MemVT,
 }
 
 SDValue SITargetLowering::lowerKernargMemParameter(
-  SelectionDAG &DAG, EVT VT, EVT MemVT,
-  const SDLoc &SL, SDValue Chain,
-  uint64_t Offset, unsigned Align, bool Signed,
-  const ISD::InputArg *Arg) const {
+    SelectionDAG &DAG, EVT VT, EVT MemVT, const SDLoc &SL, SDValue Chain,
+    uint64_t Offset, Align Alignment, bool Signed,
+    const ISD::InputArg *Arg) const {
   MachinePointerInfo PtrInfo(AMDGPUAS::CONSTANT_ADDRESS);
 
   // Try to avoid using an extload by loading earlier than the argument address,
   // and extracting the relevant bits. The load should hopefully be merged with
   // the previous argument.
-  if (MemVT.getStoreSize() < 4 && Align < 4) {
+  if (MemVT.getStoreSize() < 4 && Alignment < 4) {
     // TODO: Handle align < 4 and size >= 4 (can happen with packed structs).
     int64_t AlignDownOffset = alignDown(Offset, 4);
     int64_t OffsetDiff = Offset - AlignDownOffset;
@@ -1603,9 +1612,9 @@ SDValue SITargetLowering::lowerKernargMemParameter(
   }
 
   SDValue Ptr = lowerKernArgParameterPtr(DAG, SL, Chain, Offset);
-  SDValue Load = DAG.getLoad(MemVT, SL, Chain, Ptr, PtrInfo, Align,
+  SDValue Load = DAG.getLoad(MemVT, SL, Chain, Ptr, PtrInfo, Alignment,
                              MachineMemOperand::MODereferenceable |
-                             MachineMemOperand::MOInvariant);
+                                 MachineMemOperand::MOInvariant);
 
   SDValue Val = convertArgType(DAG, VT, MemVT, SL, Load, Signed, Arg);
   return DAG.getMergeValues({ Val, Load.getValue(1) }, SL);
@@ -2223,9 +2232,9 @@ SDValue SITargetLowering::LowerFormalArguments(
   //
   // FIXME: Alignment of explicit arguments totally broken with non-0 explicit
   // kern arg offset.
-  const unsigned KernelArgBaseAlign = 16;
+  const Align KernelArgBaseAlign = Align(16);
 
-   for (unsigned i = 0, e = Ins.size(), ArgIdx = 0; i != e; ++i) {
+  for (unsigned i = 0, e = Ins.size(), ArgIdx = 0; i != e; ++i) {
     const ISD::InputArg &Arg = Ins[i];
     if (Arg.isOrigArg() && Skipped[Arg.getOrigArgIndex()]) {
       InVals.push_back(DAG.getUNDEF(Arg.VT));
@@ -2240,10 +2249,11 @@ SDValue SITargetLowering::LowerFormalArguments(
       EVT MemVT = VA.getLocVT();
 
       const uint64_t Offset = VA.getLocMemOffset();
-      unsigned Align = MinAlign(KernelArgBaseAlign, Offset);
+      Align Alignment = commonAlignment(KernelArgBaseAlign, Offset);
 
-      SDValue Arg = lowerKernargMemParameter(
-        DAG, VT, MemVT, DL, Chain, Offset, Align, Ins[i].Flags.isSExt(), &Ins[i]);
+      SDValue Arg =
+          lowerKernargMemParameter(DAG, VT, MemVT, DL, Chain, Offset, Alignment,
+                                   Ins[i].Flags.isSExt(), &Ins[i]);
       Chains.push_back(Arg.getValue(1));
 
       auto *ParamTy =
@@ -3117,7 +3127,7 @@ SDValue SITargetLowering::lowerDYNAMIC_STACKALLOCImpl(
   SDValue Size  = Tmp2.getOperand(1);
   SDValue SP = DAG.getCopyFromReg(Chain, dl, SPReg, VT);
   Chain = SP.getValue(1);
-  unsigned Align = cast<ConstantSDNode>(Tmp3)->getZExtValue();
+  MaybeAlign Alignment(cast<ConstantSDNode>(Tmp3)->getZExtValue());
   const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
   const TargetFrameLowering *TFL = ST.getFrameLowering();
   unsigned Opc =
@@ -3128,12 +3138,13 @@ SDValue SITargetLowering::lowerDYNAMIC_STACKALLOCImpl(
       ISD::SHL, dl, VT, Size,
       DAG.getConstant(ST.getWavefrontSizeLog2(), dl, MVT::i32));
 
-  unsigned StackAlign = TFL->getStackAlignment();
+  Align StackAlign = TFL->getStackAlign();
   Tmp1 = DAG.getNode(Opc, dl, VT, SP, ScaledSize); // Value
-  if (Align > StackAlign) {
-    Tmp1 = DAG.getNode(
-      ISD::AND, dl, VT, Tmp1,
-      DAG.getConstant(-(uint64_t)Align << ST.getWavefrontSizeLog2(), dl, VT));
+  if (Alignment && *Alignment > StackAlign) {
+    Tmp1 = DAG.getNode(ISD::AND, dl, VT, Tmp1,
+                       DAG.getConstant(-(uint64_t)Alignment->value()
+                                           << ST.getWavefrontSizeLog2(),
+                                       dl, VT));
   }
 
   Chain = DAG.getCopyToReg(Chain, dl, SPReg, Tmp1);    // Output chain
@@ -4283,7 +4294,8 @@ bool SITargetLowering::isFMADLegal(const SelectionDAG &DAG,
   // v_mad_f32/v_mac_f32 do not support denormals.
   EVT VT = N->getValueType(0);
   if (VT == MVT::f32)
-    return !hasFP32Denormals(DAG.getMachineFunction());
+    return Subtarget->hasMadMacF32Insts() &&
+           !hasFP32Denormals(DAG.getMachineFunction());
   if (VT == MVT::f16) {
     return Subtarget->hasMadF16() &&
            !hasFP64FP16Denormals(DAG.getMachineFunction());
@@ -5450,8 +5462,9 @@ SITargetLowering::isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const {
 
 static SDValue
 buildPCRelGlobalAddress(SelectionDAG &DAG, const GlobalValue *GV,
-                        const SDLoc &DL, unsigned Offset, EVT PtrVT,
+                        const SDLoc &DL, int64_t Offset, EVT PtrVT,
                         unsigned GAFlags = SIInstrInfo::MO_NONE) {
+  assert(isInt<32>(Offset + 4) && "32-bit offset is expected!");
   // In order to support pc-relative addressing, the PC_ADD_REL_OFFSET SDNode is
   // lowered to the following code sequence:
   //
@@ -5526,11 +5539,11 @@ SDValue SITargetLowering::LowerGlobalAddress(AMDGPUMachineFunction *MFI,
   Type *Ty = PtrVT.getTypeForEVT(*DAG.getContext());
   PointerType *PtrTy = PointerType::get(Ty, AMDGPUAS::CONSTANT_ADDRESS);
   const DataLayout &DataLayout = DAG.getDataLayout();
-  unsigned Align = DataLayout.getABITypeAlignment(PtrTy);
+  Align Alignment = DataLayout.getABITypeAlign(PtrTy);
   MachinePointerInfo PtrInfo
     = MachinePointerInfo::getGOT(DAG.getMachineFunction());
 
-  return DAG.getLoad(PtrVT, DL, DAG.getEntryNode(), GOTAddr, PtrInfo, Align,
+  return DAG.getLoad(PtrVT, DL, DAG.getEntryNode(), GOTAddr, PtrInfo, Alignment,
                      MachineMemOperand::MODereferenceable |
                          MachineMemOperand::MOInvariant);
 }
@@ -5556,8 +5569,8 @@ SDValue SITargetLowering::lowerImplicitZextParam(SelectionDAG &DAG,
                                                  MVT VT,
                                                  unsigned Offset) const {
   SDLoc SL(Op);
-  SDValue Param = lowerKernargMemParameter(DAG, MVT::i32, MVT::i32, SL,
-                                           DAG.getEntryNode(), Offset, 4, false);
+  SDValue Param = lowerKernargMemParameter(
+      DAG, MVT::i32, MVT::i32, SL, DAG.getEntryNode(), Offset, Align(4), false);
   // The local size values will have the hi 16-bits as zero.
   return DAG.getNode(ISD::AssertZext, SL, MVT::i32, Param,
                      DAG.getValueType(VT));
@@ -6191,7 +6204,8 @@ SDValue SITargetLowering::lowerSBuffer(EVT VT, SDLoc DL, SDValue Rsrc,
 
   // Use the alignment to ensure that the required offsets will fit into the
   // immediate offsets.
-  setBufferOffsets(Offset, DAG, &Ops[3], NumLoads > 1 ? 16 * NumLoads : 4);
+  setBufferOffsets(Offset, DAG, &Ops[3],
+                   NumLoads > 1 ? Align(16 * NumLoads) : Align(4));
 
   uint64_t InstOffset = cast<ConstantSDNode>(Ops[5])->getZExtValue();
   for (unsigned i = 0; i < NumLoads; ++i) {
@@ -6287,37 +6301,43 @@ SDValue SITargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       return emitNonHSAIntrinsicError(DAG, DL, VT);
 
     return lowerKernargMemParameter(DAG, VT, VT, DL, DAG.getEntryNode(),
-                                    SI::KernelInputOffsets::NGROUPS_X, 4, false);
+                                    SI::KernelInputOffsets::NGROUPS_X, Align(4),
+                                    false);
   case Intrinsic::r600_read_ngroups_y:
     if (Subtarget->isAmdHsaOS())
       return emitNonHSAIntrinsicError(DAG, DL, VT);
 
     return lowerKernargMemParameter(DAG, VT, VT, DL, DAG.getEntryNode(),
-                                    SI::KernelInputOffsets::NGROUPS_Y, 4, false);
+                                    SI::KernelInputOffsets::NGROUPS_Y, Align(4),
+                                    false);
   case Intrinsic::r600_read_ngroups_z:
     if (Subtarget->isAmdHsaOS())
       return emitNonHSAIntrinsicError(DAG, DL, VT);
 
     return lowerKernargMemParameter(DAG, VT, VT, DL, DAG.getEntryNode(),
-                                    SI::KernelInputOffsets::NGROUPS_Z, 4, false);
+                                    SI::KernelInputOffsets::NGROUPS_Z, Align(4),
+                                    false);
   case Intrinsic::r600_read_global_size_x:
     if (Subtarget->isAmdHsaOS())
       return emitNonHSAIntrinsicError(DAG, DL, VT);
 
     return lowerKernargMemParameter(DAG, VT, VT, DL, DAG.getEntryNode(),
-                                    SI::KernelInputOffsets::GLOBAL_SIZE_X, 4, false);
+                                    SI::KernelInputOffsets::GLOBAL_SIZE_X,
+                                    Align(4), false);
   case Intrinsic::r600_read_global_size_y:
     if (Subtarget->isAmdHsaOS())
       return emitNonHSAIntrinsicError(DAG, DL, VT);
 
     return lowerKernargMemParameter(DAG, VT, VT, DL, DAG.getEntryNode(),
-                                    SI::KernelInputOffsets::GLOBAL_SIZE_Y, 4, false);
+                                    SI::KernelInputOffsets::GLOBAL_SIZE_Y,
+                                    Align(4), false);
   case Intrinsic::r600_read_global_size_z:
     if (Subtarget->isAmdHsaOS())
       return emitNonHSAIntrinsicError(DAG, DL, VT);
 
     return lowerKernargMemParameter(DAG, VT, VT, DL, DAG.getEntryNode(),
-                                    SI::KernelInputOffsets::GLOBAL_SIZE_Z, 4, false);
+                                    SI::KernelInputOffsets::GLOBAL_SIZE_Z,
+                                    Align(4), false);
   case Intrinsic::r600_read_local_size_x:
     if (Subtarget->isAmdHsaOS())
       return emitNonHSAIntrinsicError(DAG, DL, VT);
@@ -6412,9 +6432,6 @@ SDValue SITargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     return DAG.getNode(AMDGPUISD::DIV_FIXUP, DL, VT,
                        Op.getOperand(1), Op.getOperand(2), Op.getOperand(3));
 
-  case Intrinsic::amdgcn_trig_preop:
-    return DAG.getNode(AMDGPUISD::TRIG_PREOP, DL, VT,
-                       Op.getOperand(1), Op.getOperand(2));
   case Intrinsic::amdgcn_div_scale: {
     const ConstantSDNode *Param = cast<ConstantSDNode>(Op.getOperand(3));
 
@@ -6859,6 +6876,7 @@ SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
   case Intrinsic::amdgcn_buffer_atomic_swap:
   case Intrinsic::amdgcn_buffer_atomic_add:
   case Intrinsic::amdgcn_buffer_atomic_sub:
+  case Intrinsic::amdgcn_buffer_atomic_csub:
   case Intrinsic::amdgcn_buffer_atomic_smin:
   case Intrinsic::amdgcn_buffer_atomic_umin:
   case Intrinsic::amdgcn_buffer_atomic_smax:
@@ -6900,6 +6918,9 @@ SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
       break;
     case Intrinsic::amdgcn_buffer_atomic_sub:
       Opcode = AMDGPUISD::BUFFER_ATOMIC_SUB;
+      break;
+    case Intrinsic::amdgcn_buffer_atomic_csub:
+      Opcode = AMDGPUISD::BUFFER_ATOMIC_CSUB;
       break;
     case Intrinsic::amdgcn_buffer_atomic_smin:
       Opcode = AMDGPUISD::BUFFER_ATOMIC_SMIN;
@@ -7148,6 +7169,18 @@ SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
 
     return DAG.getMemIntrinsicNode(AMDGPUISD::BUFFER_ATOMIC_CMPSWAP, DL,
                                    Op->getVTList(), Ops, VT, M->getMemOperand());
+  }
+  case Intrinsic::amdgcn_global_atomic_csub: {
+    MemSDNode *M = cast<MemSDNode>(Op);
+    SDValue Ops[] = {
+      M->getOperand(0), // Chain
+      M->getOperand(2), // Ptr
+      M->getOperand(3)  // Value
+    };
+
+    return DAG.getMemIntrinsicNode(AMDGPUISD::ATOMIC_LOAD_CSUB, SDLoc(Op),
+                                   M->getVTList(), Ops, M->getMemoryVT(),
+                                   M->getMemOperand());
   }
 
   default:
@@ -7593,13 +7626,14 @@ std::pair<SDValue, SDValue> SITargetLowering::splitBufferOffsets(
 // three offsets (voffset, soffset and instoffset) into the SDValue[3] array
 // pointed to by Offsets.
 unsigned SITargetLowering::setBufferOffsets(SDValue CombinedOffset,
-                                        SelectionDAG &DAG, SDValue *Offsets,
-                                        unsigned Align) const {
+                                            SelectionDAG &DAG, SDValue *Offsets,
+                                            Align Alignment) const {
   SDLoc DL(CombinedOffset);
   if (auto C = dyn_cast<ConstantSDNode>(CombinedOffset)) {
     uint32_t Imm = C->getZExtValue();
     uint32_t SOffset, ImmOffset;
-    if (AMDGPU::splitMUBUFOffset(Imm, SOffset, ImmOffset, Subtarget, Align)) {
+    if (AMDGPU::splitMUBUFOffset(Imm, SOffset, ImmOffset, Subtarget,
+                                 Alignment)) {
       Offsets[0] = DAG.getConstant(0, DL, MVT::i32);
       Offsets[1] = DAG.getConstant(SOffset, DL, MVT::i32);
       Offsets[2] = DAG.getTargetConstant(ImmOffset, DL, MVT::i32);
@@ -7612,7 +7646,7 @@ unsigned SITargetLowering::setBufferOffsets(SDValue CombinedOffset,
     uint32_t SOffset, ImmOffset;
     int Offset = cast<ConstantSDNode>(N1)->getSExtValue();
     if (Offset >= 0 && AMDGPU::splitMUBUFOffset(Offset, SOffset, ImmOffset,
-                                                Subtarget, Align)) {
+                                                Subtarget, Alignment)) {
       Offsets[0] = N0;
       Offsets[1] = DAG.getConstant(SOffset, DL, MVT::i32);
       Offsets[2] = DAG.getTargetConstant(ImmOffset, DL, MVT::i32);
@@ -9215,7 +9249,6 @@ bool SITargetLowering::isCanonicalized(SelectionDAG &DAG, SDValue Op,
   case AMDGPUISD::RSQ_CLAMP:
   case AMDGPUISD::RCP_LEGACY:
   case AMDGPUISD::RCP_IFLAG:
-  case AMDGPUISD::TRIG_PREOP:
   case AMDGPUISD::DIV_SCALE:
   case AMDGPUISD::DIV_FMAS:
   case AMDGPUISD::DIV_FIXUP:
@@ -9323,6 +9356,7 @@ bool SITargetLowering::isCanonicalized(SelectionDAG &DAG, SDValue Op,
     case Intrinsic::amdgcn_rsq_clamp:
     case Intrinsic::amdgcn_rcp_legacy:
     case Intrinsic::amdgcn_rsq_legacy:
+    case Intrinsic::amdgcn_trig_preop:
       return true;
     default:
       break;
@@ -11267,6 +11301,27 @@ void SITargetLowering::computeKnownBitsForFrameIndex(
   // wave. We can't use vaddr in MUBUF instructions if we don't know the address
   // calculation won't overflow, so assume the sign bit is never set.
   Known.Zero.setHighBits(getSubtarget()->getKnownHighZeroBitsForFrameIndex());
+}
+
+Align SITargetLowering::computeKnownAlignForTargetInstr(
+  GISelKnownBits &KB, Register R, const MachineRegisterInfo &MRI,
+  unsigned Depth) const {
+  const MachineInstr *MI = MRI.getVRegDef(R);
+  switch (MI->getOpcode()) {
+  case AMDGPU::G_INTRINSIC:
+  case AMDGPU::G_INTRINSIC_W_SIDE_EFFECTS: {
+    // FIXME: Can this move to generic code? What about the case where the call
+    // site specifies a lower alignment?
+    Intrinsic::ID IID = MI->getIntrinsicID();
+    LLVMContext &Ctx = KB.getMachineFunction().getFunction().getContext();
+    AttributeList Attrs = Intrinsic::getAttributes(Ctx, IID);
+    if (MaybeAlign RetAlign = Attrs.getRetAlignment())
+      return *RetAlign;
+    return Align(1);
+  }
+  default:
+    return Align(1);
+  }
 }
 
 Align SITargetLowering::getPrefLoopAlignment(MachineLoop *ML) const {

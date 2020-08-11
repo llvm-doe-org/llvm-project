@@ -915,10 +915,18 @@ int main() {
 
   //--------------------------------------------------
   // Worker partitioned.
+  //
+  // FIXME: OpenMP offloading for nvptx64 doesn't seem to support _Complex
+  // properly.  The result in that case is an OpenMP runtime error:
+  //
+  //   Libomptarget fatal error 1: failure of target construct while
+  //   offloading is mandatory
   //--------------------------------------------------
 
   // Reduction var is private.
 
+// PRT-SRC-NEXT: #if !TGT_NVPTX64_EXE
+#if !TGT_NVPTX64_EXE
   // PRT-NEXT: {
   {
     // PRT-NEXT: _Complex double out0 = 2;
@@ -1012,13 +1020,6 @@ int main() {
         // PRT-NEXT: in = in || 10;
         in = in || 10;
       } // PRT-NEXT: }
-// PRT-SRC-NEXT: #if !TGT_NVPTX64_EXE
-#if !TGT_NVPTX64_EXE
-      // FIXME: OpenMP offloading for nvptx64 doesn't seem to support creal
-      // and cimag.  The result is a runtime error:
-      //
-      //   Libomptarget fatal error 1: failure of target construct while
-      //   offloading is mandatory
       // PRT-NEXT: printf
       // EXE-TGT-HOST-DAG: out1: 0.0 + 0.0i
       // EXE-TGT-HOST-DAG: out1: 0.0 + 0.0i
@@ -1035,31 +1036,43 @@ int main() {
       // EXE-TGT-PPC64LE-DAG: out2: 0.0 + 0.0i
       // EXE-TGT-PPC64LE-DAG: out2: 0.0 + 0.0i
       printf("out2: %.1f + %.1fi\n", creal(out2), cimag(out2));
-// PRT-SRC-NEXT: #endif
-#endif
       // DMP: CallExpr
       // PRT-NEXT: printf
-      // EXE-DAG: in: 1.0
-      // EXE-DAG: in: 1.0
+      //    EXE-TGT-HOST-DAG: in: 1.0
+      //    EXE-TGT-HOST-DAG: in: 1.0
+      //  EXE-TGT-X86_64-DAG: in: 1.0
+      //  EXE-TGT-X86_64-DAG: in: 1.0
+      // EXE-TGT-PPC64LE-DAG: in: 1.0
+      // EXE-TGT-PPC64LE-DAG: in: 1.0
       printf("in: %.1f\n", in);
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-NEXT: out0 = 0.0 + 0.0i
+    //    EXE-TGT-HOST-NEXT: out0 = 0.0 + 0.0i
+    //  EXE-TGT-X86_64-NEXT: out0 = 0.0 + 0.0i
+    // EXE-TGT-PPC64LE-NEXT: out0 = 0.0 + 0.0i
     printf("out0 = %.1f + %.1fi\n", creal(out0), cimag(out0));
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-NEXT: out1 = 3.0 + 0.0i
+    //    EXE-TGT-HOST-NEXT: out1 = 3.0 + 0.0i
+    //  EXE-TGT-X86_64-NEXT: out1 = 3.0 + 0.0i
+    // EXE-TGT-PPC64LE-NEXT: out1 = 3.0 + 0.0i
     printf("out1 = %.1f + %.1fi\n", creal(out1), cimag(out1));
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-NEXT: out2 = 4.0 + 0.0i
+    //    EXE-TGT-HOST-NEXT: out2 = 4.0 + 0.0i
+    //  EXE-TGT-X86_64-NEXT: out2 = 4.0 + 0.0i
+    // EXE-TGT-PPC64LE-NEXT: out2 = 4.0 + 0.0i
     printf("out2 = %.1f + %.1fi\n", creal(out2), cimag(out2));
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-NEXT: out3 = 5.0 + 0.0i
+    //    EXE-TGT-HOST-NEXT: out3 = 5.0 + 0.0i
+    //  EXE-TGT-X86_64-NEXT: out3 = 5.0 + 0.0i
+    // EXE-TGT-PPC64LE-NEXT: out3 = 5.0 + 0.0i
     printf("out3 = %.1f + %.1fi\n", creal(out3), cimag(out3));
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   // Reduction var is not private due to explicit copy/copyin/copyout clause.
 

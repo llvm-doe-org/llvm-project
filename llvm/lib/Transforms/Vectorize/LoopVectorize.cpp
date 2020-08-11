@@ -431,8 +431,9 @@ public:
 
   /// Vectorize a single GetElementPtrInst based on information gathered and
   /// decisions taken during planning.
-  void widenGEP(GetElementPtrInst *GEP, unsigned UF, unsigned VF,
-                bool IsPtrLoopInvariant, SmallBitVector &IsIndexLoopInvariant);
+  void widenGEP(GetElementPtrInst *GEP, VPUser &Indices, unsigned UF,
+                unsigned VF, bool IsPtrLoopInvariant,
+                SmallBitVector &IsIndexLoopInvariant, VPTransformState &State);
 
   /// Vectorize a single PHINode in a block. This method handles the induction
   /// variable canonicalization. It supports both VF = 1 for unrolled loops and
@@ -686,7 +687,7 @@ protected:
   DominatorTree *DT;
 
   /// Alias Analysis.
-  AliasAnalysis *AA;
+  AAResults *AA;
 
   /// Target Library Info.
   const TargetLibraryInfo *TLI;
@@ -4074,9 +4075,11 @@ void InnerLoopVectorizer::fixNonInductionPHIs() {
   }
 }
 
-void InnerLoopVectorizer::widenGEP(GetElementPtrInst *GEP, unsigned UF,
-                                   unsigned VF, bool IsPtrLoopInvariant,
-                                   SmallBitVector &IsIndexLoopInvariant) {
+void InnerLoopVectorizer::widenGEP(GetElementPtrInst *GEP, VPUser &Operands,
+                                   unsigned UF, unsigned VF,
+                                   bool IsPtrLoopInvariant,
+                                   SmallBitVector &IsIndexLoopInvariant,
+                                   VPTransformState &State) {
   // Construct a vector GEP by widening the operands of the scalar GEP as
   // necessary. We mark the vector GEP 'inbounds' if appropriate. A GEP
   // results in a vector of pointers when at least one operand of the GEP
@@ -4113,19 +4116,18 @@ void InnerLoopVectorizer::widenGEP(GetElementPtrInst *GEP, unsigned UF,
     for (unsigned Part = 0; Part < UF; ++Part) {
       // The pointer operand of the new GEP. If it's loop-invariant, we
       // won't broadcast it.
-      auto *Ptr = IsPtrLoopInvariant
-                      ? GEP->getPointerOperand()
-                      : getOrCreateVectorValue(GEP->getPointerOperand(), Part);
+      auto *Ptr = IsPtrLoopInvariant ? State.get(Operands.getOperand(0), {0, 0})
+                                     : State.get(Operands.getOperand(0), Part);
 
       // Collect all the indices for the new GEP. If any index is
       // loop-invariant, we won't broadcast it.
       SmallVector<Value *, 4> Indices;
-      for (auto Index : enumerate(GEP->indices())) {
-        Value *User = Index.value().get();
-        if (IsIndexLoopInvariant[Index.index()])
-          Indices.push_back(User);
+      for (unsigned I = 1, E = Operands.getNumOperands(); I < E; I++) {
+        VPValue *Operand = Operands.getOperand(I);
+        if (IsIndexLoopInvariant[I - 1])
+          Indices.push_back(State.get(Operand, {0, 0}));
         else
-          Indices.push_back(getOrCreateVectorValue(User, Part));
+          Indices.push_back(State.get(Operand, Part));
       }
 
       // Create the new GEP. Note that this GEP may be a scalar if VF == 1,
@@ -5723,7 +5725,8 @@ int LoopVectorizationCostModel::computePredInstDiscount(
       ScalarCost += TTI.getScalarizationOverhead(
           cast<VectorType>(ToVectorTy(I->getType(), VF)),
           APInt::getAllOnesValue(VF), true, false);
-      ScalarCost += VF * TTI.getCFInstrCost(Instruction::PHI);
+      ScalarCost += VF * TTI.getCFInstrCost(Instruction::PHI,
+                                            TTI::TCK_RecipThroughput);
     }
 
     // Compute the scalarization overhead of needed extractelement
@@ -5889,8 +5892,8 @@ unsigned LoopVectorizationCostModel::getConsecutiveMemOpCost(Instruction *I,
   const Align Alignment = getLoadStoreAlignment(I);
   unsigned Cost = 0;
   if (Legal->isMaskRequired(I))
-    Cost += TTI.getMaskedMemoryOpCost(I->getOpcode(), VectorTy,
-                                      Alignment.value(), AS, CostKind);
+    Cost += TTI.getMaskedMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS,
+                                      CostKind);
   else
     Cost += TTI.getMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS,
                                 CostKind, I);
@@ -5931,13 +5934,12 @@ unsigned LoopVectorizationCostModel::getGatherScatterCost(Instruction *I,
   Type *ValTy = getMemInstValueType(I);
   auto *VectorTy = cast<VectorType>(ToVectorTy(ValTy, VF));
   const Align Alignment = getLoadStoreAlignment(I);
-  Value *Ptr = getLoadStorePointerOperand(I);
+  const Value *Ptr = getLoadStorePointerOperand(I);
 
   return TTI.getAddressComputationCost(VectorTy) +
-         TTI.getGatherScatterOpCost(I->getOpcode(), VectorTy, Ptr,
-                                    Legal->isMaskRequired(I), Alignment.value(),
-                                    TargetTransformInfo::TCK_RecipThroughput,
-                                    I);
+         TTI.getGatherScatterOpCost(
+             I->getOpcode(), VectorTy, Ptr, Legal->isMaskRequired(I), Alignment,
+             TargetTransformInfo::TCK_RecipThroughput, I);
 }
 
 unsigned LoopVectorizationCostModel::getInterleaveGroupCost(Instruction *I,
@@ -5965,9 +5967,8 @@ unsigned LoopVectorizationCostModel::getInterleaveGroupCost(Instruction *I,
   bool UseMaskForGaps =
       Group->requiresScalarEpilogue() && !isScalarEpilogueAllowed();
   unsigned Cost = TTI.getInterleavedMemoryOpCost(
-      I->getOpcode(), WideVecTy, Group->getFactor(), Indices,
-      Group->getAlign().value(), AS, TTI::TCK_RecipThroughput,
-      Legal->isMaskRequired(I), UseMaskForGaps);
+      I->getOpcode(), WideVecTy, Group->getFactor(), Indices, Group->getAlign(),
+      AS, TTI::TCK_RecipThroughput, Legal->isMaskRequired(I), UseMaskForGaps);
 
   if (Group->isReverse()) {
     // TODO: Add support for reversed masked interleaved access.
@@ -6235,14 +6236,14 @@ unsigned LoopVectorizationCostModel::getInstructionCost(Instruction *I,
 
     if (ScalarPredicatedBB) {
       // Return cost for branches around scalarized and predicated blocks.
-      VectorType *Vec_i1Ty =
-          VectorType::get(IntegerType::getInt1Ty(RetTy->getContext()), VF);
+      auto *Vec_i1Ty =
+          FixedVectorType::get(IntegerType::getInt1Ty(RetTy->getContext()), VF);
       return (TTI.getScalarizationOverhead(Vec_i1Ty, APInt::getAllOnesValue(VF),
                                            false, true) +
-              (TTI.getCFInstrCost(Instruction::Br) * VF));
+              (TTI.getCFInstrCost(Instruction::Br, CostKind) * VF));
     } else if (I->getParent() == TheLoop->getLoopLatch() || VF == 1)
       // The back-edge branch will remain, as will all scalar branches.
-      return TTI.getCFInstrCost(Instruction::Br);
+      return TTI.getCFInstrCost(Instruction::Br, CostKind);
     else
       // This branch will be eliminated by if-conversion.
       return 0;
@@ -6258,7 +6259,7 @@ unsigned LoopVectorizationCostModel::getInstructionCost(Instruction *I,
     if (VF > 1 && Legal->isFirstOrderRecurrence(Phi))
       return TTI.getShuffleCost(TargetTransformInfo::SK_ExtractSubvector,
                                 cast<VectorType>(VectorTy), VF - 1,
-                                VectorType::get(RetTy, 1));
+                                FixedVectorType::get(RetTy, 1));
 
     // Phi nodes in non-header blocks (not inductions, reductions, etc.) are
     // converted into select instructions. We require N - 1 selects per phi
@@ -6270,7 +6271,7 @@ unsigned LoopVectorizationCostModel::getInstructionCost(Instruction *I,
                  ToVectorTy(Type::getInt1Ty(Phi->getContext()), VF),
                  CostKind);
 
-    return TTI.getCFInstrCost(Instruction::PHI);
+    return TTI.getCFInstrCost(Instruction::PHI, CostKind);
   }
   case Instruction::UDiv:
   case Instruction::SDiv:
@@ -6287,7 +6288,7 @@ unsigned LoopVectorizationCostModel::getInstructionCost(Instruction *I,
       // that we will create. This cost is likely to be zero. The phi node
       // cost, if any, should be scaled by the block probability because it
       // models a copy at the end of each predicated block.
-      Cost += VF * TTI.getCFInstrCost(Instruction::PHI);
+      Cost += VF * TTI.getCFInstrCost(Instruction::PHI, CostKind);
 
       // The cost of the non-predicated instruction.
       Cost += VF * TTI.getArithmeticInstrCost(I->getOpcode(), RetTy, CostKind);
@@ -6828,7 +6829,11 @@ VPValue *VPRecipeBuilder::createBlockInMask(BasicBlock *BB, VPlanPtr &Plan) {
       IV = IVRecipe->getVPValue();
     }
     VPValue *BTC = Plan->getOrCreateBackedgeTakenCount();
-    BlockMask = Builder.createNaryOp(VPInstruction::ICmpULE, {IV, BTC});
+    bool TailFolded = !CM.isScalarEpilogueAllowed();
+    if (TailFolded && CM.TTI.emitGetActiveLaneMask())
+      BlockMask = Builder.createNaryOp(VPInstruction::ActiveLaneMask, {IV, BTC});
+    else
+      BlockMask = Builder.createNaryOp(VPInstruction::ICmpULE, {IV, BTC});
     return BlockMaskCache[BB] = BlockMask;
   }
 
@@ -7136,7 +7141,8 @@ VPRecipeBase *VPRecipeBuilder::tryToCreateWidenRecipe(Instruction *Instr,
     return nullptr;
 
   if (auto GEP = dyn_cast<GetElementPtrInst>(Instr))
-    return new VPWidenGEPRecipe(GEP, OrigLoop);
+    return new VPWidenGEPRecipe(GEP, Plan->mapToVPValues(GEP->operands()),
+                                OrigLoop);
 
   if (auto *SI = dyn_cast<SelectInst>(Instr)) {
     bool InvariantCond =
@@ -7444,8 +7450,8 @@ void VPWidenRecipe::execute(VPTransformState &State) {
 }
 
 void VPWidenGEPRecipe::execute(VPTransformState &State) {
-  State.ILV->widenGEP(GEP, State.UF, State.VF, IsPtrLoopInvariant,
-                      IsIndexLoopInvariant);
+  State.ILV->widenGEP(GEP, User, State.UF, State.VF, IsPtrLoopInvariant,
+                      IsIndexLoopInvariant, State);
 }
 
 void VPWidenIntOrFpInductionRecipe::execute(VPTransformState &State) {
@@ -7991,7 +7997,7 @@ bool LoopVectorizePass::processLoop(Loop *L) {
 LoopVectorizeResult LoopVectorizePass::runImpl(
     Function &F, ScalarEvolution &SE_, LoopInfo &LI_, TargetTransformInfo &TTI_,
     DominatorTree &DT_, BlockFrequencyInfo &BFI_, TargetLibraryInfo *TLI_,
-    DemandedBits &DB_, AliasAnalysis &AA_, AssumptionCache &AC_,
+    DemandedBits &DB_, AAResults &AA_, AssumptionCache &AC_,
     std::function<const LoopAccessInfo &(Loop &)> &GetLAA_,
     OptimizationRemarkEmitter &ORE_, ProfileSummaryInfo *PSI_) {
   SE = &SE_;

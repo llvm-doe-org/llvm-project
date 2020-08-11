@@ -12,12 +12,8 @@
 #include "ClangTidyOptions.h"
 #include "ClangTidyProfiling.h"
 #include "clang/Basic/Diagnostic.h"
-#include "clang/Basic/SourceManager.h"
 #include "clang/Tooling/Core/Diagnostic.h"
-#include "clang/Tooling/Refactoring.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/StringMap.h"
-#include "llvm/Support/Timer.h"
 
 namespace llvm {
 class Regex;
@@ -27,6 +23,7 @@ namespace clang {
 
 class ASTContext;
 class CompilerInstance;
+class SourceManager;
 namespace ast_matchers {
 class MatchFinder;
 }
@@ -48,6 +45,7 @@ struct ClangTidyError : tooling::Diagnostic {
                  bool IsWarningAsError);
 
   bool IsWarningAsError;
+  std::vector<std::string> EnabledDiagnosticAliases;
 };
 
 /// Contains displayed and ignored diagnostic counters for a ClangTidy
@@ -246,6 +244,7 @@ public:
 private:
   void finalizeLastError();
   void removeIncompatibleErrors();
+  void removeDuplicatedDiagnosticsOfAliasCheckers();
 
   /// Returns the \c HeaderFilter constructed for the options set in the
   /// context.

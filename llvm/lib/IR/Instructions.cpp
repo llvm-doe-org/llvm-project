@@ -330,13 +330,13 @@ bool CallBase::paramHasAttr(unsigned ArgNo, Attribute::AttrKind Kind) const {
 
 bool CallBase::hasFnAttrOnCalledFunction(Attribute::AttrKind Kind) const {
   if (const Function *F = getCalledFunction())
-    return F->getAttributes().hasAttribute(AttributeList::FunctionIndex, Kind);
+    return F->getAttributes().hasFnAttribute(Kind);
   return false;
 }
 
 bool CallBase::hasFnAttrOnCalledFunction(StringRef Kind) const {
   if (const Function *F = getCalledFunction())
-    return F->getAttributes().hasAttribute(AttributeList::FunctionIndex, Kind);
+    return F->getAttributes().hasFnAttribute(Kind);
   return false;
 }
 
@@ -2205,8 +2205,14 @@ bool ShuffleVectorInst::isIdentityWithPadding() const {
 bool ShuffleVectorInst::isIdentityWithExtract() const {
   if (isa<UndefValue>(Op<2>()))
     return false;
-  int NumOpElts = cast<VectorType>(Op<0>()->getType())->getNumElements();
-  int NumMaskElts = getType()->getNumElements();
+
+  // FIXME: Not currently possible to express a shuffle mask for a scalable
+  // vector for this case
+  if (isa<ScalableVectorType>(getType()))
+    return false;
+
+  int NumOpElts = cast<FixedVectorType>(Op<0>()->getType())->getNumElements();
+  int NumMaskElts = cast<FixedVectorType>(getType())->getNumElements();
   if (NumMaskElts >= NumOpElts)
     return false;
 

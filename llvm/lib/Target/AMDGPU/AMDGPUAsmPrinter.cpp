@@ -315,14 +315,12 @@ void AMDGPUAsmPrinter::emitGlobalVariable(const GlobalVariable *GV) {
 
     const DataLayout &DL = GV->getParent()->getDataLayout();
     uint64_t Size = DL.getTypeAllocSize(GV->getValueType());
-    unsigned Align = GV->getAlignment();
-    if (!Align)
-      Align = 4;
+    Align Alignment = GV->getAlign().getValueOr(Align(4));
 
     emitVisibility(GVSym, GV->getVisibility(), !GV->isDeclaration());
     emitLinkage(GV, GVSym);
     if (auto TS = getTargetStreamer())
-      TS->emitAMDGPULDS(GVSym, Size, Align);
+      TS->emitAMDGPULDS(GVSym, Size, Alignment);
     return;
   }
 
@@ -1165,7 +1163,7 @@ void AMDGPUAsmPrinter::getSIProgramInfo(SIProgramInfo &ProgInfo,
       S_00B84C_LDS_SIZE(STM.isAmdHsaOS() ? 0 : ProgInfo.LDSBlocks) |
       S_00B84C_EXCP_EN(0);
 
-  ProgInfo.Occupancy = STM.computeOccupancy(MF, ProgInfo.LDSSize,
+  ProgInfo.Occupancy = STM.computeOccupancy(MF.getFunction(), ProgInfo.LDSSize,
                                             ProgInfo.NumSGPRsForWavesPerEU,
                                             ProgInfo.NumVGPRsForWavesPerEU);
 }

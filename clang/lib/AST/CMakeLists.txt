@@ -123,4 +123,5 @@ add_clang_library(clangAST
 
   DEPENDS
   Opcodes
+  omp_gen
   )

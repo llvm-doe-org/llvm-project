@@ -673,8 +673,8 @@ void Parser::HandlePragmaFPContract() {
     break;
   }
 
-  Actions.ActOnPragmaFPContract(FPC);
-  ConsumeAnnotationToken();
+  SourceLocation PragmaLoc = ConsumeAnnotationToken();
+  Actions.ActOnPragmaFPContract(PragmaLoc, FPC);
 }
 
 void Parser::HandlePragmaFloatControl() {
@@ -2787,7 +2787,7 @@ void PragmaCommentHandler::HandlePragma(Preprocessor &PP,
     return;
   }
 
-  // Verify that this is one of the 5 whitelisted options.
+  // Verify that this is one of the 5 explicitly listed options.
   IdentifierInfo *II = Tok.getIdentifierInfo();
   PragmaMSCommentKind Kind =
     llvm::StringSwitch<PragmaMSCommentKind>(II->getName())
@@ -2828,7 +2828,7 @@ void PragmaCommentHandler::HandlePragma(Preprocessor &PP,
   // FIXME: If the kind is "compiler" warn if the string is present (it is
   // ignored).
   // The MSDN docs say that "lib" and "linker" require a string and have a short
-  // whitelist of linker options they support, but in practice MSVC doesn't
+  // list of linker options they support, but in practice MSVC doesn't
   // issue a diagnostic.  Therefore neither does clang.
 
   if (Tok.isNot(tok::r_paren)) {
@@ -2997,8 +2997,8 @@ void Parser::HandlePragmaFP() {
       reinterpret_cast<TokFPAnnotValue *>(Tok.getAnnotationValue());
 
   if (AnnotValue->FlagKind == TokFPAnnotValue::Reassociate)
-    Actions.ActOnPragmaFPReassociate(AnnotValue->FlagValue ==
-                                     TokFPAnnotValue::On);
+    Actions.ActOnPragmaFPReassociate(
+        Tok.getLocation(), AnnotValue->FlagValue == TokFPAnnotValue::On);
   else {
     LangOptions::FPModeKind FPC;
     switch (AnnotValue->FlagValue) {
@@ -3012,7 +3012,7 @@ void Parser::HandlePragmaFP() {
       FPC = LangOptions::FPM_Fast;
       break;
     }
-    Actions.ActOnPragmaFPContract(FPC);
+    Actions.ActOnPragmaFPContract(Tok.getLocation(), FPC);
   }
   ConsumeAnnotationToken();
 }

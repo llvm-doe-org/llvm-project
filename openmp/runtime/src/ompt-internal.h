@@ -77,8 +77,6 @@ typedef struct {
   ompt_data_t task_data;
   struct kmp_taskdata *scheduling_parent;
   int thread_num;
-  int ndeps;
-  ompt_dependence_t *deps;
 } ompt_task_info_t;
 
 typedef struct {

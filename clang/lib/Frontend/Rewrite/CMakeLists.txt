@@ -21,4 +21,7 @@ add_clang_library(clangRewriteFrontend
   clangLex
   clangRewrite
   clangSerialization
+
+  DEPENDS
+  omp_gen
   )

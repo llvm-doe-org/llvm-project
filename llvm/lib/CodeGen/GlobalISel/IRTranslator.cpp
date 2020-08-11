@@ -2023,9 +2023,6 @@ bool IRTranslator::translateAtomicCmpXchg(const User &U,
                                           MachineIRBuilder &MIRBuilder) {
   const AtomicCmpXchgInst &I = cast<AtomicCmpXchgInst>(U);
 
-  if (I.isWeak())
-    return false;
-
   auto &TLI = *MF->getSubtarget().getTargetLowering();
   auto Flags = TLI.getAtomicMemOperandFlags(I, *DL);
 
@@ -2194,6 +2191,10 @@ bool IRTranslator::translate(const Instruction &Inst) {
         DebugLoc::get(0, 0, DL.getScope(), DL.getInlinedAt()));
   else
     EntryBuilder->setDebugLoc(DebugLoc());
+
+  auto &TLI = *MF->getSubtarget().getTargetLowering();
+  if (TLI.fallBackToDAGISel(Inst))
+    return false;
 
   switch (Inst.getOpcode()) {
 #define HANDLE_INST(NUM, OPCODE, CLASS)                                        \

@@ -443,7 +443,7 @@ AMDGPUTargetLowering::AMDGPUTargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::UREM, VT, Expand);
     setOperationAction(ISD::SMUL_LOHI, VT, Expand);
     setOperationAction(ISD::UMUL_LOHI, VT, Expand);
-    setOperationAction(ISD::SDIVREM, VT, Custom);
+    setOperationAction(ISD::SDIVREM, VT, Expand);
     setOperationAction(ISD::UDIVREM, VT, Expand);
     setOperationAction(ISD::SELECT, VT, Expand);
     setOperationAction(ISD::VSELECT, VT, Expand);
@@ -1010,7 +1010,7 @@ void AMDGPUTargetLowering::analyzeFormalArgumentsCompute(
   const unsigned ExplicitOffset = ST.getExplicitKernelArgOffset(Fn);
   CallingConv::ID CC = Fn.getCallingConv();
 
-  unsigned MaxAlign = 1;
+  Align MaxAlign = Align(1);
   uint64_t ExplicitArgOffset = 0;
   const DataLayout &DL = Fn.getParent()->getDataLayout();
 
@@ -1018,12 +1018,12 @@ void AMDGPUTargetLowering::analyzeFormalArgumentsCompute(
 
   for (const Argument &Arg : Fn.args()) {
     Type *BaseArgTy = Arg.getType();
-    unsigned Align = DL.getABITypeAlignment(BaseArgTy);
-    MaxAlign = std::max(Align, MaxAlign);
+    Align Alignment = DL.getABITypeAlign(BaseArgTy);
+    MaxAlign = std::max(Alignment, MaxAlign);
     unsigned AllocSize = DL.getTypeAllocSize(BaseArgTy);
 
-    uint64_t ArgOffset = alignTo(ExplicitArgOffset, Align) + ExplicitOffset;
-    ExplicitArgOffset = alignTo(ExplicitArgOffset, Align) + AllocSize;
+    uint64_t ArgOffset = alignTo(ExplicitArgOffset, Alignment) + ExplicitOffset;
+    ExplicitArgOffset = alignTo(ExplicitArgOffset, Alignment) + AllocSize;
 
     // We're basically throwing away everything passed into us and starting over
     // to get accurate in-memory offsets. The "PartOffset" is completely useless
@@ -1321,7 +1321,7 @@ SDValue AMDGPUTargetLowering::LowerGlobalAddress(AMDGPUMachineFunction* MFI,
 
     // TODO: We could emit code to handle the initialization somewhere.
     if (!hasDefinedInitializer(GV)) {
-      unsigned Offset = MFI->allocateLDSGlobal(DL, *GV);
+      unsigned Offset = MFI->allocateLDSGlobal(DL, *cast<GlobalVariable>(GV));
       return DAG.getConstant(Offset, SDLoc(Op), Op.getValueType());
     }
   }
@@ -1699,10 +1699,11 @@ SDValue AMDGPUTargetLowering::LowerDIVREM24(SDValue Op, SelectionDAG &DAG,
   const AMDGPUMachineFunction *MFI = MF.getInfo<AMDGPUMachineFunction>();
 
   // float fr = mad(fqneg, fb, fa);
-  unsigned OpCode = !MFI->getMode().allFP32Denormals() ?
+  unsigned OpCode = !Subtarget->hasMadMacF32Insts() ?
+                    (unsigned)ISD::FMA :
+                    !MFI->getMode().allFP32Denormals() ?
                     (unsigned)ISD::FMAD :
                     (unsigned)AMDGPUISD::FMAD_FTZ;
-
   SDValue fr = DAG.getNode(OpCode, DL, FltVT, fqneg, fb, fa);
 
   // int iq = (int)fq;
@@ -1785,10 +1786,11 @@ void AMDGPUTargetLowering::LowerUDIVREM64(SDValue Op,
     const SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
 
     // Compute denominator reciprocal.
-    unsigned FMAD = !MFI->getMode().allFP32Denormals() ?
+    unsigned FMAD = !Subtarget->hasMadMacF32Insts() ?
+                    (unsigned)ISD::FMA :
+                    !MFI->getMode().allFP32Denormals() ?
                     (unsigned)ISD::FMAD :
                     (unsigned)AMDGPUISD::FMAD_FTZ;
-
 
     SDValue Cvt_Lo = DAG.getNode(ISD::UINT_TO_FP, DL, MVT::f32, RHS_Lo);
     SDValue Cvt_Hi = DAG.getNode(ISD::UINT_TO_FP, DL, MVT::f32, RHS_Hi);
@@ -2929,16 +2931,17 @@ SDValue AMDGPUTargetLowering::performLoadCombine(SDNode *N,
   EVT VT = LN->getMemoryVT();
 
   unsigned Size = VT.getStoreSize();
-  unsigned Align = LN->getAlignment();
-  if (Align < Size && isTypeLegal(VT)) {
+  Align Alignment = LN->getAlign();
+  if (Alignment < Size && isTypeLegal(VT)) {
     bool IsFast;
     unsigned AS = LN->getAddressSpace();
 
     // Expand unaligned loads earlier than legalization. Due to visitation order
     // problems during legalization, the emitted instructions to pack and unpack
     // the bytes again are not eliminated in the case of an unaligned copy.
-    if (!allowsMisalignedMemoryAccesses(
-            VT, AS, Align, LN->getMemOperand()->getFlags(), &IsFast)) {
+    if (!allowsMisalignedMemoryAccesses(VT, AS, Alignment.value(),
+                                        LN->getMemOperand()->getFlags(),
+                                        &IsFast)) {
       SDValue Ops[2];
 
       if (VT.isVector())
@@ -2983,8 +2986,8 @@ SDValue AMDGPUTargetLowering::performStoreCombine(SDNode *N,
 
   SDLoc SL(N);
   SelectionDAG &DAG = DCI.DAG;
-  unsigned Align = SN->getAlignment();
-  if (Align < Size && isTypeLegal(VT)) {
+  Align Alignment = SN->getAlign();
+  if (Alignment < Size && isTypeLegal(VT)) {
     bool IsFast;
     unsigned AS = SN->getAddressSpace();
 
@@ -2992,8 +2995,9 @@ SDValue AMDGPUTargetLowering::performStoreCombine(SDNode *N,
     // order problems during legalization, the emitted instructions to pack and
     // unpack the bytes again are not eliminated in the case of an unaligned
     // copy.
-    if (!allowsMisalignedMemoryAccesses(
-            VT, AS, Align, SN->getMemOperand()->getFlags(), &IsFast)) {
+    if (!allowsMisalignedMemoryAccesses(VT, AS, Alignment.value(),
+                                        SN->getMemOperand()->getFlags(),
+                                        &IsFast)) {
       if (VT.isVector())
         return scalarizeVectorStore(SN, DAG);
 
@@ -4320,7 +4324,6 @@ const char* AMDGPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(DIV_FMAS)
   NODE_NAME_CASE(DIV_FIXUP)
   NODE_NAME_CASE(FMAD_FTZ)
-  NODE_NAME_CASE(TRIG_PREOP)
   NODE_NAME_CASE(RCP)
   NODE_NAME_CASE(RSQ)
   NODE_NAME_CASE(RCP_LEGACY)
@@ -4394,6 +4397,7 @@ const char* AMDGPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(ATOMIC_DEC)
   NODE_NAME_CASE(ATOMIC_LOAD_FMIN)
   NODE_NAME_CASE(ATOMIC_LOAD_FMAX)
+  NODE_NAME_CASE(ATOMIC_LOAD_CSUB)
   NODE_NAME_CASE(BUFFER_LOAD)
   NODE_NAME_CASE(BUFFER_LOAD_UBYTE)
   NODE_NAME_CASE(BUFFER_LOAD_USHORT)
@@ -4420,6 +4424,7 @@ const char* AMDGPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(BUFFER_ATOMIC_INC)
   NODE_NAME_CASE(BUFFER_ATOMIC_DEC)
   NODE_NAME_CASE(BUFFER_ATOMIC_CMPSWAP)
+  NODE_NAME_CASE(BUFFER_ATOMIC_CSUB)
   NODE_NAME_CASE(BUFFER_ATOMIC_FADD)
   NODE_NAME_CASE(BUFFER_ATOMIC_PK_FADD)
   NODE_NAME_CASE(ATOMIC_PK_FADD)
@@ -4586,11 +4591,10 @@ void AMDGPUTargetLowering::computeKnownBitsForTargetNode(
   }
   case AMDGPUISD::LDS: {
     auto GA = cast<GlobalAddressSDNode>(Op.getOperand(0).getNode());
-    unsigned Align = GA->getGlobal()->getAlignment();
+    Align Alignment = GA->getGlobal()->getPointerAlignment(DAG.getDataLayout());
 
     Known.Zero.setHighBits(16);
-    if (Align)
-      Known.Zero.setLowBits(Log2_32(Align));
+    Known.Zero.setLowBits(Log2(Alignment));
     break;
   }
   case ISD::INTRINSIC_WO_CHAIN: {
@@ -4734,7 +4738,6 @@ bool AMDGPUTargetLowering::isKnownNeverNaNForTargetNode(SDValue Op,
   case AMDGPUISD::DIV_SCALE:
   case AMDGPUISD::DIV_FMAS:
   case AMDGPUISD::DIV_FIXUP:
-  case AMDGPUISD::TRIG_PREOP:
     // TODO: Refine on operands.
     return SNaN;
   case AMDGPUISD::SIN_HW:
@@ -4772,6 +4775,7 @@ bool AMDGPUTargetLowering::isKnownNeverNaNForTargetNode(SDValue Op,
       // TODO: Need is known positive check.
       return false;
     }
+    case Intrinsic::amdgcn_trig_preop:
     case Intrinsic::amdgcn_fdot2:
       // TODO: Refine on operand
       return SNaN;
