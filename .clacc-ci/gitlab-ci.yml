@@ -112,17 +112,22 @@ stages:
 # utilities
 #-------------------------------------------------
 
-.utility:
-  dependencies: []
-
 .setup:
-  extends: .utility
   stage: setup
   script:
     - pwd
     - echo $BUILD_DIR_PROJ
+    # Try to remove anything older than 6 hours that was left by a previous
+    # pipeline for this project.  Doing this in the setup stage instead of
+    # cleanup stage ensures that it runs before a new job even if prior jobs
+    # failed or were canceled.
+    - find $BUILD_DIR_PROJ -mmin +360 -delete || true
     - mkdir -p $BUILD_DIR_PROJ
     - echo $BUILD_DIR
+    # Remove this build config's build directory if it already exists.  It
+    # might exist if, for example, this setup job previously failed due to a
+    # transient Gitlab/ExCL problem.
+    - rm -rf $BUILD_DIR
     - mkdir $BUILD_DIR
     - mkdir $BUILD_DIR/build
     # Clone the runner's git clone into the NFS-mounted build directory.  We
@@ -132,10 +137,10 @@ stages:
     # We've also tried creating a symlink to the runner's git clone at the
     # start of every job, but that causes ccache to miss in the same manner, so
     # apparently the symlink is expanded somewhere.
+    - git --version
     - time git clone `pwd` $BUILD_DIR/source
 
 .cleanup:
-  extends: .utility
   stage: cleanup
   variables:
     GIT_STRATEGY: none
@@ -143,9 +148,6 @@ stages:
     - pwd
     - echo $BUILD_DIR
     - rm -rf $BUILD_DIR
-    # Try to remove anything older than 12 hours that was left by previous
-    # (likely canceled) pipelines for this project.
-    - find $BUILD_DIR_PROJ -mmin +720 -delete || true
     - rmdir $BUILD_DIR_PROJ || true
 
 kold-python2 (setup):
@@ -159,26 +161,35 @@ leconte-python3 (setup):
 
 kold-python2 (cleanup, clacc):
   extends: [.kold-python2, .clacc, .cleanup]
-  needs: ["kold-python2 (test-all, clacc)"]
+  needs:
+    - job: "kold-python2 (test-all, clacc)"
+      artifacts: false
 
 kold-python2 (cleanup):
   extends: [.kold-python2, .not-clacc, .cleanup]
-  needs: [kold-python2 (test-all)]
+  needs:
+    - job: kold-python2 (test-all)
+      artifacts: false
 
 kold-python3 (cleanup):
   extends: [.kold-python3, .cleanup]
-  needs: [kold-python3 (test-all)]
+  needs:
+    - job: kold-python3 (test-all)
+      artifacts: false
 
 leconte-python3 (cleanup, clacc):
   extends: [.leconte-python3, .clacc, .cleanup]
-  needs: ["leconte-python3 (test-all, clacc)"]
+  needs:
+    - job: "leconte-python3 (test-all, clacc)"
+      artifacts: false
 
 leconte-python3 (cleanup):
   extends: [.leconte-python3, .not-clacc, .cleanup]
-  needs: [leconte-python3 (test-all)]
+  needs:
+    - job: leconte-python3 (test-all)
+      artifacts: false
 
 z-cleanup-pipeline-builds:
-  extends: .utility
   stage: setup
   when: manual
   tags: [shell, kold]
@@ -189,7 +200,6 @@ z-cleanup-pipeline-builds:
     - rm -rf $BUILD_DIRS
 
 z-cleanup-project-builds:
-  extends: .utility
   stage: setup
   when: manual
   tags: [shell, kold]
@@ -236,15 +246,21 @@ z-cleanup-project-builds:
 
 kold-python2 (config):
   extends: [.kold-python2, .config]
-  needs: [kold-python2 (setup)]
+  needs:
+    - job: kold-python2 (setup)
+      artifacts: false
 
 kold-python3 (config):
   extends: [.kold-python3, .config]
-  needs: [kold-python3 (setup)]
+  needs:
+    - job: kold-python3 (setup)
+      artifacts: false
 
 leconte-python3 (config):
   extends: [.leconte-python3, .config]
-  needs: [leconte-python3 (setup)]
+  needs:
+    - job: leconte-python3 (setup)
+      artifacts: false
 
 #-------------------------------------------------
 # build
@@ -254,22 +270,28 @@ leconte-python3 (config):
   extends: .non-utility
   stage: build
   script:
-    - time ninja-build |& tee $CI_PROJECT_DIR/build-log.txt
+    - time ninja-build -l `nproc` |& tee $CI_PROJECT_DIR/build-log.txt
   artifacts:
     when: always
     paths: [build-log.txt]
 
 kold-python2 (build):
   extends: [.kold-python2, .build]
-  needs: [kold-python2 (config)]
+  needs:
+    - job: kold-python2 (config)
+      artifacts: false
 
 kold-python3 (build):
   extends: [.kold-python3, .build]
-  needs: [kold-python3 (config)]
+  needs:
+    - job: kold-python3 (config)
+      artifacts: false
 
 leconte-python3 (build):
   extends: [.leconte-python3, .build]
-  needs: [leconte-python3 (config)]
+  needs:
+    - job: leconte-python3 (config)
+      artifacts: false
 
 #-------------------------------------------------
 # tests
@@ -295,14 +317,14 @@ leconte-python3 (build):
   script:
     - echo $CHECK_TARGETS
     - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
-      ninja-build $CHECK_TARGETS
+      ninja-build -l `nproc` $CHECK_TARGETS
       |& tee $CI_PROJECT_DIR/test-build-log.txt
       | grep '^\[[0-9]\+/[0-9]\+]\|\<error:'
     - for check_target in $CHECK_TARGETS; do
         echo "check_target=$check_target" &&
-        time FILECHECK_OPTS='-dump-input=fail -vv -color'
+        time FILECHECK_OPTS='-dump-input-filter=all -vv -color'
              LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/$check_target.xml"
-             ninja-build $check_target
+             ninja-build -l `nproc` $check_target
         |& tee $CI_PROJECT_DIR/$check_target-log.txt;
       done
   artifacts:
@@ -325,28 +347,42 @@ leconte-python3 (build):
 
 kold-python2 (test-clacc):
   extends: [.kold-python2, .test-clacc]
-  needs: [kold-python2 (build)]
+  needs:
+    - job: kold-python2 (build)
+      artifacts: false
 
 kold-python2 (test-all, clacc):
   extends: [.kold-python2, .clacc, .test-all]
-  needs: [kold-python2 (test-clacc)]
+  needs:
+    - job: kold-python2 (test-clacc)
+      artifacts: false
 
 kold-python2 (test-all):
   extends: [.kold-python2, .not-clacc, .test-all]
-  needs: [kold-python2 (build)]
+  needs:
+    - job: kold-python2 (build)
+      artifacts: false
 
 kold-python3 (test-all):
   extends: [.kold-python3, .test-all]
-  needs: [kold-python3 (build)]
+  needs:
+    - job: kold-python3 (build)
+      artifacts: false
 
 leconte-python3 (test-clacc):
   extends: [.leconte-python3, .test-clacc]
-  needs: [leconte-python3 (build)]
+  needs:
+    - job: leconte-python3 (build)
+      artifacts: false
 
 leconte-python3 (test-all, clacc):
   extends: [.leconte-python3, .clacc, .test-all]
-  needs: [leconte-python3 (test-clacc)]
+  needs:
+    - job: leconte-python3 (test-clacc)
+      artifacts: false
 
 leconte-python3 (test-all):
   extends: [.leconte-python3, .not-clacc, .test-all]
-  needs: [leconte-python3 (build)]
+  needs:
+    - job: leconte-python3 (build)
+      artifacts: false

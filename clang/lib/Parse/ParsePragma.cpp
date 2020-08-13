@@ -164,6 +164,14 @@ struct PragmaOpenMPHandler : public PragmaHandler {
                     Token &FirstToken) override;
 };
 
+struct PragmaOpenMPHandlerForOpenACC : public PragmaHandler {
+  PragmaOpenMPHandler OMPHandler;
+  PragmaNoOpenMPHandler NoOMPHandler;
+  PragmaOpenMPHandlerForOpenACC() : PragmaHandler("omp") { }
+  void HandlePragma(Preprocessor &PP, PragmaIntroducer Introducer,
+                    Token &FirstToken) override;
+};
+
 struct PragmaNoOpenACCHandler : public PragmaHandler {
   PragmaNoOpenACCHandler() : PragmaHandler("acc") { }
   void HandlePragma(Preprocessor &PP, PragmaIntroducer Introducer,
@@ -342,7 +350,9 @@ void Parser::initializePragmaHandlers() {
 
     PP.AddPragmaHandler("OPENCL", FPContractHandler.get());
   }
-  if (getLangOpts().OpenMP && !getLangOpts().OpenACC)
+  if (getLangOpts().OpenACC)
+    OpenMPHandler = std::make_unique<PragmaOpenMPHandlerForOpenACC>();
+  else if (getLangOpts().OpenMP)
     OpenMPHandler = std::make_unique<PragmaOpenMPHandler>();
   else
     OpenMPHandler = std::make_unique<PragmaNoOpenMPHandler>();
@@ -2316,6 +2326,23 @@ void PragmaOpenMPHandler::HandlePragma(Preprocessor &PP,
   std::copy(Pragma.begin(), Pragma.end(), Toks.get());
   PP.EnterTokenStream(std::move(Toks), Pragma.size(),
                       /*DisableMacroExpansion=*/false, /*IsReinject=*/false);
+}
+
+/// Handle '#pragma omp ...' when OpenACC is enabled.
+///
+/// OpenACC plus OpenMP in user code is not supported yet.  Thus, if OpenACC is
+/// enabled, process most OpenMP directives as if OpenMP is disabled.  The only
+/// exception is OpenMP directives in system headers.  The reason is that Clang
+/// translates OpenACC to OpenMP and system headers (at least for devices) use
+/// OpenMP directives, which are required during codegen from the OpenMP
+/// translation.
+void PragmaOpenMPHandlerForOpenACC::HandlePragma(Preprocessor &PP,
+                                                 PragmaIntroducer Introducer,
+                                                 Token &FirstTok) {
+  if (PP.getSourceManager().isInSystemHeader(Introducer.Loc))
+    OMPHandler.HandlePragma(PP, Introducer, FirstTok);
+  else
+    NoOMPHandler.HandlePragma(PP, Introducer, FirstTok);
 }
 
 /// Handle '#pragma acc ...' when OpenACC is disabled.

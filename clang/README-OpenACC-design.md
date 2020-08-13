@@ -430,17 +430,22 @@ Discarding OpenMP (`-Wsource-uses-openmp`)
 ------------------------------------------
 
 As usual when `-fopenmp` is not specified, the front end discards
-OpenMP directives in the source during parsing, and
+OpenMP directives in the application source during parsing, and
 `-Wsource-uses-openmp` is available as usual to request warnings about
 them.  Nevertheless, Clacc must enable OpenMP support in the front end
 in order to build OpenMP subtrees without failing many assertions in
 the OpenMP implementation, but enabling OpenMP support normally
-prevents OpenMP directives from being discarded.  To implement all
-this, Clacc extends the front end in two ways: (1) after confirming
-the user did not request both OpenACC and OpenMP support, it enables
-OpenMP support if OpenACC support is enabled, and (2) it discards
-OpenMP directives during parsing if either OpenMP support is disabled
-or OpenACC support is enabled.
+prevents OpenMP directives from being discarded.  Moreover, OpenMP
+directives in system headers must be parsed (at least for some
+offloading devices) for correct codegen from the OpenMP translation.
+
+To implement all this, Clacc extends the front end as follows:
+
+* After confirming the user did not request both OpenACC and OpenMP
+  support, Clacc enables OpenMP support if OpenACC support is enabled.
+* During parsing, Clacc discards any OpenMP directive if either (1)
+  OpenMP support is disabled or (2) OpenACC support is enabled and an
+  OpenMP directive does not appear in a system header.
 
 `-fopenmp-*`
 ------------

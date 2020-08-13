@@ -1676,16 +1676,18 @@ void test() {
     // DMP-NEXT:     OMPArraySectionExpr
     // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
     // DMP-NEXT:         DeclRefExpr {{.*}} 'arr' 'int [5]'
-    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:       <<<NULL>>>
     // DMP-NEXT:   impl: OMPTargetDataDirective
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       OMPArraySectionExpr
     // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
     // DMP-NEXT:           DeclRefExpr {{.*}} 'arr' 'int [5]'
-    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:         <<<NULL>>>
     // DMP-NOT:      OMP{{.*}}Clause
     // DMP:          CapturedStmt
     //
@@ -1767,8 +1769,9 @@ void test() {
       // DMP-NEXT:     OMPArraySectionExpr
       // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
       // DMP-NEXT:         DeclRefExpr {{.*}} 'arr' 'int [5]'
-      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
-      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
+      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
+      // DMP-NEXT:       <<<NULL>>>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int [5]'
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
@@ -1779,8 +1782,9 @@ void test() {
       // DMP-NEXT:       OMPArraySectionExpr
       // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
       // DMP-NEXT:           DeclRefExpr {{.*}} 'arr' 'int [5]'
-      // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
-      // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 3
+      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
+      // DMP-NEXT:         <<<NULL>>>
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
       // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int [5]'
@@ -1855,6 +1859,7 @@ void test() {
     // DMP-NEXT:         DeclRefExpr {{.*}} 's0' 'int'
     // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:         DeclRefExpr {{.*}} 'l0' 'int'
+    // DMP-NEXT:       <<<NULL>>>
     // DMP-NEXT:   impl: OMPTargetDataDirective
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
@@ -1865,6 +1870,7 @@ void test() {
     // DMP-NEXT:           DeclRefExpr {{.*}} 's0' 'int'
     // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:           DeclRefExpr {{.*}} 'l0' 'int'
+    // DMP-NEXT:         <<<NULL>>>
     // DMP-NOT:      OMP{{.*}}Clause
     // DMP:          CapturedStmt
     //
@@ -1950,6 +1956,7 @@ void test() {
       // DMP-NEXT:         DeclRefExpr {{.*}} 's1' 'int'
       // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
       // DMP-NEXT:         DeclRefExpr {{.*}} 'l1' 'int'
+      // DMP-NEXT:       <<<NULL>>>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int [5]'
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
@@ -1964,6 +1971,7 @@ void test() {
       // DMP-NEXT:           DeclRefExpr {{.*}} 's1' 'int'
       // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
       // DMP-NEXT:           DeclRefExpr {{.*}} 'l1' 'int'
+      // DMP-NEXT:         <<<NULL>>>
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
       // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int [5]'
@@ -2049,11 +2057,13 @@ void test() {
     // DMP-NEXT:         DeclRefExpr {{.*}} 'arr0' 'int [5]'
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:       <<<NULL>>>
     // DMP-NEXT:     OMPArraySectionExpr
     // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
     // DMP-NEXT:         DeclRefExpr {{.*}} 'arr1' 'int [5]'
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:       <<<NULL>>>
     // DMP-NEXT:   impl: OMPTargetDataDirective
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
@@ -2062,11 +2072,13 @@ void test() {
     // DMP-NEXT:           DeclRefExpr {{.*}} 'arr0' 'int [5]'
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:         <<<NULL>>>
     // DMP-NEXT:       OMPArraySectionExpr
     // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
     // DMP-NEXT:           DeclRefExpr {{.*}} 'arr1' 'int [5]'
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:         <<<NULL>>>
     // DMP-NOT:      OMP{{.*}}Clause
     // DMP:          CapturedStmt
     //
@@ -2083,11 +2095,13 @@ void test() {
     // DMP-NEXT:         DeclRefExpr {{.*}} 'arr0' 'int [5]'
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:       <<<NULL>>>
     // DMP-NEXT:     OMPArraySectionExpr
     // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
     // DMP-NEXT:         DeclRefExpr {{.*}} 'arr1' 'int [5]'
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:       <<<NULL>>>
     // DMP-NEXT:   impl: OMPTargetDataDirective
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
@@ -2096,11 +2110,13 @@ void test() {
     // DMP-NEXT:           DeclRefExpr {{.*}} 'arr0' 'int [5]'
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:         <<<NULL>>>
     // DMP-NEXT:       OMPArraySectionExpr
     // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
     // DMP-NEXT:           DeclRefExpr {{.*}} 'arr1' 'int [5]'
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:         <<<NULL>>>
     // DMP-NOT:      OMP{{.*}}Clause
     // DMP:          CapturedStmt
     //

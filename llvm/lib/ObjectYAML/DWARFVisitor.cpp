@@ -9,6 +9,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "DWARFVisitor.h"
+#include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/ObjectYAML/DWARFYAML.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/Error.h"
@@ -36,7 +37,7 @@ void DWARFYAML::VisitorImpl<T>::onVariableSizeValue(uint64_t U, unsigned Size) {
 }
 
 static unsigned getOffsetSize(const DWARFYAML::Unit &Unit) {
-  return Unit.Length.isDWARF64() ? 8 : 4;
+  return Unit.Format == dwarf::DWARF64 ? 8 : 4;
 }
 
 static unsigned getRefSize(const DWARFYAML::Unit &Unit) {
@@ -48,8 +49,6 @@ static unsigned getRefSize(const DWARFYAML::Unit &Unit) {
 template <typename T> Error DWARFYAML::VisitorImpl<T>::traverseDebugInfo() {
   for (auto &Unit : DebugInfo.CompileUnits) {
     onStartCompileUnit(Unit);
-    if (Unit.Entries.empty())
-      continue;
 
     for (auto &Entry : Unit.Entries) {
       onStartDIE(Unit, Entry);
@@ -115,6 +114,12 @@ template <typename T> Error DWARFYAML::VisitorImpl<T>::traverseDebugInfo() {
                                 ""));
             break;
           }
+          case dwarf::DW_FORM_strx:
+          case dwarf::DW_FORM_addrx:
+          case dwarf::DW_FORM_rnglistx:
+          case dwarf::DW_FORM_loclistx:
+            onValue((uint64_t)FormVal->Value, /*LEB=*/true);
+            break;
           case dwarf::DW_FORM_data1:
           case dwarf::DW_FORM_ref1:
           case dwarf::DW_FORM_flag:

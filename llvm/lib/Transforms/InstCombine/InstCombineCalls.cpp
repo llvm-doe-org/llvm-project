@@ -1144,7 +1144,7 @@ Instruction *InstCombiner::simplifyMaskedStore(IntrinsicInst &II) {
   // If the mask is all ones, this is a plain vector store of the 1st argument.
   if (ConstMask->isAllOnesValue()) {
     Value *StorePtr = II.getArgOperand(1);
-    Align Alignment(cast<ConstantInt>(II.getArgOperand(2))->getZExtValue());
+    Align Alignment = cast<ConstantInt>(II.getArgOperand(2))->getAlignValue();
     return new StoreInst(II.getArgOperand(0), StorePtr, false, Alignment);
   }
 
@@ -2379,6 +2379,14 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
       return FAdd;
     }
 
+    // fma x, y, 0 -> fmul x, y
+    // This is always valid for -0.0, but requires nsz for +0.0 as
+    // -0.0 + 0.0 = 0.0, which would not be the same as the fmul on its own.
+    if (match(II->getArgOperand(2), m_NegZeroFP()) ||
+        (match(II->getArgOperand(2), m_PosZeroFP()) &&
+         II->getFastMathFlags().noSignedZeros()))
+      return BinaryOperator::CreateFMulFMF(Src0, Src1, II);
+
     break;
   }
   case Intrinsic::copysign: {
@@ -3375,8 +3383,9 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
   case Intrinsic::arm_neon_vst4lane: {
     Align MemAlign = getKnownAlignment(II->getArgOperand(0), DL, II, &AC, &DT);
     unsigned AlignArg = II->getNumArgOperands() - 1;
-    ConstantInt *IntrAlign = dyn_cast<ConstantInt>(II->getArgOperand(AlignArg));
-    if (IntrAlign && IntrAlign->getZExtValue() < MemAlign.value())
+    Value *AlignArgOp = II->getArgOperand(AlignArg);
+    MaybeAlign Align = cast<ConstantInt>(AlignArgOp)->getMaybeAlignValue();
+    if (Align && *Align < MemAlign)
       return replaceOperand(*II, AlignArg,
                             ConstantInt::get(Type::getInt32Ty(II->getContext()),
                                              MemAlign.value(), false));

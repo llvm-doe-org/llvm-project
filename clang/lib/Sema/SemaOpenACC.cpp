@@ -1922,7 +1922,7 @@ getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
   if (auto *OASE = dyn_cast_or_null<OMPArraySectionExpr>(RefExpr)) {
     IsSubarray = true;
     do {
-      if (OASE->getColonLoc().isInvalid()) {
+      if (OASE->getColonLocFirst().isInvalid()) {
         S.Diag(OASE->getExprLoc(), diag::err_acc_subarray_without_colon)
             << OASE->getSourceRange();
         if (!AllowSubarray)

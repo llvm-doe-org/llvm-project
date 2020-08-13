@@ -53,7 +53,7 @@ def Shape_WitnessType : DialectType<ShapeDialect,
 class Shape_Op<string mnemonic, list<OpTrait> traits = []> :
     Op<ShapeDialect, mnemonic, traits>;
 
-def Shape_AddOp : Shape_Op<"add", [SameOperandsAndResultType]> {
+def Shape_AddOp : Shape_Op<"add", [Commutative, SameOperandsAndResultType]> {
   let summary = "Addition of sizes";
   let description = [{
     Adds two valid sizes as follows:
@@ -67,7 +67,7 @@ def Shape_AddOp : Shape_Op<"add", [SameOperandsAndResultType]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict";
 }
 
-def Shape_BroadcastOp : Shape_Op<"broadcast", []> {
+def Shape_BroadcastOp : Shape_Op<"broadcast", [Commutative]> {
   let summary = "Returns the broadcasted output shape of two inputs";
   let description = [{
     Computes the broadcasted output shape following:
@@ -136,6 +136,22 @@ def Shape_ConstSizeOp : Shape_Op<"const_size", [
 
   let assemblyFormat = "$value attr-dict";
   let hasFolder = 1;
+}
+
+def Shape_ShapeEqOp : Shape_Op<"shape_eq", [Commutative, NoSideEffect]> {
+  let summary = "Returns whether the input shapes or extent tensors are equal";
+  let description = [{
+    Takes two shape or extent tensor operands and determines whether they are
+    equal. When extent tensors are compared to shapes they are regarded as their
+    equivalent non-error shapes. Error shapes can be tested for equality like
+    any other shape value, meaning that the error value is equal to itself.
+  }];
+
+  let arguments = (ins Shape_ShapeOrExtentTensorType:$lhs,
+                       Shape_ShapeOrExtentTensorType:$rhs);
+  let results = (outs I1:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
 }
 
 def Shape_FromExtentsOp : Shape_Op<"from_extents", [NoSideEffect]> {
@@ -252,7 +268,7 @@ def Shape_IndexToSizeOp : Shape_Op<"index_to_size", [NoSideEffect]> {
   let hasCanonicalizer = 1;
 }
 
-def Shape_JoinOp : Shape_Op<"join", []> {
+def Shape_JoinOp : Shape_Op<"join", [Commutative]> {
   let summary = "Returns the least general shape.size of its operands";
   let description = [{
     An operation that computes the least general shape of input operands.
@@ -285,7 +301,7 @@ def Shape_JoinOp : Shape_Op<"join", []> {
   let results = (outs Shape_ShapeOrSizeType:$result);
 }
 
-def Shape_MulOp : Shape_Op<"mul", [SameOperandsAndResultType]> {
+def Shape_MulOp : Shape_Op<"mul", [Commutative, SameOperandsAndResultType]> {
   let summary = "Multiplication of sizes";
   let description = [{
     Multiplies two valid sizes as follows:
@@ -479,7 +495,7 @@ def Shape_ConcatOp : Shape_Op<"concat", []> {
 // Shape constraint related ops.
 //===----------------------------------------------------------------------===//
 
-//TODO(tpopp): Move the code below and witnesses to a different file.
+// TODO: Move the code below and witnesses to a different file.
 def Shape_AnyOp : Shape_Op<"any", [Commutative, NoSideEffect]> {
   let summary = "Return any combination of the input shapes";
   let description = [{

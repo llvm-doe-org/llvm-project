@@ -177,6 +177,7 @@ int main() {
     // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
@@ -188,6 +189,7 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
@@ -236,6 +238,7 @@ int main() {
     // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
@@ -247,6 +250,7 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
@@ -296,6 +300,7 @@ int main() {
     // DMP-NEXT:            DeclRefExpr {{.*}} 'pi' 'int *'
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:        DeclRefExpr {{.*}} 'pi' 'int *'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
@@ -307,6 +312,7 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'pi' 'int *'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'pi' 'int *'
     //
@@ -355,6 +361,7 @@ int main() {
     // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
@@ -366,6 +373,7 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
@@ -417,6 +425,7 @@ int main() {
     // DMP-NEXT:            DeclRefExpr {{.*}} 'start' 'int'
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'length' 'int'
+    // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
@@ -430,6 +439,7 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'start' 'int'
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:              DeclRefExpr {{.*}} 'length' 'int'
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
@@ -480,6 +490,7 @@ int main() {
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'length' 'int'
+    // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
@@ -492,6 +503,7 @@ int main() {
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:              DeclRefExpr {{.*}} 'length' 'int'
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
@@ -542,6 +554,7 @@ int main() {
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'start' 'int'
     // DMP-NEXT:          <<<NULL>>>
+    // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
@@ -553,6 +566,7 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:              DeclRefExpr {{.*}} 'start' 'int'
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
@@ -603,6 +617,7 @@ int main() {
     // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:          <<<NULL>>>
+    // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
@@ -612,6 +627,7 @@ int main() {
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
     // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
@@ -664,8 +680,10 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:        DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
@@ -678,8 +696,10 @@ int main() {
     // DMP-NEXT:                DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:              <<<NULL>>>
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
     //
@@ -731,8 +751,10 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:        DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
@@ -745,8 +767,10 @@ int main() {
     // DMP-NEXT:                DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:              <<<NULL>>>
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
     //
@@ -799,6 +823,8 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'pa' 'int (*)[2]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:            <<<NULL>>>
+    // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
@@ -813,6 +839,8 @@ int main() {
     // DMP-NEXT:                DeclRefExpr {{.*}} 'pa' 'int (*)[2]'
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 3
+    // DMP-NEXT:              <<<NULL>>>
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
@@ -870,8 +898,10 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'ap' 'int *[6]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:        DeclRefExpr {{.*}} 'ap' 'int *[6]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
@@ -884,8 +914,10 @@ int main() {
     // DMP-NEXT:                DeclRefExpr {{.*}} 'ap' 'int *[6]'
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:              <<<NULL>>>
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'ap' 'int *[6]'
     //
@@ -941,8 +973,10 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'ap' 'int *[6]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 5
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:        DeclRefExpr {{.*}} 'ap' 'int *[6]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
@@ -955,8 +989,10 @@ int main() {
     // DMP-NEXT:                DeclRefExpr {{.*}} 'ap' 'int *[6]'
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 5
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:              <<<NULL>>>
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'ap' 'int *[6]'
     //
@@ -1013,8 +1049,10 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'pp' 'int **'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:        DeclRefExpr {{.*}} 'pp' 'int **'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
@@ -1027,8 +1065,10 @@ int main() {
     // DMP-NEXT:                DeclRefExpr {{.*}} 'pp' 'int **'
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:              <<<NULL>>>
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'pp' 'int **'
     //
@@ -1085,8 +1125,10 @@ int main() {
     // DMP-NEXT:              DeclRefExpr {{.*}} 'pp' 'int **'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:        DeclRefExpr {{.*}} 'pp' 'int **'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
@@ -1099,8 +1141,10 @@ int main() {
     // DMP-NEXT:                DeclRefExpr {{.*}} 'pp' 'int **'
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:              <<<NULL>>>
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'pp' 'int **'
     //

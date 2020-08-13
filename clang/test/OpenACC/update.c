@@ -118,39 +118,45 @@ void updateNotNested(int *s, int *h, int *d) {
   // DMP-NEXT:     OMPArraySectionExpr
   // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <LValueToRValue>
   // DMP-NEXT:         DeclRefExpr {{.*}} 's' 'int *'
-  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
-  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 0
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:       <<<NULL>>>
   // DMP-NEXT:   ACCSelfClause
   // DMP-NEXT:     OMPArraySectionExpr
   // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <LValueToRValue>
   // DMP-NEXT:         DeclRefExpr {{.*}} 'h' 'int *'
-  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
-  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 0
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:       <<<NULL>>>
   // DMP-NEXT:   ACCDeviceClause
   // DMP-NEXT:     OMPArraySectionExpr
   // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <LValueToRValue>
   // DMP-NEXT:         DeclRefExpr {{.*}} 'd' 'int *'
-  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
-  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 0
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:       <<<NULL>>>
   // DMP-NEXT:   impl: OMPTargetUpdateDirective
   // DMP-NEXT:     OMPFromClause
   // DMP-NEXT:       OMPArraySectionExpr
   // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <LValueToRValue>
   // DMP-NEXT:           DeclRefExpr {{.*}} 's' 'int *'
-  // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 0
-  // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:         <<<NULL>>>
   // DMP-NEXT:     OMPFromClause
   // DMP-NEXT:       OMPArraySectionExpr
   // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <LValueToRValue>
   // DMP-NEXT:           DeclRefExpr {{.*}} 'h' 'int *'
-  // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 0
-  // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:         <<<NULL>>>
   // DMP-NEXT:     OMPToClause
   // DMP-NEXT:       OMPArraySectionExpr
   // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <LValueToRValue>
   // DMP-NEXT:           DeclRefExpr {{.*}} 'd' 'int *'
-  // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 0
-  // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:         <<<NULL>>>
   //  DMP-NOT: OMP
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc update self(s[0:1]) host(h[0:1]) device(d[0:1]){{$}}
@@ -518,18 +524,21 @@ int main() {
       // DMP-NEXT:         DeclRefExpr {{.*}} 's' 'int [4]'
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+      // DMP-NEXT:       <<<NULL>>>
       // DMP-NEXT:   ACCSelfClause
       // DMP-NEXT:     OMPArraySectionExpr
       // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
       // DMP-NEXT:         DeclRefExpr {{.*}} 'h' 'int [4]'
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+      // DMP-NEXT:       <<<NULL>>>
       // DMP-NEXT:   ACCDeviceClause
       // DMP-NEXT:     OMPArraySectionExpr
       // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
       // DMP-NEXT:         DeclRefExpr {{.*}} 'd' 'int [4]'
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+      // DMP-NEXT:       <<<NULL>>>
       // DMP-NEXT:   impl: OMPTargetUpdateDirective
       // DMP-NEXT:     OMPFromClause
       // DMP-NEXT:       OMPArraySectionExpr
@@ -537,18 +546,21 @@ int main() {
       // DMP-NEXT:           DeclRefExpr {{.*}} 's' 'int [4]'
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+      // DMP-NEXT:         <<<NULL>>>
       // DMP-NEXT:     OMPFromClause
       // DMP-NEXT:       OMPArraySectionExpr
       // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
       // DMP-NEXT:           DeclRefExpr {{.*}} 'h' 'int [4]'
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+      // DMP-NEXT:         <<<NULL>>>
       // DMP-NEXT:     OMPToClause
       // DMP-NEXT:       OMPArraySectionExpr
       // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
       // DMP-NEXT:           DeclRefExpr {{.*}} 'd' 'int [4]'
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+      // DMP-NEXT:         <<<NULL>>>
       //  DMP-NOT: OMP
       //
       //       PRT-A: {{^ *}}#pragma acc update self(s[1:2]) host(h[1:2]) device(d[1:2]){{$}}
@@ -680,6 +692,7 @@ int main() {
       // DMP-NEXT:       `-DeclRefExpr {{.*}} 'start' 'int'
       // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
       // DMP-NEXT:       `-DeclRefExpr {{.*}} 'length' 'int'
+      // DMP-NEXT:       <<<NULL>>>
       // DMP-NEXT:   ACCSelfClause
       // DMP-NEXT:     OMPArraySectionExpr
       // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
@@ -688,6 +701,7 @@ int main() {
       // DMP-NEXT:       `-DeclRefExpr {{.*}} 'start' 'int'
       // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
       // DMP-NEXT:       `-DeclRefExpr {{.*}} 'length' 'int'
+      // DMP-NEXT:       <<<NULL>>>
       // DMP-NEXT:   ACCDeviceClause
       // DMP-NEXT:     OMPArraySectionExpr
       // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
@@ -696,6 +710,7 @@ int main() {
       // DMP-NEXT:       `-DeclRefExpr {{.*}} 'start' 'int'
       // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
       // DMP-NEXT:       `-DeclRefExpr {{.*}} 'length' 'int'
+      // DMP-NEXT:       <<<NULL>>>
       // DMP-NEXT:   impl: OMPTargetUpdateDirective
       // DMP-NEXT:     OMPFromClause
       // DMP-NEXT:       OMPArraySectionExpr
@@ -705,6 +720,7 @@ int main() {
       // DMP-NEXT:         `-DeclRefExpr {{.*}} 'start' 'int'
       // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
       // DMP-NEXT:         `-DeclRefExpr {{.*}} 'length' 'int'
+      // DMP-NEXT:         <<<NULL>>>
       // DMP-NEXT:     OMPFromClause
       // DMP-NEXT:       OMPArraySectionExpr
       // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
@@ -713,6 +729,7 @@ int main() {
       // DMP-NEXT:         `-DeclRefExpr {{.*}} 'start' 'int'
       // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
       // DMP-NEXT:         `-DeclRefExpr {{.*}} 'length' 'int'
+      // DMP-NEXT:         <<<NULL>>>
       // DMP-NEXT:     OMPToClause
       // DMP-NEXT:       OMPArraySectionExpr
       // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
@@ -721,6 +738,7 @@ int main() {
       // DMP-NEXT:         `-DeclRefExpr {{.*}} 'start' 'int'
       // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
       // DMP-NEXT:         `-DeclRefExpr {{.*}} 'length' 'int'
+      // DMP-NEXT:         <<<NULL>>>
       //  DMP-NOT: OMP
       //
       //       PRT-A: {{^ *}}#pragma acc update self(s[start:length]) host(h[start:length]) device(d[start:length]){{$}}
@@ -874,18 +892,21 @@ int main() {
       // DMP-NEXT:         DeclRefExpr {{.*}} 's' 'int [4]'
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 0
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
+      // DMP-NEXT:       <<<NULL>>>
       // DMP-NEXT:   ACCSelfClause
       // DMP-NEXT:     OMPArraySectionExpr
       // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
       // DMP-NEXT:         DeclRefExpr {{.*}} 'h' 'int [4]'
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 0
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
+      // DMP-NEXT:       <<<NULL>>>
       // DMP-NEXT:   ACCDeviceClause
       // DMP-NEXT:     OMPArraySectionExpr
       // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
       // DMP-NEXT:         DeclRefExpr {{.*}} 'd' 'int [4]'
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 0
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
+      // DMP-NEXT:       <<<NULL>>>
       // DMP-NEXT:   impl: OMPTargetUpdateDirective
       // DMP-NEXT:     OMPFromClause
       // DMP-NEXT:       OMPArraySectionExpr
@@ -893,18 +914,21 @@ int main() {
       // DMP-NEXT:           DeclRefExpr {{.*}} 's' 'int [4]'
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
+      // DMP-NEXT:         <<<NULL>>>
       // DMP-NEXT:     OMPFromClause
       // DMP-NEXT:       OMPArraySectionExpr
       // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
       // DMP-NEXT:           DeclRefExpr {{.*}} 'h' 'int [4]'
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
+      // DMP-NEXT:         <<<NULL>>>
       // DMP-NEXT:     OMPToClause
       // DMP-NEXT:       OMPArraySectionExpr
       // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
       // DMP-NEXT:           DeclRefExpr {{.*}} 'd' 'int [4]'
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
+      // DMP-NEXT:         <<<NULL>>>
       //  DMP-NOT: OMP
       //
       //       PRT-A: {{^ *}}#pragma acc update self(s[0:3]) host(h[0:3]) device(d[0:3]){{$}}

@@ -916,8 +916,10 @@ int main() {
   //--------------------------------------------------
   // Worker partitioned.
   //
-  // FIXME: OpenMP offloading for nvptx64 doesn't seem to support _Complex
-  // properly.  The result in that case is an OpenMP runtime error:
+  // FIXME: OpenMP offloading nvptx64 doesn't seem to support _Complex
+  // properly.  When the host is x86_64, we see incorrect values printed within
+  // the following kernel.  When the host is ppc64le, the following produces a
+  // runtime error:
   //
   //   Libomptarget fatal error 1: failure of target construct while
   //   offloading is mandatory
