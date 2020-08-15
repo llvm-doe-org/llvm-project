@@ -42,43 +42,49 @@
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple not-if-off-and-present=%[not-if-present] not-if-off=not)
 // RUN: }
 // RUN: %data use-vars {
-// RUN:   (use-var-cflags=             not-if-off-and-presentOrUsevar=%[not-if-off-and-present])
-// RUN:   (use-var-cflags=-DDO_USE_VAR not-if-off-and-presentOrUsevar=%[not-if-off]            )
+// RUN:   (use-var-cflags=            )
+// RUN:   (use-var-cflags=-DDO_USE_VAR)
 // RUN: }
-//      # Codegen and runtime behavior are different for "present" clauses on
-//      # "acc data" vs. "acc parallel", so check all interesting cases for
-//      # each.  For example, like most map types without the "present"
-//      # modifier, an "alloc" map type for an unused variable within
-//      # "omp target teams" isn't actually mapped by Clang, so there's no
-//      # runtime error for collisions with prior mappings.  However, in the
-//      # case of "omp target data", a variable in a map clause is always
-//      # mapped, so such runtime errors do occur.
+//      # Due to a bug in Clang's OpenMP implementation, codegen and runtime
+//      # behavior used to be differently for "present" clauses on "acc data"
+//      # vs. "acc parallel" if -fopenacc-present-omp=alloc were specified, so
+//      # check all interesting cases for each.  Specifically, without the
+//      # "present" modifier, a map type for an unused variable within "omp
+//      # target teams" was dropped by Clang, so there was no runtime error for
+//      # collisions with prior mappings.  However, in the case of "omp target
+//      # data", a variable in a map clause was always mapped, so such runtime
+//      # errors did occur.  Both now behave like the latter.
 //      #
 //      # "acc parallel loop" should be about the same as "acc parallel", so a
 //      # few cases are probably sufficient.
+//      #
+//      # FIXME: The six cases labeled as OVERLAP_START, OVERLAP_END, and
+//      # CONCAT2 should have not-if-presentError=%[not-if-off-and-present], but
+//      # array extensions currently don't print errors about present modifiers.
+//      # This is fixed upstream by 41b1aefecb94 and will be merged later.
 // RUN: %data cases {
-// RUN:   (case=CASE_DATA_SCALAR_PRESENT             not-if-fail=                                 )
-// RUN:   (case=CASE_DATA_SCALAR_ABSENT              not-if-fail=%[not-if-off-and-present]        )
-// RUN:   (case=CASE_DATA_ARRAY_PRESENT              not-if-fail=                                 )
-// RUN:   (case=CASE_DATA_ARRAY_ABSENT               not-if-fail=%[not-if-off-and-present]        )
-// RUN:   (case=CASE_DATA_SUBARRAY_PRESENT           not-if-fail=                                 )
-// RUN:   (case=CASE_DATA_SUBARRAY_DISJOINT          not-if-fail=%[not-if-off-and-present]        )
-// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_START     not-if-fail=%[not-if-off]                    )
-// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_END       not-if-fail=%[not-if-off]                    )
-// RUN:   (case=CASE_DATA_SUBARRAY_CONCAT2           not-if-fail=%[not-if-off]                    )
-// RUN:   (case=CASE_PARALLEL_SCALAR_PRESENT         not-if-fail=                                 )
-// RUN:   (case=CASE_PARALLEL_SCALAR_ABSENT          not-if-fail=%[not-if-off-and-present]        )
-// RUN:   (case=CASE_PARALLEL_ARRAY_PRESENT          not-if-fail=                                 )
-// RUN:   (case=CASE_PARALLEL_ARRAY_ABSENT           not-if-fail=%[not-if-off-and-present]        )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_PRESENT       not-if-fail=                                 )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_DISJOINT      not-if-fail=%[not-if-off-and-present]        )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_START not-if-fail=%[not-if-off-and-presentOrUsevar])
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_END   not-if-fail=%[not-if-off-and-presentOrUsevar])
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_CONCAT2       not-if-fail=%[not-if-off-and-presentOrUsevar])
-// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_PRESENT    not-if-fail=                                 )
-// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_ABSENT     not-if-fail=%[not-if-off-and-present]        )
-// RUN:   (case=CASE_CONST_PRESENT                   not-if-fail=                                 )
-// RUN:   (case=CASE_CONST_ABSENT                    not-if-fail=%[not-if-off-and-present]        )
+// RUN:   (case=CASE_DATA_SCALAR_PRESENT             not-if-fail=                          not-if-presentError=                         )
+// RUN:   (case=CASE_DATA_SCALAR_ABSENT              not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
+// RUN:   (case=CASE_DATA_ARRAY_PRESENT              not-if-fail=                          not-if-presentError=                         )
+// RUN:   (case=CASE_DATA_ARRAY_ABSENT               not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
+// RUN:   (case=CASE_DATA_SUBARRAY_PRESENT           not-if-fail=                          not-if-presentError=                         )
+// RUN:   (case=CASE_DATA_SUBARRAY_DISJOINT          not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
+// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_START     not-if-fail=%[not-if-off]             not-if-presentError=                         )
+// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_END       not-if-fail=%[not-if-off]             not-if-presentError=                         )
+// RUN:   (case=CASE_DATA_SUBARRAY_CONCAT2           not-if-fail=%[not-if-off]             not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_SCALAR_PRESENT         not-if-fail=                          not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_SCALAR_ABSENT          not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
+// RUN:   (case=CASE_PARALLEL_ARRAY_PRESENT          not-if-fail=                          not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_ARRAY_ABSENT           not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_PRESENT       not-if-fail=                          not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_DISJOINT      not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_START not-if-fail=%[not-if-off]             not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_END   not-if-fail=%[not-if-off]             not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_CONCAT2       not-if-fail=%[not-if-off]             not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_PRESENT    not-if-fail=                          not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_ABSENT     not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
+// RUN:   (case=CASE_CONST_PRESENT                   not-if-fail=                          not-if-presentError=                         )
+// RUN:   (case=CASE_CONST_ABSENT                    not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
 // RUN: }
 
 // Check -ast-dump before and after AST serialization.
@@ -170,7 +176,7 @@
 // RUN:         %for cases {
 // RUN:           %[run-if] %[not-if-fail] %t.exe %[case] > %t.out 2> %t.err
 // RUN:           %[run-if] FileCheck -input-file %t.err -allow-empty %s \
-// RUN:                               -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS
+// RUN:                               -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS,EXE-ERR-%[not-if-presentError]PRESENT
 // RUN:           %[run-if] FileCheck -input-file %t.out -allow-empty %s \
 // RUN:                               -check-prefixes=EXE-OUT,EXE-OUT-%[not-if-fail]PASS
 // RUN:         }
@@ -190,7 +196,7 @@
 // RUN:       %for cases {
 // RUN:         %[run-if] %[not-if-fail] %t.exe %[case] > %t.out 2> %t.err
 // RUN:         %[run-if] FileCheck -input-file %t.err -allow-empty %s \
-// RUN:                             -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS
+// RUN:                             -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS,EXE-ERR-%[not-if-presentError]PRESENT
 // RUN:         %[run-if] FileCheck -input-file %t.out -allow-empty %s \
 // RUN:                             -check-prefixes=EXE-OUT,EXE-OUT-%[not-if-fail]PASS
 // RUN:         echo '%[case]' >> %t.actual-cases
@@ -256,6 +262,13 @@ FOREACH_CASE(AddCase)
 # define USE_VAR(X)
 #endif
 
+#define PRINT_VAR_INFO(Var) \
+  fprintf(stderr, "addr=%p, size=%ld\n", &(Var), sizeof (Var))
+
+#define PRINT_SUBARRAY_INFO(Arr, Start, Length) \
+  fprintf(stderr, "addr=%p, size=%ld\n", &(Arr)[Start], \
+          Length * sizeof (Arr[0]))
+
 // EXE-OUT-NOT: {{.}}
 // EXE-ERR-NOT: {{.}}
 
@@ -302,6 +315,7 @@ int main(int argc, char *argv[]) {
   //   PRT-LABEL: case CASE_DATA_SCALAR_PRESENT:
   //    PRT-NEXT: {
   //    PRT-NEXT:   int x;
+  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
   //
   //  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map(tofrom: x){{$}}
@@ -319,6 +333,7 @@ int main(int argc, char *argv[]) {
   case CASE_DATA_SCALAR_PRESENT:
   {
     int x;
+    PRINT_VAR_INFO(x);
     #pragma acc data copy(x)
     #pragma acc data present(x)
     USE_VAR(x = 1);
@@ -336,6 +351,7 @@ int main(int argc, char *argv[]) {
   //   PRT-LABEL: case CASE_DATA_SCALAR_ABSENT:
   //    PRT-NEXT: {
   //    PRT-NEXT:   int x;
+  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
   //  PRT-A-NEXT:   #pragma acc data present(x){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: x){{$}}
   //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: x){{$}}
@@ -346,6 +362,7 @@ int main(int argc, char *argv[]) {
   case CASE_DATA_SCALAR_ABSENT:
   {
     int x;
+    PRINT_VAR_INFO(x);
     #pragma acc data present(x)
     USE_VAR(x = 1);
     break;
@@ -354,6 +371,7 @@ int main(int argc, char *argv[]) {
   //   PRT-LABEL: case CASE_DATA_ARRAY_PRESENT:
   //    PRT-NEXT: {
   //    PRT-NEXT:   int arr[3];
+  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
   //
   //  PRT-A-NEXT:   #pragma acc data copy(arr){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map(tofrom: arr){{$}}
@@ -371,6 +389,7 @@ int main(int argc, char *argv[]) {
   case CASE_DATA_ARRAY_PRESENT:
   {
     int arr[3];
+    PRINT_VAR_INFO(arr);
     #pragma acc data copy(arr)
     #pragma acc data present(arr)
     USE_VAR(arr[0] = 1);
@@ -380,6 +399,7 @@ int main(int argc, char *argv[]) {
   //   PRT-LABEL: case CASE_DATA_ARRAY_ABSENT:
   //    PRT-NEXT: {
   //    PRT-NEXT:   int arr[3];
+  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
   //  PRT-A-NEXT:   #pragma acc data present(arr){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr){{$}}
   //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr){{$}}
@@ -390,6 +410,7 @@ int main(int argc, char *argv[]) {
   case CASE_DATA_ARRAY_ABSENT:
   {
     int arr[3];
+    PRINT_VAR_INFO(arr);
     #pragma acc data present(arr)
     USE_VAR(arr[0] = 1);
     break;
@@ -398,6 +419,7 @@ int main(int argc, char *argv[]) {
   //   PRT-LABEL: case CASE_DATA_SUBARRAY_PRESENT:
   //    PRT-NEXT: {
   //    PRT-NEXT:   int all[10], same[10], beg[10], mid[10], end[10];
+  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
   //
   //  PRT-A-NEXT:   #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
   // PRT-AO-NEXT:   // #pragma omp target data map(tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
@@ -417,6 +439,7 @@ int main(int argc, char *argv[]) {
   case CASE_DATA_SUBARRAY_PRESENT:
   {
     int all[10], same[10], beg[10], mid[10], end[10];
+    PRINT_VAR_INFO(all);
     #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
     #pragma acc data present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
     {
@@ -428,6 +451,7 @@ int main(int argc, char *argv[]) {
   //   PRT-LABEL: case CASE_DATA_SUBARRAY_DISJOINT:
   //    PRT-NEXT: {
   //    PRT-NEXT:   int arr[4];
+  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
   //
   //  PRT-A-NEXT:   #pragma acc data copy(arr[0:2]){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map(tofrom: arr[0:2]){{$}}
@@ -445,6 +469,7 @@ int main(int argc, char *argv[]) {
   case CASE_DATA_SUBARRAY_DISJOINT:
   {
     int arr[4];
+    PRINT_SUBARRAY_INFO(arr, 2, 2);
     #pragma acc data copy(arr[0:2])
     #pragma acc data present(arr[2:2])
     USE_VAR(arr[2] = 1);
@@ -454,6 +479,7 @@ int main(int argc, char *argv[]) {
   //   PRT-LABEL: case CASE_DATA_SUBARRAY_OVERLAP_START:
   //    PRT-NEXT: {
   //    PRT-NEXT:   int arr[5];
+  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
   //
   //  PRT-A-NEXT:   #pragma acc data copyin(arr[1:2]){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map(to: arr[1:2]){{$}}
@@ -471,6 +497,7 @@ int main(int argc, char *argv[]) {
   case CASE_DATA_SUBARRAY_OVERLAP_START:
   {
     int arr[5];
+    PRINT_SUBARRAY_INFO(arr, 0, 2);
     #pragma acc data copyin(arr[1:2])
     #pragma acc data present(arr[0:2])
     USE_VAR(arr[0] = 1);
@@ -480,6 +507,7 @@ int main(int argc, char *argv[]) {
   //   PRT-LABEL: case CASE_DATA_SUBARRAY_OVERLAP_END:
   //    PRT-NEXT: {
   //    PRT-NEXT:   int arr[5];
+  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
   //
   //  PRT-A-NEXT:   #pragma acc data copyin(arr[1:2]){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map(to: arr[1:2]){{$}}
@@ -497,6 +525,7 @@ int main(int argc, char *argv[]) {
   case CASE_DATA_SUBARRAY_OVERLAP_END:
   {
     int arr[5];
+    PRINT_SUBARRAY_INFO(arr, 2, 2);
     #pragma acc data copyin(arr[1:2])
     #pragma acc data present(arr[2:2])
     USE_VAR(arr[2] = 1);
@@ -506,6 +535,7 @@ int main(int argc, char *argv[]) {
   //   PRT-LABEL: case CASE_DATA_SUBARRAY_CONCAT2:
   //    PRT-NEXT: {
   //    PRT-NEXT:   int arr[4];
+  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
   //
   //  PRT-A-NEXT:   #pragma acc data copyout(arr[0:2]){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map(from: arr[0:2]){{$}}
@@ -527,6 +557,7 @@ int main(int argc, char *argv[]) {
   case CASE_DATA_SUBARRAY_CONCAT2:
   {
     int arr[4];
+    PRINT_SUBARRAY_INFO(arr, 0, 4);
     #pragma acc data copyout(arr[0:2])
     #pragma acc data copy(arr[2:2])
     #pragma acc data present(arr[0:4])
@@ -551,6 +582,7 @@ int main(int argc, char *argv[]) {
   //   PRT-LABEL: case CASE_PARALLEL_SCALAR_PRESENT:
   //    PRT-NEXT: {
   //    PRT-NEXT:   int x;
+  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
   //
   //  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map(tofrom: x){{$}}
@@ -568,6 +600,7 @@ int main(int argc, char *argv[]) {
   case CASE_PARALLEL_SCALAR_PRESENT:
   {
     int x;
+    PRINT_VAR_INFO(x);
     #pragma acc data copy(x)
     #pragma acc parallel present(x)
     USE_VAR(x = 1);
@@ -577,6 +610,7 @@ int main(int argc, char *argv[]) {
   case CASE_PARALLEL_SCALAR_ABSENT:
   {
     int x;
+    PRINT_VAR_INFO(x);
     #pragma acc parallel present(x)
     USE_VAR(x = 1);
     break;
@@ -585,6 +619,7 @@ int main(int argc, char *argv[]) {
   case CASE_PARALLEL_ARRAY_PRESENT:
   {
     int arr[3];
+    PRINT_VAR_INFO(arr);
     #pragma acc data copy(arr)
     #pragma acc parallel present(arr)
     USE_VAR(arr[0] = 1);
@@ -594,6 +629,7 @@ int main(int argc, char *argv[]) {
   case CASE_PARALLEL_ARRAY_ABSENT:
   {
     int arr[3];
+    PRINT_VAR_INFO(arr);
     #pragma acc parallel present(arr)
     USE_VAR(arr[0] = 1);
     break;
@@ -602,6 +638,7 @@ int main(int argc, char *argv[]) {
   case CASE_PARALLEL_SUBARRAY_PRESENT:
   {
     int all[10], same[10], beg[10], mid[10], end[10];
+    PRINT_VAR_INFO(all);
     #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
     #pragma acc parallel present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
     {
@@ -613,6 +650,7 @@ int main(int argc, char *argv[]) {
   case CASE_PARALLEL_SUBARRAY_DISJOINT:
   {
     int arr[4];
+    PRINT_SUBARRAY_INFO(arr, 2, 2);
     #pragma acc data copy(arr[0:2])
     #pragma acc parallel present(arr[2:2])
     USE_VAR(arr[2] = 1);
@@ -622,6 +660,7 @@ int main(int argc, char *argv[]) {
   case CASE_PARALLEL_SUBARRAY_OVERLAP_START:
   {
     int arr[10];
+    PRINT_SUBARRAY_INFO(arr, 4, 4);
     #pragma acc data copyin(arr[5:4])
     #pragma acc parallel present(arr[4:4])
     USE_VAR(arr[4] = 1);
@@ -631,6 +670,7 @@ int main(int argc, char *argv[]) {
   case CASE_PARALLEL_SUBARRAY_OVERLAP_END:
   {
     int arr[10];
+    PRINT_SUBARRAY_INFO(arr, 4, 4);
     #pragma acc data copyin(arr[3:4])
     #pragma acc parallel present(arr[4:4])
     USE_VAR(arr[4] = 1);
@@ -640,6 +680,7 @@ int main(int argc, char *argv[]) {
   case CASE_PARALLEL_SUBARRAY_CONCAT2:
   {
     int arr[4];
+    PRINT_SUBARRAY_INFO(arr, 0, 4);
     #pragma acc data copyout(arr[0:2])
     #pragma acc data copy(arr[2:2])
     #pragma acc parallel present(arr[0:4])
@@ -673,6 +714,7 @@ int main(int argc, char *argv[]) {
   //   PRT-LABEL: case CASE_PARALLEL_LOOP_SCALAR_PRESENT
   //    PRT-NEXT: {
   //    PRT-NEXT:   int x;
+  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
   //
   //  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map(tofrom: x){{$}}
@@ -693,6 +735,7 @@ int main(int argc, char *argv[]) {
   case CASE_PARALLEL_LOOP_SCALAR_PRESENT:
   {
     int x;
+    PRINT_VAR_INFO(x);
     #pragma acc data copy(x)
     #pragma acc parallel loop present(x)
     for (int i = 0; i < 2; ++i)
@@ -703,6 +746,7 @@ int main(int argc, char *argv[]) {
   case CASE_PARALLEL_LOOP_SCALAR_ABSENT:
   {
     int x;
+    PRINT_VAR_INFO(x);
     #pragma acc parallel loop present(x)
     for (int i = 0; i < 2; ++i)
     USE_VAR(x = 1);
@@ -712,6 +756,7 @@ int main(int argc, char *argv[]) {
   case CASE_CONST_PRESENT:
   {
     const int x;
+    PRINT_VAR_INFO(x);
     int y;
     #pragma acc data copy(x)
     #pragma acc parallel loop present(x)
@@ -723,6 +768,7 @@ int main(int argc, char *argv[]) {
   case CASE_CONST_ABSENT:
   {
     const int x;
+    PRINT_VAR_INFO(x);
     int y;
     #pragma acc parallel loop present(x)
     for (int i = 0; i < 2; ++i)
@@ -735,7 +781,9 @@ int main(int argc, char *argv[]) {
     break;
   }
 
-  // EXE-ERR-notPASS: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  //                 EXE-ERR: addr=0x[[#%x,HOST_ADDR:]], size=[[#%u,SIZE:]]
+  // EXE-ERR-notPRESENT-NEXT: Libomptarget message: device mapping required by 'present' map type modifier does not exist for host address 0x{{0*}}[[#HOST_ADDR]] ([[#SIZE]] bytes)
+  //    EXE-ERR-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 
   // EXE-OUT-PASS-NEXT: after fail
   printf("after fail\n");

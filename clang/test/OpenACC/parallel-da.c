@@ -1129,7 +1129,8 @@ int main() {
   //   EXE-CiCrFP-NEXT:          gs:[33,11]->[33,11],
   //     EXE-ICCo-NEXT:          gu.i:22->13,
   //   EXE-CiCrFP-NEXT:          gu.i:22->22,
-  //          EXE-NEXT:          gUnref:2->2,
+  // EXE-ICCiCrFP-NEXT:          gUnref:2->2,
+  //       EXE-Co-NEXT:          gUnref:2->
   //  EXE-ICiCrFP-NEXT:          li:99->99,
   //      EXE-CCo-NEXT:          li:99->98,
   //  EXE-ICiCrFP-NEXT:          lt:[7a1,62b0]->[7a1,62b0],
@@ -1142,7 +1143,8 @@ int main() {
   //   EXE-CiCrFP-NEXT:          ls:[222,111]->[222,111],
   //     EXE-ICCo-NEXT:          lu.i:167->279,
   //   EXE-CiCrFP-NEXT:          lu.i:167->167,
-  //          EXE-NEXT:          lUnref:9->9,
+  // EXE-ICCiCrFP-NEXT:          lUnref:9->9,
+  //       EXE-Co-NEXT:          lUnref:9->
   // EXE-ICCiCrFP-NEXT:          shadowed:111,
   //       EXE-Co-NEXT:          shadowed:
   // EXE-ICCiCrFP-NEXT:          ci:53,

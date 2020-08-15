@@ -160,8 +160,10 @@ LookupResult DeviceTy::lookupMapping(void *HstPtrBegin, int64_t Size) {
 // If NULL is returned, then either data allocation failed or the user tried
 // to do an illegal mapping.
 void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
-    int64_t Size, bool &IsNew, bool &IsHostPtr, bool IsImplicit,
-    bool UpdateRefCount, bool HasCloseModifier, bool DoNotAllocate) {
+                                 int64_t Size, bool &IsNew, bool &IsHostPtr,
+                                 bool IsImplicit, bool UpdateRefCount,
+                                 bool HasCloseModifier, bool HasPresentModifier,
+                                 bool HasNoAllocModifier) {
   void *rc = NULL;
   IsHostPtr = false;
   IsNew = false;
@@ -190,65 +192,72 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
   } else if ((lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) && !IsImplicit) {
     // Explicit extension of mapped data - not allowed.
     DP("Explicit extension of mapping is not allowed.\n");
-  } else if (Size) {
-    // If unified shared memory is active, implicitly mapped variables that are not
-    // privatized use host address. Any explicitly mapped variables also use
-    // host address where correctness is not impeded. In all other cases
-    // maps are respected.
-    // In addition to the mapping rules above, the close map
-    // modifier forces the mapping of the variable to the device.
-    if (RTLs->RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY &&
-        !HasCloseModifier) {
+  } else if (RTLs->RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY &&
+             !HasCloseModifier) {
+    // If unified shared memory is active, implicitly mapped variables that are
+    // not privatized use host address. Any explicitly mapped variables also use
+    // host address where correctness is not impeded. In all other cases maps
+    // are respected.
+    // In addition to the mapping rules above, the close map modifier forces the
+    // mapping of the variable to the device.
+    if (Size) {
       DP("Return HstPtrBegin " DPxMOD " Size=%ld RefCount=%s\n",
-         DPxPTR((uintptr_t)HstPtrBegin), Size, (UpdateRefCount ? " updated" : ""));
+         DPxPTR((uintptr_t)HstPtrBegin), Size,
+         (UpdateRefCount ? " updated" : ""));
       IsHostPtr = true;
       rc = HstPtrBegin;
-    } else if (DoNotAllocate) {
-      DP("Mapping does not exist%s for HstPtrBegin=" DPxMOD ", Size=%ld\n",
-         (IsImplicit ? " (implicit)" : ""), DPxPTR(HstPtrBegin), Size);
-    } else {
-      // If it is not contained and Size > 0 we should create a new entry for it.
-      IsNew = true;
-      uintptr_t tp = (uintptr_t)RTL->data_alloc(RTLDeviceID, Size, HstPtrBegin);
-#if OMPT_SUPPORT
-      // OpenMP 5.0 sec. 3.6.1 p. 398 L18:
-      // "The target-data-allocation event occurs when a thread allocates data
-      // on a target device."
-      // OpenMP 5.0 sec. 3.6.6 p. 404 L32:
-      // "The target-data-associate event occurs when a thread associates data
-      // on a target device."
-      // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
-      // "A registered ompt_callback_target_data_op callback is dispatched when
-      // device memory is allocated or freed, as well as when data is copied to
-      // or from a device."
-      // The callbacks must dispatch after the allocation succeeds because they
-      // require the device address.  Similarly, the callback for
-      // ompt_target_data_associate should follow the callback for
-      // ompt_target_data_alloc to reflect the order in which these events must
-      // occur.
-      if (OmptApi.ompt_get_enabled().ompt_callback_target_data_op) {
-        // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
-        // OpenACC support, so we haven't bothered to implement them yet.
-        OmptApi.ompt_get_callbacks().ompt_callback(
-            ompt_callback_target_data_op)(
-            OmptApi.target_id, /*host_op_id*/ ompt_id_none,
-            ompt_target_data_alloc, HstPtrBegin, HOST_DEVICE, (void *)tp,
-            DeviceID, Size, /*codeptr_ra*/ NULL);
-        OmptApi.ompt_get_callbacks().ompt_callback(
-            ompt_callback_target_data_op)(
-            OmptApi.target_id, /*host_op_id*/ ompt_id_none,
-            ompt_target_data_associate, HstPtrBegin, HOST_DEVICE, (void *)tp,
-            DeviceID, Size, /*codeptr_ra*/ NULL);
-      }
-#endif
-      DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD ", "
-         "HstEnd=" DPxMOD ", TgtBegin=" DPxMOD "\n", DPxPTR(HstPtrBase),
-         DPxPTR(HstPtrBegin), DPxPTR((uintptr_t)HstPtrBegin + Size), DPxPTR(tp));
-      HostDataToTargetMap.emplace(
-          HostDataToTargetTy((uintptr_t)HstPtrBase, (uintptr_t)HstPtrBegin,
-                             (uintptr_t)HstPtrBegin + Size, tp));
-      rc = (void *)tp;
     }
+  } else if (HasPresentModifier) {
+    DP("Mapping required by 'present' map type modifier does not exist for "
+       "HstPtrBegin=" DPxMOD ", Size=%ld\n",
+       DPxPTR(HstPtrBegin), Size);
+    MESSAGE("device mapping required by 'present' map type modifier does not "
+            "exist for host address " DPxMOD " (%ld bytes)",
+            DPxPTR(HstPtrBegin), Size);
+  } else if (HasNoAllocModifier) {
+    DP("Mapping does not exist%s for HstPtrBegin=" DPxMOD ", Size=%ld\n",
+       (IsImplicit ? " (implicit)" : ""), DPxPTR(HstPtrBegin), Size);
+  } else if (Size) {
+    // If it is not contained and Size > 0, we should create a new entry for it.
+    IsNew = true;
+    uintptr_t tp = (uintptr_t)RTL->data_alloc(RTLDeviceID, Size, HstPtrBegin);
+#if OMPT_SUPPORT
+    // OpenMP 5.0 sec. 3.6.1 p. 398 L18:
+    // "The target-data-allocation event occurs when a thread allocates data
+    // on a target device."
+    // OpenMP 5.0 sec. 3.6.6 p. 404 L32:
+    // "The target-data-associate event occurs when a thread associates data
+    // on a target device."
+    // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
+    // "A registered ompt_callback_target_data_op callback is dispatched when
+    // device memory is allocated or freed, as well as when data is copied to
+    // or from a device."
+    // The callbacks must dispatch after the allocation succeeds because they
+    // require the device address.  Similarly, the callback for
+    // ompt_target_data_associate should follow the callback for
+    // ompt_target_data_alloc to reflect the order in which these events must
+    // occur.
+    if (OmptApi.ompt_get_enabled().ompt_callback_target_data_op) {
+      // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
+      // OpenACC support, so we haven't bothered to implement them yet.
+      OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+          OmptApi.target_id, /*host_op_id*/ ompt_id_none,
+          ompt_target_data_alloc, HstPtrBegin, HOST_DEVICE, (void *)tp,
+          DeviceID, Size, /*codeptr_ra*/ NULL);
+      OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+          OmptApi.target_id, /*host_op_id*/ ompt_id_none,
+          ompt_target_data_associate, HstPtrBegin, HOST_DEVICE, (void *)tp,
+          DeviceID, Size, /*codeptr_ra*/ NULL);
+    }
+#endif
+    DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD ", "
+       "HstEnd=" DPxMOD ", TgtBegin=" DPxMOD "\n",
+       DPxPTR(HstPtrBase), DPxPTR(HstPtrBegin),
+       DPxPTR((uintptr_t)HstPtrBegin + Size), DPxPTR(tp));
+    HostDataToTargetMap.emplace(
+        HostDataToTargetTy((uintptr_t)HstPtrBase, (uintptr_t)HstPtrBegin,
+                           (uintptr_t)HstPtrBegin + Size, tp));
+    rc = (void *)tp;
   }
 
   DataMapMtx.unlock();

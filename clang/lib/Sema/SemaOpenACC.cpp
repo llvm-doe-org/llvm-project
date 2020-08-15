@@ -2680,15 +2680,16 @@ static PosIntResult IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
 
   ValExpr = Value.get();
   // The expression must evaluate to a non-negative integer value.
-  llvm::APSInt Result;
-  if (!ValExpr->isIntegerConstantExpr(Result, SemaRef.Context)) {
+  Optional<llvm::APSInt> Result =
+      ValExpr->getIntegerConstantExpr(SemaRef.Context);
+  if (!Result) {
     if (ErrorIfNotConst) {
       SemaRef.Diag(Loc, diag::err_acc_clause_not_ice)
           << getOpenACCName(CKind) << ValExpr->getSourceRange();
       return PosIntError;
     }
     return PosIntNonConst;
-  } else if (!Result.isStrictlyPositive()) {
+  } else if (!Result->isStrictlyPositive()) {
     SemaRef.Diag(Loc, diag::err_acc_clause_not_positive_ice)
         << getOpenACCName(CKind) << ValExpr->getSourceRange();
     return PosIntError;

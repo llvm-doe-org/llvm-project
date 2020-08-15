@@ -934,7 +934,7 @@ int main(int argc, char *argv[]) {
   // EXE-NO-ALLOC-DATA: Libomptarget --> Mapping does not exist
   // EXE-NO-ALLOC-DATA: Libomptarget --> Call to getOrAllocTgtPtr returned null pointer ('no_alloc' map type modifier)
   // EXE-NO-ALLOC-DATA: Libomptarget --> Entering data end region
-  // EXE-NO-ALLOC-DATA: Libomptarget --> Data is not allocated on device
+  // EXE-NO-ALLOC-DATA: Libomptarget --> Mapping does not exist
   //  EXE-NO-ALLOC-PAR: Libomptarget --> Entering target region
   //  EXE-NO-ALLOC-PAR: Libomptarget --> Launching target execution
 
@@ -946,7 +946,7 @@ int main(int argc, char *argv[]) {
   //      EXE-NO-ALLOC-DISJOINT: Libomptarget --> Call to getOrAllocTgtPtr returned null pointer ('no_alloc' map type modifier)
   //  EXE-NO-ALLOC-DISJOINT-PAR: Libomptarget --> Launching target execution
   // EXE-NO-ALLOC-DISJOINT-DATA: Libomptarget --> Entering data end region
-  //      EXE-NO-ALLOC-DISJOINT: Libomptarget --> Data is not allocated on device
+  //      EXE-NO-ALLOC-DISJOINT: Libomptarget --> Mapping does not exist
   //      EXE-NO-ALLOC-DISJOINT: Libomptarget --> Entering data end region
   //      EXE-NO-ALLOC-DISJOINT: Libomptarget --> Mapping exists
   //      EXE-NO-ALLOC-DISJOINT: Libomptarget --> Removing mapping
@@ -959,7 +959,7 @@ int main(int argc, char *argv[]) {
   //      EXE-NO-ALLOC-EXTENDS: Libomptarget --> Call to getOrAllocTgtPtr returned null pointer ('no_alloc' map type modifier)
   //  EXE-NO-ALLOC-EXTENDS-PAR: Libomptarget --> Launching target execution
   // EXE-NO-ALLOC-EXTENDS-DATA: Libomptarget --> Entering data end region
-  //      EXE-NO-ALLOC-EXTENDS: Libomptarget --> Data is not allocated on device
+  //      EXE-NO-ALLOC-EXTENDS: Libomptarget --> Mapping does not exist
   //      EXE-NO-ALLOC-EXTENDS: Libomptarget --> Entering data end region
   //      EXE-NO-ALLOC-EXTENDS: Libomptarget --> Mapping exists
   //      EXE-NO-ALLOC-EXTENDS: Libomptarget --> Removing mapping
@@ -974,7 +974,7 @@ int main(int argc, char *argv[]) {
   //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Call to getOrAllocTgtPtr returned null pointer ('no_alloc' map type modifier)
   //  EXE-NO-ALLOC-CONCAT2-PAR: Libomptarget --> Launching target execution
   // EXE-NO-ALLOC-CONCAT2-DATA: Libomptarget --> Entering data end region
-  //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Data is not allocated on device
+  //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Mapping does not exist
   //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Entering data end region
   //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Mapping exists
   //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Removing mapping
@@ -1040,7 +1040,7 @@ int main(int argc, char *argv[]) {
   // EXE-NO-ALLOC-INHERITED: Libomptarget --> Entering target region
   // EXE-NO-ALLOC-INHERITED: Libomptarget --> Launching target execution
   // EXE-NO-ALLOC-INHERITED: Libomptarget --> Entering data end region
-  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Data is not allocated on device
+  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Mapping does not exist
 
   // EXE-ALLOC-INHERITED: Libomptarget --> Entering data begin region
   // EXE-ALLOC-INHERITED: Libomptarget --> Creating new map entry

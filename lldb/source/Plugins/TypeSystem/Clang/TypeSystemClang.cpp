@@ -1657,9 +1657,9 @@ bool TypeSystemClang::FieldIsBitfield(FieldDecl *field,
   if (field->isBitField()) {
     Expr *bit_width_expr = field->getBitWidth();
     if (bit_width_expr) {
-      llvm::APSInt bit_width_apsint;
-      if (bit_width_expr->isIntegerConstantExpr(bit_width_apsint, ast)) {
-        bitfield_bit_size = bit_width_apsint.getLimitedValue(UINT32_MAX);
+      if (Optional<llvm::APSInt> bit_width_apsint =
+              bit_width_expr->getIntegerConstantExpr(ast)) {
+        bitfield_bit_size = bit_width_apsint->getLimitedValue(UINT32_MAX);
         return true;
       }
     }
@@ -2499,6 +2499,7 @@ RemoveWrappingTypes(QualType type, ArrayRef<clang::Type::TypeClass> mask = {}) {
     case clang::Type::Decltype:
     case clang::Type::Elaborated:
     case clang::Type::Paren:
+    case clang::Type::TemplateSpecialization:
     case clang::Type::Typedef:
     case clang::Type::TypeOf:
     case clang::Type::TypeOfExpr:

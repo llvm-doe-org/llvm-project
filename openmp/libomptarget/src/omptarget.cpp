@@ -208,8 +208,8 @@ static int InitLibrary(DeviceTy& Device) {
         DP("Has pending ctors... call now\n");
         for (auto &entry : lib.second.PendingCtors) {
           void *ctor = entry;
-          int rc = target(device_id, ctor, 0, NULL, NULL, NULL,
-                          NULL, 1, 1, true /*team*/);
+          int rc = target(device_id, ctor, 0, NULL, NULL, NULL, NULL, NULL, 1,
+              1, true /*team*/);
           if (rc != OFFLOAD_SUCCESS) {
             DP("Running ctor " DPxMOD " failed.\n", DPxPTR(ctor));
             Device.PendingGlobalsMtx.unlock();
@@ -305,10 +305,46 @@ static int32_t member_of(int64_t type) {
 # define OMPT_DISPATCH_CALLBACK_TARGET_MAP(SubEvent)
 #endif
 
+/// Call the user-defined mapper function followed by the appropriate
+// target_data_* function (target_data_{begin,end,update}).
+int target_data_mapper(DeviceTy &Device, void *arg_base,
+    void *arg, int64_t arg_size, int64_t arg_type, void *arg_mapper,
+    TargetDataFuncPtrTy target_data_function) {
+  DP("Calling the mapper function " DPxMOD "\n", DPxPTR(arg_mapper));
+
+  // The mapper function fills up Components.
+  MapperComponentsTy MapperComponents;
+  MapperFuncPtrTy MapperFuncPtr = (MapperFuncPtrTy)(arg_mapper);
+  (*MapperFuncPtr)((void *)&MapperComponents, arg_base, arg, arg_size,
+      arg_type);
+
+  // Construct new arrays for args_base, args, arg_sizes and arg_types
+  // using the information in MapperComponents and call the corresponding
+  // target_data_* function using these new arrays.
+  std::vector<void *> mapper_args_base;
+  std::vector<void *> mapper_args;
+  std::vector<int64_t> mapper_arg_sizes;
+  std::vector<int64_t> mapper_arg_types;
+
+  for (auto& C : MapperComponents.Components) {
+    mapper_args_base.push_back(C.Base);
+    mapper_args.push_back(C.Begin);
+    mapper_arg_sizes.push_back(C.Size);
+    mapper_arg_types.push_back(C.Type);
+  }
+
+  int rc = target_data_function(Device, MapperComponents.Components.size(),
+      mapper_args_base.data(), mapper_args.data(), mapper_arg_sizes.data(),
+      mapper_arg_types.data(), /*arg_mappers*/ nullptr,
+      /*__tgt_async_info*/ nullptr);
+
+  return rc;
+}
+
 /// Internal function to do the mapping and transfer the data to the device
 int target_data_begin(DeviceTy &Device, int32_t arg_num, void **args_base,
                       void **args, int64_t *arg_sizes, int64_t *arg_types,
-                      __tgt_async_info *async_info_ptr) {
+                      void **arg_mappers, __tgt_async_info *async_info_ptr) {
   OMPT_DISPATCH_CALLBACK_TARGET_MAP(_start);
 
   // process each input.
@@ -317,6 +353,25 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num, void **args_base,
     if ((arg_types[i] & OMP_TGT_MAPTYPE_LITERAL) ||
         (arg_types[i] & OMP_TGT_MAPTYPE_PRIVATE))
       continue;
+
+    if (arg_mappers && arg_mappers[i]) {
+      // Instead of executing the regular path of target_data_begin, call the
+      // target_data_mapper variant which will call target_data_begin again
+      // with new arguments.
+      DP("Calling target_data_mapper for the %dth argument\n", i);
+
+      int rc = target_data_mapper(Device, args_base[i], args[i], arg_sizes[i],
+          arg_types[i], arg_mappers[i], target_data_begin);
+
+      if (rc != OFFLOAD_SUCCESS) {
+        DP("Call to target_data_begin via target_data_mapper for custom mapper"
+            " failed.\n");
+        return OFFLOAD_FAIL;
+      }
+
+      // Skip the rest of this function, continue to the next argument.
+      continue;
+    }
 
     void *HstPtrBegin = args[i];
     void *HstPtrBase = args_base[i];
@@ -356,13 +411,27 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num, void **args_base,
     bool UpdateRef = !(arg_types[i] & OMP_TGT_MAPTYPE_MEMBER_OF);
     if (arg_types[i] & OMP_TGT_MAPTYPE_PTR_AND_OBJ) {
       DP("Has a pointer entry: \n");
-      // base is address of pointer.
-      Pointer_TgtPtrBegin = Device.getOrAllocTgtPtr(HstPtrBase, HstPtrBase,
-          sizeof(void *), Pointer_IsNew, IsHostPtr, IsImplicit, UpdateRef,
-          HasCloseModifier);
+      // Base is address of pointer.
+      //
+      // Usually, the pointer is already allocated by this time.  For example:
+      //
+      //   #pragma omp target map(s.p[0:N])
+      //
+      // The map entry for s comes first, and the PTR_AND_OBJ entry comes
+      // afterward, so the pointer is already allocated by the time the
+      // PTR_AND_OBJ entry is handled below, and Pointer_TgtPtrBegin is thus
+      // non-null.  However, "declare target link" can produce a PTR_AND_OBJ
+      // entry for a global that might not already be allocated by the time the
+      // PTR_AND_OBJ entry is handled below, and so the allocation might fail
+      // when HasPresentModifier.
+      Pointer_TgtPtrBegin = Device.getOrAllocTgtPtr(
+          HstPtrBase, HstPtrBase, sizeof(void *), Pointer_IsNew, IsHostPtr,
+          IsImplicit, UpdateRef, HasCloseModifier, HasPresentModifier,
+          HasNoAllocModifier);
       if (!Pointer_TgtPtrBegin) {
-        DP("Call to getOrAllocTgtPtr returned null pointer (device failure or "
-            "illegal mapping).\n");
+        DP("Call to getOrAllocTgtPtr returned null pointer (%s).\n",
+           HasPresentModifier ? "'present' map type modifier"
+                              : "device failure or illegal mapping");
         OMPT_DISPATCH_CALLBACK_TARGET_MAP();
         return OFFLOAD_FAIL;
       }
@@ -375,12 +444,12 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num, void **args_base,
       UpdateRef = true; // subsequently update ref count of pointee
     }
 
-    void *TgtPtrBegin = Device.getOrAllocTgtPtr(HstPtrBegin, HstPtrBase,
-        data_size, IsNew, IsHostPtr, IsImplicit, UpdateRef, HasCloseModifier,
-        HasPresentModifier || HasNoAllocModifier);
+    void *TgtPtrBegin = Device.getOrAllocTgtPtr(
+        HstPtrBegin, HstPtrBase, data_size, IsNew, IsHostPtr, IsImplicit,
+        UpdateRef, HasCloseModifier, HasPresentModifier, HasNoAllocModifier);
     // If data_size==0, then the argument could be a zero-length pointer to
     // NULL, so getOrAlloc() returning NULL is not an error.
-    if (!TgtPtrBegin && data_size) {
+    if (!TgtPtrBegin && (data_size || HasPresentModifier)) {
       DP("Call to getOrAllocTgtPtr returned null pointer (%s).\n",
          HasPresentModifier
              ? "'present' map type modifier"
@@ -459,7 +528,7 @@ int target_data_begin(DeviceTy &Device, int32_t arg_num, void **args_base,
 /// Internal function to undo the mapping and retrieve the data from the device.
 int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
                     void **args, int64_t *arg_sizes, int64_t *arg_types,
-                    __tgt_async_info *async_info_ptr) {
+                    void **arg_mappers, __tgt_async_info *async_info_ptr) {
   OMPT_DISPATCH_CALLBACK_TARGET_MAP(_exit_start);
 
   // process each input.
@@ -469,6 +538,25 @@ int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
     if ((arg_types[i] & OMP_TGT_MAPTYPE_LITERAL) ||
         (arg_types[i] & OMP_TGT_MAPTYPE_PRIVATE))
       continue;
+
+    if (arg_mappers && arg_mappers[i]) {
+      // Instead of executing the regular path of target_data_end, call the
+      // target_data_mapper variant which will call target_data_end again
+      // with new arguments.
+      DP("Calling target_data_mapper for the %dth argument\n", i);
+
+      int rc = target_data_mapper(Device, args_base[i], args[i], arg_sizes[i],
+          arg_types[i], arg_mappers[i], target_data_end);
+
+      if (rc != OFFLOAD_SUCCESS) {
+        DP("Call to target_data_end via target_data_mapper for custom mapper"
+            " failed.\n");
+        return OFFLOAD_FAIL;
+      }
+
+      // Skip the rest of this function, continue to the next argument.
+      continue;
+    }
 
     void *HstPtrBegin = args[i];
     int64_t data_size = arg_sizes[i];
@@ -493,18 +581,27 @@ int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
         (arg_types[i] & OMP_TGT_MAPTYPE_PTR_AND_OBJ);
     bool ForceDelete = arg_types[i] & OMP_TGT_MAPTYPE_DELETE;
     bool HasCloseModifier = arg_types[i] & OMP_TGT_MAPTYPE_CLOSE;
+    bool HasPresentModifier = arg_types[i] & OMP_TGT_MAPTYPE_PRESENT;
     bool HasNoAllocModifier = arg_types[i] & OMP_TGT_MAPTYPE_NO_ALLOC;
 
     // If PTR_AND_OBJ, HstPtrBegin is address of pointee
     void *TgtPtrBegin = Device.getTgtPtrBegin(HstPtrBegin, data_size, IsLast,
         UpdateRef, IsHostPtr, HasNoAllocModifier);
-    if (!TgtPtrBegin) {
-      DP("Data is not allocated on device\n");
-      assert(!IsLast && "expected no deallocation for unallocated data");
+    if (!TgtPtrBegin && (data_size || HasPresentModifier)) {
+      DP("Mapping does not exist (%s)\n",
+         (HasPresentModifier ? "'present' map type modifier" : "ignored"));
+      if (HasPresentModifier) {
+        // FIXME: This should not be an error on exit from "omp target data",
+        // but it should be an error upon entering an "omp target exit data".
+        MESSAGE("device mapping required by 'present' map type modifier does "
+                "not exist for host address " DPxMOD " (%ld bytes)",
+                DPxPTR(HstPtrBegin), data_size);
+        return OFFLOAD_FAIL;
+      }
     } else {
       DP("There are %" PRId64 " bytes allocated at target address " DPxMOD
-          " - is%s last\n", data_size, DPxPTR(TgtPtrBegin),
-          (IsLast ? "" : " not"));
+         " - is%s last\n",
+         data_size, DPxPTR(TgtPtrBegin), (IsLast ? "" : " not"));
     }
 
     bool DelEntry = IsLast || ForceDelete;
@@ -635,8 +732,11 @@ void ompt_dispatch_callback_target(ompt_target_t kind,
 // a scope or the end of a scope."
 
 /// Internal function to pass data to/from the target.
+// async_info_ptr is currently unused, added here so target_data_update has the
+// same signature as target_data_begin and target_data_end.
 int target_data_update(DeviceTy &Device, int32_t arg_num,
-    void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types) {
+    void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types,
+    void **arg_mappers, __tgt_async_info *async_info_ptr) {
 #if OMPT_SUPPORT
   ompt_dispatch_callback_target(ompt_target_update, ompt_scope_begin, Device);
 #endif
@@ -646,6 +746,25 @@ int target_data_update(DeviceTy &Device, int32_t arg_num,
     if ((arg_types[i] & OMP_TGT_MAPTYPE_LITERAL) ||
         (arg_types[i] & OMP_TGT_MAPTYPE_PRIVATE))
       continue;
+
+    if (arg_mappers && arg_mappers[i]) {
+      // Instead of executing the regular path of target_data_update, call the
+      // target_data_mapper variant which will call target_data_update again
+      // with new arguments.
+      DP("Calling target_data_mapper for the %dth argument\n", i);
+
+      int rc = target_data_mapper(Device, args_base[i], args[i], arg_sizes[i],
+          arg_types[i], arg_mappers[i], target_data_update);
+
+      if (rc != OFFLOAD_SUCCESS) {
+        DP("Call to target_data_update via target_data_mapper for custom mapper"
+            " failed.\n");
+        return OFFLOAD_FAIL;
+      }
+
+      // Skip the rest of this function, continue to the next argument.
+      continue;
+    }
 
     void *HstPtrBegin = args[i];
     int64_t MapSize = arg_sizes[i];
@@ -787,7 +906,8 @@ static bool isLambdaMapping(int64_t Mapping) {
 
 int target(int64_t device_id, void *host_ptr, int32_t arg_num,
     void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types,
-    int32_t team_num, int32_t thread_limit, int IsTeamConstruct) {
+    void **arg_mappers, int32_t team_num, int32_t thread_limit,
+    int IsTeamConstruct) {
   DeviceTy &Device = Devices[device_id];
 
 #if OMPT_SUPPORT
@@ -852,7 +972,7 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
 
   // Move data to device.
   int rc = target_data_begin(Device, arg_num, args_base, args, arg_sizes,
-                             arg_types, &AsyncInfo);
+                             arg_types, arg_mappers, &AsyncInfo);
   if (rc != OFFLOAD_SUCCESS) {
     DP("Call to target_data_begin failed, abort target.\n");
 #if OMPT_SUPPORT
@@ -1085,7 +1205,7 @@ int target(int64_t device_id, void *host_ptr, int32_t arg_num,
 
   // Move data from device.
   int rt = target_data_end(Device, arg_num, args_base, args, arg_sizes,
-                           arg_types, &AsyncInfo);
+                           arg_types, arg_mappers, &AsyncInfo);
   if (rt != OFFLOAD_SUCCESS) {
     DP("Call to target_data_end failed, abort targe.\n");
 #if OMPT_SUPPORT

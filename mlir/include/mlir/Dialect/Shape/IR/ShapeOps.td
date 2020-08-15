@@ -90,6 +90,8 @@ def Shape_BroadcastOp : Shape_Op<"broadcast", [Commutative]> {
                    OptionalAttr<StrAttr>:$error);
   let results = (outs Shape_ShapeType:$result);
 
+  let assemblyFormat = "$lhs `,` $rhs attr-dict";
+
   let hasFolder = 1;
 }
 
@@ -152,6 +154,7 @@ def Shape_ShapeEqOp : Shape_Op<"shape_eq", [Commutative, NoSideEffect]> {
   let results = (outs I1:$result);
 
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
+  let hasFolder = 1;
 }
 
 def Shape_FromExtentsOp : Shape_Op<"from_extents", [NoSideEffect]> {
@@ -192,13 +195,13 @@ def Shape_FromExtentTensorOp : Shape_Op<"from_extent_tensor", [NoSideEffect]> {
 def Shape_RankOp : Shape_Op<"rank", [NoSideEffect]> {
   let summary = "Gets the rank of a shape";
   let description = [{
-    Returns the rank of the shape, i.e. the number of extents.
+    Returns the rank of the shape or extent tensor, i.e. the number of extents.
   }];
 
-  let arguments = (ins Shape_ShapeType:$shape);
+  let arguments = (ins Shape_ShapeOrExtentTensorType:$shape);
   let results = (outs Shape_SizeType:$rank);
 
-  let assemblyFormat = "attr-dict $shape";
+  let assemblyFormat = "$shape `:` type($shape) attr-dict";
 
   let hasFolder = 1;
   let hasCanonicalizer = 1;
@@ -336,23 +339,26 @@ def Shape_NumElementsOp : Shape_Op<"num_elements", [NoSideEffect]> {
 
 def Shape_ReduceOp : Shape_Op<"reduce",
     [SingleBlockImplicitTerminator<"YieldOp">]> {
-  let summary = "Returns an expression reduced over a shape";
+  let summary = "Returns an expression reduced over a shape or extent tensor";
   let description = [{
-    An operation that takes as input a shape, number of initial values and has a
-    region/function that is applied repeatedly for every dimension of the shape.
+    An operation that takes as input a shape or extent tensor, and a number of
+    initial values. This operation has a region/function that is applied
+    repeatedly for every extent of the input. Starting with the initial values,
+    the individual extents are then aggregated as defined by the associated
+    region.
 
     Conceptually this op performs the following reduction:
 
     ```
     res[] = init;
-    for (int i = 0, e = shape.rank(); i != e; ++i) {
+    for (int i = 0, i < shape.rank(); i++) {
       res = fn(i, shape[i], res[0], ..., res[n]);
     }
     ```
 
-    Where fn is provided by the user and the result of the reduce op is the
+    Where `fn` is provided by the user and the result of the reduce op is the
     last computed output of the reduce function. As an example, computing the
-    number of elements
+    number of elements can be defined as follows:
 
     ```mlir
     func @reduce(%shape : !shape.shape, %init : !shape.size) -> !shape.size {
@@ -365,11 +371,10 @@ def Shape_ReduceOp : Shape_Op<"reduce",
       return %num_elements : !shape.size
     }
     ```
-
-    If the shape is unranked, then the results of the op is also unranked.
   }];
 
-  let arguments = (ins Shape_ShapeType:$shape, Variadic<AnyType>:$initVals);
+  let arguments = (ins Shape_ShapeOrExtentTensorType:$shape,
+                       Variadic<AnyType>:$initVals);
   let results = (outs Variadic<AnyType>:$result);
   let regions = (region SizedRegion<1>:$region);
 
@@ -488,6 +493,7 @@ def Shape_ConcatOp : Shape_Op<"concat", []> {
   let arguments = (ins Shape_ShapeType:$lhs, Shape_ShapeType:$rhs);
   let results = (outs Shape_ShapeType:$result);
 
+  let assemblyFormat = "$lhs `,` $rhs attr-dict";
   let hasFolder = 1;
 }
 
@@ -604,8 +610,9 @@ def Shape_AssumingYieldOp : Shape_Op<"assuming_yield",
 def Shape_CstrBroadcastableOp : Shape_Op<"cstr_broadcastable", [Commutative]> {
   let summary = "Determines if 2 shapes can be successfully broadcasted";
   let description = [{
-    Given 2 input shapes, return a witness specifying if they are broadcastable.
-    This broadcastable follows the same logic as what shape.broadcast documents.
+    Given two input shapes or extent tensors, return a witness specifying if
+    they are broadcastable. This broadcastable follows the same logic as what
+    shape.broadcast documents.
 
     "cstr" operations represent runtime assertions.
 
@@ -616,10 +623,11 @@ def Shape_CstrBroadcastableOp : Shape_Op<"cstr_broadcastable", [Commutative]> {
     ```
   }];
 
-  let arguments = (ins Shape_ShapeType:$lhs, Shape_ShapeType:$rhs);
+  let arguments = (ins Shape_ShapeOrExtentTensorType:$lhs,
+                       Shape_ShapeOrExtentTensorType:$rhs);
   let results = (outs Shape_WitnessType:$result);
 
-  let assemblyFormat = "$lhs `,` $rhs attr-dict";
+  let assemblyFormat = "$lhs `,` $rhs `:` type($lhs) `,` type($rhs) attr-dict";
 
   let hasCanonicalizer = 1;
   let hasFolder = 1;

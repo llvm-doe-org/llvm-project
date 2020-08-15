@@ -2046,8 +2046,9 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
     // FIXME: Supporting '<lang>-header-cpp-output' would be useful.
     bool Preprocessed = XValue.consume_back("-cpp-output");
     bool ModuleMap = XValue.consume_back("-module-map");
-    IsHeaderFile =
-        !Preprocessed && !ModuleMap && XValue.consume_back("-header");
+    IsHeaderFile = !Preprocessed && !ModuleMap &&
+                   XValue != "precompiled-header" &&
+                   XValue.consume_back("-header");
 
     // Principal languages.
     DashX = llvm::StringSwitch<InputKind>(XValue)
@@ -2074,7 +2075,7 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
       DashX = llvm::StringSwitch<InputKind>(XValue)
                   .Case("cpp-output", InputKind(Language::C).getPreprocessed())
                   .Case("assembler-with-cpp", Language::Asm)
-                  .Cases("ast", "pcm",
+                  .Cases("ast", "pcm", "precompiled-header",
                          InputKind(Language::Unknown, InputKind::Precompiled))
                   .Case("ir", Language::LLVM_IR)
                   .Default(Language::Unknown);
@@ -3021,6 +3022,9 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.GNUAsm = !Args.hasArg(OPT_fno_gnu_inline_asm);
   Opts.Cmse = Args.hasArg(OPT_mcmse); // Armv8-M Security Extensions
 
+  Opts.ArmSveVectorBits =
+      getLastArgIntValue(Args, options::OPT_msve_vector_bits_EQ, 0, Diags);
+
   // __declspec is enabled by default for the PS4 by the driver, and also
   // enabled for Microsoft Extensions or Borland Extensions, here.
   //
@@ -3165,15 +3169,18 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   // Don't permit -fopenacc with -fopenmp because we cannot accept OpenACC and
   // OpenMP in the same source.  However, if only -fopenacc, activate OpenMP
   // for the sake of translating OpenACC to it.  (Parsing of OpenMP directives
-  // is disabled if Opts.OpenACC despite Opts.OpenMP.)
+  // outside of system headers is disabled if Opts.OpenACC despite Opts.OpenMP.)
   if (Opts.OpenACC) {
     if (Opts.OpenMP)
       Diags.Report(clang::diag::err_drv_acc_omp_not_supported);
-    // We choose OpenMP 5.0 so that, for example, "acc parallel copyin(x)
-    // reduction(+:x)" can be translated to "omp target teams map(to:x)
-    // reduction(+:x)" without the OpenMP implementation complaining that map
-    // and reduction cannot be specified for the same variable.  That is,
-    // OpenMP 5.0 sec. 2.19.7.1 p. 321 L25-26 says:
+    // We require at least OpenMP 5.1 to enable OpenMP's "present" map type
+    // modifier in order to support OpenACC's "present" clause.
+    //
+    // We require at least OpenMP 5.0 so that, for example, "acc parallel
+    // copyin(x) reduction(+:x)" can be translated to "omp target teams
+    // map(to:x) reduction(+:x)" without the OpenMP implementation complaining
+    // that map and reduction cannot be specified for the same variable.  That
+    // is, OpenMP 5.0 sec. 2.19.7.1 p. 321 L25-26 says:
     //
     // "A list item cannot appear in both a map clause and a data-sharing
     // attribute clause on the same construct unless the construct is a
@@ -3181,7 +3188,7 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     //
     // However, OpenMP 4.5 omits the text "unless the construct is a combined
     // construct".
-    Opts.OpenMP = 50;
+    Opts.OpenMP = 51;
   }
 
   // Check if -fopenmp-simd is specified.
