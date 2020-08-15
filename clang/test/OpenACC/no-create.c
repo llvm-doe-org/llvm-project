@@ -9,6 +9,14 @@
 // consistently considered not present, so the present clause produces a runtime
 // error and the no_create clause doesn't allocate.  However, INHERITED cases
 // have no meaning for the present clause.
+//
+// In some cases, it's challenging to check when no_create actually doesn't
+// allocate memory.  Specifically, calling acc_is_present or
+// omp_target_is_present or specifying a present clause on a directive only
+// works from the host, so it doesn't help for checking no_create on
+// "acc parallel".  We could examine the output of LIBOMPTARGET_DEBUG=1, but it
+// only works in debug builds.  Our solution is to utilize the OpenACC Profiling
+// Interface, which we usually only exercise in the runtime test suite.
 
 // Check bad -fopenacc-no-create-omp values.
 //
@@ -34,45 +42,45 @@
 // Define some interrelated data we use several times below.
 //
 // RUN: %data no-create-opts {
-// RUN:   (no-create-opt=-Wno-openacc-omp-map-no-alloc                                    no-create-mt=no_alloc,alloc noAlloc-unless-alloc=NO-ALLOC noAllocDisjoint-unless-allocDisjoint=NO-ALLOC-DISJOINT noAllocExtends-unless-allocExtends=NO-ALLOC-EXTENDS noAllocConcat2-unless-allocConcat2=NO-ALLOC-CONCAT2 noAllocInherited-unless-allocInherited=NO-ALLOC-INHERITED not-if-alloc=   )
-// RUN:   (no-create-opt='-fopenacc-no-create-omp=no_alloc -Wno-openacc-omp-map-no-alloc' no-create-mt=no_alloc,alloc noAlloc-unless-alloc=NO-ALLOC noAllocDisjoint-unless-allocDisjoint=NO-ALLOC-DISJOINT noAllocExtends-unless-allocExtends=NO-ALLOC-EXTENDS noAllocConcat2-unless-allocConcat2=NO-ALLOC-CONCAT2 noAllocInherited-unless-allocInherited=NO-ALLOC-INHERITED not-if-alloc=   )
-// RUN:   (no-create-opt=-fopenacc-no-create-omp=alloc                                    no-create-mt=alloc          noAlloc-unless-alloc=ALLOC    noAllocDisjoint-unless-allocDisjoint=ALLOC-DISJOINT    noAllocExtends-unless-allocExtends=ALLOC-EXTENDS    noAllocConcat2-unless-allocConcat2=ALLOC-CONCAT2    noAllocInherited-unless-allocInherited=ALLOC-INHERITED    not-if-alloc=not)
+// RUN:   (no-create-opt=-Wno-openacc-omp-map-no-alloc                                    no-create-mt=no_alloc,alloc noAlloc-or-alloc=NO-ALLOC not-if-alloc=   )
+// RUN:   (no-create-opt='-fopenacc-no-create-omp=no_alloc -Wno-openacc-omp-map-no-alloc' no-create-mt=no_alloc,alloc noAlloc-or-alloc=NO-ALLOC not-if-alloc=   )
+// RUN:   (no-create-opt=-fopenacc-no-create-omp=alloc                                    no-create-mt=alloc          noAlloc-or-alloc=ALLOC    not-if-alloc=not)
 // RUN: }
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                                     present-unless-host=HOST    noAlloc-unless-hostOrAlloc=HOST                    noAllocDisjoint-unless-hostOrAllocDisjoint=HOST                                    noAllocExtends-unless-hostOrAllocExtends=HOST                                  noAllocConcat2-unless-hostOrAllocConcat2=HOST                                  presentInherited-unless-host=HOST              noAllocInherited-unless-hostOrAllocInherited=HOST                                    not-if-off-and-alloc=               )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  present-unless-host=PRESENT noAlloc-unless-hostOrAlloc=%[noAlloc-unless-alloc] noAllocDisjoint-unless-hostOrAllocDisjoint=%[noAllocDisjoint-unless-allocDisjoint] noAllocExtends-unless-hostOrAllocExtends=%[noAllocExtends-unless-allocExtends] noAllocConcat2-unless-hostOrAllocConcat2=%[noAllocConcat2-unless-allocConcat2] presentInherited-unless-host=PRESENT-INHERITED noAllocInherited-unless-hostOrAllocInherited=%[noAllocInherited-unless-allocInherited] not-if-off-and-alloc=%[not-if-alloc])
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple present-unless-host=PRESENT noAlloc-unless-hostOrAlloc=%[noAlloc-unless-alloc] noAllocDisjoint-unless-hostOrAllocDisjoint=%[noAllocDisjoint-unless-allocDisjoint] noAllocExtends-unless-hostOrAllocExtends=%[noAllocExtends-unless-allocExtends] noAllocConcat2-unless-hostOrAllocConcat2=%[noAllocConcat2-unless-allocConcat2] presentInherited-unless-host=PRESENT-INHERITED noAllocInherited-unless-hostOrAllocInherited=%[noAllocInherited-unless-allocInherited] not-if-off-and-alloc=%[not-if-alloc])
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple present-unless-host=PRESENT noAlloc-unless-hostOrAlloc=%[noAlloc-unless-alloc] noAllocDisjoint-unless-hostOrAllocDisjoint=%[noAllocDisjoint-unless-allocDisjoint] noAllocExtends-unless-hostOrAllocExtends=%[noAllocExtends-unless-allocExtends] noAllocConcat2-unless-hostOrAllocConcat2=%[noAllocConcat2-unless-allocConcat2] presentInherited-unless-host=PRESENT-INHERITED noAllocInherited-unless-hostOrAllocInherited=%[noAllocInherited-unless-allocInherited] not-if-off-and-alloc=%[not-if-alloc])
+// RUN:   (run-if=                tgt-cflags=                                     host=-HOST not-if-off-and-alloc=               )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host=      not-if-off-and-alloc=%[not-if-alloc])
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host=      not-if-off-and-alloc=%[not-if-alloc])
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host=      not-if-off-and-alloc=%[not-if-alloc])
 // RUN: }
 //      # "acc parallel loop" should be about the same as "acc parallel", so a
 //      # few cases are probably sufficient for it.
 // RUN: %data cases {
-// RUN:   (case=CASE_DATA_SCALAR_PRESENT             exe=%[present-unless-host]                          data-or-par=DATA  not-if-fail=                       )
-// RUN:   (case=CASE_DATA_SCALAR_ABSENT              exe=%[noAlloc-unless-hostOrAlloc]                   data-or-par=DATA  not-if-fail=                       )
-// RUN:   (case=CASE_DATA_ARRAY_PRESENT              exe=%[present-unless-host]                          data-or-par=DATA  not-if-fail=                       )
-// RUN:   (case=CASE_DATA_ARRAY_ABSENT               exe=%[noAlloc-unless-hostOrAlloc]                   data-or-par=DATA  not-if-fail=                       )
-// RUN:   (case=CASE_DATA_SUBARRAY_PRESENT           exe=%[present-unless-host]                          data-or-par=DATA  not-if-fail=                       )
-// RUN:   (case=CASE_DATA_SUBARRAY_DISJOINT          exe=%[noAllocDisjoint-unless-hostOrAllocDisjoint]   data-or-par=DATA  not-if-fail=                       )
-// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_START     exe=%[noAllocExtends-unless-hostOrAllocExtends]     data-or-par=DATA  not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_END       exe=%[noAllocExtends-unless-hostOrAllocExtends]     data-or-par=DATA  not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_DATA_SUBARRAY_CONCAT2           exe=%[noAllocConcat2-unless-hostOrAllocConcat2]     data-or-par=DATA  not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_PARALLEL_SCALAR_PRESENT         exe=%[present-unless-host]                          data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_SCALAR_ABSENT          exe=%[noAlloc-unless-hostOrAlloc]                   data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_ARRAY_PRESENT          exe=%[present-unless-host]                          data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_ARRAY_ABSENT           exe=%[noAlloc-unless-hostOrAlloc]                   data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_PRESENT       exe=%[present-unless-host]                          data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_DISJOINT      exe=%[noAllocDisjoint-unless-hostOrAllocDisjoint]   data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_START exe=%[noAllocExtends-unless-hostOrAllocExtends]     data-or-par=PAR   not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_END   exe=%[noAllocExtends-unless-hostOrAllocExtends]     data-or-par=PAR   not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_CONCAT2       exe=%[noAllocConcat2-unless-hostOrAllocConcat2]     data-or-par=PAR   not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_PRESENT    exe=%[present-unless-host]                          data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_ABSENT     exe=%[noAlloc-unless-hostOrAlloc]                   data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_CONST_PRESENT                   exe=%[present-unless-host]                          data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_CONST_ABSENT                    exe=%[noAlloc-unless-hostOrAlloc]                   data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_INHERITED_PRESENT               exe=%[presentInherited-unless-host]                 data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_INHERITED_ABSENT                exe=%[noAllocInherited-unless-hostOrAllocInherited] data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_INHERITED_SUBARRAY_PRESENT      exe=%[presentInherited-unless-host]                 data-or-par=PAR   not-if-fail=                       )
-// RUN:   (case=CASE_INHERITED_SUBARRAY_ABSENT       exe=%[noAllocInherited-unless-hostOrAllocInherited] data-or-par=PAR   not-if-fail=                       )
+// RUN:   (case=CASE_DATA_SCALAR_PRESENT             not-if-fail=                       )
+// RUN:   (case=CASE_DATA_SCALAR_ABSENT              not-if-fail=                       )
+// RUN:   (case=CASE_DATA_ARRAY_PRESENT              not-if-fail=                       )
+// RUN:   (case=CASE_DATA_ARRAY_ABSENT               not-if-fail=                       )
+// RUN:   (case=CASE_DATA_SUBARRAY_PRESENT           not-if-fail=                       )
+// RUN:   (case=CASE_DATA_SUBARRAY_DISJOINT          not-if-fail=                       )
+// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_START     not-if-fail=%[not-if-off-and-alloc])
+// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_END       not-if-fail=%[not-if-off-and-alloc])
+// RUN:   (case=CASE_DATA_SUBARRAY_CONCAT2           not-if-fail=%[not-if-off-and-alloc])
+// RUN:   (case=CASE_PARALLEL_SCALAR_PRESENT         not-if-fail=                       )
+// RUN:   (case=CASE_PARALLEL_SCALAR_ABSENT          not-if-fail=                       )
+// RUN:   (case=CASE_PARALLEL_ARRAY_PRESENT          not-if-fail=                       )
+// RUN:   (case=CASE_PARALLEL_ARRAY_ABSENT           not-if-fail=                       )
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_PRESENT       not-if-fail=                       )
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_DISJOINT      not-if-fail=                       )
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_START not-if-fail=%[not-if-off-and-alloc])
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_END   not-if-fail=%[not-if-off-and-alloc])
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_CONCAT2       not-if-fail=%[not-if-off-and-alloc])
+// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_PRESENT    not-if-fail=                       )
+// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_ABSENT     not-if-fail=                       )
+// RUN:   (case=CASE_CONST_PRESENT                   not-if-fail=                       )
+// RUN:   (case=CASE_CONST_ABSENT                    not-if-fail=                       )
+// RUN:   (case=CASE_INHERITED_PRESENT               not-if-fail=                       )
+// RUN:   (case=CASE_INHERITED_ABSENT                not-if-fail=                       )
+// RUN:   (case=CASE_INHERITED_SUBARRAY_PRESENT      not-if-fail=                       )
+// RUN:   (case=CASE_INHERITED_SUBARRAY_ABSENT       not-if-fail=                       )
 // RUN: }
 
 // Check -ast-dump before and after AST serialization.
@@ -82,12 +90,12 @@
 //
 // RUN: %for no-create-opts {
 // RUN:   %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
-// RUN:          %[no-create-opt] \
-// RUN:   | FileCheck -check-prefixes=DMP,DMP-%[noAlloc-unless-alloc] %s
+// RUN:          %acc_includes %[no-create-opt] \
+// RUN:   | FileCheck -check-prefixes=DMP,DMP-%[noAlloc-or-alloc] %s
 // RUN:   %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %s \
-// RUN:          %[no-create-opt]
+// RUN:          %acc_includes %[no-create-opt]
 // RUN:   %clang_cc1 -ast-dump-all %t.ast \
-// RUN:   | FileCheck -check-prefixes=DMP,DMP-%[noAlloc-unless-alloc] %s
+// RUN:   | FileCheck -check-prefixes=DMP,DMP-%[noAlloc-or-alloc] %s
 // RUN: }
 
 // Check -ast-print and -fopenacc[-ast]-print.
@@ -95,7 +103,8 @@
 // We include print checking on only a few representative cases, which should be
 // more than sufficient to show it's working for the no_create clause.
 //
-// RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
+// RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %acc_includes \
+// RUN:        %s \
 // RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
 //
 // TODO: If lit were to support %for inside a %data, we could iterate prt-opts
@@ -111,19 +120,20 @@
 // RUN:   (prt-opt=-fopenacc-print    )
 // RUN: }
 // RUN: %data prt-args {
-// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-A,PRT-A-%[noAlloc-unless-alloc]                                      )
-// RUN:   (prt=-fopenacc-ast-print=acc                      prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-A,PRT-A-%[noAlloc-unless-alloc]                                      )
-// RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-O,PRT-O-%[noAlloc-unless-alloc]                                      )
-// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-A,PRT-A-%[noAlloc-unless-alloc],PRT-AO,PRT-AO-%[noAlloc-unless-alloc])
-// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-O,PRT-O-%[noAlloc-unless-alloc],PRT-OA,PRT-OA-%[noAlloc-unless-alloc])
-// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-A,PRT-A-%[noAlloc-unless-alloc]                                      )
-// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-O,PRT-O-%[noAlloc-unless-alloc]                                      )
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-A,PRT-A-%[noAlloc-unless-alloc],PRT-AO,PRT-AO-%[noAlloc-unless-alloc])
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT,PRT-%[noAlloc-unless-alloc],PRT-O,PRT-O-%[noAlloc-unless-alloc],PRT-OA,PRT-OA-%[noAlloc-unless-alloc])
+// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-%[noAlloc-or-alloc],PRT-A,PRT-A-%[noAlloc-or-alloc]                                      )
+// RUN:   (prt=-fopenacc-ast-print=acc                      prt-chk=PRT,PRT-%[noAlloc-or-alloc],PRT-A,PRT-A-%[noAlloc-or-alloc]                                      )
+// RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT,PRT-%[noAlloc-or-alloc],PRT-O,PRT-O-%[noAlloc-or-alloc]                                      )
+// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT,PRT-%[noAlloc-or-alloc],PRT-A,PRT-A-%[noAlloc-or-alloc],PRT-AO,PRT-AO-%[noAlloc-or-alloc])
+// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT,PRT-%[noAlloc-or-alloc],PRT-O,PRT-O-%[noAlloc-or-alloc],PRT-OA,PRT-OA-%[noAlloc-or-alloc])
+// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT,PRT-%[noAlloc-or-alloc],PRT-A,PRT-A-%[noAlloc-or-alloc]                                      )
+// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT,PRT-%[noAlloc-or-alloc],PRT-O,PRT-O-%[noAlloc-or-alloc]                                      )
+// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT,PRT-%[noAlloc-or-alloc],PRT-A,PRT-A-%[noAlloc-or-alloc],PRT-AO,PRT-AO-%[noAlloc-or-alloc])
+// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT,PRT-%[noAlloc-or-alloc],PRT-O,PRT-O-%[noAlloc-or-alloc],PRT-OA,PRT-OA-%[noAlloc-or-alloc])
 // RUN: }
 // RUN: %for no-create-opts {
 // RUN:   %for prt-args {
-// RUN:     %clang -Xclang -verify %[prt] %[no-create-opt] %t-acc.c \
+// RUN:     %clang -Xclang -verify %[prt] %[no-create-opt] %acc_includes \
+// RUN:            %t-acc.c \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] \
 // RUN:                 -DNO_CREATE_MT=%[no-create-mt] %s
 // RUN:   }
@@ -137,7 +147,7 @@
 //
 // RUN: %for no-create-opts {
 // RUN:   %clang -Xclang -verify -fopenacc %[no-create-opt] -emit-ast \
-// RUN:          -o %t.ast %t-acc.c
+// RUN:          %acc_includes -o %t.ast %t-acc.c
 // RUN:   %for prt-args {
 // RUN:     %clang %[prt] %t.ast 2>&1 \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] \
@@ -158,16 +168,15 @@
 // RUN:   %for tgts {
 // RUN:     %for prt-opts {
 // RUN:       %[run-if] %clang -Xclang -verify %[prt-opt]=omp \
-// RUN:                 %[no-create-opt] %s > %t-omp.c
+// RUN:                 %[no-create-opt] %acc_includes %s > %t-omp.c
 // RUN:       %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:       %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
-// RUN:                 %[tgt-cflags] -o %t.exe %t-omp.c
+// RUN:                 %[tgt-cflags] %acc_includes -o %t.exe %t-omp.c
 // RUN:       %for cases {
-// RUN:         %[run-if] %[not-if-fail] env LIBOMPTARGET_DEBUG=1 %t.exe \
-// RUN:                                  %[case] > %t.out 2>&1
-// RUN:         %[run-if] FileCheck -input-file %t.out -allow-empty %s \
-// RUN:           -check-prefixes=EXE-%[exe],EXE-%[exe]-%[data-or-par] \
-// RUN:           -implicit-check-not=Entering
+// RUN:         %[run-if] %[not-if-fail] %t.exe %[case] > %t.out 2>&1
+// RUN:         %[run-if] FileCheck -input-file %t.out %s -match-full-lines \
+// RUN:           -check-prefixes=EXE,EXE-%[case]%[host] \
+// RUN:           -check-prefixes=EXE-%[case]-%[noAlloc-or-alloc]%[host]
 // RUN:       }
 // RUN:     }
 // RUN:   }
@@ -178,14 +187,13 @@
 // RUN: %for no-create-opts {
 // RUN:   %for tgts {
 // RUN:     %[run-if] %clang -Xclang -verify -fopenacc %[no-create-opt] \
-// RUN:               %[tgt-cflags] -o %t.exe %s
+// RUN:               %[tgt-cflags] %acc_includes -o %t.exe %s
 // RUN:     rm -f %t.actual-cases && touch %t.actual-cases
 // RUN:     %for cases {
-// RUN:       %[run-if] %[not-if-fail] env LIBOMPTARGET_DEBUG=1 %t.exe \
-// RUN:                                %[case] > %t.out 2>&1
-// RUN:       %[run-if] FileCheck -input-file %t.out -allow-empty %s \
-// RUN:         -check-prefixes=EXE-%[exe],EXE-%[exe]-%[data-or-par] \
-// RUN:         -implicit-check-not=Entering
+// RUN:       %[run-if] %[not-if-fail] %t.exe %[case] > %t.out 2>&1
+// RUN:       %[run-if] FileCheck -input-file %t.out %s -match-full-lines \
+// RUN:         -check-prefixes=EXE,EXE-%[case]%[host] \
+// RUN:         -check-prefixes=EXE-%[case]-%[noAlloc-or-alloc]%[host]
 // RUN:       echo '%[case]' >> %t.actual-cases
 // RUN:     }
 // RUN:   }
@@ -200,6 +208,7 @@
 
 // expected-no-diagnostics
 
+#include <acc_prof.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -246,6 +255,31 @@ FOREACH_CASE(AddCase)
 #undef AddCase
 };
 
+#define DEF_CALLBACK(Event)                                   \
+static void on_##Event(acc_prof_info *pi, acc_event_info *ei, \
+                       acc_api_info *ai) {                    \
+  fprintf(stderr, "acc_ev_" #Event "\n");                     \
+}
+
+#define REG_CALLBACK(Event) reg(acc_ev_##Event, on_##Event, acc_reg)
+
+DEF_CALLBACK(create)
+DEF_CALLBACK(delete)
+DEF_CALLBACK(alloc)
+DEF_CALLBACK(free)
+DEF_CALLBACK(enter_data_start)
+DEF_CALLBACK(exit_data_start)
+
+void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
+                          acc_prof_lookup lookup) {
+  REG_CALLBACK(create);
+  REG_CALLBACK(delete);
+  REG_CALLBACK(alloc);
+  REG_CALLBACK(free);
+  REG_CALLBACK(enter_data_start);
+  REG_CALLBACK(exit_data_start);
+}
+
 int main(int argc, char *argv[]) {
   if (argc != 2) {
     fprintf(stderr, "expected one argument\n");
@@ -265,6 +299,10 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "unexpected case: %s\n", argv[1]);
     return 1;
   }
+
+  // EXE-NOT: {{.}}
+  // EXE: start
+  fprintf(stderr, "start\n");
 
   // DMP-LABEL: SwitchStmt
   // PRT-LABEL: switch (selectedCase)
@@ -300,6 +338,15 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   ;
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
+  //
+  // EXE-CASE_DATA_SCALAR_PRESENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_DATA_SCALAR_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_DATA_SCALAR_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_DATA_SCALAR_PRESENT-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_DATA_SCALAR_PRESENT-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_DATA_SCALAR_PRESENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_DATA_SCALAR_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_DATA_SCALAR_PRESENT-NEXT:   acc_ev_free
   case CASE_DATA_SCALAR_PRESENT:
   {
     int x;
@@ -327,6 +374,13 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   ;
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
+  //
+  //      EXE-CASE_DATA_SCALAR_ABSENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_DATA_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_alloc
+  // EXE-CASE_DATA_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_create
+  //      EXE-CASE_DATA_SCALAR_ABSENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_DATA_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_delete
+  // EXE-CASE_DATA_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_free
   case CASE_DATA_SCALAR_ABSENT:
   {
     int x;
@@ -352,6 +406,15 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   ;
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
+  //
+  // EXE-CASE_DATA_ARRAY_PRESENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_DATA_ARRAY_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_DATA_ARRAY_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_DATA_ARRAY_PRESENT-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_DATA_ARRAY_PRESENT-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_DATA_ARRAY_PRESENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_DATA_ARRAY_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_DATA_ARRAY_PRESENT-NEXT:   acc_ev_free
   case CASE_DATA_ARRAY_PRESENT:
   {
     int arr[3];
@@ -371,6 +434,13 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   ;
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
+  //
+  //       EXE-CASE_DATA_ARRAY_ABSENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_DATA_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_alloc
+  // EXE-CASE_DATA_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_create
+  //       EXE-CASE_DATA_ARRAY_ABSENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_DATA_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_delete
+  // EXE-CASE_DATA_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_free
   case CASE_DATA_ARRAY_ABSENT:
   {
     int arr[3];
@@ -396,6 +466,31 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   ;
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
+  //
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_free
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_free
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_free
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_free
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_free
   case CASE_DATA_SUBARRAY_PRESENT:
   {
     int all[10], same[10], beg[10], mid[10], end[10];
@@ -422,6 +517,19 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   ;
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
+  //
+  //       EXE-CASE_DATA_SUBARRAY_DISJOINT-NEXT: acc_ev_enter_data_start
+  //       EXE-CASE_DATA_SUBARRAY_DISJOINT-NEXT:   acc_ev_alloc
+  //       EXE-CASE_DATA_SUBARRAY_DISJOINT-NEXT:   acc_ev_create
+  //       EXE-CASE_DATA_SUBARRAY_DISJOINT-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_DATA_SUBARRAY_DISJOINT-ALLOC-NEXT:     acc_ev_alloc
+  // EXE-CASE_DATA_SUBARRAY_DISJOINT-ALLOC-NEXT:     acc_ev_create
+  //       EXE-CASE_DATA_SUBARRAY_DISJOINT-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_DATA_SUBARRAY_DISJOINT-ALLOC-NEXT:     acc_ev_delete
+  // EXE-CASE_DATA_SUBARRAY_DISJOINT-ALLOC-NEXT:     acc_ev_free
+  //       EXE-CASE_DATA_SUBARRAY_DISJOINT-NEXT: acc_ev_exit_data_start
+  //       EXE-CASE_DATA_SUBARRAY_DISJOINT-NEXT:   acc_ev_delete
+  //       EXE-CASE_DATA_SUBARRAY_DISJOINT-NEXT:   acc_ev_free
   case CASE_DATA_SUBARRAY_DISJOINT:
   {
     int arr[4];
@@ -448,6 +556,16 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   ;
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
+  //
+  //          EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NEXT: acc_ev_enter_data_start
+  //          EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_alloc
+  //          EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_create
+  //          EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_delete
+  // EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_free
+  //    EXE-CASE_DATA_SUBARRAY_OVERLAP_START-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   case CASE_DATA_SUBARRAY_OVERLAP_START:
   {
     int arr[5];
@@ -474,6 +592,16 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   ;
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
+  //
+  //          EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NEXT: acc_ev_enter_data_start
+  //          EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_alloc
+  //          EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_create
+  //          EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_delete
+  // EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_free
+  //    EXE-CASE_DATA_SUBARRAY_OVERLAP_END-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   case CASE_DATA_SUBARRAY_OVERLAP_END:
   {
     int arr[5];
@@ -504,6 +632,22 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   ;
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
+  //
+  //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT: acc_ev_enter_data_start
+  //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT:   acc_ev_alloc
+  //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT:   acc_ev_create
+  //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT:   acc_ev_enter_data_start
+  //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT:     acc_ev_alloc
+  //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT:     acc_ev_create
+  //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT:     acc_ev_enter_data_start
+  // EXE-CASE_DATA_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:     acc_ev_exit_data_start
+  // EXE-CASE_DATA_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_DATA_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:     acc_ev_delete
+  // EXE-CASE_DATA_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:     acc_ev_free
+  // EXE-CASE_DATA_SUBARRAY_CONCAT2-NO-ALLOC-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_DATA_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:   acc_ev_delete
+  // EXE-CASE_DATA_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:   acc_ev_free
+  //    EXE-CASE_DATA_SUBARRAY_CONCAT2-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   case CASE_DATA_SUBARRAY_CONCAT2:
   {
     int arr[4];
@@ -547,6 +691,15 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   ;
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
+  //
+  // EXE-CASE_PARALLEL_SCALAR_PRESENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_PARALLEL_SCALAR_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_PARALLEL_SCALAR_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_PARALLEL_SCALAR_PRESENT-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_PARALLEL_SCALAR_PRESENT-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_SCALAR_PRESENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_SCALAR_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_PARALLEL_SCALAR_PRESENT-NEXT:   acc_ev_free
   case CASE_PARALLEL_SCALAR_PRESENT:
   {
     int x;
@@ -556,6 +709,12 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  //       EXE-CASE_PARALLEL_SCALAR_ABSENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_PARALLEL_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_alloc
+  // EXE-CASE_PARALLEL_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_create
+  //       EXE-CASE_PARALLEL_SCALAR_ABSENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_delete
+  // EXE-CASE_PARALLEL_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_free
   case CASE_PARALLEL_SCALAR_ABSENT:
   {
     int x;
@@ -565,6 +724,14 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  // EXE-CASE_PARALLEL_ARRAY_PRESENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_PARALLEL_ARRAY_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_PARALLEL_ARRAY_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_PARALLEL_ARRAY_PRESENT-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_PARALLEL_ARRAY_PRESENT-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_ARRAY_PRESENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_ARRAY_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_PARALLEL_ARRAY_PRESENT-NEXT:   acc_ev_free
   case CASE_PARALLEL_ARRAY_PRESENT:
   {
     int arr[3];
@@ -574,6 +741,12 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  //       EXE-CASE_PARALLEL_ARRAY_ABSENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_PARALLEL_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_alloc
+  // EXE-CASE_PARALLEL_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_create
+  //       EXE-CASE_PARALLEL_ARRAY_ABSENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_delete
+  // EXE-CASE_PARALLEL_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_free
   case CASE_PARALLEL_ARRAY_ABSENT:
   {
     int arr[3];
@@ -583,6 +756,30 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_free
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_free
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_free
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_free
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_free
   case CASE_PARALLEL_SUBARRAY_PRESENT:
   {
     int all[10], same[10], beg[10], mid[10], end[10];
@@ -594,6 +791,18 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  //       EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NEXT: acc_ev_enter_data_start
+  //       EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NEXT:   acc_ev_alloc
+  //       EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NEXT:   acc_ev_create
+  //       EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-ALLOC-NEXT:     acc_ev_alloc
+  // EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-ALLOC-NEXT:     acc_ev_create
+  //       EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-ALLOC-NEXT:     acc_ev_delete
+  // EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-ALLOC-NEXT:     acc_ev_free
+  //       EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NEXT: acc_ev_exit_data_start
+  //       EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NEXT:   acc_ev_delete
+  //       EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NEXT:   acc_ev_free
   case CASE_PARALLEL_SUBARRAY_DISJOINT:
   {
     int arr[4];
@@ -604,6 +813,15 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NEXT: acc_ev_enter_data_start
+  //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_alloc
+  //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_create
+  //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_delete
+  // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_free
+  //    EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   case CASE_PARALLEL_SUBARRAY_OVERLAP_START:
   {
     int arr[10];
@@ -614,6 +832,15 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NEXT: acc_ev_enter_data_start
+  //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_alloc
+  //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_create
+  //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_delete
+  // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_free
+  //    EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   case CASE_PARALLEL_SUBARRAY_OVERLAP_END:
   {
     int arr[10];
@@ -624,6 +851,21 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT: acc_ev_enter_data_start
+  //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT:   acc_ev_alloc
+  //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT:   acc_ev_create
+  //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT:   acc_ev_enter_data_start
+  //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT:     acc_ev_alloc
+  //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT:     acc_ev_create
+  //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT:     acc_ev_enter_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:     acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:     acc_ev_delete
+  // EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:     acc_ev_free
+  // EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NO-ALLOC-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:   acc_ev_delete
+  // EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:   acc_ev_free
+  //    EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   case CASE_PARALLEL_SUBARRAY_CONCAT2:
   {
     int arr[4];
@@ -684,6 +926,15 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:     ;
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
+  //
+  // EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NEXT:   acc_ev_free
   case CASE_PARALLEL_LOOP_SCALAR_PRESENT:
   {
     int x;
@@ -694,6 +945,12 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  //       EXE-CASE_PARALLEL_LOOP_SCALAR_ABSENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_PARALLEL_LOOP_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_alloc
+  // EXE-CASE_PARALLEL_LOOP_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_create
+  //       EXE-CASE_PARALLEL_LOOP_SCALAR_ABSENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_PARALLEL_LOOP_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_delete
+  // EXE-CASE_PARALLEL_LOOP_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_free
   case CASE_PARALLEL_LOOP_SCALAR_ABSENT:
   {
     int x;
@@ -704,6 +961,14 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  // EXE-CASE_CONST_PRESENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_CONST_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_CONST_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_CONST_PRESENT-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_CONST_PRESENT-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_CONST_PRESENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_CONST_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_CONST_PRESENT-NEXT:   acc_ev_free
   case CASE_CONST_PRESENT:
   {
     const int x;
@@ -715,6 +980,12 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  //       EXE-CASE_CONST_ABSENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_CONST_ABSENT-ALLOC-NEXT:   acc_ev_alloc
+  // EXE-CASE_CONST_ABSENT-ALLOC-NEXT:   acc_ev_create
+  //       EXE-CASE_CONST_ABSENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_CONST_ABSENT-ALLOC-NEXT:   acc_ev_delete
+  // EXE-CASE_CONST_ABSENT-ALLOC-NEXT:   acc_ev_free
   case CASE_CONST_ABSENT:
   {
     const int x;
@@ -774,6 +1045,17 @@ int main(int argc, char *argv[]) {
   //             PRT-NEXT:   x = 1;
   //             PRT-NEXT:   break;
   //             PRT-NEXT: }
+  //
+  // EXE-CASE_INHERITED_PRESENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_INHERITED_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_INHERITED_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_INHERITED_PRESENT-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_INHERITED_PRESENT-NEXT:     acc_ev_enter_data_start
+  // EXE-CASE_INHERITED_PRESENT-NEXT:     acc_ev_exit_data_start
+  // EXE-CASE_INHERITED_PRESENT-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_INHERITED_PRESENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_INHERITED_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_INHERITED_PRESENT-NEXT:   acc_ev_free
   case CASE_INHERITED_PRESENT:
   {
     int x;
@@ -829,6 +1111,15 @@ int main(int argc, char *argv[]) {
   //             PRT-NEXT:     x = 1;
   //             PRT-NEXT:   break;
   //             PRT-NEXT: }
+  //
+  //       EXE-CASE_INHERITED_ABSENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_INHERITED_ABSENT-ALLOC-NEXT:   acc_ev_alloc
+  // EXE-CASE_INHERITED_ABSENT-ALLOC-NEXT:   acc_ev_create
+  //       EXE-CASE_INHERITED_ABSENT-NEXT:   acc_ev_enter_data_start
+  //       EXE-CASE_INHERITED_ABSENT-NEXT:   acc_ev_exit_data_start
+  //       EXE-CASE_INHERITED_ABSENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_INHERITED_ABSENT-ALLOC-NEXT:   acc_ev_delete
+  // EXE-CASE_INHERITED_ABSENT-ALLOC-NEXT:   acc_ev_free
   case CASE_INHERITED_ABSENT:
   {
     int x;
@@ -863,6 +1154,17 @@ int main(int argc, char *argv[]) {
   //             PRT-NEXT:   arr[1] = 1;
   //             PRT-NEXT:   break;
   //             PRT-NEXT: }
+  //
+  // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
+  // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT:   acc_ev_create
+  // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT:   acc_ev_enter_data_start
+  // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT:     acc_ev_enter_data_start
+  // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT:     acc_ev_exit_data_start
+  // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT:   acc_ev_exit_data_start
+  // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT:   acc_ev_delete
+  // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT:   acc_ev_free
   case CASE_INHERITED_SUBARRAY_PRESENT:
   {
     int arr[] = {10, 20, 30, 40, 50};
@@ -894,6 +1196,15 @@ int main(int argc, char *argv[]) {
   //             PRT-NEXT:     arr[1] = 1;
   //             PRT-NEXT:   break;
   //             PRT-NEXT: }
+  //
+  //       EXE-CASE_INHERITED_SUBARRAY_ABSENT-NEXT: acc_ev_enter_data_start
+  // EXE-CASE_INHERITED_SUBARRAY_ABSENT-ALLOC-NEXT:   acc_ev_alloc
+  // EXE-CASE_INHERITED_SUBARRAY_ABSENT-ALLOC-NEXT:   acc_ev_create
+  //       EXE-CASE_INHERITED_SUBARRAY_ABSENT-NEXT:   acc_ev_enter_data_start
+  //       EXE-CASE_INHERITED_SUBARRAY_ABSENT-NEXT:   acc_ev_exit_data_start
+  //       EXE-CASE_INHERITED_SUBARRAY_ABSENT-NEXT: acc_ev_exit_data_start
+  // EXE-CASE_INHERITED_SUBARRAY_ABSENT-ALLOC-NEXT:   acc_ev_delete
+  // EXE-CASE_INHERITED_SUBARRAY_ABSENT-ALLOC-NEXT:   acc_ev_free
   case CASE_INHERITED_SUBARRAY_ABSENT:
   {
     int arr[] = {10, 20, 30, 40, 50};
@@ -910,145 +1221,7 @@ int main(int argc, char *argv[]) {
     break;
   }
 
-  // Unfortunately, in many cases, there's no obvious way to check when
-  // no_create actually doesn't allocate memory except by checking the debug
-  // output of the runtime.  For example, calling acc_is_present or
-  // omp_target_is_present only works from the host, so it doesn't help for
-  // no_create on "acc parallel".
-
-  // EXE-HOST-NOT: Libomptarget
-
-  //      EXE-PRESENT: Libomptarget --> Entering data begin region
-  //      EXE-PRESENT: Libomptarget --> Creating new map entry
-  // EXE-PRESENT-DATA: Libomptarget --> Entering data begin region
-  // EXE-PRESENT-DATA: Libomptarget --> Mapping exists {{.*}} updated RefCount=2
-  // EXE-PRESENT-DATA: Libomptarget --> Entering data end region
-  // EXE-PRESENT-DATA: Libomptarget --> Mapping exists {{.*}} updated RefCount=1
-  //  EXE-PRESENT-PAR: Libomptarget --> Entering target region
-  //  EXE-PRESENT-PAR: Libomptarget --> Launching target execution
-  //      EXE-PRESENT: Libomptarget --> Entering data end region
-  //      EXE-PRESENT: Libomptarget --> Mapping exists
-  //      EXE-PRESENT: Libomptarget --> Removing mapping
-
-  // EXE-NO-ALLOC-DATA: Libomptarget --> Entering data begin region
-  // EXE-NO-ALLOC-DATA: Libomptarget --> Mapping does not exist
-  // EXE-NO-ALLOC-DATA: Libomptarget --> Call to getOrAllocTgtPtr returned null pointer ('no_alloc' map type modifier)
-  // EXE-NO-ALLOC-DATA: Libomptarget --> Entering data end region
-  // EXE-NO-ALLOC-DATA: Libomptarget --> Mapping does not exist
-  //  EXE-NO-ALLOC-PAR: Libomptarget --> Entering target region
-  //  EXE-NO-ALLOC-PAR: Libomptarget --> Launching target execution
-
-  //      EXE-NO-ALLOC-DISJOINT: Libomptarget --> Entering data begin region
-  //      EXE-NO-ALLOC-DISJOINT: Libomptarget --> Creating new map entry
-  // EXE-NO-ALLOC-DISJOINT-DATA: Libomptarget --> Entering data begin region
-  //  EXE-NO-ALLOC-DISJOINT-PAR: Libomptarget --> Entering target region
-  //      EXE-NO-ALLOC-DISJOINT: Libomptarget --> Mapping does not exist
-  //      EXE-NO-ALLOC-DISJOINT: Libomptarget --> Call to getOrAllocTgtPtr returned null pointer ('no_alloc' map type modifier)
-  //  EXE-NO-ALLOC-DISJOINT-PAR: Libomptarget --> Launching target execution
-  // EXE-NO-ALLOC-DISJOINT-DATA: Libomptarget --> Entering data end region
-  //      EXE-NO-ALLOC-DISJOINT: Libomptarget --> Mapping does not exist
-  //      EXE-NO-ALLOC-DISJOINT: Libomptarget --> Entering data end region
-  //      EXE-NO-ALLOC-DISJOINT: Libomptarget --> Mapping exists
-  //      EXE-NO-ALLOC-DISJOINT: Libomptarget --> Removing mapping
-
-  //      EXE-NO-ALLOC-EXTENDS: Libomptarget --> Entering data begin region
-  //      EXE-NO-ALLOC-EXTENDS: Libomptarget --> Creating new map entry
-  // EXE-NO-ALLOC-EXTENDS-DATA: Libomptarget --> Entering data begin region
-  //  EXE-NO-ALLOC-EXTENDS-PAR: Libomptarget --> Entering target region
-  //      EXE-NO-ALLOC-EXTENDS: Libomptarget --> Explicit extension of mapping is not allowed
-  //      EXE-NO-ALLOC-EXTENDS: Libomptarget --> Call to getOrAllocTgtPtr returned null pointer ('no_alloc' map type modifier)
-  //  EXE-NO-ALLOC-EXTENDS-PAR: Libomptarget --> Launching target execution
-  // EXE-NO-ALLOC-EXTENDS-DATA: Libomptarget --> Entering data end region
-  //      EXE-NO-ALLOC-EXTENDS: Libomptarget --> Mapping does not exist
-  //      EXE-NO-ALLOC-EXTENDS: Libomptarget --> Entering data end region
-  //      EXE-NO-ALLOC-EXTENDS: Libomptarget --> Mapping exists
-  //      EXE-NO-ALLOC-EXTENDS: Libomptarget --> Removing mapping
-
-  //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Entering data begin region
-  //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Creating new map entry
-  //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Entering data begin region
-  //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Creating new map entry
-  // EXE-NO-ALLOC-CONCAT2-DATA: Libomptarget --> Entering data begin region
-  //  EXE-NO-ALLOC-CONCAT2-PAR: Libomptarget --> Entering target region
-  //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Explicit extension of mapping is not allowed
-  //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Call to getOrAllocTgtPtr returned null pointer ('no_alloc' map type modifier)
-  //  EXE-NO-ALLOC-CONCAT2-PAR: Libomptarget --> Launching target execution
-  // EXE-NO-ALLOC-CONCAT2-DATA: Libomptarget --> Entering data end region
-  //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Mapping does not exist
-  //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Entering data end region
-  //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Mapping exists
-  //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Removing mapping
-  //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Entering data end region
-  //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Mapping exists
-  //      EXE-NO-ALLOC-CONCAT2: Libomptarget --> Removing mapping
-
-  // EXE-ALLOC-DATA: Libomptarget --> Entering data begin region
-  // EXE-ALLOC-DATA: Libomptarget --> Creating new map entry
-  // EXE-ALLOC-DATA: Libomptarget --> Entering data end region
-  // EXE-ALLOC-DATA: Libomptarget --> Mapping exists
-  // EXE-ALLOC-DATA: Libomptarget --> Removing mapping
-  //  EXE-ALLOC-PAR: Libomptarget --> Entering target region
-  //  EXE-ALLOC-PAR: Libomptarget --> Launching target execution
-
-  //      EXE-ALLOC-DISJOINT: Libomptarget --> Entering data begin region
-  //      EXE-ALLOC-DISJOINT: Libomptarget --> Creating new map entry
-  // EXE-ALLOC-DISJOINT-DATA: Libomptarget --> Entering data begin region
-  //  EXE-ALLOC-DISJOINT-PAR: Libomptarget --> Entering target region
-  //      EXE-ALLOC-DISJOINT: Libomptarget --> Creating new map entry
-  //  EXE-ALLOC-DISJOINT-PAR: Libomptarget --> Launching target execution
-  // EXE-ALLOC-DISJOINT-DATA: Libomptarget --> Entering data end region
-  //      EXE-ALLOC-DISJOINT: Libomptarget --> Mapping exists
-  //      EXE-ALLOC-DISJOINT: Libomptarget --> Removing mapping
-  //      EXE-ALLOC-DISJOINT: Libomptarget --> Entering data end region
-  //      EXE-ALLOC-DISJOINT: Libomptarget --> Mapping exists
-  //      EXE-ALLOC-DISJOINT: Libomptarget --> Removing mapping
-
-  //      EXE-ALLOC-EXTENDS: Libomptarget --> Entering data begin region
-  //      EXE-ALLOC-EXTENDS: Libomptarget --> Creating new map entry
-  // EXE-ALLOC-EXTENDS-DATA: Libomptarget --> Entering data begin region
-  //  EXE-ALLOC-EXTENDS-PAR: Libomptarget --> Entering target region
-  //      EXE-ALLOC-EXTENDS: Libomptarget --> Explicit extension of mapping is not allowed
-  //      EXE-ALLOC-EXTENDS: Libomptarget --> Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping)
-  //      EXE-ALLOC-EXTENDS: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-
-  //      EXE-ALLOC-CONCAT2: Libomptarget --> Entering data begin region
-  //      EXE-ALLOC-CONCAT2: Libomptarget --> Creating new map entry
-  //      EXE-ALLOC-CONCAT2: Libomptarget --> Entering data begin region
-  //      EXE-ALLOC-CONCAT2: Libomptarget --> Creating new map entry
-  // EXE-ALLOC-CONCAT2-DATA: Libomptarget --> Entering data begin region
-  //  EXE-ALLOC-CONCAT2-PAR: Libomptarget --> Entering target region
-  //      EXE-ALLOC-CONCAT2: Libomptarget --> Explicit extension of mapping is not allowed
-  //      EXE-ALLOC-CONCAT2: Libomptarget --> Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping)
-  //      EXE-ALLOC-CONCAT2: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-
-  // EXE-PRESENT-INHERITED: Libomptarget --> Entering data begin region
-  // EXE-PRESENT-INHERITED: Libomptarget --> Creating new map entry
-  // EXE-PRESENT-INHERITED: Libomptarget --> Entering data begin region
-  // EXE-PRESENT-INHERITED: Libomptarget --> Mapping exists {{.*}} updated RefCount=2
-  // EXE-PRESENT-INHERITED: Libomptarget --> Entering target region
-  // EXE-PRESENT-INHERITED: Libomptarget --> Mapping exists {{.*}} updated RefCount=3
-  // EXE-PRESENT-INHERITED: Libomptarget --> Launching target execution
-  // EXE-PRESENT-INHERITED: Libomptarget --> Entering data end region
-  // EXE-PRESENT-INHERITED: Libomptarget --> Mapping exists {{.*}} updated RefCount=1
-  // EXE-PRESENT-INHERITED: Libomptarget --> Entering data end region
-  // EXE-PRESENT-INHERITED: Libomptarget --> Mapping exists
-  // EXE-PRESENT-INHERITED: Libomptarget --> Removing mapping
-
-  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Entering data begin region
-  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Mapping does not exist
-  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Call to getOrAllocTgtPtr returned null pointer ('no_alloc' map type modifier)
-  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Entering target region
-  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Launching target execution
-  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Entering data end region
-  // EXE-NO-ALLOC-INHERITED: Libomptarget --> Mapping does not exist
-
-  // EXE-ALLOC-INHERITED: Libomptarget --> Entering data begin region
-  // EXE-ALLOC-INHERITED: Libomptarget --> Creating new map entry
-  // EXE-ALLOC-INHERITED: Libomptarget --> Entering target region
-  // EXE-ALLOC-INHERITED: Libomptarget --> Launching target execution
-  // EXE-ALLOC-INHERITED: Libomptarget --> Entering data end region
-  // EXE-ALLOC-INHERITED: Libomptarget --> Mapping exists
-  // EXE-ALLOC-INHERITED: Libomptarget --> Removing mapping
+  // EXE-NOT: {{.}}
 
   return 0;
 }
