@@ -257,7 +257,8 @@
 // RUN: }
 //
 // LLVM: define internal void @.omp_outlined.
-// LLVM-SAME: ({{[^,]+}} %.global_tid., {{[^,]+}} %.bound_tid.)
+// LLVM-SAME: (i{{[0-9]+}}* noalias %{{[^, )]*}},
+// LLVM-SAME: {{^ *}} i{{[0-9]+}}* noalias %{{[^, )]*}})
 
 // END.
 

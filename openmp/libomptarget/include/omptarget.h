@@ -266,14 +266,6 @@ void __kmpc_push_target_tripcount(int64_t device_id, uint64_t loop_tripcount);
 }
 #endif
 
-#ifdef OMPTARGET_DEBUG
-#include <stdio.h>
-#define DEBUGP(prefix, ...)                                                    \
-  {                                                                            \
-    fprintf(stderr, "%s --> ", prefix);                                        \
-    fprintf(stderr, __VA_ARGS__);                                              \
-  }
-
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
 #endif
@@ -300,6 +292,14 @@ void __kmpc_push_target_tripcount(int64_t device_id, uint64_t loop_tripcount);
  *                               // 16 digits for 64bit
  *   (uintptr_t) ptr);
  */
+
+#ifdef OMPTARGET_DEBUG
+#include <stdio.h>
+#define DEBUGP(prefix, ...)                                                    \
+  {                                                                            \
+    fprintf(stderr, "%s --> ", prefix);                                        \
+    fprintf(stderr, __VA_ARGS__);                                              \
+  }
 #else
 #define DEBUGP(prefix, ...)                                                    \
   {}

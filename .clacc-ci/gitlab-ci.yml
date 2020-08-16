@@ -56,35 +56,18 @@ stages:
 
 #-------------------------------------------------
 # build configurations
+#
+# Test every architecture with a debug build (thus checking assertions) using
+# python3.  There are many kolds, so use them to check configuration choices
+# that are hopefully orthogonal to the architecture.
 #-------------------------------------------------
 
-.kold-python2:
-  tags: [shell, kold]
-  variables:
-    BUILD_ID: kold-python2
-    MODULES: gnu/9.1.0
-    PYTHON: /usr/bin/python2
-    CMAKE_OFFLOAD_CONFIG:
-      -DCLANG_ACC_TEST_EXE_X86_64=True
-      -DCLANG_ACC_TEST_EXE_PPC64LE=False
-      -DCLANG_ACC_TEST_EXE_NVPTX64=False
-
-.kold-python3:
-  tags: [shell, kold]
-  variables:
-    BUILD_ID: kold-python3
-    MODULES: gnu/9.1.0
-    PYTHON: /usr/bin/python3
-    CMAKE_OFFLOAD_CONFIG:
-      -DCLANG_ACC_TEST_EXE_X86_64=True
-      -DCLANG_ACC_TEST_EXE_PPC64LE=False
-      -DCLANG_ACC_TEST_EXE_NVPTX64=False
-
-.leconte-python3:
+.leconte:
   tags: [shell, leconte]
   variables:
-    BUILD_ID: leconte-python3
+    BUILD_ID: leconte
     MODULES: gnu/7.5.0 cuda/10.1
+    CMAKE_BUILD_TYPE: Debug
     PYTHON: /usr/bin/python3
     CMAKE_OFFLOAD_CONFIG:
       -DCLANG_OPENMP_NVPTX_DEFAULT_ARCH=sm_70
@@ -93,6 +76,45 @@ stages:
       -DCLANG_ACC_TEST_EXE_PPC64LE=True
       -DCLANG_ACC_TEST_EXE_NVPTX64=True
 
+.kold:
+  tags: [shell, kold]
+  variables:
+    BUILD_ID: kold
+    MODULES: gnu/9.1.0
+    CMAKE_BUILD_TYPE: Debug
+    PYTHON: /usr/bin/python3
+    CMAKE_OFFLOAD_CONFIG:
+      -DCLANG_ACC_TEST_EXE_X86_64=True
+      -DCLANG_ACC_TEST_EXE_PPC64LE=False
+      -DCLANG_ACC_TEST_EXE_NVPTX64=False
+
+# Sometimes bugs cause only release builds to fail.  For example, debugging
+# macros might accidentally be used but not defined in release builds.
+.release:
+  tags: [shell, kold]
+  variables:
+    BUILD_ID: release
+    MODULES: gnu/9.1.0
+    CMAKE_BUILD_TYPE: Release
+    PYTHON: /usr/bin/python3
+    CMAKE_OFFLOAD_CONFIG:
+      -DCLANG_ACC_TEST_EXE_X86_64=True
+      -DCLANG_ACC_TEST_EXE_PPC64LE=False
+      -DCLANG_ACC_TEST_EXE_NVPTX64=False
+
+.python2:
+  tags: [shell, kold]
+  variables:
+    BUILD_ID: python2
+    MODULES: gnu/9.1.0
+    CMAKE_BUILD_TYPE: Debug
+    PYTHON: /usr/bin/python2
+    CMAKE_OFFLOAD_CONFIG:
+      -DCLANG_ACC_TEST_EXE_X86_64=True
+      -DCLANG_ACC_TEST_EXE_PPC64LE=False
+      -DCLANG_ACC_TEST_EXE_NVPTX64=False
+
+# Not setup or cleanup.
 .non-utility:
   dependencies: []
   variables:
@@ -109,7 +131,7 @@ stages:
     - du -hs $BUILD_DIR/build
 
 #-------------------------------------------------
-# utilities
+# setup
 #-------------------------------------------------
 
 .setup:
@@ -140,6 +162,22 @@ stages:
     - git --version
     - time git clone `pwd` $BUILD_DIR/source
 
+leconte (setup):
+  extends: [.leconte, .setup]
+
+kold (setup):
+  extends: [.kold, .setup]
+
+release (setup):
+  extends: [.release, .setup]
+
+python2 (setup):
+  extends: [.python2, .setup]
+
+#-------------------------------------------------
+# cleanup
+#-------------------------------------------------
+
 .cleanup:
   stage: cleanup
   variables:
@@ -150,43 +188,40 @@ stages:
     - rm -rf $BUILD_DIR
     - rmdir $BUILD_DIR_PROJ || true
 
-kold-python2 (setup):
-  extends: [.kold-python2, .setup]
-
-kold-python3 (setup):
-  extends: [.kold-python3, .setup]
-
-leconte-python3 (setup):
-  extends: [.leconte-python3, .setup]
-
-kold-python2 (cleanup, clacc):
-  extends: [.kold-python2, .clacc, .cleanup]
+leconte (cleanup, clacc):
+  extends: [.leconte, .clacc, .cleanup]
   needs:
-    - job: "kold-python2 (test-all, clacc)"
+    - job: "leconte (test-all, clacc)"
       artifacts: false
 
-kold-python2 (cleanup):
-  extends: [.kold-python2, .not-clacc, .cleanup]
+leconte (cleanup):
+  extends: [.leconte, .not-clacc, .cleanup]
   needs:
-    - job: kold-python2 (test-all)
+    - job: leconte (test-all)
       artifacts: false
 
-kold-python3 (cleanup):
-  extends: [.kold-python3, .cleanup]
+kold (cleanup, clacc):
+  extends: [.kold, .clacc, .cleanup]
   needs:
-    - job: kold-python3 (test-all)
+    - job: "kold (test-all, clacc)"
       artifacts: false
 
-leconte-python3 (cleanup, clacc):
-  extends: [.leconte-python3, .clacc, .cleanup]
+kold (cleanup):
+  extends: [.kold, .not-clacc, .cleanup]
   needs:
-    - job: "leconte-python3 (test-all, clacc)"
+    - job: kold (test-all)
       artifacts: false
 
-leconte-python3 (cleanup):
-  extends: [.leconte-python3, .not-clacc, .cleanup]
+release (cleanup):
+  extends: [.release, .cleanup]
   needs:
-    - job: leconte-python3 (test-all)
+    - job: release (test-all)
+      artifacts: false
+
+python2 (cleanup):
+  extends: [.python2, .cleanup]
+  needs:
+    - job: python2 (test-all)
       artifacts: false
 
 z-cleanup-pipeline-builds:
@@ -219,13 +254,14 @@ z-cleanup-project-builds:
   script:
     - echo $CMAKE
     - $CMAKE --version
+    - echo $CMAKE_BUILD_TYPE
     - echo $GCC_DIR
     - echo $PYTHON
     - $PYTHON --version
     - echo $LLVM_CCACHE_PARAMS
     - echo $CMAKE_OFFLOAD_CONFIG
     - time $CMAKE -G Ninja
-                  -DCMAKE_BUILD_TYPE=Debug
+                  -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE
                   -DLLVM_CCACHE_BUILD=ON
                   -DLLVM_USE_SPLIT_DWARF=true
                   -DLLVM_USE_LINKER=gold
@@ -244,22 +280,28 @@ z-cleanup-project-builds:
     when: always
     paths: [cmake-log.txt, CMakeCache.txt]
 
-kold-python2 (config):
-  extends: [.kold-python2, .config]
+leconte (config):
+  extends: [.leconte, .config]
   needs:
-    - job: kold-python2 (setup)
+    - job: leconte (setup)
       artifacts: false
 
-kold-python3 (config):
-  extends: [.kold-python3, .config]
+kold (config):
+  extends: [.kold, .config]
   needs:
-    - job: kold-python3 (setup)
+    - job: kold (setup)
       artifacts: false
 
-leconte-python3 (config):
-  extends: [.leconte-python3, .config]
+release (config):
+  extends: [.release, .config]
   needs:
-    - job: leconte-python3 (setup)
+    - job: release (setup)
+      artifacts: false
+
+python2 (config):
+  extends: [.python2, .config]
+  needs:
+    - job: python2 (setup)
       artifacts: false
 
 #-------------------------------------------------
@@ -275,22 +317,28 @@ leconte-python3 (config):
     when: always
     paths: [build-log.txt]
 
-kold-python2 (build):
-  extends: [.kold-python2, .build]
+leconte (build):
+  extends: [.leconte, .build]
   needs:
-    - job: kold-python2 (config)
+    - job: leconte (config)
       artifacts: false
 
-kold-python3 (build):
-  extends: [.kold-python3, .build]
+kold (build):
+  extends: [.kold, .build]
   needs:
-    - job: kold-python3 (config)
+    - job: kold (config)
       artifacts: false
 
-leconte-python3 (build):
-  extends: [.leconte-python3, .build]
+release (build):
+  extends: [.release, .build]
   needs:
-    - job: leconte-python3 (config)
+    - job: release (config)
+      artifacts: false
+
+python2 (build):
+  extends: [.python2, .build]
+  needs:
+    - job: python2 (config)
       artifacts: false
 
 #-------------------------------------------------
@@ -345,44 +393,50 @@ leconte-python3 (build):
   variables:
     CHECK_TARGETS: check-all
 
-kold-python2 (test-clacc):
-  extends: [.kold-python2, .test-clacc]
+leconte (test-clacc):
+  extends: [.leconte, .test-clacc]
   needs:
-    - job: kold-python2 (build)
+    - job: leconte (build)
       artifacts: false
 
-kold-python2 (test-all, clacc):
-  extends: [.kold-python2, .clacc, .test-all]
+leconte (test-all, clacc):
+  extends: [.leconte, .clacc, .test-all]
   needs:
-    - job: kold-python2 (test-clacc)
+    - job: leconte (test-clacc)
       artifacts: false
 
-kold-python2 (test-all):
-  extends: [.kold-python2, .not-clacc, .test-all]
+leconte (test-all):
+  extends: [.leconte, .not-clacc, .test-all]
   needs:
-    - job: kold-python2 (build)
+    - job: leconte (build)
       artifacts: false
 
-kold-python3 (test-all):
-  extends: [.kold-python3, .test-all]
+kold (test-clacc):
+  extends: [.kold, .test-clacc]
   needs:
-    - job: kold-python3 (build)
+    - job: kold (build)
       artifacts: false
 
-leconte-python3 (test-clacc):
-  extends: [.leconte-python3, .test-clacc]
+kold (test-all, clacc):
+  extends: [.kold, .clacc, .test-all]
   needs:
-    - job: leconte-python3 (build)
+    - job: kold (test-clacc)
       artifacts: false
 
-leconte-python3 (test-all, clacc):
-  extends: [.leconte-python3, .clacc, .test-all]
+kold (test-all):
+  extends: [.kold, .not-clacc, .test-all]
   needs:
-    - job: leconte-python3 (test-clacc)
+    - job: kold (build)
       artifacts: false
 
-leconte-python3 (test-all):
-  extends: [.leconte-python3, .not-clacc, .test-all]
+release (test-all):
+  extends: [.release, .test-all]
   needs:
-    - job: leconte-python3 (build)
+    - job: release (build)
+      artifacts: false
+
+python2 (test-all):
+  extends: [.python2, .test-all]
+  needs:
+    - job: python2 (build)
       artifacts: false
