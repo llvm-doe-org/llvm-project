@@ -220,7 +220,7 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
   } else if (Size) {
     // If it is not contained and Size > 0, we should create a new entry for it.
     IsNew = true;
-    uintptr_t tp = (uintptr_t)RTL->data_alloc(RTLDeviceID, Size, HstPtrBegin);
+    uintptr_t tp = (uintptr_t)data_alloc(Size, HstPtrBegin);
 #if OMPT_SUPPORT
     // OpenMP 5.0 sec. 3.6.1 p. 398 L18:
     // "The target-data-allocation event occurs when a thread allocates data
@@ -366,7 +366,7 @@ int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size, bool ForceDelete,
             (void *)HT.TgtPtrBegin, DeviceID, Size, /*codeptr_ra*/ NULL);
       }
 #endif
-      RTL->data_delete(RTLDeviceID, (void *)HT.TgtPtrBegin);
+      data_delete((void *)HT.TgtPtrBegin);
       DP("Removing%s mapping with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD
           ", Size=%ld\n", (ForceDelete ? " (forced)" : ""),
           DPxPTR(HT.HstPtrBegin), DPxPTR(HT.TgtPtrBegin), Size);
@@ -454,6 +454,14 @@ __tgt_target_table *DeviceTy::load_binary(void *Img) {
   __tgt_target_table *rc = RTL->load_binary(RTLDeviceID, Img);
   RTL->Mtx.unlock();
   return rc;
+}
+
+void *DeviceTy::data_alloc(int64_t Size, void *HstPtr) {
+  return RTL->data_alloc(RTLDeviceID, Size, HstPtr);
+}
+
+int32_t DeviceTy::data_delete(void *TgtPtrBegin) {
+  return RTL->data_delete(RTLDeviceID, TgtPtrBegin);
 }
 
 // Submit data to device
@@ -567,6 +575,12 @@ bool DeviceTy::isDataExchangable(const DeviceTy &DstDevice) {
            (RTL->data_exchange_async != nullptr);
 
   return false;
+}
+
+int32_t DeviceTy::synchronize(__tgt_async_info *AsyncInfoPtr) {
+  if (RTL->synchronize)
+    return RTL->synchronize(RTLDeviceID, AsyncInfoPtr);
+  return OFFLOAD_SUCCESS;
 }
 
 /// Check whether a device has an associated RTL and initialize it if it's not

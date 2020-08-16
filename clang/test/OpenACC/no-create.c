@@ -42,45 +42,45 @@
 // Define some interrelated data we use several times below.
 //
 // RUN: %data no-create-opts {
-// RUN:   (no-create-opt=-Wno-openacc-omp-map-no-alloc                                    no-create-mt=no_alloc,alloc noAlloc-or-alloc=NO-ALLOC not-if-alloc=   )
-// RUN:   (no-create-opt='-fopenacc-no-create-omp=no_alloc -Wno-openacc-omp-map-no-alloc' no-create-mt=no_alloc,alloc noAlloc-or-alloc=NO-ALLOC not-if-alloc=   )
-// RUN:   (no-create-opt=-fopenacc-no-create-omp=alloc                                    no-create-mt=alloc          noAlloc-or-alloc=ALLOC    not-if-alloc=not)
+// RUN:   (no-create-opt=-Wno-openacc-omp-map-no-alloc                                    no-create-mt=no_alloc,alloc noAlloc-or-alloc=NO-ALLOC not-crash-if-alloc=             )
+// RUN:   (no-create-opt='-fopenacc-no-create-omp=no_alloc -Wno-openacc-omp-map-no-alloc' no-create-mt=no_alloc,alloc noAlloc-or-alloc=NO-ALLOC not-crash-if-alloc=             )
+// RUN:   (no-create-opt=-fopenacc-no-create-omp=alloc                                    no-create-mt=alloc          noAlloc-or-alloc=ALLOC    not-crash-if-alloc='not --crash')
 // RUN: }
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                                     host=-HOST not-if-off-and-alloc=               )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host=      not-if-off-and-alloc=%[not-if-alloc])
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host=      not-if-off-and-alloc=%[not-if-alloc])
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host=      not-if-off-and-alloc=%[not-if-alloc])
+// RUN:   (run-if=                tgt-cflags=                                     host=-HOST not-crash-if-off-and-alloc=                     )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host=      not-crash-if-off-and-alloc=%[not-crash-if-alloc])
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host=      not-crash-if-off-and-alloc=%[not-crash-if-alloc])
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host=      not-crash-if-off-and-alloc=%[not-crash-if-alloc])
 // RUN: }
 //      # "acc parallel loop" should be about the same as "acc parallel", so a
 //      # few cases are probably sufficient for it.
 // RUN: %data cases {
-// RUN:   (case=CASE_DATA_SCALAR_PRESENT             not-if-fail=                       )
-// RUN:   (case=CASE_DATA_SCALAR_ABSENT              not-if-fail=                       )
-// RUN:   (case=CASE_DATA_ARRAY_PRESENT              not-if-fail=                       )
-// RUN:   (case=CASE_DATA_ARRAY_ABSENT               not-if-fail=                       )
-// RUN:   (case=CASE_DATA_SUBARRAY_PRESENT           not-if-fail=                       )
-// RUN:   (case=CASE_DATA_SUBARRAY_DISJOINT          not-if-fail=                       )
-// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_START     not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_END       not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_DATA_SUBARRAY_CONCAT2           not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_PARALLEL_SCALAR_PRESENT         not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_SCALAR_ABSENT          not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_ARRAY_PRESENT          not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_ARRAY_ABSENT           not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_PRESENT       not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_DISJOINT      not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_START not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_END   not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_CONCAT2       not-if-fail=%[not-if-off-and-alloc])
-// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_PRESENT    not-if-fail=                       )
-// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_ABSENT     not-if-fail=                       )
-// RUN:   (case=CASE_CONST_PRESENT                   not-if-fail=                       )
-// RUN:   (case=CASE_CONST_ABSENT                    not-if-fail=                       )
-// RUN:   (case=CASE_INHERITED_PRESENT               not-if-fail=                       )
-// RUN:   (case=CASE_INHERITED_ABSENT                not-if-fail=                       )
-// RUN:   (case=CASE_INHERITED_SUBARRAY_PRESENT      not-if-fail=                       )
-// RUN:   (case=CASE_INHERITED_SUBARRAY_ABSENT       not-if-fail=                       )
+// RUN:   (case=CASE_DATA_SCALAR_PRESENT             not-crash-if-fail=                             )
+// RUN:   (case=CASE_DATA_SCALAR_ABSENT              not-crash-if-fail=                             )
+// RUN:   (case=CASE_DATA_ARRAY_PRESENT              not-crash-if-fail=                             )
+// RUN:   (case=CASE_DATA_ARRAY_ABSENT               not-crash-if-fail=                             )
+// RUN:   (case=CASE_DATA_SUBARRAY_PRESENT           not-crash-if-fail=                             )
+// RUN:   (case=CASE_DATA_SUBARRAY_DISJOINT          not-crash-if-fail=                             )
+// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_START     not-crash-if-fail=%[not-crash-if-off-and-alloc])
+// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_END       not-crash-if-fail=%[not-crash-if-off-and-alloc])
+// RUN:   (case=CASE_DATA_SUBARRAY_CONCAT2           not-crash-if-fail=%[not-crash-if-off-and-alloc])
+// RUN:   (case=CASE_PARALLEL_SCALAR_PRESENT         not-crash-if-fail=                             )
+// RUN:   (case=CASE_PARALLEL_SCALAR_ABSENT          not-crash-if-fail=                             )
+// RUN:   (case=CASE_PARALLEL_ARRAY_PRESENT          not-crash-if-fail=                             )
+// RUN:   (case=CASE_PARALLEL_ARRAY_ABSENT           not-crash-if-fail=                             )
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_PRESENT       not-crash-if-fail=                             )
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_DISJOINT      not-crash-if-fail=                             )
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_START not-crash-if-fail=%[not-crash-if-off-and-alloc])
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_END   not-crash-if-fail=%[not-crash-if-off-and-alloc])
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_CONCAT2       not-crash-if-fail=%[not-crash-if-off-and-alloc])
+// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_PRESENT    not-crash-if-fail=                             )
+// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_ABSENT     not-crash-if-fail=                             )
+// RUN:   (case=CASE_CONST_PRESENT                   not-crash-if-fail=                             )
+// RUN:   (case=CASE_CONST_ABSENT                    not-crash-if-fail=                             )
+// RUN:   (case=CASE_INHERITED_PRESENT               not-crash-if-fail=                             )
+// RUN:   (case=CASE_INHERITED_ABSENT                not-crash-if-fail=                             )
+// RUN:   (case=CASE_INHERITED_SUBARRAY_PRESENT      not-crash-if-fail=                             )
+// RUN:   (case=CASE_INHERITED_SUBARRAY_ABSENT       not-crash-if-fail=                             )
 // RUN: }
 
 // Check -ast-dump before and after AST serialization.
@@ -173,9 +173,10 @@
 // RUN:       %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
 // RUN:                 %[tgt-cflags] %acc_includes -o %t.exe %t-omp.c
 // RUN:       %for cases {
-// RUN:         %[run-if] %[not-if-fail] %t.exe %[case] > %t.out 2>&1
-// RUN:         %[run-if] FileCheck -input-file %t.out %s -match-full-lines \
-// RUN:           -check-prefixes=EXE,EXE-%[case]%[host] \
+// RUN:         %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2>&1
+// RUN:         %[run-if] FileCheck -input-file %t.out %s \
+// RUN:           -match-full-lines -allow-empty \
+// RUN:           -check-prefixes=EXE%[host],EXE-%[case]%[host] \
 // RUN:           -check-prefixes=EXE-%[case]-%[noAlloc-or-alloc]%[host]
 // RUN:       }
 // RUN:     }
@@ -190,9 +191,10 @@
 // RUN:               %[tgt-cflags] %acc_includes -o %t.exe %s
 // RUN:     rm -f %t.actual-cases && touch %t.actual-cases
 // RUN:     %for cases {
-// RUN:       %[run-if] %[not-if-fail] %t.exe %[case] > %t.out 2>&1
-// RUN:       %[run-if] FileCheck -input-file %t.out %s -match-full-lines \
-// RUN:         -check-prefixes=EXE,EXE-%[case]%[host] \
+// RUN:       %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2>&1
+// RUN:       %[run-if] FileCheck -input-file %t.out %s \
+// RUN:         -match-full-lines -allow-empty \
+// RUN:         -check-prefixes=EXE%[host],EXE-%[case]%[host] \
 // RUN:         -check-prefixes=EXE-%[case]-%[noAlloc-or-alloc]%[host]
 // RUN:       echo '%[case]' >> %t.actual-cases
 // RUN:     }
@@ -300,10 +302,6 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  // EXE-NOT: {{.}}
-  // EXE: start
-  fprintf(stderr, "start\n");
-
   // DMP-LABEL: SwitchStmt
   // PRT-LABEL: switch (selectedCase)
   switch (selectedCase) {
@@ -339,7 +337,8 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
   //
-  // EXE-CASE_DATA_SCALAR_PRESENT-NEXT: acc_ev_enter_data_start
+  //  EXE-CASE_DATA_SCALAR_PRESENT-NOT: {{.}}
+  //      EXE-CASE_DATA_SCALAR_PRESENT: acc_ev_enter_data_start
   // EXE-CASE_DATA_SCALAR_PRESENT-NEXT:   acc_ev_alloc
   // EXE-CASE_DATA_SCALAR_PRESENT-NEXT:   acc_ev_create
   // EXE-CASE_DATA_SCALAR_PRESENT-NEXT:   acc_ev_enter_data_start
@@ -347,6 +346,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_DATA_SCALAR_PRESENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_DATA_SCALAR_PRESENT-NEXT:   acc_ev_delete
   // EXE-CASE_DATA_SCALAR_PRESENT-NEXT:   acc_ev_free
+  //  EXE-CASE_DATA_SCALAR_PRESENT-NOT: {{.}}
   case CASE_DATA_SCALAR_PRESENT:
   {
     int x;
@@ -375,12 +375,14 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
   //
-  //      EXE-CASE_DATA_SCALAR_ABSENT-NEXT: acc_ev_enter_data_start
+  //        EXE-CASE_DATA_SCALAR_ABSENT-NOT: {{.}}
+  //            EXE-CASE_DATA_SCALAR_ABSENT: acc_ev_enter_data_start
   // EXE-CASE_DATA_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_alloc
   // EXE-CASE_DATA_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_create
-  //      EXE-CASE_DATA_SCALAR_ABSENT-NEXT: acc_ev_exit_data_start
+  //       EXE-CASE_DATA_SCALAR_ABSENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_DATA_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_DATA_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_free
+  //        EXE-CASE_DATA_SCALAR_ABSENT-NOT: {{.}}
   case CASE_DATA_SCALAR_ABSENT:
   {
     int x;
@@ -407,7 +409,8 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
   //
-  // EXE-CASE_DATA_ARRAY_PRESENT-NEXT: acc_ev_enter_data_start
+  //  EXE-CASE_DATA_ARRAY_PRESENT-NOT: {{.}}
+  //      EXE-CASE_DATA_ARRAY_PRESENT: acc_ev_enter_data_start
   // EXE-CASE_DATA_ARRAY_PRESENT-NEXT:   acc_ev_alloc
   // EXE-CASE_DATA_ARRAY_PRESENT-NEXT:   acc_ev_create
   // EXE-CASE_DATA_ARRAY_PRESENT-NEXT:   acc_ev_enter_data_start
@@ -415,6 +418,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_DATA_ARRAY_PRESENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_DATA_ARRAY_PRESENT-NEXT:   acc_ev_delete
   // EXE-CASE_DATA_ARRAY_PRESENT-NEXT:   acc_ev_free
+  //  EXE-CASE_DATA_ARRAY_PRESENT-NOT: {{.}}
   case CASE_DATA_ARRAY_PRESENT:
   {
     int arr[3];
@@ -435,12 +439,14 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
   //
-  //       EXE-CASE_DATA_ARRAY_ABSENT-NEXT: acc_ev_enter_data_start
+  //        EXE-CASE_DATA_ARRAY_ABSENT-NOT: {{.}}
+  //            EXE-CASE_DATA_ARRAY_ABSENT: acc_ev_enter_data_start
   // EXE-CASE_DATA_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_alloc
   // EXE-CASE_DATA_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_create
   //       EXE-CASE_DATA_ARRAY_ABSENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_DATA_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_DATA_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_free
+  //        EXE-CASE_DATA_ARRAY_ABSENT-NOT: {{.}}
   case CASE_DATA_ARRAY_ABSENT:
   {
     int arr[3];
@@ -467,7 +473,8 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
   //
-  // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT: acc_ev_enter_data_start
+  //  EXE-CASE_DATA_SUBARRAY_PRESENT-NOT: {{.}}
+  //      EXE-CASE_DATA_SUBARRAY_PRESENT: acc_ev_enter_data_start
   // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
   // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_create
   // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
@@ -491,6 +498,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_free
   // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_delete
   // EXE-CASE_DATA_SUBARRAY_PRESENT-NEXT:   acc_ev_free
+  //  EXE-CASE_DATA_SUBARRAY_PRESENT-NOT: {{.}}
   case CASE_DATA_SUBARRAY_PRESENT:
   {
     int all[10], same[10], beg[10], mid[10], end[10];
@@ -518,7 +526,8 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
   //
-  //       EXE-CASE_DATA_SUBARRAY_DISJOINT-NEXT: acc_ev_enter_data_start
+  //        EXE-CASE_DATA_SUBARRAY_DISJOINT-NOT: {{.}}
+  //            EXE-CASE_DATA_SUBARRAY_DISJOINT: acc_ev_enter_data_start
   //       EXE-CASE_DATA_SUBARRAY_DISJOINT-NEXT:   acc_ev_alloc
   //       EXE-CASE_DATA_SUBARRAY_DISJOINT-NEXT:   acc_ev_create
   //       EXE-CASE_DATA_SUBARRAY_DISJOINT-NEXT:   acc_ev_enter_data_start
@@ -530,6 +539,7 @@ int main(int argc, char *argv[]) {
   //       EXE-CASE_DATA_SUBARRAY_DISJOINT-NEXT: acc_ev_exit_data_start
   //       EXE-CASE_DATA_SUBARRAY_DISJOINT-NEXT:   acc_ev_delete
   //       EXE-CASE_DATA_SUBARRAY_DISJOINT-NEXT:   acc_ev_free
+  //        EXE-CASE_DATA_SUBARRAY_DISJOINT-NOT: {{.}}
   case CASE_DATA_SUBARRAY_DISJOINT:
   {
     int arr[4];
@@ -557,7 +567,8 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
   //
-  //          EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NEXT: acc_ev_enter_data_start
+  //           EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NOT: {{.}}
+  //               EXE-CASE_DATA_SUBARRAY_OVERLAP_START: acc_ev_enter_data_start
   //          EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_alloc
   //          EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_create
   //          EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_enter_data_start
@@ -566,6 +577,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_free
   //    EXE-CASE_DATA_SUBARRAY_OVERLAP_START-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  //                                                     # An abort message usually follows.
   case CASE_DATA_SUBARRAY_OVERLAP_START:
   {
     int arr[5];
@@ -593,7 +605,8 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
   //
-  //          EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NEXT: acc_ev_enter_data_start
+  //           EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NOT: {{.}}
+  //               EXE-CASE_DATA_SUBARRAY_OVERLAP_END: acc_ev_enter_data_start
   //          EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_alloc
   //          EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_create
   //          EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_enter_data_start
@@ -602,6 +615,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_free
   //    EXE-CASE_DATA_SUBARRAY_OVERLAP_END-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  //                                                   # An abort message usually follows.
   case CASE_DATA_SUBARRAY_OVERLAP_END:
   {
     int arr[5];
@@ -633,7 +647,8 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
   //
-  //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT: acc_ev_enter_data_start
+  //           EXE-CASE_DATA_SUBARRAY_CONCAT2-NOT: {{.}}
+  //               EXE-CASE_DATA_SUBARRAY_CONCAT2: acc_ev_enter_data_start
   //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT:   acc_ev_alloc
   //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT:   acc_ev_create
   //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT:   acc_ev_enter_data_start
@@ -648,6 +663,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_DATA_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_DATA_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:   acc_ev_free
   //    EXE-CASE_DATA_SUBARRAY_CONCAT2-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  //                                               # An abort message usually follows.
   case CASE_DATA_SUBARRAY_CONCAT2:
   {
     int arr[4];
@@ -692,7 +708,8 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
   //
-  // EXE-CASE_PARALLEL_SCALAR_PRESENT-NEXT: acc_ev_enter_data_start
+  //  EXE-CASE_PARALLEL_SCALAR_PRESENT-NOT: {{.}}
+  //      EXE-CASE_PARALLEL_SCALAR_PRESENT: acc_ev_enter_data_start
   // EXE-CASE_PARALLEL_SCALAR_PRESENT-NEXT:   acc_ev_alloc
   // EXE-CASE_PARALLEL_SCALAR_PRESENT-NEXT:   acc_ev_create
   // EXE-CASE_PARALLEL_SCALAR_PRESENT-NEXT:   acc_ev_enter_data_start
@@ -700,6 +717,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_PARALLEL_SCALAR_PRESENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_PARALLEL_SCALAR_PRESENT-NEXT:   acc_ev_delete
   // EXE-CASE_PARALLEL_SCALAR_PRESENT-NEXT:   acc_ev_free
+  //  EXE-CASE_PARALLEL_SCALAR_PRESENT-NOT: {{.}}
   case CASE_PARALLEL_SCALAR_PRESENT:
   {
     int x;
@@ -709,12 +727,14 @@ int main(int argc, char *argv[]) {
     break;
   }
 
-  //       EXE-CASE_PARALLEL_SCALAR_ABSENT-NEXT: acc_ev_enter_data_start
+  //        EXE-CASE_PARALLEL_SCALAR_ABSENT-NOT: {{.}}
+  //            EXE-CASE_PARALLEL_SCALAR_ABSENT: acc_ev_enter_data_start
   // EXE-CASE_PARALLEL_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_alloc
   // EXE-CASE_PARALLEL_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_create
   //       EXE-CASE_PARALLEL_SCALAR_ABSENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_PARALLEL_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_PARALLEL_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_free
+  //        EXE-CASE_PARALLEL_SCALAR_ABSENT-NOT: {{.}}
   case CASE_PARALLEL_SCALAR_ABSENT:
   {
     int x;
@@ -724,7 +744,8 @@ int main(int argc, char *argv[]) {
     break;
   }
 
-  // EXE-CASE_PARALLEL_ARRAY_PRESENT-NEXT: acc_ev_enter_data_start
+  //  EXE-CASE_PARALLEL_ARRAY_PRESENT-NOT: {{.}}
+  //      EXE-CASE_PARALLEL_ARRAY_PRESENT: acc_ev_enter_data_start
   // EXE-CASE_PARALLEL_ARRAY_PRESENT-NEXT:   acc_ev_alloc
   // EXE-CASE_PARALLEL_ARRAY_PRESENT-NEXT:   acc_ev_create
   // EXE-CASE_PARALLEL_ARRAY_PRESENT-NEXT:   acc_ev_enter_data_start
@@ -732,6 +753,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_PARALLEL_ARRAY_PRESENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_PARALLEL_ARRAY_PRESENT-NEXT:   acc_ev_delete
   // EXE-CASE_PARALLEL_ARRAY_PRESENT-NEXT:   acc_ev_free
+  //  EXE-CASE_PARALLEL_ARRAY_PRESENT-NOT: {{.}}
   case CASE_PARALLEL_ARRAY_PRESENT:
   {
     int arr[3];
@@ -741,12 +763,14 @@ int main(int argc, char *argv[]) {
     break;
   }
 
-  //       EXE-CASE_PARALLEL_ARRAY_ABSENT-NEXT: acc_ev_enter_data_start
+  //        EXE-CASE_PARALLEL_ARRAY_ABSENT-NOT: {{.}}
+  //            EXE-CASE_PARALLEL_ARRAY_ABSENT: acc_ev_enter_data_start
   // EXE-CASE_PARALLEL_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_alloc
   // EXE-CASE_PARALLEL_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_create
   //       EXE-CASE_PARALLEL_ARRAY_ABSENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_PARALLEL_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_PARALLEL_ARRAY_ABSENT-ALLOC-NEXT:   acc_ev_free
+  //        EXE-CASE_PARALLEL_ARRAY_ABSENT-NOT: {{.}}
   case CASE_PARALLEL_ARRAY_ABSENT:
   {
     int arr[3];
@@ -756,7 +780,8 @@ int main(int argc, char *argv[]) {
     break;
   }
 
-  // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT: acc_ev_enter_data_start
+  //  EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NOT: {{.}}
+  //      EXE-CASE_PARALLEL_SUBARRAY_PRESENT: acc_ev_enter_data_start
   // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
   // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_create
   // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
@@ -780,6 +805,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_free
   // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_delete
   // EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NEXT:   acc_ev_free
+  //  EXE-CASE_PARALLEL_SUBARRAY_PRESENT-NOT: {{.}}
   case CASE_PARALLEL_SUBARRAY_PRESENT:
   {
     int all[10], same[10], beg[10], mid[10], end[10];
@@ -791,7 +817,8 @@ int main(int argc, char *argv[]) {
     break;
   }
 
-  //       EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NEXT: acc_ev_enter_data_start
+  //        EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NOT: {{.}}
+  //            EXE-CASE_PARALLEL_SUBARRAY_DISJOINT: acc_ev_enter_data_start
   //       EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NEXT:   acc_ev_alloc
   //       EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NEXT:   acc_ev_create
   //       EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NEXT:   acc_ev_enter_data_start
@@ -803,6 +830,7 @@ int main(int argc, char *argv[]) {
   //       EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NEXT: acc_ev_exit_data_start
   //       EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NEXT:   acc_ev_delete
   //       EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NEXT:   acc_ev_free
+  //        EXE-CASE_PARALLEL_SUBARRAY_DISJOINT-NOT: {{.}}
   case CASE_PARALLEL_SUBARRAY_DISJOINT:
   {
     int arr[4];
@@ -813,7 +841,8 @@ int main(int argc, char *argv[]) {
     break;
   }
 
-  //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NEXT: acc_ev_enter_data_start
+  //           EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NOT: {{.}}
+  //               EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START: acc_ev_enter_data_start
   //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_alloc
   //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_create
   //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_enter_data_start
@@ -822,6 +851,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_free
   //    EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  //                                                         # An abort message usually follows.
   case CASE_PARALLEL_SUBARRAY_OVERLAP_START:
   {
     int arr[10];
@@ -832,7 +862,8 @@ int main(int argc, char *argv[]) {
     break;
   }
 
-  //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NEXT: acc_ev_enter_data_start
+  //           EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NOT: {{.}}
+  //               EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END: acc_ev_enter_data_start
   //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_alloc
   //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_create
   //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_enter_data_start
@@ -841,6 +872,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_free
   //    EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  //                                                       # An abort message usually follows.
   case CASE_PARALLEL_SUBARRAY_OVERLAP_END:
   {
     int arr[10];
@@ -851,7 +883,8 @@ int main(int argc, char *argv[]) {
     break;
   }
 
-  //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT: acc_ev_enter_data_start
+  //           EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NOT: {{.}}
+  //               EXE-CASE_PARALLEL_SUBARRAY_CONCAT2: acc_ev_enter_data_start
   //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT:   acc_ev_alloc
   //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT:   acc_ev_create
   //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT:   acc_ev_enter_data_start
@@ -866,6 +899,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:   acc_ev_free
   //    EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  //                                                   # An abort message usually follows.
   case CASE_PARALLEL_SUBARRAY_CONCAT2:
   {
     int arr[4];
@@ -927,7 +961,8 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
   //
-  // EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NEXT: acc_ev_enter_data_start
+  //  EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NOT: {{.}}
+  //      EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT: acc_ev_enter_data_start
   // EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NEXT:   acc_ev_alloc
   // EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NEXT:   acc_ev_create
   // EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NEXT:   acc_ev_enter_data_start
@@ -935,6 +970,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NEXT:   acc_ev_delete
   // EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NEXT:   acc_ev_free
+  //  EXE-CASE_PARALLEL_LOOP_SCALAR_PRESENT-NOT: {{.}}
   case CASE_PARALLEL_LOOP_SCALAR_PRESENT:
   {
     int x;
@@ -945,12 +981,14 @@ int main(int argc, char *argv[]) {
     break;
   }
 
-  //       EXE-CASE_PARALLEL_LOOP_SCALAR_ABSENT-NEXT: acc_ev_enter_data_start
+  //        EXE-CASE_PARALLEL_LOOP_SCALAR_ABSENT-NOT: {{.}}
+  //            EXE-CASE_PARALLEL_LOOP_SCALAR_ABSENT: acc_ev_enter_data_start
   // EXE-CASE_PARALLEL_LOOP_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_alloc
   // EXE-CASE_PARALLEL_LOOP_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_create
   //       EXE-CASE_PARALLEL_LOOP_SCALAR_ABSENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_PARALLEL_LOOP_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_PARALLEL_LOOP_SCALAR_ABSENT-ALLOC-NEXT:   acc_ev_free
+  //        EXE-CASE_PARALLEL_LOOP_SCALAR_ABSENT-NOT: {{.}}
   case CASE_PARALLEL_LOOP_SCALAR_ABSENT:
   {
     int x;
@@ -961,7 +999,8 @@ int main(int argc, char *argv[]) {
     break;
   }
 
-  // EXE-CASE_CONST_PRESENT-NEXT: acc_ev_enter_data_start
+  //  EXE-CASE_CONST_PRESENT-NOT: {{.}}
+  //      EXE-CASE_CONST_PRESENT: acc_ev_enter_data_start
   // EXE-CASE_CONST_PRESENT-NEXT:   acc_ev_alloc
   // EXE-CASE_CONST_PRESENT-NEXT:   acc_ev_create
   // EXE-CASE_CONST_PRESENT-NEXT:   acc_ev_enter_data_start
@@ -969,6 +1008,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_CONST_PRESENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_CONST_PRESENT-NEXT:   acc_ev_delete
   // EXE-CASE_CONST_PRESENT-NEXT:   acc_ev_free
+  //  EXE-CASE_CONST_PRESENT-NOT: {{.}}
   case CASE_CONST_PRESENT:
   {
     const int x;
@@ -980,12 +1020,14 @@ int main(int argc, char *argv[]) {
     break;
   }
 
-  //       EXE-CASE_CONST_ABSENT-NEXT: acc_ev_enter_data_start
+  //        EXE-CASE_CONST_ABSENT-NOT: {{.}}
+  //            EXE-CASE_CONST_ABSENT: acc_ev_enter_data_start
   // EXE-CASE_CONST_ABSENT-ALLOC-NEXT:   acc_ev_alloc
   // EXE-CASE_CONST_ABSENT-ALLOC-NEXT:   acc_ev_create
   //       EXE-CASE_CONST_ABSENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_CONST_ABSENT-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_CONST_ABSENT-ALLOC-NEXT:   acc_ev_free
+  //        EXE-CASE_CONST_ABSENT-NOT: {{.}}
   case CASE_CONST_ABSENT:
   {
     const int x;
@@ -1046,7 +1088,8 @@ int main(int argc, char *argv[]) {
   //             PRT-NEXT:   break;
   //             PRT-NEXT: }
   //
-  // EXE-CASE_INHERITED_PRESENT-NEXT: acc_ev_enter_data_start
+  //  EXE-CASE_INHERITED_PRESENT-NOT: {{.}}
+  //      EXE-CASE_INHERITED_PRESENT: acc_ev_enter_data_start
   // EXE-CASE_INHERITED_PRESENT-NEXT:   acc_ev_alloc
   // EXE-CASE_INHERITED_PRESENT-NEXT:   acc_ev_create
   // EXE-CASE_INHERITED_PRESENT-NEXT:   acc_ev_enter_data_start
@@ -1056,6 +1099,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_INHERITED_PRESENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_INHERITED_PRESENT-NEXT:   acc_ev_delete
   // EXE-CASE_INHERITED_PRESENT-NEXT:   acc_ev_free
+  //  EXE-CASE_INHERITED_PRESENT-NOT: {{.}}
   case CASE_INHERITED_PRESENT:
   {
     int x;
@@ -1112,7 +1156,8 @@ int main(int argc, char *argv[]) {
   //             PRT-NEXT:   break;
   //             PRT-NEXT: }
   //
-  //       EXE-CASE_INHERITED_ABSENT-NEXT: acc_ev_enter_data_start
+  //        EXE-CASE_INHERITED_ABSENT-NOT: {{.}}
+  //            EXE-CASE_INHERITED_ABSENT: acc_ev_enter_data_start
   // EXE-CASE_INHERITED_ABSENT-ALLOC-NEXT:   acc_ev_alloc
   // EXE-CASE_INHERITED_ABSENT-ALLOC-NEXT:   acc_ev_create
   //       EXE-CASE_INHERITED_ABSENT-NEXT:   acc_ev_enter_data_start
@@ -1120,6 +1165,7 @@ int main(int argc, char *argv[]) {
   //       EXE-CASE_INHERITED_ABSENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_INHERITED_ABSENT-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_INHERITED_ABSENT-ALLOC-NEXT:   acc_ev_free
+  //        EXE-CASE_INHERITED_ABSENT-NOT: {{.}}
   case CASE_INHERITED_ABSENT:
   {
     int x;
@@ -1155,7 +1201,8 @@ int main(int argc, char *argv[]) {
   //             PRT-NEXT:   break;
   //             PRT-NEXT: }
   //
-  // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT: acc_ev_enter_data_start
+  //  EXE-CASE_INHERITED_SUBARRAY_PRESENT-NOT: {{.}}
+  //      EXE-CASE_INHERITED_SUBARRAY_PRESENT: acc_ev_enter_data_start
   // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT:   acc_ev_alloc
   // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT:   acc_ev_create
   // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT:   acc_ev_enter_data_start
@@ -1165,6 +1212,7 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT:   acc_ev_delete
   // EXE-CASE_INHERITED_SUBARRAY_PRESENT-NEXT:   acc_ev_free
+  //  EXE-CASE_INHERITED_SUBARRAY_PRESENT-NOT: {{.}}
   case CASE_INHERITED_SUBARRAY_PRESENT:
   {
     int arr[] = {10, 20, 30, 40, 50};
@@ -1197,7 +1245,8 @@ int main(int argc, char *argv[]) {
   //             PRT-NEXT:   break;
   //             PRT-NEXT: }
   //
-  //       EXE-CASE_INHERITED_SUBARRAY_ABSENT-NEXT: acc_ev_enter_data_start
+  //        EXE-CASE_INHERITED_SUBARRAY_ABSENT-NOT: {{.}}
+  //            EXE-CASE_INHERITED_SUBARRAY_ABSENT: acc_ev_enter_data_start
   // EXE-CASE_INHERITED_SUBARRAY_ABSENT-ALLOC-NEXT:   acc_ev_alloc
   // EXE-CASE_INHERITED_SUBARRAY_ABSENT-ALLOC-NEXT:   acc_ev_create
   //       EXE-CASE_INHERITED_SUBARRAY_ABSENT-NEXT:   acc_ev_enter_data_start
@@ -1205,6 +1254,7 @@ int main(int argc, char *argv[]) {
   //       EXE-CASE_INHERITED_SUBARRAY_ABSENT-NEXT: acc_ev_exit_data_start
   // EXE-CASE_INHERITED_SUBARRAY_ABSENT-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_INHERITED_SUBARRAY_ABSENT-ALLOC-NEXT:   acc_ev_free
+  //        EXE-CASE_INHERITED_SUBARRAY_ABSENT-NOT: {{.}}
   case CASE_INHERITED_SUBARRAY_ABSENT:
   {
     int arr[] = {10, 20, 30, 40, 50};
@@ -1221,7 +1271,7 @@ int main(int argc, char *argv[]) {
     break;
   }
 
-  // EXE-NOT: {{.}}
+  // EXE-HOST-NOT: {{.}}
 
   return 0;
 }

@@ -112,6 +112,7 @@ static void print_info(acc_prof_info *pi, acc_event_info *ei,
   print_prof_info(pi);
   print_event_info(ei);
   print_api_info(ai);
+  fflush(stdout);
 }
 
 static void on_device_init_start(acc_prof_info *pi, acc_event_info *ei,

@@ -31,15 +31,15 @@
 // Define some interrelated data we use several times below.
 //
 // RUN: %data present-opts {
-// RUN:   (present-opt=-Wno-openacc-omp-map-present                                 present-mt=present,alloc not-if-present=not)
-// RUN:   (present-opt='-fopenacc-present-omp=present -Wno-openacc-omp-map-present' present-mt=present,alloc not-if-present=not)
-// RUN:   (present-opt=-fopenacc-present-omp=alloc                                  present-mt=alloc         not-if-present=   )
+// RUN:   (present-opt=-Wno-openacc-omp-map-present                                 present-mt=present,alloc not-if-present=not not-crash-if-present='not --crash')
+// RUN:   (present-opt='-fopenacc-present-omp=present -Wno-openacc-omp-map-present' present-mt=present,alloc not-if-present=not not-crash-if-present='not --crash')
+// RUN:   (present-opt=-fopenacc-present-omp=alloc                                  present-mt=alloc         not-if-present=    not-crash-if-present=             )
 // RUN: }
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                                     not-if-off-and-present=                  not-if-off=   )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  not-if-off-and-present=%[not-if-present] not-if-off=not)
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple not-if-off-and-present=%[not-if-present] not-if-off=not)
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple not-if-off-and-present=%[not-if-present] not-if-off=not)
+// RUN:   (run-if=                tgt-cflags=                                     not-if-off-and-present=                  not-crash-if-off-and-present=                        not-if-off=    not-crash-if-off=             )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
 // RUN: }
 // RUN: %data use-vars {
 // RUN:   (use-var-cflags=            )
@@ -63,28 +63,28 @@
 //      # array extensions currently don't print errors about present modifiers.
 //      # This is fixed upstream by 41b1aefecb94 and will be merged later.
 // RUN: %data cases {
-// RUN:   (case=CASE_DATA_SCALAR_PRESENT             not-if-fail=                          not-if-presentError=                         )
-// RUN:   (case=CASE_DATA_SCALAR_ABSENT              not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
-// RUN:   (case=CASE_DATA_ARRAY_PRESENT              not-if-fail=                          not-if-presentError=                         )
-// RUN:   (case=CASE_DATA_ARRAY_ABSENT               not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
-// RUN:   (case=CASE_DATA_SUBARRAY_PRESENT           not-if-fail=                          not-if-presentError=                         )
-// RUN:   (case=CASE_DATA_SUBARRAY_DISJOINT          not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
-// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_START     not-if-fail=%[not-if-off]             not-if-presentError=                         )
-// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_END       not-if-fail=%[not-if-off]             not-if-presentError=                         )
-// RUN:   (case=CASE_DATA_SUBARRAY_CONCAT2           not-if-fail=%[not-if-off]             not-if-presentError=                         )
-// RUN:   (case=CASE_PARALLEL_SCALAR_PRESENT         not-if-fail=                          not-if-presentError=                         )
-// RUN:   (case=CASE_PARALLEL_SCALAR_ABSENT          not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
-// RUN:   (case=CASE_PARALLEL_ARRAY_PRESENT          not-if-fail=                          not-if-presentError=                         )
-// RUN:   (case=CASE_PARALLEL_ARRAY_ABSENT           not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_PRESENT       not-if-fail=                          not-if-presentError=                         )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_DISJOINT      not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_START not-if-fail=%[not-if-off]             not-if-presentError=                         )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_END   not-if-fail=%[not-if-off]             not-if-presentError=                         )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_CONCAT2       not-if-fail=%[not-if-off]             not-if-presentError=                         )
-// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_PRESENT    not-if-fail=                          not-if-presentError=                         )
-// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_ABSENT     not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
-// RUN:   (case=CASE_CONST_PRESENT                   not-if-fail=                          not-if-presentError=                         )
-// RUN:   (case=CASE_CONST_ABSENT                    not-if-fail=%[not-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
+// RUN:   (case=CASE_DATA_SCALAR_PRESENT             not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                         )
+// RUN:   (case=CASE_DATA_SCALAR_ABSENT              not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
+// RUN:   (case=CASE_DATA_ARRAY_PRESENT              not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                         )
+// RUN:   (case=CASE_DATA_ARRAY_ABSENT               not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
+// RUN:   (case=CASE_DATA_SUBARRAY_PRESENT           not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                         )
+// RUN:   (case=CASE_DATA_SUBARRAY_DISJOINT          not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
+// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_START     not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=                         )
+// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_END       not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=                         )
+// RUN:   (case=CASE_DATA_SUBARRAY_CONCAT2           not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_SCALAR_PRESENT         not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_SCALAR_ABSENT          not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
+// RUN:   (case=CASE_PARALLEL_ARRAY_PRESENT          not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_ARRAY_ABSENT           not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_PRESENT       not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_DISJOINT      not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_START not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_END   not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_SUBARRAY_CONCAT2       not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_PRESENT    not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                         )
+// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_ABSENT     not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
+// RUN:   (case=CASE_CONST_PRESENT                   not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                         )
+// RUN:   (case=CASE_CONST_ABSENT                    not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present])
 // RUN: }
 
 // Check -ast-dump before and after AST serialization.
@@ -174,11 +174,13 @@
 // RUN:         %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
 // RUN:                   %[tgt-cflags] %[use-var-cflags] -o %t.exe %t-omp.c
 // RUN:         %for cases {
-// RUN:           %[run-if] %[not-if-fail] %t.exe %[case] > %t.out 2> %t.err
+// RUN:           %[run-if] %[not-crash-if-fail] %t.exe %[case] \
+// RUN:                     > %t.out 2> %t.err
 // RUN:           %[run-if] FileCheck -input-file %t.err -allow-empty %s \
-// RUN:                               -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS,EXE-ERR-%[not-if-presentError]PRESENT
+// RUN:             -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS \
+// RUN:             -check-prefixes=EXE-ERR-%[not-if-presentError]PRESENT
 // RUN:           %[run-if] FileCheck -input-file %t.out -allow-empty %s \
-// RUN:                               -check-prefixes=EXE-OUT,EXE-OUT-%[not-if-fail]PASS
+// RUN:             -check-prefixes=EXE-OUT,EXE-OUT-%[not-if-fail]PASS
 // RUN:         }
 // RUN:       }
 // RUN:     }
@@ -194,11 +196,12 @@
 // RUN:                 %[tgt-cflags] %[use-var-cflags] -o %t.exe %s
 // RUN:       rm -f %t.actual-cases && touch %t.actual-cases
 // RUN:       %for cases {
-// RUN:         %[run-if] %[not-if-fail] %t.exe %[case] > %t.out 2> %t.err
+// RUN:         %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2> %t.err
 // RUN:         %[run-if] FileCheck -input-file %t.err -allow-empty %s \
-// RUN:                             -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS,EXE-ERR-%[not-if-presentError]PRESENT
+// RUN:           -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS \
+// RUN:           -check-prefixes=EXE-ERR-%[not-if-presentError]PRESENT
 // RUN:         %[run-if] FileCheck -input-file %t.out -allow-empty %s \
-// RUN:                             -check-prefixes=EXE-OUT,EXE-OUT-%[not-if-fail]PASS
+// RUN:           -check-prefixes=EXE-OUT,EXE-OUT-%[not-if-fail]PASS
 // RUN:         echo '%[case]' >> %t.actual-cases
 // RUN:       }
 // RUN:     }
@@ -294,6 +297,7 @@ int main(int argc, char *argv[]) {
 
   // EXE-OUT: before fail
   printf("before fail\n");
+  fflush(stdout);
 
   // DMP-LABEL: SwitchStmt
   // PRT-LABEL: switch (selectedCase)
@@ -784,13 +788,15 @@ int main(int argc, char *argv[]) {
   //                 EXE-ERR: addr=0x[[#%x,HOST_ADDR:]], size=[[#%u,SIZE:]]
   // EXE-ERR-notPRESENT-NEXT: Libomptarget message: device mapping required by 'present' map type modifier does not exist for host address 0x{{0*}}[[#HOST_ADDR]] ([[#SIZE]] bytes)
   //    EXE-ERR-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  //                          # An abort message usually follows.
 
   // EXE-OUT-PASS-NEXT: after fail
   printf("after fail\n");
+  fflush(stdout);
 
   return 0;
 }
 
 // EXE-OUT-NOT: {{.}}
-// EXE-ERR-NOT: {{.}}
+// EXE-ERR-PASS-NOT: {{.}}
 
