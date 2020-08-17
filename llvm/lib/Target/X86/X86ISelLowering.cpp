@@ -10938,6 +10938,15 @@ static unsigned getV4X86ShuffleImm(ArrayRef<int> Mask) {
   assert(Mask[2] >= -1 && Mask[2] < 4 && "Out of bound mask element!");
   assert(Mask[3] >= -1 && Mask[3] < 4 && "Out of bound mask element!");
 
+  // If the mask only uses one non-undef element, then fully 'splat' it to
+  // improve later broadcast matching.
+  int FirstIndex = find_if(Mask, [](int M) { return M >= 0; }) - Mask.begin();
+  assert(0 <= FirstIndex && FirstIndex < 4 && "All undef shuffle mask");
+
+  int FirstElt = Mask[FirstIndex];
+  if (all_of(Mask, [FirstElt](int M) { return M < 0 || M == FirstElt; }))
+    return (FirstElt << 6) | (FirstElt << 4) | (FirstElt << 2) | FirstElt;
+
   unsigned Imm = 0;
   Imm |= (Mask[0] < 0 ? 0 : Mask[0]) << 0;
   Imm |= (Mask[1] < 0 ? 1 : Mask[1]) << 2;
@@ -15056,6 +15065,12 @@ static SDValue lowerV16I8Shuffle(const SDLoc &DL, ArrayRef<int> Mask,
       // If we have VBMI we can use one VPERM instead of multiple PSHUFBs.
       if (Subtarget.hasVBMI() && Subtarget.hasVLX())
         return lowerShuffleWithPERMV(DL, MVT::v16i8, Mask, V1, V2, DAG);
+
+      // If we have XOP we can use one VPPERM instead of multiple PSHUFBs.
+      if (Subtarget.hasXOP()) {
+        SDValue MaskNode = getConstVector(Mask, MVT::v16i8, DAG, DL, true);
+        return DAG.getNode(X86ISD::VPPERM, DL, MVT::v16i8, V1, V2, MaskNode);
+      }
 
       // Use PALIGNR+Permute if possible - permute might become PSHUFB but the
       // PALIGNR will be cheaper than the second PSHUFB+OR.

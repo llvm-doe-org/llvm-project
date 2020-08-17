@@ -3886,7 +3886,8 @@ public:
           CXXScopeSpec MapperIdScopeSpec;
           DeclarationNameInfo MapperIdInfo;
           return getDerived().RebuildOMPFromClause(
-              Vars, MapperIdScopeSpec, MapperIdInfo,
+              llvm::None, llvm::None, MapperIdScopeSpec, MapperIdInfo,
+              L.LParenLoc, Vars,
               OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
         });
   }
@@ -3899,7 +3900,8 @@ public:
           CXXScopeSpec MapperIdScopeSpec;
           DeclarationNameInfo MapperIdInfo;
           return getDerived().RebuildOMPToClause(
-              Vars, MapperIdScopeSpec, MapperIdInfo,
+              llvm::None, llvm::None, MapperIdScopeSpec, MapperIdInfo,
+              L.LParenLoc, Vars,
               OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
         });
   }

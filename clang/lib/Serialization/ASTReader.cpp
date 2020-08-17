@@ -12602,8 +12602,14 @@ void OMPClauseReader::VisitOMPDefaultmapClause(OMPDefaultmapClause *C) {
 
 void OMPClauseReader::VisitOMPToClause(OMPToClause *C) {
   C->setLParenLoc(Record.readSourceLocation());
+  for (unsigned I = 0; I < NumberOfOMPMotionModifiers; ++I) {
+    C->setMotionModifier(
+        I, static_cast<OpenMPMotionModifierKind>(Record.readInt()));
+    C->setMotionModifierLoc(I, Record.readSourceLocation());
+  }
   C->setMapperQualifierLoc(Record.readNestedNameSpecifierLoc());
   C->setMapperIdInfo(Record.readDeclarationNameInfo());
+  C->setColonLoc(Record.readSourceLocation());
   auto NumVars = C->varlist_size();
   auto UniqueDecls = C->getUniqueDeclarationsNum();
   auto TotalLists = C->getTotalComponentListNum();
@@ -12652,8 +12658,14 @@ void OMPClauseReader::VisitOMPToClause(OMPToClause *C) {
 
 void OMPClauseReader::VisitOMPFromClause(OMPFromClause *C) {
   C->setLParenLoc(Record.readSourceLocation());
+  for (unsigned I = 0; I < NumberOfOMPMotionModifiers; ++I) {
+    C->setMotionModifier(
+        I, static_cast<OpenMPMotionModifierKind>(Record.readInt()));
+    C->setMotionModifierLoc(I, Record.readSourceLocation());
+  }
   C->setMapperQualifierLoc(Record.readNestedNameSpecifierLoc());
   C->setMapperIdInfo(Record.readDeclarationNameInfo());
+  C->setColonLoc(Record.readSourceLocation());
   auto NumVars = C->varlist_size();
   auto UniqueDecls = C->getUniqueDeclarationsNum();
   auto TotalLists = C->getTotalComponentListNum();

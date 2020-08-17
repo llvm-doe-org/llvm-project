@@ -163,8 +163,8 @@ EXTERN void __tgt_target_data_begin_mapper(int64_t device_id, int32_t arg_num,
   }
 #endif
 
-  int rc = target_data_begin(Device, arg_num, args_base, args, arg_sizes,
-      arg_types, arg_mappers, nullptr);
+  int rc = targetDataBegin(Device, arg_num, args_base, args, arg_sizes,
+                           arg_types, arg_mappers, nullptr);
 #if OMPT_SUPPORT
   ompt_dispatch_callback_target(ompt_target_enter_data, ompt_scope_end,
                                 Device);
@@ -259,8 +259,8 @@ EXTERN void __tgt_target_data_end_mapper(int64_t device_id, int32_t arg_num,
   }
 #endif
 
-  int rc = target_data_end(Device, arg_num, args_base, args, arg_sizes,
-      arg_types, arg_mappers, nullptr);
+  int rc = targetDataEnd(Device, arg_num, args_base, args, arg_sizes, arg_types,
+                         arg_mappers, nullptr);
   #if OMPT_SUPPORT
     ompt_dispatch_callback_target(ompt_target_exit_data, ompt_scope_end,
                                   Device);

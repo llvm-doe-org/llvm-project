@@ -203,16 +203,6 @@ def PPCvecinsert : SDNode<"PPCISD::VECINSERT", SDT_PPCVecInsert, []>;
 def PPCxxpermdi  : SDNode<"PPCISD::XXPERMDI", SDT_PPCxxpermdi, []>;
 def PPCvecshl    : SDNode<"PPCISD::VECSHL", SDT_PPCVecShift, []>;
 
-def PPCqvfperm   : SDNode<"PPCISD::QVFPERM", SDT_PPCqvfperm, []>;
-def PPCqvgpci    : SDNode<"PPCISD::QVGPCI", SDT_PPCqvgpci, []>;
-def PPCqvaligni  : SDNode<"PPCISD::QVALIGNI", SDT_PPCqvaligni, []>;
-def PPCqvesplati : SDNode<"PPCISD::QVESPLATI", SDT_PPCqvesplati, []>;
-
-def PPCqbflt     : SDNode<"PPCISD::QBFLT", SDT_PPCqbflt, []>;
-
-def PPCqvlfsb    : SDNode<"PPCISD::QVLFSb", SDT_PPCqvlfsb,
-                          [SDNPHasChain, SDNPMayLoad]>;
-
 def PPCcmpb     : SDNode<"PPCISD::CMPB", SDTIntBinOp, []>;
 
 // These nodes represent the 32-bit PPC shifts that operate on 6-bit shift
@@ -3467,7 +3457,6 @@ include "PPCInstrAltivec.td"
 include "PPCInstrSPE.td"
 include "PPCInstr64Bit.td"
 include "PPCInstrVSX.td"
-include "PPCInstrQPX.td"
 include "PPCInstrHTM.td"
 
 def crnot : OutPatFrag<(ops node:$in),
@@ -4331,7 +4320,7 @@ def MCRFS : XLForm_3<63, 64, (outs crrc:$BF), (ins crrc:$BFA),
 
 def MTFSFI : XLForm_4<63, 134, (outs crrc:$BF), (ins i32imm:$U, i32imm:$W),
                       "mtfsfi $BF, $U, $W", IIC_IntMFFS>;
-
+let Defs = [CR1] in
 def MTFSFI_rec : XLForm_4<63, 134, (outs crrc:$BF), (ins i32imm:$U, i32imm:$W),
                        "mtfsfi. $BF, $U, $W", IIC_IntMFFS>, isRecordForm;
 
@@ -4342,6 +4331,7 @@ let Predicates = [HasFPU] in {
 def MTFSF : XFLForm_1<63, 711, (outs),
                       (ins i32imm:$FLM, f8rc:$FRB, i32imm:$L, i32imm:$W),
                       "mtfsf $FLM, $FRB, $L, $W", IIC_IntMFFS, []>;
+let Defs = [CR1] in
 def MTFSF_rec : XFLForm_1<63, 711, (outs),
                        (ins i32imm:$FLM, f8rc:$FRB, i32imm:$L, i32imm:$W),
                        "mtfsf. $FLM, $FRB, $L, $W", IIC_IntMFFS, []>, isRecordForm;
