@@ -282,6 +282,10 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
   REG_CALLBACK(exit_data_start);
 }
 
+#define PRINT_SUBARRAY_INFO(Arr, Start, Length) \
+  fprintf(stderr, "addr=%p, size=%ld\n", &(Arr)[Start], \
+          Length * sizeof (Arr[0]))
+
 int main(int argc, char *argv[]) {
   if (argc != 2) {
     fprintf(stderr, "expected one argument\n");
@@ -552,6 +556,8 @@ int main(int argc, char *argv[]) {
   //   PRT-LABEL: case CASE_DATA_SUBARRAY_OVERLAP_START:
   //    PRT-NEXT: {
   //    PRT-NEXT:   int arr[5];
+  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
+  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
   //
   //  PRT-A-NEXT:   #pragma acc data copyin(arr[1:2]){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map(to: arr[1:2]){{$}}
@@ -567,20 +573,30 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
   //
+  //  EXE-CASE_DATA_SUBARRAY_OVERLAP_START-HOST-NOT: {{.}}
+  //      EXE-CASE_DATA_SUBARRAY_OVERLAP_START-HOST: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+  // EXE-CASE_DATA_SUBARRAY_OVERLAP_START-HOST-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+  //
   //           EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NOT: {{.}}
-  //               EXE-CASE_DATA_SUBARRAY_OVERLAP_START: acc_ev_enter_data_start
+  //               EXE-CASE_DATA_SUBARRAY_OVERLAP_START: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+  //          EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+  //          EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NEXT: acc_ev_enter_data_start
   //          EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_alloc
   //          EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_create
   //          EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_enter_data_start
+  //    EXE-CASE_DATA_SUBARRAY_OVERLAP_START-ALLOC-NEXT:   Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
   // EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_exit_data_start
   // EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT: acc_ev_exit_data_start
   // EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_DATA_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_free
   //    EXE-CASE_DATA_SUBARRAY_OVERLAP_START-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   //                                                     # An abort message usually follows.
+  //     EXE-CASE_DATA_SUBARRAY_OVERLAP_START-ALLOC-NOT: Libomptarget
   case CASE_DATA_SUBARRAY_OVERLAP_START:
   {
     int arr[5];
+    PRINT_SUBARRAY_INFO(arr, 1, 2);
+    PRINT_SUBARRAY_INFO(arr, 0, 2);
     #pragma acc data copyin(arr[1:2])
     #pragma acc data no_create(arr[0:2])
     ;
@@ -590,6 +606,8 @@ int main(int argc, char *argv[]) {
   //   PRT-LABEL: case CASE_DATA_SUBARRAY_OVERLAP_END:
   //    PRT-NEXT: {
   //    PRT-NEXT:   int arr[5];
+  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
+  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
   //
   //  PRT-A-NEXT:   #pragma acc data copyin(arr[1:2]){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map(to: arr[1:2]){{$}}
@@ -605,20 +623,30 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
   //
+  //  EXE-CASE_DATA_SUBARRAY_OVERLAP_END-HOST-NOT: {{.}}
+  //      EXE-CASE_DATA_SUBARRAY_OVERLAP_END-HOST: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+  // EXE-CASE_DATA_SUBARRAY_OVERLAP_END-HOST-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+  //
   //           EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NOT: {{.}}
-  //               EXE-CASE_DATA_SUBARRAY_OVERLAP_END: acc_ev_enter_data_start
+  //               EXE-CASE_DATA_SUBARRAY_OVERLAP_END: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+  //          EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+  //          EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NEXT: acc_ev_enter_data_start
   //          EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_alloc
   //          EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_create
   //          EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_enter_data_start
+  //    EXE-CASE_DATA_SUBARRAY_OVERLAP_END-ALLOC-NEXT:   Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
   // EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_exit_data_start
   // EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT: acc_ev_exit_data_start
   // EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_DATA_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_free
   //    EXE-CASE_DATA_SUBARRAY_OVERLAP_END-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   //                                                   # An abort message usually follows.
+  //     EXE-CASE_DATA_SUBARRAY_OVERLAP_END-ALLOC-NOT: Libomptarget
   case CASE_DATA_SUBARRAY_OVERLAP_END:
   {
     int arr[5];
+    PRINT_SUBARRAY_INFO(arr, 1, 2);
+    PRINT_SUBARRAY_INFO(arr, 2, 2);
     #pragma acc data copyin(arr[1:2])
     #pragma acc data no_create(arr[2:2])
     ;
@@ -628,6 +656,8 @@ int main(int argc, char *argv[]) {
   //   PRT-LABEL: case CASE_DATA_SUBARRAY_CONCAT2:
   //    PRT-NEXT: {
   //    PRT-NEXT:   int arr[4];
+  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
+  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
   //
   //  PRT-A-NEXT:   #pragma acc data copyout(arr[0:2]){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map(from: arr[0:2]){{$}}
@@ -647,14 +677,21 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   break;
   //    PRT-NEXT: }
   //
+  //  EXE-CASE_DATA_SUBARRAY_CONCAT2-HOST-NOT: {{.}}
+  //      EXE-CASE_DATA_SUBARRAY_CONCAT2-HOST: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+  // EXE-CASE_DATA_SUBARRAY_CONCAT2-HOST-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+  //
   //           EXE-CASE_DATA_SUBARRAY_CONCAT2-NOT: {{.}}
-  //               EXE-CASE_DATA_SUBARRAY_CONCAT2: acc_ev_enter_data_start
+  //               EXE-CASE_DATA_SUBARRAY_CONCAT2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+  //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+  //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT: acc_ev_enter_data_start
   //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT:   acc_ev_alloc
   //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT:   acc_ev_create
   //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT:   acc_ev_enter_data_start
   //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT:     acc_ev_alloc
   //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT:     acc_ev_create
   //          EXE-CASE_DATA_SUBARRAY_CONCAT2-NEXT:     acc_ev_enter_data_start
+  //    EXE-CASE_DATA_SUBARRAY_CONCAT2-ALLOC-NEXT:     Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
   // EXE-CASE_DATA_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:     acc_ev_exit_data_start
   // EXE-CASE_DATA_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:   acc_ev_exit_data_start
   // EXE-CASE_DATA_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:     acc_ev_delete
@@ -664,9 +701,12 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_DATA_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:   acc_ev_free
   //    EXE-CASE_DATA_SUBARRAY_CONCAT2-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   //                                               # An abort message usually follows.
+  //     EXE-CASE_DATA_SUBARRAY_CONCAT2-ALLOC-NOT: Libomptarget
   case CASE_DATA_SUBARRAY_CONCAT2:
   {
     int arr[4];
+    PRINT_SUBARRAY_INFO(arr, 0, 2);
+    PRINT_SUBARRAY_INFO(arr, 0, 4);
     #pragma acc data copyout(arr[0:2])
     #pragma acc data copy(arr[2:2])
     #pragma acc data no_create(arr[0:4])
@@ -841,20 +881,31 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  //  EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-HOST-NOT: {{.}}
+  //      EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-HOST: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+  // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-HOST-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+  //
+  //
   //           EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NOT: {{.}}
+  //               EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+  //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
   //               EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START: acc_ev_enter_data_start
   //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_alloc
   //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_create
   //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NEXT:   acc_ev_enter_data_start
+  //    EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-ALLOC-NEXT:   Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
   // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_exit_data_start
   // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT: acc_ev_exit_data_start
   // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-NO-ALLOC-NEXT:   acc_ev_free
   //    EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   //                                                         # An abort message usually follows.
+  //     EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_START-ALLOC-NOT: Libomptarget
   case CASE_PARALLEL_SUBARRAY_OVERLAP_START:
   {
     int arr[10];
+    PRINT_SUBARRAY_INFO(arr, 5, 4);
+    PRINT_SUBARRAY_INFO(arr, 4, 4);
     int use = 0;
     #pragma acc data copyin(arr[5:4])
     #pragma acc parallel no_create(arr[4:4])
@@ -862,20 +913,30 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  //  EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-HOST-NOT: {{.}}
+  //      EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-HOST: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+  // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-HOST-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+  //
   //           EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NOT: {{.}}
-  //               EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END: acc_ev_enter_data_start
+  //               EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+  //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+  //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NEXT: acc_ev_enter_data_start
   //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_alloc
   //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_create
   //          EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NEXT:   acc_ev_enter_data_start
+  //    EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-ALLOC-NEXT:   Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
   // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_exit_data_start
   // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT: acc_ev_exit_data_start
   // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_delete
   // EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-NO-ALLOC-NEXT:   acc_ev_free
   //    EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   //                                                       # An abort message usually follows.
+  //     EXE-CASE_PARALLEL_SUBARRAY_OVERLAP_END-ALLOC-NOT: Libomptarget
   case CASE_PARALLEL_SUBARRAY_OVERLAP_END:
   {
     int arr[10];
+    PRINT_SUBARRAY_INFO(arr, 3, 4);
+    PRINT_SUBARRAY_INFO(arr, 4, 4);
     int use = 0;
     #pragma acc data copyin(arr[3:4])
     #pragma acc parallel no_create(arr[4:4])
@@ -883,14 +944,21 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  //  EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-HOST-NOT: {{.}}
+  //      EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-HOST: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+  // EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-HOST-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+  //
   //           EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NOT: {{.}}
-  //               EXE-CASE_PARALLEL_SUBARRAY_CONCAT2: acc_ev_enter_data_start
+  //               EXE-CASE_PARALLEL_SUBARRAY_CONCAT2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+  //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+  //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT: acc_ev_enter_data_start
   //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT:   acc_ev_alloc
   //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT:   acc_ev_create
   //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT:   acc_ev_enter_data_start
   //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT:     acc_ev_alloc
   //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT:     acc_ev_create
   //          EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NEXT:     acc_ev_enter_data_start
+  //    EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-ALLOC-NEXT:     Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
   // EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:     acc_ev_exit_data_start
   // EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:   acc_ev_exit_data_start
   // EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:     acc_ev_delete
@@ -900,9 +968,12 @@ int main(int argc, char *argv[]) {
   // EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-NO-ALLOC-NEXT:   acc_ev_free
   //    EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-ALLOC-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   //                                                   # An abort message usually follows.
+  //     EXE-CASE_PARALLEL_SUBARRAY_CONCAT2-ALLOC-NOT: Libomptarget
   case CASE_PARALLEL_SUBARRAY_CONCAT2:
   {
     int arr[4];
+    PRINT_SUBARRAY_INFO(arr, 0, 2);
+    PRINT_SUBARRAY_INFO(arr, 0, 4);
     int use = 0;
     #pragma acc data copyout(arr[0:2])
     #pragma acc data copy(arr[2:2])

@@ -703,7 +703,7 @@ void TextNodeDumper::dumpBareDeclRef(const Decl *D) {
 void TextNodeDumper::dumpName(const NamedDecl *ND) {
   if (ND->getDeclName()) {
     ColorScope Color(OS, ShowColors, DeclNameColor);
-    OS << ' ' << ND->getNameAsString();
+    OS << ' ' << ND->getDeclName();
   }
 }
 
@@ -1382,6 +1382,12 @@ void TextNodeDumper::VisitOMPIteratorExpr(const OMPIteratorExpr *Node) {
   }
 }
 
+void TextNodeDumper::VisitConceptSpecializationExpr(
+    const ConceptSpecializationExpr *Node) {
+  OS << " ";
+  dumpBareDeclRef(Node->getFoundDecl());
+}
+
 void TextNodeDumper::VisitRValueReferenceType(const ReferenceType *T) {
   if (T->isSpelledAsLValue())
     OS << " written as lvalue reference";
@@ -1636,9 +1642,8 @@ void TextNodeDumper::VisitFunctionDecl(const FunctionDecl *D) {
     if (MD->size_overridden_methods() != 0) {
       auto dumpOverride = [=](const CXXMethodDecl *D) {
         SplitQualType T_split = D->getType().split();
-        OS << D << " " << D->getParent()->getName()
-           << "::" << D->getNameAsString() << " '"
-           << QualType::getAsString(T_split, PrintPolicy) << "'";
+        OS << D << " " << D->getParent()->getName() << "::" << D->getDeclName()
+           << " '" << QualType::getAsString(T_split, PrintPolicy) << "'";
       };
 
       AddChild([=] {
@@ -2068,7 +2073,7 @@ void TextNodeDumper::VisitUsingDecl(const UsingDecl *D) {
   OS << ' ';
   if (D->getQualifier())
     D->getQualifier()->print(OS, D->getASTContext().getPrintingPolicy());
-  OS << D->getNameAsString();
+  OS << D->getDeclName();
 }
 
 void TextNodeDumper::VisitUnresolvedUsingTypenameDecl(
@@ -2076,7 +2081,7 @@ void TextNodeDumper::VisitUnresolvedUsingTypenameDecl(
   OS << ' ';
   if (D->getQualifier())
     D->getQualifier()->print(OS, D->getASTContext().getPrintingPolicy());
-  OS << D->getNameAsString();
+  OS << D->getDeclName();
 }
 
 void TextNodeDumper::VisitUnresolvedUsingValueDecl(
@@ -2084,7 +2089,7 @@ void TextNodeDumper::VisitUnresolvedUsingValueDecl(
   OS << ' ';
   if (D->getQualifier())
     D->getQualifier()->print(OS, D->getASTContext().getPrintingPolicy());
-  OS << D->getNameAsString();
+  OS << D->getDeclName();
   dumpType(D->getType());
 }
 

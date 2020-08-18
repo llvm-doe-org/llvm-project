@@ -86,11 +86,6 @@ public:
   bool legalizeBuildVector(MachineInstr &MI, MachineRegisterInfo &MRI,
                            MachineIRBuilder &B) const;
 
-  Register getLiveInRegister(MachineIRBuilder &B, MachineRegisterInfo &MRI,
-                             Register PhyReg, LLT Ty,
-                             bool InsertLiveInCopy = true) const;
-  Register insertLiveInCopy(MachineIRBuilder &B, MachineRegisterInfo &MRI,
-                            Register LiveIn, Register PhyReg) const;
   bool loadInputValue(Register DstReg, MachineIRBuilder &B,
                       const ArgDescriptor *Arg,
                       const TargetRegisterClass *ArgRC, LLT ArgTy) const;
@@ -133,6 +128,12 @@ public:
   bool legalizeFDIVFastIntrin(MachineInstr &MI, MachineRegisterInfo &MRI,
                               MachineIRBuilder &B) const;
 
+  bool legalizeRsqClampIntrinsic(MachineInstr &MI, MachineRegisterInfo &MRI,
+                                 MachineIRBuilder &B) const;
+
+  bool legalizeDSAtomicFPIntrinsic(LegalizerHelper &Helper,
+                                   MachineInstr &MI, Intrinsic::ID IID) const;
+
   bool getImplicitArgPtr(Register DstReg, MachineRegisterInfo &MRI,
                          MachineIRBuilder &B) const;
 
@@ -167,9 +168,7 @@ public:
       GISelChangeObserver &Observer,
       const AMDGPU::ImageDimIntrinsicInfo *ImageDimIntr) const;
 
-  bool legalizeSBufferLoad(
-    MachineInstr &MI, MachineIRBuilder &B,
-    GISelChangeObserver &Observer) const;
+  bool legalizeSBufferLoad(LegalizerHelper &Helper, MachineInstr &MI) const;
 
   bool legalizeAtomicIncDec(MachineInstr &MI,  MachineIRBuilder &B,
                             bool IsInc) const;

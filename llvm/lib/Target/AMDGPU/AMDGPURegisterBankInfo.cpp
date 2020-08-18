@@ -3232,7 +3232,7 @@ AMDGPURegisterBankInfo::getValueMappingForPtr(const MachineRegisterInfo &MRI,
   LLT PtrTy = MRI.getType(PtrReg);
   unsigned Size = PtrTy.getSizeInBits();
   if (Subtarget.useFlatForGlobal() ||
-      !SITargetLowering::isFlatGlobalAddrSpace(PtrTy.getAddressSpace()))
+      !AMDGPU::isFlatGlobalAddrSpace(PtrTy.getAddressSpace()))
     return AMDGPU::getValueMapping(AMDGPU::VGPRRegBankID, Size);
 
   // If we're using MUBUF instructions for global memory, an SGPR base register
@@ -3258,8 +3258,7 @@ AMDGPURegisterBankInfo::getInstrMappingForLoad(const MachineInstr &MI) const {
 
   const RegisterBank *PtrBank = getRegBank(PtrReg, MRI, *TRI);
 
-  if (PtrBank == &AMDGPU::SGPRRegBank &&
-      SITargetLowering::isFlatGlobalAddrSpace(AS)) {
+  if (PtrBank == &AMDGPU::SGPRRegBank && AMDGPU::isFlatGlobalAddrSpace(AS)) {
     if (isScalarLoadLegal(MI)) {
       // We have a uniform instruction so we want to use an SMRD load
       ValMapping = AMDGPU::getValueMapping(AMDGPU::SGPRRegBankID, Size);
@@ -4023,7 +4022,9 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
       return getDefaultMappingAllVGPR(MI);
     case Intrinsic::amdgcn_kernarg_segment_ptr:
     case Intrinsic::amdgcn_s_getpc:
-    case Intrinsic::amdgcn_groupstaticsize: {
+    case Intrinsic::amdgcn_groupstaticsize:
+    case Intrinsic::amdgcn_reloc_constant:
+    case Intrinsic::returnaddress: {
       unsigned Size = MRI.getType(MI.getOperand(0).getReg()).getSizeInBits();
       OpdsMapping[0] = AMDGPU::getValueMapping(AMDGPU::SGPRRegBankID, Size);
       break;
@@ -4202,9 +4203,6 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
       OpdsMapping[0] = AMDGPU::getValueMapping(AMDGPU::SGPRRegBankID, Size);
       break;
     }
-    case Intrinsic::amdgcn_ds_fadd:
-    case Intrinsic::amdgcn_ds_fmin:
-    case Intrinsic::amdgcn_ds_fmax:
     case Intrinsic::amdgcn_global_atomic_csub:
       return getDefaultMappingAllVGPR(MI);
     case Intrinsic::amdgcn_ds_ordered_add:
@@ -4390,7 +4388,9 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
   case AMDGPU::G_ATOMICRMW_FADD:
   case AMDGPU::G_AMDGPU_ATOMIC_CMPXCHG:
   case AMDGPU::G_AMDGPU_ATOMIC_INC:
-  case AMDGPU::G_AMDGPU_ATOMIC_DEC: {
+  case AMDGPU::G_AMDGPU_ATOMIC_DEC:
+  case AMDGPU::G_AMDGPU_ATOMIC_FMIN:
+  case AMDGPU::G_AMDGPU_ATOMIC_FMAX: {
     OpdsMapping[0] = getVGPROpMapping(MI.getOperand(0).getReg(), MRI, *TRI);
     OpdsMapping[1] = getValueMappingForPtr(MRI, MI.getOperand(1).getReg());
     OpdsMapping[2] = getVGPROpMapping(MI.getOperand(2).getReg(), MRI, *TRI);

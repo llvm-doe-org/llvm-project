@@ -39,8 +39,14 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
   register_all_callbacks(reg);
 }
 
+#define PRINT_SUBARRAY_INFO(Arr, Start, Length) \
+  fprintf(stderr, "addr=%p, size=%ld\n", &(Arr)[Start], \
+          Length * sizeof (Arr[0]))
+
 int main() {
   int arr[4] = {0, 1, 2, 3};
+  PRINT_SUBARRAY_INFO(arr, 0, 2);
+  PRINT_SUBARRAY_INFO(arr, 1, 2);
   #pragma acc data copy(arr[0:2])
   #pragma acc data copy(arr[1:2])
   ;
@@ -60,6 +66,10 @@ int main() {
 //  OUT-OFF-POST-ENV:acc_ev_enter_data_end
 // OUT-OFF-THEN-HOST:acc_ev_runtime_shutdown
 
-//          ERR-NOT:{{.}}
-// ERR-OFF-POST-ENV:Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-//                  # An abort message usually follows.
+//               ERR-NOT:{{.}}
+//                   ERR:addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+//              ERR-NEXT:addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+// ERR-OFF-POST-ENV-NEXT:Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
+// ERR-OFF-POST-ENV-NEXT:Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//                       # An abort message usually follows.
+//  ERR-OFF-POST-ENV-NOT:Libomptarget

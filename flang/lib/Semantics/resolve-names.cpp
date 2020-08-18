@@ -81,7 +81,8 @@ private:
   ImplicitRules *parent_;
   SemanticsContext &context_;
   bool inheritFromParent_{false}; // look in parent if not specified here
-  bool isImplicitNoneType_{false};
+  bool isImplicitNoneType_{
+      context_.IsEnabled(common::LanguageFeature::ImplicitNoneTypeAlways)};
   bool isImplicitNoneExternal_{false};
   // map_ contains the mapping between letters and types that were defined
   // by the IMPLICIT statements of the related scope. It does not contain
@@ -909,6 +910,7 @@ private:
   void AddSaveName(std::set<SourceName> &, const SourceName &);
   void SetSaveAttr(Symbol &);
   bool HandleUnrestrictedSpecificIntrinsicFunction(const parser::Name &);
+  bool IsUplevelReference(const Symbol &);
   const parser::Name *FindComponent(const parser::Name *, const parser::Name &);
   bool CheckInitialDataTarget(const Symbol &, const SomeExpr &, SourceName);
   void CheckInitialProcTarget(const Symbol &, const parser::Name &, SourceName);
@@ -1546,7 +1548,7 @@ bool AttrsVisitor::IsConflictingAttr(Attr attrName) {
   return HaveAttrConflict(attrName, Attr::INTENT_IN, Attr::INTENT_INOUT) ||
       HaveAttrConflict(attrName, Attr::INTENT_IN, Attr::INTENT_OUT) ||
       HaveAttrConflict(attrName, Attr::INTENT_INOUT, Attr::INTENT_OUT) ||
-      HaveAttrConflict(attrName, Attr::PASS, Attr::NOPASS) ||
+      HaveAttrConflict(attrName, Attr::PASS, Attr::NOPASS) || // C781
       HaveAttrConflict(attrName, Attr::PURE, Attr::IMPURE) ||
       HaveAttrConflict(attrName, Attr::PUBLIC, Attr::PRIVATE) ||
       HaveAttrConflict(attrName, Attr::RECURSIVE, Attr::NON_RECURSIVE);
@@ -1681,9 +1683,8 @@ bool ImplicitRulesVisitor::Pre(const parser::ImplicitStmt &x) {
                          Say("IMPLICIT statement after IMPLICIT NONE or "
                              "IMPLICIT NONE(TYPE) statement"_err_en_US);
                          return false;
-                       } else {
-                         implicitRules().set_isImplicitNoneType(false);
                        }
+                       implicitRules().set_isImplicitNoneType(false);
                        return true;
                      },
                  },
@@ -1743,12 +1744,16 @@ bool ImplicitRulesVisitor::HandleImplicitNone(
     return false;
   }
   prevImplicitNone_ = currStmtSource();
+  bool implicitNoneTypeNever{
+      context().IsEnabled(common::LanguageFeature::ImplicitNoneTypeNever)};
   if (nameSpecs.empty()) {
-    prevImplicitNoneType_ = currStmtSource();
-    implicitRules().set_isImplicitNoneType(true);
-    if (prevImplicit_) {
-      Say("IMPLICIT NONE statement after IMPLICIT statement"_err_en_US);
-      return false;
+    if (!implicitNoneTypeNever) {
+      prevImplicitNoneType_ = currStmtSource();
+      implicitRules().set_isImplicitNoneType(true);
+      if (prevImplicit_) {
+        Say("IMPLICIT NONE statement after IMPLICIT statement"_err_en_US);
+        return false;
+      }
     }
   } else {
     int sawType{0};
@@ -1760,13 +1765,15 @@ bool ImplicitRulesVisitor::HandleImplicitNone(
         ++sawExternal;
         break;
       case ImplicitNoneNameSpec::Type:
-        prevImplicitNoneType_ = currStmtSource();
-        implicitRules().set_isImplicitNoneType(true);
-        if (prevImplicit_) {
-          Say("IMPLICIT NONE(TYPE) after IMPLICIT statement"_err_en_US);
-          return false;
+        if (!implicitNoneTypeNever) {
+          prevImplicitNoneType_ = currStmtSource();
+          implicitRules().set_isImplicitNoneType(true);
+          if (prevImplicit_) {
+            Say("IMPLICIT NONE(TYPE) after IMPLICIT statement"_err_en_US);
+            return false;
+          }
+          ++sawType;
         }
-        ++sawType;
         break;
       }
     }
@@ -5429,7 +5436,10 @@ const parser::Name *DeclarationVisitor::ResolveName(const parser::Name &name) {
     if (CheckUseError(name)) {
       return nullptr; // reported an error
     }
-    if (IsDummy(*symbol) ||
+    if (IsUplevelReference(*symbol)) {
+      name.symbol = nullptr;
+      MakeSymbol(name, HostAssocDetails{*symbol});
+    } else if (IsDummy(*symbol) ||
         (!symbol->GetType() && FindCommonBlockContaining(*symbol))) {
       ConvertToObjectEntity(*symbol);
       ApplyImplicitRules(*symbol);
@@ -5451,6 +5461,16 @@ const parser::Name *DeclarationVisitor::ResolveName(const parser::Name &name) {
   ConvertToObjectEntity(*symbol);
   ApplyImplicitRules(*symbol);
   return &name;
+}
+
+bool DeclarationVisitor::IsUplevelReference(const Symbol &symbol) {
+  const Scope *symbolUnit{FindProgramUnitContaining(symbol)};
+  if (symbolUnit == FindProgramUnitContaining(currScope())) {
+    return false;
+  } else {
+    Scope::Kind kind{DEREF(symbolUnit).kind()};
+    return kind == Scope::Kind::Subprogram || kind == Scope::Kind::MainProgram;
+  }
 }
 
 // base is a part-ref of a derived type; find the named component in its type.
@@ -5666,22 +5686,25 @@ void DeclarationVisitor::NonPointerInitialization(const parser::Name &name,
     const parser::ConstantExpr &expr, bool inComponentDecl) {
   if (name.symbol) {
     Symbol &ultimate{name.symbol->GetUltimate()};
-    if (IsPointer(ultimate)) {
-      Say(name, "'%s' is a pointer but is not initialized like one"_err_en_US);
-    } else if (auto *details{ultimate.detailsIf<ObjectEntityDetails>()}) {
-      CHECK(!details->init());
-      Walk(expr);
-      // TODO: check C762 - all bounds and type parameters of component
-      // are colons or constant expressions if component is initialized
-      if (inComponentDecl) {
-        // Can't convert to type of component, which might not yet
-        // be known; that's done later during instantiation.
-        if (MaybeExpr value{EvaluateExpr(expr)}) {
-          details->set_init(std::move(*value));
+    if (!context().HasError(ultimate)) {
+      if (IsPointer(ultimate)) {
+        Say(name,
+            "'%s' is a pointer but is not initialized like one"_err_en_US);
+      } else if (auto *details{ultimate.detailsIf<ObjectEntityDetails>()}) {
+        CHECK(!details->init());
+        Walk(expr);
+        // TODO: check C762 - all bounds and type parameters of component
+        // are colons or constant expressions if component is initialized
+        if (inComponentDecl) {
+          // Can't convert to type of component, which might not yet
+          // be known; that's done later during instantiation.
+          if (MaybeExpr value{EvaluateExpr(expr)}) {
+            details->set_init(std::move(*value));
+          }
+        } else if (MaybeExpr folded{EvaluateConvertedExpr(
+                       ultimate, expr, expr.thing.value().source)}) {
+          details->set_init(std::move(*folded));
         }
-      } else if (MaybeExpr folded{EvaluateConvertedExpr(
-                     ultimate, expr, expr.thing.value().source)}) {
-        details->set_init(std::move(*folded));
       }
     }
   }
@@ -5732,7 +5755,8 @@ void ResolveNamesVisitor::HandleProcedureName(
     // error was reported
   } else {
     symbol = &Resolve(name, symbol)->GetUltimate();
-    if (ConvertToProcEntity(*symbol) && IsIntrinsic(symbol->name())) {
+    if (ConvertToProcEntity(*symbol) && IsIntrinsic(symbol->name()) &&
+        !IsDummy(*symbol)) {
       symbol->attrs().set(Attr::INTRINSIC);
       // 8.2(3): ignore type from intrinsic in type-declaration-stmt
       symbol->get<ProcEntityDetails>().set_interface(ProcInterface{});
