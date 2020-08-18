@@ -742,15 +742,20 @@ void SIInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   if (DestReg == AMDGPU::SCC) {
     // Copying 64-bit or 32-bit sources to SCC barely makes sense,
     // but SelectionDAG emits such copies for i1 sources.
-    // TODO: Use S_BITCMP0_B32 instead and only consider the 0th bit.
     if (AMDGPU::SReg_64RegClass.contains(SrcReg)) {
-      SrcReg = RI.getSubReg(SrcReg, AMDGPU::sub0);
+      // This copy can only be produced by patterns
+      // with explicit SCC, which are known to be enabled
+      // only for subtargets with S_CMP_LG_U64 present.
+      assert(ST.hasScalarCompareEq64());
+      BuildMI(MBB, MI, DL, get(AMDGPU::S_CMP_LG_U64))
+          .addReg(SrcReg, getKillRegState(KillSrc))
+          .addImm(0);
+    } else {
+      assert(AMDGPU::SReg_32RegClass.contains(SrcReg));
+      BuildMI(MBB, MI, DL, get(AMDGPU::S_CMP_LG_U32))
+          .addReg(SrcReg, getKillRegState(KillSrc))
+          .addImm(0);
     }
-    assert(AMDGPU::SReg_32RegClass.contains(SrcReg));
-
-    BuildMI(MBB, MI, DL, get(AMDGPU::S_CMP_LG_U32))
-        .addReg(SrcReg, getKillRegState(KillSrc))
-        .addImm(0);
 
     return;
   }
@@ -1277,8 +1282,16 @@ static unsigned getAGPRSpillSaveOpcode(unsigned Size) {
     return AMDGPU::SI_SPILL_A32_SAVE;
   case 8:
     return AMDGPU::SI_SPILL_A64_SAVE;
+  case 12:
+    return AMDGPU::SI_SPILL_A96_SAVE;
   case 16:
     return AMDGPU::SI_SPILL_A128_SAVE;
+  case 20:
+    return AMDGPU::SI_SPILL_A160_SAVE;
+  case 24:
+    return AMDGPU::SI_SPILL_A192_SAVE;
+  case 32:
+    return AMDGPU::SI_SPILL_A256_SAVE;
   case 64:
     return AMDGPU::SI_SPILL_A512_SAVE;
   case 128:
@@ -1406,8 +1419,16 @@ static unsigned getAGPRSpillRestoreOpcode(unsigned Size) {
     return AMDGPU::SI_SPILL_A32_RESTORE;
   case 8:
     return AMDGPU::SI_SPILL_A64_RESTORE;
+  case 12:
+    return AMDGPU::SI_SPILL_A96_RESTORE;
   case 16:
     return AMDGPU::SI_SPILL_A128_RESTORE;
+  case 20:
+    return AMDGPU::SI_SPILL_A160_RESTORE;
+  case 24:
+    return AMDGPU::SI_SPILL_A192_RESTORE;
+  case 32:
+    return AMDGPU::SI_SPILL_A256_RESTORE;
   case 64:
     return AMDGPU::SI_SPILL_A512_RESTORE;
   case 128:
@@ -3686,7 +3707,8 @@ bool SIInstrInfo::verifyInstruction(const MachineInstr &MI,
       } else {
         // No immediates on GFX9
         if (!MO.isReg()) {
-          ErrInfo = "Only reg allowed as operands in SDWA instructions on GFX9";
+          ErrInfo =
+            "Only reg allowed as operands in SDWA instructions on GFX9+";
           return false;
         }
       }
@@ -4657,6 +4679,22 @@ void SIInstrInfo::legalizeOperandsSMRD(MachineRegisterInfo &MRI,
   }
 }
 
+// FIXME: Remove this when SelectionDAG is obsoleted.
+void SIInstrInfo::legalizeOperandsFLAT(MachineRegisterInfo &MRI,
+                                       MachineInstr &MI) const {
+  if (!isSegmentSpecificFLAT(MI))
+    return;
+
+  // Fixup SGPR operands in VGPRs. We only select these when the DAG divergence
+  // thinks they are uniform, so a readfirstlane should be valid.
+  MachineOperand *SAddr = getNamedOperand(MI, AMDGPU::OpName::saddr);
+  if (!SAddr || RI.isSGPRClass(MRI.getRegClass(SAddr->getReg())))
+    return;
+
+  Register ToSGPR = readlaneVGPRToSGPR(SAddr->getReg(), MI, MRI);
+  SAddr->setReg(ToSGPR);
+}
+
 void SIInstrInfo::legalizeGenericOperand(MachineBasicBlock &InsertMBB,
                                          MachineBasicBlock::iterator I,
                                          const TargetRegisterClass *DstRC,
@@ -4918,6 +4956,12 @@ void SIInstrInfo::legalizeOperands(MachineInstr &MI,
   // Legalize SMRD
   if (isSMRD(MI)) {
     legalizeOperandsSMRD(MRI, MI);
+    return;
+  }
+
+  // Legalize FLAT
+  if (isFLAT(MI)) {
+    legalizeOperandsFLAT(MRI, MI);
     return;
   }
 

@@ -81,8 +81,6 @@ public:
   /// Returns the MLIR context.
   MLIRContext &getContext();
 
-  /// Returns the LLVM context.
-  llvm::LLVMContext &getLLVMContext();
 
   /// Returns the LLVM dialect.
   LLVM::LLVMDialect *getDialect() { return llvmDialect; }
@@ -106,6 +104,9 @@ public:
   /// Converts the function type to a C-compatible format, in particular using
   /// pointers to memref descriptors for arguments.
   LLVM::LLVMType convertFunctionTypeCWrapper(FunctionType type);
+
+  /// Returns the data layout to use during and after conversion.
+  const llvm::DataLayout &getDataLayout() { return options.dataLayout; }
 
   /// Gets the LLVM representation of the index type. The returned type is an
   /// integer type with the size configured for this type converter.
@@ -396,9 +397,6 @@ public:
   /// Returns the LLVM dialect.
   LLVM::LLVMDialect &getDialect() const;
 
-  /// Returns the LLVM IR context.
-  llvm::LLVMContext &getContext() const;
-
   /// Gets the MLIR type wrapping the LLVM integer type whose bit width is
   /// defined by the used type converter.
   LLVM::LLVMType getIndexType() const;
@@ -444,6 +442,10 @@ public:
                                 ArrayRef<Value> dynSizes,
                                 ConversionPatternRewriter &rewriter,
                                 SmallVectorImpl<Value> &sizes) const;
+
+  /// Computes the size of type in bytes.
+  Value getSizeInBytes(Location loc, Type type,
+                       ConversionPatternRewriter &rewriter) const;
 
   /// Computes total size in bytes of to store the given shape.
   Value getCumulativeSizeInBytes(Location loc, Type elementType,

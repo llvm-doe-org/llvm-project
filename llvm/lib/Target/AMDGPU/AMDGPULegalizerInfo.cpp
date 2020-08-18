@@ -708,6 +708,15 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
   FMad.scalarize(0)
       .lower();
 
+  auto &FRem = getActionDefinitionsBuilder(G_FREM);
+  if (ST.has16BitInsts()) {
+    FRem.customFor({S16, S32, S64});
+  } else {
+    FRem.minScalar(0, S32)
+        .customFor({S32, S64});
+  }
+  FRem.scalarize(0);
+
   // TODO: Do we need to clamp maximum bitwidth?
   getActionDefinitionsBuilder(G_TRUNC)
     .legalIf(isScalar(0))
@@ -1293,6 +1302,11 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
     Shifts.clampScalar(1, S32, S32);
     Shifts.clampScalar(0, S16, S64);
     Shifts.widenScalarToNextPow2(0, 16);
+
+    getActionDefinitionsBuilder({G_SSHLSAT, G_USHLSAT})
+      .minScalar(0, S16)
+      .scalarize(0)
+      .lower();
   } else {
     // Make sure we legalize the shift amount type first, as the general
     // expansion for the shifted type will produce much worse code if it hasn't
@@ -1300,6 +1314,11 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
     Shifts.clampScalar(1, S32, S32);
     Shifts.clampScalar(0, S32, S64);
     Shifts.widenScalarToNextPow2(0, 32);
+
+    getActionDefinitionsBuilder({G_SSHLSAT, G_USHLSAT})
+      .minScalar(0, S32)
+      .scalarize(0)
+      .lower();
   }
   Shifts.scalarize(0);
 
@@ -1319,11 +1338,11 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
                   VecTy.getSizeInBits() <= MaxRegisterSize &&
                   IdxTy.getSizeInBits() == 32;
         })
-      .bitcastIf(all(sizeIsMultipleOf32(1), scalarOrEltNarrowerThan(1, 32)),
-                 bitcastToVectorElement32(1))
+      .bitcastIf(all(sizeIsMultipleOf32(VecTypeIdx), scalarOrEltNarrowerThan(VecTypeIdx, 32)),
+                 bitcastToVectorElement32(VecTypeIdx))
       //.bitcastIf(vectorSmallerThan(1, 32), bitcastToScalar(1))
       .bitcastIf(
-        all(sizeIsMultipleOf32(1), scalarOrEltWiderThan(1, 64)),
+        all(sizeIsMultipleOf32(VecTypeIdx), scalarOrEltWiderThan(VecTypeIdx, 64)),
         [=](const LegalityQuery &Query) {
           // For > 64-bit element types, try to turn this into a 64-bit
           // element vector since we may be able to do better indexing
@@ -1340,7 +1359,8 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
       .clampScalar(EltTypeIdx, S32, S64)
       .clampScalar(VecTypeIdx, S32, S64)
       .clampScalar(IdxTypeIdx, S32, S32)
-      // TODO: Clamp the number of elements before resorting to stack lowering.
+      .clampMaxNumElements(VecTypeIdx, S32, 32)
+      // TODO: Clamp elements for 64-bit vectors?
       // It should only be necessary with variable indexes.
       // As a last resort, lower to the stack
       .lower();
@@ -1581,7 +1601,6 @@ bool AMDGPULegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
                                          MachineInstr &MI) const {
   MachineIRBuilder &B = Helper.MIRBuilder;
   MachineRegisterInfo &MRI = *B.getMRI();
-  GISelChangeObserver &Observer = Helper.Observer;
 
   switch (MI.getOpcode()) {
   case TargetOpcode::G_ADDRSPACE_CAST:
@@ -1590,6 +1609,8 @@ bool AMDGPULegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
     return legalizeFrint(MI, MRI, B);
   case TargetOpcode::G_FCEIL:
     return legalizeFceil(MI, MRI, B);
+  case TargetOpcode::G_FREM:
+    return legalizeFrem(MI, MRI, B);
   case TargetOpcode::G_INTRINSIC_TRUNC:
     return legalizeIntrinsicTrunc(MI, MRI, B);
   case TargetOpcode::G_SITOFP:
@@ -1617,7 +1638,7 @@ bool AMDGPULegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
   case TargetOpcode::G_GLOBAL_VALUE:
     return legalizeGlobalValue(MI, MRI, B);
   case TargetOpcode::G_LOAD:
-    return legalizeLoad(MI, MRI, B, Observer);
+    return legalizeLoad(Helper, MI);
   case TargetOpcode::G_FMAD:
     return legalizeFMad(MI, MRI, B);
   case TargetOpcode::G_FDIV:
@@ -1856,6 +1877,23 @@ bool AMDGPULegalizerInfo::legalizeFceil(
   // TODO: Should this propagate fast-math-flags?
   B.buildFAdd(MI.getOperand(0).getReg(), Trunc, Add);
   return true;
+}
+
+bool AMDGPULegalizerInfo::legalizeFrem(
+  MachineInstr &MI, MachineRegisterInfo &MRI,
+  MachineIRBuilder &B) const {
+    Register DstReg = MI.getOperand(0).getReg();
+    Register Src0Reg = MI.getOperand(1).getReg();
+    Register Src1Reg = MI.getOperand(2).getReg();
+    auto Flags = MI.getFlags();
+    LLT Ty = MRI.getType(DstReg);
+
+    auto Div = B.buildFDiv(Ty, Src0Reg, Src1Reg, Flags);
+    auto Trunc = B.buildIntrinsicTrunc(Ty, Div, Flags);
+    auto Neg = B.buildFNeg(Ty, Trunc, Flags);
+    B.buildFMA(DstReg, Neg, Src1Reg, Src0Reg, Flags);
+    MI.eraseFromParent();
+    return true;
 }
 
 static MachineInstrBuilder extractF64Exponent(Register Hi,
@@ -2262,15 +2300,26 @@ bool AMDGPULegalizerInfo::legalizeGlobalValue(
   return true;
 }
 
-bool AMDGPULegalizerInfo::legalizeLoad(
-  MachineInstr &MI, MachineRegisterInfo &MRI,
-  MachineIRBuilder &B, GISelChangeObserver &Observer) const {
-  LLT ConstPtr = LLT::pointer(AMDGPUAS::CONSTANT_ADDRESS, 64);
-  auto Cast = B.buildAddrSpaceCast(ConstPtr, MI.getOperand(1).getReg());
-  Observer.changingInstr(MI);
-  MI.getOperand(1).setReg(Cast.getReg(0));
-  Observer.changedInstr(MI);
-  return true;
+bool AMDGPULegalizerInfo::legalizeLoad(LegalizerHelper &Helper,
+                                       MachineInstr &MI) const {
+  MachineIRBuilder &B = Helper.MIRBuilder;
+  MachineRegisterInfo &MRI = *B.getMRI();
+  GISelChangeObserver &Observer = Helper.Observer;
+
+  Register PtrReg = MI.getOperand(1).getReg();
+  LLT PtrTy = MRI.getType(PtrReg);
+  unsigned AddrSpace = PtrTy.getAddressSpace();
+
+  if (AddrSpace == AMDGPUAS::CONSTANT_ADDRESS_32BIT) {
+    LLT ConstPtr = LLT::pointer(AMDGPUAS::CONSTANT_ADDRESS, 64);
+    auto Cast = B.buildAddrSpaceCast(ConstPtr, PtrReg);
+    Observer.changingInstr(MI);
+    MI.getOperand(1).setReg(Cast.getReg(0));
+    Observer.changedInstr(MI);
+    return true;
+  }
+
+  return false;
 }
 
 bool AMDGPULegalizerInfo::legalizeFMad(
@@ -3647,6 +3696,9 @@ static unsigned getBufferAtomicPseudo(Intrinsic::ID IntrID) {
   case Intrinsic::amdgcn_raw_buffer_atomic_cmpswap:
   case Intrinsic::amdgcn_struct_buffer_atomic_cmpswap:
     return AMDGPU::G_AMDGPU_BUFFER_ATOMIC_CMPSWAP;
+  case Intrinsic::amdgcn_raw_buffer_atomic_fadd:
+  case Intrinsic::amdgcn_struct_buffer_atomic_fadd:
+    return AMDGPU::G_AMDGPU_BUFFER_ATOMIC_FADD;
   default:
     llvm_unreachable("unhandled atomic opcode");
   }
@@ -3657,12 +3709,20 @@ bool AMDGPULegalizerInfo::legalizeBufferAtomic(MachineInstr &MI,
                                                Intrinsic::ID IID) const {
   const bool IsCmpSwap = IID == Intrinsic::amdgcn_raw_buffer_atomic_cmpswap ||
                          IID == Intrinsic::amdgcn_struct_buffer_atomic_cmpswap;
+  const bool HasReturn = MI.getNumExplicitDefs() != 0;
 
-  Register Dst = MI.getOperand(0).getReg();
-  Register VData = MI.getOperand(2).getReg();
+  Register Dst;
 
-  Register CmpVal;
   int OpOffset = 0;
+  if (HasReturn) {
+    // A few FP atomics do not support return values.
+    Dst = MI.getOperand(0).getReg();
+  } else {
+    OpOffset = -1;
+  }
+
+  Register VData = MI.getOperand(2 + OpOffset).getReg();
+  Register CmpVal;
 
   if (IsCmpSwap) {
     CmpVal = MI.getOperand(3 + OpOffset).getReg();
@@ -3670,7 +3730,7 @@ bool AMDGPULegalizerInfo::legalizeBufferAtomic(MachineInstr &MI,
   }
 
   Register RSrc = MI.getOperand(3 + OpOffset).getReg();
-  const unsigned NumVIndexOps = IsCmpSwap ? 9 : 8;
+  const unsigned NumVIndexOps = (IsCmpSwap ? 8 : 7) + HasReturn;
 
   // The struct intrinsic variants add one additional operand over raw.
   const bool HasVIndex = MI.getNumOperands() == NumVIndexOps;
@@ -3695,9 +3755,12 @@ bool AMDGPULegalizerInfo::legalizeBufferAtomic(MachineInstr &MI,
   if (!VIndex)
     VIndex = B.buildConstant(LLT::scalar(32), 0).getReg(0);
 
-  auto MIB = B.buildInstr(getBufferAtomicPseudo(IID))
-    .addDef(Dst)
-    .addUse(VData); // vdata
+  auto MIB = B.buildInstr(getBufferAtomicPseudo(IID));
+
+  if (HasReturn)
+    MIB.addDef(Dst);
+
+  MIB.addUse(VData); // vdata
 
   if (IsCmpSwap)
     MIB.addReg(CmpVal);
@@ -4462,6 +4525,8 @@ bool AMDGPULegalizerInfo::legalizeIntrinsic(LegalizerHelper &Helper,
   case Intrinsic::amdgcn_struct_buffer_atomic_inc:
   case Intrinsic::amdgcn_raw_buffer_atomic_dec:
   case Intrinsic::amdgcn_struct_buffer_atomic_dec:
+  case Intrinsic::amdgcn_raw_buffer_atomic_fadd:
+  case Intrinsic::amdgcn_struct_buffer_atomic_fadd:
   case Intrinsic::amdgcn_raw_buffer_atomic_cmpswap:
   case Intrinsic::amdgcn_struct_buffer_atomic_cmpswap:
     return legalizeBufferAtomic(MI, B, IntrID);

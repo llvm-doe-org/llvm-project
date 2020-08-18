@@ -20,17 +20,15 @@ def LLVM_Dialect : Dialect {
   let name = "llvm";
   let cppNamespace = "LLVM";
   let hasRegionArgAttrVerify = 1;
+  let hasOperationAttrVerify = 1;
   let extraClassDeclaration = [{
-    ~LLVMDialect();
-    llvm::LLVMContext &getLLVMContext();
-    llvm::Module &getLLVMModule();
-    llvm::sys::SmartMutex<true> &getLLVMContextMutex();
-    const llvm::DataLayout &getDataLayout();
+    /// Name of the data layout attributes.
+    static StringRef getDataLayoutAttrName() { return "llvm.data_layout"; }
 
-  private:
-    friend LLVMType;
-
-    std::unique_ptr<detail::LLVMDialectImpl> impl;
+    /// Verifies if the given string is a well-formed data layout descriptor.
+    /// Uses `reportError` to report errors.
+    static LogicalResult verifyDataLayoutString(
+        StringRef descr, llvm::function_ref<void (const Twine &)> reportError);
   }];
 }
 

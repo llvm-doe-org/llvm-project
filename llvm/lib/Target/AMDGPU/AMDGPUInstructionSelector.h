@@ -105,10 +105,12 @@ private:
   bool selectG_INSERT(MachineInstr &I) const;
 
   bool selectInterpP1F16(MachineInstr &MI) const;
+  bool selectWritelane(MachineInstr &MI) const;
   bool selectDivScale(MachineInstr &MI) const;
   bool selectIntrinsicIcmp(MachineInstr &MI) const;
   bool selectBallot(MachineInstr &I) const;
   bool selectRelocConstant(MachineInstr &I) const;
+  bool selectGroupStaticSize(MachineInstr &I) const;
   bool selectReturnAddress(MachineInstr &I) const;
   bool selectG_INTRINSIC(MachineInstr &I) const;
 
@@ -128,9 +130,8 @@ private:
   bool selectSMRD(MachineInstr &I, ArrayRef<GEPInfo> AddrInfo) const;
 
   void initM0(MachineInstr &I) const;
-  bool selectG_LOAD_ATOMICRMW(MachineInstr &I) const;
+  bool selectG_LOAD_STORE_ATOMICRMW(MachineInstr &I) const;
   bool selectG_AMDGPU_ATOMIC_CMPXCHG(MachineInstr &I) const;
-  bool selectG_STORE(MachineInstr &I) const;
   bool selectG_SELECT(MachineInstr &I) const;
   bool selectG_BRCOND(MachineInstr &I) const;
   bool selectG_GLOBAL_VALUE(MachineInstr &I) const;
@@ -184,6 +185,9 @@ private:
 
   InstructionSelector::ComplexRendererFns
   selectFlatOffsetSigned(MachineOperand &Root) const;
+
+  InstructionSelector::ComplexRendererFns
+  selectGlobalSAddr(MachineOperand &Root) const;
 
   InstructionSelector::ComplexRendererFns
   selectMUBUFScratchOffen(MachineOperand &Root) const;

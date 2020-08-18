@@ -558,7 +558,7 @@ public:
 
   static bool isRequired() { return true; }
 
-private:
+protected:
   using PassConceptT =
       detail::PassConcept<IRUnitT, AnalysisManagerT, ExtraArgTs...>;
 
@@ -1308,6 +1308,7 @@ struct RequireAnalysisPass
 
     return PreservedAnalyses::all();
   }
+  static bool isRequired() { return true; }
 };
 
 /// A no-op pass template which simply forces a specific analysis result

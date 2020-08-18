@@ -167,8 +167,8 @@ private:
   widenScalarExtract(MachineInstr &MI, unsigned TypeIdx, LLT WideTy);
   LegalizeResult
   widenScalarInsert(MachineInstr &MI, unsigned TypeIdx, LLT WideTy);
-  LegalizeResult widenScalarAddSubSat(MachineInstr &MI, unsigned TypeIdx,
-                                      LLT WideTy);
+  LegalizeResult
+  widenScalarAddSubShlSat(MachineInstr &MI, unsigned TypeIdx, LLT WideTy);
 
   /// Helper function to split a wide generic register into bitwise blocks with
   /// the given Type (which implies the number of blocks needed). The generic
@@ -279,6 +279,9 @@ public:
   LegalizeResult fewerElementsVectorBuildVector(MachineInstr &MI,
                                                 unsigned TypeIdx,
                                                 LLT NarrowTy);
+  LegalizeResult fewerElementsVectorExtractInsertVectorElt(MachineInstr &MI,
+                                                           unsigned TypeIdx,
+                                                           LLT NarrowTy);
 
   LegalizeResult
   reduceLoadStoreWidth(MachineInstr &MI, unsigned TypeIdx, LLT NarrowTy);
@@ -315,30 +318,34 @@ public:
   LegalizeResult bitcastExtractVectorElt(MachineInstr &MI, unsigned TypeIdx,
                                          LLT CastTy);
 
+  /// Perform Bitcast legalize action on G_INSERT_VECTOR_ELT.
+  LegalizeResult bitcastInsertVectorElt(MachineInstr &MI, unsigned TypeIdx,
+                                        LLT CastTy);
+
   LegalizeResult lowerBitcast(MachineInstr &MI);
   LegalizeResult lowerLoad(MachineInstr &MI);
   LegalizeResult lowerStore(MachineInstr &MI);
-  LegalizeResult lowerBitCount(MachineInstr &MI, unsigned TypeIdx, LLT Ty);
+  LegalizeResult lowerBitCount(MachineInstr &MI);
 
   LegalizeResult lowerU64ToF32BitOps(MachineInstr &MI);
-  LegalizeResult lowerUITOFP(MachineInstr &MI, unsigned TypeIdx, LLT Ty);
-  LegalizeResult lowerSITOFP(MachineInstr &MI, unsigned TypeIdx, LLT Ty);
-  LegalizeResult lowerFPTOUI(MachineInstr &MI, unsigned TypeIdx, LLT Ty);
+  LegalizeResult lowerUITOFP(MachineInstr &MI);
+  LegalizeResult lowerSITOFP(MachineInstr &MI);
+  LegalizeResult lowerFPTOUI(MachineInstr &MI);
   LegalizeResult lowerFPTOSI(MachineInstr &MI);
 
   LegalizeResult lowerFPTRUNC_F64_TO_F16(MachineInstr &MI);
-  LegalizeResult lowerFPTRUNC(MachineInstr &MI, unsigned TypeIdx, LLT Ty);
+  LegalizeResult lowerFPTRUNC(MachineInstr &MI);
   LegalizeResult lowerFPOWI(MachineInstr &MI);
 
-  LegalizeResult lowerMinMax(MachineInstr &MI, unsigned TypeIdx, LLT Ty);
-  LegalizeResult lowerFCopySign(MachineInstr &MI, unsigned TypeIdx, LLT Ty);
+  LegalizeResult lowerMinMax(MachineInstr &MI);
+  LegalizeResult lowerFCopySign(MachineInstr &MI);
   LegalizeResult lowerFMinNumMaxNum(MachineInstr &MI);
   LegalizeResult lowerFMad(MachineInstr &MI);
   LegalizeResult lowerIntrinsicRound(MachineInstr &MI);
   LegalizeResult lowerFFloor(MachineInstr &MI);
   LegalizeResult lowerMergeValues(MachineInstr &MI);
   LegalizeResult lowerUnmergeValues(MachineInstr &MI);
-  LegalizeResult lowerExtractVectorElt(MachineInstr &MI);
+  LegalizeResult lowerExtractInsertVectorElt(MachineInstr &MI);
   LegalizeResult lowerShuffleVector(MachineInstr &MI);
   LegalizeResult lowerDynStackAlloc(MachineInstr &MI);
   LegalizeResult lowerExtract(MachineInstr &MI);
@@ -346,6 +353,7 @@ public:
   LegalizeResult lowerSADDO_SSUBO(MachineInstr &MI);
   LegalizeResult lowerAddSubSatToMinMax(MachineInstr &MI);
   LegalizeResult lowerAddSubSatToAddoSubo(MachineInstr &MI);
+  LegalizeResult lowerShlSat(MachineInstr &MI);
   LegalizeResult lowerBswap(MachineInstr &MI);
   LegalizeResult lowerBitreverse(MachineInstr &MI);
   LegalizeResult lowerReadWriteRegister(MachineInstr &MI);
