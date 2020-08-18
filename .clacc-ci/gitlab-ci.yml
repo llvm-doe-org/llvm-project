@@ -142,8 +142,9 @@ stages:
     # Try to remove anything older than 6 hours that was left by a previous
     # pipeline for this project.  Doing this in the setup stage instead of
     # cleanup stage ensures that it runs before a new job even if prior jobs
-    # failed or were canceled.
-    - find $BUILD_DIR_PROJ -mmin +360 -delete || true
+    # failed or were canceled.  git clone creates files with old modification
+    # times, so check file creation time (-cmin) instead.
+    - find $BUILD_DIR_PROJ -cmin +360 -delete || true
     - mkdir -p $BUILD_DIR_PROJ
     - echo $BUILD_DIR
     # Remove this build config's build directory if it already exists.  It
