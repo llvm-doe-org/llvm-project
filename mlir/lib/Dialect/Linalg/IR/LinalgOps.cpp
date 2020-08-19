@@ -18,6 +18,7 @@
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Function.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/Module.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
@@ -734,9 +735,28 @@ static LogicalResult verify(TensorReshapeOp op) {
   return success();
 }
 
+/// Reshape of a splat constant can be replaced with a constant of the result
+/// type.
+struct FoldReshapeWithConstant : OpRewritePattern<TensorReshapeOp> {
+  using OpRewritePattern<TensorReshapeOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(TensorReshapeOp reshapeOp,
+                                PatternRewriter &rewriter) const override {
+    DenseElementsAttr attr;
+    if (!matchPattern(reshapeOp.src(), m_Constant(&attr)))
+      return failure();
+    if (!attr || !attr.isSplat())
+      return failure();
+    DenseElementsAttr newAttr = DenseElementsAttr::getFromRawBuffer(
+        reshapeOp.getResultType(), attr.getRawData(), true);
+    rewriter.replaceOpWithNewOp<ConstantOp>(reshapeOp, newAttr);
+    return success();
+  }
+};
+
 void TensorReshapeOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
-  results.insert<CollapseReshapeOps<TensorReshapeOp>>(context);
+  results.insert<CollapseReshapeOps<TensorReshapeOp>, FoldReshapeWithConstant>(
+      context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1303,28 +1323,28 @@ struct EraseDeadLinalgOp : public RewritePattern {
     return foldMemRefCast(*this);                                              \
   }
 
-CANONICALIZERS_AND_FOLDERS(ConvOp);
-CANONICALIZERS_AND_FOLDERS(PoolingMaxOp);
-CANONICALIZERS_AND_FOLDERS(PoolingMinOp);
-CANONICALIZERS_AND_FOLDERS(PoolingSumOp);
-CANONICALIZERS_AND_FOLDERS(CopyOp);
-CANONICALIZERS_AND_FOLDERS(FillOp);
-CANONICALIZERS_AND_FOLDERS(GenericOp);
-CANONICALIZERS_AND_FOLDERS(IndexedGenericOp);
+CANONICALIZERS_AND_FOLDERS(ConvOp)
+CANONICALIZERS_AND_FOLDERS(PoolingMaxOp)
+CANONICALIZERS_AND_FOLDERS(PoolingMinOp)
+CANONICALIZERS_AND_FOLDERS(PoolingSumOp)
+CANONICALIZERS_AND_FOLDERS(CopyOp)
+CANONICALIZERS_AND_FOLDERS(FillOp)
+CANONICALIZERS_AND_FOLDERS(GenericOp)
+CANONICALIZERS_AND_FOLDERS(IndexedGenericOp)
 
 #include "mlir/Dialect/Linalg/IR/LinalgNamedStructuredOps.cpp.inc"
 
 // TODO: Determine whether we can generate the folders and verifiers.
-CANONICALIZERS_AND_FOLDERS(BatchMatmulOp);
-CANONICALIZERS_AND_FOLDERS(DotOp);
-CANONICALIZERS_AND_FOLDERS(MatmulOp);
-CANONICALIZERS_AND_FOLDERS(MatvecOp);
-CANONICALIZERS_AND_FOLDERS(ConvWOp);
-CANONICALIZERS_AND_FOLDERS(ConvNWCOp);
-CANONICALIZERS_AND_FOLDERS(ConvNCWOp);
-CANONICALIZERS_AND_FOLDERS(ConvHWOp);
-CANONICALIZERS_AND_FOLDERS(ConvNHWCOp);
-CANONICALIZERS_AND_FOLDERS(ConvNCHWOp);
-CANONICALIZERS_AND_FOLDERS(ConvDHWOp);
-CANONICALIZERS_AND_FOLDERS(ConvNDHWCOp);
-CANONICALIZERS_AND_FOLDERS(ConvNCDHWOp);
+CANONICALIZERS_AND_FOLDERS(BatchMatmulOp)
+CANONICALIZERS_AND_FOLDERS(DotOp)
+CANONICALIZERS_AND_FOLDERS(MatmulOp)
+CANONICALIZERS_AND_FOLDERS(MatvecOp)
+CANONICALIZERS_AND_FOLDERS(ConvWOp)
+CANONICALIZERS_AND_FOLDERS(ConvNWCOp)
+CANONICALIZERS_AND_FOLDERS(ConvNCWOp)
+CANONICALIZERS_AND_FOLDERS(ConvHWOp)
+CANONICALIZERS_AND_FOLDERS(ConvNHWCOp)
+CANONICALIZERS_AND_FOLDERS(ConvNCHWOp)
+CANONICALIZERS_AND_FOLDERS(ConvDHWOp)
+CANONICALIZERS_AND_FOLDERS(ConvNDHWCOp)
+CANONICALIZERS_AND_FOLDERS(ConvNCDHWOp)

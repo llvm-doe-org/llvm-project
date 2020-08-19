@@ -1543,7 +1543,8 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
         << "__float128";
     Result = Context.Float128Ty;
     break;
-  case DeclSpec::TST_bool: Result = Context.BoolTy; break; // _Bool or bool
+  case DeclSpec::TST_bool:
+    Result = Context.BoolTy; // _Bool or bool
     break;
   case DeclSpec::TST_decimal32:    // _Decimal32
   case DeclSpec::TST_decimal64:    // _Decimal64
@@ -8962,11 +8963,8 @@ QualType Sema::BuildAtomicType(QualType T, SourceLocation Loc) {
     else if (!T.isTriviallyCopyableType(Context))
       // Some other non-trivially-copyable type (probably a C++ class)
       DisallowedKind = 7;
-    else if (auto *ExtTy = T->getAs<ExtIntType>()) {
-      if (ExtTy->getNumBits() < 8)
+    else if (T->isExtIntType()) {
         DisallowedKind = 8;
-      else if (!llvm::isPowerOf2_32(ExtTy->getNumBits()))
-        DisallowedKind = 9;
     }
 
     if (DisallowedKind != -1) {

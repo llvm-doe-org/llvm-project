@@ -145,8 +145,7 @@ static LogicalResult verifyCastOp(T op) {
   return success();
 }
 
-StandardOpsDialect::StandardOpsDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context) {
+void StandardOpsDialect::initialize() {
   addOperations<DmaStartOp, DmaWaitOp,
 #define GET_OP_LIST
 #include "mlir/Dialect/StandardOps/IR/Ops.cpp.inc"
@@ -565,7 +564,8 @@ static ParseResult parseGenericAtomicRMWOp(OpAsmParser &parser,
     return failure();
 
   Region *body = result.addRegion();
-  if (parser.parseRegion(*body, llvm::None, llvm::None))
+  if (parser.parseRegion(*body, llvm::None, llvm::None) ||
+      parser.parseOptionalAttrDict(result.attributes))
     return failure();
   result.types.push_back(memrefType.cast<MemRefType>().getElementType());
   return success();
@@ -2985,6 +2985,8 @@ OpFoldResult TensorCastOp::fold(ArrayRef<Attribute> operands) {
 static Type getTensorTypeFromMemRefType(Type type) {
   if (auto memref = type.dyn_cast<MemRefType>())
     return RankedTensorType::get(memref.getShape(), memref.getElementType());
+  if (auto memref = type.dyn_cast<UnrankedMemRefType>())
+    return UnrankedTensorType::get(memref.getElementType());
   return NoneType::get(type.getContext());
 }
 

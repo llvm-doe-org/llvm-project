@@ -1,6 +1,51 @@
 // RUN: mlir-opt -convert-spirv-to-llvm %s | FileCheck %s
 
 //===----------------------------------------------------------------------===//
+// spv.AccessChain
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @access_chain
+func @access_chain() -> () {
+  // CHECK: %[[ONE:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
+  %0 = spv.constant 1: i32
+  %1 = spv.Variable : !spv.ptr<!spv.struct<f32, !spv.array<4xf32>>, Function>
+  // CHECK: %[[ZERO:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+  // CHECK: llvm.getelementptr %{{.*}}[%[[ZERO]], %[[ONE]], %[[ONE]]] : (!llvm.ptr<struct<packed (float, array<4 x float>)>>, !llvm.i32, !llvm.i32, !llvm.i32) -> !llvm.ptr<float>
+  %2 = spv.AccessChain %1[%0, %0] : !spv.ptr<!spv.struct<f32, !spv.array<4xf32>>, Function>, i32, i32
+  return
+}
+
+// CHECK-LABEL: @access_chain_array
+func @access_chain_array(%arg0 : i32) -> () {
+  %0 = spv.Variable : !spv.ptr<!spv.array<4x!spv.array<4xf32>>, Function>
+  // CHECK: %[[ZERO:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+  // CHECK: llvm.getelementptr %{{.*}}[%[[ZERO]], %{{.*}}] : (!llvm.ptr<array<4 x array<4 x float>>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<array<4 x float>>
+  %1 = spv.AccessChain %0[%arg0] : !spv.ptr<!spv.array<4x!spv.array<4xf32>>, Function>, i32
+  %2 = spv.Load "Function" %1 ["Volatile"] : !spv.array<4xf32>
+  return
+}
+
+//===----------------------------------------------------------------------===//
+// spv.globalVariable and spv._address_of
+//===----------------------------------------------------------------------===//
+
+spv.module Logical GLSL450 {
+  // CHECK: llvm.mlir.global external constant @var() : !llvm.float
+  spv.globalVariable @var : !spv.ptr<f32, Input>
+}
+
+spv.module Logical GLSL450 {
+  //       CHECK: llvm.mlir.global private @struct() : !llvm.struct<packed (float, array<10 x float>)>
+  // CHECK-LABEL: @func
+  //       CHECK: llvm.mlir.addressof @struct : !llvm.ptr<struct<packed (float, array<10 x float>)>>
+  spv.globalVariable @struct : !spv.ptr<!spv.struct<f32, !spv.array<10xf32>>, Private>
+  spv.func @func() -> () "None" {
+    %0 = spv._address_of @struct : !spv.ptr<!spv.struct<f32, !spv.array<10xf32>>, Private>
+    spv.Return
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // spv.Load
 //===----------------------------------------------------------------------===//
 

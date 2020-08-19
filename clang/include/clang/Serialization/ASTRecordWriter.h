@@ -273,6 +273,9 @@ public:
   void writeOMPClause(OMPClause *C);
   void writeACCClause(ACCClause *C);
 
+  /// Writes data related to the OpenMP directives.
+  void writeOMPChildren(OMPChildren *Data);
+
   /// Emit a string.
   void AddString(StringRef Str) {
     return Writer->AddString(Str, *Record);

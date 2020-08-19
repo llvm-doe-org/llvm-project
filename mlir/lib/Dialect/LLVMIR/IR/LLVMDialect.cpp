@@ -1113,7 +1113,7 @@ static ParseResult parseGlobalOp(OpAsmParser &parser, OperationState &result) {
 }
 
 static LogicalResult verify(GlobalOp op) {
-  if (!LLVMType::isValidPointerElementType(op.getType()))
+  if (!LLVMPointerType::isValidElementType(op.getType()))
     return op.emitOpError(
         "expects type to be a valid element type for an LLVM pointer");
   if (op.getParentOp() && !satisfiesLLVMModule(op.getParentOp()))
@@ -1668,26 +1668,7 @@ static LogicalResult verify(FenceOp &op) {
 // LLVMDialect initialization, type parsing, and registration.
 //===----------------------------------------------------------------------===//
 
-namespace mlir {
-namespace LLVM {
-namespace detail {
-struct LLVMDialectImpl {
-  LLVMDialectImpl() : module("LLVMDialectModule", llvmContext) {}
-
-  llvm::LLVMContext llvmContext;
-  llvm::Module module;
-
-  /// A smart mutex to lock access to the llvm context. Unlike MLIR, LLVM is not
-  /// multi-threaded and requires locked access to prevent race conditions.
-  llvm::sys::SmartMutex<true> mutex;
-};
-} // end namespace detail
-} // end namespace LLVM
-} // end namespace mlir
-
-LLVMDialect::LLVMDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context),
-      impl(new detail::LLVMDialectImpl()) {
+void LLVMDialect::initialize() {
   // clang-format off
   addTypes<LLVMVoidType,
            LLVMHalfType,
@@ -1718,19 +1699,8 @@ LLVMDialect::LLVMDialect(MLIRContext *context)
   allowUnknownOperations();
 }
 
-LLVMDialect::~LLVMDialect() {}
-
 #define GET_OP_CLASSES
 #include "mlir/Dialect/LLVMIR/LLVMOps.cpp.inc"
-
-llvm::LLVMContext &LLVMDialect::getLLVMContext() { return impl->llvmContext; }
-llvm::Module &LLVMDialect::getLLVMModule() { return impl->module; }
-llvm::sys::SmartMutex<true> &LLVMDialect::getLLVMContextMutex() {
-  return impl->mutex;
-}
-const llvm::DataLayout &LLVMDialect::getDataLayout() {
-  return impl->module.getDataLayout();
-}
 
 /// Parse a type registered to this dialect.
 Type LLVMDialect::parseType(DialectAsmParser &parser) const {
@@ -1740,6 +1710,39 @@ Type LLVMDialect::parseType(DialectAsmParser &parser) const {
 /// Print a type registered to this dialect.
 void LLVMDialect::printType(Type type, DialectAsmPrinter &os) const {
   return detail::printType(type.cast<LLVMType>(), os);
+}
+
+LogicalResult LLVMDialect::verifyDataLayoutString(
+    StringRef descr, llvm::function_ref<void(const Twine &)> reportError) {
+  llvm::Expected<llvm::DataLayout> maybeDataLayout =
+      llvm::DataLayout::parse(descr);
+  if (maybeDataLayout)
+    return success();
+
+  std::string message;
+  llvm::raw_string_ostream messageStream(message);
+  llvm::logAllUnhandledErrors(maybeDataLayout.takeError(), messageStream);
+  reportError("invalid data layout descriptor: " + messageStream.str());
+  return failure();
+}
+
+/// Verify LLVM dialect attributes.
+LogicalResult LLVMDialect::verifyOperationAttribute(Operation *op,
+                                                    NamedAttribute attr) {
+  // If the data layout attribute is present, it must use the LLVM data layout
+  // syntax. Try parsing it and report errors in case of failure. Users of this
+  // attribute may assume it is well-formed and can pass it to the (asserting)
+  // llvm::DataLayout constructor.
+  if (attr.first.strref() != LLVM::LLVMDialect::getDataLayoutAttrName())
+    return success();
+  if (auto stringAttr = attr.second.dyn_cast<StringAttr>())
+    return verifyDataLayoutString(
+        stringAttr.getValue(),
+        [op](const Twine &message) { op->emitOpError() << message.str(); });
+
+  return op->emitOpError() << "expected '"
+                           << LLVM::LLVMDialect::getDataLayoutAttrName()
+                           << "' to be a string attribute";
 }
 
 /// Verify LLVMIR function argument attributes.
@@ -1793,17 +1796,4 @@ Value mlir::LLVM::createGlobalString(Location loc, OpBuilder &builder,
 bool mlir::LLVM::satisfiesLLVMModule(Operation *op) {
   return op->hasTrait<OpTrait::SymbolTable>() &&
          op->hasTrait<OpTrait::IsIsolatedFromAbove>();
-}
-
-std::unique_ptr<llvm::Module>
-mlir::LLVM::cloneModuleIntoNewContext(llvm::LLVMContext *context,
-                                      llvm::Module *module) {
-  SmallVector<char, 1> buffer;
-  {
-    llvm::raw_svector_ostream os(buffer);
-    WriteBitcodeToFile(*module, os);
-  }
-  llvm::MemoryBufferRef bufferRef(StringRef(buffer.data(), buffer.size()),
-                                  "cloned module buffer");
-  return cantFail(parseBitcodeFile(bufferRef, *context));
 }
