@@ -39,21 +39,8 @@ stages:
   - config
   - build
   - openmp
-  - test-clacc
-  - test-all
+  - test
   - cleanup
-
-#-------------------------------------------------
-# branch/tag filters
-#-------------------------------------------------
-
-.clacc:
-  only: [/^clacc$/, /^clacc-/, /-openacc$/, /-openacc-/]
-  except: [/^clacc-ci-/]
-
-.not-clacc:
-  only: [/^clacc-ci-/, /^jdenny-/]
-  except: [/-openacc$/, /-openacc-/]
 
 #-------------------------------------------------
 # build configurations
@@ -197,40 +184,28 @@ python2 (setup):
     - rm -rf $BUILD_DIR
     - rmdir $BUILD_DIR_PROJ || true
 
-leconte (cleanup, clacc):
-  extends: [.leconte, .clacc, .cleanup]
-  needs:
-    - job: "leconte (test-all, clacc)"
-      artifacts: false
-
 leconte (cleanup):
-  extends: [.leconte, .not-clacc, .cleanup]
+  extends: [.leconte, .cleanup]
   needs:
-    - job: leconte (test-all)
-      artifacts: false
-
-kold (cleanup, clacc):
-  extends: [.kold, .clacc, .cleanup]
-  needs:
-    - job: "kold (test-all, clacc)"
+    - job: leconte (test)
       artifacts: false
 
 kold (cleanup):
-  extends: [.kold, .not-clacc, .cleanup]
+  extends: [.kold, .cleanup]
   needs:
-    - job: kold (test-all)
+    - job: kold (test)
       artifacts: false
 
 release (cleanup):
   extends: [.release, .cleanup]
   needs:
-    - job: release (test-all)
+    - job: release (test)
       artifacts: false
 
 python2 (cleanup):
   extends: [.python2, .cleanup]
   needs:
-    - job: python2 (test-all)
+    - job: python2 (test)
       artifacts: false
 
 z-cleanup-pipeline-builds:
@@ -423,13 +398,6 @@ python2 (openmp):
 #-------------------------------------------------
 # tests
 #
-# Run Clacc tests before check-all and in a separate stage.  This permits us
-# to discover Clacc test fails sooner after a push, and it makes it easy to
-# see whether all Clacc tests have succeeded without the need to hunt the
-# results of a check-all that has failed due to some upstream problem that
-# does not concern Clacc.  check-all then repeats those Clacc tests
-# unfortunately, but that's ok as the Clacc tests are relatively fast.
-#
 # The additional build required for the test suite can be very noisy and
 # exceed the log output limit.  Run that first, grep for key text, and
 # make the full version an artifact.
@@ -441,81 +409,43 @@ python2 (openmp):
 
 .test:
   extends: .non-utility
+  stage: test
   script:
     - echo $CHECK_TARGETS
     - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
-      ninja-build -l `nproc` $CHECK_TARGETS
-      |& tee $CI_PROJECT_DIR/test-build-log.txt
+           ninja-build -l `nproc` check-all
+      |& tee $CI_PROJECT_DIR/check-all-build-log.txt
       | grep '^\[[0-9]\+/[0-9]\+]\|\<error:'
-    - for check_target in $CHECK_TARGETS; do
-        echo "check_target=$check_target" &&
-        time FILECHECK_OPTS='-dump-input-filter=all -vv -color'
-             LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/$check_target.xml"
-             ninja-build -l `nproc` $check_target
-        |& tee $CI_PROJECT_DIR/$check_target-log.txt;
-      done
+    - time FILECHECK_OPTS='-dump-input-filter=all -vv -color'
+           LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/check-all.xml"
+           ninja-build -l `nproc` check-all
+      |& tee $CI_PROJECT_DIR/check-all-log.txt;
   artifacts:
     when: always
-    paths: [test-build-log.txt, check-*-log.txt, check-*.xml]
+    paths: [check-all-build-log.txt, check-all-log.txt, check-all.xml]
     reports:
-      junit: check-*.xml
+      junit: check-all.xml
 
-.test-clacc:
-  extends: [.clacc, .test]
-  stage: test-clacc
-  variables:
-    CHECK_TARGETS: 'check-clang-openacc check-libomp'
-
-.test-all:
-  extends: [.test]
-  stage: test-all
-  variables:
-    CHECK_TARGETS: check-all
-
-leconte (test-clacc):
-  extends: [.leconte, .test-clacc]
+leconte (test):
+  extends: [.leconte, .test]
   needs:
     - job: leconte (openmp)
       artifacts: false
 
-leconte (test-all, clacc):
-  extends: [.leconte, .clacc, .test-all]
-  needs:
-    - job: leconte (test-clacc)
-      artifacts: false
-
-leconte (test-all):
-  extends: [.leconte, .not-clacc, .test-all]
-  needs:
-    - job: leconte (openmp)
-      artifacts: false
-
-kold (test-clacc):
-  extends: [.kold, .test-clacc]
+kold (test):
+  extends: [.kold, .test]
   needs:
     - job: kold (openmp)
       artifacts: false
 
-kold (test-all, clacc):
-  extends: [.kold, .clacc, .test-all]
-  needs:
-    - job: kold (test-clacc)
-      artifacts: false
-
-kold (test-all):
-  extends: [.kold, .not-clacc, .test-all]
-  needs:
-    - job: kold (openmp)
-      artifacts: false
-
-release (test-all):
-  extends: [.release, .test-all]
+release (test):
+  extends: [.release, .test]
   needs:
     - job: release (openmp)
       artifacts: false
 
-python2 (test-all):
-  extends: [.python2, .test-all]
+python2 (test):
+  extends: [.python2, .test]
   needs:
     - job: python2 (openmp)
       artifacts: false
