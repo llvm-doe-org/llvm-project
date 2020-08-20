@@ -38,6 +38,7 @@ stages:
   - setup
   - config
   - build
+  - openmp
   - test-clacc
   - test-all
   - cleanup
@@ -69,12 +70,13 @@ stages:
     MODULES: gnu/7.5.0 cuda/10.1
     CMAKE_BUILD_TYPE: Debug
     PYTHON: /usr/bin/python3
-    CMAKE_OFFLOAD_CONFIG:
+    CMAKE_OFFLOAD_CONFIG_CLANG:
       -DCLANG_OPENMP_NVPTX_DEFAULT_ARCH=sm_70
-      -DLIBOMPTARGET_NVPTX_COMPUTE_CAPABILITIES=70
       -DCLANG_ACC_TEST_EXE_X86_64=False
       -DCLANG_ACC_TEST_EXE_PPC64LE=True
       -DCLANG_ACC_TEST_EXE_NVPTX64=True
+    CMAKE_OFFLOAD_CONFIG_OPENMP:
+      -DLIBOMPTARGET_NVPTX_COMPUTE_CAPABILITIES=70
 
 .kold:
   tags: [shell, kold]
@@ -83,10 +85,12 @@ stages:
     MODULES: gnu/9.1.0
     CMAKE_BUILD_TYPE: Debug
     PYTHON: /usr/bin/python3
-    CMAKE_OFFLOAD_CONFIG:
+    CMAKE_OFFLOAD_CONFIG_CLANG:
       -DCLANG_ACC_TEST_EXE_X86_64=True
       -DCLANG_ACC_TEST_EXE_PPC64LE=False
       -DCLANG_ACC_TEST_EXE_NVPTX64=False
+    CMAKE_OFFLOAD_CONFIG_OPENMP:
+      ""
 
 # Sometimes bugs cause only release builds to fail.  For example, debugging
 # macros might accidentally be used but not defined in release builds.
@@ -97,10 +101,12 @@ stages:
     MODULES: gnu/9.1.0
     CMAKE_BUILD_TYPE: Release
     PYTHON: /usr/bin/python3
-    CMAKE_OFFLOAD_CONFIG:
+    CMAKE_OFFLOAD_CONFIG_CLANG:
       -DCLANG_ACC_TEST_EXE_X86_64=True
       -DCLANG_ACC_TEST_EXE_PPC64LE=False
       -DCLANG_ACC_TEST_EXE_NVPTX64=False
+    CMAKE_OFFLOAD_CONFIG_OPENMP:
+      ""
 
 .python2:
   tags: [shell, kold]
@@ -109,10 +115,12 @@ stages:
     MODULES: gnu/9.1.0
     CMAKE_BUILD_TYPE: Debug
     PYTHON: /usr/bin/python2
-    CMAKE_OFFLOAD_CONFIG:
+    CMAKE_OFFLOAD_CONFIG_CLANG:
       -DCLANG_ACC_TEST_EXE_X86_64=True
       -DCLANG_ACC_TEST_EXE_PPC64LE=False
       -DCLANG_ACC_TEST_EXE_NVPTX64=False
+    CMAKE_OFFLOAD_CONFIG_OPENMP:
+      ""
 
 # Not setup or cleanup.
 .non-utility:
@@ -260,7 +268,8 @@ z-cleanup-project-builds:
     - echo $PYTHON
     - $PYTHON --version
     - echo $LLVM_CCACHE_PARAMS
-    - echo $CMAKE_OFFLOAD_CONFIG
+    - echo $CMAKE_OFFLOAD_CONFIG_CLANG
+    - echo $CMAKE_OFFLOAD_CONFIG_OPENMP
     - time $CMAKE -G Ninja
                   -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE
                   -DLLVM_CCACHE_BUILD=ON
@@ -273,7 +282,8 @@ z-cleanup-project-builds:
                   -DPython3_EXECUTABLE=$PYTHON
                   -DLLVM_CCACHE_PARAMS="$LLVM_CCACHE_PARAMS"
                   -DLLVM_LIT_ARGS='-s -vv'
-                  $CMAKE_OFFLOAD_CONFIG
+                  $CMAKE_OFFLOAD_CONFIG_CLANG
+                  $CMAKE_OFFLOAD_CONFIG_OPENMP
                   ../source/llvm
       |& tee $CI_PROJECT_DIR/cmake-log.txt
     - cp CMakeCache.txt $CI_PROJECT_DIR
@@ -343,6 +353,74 @@ python2 (build):
       artifacts: false
 
 #-------------------------------------------------
+# openmp
+#
+# Rebuild the openmp subproject with the clang we just built in order to
+# produce libomptarget-*.bc libraries.  Without these, supposedly the worst
+# that can happen is degraded performance.  However, we've also seen failures,
+# in particular when offloading to nvptx64, that we could no longer reproduce
+# after building these.
+#-------------------------------------------------
+
+.openmp:
+  extends: .non-utility
+  stage: openmp
+  script:
+    - echo $CMAKE
+    - $CMAKE --version
+    - echo $CMAKE_BUILD_TYPE
+    - echo $GCC_DIR
+    - echo $CMAKE_OFFLOAD_CONFIG_OPENMP
+    - mkdir ../build-openmp
+    - cd ../build-openmp
+    - time $CMAKE -G Ninja
+                  -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE
+                  -DCMAKE_INSTALL_PREFIX=../install-openmp
+                  -DOPENMP_LLVM_TOOLS_DIR=$(pwd)/../build/bin
+                  -DCMAKE_C_COMPILER=$(pwd)/../build/bin/clang
+                  -DCMAKE_CXX_COMPILER=$(pwd)/../build/bin/clang++
+                  -DCMAKE_C_FLAGS=--gcc-toolchain=$GCC_DIR
+                  -DCMAKE_CXX_FLAGS=--gcc-toolchain=$GCC_DIR
+                  $CMAKE_OFFLOAD_CONFIG_OPENMP
+                  ../source/openmp
+      |& tee $CI_PROJECT_DIR/cmake-log.txt
+    - cp CMakeCache.txt $CI_PROJECT_DIR/CMakeCache.txt
+    - time ninja-build -l `nproc` |& tee $CI_PROJECT_DIR/build-log.txt
+    - time ninja-build install |& tee $CI_PROJECT_DIR/install-log.txt
+    - cp ../install-openmp/lib/* ../build/lib
+  artifacts:
+    when: always
+    paths:
+      - cmake-log.txt
+      - CMakeCache.txt
+      - build-log.txt
+      - install-log.txt
+
+leconte (openmp):
+  extends: [.leconte, .openmp]
+  needs:
+    - job: leconte (build)
+      artifacts: false
+
+kold (openmp):
+  extends: [.kold, .openmp]
+  needs:
+    - job: kold (build)
+      artifacts: false
+
+release (openmp):
+  extends: [.release, .openmp]
+  needs:
+    - job: release (build)
+      artifacts: false
+
+python2 (openmp):
+  extends: [.python2, .openmp]
+  needs:
+    - job: python2 (build)
+      artifacts: false
+
+#-------------------------------------------------
 # tests
 #
 # Run Clacc tests before check-all and in a separate stage.  This permits us
@@ -397,7 +475,7 @@ python2 (build):
 leconte (test-clacc):
   extends: [.leconte, .test-clacc]
   needs:
-    - job: leconte (build)
+    - job: leconte (openmp)
       artifacts: false
 
 leconte (test-all, clacc):
@@ -409,13 +487,13 @@ leconte (test-all, clacc):
 leconte (test-all):
   extends: [.leconte, .not-clacc, .test-all]
   needs:
-    - job: leconte (build)
+    - job: leconte (openmp)
       artifacts: false
 
 kold (test-clacc):
   extends: [.kold, .test-clacc]
   needs:
-    - job: kold (build)
+    - job: kold (openmp)
       artifacts: false
 
 kold (test-all, clacc):
@@ -427,17 +505,17 @@ kold (test-all, clacc):
 kold (test-all):
   extends: [.kold, .not-clacc, .test-all]
   needs:
-    - job: kold (build)
+    - job: kold (openmp)
       artifacts: false
 
 release (test-all):
   extends: [.release, .test-all]
   needs:
-    - job: release (build)
+    - job: release (openmp)
       artifacts: false
 
 python2 (test-all):
   extends: [.python2, .test-all]
   needs:
-    - job: python2 (build)
+    - job: python2 (openmp)
       artifacts: false
