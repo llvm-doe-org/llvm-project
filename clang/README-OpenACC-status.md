@@ -156,12 +156,11 @@ We have implemented and tested support for the following features:
             * Debugging modes like these do not actually print OpenMP
               source code, so they leave the aforementioned
               diagnostics disabled as in traditional compilation mode.
-        * Currently, Clacc's implementations of the OpenMP TR8
-          `present` map type modifier and Clacc's `no_alloc` map type
-          modifier extension for OpenMP are not well tested outside of
-          Clacc's translations from OpenACC to OpenMP.  Thus, they are
+        * Currently, Clacc's implementation of its `no_alloc` map type
+          modifier extension for OpenMP is not well tested outside of
+          Clacc's translations from OpenACC to OpenMP.  Thus, it is
           not yet recommended for use in hand-written OpenMP code as
-          they might not integrate well with some OpenMP features.
+          it might not integrate well with some OpenMP features.
     * `copy` clause and aliases `pcopy` and `present_or_copy`
     * `copyin` clause and aliases `pcopyin` and
       `present_or_copyin`
