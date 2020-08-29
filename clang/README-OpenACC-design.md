@@ -1928,8 +1928,8 @@ support and that are not specified by OpenMP 5.0 are shown in
 | `acc_ev_enter_data_end`           | `ompt_callback_target_map`                                                   | `ompt_callback_target(kind=ompt_target|ompt_target_enter_data)` |
 | `acc_ev_exit_data_start`          | **`ompt_callback_target_map_exit_start`**                                    | `ompt_callback_target(kind=ompt_target|ompt_target_exit_data)`  |
 | `acc_ev_exit_data_end`            | **`ompt_callback_target_map_exit_end`**                                      | `ompt_callback_target(kind=ompt_target|ompt_target_exit_data)`  |
-| `acc_ev_update_start`             | `ompt_callback_target(kind=ompt_target_update)`                              |                                                                 |
-| `acc_ev_update_end`               | `ompt_callback_target(kind=ompt_target_update)`                              |                                                                 |
+| `acc_ev_update_start`             | `ompt_callback_target(kind=ompt_target_update, endpoint=ompt_scope_begin)`   |                                                                 |
+| `acc_ev_update_end`               | `ompt_callback_target(kind=ompt_target_update, endpoint=ompt_scope_end)`     |                                                                 |
 | `acc_ev_compute_construct_start`  | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_begin)`          |                                                                 |
 | `acc_ev_compute_construct_end`    | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_end)`            |                                                                 |
 | `acc_ev_enqueue_launch_start`     | `ompt_callback_target_submit`                                                | `ompt_callback_target(kind=ompt_target)`                        |
