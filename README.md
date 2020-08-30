@@ -2,47 +2,23 @@
 
 Clacc is a project to add [OpenACC](https://www.openacc.org/) support
 to [Clang](http://clang.llvm.org/) and [LLVM](http://llvm.org/).
-Clacc is currently funded by the [U.S. Exascale Computing Project
-(ECP)](https://www.exascaleproject.org) and is maintained by the
-[Future Technologies Group](https://ft.ornl.gov) at [Oak Ridge
-National Laboratory](https://www.ornl.gov/).  Please contact [Joel
-E. Denny](mailto:dennyje@ornl.gov) with any questions.
-
-## Sharing
-
-There is currently no public repo for Clacc, and we ask that you do
-not redistribute Clacc.  We'll take it public when ready, hopefully in
-the coming months.  Eventually, we'll offer it to the upstream LLVM
-project, and we already make a habit of upstreaming LLVM changes that
-are not specific to OpenACC.
+Clacc is funded by the [U.S. Exascale Computing Project
+(ECP)](https://www.exascaleproject.org) and is maintained by [Oak
+Ridge National Laboratory](https://www.ornl.gov/).  Please contact
+[Joel E. Denny](mailto:dennyje@ornl.gov) with any questions.
 
 ## Git Repo
 
-The official Clacc git repo is:
+Clacc's main branch can be found at:
 
-> <https://code.ornl.gov/jum/Clacc>
+> <https://github.com/llvm-doe-org/llvm-project/tree/clacc/master>
 
-This repo is a fork of [LLVM's github
-repo](https://github.com/llvm/llvm-project).
-
-The branches and tags are as follows:
-
-* [`clacc`](https://code.ornl.gov/jum/Clacc/tree/clacc) branch: This
-  contains our most recent stable work.
-
-* [`clacc-2018-llvm-hpc`](https://code.ornl.gov/jum/Clacc/tree/clacc-2018-llvm-hpc)
-  tag: This points to the version of Clacc we used for the evaluation
-  in our [LLVM-HPC 2018
-  paper](https://csmd.ornl.gov/index.php/node/362).
-
-* [`master`](https://code.ornl.gov/jum/Clacc/tree/master) branch and
-  other branches and tags whose names do not start with `clacc`: These
-  are from upstream LLVM and do not contain Clacc.
-
-So far, we use this repo just to share our source with others who have
-reached out to us.  Eventually, we plan to set it up for CI, etc.  If
-you see something missing that would be helpful now, let us know, and
-we'll raise the priority.
+That is the `clacc/master` branch within the [LLVM DOE
+Fork](https://github.com/llvm-doe-org/llvm-project) maintained by [Oak
+Ridge National Laboratory](https://www.ornl.gov/) as a fork of [LLVM's
+github repo](https://github.com/llvm/llvm-project).  All other
+branches and tags for Clacc within the LLVM DOE Fork will also appear
+in the `clacc/` namespace.
 
 ## Building and Testing
 
@@ -94,9 +70,9 @@ $ make check-all           # all LLVM subprojects
 ## Using
 
 Clacc is still under development and requires significant manual
-intervention for any real application or benchmark (see the
-Documentation section below).  Currently, Clacc only supports OpenACC
-programs with C as the base language.
+intervention for some applications (see the Documentation section
+below).  Currently, Clacc only supports OpenACC programs with C as the
+base language.
 
 Clacc's compiler is the `clang` executable in the `bin` subdirectory
 of the LLVM build directory.  Here's a simple example of using it:
