@@ -302,6 +302,10 @@ void RTLsTy::RegisterLib(__tgt_bin_desc *desc) {
             device_id++) {
           // global device ID
           Devices[start + device_id].DeviceID = start + device_id;
+#if OMPT_SUPPORT
+          Devices[start + device_id].OmptApi.global_device_id =
+              start + device_id;
+#endif
           // RTL local device ID
           Devices[start + device_id].RTLDeviceID = device_id;
         }

@@ -546,46 +546,48 @@ static void acc_ompt_callback_target_data_op(
       acc_ev_free_callback(&pi, &ei, &ai);
     }
     break;
-  // FIXME: So far, the data transfer events are synchronous in LLVM's
-  // implementation (memcpy, cuMemcpyHToD, or cuMemcpyDToH) with no obvious
-  // enqueue stage.  Thus, we dispatch _start and _end callbacks back to back
-  // here.  Does that make sense?  Will that be true for all architectures?  If
-  // not, we might have to create an OMPT extension callback,
-  // ompt_callback_target_data_op_end.
   case ompt_target_data_transfer_to_device:
-    if (acc_ev_enqueue_upload_start_callback ||
-        acc_ev_enqueue_upload_end_callback) {
+    if (acc_ev_enqueue_upload_start_callback) {
       acc_prof_info pi;
       acc_event_info ei;
       acc_api_info ai;
-      acc_get_target_data_op_info(acc_ev_none, target_id, dest_device_num,
-                                  bytes, src_addr, dest_addr, &pi, &ei, &ai);
-      if (acc_ev_enqueue_upload_start_callback) {
-        pi.event_type = ei.event_type = acc_ev_enqueue_upload_start;
-        acc_ev_enqueue_upload_start_callback(&pi, &ei, &ai);
-      }
-      if (acc_ev_enqueue_upload_end_callback) {
-        pi.event_type = ei.event_type = acc_ev_enqueue_upload_end;
-        acc_ev_enqueue_upload_end_callback(&pi, &ei, &ai);
-      }
+      acc_get_target_data_op_info(acc_ev_enqueue_upload_start, target_id,
+                                  dest_device_num, bytes, src_addr, dest_addr,
+                                  &pi, &ei, &ai);
+      acc_ev_enqueue_upload_start_callback(&pi, &ei, &ai);
+    }
+    break;
+  case ompt_target_data_transfer_to_device_end:
+    if (acc_ev_enqueue_upload_end_callback) {
+      acc_prof_info pi;
+      acc_event_info ei;
+      acc_api_info ai;
+      acc_get_target_data_op_info(acc_ev_enqueue_upload_end, target_id,
+                                  dest_device_num, bytes, src_addr, dest_addr,
+                                  &pi, &ei, &ai);
+      acc_ev_enqueue_upload_end_callback(&pi, &ei, &ai);
     }
     break;
   case ompt_target_data_transfer_from_device:
-    if (acc_ev_enqueue_download_start_callback ||
-        acc_ev_enqueue_download_end_callback) {
+    if (acc_ev_enqueue_download_start_callback) {
       acc_prof_info pi;
       acc_event_info ei;
       acc_api_info ai;
-      acc_get_target_data_op_info(acc_ev_alloc, target_id, src_device_num,
-                                  bytes, dest_addr, src_addr, &pi, &ei, &ai);
-      if (acc_ev_enqueue_download_start_callback) {
-        pi.event_type = ei.event_type = acc_ev_enqueue_download_start;
-        acc_ev_enqueue_download_start_callback(&pi, &ei, &ai);
-      }
-      if (acc_ev_enqueue_download_end_callback) {
-        pi.event_type = ei.event_type = acc_ev_enqueue_download_end;
-        acc_ev_enqueue_download_end_callback(&pi, &ei, &ai);
-      }
+      acc_get_target_data_op_info(acc_ev_enqueue_download_start, target_id,
+                                  src_device_num, bytes, dest_addr, src_addr,
+                                  &pi, &ei, &ai);
+      acc_ev_enqueue_download_start_callback(&pi, &ei, &ai);
+    }
+    break;
+  case ompt_target_data_transfer_from_device_end:
+    if (acc_ev_enqueue_download_end_callback) {
+      acc_prof_info pi;
+      acc_event_info ei;
+      acc_api_info ai;
+      acc_get_target_data_op_info(acc_ev_enqueue_download_end, target_id,
+                                  src_device_num, bytes, dest_addr, src_addr,
+                                  &pi, &ei, &ai);
+      acc_ev_enqueue_download_end_callback(&pi, &ei, &ai);
     }
     break;
   }

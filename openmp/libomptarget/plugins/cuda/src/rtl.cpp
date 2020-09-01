@@ -740,8 +740,9 @@ public:
     return (void *)DevicePtr;
   }
 
-  int dataSubmit(const int DeviceId, const void *TgtPtr, const void *HstPtr,
-                 const int64_t Size, __tgt_async_info *AsyncInfoPtr) const {
+  int dataSubmit(const int DeviceId, void *TgtPtr, void *HstPtr,
+                 const int64_t Size, __tgt_async_info *AsyncInfoPtr
+                 OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) const {
     assert(AsyncInfoPtr && "AsyncInfoPtr is nullptr");
 
     CUresult Err = cuCtxSetCurrent(DeviceData[DeviceId].Context);
@@ -750,7 +751,43 @@ public:
 
     CUstream Stream = getStream(DeviceId, AsyncInfoPtr);
 
+#if OMPT_SUPPORT
+    // OpenMP 5.0 sec. 2.19.7.1 p. 321 L15:
+    // "The target-data-op event occurs when a thread initiates a data operation
+    // on a target device."
+    // OpenMP 5.0 sec. 3.6.4 p. 401 L24:
+    // "The target-data-op event occurs when a thread transfers data on a target
+    // device."
+    // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
+    // "A registered ompt_callback_target_data_op callback is dispatched when
+    // device memory is allocated or freed, as well as when data is copied to or
+    // from a device."
+    //
+    // We have not found an indication of whether it triggers before or after
+    // enqueueing the data transfer, so we arbitrarily choose before, and our
+    // extension callback dispatches after.
+    //
+    // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
+    // OpenACC support, so we haven't bothered to implement them yet.
+    if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op) {
+      ompt_api->ompt_get_callbacks().ompt_callback(
+          ompt_callback_target_data_op)(
+          ompt_api->target_id, /*host_op_id*/ ompt_id_none,
+          ompt_target_data_transfer_to_device, HstPtr, HOST_DEVICE, TgtPtr,
+          ompt_api->global_device_id, Size, /*codeptr_ra*/ NULL);
+    }
+#endif
     Err = cuMemcpyHtoDAsync((CUdeviceptr)TgtPtr, HstPtr, Size, Stream);
+#if OMPT_SUPPORT
+    if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op) {
+      ompt_api->ompt_get_callbacks().ompt_callback(
+          ompt_callback_target_data_op)(
+          ompt_api->target_id, /*host_op_id*/ ompt_id_none,
+          ompt_target_data_transfer_to_device_end, HstPtr, HOST_DEVICE, TgtPtr,
+          ompt_api->global_device_id, Size, /*codeptr_ra*/ NULL);
+    }
+#endif
+
     if (Err != CUDA_SUCCESS) {
       DP("Error when copying data from host to device. Pointers: host = " DPxMOD
          ", device = " DPxMOD ", size = %" PRId64 "\n",
@@ -762,8 +799,9 @@ public:
     return OFFLOAD_SUCCESS;
   }
 
-  int dataRetrieve(const int DeviceId, void *HstPtr, const void *TgtPtr,
-                   const int64_t Size, __tgt_async_info *AsyncInfoPtr) const {
+  int dataRetrieve(const int DeviceId, void *HstPtr, void *TgtPtr,
+                   const int64_t Size, __tgt_async_info *AsyncInfoPtr
+                   OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) const {
     assert(AsyncInfoPtr && "AsyncInfoPtr is nullptr");
 
     CUresult Err = cuCtxSetCurrent(DeviceData[DeviceId].Context);
@@ -772,7 +810,44 @@ public:
 
     CUstream Stream = getStream(DeviceId, AsyncInfoPtr);
 
+#if OMPT_SUPPORT
+    // OpenMP 5.0 sec. 2.19.7.1 p. 321 L15:
+    // "The target-data-op event occurs when a thread initiates a data operation
+    // on a target device."
+    // OpenMP 5.0 sec. 3.6.4 p. 401 L24:
+    // "The target-data-op event occurs when a thread transfers data on a target
+    // device."
+    // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
+    // "A registered ompt_callback_target_data_op callback is dispatched when
+    // device memory is allocated or freed, as well as when data is copied to or
+    // from a device."
+    // We have not found an indication of whether it occurs before or after
+    // enqueueing a data operation, so we arbitrarily choose before.
+    if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op) {
+      // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
+      // OpenACC support, so we haven't bothered to implement them yet.
+      ompt_api->ompt_get_callbacks().ompt_callback(
+          ompt_callback_target_data_op)(
+          ompt_api->target_id, /*host_op_id*/ ompt_id_none,
+          ompt_target_data_transfer_from_device, TgtPtr,
+          ompt_api->global_device_id, HstPtr, HOST_DEVICE, Size,
+          /*codeptr_ra*/ NULL);
+    }
+#endif
     Err = cuMemcpyDtoHAsync(HstPtr, (CUdeviceptr)TgtPtr, Size, Stream);
+#if OMPT_SUPPORT
+    if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op) {
+      // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
+      // OpenACC support, so we haven't bothered to implement them yet.
+      ompt_api->ompt_get_callbacks().ompt_callback(
+          ompt_callback_target_data_op)(
+          ompt_api->target_id, /*host_op_id*/ ompt_id_none,
+          ompt_target_data_transfer_from_device_end, TgtPtr,
+          ompt_api->global_device_id, HstPtr, HOST_DEVICE, Size,
+          /*codeptr_ra*/ NULL);
+    }
+#endif
+
     if (Err != CUDA_SUCCESS) {
       DP("Error when copying data from device to host. Pointers: host = " DPxMOD
          ", device = " DPxMOD ", size = %" PRId64 "\n",
@@ -1058,50 +1133,56 @@ void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size, void *) {
   return DeviceRTL.dataAlloc(device_id, size);
 }
 
-int32_t __tgt_rtl_data_submit(int32_t device_id, void *tgt_ptr, void *hst_ptr,
-                              int64_t size) {
+int32_t __tgt_rtl_data_submit(
+    int32_t device_id, void *tgt_ptr, void *hst_ptr, int64_t size
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(DeviceRTL.isValidDeviceId(device_id) && "device_id is invalid");
 
   __tgt_async_info async_info;
   const int32_t rc = __tgt_rtl_data_submit_async(device_id, tgt_ptr, hst_ptr,
-                                                 size, &async_info);
+                                                 size, &async_info
+                                                 OMPT_SUPPORT_IF(, ompt_api));
   if (rc != OFFLOAD_SUCCESS)
     return OFFLOAD_FAIL;
 
   return __tgt_rtl_synchronize(device_id, &async_info);
 }
 
-int32_t __tgt_rtl_data_submit_async(int32_t device_id, void *tgt_ptr,
-                                    void *hst_ptr, int64_t size,
-                                    __tgt_async_info *async_info_ptr) {
+int32_t __tgt_rtl_data_submit_async(
+    int32_t device_id, void *tgt_ptr, void *hst_ptr, int64_t size,
+    __tgt_async_info *async_info_ptr
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(DeviceRTL.isValidDeviceId(device_id) && "device_id is invalid");
   assert(async_info_ptr && "async_info_ptr is nullptr");
 
   return DeviceRTL.dataSubmit(device_id, tgt_ptr, hst_ptr, size,
-                              async_info_ptr);
+                              async_info_ptr OMPT_SUPPORT_IF(, ompt_api));
 }
 
-int32_t __tgt_rtl_data_retrieve(int32_t device_id, void *hst_ptr, void *tgt_ptr,
-                                int64_t size) {
+int32_t __tgt_rtl_data_retrieve(
+    int32_t device_id, void *hst_ptr, void *tgt_ptr, int64_t size
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(DeviceRTL.isValidDeviceId(device_id) && "device_id is invalid");
 
   __tgt_async_info async_info;
   const int32_t rc = __tgt_rtl_data_retrieve_async(device_id, hst_ptr, tgt_ptr,
-                                                   size, &async_info);
+                                                   size, &async_info
+                                                   OMPT_SUPPORT_IF(, ompt_api));
   if (rc != OFFLOAD_SUCCESS)
     return OFFLOAD_FAIL;
 
   return __tgt_rtl_synchronize(device_id, &async_info);
 }
 
-int32_t __tgt_rtl_data_retrieve_async(int32_t device_id, void *hst_ptr,
-                                      void *tgt_ptr, int64_t size,
-                                      __tgt_async_info *async_info_ptr) {
+int32_t __tgt_rtl_data_retrieve_async(
+    int32_t device_id, void *hst_ptr, void *tgt_ptr, int64_t size,
+    __tgt_async_info *async_info_ptr
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(DeviceRTL.isValidDeviceId(device_id) && "device_id is invalid");
   assert(async_info_ptr && "async_info_ptr is nullptr");
 
   return DeviceRTL.dataRetrieve(device_id, hst_ptr, tgt_ptr, size,
-                                async_info_ptr);
+                                async_info_ptr OMPT_SUPPORT_IF(, ompt_api));
 }
 
 int32_t __tgt_rtl_data_exchange_async(int32_t src_dev_id, void *src_ptr,

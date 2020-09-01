@@ -152,9 +152,12 @@ struct DeviceTy {
       : DeviceID(-1), RTL(RTL), RTLDeviceID(-1), IsInit(false), InitFlag(),
         HasPendingGlobals(false), HostDataToTargetMap(), PendingCtorsDtors(),
         ShadowPtrMap(), DataMapMtx(), PendingGlobalsMtx(), ShadowMtx() {
+#if OMPT_SUPPORT
     OmptApi.target_id = ompt_id_none;
+    OmptApi.global_device_id = DeviceID;
     OmptApi.ompt_get_enabled = ompt_get_enabled;
     OmptApi.ompt_get_callbacks = ompt_get_callbacks;
+#endif
   }
 
   // The existence of mutexes makes DeviceTy non-copyable. We need to

@@ -278,7 +278,10 @@ typedef enum ompt_target_data_op_t {
   ompt_target_data_transfer_from_device = 3,
   ompt_target_data_delete               = 4,
   ompt_target_data_associate            = 5,
-  ompt_target_data_disassociate         = 6
+  ompt_target_data_disassociate         = 6,
+  /* Extension Ops */
+  ompt_target_data_transfer_to_device_end   = 100,
+  ompt_target_data_transfer_from_device_end = 101
 } ompt_target_data_op_t;
 
 typedef enum ompt_work_t {

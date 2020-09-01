@@ -481,61 +481,23 @@ int32_t DeviceTy::deleteData(void *TgtPtrBegin) {
 // Submit data to device
 int32_t DeviceTy::submitData(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
                              __tgt_async_info *AsyncInfoPtr) {
-#if OMPT_SUPPORT
-  // OpenMP 5.0 sec. 2.19.7.1 p. 321 L15:
-  // "The target-data-op event occurs when a thread initiates a data operation
-  // on a target device."
-  // OpenMP 5.0 sec. 3.6.4 p. 401 L24:
-  // "The target-data-op event occurs when a thread transfers data on a target
-  // device."
-  // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
-  // "A registered ompt_callback_target_data_op callback is dispatched when
-  // device memory is allocated or freed, as well as when data is copied to or
-  // from a device."
-  if (OmptApi.ompt_get_enabled().ompt_callback_target_data_op) {
-    // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
-    // OpenACC support, so we haven't bothered to implement them yet.
-    OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-        OmptApi.target_id, /*host_op_id*/ ompt_id_none,
-        ompt_target_data_transfer_to_device, HstPtrBegin, HOST_DEVICE,
-        TgtPtrBegin, DeviceID, Size, /*codeptr_ra*/ NULL);
-  }
-#endif
   if (!AsyncInfoPtr || !RTL->data_submit_async || !RTL->synchronize)
-    return RTL->data_submit(RTLDeviceID, TgtPtrBegin, HstPtrBegin, Size);
+    return RTL->data_submit(RTLDeviceID, TgtPtrBegin, HstPtrBegin, Size
+                            OMPT_SUPPORT_IF(, &OmptApi));
   else
     return RTL->data_submit_async(RTLDeviceID, TgtPtrBegin, HstPtrBegin, Size,
-                                  AsyncInfoPtr);
+                                  AsyncInfoPtr OMPT_SUPPORT_IF(, &OmptApi));
 }
 
 // Retrieve data from device
 int32_t DeviceTy::retrieveData(void *HstPtrBegin, void *TgtPtrBegin,
                                int64_t Size, __tgt_async_info *AsyncInfoPtr) {
-#if OMPT_SUPPORT
-  // OpenMP 5.0 sec. 2.19.7.1 p. 321 L15:
-  // "The target-data-op event occurs when a thread initiates a data operation
-  // on a target device."
-  // OpenMP 5.0 sec. 3.6.4 p. 401 L24:
-  // "The target-data-op event occurs when a thread transfers data on a target
-  // device."
-  // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
-  // "A registered ompt_callback_target_data_op callback is dispatched when
-  // device memory is allocated or freed, as well as when data is copied to or
-  // from a device."
-  if (OmptApi.ompt_get_enabled().ompt_callback_target_data_op) {
-    // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
-    // OpenACC support, so we haven't bothered to implement them yet.
-    OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-        OmptApi.target_id, /*host_op_id*/ ompt_id_none,
-        ompt_target_data_transfer_from_device, TgtPtrBegin, DeviceID,
-        HstPtrBegin, HOST_DEVICE, Size, /*codeptr_ra*/ NULL);
-  }
-#endif
   if (!AsyncInfoPtr || !RTL->data_retrieve_async || !RTL->synchronize)
-    return RTL->data_retrieve(RTLDeviceID, HstPtrBegin, TgtPtrBegin, Size);
+    return RTL->data_retrieve(RTLDeviceID, HstPtrBegin, TgtPtrBegin, Size
+                              OMPT_SUPPORT_IF(, &OmptApi));
   else
     return RTL->data_retrieve_async(RTLDeviceID, HstPtrBegin, TgtPtrBegin, Size,
-                                    AsyncInfoPtr);
+                                    AsyncInfoPtr OMPT_SUPPORT_IF(, &OmptApi));
 }
 
 // Copy data from current device to destination device directly

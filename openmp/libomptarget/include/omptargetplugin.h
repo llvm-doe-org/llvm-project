@@ -68,22 +68,26 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr);
 
 // Pass the data content to the target device using the target address. In case
 // of success, return zero. Otherwise, return an error code.
-int32_t __tgt_rtl_data_submit(int32_t ID, void *TargetPtr, void *HostPtr,
-                              int64_t Size);
+int32_t __tgt_rtl_data_submit(
+    int32_t ID, void *TargetPtr, void *HostPtr, int64_t Size
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
 
-int32_t __tgt_rtl_data_submit_async(int32_t ID, void *TargetPtr, void *HostPtr,
-                                    int64_t Size,
-                                    __tgt_async_info *AsyncInfoPtr);
+int32_t __tgt_rtl_data_submit_async(
+    int32_t ID, void *TargetPtr, void *HostPtr, int64_t Size,
+    __tgt_async_info *AsyncInfoPtr
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
 
 // Retrieve the data content from the target device using its address. In case
 // of success, return zero. Otherwise, return an error code.
-int32_t __tgt_rtl_data_retrieve(int32_t ID, void *HostPtr, void *TargetPtr,
-                                int64_t Size);
+int32_t __tgt_rtl_data_retrieve(
+    int32_t ID, void *HostPtr, void *TargetPtr, int64_t Size
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
 
 // Asynchronous version of __tgt_rtl_data_retrieve
-int32_t __tgt_rtl_data_retrieve_async(int32_t ID, void *HostPtr,
-                                      void *TargetPtr, int64_t Size,
-                                      __tgt_async_info *AsyncInfoPtr);
+int32_t __tgt_rtl_data_retrieve_async(
+    int32_t ID, void *HostPtr, void *TargetPtr, int64_t Size,
+    __tgt_async_info *AsyncInfoPtr
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
 
 // Copy the data content from one target device to another target device using
 // its address. This operation does not need to copy data back to host and then

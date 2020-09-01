@@ -276,14 +276,74 @@ void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size, void *hst_ptr) {
   return ptr;
 }
 
-int32_t __tgt_rtl_data_submit(int32_t device_id, void *tgt_ptr, void *hst_ptr,
-                              int64_t size) {
+int32_t __tgt_rtl_data_submit(
+    int32_t device_id, void *tgt_ptr, void *hst_ptr, int64_t size
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
+#if OMPT_SUPPORT
+  // OpenMP 5.0 sec. 2.19.7.1 p. 321 L15:
+  // "The target-data-op event occurs when a thread initiates a data operation
+  // on a target device."
+  // OpenMP 5.0 sec. 3.6.4 p. 401 L24:
+  // "The target-data-op event occurs when a thread transfers data on a target
+  // device."
+  // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
+  // "A registered ompt_callback_target_data_op callback is dispatched when
+  // device memory is allocated or freed, as well as when data is copied to or
+  // from a device."
+  //
+  // There's nothing to actually enqueue as we're about to perform the copy
+  // synchronously, so we just dispatch these callbacks back to back.
+  //
+  // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
+  // OpenACC support, so we haven't bothered to implement them yet.
+  if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op) {
+    ompt_api->ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+        ompt_api->target_id, /*host_op_id*/ ompt_id_none,
+        ompt_target_data_transfer_to_device, hst_ptr, HOST_DEVICE, tgt_ptr,
+        ompt_api->global_device_id, size, /*codeptr_ra*/ NULL);
+    ompt_api->ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+        ompt_api->target_id, /*host_op_id*/ ompt_id_none,
+        ompt_target_data_transfer_to_device_end, hst_ptr, HOST_DEVICE, tgt_ptr,
+        ompt_api->global_device_id, size, /*codeptr_ra*/ NULL);
+  }
+#endif
   memcpy(tgt_ptr, hst_ptr, size);
   return OFFLOAD_SUCCESS;
 }
 
-int32_t __tgt_rtl_data_retrieve(int32_t device_id, void *hst_ptr, void *tgt_ptr,
-                                int64_t size) {
+int32_t __tgt_rtl_data_retrieve(
+    int32_t device_id, void *hst_ptr, void *tgt_ptr, int64_t size
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
+#if OMPT_SUPPORT
+  // OpenMP 5.0 sec. 2.19.7.1 p. 321 L15:
+  // "The target-data-op event occurs when a thread initiates a data operation
+  // on a target device."
+  // OpenMP 5.0 sec. 3.6.4 p. 401 L24:
+  // "The target-data-op event occurs when a thread transfers data on a target
+  // device."
+  // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
+  // "A registered ompt_callback_target_data_op callback is dispatched when
+  // device memory is allocated or freed, as well as when data is copied to or
+  // from a device."
+  //
+  // There's nothing to actually enqueue as we're about to perform the copy
+  // synchronously, so we just dispatch these callbacks back to back.
+  //
+  // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
+  // OpenACC support, so we haven't bothered to implement them yet.
+  if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op) {
+    ompt_api->ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+        ompt_api->target_id, /*host_op_id*/ ompt_id_none,
+        ompt_target_data_transfer_from_device, tgt_ptr,
+        ompt_api->global_device_id, hst_ptr, HOST_DEVICE, size,
+        /*codeptr_ra*/ NULL);
+    ompt_api->ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
+        ompt_api->target_id, /*host_op_id*/ ompt_id_none,
+        ompt_target_data_transfer_from_device_end, tgt_ptr,
+        ompt_api->global_device_id, hst_ptr, HOST_DEVICE, size,
+        /*codeptr_ra*/ NULL);
+  }
+#endif
   memcpy(hst_ptr, tgt_ptr, size);
   return OFFLOAD_SUCCESS;
 }

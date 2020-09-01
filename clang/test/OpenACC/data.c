@@ -75,7 +75,7 @@
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc %s -o %t %[tgt-cflags]
-// RUN:   %[run-if] %t 2 > %t.out 2>&1
+// RUN:   %[run-if] %t > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out %s -strict-whitespace \
 // RUN:                       -check-prefixes=EXE,EXE-TGT-%[tgt],EXE-%[host-or-dev]
 // RUN: }
