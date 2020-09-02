@@ -362,6 +362,7 @@ static void acc_ompt_callback_target(
     ompt_data_t *task_data, ompt_id_t target_id, const void *codeptr_ra) {
   acc_event_t event_type;
   acc_prof_callback acc_cb = nullptr;
+  bool sub_region = false;
   switch (kind) {
   case ompt_target:
     switch (endpoint) {
@@ -375,8 +376,35 @@ static void acc_ompt_callback_target(
       break;
     }
     break;
+  case ompt_target_region_enter_data:
+    sub_region = true;
+    KMP_FALLTHROUGH();
   case ompt_target_enter_data:
+    switch (endpoint) {
+    case ompt_scope_begin:
+      event_type = acc_ev_enter_data_start;
+      acc_cb = acc_ev_enter_data_start_callback;
+      break;
+    case ompt_scope_end:
+      event_type = acc_ev_enter_data_end;
+      acc_cb = acc_ev_enter_data_end_callback;
+      break;
+    }
+    break;
+  case ompt_target_region_exit_data:
+    sub_region = true;
+    KMP_FALLTHROUGH();
   case ompt_target_exit_data:
+    switch (endpoint) {
+    case ompt_scope_begin:
+      event_type = acc_ev_exit_data_start;
+      acc_cb = acc_ev_exit_data_start_callback;
+      break;
+    case ompt_scope_end:
+      event_type = acc_ev_exit_data_end;
+      acc_cb = acc_ev_exit_data_end_callback;
+      break;
+    }
     break;
   case ompt_target_update:
     switch (endpoint) {
@@ -391,7 +419,7 @@ static void acc_ompt_callback_target(
     }
     break;
   }
-  if (endpoint == ompt_scope_begin)
+  if (!sub_region && endpoint == ompt_scope_begin)
     acc_ompt_target_device_map[target_id] = device_num;
   if (acc_cb) {
     acc_prof_info pi = acc_get_prof_info(event_type, device_num);
@@ -399,68 +427,8 @@ static void acc_ompt_callback_target(
     acc_api_info ai = acc_get_api_info(device_num);
     acc_cb(&pi, &ei, &ai);
   }
-  if (endpoint == ompt_scope_end)
+  if (!sub_region && endpoint == ompt_scope_end)
     acc_ompt_target_device_map.erase(target_id);
-}
-
-static unsigned acc_ompt_callback_target_map_start_reg_counter = 0;
-static void acc_ompt_callback_target_map_start(
-    ompt_id_t target_id, unsigned int nitems, void **host_addr,
-    void **device_addr, size_t *bytes, unsigned int *mapping_flags,
-    const void * codeptr_ra) {
-  acc_event_t event_type = acc_ev_enter_data_start;
-  auto itr = acc_ompt_target_device_map.find(target_id);
-  KMP_ASSERT2(itr != acc_ompt_target_device_map.end(), "unexpected target_id");
-  int device_num = itr->second;
-  acc_prof_info pi = acc_get_prof_info(event_type, device_num);
-  acc_event_info ei = acc_get_other_event_info(event_type);
-  acc_api_info ai = acc_get_api_info(device_num);
-  acc_ev_enter_data_start_callback(&pi, &ei, &ai);
-}
-
-static unsigned acc_ompt_callback_target_map_reg_counter = 0;
-static void acc_ompt_callback_target_map(
-    ompt_id_t target_id, unsigned int nitems, void **host_addr,
-    void **device_addr, size_t *bytes, unsigned int *mapping_flags,
-    const void * codeptr_ra) {
-  acc_event_t event_type = acc_ev_enter_data_end;
-  auto itr = acc_ompt_target_device_map.find(target_id);
-  KMP_ASSERT2(itr != acc_ompt_target_device_map.end(), "unexpected target_id");
-  int device_num = itr->second;
-  acc_prof_info pi = acc_get_prof_info(event_type, device_num);
-  acc_event_info ei = acc_get_other_event_info(event_type);
-  acc_api_info ai = acc_get_api_info(device_num);
-  acc_ev_enter_data_end_callback(&pi, &ei, &ai);
-}
-
-static unsigned acc_ompt_callback_target_map_exit_start_reg_counter = 0;
-static void acc_ompt_callback_target_map_exit_start(
-    ompt_id_t target_id, unsigned int nitems, void **host_addr,
-    void **device_addr, size_t *bytes, unsigned int *mapping_flags,
-    const void * codeptr_ra) {
-  acc_event_t event_type = acc_ev_exit_data_start;
-  auto itr = acc_ompt_target_device_map.find(target_id);
-  KMP_ASSERT2(itr != acc_ompt_target_device_map.end(), "unexpected target_id");
-  int device_num = itr->second;
-  acc_prof_info pi = acc_get_prof_info(event_type, device_num);
-  acc_event_info ei = acc_get_other_event_info(event_type);
-  acc_api_info ai = acc_get_api_info(device_num);
-  acc_ev_exit_data_start_callback(&pi, &ei, &ai);
-}
-
-static unsigned acc_ompt_callback_target_map_exit_end_reg_counter = 0;
-static void acc_ompt_callback_target_map_exit_end(
-    ompt_id_t target_id, unsigned int nitems, void **host_addr,
-    void **device_addr, size_t *bytes, unsigned int *mapping_flags,
-    const void * codeptr_ra) {
-  acc_event_t event_type = acc_ev_exit_data_end;
-  auto itr = acc_ompt_target_device_map.find(target_id);
-  KMP_ASSERT2(itr != acc_ompt_target_device_map.end(), "unexpected target_id");
-  int device_num = itr->second;
-  acc_prof_info pi = acc_get_prof_info(event_type, device_num);
-  acc_event_info ei = acc_get_other_event_info(event_type);
-  acc_api_info ai = acc_get_api_info(device_num);
-  acc_ev_exit_data_end_callback(&pi, &ei, &ai);
 }
 
 static unsigned acc_ompt_callback_target_submit_reg_counter = 0 ;
@@ -615,10 +583,10 @@ static bool acc_event_callback(
   ACC_EVENT_CASE(acc_ev_delete,                  ompt_callback_target_data_op)
   ACC_EVENT_CASE(acc_ev_alloc,                   ompt_callback_target_data_op)
   ACC_EVENT_CASE(acc_ev_free,                    ompt_callback_target_data_op)
-  ACC_EVENT_CASE(acc_ev_enter_data_start,        ompt_callback_target, ompt_callback_target_map_start)
-  ACC_EVENT_CASE(acc_ev_enter_data_end,          ompt_callback_target, ompt_callback_target_map)
-  ACC_EVENT_CASE(acc_ev_exit_data_start,         ompt_callback_target, ompt_callback_target_map_exit_start)
-  ACC_EVENT_CASE(acc_ev_exit_data_end,           ompt_callback_target, ompt_callback_target_map_exit_end)
+  ACC_EVENT_CASE(acc_ev_enter_data_start,        ompt_callback_target)
+  ACC_EVENT_CASE(acc_ev_enter_data_end,          ompt_callback_target)
+  ACC_EVENT_CASE(acc_ev_exit_data_start,         ompt_callback_target)
+  ACC_EVENT_CASE(acc_ev_exit_data_end,           ompt_callback_target)
   ACC_EVENT_CASE(acc_ev_update_start,            ompt_callback_target)
   ACC_EVENT_CASE(acc_ev_update_end,              ompt_callback_target)
   ACC_EVENT_CASE(acc_ev_compute_construct_start, ompt_callback_target)
@@ -652,10 +620,6 @@ static void acc_ompt_event_callback(ompt_callbacks_t ompt_event,
   OMPT_EVENT_CASE(ompt_callback_device_finalize_start)
   OMPT_EVENT_CASE(ompt_callback_device_finalize)
   OMPT_EVENT_CASE(ompt_callback_target)
-  OMPT_EVENT_CASE(ompt_callback_target_map_start)
-  OMPT_EVENT_CASE(ompt_callback_target_map)
-  OMPT_EVENT_CASE(ompt_callback_target_map_exit_start)
-  OMPT_EVENT_CASE(ompt_callback_target_map_exit_end)
   OMPT_EVENT_CASE(ompt_callback_target_submit)
   OMPT_EVENT_CASE(ompt_callback_target_submit_end)
   OMPT_EVENT_CASE(ompt_callback_target_data_op)

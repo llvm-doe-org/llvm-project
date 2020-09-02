@@ -94,7 +94,7 @@
 
 #define ompt_callback_master_implemented ompt_event_MAY_ALWAYS_OPTIONAL
 
-#define ompt_callback_target_map_implemented ompt_event_MAY_ALWAYS_OPTIONAL
+#define ompt_callback_target_map_implemented ompt_event_UNIMPLEMENTED
 
 #define ompt_callback_sync_region_implemented ompt_event_MAY_ALWAYS_OPTIONAL
 
@@ -123,8 +123,5 @@
 #define ompt_callback_device_initialize_start_implemented ompt_event_MAY_ALWAYS
 #define ompt_callback_device_finalize_start_implemented ompt_event_MAY_ALWAYS
 #define ompt_callback_target_submit_end_implemented ompt_event_MAY_ALWAYS
-#define ompt_callback_target_map_start_implemented ompt_event_MAY_ALWAYS_OPTIONAL
-#define ompt_callback_target_map_exit_start_implemented ompt_event_MAY_ALWAYS_OPTIONAL
-#define ompt_callback_target_map_exit_end_implemented ompt_event_MAY_ALWAYS_OPTIONAL
 
 #endif

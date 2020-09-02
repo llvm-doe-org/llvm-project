@@ -1913,33 +1913,33 @@ OMPT callbacks that we devised for Clacc's OpenACC Profiling Interface
 support and that are not specified by OpenMP 5.0 are shown in
 **bold**.
 
-| OpenACC Event                     | Triggering OMPT Callback                                                         | Auxiliary OMPT Callback                                         |
-|:----------------------------------|:---------------------------------------------------------------------------------|:----------------------------------------------------------------|
-| `acc_ev_device_init_start`        | **`ompt_callback_device_initialize_start`**                                      |                                                                 |
-| `acc_ev_device_init_end`          | `ompt_callback_device_initialize`                                                |                                                                 |
-| `acc_ev_device_shutdown_start`    | **`ompt_callback_device_finalize_start`**                                        |                                                                 |
-| `acc_ev_device_shutdown_end`      | `ompt_callback_device_finalize`                                                  |                                                                 |
-| `acc_ev_runtime_shutdown`         | `finalize` set by `ompt_start_tool`                                              |                                                                 |
-| `acc_ev_create`                   | `ompt_callback_target_data_op(optype=ompt_target_data_associate)`                |                                                                 |
-| `acc_ev_delete`                   | `ompt_callback_target_data_op(optype=ompt_target_data_disassociate)`             |                                                                 |
-| `acc_ev_alloc`                    | `ompt_callback_target_data_op(optype=ompt_target_data_alloc)`                    |                                                                 |
-| `acc_ev_free`                     | `ompt_callback_target_data_op(optype=ompt_target_data_delete)`                   |                                                                 |
-| `acc_ev_enter_data_start`         | **`ompt_callback_target_map_start`**                                             | `ompt_callback_target(kind=ompt_target|ompt_target_enter_data)` |
-| `acc_ev_enter_data_end`           | `ompt_callback_target_map`                                                       | `ompt_callback_target(kind=ompt_target|ompt_target_enter_data)` |
-| `acc_ev_exit_data_start`          | **`ompt_callback_target_map_exit_start`**                                        | `ompt_callback_target(kind=ompt_target|ompt_target_exit_data)`  |
-| `acc_ev_exit_data_end`            | **`ompt_callback_target_map_exit_end`**                                          | `ompt_callback_target(kind=ompt_target|ompt_target_exit_data)`  |
-| `acc_ev_update_start`             | `ompt_callback_target(kind=ompt_target_update, endpoint=ompt_scope_begin)`       |                                                                 |
-| `acc_ev_update_end`               | `ompt_callback_target(kind=ompt_target_update, endpoint=ompt_scope_end)`         |                                                                 |
-| `acc_ev_compute_construct_start`  | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_begin)`              |                                                                 |
-| `acc_ev_compute_construct_end`    | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_end)`                |                                                                 |
-| `acc_ev_enqueue_launch_start`     | `ompt_callback_target_submit`                                                    | `ompt_callback_target(kind=ompt_target)`                        |
-| `acc_ev_enqueue_launch_end`       | **`ompt_callback_target_submit_end`**                                            | `ompt_callback_target(kind=ompt_target)`                        |
-| `acc_ev_enqueue_upload_start`     | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_to_device)`       |                                                                 |
-| `acc_ev_enqueue_upload_end`       | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_to_device_end)`   |                                                                 |
-| `acc_ev_enqueue_download_start`   | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_from_device)`     |                                                                 |
-| `acc_ev_enqueue_download_end`     | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_from_device_end)` |                                                                 |
-| `acc_ev_wait_start`               | *unimplemented*                                                                  |                                                                 |
-| `acc_ev_wait_end`                 | *unimplemented*                                                                  |                                                                 |
+| OpenACC Event                     | Triggering OMPT Callback                                                                                            | Auxiliary OMPT Callback                                         |
+|:----------------------------------|:--------------------------------------------------------------------------------------------------------------------|:----------------------------------------------------------------|
+| `acc_ev_device_init_start`        | **`ompt_callback_device_initialize_start`**                                                                         |                                                                 |
+| `acc_ev_device_init_end`          | `ompt_callback_device_initialize`                                                                                   |                                                                 |
+| `acc_ev_device_shutdown_start`    | **`ompt_callback_device_finalize_start`**                                                                           |                                                                 |
+| `acc_ev_device_shutdown_end`      | `ompt_callback_device_finalize`                                                                                     |                                                                 |
+| `acc_ev_runtime_shutdown`         | `finalize` set by `ompt_start_tool`                                                                                 |                                                                 |
+| `acc_ev_create`                   | `ompt_callback_target_data_op(optype=ompt_target_data_associate)`                                                   |                                                                 |
+| `acc_ev_delete`                   | `ompt_callback_target_data_op(optype=ompt_target_data_disassociate)`                                                |                                                                 |
+| `acc_ev_alloc`                    | `ompt_callback_target_data_op(optype=ompt_target_data_alloc)`                                                       |                                                                 |
+| `acc_ev_free`                     | `ompt_callback_target_data_op(optype=ompt_target_data_delete)`                                                      |                                                                 |
+| `acc_ev_enter_data_start`         | `ompt_callback_target(kind=ompt_target_enter_data|`**`ompt_target_region_enter_data`**`, endpoint=ompt_scope_begin)`|                                                                 |
+| `acc_ev_enter_data_end`           | `ompt_callback_target(kind=ompt_target_enter_data|`**`ompt_target_region_enter_data`**`, endpoint=ompt_scope_end)`  |                                                                 |
+| `acc_ev_exit_data_start`          | `ompt_callback_target(kind=ompt_target_exit_data|`**`ompt_target_region_exit_data`**`, endpoint=ompt_scope_begin)`  |                                                                 |
+| `acc_ev_exit_data_end`            | `ompt_callback_target(kind=ompt_target_exit_data|`**`ompt_target_region_exit_data`**`, endpoint=ompt_scope_end)`    |                                                                 |
+| `acc_ev_update_start`             | `ompt_callback_target(kind=ompt_target_update, endpoint=ompt_scope_begin)`                                          |                                                                 |
+| `acc_ev_update_end`               | `ompt_callback_target(kind=ompt_target_update, endpoint=ompt_scope_end)`                                            |                                                                 |
+| `acc_ev_compute_construct_start`  | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_begin)`                                                 |                                                                 |
+| `acc_ev_compute_construct_end`    | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_end)`                                                   |                                                                 |
+| `acc_ev_enqueue_launch_start`     | `ompt_callback_target_submit`                                                                                       | `ompt_callback_target(kind=ompt_target)`                        |
+| `acc_ev_enqueue_launch_end`       | **`ompt_callback_target_submit_end`**                                                                               | `ompt_callback_target(kind=ompt_target)`                        |
+| `acc_ev_enqueue_upload_start`     | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_to_device)`                                          |                                                                 |
+| `acc_ev_enqueue_upload_end`       | `ompt_callback_target_data_op(optype=`**`ompt_target_data_transfer_to_device_end`**`)`                              |                                                                 |
+| `acc_ev_enqueue_download_start`   | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_from_device)`                                        |                                                                 |
+| `acc_ev_enqueue_download_end`     | `ompt_callback_target_data_op(optype=`**`ompt_target_data_transfer_from_device_end`**`)`                            |                                                                 |
+| `acc_ev_wait_start`               | *unimplemented*                                                                                                     |                                                                 |
+| `acc_ev_wait_end`                 | *unimplemented*                                                                                                     |                                                                 |
 
 One way to conceptualize of the interaction between Clacc's OpenACC
 Profiling Interface support and the OpenMP runtime is that OMPT
@@ -2038,42 +2038,6 @@ Clacc's rationale for such cases:
       before flushing of traces.  (However, device traces haven't yet
       actually been implemented in LLVM's OpenMP runtime, so these
       events are actually triggered back to back at the moment.)
-
-* `ompt_callback_target_map`
-    * OpenMP 5.0 sec. 2.19.7.1 p. 321 L14:
-
-        > The target-map event occurs when a thread maps data to or
-        > from a target device.
-
-    * OpenMP 5.0 sec. 4.5.2.27 p. 493 L12-20:
-
-        > An instance of a target, target data, target enter data, or
-        > target exit data construct may contain one or more map
-        > clauses. An OpenMP implementation may report the set of
-        > mappings associated with map clauses for a construct with a
-        > single ompt_callback_target_map callback to report the
-        > effect of all mappings or multiple ompt_callback_target_map
-        > callbacks with each reporting a subset of the
-        > mappings. Furthermore, an OpenMP implementation may omit
-        > mappings that it determines are unnecessary. If an OpenMP
-        > implementation issues multiple ompt_callback_target_map
-        > callbacks, these callbacks may be interleaved with
-        > ompt_callback_target_data_op callbacks used to report data
-        > operations associated with the mappings.
-
-    * Based on the word "when" in the first passage, Clacc's
-      implementation of this callback should trigger either
-      `acc_ev_enter_data_start` or `acc_ev_enter_data_end` instead of
-      `acc_ev_exit_data_start` or `acc_ev_exit_data_end`.
-    * This callback requires device addresses, so it must follow all
-      associated device allocations, and logically it then follows all
-      associated `ompt_callback_target_data_op` callbacks with
-      `optype=ompt_target_data_alloc`.
-    * Because it is meant to describe mappings, it also logically
-      follows all associated `ompt_callback_target_data_op` callbacks
-      with `optype=ompt_target_data_associate`.
-    * Clacc's implementation of this callback thus triggers
-      `acc_ev_enter_data_end` not `acc_ev_enter_data_start`.
 
 * `ompt_callback_target_submit`
     * OpenMP 5.0 sec. 2.12.5 p. 173 L26-27:

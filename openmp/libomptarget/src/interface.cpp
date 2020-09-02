@@ -138,22 +138,18 @@ EXTERN void __tgt_target_data_begin_mapper(int64_t device_id, int32_t arg_num,
     DP("Use default device id %" PRId64 "\n", device_id);
   }
 
+  if (CheckDeviceAndCtors(device_id) != OFFLOAD_SUCCESS) {
+    DP("Failed to get device %" PRId64 " ready\n", device_id);
+    HandleTargetOutcome(false);
+    return;
+  }
+
   DeviceTy &Device = Devices[device_id];
 
 #if OMPT_SUPPORT
   ompt_dispatch_callback_target(ompt_target_enter_data, ompt_scope_begin,
                                 Device);
 #endif
-
-  if (CheckDeviceAndCtors(device_id) != OFFLOAD_SUCCESS) {
-    DP("Failed to get device %" PRId64 " ready\n", device_id);
-    #if OMPT_SUPPORT
-      ompt_dispatch_callback_target(ompt_target_enter_data, ompt_scope_end,
-                                    Device);
-    #endif
-    HandleTargetOutcome(false);
-    return;
-  }
 
 #ifdef OMPTARGET_DEBUG
   for (int i = 0; i < arg_num; ++i) {

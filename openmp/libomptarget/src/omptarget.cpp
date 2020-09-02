@@ -256,55 +256,6 @@ static int32_t getParentIndex(int64_t type) {
   return ((type & OMP_TGT_MAPTYPE_MEMBER_OF) >> 48) - 1;
 }
 
-#if OMPT_OPTIONAL
-// OpenMP 5.0 sec. 2.19.7.1 p. 321 L14:
-// "The target-map event occurs when a thread maps data to or from a target
-// device."
-//
-// OpenMP 5.0 sec. 4.5.2.27 p. 493 L12-20:
-// "An instance of a target, target data, target enter data, or target exit
-// data construct may contain one or more map clauses. An OpenMP implementation
-// may report the set of mappings associated with map clauses for a construct
-// with a single ompt_callback_target_map callback to report the effect of all
-// mappings or multiple ompt_callback_target_map callbacks with each reporting
-// a subset of the mappings. Furthermore, an OpenMP implementation may omit
-// mappings that it determines are unnecessary. If an OpenMP implementation
-// issues multiple ompt_callback_target_map callbacks, these callbacks may be
-// interleaved with ompt_callback_target_data_op callbacks used to report data
-// operations associated with the mappings."
-//
-// ompt_callback_target_map callback, as discussed above, is dispatched when
-// OMPT_DISPATCH_CALLBACK_TARGET_MAP is called with an empty argument.  Because
-// this callback includes device addresses, it must follow all associated
-// device allocations, and logically it then follows all associated
-// ompt_callback_target_data_op callbacks with ompt_target_data_alloc.  Because
-// it is meant to describe mappings, it also logically follows
-// ompt_callback_target_data_op callbacks with ompt_target_data_associate.
-// In other words, the ompt_callback_target_map callback corresponds to
-// acc_ev_enter_data_end, and our related extensions
-// (ompt_callback_target_map_start, ompt_callback_target_map_exit_start, and
-// ompt_callback_target_map_exit_end) correspond to acc_ev_enter_data_start,
-// acc_ev_exit_data_start, and acc_ev_exit_data_end.
-//
-// FIXME: We don't yet need the NULL arguments for OpenACC support, so we
-// haven't bothered to implement them yet, but it should be straight-forward to
-// gather them during the loop above.  We actually don't need nitems yet
-// either, but that one is trivial.
-# define OMPT_DISPATCH_CALLBACK_TARGET_MAP(SubEvent, ArgNum)                   \
-  do {                                                                         \
-    if (Device.OmptApi.ompt_get_enabled()                                      \
-            .ompt_callback_target_map##SubEvent) {                             \
-      Device.OmptApi.ompt_get_callbacks().ompt_callback(                       \
-          ompt_callback_target_map##SubEvent)(                                 \
-          Device.OmptApi.target_id, /*nitems*/ ArgNum, /*host_addr*/ NULL,     \
-          /*device_addr*/ NULL, /*bytes*/ NULL, /*mapping_flags*/ NULL,        \
-          /*codeptr_ra*/ NULL);                                                \
-    }                                                                          \
-  } while (0)
-#else
-# define OMPT_DISPATCH_CALLBACK_TARGET_MAP(SubEvent, ArgNum)
-#endif
-
 /// Call the user-defined mapper function followed by the appropriate
 // target_data_* function (target_data_{begin,end,update}).
 int targetDataMapper(DeviceTy &Device, void *arg_base, void *arg,
@@ -349,8 +300,6 @@ int targetDataMapper(DeviceTy &Device, void *arg_base, void *arg,
 int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
                     void **args, int64_t *arg_sizes, int64_t *arg_types,
                     void **arg_mappers, __tgt_async_info *async_info_ptr) {
-  OMPT_DISPATCH_CALLBACK_TARGET_MAP(_start, arg_num);
-
   // process each input.
   for (int32_t i = 0; i < arg_num; ++i) {
     // Ignore private variables and arrays - there is no mapping for them.
@@ -436,7 +385,6 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
         DP("Call to getOrAllocTgtPtr returned null pointer (%s).\n",
            HasPresentModifier ? "'present' map type modifier"
                               : "device failure or illegal mapping");
-        OMPT_DISPATCH_CALLBACK_TARGET_MAP(, arg_num);
         return OFFLOAD_FAIL;
       }
       DP("There are %zu bytes allocated at target address " DPxMOD " - is%s new"
@@ -461,7 +409,6 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
                                   : "device failure or illegal mapping");
       if (!HasPresentModifier && HasNoAllocModifier)
         continue;
-      OMPT_DISPATCH_CALLBACK_TARGET_MAP(, arg_num);
       return OFFLOAD_FAIL;
     }
     DP("There are %" PRId64 " bytes allocated at target address " DPxMOD
@@ -499,7 +446,6 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
                                    async_info_ptr);
         if (rt != OFFLOAD_SUCCESS) {
           DP("Copying data to device failed.\n");
-          OMPT_DISPATCH_CALLBACK_TARGET_MAP(, arg_num);
           return OFFLOAD_FAIL;
         }
       }
@@ -514,7 +460,6 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
                                  sizeof(void *), async_info_ptr);
       if (rt != OFFLOAD_SUCCESS) {
         DP("Copying data to device failed.\n");
-        OMPT_DISPATCH_CALLBACK_TARGET_MAP(, arg_num);
         return OFFLOAD_FAIL;
       }
       // create shadow pointers for this entry
@@ -525,7 +470,6 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
     }
   }
 
-  OMPT_DISPATCH_CALLBACK_TARGET_MAP(, arg_num);
   return OFFLOAD_SUCCESS;
 }
 
@@ -553,8 +497,6 @@ struct DeallocTgtPtrInfo {
 int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
                   void **Args, int64_t *ArgSizes, int64_t *ArgTypes,
                   void **ArgMappers, __tgt_async_info *AsyncInfo) {
-  OMPT_DISPATCH_CALLBACK_TARGET_MAP(_exit_start, ArgNum);
-
   int Ret;
   std::vector<DeallocTgtPtrInfo> DeallocTgtPtrs;
   // process each input.
@@ -670,7 +612,6 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
                                     AsyncInfo);
           if (Ret != OFFLOAD_SUCCESS) {
             DP("Copying data from device failed.\n");
-            OMPT_DISPATCH_CALLBACK_TARGET_MAP(_exit_end, ArgNum);
             return OFFLOAD_FAIL;
           }
         }
@@ -730,7 +671,6 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
     Ret = Device.synchronize(AsyncInfo);
     if (Ret != OFFLOAD_SUCCESS) {
       DP("Failed to synchronize device.\n");
-      OMPT_DISPATCH_CALLBACK_TARGET_MAP(_exit_end, ArgNum);
       return OFFLOAD_FAIL;
     }
   }
@@ -741,12 +681,10 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
                                Info.ForceDelete, Info.HasCloseModifier);
     if (Ret != OFFLOAD_SUCCESS) {
       DP("Deallocating data from device failed.\n");
-      OMPT_DISPATCH_CALLBACK_TARGET_MAP(_exit_end, ArgNum);
       return OFFLOAD_FAIL;
     }
   }
 
-  OMPT_DISPATCH_CALLBACK_TARGET_MAP(_exit_end, ArgNum);
   return OFFLOAD_SUCCESS;
 }
 
@@ -754,7 +692,9 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
 void ompt_dispatch_callback_target(ompt_target_t kind,
                                    ompt_scope_endpoint_t endpoint,
                                    DeviceTy &Device) {
-  if (endpoint == ompt_scope_begin) {
+  bool SubRegion = kind == ompt_target_region_enter_data ||
+                   kind == ompt_target_region_exit_data;
+  if (!SubRegion && endpoint == ompt_scope_begin) {
     Device.OmptApi.target_id = ompt_get_unique_id();
     ompt_toggle_in_device_target_region();
   }
@@ -765,7 +705,7 @@ void ompt_dispatch_callback_target(ompt_target_t kind,
         kind, endpoint, Device.DeviceID, /*task_data*/ NULL,
         Device.OmptApi.target_id, /*codeptr_ra*/ NULL);
   }
-  if (endpoint == ompt_scope_end) {
+  if (!SubRegion && endpoint == ompt_scope_end) {
     Device.OmptApi.target_id = ompt_id_none;
     ompt_toggle_in_device_target_region();
   }
@@ -1002,8 +942,16 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
                       std::vector<FPArrayType> &FPArrays,
                       __tgt_async_info *AsyncInfo) {
   DeviceTy &Device = Devices[DeviceId];
+#if OMPT_SUPPORT
+  ompt_dispatch_callback_target(ompt_target_region_enter_data, ompt_scope_begin,
+                                Device);
+#endif
   int Ret = targetDataBegin(Device, ArgNum, ArgBases, Args, ArgSizes, ArgTypes,
                             ArgMappers, AsyncInfo);
+#if OMPT_SUPPORT
+  ompt_dispatch_callback_target(ompt_target_region_enter_data, ompt_scope_end,
+                                Device);
+#endif
   if (Ret != OFFLOAD_SUCCESS) {
     DP("Call to targetDataBegin failed, abort target.\n");
 #if OMPT_SUPPORT
@@ -1168,8 +1116,16 @@ int processDataAfter(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
   DeviceTy &Device = Devices[DeviceId];
 
   // Move data from device.
+#if OMPT_SUPPORT
+  ompt_dispatch_callback_target(ompt_target_region_exit_data, ompt_scope_begin,
+                                Device);
+#endif
   int Ret = targetDataEnd(Device, ArgNum, ArgBases, Args, ArgSizes, ArgTypes,
                           ArgMappers, AsyncInfo);
+#if OMPT_SUPPORT
+  ompt_dispatch_callback_target(ompt_target_region_exit_data, ompt_scope_end,
+                                Device);
+#endif
   if (Ret != OFFLOAD_SUCCESS) {
     DP("Call to targetDataEnd failed, abort targe.\n");
 #if OMPT_SUPPORT
