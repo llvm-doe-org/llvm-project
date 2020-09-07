@@ -954,9 +954,6 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
 #endif
   if (Ret != OFFLOAD_SUCCESS) {
     DP("Call to targetDataBegin failed, abort target.\n");
-#if OMPT_SUPPORT
-    ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
-#endif
     return OFFLOAD_FAIL;
   }
 
@@ -1004,9 +1001,6 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
                                 sizeof(void *), AsyncInfo);
         if (Ret != OFFLOAD_SUCCESS) {
           DP("Copying data to device failed.\n");
-#if OMPT_SUPPORT
-          ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
-#endif
           return OFFLOAD_FAIL;
         }
       }
@@ -1030,9 +1024,6 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
            "abort target.\n",
            (ArgTypes[I] & OMP_TGT_MAPTYPE_TO ? "first-" : ""),
            DPxPTR(HstPtrBegin));
-#if OMPT_SUPPORT
-        ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
-#endif
         return OFFLOAD_FAIL;
       }
       FPArrayType FPArray;
@@ -1075,9 +1066,6 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
             Device.submitData(TgtPtrBegin, HstPtrBegin, ArgSizes[I], AsyncInfo);
         if (Ret != OFFLOAD_SUCCESS) {
           DP("Copying data to device failed, failed.\n");
-#if OMPT_SUPPORT
-          ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
-#endif
           return OFFLOAD_FAIL;
         }
       }
@@ -1128,9 +1116,6 @@ int processDataAfter(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
 #endif
   if (Ret != OFFLOAD_SUCCESS) {
     DP("Call to targetDataEnd failed, abort targe.\n");
-#if OMPT_SUPPORT
-    ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
-#endif
     return OFFLOAD_FAIL;
   }
 
@@ -1159,9 +1144,6 @@ int processDataAfter(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
     Ret = Device.deleteData(FPArray.TgtPtrBegin);
     if (Ret != OFFLOAD_SUCCESS) {
       DP("Deallocation of (first-)private arrays failed.\n");
-#if OMPT_SUPPORT
-      ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
-#endif
       return OFFLOAD_FAIL;
     }
   }
