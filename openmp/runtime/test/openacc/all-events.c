@@ -32,19 +32,23 @@
 // RUN: %data tgts {
 // RUN:   (run-if=
 // RUN:    tgt-host-or-off=HOST
+// RUN:    tgt-cppflags=
 // RUN:    tgt-cflags=
 // RUN:    tgt-fc=HOST,HOST-%[dir-fc1],HOST-%[dir-fc2],HOST-%[dir-fc3])
 // RUN:   (run-if=%run-if-x86_64
 // RUN:    tgt-host-or-off=OFF
+// RUN:    tgt-cppflags=
 // RUN:    tgt-cflags=-fopenmp-targets=%run-x86_64-triple
 // RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],OFF-%[dir-fc3],X86_64,X86_64-%[dir-fc1],X86_64-%[dir-fc2],X86_64-%[dir-fc3])
 // RUN:   (run-if=%run-if-ppc64le
 // RUN:    tgt-host-or-off=OFF
+// RUN:    tgt-cppflags=
 // RUN:    tgt-cflags=-fopenmp-targets=%run-ppc64le-triple
 // RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],OFF-%[dir-fc3],PPC64LE,PPC64LE-%[dir-fc1],PPC64LE-%[dir-fc2],PPC64LE-%[dir-fc3])
 // RUN:   (run-if=%run-if-nvptx64
 // RUN:    tgt-host-or-off=OFF
-// RUN:    tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -DNVPTX64'
+// RUN:    tgt-cppflags=-DNVPTX64
+// RUN:    tgt-cflags=-fopenmp-targets=%run-nvptx64-triple
 // RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],OFF-%[dir-fc3],NVPTX64,NVPTX64-%[dir-fc1],NVPTX64-%[dir-fc2],NVPTX64-%[dir-fc3])
 // RUN: }
 //      # Check offloading compilation both with and without offloading at run
@@ -56,10 +60,18 @@
 // RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled'
 // RUN:    env-fc=HOST,HOST-%[dir-fc1],HOST-%[dir-fc2],%[tgt-host-or-off]-BEFORE-ENV,%[tgt-host-or-off]-BEFORE-ENV-%[dir-fc2])
 // RUN: }
+//      # Check both traditional compilation mode and source-to-source mode
+//      # followed by OpenMP compilation.  This is important because some
+//      # profiling data that depends on OMPT extensions is currently available
+//      # only in the former case.
 // RUN: %for dirs {
 // RUN:   %for tgts {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %flags %s -o %t \
-// RUN:                      %[tgt-cflags] %[dir-cflags]
+// RUN:     %[run-if] %clang -Xclang -verify -fopenacc-print=omp %flags %s \
+// RUN:                      %[tgt-cppflags] %[dir-cflags] > %t-omp.c
+// RUN:     %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
+// RUN:     %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version %flags \
+// RUN:                      %t-omp.c %[tgt-cppflags] %[tgt-cflags] \
+// RUN:                      %[dir-cflags] -I%S -o %t
 // RUN:     %for run-envs {
 // RUN:       %[run-if] %[run-env] %t > %t.out 2> %t.err
 // RUN:       %[run-if] FileCheck -input-file %t.err %s \
@@ -68,13 +80,44 @@
 // RUN:           -match-full-lines -strict-whitespace \
 // RUN:           -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2],CHECK-%[dir-fc3],%[env-fc] \
 // RUN:           -DVERSION=%acc-version -DHOST_DEV=%acc-host-dev \
-// RUN:           -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 -DSRC_FILE=%s \
-// RUN:           -DARR_CONSTRUCT=%[arr-construct] \
+// RUN:           -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
+// RUN:           -DARR_CONSTRUCT='runtime_api' -DDATA_CONSTRUCT='runtime_api' \
+// RUN:           -DPARALLEL_CONSTRUCT='runtime_api' \
+// RUN:           -DUPDATE_CONSTRUCT='runtime_api' \
+// RUN:           -DIMPLICIT_FOR_DIRECTIVE=1 \
+// RUN:           -DSRC_FILE='(null)' -DFUNC_NAME='(null)' \
+// RUN:           -DARR0_LINE_NO=0 -DARR0_END_LINE_NO=0 \
+// RUN:           -DARR1_LINE_NO=0 -DARR1_END_LINE_NO=0 \
+// RUN:           -DKERN_LINE_NO=0 -DKERN_END_LINE_NO=0 \
+// RUN:           -DUPDATE0_LINE_NO=0 -DUPDATE1_LINE_NO=0 \
+// RUN:           -DFUNC_LINE_NO=0 -DFUNC_END_LINE_NO=0 \
+// RUN:           -DARR0_VAR_NAME='(null)' -DARR1_VAR_NAME='(null)'
+// RUN:     }
+// RUN:   }
+// RUN: }
+// RUN: %for dirs {
+// RUN:   %for tgts {
+// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %flags %s \
+// RUN:                      %[tgt-cflags] %[tgt-cppflags] %[dir-cflags] -o %t
+// RUN:     %for run-envs {
+// RUN:       %[run-if] %[run-env] %t > %t.out 2> %t.err
+// RUN:       %[run-if] FileCheck -input-file %t.err %s \
+// RUN:           -allow-empty -check-prefixes=ERR
+// RUN:       %[run-if] FileCheck -input-file %t.out %s \
+// RUN:           -match-full-lines -strict-whitespace \
+// RUN:           -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2],CHECK-%[dir-fc3],%[env-fc] \
+// RUN:           -DVERSION=%acc-version -DHOST_DEV=%acc-host-dev \
+// RUN:           -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
+// RUN:           -DARR_CONSTRUCT=%[arr-construct] -DDATA_CONSTRUCT='data' \
+// RUN:           -DPARALLEL_CONSTRUCT='parallel' -DUPDATE_CONSTRUCT='update' \
+// RUN:           -DIMPLICIT_FOR_DIRECTIVE=0 \
+// RUN:           -DSRC_FILE='%s' -DFUNC_NAME=main \
 // RUN:           -DARR0_LINE_NO=%[arr0-line-no] -DARR0_END_LINE_NO=%[arr0-end-line-no] \
 // RUN:           -DARR1_LINE_NO=%[arr1-line-no] -DARR1_END_LINE_NO=%[arr1-end-line-no] \
 // RUN:           -DKERN_LINE_NO=%[kern-line-no] -DKERN_END_LINE_NO=%[kern-end-line-no] \
 // RUN:           -DUPDATE0_LINE_NO=%[update0-line-no] -DUPDATE1_LINE_NO=%[update1-line-no] \
-// RUN:           -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=130000
+// RUN:           -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=130000 \
+// RUN:           -DARR0_VAR_NAME=arr0 -DARR1_VAR_NAME='arr1[0:5]'
 // RUN:     }
 // RUN:   }
 // RUN: }
@@ -111,7 +154,7 @@ int main() {
   // CHECK-NOT:{{.}}
 
   int arr0[2] = {10, 11};
-  int arr1[5] = {20, 21, 22, 23, 24};
+  int arr1[9] = {20, 21, 22, 23, 24};
   int notPresent0[10];
   int notPresent1[11];
 
@@ -130,13 +173,13 @@ int main() {
   // OFF-NEXT:    event_type=1, valid_bytes=72, version=[[VERSION]],
   // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   // OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NEXT:  acc_other_event_info
   // OFF-NEXT:    event_type=1, valid_bytes=24,
   // OFF-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
   // OFF-NEXT:    device_type=acc_device_not_host
@@ -145,13 +188,13 @@ int main() {
   // OFF-NEXT:    event_type=2, valid_bytes=72, version=[[VERSION]],
   // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   // OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NEXT:  acc_other_event_info
   // OFF-NEXT:    event_type=2, valid_bytes=24,
   // OFF-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
   // OFF-NEXT:    device_type=acc_device_not_host
@@ -164,13 +207,13 @@ int main() {
   //  HOST-PAR-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
   //   OFF-PAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // CHECK-PAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // CHECK-PAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // CHECK-PAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // CHECK-PAR-NEXT:    line_no=[[KERN_LINE_NO]], end_line_no=[[KERN_END_LINE_NO]],
   // CHECK-PAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // CHECK-PAR-NEXT:  acc_other_event_info
   // CHECK-PAR-NEXT:    event_type=16, valid_bytes=24,
-  // CHECK-PAR-NEXT:    parent_construct=acc_construct_parallel,
-  // CHECK-PAR-NEXT:    implicit=0, tool_info=(nil)
+  // CHECK-PAR-NEXT:    parent_construct=acc_construct_[[PARALLEL_CONSTRUCT]],
+  // CHECK-PAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // CHECK-PAR-NEXT:  acc_api_info
   // CHECK-PAR-NEXT:    device_api=0, valid_bytes=12,
   //  HOST-PAR-NEXT:    device_type=acc_device_host
@@ -183,13 +226,13 @@ int main() {
   //         OFF-NEXT:    event_type=10, valid_bytes=72, version=[[VERSION]],
   //         OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   //         OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   //         OFF-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   //         OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   //         OFF-NEXT:  acc_other_event_info
   //         OFF-NEXT:    event_type=10, valid_bytes=24,
   //         OFF-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  //         OFF-NEXT:    implicit=0, tool_info=(nil)
+  //         OFF-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   //         OFF-NEXT:  acc_api_info
   //         OFF-NEXT:    device_api=0, valid_bytes=12,
   //         OFF-NEXT:    device_type=acc_device_not_host
@@ -198,14 +241,14 @@ int main() {
   //         OFF-NEXT:    event_type=8, valid_bytes=72, version=[[VERSION]],
   //         OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   //         OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   //         OFF-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   //         OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   //         OFF-NEXT:  acc_data_event_info
   //         OFF-NEXT:    event_type=8, valid_bytes=56,
   //         OFF-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  //         OFF-NEXT:    implicit=0, tool_info=(nil),
-  //         OFF-NEXT:    var_name=(null), bytes=8,
+  //         OFF-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  //         OFF-NEXT:    var_name=[[ARR0_VAR_NAME]], bytes=8,
   //         OFF-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
   //         OFF-NEXT:    device_ptr=[[ARR0_DEVICE_PTR:0x[a-z0-9]+]]
   //         OFF-NEXT:  acc_api_info
@@ -216,14 +259,14 @@ int main() {
   //         OFF-NEXT:    event_type=6, valid_bytes=72, version=[[VERSION]],
   //         OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   //         OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   //         OFF-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   //         OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   //         OFF-NEXT:  acc_data_event_info
   //         OFF-NEXT:    event_type=6, valid_bytes=56,
   //         OFF-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  //         OFF-NEXT:    implicit=0, tool_info=(nil),
-  //         OFF-NEXT:    var_name=(null), bytes=8,
+  //         OFF-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  //         OFF-NEXT:    var_name=[[ARR0_VAR_NAME]], bytes=8,
   //         OFF-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
   //         OFF-NEXT:    device_ptr=[[ARR0_DEVICE_PTR]]
   //         OFF-NEXT:  acc_api_info
@@ -234,14 +277,14 @@ int main() {
   //         OFF-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
   //         OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   //         OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   //         OFF-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   //         OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   //         OFF-NEXT:  acc_data_event_info
   //         OFF-NEXT:    event_type=20, valid_bytes=56,
   //         OFF-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  //         OFF-NEXT:    implicit=0, tool_info=(nil),
-  //         OFF-NEXT:    var_name=(null), bytes=8,
+  //         OFF-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  //         OFF-NEXT:    var_name=[[ARR0_VAR_NAME]], bytes=8,
   //         OFF-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
   //         OFF-NEXT:    device_ptr=[[ARR0_DEVICE_PTR]]
   //         OFF-NEXT:  acc_api_info
@@ -252,14 +295,14 @@ int main() {
   //         OFF-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
   //         OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   //         OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   //         OFF-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   //         OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   //         OFF-NEXT:  acc_data_event_info
   //         OFF-NEXT:    event_type=21, valid_bytes=56,
   //         OFF-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  //         OFF-NEXT:    implicit=0, tool_info=(nil),
-  //         OFF-NEXT:    var_name=(null), bytes=8,
+  //         OFF-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  //         OFF-NEXT:    var_name=[[ARR0_VAR_NAME]], bytes=8,
   //         OFF-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
   //         OFF-NEXT:    device_ptr=[[ARR0_DEVICE_PTR]]
   //         OFF-NEXT:  acc_api_info
@@ -270,13 +313,13 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=11, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_other_event_info
   // OFF-DATAPAR-NEXT:    event_type=11, valid_bytes=24,
-  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_data,
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[DATA_CONSTRUCT]],
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // OFF-DATAPAR-NEXT:  acc_api_info
   // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
@@ -288,13 +331,13 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=10, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_other_event_info
   // OFF-DATAPAR-NEXT:    event_type=10, valid_bytes=24,
-  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_data,
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[DATA_CONSTRUCT]],
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // OFF-DATAPAR-NEXT:  acc_api_info
   // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
@@ -303,14 +346,14 @@ int main() {
   //         OFF-NEXT:    event_type=8, valid_bytes=72, version=[[VERSION]],
   //         OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   //         OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   //         OFF-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   //         OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   //         OFF-NEXT:  acc_data_event_info
   //         OFF-NEXT:    event_type=8, valid_bytes=56,
   //         OFF-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  //         OFF-NEXT:    implicit=0, tool_info=(nil),
-  //         OFF-NEXT:    var_name=(null), bytes=20,
+  //         OFF-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  //         OFF-NEXT:    var_name=[[ARR1_VAR_NAME]], bytes=20,
   //         OFF-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
   //         OFF-NEXT:    device_ptr=[[ARR1_DEVICE_PTR:0x[a-z0-9]+]]
   //         OFF-NEXT:  acc_api_info
@@ -321,14 +364,14 @@ int main() {
   //         OFF-NEXT:    event_type=6, valid_bytes=72, version=[[VERSION]],
   //         OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   //         OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   //         OFF-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   //         OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   //         OFF-NEXT:  acc_data_event_info
   //         OFF-NEXT:    event_type=6, valid_bytes=56,
   //         OFF-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  //         OFF-NEXT:    implicit=0, tool_info=(nil),
-  //         OFF-NEXT:    var_name=(null), bytes=20,
+  //         OFF-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  //         OFF-NEXT:    var_name=[[ARR1_VAR_NAME]], bytes=20,
   //         OFF-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
   //         OFF-NEXT:    device_ptr=[[ARR1_DEVICE_PTR]]
   //         OFF-NEXT:  acc_api_info
@@ -339,14 +382,14 @@ int main() {
   //         OFF-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
   //         OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   //         OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   //         OFF-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   //         OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   //         OFF-NEXT:  acc_data_event_info
   //         OFF-NEXT:    event_type=20, valid_bytes=56,
   //         OFF-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  //         OFF-NEXT:    implicit=0, tool_info=(nil),
-  //         OFF-NEXT:    var_name=(null), bytes=20,
+  //         OFF-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  //         OFF-NEXT:    var_name=[[ARR1_VAR_NAME]], bytes=20,
   //         OFF-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
   //         OFF-NEXT:    device_ptr=[[ARR1_DEVICE_PTR]]
   //         OFF-NEXT:  acc_api_info
@@ -357,14 +400,14 @@ int main() {
   //         OFF-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
   //         OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   //         OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   //         OFF-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   //         OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   //         OFF-NEXT:  acc_data_event_info
   //         OFF-NEXT:    event_type=21, valid_bytes=56,
   //         OFF-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  //         OFF-NEXT:    implicit=0, tool_info=(nil),
-  //         OFF-NEXT:    var_name=(null), bytes=20,
+  //         OFF-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  //         OFF-NEXT:    var_name=[[ARR1_VAR_NAME]], bytes=20,
   //         OFF-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
   //         OFF-NEXT:    device_ptr=[[ARR1_DEVICE_PTR]]
   //         OFF-NEXT:  acc_api_info
@@ -375,13 +418,13 @@ int main() {
   //         OFF-NEXT:    event_type=11, valid_bytes=72, version=[[VERSION]],
   //         OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   //         OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  //         OFF-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   //         OFF-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   //         OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   //         OFF-NEXT:  acc_other_event_info
   //         OFF-NEXT:    event_type=11, valid_bytes=24,
   //         OFF-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  //         OFF-NEXT:    implicit=0, tool_info=(nil)
+  //         OFF-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   //         OFF-NEXT:  acc_api_info
   //         OFF-NEXT:    device_api=0, valid_bytes=12,
   //         OFF-NEXT:    device_type=acc_device_not_host
@@ -395,13 +438,13 @@ int main() {
   //  HOST-DATAPAR-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
   //   OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // CHECK-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // CHECK-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // CHECK-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // CHECK-DATAPAR-NEXT:    line_no=[[KERN_LINE_NO]], end_line_no=[[KERN_END_LINE_NO]],
   // CHECK-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // CHECK-DATAPAR-NEXT:  acc_other_event_info
   // CHECK-DATAPAR-NEXT:    event_type=16, valid_bytes=24,
-  // CHECK-DATAPAR-NEXT:    parent_construct=acc_construct_parallel,
-  // CHECK-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // CHECK-DATAPAR-NEXT:    parent_construct=acc_construct_[[PARALLEL_CONSTRUCT]],
+  // CHECK-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // CHECK-DATAPAR-NEXT:  acc_api_info
   // CHECK-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   //  HOST-DATAPAR-NEXT:    device_type=acc_device_host
@@ -411,13 +454,13 @@ int main() {
   //   OFF-DATAPAR-NEXT:    event_type=10, valid_bytes=72, version=[[VERSION]],
   //   OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   //   OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  //   OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  //   OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   //   OFF-DATAPAR-NEXT:    line_no=[[KERN_LINE_NO]], end_line_no=[[KERN_END_LINE_NO]],
   //   OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   //   OFF-DATAPAR-NEXT:  acc_other_event_info
   //   OFF-DATAPAR-NEXT:    event_type=10, valid_bytes=24,
-  //   OFF-DATAPAR-NEXT:    parent_construct=acc_construct_parallel,
-  //   OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  //   OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[PARALLEL_CONSTRUCT]],
+  //   OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   //   OFF-DATAPAR-NEXT:  acc_api_info
   //   OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   //   OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
@@ -426,13 +469,13 @@ int main() {
   //   OFF-DATAPAR-NEXT:    event_type=11, valid_bytes=72, version=[[VERSION]],
   //   OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   //   OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  //   OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  //   OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   //   OFF-DATAPAR-NEXT:    line_no=[[KERN_LINE_NO]], end_line_no=[[KERN_END_LINE_NO]],
   //   OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   //   OFF-DATAPAR-NEXT:  acc_other_event_info
   //   OFF-DATAPAR-NEXT:    event_type=11, valid_bytes=24,
-  //   OFF-DATAPAR-NEXT:    parent_construct=acc_construct_parallel,
-  //   OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  //   OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[PARALLEL_CONSTRUCT]],
+  //   OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   //   OFF-DATAPAR-NEXT:  acc_api_info
   //   OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   //   OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
@@ -445,13 +488,13 @@ int main() {
   //  HOST-HASPAR-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
   //   OFF-HASPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // CHECK-HASPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // CHECK-HASPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // CHECK-HASPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // CHECK-HASPAR-NEXT:    line_no=[[KERN_LINE_NO]], end_line_no=[[KERN_END_LINE_NO]],
   // CHECK-HASPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // CHECK-HASPAR-NEXT:  acc_launch_event_info
   // CHECK-HASPAR-NEXT:    event_type=18, valid_bytes=32,
-  // CHECK-HASPAR-NEXT:    parent_construct=acc_construct_parallel,
-  // CHECK-HASPAR-NEXT:    implicit=0, tool_info=(nil),
+  // CHECK-HASPAR-NEXT:    parent_construct=acc_construct_[[PARALLEL_CONSTRUCT]],
+  // CHECK-HASPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
   // CHECK-HASPAR-NEXT:    kernel_name=(nil)
   // CHECK-HASPAR-NEXT:  acc_api_info
   // CHECK-HASPAR-NEXT:    device_api=0, valid_bytes=12,
@@ -463,13 +506,13 @@ int main() {
   //  HOST-HASPAR-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
   //   OFF-HASPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // CHECK-HASPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // CHECK-HASPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // CHECK-HASPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // CHECK-HASPAR-NEXT:    line_no=[[KERN_LINE_NO]], end_line_no=[[KERN_END_LINE_NO]],
   // CHECK-HASPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // CHECK-HASPAR-NEXT:  acc_launch_event_info
   // CHECK-HASPAR-NEXT:    event_type=19, valid_bytes=32,
-  // CHECK-HASPAR-NEXT:    parent_construct=acc_construct_parallel,
-  // CHECK-HASPAR-NEXT:    implicit=0, tool_info=(nil),
+  // CHECK-HASPAR-NEXT:    parent_construct=acc_construct_[[PARALLEL_CONSTRUCT]],
+  // CHECK-HASPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
   // CHECK-HASPAR-NEXT:    kernel_name=(nil)
   // CHECK-HASPAR-NEXT:  acc_api_info
   // CHECK-HASPAR-NEXT:    device_api=0, valid_bytes=12,
@@ -478,18 +521,18 @@ int main() {
 
 #if DIR == DIR_DATA
   #line 20000
-  #pragma acc data copy(arr0, arr1)
+  #pragma acc data copy(arr0, arr1[0:5])
   #line 30000
   ;
 #elif DIR == DIR_PAR
   #line 40000
-  #pragma acc parallel copy(arr0, arr1) num_gangs(1)
+  #pragma acc parallel copy(arr0, arr1[0:5]) num_gangs(1)
 #elif DIR == DIR_DATAPAR
   #line 50000
   #pragma acc data copy(arr0)
   {
     #line 60000
-    #pragma acc data copy(arr1)
+    #pragma acc data copy(arr1[0:5])
     {
       #line 70000
       #pragma acc parallel num_gangs(1)
@@ -521,7 +564,7 @@ int main() {
 #endif
 #if DIR == DIR_DATAPAR
     #line 90000
-    #pragma acc update self(arr0, notPresent0) device(arr1, notPresent1)
+    #pragma acc update self(arr0, notPresent0) device(arr1[0:5], notPresent1)
     #line 100000
     #pragma acc update self(notPresent0) device(notPresent1)
     #line 110000
@@ -538,13 +581,13 @@ int main() {
   //   OFF-DATAPAR-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
   //   OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   //   OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  //   OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  //   OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   //   OFF-DATAPAR-NEXT:    line_no=[[KERN_LINE_NO]], end_line_no=[[KERN_END_LINE_NO]],
   //   OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   //   OFF-DATAPAR-NEXT:  acc_other_event_info
   //   OFF-DATAPAR-NEXT:    event_type=12, valid_bytes=24,
-  //   OFF-DATAPAR-NEXT:    parent_construct=acc_construct_parallel,
-  //   OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  //   OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[PARALLEL_CONSTRUCT]],
+  //   OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   //   OFF-DATAPAR-NEXT:  acc_api_info
   //   OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   //   OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
@@ -553,13 +596,13 @@ int main() {
   //   OFF-DATAPAR-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
   //   OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   //   OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  //   OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  //   OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   //   OFF-DATAPAR-NEXT:    line_no=[[KERN_LINE_NO]], end_line_no=[[KERN_END_LINE_NO]],
   //   OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   //   OFF-DATAPAR-NEXT:  acc_other_event_info
   //   OFF-DATAPAR-NEXT:    event_type=13, valid_bytes=24,
-  //   OFF-DATAPAR-NEXT:    parent_construct=acc_construct_parallel,
-  //   OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  //   OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[PARALLEL_CONSTRUCT]],
+  //   OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   //   OFF-DATAPAR-NEXT:  acc_api_info
   //   OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   //   OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
@@ -569,13 +612,13 @@ int main() {
   //  HOST-DATAPAR-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
   //   OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // CHECK-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // CHECK-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // CHECK-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // CHECK-DATAPAR-NEXT:    line_no=[[KERN_LINE_NO]], end_line_no=[[KERN_END_LINE_NO]],
   // CHECK-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // CHECK-DATAPAR-NEXT:  acc_other_event_info
   // CHECK-DATAPAR-NEXT:    event_type=17, valid_bytes=24,
-  // CHECK-DATAPAR-NEXT:    parent_construct=acc_construct_parallel,
-  // CHECK-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // CHECK-DATAPAR-NEXT:    parent_construct=acc_construct_[[PARALLEL_CONSTRUCT]],
+  // CHECK-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // CHECK-DATAPAR-NEXT:  acc_api_info
   // CHECK-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   //  HOST-DATAPAR-NEXT:    device_type=acc_device_host
@@ -588,13 +631,13 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=14, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[UPDATE0_LINE_NO]], end_line_no=[[UPDATE0_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_other_event_info
   // OFF-DATAPAR-NEXT:    event_type=14, valid_bytes=24,
-  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[UPDATE_CONSTRUCT]],
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // OFF-DATAPAR-NEXT:  acc_api_info
   // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
@@ -603,14 +646,14 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[UPDATE0_LINE_NO]], end_line_no=[[UPDATE0_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_data_event_info
   // OFF-DATAPAR-NEXT:    event_type=20, valid_bytes=56,
-  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=20,
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[UPDATE_CONSTRUCT]],
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=[[ARR1_VAR_NAME]], bytes=20,
   // OFF-DATAPAR-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
   // OFF-DATAPAR-NEXT:    device_ptr=[[ARR1_DEVICE_PTR]]
   // OFF-DATAPAR-NEXT:  acc_api_info
@@ -621,14 +664,14 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[UPDATE0_LINE_NO]], end_line_no=[[UPDATE0_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_data_event_info
   // OFF-DATAPAR-NEXT:    event_type=21, valid_bytes=56,
-  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=20,
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[UPDATE_CONSTRUCT]],
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=[[ARR1_VAR_NAME]], bytes=20,
   // OFF-DATAPAR-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
   // OFF-DATAPAR-NEXT:    device_ptr=[[ARR1_DEVICE_PTR]]
   // OFF-DATAPAR-NEXT:  acc_api_info
@@ -639,14 +682,14 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[UPDATE0_LINE_NO]], end_line_no=[[UPDATE0_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_data_event_info
   // OFF-DATAPAR-NEXT:    event_type=22, valid_bytes=56,
-  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=8,
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[UPDATE_CONSTRUCT]],
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=[[ARR0_VAR_NAME]], bytes=8,
   // OFF-DATAPAR-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
   // OFF-DATAPAR-NEXT:    device_ptr=[[ARR0_DEVICE_PTR]]
   // OFF-DATAPAR-NEXT:  acc_api_info
@@ -657,14 +700,14 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[UPDATE0_LINE_NO]], end_line_no=[[UPDATE0_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_data_event_info
   // OFF-DATAPAR-NEXT:    event_type=23, valid_bytes=56,
-  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=8,
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[UPDATE_CONSTRUCT]],
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=[[ARR0_VAR_NAME]], bytes=8,
   // OFF-DATAPAR-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
   // OFF-DATAPAR-NEXT:    device_ptr=[[ARR0_DEVICE_PTR]]
   // OFF-DATAPAR-NEXT:  acc_api_info
@@ -675,13 +718,13 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=15, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[UPDATE0_LINE_NO]], end_line_no=[[UPDATE0_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_other_event_info
   // OFF-DATAPAR-NEXT:    event_type=15, valid_bytes=24,
-  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[UPDATE_CONSTRUCT]],
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // OFF-DATAPAR-NEXT:  acc_api_info
   // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
@@ -690,13 +733,13 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=14, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[UPDATE1_LINE_NO]], end_line_no=[[UPDATE1_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_other_event_info
   // OFF-DATAPAR-NEXT:    event_type=14, valid_bytes=24,
-  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[UPDATE_CONSTRUCT]],
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // OFF-DATAPAR-NEXT:  acc_api_info
   // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
@@ -705,13 +748,13 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=15, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[UPDATE1_LINE_NO]], end_line_no=[[UPDATE1_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_other_event_info
   // OFF-DATAPAR-NEXT:    event_type=15, valid_bytes=24,
-  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_update,
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[UPDATE_CONSTRUCT]],
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // OFF-DATAPAR-NEXT:  acc_api_info
   // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
@@ -723,13 +766,13 @@ int main() {
   // OFF-NODATAPAR-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
   // OFF-NODATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-NODATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-NODATAPAR-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   // OFF-NODATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NODATAPAR-NEXT:  acc_other_event_info
   // OFF-NODATAPAR-NEXT:    event_type=12, valid_bytes=24,
   // OFF-NODATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-NODATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-NODATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // OFF-NODATAPAR-NEXT:  acc_api_info
   // OFF-NODATAPAR-NEXT:    device_api=0, valid_bytes=12,
   // OFF-NODATAPAR-NEXT:    device_type=acc_device_not_host
@@ -738,14 +781,14 @@ int main() {
   // OFF-NODATAPAR-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
   // OFF-NODATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-NODATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-NODATAPAR-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   // OFF-NODATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NODATAPAR-NEXT:  acc_data_event_info
   // OFF-NODATAPAR-NEXT:    event_type=22, valid_bytes=56,
   // OFF-NODATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-NODATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NODATAPAR-NEXT:    var_name=(null), bytes=20,
+  // OFF-NODATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-NODATAPAR-NEXT:    var_name=[[ARR1_VAR_NAME]], bytes=20,
   // OFF-NODATAPAR-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
   // OFF-NODATAPAR-NEXT:    device_ptr=[[ARR1_DEVICE_PTR]]
   // OFF-NODATAPAR-NEXT:  acc_api_info
@@ -756,14 +799,14 @@ int main() {
   // OFF-NODATAPAR-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
   // OFF-NODATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-NODATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-NODATAPAR-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   // OFF-NODATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NODATAPAR-NEXT:  acc_data_event_info
   // OFF-NODATAPAR-NEXT:    event_type=23, valid_bytes=56,
   // OFF-NODATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-NODATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NODATAPAR-NEXT:    var_name=(null), bytes=20,
+  // OFF-NODATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-NODATAPAR-NEXT:    var_name=[[ARR1_VAR_NAME]], bytes=20,
   // OFF-NODATAPAR-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
   // OFF-NODATAPAR-NEXT:    device_ptr=[[ARR1_DEVICE_PTR]]
   // OFF-NODATAPAR-NEXT:  acc_api_info
@@ -774,14 +817,14 @@ int main() {
   // OFF-NODATAPAR-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
   // OFF-NODATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-NODATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-NODATAPAR-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   // OFF-NODATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NODATAPAR-NEXT:  acc_data_event_info
   // OFF-NODATAPAR-NEXT:    event_type=22, valid_bytes=56,
   // OFF-NODATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-NODATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NODATAPAR-NEXT:    var_name=(null), bytes=8,
+  // OFF-NODATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-NODATAPAR-NEXT:    var_name=[[ARR0_VAR_NAME]], bytes=8,
   // OFF-NODATAPAR-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
   // OFF-NODATAPAR-NEXT:    device_ptr=[[ARR0_DEVICE_PTR]]
   // OFF-NODATAPAR-NEXT:  acc_api_info
@@ -792,14 +835,14 @@ int main() {
   // OFF-NODATAPAR-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
   // OFF-NODATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-NODATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-NODATAPAR-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   // OFF-NODATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NODATAPAR-NEXT:  acc_data_event_info
   // OFF-NODATAPAR-NEXT:    event_type=23, valid_bytes=56,
   // OFF-NODATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-NODATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NODATAPAR-NEXT:    var_name=(null), bytes=8,
+  // OFF-NODATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-NODATAPAR-NEXT:    var_name=[[ARR0_VAR_NAME]], bytes=8,
   // OFF-NODATAPAR-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
   // OFF-NODATAPAR-NEXT:    device_ptr=[[ARR0_DEVICE_PTR]]
   // OFF-NODATAPAR-NEXT:  acc_api_info
@@ -810,14 +853,14 @@ int main() {
   // OFF-NODATAPAR-NEXT:    event_type=7, valid_bytes=72, version=[[VERSION]],
   // OFF-NODATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-NODATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-NODATAPAR-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   // OFF-NODATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NODATAPAR-NEXT:  acc_data_event_info
   // OFF-NODATAPAR-NEXT:    event_type=7, valid_bytes=56,
   // OFF-NODATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-NODATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NODATAPAR-NEXT:    var_name=(null), bytes=20,
+  // OFF-NODATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-NODATAPAR-NEXT:    var_name=[[ARR1_VAR_NAME]], bytes=20,
   // OFF-NODATAPAR-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
   // OFF-NODATAPAR-NEXT:    device_ptr=[[ARR1_DEVICE_PTR]]
   // OFF-NODATAPAR-NEXT:  acc_api_info
@@ -828,14 +871,14 @@ int main() {
   // OFF-NODATAPAR-NEXT:    event_type=9, valid_bytes=72, version=[[VERSION]],
   // OFF-NODATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-NODATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-NODATAPAR-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   // OFF-NODATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NODATAPAR-NEXT:  acc_data_event_info
   // OFF-NODATAPAR-NEXT:    event_type=9, valid_bytes=56,
   // OFF-NODATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-NODATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NODATAPAR-NEXT:    var_name=(null), bytes=20,
+  // OFF-NODATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-NODATAPAR-NEXT:    var_name=[[ARR1_VAR_NAME]], bytes=20,
   // OFF-NODATAPAR-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
   // OFF-NODATAPAR-NEXT:    device_ptr=[[ARR1_DEVICE_PTR]]
   // OFF-NODATAPAR-NEXT:  acc_api_info
@@ -846,14 +889,14 @@ int main() {
   // OFF-NODATAPAR-NEXT:    event_type=7, valid_bytes=72, version=[[VERSION]],
   // OFF-NODATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-NODATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-NODATAPAR-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   // OFF-NODATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NODATAPAR-NEXT:  acc_data_event_info
   // OFF-NODATAPAR-NEXT:    event_type=7, valid_bytes=56,
   // OFF-NODATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-NODATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NODATAPAR-NEXT:    var_name=(null), bytes=8,
+  // OFF-NODATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-NODATAPAR-NEXT:    var_name=[[ARR0_VAR_NAME]], bytes=8,
   // OFF-NODATAPAR-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
   // OFF-NODATAPAR-NEXT:    device_ptr=[[ARR0_DEVICE_PTR]]
   // OFF-NODATAPAR-NEXT:  acc_api_info
@@ -864,14 +907,14 @@ int main() {
   // OFF-NODATAPAR-NEXT:    event_type=9, valid_bytes=72, version=[[VERSION]],
   // OFF-NODATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-NODATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-NODATAPAR-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   // OFF-NODATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NODATAPAR-NEXT:  acc_data_event_info
   // OFF-NODATAPAR-NEXT:    event_type=9, valid_bytes=56,
   // OFF-NODATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-NODATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NODATAPAR-NEXT:    var_name=(null), bytes=8,
+  // OFF-NODATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-NODATAPAR-NEXT:    var_name=[[ARR0_VAR_NAME]], bytes=8,
   // OFF-NODATAPAR-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
   // OFF-NODATAPAR-NEXT:    device_ptr=[[ARR0_DEVICE_PTR]]
   // OFF-NODATAPAR-NEXT:  acc_api_info
@@ -882,13 +925,13 @@ int main() {
   // OFF-NODATAPAR-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
   // OFF-NODATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-NODATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NODATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-NODATAPAR-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   // OFF-NODATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-NODATAPAR-NEXT:  acc_other_event_info
   // OFF-NODATAPAR-NEXT:    event_type=13, valid_bytes=24,
   // OFF-NODATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-NODATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-NODATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // OFF-NODATAPAR-NEXT:  acc_api_info
   // OFF-NODATAPAR-NEXT:    device_api=0, valid_bytes=12,
   // OFF-NODATAPAR-NEXT:    device_type=acc_device_not_host
@@ -900,13 +943,13 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_other_event_info
   // OFF-DATAPAR-NEXT:    event_type=12, valid_bytes=24,
   // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // OFF-DATAPAR-NEXT:  acc_api_info
   // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
@@ -915,14 +958,14 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_data_event_info
   // OFF-DATAPAR-NEXT:    event_type=22, valid_bytes=56,
   // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=20,
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=[[ARR1_VAR_NAME]], bytes=20,
   // OFF-DATAPAR-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
   // OFF-DATAPAR-NEXT:    device_ptr=[[ARR1_DEVICE_PTR]]
   // OFF-DATAPAR-NEXT:  acc_api_info
@@ -933,14 +976,14 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_data_event_info
   // OFF-DATAPAR-NEXT:    event_type=23, valid_bytes=56,
   // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=20,
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=[[ARR1_VAR_NAME]], bytes=20,
   // OFF-DATAPAR-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
   // OFF-DATAPAR-NEXT:    device_ptr=[[ARR1_DEVICE_PTR]]
   // OFF-DATAPAR-NEXT:  acc_api_info
@@ -951,14 +994,14 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=7, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_data_event_info
   // OFF-DATAPAR-NEXT:    event_type=7, valid_bytes=56,
   // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=20,
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=[[ARR1_VAR_NAME]], bytes=20,
   // OFF-DATAPAR-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
   // OFF-DATAPAR-NEXT:    device_ptr=[[ARR1_DEVICE_PTR]]
   // OFF-DATAPAR-NEXT:  acc_api_info
@@ -969,14 +1012,14 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=9, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_data_event_info
   // OFF-DATAPAR-NEXT:    event_type=9, valid_bytes=56,
   // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=20,
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=[[ARR1_VAR_NAME]], bytes=20,
   // OFF-DATAPAR-NEXT:    host_ptr=[[ARR1_HOST_PTR]],
   // OFF-DATAPAR-NEXT:    device_ptr=[[ARR1_DEVICE_PTR]]
   // OFF-DATAPAR-NEXT:  acc_api_info
@@ -987,13 +1030,13 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[ARR1_LINE_NO]], end_line_no=[[ARR1_END_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_other_event_info
   // OFF-DATAPAR-NEXT:    event_type=13, valid_bytes=24,
-  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_data,
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[DATA_CONSTRUCT]],
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // OFF-DATAPAR-NEXT:  acc_api_info
   // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
@@ -1005,13 +1048,13 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_other_event_info
   // OFF-DATAPAR-NEXT:    event_type=12, valid_bytes=24,
-  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_data,
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[DATA_CONSTRUCT]],
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // OFF-DATAPAR-NEXT:  acc_api_info
   // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
@@ -1020,14 +1063,14 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_data_event_info
   // OFF-DATAPAR-NEXT:    event_type=22, valid_bytes=56,
   // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=8,
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=[[ARR0_VAR_NAME]], bytes=8,
   // OFF-DATAPAR-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
   // OFF-DATAPAR-NEXT:    device_ptr=[[ARR0_DEVICE_PTR]]
   // OFF-DATAPAR-NEXT:  acc_api_info
@@ -1038,14 +1081,14 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_data_event_info
   // OFF-DATAPAR-NEXT:    event_type=23, valid_bytes=56,
   // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=8,
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=[[ARR0_VAR_NAME]], bytes=8,
   // OFF-DATAPAR-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
   // OFF-DATAPAR-NEXT:    device_ptr=[[ARR0_DEVICE_PTR]]
   // OFF-DATAPAR-NEXT:  acc_api_info
@@ -1056,14 +1099,14 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=7, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_data_event_info
   // OFF-DATAPAR-NEXT:    event_type=7, valid_bytes=56,
   // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=8,
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=[[ARR0_VAR_NAME]], bytes=8,
   // OFF-DATAPAR-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
   // OFF-DATAPAR-NEXT:    device_ptr=[[ARR0_DEVICE_PTR]]
   // OFF-DATAPAR-NEXT:  acc_api_info
@@ -1074,14 +1117,14 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=9, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_data_event_info
   // OFF-DATAPAR-NEXT:    event_type=9, valid_bytes=56,
   // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-DATAPAR-NEXT:    var_name=(null), bytes=8,
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil),
+  // OFF-DATAPAR-NEXT:    var_name=[[ARR0_VAR_NAME]], bytes=8,
   // OFF-DATAPAR-NEXT:    host_ptr=[[ARR0_HOST_PTR]],
   // OFF-DATAPAR-NEXT:    device_ptr=[[ARR0_DEVICE_PTR]]
   // OFF-DATAPAR-NEXT:  acc_api_info
@@ -1092,13 +1135,13 @@ int main() {
   // OFF-DATAPAR-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // OFF-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // OFF-DATAPAR-NEXT:    line_no=[[ARR0_LINE_NO]], end_line_no=[[ARR0_END_LINE_NO]],
   // OFF-DATAPAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // OFF-DATAPAR-NEXT:  acc_other_event_info
   // OFF-DATAPAR-NEXT:    event_type=13, valid_bytes=24,
   // OFF-DATAPAR-NEXT:    parent_construct=acc_construct_[[ARR_CONSTRUCT]],
-  // OFF-DATAPAR-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-DATAPAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // OFF-DATAPAR-NEXT:  acc_api_info
   // OFF-DATAPAR-NEXT:    device_api=0, valid_bytes=12,
   // OFF-DATAPAR-NEXT:    device_type=acc_device_not_host
@@ -1111,13 +1154,13 @@ int main() {
   //  HOST-PAR-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
   //   OFF-PAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // CHECK-PAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // CHECK-PAR-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // CHECK-PAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
   // CHECK-PAR-NEXT:    line_no=[[KERN_LINE_NO]], end_line_no=[[KERN_END_LINE_NO]],
   // CHECK-PAR-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
   // CHECK-PAR-NEXT:  acc_other_event_info
   // CHECK-PAR-NEXT:    event_type=17, valid_bytes=24,
-  // CHECK-PAR-NEXT:    parent_construct=acc_construct_parallel,
-  // CHECK-PAR-NEXT:    implicit=0, tool_info=(nil)
+  // CHECK-PAR-NEXT:    parent_construct=acc_construct_[[PARALLEL_CONSTRUCT]],
+  // CHECK-PAR-NEXT:    implicit=[[IMPLICIT_FOR_DIRECTIVE]], tool_info=(nil)
   // CHECK-PAR-NEXT:  acc_api_info
   // CHECK-PAR-NEXT:    device_api=0, valid_bytes=12,
   //  HOST-PAR-NEXT:    device_type=acc_device_host

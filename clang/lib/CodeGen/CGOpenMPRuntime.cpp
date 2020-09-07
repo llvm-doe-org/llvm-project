@@ -7044,23 +7044,52 @@ public:
     void setDevicePtrDecl(const ValueDecl *D) { DevPtrDecl = D; }
   };
 
+  using MapExprsArrayTy = SmallVector<std::string, 4>;
   using MapBaseValuesArrayTy = SmallVector<BasePointerInfo, 4>;
   using MapValuesArrayTy = SmallVector<llvm::Value *, 4>;
   using MapFlagsArrayTy = SmallVector<OpenMPOffloadMappingFlags, 4>;
   using MapMappersArrayTy = SmallVector<const ValueDecl *, 4>;
 
   /// This structure contains combined information generated for mappable
-  /// clauses, including base pointers, pointers, sizes, map types, and
-  /// user-defined mappers.
+  /// clauses, including map expressions, base pointers, pointers, sizes, map
+  /// types, and user-defined mappers.
   struct MapCombinedInfoTy {
+    MapExprsArrayTy Exprs;
     MapBaseValuesArrayTy BasePointers;
     MapValuesArrayTy Pointers;
     MapValuesArrayTy Sizes;
     MapFlagsArrayTy Types;
     MapMappersArrayTy Mappers;
 
+    /// Add placeholder when map expression is unknown.
+    ///
+    /// TODO: Map expressions are currently needed only for the OMPT extension
+    /// entry point ompt_get_data_expression, which is needed only to support
+    /// the OpenACC Profiling Interface's var_name.  This function is called
+    /// where we simply haven't yet desired support for that and thus haven't
+    /// bothered to implement extraction of map expressions.
+    void addExpr() {
+      Exprs.emplace_back();
+    }
+
+    /// Add variable name as map expression.
+    void addExpr(const VarDecl *VD) {
+      Exprs.push_back(VD->getName().str());
+    }
+
+    /// Add map expression.
+    void addExpr(const Expr *E, ASTContext &Ctxt) {
+      std::string Str;
+      llvm::raw_string_ostream StrStr(Str);
+      PrintingPolicy Pol(Ctxt.getLangOpts());
+      E->printPretty(StrStr, nullptr, Pol);
+      StrStr.flush();
+      Exprs.push_back(Str);
+    }
+
     /// Append arrays in \a CurInfo.
     void append(MapCombinedInfoTy &CurInfo) {
+      Exprs.append(CurInfo.Exprs.begin(), CurInfo.Exprs.end());
       BasePointers.append(CurInfo.BasePointers.begin(),
                           CurInfo.BasePointers.end());
       Pointers.append(CurInfo.Pointers.begin(), CurInfo.Pointers.end());
@@ -7702,6 +7731,7 @@ private:
                 break;
               }
             }
+            CombinedInfo.addExpr();
             CombinedInfo.BasePointers.push_back(BP.getPointer());
             CombinedInfo.Pointers.push_back(LB.getPointer());
             CombinedInfo.Sizes.push_back(CGF.Builder.CreateIntCast(
@@ -7710,6 +7740,7 @@ private:
             CombinedInfo.Mappers.push_back(nullptr);
             LB = CGF.Builder.CreateConstGEP(ComponentLB, 1);
           }
+          CombinedInfo.addExpr();
           CombinedInfo.BasePointers.push_back(BP.getPointer());
           CombinedInfo.Pointers.push_back(LB.getPointer());
           Size = CGF.Builder.CreatePtrDiff(
@@ -7724,6 +7755,7 @@ private:
         }
         llvm::Value *Size = getExprTypeSize(I->getAssociatedExpression());
         if (!IsMemberPointerOrAddr) {
+          CombinedInfo.addExpr(I->getAssociatedExpression(), CGF.getContext());
           CombinedInfo.BasePointers.push_back(BP.getPointer());
           CombinedInfo.Pointers.push_back(LB.getPointer());
           CombinedInfo.Sizes.push_back(
@@ -7948,6 +7980,7 @@ public:
                          MapFlagsArrayTy &CurTypes,
                          const StructRangeInfoTy &PartialStruct,
                          bool NotTargetParams = false) const {
+    CombinedInfo.addExpr();
     // Base is the base of the struct
     CombinedInfo.BasePointers.push_back(PartialStruct.Base.getPointer());
     // Pointer is the address of the lowest element
@@ -8111,6 +8144,7 @@ public:
         } else {
           llvm::Value *Ptr =
               CGF.EmitLoadOfScalar(CGF.EmitLValue(IE), IE->getExprLoc());
+          UseDevicePtrCombinedInfo.addExpr();
           UseDevicePtrCombinedInfo.BasePointers.emplace_back(Ptr, VD);
           UseDevicePtrCombinedInfo.Pointers.push_back(Ptr);
           UseDevicePtrCombinedInfo.Sizes.push_back(
@@ -8180,6 +8214,7 @@ public:
             Ptr = CGF.EmitLValue(IE).getPointer(CGF);
           else
             Ptr = CGF.EmitScalarExpr(IE);
+          CombinedInfo.addExpr();
           CombinedInfo.BasePointers.emplace_back(Ptr, VD);
           CombinedInfo.Pointers.push_back(Ptr);
           CombinedInfo.Sizes.push_back(
@@ -8257,6 +8292,7 @@ public:
             CurInfo.Types.push_back(OMP_MAP_PTR_AND_OBJ | OMP_MAP_RETURN_PARAM |
                                     OMP_MAP_MEMBER_OF);
           }
+          CurInfo.addExpr();
           CurInfo.BasePointers.emplace_back(BasePtr, L.VD);
           CurInfo.Pointers.push_back(Ptr);
           CurInfo.Sizes.push_back(
@@ -8356,6 +8392,7 @@ public:
       LValue ThisLValVal = CGF.EmitLValueForField(VDLVal, ThisCapture);
       LambdaPointers.try_emplace(ThisLVal.getPointer(CGF),
                                  VDLVal.getPointer(CGF));
+      CombinedInfo.addExpr();
       CombinedInfo.BasePointers.push_back(ThisLVal.getPointer(CGF));
       CombinedInfo.Pointers.push_back(ThisLValVal.getPointer(CGF));
       CombinedInfo.Sizes.push_back(
@@ -8378,6 +8415,7 @@ public:
         LValue VarLValVal = CGF.EmitLValueForField(VDLVal, It->second);
         LambdaPointers.try_emplace(VarLVal.getPointer(CGF),
                                    VDLVal.getPointer(CGF));
+        CombinedInfo.addExpr();
         CombinedInfo.BasePointers.push_back(VarLVal.getPointer(CGF));
         CombinedInfo.Pointers.push_back(VarLValVal.getPointer(CGF));
         CombinedInfo.Sizes.push_back(CGF.Builder.CreateIntCast(
@@ -8388,6 +8426,7 @@ public:
         RValue VarRVal = CGF.EmitLoadOfLValue(VarLVal, RD->getLocation());
         LambdaPointers.try_emplace(VarLVal.getPointer(CGF),
                                    VDLVal.getPointer(CGF));
+        CombinedInfo.addExpr();
         CombinedInfo.BasePointers.push_back(VarLVal.getPointer(CGF));
         CombinedInfo.Pointers.push_back(VarRVal.getScalarVal());
         CombinedInfo.Sizes.push_back(llvm::ConstantInt::get(CGF.Int64Ty, 0));
@@ -8444,6 +8483,7 @@ public:
     // pass the pointer by value. If it is a reference to a declaration, we just
     // pass its value.
     if (DevPointersMap.count(VD)) {
+      CombinedInfo.addExpr();
       CombinedInfo.BasePointers.emplace_back(Arg, VD);
       CombinedInfo.Pointers.push_back(Arg);
       CombinedInfo.Sizes.push_back(
@@ -8616,6 +8656,7 @@ public:
     bool IsImplicit = true;
     // Do the default mapping.
     if (CI.capturesThis()) {
+      CombinedInfo.addExpr();
       CombinedInfo.BasePointers.push_back(CV);
       CombinedInfo.Pointers.push_back(CV);
       const auto *PtrTy = cast<PointerType>(RI.getType().getTypePtr());
@@ -8625,6 +8666,7 @@ public:
       // Default map type.
       CombinedInfo.Types.push_back(OMP_MAP_TO | OMP_MAP_FROM);
     } else if (CI.capturesVariableByCopy()) {
+      CombinedInfo.addExpr();
       CombinedInfo.BasePointers.push_back(CV);
       CombinedInfo.Pointers.push_back(CV);
       if (!RI.getType()->isAnyPointerType()) {
@@ -8665,9 +8707,11 @@ public:
             Address(CV, CGF.getContext().getTypeAlignInChars(ElementType)),
             CombinedInfo.Sizes.back(), /*IsVolatile=*/false);
         // Use new global variable as the base pointers.
+        CombinedInfo.addExpr(VD);
         CombinedInfo.BasePointers.push_back(Addr);
         CombinedInfo.Pointers.push_back(Addr);
       } else {
+        CombinedInfo.addExpr(VD);
         CombinedInfo.BasePointers.push_back(CV);
         if (I != FirstPrivateDecls.end() && ElementType->isAnyPointerType()) {
           Address PtrAddr = CGF.EmitLoadOfReference(CGF.MakeAddrLValue(
@@ -8700,7 +8744,8 @@ public:
 static void
 emitOffloadingArrays(CodeGenFunction &CGF,
                      MappableExprsHandler::MapCombinedInfoTy &CombinedInfo,
-                     CGOpenMPRuntime::TargetDataInfo &Info) {
+                     CGOpenMPRuntime::TargetDataInfo &Info,
+                     bool IsInOpenACCConstruct) {
   CodeGenModule &CGM = CGF.CGM;
   ASTContext &Ctx = CGF.getContext();
 
@@ -8758,6 +8803,32 @@ emitOffloadingArrays(CodeGenFunction &CGF,
           SizesArrayInit, Name);
       SizesArrayGbl->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
       Info.SizesArray = SizesArrayGbl;
+    }
+
+    if (IsInOpenACCConstruct) {
+      SmallVector<llvm::Constant *, 4> MapExprs;
+      for (const std::string &MapExpr : CombinedInfo.Exprs) {
+        // TODO: As documented on MapCombinedInfoTy::addExpr, an empty map
+        // expression just means we haven't handled a case yet.  We indicate
+        // that by passing a null pointer here.  In theory, once all cases are
+        // handled, passing a null pointer shouldn't be necessary.
+        if (MapExpr.empty())
+          MapExprs.push_back(llvm::ConstantPointerNull::get(CGM.Int8PtrTy));
+        else
+          MapExprs.push_back(CGF.Builder.CreateGlobalStringPtr(MapExpr));
+      }
+      llvm::Constant *MapExprsArrayInit =
+          llvm::ConstantArray::get(llvm::ArrayType::get(CGM.Int8PtrTy,
+                                                        MapExprs.size()),
+                                   MapExprs);
+      std::string MapExprsName =
+          CGM.getOpenMPRuntime().getName({"offload_mapexprs"});
+      auto *MapExprsArrayGbl = new llvm::GlobalVariable(
+          CGM.getModule(), MapExprsArrayInit->getType(),
+          /*isConstant=*/true, llvm::GlobalValue::PrivateLinkage,
+          MapExprsArrayInit, MapExprsName);
+      MapExprsArrayGbl->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+      Info.MapExprsArray = MapExprsArrayGbl;
     }
 
     // The map types are always constant so we don't need to generate code to
@@ -9504,16 +9575,18 @@ void CGOpenMPRuntime::emitTargetCall(
                                        InputInfo.MappersArray.getPointer(),
                                        NumTeams,
                                        NumThreads};
-      // TODO: emit*DirectiveInfoCall probably also make sense around the
-      // OMPRTL__tgt_target* call in the "else" below.  However, so far, that
-      // doesn't appear to be useful for OpenACC support.
+      // TODO: emit*DirectiveInfoCall and emit*DataExpressionsCall probably also
+      // make sense around the OMPRTL__tgt_target* call in the "else" below.
+      // However, so far, that doesn't appear to be useful for OpenACC support.
       emitSetDirectiveInfoCall(CGF, D);
+      emitSetDataExpressionsCall(CGF, InputInfo.MapExprsArray);
       Return = CGF.EmitRuntimeCall(
           OMPBuilder.getOrCreateRuntimeFunction(
               CGM.getModule(), HasNowait
                                    ? OMPRTL___tgt_target_teams_nowait_mapper
                                    : OMPRTL___tgt_target_teams_mapper),
           OffloadingArgs);
+      emitClearDataExpressionsCall(CGF, InputInfo.MapExprsArray);
       emitClearDirectiveInfoCall(CGF);
     } else {
       llvm::Value *OffloadingArgs[] = {DeviceID,
@@ -9545,7 +9618,9 @@ void CGOpenMPRuntime::emitTargetCall(
       CGF.GenerateOpenMPCapturedVars(CS, CapturedVars);
     }
     emitSetDirectiveInfoCall(CGF, D);
+    emitSetDataExpressionsCall(CGF, InputInfo.MapExprsArray);
     emitOutlinedFunctionCall(CGF, D.getBeginLoc(), OutlinedFn, CapturedVars);
+    emitClearDataExpressionsCall(CGF, InputInfo.MapExprsArray);
     emitClearDirectiveInfoCall(CGF);
     CGF.EmitBranch(OffloadContBlock);
 
@@ -9585,6 +9660,7 @@ void CGOpenMPRuntime::emitTargetCall(
       // VLA sizes are passed to the outlined region by copy and do not have map
       // information associated.
       if (CI->capturesVariableArrayType()) {
+        CurInfo.addExpr();
         CurInfo.BasePointers.push_back(*CV);
         CurInfo.Pointers.push_back(*CV);
         CurInfo.Sizes.push_back(CGF.Builder.CreateIntCast(
@@ -9638,11 +9714,13 @@ void CGOpenMPRuntime::emitTargetCall(
 
     TargetDataInfo Info;
     // Fill up the arrays and create the arguments.
-    emitOffloadingArrays(CGF, CombinedInfo, Info);
+    emitOffloadingArrays(CGF, CombinedInfo, Info, IsInOpenACCConstruct);
     emitOffloadingArraysArgument(CGF, Info.BasePointersArray,
                                  Info.PointersArray, Info.SizesArray,
                                  Info.MapTypesArray, Info.MappersArray, Info);
     InputInfo.NumberOfTargetItems = Info.NumberOfPtrs;
+    InputInfo.MapExprsArray =
+        Address(Info.MapExprsArray, CGM.getPointerAlign());
     InputInfo.BasePointersArray =
         Address(Info.BasePointersArray, CGM.getPointerAlign());
     InputInfo.PointersArray =
@@ -9656,15 +9734,17 @@ void CGOpenMPRuntime::emitTargetCall(
       emitInlinedDirective(CGF, D.getDirectiveKind(), ThenGen);
   };
 
-  auto &&TargetElseGen = [this, &ElseGen, &D, RequiresOuterTask](
+  auto &&TargetElseGen = [this, &ElseGen, &D, &InputInfo, RequiresOuterTask](
                              CodeGenFunction &CGF, PrePostActionTy &) {
     emitSetDirectiveInfoCall(CGF, D);
+    emitSetDataExpressionsCall(CGF, InputInfo.MapExprsArray);
     if (RequiresOuterTask) {
       CodeGenFunction::OMPTargetDataInfo InputInfo;
       CGF.EmitOMPTargetTaskBasedDirective(D, ElseGen, InputInfo);
     } else {
       emitInlinedDirective(CGF, D.getDirectiveKind(), ElseGen);
     }
+    emitClearDataExpressionsCall(CGF, InputInfo.MapExprsArray);
     emitClearDirectiveInfoCall(CGF);
   };
 
@@ -10267,6 +10347,30 @@ void CGOpenMPRuntime::emitClearDirectiveInfoCall(CodeGenFunction &CGF) {
                       Args);
 }
 
+void CGOpenMPRuntime::emitSetDataExpressionsCall(CodeGenFunction &CGF,
+                                                 Address MapExprsArray) {
+  if (!IsInOpenACCConstruct || !MapExprsArray.isValid())
+    return;
+  llvm::Value *Args[] = {
+      CGF.Builder.CreateConstArrayGEP(MapExprsArray, 0).getPointer()
+  };
+  llvm::FunctionCallee Fn = OMPBuilder.getOrCreateRuntimeFunction(
+                          CGM.getModule(), OMPRTL___kmpc_set_data_expressions);
+  CGF.EmitRuntimeCall(Fn, Args);
+}
+
+void CGOpenMPRuntime::emitClearDataExpressionsCall(CodeGenFunction &CGF,
+                                                   Address MapExprsArray) {
+  if (!IsInOpenACCConstruct || !MapExprsArray.isValid())
+    return;
+  llvm::Value *CharNullPtrPtr =
+      llvm::ConstantPointerNull::get(CGM.Int8PtrPtrTy);
+  llvm::Value *Args[] = {CharNullPtrPtr};
+  CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
+                          CGM.getModule(), OMPRTL___kmpc_set_data_expressions),
+                      Args);
+}
+
 void CGOpenMPRuntime::emitNumTeamsClause(CodeGenFunction &CGF,
                                          const Expr *NumTeams,
                                          const Expr *ThreadLimit,
@@ -10319,7 +10423,7 @@ void CGOpenMPRuntime::emitTargetDataCalls(
     MEHandler.generateAllInfo(CombinedInfo);
 
     // Fill up the arrays and create the arguments.
-    emitOffloadingArrays(CGF, CombinedInfo, Info);
+    emitOffloadingArrays(CGF, CombinedInfo, Info, IsInOpenACCConstruct);
 
     llvm::Value *BasePointersArrayArg = nullptr;
     llvm::Value *PointersArrayArg = nullptr;
@@ -10346,10 +10450,13 @@ void CGOpenMPRuntime::emitTargetDataCalls(
         DeviceID,      PointerNum,       BasePointersArrayArg, PointersArrayArg,
         SizesArrayArg, MapTypesArrayArg, MappersArrayArg};
     emitSetDirectiveInfoCall(CGF, D);
+    Address MapExprsArrayAddr(Info.MapExprsArray, CGM.getPointerAlign());
+    emitSetDataExpressionsCall(CGF, MapExprsArrayAddr);
     CGF.EmitRuntimeCall(
         OMPBuilder.getOrCreateRuntimeFunction(
             CGM.getModule(), OMPRTL___tgt_target_data_begin_mapper),
         OffloadingArgs);
+    emitClearDataExpressionsCall(CGF, MapExprsArrayAddr);
     emitClearDirectiveInfoCall(CGF);
 
     // If device pointer privatization is required, emit the body of the region
@@ -10388,10 +10495,13 @@ void CGOpenMPRuntime::emitTargetDataCalls(
         DeviceID,      PointerNum,       BasePointersArrayArg, PointersArrayArg,
         SizesArrayArg, MapTypesArrayArg, MappersArrayArg};
     emitSetDirectiveInfoCall(CGF, D);
+    Address MapExprsArrayAddr(Info.MapExprsArray, CGM.getPointerAlign());
+    emitSetDataExpressionsCall(CGF, MapExprsArrayAddr);
     CGF.EmitRuntimeCall(
         OMPBuilder.getOrCreateRuntimeFunction(
             CGM.getModule(), OMPRTL___tgt_target_data_end_mapper),
         OffloadingArgs);
+    emitClearDataExpressionsCall(CGF, MapExprsArrayAddr);
     emitClearDirectiveInfoCall(CGF);
   };
 
@@ -10554,9 +10664,11 @@ void CGOpenMPRuntime::emitTargetDataStandAloneCall(
       break;
     }
     emitSetDirectiveInfoCall(CGF, D);
+    emitSetDataExpressionsCall(CGF, InputInfo.MapExprsArray);
     CGF.EmitRuntimeCall(
         OMPBuilder.getOrCreateRuntimeFunction(CGM.getModule(), RTLFn),
         OffloadingArgs);
+    emitClearDataExpressionsCall(CGF, InputInfo.MapExprsArray);
     emitClearDirectiveInfoCall(CGF);
   };
 
@@ -10571,11 +10683,13 @@ void CGOpenMPRuntime::emitTargetDataStandAloneCall(
 
     TargetDataInfo Info;
     // Fill up the arrays and create the arguments.
-    emitOffloadingArrays(CGF, CombinedInfo, Info);
+    emitOffloadingArrays(CGF, CombinedInfo, Info, IsInOpenACCConstruct);
     emitOffloadingArraysArgument(CGF, Info.BasePointersArray,
                                  Info.PointersArray, Info.SizesArray,
                                  Info.MapTypesArray, Info.MappersArray, Info);
     InputInfo.NumberOfTargetItems = Info.NumberOfPtrs;
+    InputInfo.MapExprsArray =
+        Address(Info.MapExprsArray, CGM.getPointerAlign());
     InputInfo.BasePointersArray =
         Address(Info.BasePointersArray, CGM.getPointerAlign());
     InputInfo.PointersArray =

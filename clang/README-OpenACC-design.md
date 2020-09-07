@@ -2087,19 +2087,23 @@ data that depends on OMPT extensions and Clacc compiler extensions.
 
 For now, the only profiling data that Clacc supports and that requires
 extensions beyond the new OMPT callbacks discussed in section "OpenACC
-to OpenMP Mapping: Events" are (1) the `parent_construct` and
-`implicit` fields common to all members of the `acc_event_info` union
-and (2) the source location information of the `acc_prof_info`
-structure.  In the remainder of this section, we explain these
-extensions.  As Clacc grows support for additional profiling data, we
-expect Clacc will reuse these or similar extensions.
+to OpenMP Mapping: Events" are:
+
+* The `parent_construct` and `implicit` fields common to all members
+  of the `acc_event_info` union.
+* The `acc_prof_info` structure's source location information.
+* The `acc_data_event_info` structure's `var_name` field.
+
+In the remainder of this section, we explain these extensions.  As
+Clacc grows support for additional profiling data, we expect Clacc
+will reuse these or similar extensions.
 
 Clacc's version of the LLVM OpenMP runtime extends OpenMP 5.0
-sec. 4.6.1 "Entry Points in the OMPT Callback Interface" with a new
-entry point, `ompt_get_directive_info`, that can be called from OMPT
-callback functions to retrieve information about the directive
-associated with the callback.  The type signature of this entry point
-is `ompt_get_directive_info_t`:
+sec. 4.6.1 "Entry Points in the OMPT Callback Interface" with two new
+entry points, `ompt_get_directive_info` and
+`ompt_get_data_expression`.  The type signatures of these entry points
+are `ompt_get_directive_info_t` and `ompt_get_data_expression_t`, as
+follows:
 
 ```
 // TODO: The members listed below are those currently needed for
@@ -2128,61 +2132,80 @@ typedef struct ompt_directive_info_t {
 } ompt_directive_info_t;
 
 typedef ompt_directive_info_t *(*ompt_get_directive_info_t) (void);
+
+typedef const char *(*ompt_get_data_expression_t) (void);
 ```
 
-If the callback is not associated with a directive, all fields of the
-`ompt_directive_info_t` are set to null.  The OMPT callback functions
-that Clacc's OpenACC runtime implements call the above entry point to
-retrieve the directive information to pass to OpenACC callbacks.
+These entry points can be called from OMPT callback functions.
+`ompt_get_directive_info` returns an `ompt_directive_info_t` with
+information about the directive associated with the callback, and
+`ompt_directive_info_t` is designed so that null-initialization of all
+fields logically indicates the case when the callback is not
+associated with a directive.  If the callback is
+`ompt_callback_target_data_op`, `ompt_get_data_expression` returns an
+expression identifying the data on which the operation associated with
+the callback is performed, and it otherwise returns `NULL`.  Often the
+expression is just a variable name, but it can also include a more
+complex expression, such as an array section, if specified in an
+explicit `map` clause.
+
+The OMPT callback functions that Clacc's OpenACC runtime implements
+call these entry points to retrieve information to pass to OpenACC
+callbacks.  OpenACC's `parent_construct` and `implicit` fields are
+computed from the `kind` and `is_explicit_event` fields of the
+`ompt_directive_info_t` returned by `ompt_get_directive_info`, and
+source location information is taken directly from the remaining
+fields.  OpenACC's `var_name` field is taken directly from the
+expression returned by `ompt_get_data_expression`.
 
 Upstream Clang's LLVM IR codegen phase for OpenMP currently does not
-make the directive information required for `ompt_get_directive_info`
-available to the OpenMP runtime.  For this purpose, Clacc extends this
-phase to instrument OpenMP runtime calls corresponding to OpenMP
-directives that are translated from OpenACC directives.  Thus, the
-required directive information is available only when using Clacc's
-compiler in traditional compilation mode.
+make the information required for these entry points available to the
+OpenMP runtime.  For this purpose, Clacc extends this phase to
+instrument OpenMP runtime calls corresponding to OpenMP directives
+that are translated from OpenACC directives.  Thus, the required
+information is available only when using Clacc's compiler in
+traditional compilation mode.
 
 When using Clacc's compiler in source-to-source mode followed by a
 foreign OpenMP compiler, we expect that the foreign OpenMP runtime's
-entry point lookup function would simply return null for such a
-non-standard entry point.  In that case, Clacc's OpenACC runtime
-passes values indicating no directive information to the OpenACC
-callbacks (see the "Limitations" section below for details).  Of
-course, if the entry point is one day standardized, it will then be
-the responsibility of the foreign OpenMP compiler to provide the
-required directive information to its OpenMP runtime, which would then
-expose it via the `ompt_get_directive_info` entry point, just as
+entry point lookup function would simply return null for such
+non-standard entry points.  In that case, Clacc's OpenACC runtime
+passes values indicating no directive information and no data
+expression to the OpenACC callbacks (see the "Limitations" section
+below for details).  Of course, if these entry points are one day
+standardized, they will then be the responsibility of the foreign
+OpenMP compiler to provide the required information to its OpenMP
+runtime, which would then expose it via these entry points, just as
 Clacc's compiler and OpenMP runtime do now.  At that point, this
-directive information will be available to OpenACC profiling libraries
+information will be available to OpenACC profiling libraries
 regardless of which Clacc compiler mode the user uses to compile his
 OpenACC application.
 
 As an alternative to the above OMPT and LLVM IR codegen extensions, we
 also considered a source-level design.  That is, we considered
 extending the Clacc compiler's `TransformACCToOMP` component to insert
-source-level calls to pass the required directive information directly
-to Clacc's OpenACC runtime.  With that approach, the directive
-information would be available today even if the user compiled his
-OpenACC application using source-to-source mode followed by a foreign
-OpenMP compiler targeting a foreign OpenMP runtime, which would then
-not need to provide support for `ompt_get_directive_info`.  However,
-that approach has several issues.  First, the Clacc OpenACC runtime
-calls would be separate from the OpenMP runtime calls for the
-associated OpenMP directives, and thus they might interfere with
-optimizations, especially in foreign OpenMP compilers that would see
-them as opaque function calls.  Second, the Clacc compiler's
-source-to-source mode is intended to produce standard OpenMP that can
-be compiled by foreign OpenMP compilers, but these runtime calls are
-not standard and would fail to link without Clacc's OpenACC runtime
-even when OpenACC profiling is not desired.  Third, unlike LLVM IR
-codegen, `TransformACCToOMP` currently runs immediately after each
-OpenACC directive is parsed, when `func_end_line_no` is not yet known.
-There are various ways to mitigate some of these issues, such as
-requiring the user to opt into these source-level insertions when
-OpenACC profiling is required.  However, it is our conclusion that
-Clacc's current design is cleaner and provides a clearer path to reuse
-between OpenACC and OpenMP implementations.
+source-level calls to pass the required information directly to
+Clacc's OpenACC runtime.  With that approach, the information would be
+available today even if the user compiled his OpenACC application
+using source-to-source mode followed by a foreign OpenMP compiler
+targeting a foreign OpenMP runtime, which would then not need to
+provide support for the entry points.  However, that approach has
+several issues.  First, the Clacc OpenACC runtime calls would be
+separate from the OpenMP runtime calls for the associated OpenMP
+directives, and thus they might interfere with optimizations,
+especially in foreign OpenMP compilers that would see them as opaque
+function calls.  Second, the Clacc compiler's source-to-source mode is
+intended to produce standard OpenMP that can be compiled by foreign
+OpenMP compilers, but these runtime calls are not standard and would
+fail to link without Clacc's OpenACC runtime even when OpenACC
+profiling is not desired.  Third, unlike LLVM IR codegen,
+`TransformACCToOMP` currently runs immediately after each OpenACC
+directive is parsed, when `func_end_line_no` is not yet known.  There
+are various ways to mitigate some of these issues, such as requiring
+the user to opt into these source-level insertions when OpenACC
+profiling is required.  However, it is our conclusion that Clacc's
+current design is cleaner and provides a clearer path to reuse between
+OpenACC and OpenMP implementations.
 
 Currently, Clacc's implementation actually suffers from the first
 problem mentioned for the alternative source-level design.  That is,
@@ -2193,8 +2216,8 @@ is not possible at the source level, it should be straight-forward in
 LLVM IR codegen.  We have not yet pursued this solution in Clacc.  We
 have been advised by members of the LLVM community that the `ident_t`
 structure could be used for this purpose and extended with missing
-directive information.  Another missing piece is that, currently in
-upstream LLVM, `ident_t` is not passed to the required OpenMP runtime
+information.  Another missing piece is that, currently in upstream
+LLVM, `ident_t` is not passed to the required OpenMP runtime
 functions, such as `__tgt_target_teams`.
 
 OpenACC Clarifications
@@ -2420,9 +2443,32 @@ support currently include:
           shared between `_start` and `_end` events.  This should be
           one of the easier limitations to fix, if needed.
         * `acc_data_event_info`:
-            * `var_name` is always set to `NULL` because we do not
-              know how to obtain it via OMPT.  Setting to `NULL` is
-              permitted by OpenACC.
+            * `var_name`:
+                * We do not know how to obtain this field via OMPT.
+                * When compiling the OpenACC application using Clacc's
+                  compiler in traditional compilation mode, this field
+                  is normally set correctly, but there are a few
+                  caveats:
+                    * OpenACC 3.0 specifies that this field contain
+                      just a variable name.  Under Clacc, it can
+                      include a more complex expression, such as a
+                      subarray, if specified in an explicit data
+                      clause.  We assume this extra information is
+                      helpful for users.  If users instead report that
+                      it is problematic for their OpenACC profiling
+                      libraries, Clacc will be adjusted in the future
+                      to fully conform to the spec.
+                    * There exists at least one case where this field
+                      is not yet supported and thus is set to `NULL`:
+                      `acc_ev_create` events for firstprivate `const`
+                      arrays.  Please report additional cases.
+                * When compiling the OpenACC application using Clacc's
+                  compiler in source-to-source mode, this field is always
+                  set to `NULL`.
+                * See the section "OpenACC to OpenMP Mapping: Profiling
+                  Data" for further discussion.
+                * Note that setting this field to `NULL` is permitted
+                  by OpenACC 3.0 when the variable name is not known.
         * `acc_launch_event_info`:
             * `kernel_name` is always set to `NULL` because we do not
               know how to obtain it via OMPT.  Setting to `NULL` is

@@ -49,7 +49,8 @@
                                             \
     macro(ompt_get_target_info)             \
     macro(ompt_get_num_devices)             \
-    macro(ompt_get_directive_info)
+    macro(ompt_get_directive_info)          \
+    macro(ompt_get_data_expression)
 
 #define FOREACH_OMPT_STATE(macro)                                                                \
                                                                                                 \
@@ -620,6 +621,7 @@ typedef struct ompt_directive_info_t {
 } ompt_directive_info_t;
 
 typedef ompt_directive_info_t *(*ompt_get_directive_info_t) (void);
+typedef const char *(*ompt_get_data_expression_t) (void);
 
 typedef int (*ompt_get_device_num_procs_t) (
   ompt_device_t *device

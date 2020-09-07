@@ -73,6 +73,8 @@ int main() {
   // Creation of const array before first kernel even though it's not used
   // until a later kernel.
   //
+  // FIXME: var_name isn't yet supported in this case.
+  //
   //      OFF:acc_ev_create
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=6, valid_bytes=72, version=[[VERSION]],
@@ -138,7 +140,7 @@ int main() {
   // OFF-NEXT:    event_type=20, valid_bytes=56,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
   // OFF-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NEXT:    var_name=(null), bytes=40,
+  // OFF-NEXT:    var_name=carr, bytes=40,
   // OFF-NEXT:    host_ptr=[[CARR_HOST_PTR_IN_CB]],
   // OFF-NEXT:    device_ptr=[[CARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
@@ -156,7 +158,7 @@ int main() {
   // OFF-NEXT:    event_type=21, valid_bytes=56,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
   // OFF-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NEXT:    var_name=(null), bytes=40,
+  // OFF-NEXT:    var_name=carr, bytes=40,
   // OFF-NEXT:    host_ptr=[[CARR_HOST_PTR_IN_CB]],
   // OFF-NEXT:    device_ptr=[[CARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info

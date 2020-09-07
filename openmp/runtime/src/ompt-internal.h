@@ -135,7 +135,10 @@ ompt_callbacks_internal_t ompt_get_callbacks(void) OMPT_LIBOMPTARGET_WEAK;
 uint64_t ompt_get_unique_id(void) OMPT_LIBOMPTARGET_WEAK;
 void ompt_record_device_init(int32_t device_num) OMPT_LIBOMPTARGET_WEAK;
 void ompt_toggle_in_device_target_region() OMPT_LIBOMPTARGET_WEAK;
+const char *ompt_index_data_expressions(uint32_t) OMPT_LIBOMPTARGET_WEAK;
+void ompt_set_data_expression(const char *) OMPT_LIBOMPTARGET_WEAK;
 extern ompt_directive_info_t ompt_directive_info;
+extern const char * const *ompt_data_expressions;
 
 // This struct is passed into target plugins where they require target_id,
 // global_device_id, or OMPT functions from libomp.so.  Target plugins must call

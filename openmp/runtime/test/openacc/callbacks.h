@@ -81,8 +81,9 @@ static void print_event_info(acc_event_info *ei) {
            "    var_name=%s, bytes=%zu,\n"
            "    host_ptr=%p,\n"
            "    device_ptr=%p\n",
-           ei->data_event.var_name, ei->data_event.bytes,
-           ei->data_event.host_ptr, ei->data_event.device_ptr);
+           ei->data_event.var_name ? ei->data_event.var_name : "(null)",
+           ei->data_event.bytes, ei->data_event.host_ptr,
+           ei->data_event.device_ptr);
     break;
   case acc_ev_enqueue_launch_start:
   case acc_ev_enqueue_launch_end:

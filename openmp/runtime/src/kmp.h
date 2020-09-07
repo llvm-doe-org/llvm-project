@@ -3923,6 +3923,9 @@ void __kmpc_set_directive_info(
     const char *func_name, int line_no, int end_line_no, int func_line_no,
     int func_end_line_no);
 
+// Records data expressions for upcoming runtime calls.
+void __kmpc_set_data_expressions(const char * const *exprs);
+
 #ifdef __cplusplus
 }
 #endif

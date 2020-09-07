@@ -1639,6 +1639,14 @@ public:
   /// Must be paired with emitSetDirectiveInfoCall.
   virtual void emitClearDirectiveInfoCall(CodeGenFunction &CGF);
 
+  /// Same as emitSetDirectiveInfoCall except it's for
+  /// __kmpc_set_data_expressions calls.
+  virtual void emitSetDataExpressionsCall(CodeGenFunction &CGF,
+                                          Address MapExprsArray);
+  /// Must be paired with emitSetDataExpressionsCall.
+  virtual void emitClearDataExpressionsCall(CodeGenFunction &CGF,
+                                            Address MapExprsArray);
+
   /// Emits call to void __kmpc_push_num_teams(ident_t *loc, kmp_int32
   /// global_tid, kmp_int32 num_teams, kmp_int32 thread_limit) to generate code
   /// for num_teams clause.
@@ -1663,6 +1671,9 @@ public:
     llvm::Value *PointersArray = nullptr;
     /// The array of sizes passed to the runtime library.
     llvm::Value *SizesArray = nullptr;
+    /// The array of source-level map expressions passed to the runtime library,
+    /// or nullptr if not set.
+    llvm::Value *MapExprsArray = nullptr;
     /// The array of map types passed to the runtime library for the beginning
     /// of the region or for the entire region if there are no separate map
     /// types for the region end.
@@ -1691,6 +1702,7 @@ public:
       BasePointersArray = nullptr;
       PointersArray = nullptr;
       SizesArray = nullptr;
+      MapExprsArray = nullptr;
       MapTypesArray = nullptr;
       MapTypesArrayEnd = nullptr;
       MappersArray = nullptr;

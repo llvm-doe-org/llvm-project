@@ -471,6 +471,7 @@ __OMP_RTL(__kmpc_destroy_allocator, false, Void, /* Int */ Int32,
 __OMP_RTL(__kmpc_set_directive_info, false, Void, /* Int */ Int32,
           /* Int */ Int32, Int8Ptr, Int8Ptr, /* Int */ Int32, /* Int */ Int32,
           /* Int */ Int32, /* Int */ Int32)
+__OMP_RTL(__kmpc_set_data_expressions, false, Void, Int8PtrPtr)
 
 __OMP_RTL(__kmpc_push_target_tripcount, false, Void, Int64, Int64)
 __OMP_RTL(__tgt_target_mapper, false, Int32, Int64, VoidPtr, Int32, VoidPtrPtr,
@@ -903,6 +904,7 @@ __OMP_RTL_ATTRS(__kmpc_free, AllocAttrs, AttributeSet(), {})
 __OMP_RTL_ATTRS(__kmpc_init_allocator, DefaultAttrs, ReturnPtrAttrs, {})
 __OMP_RTL_ATTRS(__kmpc_destroy_allocator, AllocAttrs, AttributeSet(), {})
 __OMP_RTL_ATTRS(__kmpc_set_directive_info, SetterAttrs, AttributeSet(), {})
+__OMP_RTL_ATTRS(__kmpc_set_data_expressions, SetterAttrs, AttributeSet(), {})
 
 __OMP_RTL_ATTRS(__kmpc_push_target_tripcount, SetterAttrs, AttributeSet(), {})
 __OMP_RTL_ATTRS(__tgt_target_mapper, ForkAttrs, AttributeSet(), {})

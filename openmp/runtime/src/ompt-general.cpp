@@ -95,6 +95,8 @@ static ompt_start_tool_result_t *ompt_start_tool_result = NULL;
 // FIXME: Access to these is not thread-safe.  Does it need to be?
 ompt_directive_info_t ompt_directive_info = {ompt_directive_unknown, 0, NULL,
                                              NULL, 0, 0, 0, 0};
+const char * const *ompt_data_expressions = NULL;
+const char *ompt_data_expression = NULL;
 static unsigned ompt_device_inits_capacity = 0;
 static unsigned ompt_device_inits_size = 0;
 static int32_t *ompt_device_inits = NULL;
@@ -135,6 +137,7 @@ static const char *acc_get_event_name(acc_event_t event) {
 
 static ompt_set_callback_t acc_ompt_set_callback = NULL;
 static ompt_get_directive_info_t acc_ompt_get_directive_info = NULL;
+static ompt_get_data_expression_t acc_ompt_get_data_expression = NULL;
 static int acc_ompt_initial_device_num;
 
 static acc_prof_callback acc_ev_device_init_start_callback = NULL;
@@ -276,8 +279,14 @@ static acc_event_info acc_get_data_event_info(
     acc_event_t event_type, size_t bytes, const void *host_ptr,
     const void *device_ptr) {
   acc_event_info ret = acc_get_other_event_info(event_type);
-  // FIXME: How can we get the variable name?
-  ret.data_event.var_name = NULL;
+  // If the OpenMP runtime doesn't support the ompt_get_data_expression entry
+  // point, just use NULL.  FIXME: That will make sense when we separate the
+  // OpenACC runtime from LLVM's OpenMP runtime, thus creating the possibility
+  // of linking the OpenACC runtime with alternate OpenMP runtimes.
+  if (acc_ompt_get_data_expression)
+    ret.data_event.var_name = acc_ompt_get_data_expression();
+  else
+    ret.data_event.var_name = NULL;
   ret.data_event.bytes = bytes;
   ret.data_event.host_ptr = host_ptr;
   ret.data_event.device_ptr = device_ptr;
@@ -791,6 +800,8 @@ static int acc_ompt_initialize(ompt_function_lookup_t lookup,
   acc_ompt_set_callback = (ompt_set_callback_t)lookup("ompt_set_callback");
   acc_ompt_get_directive_info =
       (ompt_get_directive_info_t)lookup("ompt_get_directive_info");
+  acc_ompt_get_data_expression =
+      (ompt_get_data_expression_t)lookup("ompt_get_data_expression");
   while (acc_prof_action *action = acc_prof_dequeue()) {
     if (action->reg)
       acc_prof_register_ompt(action->event, action->cb, action->info);
@@ -1223,6 +1234,16 @@ void ompt_toggle_in_device_target_region() {
   ompt_in_device_target_region = !ompt_in_device_target_region;
 }
 
+const char *ompt_index_data_expressions(uint32_t i) {
+  if (!ompt_data_expressions)
+    return NULL;
+  return ompt_data_expressions[i];
+}
+
+void ompt_set_data_expression(const char *expr) {
+  ompt_data_expression = expr;
+}
+
 /*****************************************************************************
  * interface operations
  ****************************************************************************/
@@ -1563,6 +1584,10 @@ OMPT_API_ROUTINE int ompt_get_num_devices(void) {
 
 OMPT_API_ROUTINE ompt_directive_info_t *ompt_get_directive_info(void) {
   return &ompt_directive_info;
+}
+
+OMPT_API_ROUTINE const char *ompt_get_data_expression(void) {
+  return ompt_data_expression;
 }
 
 /*****************************************************************************

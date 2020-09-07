@@ -108,7 +108,7 @@ int main() {
   // OFF-NEXT:    event_type=8, valid_bytes=56,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
   // OFF-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NEXT:    var_name=(null), bytes=40,
+  // OFF-NEXT:    var_name=arr, bytes=40,
   // OFF-NEXT:    host_ptr=[[ARR_HOST_PTR_ON_HOST]],
   // OFF-NEXT:    device_ptr=[[ARR_DEVICE_PTR_IN_CB:0x[a-z0-9]+]]
   // OFF-NEXT:  acc_api_info
@@ -126,7 +126,7 @@ int main() {
   // OFF-NEXT:    event_type=6, valid_bytes=56,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
   // OFF-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NEXT:    var_name=(null), bytes=40,
+  // OFF-NEXT:    var_name=arr, bytes=40,
   // OFF-NEXT:    host_ptr=[[ARR_HOST_PTR_ON_HOST]],
   // OFF-NEXT:    device_ptr=[[ARR_DEVICE_PTR_IN_CB]]
   // OFF-NEXT:  acc_api_info
@@ -144,7 +144,7 @@ int main() {
   // OFF-NEXT:    event_type=20, valid_bytes=56,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
   // OFF-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NEXT:    var_name=(null), bytes=40,
+  // OFF-NEXT:    var_name=arr, bytes=40,
   // OFF-NEXT:    host_ptr=[[ARR_HOST_PTR_ON_HOST]],
   // OFF-NEXT:    device_ptr=[[ARR_DEVICE_PTR_IN_CB]]
   // OFF-NEXT:  acc_api_info
@@ -162,7 +162,7 @@ int main() {
   // OFF-NEXT:    event_type=21, valid_bytes=56,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
   // OFF-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NEXT:    var_name=(null), bytes=40,
+  // OFF-NEXT:    var_name=arr, bytes=40,
   // OFF-NEXT:    host_ptr=[[ARR_HOST_PTR_ON_HOST]],
   // OFF-NEXT:    device_ptr=[[ARR_DEVICE_PTR_IN_CB]]
   // OFF-NEXT:  acc_api_info
@@ -259,7 +259,7 @@ int main() {
   // OFF-NEXT:    event_type=7, valid_bytes=56,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
   // OFF-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NEXT:    var_name=(null), bytes=40,
+  // OFF-NEXT:    var_name=arr, bytes=40,
   // OFF-NEXT:    host_ptr=[[ARR_HOST_PTR_ON_HOST]],
   // OFF-NEXT:    device_ptr=[[ARR_DEVICE_PTR_IN_CB]]
   // OFF-NEXT:  acc_api_info
@@ -277,7 +277,7 @@ int main() {
   // OFF-NEXT:    event_type=9, valid_bytes=56,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
   // OFF-NEXT:    implicit=0, tool_info=(nil),
-  // OFF-NEXT:    var_name=(null), bytes=40,
+  // OFF-NEXT:    var_name=arr, bytes=40,
   // OFF-NEXT:    host_ptr=[[ARR_HOST_PTR_ON_HOST]],
   // OFF-NEXT:    device_ptr=[[ARR_DEVICE_PTR_IN_CB:0x[a-z0-9]+]]
   // OFF-NEXT:  acc_api_info
