@@ -114,6 +114,24 @@ int main() {
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
   // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:acc_ev_create
+  // OFF-NEXT:  acc_prof_info
+  // OFF-NEXT:    event_type=6, valid_bytes=72, version=[[VERSION]],
+  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NEXT:    line_no=[[LINE_NO1]], end_line_no=[[END_LINE_NO1]],
+  // OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
+  // OFF-NEXT:  acc_data_event_info
+  // OFF-NEXT:    event_type=6, valid_bytes=56,
+  // OFF-NEXT:    parent_construct=acc_construct_parallel,
+  // OFF-NEXT:    implicit=0, tool_info=(nil),
+  // OFF-NEXT:    var_name=(null), bytes=40,
+  // OFF-NEXT:    host_ptr=[[ARR_HOST_PTR_ON_HOST]],
+  // OFF-NEXT:    device_ptr=[[ARR_DEVICE_PTR_IN_CB]]
+  // OFF-NEXT:  acc_api_info
+  // OFF-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-NEXT:    device_type=acc_device_not_host
   // OFF-NEXT:acc_ev_enqueue_upload_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
@@ -226,6 +244,24 @@ int main() {
   // OFF-NEXT:    event_type=12, valid_bytes=24,
   // OFF-NEXT:    parent_construct=acc_construct_parallel,
   // OFF-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-NEXT:  acc_api_info
+  // OFF-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:acc_ev_delete
+  // OFF-NEXT:  acc_prof_info
+  // OFF-NEXT:    event_type=7, valid_bytes=72, version=[[VERSION]],
+  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=[[SRC_FILE]], func_name=main,
+  // OFF-NEXT:    line_no=[[LINE_NO1]], end_line_no=[[END_LINE_NO1]],
+  // OFF-NEXT:    func_line_no=[[FUNC_LINE_NO]], func_end_line_no=[[FUNC_END_LINE_NO]]
+  // OFF-NEXT:  acc_data_event_info
+  // OFF-NEXT:    event_type=7, valid_bytes=56,
+  // OFF-NEXT:    parent_construct=acc_construct_parallel,
+  // OFF-NEXT:    implicit=0, tool_info=(nil),
+  // OFF-NEXT:    var_name=(null), bytes=40,
+  // OFF-NEXT:    host_ptr=[[ARR_HOST_PTR_ON_HOST]],
+  // OFF-NEXT:    device_ptr=[[ARR_DEVICE_PTR_IN_CB]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
   // OFF-NEXT:    device_type=acc_device_not_host

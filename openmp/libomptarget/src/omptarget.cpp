@@ -1026,12 +1026,18 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
       // OpenMP 5.0 sec. 3.6.1 p. 398 L18:
       // "The target-data-allocation event occurs when a thread allocates data
       // on a target device."
+      // OpenMP 5.0 sec. 3.6.6 p. 404 L32:
+      // "The target-data-associate event occurs when a thread associates data
+      // on a target device."
       // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
       // "A registered ompt_callback_target_data_op callback is dispatched when
       // device memory is allocated or freed, as well as when data is copied to
       // or from a device."
-      // The callback must dispatch after the allocation succeeds because it
-      // requires the device address.
+      // The callbacks must dispatch after the allocation succeeds because they
+      // require the device address.  Similarly, the callback for
+      // ompt_target_data_associate should follow the callback for
+      // ompt_target_data_alloc to reflect the order in which these events must
+      // occur.
       if (Device.OmptApi.ompt_get_enabled().ompt_callback_target_data_op) {
         // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
         // OpenACC support, so we haven't bothered to implement them yet.
@@ -1039,6 +1045,11 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
             ompt_callback_target_data_op)(
             Device.OmptApi.target_id, /*host_op_id*/ ompt_id_none,
             ompt_target_data_alloc, FPArray.HstPtrBegin, HOST_DEVICE,
+            FPArray.TgtPtrBegin, DeviceId, FPArray.Size, /*codeptr_ra*/ NULL);
+        Device.OmptApi.ompt_get_callbacks().ompt_callback(
+            ompt_callback_target_data_op)(
+            Device.OmptApi.target_id, /*host_op_id*/ ompt_id_none,
+            ompt_target_data_associate, FPArray.HstPtrBegin, HOST_DEVICE,
             FPArray.TgtPtrBegin, DeviceId, FPArray.Size, /*codeptr_ra*/ NULL);
       }
 #endif
@@ -1106,18 +1117,31 @@ int processDataAfter(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
   // Deallocate (first-)private arrays
   for (FPArrayType FPArray : FPArrays) {
 #if OMPT_SUPPORT
+    // OpenMP 5.0 sec. 3.6.7 p. 405 L27:
+    // "The target-data-disassociate event occurs when a thread disassociates
+    // data on a target device."
+    // OpenMP 5.0 sec. 3.6.2 p. 399 L19:
+    // "The target-data-free event occurs when a thread frees data on a
+    // target device."
+    // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
+    // "A registered ompt_callback_target_data_op callback is dispatched when
+    // device memory is allocated or freed, as well as when data is copied to
+    // or from a device."
+    // We assume the callbacks should dispatch before the free so that the
+    // device address is still valid.  Similarly, we assume the callback for
+    // ompt_target_data_disassociate should precede the callback for
+    // ompt_target_data_delete to reflect the order in which these events
+    // logically occur, even if that's not how the underlying actions are
+    // coded here.  Moreover, this ordering is for symmetry with
+    // ompt_target_data_alloc and ompt_target_data_associate.
     if (Device.OmptApi.ompt_get_enabled().ompt_callback_target_data_op) {
-      // OpenMP 5.0 sec. 3.6.2 p. 399 L19:
-      // "The target-data-free event occurs when a thread frees data on a
-      // target device."
-      // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
-      // "A registered ompt_callback_target_data_op callback is dispatched when
-      // device memory is allocated or freed, as well as when data is copied to
-      // or from a device."
-      // We assume the callbacks should dispatch before the free so that the
-      // device address is still valid.
       // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
       // OpenACC support, so we haven't bothered to implement them yet.
+      Device.OmptApi.ompt_get_callbacks().ompt_callback(
+          ompt_callback_target_data_op)(
+          Device.OmptApi.target_id, /*host_op_id*/ ompt_id_none,
+          ompt_target_data_disassociate, FPArray.HstPtrBegin, HOST_DEVICE,
+          FPArray.TgtPtrBegin, DeviceId, FPArray.Size, /*codeptr_ra*/ NULL);
       Device.OmptApi.ompt_get_callbacks().ompt_callback(
           ompt_callback_target_data_op)(
           Device.OmptApi.target_id, /*host_op_id*/ ompt_id_none,
