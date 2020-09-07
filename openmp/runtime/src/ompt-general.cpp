@@ -882,13 +882,9 @@ ompt_start_tool(unsigned int omp_version, const char *runtime_version) {
     __kmp_str_free(&libs);
   }
   if (acc_prof_action_head) {
-    static int host_device_number;
-    static ompt_data_t ompt_data;
     static ompt_start_tool_result_t res;
-    ompt_data.ptr = &host_device_number;
     res.initialize = acc_ompt_initialize;
     res.finalize = acc_ompt_finalize;
-    res.tool_data = ompt_data;
     return &res;
   }
 
