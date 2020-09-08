@@ -41,6 +41,7 @@ stages:
   - openmp
   - test
   - cleanup
+  - manual cleanup
 
 #-------------------------------------------------
 # build configurations
@@ -88,20 +89,6 @@ stages:
     MODULES: gnu/9.1.0
     CMAKE_BUILD_TYPE: Release
     PYTHON: /usr/bin/python3
-    CMAKE_OFFLOAD_CONFIG_CLANG:
-      -DCLANG_ACC_TEST_EXE_X86_64=True
-      -DCLANG_ACC_TEST_EXE_PPC64LE=False
-      -DCLANG_ACC_TEST_EXE_NVPTX64=False
-    CMAKE_OFFLOAD_CONFIG_OPENMP:
-      ""
-
-.python2:
-  tags: [shell, kold]
-  variables:
-    BUILD_ID: python2
-    MODULES: gnu/9.1.0
-    CMAKE_BUILD_TYPE: Debug
-    PYTHON: /usr/bin/python2
     CMAKE_OFFLOAD_CONFIG_CLANG:
       -DCLANG_ACC_TEST_EXE_X86_64=True
       -DCLANG_ACC_TEST_EXE_PPC64LE=False
@@ -167,15 +154,11 @@ kold (setup):
 release (setup):
   extends: [.release, .setup]
 
-python2 (setup):
-  extends: [.python2, .setup]
-
 #-------------------------------------------------
 # cleanup
 #-------------------------------------------------
 
-.cleanup:
-  stage: cleanup
+.rm-build-dir:
   variables:
     GIT_STRATEGY: none
   script:
@@ -183,6 +166,16 @@ python2 (setup):
     - echo $BUILD_DIR
     - rm -rf $BUILD_DIR
     - rmdir $BUILD_DIR_PROJ || true
+
+.cleanup:
+  stage: cleanup
+  extends: .rm-build-dir
+
+.manual-cleanup:
+  stage: manual cleanup
+  extends: .rm-build-dir
+  when: manual
+  needs: []
 
 leconte (cleanup):
   extends: [.leconte, .cleanup]
@@ -202,15 +195,19 @@ release (cleanup):
     - job: release (test)
       artifacts: false
 
-python2 (cleanup):
-  extends: [.python2, .cleanup]
-  needs:
-    - job: python2 (test)
-      artifacts: false
+leconte (manual cleanup):
+  extends: [.leconte, .manual-cleanup]
+
+kold (manual cleanup):
+  extends: [.kold, .manual-cleanup]
+
+release (manual cleanup):
+  extends: [.release, .manual-cleanup]
 
 z-cleanup-pipeline-builds:
-  stage: setup
+  stage: manual cleanup
   when: manual
+  needs: []
   tags: [shell, kold]
   variables:
     GIT_STRATEGY: none
@@ -219,8 +216,9 @@ z-cleanup-pipeline-builds:
     - rm -rf $BUILD_DIRS
 
 z-cleanup-project-builds:
-  stage: setup
+  stage: manual cleanup
   when: manual
+  needs: []
   tags: [shell, kold]
   variables:
     GIT_STRATEGY: none
@@ -284,12 +282,6 @@ release (config):
     - job: release (setup)
       artifacts: false
 
-python2 (config):
-  extends: [.python2, .config]
-  needs:
-    - job: python2 (setup)
-      artifacts: false
-
 #-------------------------------------------------
 # build
 #-------------------------------------------------
@@ -319,12 +311,6 @@ release (build):
   extends: [.release, .build]
   needs:
     - job: release (config)
-      artifacts: false
-
-python2 (build):
-  extends: [.python2, .build]
-  needs:
-    - job: python2 (config)
       artifacts: false
 
 #-------------------------------------------------
@@ -389,12 +375,6 @@ release (openmp):
     - job: release (build)
       artifacts: false
 
-python2 (openmp):
-  extends: [.python2, .openmp]
-  needs:
-    - job: python2 (build)
-      artifacts: false
-
 #-------------------------------------------------
 # tests
 #
@@ -442,10 +422,4 @@ release (test):
   extends: [.release, .test]
   needs:
     - job: release (openmp)
-      artifacts: false
-
-python2 (test):
-  extends: [.python2, .test]
-  needs:
-    - job: python2 (openmp)
       artifacts: false
