@@ -942,16 +942,8 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
                       std::vector<FPArrayType> &FPArrays,
                       __tgt_async_info *AsyncInfo) {
   DeviceTy &Device = Devices[DeviceId];
-#if OMPT_SUPPORT
-  ompt_dispatch_callback_target(ompt_target_region_enter_data, ompt_scope_begin,
-                                Device);
-#endif
   int Ret = targetDataBegin(Device, ArgNum, ArgBases, Args, ArgSizes, ArgTypes,
                             ArgMappers, AsyncInfo);
-#if OMPT_SUPPORT
-  ompt_dispatch_callback_target(ompt_target_region_enter_data, ompt_scope_end,
-                                Device);
-#endif
   if (Ret != OFFLOAD_SUCCESS) {
     DP("Call to targetDataBegin failed, abort target.\n");
     return OFFLOAD_FAIL;
@@ -1104,16 +1096,8 @@ int processDataAfter(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
   DeviceTy &Device = Devices[DeviceId];
 
   // Move data from device.
-#if OMPT_SUPPORT
-  ompt_dispatch_callback_target(ompt_target_region_exit_data, ompt_scope_begin,
-                                Device);
-#endif
   int Ret = targetDataEnd(Device, ArgNum, ArgBases, Args, ArgSizes, ArgTypes,
                           ArgMappers, AsyncInfo);
-#if OMPT_SUPPORT
-  ompt_dispatch_callback_target(ompt_target_region_exit_data, ompt_scope_end,
-                                Device);
-#endif
   if (Ret != OFFLOAD_SUCCESS) {
     DP("Call to targetDataEnd failed, abort targe.\n");
     return OFFLOAD_FAIL;
@@ -1224,9 +1208,17 @@ int target(int64_t DeviceId, void *HostPtr, int32_t ArgNum, void **ArgBases,
   std::vector<FPArrayType> FPArrays;
 
   // Process data, such as data mapping, before launching the kernel
+#if OMPT_SUPPORT
+  ompt_dispatch_callback_target(ompt_target_region_enter_data, ompt_scope_begin,
+                                Device);
+#endif
   int Ret = processDataBefore(DeviceId, HostPtr, ArgNum, ArgBases, Args,
                               ArgSizes, ArgTypes, ArgMappers, TgtArgs,
                               TgtOffsets, FPArrays, &AsyncInfo);
+#if OMPT_SUPPORT
+  ompt_dispatch_callback_target(ompt_target_region_enter_data, ompt_scope_end,
+                                Device);
+#endif
   if (Ret != OFFLOAD_SUCCESS) {
     DP("Failed to process data before launching the kernel.\n");
 #if OMPT_SUPPORT
@@ -1261,8 +1253,16 @@ int target(int64_t DeviceId, void *HostPtr, int32_t ArgNum, void **ArgBases,
 
   // Transfer data back and deallocate target memory for (first-)private
   // variables
+#if OMPT_SUPPORT
+  ompt_dispatch_callback_target(ompt_target_region_exit_data, ompt_scope_begin,
+                                Device);
+#endif
   Ret = processDataAfter(DeviceId, HostPtr, ArgNum, ArgBases, Args, ArgSizes,
                          ArgTypes, ArgMappers, FPArrays, &AsyncInfo);
+#if OMPT_SUPPORT
+  ompt_dispatch_callback_target(ompt_target_region_exit_data, ompt_scope_end,
+                                Device);
+#endif
   if (Ret != OFFLOAD_SUCCESS) {
     DP("Failed to process data after launching the kernel.\n");
 #if OMPT_SUPPORT
