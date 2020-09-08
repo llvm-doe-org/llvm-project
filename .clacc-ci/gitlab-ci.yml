@@ -41,6 +41,7 @@ stages:
   - openmp
   - test
   - cleanup
+  - manual cleanup
 
 #-------------------------------------------------
 # build configurations
@@ -157,8 +158,7 @@ release (setup):
 # cleanup
 #-------------------------------------------------
 
-.cleanup:
-  stage: cleanup
+.rm-build-dir:
   variables:
     GIT_STRATEGY: none
   script:
@@ -166,6 +166,16 @@ release (setup):
     - echo $BUILD_DIR
     - rm -rf $BUILD_DIR
     - rmdir $BUILD_DIR_PROJ || true
+
+.cleanup:
+  stage: cleanup
+  extends: .rm-build-dir
+
+.manual-cleanup:
+  stage: manual cleanup
+  extends: .rm-build-dir
+  when: manual
+  needs: []
 
 leconte (cleanup):
   extends: [.leconte, .cleanup]
@@ -185,9 +195,19 @@ release (cleanup):
     - job: release (test)
       artifacts: false
 
+leconte (manual cleanup):
+  extends: [.leconte, .manual-cleanup]
+
+kold (manual cleanup):
+  extends: [.kold, .manual-cleanup]
+
+release (manual cleanup):
+  extends: [.release, .manual-cleanup]
+
 z-cleanup-pipeline-builds:
-  stage: setup
+  stage: manual cleanup
   when: manual
+  needs: []
   tags: [shell, kold]
   variables:
     GIT_STRATEGY: none
@@ -196,8 +216,9 @@ z-cleanup-pipeline-builds:
     - rm -rf $BUILD_DIRS
 
 z-cleanup-project-builds:
-  stage: setup
+  stage: manual cleanup
   when: manual
+  needs: []
   tags: [shell, kold]
   variables:
     GIT_STRATEGY: none
