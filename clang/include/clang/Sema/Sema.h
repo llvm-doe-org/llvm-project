@@ -11119,13 +11119,19 @@ public:
                                         SourceLocation LParenLoc,
                                         SourceLocation EndLoc);
 
+  /// Is an OpenACC directive currently being analyzed?
+  bool isInOpenACCDirective();
+
   /// Transform OpenACC region to OpenMP, and return true if an error occurred.
   ///
-  /// If \a D is not enclosed in another OpenACC region, transforms \a D and
-  /// all nested OpenACC executable directives such that, for each such
-  /// directive, \c getOMPNode then returns the corresponding OpenMP directive.
-  /// Otherwise, does nothing so that we only transform each OpenACC region to
-  /// OpenMP once, in its entirety.
+  /// This function must be called on \a D immediately after Parser and Sema
+  /// have otherwise finished analyzing \a D.  If Sema is not still analyzing
+  /// any other OpenACC directive, then \a D is not enclosed in another OpenACC
+  /// directive.  In that case, this function then transforms \a D and all
+  /// OpenACC directives \a D encloses such that, for each such directive,
+  /// \c getOMPNode then returns the corresponding OpenMP directive.  Otherwise,
+  /// this function does nothing so that we only transform each OpenACC region
+  /// to OpenMP once, in its entirety.
   bool transformACCToOMP(ACCExecutableDirective *D);
 
   /// The kind of conversion being performed.
