@@ -3150,16 +3150,31 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     bool Err : 1;
     SmallVector<Stmt*, 8> Stmts;
     llvm::DenseMap<Decl *, Decl *> OldDeclTxs;
-  public:
-    ConditionalCompoundStmtRAII(TransformACCToOMP &Tx)
-        : Tx(Tx), Started(false), Finalized(false), Err(false) {}
-    void addPrivateDecl(SourceLocation RefStartLoc, SourceLocation RefEndLoc,
-                        VarDecl *VD) {
-      VD = VD->getCanonicalDecl();
+    void prepForAdd() {
+      assert(!Finalized &&
+             "expected compound statement not to be finalized yet");
       if (!Started) {
         Tx.getSema().ActOnStartOfCompoundStmt(false);
         Started = true;
       }
+    }
+    template <typename T>
+    void add(const T &Res) {
+      if (Res.isInvalid()) {
+        Err = true;
+        return;
+      }
+      Stmts.push_back(Res.get());
+    }
+  public:
+    ConditionalCompoundStmtRAII(TransformACCToOMP &Tx)
+        : Tx(Tx), Started(false), Finalized(false), Err(false) {}
+    /// Add a variable declaration that privatizes an enclosing declaration.
+    /// Use \c addNewPrivateDecl instead if it's an entirely new variable.
+    void addPrivatizingDecl(SourceLocation RefStartLoc, SourceLocation RefEndLoc,
+                            VarDecl *VD) {
+      prepForAdd();
+      VD = VD->getCanonicalDecl();
       // Record old transformation for VD.  If we've already done that, that
       // means VD appeared multiple times in private clauses.  Once is enough,
       // and we don't want to lose the old transformation.
@@ -3171,20 +3186,15 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
       // Transform Def and create a declaration statement for it.
       Decl *DPrivate = Tx.getDerived().TransformDefinition(RefStartLoc, VD,
                                                            /*DropInit*/true);
-      StmtResult Res = Tx.getSema().ActOnDeclStmt(
+      add(Tx.getSema().ActOnDeclStmt(
           Tx.getSema().ConvertDeclToDeclGroup(DPrivate), RefStartLoc,
-          RefEndLoc);
-      if (Res.isInvalid())
-        Err = true;
-      else
-        Stmts.push_back(Res.get());
+          RefEndLoc));
     }
+    /// Add a local variable declaration that doesn't privatize an enclosing
+    /// declaration.  Use \c addPrivatizingDecl instead if it does.
     VarDecl *addNewPrivateDecl(StringRef Name, QualType Ty, Expr *Init,
                                SourceLocation Loc) {
-      if (!Started) {
-        Tx.getSema().ActOnStartOfCompoundStmt(false);
-        Started = true;
-      }
+      prepForAdd();
       ASTContext &Context = Tx.getSema().getASTContext();
       DeclContext *DC = Tx.getSema().CurContext;
       IdentifierInfo *II = &Tx.getSema().PP.getIdentifierTable().get(Name);
@@ -3192,20 +3202,15 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
       VarDecl *VD = VarDecl::Create(Context, DC, Loc, Loc, II, Ty, TInfo,
                                     SC_None);
       Tx.getSema().AddInitializerToDecl(VD, Init, false);
-      StmtResult Res = Tx.getSema().ActOnDeclStmt(
+      add(Tx.getSema().ActOnDeclStmt(
           Tx.getSema().ConvertDeclToDeclGroup(VD), VD->getBeginLoc(),
-          VD->getEndLoc());
-      if (Res.isInvalid())
-        Err = true;
-      else
-        Stmts.push_back(Res.get());
+          VD->getEndLoc()));
       return VD;
     }
+    /// Evaluate an expression that has side effects but whose original use has
+    /// been removed.
     void addUnusedExpr(Expr *E) {
-      if (!Started) {
-        Tx.getSema().ActOnStartOfCompoundStmt(false);
-        Started = true;
-      }
+      prepForAdd();
       ExprResult Res = Tx.getDerived().TransformExpr(E);
       if (Res.isInvalid()) {
         Err = true;
@@ -3215,13 +3220,9 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
       SourceLocation Loc = E->getExprLoc();
       TypeSourceInfo *TInfo = Context.getTrivialTypeSourceInfo(Context.VoidTy,
                                                                Loc);
-      Res = Tx.getSema().BuildCStyleCastExpr(Loc, TInfo, Loc, Res.get());
-      if (Res.isInvalid()) {
-        Err = true;
-        return;
-      }
-      Stmts.push_back(Res.get());
+      add(Tx.getSema().BuildCStyleCastExpr(Loc, TInfo, Loc, Res.get()));
     }
+    /// Add the statement that terminates the compound statement.
     void finalize(StmtResult &S) {
       assert(!Finalized && "expected only one finalization");
       Finalized = true;
@@ -3489,8 +3490,8 @@ public:
           VarDecl *VD = cast<VarDecl>(cast<DeclRefExpr>(VR)->getDecl())
                         ->getCanonicalDecl();
           if (AddScopeWithAllPrivates || LCVSet.count(VD))
-            EnclosingCompoundStmt.addPrivateDecl(VR->getBeginLoc(),
-                                                 VR->getEndLoc(), VD);
+            EnclosingCompoundStmt.addPrivatizingDecl(VR->getBeginLoc(),
+                                                     VR->getEndLoc(), VD);
         }
       }
     }
