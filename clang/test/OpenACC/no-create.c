@@ -4,8 +4,8 @@
 // with explicit DAs and the defaultmap added for scalars with suppressed
 // OpenACC implicit DAs.
 //
-// The various cases covered here should be kept consistent with present.c.
-// For example, a subarray that extends a subarray already present is
+// The various cases covered here should be kept consistent with present.c and
+// update.c.  For example, a subarray that extends a subarray already present is
 // consistently considered not present, so the present clause produces a runtime
 // error and the no_create clause doesn't allocate.  However, INHERITED cases
 // have no meaning for the present clause.

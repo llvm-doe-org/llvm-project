@@ -13024,6 +13024,9 @@ ACCClause *ACCClauseReader::readClause() {
   case ACCC_reduction:
     C = ACCReductionClause::CreateEmpty(Context, Record.readInt());
     break;
+  case ACCC_if_present:
+    C = new (Context) ACCIfPresentClause();
+    break;
 #define OPENACC_CLAUSE_ALIAS_self(Name) \
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
@@ -13185,6 +13188,8 @@ void ACCClauseReader::VisitACCReductionClause(ACCReductionClause *C) {
     Vars.push_back(Record.readSubExpr());
   C->setVarRefs(Vars);
 }
+
+void ACCClauseReader::VisitACCIfPresentClause(ACCIfPresentClause *) {}
 
 void ACCClauseReader::VisitACCSelfClause(ACCSelfClause *C) {
   C->setLParenLoc(Record.readSourceLocation());

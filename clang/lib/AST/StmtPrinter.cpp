@@ -1085,6 +1085,10 @@ void ACCClausePrinter::VisitACCReductionClause(ACCReductionClause *Node) {
   }
 }
 
+void ACCClausePrinter::VisitACCIfPresentClause(ACCIfPresentClause *Node) {
+  OS << "if_present";
+}
+
 void ACCClausePrinter::VisitACCSelfClause(ACCSelfClause *Node) {
   if (!Node->varlist_empty()) {
     OS << getOpenACCName(Node->getClauseKind());

@@ -1133,6 +1133,7 @@ def OpenMP : DiagGroup<"openmp", [
 // OpenACC warnings.
 def SourceUsesOpenACC : DiagGroup<"source-uses-openacc">;
 def OpenACCIgnoredClause : DiagGroup<"openacc-ignored-clause">;
+def OpenACCOMPUpdatePresent : DiagGroup<"openacc-omp-update-present">;
 def OpenACCOMPMapPresent : DiagGroup<"openacc-omp-map-present">;
 def OpenACCOMPMapNoAlloc : DiagGroup<"openacc-omp-map-no-alloc">;
 

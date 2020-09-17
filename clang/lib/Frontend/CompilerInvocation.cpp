@@ -3141,6 +3141,21 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   if (Opts.OpenACC && Opts.CPlusPlus)
     Diags.Report(clang::diag::err_drv_acc_cxx_not_supported);
 
+  // Check if -fopenacc-update-present-omp is specified.
+  if (Arg *A = Args.getLastArg(OPT_fopenacc_update_present_omp_EQ)) {
+    StringRef Val = A->getValue();
+    unsigned I;
+    for (I = 0; I <= (unsigned)LangOptions::OpenACCUpdatePresentOMP_Last; ++I) {
+      auto K = (LangOptions::OpenACCUpdatePresentOMPKind)I;
+      if (Val == LangOptions::getOpenACCUpdatePresentOMPValue(K)) {
+        Opts.setOpenACCUpdatePresentOMP(K);
+        break;
+      }
+    }
+    if (I == LangOptions::OpenACCUpdatePresentOMP_Last + 1)
+      Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
+  }
+
   // Check if -fopenacc-present-omp is specified.
   if (Arg *A = Args.getLastArg(OPT_fopenacc_present_omp_EQ)) {
     StringRef Val = A->getValue();

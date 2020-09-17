@@ -1173,6 +1173,7 @@ void ACCClauseProfiler::VisitACCReductionClause(
   Profiler->VisitName(C->getNameInfo().getName());
   VisitACCClauseList(C);
 }
+void ACCClauseProfiler::VisitACCIfPresentClause(const ACCIfPresentClause *) {}
 void ACCClauseProfiler::VisitACCSelfClause(const ACCSelfClause *C) {
   // FIXME: Should we visit the clause kind, which varies among clause
   // aliases?

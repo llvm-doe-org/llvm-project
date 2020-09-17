@@ -646,6 +646,7 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
   case ACCC_worker:
   case ACCC_vector:
   case ACCC_collapse:
+  case ACCC_if_present:
   case ACCC_unknown:
     llvm_unreachable("expected explicit clause that accepts a variable list");
   }
@@ -1676,6 +1677,7 @@ StmtResult Sema::ActOnOpenACCDataDirective(
     case ACCC_private:
     case ACCC_firstprivate:
     case ACCC_reduction:
+    case ACCC_if_present:
 #define OPENACC_CLAUSE_ALIAS_self(Name) \
     case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
@@ -1873,6 +1875,7 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr
   case ACCC_private:
   case ACCC_firstprivate:
   case ACCC_reduction:
+  case ACCC_if_present:
 #define OPENACC_CLAUSE_ALIAS_self(Name) \
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
@@ -2559,6 +2562,11 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
                                     ReductionId);
 }
 
+ACCClause *Sema::ActOnOpenACCIfPresentClause(SourceLocation StartLoc,
+                                             SourceLocation EndLoc) {
+  return new (Context) ACCIfPresentClause(StartLoc, EndLoc);
+}
+
 ACCClause *Sema::ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
                                         ArrayRef<Expr *> VarList,
                                         SourceLocation StartLoc,
@@ -2702,6 +2710,9 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
     break;
   case ACCC_vector:
     Res = ActOnOpenACCVectorClause(StartLoc, EndLoc);
+    break;
+  case ACCC_if_present:
+    Res = ActOnOpenACCIfPresentClause(StartLoc, EndLoc);
     break;
   case ACCC_nomap:
   case ACCC_present:

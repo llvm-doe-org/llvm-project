@@ -1160,13 +1160,20 @@ Clacc's current mapping of an `acc update` directive and its clauses
 to OpenMP is as follows:
 
 * `acc update` -> `omp target update`
-* *exp* `self` -> *exp* `from`
-* *exp* `device` -> *exp* `to`
+* If *exp* `if_present`, then
+    * *exp* `self` -> *exp* `from` without a `present` motion modifier
+    * *exp* `device` -> *exp* `to` without a `present` motion modifier
+* Else
+    * *exp* `self` -> *exp* `from` with a `present` motion modifier
+    * *exp* `device` -> *exp* `to` with a `present` motion modifier
 * Notes:
-    * In the future, Clacc might add the OpenMP TR8 `present` motion
-      modifier to this translation.  See the discussion of the
-      `update` directive under "Supported Features" in
-      `README-OpenACC-status.md`.
+    * See the discussion of the `update` directive under "Supported
+      Features" in `README-OpenACC-status.md` for a description of
+      associated diagnostics and for an explanation of the impact of
+      this design on Clacc users.
+    * Clacc does not currently support translating to
+      `omp_target_is_present` for the same reasons as discussed for
+      the `present` clause under "Data Directives" below.
 
 Data Directives
 ---------------

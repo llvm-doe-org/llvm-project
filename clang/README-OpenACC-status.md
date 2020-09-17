@@ -20,6 +20,9 @@ We have implemented and tested support for the following features:
           tested offloading target triples.
         * See the section "Interaction with OpenMP Support" in
           `README-OpenACC-design.md` for design details.
+    * `-fopenacc-update-present-omp=KIND` where `KIND` is either
+      `present` or `no-present`
+        * See the discussion of the `update` directive below.
     * `-fopenacc-present-omp=KIND` where `KIND` is either `present` or
       `alloc`
         * See the discussion of the `present` clause below.
@@ -29,6 +32,8 @@ We have implemented and tested support for the following features:
     * `-Wsource-uses-openacc`
     * `-Wopenacc-ignored-clause`
         * See the discussion of the `vector_length` clause below.
+    * `-Wopenacc-omp-update-present`
+        * See the discussion of the `update` directive below.
     * `-Wopenacc-omp-map-present`
         * See the discussion of the `present` clause below.
     * `-Wopenacc-omp-map-no-alloc`
@@ -43,22 +48,71 @@ We have implemented and tested support for the following features:
     * `OMP_TARGET_OFFLOAD=disabled` for targeting host
     * `ACC_PROFLIB` for the OpenACC Profiling Interface
 * `update` directive:
+    * `if_present` clause
     * `self` clause and alias `host`
     * `device` clause
-    * Presence restriction:
-        * OpenACC 3.0 requires variables appearing in these clauses to
-          be already present on the device.  However, while it
-          suggests a runtime error when this restriction is violated
-          by an application, it does not strictly require any specific
-          behavior.
-        * For now, Clacc produces the same behavior as OpenMP 5.0's
-          `omp target update` when this restriction is violated: no
-          data transfer occurs.
-        * Changes have been proposed to the OpenACC specification to
-          strictly require a runtime error instead, and so Clacc will
-          likely adjust its behavior in the future.  Most likely,
-          Clacc will utilize OpenMP TR8's `present` motion modifier
-          once Clang supports it.
+    * Presence restriction when `if_present` is not specified:
+        * OpenACC 3.0 requires variables appearing in `self`, `host`,
+          or `device` to be already present on the device when
+          `if_present` is not specified.  However, while it suggests a
+          runtime error when this restriction is violated by an
+          application, it does not strictly require any specific
+          behavior.  Changes have been proposed to the OpenACC
+          specification to strictly require a runtime error instead.
+        * Traditional compilation mode:
+            * The behavior described above is fully supported.
+            * Although the traditional compilation mode user typically
+              does not need to be aware, the OpenMP translation of the
+              `self`, `host`, and `device` clauses use an OpenMP TR8
+              feature when `if_present` is not specified: the
+              `present` motion modifier.
+            * If desired, it is possible to adjust the translation or
+              related diagnostics by using the command-line options
+              discussed below for source-to-source mode.  The
+              difference is that, by default in traditional
+              compilation mode, the related diagnostics are disabled.
+        * Source-to-source mode:
+            * Occurrences of the `self`, `host`, or `device` clause
+              without the `if_present` clause produce compile-time
+              error diagnostics by default.  The purpose of the
+              diagnostics is to ensure the user is aware that the
+              OpenMP translation includes the `present` motion
+              modifier because it is unlikely to be supported yet by
+              foreign OpenMP compilers.
+            * The diagnostics are actually warnings enabled by
+              `-Wopenacc-omp-update-present`, which is enabled and
+              treated as an error by default in source-to-source mode.
+            * To work around this issue, any of the following
+              command-line options can be specified:
+                * `-Wno-error=openacc-omp-update-present` converts the
+                  diagnostic to a warning to make it easier to find
+                  all occurrences.
+                * `-Wno-openacc-omp-update-present` disables the
+                  diagnostic entirely.  This is useful if the
+                  generated OpenMP will not be compiled or if the
+                  OpenMP compiler actually already supports the
+                  `present` motion modifier.
+                * `-fopenacc-update-present-omp=no-present` suppresses
+                  the diagnostic by changing the translation not to
+                  use the `present` motion modifier.  Contrary to
+                  OpenACC semantics, this translation does not produce
+                  a runtime error when the specified variable is not
+                  present on the device.  However, this translation
+                  should be sufficient for OpenACC applications that
+                  are robust enough not to actually encounter this
+                  runtime error.
+                * There are various other imperfect translations of
+                  these clauses to standard OpenMP that might be
+                  useful under other conditions.  We will consider
+                  adding support if there is user demand.  See the
+                  section "Update Directives" in
+                  `README-OpenACC-design.md` for a discussion of
+                  alternative translations that we considered.
+        * `-fopenacc[-ast]-print=acc`, `-ast-print`, `-ast-dump`,
+          etc. mode:
+            * Debugging modes like these do not actually print OpenMP
+              source code, so they leave the aforementioned diagnostic
+              disabled as in traditional compilation mode.
     * nesting within a `data` directive
     * in `self`, `host`, and `device` clauses, subarrays specifying
       contiguous blocks
@@ -437,6 +491,9 @@ standard OpenMP as much as possible, and to that end it might be
 worthwhile to propose these extensions for inclusion in the OpenMP
 specification.  Currently, Clacc uses OpenMP extensions as follows:
 
+* The `update` directive translation depends on the OpenMP TR8 motion
+  modifier `present` by default:
+    * See the discussion of the `update` directive above for details.
 * The `present` clause translation depends on the OpenMP TR8 map type
   modifier `present` by default:
     * See the discussion of the `present` clause above for details.

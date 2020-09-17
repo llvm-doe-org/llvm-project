@@ -40,20 +40,20 @@
 
 int main() {
   int x, y, z;
-  // error-error@+6  2 {{the OpenACC 'present' clause translation uses the 'present' map type}}
+  // error-error@+6  2 {{the OpenACC 'present' clause translation uses the 'present' map type modifier}}
   // error-note@+5   2 {{an alternative OpenMP translation can be specified with, for example, '-fopenacc-present-omp=alloc'}}
   // error-note@+4   2 {{or you can just disable this diagnostic with '-Wno-openacc-omp-map-present'}}
-  // warn-warning@+3 2 {{the OpenACC 'present' clause translation uses the 'present' map type}}
+  // warn-warning@+3 2 {{the OpenACC 'present' clause translation uses the 'present' map type modifier}}
   // warn-note@+2    2 {{an alternative OpenMP translation can be specified with, for example, '-fopenacc-present-omp=alloc'}}
   // warn-note@+1    2 {{or you can just disable this diagnostic with '-Wno-openacc-omp-map-present'}}
   #pragma acc data present(x, y) present(z)
     ;
-  // warn-warning@+3 {{the OpenACC 'present' clause translation uses the 'present' map type}}
+  // warn-warning@+3 {{the OpenACC 'present' clause translation uses the 'present' map type modifier}}
   // warn-note@+2    {{an alternative OpenMP translation can be specified with, for example, '-fopenacc-present-omp=alloc'}}
   // warn-note@+1    {{or you can just disable this diagnostic with '-Wno-openacc-omp-map-present'}}
   #pragma acc parallel present(x)
     ;
-  // warn-warning@+3 {{the OpenACC 'present' clause translation uses the 'present' map type}}
+  // warn-warning@+3 {{the OpenACC 'present' clause translation uses the 'present' map type modifier}}
   // warn-note@+2    {{an alternative OpenMP translation can be specified with, for example, '-fopenacc-present-omp=alloc'}}
   // warn-note@+1    {{or you can just disable this diagnostic with '-Wno-openacc-omp-map-present'}}
   #pragma acc parallel loop present(x)

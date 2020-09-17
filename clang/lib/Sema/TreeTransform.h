@@ -10471,6 +10471,13 @@ ACCClause *TreeTransform<Derived>::TransformACCReductionClause(
 }
 
 template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCIfPresentClause(ACCIfPresentClause *C) {
+  // No need to rebuild this clause, no parameters.
+  return C;
+}
+
+template <typename Derived>
 ACCClause *TreeTransform<Derived>::TransformACCSelfClause(ACCSelfClause *C) {
   llvm::SmallVector<Expr *, 16> Vars;
   Vars.reserve(C->varlist_size());

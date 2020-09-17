@@ -1744,6 +1744,19 @@ def fopenacc_ast_print_EQ : Joined<["-"], "fopenacc-ast-print=">,
            " a result, the output will have preprocessor expansions and"
            " reformatting.">,
   Values<"acc,omp,acc-omp,omp-acc">;
+def fopenacc_update_present_omp_EQ :
+  Joined<["-"], "fopenacc-update-present-omp=">,
+  Flags<[CC1Option, NoArgumentUnused]>, Group<f_Group>,
+  MetaVarName<"<translation>">,
+  HelpText<"Adjust the OpenMP translation of the OpenACC 'update' directive "
+           "when 'if_present' is not specified.  'present' (default) specifies "
+           "that the 'present' motion modifier be included, an OpenMP TR8 "
+           "feature that fully implements OpenACC semantics in this case.  "
+           "'no-present' specifies that the 'present' motion modifier not be "
+           "included, which suffices for OpenACC applications that are robust "
+           "enough not to produce the runtime error specified by OpenACC "
+           "here.">,
+  Values<"present,no-present">;
 def fopenacc_present_omp_EQ : Joined<["-"], "fopenacc-present-omp=">,
   Flags<[CC1Option, NoArgumentUnused]>, Group<f_Group>,
   MetaVarName<"<translation>">,

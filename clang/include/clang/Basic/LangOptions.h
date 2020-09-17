@@ -108,6 +108,22 @@ public:
     DCC_RegCall
   };
 
+  enum OpenACCUpdatePresentOMPKind {
+    OpenACCUpdatePresentOMP_Present,
+    OpenACCUpdatePresentOMP_NoPresent,
+    OpenACCUpdatePresentOMP_Last = OpenACCUpdatePresentOMP_NoPresent
+  };
+  static StringRef
+  getOpenACCUpdatePresentOMPValue(OpenACCUpdatePresentOMPKind K) {
+    switch (K) {
+    case OpenACCUpdatePresentOMP_Present:
+      return "present";
+    case OpenACCUpdatePresentOMP_NoPresent:
+      return "no-present";
+    }
+    llvm_unreachable("unexpected OpenACCUpdatePresentOMPKind");
+  }
+
   enum OpenACCPresentOMPKind {
     OpenACCPresentOMP_Present,
     OpenACCPresentOMP_Alloc,

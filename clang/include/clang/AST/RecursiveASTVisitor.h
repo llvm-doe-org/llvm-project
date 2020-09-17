@@ -3674,6 +3674,12 @@ bool RecursiveASTVisitor<Derived>::VisitACCReductionClause(
 }
 
 template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCIfPresentClause(
+    ACCIfPresentClause *) {
+  return true;
+}
+
+template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCSelfClause(ACCSelfClause *C) {
   TRY_TO(VisitACCClauseList(C));
   return true;

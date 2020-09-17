@@ -14,7 +14,7 @@
 // RUN: }
 // RUN: %for prt-args {
 // RUN:   %clang -Xclang -verify=%[prt-ver] -fopenacc-print=%[prt-arg] \
-// RUN:          -ferror-limit=100 %t-acc.c \
+// RUN:          -Wno-openacc-omp-update-present -ferror-limit=100 %t-acc.c \
 // RUN:   | FileCheck -check-prefixes=%[prt-chk] -match-full-lines \
 // RUN:               -strict-whitespace %s
 // RUN: }

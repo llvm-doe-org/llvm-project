@@ -564,9 +564,9 @@ int main() {
 #endif
 #if DIR == DIR_DATAPAR
     #line 90000
-    #pragma acc update self(arr0, notPresent0) device(arr1[0:5], notPresent1)
+    #pragma acc update self(arr0, notPresent0) device(arr1[0:5], notPresent1) if_present
     #line 100000
-    #pragma acc update self(notPresent0) device(notPresent1)
+    #pragma acc update self(notPresent0) device(notPresent1) if_present
     #line 110000
     }
   #line 120000

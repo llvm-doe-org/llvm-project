@@ -1,4 +1,6 @@
 // Check diagnostics for "acc update".
+//
+// -Wopenacc-omp-update-present is tested in warn-acc-omp-update-present.c
 
 // OpenACC disabled
 // RUN: %clang_cc1 -verify=noacc,expected-noacc -Wchar-subscripts %s
@@ -120,6 +122,19 @@ int main() {
   // expected-note@+2 {{to match this '('}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update shared(i
+
+  //--------------------------------------------------
+  // if_present clause syntax
+  //--------------------------------------------------
+
+  // expected-warning@+1 {{extra tokens at the end of '#pragma acc update' are ignored}}
+  #pragma acc update self(i) if_present(
+  // expected-warning@+1 {{extra tokens at the end of '#pragma acc update' are ignored}}
+  #pragma acc update self(i) if_present()
+  // expected-warning@+1 {{extra tokens at the end of '#pragma acc update' are ignored}}
+  #pragma acc update self(i) if_present(i
+  // expected-warning@+1 {{extra tokens at the end of '#pragma acc update' are ignored}}
+  #pragma acc update self(i) if_present(i)
 
   //--------------------------------------------------
   // Variable clauses: syntax

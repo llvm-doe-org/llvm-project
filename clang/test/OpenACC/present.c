@@ -2,10 +2,10 @@
 // -fopenacc-present-omp.  Diagnostics about present in the translation are
 // tested in warn-acc-omp-map-present.c.
 //
-// The various cases covered here should be kept consistent with no-create.c.
-// For example, a subarray that extends a subarray already present is
-// consistently considered not present, so the present clause produces a runtime
-// error and the no_create clause doesn't allocate.
+// The various cases covered here should be kept consistent with no-create.c
+// and update.c.  For example, a subarray that extends a subarray already
+// present is consistently considered not present, so the present clause
+// produces a runtime error and the no_create clause doesn't allocate.
 
 // Check bad -fopenacc-present-omp values.
 //

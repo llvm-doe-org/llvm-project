@@ -28,6 +28,7 @@
 // RUN: %for cpps {
 // RUN:   %for prt-args {
 // RUN:     %clang -Xclang -verify -fopenacc-print=%[prt-arg] %[cpp] %t-acc.c \
+// RUN:            -Wno-openacc-omp-update-present \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] -match-full-lines \
 // RUN:                 -strict-whitespace %s
 // RUN:   }
@@ -63,8 +64,8 @@ int main() {
   //--------------------------------------------------
 
   //  PRT-A-NEXT:  #pragma acc update device(i)
-  // PRT-AO-NEXT:  // #pragma omp target update to(i)
-  //  PRT-O-NEXT:  #pragma omp target update to(i)
+  // PRT-AO-NEXT:  // #pragma omp target update to(present: i)
+  //  PRT-O-NEXT:  #pragma omp target update to(present: i)
   // PRT-OA-NEXT:  // #pragma acc update device(i)
   #pragma acc update device(i)
 
@@ -96,12 +97,12 @@ int main() {
   // PRT-AO-NEXT:  // #pragma omp target data map(tofrom: i)
   //  PRT-A-NEXT:  {
   //  PRT-A-NEXT:    #pragma acc update device(i)
-  // PRT-AO-NEXT:    // #pragma omp target update to(i)
+  // PRT-AO-NEXT:    // #pragma omp target update to(present: i)
   //  PRT-A-NEXT:  }
   //  PRT-O-NEXT:  #pragma omp target data map(tofrom: i)
   // PRT-OA-NEXT:  // #pragma acc data copy(i)
   //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:    #pragma omp target update to(i)
+  //  PRT-O-NEXT:    #pragma omp target update to(present: i)
   // PRT-OA-NEXT:    // #pragma acc update device(i)
   //  PRT-O-NEXT:  }
   #pragma acc data copy(i)

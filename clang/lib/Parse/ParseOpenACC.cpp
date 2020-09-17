@@ -195,7 +195,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
 ///       | create-clause | pcreate-clause | present_or_create-clause
 ///       | no_create-clause
 ///       | private-clause | firstprivate-clause | reduction-clause
-///       | self-clause | host-clause | device-clause
+///       | if-present-clause | self-clause | host-clause | device-clause
 ///       | num_gangs-clause | num_workers-clause | vector_length-clause
 ///       | seq-clause | independent-clause | auto-clause
 ///       | gang-clause | worker-clause | vector-clause | collapse-clause
@@ -226,25 +226,19 @@ ACCClause *Parser::ParseOpenACCClause(
     }
     Clause = ParseOpenACCSingleExprClause(CKind, WrongDirective);
     break;
+  case ACCC_if_present:
   case ACCC_seq:
   case ACCC_independent:
   case ACCC_auto:
   case ACCC_gang:
   case ACCC_worker:
   case ACCC_vector:
-    // gcc 7.2.0 and pgcc 17.4-0 both complain if any one of these clauses
-    // appears more than once, but OpenACC 2.6 doesn't appear to mention this
-    // issue.
     if (FirstClauses[CKind]) {
       Diag(Tok, diag::err_acc_more_one_clause)
           << getOpenACCName(DKind) << getOpenACCName(CKind);
       ErrorFound = true;
     }
     else {
-      // Neither gcc 7.2.0 or pgcc 17.4-0 complain about combining these
-      // apparently contradictory clauses (except gcc does complain when
-      // combining seq and auto), and OpenACC 2.6 doesn't appear to mention
-      // this issue, but what can they possibly mean together?
       if (CKind == ACCC_seq || CKind == ACCC_independent ||
            CKind == ACCC_auto) {
         OpenACCClauseKind CKindOther;
@@ -256,9 +250,6 @@ ACCClause *Parser::ParseOpenACCClause(
           ErrorFound = true;
         }
       }
-      // gcc 7.2.0 complains about combining these apparently contradictory
-      // clauses, but pgcc 17.4-0 does not and OpenACC 2.6 doesn't appear to
-      // mention this issue.
       if (CKind == ACCC_seq) {
         OpenACCClauseKind CKindOther;
         if (FirstClauses[CKindOther = ACCC_gang] ||

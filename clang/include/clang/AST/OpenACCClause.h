@@ -982,6 +982,34 @@ public:
   }
 };
 
+/// This represents 'if_present' clause in the '#pragma acc ...'
+/// directive.
+///
+/// \code
+/// #pragma acc update if_present
+/// \endcode
+/// In this example directive '#pragma acc update' has clause 'if_present'.
+class ACCIfPresentClause : public ACCClause {
+public:
+  /// Build 'if_present' clause.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param EndLoc Ending location of the clause.
+  ACCIfPresentClause(SourceLocation StartLoc, SourceLocation EndLoc)
+      : ACCClause(ACCC_if_present, ACC_EXPLICIT, StartLoc, EndLoc) {}
+
+  /// Build an empty clause.
+  ACCIfPresentClause() : ACCClause(ACCC_if_present) {}
+
+  child_range children() {
+    return child_range(child_iterator(), child_iterator());
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_if_present;
+  }
+};
+
 /// This represents the clause 'self' (or any of its aliases) for
 /// '#pragma acc ...' directives.
 ///

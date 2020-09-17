@@ -1038,33 +1038,69 @@ public:
         });
   }
 
-  OMPClauseResult TransformACCSelfClause(ACCExecutableDirective *D,
-                                         OpenMPDirectiveKind TDKind,
-                                         ACCSelfClause *C) {
-    return transformACCVarListClause<ACCSelfClause>(
-        D, C, OMPC_from,
-        [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+  OMPClauseResult TransformACCIfPresentClause(ACCExecutableDirective *D,
+                                              OpenMPDirectiveKind TDKind,
+                                              ACCIfPresentClause *C) {
+    return OMPClauseEmpty();
+  }
+
+private:
+  template <typename ClauseType>
+  OMPClauseResult TransformACCSelfOrDeviceClause(
+      ACCExecutableDirective *D, OpenMPDirectiveKind TDKind, ClauseType *C,
+      OpenMPClauseKind TCKind,
+      OMPClause *(TransformACCToOMP::*Rebuilder)(
+          ArrayRef<OpenMPMotionModifierKind> MotionMods,
+          ArrayRef<SourceLocation> MotionModLocs,
+          CXXScopeSpec &MapperIdScopeSpec, DeclarationNameInfo &MapperId,
+          SourceLocation ColonLoc, ArrayRef<Expr *> VarList,
+          const OMPVarListLocTy &Locs, ArrayRef<Expr *> UnresolvedMappers)) {
+    SmallVector<OpenMPMotionModifierKind, 1> MotionMods;
+    switch (getSema().LangOpts.getOpenACCUpdatePresentOMP()) {
+    case LangOptions::OpenACCUpdatePresentOMP_Present:
+      if (!D->hasClausesOfKind<ACCIfPresentClause>()) {
+        MotionMods.push_back(OMPC_MOTION_MODIFIER_present);
+        getSema().Diag(C->getBeginLoc(), diag::warn_acc_omp_update_present)
+            << getOpenACCName(C->getClauseKind()) << C->getSourceRange();
+        getSema().Diag(C->getBeginLoc(), diag::note_acc_alternate_omp)
+            << (std::string(getOpenACCName(D->getDirectiveKind())) + "-present")
+            << LangOptions::getOpenACCUpdatePresentOMPValue(
+                   LangOptions::OpenACCUpdatePresentOMP_NoPresent);
+        getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_diag)
+            << DiagnosticIDs::getWarningOptionForDiag(
+                   diag::warn_acc_omp_update_present);
+      }
+      break;
+    case LangOptions::OpenACCUpdatePresentOMP_NoPresent:
+      break;
+    }
+    return transformACCVarListClause<ClauseType>(
+        D, C, TCKind, [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+          SmallVector<SourceLocation, 1> MotionModLocs;
+          for (int i = 0, e = MotionMods.size(); i < e; ++i)
+            MotionModLocs.push_back(L.LParenLoc);
           CXXScopeSpec MapperIdScopeSpec;
           DeclarationNameInfo MapperIdInfo;
-          return getDerived().RebuildOMPFromClause(
-              llvm::None, llvm::None, MapperIdScopeSpec, MapperIdInfo,
+          return (getDerived().*Rebuilder)(
+              MotionMods, MotionModLocs, MapperIdScopeSpec, MapperIdInfo,
               L.LParenLoc, Vars,
               OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
         });
   }
 
+public:
+  OMPClauseResult TransformACCSelfClause(ACCExecutableDirective *D,
+                                         OpenMPDirectiveKind TDKind,
+                                         ACCSelfClause *C) {
+    return TransformACCSelfOrDeviceClause(
+        D, TDKind, C, OMPC_from, &TransformACCToOMP::RebuildOMPFromClause);
+  }
+
   OMPClauseResult TransformACCDeviceClause(ACCExecutableDirective *D,
                                            OpenMPDirectiveKind TDKind,
                                            ACCDeviceClause *C) {
-    return transformACCVarListClause<ACCDeviceClause>(
-        D, C, OMPC_to, [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
-          CXXScopeSpec MapperIdScopeSpec;
-          DeclarationNameInfo MapperIdInfo;
-          return getDerived().RebuildOMPToClause(
-              llvm::None, llvm::None, MapperIdScopeSpec, MapperIdInfo,
-              L.LParenLoc, Vars,
-              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
-        });
+    return TransformACCSelfOrDeviceClause(
+        D, TDKind, C, OMPC_to, &TransformACCToOMP::RebuildOMPToClause);
   }
 
   OMPClauseResult TransformACCSeqClause(ACCExecutableDirective *D,

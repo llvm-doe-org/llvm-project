@@ -6903,6 +6903,8 @@ void ACCClauseWriter::VisitACCReductionClause(ACCReductionClause *C) {
     Record.AddStmt(VE);
 }
 
+void ACCClauseWriter::VisitACCIfPresentClause(ACCIfPresentClause *) {}
+
 void ACCClauseWriter::VisitACCSelfClause(ACCSelfClause *C) {
   Record.push_back(C->varlist_size());
   Record.AddSourceLocation(C->getLParenLoc());

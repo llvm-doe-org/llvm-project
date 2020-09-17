@@ -11087,6 +11087,9 @@ public:
       SourceLocation StartLoc, SourceLocation LParenLoc,
       SourceLocation ColonLoc, SourceLocation EndLoc,
       const DeclarationNameInfo &ReductionId);
+  /// Called on well-formed 'if_present' clause.
+  ACCClause *ActOnOpenACCIfPresentClause(SourceLocation StartLoc,
+                                         SourceLocation EndLoc);
   /// Called for well-formed 'self' clause or an alias.
   ACCClause *ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
                                     ArrayRef<Expr *> VarList,
