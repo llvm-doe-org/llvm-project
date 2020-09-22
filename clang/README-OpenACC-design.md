@@ -404,7 +404,7 @@ portions using the original input buffer.
 
 The `Rewrite` facility is challenging to use when either boundary of a
 region of text to be rewritten is expanded from a preprocessor macro.
-See `-fopenacc-print` in the section `Skipped Features` in
+See the section "Source-to-Source Mode Limitations" in
 `README-OpenACC-status.md` for details on how this currently limits
 `-fopenacc-print`.
 

@@ -4,22 +4,45 @@ Clang and LLVM with support for OpenACC.
 Supported Features
 ==================
 
-We have implemented and tested support for the following features:
+This section catalogs features that Clacc currently implements to
+support OpenACC, and it identifies known limitations in those
+features.  Clacc does not yet support OpenACC features that are not
+mentioned here.
 
-* build platforms:
-    * Ubuntu 18.04
-    * CentOS 7.8
-* command-line options:
-    * `-f[no-]openacc`
+* Build platforms
+    * Ubuntu 18.04 is regularly tested.
+    * CentOS 7.8 is regularly tested.
+    * Windows and macOS are not yet supported.
+* Command-line options
+    * See the section "Using" in `../README.md` for an introduction to
+      Clacc's command-line options.
+    * For brief descriptions of all OpenACC-related and OpenMP-related
+      command-line options, run Clacc's `clang -help` and search for
+      `openacc` or `openmp`.
+    * `-f[no-]openacc` enables OpenACC support.  Traditional
+      compilation mode is the default.
     * `-fopenacc[-ast]-print=acc|omp|acc-omp|omp-acc`
+        * Enables OpenACC support in source-to-source compilation
+          mode.
         * See the section "Source-to-Source Translation" in
           `README-OpenACC-design.md` for design details.
-    * `-fopenmp-targets=<triples>` for offloading in traditional
-      compilation mode, and omitted for targeting host
+    * `-fopenmp-targets=<triples>`
+        * In traditional compilation mode, specifies offloading device
+          instead of targeting host.
+        * Not supported for source-to-source mode
         * See the section "Using" in `../README.md` for a list of
           tested offloading target triples.
         * See the section "Interaction with OpenMP Support" in
           `README-OpenACC-design.md` for design details.
+    * Other OpenMP options
+        * `-fopenmp` produces an error when OpenACC support is enabled
+          as Clacc does not currently support combining OpenMP and
+          OpenACC in the same application.
+        * Other `-fopenmp-*` options are not supported when OpenACC
+          support is enabled.
+        * As usual when `-fopenmp` is not specified, OpenMP directives
+          are discarded but `-Wsource-uses-openmp` is available to
+          produce warnings for them.
     * `-fopenacc-update-present-omp=KIND` where `KIND` is either
       `present` or `no-present`
         * See the discussion of the `update` directive below.
@@ -30,6 +53,9 @@ We have implemented and tested support for the following features:
       or `alloc`
         * See the discussion of the `no_create` clause below.
     * `-Wsource-uses-openacc`
+        * Similar to `-Wsource-uses-openmp`, this enables warnings
+          about OpenACC directives when OpenACC support is not
+          enabled.
     * `-Wopenacc-ignored-clause`
         * See the discussion of the `vector_length` clause below.
     * `-Wopenacc-omp-update-present`
@@ -38,20 +64,22 @@ We have implemented and tested support for the following features:
         * See the discussion of the `present` clause below.
     * `-Wopenacc-omp-map-no-alloc`
         * See the discussion of the `no_create` clause below.
-    * Notes:
-        * See the section "Using" in `../README.md` for an
-          introduction to Clacc's command-line options.
-        * For brief descriptions of all OpenACC-related and
-          OpenMP-related command-line options, run Clacc's `clang
-          -help` and search for `openacc` or `openmp`.
-* run-time environment variables:
-    * `OMP_TARGET_OFFLOAD=disabled` for targeting host
-    * `ACC_PROFLIB` for the OpenACC Profiling Interface
-* `update` directive:
-    * `if_present` clause
-    * `self` clause and alias `host`
-    * `device` clause
-    * Presence restriction when `if_present` is not specified:
+* Run-time environment variables
+    * `OMP_TARGET_OFFLOAD=disabled` for specifying at run time to
+      target the host.
+    * `ACC_PROFLIB` for the OpenACC Profiling Interface.
+* `update` directive
+    * Lexical context
+        * Appearing within a `data` construct is supported.
+    * Supported clauses
+        * `if_present`
+        * `self` and alias `host`
+        * `device`
+    * Subarrays specifying contiguous blocks are supported.
+    * Multiple subarrays of the same array on the same directive are
+      not yet supported.
+    * Members of structs or classes are not yet supported.
+    * Presence restriction caveats when `if_present` is not specified
         * OpenACC 3.0 requires variables appearing in `self`, `host`,
           or `device` to be already present on the device when
           `if_present` is not specified.  However, while it suggests a
@@ -59,7 +87,7 @@ We have implemented and tested support for the following features:
           application, it does not strictly require any specific
           behavior.  Changes have been proposed to the OpenACC
           specification to strictly require a runtime error instead.
-        * Traditional compilation mode:
+        * Traditional compilation mode
             * The behavior described above is fully supported.
             * Although the traditional compilation mode user typically
               does not need to be aware, the OpenMP translation of the
@@ -71,7 +99,7 @@ We have implemented and tested support for the following features:
               discussed below for source-to-source mode.  The
               difference is that, by default in traditional
               compilation mode, the related diagnostics are disabled.
-        * Source-to-source mode:
+        * Source-to-source mode
             * Occurrences of the `self`, `host`, or `device` clause
               without the `if_present` clause produce compile-time
               error diagnostics by default.  The purpose of the
@@ -109,16 +137,27 @@ We have implemented and tested support for the following features:
                   `README-OpenACC-design.md` for a discussion of
                   alternative translations that we considered.
         * `-fopenacc[-ast]-print=acc`, `-ast-print`, `-ast-dump`,
-          etc. mode:
+          etc. mode
             * Debugging modes like these do not actually print OpenMP
               source code, so they leave the aforementioned diagnostic
               disabled as in traditional compilation mode.
-    * nesting within a `data` directive
-    * in `self`, `host`, and `device` clauses, subarrays specifying
-      contiguous blocks
-* `data` directive:
-    * `present` and `no_create` clauses
-        * Traditional compilation mode:
+* `data` directive
+    * Lexical context
+        * Any number of levels of nesting within other `data`
+          constructs is supported.
+    * Supported clauses
+        * `present`
+        * `copy` and aliases `pcopy` and `present_or_copy`
+        * `copyin` and aliases `pcopyin` and `present_or_copyin`
+            * `readonly` modifier is not yet supported.
+        * `copyout` and aliases `pcopyout` and `present_or_copyout`
+            * `zero` modifier is not yet supported.
+        * `create` and aliases `pcreate` and `present_or_create`
+            * `zero` modifier is not yet supported.
+        * `no_create`
+    * Subarrays specifying contiguous blocks are supported.
+    * `present` and `no_create` caveats
+        * Traditional compilation mode
             * The `present` and `no_create` clauses are fully
               supported.
             * Although the traditional compilation mode user typically
@@ -138,7 +177,7 @@ We have implemented and tested support for the following features:
               discussed below for source-to-source mode.  The
               difference is that, by default in traditional
               compilation mode, the related diagnostics are disabled.
-        * Source-to-source mode:
+        * Source-to-source mode
             * Occurrences of the `present` or `no_create` clause
               produce compile-time error diagnostics by default.  The
               purpose of the diagnostics is to ensure the user is
@@ -206,7 +245,7 @@ We have implemented and tested support for the following features:
                   alternative translations that we considered for the
                   OpenACC `present` clause.
         * `-fopenacc[-ast]-print=acc`, `-ast-print`, `-ast-dump`,
-          etc. mode:
+          etc. mode
             * Debugging modes like these do not actually print OpenMP
               source code, so they leave the aforementioned
               diagnostics disabled as in traditional compilation mode.
@@ -215,37 +254,29 @@ We have implemented and tested support for the following features:
           Clacc's translations from OpenACC to OpenMP.  Thus, it is
           not yet recommended for use in hand-written OpenMP code as
           it might not integrate well with some OpenMP features.
-    * `copy` clause and aliases `pcopy` and `present_or_copy`
-    * `copyin` clause and aliases `pcopyin` and
-      `present_or_copyin`
-    * `copyout` clause and aliases `pcopyout` and
-      `present_or_copyout`
-    * `create` clause and aliases `pcreate` and `present_or_create`
-    * in `present`, `copy`, `copyin`, `copyout`, `create`, and
-      `no_create` clauses and their aliases, subarrays specifying
-      contiguous blocks
-    * any number of levels of nesting within other `data` directives
-* `parallel` directive:
-    * use without clauses
-    * data attributes:
-        * implicit `copy` for non-scalars
-        * implicit `firstprivate` for scalars
+* `parallel` directive
+    * Lexical context
+        * Appearing within a `data` construct is supported.
+    * Use without clauses is supported.
+    * Supported data attributes and clauses
+        * Implicit `copy` for non-scalars
+        * Implicit `firstprivate` for scalars
         * For `present`, `copy`, `copyin`, `copyout`, `create`, and
           `no_create` clauses and their aliases, support is the same
           as for the `data` directive, as described above.
         * `firstprivate` clause
         * `private` clause
-        * `reduction` clause:
-            * supports only scalars for now
-            * implies `copy` clause (overriding the implicit
-              `firstprivate` clause)
+        * `reduction` clause
+            * Supports only scalars for now.
+            * Implies `copy` clause (overriding the implicit
+              `firstprivate` clause).
             * `+`, `*`, `&&`, and `||` support exactly C11's
               arithmetic types (integer and floating types).
             * `max` and `min` support exactly C11's real types
               (integer types and floating types except complex types)
               and pointer types.
             * `&`, `|`, and `^` support exactly C11's integer types.
-            * deviations from OpenACC 2.6:
+            * Deviations from OpenACC 2.6
                 * OpenACC 2.6 sec. 2.5.12p774 mistypes `^` as `%`.
                   The latter would be nonsense as a reduction
                   operator.
@@ -269,7 +300,7 @@ We have implemented and tested support for the following features:
                   support for OpenMP reductions.  Some operand types
                   might not be supported when compiling the generated
                   OpenMP using a different compiler.
-    * `num_gangs`, `num_workers`, `vector_length` clause:
+    * `num_gangs`, `num_workers`, `vector_length` clauses
         * The argument in all cases must be a positive integer
           expression.
         * The `vector_length` argument must also be a constant or
@@ -295,21 +326,28 @@ We have implemented and tested support for the following features:
               compiler to ignore `vector_length` as a hint, so we
               choose to ignore it and warn in the case of a
               non-constant expression.
-    * nesting within a `data` directive
-* `loop` directive within a `parallel` directive:
-    * use without clauses
-    * partitionability:
-        * implicit `independent`
-        * `seq` clause
-        * `independent` clause
-        * `auto` clause: for now, always produces a sequential loop
-    * partitioning:
-        * `gang` clause without arguments
-        * `worker` clause without arguments
-        * `vector` clause without arguments
+* `loop` directive
+    * Lexical context
+        * Appearing within a `parallel` construct and any number of
+          levels of nesting within other `loop` directives are
+          supported.
+        * Appearing outside a `parallel` construct (that is, an
+          orphaned loop) is not yet supported.
+    * Use without clauses is supported.
+    * Supported partitionability clauses
+        * Implicit `independent`
+        * `seq`
+        * `independent`
+        * `auto`
+            * For now, always produces a sequential loop.
+    * Supported partitioning clauses
+        * `gang`
+        * `worker`
+        * `vector`
+        * Arguments to those clauses are not yet supported.
         * For now, all three are ignored when combined with `auto`
           clause because, for now, `auto` produces a sequential loop.
-        * implicit `gang` clause
+        * Implicit `gang` clause
             * This feature is not specified in OpenACC 2.7, but
               existing OpenACC compilers implement it in some form.
               Clacc attempts to mimic their behavior, but some details
@@ -317,16 +355,16 @@ We have implemented and tested support for the following features:
               section in `README-OpenACC-design.md` for details.
         * For now, if none of these clauses appear (explicitly or
           implicitly), then a sequential loop is produced.
-    * `collapse` clause
-    * data attributes:
-        * for loop control variable:
-            * implicit `shared` if `seq` is explicitly specified and
+    * The `collapse` clause is supported.
+    * Supported data attributes and clauses
+        * A loop control variable is:
+            * Implicit `shared` if `seq` is explicitly specified and
               loop control variable is assigned but not declared in
-              init of attached `for` loop
-            * predetermined `private` otherwise
-        * implicit `shared` for other referenced variables
+              init of attached `for` loop.
+            * Predetermined `private` otherwise.
+        * Implicit `shared` for other referenced variables
         * `private` clause
-        * `reduction` clause:
+        * `reduction` clause
             * See `reduction` clause for `parallel` directive for
               general details about operand types and limitations.
             * Various subtleties in the semantics of `reduction`
@@ -338,9 +376,9 @@ We have implemented and tested support for the following features:
               subtleties are under discussion among the OpenACC
               technical committee for clarification in the OpenACC
               spec after 2.7.
-    * detection of `break` statement for the associated loop:
-        * compile error if implicit/explicit `independent`
-        * no error if `seq` or `auto`
+    * Detection of `break` statement for the associated loop
+        * Compile error if implicit/explicit `independent`.
+        * No error if `seq` or `auto`.
         * This is important because Clang's implementation does not
           permit `break` statements for OpenMP loops.
         * In the future when `auto` doesn't always produce a
@@ -349,97 +387,80 @@ We have implemented and tested support for the following features:
         * Both the OpenACC and OpenMP implementations currently permit
           `break` statements for nested loops that are associated via
           a `collapse` clause, but that's probably a bug.
-    * any number of levels of nesting within other `loop` directives
-* `parallel loop` directive:
+* `parallel loop` directive
     * All features currently supported by `parallel` and `loop`
       directives are also supported here.
-    * `copy` clause implied by `reduction` clause (overriding the
-      implicit `firstprivate` clause)
+    * A `reduction` clause implies a `copy` clause (overriding the
+      implicit `firstprivate` clause).
+* Subarrays
+    * Subarrays specifying contiguous blocks are supported.
+    * Subarrays specifying non-contiguous blocks in dynamic
+      multidimensional arrays are not yet supported.
+    * Subarrays in `firstprivate`, `private`, and `reduction` clauses
+      are not yet supported.
+    * Subarrays with no `:` and one integer (syntactically an array
+      subscript, such as `arr[5]`) are not yet supported.
+* Device-side directives
+    * Nesting of an `update`, `data`, `parallel`, or `parallel loop`
+      directive inside a `parallel`, `loop`, or `parallel loop`
+      construct is not yet supported.
+    * We're not aware of any OpenACC implementation that supports this
+      yet.
 * OpenACC Profiling Interface
+    * Clacc's support has been tested with TAU.
+    * The main limitations are currently as follows:
+        * Multiple callbacks per event type and callback toggling are
+          not yet supported.
+        * Callback registration is permitted only within the
+          `acc_register_library` function.
+        * `acc_ev_wait_start` and `acc_ev_wait_end` event types are
+          not yet supported.
+        * The `kernel_name`, `num_gangs`, `num_workers`,
+          `vector_length`, and `tool_info` fields are not yet
+          supported.
+        * The `acc_api_info` structure is not yet supported.
     * See the section "OpenACC Profiling Interface" in
-      `README-OpenACC-design.md` for features and limitations.
-* language support:
-    * C11 with the following extensions:
+      `README-OpenACC-design.md` for a more detailed description.
+* Language support
+    * C11 is supported with the following extensions:
         * `__uint128_t`, `__int128_t`, `__SIZEOF_INT128__`
+    * The nested function definition extension for C is not yet
+      supported.
+    * C++ is not yet supported.
+    * Objective-C/C++ are not supported.
 
-Skipped Features
-================
+Source-to-Source Mode Limitations
+=================================
 
-While implementing support for the above features, we have
-intentionally skipped or have not fully tested support for the
-following features for now:
-
-* build platforms:
-    * windows
-* combining OpenMP and OpenACC in the same application:
-    * `-fopenmp` is an error when OpenACC support is enabled.
-    * As usual when `-fopenmp` is not specified, OpenMP directives are
-      discarded, but `-Wsource-uses-openmp` is available as usual to
-      produce warnings for them.
-* command-line options:
-    * `-fopenmp-targets=<triples>` for source-to-source mode
-    * other `-fopenmp-*` options
-* all directives:
-    * clauses not listed in the previous section
-    * non-scalars in `reduction` clauses
-    * subarrays specifying non-contiguous blocks in dynamic
-      multidimensional arrays
-    * subarrays in `firstprivate`, `private`, and `reduction` clauses
-    * subarrays with no `:` and one integer (syntactically an array
-      subscript)
-    * `readonly` and `zero` modifiers in `copyin`, `copyout`, and
-      `create` clauses
-* `update` directive:
-    * multiple subarrays of the same array on the same directive
-    * a member of a struct or class
-* `loop` directive:
-    * outside a `parallel` directive (that is, an orphaned loop)
-    * `gang`, `worker`, and `vector` clause arguments
-* `data`, `parallel`, and `parallel loop` directive:
-    * inside a `parallel`, `loop`, or `parallel loop` directive (we're
-      not aware of any implementation that supports this)
-* language support:
-    * C extensions:
-        * nested function definitions
-    * C++
-    * Objective-C/C++
-* source-to-source mode using `-fopenacc-print`:
-    * Preprocessor macros appearing within OpenACC clauses or
-      associated statements are expanded in the OpenMP translation.
-      Notes:
-        * See the "Source-to-Source Translation" section in
-          `README-OpenACC-design.md` for an explanation of why this
-          happens and how Clacc might evolve to prevent it in the
-          future.
-    * Preprocessor macro usage and the `_Pragma` operator form can
-      sometimes prevent OpenACC directives from being translated:
-        * Clacc cannot translate an OpenACC directive if it meets any
-          of the following conditions:
-            * The directive is expanded from a preprocessor macro and
-              thus uses `_Pragma` form.
-            * The directive uses `_Pragma` form and has no associated
-              statement.
-            * The associated statement must be rewritten but its last
-              token is expanded from a preprocessor macro:
-                * In the case of `#pragma` form, whether the
-                  associated statement must be rewritten depends on
-                  Clacc's mapping for the construct to OpenMP.
-                * In the case of `_Pragma` form, currently the
-                  associated statement must always be rewritten.
-        * Clacc reports an error diagnostic for every such OpenACC
-          construct in the source file.  Clacc then prints a version
-          of the source in which all OpenACC constructs are
-          transformed except the reported ones.
-        * For a full transformation of the source file in this case,
-          try `-fopenacc-ast-print` instead.  However, its output
-          looks like the preprocessor output, which is not appropriate
-          for some use cases.
-
-Other Features
-==============
-
-We have not yet considered features that are not mentioned in either
-list above.
+* Preprocessor macros appearing within OpenACC clauses or associated
+  statements are expanded in the OpenMP translation.  Notes:
+    * See the "Source-to-Source Translation" section in
+      `README-OpenACC-design.md` for an explanation of why this
+      happens and how Clacc might evolve to prevent it in the future.
+* Preprocessor macro usage and the `_Pragma` operator form can
+  sometimes prevent OpenACC directives from being translated:
+    * Clacc cannot translate an OpenACC directive if it meets any of
+      the following conditions:
+        * The directive is expanded from a preprocessor macro and thus
+          uses `_Pragma` form.
+        * The directive uses `_Pragma` form and has no associated
+          statement.
+        * The associated statement must be rewritten but its last
+          token is expanded from a preprocessor macro:
+            * In the case of `#pragma` form, whether the associated
+              statement must be rewritten depends on Clacc's mapping
+              for the construct to OpenMP.
+            * In the case of `_Pragma` form, currently the associated
+              statement must always be rewritten.
+    * Clacc reports an error diagnostic for every such OpenACC
+      construct in the source file.  Clacc then prints a version of
+      the source in which all OpenACC constructs are transformed
+      except the reported ones.
+    * For a full transformation of the source file in this case, try
+      `-fopenacc-ast-print` instead.  However, its output looks like
+      the preprocessor output, which is not appropriate for some use
+      cases.
+* Also see the section "OpenMP Extensions" below.
 
 OpenMP Exposure
 ===============
