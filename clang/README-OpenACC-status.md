@@ -8,7 +8,7 @@ We have implemented and tested support for the following features:
 
 * build platforms:
     * Ubuntu 18.04
-    * CentOS 7.7
+    * CentOS 7.8
 * command-line options:
     * `-f[no-]openacc`
     * `-fopenacc[-ast]-print=acc|omp|acc-omp|omp-acc`
