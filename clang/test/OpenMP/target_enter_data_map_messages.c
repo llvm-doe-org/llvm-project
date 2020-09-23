@@ -25,5 +25,10 @@ int main(int argc, char **argv) {
   #pragma omp target enter data map(release: r) // expected-error {{map type 'release' is not allowed for '#pragma omp target enter data'}}
   #pragma omp target enter data map(delete: r) // expected-error {{map type 'delete' is not allowed for '#pragma omp target enter data'}}
 
+  // expected-error@+1 {{map type modifier 'hold' is not allowed for '#pragma omp target enter data'}}
+  #pragma omp target enter data map(hold, alloc: r)
+  // expected-error@+1 {{map type modifier 'hold' is not allowed for '#pragma omp target enter data'}}
+  #pragma omp target enter data map(hold, to: r)
+
   return 0;
 }

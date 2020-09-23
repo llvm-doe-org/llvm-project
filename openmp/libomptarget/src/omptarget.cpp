@@ -146,7 +146,7 @@ static int InitLibrary(DeviceTy& Device) {
             (uintptr_t)CurrHostEntry->addr /*HstPtrBegin*/,
             (uintptr_t)CurrHostEntry->addr + CurrHostEntry->size /*HstPtrEnd*/,
             (uintptr_t)CurrDeviceEntry->addr /*TgtPtrBegin*/,
-            true /*IsRefCountINF*/);
+            false /*UseHoldRefCount*/, true /*IsRefCountINF*/);
 #if OMPT_SUPPORT
         // FIXME: In our experiments so far, this callback describes the
         // association of a const array's host and device addresses because it
@@ -362,6 +362,7 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
     bool HasCloseModifier = arg_types[i] & OMP_TGT_MAPTYPE_CLOSE;
     bool HasPresentModifier = arg_types[i] & OMP_TGT_MAPTYPE_PRESENT;
     bool HasNoAllocModifier = arg_types[i] & OMP_TGT_MAPTYPE_NO_ALLOC;
+    bool HasHoldModifier = arg_types[i] & OMP_TGT_MAPTYPE_HOLD;
     // UpdateRef is based on MEMBER_OF instead of TARGET_PARAM because if we
     // have reached this point via __tgt_target_data_begin and not __tgt_target
     // then no argument is marked as TARGET_PARAM ("omp target data map" is not
@@ -383,10 +384,15 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
       // entry for a global that might not already be allocated by the time the
       // PTR_AND_OBJ entry is handled below, and so the allocation might fail
       // when HasPresentModifier.
+      // TODO: Is the above still true?  That is, is it actually possible for
+      // the pointer not to be allocated yet?  If not, then does
+      // HasPresentModifier or HasNoAllocModifier still matter here?
+      // TODO: Does HasHoldModifier matter here or is the reference count always
+      // already infinite?
       PointerTgtPtrBegin = Device.getOrAllocTgtPtr(
           HstPtrBase, HstPtrBase, sizeof(void *), Pointer_IsNew, IsHostPtr,
           IsImplicit, UpdateRef, HasCloseModifier, HasPresentModifier,
-          HasNoAllocModifier);
+          HasNoAllocModifier, HasHoldModifier);
       if (!PointerTgtPtrBegin) {
         DP("Call to getOrAllocTgtPtr returned null pointer (%s).\n",
            HasPresentModifier ? "'present' map type modifier"
@@ -407,7 +413,8 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
 
     void *TgtPtrBegin = Device.getOrAllocTgtPtr(
         HstPtrBegin, HstPtrBase, data_size, IsNew, IsHostPtr, IsImplicit,
-        UpdateRef, HasCloseModifier, HasPresentModifier, HasNoAllocModifier);
+        UpdateRef, HasCloseModifier, HasPresentModifier, HasNoAllocModifier,
+        HasHoldModifier);
     // If data_size==0, then the argument could be a zero-length pointer to
     // NULL, so getOrAlloc() returning NULL is not an error.
     if (!TgtPtrBegin && (data_size || HasPresentModifier)) {
@@ -506,16 +513,18 @@ struct DeallocTgtPtrInfo {
   bool ForceDelete;
   /// Whether it has \p close modifier
   bool HasCloseModifier;
+  /// Whether it has \p hold modifier
+  bool HasHoldModifier;
 #if OMPT_SUPPORT
   /// The string for ompt_get_data_expression.
   const char *DataExpression;
 #endif
 
-  DeallocTgtPtrInfo(void *HstPtr, int64_t Size, bool ForceDelete,
-                    bool HasCloseModifier
-                    OMPT_SUPPORT_IF(, const char *DataExpression))
+  DeallocTgtPtrInfo(
+      void *HstPtr, int64_t Size, bool ForceDelete, bool HasCloseModifier,
+      bool HasHoldModifier OMPT_SUPPORT_IF(, const char *DataExpression))
       : HstPtrBegin(HstPtr), DataSize(Size), ForceDelete(ForceDelete),
-        HasCloseModifier(HasCloseModifier)
+        HasCloseModifier(HasCloseModifier), HasHoldModifier(HasHoldModifier)
         OMPT_SUPPORT_IF(, DataExpression(DataExpression)) {}
 };
 } // namespace
@@ -585,10 +594,12 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
     bool ForceDelete = ArgTypes[I] & OMP_TGT_MAPTYPE_DELETE;
     bool HasCloseModifier = ArgTypes[I] & OMP_TGT_MAPTYPE_CLOSE;
     bool HasPresentModifier = ArgTypes[I] & OMP_TGT_MAPTYPE_PRESENT;
+    bool HasHoldModifier = ArgTypes[I] & OMP_TGT_MAPTYPE_HOLD;
 
     // If PTR_AND_OBJ, HstPtrBegin is address of pointee
-    void *TgtPtrBegin = Device.getTgtPtrBegin(
-        HstPtrBegin, DataSize, IsLast, UpdateRef, IsHostPtr, !IsImplicit);
+    void *TgtPtrBegin =
+        Device.getTgtPtrBegin(HstPtrBegin, DataSize, IsLast, UpdateRef,
+                              HasHoldModifier, IsHostPtr, !IsImplicit);
     if (!TgtPtrBegin && (DataSize || HasPresentModifier)) {
       DP("Mapping does not exist (%s)\n",
          (HasPresentModifier ? "'present' map type modifier" : "ignored"));
@@ -697,7 +708,8 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
       // Add pointer to the buffer for later deallocation
       if (DelEntry)
         DeallocTgtPtrs.emplace_back(HstPtrBegin, DataSize, ForceDelete,
-                                    HasCloseModifier, DataExpression);
+                                    HasCloseModifier, HasHoldModifier,
+                                    DataExpression);
     }
   }
 #if OMPT_SUPPORT
@@ -723,8 +735,9 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
 #if OMPT_SUPPORT
     ompt_set_data_expression(Info.DataExpression);
 #endif
-    Ret = Device.deallocTgtPtr(Info.HstPtrBegin, Info.DataSize,
-                               Info.ForceDelete, Info.HasCloseModifier);
+    Ret =
+        Device.deallocTgtPtr(Info.HstPtrBegin, Info.DataSize, Info.ForceDelete,
+                             Info.HasCloseModifier, Info.HasHoldModifier);
 #if OMPT_SUPPORT
     ompt_set_data_expression(NULL);
 #endif
@@ -819,7 +832,8 @@ int target_data_update(DeviceTy &Device, int32_t arg_num,
     int64_t MapSize = arg_sizes[i];
     bool IsLast, IsHostPtr;
     void *TgtPtrBegin = Device.getTgtPtrBegin(
-        HstPtrBegin, MapSize, IsLast, false, IsHostPtr, /*MustContain=*/true);
+        HstPtrBegin, MapSize, IsLast, /*UpdateRefCount=*/false,
+        /*UseHoldRefCount=*/false, IsHostPtr, /*MustContain=*/true);
     if (!TgtPtrBegin) {
       DP("hst data:" DPxMOD " not found, becomes a noop\n", DPxPTR(HstPtrBegin));
       if (arg_types[i] & OMP_TGT_MAPTYPE_PRESENT) {
@@ -1045,7 +1059,8 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
         uint64_t Delta = (uint64_t)HstPtrBegin - (uint64_t)HstPtrBase;
         void *TgtPtrBegin = (void *)((uintptr_t)TgtPtrBase + Delta);
         void *PointerTgtPtrBegin = Device.getTgtPtrBegin(
-            HstPtrVal, ArgSizes[I], IsLast, false, IsHostPtr);
+            HstPtrVal, ArgSizes[I], IsLast, /*UpdateRefCount=*/false,
+            /*UseHoldRefCount=*/false, IsHostPtr);
         if (!PointerTgtPtrBegin) {
           DP("No lambda captured variable mapped (" DPxMOD ") - ignored\n",
              DPxPTR(HstPtrVal));
@@ -1157,7 +1172,8 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
       if (ArgTypes[I] & OMP_TGT_MAPTYPE_PTR_AND_OBJ)
         HstPtrBase = *reinterpret_cast<void **>(HstPtrBase);
       TgtPtrBegin = Device.getTgtPtrBegin(HstPtrBegin, ArgSizes[I], IsLast,
-                                          false, IsHostPtr);
+                                          /*UpdateRefCount=*/false,
+                                          /*UseHoldRefCount=*/false, IsHostPtr);
       TgtBaseOffset = (intptr_t)HstPtrBase - (intptr_t)HstPtrBegin;
 #ifdef OMPTARGET_DEBUG
       void *TgtPtrBase = (void *)((intptr_t)TgtPtrBegin + TgtBaseOffset);

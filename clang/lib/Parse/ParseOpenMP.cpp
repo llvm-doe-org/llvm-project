@@ -3127,7 +3127,8 @@ bool Parser::parseMapTypeModifiers(OpenMPVarListDataTy &Data) {
     if (TypeModifier == OMPC_MAP_MODIFIER_always ||
         TypeModifier == OMPC_MAP_MODIFIER_close ||
         TypeModifier == OMPC_MAP_MODIFIER_present ||
-        TypeModifier == OMPC_MAP_MODIFIER_no_alloc) {
+        TypeModifier == OMPC_MAP_MODIFIER_no_alloc ||
+        TypeModifier == OMPC_MAP_MODIFIER_hold) {
       Data.MapTypeModifiers.push_back(TypeModifier);
       Data.MapTypeModifiersLoc.push_back(Tok.getLocation());
       ConsumeToken();

@@ -47,6 +47,7 @@ int DeviceTy::associatePtr(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size) {
                               (uintptr_t) HstPtrBegin /*HstPtrBegin*/,
                               (uintptr_t) HstPtrBegin + Size /*HstPtrEnd*/,
                               (uintptr_t) TgtPtrBegin /*TgtPtrBegin*/,
+                              false /*UseHoldRefCount*/,
                               true /*IsRefCountINF*/);
 
   DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD ", HstEnd="
@@ -163,7 +164,8 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
                                  int64_t Size, bool &IsNew, bool &IsHostPtr,
                                  bool IsImplicit, bool UpdateRefCount,
                                  bool HasCloseModifier, bool HasPresentModifier,
-                                 bool HasNoAllocModifier) {
+                                 bool HasNoAllocModifier,
+                                 bool HasHoldModifier) {
   void *rc = NULL;
   IsHostPtr = false;
   IsNew = false;
@@ -180,7 +182,7 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
     IsNew = false;
 
     if (UpdateRefCount)
-      HT.incRefCount();
+      HT.incRefCount(HasHoldModifier);
 
     uintptr_t tp = HT.TgtPtrBegin + ((uintptr_t)HstPtrBegin - HT.HstPtrBegin);
     DP("Mapping exists%s with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD ", "
@@ -270,7 +272,8 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
        DPxPTR((uintptr_t)HstPtrBegin + Size), DPxPTR(tp));
     HostDataToTargetMap.emplace(
         HostDataToTargetTy((uintptr_t)HstPtrBase, (uintptr_t)HstPtrBegin,
-                           (uintptr_t)HstPtrBegin + Size, tp));
+                           (uintptr_t)HstPtrBegin + Size, tp, HasHoldModifier,
+                           /*IsINF=*/false));
     rc = (void *)tp;
   }
 
@@ -282,8 +285,8 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
 // Return the target pointer begin (where the data will be moved).
 // Decrement the reference counter if called from targetDataEnd.
 void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
-                               bool UpdateRefCount, bool &IsHostPtr,
-                               bool MustContain) {
+                               bool UpdateRefCount, bool UseHoldRefCount,
+                               bool &IsHostPtr, bool MustContain) {
   void *rc = NULL;
   IsHostPtr = false;
   IsLast = false;
@@ -293,10 +296,10 @@ void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
   if (lr.Flags.IsContained ||
       (!MustContain && (lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter))) {
     auto &HT = *lr.Entry;
-    IsLast = HT.getRefCount() == 1;
+    IsLast = HT.getRefCount() == 1 && HT.getRefCount(UseHoldRefCount) == 1;
 
-    if (!IsLast && UpdateRefCount)
-      HT.decRefCount();
+    if (!IsLast && UpdateRefCount && HT.getRefCount(UseHoldRefCount) > 0)
+      HT.decRefCount(UseHoldRefCount);
 
     uintptr_t tp = HT.TgtPtrBegin + ((uintptr_t)HstPtrBegin - HT.HstPtrBegin);
     DP("Mapping exists with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD ", "
@@ -333,7 +336,7 @@ void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size) {
 }
 
 int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size, bool ForceDelete,
-                            bool HasCloseModifier) {
+                            bool HasCloseModifier, bool HasHoldModifier) {
   if (RTLs->RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY && !HasCloseModifier)
     return OFFLOAD_SUCCESS;
   // Check if the pointer is contained in any sub-nodes.
@@ -344,7 +347,7 @@ int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size, bool ForceDelete,
     auto &HT = *lr.Entry;
     if (ForceDelete)
       HT.resetRefCount();
-    if (HT.decRefCount() == 0) {
+    if (HT.decRefCount(HasHoldModifier) == 0) {
       DP("Deleting tgt data " DPxMOD " of size %" PRId64 "\n",
           DPxPTR(HT.TgtPtrBegin), Size);
 #if OMPT_SUPPORT

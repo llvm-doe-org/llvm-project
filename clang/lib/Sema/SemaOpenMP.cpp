@@ -17460,6 +17460,10 @@ static void checkMappableExpressionList(
   bool UpdateUMIt = false;
   Expr *UnresolvedMapper = nullptr;
 
+  bool HasHoldModifier =
+      Modifiers.end() !=
+      std::find(Modifiers.begin(), Modifiers.end(), OMPC_MAP_MODIFIER_hold);
+
   // Keep track of the mappable components and base declarations in this clause.
   // Each entry in the list is going to have a list of components associated. We
   // record each set of the components so that we can build the clause later on.
@@ -17659,6 +17663,19 @@ static void checkMappableExpressionList(
         continue;
       }
 
+      // The 'hold' modifier is specifically intended to be used on a target or
+      // target data directive to prevent data from being deallocated during the
+      // associated region.  It is not useful on a target enter data or target
+      // exit data directive because they are inherently dynamic not structured.
+      if ((DKind == OMPD_target_enter_data || DKind == OMPD_target_exit_data) &&
+          HasHoldModifier) {
+        SemaRef.Diag(StartLoc,
+                     diag::err_omp_invalid_map_type_modifier_for_directive)
+            << getOpenMPSimpleClauseTypeName(OMPC_map, OMPC_MAP_MODIFIER_hold)
+            << getOpenMPDirectiveName(DKind);
+        continue;
+      }
+
       // target, target data
       // OpenMP 5.0 [2.12.2, Restrictions, p. 163]
       // OpenMP 5.0 [2.12.5, Restrictions, p. 174]
@@ -17734,7 +17751,7 @@ OMPClause *Sema::ActOnOpenMPMapClause(
   OpenMPMapModifierKind Modifiers[] = {
       OMPC_MAP_MODIFIER_unknown, OMPC_MAP_MODIFIER_unknown,
       OMPC_MAP_MODIFIER_unknown, OMPC_MAP_MODIFIER_unknown,
-      OMPC_MAP_MODIFIER_unknown};
+      OMPC_MAP_MODIFIER_unknown, OMPC_MAP_MODIFIER_unknown};
   SourceLocation ModifiersLoc[NumberOfOMPMapClauseModifiers];
 
   // Process map-type-modifiers, flag errors for duplicate modifiers.

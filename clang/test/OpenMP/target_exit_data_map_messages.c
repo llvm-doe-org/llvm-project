@@ -18,5 +18,12 @@ int main(int argc, char **argv) {
   #pragma omp target exit data map(always, alloc: r) // expected-error {{map type 'alloc' is not allowed for '#pragma omp target exit data'}}
   #pragma omp target exit data map(to: r) // expected-error {{map type 'to' is not allowed for '#pragma omp target exit data'}}
 
+  // expected-error@+1 {{map type modifier 'hold' is not allowed for '#pragma omp target exit data'}}
+  #pragma omp target exit data map(hold, from: r)
+  // expected-error@+1 {{map type modifier 'hold' is not allowed for '#pragma omp target exit data'}}
+  #pragma omp target exit data map(hold, release: r)
+  // expected-error@+1 {{map type modifier 'hold' is not allowed for '#pragma omp target exit data'}}
+  #pragma omp target exit data map(hold, delete: r)
+
   return 0;
 }

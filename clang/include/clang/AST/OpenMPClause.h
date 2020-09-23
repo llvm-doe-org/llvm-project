@@ -5395,7 +5395,7 @@ private:
   OpenMPMapModifierKind MapTypeModifiers[NumberOfOMPMapClauseModifiers] = {
       OMPC_MAP_MODIFIER_unknown, OMPC_MAP_MODIFIER_unknown,
       OMPC_MAP_MODIFIER_unknown, OMPC_MAP_MODIFIER_unknown,
-      OMPC_MAP_MODIFIER_unknown};
+      OMPC_MAP_MODIFIER_unknown, OMPC_MAP_MODIFIER_unknown};
 
   /// Location of map-type-modifiers for the 'map' clause.
   SourceLocation MapTypeModifiersLoc[NumberOfOMPMapClauseModifiers];

@@ -7012,6 +7012,16 @@ public:
     // OpenACC to OpenMP, so it is not yet recommended for general use in
     // OpenMP code.
     OMP_MAP_NO_ALLOC = 0x2000,
+    // Increment and decrement a separate reference counter so that the data
+    // cannot be deallocated within the associated region.  Thus, this flag is
+    // intended to be used on target and target data directives.  It is not
+    // intended to be used on target enter/exit data directives because they are
+    // inherently dynamic not structured.
+    // This is an OpenMP extension for the sake of OpenACC support.
+    // TODO: Currently, it is not well tested outside of translations from
+    // OpenACC to OpenMP, so it is not yet recommended for general use in
+    // OpenMP code.
+    OMP_MAP_HOLD = 0x4000,
     /// The 16 MSBs of the flags indicate whether the entry is member of some
     /// struct/class.
     OMP_MAP_MEMBER_OF = 0xffff000000000000,
@@ -7295,6 +7305,8 @@ private:
     if (llvm::find(MapModifiers, OMPC_MAP_MODIFIER_no_alloc)
         != MapModifiers.end())
       Bits |= OMP_MAP_NO_ALLOC;
+    if (llvm::find(MapModifiers, OMPC_MAP_MODIFIER_hold) != MapModifiers.end())
+      Bits |= OMP_MAP_HOLD;
     if (llvm::find(MotionModifiers, OMPC_MOTION_MODIFIER_present)
         != MotionModifiers.end())
       Bits |= OMP_MAP_PRESENT;

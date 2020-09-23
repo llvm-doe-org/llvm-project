@@ -56,6 +56,12 @@ enum tgt_map_type {
   // TODO: Currently, it is not well tested outside of translations from OpenACC
   // to OpenMP, so it is not yet recommended for general use in OpenMP code.
   OMP_TGT_MAPTYPE_NO_ALLOC        = 0x2000,
+  // use a separate reference counter so that the data cannot be deallocated
+  // within the structured region
+  // This is an OpenMP extension for the sake of OpenACC support.
+  // TODO: Currently, it is not well tested outside of translations from OpenACC
+  // to OpenMP, so it is not yet recommended for general use in OpenMP code.
+  OMP_TGT_MAPTYPE_HOLD            = 0x4000,
   // member of struct, member given by [16 MSBs] - 1
   OMP_TGT_MAPTYPE_MEMBER_OF       = 0xffff000000000000
 };

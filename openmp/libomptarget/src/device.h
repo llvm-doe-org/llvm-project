@@ -40,44 +40,69 @@ struct HostDataToTargetTy {
 
 private:
   /// use mutable to allow modification via std::set iterator which is const.
+  ///@{
   mutable uint64_t RefCount;
+  mutable uint64_t HoldRefCount;
+  ///@}
   static const uint64_t INFRefCount = ~(uint64_t)0;
 
 public:
   HostDataToTargetTy(uintptr_t BP, uintptr_t B, uintptr_t E, uintptr_t TB,
-      bool IsINF = false)
-      : HstPtrBase(BP), HstPtrBegin(B), HstPtrEnd(E),
-        TgtPtrBegin(TB), RefCount(IsINF ? INFRefCount : 1) {}
+                     bool UseHoldRefCount, bool IsINF)
+      : HstPtrBase(BP), HstPtrBegin(B), HstPtrEnd(E), TgtPtrBegin(TB),
+        RefCount(IsINF ? INFRefCount : !UseHoldRefCount),
+        HoldRefCount(UseHoldRefCount) {}
 
+  /// Get the total reference count.
   uint64_t getRefCount() const {
-    return RefCount;
+    if (RefCount == INFRefCount)
+      return RefCount;
+    return RefCount + HoldRefCount;
   }
 
+  /// Get a specific reference count.
+  uint64_t getRefCount(bool UseHoldRefCount) const {
+    return UseHoldRefCount ? HoldRefCount : RefCount;
+  }
+
+  /// Reset the dynamic reference count only and return the total reference
+  /// count.
   uint64_t resetRefCount() const {
     if (RefCount != INFRefCount)
       RefCount = 1;
 
-    return RefCount;
+    return getRefCount();
   }
 
-  uint64_t incRefCount() const {
-    if (RefCount != INFRefCount) {
+  /// Increment the specified reference count and return the total reference
+  /// count.
+  uint64_t incRefCount(bool UseHoldRefCount) const {
+    if (UseHoldRefCount) {
+      ++HoldRefCount;
+      assert(HoldRefCount < INFRefCount && "hold refcount overflow");
+    } else if (RefCount != INFRefCount) {
       ++RefCount;
       assert(RefCount < INFRefCount && "refcount overflow");
     }
 
-    return RefCount;
+    return getRefCount();
   }
 
-  uint64_t decRefCount() const {
-    if (RefCount != INFRefCount) {
+  /// Decrement the specified reference count and return the total reference
+  /// count.
+  uint64_t decRefCount(bool UseHoldRefCount) const {
+    if (UseHoldRefCount) {
+      assert(HoldRefCount > 0 && "hold refcount underflow");
+      --HoldRefCount;
+    } else if (RefCount != INFRefCount) {
       assert(RefCount > 0 && "refcount underflow");
       --RefCount;
     }
 
-    return RefCount;
+    return getRefCount();
   }
 
+  /// Is the dynamic (and thus total) reference count infinite?
   bool isRefCountInf() const {
     return RefCount == INFRefCount;
   }
@@ -196,13 +221,14 @@ struct DeviceTy {
   void *getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, int64_t Size,
                          bool &IsNew, bool &IsHostPtr, bool IsImplicit,
                          bool UpdateRefCount, bool HasCloseModifier,
-                         bool HasPresentModifier, bool HasNoAllocModifier);
+                         bool HasPresentModifier, bool HasNoAllocModifier,
+                         bool HasHoldModifier);
   void *getTgtPtrBegin(void *HstPtrBegin, int64_t Size);
   void *getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
-                       bool UpdateRefCount, bool &IsHostPtr,
-                       bool MustContain = false);
+                       bool UpdateRefCount, bool UseHoldRefCount,
+                       bool &IsHostPtr, bool MustContain = false);
   int deallocTgtPtr(void *TgtPtrBegin, int64_t Size, bool ForceDelete,
-                    bool HasCloseModifier = false);
+                    bool HasCloseModifier, bool HasHoldModifier);
   int associatePtr(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size);
   int disassociatePtr(void *HstPtrBegin);
 
