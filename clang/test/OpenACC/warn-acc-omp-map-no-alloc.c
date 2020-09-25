@@ -29,7 +29,7 @@
 // RUN:   %for warn-opts {
 // RUN:     %for no-create-opts {
 // RUN:       %clang %[prt-opt] %[warn-opt] %[no-create-opt] %s \
-// RUN:              -Xclang -verify=%[verify]
+// RUN:              -Xclang -verify=%[verify] -Wno-openacc-omp-map-hold
 // RUN:     }
 // RUN:   }
 // RUN: }

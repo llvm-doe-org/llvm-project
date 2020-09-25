@@ -124,6 +124,22 @@ public:
     llvm_unreachable("unexpected OpenACCUpdatePresentOMPKind");
   }
 
+  enum OpenACCStructuredRefCountOMPKind {
+    OpenACCStructuredRefCountOMP_Hold,
+    OpenACCStructuredRefCountOMP_NoHold,
+    OpenACCStructuredRefCountOMP_Last = OpenACCStructuredRefCountOMP_NoHold
+  };
+  static StringRef
+  getOpenACCStructuredRefCountOMPValue(OpenACCStructuredRefCountOMPKind K) {
+    switch (K) {
+    case OpenACCStructuredRefCountOMP_Hold:
+      return "hold";
+    case OpenACCStructuredRefCountOMP_NoHold:
+      return "no-hold";
+    }
+    llvm_unreachable("unexpected OpenACCStructuredRefCountOMPKind");
+  }
+
   enum OpenACCPresentOMPKind {
     OpenACCPresentOMP_Present,
     OpenACCPresentOMP_Alloc,

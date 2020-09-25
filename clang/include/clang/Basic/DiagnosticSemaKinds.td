@@ -10479,6 +10479,11 @@ def warn_acc_omp_update_present : Warning<
   "which is an OpenMP TR8 feature that might not be supported yet by other "
   "compilers">,
   InGroup<OpenACCOMPUpdatePresent>, DefaultIgnore;
+def warn_acc_omp_map_hold : Warning<
+  "the OpenACC '%0' clause translation uses the 'hold' map type modifier, "
+  "which is an OpenMP extension that might not be supported yet by other "
+  "compilers">,
+  InGroup<OpenACCOMPMapHold>, DefaultIgnore;
 def warn_acc_omp_map_present : Warning<
   "the OpenACC '%0' clause translation uses the 'present' map type modifier, "
   "which is an OpenMP TR8 feature that might not be supported yet by other "

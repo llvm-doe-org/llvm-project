@@ -3156,6 +3156,22 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
       Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
   }
 
+  // Check if -fopenacc-structured-ref-count-omp is specified.
+  if (Arg *A = Args.getLastArg(OPT_fopenacc_structured_ref_count_omp_EQ)) {
+    StringRef Val = A->getValue();
+    unsigned I;
+    for (I = 0; I <= (unsigned)LangOptions::OpenACCStructuredRefCountOMP_Last;
+         ++I) {
+      auto K = (LangOptions::OpenACCStructuredRefCountOMPKind)I;
+      if (Val == LangOptions::getOpenACCStructuredRefCountOMPValue(K)) {
+        Opts.setOpenACCStructuredRefCountOMP(K);
+        break;
+      }
+    }
+    if (I == LangOptions::OpenACCStructuredRefCountOMP_Last + 1)
+      Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
+  }
+
   // Check if -fopenacc-present-omp is specified.
   if (Arg *A = Args.getLastArg(OPT_fopenacc_present_omp_EQ)) {
     StringRef Val = A->getValue();

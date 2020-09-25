@@ -302,6 +302,26 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     }
   };
 
+  void addHoldMapTypeModifier(ACCClause *C,
+                              SmallVectorImpl<OpenMPMapModifierKind> &MapMods) {
+    switch (getSema().LangOpts.getOpenACCStructuredRefCountOMP()) {
+    case LangOptions::OpenACCStructuredRefCountOMP_Hold:
+      MapMods.push_back(OMPC_MAP_MODIFIER_hold);
+      getSema().Diag(C->getBeginLoc(), diag::warn_acc_omp_map_hold)
+          << getOpenACCName(C->getClauseKind()) << C->getSourceRange();
+      getSema().Diag(C->getBeginLoc(), diag::note_acc_alternate_omp)
+          << "structured-ref-count"
+          << LangOptions::getOpenACCStructuredRefCountOMPValue(
+                 LangOptions::OpenACCStructuredRefCountOMP_NoHold);
+      getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_diag)
+          << DiagnosticIDs::getWarningOptionForDiag(
+                 diag::warn_acc_omp_map_hold);
+      break;
+    case LangOptions::OpenACCStructuredRefCountOMP_NoHold:
+      break;
+    }
+  }
+
   /// A RAII object to conditionally build a compound scope and statement.
   class ConditionalCompoundStmtRAII {
     TransformACCToOMP &Tx;
@@ -827,8 +847,8 @@ public:
           SmallVector<SourceLocation, 1> MapModLocs;
           return getDerived().RebuildOMPMapClause(
               {OMPC_MAP_MODIFIER_no_alloc}, {L.LParenLoc}, CXXScopeSpec(),
-              DeclarationNameInfo(), OMPC_MAP_alloc, /*IsMapTypeImplicit*/
-              false, L.LocStart, L.LParenLoc, Vars,
+              DeclarationNameInfo(), OMPC_MAP_alloc,
+              /*IsMapTypeImplicit=*/false, L.LocStart, L.LParenLoc, Vars,
               OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
         });
   }
@@ -836,7 +856,7 @@ public:
   OMPClauseResult TransformACCPresentClause(ACCExecutableDirective *D,
                                             OpenMPDirectiveKind TDKind,
                                             ACCPresentClause *C) {
-    SmallVector<OpenMPMapModifierKind, 1> MapMods;
+    SmallVector<OpenMPMapModifierKind, 2> MapMods;
     switch (getSema().LangOpts.getOpenACCPresentOMP()) {
     case LangOptions::OpenACCPresentOMP_Present:
       MapMods.push_back(OMPC_MAP_MODIFIER_present);
@@ -854,80 +874,101 @@ public:
     case LangOptions::OpenACCPresentOMP_Alloc:
       break;
     }
+    addHoldMapTypeModifier(C, MapMods);
     return transformACCVarListClause<ACCPresentClause>(
         D, C, OMPC_map,
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
-          SmallVector<SourceLocation, 1> MapModLocs;
+          SmallVector<SourceLocation, 2> MapModLocs;
           for (int i = 0, e = MapMods.size(); i < e; ++i)
             MapModLocs.push_back(L.LParenLoc);
           return getDerived().RebuildOMPMapClause(
-            MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
-            OMPC_MAP_alloc, /*IsMapTypeImplicit*/ false, L.LocStart,
-            L.LParenLoc, Vars,
-            OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+              MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
+              OMPC_MAP_alloc, /*IsMapTypeImplicit=*/false, L.LocStart,
+              L.LParenLoc, Vars,
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
         });
   }
 
   OMPClauseResult TransformACCCopyClause(ACCExecutableDirective *D,
                                          OpenMPDirectiveKind TDKind,
                                          ACCCopyClause *C) {
+    SmallVector<OpenMPMapModifierKind, 1> MapMods;
+    addHoldMapTypeModifier(C, MapMods);
     return transformACCVarListClause<ACCCopyClause>(
         D, C, OMPC_map,
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+          SmallVector<SourceLocation, 1> MapModLocs;
+          for (int i = 0, e = MapMods.size(); i < e; ++i)
+            MapModLocs.push_back(L.LParenLoc);
           return getDerived().RebuildOMPMapClause(
-            llvm::None, llvm::None, CXXScopeSpec(), DeclarationNameInfo(),
-            OMPC_MAP_tofrom, /*IsMapTypeImplicit*/ false, L.LocStart,
-            L.LParenLoc, Vars,
-            OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+              MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
+              OMPC_MAP_tofrom, /*IsMapTypeImplicit=*/false, L.LocStart,
+              L.LParenLoc, Vars,
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
         });
   }
 
   OMPClauseResult TransformACCCopyinClause(ACCExecutableDirective *D,
                                            OpenMPDirectiveKind TDKind,
                                            ACCCopyinClause *C) {
+    SmallVector<OpenMPMapModifierKind, 1> MapMods;
+    addHoldMapTypeModifier(C, MapMods);
     return transformACCVarListClause<ACCCopyinClause>(
         D, C, OMPC_map,
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+          SmallVector<SourceLocation, 1> MapModLocs;
+          for (int i = 0, e = MapMods.size(); i < e; ++i)
+            MapModLocs.push_back(L.LParenLoc);
           return getDerived().RebuildOMPMapClause(
-            llvm::None, llvm::None, CXXScopeSpec(), DeclarationNameInfo(),
-            OMPC_MAP_to, /*IsMapTypeImplicit*/ false, L.LocStart, L.LParenLoc,
-            Vars,
-            OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+              MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
+              OMPC_MAP_to, /*IsMapTypeImplicit=*/false, L.LocStart, L.LParenLoc,
+              Vars, OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd),
+              llvm::None);
         });
   }
 
   OMPClauseResult TransformACCCopyoutClause(ACCExecutableDirective *D,
                                             OpenMPDirectiveKind TDKind,
                                             ACCCopyoutClause *C) {
+    SmallVector<OpenMPMapModifierKind, 1> MapMods;
+    addHoldMapTypeModifier(C, MapMods);
     return transformACCVarListClause<ACCCopyoutClause>(
         D, C, OMPC_map,
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+          SmallVector<SourceLocation, 1> MapModLocs;
+          for (int i = 0, e = MapMods.size(); i < e; ++i)
+            MapModLocs.push_back(L.LParenLoc);
           return getDerived().RebuildOMPMapClause(
-            llvm::None, llvm::None, CXXScopeSpec(), DeclarationNameInfo(),
-            OMPC_MAP_from, /*IsMapTypeImplicit*/ false, L.LocStart,
-            L.LParenLoc, Vars,
-            OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+              MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
+              OMPC_MAP_from, /*IsMapTypeImplicit=*/false, L.LocStart,
+              L.LParenLoc, Vars,
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
         });
   }
 
   OMPClauseResult TransformACCCreateClause(ACCExecutableDirective *D,
                                            OpenMPDirectiveKind TDKind,
                                            ACCCreateClause *C) {
+    SmallVector<OpenMPMapModifierKind, 1> MapMods;
+    addHoldMapTypeModifier(C, MapMods);
     return transformACCVarListClause<ACCCreateClause>(
         D, C, OMPC_map,
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+          SmallVector<SourceLocation, 1> MapModLocs;
+          for (int i = 0, e = MapMods.size(); i < e; ++i)
+            MapModLocs.push_back(L.LParenLoc);
           return getDerived().RebuildOMPMapClause(
-            llvm::None, llvm::None, CXXScopeSpec(), DeclarationNameInfo(),
-            OMPC_MAP_alloc, /*IsMapTypeImplicit*/ false, L.LocStart,
-            L.LParenLoc, Vars,
-            OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+              MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
+              OMPC_MAP_alloc, /*IsMapTypeImplicit=*/false, L.LocStart,
+              L.LParenLoc, Vars,
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
         });
   }
 
   OMPClauseResult TransformACCNoCreateClause(ACCExecutableDirective *D,
                                              OpenMPDirectiveKind TDKind,
                                              ACCNoCreateClause *C) {
-    SmallVector<OpenMPMapModifierKind, 1> MapMods;
+    SmallVector<OpenMPMapModifierKind, 2> MapMods;
     switch (getSema().LangOpts.getOpenACCNoCreateOMP()) {
     case LangOptions::OpenACCNoCreateOMP_NoAlloc:
       MapMods.push_back(OMPC_MAP_MODIFIER_no_alloc);
@@ -945,6 +986,7 @@ public:
     case LangOptions::OpenACCNoCreateOMP_Alloc:
       break;
     }
+    addHoldMapTypeModifier(C, MapMods);
     return transformACCVarListClause<ACCNoCreateClause>(
         D, C, OMPC_map,
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
@@ -952,10 +994,10 @@ public:
           for (int i = 0, e = MapMods.size(); i < e; ++i)
             MapModLocs.push_back(L.LParenLoc);
           return getDerived().RebuildOMPMapClause(
-            MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
-            OMPC_MAP_alloc, /*IsMapTypeImplicit*/ false, L.LocStart,
-            L.LParenLoc, Vars,
-            OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+              MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
+              OMPC_MAP_alloc, /*IsMapTypeImplicit=*/false, L.LocStart,
+              L.LParenLoc, Vars,
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
         });
   }
 

@@ -4075,6 +4075,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       options::OPT_fopenacc_print_EQ, options::OPT_fopenacc_ast_print_EQ);
   if (OpenACCPrint && StringRef(OpenACCPrint->getValue()) != "acc") {
     CmdArgs.push_back("-Werror=openacc-omp-update-present");
+    CmdArgs.push_back("-Werror=openacc-omp-map-hold");
     CmdArgs.push_back("-Werror=openacc-omp-map-present");
     CmdArgs.push_back("-Werror=openacc-omp-map-no-alloc");
   }
@@ -5286,6 +5287,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddLastArg(CmdArgs, options::OPT_fopenacc_print_EQ);
   Args.AddLastArg(CmdArgs, options::OPT_fopenacc_ast_print_EQ);
   Args.AddAllArgs(CmdArgs, options::OPT_fopenacc_update_present_omp_EQ);
+  Args.AddAllArgs(CmdArgs, options::OPT_fopenacc_structured_ref_count_omp_EQ);
   Args.AddAllArgs(CmdArgs, options::OPT_fopenacc_present_omp_EQ);
   Args.AddAllArgs(CmdArgs, options::OPT_fopenacc_no_create_omp_EQ);
 

@@ -28,7 +28,7 @@
 // RUN: %for cpps {
 // RUN:   %for prt-args {
 // RUN:     %clang -Xclang -verify -fopenacc-print=%[prt-arg] %[cpp] %t-acc.c \
-// RUN:            -Wno-openacc-omp-update-present \
+// RUN:            -Wno-openacc-omp-map-hold -Wno-openacc-omp-update-present \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] -match-full-lines \
 // RUN:                 -strict-whitespace %s
 // RUN:   }
@@ -94,12 +94,12 @@ int main() {
   //--------------------------------------------------
 
   //  PRT-A-NEXT:  #pragma acc data copy(i)
-  // PRT-AO-NEXT:  // #pragma omp target data map(tofrom: i)
+  // PRT-AO-NEXT:  // #pragma omp target data map(hold,tofrom: i)
   //  PRT-A-NEXT:  {
   //  PRT-A-NEXT:    #pragma acc update device(i)
   // PRT-AO-NEXT:    // #pragma omp target update to(present: i)
   //  PRT-A-NEXT:  }
-  //  PRT-O-NEXT:  #pragma omp target data map(tofrom: i)
+  //  PRT-O-NEXT:  #pragma omp target data map(hold,tofrom: i)
   // PRT-OA-NEXT:  // #pragma acc data copy(i)
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:    #pragma omp target update to(present: i)
@@ -156,8 +156,8 @@ int main() {
   // will look different due merely to indentation.
 
   //  PRT-A-NEXT:  #pragma acc data copy(i)
-  // PRT-AO-NEXT:  // #pragma omp target data map(tofrom: i)
-  //  PRT-O-NEXT:  #pragma omp target data map(tofrom: i)
+  // PRT-AO-NEXT:  // #pragma omp target data map(hold,tofrom: i)
+  //  PRT-O-NEXT:  #pragma omp target data map(hold,tofrom: i)
   // PRT-OA-NEXT:  // #pragma acc data copy(i)
   #pragma acc data copy(i)
   //  PRT-A-NEXT:  #pragma acc parallel loop gang

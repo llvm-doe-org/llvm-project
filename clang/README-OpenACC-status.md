@@ -45,6 +45,9 @@ mentioned here.
     * `-fopenacc-update-present-omp=KIND` where `KIND` is either
       `present` or `no-present`
         * See the discussion of the `update` directive below.
+    * `-fopenacc-structured-ref-count-omp=KIND` where `KIND` is either
+      `hold` or `no-hold`
+        * See the discussion of the `data` directive below.
     * `-fopenacc-present-omp=KIND` where `KIND` is either `present` or
       `alloc`
         * See the discussion of the `present` clause below.
@@ -59,6 +62,8 @@ mentioned here.
         * See the discussion of the `vector_length` clause below.
     * `-Wopenacc-omp-update-present`
         * See the discussion of the `update` directive below.
+    * `-Wopenacc-omp-map-hold`
+        * See the discussion of the `data` directive below.
     * `-Wopenacc-omp-map-present`
         * See the discussion of the `present` clause below.
     * `-Wopenacc-omp-map-no-alloc`
@@ -156,6 +161,68 @@ mentioned here.
             * `zero` modifier is not yet supported.
         * `no_create`
     * Subarrays specifying contiguous blocks are supported.
+    * Source-to-source mode caveats for all data clauses
+        * OpenACC specifies two reference counters for tracking device
+          allocations: a structured reference counter for `data` and
+          `parallel` directives, and a dynamic reference counter for
+          `enter data` and `exit data` directives.  OpenMP specifies
+          only one, which can thus be considered a dynamic reference
+          counter.
+        * Traditional compilation mode
+            * The data clauses listed above are fully supported and
+              thus, for `data` and `parallel` directives, use a
+              separate structured reference counter as required by
+              OpenACC.
+            * Although the traditional compilation mode user typically
+              does not need to be aware, the OpenMP translations of
+              the above data clauses use a Clacc-specific OpenMP
+              extension: the `hold` map type modifier.
+            * If desired, it is possible to adjust the translation or
+              related diagnostics by using the command-line options
+              discussed below for source-to-source mode.  The
+              difference is that, by default in traditional
+              compilation mode, the related diagnostics are disabled.
+        * Source-to-source mode
+            * Occurrences of the above data clauses on `data` and
+              `parallel` directives produce compile-time error
+              diagnostics by default.  The purpose of the diagnostics
+              is to ensure the user is aware that the OpenMP
+              translation includes the `hold` map type modifier
+              because it is unlikely to be supported yet by foreign
+              OpenMP compilers.
+            * The diagnostics are actually warnings enabled by
+              `-Wopenacc-omp-map-hold`, which is enabled and treated
+              as an error by default in source-to-source mode.
+            * To work around this issue, any of the following
+              command-line options can be specified:
+                * `-Wno-error=openacc-omp-map-hold` converts the
+                  diagnostic to a warning to make it easier to find
+                  all occurrences.
+                * `-Wno-openacc-omp-map-hold` disables the diagnostic
+                  entirely.  This is useful if the generated OpenMP
+                  will not be compiled or if the OpenMP compiler
+                  actually already supports the `hold` map type
+                  modifier.
+                * `-fopenacc-structured-ref-count-omp=no-hold`
+                  suppresses the diagnostic by changing the
+                  translation not to use the `hold` map type modifier.
+                  Contrary to OpenACC semantics, this translation uses
+                  a single reference counter for tracking device
+                  allocations.  However, this translation should be
+                  sufficient if, for example, an OpenACC application
+                  always pairs `enter data` and `exit data` directives
+                  (and corresponding runtime library routine calls) in
+                  a structured manner.
+        * `-fopenacc[-ast]-print=acc`, `-ast-print`, `-ast-dump`,
+          etc. mode
+            * Debugging modes like these do not actually print OpenMP
+              source code, so they leave the aforementioned
+              diagnostics disabled as in traditional compilation mode.
+        * Currently, Clacc's implementation of its `hold` map type
+          modifier extension for OpenMP is not well tested outside of
+          Clacc's translations from OpenACC to OpenMP.  Thus, it is
+          not yet recommended for use in hand-written OpenMP code as
+          it might not integrate well with some OpenMP features.
     * Source-to-source mode caveats for `present` and `no_create`
         * Traditional compilation mode
             * The `present` and `no_create` clauses are fully
@@ -516,6 +583,10 @@ specification.  Currently, Clacc uses OpenMP extensions as follows:
 * The `update` directive translation depends on the OpenMP TR8 motion
   modifier `present` by default:
     * See the discussion of the `update` directive above for details.
+* For the `data` and `parallel` directives, translations of data
+  attributes and clauses other than `firstprivate`, `private`, and
+  `reduction` depend on the map type modifier `hold` by default:
+    * See the discussion of the `data` directive above for details.
 * The `present` clause translation depends on the OpenMP TR8 map type
   modifier `present` by default:
     * See the discussion of the `present` clause above for details.

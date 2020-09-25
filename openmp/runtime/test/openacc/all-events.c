@@ -67,7 +67,8 @@
 // RUN: %for dirs {
 // RUN:   %for tgts {
 // RUN:     %[run-if] %clang -Xclang -verify -fopenacc-print=omp %flags %s \
-// RUN:                      %[tgt-cppflags] %[dir-cflags] > %t-omp.c
+// RUN:                      %[tgt-cppflags] %[dir-cflags] > %t-omp.c \
+// RUN:                      -Wno-openacc-omp-map-hold
 // RUN:     %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:     %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version %flags \
 // RUN:                      %t-omp.c %[tgt-cppflags] %[tgt-cflags] \

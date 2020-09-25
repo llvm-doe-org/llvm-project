@@ -236,9 +236,12 @@ LANGOPT(OpenACC           , 1, 0, "OpenACC support")
 ENUM_LANGOPT(OpenACCUpdatePresentOMP, OpenACCUpdatePresentOMPKind, 1,
              OpenACCUpdatePresentOMP_Present,
              "The OpenMP translation of the OpenACC 'update' directive without 'if_present'")
+ENUM_LANGOPT(OpenACCStructuredRefCountOMP, OpenACCStructuredRefCountOMPKind, 1,
+             OpenACCStructuredRefCountOMP_Hold,
+             "The OpenMP translation of the OpenACC 'no_create' clause")
 ENUM_LANGOPT(OpenACCPresentOMP, OpenACCPresentOMPKind, 1,
              OpenACCPresentOMP_Present,
-             "The OpenMP translation of the OpenACC 'present' clause")
+             "The OpenMP translation of OpenACC data clauses using OpenACC's structured reference counter")
 ENUM_LANGOPT(OpenACCNoCreateOMP, OpenACCNoCreateOMPKind, 1,
              OpenACCNoCreateOMP_NoAlloc,
              "The OpenMP translation of the OpenACC 'no_create' clause")

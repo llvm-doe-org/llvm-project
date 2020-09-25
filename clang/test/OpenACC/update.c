@@ -106,6 +106,7 @@
 // RUN: %for present-opts {
 // RUN:   %for prt-args {
 // RUN:     %clang -Xclang -verify %[prt] %[present-opt] %t-acc.c \
+// RUN:            -Wno-openacc-omp-map-hold \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] -DPRESENT='%[present]' %s
 // RUN:   }
 // RUN: }
@@ -138,7 +139,7 @@
 // RUN:   %for tgts {
 // RUN:     %for prt-opts {
 // RUN:       %[run-if] %clang -Xclang -verify %[prt-opt]=omp %[present-opt] \
-// RUN:                 %s > %t-omp.c
+// RUN:                 %s -Wno-openacc-omp-map-hold > %t-omp.c
 // RUN:       %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:       %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
 // RUN:                 %[tgt-cflags] -o %t.exe %t-omp.c
@@ -441,8 +442,8 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'd' 'int'
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc data create(s,h,d){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(alloc: s,h,d){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(alloc: s,h,d){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,alloc: s,h,d){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(hold,alloc: s,h,d){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data create(s,h,d){{$}}
     #pragma acc data create(s,h,d)
     // PRT-NEXT: {

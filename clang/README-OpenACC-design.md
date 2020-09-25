@@ -1182,14 +1182,28 @@ Clacc's current mapping of an `acc data` directive and its clauses to
 OpenMP is as follows:
 
 * `acc data` -> `omp target data`
+* The translation of all data clauses listed below is affected by the
+  `-fopenacc-structured-ref-count-omp=KIND` command-line option:
+    * `KIND` is one of:
+        * `hold` (default):
+            * The `hold` map type modifier is included as specified
+              below.
+        * `no-hold`:
+            * The `hold` map type modifier specified below is omitted.
+    * Notes:
+        * See the discussion of the `data` directive under "Supported
+          Features" in `README-OpenACC-status.md` for a description of
+          associated diagnostics and for an explanation of the impact
+          of this design on Clacc users.
 * *exp* `present` is translated according to the
   `-fopenacc-present-omp=KIND` command-line option:
     * `KIND` is one of:
         * `present` (default):
-            * *exp* `present` -> *exp* `map` with a `present,alloc`
-              map type.
+            * *exp* `present` -> *exp* `map` with a
+              `present,hold,alloc` map type.
         * `alloc`:
-            * *exp* `present` -> *exp* `map` with an `alloc` map type.
+            * *exp* `present` -> *exp* `map` with an `hold,alloc` map
+              type.
     * Notes:
         * See the discussion of the `present` clause under "Supported
           Features" in `README-OpenACC-status.md` for a description of
@@ -1228,19 +1242,19 @@ OpenMP is as follows:
               if there is user demand, but we suspect the likelihood
               that OpenMP TR8's `present` map type modifier will be
               standardized means this option is likely not worthwhile.
-* *exp* `copy` -> *exp* `map` with a `tofrom` map type.
-* *exp* `copyin` -> *exp* `map` with a `to` map type.
-* *exp* `copyout` -> *exp* `map` with a `from` map type.
-* *exp* `create` -> *exp* `map` with an `alloc` map type.
+* *exp* `copy` -> *exp* `map` with a `hold,tofrom` map type.
+* *exp* `copyin` -> *exp* `map` with a `hold,to` map type.
+* *exp* `copyout` -> *exp* `map` with a `hold,from` map type.
+* *exp* `create` -> *exp* `map` with an `hold,alloc` map type.
 * *exp* `no_create` is translated according to the
   `-fopenacc-no-create-omp=KIND` command-line option:
     * `KIND` is one of:
         * `no_alloc` (default):
-            * *exp* `no_create` -> *exp* `map` with a `no_alloc,alloc`
-              map type.
+            * *exp* `no_create` -> *exp* `map` with a
+              `no_alloc,hold,alloc` map type.
         * `alloc`:
-            * *exp* `no_create` -> *exp* `map` with an `alloc` map
-              type.
+            * *exp* `no_create` -> *exp* `map` with an `hold,alloc`
+              map type.
     * Notes:
         * See the translation of *imp* `nomap` on `acc parallel` for
           an additional component of the `no_create` translation.
@@ -1267,7 +1281,7 @@ to OpenMP is as follows:
           `no_create`, then the full array is specified in the *exp*
           `map` here.
     * Otherwise, if the variable is *imp* `shared` on the
-      `acc parallel` and is a scalar, then ->
+      `acc parallel` and is a scalar, then -> *exp*
       `defaultmap(tofrom:scalar)`.  This is generated only once per
       `acc parallel`.
     * Otherwise, the translations discards *imp* `nomap`.
@@ -1398,15 +1412,19 @@ to OpenMP is as follows:
           implicit `tofrom` for non-scalars, Clacc chooses `tofrom`
           for scalars for consistency.
         * When the variable is already present, including when the
-          suppressing DMA is `no_create`, the reference counter for
-          the variable will be affected by the `map` clauses even
-          though OpenACC doesn't specify that behavior.  However, this
-          behavior shouldn't be observable given that it's OpenACC's
-          structured reference counter, which is guaranteed not to
-          fall to zero before the enclosing `acc data` ends either
-          way.
-* All DMAs are mapped in the same manner as when appearing on an `acc
-  data`.  *imp* `copy` is mapped in the same manner as *exp* `copy`.
+          suppressing DMA is `no_create`, the `map` clauses will
+          redundantly increment and decrement the variable's dynamic
+          reference counter (regardless of
+          `-fopenacc-structured-ref-count-omp`) at the `acc parallel`
+          entry and exit even though OpenACC specifies no manipulation
+          of the variable's reference counters here.  However, this
+          behavior shouldn't be observable given that it should be
+          impossible to otherwise manipulate the variable's reference
+          counters during the `acc parallel` region.  TODO: How will
+          `async` affect this?
+* All other DMAs are translated in the same manner as when appearing
+  on an `acc data`.  *imp* `copy` is translated in the same manner as
+  *exp* `copy`.
 * *imp* `shared` -> *exp* `shared`
 * *exp*|*imp* `reduction` -> *exp* `reduction`
 * *exp*|*imp* `firstprivate` -> *exp* `firstprivate`

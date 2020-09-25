@@ -42,9 +42,9 @@
 // Define some interrelated data we use several times below.
 //
 // RUN: %data no-create-opts {
-// RUN:   (no-create-opt=-Wno-openacc-omp-map-no-alloc                                    no-create-mt=no_alloc,alloc noAlloc-or-alloc=NO-ALLOC not-crash-if-alloc=             )
-// RUN:   (no-create-opt='-fopenacc-no-create-omp=no_alloc -Wno-openacc-omp-map-no-alloc' no-create-mt=no_alloc,alloc noAlloc-or-alloc=NO-ALLOC not-crash-if-alloc=             )
-// RUN:   (no-create-opt=-fopenacc-no-create-omp=alloc                                    no-create-mt=alloc          noAlloc-or-alloc=ALLOC    not-crash-if-alloc='not --crash')
+// RUN:   (no-create-opt=-Wno-openacc-omp-map-no-alloc                                    no-create-mt=no_alloc,hold,alloc inherited-no-create-mt=no_alloc,alloc noAlloc-or-alloc=NO-ALLOC not-crash-if-alloc=             )
+// RUN:   (no-create-opt='-fopenacc-no-create-omp=no_alloc -Wno-openacc-omp-map-no-alloc' no-create-mt=no_alloc,hold,alloc inherited-no-create-mt=no_alloc,alloc noAlloc-or-alloc=NO-ALLOC not-crash-if-alloc=             )
+// RUN:   (no-create-opt=-fopenacc-no-create-omp=alloc                                    no-create-mt=hold,alloc          inherited-no-create-mt=alloc          noAlloc-or-alloc=ALLOC    not-crash-if-alloc='not --crash')
 // RUN: }
 // RUN: %data tgts {
 // RUN:   (run-if=                tgt-cflags=                                     host=-HOST not-crash-if-off-and-alloc=                     )
@@ -133,9 +133,10 @@
 // RUN: %for no-create-opts {
 // RUN:   %for prt-args {
 // RUN:     %clang -Xclang -verify %[prt] %[no-create-opt] %acc_includes \
-// RUN:            %t-acc.c \
+// RUN:            %t-acc.c -Wno-openacc-omp-map-hold \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] \
-// RUN:                 -DNO_CREATE_MT=%[no-create-mt] %s
+// RUN:                 -DNO_CREATE_MT=%[no-create-mt] \
+// RUN:                 -DINHERITED_NO_CREATE_MT=%[inherited-no-create-mt] %s
 // RUN:   }
 // RUN: }
 
@@ -151,7 +152,8 @@
 // RUN:   %for prt-args {
 // RUN:     %clang %[prt] %t.ast 2>&1 \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] \
-// RUN:                 -DNO_CREATE_MT=%[no-create-mt] %s
+// RUN:                 -DNO_CREATE_MT=%[no-create-mt] \
+// RUN:                 -DINHERITED_NO_CREATE_MT=%[inherited-no-create-mt] %s
 // RUN:   }
 // RUN: }
 
@@ -168,7 +170,8 @@
 // RUN:   %for tgts {
 // RUN:     %for prt-opts {
 // RUN:       %[run-if] %clang -Xclang -verify %[prt-opt]=omp \
-// RUN:                 %[no-create-opt] %acc_includes %s > %t-omp.c
+// RUN:                 %[no-create-opt] %acc_includes %s > %t-omp.c \
+// RUN:                 -Wno-openacc-omp-map-hold
 // RUN:       %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:       %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
 // RUN:                 %[tgt-cflags] %acc_includes -o %t.exe %t-omp.c
@@ -328,11 +331,11 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   int x;
   //
   //  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(tofrom: x){{$}}
+  // PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: x){{$}}
   //  PRT-A-NEXT:   #pragma acc data no_create(x){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
   //
-  //  PRT-O-NEXT:   #pragma omp target data map(tofrom: x){{$}}
+  //  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: x){{$}}
   // PRT-OA-NEXT:   // #pragma acc data copy(x){{$}}
   //  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
   // PRT-OA-NEXT:   // #pragma acc data no_create(x){{$}}
@@ -400,11 +403,11 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   int arr[3];
   //
   //  PRT-A-NEXT:   #pragma acc data copy(arr){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(tofrom: arr){{$}}
+  // PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: arr){{$}}
   //  PRT-A-NEXT:   #pragma acc data no_create(arr){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr){{$}}
   //
-  //  PRT-O-NEXT:   #pragma omp target data map(tofrom: arr){{$}}
+  //  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: arr){{$}}
   // PRT-OA-NEXT:   // #pragma acc data copy(arr){{$}}
   //  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr){{$}}
   // PRT-OA-NEXT:   // #pragma acc data no_create(arr){{$}}
@@ -464,11 +467,11 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   int all[10], same[10], beg[10], mid[10], end[10];
   //
   //  PRT-A-NEXT:   #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-  // PRT-AO-NEXT:   // #pragma omp target data map(tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
+  // PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
   //  PRT-A-NEXT:   #pragma acc data no_create(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
   // PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
   //
-  //  PRT-O-NEXT:   #pragma omp target data map(tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
+  //  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
   // PRT-OA-NEXT:   // #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
   //  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
   // PRT-OA-NEXT:   // #pragma acc data no_create(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
@@ -517,11 +520,11 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   int arr[4];
   //
   //  PRT-A-NEXT:   #pragma acc data copy(arr[0:2]){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(tofrom: arr[0:2]){{$}}
+  // PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: arr[0:2]){{$}}
   //  PRT-A-NEXT:   #pragma acc data no_create(arr[2:2]){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[2:2]){{$}}
   //
-  //  PRT-O-NEXT:   #pragma omp target data map(tofrom: arr[0:2]){{$}}
+  //  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: arr[0:2]){{$}}
   // PRT-OA-NEXT:   // #pragma acc data copy(arr[0:2]){{$}}
   //  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[2:2]){{$}}
   // PRT-OA-NEXT:   // #pragma acc data no_create(arr[2:2]){{$}}
@@ -560,11 +563,11 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
   //
   //  PRT-A-NEXT:   #pragma acc data copyin(arr[1:2]){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(to: arr[1:2]){{$}}
+  // PRT-AO-NEXT:   // #pragma omp target data map(hold,to: arr[1:2]){{$}}
   //  PRT-A-NEXT:   #pragma acc data no_create(arr[0:2]){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[0:2]){{$}}
   //
-  //  PRT-O-NEXT:   #pragma omp target data map(to: arr[1:2]){{$}}
+  //  PRT-O-NEXT:   #pragma omp target data map(hold,to: arr[1:2]){{$}}
   // PRT-OA-NEXT:   // #pragma acc data copyin(arr[1:2]){{$}}
   //  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[0:2]){{$}}
   // PRT-OA-NEXT:   // #pragma acc data no_create(arr[0:2]){{$}}
@@ -610,11 +613,11 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
   //
   //  PRT-A-NEXT:   #pragma acc data copyin(arr[1:2]){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(to: arr[1:2]){{$}}
+  // PRT-AO-NEXT:   // #pragma omp target data map(hold,to: arr[1:2]){{$}}
   //  PRT-A-NEXT:   #pragma acc data no_create(arr[2:2]){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[2:2]){{$}}
   //
-  //  PRT-O-NEXT:   #pragma omp target data map(to: arr[1:2]){{$}}
+  //  PRT-O-NEXT:   #pragma omp target data map(hold,to: arr[1:2]){{$}}
   // PRT-OA-NEXT:   // #pragma acc data copyin(arr[1:2]){{$}}
   //  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[2:2]){{$}}
   // PRT-OA-NEXT:   // #pragma acc data no_create(arr[2:2]){{$}}
@@ -660,15 +663,15 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
   //
   //  PRT-A-NEXT:   #pragma acc data copyout(arr[0:2]){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(from: arr[0:2]){{$}}
+  // PRT-AO-NEXT:   // #pragma omp target data map(hold,from: arr[0:2]){{$}}
   //  PRT-A-NEXT:   #pragma acc data copy(arr[2:2]){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(tofrom: arr[2:2]){{$}}
+  // PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: arr[2:2]){{$}}
   //  PRT-A-NEXT:   #pragma acc data no_create(arr[0:4]){{$}}
   // PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[0:4]){{$}}
   //
-  //  PRT-O-NEXT:   #pragma omp target data map(from: arr[0:2]){{$}}
+  //  PRT-O-NEXT:   #pragma omp target data map(hold,from: arr[0:2]){{$}}
   // PRT-OA-NEXT:   // #pragma acc data copyout(arr[0:2]){{$}}
-  //  PRT-O-NEXT:   #pragma omp target data map(tofrom: arr[2:2]){{$}}
+  //  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: arr[2:2]){{$}}
   // PRT-OA-NEXT:   // #pragma acc data copy(arr[2:2]){{$}}
   //  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[0:4]){{$}}
   // PRT-OA-NEXT:   // #pragma acc data no_create(arr[0:4]){{$}}
@@ -735,11 +738,11 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   int x;
   //
   //  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(tofrom: x){{$}}
+  // PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: x){{$}}
   //  PRT-A-NEXT:   #pragma acc parallel no_create(x){{$}}
   // PRT-AO-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x){{$}}
   //
-  //  PRT-O-NEXT:   #pragma omp target data map(tofrom: x){{$}}
+  //  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: x){{$}}
   // PRT-OA-NEXT:   // #pragma acc data copy(x){{$}}
   //  PRT-O-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x){{$}}
   // PRT-OA-NEXT:   // #pragma acc parallel no_create(x){{$}}
@@ -1016,12 +1019,12 @@ int main(int argc, char *argv[]) {
   //    PRT-NEXT:   int x;
   //
   //  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(tofrom: x){{$}}
+  // PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: x){{$}}
   //  PRT-A-NEXT:   #pragma acc parallel loop no_create(x){{$}}
   // PRT-AO-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x){{$}}
   // PRT-AO-NEXT:   // #pragma omp distribute{{$}}
   //
-  //  PRT-O-NEXT:   #pragma omp target data map(tofrom: x){{$}}
+  //  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: x){{$}}
   // PRT-OA-NEXT:   // #pragma acc data copy(x){{$}}
   //  PRT-O-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x){{$}}
   //  PRT-O-NEXT:   #pragma omp distribute{{$}}
@@ -1140,18 +1143,18 @@ int main(int argc, char *argv[]) {
   //             PRT-NEXT:   int x;
   //
   //           PRT-A-NEXT:   #pragma acc data create(x){{$}}
-  //          PRT-AO-NEXT:   // #pragma omp target data map(alloc: x){{$}}
+  //          PRT-AO-NEXT:   // #pragma omp target data map(hold,alloc: x){{$}}
   //           PRT-A-NEXT:   #pragma acc data no_create(x){{$}}
   //          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
   //           PRT-A-NEXT:   #pragma acc parallel{{$}}
-  // PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x){{$}}
+  // PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x){{$}}
   //    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams shared(x) defaultmap(tofrom: scalar){{$}}
   //
-  //           PRT-O-NEXT:   #pragma omp target data map(alloc: x){{$}}
+  //           PRT-O-NEXT:   #pragma omp target data map(hold,alloc: x){{$}}
   //          PRT-OA-NEXT:   // #pragma acc data create(x){{$}}
   //           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
   //          PRT-OA-NEXT:   // #pragma acc data no_create(x){{$}}
-  //  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x){{$}}
+  //  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x){{$}}
   //     PRT-O-ALLOC-NEXT:   #pragma omp target teams shared(x) defaultmap(tofrom: scalar){{$}}
   //          PRT-OA-NEXT:   // #pragma acc parallel{{$}}
   //
@@ -1213,12 +1216,12 @@ int main(int argc, char *argv[]) {
   //           PRT-A-NEXT:   #pragma acc data no_create(x){{$}}
   //          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
   //           PRT-A-NEXT:   #pragma acc parallel{{$}}
-  // PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x) firstprivate(use){{$}}
+  // PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x) firstprivate(use){{$}}
   //    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams shared(x) firstprivate(use) defaultmap(tofrom: scalar){{$}}
   //
   //           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
   //          PRT-OA-NEXT:   // #pragma acc data no_create(x){{$}}
-  //  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x) firstprivate(use){{$}}
+  //  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x) firstprivate(use){{$}}
   //     PRT-O-ALLOC-NEXT:   #pragma omp target teams shared(x) firstprivate(use) defaultmap(tofrom: scalar){{$}}
   //          PRT-OA-NEXT:   // #pragma acc parallel{{$}}
   //
@@ -1253,18 +1256,18 @@ int main(int argc, char *argv[]) {
   //             PRT-NEXT:   int arr[] =
   //
   //           PRT-A-NEXT:   #pragma acc data create(arr){{$}}
-  //          PRT-AO-NEXT:   // #pragma omp target data map(alloc: arr){{$}}
+  //          PRT-AO-NEXT:   // #pragma omp target data map(hold,alloc: arr){{$}}
   //           PRT-A-NEXT:   #pragma acc data no_create(arr[1:2]){{$}}
   //          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2]){{$}}
   //           PRT-A-NEXT:   #pragma acc parallel{{$}}
-  // PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: arr) shared(arr){{$}}
+  // PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr) shared(arr){{$}}
   //    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams shared(arr){{$}}
   //
-  //           PRT-O-NEXT:   #pragma omp target data map(alloc: arr){{$}}
+  //           PRT-O-NEXT:   #pragma omp target data map(hold,alloc: arr){{$}}
   //          PRT-OA-NEXT:   // #pragma acc data create(arr){{$}}
   //           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2]){{$}}
   //          PRT-OA-NEXT:   // #pragma acc data no_create(arr[1:2]){{$}}
-  //  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: arr) shared(arr){{$}}
+  //  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr) shared(arr){{$}}
   //     PRT-O-ALLOC-NEXT:   #pragma omp target teams shared(arr){{$}}
   //          PRT-OA-NEXT:   // #pragma acc parallel{{$}}
   //
@@ -1302,12 +1305,12 @@ int main(int argc, char *argv[]) {
   //           PRT-A-NEXT:   #pragma acc data no_create(arr[1:2]){{$}}
   //          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2]){{$}}
   //           PRT-A-NEXT:   #pragma acc parallel{{$}}
-  // PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: arr) shared(arr) firstprivate(use){{$}}
+  // PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr) shared(arr) firstprivate(use){{$}}
   //    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams shared(arr) firstprivate(use){{$}}
   //
   //           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2]){{$}}
   //          PRT-OA-NEXT:   // #pragma acc data no_create(arr[1:2]){{$}}
-  //  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: arr) shared(arr) firstprivate(use){{$}}
+  //  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr) shared(arr) firstprivate(use){{$}}
   //     PRT-O-ALLOC-NEXT:   #pragma omp target teams shared(arr) firstprivate(use){{$}}
   //          PRT-OA-NEXT:   // #pragma acc parallel{{$}}
   //
