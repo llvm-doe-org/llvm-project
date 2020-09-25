@@ -22,8 +22,7 @@ mentioned here.
     * `-f[no-]openacc` enables OpenACC support.  Traditional
       compilation mode is the default.
     * `-fopenacc[-ast]-print=acc|omp|acc-omp|omp-acc`
-        * Enables OpenACC support in source-to-source compilation
-          mode.
+        * Enables OpenACC support and source-to-source mode.
         * See the section "Source-to-Source Translation" in
           `README-OpenACC-design.md` for design details.
     * `-fopenmp-targets=<triples>`
@@ -38,8 +37,8 @@ mentioned here.
         * `-fopenmp` produces an error when OpenACC support is enabled
           as Clacc does not currently support combining OpenMP and
           OpenACC in the same application.
-        * Other `-fopenmp-*` options are not supported when OpenACC
-          support is enabled.
+        * `-fopenmp-*` options not mentioned above are not supported
+          when OpenACC support is enabled.
         * As usual when `-fopenmp` is not specified, OpenMP directives
           are discarded but `-Wsource-uses-openmp` is available to
           produce warnings for them.
@@ -79,7 +78,8 @@ mentioned here.
     * Multiple subarrays of the same array on the same directive are
       not yet supported.
     * Members of structs or classes are not yet supported.
-    * Presence restriction caveats when `if_present` is not specified
+    * Source-to-source mode caveats for presence restriction when
+      `if_present` is not specified
         * OpenACC 3.0 requires variables appearing in `self`, `host`,
           or `device` to be already present on the device when
           `if_present` is not specified.  However, while it suggests a
@@ -156,7 +156,7 @@ mentioned here.
             * `zero` modifier is not yet supported.
         * `no_create`
     * Subarrays specifying contiguous blocks are supported.
-    * `present` and `no_create` caveats
+    * Source-to-source mode caveats for `present` and `no_create`
         * Traditional compilation mode
             * The `present` and `no_create` clauses are fully
               supported.
@@ -263,7 +263,8 @@ mentioned here.
         * Implicit `firstprivate` for scalars
         * For `present`, `copy`, `copyin`, `copyout`, `create`, and
           `no_create` clauses and their aliases, support is the same
-          as for the `data` directive, as described above.
+          as for the `data` directive, as described above, including
+          source-to-source mode caveats.
         * `firstprivate` clause
         * `private` clause
         * `reduction` clause
