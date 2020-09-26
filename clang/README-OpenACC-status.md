@@ -19,8 +19,9 @@ mentioned here.
     * For brief descriptions of all OpenACC-related and OpenMP-related
       command-line options, run Clacc's `clang -help` and search for
       `openacc` or `openmp`.
-    * `-f[no-]openacc` enables OpenACC support.  Traditional
-      compilation mode is the default.
+    * `-f[no-]openacc`
+        * Enables OpenACC support.
+        * Traditional compilation mode is the default.
     * `-fopenacc[-ast]-print=acc|omp|acc-omp|omp-acc`
         * Enables OpenACC support and source-to-source mode.
         * See the section "Source-to-Source Translation" in
@@ -42,32 +43,28 @@ mentioned here.
         * As usual when `-fopenmp` is not specified, OpenMP directives
           are discarded but `-Wsource-uses-openmp` is available to
           produce warnings for them.
-    * `-fopenacc-update-present-omp=KIND` where `KIND` is either
-      `present` or `no-present`
-        * See the discussion of the `update` directive below.
-    * `-fopenacc-structured-ref-count-omp=KIND` where `KIND` is either
-      `hold` or `no-hold`
-        * See the discussion of the `data` directive below.
-    * `-fopenacc-present-omp=KIND` where `KIND` is either `present` or
-      `alloc`
-        * See the discussion of the `present` clause below.
-    * `-fopenacc-no-create-omp=KIND` where `KIND` is either `no_alloc`
-      or `alloc`
-        * See the discussion of the `no_create` clause below.
-    * `-Wsource-uses-openacc`
-        * Similar to `-Wsource-uses-openmp`, this enables warnings
-          about OpenACC directives when OpenACC support is not
-          enabled.
-    * `-Wopenacc-ignored-clause`
-        * See the discussion of the `vector_length` clause below.
-    * `-Wopenacc-omp-update-present`
-        * See the discussion of the `update` directive below.
-    * `-Wopenacc-omp-map-hold`
-        * See the discussion of the `data` directive below.
-    * `-Wopenacc-omp-map-present`
-        * See the discussion of the `present` clause below.
-    * `-Wopenacc-omp-map-no-alloc`
-        * See the discussion of the `no_create` clause below.
+    * Options controlling the translation to OpenMP and related
+      diagnostics
+        * `-fopenacc-update-present-omp=KIND` where `KIND` is either
+          `present` or `no-present`
+        * `-fopenacc-structured-ref-count-omp=KIND` where `KIND` is
+          either `hold` or `no-hold`
+        * `-fopenacc-present-omp=KIND` where `KIND` is either
+          `present` or `alloc`
+        * `-fopenacc-no-create-omp=KIND` where `KIND` is either
+          `no_alloc` or `alloc`
+        * `-Wopenacc-omp-update-present`
+        * `-Wopenacc-omp-map-hold`
+        * `-Wopenacc-omp-map-present`
+        * `-Wopenacc-omp-map-no-alloc`
+        * See the section "OpenMP Extensions" below for details.
+    * Other diagnostic options
+        * `-Wsource-uses-openacc`
+            * Similar to `-Wsource-uses-openmp`, this enables warnings
+              about OpenACC directives when OpenACC support is not
+              enabled.
+        * `-Wopenacc-ignored-clause`
+            * See the discussion of the `vector_length` clause below.
 * Run-time environment variables
     * `OMP_TARGET_OFFLOAD=disabled` for specifying at run time to
       target the host.
@@ -83,69 +80,8 @@ mentioned here.
     * Multiple subarrays of the same array on the same directive are
       not yet supported.
     * Members of structs or classes are not yet supported.
-    * Source-to-source mode caveats for presence restriction when
-      `if_present` is not specified
-        * OpenACC 3.0 requires variables appearing in `self`, `host`,
-          or `device` to be already present on the device when
-          `if_present` is not specified.  However, while it suggests a
-          runtime error when this restriction is violated by an
-          application, it does not strictly require any specific
-          behavior.  Changes have been proposed to the OpenACC
-          specification to strictly require a runtime error instead.
-        * Traditional compilation mode
-            * The behavior described above is fully supported.
-            * Although the traditional compilation mode user typically
-              does not need to be aware, the OpenMP translation of the
-              `self`, `host`, and `device` clauses use an OpenMP TR8
-              feature when `if_present` is not specified: the
-              `present` motion modifier.
-            * If desired, it is possible to adjust the translation or
-              related diagnostics by using the command-line options
-              discussed below for source-to-source mode.  The
-              difference is that, by default in traditional
-              compilation mode, the related diagnostics are disabled.
-        * Source-to-source mode
-            * Occurrences of the `self`, `host`, or `device` clause
-              without the `if_present` clause produce compile-time
-              error diagnostics by default.  The purpose of the
-              diagnostics is to ensure the user is aware that the
-              OpenMP translation includes the `present` motion
-              modifier because it is unlikely to be supported yet by
-              foreign OpenMP compilers.
-            * The diagnostics are actually warnings enabled by
-              `-Wopenacc-omp-update-present`, which is enabled and
-              treated as an error by default in source-to-source mode.
-            * To work around this issue, any of the following
-              command-line options can be specified:
-                * `-Wno-error=openacc-omp-update-present` converts the
-                  diagnostic to a warning to make it easier to find
-                  all occurrences.
-                * `-Wno-openacc-omp-update-present` disables the
-                  diagnostic entirely.  This is useful if the
-                  generated OpenMP will not be compiled or if the
-                  OpenMP compiler actually already supports the
-                  `present` motion modifier.
-                * `-fopenacc-update-present-omp=no-present` suppresses
-                  the diagnostic by changing the translation not to
-                  use the `present` motion modifier.  Contrary to
-                  OpenACC semantics, this translation does not produce
-                  a runtime error when the specified variable is not
-                  present on the device.  However, this translation
-                  should be sufficient for OpenACC applications that
-                  are robust enough not to actually encounter this
-                  runtime error.
-                * There are various other imperfect translations of
-                  these clauses to standard OpenMP that might be
-                  useful under other conditions.  We will consider
-                  adding support if there is user demand.  See the
-                  section "Update Directives" in
-                  `README-OpenACC-design.md` for a discussion of
-                  alternative translations that we considered.
-        * `-fopenacc[-ast]-print=acc`, `-ast-print`, `-ast-dump`,
-          etc. mode
-            * Debugging modes like these do not actually print OpenMP
-              source code, so they leave the aforementioned diagnostic
-              disabled as in traditional compilation mode.
+    * See the section "OpenMP Extensions" below for caveats related to
+      source-to-source mode.
 * `data` directive
     * Lexical context
         * Any number of levels of nesting within other `data`
@@ -161,166 +97,8 @@ mentioned here.
             * `zero` modifier is not yet supported.
         * `no_create`
     * Subarrays specifying contiguous blocks are supported.
-    * Source-to-source mode caveats for all data clauses
-        * OpenACC specifies two reference counters for tracking device
-          allocations: a structured reference counter for `data` and
-          `parallel` directives, and a dynamic reference counter for
-          `enter data` and `exit data` directives.  OpenMP specifies
-          only one, which can thus be considered a dynamic reference
-          counter.
-        * Traditional compilation mode
-            * The data clauses listed above are fully supported and
-              thus, for `data` and `parallel` directives, use a
-              separate structured reference counter as required by
-              OpenACC.
-            * Although the traditional compilation mode user typically
-              does not need to be aware, the OpenMP translations of
-              the above data clauses use a Clacc-specific OpenMP
-              extension: the `hold` map type modifier.
-            * If desired, it is possible to adjust the translation or
-              related diagnostics by using the command-line options
-              discussed below for source-to-source mode.  The
-              difference is that, by default in traditional
-              compilation mode, the related diagnostics are disabled.
-        * Source-to-source mode
-            * Occurrences of the above data clauses on `data` and
-              `parallel` directives produce compile-time error
-              diagnostics by default.  The purpose of the diagnostics
-              is to ensure the user is aware that the OpenMP
-              translation includes the `hold` map type modifier
-              because it is unlikely to be supported yet by foreign
-              OpenMP compilers.
-            * The diagnostics are actually warnings enabled by
-              `-Wopenacc-omp-map-hold`, which is enabled and treated
-              as an error by default in source-to-source mode.
-            * To work around this issue, any of the following
-              command-line options can be specified:
-                * `-Wno-error=openacc-omp-map-hold` converts the
-                  diagnostic to a warning to make it easier to find
-                  all occurrences.
-                * `-Wno-openacc-omp-map-hold` disables the diagnostic
-                  entirely.  This is useful if the generated OpenMP
-                  will not be compiled or if the OpenMP compiler
-                  actually already supports the `hold` map type
-                  modifier.
-                * `-fopenacc-structured-ref-count-omp=no-hold`
-                  suppresses the diagnostic by changing the
-                  translation not to use the `hold` map type modifier.
-                  Contrary to OpenACC semantics, this translation uses
-                  a single reference counter for tracking device
-                  allocations.  However, this translation should be
-                  sufficient if, for example, an OpenACC application
-                  always pairs `enter data` and `exit data` directives
-                  (and corresponding runtime library routine calls) in
-                  a structured manner.
-        * `-fopenacc[-ast]-print=acc`, `-ast-print`, `-ast-dump`,
-          etc. mode
-            * Debugging modes like these do not actually print OpenMP
-              source code, so they leave the aforementioned
-              diagnostics disabled as in traditional compilation mode.
-        * Currently, Clacc's implementation of its `hold` map type
-          modifier extension for OpenMP is not well tested outside of
-          Clacc's translations from OpenACC to OpenMP.  Thus, it is
-          not yet recommended for use in hand-written OpenMP code as
-          it might not integrate well with some OpenMP features.
-    * Source-to-source mode caveats for `present` and `no_create`
-        * Traditional compilation mode
-            * The `present` and `no_create` clauses are fully
-              supported.
-            * Although the traditional compilation mode user typically
-              does not need to be aware, the OpenMP translation of
-              these clauses uses the following features:
-                * The `present` translation uses an OpenMP
-                  TR8 feature: the `present` map type modifier.
-                * The `no_create` translation uses a Clacc-specific
-                  OpenMP extension: the `no_alloc` map type modifier.
-            * In each case, the map type modifier is combined with the
-              OpenMP `alloc` map type as opposed to, for example,
-              `tofrom` in order to suppress device-to-host transfers
-              in the case that there is a reference count decrement
-              within the associated region.
-            * If desired, it is possible to adjust the translation or
-              related diagnostics by using the command-line options
-              discussed below for source-to-source mode.  The
-              difference is that, by default in traditional
-              compilation mode, the related diagnostics are disabled.
-        * Source-to-source mode
-            * Occurrences of the `present` or `no_create` clause
-              produce compile-time error diagnostics by default.  The
-              purpose of the diagnostics is to ensure the user is
-              aware that the OpenMP translation includes the `present`
-              or `no_alloc` map type modifier because it is unlikely
-              to be supported yet by foreign OpenMP compilers.
-            * The diagnostics are actually warnings enabled by
-              `-Wopenacc-omp-map-present` or
-              `-Wopenacc-omp-map-no-alloc`, which is enabled and
-              treated as an error by default in source-to-source mode.
-            * To work around this issue, any of the following
-              command-line options can be specified:
-                * `-Wno-error=openacc-omp-map-present` or
-                  `-Wno-error=openacc-omp-map-no-alloc` converts the
-                  diagnostic to a warning to make it easier to find
-                  all occurrences.
-                * `-Wno-openacc-omp-map-present` or
-                  `-Wno-openacc-omp-map-no-alloc` disables the
-                  diagnostic entirely.  This is useful if the
-                  generated OpenMP will not be compiled or if the
-                  OpenMP compiler actually already supports the
-                  `present` or `no_alloc` map type modifier.
-                * `-fopenacc-present-omp=alloc` suppresses the
-                  diagnostic for the OpenACC `present` clause by
-                  changing its translation to use the standard OpenMP
-                  `alloc` map type without the `present` modifier.
-                  Contrary to OpenACC `present` clause semantics, this
-                  translation does not produce a runtime error when
-                  the specified variable is not present on the device.
-                  However, this translation should be sufficient for
-                  OpenACC applications that are robust enough not to
-                  actually encounter this runtime error.
-                * `-fopenacc-no-create-omp=alloc` suppresses the
-                  diagnostic for the OpenACC `no_create` clause by
-                  changing its translation to use the standard OpenMP
-                  map type `alloc` without the `no_alloc` modifier.
-                  Contrary to OpenACC `no_create` clause semantics,
-                  this translation attempts to allocate the specified
-                  data when it is not already present on the device.
-                  Thus, this translation is probably only useful when
-                  all of the following conditions are met:
-                    * The application is being tested with smaller
-                      data sets, perhaps in initial attempts to port
-                      to OpenMP.  Otherwise, the unexpected
-                      allocations could produce performance
-                      degradation or memory exhaustion.
-                    * Any subarray specified in a `no_create` clause
-                      never conflicts with any subarray already
-                      present on the device or any subarray
-                      specification encountered during the execution
-                      of the associated region.  The unexpected
-                      allocations can cause such subarray conflicts to
-                      produce compile-time or runtime errors.
-                    * For any variable specified in a `no_create`
-                      clause, no data transfers for that variable are
-                      encountered during the execution of the
-                      associated region.  The unexpected allocations
-                      can suppress those data transfers.
-                * There are various other imperfect translations of
-                  these clauses to standard OpenMP that might be
-                  useful under other conditions.  We will consider
-                  adding support if there is user demand.  See the
-                  section "Data Directives" in
-                  `README-OpenACC-design.md` for a discussion of
-                  alternative translations that we considered for the
-                  OpenACC `present` clause.
-        * `-fopenacc[-ast]-print=acc`, `-ast-print`, `-ast-dump`,
-          etc. mode
-            * Debugging modes like these do not actually print OpenMP
-              source code, so they leave the aforementioned
-              diagnostics disabled as in traditional compilation mode.
-        * Currently, Clacc's implementation of its `no_alloc` map type
-          modifier extension for OpenMP is not well tested outside of
-          Clacc's translations from OpenACC to OpenMP.  Thus, it is
-          not yet recommended for use in hand-written OpenMP code as
-          it might not integrate well with some OpenMP features.
+    * See the section "OpenMP Extensions" below for caveats related to
+      source-to-source mode.
 * `parallel` directive
     * Lexical context
         * Appearing within a `data` construct is supported.
@@ -578,22 +356,235 @@ affect compilation using Clacc's source-to-source mode followed by a
 foreign OpenMP compiler or runtime.  A goal of Clacc is to rely on
 standard OpenMP as much as possible, and to that end it might be
 worthwhile to propose these extensions for inclusion in the OpenMP
-specification.  Currently, Clacc uses OpenMP extensions as follows:
+specification.
 
-* The `update` directive translation depends on the OpenMP TR8 motion
-  modifier `present` by default:
-    * See the discussion of the `update` directive above for details.
-* For the `data` and `parallel` directives, translations of data
-  attributes and clauses other than `firstprivate`, `private`, and
-  `reduction` depend on the map type modifier `hold` by default:
-    * See the discussion of the `data` directive above for details.
-* The `present` clause translation depends on the OpenMP TR8 map type
-  modifier `present` by default:
-    * See the discussion of the `present` clause above for details.
-* The `no_create` clause translation depends on the map type modifier
-  `no_alloc` by default:
-    * See the discussion of the `no_create` clause above for details.
-* Some features of the OpenACC Profiling Interface depend on OMPT
-  extensions:
-    * See the section "OpenACC Profiling Interface" in
-      `README-OpenACC-design.md` for details.
+This section describes the OpenMP extensions that Clacc employs.  It
+also describes associated diagnostics for discovering occurrences of
+these extensions as well as command-line options for choosing
+alternative OpenMP translations.
+
+OpenMP Directives and Clauses
+-----------------------------
+
+By default, Clacc's translation of some OpenACC directives and clauses
+employs extensions to OpenMP's directives and clauses.  Clacc's
+behavior is affected as follows:
+
+* Traditional compilation mode
+    * Standard OpenACC behavior is intended to be fully supported in
+      all cases.
+    * Although the traditional compilation mode user typically does
+      not need to be aware, the OpenMP translation does still use
+      OpenMP extensions for OpenACC features that require them.
+    * If desired, it is possible to adjust the translation or
+      associated diagnostics by using the command-line options
+      discussed below for source-to-source mode.  The difference is
+      that, by default in traditional compilation mode, the related
+      diagnostics are disabled.
+* Source-to-source mode
+    * An occurrence of an OpenACC directive or clause whose
+      translation employs an OpenMP extension produces a compile-time
+      error diagnostic by default.  The purpose of the diagnostic is
+      to ensure the user is aware that the translation is unlikely to
+      be supported yet by foreign OpenMP compilers.
+    * The diagnostic is actually a warning enabled by a command-line
+      option of the form `-Wopenacc-omp-<OMP-EXT>`, where `<OMP-EXT>`
+      identifies the OpenMP extension.  The warning is enabled and
+      treated as an error by default in source-to-source mode.
+    * To work around this issue, any of the following
+      command-line options can be specified:
+        * `-Wno-error=openacc-omp-<OMP-EXT>`
+            * This converts the diagnostic to a warning to make it
+              easier to find all occurrences.
+        * `-Wno-openacc-omp-<OMP-EXT>`
+            * This disables the diagnostic entirely.
+            * This is useful if the generated OpenMP will not be
+              compiled or if the OpenMP compiler actually already
+              supports the OpenMP extension.
+        * `-fopenacc-<ACC-FEATURE>-omp=<KIND>`
+            * This suppresses the diagnostic by choosing the
+              alternative translation identified by `<KIND>` for the
+              OpenACC feature identified by `<ACC-FEATURE>`.
+            * For some OpenACC applications, the alternative
+              translation does not strictly conform to OpenACC
+              semantics as the OpenMP extension does, but it might be
+              sufficient for other OpenACC applications.
+            * There are various such imperfect translations that Clacc
+              currently does not support but that might be useful for
+              some OpenACC applications.  We will consider adding
+              support if there is user demand.  For each affected
+              OpenACC feature, the associated section of "OpenACC to
+              OpenMP Mapping" in `README-OpenACC-design.md` sometimes
+              includes a discussion of alternative translations that
+              we considered.
+* `-fopenacc[-ast]-print=acc`, `-ast-print`, `-ast-dump`,
+  etc. mode
+    * Debugging modes like these do not actually print OpenMP source
+      code, so they leave the aforementioned diagnostics disabled as
+      in traditional compilation mode.
+
+The remainder of this section describes OpenACC features that use
+OpenMP extensions by default, and it describes the associated
+command-line options mentioned above.
+
+### `update` Directive's Presence Restriction ###
+
+* OpenACC Features Affected
+    * `update` directive's `self`, `host`, or `device` clause when
+      `if_present` is not specified.
+* OpenMP Extension Employed
+    * `present` motion modifier (OpenMP TR8).
+* OpenACC Semantics Required
+    * OpenACC 3.0 requires variables appearing in `self`, `host`, or
+      `device` to be already present on the device when `if_present`
+      is not specified.  However, while it suggests a runtime error
+      when this restriction is violated by an application, it does not
+      strictly require any specific behavior.
+    * Changes have been proposed to the OpenACC specification to
+      strictly require a runtime error instead.
+    * Clacc uses the `present` motion modifier to implement the
+      proposed runtime error.
+* Diagnostic Options
+    * `-Wopenacc-omp-update-present`
+    * `-Wno-error=openacc-omp-update-present`
+    * `-Wno-openacc-omp-update-present`
+* Translation Options
+    * `-fopenacc-update-present-omp=present`
+        * This is the default translation.
+    * `-fopenacc-update-present-omp=no-present`
+        * This translation omits the `present` motion modifier.  The
+          `update` directive then always behaves as if it has an
+          `if_present` clause.  Thus, contrary to OpenACC semantics,
+          it never produces a runtime error when the specified
+          variable is not present on the device.
+        * However, this translation should be sufficient for OpenACC
+          applications that are robust enough not to actually
+          encounter this runtime error.
+
+### Structured Reference Counter ###
+
+* OpenACC Features Affected
+    * `data` and `parallel` directives' `present`, `copy`, `copyin`,
+      `copyout`, `create`, and `no_create` data attributes and
+      clauses.
+* OpenMP Extension Employed
+    * `hold` map type modifier.
+* OpenACC Semantics Required
+    * OpenACC specifies two reference counters for tracking device
+      allocations: a structured reference counter for `data` and
+      `parallel` directives, and a dynamic reference counter for
+      `enter data` and `exit data` directives and corresponding
+      OpenACC Runtime Library routines.
+    * OpenMP 5.0 specifies only one, which can thus be considered a
+      dynamic reference counter.
+    * Clacc uses the `hold` map type modifier extension to implement a
+      structured reference counter.
+* Diagnostic Options
+    * `-Wopenacc-omp-map-hold`
+    * `-Wno-error=openacc-omp-map-hold`
+    * `-Wno-openacc-omp-map-hold`
+* Translation Options
+    * `-fopenacc-structured-ref-count-omp=hold`
+        * This is the default translation.
+    * `-fopenacc-structured-ref-count-omp=no-hold`
+        * This translation omits the `hold` map type modifier.  Thus,
+          contrary to OpenACC semantics, it always uses the dynamic
+          reference counter, and so device memory might be deallocated
+          prematurely for some OpenACC applications.
+        * However, this translation should be sufficient if, for
+          example, an OpenACC application always pairs `enter data`
+          and `exit data` directives and corresponding OpenACC Runtime
+          Library routine calls in a structured manner.
+
+Currently, Clacc's implementation of its `hold` map type modifier
+extension for OpenMP is not well tested outside of Clacc's
+translations from OpenACC to OpenMP.  Thus, it is not yet recommended
+for use in hand-written OpenMP code as it might not integrate well
+with some OpenMP features.
+
+### `present` Clause's Presence Restriction ###
+
+* OpenACC Features Affected
+    * `present` clause.
+* OpenMP Extension Employed
+    * `present` map type modifier (OpenMP TR8)
+* OpenACC Semantics Required
+    * Clacc uses the `present` map type modifier to implement the
+      runtime error required by the OpenACC `present` clause in the
+      case that data is not already present on the device.
+    * This modifier is combined with the OpenMP `alloc` map type as
+      opposed to, for example, `tofrom` in order to suppress
+      device-to-host transfers in the case that there is a reference
+      count decrement within the associated region.
+* Diagnostic Options
+    * `-Wopenacc-omp-map-present`
+    * `-Wno-error=openacc-omp-map-present`
+    * `-Wno-openacc-omp-map-present`
+* Translation Options
+    * `-fopenacc-present-omp=present`
+        * This is the default translation.
+    * `-fopenacc-present-omp=alloc`
+        * This translation omits the `present` map type modifier.
+          Thus, contrary to OpenACC semantics, it never produces a
+          runtime error when the specified variable is not present
+          on the device.
+        * However, this translation should be sufficient for
+          OpenACC applications that are robust enough not to
+          actually encounter this runtime error.
+
+### `no_create` Clause's Presence Check ###
+
+* OpenACC Features Affected
+    * `no_create` clause
+* OpenMP Extensions Employed
+    * `no_alloc` map type modifier
+* OpenACC Semantics Required
+    * Clacc uses the `no_alloc` map type modifier to suppress all
+      runtime actions as required by the OpenACC `no_create` clause in
+      the case that data is not already present on the device.
+    * This modifier is combined with the OpenMP `alloc` map type as
+      opposed to, for example, `tofrom` in order to suppress
+      device-to-host transfers in the case that there is a reference
+      count decrement within the associated region.
+* Diagnostic Options
+    * `-Wopenacc-omp-map-no-alloc`
+    * `-Wno-error=openacc-omp-map-no-alloc`
+    * `-Wno-openacc-omp-map-no-alloc`
+* Translation Options
+    * `-fopenacc-no-create-omp=no-alloc`
+        * This is the default translation.
+    * `-fopenacc-no-create-omp=alloc`
+        * This translation omits the `no_alloc` map type modifier.
+          Thus, contrary to OpenACC semantics, it attempts to allocate
+          the specified variable when it is not already present on the
+          device.
+        * This translation is probably only useful when all of the
+          following conditions are met:
+            * The application is being tested with smaller data sets,
+              perhaps in initial attempts to port to OpenMP.
+              Otherwise, the unexpected allocations could produce
+              performance degradation or memory exhaustion.
+            * Any subarray specified in a `no_create` clause never
+              conflicts with any subarray already present on the
+              device or any subarray specification encountered during
+              the execution of the associated region.  The unexpected
+              allocations can cause such subarray conflicts to produce
+              compile-time or runtime errors.
+            * For any variable specified in a `no_create` clause, no
+              data transfers for that variable as specified by data
+              clauses are encountered during the execution of the
+              associated region.  The unexpected allocations can
+              suppress those data transfers.
+
+Currently, Clacc's implementation of its `no_alloc` map type modifier
+extension for OpenMP is not well tested outside of Clacc's
+translations from OpenACC to OpenMP.  Thus, it is not yet recommended
+for use in hand-written OpenMP code as it might not integrate well
+with some OpenMP features.
+
+OMPT
+----
+
+Some features of the OpenACC Profiling Interface depend on OMPT
+extensions. See the section "OpenACC Profiling Interface" in
+`README-OpenACC-design.md` for details.
