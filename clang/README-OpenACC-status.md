@@ -9,271 +9,301 @@ support OpenACC, and it identifies known limitations in those
 features.  Clacc does not yet support OpenACC features that are not
 mentioned here.
 
-* Build platforms
-    * Ubuntu 18.04 is regularly tested.
-    * CentOS 7.8 is regularly tested.
-    * Windows and macOS are not yet supported.
-* Command-line options
-    * See the section "Using" in `../README.md` for an introduction to
-      Clacc's command-line options.
-    * For brief descriptions of all OpenACC-related and OpenMP-related
-      command-line options, run Clacc's `clang -help` and search for
-      `openacc` or `openmp`.
-    * `-f[no-]openacc`
-        * Enables OpenACC support.
-        * Traditional compilation mode is the default.
-    * `-fopenacc[-ast]-print=acc|omp|acc-omp|omp-acc`
-        * Enables OpenACC support and source-to-source mode.
-        * See the section "Source-to-Source Translation" in
-          `README-OpenACC-design.md` for design details.
-    * `-fopenmp-targets=<triples>`
-        * In traditional compilation mode, specifies offloading device
-          instead of targeting host.
-        * Not supported for source-to-source mode
-        * See the section "Using" in `../README.md` for a list of
-          tested offloading target triples.
-        * See the section "Interaction with OpenMP Support" in
-          `README-OpenACC-design.md` for design details.
-    * Other OpenMP options
-        * `-fopenmp` produces an error when OpenACC support is enabled
-          as Clacc does not currently support combining OpenMP and
-          OpenACC in the same application.
-        * `-fopenmp-*` options not mentioned above are not supported
-          when OpenACC support is enabled.
-        * As usual when `-fopenmp` is not specified, OpenMP directives
-          are discarded but `-Wsource-uses-openmp` is available to
-          produce warnings for them.
-    * Options controlling the translation to OpenMP and related
-      diagnostics
-        * `-fopenacc-update-present-omp=KIND` where `KIND` is either
-          `present` or `no-present`
-        * `-fopenacc-structured-ref-count-omp=KIND` where `KIND` is
-          either `hold` or `no-hold`
-        * `-fopenacc-present-omp=KIND` where `KIND` is either
-          `present` or `alloc`
-        * `-fopenacc-no-create-omp=KIND` where `KIND` is either
-          `no_alloc` or `alloc`
-        * `-Wopenacc-omp-update-present`
-        * `-Wopenacc-omp-map-hold`
-        * `-Wopenacc-omp-map-present`
-        * `-Wopenacc-omp-map-no-alloc`
-        * See the section "OpenMP Extensions" below for details.
-    * Other diagnostic options
-        * `-Wsource-uses-openacc`
-            * Similar to `-Wsource-uses-openmp`, this enables warnings
-              about OpenACC directives when OpenACC support is not
-              enabled.
-        * `-Wopenacc-ignored-clause`
-            * See the discussion of the `vector_length` clause below.
-* Run-time environment variables
-    * `OMP_TARGET_OFFLOAD=disabled` for specifying at run time to
-      target the host.
-    * `ACC_PROFLIB` for the OpenACC Profiling Interface.
-* `update` directive
-    * Lexical context
-        * Appearing within a `data` construct is supported.
-    * Supported clauses
-        * `if_present`
-        * `self` and alias `host`
-        * `device`
-    * Subarrays specifying contiguous blocks are supported.
-    * Multiple subarrays of the same array on the same directive are
-      not yet supported.
-    * Members of structs or classes are not yet supported.
-    * See the section "OpenMP Extensions" below for caveats related to
-      source-to-source mode.
-* `data` directive
-    * Lexical context
-        * Any number of levels of nesting within other `data`
-          constructs is supported.
-    * Supported clauses
-        * `present`
-        * `copy` and aliases `pcopy` and `present_or_copy`
-        * `copyin` and aliases `pcopyin` and `present_or_copyin`
-            * `readonly` modifier is not yet supported.
-        * `copyout` and aliases `pcopyout` and `present_or_copyout`
-            * `zero` modifier is not yet supported.
-        * `create` and aliases `pcreate` and `present_or_create`
-            * `zero` modifier is not yet supported.
-        * `no_create`
-    * Subarrays specifying contiguous blocks are supported.
-    * See the section "OpenMP Extensions" below for caveats related to
-      source-to-source mode.
-* `parallel` directive
-    * Lexical context
-        * Appearing within a `data` construct is supported.
-    * Use without clauses is supported.
-    * Supported data attributes and clauses
-        * Implicit `copy` for non-scalars
-        * Implicit `firstprivate` for scalars
-        * For `present`, `copy`, `copyin`, `copyout`, `create`, and
-          `no_create` clauses and their aliases, support is the same
-          as for the `data` directive, as described above, including
-          source-to-source mode caveats.
-        * `firstprivate` clause
-        * `private` clause
-        * `reduction` clause
-            * Supports only scalars for now.
-            * Implies `copy` clause (overriding the implicit
-              `firstprivate` clause).
-            * `+`, `*`, `&&`, and `||` support exactly C11's
-              arithmetic types (integer and floating types).
-            * `max` and `min` support exactly C11's real types
-              (integer types and floating types except complex types)
-              and pointer types.
-            * `&`, `|`, and `^` support exactly C11's integer types.
-            * Deviations from OpenACC 2.6
-                * OpenACC 2.6 sec. 2.5.12p774 mistypes `^` as `%`.
-                  The latter would be nonsense as a reduction
-                  operator.
-                * OpenACC 2.6 specifies that reduction operators
-                  support "the numerical data types in C", which is
-                  not terminology used by the C11 standard, and then
-                  it lists specific types.  We use this description
-                  only as a guideline as some operators more
-                  reasonably support different types than the types
-                  listed.  For example, all operators can support
-                  `bool` and enumerated types, which are not listed,
-                  and `max` and `min` cannot support complex types,
-                  which are listed.
-                * Specifically, we have designed the operand type
-                  constraints for reduction operators to match the
-                  operand type constraints for C11's corresponding
-                  operators when combined with the general reduction
-                  constraint that the result type and both operand
-                  types must all be the same type.
-                * All such support depends on Clang's corresponding
-                  support for OpenMP reductions.  Some operand types
-                  might not be supported when compiling the generated
-                  OpenMP using a different compiler.
-    * `num_gangs`, `num_workers`, `vector_length` clauses
-        * The argument in all cases must be a positive integer
-          expression.
-        * The `vector_length` argument must also be a constant or
-          Clacc does not use the clause and reports a warning
-          diagnostic, which can be suppressed or converted to an error
-          using the `-W{no-,error=}openacc-ignored-clause`
-          command-line options.
-        * Notes:
-            * OpenACC 2.6 specifies only that the arguments must be
-              integer expressions.  However, OpenMP specifies the
-              stricter requirements above for `num_teams`,
-              `num_threads`, and `simdlen`, to which Clacc translates
-              the above clauses.
-            * A non-positive value here probably doesn't make sense
-              anyway.  Moreover, if the argument is an integer
-              constant (so that it can be statically analyzed), gcc
-              7.3.0 warns if it's non-positive.  However, pgcc 18.4-0
-              doesn't warn even if it's negative.
-            * Neither gcc 7.3.0 nor pgcc 18.4-0 warn if
-              `vector_length` receives a non-constant expression.
-              However, we're stuck with this restriction because we
-              translate to OpenMP `simdlen`.  OpenACC does permit the
-              compiler to ignore `vector_length` as a hint, so we
-              choose to ignore it and warn in the case of a
-              non-constant expression.
-* `loop` directive
-    * Lexical context
-        * Appearing within a `parallel` construct and any number of
-          levels of nesting within other `loop` directives are
-          supported.
-        * Appearing outside a `parallel` construct (that is, an
-          orphaned loop) is not yet supported.
-    * Use without clauses is supported.
-    * Supported partitionability clauses
-        * Implicit `independent`
-        * `seq`
-        * `independent`
-        * `auto`
-            * For now, always produces a sequential loop.
-    * Supported partitioning clauses
-        * `gang`
-        * `worker`
-        * `vector`
-        * Arguments to those clauses are not yet supported.
-        * For now, all three are ignored when combined with `auto`
-          clause because, for now, `auto` produces a sequential loop.
-        * Implicit `gang` clause
-            * This feature is not specified in OpenACC 2.7, but
-              existing OpenACC compilers implement it in some form.
-              Clacc attempts to mimic their behavior, but some details
-              might be different.  See the "Semantic Clarifications"
-              section in `README-OpenACC-design.md` for details.
-        * For now, if none of these clauses appear (explicitly or
-          implicitly), then a sequential loop is produced.
-    * The `collapse` clause is supported.
-    * Supported data attributes and clauses
-        * A loop control variable is:
-            * Implicit `shared` if `seq` is explicitly specified and
-              loop control variable is assigned but not declared in
-              init of attached `for` loop.
-            * Predetermined `private` otherwise.
-        * Implicit `shared` for other referenced variables
-        * `private` clause
-        * `reduction` clause
-            * See `reduction` clause for `parallel` directive for
-              general details about operand types and limitations.
-            * Various subtleties in the semantics of `reduction`
-              clauses on `loop` directives are discussed in the
-              "Semantic Clarifications" section in
-              `README-OpenACC-design.md`.  For example, a reduction on
-              a sequential loop specifies a reduction across gangs if
-              the reduction variable is gang-shared.  Many of these
-              subtleties are under discussion among the OpenACC
-              technical committee for clarification in the OpenACC
-              spec after 2.7.
-    * Detection of `break` statement for the associated loop
-        * Compile error if implicit/explicit `independent`.
-        * No error if `seq` or `auto`.
-        * This is important because Clang's implementation does not
-          permit `break` statements for OpenMP loops.
-        * In the future when `auto` doesn't always produce a
-          sequential loop, a `break` statement will force it to be
-          sequential, probably with a warning.
-        * Both the OpenACC and OpenMP implementations currently permit
-          `break` statements for nested loops that are associated via
-          a `collapse` clause, but that's probably a bug.
-* `parallel loop` directive
-    * All features currently supported by `parallel` and `loop`
-      directives are also supported here.
-    * A `reduction` clause implies a `copy` clause (overriding the
-      implicit `firstprivate` clause).
-* Subarrays
-    * Subarrays specifying contiguous blocks are supported.
-    * Subarrays specifying non-contiguous blocks in dynamic
-      multidimensional arrays are not yet supported.
-    * Subarrays in `firstprivate`, `private`, and `reduction` clauses
-      are not yet supported.
-    * Subarrays with no `:` and one integer (syntactically an array
-      subscript, such as `arr[5]`) are not yet supported.
-* Device-side directives
-    * Nesting of an `update`, `data`, `parallel`, or `parallel loop`
-      directive inside a `parallel`, `loop`, or `parallel loop`
-      construct is not yet supported.
-    * We're not aware of any OpenACC implementation that supports this
-      yet.
-* OpenACC Profiling Interface
-    * Clacc's support has been tested with TAU.
-    * The main limitations are currently as follows:
-        * Multiple callbacks per event type and callback toggling are
-          not yet supported.
-        * Callback registration is permitted only within the
-          `acc_register_library` function.
-        * `acc_ev_wait_start` and `acc_ev_wait_end` event types are
-          not yet supported.
-        * The `kernel_name`, `num_gangs`, `num_workers`,
-          `vector_length`, and `tool_info` fields are not yet
-          supported.
-        * The `acc_api_info` structure is not yet supported.
-    * See the section "OpenACC Profiling Interface" in
-      `README-OpenACC-design.md` for a more detailed description.
-* Language support
-    * C11 is supported with the following extensions:
-        * `__uint128_t`, `__int128_t`, `__SIZEOF_INT128__`
-    * The nested function definition extension for C is not yet
-      supported.
-    * C++ is not yet supported.
-    * Objective-C/C++ are not supported.
+Build Platforms
+---------------
+
+* Ubuntu 18.04 is regularly tested.
+* CentOS 7.8 is regularly tested.
+* Windows and macOS are not yet supported.
+
+Command-Line Options
+--------------------
+
+See the section "Using" in `../README.md` for an introduction to
+Clacc's command-line options.  For brief descriptions of all
+OpenACC-related and OpenMP-related command-line options, run Clacc's
+`clang -help` and search for `openacc` or `openmp`.
+
+* `-f[no-]openacc`
+    * Enables OpenACC support.
+    * Traditional compilation mode is the default.
+* `-fopenacc[-ast]-print=acc|omp|acc-omp|omp-acc`
+    * Enables OpenACC support and source-to-source mode.
+    * See the section "Source-to-Source Translation" in
+      `README-OpenACC-design.md` for design details.
+* `-fopenmp-targets=<triples>`
+    * In traditional compilation mode, specifies offloading device
+      instead of targeting host.
+    * Not supported for source-to-source mode
+    * See the section "Using" in `../README.md` for a list of tested
+      offloading target triples.
+    * See the section "Interaction with OpenMP Support" in
+      `README-OpenACC-design.md` for design details.
+* Other OpenMP options
+    * `-fopenmp` produces an error when OpenACC support is enabled as
+      Clacc does not currently support combining OpenMP and OpenACC in
+      the same application.
+    * `-fopenmp-*` options not mentioned above are not supported when
+      OpenACC support is enabled.
+    * As usual when `-fopenmp` is not specified, OpenMP directives are
+      discarded but `-Wsource-uses-openmp` is available to produce
+      warnings for them.
+* Options controlling the translation to OpenMP and related
+  diagnostics
+    * `-fopenacc-update-present-omp=KIND` where `KIND` is either
+      `present` or `no-present`
+    * `-fopenacc-structured-ref-count-omp=KIND` where `KIND` is either
+      `hold` or `no-hold`
+    * `-fopenacc-present-omp=KIND` where `KIND` is either `present` or
+      `alloc`
+    * `-fopenacc-no-create-omp=KIND` where `KIND` is either `no_alloc`
+      or `alloc`
+    * `-Wopenacc-omp-update-present`
+    * `-Wopenacc-omp-map-hold`
+    * `-Wopenacc-omp-map-present`
+    * `-Wopenacc-omp-map-no-alloc`
+    * See the section "OpenMP Extensions" below for details.
+* Other diagnostic options
+    * `-Wsource-uses-openacc`
+        * Similar to `-Wsource-uses-openmp`, this enables warnings
+          about OpenACC directives when OpenACC support is not
+          enabled.
+    * `-Wopenacc-ignored-clause`
+        * See the discussion of the `vector_length` clause below.
+
+Run-Time Environment Variables
+------------------------------
+
+* `OMP_TARGET_OFFLOAD=disabled` for specifying at run time to target
+  the host.
+* `ACC_PROFLIB` for the OpenACC Profiling Interface.
+
+`update` Directive
+------------------
+
+* Lexical context
+    * Appearing within a `data` construct is supported.
+* Supported clauses
+    * `if_present`
+    * `self` and alias `host`
+    * `device`
+* Subarrays specifying contiguous blocks are supported.
+* Multiple subarrays of the same array on the same directive are not
+  yet supported.
+* Members of structs or classes are not yet supported.
+* See the section "OpenMP Extensions" below for caveats related to
+  source-to-source mode.
+
+`data` Directive
+----------------
+
+* Lexical context
+    * Any number of levels of nesting within other `data` constructs
+      is supported.
+* Supported clauses
+    * `present`
+    * `copy` and aliases `pcopy` and `present_or_copy`
+    * `copyin` and aliases `pcopyin` and `present_or_copyin`
+        * `readonly` modifier is not yet supported.
+    * `copyout` and aliases `pcopyout` and `present_or_copyout`
+        * `zero` modifier is not yet supported.
+    * `create` and aliases `pcreate` and `present_or_create`
+        * `zero` modifier is not yet supported.
+    * `no_create`
+* Subarrays specifying contiguous blocks are supported.
+* See the section "OpenMP Extensions" below for caveats related to
+  source-to-source mode.
+
+`parallel` Directive
+--------------------
+
+* Lexical context
+    * Appearing within a `data` construct is supported.
+* Use without clauses is supported.
+* Supported data attributes and clauses
+    * Implicit `copy` for non-scalars
+    * Implicit `firstprivate` for scalars
+    * For `present`, `copy`, `copyin`, `copyout`, `create`, and
+      `no_create` clauses and their aliases, support is the same as
+      for the `data` directive, as described above, including
+      source-to-source mode caveats.
+    * `firstprivate` clause
+    * `private` clause
+    * `reduction` clause
+        * Supports only scalars for now.
+        * Implies `copy` clause (overriding the implicit
+          `firstprivate` clause).
+        * `+`, `*`, `&&`, and `||` support exactly C11's arithmetic
+          types (integer and floating types).
+        * `max` and `min` support exactly C11's real types (integer
+          types and floating types except complex types) and pointer
+          types.
+        * `&`, `|`, and `^` support exactly C11's integer types.
+        * Deviations from OpenACC 2.6
+            * OpenACC 2.6 sec. 2.5.12p774 mistypes `^` as `%`.  The
+              latter would be nonsense as a reduction operator.
+            * OpenACC 2.6 specifies that reduction operators support
+              "the numerical data types in C", which is not
+              terminology used by the C11 standard, and then it lists
+              specific types.  We use this description only as a
+              guideline as some operators more reasonably support
+              different types than the types listed.  For example, all
+              operators can support `bool` and enumerated types, which
+              are not listed, and `max` and `min` cannot support
+              complex types, which are listed.
+            * Specifically, we have designed the operand type
+              constraints for reduction operators to match the operand
+              type constraints for C11's corresponding operators when
+              combined with the general reduction constraint that the
+              result type and both operand types must all be the same
+              type.
+            * All such support depends on Clang's corresponding
+              support for OpenMP reductions.  Some operand types might
+              not be supported when compiling the generated OpenMP
+              using a different compiler.
+* `num_gangs`, `num_workers`, `vector_length` clauses
+    * The argument in all cases must be a positive integer expression.
+    * The `vector_length` argument must also be a constant or Clacc
+      does not use the clause and reports a warning diagnostic, which
+      can be suppressed or converted to an error using the
+      `-W{no-,error=}openacc-ignored-clause` command-line options.
+    * Notes:
+        * OpenACC 2.6 specifies only that the arguments must be
+          integer expressions.  However, OpenMP specifies the stricter
+          requirements above for `num_teams`, `num_threads`, and
+          `simdlen`, to which Clacc translates the above clauses.
+        * A non-positive value here probably doesn't make sense
+          anyway.  Moreover, if the argument is an integer constant
+          (so that it can be statically analyzed), gcc 7.3.0 warns if
+          it's non-positive.  However, pgcc 18.4-0 doesn't warn even
+          if it's negative.
+        * Neither gcc 7.3.0 nor pgcc 18.4-0 warn if `vector_length`
+          receives a non-constant expression.  However, we're stuck
+          with this restriction because we translate to OpenMP
+          `simdlen`.  OpenACC does permit the compiler to ignore
+          `vector_length` as a hint, so we choose to ignore it and
+          warn in the case of a non-constant expression.
+
+`loop` directive
+----------------
+
+* Lexical context
+    * Appearing within a `parallel` construct and any number of levels
+      of nesting within other `loop` directives are supported.
+    * Appearing outside a `parallel` construct (that is, an orphaned
+      loop) is not yet supported.
+* Use without clauses is supported.
+* Supported partitionability clauses
+    * Implicit `independent`
+    * `seq`
+    * `independent`
+    * `auto`
+        * For now, always produces a sequential loop.
+* Supported partitioning clauses
+    * `gang`
+    * `worker`
+    * `vector`
+    * Arguments to those clauses are not yet supported.
+    * For now, all three are ignored when combined with `auto` clause
+      because, for now, `auto` produces a sequential loop.
+    * Implicit `gang` clause
+        * This feature is not specified in OpenACC 2.7, but existing
+          OpenACC compilers implement it in some form.  Clacc attempts
+          to mimic their behavior, but some details might be
+          different.  See the "Semantic Clarifications" section in
+          `README-OpenACC-design.md` for details.
+    * For now, if none of these clauses appear (explicitly or
+      implicitly), then a sequential loop is produced.
+* The `collapse` clause is supported.
+* Supported data attributes and clauses
+    * A loop control variable is:
+        * Implicit `shared` if `seq` is explicitly specified and loop
+          control variable is assigned but not declared in init of
+          attached `for` loop.
+        * Predetermined `private` otherwise.
+    * Implicit `shared` for other referenced variables
+    * `private` clause
+    * `reduction` clause
+        * See `reduction` clause for `parallel` directive for general
+          details about operand types and limitations.
+        * Various subtleties in the semantics of `reduction` clauses
+          on `loop` directives are discussed in the "Semantic
+          Clarifications" section in `README-OpenACC-design.md`.  For
+          example, a reduction on a sequential loop specifies a
+          reduction across gangs if the reduction variable is
+          gang-shared.  Many of these subtleties are under discussion
+          among the OpenACC technical committee for clarification in
+          the OpenACC spec after 2.7.
+* Detection of `break` statement for the associated loop
+    * Compile error if implicit/explicit `independent`.
+    * No error if `seq` or `auto`.
+    * This is important because Clang's implementation does not permit
+      `break` statements for OpenMP loops.
+    * In the future when `auto` doesn't always produce a sequential
+      loop, a `break` statement will force it to be sequential,
+      probably with a warning.
+    * Both the OpenACC and OpenMP implementations currently permit
+      `break` statements for nested loops that are associated via a
+      `collapse` clause, but that's probably a bug.
+
+`parallel loop` Directive
+-------------------------
+
+* All features currently supported by `parallel` and `loop` directives
+  are also supported here.
+* A `reduction` clause implies a `copy` clause (overriding the
+  implicit `firstprivate` clause).
+
+Subarrays
+---------
+
+* Subarrays specifying contiguous blocks are supported.
+* Subarrays specifying non-contiguous blocks in dynamic
+  multidimensional arrays are not yet supported.
+* Subarrays in `firstprivate`, `private`, and `reduction` clauses are
+  not yet supported.
+* Subarrays with no `:` and one integer (syntactically an array
+  subscript, such as `arr[5]`) are not yet supported.
+
+Device-Side Directives
+----------------------
+
+Nesting of an `update`, `data`, `parallel`, or `parallel loop`
+directive inside a `parallel`, `loop`, or `parallel loop` construct is
+not yet supported.  We're not aware of any OpenACC implementation that
+supports this yet.
+
+OpenACC Profiling Interface
+---------------------------
+
+Clacc's support for the OpenACC Profiling Interface has been tested
+with TAU.
+
+The main limitations are currently as follows:
+
+* Multiple callbacks per event type and callback toggling are
+  not yet supported.
+* Callback registration is permitted only within the
+  `acc_register_library` function.
+* `acc_ev_wait_start` and `acc_ev_wait_end` event types are
+  not yet supported.
+* The `kernel_name`, `num_gangs`, `num_workers`,
+  `vector_length`, and `tool_info` fields are not yet
+  supported.
+* The `acc_api_info` structure is not yet supported.
+
+See the section "OpenACC Profiling Interface" in
+`README-OpenACC-design.md` for a more detailed description of Clacc's
+support.
+
+Language Support
+----------------
+
+* C11 is supported with the following extensions:
+    * `__uint128_t`, `__int128_t`, `__SIZEOF_INT128__`
+* The nested function definition extension for C is not yet supported.
+* C++ is not yet supported.
+* Objective-C/C++ are not supported.
 
 Source-to-Source Mode Limitations
 =================================
