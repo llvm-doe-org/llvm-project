@@ -1,5 +1,8 @@
 // Check "acc data".
 //
+// Interactions with "acc enter data" and "acc exit data" are checked in
+// enter-exit-data.c and fopenacc-structured-ref-count-omp.c.
+
 // Check -ast-dump before and after AST serialization.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \

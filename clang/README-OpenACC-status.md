@@ -95,6 +95,32 @@ Run-Time Environment Variables
 * See the section "OpenMP Extensions" below for caveats related to
   source-to-source mode.
 
+`enter data` Directive
+----------------------
+
+* Lexical context
+    * Appearing outside any OpenACC construct is supported.
+    * Appearing within a `data` construct is supported.
+* Supported clauses
+    * `copyin` and aliases `pcopyin` and `present_or_copyin`
+    * `create`
+        * `zero` modifier is not yet supported.
+* Subarrays specifying contiguous blocks are supported.
+
+`exit data` Directive
+----------------------
+
+* Lexical context
+    * Appearing outside any OpenACC construct is supported.
+    * Appearing within a `data` construct is supported.
+* Supported clauses
+    * `copyout` and aliases `pcopyout` and `present_or_copyout`
+    * `delete`
+* Subarrays specifying contiguous blocks are supported.
+* When offloading, the `exit data` directive must not be the first
+  OpenACC directive encountered at run time.  Otherwise, LLVM's OpenMP
+  runtime will complain that the device is uninitialized.
+
 `data` Directive
 ----------------
 

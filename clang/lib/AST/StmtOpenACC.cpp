@@ -116,6 +116,54 @@ ACCUpdateDirective *ACCUpdateDirective::CreateEmpty(const ASTContext &C,
   return new (Mem) ACCUpdateDirective(NumClauses);
 }
 
+ACCEnterDataDirective *
+ACCEnterDataDirective::Create(const ASTContext &C, SourceLocation StartLoc,
+                              SourceLocation EndLoc,
+                              ArrayRef<ACCClause *> Clauses) {
+  unsigned Size =
+      llvm::alignTo(sizeof(ACCEnterDataDirective), alignof(ACCClause *));
+  void *Mem =
+      C.Allocate(Size + sizeof(ACCClause *) * Clauses.size() + sizeof(Stmt *));
+  ACCEnterDataDirective *Dir =
+      new (Mem) ACCEnterDataDirective(StartLoc, EndLoc, Clauses.size());
+  Dir->setClauses(Clauses);
+  return Dir;
+}
+
+ACCEnterDataDirective *ACCEnterDataDirective::CreateEmpty(const ASTContext &C,
+                                                          unsigned NumClauses,
+                                                          EmptyShell) {
+  unsigned Size =
+      llvm::alignTo(sizeof(ACCEnterDataDirective), alignof(ACCClause *));
+  void *Mem =
+      C.Allocate(Size + sizeof(ACCClause *) * NumClauses + sizeof(Stmt *));
+  return new (Mem) ACCEnterDataDirective(NumClauses);
+}
+
+ACCExitDataDirective *
+ACCExitDataDirective::Create(const ASTContext &C, SourceLocation StartLoc,
+                             SourceLocation EndLoc,
+                             ArrayRef<ACCClause *> Clauses) {
+  unsigned Size =
+      llvm::alignTo(sizeof(ACCExitDataDirective), alignof(ACCClause *));
+  void *Mem =
+      C.Allocate(Size + sizeof(ACCClause *) * Clauses.size() + sizeof(Stmt *));
+  ACCExitDataDirective *Dir =
+      new (Mem) ACCExitDataDirective(StartLoc, EndLoc, Clauses.size());
+  Dir->setClauses(Clauses);
+  return Dir;
+}
+
+ACCExitDataDirective *ACCExitDataDirective::CreateEmpty(const ASTContext &C,
+                                                        unsigned NumClauses,
+                                                        EmptyShell) {
+  unsigned Size =
+      llvm::alignTo(sizeof(ACCExitDataDirective), alignof(ACCClause *));
+  void *Mem =
+      C.Allocate(Size + sizeof(ACCClause *) * NumClauses + sizeof(Stmt *));
+  return new (Mem) ACCExitDataDirective(NumClauses);
+}
+
 ACCDataDirective *ACCDataDirective::Create(
     const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
     ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt) {

@@ -258,14 +258,20 @@ static acc_event_info acc_get_other_event_info(acc_event_t event_type) {
              "kind=ompt_directve_unknown");
       ret.other_event.parent_construct = acc_construct_runtime_api;
       break;
+    case ompt_directive_target_update:
+      ret.other_event.parent_construct = acc_construct_update;
+      break;
+    case ompt_directive_target_enter_data:
+      ret.other_event.parent_construct = acc_construct_enter_data;
+      break;
+    case ompt_directive_target_exit_data:
+      ret.other_event.parent_construct = acc_construct_exit_data;
+      break;
     case ompt_directive_target_data:
       ret.other_event.parent_construct = acc_construct_data;
       break;
     case ompt_directive_target_teams:
       ret.other_event.parent_construct = acc_construct_parallel;
-      break;
-    case ompt_directive_target_update:
-      ret.other_event.parent_construct = acc_construct_update;
       break;
     }
     ret.other_event.implicit = !directive_info->is_explicit_event;

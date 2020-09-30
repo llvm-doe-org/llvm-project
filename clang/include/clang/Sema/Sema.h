@@ -10979,6 +10979,14 @@ public:
   StmtResult ActOnOpenACCUpdateDirective(ArrayRef<ACCClause *> Clauses,
                                          SourceLocation StartLoc,
                                          SourceLocation EndLoc);
+  /// Called on well-formed '\#pragma acc enter data'.
+  StmtResult ActOnOpenACCEnterDataDirective(ArrayRef<ACCClause *> Clauses,
+                                            SourceLocation StartLoc,
+                                            SourceLocation EndLoc);
+  /// Called on well-formed '\#pragma acc exit data'.
+  StmtResult ActOnOpenACCExitDataDirective(ArrayRef<ACCClause *> Clauses,
+                                           SourceLocation StartLoc,
+                                           SourceLocation EndLoc);
   /// Called on well-formed '\#pragma acc data' after parsing of the associated
   /// statement.
   StmtResult ActOnOpenACCDataDirective(
@@ -11069,6 +11077,11 @@ public:
   ACCClause *ActOnOpenACCNoCreateClause(
       ArrayRef<Expr *> VarList, SourceLocation StartLoc,
       SourceLocation LParenLoc, SourceLocation EndLoc);
+  /// Called for well-formed 'delete' clause.
+  ACCClause *ActOnOpenACCDeleteClause(ArrayRef<Expr *> VarList,
+                                      SourceLocation StartLoc,
+                                      SourceLocation LParenLoc,
+                                      SourceLocation EndLoc);
   /// Called for implicit 'shared' clause.
   ACCClause *ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList);
   /// Called on well-formed 'private' clause.

@@ -363,6 +363,101 @@ public:
   }
 };
 
+/// This represents '#pragma acc enter data' directive.
+///
+class ACCEnterDataDirective : public ACCExecutableDirective {
+  friend class ASTStmtReader;
+
+  /// Build directive with the given start and end location.
+  ///
+  /// \param StartLoc Starting location of the directive (directive keyword).
+  /// \param EndLoc Ending Location of the directive.
+  /// \param NumClauses Number of clauses.
+  ///
+  ACCEnterDataDirective(SourceLocation StartLoc, SourceLocation EndLoc,
+                        unsigned NumClauses)
+      : ACCExecutableDirective(this, ACCEnterDataDirectiveClass,
+                               ACCD_enter_data, StartLoc, EndLoc, NumClauses, 0,
+                               0) {}
+
+  /// Build an empty directive.
+  explicit ACCEnterDataDirective(unsigned NumClauses)
+      : ACCExecutableDirective(this, ACCEnterDataDirectiveClass,
+                               ACCD_enter_data, SourceLocation(),
+                               SourceLocation(), NumClauses, 0, 0) {}
+
+public:
+  /// Creates directive.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the directive kind.
+  /// \param EndLoc Ending Location of the directive.
+  /// \param Clauses List of clauses.
+  static ACCEnterDataDirective *Create(const ASTContext &C,
+                                       SourceLocation StartLoc,
+                                       SourceLocation EndLoc,
+                                       ArrayRef<ACCClause *> Clauses);
+
+  /// Creates an empty directive.
+  ///
+  /// \param C AST context.
+  /// \param NumClauses Number of clauses.
+  ///
+  static ACCEnterDataDirective *CreateEmpty(const ASTContext &C,
+                                            unsigned NumClauses, EmptyShell);
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == ACCEnterDataDirectiveClass;
+  }
+};
+
+/// This represents '#pragma acc exit data' directive.
+///
+class ACCExitDataDirective : public ACCExecutableDirective {
+  friend class ASTStmtReader;
+
+  /// Build directive with the given start and end location.
+  ///
+  /// \param StartLoc Starting location of the directive (directive keyword).
+  /// \param EndLoc Ending Location of the directive.
+  /// \param NumClauses Number of clauses.
+  ///
+  ACCExitDataDirective(SourceLocation StartLoc, SourceLocation EndLoc,
+                       unsigned NumClauses)
+      : ACCExecutableDirective(this, ACCExitDataDirectiveClass, ACCD_exit_data,
+                               StartLoc, EndLoc, NumClauses, 0, 0) {}
+
+  /// Build an empty directive.
+  explicit ACCExitDataDirective(unsigned NumClauses)
+      : ACCExecutableDirective(this, ACCExitDataDirectiveClass, ACCD_exit_data,
+                               SourceLocation(), SourceLocation(), NumClauses,
+                               0, 0) {}
+
+public:
+  /// Creates directive.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the directive kind.
+  /// \param EndLoc Ending Location of the directive.
+  /// \param Clauses List of clauses.
+  static ACCExitDataDirective *Create(const ASTContext &C,
+                                      SourceLocation StartLoc,
+                                      SourceLocation EndLoc,
+                                      ArrayRef<ACCClause *> Clauses);
+
+  /// Creates an empty directive.
+  ///
+  /// \param C AST context.
+  /// \param NumClauses Number of clauses.
+  ///
+  static ACCExitDataDirective *CreateEmpty(const ASTContext &C,
+                                           unsigned NumClauses, EmptyShell);
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == ACCExitDataDirectiveClass;
+  }
+};
+
 /// This represents '#pragma acc data' directive.
 ///
 class ACCDataDirective : public ACCExecutableDirective {

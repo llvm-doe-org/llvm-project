@@ -1005,13 +1005,13 @@ int main() {
     FORLOOP
   #pragma acc parallel LOOP present_or_copyin(constI, constIDecl)
     FORLOOP
-  // expected-error@+1 2 {{const variable cannot be copyout because initialization is impossible}}
+  // expected-error@+1 2 {{const variable cannot be written by 'copyout' clause}}
   #pragma acc parallel LOOP copyout(constI, constIDecl)
     FORLOOP
-  // expected-error@+1 2 {{const variable cannot be copyout because initialization is impossible}}
+  // expected-error@+1 2 {{const variable cannot be written by 'pcopyout' clause}}
   #pragma acc parallel LOOP pcopyout(constI, constIDecl)
     FORLOOP
-  // expected-error@+1 2 {{const variable cannot be copyout because initialization is impossible}}
+  // expected-error@+1 2 {{const variable cannot be written by 'present_or_copyout' clause}}
   #pragma acc parallel LOOP present_or_copyout(constI, constIDecl)
     FORLOOP
   // expected-error@+1 2 {{const variable cannot be create because initialization is impossible}}

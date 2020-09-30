@@ -560,6 +560,8 @@ void Sema::StartOpenACCDABlock(OpenACCDirectiveKind RealDKind,
                                SourceLocation Loc) {
   switch (RealDKind) {
   case ACCD_update:
+  case ACCD_enter_data:
+  case ACCD_exit_data:
   case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
@@ -612,6 +614,9 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
     break;
   case ACCC_no_create:
     Res = ActOnOpenACCNoCreateClause(VarList, StartLoc, LParenLoc, EndLoc);
+    break;
+  case ACCC_delete:
+    Res = ActOnOpenACCDeleteClause(VarList, StartLoc, LParenLoc, EndLoc);
     break;
   case ACCC_private:
     Res = ActOnOpenACCPrivateClause(VarList, ACC_EXPLICIT, StartLoc, LParenLoc,
@@ -814,6 +819,7 @@ public:
     case ACC_DMA_copyout:
     case ACC_DMA_create:
     case ACC_DMA_no_create:
+    case ACC_DMA_delete:
     case ACC_DMA_unknown:
       llvm_unreachable("expected DMA that can be implicit");
     }
@@ -1420,6 +1426,8 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
       return ActOnOpenACCParallelLoopDirective(Clauses, AStmt, StartLoc,
                                                EndLoc);
     case ACCD_update:
+    case ACCD_enter_data:
+    case ACCD_exit_data:
     case ACCD_data:
     case ACCD_parallel:
     case ACCD_loop:
@@ -1583,6 +1591,16 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
            "expected no associated statement for 'acc update' directive");
     Res = ActOnOpenACCUpdateDirective(ComputedClauses, StartLoc, EndLoc);
     break;
+  case ACCD_enter_data:
+    assert(!AStmt &&
+           "expected no associated statement for 'acc enter data' directive");
+    Res = ActOnOpenACCEnterDataDirective(ComputedClauses, StartLoc, EndLoc);
+    break;
+  case ACCD_exit_data:
+    assert(!AStmt &&
+           "expected no associated statement for 'acc exit data' directive");
+    Res = ActOnOpenACCExitDataDirective(ComputedClauses, StartLoc, EndLoc);
+    break;
   case ACCD_data:
     Res = ActOnOpenACCDataDirective(ComputedClauses, AStmt, StartLoc, EndLoc);
     break;
@@ -1645,6 +1663,69 @@ StmtResult Sema::ActOnOpenACCUpdateDirective(ArrayRef<ACCClause *> Clauses,
   }
 
   return ACCUpdateDirective::Create(Context, StartLoc, EndLoc, Clauses);
+}
+
+StmtResult Sema::ActOnOpenACCEnterDataDirective(ArrayRef<ACCClause *> Clauses,
+                                                SourceLocation StartLoc,
+                                                SourceLocation EndLoc) {
+  // OpenACC 3.0 sec. 2.6.6 "Enter Data and Exit Data Directives" L1159-1160:
+  // "At least one copyin, create, or attach clause must appear on an enter data
+  // directive."
+  bool Found = false;
+  for (ACCClause *C : Clauses) {
+    switch (C->getClauseKind()) {
+#define OPENACC_CLAUSE_ALIAS_copyin(Name) \
+    case ACCC_##Name:
+#define OPENACC_CLAUSE_ALIAS_create(Name) \
+    case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+      Found = true;
+      break;
+    default:
+      llvm_unreachable("expected clause permitted on 'acc enter data' "
+                       "directive");
+    }
+    if (Found)
+      break;
+  }
+  if (!Found) {
+    Diag(StartLoc, diag::err_acc_no_data_clause)
+        << getOpenACCName(ACCD_enter_data);
+    return StmtError();
+  }
+
+  return ACCEnterDataDirective::Create(Context, StartLoc, EndLoc, Clauses);
+}
+
+StmtResult Sema::ActOnOpenACCExitDataDirective(ArrayRef<ACCClause *> Clauses,
+                                               SourceLocation StartLoc,
+                                               SourceLocation EndLoc) {
+  // OpenACC 3.0 sec. 2.6.6 "Enter Data and Exit Data Directives" L1161-1162:
+  // "At least one copyout, delete, or detach clause must appear on an exit data
+  // direcive."
+  bool Found = false;
+  for (ACCClause *C : Clauses) {
+    switch (C->getClauseKind()) {
+#define OPENACC_CLAUSE_ALIAS_copyout(Name) \
+    case ACCC_##Name:
+#include "clang/Basic/OpenACCKinds.def"
+    case ACCC_delete:
+      Found = true;
+      break;
+    default:
+      llvm_unreachable("expected clause permitted on 'acc exit data' "
+                       "directive");
+    }
+    if (Found)
+      break;
+  }
+  if (!Found) {
+    Diag(StartLoc, diag::err_acc_no_data_clause)
+        << getOpenACCName(ACCD_exit_data);
+    return StmtError();
+  }
+
+  return ACCExitDataDirective::Create(Context, StartLoc, EndLoc, Clauses);
 }
 
 StmtResult Sema::ActOnOpenACCDataDirective(
@@ -1851,6 +1932,7 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
   case ACCC_no_create:
+  case ACCC_delete:
   case ACCC_shared:
   case ACCC_private:
   case ACCC_firstprivate:
@@ -2122,11 +2204,12 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
     // variable cannot be copyout.  However, you can never initialize the
-    // device copy of such a variable, and that uninitialized value would be
-    // copied back to the host.
+    // device copy of such a variable (except that, in the case of acc exit
+    // data, another directive might have initialized it), and the value has to
+    // be written back to the host.
     if (Type.isConstant(Context)) {
-      Diag(ELoc, diag::err_acc_const_da)
-          << getOpenACCName(ACCC_copyout) << ERange;
+      Diag(ELoc, diag::err_acc_const_var_write)
+          << getOpenACCName(Kind) << ERange;
       Diag(VD->getLocation(), diag::note_acc_const) << VD;
       continue;
     }
@@ -2225,6 +2308,42 @@ ACCClause *Sema::ActOnOpenACCNoCreateClause(
     return nullptr;
 
   return ACCNoCreateClause::Create(Context, StartLoc, LParenLoc, EndLoc, Vars);
+}
+
+ACCClause *Sema::ActOnOpenACCDeleteClause(ArrayRef<Expr *> VarList,
+                                          SourceLocation StartLoc,
+                                          SourceLocation LParenLoc,
+                                          SourceLocation EndLoc) {
+  SmallVector<Expr *, 8> Vars;
+  for (auto &RefExpr : VarList) {
+    assert(RefExpr && "NULL expr in OpenACC delete clause.");
+    SourceLocation ELoc;
+    SourceRange ERange;
+    Expr *SimpleRefExpr = RefExpr;
+    VarDecl *VD = getVarDeclFromVarList(*this, ACCC_delete, SimpleRefExpr, ELoc,
+                                        ERange, /*AllowSubarray=*/true);
+    if (!VD)
+      continue;
+
+    QualType Type = VD->getType();
+
+    // The OpenACC 3.0 spec doesn't say, as far as I know, that a variable
+    // in a delete clause must have a complete type.  However, without its
+    // size, we cannot know if it's fully present.  Besides, it translates to
+    // an OpenMP map clause, which does require a complete type.
+    if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_delete,
+                               DirStack->getConstructLoc(), ELoc))
+      continue;
+
+    if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_delete,
+                          ACC_EXPLICIT))
+      Vars.push_back(RefExpr->IgnoreParens());
+  }
+
+  if (Vars.empty())
+    return nullptr;
+
+  return ACCDeleteClause::Create(Context, StartLoc, LParenLoc, EndLoc, Vars);
 }
 
 ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
@@ -2576,7 +2695,8 @@ ACCClause *Sema::ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
     // variable cannot be in a self clause, but updating it seems to be a
     // violation of const.
     if (Type.isConstant(Context)) {
-      Diag(ELoc, diag::err_acc_const_update) << ERange;
+      Diag(ELoc, diag::err_acc_const_var_write)
+          << getOpenACCName(Kind) << ERange;
       Diag(VD->getLocation(), diag::note_acc_const) << VD;
       continue;
     }
@@ -2620,7 +2740,8 @@ ACCClause *Sema::ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
     // variable cannot be in a device clause, but updating it seems to be a
     // violation of const.
     if (Type.isConstant(Context)) {
-      Diag(ELoc, diag::err_acc_const_update) << ERange;
+      Diag(ELoc, diag::err_acc_const_var_write)
+          << getOpenACCName(ACCC_device) << ERange;
       Diag(VD->getLocation(), diag::note_acc_const) << VD;
       continue;
     }
@@ -2706,6 +2827,7 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
   case ACCC_no_create:
+  case ACCC_delete:
   case ACCC_shared:
   case ACCC_private:
   case ACCC_firstprivate:

@@ -2297,6 +2297,18 @@ public:
                                                 EndLoc);
   }
 
+  /// Build a new OpenACC 'delete' clause.
+  ///
+  /// By default, performs semantic analysis to build the new OpenACC clause.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCDeleteClause(ArrayRef<Expr *> VarList,
+                                    SourceLocation StartLoc,
+                                    SourceLocation LParenLoc,
+                                    SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCDeleteClause(VarList, StartLoc, LParenLoc,
+                                              EndLoc);
+  }
+
   /// Build a new OpenACC 'shared' clause.
   ///
   /// By default, performs semantic analysis to build the new OpenACC clause.
@@ -10223,6 +10235,24 @@ TreeTransform<Derived>::TransformACCUpdateDirective(ACCUpdateDirective *D) {
 }
 
 template <typename Derived>
+StmtResult TreeTransform<Derived>::TransformACCEnterDataDirective(
+    ACCEnterDataDirective *D) {
+  getDerived().getSema().StartOpenACCDABlock(ACCD_enter_data, D->getBeginLoc());
+  StmtResult Res = getDerived().TransformACCExecutableDirective(D);
+  getDerived().getSema().EndOpenACCDABlock();
+  return Res;
+}
+
+template <typename Derived>
+StmtResult
+TreeTransform<Derived>::TransformACCExitDataDirective(ACCExitDataDirective *D) {
+  getDerived().getSema().StartOpenACCDABlock(ACCD_exit_data, D->getBeginLoc());
+  StmtResult Res = getDerived().TransformACCExecutableDirective(D);
+  getDerived().getSema().EndOpenACCDABlock();
+  return Res;
+}
+
+template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCDataDirective(ACCDataDirective *D) {
   getDerived().getSema().StartOpenACCDABlock(ACCD_data, D->getBeginLoc());
@@ -10400,6 +10430,21 @@ TreeTransform<Derived>::TransformACCNoCreateClause(ACCNoCreateClause *C) {
   }
   return getDerived().RebuildACCNoCreateClause(
       Vars, C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCDeleteClause(ACCDeleteClause *C) {
+  llvm::SmallVector<Expr *, 16> Vars;
+  Vars.reserve(C->varlist_size());
+  for (auto *VE : C->varlists()) {
+    ExprResult EVar = getDerived().TransformExpr(cast<Expr>(VE));
+    if (EVar.isInvalid())
+      return nullptr;
+    Vars.push_back(EVar.get());
+  }
+  return getDerived().RebuildACCDeleteClause(Vars, C->getBeginLoc(),
+                                             C->getLParenLoc(), C->getEndLoc());
 }
 
 template <typename Derived>

@@ -694,6 +694,64 @@ public:
   }
 };
 
+/// This represents the clause 'delete' for '#pragma acc ...' directives.
+///
+/// \code
+/// #pragma acc exit data delete(a,b)
+/// \endcode
+/// In this example directive '#pragma acc exit data' has clause 'delete' with
+/// the variables 'a' and 'b'.
+class ACCDeleteClause final
+    : public ACCVarListClause<ACCDeleteClause>,
+      private llvm::TrailingObjects<ACCDeleteClause, Expr *> {
+  friend TrailingObjects;
+  friend ACCVarListClause;
+  friend class ACCClauseReader;
+
+  /// Build clause with number of variables \a N.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param N Number of the variables in the clause.
+  ACCDeleteClause(SourceLocation StartLoc, SourceLocation LParenLoc,
+                  SourceLocation EndLoc, unsigned N)
+      : ACCVarListClause<ACCDeleteClause>(ACCC_delete, ACC_EXPLICIT, StartLoc,
+                                          LParenLoc, EndLoc, N) {}
+
+  /// Build an empty clause.
+  ///
+  /// \param N Number of variables.
+  explicit ACCDeleteClause(unsigned N)
+      : ACCVarListClause<ACCDeleteClause>(ACCC_delete, N) {}
+
+public:
+  /// Creates clause with a list of variables \a VL.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param VL List of references to the variables.
+  static ACCDeleteClause *Create(const ASTContext &C, SourceLocation StartLoc,
+                                 SourceLocation LParenLoc,
+                                 SourceLocation EndLoc, ArrayRef<Expr *> VL);
+  /// Creates an empty clause with the place for \a N variables.
+  ///
+  /// \param C AST context.
+  /// \param N The number of variables.
+  static ACCDeleteClause *CreateEmpty(const ASTContext &C, unsigned N);
+
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end()));
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_delete;
+  }
+};
+
 /// This represents the implicit clause 'shared' for '#pragma acc ...'.
 ///
 /// These clauses are computed implicitly by Clang.  Currently, OpenACC does

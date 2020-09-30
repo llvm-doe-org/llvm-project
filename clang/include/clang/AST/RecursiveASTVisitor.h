@@ -3562,6 +3562,12 @@ bool RecursiveASTVisitor<Derived>::TraverseACCExecutableDirective(
 DEF_TRAVERSE_STMT(ACCUpdateDirective,
                   { TRY_TO(TraverseACCExecutableDirective(S)); })
 
+DEF_TRAVERSE_STMT(ACCEnterDataDirective,
+                  { TRY_TO(TraverseACCExecutableDirective(S)); })
+
+DEF_TRAVERSE_STMT(ACCExitDataDirective,
+                  { TRY_TO(TraverseACCExecutableDirective(S)); })
+
 DEF_TRAVERSE_STMT(ACCDataDirective,
                   { TRY_TO(TraverseACCExecutableDirective(S)); })
 
@@ -3642,6 +3648,12 @@ bool RecursiveASTVisitor<Derived>::VisitACCCreateClause(ACCCreateClause *C) {
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCNoCreateClause(ACCNoCreateClause *C) {
+  TRY_TO(VisitACCClauseList(C));
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCDeleteClause(ACCDeleteClause *C) {
   TRY_TO(VisitACCClauseList(C));
   return true;
 }

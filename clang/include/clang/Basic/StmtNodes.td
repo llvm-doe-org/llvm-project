@@ -276,6 +276,8 @@ def OMPTargetTeamsDistributeSimdDirective : StmtNode<OMPLoopDirective>;
 // OpenACC Directives.
 def ACCExecutableDirective : StmtNode<Stmt, 1>;
 def ACCUpdateDirective : StmtNode<ACCExecutableDirective>;
+def ACCEnterDataDirective : StmtNode<ACCExecutableDirective>;
+def ACCExitDataDirective : StmtNode<ACCExecutableDirective>;
 def ACCDataDirective : StmtNode<ACCExecutableDirective>;
 def ACCParallelDirective : StmtNode<ACCExecutableDirective>;
 def ACCLoopDirective : StmtNode<ACCExecutableDirective>;

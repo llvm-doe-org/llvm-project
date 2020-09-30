@@ -27,7 +27,8 @@ enum OpenACCDirectiveKind {
 #define OPENACC_DIRECTIVE_EXT(Name, Str) \
   ACCD_##Name,
 #include "clang/Basic/OpenACCKinds.def"
-  ACCD_unknown
+  ACCD_unknown,
+  ACCD_LAST_KIND = ACCD_unknown
 };
 
 /// How OpenACC clauses or data attributes are determined.

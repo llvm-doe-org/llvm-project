@@ -1408,11 +1408,13 @@ CanThrowResult Sema::canThrow(const Stmt *S) {
 
     // Most statements can throw if any substatement can throw.
   case Stmt::AttributedStmtClass:
+  case Stmt::ACCUpdateDirectiveClass:
+  case Stmt::ACCEnterDataDirectiveClass:
+  case Stmt::ACCExitDataDirectiveClass:
   case Stmt::ACCDataDirectiveClass:
   case Stmt::ACCLoopDirectiveClass:
   case Stmt::ACCParallelDirectiveClass:
   case Stmt::ACCParallelLoopDirectiveClass:
-  case Stmt::ACCUpdateDirectiveClass:
   case Stmt::BreakStmtClass:
   case Stmt::CapturedStmtClass:
   case Stmt::CaseStmtClass:

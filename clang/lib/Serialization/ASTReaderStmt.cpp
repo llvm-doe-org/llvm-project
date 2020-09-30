@@ -2596,6 +2596,20 @@ void ASTStmtReader::VisitACCUpdateDirective(ACCUpdateDirective *D) {
   VisitACCExecutableDirective(D);
 }
 
+void ASTStmtReader::VisitACCEnterDataDirective(ACCEnterDataDirective *D) {
+  VisitStmt(D);
+  // The NumClauses field was read in ReadStmtFromStream.
+  Record.skipInts(1);
+  VisitACCExecutableDirective(D);
+}
+
+void ASTStmtReader::VisitACCExitDataDirective(ACCExitDataDirective *D) {
+  VisitStmt(D);
+  // The NumClauses field was read in ReadStmtFromStream.
+  Record.skipInts(1);
+  VisitACCExecutableDirective(D);
+}
+
 void ASTStmtReader::VisitACCDataDirective(ACCDataDirective *D) {
   VisitStmt(D);
   // The NumClauses field was read in ReadStmtFromStream.
@@ -3533,6 +3547,18 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       unsigned NumClauses = Record[ASTStmtReader::NumStmtFields + 1];
       S = OMPTargetTeamsDistributeSimdDirective::CreateEmpty(
           Context, NumClauses, CollapsedNum, Empty);
+      break;
+    }
+
+    case STMT_ACC_ENTER_DATA_DIRECTIVE: {
+      unsigned NumClauses = Record[ASTStmtReader::NumStmtFields];
+      S = ACCEnterDataDirective::CreateEmpty(Context, NumClauses, Empty);
+      break;
+    }
+
+    case STMT_ACC_EXIT_DATA_DIRECTIVE: {
+      unsigned NumClauses = Record[ASTStmtReader::NumStmtFields];
+      S = ACCExitDataDirective::CreateEmpty(Context, NumClauses, Empty);
       break;
     }
 

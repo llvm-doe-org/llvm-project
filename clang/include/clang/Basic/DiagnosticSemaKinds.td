@@ -10420,8 +10420,8 @@ def err_acc_update_same_var : Error<
   "variable '%0' appears in multiple self, host, or device clauses of the "
   "same '#pragma acc update' directive">;
 def note_acc_update_var : Note<"previously appeared here">;
-def err_acc_const_update : Error<
-  "const variable cannot be updated by '#pragma acc update'">;
+def err_acc_const_var_write : Error<
+  "const variable cannot be written by '%0' clause">;
 def err_acc_const_da : Error<
   "const variable cannot be %0 because initialization is impossible">;
 def note_acc_const : Note<

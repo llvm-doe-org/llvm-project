@@ -233,13 +233,13 @@ int main() {
 
   // Variables of const type.
 
-  // expected-error@+2 2 {{const variable cannot be updated by '#pragma acc update'}}
+  // expected-error@+2 2 {{const variable cannot be written by 'self' clause}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update self(constI, constIDecl)
-  // expected-error@+2 2 {{const variable cannot be updated by '#pragma acc update'}}
+  // expected-error@+2 2 {{const variable cannot be written by 'host' clause}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update host(constADecl) host(constA)
-  // expected-error@+2 2 {{const variable cannot be updated by '#pragma acc update'}}
+  // expected-error@+2 2 {{const variable cannot be written by 'device' clause}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update device(constI) device(constADecl)
 

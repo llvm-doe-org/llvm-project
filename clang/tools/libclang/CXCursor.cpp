@@ -804,6 +804,12 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::ACCUpdateDirectiveClass:
     K = CXCursor_ACCUpdateDirective;
     break;
+  case Stmt::ACCEnterDataDirectiveClass:
+    K = CXCursor_ACCEnterDataDirective;
+    break;
+  case Stmt::ACCExitDataDirectiveClass:
+    K = CXCursor_ACCExitDataDirective;
+    break;
   case Stmt::ACCDataDirectiveClass:
     K = CXCursor_ACCDataDirective;
     break;

@@ -1158,6 +1158,9 @@ void ACCClauseProfiler::VisitACCCreateClause(const ACCCreateClause *C) {
 void ACCClauseProfiler::VisitACCNoCreateClause(const ACCNoCreateClause *C) {
   VisitACCClauseList(C);
 }
+void ACCClauseProfiler::VisitACCDeleteClause(const ACCDeleteClause *C) {
+  VisitACCClauseList(C);
+}
 void ACCClauseProfiler::VisitACCSharedClause(const ACCSharedClause *C) {
   VisitACCClauseList(C);
 }
@@ -1219,6 +1222,14 @@ StmtProfiler::VisitACCExecutableDirective(const ACCExecutableDirective *S) {
 }
 
 void StmtProfiler::VisitACCUpdateDirective(const ACCUpdateDirective *S) {
+  VisitACCExecutableDirective(S);
+}
+
+void StmtProfiler::VisitACCEnterDataDirective(const ACCEnterDataDirective *S) {
+  VisitACCExecutableDirective(S);
+}
+
+void StmtProfiler::VisitACCExitDataDirective(const ACCExitDataDirective *S) {
   VisitACCExecutableDirective(S);
 }
 

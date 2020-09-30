@@ -302,8 +302,21 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     }
   };
 
-  void addHoldMapTypeModifier(ACCClause *C,
+  void addHoldMapTypeModifier(ACCExecutableDirective *D, ACCClause *C,
                               SmallVectorImpl<OpenMPMapModifierKind> &MapMods) {
+    switch (D->getDirectiveKind()) {
+    case ACCD_enter_data:
+    case ACCD_exit_data:
+      return;
+    case ACCD_data:
+    case ACCD_parallel:
+    case ACCD_parallel_loop:
+      break;
+    case ACCD_update:
+    case ACCD_loop:
+    case ACCD_unknown:
+      llvm_unreachable("expected directive that takes data clauses");
+    }
     switch (getSema().LangOpts.getOpenACCStructuredRefCountOMP()) {
     case LangOptions::OpenACCStructuredRefCountOMP_Hold:
       MapMods.push_back(OMPC_MAP_MODIFIER_hold);
@@ -477,6 +490,86 @@ public:
     else
       Res = getDerived().RebuildOMPExecutableDirective(
           OMPD_target_update, DeclarationNameInfo(), OMPD_unknown, TClauses,
+          AssociatedStmt.get(), D->getBeginLoc(), D->getEndLoc());
+    getSema().EndOpenMPDSABlock(Res.get());
+    if (!Res.isInvalid())
+      D->setOMPNode(Res.get());
+    return Res;
+  }
+
+  StmtResult TransformACCEnterDataDirective(ACCEnterDataDirective *D) {
+    DirStackEntryRAII TheDirStackEntryRAII(*this, D);
+
+    // Start OpenMP DA block.
+    getSema().StartOpenMPDSABlock(OMPD_target_enter_data, DeclarationNameInfo(),
+                                  /*CurScope=*/nullptr, D->getBeginLoc());
+
+    // Transform OpenACC clauses.
+    llvm::SmallVector<OMPClause *, 16> TClauses;
+    size_t TClausesEmptyCount;
+    size_t NumClausesAdded = 0;
+    transformACCClauses(D, OMPD_target_enter_data, TClauses, TClausesEmptyCount,
+                        NumClausesAdded);
+
+    // Neither acc enter data nor omp target enter data have associated
+    // statements, but for some reason OMPTargetEnterDataDirective expects one.
+    assert(!D->hasAssociatedStmt() &&
+           "expected no associated statement on 'acc enter data' directive");
+    getSema().ActOnOpenMPRegionStart(OMPD_target_enter_data, nullptr);
+    StmtResult AssociatedStmt =
+        (Sema::CompoundScopeRAII(getSema()),
+         getSema().ActOnCompoundStmt(D->getEndLoc(), D->getEndLoc(), llvm::None,
+                                     /*isStmtExpr=*/false));
+    AssociatedStmt = getSema().ActOnOpenMPRegionEnd(AssociatedStmt, TClauses);
+
+    // Build OpenMP directive and finalize enclosing compound statement, if any.
+    StmtResult Res;
+    if (TClauses.size() !=
+        D->clauses().size() - TClausesEmptyCount + NumClausesAdded)
+      Res = StmtError();
+    else
+      Res = getDerived().RebuildOMPExecutableDirective(
+          OMPD_target_enter_data, DeclarationNameInfo(), OMPD_unknown, TClauses,
+          AssociatedStmt.get(), D->getBeginLoc(), D->getEndLoc());
+    getSema().EndOpenMPDSABlock(Res.get());
+    if (!Res.isInvalid())
+      D->setOMPNode(Res.get());
+    return Res;
+  }
+
+  StmtResult TransformACCExitDataDirective(ACCExitDataDirective *D) {
+    DirStackEntryRAII TheDirStackEntryRAII(*this, D);
+
+    // Start OpenMP DA block.
+    getSema().StartOpenMPDSABlock(OMPD_target_exit_data, DeclarationNameInfo(),
+                                  /*CurScope=*/nullptr, D->getBeginLoc());
+
+    // Transform OpenACC clauses.
+    llvm::SmallVector<OMPClause *, 16> TClauses;
+    size_t TClausesEmptyCount;
+    size_t NumClausesAdded = 0;
+    transformACCClauses(D, OMPD_target_exit_data, TClauses, TClausesEmptyCount,
+                        NumClausesAdded);
+
+    // Neither acc exit data nor omp target exit data have associated
+    // statements, but for some reason OMPTargetEnterDataDirective expects one.
+    assert(!D->hasAssociatedStmt() &&
+           "expected no associated statement on 'acc exit data' directive");
+    getSema().ActOnOpenMPRegionStart(OMPD_target_exit_data, nullptr);
+    StmtResult AssociatedStmt =
+        (Sema::CompoundScopeRAII(getSema()),
+         getSema().ActOnCompoundStmt(D->getEndLoc(), D->getEndLoc(), llvm::None,
+                                     /*isStmtExpr=*/false));
+    AssociatedStmt = getSema().ActOnOpenMPRegionEnd(AssociatedStmt, TClauses);
+
+    // Build OpenMP directive and finalize enclosing compound statement, if any.
+    StmtResult Res;
+    if (TClauses.size() !=
+        D->clauses().size() - TClausesEmptyCount + NumClausesAdded)
+      Res = StmtError();
+    else
+      Res = getDerived().RebuildOMPExecutableDirective(
+          OMPD_target_exit_data, DeclarationNameInfo(), OMPD_unknown, TClauses,
           AssociatedStmt.get(), D->getBeginLoc(), D->getEndLoc());
     getSema().EndOpenMPDSABlock(Res.get());
     if (!Res.isInvalid())
@@ -874,7 +967,7 @@ public:
     case LangOptions::OpenACCPresentOMP_Alloc:
       break;
     }
-    addHoldMapTypeModifier(C, MapMods);
+    addHoldMapTypeModifier(D, C, MapMods);
     return transformACCVarListClause<ACCPresentClause>(
         D, C, OMPC_map,
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
@@ -893,7 +986,7 @@ public:
                                          OpenMPDirectiveKind TDKind,
                                          ACCCopyClause *C) {
     SmallVector<OpenMPMapModifierKind, 1> MapMods;
-    addHoldMapTypeModifier(C, MapMods);
+    addHoldMapTypeModifier(D, C, MapMods);
     return transformACCVarListClause<ACCCopyClause>(
         D, C, OMPC_map,
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
@@ -912,7 +1005,7 @@ public:
                                            OpenMPDirectiveKind TDKind,
                                            ACCCopyinClause *C) {
     SmallVector<OpenMPMapModifierKind, 1> MapMods;
-    addHoldMapTypeModifier(C, MapMods);
+    addHoldMapTypeModifier(D, C, MapMods);
     return transformACCVarListClause<ACCCopyinClause>(
         D, C, OMPC_map,
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
@@ -931,7 +1024,7 @@ public:
                                             OpenMPDirectiveKind TDKind,
                                             ACCCopyoutClause *C) {
     SmallVector<OpenMPMapModifierKind, 1> MapMods;
-    addHoldMapTypeModifier(C, MapMods);
+    addHoldMapTypeModifier(D, C, MapMods);
     return transformACCVarListClause<ACCCopyoutClause>(
         D, C, OMPC_map,
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
@@ -950,7 +1043,7 @@ public:
                                            OpenMPDirectiveKind TDKind,
                                            ACCCreateClause *C) {
     SmallVector<OpenMPMapModifierKind, 1> MapMods;
-    addHoldMapTypeModifier(C, MapMods);
+    addHoldMapTypeModifier(D, C, MapMods);
     return transformACCVarListClause<ACCCreateClause>(
         D, C, OMPC_map,
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
@@ -986,7 +1079,7 @@ public:
     case LangOptions::OpenACCNoCreateOMP_Alloc:
       break;
     }
-    addHoldMapTypeModifier(C, MapMods);
+    addHoldMapTypeModifier(D, C, MapMods);
     return transformACCVarListClause<ACCNoCreateClause>(
         D, C, OMPC_map,
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
@@ -996,6 +1089,20 @@ public:
           return getDerived().RebuildOMPMapClause(
               MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
               OMPC_MAP_alloc, /*IsMapTypeImplicit=*/false, L.LocStart,
+              L.LParenLoc, Vars,
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+        });
+  }
+
+  OMPClauseResult TransformACCDeleteClause(ACCExecutableDirective *D,
+                                           OpenMPDirectiveKind TDKind,
+                                           ACCDeleteClause *C) {
+    return transformACCVarListClause<ACCDeleteClause>(
+        D, C, OMPC_map,
+        [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
+          return getDerived().RebuildOMPMapClause(
+              llvm::None, llvm::None, CXXScopeSpec(), DeclarationNameInfo(),
+              OMPC_MAP_release, /*IsMapTypeImplicit=*/false, L.LocStart,
               L.LParenLoc, Vars,
               OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
         });

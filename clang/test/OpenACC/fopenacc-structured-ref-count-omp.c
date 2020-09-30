@@ -1,5 +1,6 @@
 // Check the effect of -fopenacc-structured-ref-count-omp on the translation of
-// data clauses, and check the effect on the presence of data at run time.
+// data clauses, and check the effect on the presence of data at run time, in
+// particular when acc exit data is called more times than acc enter data.
 //
 // In various other tests for specific directives and clauses, various other
 // dimensions of data clause behavior are checked thoroughly when 'hold' is
@@ -14,9 +15,6 @@
 // LIBOMPTARGET_DEBUG=1, but it only works in debug builds.  Our solution is to
 // utilize the OpenACC Profiling Interface, which we usually only exercise in
 // the runtime test suite.
-//
-// TODO: Once "acc exit data" is implemented, extend this test to be sure that
-// cannot remove data when 'hold' is used but can otherwise.
 
 // Check bad -fopenacc-structured-ref-count-omp values.
 //
@@ -40,9 +38,9 @@
 // BAD-VAL: error: invalid value '[[VAL]]' in '-fopenacc-structured-ref-count-omp=[[VAL]]'
 
 // RUN: %data ref-count-opts {
-// RUN:   (ref-count-opt=-Wno-openacc-omp-map-hold                                           hold='hold,')
-// RUN:   (ref-count-opt='-fopenacc-structured-ref-count-omp=hold -Wno-openacc-omp-map-hold' hold='hold,')
-// RUN:   (ref-count-opt=-fopenacc-structured-ref-count-omp=no-hold                          hold=       )
+// RUN:   (ref-count-opt=-Wno-openacc-omp-map-hold                                           hold-comma='hold,' hold-or-no-hold=HOLD)
+// RUN:   (ref-count-opt='-fopenacc-structured-ref-count-omp=hold -Wno-openacc-omp-map-hold' hold-comma='hold,' hold-or-no-hold=HOLD)
+// RUN:   (ref-count-opt=-fopenacc-structured-ref-count-omp=no-hold                          hold-comma=        hold-or-no-hold=NO-HOLD)
 // RUN: }
 
 // Check -ast-dump before and after AST serialization.
@@ -87,7 +85,7 @@
 // RUN:     %clang -Xclang -verify %[prt] %[ref-count-opt] %t-acc.c \
 // RUN:            %acc_includes -Wno-openacc-omp-map-present \
 // RUN:            -Wno-openacc-omp-map-no-alloc \
-// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DHOLD='%[hold]' %s
+// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DHOLD='%[hold-comma]' %s
 // RUN:   }
 // RUN: }
 
@@ -102,7 +100,7 @@
 // RUN:          -o %t.ast %acc_includes
 // RUN:   %for prt-args {
 // RUN:     %clang %[prt] %t.ast 2>&1 \
-// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DHOLD='%[hold]' %s
+// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DHOLD='%[hold-comma]' %s
 // RUN:   }
 // RUN: }
 
@@ -134,7 +132,8 @@
 // RUN:       %[run-if] %t.exe > %t.out 2>&1
 // RUN:       %[run-if] FileCheck -input-file %t.out %s \
 // RUN:         -match-full-lines -allow-empty \
-// RUN:         -check-prefixes=EXE,EXE-%[host-or-dev]
+// RUN:         -check-prefixes=EXE,EXE-%[host-or-dev] \
+// RUN:         -check-prefixes=EXE-%[host-or-dev]-%[hold-or-no-hold]
 // RUN:     }
 // RUN:   }
 // RUN: }
@@ -148,7 +147,8 @@
 // RUN:     %[run-if] %t.exe > %t.out 2>&1
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
 // RUN:       -match-full-lines -allow-empty \
-// RUN:       -check-prefixes=EXE,EXE-%[host-or-dev]
+// RUN:       -check-prefixes=EXE,EXE-%[host-or-dev] \
+// RUN:       -check-prefixes=EXE-%[host-or-dev]-%[hold-or-no-hold]
 // RUN:   }
 // RUN: }
 
@@ -217,7 +217,7 @@ int main() {
   printf("start\n");
 
   //--------------------------------------------------
-  // Initially absent.
+  // acc data when initially absent.
   //--------------------------------------------------
 
   // DMP-LABEL: ACCDataDirective
@@ -242,7 +242,7 @@ int main() {
   //  DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int'
   //  DMP-NEXT:     OMPMapClause
   //  DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int'
-  //   DMP-NOT: -{{OMP|ACC}}
+  //   DMP-NOT: -{{ACC}}
   //
   //  PRT-A-NEXT: #pragma acc data copy(c) copyin(ci) copyout(co) create(cr)
   //  PRT-A-SAME: {{^}} no_create(nc){{$}}
@@ -268,18 +268,41 @@ int main() {
   // EXE-DEV-NEXT: acc_ev_create var_name={{<null>|cr}}
   // EXE-DEV-NEXT: acc_ev_enter_data_end
   #pragma acc data copy(c) copyin(ci) copyout(co) create(cr) no_create(nc)
-  // PRT: ;
-  ;
-  // EXE-DEV-NEXT: acc_ev_exit_data_start
-  // EXE-DEV-NEXT: acc_ev_delete var_name={{<null>|cr}}
-  // EXE-DEV-NEXT: acc_ev_free   var_name={{<null>|cr}}
-  // EXE-DEV-NEXT: acc_ev_delete var_name={{<null>|co}}
-  // EXE-DEV-NEXT: acc_ev_free   var_name={{<null>|co}}
-  // EXE-DEV-NEXT: acc_ev_delete var_name={{<null>|ci}}
-  // EXE-DEV-NEXT: acc_ev_free   var_name={{<null>|ci}}
-  // EXE-DEV-NEXT: acc_ev_delete var_name={{<null>|c}}
-  // EXE-DEV-NEXT: acc_ev_free   var_name={{<null>|c}}
-  // EXE-DEV-NEXT: acc_ev_exit_data_end
+  // PRT-NEXT: {
+  {
+    // DMP: ACCExitDataDirective
+    //
+    //  PRT-A-NEXT: #pragma acc exit data copyout(c,ci,co) delete(cr){{$}}
+    // PRT-AO-NEXT: // #pragma omp target exit data map(from: c,ci,co) map(release: cr){{$}}
+    //  PRT-O-NEXT: #pragma omp target exit data map(from: c,ci,co) map(release: cr){{$}}
+    // PRT-OA-NEXT: // #pragma acc exit data copyout(c,ci,co) delete(cr){{$}}
+    //
+    // EXE-DEV-NEXT: acc_ev_exit_data_start
+    // EXE-DEV-NO-HOLD-NEXT: acc_ev_delete var_name={{<null>|cr}}
+    // EXE-DEV-NO-HOLD-NEXT: acc_ev_free   var_name={{<null>|cr}}
+    // EXE-DEV-NO-HOLD-NEXT: acc_ev_delete var_name={{<null>|co}}
+    // EXE-DEV-NO-HOLD-NEXT: acc_ev_free   var_name={{<null>|co}}
+    // EXE-DEV-NO-HOLD-NEXT: acc_ev_delete var_name={{<null>|ci}}
+    // EXE-DEV-NO-HOLD-NEXT: acc_ev_free   var_name={{<null>|ci}}
+    // EXE-DEV-NO-HOLD-NEXT: acc_ev_delete var_name={{<null>|c}}
+    // EXE-DEV-NO-HOLD-NEXT: acc_ev_free   var_name={{<null>|c}}
+    // EXE-DEV-NEXT: acc_ev_exit_data_end
+    #pragma acc exit data copyout(c,ci,co) delete(cr)
+  } // PRT-NEXT: }
+  //      EXE-DEV-NEXT: acc_ev_exit_data_start
+  // EXE-DEV-HOLD-NEXT: acc_ev_delete var_name={{<null>|cr}}
+  // EXE-DEV-HOLD-NEXT: acc_ev_free   var_name={{<null>|cr}}
+  // EXE-DEV-HOLD-NEXT: acc_ev_delete var_name={{<null>|co}}
+  // EXE-DEV-HOLD-NEXT: acc_ev_free   var_name={{<null>|co}}
+  // EXE-DEV-HOLD-NEXT: acc_ev_delete var_name={{<null>|ci}}
+  // EXE-DEV-HOLD-NEXT: acc_ev_free   var_name={{<null>|ci}}
+  // EXE-DEV-HOLD-NEXT: acc_ev_delete var_name={{<null>|c}}
+  // EXE-DEV-HOLD-NEXT: acc_ev_free   var_name={{<null>|c}}
+  //      EXE-DEV-NEXT: acc_ev_exit_data_end
+
+  //--------------------------------------------------
+  // acc parallel when initially absent.
+  //--------------------------------------------------
 
   // DMP-LABEL: ACCParallelDirective
   //  DMP-NEXT:   ACCCopyClause
@@ -343,8 +366,10 @@ int main() {
   // EXE-DEV-NEXT: acc_ev_exit_data_end
 
   //--------------------------------------------------
-  // Initially present.
+  // acc data when initially present (enclosing acc data).
   //--------------------------------------------------
+
+  // Check acc data around acc data.
 
   // DMP-LABEL: ACCDataDirective
   //  DMP-NEXT:   ACCCreateClause
@@ -380,7 +405,7 @@ int main() {
     //  DMP-NEXT:       DeclRefExpr {{.*}} 'p' 'int'
     //  DMP-NEXT:     OMPMapClause
     //  DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int'
-    //   DMP-NOT: -{{OMP|ACC}}
+    //   DMP-NOT: -{{ACC}}
     //
     //  PRT-A-NEXT: #pragma acc data present(p) no_create(nc){{$}}
     // PRT-AO-NEXT: // #pragma omp target data map(present,[[HOLD]]alloc: p)
@@ -391,11 +416,71 @@ int main() {
     // EXE-DEV-NEXT: acc_ev_enter_data_start
     // EXE-DEV-NEXT: acc_ev_enter_data_end
     #pragma acc data present(p) no_create(nc)
-    // PRT-NEXT: ;
-    ;
+    // PRT-NEXT: {
+    {
+      // DMP: ACCExitDataDirective
+      //
+      //  PRT-A-NEXT: #pragma acc exit data delete(p) copyout(nc){{$}}
+      // PRT-AO-NEXT: // #pragma omp target exit data map(release: p) map(from: nc){{$}}
+      //  PRT-O-NEXT: #pragma omp target exit data map(release: p) map(from: nc){{$}}
+      // PRT-OA-NEXT: // #pragma acc exit data delete(p) copyout(nc){{$}}
+      //
+      // EXE-DEV-NEXT: acc_ev_exit_data_start
+      // EXE-DEV-NEXT: acc_ev_exit_data_end
+      #pragma acc exit data delete(p) copyout(nc)
+      // DMP: ACCExitDataDirective
+      //
+      //  PRT-A-NEXT: #pragma acc exit data copyout(p) delete(nc){{$}}
+      // PRT-AO-NEXT: // #pragma omp target exit data map(from: p) map(release: nc){{$}}
+      //  PRT-O-NEXT: #pragma omp target exit data map(from: p) map(release: nc){{$}}
+      // PRT-OA-NEXT: // #pragma acc exit data copyout(p) delete(nc){{$}}
+      //
+      // EXE-DEV-NEXT: acc_ev_exit_data_start
+      // EXE-DEV-NO-HOLD-NEXT: acc_ev_delete var_name={{<null>|nc}}
+      // EXE-DEV-NO-HOLD-NEXT: acc_ev_free   var_name={{<null>|nc}}
+      // EXE-DEV-NO-HOLD-NEXT: acc_ev_delete var_name={{<null>|p}}
+      // EXE-DEV-NO-HOLD-NEXT: acc_ev_free   var_name={{<null>|p}}
+      // EXE-DEV-NEXT: acc_ev_exit_data_end
+      #pragma acc exit data copyout(p) delete(nc)
+    } // PRT-NEXT: }
     // EXE-DEV-NEXT: acc_ev_exit_data_start
     // EXE-DEV-NEXT: acc_ev_exit_data_end
+  } // PRT-NEXT: }
+  //      EXE-DEV-NEXT: acc_ev_exit_data_start
+  // EXE-DEV-HOLD-NEXT: acc_ev_delete var_name={{<null>|nc}}
+  // EXE-DEV-HOLD-NEXT: acc_ev_free   var_name={{<null>|nc}}
+  // EXE-DEV-HOLD-NEXT: acc_ev_delete var_name={{<null>|p}}
+  // EXE-DEV-HOLD-NEXT: acc_ev_free   var_name={{<null>|p}}
+  //      EXE-DEV-NEXT: acc_ev_exit_data_end
 
+  //--------------------------------------------------
+  // acc parallel when initially present (enclosing acc data).
+  //--------------------------------------------------
+
+  // DMP-LABEL: ACCDataDirective
+  //  DMP-NEXT:   ACCCreateClause
+  //  DMP-NEXT:     DeclRefExpr {{.*}} 'p' 'int'
+  //  DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int'
+  //  DMP-NEXT:   impl: OMPTargetDataDirective
+  //  DMP-NEXT:     OMPMapClause
+  //  DMP-NEXT:       DeclRefExpr {{.*}} 'p' 'int'
+  //  DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int'
+  //   DMP-NOT: -{{ACC}}
+  //
+  //  PRT-A-NEXT: #pragma acc data create(p,nc){{$}}
+  // PRT-AO-NEXT: // #pragma omp target data map([[HOLD]]alloc: p,nc){{$}}
+  //  PRT-O-NEXT: #pragma omp target data map([[HOLD]]alloc: p,nc){{$}}
+  // PRT-OA-NEXT: // #pragma acc data create(p,nc){{$}}
+  //
+  // EXE-DEV-NEXT: acc_ev_enter_data_start
+  // EXE-DEV-NEXT: acc_ev_alloc  var_name={{<null>|p}}
+  // EXE-DEV-NEXT: acc_ev_create var_name={{<null>|p}}
+  // EXE-DEV-NEXT: acc_ev_alloc  var_name={{<null>|nc}}
+  // EXE-DEV-NEXT: acc_ev_create var_name={{<null>|nc}}
+  // EXE-DEV-NEXT: acc_ev_enter_data_end
+  #pragma acc data create(p,nc)
+  // PRT-NEXT: {
+  {
     // DMP-LABEL: ACCParallelDirective
     //  DMP-NEXT:   ACCPresentClause
     //  DMP-NEXT:     DeclRefExpr {{.*}} 'p' 'int'
@@ -422,13 +507,30 @@ int main() {
     ;
     // EXE-DEV-NEXT: acc_ev_exit_data_start
     // EXE-DEV-NEXT: acc_ev_exit_data_end
+    // PRT-NEXT: {
+    {
+      // DMP: ACCExitDataDirective
+      //
+      //  PRT-A-NEXT: #pragma acc exit data copyout(p) delete(nc){{$}}
+      // PRT-AO-NEXT: // #pragma omp target exit data map(from: p) map(release: nc){{$}}
+      //  PRT-O-NEXT: #pragma omp target exit data map(from: p) map(release: nc){{$}}
+      // PRT-OA-NEXT: // #pragma acc exit data copyout(p) delete(nc){{$}}
+      //
+      // EXE-DEV-NEXT: acc_ev_exit_data_start
+      // EXE-DEV-NO-HOLD-NEXT: acc_ev_delete var_name={{<null>|nc}}
+      // EXE-DEV-NO-HOLD-NEXT: acc_ev_free   var_name={{<null>|nc}}
+      // EXE-DEV-NO-HOLD-NEXT: acc_ev_delete var_name={{<null>|p}}
+      // EXE-DEV-NO-HOLD-NEXT: acc_ev_free   var_name={{<null>|p}}
+      // EXE-DEV-NEXT: acc_ev_exit_data_end
+      #pragma acc exit data copyout(p) delete(nc)
+    } // PRT-NEXT: }
   } // PRT-NEXT: }
-  // EXE-DEV-NEXT: acc_ev_exit_data_start
-  // EXE-DEV-NEXT: acc_ev_delete var_name={{<null>|nc}}
-  // EXE-DEV-NEXT: acc_ev_free   var_name={{<null>|nc}}
-  // EXE-DEV-NEXT: acc_ev_delete var_name={{<null>|p}}
-  // EXE-DEV-NEXT: acc_ev_free   var_name={{<null>|p}}
-  // EXE-DEV-NEXT: acc_ev_exit_data_end
+  //      EXE-DEV-NEXT: acc_ev_exit_data_start
+  // EXE-DEV-HOLD-NEXT: acc_ev_delete var_name={{<null>|nc}}
+  // EXE-DEV-HOLD-NEXT: acc_ev_free   var_name={{<null>|nc}}
+  // EXE-DEV-HOLD-NEXT: acc_ev_delete var_name={{<null>|p}}
+  // EXE-DEV-HOLD-NEXT: acc_ev_free   var_name={{<null>|p}}
+  //      EXE-DEV-NEXT: acc_ev_exit_data_end
 
   // PRT-NEXT: return 0;
   return 0;

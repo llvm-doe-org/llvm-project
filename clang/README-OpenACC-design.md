@@ -588,6 +588,7 @@ clarify these points in future versions of the OpenACC specification.
         * `copyout`
         * `create`
         * `no_create`
+        * `delete`
         * Others not yet implemented by Clacc.
     * Data sharing attributes (DSAs), which describe the sharing of
       data among gangs, workers, or vector lanes:
@@ -606,11 +607,13 @@ clarify these points in future versions of the OpenACC specification.
     * Relevant DAs:
         * A variable cannot have any DA from a group on a directive if
           that group is irrelevant to that directive.
-        * DMAs are relevant only to `acc data` and `acc parallel`.
+        * DMAs are relevant only to `acc enter data`, `acc exit data`,
+          `acc data`, and `acc parallel`.
         * DSAs are relevant only to `acc parallel` and `acc loop`.
         * Relevance does not indicate that all members of a group are
           permitted.  For example, `firstprivate` is not permitted on
-          `acc loop`.
+          `acc loop`, and `copyout` is not permitted on `acc enter
+          data`.
     * Default DA:
         * Each group has one default DA.
         * It is not permitted as *exp* and is never computed as *pre*.
@@ -729,7 +732,9 @@ clarify these points in future versions of the OpenACC specification.
           write to the original variable at the end of the region.
           Those writes would violate `const`, particularly if they
           would alter known data.  In the case of `copyout`, the new
-          data would likely be uninitialized values.
+          data would likely be uninitialized values (except in the
+          case of `acc exit data` as another directive might have
+          initialized the variable).
     * *exp* `copy` is a subtle case.  Technically, it writes to the
       original, and `const` prevents that.  However, there are several
       arguments for why it should be permitted for a `const` variable:
@@ -752,9 +757,9 @@ clarify these points in future versions of the OpenACC specification.
     * *exp* `copyin` or *exp* `firstprivate` is fine for a `const`
       variable.  The local copy will have the original variable's
       value throughout its lifetime.
-    * *exp* `present` or *exp* `no_create` is fine for a `const`
-      variable as the initialization could have happened at the time
-      of the allocation.
+    * *exp* `present`, *exp* `no_create`, or *exp* `delete` is fine
+      for a `const` variable as the initialization could have happened
+      at the time of the allocation.
     * *imp* `copy` or *imp* `firstprivate` for a `const` variable
       should be fine for the same reasons as their *exp* versions.
     * *imp* `nomap` and *imp* `shared` are the only remaining *imp*
@@ -767,6 +772,13 @@ clarify these points in future versions of the OpenACC specification.
     * It assumes the host and device copies of the variable have
       different values and one must be updated from the other, but
       doing so would violate `const`.
+* A `copyout` or `delete` clause on `acc exit data` performs no action
+  for any variable that is not currently present on the device.
+  Notes:
+    * OpenACC 3.0 specifies a runtime error instead.
+    * [A correction has been
+      proposed](https://github.com/OpenACC/openacc-spec/pull/306) and
+      should appear in the OpenACC spec after 3.0.
 * It is an error to specify subarrays with no `:` and one integer.
   Notes:
     * This notation is syntactically identical to an array subscript.
@@ -792,9 +804,10 @@ clarify these points in future versions of the OpenACC specification.
       OpenMP 5.0 sec. 2.1.5 p. 46 L10.  Thus, this feature is
       currently listed under "Potentially Unmappable Features" below.
 * Behavior is undefined if a subarray specified for a variable in a
-  DMA on an `acc parallel` or `acc data` directive is not fully
-  contained within any subarray specified for the same variable in a
-  DMA on any enclosing `acc data` directive.  Notes:
+  DMA on an `acc enter data`, `acc exit data`, `acc data`, or `acc
+  parallel` directive is not fully contained within any subarray
+  specified for the same variable in a DMA on any enclosing `acc data`
+  directive.  Notes:
     * This case does not appear to be well defined by OpenACC 3.0 or
       OpenMP 5.0, but our understanding is that it will be clarified
       in OpenMP 5.1.  For now, Clacc handles this case by deferring to
@@ -1115,11 +1128,11 @@ Currently, it works as follows in Clacc:
 
 ### Executable Directive Placement ###
 
-`acc update` may not be an immediate substatement of any other
-statement including another directive but not including a labeled
-statement.  Notes:
+`acc update`, `acc enter data`, or `acc exit data` may not be an
+immediate substatement of any other statement including another
+directive but not including a labeled statement.  Notes:
 
-* Enclosing the `acc update` in a compound statement works around this
+* Enclosing the directive in a compound statement works around this
   restriction.
 * This restriction is consistent with Clang's OpenMP support and thus
   facilitates translation to OpenMP.
@@ -1133,6 +1146,9 @@ statement.  Notes:
         > or label in C or C++, or in place of the statement following
         > a logical if in Fortran.
 
+    * There appears to be no similar restriction for other OpenACC
+      executable directives, like `acc enter data` and `acc exit
+      data`.
     * OpenMP 5.0 sec. 2.1.3 "Stand-Alone Directives", "Restrictions",
       p. 43 L2-3 states:
 
@@ -1190,6 +1206,26 @@ to OpenMP is as follows:
     * Clacc does not currently support translating to
       `omp_target_is_present` for the same reasons as discussed for
       the `present` clause under "Data Directives" below.
+
+Enter Data Directives
+---------------------
+
+Clacc's current mapping of an `acc enter data` directive and its
+clauses to OpenMP is as follows:
+
+* `acc enter data` -> `omp target enter data`
+* *exp* `copyin` -> *exp* `map` with a `to` map type.
+* *exp* `create` -> *exp* `map` with an `alloc` map type.
+
+Exit Data Directives
+--------------------
+
+Clacc's current mapping of an `acc exit data` directive and its
+clauses to OpenMP is as follows:
+
+* `acc exit data` -> `omp target exit data`
+* *exp* `copyout` -> *exp* `map` with a `from` map type.
+* *exp* `delete` -> *exp* `map` with a `release` map type.
 
 Data Directives
 ---------------
@@ -1436,8 +1472,7 @@ to OpenMP is as follows:
           of the variable's reference counters here.  However, this
           behavior shouldn't be observable given that it should be
           impossible to otherwise manipulate the variable's reference
-          counters during the `acc parallel` region.  TODO: How will
-          `async` affect this?
+          counters during the `acc parallel` region.
 * All other DMAs are translated in the same manner as when appearing
   on an `acc data`.  *imp* `copy` is translated in the same manner as
   *exp* `copy`.
@@ -2154,9 +2189,11 @@ follows:
 // backward compatibility guarantees.
 typedef enum ompt_directive_kind_t {
   ompt_directive_unknown = 0,
+  ompt_directive_target_update,
+  ompt_directive_target_enter_data,
+  ompt_directive_target_exit_data,
   ompt_directive_target_data,
-  ompt_directive_target_teams,
-  ompt_directive_target_update
+  ompt_directive_target_teams
 } ompt_directive_kind_t;
 
 // All fields are designed so that null-initialization is a reasonable

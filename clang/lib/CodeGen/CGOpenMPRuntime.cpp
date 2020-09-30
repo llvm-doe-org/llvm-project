@@ -10310,9 +10310,21 @@ void CGOpenMPRuntime::emitSetDirectiveInfoCall(
   // TODO: These values come from enum ompt_directive_kind_t in
   // openmp/runtime/src/include/omp-tools.h.var.  Find a clean way to ensure
   // these stay in sync.
-  case OMPD_target_data: KindRaw = 1; break;
-  case OMPD_target_teams: KindRaw = 2; break;
-  case OMPD_target_update: KindRaw = 3; break;
+  case OMPD_target_update:
+    KindRaw = 1;
+    break;
+  case OMPD_target_enter_data:
+    KindRaw = 2;
+    break;
+  case OMPD_target_exit_data:
+    KindRaw = 3;
+    break;
+  case OMPD_target_data:
+    KindRaw = 4;
+    break;
+  case OMPD_target_teams:
+    KindRaw = 5;
+    break;
   default:
     // Other cases just aren't calling this yet, in part because of the check
     // for IsInOpenACCConstruct above.

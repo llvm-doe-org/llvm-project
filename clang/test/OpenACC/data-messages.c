@@ -232,7 +232,7 @@ int main() {
     ;
   #pragma acc data pcopy(constI, constIDecl)
     ;
-  // expected-error@+1 {{const variable cannot be copyout because initialization is impossible}}
+  // expected-error@+1 {{const variable cannot be written by 'pcopyout'}}
   #pragma acc data pcopyin(constADecl) pcopyout(constA)
   {
     // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}

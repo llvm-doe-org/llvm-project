@@ -13012,6 +13012,9 @@ ACCClause *ACCClauseReader::readClause() {
   case ACCC_no_create:
     C = ACCNoCreateClause::CreateEmpty(Context, Record.readInt());
     break;
+  case ACCC_delete:
+    C = ACCDeleteClause::CreateEmpty(Context, Record.readInt());
+    break;
   case ACCC_shared:
     C = ACCSharedClause::CreateEmpty(Context, Record.readInt());
     break;
@@ -13137,6 +13140,16 @@ void ACCClauseReader::VisitACCCreateClause(ACCCreateClause *C) {
 }
 
 void ACCClauseReader::VisitACCNoCreateClause(ACCNoCreateClause *C) {
+  C->setLParenLoc(Record.readSourceLocation());
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Record.readSubExpr());
+  C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCDeleteClause(ACCDeleteClause *C) {
   C->setLParenLoc(Record.readSourceLocation());
   unsigned NumVars = C->varlist_size();
   SmallVector<Expr *, 16> Vars;

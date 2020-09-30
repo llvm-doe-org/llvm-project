@@ -53,6 +53,7 @@ clang::getPrivateVarsFromClause(ACCClause *C) {
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
   case ACCC_no_create:
+  case ACCC_delete:
   case ACCC_if_present:
 #define OPENACC_CLAUSE_ALIAS_self(Name) \
   case ACCC_##Name:
@@ -201,6 +202,24 @@ ACCNoCreateClause *ACCNoCreateClause::CreateEmpty(const ASTContext &C,
                                                   unsigned N) {
   void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
   return new (Mem) ACCNoCreateClause(N);
+}
+
+ACCDeleteClause *ACCDeleteClause::Create(const ASTContext &C,
+                                         SourceLocation StartLoc,
+                                         SourceLocation LParenLoc,
+                                         SourceLocation EndLoc,
+                                         ArrayRef<Expr *> VL) {
+  // Allocate space for private variables and initializer expressions.
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
+  ACCDeleteClause *Clause =
+      new (Mem) ACCDeleteClause(StartLoc, LParenLoc, EndLoc, VL.size());
+  Clause->setVarRefs(VL);
+  return Clause;
+}
+
+ACCDeleteClause *ACCDeleteClause::CreateEmpty(const ASTContext &C, unsigned N) {
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
+  return new (Mem) ACCDeleteClause(N);
 }
 
 ACCSharedClause *

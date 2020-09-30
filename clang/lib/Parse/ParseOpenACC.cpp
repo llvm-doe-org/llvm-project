@@ -21,17 +21,38 @@
 
 using namespace clang;
 
-static OpenACCDirectiveKind parseOpenACCDirectiveKind(Parser &P) {
+namespace {
+enum OpenACCDirectiveKindEx {
+  ACCDEx_enter = ACCD_LAST_KIND + 1,
+  ACCDEx_exit,
+  ACCDEx_data
+};
+
+// Map token string to extended ACC token kind that are
+// OpenACCDirectiveKind + OpenACCDirectiveKindEx.
+unsigned getOpenACCDirectiveKindEx(StringRef S) {
+  unsigned DKind = getOpenACCDirectiveKind(S);
+  if (DKind != ACCD_unknown)
+    return DKind;
+  return llvm::StringSwitch<unsigned>(S)
+      .Case("enter", ACCDEx_enter)
+      .Case("exit", ACCDEx_exit)
+      .Default(ACCD_unknown);
+}
+
+OpenACCDirectiveKind parseOpenACCDirectiveKind(Parser &P) {
   // Array of foldings: F[i][0] F[i][1] ===> F[i][2].
   // E.g.: ACCD_parallel ACCD_loop ===> ACCD_parallel_loop
   // TODO: add other combined directives in topological order.
   static const unsigned F[][3] = {
-      {ACCD_parallel, ACCD_loop, ACCD_parallel_loop}};
+      {ACCD_parallel, ACCD_loop, ACCD_parallel_loop},
+      {ACCDEx_enter, ACCD_data, ACCD_enter_data},
+      {ACCDEx_exit, ACCD_data, ACCD_exit_data}};
   auto Tok = P.getCurToken();
   unsigned DKind =
       Tok.isAnnotation()
           ? static_cast<unsigned>(ACCD_unknown)
-          : getOpenACCDirectiveKind(P.getPreprocessor().getSpelling(Tok));
+          : getOpenACCDirectiveKindEx(P.getPreprocessor().getSpelling(Tok));
   if (DKind == ACCD_unknown)
     return ACCD_unknown;
 
@@ -55,6 +76,7 @@ static OpenACCDirectiveKind parseOpenACCDirectiveKind(Parser &P) {
   return DKind < ACCD_unknown ? static_cast<OpenACCDirectiveKind>(DKind)
                               : ACCD_unknown;
 }
+} // namespace
 
 /// Parsing of declarative OpenACC directives.  None are supported yet, but
 /// we want to give a better diagnostic than a syntax error.
@@ -71,6 +93,8 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
     Diag(Tok, diag::err_acc_unknown_directive);
     break;
   case ACCD_update:
+  case ACCD_enter_data:
+  case ACCD_exit_data:
   case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
@@ -89,7 +113,8 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
 ///
 ///       executable-directive:
 ///         annot_pragma_openacc
-///         'update' | 'data' | 'parallel' | 'loop' | 'parallel loop'
+///         'update' | 'enter data' | 'exit data' | 'data' | 'parallel' | 'loop'
+///         | 'parallel loop'
 ///         {clause}
 ///         annot_pragma_openacc_end
 ///
@@ -108,14 +133,21 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
 
   switch (DKind) {
   case ACCD_update:
+  case ACCD_enter_data:
+  case ACCD_exit_data:
     // OpenACC 3.0 sec. 2.14.4 "Update Directive" L2296-2298:
     //   "The update directive is executable.  It must not appear in place of
     //   the statement following an if, while, do, switch, or label in C or C++,
     //   or in place of the statement following a logical if in Fortran."
+    // There appears to be no similar restriction for other OpenACC executable
+    // directives.
+    //
     // Clang does not follow this exactly.  Instead, Clang's OpenACC and OpenMP
     // support are consistent here, facilitating translation to OpenMP.  For
     // example, Clang does not enforce the case of labels, and Clang
     // additionally restricts the cases of "else", "for", and other directives.
+    // More importantly, Clang enforces these restrictions for all executables
+    // directives.
     if ((StmtCtx & ParsedStmtContext::AllowExecutableOpenACCDirectives) ==
         ParsedStmtContext()) {
       Diag(Tok, diag::err_acc_immediate_substatement) << getOpenACCName(DKind);
@@ -193,7 +225,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
 ///       | copyin-clause | pcopyin-clause | present_or_copyin-clause
 ///       | copyout-clause | pcopyout-clause | present_or_copyout-clause
 ///       | create-clause | pcreate-clause | present_or_create-clause
-///       | no_create-clause
+///       | no_create-clause | delete-clause
 ///       | private-clause | firstprivate-clause | reduction-clause
 ///       | if-present-clause | self-clause | host-clause | device-clause
 ///       | num_gangs-clause | num_workers-clause | vector_length-clause
@@ -281,6 +313,7 @@ ACCClause *Parser::ParseOpenACCClause(
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"
   case ACCC_no_create:
+  case ACCC_delete:
   case ACCC_private:
   case ACCC_firstprivate:
   case ACCC_reduction:

@@ -1051,6 +1051,14 @@ void ACCClausePrinter::VisitACCNoCreateClause(ACCNoCreateClause *Node) {
   }
 }
 
+void ACCClausePrinter::VisitACCDeleteClause(ACCDeleteClause *Node) {
+  if (!Node->varlist_empty()) {
+    OS << "delete";
+    VisitACCClauseList(Node, '(');
+    OS << ")";
+  }
+}
+
 void ACCClausePrinter::VisitACCSharedClause(ACCSharedClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "shared";
@@ -1309,6 +1317,14 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
 }
 
 void StmtPrinter::VisitACCUpdateDirective(ACCUpdateDirective *Node) {
+  PrintACCExecutableDirective(Node);
+}
+
+void StmtPrinter::VisitACCEnterDataDirective(ACCEnterDataDirective *Node) {
+  PrintACCExecutableDirective(Node);
+}
+
+void StmtPrinter::VisitACCExitDataDirective(ACCExitDataDirective *Node) {
   PrintACCExecutableDirective(Node);
 }
 

@@ -2572,21 +2572,29 @@ enum CXCursorKind {
    */
   CXCursor_ACCUpdateDirective = 288,
 
+  /** OpenACC enter data directive.
+   */
+  CXCursor_ACCEnterDataDirective = 289,
+
+  /** OpenACC exit data directive.
+   */
+  CXCursor_ACCExitDataDirective = 290,
+
   /** OpenACC data directive.
    */
-  CXCursor_ACCDataDirective = 289,
+  CXCursor_ACCDataDirective = 291,
 
   /** OpenACC parallel directive.
    */
-  CXCursor_ACCParallelDirective = 290,
+  CXCursor_ACCParallelDirective = 292,
 
   /** OpenACC loop directive.
    */
-  CXCursor_ACCLoopDirective = 291,
+  CXCursor_ACCLoopDirective = 293,
 
   /** OpenACC parallel loop directive.
    */
-  CXCursor_ACCParallelLoopDirective = 292,
+  CXCursor_ACCParallelLoopDirective = 294,
 
   CXCursor_LastStmt = CXCursor_ACCParallelLoopDirective,
 

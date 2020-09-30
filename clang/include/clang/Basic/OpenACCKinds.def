@@ -55,6 +55,18 @@
 #ifndef OPENACC_UPDATE_DSA
 #  define OPENACC_UPDATE_DSA(Name)
 #endif
+#ifndef OPENACC_ENTER_DATA_DMA
+#  define OPENACC_ENTER_DATA_DMA(Name)
+#endif
+#ifndef OPENACC_ENTER_DATA_DSA
+#  define OPENACC_ENTER_DATA_DSA(Name)
+#endif
+#ifndef OPENACC_EXIT_DATA_DMA
+#  define OPENACC_EXIT_DATA_DMA(Name)
+#endif
+#ifndef OPENACC_EXIT_DATA_DSA
+#  define OPENACC_EXIT_DATA_DSA(Name)
+#endif
 #ifndef OPENACC_DATA_DMA
 #  define OPENACC_DATA_DMA(Name)
 #endif
@@ -82,6 +94,12 @@
 #ifndef OPENACC_UPDATE_CLAUSE
 #  define OPENACC_UPDATE_CLAUSE(Name)
 #endif
+#ifndef OPENACC_ENTER_DATA_CLAUSE
+#  define OPENACC_ENTER_DATA_CLAUSE(Name)
+#endif
+#ifndef OPENACC_EXIT_DATA_CLAUSE
+#  define OPENACC_EXIT_DATA_CLAUSE(Name)
+#endif
 #ifndef OPENACC_DATA_CLAUSE
 #  define OPENACC_DATA_CLAUSE(Name)
 #endif
@@ -96,6 +114,12 @@
 #endif
 #ifndef OPENACC_UPDATE_PARENT
 #  define OPENACC_UPDATE_PARENT(Name)
+#endif
+#ifndef OPENACC_ENTER_DATA_PARENT
+#  define OPENACC_ENTER_DATA_PARENT(Name)
+#endif
+#ifndef OPENACC_EXIT_DATA_PARENT
+#  define OPENACC_EXIT_DATA_PARENT(Name)
 #endif
 #ifndef OPENACC_DATA_PARENT
 #  define OPENACC_DATA_PARENT(Name)
@@ -122,6 +146,12 @@
 #define OPENACC_CLAUSE_AND_DSA_UNMAPPABLE(Name, Class) \
   OPENACC_CLAUSE(Name, Class)                          \
   OPENACC_DSA_UNMAPPABLE(Name, Class)
+#define OPENACC_ENTER_DATA_CLAUSE_AND_DMA(Name) \
+  OPENACC_ENTER_DATA_CLAUSE(Name)               \
+  OPENACC_ENTER_DATA_DMA(Name)
+#define OPENACC_EXIT_DATA_CLAUSE_AND_DMA(Name) \
+  OPENACC_EXIT_DATA_CLAUSE(Name)               \
+  OPENACC_EXIT_DATA_DMA(Name)
 #define OPENACC_DATA_CLAUSE_AND_DMA(Name) \
   OPENACC_DATA_CLAUSE(Name)               \
   OPENACC_DATA_DMA(Name)
@@ -137,6 +167,8 @@
 
 // OpenACC directives.
 OPENACC_DIRECTIVE(update)
+OPENACC_DIRECTIVE_EXT(enter_data, "enter data")
+OPENACC_DIRECTIVE_EXT(exit_data, "exit data")
 OPENACC_DIRECTIVE(data)
 OPENACC_DIRECTIVE(parallel)
 OPENACC_DIRECTIVE(loop)
@@ -156,6 +188,7 @@ OPENACC_DIRECTIVE_EXT(parallel_loop, "parallel loop")
 //     - copyout
 //     - create
 //     - no_create
+//     - delete
 //   - The DSAs are the following:
 //     - shared (default)
 //     - reduction
@@ -249,6 +282,7 @@ OPENACC_ALIASED_CLAUSE(OPENACC_CLAUSE_AND_DMA, create, ACCCreateClause)
 OPENACC_CLAUSE_ALIAS(pcreate, create, ACCCreateClause)
 OPENACC_CLAUSE_ALIAS(present_or_create, create, ACCCreateClause)
 OPENACC_CLAUSE_AND_DMA(no_create, ACCNoCreateClause)
+OPENACC_CLAUSE_AND_DMA(delete, ACCDeleteClause)
 OPENACC_CLAUSE_AND_DSA_MAPPABLE(shared, ACCSharedClause)
 OPENACC_CLAUSE_AND_DSA_MAPPABLE(reduction, ACCReductionClause)
 OPENACC_CLAUSE_AND_DSA_UNMAPPABLE(private, ACCPrivateClause)
@@ -273,6 +307,20 @@ OPENACC_UPDATE_CLAUSE(if_present)
 OPENACC_UPDATE_CLAUSE(self)
 OPENACC_UPDATE_CLAUSE(host)
 OPENACC_UPDATE_CLAUSE(device)
+
+// Explicit clauses and DAs allowed for OpenACC directive 'enter data'.
+OPENACC_ENTER_DATA_CLAUSE_AND_DMA(copyin)
+OPENACC_ENTER_DATA_CLAUSE(pcopyin)
+OPENACC_ENTER_DATA_CLAUSE(present_or_copyin)
+OPENACC_ENTER_DATA_CLAUSE_AND_DMA(create)
+OPENACC_ENTER_DATA_CLAUSE(pcreate)
+OPENACC_ENTER_DATA_CLAUSE(present_or_create)
+
+// Explicit clauses and DAs allowed for OpenACC directive 'exit data'.
+OPENACC_EXIT_DATA_CLAUSE_AND_DMA(copyout)
+OPENACC_EXIT_DATA_CLAUSE(pcopyout)
+OPENACC_EXIT_DATA_CLAUSE(present_or_copyout)
+OPENACC_EXIT_DATA_CLAUSE_AND_DMA(delete)
 
 // Explicit clauses and DAs allowed for OpenACC directive 'data'.
 OPENACC_DATA_DMA(nomap)
@@ -361,6 +409,14 @@ OPENACC_PARALLEL_LOOP_CLAUSE(collapse)
 OPENACC_UPDATE_PARENT(unknown)
 OPENACC_UPDATE_PARENT(data)
 
+// Parent directives allowed for 'enter data'.
+OPENACC_ENTER_DATA_PARENT(unknown)
+OPENACC_ENTER_DATA_PARENT(data)
+
+// Parent directives allowed for 'exit data'.
+OPENACC_EXIT_DATA_PARENT(unknown)
+OPENACC_EXIT_DATA_PARENT(data)
+
 // Parent directives allowed for 'data'.
 OPENACC_DATA_PARENT(unknown)
 OPENACC_DATA_PARENT(data)
@@ -396,6 +452,10 @@ OPENACC_PARALLEL_LOOP_PARENT(data)
 #undef OPENACC_CLAUSE_ALIAS_self
 #undef OPENACC_UPDATE_DMA
 #undef OPENACC_UPDATE_DSA
+#undef OPENACC_ENTER_DATA_DMA
+#undef OPENACC_ENTER_DATA_DSA
+#undef OPENACC_EXIT_DATA_DMA
+#undef OPENACC_EXIT_DATA_DSA
 #undef OPENACC_DATA_DMA
 #undef OPENACC_DATA_DSA
 #undef OPENACC_PARALLEL_DMA
@@ -405,11 +465,15 @@ OPENACC_PARALLEL_LOOP_PARENT(data)
 #undef OPENACC_PARALLEL_LOOP_DMA
 #undef OPENACC_PARALLEL_LOOP_DSA
 #undef OPENACC_UPDATE_CLAUSE
+#undef OPENACC_ENTER_DATA_CLAUSE
+#undef OPENACC_EXIT_DATA_CLAUSE
 #undef OPENACC_DATA_CLAUSE
 #undef OPENACC_PARALLEL_CLAUSE
 #undef OPENACC_LOOP_CLAUSE
 #undef OPENACC_PARALLEL_LOOP_CLAUSE
 #undef OPENACC_UPDATE_PARENT
+#undef OPENACC_ENTER_DATA_PARENT
+#undef OPENACC_EXIT_DATA_PARENT
 #undef OPENACC_DATA_PARENT
 #undef OPENACC_PARALLEL_PARENT
 #undef OPENACC_LOOP_PARENT
