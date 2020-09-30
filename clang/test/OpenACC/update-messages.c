@@ -139,7 +139,7 @@ int main() {
   //--------------------------------------------------
   // Variable clauses: syntax
   //
-  // Parsing of variable clauses are checked thoroughly in parallel-messages.c
+  // Parsing of variable clauses is checked thoroughly in parallel-messages.c
   // for data clauses, so just check a cross section of cases here to confirm it
   // works for the update directive's variable clauses.
   //--------------------------------------------------
@@ -310,7 +310,8 @@ int main() {
   // As immediate substatement
   //--------------------------------------------------
 
-  // Only check the parse errors here when OpenACC directives are included.
+  // Only check the parse errors here when OpenACC directives are included
+  // because there are different parse errors when they're ignored.
 #ifdef ACC
   if (i)
     // expected-error@+1 {{'#pragma acc update' cannot be an immediate substatement}}
@@ -350,9 +351,10 @@ int main() {
   default:
     #pragma acc update self(i)
   }
+#endif
+
   lab:
     #pragma acc update self(i)
-#endif
 
   #pragma acc data copy(i)
   // expected-error@+1 {{'#pragma acc update' cannot be an immediate substatement}}

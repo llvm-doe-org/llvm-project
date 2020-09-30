@@ -1666,7 +1666,7 @@ void test() {
 
   //--------------------------------------------------
   // Check that a data clause for a subarray from an enclosing acc data
-  // directive suppresses an implicit data clause on a nested acc parallel.
+  // directive suppresses data clauses on nested acc parallel.
   //--------------------------------------------------
 
   // PRT-NEXT: {

@@ -1672,27 +1672,7 @@ StmtResult Sema::ActOnOpenACCDataDirective(
     case ACCC_no_create:
       Found = true;
       break;
-    case ACCC_nomap:
-    case ACCC_shared:
-    case ACCC_private:
-    case ACCC_firstprivate:
-    case ACCC_reduction:
-    case ACCC_if_present:
-#define OPENACC_CLAUSE_ALIAS_self(Name) \
-    case ACCC_##Name:
-#include "clang/Basic/OpenACCKinds.def"
-    case ACCC_device:
-    case ACCC_num_gangs:
-    case ACCC_num_workers:
-    case ACCC_vector_length:
-    case ACCC_seq:
-    case ACCC_independent:
-    case ACCC_auto:
-    case ACCC_gang:
-    case ACCC_worker:
-    case ACCC_vector:
-    case ACCC_collapse:
-    case ACCC_unknown:
+    default:
       llvm_unreachable("expected clause permitted on 'acc data' directive");
     }
     if (Found)
@@ -2008,7 +1988,7 @@ ACCClause *Sema::ActOnOpenACCPresentClause(
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, ACCC_present, SimpleRefExpr,
-                                        ELoc, ERange, /*AllowSubarray*/ true);
+                                        ELoc, ERange, /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -2048,7 +2028,7 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, Kind, SimpleRefExpr, ELoc,
-                                        ERange, /*AllowSubarray*/ true);
+                                        ERange, /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -2087,7 +2067,7 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, Kind, SimpleRefExpr, ELoc,
-                                        ERange, /*AllowSubarray*/ true);
+                                        ERange, /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -2126,7 +2106,7 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, Kind, SimpleRefExpr, ELoc,
-                                         ERange, /*AllowSubarray*/ true);
+                                        ERange, /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -2176,7 +2156,7 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, Kind, SimpleRefExpr, ELoc,
-                                        ERange, /*AllowSubarray*/ true);
+                                        ERange, /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -2222,7 +2202,7 @@ ACCClause *Sema::ActOnOpenACCNoCreateClause(
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, ACCC_no_create, SimpleRefExpr,
-                                        ELoc, ERange, /*AllowSubarray*/ true);
+                                        ELoc, ERange, /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
