@@ -1133,18 +1133,34 @@ statement.  Notes:
         > or label in C or C++, or in place of the statement following
         > a logical if in Fortran.
 
-    * OpenMP 5.0 sec. 2.1.3 "Stand-Alone Directives", "Restrictions,
+    * OpenMP 5.0 sec. 2.1.3 "Stand-Alone Directives", "Restrictions",
       p. 43 L2-3 states:
 
         > A stand-alone directive may not be used in place of the
         > statement following an if, while, do, switch, or label.
 
-    * OpenMP TR8 sec. 2.1.3 "Stand-Alone Directives", "Restrictions,
+    * OpenMP TR8 sec. 2.1.3 "Stand-Alone Directives", "Restrictions",
       p. 41 L26-27 states:
 
         > A stand-alone directive may not be used in place of the
         > statement following an if, else, while, do, for, switch, or
         > a label.
+
+    * OpenMP TR9 sec. 2.1.3 "Stand-Alone Directives", "Restrictions",
+      p. 44 L25-28 states:
+        * For C:
+
+            > A stand-alone directive may not be used in place of a
+            > substatement in a selection statement, in place of the
+            > loop body in an iteration statement, or in place of the
+            > statement that follows a label.
+
+        * For C++:
+
+            > A stand-alone directive may not be used in place of a
+            > substatement in a selection statement or iteration
+            > statement, or in place of the statement that follows a
+            > label.
 
 * This restriction is also not consistent with other OpenACC or OpenMP
   compilers:
