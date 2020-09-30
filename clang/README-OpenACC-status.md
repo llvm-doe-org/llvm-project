@@ -82,6 +82,7 @@ Run-Time Environment Variables
 ------------------
 
 * Lexical context
+    * Appearing outside any OpenACC construct is supported.
     * Appearing within a `data` construct is supported.
 * Supported clauses
     * `if_present`
@@ -98,6 +99,7 @@ Run-Time Environment Variables
 ----------------
 
 * Lexical context
+    * Appearing outside any OpenACC construct is supported.
     * Any number of levels of nesting within other `data` constructs
       is supported.
 * Supported clauses
@@ -118,6 +120,7 @@ Run-Time Environment Variables
 --------------------
 
 * Lexical context
+    * Appearing outside any OpenACC construct is supported.
     * Appearing within a `data` construct is supported.
 * Use without clauses is supported.
 * Supported data attributes and clauses
