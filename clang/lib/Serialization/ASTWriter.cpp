@@ -6910,6 +6910,11 @@ void ACCClauseWriter::VisitACCReductionClause(ACCReductionClause *C) {
     Record.AddStmt(VE);
 }
 
+void ACCClauseWriter::VisitACCIfClause(ACCIfClause *C) {
+  Record.AddStmt(C->getCondition());
+  Record.AddSourceLocation(C->getLParenLoc());
+}
+
 void ACCClauseWriter::VisitACCIfPresentClause(ACCIfPresentClause *) {}
 
 void ACCClauseWriter::VisitACCSelfClause(ACCSelfClause *C) {

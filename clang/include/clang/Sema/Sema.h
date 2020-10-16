@@ -11100,6 +11100,10 @@ public:
       SourceLocation StartLoc, SourceLocation LParenLoc,
       SourceLocation ColonLoc, SourceLocation EndLoc,
       const DeclarationNameInfo &ReductionId);
+  /// Called on well-formed 'if' clause.
+  ACCClause *ActOnOpenACCIfClause(Expr *Condition, SourceLocation StartLoc,
+                                  SourceLocation LParenLoc,
+                                  SourceLocation EndLoc);
   /// Called on well-formed 'if_present' clause.
   ACCClause *ActOnOpenACCIfPresentClause(SourceLocation StartLoc,
                                          SourceLocation EndLoc);

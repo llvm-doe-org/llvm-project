@@ -226,7 +226,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
 ///       | copyout-clause | pcopyout-clause | present_or_copyout-clause
 ///       | create-clause | pcreate-clause | present_or_create-clause
 ///       | no_create-clause | delete-clause
-///       | private-clause | firstprivate-clause | reduction-clause
+///       | private-clause | firstprivate-clause | reduction-clause | if-clause
 ///       | if-present-clause | self-clause | host-clause | device-clause
 ///       | num_gangs-clause | num_workers-clause | vector_length-clause
 ///       | seq-clause | independent-clause | auto-clause
@@ -247,6 +247,7 @@ ACCClause *Parser::ParseOpenACCClause(
   }
 
   switch (CKind) {
+  case ACCC_if:
   case ACCC_num_gangs:
   case ACCC_num_workers:
   case ACCC_vector_length:

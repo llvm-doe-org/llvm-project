@@ -641,6 +641,8 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
     break;
   case ACCC_nomap:
   case ACCC_shared:
+  case ACCC_if:
+  case ACCC_if_present:
   case ACCC_num_gangs:
   case ACCC_num_workers:
   case ACCC_vector_length:
@@ -651,7 +653,6 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
   case ACCC_worker:
   case ACCC_vector:
   case ACCC_collapse:
-  case ACCC_if_present:
   case ACCC_unknown:
     llvm_unreachable("expected explicit clause that accepts a variable list");
   }
@@ -1908,6 +1909,9 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr
                                               SourceLocation EndLoc) {
   ACCClause *Res = nullptr;
   switch (Kind) {
+  case ACCC_if:
+    Res = ActOnOpenACCIfClause(Expr, StartLoc, LParenLoc, EndLoc);
+    break;
   case ACCC_num_gangs:
     Res = ActOnOpenACCNumGangsClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
@@ -2661,6 +2665,16 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
                                     ReductionId);
 }
 
+ACCClause *Sema::ActOnOpenACCIfClause(Expr *Condition, SourceLocation StartLoc,
+                                      SourceLocation LParenLoc,
+                                      SourceLocation EndLoc) {
+  // OpenACC 3.0 sec. 2.14.4 "Update Directive", "Restrictions", L2303:
+  //   "in C or C++, the condition must evaluate to a scalar integer value."
+  if (CheckBooleanCondition(StartLoc, Condition).isInvalid())
+    return nullptr;
+  return new (Context) ACCIfClause(Condition, StartLoc, LParenLoc, EndLoc);
+}
+
 ACCClause *Sema::ActOnOpenACCIfPresentClause(SourceLocation StartLoc,
                                              SourceLocation EndLoc) {
   return new (Context) ACCIfPresentClause(StartLoc, EndLoc);
@@ -2794,6 +2808,9 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
                                     SourceLocation EndLoc) {
   ACCClause *Res = nullptr;
   switch (Kind) {
+  case ACCC_if_present:
+    Res = ActOnOpenACCIfPresentClause(StartLoc, EndLoc);
+    break;
   case ACCC_seq:
     Res = ActOnOpenACCSeqClause(StartLoc, EndLoc);
     break;
@@ -2812,9 +2829,6 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
   case ACCC_vector:
     Res = ActOnOpenACCVectorClause(StartLoc, EndLoc);
     break;
-  case ACCC_if_present:
-    Res = ActOnOpenACCIfPresentClause(StartLoc, EndLoc);
-    break;
   case ACCC_nomap:
   case ACCC_present:
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
@@ -2832,6 +2846,7 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
   case ACCC_private:
   case ACCC_firstprivate:
   case ACCC_reduction:
+  case ACCC_if:
 #define OPENACC_CLAUSE_ALIAS_self(Name) \
   case ACCC_##Name:
 #include "clang/Basic/OpenACCKinds.def"

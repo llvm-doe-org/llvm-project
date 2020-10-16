@@ -1176,6 +1176,10 @@ void ACCClauseProfiler::VisitACCReductionClause(
   Profiler->VisitName(C->getNameInfo().getName());
   VisitACCClauseList(C);
 }
+void ACCClauseProfiler::VisitACCIfClause(const ACCIfClause *C) {
+  if (C->getCondition())
+    Profiler->VisitStmt(C->getCondition());
+}
 void ACCClauseProfiler::VisitACCIfPresentClause(const ACCIfPresentClause *) {}
 void ACCClauseProfiler::VisitACCSelfClause(const ACCSelfClause *C) {
   // FIXME: Should we visit the clause kind, which varies among clause

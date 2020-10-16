@@ -13027,6 +13027,9 @@ ACCClause *ACCClauseReader::readClause() {
   case ACCC_reduction:
     C = ACCReductionClause::CreateEmpty(Context, Record.readInt());
     break;
+  case ACCC_if:
+    C = new (Context) ACCIfClause();
+    break;
   case ACCC_if_present:
     C = new (Context) ACCIfPresentClause();
     break;
@@ -13200,6 +13203,11 @@ void ACCClauseReader::VisitACCReductionClause(ACCReductionClause *C) {
   for (unsigned i = 0; i != NumVars; ++i)
     Vars.push_back(Record.readSubExpr());
   C->setVarRefs(Vars);
+}
+
+void ACCClauseReader::VisitACCIfClause(ACCIfClause *C) {
+  C->setCondition(Record.readSubExpr());
+  C->setLParenLoc(Record.readSourceLocation());
 }
 
 void ACCClauseReader::VisitACCIfPresentClause(ACCIfPresentClause *) {}

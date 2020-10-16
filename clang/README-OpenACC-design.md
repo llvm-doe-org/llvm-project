@@ -1185,6 +1185,30 @@ directive but not including a labeled statement.  Notes:
       for both OpenACC and OpenMP.  Moreover gcc's diagnostic
       specifically says `may only be used in compound statements`.
 
+### `if` clause ###
+
+* If the condition of an `update` directive's `if` clause evaluates to
+  zero, the directive does not produce a runtime error for data that
+  is not present on the device.  Notes:
+    * OpenACC 3.0 sec. 2.14.4 "Update Directive", "Restrictions",
+      L2299 states:
+
+        > If no if_present clause appears on the directive, each var
+        > in var-list must be present in the current device memory.
+
+    * OpenMP TR9 sec. 2.13.6 "target update Construct", p. 209 L3-4
+      states:
+
+        > If a present modifier appears in the clause and the
+        > corresponding list item is not present in the device data
+        > environment then an error occurs and the program terminates.
+
+    * Neither spec appears to state that this constraint is relaxed
+      when an `if` condition evaluates to zero.
+    * Even so, Clacc's OpenACC behavior here is the same as that of
+      LLVM's current upstream OpenMP behavior and pgcc 19.10-0's
+      OpenACC behavior.
+
 Update Directives
 -----------------
 
@@ -1192,6 +1216,7 @@ Clacc's current mapping of an `acc update` directive and its clauses
 to OpenMP is as follows:
 
 * `acc update` -> `omp target update`
+* *exp* `if` -> *exp* `if`
 * If *exp* `if_present`, then
     * *exp* `self` -> *exp* `from` without a `present` motion modifier
     * *exp* `device` -> *exp* `to` without a `present` motion modifier

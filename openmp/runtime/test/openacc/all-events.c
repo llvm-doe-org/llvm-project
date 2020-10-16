@@ -602,6 +602,8 @@ int main() {
     #pragma acc update self(arr0, notPresent0) device(arr1[0:5], notPresent1) if_present
     #line 120000
     #pragma acc update self(notPresent0) device(notPresent1) if_present
+    // Due to the if(0), the following should produce no additional events.
+    #pragma acc update self(arr0) device(arr1[0:5]) if_present if(0)
     #line 130000
     }
   #line 140000

@@ -85,6 +85,7 @@ Run-Time Environment Variables
     * Appearing outside any OpenACC construct is supported.
     * Appearing within a `data` construct is supported.
 * Supported clauses
+    * `if`
     * `if_present`
     * `self` and alias `host`
     * `device`
@@ -403,6 +404,8 @@ Clacc matures.  Please report any cases not listed below.
       implementation.
 * OpenMP runtime error diagnostics are expressed in terms of OpenMP
   not OpenACC.
+* Some compiler warnings are reported twice, once while parsing
+  OpenACC, and once while transforming to OpenMP.
 
 OpenMP Extensions
 =================

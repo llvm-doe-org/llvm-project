@@ -33,13 +33,18 @@ int main() {
   // expected-note@+1 2 {{variable 'constADecl' declared const here}}
   const extern int constADecl[3];
   struct S { int i; } s;
+  union U { int i; } u;
 
   //--------------------------------------------------
-  // No clauses
+  // Missing clauses
   //--------------------------------------------------
 
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update if(0)
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update if(1)
 
   // Any one of those clauses is sufficient to suppress that diagnostic.
   #pragma acc update self(i)
@@ -125,7 +130,30 @@ int main() {
   #pragma acc update shared(i
 
   //--------------------------------------------------
-  // if_present clause syntax
+  // if clause.
+  //--------------------------------------------------
+
+  // expected-error@+1 {{expected '(' after 'if'}}
+  #pragma acc update self(i) if
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc update self(i) if(1
+  // expected-error@+1 {{use of undeclared identifier 'bogus'}}
+  #pragma acc update self(i) if(bogus)
+  // expected-error@+1 {{statement requires expression of scalar type ('struct S' invalid)}}
+  #pragma acc update self(i) if(s)
+  // expected-error@+1 {{statement requires expression of scalar type ('union U' invalid)}}
+  #pragma acc update self(i) if(u)
+  // expected-warning@+1 {{implicit conversion from 'double' to '_Bool' changes value from 0.1 to true}}
+  #pragma acc update self(i) if(0.1)
+  // expected-error@+1 {{directive '#pragma acc update' cannot contain more than one 'if' clause}}
+  #pragma acc update self(i) if(1) if(1)
+  // expected-error@+2 {{directive '#pragma acc update' cannot contain more than one 'if' clause}}
+  // expected-error@+1 {{directive '#pragma acc update' cannot contain more than one 'if' clause}}
+  #pragma acc update self(i) if(i) if( 1) if(0)
+
+  //--------------------------------------------------
+  // if_present clause.
   //--------------------------------------------------
 
   // expected-warning@+1 {{extra tokens at the end of '#pragma acc update' are ignored}}

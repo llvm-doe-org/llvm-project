@@ -1040,6 +1040,63 @@ public:
   }
 };
 
+/// This represents 'if' clause in the '#pragma acc update' directive.
+///
+/// \code
+/// #pragma acc update if(c)
+/// \endcode
+/// In this example directive '#pragma acc update' has clause 'if' with single
+/// expression 'c'.
+class ACCIfClause : public ACCClause {
+  friend class ACCClauseReader;
+
+  /// Location of '('.
+  SourceLocation LParenLoc;
+
+  /// Original condition expression.
+  Stmt *Condition = nullptr;
+
+  /// Sets the location of '('.
+  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
+
+  /// Set the original condition expression.
+  ///
+  /// \param C condition expression.
+  void setCondition(Expr *C) { Condition = C; }
+
+public:
+  /// Build 'if' clause.
+  ///
+  /// \param C Original expression associated with this clause.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  ACCIfClause(Expr *C, SourceLocation StartLoc, SourceLocation LParenLoc,
+              SourceLocation EndLoc)
+      : ACCClause(ACCC_if, ACC_EXPLICIT, StartLoc, EndLoc),
+        LParenLoc(LParenLoc), Condition(C) {}
+
+  /// Build an empty clause.
+  ACCIfClause() : ACCClause(ACCC_if) {}
+
+  /// Returns the location of '('.
+  SourceLocation getLParenLoc() const { return LParenLoc; }
+
+  /// Return the original condition expression.
+  Expr *getCondition() { return cast<Expr>(Condition); }
+
+  /// Return the original condition expression.
+  Expr *getCondition() const { return cast<Expr>(Condition); }
+
+  child_range children() {
+    return child_range(&Condition, &Condition + 1);
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_if;
+  }
+};
+
 /// This represents 'if_present' clause in the '#pragma acc ...'
 /// directive.
 ///

@@ -119,6 +119,8 @@ int main() {
   // parloop-error@+1 {{unexpected OpenACC clause 'shared' in directive '#pragma acc parallel loop'}}
   #pragma acc parallel LOOP nomap(i) delete(i) shared(i, jk)
     FORLOOP
+  // par-error@+10 {{unexpected OpenACC clause 'if' in directive '#pragma acc parallel'}}
+  // parloop-error@+9 {{unexpected OpenACC clause 'if' in directive '#pragma acc parallel loop'}}
   // par-error@+8 {{unexpected OpenACC clause 'if_present' in directive '#pragma acc parallel'}}
   // parloop-error@+7 {{unexpected OpenACC clause 'if_present' in directive '#pragma acc parallel loop'}}
   // par-error@+6 {{unexpected OpenACC clause 'self' in directive '#pragma acc parallel'}}
@@ -127,7 +129,7 @@ int main() {
   // parloop-error@+3 {{unexpected OpenACC clause 'host' in directive '#pragma acc parallel loop'}}
   // par-error@+2 {{unexpected OpenACC clause 'device' in directive '#pragma acc parallel'}}
   // parloop-error@+1 {{unexpected OpenACC clause 'device' in directive '#pragma acc parallel loop'}}
-  #pragma acc parallel LOOP if_present self(i) host(i) device(i)
+  #pragma acc parallel LOOP if(1) if_present self(i) host(i) device(i)
     FORLOOP
   // par-error@+11 {{unexpected OpenACC clause 'seq' in directive '#pragma acc parallel'}}
   // par-error@+10 {{unexpected OpenACC clause 'independent' in directive '#pragma acc parallel'}}

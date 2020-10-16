@@ -144,6 +144,8 @@ void fn() {
     #pragma acc CMB_PAR loop firstprivate(i)
     for (int i = 0; i < 5; ++i)
       ;
+    // sep-error@+10 {{unexpected OpenACC clause 'if' in directive '#pragma acc loop'}}
+    // cmb-error@+9 {{unexpected OpenACC clause 'if' in directive '#pragma acc parallel loop'}}
     // sep-error@+8 {{unexpected OpenACC clause 'if_present' in directive '#pragma acc loop'}}
     // cmb-error@+7 {{unexpected OpenACC clause 'if_present' in directive '#pragma acc parallel loop'}}
     // sep-error@+6 {{unexpected OpenACC clause 'self' in directive '#pragma acc loop'}}
@@ -152,7 +154,7 @@ void fn() {
     // cmb-error@+3 {{unexpected OpenACC clause 'host' in directive '#pragma acc parallel loop'}}
     // sep-error@+2 {{unexpected OpenACC clause 'device' in directive '#pragma acc loop'}}
     // cmb-error@+1 {{unexpected OpenACC clause 'device' in directive '#pragma acc parallel loop'}}
-    #pragma acc CMB_PAR loop if_present self(i) host(i) device(i)
+    #pragma acc CMB_PAR loop if(1) if_present self(i) host(i) device(i)
     for (int i = 0; i < 5; ++i)
       ;
     // sep-error@+3 {{unexpected OpenACC clause 'num_gangs' in directive '#pragma acc loop'}}

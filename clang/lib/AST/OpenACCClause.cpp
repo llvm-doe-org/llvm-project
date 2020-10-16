@@ -54,6 +54,7 @@ clang::getPrivateVarsFromClause(ACCClause *C) {
 #include "clang/Basic/OpenACCKinds.def"
   case ACCC_no_create:
   case ACCC_delete:
+  case ACCC_if:
   case ACCC_if_present:
 #define OPENACC_CLAUSE_ALIAS_self(Name) \
   case ACCC_##Name:

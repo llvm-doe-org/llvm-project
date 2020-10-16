@@ -152,18 +152,20 @@ int main() {
   // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
   #pragma acc exit data shared(i, jk) reduction(+:i,jk,f) private(i) firstprivate(i)
 
+  // expected-error@+6 {{unexpected OpenACC clause 'if' in directive '#pragma acc enter data'}}
   // expected-error@+5 {{unexpected OpenACC clause 'if_present' in directive '#pragma acc enter data'}}
   // expected-error@+4 {{unexpected OpenACC clause 'self' in directive '#pragma acc enter data'}}
   // expected-error@+3 {{unexpected OpenACC clause 'host' in directive '#pragma acc enter data'}}
   // expected-error@+2 {{unexpected OpenACC clause 'device' in directive '#pragma acc enter data'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
-  #pragma acc enter data if_present self(i) host(i) device(i)
+  #pragma acc enter data if(1) if_present self(i) host(i) device(i)
+  // expected-error@+6 {{unexpected OpenACC clause 'if' in directive '#pragma acc exit data'}}
   // expected-error@+5 {{unexpected OpenACC clause 'if_present' in directive '#pragma acc exit data'}}
   // expected-error@+4 {{unexpected OpenACC clause 'self' in directive '#pragma acc exit data'}}
   // expected-error@+3 {{unexpected OpenACC clause 'host' in directive '#pragma acc exit data'}}
   // expected-error@+2 {{unexpected OpenACC clause 'device' in directive '#pragma acc exit data'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
-  #pragma acc exit data if_present self(i) host(i) device(i)
+  #pragma acc exit data if(1) if_present self(i) host(i) device(i)
 
   // expected-error@+4 {{unexpected OpenACC clause 'num_gangs' in directive '#pragma acc enter data'}}
   // expected-error@+3 {{unexpected OpenACC clause 'num_workers' in directive '#pragma acc enter data'}}

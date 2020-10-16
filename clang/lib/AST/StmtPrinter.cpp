@@ -1093,6 +1093,12 @@ void ACCClausePrinter::VisitACCReductionClause(ACCReductionClause *Node) {
   }
 }
 
+void ACCClausePrinter::VisitACCIfClause(ACCIfClause *Node) {
+  OS << "if(";
+  Node->getCondition()->printPretty(OS, nullptr, Policy, 0);
+  OS << ")";
+}
+
 void ACCClausePrinter::VisitACCIfPresentClause(ACCIfPresentClause *Node) {
   OS << "if_present";
 }

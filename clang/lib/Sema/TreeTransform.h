@@ -2355,6 +2355,17 @@ public:
         ReductionId);
   }
 
+  /// Build a new OpenACC 'if' clause.
+  ///
+  /// By default, performs semantic analysis to build the new statement.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCIfClause(Expr *Condition, SourceLocation StartLoc,
+                                SourceLocation LParenLoc,
+                                SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCIfClause(Condition, StartLoc, LParenLoc,
+                                          EndLoc);
+  }
+
   /// Build a new OpenACC 'self' clause.
   ///
   /// By default, performs semantic analysis to build the new OpenACC clause.
@@ -10513,6 +10524,16 @@ ACCClause *TreeTransform<Derived>::TransformACCReductionClause(
   return getDerived().RebuildACCReductionClause(
       Vars, C->getDetermination(), C->getBeginLoc(), C->getLParenLoc(),
       C->getColonLoc(), C->getEndLoc(), NameInfo);
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCIfClause(ACCIfClause *C) {
+  ExprResult E = getDerived().TransformExpr(C->getCondition());
+  if (E.isInvalid())
+    return nullptr;
+  return getDerived().RebuildACCIfClause(E.get(), C->getBeginLoc(),
+                                         C->getLParenLoc(), C->getEndLoc());
 }
 
 template <typename Derived>

@@ -1187,6 +1187,19 @@ public:
         });
   }
 
+  OMPClauseResult TransformACCIfClause(ACCExecutableDirective *D,
+                                       OpenMPDirectiveKind TDKind,
+                                       ACCIfClause *C) {
+    OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_if);
+    ExprResult E = getDerived().TransformExpr(C->getCondition());
+    if (E.isInvalid())
+      return OMPClauseError();
+    ExplicitClauseLocs L(D, C, C->getLParenLoc());
+    return getDerived().RebuildOMPIfClause(OMPD_unknown, E.get(), L.LocStart,
+                                           L.LParenLoc, L.LParenLoc,
+                                           L.LParenLoc, L.LocEnd);
+  }
+
   OMPClauseResult TransformACCIfPresentClause(ACCExecutableDirective *D,
                                               OpenMPDirectiveKind TDKind,
                                               ACCIfPresentClause *C) {

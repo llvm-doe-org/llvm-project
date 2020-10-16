@@ -1,6 +1,7 @@
 // Check "acc update" with different values of -fopenacc-update-present-omp.
+//
 // Diagnostics about the present motion modifier in the translation are tested
-// in warn-acc-omp-update-present.c
+// in warn-acc-omp-update-present.c.  The "if" clause is tested in update-if.c.
 //
 // The various cases covered here should be kept consistent with present.c and
 // no-create.c.  For example, a subarray that extends a subarray already present
