@@ -61,15 +61,16 @@ int main() {
 
   // Well formed clauses not permitted here.
 
-  // expected-error@+8 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc update'}}
-  // expected-error@+7 {{unexpected OpenACC clause 'present' in directive '#pragma acc update'}}
-  // expected-error@+6 {{unexpected OpenACC clause 'copy' in directive '#pragma acc update'}}
-  // expected-error@+5 {{unexpected OpenACC clause 'copyin' in directive '#pragma acc update'}}
-  // expected-error@+4 {{unexpected OpenACC clause 'copyout' in directive '#pragma acc update'}}
-  // expected-error@+3 {{unexpected OpenACC clause 'create' in directive '#pragma acc update'}}
-  // expected-error@+2 {{unexpected OpenACC clause 'no_create' in directive '#pragma acc update'}}
+  // expected-error@+9 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc update'}}
+  // expected-error@+8 {{unexpected OpenACC clause 'present' in directive '#pragma acc update'}}
+  // expected-error@+7 {{unexpected OpenACC clause 'copy' in directive '#pragma acc update'}}
+  // expected-error@+6 {{unexpected OpenACC clause 'copyin' in directive '#pragma acc update'}}
+  // expected-error@+5 {{unexpected OpenACC clause 'copyout' in directive '#pragma acc update'}}
+  // expected-error@+4 {{unexpected OpenACC clause 'create' in directive '#pragma acc update'}}
+  // expected-error@+3 {{unexpected OpenACC clause 'no_create' in directive '#pragma acc update'}}
+  // expected-error@+2 {{unexpected OpenACC clause 'delete' in directive '#pragma acc update'}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
-  #pragma acc update nomap(i) present(i) copy(i) copyin(i) copyout(i) create(i) no_create(i)
+  #pragma acc update nomap(i) present(i) copy(i) copyin(i) copyout(i) create(i) no_create(i) delete(i)
   // expected-error@+5 {{unexpected OpenACC clause 'pcopy' in directive '#pragma acc update'}}
   // expected-error@+4 {{unexpected OpenACC clause 'pcopyin' in directive '#pragma acc update'}}
   // expected-error@+3 {{unexpected OpenACC clause 'pcopyout' in directive '#pragma acc update'}}

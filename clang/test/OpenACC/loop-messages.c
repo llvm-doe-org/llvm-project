@@ -128,18 +128,31 @@ void fn() {
     #pragma acc CMB_PAR loop DATA(i)
     for (int i = 0; i < 5; ++i)
       ;
-    // sep-error@+2 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc loop'}}
-    // cmb-error@+1 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc parallel loop'}}
-    #pragma acc CMB_PAR loop nomap(i)
+    // sep-error@+4 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc loop'}}
+    // cmb-error@+3 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc parallel loop'}}
+    // sep-error@+2 {{unexpected OpenACC clause 'delete' in directive '#pragma acc loop'}}
+    // cmb-error@+1 {{unexpected OpenACC clause 'delete' in directive '#pragma acc parallel loop'}}
+    #pragma acc CMB_PAR loop nomap(i) delete(i)
     for (int i = 0; i < 5; ++i)
       ;
-    // cmb-error@+2 {{unexpected OpenACC clause 'shared' in directive '#pragma acc parallel loop'}}
-    // sep-error@+1 {{unexpected OpenACC clause 'shared' in directive '#pragma acc loop'}}
+    // sep-error@+2 {{unexpected OpenACC clause 'shared' in directive '#pragma acc loop'}}
+    // cmb-error@+1 {{unexpected OpenACC clause 'shared' in directive '#pragma acc parallel loop'}}
     #pragma acc CMB_PAR loop shared(i)
     for (int i = 0; i < 5; ++i)
       ;
     // sep-error@+1 {{unexpected OpenACC clause 'firstprivate' in directive '#pragma acc loop'}}
     #pragma acc CMB_PAR loop firstprivate(i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // sep-error@+8 {{unexpected OpenACC clause 'if_present' in directive '#pragma acc loop'}}
+    // cmb-error@+7 {{unexpected OpenACC clause 'if_present' in directive '#pragma acc parallel loop'}}
+    // sep-error@+6 {{unexpected OpenACC clause 'self' in directive '#pragma acc loop'}}
+    // cmb-error@+5 {{unexpected OpenACC clause 'self' in directive '#pragma acc parallel loop'}}
+    // sep-error@+4 {{unexpected OpenACC clause 'host' in directive '#pragma acc loop'}}
+    // cmb-error@+3 {{unexpected OpenACC clause 'host' in directive '#pragma acc parallel loop'}}
+    // sep-error@+2 {{unexpected OpenACC clause 'device' in directive '#pragma acc loop'}}
+    // cmb-error@+1 {{unexpected OpenACC clause 'device' in directive '#pragma acc parallel loop'}}
+    #pragma acc CMB_PAR loop if_present self(i) host(i) device(i)
     for (int i = 0; i < 5; ++i)
       ;
     // sep-error@+3 {{unexpected OpenACC clause 'num_gangs' in directive '#pragma acc loop'}}

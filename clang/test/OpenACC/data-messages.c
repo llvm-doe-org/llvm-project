@@ -99,14 +99,21 @@ int main() {
 
   // Well formed clauses not permitted here.
 
-  // expected-error@+6 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc data'}}
+  // expected-error@+7 {{unexpected OpenACC clause 'nomap' in directive '#pragma acc data'}}
+  // expected-error@+6 {{unexpected OpenACC clause 'delete' in directive '#pragma acc data'}}
   // expected-error@+5 {{unexpected OpenACC clause 'shared' in directive '#pragma acc data'}}
   // expected-error@+4 {{unexpected OpenACC clause 'reduction' in directive '#pragma acc data'}}
   // expected-error@+3 {{unexpected OpenACC clause 'private' in directive '#pragma acc data'}}
   // expected-error@+2 {{unexpected OpenACC clause 'firstprivate' in directive '#pragma acc data'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
-  #pragma acc data nomap(i) shared(i, jk) reduction(+:i,jk,f) private(i) firstprivate(i)
+  #pragma acc data nomap(i) delete(i) shared(i, jk) reduction(+:i,jk,f) private(i) firstprivate(i)
     ;
+  // expected-error@+5 {{unexpected OpenACC clause 'if_present' in directive '#pragma acc data'}}
+  // expected-error@+4 {{unexpected OpenACC clause 'self' in directive '#pragma acc data'}}
+  // expected-error@+3 {{unexpected OpenACC clause 'host' in directive '#pragma acc data'}}
+  // expected-error@+2 {{unexpected OpenACC clause 'device' in directive '#pragma acc data'}}
+  // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
+  #pragma acc data if_present self(i) host(i) device(i)
   // expected-error@+3 {{unexpected OpenACC clause 'num_gangs' in directive '#pragma acc data'}}
   // expected-error@+2 {{unexpected OpenACC clause 'num_workers' in directive '#pragma acc data'}}
   // expected-error@+1 {{unexpected OpenACC clause 'vector_length' in directive '#pragma acc data'}}
