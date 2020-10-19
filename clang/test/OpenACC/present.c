@@ -33,7 +33,7 @@
 // RUN: %data present-opts {
 // RUN:   (present-opt=-Wno-openacc-omp-map-present                                 present-mt=present,hold,alloc not-if-present=not not-crash-if-present='not --crash')
 // RUN:   (present-opt='-fopenacc-present-omp=present -Wno-openacc-omp-map-present' present-mt=present,hold,alloc not-if-present=not not-crash-if-present='not --crash')
-// RUN:   (present-opt=-fopenacc-present-omp=alloc                                  present-mt=hold,alloc         not-if-present=    not-crash-if-present=             )
+// RUN:   (present-opt=-fopenacc-present-omp=no-present                             present-mt=hold,alloc         not-if-present=    not-crash-if-present=             )
 // RUN: }
 // RUN: %data tgts {
 // RUN:   (run-if=                tgt-cflags=                                     not-if-off-and-present=                  not-crash-if-off-and-present=                        not-if-off=    not-crash-if-off=             )
@@ -47,8 +47,8 @@
 // RUN: }
 //      # Due to a bug in Clang's OpenMP implementation, codegen and runtime
 //      # behavior used to be differently for "present" clauses on "acc data"
-//      # vs. "acc parallel" if -fopenacc-present-omp=alloc were specified, so
-//      # check all interesting cases for each.  Specifically, without the
+//      # vs. "acc parallel" if -fopenacc-present-omp=no-present were specified,
+//      # so check all interesting cases for each.  Specifically, without the
 //      # "present" modifier, a map type for an unused variable within "omp
 //      # target teams" was dropped by Clang, so there was no runtime error for
 //      # collisions with prior mappings.  However, in the case of "omp target

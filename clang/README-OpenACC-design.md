@@ -1278,8 +1278,8 @@ OpenMP is as follows:
         * `present` (default):
             * *exp* `present` -> *exp* `map` with a
               `present,hold,alloc` map type.
-        * `alloc`:
-            * *exp* `present` -> *exp* `map` with an `hold,alloc` map
+        * `no-present`:
+            * *exp* `present` -> *exp* `map` with a `hold,alloc` map
               type.
     * Notes:
         * See the discussion of the `present` clause under "Supported

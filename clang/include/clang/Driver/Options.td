@@ -1751,7 +1751,7 @@ def fopenacc_update_present_omp_EQ :
   HelpText<"Adjust the OpenMP translation of the OpenACC 'update' directive "
            "when 'if_present' is not specified.  'present' (default) specifies "
            "inclusion of the 'present' motion modifier, an OpenMP TR8 feature "
-           "that fully implements OpenACC semantics in this case.  "
+           "that fully implements the OpenACC presence check in this case.  "
            "'no-present' specifies that 'present' be omitted, which suffices "
            "for OpenACC applications that are robust enough not to produce the "
            "runtime error specified by OpenACC here.">,
@@ -1772,14 +1772,14 @@ def fopenacc_structured_ref_count_omp_EQ : Joined<["-"],
 def fopenacc_present_omp_EQ : Joined<["-"], "fopenacc-present-omp=">,
   Flags<[CC1Option, NoArgumentUnused]>, Group<f_Group>,
   MetaVarName<"<translation>">,
-  HelpText<"Adjust the OpenMP translation of OpenACC 'present' clauses. "
-           "'present' (default) specifies the 'present' map type modifier, an "
-           "OpenMP TR8 feature that fully implements the 'present' clause "
-           "semantics.  'alloc' specifies the standard OpenMP 'alloc' map "
-           "type without a modifier, which suffices for OpenACC applications "
-           "that are robust enough not to produce the runtime error specified "
-           "by the OpenACC 'present' clause.">,
-  Values<"present,alloc">;
+  HelpText<"Adjust the OpenMP translation of the OpenACC 'present' clause. "
+           "'present' (default) specifies inclusion of the 'present' map type "
+           "modifier, an OpenMP TR8 feature that fully implements the OpenACC "
+           "presence check in this case.  'no-present' specifies that "
+           "'present' be omitted, which suffices for OpenACC applications that "
+           "are robust enough not to produce the runtime error specified by "
+           "OpenACC here.">,
+  Values<"present,no-present">;
 def fopenacc_no_create_omp_EQ : Joined<["-"], "fopenacc-no-create-omp=">,
   Flags<[CC1Option, NoArgumentUnused]>, Group<f_Group>,
   MetaVarName<"<translation>">,

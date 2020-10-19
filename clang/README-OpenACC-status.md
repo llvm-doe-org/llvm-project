@@ -55,7 +55,7 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
     * `-fopenacc-structured-ref-count-omp=KIND` where `KIND` is either
       `hold` or `no-hold`
     * `-fopenacc-present-omp=KIND` where `KIND` is either `present` or
-      `alloc`
+      `no-present`
     * `-fopenacc-no-create-omp=KIND` where `KIND` is either `no_alloc`
       or `alloc`
     * `-Wopenacc-omp-update-present`
@@ -585,7 +585,7 @@ with some OpenMP features.
 * Translation Options
     * `-fopenacc-present-omp=present`
         * This is the default translation.
-    * `-fopenacc-present-omp=alloc`
+    * `-fopenacc-present-omp=no-present`
         * This translation omits the `present` map type modifier.
           Thus, contrary to OpenACC semantics, it never produces a
           runtime error when the specified variable is not present

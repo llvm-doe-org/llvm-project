@@ -959,12 +959,12 @@ public:
       getSema().Diag(C->getBeginLoc(), diag::note_acc_alternate_omp)
           << getOpenACCName(C->getClauseKind())
           << LangOptions::getOpenACCPresentOMPValue(
-              LangOptions::OpenACCPresentOMP_Alloc);
+              LangOptions::OpenACCPresentOMP_NoPresent);
       getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_diag)
           << DiagnosticIDs::getWarningOptionForDiag(
               diag::warn_acc_omp_map_present);
       break;
-    case LangOptions::OpenACCPresentOMP_Alloc:
+    case LangOptions::OpenACCPresentOMP_NoPresent:
       break;
     }
     addHoldMapTypeModifier(D, C, MapMods);

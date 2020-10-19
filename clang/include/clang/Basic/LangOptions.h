@@ -142,15 +142,15 @@ public:
 
   enum OpenACCPresentOMPKind {
     OpenACCPresentOMP_Present,
-    OpenACCPresentOMP_Alloc,
-    OpenACCPresentOMP_Last = OpenACCPresentOMP_Alloc
+    OpenACCPresentOMP_NoPresent,
+    OpenACCPresentOMP_Last = OpenACCPresentOMP_NoPresent
   };
   static StringRef getOpenACCPresentOMPValue(OpenACCPresentOMPKind K) {
     switch (K) {
     case OpenACCPresentOMP_Present:
       return "present";
-    case OpenACCPresentOMP_Alloc:
-      return "alloc";
+    case OpenACCPresentOMP_NoPresent:
+      return "no-present";
     }
     llvm_unreachable("unexpected OpenACCPresentOMPKind");
   }
