@@ -6,8 +6,8 @@
 // in the Clang frontend complains... but only in the case that no_create
 // specifies the full array.
 
-// RUN: %clang -Xclang -verify=alloc -fsyntax-only -fopenacc \
-// RUN:        -fopenacc-no-create-omp=alloc -o %t.exe %s
+// RUN: %clang -Xclang -verify=no-no_alloc -fsyntax-only -fopenacc \
+// RUN:        -fopenacc-no-create-omp=no-no_alloc -o %t.exe %s
 
 // RUN: %data tgts {
 // RUN:   (run-if=                cflags=                                    )
@@ -16,7 +16,7 @@
 // RUN:   (run-if=%run-if-nvptx64 cflags=-fopenmp-targets=%run-nvptx64-triple)
 // RUN: }
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify=no-alloc -fopenacc %[cflags] \
+// RUN:   %[run-if] %clang -Xclang -verify=no_alloc -fopenacc %[cflags] \
 // RUN:                    -o %t.exe %s
 // RUN:   %[run-if] %t.exe > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out -check-prefixes=EXE %s
@@ -24,16 +24,16 @@
 
 // END.
 
-// no-alloc-no-diagnostics
+// no_alloc-no-diagnostics
 
 #include <stdio.h>
 
 // EXE-NOT: {{.}}
 int main() {
   int arr[] = {10, 20, 30, 40, 50};
-  // alloc-note@+1 {{used here}}
+  // no-no_alloc-note@+1 {{used here}}
   #pragma acc data copy(arr[1:2])
-  // alloc-error@+1 {{original storage of expression in data environment is shared but data environment do not fully contain mapped expression storage}}
+  // no-no_alloc-error@+1 {{original storage of expression in data environment is shared but data environment do not fully contain mapped expression storage}}
   #pragma acc parallel num_gangs(1) no_create(arr)
   arr[1] += 100;
   // EXE: 120

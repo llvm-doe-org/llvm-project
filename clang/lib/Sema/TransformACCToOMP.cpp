@@ -911,7 +911,7 @@ public:
     case LangOptions::OpenACCNoCreateOMP_NoAlloc:
       NoCreateOMPNoAlloc = true;
       break;
-    case LangOptions::OpenACCNoCreateOMP_Alloc:
+    case LangOptions::OpenACCNoCreateOMP_NoNoAlloc:
       NoCreateOMPNoAlloc = false;
       break;
     }
@@ -1071,12 +1071,12 @@ public:
       getSema().Diag(C->getBeginLoc(), diag::note_acc_alternate_omp)
           << "no-create"
           << LangOptions::getOpenACCNoCreateOMPValue(
-              LangOptions::OpenACCNoCreateOMP_Alloc);
+              LangOptions::OpenACCNoCreateOMP_NoNoAlloc);
       getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_diag)
           << DiagnosticIDs::getWarningOptionForDiag(
               diag::warn_acc_omp_map_no_alloc);
       break;
-    case LangOptions::OpenACCNoCreateOMP_Alloc:
+    case LangOptions::OpenACCNoCreateOMP_NoNoAlloc:
       break;
     }
     addHoldMapTypeModifier(D, C, MapMods);

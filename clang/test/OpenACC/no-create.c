@@ -1,5 +1,5 @@
 // Check no_create clauses on different constructs and with different values of
-// -fopenacc-no-create-omp.  Diagnostics about no-alloc in the translation are
+// -fopenacc-no-create-omp.  Diagnostics about no_alloc in the translation are
 // tested in warn-acc-omp-map-no-alloc.c.  data.c tests various interactions
 // with explicit DAs and the defaultmap added for scalars with suppressed
 // OpenACC implicit DAs.
@@ -44,7 +44,7 @@
 // RUN: %data no-create-opts {
 // RUN:   (no-create-opt=-Wno-openacc-omp-map-no-alloc                                    no-create-mt=no_alloc,hold,alloc inherited-no-create-mt=no_alloc,alloc noAlloc-or-alloc=NO-ALLOC not-crash-if-alloc=             )
 // RUN:   (no-create-opt='-fopenacc-no-create-omp=no_alloc -Wno-openacc-omp-map-no-alloc' no-create-mt=no_alloc,hold,alloc inherited-no-create-mt=no_alloc,alloc noAlloc-or-alloc=NO-ALLOC not-crash-if-alloc=             )
-// RUN:   (no-create-opt=-fopenacc-no-create-omp=alloc                                    no-create-mt=hold,alloc          inherited-no-create-mt=alloc          noAlloc-or-alloc=ALLOC    not-crash-if-alloc='not --crash')
+// RUN:   (no-create-opt=-fopenacc-no-create-omp=no-no_alloc                              no-create-mt=hold,alloc          inherited-no-create-mt=alloc          noAlloc-or-alloc=ALLOC    not-crash-if-alloc='not --crash')
 // RUN: }
 // RUN: %data tgts {
 // RUN:   (run-if=                tgt-cflags=                                     host=-HOST not-crash-if-off-and-alloc=                     )

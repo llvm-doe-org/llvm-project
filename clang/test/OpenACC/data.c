@@ -2305,8 +2305,8 @@ void test() {
   //--------------------------------------------------
   // Inherited no_alloc: Check that an explicit DMA or DSA prevents it.
   //
-  // The case where -fopenacc-no-create-omp=alloc prevents it is checked in
-  // no-create.c.
+  // The case where -fopenacc-no-create-omp=no-no_alloc prevents it is checked
+  // in no-create.c.
   //--------------------------------------------------
 
   // PRT-NEXT: {

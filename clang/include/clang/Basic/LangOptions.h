@@ -157,15 +157,15 @@ public:
 
   enum OpenACCNoCreateOMPKind {
     OpenACCNoCreateOMP_NoAlloc,
-    OpenACCNoCreateOMP_Alloc,
-    OpenACCNoCreateOMP_Last = OpenACCNoCreateOMP_Alloc
+    OpenACCNoCreateOMP_NoNoAlloc,
+    OpenACCNoCreateOMP_Last = OpenACCNoCreateOMP_NoNoAlloc
   };
   static StringRef getOpenACCNoCreateOMPValue(OpenACCNoCreateOMPKind K) {
     switch (K) {
     case OpenACCNoCreateOMP_NoAlloc:
       return "no_alloc";
-    case OpenACCNoCreateOMP_Alloc:
-      return "alloc";
+    case OpenACCNoCreateOMP_NoNoAlloc:
+      return "no-no_alloc";
     }
     llvm_unreachable("unexpected OpenACCNoCreateOMPKind");
   }

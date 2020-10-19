@@ -57,7 +57,7 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
     * `-fopenacc-present-omp=KIND` where `KIND` is either `present` or
       `no-present`
     * `-fopenacc-no-create-omp=KIND` where `KIND` is either `no_alloc`
-      or `alloc`
+      or `no-no_alloc`
     * `-Wopenacc-omp-update-present`
     * `-Wopenacc-omp-map-hold`
     * `-Wopenacc-omp-map-present`
@@ -613,9 +613,9 @@ with some OpenMP features.
     * `-Wno-error=openacc-omp-map-no-alloc`
     * `-Wno-openacc-omp-map-no-alloc`
 * Translation Options
-    * `-fopenacc-no-create-omp=no-alloc`
+    * `-fopenacc-no-create-omp=no_alloc`
         * This is the default translation.
-    * `-fopenacc-no-create-omp=alloc`
+    * `-fopenacc-no-create-omp=no-no_alloc`
         * This translation omits the `no_alloc` map type modifier.
           Thus, contrary to OpenACC semantics, it attempts to allocate
           the specified variable when it is not already present on the

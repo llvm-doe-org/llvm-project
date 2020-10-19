@@ -21,9 +21,9 @@
 // RUN:   (warn-opt=-Wno-openacc-omp-map-no-alloc       no-alloc=none    )
 // RUN: }
 // RUN: %data no-create-opts {
-// RUN:   (no-create-opt=                                 verify=%[no-alloc])
-// RUN:   (no-create-opt=-fopenacc-no-create-omp=no_alloc verify=%[no-alloc])
-// RUN:   (no-create-opt=-fopenacc-no-create-omp=alloc    verify=none       )
+// RUN:   (no-create-opt=                                    verify=%[no-alloc])
+// RUN:   (no-create-opt=-fopenacc-no-create-omp=no_alloc    verify=%[no-alloc])
+// RUN:   (no-create-opt=-fopenacc-no-create-omp=no-no_alloc verify=none       )
 // RUN: }
 // RUN: %for prt-opts {
 // RUN:   %for warn-opts {
@@ -41,10 +41,10 @@
 int main() {
   int x, y, z;
   // error-error@+6  2 {{the OpenACC 'no_create' clause translation uses the 'no_alloc' map type modifier}}
-  // error-note@+5   2 {{an alternative OpenMP translation can be specified with, for example, '-fopenacc-no-create-omp=alloc'}}
+  // error-note@+5   2 {{an alternative OpenMP translation can be specified with, for example, '-fopenacc-no-create-omp=no-no_alloc'}}
   // error-note@+4   2 {{or you can just disable this diagnostic with '-Wno-openacc-omp-map-no-alloc'}}
   // warn-warning@+3 2 {{the OpenACC 'no_create' clause translation uses the 'no_alloc' map type modifier}}
-  // warn-note@+2    2 {{an alternative OpenMP translation can be specified with, for example, '-fopenacc-no-create-omp=alloc'}}
+  // warn-note@+2    2 {{an alternative OpenMP translation can be specified with, for example, '-fopenacc-no-create-omp=no-no_alloc'}}
   // warn-note@+1    2 {{or you can just disable this diagnostic with '-Wno-openacc-omp-map-no-alloc'}}
   #pragma acc data no_create(x, y) no_create(z)
   // error-error@+2 {{the translation of a visible OpenACC 'nomap' clause produces a 'no_alloc' map type modifier here}}
@@ -52,12 +52,12 @@ int main() {
   #pragma acc parallel
   x = 5;
   // warn-warning@+3 {{the OpenACC 'no_create' clause translation uses the 'no_alloc' map type modifier}}
-  // warn-note@+2    {{an alternative OpenMP translation can be specified with, for example, '-fopenacc-no-create-omp=alloc'}}
+  // warn-note@+2    {{an alternative OpenMP translation can be specified with, for example, '-fopenacc-no-create-omp=no-no_alloc'}}
   // warn-note@+1    {{or you can just disable this diagnostic with '-Wno-openacc-omp-map-no-alloc'}}
   #pragma acc parallel no_create(x)
   ;
   // warn-warning@+3 {{the OpenACC 'no_create' clause translation uses the 'no_alloc' map type modifier}}
-  // warn-note@+2    {{an alternative OpenMP translation can be specified with, for example, '-fopenacc-no-create-omp=alloc'}}
+  // warn-note@+2    {{an alternative OpenMP translation can be specified with, for example, '-fopenacc-no-create-omp=no-no_alloc'}}
   // warn-note@+1    {{or you can just disable this diagnostic with '-Wno-openacc-omp-map-no-alloc'}}
   #pragma acc parallel loop no_create(x)
   for (int i = 0; i < 5; ++i)

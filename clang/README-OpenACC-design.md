@@ -1322,16 +1322,16 @@ OpenMP is as follows:
 * *exp* `copy` -> *exp* `map` with a `hold,tofrom` map type.
 * *exp* `copyin` -> *exp* `map` with a `hold,to` map type.
 * *exp* `copyout` -> *exp* `map` with a `hold,from` map type.
-* *exp* `create` -> *exp* `map` with an `hold,alloc` map type.
+* *exp* `create` -> *exp* `map` with a `hold,alloc` map type.
 * *exp* `no_create` is translated according to the
   `-fopenacc-no-create-omp=KIND` command-line option:
     * `KIND` is one of:
         * `no_alloc` (default):
             * *exp* `no_create` -> *exp* `map` with a
               `no_alloc,hold,alloc` map type.
-        * `alloc`:
-            * *exp* `no_create` -> *exp* `map` with an `hold,alloc`
-              map type.
+        * `no-no_alloc`:
+            * *exp* `no_create` -> *exp* `map` with a `hold,alloc` map
+              type.
     * Notes:
         * See the translation of *imp* `nomap` on `acc parallel` for
           an additional component of the `no_create` translation.
