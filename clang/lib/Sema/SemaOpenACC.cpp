@@ -684,23 +684,18 @@ public:
     if (isOpenACCLoopDirective(D->getDirectiveKind())) {
       auto *LD = cast<ACCLoopDirective>(D);
       ACCPartitioningKind Part = LD->getPartitioning();
-      // If there's nested gang partitioning or if the loop has not been
-      // determined to be independent, continue on to descendants, some of
-      // which that might not be true for.
+      // If this loop is gang-partitioned, don't add an implicit gang clause,
+      // which would be redundant, and don't continue to descendants because
+      // they cannot then be gang-partitioned.
+      if (Part.hasGangPartitioning())
+        return;
+      // We haven't encountered any enclosing gang-partitioned loop.  If there's
+      // also no enclosed gang-partitioned loop and if this loop has been
+      // determined to be independent, then this is the outermost loop meeting
+      // all those conditions.  Thus, an implicit gang clause belongs here, and
+      // don't continue to descendants because they cannot then be
+      // gang-partitioned.
       if (!LD->getNestedGangPartitioning() && Part.hasIndependent()) {
-        // If there's already a gang, worker, or vector clause, don't mess
-        // with the directive's partitioning specification.  Don't continue to
-        // descendants because this means they can't accept a gang clause
-        // either.
-        if (Part.hasGangClause() || Part.hasWorkerClause() ||
-            Part.hasVectorClause())
-          return;
-        // The first three conditions checked above plus the fact that we
-        // haven't encountered a gang clause on enclosing loops mean this is a
-        // gang clause candidate.  The last two conditions above plus the fact
-        // that this is the outermost gang clause candidate we've encountered
-        // means this is where we add the implicit gang clause.  Don't continue
-        // to descendants as they then cannot have a gang clause.
         LD->addImplicitGangClause();
         return;
       }
@@ -1469,7 +1464,7 @@ StmtResult Sema::ActOnOpenACCExecutableDirective(
     if (isOpenACCParallelDirective(DKind))
       ImplicitGangAdder().Visit(AStmt);
 
-    // Iterate acc loop control control variables.
+    // Iterate acc loop control variables.
     llvm::SmallVector<Expr *, 8> PrePrivate;
     for (std::pair<Expr *, VarDecl *> LCV :
              DirStack->getLoopControlVariables()) {

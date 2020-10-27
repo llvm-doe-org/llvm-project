@@ -722,8 +722,13 @@ public:
             if (DirEntry.LoopOMPKind == OMPD_unknown) {
               TDKind = OMPD_parallel_for_simd;
               AddNumThreads1 = true;
-            }
-            else
+              // TODO: Gang-redundant, vector-partitioned mode isn't possible
+              // currently because of implicit gang clauses.  Support for
+              // orphaned loops or something like a gang(redundant) clause would
+              // make it possible again.
+              llvm_unreachable(
+                  "unexpected need for parallel for num_threads(1)");
+            } else
               TDKind = OMPD_simd;
           }
         } else { // hasWorkerPartitioning

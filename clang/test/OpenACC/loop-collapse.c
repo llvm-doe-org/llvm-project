@@ -510,7 +510,8 @@ int main() {
   // DMP-NEXT:   ACCCollapseClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 2
   // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-  // DMP-NEXT:   impl: OMPParallelForDirective
+  // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+  // DMP-NEXT:   impl: OMPDistributeParallelForDirective
   // DMP-NEXT:     OMPNum_threadsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 4
   // DMP-NEXT:     OMPCollapseClause
@@ -519,8 +520,8 @@ int main() {
   // DMP:          ForStmt
   //
   // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker collapse(2){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for num_threads(4) collapse(2){{$}}
-  // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for num_threads(4) collapse(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4) collapse(2){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp distribute parallel for num_threads(4) collapse(2){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker collapse(2){{$}}
   // PRT-NEXT:    for (int i ={{.*}})
   #pragma acc loop worker collapse(2)
@@ -562,9 +563,8 @@ int main() {
   // DMP-NEXT:       ACCCollapseClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 2
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-  // DMP-NEXT:       impl: OMPParallelForSimdDirective
-  // DMP-NEXT:         OMPNum_threadsClause
-  // DMP-NEXT:           IntegerLiteral {{.*}} 1
+  // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+  // DMP-NEXT:       impl: OMPDistributeSimdDirective
   // DMP-NEXT:         OMPSimdlenClause
   // DMP-NEXT:           ConstantExpr {{.*}} 'int'
   // DMP-NEXT:             IntegerLiteral {{.*}} 4
@@ -575,10 +575,10 @@ int main() {
   //
   // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(1) vector_length(4) vector collapse(2){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(1) simdlen(4) collapse(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute simd simdlen(4) collapse(2){{$}}
   //
   // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
-  // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(1) simdlen(4) collapse(2){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp distribute simd simdlen(4) collapse(2){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(1) vector_length(4) vector collapse(2){{$}}
   //
   // PRT-NEXT:    for (int i ={{.*}})
@@ -1144,13 +1144,15 @@ int main() {
   //
   // The first case checks gang partitioning only.
   //
-  // The second case checks worker partitioning only.
+  // The second case checks worker partitioning only (plus implicit gang
+  // partitioning).
   //
   // The third case checks (1) a combined directive, (2) vector partitioning
-  // only (3) that privacy of a simd loop control variables is handled via a
-  // compound statement and local declaration instead of a private clause, and
-  // (4) that a declared loop control variable doesn't throw off the count and
-  // cause nested but not associated loop control variables to be private.
+  // only (plus implicit gang partitioning) (3) that privacy of a simd loop
+  // control variable is handled via a compound statement and local declaration
+  // instead of a private clause, and (4) that a declared loop control variable
+  // doesn't throw off the count and cause nested but not associated loop
+  // control variables to be private.
   //--------------------------------------------------
 
   // DMP: CallExpr
@@ -1272,7 +1274,8 @@ int main() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-NEXT:   impl: OMPParallelForDirective
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeParallelForDirective
     // DMP-NEXT:     OMPNum_threadsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 8
     // DMP-NEXT:     OMPCollapseClause
@@ -1288,8 +1291,8 @@ int main() {
     // DMP:          ForStmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker collapse(2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for num_threads(8) collapse(2) private(i,j) shared(k){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for num_threads(8) collapse(2) private(i,j) shared(k){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(8) collapse(2) private(i,j) shared(k){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp distribute parallel for num_threads(8) collapse(2) private(i,j) shared(k){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker collapse(2){{$}}
     // PRT-NEXT:    for (i ={{.*}})
     #pragma acc loop worker collapse(2)
@@ -1350,20 +1353,18 @@ int main() {
     // DMP-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:       ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:         DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:       impl: CompoundStmt
     // DMP-NEXT:         DeclStmt
     // DMP-NEXT:           VarDecl {{.*}} j 'int'
-    // DMP-NEXT:         OMPParallelForSimdDirective
-    // DMP-NEXT:           OMPNum_threadsClause
-    // DMP-NEXT:             IntegerLiteral {{.*}} 1
+    // DMP-NEXT:         OMPDistributeSimdDirective
     // DMP-NEXT:           OMPSimdlenClause
     // DMP-NEXT:             ConstantExpr {{.*}} 'int'
     // DMP-NEXT:               IntegerLiteral {{.*}} 8
     // DMP-NEXT:           OMPCollapseClause
     // DMP-NEXT:             ConstantExpr {{.*}} 'int'
     // DMP-NEXT:               IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:           OMPSharedClause
-    // DMP-NOT:              <implicit>
+    // DMP-NEXT:           OMPSharedClause {{.*}} <implicit>
     // DMP-NEXT:             DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NOT:            OMPPrivateClause
     // DMP:                ForStmt
@@ -1386,7 +1387,7 @@ int main() {
     // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) firstprivate(k){{$}}
     // PRT-AO-NEXT: // {
     // PRT-AO-NEXT: //   int j;
-    // PRT-AO-NEXT: //   #pragma omp parallel for simd num_threads(1) simdlen(8) collapse(2) shared(k){{$}}
+    // PRT-AO-NEXT: //   #pragma omp distribute simd simdlen(8) collapse(2){{$}}
     // PRT-AO-NEXT: //   for (int i ={{.*}})
     // PRT-AO-NEXT: //     for (j ={{.*}})
     // PRT-AO-NEXT: //       for (k ={{.*}})
@@ -1398,7 +1399,7 @@ int main() {
     // PRT-O-NEXT:  #pragma omp target teams num_teams(1) firstprivate(k){{$}}
     // PRT-O-NEXT:  {
     // PRT-O-NEXT:    int j;
-    // PRT-O-NEXT:    #pragma omp parallel for simd num_threads(1) simdlen(8) collapse(2) shared(k){{$}}
+    // PRT-O-NEXT:    #pragma omp distribute simd simdlen(8) collapse(2){{$}}
     // PRT-O-NEXT:    for (int i ={{.*}})
     // PRT-O-NEXT:      for (j ={{.*}})
     // PRT-O-NEXT:        for (k ={{.*}})

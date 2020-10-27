@@ -235,7 +235,7 @@ int main() {
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
   // PRT-AO-NEXT:  //     #pragma omp target teams
-  // PRT-AO-NEXT:  //         #pragma omp parallel for num_threads(__clang_acc_num_workers__)
+  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 ;
   // PRT-AO-NEXT:  // }
@@ -245,7 +245,7 @@ int main() {
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
   //  PRT-O-NEXT:      #pragma omp target teams
-  //  PRT-O-NEXT:          #pragma omp parallel for num_threads(__clang_acc_num_workers__)
+  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  ;
   //  PRT-O-NEXT:  }
@@ -269,7 +269,7 @@ int main() {
   // PRT-AO-NEXT:  // #pragma omp target teams
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             ;
   // PRT-AO-NEXT:  // }
@@ -279,7 +279,7 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              ;
   //  PRT-O-NEXT:  }
@@ -309,7 +309,7 @@ int main() {
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
   // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(var,non_const_expr)
-  // PRT-AO-NEXT:  //         #pragma omp parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
+  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i) {
   // PRT-AO-NEXT:  //                 var = 5;
   // PRT-AO-NEXT:  //                 var = non_const_expr;
@@ -321,7 +321,7 @@ int main() {
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
   //  PRT-O-NEXT:      #pragma omp target teams firstprivate(var,non_const_expr)
-  //  PRT-O-NEXT:          #pragma omp parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
+  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i) {
   //  PRT-O-NEXT:                  var = 5;
   //  PRT-O-NEXT:                  var = non_const_expr;
@@ -353,7 +353,7 @@ int main() {
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i) {
   // PRT-AO-NEXT:  //             var = 5;
   // PRT-AO-NEXT:  //             var = non_const_expr;
@@ -365,7 +365,7 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,non_const_expr)
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i) {
   //  PRT-O-NEXT:              var = 5;
   //  PRT-O-NEXT:              var = non_const_expr;
@@ -397,7 +397,7 @@ int main() {
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
   // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(var,non_const_expr)
-  // PRT-AO-NEXT:  //         #pragma omp parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
+  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 var = non_const_expr;
   // PRT-AO-NEXT:  // }
@@ -407,7 +407,7 @@ int main() {
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
   //  PRT-O-NEXT:      #pragma omp target teams firstprivate(var,non_const_expr)
-  //  PRT-O-NEXT:          #pragma omp parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
+  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  var = non_const_expr;
   //  PRT-O-NEXT:  }
@@ -432,7 +432,7 @@ int main() {
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             var = non_const_expr;
   // PRT-AO-NEXT:  // }
@@ -442,7 +442,7 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,non_const_expr)
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              var = non_const_expr;
   //  PRT-O-NEXT:  }
@@ -469,7 +469,7 @@ int main() {
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
   // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(var,non_const_expr)
-  // PRT-AO-NEXT:  //         #pragma omp parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
+  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 var = (non_const_expr);
   // PRT-AO-NEXT:  // }
@@ -479,7 +479,7 @@ int main() {
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
   //  PRT-O-NEXT:      #pragma omp target teams firstprivate(var,non_const_expr)
-  //  PRT-O-NEXT:          #pragma omp parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
+  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  var = (non_const_expr);
   //  PRT-O-NEXT:  }
@@ -507,7 +507,7 @@ int main() {
   // PRT-AO-NEXT:  // #pragma omp target teams
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             printf("hello world\n");
   // PRT-AO-NEXT:  // }
@@ -517,7 +517,7 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              printf("hello world\n");
   //  PRT-O-NEXT:  }
@@ -542,7 +542,7 @@ int main() {
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             var = _Generic(var, int: 0, default: 1);
   // PRT-AO-NEXT:  // }
@@ -552,7 +552,7 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              var = _Generic(var, int: 0, default: 1);
   //  PRT-O-NEXT:  }
@@ -574,7 +574,7 @@ int main() {
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(ptr)
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(ptr)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             ptr = (int [2]){0, 1};
   // PRT-AO-NEXT:  // }
@@ -584,7 +584,7 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(ptr)
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(ptr)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              ptr = (int [2]){0, 1};
   //  PRT-O-NEXT:  }
@@ -606,7 +606,7 @@ int main() {
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,ptr)
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var,ptr)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             var = ptr[0];
   // PRT-AO-NEXT:  // }
@@ -616,7 +616,7 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,ptr)
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var,ptr)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              var = ptr[0];
   //  PRT-O-NEXT:  }
@@ -639,7 +639,7 @@ int main() {
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             var = sizeof(int);
   // PRT-AO-NEXT:  // }
@@ -649,7 +649,7 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              var = sizeof(int);
   //  PRT-O-NEXT:  }
@@ -672,7 +672,7 @@ int main() {
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             var = _Alignof(int);
   // PRT-AO-NEXT:  // }
@@ -682,7 +682,7 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              var = _Alignof(int);
   //  PRT-O-NEXT:  }
@@ -705,7 +705,7 @@ int main() {
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             var = sizeof(int [i]);
   // PRT-AO-NEXT:  // }
@@ -715,7 +715,7 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              var = sizeof(int [i]);
   //  PRT-O-NEXT:  }
@@ -738,7 +738,7 @@ int main() {
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             var = _Alignof(int [i]);
   // PRT-AO-NEXT:  // }
@@ -748,7 +748,7 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              var = _Alignof(int [i]);
   //  PRT-O-NEXT:  }
@@ -771,7 +771,7 @@ int main() {
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             var = sizeof i;
   // PRT-AO-NEXT:  // }
@@ -781,7 +781,7 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              var = sizeof i;
   //  PRT-O-NEXT:  }
@@ -804,7 +804,7 @@ int main() {
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             var = sizeof (i);
   // PRT-AO-NEXT:  // }
@@ -814,7 +814,7 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              var = sizeof (i);
   //  PRT-O-NEXT:  }
@@ -844,7 +844,7 @@ int main() {
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             ;
   // PRT-AO-NEXT:  // }
@@ -855,7 +855,7 @@ int main() {
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              ;
   //  PRT-O-NEXT:  }
@@ -874,7 +874,7 @@ int main() {
 
   //  PRT-A-NEXT:  #pragma acc parallel loop worker
   // PRT-AO-NEXT:  // #pragma omp target teams
-  // PRT-AO-NEXT:  // #pragma omp parallel for
+  // PRT-AO-NEXT:  // #pragma omp distribute parallel for
   //  PRT-A-NEXT:  for (int j = 0; j < 5; ++j) {
   // PRT-AO-NEXT:    // v----------ACC----------v
   //  PRT-A-NEXT:    #pragma acc loop vector
@@ -891,7 +891,7 @@ int main() {
   //  PRT-A-NEXT:  }
   //
   //  PRT-O-NEXT:  #pragma omp target teams
-  //  PRT-O-NEXT:  #pragma omp parallel for
+  //  PRT-O-NEXT:  #pragma omp distribute parallel for
   // PRT-OA-NEXT:  // #pragma acc parallel loop worker
   //  PRT-O-NEXT:  for (int j = 0; j < 5; ++j) {
   // PRT-OA-NEXT:    // v----------OMP----------v
@@ -929,7 +929,7 @@ int main() {
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i) {
   // PRT-AO-NEXT:  //             var = 5;
   // PRT-AO-NEXT:  //             var = non_const_expr;
@@ -942,7 +942,7 @@ int main() {
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i) {
   //  PRT-O-NEXT:              var = 5;
   //  PRT-O-NEXT:              var = non_const_expr;
@@ -967,7 +967,7 @@ int main() {
 
   //  PRT-A-NEXT:  #pragma acc parallel loop worker
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
-  // PRT-AO-NEXT:  // #pragma omp parallel for shared(var,non_const_expr)
+  // PRT-AO-NEXT:  // #pragma omp distribute parallel for shared(var,non_const_expr)
   //  PRT-A-NEXT:  for (int j = 0; j < 5; ++j) {
   // PRT-AO-NEXT:    // v----------ACC----------v
   //  PRT-A-NEXT:    #pragma acc loop vector
@@ -988,7 +988,7 @@ int main() {
   //  PRT-A-NEXT:  }
   //
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,non_const_expr)
-  //  PRT-O-NEXT:  #pragma omp parallel for shared(var,non_const_expr)
+  //  PRT-O-NEXT:  #pragma omp distribute parallel for shared(var,non_const_expr)
   // PRT-OA-NEXT:  // #pragma acc parallel loop worker
   //  PRT-O-NEXT:  for (int j = 0; j < 5; ++j) {
   // PRT-OA-NEXT:    // v----------OMP----------v
@@ -1023,7 +1023,7 @@ int main() {
   // Preceding token is a descendant.
   //  PRT-A-NEXT:  #pragma acc parallel loop worker
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
-  // PRT-AO-NEXT:  // #pragma omp parallel for shared(var,non_const_expr)
+  // PRT-AO-NEXT:  // #pragma omp distribute parallel for shared(var,non_const_expr)
   //  PRT-A-NEXT:  for (int j = 0; j < 5; ++j) {
   // PRT-AO-NEXT:    // v----------ACC----------v
   //  PRT-A-NEXT:    #pragma acc loop vector
@@ -1040,7 +1040,7 @@ int main() {
   //  PRT-A-NEXT:  }
   //
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,non_const_expr)
-  //  PRT-O-NEXT:  #pragma omp parallel for shared(var,non_const_expr)
+  //  PRT-O-NEXT:  #pragma omp distribute parallel for shared(var,non_const_expr)
   // PRT-OA-NEXT:  // #pragma acc parallel loop worker
   //  PRT-O-NEXT:  for (int j = 0; j < 5; ++j) {
   // PRT-OA-NEXT:    // v----------OMP----------v
@@ -1074,7 +1074,7 @@ int main() {
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             var = non_const_expr;
   // PRT-AO-NEXT:  // }
@@ -1085,7 +1085,7 @@ int main() {
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              var = non_const_expr;
   //  PRT-O-NEXT:  }
@@ -1113,7 +1113,7 @@ int main() {
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //             var = (non_const_expr);
   // PRT-AO-NEXT:  // }
@@ -1124,7 +1124,7 @@ int main() {
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:              var = (non_const_expr);
   //  PRT-O-NEXT:  }
@@ -1199,7 +1199,7 @@ int main() {
   // PRT-AO-NEXT:  //     #pragma omp target teams
   // PRT-AO-NEXT:  //         {
   // PRT-AO-NEXT:  //             int i;
-  // PRT-AO-NEXT:  //             #pragma omp parallel for simd num_threads(__clang_acc_num_workers__)
+  // PRT-AO-NEXT:  //             #pragma omp distribute parallel for simd num_threads(__clang_acc_num_workers__)
   // PRT-AO-NEXT:  //                 for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                     ;
   // PRT-AO-NEXT:  //         }
@@ -1212,7 +1212,7 @@ int main() {
   //  PRT-O-NEXT:      #pragma omp target teams
   //  PRT-O-NEXT:          {
   //  PRT-O-NEXT:              int i;
-  //  PRT-O-NEXT:              #pragma omp parallel for simd num_threads(__clang_acc_num_workers__)
+  //  PRT-O-NEXT:              #pragma omp distribute parallel for simd num_threads(__clang_acc_num_workers__)
   //  PRT-O-NEXT:                  for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                      ;
   //  PRT-O-NEXT:          }
@@ -1238,7 +1238,7 @@ int main() {
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
   // PRT-AO-NEXT:  //     #pragma omp target teams
-  // PRT-AO-NEXT:  //         #pragma omp parallel for num_threads(__clang_acc_num_workers__)
+  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
   // PRT-AO-NEXT:  //             for (int j = 0; j < 5; ++j) {
   // PRT-AO-NEXT:  //                 int i;
   // PRT-AO-NEXT:  //                 #pragma omp simd
@@ -1252,7 +1252,7 @@ int main() {
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
   //  PRT-O-NEXT:      #pragma omp target teams
-  //  PRT-O-NEXT:          #pragma omp parallel for num_threads(__clang_acc_num_workers__)
+  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
   //  PRT-O-NEXT:              for (int j = 0; j < 5; ++j) {
   //  PRT-O-NEXT:                  int i;
   //  PRT-O-NEXT:                  #pragma omp simd
@@ -1285,7 +1285,7 @@ int main() {
   // PRT-AO-NEXT:  //     #pragma omp target teams
   // PRT-AO-NEXT:  //         {
   // PRT-AO-NEXT:  //             int i;
-  // PRT-AO-NEXT:  //             #pragma omp parallel for simd num_threads(__clang_acc_num_workers__)
+  // PRT-AO-NEXT:  //             #pragma omp distribute parallel for simd num_threads(__clang_acc_num_workers__)
   // PRT-AO-NEXT:  //                 for (i = 0; i < 5; ++i) {
   // PRT-AO-NEXT:  //                     int var;
   // PRT-AO-NEXT:  //                     for (var = 0; var < 5; ++var)
@@ -1301,7 +1301,7 @@ int main() {
   //  PRT-O-NEXT:      #pragma omp target teams
   //  PRT-O-NEXT:          {
   //  PRT-O-NEXT:              int i;
-  //  PRT-O-NEXT:              #pragma omp parallel for simd num_threads(__clang_acc_num_workers__)
+  //  PRT-O-NEXT:              #pragma omp distribute parallel for simd num_threads(__clang_acc_num_workers__)
   //  PRT-O-NEXT:                  for (i = 0; i < 5; ++i) {
   //  PRT-O-NEXT:                      int var;
   //  PRT-O-NEXT:                      for (var = 0; var < 5; ++var)
@@ -1565,7 +1565,7 @@ int main() {
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i) {
   // PRT-AO-NEXT:  //             var = 5;
   // PRT-AO-NEXT:  //             var = non_const_expr;
@@ -1578,7 +1578,7 @@ int main() {
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp parallel for simd num_threads(1) shared(var,non_const_expr)
+  //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i) {
   //  PRT-O-NEXT:              var = 5;
   //  PRT-O-NEXT:              var = non_const_expr;
@@ -1635,7 +1635,7 @@ for (i = 0; i < 5; ++i) {
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
   // PRT-AO-NEXT:  //     #pragma omp target teams
-  // PRT-AO-NEXT:  //         #pragma omp parallel for num_threads(__clang_acc_num_workers__)
+  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 ;
   // PRT-AO-NEXT:  // }
@@ -1646,7 +1646,7 @@ for (i = 0; i < 5; ++i) {
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
   //  PRT-O-NEXT:      #pragma omp target teams
-  //  PRT-O-NEXT:          #pragma omp parallel for num_threads(__clang_acc_num_workers__)
+  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  ;
   // PRT-OO-NEXT:  }var = 5;
@@ -1677,7 +1677,7 @@ for (i = 0; i < 5; ++i) {
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
   // PRT-AO-NEXT:  //     #pragma omp target teams
-  // PRT-AO-NEXT:  //         #pragma omp parallel for num_threads(__clang_acc_num_workers__)
+  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 ;
   // PRT-AO-NEXT:  // }
@@ -1687,7 +1687,7 @@ for (i = 0; i < 5; ++i) {
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
   //  PRT-O-NEXT:      #pragma omp target teams
-  //  PRT-O-NEXT:          #pragma omp parallel for num_threads(__clang_acc_num_workers__)
+  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  ;
   // PRT-OO-NEXT:  }{{  }}

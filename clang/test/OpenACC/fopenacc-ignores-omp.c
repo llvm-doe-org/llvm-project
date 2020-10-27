@@ -142,7 +142,8 @@ int main() {
   // DMP:        ACCLoopDirective
   // DMP-NEXT:     ACCWorkerClause
   // DMP-NEXT:     ACCIndependentClause {{.*}} <implicit>
-  // DMP-NEXT:     impl: OMPParallelForDirective
+  // DMP-NEXT:     ACCGangClause {{.*}} <implicit>
+  // DMP-NEXT:     impl: OMPDistributeParallelForDirective
   // DMP-NEXT:       OMPNum_threadsClause
   // DMP-NEXT:         DeclRefExpr {{.*}} '__clang_acc_num_workers__'
   // DMP:            ForStmt
@@ -165,7 +166,7 @@ int main() {
   // PRT-AO-NEXT:     {{^ *}}// {
   // PRT-AO-NEXT:     {{^ *}}//   const int __clang_acc_num_workers__ = (x = 2);
   // PRT-AO-NEXT:     {{^ *}}//   #pragma omp target teams
-  // PRT-AO-NEXT:     {{^ *}}//   #pragma omp parallel for num_threads(__clang_acc_num_workers__)
+  // PRT-AO-NEXT:     {{^ *}}//   #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
   // PRT-AO-NEXT:     {{^ *}}//   for (int i = 0; i < 2; ++i)
   // PRT-AO-NEXT:     {{^ *}}//     for (int j = 0; j < 2; ++j)
   // PRT-AO-NEXT:     {{^ *}}//       printf("i=%d, j=%d\n", i, j);
@@ -176,7 +177,7 @@ int main() {
   // PRT-O-NEXT:      {{^ *}}{
   // PRT-O-NEXT:      {{^ *}}  const int __clang_acc_num_workers__ = (x = 2);
   // PRT-O-NEXT:      {{^ *}}  #pragma omp target teams
-  // PRT-O-NEXT:      {{^ *}}  #pragma omp parallel for num_threads(__clang_acc_num_workers__)
+  // PRT-O-NEXT:      {{^ *}}  #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
   // PRT-O-NEXT:      {{^ *}}  for (int i = 0; i < 2; ++i)
   // PRT-O-NEXT:      {{^ *}}    for (int j = 0; j < 2; ++j)
   // PRT-O-NEXT:      {{^ *}}      printf("i=%d, j=%d\n", i, j);

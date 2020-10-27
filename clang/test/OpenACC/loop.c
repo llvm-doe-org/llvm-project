@@ -24,7 +24,6 @@
 //             in an enclosing compound statement
 //   OSIMP   = OpenMP shared implicit
 //   OSEXP   = OpenMP shared explicit
-//   ONT1    = OpenMP num_threads(1)
 //   PART    = partitioned (or additionally partitioned if with GPART)
 //   NOPART  = not partitioned (or not additionally partitioned if with GPART)
 //   GREDUN  = gang-redundant
@@ -58,7 +57,7 @@
 // RUN:    ompdk=OSEQ
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-ASEQ,DMP-ASLC
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-SLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-SLC)
 // RUN:   (accc=independent
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPDistributeDirective
@@ -74,7 +73,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-PLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 //
 //        gang, worker, vector with each of the above except seq
 // RUN:   (accc=gang
@@ -87,20 +86,20 @@
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-NOPART-GPART,EXE-PLC)
 // RUN:   (accc=worker
 // RUN:    accc_sp=' '
-// RUN:    ompdd=OMPParallelForDirective
-// RUN:    ompdp='parallel for'
+// RUN:    ompdd=OMPDistributeParallelForDirective
+// RUN:    ompdp='distribute parallel for'
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSEXP
-// RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AW
-// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
+// RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AGIMP,DMP-AW
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc=vector
 // RUN:    accc_sp=' '
-// RUN:    ompdd=OMPParallelForSimdDirective
-// RUN:    ompdp='parallel for simd num_threads(1)'
+// RUN:    ompdd=OMPDistributeSimdDirective
+// RUN:    ompdp='distribute simd'
 // RUN:    ompdk=OPRGPLC
-// RUN:    ompsk=OSEXP
-// RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AV,DMP-ONT1
-// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
+// RUN:    ompsk=OSIMP
+// RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AGIMP,DMP-AV
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='independent gang'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPDistributeDirective
@@ -111,20 +110,20 @@
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-NOPART-GPART,EXE-PLC)
 // RUN:   (accc='independent worker'
 // RUN:    accc_sp=' '
-// RUN:    ompdd=OMPParallelForDirective
-// RUN:    ompdp='parallel for'
+// RUN:    ompdd=OMPDistributeParallelForDirective
+// RUN:    ompdp='distribute parallel for'
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSEXP
-// RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AW
-// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
+// RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AGIMP,DMP-AW
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='independent vector'
 // RUN:    accc_sp=' '
-// RUN:    ompdd=OMPParallelForSimdDirective
-// RUN:    ompdp='parallel for simd num_threads(1)'
+// RUN:    ompdd=OMPDistributeSimdDirective
+// RUN:    ompdp='distribute simd'
 // RUN:    ompdk=OPRGPLC
-// RUN:    ompsk=OSEXP
-// RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AV,DMP-ONT1
-// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
+// RUN:    ompsk=OSIMP
+// RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AGIMP,DMP-AV
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='auto gang'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -132,7 +131,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC,DMP-AG
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-PLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 // RUN:   (accc='auto worker'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -140,7 +139,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC,DMP-AW
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-PLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 // RUN:   (accc='auto vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -148,7 +147,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC,DMP-AV
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-PLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 //
 //        combinations of gang, worker, vector
 // RUN:   (accc='gang worker'
@@ -185,20 +184,20 @@
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='worker vector'
 // RUN:    accc_sp=' '
-// RUN:    ompdd=OMPParallelForSimdDirective
-// RUN:    ompdp='parallel for simd'
+// RUN:    ompdd=OMPDistributeParallelForSimdDirective
+// RUN:    ompdp='distribute parallel for simd'
 // RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSEXP
-// RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AW,DMP-AV
-// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
+// RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AGIMP,DMP-AW,DMP-AV
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='independent worker vector'
 // RUN:    accc_sp=' '
-// RUN:    ompdd=OMPParallelForSimdDirective
-// RUN:    ompdp='parallel for simd'
+// RUN:    ompdd=OMPDistributeParallelForSimdDirective
+// RUN:    ompdp='distribute parallel for simd'
 // RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSEXP
-// RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AW,DMP-AV
-// RUN:    exe=EXE,EXE-PART,EXE-GREDUN,EXE-PART-GREDUN,EXE-PLC)
+// RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AGIMP,DMP-AW,DMP-AV
+// RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='gang worker vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=OMPDistributeParallelForSimdDirective
@@ -222,7 +221,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC,DMP-AG,DMP-AW
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-PLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 // RUN:   (accc='auto gang vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -230,7 +229,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC,DMP-AG,DMP-AV
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-PLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 // RUN:   (accc='auto worker vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -238,7 +237,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC,DMP-AW,DMP-AV
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-PLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 // RUN:   (accc='auto gang worker vector'
 // RUN:    accc_sp=' '
 // RUN:    ompdd=
@@ -246,7 +245,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC,DMP-AG,DMP-AW,DMP-AV
-// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-NOPART-GREDUN,EXE-PLC)
+// RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 // RUN: }
 
 // Check -ast-dump before and after AST serialization.
@@ -464,8 +463,6 @@ int main() {
       // DMP-OPRG-NEXT:              DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
       // DMP-OPRG:                 ForStmt
       // DMP-OPRGPLC-NEXT:       impl: [[OMPDD]]
-      // DMP-ONT1-NEXT:            OMPNum_threadsClause
-      // DMP-ONT1-NEXT:              IntegerLiteral {{.*}} 'int' 1
       // DMP-OPRGPLC-NEXT:         OMPSharedClause
       // DMP-OPRGPLC-OSIMP-SAME:     <implicit>
       // DMP-OPRGPLC-OSEXP-NOT:      <implicit>
@@ -551,9 +548,8 @@ int main() {
 
     // EXE-NEXT: save.readLoopOnlyOld=1
     printf("save.readLoopOnlyOld=%d\n", save.readLoopOnlyOld);
-    // EXE-NOPART-NEXT:       save.readLoopOnlyNew=1
-    // EXE-GPART-NEXT:        save.readLoopOnlyNew=0
-    // EXE-PART-GREDUN-NEXT:  save.readLoopOnlyNew={{[01]}}
+    // EXE-NOPART-NEXT: save.readLoopOnlyNew=1
+    // EXE-GPART-NEXT:  save.readLoopOnlyNew=0
     printf("save.readLoopOnlyNew=%d\n", save.readLoopOnlyNew);
     // EXE: save.readLoopOnlyErr=0
     printf("save.readLoopOnlyErr=%d\n", save.readLoopOnlyErr);
@@ -566,14 +562,14 @@ int main() {
     // EXE-NEXT: save.readLoopOnlyArrErr=0
     printf("save.readLoopOnlyArrErr=%d\n", save.readLoopOnlyArrErr);
 
-    // EXE-NOPART-GREDUN-NEXT: save.declNestedLoopOld=0
-    // EXE-NOPART-GPART-NEXT:  save.declNestedLoopOld=1
+    // EXE-GREDUN-NEXT:       save.declNestedLoopOld=0
+    // EXE-NOPART-GPART-NEXT: save.declNestedLoopOld=1
     printf("save.declNestedLoopOld=%d\n", save.declNestedLoopOld);
-    // EXE-NOPART-GREDUN-NEXT: save.declNestedLoopNew=1
-    // EXE-NOPART-GPART-NEXT:  save.declNestedLoopNew=1
+    // EXE-GREDUN-NEXT:       save.declNestedLoopNew=1
+    // EXE-NOPART-GPART-NEXT: save.declNestedLoopNew=1
     printf("save.declNestedLoopNew=%d\n", save.declNestedLoopNew);
-    // EXE-NOPART-GREDUN-NEXT: save.declNestedLoopErr=0
-    // EXE-NOPART-GPART-NEXT:  save.declNestedLoopErr=0
+    // EXE-GREDUN-NEXT:       save.declNestedLoopErr=0
+    // EXE-NOPART-GPART-NEXT: save.declNestedLoopErr=0
     printf("save.declNestedLoopErr=%d\n", save.declNestedLoopErr);
 
     // EXE:      loopOnly=88
@@ -686,8 +682,6 @@ int main() {
     // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
     // DMP-OPRG:                  ForStmt
     // DMP-OPRGPLC-NEXT:        impl: [[OMPDD]]
-    // DMP-ONT1-NEXT:             OMPNum_threadsClause
-    // DMP-ONT1-NEXT:               IntegerLiteral {{.*}} 'int' 1
     // DMP-OPRGPLC-NEXT:          OMPSharedClause
     // DMP-OPRGPLC-OSIMP-SAME:      <implicit>
     // DMP-OPRGPLC-OSEXP-NOT:       <implicit>
@@ -768,9 +762,8 @@ int main() {
 
     // EXE-NEXT: save.readLoopOnlyOld=1
     printf("save.readLoopOnlyOld=%d\n", save.readLoopOnlyOld);
-    // EXE-NOPART-NEXT:       save.readLoopOnlyNew=1
-    // EXE-GPART-NEXT:        save.readLoopOnlyNew=0
-    // EXE-PART-GREDUN-NEXT:  save.readLoopOnlyNew={{[01]}}
+    // EXE-NOPART-NEXT: save.readLoopOnlyNew=1
+    // EXE-GPART-NEXT:  save.readLoopOnlyNew=0
     printf("save.readLoopOnlyNew=%d\n", save.readLoopOnlyNew);
     // EXE: save.readLoopOnlyErr=0
     printf("save.readLoopOnlyErr=%d\n", save.readLoopOnlyErr);
@@ -783,13 +776,13 @@ int main() {
     // EXE-NEXT: save.readLoopOnlyArrErr=0
     printf("save.readLoopOnlyArrErr=%d\n", save.readLoopOnlyArrErr);
 
-    // EXE-NOPART-GREDUN-NEXT: save.declNestedLoopOld=0
+    // EXE-GREDUN-NEXT:        save.declNestedLoopOld=0
     // EXE-NOPART-GPART-NEXT:  save.declNestedLoopOld=0
     printf("save.declNestedLoopOld=%d\n", save.declNestedLoopOld);
-    // EXE-NOPART-GREDUN-NEXT: save.declNestedLoopNew=1
+    // EXE-GREDUN-NEXT:        save.declNestedLoopNew=1
     // EXE-NOPART-GPART-NEXT:  save.declNestedLoopNew=1
     printf("save.declNestedLoopNew=%d\n", save.declNestedLoopNew);
-    // EXE-NOPART-GREDUN-NEXT: save.declNestedLoopErr=0
+    // EXE-GREDUN-NEXT:        save.declNestedLoopErr=0
     // EXE-NOPART-GPART-NEXT:  save.declNestedLoopErr=0
     printf("save.declNestedLoopErr=%d\n", save.declNestedLoopErr);
 
@@ -895,8 +888,6 @@ int main() {
       // DMP-OPRGPLC-NEXT:        DeclStmt
       // DMP-OPRGPLC-NEXT:          VarDecl {{.*}} j 'int'
       // DMP-OPRGPLC-NEXT:        [[OMPDD]]
-      // DMP-ONT1-NEXT:             OMPNum_threadsClause
-      // DMP-ONT1-NEXT:               IntegerLiteral {{.*}} 'int' 1
       // DMP-OPRGPLC:               ForStmt
       // DMP-OSEQ-NEXT:         impl: ForStmt
       // DMP-OSEQPLC-NEXT:      impl: CompoundStmt
@@ -1046,8 +1037,6 @@ int main() {
       // DMP-OPRG-NEXT:              DeclRefExpr {{.*}} 'save'
       // DMP-OPRG:                 ForStmt
       // DMP-OPRGPLC-NEXT:       impl: [[OMPDD]]
-      // DMP-ONT1-NEXT:            OMPNum_threadsClause
-      // DMP-ONT1-NEXT:              IntegerLiteral {{.*}} 'int' 1
       // DMP-OPRGPLC-NEXT:         OMPSharedClause
       // DMP-OPRGPLC-OSIMP-SAME:     <implicit>
       // DMP-OPRGPLC-OSEXP-NOT:      <implicit>
@@ -1119,21 +1108,20 @@ int main() {
     // EXE-NEXT: save.assignLoopErr=0
     printf("save.assignLoopErr=%d\n", save.assignLoopErr);
 
-    // EXE-NOPART-GREDUN-NEXT: save.assignNestedLoopOld=0
+    // EXE-GREDUN-NEXT:        save.assignNestedLoopOld=0
     // EXE-NOPART-GPART-NEXT:  save.assignNestedLoopOld=1
     printf("save.assignNestedLoopOld=%d\n", save.assignNestedLoopOld);
-    // EXE-NOPART-GREDUN-NEXT: save.assignNestedLoopNew=1
+    // EXE-GREDUN-NEXT:        save.assignNestedLoopNew=1
     // EXE-NOPART-GPART-NEXT:  save.assignNestedLoopNew=1
     printf("save.assignNestedLoopNew=%d\n", save.assignNestedLoopNew);
-    // EXE-NOPART-GREDUN-NEXT: save.assignNestedLoopErr=0
+    // EXE-GREDUN-NEXT:        save.assignNestedLoopErr=0
     // EXE-NOPART-GPART-NEXT:  save.assignNestedLoopErr=0
     printf("save.assignNestedLoopErr=%d\n", save.assignNestedLoopErr);
 
     // EXE: save.readInLaterLoopOld=1
     printf("save.readInLaterLoopOld=%d\n", save.readInLaterLoopOld);
-    // EXE-NOPART-NEXT:       save.readInLaterLoopNew=1
-    // EXE-GPART-NEXT:        save.readInLaterLoopNew=0
-    // EXE-PART-GREDUN-NEXT:  save.readInLaterLoopNew={{[01]}}
+    // EXE-NOPART-NEXT: save.readInLaterLoopNew=1
+    // EXE-GPART-NEXT:  save.readInLaterLoopNew=0
     printf("save.readInLaterLoopNew=%d\n", save.readInLaterLoopNew);
     // EXE: save.readInLaterLoopErr=0
     printf("save.readInLaterLoopErr=%d\n", save.readInLaterLoopErr);
@@ -1219,8 +1207,6 @@ int main() {
     // DMP-OPRGPLC-NEXT:          DeclStmt
     // DMP-OPRGPLC-NEXT:            VarDecl {{.*}} j 'int'
     // DMP-OPRGPLC-NEXT:          [[OMPDD]]
-    // DMP-ONT1-NEXT:               OMPNum_threadsClause
-    // DMP-ONT1-NEXT:                 IntegerLiteral {{.*}} 'int' 1
     // DMP-OPRGPLC:                 ForStmt
     // DMP-OSEQ-NEXT:           impl: ForStmt
     // DMP-OSEQPLC-NEXT:        impl: CompoundStmt
@@ -1387,8 +1373,6 @@ int main() {
       // DMP-OPRGPLC-NEXT:        DeclStmt
       // DMP-OPRGPLC-NEXT:          VarDecl {{.*}} tentativeDef 'int'
       // DMP-OPRGPLC-NEXT:        [[OMPDD]]
-      // DMP-ONT1-NEXT:             OMPNum_threadsClause
-      // DMP-ONT1-NEXT:               IntegerLiteral {{.*}} 'int' 1
       // DMP-OPRGPLC:               ForStmt
       // DMP-OSEQ-NEXT:         impl: ForStmt
       // DMP-OSEQPLC-NEXT:      impl: CompoundStmt
@@ -1521,8 +1505,6 @@ int main() {
     // DMP-OPRGPLC-NEXT:          DeclStmt
     // DMP-OPRGPLC-NEXT:            VarDecl {{.*}} tentativeDef 'int'
     // DMP-OPRGPLC-NEXT:          [[OMPDD]]
-    // DMP-ONT1-NEXT:               OMPNum_threadsClause
-    // DMP-ONT1-NEXT:                 IntegerLiteral {{.*}} 'int' 1
     // DMP-OPRGPLC:                 ForStmt
     // DMP-OSEQ-NEXT:           impl: ForStmt
     // DMP-OSEQPLC-NEXT:        impl: CompoundStmt
@@ -1641,8 +1623,6 @@ int main() {
   // DMP-OPRG-NEXT:       impl: [[OMPDD]]
   // DMP-OPRG:              ForStmt
   // DMP-OPRGPLC-NEXT:    impl: [[OMPDD]]
-  // DMP-ONT1-NEXT:         OMPNum_threadsClause
-  // DMP-ONT1-NEXT:           IntegerLiteral {{.*}} 'int' 1
   // DMP-OPRGPLC:           ForStmt
   // DMP-OSEQ-NEXT:       impl: ForStmt
   // DMP-OSEQPLC-NEXT:    impl: ForStmt
@@ -1707,8 +1687,6 @@ int main() {
   // DMP-OPRG-NEXT:             impl: [[OMPDD]]
   // DMP-OPRG:                    ForStmt
   // DMP-OPRGPLC-NEXT:          impl: [[OMPDD]]
-  // DMP-ONT1-NEXT:               OMPNum_threadsClause
-  // DMP-ONT1-NEXT:                 IntegerLiteral {{.*}} 'int' 1
   // DMP-OPRGPLC:                 ForStmt
   // DMP-OSEQ-NEXT:             impl: ForStmt
   // DMP-OSEQPLC-NEXT:          impl: ForStmt
@@ -1780,8 +1758,6 @@ int main() {
     // DMP-OPRGPLC-NEXT:      DeclStmt
     // DMP-OPRGPLC-NEXT:        VarDecl {{.*}} j 'int'
     // DMP-OPRGPLC-NEXT:      [[OMPDD]]
-    // DMP-ONT1-NEXT:           OMPNum_threadsClause
-    // DMP-ONT1-NEXT:             IntegerLiteral {{.*}} 'int' 1
     // DMP-OPRGPLC:             ForStmt
     // DMP-OSEQ-NEXT:       impl: ForStmt
     // DMP-OSEQPLC-NEXT:    impl: CompoundStmt
@@ -1915,8 +1891,6 @@ int main() {
     // DMP-OPRGPLC-NEXT:         DeclStmt
     // DMP-OPRGPLC-NEXT:           VarDecl {{.*}} j 'int'
     // DMP-OPRGPLC-NEXT:         [[OMPDD]]
-    // DMP-ONT1-NEXT:              OMPNum_threadsClause
-    // DMP-ONT1-NEXT:                IntegerLiteral {{.*}} 'int' 1
     // DMP-OPRGPLC:                ForStmt
     // DMP-OSEQ-NEXT:          impl: ForStmt
     // DMP-OSEQPLC-NEXT:       impl: CompoundStmt
@@ -2052,8 +2026,6 @@ int main() {
       // DMP-OPRG-NEXT:                DeclRefExpr {{.*}} 'x' 'const int'
       // DMP-OPRG:                   ForStmt
       // DMP-OPRGPLC-NEXT:         impl: [[OMPDD]]
-      // DMP-ONT1-NEXT:              OMPNum_threadsClause
-      // DMP-ONT1-NEXT:                IntegerLiteral {{.*}} 'int' 1
       // DMP-OPRGPLC-NEXT:           OMPSharedClause
       // DMP-OPRGPLC-OSIMP-SAME:       <implicit>
       // DMP-OPRGPLC-OSEXP-NOT:        <implicit>

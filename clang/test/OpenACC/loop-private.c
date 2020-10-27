@@ -14,7 +14,6 @@
 //   OPLC   = OPRG but any assigned loop control var becomes declared private
 //            in an enclosing compound statement
 //   OSEQ   = OpenACC loop seq discarded in translation to OpenMP
-//   ONT1   = OpenMP num_threads(1)
 //   GREDUN = gang redundancy
 //
 //   accc   = OpenACC clauses
@@ -38,17 +37,17 @@
 // RUN:    dmp=DMP-AIMP,DMP-AG
 // RUN:    exe=EXE)
 // RUN:   (accc=worker
-// RUN:    ompdd=OMPParallelForDirective
-// RUN:    ompdp='parallel for'
+// RUN:    ompdd=OMPDistributeParallelForDirective
+// RUN:    ompdp='distribute parallel for'
 // RUN:    ompdk=OPRG
-// RUN:    dmp=DMP-AIMP,DMP-AW
-// RUN:    exe=EXE,EXE-GREDUN)
+// RUN:    dmp=DMP-AIMP,DMP-AGIMP,DMP-AW
+// RUN:    exe=EXE)
 // RUN:   (accc=vector
-// RUN:    ompdd=OMPParallelForSimdDirective
-// RUN:    ompdp='parallel for simd num_threads(1)'
+// RUN:    ompdd=OMPDistributeSimdDirective
+// RUN:    ompdp='distribute simd'
 // RUN:    ompdk=OPLC
-// RUN:    dmp=DMP-AIMP,DMP-AV,DMP-ONT1
-// RUN:    exe=EXE,EXE-GREDUN)
+// RUN:    dmp=DMP-AIMP,DMP-AGIMP,DMP-AV
+// RUN:    exe=EXE)
 // RUN:   (accc='gang worker'
 // RUN:    ompdd=OMPDistributeParallelForDirective
 // RUN:    ompdp='distribute parallel for'
@@ -62,11 +61,11 @@
 // RUN:    dmp=DMP-AIMP,DMP-AG,DMP-AV
 // RUN:    exe=EXE)
 // RUN:   (accc='worker vector'
-// RUN:    ompdd=OMPParallelForSimdDirective
-// RUN:    ompdp='parallel for simd'
+// RUN:    ompdd=OMPDistributeParallelForSimdDirective
+// RUN:    ompdp='distribute parallel for simd'
 // RUN:    ompdk=OPLC
-// RUN:    dmp=DMP-AIMP,DMP-AW,DMP-AV
-// RUN:    exe=EXE,EXE-GREDUN)
+// RUN:    dmp=DMP-AIMP,DMP-AGIMP,DMP-AW,DMP-AV
+// RUN:    exe=EXE)
 // RUN:   (accc='gang worker vector'
 // RUN:    ompdd=OMPDistributeParallelForSimdDirective
 // RUN:    ompdp='distribute parallel for simd'
@@ -214,13 +213,12 @@ int main() {
     // DMP-NEXT:        ACCPrivateClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
     // DMP-AIMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-AGIMP-NEXT:  ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:   impl: [[OMPDD]]
     // DMP-OPRG-NEXT:     OMPPrivateClause
     // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     // DMP-OPRG:          ForStmt
     // DMP-OPLC-NEXT:   impl: [[OMPDD]]
-    // DMP-ONT1-NEXT:     OMPNum_threadsClause
-    // DMP-ONT1-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-OPLC-NEXT:     OMPPrivateClause
     // DMP-OPLC-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     // DMP-OPLC:          ForStmt
@@ -323,13 +321,12 @@ int main() {
     // DMP-NEXT:            ACCPrivateClause
     // DMP-NEXT:              DeclRefExpr {{.*}} 'i' 'int'
     // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-AGIMP-NEXT:      ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:       impl: [[OMPDD]]
     // DMP-OPRG-NEXT:         OMPPrivateClause
     // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
     // DMP-OPRG:              ForStmt
     // DMP-OPLC-NEXT:       impl: [[OMPDD]]
-    // DMP-ONT1-NEXT:         OMPNum_threadsClause
-    // DMP-ONT1-NEXT:           IntegerLiteral {{.*}} 'int' 1
     // DMP-OPLC-NEXT:         OMPPrivateClause
     // DMP-OPLC-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
     // DMP-OPLC:              ForStmt
@@ -430,6 +427,7 @@ int main() {
       // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
       // DMP-AIMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+      // DMP-AGIMP-NEXT:  ACCGangClause {{.*}} <implicit>
       // DMP-OPRG-NEXT:   impl: [[OMPDD]]
       // DMP-OPRG-NEXT:     OMPPrivateClause
       // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
@@ -439,8 +437,6 @@ int main() {
       // DMP-OPLC-NEXT:     DeclStmt
       // DMP-OPLC-NEXT:       VarDecl {{.*}} j 'int'
       // DMP-OPLC-NEXT:     [[OMPDD]]
-      // DMP-ONT1-NEXT:       OMPNum_threadsClause
-      // DMP-ONT1-NEXT:         IntegerLiteral {{.*}} 'int' 1
       // DMP-OPLC-NEXT:       OMPPrivateClause
       // DMP-OPLC-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
       // DMP-OPLC:            ForStmt
@@ -571,13 +567,12 @@ int main() {
     // DMP-NEXT:        ACCPrivateClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'tentativeDef' 'int'
     // DMP-AIMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-AGIMP-NEXT:  ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:   impl: [[OMPDD]]
     // DMP-OPRG-NEXT:     OMPPrivateClause
     // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'tentativeDef' 'int'
     // DMP-OPRG:          ForStmt
     // DMP-OPLC-NEXT:   impl: [[OMPDD]]
-    // DMP-ONT1-NEXT:     OMPNum_threadsClause
-    // DMP-ONT1-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-OPLC-NEXT:     OMPPrivateClause
     // DMP-OPLC-NEXT:       DeclRefExpr {{.*}} 'tentativeDef' 'int'
     // DMP-OPLC:          ForStmt
@@ -675,13 +670,12 @@ int main() {
     // DMP-NEXT:            ACCPrivateClause
     // DMP-NEXT:              DeclRefExpr {{.*}} 'tentativeDef' 'int'
     // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-AGIMP-NEXT:      ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:       impl: [[OMPDD]]
     // DMP-OPRG-NEXT:         OMPPrivateClause
     // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'tentativeDef' 'int'
     // DMP-OPRG:              ForStmt
     // DMP-OPLC-NEXT:       impl: [[OMPDD]]
-    // DMP-ONT1-NEXT:         OMPNum_threadsClause
-    // DMP-ONT1-NEXT:           IntegerLiteral {{.*}} 'int' 1
     // DMP-OPLC-NEXT:         OMPPrivateClause
     // DMP-OPLC-NEXT:           DeclRefExpr {{.*}} 'tentativeDef' 'int'
     // DMP-OPLC:              ForStmt
@@ -776,13 +770,12 @@ int main() {
     // DMP-NEXT:        ACCPrivateClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
     // DMP-AIMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-AGIMP-NEXT:  ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:   impl: [[OMPDD]]
     // DMP-OPRG-NEXT:     OMPPrivateClause
     // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     // DMP-OPRG:          ForStmt
     // DMP-OPLC-NEXT:   impl: [[OMPDD]]
-    // DMP-ONT1-NEXT:     OMPNum_threadsClause
-    // DMP-ONT1-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-OPLC-NEXT:     OMPPrivateClause
     // DMP-OPLC-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     // DMP-OPLC:          ForStmt
@@ -876,13 +869,12 @@ int main() {
     // DMP-NEXT:            ACCPrivateClause
     // DMP-NEXT:              DeclRefExpr {{.*}} 'i' 'int'
     // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-AGIMP-NEXT:      ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:       impl: [[OMPDD]]
     // DMP-OPRG-NEXT:         OMPPrivateClause
     // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
     // DMP-OPRG:              ForStmt
     // DMP-OPLC-NEXT:       impl: [[OMPDD]]
-    // DMP-ONT1-NEXT:         OMPNum_threadsClause
-    // DMP-ONT1-NEXT:           IntegerLiteral {{.*}} 'int' 1
     // DMP-OPLC-NEXT:         OMPPrivateClause
     // DMP-OPLC-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
     // DMP-OPLC:              ForStmt
@@ -971,6 +963,7 @@ int main() {
     // DMP-NEXT:        ACCPrivateClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
     // DMP-AIMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-AGIMP-NEXT:  ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:   impl: [[OMPDD]]
     // DMP-OPRG-NEXT:     OMPPrivateClause
     // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
@@ -979,8 +972,6 @@ int main() {
     // DMP-OPLC-NEXT:     DeclStmt
     // DMP-OPLC-NEXT:       VarDecl {{.*}} i 'int'
     // DMP-OPLC-NEXT:     [[OMPDD]]
-    // DMP-ONT1-NEXT:       OMPNum_threadsClause
-    // DMP-ONT1-NEXT:         IntegerLiteral {{.*}} 'int' 1
     // DMP-OPLC:            ForStmt
     // DMP-OSEQ-NEXT:   impl: CompoundStmt
     // DMP-OSEQ-NEXT:     DeclStmt
@@ -1096,6 +1087,7 @@ int main() {
     // DMP-NEXT:            ACCPrivateClause
     // DMP-NEXT:              DeclRefExpr {{.*}} 'i' 'int'
     // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-AGIMP-NEXT:      ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:       impl: [[OMPDD]]
     // DMP-OPRG-NEXT:         OMPPrivateClause
     // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
@@ -1104,8 +1096,6 @@ int main() {
     // DMP-OPLC-NEXT:         DeclStmt
     // DMP-OPLC-NEXT:           VarDecl {{.*}} i 'int'
     // DMP-OPLC-NEXT:         [[OMPDD]]
-    // DMP-ONT1-NEXT:           OMPNum_threadsClause
-    // DMP-ONT1-NEXT:             IntegerLiteral {{.*}} 'int' 1
     // DMP-OPLC:                ForStmt
     // DMP-OSEQ-NEXT:       impl: CompoundStmt
     // DMP-OSEQ-NEXT:         DeclStmt
@@ -1225,6 +1215,7 @@ int main() {
     // DMP-NEXT:        ACCPrivateClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'k' 'int'
     // DMP-AIMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-AGIMP-NEXT:  ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:   impl: [[OMPDD]]
     // DMP-OPRG-NEXT:     OMPPrivateClause
     // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'j' 'int'
@@ -1236,8 +1227,6 @@ int main() {
     // DMP-OPLC-NEXT:     DeclStmt
     // DMP-OPLC-NEXT:       VarDecl {{.*}} i 'int'
     // DMP-OPLC-NEXT:     [[OMPDD]]
-    // DMP-ONT1-NEXT:       OMPNum_threadsClause
-    // DMP-ONT1-NEXT:         IntegerLiteral {{.*}} 'int' 1
     // DMP-OPLC-NEXT:       OMPPrivateClause
     // DMP-OPLC-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
     // DMP-OPLC-NEXT:       OMPPrivateClause
@@ -1385,6 +1374,7 @@ int main() {
     // DMP-NEXT:              ACCPrivateClause
     // DMP-NEXT:                DeclRefExpr {{.*}} 'k' 'int'
     // DMP-AIMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
+    // DMP-AGIMP-NEXT:        ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:         impl: [[OMPDD]]
     // DMP-OPRG-NEXT:           OMPPrivateClause
     // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
@@ -1396,8 +1386,6 @@ int main() {
     // DMP-OPLC-NEXT:           DeclStmt
     // DMP-OPLC-NEXT:             VarDecl {{.*}} i 'int'
     // DMP-OPLC-NEXT:           [[OMPDD]]
-    // DMP-ONT1-NEXT:             OMPNum_threadsClause
-    // DMP-ONT1-NEXT:               IntegerLiteral {{.*}} 'int' 1
     // DMP-OPLC-NEXT:             OMPPrivateClause
     // DMP-OPLC-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
     // DMP-OPLC-NEXT:             OMPPrivateClause

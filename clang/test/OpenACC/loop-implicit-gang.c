@@ -102,6 +102,7 @@ int main() {
   // DMP-LABEL: StringLiteral {{.*}} "acc loop enclosing\n"
   // PRT-LABEL: printf("acc loop enclosing\n");
   // EXE-LABEL: {{^}}acc loop enclosing{{$}}
+  // EXE-NOT: {{.}}
   printf("acc loop enclosing\n");
 
   // DMP:      ACCParallelDirective
@@ -169,14 +170,15 @@ int main() {
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NOT:      <implicit>
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-    // DMP-NEXT:   impl: OMPParallelForDirective
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeParallelForDirective
     // DMP-NEXT:     OMPNum_threadsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NOT:      OMP
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker{{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for num_threads(2){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for num_threads(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(2){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp distribute parallel for num_threads(2){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker{{$}}
     #pragma acc loop worker
     // DMP: ForStmt
@@ -204,10 +206,6 @@ int main() {
         // EXE-DAG: {{^}}acc loop worker enclosing: 0, 1{{$}}
         // EXE-DAG: {{^}}acc loop worker enclosing: 1, 0{{$}}
         // EXE-DAG: {{^}}acc loop worker enclosing: 1, 1{{$}}
-        // EXE-DAG: {{^}}acc loop worker enclosing: 0, 0{{$}}
-        // EXE-DAG: {{^}}acc loop worker enclosing: 0, 1{{$}}
-        // EXE-DAG: {{^}}acc loop worker enclosing: 1, 0{{$}}
-        // EXE-DAG: {{^}}acc loop worker enclosing: 1, 1{{$}}
         printf("acc loop worker enclosing: %d, %d\n", i, j);
 
     // DMP-NOT:  OMP
@@ -215,17 +213,16 @@ int main() {
     // DMP-NEXT:   ACCVectorClause
     // DMP-NOT:      <implicit>
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-    // DMP-NEXT:   impl: OMPParallelForSimdDirective
-    // DMP-NEXT:     OMPNum_threadsClause
-    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeSimdDirective
     // DMP-NEXT:     OMPSimdlenClause
     // DMP-NEXT:       ConstantExpr
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
     // DMP-NOT:      OMP
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc loop vector{{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(1) simdlen(2){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(1) simdlen(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute simd simdlen(2){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp distribute simd simdlen(2){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc loop vector{{$}}
     #pragma acc loop vector
     // DMP: ForStmt
@@ -249,10 +246,6 @@ int main() {
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
         // PRT-NEXT: printf
-        // EXE-DAG: {{^}}acc loop vector enclosing: 0, 0{{$}}
-        // EXE-DAG: {{^}}acc loop vector enclosing: 0, 1{{$}}
-        // EXE-DAG: {{^}}acc loop vector enclosing: 1, 0{{$}}
-        // EXE-DAG: {{^}}acc loop vector enclosing: 1, 1{{$}}
         // EXE-DAG: {{^}}acc loop vector enclosing: 0, 0{{$}}
         // EXE-DAG: {{^}}acc loop vector enclosing: 0, 1{{$}}
         // EXE-DAG: {{^}}acc loop vector enclosing: 1, 0{{$}}
@@ -389,7 +382,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop gang enclosing\n"
   // PRT-LABEL: printf("acc parallel loop gang enclosing\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}acc parallel loop gang enclosing{{$}}
+  // EXE-NOT: {{.}}
   printf("acc parallel loop gang enclosing\n");
 
   // DMP:      ACCParallelLoopDirective
@@ -447,7 +442,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop worker enclosing\n"
   // PRT-LABEL: printf("acc parallel loop worker enclosing\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}acc parallel loop worker enclosing{{$}}
+  // EXE-NOT: {{.}}
   printf("acc parallel loop worker enclosing\n");
 
   // DMP:      ACCParallelLoopDirective
@@ -469,16 +466,17 @@ int main() {
   // DMP-NEXT:       ACCWorkerClause
   // DMP-NOT:          <implicit>
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-  // DMP-NEXT:       impl: OMPParallelForDirective
+  // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+  // DMP-NEXT:       impl: OMPDistributeParallelForDirective
   // DMP-NEXT:         OMPNum_threadsClause
   // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 2
   // DMP-NOT:          OMP
   //
   // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(2) worker{{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for num_threads(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(2){{$}}
   // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2){{$}}
-  // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for num_threads(2){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp distribute parallel for num_threads(2){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(2) worker{{$}}
   #pragma acc parallel loop num_gangs(2) num_workers(2) worker
   // DMP: ForStmt
@@ -511,7 +509,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop vector enclosing\n"
   // PRT-LABEL: printf("acc parallel loop vector enclosing\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}acc parallel loop vector enclosing{{$}}
+  // EXE-NOT: {{.}}
   printf("acc parallel loop vector enclosing\n");
 
   // DMP:      ACCParallelLoopDirective
@@ -533,9 +533,8 @@ int main() {
   // DMP-NEXT:       ACCVectorClause
   // DMP-NOT:          <implicit>
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-  // DMP-NEXT:       impl: OMPParallelForSimdDirective
-  // DMP-NEXT:         OMPNum_threadsClause
-  // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+  // DMP-NEXT:       impl: OMPDistributeSimdDirective
   // DMP-NEXT:         OMPSimdlenClause
   // DMP-NEXT:           ConstantExpr
   // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 2
@@ -543,9 +542,9 @@ int main() {
   //
   // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(2) vector_length(2) vector{{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(1) simdlen(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute simd simdlen(2){{$}}
   // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2){{$}}
-  // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(1) simdlen(2){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp distribute simd simdlen(2){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) vector_length(2) vector{{$}}
   #pragma acc parallel loop num_gangs(2) vector_length(2) vector
   // DMP: ForStmt
@@ -578,7 +577,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop seq enclosing\n"
   // PRT-LABEL: printf("acc parallel loop seq enclosing\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}acc parallel loop seq enclosing{{$}}
+  // EXE-NOT: {{.}}
   printf("acc parallel loop seq enclosing\n");
 
   // DMP:      ACCParallelLoopDirective
@@ -634,7 +635,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop auto enclosing\n"
   // PRT-LABEL: printf("acc parallel loop auto enclosing\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}acc parallel loop auto enclosing{{$}}
+  // EXE-NOT: {{.}}
   printf("acc parallel loop auto enclosing\n");
 
   // DMP:      ACCParallelLoopDirective
@@ -690,7 +693,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop gang auto enclosing\n"
   // PRT-LABEL: printf("acc parallel loop gang auto enclosing\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}acc parallel loop gang auto enclosing{{$}}
+  // EXE-NOT: {{.}}
   printf("acc parallel loop gang auto enclosing\n");
 
   // DMP:      ACCParallelLoopDirective
@@ -756,7 +761,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "acc loop enclosed\n"
   // PRT-LABEL: printf("acc loop enclosed\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}acc loop enclosed{{$}}
+  // EXE-NOT: {{.}}
   printf("acc loop enclosed\n");
 
   // DMP:      ACCParallelDirective
@@ -1036,7 +1043,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop gang enclosed\n"
   // PRT-LABEL: printf("acc parallel loop gang enclosed\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}acc parallel loop gang enclosed{{$}}
+  // EXE-NOT: {{.}}
   printf("acc parallel loop gang enclosed\n");
 
   // DMP:      ACCParallelLoopDirective
@@ -1090,7 +1099,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop worker enclosed\n"
   // PRT-LABEL: printf("acc parallel loop worker enclosed\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}acc parallel loop worker enclosed{{$}}
+  // EXE-NOT: {{.}}
   printf("acc parallel loop worker enclosed\n");
 
   // DMP:      ACCParallelLoopDirective
@@ -1155,7 +1166,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop vector enclosed\n"
   // PRT-LABEL: printf("acc parallel loop vector enclosed\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}acc parallel loop vector enclosed{{$}}
+  // EXE-NOT: {{.}}
   printf("acc parallel loop vector enclosed\n");
 
   // DMP:      ACCParallelLoopDirective
@@ -1220,7 +1233,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop seq enclosed\n"
   // PRT-LABEL: printf("acc parallel loop seq enclosed\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}acc parallel loop seq enclosed{{$}}
+  // EXE-NOT: {{.}}
   printf("acc parallel loop seq enclosed\n");
 
   // DMP:      ACCParallelLoopDirective
@@ -1276,7 +1291,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop auto enclosed\n"
   // PRT-LABEL: printf("acc parallel loop auto enclosed\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}acc parallel loop auto enclosed{{$}}
+  // EXE-NOT: {{.}}
   printf("acc parallel loop auto enclosed\n");
 
   // DMP:      ACCParallelLoopDirective
@@ -1332,7 +1349,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop gang auto enclosed\n"
   // PRT-LABEL: printf("acc parallel loop gang auto enclosed\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}acc parallel loop gang auto enclosed{{$}}
+  // EXE-NOT: {{.}}
   printf("acc parallel loop gang auto enclosed\n");
 
   // DMP:      ACCParallelLoopDirective
@@ -1394,7 +1413,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "multilevel, separate\n"
   // PRT-LABEL: printf("multilevel, separate\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}multilevel, separate{{$}}
+  // EXE-NOT: {{.}}
   printf("multilevel, separate\n");
 
   // DMP:      ACCParallelDirective
@@ -1548,7 +1569,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "siblings, separate, gang first\n"
   // PRT-LABEL: printf("siblings, separate, gang first\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}siblings, separate, gang first{{$}}
+  // EXE-NOT: {{.}}
   printf("siblings, separate, gang first\n");
 
   // DMP:      ACCParallelDirective
@@ -1635,7 +1658,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "siblings, combined, gang first\n"
   // PRT-LABEL: printf("siblings, combined, gang first\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}siblings, combined, gang first{{$}}
+  // EXE-NOT: {{.}}
   printf("siblings, combined, gang first\n");
 
   // DMP:      ACCParallelLoopDirective
@@ -1719,7 +1744,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "siblings, separate, gang second\n"
   // PRT-LABEL: printf("siblings, separate, gang second\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}siblings, separate, gang second{{$}}
+  // EXE-NOT: {{.}}
   printf("siblings, separate, gang second\n");
 
   // DMP:      ACCParallelDirective
@@ -1806,7 +1833,9 @@ int main() {
 
   // DMP-LABEL: StringLiteral {{.*}} "siblings, combined, gang second\n"
   // PRT-LABEL: printf("siblings, combined, gang second\n");
+  // EXE-NOT: {{.}}
   // EXE-LABEL: {{^}}siblings, combined, gang second{{$}}
+  // EXE-NOT: {{.}}
   printf("siblings, combined, gang second\n");
 
   // DMP:      ACCParallelLoopDirective
