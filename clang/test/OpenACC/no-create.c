@@ -105,7 +105,7 @@
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %acc_includes \
 // RUN:        %s \
-// RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
+// RUN: | FileCheck -check-prefixes=PRT %s
 //
 // TODO: If lit were to support %for inside a %data, we could iterate prt-opts
 // within prt-args after the first prt-args iteration, significantly shortening

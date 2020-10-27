@@ -7,8 +7,8 @@
 // RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' > %t-acc.c
 
 // RUN: %data prt-args {
-// RUN:   (prt-arg=acc     prt-chk=PRT,PRT-A,PRT-AA prt-ver=noerrs)
-// RUN:   (prt-arg=omp     prt-chk=PRT,PRT-O,PRT-OO prt-ver=expected)
+// RUN:   (prt-arg=acc     prt-chk=PRT,PRT-A        prt-ver=noerrs)
+// RUN:   (prt-arg=omp     prt-chk=PRT,PRT-O        prt-ver=expected)
 // RUN:   (prt-arg=acc-omp prt-chk=PRT,PRT-A,PRT-AO prt-ver=expected)
 // RUN:   (prt-arg=omp-acc prt-chk=PRT,PRT-O,PRT-OA prt-ver=expected)
 // RUN: }

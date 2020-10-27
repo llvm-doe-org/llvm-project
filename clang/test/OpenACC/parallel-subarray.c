@@ -29,7 +29,7 @@
 // Check -ast-print and -fopenacc[-ast]-print.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
-// RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
+// RUN: | FileCheck -check-prefixes=PRT %s
 //
 // TODO: If lit were to support %for inside a %data, we could iterate prt-opts
 // within prt-args after the first prt-args iteration, significantly shortening
@@ -89,7 +89,7 @@
 // RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version -o %t \
 // RUN:            -DACCC=%[accc] %t-omp.c
 // RUN:     %t 2 2>&1 \
-// RUN:     | FileCheck -check-prefixes=EXE,EXE-TGT-HOST,EXE-%[fc],EXE-TGT-HOST-%[fc] %s
+// RUN:     | FileCheck -check-prefixes=EXE,EXE-%[fc],EXE-TGT-HOST-%[fc] %s
 // RUN:   }
 // RUN: }
 
@@ -107,7 +107,7 @@
 // RUN:               -DACCC=%[accc] %s
 // RUN:     %[run-if] %t > %t.out 2>&1
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:                         -check-prefixes=EXE,EXE-TGT-%[tgt],EXE-%[fc],EXE-TGT-%[tgt]-%[fc]
+// RUN:                         -check-prefixes=EXE,EXE-%[fc],EXE-TGT-%[tgt]-%[fc]
 // RUN:   }
 // RUN: }
 

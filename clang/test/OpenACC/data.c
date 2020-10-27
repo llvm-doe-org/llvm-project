@@ -14,7 +14,7 @@
 // Check -ast-print and -fopenacc[-ast]-print.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
-// RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
+// RUN: | FileCheck -check-prefixes=PRT %s
 //
 // TODO: If lit were to support %for inside a %data, we could iterate prt-opts
 // within prt-args after the first prt-args iteration, significantly shortening
@@ -34,10 +34,10 @@
 // RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT-O,PRT)
 // RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT-A,PRT-AO,PRT)
 // RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT-O,PRT-OA,PRT)
-// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-A,PRT,PRT-SRC)
-// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-O,PRT,PRT-SRC)
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-A,PRT-AO,PRT,PRT-SRC)
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-O,PRT-OA,PRT,PRT-SRC)
+// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-A,PRT)
+// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-O,PRT)
+// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-A,PRT-AO,PRT)
+// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-O,PRT-OA,PRT)
 // RUN: }
 // RUN: %for prt-args {
 // RUN:   %clang -Xclang -verify %[prt] %t-acc.c \
@@ -68,22 +68,22 @@
 // RUN:          -Wno-openacc-omp-map-no-alloc
 // RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:   %clang -Xclang -verify -fopenmp %fopenmp-version -o %t %t-omp.c
-// RUN:   %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-TGT-HOST,EXE-HOST %s
+// RUN:   %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-HOST %s
 // RUN: }
 
 // Check execution with normal compilation.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt=HOST    tgt-cflags=                                     host-or-dev=HOST)
-// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host-or-dev=DEV )
-// RUN:   (run-if=%run-if-ppc64le tgt=PPC64LE tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host-or-dev=DEV )
-// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host-or-dev=DEV )
+// RUN:   (run-if=                tgt-cflags=                                     host-or-dev=HOST)
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host-or-dev=DEV )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host-or-dev=DEV )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host-or-dev=DEV )
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc %s -o %t %[tgt-cflags]
 // RUN:   %[run-if] %t > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out %s -strict-whitespace \
-// RUN:                       -check-prefixes=EXE,EXE-TGT-%[tgt],EXE-%[host-or-dev]
+// RUN:                       -check-prefixes=EXE,EXE-%[host-or-dev]
 // RUN: }
 
 // END.

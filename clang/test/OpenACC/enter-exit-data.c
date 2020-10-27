@@ -18,7 +18,7 @@
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only \
 // RUN:        %acc_includes %s \
-// RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
+// RUN: | FileCheck -check-prefixes=PRT %s
 //
 // TODO: If lit were to support %for inside a %data, we could iterate prt-opts
 // within prt-args after the first prt-args iteration, significantly shortening
@@ -38,10 +38,10 @@
 // RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT-O,PRT)
 // RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT-A,PRT-AO,PRT)
 // RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT-O,PRT-OA,PRT)
-// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-A,PRT,PRT-SRC)
-// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-O,PRT,PRT-SRC)
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-A,PRT-AO,PRT,PRT-SRC)
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-O,PRT-OA,PRT,PRT-SRC)
+// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-A,PRT)
+// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-O,PRT)
+// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-A,PRT-AO,PRT)
+// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-O,PRT-OA,PRT)
 // RUN: }
 // RUN: %for prt-args {
 // RUN:   %clang -Xclang -verify %[prt] %t-acc.c %acc_includes \
@@ -85,8 +85,7 @@
 // RUN:               %acc_includes -D%[tgt] %[tgt-cflags] -o %t %t-omp.c
 // RUN:     %[run-if] %t > %t.out 2>&1
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:                         -check-prefixes=EXE,EXE-TGT-%[tgt] \
-// RUN:                         -check-prefixes=EXE-%[host-or-dev]
+// RUN:                         -check-prefixes=EXE,EXE-%[host-or-dev]
 // RUN:   }
 // RUN: }
 
@@ -97,8 +96,7 @@
 // RUN:                    -o %t %[tgt-cflags]
 // RUN:   %[run-if] %t > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out %s \
-// RUN:                       -check-prefixes=EXE,EXE-TGT-%[tgt] \
-// RUN:                       -check-prefixes=EXE-%[host-or-dev]
+// RUN:                       -check-prefixes=EXE,EXE-%[host-or-dev]
 // RUN: }
 
 // END.

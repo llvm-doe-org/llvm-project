@@ -79,7 +79,7 @@
 // more than sufficient to show it's working for the update directive.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
-// RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
+// RUN: | FileCheck -check-prefixes=PRT %s
 //
 // TODO: If lit were to support %for inside a %data, we could iterate prt-opts
 // within prt-args after the first prt-args iteration, significantly shortening
@@ -99,10 +99,10 @@
 // RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT-O,PRT)
 // RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT-A,PRT-AO,PRT)
 // RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT-O,PRT-OA,PRT)
-// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-A,PRT,PRT-SRC)
-// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-O,PRT,PRT-SRC)
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-A,PRT-AO,PRT,PRT-SRC)
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-O,PRT-OA,PRT,PRT-SRC)
+// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-A,PRT)
+// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-O,PRT)
+// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-A,PRT-AO,PRT)
+// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-O,PRT-OA,PRT)
 // RUN: }
 // RUN: %for present-opts {
 // RUN:   %for prt-args {
