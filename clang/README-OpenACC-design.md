@@ -1594,8 +1594,9 @@ clauses to OpenMP is as follows:
 * Otherwise, *exp*|*pre* `private` -> wrap the loop in a compound
   statement and declare an uninitialized local copy of the variable.
   Notes:
-    * exp `private` just needs to be local to the one thread executing
-      the loop, and so creating a new local variable is sufficient.
+    * *exp*|*pre* `private` just needs to be local to the one thread
+      executing the loop, and so creating a new local variable is
+      sufficient.
 
 A sequential `acc loop` directive is gang-redundant, worker-single,
 vector-single mode.  Thus, as far as partitioning is concerned, simple
