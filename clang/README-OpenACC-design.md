@@ -2644,14 +2644,20 @@ support currently include:
 * The source of Clacc's OpenACC Profiling Interface support is
   integrated with the source of LLVM's OpenMP runtime implementation.
   Notes:
-    * The source needs to be separated into two distinct libraries
-      that can be built separately.
+    * Recently, the source has been extracted into a separate
+      compilation unit, `acc-prof.cpp`.  However, the source needs to
+      be separated into two distinct libraries that can be built
+      separately.
     * This separation should facilitate continuous integration of
       upstream work into Clacc, and it should facilitate the eventual
       contribution of Clacc to upstream.
     * This separation would also be necessary to eventually enable use
       of Clacc's OpenACC Profiling Interface support with other OpenMP
-      runtime implementations.
+      runtime implementations.  In that case, the user could define an
+      `ompt_start_tool` that calls Clacc's `acc_ompt_start_tool` and
+      returns its result.  It might be convenient for Clacc to provide
+      a library with just that definition, and the user could
+      optionally link it along with Clacc's OpenACC runtime.
 * Clacc's OpenACC Profiling Interface support depends on OMPT
   extensions.  As a result, any OpenMP runtime implementation must
   support some of these extensions to be usable.  Moreover, any OpenMP
