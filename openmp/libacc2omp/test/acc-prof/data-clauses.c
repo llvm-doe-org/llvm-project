@@ -9,8 +9,6 @@
 // - Runtime errors from "present": The Clang OpenACC test suite checks this.
 // - Data types and subarray cases: The Clang OpenACC test suite checks this.
 
-// REQUIRES: ompt
-//
 // RUN: %data tgts {
 // RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
 // RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple)
@@ -22,7 +20,7 @@
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %for directives {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %flags %s -o %t \
+// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s -o %t \
 // RUN:         %[tgt-cflags] -DDIRECTIVE=%'directive'
 // RUN:     %[run-if] %t > %t.out 2> %t.err
 // RUN:     %[run-if] FileCheck -input-file %t.err -allow-empty %s \

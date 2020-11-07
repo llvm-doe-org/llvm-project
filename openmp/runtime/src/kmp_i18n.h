@@ -114,6 +114,7 @@ extern kmp_msg_t __kmp_msg_null;
 // system. Note: these functions allocate memory. You should pass created
 // messages to __kmp_msg() function, it will print messages and destroy them.
 kmp_msg_t __kmp_msg_format(unsigned id_arg, ...);
+kmp_msg_t __kmp_msg_vformat(unsigned id_arg, va_list args);
 kmp_msg_t __kmp_msg_error_code(int code);
 kmp_msg_t __kmp_msg_error_mesg(char const *mesg);
 

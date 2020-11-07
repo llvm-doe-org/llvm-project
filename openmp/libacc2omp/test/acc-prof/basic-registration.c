@@ -1,7 +1,5 @@
 // Check various basic registration/unregistration scenarios.
 
-// REQUIRES: ompt
-//
 // RUN: %data tgts {
 // RUN:   (run-if=                tgt-cflags=                                     fc=HOST       )
 // RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  fc=OFF,X86_64 )
@@ -9,7 +7,7 @@
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple fc=OFF,NVPTX64)
 // RUN: }
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %flags %s -o %t \
+// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s -o %t \
 // RUN:                    %[tgt-cflags]
 // RUN:   %[run-if] %t > %t.out 2> %t.err
 // RUN:   %[run-if] FileCheck -input-file %t.err %s \

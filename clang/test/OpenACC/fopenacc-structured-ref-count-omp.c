@@ -47,10 +47,10 @@
 //
 // RUN: %for ref-count-opts {
 // RUN:   %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
-// RUN:          %acc_includes %[ref-count-opt] \
+// RUN:          %acc-includes %[ref-count-opt] \
 // RUN:   | FileCheck -check-prefixes=DMP %s
 // RUN:   %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %s \
-// RUN:          %acc_includes %[ref-count-opt]
+// RUN:          %acc-includes %[ref-count-opt]
 // RUN:   %clang_cc1 -ast-dump-all %t.ast \
 // RUN:   | FileCheck -check-prefixes=DMP %s
 // RUN: }
@@ -83,7 +83,7 @@
 // RUN: %for ref-count-opts {
 // RUN:   %for prt-args {
 // RUN:     %clang -Xclang -verify %[prt] %[ref-count-opt] %t-acc.c \
-// RUN:            %acc_includes -Wno-openacc-omp-map-present \
+// RUN:            %acc-includes -Wno-openacc-omp-map-present \
 // RUN:            -Wno-openacc-omp-map-no-alloc \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] -DHOLD='%[hold-comma]' %s
 // RUN:   }
@@ -97,7 +97,7 @@
 //
 // RUN: %for ref-count-opts {
 // RUN:   %clang -Xclang -verify -fopenacc %[ref-count-opt] -emit-ast %t-acc.c \
-// RUN:          -o %t.ast %acc_includes
+// RUN:          -o %t.ast %acc-includes
 // RUN:   %for prt-args {
 // RUN:     %clang %[prt] %t.ast 2>&1 \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] -DHOLD='%[hold-comma]' %s
@@ -123,12 +123,12 @@
 // RUN:   %for tgts {
 // RUN:     %for prt-opts {
 // RUN:       %[run-if] %clang -Xclang -verify %[prt-opt]=omp %[ref-count-opt] \
-// RUN:                        %s %acc_includes > %t-omp.c \
+// RUN:                        %s %acc-includes > %t-omp.c \
 // RUN:                        -Wno-openacc-omp-map-present \
 // RUN:                        -Wno-openacc-omp-map-no-alloc
 // RUN:       %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:       %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
-// RUN:                 %[tgt-cflags] -o %t.exe %t-omp.c %acc_includes
+// RUN:                 %[tgt-cflags] %acc-includes -o %t.exe %t-omp.c %acc-libs
 // RUN:       %[run-if] %t.exe > %t.out 2>&1
 // RUN:       %[run-if] FileCheck -input-file %t.out %s \
 // RUN:         -match-full-lines -allow-empty \
@@ -143,7 +143,7 @@
 // RUN: %for ref-count-opts {
 // RUN:   %for tgts {
 // RUN:     %[run-if] %clang -Xclang -verify -fopenacc %[ref-count-opt] \
-// RUN:               %[tgt-cflags] -o %t.exe %s %acc_includes
+// RUN:               %[tgt-cflags] -o %t.exe %s %acc-includes
 // RUN:     %[run-if] %t.exe > %t.out 2>&1
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
 // RUN:       -match-full-lines -allow-empty \

@@ -63,11 +63,12 @@ or as part of larger test suites, as follows:
 ```
 $ make check-clang-openacc # OpenACC directives
 $ make check-clang         # all of Clang including OpenACC directives
-$ make check-libomp        # OpenMP runtime and OpenACC Profiling Interface
+$ make check-libacc2omp    # OpenACC runtime
+$ make check-openmp        # OpenMP and OpenACC runtime
 $ make check-all           # all LLVM subprojects
 ```
 
-## Using
+## Basic Usage
 
 Clacc is still under development and requires significant manual
 intervention for some applications (see the Documentation section
@@ -116,8 +117,9 @@ int main() {
   return 0;
 }
 ```
+## Compiler Options
 
-The most relevant command-line options are as follows:
+The most relevant `clang` command-line options are as follows:
 
 * OpenACC traditional compilation mode:
     * `-fopenacc` enables OpenACC support.  Unless source-to-source
@@ -153,6 +155,28 @@ command-line options, run Clacc's `clang -help` and search for
 `clang/README-OpenACC-status.md` also provides a full list of
 OpenACC-related command-line options and cross-references to related
 status and design documentation.
+
+## Linking
+
+When compiling an OpenACC application with the Clacc compiler, you
+must link an OpenMP runtime library.  Currently, we have only tested
+with Clacc's version of LLVM's OpenMP runtime library.  Moreover, some
+OpenACC features as compiled by Clacc depend on OpenMP extensions
+implemented there.
+
+If an OpenACC application uses the OpenACC Runtime Library API, or if
+you wish to profile an OpenACC application using an OpenACC profiling
+library depending on the OpenACC Profiling Interface, you must also
+link Clacc's `libacc2omp.so` and `libacc2omp-proxy.so` with your
+application.  These libraries serve as a wrapper around LLVM's OpenMP
+runtime and are installed in the same directories as Clacc's version
+of LLVM's OpenMP runtime, `libomp.so`.
+
+Normally, the `-fopenacc` option to `clang` triggers linking of all
+such required libraries automatically.  However, if you are linking
+with a separate command, or if you are using Clacc's source-to-source
+mode followed by OpenMP compilation, you must specify linking of the
+required libraries.
 
 ## Documentation
 

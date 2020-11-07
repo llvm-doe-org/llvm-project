@@ -1,0 +1,8 @@
+VERS1.0 {
+  global:
+    acc2omp_ompt_start_tool;
+    acc_register_library;
+  local:
+    *;
+};
+

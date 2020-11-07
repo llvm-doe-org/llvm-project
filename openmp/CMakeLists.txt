@@ -103,5 +103,8 @@ if (OPENMP_ENABLE_OMPT_TOOLS)
   add_subdirectory(tools)
 endif()
 
+# Build OpenACC runtime.
+add_subdirectory(libacc2omp)
+
 # Now that we have seen all testsuites, create the check-openmp target.
 construct_check_openmp_target()

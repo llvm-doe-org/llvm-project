@@ -552,10 +552,17 @@ void tools::addArchSpecificRPath(const ToolChain &TC, const ArgList &Args,
 bool tools::addOpenMPRuntime(ArgStringList &CmdArgs, const ToolChain &TC,
                              const ArgList &Args, bool ForceStaticHostRuntime,
                              bool IsOffloadingHost, bool GompNeedsRT) {
+  bool HasOpenACC =
+      Args.hasFlag(options::OPT_fopenacc, options::OPT_fno_openacc, false);
   if (!Args.hasFlag(options::OPT_fopenmp, options::OPT_fopenmp_EQ,
                     options::OPT_fno_openmp, false) &&
-      !Args.hasFlag(options::OPT_fopenacc, options::OPT_fno_openacc, false))
+      !HasOpenACC)
     return false;
+
+  if (HasOpenACC) {
+    CmdArgs.push_back("-lacc2omp");
+    CmdArgs.push_back("-lacc2omp-proxy");
+  }
 
   Driver::OpenMPRuntimeKind RTKind = TC.getDriver().getOpenMPRuntime(Args);
 

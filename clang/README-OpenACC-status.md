@@ -315,11 +315,10 @@ The main limitations are currently as follows:
   not yet supported.
 * Callback registration is permitted only within the
   `acc_register_library` function.
-* `acc_ev_wait_start` and `acc_ev_wait_end` event types are
-  not yet supported.
-* The `kernel_name`, `num_gangs`, `num_workers`,
-  `vector_length`, and `tool_info` fields are not yet
+* `acc_ev_wait_start` and `acc_ev_wait_end` event types are not yet
   supported.
+* The `kernel_name`, `num_gangs`, `num_workers`, `vector_length`,
+  `thread_id`, and `tool_info` fields are not yet supported.
 * The `acc_api_info` structure is not yet supported.
 
 See the section "OpenACC Profiling Interface" in

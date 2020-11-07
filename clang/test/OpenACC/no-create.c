@@ -90,10 +90,10 @@
 //
 // RUN: %for no-create-opts {
 // RUN:   %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
-// RUN:          %acc_includes %[no-create-opt] \
+// RUN:          %acc-includes %[no-create-opt] \
 // RUN:   | FileCheck -check-prefixes=DMP,DMP-%[noAlloc-or-alloc] %s
 // RUN:   %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %s \
-// RUN:          %acc_includes %[no-create-opt]
+// RUN:          %acc-includes %[no-create-opt]
 // RUN:   %clang_cc1 -ast-dump-all %t.ast \
 // RUN:   | FileCheck -check-prefixes=DMP,DMP-%[noAlloc-or-alloc] %s
 // RUN: }
@@ -103,7 +103,7 @@
 // We include print checking on only a few representative cases, which should be
 // more than sufficient to show it's working for the no_create clause.
 //
-// RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %acc_includes \
+// RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %acc-includes \
 // RUN:        %s \
 // RUN: | FileCheck -check-prefixes=PRT %s
 //
@@ -132,7 +132,7 @@
 // RUN: }
 // RUN: %for no-create-opts {
 // RUN:   %for prt-args {
-// RUN:     %clang -Xclang -verify %[prt] %[no-create-opt] %acc_includes \
+// RUN:     %clang -Xclang -verify %[prt] %[no-create-opt] %acc-includes \
 // RUN:            %t-acc.c -Wno-openacc-omp-map-hold \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] \
 // RUN:                 -DNO_CREATE_MT=%[no-create-mt] \
@@ -148,7 +148,7 @@
 //
 // RUN: %for no-create-opts {
 // RUN:   %clang -Xclang -verify -fopenacc %[no-create-opt] -emit-ast \
-// RUN:          %acc_includes -o %t.ast %t-acc.c
+// RUN:          %acc-includes -o %t.ast %t-acc.c
 // RUN:   %for prt-args {
 // RUN:     %clang %[prt] %t.ast 2>&1 \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] \
@@ -170,11 +170,11 @@
 // RUN:   %for tgts {
 // RUN:     %for prt-opts {
 // RUN:       %[run-if] %clang -Xclang -verify %[prt-opt]=omp \
-// RUN:                 %[no-create-opt] %acc_includes %s > %t-omp.c \
+// RUN:                 %[no-create-opt] %acc-includes %s > %t-omp.c \
 // RUN:                 -Wno-openacc-omp-map-hold
 // RUN:       %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:       %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
-// RUN:                 %[tgt-cflags] %acc_includes -o %t.exe %t-omp.c
+// RUN:                 %[tgt-cflags] %acc-includes -o %t.exe %t-omp.c %acc-libs
 // RUN:       %for cases {
 // RUN:         %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2>&1
 // RUN:         %[run-if] FileCheck -input-file %t.out %s \
@@ -191,7 +191,7 @@
 // RUN: %for no-create-opts {
 // RUN:   %for tgts {
 // RUN:     %[run-if] %clang -Xclang -verify -fopenacc %[no-create-opt] \
-// RUN:               %[tgt-cflags] %acc_includes -o %t.exe %s
+// RUN:               %[tgt-cflags] %acc-includes -o %t.exe %s
 // RUN:     rm -f %t.actual-cases && touch %t.actual-cases
 // RUN:     %for cases {
 // RUN:       %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2>&1

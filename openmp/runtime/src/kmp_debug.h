@@ -41,6 +41,10 @@ extern int __kmp_debug_assert(char const *expr, char const *file, int line);
   if (!(cond)) {                                                               \
     __kmp_debug_assert((msg), __FILE__, __LINE__);                             \
   }
+#define KMP_ASSERT4(cond, msg, file, line)                                     \
+  if (!(cond)) {                                                               \
+    __kmp_debug_assert((msg), file, line);                                     \
+  }
 #define KMP_DEBUG_ASSERT(cond) KMP_ASSERT(cond)
 #define KMP_DEBUG_ASSERT2(cond, msg) KMP_ASSERT2(cond, msg)
 #define KMP_DEBUG_USE_VAR(x) /* Nothing (it is used!) */
@@ -51,6 +55,10 @@ extern int __kmp_debug_assert(char const *expr, char const *file, int line);
     __kmp_debug_assert("assertion failure", __FILE__, __LINE__);               \
   }
 #define KMP_ASSERT2(cond, msg) KMP_ASSERT(cond)
+#define KMP_ASSERT4(cond, msg, file, line)                                     \
+  if (!(cond)) {                                                               \
+    __kmp_debug_assert("assertion failure", file, line);                       \
+  }
 #define KMP_DEBUG_ASSERT(cond) /* Nothing */
 #define KMP_DEBUG_ASSERT2(cond, msg) /* Nothing */
 #define KMP_DEBUG_USE_VAR(x) ((void)(x))

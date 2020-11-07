@@ -1,0 +1,26 @@
+@AUTO_GEN_COMMENT@
+
+config.test_c_compiler = "@OPENMP_TEST_C_COMPILER@"
+config.test_cxx_compiler = "@OPENMP_TEST_CXX_COMPILER@"
+config.test_compiler_features = @OPENMP_TEST_COMPILER_FEATURES@
+config.test_filecheck = "@OPENMP_FILECHECK_EXECUTABLE@"
+config.test_not = "@OPENMP_NOT_EXECUTABLE@"
+config.libacc2omp_obj_root = "@CMAKE_CURRENT_BINARY_DIR@"
+config.library_dir = "@LIBOMP_LIBRARY_DIR@"
+config.acc2omp_header_directory = "@CMAKE_CURRENT_BINARY_DIR@/../src"
+
+# These cmake variables enable users to specify what hardware and platform is
+# available for running programs with offloading in the OpenACC Profiling
+# Interface test suite.
+config.clang_acc_test_exe_x86_64 = \
+    "@CLANG_ACC_TEST_EXE_X86_64@" in ['True', 'true', '1']
+config.clang_acc_test_exe_ppc64le = \
+    "@CLANG_ACC_TEST_EXE_PPC64LE@" in ['True', 'true', '1']
+config.clang_acc_test_exe_nvptx64 = \
+    "@CLANG_ACC_TEST_EXE_NVPTX64@" in ['True', 'true', '1']
+config.clang_acc_test_exe_x86_64_triple = 'x86_64-unknown-linux-gnu';
+config.clang_acc_test_exe_ppc64le_triple = 'ppc64le-unknown-linux-gnu';
+config.clang_acc_test_exe_nvptx64_triple = 'nvptx64-nvidia-cuda';
+
+# Let the main config do the real work.
+lit_config.load_config(config, "@CMAKE_CURRENT_SOURCE_DIR@/lit.cfg")

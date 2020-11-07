@@ -1,7 +1,5 @@
 // Check that no callbacks are missed upon a device allocation failure.
 
-// REQUIRES: ompt
-//
 // RUN: %data tgts {
 // RUN:   (run-if=                tgt-cflags=                                     host-or-off-pre-env=HOST not-if-off-pre-env=              )
 // RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
@@ -13,7 +11,7 @@
 // RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off-post-env=HOST                   not-if-off-post-env=                     )
 // RUN: }
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %flags %s -o %t \
+// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s -o %t \
 // RUN:                    %[tgt-cflags]
 // RUN:   %for run-envs {
 // RUN:     %[run-if] %[not-if-off-post-env] %[run-env] %t > %t.out 2> %t.err

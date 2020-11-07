@@ -13,14 +13,13 @@
 // registered.  This will become more important once multiple callbacks can be
 // registered as we'll then need to check their dispatch order.
 
-// REQUIRES: ompt
-
 // RUN: %data proflibs {
 // RUN:   (cpp=-DPROG=PROG_PROFLIB1 file=%t.proflib1)
 // RUN:   (cpp=-DPROG=PROG_PROFLIB2 file=%t.proflib2)
 // RUN: }
 // RUN: %for proflibs {
-// RUN:   %clang -Xclang -verify %flags -shared -fpic %[cpp] %s -o %[file]
+// RUN:   %clang -Xclang -verify %acc-includes -shared -fpic %[cpp] %s \
+// RUN:          -o %[file]
 // RUN: }
 // RUN: %data tgts {
 //        Whether the target is host or device affects at least when
@@ -32,8 +31,8 @@
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple fc=OFF )
 // RUN: }
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %flags -DPROG=PROG_APP %s \
-// RUN:                    -o %t %[tgt-cflags]
+// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes \
+// RUN:                    -DPROG=PROG_APP %s -o %t %[tgt-cflags]
 // RUN:   %[run-if] env ACC_PROFLIB='%t.proflib1;%t.proflib2' %t > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out %s \
 // RUN:       -match-full-lines -strict-whitespace -check-prefixes=CHECK,%[fc]

@@ -14,9 +14,8 @@
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %for dirs {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %acc_includes \
-// RUN:                      %[tgt-cflags] -DDIR=%[dir] -DCLAUSE=%[clause] \
-// RUN:                      %s -o %t
+// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %[tgt-cflags] \
+// RUN:                      -DDIR=%[dir] -DCLAUSE=%[clause] %s -o %t
 // RUN:     %[run-if] %[not-crash] %t > %t.out 2>&1
 // RUN:     %[run-if] FileCheck -input-file %t.out -allow-empty %s \
 // RUN:                         -check-prefixes=EXE,EXE-%[not]PASS

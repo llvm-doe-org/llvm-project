@@ -1,13 +1,12 @@
 // Check basic ACC_PROFLIB functionality and diagnostics.
 
-// REQUIRES: ompt
-
 // RUN: %data proflibs {
 // RUN:   (cpp=-DPROG=PROG_PROFLIB_BAD  file=%t.proflib-bad )
 // RUN:   (cpp=-DPROG=PROG_PROFLIB_GOOD file=%t.proflib-good)
 // RUN: }
 // RUN: %for proflibs {
-// RUN:   %clang -Xclang -verify %flags -shared -fpic %[cpp] %s -o %[file]
+// RUN:   %clang -Xclang -verify %acc-includes -shared -fpic %[cpp] %s \
+// RUN:          -o %[file]
 // RUN: }
 // RUN: %data tgts {
 //        Whether the target is host or device affects at least when
@@ -19,8 +18,8 @@
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple fc=OFF )
 // RUN: }
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %flags -DPROG=PROG_APP %s \
-// RUN:                    -o %t %[tgt-cflags]
+// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes \
+// RUN:                    -DPROG=PROG_APP %s -o %t %[tgt-cflags]
 //
 //        # Check diagnostic if library doesn't exist.
 // RUN:   %[run-if] rm -f %t.non-existent

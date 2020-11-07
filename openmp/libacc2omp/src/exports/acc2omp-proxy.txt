@@ -1,0 +1,8 @@
+{
+  global:
+    acc2omp_fatal;
+    acc2omp_assert;
+  local:
+    *;
+};
+

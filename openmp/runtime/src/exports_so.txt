@@ -26,7 +26,6 @@ VERSION {
         # OMPT API
         #
         ompt_start_tool;     # OMPT start interface
-        acc_register_library;
         ompt_get_enabled;
         ompt_get_callbacks;
         ompt_get_unique_id;
@@ -63,6 +62,14 @@ VERSION {
         __kmp_thread_pool;
 
 	__kmp_reset_stats;
+
+        #
+        # Internal symbols exported for LLVM's libacc2omp-proxy.
+        #
+        __kmp_msg_vformat;
+        __kmp_msg_null;
+        __kmp_fatal;
+        __kmp_debug_assert;
 
 #if USE_ITT_BUILD
         #

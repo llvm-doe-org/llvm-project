@@ -8,16 +8,16 @@
 // Check -ast-dump before and after AST serialization.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc \
-// RUN:        %acc_includes %s \
+// RUN:        %acc-includes %s \
 // RUN: | FileCheck -check-prefix=DMP %s
-// RUN: %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %acc_includes %s
+// RUN: %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %acc-includes %s
 // RUN: %clang_cc1 -ast-dump-all %t.ast \
 // RUN: | FileCheck -check-prefixes=DMP %s
 
 // Check -ast-print and -fopenacc[-ast]-print.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only \
-// RUN:        %acc_includes %s \
+// RUN:        %acc-includes %s \
 // RUN: | FileCheck -check-prefixes=PRT %s
 //
 // TODO: If lit were to support %for inside a %data, we could iterate prt-opts
@@ -44,7 +44,7 @@
 // RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-O,PRT-OA,PRT)
 // RUN: }
 // RUN: %for prt-args {
-// RUN:   %clang -Xclang -verify %[prt] %t-acc.c %acc_includes \
+// RUN:   %clang -Xclang -verify %[prt] %t-acc.c %acc-includes \
 // RUN:          -Wno-openacc-omp-map-hold -Wno-openacc-omp-map-present \
 // RUN:          -Wno-openacc-omp-map-no-alloc \
 // RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
@@ -56,7 +56,7 @@
 // directives) is serialized and deserialized, so it's worthwhile to try all
 // OpenACC printing modes.
 //
-// RUN: %clang -Xclang -verify -fopenacc -emit-ast %acc_includes %t-acc.c \
+// RUN: %clang -Xclang -verify -fopenacc -emit-ast %acc-includes %t-acc.c \
 // RUN:        -o %t.ast
 // RUN: %for prt-args {
 // RUN:   %clang %[prt] %t.ast 2>&1 \
@@ -75,14 +75,14 @@
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %for prt-opts {
-// RUN:     %[run-if] %clang -Xclang -verify %[prt-opt]=omp %acc_includes \
+// RUN:     %[run-if] %clang -Xclang -verify %[prt-opt]=omp %acc-includes \
 // RUN:                      -D%[tgt] %s > %t-omp.c \
 // RUN:                      -Wno-openacc-omp-map-hold \
 // RUN:                      -Wno-openacc-omp-map-present \
 // RUN:                      -Wno-openacc-omp-map-no-alloc
 // RUN:     %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:     %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
-// RUN:               %acc_includes -D%[tgt] %[tgt-cflags] -o %t %t-omp.c
+// RUN:               %acc-includes -D%[tgt] %[tgt-cflags] -o %t %t-omp.c
 // RUN:     %[run-if] %t > %t.out 2>&1
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
 // RUN:                         -check-prefixes=EXE,EXE-%[host-or-dev]
@@ -92,7 +92,7 @@
 // Check execution with normal compilation.
 //
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc_includes -D%[tgt] %s \
+// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes -D%[tgt] %s \
 // RUN:                    -o %t %[tgt-cflags]
 // RUN:   %[run-if] %t > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out %s \

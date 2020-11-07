@@ -620,14 +620,20 @@ void __kmp_i18n_dump_catalog(kmp_str_buf_t *buffer) {
 } // __kmp_i18n_dump_catalog
 
 // -----------------------------------------------------------------------------
+
 kmp_msg_t __kmp_msg_format(unsigned id_arg, ...) {
+  va_list args;
+  va_start(args, id_arg);
+  kmp_msg_t msg = __kmp_msg_vformat(id_arg, args);
+  va_end(args);
+  return msg;
+} // __kmp_msg_format
+
+kmp_msg_t __kmp_msg_vformat(unsigned id_arg, va_list args) {
 
   kmp_msg_t msg;
-  va_list args;
   kmp_str_buf_t buffer;
   __kmp_str_buf_init(&buffer);
-
-  va_start(args, id_arg);
 
   // We use unsigned for the ID argument and explicitly cast it here to the
   // right enumerator because variadic functions are not compatible with
@@ -654,7 +660,6 @@ kmp_msg_t __kmp_msg_format(unsigned id_arg, ...) {
 #else
 #error
 #endif
-  va_end(args);
   __kmp_str_buf_detach(&buffer);
 
   msg.type = (kmp_msg_type_t)(id >> 16);
@@ -664,7 +669,7 @@ kmp_msg_t __kmp_msg_format(unsigned id_arg, ...) {
 
   return msg;
 
-} // __kmp_msg_format
+} // __kmp_msg_vformat
 
 // -----------------------------------------------------------------------------
 static char *sys_error(int err) {

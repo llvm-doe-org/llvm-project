@@ -142,15 +142,21 @@ static ompt_start_tool_result_t *ompt_tool_darwin(unsigned int omp_version,
 // of ompt_start_tool() will be used in case no tool-supplied implementation of
 // this function is present in the address space of a process.
 
-_OMP_EXTERN ompt_start_tool_result_t *
-acc_ompt_start_tool(unsigned int omp_version, const char *runtime_version);
-
 _OMP_EXTERN OMPT_WEAK_ATTRIBUTE ompt_start_tool_result_t *
 ompt_start_tool(unsigned int omp_version, const char *runtime_version) {
-  ompt_start_tool_result_t *ret = acc_ompt_start_tool(omp_version,
-                                                      runtime_version);
-  if (ret)
-    return ret;
+  ompt_start_tool_result_t *ret = NULL;
+
+  // If acc2omp_ompt_start_tool is available, assume it's the LLVM OpenACC
+  // runtime's wrapper around ompt_start_tool for supporting the OpenACC
+  // Profiling Interface.
+  ompt_start_tool_t acc2omp_ompt_start_tool =
+      (ompt_start_tool_t)dlsym(RTLD_DEFAULT, "acc2omp_ompt_start_tool");
+  if (acc2omp_ompt_start_tool) {
+    ret = acc2omp_ompt_start_tool(omp_version, runtime_version);
+    if (ret)
+      return ret;
+  }
+
   // Search next symbol in the current address space. This can happen if the
   // runtime library is linked before the tool. Since glibc 2.2 strong symbols
   // don't override weak symbols that have been found before unless the user

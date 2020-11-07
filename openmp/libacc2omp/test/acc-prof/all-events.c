@@ -8,8 +8,6 @@
 // - A parallel construct and update directive nested within data constructs
 //   (-DDIR=DIR_DATAPAR)
 
-// REQUIRES: ompt
-//
 // RUN: %data dirs {
 // RUN:   (dir-cflags=-DDIR=DIR_ENTER_EXIT_DATA dir-fc1=DATA dir-fc2=NOPAR dir-fc3=NODATAPAR
 // RUN:    arr-enter-construct=enter_data arr-exit-construct=exit_data
@@ -81,13 +79,13 @@
 //      # only in the former case.
 // RUN: %for dirs {
 // RUN:   %for tgts {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc-print=omp %flags %s \
-// RUN:                      %[tgt-cppflags] %[dir-cflags] > %t-omp.c \
+// RUN:     %[run-if] %clang -Xclang -verify -fopenacc-print=omp %acc-includes \
+// RUN:                      %s %[tgt-cppflags] %[dir-cflags] > %t-omp.c \
 // RUN:                      -Wno-openacc-omp-map-hold
 // RUN:     %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:     %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version %flags \
-// RUN:                      %t-omp.c %[tgt-cppflags] %[tgt-cflags] \
-// RUN:                      %[dir-cflags] -I%S -o %t
+// RUN:     %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
+// RUN:                      %acc-includes %t-omp.c %acc-libs %[tgt-cppflags] \
+// RUN:                      %[tgt-cflags] %[dir-cflags] -I%S -o %t
 // RUN:     %for run-envs {
 // RUN:       %[run-if] %[run-env] %t > %t.out 2> %t.err
 // RUN:       %[run-if] FileCheck -input-file %t.err %s \
@@ -117,7 +115,7 @@
 // RUN: }
 // RUN: %for dirs {
 // RUN:   %for tgts {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %flags %s \
+// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s \
 // RUN:                      %[tgt-cflags] %[tgt-cppflags] %[dir-cflags] -o %t
 // RUN:     %for run-envs {
 // RUN:       %[run-if] %[run-env] %t > %t.out 2> %t.err

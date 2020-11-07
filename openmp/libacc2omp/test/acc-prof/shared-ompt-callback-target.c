@@ -1,8 +1,6 @@
 // Check registration/unregistration scenarios involving OpenACC events that
 // share ompt_callback_target.
 
-// REQUIRES: ompt
-//
 // RUN: %data events {
 // RUN:   (event=NONE)
 // RUN:   (event=ENTER_DATA_START)
@@ -27,7 +25,7 @@
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %for events {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %flags %s -o %t \
+// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s -o %t \
 // RUN:                      %[tgt-cflags] -DEVENT=EVENT_%[event]
 // RUN:     %[run-if] %t > %t.out 2> %t.err
 // RUN:     %[run-if] FileCheck -input-file %t.err %s \

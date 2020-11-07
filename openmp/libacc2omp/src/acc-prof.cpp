@@ -1,5 +1,5 @@
 /*
- * acc-prof.cpp -- OpenACC Profiling Interface implementation
+ * acc-prof.cpp -- OpenACC Profiling Interface implementation.
  */
 
 //===----------------------------------------------------------------------===//
@@ -14,39 +14,46 @@
  * System include files.
  ****************************************************************************/
 
+// FIXME: Any uses of stderr or stdout in this file should use an
+// acc2omp-proxy.h function instead.
+#include <cstdio>
+#include <cstring>
+#include <dlfcn.h>
 #include <map>
 
 /*****************************************************************************
  * OpenMP standard include files.
  ****************************************************************************/
 
-#include <omp-tools.h>
+#include "omp-tools.h"
 
 /*****************************************************************************
- * OpenMP LLVM-implementation-specific include files.
+ * LLVM OpenMP include files.
  *
- * FIXME: One of our goals is to be able to wrap any OpenMP runtime implementing
- * OMPT.  In that case, what do we call in place of the
- * LLVM-implementation-specific definitions included here?  Some of them, such
- * as KMP_FALLTHROUGH, could probably safely be considered part of the OpenACC
- * runtime independent of the OpenMP implementation.  Others, such as
- * __kmp_get_gtid, surely could not.
+ * One of our eventual goals is to be able to wrap any OpenMP runtime
+ * implementing OMPT.  For that reason, it's expected that anything included
+ * here doesn't actually require linking with LLVM's OpenMP runtime.  Only
+ * definitions in the header are needed.  If you do need to link something from
+ * the OpenMP runtime, see through acc2omp-proxy.
  ****************************************************************************/
 
 // Currently needed for:
 // - KMP_HAVE_WEAK_ATTRIBUTE
 // - KMP_WEAK_ATTRIBUTE_INTERNAL
 // - KMP_FALLTHROUGH
-// - KMP_ASSERT2, KMP_FATAL
-// - __kmp_str_*
-// - KMP_GTID_DNE, __kmp_get_gtid
-#include <kmp.h>
+#include "kmp_os.h"
 
 /*****************************************************************************
  * OpenACC standard include files.
  ****************************************************************************/
 
 #include "acc_prof.h"
+
+/*****************************************************************************
+ * Internal includes.
+ ****************************************************************************/
+
+#include "acc2omp-proxy-internal.h"
 
 /*****************************************************************************
  * Runtime state.
@@ -141,7 +148,7 @@ static const char *acc_get_event_name(acc_event_t event) {
   case acc_ev_last:
     return "acc_ev_last";
   }
-  KMP_ASSERT2(0, "unexpected acc_event_t");
+  ACC2OMP_UNREACHABLE("unexpected acc_event_t");
   return NULL;
 }
 
@@ -158,21 +165,8 @@ static acc_prof_info acc_get_prof_info(acc_event_t event_type,
   ret.device_type = device_number == acc_ompt_initial_device_num
                     ? acc_device_host : acc_device_not_host;
   ret.device_number = device_number;
-  // FIXME: Is this the right thread ID?  Sometimes this returns
-  // KMP_GTID_DNE (-2 in kmp.h) for device and runtime finalization events, but
-  // that doesn't seem meaningful to the OpenACC user.  Setting to 0 in that
-  // case seems right given that 0 is what __kmp_get_gtid() normally returns
-  // and given the following text:
-  // OpenMP 5.0 sec. 3.2.4 "omp_get_thread_num" p. 338 L8-9:
-  // "The routine returns 0 if it is called from the sequential part of a
-  // program."
-  ret.thread_id = __kmp_get_gtid();
-  // FIXME: So far, it always gives me one of these, so I'd like to notice if
-  // it ever returns anything else.
-  KMP_ASSERT2(ret.thread_id == 0 || ret.thread_id == KMP_GTID_DNE,
-              "__kmp_get_gtid is useful in acc_get_prof_info");
-  if (ret.thread_id < 0)
-    ret.thread_id = 0;
+  // FIXME: We need to find the right way to compute this.
+  ret.thread_id = 0;
   // FIXME: We currently don't support the async clause, so this is currently
   // always right.
   ret.async = acc_async_sync;
@@ -234,9 +228,9 @@ static acc_event_info acc_get_other_event_info(acc_event_t event_type) {
       // TODO: Once we provide directive info for runtime calls, for which
       // is_explicit_event should be true, create an ompt_directive_runtime_api
       // instead of reusing ompt_directive_unknown.
-      KMP_ASSERT2(!directive_info->is_explicit_event,
-                  "expected is_explicit_event=false for "
-                  "kind=ompt_directve_unknown");
+      ACC2OMP_ASSERT(!directive_info->is_explicit_event,
+                     "expected is_explicit_event=false for "
+                     "kind=ompt_directve_unknown");
       ret.other_event.parent_construct = acc_construct_runtime_api;
       break;
     case ompt_directive_target_update:
@@ -447,7 +441,8 @@ static void acc_ompt_callback_target_submit(
     unsigned int requested_num_teams) {
   acc_event_t event_type = acc_ev_enqueue_launch_start;
   auto itr = acc_ompt_target_device_map.find(target_id);
-  KMP_ASSERT2(itr != acc_ompt_target_device_map.end(), "unexpected target_id");
+  ACC2OMP_ASSERT(itr != acc_ompt_target_device_map.end(),
+                 "unexpected target_id");
   int device_num = itr->second;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
   acc_event_info ei = acc_get_launch_event_info(event_type);
@@ -461,7 +456,8 @@ static void acc_ompt_callback_target_submit_end(
     unsigned int requested_num_teams) {
   acc_event_t event_type = acc_ev_enqueue_launch_end;
   auto itr = acc_ompt_target_device_map.find(target_id);
-  KMP_ASSERT2(itr != acc_ompt_target_device_map.end(), "unexpected target_id");
+  ACC2OMP_ASSERT(itr != acc_ompt_target_device_map.end(),
+                 "unexpected target_id");
   int device_num = itr->second;
   acc_prof_info pi = acc_get_prof_info(event_type, device_num);
   acc_event_info ei = acc_get_launch_event_info(event_type);
@@ -610,8 +606,12 @@ static bool acc_event_callback(
     *acc_cb_ptr = &acc_ev_runtime_shutdown_callback;
     *ompt_event_count = 0;
     return 0;
+  case acc_ev_none:
+  case acc_ev_wait_start:
+  case acc_ev_wait_end:
+  case acc_ev_last:
+    return 1;
   }
-  return 1;
 }
 
 // Get the callback function and registration counter for an OMPT event.
@@ -633,8 +633,10 @@ static void acc_ompt_event_callback(ompt_callbacks_t ompt_event,
   OMPT_EVENT_CASE(ompt_callback_target_submit_end)
   OMPT_EVENT_CASE(ompt_callback_target_data_op)
 #undef OMPT_EVENT_CASE
+  default:
+    ACC2OMP_UNREACHABLE("unexpected ompt_callbacks_t");
+    break;
   }
-  KMP_ASSERT2(0, "unexpected ompt_callbacks_t");
 }
 
 // Register an OpenACC callback and any required OMPT callbacks.
@@ -735,8 +737,8 @@ static void acc_prof_unregister_ompt(
     ompt_callback_t ompt_cb;
     unsigned *ompt_reg_counter;
     acc_ompt_event_callback(ompt_events[i], &ompt_cb, &ompt_reg_counter);
-    KMP_ASSERT2(*ompt_reg_counter,
-                "expected OMPT callback registration count to be non-zero");
+    ACC2OMP_ASSERT(*ompt_reg_counter,
+                   "expected OMPT callback registration count to be non-zero");
     if (--*ompt_reg_counter)
       continue;
     if (acc_ompt_set_callback(ompt_events[i], NULL) == ompt_set_error)
@@ -809,7 +811,7 @@ static void acc_ompt_finalize(ompt_data_t *tool_data) {
 }
 
 /*****************************************************************************
- * The default acc_register_library called by acc_ompt_start_tool.
+ * The default acc_register_library called by acc2omp_ompt_start_tool.
  ****************************************************************************/
 
 #if KMP_HAVE_WEAK_ATTRIBUTE
@@ -829,58 +831,42 @@ typedef void (*acc_register_library_t)(acc_prof_reg reg, acc_prof_reg unref,
 #endif
 
 /*****************************************************************************
- * acc_ompt_start_tool, which is meant to be called by ompt_start_tool.
+ * acc2omp_ompt_start_tool, which is meant to be called by ompt_start_tool to
+ * enable OpenACC Profiling Interface support.
  *
- * acc_ompt_start_tool calls the various acc_register_library functions it finds
- * linked or listed in ACC_PROFLIB and then returns a result appropriate for
- * omp_start_tool to return.  The result is NULL if no acc_register_library
- * registered any callbacks.  That way, ompt_start_tool can determine whether
- * it's necessary to enable OMPT support, look for another ompt_start_tool, etc.
- *
- * Normally, ompt_start_tool is the one defined in the LLVM OpenMP runtime.  It
- * has the weak attribute, so it and thus all acc_register_library definitions
- * might be ignored if another ompt_start_tool is linked.  Otherwise, it indeed
- * calls acc_ompt_start_tool and then, if the result is NULL, uses dlsym to
- * search for another ompt_start_tool.
- *
- * If the user wants to ensure his acc_register_library functions are called,
- * perhaps when using a different OpenMP runtime that doesn't call
- * acc_ompt_start_tool, he can define:
- *
- * ompt_start_tool_result_t *ompt_start_tool(unsigned int omp_version,
- *                                           const char *runtime_version) {
- *   return acc_ompt_start_tool(omp_version, runtime_version);
- * }
- *
- * FIXME: When acc_prof.cpp is moved to a separate library, create a header file
- * that defines this function and include it in ompt-general.cpp instead of
- * repeating the prototype there.
+ * See header comments in acc2omp-proxy.h for an explanation of how
+ * acc2omp_ompt_start_tool is intended to be used by OMPT support in an OpenMP
+ * runtime, LLVM's in particular.
  ****************************************************************************/
 
 extern "C" ompt_start_tool_result_t *
-acc_ompt_start_tool(unsigned int omp_version, const char *runtime_version) {
-  acc_register_library(acc_prof_register_enqueue,
-                       acc_prof_unregister_enqueue,
+acc2omp_ompt_start_tool(unsigned int omp_version, const char *runtime_version) {
+  // Call all acc_register_library functions.
+  acc_register_library(acc_prof_register_enqueue, acc_prof_unregister_enqueue,
                        /*acc_query_fn_name=*/NULL);
-  const char *proflibs = getenv("ACC_PROFLIB");
-  if (proflibs) {
-    char *libs = __kmp_str_format("%s", proflibs);
+  if (const char *env = getenv("ACC_PROFLIB")) {
+    char *proflib = strdup(env);
+    if (!proflib)
+      acc2omp_fatal(ACC2OMP_MSG(alloc_fail));
     char *buf;
-    char *fname = __kmp_str_token(libs, ";", &buf);
+    char *fname = strtok_r(proflib, ";", &buf);
     while (fname) {
       void *h = dlopen(fname, RTLD_LAZY);
       if (!h)
-        KMP_FATAL(AccProflibFail, dlerror());
+        acc2omp_fatal(ACC2OMP_MSG(acc_proflib_fail), dlerror());
       acc_register_library_t register_library =
           (acc_register_library_t)dlsym(h, "acc_register_library");
       if (!register_library)
-        KMP_FATAL(AccProflibFail, dlerror());
+        acc2omp_fatal(ACC2OMP_MSG(acc_proflib_fail), dlerror());
       register_library(acc_prof_register_enqueue, acc_prof_unregister_enqueue,
                        /*acc_query_fn_name=*/NULL);
-      fname = __kmp_str_token(NULL, ";", &buf);
+      fname = strtok_r(NULL, ";", &buf);
     }
-    __kmp_str_free(&libs);
+    free(proflib);
   }
+
+  // If an OpenACC callback has been registered, set up OMPT initialize/finalize
+  // callbacks.
   if (acc_prof_action_head) {
     static ompt_start_tool_result_t res;
     res.initialize = acc_ompt_initialize;

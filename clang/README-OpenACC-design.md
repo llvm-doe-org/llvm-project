@@ -1853,6 +1853,20 @@ C++ Issues
   fields.  The OpenMP implementation does this, as hinted by OpenMP
   5.0 sec. 2.19.1.1 phrase "with no mutable members".
 
+OpenACC Runtime
+===============
+
+Clacc's OpenACC runtime is built as a layer on top of LLVM's OpenMP
+runtime.  Currently, the majority of this layer offers OpenACC
+Profiling Interface support, which is documented in the next section.
+Further support for the OpenACC Runtime Library API is under
+development.
+
+Details on how Clacc's OpenACC runtime might one day interact with
+OpenMP runtimes from other OpenMP implementations can currently be
+found in the comments in the source file
+`openmp/libacc2omp/src/include/acc2omp-proxy.h.var`.
+
 OpenACC Profiling Interface
 ===========================
 
@@ -2539,8 +2553,7 @@ support currently include:
     * Fields not mentioned below are expected to be correctly
       implemented.
     * `acc_prof_info`:
-        * `thread_id` always seems to be set to `0` currently, so we
-          might not be obtaining the value correctly.
+        * `thread_id` is always set to `0` currently.
         * `async` is always set to `acc_async_sync` because the Clacc
           compiler does not yet support the `async` clause.  Thus,
           this value appears to be correct according to OpenACC.
@@ -2641,23 +2654,6 @@ support currently include:
   profiling libraries.  In particular, we took shortcuts in our
   extensions to LLVM's OMPT support, and there might be issues with,
   for example, thread safety.
-* The source of Clacc's OpenACC Profiling Interface support is
-  integrated with the source of LLVM's OpenMP runtime implementation.
-  Notes:
-    * Recently, the source has been extracted into a separate
-      compilation unit, `acc-prof.cpp`.  However, the source needs to
-      be separated into two distinct libraries that can be built
-      separately.
-    * This separation should facilitate continuous integration of
-      upstream work into Clacc, and it should facilitate the eventual
-      contribution of Clacc to upstream.
-    * This separation would also be necessary to eventually enable use
-      of Clacc's OpenACC Profiling Interface support with other OpenMP
-      runtime implementations.  In that case, the user could define an
-      `ompt_start_tool` that calls Clacc's `acc_ompt_start_tool` and
-      returns its result.  It might be convenient for Clacc to provide
-      a library with just that definition, and the user could
-      optionally link it along with Clacc's OpenACC runtime.
 * Clacc's OpenACC Profiling Interface support depends on OMPT
   extensions.  As a result, any OpenMP runtime implementation must
   support some of these extensions to be usable.  Moreover, any OpenMP

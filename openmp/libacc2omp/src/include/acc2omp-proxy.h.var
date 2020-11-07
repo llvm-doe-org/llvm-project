@@ -1,0 +1,186 @@
+/*
+ * acc2omp-proxy.h -- Declarations of proxy functions for OpenMP runtime entry
+ * points that are unlikely to ever be specified by the OpenMP standard but that
+ * libacc2omp depends upon.
+ *
+ * Rationale
+ * ---------
+ *
+ * While libacc2omp relies on standard OpenMP features as much as possible,
+ * there is some functionality that will likely always remain specific to
+ * individual OpenMP runtime implementations.  For example, an entry point to
+ * report errors occurring within the OpenMP runtime itself will likely never be
+ * standardized, but libacc2omp needs to report such errors as well.  While
+ * libacc2omp could provide its own mechanisms for such purposes (e.g., print an
+ * English diagnostic to stderr and call exit), the libacc2omp user experience
+ * should prove more seamless and less confusing if it reuses the OpenMP runtime
+ * implementation's mechanisms for this purpose (e.g., translate a diagnostic to
+ * a runtime-determined language, print it to a runtime-determined log file or
+ * stream, shut down the runtime, and call abort).
+ *
+ * acc2omp-proxy implementations
+ * -----------------------------
+ *
+ * This is the term we use for any library that implements the functions
+ * declared in this header in order to enable libacc2omp to use some specific
+ * OpenMP runtime implementation.  For the convenience of users who wish to
+ * develop new acc2omp-proxy implementations, LLVM typically installs this
+ * header in the same directories as it installs its versions of the standard
+ * OpenACC and OpenMP headers.  Of course, an acc2omp-proxy implementation can
+ * be compiled and linked as part of the OpenMP runtime library it enables
+ * libacc2omp to use, or it can be compiled and linked as a separate library.
+ *
+ * TODO: To make it easier to get started with libacc2omp, we might consider
+ * providing a (weakly linked?) default implementation of each proxy function.
+ * For example, the default acc2omp_fatal could simply print to stderr and call
+ * abort.
+ *
+ * LLVM's acc2omp-proxy implementation
+ * -----------------------------------
+ *
+ * LLVM builds libacc2omp-proxy.so as the acc2omp-proxy implementation for
+ * LLVM's OpenMP runtime implementation, libomp.so.  LLVM typically installs
+ * libacc2omp.so and libacc2omp-proxy.so in the same directories as it installs
+ * libomp.so.
+ *
+ * In contrast to libacc2omp-proxy.so, libacc2omp.so is designed for any OpenMP
+ * runtime implementation.  Nevertheless, the library file names libomp.so and
+ * libacc2omp-proxy.so are encoded as shared library dependencies.  Thus, while
+ * using the same libacc2omp.so, LD_LIBRARY_PATH can be used to select a
+ * different libacc2omp.so and libacc2omp-proxy.so pair from another directory.
+ * To select libraries with different file names, LD_PRELOAD can be used, or a
+ * new libacc2omp.so can be linked.
+ *
+ * Unlike its source file (acc2omp-proxy-llvm.cpp), the library file name
+ * libacc2omp-proxy.so does not mention LLVM.  This enables the LD_LIBRARY_PATH
+ * use case described above without forcing this library file name for an
+ * external OpenMP implementation to also mention LLVM.
+ *
+ * If distributions wish to install multiple OpenMP runtime libraries in the
+ * same directory but with different file names, libacc2omp.so and
+ * libacc2omp-proxy.so should retain their names so that Clang can locate them.
+ * For example, in a single system lib directory, you might have:
+ *
+ * - libomp.so
+ * - libacc2omp.so
+ * - libacc2omp-proxy.so
+ * - libiomp5.so
+ * - libacc2omp-libiomp5.so
+ * - libacc2omp-proxy-libiomp5.so
+ * - libgomp.so
+ * - libacc2omp-libgomp.so
+ * - libacc2omp-proxy-libgomp.so
+ *
+ * TODO: If this becomes common, perhaps LLVM's libacc2omp.so and
+ * libacc2omp-proxy.so should be named with "-libomp" by default.  For now,
+ * without a pressing need, it looks strange to me to insert shared library
+ * dependencies into the name of a library.
+ *
+ * OMPT's ompt_start_tool for the OpenACC Profiling Interface
+ * ----------------------------------------------------------
+ *
+ * libacc2omp exports acc2omp_ompt_start_tool, which is meant to be called by
+ * OMPT's ompt_start_tool to enable OpenACC Profiling Interface support.
+ * acc2omp_ompt_start_tool calls the various acc_register_library functions it
+ * finds linked or listed in ACC_PROFLIB and then returns a result appropriate
+ * for the calling omp_start_tool to return.  The result is NULL if no
+ * acc_register_library registered any callbacks.  That way, a calling
+ * ompt_start_tool can determine whether it's necessary to enable OMPT support,
+ * look for another ompt_start_tool, etc.
+ *
+ * Normally, the calling ompt_start_tool is the one defined in the LLVM OpenMP
+ * runtime.  It has the weak attribute, so it and thus all acc_register_library
+ * definitions might be ignored if another ompt_start_tool is linked.
+ * Otherwise, it indeed calls acc2omp_ompt_start_tool and then, if the result is
+ * NULL, uses dlsym to search for another ompt_start_tool.
+ *
+ * If the user wants to ensure his acc_register_library functions are called,
+ * perhaps when using a different OpenMP runtime that doesn't call
+ * acc2omp_ompt_start_tool, he can define:
+ *
+ *   ompt_start_tool_result_t *ompt_start_tool(unsigned int omp_version,
+ *                                             const char *runtime_version) {
+ *     return acc2omp_ompt_start_tool(omp_version, runtime_version);
+ *   }
+ *
+ * However, to avoid collisions between this ompt_start_tool and others, the
+ * user should consider whether it's better to build this ompt_start_tool as
+ * part of a different library than his acc2omp-proxy implementation, especially
+ * if his acc2omp-proxy implementation is compiled as part of his OpenMP runtime
+ * implementation.
+ *
+ * TODO: It might be convenient for LLVM to provide a library with just that
+ * definition, and the user could link it only when desired.
+ */
+
+//===----------------------------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef ACC2OMP_PROXY_H
+#define ACC2OMP_PROXY_H
+
+/// Message IDs that libacc2omp passes to acc2omp-proxy implementations for
+/// optional internationalization.
+///
+/// The \c acc2omp_msg definition in acc2omp-proxy-internal.cpp contains
+/// printf-style format strings in English showing the expected semantics and
+/// arguments.
+typedef enum {
+  acc2omp_msg_alloc_fail,
+  acc2omp_msg_acc_proflib_fail
+} acc2omp_msgid_t;
+
+/// A wrapper around an \c acc2omp_msgid_t and its default printf-style format
+/// string in English.
+///
+/// Notes for usage within libacc2omp:
+/// - \c ACC2OMP_MSG should always be used to build instances of acc2omp_msg_t.
+/// - Using acc2omp_msg_t instead of just acc2omp_msgid_t as a function
+///   parameter serves two purposes:
+///   - First, it makes access to the default format string more convenient when
+///     desired in acc2omp-proxy function implementations.
+///   - Second, it means that \c acc2omp_msgid_t doesn't have to serve as a
+///     second argument to \c va_start, where it would produce undefined
+///     behavior, as warned by -Wvarargs.
+typedef struct {
+  acc2omp_msgid_t Id;
+  const char *DefaultFmt;
+} acc2omp_msg_t;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/// Report a fatal runtime error and abort the program.
+void acc2omp_fatal(acc2omp_msg_t Msg, ...);
+
+/// Assert that \p Cond is true in file \File at line \p Line with message
+/// \p Msg.
+///
+/// The acc2omp-proxy implementation may choose to (1) utilize an assertion
+/// mechanism exposed by the OpenMP runtime or (2) implement its own assertion
+/// mechanism (maybe just a call to fprintf and abort).  For choice 1, if the
+/// OpenMP runtime's assertion mechanism is disabled for this build, the
+/// acc2omp-proxy implementation may choose to fall back to choice 2 or simply
+/// ignore the assertion.
+///
+/// If libacc2omp is built with assertions disabled, then \c acc2omp_assert is
+/// never called.  The acc2omp-proxy implementation normally does not need to
+/// consider this possibility.  However, if whether assertions are enabled is
+/// always the same in libacc2omp and the OpenMP runtime, then the fallback
+/// discussed above is never useful.
+///
+/// Notes for usage within libacc2omp: Do not call this directly.  Use
+/// \c ACC2OMP_ASSERT and \c ACC2OMP_UNREACHABLE instead.
+void acc2omp_assert(int Cond, const char *Msg, const char *File, int Line);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
+
+#endif // ACC2OMP_PROXY_H

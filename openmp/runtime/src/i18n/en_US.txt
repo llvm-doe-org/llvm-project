@@ -427,6 +427,7 @@ HierSchedInvalid             "Hierarchy ignored: unsupported level: %1$s."
 AffFormatDefault             "OMP: pid %1$s tid %2$s thread %3$s bound to OS proc set {%4$s}"
 APIDeprecated                "%1$s routine deprecated, please use %2$s instead."
 
+# --- libacc2omp errors detected at runtime ---
 AccProflibFail               "failure using library from ACC_PROFLIB: %1$s"
 
 # --------------------------------------------------------------------------------------------------
