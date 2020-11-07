@@ -34,11 +34,11 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
                           acc_prof_lookup lookup) {
   // Check registering multiple callbacks for the same event.  Currently, this
   // is not supported, and only the first callback remains registered.
-  //      ERR:Warning: registering already registered events is not supported: acc_ev_device_init_start
-  // ERR-NEXT:Warning: registering already registered events is not supported: acc_ev_device_init_start
-  // ERR-NEXT:Warning: registering already registered events is not supported: acc_ev_device_init_end
-  // ERR-NEXT:Warning: registering already registered events is not supported: acc_ev_device_init_end
-  // ERR-NEXT:Warning: registering already registered events is not supported: acc_ev_device_init_end
+  //      ERR:OMP: Warning #[[#]]: registering already registered events is not yet supported: acc_ev_device_init_start
+  // ERR-NEXT:OMP: Warning #[[#]]: registering already registered events is not yet supported: acc_ev_device_init_start
+  // ERR-NEXT:OMP: Warning #[[#]]: registering already registered events is not yet supported: acc_ev_device_init_end
+  // ERR-NEXT:OMP: Warning #[[#]]: registering already registered events is not yet supported: acc_ev_device_init_end
+  // ERR-NEXT:OMP: Warning #[[#]]: registering already registered events is not yet supported: acc_ev_device_init_end
   reg(acc_ev_device_init_start, on_device_init_start, acc_reg);
   reg(acc_ev_device_init_start, on_device_init_start, acc_reg);
   reg(acc_ev_device_init_start, on_device_init_start, acc_reg);
@@ -59,8 +59,8 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
   // Check unregistering a callback for an event for which no callback has
   // previously been registered.  This leaves nothing registered.  Check we can
   // then register after that.
-  // ERR-NEXT:Warning: attempt to unregister event not previously registered: acc_ev_runtime_shutdown
-  // ERR-NEXT:Warning: attempt to unregister event not previously registered: acc_ev_create
+  // ERR-NEXT:OMP: Warning #[[#]]: attempt to unregister event not previously registered: acc_ev_runtime_shutdown
+  // ERR-NEXT:OMP: Warning #[[#]]: attempt to unregister event not previously registered: acc_ev_create
   unreg(acc_ev_runtime_shutdown, on_runtime_shutdown, acc_reg);
   unreg(acc_ev_create, on_create, acc_reg);
   reg(acc_ev_create, on_create, acc_reg);
@@ -68,8 +68,8 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
   // Check unregistering the wrong callback for an event.  The previously
   // registered callback is left registered.  Check we can then unregister the
   // correct callback after that.
-  // ERR-NEXT:Warning: attempt to unregister wrong callback for event: acc_ev_delete
-  // ERR-NEXT:Warning: attempt to unregister wrong callback for event: acc_ev_alloc
+  // ERR-NEXT:OMP: Warning #[[#]]: attempt to unregister wrong callback for event: acc_ev_delete
+  // ERR-NEXT:OMP: Warning #[[#]]: attempt to unregister wrong callback for event: acc_ev_alloc
   reg(acc_ev_delete, on_delete, acc_reg);
   unreg(acc_ev_delete, on_create, acc_reg);
   reg(acc_ev_alloc, on_alloc, acc_reg);
@@ -80,19 +80,19 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
   // not supported and their use has no effect except a warning.
   //
   // First, check for events without previously registered callbacks.
-  // ERR-NEXT:Warning: toggling events is not supported: acc_ev_free
-  // ERR-NEXT:Warning: toggling events is not supported: acc_ev_enter_data_start
-  // ERR-NEXT:Warning: toggling events is not supported: acc_ev_enter_data_end
-  // ERR-NEXT:Warning: toggling events is not supported: acc_ev_exit_data_start
+  // ERR-NEXT:OMP: Warning #[[#]]: toggling events is not yet supported: acc_ev_free
+  // ERR-NEXT:OMP: Warning #[[#]]: toggling events is not yet supported: acc_ev_enter_data_start
+  // ERR-NEXT:OMP: Warning #[[#]]: toggling events is not yet supported: acc_ev_enter_data_end
+  // ERR-NEXT:OMP: Warning #[[#]]: toggling events is not yet supported: acc_ev_exit_data_start
   reg(acc_ev_free, on_free, acc_toggle);
   reg(acc_ev_enter_data_start, on_enter_data_start, acc_toggle_per_thread);
   unreg(acc_ev_enter_data_end, on_enter_data_end, acc_toggle);
   unreg(acc_ev_exit_data_start, on_exit_data_start, acc_toggle_per_thread);
   // Second, check for events with previously registered callbacks.
-  // ERR-NEXT:Warning: toggling events is not supported: acc_ev_exit_data_end
-  // ERR-NEXT:Warning: toggling events is not supported: acc_ev_compute_construct_start
-  // ERR-NEXT:Warning: toggling events is not supported: acc_ev_compute_construct_end
-  // ERR-NEXT:Warning: toggling events is not supported: acc_ev_enqueue_launch_start
+  // ERR-NEXT:OMP: Warning #[[#]]: toggling events is not yet supported: acc_ev_exit_data_end
+  // ERR-NEXT:OMP: Warning #[[#]]: toggling events is not yet supported: acc_ev_compute_construct_start
+  // ERR-NEXT:OMP: Warning #[[#]]: toggling events is not yet supported: acc_ev_compute_construct_end
+  // ERR-NEXT:OMP: Warning #[[#]]: toggling events is not yet supported: acc_ev_enqueue_launch_start
   reg(acc_ev_exit_data_end, on_exit_data_end, acc_reg);
   reg(acc_ev_compute_construct_start, on_compute_construct_start, acc_reg);
   reg(acc_ev_compute_construct_end, on_compute_construct_end, acc_reg);
@@ -103,8 +103,8 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
   unreg(acc_ev_enqueue_launch_start, on_enqueue_launch_start, acc_toggle_per_thread);
 
   // Check (un)registering unimplemented callbacks.
-  // ERR-NEXT:Warning: attempt to unregister unhandled event: acc_ev_wait_start
-  // ERR-NEXT:Warning: attempt to register unhandled event: acc_ev_wait_end
+  // ERR-NEXT:OMP: Warning #[[#]]: attempt to unregister event that is not yet supported: acc_ev_wait_start
+  // ERR-NEXT:OMP: Warning #[[#]]: attempt to register event that is not yet supported: acc_ev_wait_end
   unreg(acc_ev_wait_start, on_wait_start, acc_reg);
   reg(acc_ev_wait_end, on_wait_end, acc_reg);
 

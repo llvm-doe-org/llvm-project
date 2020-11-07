@@ -402,7 +402,8 @@ Clacc matures.  Please report any cases not listed below.
       `ArraySubscriptExtendedExpr`.  See the todo on this class in the
       implementation.
 * OpenMP runtime error diagnostics are expressed in terms of OpenMP
-  not OpenACC.
+  not OpenACC, and OpenACC runtime diagnostics are prefixed with
+  "OMP:".
 * Some compiler warnings are reported twice, once while parsing
   OpenACC, and once while transforming to OpenMP.
 

@@ -132,7 +132,15 @@
 /// arguments.
 typedef enum {
   acc2omp_msg_alloc_fail,
-  acc2omp_msg_acc_proflib_fail
+  acc2omp_msg_acc_proflib_fail,
+  acc2omp_msg_unsupported_event_register,
+  acc2omp_msg_unsupported_event_unregister,
+  acc2omp_msg_event_unsupported_toggle,
+  acc2omp_msg_event_unsupported_multiple_register,
+  acc2omp_msg_event_register_result,
+  acc2omp_msg_event_unregister_result,
+  acc2omp_msg_event_unregister_unregistered,
+  acc2omp_msg_callback_unregister_unregistered
 } acc2omp_msgid_t;
 
 /// A wrapper around an \c acc2omp_msgid_t and its default printf-style format
@@ -155,6 +163,9 @@ typedef struct {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/// Report a runtime warning and continue execution.
+void acc2omp_warn(acc2omp_msg_t Msg, ...);
 
 /// Report a fatal runtime error and abort the program.
 void acc2omp_fatal(acc2omp_msg_t Msg, ...);

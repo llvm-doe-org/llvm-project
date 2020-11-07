@@ -66,10 +66,11 @@ VERSION {
         #
         # Internal symbols exported for LLVM's libacc2omp-proxy.
         #
-        __kmp_msg_vformat;
-        __kmp_msg_null;
-        __kmp_fatal;
         __kmp_debug_assert;
+        __kmp_fatal;
+        __kmp_msg;
+        __kmp_msg_null;
+        __kmp_msg_vformat;
 
 #if USE_ITT_BUILD
         #

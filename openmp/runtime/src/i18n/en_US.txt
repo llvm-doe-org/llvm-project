@@ -428,7 +428,15 @@ AffFormatDefault             "OMP: pid %1$s tid %2$s thread %3$s bound to OS pro
 APIDeprecated                "%1$s routine deprecated, please use %2$s instead."
 
 # --- libacc2omp errors detected at runtime ---
-AccProflibFail               "failure using library from ACC_PROFLIB: %1$s"
+AccProflibFail                      "failure using library from ACC_PROFLIB: %1$s"
+AccUnsupportedEventRegister         "attempt to register event that is not yet supported: %1$s"
+AccUnsupportedEventUnregister       "attempt to unregister event that is not yet supported: %1$s"
+AccEventUnsupportedToggle           "toggling events is not yet supported: %1$s"
+AccEventUnsupportedMultipleRegister "registering already registered events is not yet supported: %1$s"
+AccEventRegisterResult              "%1$s result when registering event: %2$s"
+AccEventUnregisterResult            "%1$s result when unregistering event: %2$s"
+AccEventUnregisterUnregistered      "attempt to unregister event not previously registered: %1$s"
+AccCallbackUnregisterUnregistered   "attempt to unregister wrong callback for event: %1$s"
 
 # --------------------------------------------------------------------------------------------------
 -*- HINTS -*-

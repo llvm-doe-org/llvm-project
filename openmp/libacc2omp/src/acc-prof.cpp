@@ -14,9 +14,8 @@
  * System include files.
  ****************************************************************************/
 
-// FIXME: Any uses of stderr or stdout in this file should use an
-// acc2omp-proxy.h function instead.
-#include <cstdio>
+// Don't include headers like assert.h, stdio.h, or iostream.  Instead, call
+// functions declared in acc2omp-proxy.h.
 #include <cstring>
 #include <dlfcn.h>
 #include <map>
@@ -645,8 +644,8 @@ static void acc_prof_register_ompt(
   // FIXME: Support other values of acc_info.  Probably should coordinate with
   // fixme below about registering multiple callbacks per event.
   if (acc_info != acc_reg) {
-    fprintf(stderr, "Warning: toggling events is not supported: %s\n",
-            acc_get_event_name(acc_event));
+    acc2omp_warn(ACC2OMP_MSG(event_unsupported_toggle),
+                 acc_get_event_name(acc_event));
     return;
   }
   acc_prof_callback *acc_cb_ptr;
@@ -654,8 +653,8 @@ static void acc_prof_register_ompt(
   ompt_callbacks_t *ompt_events;
   if (acc_event_callback(acc_event, &acc_cb_ptr, &ompt_event_count,
                          &ompt_events)) {
-    fprintf(stderr, "Warning: attempt to register unhandled event: %s\n",
-            acc_get_event_name(acc_event));
+    acc2omp_warn(ACC2OMP_MSG(unsupported_event_register),
+                 acc_get_event_name(acc_event));
     return;
   }
   // FIXME: According to the spec, we need to store a list of callbacks per
@@ -664,9 +663,8 @@ static void acc_prof_register_ompt(
   // causing it to be called multiple times.  Perhaps we should then also have
   // a hash for fast lookup.
   if (*acc_cb_ptr) {
-    fprintf(stderr, "Warning: registering already registered events is not "
-                    "supported: %s\n",
-            acc_get_event_name(acc_event));
+    acc2omp_warn(ACC2OMP_MSG(event_unsupported_multiple_register),
+                 acc_get_event_name(acc_event));
     return;
   }
   *acc_cb_ptr = acc_cb;
@@ -678,19 +676,16 @@ static void acc_prof_register_ompt(
       continue;
     switch (acc_ompt_set_callback(ompt_events[i], ompt_cb)) {
     case ompt_set_error:
-      fprintf(stderr, "Warning: ompt_set_error result when registering event: "
-                      "%s\n",
-              acc_get_event_name(acc_event));
+      acc2omp_warn(ACC2OMP_MSG(event_register_result), "ompt_set_error",
+                   acc_get_event_name(acc_event));
       break;
     case ompt_set_never:
-      fprintf(stderr, "Warning: ompt_set_never result when registering event: "
-                      "%s\n",
-              acc_get_event_name(acc_event));
+      acc2omp_warn(ACC2OMP_MSG(event_register_result), "ompt_set_never",
+                   acc_get_event_name(acc_event));
       break;
     case ompt_set_impossible:
-      fprintf(stderr, "Warning: ompt_set_impossible result when registering "
-                      "event: %s\n",
-              acc_get_event_name(acc_event));
+      acc2omp_warn(ACC2OMP_MSG(event_register_result), "ompt_set_impossible",
+                   acc_get_event_name(acc_event));
       break;
     case ompt_set_sometimes:
     case ompt_set_sometimes_paired:
@@ -707,8 +702,8 @@ static void acc_prof_register_ompt(
 static void acc_prof_unregister_ompt(
     acc_event_t acc_event, acc_prof_callback acc_cb, acc_register_t acc_info) {
   if (acc_info != acc_reg) {
-    fprintf(stderr, "Warning: toggling events is not supported: %s\n",
-            acc_get_event_name(acc_event));
+    acc2omp_warn(ACC2OMP_MSG(event_unsupported_toggle),
+                 acc_get_event_name(acc_event));
     return;
   }
   acc_prof_callback *acc_cb_ptr;
@@ -716,20 +711,18 @@ static void acc_prof_unregister_ompt(
   ompt_callbacks_t *ompt_events;
   if (acc_event_callback(acc_event, &acc_cb_ptr, &ompt_event_count,
                          &ompt_events)) {
-    fprintf(stderr, "Warning: attempt to unregister unhandled event: %s\n",
-            acc_get_event_name(acc_event));
+    acc2omp_warn(ACC2OMP_MSG(unsupported_event_unregister),
+                 acc_get_event_name(acc_event));
     return;
   }
   if (!*acc_cb_ptr) {
-    fprintf(stderr, "Warning: attempt to unregister event not previously "
-                    "registered: %s\n",
-            acc_get_event_name(acc_event));
+    acc2omp_warn(ACC2OMP_MSG(event_unregister_unregistered),
+                 acc_get_event_name(acc_event));
     return;
   }
   if (*acc_cb_ptr != acc_cb) {
-    fprintf(stderr, "Warning: attempt to unregister wrong callback for event: "
-                    "%s\n",
-            acc_get_event_name(acc_event));
+    acc2omp_warn(ACC2OMP_MSG(callback_unregister_unregistered),
+                 acc_get_event_name(acc_event));
     return;
   }
   *acc_cb_ptr = NULL;
@@ -742,9 +735,8 @@ static void acc_prof_unregister_ompt(
     if (--*ompt_reg_counter)
       continue;
     if (acc_ompt_set_callback(ompt_events[i], NULL) == ompt_set_error)
-      fprintf(stderr, "Warning: ompt_set_error result when unregistering "
-                      "event: %s\n",
-              acc_get_event_name(acc_event));
+      acc2omp_warn(ACC2OMP_MSG(event_unregister_result), "ompt_set_error",
+                   acc_get_event_name(acc_event));
   }
 }
 

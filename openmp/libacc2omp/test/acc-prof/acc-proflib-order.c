@@ -84,8 +84,8 @@ DEF_CALLBACK(runtime_shutdown)
 
 void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
                           acc_prof_lookup lookup) {
-  //      CHECK:Warning: registering already registered events is not supported: acc_ev_device_init_end
-  // CHECK-NEXT:Warning: registering already registered events is not supported: acc_ev_compute_construct_end
+  //      CHECK:OMP: Warning #[[#]]: registering already registered events is not yet supported: acc_ev_device_init_end
+  // CHECK-NEXT:OMP: Warning #[[#]]: registering already registered events is not yet supported: acc_ev_compute_construct_end
   reg(acc_ev_device_init_end, on_device_init_end, acc_reg);
   reg(acc_ev_compute_construct_end, on_compute_construct_end, acc_reg);
   reg(acc_ev_enqueue_launch_start, on_enqueue_launch_start, acc_reg);
@@ -103,8 +103,8 @@ DEF_CALLBACK(device_shutdown_end)
 
 void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
                           acc_prof_lookup lookup) {
-  // CHECK-NEXT:Warning: registering already registered events is not supported: acc_ev_enqueue_launch_end
-  // CHECK-NEXT:Warning: registering already registered events is not supported: acc_ev_runtime_shutdown
+  // CHECK-NEXT:OMP: Warning #[[#]]: registering already registered events is not yet supported: acc_ev_enqueue_launch_end
+  // CHECK-NEXT:OMP: Warning #[[#]]: registering already registered events is not yet supported: acc_ev_runtime_shutdown
   reg(acc_ev_enqueue_launch_end, on_enqueue_launch_end, acc_reg);
   reg(acc_ev_runtime_shutdown, on_runtime_shutdown, acc_reg);
   reg(acc_ev_device_shutdown_start, on_device_shutdown_start, acc_reg);

@@ -24,9 +24,33 @@ static kmp_i18n_id_t acc2omp_msg_to_llvm(acc2omp_msgid_t MsgId) {
     return kmp_i18n_msg_MemoryAllocFailed;
   case acc2omp_msg_acc_proflib_fail:
     return kmp_i18n_msg_AccProflibFail;
+  case acc2omp_msg_unsupported_event_register:
+    return kmp_i18n_msg_AccUnsupportedEventRegister;
+  case acc2omp_msg_unsupported_event_unregister:
+    return kmp_i18n_msg_AccUnsupportedEventUnregister;
+  case acc2omp_msg_event_unsupported_toggle:
+    return kmp_i18n_msg_AccEventUnsupportedToggle;
+  case acc2omp_msg_event_unsupported_multiple_register:
+    return kmp_i18n_msg_AccEventUnsupportedMultipleRegister;
+  case acc2omp_msg_event_register_result:
+    return kmp_i18n_msg_AccEventRegisterResult;
+  case acc2omp_msg_event_unregister_result:
+    return kmp_i18n_msg_AccEventUnregisterResult;
+  case acc2omp_msg_event_unregister_unregistered:
+    return kmp_i18n_msg_AccEventUnregisterUnregistered;
+  case acc2omp_msg_callback_unregister_unregistered:
+    return kmp_i18n_msg_AccCallbackUnregisterUnregistered;
   }
   KMP_ASSERT2(0, "unexpected acc2omp_msg_t");
   return kmp_i18n_null;
+}
+
+void acc2omp_warn(acc2omp_msg_t Msg, ...) {
+  va_list Args;
+  va_start(Args, Msg);
+  kmp_msg_t KmpMsg = __kmp_msg_vformat(acc2omp_msg_to_llvm(Msg.Id), Args);
+  va_end(Args);
+  __kmp_msg(kmp_ms_warning, KmpMsg, __kmp_msg_null);
 }
 
 void acc2omp_fatal(acc2omp_msg_t Msg, ...) {
