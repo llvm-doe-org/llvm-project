@@ -18,7 +18,10 @@
 #include "clang/AST/StmtOpenACC.h"
 #include "clang/Basic/DiagnosticFrontend.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/Frontend/CompilerInstance.h"
 #include "clang/Lex/Lexer.h"
+#include "clang/Lex/MacroInfo.h"
+#include "clang/Lex/Preprocessor.h"
 #include "clang/Rewrite/Core/Rewriter.h"
 
 using namespace clang;
@@ -30,20 +33,50 @@ class RewriteOpenACC : public ASTConsumer,
   Rewriter Rewrite;
   std::unique_ptr<raw_ostream> OutFile;
   ASTContext *Context;
+  Preprocessor &PP;
   OpenACCPrintKind OpenACCPrint;
 
 public:
   RewriteOpenACC(StringRef InFileName, std::unique_ptr<raw_ostream> OS,
-                 OpenACCPrintKind OpenACCPrint)
+                 CompilerInstance &CI)
       : InFileName(InFileName), OutFile(std::move(OS)), Context(nullptr),
-        OpenACCPrint(OpenACCPrint) {}
+        PP(CI.getPreprocessor()),
+        OpenACCPrint(CI.getFrontendOpts().OpenACCPrint) {
+  }
   ~RewriteOpenACC() override {}
   void HandleTranslationUnit(ASTContext &C) override {
     Context = &C;
     SourceManager &SM = Context->getSourceManager();
     Rewrite.setSourceMgr(SM, Context->getLangOpts());
-    if (OpenACCPrint != OpenACCPrint_ACC)
+    if (OpenACCPrint != OpenACCPrint_ACC) {
+      // If the output will be (uncommented) OpenMP, and if the original
+      // _OPENACC macro definition from Clang was ever used, insert it at the
+      // beginning of the translation unit.
+      if (OpenACCPrint != OpenACCPrint_ACC_OMP) {
+        MacroDirective *MD =
+          PP.getLocalMacroDirectiveHistory(PP.getIdentifierInfo("_OPENACC"));
+        assert(MD && "expected _OPENACC to be defined");
+        while (MacroDirective *Prev = MD->getPrevious())
+          MD = Prev;
+        if (MD->getMacroInfo()->isUsed()) {
+          SourceLocation Loc = SM.getComposedLoc(SM.getMainFileID(), 0);
+          Context->getDiagnostics().Report(
+              Loc, diag::warn_rewrite_acc_omp_openacc_macro_inserted);
+          Context->getDiagnostics().Report(
+              Loc, diag::note_rewrite_acc_omp_openacc_macro_inserted);
+          const char *Start =
+              SM.getCharacterData(MD->getDefinition().getLocation());
+          const char *End = Start;
+          while (*End != '\n' && *End != 0)
+            ++End;
+          *OutFile << "#define " << StringRef(Start, End - Start)
+                   << " // inserted by Clang for OpenACC-to-OpenMP translation"
+                   << '\n';
+        }
+      }
+      // Find directives to rewrite.
       TraverseAST(*Context);
+    }
     Rewrite.getEditBuffer(SM.getMainFileID()).write(*OutFile);
     Context = nullptr;
   }
@@ -346,6 +379,6 @@ public:
 
 std::unique_ptr<ASTConsumer>
 clang::CreateOpenACCRewriter(StringRef InFile, std::unique_ptr<raw_ostream> OS,
-                             OpenACCPrintKind OpenACCPrint) {
-  return std::make_unique<RewriteOpenACC>(InFile, std::move(OS), OpenACCPrint);
+                             CompilerInstance &CI) {
+  return std::make_unique<RewriteOpenACC>(InFile, std::move(OS), CI);
 }

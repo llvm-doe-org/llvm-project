@@ -308,6 +308,13 @@ def warn_profile_data_misexpect : Warning<
 } // end of instrumentation issue category
 
 let CategoryName = "RewriteOpenACC" in {
+def warn_rewrite_acc_omp_openacc_macro_inserted : Warning<
+  "inserted '_OPENACC' macro definition for uses that remain after translation "
+  "to OpenMP">,
+  InGroup<OpenACCOMPMacroInserted>;
+def note_rewrite_acc_omp_openacc_macro_inserted : Note<
+  "use caution when modifying the OpenMP translation as this definition "
+  "intentionally mispresents the compilation mode">;
 def err_rewrite_acc_start_in_macro : Error<
   "cannot rewrite OpenACC construct starting within a macro expansion">;
 def err_rewrite_acc_end_in_macro : Error<

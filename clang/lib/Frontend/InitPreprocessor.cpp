@@ -1093,6 +1093,20 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
     Builder.defineMacro("__CUDA_ARCH__");
   }
 
+  // _OPENACC definition.
+  //
+  // OpenACC 2.7, sec. 2.2:
+  //   "The _OPENACC macro name is defined to have a value yyyymm where yyyy is
+  //   the year and mm is the month designation of the version of the OpenACC
+  //   directives supported by the implementation. This macro must be defined by
+  //   a compiler only when OpenACC directives are enabled.  The version
+  //   described here is 201811."
+  //
+  // Keep this in sync with libacc2omp's \c ACC2OMP_OPENACC_VERSION and both
+  // test suites' \c %acc-version LIT substitutions.
+  if (LangOpts.OpenACC)
+    Builder.defineMacro("_OPENACC", "201811");
+
   // We need to communicate this to our CUDA header wrapper, which in turn
   // informs the proper CUDA headers of this choice.
   if (LangOpts.CUDADeviceApproxTranscendentals || LangOpts.FastMath) {

@@ -21,6 +21,7 @@
 namespace clang {
 
 class ASTConsumer;
+class CompilerInstance;
 class DiagnosticsEngine;
 class LangOptions;
 class Preprocessor;
@@ -48,7 +49,7 @@ std::unique_ptr<ASTConsumer> CreateHTMLPrinter(std::unique_ptr<raw_ostream> OS,
 /// regions to OpenMP.
 std::unique_ptr<ASTConsumer>
 CreateOpenACCRewriter(StringRef InFile, std::unique_ptr<raw_ostream> OS,
-                      OpenACCPrintKind OpenACCPrint);
+                      CompilerInstance &CI);
 
 } // end clang namespace
 

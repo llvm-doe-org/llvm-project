@@ -52,7 +52,7 @@
  * Internal includes.
  ****************************************************************************/
 
-#include "acc2omp-proxy-internal.h"
+#include "acc2omp-internal.h"
 
 /*****************************************************************************
  * Runtime state.
@@ -158,9 +158,7 @@ static acc_prof_info acc_get_prof_info(acc_event_t event_type,
                                        int device_number) {
   acc_prof_info ret;
   ret.event_type = event_type;
-  // FIXME: Clang should set _OPENACC to the same value, and we should
-  // configure that value in one place in the code base.
-  ret.version = 201811;
+  ret.version = ACC2OMP_OPENACC_VERSION;
   ret.device_type = device_number == acc_ompt_initial_device_num
                     ? acc_device_host : acc_device_not_host;
   ret.device_number = device_number;

@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "acc2omp-config.h"
 #include "acc2omp-proxy-internal.h"
 
 #include <cassert>

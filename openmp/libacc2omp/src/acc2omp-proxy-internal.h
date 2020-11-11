@@ -15,7 +15,6 @@
 #ifndef ACC2OMP_PROXY_INTERNAL_H
 #define ACC2OMP_PROXY_INTERNAL_H
 
-#include "acc2omp-config.h"
 #include "acc2omp-proxy.h"
 
 /// Build an \c acc2omp_msg_t from an \c acc2omp_msgid_t.  For brevity, callers

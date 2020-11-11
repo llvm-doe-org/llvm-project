@@ -48,7 +48,7 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
     * As usual when `-fopenmp` is not specified, OpenMP directives are
       discarded but `-Wsource-uses-openmp` is available to produce
       warnings for them.
-* Options controlling the translation to OpenMP and related
+* Options controlling the translation to OpenMP and their associated
   diagnostics
     * `-fopenacc-update-present-omp=KIND` where `KIND` is either
       `present` or `no-present`
@@ -64,6 +64,8 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
     * `-Wopenacc-omp-map-no-alloc`
     * See the section "OpenMP Extensions" below for details.
 * Other diagnostic options
+    * `-Wopenacc-omp-macro-inserted`
+        * See "Source-to-Source Mode Limitations" below for details.
     * `-Wsource-uses-openacc`
         * Similar to `-Wsource-uses-openmp`, this enables warnings
           about OpenACC directives when OpenACC support is not
@@ -77,6 +79,15 @@ Run-Time Environment Variables
 * `OMP_TARGET_OFFLOAD=disabled` for specifying at run time to target
   the host.
 * `ACC_PROFLIB` for the OpenACC Profiling Interface.
+
+OpenACC Runtime Library and Preprocessor
+----------------------------------------
+
+* The `_OPENACC` preprocessor macro is supported.
+* The OpenACC Runtime Library API is not yet supported.
+
+See the section "Source-to-Source Mode Limitations" below for caveats
+related to source-to-source mode.
 
 `update` Directive
 ------------------
@@ -337,8 +348,34 @@ Language Support
 Source-to-Source Mode Limitations
 =================================
 
+* Calls to the OpenACC Runtime Library API are not translated to
+  OpenMP:
+    * Instead, they are implemented as wrappers around the OpenMP
+      Runtime Library Routines and require Clacc's OpenACC runtime
+      libraries to be linked.
+    * See the section "Linking" in `../README.md` for details.
+* Occurrences of the `_OPENACC` preprocessor macro are not translated
+  to OpenMP:
+    * Instead, the compiler inserts its `_OPENACC` definition at the
+      beginning of the OpenMP translation of any compilation unit that
+      uses it.
+    * The reason for the insertion is that a compiler defines
+      `_OPENACC` only when OpenACC compilation is enabled, so the
+      OpenMP compiler for the translation normally does not.  The
+      insertion is then necessary so that any uses of `_OPENACC`
+      remaining after translation do not behave differently than
+      before.
+    * The compilation warning diagnostic controlled by
+      `-Wopenacc-omp-macro-inserted` reports the inserted definition
+      because it might prove problematic if the user adds new code to
+      the OpenMP translation that expects `_OPENACC` to reflect the
+      actual compilation mode.
+    * When source-to-source mode is enabled by `-fopenacc-ast-print`
+      instead of `-fopenacc-print`, macros are fully expanded, so this
+      issue is irrelevant and the warning diagnostic controlled by
+      `-Wopenacc-omp-macro-inserted` is never reported.
 * Preprocessor macros appearing within OpenACC clauses or associated
-  statements are expanded in the OpenMP translation.  Notes:
+  statements are expanded in the OpenMP translation:
     * See the "Source-to-Source Translation" section in
       `README-OpenACC-design.md` for an explanation of why this
       happens and how Clacc might evolve to prevent it in the future.
