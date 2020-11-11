@@ -21,6 +21,6 @@
 ///
 /// Keep this in sync with Clang's definition of \c _OPENACC and both test
 /// suites' \c %acc-version LIT substitutions.
-#define ACC2OMP_OPENACC_VERSION 201811
+#define ACC2OMP_OPENACC_VERSION 202011
 
 #endif // ACC2OMP_INTERNAL_H
