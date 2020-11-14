@@ -13,7 +13,7 @@
 libacc2omp_say("Building OpenACC runtime libraries.")
 
 # Configure libacc2omp.
-configure_file(acc2omp-config.h.cmake acc2omp-config.h @ONLY)
+configure_file(config.h.cmake config.h @ONLY)
 
 # Configure the OpenACC standard headers and acc2omp-backend.h.
 #
@@ -25,7 +25,7 @@ configure_file(include/acc_prof.h.var acc_prof.h @ONLY)
 configure_file(include/acc2omp-backend.h.var acc2omp-backend.h @ONLY)
 
 # Build libacc2omp library with libdl and libacc2omp-backend dependencies.
-add_library(acc2omp SHARED acc-prof.cpp acc2omp-backend-internal.cpp)
+add_library(acc2omp SHARED prof.cpp backend-internal.cpp)
 target_link_libraries(acc2omp
   PUBLIC
     acc2omp-backend ${CMAKE_DL_LIBS}
@@ -42,7 +42,7 @@ endif()
 
 # Build libacc2omp-backend library.  See acc2omp-backend.h header comments for
 # why the library name does not match the source file name.
-add_library(acc2omp-backend SHARED acc2omp-backend-llvm.cpp)
+add_library(acc2omp-backend SHARED backend-llvm.cpp)
 target_link_libraries(acc2omp-backend
   PUBLIC
     omp

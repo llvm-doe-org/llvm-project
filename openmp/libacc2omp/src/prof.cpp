@@ -1,5 +1,5 @@
 /*
- * acc-prof.cpp -- OpenACC Profiling Interface implementation.
+ * prof.cpp -- OpenACC Profiling Interface implementation.
  */
 
 //===----------------------------------------------------------------------===//
@@ -52,7 +52,7 @@
  * Internal includes.
  ****************************************************************************/
 
-#include "acc2omp-internal.h"
+#include "internal.h"
 
 /*****************************************************************************
  * Runtime state.

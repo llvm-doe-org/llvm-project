@@ -1,5 +1,5 @@
 /*
- * acc2omp-backend-internal.cpp -- acc2omp-backend-internal.h implementation.
+ * backend-internal.cpp -- backend-internal.h implementation.
  */
 
 //===----------------------------------------------------------------------===//
@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "acc2omp-config.h"
-#include "acc2omp-backend-internal.h"
+#include "config.h"
+#include "backend-internal.h"
 
 #include <cassert>
 #include <cstdio>

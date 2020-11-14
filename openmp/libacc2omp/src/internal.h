@@ -1,5 +1,5 @@
 /*
- * acc2omp-internal.h -- Declarations used across various libacc2omp internal
+ * internal.h -- Declarations used across various libacc2omp internal
  * components.
  */
 
@@ -14,8 +14,8 @@
 #ifndef ACC2OMP_INTERNAL_H
 #define ACC2OMP_INTERNAL_H
 
-#include "acc2omp-config.h"
-#include "acc2omp-backend-internal.h"
+#include "config.h"
+#include "backend-internal.h"
 
 /// The value used for acc_prof_info's version field.
 ///

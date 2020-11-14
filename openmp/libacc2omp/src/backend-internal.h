@@ -1,6 +1,6 @@
 /*
- * acc2omp-backend-internal.h -- Declarations used by libacc2omp internally to
- * interact with backends but not used by the backends themselves.
+ * backend-internal.h -- Declarations used by libacc2omp internally to interact
+ * with backends but not used by the backends themselves.
  */
 
 //===----------------------------------------------------------------------===//

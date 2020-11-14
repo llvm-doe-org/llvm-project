@@ -1,6 +1,6 @@
 /*
- * acc2omp-backend-llvm.cpp -- libacc2omp backend for LLVM's OpenMP runtime.
- * Builds as libacc2omp-backend.so.
+ * backend-llvm.cpp -- libacc2omp backend for LLVM's OpenMP runtime.  Builds as
+ * libacc2omp-backend.so.
  */
 
 //===----------------------------------------------------------------------===//
