@@ -15,7 +15,7 @@
  ****************************************************************************/
 
 // Don't include headers like assert.h, stdio.h, or iostream.  Instead, call
-// functions declared in acc2omp-proxy.h.
+// functions declared in acc2omp-backend.h.
 #include <cstring>
 #include <dlfcn.h>
 #include <map>
@@ -29,11 +29,11 @@
 /*****************************************************************************
  * LLVM OpenMP include files.
  *
- * One of our eventual goals is to be able to wrap any OpenMP runtime
- * implementing OMPT.  For that reason, it's expected that anything included
- * here doesn't actually require linking with LLVM's OpenMP runtime.  Only
- * definitions in the header are needed.  If you do need to link something from
- * the OpenMP runtime, see through acc2omp-proxy.
+ * One of our goals is to be able to wrap any OpenMP runtime implementing OMPT.
+ * For that reason, it's expected that anything included here doesn't actually
+ * require linking with LLVM's OpenMP runtime.  Only definitions in the header
+ * are needed.  If you do need to link something from the OpenMP runtime, see
+ * acc2omp-backend.h.
  ****************************************************************************/
 
 // Currently needed for:
@@ -824,7 +824,7 @@ typedef void (*acc_register_library_t)(acc_prof_reg reg, acc_prof_reg unref,
  * acc2omp_ompt_start_tool, which is meant to be called by ompt_start_tool to
  * enable OpenACC Profiling Interface support.
  *
- * See header comments in acc2omp-proxy.h for an explanation of how
+ * See header comments in acc2omp-backend.h for an explanation of how
  * acc2omp_ompt_start_tool is intended to be used by OMPT support in an OpenMP
  * runtime, LLVM's in particular.
  ****************************************************************************/

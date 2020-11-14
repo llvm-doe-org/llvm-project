@@ -64,7 +64,7 @@ VERSION {
 	__kmp_reset_stats;
 
         #
-        # Internal symbols exported for LLVM's libacc2omp-proxy.
+        # Internal symbols exported for LLVM's libacc2omp backend.
         #
         __kmp_debug_assert;
         __kmp_fatal;

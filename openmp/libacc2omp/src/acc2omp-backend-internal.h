@@ -1,7 +1,6 @@
 /*
- * acc2omp-proxy-internal.h -- Declarations used by libacc2omp internally to
- * interact with acc2omp-proxy implementations but not used by acc2omp-proxy
- * implementations.
+ * acc2omp-backend-internal.h -- Declarations used by libacc2omp internally to
+ * interact with backends but not used by the backends themselves.
  */
 
 //===----------------------------------------------------------------------===//
@@ -12,18 +11,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef ACC2OMP_PROXY_INTERNAL_H
-#define ACC2OMP_PROXY_INTERNAL_H
+#ifndef ACC2OMP_BACKEND_INTERNAL_H
+#define ACC2OMP_BACKEND_INTERNAL_H
 
-#include "acc2omp-proxy.h"
+#include "acc2omp-backend.h"
 
 /// Build an \c acc2omp_msg_t from an \c acc2omp_msgid_t.  For brevity, callers
 /// should use \c ACC2OMP_MSG instead of \c acc2omp_msg.
 acc2omp_msg_t acc2omp_msg(acc2omp_msgid_t MsgId);
 #define ACC2OMP_MSG(MsgId) acc2omp_msg(acc2omp_msg_##MsgId)
 
-/// Wrappers around acc2omp-proxy's \c acc2omp_assert that expand to nothing
-/// when assertions are disabled in libacc2omp.
+/// Wrappers around \c acc2omp_assert that expand to nothing when assertions are
+/// disabled in libacc2omp.
 #ifdef ACC2OMP_USE_ASSERT
 # define ACC2OMP_ASSERT(Cond, Msg)                                             \
   acc2omp_assert((Cond), (Msg), __FILE__, __LINE__);
@@ -33,4 +32,4 @@ acc2omp_msg_t acc2omp_msg(acc2omp_msgid_t MsgId);
 # define ACC2OMP_UNREACHABLE(Msg)
 #endif
 
-#endif // ACC2OMP_PROXY_INTERNAL_H
+#endif // ACC2OMP_BACKEND_INTERNAL_H

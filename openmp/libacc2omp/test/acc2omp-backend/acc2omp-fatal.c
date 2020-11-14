@@ -1,20 +1,20 @@
-// Check that the acc2omp-proxy implementation controls fatal error handling.
+// Check that the libacc2omp backend controls fatal error handling.
 
-// Build acc2omp-proxy-test.
+// Build libacc2omp-backend-test.
 // RUN: %clang -Xclang -verify %acc-includes -shared -fPIC \
-// RUN:        %S/Inputs/acc2omp-proxy-test.c -o %t.so
+// RUN:        %S/Inputs/acc2omp-backend-test.c -o %t.so
 
 // Build the OpenACC application in source-to-source mode followed by OpenMP
 // compilation.  We use our Clang as the OpenMP compiler because it's the only
 // one we have.  Otherwise, this is expected to be the normal case for alternate
-// OpenMP runtimes and thus alternate acc2omp-proxy implementations.
+// OpenMP runtimes and thus alternate libacc2omp backends.
 // RUN: %clang -Xclang -verify -fopenacc-print=omp %acc-includes %s > %t-omp.c
 // RUN: %clang -Xclang -verify -fopenmp %fopenmp-version %acc-includes \
 // RUN:        %t-omp.c %acc-libs -o %t
 
-// Run the compiled application.  Force it to use acc2omp-proxy-test instead of
-// acc2omp-proxy-llvm, but use LLVM's OpenMP runtime because it's the only one
-// we have.
+// Run the compiled application.  Force it to use libacc2omp-backend-test
+// instead of libacc2omp-backend-llvm, but use LLVM's OpenMP runtime because
+// it's the only one we have.
 //
 // First, make sure it's fine when no error is expected.
 // RUN: %preload-t.so %t > %t.out 2> %t.err
@@ -38,7 +38,7 @@
 // EMPTY-NOT: {{.}}
 
 // Check that the message contains:
-// - The acc2omp-proxy-test prefix.
+// - The libacc2omp-backend-test prefix.
 // - The default message for acc2omp_msg_acc_proflib_fail.
 // - The file name, which demonstrates that the message received its argument.
 //   (If any dlopen implementation doesn't include the file name in the
@@ -46,7 +46,7 @@
 //   it, but hopefully no such implementation exists.)
 //
 // ERR-NOT: {{.}}
-//     ERR: {{^}}acc2omp-proxy-test: fatal error: failure using library from ACC_PROFLIB:{{.*}}[[FILE]]{{.*$}}
+//     ERR: {{^}}libacc2omp-backend-test: fatal error: failure using library from ACC_PROFLIB:{{.*}}[[FILE]]{{.*$}}
 // ERR-NOT: {{.}}
 
 #include <stdio.h>

@@ -1,5 +1,5 @@
 /*
- * acc2omp-proxy-internal.cpp -- acc2omp-proxy-internal.h implementation.
+ * acc2omp-backend-internal.cpp -- acc2omp-backend-internal.h implementation.
  */
 
 //===----------------------------------------------------------------------===//
@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "acc2omp-config.h"
-#include "acc2omp-proxy-internal.h"
+#include "acc2omp-backend-internal.h"
 
 #include <cassert>
 #include <cstdio>

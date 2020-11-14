@@ -167,7 +167,7 @@ implemented there.
 If an OpenACC application uses the OpenACC Runtime Library API, or if
 you wish to profile an OpenACC application using an OpenACC profiling
 library depending on the OpenACC Profiling Interface, you must also
-link Clacc's `libacc2omp.so` and `libacc2omp-proxy.so` with your
+link Clacc's `libacc2omp.so` and `libacc2omp-backend.so` with your
 application.  These libraries serve as a wrapper around LLVM's OpenMP
 runtime and are installed in the same directories as Clacc's version
 of LLVM's OpenMP runtime, `libomp.so`.

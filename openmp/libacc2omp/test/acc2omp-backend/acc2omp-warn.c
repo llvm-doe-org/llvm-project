@@ -1,20 +1,20 @@
-// Check that the acc2omp-proxy implementation controls reporting of warnings.
+// Check that the libacc2omp backend controls reporting of warnings.
 
-// Build acc2omp-proxy-test.
+// Build libacc2omp-backend-test.
 // RUN: %clang -Xclang -verify %acc-includes -shared -fPIC \
-// RUN:        %S/Inputs/acc2omp-proxy-test.c -o %t.so
+// RUN:        %S/Inputs/acc2omp-backend-test.c -o %t.so
 
 // Build the OpenACC application in source-to-source mode followed by OpenMP
 // compilation.  We use our Clang as the OpenMP compiler because it's the only
 // one we have.  Otherwise, this is expected to be the normal case for alternate
-// OpenMP runtimes and thus alternate acc2omp-proxy implementations.
+// OpenMP runtimes and thus alternate libacc2omp backends.
 // RUN: %clang -Xclang -verify -fopenacc-print=omp %acc-includes %s > %t-omp.c
 // RUN: %clang -Xclang -verify -fopenmp %fopenmp-version %acc-includes \
 // RUN:        %t-omp.c %acc-libs -o %t
 
-// Run the compiled application.  Force it to use acc2omp-proxy-test instead of
-// acc2omp-proxy-llvm, but use LLVM's OpenMP runtime because it's the only one
-// we have.
+// Run the compiled application.  Force it to use libacc2omp-backend-test
+// instead of libacc2omp-backend-llvm, but use LLVM's OpenMP runtime because
+// it's the only one we have.
 //
 // RUN: %preload-t.so %t > %t.out 2> %t.err
 // RUN: FileCheck -input-file %t.err -check-prefixes=ERR -strict-whitespace \
@@ -32,11 +32,11 @@
 // OUT-NEXT:after kernel
 //  OUT-NOT:{{.}}
 
-// Check entire message to be sure acc2omp-proxy-test is printing it and that
-// all components of the message are passed correctly.
+// Check entire message to be sure libacc2omp-backend-test is printing it and
+// that all components of the message are passed correctly.
 //
 // ERR-NOT:{{.}}
-//     ERR:acc2omp-proxy-test: warning: attempt to unregister event not previously registered: acc_ev_device_init_start
+//     ERR:libacc2omp-backend-test: warning: attempt to unregister event not previously registered: acc_ev_device_init_start
 // ERR-NOT:{{.}}
 
 #include <acc_prof.h>
