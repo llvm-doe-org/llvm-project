@@ -1856,11 +1856,11 @@ C++ Issues
 OpenACC Runtime
 ===============
 
-Clacc's OpenACC runtime is built as a layer on top of LLVM's OpenMP
-runtime.  Currently, the majority of this layer offers OpenACC
-Profiling Interface support, which is documented in the next section.
-Further support for the OpenACC Runtime Library API is under
-development.
+Clacc's OpenACC runtime is built as a layer on top of Clacc's version
+of LLVM's OpenMP runtime.  Currently, the majority of this layer
+offers OpenACC Profiling Interface support, which is documented in the
+next section.  Further support for the OpenACC Runtime Library API is
+under development.
 
 Details on how Clacc's OpenACC runtime might one day interact with
 OpenMP runtimes from other OpenMP implementations can currently be

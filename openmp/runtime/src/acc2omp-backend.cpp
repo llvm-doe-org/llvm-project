@@ -1,6 +1,5 @@
 /*
- * backend-llvm.cpp -- libacc2omp backend for LLVM's OpenMP runtime.  Builds as
- * libacc2omp-backend.so.
+ * acc2omp-backend.cpp -- libacc2omp backend for LLVM's OpenMP runtime.
  */
 
 //===----------------------------------------------------------------------===//
@@ -11,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../../runtime/src/kmp.h"
+#include "kmp.h"
 
 #include <cstdarg>
 #include <cstdlib>

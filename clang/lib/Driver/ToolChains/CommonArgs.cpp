@@ -559,10 +559,8 @@ bool tools::addOpenMPRuntime(ArgStringList &CmdArgs, const ToolChain &TC,
       !HasOpenACC)
     return false;
 
-  if (HasOpenACC) {
+  if (HasOpenACC)
     CmdArgs.push_back("-lacc2omp");
-    CmdArgs.push_back("-lacc2omp-backend");
-  }
 
   Driver::OpenMPRuntimeKind RTKind = TC.getDriver().getOpenMPRuntime(Args);
 

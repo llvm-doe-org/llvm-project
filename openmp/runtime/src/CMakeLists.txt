@@ -41,6 +41,7 @@ add_definitions(${LIBOMP_CONFIGURED_DEFINITIONS_FLAGS})
 # Set the -I includes for all sources
 include_directories(
   ${CMAKE_CURRENT_BINARY_DIR}
+  ${CMAKE_CURRENT_BINARY_DIR}/../../libacc2omp/src
   ${LIBOMP_SRC_DIR}
   ${LIBOMP_SRC_DIR}/i18n
   ${LIBOMP_INC_DIR}
@@ -58,6 +59,7 @@ if(STUBS_LIBRARY)
 else()
   # Get C++ files
   set(LIBOMP_CXXFILES
+    acc2omp-backend.cpp
     kmp_alloc.cpp
     kmp_atomic.cpp
     kmp_csupport.cpp

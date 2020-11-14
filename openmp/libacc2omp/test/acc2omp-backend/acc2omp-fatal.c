@@ -13,7 +13,7 @@
 // RUN:        %t-omp.c %acc-libs -o %t
 
 // Run the compiled application.  Force it to use libacc2omp-backend-test
-// instead of libacc2omp-backend-llvm, but use LLVM's OpenMP runtime because
+// instead of LLVM's libacc2omp backend, but use LLVM's OpenMP runtime because
 // it's the only one we have.
 //
 // First, make sure it's fine when no error is expected.

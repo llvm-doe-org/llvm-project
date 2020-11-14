@@ -42,56 +42,24 @@
  * runtime.  For the convenience of users who wish to develop new libacc2omp
  * backends, LLVM typically installs this header in the same directories as it
  * installs its versions of the standard OpenACC and OpenMP headers.  Of course,
- * an libacc2omp backend can be compiled and linked as part of the OpenMP
- * runtime library it enables libacc2omp to use, or it can be compiled and
- * linked as a separate library.
+ * a libacc2omp backend can be compiled and linked as part of the OpenMP runtime
+ * library it enables libacc2omp to use (as in the case of LLVM's OpenMP
+ * runtime), or it can be compiled and linked as a separate library.
  *
  * TODO: To make it easier to get started with a new OpenMP runtime, we might
  * consider providing a (weakly linked?) default implementation of each backend
  * function.  For example, the default acc2omp_fatal could simply print to
  * stderr and call abort.
  *
- * LLVM's libacc2omp backend
- * -------------------------
+ * LLVM's runtime libraries
+ * ------------------------
  *
- * LLVM builds libacc2omp-backend.so as the libacc2omp backend for LLVM's OpenMP
- * runtime, libomp.so.  LLVM typically installs libacc2omp.so and
- * libacc2omp-backend.so in the same directories as it installs libomp.so.
- *
- * In contrast to libacc2omp-backend.so, libacc2omp.so is designed for any
- * OpenMP runtime.  Nevertheless, the library file names libomp.so and
- * libacc2omp-backend.so are encoded as shared library dependencies of
- * libacc2omp.so.  Thus, while using the same libacc2omp.so, LD_LIBRARY_PATH can
- * be used to select a different libacc2omp.so and libacc2omp-backend.so pair
- * from another directory.  To select libraries with different file names, or to
- * handle a case where a libacc2omp backend is compiled as part of the OpenMP
- * runtime library, LD_PRELOAD can be used, or a new libacc2omp.so can be
- * linked.
- *
- * Unlike its source file (acc2omp-backend-llvm.cpp), the library file name
- * libacc2omp-backend.so does not mention LLVM.  This enables the
- * LD_LIBRARY_PATH use case described above without forcing this library file
- * name for an external OpenMP implementation to also mention LLVM.
- *
- * If distributions wish to install multiple OpenMP runtime libraries in the
- * same directory but with different file names, libacc2omp.so and
- * libacc2omp-backend.so should retain their names so that Clang can locate
- * them.  For example, in a single system lib directory, you might have:
- *
- * - libomp.so
- * - libacc2omp.so
- * - libacc2omp-backend.so
- * - libiomp5.so
- * - libacc2omp-libiomp5.so
- * - libacc2omp-backend-libiomp5.so
- * - libgomp.so
- * - libacc2omp-libgomp.so
- * - libacc2omp-backend-libgomp.so
- *
- * TODO: If this becomes common, perhaps LLVM's libacc2omp.so and
- * libacc2omp-backend.so should be named with "-libomp" by default.  For now,
- * without a pressing need, it looks strange to me to insert shared library
- * dependencies into the name of a library.
+ * LLVM's OpenMP runtime and its libacc2omp backend are built as part of the
+ * same library, libomp.so.  LLVM typically installs libacc2omp.so in the same
+ * directories as it installs libomp.so, which is encoded as a shared library
+ * dependency.  Nevertheless, libacc2omp.so is designed for any OpenMP runtime.
+ * To select an alternate OpenMP runtime and libacc2omp backend, LD_LIBRARY_PATH
+ * or LD_PRELOAD can be used, or a new libacc2omp.so can be built.
  *
  * OMPT's ompt_start_tool for the OpenACC Profiling Interface
  * ----------------------------------------------------------

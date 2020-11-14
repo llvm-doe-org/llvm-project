@@ -64,13 +64,11 @@ VERSION {
 	__kmp_reset_stats;
 
         #
-        # Internal symbols exported for LLVM's libacc2omp backend.
+        # libacc2omp backend symbols.
         #
-        __kmp_debug_assert;
-        __kmp_fatal;
-        __kmp_msg;
-        __kmp_msg_null;
-        __kmp_msg_vformat;
+        acc2omp_warn;
+        acc2omp_fatal;
+        acc2omp_assert;
 
 #if USE_ITT_BUILD
         #
