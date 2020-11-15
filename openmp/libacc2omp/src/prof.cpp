@@ -303,10 +303,11 @@ static acc_api_info acc_get_api_info(int device_number) {
   return ret;
 }
 
-static void acc_get_target_data_op_info(
-    acc_event_t event_type, ompt_id_t target_id, int device_num, size_t bytes,
-    const void *host_ptr, const void *device_ptr, acc_prof_info *pi,
-    acc_event_info *ei, acc_api_info *ai) {
+static void acc_get_target_data_op_info(acc_event_t event_type, int device_num,
+                                        size_t bytes, const void *host_ptr,
+                                        const void *device_ptr,
+                                        acc_prof_info *pi, acc_event_info *ei,
+                                        acc_api_info *ai) {
   *pi = acc_get_prof_info(event_type, device_num);
   *ei = acc_get_data_event_info(event_type, bytes, host_ptr, device_ptr);
   *ai = acc_get_api_info(device_num);
@@ -473,8 +474,8 @@ static void acc_ompt_callback_target_data_op(
       acc_prof_info pi;
       acc_event_info ei;
       acc_api_info ai;
-      acc_get_target_data_op_info(acc_ev_create, target_id, dest_device_num,
-                                  bytes, src_addr, dest_addr, &pi, &ei, &ai);
+      acc_get_target_data_op_info(acc_ev_create, dest_device_num, bytes,
+                                  src_addr, dest_addr, &pi, &ei, &ai);
       acc_ev_create_callback(&pi, &ei, &ai);
     }
     break;
@@ -483,8 +484,8 @@ static void acc_ompt_callback_target_data_op(
       acc_prof_info pi;
       acc_event_info ei;
       acc_api_info ai;
-      acc_get_target_data_op_info(acc_ev_delete, target_id, dest_device_num,
-                                  bytes, src_addr, dest_addr, &pi, &ei, &ai);
+      acc_get_target_data_op_info(acc_ev_delete, dest_device_num, bytes,
+                                  src_addr, dest_addr, &pi, &ei, &ai);
       acc_ev_delete_callback(&pi, &ei, &ai);
     }
     break;
@@ -493,8 +494,8 @@ static void acc_ompt_callback_target_data_op(
       acc_prof_info pi;
       acc_event_info ei;
       acc_api_info ai;
-      acc_get_target_data_op_info(acc_ev_alloc, target_id, dest_device_num,
-                                  bytes, src_addr, dest_addr, &pi, &ei, &ai);
+      acc_get_target_data_op_info(acc_ev_alloc, dest_device_num, bytes,
+                                  src_addr, dest_addr, &pi, &ei, &ai);
       acc_ev_alloc_callback(&pi, &ei, &ai);
     }
     break;
@@ -503,8 +504,8 @@ static void acc_ompt_callback_target_data_op(
       acc_prof_info pi;
       acc_event_info ei;
       acc_api_info ai;
-      acc_get_target_data_op_info(acc_ev_free, target_id, dest_device_num,
-                                  bytes, src_addr, dest_addr, &pi, &ei, &ai);
+      acc_get_target_data_op_info(acc_ev_free, dest_device_num, bytes, src_addr,
+                                  dest_addr, &pi, &ei, &ai);
       acc_ev_free_callback(&pi, &ei, &ai);
     }
     break;
@@ -513,9 +514,8 @@ static void acc_ompt_callback_target_data_op(
       acc_prof_info pi;
       acc_event_info ei;
       acc_api_info ai;
-      acc_get_target_data_op_info(acc_ev_enqueue_upload_start, target_id,
-                                  dest_device_num, bytes, src_addr, dest_addr,
-                                  &pi, &ei, &ai);
+      acc_get_target_data_op_info(acc_ev_enqueue_upload_start, dest_device_num,
+                                  bytes, src_addr, dest_addr, &pi, &ei, &ai);
       acc_ev_enqueue_upload_start_callback(&pi, &ei, &ai);
     }
     break;
@@ -524,9 +524,8 @@ static void acc_ompt_callback_target_data_op(
       acc_prof_info pi;
       acc_event_info ei;
       acc_api_info ai;
-      acc_get_target_data_op_info(acc_ev_enqueue_upload_end, target_id,
-                                  dest_device_num, bytes, src_addr, dest_addr,
-                                  &pi, &ei, &ai);
+      acc_get_target_data_op_info(acc_ev_enqueue_upload_end, dest_device_num,
+                                  bytes, src_addr, dest_addr, &pi, &ei, &ai);
       acc_ev_enqueue_upload_end_callback(&pi, &ei, &ai);
     }
     break;
@@ -535,9 +534,8 @@ static void acc_ompt_callback_target_data_op(
       acc_prof_info pi;
       acc_event_info ei;
       acc_api_info ai;
-      acc_get_target_data_op_info(acc_ev_enqueue_download_start, target_id,
-                                  src_device_num, bytes, dest_addr, src_addr,
-                                  &pi, &ei, &ai);
+      acc_get_target_data_op_info(acc_ev_enqueue_download_start, src_device_num,
+                                  bytes, dest_addr, src_addr, &pi, &ei, &ai);
       acc_ev_enqueue_download_start_callback(&pi, &ei, &ai);
     }
     break;
@@ -546,9 +544,8 @@ static void acc_ompt_callback_target_data_op(
       acc_prof_info pi;
       acc_event_info ei;
       acc_api_info ai;
-      acc_get_target_data_op_info(acc_ev_enqueue_download_end, target_id,
-                                  src_device_num, bytes, dest_addr, src_addr,
-                                  &pi, &ei, &ai);
+      acc_get_target_data_op_info(acc_ev_enqueue_download_end, src_device_num,
+                                  bytes, dest_addr, src_addr, &pi, &ei, &ai);
       acc_ev_enqueue_download_end_callback(&pi, &ei, &ai);
     }
     break;
