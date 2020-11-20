@@ -174,9 +174,7 @@ static acc_prof_info acc_get_prof_info(acc_event_t event_type,
   ret.async_queue = -1;
   // The remaining fields of acc_prof_info are source location information.
   // If the OpenMP runtime doesn't support the ompt_get_directive_info entry
-  // point, just nullify the fields.  FIXME: That will make sense when we
-  // separate the OpenACC runtime from LLVM's OpenMP runtime, thus creating the
-  // possibility of linking the OpenACC runtime with alternate OpenMP runtimes.
+  // point (it's then not LLVM's OpenMP runtime), just nullify the fields.
   if (acc_ompt_get_directive_info) {
     ompt_directive_info_t *directive_info = acc_ompt_get_directive_info();
     ret.src_file = directive_info->src_file;
@@ -258,9 +256,7 @@ static acc_event_info acc_get_data_event_info(
     const void *device_ptr) {
   acc_event_info ret = acc_get_other_event_info(event_type);
   // If the OpenMP runtime doesn't support the ompt_get_data_expression entry
-  // point, just use NULL.  FIXME: That will make sense when we separate the
-  // OpenACC runtime from LLVM's OpenMP runtime, thus creating the possibility
-  // of linking the OpenACC runtime with alternate OpenMP runtimes.
+  // point (it's then not LLVM's OpenMP runtime), just use NULL.
   if (acc_ompt_get_data_expression)
     ret.data_event.var_name = acc_ompt_get_data_expression();
   else
