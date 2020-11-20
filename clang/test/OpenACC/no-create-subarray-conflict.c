@@ -1,7 +1,7 @@
 // Check what happens in the strange case that no_create and a data clause on
 // a statically enclosing acc data specify different parts of the same array.
 // OpenACC 3.0-next seems to permit this because no_create then just doesn't
-// allocate.  Clacc also permits this, but only when using the no_alloc
+// allocate.  Clang also permits this, but only when using the no_alloc
 // translation of no_create.  When using the alloc translation, OpenMP support
 // in the Clang frontend complains... but only in the case that no_create
 // specifies the full array.
