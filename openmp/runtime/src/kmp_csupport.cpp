@@ -4253,6 +4253,19 @@ void __kmpc_set_directive_info(
 #endif
 }
 
+void __kmpc_clear_directive_info() {
+#if OMPT_SUPPORT
+  ompt_directive_info.kind = ompt_directive_unknown;
+  ompt_directive_info.is_explicit_event = false;
+  ompt_directive_info.src_file = nullptr;
+  ompt_directive_info.func_name = nullptr;
+  ompt_directive_info.line_no = 0;
+  ompt_directive_info.end_line_no = 0;
+  ompt_directive_info.func_line_no = 0;
+  ompt_directive_info.func_end_line_no = 0;
+#endif
+}
+
 void __kmpc_set_data_expressions(const char * const *exprs) {
 #if OMPT_SUPPORT
   ompt_data_expressions = exprs;

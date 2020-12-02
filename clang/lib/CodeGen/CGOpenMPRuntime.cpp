@@ -10359,16 +10359,8 @@ void CGOpenMPRuntime::emitSetDirectiveInfoCall(
 void CGOpenMPRuntime::emitClearDirectiveInfoCall(CodeGenFunction &CGF) {
   if (!IsInOpenACCConstruct)
     return;
-  llvm::Value *CharNullPtr = llvm::ConstantPointerNull::get(CGM.Int8PtrTy);
-  llvm::Value *IntZero = llvm::ConstantInt::getNullValue(CGM.IntTy);
-  // TODO: The value of the first argument comes from enum
-  // ompt_directive_kind_t in openmp/runtime/src/include/omp-tools.h.var.  Find
-  // a clean way to ensure these stay in sync.
-  llvm::Value *Args[] = {IntZero, IntZero, CharNullPtr, CharNullPtr, IntZero,
-                         IntZero, IntZero, IntZero};
   CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
-                          CGM.getModule(), OMPRTL___kmpc_set_directive_info),
-                      Args);
+      CGM.getModule(), OMPRTL___kmpc_clear_directive_info));
 }
 
 void CGOpenMPRuntime::emitSetDataExpressionsCall(CodeGenFunction &CGF,
