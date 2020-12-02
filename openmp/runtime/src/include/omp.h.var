@@ -152,6 +152,18 @@
     extern int   __KAI_KMPC_CONVENTION  omp_get_device_num (void);
     typedef void * omp_depend_t;
 
+    /* OpenMP extensions for OpenACC support */
+    typedef enum omp_present_t {
+        omp_present_none = 0,
+        omp_present_partial = 1,
+        omp_present_full = 2
+    } omp_present_t;
+    // TODO: Currently, omp_target_range_is_present is not well tested outside
+    // of the OpenACC runtime, so it is not yet recommended for general use in
+    // OpenMP code.
+    extern omp_present_t __KAI_KMPC_CONVENTION
+    omp_target_range_is_present(void *, size_t, int);
+
     /* kmp API functions */
     extern int    __KAI_KMPC_CONVENTION  kmp_get_stacksize          (void);
     extern void   __KAI_KMPC_CONVENTION  kmp_set_stacksize          (int);
