@@ -80,15 +80,6 @@ Run-Time Environment Variables
   the host.
 * `ACC_PROFLIB` for the OpenACC Profiling Interface.
 
-OpenACC Runtime Library and Preprocessor
-----------------------------------------
-
-* The `_OPENACC` preprocessor macro is supported.
-* The OpenACC Runtime Library API is not yet supported.
-
-See the section "Source-to-Source Mode Limitations" below for caveats
-related to source-to-source mode.
-
 `update` Directive
 ------------------
 
@@ -313,6 +304,21 @@ Nesting of an `update`, `data`, `parallel`, or `parallel loop`
 directive inside a `parallel`, `loop`, or `parallel loop` construct is
 not yet supported.  We're not aware of any OpenACC implementation that
 supports this yet.
+
+OpenACC Runtime Library API and Preprocessor
+--------------------------------------------
+
+* The `_OPENACC` preprocessor macro is supported.
+* Data and memory management routines supported are:
+    * `acc_is_present`
+        * OpenACC 3.0 is unclear about handling of a null pointer.
+          Currently, Clacc always returns true.
+
+See the section "OpenACC Runtime" in `README-OpenACC-design.md` for
+further design details.
+
+See the section "Source-to-Source Mode Limitations" below for caveats
+related to source-to-source mode.
 
 OpenACC Profiling Interface
 ---------------------------
@@ -681,9 +687,16 @@ translations from OpenACC to OpenMP.  Thus, it is not yet recommended
 for use in hand-written OpenMP code as it might not integrate well
 with some OpenMP features.
 
+OpenACC Runtime Library API
+---------------------------
+
+Some OpenACC Runtime Library API routines are implemented in terms of
+extensions to OpenMP's Runtime Library Routines.  See the section
+"OpenACC Runtime" in `README-OpenACC-design.md` for details.
+
 OMPT
 ----
 
 Some features of the OpenACC Profiling Interface depend on OMPT
-extensions. See the section "OpenACC Profiling Interface" in
+extensions.  See the section "OpenACC Profiling Interface" in
 `README-OpenACC-design.md` for details.

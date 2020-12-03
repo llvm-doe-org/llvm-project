@@ -1856,15 +1856,27 @@ C++ Issues
 OpenACC Runtime
 ===============
 
-Clacc's OpenACC runtime is built as a layer on top of Clacc's version
-of LLVM's OpenMP runtime.  Currently, the majority of this layer
-offers OpenACC Profiling Interface support, which is documented in the
-next section.  Further support for the OpenACC Runtime Library API is
-under development.
+Clacc's OpenACC runtime is designed as a layer on top of Clacc's
+version of LLVM's OpenMP runtime.  It is built as the library
+`libacc2omp.so`.
 
-Details on how Clacc's OpenACC runtime might one day interact with
-OpenMP runtimes from other OpenMP implementations can currently be
-found in the comments in the source file
+Support for the OpenACC Runtime Library API appears primarily in the
+source file `openmp/libacc2omp/src/api.cpp`.  Clacc's mapping to the
+OpenMP Runtime Library Routines can be found there.  That mapping
+relies on the following OpenMP extensions, which are implemented in
+Clacc's version of LLVM's OpenMP runtime library:
+
+* `omp_present_t`
+* `omp_target_range_is_present`
+
+Support for the OpenACC Profiling Interface appears primarily in the
+source file `openmp/libacc2omp/src/prof.cpp`.  It is documented in the
+next section, including Clacc's mapping to OMPT and required OMPT
+extensions.
+
+Further details on how Clacc's OpenACC runtime might one day interact
+with OpenMP runtimes from other OpenMP implementations can currently
+be found in the comments in the source file
 `openmp/libacc2omp/src/include/acc2omp-backend.h.var`.
 
 OpenACC Profiling Interface

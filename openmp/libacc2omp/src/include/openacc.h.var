@@ -13,6 +13,9 @@
 #ifndef __OPENACC__
 #define __OPENACC__
 
+// For standard types (e.g., size_t) used in OpenACC spec's declarations.
+#include <stddef.h>
+
 #define ACC_FOREACH_DEVICE(Macro) \
   Macro(none)                     \
   Macro(default)                  \
@@ -37,5 +40,15 @@ enum {
 ACC_FOREACH_ASYNC(ACC_ASYNC_ENUMERATOR)
 #undef ACC_ASYNC_ENUMERATOR
 };
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int acc_is_present(void *data_arg, size_t bytes);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif /* __OPENACC__ */

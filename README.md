@@ -168,8 +168,9 @@ If an OpenACC application uses the OpenACC Runtime Library API, or if
 you wish to profile an OpenACC application using an OpenACC profiling
 library depending on the OpenACC Profiling Interface, you must also
 link Clacc's `libacc2omp.so` with your application.  This library
-serves as a wrapper around Clacc's version of LLVM's OpenMP runtime,
-`libomp.so`, and is installed in the same directories.
+serves as a wrapper around Clacc's version of LLVM's OpenMP runtime
+(`libomp.so`, `libomptarget.so`, etc.) and is installed in the same
+directories.
 
 Normally, the `-fopenacc` option to `clang` triggers linking of all
 such required libraries automatically.  However, if you are linking

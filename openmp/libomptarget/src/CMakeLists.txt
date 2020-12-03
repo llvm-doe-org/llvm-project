@@ -23,8 +23,10 @@ set(src_files
 # Build libomptarget library with libdl dependency.
 add_library(omptarget SHARED ${src_files})
 target_link_libraries(omptarget
-  ${CMAKE_DL_LIBS}
-  "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports")
+  PUBLIC
+    ${CMAKE_DL_LIBS}
+  PRIVATE
+    "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports")
 if(OPENMP_CLANG_LIB_SUBDIR AND NOT OPENMP_STANDALONE_BUILD)
   add_custom_command(TARGET omptarget POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory

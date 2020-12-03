@@ -25,10 +25,10 @@ configure_file(include/acc_prof.h.var acc_prof.h @ONLY)
 configure_file(include/acc2omp-backend.h.var acc2omp-backend.h @ONLY)
 
 # Build libacc2omp library with libdl and libomp dependencies.
-add_library(acc2omp SHARED prof.cpp backend-internal.cpp)
+add_library(acc2omp SHARED backend-internal.cpp api.cpp prof.cpp)
 target_link_libraries(acc2omp
   PUBLIC
-    omp ${CMAKE_DL_LIBS}
+    omp omptarget ${CMAKE_DL_LIBS}
   PRIVATE
     "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports/acc2omp.txt")
 if(OPENMP_CLANG_LIB_SUBDIR AND NOT OPENMP_STANDALONE_BUILD)

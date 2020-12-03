@@ -54,12 +54,13 @@
  * LLVM's runtime libraries
  * ------------------------
  *
- * LLVM's OpenMP runtime and its libacc2omp backend are built as part of the
- * same library, libomp.so.  LLVM typically installs libacc2omp.so in the same
- * directories as it installs libomp.so, which is encoded as a shared library
- * dependency.  Nevertheless, libacc2omp.so is designed for any OpenMP runtime.
- * To select an alternate OpenMP runtime and libacc2omp backend, LD_LIBRARY_PATH
- * or LD_PRELOAD can be used, or a new libacc2omp.so can be built.
+ * The libacc2omp backend for LLVM's OpenMP runtime is built as part of the
+ * latter's libraries, libomp.so and libomptarget.so.  LLVM typically installs
+ * libacc2omp.so in the same directories as those libraries, which are encoded
+ * as shared library dependencies.  Nevertheless, libacc2omp.so is designed for
+ * any OpenMP runtime.  To select an alternate OpenMP runtime and libacc2omp
+ * backend, LD_LIBRARY_PATH or LD_PRELOAD can be used, or a new libacc2omp.so
+ * can be built.
  *
  * OMPT's ompt_start_tool for the OpenACC Profiling Interface
  * ----------------------------------------------------------
