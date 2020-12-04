@@ -2,6 +2,10 @@ VERS1.0 {
   global:
     acc2omp_ompt_start_tool;
     acc_register_library;
+    acc_malloc;
+    acc_free;
+    acc_map_data;
+    acc_unmap_data;
     acc_is_present;
   local:
     *;

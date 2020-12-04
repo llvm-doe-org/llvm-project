@@ -437,6 +437,9 @@ AccEventRegisterResult              "%1$s result when registering event: %2$s"
 AccEventUnregisterResult            "%1$s result when unregistering event: %2$s"
 AccEventUnregisterUnregistered      "attempt to unregister event not previously registered: %1$s"
 AccCallbackUnregisterUnregistered   "attempt to unregister wrong callback for event: %1$s"
+AccMapDataAlreadyPresent            "acc_map_data called on host pointer that is already mapped"
+AccMapDataFail                      "acc_map_data failed"
+AccUnmapDataFail                    "acc_unmap_data failed"
 
 # --------------------------------------------------------------------------------------------------
 -*- HINTS -*-

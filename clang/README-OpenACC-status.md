@@ -310,8 +310,24 @@ OpenACC Runtime Library API and Preprocessor
 
 * The `_OPENACC` preprocessor macro is supported.
 * Data and memory management routines supported are:
+    * `acc_malloc`, `acc_free`
+        * When offloading is disabled, these allocate and free on the
+          host.  This behavior appears to mimic pgcc 19.10-0 and gcc
+          10.2.0, but OpenACC 3.1 is unclear.
+    * `acc_map_data`, `acc_unmap_data`
+        * When offloading is disabled, these are no-ops.  This
+          behavior appears to mimic pgcc 19.10-0, but OpenACC 3.1 is
+          unclear, and gcc-10 has "libgomp: cannot map data on
+          shared-memory system" at run time.
+        * OpenACC 3.1 is unclear about whether it is an error if a
+          null pointer is specified.  Currently, Clacc produces a
+          runtime error.
+        * OpenACC 3.1 is unclear about whether it is an error if only
+          part of the host memory specified to `acc_map_data` has
+          already been mapped.  Currently, Clacc produces a runtime
+          error.
     * `acc_is_present`
-        * OpenACC 3.0 is unclear about handling of a null pointer.
+        * OpenACC 3.1 is unclear about handling of a null pointer.
           Currently, Clacc always returns true.
 
 See the section "OpenACC Runtime" in `README-OpenACC-design.md` for

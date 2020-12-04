@@ -179,6 +179,31 @@ static acc_prof_info acc_get_prof_info(acc_event_t event_type,
     ompt_directive_info_t *directive_info = acc_ompt_get_directive_info();
     ret.src_file = directive_info->src_file;
     ret.func_name = directive_info->func_name;
+    switch (directive_info->kind) {
+    case ompt_directive_unknown:
+    case ompt_directive_target_update:
+    case ompt_directive_target_enter_data:
+    case ompt_directive_target_exit_data:
+    case ompt_directive_target_data:
+    case ompt_directive_target_teams:
+      break;
+    case ompt_directive_omp_target_alloc:
+      ACC2OMP_ASSERT(!ret.func_name, "expected no func_name");
+      ret.func_name = "acc_malloc";
+      break;
+    case ompt_directive_omp_target_free:
+      ACC2OMP_ASSERT(!ret.func_name, "expected no func_name");
+      ret.func_name = "acc_free";
+      break;
+    case ompt_directive_omp_target_associate_ptr:
+      ACC2OMP_ASSERT(!ret.func_name, "expected no func_name");
+      ret.func_name = "acc_map_data";
+      break;
+    case ompt_directive_omp_target_disassociate_ptr:
+      ACC2OMP_ASSERT(!ret.func_name, "expected no func_name");
+      ret.func_name = "acc_unmap_data";
+      break;
+    }
     ret.line_no = directive_info->line_no;
     ret.end_line_no = directive_info->end_line_no;
     ret.func_line_no = directive_info->func_line_no;
@@ -218,14 +243,12 @@ static acc_event_info acc_get_other_event_info(acc_event_t event_type) {
     ret.other_event.implicit = true;
   } else {
     ompt_directive_info_t *directive_info = acc_ompt_get_directive_info();
+    ACC2OMP_ASSERT(!directive_info->is_explicit_event ==
+                       (directive_info->kind == ompt_directive_unknown),
+                   "expected !is_explicit_event if and only if "
+                   "kind=ompt_directve_unknown");
     switch (directive_info->kind) {
     case ompt_directive_unknown:
-      // TODO: Once we provide directive info for runtime calls, for which
-      // is_explicit_event should be true, create an ompt_directive_runtime_api
-      // instead of reusing ompt_directive_unknown.
-      ACC2OMP_ASSERT(!directive_info->is_explicit_event,
-                     "expected is_explicit_event=false for "
-                     "kind=ompt_directve_unknown");
       ret.other_event.parent_construct = acc_construct_runtime_api;
       break;
     case ompt_directive_target_update:
@@ -242,6 +265,12 @@ static acc_event_info acc_get_other_event_info(acc_event_t event_type) {
       break;
     case ompt_directive_target_teams:
       ret.other_event.parent_construct = acc_construct_parallel;
+      break;
+    case ompt_directive_omp_target_alloc:
+    case ompt_directive_omp_target_free:
+    case ompt_directive_omp_target_associate_ptr:
+    case ompt_directive_omp_target_disassociate_ptr:
+      ret.other_event.parent_construct = acc_construct_runtime_api;
       break;
     }
     ret.other_event.implicit = !directive_info->is_explicit_event;

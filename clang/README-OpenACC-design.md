@@ -2269,21 +2269,33 @@ follows:
 
 ```
 // TODO: The members listed below are those currently needed for
-// Clacc, but obviously there are more directives in OpenMP that
-// should have members here.  A specific value for each member can be
-// specified later (perhaps during standardization) for the sake of
-// backward compatibility guarantees.
+// Clacc, but obviously there are more directives and runtime library
+// routines in OpenMP that should have members here.  A specific value
+// for each member can be specified later (perhaps during
+// standardization) for the sake of backward compatibility guarantees.
+//
+// FIXME: "directive" is the wrong name now that this also includes
+// runtime library routines.  OpenACC's term is "parent construct".
+// Maybe "source" as in where it originated but also as in source code?
+// Maybe "caller" or "trigger"?
 typedef enum ompt_directive_kind_t {
   ompt_directive_unknown = 0,
   ompt_directive_target_update,
   ompt_directive_target_enter_data,
   ompt_directive_target_exit_data,
   ompt_directive_target_data,
-  ompt_directive_target_teams
+  ompt_directive_target_teams,
+  ompt_directive_omp_target_alloc,
+  ompt_directive_omp_target_free,
+  ompt_directive_omp_target_associate_ptr,
+  ompt_directive_omp_target_disassociate_ptr
 } ompt_directive_kind_t;
 
 // All fields are designed so that null-initialization is a reasonable
 // default indicating no directive or runtime call information.
+//
+// FIXME: If ompt_directive_kind_t changes its name, then so perhaps
+// should ompt_directive_info_t.
 typedef struct ompt_directive_info_t {
   ompt_directive_kind_t kind;
   int is_explicit_event;
@@ -2302,25 +2314,36 @@ typedef const char *(*ompt_get_data_expression_t) (void);
 
 These entry points can be called from OMPT callback functions.
 `ompt_get_directive_info` returns an `ompt_directive_info_t` with
-information about the directive associated with the callback, and
-`ompt_directive_info_t` is designed so that null-initialization of all
-fields logically indicates the case when the callback is not
-associated with a directive.  If the callback is
-`ompt_callback_target_data_op`, `ompt_get_data_expression` returns an
-expression identifying the data on which the operation associated with
-the callback is performed, and it otherwise returns `NULL`.  Often the
-expression is just a variable name, but it can also include a more
-complex expression, such as an array section, if specified in an
-explicit `map` clause.
+information about the directive or OpenMP runtime library routine
+associated with the callback, and `ompt_directive_info_t` is designed
+so that null-initialization of all fields logically indicates the case
+when the callback is not associated with a directive or runtime
+library routine.  If the callback is `ompt_callback_target_data_op`,
+`ompt_get_data_expression` returns an expression identifying the data
+on which the operation associated with the callback is performed, and
+it otherwise returns `NULL`.  Often the expression is just a variable
+name, but it can also include a more complex expression, such as an
+array section, if specified in an explicit `map` clause.
 
 The OMPT callback functions that Clacc's OpenACC runtime implements
 call these entry points to retrieve information to pass to OpenACC
-callbacks.  OpenACC's `parent_construct` and `implicit` fields are
-computed from the `kind` and `is_explicit_event` fields of the
-`ompt_directive_info_t` returned by `ompt_get_directive_info`, and
-source location information is taken directly from the remaining
-fields.  OpenACC's `var_name` field is taken directly from the
-expression returned by `ompt_get_data_expression`.
+callbacks.  OpenACC's `implicit` field is computed from the
+`is_explicit_event` field of the `ompt_directive_info_t` returned by
+`ompt_get_directive_info`.  If the `kind` field of the
+`ompt_directive_info_t` indicates a directive, then OpenACC's
+`parent_construct` field is computed from it, and OpenACC's
+`func_name` field is taken directly from the `func_name` field of the
+`ompt_directive_info_t`.  However, if the `kind` field indicates an
+OpenMP runtime library routine, then OpenACC's `parent_construct`
+field is set to `acc_construct_runtime_api`, and OpenACC's `func_name`
+field is computed from the `kind` field (it is not computed from the
+`func_name` field of the `ompt_directive_info_t` as this would require
+string comparisons, which would be inefficient).  OpenACC's `src_file`
+and line number fields are taken directly from the corresponding
+fields of the `ompt_directive_info_t`, and so they are null in the
+case of an OpenMP runtime library routine.  OpenACC's `var_name` field
+is taken directly from the expression returned by
+`ompt_get_data_expression`.
 
 Upstream Clang's LLVM IR codegen phase for OpenMP currently does not
 make the information required for these entry points available to the

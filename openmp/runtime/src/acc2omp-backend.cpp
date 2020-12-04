@@ -39,6 +39,12 @@ static kmp_i18n_id_t acc2omp_msg_to_llvm(acc2omp_msgid_t MsgId) {
     return kmp_i18n_msg_AccEventUnregisterUnregistered;
   case acc2omp_msg_callback_unregister_unregistered:
     return kmp_i18n_msg_AccCallbackUnregisterUnregistered;
+  case acc2omp_msg_map_data_already_present:
+    return kmp_i18n_msg_AccMapDataAlreadyPresent;
+  case acc2omp_msg_map_data_fail:
+    return kmp_i18n_msg_AccMapDataFail;
+  case acc2omp_msg_unmap_data_fail:
+    return kmp_i18n_msg_AccUnmapDataFail;
   }
   KMP_ASSERT2(0, "unexpected acc2omp_msg_t");
   return kmp_i18n_null;

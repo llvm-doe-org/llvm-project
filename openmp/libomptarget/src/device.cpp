@@ -61,14 +61,23 @@ int DeviceTy::associatePtr(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size) {
   return OFFLOAD_SUCCESS;
 }
 
-int DeviceTy::disassociatePtr(void *HstPtrBegin) {
+int DeviceTy::disassociatePtr(void *HstPtrBegin, void *&TgtPtrBegin,
+                              int64_t &Size) {
   DataMapMtx.lock();
 
   auto search = HostDataToTargetMap.find(HstPtrBeginTy{(uintptr_t)HstPtrBegin});
   if (search != HostDataToTargetMap.end()) {
     // Mapping exists
-    if (search->isRefCountInf()) {
+    if (search->getRefCount(/*UseHoldRefCount=*/true)) {
+      // This is based on OpenACC 3.1, sec 3.2.33 "acc_unmap_data", L3656-3657:
+      // "It is an error to call acc_unmap_data if the structured reference
+      // count for the pointer is not zero."
+      DP("Trying to disassociate a pointer with a non-zero hold reference "
+         "count\n");
+    } else if (search->isRefCountInf()) {
       DP("Association found, removing it\n");
+      TgtPtrBegin = (void *)search->TgtPtrBegin;
+      Size = search->HstPtrEnd - search->HstPtrBegin;
       HostDataToTargetMap.erase(search);
       DataMapMtx.unlock();
       return OFFLOAD_SUCCESS;
@@ -76,11 +85,12 @@ int DeviceTy::disassociatePtr(void *HstPtrBegin) {
       DP("Trying to disassociate a pointer which was not mapped via "
          "omp_target_associate_ptr\n");
     }
+  } else {
+    DP("Association not found\n");
   }
 
   // Mapping not found
   DataMapMtx.unlock();
-  DP("Association not found\n");
   return OFFLOAD_FAIL;
 }
 

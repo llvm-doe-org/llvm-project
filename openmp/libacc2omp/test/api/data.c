@@ -12,6 +12,23 @@
 // RUN: }
 // RUN: %data cases {
 // RUN:   (case=CASE_IS_PRESENT_SUCCESS             not-if-fail=             )
+// RUN:   (case=CASE_MAP_UNMAP_SUCCESS              not-if-fail=             )
+// RUN:   (case=CASE_MAP_SAME_HOST_AS_STRUCTURED    not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_MAP_SAME_HOST_AS_DYNAMIC       not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_MAP_SAME                       not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_MAP_SAME_HOST                  not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_MAP_HOST_EXTENDS_AFTER         not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_MAP_HOST_EXTENDS_BEFORE        not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_MAP_HOST_SUBSUMES              not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_MAP_HOST_IS_SUBSUMED           not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_MAP_HOST_NULL                  not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_MAP_DEV_NULL                   not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_UNMAP_NULL                     not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_UNMAP_UNMAPPED                 not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_UNMAP_AFTER_ONLY_STRUCTURED    not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_UNMAP_AFTER_ONLY_DYNAMIC       not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_UNMAP_AFTER_MAP_AND_STRUCTURED not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_UNMAP_AFTER_ALL_THREE          not-if-fail=%[not-if-off])
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %[cflags] \
@@ -46,7 +63,24 @@
 #include <string.h>
 
 #define FOREACH_CASE(Macro)                                                    \
-  Macro(CASE_IS_PRESENT_SUCCESS)
+  Macro(CASE_IS_PRESENT_SUCCESS)                                               \
+  Macro(CASE_MAP_UNMAP_SUCCESS)                                                \
+  Macro(CASE_MAP_SAME_HOST_AS_STRUCTURED)                                      \
+  Macro(CASE_MAP_SAME_HOST_AS_DYNAMIC)                                         \
+  Macro(CASE_MAP_SAME)                                                         \
+  Macro(CASE_MAP_SAME_HOST)                                                    \
+  Macro(CASE_MAP_HOST_EXTENDS_AFTER)                                           \
+  Macro(CASE_MAP_HOST_EXTENDS_BEFORE)                                          \
+  Macro(CASE_MAP_HOST_SUBSUMES)                                                \
+  Macro(CASE_MAP_HOST_IS_SUBSUMED)                                             \
+  Macro(CASE_MAP_HOST_NULL)                                                    \
+  Macro(CASE_MAP_DEV_NULL)                                                     \
+  Macro(CASE_UNMAP_NULL)                                                       \
+  Macro(CASE_UNMAP_UNMAPPED)                                                   \
+  Macro(CASE_UNMAP_AFTER_ONLY_STRUCTURED)                                      \
+  Macro(CASE_UNMAP_AFTER_ONLY_DYNAMIC)                                         \
+  Macro(CASE_UNMAP_AFTER_MAP_AND_STRUCTURED)                                   \
+  Macro(CASE_UNMAP_AFTER_ALL_THREE)
 
 enum Case {
 #define AddCase(CaseName) \
@@ -92,6 +126,9 @@ int main(int argc, char *argv[]) {
   case CASE_IS_PRESENT_SUCCESS: {
     int arr[] = {10, 20, 30};
     int *arr_dev;
+
+    // acc_is_present with acc_map_data/acc_unmap_data is checked in
+    // CASE_MAP_UNMAP_SUCCESS.
 
     // Check with acc data.
     //
@@ -186,7 +223,7 @@ int main(int argc, char *argv[]) {
       printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
     }
 
-    // OpenACC 3.0, sec. 3.2.36 "acc_is_present", L3066-3067:
+    // OpenACC 3.1, sec. 3.2.36 "acc_is_present", L3698-3699:
     // "If the byte length is zero, the routine returns nonzero in C/C++ or
     // .true. in Fortran if the given address is in shared memory or is present
     // at all in the current device memory."
@@ -226,6 +263,307 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  case CASE_MAP_UNMAP_SUCCESS: {
+    int arr[] = {10, 20};
+    int *arr_dev;
+
+    // OpenACC 3.1, sec. 3.2.25 "acc_free", L3444-3445:
+    // "If the argument is a NULL pointer, no operation is performed."
+    acc_free(NULL);
+
+    // Check acc_malloc then acc_free without mapping.
+    arr_dev = acc_malloc(sizeof arr);
+    if (!arr_dev) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0
+    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    acc_free(arr_dev);
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0
+    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+
+    // Check the sequence acc_malloc, acc_map_data, acc_unmap_data, and
+    // acc_free.  Between acc_map_data and acc_unmap_data, both the structured
+    // reference counter and dynamic reference counters (via enter data) are
+    // non-zero but return to zero.
+    arr_dev = acc_malloc(sizeof arr);
+    if (!arr_dev) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    acc_map_data(arr, arr_dev, sizeof arr);
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: is_present: 1
+    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    #pragma acc update device(arr)
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: 10
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: 20
+    #pragma acc parallel num_gangs(1)
+    for (int i = 0; i < 2; ++i) {
+      printf("%d\n", arr[i]);
+      arr[i] += 100;
+    }
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: 110
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: 120
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: 10
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: 20
+    for (int i = 0; i < 2; ++i)
+      printf("%d\n", arr[i]);
+    #pragma acc update self(arr)
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: 110
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: 120
+    for (int i = 0; i < 2; ++i)
+      printf("%d\n", arr[i]);
+    #pragma acc enter data create(arr)
+    #pragma acc exit data delete(arr)
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: is_present: 1
+    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    acc_unmap_data(arr);
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0
+    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: 110
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: 120
+    for (int i = 0; i < 2; ++i)
+      printf("%d\n", arr[i]);
+    acc_free(arr_dev);
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0
+    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+
+    // OpenACC 3.1, sec 3.2.33 "acc_unmap_data", L3655-3656:
+    // "After unmapping memory the dynamic reference count for the pointer is
+    // set to zero, but no data movement will occur."
+    arr_dev = acc_malloc(sizeof arr);
+    if (!arr_dev) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    acc_map_data(arr, arr_dev, sizeof arr);
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: is_present: 1
+    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    #pragma acc enter data create(arr)
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: is_present: 1
+    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    acc_unmap_data(arr);
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0
+    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    acc_map_data(arr, arr_dev, sizeof arr);
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: is_present: 1
+    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    #pragma acc enter data create(arr)
+    #pragma acc enter data create(arr)
+    #pragma acc enter data create(arr)
+    #pragma acc enter data create(arr)
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: is_present: 1
+    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    acc_unmap_data(arr);
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0
+    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+
+    // OpenACC 3.1, sec. 3.2.32 "acc_map_data", L3641-3642:
+    // "Memory mapped by acc_map_data may not have the associated dynamic
+    // reference count decremented to zero, except by a call to acc_unmap_data."
+    acc_map_data(arr, arr_dev, sizeof arr);
+    #pragma exit data delete(arr)
+    #pragma exit data delete(arr)
+    #pragma exit data delete(arr)
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: is_present: 1
+    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    acc_unmap_data(arr);
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0
+    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+
+    break;
+  }
+
+  // OpenACC 3.1, sec. 3.2.32 "acc_map_data", L3637-3638:
+  // "It is an error to call acc_map_data for host data that is already present
+  // in the current device memory."
+  case CASE_MAP_SAME_HOST_AS_STRUCTURED: {
+    int arr[] = {10, 20};
+    int *arr_dev = acc_malloc(sizeof arr);
+    if (!arr_dev) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    #pragma acc data create(arr)
+    // ERR-CASE_MAP_SAME_HOST_AS_STRUCTURED-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    acc_map_data(arr, arr_dev, sizeof arr);
+    break;
+  }
+  case CASE_MAP_SAME_HOST_AS_DYNAMIC: {
+    int arr[] = {10, 20};
+    int *arr_dev = acc_malloc(sizeof arr);
+    if (!arr_dev) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    #pragma acc enter data create(arr)
+    // ERR-CASE_MAP_SAME_HOST_AS_DYNAMIC-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    acc_map_data(arr, arr_dev, sizeof arr);
+    break;
+  }
+  case CASE_MAP_SAME: {
+    int arr[] = {10, 20};
+    int *arr_dev = acc_malloc(sizeof arr);
+    if (!arr_dev) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    acc_map_data(arr, arr_dev, sizeof arr);
+    // ERR-CASE_MAP_SAME-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    acc_map_data(arr, arr_dev, sizeof arr);
+    break;
+  }
+  case CASE_MAP_SAME_HOST: {
+    int arr[] = {10, 20};
+    int *arr_dev0 = acc_malloc(sizeof arr);
+    int *arr_dev1 = acc_malloc(sizeof arr);
+    if (!arr_dev0 || !arr_dev1) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    acc_map_data(arr, arr_dev0, sizeof arr);
+    // ERR-CASE_MAP_SAME_HOST-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    acc_map_data(arr, arr_dev1, sizeof arr);
+    break;
+  }
+  case CASE_MAP_HOST_EXTENDS_AFTER: {
+    int arr[] = {10, 20};
+    int *arr_dev0 = acc_malloc(sizeof *arr);
+    int *arr_dev1 = acc_malloc(sizeof arr);
+    if (!arr_dev0 || !arr_dev1) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    acc_map_data(arr, arr_dev0, sizeof *arr);
+    // ERR-CASE_MAP_HOST_EXTENDS_AFTER-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    acc_map_data(arr, arr_dev1, sizeof arr);
+    break;
+  }
+  case CASE_MAP_HOST_EXTENDS_BEFORE: {
+    int arr[] = {10, 20};
+    int *arr_dev0 = acc_malloc(sizeof *arr);
+    int *arr_dev1 = acc_malloc(sizeof arr);
+    if (!arr_dev0 || !arr_dev1) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    acc_map_data(arr+1, arr_dev0, sizeof *arr);
+    // ERR-CASE_MAP_HOST_EXTENDS_BEFORE-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    acc_map_data(arr, arr_dev1, sizeof arr);
+    break;
+  }
+  case CASE_MAP_HOST_SUBSUMES: {
+    int arr[] = {10, 20, 30};
+    int *arr_dev0 = acc_malloc(2 * sizeof *arr);
+    int *arr_dev1 = acc_malloc(sizeof arr);
+    if (!arr_dev0 || !arr_dev1) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    acc_map_data(arr+1, arr_dev0, 2 * sizeof *arr);
+    // ERR-CASE_MAP_HOST_SUBSUMES-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    acc_map_data(arr, arr_dev1, sizeof arr);
+    break;
+  }
+  case CASE_MAP_HOST_IS_SUBSUMED: {
+    int arr[] = {10, 20, 30};
+    int *arr_dev0 = acc_malloc(sizeof arr);
+    int *arr_dev1 = acc_malloc(2 * sizeof *arr);
+    if (!arr_dev0 || !arr_dev1) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    acc_map_data(arr, arr_dev0, sizeof arr);
+    // ERR-CASE_MAP_HOST_IS_SUBSUMED-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    acc_map_data(arr+1, arr_dev1, 2 * sizeof *arr);
+    break;
+  }
+
+  case CASE_MAP_HOST_NULL: {
+    int *arr_dev = acc_malloc(sizeof *arr_dev);
+    if (!arr_dev) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    // ERR-CASE_MAP_HOST_NULL-OFF: OMP: Error #[[#]]: acc_map_data failed
+    acc_map_data(NULL, arr_dev, sizeof *arr_dev);
+    break;
+  }
+  case CASE_MAP_DEV_NULL: {
+    int arr[] = {10, 20};
+    // ERR-CASE_MAP_DEV_NULL-OFF: OMP: Error #[[#]]: acc_map_data failed
+    acc_map_data(arr, NULL, sizeof arr);
+    break;
+  }
+  case CASE_UNMAP_NULL: {
+    // ERR-CASE_UNMAP_NULL-OFF: OMP: Error #[[#]]: acc_unmap_data failed
+    acc_unmap_data(NULL);
+    break;
+  }
+
+  // OpenACC 3.1, sec. 3.2.33 "acc_unmap_data", L3653-3655:
+  // "It is undefined behavior to call acc_unmap_data with a host address unless
+  // that host address was mapped to device memory using acc_map_data."
+  case CASE_UNMAP_UNMAPPED: {
+    int arr[] = {10, 20};
+    // ERR-CASE_UNMAP_UNMAPPED-OFF: OMP: Error #[[#]]: acc_unmap_data failed
+    acc_unmap_data(arr);
+    break;
+  }
+  case CASE_UNMAP_AFTER_ONLY_STRUCTURED: {
+    int arr[] = {10, 20};
+    #pragma acc data create(arr)
+    // ERR-CASE_UNMAP_AFTER_ONLY_STRUCTURED-OFF: OMP: Error #[[#]]: acc_unmap_data failed
+    acc_unmap_data(arr);
+    break;
+  }
+  case CASE_UNMAP_AFTER_ONLY_DYNAMIC: {
+    int arr[] = {10, 20};
+    #pragma acc enter data create(arr)
+    // ERR-CASE_UNMAP_AFTER_ONLY_DYNAMIC-OFF: OMP: Error #[[#]]: acc_unmap_data failed
+    acc_unmap_data(arr);
+    break;
+  }
+
+  // OpenACC 3.1, sec 3.2.33 "acc_unmap_data", L3656-3657:
+  // "It is an error to call acc_unmap_data if the structured reference count
+  // for the pointer is not zero."
+  case CASE_UNMAP_AFTER_MAP_AND_STRUCTURED: {
+    int arr[] = {10, 20};
+    int *arr_dev = acc_malloc(sizeof arr);
+    if (!arr_dev) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    acc_map_data(arr, arr_dev, sizeof arr);
+    #pragma acc data create(arr)
+    // ERR-CASE_UNMAP_AFTER_MAP_AND_STRUCTURED-OFF: OMP: Error #[[#]]: acc_unmap_data failed
+    acc_unmap_data(arr);
+    break;
+  }
+  case CASE_UNMAP_AFTER_ALL_THREE: {
+    int arr[] = {10, 20};
+    int *arr_dev = acc_malloc(sizeof arr);
+    if (!arr_dev) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    acc_map_data(arr, arr_dev, sizeof arr);
+    #pragma acc enter data create(arr)
+    #pragma acc data create(arr)
+    // ERR-CASE_UNMAP_AFTER_ALL_THREE-OFF: OMP: Error #[[#]]: acc_unmap_data failed
+    acc_unmap_data(arr);
+    break;
+  }
+
   case CASE_END:
     fprintf(stderr, "unexpected CASE_END\n");
     break;
@@ -234,4 +572,5 @@ int main(int argc, char *argv[]) {
 }
 
 // OUT-NOT: {{.}}
-// ERR-NOT: {{.}}
+// An abort messages usually follows any error.
+// ERR-NOT: {{(OMP:|Libomptarget)}}

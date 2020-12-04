@@ -78,11 +78,16 @@ static void print_event_info(acc_event_info *ei) {
     printf("  acc_data_event_info\n");
     print_other_event_info(&ei->other_event);
     printf(",\n"
-           "    var_name=%s, bytes=%zu,\n"
-           "    host_ptr=%p,\n"
-           "    device_ptr=%p\n",
+           "    var_name=%s, bytes=%zu,\n",
            ei->data_event.var_name ? ei->data_event.var_name : "(null)",
-           ei->data_event.bytes, ei->data_event.host_ptr,
+           ei->data_event.bytes);
+    printf("    host_ptr=");
+    if (ei->data_event.host_ptr)
+      printf("%p", ei->data_event.host_ptr);
+    else
+      printf("(null)");
+    printf(",\n"
+           "    device_ptr=%p\n",
            ei->data_event.device_ptr);
     break;
   case acc_ev_enqueue_launch_start:

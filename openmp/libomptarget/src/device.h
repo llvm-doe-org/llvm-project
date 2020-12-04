@@ -230,7 +230,7 @@ struct DeviceTy {
   int deallocTgtPtr(void *TgtPtrBegin, int64_t Size, bool ForceDelete,
                     bool HasCloseModifier, bool HasHoldModifier);
   int associatePtr(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size);
-  int disassociatePtr(void *HstPtrBegin);
+  int disassociatePtr(void *HstPtrBegin, void *&TgtPtrBegin, int64_t &Size);
 
   // calls to RTL
   int32_t initOnce();

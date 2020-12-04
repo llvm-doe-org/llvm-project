@@ -608,7 +608,11 @@ typedef enum ompt_directive_kind_t {
   ompt_directive_target_enter_data,
   ompt_directive_target_exit_data,
   ompt_directive_target_data,
-  ompt_directive_target_teams
+  ompt_directive_target_teams,
+  ompt_directive_omp_target_alloc,
+  ompt_directive_omp_target_free,
+  ompt_directive_omp_target_associate_ptr,
+  ompt_directive_omp_target_disassociate_ptr
 } ompt_directive_kind_t;
 
 typedef struct ompt_directive_info_t {
