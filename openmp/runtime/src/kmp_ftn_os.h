@@ -119,6 +119,7 @@
 #define FTN_TARGET_MEMCPY_RECT omp_target_memcpy_rect
 #define FTN_TARGET_ASSOCIATE_PTR omp_target_associate_ptr
 #define FTN_TARGET_DISASSOCIATE_PTR omp_target_disassociate_ptr
+#define FTN_GET_MAPPED_PTR omp_get_mapped_ptr
 #endif
 
 #define FTN_CONTROL_TOOL omp_control_tool
@@ -242,6 +243,7 @@
 #define FTN_TARGET_MEMCPY_RECT omp_target_memcpy_rect_
 #define FTN_TARGET_ASSOCIATE_PTR omp_target_associate_ptr_
 #define FTN_TARGET_DISASSOCIATE_PTR omp_target_disassociate_ptr_
+#define FTN_GET_MAPPED_PTR omp_get_mapped_ptr_
 #endif
 
 #define FTN_CONTROL_TOOL omp_control_tool_
@@ -367,6 +369,7 @@
 #define FTN_TARGET_MEMCPY_RECT OMP_TARGET_MEMCPY_RECT
 #define FTN_TARGET_ASSOCIATE_PTR OMP_TARGET_ASSOCIATE_PTR
 #define FTN_TARGET_DISASSOCIATE_PTR OMP_TARGET_DISASSOCIATE_PTR
+#define FTN_GET_MAPPED_PTR OMP_GET_MAPPED_PTR
 #endif
 
 #define FTN_CONTROL_TOOL OMP_CONTROL_TOOL
@@ -490,6 +493,7 @@
 #define FTN_TARGET_MEMCPY_RECT OMP_TARGET_MEMCPY_RECT_
 #define FTN_TARGET_ASSOCIATE_PTR OMP_TARGET_ASSOCIATE_PTR_
 #define FTN_TARGET_DISASSOCIATE_PTR OMP_TARGET_DISASSOCIATE_PTR_
+#define FTN_GET_MAPPED_PTR OMP_GET_MAPPED_PTR_
 #endif
 
 #define FTN_CONTROL_TOOL OMP_CONTROL_TOOL_

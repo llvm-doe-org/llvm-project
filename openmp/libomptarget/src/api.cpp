@@ -257,6 +257,40 @@ EXTERN omp_present_t omp_target_range_is_present(void *ptr, size_t size,
   return omp_present_none;
 }
 
+EXTERN void *omp_get_mapped_ptr(const void *ptr, int device_num) {
+  DP("Call to omp_get_mapped_ptr for device %d and address " DPxMOD
+     "\n",
+     device_num, DPxPTR(ptr));
+
+  if (!ptr) {
+    DP("Call to omp_get_mapped_ptr with NULL ptr, returning NULL\n");
+    return NULL;
+  }
+
+  if (device_num == omp_get_initial_device()) {
+    DP("Call to omp_get_mapped_ptr on host, returning host pointer\n");
+    return const_cast<void *>(ptr);
+  }
+
+  RTLsMtx->lock();
+  size_t Devices_size = Devices.size();
+  RTLsMtx->unlock();
+  if (Devices_size <= (size_t)device_num) {
+    DP("Call to omp_get_mapped_ptr with invalid device ID, returning NULL\n");
+    return NULL;
+  }
+
+  DeviceTy &Device = Devices[device_num];
+  LookupResult lr = Device.lookupMapping(const_cast<void *>(ptr), 0);
+  if (!lr.Flags.IsContained) {
+    DP("Call to omp_get_mapped_ptr for unmapped ptr, returning NULL\n");
+    return NULL;
+  }
+  DP("Call to omp_get_mapped_ptr for mapped ptr, returns non-NULL\n");
+  uintptr_t Offset = (uintptr_t)ptr - lr.Entry->HstPtrBegin;
+  return (void *)(lr.Entry->TgtPtrBegin + Offset);
+}
+
 EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
     size_t dst_offset, size_t src_offset, int dst_device, int src_device) {
   DP("Call to omp_target_memcpy, dst device %d, src device %d, "

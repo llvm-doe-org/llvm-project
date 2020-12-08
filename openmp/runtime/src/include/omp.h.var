@@ -152,6 +152,9 @@
     extern int   __KAI_KMPC_CONVENTION  omp_get_device_num (void);
     typedef void * omp_depend_t;
 
+    /* OpenMP 5.1 */
+    extern void *__KAI_KMPC_CONVENTION omp_get_mapped_ptr(const void *, int);
+
     /* OpenMP extensions for OpenACC support */
     typedef enum omp_present_t {
         omp_present_none = 0,

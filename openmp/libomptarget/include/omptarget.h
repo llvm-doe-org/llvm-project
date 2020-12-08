@@ -158,6 +158,7 @@ int omp_target_memcpy_rect(void *dst, void *src, size_t element_size,
 int omp_target_associate_ptr(void *host_ptr, void *device_ptr, size_t size,
     size_t device_offset, int device_num);
 int omp_target_disassociate_ptr(void *host_ptr, int device_num);
+void *omp_get_mapped_ptr(const void *ptr, int device_num);
 
 /// add the clauses of the requires directives in a given file
 void __tgt_register_requires(int64_t flags);
