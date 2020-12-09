@@ -1862,9 +1862,10 @@ version of LLVM's OpenMP runtime.  It is built as the library
 
 Support for the OpenACC Runtime Library API appears primarily in the
 source file `openmp/libacc2omp/src/api.cpp`.  Clacc's mapping to the
-OpenMP Runtime Library Routines can be found there.  That mapping
-relies on the following OpenMP extensions, which are implemented in
-Clacc's version of LLVM's OpenMP runtime library:
+OpenMP Runtime Library Routines can be found there along with notes on
+relevant ambiguities in the OpenACC and OpenMP specifications.  That
+mapping relies on the following OpenMP extensions, which are
+implemented in Clacc's version of LLVM's OpenMP runtime library:
 
 * `omp_present_t`
 * `omp_target_range_is_present`
