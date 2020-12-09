@@ -218,6 +218,27 @@ void acc_unmap_data(void *data_arg) {
   acc2omp_fatal(ACC2OMP_MSG(unmap_data_fail));
 }
 
+void *acc_deviceptr(void *data_arg) {
+  // If offloading is disabled (thus shared memory):
+  // - Return data_arg, for consistency with acc_is_present, which always
+  //   returns true in this case.
+  // - This behavior appears to mimic nvc 20.9-0.
+  // - OpenACC 3.1 is unclear about the behavior in this case.
+  //
+  // Handling of null pointer:
+  // - Return a null pointer.
+  // - This behavior appears to mimic nvc 20.9-0.
+  // - OpenACC 3.1 is unclear about the behavior in this case.
+  if (!omp_get_num_devices() || !data_arg)
+    return data_arg;
+  // OpenACC 3.1, sec. 3.2.34 "acc_deviceptr", L3665-3667:
+  // "The acc_deviceptr routine returns the device pointer associated with a
+  // host address.  data_arg is the address of a host variable or array that has
+  // an active lifetime on the current device.  If the data is not present in
+  // the current device memory, the routine returns a NULL value."
+  return omp_get_mapped_ptr(data_arg, omp_get_default_device());
+}
+
 int acc_is_present(void *data_arg, size_t bytes) {
   // OpenACC 3.1, sec. 3.2.36 "acc_is_present", L3696-3697:
   // "The routine returns .true. if the specified data is in shared memory or

@@ -11,6 +11,7 @@
 // RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off=HOST               not-if-off=                 )
 // RUN: }
 // RUN: %data cases {
+// RUN:   (case=CASE_DEVICEPTR_SUCCESS              not-if-fail=             )
 // RUN:   (case=CASE_IS_PRESENT_SUCCESS             not-if-fail=             )
 // RUN:   (case=CASE_MAP_UNMAP_SUCCESS              not-if-fail=             )
 // RUN:   (case=CASE_MAP_SAME_HOST_AS_STRUCTURED    not-if-fail=%[not-if-off])
@@ -63,6 +64,7 @@
 #include <string.h>
 
 #define FOREACH_CASE(Macro)                                                    \
+  Macro(CASE_DEVICEPTR_SUCCESS)                                                \
   Macro(CASE_IS_PRESENT_SUCCESS)                                               \
   Macro(CASE_MAP_UNMAP_SUCCESS)                                                \
   Macro(CASE_MAP_SAME_HOST_AS_STRUCTURED)                                      \
@@ -123,9 +125,84 @@ int main(int argc, char *argv[]) {
   printf("start\n");
   fflush(stdout);
   switch (selectedCase) {
+  case CASE_DEVICEPTR_SUCCESS: {
+    int arr[3];
+    // OUT-CASE_DEVICEPTR_SUCCESS-NEXT: arr: 0x[[#%x,ARR:]]
+    // OUT-CASE_DEVICEPTR_SUCCESS-NEXT: element size: [[#%u,ELE_SIZE:]]
+    printf("arr: %p\n", arr);
+    printf("element size: %zu\n", sizeof *arr);
+
+    // acc_deviceptr with acc_map_data/acc_unmap_data is checked in
+    // CASE_MAP_UNMAP_SUCCESS.
+
+    // Check with acc data.
+    //
+    // OUT-CASE_DEVICEPTR_SUCCESS-HOST-NEXT: deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_DEVICEPTR_SUCCESS-OFF-NEXT: deviceptr: (nil)
+    printf("deviceptr: %p\n", acc_deviceptr(arr));
+    #pragma acc data create(arr)
+    {
+      // OUT-CASE_DEVICEPTR_SUCCESS-HOST-NEXT: deviceptr: 0x[[#ARR_DEV:ARR]]
+      //  OUT-CASE_DEVICEPTR_SUCCESS-OFF-NEXT: deviceptr: 0x[[#%x,ARR_DEV:]]
+      //      OUT-CASE_DEVICEPTR_SUCCESS-NEXT: deviceptr: 0x[[#ARR_DEV]]
+      //      OUT-CASE_DEVICEPTR_SUCCESS-NEXT: deviceptr: 0x[[#ARR_DEV]]
+      printf("deviceptr: %p\n", acc_deviceptr(arr));
+      #pragma acc data create(arr)
+      {
+        printf("deviceptr: %p\n", acc_deviceptr(arr));
+      }
+      printf("deviceptr: %p\n", acc_deviceptr(arr));
+    }
+    // OUT-CASE_DEVICEPTR_SUCCESS-HOST-NEXT: deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_DEVICEPTR_SUCCESS-OFF-NEXT: deviceptr: (nil)
+    printf("deviceptr: %p\n", acc_deviceptr(arr));
+
+    // Check with acc enter/exit data.
+    //
+    // OUT-CASE_DEVICEPTR_SUCCESS-HOST-NEXT: deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_DEVICEPTR_SUCCESS-OFF-NEXT: deviceptr: (nil)
+    // OUT-CASE_DEVICEPTR_SUCCESS-HOST-NEXT: deviceptr: 0x[[#ARR_DEV:ARR]]
+    //  OUT-CASE_DEVICEPTR_SUCCESS-OFF-NEXT: deviceptr: 0x[[#%x,ARR_DEV:]]
+    //      OUT-CASE_DEVICEPTR_SUCCESS-NEXT: deviceptr: 0x[[#ARR_DEV]]
+    //      OUT-CASE_DEVICEPTR_SUCCESS-NEXT: deviceptr: 0x[[#ARR_DEV]]
+    // OUT-CASE_DEVICEPTR_SUCCESS-HOST-NEXT: deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_DEVICEPTR_SUCCESS-OFF-NEXT: deviceptr: (nil)
+    printf("deviceptr: %p\n", acc_deviceptr(arr));
+    #pragma acc enter data create(arr)
+    printf("deviceptr: %p\n", acc_deviceptr(arr));
+    #pragma acc enter data create(arr)
+    printf("deviceptr: %p\n", acc_deviceptr(arr));
+    #pragma acc exit data delete(arr)
+    printf("deviceptr: %p\n", acc_deviceptr(arr));
+    #pragma acc exit data delete(arr)
+    printf("deviceptr: %p\n", acc_deviceptr(arr));
+
+    // Check that the correct offset is computed when the address is within a
+    // larger allocation.
+    #pragma acc data create(arr)
+    {
+      // OUT-CASE_DEVICEPTR_SUCCESS-HOST-NEXT: deviceptr: 0x[[#ARR_DEV:ARR]]
+      //  OUT-CASE_DEVICEPTR_SUCCESS-OFF-NEXT: deviceptr: 0x[[#%x,ARR_DEV:]]
+      //      OUT-CASE_DEVICEPTR_SUCCESS-NEXT: deviceptr: 0x[[#%x,ARR_DEV + ELE_SIZE]]
+      //      OUT-CASE_DEVICEPTR_SUCCESS-NEXT: deviceptr: 0x[[#%x,ARR_DEV + ELE_SIZE + ELE_SIZE]]
+      // OUT-CASE_DEVICEPTR_SUCCESS-HOST-NEXT: deviceptr: 0x[[#%x,ARR_DEV + ELE_SIZE + ELE_SIZE + ELE_SIZE]]
+      //  OUT-CASE_DEVICEPTR_SUCCESS-OFF-NEXT: deviceptr: (nil)
+      printf("deviceptr: %p\n", acc_deviceptr(arr));
+      printf("deviceptr: %p\n", acc_deviceptr(arr + 1));
+      printf("deviceptr: %p\n", acc_deviceptr(arr + 2));
+      printf("deviceptr: %p\n", acc_deviceptr(arr + 3));
+    }
+
+    // Check case of null pointer.
+    //
+    // OUT-CASE_DEVICEPTR_SUCCESS-NEXT: deviceptr: (nil)
+    printf("deviceptr: %p\n", acc_deviceptr(NULL));
+
+    break;
+  }
+
   case CASE_IS_PRESENT_SUCCESS: {
     int arr[] = {10, 20, 30};
-    int *arr_dev;
 
     // acc_is_present with acc_map_data/acc_unmap_data is checked in
     // CASE_MAP_UNMAP_SUCCESS.
@@ -267,6 +344,9 @@ int main(int argc, char *argv[]) {
     int arr[] = {10, 20};
     int *arr_dev;
 
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: arr: 0x[[#%x,ARR:]]
+    printf("arr: %p\n", arr);
+
     // OpenACC 3.1, sec. 3.2.25 "acc_free", L3444-3445:
     // "If the argument is a NULL pointer, no operation is performed."
     acc_free(NULL);
@@ -277,13 +357,15 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "acc_malloc failed\n");
       return 1;
     }
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0
-    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1, deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0, deviceptr: (nil)
+    printf("is_present: %d, deviceptr: %p\n", acc_is_present(arr, sizeof arr),
+           acc_deviceptr(arr));
     acc_free(arr_dev);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0
-    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1, deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0, deviceptr: (nil)
+    printf("is_present: %d, deviceptr: %p\n", acc_is_present(arr, sizeof arr),
+           acc_deviceptr(arr));
 
     // Check the sequence acc_malloc, acc_map_data, acc_unmap_data, and
     // acc_free.  Between acc_map_data and acc_unmap_data, both the structured
@@ -294,9 +376,13 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "acc_malloc failed\n");
       return 1;
     }
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: arr_dev: 0x[[#%x,ARR_DEV:]]
+    printf("arr_dev: %p\n", arr_dev);
     acc_map_data(arr, arr_dev, sizeof arr);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: is_present: 1
-    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1, deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 1, deviceptr: 0x[[#ARR_DEV]]
+    printf("is_present: %d, deviceptr: %p\n", acc_is_present(arr, sizeof arr),
+           acc_deviceptr(arr));
     #pragma acc update device(arr)
     // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: 10
     // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: 20
@@ -318,20 +404,24 @@ int main(int argc, char *argv[]) {
       printf("%d\n", arr[i]);
     #pragma acc enter data create(arr)
     #pragma acc exit data delete(arr)
-    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: is_present: 1
-    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1, deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 1, deviceptr: 0x[[#ARR_DEV]]
+    printf("is_present: %d, deviceptr: %p\n", acc_is_present(arr, sizeof arr),
+           acc_deviceptr(arr));
     acc_unmap_data(arr);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0
-    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1, deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0, deviceptr: (nil)
+    printf("is_present: %d, deviceptr: %p\n", acc_is_present(arr, sizeof arr),
+           acc_deviceptr(arr));
     // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: 110
     // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: 120
     for (int i = 0; i < 2; ++i)
       printf("%d\n", arr[i]);
     acc_free(arr_dev);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0
-    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1, deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0, deviceptr: (nil)
+    printf("is_present: %d, deviceptr: %p\n", acc_is_present(arr, sizeof arr),
+           acc_deviceptr(arr));
 
     // OpenACC 3.1, sec 3.2.33 "acc_unmap_data", L3655-3656:
     // "After unmapping memory the dynamic reference count for the pointer is
@@ -341,29 +431,41 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "acc_malloc failed\n");
       return 1;
     }
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: arr_dev: 0x[[#%x,ARR_DEV:]]
+    printf("arr_dev: %p\n", arr_dev);
     acc_map_data(arr, arr_dev, sizeof arr);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: is_present: 1
-    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1, deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 1, deviceptr: 0x[[#ARR_DEV]]
+    printf("is_present: %d, deviceptr: %p\n", acc_is_present(arr, sizeof arr),
+           acc_deviceptr(arr));
     #pragma acc enter data create(arr)
-    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: is_present: 1
-    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1, deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 1, deviceptr: 0x[[#ARR_DEV]]
+    printf("is_present: %d, deviceptr: %p\n", acc_is_present(arr, sizeof arr),
+           acc_deviceptr(arr));
     acc_unmap_data(arr);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0
-    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1, deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0, deviceptr: (nil)
+    printf("is_present: %d, deviceptr: %p\n", acc_is_present(arr, sizeof arr),
+           acc_deviceptr(arr));
     acc_map_data(arr, arr_dev, sizeof arr);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: is_present: 1
-    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1, deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 1, deviceptr: 0x[[#ARR_DEV]]
+    printf("is_present: %d, deviceptr: %p\n", acc_is_present(arr, sizeof arr),
+           acc_deviceptr(arr));
     #pragma acc enter data create(arr)
     #pragma acc enter data create(arr)
     #pragma acc enter data create(arr)
     #pragma acc enter data create(arr)
-    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: is_present: 1
-    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1, deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 1, deviceptr: 0x[[#ARR_DEV]]
+    printf("is_present: %d, deviceptr: %p\n", acc_is_present(arr, sizeof arr),
+           acc_deviceptr(arr));
     acc_unmap_data(arr);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0
-    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1, deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0, deviceptr: (nil)
+    printf("is_present: %d, deviceptr: %p\n", acc_is_present(arr, sizeof arr),
+           acc_deviceptr(arr));
 
     // OpenACC 3.1, sec. 3.2.32 "acc_map_data", L3641-3642:
     // "Memory mapped by acc_map_data may not have the associated dynamic
@@ -372,12 +474,15 @@ int main(int argc, char *argv[]) {
     #pragma exit data delete(arr)
     #pragma exit data delete(arr)
     #pragma exit data delete(arr)
-    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: is_present: 1
-    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1, deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 1, deviceptr: 0x[[#ARR_DEV]]
+    printf("is_present: %d, deviceptr: %p\n", acc_is_present(arr, sizeof arr),
+           acc_deviceptr(arr));
     acc_unmap_data(arr);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0
-    printf("is_present: %d\n", acc_is_present(arr, sizeof arr));
+    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: is_present: 1, deviceptr: 0x[[#ARR]]
+    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: is_present: 0, deviceptr: (nil)
+    printf("is_present: %d, deviceptr: %p\n", acc_is_present(arr, sizeof arr),
+           acc_deviceptr(arr));
 
     break;
   }

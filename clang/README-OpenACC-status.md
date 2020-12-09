@@ -324,6 +324,12 @@ OpenACC Runtime Library API and Preprocessor
           part of the host memory specified to `acc_map_data` has
           already been mapped.  Clacc produces a runtime error in that
           case.
+    * `acc_deviceptr`
+        * OpenACC 3.1 is unclear about the behavior when offloading is
+          disabled (thus shared memory).  Clacc returns the host
+          pointer in that case.
+        * OpenACC 3.1 is unclear about handling of a null pointer.
+          Clacc returns a null pointer in that case.
     * `acc_is_present`
         * OpenACC 3.1 is unclear about handling of a null pointer.
           Clacc returns true in that case.

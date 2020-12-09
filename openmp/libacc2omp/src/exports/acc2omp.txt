@@ -6,6 +6,7 @@ VERS1.0 {
     acc_free;
     acc_map_data;
     acc_unmap_data;
+    acc_deviceptr;
     acc_is_present;
   local:
     *;
