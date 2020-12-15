@@ -296,7 +296,8 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
 // Decrement the reference counter if called from targetDataEnd.
 void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
                                bool UpdateRefCount, bool UseHoldRefCount,
-                               bool &IsHostPtr, bool MustContain) {
+                               bool &IsHostPtr, bool MustContain,
+                               bool HasDeleteModifier) {
   void *rc = NULL;
   IsHostPtr = false;
   IsLast = false;
@@ -306,10 +307,15 @@ void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
   if (lr.Flags.IsContained ||
       (!MustContain && (lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter))) {
     auto &HT = *lr.Entry;
-    IsLast = HT.getRefCount() == 1 && HT.getRefCount(UseHoldRefCount) == 1;
+    IsLast = (HT.getRefCount() == 1 && HT.getRefCount(UseHoldRefCount) == 1) ||
+             (HasDeleteModifier && !HT.getRefCount(/*UseHoldRefCount=*/true) &&
+              !HT.isRefCountInf());
 
-    if (!IsLast && UpdateRefCount && HT.getRefCount(UseHoldRefCount) > 0)
+    if (!IsLast && UpdateRefCount && HT.getRefCount(UseHoldRefCount) > 0) {
+      if (HasDeleteModifier)
+        HT.resetRefCount();
       HT.decRefCount(UseHoldRefCount);
+    }
 
     uintptr_t tp = HT.TgtPtrBegin + ((uintptr_t)HstPtrBegin - HT.HstPtrBegin);
     DP("Mapping exists with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD ", "

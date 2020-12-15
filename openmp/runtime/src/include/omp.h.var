@@ -156,16 +156,44 @@
     extern void *__KAI_KMPC_CONVENTION omp_get_mapped_ptr(const void *, int);
 
     /* OpenMP extensions for OpenACC support */
+
+    // TODO: Currently, these routines are not well tested outside of the
+    // OpenACC runtime, so they are not yet recommended for general use in
+    // OpenMP code.
+
     typedef enum omp_present_t {
-        omp_present_none = 0,
+        omp_present_none = 0, // has value of false
         omp_present_partial = 1,
         omp_present_full = 2
     } omp_present_t;
-    // TODO: Currently, omp_target_range_is_present is not well tested outside
-    // of the OpenACC runtime, so it is not yet recommended for general use in
-    // OpenMP code.
+
+    // Same as omp_target_is_present except it determines whether a range of
+    // bytes (as opposed to a single address) is not present, only partially
+    // present, or fully present.
     extern omp_present_t __KAI_KMPC_CONVENTION
     omp_target_range_is_present(void *, size_t, int);
+
+    // Same as an OpenMP "target enter data" construct with:
+    // - A device clause for the specified device number.
+    // - A map clause with:
+    //   - A "to" or "alloc" map type.
+    //   - A locator for the specified host memory range.
+    // The result is a pointer to the device allocation.
+    extern void *__KAI_KMPC_CONVENTION omp_target_map_to(void *, size_t, int);
+    extern void *__KAI_KMPC_CONVENTION omp_target_map_alloc(void *, size_t, int);
+
+    // Same as an OpenMP "target exit data" construct with:
+    // - A device clause for the specified device number.
+    // - A map clause with:
+    //   - A "from", "release", or "delete" map type.
+    //   - A locator for the specified host memory range.
+    // In the case of "omp_target_map_from_delete", the behavior is that of two
+    // map clauses, such that both the transfer and deallocation occurs, except
+    // that two map clauses for the same variable isn't supported yet.
+    extern void __KAI_KMPC_CONVENTION omp_target_map_from(void *, size_t, int);
+    extern void __KAI_KMPC_CONVENTION omp_target_map_from_delete(void *, size_t, int);
+    extern void __KAI_KMPC_CONVENTION omp_target_map_release(void *, size_t, int);
+    extern void __KAI_KMPC_CONVENTION omp_target_map_delete(void *, size_t, int);
 
     /* kmp API functions */
     extern int    __KAI_KMPC_CONVENTION  kmp_get_stacksize          (void);

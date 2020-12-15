@@ -159,6 +159,12 @@ int omp_target_associate_ptr(void *host_ptr, void *device_ptr, size_t size,
     size_t device_offset, int device_num);
 int omp_target_disassociate_ptr(void *host_ptr, int device_num);
 void *omp_get_mapped_ptr(const void *ptr, int device_num);
+void *omp_target_map_to(void *, size_t, int);
+void omp_target_map_from(void *, size_t, int);
+void omp_target_map_from_delete(void *, size_t, int);
+void *omp_target_map_alloc(void *, size_t, int);
+void omp_target_map_release(void *, size_t, int);
+void omp_target_map_delete(void *, size_t, int);
 
 /// add the clauses of the requires directives in a given file
 void __tgt_register_requires(int64_t flags);

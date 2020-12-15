@@ -36,6 +36,12 @@ VERS1.0 {
     omp_target_associate_ptr;
     omp_target_disassociate_ptr;
     omp_get_mapped_ptr;
+    omp_target_map_to;
+    omp_target_map_from;
+    omp_target_map_from_delete;
+    omp_target_map_alloc;
+    omp_target_map_release;
+    omp_target_map_delete;
     __kmpc_push_target_tripcount;
   local:
     *;

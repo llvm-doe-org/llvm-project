@@ -596,10 +596,17 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
     bool HasPresentModifier = ArgTypes[I] & OMP_TGT_MAPTYPE_PRESENT;
     bool HasHoldModifier = ArgTypes[I] & OMP_TGT_MAPTYPE_HOLD;
 
+    // "delete" is implemented only for the dynamic reference count.  That
+    // should be fine as "hold" is permitted only on "omp target data" and
+    // "delete" is permitted only on "omp target exit data" and associated
+    // runtime library routines.
+    assert((!ForceDelete || !HasHoldModifier) &&
+           "unexpected 'delete' modifier with 'hold' modifier");
+
     // If PTR_AND_OBJ, HstPtrBegin is address of pointee
-    void *TgtPtrBegin =
-        Device.getTgtPtrBegin(HstPtrBegin, DataSize, IsLast, UpdateRef,
-                              HasHoldModifier, IsHostPtr, !IsImplicit);
+    void *TgtPtrBegin = Device.getTgtPtrBegin(
+        HstPtrBegin, DataSize, IsLast, UpdateRef, HasHoldModifier, IsHostPtr,
+        !IsImplicit, ForceDelete);
     if (!TgtPtrBegin && (DataSize || HasPresentModifier)) {
       DP("Mapping does not exist (%s)\n",
          (HasPresentModifier ? "'present' map type modifier" : "ignored"));
@@ -626,7 +633,7 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
          DataSize, DPxPTR(TgtPtrBegin), (IsLast ? "" : " not"));
     }
 
-    bool DelEntry = IsLast || ForceDelete;
+    bool DelEntry = IsLast;
 
     if ((ArgTypes[I] & OMP_TGT_MAPTYPE_MEMBER_OF) &&
         !(ArgTypes[I] & OMP_TGT_MAPTYPE_PTR_AND_OBJ)) {

@@ -484,3 +484,45 @@ EXTERN int omp_target_disassociate_ptr(void *host_ptr, int device_num) {
   DP("omp_target_disassociate_ptr returns %d\n", rc);
   return rc;
 }
+
+EXTERN void *omp_target_map_to(void *host_ptr, size_t size, int device_num) {
+  int64_t tgt_map_type = OMP_TGT_MAPTYPE_TO;
+  int64_t s = size;
+  __tgt_target_data_begin(device_num, 1, &host_ptr, &host_ptr, &s,
+                          &tgt_map_type);
+  return omp_get_mapped_ptr(host_ptr, device_num);
+}
+
+EXTERN void *omp_target_map_alloc(void *host_ptr, size_t size, int device_num) {
+  int64_t tgt_map_type = OMP_TGT_MAPTYPE_NONE;
+  int64_t s = size;
+  __tgt_target_data_begin(device_num, 1, &host_ptr, &host_ptr, &s,
+                          &tgt_map_type);
+  return omp_get_mapped_ptr(host_ptr, device_num);
+}
+
+EXTERN void omp_target_map_from(void *host_ptr, size_t size, int device_num) {
+  int64_t tgt_map_type = OMP_TGT_MAPTYPE_FROM;
+  int64_t s = size;
+  __tgt_target_data_end(device_num, 1, &host_ptr, &host_ptr, &s, &tgt_map_type);
+}
+
+EXTERN void omp_target_map_from_delete(void *host_ptr, size_t size,
+                                       int device_num) {
+  int64_t tgt_map_type = OMP_TGT_MAPTYPE_FROM | OMP_TGT_MAPTYPE_DELETE;
+  int64_t s = size;
+  __tgt_target_data_end(device_num, 1, &host_ptr, &host_ptr, &s, &tgt_map_type);
+}
+
+EXTERN void omp_target_map_release(void *host_ptr, size_t size,
+                                   int device_num) {
+  int64_t tgt_map_type = OMP_TGT_MAPTYPE_NONE;
+  int64_t s = size;
+  __tgt_target_data_end(device_num, 1, &host_ptr, &host_ptr, &s, &tgt_map_type);
+}
+
+EXTERN void omp_target_map_delete(void *host_ptr, size_t size, int device_num) {
+  int64_t tgt_map_type = OMP_TGT_MAPTYPE_DELETE;
+  int64_t s = size;
+  __tgt_target_data_end(device_num, 1, &host_ptr, &host_ptr, &s, &tgt_map_type);
+}
