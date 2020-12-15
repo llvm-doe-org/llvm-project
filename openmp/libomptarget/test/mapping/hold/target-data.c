@@ -69,9 +69,7 @@ int main() {
     }
     // CHECK-NEXT: presence of m, r, d: 0, 0, 0
     CHECK_PRESENCE(m, r, d);
-    // FIXME: 'delete' when not present should be fine, but currently it
-    // produces a runtime error.
-    #pragma omp target exit data map(from: m) map(release: r) //map(delete: d)
+    #pragma omp target exit data map(from: m) map(release: r) map(delete: d)
     // CHECK-NEXT: presence of m, r, d: 0, 0, 0
     CHECK_PRESENCE(m, r, d);
   }
