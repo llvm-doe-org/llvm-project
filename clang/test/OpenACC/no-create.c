@@ -82,6 +82,11 @@
 // RUN:   (case=CASE_INHERITED_SUBARRAY_PRESENT      not-crash-if-fail=                             )
 // RUN:   (case=CASE_INHERITED_SUBARRAY_ABSENT       not-crash-if-fail=                             )
 // RUN: }
+// RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
+// RUN: %for cases {
+// RUN:   echo '  Macro(%[case]) \' >> %t-cases.h
+// RUN: }
+// RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
 
 // Check -ast-dump before and after AST serialization.
 //
@@ -90,10 +95,10 @@
 //
 // RUN: %for no-create-opts {
 // RUN:   %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
-// RUN:          %acc-includes %[no-create-opt] \
+// RUN:          %acc-includes %[no-create-opt] -DCASES_HEADER='"%t-cases.h"' \
 // RUN:   | FileCheck -check-prefixes=DMP,DMP-%[noAlloc-or-alloc] %s
 // RUN:   %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %s \
-// RUN:          %acc-includes %[no-create-opt]
+// RUN:          %acc-includes %[no-create-opt] -DCASES_HEADER='"%t-cases.h"'
 // RUN:   %clang_cc1 -ast-dump-all %t.ast \
 // RUN:   | FileCheck -check-prefixes=DMP,DMP-%[noAlloc-or-alloc] %s
 // RUN: }
@@ -104,7 +109,7 @@
 // more than sufficient to show it's working for the no_create clause.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %acc-includes \
-// RUN:        %s \
+// RUN:        -DCASES_HEADER='"%t-cases.h"' %s \
 // RUN: | FileCheck -check-prefixes=PRT %s
 //
 // TODO: If lit were to support %for inside a %data, we could iterate prt-opts
@@ -133,7 +138,8 @@
 // RUN: %for no-create-opts {
 // RUN:   %for prt-args {
 // RUN:     %clang -Xclang -verify %[prt] %[no-create-opt] %acc-includes \
-// RUN:            %t-acc.c -Wno-openacc-omp-map-hold \
+// RUN:            -DCASES_HEADER='"%t-cases.h"' %t-acc.c \
+// RUN:            -Wno-openacc-omp-map-hold \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] \
 // RUN:                 -DNO_CREATE_MT=%[no-create-mt] \
 // RUN:                 -DINHERITED_NO_CREATE_MT=%[inherited-no-create-mt] %s
@@ -148,7 +154,7 @@
 //
 // RUN: %for no-create-opts {
 // RUN:   %clang -Xclang -verify -fopenacc %[no-create-opt] -emit-ast \
-// RUN:          %acc-includes -o %t.ast %t-acc.c
+// RUN:          %acc-includes -DCASES_HEADER='"%t-cases.h"' -o %t.ast %t-acc.c
 // RUN:   %for prt-args {
 // RUN:     %clang %[prt] %t.ast 2>&1 \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] \
@@ -170,11 +176,14 @@
 // RUN:   %for tgts {
 // RUN:     %for prt-opts {
 // RUN:       %[run-if] %clang -Xclang -verify %[prt-opt]=omp \
-// RUN:                 %[no-create-opt] %acc-includes %s > %t-omp.c \
+// RUN:                 %[no-create-opt] %acc-includes \
+// RUN:                 -DCASES_HEADER='"%t-cases.h"' %s > %t-omp.c \
 // RUN:                 -Wno-openacc-omp-map-hold
 // RUN:       %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:       %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
-// RUN:                 %[tgt-cflags] %acc-includes -o %t.exe %t-omp.c %acc-libs
+// RUN:                 %[tgt-cflags] %acc-includes \
+// RUN:                 -DCASES_HEADER='"%t-cases.h"' -o %t.exe %t-omp.c \
+// RUN:                 %acc-libs
 // RUN:       %for cases {
 // RUN:         %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2>&1
 // RUN:         %[run-if] FileCheck -input-file %t.out %s \
@@ -191,23 +200,17 @@
 // RUN: %for no-create-opts {
 // RUN:   %for tgts {
 // RUN:     %[run-if] %clang -Xclang -verify -fopenacc %[no-create-opt] \
-// RUN:               %[tgt-cflags] %acc-includes -o %t.exe %s
-// RUN:     rm -f %t.actual-cases && touch %t.actual-cases
+// RUN:               %[tgt-cflags] %acc-includes \
+// RUN:               -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
 // RUN:     %for cases {
 // RUN:       %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2>&1
 // RUN:       %[run-if] FileCheck -input-file %t.out %s \
 // RUN:         -match-full-lines -allow-empty \
 // RUN:         -check-prefixes=EXE%[host],EXE-%[case]%[host] \
 // RUN:         -check-prefixes=EXE-%[case]-%[noAlloc-or-alloc]%[host]
-// RUN:       echo '%[case]' >> %t.actual-cases
 // RUN:     }
 // RUN:   }
 // RUN: }
-
-// Make sure %data cases didn't omit any cases defined in the code.
-//
-// RUN: %t.exe -dump-cases > %t.expected-cases
-// RUN: diff -u %t.expected-cases %t.actual-cases >&2
 
 // END.
 
@@ -217,33 +220,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define FOREACH_CASE(Macro)                   \
-  Macro(CASE_DATA_SCALAR_PRESENT)             \
-  Macro(CASE_DATA_SCALAR_ABSENT)              \
-  Macro(CASE_DATA_ARRAY_PRESENT)              \
-  Macro(CASE_DATA_ARRAY_ABSENT)               \
-  Macro(CASE_DATA_SUBARRAY_PRESENT)           \
-  Macro(CASE_DATA_SUBARRAY_DISJOINT)          \
-  Macro(CASE_DATA_SUBARRAY_OVERLAP_START)     \
-  Macro(CASE_DATA_SUBARRAY_OVERLAP_END)       \
-  Macro(CASE_DATA_SUBARRAY_CONCAT2)           \
-  Macro(CASE_PARALLEL_SCALAR_PRESENT)         \
-  Macro(CASE_PARALLEL_SCALAR_ABSENT)          \
-  Macro(CASE_PARALLEL_ARRAY_PRESENT)          \
-  Macro(CASE_PARALLEL_ARRAY_ABSENT)           \
-  Macro(CASE_PARALLEL_SUBARRAY_PRESENT)       \
-  Macro(CASE_PARALLEL_SUBARRAY_DISJOINT)      \
-  Macro(CASE_PARALLEL_SUBARRAY_OVERLAP_START) \
-  Macro(CASE_PARALLEL_SUBARRAY_OVERLAP_END)   \
-  Macro(CASE_PARALLEL_SUBARRAY_CONCAT2)       \
-  Macro(CASE_PARALLEL_LOOP_SCALAR_PRESENT)    \
-  Macro(CASE_PARALLEL_LOOP_SCALAR_ABSENT)     \
-  Macro(CASE_CONST_PRESENT)                   \
-  Macro(CASE_CONST_ABSENT)                    \
-  Macro(CASE_INHERITED_PRESENT)               \
-  Macro(CASE_INHERITED_ABSENT)                \
-  Macro(CASE_INHERITED_SUBARRAY_PRESENT)      \
-  Macro(CASE_INHERITED_SUBARRAY_ABSENT)
+#include CASES_HEADER
 
 enum Case {
 #define AddCase(CaseName) \
@@ -293,11 +270,6 @@ int main(int argc, char *argv[]) {
   if (argc != 2) {
     fprintf(stderr, "expected one argument\n");
     return 1;
-  }
-  if (!strcmp(argv[1], "-dump-cases")) {
-    for (int i = 0; i < CASE_END; ++i)
-      printf("%s\n", CaseNames[i]);
-    return 0;
   }
   enum Case selectedCase;
   for (selectedCase = 0; selectedCase < CASE_END; ++selectedCase) {

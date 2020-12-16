@@ -60,15 +60,20 @@
 // RUN:   (case=CASE_SUBARRAY_OVERLAP_END   not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present])
 // RUN:   (case=CASE_SUBARRAY_CONCAT2       not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present])
 // RUN: }
+// RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
+// RUN: %for cases {
+// RUN:   echo '  Macro(%[case]) \' >> %t-cases.h
+// RUN: }
+// RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
 
 // Check -ast-dump before and after AST serialization.
 //
 // RUN: %for present-opts {
 // RUN:   %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
-// RUN:          %[present-opt] \
+// RUN:          -DCASES_HEADER='"%t-cases.h"' %[present-opt] \
 // RUN:   | FileCheck -check-prefixes=DMP,DMP-%[if-present] %s
 // RUN:   %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %s \
-// RUN:          %[present-opt]
+// RUN:          -DCASES_HEADER='"%t-cases.h"' %[present-opt]
 // RUN:   %clang_cc1 -ast-dump-all %t.ast \
 // RUN:   | FileCheck -check-prefixes=DMP,DMP-%[if-present] %s
 // RUN: }
@@ -79,6 +84,7 @@
 // more than sufficient to show it's working for the update directive.
 //
 // RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
+// RUN:        -DCASES_HEADER='"%t-cases.h"' \
 // RUN: | FileCheck -check-prefixes=PRT %s
 //
 // TODO: If lit were to support %for inside a %data, we could iterate prt-opts
@@ -107,7 +113,7 @@
 // RUN: %for present-opts {
 // RUN:   %for prt-args {
 // RUN:     %clang -Xclang -verify %[prt] %[present-opt] %t-acc.c \
-// RUN:            -Wno-openacc-omp-map-hold \
+// RUN:             -DCASES_HEADER='"%t-cases.h"' -Wno-openacc-omp-map-hold \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] -DPRESENT='%[present]' %s
 // RUN:   }
 // RUN: }
@@ -120,7 +126,7 @@
 //
 // RUN: %for present-opts {
 // RUN:   %clang -Xclang -verify -fopenacc %[present-opt] -emit-ast %t-acc.c \
-// RUN:          -o %t.ast
+// RUN:          -DCASES_HEADER='"%t-cases.h"' -o %t.ast
 // RUN:   %for prt-args {
 // RUN:     %clang %[prt] %t.ast 2>&1 \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] -DPRESENT='%[present]' %s
@@ -140,10 +146,12 @@
 // RUN:   %for tgts {
 // RUN:     %for prt-opts {
 // RUN:       %[run-if] %clang -Xclang -verify %[prt-opt]=omp %[present-opt] \
-// RUN:                 %s -Wno-openacc-omp-map-hold > %t-omp.c
+// RUN:                 -DCASES_HEADER='"%t-cases.h"' \
+// RUN:                 -Wno-openacc-omp-map-hold %s > %t-omp.c
 // RUN:       %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:       %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
-// RUN:                 %[tgt-cflags] -o %t.exe %t-omp.c
+// RUN:                 %[tgt-cflags] -DCASES_HEADER='"%t-cases.h"' -o %t.exe \
+// RUN:                 %t-omp.c
 // RUN:       %for cases {
 // RUN:         %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2> %t.err
 // RUN:         %[run-if] FileCheck -input-file %t.err -allow-empty %s \
@@ -164,8 +172,7 @@
 // RUN: %for present-opts {
 // RUN:   %for tgts {
 // RUN:     %[run-if] %clang -Xclang -verify -fopenacc %[present-opt] \
-// RUN:               %[tgt-cflags] -o %t.exe %s
-// RUN:     rm -f %t.actual-cases && touch %t.actual-cases
+// RUN:               %[tgt-cflags] -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
 // RUN:     %for cases {
 // RUN:       %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2> %t.err
 // RUN:       %[run-if] FileCheck -input-file %t.err -allow-empty %s \
@@ -176,15 +183,9 @@
 // RUN:         -check-prefixes=EXE-OUT-%[case]-%[not-if-fail]PASS \
 // RUN:         -check-prefixes=EXE-OUT-%[case]-%[host-or-dev] \
 // RUN:         -check-prefixes=EXE-OUT-%[case]-%[host-or-dev]-%[not-if-fail]PASS
-// RUN:       echo %[case] >> %t.actual-cases
 // RUN:     }
 // RUN:   }
 // RUN: }
-
-// Make sure %data cases didn't omit any cases defined in the code.
-//
-// RUN: %t.exe -dump-cases > %t.expected-cases
-// RUN: diff -u %t.expected-cases %t.actual-cases >&2
 
 // END.
 
@@ -193,21 +194,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define FOREACH_CASE(Macro)          \
-  Macro(CASE_NO_PARENT_PRESENT)      \
-  Macro(CASE_NO_PARENT_ABSENT)       \
-  Macro(CASE_SCALAR_PRESENT)         \
-  Macro(CASE_SCALAR_ABSENT)          \
-  Macro(CASE_STRUCT_PRESENT)         \
-  Macro(CASE_STRUCT_ABSENT)          \
-  Macro(CASE_ARRAY_PRESENT)          \
-  Macro(CASE_ARRAY_ABSENT)           \
-  Macro(CASE_SUBARRAY_PRESENT)       \
-  Macro(CASE_SUBARRAY_PRESENT2)      \
-  Macro(CASE_SUBARRAY_DISJOINT)      \
-  Macro(CASE_SUBARRAY_OVERLAP_START) \
-  Macro(CASE_SUBARRAY_OVERLAP_END)   \
-  Macro(CASE_SUBARRAY_CONCAT2)
+#include CASES_HEADER
 
 enum Case {
 #define AddCase(CaseName) \
@@ -319,11 +306,6 @@ int main(int argc, char *argv[]) {
   if (argc != 2) {
     fprintf(stderr, "expected one argument\n");
     return 1;
-  }
-  if (!strcmp(argv[1], "-dump-cases")) {
-    for (int i = 0; i < CASE_END; ++i)
-      printf("%s\n", CaseNames[i]);
-    return 0;
   }
   enum Case selectedCase;
   for (selectedCase = 0; selectedCase < CASE_END; ++selectedCase) {

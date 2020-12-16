@@ -40,11 +40,15 @@
 // RUN:   (case=CASE_UNMAP_AFTER_MAP_AND_STRUCTURED not-if-fail=%[not-if-off] )
 // RUN:   (case=CASE_UNMAP_AFTER_ALL_THREE          not-if-fail=%[not-if-off] )
 // RUN: }
+// RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
+// RUN: %for cases {
+// RUN:   echo '  Macro(%[case]) \' >> %t-cases.h
+// RUN: }
+// RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %[cflags] \
-// RUN:             -o %t.exe %s
+// RUN:             -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
 // RUN:   %for run-envs {
-// RUN:     rm -f %t.actual-cases && touch %t.actual-cases
 // RUN:     %for cases {
 // RUN:       %[run-if] %[run-env] %[not-if-fail] %t.exe %[case] \
 // RUN:                            > %t.out 2> %t.err
@@ -54,15 +58,9 @@
 // RUN:       %[run-if] FileCheck \
 // RUN:           -input-file %t.err %s -match-full-lines -allow-empty \
 // RUN:           -check-prefixes=ERR,ERR-%[case],ERR-%[case]-%[host-or-off]
-// RUN:       echo '%[case]' >> %t.actual-cases
 // RUN:     }
 // RUN:   }
 // RUN: }
-//
-// Make sure %data cases didn't omit any cases defined in the code.
-//
-// RUN: %t.exe -dump-cases > %t.expected-cases
-// RUN: diff -u %t.expected-cases %t.actual-cases >&2
 //
 // END.
 
@@ -73,35 +71,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define FOREACH_CASE(Macro)                                                    \
-  Macro(CASE_DEVICEPTR_SUCCESS)                                                \
-  Macro(CASE_IS_PRESENT_SUCCESS)                                               \
-  Macro(CASE_CLAUSE_LIKE_ROUTINES_SUCCESS)                                     \
-  Macro(CASE_COPYIN_EXTENDS_AFTER)                                             \
-  Macro(CASE_COPYIN_EXTENDS_BEFORE)                                            \
-  Macro(CASE_COPYIN_SUBSUMES)                                                  \
-  Macro(CASE_CREATE_EXTENDS_AFTER)                                             \
-  Macro(CASE_CREATE_EXTENDS_BEFORE)                                            \
-  Macro(CASE_CREATE_SUBSUMES)                                                  \
-  Macro(CASE_MAP_UNMAP_SUCCESS)                                                \
-  Macro(CASE_MAP_SAME_HOST_AS_STRUCTURED)                                      \
-  Macro(CASE_MAP_SAME_HOST_AS_DYNAMIC)                                         \
-  Macro(CASE_MAP_SAME)                                                         \
-  Macro(CASE_MAP_SAME_HOST)                                                    \
-  Macro(CASE_MAP_HOST_EXTENDS_AFTER)                                           \
-  Macro(CASE_MAP_HOST_EXTENDS_BEFORE)                                          \
-  Macro(CASE_MAP_HOST_SUBSUMES)                                                \
-  Macro(CASE_MAP_HOST_IS_SUBSUMED)                                             \
-  Macro(CASE_MAP_HOST_NULL)                                                    \
-  Macro(CASE_MAP_DEV_NULL)                                                     \
-  Macro(CASE_MAP_BYTES_ZERO)                                                   \
-  Macro(CASE_MAP_ALL_NULL)                                                     \
-  Macro(CASE_UNMAP_NULL)                                                       \
-  Macro(CASE_UNMAP_UNMAPPED)                                                   \
-  Macro(CASE_UNMAP_AFTER_ONLY_STRUCTURED)                                      \
-  Macro(CASE_UNMAP_AFTER_ONLY_DYNAMIC)                                         \
-  Macro(CASE_UNMAP_AFTER_MAP_AND_STRUCTURED)                                   \
-  Macro(CASE_UNMAP_AFTER_ALL_THREE)
+#include CASES_HEADER
 
 enum Case {
 #define AddCase(CaseName) \
@@ -150,11 +120,6 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "expected one argument\n");
     return 1;
   }
-  if (!strcmp(argv[1], "-dump-cases")) {
-    for (int i = 0; i < CASE_END; ++i)
-      printf("%s\n", CaseNames[i]);
-    return 0;
-  }
   enum Case selectedCase;
   for (selectedCase = 0; selectedCase < CASE_END; ++selectedCase) {
     if (!strcmp(argv[1], CaseNames[selectedCase]))
@@ -164,6 +129,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "unexpected case: %s\n", argv[1]);
     return 1;
   }
+
   // OUT: start
   printf("start\n");
   fflush(stdout);

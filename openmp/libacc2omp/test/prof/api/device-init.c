@@ -11,15 +11,14 @@
 // RUN:   (case=acc_copyin)
 // RUN:   (case=acc_create)
 // RUN: }
-// RUN: rm -f %t.h
-// RUN: echo '#define FOREACH_CASE(Macro) \' > %t.h
+// RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
 // RUN: %for cases {
-// RUN:   echo '  Macro(%[case]) \' >> %t.h
+// RUN:   echo '  Macro(%[case]) \' >> %t-cases.h
 // RUN: }
-// RUN: echo '  /*end of FOREACH_CASE*/' >> %t.h
+// RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %[cflags] \
-// RUN:                    -DCASES_HEADER='"%t.h"' -o %t.exe %s
+// RUN:                    -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
 // RUN:   %for cases {
 // RUN:     %[run-if] %t.exe %[case] > %t.out 2> %t.err
 // RUN:     %[run-if] FileCheck -input-file %t.err %s \
