@@ -311,25 +311,29 @@ OpenACC Runtime Library API and Preprocessor
 * The `_OPENACC` preprocessor macro is supported.
 * Data and memory management routines supported are:
     * `acc_malloc`, `acc_free`
+        * OpenACC 3.1 is unclear about handling of a `bytes` argument
+          equal to zero.  In that case, Clacc implements `acc_malloc`
+          as a no-op and returns a null pointer.
         * OpenACC 3.1 is unclear about the behavior when offloading is
           disabled (thus shared memory).  Clacc allocates and frees on
           the host in that case.
     * `acc_map_data`, `acc_unmap_data`
+        * OpenACC 3.1 is unclear about handling of null pointers or a
+          `bytes` argument equal to zero.  Clacc produces a runtime
+          error in that case.
         * OpenACC 3.1 is unclear about the behavior when offloading is
           disabled (thus shared memory).  Clacc implements these as
           no-ops in that case.
-        * OpenACC 3.1 is unclear about handling of null pointers.
-          Clacc produces a runtime error in that case.
         * OpenACC 3.1 is unclear about whether it is an error if only
           part of the host memory specified to `acc_map_data` has
           already been mapped.  Clacc produces a runtime error in that
           case.
     * `acc_deviceptr`
+        * OpenACC 3.1 is unclear about handling of a null pointer.
+          Clacc returns a null pointer in that case.
         * OpenACC 3.1 is unclear about the behavior when offloading is
           disabled (thus shared memory).  Clacc returns the host
           pointer in that case.
-        * OpenACC 3.1 is unclear about handling of a null pointer.
-          Clacc returns a null pointer in that case.
     * `acc_is_present`
         * OpenACC 3.1 is unclear about handling of a null pointer.
           Clacc returns true in that case.

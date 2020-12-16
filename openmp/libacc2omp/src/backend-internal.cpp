@@ -56,12 +56,24 @@ acc2omp_msg_t acc2omp_msg(acc2omp_msgid_t MsgId) {
   case acc2omp_msg_callback_unregister_unregistered:
     Msg.DefaultFmt = "attempt to unregister wrong callback for event: %s";
     break;
+  case acc2omp_msg_map_data_host_pointer_null:
+    Msg.DefaultFmt = "acc_map_data called with null host pointer";
+    break;
+  case acc2omp_msg_map_data_device_pointer_null:
+    Msg.DefaultFmt = "acc_map_data called with null device pointer";
+    break;
+  case acc2omp_msg_map_data_bytes_zero:
+    Msg.DefaultFmt = "acc_map_data called with zero bytes";
+    break;
   case acc2omp_msg_map_data_already_present:
-    Msg.DefaultFmt = "acc_map_data called on host pointer that is already "
+    Msg.DefaultFmt = "acc_map_data called with host pointer that is already "
                      "mapped";
     break;
   case acc2omp_msg_map_data_fail:
     Msg.DefaultFmt = "acc_map_data failed";
+    break;
+  case acc2omp_msg_unmap_data_pointer_null:
+    Msg.DefaultFmt = "acc_unmap_data call with null pointer";
     break;
   case acc2omp_msg_unmap_data_fail:
     Msg.DefaultFmt = "acc_unmap_data failed";

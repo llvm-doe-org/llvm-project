@@ -1,5 +1,11 @@
 /*
  * api.cpp -- OpenACC Runtime Library API implementation.
+ *
+ * This file generally tries to depend on the implementation of OpenMP routines
+ * where the desired OpenACC behavior is clearly specified by the OpenMP
+ * specification or where we use original OpenMP extensions so that we specify
+ * the OpenMP behavior.  Otherwise, this implementation tries to implement the
+ * desired OpenACC behavior in this file to avoid such a dependence.
  */
 
 //===----------------------------------------------------------------------===//
@@ -27,11 +33,10 @@
 /*****************************************************************************
  * LLVM OpenMP include files.
  *
- * One of our goals is to be able to wrap any OpenMP runtime implementing OMPT.
- * For that reason, it's expected that anything included here doesn't actually
- * require linking with LLVM's OpenMP runtime.  Only definitions in the header
- * are needed.  If you do need to link something from the OpenMP runtime, see
- * acc2omp-backend.h.
+ * One of our goals is to be able to wrap any OpenMP runtime.  For that reason,
+ * it's expected that anything included here doesn't actually require linking
+ * with LLVM's OpenMP runtime.  Only definitions in the header are needed.  If
+ * you do need to link something from the OpenMP runtime, see acc2omp-backend.h.
  ****************************************************************************/
 
 // FIXME: Will this be needed?
@@ -53,11 +58,26 @@
 /*****************************************************************************
  * Data and memory management routines.
  *
+ * Correct handling of null pointers is often not clear in OpenACC 3.1.  We
+ * attempt to follow a concept discussed by the OpenACC technical committee: a
+ * null pointer is considered always present.  Specifically, we assume the
+ * behavior is as if there is an "acc data" enclosing the entire program that
+ * maps a host null pointer to a device null pointer so that the structured
+ * reference count is always non-zero.  We document each routine's specific
+ * handling of null pointers in more detail below and relate it to this concept
+ * where applicable.
+ *
  * TODO: We assume !omp_get_num_devices() is a good test for disabled
  * offloading.  Is there a better check?
  ****************************************************************************/
 
 void *acc_malloc(size_t bytes) {
+  // Handling of bytes=0:
+  // - Return a null pointer and do nothing.
+  // - This behavior appears to mimic nvc 20.9-0.
+  // - OpenACC 3.1 and OpenMP 5.1 are unclear about the behavior in this case.
+  if (!bytes)
+    return NULL;
   // If offloading is disabled (thus shared memory):
   // - Allocate on the host.
   // - This behavior appears to mimic nvc 20.9-0 and gcc 10.2.0.
@@ -84,6 +104,26 @@ void acc_free(void *data_dev) {
 }
 
 void acc_map_data(void *data_arg, void *data_dev, size_t bytes) {
+  // Handling of null pointer or bytes=0:
+  // - Produce a runtime error.
+  // - nvc 20.9-0 appears to implement these cases as no-ops.
+  // - OpenACC 3.1 and OpenMP 5.1 are unclear about the behavior in these cases.
+  // - For a null pointer, this behavior seems to follow the OpenACC technical
+  //   committee's idea that a null pointer is considered always present,
+  //   especially if we assume it was automatically mapped to a null pointer.
+  //   That is, an acc_map_data with a host null pointer is then an error, and
+  //   an acc_map_data with a device null pointer is undefined, according to
+  //   OpenACC 3.1, sec. 3.2.32 "acc_map_data", L3637-3639: "It is an error to
+  //   call acc_map_data for host data that is already present in the current
+  //   device memory.  It is undefined to call acc_map_data with a device
+  //   address that is already mapped to host data."
+  if (!data_arg)
+    acc2omp_fatal(ACC2OMP_MSG(map_data_host_pointer_null));
+  if (!data_dev)
+    acc2omp_fatal(ACC2OMP_MSG(map_data_device_pointer_null));
+  if (!bytes)
+    acc2omp_fatal(ACC2OMP_MSG(map_data_bytes_zero));
+
   // If offloading is disabled (thus shared memory):
   // - Do nothing.
   // - This behavior appears to mimic nvc 20.9-0: acc_map_data doesn't affect
@@ -149,11 +189,6 @@ void acc_map_data(void *data_arg, void *data_dev, size_t bytes) {
 
   // Try to create the mapping.
   //
-  // Handling of null pointer:
-  // - This produces an error if either pointer is NULL, but it is not clear
-  //   from either spec whether that's correct.
-  // - nvc 20.9-0 appears to implement this case as a no-op.
-  //
   // Effect on dynamic reference counter:
   // - OpenACC 3.1, sec. 3.2.32 "acc_map_data", L3639-3642:
   //   "After mapping the device memory, the dynamic reference count for the
@@ -173,6 +208,20 @@ void acc_map_data(void *data_arg, void *data_dev, size_t bytes) {
 }
 
 void acc_unmap_data(void *data_arg) {
+  // Handling of null pointer:
+  // - Produce a runtime error.
+  // - nvc 20.9-0 appears to implement these case as a no-op.
+  // - OpenACC 3.1 and OpenMP 5.1 are unclear about the behavior in this case.
+  //   For details, see the quotes and discussion below concerning whether a
+  //   pointer was already mapped.
+  // - For a null pointer, this behavior seems to follow the OpenACC technical
+  //   committee's idea that a null pointer is considered always present,
+  //   especially if we assume it was automatically mapped to a null pointer
+  //   with a non-zero structured reference count.  That is, an acc_unmap_data
+  //   with a null pointer is then not permitted, according to the quote about a
+  //   non-zero structured reference count below.
+  if (!data_arg)
+    acc2omp_fatal(ACC2OMP_MSG(unmap_data_pointer_null));
   // If offloading is disabled (thus shared memory):
   // - Do nothing, for consistency with acc_map_data.
   // - This behavior appears to mimic nvc 20.9-0: acc_unmap_data doesn't affect
@@ -182,7 +231,7 @@ void acc_unmap_data(void *data_arg) {
   // - OpenACC 3.1 is unclear about the behavior in this case.
   if (!omp_get_num_devices())
     return;
-  // Pointer must have been mapped using acc_map_data and must not be NULL:
+  // Pointer must have been mapped using acc_map_data:
   // - OpenACC 3.1, sec. 3.2.33 "acc_unmap_data", L3653-3655:
   //   "It is undefined behavior to call acc_unmap_data with a host address
   //   unless that host address was mapped to device memory using acc_map_data."
@@ -193,11 +242,11 @@ void acc_unmap_data(void *data_arg) {
   // - Strangely, the above passages seem to say that behavior of acc_unmap_data
   //   but not omp_target_disassociate_ptr is undefined if the pointer is NULL,
   //   but nvc 20.9-0 appears to implement this case as a no-op, and LLVM's
-  //   OpenMP runtime produces an error.  For now, to be careful, we just let
-  //   the runtime error happen.
+  //   OpenMP runtime produces an error.  For now, to be careful, we report an
+  //   error above.
   // - For any non-null pointer that wasn't mapped, LLVM's OpenMP runtime
-  //   produces a runtime error, so we let that happen too even though nvc
-  //   20.9-0 appears to implement this case as a no-op too.
+  //   produces a runtime error, so we let that happen even though nvc 20.9-0
+  //   appears to implement this case as a no-op too.
   //
   // Structured reference counter must be zero:
   // - OpenACC 3.1, sec 3.2.33 "acc_unmap_data", L3656-3657:
@@ -219,17 +268,21 @@ void acc_unmap_data(void *data_arg) {
 }
 
 void *acc_deviceptr(void *data_arg) {
+  // Handling of null pointer:
+  // - Return a null pointer.
+  // - This behavior appears to mimic nvc 20.9-0.
+  // - OpenACC 3.1 and OpenMP 5.1 are unclear about the behavior in this case.
+  // - This behavior seems to follow the OpenACC technical committee's idea that
+  //   a null pointer is considered always present, especially if we assume it
+  //   was automatically mapped to a null pointer.
+  if (!data_arg)
+    return NULL;
   // If offloading is disabled (thus shared memory):
   // - Return data_arg, for consistency with acc_is_present, which always
   //   returns true in this case.
   // - This behavior appears to mimic nvc 20.9-0.
   // - OpenACC 3.1 is unclear about the behavior in this case.
-  //
-  // Handling of null pointer:
-  // - Return a null pointer.
-  // - This behavior appears to mimic nvc 20.9-0.
-  // - OpenACC 3.1 is unclear about the behavior in this case.
-  if (!omp_get_num_devices() || !data_arg)
+  if (!omp_get_num_devices())
     return data_arg;
   // OpenACC 3.1, sec. 3.2.34 "acc_deviceptr", L3665-3667:
   // "The acc_deviceptr routine returns the device pointer associated with a
@@ -240,20 +293,39 @@ void *acc_deviceptr(void *data_arg) {
 }
 
 int acc_is_present(void *data_arg, size_t bytes) {
-  // OpenACC 3.1, sec. 3.2.36 "acc_is_present", L3696-3697:
-  // "The routine returns .true. if the specified data is in shared memory or
-  // is fully present, and .false. otherwise."
-  //
-  // If offloading is disabled, that means shared memory, so it's present.
-  //
   // Handling of null pointer:
   // - Return true.
   // - This behavior appears to mimic nvc 20.9-0 except that, strangely, it
   //   returns false if the OpenACC runtime hasn't started yet.
-  // - OpenACC 3.1 is unclear about the behavior in this case, but this behavior
-  //   appears to match recent discussions in the OpenACC technical committee.
-  if (!omp_get_num_devices() || !data_arg)
+  // - OpenACC 3.1 is unclear about the behavior in this case.
+  // - This behavior seems to follow the OpenACC technical committee's idea that
+  //   a null pointer is considered always present.
+  // - OpenMP 5.1 sec. 3.8.3 "omp_target_is_present", p. 416, L13 and
+  //   OpenMP 5.1 sec. 3.8.4 "omp_target_is_accessible", p. 417, L15:
+  //   "The value of ptr must be a valid host pointer or NULL (or C_NULL_PTR,
+  //   for Fortran)."
+  // - Thus, OpenMP 5.1 explicitly permits this case but is unclear about the
+  //   behavior.
+  if (!data_arg)
     return true;
+  // If offloading is disabled (thus shared memory):
+  // - Return true.
+  // - OpenACC 3.1, sec. 3.2.36 "acc_is_present", L3696-3697:
+  //   "The routine returns .true. if the specified data is in shared memory or
+  //   is fully present, and .false. otherwise."
+  if (!omp_get_num_devices())
+    return true;
+  // Handling of bytes=0:
+  // - OpenACC 3.1, sec. 3.2.36 "acc_is_present", L3697-3699:
+  //   "If the byte length is zero, the routine returns nonzero in C/C++ or
+  //   .true. in Fortran if the given address is in shared memory or is present
+  //   at all in the current device memory."
+  // - OpenMP 5.1, sec. 3.8.4 "omp_target_is_accessible", p. 417, L21-22:
+  //   "This routine returns true if the storage of size bytes starting at the
+  //   address given by ptr is accessible from device device_num.  Otherwise, it
+  //   returns false."
+  // - Follow OpenACC 3.1.  We assume OpenMP 5.1 implementations should have the
+  //   same behavior, but the spec is unclear.
   return omp_present_full ==
          omp_target_range_is_present(data_arg, bytes, omp_get_default_device());
 }

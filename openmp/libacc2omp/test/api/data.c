@@ -11,25 +11,27 @@
 // RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off=HOST               not-if-off=                 )
 // RUN: }
 // RUN: %data cases {
-// RUN:   (case=CASE_DEVICEPTR_SUCCESS              not-if-fail=             )
-// RUN:   (case=CASE_IS_PRESENT_SUCCESS             not-if-fail=             )
-// RUN:   (case=CASE_MAP_UNMAP_SUCCESS              not-if-fail=             )
-// RUN:   (case=CASE_MAP_SAME_HOST_AS_STRUCTURED    not-if-fail=%[not-if-off])
-// RUN:   (case=CASE_MAP_SAME_HOST_AS_DYNAMIC       not-if-fail=%[not-if-off])
-// RUN:   (case=CASE_MAP_SAME                       not-if-fail=%[not-if-off])
-// RUN:   (case=CASE_MAP_SAME_HOST                  not-if-fail=%[not-if-off])
-// RUN:   (case=CASE_MAP_HOST_EXTENDS_AFTER         not-if-fail=%[not-if-off])
-// RUN:   (case=CASE_MAP_HOST_EXTENDS_BEFORE        not-if-fail=%[not-if-off])
-// RUN:   (case=CASE_MAP_HOST_SUBSUMES              not-if-fail=%[not-if-off])
-// RUN:   (case=CASE_MAP_HOST_IS_SUBSUMED           not-if-fail=%[not-if-off])
-// RUN:   (case=CASE_MAP_HOST_NULL                  not-if-fail=%[not-if-off])
-// RUN:   (case=CASE_MAP_DEV_NULL                   not-if-fail=%[not-if-off])
-// RUN:   (case=CASE_UNMAP_NULL                     not-if-fail=%[not-if-off])
-// RUN:   (case=CASE_UNMAP_UNMAPPED                 not-if-fail=%[not-if-off])
-// RUN:   (case=CASE_UNMAP_AFTER_ONLY_STRUCTURED    not-if-fail=%[not-if-off])
-// RUN:   (case=CASE_UNMAP_AFTER_ONLY_DYNAMIC       not-if-fail=%[not-if-off])
-// RUN:   (case=CASE_UNMAP_AFTER_MAP_AND_STRUCTURED not-if-fail=%[not-if-off])
-// RUN:   (case=CASE_UNMAP_AFTER_ALL_THREE          not-if-fail=%[not-if-off])
+// RUN:   (case=CASE_DEVICEPTR_SUCCESS              not-if-fail=              )
+// RUN:   (case=CASE_IS_PRESENT_SUCCESS             not-if-fail=              )
+// RUN:   (case=CASE_MAP_UNMAP_SUCCESS              not-if-fail=              )
+// RUN:   (case=CASE_MAP_SAME_HOST_AS_STRUCTURED    not-if-fail=%[not-if-off] )
+// RUN:   (case=CASE_MAP_SAME_HOST_AS_DYNAMIC       not-if-fail=%[not-if-off] )
+// RUN:   (case=CASE_MAP_SAME                       not-if-fail=%[not-if-off] )
+// RUN:   (case=CASE_MAP_SAME_HOST                  not-if-fail=%[not-if-off] )
+// RUN:   (case=CASE_MAP_HOST_EXTENDS_AFTER         not-if-fail=%[not-if-off] )
+// RUN:   (case=CASE_MAP_HOST_EXTENDS_BEFORE        not-if-fail=%[not-if-off] )
+// RUN:   (case=CASE_MAP_HOST_SUBSUMES              not-if-fail=%[not-if-off] )
+// RUN:   (case=CASE_MAP_HOST_IS_SUBSUMED           not-if-fail=%[not-if-off] )
+// RUN:   (case=CASE_MAP_HOST_NULL                  not-if-fail='%not --crash')
+// RUN:   (case=CASE_MAP_DEV_NULL                   not-if-fail='%not --crash')
+// RUN:   (case=CASE_MAP_BYTES_ZERO                 not-if-fail='%not --crash')
+// RUN:   (case=CASE_MAP_ALL_NULL                   not-if-fail='%not --crash')
+// RUN:   (case=CASE_UNMAP_NULL                     not-if-fail='%not --crash')
+// RUN:   (case=CASE_UNMAP_UNMAPPED                 not-if-fail=%[not-if-off] )
+// RUN:   (case=CASE_UNMAP_AFTER_ONLY_STRUCTURED    not-if-fail=%[not-if-off] )
+// RUN:   (case=CASE_UNMAP_AFTER_ONLY_DYNAMIC       not-if-fail=%[not-if-off] )
+// RUN:   (case=CASE_UNMAP_AFTER_MAP_AND_STRUCTURED not-if-fail=%[not-if-off] )
+// RUN:   (case=CASE_UNMAP_AFTER_ALL_THREE          not-if-fail=%[not-if-off] )
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %[cflags] \
@@ -77,6 +79,8 @@
   Macro(CASE_MAP_HOST_IS_SUBSUMED)                                             \
   Macro(CASE_MAP_HOST_NULL)                                                    \
   Macro(CASE_MAP_DEV_NULL)                                                     \
+  Macro(CASE_MAP_BYTES_ZERO)                                                   \
+  Macro(CASE_MAP_ALL_NULL)                                                     \
   Macro(CASE_UNMAP_NULL)                                                       \
   Macro(CASE_UNMAP_UNMAPPED)                                                   \
   Macro(CASE_UNMAP_AFTER_ONLY_STRUCTURED)                                      \
@@ -347,6 +351,9 @@ int main(int argc, char *argv[]) {
     // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: arr: 0x[[#%x,ARR:]]
     printf("arr: %p\n", arr);
 
+    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: acc_malloc(0): (nil)
+    printf("acc_malloc(0): %p\n", acc_malloc(0));
+
     // OpenACC 3.1, sec. 3.2.25 "acc_free", L3444-3445:
     // "If the argument is a NULL pointer, no operation is performed."
     acc_free(NULL);
@@ -498,7 +505,7 @@ int main(int argc, char *argv[]) {
       return 1;
     }
     #pragma acc data create(arr)
-    // ERR-CASE_MAP_SAME_HOST_AS_STRUCTURED-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    // ERR-CASE_MAP_SAME_HOST_AS_STRUCTURED-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr, arr_dev, sizeof arr);
     break;
   }
@@ -510,7 +517,7 @@ int main(int argc, char *argv[]) {
       return 1;
     }
     #pragma acc enter data create(arr)
-    // ERR-CASE_MAP_SAME_HOST_AS_DYNAMIC-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    // ERR-CASE_MAP_SAME_HOST_AS_DYNAMIC-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr, arr_dev, sizeof arr);
     break;
   }
@@ -522,7 +529,7 @@ int main(int argc, char *argv[]) {
       return 1;
     }
     acc_map_data(arr, arr_dev, sizeof arr);
-    // ERR-CASE_MAP_SAME-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    // ERR-CASE_MAP_SAME-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr, arr_dev, sizeof arr);
     break;
   }
@@ -535,7 +542,7 @@ int main(int argc, char *argv[]) {
       return 1;
     }
     acc_map_data(arr, arr_dev0, sizeof arr);
-    // ERR-CASE_MAP_SAME_HOST-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    // ERR-CASE_MAP_SAME_HOST-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr, arr_dev1, sizeof arr);
     break;
   }
@@ -548,7 +555,7 @@ int main(int argc, char *argv[]) {
       return 1;
     }
     acc_map_data(arr, arr_dev0, sizeof *arr);
-    // ERR-CASE_MAP_HOST_EXTENDS_AFTER-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    // ERR-CASE_MAP_HOST_EXTENDS_AFTER-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr, arr_dev1, sizeof arr);
     break;
   }
@@ -561,7 +568,7 @@ int main(int argc, char *argv[]) {
       return 1;
     }
     acc_map_data(arr+1, arr_dev0, sizeof *arr);
-    // ERR-CASE_MAP_HOST_EXTENDS_BEFORE-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    // ERR-CASE_MAP_HOST_EXTENDS_BEFORE-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr, arr_dev1, sizeof arr);
     break;
   }
@@ -574,7 +581,7 @@ int main(int argc, char *argv[]) {
       return 1;
     }
     acc_map_data(arr+1, arr_dev0, 2 * sizeof *arr);
-    // ERR-CASE_MAP_HOST_SUBSUMES-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    // ERR-CASE_MAP_HOST_SUBSUMES-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr, arr_dev1, sizeof arr);
     break;
   }
@@ -587,7 +594,7 @@ int main(int argc, char *argv[]) {
       return 1;
     }
     acc_map_data(arr, arr_dev0, sizeof arr);
-    // ERR-CASE_MAP_HOST_IS_SUBSUMED-OFF: OMP: Error #[[#]]: acc_map_data called on host pointer that is already mapped
+    // ERR-CASE_MAP_HOST_IS_SUBSUMED-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr+1, arr_dev1, 2 * sizeof *arr);
     break;
   }
@@ -598,18 +605,34 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "acc_malloc failed\n");
       return 1;
     }
-    // ERR-CASE_MAP_HOST_NULL-OFF: OMP: Error #[[#]]: acc_map_data failed
+    // ERR-CASE_MAP_HOST_NULL: OMP: Error #[[#]]: acc_map_data called with null host pointer
     acc_map_data(NULL, arr_dev, sizeof *arr_dev);
     break;
   }
   case CASE_MAP_DEV_NULL: {
     int arr[] = {10, 20};
-    // ERR-CASE_MAP_DEV_NULL-OFF: OMP: Error #[[#]]: acc_map_data failed
+    // ERR-CASE_MAP_DEV_NULL: OMP: Error #[[#]]: acc_map_data called with null device pointer
     acc_map_data(arr, NULL, sizeof arr);
     break;
   }
+  case CASE_MAP_BYTES_ZERO: {
+    int arr[] = {10, 20};
+    int *arr_dev = acc_malloc(sizeof *arr_dev);
+    if (!arr_dev) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    // ERR-CASE_MAP_BYTES_ZERO: OMP: Error #[[#]]: acc_map_data called with zero bytes
+    acc_map_data(arr, arr_dev, 0);
+    break;
+  }
+  case CASE_MAP_ALL_NULL: {
+    // ERR-CASE_MAP_ALL_NULL: OMP: Error #[[#]]: acc_map_data called with null host pointer
+    acc_map_data(NULL, NULL, 0);
+    break;
+  }
   case CASE_UNMAP_NULL: {
-    // ERR-CASE_UNMAP_NULL-OFF: OMP: Error #[[#]]: acc_unmap_data failed
+    // ERR-CASE_UNMAP_NULL: OMP: Error #[[#]]: acc_unmap_data called with null pointer
     acc_unmap_data(NULL);
     break;
   }
