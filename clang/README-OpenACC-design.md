@@ -1867,8 +1867,14 @@ relevant ambiguities in the OpenACC and OpenMP specifications.  That
 mapping relies on the following OpenMP extensions, which are
 implemented in Clacc's version of LLVM's OpenMP runtime library:
 
-* `omp_present_t`
-* `omp_target_range_is_present`
+* `omp_present_t;`
+* `omp_present_t omp_target_range_is_present(void *, size_t, int);`
+* `void *omp_target_map_to(void *, size_t, int);`
+* `void *omp_target_map_alloc(void *, size_t, int);`
+* `void omp_target_map_from(void *, size_t, int);`
+* `void omp_target_map_from_delete(void *, size_t, int);`
+* `void omp_target_map_release(void *, size_t, int);`
+* `void omp_target_map_delete(void *, size_t, int);`
 
 Support for the OpenACC Profiling Interface appears primarily in the
 source file `openmp/libacc2omp/src/prof.cpp`.  It is documented in the
@@ -2289,7 +2295,13 @@ typedef enum ompt_directive_kind_t {
   ompt_directive_omp_target_alloc,
   ompt_directive_omp_target_free,
   ompt_directive_omp_target_associate_ptr,
-  ompt_directive_omp_target_disassociate_ptr
+  ompt_directive_omp_target_disassociate_ptr,
+  ompt_directive_omp_target_map_to,
+  ompt_directive_omp_target_map_from,
+  ompt_directive_omp_target_map_from_delete,
+  ompt_directive_omp_target_map_alloc,
+  ompt_directive_omp_target_map_release,
+  ompt_directive_omp_target_map_delete,
 } ompt_directive_kind_t;
 
 // All fields are designed so that null-initialization is a reasonable

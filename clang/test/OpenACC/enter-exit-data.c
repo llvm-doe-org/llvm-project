@@ -608,7 +608,8 @@ int main() {
       setDeviceInt(str[1], 61);
       setDeviceInt(str[2], 71);
 
-      // Actions for the same subarray should have no effect.
+      // Actions for the same subarray should have no effect except to adjust
+      // the dynamic reference count.
       #pragma acc data copy(dyn[1:2])
       ;
       #pragma acc enter data copyin(dyn[1:2], str[1:2])
@@ -618,7 +619,8 @@ int main() {
       #pragma acc exit data delete(dyn[1:2], str[1:2])
       #pragma acc exit data delete(str[1:2])
 
-      // Actions for a subset of the subarray should have no effect.
+      // Actions for a subset of the subarray should also have no effect except
+      // to adjust the dynamic reference count.
       #pragma acc data copy(dyn[1:1])
       ;
       #pragma acc enter data copyin(dyn[1:1], str[1:1])
@@ -661,6 +663,32 @@ int main() {
       printDeviceInt(str[1]);
       printDeviceInt(str[2]);
     }
+
+    // acc exit data should have no effect for subarray that extends after,
+    // extends before, or subsumes a subarray that's present.
+    #pragma acc exit data copyout(dyn[1:3])
+    #pragma acc exit data delete(dyn[1:3])
+    #pragma acc exit data copyout(dyn[0:3])
+    #pragma acc exit data delete(dyn[0:3])
+    #pragma acc exit data copyout(dyn)
+    #pragma acc exit data delete(dyn)
+
+    // EXE-HOST-NEXT:   host dyn[0]         10{{$}}
+    // EXE-HOST-NEXT:   host dyn[1]         21{{$}}
+    // EXE-HOST-NEXT:   host dyn[2]         31{{$}}
+    // EXE-HOST-NEXT:   host dyn[3]         40{{$}}
+    //  EXE-DEV-NEXT:   host dyn[0]         10{{$}}
+    //  EXE-DEV-NEXT:   host dyn[1]         20{{$}}
+    //  EXE-DEV-NEXT:   host dyn[2]         30{{$}}
+    //  EXE-DEV-NEXT:   host dyn[3]         40{{$}}
+    //      EXE-NEXT: device dyn[1] present 21{{$}}
+    //      EXE-NEXT: device dyn[2] present 31{{$}}
+    printHostInt(dyn[0]);
+    printHostInt(dyn[1]);
+    printHostInt(dyn[2]);
+    printHostInt(dyn[3]);
+    printDeviceInt(dyn[1]);
+    printDeviceInt(dyn[2]);
   }
 
   return 0;

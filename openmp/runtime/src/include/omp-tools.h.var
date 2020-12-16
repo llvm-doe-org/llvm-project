@@ -612,7 +612,13 @@ typedef enum ompt_directive_kind_t {
   ompt_directive_omp_target_alloc,
   ompt_directive_omp_target_free,
   ompt_directive_omp_target_associate_ptr,
-  ompt_directive_omp_target_disassociate_ptr
+  ompt_directive_omp_target_disassociate_ptr,
+  ompt_directive_omp_target_map_to,
+  ompt_directive_omp_target_map_from,
+  ompt_directive_omp_target_map_from_delete,
+  ompt_directive_omp_target_map_alloc,
+  ompt_directive_omp_target_map_release,
+  ompt_directive_omp_target_map_delete,
 } ompt_directive_kind_t;
 
 typedef struct ompt_directive_info_t {

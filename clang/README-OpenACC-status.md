@@ -309,7 +309,7 @@ OpenACC Runtime Library API and Preprocessor
 --------------------------------------------
 
 * The `_OPENACC` preprocessor macro is supported.
-* Data and memory management routines supported are:
+* Data and memory management routines supported on the host are:
     * `acc_malloc`, `acc_free`
         * OpenACC 3.1 is unclear about handling of a `bytes` argument
           equal to zero.  In that case, Clacc implements `acc_malloc`
@@ -317,6 +317,14 @@ OpenACC Runtime Library API and Preprocessor
         * OpenACC 3.1 is unclear about the behavior when offloading is
           disabled (thus shared memory).  Clacc allocates and frees on
           the host in that case.
+    * `acc_copyin`, `acc_create`, `acc_copyout`,
+      `acc_copyout_finalize`, `acc_delete`, `acc_delete_finalize`; and
+      aliases `acc_present_or_copyin`, `acc_pcopyin`,
+      `acc_present_or_create`, `acc_pcreate`
+        * OpenACC 3.1 is unclear about handling of null pointers or a
+          `bytes` argument equal to zero.  In that case, Clacc
+          implements these as no-ops and returns a null pointer where
+          the return type is not void.
     * `acc_map_data`, `acc_unmap_data`
         * OpenACC 3.1 is unclear about handling of null pointers or a
           `bytes` argument equal to zero.  Clacc produces a runtime

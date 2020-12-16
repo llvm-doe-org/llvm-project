@@ -47,6 +47,16 @@ extern "C" {
 
 void *acc_malloc(size_t bytes);
 void acc_free(void *data_dev);
+void *acc_copyin(void *data_arg, size_t bytes);
+void *acc_present_or_copyin(void *data_arg, size_t bytes);
+void *acc_pcopyin(void *data_arg, size_t bytes);
+void *acc_create(void *data_arg, size_t bytes);
+void *acc_present_or_create(void *data_arg, size_t bytes);
+void *acc_pcreate(void *data_arg, size_t bytes);
+void acc_copyout(void *data_arg, size_t bytes);
+void acc_copyout_finalize(void *data_arg, size_t bytes);
+void acc_delete(void *data_arg, size_t bytes);
+void acc_delete_finalize(void *data_arg, size_t bytes);
 void acc_map_data(void* data_arg, void* data_dev, size_t bytes);
 void acc_unmap_data(void* data_arg);
 void *acc_deviceptr(void *data_arg);

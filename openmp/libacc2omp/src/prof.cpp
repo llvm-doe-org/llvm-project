@@ -179,6 +179,7 @@ static acc_prof_info acc_get_prof_info(acc_event_t event_type,
     ompt_directive_info_t *directive_info = acc_ompt_get_directive_info();
     ret.src_file = directive_info->src_file;
     ret.func_name = directive_info->func_name;
+    const char *new_func_name = nullptr;
     switch (directive_info->kind) {
     case ompt_directive_unknown:
     case ompt_directive_target_update:
@@ -188,21 +189,39 @@ static acc_prof_info acc_get_prof_info(acc_event_t event_type,
     case ompt_directive_target_teams:
       break;
     case ompt_directive_omp_target_alloc:
-      ACC2OMP_ASSERT(!ret.func_name, "expected no func_name");
-      ret.func_name = "acc_malloc";
+      new_func_name = "acc_malloc";
       break;
     case ompt_directive_omp_target_free:
-      ACC2OMP_ASSERT(!ret.func_name, "expected no func_name");
-      ret.func_name = "acc_free";
+      new_func_name = "acc_free";
       break;
     case ompt_directive_omp_target_associate_ptr:
-      ACC2OMP_ASSERT(!ret.func_name, "expected no func_name");
-      ret.func_name = "acc_map_data";
+      new_func_name = "acc_map_data";
       break;
     case ompt_directive_omp_target_disassociate_ptr:
-      ACC2OMP_ASSERT(!ret.func_name, "expected no func_name");
-      ret.func_name = "acc_unmap_data";
+      new_func_name = "acc_unmap_data";
       break;
+    case ompt_directive_omp_target_map_to:
+      new_func_name = "acc_copyin";
+      break;
+    case ompt_directive_omp_target_map_from:
+      new_func_name = "acc_copyout";
+      break;
+    case ompt_directive_omp_target_map_from_delete:
+      new_func_name = "acc_copyout_finalize";
+      break;
+    case ompt_directive_omp_target_map_alloc:
+      new_func_name = "acc_create";
+      break;
+    case ompt_directive_omp_target_map_release:
+      new_func_name = "acc_delete";
+      break;
+    case ompt_directive_omp_target_map_delete:
+      new_func_name = "acc_delete_finalize";
+      break;
+    }
+    if (new_func_name) {
+      ACC2OMP_ASSERT(!ret.func_name, "expected no func_name");
+      ret.func_name = new_func_name;
     }
     ret.line_no = directive_info->line_no;
     ret.end_line_no = directive_info->end_line_no;
@@ -270,6 +289,12 @@ static acc_event_info acc_get_other_event_info(acc_event_t event_type) {
     case ompt_directive_omp_target_free:
     case ompt_directive_omp_target_associate_ptr:
     case ompt_directive_omp_target_disassociate_ptr:
+    case ompt_directive_omp_target_map_to:
+    case ompt_directive_omp_target_map_from:
+    case ompt_directive_omp_target_map_from_delete:
+    case ompt_directive_omp_target_map_alloc:
+    case ompt_directive_omp_target_map_release:
+    case ompt_directive_omp_target_map_delete:
       ret.other_event.parent_construct = acc_construct_runtime_api;
       break;
     }
