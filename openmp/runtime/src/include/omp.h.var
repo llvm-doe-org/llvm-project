@@ -142,6 +142,7 @@
     extern void* __KAI_KMPC_CONVENTION  omp_target_alloc(size_t, int);
     extern void  __KAI_KMPC_CONVENTION  omp_target_free(void *, int);
     extern int   __KAI_KMPC_CONVENTION  omp_target_is_present(void *, int);
+    extern int   __KAI_KMPC_CONVENTION  omp_target_is_accessible(const void *, size_t, int);
     extern int   __KAI_KMPC_CONVENTION  omp_target_memcpy(void *, void *, size_t, size_t, size_t, int, int);
     extern int   __KAI_KMPC_CONVENTION  omp_target_memcpy_rect(void *, void *, size_t, int, const size_t *,
                                             const size_t *, const size_t *, const size_t *, const size_t *, int, int);

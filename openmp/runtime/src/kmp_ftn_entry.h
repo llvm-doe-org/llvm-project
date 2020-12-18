@@ -986,6 +986,11 @@ void FTN_STDCALL FTN_TARGET_FREE(void *device_ptr, int device_num) {}
 
 int FTN_STDCALL FTN_TARGET_IS_PRESENT(void *ptr, int device_num) { return 0; }
 
+int FTN_STDCALL FTN_TARGET_IS_ACCESSIBLE(const void *ptr, size_t size,
+                                         int device_num) {
+  return 0;
+}
+
 typedef enum omp_present_t {
   omp_present_none = 0,
   omp_present_partial = 1,

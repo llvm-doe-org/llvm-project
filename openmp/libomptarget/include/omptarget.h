@@ -141,7 +141,9 @@ int omp_get_num_devices(void);
 int omp_get_initial_device(void);
 void *omp_target_alloc(size_t size, int device_num);
 void omp_target_free(void *device_ptr, int device_num);
+// FIXME: OpenMP 5.0 and 5.1 say const void *ptr.
 int omp_target_is_present(void *ptr, int device_num);
+int omp_target_is_accessible(const void *ptr, size_t size, int device_num);
 typedef enum omp_present_t {
   omp_present_none = 0,
   omp_present_partial = 1,

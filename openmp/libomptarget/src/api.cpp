@@ -216,6 +216,67 @@ EXTERN int omp_target_is_present(void *ptr, int device_num) {
   return rc;
 }
 
+EXTERN int omp_target_is_accessible(const void *ptr, size_t size,
+                                    int device_num) {
+  // OpenMP 5.1, sec. 3.8.4 "omp_target_is_accessible", p. 417, L21-22:
+  // "This routine returns true if the storage of size bytes starting at the
+  // address given by ptr is accessible from device device_num. Otherwise, it
+  // returns false."
+  //
+  // The meaning of "accessible" for unified shared memory is established in
+  // OpenMP 5.1, sec. 2.5.1 "requires directive".  More generally, the specified
+  // host memory is accessible if it can be accessed from the device either
+  // directly (because of unified shared memory or because device_num is the
+  // value returned by omp_get_initial_device()) or indirectly (because it's
+  // mapped to the device).
+  DP("Call to omp_target_is_accessible for device %d and address " DPxMOD "\n",
+     device_num, DPxPTR(ptr));
+
+  // FIXME: Is this right?
+  //
+  // Null pointer is permitted:
+  //
+  // OpenMP 5.1, sec. 3.8.4 "omp_target_is_accessible", p. 417, L15:
+  // "The value of ptr must be a valid host pointer or NULL (or C_NULL_PTR, for
+  // Fortran)."
+  //
+  // However, I found no specification of behavior in this case.
+  // omp_target_is_present has the same problem and is implemented the same way.
+  // Should size have any effect on the result when ptr is NULL?
+  if (!ptr) {
+    DP("Call to omp_target_is_accessible with NULL ptr, returning false\n");
+    return false;
+  }
+
+  if (device_num == omp_get_initial_device()) {
+    DP("Call to omp_target_is_accessible on host, returning true\n");
+    return true;
+  }
+
+  RTLsMtx->lock();
+  size_t Devices_size = Devices.size();
+  RTLsMtx->unlock();
+  if (Devices_size <= (size_t)device_num) {
+    DP("Call to omp_target_is_accessible with invalid device ID, returning "
+       "false\n");
+    return false;
+  }
+
+  DeviceTy &Device = Devices[device_num];
+  bool IsLast;    // not used
+  bool IsHostPtr; // not used
+  // TODO: How does the spec intend for the size=0 case to be handled?
+  // Currently, we return true if we would return true for size=1 (ptr is within
+  // a range that's accessible).  Does the spec clarify this somewhere?
+  void *TgtPtr = Device.getTgtPtrBegin(const_cast<void *>(ptr), size, IsLast,
+                                       /*UpdateRefCount=*/false,
+                                       /*UseHoldRefCount=*/false, IsHostPtr,
+                                       /*MustContain=*/true);
+  int rc = (TgtPtr != NULL);
+  DP("Call to omp_target_is_accessible returns %d\n", rc);
+  return rc;
+}
+
 EXTERN omp_present_t omp_target_range_is_present(void *ptr, size_t size,
                                                  int device_num) {
   DP("Call to omp_target_range_is_present for device %d and address " DPxMOD
