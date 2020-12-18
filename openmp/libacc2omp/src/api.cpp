@@ -113,8 +113,8 @@ void *acc_copyin(void *data_arg, size_t bytes) {
   // - For a null pointer, this behavior seems to follow the OpenACC technical
   //   commitee's idea that a null pointer is considered always present,
   //   especially if we assume it was automatically mapped to a null pointer
-  //   with a structured reference count of 1 (so that reference count incs/decs
-  //   have no effect).
+  //   with a non-zero structured reference count (so that reference count
+  //   incs/decs have no effect).
   // - For bytes=0, it seems like it would be more consistent with
   //   acc_is_present to increment the dynamic reference count when
   //   acc_is_present returns true and do nothing otherwise.  On the other hand,
@@ -160,12 +160,12 @@ void *acc_create(void *data_arg, size_t bytes) {
   // - For a null pointer, this behavior seems to follow the OpenACC technical
   //   commitee's idea that a null pointer is considered always present,
   //   especially if we assume it was automatically mapped to a null pointer
-  //   with a structured reference count of 1 (so that reference count incs/decs
-  //   have no effect).
+  //   with a non-zero structured reference count (so that reference count
+  //   incs/decs have no effect).
   // - For bytes=0, it seems like it would be more consistent with
   //   acc_is_present to increment the dynamic reference count when
   //   acc_is_present returns true and do nothing otherwise.  On the other hand,
-  ///  that behavior would but subtly inconsistent with nvc.  This idea needs to
+  //   that behavior would but subtly inconsistent with nvc.  This idea needs to
   //   be discussed in the OpenACC technical committee.
   if (!data_arg || !bytes)
     return NULL;
@@ -207,8 +207,8 @@ void acc_copyout(void *data_arg, size_t bytes) {
   // - For a null pointer, this behavior seems to follow the OpenACC technical
   //   commitee's idea that a null pointer is considered always present,
   //   especially if we assume it was automatically mapped to a null pointer
-  //   with a structured reference count of 1 (so that reference count incs/decs
-  //   have no effect).
+  //   with a non-zero structured reference count (so that reference count
+  //   incs/decs have no effect).
   // - For bytes=0, it seems like it would be more consistent with
   //   acc_is_present to decrement the dynamic reference count when
   //   acc_is_present returns true and do nothing otherwise.  On the other hand,
@@ -240,8 +240,8 @@ void acc_copyout_finalize(void *data_arg, size_t bytes) {
   // - For a null pointer, this behavior seems to follow the OpenACC technical
   //   commitee's idea that a null pointer is considered always present,
   //   especially if we assume it was automatically mapped to a null pointer
-  //   with a structured reference count of 1 (so that reference count incs/decs
-  //   have no effect).
+  //   with a non-zero structured reference count (so that reference count
+  //   incs/decs have no effect).
   // - For bytes=0, it seems like it would be more consistent with
   //   acc_is_present to decrement the dynamic reference count when
   //   acc_is_present returns true and do nothing otherwise.  On the other hand,
@@ -271,8 +271,8 @@ void acc_delete(void *data_arg, size_t bytes) {
   // - For a null pointer, this behavior seems to follow the OpenACC technical
   //   commitee's idea that a null pointer is considered always present,
   //   especially if we assume it was automatically mapped to a null pointer
-  //   with a structured reference count of 1 (so that reference count incs/decs
-  //   have no effect).
+  //   with a non-zero structured reference count (so that reference count
+  //   incs/decs have no effect).
   // - For bytes=0, it seems like it would be more consistent with
   //   acc_is_present to decrement the dynamic reference count when
   //   acc_is_present returns true and do nothing otherwise.  On the other hand,
@@ -304,8 +304,8 @@ void acc_delete_finalize(void *data_arg, size_t bytes) {
   // - For a null pointer, this behavior seems to follow the OpenACC technical
   //   commitee's idea that a null pointer is considered always present,
   //   especially if we assume it was automatically mapped to a null pointer
-  //   with a structured reference count of 1 (so that reference count incs/decs
-  //   have no effect).
+  //   with a non-zero structured reference count (so that reference count
+  //   incs/decs have no effect).
   // - For bytes=0, it seems like it would be more consistent with
   //   acc_is_present to decrement the dynamic reference count when
   //   acc_is_present returns true and do nothing otherwise.  On the other hand,
@@ -387,8 +387,8 @@ void acc_map_data(void *data_arg, void *data_dev, size_t bytes) {
   //     nvc 20.9-0 has the error.
   //   - omp_target_associate_ptr: Error because it's an attempt "to associate a
   //     second buffer".  LLVM's OpenMP runtime has the error.
-  // - Host memory has the same starting address but extends after (bytes is
-  //   larger) than host memory that's already mapped:
+  // - Host memory has the same starting address as (or starts within) but
+  //   extends after (bytes is larger than) host memory that's already mapped:
   //   - acc_map_data: It's not clear if "is already present" means "fully
   //     present" or "at least partially present".  nvc 20.9-0 has the error,
   //     and its diagnostic says "partially present", so the latter
