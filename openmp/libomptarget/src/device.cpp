@@ -164,6 +164,41 @@ LookupResult DeviceTy::lookupMapping(void *HstPtrBegin, int64_t Size) {
   return lr;
 }
 
+size_t DeviceTy::getAccessibleBuffer(void *Ptr, int64_t Size, void **BufferHost,
+                                     void **BufferDevice) {
+  size_t BufferSize;
+  DataMapMtx.lock();
+  LookupResult lr = lookupMapping(Ptr, Size);
+  if (lr.Flags.IsContained || lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) {
+    auto &HT = *lr.Entry;
+    BufferSize = HT.HstPtrEnd - HT.HstPtrBegin;
+    DP("Overlapping mapping exists with HstPtrBegin=" DPxMOD ", TgtPtrBegin="
+        DPxMOD ", " "Size=%" PRId64 ", RefCount=%s\n",
+        DPxPTR(HT.HstPtrBegin), DPxPTR(HT.TgtPtrBegin), BufferSize,
+        HT.isRefCountInf() ? "INF" : std::to_string(HT.getRefCount()).c_str());
+    if (BufferHost)
+      *BufferHost = (void *)HT.HstPtrBegin;
+    if (BufferDevice)
+      *BufferDevice = (void *)HT.TgtPtrBegin;
+  } else if (RTLs->RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY) {
+    DP("Unified shared memory\n");
+    BufferSize = SIZE_MAX;
+    if (BufferHost)
+      *BufferHost = nullptr;
+    if (BufferDevice)
+      *BufferDevice = nullptr;
+  } else {
+    DP("Host memory is inaccessible from device\n");
+    BufferSize = 0;
+    if (BufferHost)
+      *BufferHost = nullptr;
+    if (BufferDevice)
+      *BufferDevice = nullptr;
+  }
+  DataMapMtx.unlock();
+  return BufferSize;
+}
+
 // Used by targetDataBegin
 // Return the target pointer begin (where the data will be moved).
 // Allocate memory if this is the first occurrence of this mapping.

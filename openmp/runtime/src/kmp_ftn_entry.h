@@ -1029,6 +1029,12 @@ int FTN_STDCALL FTN_TARGET_DISASSOCIATE_PTR(void *host_ptr, int device_num) {
 void *FTN_STDCALL FTN_GET_MAPPED_PTR(const void *ptr, int device_num) {
   return NULL;
 }
+
+size_t FTN_STDCALL FTN_GET_ACCESSIBLE_BUFFER(const void *ptr, size_t size,
+                                             int device_num, void **buffer_host,
+                                             void **buffer_device) {
+  return 0;
+}
 #endif // defined(KMP_STUB)
 
 #ifdef KMP_STUB

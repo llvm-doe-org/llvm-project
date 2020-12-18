@@ -161,6 +161,8 @@ int omp_target_associate_ptr(void *host_ptr, void *device_ptr, size_t size,
     size_t device_offset, int device_num);
 int omp_target_disassociate_ptr(void *host_ptr, int device_num);
 void *omp_get_mapped_ptr(const void *ptr, int device_num);
+size_t omp_get_accessible_buffer(const void *ptr, size_t size, int device_num,
+                                 void **buffer_host, void **buffer_device);
 void *omp_target_map_to(void *, size_t, int);
 void omp_target_map_from(void *, size_t, int);
 void omp_target_map_from_delete(void *, size_t, int);

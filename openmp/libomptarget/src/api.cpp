@@ -367,6 +367,53 @@ EXTERN void *omp_get_mapped_ptr(const void *ptr, int device_num) {
   return TgtPtr;
 }
 
+EXTERN size_t omp_get_accessible_buffer(
+  const void *ptr, size_t size, int device_num, void **buffer_host,
+  void **buffer_device) {
+  DP("Call to omp_get_accessible_buffer for address " DPxMOD ", size %zu, and "
+     "device %d\n",
+     DPxPTR(ptr), size, device_num);
+
+  if (device_num == omp_get_initial_device()) {
+    DP("Call to omp_get_accessible_buffer for initial device, returning "
+       "SIZE_MAX\n");
+    if (buffer_host)
+      *buffer_host = nullptr;
+    if (buffer_device)
+      *buffer_device = nullptr;
+    return SIZE_MAX;
+  }
+
+  RTLsMtx->lock();
+  size_t Devices_size = Devices.size();
+  RTLsMtx->unlock();
+  if (Devices_size <= (size_t)device_num) {
+    DP("Call to omp_get_accessible_buffer with invalid device ID, returning "
+       "0\n");
+    if (buffer_host)
+      *buffer_host = nullptr;
+    if (buffer_device)
+      *buffer_device = nullptr;
+    return 0;
+  }
+
+  if (!ptr) {
+    DP("Call to omp_get_accessible_buffer with NULL ptr, returning SIZE_MAX\n");
+    if (buffer_host)
+      *buffer_host = nullptr;
+    if (buffer_device)
+      *buffer_device = nullptr;
+    return SIZE_MAX;
+  }
+
+  DeviceTy &Device = Devices[device_num];
+  size_t BufferSize = Device.getAccessibleBuffer(const_cast<void *>(ptr),
+                                                 /*Size=*/size, buffer_host,
+                                                 buffer_device);
+  DP("Call to omp_get_accessible_buffer returns %zu\n", BufferSize);
+  return BufferSize;;
+}
+
 EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
     size_t dst_offset, size_t src_offset, int dst_device, int src_device) {
   DP("Call to omp_target_memcpy, dst device %d, src device %d, "

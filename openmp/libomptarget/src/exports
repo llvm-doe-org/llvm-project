@@ -37,6 +37,7 @@ VERS1.0 {
     omp_target_associate_ptr;
     omp_target_disassociate_ptr;
     omp_get_mapped_ptr;
+    omp_get_accessible_buffer;
     omp_target_map_to;
     omp_target_map_from;
     omp_target_map_from_delete;
