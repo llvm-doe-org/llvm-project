@@ -330,6 +330,11 @@ EXTERN void *omp_get_mapped_ptr(const void *ptr, int device_num) {
 
   if (device_num == omp_get_initial_device()) {
     DP("Call to omp_get_mapped_ptr on host, returning host pointer\n");
+    // OpenMP 5.1, sec. 3.8.11 "omp_get_mapped_ptr", p. 431, L10-12:
+    // Otherwise it returns the device pointer, which is ptr if device_num is
+    // the value returned by omp_get_initial_device().
+    //
+    // That is, the spec actually requires us to cast away const.
     return const_cast<void *>(ptr);
   }
 
@@ -342,14 +347,24 @@ EXTERN void *omp_get_mapped_ptr(const void *ptr, int device_num) {
   }
 
   DeviceTy &Device = Devices[device_num];
-  LookupResult lr = Device.lookupMapping(const_cast<void *>(ptr), 0);
-  if (!lr.Flags.IsContained) {
-    DP("Call to omp_get_mapped_ptr for unmapped ptr, returning NULL\n");
-    return NULL;
+  bool IsLast; // not used
+  bool IsHostPtr;
+  void *TgtPtr = Device.getTgtPtrBegin(const_cast<void *>(ptr), /*Size=*/0,
+                                       IsLast, /*UpdateRefCount=*/false,
+                                       /*UseHoldRefCount=*/false, IsHostPtr);
+  // Return nullptr in the case of unified shared memory.
+  //
+  // TODO: This seems to be implied by the named "mapped" instead of
+  // "accessible".  Or should we return the host pointer?  That is, is this
+  // supposed to be like omp_target_is_present or omp_target_is_accessible?
+  // OpenMP 5.1 doesn't seem clear.
+  if (IsHostPtr) {
+    DP("Call to omp_get_mapped_ptr for unified shared memory, returning "
+       "NULL\n");
+    return nullptr;
   }
-  DP("Call to omp_get_mapped_ptr for mapped ptr, returns non-NULL\n");
-  uintptr_t Offset = (uintptr_t)ptr - lr.Entry->HstPtrBegin;
-  return (void *)(lr.Entry->TgtPtrBegin + Offset);
+  DP("Call to omp_get_mapped_ptr returns " DPxMOD "\n", DPxPTR(TgtPtr));
+  return TgtPtr;
 }
 
 EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
