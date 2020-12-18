@@ -3,26 +3,26 @@
 // routines.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                cflags=                                     host-or-off=HOST)
-// RUN:   (run-if=%run-if-x86_64  cflags=-fopenmp-targets=%run-x86_64-triple  host-or-off=OFF )
-// RUN:   (run-if=%run-if-ppc64le cflags=-fopenmp-targets=%run-ppc64le-triple host-or-off=OFF )
-// RUN:   (run-if=%run-if-nvptx64 cflags=-fopenmp-targets=%run-nvptx64-triple host-or-off=OFF )
+// RUN:   (run-if=                cflags=                                     tgt-host-or-off=HOST)
+// RUN:   (run-if=%run-if-x86_64  cflags=-fopenmp-targets=%run-x86_64-triple  tgt-host-or-off=OFF )
+// RUN:   (run-if=%run-if-ppc64le cflags=-fopenmp-targets=%run-ppc64le-triple tgt-host-or-off=OFF )
+// RUN:   (run-if=%run-if-nvptx64 cflags=-fopenmp-targets=%run-nvptx64-triple tgt-host-or-off=OFF )
 // RUN: }
 // RUN: %data run-envs {
-// RUN:   (run-env=                                  env-fc=%[host-or-off],%[host-or-off]-BEFORE-ENV)
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' env-fc=HOST                                    )
+// RUN:   (run-env=                                  host-or-off=%[tgt-host-or-off])
+// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off=HOST              )
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s \
 // RUN:                    %[cflags] -o %t
 // RUN:   %for run-envs {
-// RUN:     %[run-if] %[run-env] %t > %t.out 2> %t.err
+// RUN:     %[run-if] %[run-env] %t %[host-or-off] > %t.out 2> %t.err
 // RUN:     %[run-if] FileCheck -input-file %t.err %s \
 // RUN:         -allow-empty -check-prefixes=ERR
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
 // RUN:         -match-full-lines -strict-whitespace \
 // RUN:         -implicit-check-not=acc_ev_ \
-// RUN:         -check-prefixes=CHECK,%[env-fc] \
+// RUN:         -check-prefixes=CHECK,%[host-or-off] \
 // RUN:         -DVERSION=%acc-version -DHOST_DEV=%acc-host-dev \
 // RUN:         -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1
 // RUN:   }
@@ -47,16 +47,33 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
 // CHECK-NOT:{{.}}
 // ERR-NOT:{{.}}
 
-int main() {
+int main(int argc, char *argv[]) {
+  if (argc != 2) {
+    fprintf(stderr, "expected one argument\n");
+    return 1;
+  }
+  bool Offloading;
+  if (!strcmp(argv[1], "HOST"))
+    Offloading = false;
+  else if (!strcmp(argv[1], "OFF"))
+    Offloading = true;
+  else {
+    fprintf(stderr, "invalid argument: %s\n", argv[1]);
+    return 1;
+  }
+
   int arr[2] = {10, 11};
 
   // CHECK:arr host ptr = [[ARR_HOST_PTR:0x[a-z0-9]+]]
   printf("arr host ptr = %p\n", arr);
 
   //--------------------------------------------------
-  // Check acc_malloc, acc_map_data, acc_unmap_data, and acc_free.  Check
-  // data-clause-like routines (acc_copyin, acc_copyout, etc.) when data is
-  // present and not ready to be deleted (a case we exercise here by calling
+  // Check acc_malloc, acc_map_data, acc_unmap_data, and acc_free.  acc_map_data
+  // and acc_unmap_data fail for shared memory, so skip them when offloading is
+  // disabled.
+  //
+  // Check data-clause-like routines (acc_copyin, acc_copyout, etc.) when data
+  // is present and not ready to be deleted (a case we exercise here by calling
   // them between acc_map_data and acc_unmap_data).
   //--------------------------------------------------
 
@@ -137,7 +154,8 @@ int main() {
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
   // OFF-NEXT:    device_type=acc_device_not_host
-  acc_map_data(arr, arr_dev, sizeof arr);
+  if (Offloading)
+    acc_map_data(arr, arr_dev, sizeof arr);
 
   // OFF-NEXT:acc_ev_enter_data_start
   // OFF-NEXT:  acc_prof_info
@@ -349,7 +367,8 @@ int main() {
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
   // OFF-NEXT:    device_type=acc_device_not_host
-  acc_unmap_data(arr);
+  if (Offloading)
+    acc_unmap_data(arr);
 
   // CHECK-NEXT:acc_ev_free
   // CHECK-NEXT:  acc_prof_info

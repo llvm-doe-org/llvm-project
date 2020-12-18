@@ -1867,8 +1867,7 @@ relevant ambiguities in the OpenACC and OpenMP specifications.  That
 mapping relies on the following OpenMP extensions, which are
 implemented in Clacc's version of LLVM's OpenMP runtime library:
 
-* `omp_present_t;`
-* `omp_present_t omp_target_range_is_present(void *, size_t, int);`
+* `size_t omp_get_accessible_buffer(const void *ptr, size_t size, int device_num, void **buffer_host, void **buffer_device);`
 * `void *omp_target_map_to(void *, size_t, int);`
 * `void *omp_target_map_alloc(void *, size_t, int);`
 * `void omp_target_map_from(void *, size_t, int);`

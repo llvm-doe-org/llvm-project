@@ -1,14 +1,14 @@
 // Check data and memory management routines.
 
 // RUN: %data tgts {
-// RUN:   (run-if=                cflags=                                     tgt-host-or-off=HOST tgt-not-if-off=              )
-// RUN:   (run-if=%run-if-x86_64  cflags=-fopenmp-targets=%run-x86_64-triple  tgt-host-or-off=OFF  tgt-not-if-off='%not --crash')
-// RUN:   (run-if=%run-if-ppc64le cflags=-fopenmp-targets=%run-ppc64le-triple tgt-host-or-off=OFF  tgt-not-if-off='%not --crash')
-// RUN:   (run-if=%run-if-nvptx64 cflags=-fopenmp-targets=%run-nvptx64-triple tgt-host-or-off=OFF  tgt-not-if-off='%not --crash')
+// RUN:   (run-if=                cflags=                                     tgt-host-or-off=HOST tgt-not-if-host='%not --crash' tgt-not-if-off=              )
+// RUN:   (run-if=%run-if-x86_64  cflags=-fopenmp-targets=%run-x86_64-triple  tgt-host-or-off=OFF  tgt-not-if-host=               tgt-not-if-off='%not --crash')
+// RUN:   (run-if=%run-if-ppc64le cflags=-fopenmp-targets=%run-ppc64le-triple tgt-host-or-off=OFF  tgt-not-if-host=               tgt-not-if-off='%not --crash')
+// RUN:   (run-if=%run-if-nvptx64 cflags=-fopenmp-targets=%run-nvptx64-triple tgt-host-or-off=OFF  tgt-not-if-host=               tgt-not-if-off='%not --crash')
 // RUN: }
 // RUN: %data run-envs {
-// RUN:   (run-env=                                  host-or-off=%[tgt-host-or-off] not-if-off=%[tgt-not-if-off])
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off=HOST               not-if-off=                 )
+// RUN:   (run-env=                                  host-or-off=%[tgt-host-or-off] not-if-host=%[tgt-not-if-host] not-if-off=%[tgt-not-if-off])
+// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off=HOST               not-if-host='%not --crash'     not-if-off=                 )
 // RUN: }
 // RUN: %data cases {
 // RUN:   (case=CASE_DEVICEPTR_SUCCESS              not-if-fail=              )
@@ -20,25 +20,26 @@
 // RUN:   (case=CASE_CREATE_EXTENDS_AFTER           not-if-fail=%[not-if-off] )
 // RUN:   (case=CASE_CREATE_EXTENDS_BEFORE          not-if-fail=%[not-if-off] )
 // RUN:   (case=CASE_CREATE_SUBSUMES                not-if-fail=%[not-if-off] )
-// RUN:   (case=CASE_MAP_UNMAP_SUCCESS              not-if-fail=              )
-// RUN:   (case=CASE_MAP_SAME_HOST_AS_STRUCTURED    not-if-fail=%[not-if-off] )
-// RUN:   (case=CASE_MAP_SAME_HOST_AS_DYNAMIC       not-if-fail=%[not-if-off] )
-// RUN:   (case=CASE_MAP_SAME                       not-if-fail=%[not-if-off] )
-// RUN:   (case=CASE_MAP_SAME_HOST                  not-if-fail=%[not-if-off] )
-// RUN:   (case=CASE_MAP_HOST_EXTENDS_AFTER         not-if-fail=%[not-if-off] )
-// RUN:   (case=CASE_MAP_HOST_EXTENDS_BEFORE        not-if-fail=%[not-if-off] )
-// RUN:   (case=CASE_MAP_HOST_SUBSUMES              not-if-fail=%[not-if-off] )
-// RUN:   (case=CASE_MAP_HOST_IS_SUBSUMED           not-if-fail=%[not-if-off] )
+// RUN:   (case=CASE_MALLOC_FREE_SUCCESS            not-if-fail=              )
+// RUN:   (case=CASE_MAP_UNMAP_SUCCESS              not-if-fail=%[not-if-host])
+// RUN:   (case=CASE_MAP_SAME_HOST_AS_STRUCTURED    not-if-fail='%not --crash')
+// RUN:   (case=CASE_MAP_SAME_HOST_AS_DYNAMIC       not-if-fail='%not --crash')
+// RUN:   (case=CASE_MAP_SAME                       not-if-fail='%not --crash')
+// RUN:   (case=CASE_MAP_SAME_HOST                  not-if-fail='%not --crash')
+// RUN:   (case=CASE_MAP_HOST_EXTENDS_AFTER         not-if-fail='%not --crash')
+// RUN:   (case=CASE_MAP_HOST_EXTENDS_BEFORE        not-if-fail='%not --crash')
+// RUN:   (case=CASE_MAP_HOST_SUBSUMES              not-if-fail='%not --crash')
+// RUN:   (case=CASE_MAP_HOST_IS_SUBSUMED           not-if-fail='%not --crash')
 // RUN:   (case=CASE_MAP_HOST_NULL                  not-if-fail='%not --crash')
 // RUN:   (case=CASE_MAP_DEV_NULL                   not-if-fail='%not --crash')
 // RUN:   (case=CASE_MAP_BYTES_ZERO                 not-if-fail='%not --crash')
 // RUN:   (case=CASE_MAP_ALL_NULL                   not-if-fail='%not --crash')
 // RUN:   (case=CASE_UNMAP_NULL                     not-if-fail='%not --crash')
-// RUN:   (case=CASE_UNMAP_UNMAPPED                 not-if-fail=%[not-if-off] )
-// RUN:   (case=CASE_UNMAP_AFTER_ONLY_STRUCTURED    not-if-fail=%[not-if-off] )
-// RUN:   (case=CASE_UNMAP_AFTER_ONLY_DYNAMIC       not-if-fail=%[not-if-off] )
-// RUN:   (case=CASE_UNMAP_AFTER_MAP_AND_STRUCTURED not-if-fail=%[not-if-off] )
-// RUN:   (case=CASE_UNMAP_AFTER_ALL_THREE          not-if-fail=%[not-if-off] )
+// RUN:   (case=CASE_UNMAP_UNMAPPED                 not-if-fail='%not --crash')
+// RUN:   (case=CASE_UNMAP_AFTER_ONLY_STRUCTURED    not-if-fail='%not --crash')
+// RUN:   (case=CASE_UNMAP_AFTER_ONLY_DYNAMIC       not-if-fail='%not --crash')
+// RUN:   (case=CASE_UNMAP_AFTER_MAP_AND_STRUCTURED not-if-fail='%not --crash')
+// RUN:   (case=CASE_UNMAP_AFTER_ALL_THREE          not-if-fail='%not --crash')
 // RUN: }
 // RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
 // RUN: %for cases {
@@ -47,7 +48,7 @@
 // RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %[cflags] \
-// RUN:             -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
+// RUN:                    -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
 // RUN:   %for run-envs {
 // RUN:     %for cases {
 // RUN:       %[run-if] %[run-env] %[not-if-fail] %t.exe %[case] \
@@ -1416,6 +1417,29 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  case CASE_MALLOC_FREE_SUCCESS: {
+    // OUT-CASE_MALLOC_FREE_SUCCESS-NEXT: acc_malloc(0): (nil)
+    printf("acc_malloc(0): %p\n", acc_malloc(0));
+
+    // OpenACC 3.1, sec. 3.2.25 "acc_free", L3444-3445:
+    // "If the argument is a NULL pointer, no operation is performed."
+    acc_free(NULL);
+
+    // OUT-CASE_MALLOC_FREE_SUCCESS-NEXT: acc_malloc(1) != NULL: 1
+    void *ptr = acc_malloc(1);
+    printf("acc_malloc(1) != NULL: %d\n", ptr != NULL);
+    acc_free(ptr);
+
+    // OUT-CASE_MALLOC_FREE_SUCCESS-NEXT: acc_malloc(2) != NULL: 1
+    ptr = acc_malloc(2);
+    printf("acc_malloc(2) != NULL: %d\n", ptr != NULL);
+    acc_free(ptr);
+
+    // acc_malloc/acc_free with acc_map_data/acc_unmap_data is checked in
+    // CASE_MAP_UNMAP_SUCCESS.
+
+    break;
+  }
   case CASE_MAP_UNMAP_SUCCESS: {
     int arr[] = {10, 20};
     int *arr_dev;
@@ -1424,21 +1448,6 @@ int main(int argc, char *argv[]) {
     // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: element size: [[#%u,ELE_SIZE:]]
     printf("arr: %p\n", arr);
     printf("element size: %lu\n", sizeof *arr);
-
-    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: acc_malloc(0): (nil)
-    printf("acc_malloc(0): %p\n", acc_malloc(0));
-
-    // OpenACC 3.1, sec. 3.2.25 "acc_free", L3444-3445:
-    // "If the argument is a NULL pointer, no operation is performed."
-    acc_free(NULL);
-
-    // Check acc_malloc then acc_free without mapping.
-    arr_dev = acc_malloc(sizeof arr);
-    if (!arr_dev) {
-      fprintf(stderr, "acc_malloc failed\n");
-      return 1;
-    }
-    acc_free(arr_dev);
 
     // Check the sequence acc_malloc, acc_map_data, acc_unmap_data, and
     // acc_free.  Make sure data assignments and transfer work correctly between
@@ -1450,18 +1459,16 @@ int main(int argc, char *argv[]) {
     }
     // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: arr_dev: 0x[[#%x,ARR_DEV:]]
     printf("arr_dev: %p\n", arr_dev);
+    fflush(stdout);
+    // ERR-CASE_MAP_UNMAP_SUCCESS-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
     acc_map_data(arr, arr_dev, sizeof arr);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR]],                   10 -> 10
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE]],     20 -> 20
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               10 -> {{.*}}
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 20 -> {{.*}}
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               10 -> {{.*}}
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 20 -> {{.*}}
     PRINT_INT(arr[0]);
     PRINT_INT(arr[1]);
     #pragma acc update device(arr)
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR]],                   10 -> 10
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE]],     20 -> 20
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               10 -> 10
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 20 -> 20
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               10 -> 10
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 20 -> 20
     PRINT_INT(arr[0]);
     PRINT_INT(arr[1]);
     #pragma acc parallel num_gangs(1)
@@ -1469,41 +1476,31 @@ int main(int argc, char *argv[]) {
       arr[0] += 1;
       arr[1] += 1;
     }
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR]],                   11 -> 11
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE]],     21 -> 21
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               10 -> 11
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 20 -> 21
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               10 -> 11
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 20 -> 21
     PRINT_INT(arr[0]);
     PRINT_INT(arr[1]);
     #pragma acc update self(arr)
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR]],                   11 -> 11
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE]],     21 -> 21
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               11 -> 11
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 21 -> 21
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               11 -> 11
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 21 -> 21
     PRINT_INT(arr[0]);
     PRINT_INT(arr[1]);
     arr[0] = 10;
     arr[1] = 20;
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR]],                   10 -> 10
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE]],     20 -> 20
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               10 -> 11
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 20 -> 21
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               10 -> 11
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 20 -> 21
     PRINT_INT(arr[0]);
     PRINT_INT(arr[1]);
     // Structured reference count is zero.  Dynamic reference count would be
     // zero if not for the preceding acc_map_data.
     acc_unmap_data(arr);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR]],                   10 -> 10
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE]],     20 -> 20
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0]  absent: 0x[[#ARR]]               -> (nil),                        10
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1]  absent: 0x[[#%x,ARR + ELE_SIZE]] -> (nil),                        20
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0]  absent: 0x[[#ARR]]               -> (nil),                        10
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1]  absent: 0x[[#%x,ARR + ELE_SIZE]] -> (nil),                        20
     PRINT_INT(arr[0]);
     PRINT_INT(arr[1]);
     acc_free(arr_dev);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR]],                   10 -> 10
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE]],     20 -> 20
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0]  absent: 0x[[#ARR]]               -> (nil),                        10
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1]  absent: 0x[[#%x,ARR + ELE_SIZE]] -> (nil),                        20
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0]  absent: 0x[[#ARR]]               -> (nil),                        10
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1]  absent: 0x[[#%x,ARR + ELE_SIZE]] -> (nil),                        20
     PRINT_INT(arr[0]);
     PRINT_INT(arr[1]);
 
@@ -1518,7 +1515,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "acc_malloc failed\n");
       return 1;
     }
-    // OUT-CASE_MAP_UNMAP_SUCCESS-NEXT: arr_dev: 0x[[#%x,ARR_DEV:]]
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr_dev: 0x[[#%x,ARR_DEV:]]
     printf("arr_dev: %p\n", arr_dev);
     acc_map_data(arr, arr_dev, sizeof arr);
     arr[0] = 10;
@@ -1529,18 +1526,14 @@ int main(int argc, char *argv[]) {
       arr[1] = 21;
     }
     #pragma acc enter data create(arr)
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR]],                   11 -> 11
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE]],     21 -> 21
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               10 -> 11
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 20 -> 21
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               10 -> 11
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 20 -> 21
     PRINT_INT(arr[0]);
     PRINT_INT(arr[1]);
     // Dynamic reference count would be 1 if not for acc_map_data.
     acc_unmap_data(arr);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR]],                   11 -> 11
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE]],     21 -> 21
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0]  absent: 0x[[#ARR]]               -> (nil),                        10
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1]  absent: 0x[[#%x,ARR + ELE_SIZE]] -> (nil),                        20
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0]  absent: 0x[[#ARR]]               -> (nil),                        10
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1]  absent: 0x[[#%x,ARR + ELE_SIZE]] -> (nil),                        20
     PRINT_INT(arr[0]);
     PRINT_INT(arr[1]);
     acc_map_data(arr, arr_dev, sizeof arr);
@@ -1552,18 +1545,14 @@ int main(int argc, char *argv[]) {
     #pragma acc enter data create(arr)
     acc_copyin(arr, sizeof arr);
     acc_create(arr, sizeof arr);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR]],                   11 -> 11
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE]],     21 -> 21
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               10 -> 11
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 20 -> 21
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               10 -> 11
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 20 -> 21
     PRINT_INT(arr[0]);
     PRINT_INT(arr[1]);
     // Dynamic reference count would be > 1 if not for acc_map_data.
     acc_unmap_data(arr);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR]],                   11 -> 11
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE]],     21 -> 21
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0]  absent: 0x[[#ARR]]               -> (nil),                        10
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1]  absent: 0x[[#%x,ARR + ELE_SIZE]] -> (nil),                        20
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0]  absent: 0x[[#ARR]]               -> (nil),                        10
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1]  absent: 0x[[#%x,ARR + ELE_SIZE]] -> (nil),                        20
     PRINT_INT(arr[0]);
     PRINT_INT(arr[1]);
 
@@ -1585,17 +1574,13 @@ int main(int argc, char *argv[]) {
     acc_copyout_finalize(arr, sizeof arr);
     acc_delete(arr, sizeof arr);
     acc_delete_finalize(arr, sizeof arr);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR]],                   11 -> 11
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE]],     21 -> 21
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               10 -> 11
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 20 -> 21
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               10 -> 11
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 20 -> 21
     PRINT_INT(arr[0]);
     PRINT_INT(arr[1]);
     acc_unmap_data(arr);
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR]],                   11 -> 11
-    // OUT-CASE_MAP_UNMAP_SUCCESS-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE]],     21 -> 21
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0]  absent: 0x[[#ARR]]               -> (nil),                        10
-    //  OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1]  absent: 0x[[#%x,ARR + ELE_SIZE]] -> (nil),                        20
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[0]  absent: 0x[[#ARR]]               -> (nil),                        10
+    // OUT-CASE_MAP_UNMAP_SUCCESS-OFF-NEXT: arr[1]  absent: 0x[[#%x,ARR + ELE_SIZE]] -> (nil),                        20
     PRINT_INT(arr[0]);
     PRINT_INT(arr[1]);
 
@@ -1612,6 +1597,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "acc_malloc failed\n");
       return 1;
     }
+    // ERR-CASE_MAP_SAME_HOST_AS_STRUCTURED-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
     #pragma acc data create(arr)
     // ERR-CASE_MAP_SAME_HOST_AS_STRUCTURED-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr, arr_dev, sizeof arr);
@@ -1624,6 +1610,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "acc_malloc failed\n");
       return 1;
     }
+    // ERR-CASE_MAP_SAME_HOST_AS_DYNAMIC-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
     #pragma acc enter data create(arr)
     // ERR-CASE_MAP_SAME_HOST_AS_DYNAMIC-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr, arr_dev, sizeof arr);
@@ -1636,6 +1623,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "acc_malloc failed\n");
       return 1;
     }
+    // ERR-CASE_MAP_SAME-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
     acc_map_data(arr, arr_dev, sizeof arr);
     // ERR-CASE_MAP_SAME-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr, arr_dev, sizeof arr);
@@ -1649,6 +1637,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "acc_malloc failed\n");
       return 1;
     }
+    // ERR-CASE_MAP_SAME_HOST-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
     acc_map_data(arr, arr_dev0, sizeof arr);
     // ERR-CASE_MAP_SAME_HOST-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr, arr_dev1, sizeof arr);
@@ -1662,6 +1651,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "acc_malloc failed\n");
       return 1;
     }
+    // ERR-CASE_MAP_HOST_EXTENDS_AFTER-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
     acc_map_data(arr, arr_dev0, sizeof *arr);
     // ERR-CASE_MAP_HOST_EXTENDS_AFTER-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr, arr_dev1, sizeof arr);
@@ -1675,6 +1665,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "acc_malloc failed\n");
       return 1;
     }
+    // ERR-CASE_MAP_HOST_EXTENDS_BEFORE-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
     acc_map_data(arr+1, arr_dev0, sizeof *arr);
     // ERR-CASE_MAP_HOST_EXTENDS_BEFORE-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr, arr_dev1, sizeof arr);
@@ -1688,6 +1679,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "acc_malloc failed\n");
       return 1;
     }
+    // ERR-CASE_MAP_HOST_SUBSUMES-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
     acc_map_data(arr+1, arr_dev0, sizeof *arr);
     // ERR-CASE_MAP_HOST_SUBSUMES-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr, arr_dev1, sizeof arr);
@@ -1701,6 +1693,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "acc_malloc failed\n");
       return 1;
     }
+    // ERR-CASE_MAP_HOST_IS_SUBSUMED-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
     acc_map_data(arr, arr_dev0, sizeof arr);
     // ERR-CASE_MAP_HOST_IS_SUBSUMED-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
     acc_map_data(arr+1, arr_dev1, sizeof *arr);
@@ -1750,21 +1743,24 @@ int main(int argc, char *argv[]) {
   // that host address was mapped to device memory using acc_map_data."
   case CASE_UNMAP_UNMAPPED: {
     int arr[] = {10, 20};
-    // ERR-CASE_UNMAP_UNMAPPED-OFF: OMP: Error #[[#]]: acc_unmap_data failed
+    // ERR-CASE_UNMAP_UNMAPPED-HOST: OMP: Error #[[#]]: acc_unmap_data called for shared memory
+    //  ERR-CASE_UNMAP_UNMAPPED-OFF: OMP: Error #[[#]]: acc_unmap_data failed
     acc_unmap_data(arr);
     break;
   }
   case CASE_UNMAP_AFTER_ONLY_STRUCTURED: {
     int arr[] = {10, 20};
     #pragma acc data create(arr)
-    // ERR-CASE_UNMAP_AFTER_ONLY_STRUCTURED-OFF: OMP: Error #[[#]]: acc_unmap_data failed
+    // ERR-CASE_UNMAP_AFTER_ONLY_STRUCTURED-HOST: OMP: Error #[[#]]: acc_unmap_data called for shared memory
+    //  ERR-CASE_UNMAP_AFTER_ONLY_STRUCTURED-OFF: OMP: Error #[[#]]: acc_unmap_data failed
     acc_unmap_data(arr);
     break;
   }
   case CASE_UNMAP_AFTER_ONLY_DYNAMIC: {
     int arr[] = {10, 20};
     #pragma acc enter data create(arr)
-    // ERR-CASE_UNMAP_AFTER_ONLY_DYNAMIC-OFF: OMP: Error #[[#]]: acc_unmap_data failed
+    // ERR-CASE_UNMAP_AFTER_ONLY_DYNAMIC-HOST: OMP: Error #[[#]]: acc_unmap_data called for shared memory
+    //  ERR-CASE_UNMAP_AFTER_ONLY_DYNAMIC-OFF: OMP: Error #[[#]]: acc_unmap_data failed
     acc_unmap_data(arr);
     break;
   }
@@ -1779,6 +1775,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "acc_malloc failed\n");
       return 1;
     }
+    // ERR-CASE_UNMAP_AFTER_MAP_AND_STRUCTURED-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
     acc_map_data(arr, arr_dev, sizeof arr);
     #pragma acc data create(arr)
     // ERR-CASE_UNMAP_AFTER_MAP_AND_STRUCTURED-OFF: OMP: Error #[[#]]: acc_unmap_data failed
@@ -1792,6 +1789,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "acc_malloc failed\n");
       return 1;
     }
+    // ERR-CASE_UNMAP_AFTER_ALL_THREE-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
     acc_map_data(arr, arr_dev, sizeof arr);
     #pragma acc enter data create(arr)
     #pragma acc data create(arr)

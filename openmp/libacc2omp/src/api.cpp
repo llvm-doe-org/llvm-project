@@ -3,9 +3,10 @@
  *
  * This file generally tries to depend on the implementation of OpenMP routines
  * where the desired OpenACC behavior is clearly specified by the OpenMP
- * specification or where we use original OpenMP extensions so that we specify
- * the OpenMP behavior.  Otherwise, this implementation tries to implement the
- * desired OpenACC behavior in this file to avoid such a dependence.
+ * specification or where we use original OpenMP extensions that we believe
+ * should support the desired behavior.  Otherwise, this implementation tries to
+ * implement the desired OpenACC behavior in this file to avoid such a
+ * dependence.
  */
 
 //===----------------------------------------------------------------------===//
@@ -66,10 +67,36 @@
  * reference count is always non-zero.  We document each routine's specific
  * handling of null pointers in more detail below and relate it to this concept
  * where applicable.
- *
- * TODO: We assume !omp_get_num_devices() is a good test for disabled
- * offloading.  Is there a better check?
  ****************************************************************************/
+
+static inline int getCurrentDevice() {
+  // TODO: We assume !omp_get_num_devices() is a good test for disabled
+  // offloading.  Is there a better check?
+  return omp_get_num_devices() ? omp_get_default_device()
+                               : omp_get_initial_device();
+}
+
+enum Presence {
+  PresenceNone,
+  PresencePartiallyMapped,
+  PresenceFullyMapped,
+  PresenceSharedMemory
+};
+
+static inline Presence checkPresence(void *HostPtr, size_t Bytes) {
+  void *BufferHost;
+  void *BufferDevice;
+  size_t BufferSize = omp_get_accessible_buffer(
+      HostPtr, Bytes, getCurrentDevice(), &BufferHost, &BufferDevice);
+  if (!BufferSize)
+    return PresenceNone;
+  if (BufferSize == SIZE_MAX)
+    return PresenceSharedMemory;
+  if (BufferHost <= HostPtr &&
+      (char *)HostPtr + Bytes <= (char *)BufferHost + BufferSize)
+    return PresenceFullyMapped;
+  return PresencePartiallyMapped;
+}
 
 void *acc_malloc(size_t bytes) {
   // Handling of bytes=0:
@@ -78,29 +105,37 @@ void *acc_malloc(size_t bytes) {
   // - OpenACC 3.1 and OpenMP 5.1 are unclear about the behavior in this case.
   if (!bytes)
     return NULL;
-  // If offloading is disabled (thus shared memory):
-  // - Allocate on the host.
-  // - This behavior appears to mimic nvc 20.9-0 and gcc 10.2.0.
-  // - OpenACC 3.1 is unclear about the behavior in this case.
-  return omp_target_alloc(bytes, omp_get_num_devices()
-                                     ? omp_get_default_device()
-                                     : omp_get_initial_device());
+  // Handling of shared memory (including host as current device):
+  // - Regardless, allocate on the current device.
+  // - nvc 20.9-0's acc_malloc returns a non-null pointer.
+  // - LLVM OpenMP runtime's omp_target_alloc allocates on the specified device.
+  // - OpenACC 3.1, sec. 3.2.24 "acc_alloc", L3428:
+  //   "The acc_malloc routine allocates space in the current device memory."
+  // - OpenMP 5.1, sec. 3.8.1 "omp_target_alloc", p. 413 L3-4:
+  //   "The storage location is dynamically allocated in the device data
+  //   environment of the device specified by device_num."
+  // - Neither spec seems to specify an exception for shared memory.
+  return omp_target_alloc(bytes, getCurrentDevice());
 }
 
 void acc_free(void *data_dev) {
-  // If offloading is disabled (thus shared memory):
-  // - Free from the host, for compatibility with acc_malloc.
-  // - This behavior appears to mimic nvc 20.9-0 and gcc 10.2.0.
-  // - OpenACC 3.1 is unclear about the behavior in this case.
-  //
+  // Handling of shared memory (including host as current device):
+  // - Regardless, free from the current device, for consistency with
+  //   acc_malloc.
+  // - OpenACC 3.1, sec. 3.2.25 "acc_free", L3443-3444:
+  //   "The acc_free routine will free previously allocated space in the current
+  //   device memory; data_dev should be a pointer value that was returned by a
+  //   call to acc_malloc."
+  // - OpenMP 5.1, sec. 3.8.2 "omp_target_free", p. 414 L12-13:
+  //   "The omp_target_free routine frees the device memory allocated by the
+  //   omp_target_alloc routine."
   // Handling of null pointer:
   // - OpenACC 3.1, sec. 3.2.25 "acc_free", L3444-3445:
   //   "If the argument is a NULL pointer, no operation is performed."
   // - OpenMP 5.1, sec. 3.8.2 "omp_target_free", p. 415, L3:
   //   "If device_ptr is NULL (or C_NULL_PTR, for Fortran), the operation is
   //   ignored."
-  omp_target_free(data_dev, omp_get_num_devices() ? omp_get_default_device()
-                                                  : omp_get_initial_device());
+  omp_target_free(data_dev, getCurrentDevice());
 }
 
 void *acc_copyin(void *data_arg, size_t bytes) {
@@ -122,18 +157,24 @@ void *acc_copyin(void *data_arg, size_t bytes) {
   //   be discussed in the OpenACC technical committee.
   if (!data_arg || !bytes)
     return NULL;
-  // If offloading is disabled (thus shared memory):
+  // Handling of shared memory (including host as current device):
   // - Return data_arg.
   // - This behavior appears to mimic nvc 20.9-0.
   // - OpenACC 3.1, sec. 3.2.26 "acc_copyin", L3470-3471:
   //   "If the data is in shared memory, no action is taken.  The C/C++
   //   acc_copyin routine returns the incoming pointer."
-  if (!omp_get_num_devices())
+  // - LLVM's OpenMP implementation currently produces a runtime error if
+  //   omp_set_default_device(omp_get_initial_device()) is called before a
+  //   target enter data directive, reporting that the device is not ready, so
+  //   for now our omp_target_map_to implementation does the same for
+  //   device_num = omp_get_initial_device().  Otherwise, it would handle the
+  //   case of shared memory as desired here.
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
     return data_arg;
   // OpenACC 3.1, sec. 3.2.26 "acc_copyin", L3462:
   // "The acc_copyin routines are equivalent to an enter data directive with a
   // copyin clause."
-  return omp_target_map_to(data_arg, bytes, omp_get_default_device());
+  return omp_target_map_to(data_arg, bytes, getCurrentDevice());
 }
 
 void *acc_present_or_copyin(void *data_arg, size_t bytes) {
@@ -169,18 +210,24 @@ void *acc_create(void *data_arg, size_t bytes) {
   //   be discussed in the OpenACC technical committee.
   if (!data_arg || !bytes)
     return NULL;
-  // If offloading is disabled (thus shared memory):
+  // Handling of shared memory (including host as current device):
   // - Return data_arg.
   // - This behavior appears to mimic nvc 20.9-0.
   // - OpenACC 3.1, sec. 3.2.27 "acc_create", L3505-3506:
   //   "If the data is in shared memory, no action is taken.  The C/C++
   //   acc_create routine returns the incoming pointer."
-  if (!omp_get_num_devices())
+  // - LLVM's OpenMP implementation currently produces a runtime error if
+  //   omp_set_default_device(omp_get_initial_device()) is called before a
+  //   target enter data directive, reporting that the device is not ready, so
+  //   for now our omp_target_map_alloc implementation does the same for
+  //   device_num = omp_get_initial_device().  Otherwise, it would handle the
+  //   case of shared memory as desired here.
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
     return data_arg;
   // OpenACC 3.1, sec. 3.2.27 "acc_create", L3502:
   // "The acc_create routines are equivalent to an enter data directive with a
   // create clause."
-  return omp_target_map_alloc(data_arg, bytes, omp_get_default_device());
+  return omp_target_map_alloc(data_arg, bytes, getCurrentDevice());
 }
 
 void *acc_present_or_create(void *data_arg, size_t bytes) {
@@ -216,17 +263,23 @@ void acc_copyout(void *data_arg, size_t bytes) {
   //   be discussed in the OpenACC technical committee.
   if (!data_arg || !bytes)
     return;
-  // If offloading is disabled (thus shared memory):
+  // Handling of shared memory (including host as current device):
   // - Do nothing.
   // - This behavior appears to mimic nvc 20.9-0.
   // - OpenACC 3.1, sec. 3.2.28 "acc_copyout", L3537:
   //   "If the data is in shared memory, no action is taken."
-  if (!omp_get_num_devices())
+  // - LLVM's OpenMP implementation currently produces a runtime error if
+  //   omp_set_default_device(omp_get_initial_device()) is called before a
+  //   target exit data directive, reporting that the device is not ready, so
+  //   for now our omp_target_map_from implementation does the same for
+  //   device_num = omp_get_initial_device().  Otherwise, it would handle the
+  //   case of shared memory as desired here.
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
     return;
   // OpenACC 3.1, sec. 3.2.28 "acc_copyout", L3532:
   // "The acc_copyout routines are equivalent to an exit data directive with a
   // copyout clause."
-  omp_target_map_from(data_arg, bytes, omp_get_default_device());
+  omp_target_map_from(data_arg, bytes, getCurrentDevice());
 }
 
 void acc_copyout_finalize(void *data_arg, size_t bytes) {
@@ -249,16 +302,22 @@ void acc_copyout_finalize(void *data_arg, size_t bytes) {
   //   be discussed in the OpenACC technical committee.
   if (!data_arg || !bytes)
     return;
-  // If offloading is disabled (thus shared memory):
+  // Handling of shared memory (including host as current device):
   // - Do nothing.
   // - OpenACC 3.1, sec. 3.2.28 "acc_copyout", L3537:
   //   "If the data is in shared memory, no action is taken."
-  if (!omp_get_num_devices())
+  // - LLVM's OpenMP implementation currently produces a runtime error if
+  //   omp_set_default_device(omp_get_initial_device()) is called before a
+  //   target exit data directive, reporting that the device is not ready, so
+  //   for now our omp_target_map_from_delete implementation does the same for
+  //   device_num = omp_get_initial_device().  Otherwise, it would handle the
+  //   case of shared memory as desired here.
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
     return;
   // OpenACC 3.1, sec. 3.2.28 "acc_copyout", L3533-3534:
   // "The acc_copyout_finalize routines are equivalent to an exit data directive
   // with both copyout and finalize clauses."
-  omp_target_map_from_delete(data_arg, bytes, omp_get_default_device());
+  omp_target_map_from_delete(data_arg, bytes, getCurrentDevice());
 }
 
 void acc_delete(void *data_arg, size_t bytes) {
@@ -276,21 +335,27 @@ void acc_delete(void *data_arg, size_t bytes) {
   // - For bytes=0, it seems like it would be more consistent with
   //   acc_is_present to decrement the dynamic reference count when
   //   acc_is_present returns true and do nothing otherwise.  On the other hand,
-  ///  that behavior would but subtly inconsistent with nvc.  This idea needs to
+  //   that behavior would but subtly inconsistent with nvc.  This idea needs to
   //   be discussed in the OpenACC technical committee.
   if (!data_arg || !bytes)
     return;
-  // If offloading is disabled (thus shared memory):
+  // Handling of shared memory (including host as current device):
   // - Do nothing.
   // - This behavior appears to mimic nvc 20.9-0.
   // - OpenACC 3.1, sec. 3.2.29 "acc_delete", L3565:
   //   "If the data is in shared memory, no action is taken."
-  if (!omp_get_num_devices())
+  // - LLVM's OpenMP implementation currently produces a runtime error if
+  //   omp_set_default_device(omp_get_initial_device()) is called before a
+  //   target exit data directive, reporting that the device is not ready, so
+  //   for now our omp_target_map_release implementation does the same for
+  //   device_num = omp_get_initial_device().  Otherwise, it would handle the
+  //   case of shared memory as desired here.
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
     return;
   // OpenACC 3.1, sec. 3.2.29 "acc_delete", L3560:
   // "The acc_delete routines are equivalent to an exit data directive with a
   // delete clause."
-  omp_target_map_release(data_arg, bytes, omp_get_default_device());
+  omp_target_map_release(data_arg, bytes, getCurrentDevice());
 }
 
 void acc_delete_finalize(void *data_arg, size_t bytes) {
@@ -313,16 +378,22 @@ void acc_delete_finalize(void *data_arg, size_t bytes) {
   //   be discussed in the OpenACC technical committee.
   if (!data_arg || !bytes)
     return;
-  // If offloading is disabled (thus shared memory):
+  // Handling of shared memory (including host as current device):
   // - Do nothing.
   // - OpenACC 3.1, sec. 3.2.29 "acc_delete", L3565:
   //   "If the data is in shared memory, no action is taken."
-  if (!omp_get_num_devices())
+  // - LLVM's OpenMP implementation currently produces a runtime error if
+  //   omp_set_default_device(omp_get_initial_device()) is called before a
+  //   target exit data directive, reporting that the device is not ready, so
+  //   for now our omp_target_map_delete implementation does the same for
+  //   device_num = omp_get_initial_device().  Otherwise, it would handle the
+  //   case of shared memory as desired here.
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
     return;
   // OpenACC 3.1, sec. 3.2.29 "acc_delete", L3561-3562:
   // "The acc_delete_finalize routines are equivalent to an exit data directive
   // with both delete clause and finalize clauses."
-  omp_target_map_delete(data_arg, bytes, omp_get_default_device());
+  omp_target_map_delete(data_arg, bytes, getCurrentDevice());
 }
 
 void acc_map_data(void *data_arg, void *data_dev, size_t bytes) {
@@ -346,21 +417,10 @@ void acc_map_data(void *data_arg, void *data_dev, size_t bytes) {
   if (!bytes)
     acc2omp_fatal(ACC2OMP_MSG(map_data_bytes_zero));
 
-  // If offloading is disabled (thus shared memory):
-  // - Do nothing.
-  // - This behavior appears to mimic nvc 20.9-0: acc_map_data doesn't affect
-  //   the result of acc_is_present, acc_deviceptr, or acc_hostptr, all of which
-  //   indicate the host pointer is mapped to itself both before and after
-  //   acc_map_data.
-  // - However, gcc-10 has "libgomp: cannot map data on shared-memory system" at
-  //   run time.
-  // - OpenACC 3.1 is unclear about the behavior in this case.
-  if (!omp_get_num_devices())
-    return;
-
-  // When any byte of the specified host memory has already been mapped, issue a
-  // runtime error.  Because omp_target_associate_ptr does not always do so,
-  // check for this case using the OpenMP extension omp_target_range_is_present.
+  // When any byte of the specified host memory has already been mapped or is in
+  // shared memory, issue a runtime error.  Because omp_target_associate_ptr
+  // does not always do so, check for this case using the OpenMP extension
+  // omp_get_accessible_buffer.
   //
   // The relevant spec passages are:
   //
@@ -405,8 +465,25 @@ void acc_map_data(void *data_arg, void *data_dev, size_t bytes) {
   //   - omp_target_associate_ptr: Does "given host pointer value" refer only to
   //     the specified host start address or to any address within the specified
   //     host memory?  LLVM's OpenMP runtime does not make this an error.
-  int Dev = omp_get_default_device();
-  if (omp_present_none != omp_target_range_is_present(data_arg, bytes, Dev))
+  // - Shared memory (including host as current device):
+  //   - It is not clear if either spec covers this case.  However, based on the
+  //     above quotes, we might assume acc_map_data should see the memory as
+  //     already present and thus produce an error, and we might assume OpenMP
+  //     would produce an error only if you don't map it to itself.
+  //   - Under nvc 20.9-0, acc_map_data appears to do nothing in this case: the
+  //     result of acc_is_present, acc_deviceptr, and acc_hostptr aren't
+  //     affected, all of which indicate the host pointer is mapped to itself
+  //     both before and after acc_map_data.  However, calling acc_map_data
+  //     again for the same host pointer produces a runtime error that it's
+  //     already mapped.  Strangely, acc_unmap_data doesn't appear to remove the
+  //     entry as it doesn't prevent that error when called in between those two
+  //     acc_map_data calls.
+  //   - gcc-10 has "libgomp: cannot map data on shared-memory system" at run
+  //     time.
+  Presence P = checkPresence(data_arg, bytes);
+  if (P == PresenceSharedMemory)
+    acc2omp_fatal(ACC2OMP_MSG(map_data_shared_memory));
+  if (P != PresenceNone)
     acc2omp_fatal(ACC2OMP_MSG(map_data_already_present));
 
   // Try to create the mapping.
@@ -424,7 +501,8 @@ void acc_map_data(void *data_arg, void *data_dev, size_t bytes) {
   //   not?  We assume it's the latter and thus follow OpenMP behavior.
   //   However, nvc 20.9-0 does permit exit data to reduce the reference count
   //   to zero and thus unmap the data.
-  if (!omp_target_associate_ptr(data_arg, data_dev, bytes, 0, Dev))
+  if (!omp_target_associate_ptr(data_arg, data_dev, bytes, /*device_offset=*/0,
+                                getCurrentDevice()))
     return;
   acc2omp_fatal(ACC2OMP_MSG(map_data_fail));
 }
@@ -444,15 +522,15 @@ void acc_unmap_data(void *data_arg) {
   //   non-zero structured reference count below.
   if (!data_arg)
     acc2omp_fatal(ACC2OMP_MSG(unmap_data_pointer_null));
-  // If offloading is disabled (thus shared memory):
-  // - Do nothing, for consistency with acc_map_data.
-  // - This behavior appears to mimic nvc 20.9-0: acc_unmap_data doesn't affect
-  //   the result of acc_is_present, acc_deviceptr, or acc_hostptr, all of which
-  //   indicate the host pointer is mapped to itself both before and after
-  //   acc_map_data.
-  // - OpenACC 3.1 is unclear about the behavior in this case.
-  if (!omp_get_num_devices())
-    return;
+  // Handling of shared memory (including host as current device):
+  // - Produce a runtime error, for consistency with acc_map_data.
+  // - Under nvc 20.9-0, acc_unmap_data appears to do nothing in this case: the
+  //   result of acc_is_present, acc_deviceptr, and acc_hostptr aren't affected,
+  //   all of which indicate the host pointer is mapped to itself both before
+  //   and after acc_unmap_data.
+  // - OpenACC 3.1 and OpenMP 5.1 are unclear about the behavior in this case.
+  if (PresenceSharedMemory == checkPresence(data_arg, /*Bytes=*/0))
+    acc2omp_fatal(ACC2OMP_MSG(unmap_data_shared_memory));
   // Pointer must have been mapped using acc_map_data:
   // - OpenACC 3.1, sec. 3.2.33 "acc_unmap_data", L3653-3655:
   //   "It is undefined behavior to call acc_unmap_data with a host address
@@ -484,7 +562,7 @@ void acc_unmap_data(void *data_arg) {
   // - OpenMP 5.1, sec. 3.8.10 "omp_target_disassociate_ptr", p. 429, L22-23:
   //   "The reference count of the mapping is reduced to zero, regardless of its
   //   current value."
-  if (!omp_target_disassociate_ptr(data_arg, omp_get_default_device()))
+  if (!omp_target_disassociate_ptr(data_arg, getCurrentDevice()))
     return;
   acc2omp_fatal(ACC2OMP_MSG(unmap_data_fail));
 }
@@ -499,19 +577,29 @@ void *acc_deviceptr(void *data_arg) {
   //   was automatically mapped to a null pointer.
   if (!data_arg)
     return NULL;
-  // If offloading is disabled (thus shared memory):
+  // Handling of shared memory (including host as current device):
   // - Return data_arg, for consistency with acc_is_present, which always
   //   returns true in this case.
   // - This behavior appears to mimic nvc 20.9-0.
   // - OpenACC 3.1 is unclear about the behavior in this case.
-  if (!omp_get_num_devices())
+  // - OpenMP 5.1 is unclear about the behavior in this case, but "mapped" seems
+  //   to imply an actual present table entry vs. just shared memory.  On the
+  //   other hand, the spec is clear that, if the specified device is the
+  //   initial device (host), then it returns the host pointer.
+  // - TODO: If we decide that omp_get_mapped_ptr definitely isn't intended to
+  //   handle shared memory as we require here, it's probably more reasonable to
+  //   just call omp_get_accessible_buffer once here to get the desired pointer,
+  //   thus eliminating checkPresence and omp_get_mapped_ptr calls here.  Of
+  //   course, if we decide omp_get_mapped_ptr definitely is intended to do what
+  //   we want, we can just eliminate this checkPresence call.
+  if (PresenceSharedMemory == checkPresence(data_arg, /*Bytes=*/0))
     return data_arg;
   // OpenACC 3.1, sec. 3.2.34 "acc_deviceptr", L3665-3667:
   // "The acc_deviceptr routine returns the device pointer associated with a
   // host address.  data_arg is the address of a host variable or array that has
   // an active lifetime on the current device.  If the data is not present in
   // the current device memory, the routine returns a NULL value."
-  return omp_get_mapped_ptr(data_arg, omp_get_default_device());
+  return omp_get_mapped_ptr(data_arg, getCurrentDevice());
 }
 
 int acc_is_present(void *data_arg, size_t bytes) {
@@ -530,13 +618,26 @@ int acc_is_present(void *data_arg, size_t bytes) {
   //   behavior.
   if (!data_arg)
     return true;
-  // If offloading is disabled (thus shared memory):
+  // Handling of shared memory (including host as current device):
   // - Return true.
+  // - OpenACC 3.1, sec. 3.2.36 "acc_is_present", L3692-3693:
+  //   "The acc_is_present routine tests whether the specified host data is
+  //   accessible from the current device."
   // - OpenACC 3.1, sec. 3.2.36 "acc_is_present", L3696-3697:
   //   "The routine returns .true. if the specified data is in shared memory or
   //   is fully present, and .false. otherwise."
-  if (!omp_get_num_devices())
-    return true;
+  // - OpenMP 5.1, sec. 3.8.4 "omp_target_is_accessible", p. 417, L21-22:
+  //   "This routine returns true if the storage of size bytes starting at the
+  //   address given by ptr is accessible from device device_num. Otherwise, it
+  //   returns false."
+  // - omp_target_is_accessible seems to have been designed specifically to
+  //   behave like acc_is_present where omp_target_is_present was not: not
+  //   only does omp_target_is_accessible add the size_t argument, but its
+  //   description also uses the term "accessible".  OpenACC spells out the
+  //   intended meaning of that term for shared memory by spelling out the
+  //   behavior of acc_is_present, as quoted above.  OpenMP establishes the same
+  //   meaning of that term for unified shared memory in OpenMP 5.1, sec. 2.5.1
+  //   "requires directive".
   // Handling of bytes=0:
   // - OpenACC 3.1, sec. 3.2.36 "acc_is_present", L3697-3699:
   //   "If the byte length is zero, the routine returns nonzero in C/C++ or
@@ -549,5 +650,5 @@ int acc_is_present(void *data_arg, size_t bytes) {
   // - The OpenMP 5.1 spec is not perfectly clear, but we assume it's intended
   //   to handle bytes=0 in the same manner as OpenACC, and that's how LLVM's
   //   OpenMP runtime currently implements it.
-  return omp_target_is_accessible(data_arg, bytes, omp_get_default_device());
+  return omp_target_is_accessible(data_arg, bytes, getCurrentDevice());
 }

@@ -45,12 +45,16 @@ static kmp_i18n_id_t acc2omp_msg_to_llvm(acc2omp_msgid_t MsgId) {
     return kmp_i18n_msg_AccMapDataDevicePointerNull;
   case acc2omp_msg_map_data_bytes_zero:
     return kmp_i18n_msg_AccMapDataBytesZero;
+  case acc2omp_msg_map_data_shared_memory:
+    return kmp_i18n_msg_AccMapDataSharedMemory;
   case acc2omp_msg_map_data_already_present:
     return kmp_i18n_msg_AccMapDataAlreadyPresent;
   case acc2omp_msg_map_data_fail:
     return kmp_i18n_msg_AccMapDataFail;
   case acc2omp_msg_unmap_data_pointer_null:
     return kmp_i18n_msg_AccUnmapDataPointerNull;
+  case acc2omp_msg_unmap_data_shared_memory:
+    return kmp_i18n_msg_AccUnmapDataSharedMemory;
   case acc2omp_msg_unmap_data_fail:
     return kmp_i18n_msg_AccUnmapDataFail;
   }

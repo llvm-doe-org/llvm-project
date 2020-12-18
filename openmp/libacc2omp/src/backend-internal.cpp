@@ -65,6 +65,9 @@ acc2omp_msg_t acc2omp_msg(acc2omp_msgid_t MsgId) {
   case acc2omp_msg_map_data_bytes_zero:
     Msg.DefaultFmt = "acc_map_data called with zero bytes";
     break;
+  case acc2omp_msg_map_data_shared_memory:
+    Msg.DefaultFmt = "acc_map_data called for shared memory";
+    break;
   case acc2omp_msg_map_data_already_present:
     Msg.DefaultFmt = "acc_map_data called with host pointer that is already "
                      "mapped";
@@ -74,6 +77,9 @@ acc2omp_msg_t acc2omp_msg(acc2omp_msgid_t MsgId) {
     break;
   case acc2omp_msg_unmap_data_pointer_null:
     Msg.DefaultFmt = "acc_unmap_data call with null pointer";
+    break;
+  case acc2omp_msg_unmap_data_shared_memory:
+    Msg.DefaultFmt = "acc_unmap_data called for shared memory";
     break;
   case acc2omp_msg_unmap_data_fail:
     Msg.DefaultFmt = "acc_unmap_data failed";

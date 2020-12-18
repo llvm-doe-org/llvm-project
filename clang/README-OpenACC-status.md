@@ -314,9 +314,9 @@ OpenACC Runtime Library API and Preprocessor
         * OpenACC 3.1 is unclear about handling of a `bytes` argument
           equal to zero.  In that case, Clacc implements `acc_malloc`
           as a no-op and returns a null pointer.
-        * OpenACC 3.1 is unclear about the behavior when offloading is
-          disabled (thus shared memory).  Clacc allocates and frees on
-          the host in that case.
+        * OpenACC 3.1 does not specify special behavior for shared
+          memory.  As in the case of discrete memory, Clacc allocates
+          and frees on the current device.
     * `acc_copyin`, `acc_create`, `acc_copyout`,
       `acc_copyout_finalize`, `acc_delete`, `acc_delete_finalize`; and
       aliases `acc_present_or_copyin`, `acc_pcopyin`,
@@ -329,9 +329,8 @@ OpenACC Runtime Library API and Preprocessor
         * OpenACC 3.1 is unclear about handling of null pointers or a
           `bytes` argument equal to zero.  Clacc produces a runtime
           error in that case.
-        * OpenACC 3.1 is unclear about the behavior when offloading is
-          disabled (thus shared memory).  Clacc implements these as
-          no-ops in that case.
+        * OpenACC 3.1 is unclear about the behavior for shared memory.
+          Clacc produces a runtime error in that case.
         * OpenACC 3.1 is unclear about whether it is an error if only
           part of the host memory specified to `acc_map_data` has
           already been mapped.  Clacc produces a runtime error in that
@@ -339,9 +338,8 @@ OpenACC Runtime Library API and Preprocessor
     * `acc_deviceptr`
         * OpenACC 3.1 is unclear about handling of a null pointer.
           Clacc returns a null pointer in that case.
-        * OpenACC 3.1 is unclear about the behavior when offloading is
-          disabled (thus shared memory).  Clacc returns the host
-          pointer in that case.
+        * OpenACC 3.1 is unclear about the behavior for shared memory.
+          Clacc returns the host pointer in that case.
     * `acc_is_present`
         * OpenACC 3.1 is unclear about handling of a null pointer.
           Clacc returns true in that case.

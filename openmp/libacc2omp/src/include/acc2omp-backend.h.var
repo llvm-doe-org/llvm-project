@@ -129,9 +129,11 @@ typedef enum {
   acc2omp_msg_map_data_host_pointer_null,
   acc2omp_msg_map_data_device_pointer_null,
   acc2omp_msg_map_data_bytes_zero,
+  acc2omp_msg_map_data_shared_memory,
   acc2omp_msg_map_data_already_present,
   acc2omp_msg_map_data_fail,
   acc2omp_msg_unmap_data_pointer_null,
+  acc2omp_msg_unmap_data_shared_memory,
   acc2omp_msg_unmap_data_fail,
 } acc2omp_msgid_t;
 
