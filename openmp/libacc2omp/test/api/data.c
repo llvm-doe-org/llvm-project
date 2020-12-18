@@ -319,27 +319,37 @@ int main(int argc, char *argv[]) {
     // "If the byte length is zero, the routine returns nonzero in C/C++ or
     // .true. in Fortran if the given address is in shared memory or is present
     // at all in the current device memory."
+    //
+    // Specified array is not present.
     // OUT-CASE_IS_PRESENT_SUCCESS-HOST-NEXT: is_present: 1
     //  OUT-CASE_IS_PRESENT_SUCCESS-OFF-NEXT: is_present: 0
     printf("is_present: %d\n", acc_is_present(arr, 0));
     #pragma acc data create(arr)
     {
+      // Specified array is entirely present.
       // OUT-CASE_IS_PRESENT_SUCCESS-NEXT: is_present: 1
       printf("is_present: %d\n", acc_is_present(arr, 0));
     }
     #pragma acc data create(arr[0:1])
     {
+      // Only subarray of specified array is present, including start.
       // OUT-CASE_IS_PRESENT_SUCCESS-NEXT: is_present: 1
       printf("is_present: %d\n", acc_is_present(arr, 0));
     }
     #pragma acc data create(arr[1:])
     {
+      // Only subarray of specified array is present, not including start.
       // OUT-CASE_IS_PRESENT_SUCCESS-HOST-NEXT: is_present: 1
       //  OUT-CASE_IS_PRESENT_SUCCESS-OFF-NEXT: is_present: 0
       printf("is_present: %d\n", acc_is_present(arr, 0));
+      // Check at valid host address immediately before what's present.
+      // OUT-CASE_IS_PRESENT_SUCCESS-HOST-NEXT: is_present: 1
+      //  OUT-CASE_IS_PRESENT_SUCCESS-OFF-NEXT: is_present: 0
+      printf("is_present: %d\n", acc_is_present(((char*)&arr[1]) - 1, 0));
     }
     #pragma acc data create(arr[0:2])
     {
+      // Check at valid host address immediately after what's present.
       // OUT-CASE_IS_PRESENT_SUCCESS-HOST-NEXT: is_present: 1
       //  OUT-CASE_IS_PRESENT_SUCCESS-OFF-NEXT: is_present: 0
       printf("is_present: %d\n", acc_is_present(arr+2, 0));

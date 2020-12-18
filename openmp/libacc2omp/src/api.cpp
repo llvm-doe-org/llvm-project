@@ -546,8 +546,8 @@ int acc_is_present(void *data_arg, size_t bytes) {
   //   "This routine returns true if the storage of size bytes starting at the
   //   address given by ptr is accessible from device device_num.  Otherwise, it
   //   returns false."
-  // - Follow OpenACC 3.1.  We assume OpenMP 5.1 implementations should have the
-  //   same behavior, but the spec is unclear.
-  return omp_present_full ==
-         omp_target_range_is_present(data_arg, bytes, omp_get_default_device());
+  // - The OpenMP 5.1 spec is not perfectly clear, but we assume it's intended
+  //   to handle bytes=0 in the same manner as OpenACC, and that's how LLVM's
+  //   OpenMP runtime currently implements it.
+  return omp_target_is_accessible(data_arg, bytes, omp_get_default_device());
 }
