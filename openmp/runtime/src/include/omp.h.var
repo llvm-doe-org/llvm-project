@@ -217,6 +217,11 @@
     extern void __KAI_KMPC_CONVENTION omp_target_map_release(void *ptr, size_t size, int device_num);
     extern void __KAI_KMPC_CONVENTION omp_target_map_delete(void *ptr, size_t size, int device_num);
 
+    // The reverse of omp_get_mapped_ptr.  The implementation is inefficient, so
+    // it shouldn't be used in production code, but it might be useful for
+    // debugging.
+    extern void *__KAI_KMPC_CONVENTION omp_get_mapped_hostptr(const void *ptr, int device_num);
+
     /* kmp API functions */
     extern int    __KAI_KMPC_CONVENTION  kmp_get_stacksize          (void);
     extern void   __KAI_KMPC_CONVENTION  kmp_set_stacksize          (int);

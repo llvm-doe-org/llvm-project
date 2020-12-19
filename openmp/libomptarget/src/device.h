@@ -218,6 +218,7 @@ struct DeviceTy {
 
   uint64_t getMapEntryRefCnt(void *HstPtrBegin);
   LookupResult lookupMapping(void *HstPtrBegin, int64_t Size);
+  void *lookupHostPtr(void *TgtPtr);
   size_t getAccessibleBuffer(void *Ptr, int64_t Size, void **BufferHost,
                              void **BufferDevice);
   void *getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, int64_t Size,

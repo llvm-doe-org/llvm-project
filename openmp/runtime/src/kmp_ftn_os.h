@@ -120,6 +120,7 @@
 #define FTN_TARGET_ASSOCIATE_PTR omp_target_associate_ptr
 #define FTN_TARGET_DISASSOCIATE_PTR omp_target_disassociate_ptr
 #define FTN_GET_MAPPED_PTR omp_get_mapped_ptr
+#define FTN_GET_MAPPED_HOSTPTR omp_get_mapped_hostptr
 #define FTN_GET_ACCESSIBLE_BUFFER omp_get_accessible_buffer
 #endif
 
@@ -245,6 +246,7 @@
 #define FTN_TARGET_ASSOCIATE_PTR omp_target_associate_ptr_
 #define FTN_TARGET_DISASSOCIATE_PTR omp_target_disassociate_ptr_
 #define FTN_GET_MAPPED_PTR omp_get_mapped_ptr_
+#define FTN_GET_MAPPED_HOSTPTR omp_get_mapped_hostptr_
 #define FTN_GET_ACCESSIBLE_BUFFER omp_get_accessible_buffer_
 #endif
 
@@ -372,6 +374,7 @@
 #define FTN_TARGET_ASSOCIATE_PTR OMP_TARGET_ASSOCIATE_PTR
 #define FTN_TARGET_DISASSOCIATE_PTR OMP_TARGET_DISASSOCIATE_PTR
 #define FTN_GET_MAPPED_PTR OMP_GET_MAPPED_PTR
+#define FTN_GET_MAPPED_HOSTPTR OMP_GET_MAPPED_HOSTPTR
 #define FTN_GET_ACCESSIBLE_BUFFER OMP_GET_ACCESSIBLE_BUFFER
 #endif
 
@@ -497,6 +500,7 @@
 #define FTN_TARGET_ASSOCIATE_PTR OMP_TARGET_ASSOCIATE_PTR_
 #define FTN_TARGET_DISASSOCIATE_PTR OMP_TARGET_DISASSOCIATE_PTR_
 #define FTN_GET_MAPPED_PTR OMP_GET_MAPPED_PTR_
+#define FTN_GET_MAPPED_HOSTPTR OMP_GET_MAPPED_HOSTPTR_
 #define FTN_GET_ACCESSIBLE_BUFFER OMP_GET_ACCESSIBLE_BUFFER_
 #endif
 

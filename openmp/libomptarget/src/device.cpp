@@ -14,6 +14,7 @@
 #include "private.h"
 #include "rtl.h"
 
+#include <algorithm>
 #include <cassert>
 #include <climits>
 #include <string>
@@ -162,6 +163,33 @@ LookupResult DeviceTy::lookupMapping(void *HstPtrBegin, int64_t Size) {
   }
 
   return lr;
+}
+
+void *DeviceTy::lookupHostPtr(void *TgtPtr) {
+  uintptr_t Tp = (uintptr_t)TgtPtr;
+  DP("Looking up mapping for TgtPtr=" DPxMOD "...\n", DPxPTR(Tp));
+  DataMapMtx.lock();
+
+  HostDataToTargetListTy::iterator Itr = std::find_if(
+      HostDataToTargetMap.begin(), HostDataToTargetMap.end(),
+      [Tp](const HostDataToTargetTy &Entry) {
+        uintptr_t Size = Entry.HstPtrEnd - Entry.HstPtrBegin;
+        return Entry.TgtPtrBegin <= Tp && Tp < Entry.TgtPtrBegin + Size;
+      });
+
+  void *HostPtr;
+  if (Itr == HostDataToTargetMap.end()) {
+    DP("Mapping does not exist\n");
+    HostPtr = NULL;
+  } else {
+    uintptr_t Offset = Tp - Itr->TgtPtrBegin;
+    uintptr_t Hp = Itr->HstPtrBegin + Offset;
+    DP("Mapping exists with HstPtr=" DPxMOD "\n", DPxPTR(Hp));
+    HostPtr = (void *)Hp;
+  }
+
+  DataMapMtx.unlock();
+  return HostPtr;
 }
 
 size_t DeviceTy::getAccessibleBuffer(void *Ptr, int64_t Size, void **BufferHost,

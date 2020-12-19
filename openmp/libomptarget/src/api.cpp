@@ -290,8 +290,8 @@ EXTERN void *omp_get_mapped_ptr(const void *ptr, int device_num) {
   if (device_num == omp_get_initial_device()) {
     DP("Call to omp_get_mapped_ptr on host, returning host pointer\n");
     // OpenMP 5.1, sec. 3.8.11 "omp_get_mapped_ptr", p. 431, L10-12:
-    // Otherwise it returns the device pointer, which is ptr if device_num is
-    // the value returned by omp_get_initial_device().
+    // "Otherwise it returns the device pointer, which is ptr if device_num is
+    // the value returned by omp_get_initial_device()."
     //
     // That is, the spec actually requires us to cast away const.
     return const_cast<void *>(ptr);
@@ -316,7 +316,7 @@ EXTERN void *omp_get_mapped_ptr(const void *ptr, int device_num) {
   // TODO: This seems to be implied by the named "mapped" instead of
   // "accessible".  Or should we return the host pointer?  That is, is this
   // supposed to be like omp_target_is_present or omp_target_is_accessible?
-  // OpenMP 5.1 doesn't seem clear.
+  // OpenMP 5.1 doesn't seem clear.  Keep omp_get_mapped_hostptr in sync.
   if (IsHostPtr) {
     DP("Call to omp_get_mapped_ptr for unified shared memory, returning "
        "NULL\n");
@@ -324,6 +324,41 @@ EXTERN void *omp_get_mapped_ptr(const void *ptr, int device_num) {
   }
   DP("Call to omp_get_mapped_ptr returns " DPxMOD "\n", DPxPTR(TgtPtr));
   return TgtPtr;
+}
+
+EXTERN void *omp_get_mapped_hostptr(const void *ptr, int device_num) {
+  DP("Call to omp_get_mapped_hostptr for device %d and address " DPxMOD "\n",
+     device_num, DPxPTR(ptr));
+
+  if (!ptr) {
+    DP("Call to omp_get_mapped_hostptr with NULL ptr, returning NULL\n");
+    return NULL;
+  }
+
+  if (device_num == omp_get_initial_device()) {
+    DP("Call to omp_get_mapped_hostptr for host, returning device pointer\n");
+    // For consistency with OpenMP 5.1, sec. 3.8.11 "omp_get_mapped_ptr", p.
+    // 431, L10-12:
+    // "Otherwise it returns the device pointer, which is ptr if device_num is
+    // the value returned by omp_get_initial_device()."
+    return const_cast<void *>(ptr);
+  }
+
+  RTLsMtx->lock();
+  size_t Devices_size = Devices.size();
+  RTLsMtx->unlock();
+  if (Devices_size <= (size_t)device_num) {
+    DP("Call to omp_get_mapped_hostptr with invalid device ID, returning "
+       "NULL\n");
+    return NULL;
+  }
+
+  DeviceTy &Device = Devices[device_num];
+  // TODO: This returns nullptr in the case of unified shared memory.  This is
+  // for consistency with the current omp_get_mapped_ptr implementation.
+  void *HostPtr = Device.lookupHostPtr(const_cast<void *>(ptr));
+  DP("Call to omp_get_mapped_hostptr returns " DPxMOD "\n", DPxPTR(HostPtr));
+  return HostPtr;
 }
 
 EXTERN size_t omp_get_accessible_buffer(
