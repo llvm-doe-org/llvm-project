@@ -498,6 +498,41 @@ void *acc_deviceptr(void *data_arg) {
   return omp_get_mapped_ptr(data_arg, getCurrentDevice());
 }
 
+void *acc_hostptr(void *data_dev) {
+  // Handling of null pointer:
+  // - Return a null pointer.
+  // - This behavior appears to mimic nvc 20.9-0.
+  // - OpenACC 3.1, sec. 3.2.35 "acc_hostptr", L3677-3678:
+  //   "If the device address is NULL, or does not correspond to any host
+  //   address, the routine returns a NULL value."
+  // - This behavior seems to follow the OpenACC technical committee's idea that
+  //   a null pointer is considered always present, especially if we assume it
+  //   was automatically mapped to a null pointer.
+  // - OpenMP 5.1 is unclear about the behavior of acc_get_mapped_ptr in this
+  //   case, and our extension omp_get_mapped_hostptr should be consistent with
+  //   omp_get_mapped_ptr.
+  if (!data_dev)
+    return NULL;
+  // Handling of shared memory (including host as current device):
+  // - Return data_dev, for consistency with acc_deviceptr.
+  // - This behavior appears to mimic nvc 20.9-0.
+  // - OpenACC 3.1 is unclear about the behavior in this case.
+  // - OpenMP 5.1 is unclear about the behavior of acc_get_mapped_ptr in this
+  //   case, and our extension omp_get_mapped_hostptr should be consistent with
+  //   omp_get_mapped_ptr.
+  // - TODO: As in acc_deviceptr, we can simplify the remaining code once we
+  //   decide how omp_get_mapped_hostptr should behave.
+  if (PresenceSharedMemory == checkPresence(data_dev, /*Bytes=*/0))
+    return data_dev;
+  // OpenACC 3.1, sec. 3.2.35 "acc_hostptr", L3675-3678:
+  // "The acc_hostptr routine returns the host pointer associated with a device
+  // address. data_dev is the address of a device variable or array, such as
+  // that returned from acc_deviceptr, acc_create or acc_copyin. If the device
+  // address is NULL, or does not correspond to any host address, the routine
+  // returns a NULL value."
+  return omp_get_mapped_hostptr(data_dev, getCurrentDevice());
+}
+
 int acc_is_present(void *data_arg, size_t bytes) {
   // Handling of null pointer:
   // - Return true.

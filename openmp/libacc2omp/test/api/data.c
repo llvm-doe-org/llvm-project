@@ -12,6 +12,7 @@
 // RUN: }
 // RUN: %data cases {
 // RUN:   (case=CASE_DEVICEPTR_SUCCESS              not-if-fail=              )
+// RUN:   (case=CASE_HOSTPTR_SUCCESS                not-if-fail=              )
 // RUN:   (case=CASE_IS_PRESENT_SUCCESS             not-if-fail=              )
 // RUN:   (case=CASE_CLAUSE_LIKE_ROUTINES_SUCCESS   not-if-fail=              )
 // RUN:   (case=CASE_COPYIN_EXTENDS_AFTER           not-if-fail=%[not-if-off] )
@@ -52,7 +53,7 @@
 // RUN:   %for run-envs {
 // RUN:     %for cases {
 // RUN:       %[run-if] %[run-env] %[not-if-fail] %t.exe %[case] \
-// RUN:                            > %t.out 2> %t.err
+// RUN:                            %[host-or-off] > %t.out 2> %t.err
 // RUN:       %[run-if] FileCheck \
 // RUN:           -input-file %t.out %s -match-full-lines -allow-empty \
 // RUN:           -check-prefixes=OUT,OUT-%[case],OUT-%[case]-%[host-or-off]
@@ -70,6 +71,7 @@
 #include <openacc.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include CASES_HEADER
@@ -94,8 +96,16 @@ FOREACH_CASE(AddCase)
 
 bool printMap_(const char *Name, void *HostPtr, size_t Bytes) {
   bool IsPresent = acc_is_present(HostPtr, Bytes);
+  void *DevPtr = acc_deviceptr(HostPtr);
   printf("%s %s: %p -> %p", Name, IsPresent ? "present" : "absent",
-         HostPtr, acc_deviceptr(HostPtr));
+         HostPtr, DevPtr);
+  void *HostPtrChk = acc_hostptr(DevPtr);
+  void *HostPtrExpected = DevPtr ? HostPtr : NULL;
+  if (HostPtrChk != HostPtrExpected) {
+    fprintf(stderr, "acc_hostptr(%p) returned %p but %p was expected\n",
+            DevPtr, HostPtrChk, HostPtrExpected);
+    abort();
+  }
   return IsPresent;
 }
 
@@ -117,8 +127,8 @@ void printInt(const char *Var, int *HostPtr, size_t Bytes) {
 #define PRINT_INT(Var) printInt(#Var, &(Var), sizeof (Var))
 
 int main(int argc, char *argv[]) {
-  if (argc != 2) {
-    fprintf(stderr, "expected one argument\n");
+  if (argc != 3) {
+    fprintf(stderr, "expected two arguments\n");
     return 1;
   }
   enum Case selectedCase;
@@ -130,13 +140,22 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "unexpected case: %s\n", argv[1]);
     return 1;
   }
+  bool Offloading;
+  if (!strcmp(argv[2], "HOST"))
+    Offloading = false;
+  else if (!strcmp(argv[2], "OFF"))
+    Offloading = true;
+  else {
+    fprintf(stderr, "invalid second argument: %s\n", argv[1]);
+    return 1;
+  }
 
   // OUT: start
   printf("start\n");
   fflush(stdout);
   switch (selectedCase) {
   case CASE_DEVICEPTR_SUCCESS: {
-    int arr[3];
+    int arr[4];
     // OUT-CASE_DEVICEPTR_SUCCESS-NEXT: arr: 0x[[#%x,ARR:]]
     // OUT-CASE_DEVICEPTR_SUCCESS-NEXT: element size: [[#%u,ELE_SIZE:]]
     printf("arr: %p\n", arr);
@@ -190,26 +209,131 @@ int main(int argc, char *argv[]) {
     #pragma acc exit data delete(arr)
     printf("deviceptr: %p\n", acc_deviceptr(arr));
 
-    // Check that the correct offset is computed when the address is within a
-    // larger allocation.
-    #pragma acc data create(arr)
+    // Check that the correct offset is computed when the address is within or
+    // immediately beyond a larger allocation.  Check exactly one byte and one
+    // byte after in case there are off-by-one errors in the implementation.
+    #pragma acc data create(arr[1:])
     {
-      // OUT-CASE_DEVICEPTR_SUCCESS-HOST-NEXT: deviceptr: 0x[[#ARR_DEV:ARR]]
-      //  OUT-CASE_DEVICEPTR_SUCCESS-OFF-NEXT: deviceptr: 0x[[#%x,ARR_DEV:]]
-      //      OUT-CASE_DEVICEPTR_SUCCESS-NEXT: deviceptr: 0x[[#%x,ARR_DEV + ELE_SIZE]]
-      //      OUT-CASE_DEVICEPTR_SUCCESS-NEXT: deviceptr: 0x[[#%x,ARR_DEV + ELE_SIZE + ELE_SIZE]]
-      // OUT-CASE_DEVICEPTR_SUCCESS-HOST-NEXT: deviceptr: 0x[[#%x,ARR_DEV + ELE_SIZE + ELE_SIZE + ELE_SIZE]]
+      // OUT-CASE_DEVICEPTR_SUCCESS-HOST-NEXT: deviceptr: 0x[[#ARR_DEV0:ARR]]
+      //  OUT-CASE_DEVICEPTR_SUCCESS-OFF-NEXT: deviceptr: (nil)
+      // OUT-CASE_DEVICEPTR_SUCCESS-HOST-NEXT: deviceptr: 0x[[#%x,ARR + ELE_SIZE - 1]]
+      //  OUT-CASE_DEVICEPTR_SUCCESS-OFF-NEXT: deviceptr: (nil)
+      // OUT-CASE_DEVICEPTR_SUCCESS-HOST-NEXT: deviceptr: 0x[[#%x,ARR_DEV1:ARR_DEV0 + ELE_SIZE]]
+      //  OUT-CASE_DEVICEPTR_SUCCESS-OFF-NEXT: deviceptr: 0x[[#%x,ARR_DEV1:]]
+      //      OUT-CASE_DEVICEPTR_SUCCESS-NEXT: deviceptr: 0x[[#%x,ARR_DEV2:ARR_DEV1 + ELE_SIZE]]
+      //      OUT-CASE_DEVICEPTR_SUCCESS-NEXT: deviceptr: 0x[[#%x,ARR_DEV3:ARR_DEV2 + ELE_SIZE]]
+      // OUT-CASE_DEVICEPTR_SUCCESS-HOST-NEXT: deviceptr: 0x[[#%x,ARR_DEV4:ARR_DEV3 + ELE_SIZE]]
       //  OUT-CASE_DEVICEPTR_SUCCESS-OFF-NEXT: deviceptr: (nil)
       printf("deviceptr: %p\n", acc_deviceptr(arr));
+      printf("deviceptr: %p\n", acc_deviceptr((char *)(arr + 1) - 1));
       printf("deviceptr: %p\n", acc_deviceptr(arr + 1));
       printf("deviceptr: %p\n", acc_deviceptr(arr + 2));
       printf("deviceptr: %p\n", acc_deviceptr(arr + 3));
+      printf("deviceptr: %p\n", acc_deviceptr(arr + 4));
     }
 
     // Check case of null pointer.
     //
     // OUT-CASE_DEVICEPTR_SUCCESS-NEXT: deviceptr: (nil)
     printf("deviceptr: %p\n", acc_deviceptr(NULL));
+
+    break;
+  }
+
+  case CASE_HOSTPTR_SUCCESS: {
+    int arr[4];
+    // OUT-CASE_HOSTPTR_SUCCESS-NEXT: arr: 0x[[#%x,ARR:]]
+    // OUT-CASE_HOSTPTR_SUCCESS-NEXT: element size: [[#%u,ELE_SIZE:]]
+    printf("arr: %p\n", arr);
+    printf("element size: %zu\n", sizeof *arr);
+
+    // acc_hostptr with acc_map_data/acc_unmap_data is checked more thoroughly
+    // in CASE_MAP_UNMAP_SUCCESS.
+    //
+    // acc_hostptr with data-clause-like routines (acc_copyin, acc_create, etc.)
+    // is checked in CASE_CLAUSE_LIKE_ROUTINES_SUCCESS.
+
+    // Check when not mapped.
+    //
+    //      OUT-CASE_HOSTPTR_SUCCESS-NEXT: (unmapped) arr_dev: 0x[[#%x,ARR_DEV:]]
+    // OUT-CASE_HOSTPTR_SUCCESS-HOST-NEXT: (unmapped) hostptr: 0x[[#ARR_DEV]]
+    //  OUT-CASE_HOSTPTR_SUCCESS-OFF-NEXT: (unmapped) hostptr: (nil)
+    int *arr_dev = acc_malloc(sizeof arr);
+    if (!arr_dev) {
+      fprintf(stderr, "acc_malloc failed\n");
+      return 1;
+    }
+    printf("(unmapped) arr_dev: %p\n", arr_dev);
+    printf("(unmapped) hostptr: %p\n", acc_hostptr(arr_dev));
+    acc_free(arr_dev);
+
+    // Check with acc data.
+    #pragma acc data create(arr)
+    {
+      arr_dev = acc_deviceptr(arr);
+      // OUT-CASE_HOSTPTR_SUCCESS-NEXT: (acc data) hostptr: 0x[[#ARR]]
+      // OUT-CASE_HOSTPTR_SUCCESS-NEXT: (acc data) hostptr: 0x[[#ARR]]
+      // OUT-CASE_HOSTPTR_SUCCESS-NEXT: (acc data) hostptr: 0x[[#ARR]]
+      printf("(acc data) hostptr: %p\n", acc_hostptr(arr_dev));
+      #pragma acc data create(arr)
+      {
+        printf("(acc data) hostptr: %p\n", acc_hostptr(arr_dev));
+      }
+      printf("(acc data) hostptr: %p\n", acc_hostptr(arr_dev));
+    }
+
+    // Check with acc enter/exit data.
+    //
+    // OUT-CASE_HOSTPTR_SUCCESS-NEXT: (acc enter/exit data) hostptr: 0x[[#ARR]]
+    // OUT-CASE_HOSTPTR_SUCCESS-NEXT: (acc enter/exit data) hostptr: 0x[[#ARR]]
+    // OUT-CASE_HOSTPTR_SUCCESS-NEXT: (acc enter/exit data) hostptr: 0x[[#ARR]]
+    #pragma acc enter data create(arr)
+    arr_dev = acc_deviceptr(arr);
+    printf("(acc enter/exit data) hostptr: %p\n", acc_hostptr(arr_dev));
+    #pragma acc enter data create(arr)
+    printf("(acc enter/exit data) hostptr: %p\n", acc_hostptr(arr_dev));
+    #pragma acc exit data delete(arr)
+    printf("(acc enter/exit data) hostptr: %p\n", acc_hostptr(arr_dev));
+    #pragma acc exit data delete(arr)
+
+    // Check that the correct offset is computed when the address is within or
+    // immediately beyond a larger allocation.  Check exactly one byte and one
+    // byte after in case there are off-by-one errors in the implementation.
+    //
+    // To check acc_hostptr immediately before the device mapping, we need to
+    // make sure memory is allocated there.  acc_malloc plus acc_map_data is a
+    // way to do that.  In the case of shared memory, acc_map_data fails but we
+    // don't have to worry about the device memory not being allocated then.
+    if (!Offloading) {
+      arr_dev = arr;
+    } else {
+      arr_dev = acc_malloc(sizeof arr);
+      acc_map_data(arr + 1, arr_dev + 1, sizeof arr - sizeof *arr);
+    }
+    // OUT-CASE_HOSTPTR_SUCCESS-HOST-NEXT: (offset) hostptr: 0x[[#%x,ARR]]
+    //  OUT-CASE_HOSTPTR_SUCCESS-OFF-NEXT: (offset) hostptr: (nil)
+    // OUT-CASE_HOSTPTR_SUCCESS-HOST-NEXT: (offset) hostptr: 0x[[#%x,ARR + ELE_SIZE - 1]]
+    //  OUT-CASE_HOSTPTR_SUCCESS-OFF-NEXT: (offset) hostptr: (nil)
+    //      OUT-CASE_HOSTPTR_SUCCESS-NEXT: (offset) hostptr: 0x[[#%x,ARR1:ARR + ELE_SIZE]]
+    //      OUT-CASE_HOSTPTR_SUCCESS-NEXT: (offset) hostptr: 0x[[#%x,ARR2:ARR1 + ELE_SIZE]]
+    //      OUT-CASE_HOSTPTR_SUCCESS-NEXT: (offset) hostptr: 0x[[#%x,ARR3:ARR2 + ELE_SIZE]]
+    // OUT-CASE_HOSTPTR_SUCCESS-HOST-NEXT: (offset) hostptr: 0x[[#%x,ARR4:ARR3 + ELE_SIZE]]
+    //  OUT-CASE_HOSTPTR_SUCCESS-OFF-NEXT: (offset) hostptr: (nil)
+    printf("(offset) hostptr: %p\n", acc_hostptr(arr_dev));
+    printf("(offset) hostptr: %p\n", acc_hostptr((char *)(arr_dev + 1) - 1));
+    printf("(offset) hostptr: %p\n", acc_hostptr(arr_dev + 1));
+    printf("(offset) hostptr: %p\n", acc_hostptr(arr_dev + 2));
+    printf("(offset) hostptr: %p\n", acc_hostptr(arr_dev + 3));
+    printf("(offset) hostptr: %p\n", acc_hostptr(arr_dev + 4));
+    if (Offloading) {
+      acc_unmap_data(arr + 1);
+      acc_free(arr_dev);
+    }
+
+    // Check case of null pointer.
+    //
+    // OUT-CASE_HOSTPTR_SUCCESS-NEXT: (null) hostptr: (nil)
+    printf("(null) hostptr: %p\n", acc_hostptr(NULL));
 
     break;
   }

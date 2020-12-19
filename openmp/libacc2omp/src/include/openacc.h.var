@@ -60,6 +60,7 @@ void acc_delete_finalize(void *data_arg, size_t bytes);
 void acc_map_data(void* data_arg, void* data_dev, size_t bytes);
 void acc_unmap_data(void* data_arg);
 void *acc_deviceptr(void *data_arg);
+void *acc_hostptr(void *data_dev);
 int acc_is_present(void *data_arg, size_t bytes);
 
 #ifdef __cplusplus

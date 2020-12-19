@@ -339,7 +339,14 @@ OpenACC Runtime Library API and Preprocessor
         * OpenACC 3.1 is unclear about handling of a null pointer.
           Clacc returns a null pointer in that case.
         * OpenACC 3.1 is unclear about the behavior for shared memory.
-          Clacc returns the host pointer in that case.
+          Clacc returns the specified host pointer in that case.
+    * `acc_hostptr`
+        * As in other OpenACC implementations, Clacc's implementation
+          of `acc_hostptr` has poor performance.  Calls to
+          `acc_hostptr` are not recommended in production code but may
+          be useful for debugging.
+        * OpenACC 3.1 is unclear about the behavior for shared memory.
+          Clacc returns the specified device pointer in that case.
     * `acc_is_present`
         * OpenACC 3.1 is unclear about handling of a null pointer.
           Clacc returns true in that case.

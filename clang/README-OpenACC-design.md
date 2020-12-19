@@ -1874,6 +1874,7 @@ implemented in Clacc's version of LLVM's OpenMP runtime library:
 * `void omp_target_map_from_delete(void *ptr, size_t size, int device_num);`
 * `void omp_target_map_release(void *ptr, size_t size, int device_num);`
 * `void omp_target_map_delete(void *ptr, size_t size, int device_num);`
+* `void *omp_get_mapped_hostptr(const void *ptr, int device_num);`
 
 Support for the OpenACC Profiling Interface appears primarily in the
 source file `openmp/libacc2omp/src/prof.cpp`.  It is documented in the
