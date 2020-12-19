@@ -57,16 +57,7 @@
 #include "internal.h"
 
 /*****************************************************************************
- * Data and memory management routines.
- *
- * Correct handling of null pointers is often not clear in OpenACC 3.1.  We
- * attempt to follow a concept discussed by the OpenACC technical committee: a
- * null pointer is considered always present.  Specifically, we assume the
- * behavior is as if there is an "acc data" enclosing the entire program that
- * maps a host null pointer to a device null pointer so that the structured
- * reference count is always non-zero.  We document each routine's specific
- * handling of null pointers in more detail below and relate it to this concept
- * where applicable.
+ * Internal helper routines.
  ****************************************************************************/
 
 static inline int getCurrentDevice() {
@@ -97,6 +88,23 @@ static inline Presence checkPresence(void *HostPtr, size_t Bytes) {
     return PresenceFullyMapped;
   return PresencePartiallyMapped;
 }
+
+/*****************************************************************************
+ * Data and memory management routines.
+ *
+ * Correct handling of null pointers is often not clear in OpenACC 3.1.  We
+ * attempt to follow a concept discussed by the OpenACC technical committee: a
+ * null pointer is considered always present.  Specifically, we assume the
+ * behavior is as if there is an "acc data" enclosing the entire program that
+ * maps a host null pointer to a device null pointer so that the structured
+ * reference count is always non-zero.  We document each routine's specific
+ * handling of null pointers in more detail below and relate it to this concept
+ * where applicable.
+ ****************************************************************************/
+
+/*----------------------------------------------------------------------------
+ * Allocation routines.
+ *--------------------------------------------------------------------------*/
 
 void *acc_malloc(size_t bytes) {
   // Handling of bytes=0:
@@ -138,37 +146,51 @@ void acc_free(void *data_dev) {
   omp_target_free(data_dev, getCurrentDevice());
 }
 
+/*----------------------------------------------------------------------------
+ * Data-clause-like routines.
+ *
+ * Handling of null pointer or bytes=0:
+ * - Other than returning a null pointer where the return type is void*, do
+ *   nothing, even if shared memory.
+ * - This behavior appears to mimic nvc 20.9-0, except that the latter doesn't
+ *   yet implement acc_copyout_finalize or acc_delete_finalize.
+ * - OpenACC 3.1 is unclear about the behavior in this case.
+ * - The OpenACC technical committee is considering adding "or is a null
+ *   pointer" to the shared-memory condition in each of the quotes below.
+ * - For a null pointer, this behavior seems to follow the OpenACC technical
+ *   commitee's idea that a null pointer is considered always present,
+ *   especially if we assume it was automatically mapped to a null pointer with
+ *   a non-zero structured reference count (so that reference count incs/decs
+ *   have no effect).
+ * - For bytes=0, it seems like it would be more consistent with acc_is_present
+ *   to increment/decrement the dynamic reference count when acc_is_present
+ *   returns true and do nothing otherwise.  On the other hand, that behavior
+ *   would but subtly inconsistent with nvc.  This idea needs to be discussed in
+ *   the OpenACC technical committee.
+ * Handling of shared memory (including host as current device):
+ * - Other than returning data_arg where the return type is void*, do nothing.
+ * - This behavior appears to mimic nvc 20.9-0.
+ * - OpenACC 3.1, sec. 3.2.26 "acc_copyin", L3470-3471:
+ *   "If the data is in shared memory, no action is taken.  The C/C++ acc_copyin
+ *   routine returns the incoming pointer."
+ * - OpenACC 3.1, sec. 3.2.27 "acc_create", L3505-3506:
+ *   "If the data is in shared memory, no action is taken.  The C/C++ acc_create
+ *   routine returns the incoming pointer."
+ * - OpenACC 3.1, sec. 3.2.28 "acc_copyout", L3537:
+ *   "If the data is in shared memory, no action is taken."
+ * - OpenACC 3.1, sec. 3.2.29 "acc_delete", L3565:
+ *   "If the data is in shared memory, no action is taken."
+ * - LLVM's OpenMP implementation currently produces a runtime error if
+ *   omp_set_default_device(omp_get_initial_device()) is called before a target
+ *   enter/exit data directive, reporting that the device is not ready.  Thus,
+ *   for now, our omp_target_map_(to|alloc|from|from_delete|release|delete)
+ *   implementations do the same for device_num = omp_get_initial_device().
+ *   Otherwise, it would handle the case of shared memory as desired here.
+ *--------------------------------------------------------------------------*/
+
 void *acc_copyin(void *data_arg, size_t bytes) {
-  // Handling of null pointer or bytes=0:
-  // - Return a null pointer and do nothing, even if shared memory.
-  // - This behavior appears to mimic nvc 20.9-0.
-  // - OpenACC 3.1 is unclear about the behavior in this case.
-  // - The OpenACC technical committee is considering adding "or is a null
-  //   pointer" to the condition in the following quote.
-  // - For a null pointer, this behavior seems to follow the OpenACC technical
-  //   commitee's idea that a null pointer is considered always present,
-  //   especially if we assume it was automatically mapped to a null pointer
-  //   with a non-zero structured reference count (so that reference count
-  //   incs/decs have no effect).
-  // - For bytes=0, it seems like it would be more consistent with
-  //   acc_is_present to increment the dynamic reference count when
-  //   acc_is_present returns true and do nothing otherwise.  On the other hand,
-  ///  that behavior would but subtly inconsistent with nvc.  This idea needs to
-  //   be discussed in the OpenACC technical committee.
   if (!data_arg || !bytes)
     return NULL;
-  // Handling of shared memory (including host as current device):
-  // - Return data_arg.
-  // - This behavior appears to mimic nvc 20.9-0.
-  // - OpenACC 3.1, sec. 3.2.26 "acc_copyin", L3470-3471:
-  //   "If the data is in shared memory, no action is taken.  The C/C++
-  //   acc_copyin routine returns the incoming pointer."
-  // - LLVM's OpenMP implementation currently produces a runtime error if
-  //   omp_set_default_device(omp_get_initial_device()) is called before a
-  //   target enter data directive, reporting that the device is not ready, so
-  //   for now our omp_target_map_to implementation does the same for
-  //   device_num = omp_get_initial_device().  Otherwise, it would handle the
-  //   case of shared memory as desired here.
   if (PresenceSharedMemory == checkPresence(data_arg, bytes))
     return data_arg;
   // OpenACC 3.1, sec. 3.2.26 "acc_copyin", L3462:
@@ -192,36 +214,8 @@ void *acc_pcopyin(void *data_arg, size_t bytes) {
 }
 
 void *acc_create(void *data_arg, size_t bytes) {
-  // Handling of null pointer or bytes=0:
-  // - Return a null pointer and do nothing, even if shared memory.
-  // - This behavior appears to mimic nvc 20.9-0.
-  // - OpenACC 3.1 is unclear about the behavior in this case.
-  // - The OpenACC technical committee is considering adding "or is a null
-  //   pointer" to the condition in the following quote.
-  // - For a null pointer, this behavior seems to follow the OpenACC technical
-  //   commitee's idea that a null pointer is considered always present,
-  //   especially if we assume it was automatically mapped to a null pointer
-  //   with a non-zero structured reference count (so that reference count
-  //   incs/decs have no effect).
-  // - For bytes=0, it seems like it would be more consistent with
-  //   acc_is_present to increment the dynamic reference count when
-  //   acc_is_present returns true and do nothing otherwise.  On the other hand,
-  //   that behavior would but subtly inconsistent with nvc.  This idea needs to
-  //   be discussed in the OpenACC technical committee.
   if (!data_arg || !bytes)
     return NULL;
-  // Handling of shared memory (including host as current device):
-  // - Return data_arg.
-  // - This behavior appears to mimic nvc 20.9-0.
-  // - OpenACC 3.1, sec. 3.2.27 "acc_create", L3505-3506:
-  //   "If the data is in shared memory, no action is taken.  The C/C++
-  //   acc_create routine returns the incoming pointer."
-  // - LLVM's OpenMP implementation currently produces a runtime error if
-  //   omp_set_default_device(omp_get_initial_device()) is called before a
-  //   target enter data directive, reporting that the device is not ready, so
-  //   for now our omp_target_map_alloc implementation does the same for
-  //   device_num = omp_get_initial_device().  Otherwise, it would handle the
-  //   case of shared memory as desired here.
   if (PresenceSharedMemory == checkPresence(data_arg, bytes))
     return data_arg;
   // OpenACC 3.1, sec. 3.2.27 "acc_create", L3502:
@@ -245,35 +239,8 @@ void *acc_pcreate(void *data_arg, size_t bytes) {
 }
 
 void acc_copyout(void *data_arg, size_t bytes) {
-  // Handling of null pointer or bytes=0:
-  // - Do nothing, even if shared memory.
-  // - This behavior appears to mimic nvc 20.9-0.
-  // - OpenACC 3.1 is unclear about the behavior in this case.
-  // - The OpenACC technical committee is considering adding "or is a null
-  //   pointer" to the condition in the following quote.
-  // - For a null pointer, this behavior seems to follow the OpenACC technical
-  //   commitee's idea that a null pointer is considered always present,
-  //   especially if we assume it was automatically mapped to a null pointer
-  //   with a non-zero structured reference count (so that reference count
-  //   incs/decs have no effect).
-  // - For bytes=0, it seems like it would be more consistent with
-  //   acc_is_present to decrement the dynamic reference count when
-  //   acc_is_present returns true and do nothing otherwise.  On the other hand,
-  ///  that behavior would but subtly inconsistent with nvc.  This idea needs to
-  //   be discussed in the OpenACC technical committee.
   if (!data_arg || !bytes)
     return;
-  // Handling of shared memory (including host as current device):
-  // - Do nothing.
-  // - This behavior appears to mimic nvc 20.9-0.
-  // - OpenACC 3.1, sec. 3.2.28 "acc_copyout", L3537:
-  //   "If the data is in shared memory, no action is taken."
-  // - LLVM's OpenMP implementation currently produces a runtime error if
-  //   omp_set_default_device(omp_get_initial_device()) is called before a
-  //   target exit data directive, reporting that the device is not ready, so
-  //   for now our omp_target_map_from implementation does the same for
-  //   device_num = omp_get_initial_device().  Otherwise, it would handle the
-  //   case of shared memory as desired here.
   if (PresenceSharedMemory == checkPresence(data_arg, bytes))
     return;
   // OpenACC 3.1, sec. 3.2.28 "acc_copyout", L3532:
@@ -284,34 +251,8 @@ void acc_copyout(void *data_arg, size_t bytes) {
 
 void acc_copyout_finalize(void *data_arg, size_t bytes) {
   // nvc 20.9-0 does not implement acc_copyout_finalize.
-  //
-  // Handling of null pointer or bytes=0:
-  // - Do nothing, even if shared memory.
-  // - OpenACC 3.1 is unclear about the behavior in this case.
-  // - The OpenACC technical committee is considering adding "or is a null
-  //   pointer" to the condition in the following quote.
-  // - For a null pointer, this behavior seems to follow the OpenACC technical
-  //   commitee's idea that a null pointer is considered always present,
-  //   especially if we assume it was automatically mapped to a null pointer
-  //   with a non-zero structured reference count (so that reference count
-  //   incs/decs have no effect).
-  // - For bytes=0, it seems like it would be more consistent with
-  //   acc_is_present to decrement the dynamic reference count when
-  //   acc_is_present returns true and do nothing otherwise.  On the other hand,
-  ///  that behavior would but subtly inconsistent with nvc.  This idea needs to
-  //   be discussed in the OpenACC technical committee.
   if (!data_arg || !bytes)
     return;
-  // Handling of shared memory (including host as current device):
-  // - Do nothing.
-  // - OpenACC 3.1, sec. 3.2.28 "acc_copyout", L3537:
-  //   "If the data is in shared memory, no action is taken."
-  // - LLVM's OpenMP implementation currently produces a runtime error if
-  //   omp_set_default_device(omp_get_initial_device()) is called before a
-  //   target exit data directive, reporting that the device is not ready, so
-  //   for now our omp_target_map_from_delete implementation does the same for
-  //   device_num = omp_get_initial_device().  Otherwise, it would handle the
-  //   case of shared memory as desired here.
   if (PresenceSharedMemory == checkPresence(data_arg, bytes))
     return;
   // OpenACC 3.1, sec. 3.2.28 "acc_copyout", L3533-3534:
@@ -321,35 +262,8 @@ void acc_copyout_finalize(void *data_arg, size_t bytes) {
 }
 
 void acc_delete(void *data_arg, size_t bytes) {
-  // Handling of null pointer or bytes=0:
-  // - Do nothing, even if shared memory.
-  // - This behavior appears to mimic nvc 20.9-0.
-  // - OpenACC 3.1 is unclear about the behavior in this case.
-  // - The OpenACC technical committee is considering adding "or is a null
-  //   pointer" to the condition in the following quote.
-  // - For a null pointer, this behavior seems to follow the OpenACC technical
-  //   commitee's idea that a null pointer is considered always present,
-  //   especially if we assume it was automatically mapped to a null pointer
-  //   with a non-zero structured reference count (so that reference count
-  //   incs/decs have no effect).
-  // - For bytes=0, it seems like it would be more consistent with
-  //   acc_is_present to decrement the dynamic reference count when
-  //   acc_is_present returns true and do nothing otherwise.  On the other hand,
-  //   that behavior would but subtly inconsistent with nvc.  This idea needs to
-  //   be discussed in the OpenACC technical committee.
   if (!data_arg || !bytes)
     return;
-  // Handling of shared memory (including host as current device):
-  // - Do nothing.
-  // - This behavior appears to mimic nvc 20.9-0.
-  // - OpenACC 3.1, sec. 3.2.29 "acc_delete", L3565:
-  //   "If the data is in shared memory, no action is taken."
-  // - LLVM's OpenMP implementation currently produces a runtime error if
-  //   omp_set_default_device(omp_get_initial_device()) is called before a
-  //   target exit data directive, reporting that the device is not ready, so
-  //   for now our omp_target_map_release implementation does the same for
-  //   device_num = omp_get_initial_device().  Otherwise, it would handle the
-  //   case of shared memory as desired here.
   if (PresenceSharedMemory == checkPresence(data_arg, bytes))
     return;
   // OpenACC 3.1, sec. 3.2.29 "acc_delete", L3560:
@@ -360,34 +274,8 @@ void acc_delete(void *data_arg, size_t bytes) {
 
 void acc_delete_finalize(void *data_arg, size_t bytes) {
   // nvc 20.9-0 does not implement acc_delete_finalize.
-  //
-  // Handling of null pointer or bytes=0:
-  // - Do nothing, even if shared memory.
-  // - OpenACC 3.1 is unclear about the behavior in this case.
-  // - The OpenACC technical committee is considering adding "or is a null
-  //   pointer" to the condition in the following quote.
-  // - For a null pointer, this behavior seems to follow the OpenACC technical
-  //   commitee's idea that a null pointer is considered always present,
-  //   especially if we assume it was automatically mapped to a null pointer
-  //   with a non-zero structured reference count (so that reference count
-  //   incs/decs have no effect).
-  // - For bytes=0, it seems like it would be more consistent with
-  //   acc_is_present to decrement the dynamic reference count when
-  //   acc_is_present returns true and do nothing otherwise.  On the other hand,
-  ///  that behavior would but subtly inconsistent with nvc.  This idea needs to
-  //   be discussed in the OpenACC technical committee.
   if (!data_arg || !bytes)
     return;
-  // Handling of shared memory (including host as current device):
-  // - Do nothing.
-  // - OpenACC 3.1, sec. 3.2.29 "acc_delete", L3565:
-  //   "If the data is in shared memory, no action is taken."
-  // - LLVM's OpenMP implementation currently produces a runtime error if
-  //   omp_set_default_device(omp_get_initial_device()) is called before a
-  //   target exit data directive, reporting that the device is not ready, so
-  //   for now our omp_target_map_delete implementation does the same for
-  //   device_num = omp_get_initial_device().  Otherwise, it would handle the
-  //   case of shared memory as desired here.
   if (PresenceSharedMemory == checkPresence(data_arg, bytes))
     return;
   // OpenACC 3.1, sec. 3.2.29 "acc_delete", L3561-3562:
@@ -395,6 +283,10 @@ void acc_delete_finalize(void *data_arg, size_t bytes) {
   // with both delete clause and finalize clauses."
   omp_target_map_delete(data_arg, bytes, getCurrentDevice());
 }
+
+/*----------------------------------------------------------------------------
+ * Mapping routines.
+ *--------------------------------------------------------------------------*/
 
 void acc_map_data(void *data_arg, void *data_dev, size_t bytes) {
   // Handling of null pointer or bytes=0:
@@ -566,6 +458,10 @@ void acc_unmap_data(void *data_arg) {
     return;
   acc2omp_fatal(ACC2OMP_MSG(unmap_data_fail));
 }
+
+/*----------------------------------------------------------------------------
+ * Query routines.
+ *--------------------------------------------------------------------------*/
 
 void *acc_deviceptr(void *data_arg) {
   // Handling of null pointer:
