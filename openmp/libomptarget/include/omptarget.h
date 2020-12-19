@@ -144,13 +144,6 @@ void omp_target_free(void *device_ptr, int device_num);
 // FIXME: OpenMP 5.0 and 5.1 say const void *ptr.
 int omp_target_is_present(void *ptr, int device_num);
 int omp_target_is_accessible(const void *ptr, size_t size, int device_num);
-typedef enum omp_present_t {
-  omp_present_none = 0,
-  omp_present_partial = 1,
-  omp_present_full = 2
-} omp_present_t;
-omp_present_t omp_target_range_is_present(void *ptr, size_t size,
-                                          int device_num);
 int omp_target_memcpy(void *dst, void *src, size_t length, size_t dst_offset,
     size_t src_offset, int dst_device, int src_device);
 int omp_target_memcpy_rect(void *dst, void *src, size_t element_size,

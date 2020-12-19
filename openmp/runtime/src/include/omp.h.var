@@ -162,18 +162,6 @@
     // OpenACC runtime, so they are not yet recommended for general use in
     // OpenMP code.
 
-    typedef enum omp_present_t {
-        omp_present_none = 0, // has value of false
-        omp_present_partial = 1,
-        omp_present_full = 2
-    } omp_present_t;
-
-    // Same as omp_target_is_present except it determines whether a range of
-    // bytes (as opposed to a single address) is not present, only partially
-    // present, or fully present.
-    extern omp_present_t __KAI_KMPC_CONVENTION
-    omp_target_range_is_present(void *, size_t, int);
-
     // Find any mapped or unified shared memory buffer that overlaps with the
     // specified host memory range.
     //

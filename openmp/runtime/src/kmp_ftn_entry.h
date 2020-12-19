@@ -991,17 +991,6 @@ int FTN_STDCALL FTN_TARGET_IS_ACCESSIBLE(const void *ptr, size_t size,
   return 0;
 }
 
-typedef enum omp_present_t {
-  omp_present_none = 0,
-  omp_present_partial = 1,
-  omp_present_full = 2
-} omp_present_t;
-
-omp_present_t FTN_STDCALL FTN_TARGET_RANGE_IS_PRESENT(void *ptr, size_t size,
-                                                      int device_num) {
-  return 0;
-}
-
 int FTN_STDCALL FTN_TARGET_MEMCPY(void *dst, void *src, size_t length,
                                   size_t dst_offset, size_t src_offset,
                                   int dst_device, int src_device) {

@@ -277,47 +277,6 @@ EXTERN int omp_target_is_accessible(const void *ptr, size_t size,
   return rc;
 }
 
-EXTERN omp_present_t omp_target_range_is_present(void *ptr, size_t size,
-                                                 int device_num) {
-  DP("Call to omp_target_range_is_present for device %d and address " DPxMOD
-     "\n",
-     device_num, DPxPTR(ptr));
-
-  if (!ptr) {
-    DP("Call to omp_target_range_is_present with NULL ptr, returning "
-       "omp_present_none\n");
-    return omp_present_none;
-  }
-
-  if (device_num == omp_get_initial_device()) {
-    DP("Call to omp_target_range_is_present on host, returning "
-       "omp_present_full\n");
-    return omp_present_full;
-  }
-
-  RTLsMtx->lock();
-  size_t Devices_size = Devices.size();
-  RTLsMtx->unlock();
-  if (Devices_size <= (size_t)device_num) {
-    DP("Call to omp_target_range_is_present with invalid device ID, returning "
-       "omp_present_none\n");
-    return omp_present_none;
-  }
-
-  DeviceTy &Device = Devices[device_num];
-  LookupResult lr = Device.lookupMapping(ptr, size);
-  if (lr.Flags.IsContained) {
-    DP("Call to omp_target_range_is_present returns omp_present_full\n");
-    return omp_present_full;
-  }
-  if (lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) {
-    DP("Call to omp_target_range_is_present returns omp_present_partial\n");
-    return omp_present_partial;
-  }
-  DP("Call to omp_target_range_is_present returns omp_present_none\n");
-  return omp_present_none;
-}
-
 EXTERN void *omp_get_mapped_ptr(const void *ptr, int device_num) {
   DP("Call to omp_get_mapped_ptr for device %d and address " DPxMOD
      "\n",
