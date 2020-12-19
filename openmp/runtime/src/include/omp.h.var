@@ -201,8 +201,8 @@
     //   - A "to" or "alloc" map type.
     //   - A locator for the specified host memory range.
     // The result is a pointer to the device allocation.
-    extern void *__KAI_KMPC_CONVENTION omp_target_map_to(void *, size_t, int);
-    extern void *__KAI_KMPC_CONVENTION omp_target_map_alloc(void *, size_t, int);
+    extern void *__KAI_KMPC_CONVENTION omp_target_map_to(void *ptr, size_t size, int device_num);
+    extern void *__KAI_KMPC_CONVENTION omp_target_map_alloc(void *ptr, size_t size, int device_num);
 
     // Same as an OpenMP "target exit data" construct with:
     // - A device clause for the specified device number.
@@ -212,10 +212,10 @@
     // In the case of "omp_target_map_from_delete", the behavior is that of two
     // map clauses, such that both the transfer and deallocation occurs, except
     // that two map clauses for the same variable isn't supported yet.
-    extern void __KAI_KMPC_CONVENTION omp_target_map_from(void *, size_t, int);
-    extern void __KAI_KMPC_CONVENTION omp_target_map_from_delete(void *, size_t, int);
-    extern void __KAI_KMPC_CONVENTION omp_target_map_release(void *, size_t, int);
-    extern void __KAI_KMPC_CONVENTION omp_target_map_delete(void *, size_t, int);
+    extern void __KAI_KMPC_CONVENTION omp_target_map_from(void *ptr, size_t size, int device_num);
+    extern void __KAI_KMPC_CONVENTION omp_target_map_from_delete(void *ptr, size_t size, int device_num);
+    extern void __KAI_KMPC_CONVENTION omp_target_map_release(void *ptr, size_t size, int device_num);
+    extern void __KAI_KMPC_CONVENTION omp_target_map_delete(void *ptr, size_t size, int device_num);
 
     /* kmp API functions */
     extern int    __KAI_KMPC_CONVENTION  kmp_get_stacksize          (void);
