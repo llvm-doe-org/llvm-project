@@ -991,6 +991,20 @@ int FTN_STDCALL FTN_TARGET_IS_ACCESSIBLE(const void *ptr, size_t size,
   return 0;
 }
 
+void *FTN_STDCALL FTN_GET_MAPPED_PTR(const void *ptr, int device_num) {
+  return NULL;
+}
+
+void *FTN_STDCALL FTN_GET_MAPPED_HOSTPTR(const void *ptr, int device_num) {
+  return NULL;
+}
+
+size_t FTN_STDCALL FTN_GET_ACCESSIBLE_BUFFER(const void *ptr, size_t size,
+                                             int device_num, void **buffer_host,
+                                             void **buffer_device) {
+  return 0;
+}
+
 int FTN_STDCALL FTN_TARGET_MEMCPY(void *dst, void *src, size_t length,
                                   size_t dst_offset, size_t src_offset,
                                   int dst_device, int src_device) {
@@ -1015,18 +1029,23 @@ int FTN_STDCALL FTN_TARGET_DISASSOCIATE_PTR(void *host_ptr, int device_num) {
   return -1;
 }
 
-void *FTN_STDCALL FTN_GET_MAPPED_PTR(const void *ptr, int device_num) {
+void *FTN_STDCALL FTN_TARGET_MAP_TO(void *ptr, size_t size, int device_num) {
   return NULL;
 }
 
-void *FTN_STDCALL FTN_GET_MAPPED_HOSTPTR(const void *ptr, int device_num) {
+void *FTN_STDCALL FTN_TARGET_MAP_ALLOC(void *ptr, size_t size, int device_num) {
   return NULL;
 }
 
-size_t FTN_STDCALL FTN_GET_ACCESSIBLE_BUFFER(const void *ptr, size_t size,
-                                             int device_num, void **buffer_host,
-                                             void **buffer_device) {
-  return 0;
+void FTN_STDCALL FTN_TARGET_MAP_FROM(void *ptr, size_t size, int device_num) {}
+
+void FTN_STDCALL FTN_TARGET_MAP_FROM_DELETE(void *ptr, size_t size,
+                                            int device_num) {}
+
+void FTN_STDCALL FTN_TARGET_MAP_RELEASE(void *ptr, size_t size,
+                                        int device_num) {}
+
+void FTN_STDCALL FTN_TARGET_MAP_DELETE(void *ptr, size_t size, int device_num) {
 }
 #endif // defined(KMP_STUB)
 
