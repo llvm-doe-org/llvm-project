@@ -86,7 +86,7 @@
 // RUN:     %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c %[cmb-cflags]
 // RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version -o %t %t-omp.c \
-// RUN:             %[cmb-cflags]
+// RUN:             -Wno-unused-function %[cmb-cflags]
 // RUN:     %t 2>&1 \
 // RUN:     | FileCheck -check-prefixes=EXE %s
 // RUN:   }

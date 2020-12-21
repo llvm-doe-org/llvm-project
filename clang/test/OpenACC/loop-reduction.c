@@ -68,7 +68,7 @@
 // RUN:          -Wno-openacc-omp-map-hold
 // RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:   %clang -Xclang -verify -fopenmp %fopenmp-version -o %t %t-omp.c \
-// RUN:          %libatomic
+// RUN:          -Wno-unused-function %libatomic
 // RUN:   %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-TGT-HOST %s
 // RUN: }
 

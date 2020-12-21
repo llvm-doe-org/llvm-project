@@ -53,13 +53,14 @@
 //     ERR-DAG: [[FILE]]
 // ERR-SYM-DAG: acc_register_library
 
-#include "callbacks.h"
-
 #define PROG_APP          0
 #define PROG_PROFLIB_BAD  1
 #define PROG_PROFLIB_GOOD 2
 
 #if PROG == PROG_APP
+
+#include <stdio.h>
+
 int main() {
   //   OFF: acc_ev_device_init_start
   //   OFF: acc_ev_device_init_end
@@ -82,13 +83,19 @@ int main() {
   //     CHECK: acc_ev_runtime_shutdown
   return 0;
 }
+
 #elif PROG == PROG_PROFLIB_BAD
+
 void has_no_acc_register_library() {}
+
 #elif PROG == PROG_PROFLIB_GOOD
+
+#include "callbacks.h"
 void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
                           acc_prof_lookup lookup) {
   register_all_callbacks(reg);
 }
+
 #else
 # error "unknown PROG"
 #endif

@@ -59,7 +59,8 @@
 // RUN: %for prt-opts {
 // RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c
 // RUN:   echo "// noacc""-no-diagnostics" >> %t-omp.c
-// RUN:   %clang -Xclang -verify=noacc -fopenmp %fopenmp-version -o %t %t-omp.c
+// RUN:   %clang -Xclang -verify=noacc -fopenmp %fopenmp-version \
+// RUN:          -Wno-unused-function -o %t %t-omp.c
 // RUN:   %t 2 2>&1 | FileCheck -check-prefix=EXE %s
 // RUN: }
 

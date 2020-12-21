@@ -82,7 +82,8 @@
 // RUN:                      -Wno-openacc-omp-map-no-alloc
 // RUN:     %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:     %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
-// RUN:               %acc-includes -D%[tgt] %[tgt-cflags] -o %t %t-omp.c
+// RUN:               %acc-includes -Wno-unused-function -D%[tgt] \
+// RUN:               %[tgt-cflags] -o %t %t-omp.c
 // RUN:     %[run-if] %t > %t.out 2>&1
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
 // RUN:                         -check-prefixes=EXE,EXE-%[host-or-dev]

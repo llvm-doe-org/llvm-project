@@ -7,13 +7,13 @@
 // RUN:   (run-if=%run-if-nvptx64 cflags=-fopenmp-targets=%run-nvptx64-triple)
 // RUN: }
 // RUN: %data cases {
-// RUN:   (case=acc_malloc)
-// RUN:   (case=acc_copyin)
-// RUN:   (case=acc_create)
+// RUN:   (case=acc_malloc args='size'     )
+// RUN:   (case=acc_copyin args='arr, size')
+// RUN:   (case=acc_create args='arr, size')
 // RUN: }
 // RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
 // RUN: %for cases {
-// RUN:   echo '  Macro(%[case]) \' >> %t-cases.h
+// RUN:   echo '  Macro(%[case], %[args]) \' >> %t-cases.h
 // RUN: }
 // RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
 // RUN: %for tgts {
@@ -49,38 +49,9 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
 
 #include CASES_HEADER
 
-enum Case {
-#define AddCase(CaseName) \
-  CASE_##CaseName,
-FOREACH_CASE(AddCase)
-#undef AddCase
-  CASE_END
-};
-
-const char *CaseNames[] = {
-#define AddCase(CaseName) \
-  #CaseName,
-FOREACH_CASE(AddCase)
-#undef AddCase
-};
-
 // ERR-NOT:{{.}}
 
 int main(int argc, char *argv[]) {
-  if (argc != 2) {
-    fprintf(stderr, "expected one argument\n");
-    return 1;
-  }
-  enum Case selectedCase;
-  for (selectedCase = 0; selectedCase < CASE_END; ++selectedCase) {
-    if (!strcmp(argv[1], CaseNames[selectedCase]))
-      break;
-  }
-  if (selectedCase == CASE_END) {
-    fprintf(stderr, "unexpected case: %s\n", argv[1]);
-    return 1;
-  }
-
   // CHECK-NOT:{{.}}
   //      CHECK:acc_ev_device_init_start
   // CHECK-NEXT:  acc_prof_info
@@ -114,17 +85,18 @@ int main(int argc, char *argv[]) {
   // CHECK-NEXT:    device_type=acc_device_not_host
   int arr[5];
   int size = sizeof arr;
-  switch (selectedCase) {
-#define CASE(Fn, ...)                                                          \
-  case CASE_##Fn:                                                              \
-    Fn(__VA_ARGS__);                                                           \
-    break;
-  CASE(acc_malloc, size);
-  CASE(acc_copyin, arr, size);
-  CASE(acc_create, arr, size);
-  case CASE_END:
-    fprintf(stderr, "unexpected CASE_END\n");
-    break;
+  if (argc != 2) {
+    fprintf(stderr, "expected one argument\n");
+    return 1;
+  }
+#define AddCase(Fn, ...)                                                       \
+  else if (!strcmp(argv[1], #Fn))                                              \
+    Fn(__VA_ARGS__);
+  FOREACH_CASE(AddCase)
+#undef AddCase
+  else {
+    fprintf(stderr, "unexpected case: %s\n", argv[1]);
+    return 1;
   }
   return 0;
 }

@@ -258,11 +258,13 @@ static void on_enqueue_download_end(acc_prof_info *pi, acc_event_info *ei,
   print_info(pi, ei, ai);
 }
 
+__attribute__((unused))
 static void on_wait_start(acc_prof_info *pi, acc_event_info *ei,
                           acc_api_info *ai) {
   assert(!"acc_ev_wait_start is not yet implemented\n");
 }
 
+__attribute__((unused))
 static void on_wait_end(acc_prof_info *pi, acc_event_info *ei,
                         acc_api_info *ai) {
   assert(!"acc_ev_wait_end is not yet implemented\n");

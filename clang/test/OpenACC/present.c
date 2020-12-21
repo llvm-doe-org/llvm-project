@@ -58,28 +58,28 @@
 //      # "acc parallel loop" should be about the same as "acc parallel", so a
 //      # few cases are probably sufficient.
 // RUN: %data cases {
-// RUN:   (case=CASE_DATA_SCALAR_PRESENT             not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=CASE_DATA_SCALAR_ABSENT              not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
-// RUN:   (case=CASE_DATA_ARRAY_PRESENT              not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=CASE_DATA_ARRAY_ABSENT               not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
-// RUN:   (case=CASE_DATA_SUBARRAY_PRESENT           not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=CASE_DATA_SUBARRAY_DISJOINT          not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
-// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_START     not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
-// RUN:   (case=CASE_DATA_SUBARRAY_OVERLAP_END       not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
-// RUN:   (case=CASE_DATA_SUBARRAY_CONCAT2           not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
-// RUN:   (case=CASE_PARALLEL_SCALAR_PRESENT         not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=CASE_PARALLEL_SCALAR_ABSENT          not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
-// RUN:   (case=CASE_PARALLEL_ARRAY_PRESENT          not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=CASE_PARALLEL_ARRAY_ABSENT           not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_PRESENT       not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_DISJOINT      not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_START not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_OVERLAP_END   not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
-// RUN:   (case=CASE_PARALLEL_SUBARRAY_CONCAT2       not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
-// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_PRESENT    not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=CASE_PARALLEL_LOOP_SCALAR_ABSENT     not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
-// RUN:   (case=CASE_CONST_PRESENT                   not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=CASE_CONST_ABSENT                    not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
+// RUN:   (case=caseDataScalarPresent            not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
+// RUN:   (case=caseDataScalarAbsent             not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
+// RUN:   (case=caseDataArrayPresent             not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
+// RUN:   (case=caseDataArrayAbsent              not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
+// RUN:   (case=caseDataSubarrayPresent          not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
+// RUN:   (case=caseDataSubarrayDisjoint         not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
+// RUN:   (case=caseDataSubarrayOverlapStart     not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
+// RUN:   (case=caseDataSubarrayOverlapEnd       not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
+// RUN:   (case=caseDataSubarrayConcat2          not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
+// RUN:   (case=caseParallelScalarPresent        not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
+// RUN:   (case=caseParallelScalarAbsent         not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
+// RUN:   (case=caseParallelArrayPresent         not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
+// RUN:   (case=caseParallelArrayAbsent          not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
+// RUN:   (case=caseParallelSubarrayPresent      not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
+// RUN:   (case=caseParallelSubarrayDisjoint     not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
+// RUN:   (case=caseParallelSubarrayOverlapStart not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
+// RUN:   (case=caseParallelSubarrayOverlapEnd   not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
+// RUN:   (case=caseParallelSubarrayConcat2      not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
+// RUN:   (case=caseParallelLoopScalarPresent    not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
+// RUN:   (case=caseParallelLoopScalarAbsent     not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
+// RUN:   (case=caseConstPresent                 not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
+// RUN:   (case=caseConstAbsent                  not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
 // RUN: }
 // RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
 // RUN: %for cases {
@@ -221,23 +221,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include CASES_HEADER
-
-enum Case {
-#define AddCase(CaseName) \
-  CaseName,
-FOREACH_CASE(AddCase)
-  CASE_END
-#undef AddCase
-};
-
-const char *CaseNames[] = {
-#define AddCase(CaseName) \
-  #CaseName,
-FOREACH_CASE(AddCase)
-#undef AddCase
-};
-
 #ifdef DO_USE_VAR
 # define USE_VAR(X) X
 #else
@@ -251,561 +234,493 @@ FOREACH_CASE(AddCase)
   fprintf(stderr, "addr=%p, size=%ld\n", &(Arr)[Start], \
           Length * sizeof (Arr[0]))
 
+// Make each static to ensure we get a compile warning if it's never called.
+#include CASES_HEADER
+#define CASE(CaseName) static void CaseName(void)
+#define AddCase(CaseName) CASE(CaseName);
+FOREACH_CASE(AddCase)
+#undef AddCase
+
+//              EXE-ERR-NOT: {{.}}
+//                  EXE-ERR: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+//             EXE-ERR-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+// EXE-ERR-notARRAYEXT-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
+//  EXE-ERR-notPRESENT-NEXT: Libomptarget message: device mapping required by 'present' map type modifier does not exist for host address 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes)
+//     EXE-ERR-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//                           # An abort message usually follows.
+//      EXE-ERR-notPASS-NOT: Libomptarget
+//         EXE-ERR-PASS-NOT: {{.}}
+
+//       EXE-OUT-NOT: {{.}}
+//           EXE-OUT: start
+// EXE-OUT-PASS-NEXT: end
+//       EXE-OUT-NOT: {{.}}
+
 int main(int argc, char *argv[]) {
+  CASE((*caseFn));
   if (argc != 2) {
     fprintf(stderr, "expected one argument\n");
     return 1;
   }
-  enum Case selectedCase;
-  for (selectedCase = 0; selectedCase < CASE_END; ++selectedCase) {
-    if (!strcmp(argv[1], CaseNames[selectedCase]))
-      break;
-  }
-  if (selectedCase == CASE_END) {
+#define AddCase(CaseName)                                                      \
+  else if (!strcmp(argv[1], #CaseName))                                        \
+    caseFn = CaseName;
+  FOREACH_CASE(AddCase)
+#undef AddCase
+  else {
     fprintf(stderr, "unexpected case: %s\n", argv[1]);
     return 1;
   }
 
-  printf("before fail\n");
+  printf("start\n");
   fflush(stdout);
-
-  // DMP-LABEL: SwitchStmt
-  // PRT-LABEL: switch (selectedCase)
-  switch (selectedCase) {
-  // DMP-LABEL: CASE_DATA_SCALAR_PRESENT
-  //       DMP: ACCDataDirective
-  //  DMP-NEXT:   ACCCopyClause
-  //  DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
-  //  DMP-NEXT:   impl: OMPTargetDataDirective
-  //  DMP-NEXT:     OMPMapClause
-  //  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
-  //       DMP:   ACCDataDirective
-  //  DMP-NEXT:     ACCPresentClause
-  //  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
-  //  DMP-NEXT:     impl: OMPTargetDataDirective
-  //  DMP-NEXT:       OMPMapClause
-  //  DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
-  //
-  //   PRT-LABEL: case CASE_DATA_SCALAR_PRESENT:
-  //    PRT-NEXT: {
-  //    PRT-NEXT:   int x;
-  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-  //
-  //  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: x){{$}}
-  //  PRT-A-NEXT:   #pragma acc data present(x){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: x){{$}}
-  //
-  //  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: x){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data copy(x){{$}}
-  //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: x){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data present(x){{$}}
-  //
-  //    PRT-NEXT:   ;
-  //    PRT-NEXT:   break;
-  //    PRT-NEXT: }
-  case CASE_DATA_SCALAR_PRESENT:
-  {
-    int x;
-    PRINT_VAR_INFO(x);
-    PRINT_VAR_INFO(x);
-    #pragma acc data copy(x)
-    #pragma acc data present(x)
-    USE_VAR(x = 1);
-    break;
-  }
-
-  // DMP-LABEL: CASE_DATA_SCALAR_ABSENT
-  //       DMP: ACCDataDirective
-  //  DMP-NEXT:   ACCPresentClause
-  //  DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
-  //  DMP-NEXT:   impl: OMPTargetDataDirective
-  //  DMP-NEXT:     OMPMapClause
-  //  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
-  //
-  //   PRT-LABEL: case CASE_DATA_SCALAR_ABSENT:
-  //    PRT-NEXT: {
-  //    PRT-NEXT:   int x;
-  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-  //  PRT-A-NEXT:   #pragma acc data present(x){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: x){{$}}
-  //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: x){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data present(x){{$}}
-  //    PRT-NEXT:   ;
-  //    PRT-NEXT:   break;
-  //    PRT-NEXT: }
-  case CASE_DATA_SCALAR_ABSENT:
-  {
-    int x;
-    PRINT_VAR_INFO(x);
-    PRINT_VAR_INFO(x);
-    #pragma acc data present(x)
-    USE_VAR(x = 1);
-    break;
-  }
-
-  //   PRT-LABEL: case CASE_DATA_ARRAY_PRESENT:
-  //    PRT-NEXT: {
-  //    PRT-NEXT:   int arr[3];
-  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-  //
-  //  PRT-A-NEXT:   #pragma acc data copy(arr){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: arr){{$}}
-  //  PRT-A-NEXT:   #pragma acc data present(arr){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr){{$}}
-  //
-  //  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: arr){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data copy(arr){{$}}
-  //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data present(arr){{$}}
-  //
-  //    PRT-NEXT:   ;
-  //    PRT-NEXT:   break;
-  //    PRT-NEXT: }
-  case CASE_DATA_ARRAY_PRESENT:
-  {
-    int arr[3];
-    PRINT_VAR_INFO(arr);
-    PRINT_VAR_INFO(arr);
-    #pragma acc data copy(arr)
-    #pragma acc data present(arr)
-    USE_VAR(arr[0] = 1);
-    break;
-  }
-
-  //   PRT-LABEL: case CASE_DATA_ARRAY_ABSENT:
-  //    PRT-NEXT: {
-  //    PRT-NEXT:   int arr[3];
-  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-  //  PRT-A-NEXT:   #pragma acc data present(arr){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr){{$}}
-  //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data present(arr){{$}}
-  //    PRT-NEXT:   ;
-  //    PRT-NEXT:   break;
-  //    PRT-NEXT: }
-  case CASE_DATA_ARRAY_ABSENT:
-  {
-    int arr[3];
-    PRINT_VAR_INFO(arr);
-    PRINT_VAR_INFO(arr);
-    #pragma acc data present(arr)
-    USE_VAR(arr[0] = 1);
-    break;
-  }
-
-  //   PRT-LABEL: case CASE_DATA_SUBARRAY_PRESENT:
-  //    PRT-NEXT: {
-  //    PRT-NEXT:   int all[10], same[10], beg[10], mid[10], end[10];
-  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-  //
-  //  PRT-A-NEXT:   #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-  // PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-  //  PRT-A-NEXT:   #pragma acc data present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
-  // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
-  //
-  //  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-  // PRT-OA-NEXT:   // #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-  //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
-  // PRT-OA-NEXT:   // #pragma acc data present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
-  //
-  //    PRT-NEXT:   {
-  //    PRT-NEXT:     ;
-  //    PRT-NEXT:   }
-  //    PRT-NEXT:   break;
-  //    PRT-NEXT: }
-  case CASE_DATA_SUBARRAY_PRESENT:
-  {
-    int all[10], same[10], beg[10], mid[10], end[10];
-    PRINT_VAR_INFO(all);
-    PRINT_VAR_INFO(all);
-    #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-    #pragma acc data present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
-    {
-      USE_VAR(all[0] = 1; same[3] = 1; beg[2] = 1; mid[3] = 1; end[4] = 1);
-    }
-    break;
-  }
-
-  //   PRT-LABEL: case CASE_DATA_SUBARRAY_DISJOINT:
-  //    PRT-NEXT: {
-  //    PRT-NEXT:   int arr[4];
-  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
-  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
-  //
-  //  PRT-A-NEXT:   #pragma acc data copy(arr[0:2]){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: arr[0:2]){{$}}
-  //  PRT-A-NEXT:   #pragma acc data present(arr[2:2]){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr[2:2]){{$}}
-  //
-  //  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: arr[0:2]){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data copy(arr[0:2]){{$}}
-  //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr[2:2]){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data present(arr[2:2]){{$}}
-  //
-  //    PRT-NEXT:   ;
-  //    PRT-NEXT:   break;
-  //    PRT-NEXT: }
-  case CASE_DATA_SUBARRAY_DISJOINT:
-  {
-    int arr[4];
-    PRINT_SUBARRAY_INFO(arr, 0, 2);
-    PRINT_SUBARRAY_INFO(arr, 2, 2);
-    #pragma acc data copy(arr[0:2])
-    #pragma acc data present(arr[2:2])
-    USE_VAR(arr[2] = 1);
-    break;
-  }
-
-  //   PRT-LABEL: case CASE_DATA_SUBARRAY_OVERLAP_START:
-  //    PRT-NEXT: {
-  //    PRT-NEXT:   int arr[5];
-  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
-  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
-  //
-  //  PRT-A-NEXT:   #pragma acc data copyin(arr[1:2]){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(hold,to: arr[1:2]){{$}}
-  //  PRT-A-NEXT:   #pragma acc data present(arr[0:2]){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr[0:2]){{$}}
-  //
-  //  PRT-O-NEXT:   #pragma omp target data map(hold,to: arr[1:2]){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data copyin(arr[1:2]){{$}}
-  //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr[0:2]){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data present(arr[0:2]){{$}}
-  //
-  //    PRT-NEXT:   ;
-  //    PRT-NEXT:   break;
-  //    PRT-NEXT: }
-  case CASE_DATA_SUBARRAY_OVERLAP_START:
-  {
-    int arr[5];
-    PRINT_SUBARRAY_INFO(arr, 1, 2);
-    PRINT_SUBARRAY_INFO(arr, 0, 2);
-    #pragma acc data copyin(arr[1:2])
-    #pragma acc data present(arr[0:2])
-    USE_VAR(arr[0] = 1);
-    break;
-  }
-
-  //   PRT-LABEL: case CASE_DATA_SUBARRAY_OVERLAP_END:
-  //    PRT-NEXT: {
-  //    PRT-NEXT:   int arr[5];
-  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
-  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
-  //
-  //  PRT-A-NEXT:   #pragma acc data copyin(arr[1:2]){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(hold,to: arr[1:2]){{$}}
-  //  PRT-A-NEXT:   #pragma acc data present(arr[2:2]){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr[2:2]){{$}}
-  //
-  //  PRT-O-NEXT:   #pragma omp target data map(hold,to: arr[1:2]){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data copyin(arr[1:2]){{$}}
-  //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr[2:2]){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data present(arr[2:2]){{$}}
-  //
-  //    PRT-NEXT:   ;
-  //    PRT-NEXT:   break;
-  //    PRT-NEXT: }
-  case CASE_DATA_SUBARRAY_OVERLAP_END:
-  {
-    int arr[5];
-    PRINT_SUBARRAY_INFO(arr, 1, 2);
-    PRINT_SUBARRAY_INFO(arr, 2, 2);
-    #pragma acc data copyin(arr[1:2])
-    #pragma acc data present(arr[2:2])
-    USE_VAR(arr[2] = 1);
-    break;
-  }
-
-  //   PRT-LABEL: case CASE_DATA_SUBARRAY_CONCAT2:
-  //    PRT-NEXT: {
-  //    PRT-NEXT:   int arr[4];
-  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
-  //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
-  //
-  //  PRT-A-NEXT:   #pragma acc data copyout(arr[0:2]){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(hold,from: arr[0:2]){{$}}
-  //  PRT-A-NEXT:   #pragma acc data copy(arr[2:2]){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: arr[2:2]){{$}}
-  //  PRT-A-NEXT:   #pragma acc data present(arr[0:4]){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr[0:4]){{$}}
-  //
-  //  PRT-O-NEXT:   #pragma omp target data map(hold,from: arr[0:2]){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data copyout(arr[0:2]){{$}}
-  //  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: arr[2:2]){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data copy(arr[2:2]){{$}}
-  //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr[0:4]){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data present(arr[0:4]){{$}}
-  //
-  //    PRT-NEXT:   ;
-  //    PRT-NEXT:   break;
-  //    PRT-NEXT: }
-  case CASE_DATA_SUBARRAY_CONCAT2:
-  {
-    int arr[4];
-    PRINT_SUBARRAY_INFO(arr, 0, 2);
-    PRINT_SUBARRAY_INFO(arr, 0, 4);
-    #pragma acc data copyout(arr[0:2])
-    #pragma acc data copy(arr[2:2])
-    #pragma acc data present(arr[0:4])
-    USE_VAR(arr[0] = 1);
-    break;
-  }
-
-  // DMP-LABEL: CASE_PARALLEL_SCALAR_PRESENT
-  //       DMP: ACCDataDirective
-  //  DMP-NEXT:   ACCCopyClause
-  //  DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
-  //  DMP-NEXT:   impl: OMPTargetDataDirective
-  //  DMP-NEXT:     OMPMapClause
-  //  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
-  //       DMP: ACCParallelDirective
-  //  DMP-NEXT:   ACCPresentClause
-  //  DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
-  //  DMP-NEXT:   impl: OMPTargetTeamsDirective
-  //  DMP-NEXT:     OMPMapClause
-  //  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
-  //
-  //   PRT-LABEL: case CASE_PARALLEL_SCALAR_PRESENT:
-  //    PRT-NEXT: {
-  //    PRT-NEXT:   int x;
-  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-  //
-  //  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: x){{$}}
-  //  PRT-A-NEXT:   #pragma acc parallel present(x){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target teams map([[PRESENT_MT]]: x){{$}}
-  //
-  //  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: x){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data copy(x){{$}}
-  //  PRT-O-NEXT:   #pragma omp target teams map([[PRESENT_MT]]: x){{$}}
-  // PRT-OA-NEXT:   // #pragma acc parallel present(x){{$}}
-  //
-  //    PRT-NEXT:   ;
-  //    PRT-NEXT:   break;
-  //    PRT-NEXT: }
-  case CASE_PARALLEL_SCALAR_PRESENT:
-  {
-    int x;
-    PRINT_VAR_INFO(x);
-    PRINT_VAR_INFO(x);
-    #pragma acc data copy(x)
-    #pragma acc parallel present(x)
-    USE_VAR(x = 1);
-    break;
-  }
-
-  case CASE_PARALLEL_SCALAR_ABSENT:
-  {
-    int x;
-    PRINT_VAR_INFO(x);
-    PRINT_VAR_INFO(x);
-    #pragma acc parallel present(x)
-    USE_VAR(x = 1);
-    break;
-  }
-
-  case CASE_PARALLEL_ARRAY_PRESENT:
-  {
-    int arr[3];
-    PRINT_VAR_INFO(arr);
-    PRINT_VAR_INFO(arr);
-    #pragma acc data copy(arr)
-    #pragma acc parallel present(arr)
-    USE_VAR(arr[0] = 1);
-    break;
-  }
-
-  case CASE_PARALLEL_ARRAY_ABSENT:
-  {
-    int arr[3];
-    PRINT_VAR_INFO(arr);
-    PRINT_VAR_INFO(arr);
-    #pragma acc parallel present(arr)
-    USE_VAR(arr[0] = 1);
-    break;
-  }
-
-  case CASE_PARALLEL_SUBARRAY_PRESENT:
-  {
-    int all[10], same[10], beg[10], mid[10], end[10];
-    PRINT_VAR_INFO(all);
-    PRINT_VAR_INFO(all);
-    #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-    #pragma acc parallel present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
-    {
-      USE_VAR(all[0] = 1; same[3] = 1; beg[2] = 1; mid[3] = 1; end[4] = 1);
-    }
-    break;
-  }
-
-  case CASE_PARALLEL_SUBARRAY_DISJOINT:
-  {
-    int arr[4];
-    PRINT_SUBARRAY_INFO(arr, 0, 2);
-    PRINT_SUBARRAY_INFO(arr, 2, 2);
-    #pragma acc data copy(arr[0:2])
-    #pragma acc parallel present(arr[2:2])
-    USE_VAR(arr[2] = 1);
-    break;
-  }
-
-  case CASE_PARALLEL_SUBARRAY_OVERLAP_START:
-  {
-    int arr[10];
-    PRINT_SUBARRAY_INFO(arr, 5, 4);
-    PRINT_SUBARRAY_INFO(arr, 4, 4);
-    #pragma acc data copyin(arr[5:4])
-    #pragma acc parallel present(arr[4:4])
-    USE_VAR(arr[4] = 1);
-    break;
-  }
-
-  case CASE_PARALLEL_SUBARRAY_OVERLAP_END:
-  {
-    int arr[10];
-    PRINT_SUBARRAY_INFO(arr, 3, 4);
-    PRINT_SUBARRAY_INFO(arr, 4, 4);
-    #pragma acc data copyin(arr[3:4])
-    #pragma acc parallel present(arr[4:4])
-    USE_VAR(arr[4] = 1);
-    break;
-  }
-
-  case CASE_PARALLEL_SUBARRAY_CONCAT2:
-  {
-    int arr[4];
-    PRINT_SUBARRAY_INFO(arr, 0, 2);
-    PRINT_SUBARRAY_INFO(arr, 0, 4);
-    #pragma acc data copyout(arr[0:2])
-    #pragma acc data copy(arr[2:2])
-    #pragma acc parallel present(arr[0:4])
-    USE_VAR(arr[0] = 1);
-    break;
-  }
-
-  // DMP-LABEL: CASE_PARALLEL_LOOP_SCALAR_PRESENT
-  //       DMP: ACCDataDirective
-  //  DMP-NEXT:   ACCCopyClause
-  //  DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
-  //  DMP-NEXT:   impl: OMPTargetDataDirective
-  //  DMP-NEXT:     OMPMapClause
-  //  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
-  //       DMP:   ACCParallelLoopDirective
-  //  DMP-NEXT:     ACCPresentClause
-  //  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
-  //  DMP-NEXT:     effect: ACCParallelDirective
-  //  DMP-NEXT:       ACCPresentClause
-  //  DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
-  //  DMP-NEXT:       impl: OMPTargetTeamsDirective
-  //  DMP-NEXT:         OMPMapClause
-  //  DMP-NEXT:           DeclRefExpr {{.*}} 'x' 'int'
-  //       DMP:       ACCLoopDirective
-  //  DMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
-  //  DMP-NEXT:         ACCGangClause {{.*}} <implicit>
-  //  DMP-NEXT:         impl: OMPDistributeDirective
-  //   DMP-NOT:           OMP
-  //       DMP:           ForStmt
-  //
-  //   PRT-LABEL: case CASE_PARALLEL_LOOP_SCALAR_PRESENT
-  //    PRT-NEXT: {
-  //    PRT-NEXT:   int x;
-  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-  //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-  //
-  //  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: x){{$}}
-  //  PRT-A-NEXT:   #pragma acc parallel loop present(x){{$}}
-  // PRT-AO-NEXT:   // #pragma omp target teams map([[PRESENT_MT]]: x){{$}}
-  // PRT-AO-NEXT:   // #pragma omp distribute{{$}}
-  //
-  //  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: x){{$}}
-  // PRT-OA-NEXT:   // #pragma acc data copy(x){{$}}
-  //  PRT-O-NEXT:   #pragma omp target teams map([[PRESENT_MT]]: x){{$}}
-  //  PRT-O-NEXT:   #pragma omp distribute{{$}}
-  // PRT-OA-NEXT:   // #pragma acc parallel loop present(x){{$}}
-  //
-  //    PRT-NEXT:   for ({{.*}})
-  //    PRT-NEXT:     ;
-  //    PRT-NEXT:   break;
-  //    PRT-NEXT: }
-  case CASE_PARALLEL_LOOP_SCALAR_PRESENT:
-  {
-    int x;
-    PRINT_VAR_INFO(x);
-    PRINT_VAR_INFO(x);
-    #pragma acc data copy(x)
-    #pragma acc parallel loop present(x)
-    for (int i = 0; i < 2; ++i)
-    USE_VAR(x = 1);
-    break;
-  }
-
-  case CASE_PARALLEL_LOOP_SCALAR_ABSENT:
-  {
-    int x;
-    PRINT_VAR_INFO(x);
-    PRINT_VAR_INFO(x);
-    #pragma acc parallel loop present(x)
-    for (int i = 0; i < 2; ++i)
-    USE_VAR(x = 1);
-    break;
-  }
-
-  case CASE_CONST_PRESENT:
-  {
-    const int x;
-    PRINT_VAR_INFO(x);
-    PRINT_VAR_INFO(x);
-    int y;
-    #pragma acc data copy(x)
-    #pragma acc parallel loop present(x)
-    for (int i = 0; i < 2; ++i)
-    USE_VAR(y = x);
-    break;
-  }
-
-  case CASE_CONST_ABSENT:
-  {
-    const int x;
-    PRINT_VAR_INFO(x);
-    PRINT_VAR_INFO(x);
-    int y;
-    #pragma acc parallel loop present(x)
-    for (int i = 0; i < 2; ++i)
-    USE_VAR(y = x);
-    break;
-  }
-
-  case CASE_END:
-    fprintf(stderr, "unexpected CASE_END\n");
-    break;
-  }
-
-  printf("after fail\n");
+  caseFn();
+  printf("end\n");
   fflush(stdout);
-
-  //              EXE-ERR-NOT: {{.}}
-  //                  EXE-ERR: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
-  //             EXE-ERR-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
-  // EXE-ERR-notARRAYEXT-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
-  //  EXE-ERR-notPRESENT-NEXT: Libomptarget message: device mapping required by 'present' map type modifier does not exist for host address 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes)
-  //     EXE-ERR-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-  //                           # An abort message usually follows.
-  //      EXE-ERR-notPASS-NOT: Libomptarget
-  //         EXE-ERR-PASS-NOT: {{.}}
-
-  //       EXE-OUT-NOT: {{.}}
-  //           EXE-OUT: before fail
-  // EXE-OUT-PASS-NEXT: after fail
-  //       EXE-OUT-NOT: {{.}}
-
   return 0;
 }
 
+// DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseDataScalarPresent
+//       DMP: ACCDataDirective
+//  DMP-NEXT:   ACCCopyClause
+//  DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:   impl: OMPTargetDataDirective
+//  DMP-NEXT:     OMPMapClause
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+//       DMP:   ACCDataDirective
+//  DMP-NEXT:     ACCPresentClause
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:     impl: OMPTargetDataDirective
+//  DMP-NEXT:       OMPMapClause
+//  DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
+//
+//   PRT-LABEL: {{.*}}caseDataScalarPresent{{.*}} {
+//    PRT-NEXT:   int x;
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//
+//  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: x){{$}}
+//  PRT-A-NEXT:   #pragma acc data present(x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: x){{$}}
+//
+//  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: x){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copy(x){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: x){{$}}
+// PRT-OA-NEXT:   // #pragma acc data present(x){{$}}
+//
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+CASE(caseDataScalarPresent) {
+  int x;
+  PRINT_VAR_INFO(x);
+  PRINT_VAR_INFO(x);
+  #pragma acc data copy(x)
+  #pragma acc data present(x)
+  USE_VAR(x = 1);
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseDataScalarAbsent
+//       DMP: ACCDataDirective
+//  DMP-NEXT:   ACCPresentClause
+//  DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:   impl: OMPTargetDataDirective
+//  DMP-NEXT:     OMPMapClause
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+//
+//   PRT-LABEL: {{.*}}caseDataScalarAbsent{{.*}} {
+//    PRT-NEXT:   int x;
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//  PRT-A-NEXT:   #pragma acc data present(x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: x){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: x){{$}}
+// PRT-OA-NEXT:   // #pragma acc data present(x){{$}}
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+CASE(caseDataScalarAbsent) {
+  int x;
+  PRINT_VAR_INFO(x);
+  PRINT_VAR_INFO(x);
+  #pragma acc data present(x)
+  USE_VAR(x = 1);
+}
+
+//   PRT-LABEL: {{.*}}caseDataArrayPresent{{.*}} {
+//    PRT-NEXT:   int arr[3];
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//
+//  PRT-A-NEXT:   #pragma acc data copy(arr){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: arr){{$}}
+//  PRT-A-NEXT:   #pragma acc data present(arr){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr){{$}}
+//
+//  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: arr){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copy(arr){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr){{$}}
+// PRT-OA-NEXT:   // #pragma acc data present(arr){{$}}
+//
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+CASE(caseDataArrayPresent) {
+  int arr[3];
+  PRINT_VAR_INFO(arr);
+  PRINT_VAR_INFO(arr);
+  #pragma acc data copy(arr)
+  #pragma acc data present(arr)
+  USE_VAR(arr[0] = 1);
+}
+
+//   PRT-LABEL: {{.*}}caseDataArrayAbsent{{.*}} {
+//    PRT-NEXT:   int arr[3];
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//  PRT-A-NEXT:   #pragma acc data present(arr){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr){{$}}
+// PRT-OA-NEXT:   // #pragma acc data present(arr){{$}}
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+CASE(caseDataArrayAbsent) {
+  int arr[3];
+  PRINT_VAR_INFO(arr);
+  PRINT_VAR_INFO(arr);
+  #pragma acc data present(arr)
+  USE_VAR(arr[0] = 1);
+}
+
+//   PRT-LABEL: {{.*}}caseDataSubarrayPresent{{.*}} {
+//    PRT-NEXT:   int all[10], same[10], beg[10], mid[10], end[10];
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//
+//  PRT-A-NEXT:   #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
+// PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
+//  PRT-A-NEXT:   #pragma acc data present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+//
+//  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
+// PRT-OA-NEXT:   // #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+// PRT-OA-NEXT:   // #pragma acc data present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+//
+//    PRT-NEXT:   {
+//    PRT-NEXT:     ;
+//    PRT-NEXT:   }
+//    PRT-NEXT: }
+CASE(caseDataSubarrayPresent) {
+  int all[10], same[10], beg[10], mid[10], end[10];
+  PRINT_VAR_INFO(all);
+  PRINT_VAR_INFO(all);
+  #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
+  #pragma acc data present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+  {
+    USE_VAR(all[0] = 1; same[3] = 1; beg[2] = 1; mid[3] = 1; end[4] = 1);
+  }
+}
+
+//   PRT-LABEL: {{.*}}caseDataSubarrayDisjoint{{.*}} {
+//    PRT-NEXT:   int arr[4];
+//    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
+//
+//  PRT-A-NEXT:   #pragma acc data copy(arr[0:2]){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: arr[0:2]){{$}}
+//  PRT-A-NEXT:   #pragma acc data present(arr[2:2]){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr[2:2]){{$}}
+//
+//  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: arr[0:2]){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copy(arr[0:2]){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr[2:2]){{$}}
+// PRT-OA-NEXT:   // #pragma acc data present(arr[2:2]){{$}}
+//
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+CASE(caseDataSubarrayDisjoint) {
+  int arr[4];
+  PRINT_SUBARRAY_INFO(arr, 0, 2);
+  PRINT_SUBARRAY_INFO(arr, 2, 2);
+  #pragma acc data copy(arr[0:2])
+  #pragma acc data present(arr[2:2])
+  USE_VAR(arr[2] = 1);
+}
+
+//   PRT-LABEL: {{.*}}caseDataSubarrayOverlapStart{{.*}} {
+//    PRT-NEXT:   int arr[5];
+//    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
+//
+//  PRT-A-NEXT:   #pragma acc data copyin(arr[1:2]){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(hold,to: arr[1:2]){{$}}
+//  PRT-A-NEXT:   #pragma acc data present(arr[0:2]){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr[0:2]){{$}}
+//
+//  PRT-O-NEXT:   #pragma omp target data map(hold,to: arr[1:2]){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copyin(arr[1:2]){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr[0:2]){{$}}
+// PRT-OA-NEXT:   // #pragma acc data present(arr[0:2]){{$}}
+//
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+CASE(caseDataSubarrayOverlapStart) {
+  int arr[5];
+  PRINT_SUBARRAY_INFO(arr, 1, 2);
+  PRINT_SUBARRAY_INFO(arr, 0, 2);
+  #pragma acc data copyin(arr[1:2])
+  #pragma acc data present(arr[0:2])
+  USE_VAR(arr[0] = 1);
+}
+
+//   PRT-LABEL: {{.*}}caseDataSubarrayOverlapEnd{{.*}} {
+//    PRT-NEXT:   int arr[5];
+//    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
+//
+//  PRT-A-NEXT:   #pragma acc data copyin(arr[1:2]){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(hold,to: arr[1:2]){{$}}
+//  PRT-A-NEXT:   #pragma acc data present(arr[2:2]){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr[2:2]){{$}}
+//
+//  PRT-O-NEXT:   #pragma omp target data map(hold,to: arr[1:2]){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copyin(arr[1:2]){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr[2:2]){{$}}
+// PRT-OA-NEXT:   // #pragma acc data present(arr[2:2]){{$}}
+//
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+CASE(caseDataSubarrayOverlapEnd) {
+  int arr[5];
+  PRINT_SUBARRAY_INFO(arr, 1, 2);
+  PRINT_SUBARRAY_INFO(arr, 2, 2);
+  #pragma acc data copyin(arr[1:2])
+  #pragma acc data present(arr[2:2])
+  USE_VAR(arr[2] = 1);
+}
+
+//   PRT-LABEL: {{.*}}caseDataSubarrayConcat2{{.*}} {
+//    PRT-NEXT:   int arr[4];
+//    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
+//
+//  PRT-A-NEXT:   #pragma acc data copyout(arr[0:2]){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(hold,from: arr[0:2]){{$}}
+//  PRT-A-NEXT:   #pragma acc data copy(arr[2:2]){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: arr[2:2]){{$}}
+//  PRT-A-NEXT:   #pragma acc data present(arr[0:4]){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr[0:4]){{$}}
+//
+//  PRT-O-NEXT:   #pragma omp target data map(hold,from: arr[0:2]){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copyout(arr[0:2]){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: arr[2:2]){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copy(arr[2:2]){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr[0:4]){{$}}
+// PRT-OA-NEXT:   // #pragma acc data present(arr[0:4]){{$}}
+//
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+CASE(caseDataSubarrayConcat2) {
+  int arr[4];
+  PRINT_SUBARRAY_INFO(arr, 0, 2);
+  PRINT_SUBARRAY_INFO(arr, 0, 4);
+  #pragma acc data copyout(arr[0:2])
+  #pragma acc data copy(arr[2:2])
+  #pragma acc data present(arr[0:4])
+  USE_VAR(arr[0] = 1);
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseParallelScalarPresent
+//       DMP: ACCDataDirective
+//  DMP-NEXT:   ACCCopyClause
+//  DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:   impl: OMPTargetDataDirective
+//  DMP-NEXT:     OMPMapClause
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+//       DMP: ACCParallelDirective
+//  DMP-NEXT:   ACCPresentClause
+//  DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:   impl: OMPTargetTeamsDirective
+//  DMP-NEXT:     OMPMapClause
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+//
+//   PRT-LABEL: {{.*}}caseParallelScalarPresent{{.*}} {
+//    PRT-NEXT:   int x;
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//
+//  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: x){{$}}
+//  PRT-A-NEXT:   #pragma acc parallel present(x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target teams map([[PRESENT_MT]]: x){{$}}
+//
+//  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: x){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copy(x){{$}}
+//  PRT-O-NEXT:   #pragma omp target teams map([[PRESENT_MT]]: x){{$}}
+// PRT-OA-NEXT:   // #pragma acc parallel present(x){{$}}
+//
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+CASE(caseParallelScalarPresent) {
+  int x;
+  PRINT_VAR_INFO(x);
+  PRINT_VAR_INFO(x);
+  #pragma acc data copy(x)
+  #pragma acc parallel present(x)
+  USE_VAR(x = 1);
+}
+
+CASE(caseParallelScalarAbsent) {
+  int x;
+  PRINT_VAR_INFO(x);
+  PRINT_VAR_INFO(x);
+  #pragma acc parallel present(x)
+  USE_VAR(x = 1);
+}
+
+CASE(caseParallelArrayPresent) {
+  int arr[3];
+  PRINT_VAR_INFO(arr);
+  PRINT_VAR_INFO(arr);
+  #pragma acc data copy(arr)
+  #pragma acc parallel present(arr)
+  USE_VAR(arr[0] = 1);
+}
+
+CASE(caseParallelArrayAbsent) {
+  int arr[3];
+  PRINT_VAR_INFO(arr);
+  PRINT_VAR_INFO(arr);
+  #pragma acc parallel present(arr)
+  USE_VAR(arr[0] = 1);
+}
+
+CASE(caseParallelSubarrayPresent) {
+  int all[10], same[10], beg[10], mid[10], end[10];
+  PRINT_VAR_INFO(all);
+  PRINT_VAR_INFO(all);
+  #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
+  #pragma acc parallel present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+  {
+    USE_VAR(all[0] = 1; same[3] = 1; beg[2] = 1; mid[3] = 1; end[4] = 1);
+  }
+}
+
+CASE(caseParallelSubarrayDisjoint) {
+  int arr[4];
+  PRINT_SUBARRAY_INFO(arr, 0, 2);
+  PRINT_SUBARRAY_INFO(arr, 2, 2);
+  #pragma acc data copy(arr[0:2])
+  #pragma acc parallel present(arr[2:2])
+  USE_VAR(arr[2] = 1);
+}
+
+CASE(caseParallelSubarrayOverlapStart) {
+  int arr[10];
+  PRINT_SUBARRAY_INFO(arr, 5, 4);
+  PRINT_SUBARRAY_INFO(arr, 4, 4);
+  #pragma acc data copyin(arr[5:4])
+  #pragma acc parallel present(arr[4:4])
+  USE_VAR(arr[4] = 1);
+}
+
+CASE(caseParallelSubarrayOverlapEnd) {
+  int arr[10];
+  PRINT_SUBARRAY_INFO(arr, 3, 4);
+  PRINT_SUBARRAY_INFO(arr, 4, 4);
+  #pragma acc data copyin(arr[3:4])
+  #pragma acc parallel present(arr[4:4])
+  USE_VAR(arr[4] = 1);
+}
+
+CASE(caseParallelSubarrayConcat2) {
+  int arr[4];
+  PRINT_SUBARRAY_INFO(arr, 0, 2);
+  PRINT_SUBARRAY_INFO(arr, 0, 4);
+  #pragma acc data copyout(arr[0:2])
+  #pragma acc data copy(arr[2:2])
+  #pragma acc parallel present(arr[0:4])
+  USE_VAR(arr[0] = 1);
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseParallelLoopScalarPresent
+//       DMP: ACCDataDirective
+//  DMP-NEXT:   ACCCopyClause
+//  DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:   impl: OMPTargetDataDirective
+//  DMP-NEXT:     OMPMapClause
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+//       DMP:   ACCParallelLoopDirective
+//  DMP-NEXT:     ACCPresentClause
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:     effect: ACCParallelDirective
+//  DMP-NEXT:       ACCPresentClause
+//  DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:       impl: OMPTargetTeamsDirective
+//  DMP-NEXT:         OMPMapClause
+//  DMP-NEXT:           DeclRefExpr {{.*}} 'x' 'int'
+//       DMP:       ACCLoopDirective
+//  DMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
+//  DMP-NEXT:         ACCGangClause {{.*}} <implicit>
+//  DMP-NEXT:         impl: OMPDistributeDirective
+//   DMP-NOT:           OMP
+//       DMP:           ForStmt
+//
+//   PRT-LABEL: {{.*}}caseParallelLoopScalarPresent{{.*}} {
+//    PRT-NEXT:   int x;
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//
+//  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: x){{$}}
+//  PRT-A-NEXT:   #pragma acc parallel loop present(x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target teams map([[PRESENT_MT]]: x){{$}}
+// PRT-AO-NEXT:   // #pragma omp distribute{{$}}
+//
+//  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: x){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copy(x){{$}}
+//  PRT-O-NEXT:   #pragma omp target teams map([[PRESENT_MT]]: x){{$}}
+//  PRT-O-NEXT:   #pragma omp distribute{{$}}
+// PRT-OA-NEXT:   // #pragma acc parallel loop present(x){{$}}
+//
+//    PRT-NEXT:   for ({{.*}})
+//    PRT-NEXT:     ;
+//    PRT-NEXT: }
+CASE(caseParallelLoopScalarPresent) {
+  int x;
+  PRINT_VAR_INFO(x);
+  PRINT_VAR_INFO(x);
+  #pragma acc data copy(x)
+  #pragma acc parallel loop present(x)
+  for (int i = 0; i < 2; ++i)
+  USE_VAR(x = 1);
+}
+
+CASE(caseParallelLoopScalarAbsent) {
+  int x;
+  PRINT_VAR_INFO(x);
+  PRINT_VAR_INFO(x);
+  #pragma acc parallel loop present(x)
+  for (int i = 0; i < 2; ++i)
+  USE_VAR(x = 1);
+}
+
+CASE(caseConstPresent) {
+  const int x;
+  PRINT_VAR_INFO(x);
+  PRINT_VAR_INFO(x);
+  int y;
+  #pragma acc data copy(x)
+  #pragma acc parallel loop present(x)
+  for (int i = 0; i < 2; ++i)
+  USE_VAR(y = x);
+}
+
+CASE(caseConstAbsent) {
+  const int x;
+  PRINT_VAR_INFO(x);
+  PRINT_VAR_INFO(x);
+  int y;
+  #pragma acc parallel loop present(x)
+  for (int i = 0; i < 2; ++i)
+  USE_VAR(y = x);
+}

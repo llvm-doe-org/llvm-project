@@ -87,8 +87,8 @@
 // RUN:     %clang -Xclang -verify %[prt-opt]=omp %[dir-cflags] %s > %t-omp.c \
 // RUN:            -Wno-openacc-omp-map-hold
 // RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version -o %t %t-omp.c \
-// RUN:            %libatomic %[dir-cflags]
+// RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version \
+// RUN:            -Wno-unused-function %libatomic %[dir-cflags] -o %t %t-omp.c
 // RUN:     %t 2 2>&1 \
 // RUN:     | FileCheck -check-prefixes=EXE,EXE-%[dir],EXE-TGT-HOST,EXE-%[dir]-TGT-HOST %s
 // RUN:   }

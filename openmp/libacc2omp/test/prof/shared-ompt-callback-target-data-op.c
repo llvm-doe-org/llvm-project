@@ -39,6 +39,8 @@
 
 // expected-no-diagnostics
 
+#include <acc_prof.h>
+__attribute__((unused)) static void register_all_callbacks(acc_prof_reg reg);
 #include "callbacks.h"
 
 enum {

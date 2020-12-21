@@ -21,6 +21,8 @@
 
 // expected-no-diagnostics
 
+#include <acc_prof.h>
+__attribute__((unused)) static void register_all_callbacks(acc_prof_reg reg);
 #include "callbacks.h"
 
 static void on_device_init_end_dup(acc_prof_info *pi, acc_event_info *ei,

@@ -128,7 +128,8 @@
 // RUN:                        -Wno-openacc-omp-map-no-alloc
 // RUN:       %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:       %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
-// RUN:                 %[tgt-cflags] %acc-includes -o %t.exe %t-omp.c %acc-libs
+// RUN:                 %[tgt-cflags] %acc-includes -Wno-unused-function \
+// RUN:                 -o %t.exe %t-omp.c %acc-libs
 // RUN:       %[run-if] %t.exe > %t.out 2>&1
 // RUN:       %[run-if] FileCheck -input-file %t.out %s \
 // RUN:         -match-full-lines -allow-empty \
