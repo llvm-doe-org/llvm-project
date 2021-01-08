@@ -128,6 +128,8 @@
 #define FTN_TARGET_MAP_FROM_DELETE omp_target_map_from_delete
 #define FTN_TARGET_MAP_RELEASE omp_target_map_release
 #define FTN_TARGET_MAP_DELETE omp_target_map_delete
+#define FTN_TARGET_UPDATE_TO omp_target_update_to
+#define FTN_TARGET_UPDATE_FROM omp_target_update_from
 #endif
 
 #define FTN_CONTROL_TOOL omp_control_tool
@@ -260,6 +262,8 @@
 #define FTN_TARGET_MAP_FROM_DELETE omp_target_map_from_delete_
 #define FTN_TARGET_MAP_RELEASE omp_target_map_release_
 #define FTN_TARGET_MAP_DELETE omp_target_map_delete_
+#define FTN_TARGET_UPDATE_TO omp_target_update_to_
+#define FTN_TARGET_UPDATE_FROM omp_target_update_from_
 #endif
 
 #define FTN_CONTROL_TOOL omp_control_tool_
@@ -394,6 +398,8 @@
 #define FTN_TARGET_MAP_FROM_DELETE OMP_TARGET_MAP_FROM_DELETE
 #define FTN_TARGET_MAP_RELEASE OMP_TARGET_MAP_RELEASE
 #define FTN_TARGET_MAP_DELETE OMP_TARGET_MAP_DELETE
+#define FTN_TARGET_UPDATE_TO OMP_TARGET_UPDATE_TO
+#define FTN_TARGET_UPDATE_FROM OMP_TARGET_UPDATE_FROM
 #endif
 
 #define FTN_CONTROL_TOOL OMP_CONTROL_TOOL
@@ -526,6 +532,8 @@
 #define FTN_TARGET_MAP_FROM_DELETE OMP_TARGET_MAP_FROM_DELETE_
 #define FTN_TARGET_MAP_RELEASE OMP_TARGET_MAP_RELEASE_
 #define FTN_TARGET_MAP_DELETE OMP_TARGET_MAP_DELETE_
+#define FTN_TARGET_UPDATE_TO OMP_TARGET_UPDATE_TO_
+#define FTN_TARGET_UPDATE_FROM OMP_TARGET_UPDATE_FROM_
 #endif
 
 #define FTN_CONTROL_TOOL OMP_CONTROL_TOOL_

@@ -163,6 +163,8 @@ void omp_target_map_from_delete(void *ptr, size_t size, int device_num);
 void *omp_target_map_alloc(void *ptr, size_t size, int device_num);
 void omp_target_map_release(void *ptr, size_t size, int device_num);
 void omp_target_map_delete(void *ptr, size_t size, int device_num);
+void omp_target_update_to(void *ptr, size_t size, int device_num);
+void omp_target_update_from(void *ptr, size_t size, int device_num);
 
 /// add the clauses of the requires directives in a given file
 void __tgt_register_requires(int64_t flags);

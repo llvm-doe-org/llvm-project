@@ -1047,6 +1047,11 @@ void FTN_STDCALL FTN_TARGET_MAP_RELEASE(void *ptr, size_t size,
 
 void FTN_STDCALL FTN_TARGET_MAP_DELETE(void *ptr, size_t size, int device_num) {
 }
+
+void FTN_STDCALL FTN_TARGET_UPDATE_TO(void *ptr, size_t size, int device_num) {}
+
+void FTN_STDCALL FTN_TARGET_UPDATE_FROM(void *ptr, size_t size,
+                                        int device_num) {}
 #endif // defined(KMP_STUB)
 
 #ifdef KMP_STUB
