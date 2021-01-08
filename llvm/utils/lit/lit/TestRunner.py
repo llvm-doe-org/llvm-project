@@ -581,30 +581,36 @@ def _executeShCmd(cmd, shenv, results, timeoutHelper):
         # as we should try avoid launching more processes.
         return None
 
+    # Traverse ShUtil.Seq iteratively here.  The previous recursive
+    # implementation sometimes exceeded python's maximum recursion depth when
+    # using LIT's internal shell to execute test scripts with many RUN lines.
     if isinstance(cmd, ShUtil.Seq):
-        if cmd.op == ';':
-            res = _executeShCmd(cmd.lhs, shenv, results, timeoutHelper)
-            return _executeShCmd(cmd.rhs, shenv, results, timeoutHelper)
-
-        if cmd.op == '&':
-            raise InternalShellError(cmd,"unsupported shell operator: '&'")
-
-        if cmd.op == '||':
-            res = _executeShCmd(cmd.lhs, shenv, results, timeoutHelper)
-            if res != 0:
-                res = _executeShCmd(cmd.rhs, shenv, results, timeoutHelper)
-            return res
-
-        if cmd.op == '&&':
-            res = _executeShCmd(cmd.lhs, shenv, results, timeoutHelper)
-            if res is None:
-                return res
-
-            if res == 0:
-                res = _executeShCmd(cmd.rhs, shenv, results, timeoutHelper)
-            return res
-
-        raise ValueError('Unknown shell command: %r' % cmd.op)
+        # At the start of each iteration below, seqStack.top().lhs has already
+        # been fully executed, res holds the result, and seqStack.top().rhs will
+        # be executed next depending on seqStack.top().op and res.  With that in
+        # mind, initialize seqStack so that cmd will be executed first.
+        seqStack = [ShUtil.Seq(':', ';', cmd)]
+        res = 0
+        while seqStack:
+            seq = seqStack.pop()
+            skipRhs = False
+            if seq.op == ';':
+                pass
+            elif seq.op == '&':
+                raise InternalShellError(seq,"unsupported shell operator: '&'")
+            elif seq.op == '||':
+                skipRhs = res == 0
+            elif seq.op == '&&':
+                skipRhs = res != 0
+            else:
+                raise ValueError('Unknown shell command: %r' % seq.op)
+            if not skipRhs:
+              seq = seq.rhs
+              while isinstance(seq, ShUtil.Seq):
+                  seqStack.append(seq)
+                  seq = seq.lhs
+              res = _executeShCmd(seq, shenv, results, timeoutHelper)
+        return res
     assert isinstance(cmd, ShUtil.Pipeline)
 
     procs = []

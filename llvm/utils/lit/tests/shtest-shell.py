@@ -520,6 +520,8 @@
 # CHECK: Unsupported redirect:
 # CHECK: ***
 
+# CHECK: PASS: shtest-shell :: many-run-lines.txt
+
 # CHECK: FAIL: shtest-shell :: mkdir-error-0.txt
 # CHECK: *** TEST 'shtest-shell :: mkdir-error-0.txt' FAILED ***
 # CHECK: $ "mkdir" "-p" "temp"
@@ -591,4 +593,8 @@
 # CHECK: ***
 
 # CHECK: PASS: shtest-shell :: valid-shell.txt
-# CHECK: Failed Tests (35)
+
+#      CHECK: Testing Time
+# CHECK-NEXT: Passed           :  7
+# CHECK-NEXT: Expectedly Failed:  1
+# CHECK-NEXT: Failed           : 35
