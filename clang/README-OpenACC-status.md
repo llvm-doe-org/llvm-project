@@ -318,9 +318,10 @@ OpenACC Runtime Library API and Preprocessor
           memory.  As in the case of discrete memory, Clacc allocates
           and frees on the current device.
     * `acc_copyin`, `acc_create`, `acc_copyout`,
-      `acc_copyout_finalize`, `acc_delete`, `acc_delete_finalize`; and
-      aliases `acc_present_or_copyin`, `acc_pcopyin`,
-      `acc_present_or_create`, `acc_pcreate`
+      `acc_copyout_finalize`, `acc_delete`, `acc_delete_finalize`,
+      `acc_update_device`, `acc_update_self`; and aliases
+      `acc_present_or_copyin`, `acc_pcopyin`, `acc_present_or_create`,
+      `acc_pcreate`
         * OpenACC 3.1 is unclear about handling of null pointers or a
           `bytes` argument equal to zero.  In that case, Clacc
           implements these as no-ops and returns a null pointer where

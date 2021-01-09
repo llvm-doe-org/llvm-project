@@ -655,11 +655,15 @@ EXTERN void omp_target_map_delete(void *ptr, size_t size, int device_num) {
 EXTERN void omp_target_update_to(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_TO | OMP_TGT_MAPTYPE_PRESENT;
   int64_t s = size;
+  OMPT_SET_DIRECTIVE_INFO(ompt_directive_omp_target_update_to);
   __tgt_target_data_update(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
+  OMPT_CLEAR_DIRECTIVE_INFO();
 }
 
 EXTERN void omp_target_update_from(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_FROM | OMP_TGT_MAPTYPE_PRESENT;
   int64_t s = size;
+  OMPT_SET_DIRECTIVE_INFO(ompt_directive_omp_target_update_from);
   __tgt_target_data_update(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
+  OMPT_CLEAR_DIRECTIVE_INFO();
 }

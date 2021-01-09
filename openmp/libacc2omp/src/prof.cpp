@@ -218,6 +218,12 @@ static acc_prof_info acc_get_prof_info(acc_event_t event_type,
     case ompt_directive_omp_target_map_delete:
       new_func_name = "acc_delete_finalize";
       break;
+    case ompt_directive_omp_target_update_to:
+      new_func_name = "acc_update_device";
+      break;
+    case ompt_directive_omp_target_update_from:
+      new_func_name = "acc_update_self";
+      break;
     }
     if (new_func_name) {
       ACC2OMP_ASSERT(!ret.func_name, "expected no func_name");
@@ -295,6 +301,8 @@ static acc_event_info acc_get_other_event_info(acc_event_t event_type) {
     case ompt_directive_omp_target_map_alloc:
     case ompt_directive_omp_target_map_release:
     case ompt_directive_omp_target_map_delete:
+    case ompt_directive_omp_target_update_to:
+    case ompt_directive_omp_target_update_from:
       ret.other_event.parent_construct = acc_construct_runtime_api;
       break;
     }

@@ -57,6 +57,8 @@ void acc_copyout(void *data_arg, size_t bytes);
 void acc_copyout_finalize(void *data_arg, size_t bytes);
 void acc_delete(void *data_arg, size_t bytes);
 void acc_delete_finalize(void *data_arg, size_t bytes);
+void acc_update_device(void *data_arg, size_t bytes);
+void acc_update_self(void *data_arg, size_t bytes);
 void acc_map_data(void* data_arg, void* data_dev, size_t bytes);
 void acc_unmap_data(void* data_arg);
 void *acc_deviceptr(void *data_arg);

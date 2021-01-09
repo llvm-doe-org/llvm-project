@@ -92,12 +92,16 @@ static inline Presence checkPresence(void *HostPtr, size_t Bytes) {
 /*****************************************************************************
  * Data and memory management routines.
  *
- * Correct handling of null pointers is often not clear in OpenACC 3.1.  We
+ * Handling of null pointers is often not clearly specified in OpenACC 3.1.  We
  * attempt to follow a concept discussed by the OpenACC technical committee: a
  * null pointer is considered always present.  Specifically, we assume the
  * behavior is as if there is an "acc data" enclosing the entire program that
  * maps a host null pointer to a device null pointer so that the structured
- * reference count is always non-zero.  We document each routine's specific
+ * reference count is always non-zero.  Because a null pointer doesn't actually
+ * point to data, we also assume that the number of bytes specified to a routine
+ * is ignored and that any update requested for a null pointer does nothing.
+ * However, none of this applies to the lower-level routines acc_map_data,
+ * acc_unmap_data, and acc_memcpy_*.  We document each routine's specific
  * handling of null pointers in more detail below and relate it to this concept
  * where applicable.
  ****************************************************************************/
@@ -147,13 +151,13 @@ void acc_free(void *data_dev) {
 }
 
 /*----------------------------------------------------------------------------
- * Data-clause-like routines.
+ * Routines similar to enter data, exit data, and update directives.
  *
  * Handling of null pointer or bytes=0:
  * - Other than returning a null pointer where the return type is void*, do
- *   nothing, even if shared memory.
- * - This behavior appears to mimic nvc 20.9-0, except that the latter doesn't
- *   yet implement acc_copyout_finalize or acc_delete_finalize.
+ *   nothing.  In the case of a null pointer, ignore bytes.
+ * - This behavior appears to mimic nvc 20.9-0 except that nvc doesn't yet
+ *   implement acc_copyout_finalize or acc_delete_finalize.
  * - OpenACC 3.1 is unclear about the behavior in this case.
  * - The OpenACC technical committee is considering adding "or is a null
  *   pointer" to the shared-memory condition in each of the quotes below.
@@ -161,12 +165,67 @@ void acc_free(void *data_dev) {
  *   commitee's idea that a null pointer is considered always present,
  *   especially if we assume it was automatically mapped to a null pointer with
  *   a non-zero structured reference count (so that reference count incs/decs
- *   have no effect).
- * - For bytes=0, it seems like it would be more consistent with acc_is_present
- *   to increment/decrement the dynamic reference count when acc_is_present
- *   returns true and do nothing otherwise.  On the other hand, that behavior
- *   would but subtly inconsistent with nvc.  This idea needs to be discussed in
- *   the OpenACC technical committee.
+ *   have no effect), and if we assume bytes and updates should be ignored
+ *   because a null pointer doesn't actually point to data.
+ * - For bytes=0:
+ *   - Potential use cases:
+ *     - bytes=0 for data of size > 0:
+ *       - This is part of a more general use case of specifying bytes<N to
+ *         operate on data of size N>0 when it is not convenient to determine
+ *         the exact value of N at the routine's call site.  That is, this use
+ *         case relies on N already stored in the present table.
+ *       - The current behavior of enter/exit-data-like routines does not
+ *         support this use case for bytes=0 though it does for bytes>0: it does
+ *         not adjust dynamic reference counts and perform any consequent
+ *         deletions or data transfers.  It does nothing.
+ *       - This use case does not include update routines, which always operate
+ *         on exactly the specified bytes not on N bytes.
+ *     - bytes=0 for data of size 0:
+ *       - That is, imagine an application that maps N>=0 bytes to the device
+ *         and then calls enter/exit-data-like routines and update routines for
+ *         a subset, M<=N.  Fulfilling their usual role, the
+ *         enter/exit-data-like routines guarantee the M bytes are present for
+ *         the desired lifetime, and the update routines transfer the M bytes.
+ *         Imagine we want the application to gracefully handle (not fail for)
+ *         the cases of M=0 and N=0.
+ *       - To support the M=0 but N>0 case, it is sufficient for these routines
+ *         to do nothing when bytes=0: the specified address is present but
+ *         operations on the subset M become no-ops.
+ *       - To support the M=N=0 case, doing nothing for bytes=0 is sufficient if
+ *         other functionality that checks presence, such acc_is_present, is not
+ *         used.  That is, presence checks currently return false when N=0 but
+ *         not when N>0.  Whether that's desirable is likely
+ *         application-dependent.
+ *   - Alternative behaviors:
+ *     - Modify bytes=0 behavior for consistency with bytes>0 behavior to
+ *       support the above use cases and so that these routines agree with
+ *       acc_is_present about when a (data_arg, 0) pair is considered present:
+ *       - Modify enter-data-like routines when address is not already present:
+ *         create a present table entry for the address with size 0.  A unique
+ *         device address should also be mapped for the sake of acc_deviceptr
+ *         and acc_hostptr.
+ *       - Modify enter/exit-data-like routines when address is already present:
+ *         adjust the dynamic reference count and perform any consequent
+ *         deletions or data transfers.
+ *       - Modify update routines: check for presence even though bytes=0.  This
+ *         seems fine if present table entries can have size 0.  However, the
+ *         check could be viewed as redundant given that no bytes will actually
+ *         by transferred.
+ *       - If these changes are worthwhile, it might worthwhile to consider
+ *         similar behaviors for acc_malloc, acc_map_data, and acc_unmap_data.
+ *     - Produce runtime errors:
+ *       - The current bytes=0 behavior may be confusing due to inconsistencies
+ *         with the bytes>0 behavior.
+ *       - The previous alternative behavior to avoid that confusion has subtle
+ *         differences in reference counting from nvc's current behavior and
+ *         could thus lead to memory errors that are difficult to debug in
+ *         existing applications.  Moreover, acc_is_present, for example, would
+ *         no longer have identical behavior for bytes=0 and bytes=1.
+ *       - Always producing a runtime error for bytes=0 would avoid both these
+ *         problems.  It might be the best option if the above use cases are
+ *         not worthwhile to support.
+ *   - These alternative behaviors need to be discussed with the OpenACC
+ *     technical committee.
  * Handling of shared memory (including host as current device):
  * - Other than returning data_arg where the return type is void*, do nothing.
  * - This behavior appears to mimic nvc 20.9-0.
@@ -180,12 +239,20 @@ void acc_free(void *data_dev) {
  *   "If the data is in shared memory, no action is taken."
  * - OpenACC 3.1, sec. 3.2.29 "acc_delete", L3565:
  *   "If the data is in shared memory, no action is taken."
+ * - OpenACC 3.1, sec. 3.2.30 "acc_update_device", L3591-3593:
+ *   "For the data referred to by data_arg, if data is not in shared memory, the
+ *   data in the local memory is copied to the corresponding device memory."
+ * - OpenACC 3.1, sec. 3.2.31 "acc_update_self", L3616-3618:
+ *   "For the data referred to by data_arg, if the data is not in shared memory,
+ *   the data in the local memory is copied to the corresponding device memory.
  * - LLVM's OpenMP implementation currently produces a runtime error if
  *   omp_set_default_device(omp_get_initial_device()) is called before a target
- *   enter/exit data directive, reporting that the device is not ready.  Thus,
- *   for now, our omp_target_map_(to|alloc|from|from_delete|release|delete)
- *   implementations do the same for device_num = omp_get_initial_device().
- *   Otherwise, it would handle the case of shared memory as desired here.
+ *   enter/exit data or target update directive, reporting that the device is
+ *   not ready.  Thus, for now, our
+ *   omp_target_map_(to|alloc|from|from_delete|release|delete) and
+ *   omp_target_update_(to|from) implementations do the same for device_num =
+ *   omp_get_initial_device().  Otherwise, it would handle the case of shared
+ *   memory as desired here.
  *--------------------------------------------------------------------------*/
 
 void *acc_copyin(void *data_arg, size_t bytes) {
@@ -282,6 +349,28 @@ void acc_delete_finalize(void *data_arg, size_t bytes) {
   // "The acc_delete_finalize routines are equivalent to an exit data directive
   // with both delete clause and finalize clauses."
   omp_target_map_delete(data_arg, bytes, getCurrentDevice());
+}
+
+void acc_update_device(void *data_arg, size_t bytes) {
+  if (!data_arg || !bytes)
+    return;
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
+    return;
+  // OpenACC 3.1, sec. 3.2.30 "acc_update_device", L3590:
+  // "The acc_update_device routine is equivalent to an update directive with a
+  // device clause."
+  omp_target_update_to(data_arg, bytes, getCurrentDevice());
+}
+
+void acc_update_self(void *data_arg, size_t bytes) {
+  if (!data_arg || !bytes)
+    return;
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
+    return;
+  // OpenACC 3.1, sec. 3.2.31 "acc_update_self", L3615:
+  // "The acc_update_self routine is equivalent to an update directive with a
+  // self clause,"
+  omp_target_update_from(data_arg, bytes, getCurrentDevice());
 }
 
 /*----------------------------------------------------------------------------
@@ -535,7 +624,7 @@ void *acc_hostptr(void *data_dev) {
 
 int acc_is_present(void *data_arg, size_t bytes) {
   // Handling of null pointer:
-  // - Return true.
+  // - Return true, regardless of bytes.
   // - This behavior appears to mimic nvc 20.9-0 except that, strangely, it
   //   returns false if the OpenACC runtime hasn't started yet.
   // - OpenACC 3.1 is unclear about the behavior in this case.

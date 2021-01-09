@@ -23,6 +23,17 @@
 // RUN:   (case=caseCreateExtendsBefore        not-if-fail=%[not-if-off] )
 // RUN:   (case=caseCreateSubsumes             not-if-fail=%[not-if-off] )
 // RUN:   (case=caseCreateConcat2              not-if-fail=%[not-if-off] )
+// RUN:   (case=caseUpdateRoutinesSuccess      not-if-fail=              )
+// RUN:   (case=caseUpdateDeviceAbsent         not-if-fail=%[not-if-off] )
+// RUN:   (case=caseUpdateDeviceExtendsAfter   not-if-fail=%[not-if-off] )
+// RUN:   (case=caseUpdateDeviceExtendsBefore  not-if-fail=%[not-if-off] )
+// RUN:   (case=caseUpdateDeviceSubsumes       not-if-fail=%[not-if-off] )
+// RUN:   (case=caseUpdateDeviceConcat2        not-if-fail=%[not-if-off] )
+// RUN:   (case=caseUpdateSelfAbsent           not-if-fail=%[not-if-off] )
+// RUN:   (case=caseUpdateSelfExtendsAfter     not-if-fail=%[not-if-off] )
+// RUN:   (case=caseUpdateSelfExtendsBefore    not-if-fail=%[not-if-off] )
+// RUN:   (case=caseUpdateSelfSubsumes         not-if-fail=%[not-if-off] )
+// RUN:   (case=caseUpdateSelfConcat2          not-if-fail=%[not-if-off] )
 // RUN:   (case=caseMallocFreeSuccess          not-if-fail=              )
 // RUN:   (case=caseMapUnmapSuccess            not-if-fail=%[not-if-host])
 // RUN:   (case=caseMapSameHostAsStructured    not-if-fail='%not --crash')
@@ -1589,6 +1600,380 @@ CASE(caseCreateConcat2) {
   PRINT_INT_STDERR(arr[0]);
   PRINT_INT_STDERR(arr[1]);
   PRINT_INT_STDERR(arr[2]);
+  return 0;
+}
+
+CASE(caseUpdateRoutinesSuccess) {
+  // Scalar.
+  int d = 10, s = 20;
+  #pragma acc data create(d, s)
+  {
+    #pragma acc parallel num_gangs(1)
+    {
+      d = 11;
+      s = 21;
+    }
+    // OUT-caseUpdateRoutinesSuccess-NEXT: d: 0x[[#%x,D:]] -> 0x[[#%x,D_DEV:]]
+    // OUT-caseUpdateRoutinesSuccess-NEXT: s: 0x[[#%x,S:]] -> 0x[[#%x,S_DEV:]]
+    printf("d: %p -> %p\n", &d, acc_deviceptr(&d));
+    printf("s: %p -> %p\n", &s, acc_deviceptr(&s));
+    acc_update_device(&d, sizeof d);
+    acc_update_self(&s, sizeof s);
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: d present: 0x[[#D]] -> 0x[[#D]],     11 -> 11
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: s present: 0x[[#S]] -> 0x[[#S]],     21 -> 21
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: d present: 0x[[#D]] -> 0x[[#D_DEV]], 10 -> 10
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: s present: 0x[[#S]] -> 0x[[#S_DEV]], 21 -> 21
+    PRINT_INT(d);
+    PRINT_INT(s);
+  }
+
+  // Array extends after.
+  int darr[] = {10, 20, 30}, sarr[] = {40, 50, 60};
+  #pragma acc data create(darr, sarr)
+  {
+    // OUT-caseUpdateRoutinesSuccess-NEXT: darr: 0x[[#%x,DARR0:]] -> 0x[[#%x,DARR0_DEV:]], [[#%u,D_ELE_SIZE:]]
+    // OUT-caseUpdateRoutinesSuccess-NEXT: sarr: 0x[[#%x,SARR0:]] -> 0x[[#%x,SARR0_DEV:]], [[#%u,S_ELE_SIZE:]]
+    printf("darr: %p -> %p, %zu\n", darr, acc_deviceptr(darr), sizeof *darr);
+    printf("sarr: %p -> %p, %zu\n", sarr, acc_deviceptr(sarr), sizeof *sarr);
+    #pragma acc parallel num_gangs(1)
+    {
+      darr[0] = 11;
+      darr[1] = 21;
+      darr[2] = 31;
+      sarr[0] = 41;
+      sarr[1] = 51;
+      sarr[2] = 61;
+    }
+    acc_update_device(darr, 2 * sizeof *darr);
+    acc_update_self(sarr, 2 * sizeof *sarr);
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: darr[0] present: 0x[[#%x,DARR0]]                    -> 0x[[#%x,DARR0]],                            11 -> 11
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: darr[1] present: 0x[[#%x,DARR1:DARR0 + D_ELE_SIZE]] -> 0x[[#%x,DARR0 + D_ELE_SIZE]],               21 -> 21
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: darr[2] present: 0x[[#%x,DARR2:DARR1 + D_ELE_SIZE]] -> 0x[[#%x,DARR1 + D_ELE_SIZE]],               31 -> 31
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: sarr[0] present: 0x[[#%x,SARR0]]                    -> 0x[[#%x,SARR0]],                            41 -> 41
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: sarr[1] present: 0x[[#%x,SARR1:SARR0 + S_ELE_SIZE]] -> 0x[[#%x,SARR0 + S_ELE_SIZE]],               51 -> 51
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: sarr[2] present: 0x[[#%x,SARR2:SARR1 + S_ELE_SIZE]] -> 0x[[#%x,SARR1 + S_ELE_SIZE]],               61 -> 61
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: darr[0] present: 0x[[#%x,DARR0]]                    -> 0x[[#%x,DARR0_DEV]],                        10 -> 10
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: darr[1] present: 0x[[#%x,DARR1:DARR0 + D_ELE_SIZE]] -> 0x[[#%x,DARR1_DEV:DARR0_DEV + D_ELE_SIZE]], 20 -> 20
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: darr[2] present: 0x[[#%x,DARR2:DARR1 + D_ELE_SIZE]] -> 0x[[#%x,DARR2_DEV:DARR1_DEV + D_ELE_SIZE]], 30 -> 31
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: sarr[0] present: 0x[[#%x,SARR0]]                    -> 0x[[#%x,SARR0_DEV]],                        41 -> 41
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: sarr[1] present: 0x[[#%x,SARR1:SARR0 + S_ELE_SIZE]] -> 0x[[#%x,SARR1_DEV:SARR0_DEV + S_ELE_SIZE]], 51 -> 51
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: sarr[2] present: 0x[[#%x,SARR2:SARR1 + S_ELE_SIZE]] -> 0x[[#%x,SARR2_DEV:SARR1_DEV + S_ELE_SIZE]], 60 -> 61
+    PRINT_INT(darr[0]);
+    PRINT_INT(darr[1]);
+    PRINT_INT(darr[2]);
+    PRINT_INT(sarr[0]);
+    PRINT_INT(sarr[1]);
+    PRINT_INT(sarr[2]);
+  }
+
+  // Array extends before.
+  darr[0] = 10;
+  darr[1] = 20;
+  darr[2] = 30;
+  sarr[0] = 40;
+  sarr[1] = 50;
+  sarr[2] = 60;
+  #pragma acc data create(darr, sarr)
+  {
+    // OUT-caseUpdateRoutinesSuccess-NEXT: darr: 0x[[#%x,DARR0:]] -> 0x[[#%x,DARR0_DEV:]], [[#%u,D_ELE_SIZE:]]
+    // OUT-caseUpdateRoutinesSuccess-NEXT: sarr: 0x[[#%x,SARR0:]] -> 0x[[#%x,SARR0_DEV:]], [[#%u,S_ELE_SIZE:]]
+    printf("darr: %p -> %p, %zu\n", darr, acc_deviceptr(darr), sizeof *darr);
+    printf("sarr: %p -> %p, %zu\n", sarr, acc_deviceptr(sarr), sizeof *sarr);
+    #pragma acc parallel num_gangs(1)
+    {
+      darr[0] = 11;
+      darr[1] = 21;
+      darr[2] = 31;
+      sarr[0] = 41;
+      sarr[1] = 51;
+      sarr[2] = 61;
+    }
+    acc_update_device(darr + 1, 2 * sizeof *darr);
+    acc_update_self(sarr + 1, 2 * sizeof *sarr);
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: darr[0] present: 0x[[#%x,DARR0]]                    -> 0x[[#%x,DARR0]],                            11 -> 11
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: darr[1] present: 0x[[#%x,DARR1:DARR0 + D_ELE_SIZE]] -> 0x[[#%x,DARR0 + D_ELE_SIZE]],               21 -> 21
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: darr[2] present: 0x[[#%x,DARR2:DARR1 + D_ELE_SIZE]] -> 0x[[#%x,DARR1 + D_ELE_SIZE]],               31 -> 31
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: sarr[0] present: 0x[[#%x,SARR0]]                    -> 0x[[#%x,SARR0]],                            41 -> 41
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: sarr[1] present: 0x[[#%x,SARR1:SARR0 + S_ELE_SIZE]] -> 0x[[#%x,SARR0 + S_ELE_SIZE]],               51 -> 51
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: sarr[2] present: 0x[[#%x,SARR2:SARR1 + S_ELE_SIZE]] -> 0x[[#%x,SARR1 + S_ELE_SIZE]],               61 -> 61
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: darr[0] present: 0x[[#%x,DARR0]]                    -> 0x[[#%x,DARR0_DEV]],                        10 -> 11
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: darr[1] present: 0x[[#%x,DARR1:DARR0 + D_ELE_SIZE]] -> 0x[[#%x,DARR1_DEV:DARR0_DEV + D_ELE_SIZE]], 20 -> 20
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: darr[2] present: 0x[[#%x,DARR2:DARR1 + D_ELE_SIZE]] -> 0x[[#%x,DARR2_DEV:DARR1_DEV + D_ELE_SIZE]], 30 -> 30
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: sarr[0] present: 0x[[#%x,SARR0]]                    -> 0x[[#%x,SARR0_DEV]],                        40 -> 41
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: sarr[1] present: 0x[[#%x,SARR1:SARR0 + S_ELE_SIZE]] -> 0x[[#%x,SARR1_DEV:SARR0_DEV + S_ELE_SIZE]], 51 -> 51
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: sarr[2] present: 0x[[#%x,SARR2:SARR1 + S_ELE_SIZE]] -> 0x[[#%x,SARR2_DEV:SARR1_DEV + S_ELE_SIZE]], 61 -> 61
+    PRINT_INT(darr[0]);
+    PRINT_INT(darr[1]);
+    PRINT_INT(darr[2]);
+    PRINT_INT(sarr[0]);
+    PRINT_INT(sarr[1]);
+    PRINT_INT(sarr[2]);
+  }
+
+  // Array subsumes.
+  darr[0] = 10;
+  darr[1] = 20;
+  darr[2] = 30;
+  sarr[0] = 40;
+  sarr[1] = 50;
+  sarr[2] = 60;
+  #pragma acc data create(darr, sarr)
+  {
+    // OUT-caseUpdateRoutinesSuccess-NEXT: darr: 0x[[#%x,DARR0:]] -> 0x[[#%x,DARR0_DEV:]], [[#%u,D_ELE_SIZE:]]
+    // OUT-caseUpdateRoutinesSuccess-NEXT: sarr: 0x[[#%x,SARR0:]] -> 0x[[#%x,SARR0_DEV:]], [[#%u,S_ELE_SIZE:]]
+    printf("darr: %p -> %p, %zu\n", darr, acc_deviceptr(darr), sizeof *darr);
+    printf("sarr: %p -> %p, %zu\n", sarr, acc_deviceptr(sarr), sizeof *sarr);
+    #pragma acc parallel num_gangs(1)
+    {
+      darr[0] = 11;
+      darr[1] = 21;
+      darr[2] = 31;
+      sarr[0] = 41;
+      sarr[1] = 51;
+      sarr[2] = 61;
+    }
+    acc_update_device(darr + 1, sizeof *darr);
+    acc_update_self(sarr + 1, sizeof *sarr);
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: darr[0] present: 0x[[#%x,DARR0]]                    -> 0x[[#%x,DARR0]],                            11 -> 11
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: darr[1] present: 0x[[#%x,DARR1:DARR0 + D_ELE_SIZE]] -> 0x[[#%x,DARR0 + D_ELE_SIZE]],               21 -> 21
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: darr[2] present: 0x[[#%x,DARR2:DARR1 + D_ELE_SIZE]] -> 0x[[#%x,DARR1 + D_ELE_SIZE]],               31 -> 31
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: sarr[0] present: 0x[[#%x,SARR0]]                    -> 0x[[#%x,SARR0]],                            41 -> 41
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: sarr[1] present: 0x[[#%x,SARR1:SARR0 + S_ELE_SIZE]] -> 0x[[#%x,SARR0 + S_ELE_SIZE]],               51 -> 51
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: sarr[2] present: 0x[[#%x,SARR2:SARR1 + S_ELE_SIZE]] -> 0x[[#%x,SARR1 + S_ELE_SIZE]],               61 -> 61
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: darr[0] present: 0x[[#%x,DARR0]]                    -> 0x[[#%x,DARR0_DEV]],                        10 -> 11
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: darr[1] present: 0x[[#%x,DARR1:DARR0 + D_ELE_SIZE]] -> 0x[[#%x,DARR1_DEV:DARR0_DEV + D_ELE_SIZE]], 20 -> 20
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: darr[2] present: 0x[[#%x,DARR2:DARR1 + D_ELE_SIZE]] -> 0x[[#%x,DARR2_DEV:DARR1_DEV + D_ELE_SIZE]], 30 -> 31
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: sarr[0] present: 0x[[#%x,SARR0]]                    -> 0x[[#%x,SARR0_DEV]],                        40 -> 41
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: sarr[1] present: 0x[[#%x,SARR1:SARR0 + S_ELE_SIZE]] -> 0x[[#%x,SARR1_DEV:SARR0_DEV + S_ELE_SIZE]], 51 -> 51
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: sarr[2] present: 0x[[#%x,SARR2:SARR1 + S_ELE_SIZE]] -> 0x[[#%x,SARR2_DEV:SARR1_DEV + S_ELE_SIZE]], 60 -> 61
+    PRINT_INT(darr[0]);
+    PRINT_INT(darr[1]);
+    PRINT_INT(darr[2]);
+    PRINT_INT(sarr[0]);
+    PRINT_INT(sarr[1]);
+    PRINT_INT(sarr[2]);
+  }
+
+  // Check case of zero bytes.
+  {
+    // OUT-caseUpdateRoutinesSuccess-NEXT: arr[0]: 0x[[#%x,ARR0:]]
+    // OUT-caseUpdateRoutinesSuccess-NEXT: arr[1]: 0x[[#%x,ARR1:]]
+    int arr[] = {10, 20};
+    printf("arr[0]: %p\n", &arr[0]);
+    printf("arr[1]: %p\n", &arr[1]);
+
+    // When data is absent.
+    //
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: arr[0] present: 0x[[#ARR0]] -> 0x[[#ARR0]], 10 -> 10
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: arr[1] present: 0x[[#ARR1]] -> 0x[[#ARR1]], 20 -> 20
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: arr[0] present: 0x[[#ARR0]] -> 0x[[#ARR0]], 10 -> 10
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: arr[1] present: 0x[[#ARR1]] -> 0x[[#ARR1]], 20 -> 20
+    // OUT-caseUpdateRoutinesSuccess-OFF-NEXT:  arr[0]  absent: 0x[[#ARR0]] -> (nil),       10
+    // OUT-caseUpdateRoutinesSuccess-OFF-NEXT:  arr[1]  absent: 0x[[#ARR1]] -> (nil),       20
+    // OUT-caseUpdateRoutinesSuccess-OFF-NEXT:  arr[0]  absent: 0x[[#ARR0]] -> (nil),       10
+    // OUT-caseUpdateRoutinesSuccess-OFF-NEXT:  arr[1]  absent: 0x[[#ARR1]] -> (nil),       20
+    acc_update_device(&arr[1], 0);
+    PRINT_INT(arr[0]);
+    PRINT_INT(arr[1]);
+    acc_update_self(&arr[1], 0);
+    PRINT_INT(arr[0]);
+    PRINT_INT(arr[1]);
+
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: arr[0] present: 0x[[#ARR0]] -> 0x[[#ARR0]],         11 -> 11
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: arr[1] present: 0x[[#ARR1]] -> 0x[[#ARR1]],         21 -> 21
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: arr[0] present: 0x[[#ARR0]] -> 0x[[#%x,ARR0_DEV:]], 10 -> 11
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: arr[1] present: 0x[[#ARR1]] -> 0x[[#%x,ARR1_DEV:]], 20 -> 21
+    #pragma acc enter data create(arr)
+    #pragma acc parallel num_gangs(1)
+    {
+      arr[0] = 11;
+      arr[1] = 21;
+    }
+    PRINT_INT(arr[0]);
+    PRINT_INT(arr[1]);
+
+    // When data is present.
+    //
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: arr[0] present: 0x[[#ARR0]] -> 0x[[#ARR0]],         11 -> 11
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: arr[1] present: 0x[[#ARR1]] -> 0x[[#ARR1]],         21 -> 21
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: arr[0] present: 0x[[#ARR0]] -> 0x[[#ARR0]],         11 -> 11
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: arr[1] present: 0x[[#ARR1]] -> 0x[[#ARR1]],         21 -> 21
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: arr[0] present: 0x[[#ARR0]] -> 0x[[#%x,ARR0_DEV:]], 10 -> 11
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: arr[1] present: 0x[[#ARR1]] -> 0x[[#%x,ARR1_DEV:]], 20 -> 21
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: arr[0] present: 0x[[#ARR0]] -> 0x[[#%x,ARR0_DEV:]], 10 -> 11
+    //  OUT-caseUpdateRoutinesSuccess-OFF-NEXT: arr[1] present: 0x[[#ARR1]] -> 0x[[#%x,ARR1_DEV:]], 20 -> 21
+    acc_update_device(&arr[1], 0);
+    PRINT_INT(arr[0]);
+    PRINT_INT(arr[1]);
+    acc_update_self(&arr[1], 0);
+    PRINT_INT(arr[0]);
+    PRINT_INT(arr[1]);
+
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: arr[0] present: 0x[[#ARR0]] -> 0x[[#ARR0]], 11 -> 11
+    // OUT-caseUpdateRoutinesSuccess-HOST-NEXT: arr[1] present: 0x[[#ARR1]] -> 0x[[#ARR1]], 21 -> 21
+    // OUT-caseUpdateRoutinesSuccess-OFF-NEXT:  arr[0]  absent: 0x[[#ARR0]] -> (nil),       10
+    // OUT-caseUpdateRoutinesSuccess-OFF-NEXT:  arr[1]  absent: 0x[[#ARR1]] -> (nil),       20
+    #pragma acc exit data delete(arr)
+    PRINT_INT(arr[0]);
+    PRINT_INT(arr[1]);
+  }
+
+  // Check case of null pointer, with non-zero or zero bytes.
+  //
+  // OUT-caseUpdateRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  // OUT-caseUpdateRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  // OUT-caseUpdateRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  // OUT-caseUpdateRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  acc_update_device(NULL, 1);
+  printMap("NULL", NULL, 1);
+  acc_update_self(NULL, 1);
+  printMap("NULL", NULL, 1);
+  acc_update_device(NULL, 0);
+  printMap("NULL", NULL, 0);
+  acc_update_self(NULL, 0);
+  printMap("NULL", NULL, 0);
+  return 0;
+}
+
+CASE(caseUpdateDeviceAbsent) {
+  //      ERR-caseUpdateDeviceAbsent-NEXT: 0x[[#%x,HOST:]], [[#%u,SIZE:]]
+  // ERR-caseUpdateDeviceAbsent-HOST-NEXT: x present: 0x[[#HOST]] -> 0x[[#HOST]], 10 -> 10
+  //  ERR-caseUpdateDeviceAbsent-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateDeviceAbsent-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  int x = 10;
+  fprintf(stderr, "%p, %ld\n", &x, sizeof x);
+  acc_update_device(&x, sizeof x);
+  PRINT_INT_STDERR(x);
+  return 0;
+}
+CASE(caseUpdateDeviceExtendsAfter) {
+  //      ERR-caseUpdateDeviceExtendsAfter-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseUpdateDeviceExtendsAfter-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
+  // ERR-caseUpdateDeviceExtendsAfter-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
+  //  ERR-caseUpdateDeviceExtendsAfter-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateDeviceExtendsAfter-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  int arr[] = {10, 20};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
+  #pragma acc data create(arr[0:1])
+  acc_update_device(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
+  return 0;
+}
+CASE(caseUpdateDeviceExtendsBefore) {
+  //      ERR-caseUpdateDeviceExtendsBefore-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseUpdateDeviceExtendsBefore-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
+  // ERR-caseUpdateDeviceExtendsBefore-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
+  //  ERR-caseUpdateDeviceExtendsBefore-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateDeviceExtendsBefore-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  int arr[] = {10, 20};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
+  #pragma acc data create(arr[1:1])
+  acc_update_device(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
+  return 0;
+}
+CASE(caseUpdateDeviceSubsumes) {
+  //      ERR-caseUpdateDeviceSubsumes-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseUpdateDeviceSubsumes-HOST-NEXT: arr[0] present: 0x[[#HOST]]                          -> 0x[[#HOST]],                          10 -> 10
+  // ERR-caseUpdateDeviceSubsumes-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
+  // ERR-caseUpdateDeviceSubsumes-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
+  //  ERR-caseUpdateDeviceSubsumes-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateDeviceSubsumes-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  int arr[] = {10, 20, 30};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
+  #pragma acc data create(arr[1:1])
+  acc_update_device(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
+  PRINT_INT_STDERR(arr[2]);
+  return 0;
+}
+CASE(caseUpdateDeviceConcat2) {
+  //      ERR-caseUpdateDeviceConcat2-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseUpdateDeviceConcat2-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
+  // ERR-caseUpdateDeviceConcat2-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
+  //  ERR-caseUpdateDeviceConcat2-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateDeviceConcat2-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  int arr[] = {10, 20};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
+  #pragma acc data create(arr[0:1])
+  #pragma acc data create(arr[1:1])
+  acc_update_device(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
+  return 0;
+}
+
+CASE(caseUpdateSelfAbsent) {
+  //      ERR-caseUpdateSelfAbsent-NEXT: 0x[[#%x,HOST:]], [[#%u,SIZE:]]
+  // ERR-caseUpdateSelfAbsent-HOST-NEXT: x present: 0x[[#HOST]] -> 0x[[#HOST]], 10 -> 10
+  //  ERR-caseUpdateSelfAbsent-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateSelfAbsent-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  int x = 10;
+  fprintf(stderr, "%p, %ld\n", &x, sizeof x);
+  acc_update_self(&x, sizeof x);
+  PRINT_INT_STDERR(x);
+  return 0;
+}
+CASE(caseUpdateSelfExtendsAfter) {
+  //      ERR-caseUpdateSelfExtendsAfter-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseUpdateSelfExtendsAfter-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
+  // ERR-caseUpdateSelfExtendsAfter-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
+  //  ERR-caseUpdateSelfExtendsAfter-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateSelfExtendsAfter-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  int arr[] = {10, 20};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
+  #pragma acc data create(arr[0:1])
+  acc_update_self(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
+  return 0;
+}
+CASE(caseUpdateSelfExtendsBefore) {
+  //      ERR-caseUpdateSelfExtendsBefore-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseUpdateSelfExtendsBefore-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
+  // ERR-caseUpdateSelfExtendsBefore-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
+  //  ERR-caseUpdateSelfExtendsBefore-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateSelfExtendsBefore-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  int arr[] = {10, 20};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
+  #pragma acc data create(arr[1:1])
+  acc_update_self(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
+  return 0;
+}
+CASE(caseUpdateSelfSubsumes) {
+  //      ERR-caseUpdateSelfSubsumes-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseUpdateSelfSubsumes-HOST-NEXT: arr[0] present: 0x[[#HOST]]                          -> 0x[[#HOST]],                          10 -> 10
+  // ERR-caseUpdateSelfSubsumes-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
+  // ERR-caseUpdateSelfSubsumes-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
+  //  ERR-caseUpdateSelfSubsumes-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateSelfSubsumes-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  int arr[] = {10, 20, 30};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
+  #pragma acc data create(arr[1:1])
+  acc_update_self(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
+  PRINT_INT_STDERR(arr[2]);
+  return 0;
+}
+CASE(caseUpdateSelfConcat2) {
+  //      ERR-caseUpdateSelfConcat2-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseUpdateSelfConcat2-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
+  // ERR-caseUpdateSelfConcat2-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
+  //  ERR-caseUpdateSelfConcat2-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateSelfConcat2-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  int arr[] = {10, 20};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
+  #pragma acc data create(arr[0:1])
+  #pragma acc data create(arr[1:1])
+  acc_update_self(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
   return 0;
 }
 

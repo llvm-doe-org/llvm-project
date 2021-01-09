@@ -4,11 +4,6 @@ VERS1.0 {
     acc_register_library;
     acc_malloc;
     acc_free;
-    acc_map_data;
-    acc_unmap_data;
-    acc_deviceptr;
-    acc_hostptr;
-    acc_is_present;
     acc_copyin;
     acc_present_or_copyin;
     acc_pcopyin;
@@ -19,6 +14,13 @@ VERS1.0 {
     acc_copyout_finalize;
     acc_delete;
     acc_delete_finalize;
+    acc_update_device;
+    acc_update_self;
+    acc_map_data;
+    acc_unmap_data;
+    acc_deviceptr;
+    acc_hostptr;
+    acc_is_present;
   local:
     *;
 };

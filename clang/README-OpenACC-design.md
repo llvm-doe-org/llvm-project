@@ -1874,6 +1874,8 @@ implemented in Clacc's version of LLVM's OpenMP runtime library:
 * `void omp_target_map_from_delete(void *ptr, size_t size, int device_num);`
 * `void omp_target_map_release(void *ptr, size_t size, int device_num);`
 * `void omp_target_map_delete(void *ptr, size_t size, int device_num);`
+* `void omp_target_update_to(void *ptr, size_t size, int device_num);`
+* `void omp_target_update_from(void *ptr, size_t size, int device_num);`
 * `void *omp_get_mapped_hostptr(const void *ptr, int device_num);`
 
 Support for the OpenACC Profiling Interface appears primarily in the
@@ -2302,6 +2304,8 @@ typedef enum ompt_directive_kind_t {
   ompt_directive_omp_target_map_alloc,
   ompt_directive_omp_target_map_release,
   ompt_directive_omp_target_map_delete,
+  ompt_directive_omp_target_update_to,
+  ompt_directive_omp_target_update_from,
 } ompt_directive_kind_t;
 
 // All fields are designed so that null-initialization is a reasonable

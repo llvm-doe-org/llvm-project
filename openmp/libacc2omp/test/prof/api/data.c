@@ -1065,12 +1065,170 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_type=acc_device_not_host
   acc_delete_finalize(arr, sizeof arr);
 
+  //--------------------------------------------------
+  // Check update routines when data is present.
+  //--------------------------------------------------
+
+  // We've already checked acc_create when data is not present, but we need to
+  // make it present again.
+  //
+  // OFF:acc_ev_enter_data_start
+  // OFF:acc_ev_alloc
+  // OFF:acc_ev_create
+  // OFF:acc_ev_enter_data_end
+  acc_create(arr, sizeof arr);
+
+  //      OFF:acc_ev_update_start
+  // OFF-NEXT:  acc_prof_info
+  // OFF-NEXT:    event_type=14, valid_bytes=72, version=[[VERSION]],
+  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=(null), func_name=acc_update_device,
+  // OFF-NEXT:    line_no=0, end_line_no=0,
+  // OFF-NEXT:    func_line_no=0, func_end_line_no=0
+  // OFF-NEXT:  acc_other_event_info
+  // OFF-NEXT:    event_type=14, valid_bytes=24,
+  // OFF-NEXT:    parent_construct=acc_construct_runtime_api,
+  // OFF-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-NEXT:  acc_api_info
+  // OFF-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:acc_ev_enqueue_upload_start
+  // OFF-NEXT:  acc_prof_info
+  // OFF-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
+  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=(null), func_name=acc_update_device,
+  // OFF-NEXT:    line_no=0, end_line_no=0,
+  // OFF-NEXT:    func_line_no=0, func_end_line_no=0
+  // OFF-NEXT:  acc_data_event_info
+  // OFF-NEXT:    event_type=20, valid_bytes=56,
+  // OFF-NEXT:    parent_construct=acc_construct_runtime_api,
+  // OFF-NEXT:    implicit=0, tool_info=(nil),
+  // OFF-NEXT:    var_name=(null), bytes=8,
+  // OFF-NEXT:    host_ptr=[[ARR_HOST_PTR]],
+  // OFF-NEXT:    device_ptr=[[ARR_DEVICE_PTR]]
+  // OFF-NEXT:  acc_api_info
+  // OFF-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:acc_ev_enqueue_upload_end
+  // OFF-NEXT:  acc_prof_info
+  // OFF-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
+  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=(null), func_name=acc_update_device,
+  // OFF-NEXT:    line_no=0, end_line_no=0,
+  // OFF-NEXT:    func_line_no=0, func_end_line_no=0
+  // OFF-NEXT:  acc_data_event_info
+  // OFF-NEXT:    event_type=21, valid_bytes=56,
+  // OFF-NEXT:    parent_construct=acc_construct_runtime_api,
+  // OFF-NEXT:    implicit=0, tool_info=(nil),
+  // OFF-NEXT:    var_name=(null), bytes=8,
+  // OFF-NEXT:    host_ptr=[[ARR_HOST_PTR]],
+  // OFF-NEXT:    device_ptr=[[ARR_DEVICE_PTR]]
+  // OFF-NEXT:  acc_api_info
+  // OFF-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:acc_ev_update_end
+  // OFF-NEXT:  acc_prof_info
+  // OFF-NEXT:    event_type=15, valid_bytes=72, version=[[VERSION]],
+  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=(null), func_name=acc_update_device,
+  // OFF-NEXT:    line_no=0, end_line_no=0,
+  // OFF-NEXT:    func_line_no=0, func_end_line_no=0
+  // OFF-NEXT:  acc_other_event_info
+  // OFF-NEXT:    event_type=15, valid_bytes=24,
+  // OFF-NEXT:    parent_construct=acc_construct_runtime_api,
+  // OFF-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-NEXT:  acc_api_info
+  // OFF-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-NEXT:    device_type=acc_device_not_host
+  acc_update_device(arr, sizeof arr);
+
+  //      OFF:acc_ev_update_start
+  // OFF-NEXT:  acc_prof_info
+  // OFF-NEXT:    event_type=14, valid_bytes=72, version=[[VERSION]],
+  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=(null), func_name=acc_update_self,
+  // OFF-NEXT:    line_no=0, end_line_no=0,
+  // OFF-NEXT:    func_line_no=0, func_end_line_no=0
+  // OFF-NEXT:  acc_other_event_info
+  // OFF-NEXT:    event_type=14, valid_bytes=24,
+  // OFF-NEXT:    parent_construct=acc_construct_runtime_api,
+  // OFF-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-NEXT:  acc_api_info
+  // OFF-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:acc_ev_enqueue_download_start
+  // OFF-NEXT:  acc_prof_info
+  // OFF-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
+  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=(null), func_name=acc_update_self,
+  // OFF-NEXT:    line_no=0, end_line_no=0,
+  // OFF-NEXT:    func_line_no=0, func_end_line_no=0
+  // OFF-NEXT:  acc_data_event_info
+  // OFF-NEXT:    event_type=22, valid_bytes=56,
+  // OFF-NEXT:    parent_construct=acc_construct_runtime_api,
+  // OFF-NEXT:    implicit=0, tool_info=(nil),
+  // OFF-NEXT:    var_name=(null), bytes=8,
+  // OFF-NEXT:    host_ptr=[[ARR_HOST_PTR]],
+  // OFF-NEXT:    device_ptr=[[ARR_DEVICE_PTR]]
+  // OFF-NEXT:  acc_api_info
+  // OFF-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:acc_ev_enqueue_download_end
+  // OFF-NEXT:  acc_prof_info
+  // OFF-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
+  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=(null), func_name=acc_update_self,
+  // OFF-NEXT:    line_no=0, end_line_no=0,
+  // OFF-NEXT:    func_line_no=0, func_end_line_no=0
+  // OFF-NEXT:  acc_data_event_info
+  // OFF-NEXT:    event_type=23, valid_bytes=56,
+  // OFF-NEXT:    parent_construct=acc_construct_runtime_api,
+  // OFF-NEXT:    implicit=0, tool_info=(nil),
+  // OFF-NEXT:    var_name=(null), bytes=8,
+  // OFF-NEXT:    host_ptr=[[ARR_HOST_PTR]],
+  // OFF-NEXT:    device_ptr=[[ARR_DEVICE_PTR]]
+  // OFF-NEXT:  acc_api_info
+  // OFF-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:acc_ev_update_end
+  // OFF-NEXT:  acc_prof_info
+  // OFF-NEXT:    event_type=15, valid_bytes=72, version=[[VERSION]],
+  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OFF-NEXT:    src_file=(null), func_name=acc_update_self,
+  // OFF-NEXT:    line_no=0, end_line_no=0,
+  // OFF-NEXT:    func_line_no=0, func_end_line_no=0
+  // OFF-NEXT:  acc_other_event_info
+  // OFF-NEXT:    event_type=15, valid_bytes=24,
+  // OFF-NEXT:    parent_construct=acc_construct_runtime_api,
+  // OFF-NEXT:    implicit=0, tool_info=(nil)
+  // OFF-NEXT:  acc_api_info
+  // OFF-NEXT:    device_api=0, valid_bytes=12,
+  // OFF-NEXT:    device_type=acc_device_not_host
+  acc_update_self(arr, sizeof arr);
+
+  // We've already checked acc_delete when data is present, but we want to make
+  // it absent again.
+  //
+  // OFF:acc_ev_exit_data_start
+  // OFF:acc_ev_delete
+  // OFF:acc_ev_free
+  // OFF:acc_ev_exit_data_end
+  acc_delete(arr, sizeof arr);
+
   return 0;
 }
 
 // Device shutdown.
 //
-// OFF-NEXT:acc_ev_device_shutdown_start
+//      OFF:acc_ev_device_shutdown_start
 // OFF-NEXT:  acc_prof_info
 // OFF-NEXT:    event_type=3, valid_bytes=72, version=[[VERSION]],
 // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
