@@ -72,9 +72,9 @@ int main(int argc, char *argv[]) {
   // and acc_unmap_data fail for shared memory, so skip them when offloading is
   // disabled.
   //
-  // Check data-clause-like routines (acc_copyin, acc_copyout, etc.) when data
-  // is present and not ready to be deleted (a case we exercise here by calling
-  // them between acc_map_data and acc_unmap_data).
+  // Check enter/exit-data-like routines (acc_copyin, acc_copyout, etc.) when
+  // data is present and not ready to be deleted (a case we exercise here by
+  // calling them between acc_map_data and acc_unmap_data).
   //--------------------------------------------------
 
   // OFF-NEXT:acc_ev_device_init_start
@@ -393,8 +393,8 @@ int main(int argc, char *argv[]) {
   acc_free(arr_dev);
 
   //--------------------------------------------------
-  // Check exit-data-clause-like routines (acc_copyout, etc.) when data is not
-  // present and so there's nothing to delete.
+  // Check exit-data-like routines (acc_copyout, etc.) when data is not present
+  // and so there's nothing to delete.
   //--------------------------------------------------
 
   // OFF-NEXT:acc_ev_exit_data_start
@@ -526,9 +526,9 @@ int main(int argc, char *argv[]) {
   acc_delete_finalize(arr, sizeof arr);
 
   //--------------------------------------------------
-  // Check enter-data-clause-like routines (acc_copyin, etc.) when data is not
-  // present and so data is ready to be created, and check exit-data-clause-like
-  // routines (acc_copyout, etc.) when data is present and ready to be deleted.
+  // Check enter-data-like routines (acc_copyin, etc.) when data is not present
+  // and so data is ready to be created, and check exit-data-like routines
+  // (acc_copyout, etc.) when data is present and ready to be deleted.
   //--------------------------------------------------
 
   // OFF-NEXT:acc_ev_enter_data_start

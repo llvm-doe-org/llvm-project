@@ -14,13 +14,15 @@
 // RUN:   (case=caseDeviceptrSuccess           not-if-fail=              )
 // RUN:   (case=caseHostptrSuccess             not-if-fail=              )
 // RUN:   (case=caseIsPresentSuccess           not-if-fail=              )
-// RUN:   (case=caseClauseLikeRoutinesSuccess  not-if-fail=              )
+// RUN:   (case=caseEnterExitRoutinesSuccess   not-if-fail=              )
 // RUN:   (case=caseCopyinExtendsAfter         not-if-fail=%[not-if-off] )
 // RUN:   (case=caseCopyinExtendsBefore        not-if-fail=%[not-if-off] )
 // RUN:   (case=caseCopyinSubsumes             not-if-fail=%[not-if-off] )
+// RUN:   (case=caseCopyinConcat2              not-if-fail=%[not-if-off] )
 // RUN:   (case=caseCreateExtendsAfter         not-if-fail=%[not-if-off] )
 // RUN:   (case=caseCreateExtendsBefore        not-if-fail=%[not-if-off] )
 // RUN:   (case=caseCreateSubsumes             not-if-fail=%[not-if-off] )
+// RUN:   (case=caseCreateConcat2              not-if-fail=%[not-if-off] )
 // RUN:   (case=caseMallocFreeSuccess          not-if-fail=              )
 // RUN:   (case=caseMapUnmapSuccess            not-if-fail=%[not-if-host])
 // RUN:   (case=caseMapSameHostAsStructured    not-if-fail='%not --crash')
@@ -77,11 +79,11 @@
 // OUT-NOT: {{.}}
 // ERR-NOT: {{.}}
 
-bool printMap_(const char *Name, void *HostPtr, size_t Bytes) {
+bool printMap_(FILE *File, const char *Name, void *HostPtr, size_t Bytes) {
   bool IsPresent = acc_is_present(HostPtr, Bytes);
   void *DevPtr = acc_deviceptr(HostPtr);
-  printf("%s %s: %p -> %p", Name, IsPresent ? "present" : "absent",
-         HostPtr, DevPtr);
+  fprintf(File, "%s %s: %p -> %p", Name, IsPresent ? "present" : "absent",
+          HostPtr, DevPtr);
   void *HostPtrChk = acc_hostptr(DevPtr);
   void *HostPtrExpected = DevPtr ? HostPtr : NULL;
   if (HostPtrChk != HostPtrExpected) {
@@ -93,21 +95,24 @@ bool printMap_(const char *Name, void *HostPtr, size_t Bytes) {
 }
 
 void printMap(const char *Name, void *HostPtr, size_t Bytes) {
-  printMap_(Name, HostPtr, Bytes);
-  printf("\n");
+  printMap_(stdout, Name, HostPtr, Bytes);
+  fprintf(stdout, "\n");
 }
 
-void printInt(const char *Var, int *HostPtr, size_t Bytes) {
-  int IsPresent = printMap_(Var, HostPtr, Bytes);
-  printf(", %d", *HostPtr);
+void printInt(FILE *File, const char *Var, int *HostPtr, size_t Bytes) {
+  int IsPresent = printMap_(File, Var, HostPtr, Bytes);
+  fprintf(File, ", %d", *HostPtr);
   if (IsPresent) {
-    #pragma acc parallel num_gangs(1)
-    printf(" -> %d", *HostPtr);
+    int DevVal;
+    #pragma acc parallel num_gangs(1) copyout(DevVal)
+    DevVal = *HostPtr;
+    fprintf(File, " -> %d", DevVal);
   }
-  printf("\n");
+  fprintf(File, "\n");
 }
 
-#define PRINT_INT(Var) printInt(#Var, &(Var), sizeof (Var))
+#define PRINT_INT(Var) printInt(stdout, #Var, &(Var), sizeof (Var))
+#define PRINT_INT_STDERR(Var) printInt(stderr, #Var, &(Var), sizeof (Var))
 
 // Make each static to ensure we get a compile warning if it's never called.
 #include CASES_HEADER
@@ -141,11 +146,13 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  // OUT: start
-  printf("start\n");
+  // OUT: start out
+  // ERR: start err
+  fprintf(stdout, "start out\n");
+  fprintf(stderr, "start err\n");
   fflush(stdout);
-  caseFn(Offloading);
-  return 0;
+  fflush(stderr);
+  return caseFn(Offloading);
 }
 
 CASE(caseDeviceptrSuccess) {
@@ -158,8 +165,8 @@ CASE(caseDeviceptrSuccess) {
   // acc_deviceptr with acc_map_data/acc_unmap_data is checked in
   // caseMapUnmapSuccess.
   //
-  // acc_deviceptr with data-clause-like routines (acc_copyin, acc_create, etc.)
-  // is checked in caseClauseLikeRoutinesSuccess.
+  // acc_deviceptr with enter/exit-data-like routines (acc_copyin, acc_create,
+  // etc.) is checked in caseEnterExitRoutinesSuccess.
 
   // Check with acc data.
   //
@@ -244,8 +251,8 @@ CASE(caseHostptrSuccess) {
   // acc_hostptr with acc_map_data/acc_unmap_data is checked more thoroughly in
   // caseMapUnmapSuccess.
   //
-  // acc_hostptr with data-clause-like routines (acc_copyin, acc_create, etc.)
-  // is checked in caseClauseLikeRoutinesSuccess.
+  // acc_hostptr with enter/exit-data-like routines (acc_copyin, acc_create,
+  // etc.) is checked in caseEnterExitRoutinesSuccess.
 
   // Check when not mapped.
   //
@@ -338,8 +345,8 @@ CASE(caseIsPresentSuccess) {
   // acc_is_present with acc_map_data/acc_unmap_data is checked in
   // caseMapUnmapSuccess.
   //
-  // acc_is_present with data-clause-like routines (acc_copyin, acc_create,
-  // etc.) is checked in caseClauseLikeRoutinesSuccess.
+  // acc_is_present with enter/exit-data-like routines (acc_copyin, acc_create,
+  // etc.) is checked in caseEnterExitRoutinesSuccess.
 
   // Check with acc data.
   //
@@ -484,8 +491,8 @@ CASE(caseIsPresentSuccess) {
   return 0;
 }
 
-CASE(caseClauseLikeRoutinesSuccess) {
-  // These data-clause-like routines are checked with
+CASE(caseEnterExitRoutinesSuccess) {
+  // These enter/exit-data-like routines are checked with
   // acc_map_data/acc_unmap_data is checked in caseMapUnmapSuccess.
 
   // Check the case where both ref counts are initially zero.
@@ -511,20 +518,20 @@ CASE(caseClauseLikeRoutinesSuccess) {
     int cof   = 120;
     int dl    = 130;
     int dlf   = 140;
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT:    ci: 0x[[#%x,CI:]]
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT:  cico: 0x[[#%x,CICO:]]
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT: cicof: 0x[[#%x,CICOF:]]
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT:  cidl: 0x[[#%x,CIDL:]]
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT: cidlf: 0x[[#%x,CIDLF:]]
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT:    cr: 0x[[#%x,CR:]]
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT:  crco: 0x[[#%x,CRCO:]]
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT: crcof: 0x[[#%x,CRCOF:]]
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT:  crdl: 0x[[#%x,CRDL:]]
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT: crdlf: 0x[[#%x,CRDLF:]]
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT:    co: 0x[[#%x,CO:]]
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT:   cof: 0x[[#%x,COF:]]
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT:    dl: 0x[[#%x,DL:]]
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT:   dlf: 0x[[#%x,DLF:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT:    ci: 0x[[#%x,CI:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT:  cico: 0x[[#%x,CICO:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT: cicof: 0x[[#%x,CICOF:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT:  cidl: 0x[[#%x,CIDL:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT: cidlf: 0x[[#%x,CIDLF:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT:    cr: 0x[[#%x,CR:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT:  crco: 0x[[#%x,CRCO:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT: crcof: 0x[[#%x,CRCOF:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT:  crdl: 0x[[#%x,CRDL:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT: crdlf: 0x[[#%x,CRDLF:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT:    co: 0x[[#%x,CO:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT:   cof: 0x[[#%x,COF:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT:    dl: 0x[[#%x,DL:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT:   dlf: 0x[[#%x,DLF:]]
     printf("   ci: %p\n", &ci);
     printf(" cico: %p\n", &cico);
     printf("cicof: %p\n", &cicof);
@@ -539,26 +546,26 @@ CASE(caseClauseLikeRoutinesSuccess) {
     printf("  cof: %p\n", &cof);
     printf("   dl: %p\n", &dl);
     printf("  dlf: %p\n", &dlf);
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:    ci_dev: 0x[[#CI]]
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:  cico_dev: 0x[[#CICO]]
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cicof_dev: 0x[[#CICOF]]
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:  cidl_dev: 0x[[#CIDL]]
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cidlf_dev: 0x[[#CIDLF]]
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:    cr_dev: 0x[[#CR]]
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:  crco_dev: 0x[[#CRCO]]
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: crcof_dev: 0x[[#CRCOF]]
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:  crdl_dev: 0x[[#CRDL]]
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: crdlf_dev: 0x[[#CRDLF]]
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:    ci_dev: 0x[[#%x,CI_DEV:]]
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  cico_dev: 0x[[#%x,CICO_DEV:]]
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cicof_dev: 0x[[#%x,CICOF_DEV:]]
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  cidl_dev: 0x[[#%x,CIDL_DEV:]]
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cidlf_dev: 0x[[#%x,CIDLF_DEV:]]
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:    cr_dev: 0x[[#%x,CR_DEV:]]
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  crco_dev: 0x[[#%x,CRCO_DEV:]]
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: crcof_dev: 0x[[#%x,CRCOF_DEV:]]
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  crdl_dev: 0x[[#%x,CRDL_DEV:]]
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: crdlf_dev: 0x[[#%x,CRDLF_DEV:]]
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:    ci_dev: 0x[[#CI]]
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:  cico_dev: 0x[[#CICO]]
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cicof_dev: 0x[[#CICOF]]
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:  cidl_dev: 0x[[#CIDL]]
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cidlf_dev: 0x[[#CIDLF]]
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:    cr_dev: 0x[[#CR]]
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:  crco_dev: 0x[[#CRCO]]
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: crcof_dev: 0x[[#CRCOF]]
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:  crdl_dev: 0x[[#CRDL]]
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: crdlf_dev: 0x[[#CRDLF]]
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:    ci_dev: 0x[[#%x,CI_DEV:]]
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  cico_dev: 0x[[#%x,CICO_DEV:]]
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cicof_dev: 0x[[#%x,CICOF_DEV:]]
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  cidl_dev: 0x[[#%x,CIDL_DEV:]]
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cidlf_dev: 0x[[#%x,CIDLF_DEV:]]
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:    cr_dev: 0x[[#%x,CR_DEV:]]
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  crco_dev: 0x[[#%x,CRCO_DEV:]]
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: crcof_dev: 0x[[#%x,CRCOF_DEV:]]
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  crdl_dev: 0x[[#%x,CRDL_DEV:]]
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: crdlf_dev: 0x[[#%x,CRDLF_DEV:]]
     printf("   ci_dev: %p\n", acc_copyin(&ci, sizeof ci));
     printf(" cico_dev: %p\n", acc_pcopyin(&cico, sizeof cico));
     printf("cicof_dev: %p\n", acc_present_or_copyin(&cicof, sizeof cicof));
@@ -569,34 +576,34 @@ CASE(caseClauseLikeRoutinesSuccess) {
     printf("crcof_dev: %p\n", acc_present_or_create(&crcof, sizeof crcof));
     printf(" crdl_dev: %p\n", acc_create(&crdl, sizeof crdl));
     printf("crdlf_dev: %p\n", acc_pcreate(&crdlf, sizeof crdlf));
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:    ci present: 0x[[#CI]]    -> 0x[[#CI]],          10 ->  10
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:  cico present: 0x[[#CICO]]  -> 0x[[#CICO]],        20 ->  20
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cicof present: 0x[[#CICOF]] -> 0x[[#CICOF]],       30 ->  30
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:  cidl present: 0x[[#CIDL]]  -> 0x[[#CIDL]],        40 ->  40
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cidlf present: 0x[[#CIDLF]] -> 0x[[#CIDLF]],       50 ->  50
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:    cr present: 0x[[#CR]]    -> 0x[[#CR]],          60 ->  60
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:  crco present: 0x[[#CRCO]]  -> 0x[[#CRCO]],        70 ->  70
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: crcof present: 0x[[#CRCOF]] -> 0x[[#CRCOF]],       80 ->  80
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:  crdl present: 0x[[#CRDL]]  -> 0x[[#CRDL]],        90 ->  90
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: crdlf present: 0x[[#CRDLF]] -> 0x[[#CRDLF]],      100 -> 100
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:    co present: 0x[[#CO]]    -> 0x[[#CO]],         110 -> 110
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:   cof present: 0x[[#COF]]   -> 0x[[#COF]],        120 -> 120
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:    dl present: 0x[[#DL]]    -> 0x[[#DL]],         130 -> 130
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:   dlf present: 0x[[#DLF]]   -> 0x[[#DLF]],        140 -> 140
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:    ci present: 0x[[#CI]]    -> 0x[[#CI_DEV]],     10 ->  10
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  cico present: 0x[[#CICO]]  -> 0x[[#CICO_DEV]],   20 ->  20
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cicof present: 0x[[#CICOF]] -> 0x[[#CICOF_DEV]],  30 ->  30
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  cidl present: 0x[[#CIDL]]  -> 0x[[#CIDL_DEV]],   40 ->  40
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cidlf present: 0x[[#CIDLF]] -> 0x[[#CIDLF_DEV]],  50 ->  50
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:    cr present: 0x[[#CR]]    -> 0x[[#CR_DEV]],     60 -> {{.*}}
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  crco present: 0x[[#CRCO]]  -> 0x[[#CRCO_DEV]],   70 -> {{.*}}
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: crcof present: 0x[[#CRCOF]] -> 0x[[#CRCOF_DEV]],  80 -> {{.*}}
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  crdl present: 0x[[#CRDL]]  -> 0x[[#CRDL_DEV]],   90 -> {{.*}}
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: crdlf present: 0x[[#CRDLF]] -> 0x[[#CRDLF_DEV]], 100 -> {{.*}}
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:    co  absent: 0x[[#CO]]    -> (nil),            110
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:   cof  absent: 0x[[#COF]]   -> (nil),            120
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:    dl  absent: 0x[[#DL]]    -> (nil),            130
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:   dlf  absent: 0x[[#DLF]]   -> (nil),            140
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:    ci present: 0x[[#CI]]    -> 0x[[#CI]],          10 ->  10
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:  cico present: 0x[[#CICO]]  -> 0x[[#CICO]],        20 ->  20
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cicof present: 0x[[#CICOF]] -> 0x[[#CICOF]],       30 ->  30
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:  cidl present: 0x[[#CIDL]]  -> 0x[[#CIDL]],        40 ->  40
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cidlf present: 0x[[#CIDLF]] -> 0x[[#CIDLF]],       50 ->  50
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:    cr present: 0x[[#CR]]    -> 0x[[#CR]],          60 ->  60
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:  crco present: 0x[[#CRCO]]  -> 0x[[#CRCO]],        70 ->  70
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: crcof present: 0x[[#CRCOF]] -> 0x[[#CRCOF]],       80 ->  80
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:  crdl present: 0x[[#CRDL]]  -> 0x[[#CRDL]],        90 ->  90
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: crdlf present: 0x[[#CRDLF]] -> 0x[[#CRDLF]],      100 -> 100
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:    co present: 0x[[#CO]]    -> 0x[[#CO]],         110 -> 110
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:   cof present: 0x[[#COF]]   -> 0x[[#COF]],        120 -> 120
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:    dl present: 0x[[#DL]]    -> 0x[[#DL]],         130 -> 130
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:   dlf present: 0x[[#DLF]]   -> 0x[[#DLF]],        140 -> 140
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:    ci present: 0x[[#CI]]    -> 0x[[#CI_DEV]],     10 ->  10
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  cico present: 0x[[#CICO]]  -> 0x[[#CICO_DEV]],   20 ->  20
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cicof present: 0x[[#CICOF]] -> 0x[[#CICOF_DEV]],  30 ->  30
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  cidl present: 0x[[#CIDL]]  -> 0x[[#CIDL_DEV]],   40 ->  40
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cidlf present: 0x[[#CIDLF]] -> 0x[[#CIDLF_DEV]],  50 ->  50
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:    cr present: 0x[[#CR]]    -> 0x[[#CR_DEV]],     60 -> {{.*}}
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  crco present: 0x[[#CRCO]]  -> 0x[[#CRCO_DEV]],   70 -> {{.*}}
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: crcof present: 0x[[#CRCOF]] -> 0x[[#CRCOF_DEV]],  80 -> {{.*}}
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  crdl present: 0x[[#CRDL]]  -> 0x[[#CRDL_DEV]],   90 -> {{.*}}
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: crdlf present: 0x[[#CRDLF]] -> 0x[[#CRDLF_DEV]], 100 -> {{.*}}
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:    co  absent: 0x[[#CO]]    -> (nil),            110
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:   cof  absent: 0x[[#COF]]   -> (nil),            120
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:    dl  absent: 0x[[#DL]]    -> (nil),            130
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:   dlf  absent: 0x[[#DLF]]   -> (nil),            140
     PRINT_INT(ci);
     PRINT_INT(cico);
     PRINT_INT(cicof);
@@ -637,34 +644,34 @@ CASE(caseClauseLikeRoutinesSuccess) {
     acc_copyout_finalize(&cof, sizeof cof);
     acc_delete(&dl, sizeof dl);
     acc_delete_finalize(&dlf, sizeof dlf);
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:    ci present: 0x[[#CI]]    -> 0x[[#CI]],       11 ->  11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:  cico present: 0x[[#CICO]]  -> 0x[[#CICO]],     21 ->  21
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cicof present: 0x[[#CICOF]] -> 0x[[#CICOF]],    31 ->  31
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:  cidl present: 0x[[#CIDL]]  -> 0x[[#CIDL]],     41 ->  41
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cidlf present: 0x[[#CIDLF]] -> 0x[[#CIDLF]],    51 ->  51
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:    cr present: 0x[[#CR]]    -> 0x[[#CR]],       61 ->  61
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:  crco present: 0x[[#CRCO]]  -> 0x[[#CRCO]],     71 ->  71
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: crcof present: 0x[[#CRCOF]] -> 0x[[#CRCOF]],    81 ->  81
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:  crdl present: 0x[[#CRDL]]  -> 0x[[#CRDL]],     91 ->  91
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: crdlf present: 0x[[#CRDLF]] -> 0x[[#CRDLF]],   101 -> 101
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:    co present: 0x[[#CO]]    -> 0x[[#CO]],      110 -> 110
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:   cof present: 0x[[#COF]]   -> 0x[[#COF]],     120 -> 120
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:    dl present: 0x[[#DL]]    -> 0x[[#DL]],      130 -> 130
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT:   dlf present: 0x[[#DLF]]   -> 0x[[#DLF]],     140 -> 140
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:    ci present: 0x[[#CI]]    -> 0x[[#CI_DEV]],  10 ->  11
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  cico  absent: 0x[[#CICO]]  -> (nil),          21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cicof  absent: 0x[[#CICOF]] -> (nil),          31
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  cidl  absent: 0x[[#CIDL]]  -> (nil),          40
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cidlf  absent: 0x[[#CIDLF]] -> (nil),          50
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:    cr present: 0x[[#CR]]    -> 0x[[#CR_DEV]],  60 -> {{.*}}
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  crco  absent: 0x[[#CRCO]]  -> (nil),          71
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: crcof  absent: 0x[[#CRCOF]] -> (nil),          81
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  crdl  absent: 0x[[#CRDL]]  -> (nil),          90
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: crdlf  absent: 0x[[#CRDLF]] -> (nil),          100
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:    co  absent: 0x[[#CO]]    -> (nil),          110
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:   cof  absent: 0x[[#COF]]   -> (nil),          120
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:    dl  absent: 0x[[#DL]]    -> (nil),          130
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:   dlf  absent: 0x[[#DLF]]   -> (nil),          140
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:    ci present: 0x[[#CI]]    -> 0x[[#CI]],       11 ->  11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:  cico present: 0x[[#CICO]]  -> 0x[[#CICO]],     21 ->  21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cicof present: 0x[[#CICOF]] -> 0x[[#CICOF]],    31 ->  31
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:  cidl present: 0x[[#CIDL]]  -> 0x[[#CIDL]],     41 ->  41
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cidlf present: 0x[[#CIDLF]] -> 0x[[#CIDLF]],    51 ->  51
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:    cr present: 0x[[#CR]]    -> 0x[[#CR]],       61 ->  61
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:  crco present: 0x[[#CRCO]]  -> 0x[[#CRCO]],     71 ->  71
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: crcof present: 0x[[#CRCOF]] -> 0x[[#CRCOF]],    81 ->  81
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:  crdl present: 0x[[#CRDL]]  -> 0x[[#CRDL]],     91 ->  91
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: crdlf present: 0x[[#CRDLF]] -> 0x[[#CRDLF]],   101 -> 101
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:    co present: 0x[[#CO]]    -> 0x[[#CO]],      110 -> 110
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:   cof present: 0x[[#COF]]   -> 0x[[#COF]],     120 -> 120
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:    dl present: 0x[[#DL]]    -> 0x[[#DL]],      130 -> 130
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT:   dlf present: 0x[[#DLF]]   -> 0x[[#DLF]],     140 -> 140
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:    ci present: 0x[[#CI]]    -> 0x[[#CI_DEV]],  10 ->  11
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  cico  absent: 0x[[#CICO]]  -> (nil),          21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cicof  absent: 0x[[#CICOF]] -> (nil),          31
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  cidl  absent: 0x[[#CIDL]]  -> (nil),          40
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cidlf  absent: 0x[[#CIDLF]] -> (nil),          50
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:    cr present: 0x[[#CR]]    -> 0x[[#CR_DEV]],  60 -> {{.*}}
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  crco  absent: 0x[[#CRCO]]  -> (nil),          71
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: crcof  absent: 0x[[#CRCOF]] -> (nil),          81
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  crdl  absent: 0x[[#CRDL]]  -> (nil),          90
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: crdlf  absent: 0x[[#CRDLF]] -> (nil),          100
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:    co  absent: 0x[[#CO]]    -> (nil),          110
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:   cof  absent: 0x[[#COF]]   -> (nil),          120
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:    dl  absent: 0x[[#DL]]    -> (nil),          130
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:   dlf  absent: 0x[[#DLF]]   -> (nil),          140
     PRINT_INT(ci);
     PRINT_INT(cico);
     PRINT_INT(cicof);
@@ -683,10 +690,10 @@ CASE(caseClauseLikeRoutinesSuccess) {
     // Check the dynamic reference counts by seeing how many decs it takes to
     // reach zero.
     #pragma acc exit data delete(ci, cr)
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI]], 11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR]], 61 -> 61
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  absent: 0x[[#CI]] -> (nil),     10
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  absent: 0x[[#CR]] -> (nil),     60
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI]], 11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR]], 61 -> 61
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  absent: 0x[[#CI]] -> (nil),     10
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  absent: 0x[[#CR]] -> (nil),     60
     PRINT_INT(ci);
     PRINT_INT(cr);
   }
@@ -714,18 +721,18 @@ CASE(caseClauseLikeRoutinesSuccess) {
         dl  = 51;
         dlf = 61;
       }
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x{{[^,]*}},        11 -> 11
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x{{[^,]*}},        21 -> 21
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x{{[^,]*}},        31 -> 31
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cof present: 0x[[#%x,COF:]] -> 0x{{[^,]*}},        41 -> 41
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x{{[^,]*}},        51 -> 51
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x{{[^,]*}},        61 -> 61
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x[[#%x,CI_DEV:]],  10 -> 11
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x[[#%x,CR_DEV:]],  20 -> 21
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x[[#%x,CO_DEV:]],  30 -> 31
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cof present: 0x[[#%x,COF:]] -> 0x[[#%x,COF_DEV:]], 40 -> 41
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x[[#%x,DL_DEV:]],  50 -> 51
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x[[#%x,DLF_DEV:]], 60 -> 61
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x{{[^,]*}},        11 -> 11
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x{{[^,]*}},        21 -> 21
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x{{[^,]*}},        31 -> 31
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cof present: 0x[[#%x,COF:]] -> 0x{{[^,]*}},        41 -> 41
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x{{[^,]*}},        51 -> 51
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x{{[^,]*}},        61 -> 61
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x[[#%x,CI_DEV:]],  10 -> 11
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x[[#%x,CR_DEV:]],  20 -> 21
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x[[#%x,CO_DEV:]],  30 -> 31
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cof present: 0x[[#%x,COF:]] -> 0x[[#%x,COF_DEV:]], 40 -> 41
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x[[#%x,DL_DEV:]],  50 -> 51
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x[[#%x,DLF_DEV:]], 60 -> 61
       PRINT_INT(ci);
       PRINT_INT(cr);
       PRINT_INT(co);
@@ -733,28 +740,28 @@ CASE(caseClauseLikeRoutinesSuccess) {
       PRINT_INT(dl);
       PRINT_INT(dlf);
 
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_copyin of ci: 0x[[#CI]]
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_create of cr: 0x[[#CR]]
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_copyin of ci: 0x[[#CI_DEV]]
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_create of cr: 0x[[#CR_DEV]]
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_copyin of ci: 0x[[#CI]]
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_create of cr: 0x[[#CR]]
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_copyin of ci: 0x[[#CI_DEV]]
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_create of cr: 0x[[#CR_DEV]]
       printf("acc_copyin of ci: %p\n", acc_copyin(&ci, sizeof ci));
       printf("acc_create of cr: %p\n", acc_create(&cr, sizeof cr));
       acc_copyout(&co, sizeof co);
       acc_copyout_finalize(&cof, sizeof cof);
       acc_delete(&dl, sizeof dl);
       acc_delete_finalize(&dlf, sizeof dlf);
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI]],      11 -> 11
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR]],      21 -> 21
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO]],      31 -> 31
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF]],     41 -> 41
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL]],      51 -> 51
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF]],     61 -> 61
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI_DEV]],  10 -> 11
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR_DEV]],  20 -> 21
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO_DEV]],  30 -> 31
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF_DEV]], 40 -> 41
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL_DEV]],  50 -> 51
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF_DEV]], 60 -> 61
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI]],      11 -> 11
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR]],      21 -> 21
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO]],      31 -> 31
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF]],     41 -> 41
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL]],      51 -> 51
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF]],     61 -> 61
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI_DEV]],  10 -> 11
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR_DEV]],  20 -> 21
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO_DEV]],  30 -> 31
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF_DEV]], 40 -> 41
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL_DEV]],  50 -> 51
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF_DEV]], 60 -> 61
       PRINT_INT(ci);
       PRINT_INT(cr);
       PRINT_INT(co);
@@ -765,18 +772,18 @@ CASE(caseClauseLikeRoutinesSuccess) {
 
     // Check the dynamic reference counts by seeing how many decs it takes to
     // reach zero.
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI]],     11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR]],     21 -> 21
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO]],     31 -> 31
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF]],    41 -> 41
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL]],     51 -> 51
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF]],    61 -> 61
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI_DEV]], 10 -> 11
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR_DEV]], 20 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: co  absent:  0x[[#CO]]  -> (nil),         30
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cof absent:  0x[[#COF]] -> (nil),         40
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dl  absent:  0x[[#DL]]  -> (nil),         50
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dlf absent:  0x[[#DLF]] -> (nil),         60
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI]],     11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR]],     21 -> 21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO]],     31 -> 31
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF]],    41 -> 41
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL]],     51 -> 51
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF]],    61 -> 61
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI_DEV]], 10 -> 11
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR_DEV]], 20 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: co  absent:  0x[[#CO]]  -> (nil),         30
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cof absent:  0x[[#COF]] -> (nil),         40
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dl  absent:  0x[[#DL]]  -> (nil),         50
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dlf absent:  0x[[#DLF]] -> (nil),         60
     PRINT_INT(ci);
     PRINT_INT(cr);
     PRINT_INT(co);
@@ -784,10 +791,10 @@ CASE(caseClauseLikeRoutinesSuccess) {
     PRINT_INT(dl);
     PRINT_INT(dlf);
     #pragma acc exit data delete(ci, cr)
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI]], 11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR]], 21 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  absent: 0x[[#CI]] -> (nil),     10
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  absent: 0x[[#CR]] -> (nil),     20
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI]], 11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR]], 21 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  absent: 0x[[#CI]] -> (nil),     10
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  absent: 0x[[#CR]] -> (nil),     20
     PRINT_INT(ci);
     PRINT_INT(cr);
   }
@@ -815,18 +822,18 @@ CASE(caseClauseLikeRoutinesSuccess) {
         dl  = 51;
         dlf = 61;
       }
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x{{[^,]*}},        11 -> 11
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x{{[^,]*}},        21 -> 21
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x{{[^,]*}},        31 -> 31
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cof present: 0x[[#%x,COF:]] -> 0x{{[^,]*}},        41 -> 41
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x{{[^,]*}},        51 -> 51
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x{{[^,]*}},        61 -> 61
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x[[#%x,CI_DEV:]],  10 -> 11
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x[[#%x,CR_DEV:]],  20 -> 21
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x[[#%x,CO_DEV:]],  30 -> 31
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cof present: 0x[[#%x,COF:]] -> 0x[[#%x,COF_DEV:]], 40 -> 41
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x[[#%x,DL_DEV:]],  50 -> 51
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x[[#%x,DLF_DEV:]], 60 -> 61
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x{{[^,]*}},        11 -> 11
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x{{[^,]*}},        21 -> 21
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x{{[^,]*}},        31 -> 31
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cof present: 0x[[#%x,COF:]] -> 0x{{[^,]*}},        41 -> 41
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x{{[^,]*}},        51 -> 51
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x{{[^,]*}},        61 -> 61
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x[[#%x,CI_DEV:]],  10 -> 11
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x[[#%x,CR_DEV:]],  20 -> 21
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x[[#%x,CO_DEV:]],  30 -> 31
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cof present: 0x[[#%x,COF:]] -> 0x[[#%x,COF_DEV:]], 40 -> 41
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x[[#%x,DL_DEV:]],  50 -> 51
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x[[#%x,DLF_DEV:]], 60 -> 61
       PRINT_INT(ci);
       PRINT_INT(cr);
       PRINT_INT(co);
@@ -834,28 +841,28 @@ CASE(caseClauseLikeRoutinesSuccess) {
       PRINT_INT(dl);
       PRINT_INT(dlf);
 
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_copyin of ci: 0x[[#CI]]
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_create of cr: 0x[[#CR]]
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_copyin of ci: 0x[[#CI_DEV]]
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_create of cr: 0x[[#CR_DEV]]
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_copyin of ci: 0x[[#CI]]
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_create of cr: 0x[[#CR]]
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_copyin of ci: 0x[[#CI_DEV]]
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_create of cr: 0x[[#CR_DEV]]
       printf("acc_copyin of ci: %p\n", acc_copyin(&ci, sizeof ci));
       printf("acc_create of cr: %p\n", acc_create(&cr, sizeof cr));
       acc_copyout(&co, sizeof co);
       acc_copyout_finalize(&cof, sizeof cof);
       acc_delete(&dl, sizeof dl);
       acc_delete_finalize(&dlf, sizeof dlf);
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI]],      11 -> 11
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR]],      21 -> 21
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO]],      31 -> 31
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF]],     41 -> 41
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL]],      51 -> 51
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF]],     61 -> 61
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI_DEV]],  10 -> 11
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR_DEV]],  20 -> 21
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO_DEV]],  30 -> 31
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF_DEV]], 40 -> 41
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL_DEV]],  50 -> 51
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF_DEV]], 60 -> 61
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI]],      11 -> 11
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR]],      21 -> 21
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO]],      31 -> 31
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF]],     41 -> 41
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL]],      51 -> 51
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF]],     61 -> 61
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI_DEV]],  10 -> 11
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR_DEV]],  20 -> 21
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO_DEV]],  30 -> 31
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF_DEV]], 40 -> 41
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL_DEV]],  50 -> 51
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF_DEV]], 60 -> 61
       PRINT_INT(ci);
       PRINT_INT(cr);
       PRINT_INT(co);
@@ -866,18 +873,18 @@ CASE(caseClauseLikeRoutinesSuccess) {
 
     // Check the dynamic reference counts by seeing how many decs it takes to
     // reach zero.
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI]],     11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR]],     21 -> 21
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO]],     31 -> 31
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF]],    41 -> 41
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL]],     51 -> 51
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF]],    61 -> 61
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI_DEV]], 10 -> 11
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR_DEV]], 20 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: co  absent:  0x[[#CO]]  -> (nil),         30
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cof absent:  0x[[#COF]] -> (nil),         40
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dl  absent:  0x[[#DL]]  -> (nil),         50
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dlf absent:  0x[[#DLF]] -> (nil),         60
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI]],     11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR]],     21 -> 21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO]],     31 -> 31
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF]],    41 -> 41
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL]],     51 -> 51
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF]],    61 -> 61
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI_DEV]], 10 -> 11
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR_DEV]], 20 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: co  absent:  0x[[#CO]]  -> (nil),         30
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cof absent:  0x[[#COF]] -> (nil),         40
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dl  absent:  0x[[#DL]]  -> (nil),         50
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dlf absent:  0x[[#DLF]] -> (nil),         60
     PRINT_INT(ci);
     PRINT_INT(cr);
     PRINT_INT(co);
@@ -885,17 +892,17 @@ CASE(caseClauseLikeRoutinesSuccess) {
     PRINT_INT(dl);
     PRINT_INT(dlf);
     #pragma acc exit data delete(ci, cr)
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI]],     11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR]],     21 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI_DEV]], 10 -> 11
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR_DEV]], 20 -> 21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI]],     11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR]],     21 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI_DEV]], 10 -> 11
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR_DEV]], 20 -> 21
     PRINT_INT(ci);
     PRINT_INT(cr);
     #pragma acc exit data delete(ci, cr)
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI]], 11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR]], 21 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  absent: 0x[[#CI]] -> (nil),     10
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  absent: 0x[[#CR]] -> (nil),     20
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI]], 11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR]], 21 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  absent: 0x[[#CI]] -> (nil),     10
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  absent: 0x[[#CR]] -> (nil),     20
     PRINT_INT(ci);
     PRINT_INT(cr);
   }
@@ -918,18 +925,18 @@ CASE(caseClauseLikeRoutinesSuccess) {
       dl  = 51;
       dlf = 61;
     }
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x{{[^,]*}},        11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x{{[^,]*}},        21 -> 21
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x{{[^,]*}},        31 -> 31
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cof present: 0x[[#%x,COF:]] -> 0x{{[^,]*}},        41 -> 41
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x{{[^,]*}},        51 -> 51
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x{{[^,]*}},        61 -> 61
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x[[#%x,CI_DEV:]],  10 -> 11
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x[[#%x,CR_DEV:]],  20 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x[[#%x,CO_DEV:]],  30 -> 31
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cof present: 0x[[#%x,COF:]] -> 0x[[#%x,COF_DEV:]], 40 -> 41
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x[[#%x,DL_DEV:]],  50 -> 51
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x[[#%x,DLF_DEV:]], 60 -> 61
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x{{[^,]*}},        11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x{{[^,]*}},        21 -> 21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x{{[^,]*}},        31 -> 31
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cof present: 0x[[#%x,COF:]] -> 0x{{[^,]*}},        41 -> 41
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x{{[^,]*}},        51 -> 51
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x{{[^,]*}},        61 -> 61
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x[[#%x,CI_DEV:]],  10 -> 11
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x[[#%x,CR_DEV:]],  20 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x[[#%x,CO_DEV:]],  30 -> 31
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cof present: 0x[[#%x,COF:]] -> 0x[[#%x,COF_DEV:]], 40 -> 41
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x[[#%x,DL_DEV:]],  50 -> 51
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x[[#%x,DLF_DEV:]], 60 -> 61
     PRINT_INT(ci);
     PRINT_INT(cr);
     PRINT_INT(co);
@@ -937,28 +944,28 @@ CASE(caseClauseLikeRoutinesSuccess) {
     PRINT_INT(dl);
     PRINT_INT(dlf);
 
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_copyin of ci: 0x[[#CI]]
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_create of cr: 0x[[#CR]]
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_copyin of ci: 0x[[#CI_DEV]]
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_create of cr: 0x[[#CR_DEV]]
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_copyin of ci: 0x[[#CI]]
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_create of cr: 0x[[#CR]]
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_copyin of ci: 0x[[#CI_DEV]]
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_create of cr: 0x[[#CR_DEV]]
     printf("acc_copyin of ci: %p\n", acc_copyin(&ci, sizeof ci));
     printf("acc_create of cr: %p\n", acc_create(&cr, sizeof cr));
     acc_copyout(&co, sizeof co);
     acc_copyout_finalize(&cof, sizeof cof);
     acc_delete(&dl, sizeof dl);
     acc_delete_finalize(&dlf, sizeof dlf);
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI]],     11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR]],     21 -> 21
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO]],     31 -> 31
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF]],    41 -> 41
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL]],     51 -> 51
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF]],    61 -> 61
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI_DEV]], 10 -> 11
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR_DEV]], 20 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: co  absent:  0x[[#CO]]  -> (nil),         31
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cof absent:  0x[[#COF]] -> (nil),         41
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dl  absent:  0x[[#DL]]  -> (nil),         50
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dlf absent:  0x[[#DLF]] -> (nil),         60
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI]],     11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR]],     21 -> 21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO]],     31 -> 31
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF]],    41 -> 41
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL]],     51 -> 51
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF]],    61 -> 61
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI_DEV]], 10 -> 11
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR_DEV]], 20 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: co  absent:  0x[[#CO]]  -> (nil),         31
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cof absent:  0x[[#COF]] -> (nil),         41
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dl  absent:  0x[[#DL]]  -> (nil),         50
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dlf absent:  0x[[#DLF]] -> (nil),         60
     PRINT_INT(ci);
     PRINT_INT(cr);
     PRINT_INT(co);
@@ -969,17 +976,17 @@ CASE(caseClauseLikeRoutinesSuccess) {
     // Check the remaining dynamic reference counts by seeing how many decs it
     // takes to reach zero.
     #pragma acc exit data delete(ci, cr)
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI]],     11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR]],     21 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI_DEV]], 10 -> 11
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR_DEV]], 20 -> 21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI]],     11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR]],     21 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI_DEV]], 10 -> 11
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR_DEV]], 20 -> 21
     PRINT_INT(ci);
     PRINT_INT(cr);
     #pragma acc exit data delete(ci, cr)
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI]], 11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR]], 21 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  absent: 0x[[#CI]] -> (nil),     10
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  absent: 0x[[#CR]] -> (nil),     20
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI]], 11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR]], 21 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  absent: 0x[[#CI]] -> (nil),     10
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  absent: 0x[[#CR]] -> (nil),     20
     PRINT_INT(ci);
     PRINT_INT(cr);
   }
@@ -1005,18 +1012,18 @@ CASE(caseClauseLikeRoutinesSuccess) {
       dl  = 51;
       dlf = 61;
     }
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x{{[^,]*}},        11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x{{[^,]*}},        21 -> 21
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x{{[^,]*}},        31 -> 31
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cof present: 0x[[#%x,COF:]] -> 0x{{[^,]*}},        41 -> 41
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x{{[^,]*}},        51 -> 51
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x{{[^,]*}},        61 -> 61
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x[[#%x,CI_DEV:]],  10 -> 11
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x[[#%x,CR_DEV:]],  20 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x[[#%x,CO_DEV:]],  30 -> 31
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cof present: 0x[[#%x,COF:]] -> 0x[[#%x,COF_DEV:]], 40 -> 41
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x[[#%x,DL_DEV:]],  50 -> 51
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x[[#%x,DLF_DEV:]], 60 -> 61
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x{{[^,]*}},        11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x{{[^,]*}},        21 -> 21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x{{[^,]*}},        31 -> 31
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cof present: 0x[[#%x,COF:]] -> 0x{{[^,]*}},        41 -> 41
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x{{[^,]*}},        51 -> 51
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x{{[^,]*}},        61 -> 61
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#%x,CI:]]  -> 0x[[#%x,CI_DEV:]],  10 -> 11
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#%x,CR:]]  -> 0x[[#%x,CR_DEV:]],  20 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: co  present: 0x[[#%x,CO:]]  -> 0x[[#%x,CO_DEV:]],  30 -> 31
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cof present: 0x[[#%x,COF:]] -> 0x[[#%x,COF_DEV:]], 40 -> 41
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dl  present: 0x[[#%x,DL:]]  -> 0x[[#%x,DL_DEV:]],  50 -> 51
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dlf present: 0x[[#%x,DLF:]] -> 0x[[#%x,DLF_DEV:]], 60 -> 61
     PRINT_INT(ci);
     PRINT_INT(cr);
     PRINT_INT(co);
@@ -1024,28 +1031,28 @@ CASE(caseClauseLikeRoutinesSuccess) {
     PRINT_INT(dl);
     PRINT_INT(dlf);
 
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_copyin of ci: 0x[[#CI]]
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_create of cr: 0x[[#CR]]
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_copyin of ci: 0x[[#CI_DEV]]
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_create of cr: 0x[[#CR_DEV]]
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_copyin of ci: 0x[[#CI]]
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_create of cr: 0x[[#CR]]
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_copyin of ci: 0x[[#CI_DEV]]
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_create of cr: 0x[[#CR_DEV]]
     printf("acc_copyin of ci: %p\n", acc_copyin(&ci, sizeof ci));
     printf("acc_create of cr: %p\n", acc_create(&cr, sizeof cr));
     acc_copyout(&co, sizeof co);
     acc_copyout_finalize(&cof, sizeof cof);
     acc_delete(&dl, sizeof dl);
     acc_delete_finalize(&dlf, sizeof dlf);
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI]],     11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR]],     21 -> 21
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO]],     31 -> 31
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF]],    41 -> 41
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL]],     51 -> 51
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF]],    61 -> 61
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI_DEV]], 10 -> 11
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR_DEV]], 20 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO_DEV]], 30 -> 31
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cof absent:  0x[[#COF]] -> (nil),         41
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL_DEV]], 50 -> 51
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dlf absent:  0x[[#DLF]] -> (nil),         60
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI]],     11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR]],     21 -> 21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO]],     31 -> 31
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cof present: 0x[[#COF]] -> 0x[[#COF]],    41 -> 41
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL]],     51 -> 51
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dlf present: 0x[[#DLF]] -> 0x[[#DLF]],    61 -> 61
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  present: 0x[[#CI]]  -> 0x[[#CI_DEV]], 10 -> 11
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  present: 0x[[#CR]]  -> 0x[[#CR_DEV]], 20 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: co  present: 0x[[#CO]]  -> 0x[[#CO_DEV]], 30 -> 31
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cof absent:  0x[[#COF]] -> (nil),         41
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dl  present: 0x[[#DL]]  -> 0x[[#DL_DEV]], 50 -> 51
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dlf absent:  0x[[#DLF]] -> (nil),         60
     PRINT_INT(ci);
     PRINT_INT(cr);
     PRINT_INT(co);
@@ -1056,53 +1063,53 @@ CASE(caseClauseLikeRoutinesSuccess) {
     // Check the remaining dynamic reference counts by seeing how many decs it
     // takes to reach zero.
     #pragma acc exit data delete(co, dl)
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: co present: 0x[[#CO]] -> 0x[[#CO]], 31 -> 31
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dl present: 0x[[#DL]] -> 0x[[#DL]], 51 -> 51
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: co  absent: 0x[[#CO]] -> (nil),     30
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dl  absent: 0x[[#DL]] -> (nil),     50
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: co present: 0x[[#CO]] -> 0x[[#CO]], 31 -> 31
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dl present: 0x[[#DL]] -> 0x[[#DL]], 51 -> 51
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: co  absent: 0x[[#CO]] -> (nil),     30
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dl  absent: 0x[[#DL]] -> (nil),     50
     PRINT_INT(co);
     PRINT_INT(dl);
     #pragma acc exit data delete(ci, cr)
     #pragma acc exit data delete(ci, cr)
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI]],     11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR]],     21 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI_DEV]], 10 -> 11
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR_DEV]], 20 -> 21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI]],     11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR]],     21 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI_DEV]], 10 -> 11
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR_DEV]], 20 -> 21
     PRINT_INT(ci);
     PRINT_INT(cr);
     #pragma acc exit data delete(ci, cr)
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI]], 11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR]], 21 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: ci  absent: 0x[[#CI]] -> (nil),     10
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: cr  absent: 0x[[#CR]] -> (nil),     20
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: ci present: 0x[[#CI]] -> 0x[[#CI]], 11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: cr present: 0x[[#CR]] -> 0x[[#CR]], 21 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: ci  absent: 0x[[#CI]] -> (nil),     10
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: cr  absent: 0x[[#CR]] -> (nil),     20
     PRINT_INT(ci);
     PRINT_INT(cr);
   }
 
   // Check case of zero bytes.
   {
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT: x: 0x[[#%x,X:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT: x: 0x[[#%x,X:]]
     int x = 10;
     printf("x: %p\n", &x);
 
     // When data is absent.
     //
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_copyin(&x, 0): (nil)
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_create(&x, 0): (nil)
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  acc_copyin(&x, 0): (nil)
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  x  absent: 0x[[#X]] -> (nil),    10
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  acc_create(&x, 0): (nil)
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  x  absent: 0x[[#X]] -> (nil),    10
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  x  absent: 0x[[#X]] -> (nil),    10
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  x  absent: 0x[[#X]] -> (nil),    10
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  x  absent: 0x[[#X]] -> (nil),    10
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  x  absent: 0x[[#X]] -> (nil),    10
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_copyin(&x, 0): (nil)
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_create(&x, 0): (nil)
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  acc_copyin(&x, 0): (nil)
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  x  absent: 0x[[#X]] -> (nil),    10
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  acc_create(&x, 0): (nil)
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  x  absent: 0x[[#X]] -> (nil),    10
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  x  absent: 0x[[#X]] -> (nil),    10
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  x  absent: 0x[[#X]] -> (nil),    10
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  x  absent: 0x[[#X]] -> (nil),    10
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  x  absent: 0x[[#X]] -> (nil),    10
     printf("acc_copyin(&x, 0): %p\n", acc_copyin(&x, 0));
     PRINT_INT(x);
     printf("acc_create(&x, 0): %p\n", acc_create(&x, 0));
@@ -1116,8 +1123,8 @@ CASE(caseClauseLikeRoutinesSuccess) {
     acc_delete_finalize(&x, 0);
     PRINT_INT(x);
 
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],         11 -> 11
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: x present: 0x[[#X]] -> 0x[[#%x,X_DEV:]], 10 -> {{.*}}
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],         11 -> 11
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: x present: 0x[[#X]] -> 0x[[#%x,X_DEV:]], 10 -> 11
     #pragma acc enter data create(x)
     #pragma acc parallel num_gangs(1) present(x)
     x = 11;
@@ -1125,22 +1132,22 @@ CASE(caseClauseLikeRoutinesSuccess) {
 
     // When data is present.
     //
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_copyin(&x, 0): (nil)
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],     11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_create(&x, 0): (nil)
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],     11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],     11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],     11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],     11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],     11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  acc_copyin(&x, 0): (nil)
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  x present: 0x[[#X]] -> 0x[[#X_DEV]], 10 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  acc_create(&x, 0): (nil)
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  x present: 0x[[#X]] -> 0x[[#X_DEV]], 10 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  x present: 0x[[#X]] -> 0x[[#X_DEV]], 10 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  x present: 0x[[#X]] -> 0x[[#X_DEV]], 10 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  x present: 0x[[#X]] -> 0x[[#X_DEV]], 10 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  x present: 0x[[#X]] -> 0x[[#X_DEV]], 10 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_copyin(&x, 0): (nil)
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],     11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_create(&x, 0): (nil)
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],     11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],     11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],     11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],     11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],     11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  acc_copyin(&x, 0): (nil)
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  x present: 0x[[#X]] -> 0x[[#X_DEV]], 10 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  acc_create(&x, 0): (nil)
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  x present: 0x[[#X]] -> 0x[[#X_DEV]], 10 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  x present: 0x[[#X]] -> 0x[[#X_DEV]], 10 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  x present: 0x[[#X]] -> 0x[[#X_DEV]], 10 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  x present: 0x[[#X]] -> 0x[[#X_DEV]], 10 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  x present: 0x[[#X]] -> 0x[[#X_DEV]], 10 -> 11
     printf("acc_copyin(&x, 0): %p\n", acc_copyin(&x, 0));
     PRINT_INT(x);
     printf("acc_create(&x, 0): %p\n", acc_create(&x, 0));
@@ -1154,30 +1161,30 @@ CASE(caseClauseLikeRoutinesSuccess) {
     acc_delete_finalize(&x, 0);
     PRINT_INT(x);
 
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 11 -> 11
-    // OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT:  x  absent: 0x[[#X]] -> (nil),    10
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 11 -> 11
+    // OUT-caseEnterExitRoutinesSuccess-OFF-NEXT:  x  absent: 0x[[#X]] -> (nil),    10
     #pragma acc exit data delete(x)
     PRINT_INT(x);
   }
 
   // Check case of null pointer, with non-zero or zero bytes.
   //
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: acc_copyin(NULL, 1): (nil)
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: acc_create(NULL, 1): (nil)
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: acc_copyin(NULL, 0): (nil)
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: acc_create(NULL, 0): (nil)
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
-  // OUT-caseClauseLikeRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: acc_copyin(NULL, 1): (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: acc_create(NULL, 1): (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: acc_copyin(NULL, 0): (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: acc_create(NULL, 0): (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
+  // OUT-caseEnterExitRoutinesSuccess-NEXT: NULL present: (nil) -> (nil)
   printf("acc_copyin(NULL, 1): %p\n", acc_copyin(NULL, 1));
   printMap("NULL", NULL, 1);
   printf("acc_create(NULL, 1): %p\n", acc_create(NULL, 1));
@@ -1209,8 +1216,8 @@ CASE(caseClauseLikeRoutinesSuccess) {
   {
     int dyn[4] = {10, 20, 30, 40};
     int str[4] = {50, 60, 70, 80};
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT: dyn element size: [[#%u,DYN_ELE_SIZE:]]
-    // OUT-caseClauseLikeRoutinesSuccess-NEXT: str element size: [[#%u,STR_ELE_SIZE:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT: dyn element size: [[#%u,DYN_ELE_SIZE:]]
+    // OUT-caseEnterExitRoutinesSuccess-NEXT: str element size: [[#%u,STR_ELE_SIZE:]]
     printf("dyn element size: %zu\n", sizeof *dyn);
     printf("str element size: %zu\n", sizeof *str);
 
@@ -1224,10 +1231,10 @@ CASE(caseClauseLikeRoutinesSuccess) {
         str[1] = 61;
         str[2] = 71;
       }
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[1] present: 0x[[#%x,DYN1:]] -> 0x{{[^,]*}},         21 -> 21
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[1] present: 0x[[#%x,STR1:]] -> 0x{{[^,]*}},         61 -> 61
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[1] present: 0x[[#%x,DYN1:]] -> 0x[[#%x,DYN1_DEV:]], 20 -> 21
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[1] present: 0x[[#%x,STR1:]] -> 0x[[#%x,STR1_DEV:]], 60 -> 61
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[1] present: 0x[[#%x,DYN1:]] -> 0x{{[^,]*}},         21 -> 21
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[1] present: 0x[[#%x,STR1:]] -> 0x{{[^,]*}},         61 -> 61
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[1] present: 0x[[#%x,DYN1:]] -> 0x[[#%x,DYN1_DEV:]], 20 -> 21
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[1] present: 0x[[#%x,STR1:]] -> 0x[[#%x,STR1_DEV:]], 60 -> 61
       PRINT_INT(dyn[1]);
       PRINT_INT(str[1]);
       // dyn[1:2] has dyn ref = 1, str ref = 0.
@@ -1248,14 +1255,14 @@ CASE(caseClauseLikeRoutinesSuccess) {
       // dyn[1:2] has dyn ref = 1, str ref = 0.
       // str[1:2] has dyn ref = 0, str ref = 1.
 
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_copyin of dyn[1:2]: 0x[[#DYN1]]
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_copyin of str[1:2]: 0x[[#STR1]]
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_create of dyn[1:2]: 0x[[#DYN1]]
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_create of str[1:2]: 0x[[#STR1]]
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_copyin of dyn[1:2]: 0x[[#DYN1_DEV]]
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_copyin of str[1:2]: 0x[[#STR1_DEV]]
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_create of dyn[1:2]: 0x[[#DYN1_DEV]]
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_create of str[1:2]: 0x[[#STR1_DEV]]
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_copyin of dyn[1:2]: 0x[[#DYN1]]
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_copyin of str[1:2]: 0x[[#STR1]]
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_create of dyn[1:2]: 0x[[#DYN1]]
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_create of str[1:2]: 0x[[#STR1]]
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_copyin of dyn[1:2]: 0x[[#DYN1_DEV]]
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_copyin of str[1:2]: 0x[[#STR1_DEV]]
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_create of dyn[1:2]: 0x[[#DYN1_DEV]]
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_create of str[1:2]: 0x[[#STR1_DEV]]
       printf("acc_copyin of dyn[1:2]: %p\n",
              acc_copyin(dyn + 1, 2 * sizeof *dyn));
       printf("acc_copyin of str[1:2]: %p\n",
@@ -1267,14 +1274,14 @@ CASE(caseClauseLikeRoutinesSuccess) {
       // dyn[1:2] has dyn ref = 3, str ref = 0.
       // str[1:2] has dyn ref = 2, str ref = 1.
 
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_copyin of dyn[2]: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_copyin of str[2]: 0x[[#%x,STR1 + STR_ELE_SIZE]]
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_create of dyn[2]: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: acc_create of str[2]: 0x[[#%x,STR1 + STR_ELE_SIZE]]
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_copyin of dyn[2]: 0x[[#%x,DYN1_DEV + DYN_ELE_SIZE]]
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_copyin of str[2]: 0x[[#%x,STR1_DEV + STR_ELE_SIZE]]
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_create of dyn[2]: 0x[[#%x,DYN1_DEV + DYN_ELE_SIZE]]
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: acc_create of str[2]: 0x[[#%x,STR1_DEV + STR_ELE_SIZE]]
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_copyin of dyn[2]: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_copyin of str[2]: 0x[[#%x,STR1 + STR_ELE_SIZE]]
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_create of dyn[2]: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: acc_create of str[2]: 0x[[#%x,STR1 + STR_ELE_SIZE]]
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_copyin of dyn[2]: 0x[[#%x,DYN1_DEV + DYN_ELE_SIZE]]
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_copyin of str[2]: 0x[[#%x,STR1_DEV + STR_ELE_SIZE]]
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_create of dyn[2]: 0x[[#%x,DYN1_DEV + DYN_ELE_SIZE]]
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: acc_create of str[2]: 0x[[#%x,STR1_DEV + STR_ELE_SIZE]]
       printf("acc_copyin of dyn[2]: %p\n", acc_copyin(dyn + 2, sizeof *dyn));
       printf("acc_copyin of str[2]: %p\n", acc_copyin(str + 2, sizeof *str));
       printf("acc_create of dyn[2]: %p\n", acc_create(dyn + 2, sizeof *dyn));
@@ -1293,22 +1300,22 @@ CASE(caseClauseLikeRoutinesSuccess) {
       // dyn[1:2] has dyn ref = 2, str ref = 0.
       // str[1:2] has dyn ref = 2, str ref = 1.
 
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[0] present: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 - DYN_ELE_SIZE]],                10 -> 10
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[1] present: 0x[[#%x,DYN1]]                               -> 0x[[#%x,DYN1]],                               21 -> 21
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[2] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 + DYN_ELE_SIZE]],                31 -> 31
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[3] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]], 40 -> 40
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[0] present: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> 0x[[#%x,STR1 - STR_ELE_SIZE]],                50 -> 50
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[1] present: 0x[[#%x,STR1]]                               -> 0x[[#%x,STR1]],                               61 -> 61
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[2] present: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> 0x[[#%x,STR1 + STR_ELE_SIZE]],                71 -> 71
-      // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[3] present: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]], 80 -> 80
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[0]  absent: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> (nil),                                        10
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[1] present: 0x[[#%x,DYN1]]                               -> 0x[[#%x,DYN1_DEV]],                           20 -> 21
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[2] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1_DEV + DYN_ELE_SIZE]],            30 -> 31
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[3]  absent: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> (nil),                                        40
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[0]  absent: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> (nil),                                        50
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[1] present: 0x[[#%x,STR1]]                               -> 0x[[#%x,STR1_DEV]],                           60 -> 61
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[2] present: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> 0x[[#%x,STR1_DEV + STR_ELE_SIZE]],            70 -> 71
-      //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[3]  absent: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> (nil),                                        80
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[0] present: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 - DYN_ELE_SIZE]],                10 -> 10
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[1] present: 0x[[#%x,DYN1]]                               -> 0x[[#%x,DYN1]],                               21 -> 21
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[2] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 + DYN_ELE_SIZE]],                31 -> 31
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[3] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]], 40 -> 40
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[0] present: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> 0x[[#%x,STR1 - STR_ELE_SIZE]],                50 -> 50
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[1] present: 0x[[#%x,STR1]]                               -> 0x[[#%x,STR1]],                               61 -> 61
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[2] present: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> 0x[[#%x,STR1 + STR_ELE_SIZE]],                71 -> 71
+      // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[3] present: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]], 80 -> 80
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[0]  absent: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> (nil),                                        10
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[1] present: 0x[[#%x,DYN1]]                               -> 0x[[#%x,DYN1_DEV]],                           20 -> 21
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[2] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1_DEV + DYN_ELE_SIZE]],            30 -> 31
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[3]  absent: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> (nil),                                        40
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[0]  absent: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> (nil),                                        50
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[1] present: 0x[[#%x,STR1]]                               -> 0x[[#%x,STR1_DEV]],                           60 -> 61
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[2] present: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> 0x[[#%x,STR1_DEV + STR_ELE_SIZE]],            70 -> 71
+      //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[3]  absent: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> (nil),                                        80
       PRINT_INT(dyn[0]);
       PRINT_INT(dyn[1]);
       PRINT_INT(dyn[2]);
@@ -1322,22 +1329,22 @@ CASE(caseClauseLikeRoutinesSuccess) {
     // Check the remaining dynamic reference counts by seeing how many decs it
     // takes to reach zero.
     //
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[0] present: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 - DYN_ELE_SIZE]],                10 -> 10
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[1] present: 0x[[#%x,DYN1]]                               -> 0x[[#%x,DYN1]],                               21 -> 21
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[2] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 + DYN_ELE_SIZE]],                31 -> 31
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[3] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]], 40 -> 40
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[0] present: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> 0x[[#%x,STR1 - STR_ELE_SIZE]],                50 -> 50
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[1] present: 0x[[#%x,STR1]]                               -> 0x[[#%x,STR1]],                               61 -> 61
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[2] present: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> 0x[[#%x,STR1 + STR_ELE_SIZE]],                71 -> 71
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[3] present: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]], 80 -> 80
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[0]  absent: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> (nil),                                        10
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[1] present: 0x[[#%x,DYN1]]                               -> 0x[[#%x,DYN1_DEV]],                           20 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[2] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1_DEV + DYN_ELE_SIZE]],            30 -> 31
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[3]  absent: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> (nil),                                        40
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[0]  absent: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> (nil),                                        50
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[1] present: 0x[[#%x,STR1]]                               -> 0x[[#%x,STR1_DEV]],                           60 -> 61
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[2] present: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> 0x[[#%x,STR1_DEV + STR_ELE_SIZE]],            70 -> 71
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[3]  absent: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> (nil),                                        80
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[0] present: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 - DYN_ELE_SIZE]],                10 -> 10
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[1] present: 0x[[#%x,DYN1]]                               -> 0x[[#%x,DYN1]],                               21 -> 21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[2] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 + DYN_ELE_SIZE]],                31 -> 31
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[3] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]], 40 -> 40
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[0] present: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> 0x[[#%x,STR1 - STR_ELE_SIZE]],                50 -> 50
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[1] present: 0x[[#%x,STR1]]                               -> 0x[[#%x,STR1]],                               61 -> 61
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[2] present: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> 0x[[#%x,STR1 + STR_ELE_SIZE]],                71 -> 71
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[3] present: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]], 80 -> 80
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[0]  absent: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> (nil),                                        10
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[1] present: 0x[[#%x,DYN1]]                               -> 0x[[#%x,DYN1_DEV]],                           20 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[2] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1_DEV + DYN_ELE_SIZE]],            30 -> 31
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[3]  absent: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> (nil),                                        40
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[0]  absent: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> (nil),                                        50
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[1] present: 0x[[#%x,STR1]]                               -> 0x[[#%x,STR1_DEV]],                           60 -> 61
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[2] present: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> 0x[[#%x,STR1_DEV + STR_ELE_SIZE]],            70 -> 71
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[3]  absent: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> (nil),                                        80
     PRINT_INT(dyn[0]);
     PRINT_INT(dyn[1]);
     PRINT_INT(dyn[2]);
@@ -1347,22 +1354,22 @@ CASE(caseClauseLikeRoutinesSuccess) {
     PRINT_INT(str[2]);
     PRINT_INT(str[3]);
     #pragma acc exit data delete(dyn[1:2], str[1:2])
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[0] present: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 - DYN_ELE_SIZE]],                10 -> 10
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[1] present: 0x[[#%x,DYN1]]                               -> 0x[[#%x,DYN1]],                               21 -> 21
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[2] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 + DYN_ELE_SIZE]],                31 -> 31
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[3] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]], 40 -> 40
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[0] present: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> 0x[[#%x,STR1 - STR_ELE_SIZE]],                50 -> 50
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[1] present: 0x[[#%x,STR1]]                               -> 0x[[#%x,STR1]],                               61 -> 61
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[2] present: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> 0x[[#%x,STR1 + STR_ELE_SIZE]],                71 -> 71
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[3] present: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]], 80 -> 80
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[0]  absent: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> (nil),                                        10
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[1] present: 0x[[#%x,DYN1]]                               -> 0x[[#%x,DYN1_DEV]],                           20 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[2] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1_DEV + DYN_ELE_SIZE]],            30 -> 31
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[3]  absent: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> (nil),                                        40
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[0]  absent: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> (nil),                                        50
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[1] present: 0x[[#%x,STR1]]                               -> 0x[[#%x,STR1_DEV]],                           60 -> 61
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[2] present: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> 0x[[#%x,STR1_DEV + STR_ELE_SIZE]],            70 -> 71
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[3]  absent: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> (nil),                                        80
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[0] present: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 - DYN_ELE_SIZE]],                10 -> 10
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[1] present: 0x[[#%x,DYN1]]                               -> 0x[[#%x,DYN1]],                               21 -> 21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[2] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 + DYN_ELE_SIZE]],                31 -> 31
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[3] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]], 40 -> 40
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[0] present: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> 0x[[#%x,STR1 - STR_ELE_SIZE]],                50 -> 50
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[1] present: 0x[[#%x,STR1]]                               -> 0x[[#%x,STR1]],                               61 -> 61
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[2] present: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> 0x[[#%x,STR1 + STR_ELE_SIZE]],                71 -> 71
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[3] present: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]], 80 -> 80
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[0]  absent: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> (nil),                                        10
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[1] present: 0x[[#%x,DYN1]]                               -> 0x[[#%x,DYN1_DEV]],                           20 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[2] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1_DEV + DYN_ELE_SIZE]],            30 -> 31
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[3]  absent: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> (nil),                                        40
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[0]  absent: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> (nil),                                        50
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[1] present: 0x[[#%x,STR1]]                               -> 0x[[#%x,STR1_DEV]],                           60 -> 61
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[2] present: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> 0x[[#%x,STR1_DEV + STR_ELE_SIZE]],            70 -> 71
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[3]  absent: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> (nil),                                        80
     PRINT_INT(dyn[0]);
     PRINT_INT(dyn[1]);
     PRINT_INT(dyn[2]);
@@ -1372,22 +1379,22 @@ CASE(caseClauseLikeRoutinesSuccess) {
     PRINT_INT(str[2]);
     PRINT_INT(str[3]);
     #pragma acc exit data delete(dyn[1:2], str[1:2])
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[0] present: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 - DYN_ELE_SIZE]],                10 -> 10
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[1] present: 0x[[#%x,DYN1]]                               -> 0x[[#%x,DYN1]],                               21 -> 21
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[2] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 + DYN_ELE_SIZE]],                31 -> 31
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: dyn[3] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]], 40 -> 40
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[0] present: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> 0x[[#%x,STR1 - STR_ELE_SIZE]],                50 -> 50
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[1] present: 0x[[#%x,STR1]]                               -> 0x[[#%x,STR1]],                               61 -> 61
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[2] present: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> 0x[[#%x,STR1 + STR_ELE_SIZE]],                71 -> 71
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: str[3] present: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]], 80 -> 80
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[0]  absent: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> (nil),                                        10
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[1]  absent: 0x[[#%x,DYN1]]                               -> (nil),                                        20
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[2]  absent: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> (nil),                                        30
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: dyn[3]  absent: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> (nil),                                        40
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[0]  absent: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> (nil),                                        50
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[1]  absent: 0x[[#%x,STR1]]                               -> (nil),                                        60
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[2]  absent: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> (nil),                                        70
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: str[3]  absent: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> (nil),                                        80
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[0] present: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 - DYN_ELE_SIZE]],                10 -> 10
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[1] present: 0x[[#%x,DYN1]]                               -> 0x[[#%x,DYN1]],                               21 -> 21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[2] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> 0x[[#%x,DYN1 + DYN_ELE_SIZE]],                31 -> 31
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: dyn[3] present: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]], 40 -> 40
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[0] present: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> 0x[[#%x,STR1 - STR_ELE_SIZE]],                50 -> 50
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[1] present: 0x[[#%x,STR1]]                               -> 0x[[#%x,STR1]],                               61 -> 61
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[2] present: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> 0x[[#%x,STR1 + STR_ELE_SIZE]],                71 -> 71
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: str[3] present: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]], 80 -> 80
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[0]  absent: 0x[[#%x,DYN1 - DYN_ELE_SIZE]]                -> (nil),                                        10
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[1]  absent: 0x[[#%x,DYN1]]                               -> (nil),                                        20
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[2]  absent: 0x[[#%x,DYN1 + DYN_ELE_SIZE]]                -> (nil),                                        30
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: dyn[3]  absent: 0x[[#%x,DYN1 + DYN_ELE_SIZE + DYN_ELE_SIZE]] -> (nil),                                        40
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[0]  absent: 0x[[#%x,STR1 - STR_ELE_SIZE]]                -> (nil),                                        50
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[1]  absent: 0x[[#%x,STR1]]                               -> (nil),                                        60
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[2]  absent: 0x[[#%x,STR1 + STR_ELE_SIZE]]                -> (nil),                                        70
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: str[3]  absent: 0x[[#%x,STR1 + STR_ELE_SIZE + STR_ELE_SIZE]] -> (nil),                                        80
     PRINT_INT(dyn[0]);
     PRINT_INT(dyn[1]);
     PRINT_INT(dyn[2]);
@@ -1403,13 +1410,13 @@ CASE(caseClauseLikeRoutinesSuccess) {
   // that case are checked in caseCopyinExtendsAfter,
   // caseCreateExtendsAfter, etc.
   {
-    //      OUT-caseClauseLikeRoutinesSuccess-NEXT: element size: [[#%u,ELE_SIZE:]]
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: arr[0] present: 0x[[#%x,ARR:]]                      -> 0x{{[^,]*}},                         10 -> 10
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]]            -> 0x[[#%x,ARR + ELE_SIZE]],            21 -> 21
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: arr[2] present: 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]], 30 -> 30
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: arr[0]  absent: 0x[[#%x,ARR:]]                      -> (nil),                               10
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]]            -> 0x[[#%x,ARR1_DEV:]],                 20 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: arr[2]  absent: 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]] -> (nil),                               30
+    //      OUT-caseEnterExitRoutinesSuccess-NEXT: element size: [[#%u,ELE_SIZE:]]
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: arr[0] present: 0x[[#%x,ARR:]]                      -> 0x{{[^,]*}},                         10 -> 10
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]]            -> 0x[[#%x,ARR + ELE_SIZE]],            21 -> 21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: arr[2] present: 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]], 30 -> 30
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: arr[0]  absent: 0x[[#%x,ARR:]]                      -> (nil),                               10
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]]            -> 0x[[#%x,ARR1_DEV:]],                 20 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: arr[2]  absent: 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]] -> (nil),                               30
     int arr[] = {10, 20, 30};
     #pragma acc enter data create(arr[1:1])
     #pragma acc parallel num_gangs(1) present(arr[1:1])
@@ -1437,22 +1444,22 @@ CASE(caseClauseLikeRoutinesSuccess) {
     acc_delete(arr, sizeof arr);
     acc_delete_finalize(arr, sizeof arr);
 
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: arr[0] present: 0x[[#%x,ARR]]                       -> 0x[[#%x,ARR]],                       10 -> 10
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]]            -> 0x[[#%x,ARR + ELE_SIZE]],            21 -> 21
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: arr[2] present: 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]], 30 -> 30
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: arr[0]  absent: 0x[[#%x,ARR]]                       -> (nil),                               10
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]]            -> 0x[[#%x,ARR1_DEV]],                  20 -> 21
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: arr[2]  absent: 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]] -> (nil),                               30
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: arr[0] present: 0x[[#%x,ARR]]                       -> 0x[[#%x,ARR]],                       10 -> 10
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]]            -> 0x[[#%x,ARR + ELE_SIZE]],            21 -> 21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: arr[2] present: 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]], 30 -> 30
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: arr[0]  absent: 0x[[#%x,ARR]]                       -> (nil),                               10
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]]            -> 0x[[#%x,ARR1_DEV]],                  20 -> 21
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: arr[2]  absent: 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]] -> (nil),                               30
     PRINT_INT(arr[0]);
     PRINT_INT(arr[1]);
     PRINT_INT(arr[2]);
 
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: arr[0] present: 0x[[#%x,ARR]]                       -> 0x[[#%x,ARR]],                       10 -> 10
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]]            -> 0x[[#%x,ARR + ELE_SIZE]],            21 -> 21
-    // OUT-caseClauseLikeRoutinesSuccess-HOST-NEXT: arr[2] present: 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]], 30 -> 30
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: arr[0]  absent: 0x[[#%x,ARR]]                       -> (nil),                               10
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: arr[1]  absent: 0x[[#%x,ARR + ELE_SIZE]]            -> (nil),                               20
-    //  OUT-caseClauseLikeRoutinesSuccess-OFF-NEXT: arr[2]  absent: 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]] -> (nil),                               30
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: arr[0] present: 0x[[#%x,ARR]]                       -> 0x[[#%x,ARR]],                       10 -> 10
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]]            -> 0x[[#%x,ARR + ELE_SIZE]],            21 -> 21
+    // OUT-caseEnterExitRoutinesSuccess-HOST-NEXT: arr[2] present: 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]], 30 -> 30
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: arr[0]  absent: 0x[[#%x,ARR]]                       -> (nil),                               10
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: arr[1]  absent: 0x[[#%x,ARR + ELE_SIZE]]            -> (nil),                               20
+    //  OUT-caseEnterExitRoutinesSuccess-OFF-NEXT: arr[2]  absent: 0x[[#%x,ARR + ELE_SIZE + ELE_SIZE]] -> (nil),                               30
     #pragma acc exit data delete(arr[1:1])
     PRINT_INT(arr[0]);
     PRINT_INT(arr[1]);
@@ -1462,76 +1469,126 @@ CASE(caseClauseLikeRoutinesSuccess) {
 }
 
 CASE(caseCopyinExtendsAfter) {
+  //      ERR-caseCopyinExtendsAfter-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseCopyinExtendsAfter-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
+  // ERR-caseCopyinExtendsAfter-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
+  //  ERR-caseCopyinExtendsAfter-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#HOST]] ([[#ELE_SIZE]] bytes)
+  //  ERR-caseCopyinExtendsAfter-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
   #pragma acc data create(arr[0:1])
-  {
-    // ERR-caseCopyinExtendsAfter: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]]
-    // ERR-caseCopyinExtendsAfter-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#ELE_SIZE + ELE_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#HOST]] ([[#ELE_SIZE]] bytes)
-    // ERR-caseCopyinExtendsAfter-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-    fprintf(stderr, "%p, %ld\n", arr, sizeof *arr);
-    acc_copyin(arr, sizeof arr);
-  }
+  acc_copyin(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
   return 0;
 }
 CASE(caseCopyinExtendsBefore) {
+  //      ERR-caseCopyinExtendsBefore-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseCopyinExtendsBefore-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
+  // ERR-caseCopyinExtendsBefore-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
+  //  ERR-caseCopyinExtendsBefore-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE]] bytes)
+  //  ERR-caseCopyinExtendsBefore-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
   #pragma acc data create(arr[1:1])
-  {
-    // ERR-caseCopyinExtendsBefore: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]]
-    // ERR-caseCopyinExtendsBefore-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#ELE_SIZE + ELE_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE]] bytes)
-    // ERR-caseCopyinExtendsBefore-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-    fprintf(stderr, "%p, %ld\n", arr, sizeof *arr);
-    acc_copyin(arr, sizeof arr);
-  }
+  acc_copyin(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
   return 0;
 }
 CASE(caseCopyinSubsumes) {
+  //      ERR-caseCopyinSubsumes-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseCopyinSubsumes-HOST-NEXT: arr[0] present: 0x[[#HOST]]                          -> 0x[[#HOST]],                          10 -> 10
+  // ERR-caseCopyinSubsumes-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
+  // ERR-caseCopyinSubsumes-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
+  //  ERR-caseCopyinSubsumes-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE]] bytes)
+  //  ERR-caseCopyinSubsumes-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20, 30};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
+  #pragma acc data create(arr[1:1])
+  acc_copyin(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
+  PRINT_INT_STDERR(arr[2]);
+  return 0;
+}
+CASE(caseCopyinConcat2) {
+  //      ERR-caseCopyinConcat2-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseCopyinConcat2-HOST-NEXT: arr[0] present: 0x[[#HOST]]                          -> 0x[[#HOST]],                          10 -> 10
+  // ERR-caseCopyinConcat2-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
+  // ERR-caseCopyinConcat2-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
+  //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST]] ([[#ELE_SIZE]] bytes)
+  //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  int arr[] = {10, 20, 30};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
+  #pragma acc data create(arr[0:1])
   #pragma acc data create(arr[1:2])
-  {
-    // ERR-caseCopyinSubsumes: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]]
-    // ERR-caseCopyinSubsumes-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#ELE_SIZE + ELE_SIZE + ELE_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE + ELE_SIZE]] bytes)
-    // ERR-caseCopyinSubsumes-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-    fprintf(stderr, "%p, %ld\n", arr, sizeof *arr);
-    acc_copyin(arr, sizeof arr);
-  }
+  acc_copyin(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
+  PRINT_INT_STDERR(arr[2]);
   return 0;
 }
 
 CASE(caseCreateExtendsAfter) {
+  //      ERR-caseCreateExtendsAfter-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseCreateExtendsAfter-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
+  // ERR-caseCreateExtendsAfter-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
+  //  ERR-caseCreateExtendsAfter-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#HOST]] ([[#ELE_SIZE]] bytes)
+  //  ERR-caseCreateExtendsAfter-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
   #pragma acc data create(arr[0:1])
-  {
-    // ERR-caseCreateExtendsAfter: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]]
-    // ERR-caseCreateExtendsAfter-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#ELE_SIZE + ELE_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#HOST]] ([[#ELE_SIZE]] bytes)
-    // ERR-caseCreateExtendsAfter-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-    fprintf(stderr, "%p, %ld\n", arr, sizeof *arr);
-    acc_create(arr, sizeof arr);
-  }
+  acc_create(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
   return 0;
 }
 CASE(caseCreateExtendsBefore) {
+  //      ERR-caseCreateExtendsBefore-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseCreateExtendsBefore-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
+  // ERR-caseCreateExtendsBefore-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
+  //  ERR-caseCreateExtendsBefore-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE]] bytes)
+  //  ERR-caseCreateExtendsBefore-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
   #pragma acc data create(arr[1:1])
-  {
-    // ERR-caseCreateExtendsBefore: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]]
-    // ERR-caseCreateExtendsBefore-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#ELE_SIZE + ELE_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE]] bytes)
-    // ERR-caseCreateExtendsBefore-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-    fprintf(stderr, "%p, %ld\n", arr, sizeof *arr);
-    acc_create(arr, sizeof arr);
-  }
+  acc_create(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
   return 0;
 }
 CASE(caseCreateSubsumes) {
+  //      ERR-caseCreateSubsumes-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseCreateSubsumes-HOST-NEXT: arr[0] present: 0x[[#HOST]]                          -> 0x[[#HOST]],                          10 -> 10
+  // ERR-caseCreateSubsumes-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
+  // ERR-caseCreateSubsumes-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
+  //  ERR-caseCreateSubsumes-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE]] bytes)
+  //  ERR-caseCreateSubsumes-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20, 30};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
+  #pragma acc data create(arr[1:1])
+  acc_create(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
+  PRINT_INT_STDERR(arr[2]);
+  return 0;
+}
+CASE(caseCreateConcat2) {
+  //      ERR-caseCreateConcat2-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
+  // ERR-caseCreateConcat2-HOST-NEXT: arr[0] present: 0x[[#HOST]]                          -> 0x[[#HOST]],                          10 -> 10
+  // ERR-caseCreateConcat2-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
+  // ERR-caseCreateConcat2-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
+  //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST]] ([[#ELE_SIZE]] bytes)
+  //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  int arr[] = {10, 20, 30};
+  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
+  #pragma acc data create(arr[0:1])
   #pragma acc data create(arr[1:2])
-  {
-    // ERR-caseCreateSubsumes: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]]
-    // ERR-caseCreateSubsumes-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#ELE_SIZE + ELE_SIZE + ELE_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE + ELE_SIZE]] bytes)
-    // ERR-caseCreateSubsumes-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-    fprintf(stderr, "%p, %ld\n", arr, sizeof *arr);
-    acc_create(arr, sizeof arr);
-  }
+  acc_create(arr, sizeof arr);
+  PRINT_INT_STDERR(arr[0]);
+  PRINT_INT_STDERR(arr[1]);
+  PRINT_INT_STDERR(arr[2]);
   return 0;
 }
 
@@ -1578,7 +1635,7 @@ CASE(caseMapUnmapSuccess) {
   // OUT-caseMapUnmapSuccess-NEXT: arr_dev: 0x[[#%x,ARR_DEV:]]
   printf("arr_dev: %p\n", arr_dev);
   fflush(stdout);
-  // ERR-caseMapUnmapSuccess-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
+  // ERR-caseMapUnmapSuccess-HOST-NEXT: OMP: Error #[[#]]: acc_map_data called for shared memory
   acc_map_data(arr, arr_dev, sizeof arr);
   // OUT-caseMapUnmapSuccess-OFF-NEXT: arr[0] present: 0x[[#ARR]]               -> 0x[[#ARR_DEV]],               10 -> {{.*}}
   // OUT-caseMapUnmapSuccess-OFF-NEXT: arr[1] present: 0x[[#%x,ARR + ELE_SIZE]] -> 0x[[#%x,ARR_DEV + ELE_SIZE]], 20 -> {{.*}}
@@ -1715,9 +1772,9 @@ CASE(caseMapSameHostAsStructured) {
     fprintf(stderr, "acc_malloc failed\n");
     return 1;
   }
-  // ERR-caseMapSameHostAsStructured-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
+  // ERR-caseMapSameHostAsStructured-HOST-NEXT: OMP: Error #[[#]]: acc_map_data called for shared memory
   #pragma acc data create(arr)
-  // ERR-caseMapSameHostAsStructured-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
+  // ERR-caseMapSameHostAsStructured-OFF-NEXT: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
   acc_map_data(arr, arr_dev, sizeof arr);
   return 0;
 }
@@ -1728,9 +1785,9 @@ CASE(caseMapSameHostAsDynamic) {
     fprintf(stderr, "acc_malloc failed\n");
     return 1;
   }
-  // ERR-caseMapSameHostAsDynamic-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
+  // ERR-caseMapSameHostAsDynamic-HOST-NEXT: OMP: Error #[[#]]: acc_map_data called for shared memory
   #pragma acc enter data create(arr)
-  // ERR-caseMapSameHostAsDynamic-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
+  // ERR-caseMapSameHostAsDynamic-OFF-NEXT: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
   acc_map_data(arr, arr_dev, sizeof arr);
   return 0;
 }
@@ -1741,9 +1798,9 @@ CASE(caseMapSame) {
     fprintf(stderr, "acc_malloc failed\n");
     return 1;
   }
-  // ERR-caseMapSame-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
+  // ERR-caseMapSame-HOST-NEXT: OMP: Error #[[#]]: acc_map_data called for shared memory
   acc_map_data(arr, arr_dev, sizeof arr);
-  // ERR-caseMapSame-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
+  // ERR-caseMapSame-OFF-NEXT: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
   acc_map_data(arr, arr_dev, sizeof arr);
   return 0;
 }
@@ -1755,9 +1812,9 @@ CASE(caseMapSameHost) {
     fprintf(stderr, "acc_malloc failed\n");
     return 1;
   }
-  // ERR-caseMapSameHost-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
+  // ERR-caseMapSameHost-HOST-NEXT: OMP: Error #[[#]]: acc_map_data called for shared memory
   acc_map_data(arr, arr_dev0, sizeof arr);
-  // ERR-caseMapSameHost-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
+  // ERR-caseMapSameHost-OFF-NEXT: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
   acc_map_data(arr, arr_dev1, sizeof arr);
   return 0;
 }
@@ -1769,9 +1826,9 @@ CASE(caseMapHostExtendsAfter) {
     fprintf(stderr, "acc_malloc failed\n");
     return 1;
   }
-  // ERR-caseMapHostExtendsAfter-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
+  // ERR-caseMapHostExtendsAfter-HOST-NEXT: OMP: Error #[[#]]: acc_map_data called for shared memory
   acc_map_data(arr, arr_dev0, sizeof *arr);
-  // ERR-caseMapHostExtendsAfter-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
+  // ERR-caseMapHostExtendsAfter-OFF-NEXT: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
   acc_map_data(arr, arr_dev1, sizeof arr);
   return 0;
 }
@@ -1783,9 +1840,9 @@ CASE(caseMapHostExtendsBefore) {
     fprintf(stderr, "acc_malloc failed\n");
     return 1;
   }
-  // ERR-caseMapHostExtendsBefore-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
+  // ERR-caseMapHostExtendsBefore-HOST-NEXT: OMP: Error #[[#]]: acc_map_data called for shared memory
   acc_map_data(arr+1, arr_dev0, sizeof *arr);
-  // ERR-caseMapHostExtendsBefore-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
+  // ERR-caseMapHostExtendsBefore-OFF-NEXT: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
   acc_map_data(arr, arr_dev1, sizeof arr);
   return 0;
 }
@@ -1797,9 +1854,9 @@ CASE(caseMapHostSubsumes) {
     fprintf(stderr, "acc_malloc failed\n");
     return 1;
   }
-  // ERR-caseMapHostSubsumes-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
+  // ERR-caseMapHostSubsumes-HOST-NEXT: OMP: Error #[[#]]: acc_map_data called for shared memory
   acc_map_data(arr+1, arr_dev0, sizeof *arr);
-  // ERR-caseMapHostSubsumes-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
+  // ERR-caseMapHostSubsumes-OFF-NEXT: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
   acc_map_data(arr, arr_dev1, sizeof arr);
   return 0;
 }
@@ -1811,9 +1868,9 @@ CASE(caseMapHostIsSubsumed) {
     fprintf(stderr, "acc_malloc failed\n");
     return 1;
   }
-  // ERR-caseMapHostIsSubsumed-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
+  // ERR-caseMapHostIsSubsumed-HOST-NEXT: OMP: Error #[[#]]: acc_map_data called for shared memory
   acc_map_data(arr, arr_dev0, sizeof arr);
-  // ERR-caseMapHostIsSubsumed-OFF: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
+  // ERR-caseMapHostIsSubsumed-OFF-NEXT: OMP: Error #[[#]]: acc_map_data called with host pointer that is already mapped
   acc_map_data(arr+1, arr_dev1, sizeof *arr);
   return 0;
 }
@@ -1824,13 +1881,13 @@ CASE(caseMapHostNull) {
     fprintf(stderr, "acc_malloc failed\n");
     return 1;
   }
-  // ERR-caseMapHostNull: OMP: Error #[[#]]: acc_map_data called with null host pointer
+  // ERR-caseMapHostNull-NEXT: OMP: Error #[[#]]: acc_map_data called with null host pointer
   acc_map_data(NULL, arr_dev, sizeof *arr_dev);
   return 0;
 }
 CASE(caseMapDevNull) {
   int arr[] = {10, 20};
-  // ERR-caseMapDevNull: OMP: Error #[[#]]: acc_map_data called with null device pointer
+  // ERR-caseMapDevNull-NEXT: OMP: Error #[[#]]: acc_map_data called with null device pointer
   acc_map_data(arr, NULL, sizeof arr);
   return 0;
 }
@@ -1841,17 +1898,17 @@ CASE(caseMapBytesZero) {
     fprintf(stderr, "acc_malloc failed\n");
     return 1;
   }
-  // ERR-caseMapBytesZero: OMP: Error #[[#]]: acc_map_data called with zero bytes
+  // ERR-caseMapBytesZero-NEXT: OMP: Error #[[#]]: acc_map_data called with zero bytes
   acc_map_data(arr, arr_dev, 0);
   return 0;
 }
 CASE(caseMapAllNull) {
-  // ERR-caseMapAllNull: OMP: Error #[[#]]: acc_map_data called with null host pointer
+  // ERR-caseMapAllNull-NEXT: OMP: Error #[[#]]: acc_map_data called with null host pointer
   acc_map_data(NULL, NULL, 0);
   return 0;
 }
 CASE(caseUnmapNull) {
-  // ERR-caseUnmapNull: OMP: Error #[[#]]: acc_unmap_data called with null pointer
+  // ERR-caseUnmapNull-NEXT: OMP: Error #[[#]]: acc_unmap_data called with null pointer
   acc_unmap_data(NULL);
   return 0;
 }
@@ -1861,24 +1918,24 @@ CASE(caseUnmapNull) {
 // that host address was mapped to device memory using acc_map_data."
 CASE(caseUnmapUnmapped) {
   int arr[] = {10, 20};
-  // ERR-caseUnmapUnmapped-HOST: OMP: Error #[[#]]: acc_unmap_data called for shared memory
-  //  ERR-caseUnmapUnmapped-OFF: OMP: Error #[[#]]: acc_unmap_data failed
+  // ERR-caseUnmapUnmapped-HOST-NEXT: OMP: Error #[[#]]: acc_unmap_data called for shared memory
+  //  ERR-caseUnmapUnmapped-OFF-NEXT: OMP: Error #[[#]]: acc_unmap_data failed
   acc_unmap_data(arr);
   return 0;
 }
 CASE(caseUnmapAfterOnlyStructured) {
   int arr[] = {10, 20};
   #pragma acc data create(arr)
-  // ERR-caseUnmapAfterOnlyStructured-HOST: OMP: Error #[[#]]: acc_unmap_data called for shared memory
-  //  ERR-caseUnmapAfterOnlyStructured-OFF: OMP: Error #[[#]]: acc_unmap_data failed
+  // ERR-caseUnmapAfterOnlyStructured-HOST-NEXT: OMP: Error #[[#]]: acc_unmap_data called for shared memory
+  //  ERR-caseUnmapAfterOnlyStructured-OFF-NEXT: OMP: Error #[[#]]: acc_unmap_data failed
   acc_unmap_data(arr);
   return 0;
 }
 CASE(caseUnmapAfterOnlyDynamic) {
   int arr[] = {10, 20};
   #pragma acc enter data create(arr)
-  // ERR-caseUnmapAfterOnlyDynamic-HOST: OMP: Error #[[#]]: acc_unmap_data called for shared memory
-  //  ERR-caseUnmapAfterOnlyDynamic-OFF: OMP: Error #[[#]]: acc_unmap_data failed
+  // ERR-caseUnmapAfterOnlyDynamic-HOST-NEXT: OMP: Error #[[#]]: acc_unmap_data called for shared memory
+  //  ERR-caseUnmapAfterOnlyDynamic-OFF-NEXT: OMP: Error #[[#]]: acc_unmap_data failed
   acc_unmap_data(arr);
   return 0;
 }
@@ -1893,10 +1950,10 @@ CASE(caseUnmapAfterMapAndStructured) {
     fprintf(stderr, "acc_malloc failed\n");
     return 1;
   }
-  // ERR-caseUnmapAfterMapAndStructured-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
+  // ERR-caseUnmapAfterMapAndStructured-HOST-NEXT: OMP: Error #[[#]]: acc_map_data called for shared memory
   acc_map_data(arr, arr_dev, sizeof arr);
   #pragma acc data create(arr)
-  // ERR-caseUnmapAfterMapAndStructured-OFF: OMP: Error #[[#]]: acc_unmap_data failed
+  // ERR-caseUnmapAfterMapAndStructured-OFF-NEXT: OMP: Error #[[#]]: acc_unmap_data failed
   acc_unmap_data(arr);
   return 0;
 }
@@ -1907,11 +1964,11 @@ CASE(caseUnmapAfterAllThree) {
     fprintf(stderr, "acc_malloc failed\n");
     return 1;
   }
-  // ERR-caseUnmapAfterAllThree-HOST: OMP: Error #[[#]]: acc_map_data called for shared memory
+  // ERR-caseUnmapAfterAllThree-HOST-NEXT: OMP: Error #[[#]]: acc_map_data called for shared memory
   acc_map_data(arr, arr_dev, sizeof arr);
   #pragma acc enter data create(arr)
   #pragma acc data create(arr)
-  // ERR-caseUnmapAfterAllThree-OFF: OMP: Error #[[#]]: acc_unmap_data failed
+  // ERR-caseUnmapAfterAllThree-OFF-NEXT: OMP: Error #[[#]]: acc_unmap_data failed
   acc_unmap_data(arr);
   return 0;
 }
