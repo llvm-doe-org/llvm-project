@@ -89,6 +89,7 @@ ompt_callbacks_internal_t ompt_callbacks;
 static ompt_start_tool_result_t *ompt_start_tool_result = NULL;
 
 // FIXME: Access to these is not thread-safe.  Does it need to be?
+bool ompt_has_user_source_info = false;
 ompt_directive_info_t ompt_directive_info = {ompt_directive_unknown, 0, NULL,
                                              NULL, 0, 0, 0, 0};
 const char * const *ompt_data_expressions = NULL;

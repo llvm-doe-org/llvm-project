@@ -1421,6 +1421,16 @@ void FTN_STDCALL FTN_DISPLAY_ENV(int verbose) {
 #endif
 }
 
+void FTN_STDCALL FTN_SET_SOURCE_INFO(const char *src_file,
+                                     const char *func_name, int line_no,
+                                     int end_line_no, int func_line_no,
+                                     int func_end_line_no) {
+  __kmpc_set_source_info(src_file, func_name, line_no, end_line_no,
+                         func_line_no, func_end_line_no);
+}
+
+void FTN_STDCALL FTN_CLEAR_SOURCE_INFO() { __kmpc_clear_source_info(); }
+
 // GCC compatibility (versioned symbols)
 #ifdef KMP_USE_VERSION_SYMBOLS
 

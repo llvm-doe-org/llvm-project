@@ -230,6 +230,27 @@
     // debugging.
     extern void *__KAI_KMPC_CONVENTION omp_get_mapped_hostptr(const void *ptr, int device_num);
 
+    // Set or clear user source info to be used by OMPT callbacks and, in the
+    // future, perhaps for other purposes, such as debugging facilities.
+    //
+    // A simple example is to enclose an OpenMP Runtime Library routine call
+    // with omp_set_source_info and omp_clear_source_info calls in order to
+    // specify the routine's caller's source info, which might be more
+    // meaningful than the routine's source info for the purposes of profiling.
+    //
+    // Specifically, omp_set_source_info sets the source info to be retrieved by
+    // calls to the ompt_get_directive_info entry point.  This source info is
+    // not overwritten by any subsequent OpenMP runtime events, such as those
+    // triggered by OpenMP directives or OpenMP Runtime Library routine calls.
+    // omp_clear_source_info clears all source info previously set by any means
+    // (there's no source info stack) and re-enables runtime events to set
+    // source info.  omp_set_source_info and omp_clear_source_info have no
+    // impact on other info retrieved by omp_get_directive_info.
+    void omp_set_source_info(const char *src_file, const char *func_name,
+                             int line_no, int end_line_no, int func_line_no,
+                             int func_end_line_no);
+    void omp_clear_source_info();
+
     /* kmp API functions */
     extern int    __KAI_KMPC_CONVENTION  kmp_get_stacksize          (void);
     extern void   __KAI_KMPC_CONVENTION  kmp_set_stacksize          (int);

@@ -137,6 +137,7 @@ void ompt_record_device_init(int32_t device_num) OMPT_LIBOMPTARGET_WEAK;
 void ompt_toggle_in_device_target_region() OMPT_LIBOMPTARGET_WEAK;
 const char *ompt_index_data_expressions(uint32_t) OMPT_LIBOMPTARGET_WEAK;
 void ompt_set_data_expression(const char *) OMPT_LIBOMPTARGET_WEAK;
+extern bool ompt_has_user_source_info;
 extern ompt_directive_info_t ompt_directive_info;
 extern const char * const *ompt_data_expressions;
 

@@ -3924,6 +3924,12 @@ void __kmpc_set_directive_info(
     int func_end_line_no);
 void __kmpc_clear_directive_info();
 
+// Implements extensions omp_set_source_info and omp_clear_source_info.
+void __kmpc_set_source_info(const char *src_file, const char *func_name,
+                            int line_no, int end_line_no, int func_line_no,
+                            int func_end_line_no);
+void __kmpc_clear_source_info();
+
 // Records data expressions for upcoming runtime calls.
 void __kmpc_set_data_expressions(const char * const *exprs);
 

@@ -148,6 +148,9 @@
 #define FTN_DISPLAY_ENV omp_display_env
 #define FTN_FULFILL_EVENT omp_fulfill_event
 
+#define FTN_SET_SOURCE_INFO omp_set_source_info
+#define FTN_CLEAR_SOURCE_INFO omp_clear_source_info
+
 #endif /* KMP_FTN_PLAIN */
 
 /* ------------------------------------------------------------------------ */
@@ -284,6 +287,9 @@
 #define FTN_DISPLAY_ENV omp_display_env_
 #define FTN_FULFILL_EVENT omp_fulfill_event_
 
+#define FTN_SET_SOURCE_INFO omp_set_source_info_
+#define FTN_CLEAR_SOURCE_INFO omp_clear_source_info_
+
 #endif /* KMP_FTN_APPEND */
 
 /* ------------------------------------------------------------------------ */
@@ -417,6 +423,9 @@
 #define FTN_GET_SUPPORTED_ACTIVE_LEVELS OMP_GET_SUPPORTED_ACTIVE_LEVELS
 #define FTN_DISPLAY_ENV OMP_DISPLAY_ENV
 #define FTN_FULFILL_EVENT OMP_FULFILL_EVENT
+
+#define FTN_SET_SOURCE_INFO OMP_SET_SOURCE_INFO
+#define FTN_CLEAR_SOURCE_INFO OMP_CLEAR_SOURCE_INFO
 
 #endif /* KMP_FTN_UPPER */
 
@@ -553,6 +562,9 @@
 #define FTN_GET_SUPPORTED_ACTIVE_LEVELS OMP_GET_SUPPORTED_ACTIVE_LEVELS_
 #define FTN_DISPLAY_ENV OMP_DISPLAY_ENV_
 #define FTN_FULFILL_EVENT OMP_FULFILL_EVENT_
+
+#define FTN_SET_SOURCE_INFO OMP_SET_SOURCE_INFO_
+#define FTN_CLEAR_SOURCE_INFO OMP_CLEAR_SOURCE_INFO_
 
 #endif /* KMP_FTN_UAPPEND */
 
