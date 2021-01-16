@@ -36,6 +36,7 @@
 // RUN:   (case=caseUpdateSelfConcat2          not-if-fail=%[not-if-off] )
 // RUN:   (case=caseMallocFreeSuccess          not-if-fail=              )
 // RUN:   (case=caseMapUnmapSuccess            not-if-fail=%[not-if-host])
+// RUN:   (case=caseMapBytesZero               not-if-fail=              )
 // RUN:   (case=caseMapSameHostAsStructured    not-if-fail='%not --crash')
 // RUN:   (case=caseMapSameHostAsDynamic       not-if-fail='%not --crash')
 // RUN:   (case=caseMapSame                    not-if-fail='%not --crash')
@@ -46,8 +47,7 @@
 // RUN:   (case=caseMapHostIsSubsumed          not-if-fail='%not --crash')
 // RUN:   (case=caseMapHostNull                not-if-fail='%not --crash')
 // RUN:   (case=caseMapDevNull                 not-if-fail='%not --crash')
-// RUN:   (case=caseMapBytesZero               not-if-fail='%not --crash')
-// RUN:   (case=caseMapAllNull                 not-if-fail='%not --crash')
+// RUN:   (case=caseMapBothNull                not-if-fail='%not --crash')
 // RUN:   (case=caseUnmapNull                  not-if-fail='%not --crash')
 // RUN:   (case=caseUnmapUnmapped              not-if-fail='%not --crash')
 // RUN:   (case=caseUnmapAfterOnlyStructured   not-if-fail='%not --crash')
@@ -2000,6 +2000,7 @@ CASE(caseMallocFreeSuccess) {
 
   return 0;
 }
+
 CASE(caseMapUnmapSuccess) {
   int arr[] = {10, 20};
   int *arr_dev;
@@ -2144,9 +2145,63 @@ CASE(caseMapUnmapSuccess) {
   PRINT_INT(arr[0]);
   PRINT_INT(arr[1]);
 
+  acc_free(arr_dev);
   return 0;
 }
+CASE(caseMapBytesZero) {
+  int x = 10;
+  int *dev = acc_malloc(sizeof *dev); // unmapped device address
 
+  // OUT-caseMapBytesZero-NEXT: &x: 0x[[#%x,X:]]
+  // OUT-caseMapBytesZero-NEXT: dev: 0x[[#%x,DEV:]]
+  printf("&x: %p\n", &x);
+  printf("dev: %p\n", dev);
+
+  // Check when host and/or device addresses are already mapped.
+  //
+  // acc_map_data should then be a no-op: there should be no runtime error even
+  // for null pointers, and the existing mapping should not be affected.
+  #pragma acc enter data create(x)
+  #pragma acc parallel num_gangs(1) present(x)
+  x = 11;
+  // OUT-caseMapBytesZero-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],         11 -> 11
+  //  OUT-caseMapBytesZero-OFF-NEXT: x present: 0x[[#X]] -> 0x[[#%x,X_DEV:]], 10 -> 11
+  PRINT_INT(x);
+  acc_map_data(&x, acc_deviceptr(&x), 0);
+  acc_map_data(&x, NULL, 0);
+  acc_map_data(NULL, acc_deviceptr(&x), 0);
+  acc_map_data(NULL, NULL, 0);
+  // OUT-caseMapBytesZero-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]],     11 -> 11
+  //  OUT-caseMapBytesZero-OFF-NEXT: x present: 0x[[#X]] -> 0x[[#X_DEV]], 10 -> 11
+  //      OUT-caseMapBytesZero-NEXT: NULL present: (nil) -> (nil)
+  PRINT_INT(x);
+  printMap("NULL", NULL, 0);
+  #pragma acc exit data delete(x)
+
+  // Again, but when host and/or device addresses are not already mapped.
+  x = 10;
+  // OUT-caseMapBytesZero-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
+  //  OUT-caseMapBytesZero-OFF-NEXT: x absent:  0x[[#X]] -> (nil),    10
+  // OUT-caseMapBytesZero-HOST-NEXT: dev: 0x[[#DEV]] <- 0x[[#DEV]]
+  //  OUT-caseMapBytesZero-OFF-NEXT: dev: (nil)      <- 0x[[#DEV]]
+  PRINT_INT(x);
+  printf("dev: %p <- %p\n", acc_hostptr(dev), dev);
+  acc_map_data(&x, dev, 0);
+  acc_map_data(&x, NULL, 0);
+  acc_map_data(NULL, dev, 0);
+  acc_map_data(NULL, NULL, 0);
+  // OUT-caseMapBytesZero-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
+  //  OUT-caseMapBytesZero-OFF-NEXT: x absent:  0x[[#X]] -> (nil),    10
+  // OUT-caseMapBytesZero-HOST-NEXT: dev: 0x[[#DEV]] <- 0x[[#DEV]]
+  //  OUT-caseMapBytesZero-OFF-NEXT: dev: (nil)      <- 0x[[#DEV]]
+  //      OUT-caseMapBytesZero-NEXT: NULL present: (nil) -> (nil)
+  PRINT_INT(x);
+  printf("dev: %p <- %p\n", acc_hostptr(dev), dev);
+  printMap("NULL", NULL, 0);
+
+  acc_free(dev);
+  return 0;
+}
 // OpenACC 3.1, sec. 3.2.32 "acc_map_data", L3637-3638:
 // "It is an error to call acc_map_data for host data that is already present in
 // the current device memory."
@@ -2276,20 +2331,9 @@ CASE(caseMapDevNull) {
   acc_map_data(arr, NULL, sizeof arr);
   return 0;
 }
-CASE(caseMapBytesZero) {
-  int arr[] = {10, 20};
-  int *arr_dev = acc_malloc(sizeof *arr_dev);
-  if (!arr_dev) {
-    fprintf(stderr, "acc_malloc failed\n");
-    return 1;
-  }
-  // ERR-caseMapBytesZero-NEXT: OMP: Error #[[#]]: acc_map_data called with zero bytes
-  acc_map_data(arr, arr_dev, 0);
-  return 0;
-}
-CASE(caseMapAllNull) {
-  // ERR-caseMapAllNull-NEXT: OMP: Error #[[#]]: acc_map_data called with null host pointer
-  acc_map_data(NULL, NULL, 0);
+CASE(caseMapBothNull) {
+  // ERR-caseMapBothNull-NEXT: OMP: Error #[[#]]: acc_map_data called with null host pointer
+  acc_map_data(NULL, NULL, 1);
   return 0;
 }
 CASE(caseUnmapNull) {

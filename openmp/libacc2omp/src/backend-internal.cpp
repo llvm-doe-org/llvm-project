@@ -62,9 +62,6 @@ acc2omp_msg_t acc2omp_msg(acc2omp_msgid_t MsgId) {
   case acc2omp_msg_map_data_device_pointer_null:
     Msg.DefaultFmt = "acc_map_data called with null device pointer";
     break;
-  case acc2omp_msg_map_data_bytes_zero:
-    Msg.DefaultFmt = "acc_map_data called with zero bytes";
-    break;
   case acc2omp_msg_map_data_shared_memory:
     Msg.DefaultFmt = "acc_map_data called for shared memory";
     break;

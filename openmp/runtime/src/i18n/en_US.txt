@@ -439,7 +439,6 @@ AccEventUnregisterUnregistered      "attempt to unregister event not previously 
 AccCallbackUnregisterUnregistered   "attempt to unregister wrong callback for event: %1$s"
 AccMapDataHostPointerNull           "acc_map_data called with null host pointer"
 AccMapDataDevicePointerNull         "acc_map_data called with null device pointer"
-AccMapDataBytesZero                 "acc_map_data called with zero bytes"
 AccMapDataSharedMemory              "acc_map_data called for shared memory"
 AccMapDataAlreadyPresent            "acc_map_data called with host pointer that is already mapped"
 AccMapDataFail                      "acc_map_data failed"

@@ -327,9 +327,11 @@ OpenACC Runtime Library API and Preprocessor
           implements these as no-ops and returns a null pointer where
           the return type is not void.
     * `acc_map_data`, `acc_unmap_data`
-        * OpenACC 3.1 is unclear about handling of null pointers or a
-          `bytes` argument equal to zero.  Clacc produces a runtime
-          error in that case.
+        * OpenACC 3.1 is unclear about handling a `bytes` argument
+          equal to zero.  In that case, Clacc implements
+          `acc_map_data` as a no-op.
+        * OpenACC 3.1 is unclear about handling of null pointers.
+          Clacc produces a runtime error in that case.
         * OpenACC 3.1 is unclear about the behavior for shared memory.
           Clacc produces a runtime error in that case.
         * OpenACC 3.1 is unclear about whether it is an error if only

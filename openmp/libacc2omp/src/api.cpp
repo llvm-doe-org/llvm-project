@@ -92,18 +92,104 @@ static inline Presence checkPresence(void *HostPtr, size_t Bytes) {
 /*****************************************************************************
  * Data and memory management routines.
  *
- * Handling of null pointers is often not clearly specified in OpenACC 3.1.  We
- * attempt to follow a concept discussed by the OpenACC technical committee: a
- * null pointer is considered always present.  Specifically, we assume the
- * behavior is as if there is an "acc data" enclosing the entire program that
- * maps a host null pointer to a device null pointer so that the structured
- * reference count is always non-zero.  Because a null pointer doesn't actually
- * point to data, we also assume that the number of bytes specified to a routine
- * is ignored and that any update requested for a null pointer does nothing.
- * However, none of this applies to the lower-level routines acc_map_data,
- * acc_unmap_data, and acc_memcpy_*.  We document each routine's specific
- * handling of null pointers in more detail below and relate it to this concept
- * where applicable.
+ * Handling of null pointers:
+ * - The behavior is often not clearly specified in OpenACC 3.1.
+ * - We attempt to follow a concept discussed by the OpenACC technical
+ *   committee: a null pointer is considered always present.  Specifically, we
+ *   assume the behavior is as if there is an "acc data" enclosing the entire
+ *   program that maps a host null pointer to a device null pointer so that the
+ *   structured reference count is always non-zero.  Because a null pointer
+ *   doesn't actually point to data, we also assume that the number of bytes
+ *   specified to a routine is ignored and that any update requested for a null
+ *   pointer does nothing.
+ * - We document each routine's specific handling of null pointers in more
+ *   detail below and relate it to this concept where applicable.
+ *
+ * Handling of bytes=0:
+ * - The behavior is usually not clearly specified in OpenACC 3.1.
+ * - We attempt to mimc nvc 20.9-0 as much as possible:
+ *   - Except for acc_is_present, for all routines that accept a bytes argument,
+ *     do nothing other than returning a null pointer where the return type is
+ *     void*.
+ *   - For acc_is_present, handle bytes=0 like bytes=1.  This behavior follows
+ *     OpenACC 3.1.
+ *   - These behaviors seem to, at least partially, address the second potential
+ *     use case below.
+ * - Potential use cases:
+ *   - bytes=0 for data of size > 0:
+ *     - This is part of a more general use case of specifying bytes<N to
+ *       operate on data of size N>0 when it is not convenient to determine the
+ *       exact value of N at the routine's call site.  That is, this use case
+ *       relies on N already stored in the present table.
+ *     - The current behavior of enter/exit-data-like routines does not support
+ *       this use case for bytes=0 though it does for bytes>0: it does not
+ *       adjust dynamic reference counts and perform any consequent deletions or
+ *       data transfers.  It does nothing.
+ *     - This use case does not include other data and memory management
+ *       routines, which operate on exactly the specified bytes not on N bytes.
+ *   - bytes=0 for data of size 0:
+ *     - That is, imagine an application that maps N>=0 bytes to the device and
+ *       then calls various data and memory management routines for a subset,
+ *       M<=N.  Imagine we want the application to gracefully handle (not fail
+ *       for) the cases of M=0 and N=0.
+ *     - To support the M=0 but N>0 case, it usually sufficient for acc_malloc,
+ *       enter/exit-data-like routines, update routines, acc_map_data, and
+ *       memcpy routines to do nothing when bytes=0: the specified address is
+ *       present but operations on the subset M become no-ops.  acc_deviceptr,
+ *       acc_hostptr, and acc_is_present indicate presence for the base address
+ *       of the M bytes as when M>0.
+ *     - The same is true for the M=N=0 case except that acc_deviceptr,
+ *       acc_hostptr, and acc_is_present now indicate absence for the base
+ *       address.  Whether that's desirable may be application-dependent.  It
+ *       might be argued that application code that would invoke those for the M
+ *       bytes would often be naturally skipped when M=0 (for example, in a loop
+ *       with M iterations).
+ * - Alternative behaviors:
+ *   - Modify bytes=0 behavior for consistency with bytes>0 behavior to better
+ *     support the above use cases and so that these routines agree with
+ *     acc_deviceptr, acc_hostptr, and acc_is_present about when a (data_arg, 0)
+ *     pair is considered present:
+ *     - Modify acc_malloc: return a unique device address that can be passed to
+ *       acc_map_data with bytes=0.
+ *     - Modify enter-data-like routines and acc_map_data when address is not
+ *       already present: create a present table entry for the address with size
+ *       0.  As for bytes>0, enter-data-like routines should map a unique device
+ *       address, and acc_map_data behavior should be undefined if the specified
+ *       device address is not unique.  Unique device addresses are for the sake
+ *       of acc_deviceptr and acc_hostptr.
+ *     - Modify enter/exit-data-like and acc_map_data routines when address is
+ *       already present: behave like the bytes>0 case.  That is,
+ *       enter/exit-data-like routines should adjust the dynamic reference count
+ *       and perform any consequent deletions or data transfers.  acc_map_data
+ *       should produce a runtime error.
+ *     - Modify update routines: check for presence even though bytes=0.  This
+ *       seems fine if present table entries can have size 0.  Even so, the
+ *       check could be viewed as redundant given that no bytes will actually
+ *       by transferred.
+ *     - One use case this alternative does not address: an accidental attempt
+ *       to map two consecutive memory ranges with the same starting address
+ *       because the size of the first range has fallen to zero.  This case
+ *       would have to be handled specially in the application to avoid runtime
+ *       errors or undefined behavior.  Such undefined behavior could occur when
+ *       the ranges are consecutive only on the device side when, for example,
+ *       acc_malloc is being used for memory pooling.
+ *     - acc_is_present, for example, would no longer have identical behavior
+ *       for bytes=0 and bytes=1.  This at least represents a subtle change from
+ *       previous behavior.
+ *   - Produce runtime errors:
+ *     - The current bytes=0 behavior may be confusing due to inconsistencies
+ *       with the bytes>0 behavior.
+ *     - The previous alternative behavior to avoid that confusion has subtle
+ *       differences in reference counting from nvc's current behavior and
+ *       could thus lead to memory errors that are difficult to debug in
+ *       existing applications.  Moreover, runtime errors or undefined behavior
+ *       may still occur for the bytes=0 case but not the bytes>0 when
+ *       attempting to map consecutive memory ranges.
+ *     - Always producing a runtime error for bytes=0 would avoid all these
+ *       problems.  It might be the best option if the above use cases are
+ *       not worthwhile to support.
+ * - These alternative behaviors need to be discussed with the OpenACC
+ *   technical committee.
  ****************************************************************************/
 
 /*----------------------------------------------------------------------------
@@ -167,65 +253,6 @@ void acc_free(void *data_dev) {
  *   a non-zero structured reference count (so that reference count incs/decs
  *   have no effect), and if we assume bytes and updates should be ignored
  *   because a null pointer doesn't actually point to data.
- * - For bytes=0:
- *   - Potential use cases:
- *     - bytes=0 for data of size > 0:
- *       - This is part of a more general use case of specifying bytes<N to
- *         operate on data of size N>0 when it is not convenient to determine
- *         the exact value of N at the routine's call site.  That is, this use
- *         case relies on N already stored in the present table.
- *       - The current behavior of enter/exit-data-like routines does not
- *         support this use case for bytes=0 though it does for bytes>0: it does
- *         not adjust dynamic reference counts and perform any consequent
- *         deletions or data transfers.  It does nothing.
- *       - This use case does not include update routines, which always operate
- *         on exactly the specified bytes not on N bytes.
- *     - bytes=0 for data of size 0:
- *       - That is, imagine an application that maps N>=0 bytes to the device
- *         and then calls enter/exit-data-like routines and update routines for
- *         a subset, M<=N.  Fulfilling their usual role, the
- *         enter/exit-data-like routines guarantee the M bytes are present for
- *         the desired lifetime, and the update routines transfer the M bytes.
- *         Imagine we want the application to gracefully handle (not fail for)
- *         the cases of M=0 and N=0.
- *       - To support the M=0 but N>0 case, it is sufficient for these routines
- *         to do nothing when bytes=0: the specified address is present but
- *         operations on the subset M become no-ops.
- *       - To support the M=N=0 case, doing nothing for bytes=0 is sufficient if
- *         other functionality that checks presence, such acc_is_present, is not
- *         used.  That is, presence checks currently return false when N=0 but
- *         not when N>0.  Whether that's desirable is likely
- *         application-dependent.
- *   - Alternative behaviors:
- *     - Modify bytes=0 behavior for consistency with bytes>0 behavior to
- *       support the above use cases and so that these routines agree with
- *       acc_is_present about when a (data_arg, 0) pair is considered present:
- *       - Modify enter-data-like routines when address is not already present:
- *         create a present table entry for the address with size 0.  A unique
- *         device address should also be mapped for the sake of acc_deviceptr
- *         and acc_hostptr.
- *       - Modify enter/exit-data-like routines when address is already present:
- *         adjust the dynamic reference count and perform any consequent
- *         deletions or data transfers.
- *       - Modify update routines: check for presence even though bytes=0.  This
- *         seems fine if present table entries can have size 0.  However, the
- *         check could be viewed as redundant given that no bytes will actually
- *         by transferred.
- *       - If these changes are worthwhile, it might worthwhile to consider
- *         similar behaviors for acc_malloc, acc_map_data, and acc_unmap_data.
- *     - Produce runtime errors:
- *       - The current bytes=0 behavior may be confusing due to inconsistencies
- *         with the bytes>0 behavior.
- *       - The previous alternative behavior to avoid that confusion has subtle
- *         differences in reference counting from nvc's current behavior and
- *         could thus lead to memory errors that are difficult to debug in
- *         existing applications.  Moreover, acc_is_present, for example, would
- *         no longer have identical behavior for bytes=0 and bytes=1.
- *       - Always producing a runtime error for bytes=0 would avoid both these
- *         problems.  It might be the best option if the above use cases are
- *         not worthwhile to support.
- *   - These alternative behaviors need to be discussed with the OpenACC
- *     technical committee.
  * Handling of shared memory (including host as current device):
  * - Other than returning data_arg where the return type is void*, do nothing.
  * - This behavior appears to mimic nvc 20.9-0.
@@ -378,25 +405,29 @@ void acc_update_self(void *data_arg, size_t bytes) {
  *--------------------------------------------------------------------------*/
 
 void acc_map_data(void *data_arg, void *data_dev, size_t bytes) {
-  // Handling of null pointer or bytes=0:
+  // Handling of bytes=0:
+  // - Do nothing, regardless of the specified pointers, even if null.
+  // - This behavior appears to mimic nvc 20.9-0.
+  // - OpenACC 3.1 and OpenMP 5.1 are unclear about the behavior in this case.
+  if (!bytes)
+    return;
+  // Handling of null pointer:
   // - Produce a runtime error.
-  // - nvc 20.9-0 appears to implement these cases as no-ops.
-  // - OpenACC 3.1 and OpenMP 5.1 are unclear about the behavior in these cases.
-  // - For a null pointer, this behavior seems to follow the OpenACC technical
-  //   committee's idea that a null pointer is considered always present,
-  //   especially if we assume it was automatically mapped to a null pointer.
-  //   That is, an acc_map_data with a host null pointer is then an error, and
-  //   an acc_map_data with a device null pointer is undefined, according to
-  //   OpenACC 3.1, sec. 3.2.32 "acc_map_data", L3637-3639: "It is an error to
-  //   call acc_map_data for host data that is already present in the current
-  //   device memory.  It is undefined to call acc_map_data with a device
-  //   address that is already mapped to host data."
+  // - nvc 20.9-0 appears to implement this case as a no-op.
+  // - OpenACC 3.1 and OpenMP 5.1 are unclear about the behavior in this case.
+  // - This behavior seems to follow the OpenACC technical committee's idea that
+  //   a null pointer is considered always present, especially if we assume it
+  //   was automatically mapped to a null pointer.  That is, an acc_map_data
+  //   with a host null pointer is then an error, and an acc_map_data with a
+  //   device null pointer is undefined, according to OpenACC 3.1, sec. 3.2.32
+  //   "acc_map_data", L3637-3639: "It is an error to call acc_map_data for host
+  //   data that is already present in the current device memory.  It is
+  //   undefined to call acc_map_data with a device address that is already
+  //   mapped to host data."
   if (!data_arg)
     acc2omp_fatal(ACC2OMP_MSG(map_data_host_pointer_null));
   if (!data_dev)
     acc2omp_fatal(ACC2OMP_MSG(map_data_device_pointer_null));
-  if (!bytes)
-    acc2omp_fatal(ACC2OMP_MSG(map_data_bytes_zero));
 
   // When any byte of the specified host memory has already been mapped or is in
   // shared memory, issue a runtime error.  Because omp_target_associate_ptr
