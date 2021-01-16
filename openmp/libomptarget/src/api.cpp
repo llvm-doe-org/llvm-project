@@ -21,25 +21,27 @@
 #include <cstdlib>
 
 #if OMPT_SUPPORT
-# define OMPT_SET_DIRECTIVE_INFO(DirKind)                                      \
-  __kmpc_set_directive_info(DirKind, /*is_explicit_event=*/true,               \
-                            /*src_file=*/NULL, /*func_name=*/NULL,             \
-                            /*line_no=*/0, /*end_line_no=*/0,                  \
-                            /*func_line_no=*/0, /*func_end_line_no=*/0)
-# define OMPT_CLEAR_DIRECTIVE_INFO()                                           \
-    __kmpc_clear_directive_info()
-# define OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(                                \
-    DirKind, OpKind, SrcPtr, SrcDevNum, DestPtr, DestDevNum, Size)             \
-  ompt_dispatch_callback_target_data_op(ompt_directive_##DirKind,              \
-                                        ompt_target_data_##OpKind, SrcPtr,     \
-                                        SrcDevNum, DestPtr, DestDevNum, Size)
-static void ompt_dispatch_callback_target_data_op(ompt_directive_kind_t DirKind,
+# define OMPT_SET_DIRECTIVE_INFO() ompt_set_directive_info(__func__)
+# define OMPT_CLEAR_DIRECTIVE_INFO() __kmpc_clear_directive_info()
+# define OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(OpKind, SrcPtr, SrcDevNum,      \
+                                               DestPtr, DestDevNum, Size)      \
+  ompt_dispatch_callback_target_data_op(__func__, ompt_target_data_##OpKind,   \
+                                        SrcPtr, SrcDevNum, DestPtr,            \
+                                        DestDevNum, Size)
+static void ompt_set_directive_info(const char *DirKind) {
+  __kmpc_set_directive_info(ompt_directive_runtime_api,
+                            /*is_explicit_event=*/true, /*src_file=*/NULL,
+                            /*func_name=*/DirKind, /*line_no=*/0,
+                            /*end_line_no=*/0, /*func_line_no=*/0,
+                            /*func_end_line_no=*/0);
+}
+static void ompt_dispatch_callback_target_data_op(const char *DirKind,
                                                   ompt_target_data_op_t OpKind,
                                                   void *SrcPtr, int SrcDevNum,
                                                   void *DestPtr, int DestDevNum,
                                                   size_t Size) {
   if (ompt_get_enabled().ompt_callback_target_data_op) {
-    OMPT_SET_DIRECTIVE_INFO(DirKind);
+    ompt_set_directive_info(DirKind);
     // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
     // OpenACC support, so we haven't bothered to implement them yet.
     ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
@@ -49,10 +51,10 @@ static void ompt_dispatch_callback_target_data_op(ompt_directive_kind_t DirKind,
   }
 }
 #else
-# define OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(                                \
-    DirKind, OpKind, SrcPtr, SrcDevNum, DestPtr, DestDevNum, Size)
-# define OMPT_SET_DIRECTIVE_INFO(DirKind)
+# define OMPT_SET_DIRECTIVE_INFO()
 # define OMPT_CLEAR_DIRECTIVE_INFO()
+# define OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(OpKind, SrcPtr, SrcDevNum,      \
+                                               DestPtr, DestDevNum, Size)
 #endif
 
 EXTERN int omp_get_num_devices(void) {
@@ -106,15 +108,14 @@ EXTERN void *omp_target_alloc(size_t size, int device_num) {
     // __kmpc_initialize_runtime to call here instead.
     __kmpc_get_target_offload();
     DeviceAllocSizes[rc] = size;
-    OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(omp_target_alloc, alloc,
-                                          /*SrcPtr=*/NULL, HOST_DEVICE, rc,
-                                          device_num, size);
+    OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(alloc, /*SrcPtr=*/NULL, HOST_DEVICE,
+                                          rc, device_num, size);
 #endif
     DP("omp_target_alloc returns host ptr " DPxMOD "\n", DPxPTR(rc));
     return rc;
   }
 
-  OMPT_SET_DIRECTIVE_INFO(ompt_directive_omp_target_alloc);
+  OMPT_SET_DIRECTIVE_INFO();
   if (!device_is_ready(device_num)) {
     DP("omp_target_alloc returns NULL ptr\n");
     return NULL;
@@ -124,8 +125,7 @@ EXTERN void *omp_target_alloc(size_t size, int device_num) {
   rc = Devices[device_num].allocData(size);
 #if OMPT_SUPPORT
   DeviceAllocSizes[rc] = size;
-  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(omp_target_alloc, alloc,
-                                        /*SrcPtr=*/NULL, HOST_DEVICE, rc,
+  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(alloc, /*SrcPtr=*/NULL, HOST_DEVICE, rc,
                                         device_num, size);
 #endif
   DP("omp_target_alloc returns device ptr " DPxMOD "\n", DPxPTR(rc));
@@ -152,8 +152,7 @@ EXTERN void omp_target_free(void *device_ptr, int device_num) {
   // address is still valid.
 
   if (device_num == omp_get_initial_device()) {
-    OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(omp_target_free, delete,
-                                          /*SrcPtr=*/NULL, HOST_DEVICE,
+    OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(delete, /*SrcPtr=*/NULL, HOST_DEVICE,
                                           device_ptr, device_num,
                                           DeviceAllocSizes[device_ptr]);
     free(device_ptr);
@@ -167,8 +166,7 @@ EXTERN void omp_target_free(void *device_ptr, int device_num) {
   }
 
 #if OMPT_SUPPORT
-  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(omp_target_free, delete,
-                                        /*SrcPtr=*/NULL, HOST_DEVICE,
+  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(delete, /*SrcPtr=*/NULL, HOST_DEVICE,
                                         device_ptr, device_num,
                                         DeviceAllocSizes[device_ptr]);
   DeviceAllocSizes.erase(device_ptr);
@@ -557,9 +555,8 @@ EXTERN int omp_target_associate_ptr(void *host_ptr, void *device_ptr,
   // "A registered ompt_callback_target_data_op callback is dispatched when
   // device memory is allocated or freed, as well as when data is copied to or
   // from a device."
-  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(omp_target_associate_ptr, associate,
-                                        host_ptr, HOST_DEVICE, device_addr,
-                                        device_num, size);
+  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(associate, host_ptr, HOST_DEVICE,
+                                        device_addr, device_num, size);
   int rc = Device.associatePtr(host_ptr, device_addr, size);
   DP("omp_target_associate_ptr returns %d\n", rc);
   return rc;
@@ -595,8 +592,7 @@ EXTERN int omp_target_disassociate_ptr(void *host_ptr, int device_num) {
   // "A registered ompt_callback_target_data_op callback is dispatched when
   // device memory is allocated or freed, as well as when data is copied to
   // or from a device."
-  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(omp_target_disassociate_ptr,
-                                        disassociate, host_ptr, HOST_DEVICE,
+  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(disassociate, host_ptr, HOST_DEVICE,
                                         TgtPtrBegin, device_num, Size);
   DP("omp_target_disassociate_ptr returns %d\n", rc);
   return rc;
@@ -605,7 +601,7 @@ EXTERN int omp_target_disassociate_ptr(void *host_ptr, int device_num) {
 EXTERN void *omp_target_map_to(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_TO;
   int64_t s = size;
-  OMPT_SET_DIRECTIVE_INFO(ompt_directive_omp_target_map_to);
+  OMPT_SET_DIRECTIVE_INFO();
   __tgt_target_data_begin(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
   OMPT_CLEAR_DIRECTIVE_INFO();
   return omp_get_mapped_ptr(ptr, device_num);
@@ -614,7 +610,7 @@ EXTERN void *omp_target_map_to(void *ptr, size_t size, int device_num) {
 EXTERN void *omp_target_map_alloc(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_NONE;
   int64_t s = size;
-  OMPT_SET_DIRECTIVE_INFO(ompt_directive_omp_target_map_alloc);
+  OMPT_SET_DIRECTIVE_INFO();
   __tgt_target_data_begin(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
   OMPT_CLEAR_DIRECTIVE_INFO();
   return omp_get_mapped_ptr(ptr, device_num);
@@ -623,7 +619,7 @@ EXTERN void *omp_target_map_alloc(void *ptr, size_t size, int device_num) {
 EXTERN void omp_target_map_from(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_FROM;
   int64_t s = size;
-  OMPT_SET_DIRECTIVE_INFO(ompt_directive_omp_target_map_from);
+  OMPT_SET_DIRECTIVE_INFO();
   __tgt_target_data_end(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
   OMPT_CLEAR_DIRECTIVE_INFO();
 }
@@ -631,7 +627,7 @@ EXTERN void omp_target_map_from(void *ptr, size_t size, int device_num) {
 EXTERN void omp_target_map_from_delete(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_FROM | OMP_TGT_MAPTYPE_DELETE;
   int64_t s = size;
-  OMPT_SET_DIRECTIVE_INFO(ompt_directive_omp_target_map_from_delete);
+  OMPT_SET_DIRECTIVE_INFO();
   __tgt_target_data_end(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
   OMPT_CLEAR_DIRECTIVE_INFO();
 }
@@ -639,7 +635,7 @@ EXTERN void omp_target_map_from_delete(void *ptr, size_t size, int device_num) {
 EXTERN void omp_target_map_release(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_NONE;
   int64_t s = size;
-  OMPT_SET_DIRECTIVE_INFO(ompt_directive_omp_target_map_release);
+  OMPT_SET_DIRECTIVE_INFO();
   __tgt_target_data_end(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
   OMPT_CLEAR_DIRECTIVE_INFO();
 }
@@ -647,7 +643,7 @@ EXTERN void omp_target_map_release(void *ptr, size_t size, int device_num) {
 EXTERN void omp_target_map_delete(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_DELETE;
   int64_t s = size;
-  OMPT_SET_DIRECTIVE_INFO(ompt_directive_omp_target_map_delete);
+  OMPT_SET_DIRECTIVE_INFO();
   __tgt_target_data_end(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
   OMPT_CLEAR_DIRECTIVE_INFO();
 }
@@ -655,7 +651,7 @@ EXTERN void omp_target_map_delete(void *ptr, size_t size, int device_num) {
 EXTERN void omp_target_update_to(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_TO | OMP_TGT_MAPTYPE_PRESENT;
   int64_t s = size;
-  OMPT_SET_DIRECTIVE_INFO(ompt_directive_omp_target_update_to);
+  OMPT_SET_DIRECTIVE_INFO();
   __tgt_target_data_update(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
   OMPT_CLEAR_DIRECTIVE_INFO();
 }
@@ -663,7 +659,7 @@ EXTERN void omp_target_update_to(void *ptr, size_t size, int device_num) {
 EXTERN void omp_target_update_from(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_FROM | OMP_TGT_MAPTYPE_PRESENT;
   int64_t s = size;
-  OMPT_SET_DIRECTIVE_INFO(ompt_directive_omp_target_update_from);
+  OMPT_SET_DIRECTIVE_INFO();
   __tgt_target_data_update(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
   OMPT_CLEAR_DIRECTIVE_INFO();
 }

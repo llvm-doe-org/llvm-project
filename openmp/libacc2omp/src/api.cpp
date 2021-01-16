@@ -57,7 +57,7 @@
 #include "internal.h"
 
 /*****************************************************************************
- * Internal helper routines.
+ * Internal helper definitions.
  ****************************************************************************/
 
 static inline int getCurrentDevice() {
@@ -88,6 +88,13 @@ static inline Presence checkPresence(void *HostPtr, size_t Bytes) {
     return PresenceFullyMapped;
   return PresencePartiallyMapped;
 }
+
+#define SET_SOURCE_INFO()                                                      \
+  omp_set_source_info(/*src_file=*/NULL, __func__, /*line_no=*/0,              \
+                      /*end_line_no=*/0, /*func_line_no=*/0,                   \
+                      /*func_end_line_no=*/0)
+
+#define CLEAR_SOURCE_INFO() omp_clear_source_info()
 
 /*****************************************************************************
  * Data and memory management routines.
@@ -213,7 +220,10 @@ void *acc_malloc(size_t bytes) {
   //   "The storage location is dynamically allocated in the device data
   //   environment of the device specified by device_num."
   // - Neither spec seems to specify an exception for shared memory.
-  return omp_target_alloc(bytes, getCurrentDevice());
+  SET_SOURCE_INFO();
+  void *Res = omp_target_alloc(bytes, getCurrentDevice());
+  CLEAR_SOURCE_INFO();
+  return Res;
 }
 
 void acc_free(void *data_dev) {
@@ -233,7 +243,9 @@ void acc_free(void *data_dev) {
   // - OpenMP 5.1, sec. 3.8.2 "omp_target_free", p. 415, L3:
   //   "If device_ptr is NULL (or C_NULL_PTR, for Fortran), the operation is
   //   ignored."
+  SET_SOURCE_INFO();
   omp_target_free(data_dev, getCurrentDevice());
+  CLEAR_SOURCE_INFO();
 }
 
 /*----------------------------------------------------------------------------
@@ -290,7 +302,10 @@ void *acc_copyin(void *data_arg, size_t bytes) {
   // OpenACC 3.1, sec. 3.2.26 "acc_copyin", L3462:
   // "The acc_copyin routines are equivalent to an enter data directive with a
   // copyin clause."
-  return omp_target_map_to(data_arg, bytes, getCurrentDevice());
+  SET_SOURCE_INFO();
+  void *Res = omp_target_map_to(data_arg, bytes, getCurrentDevice());
+  CLEAR_SOURCE_INFO();
+  return Res;
 }
 
 void *acc_present_or_copyin(void *data_arg, size_t bytes) {
@@ -315,7 +330,10 @@ void *acc_create(void *data_arg, size_t bytes) {
   // OpenACC 3.1, sec. 3.2.27 "acc_create", L3502:
   // "The acc_create routines are equivalent to an enter data directive with a
   // create clause."
-  return omp_target_map_alloc(data_arg, bytes, getCurrentDevice());
+  SET_SOURCE_INFO();
+  void *Res = omp_target_map_alloc(data_arg, bytes, getCurrentDevice());
+  CLEAR_SOURCE_INFO();
+  return Res;
 }
 
 void *acc_present_or_create(void *data_arg, size_t bytes) {
@@ -340,7 +358,9 @@ void acc_copyout(void *data_arg, size_t bytes) {
   // OpenACC 3.1, sec. 3.2.28 "acc_copyout", L3532:
   // "The acc_copyout routines are equivalent to an exit data directive with a
   // copyout clause."
+  SET_SOURCE_INFO();
   omp_target_map_from(data_arg, bytes, getCurrentDevice());
+  CLEAR_SOURCE_INFO();
 }
 
 void acc_copyout_finalize(void *data_arg, size_t bytes) {
@@ -352,7 +372,9 @@ void acc_copyout_finalize(void *data_arg, size_t bytes) {
   // OpenACC 3.1, sec. 3.2.28 "acc_copyout", L3533-3534:
   // "The acc_copyout_finalize routines are equivalent to an exit data directive
   // with both copyout and finalize clauses."
+  SET_SOURCE_INFO();
   omp_target_map_from_delete(data_arg, bytes, getCurrentDevice());
+  CLEAR_SOURCE_INFO();
 }
 
 void acc_delete(void *data_arg, size_t bytes) {
@@ -363,7 +385,9 @@ void acc_delete(void *data_arg, size_t bytes) {
   // OpenACC 3.1, sec. 3.2.29 "acc_delete", L3560:
   // "The acc_delete routines are equivalent to an exit data directive with a
   // delete clause."
+  SET_SOURCE_INFO();
   omp_target_map_release(data_arg, bytes, getCurrentDevice());
+  CLEAR_SOURCE_INFO();
 }
 
 void acc_delete_finalize(void *data_arg, size_t bytes) {
@@ -375,7 +399,9 @@ void acc_delete_finalize(void *data_arg, size_t bytes) {
   // OpenACC 3.1, sec. 3.2.29 "acc_delete", L3561-3562:
   // "The acc_delete_finalize routines are equivalent to an exit data directive
   // with both delete clause and finalize clauses."
+  SET_SOURCE_INFO();
   omp_target_map_delete(data_arg, bytes, getCurrentDevice());
+  CLEAR_SOURCE_INFO();
 }
 
 void acc_update_device(void *data_arg, size_t bytes) {
@@ -386,7 +412,9 @@ void acc_update_device(void *data_arg, size_t bytes) {
   // OpenACC 3.1, sec. 3.2.30 "acc_update_device", L3590:
   // "The acc_update_device routine is equivalent to an update directive with a
   // device clause."
+  SET_SOURCE_INFO();
   omp_target_update_to(data_arg, bytes, getCurrentDevice());
+  CLEAR_SOURCE_INFO();
 }
 
 void acc_update_self(void *data_arg, size_t bytes) {
@@ -397,7 +425,9 @@ void acc_update_self(void *data_arg, size_t bytes) {
   // OpenACC 3.1, sec. 3.2.31 "acc_update_self", L3615:
   // "The acc_update_self routine is equivalent to an update directive with a
   // self clause,"
+  SET_SOURCE_INFO();
   omp_target_update_from(data_arg, bytes, getCurrentDevice());
+  CLEAR_SOURCE_INFO();
 }
 
 /*----------------------------------------------------------------------------
@@ -513,10 +543,12 @@ void acc_map_data(void *data_arg, void *data_dev, size_t bytes) {
   //   not?  We assume it's the latter and thus follow OpenMP behavior.
   //   However, nvc 20.9-0 does permit exit data to reduce the reference count
   //   to zero and thus unmap the data.
-  if (!omp_target_associate_ptr(data_arg, data_dev, bytes, /*device_offset=*/0,
-                                getCurrentDevice()))
-    return;
-  acc2omp_fatal(ACC2OMP_MSG(map_data_fail));
+  SET_SOURCE_INFO();
+  int Err = omp_target_associate_ptr(data_arg, data_dev, bytes,
+                                     /*device_offset=*/0, getCurrentDevice());
+  CLEAR_SOURCE_INFO();
+  if (Err)
+    acc2omp_fatal(ACC2OMP_MSG(map_data_fail));
 }
 
 void acc_unmap_data(void *data_arg) {
@@ -574,9 +606,11 @@ void acc_unmap_data(void *data_arg) {
   // - OpenMP 5.1, sec. 3.8.10 "omp_target_disassociate_ptr", p. 429, L22-23:
   //   "The reference count of the mapping is reduced to zero, regardless of its
   //   current value."
-  if (!omp_target_disassociate_ptr(data_arg, getCurrentDevice()))
-    return;
-  acc2omp_fatal(ACC2OMP_MSG(unmap_data_fail));
+  SET_SOURCE_INFO();
+  int Err = omp_target_disassociate_ptr(data_arg, getCurrentDevice());
+  CLEAR_SOURCE_INFO();
+  if (Err)
+    acc2omp_fatal(ACC2OMP_MSG(unmap_data_fail));
 }
 
 /*----------------------------------------------------------------------------

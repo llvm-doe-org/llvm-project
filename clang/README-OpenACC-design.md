@@ -2294,18 +2294,7 @@ typedef enum ompt_directive_kind_t {
   ompt_directive_target_exit_data,
   ompt_directive_target_data,
   ompt_directive_target_teams,
-  ompt_directive_omp_target_alloc,
-  ompt_directive_omp_target_free,
-  ompt_directive_omp_target_associate_ptr,
-  ompt_directive_omp_target_disassociate_ptr,
-  ompt_directive_omp_target_map_to,
-  ompt_directive_omp_target_map_from,
-  ompt_directive_omp_target_map_from_delete,
-  ompt_directive_omp_target_map_alloc,
-  ompt_directive_omp_target_map_release,
-  ompt_directive_omp_target_map_delete,
-  ompt_directive_omp_target_update_to,
-  ompt_directive_omp_target_update_from,
+  ompt_directive_runtime_api,
 } ompt_directive_kind_t;
 
 // All fields are designed so that null-initialization is a reasonable
@@ -2344,31 +2333,49 @@ array section, if specified in an explicit `map` clause.
 
 The OMPT callback functions that Clacc's OpenACC runtime implements
 call these entry points to retrieve information to pass to OpenACC
-callbacks.  OpenACC's `implicit` field is computed from the
-`is_explicit_event` field of the `ompt_directive_info_t` returned by
-`ompt_get_directive_info`.  If the `kind` field of the
-`ompt_directive_info_t` indicates a directive, then OpenACC's
-`parent_construct` field is computed from it, and OpenACC's
-`func_name` field is taken directly from the `func_name` field of the
-`ompt_directive_info_t`.  However, if the `kind` field indicates an
-OpenMP runtime library routine, then OpenACC's `parent_construct`
-field is set to `acc_construct_runtime_api`, and OpenACC's `func_name`
-field is computed from the `kind` field (it is not computed from the
-`func_name` field of the `ompt_directive_info_t` as this would require
-string comparisons, which would be inefficient).  OpenACC's `src_file`
-and line number fields are taken directly from the corresponding
-fields of the `ompt_directive_info_t`, and so they are null in the
-case of an OpenMP runtime library routine.  OpenACC's `var_name` field
-is taken directly from the expression returned by
-`ompt_get_data_expression`.
+callbacks.  OpenACC's `parent_construct` and `implicit` fields are
+computed from the `kind` and `is_explicit_event` fields of the
+`ompt_directive_info_t` returned by `ompt_get_directive_info`, and
+source location information is taken directly from the remaining
+fields.  OpenACC's `var_name` field is taken directly from the
+expression returned by `ompt_get_data_expression`.
 
-Upstream Clang's LLVM IR codegen phase for OpenMP currently does not
-make the information required for these entry points available to the
-OpenMP runtime.  For this purpose, Clacc extends this phase to
-instrument OpenMP runtime calls corresponding to OpenMP directives
-that are translated from OpenACC directives.  Thus, the required
-information is available only when using Clacc's compiler in
-traditional compilation mode.
+So far, OpenACC directives can be identified uniquely by the OpenMP
+directives to which the Clacc compiler translates them.  However, the
+same is not true for OpenACC Runtime Library routines and the OpenMP
+Runtime Library routines they call.  For this reason, Clacc's version
+of the LLVM OpenMP runtime also extends OpenMP 5.1 sec. 3 with two new
+routines:
+
+```
+void omp_set_source_info(const char *src_file, const char *func_name,
+                         int line_no, int end_line_no, int func_line_no,
+                         int func_end_line_no);
+void omp_clear_source_info();
+```
+
+Clacc implements each OpenACC routine to call these routines around
+its OpenMP routine calls to override the source info recorded by the
+latter for use by `ompt_get_directive_info`.  In this case, all fields
+it passes to `omp_set_source_info` are null except `func_name`, which
+indicates the OpenACC routine.  That is, Clacc's implementation does
+not attempt to climb the call stack to determine the caller of the
+OpenACC routine, and source files and line numbers within the OpenACC
+routine implementation are not expected to be useful for an OpenACC
+application developer.  Even so, Clacc defines `omp_set_source_info`
+to accept the remaining source information fields as well to make it
+more appealing as a general feature that can be used by OpenMP
+applications.  Clacc uses the `omp_` prefix instead of `ompt_` as
+these routines seem like they might be useful for other purposes
+outside OMPT, such as debugging facilities, in the future.
+
+In the case of directives, upstream Clang's LLVM IR codegen phase for
+OpenMP currently does not make the information required for the above
+OMPT entry points available to the OpenMP runtime.  For this purpose,
+Clacc extends this phase to instrument OpenMP runtime calls
+corresponding to OpenMP directives that are translated from OpenACC
+directives.  Thus, the required information is available only when
+using Clacc's compiler in traditional compilation mode.
 
 When using Clacc's compiler in source-to-source mode followed by a
 foreign OpenMP compiler, we expect that the foreign OpenMP runtime's
@@ -2401,15 +2408,15 @@ especially in foreign OpenMP compilers that would see them as opaque
 function calls.  Second, the Clacc compiler's source-to-source mode is
 intended to produce standard OpenMP that can be compiled by foreign
 OpenMP compilers, but these runtime calls are not standard and would
-fail to link without Clacc's OpenACC runtime even when OpenACC
-profiling is not desired.  Third, unlike LLVM IR codegen,
-`TransformACCToOMP` currently runs immediately after each OpenACC
-directive is parsed, when `func_end_line_no` is not yet known.  There
-are various ways to mitigate some of these issues, such as requiring
-the user to opt into these source-level insertions when OpenACC
-profiling is required.  However, it is our conclusion that Clacc's
-current design is cleaner and provides a clearer path to reuse between
-OpenACC and OpenMP implementations.
+fail to link without Clacc's OpenACC runtime even when support for
+OpenACC profiling and routines is not desired.  Third, unlike LLVM IR
+codegen, `TransformACCToOMP` currently runs immediately after each
+OpenACC directive is parsed, when `func_end_line_no` is not yet known.
+There are various ways to mitigate some of these issues, such as
+requiring the user to opt into these source-level insertions when
+OpenACC profiling is required.  However, it is our conclusion that
+Clacc's current design is cleaner and provides a clearer path to reuse
+between OpenACC and OpenMP implementations.
 
 Currently, Clacc's implementation actually suffers from the first
 problem mentioned for the alternative source-level design.  That is,
