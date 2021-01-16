@@ -432,6 +432,23 @@ EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
   void *srcAddr = (char *)src + src_offset;
   void *dstAddr = (char *)dst + dst_offset;
 
+  // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
+  // "A registered ompt_callback_target_data_op callback is dispatched when
+  // device memory is allocated or freed, as well as when data is copied to or
+  // from a device."
+  //
+  // TODO: Currently, we have not implemented callbacks for direct transfers
+  // within host memory (memcpy), within a single device's memory
+  // (data_exchange), or between different devices (data_exchange).  It's not
+  // clear whether callbacks are desired in each of those cases and whether
+  // ompt_target_data_transfer_to_device, ompt_target_data_transfer_from_device,
+  // or both (one relative to each device) should be specified in such cases.
+  // We have implemented both callbacks when a direct transfer between the
+  // devices is not possible and so transfers to/from the initial device are
+  // implemented (retrieveData and submitData), and we have implemented the
+  // appropriate callback when the transfer is specified as between host and a
+  // device (retreiveData or submitData).
+  OMPT_SET_DIRECTIVE_INFO();
   if (src_device == omp_get_initial_device() &&
       dst_device == omp_get_initial_device()) {
     DP("copy from host to host\n");
@@ -454,8 +471,10 @@ EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
     // to unefficient way.
     if (SrcDev.isDataExchangable(DstDev)) {
       rc = SrcDev.data_exchange(srcAddr, DstDev, dstAddr, length, nullptr);
-      if (rc == OFFLOAD_SUCCESS)
+      if (rc == OFFLOAD_SUCCESS) {
+        OMPT_CLEAR_DIRECTIVE_INFO();
         return OFFLOAD_SUCCESS;
+      }
     }
 
     void *buffer = malloc(length);
@@ -464,6 +483,7 @@ EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
       rc = DstDev.submitData(dstAddr, buffer, length, nullptr);
     free(buffer);
   }
+  OMPT_CLEAR_DIRECTIVE_INFO();
 
   DP("omp_target_memcpy returns %d\n", rc);
   return rc;

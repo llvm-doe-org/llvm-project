@@ -2488,6 +2488,24 @@ specification that we need to investigate further:
   `acc_ev_free`, which it never seems to trigger.  Notes:
     * We need to check more recent pgcc and discuss with the OpenACC
       technical committee.
+* Should any events trigger when transferring data between or within
+  device memories?  Notes:
+    * Such transfers can be performed using `acc_memcpy_device` (same
+      device) or `acc_memcpy_d2d` (potentially different devices).
+    * OpenACC 3.1 specifies `acc_ev_enqueue_{up,down}load_{start,end}`
+      for copying data between local memory and device memory.  It
+      does not specify events for transferring between device
+      memories.  Moreover, would it be upload or download, or would
+      both be triggered, relative to each device?
+    * Clacc currently produces no OpenACC callbacks in these cases
+      unless the implementation must transfer to/from local memory,
+      either because one device is specified as the host or because a
+      direct transfer between the specified devices is not possible.
+    * Clacc's behavior seems to mimic nvc 20.9-0 behavior, at least
+      when transferring within a single device's memory as nvc doesn't
+      yet implement `acc_memcpy_d2d`.
+    * Clacc assumes callbacks are not desirable if `acc_memcpy_d2d`
+      specifies a transfer within local memory.
 * OpenACC 2.7 specifies the typedef `acc_prof_lookup_func`, but it's
   spelled `acc_prof_lookup` in pgcc 19.4-0's `acc_prof.h`.  Notes:
     * Clacc's `acc_prof.h` typedefs one to the other in order to

@@ -134,6 +134,22 @@ typedef enum {
   acc2omp_msg_unmap_data_pointer_null,
   acc2omp_msg_unmap_data_shared_memory,
   acc2omp_msg_unmap_data_fail,
+  acc2omp_msg_memcpy_to_device_dest_pointer_null,
+  acc2omp_msg_memcpy_to_device_src_pointer_null,
+  acc2omp_msg_memcpy_to_device_fail,
+  acc2omp_msg_memcpy_from_device_dest_pointer_null,
+  acc2omp_msg_memcpy_from_device_src_pointer_null,
+  acc2omp_msg_memcpy_from_device_fail,
+  acc2omp_msg_memcpy_device_dest_pointer_null,
+  acc2omp_msg_memcpy_device_src_pointer_null,
+  acc2omp_msg_memcpy_device_fail,
+  acc2omp_msg_memcpy_d2d_dest_pointer_null,
+  acc2omp_msg_memcpy_d2d_src_pointer_null,
+  acc2omp_msg_memcpy_d2d_dest_device_invalid,
+  acc2omp_msg_memcpy_d2d_src_device_invalid,
+  acc2omp_msg_memcpy_d2d_dest_data_inaccessible,
+  acc2omp_msg_memcpy_d2d_src_data_inaccessible,
+  acc2omp_msg_memcpy_d2d_fail,
 } acc2omp_msgid_t;
 
 /// A wrapper around an \c acc2omp_msgid_t and its default printf-style format

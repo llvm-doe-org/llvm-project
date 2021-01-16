@@ -54,6 +54,35 @@
 // RUN:   (case=caseUnmapAfterOnlyDynamic      not-if-fail='%not --crash')
 // RUN:   (case=caseUnmapAfterMapAndStructured not-if-fail='%not --crash')
 // RUN:   (case=caseUnmapAfterAllThree         not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpySuccess              not-if-fail=              )
+// RUN:   (case=caseMemcpyToDeviceDestNull     not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyToDeviceSrcNull      not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyToDeviceBothNull     not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyFromDeviceDestNull   not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyFromDeviceSrcNull    not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyFromDeviceBothNull   not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyDeviceDestNull       not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyDeviceSrcNull        not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyDeviceBothNull       not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyD2dDestNull          not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyD2dSrcNull           not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyD2dBothNull          not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyD2dDestDevInvalid    not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyD2dDestDevInvalidNeg not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyD2dSrcDevInvalid     not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyD2dSrcDevInvalidNeg  not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyD2dBothDevInvalid    not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyD2dSameDevInvalid    not-if-fail='%not --crash')
+// RUN:   (case=caseMemcpyD2dDestAbsent        not-if-fail=%[not-if-off] )
+// RUN:   (case=caseMemcpyD2dSrcAbsent         not-if-fail=%[not-if-off] )
+// RUN:   (case=caseMemcpyD2dDestExtendsAfter  not-if-fail=%[not-if-off] )
+// RUN:   (case=caseMemcpyD2dSrcExtendsAfter   not-if-fail=%[not-if-off] )
+// RUN:   (case=caseMemcpyD2dDestExtendsBefore not-if-fail=%[not-if-off] )
+// RUN:   (case=caseMemcpyD2dSrcExtendsBefore  not-if-fail=%[not-if-off] )
+// RUN:   (case=caseMemcpyD2dDestSubsumes      not-if-fail=%[not-if-off] )
+// RUN:   (case=caseMemcpyD2dSrcSubsumes       not-if-fail=%[not-if-off] )
+// RUN:   (case=caseMemcpyD2dDestConcat2       not-if-fail=%[not-if-off] )
+// RUN:   (case=caseMemcpyD2dSrcConcat2        not-if-fail=%[not-if-off] )
 // RUN: }
 // RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
 // RUN: %for cases {
@@ -105,13 +134,27 @@ bool printMap_(FILE *File, const char *Name, void *HostPtr, size_t Bytes) {
   return IsPresent;
 }
 
+void *printDevMap_(FILE *File, const char *Name, void *DevPtr, size_t Bytes) {
+  void *HostPtr = acc_hostptr(DevPtr);
+  fprintf(File, "%s %s: %p <- %p", Name, HostPtr ? "mapped" : "unmapped",
+          DevPtr, HostPtr);
+  void *DevPtrChk = acc_deviceptr(HostPtr);
+  void *DevPtrExpected = HostPtr ? DevPtr : NULL;
+  if (DevPtrChk != DevPtrExpected) {
+    fprintf(stderr, "acc_deviceptr(%p) returned %p but %p was expected\n",
+            HostPtr, DevPtrChk, DevPtrExpected);
+    abort();
+  }
+  return HostPtr;
+}
+
 void printMap(const char *Name, void *HostPtr, size_t Bytes) {
   printMap_(stdout, Name, HostPtr, Bytes);
   fprintf(stdout, "\n");
 }
 
-void printInt(FILE *File, const char *Var, int *HostPtr, size_t Bytes) {
-  int IsPresent = printMap_(File, Var, HostPtr, Bytes);
+void printInt(FILE *File, const char *Var, int *HostPtr) {
+  int IsPresent = printMap_(File, Var, HostPtr, sizeof *HostPtr);
   fprintf(File, ", %d", *HostPtr);
   if (IsPresent) {
     int DevVal;
@@ -122,8 +165,39 @@ void printInt(FILE *File, const char *Var, int *HostPtr, size_t Bytes) {
   fprintf(File, "\n");
 }
 
-#define PRINT_INT(Var) printInt(stdout, #Var, &(Var), sizeof (Var))
-#define PRINT_INT_STDERR(Var) printInt(stderr, #Var, &(Var), sizeof (Var))
+void printDevInt(FILE *File, const char *Var, int *DevPtr) {
+  int *HostPtr = printDevMap_(File, Var, DevPtr, sizeof *DevPtr);
+  fprintf(File, ", ");
+  if (HostPtr) {
+    int DevVal;
+    #pragma acc parallel num_gangs(1) copyout(DevVal)
+    DevVal = *HostPtr;
+    fprintf(File, "%d <- %d", DevVal, *HostPtr);
+  } else {
+    int DevVal;
+    acc_map_data(&DevVal, DevPtr, sizeof *DevPtr);
+    #pragma acc update self(DevVal)
+    acc_unmap_data(&DevVal);
+    fprintf(File, "%d", DevVal);
+  }
+  fprintf(File, "\n");
+}
+
+#define PRINT_INT(Var) printInt(stdout, #Var, &(Var))
+#define PRINT_INT_STDERR(Var) printInt(stderr, #Var, &(Var))
+#define PRINT_DEV_INT(Var) printDevInt(stdout, #Var, &(Var))
+
+// FIXME: Switch to OpenACC routines once they're implemented.
+int omp_get_default_device(void);
+int omp_get_initial_device(void);
+int omp_get_num_devices(void);
+static inline int getDevNum() {
+  return omp_get_num_devices() ? omp_get_default_device()
+                               : omp_get_initial_device();
+}
+static inline int getHostNum() { return omp_get_initial_device(); }
+static inline int getDevNumInvalid() { return omp_get_num_devices(); }
+static inline int getDevNumInvalidNeg() { return -1; }
 
 // Make each static to ensure we get a compile warning if it's never called.
 #include CASES_HEADER
@@ -2183,9 +2257,9 @@ CASE(caseMapBytesZero) {
   // OUT-caseMapBytesZero-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
   //  OUT-caseMapBytesZero-OFF-NEXT: x absent:  0x[[#X]] -> (nil),    10
   // OUT-caseMapBytesZero-HOST-NEXT: dev: 0x[[#DEV]] <- 0x[[#DEV]]
-  //  OUT-caseMapBytesZero-OFF-NEXT: dev: (nil)      <- 0x[[#DEV]]
+  //  OUT-caseMapBytesZero-OFF-NEXT: dev: 0x[[#DEV]] <- (nil)
   PRINT_INT(x);
-  printf("dev: %p <- %p\n", acc_hostptr(dev), dev);
+  printf("dev: %p <- %p\n", dev, acc_hostptr(dev));
   acc_map_data(&x, dev, 0);
   acc_map_data(&x, NULL, 0);
   acc_map_data(NULL, dev, 0);
@@ -2193,10 +2267,10 @@ CASE(caseMapBytesZero) {
   // OUT-caseMapBytesZero-HOST-NEXT: x present: 0x[[#X]] -> 0x[[#X]], 10 -> 10
   //  OUT-caseMapBytesZero-OFF-NEXT: x absent:  0x[[#X]] -> (nil),    10
   // OUT-caseMapBytesZero-HOST-NEXT: dev: 0x[[#DEV]] <- 0x[[#DEV]]
-  //  OUT-caseMapBytesZero-OFF-NEXT: dev: (nil)      <- 0x[[#DEV]]
+  //  OUT-caseMapBytesZero-OFF-NEXT: dev: 0x[[#DEV]] <- (nil)
   //      OUT-caseMapBytesZero-NEXT: NULL present: (nil) -> (nil)
   PRINT_INT(x);
-  printf("dev: %p <- %p\n", acc_hostptr(dev), dev);
+  printf("dev: %p <- %p\n", dev, acc_hostptr(dev));
   printMap("NULL", NULL, 0);
 
   acc_free(dev);
@@ -2399,6 +2473,647 @@ CASE(caseUnmapAfterAllThree) {
   #pragma acc data create(arr)
   // ERR-caseUnmapAfterAllThree-OFF-NEXT: OMP: Error #[[#]]: acc_unmap_data failed
   acc_unmap_data(arr);
+  return 0;
+}
+
+CASE(caseMemcpySuccess) {
+  int devNum = getDevNum();
+  int hostNum = getHostNum();
+  int devNumInvalid = getDevNumInvalid();
+
+  // Copy between addresses that are not mapped to anything (unless shared
+  // memory).  Unlike update routines, these routines shouldn't have errors.
+  {
+    // OUT-caseMemcpySuccess-NEXT: host[0]: 0x[[#%x,HOST0:]]
+    // OUT-caseMemcpySuccess-NEXT: host[1]: 0x[[#%x,HOST1:]]
+    // OUT-caseMemcpySuccess-NEXT: host[2]: 0x[[#%x,HOST2:]]
+    // OUT-caseMemcpySuccess-NEXT:  dev[0]: 0x[[#%x,DEV0:]]
+    // OUT-caseMemcpySuccess-NEXT:  dev[1]: 0x[[#%x,DEV1:]]
+    // OUT-caseMemcpySuccess-NEXT:  dev[2]: 0x[[#%x,DEV2:]]
+    int host[] = {10, 20, 30};
+    int valsForDev[] = {41, 51, 61};
+    int *dev = acc_malloc(sizeof valsForDev);
+    if (Offloading) {
+      acc_map_data(valsForDev, dev, sizeof valsForDev);
+      #pragma acc update device(valsForDev)
+      acc_unmap_data(valsForDev);
+    } else {
+      memcpy(dev, valsForDev, sizeof valsForDev);
+    }
+    printf("host[0]: %p\n", &host[0]);
+    printf("host[1]: %p\n", &host[1]);
+    printf("host[2]: %p\n", &host[2]);
+    printf("dev[0]: %p\n", &dev[0]);
+    printf("dev[1]: %p\n", &dev[1]);
+    printf("dev[2]: %p\n", &dev[2]);
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: dev[1]   mapped: 0x[[#DEV1]] <- 0x[[#DEV1]], 10 <- 10
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dev[1] unmapped: 0x[[#DEV1]] <- (nil),       10
+    acc_memcpy_to_device(&dev[1], &host[0], sizeof dev[1]);
+    PRINT_DEV_INT(dev[1]);
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: host[1] present: 0x[[#HOST1]] -> 0x[[#HOST1]], 41 -> 41
+    //  OUT-caseMemcpySuccess-OFF-NEXT: host[1]  absent: 0x[[#HOST1]] -> (nil),        41
+    acc_memcpy_from_device(&host[1], &dev[0], sizeof host[1]);
+    PRINT_INT(host[1]);
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: dev[1]   mapped: 0x[[#DEV1]] <- 0x[[#DEV1]], 41 <- 41
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dev[1] unmapped: 0x[[#DEV1]] <- (nil),       41
+    acc_memcpy_device(&dev[1], &dev[0], sizeof dev[1]);
+    PRINT_DEV_INT(dev[1]);
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: host[1] present: 0x[[#HOST1]] -> 0x[[#HOST1]], 10 -> 10
+    //  OUT-caseMemcpySuccess-OFF-NEXT: host[1]  absent: 0x[[#HOST1]] -> (nil),        10
+    acc_memcpy_d2d(&host[1], &host[0], sizeof host[1], hostNum, hostNum);
+    PRINT_INT(host[1]);
+
+    // No-op.
+    // OUT-caseMemcpySuccess-HOST-NEXT: dev[1]   mapped: 0x[[#DEV1]] <- 0x[[#DEV1]], 41 <- 41
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dev[1] unmapped: 0x[[#DEV1]] <- (nil),       41
+    acc_memcpy_device(&dev[1], &dev[1], sizeof dev[1]);
+    PRINT_DEV_INT(dev[1]);
+
+    // No-op.
+    // OUT-caseMemcpySuccess-HOST-NEXT: host[1] present: 0x[[#HOST1]] -> 0x[[#HOST1]], 10 -> 10
+    //  OUT-caseMemcpySuccess-OFF-NEXT: host[1]  absent: 0x[[#HOST1]] -> (nil),        10
+    acc_memcpy_d2d(&host[1], &host[1], sizeof host[1], hostNum, hostNum);
+    PRINT_INT(host[1]);
+
+    // Check that we didn't disturb neighboring data or source data.
+    // OUT-caseMemcpySuccess-HOST-NEXT: host[0]  present: 0x[[#HOST0]] -> 0x[[#HOST0]], 10 -> 10
+    // OUT-caseMemcpySuccess-HOST-NEXT: host[2]  present: 0x[[#HOST2]] -> 0x[[#HOST2]], 30 -> 30
+    // OUT-caseMemcpySuccess-HOST-NEXT: dev[0]    mapped: 0x[[#DEV0]]  <- 0x[[#DEV0]],  41 <- 41
+    // OUT-caseMemcpySuccess-HOST-NEXT: dev[2]    mapped: 0x[[#DEV2]]  <- 0x[[#DEV2]],  61 <- 61
+    //  OUT-caseMemcpySuccess-OFF-NEXT: host[0]   absent: 0x[[#HOST0]] -> (nil),        10
+    //  OUT-caseMemcpySuccess-OFF-NEXT: host[2]   absent: 0x[[#HOST2]] -> (nil),        30
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dev[0]  unmapped: 0x[[#DEV0]]  <- (nil),        41
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dev[2]  unmapped: 0x[[#DEV2]]  <- (nil),        61
+    PRINT_INT(host[0]);
+    PRINT_INT(host[2]);
+    PRINT_DEV_INT(dev[0]);
+    PRINT_DEV_INT(dev[2]);
+  }
+
+  // Copy between addresses that are mapped but not to each other and are not
+  // the same.
+  {
+    // OUT-caseMemcpySuccess-NEXT: dst[0]: 0x[[#%x,DST0:]] -> 0x[[#%x,DST0_DEV:]]
+    // OUT-caseMemcpySuccess-NEXT: dst[1]: 0x[[#%x,DST1:]] -> 0x[[#%x,DST1_DEV:]]
+    // OUT-caseMemcpySuccess-NEXT: dst[2]: 0x[[#%x,DST2:]] -> 0x[[#%x,DST2_DEV:]]
+    // OUT-caseMemcpySuccess-NEXT: src[0]: 0x[[#%x,SRC0:]] -> 0x[[#%x,SRC0_DEV:]]
+    // OUT-caseMemcpySuccess-NEXT: src[1]: 0x[[#%x,SRC1:]] -> 0x[[#%x,SRC1_DEV:]]
+    // OUT-caseMemcpySuccess-NEXT: src[2]: 0x[[#%x,SRC2:]] -> 0x[[#%x,SRC2_DEV:]]
+    int dst[] = {10, 20, 30};
+    int src[] = {40, 50, 60};
+    #pragma acc enter data create(dst, src)
+    #pragma acc parallel num_gangs(1)
+    {
+      dst[0] = 11;
+      dst[1] = 21;
+      dst[2] = 31;
+      src[0] = 41;
+      src[1] = 51;
+      src[2] = 61;
+    }
+    printf("dst[0]: %p -> %p\n", &dst[0], acc_deviceptr(&dst[0]));
+    printf("dst[1]: %p -> %p\n", &dst[1], acc_deviceptr(&dst[1]));
+    printf("dst[2]: %p -> %p\n", &dst[2], acc_deviceptr(&dst[2]));
+    printf("src[0]: %p -> %p\n", &src[0], acc_deviceptr(&src[0]));
+    printf("src[1]: %p -> %p\n", &src[1], acc_deviceptr(&src[1]));
+    printf("src[2]: %p -> %p\n", &src[2], acc_deviceptr(&src[2]));
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1]],     51 -> 51
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV]], 20 -> 50
+    acc_memcpy_to_device(acc_deviceptr(&dst[1]), &src[1], sizeof dst[1]);
+    PRINT_INT(dst[1]);
+    dst[1] = 20;
+    #pragma acc parallel num_gangs(1)
+    dst[1] = 21;
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1]],     51 -> 51
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV]], 20 -> 50
+    acc_memcpy_d2d(&dst[1], &src[1], sizeof dst[1], devNum, hostNum);
+    PRINT_INT(dst[1]);
+    dst[1] = 20;
+    #pragma acc parallel num_gangs(1)
+    dst[1] = 21;
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1]],     51 -> 51
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV]], 51 -> 21
+    acc_memcpy_from_device(&dst[1], acc_deviceptr(&src[1]), sizeof dst[1]);
+    PRINT_INT(dst[1]);
+    dst[1] = 20;
+    #pragma acc parallel num_gangs(1)
+    dst[1] = 21;
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1]],     51 -> 51
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV]], 51 -> 21
+    acc_memcpy_d2d(&dst[1], &src[1], sizeof dst[1], hostNum, devNum);
+    PRINT_INT(dst[1]);
+    dst[1] = 20;
+    #pragma acc parallel num_gangs(1)
+    dst[1] = 21;
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1]],     51 -> 51
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV]], 20 -> 51
+    acc_memcpy_device(acc_deviceptr(&dst[1]), acc_deviceptr(&src[1]), sizeof dst[1]);
+    PRINT_INT(dst[1]);
+    dst[1] = 20;
+    #pragma acc parallel num_gangs(1)
+    dst[1] = 21;
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1]],     51 -> 51
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV]], 20 -> 51
+    acc_memcpy_d2d(&dst[1], &src[1], sizeof dst[1], devNum, devNum);
+    PRINT_INT(dst[1]);
+    dst[1] = 20;
+    #pragma acc parallel num_gangs(1)
+    dst[1] = 21;
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1]],     51 -> 51
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV]], 50 -> 21
+    acc_memcpy_d2d(&dst[1], &src[1], sizeof dst[1], hostNum, hostNum);
+    PRINT_INT(dst[1]);
+
+    // Check that we didn't disturb neighboring data or source data.
+    // OUT-caseMemcpySuccess-HOST-NEXT: dst[0] present: 0x[[#DST0]] -> 0x[[#DST0]],     11 -> 11
+    // OUT-caseMemcpySuccess-HOST-NEXT: dst[2] present: 0x[[#DST2]] -> 0x[[#DST2]],     31 -> 31
+    // OUT-caseMemcpySuccess-HOST-NEXT: src[0] present: 0x[[#SRC0]] -> 0x[[#SRC0]],     41 -> 41
+    // OUT-caseMemcpySuccess-HOST-NEXT: src[1] present: 0x[[#SRC1]] -> 0x[[#SRC1]],     51 -> 51
+    // OUT-caseMemcpySuccess-HOST-NEXT: src[2] present: 0x[[#SRC2]] -> 0x[[#SRC2]],     61 -> 61
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dst[0] present: 0x[[#DST0]] -> 0x[[#DST0_DEV]], 10 -> 11
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dst[2] present: 0x[[#DST2]] -> 0x[[#DST2_DEV]], 30 -> 31
+    //  OUT-caseMemcpySuccess-OFF-NEXT: src[0] present: 0x[[#SRC0]] -> 0x[[#SRC0_DEV]], 40 -> 41
+    //  OUT-caseMemcpySuccess-OFF-NEXT: src[1] present: 0x[[#SRC1]] -> 0x[[#SRC1_DEV]], 50 -> 51
+    //  OUT-caseMemcpySuccess-OFF-NEXT: src[2] present: 0x[[#SRC2]] -> 0x[[#SRC2_DEV]], 60 -> 61
+    PRINT_INT(dst[0]);
+    PRINT_INT(dst[2]);
+    PRINT_INT(src[0]);
+    PRINT_INT(src[1]);
+    PRINT_INT(src[2]);
+
+    #pragma acc exit data delete(dst, src)
+  }
+
+  // Copy between addresses that are mapped to each other or are the same.  All
+  // cases are no-ops if shared memory.
+  {
+    // OUT-caseMemcpySuccess-NEXT: x[0]: 0x[[#%x,X0:]] -> 0x[[#%x,X0_DEV:]]
+    // OUT-caseMemcpySuccess-NEXT: x[1]: 0x[[#%x,X1:]] -> 0x[[#%x,X1_DEV:]]
+    // OUT-caseMemcpySuccess-NEXT: x[2]: 0x[[#%x,X2:]] -> 0x[[#%x,X2_DEV:]]
+    int x[] = {10, 20, 30};
+    #pragma acc enter data create(x)
+    #pragma acc parallel num_gangs(1)
+    {
+      x[0] = 11;
+      x[1] = 21;
+      x[2] = 31;
+    }
+    printf("x[0]: %p -> %p\n", &x[0], acc_deviceptr(&x[0]));
+    printf("x[1]: %p -> %p\n", &x[1], acc_deviceptr(&x[1]));
+    printf("x[2]: %p -> %p\n", &x[2], acc_deviceptr(&x[2]));
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1]],     21 -> 21
+    //  OUT-caseMemcpySuccess-OFF-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1_DEV]], 20 -> 20
+    acc_memcpy_to_device(acc_deviceptr(&x[1]), &x[1], sizeof x[1]);
+    PRINT_INT(x[1]);
+    x[1] = 20;
+    #pragma acc parallel num_gangs(1)
+    x[1] = 21;
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1]],     21 -> 21
+    //  OUT-caseMemcpySuccess-OFF-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1_DEV]], 20 -> 20
+    acc_memcpy_d2d(&x[1], &x[1], sizeof x[1], devNum, hostNum);
+    PRINT_INT(x[1]);
+    x[1] = 20;
+    #pragma acc parallel num_gangs(1)
+    x[1] = 21;
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1]],     21 -> 21
+    //  OUT-caseMemcpySuccess-OFF-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1_DEV]], 21 -> 21
+    acc_memcpy_from_device(&x[1], acc_deviceptr(&x[1]), sizeof x[1]);
+    PRINT_INT(x[1]);
+    x[1] = 20;
+    #pragma acc parallel num_gangs(1)
+    x[1] = 21;
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1]],     21 -> 21
+    //  OUT-caseMemcpySuccess-OFF-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1_DEV]], 21 -> 21
+    acc_memcpy_d2d(&x[1], &x[1], sizeof x[1], hostNum, devNum);
+    PRINT_INT(x[1]);
+    x[1] = 20;
+    #pragma acc parallel num_gangs(1)
+    x[1] = 21;
+
+    // Always no-op.
+    // OUT-caseMemcpySuccess-HOST-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1]],     21 -> 21
+    //  OUT-caseMemcpySuccess-OFF-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1_DEV]], 20 -> 21
+    acc_memcpy_device(acc_deviceptr(&x[1]), acc_deviceptr(&x[1]), sizeof x[1]);
+    PRINT_INT(x[1]);
+
+    // Always no-op.
+    // OUT-caseMemcpySuccess-HOST-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1]],     21 -> 21
+    //  OUT-caseMemcpySuccess-OFF-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1_DEV]], 20 -> 21
+    acc_memcpy_d2d(&x[1], &x[1], sizeof x[1], devNum, devNum);
+    PRINT_INT(x[1]);
+
+    // Always no-op.
+    // OUT-caseMemcpySuccess-HOST-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1]],     21 -> 21
+    //  OUT-caseMemcpySuccess-OFF-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1_DEV]], 20 -> 21
+    acc_memcpy_d2d(&x[1], &x[1], sizeof x[1], hostNum, hostNum);
+    PRINT_INT(x[1]);
+
+    // Check that we didn't disturb neighboring data.
+    // OUT-caseMemcpySuccess-HOST-NEXT: x[0] present: 0x[[#X0]] -> 0x[[#X0]],     11 -> 11
+    // OUT-caseMemcpySuccess-HOST-NEXT: x[2] present: 0x[[#X2]] -> 0x[[#X2]],     31 -> 31
+    //  OUT-caseMemcpySuccess-OFF-NEXT: x[0] present: 0x[[#X0]] -> 0x[[#X0_DEV]], 10 -> 11
+    //  OUT-caseMemcpySuccess-OFF-NEXT: x[2] present: 0x[[#X2]] -> 0x[[#X2_DEV]], 30 -> 31
+    PRINT_INT(x[0]);
+    PRINT_INT(x[2]);
+
+    #pragma acc exit data delete(x)
+
+    // Always no-op even though data is inaccessible on the device.
+    // OUT-caseMemcpySuccess-HOST-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1]], 21 -> 21
+    //  OUT-caseMemcpySuccess-OFF-NEXT: x[1]  absent: 0x[[#X1]] -> (nil),     20
+    acc_memcpy_d2d(&x[1], &x[1], sizeof x[1], devNum, devNum);
+    PRINT_INT(x[1]);
+  }
+
+  // Check that we have a no-op when bytes=0 and addresses are not mapped to
+  // anything (unless shared memory).
+  {
+    // OUT-caseMemcpySuccess-NEXT: host[0]: 0x[[#%x,HOST0:]]
+    // OUT-caseMemcpySuccess-NEXT: host[1]: 0x[[#%x,HOST1:]]
+    // OUT-caseMemcpySuccess-NEXT:  dev[0]: 0x[[#%x,DEV0:]]
+    // OUT-caseMemcpySuccess-NEXT:  dev[1]: 0x[[#%x,DEV1:]]
+    int host[] = {10, 20};
+    int valsForDev[] = {31, 41};
+    int *dev = acc_malloc(sizeof valsForDev);
+    if (Offloading) {
+      acc_map_data(valsForDev, dev, sizeof valsForDev);
+      #pragma acc update device(valsForDev)
+      acc_unmap_data(valsForDev);
+    } else {
+      memcpy(dev, valsForDev, sizeof valsForDev);
+    }
+    printf("host[0]: %p\n", &host[0]);
+    printf("host[1]: %p\n", &host[1]);
+    printf("dev[0]: %p\n", &dev[0]);
+    printf("dev[1]: %p\n", &dev[1]);
+
+    acc_memcpy_to_device(&dev[1], &host[0], 0);
+    acc_memcpy_from_device(&host[1], &dev[0], 0);
+    acc_memcpy_device(&dev[1], &dev[0], 0);
+    acc_memcpy_d2d(&host[1], &host[0], 0, hostNum, hostNum);
+    acc_memcpy_device(&dev[1], &dev[1], 0);
+    acc_memcpy_d2d(&host[1], &host[1], 0, hostNum, hostNum);
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: host[0]  present: 0x[[#HOST0]] -> 0x[[#HOST0]], 10 -> 10
+    // OUT-caseMemcpySuccess-HOST-NEXT: host[1]  present: 0x[[#HOST1]] -> 0x[[#HOST1]], 20 -> 20
+    // OUT-caseMemcpySuccess-HOST-NEXT: dev[0]    mapped: 0x[[#DEV0]]  <- 0x[[#DEV0]],  31 <- 31
+    // OUT-caseMemcpySuccess-HOST-NEXT: dev[1]    mapped: 0x[[#DEV1]]  <- 0x[[#DEV1]],  41 <- 41
+    //  OUT-caseMemcpySuccess-OFF-NEXT: host[0]   absent: 0x[[#HOST0]] -> (nil),        10
+    //  OUT-caseMemcpySuccess-OFF-NEXT: host[1]   absent: 0x[[#HOST1]] -> (nil),        20
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dev[0]  unmapped: 0x[[#DEV0]]  <- (nil),        31
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dev[1]  unmapped: 0x[[#DEV1]]  <- (nil),        41
+    PRINT_INT(host[0]);
+    PRINT_INT(host[1]);
+    PRINT_DEV_INT(dev[0]);
+    PRINT_DEV_INT(dev[1]);
+  }
+
+  // Check that we have a no-op when bytes=0 and addresses are mapped, possibly
+  // to each other, or are the same.
+  {
+    // OUT-caseMemcpySuccess-NEXT: dst[0]: 0x[[#%x,DST0:]] -> 0x[[#%x,DST0_DEV:]]
+    // OUT-caseMemcpySuccess-NEXT: dst[1]: 0x[[#%x,DST1:]] -> 0x[[#%x,DST1_DEV:]]
+    // OUT-caseMemcpySuccess-NEXT: src[0]: 0x[[#%x,SRC0:]] -> 0x[[#%x,SRC0_DEV:]]
+    // OUT-caseMemcpySuccess-NEXT: src[1]: 0x[[#%x,SRC1:]] -> 0x[[#%x,SRC1_DEV:]]
+    int dst[] = {10, 20};
+    int src[] = {30, 40};
+    #pragma acc enter data create(dst, src)
+    #pragma acc parallel num_gangs(1)
+    {
+      dst[0] = 11;
+      dst[1] = 21;
+      src[0] = 31;
+      src[1] = 41;
+    }
+    printf("dst[0]: %p -> %p\n", &dst[0], acc_deviceptr(&dst[0]));
+    printf("dst[1]: %p -> %p\n", &dst[1], acc_deviceptr(&dst[1]));
+    printf("src[0]: %p -> %p\n", &src[0], acc_deviceptr(&src[0]));
+    printf("src[1]: %p -> %p\n", &src[1], acc_deviceptr(&src[1]));
+
+    // Mapped but not to each other.
+    acc_memcpy_to_device(acc_deviceptr(&dst[1]), &src[1], 0);
+    acc_memcpy_d2d(&dst[1], &src[1], 0, devNum, hostNum);
+    acc_memcpy_from_device(&dst[1], acc_deviceptr(&src[1]), 0);
+    acc_memcpy_d2d(&dst[1], &src[1], 0, hostNum, devNum);
+    acc_memcpy_device(acc_deviceptr(&dst[1]), acc_deviceptr(&src[1]), 0);
+    acc_memcpy_d2d(&dst[1], &src[1], 0, devNum, devNum);
+    acc_memcpy_d2d(&dst[1], &src[1], 0, hostNum, hostNum);
+
+    // Mapped to each other.
+    acc_memcpy_to_device(acc_deviceptr(&dst[1]), &dst[1], 0);
+    acc_memcpy_d2d(&dst[1], &dst[1], 0, devNum, hostNum);
+    acc_memcpy_from_device(&dst[1], acc_deviceptr(&dst[1]), 0);
+    acc_memcpy_d2d(&dst[1], &dst[1], 0, hostNum, devNum);
+
+    // The same.
+    acc_memcpy_device(acc_deviceptr(&dst[1]), acc_deviceptr(&dst[1]), 0);
+    acc_memcpy_d2d(&dst[1], &dst[1], 0, devNum, devNum);
+    acc_memcpy_d2d(&dst[1], &dst[1], 0, hostNum, hostNum);
+
+    // OUT-caseMemcpySuccess-HOST-NEXT: dst[0] present: 0x[[#DST0]] -> 0x[[#DST0]],     11 -> 11
+    // OUT-caseMemcpySuccess-HOST-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1]],     21 -> 21
+    // OUT-caseMemcpySuccess-HOST-NEXT: src[0] present: 0x[[#SRC0]] -> 0x[[#SRC0]],     31 -> 31
+    // OUT-caseMemcpySuccess-HOST-NEXT: src[1] present: 0x[[#SRC1]] -> 0x[[#SRC1]],     41 -> 41
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dst[0] present: 0x[[#DST0]] -> 0x[[#DST0_DEV]], 10 -> 11
+    //  OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV]], 20 -> 21
+    //  OUT-caseMemcpySuccess-OFF-NEXT: src[0] present: 0x[[#SRC0]] -> 0x[[#SRC0_DEV]], 30 -> 31
+    //  OUT-caseMemcpySuccess-OFF-NEXT: src[1] present: 0x[[#SRC1]] -> 0x[[#SRC1_DEV]], 40 -> 41
+    PRINT_INT(dst[0]);
+    PRINT_INT(dst[1]);
+    PRINT_INT(src[0]);
+    PRINT_INT(src[1]);
+
+    #pragma acc exit data delete(dst, src)
+  }
+
+  // Check that we have a no-op when bytes=0 and either addresses are null,
+  // addresses are inaccessible, device numbers are invalid, or some combination
+  // of those.
+  acc_memcpy_to_device(NULL, NULL, 0);
+  acc_memcpy_from_device(NULL, NULL, 0);
+  acc_memcpy_device(NULL, NULL, 0);
+  acc_memcpy_d2d(NULL, NULL, 0, devNum, devNum);
+  acc_memcpy_d2d(NULL, NULL, 0, devNumInvalid, devNumInvalid);
+  {
+    int x, y; // inaccessible
+    acc_memcpy_d2d(&x, &y, 0, devNum, devNum);
+    acc_memcpy_d2d(&x, &y, 0, devNumInvalid, devNumInvalid);
+    #pragma acc data create(x, y) // now accessible
+    acc_memcpy_d2d(&x, &y, 0, devNumInvalid, devNumInvalid);
+  }
+
+  return 0;
+}
+
+CASE(caseMemcpyToDeviceDestNull) {
+  int host;
+  // ERR-caseMemcpyToDeviceDestNull-NEXT: OMP: Error #[[#]]: acc_memcpy_to_device called with null destination pointer
+  acc_memcpy_to_device(NULL, &host, sizeof host);
+  return 0;
+}
+CASE(caseMemcpyToDeviceSrcNull) {
+  int *dev = acc_malloc(sizeof *dev);
+  if (!dev) {
+    fprintf(stderr, "acc_malloc failed\n");
+    return 1;
+  }
+  // ERR-caseMemcpyToDeviceSrcNull-NEXT: OMP: Error #[[#]]: acc_memcpy_to_device called with null source pointer
+  acc_memcpy_to_device(dev, NULL, sizeof *dev);
+  return 0;
+}
+CASE(caseMemcpyToDeviceBothNull) {
+  // ERR-caseMemcpyToDeviceBothNull-NEXT: OMP: Error #[[#]]: acc_memcpy_to_device called with null destination pointer
+  acc_memcpy_to_device(NULL, NULL, 1);
+  return 0;
+}
+
+CASE(caseMemcpyFromDeviceDestNull) {
+  int *dev = acc_malloc(sizeof *dev);
+  if (!dev) {
+    fprintf(stderr, "acc_malloc failed\n");
+    return 1;
+  }
+  acc_memcpy_from_device(NULL, dev, sizeof *dev);
+  // ERR-caseMemcpyFromDeviceDestNull-NEXT: OMP: Error #[[#]]: acc_memcpy_from_device called with null destination pointer
+  return 0;
+}
+CASE(caseMemcpyFromDeviceSrcNull) {
+  int host;
+  // ERR-caseMemcpyFromDeviceSrcNull-NEXT: OMP: Error #[[#]]: acc_memcpy_from_device called with null source pointer
+  acc_memcpy_from_device(&host, NULL, sizeof host);
+  return 0;
+}
+CASE(caseMemcpyFromDeviceBothNull) {
+  // ERR-caseMemcpyFromDeviceBothNull-NEXT: OMP: Error #[[#]]: acc_memcpy_from_device called with null destination pointer
+  acc_memcpy_from_device(NULL, NULL, 1);
+  return 0;
+}
+
+CASE(caseMemcpyDeviceDestNull) {
+  int *dev = acc_malloc(sizeof *dev);
+  if (!dev) {
+    fprintf(stderr, "acc_malloc failed\n");
+    return 1;
+  }
+  acc_memcpy_device(NULL, dev, sizeof *dev);
+  // ERR-caseMemcpyDeviceDestNull-NEXT: OMP: Error #[[#]]: acc_memcpy_device called with null destination pointer
+  return 0;
+}
+CASE(caseMemcpyDeviceSrcNull) {
+  int *dev = acc_malloc(sizeof *dev);
+  if (!dev) {
+    fprintf(stderr, "acc_malloc failed\n");
+    return 1;
+  }
+  // ERR-caseMemcpyDeviceSrcNull-NEXT: OMP: Error #[[#]]: acc_memcpy_device called with null source pointer
+  acc_memcpy_device(dev, NULL, sizeof *dev);
+  return 0;
+}
+CASE(caseMemcpyDeviceBothNull) {
+  // ERR-caseMemcpyDeviceBothNull-NEXT: OMP: Error #[[#]]: acc_memcpy_device called with null destination pointer
+  acc_memcpy_device(NULL, NULL, 1);
+  return 0;
+}
+
+CASE(caseMemcpyD2dDestNull) {
+  int devNum = getDevNum();
+  int host;
+  #pragma acc data create(host)
+  // ERR-caseMemcpyD2dDestNull-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with null destination pointer
+  acc_memcpy_d2d(NULL, &host, sizeof host, devNum, devNum);
+  return 0;
+}
+CASE(caseMemcpyD2dSrcNull) {
+  int devNum = getDevNum();
+  int host;
+  #pragma acc data create(host)
+  // ERR-caseMemcpyD2dSrcNull-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with null source pointer
+  acc_memcpy_d2d(&host, NULL, sizeof host, devNum, devNum);
+  return 0;
+}
+CASE(caseMemcpyD2dBothNull) {
+  int devNum = getDevNum();
+  // ERR-caseMemcpyD2dBothNull-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with null destination pointer
+  acc_memcpy_d2d(NULL, NULL, 1, devNum, devNum);
+  return 0;
+}
+
+CASE(caseMemcpyD2dDestDevInvalid) {
+  int x, y;
+  #pragma acc data create(x, y)
+  // ERR-caseMemcpyD2dDestDevInvalid-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid destination device
+  acc_memcpy_d2d(&x, &y, sizeof x, getDevNumInvalid(), getDevNum());
+  return 0;
+}
+CASE(caseMemcpyD2dDestDevInvalidNeg) {
+  int x, y;
+  #pragma acc data create(x, y)
+  // ERR-caseMemcpyD2dDestDevInvalidNeg-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid destination device
+  acc_memcpy_d2d(&x, &y, sizeof x, getDevNumInvalidNeg(), getDevNum());
+  return 0;
+}
+CASE(caseMemcpyD2dSrcDevInvalid) {
+  int x, y;
+  #pragma acc data create(x, y)
+  // ERR-caseMemcpyD2dSrcDevInvalid-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid source device
+  acc_memcpy_d2d(&x, &y, sizeof x, getDevNum(), getDevNumInvalid());
+  return 0;
+}
+CASE(caseMemcpyD2dSrcDevInvalidNeg) {
+  int x, y;
+  #pragma acc data create(x, y)
+  // ERR-caseMemcpyD2dSrcDevInvalidNeg-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid source device
+  acc_memcpy_d2d(&x, &y, sizeof x, getDevNum(), getDevNumInvalidNeg());
+  return 0;
+}
+CASE(caseMemcpyD2dBothDevInvalid) {
+  int x, y;
+  #pragma acc data create(x, y)
+  // ERR-caseMemcpyD2dBothDevInvalid-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid destination device
+  acc_memcpy_d2d(&x, &y, sizeof x, getDevNumInvalid(), getDevNumInvalid());
+  return 0;
+}
+CASE(caseMemcpyD2dSameDevInvalid) {
+  int x;
+  #pragma acc data create(x)
+  // ERR-caseMemcpyD2dSameDevInvalid-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid destination device
+  acc_memcpy_d2d(&x, &x, sizeof x, getDevNumInvalid(), getDevNumInvalid());
+  return 0;
+}
+
+CASE(caseMemcpyD2dDestAbsent) {
+  // ERR-caseMemcpyD2dDestAbsent-HOST-NEXT: dst present: 0x[[#%x,]] -> 0x[[#%x,]], 20 -> 20
+  //  ERR-caseMemcpyD2dDestAbsent-OFF-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with inaccessible destination data
+  int dst = 10, src = 20;
+  #pragma acc data create(src)
+  acc_memcpy_d2d(&dst, &src, sizeof dst, getDevNum(), getDevNum());
+  PRINT_INT_STDERR(dst);
+  return 0;
+}
+CASE(caseMemcpyD2dSrcAbsent) {
+  // ERR-caseMemcpyD2dSrcAbsent-HOST-NEXT: dst present: 0x[[#%x,]] -> 0x[[#%x,]], 20 -> 20
+  //  ERR-caseMemcpyD2dSrcAbsent-OFF-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with inaccessible source data
+  int dst = 10, src = 20;
+  #pragma acc data create(dst)
+  acc_memcpy_d2d(&dst, &src, sizeof dst, getDevNum(), getDevNum());
+  PRINT_INT_STDERR(dst);
+  return 0;
+}
+CASE(caseMemcpyD2dDestExtendsAfter) {
+  // ERR-caseMemcpyD2dDestExtendsAfter-HOST-NEXT: dst[0] present: 0x[[#%x,]] -> 0x[[#%x,]], 30 -> 30
+  // ERR-caseMemcpyD2dDestExtendsAfter-HOST-NEXT: dst[1] present: 0x[[#%x,]] -> 0x[[#%x,]], 40 -> 40
+  //  ERR-caseMemcpyD2dDestExtendsAfter-OFF-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with inaccessible destination data
+  int dst[] = {10, 20};
+  int src[] = {30, 40};
+  #pragma acc data create(dst[0:1], src)
+  acc_memcpy_d2d(dst, src, sizeof dst, getDevNum(), getDevNum());
+  PRINT_INT_STDERR(dst[0]);
+  PRINT_INT_STDERR(dst[1]);
+  return 0;
+}
+CASE(caseMemcpyD2dSrcExtendsAfter) {
+  // ERR-caseMemcpyD2dSrcExtendsAfter-HOST-NEXT: dst[0] present: 0x[[#%x,]] -> 0x[[#%x,]], 30 -> 30
+  // ERR-caseMemcpyD2dSrcExtendsAfter-HOST-NEXT: dst[1] present: 0x[[#%x,]] -> 0x[[#%x,]], 40 -> 40
+  //  ERR-caseMemcpyD2dSrcExtendsAfter-OFF-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with inaccessible source data
+  int dst[] = {10, 20};
+  int src[] = {30, 40};
+  #pragma acc data create(dst, src[0:1])
+  acc_memcpy_d2d(dst, src, sizeof dst, getDevNum(), getDevNum());
+  PRINT_INT_STDERR(dst[0]);
+  PRINT_INT_STDERR(dst[1]);
+  return 0;
+}
+CASE(caseMemcpyD2dDestExtendsBefore) {
+  // ERR-caseMemcpyD2dDestExtendsBefore-HOST-NEXT: dst[0] present: 0x[[#%x,]] -> 0x[[#%x,]], 30 -> 30
+  // ERR-caseMemcpyD2dDestExtendsBefore-HOST-NEXT: dst[1] present: 0x[[#%x,]] -> 0x[[#%x,]], 40 -> 40
+  //  ERR-caseMemcpyD2dDestExtendsBefore-OFF-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with inaccessible destination data
+  int dst[] = {10, 20};
+  int src[] = {30, 40};
+  #pragma acc data create(dst[1:1], src)
+  acc_memcpy_d2d(dst, src, sizeof dst, getDevNum(), getDevNum());
+  PRINT_INT_STDERR(dst[0]);
+  PRINT_INT_STDERR(dst[1]);
+  return 0;
+}
+CASE(caseMemcpyD2dSrcExtendsBefore) {
+  // ERR-caseMemcpyD2dSrcExtendsBefore-HOST-NEXT: dst[0] present: 0x[[#%x,]] -> 0x[[#%x,]], 30 -> 30
+  // ERR-caseMemcpyD2dSrcExtendsBefore-HOST-NEXT: dst[1] present: 0x[[#%x,]] -> 0x[[#%x,]], 40 -> 40
+  //  ERR-caseMemcpyD2dSrcExtendsBefore-OFF-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with inaccessible source data
+  int dst[] = {10, 20};
+  int src[] = {30, 40};
+  #pragma acc data create(dst, src[1:1])
+  acc_memcpy_d2d(dst, src, sizeof dst, getDevNum(), getDevNum());
+  PRINT_INT_STDERR(dst[0]);
+  PRINT_INT_STDERR(dst[1]);
+  return 0;
+}
+CASE(caseMemcpyD2dDestSubsumes) {
+  // ERR-caseMemcpyD2dDestSubsumes-HOST-NEXT: dst[0] present: 0x[[#%x,]] -> 0x[[#%x,]], 40 -> 40
+  // ERR-caseMemcpyD2dDestSubsumes-HOST-NEXT: dst[1] present: 0x[[#%x,]] -> 0x[[#%x,]], 50 -> 50
+  // ERR-caseMemcpyD2dDestSubsumes-HOST-NEXT: dst[2] present: 0x[[#%x,]] -> 0x[[#%x,]], 60 -> 60
+  //  ERR-caseMemcpyD2dDestSubsumes-OFF-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with inaccessible destination data
+  int dst[] = {10, 20, 30};
+  int src[] = {40, 50, 60};
+  #pragma acc data create(dst[1:1], src)
+  acc_memcpy_d2d(dst, src, sizeof dst, getDevNum(), getDevNum());
+  PRINT_INT_STDERR(dst[0]);
+  PRINT_INT_STDERR(dst[1]);
+  PRINT_INT_STDERR(dst[2]);
+  return 0;
+}
+CASE(caseMemcpyD2dSrcSubsumes) {
+  // ERR-caseMemcpyD2dSrcSubsumes-HOST-NEXT: dst[0] present: 0x[[#%x,]] -> 0x[[#%x,]], 40 -> 40
+  // ERR-caseMemcpyD2dSrcSubsumes-HOST-NEXT: dst[1] present: 0x[[#%x,]] -> 0x[[#%x,]], 50 -> 50
+  // ERR-caseMemcpyD2dSrcSubsumes-HOST-NEXT: dst[2] present: 0x[[#%x,]] -> 0x[[#%x,]], 60 -> 60
+  //  ERR-caseMemcpyD2dSrcSubsumes-OFF-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with inaccessible source data
+  int dst[] = {10, 20, 30};
+  int src[] = {40, 50, 60};
+  #pragma acc data create(dst, src[1:1])
+  acc_memcpy_d2d(dst, src, sizeof dst, getDevNum(), getDevNum());
+  PRINT_INT_STDERR(dst[0]);
+  PRINT_INT_STDERR(dst[1]);
+  PRINT_INT_STDERR(dst[2]);
+  return 0;
+}
+CASE(caseMemcpyD2dDestConcat2) {
+  // ERR-caseMemcpyD2dDestConcat2-HOST-NEXT: dst[0] present: 0x[[#%x,]] -> 0x[[#%x,]], 30 -> 30
+  // ERR-caseMemcpyD2dDestConcat2-HOST-NEXT: dst[1] present: 0x[[#%x,]] -> 0x[[#%x,]], 40 -> 40
+  //  ERR-caseMemcpyD2dDestConcat2-OFF-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with inaccessible destination data
+  int dst[] = {10, 20};
+  int src[] = {30, 40};
+  #pragma acc data create(dst[0:1], src)
+  #pragma acc data create(dst[1:1], src)
+  acc_memcpy_d2d(dst, src, sizeof dst, getDevNum(), getDevNum());
+  PRINT_INT_STDERR(dst[0]);
+  PRINT_INT_STDERR(dst[1]);
+  return 0;
+}
+CASE(caseMemcpyD2dSrcConcat2) {
+  // ERR-caseMemcpyD2dSrcConcat2-HOST-NEXT: dst[0] present: 0x[[#%x,]] -> 0x[[#%x,]], 30 -> 30
+  // ERR-caseMemcpyD2dSrcConcat2-HOST-NEXT: dst[1] present: 0x[[#%x,]] -> 0x[[#%x,]], 40 -> 40
+  //  ERR-caseMemcpyD2dSrcConcat2-OFF-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with inaccessible source data
+  int dst[] = {10, 20};
+  int src[] = {30, 40};
+  #pragma acc data create(dst, src[0:1])
+  #pragma acc data create(dst, src[1:1])
+  acc_memcpy_d2d(dst, src, sizeof dst, getDevNum(), getDevNum());
+  PRINT_INT_STDERR(dst[0]);
+  PRINT_INT_STDERR(dst[1]);
   return 0;
 }
 

@@ -21,6 +21,10 @@ VERS1.0 {
     acc_deviceptr;
     acc_hostptr;
     acc_is_present;
+    acc_memcpy_to_device;
+    acc_memcpy_from_device;
+    acc_memcpy_device;
+    acc_memcpy_d2d;
   local:
     *;
 };

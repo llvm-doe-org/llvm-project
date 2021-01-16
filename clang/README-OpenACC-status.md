@@ -353,6 +353,18 @@ OpenACC Runtime Library API and Preprocessor
     * `acc_is_present`
         * OpenACC 3.1 is unclear about handling of a null pointer.
           Clacc returns true in that case.
+    * `acc_memcpy_to_device`, `acc_memcpy_from_device`,
+      `acc_memcpy_device`, `acc_memcpy_d2d`
+        * OpenACC 3.1 is unclear about handling a `bytes` argument
+          equal to zero.  In that case, Clacc implements these as
+          no-ops.
+        * OpenACC 3.1 is unclear about handling of null pointers.
+          Clacc produces a runtime error in that case.
+        * `acc_memcpy_d2d` is not yet easily usable because Clacc does
+          not yet support OpenACC routines to retrieve device numbers.
+          As a temporary workaround, OpenMP routines like
+          `omp_get_default_device` and `omp_get_initial_device` can
+          instead be called to retrieve device numbers.
 
 See the section "OpenACC Runtime" in `README-OpenACC-design.md` for
 further design details.

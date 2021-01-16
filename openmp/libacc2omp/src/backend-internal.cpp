@@ -73,13 +73,63 @@ acc2omp_msg_t acc2omp_msg(acc2omp_msgid_t MsgId) {
     Msg.DefaultFmt = "acc_map_data failed";
     break;
   case acc2omp_msg_unmap_data_pointer_null:
-    Msg.DefaultFmt = "acc_unmap_data call with null pointer";
+    Msg.DefaultFmt = "acc_unmap_data called with null pointer";
     break;
   case acc2omp_msg_unmap_data_shared_memory:
     Msg.DefaultFmt = "acc_unmap_data called for shared memory";
     break;
   case acc2omp_msg_unmap_data_fail:
     Msg.DefaultFmt = "acc_unmap_data failed";
+    break;
+  case acc2omp_msg_memcpy_to_device_dest_pointer_null:
+    Msg.DefaultFmt = "acc_memcpy_to_device called with null destination "
+                     "pointer";
+    break;
+  case acc2omp_msg_memcpy_to_device_src_pointer_null:
+    Msg.DefaultFmt = "acc_memcpy_to_device called with null source pointer";
+    break;
+  case acc2omp_msg_memcpy_to_device_fail:
+    Msg.DefaultFmt = "acc_memcpy_to_device failed";
+    break;
+  case acc2omp_msg_memcpy_from_device_dest_pointer_null:
+    Msg.DefaultFmt = "acc_memcpy_from_device called with null destination "
+                     "pointer";
+    break;
+  case acc2omp_msg_memcpy_from_device_src_pointer_null:
+    Msg.DefaultFmt = "acc_memcpy_from_device called with null source pointer";
+    break;
+  case acc2omp_msg_memcpy_from_device_fail:
+    Msg.DefaultFmt = "acc_memcpy_from_device failed";
+    break;
+  case acc2omp_msg_memcpy_device_dest_pointer_null:
+    Msg.DefaultFmt = "acc_memcpy_device called with null destination pointer";
+    break;
+  case acc2omp_msg_memcpy_device_src_pointer_null:
+    Msg.DefaultFmt = "acc_memcpy_device called with null source pointer";
+    break;
+  case acc2omp_msg_memcpy_device_fail:
+    Msg.DefaultFmt = "acc_memcpy_device failed";
+    break;
+  case acc2omp_msg_memcpy_d2d_dest_pointer_null:
+    Msg.DefaultFmt = "acc_memcpy_d2d called with null destination pointer";
+    break;
+  case acc2omp_msg_memcpy_d2d_src_pointer_null:
+    Msg.DefaultFmt = "acc_memcpy_d2d called with null source pointer";
+    break;
+  case acc2omp_msg_memcpy_d2d_dest_device_invalid:
+    Msg.DefaultFmt = "acc_memcpy_d2d called with invalid destination device";
+    break;
+  case acc2omp_msg_memcpy_d2d_src_device_invalid:
+    Msg.DefaultFmt = "acc_memcpy_d2d called with invalid source device";
+    break;
+  case acc2omp_msg_memcpy_d2d_dest_data_inaccessible:
+    Msg.DefaultFmt = "acc_memcpy_d2d called with inaccessible destination data";
+    break;
+  case acc2omp_msg_memcpy_d2d_src_data_inaccessible:
+    Msg.DefaultFmt = "acc_memcpy_d2d called with inaccessible source data";
+    break;
+  case acc2omp_msg_memcpy_d2d_fail:
+    Msg.DefaultFmt = "acc_memcpy_d2d failed";
     break;
   }
   assert(Msg.DefaultFmt && "expected acc2omp_msg_t to be handled in switch");

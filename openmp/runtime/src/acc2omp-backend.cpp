@@ -55,6 +55,38 @@ static kmp_i18n_id_t acc2omp_msg_to_llvm(acc2omp_msgid_t MsgId) {
     return kmp_i18n_msg_AccUnmapDataSharedMemory;
   case acc2omp_msg_unmap_data_fail:
     return kmp_i18n_msg_AccUnmapDataFail;
+  case acc2omp_msg_memcpy_to_device_dest_pointer_null:
+    return kmp_i18n_msg_AccMemcpyToDeviceDestPointerNull;
+  case acc2omp_msg_memcpy_to_device_src_pointer_null:
+    return kmp_i18n_msg_AccMemcpyToDeviceSrcPointerNull;
+  case acc2omp_msg_memcpy_to_device_fail:
+    return kmp_i18n_msg_AccMemcpyToDeviceFail;
+  case acc2omp_msg_memcpy_from_device_dest_pointer_null:
+    return kmp_i18n_msg_AccMemcpyFromDeviceDestPointerNull;
+  case acc2omp_msg_memcpy_from_device_src_pointer_null:
+    return kmp_i18n_msg_AccMemcpyFromDeviceSrcPointerNull;
+  case acc2omp_msg_memcpy_from_device_fail:
+    return kmp_i18n_msg_AccMemcpyFromDeviceFail;
+  case acc2omp_msg_memcpy_device_dest_pointer_null:
+    return kmp_i18n_msg_AccMemcpyDeviceDestPointerNull;
+  case acc2omp_msg_memcpy_device_src_pointer_null:
+    return kmp_i18n_msg_AccMemcpyDeviceSrcPointerNull;
+  case acc2omp_msg_memcpy_device_fail:
+    return kmp_i18n_msg_AccMemcpyDeviceFail;
+  case acc2omp_msg_memcpy_d2d_dest_pointer_null:
+    return kmp_i18n_msg_AccMemcpyD2dDestPointerNull;
+  case acc2omp_msg_memcpy_d2d_src_pointer_null:
+    return kmp_i18n_msg_AccMemcpyD2dSrcPointerNull;
+  case acc2omp_msg_memcpy_d2d_dest_device_invalid:
+    return kmp_i18n_msg_AccMemcpyD2dDestDeviceInvalid;
+  case acc2omp_msg_memcpy_d2d_src_device_invalid:
+    return kmp_i18n_msg_AccMemcpyD2dSrcDeviceInvalid;
+  case acc2omp_msg_memcpy_d2d_dest_data_inaccessible:
+    return kmp_i18n_msg_AccMemcpyD2dDestDataInaccessible;
+  case acc2omp_msg_memcpy_d2d_src_data_inaccessible:
+    return kmp_i18n_msg_AccMemcpyD2dSrcDataInaccessible;
+  case acc2omp_msg_memcpy_d2d_fail:
+    return kmp_i18n_msg_AccMemcpyD2dFail;
   }
   KMP_ASSERT2(0, "unexpected acc2omp_msg_t");
   return kmp_i18n_null;

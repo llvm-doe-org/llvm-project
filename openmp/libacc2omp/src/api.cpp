@@ -67,6 +67,11 @@ static inline int getCurrentDevice() {
                                : omp_get_initial_device();
 }
 
+static inline int isValidDevice(int Device) {
+  return Device == omp_get_initial_device() ||
+         (0 <= Device && Device < omp_get_num_devices());
+}
+
 enum Presence {
   PresenceNone,
   PresencePartiallyMapped,
@@ -74,11 +79,11 @@ enum Presence {
   PresenceSharedMemory
 };
 
-static inline Presence checkPresence(void *HostPtr, size_t Bytes) {
+static inline Presence checkPresence(void *HostPtr, size_t Bytes, int Device) {
   void *BufferHost;
   void *BufferDevice;
-  size_t BufferSize = omp_get_accessible_buffer(
-      HostPtr, Bytes, getCurrentDevice(), &BufferHost, &BufferDevice);
+  size_t BufferSize = omp_get_accessible_buffer(HostPtr, Bytes, Device,
+                                                &BufferHost, &BufferDevice);
   if (!BufferSize)
     return PresenceNone;
   if (BufferSize == SIZE_MAX)
@@ -297,13 +302,14 @@ void acc_free(void *data_dev) {
 void *acc_copyin(void *data_arg, size_t bytes) {
   if (!data_arg || !bytes)
     return NULL;
-  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
+  int Dev = getCurrentDevice();
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes, Dev))
     return data_arg;
   // OpenACC 3.1, sec. 3.2.26 "acc_copyin", L3462:
   // "The acc_copyin routines are equivalent to an enter data directive with a
   // copyin clause."
   SET_SOURCE_INFO();
-  void *Res = omp_target_map_to(data_arg, bytes, getCurrentDevice());
+  void *Res = omp_target_map_to(data_arg, bytes, Dev);
   CLEAR_SOURCE_INFO();
   return Res;
 }
@@ -325,13 +331,14 @@ void *acc_pcopyin(void *data_arg, size_t bytes) {
 void *acc_create(void *data_arg, size_t bytes) {
   if (!data_arg || !bytes)
     return NULL;
-  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
+  int Dev = getCurrentDevice();
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes, Dev))
     return data_arg;
   // OpenACC 3.1, sec. 3.2.27 "acc_create", L3502:
   // "The acc_create routines are equivalent to an enter data directive with a
   // create clause."
   SET_SOURCE_INFO();
-  void *Res = omp_target_map_alloc(data_arg, bytes, getCurrentDevice());
+  void *Res = omp_target_map_alloc(data_arg, bytes, Dev);
   CLEAR_SOURCE_INFO();
   return Res;
 }
@@ -353,13 +360,14 @@ void *acc_pcreate(void *data_arg, size_t bytes) {
 void acc_copyout(void *data_arg, size_t bytes) {
   if (!data_arg || !bytes)
     return;
-  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
+  int Dev = getCurrentDevice();
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes, Dev))
     return;
   // OpenACC 3.1, sec. 3.2.28 "acc_copyout", L3532:
   // "The acc_copyout routines are equivalent to an exit data directive with a
   // copyout clause."
   SET_SOURCE_INFO();
-  omp_target_map_from(data_arg, bytes, getCurrentDevice());
+  omp_target_map_from(data_arg, bytes, Dev);
   CLEAR_SOURCE_INFO();
 }
 
@@ -367,26 +375,28 @@ void acc_copyout_finalize(void *data_arg, size_t bytes) {
   // nvc 20.9-0 does not implement acc_copyout_finalize.
   if (!data_arg || !bytes)
     return;
-  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
+  int Dev = getCurrentDevice();
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes, Dev))
     return;
   // OpenACC 3.1, sec. 3.2.28 "acc_copyout", L3533-3534:
   // "The acc_copyout_finalize routines are equivalent to an exit data directive
   // with both copyout and finalize clauses."
   SET_SOURCE_INFO();
-  omp_target_map_from_delete(data_arg, bytes, getCurrentDevice());
+  omp_target_map_from_delete(data_arg, bytes, Dev);
   CLEAR_SOURCE_INFO();
 }
 
 void acc_delete(void *data_arg, size_t bytes) {
   if (!data_arg || !bytes)
     return;
-  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
+  int Dev = getCurrentDevice();
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes, Dev))
     return;
   // OpenACC 3.1, sec. 3.2.29 "acc_delete", L3560:
   // "The acc_delete routines are equivalent to an exit data directive with a
   // delete clause."
   SET_SOURCE_INFO();
-  omp_target_map_release(data_arg, bytes, getCurrentDevice());
+  omp_target_map_release(data_arg, bytes, Dev);
   CLEAR_SOURCE_INFO();
 }
 
@@ -394,39 +404,42 @@ void acc_delete_finalize(void *data_arg, size_t bytes) {
   // nvc 20.9-0 does not implement acc_delete_finalize.
   if (!data_arg || !bytes)
     return;
-  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
+  int Dev = getCurrentDevice();
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes, Dev))
     return;
   // OpenACC 3.1, sec. 3.2.29 "acc_delete", L3561-3562:
   // "The acc_delete_finalize routines are equivalent to an exit data directive
   // with both delete clause and finalize clauses."
   SET_SOURCE_INFO();
-  omp_target_map_delete(data_arg, bytes, getCurrentDevice());
+  omp_target_map_delete(data_arg, bytes, Dev);
   CLEAR_SOURCE_INFO();
 }
 
 void acc_update_device(void *data_arg, size_t bytes) {
   if (!data_arg || !bytes)
     return;
-  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
+  int Dev = getCurrentDevice();
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes, Dev))
     return;
   // OpenACC 3.1, sec. 3.2.30 "acc_update_device", L3590:
   // "The acc_update_device routine is equivalent to an update directive with a
   // device clause."
   SET_SOURCE_INFO();
-  omp_target_update_to(data_arg, bytes, getCurrentDevice());
+  omp_target_update_to(data_arg, bytes, Dev);
   CLEAR_SOURCE_INFO();
 }
 
 void acc_update_self(void *data_arg, size_t bytes) {
   if (!data_arg || !bytes)
     return;
-  if (PresenceSharedMemory == checkPresence(data_arg, bytes))
+  int Dev = getCurrentDevice();
+  if (PresenceSharedMemory == checkPresence(data_arg, bytes, Dev))
     return;
   // OpenACC 3.1, sec. 3.2.31 "acc_update_self", L3615:
   // "The acc_update_self routine is equivalent to an update directive with a
   // self clause,"
   SET_SOURCE_INFO();
-  omp_target_update_from(data_arg, bytes, getCurrentDevice());
+  omp_target_update_from(data_arg, bytes, Dev);
   CLEAR_SOURCE_INFO();
 }
 
@@ -522,7 +535,8 @@ void acc_map_data(void *data_arg, void *data_dev, size_t bytes) {
   //     acc_map_data calls.
   //   - gcc-10 has "libgomp: cannot map data on shared-memory system" at run
   //     time.
-  Presence P = checkPresence(data_arg, bytes);
+  int Dev = getCurrentDevice();
+  Presence P = checkPresence(data_arg, bytes, Dev);
   if (P == PresenceSharedMemory)
     acc2omp_fatal(ACC2OMP_MSG(map_data_shared_memory));
   if (P != PresenceNone)
@@ -545,7 +559,7 @@ void acc_map_data(void *data_arg, void *data_dev, size_t bytes) {
   //   to zero and thus unmap the data.
   SET_SOURCE_INFO();
   int Err = omp_target_associate_ptr(data_arg, data_dev, bytes,
-                                     /*device_offset=*/0, getCurrentDevice());
+                                     /*device_offset=*/0, Dev);
   CLEAR_SOURCE_INFO();
   if (Err)
     acc2omp_fatal(ACC2OMP_MSG(map_data_fail));
@@ -573,7 +587,8 @@ void acc_unmap_data(void *data_arg) {
   //   all of which indicate the host pointer is mapped to itself both before
   //   and after acc_unmap_data.
   // - OpenACC 3.1 and OpenMP 5.1 are unclear about the behavior in this case.
-  if (PresenceSharedMemory == checkPresence(data_arg, /*Bytes=*/0))
+  int Dev = getCurrentDevice();
+  if (PresenceSharedMemory == checkPresence(data_arg, /*Bytes=*/0, Dev))
     acc2omp_fatal(ACC2OMP_MSG(unmap_data_shared_memory));
   // Pointer must have been mapped using acc_map_data:
   // - OpenACC 3.1, sec. 3.2.33 "acc_unmap_data", L3653-3655:
@@ -607,7 +622,7 @@ void acc_unmap_data(void *data_arg) {
   //   "The reference count of the mapping is reduced to zero, regardless of its
   //   current value."
   SET_SOURCE_INFO();
-  int Err = omp_target_disassociate_ptr(data_arg, getCurrentDevice());
+  int Err = omp_target_disassociate_ptr(data_arg, Dev);
   CLEAR_SOURCE_INFO();
   if (Err)
     acc2omp_fatal(ACC2OMP_MSG(unmap_data_fail));
@@ -642,14 +657,15 @@ void *acc_deviceptr(void *data_arg) {
   //   thus eliminating checkPresence and omp_get_mapped_ptr calls here.  Of
   //   course, if we decide omp_get_mapped_ptr definitely is intended to do what
   //   we want, we can just eliminate this checkPresence call.
-  if (PresenceSharedMemory == checkPresence(data_arg, /*Bytes=*/0))
+  int Dev = getCurrentDevice();
+  if (PresenceSharedMemory == checkPresence(data_arg, /*Bytes=*/0, Dev))
     return data_arg;
   // OpenACC 3.1, sec. 3.2.34 "acc_deviceptr", L3665-3667:
   // "The acc_deviceptr routine returns the device pointer associated with a
   // host address.  data_arg is the address of a host variable or array that has
   // an active lifetime on the current device.  If the data is not present in
   // the current device memory, the routine returns a NULL value."
-  return omp_get_mapped_ptr(data_arg, getCurrentDevice());
+  return omp_get_mapped_ptr(data_arg, Dev);
 }
 
 void *acc_hostptr(void *data_dev) {
@@ -676,7 +692,8 @@ void *acc_hostptr(void *data_dev) {
   //   omp_get_mapped_ptr.
   // - TODO: As in acc_deviceptr, we can simplify the remaining code once we
   //   decide how omp_get_mapped_hostptr should behave.
-  if (PresenceSharedMemory == checkPresence(data_dev, /*Bytes=*/0))
+  int Dev = getCurrentDevice();
+  if (PresenceSharedMemory == checkPresence(data_dev, /*Bytes=*/0, Dev))
     return data_dev;
   // OpenACC 3.1, sec. 3.2.35 "acc_hostptr", L3675-3678:
   // "The acc_hostptr routine returns the host pointer associated with a device
@@ -684,7 +701,7 @@ void *acc_hostptr(void *data_dev) {
   // that returned from acc_deviceptr, acc_create or acc_copyin. If the device
   // address is NULL, or does not correspond to any host address, the routine
   // returns a NULL value."
-  return omp_get_mapped_hostptr(data_dev, getCurrentDevice());
+  return omp_get_mapped_hostptr(data_dev, Dev);
 }
 
 int acc_is_present(void *data_arg, size_t bytes) {
@@ -736,4 +753,178 @@ int acc_is_present(void *data_arg, size_t bytes) {
   //   to handle bytes=0 in the same manner as OpenACC, and that's how LLVM's
   //   OpenMP runtime currently implements it.
   return omp_target_is_accessible(data_arg, bytes, getCurrentDevice());
+}
+
+/*----------------------------------------------------------------------------
+ * memcpy routines.
+ *
+ * Handling of bytes=0:
+ * - Do nothing, regardless of the specified pointers (even if null or data
+ *   pointed to is inaccessible) or device numbers (even if invalid).
+ * - This behavior appears to mimic nvc 20.9-0 except that nvc doesn't yet
+ *   implement acc_memcpy_d2d.
+ * - LLVM OpenMP runtime's omp_target_memcpy specifically checks for this case
+ *   and returns non-zero.
+ * - OpenACC 3.1 and OpenMP 5.1 are unclear about the behavior in this case.
+ * Handling of null pointer:
+ * - Produce a runtime error, even if the pointers are the same, as discussed
+ *   below.
+ * - In this case, instead of specifically checking for this case, nvc 20.9-0
+ *   usually produces generic runtime errors, such as segmentation faults or
+ *   CUDA errors.
+ * - LLVM OpenMP runtime's omp_target_memcpy specifically checks for this case
+ *   and returns non-zero.
+ * - OpenACC 3.1 and OpenMP 5.1 are unclear about the behavior in this case.
+ * Handling of invalid device numbers (for acc_memcpy_d2d):
+ * - Even if the device numbers and pointers are the same, as discussed below,
+ *   produce a runtime error that is distinct from the runtime error produced
+ *   when data isn't present on the device.  Otherwise, the latter runtime error
+ *   is confusing.
+ * - As an extension relative to the OpenACC quote below, do not produce a
+ *   runtime error if a device number is not of the current device type.
+ *   Because OpenMP doesn't appear to reuse device numbers across device types,
+ *   there seems to be no reason to limit acc_memcpy_d2d in this way.  This
+ *   behavior needs to be discussed with the OpenACC technical committee, and
+ *   some discussion of the current limitation might make sense in the rationale
+ *   doc.  TODO: One problem is that Clacc's behavior quietly encourages OpenACC
+ *   developers to write non-portable applications.  An opt-out runtime warning
+ *   might be worthwhile.
+ * - OpenACC 3.1, sec. 3.2.42 "acc_memcpy_d2d", L3799-3800:
+ *   "The acc_memcpy_d2d and acc_memcpy_d2d_async routines are passed the
+ *   address of destination and source host pointers as well as integer device
+ *   numbers for the destination and source devices, which must both be of the
+ *   current device type."
+ * - nvc 20.9-0 doesn't yet implement acc_memcpy_d2d.
+ * Handling pointers referring to the same memory:
+ * - In the case of acc_memcpy_device, if the pointers are the same, do nothing.
+ * - In the case of the other routines, if both pointers refer to shared memory
+ *   and are the same, do nothing.
+ * - Additionally in the case of acc_memcpy_d2d, if the devices are the same
+ *   and the pointers are the same, do nothing, even if the data pointed to is
+ *   inaccessible (checking accessibility isn't cheap, so don't do it just to
+ *   protect a no-op).
+ * - OpenACC 3.1 is unclear about the behavior in this case but does have text
+ *   that was likely misworded but intended to specify the above behavior for
+ *   acc_memcpy_d2d: OpenACC 3.1, sec. 3.2.42 "acc_memcpy_d2d", L3801-3802:
+ *   "If both arrays are in shared memory, then no action is taken."
+ * - Text to specify the above behavior in OpenACC has already been proposed:
+ *   - It's not meant simply as a clarification that behavior is not left
+ *     undefined as for, for example, C99's memcpy.  It's meant as an
+ *     optimization for shared memory, exactly as specified for OpenACC data
+ *     clauses and the enter/exit-data-like routines and update routines.
+ *   - However, it's also extended to copies within a single device's memory,
+ *     using either acc_memcpy_device or acc_memcpy_d2d.  Because this
+ *     optimization isn't part of the shared memory optimizations, it might be
+ *     worthwhile for the OpenACC rationale doc to explain all this.
+ * - OpenMP 5.1 could be read to mean this case is well defined for
+ *   omp_target_memcpy, but it doesn't specifically discuss overlapping regions,
+ *   so we assume this case wasn't actually considered.  Moreover, LLVM's
+ *   implementation of omp_target_memcpy does not check for this case and
+ *   sometimes calls memcpy, for which this case has undefined behavior due to
+ *   C99's restrict qualifier.  Thus, we must check here.  TODO: If OpenMP
+ *   clarifies omp_target_memcpy's behavior for this case as effectively a
+ *   no-op, then we can eliminate our checks in most cases.
+ *--------------------------------------------------------------------------*/
+
+void acc_memcpy_to_device(void *data_dev_dest, void *data_host_src,
+                          size_t bytes) {
+  if (!bytes)
+    return;
+  if (!data_dev_dest)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_to_device_dest_pointer_null));
+  if (!data_host_src)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_to_device_src_pointer_null));
+  int Dev = getCurrentDevice();
+  if (PresenceSharedMemory == checkPresence(data_host_src, bytes, Dev) &&
+      data_dev_dest == data_host_src)
+    return;
+  SET_SOURCE_INFO();
+  int Err = omp_target_memcpy(data_dev_dest, data_host_src, bytes,
+                              /*dst_offset=*/0, /*src_offset=*/0, Dev,
+                              omp_get_initial_device());
+  CLEAR_SOURCE_INFO();
+  if (Err)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_to_device_fail));
+}
+
+void acc_memcpy_from_device(void *data_host_dest, void *data_dev_src,
+                            size_t bytes) {
+  if (!bytes)
+    return;
+  if (!data_host_dest)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_from_device_dest_pointer_null));
+  if (!data_dev_src)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_from_device_src_pointer_null));
+  int Dev = getCurrentDevice();
+  if (PresenceSharedMemory == checkPresence(data_host_dest, bytes, Dev) &&
+      data_host_dest == data_dev_src)
+    return;
+  SET_SOURCE_INFO();
+  int Err = omp_target_memcpy(data_host_dest, data_dev_src, bytes,
+                              /*dst_offset=*/0, /*src_offset=*/0,
+                              omp_get_initial_device(), Dev);
+  CLEAR_SOURCE_INFO();
+  if (Err)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_from_device_fail));
+}
+
+void acc_memcpy_device(void *data_dev_dest, void *data_dev_src, size_t bytes) {
+  if (!bytes)
+    return;
+  if (!data_dev_dest)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_device_dest_pointer_null));
+  if (!data_dev_src)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_device_src_pointer_null));
+  if (data_dev_dest == data_dev_src)
+    return;
+  int Dev = getCurrentDevice();
+  SET_SOURCE_INFO();
+  int Err = omp_target_memcpy(data_dev_dest, data_dev_src, bytes,
+                              /*dst_offset=*/0, /*src_offset=*/0, Dev, Dev);
+  CLEAR_SOURCE_INFO();
+  if (Err)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_device_fail));
+}
+
+void acc_memcpy_d2d(void *data_arg_dest, void *data_arg_src, size_t bytes,
+                    int dev_num_dest, int dev_num_src) {
+  if (!bytes)
+    return;
+  if (!data_arg_dest)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_dest_pointer_null));
+  if (!data_arg_src)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_src_pointer_null));
+  if (!isValidDevice(dev_num_dest))
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_dest_device_invalid));
+  if (!isValidDevice(dev_num_src))
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_src_device_invalid));
+  if (dev_num_dest == dev_num_src && data_arg_dest == data_arg_src)
+    return;
+  Presence DestPresence = checkPresence(data_arg_dest, bytes, dev_num_dest);
+  Presence SrcPresence = checkPresence(data_arg_src, bytes, dev_num_src);
+  if (DestPresence == PresenceSharedMemory &&
+      SrcPresence == PresenceSharedMemory && data_arg_dest == data_arg_src)
+    return;
+
+  // OpenACC 3.1, sec. 3.2.42, L3802-3803:
+  // "If either pointer is not in shared memory, then that array must be present
+  // on its respective device."
+  if (DestPresence != PresenceFullyMapped &&
+      DestPresence != PresenceSharedMemory)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_dest_data_inaccessible));
+  if (SrcPresence != PresenceFullyMapped && SrcPresence != PresenceSharedMemory)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_src_data_inaccessible));
+
+  void *dataDevDest = DestPresence == PresenceSharedMemory
+                          ? data_arg_dest
+                          : omp_get_mapped_ptr(data_arg_dest, dev_num_dest);
+  void *dataDevSrc = SrcPresence == PresenceSharedMemory
+                         ? data_arg_src
+                         : omp_get_mapped_ptr(data_arg_src, dev_num_src);
+  SET_SOURCE_INFO();
+  int Err = omp_target_memcpy(dataDevDest, dataDevSrc, bytes, /*dst_offset=*/0,
+                              /*src_offset=*/0, dev_num_dest, dev_num_src);
+  CLEAR_SOURCE_INFO();
+  if (Err)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_fail));
 }

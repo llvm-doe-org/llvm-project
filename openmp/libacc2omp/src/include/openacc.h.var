@@ -64,6 +64,13 @@ void acc_unmap_data(void* data_arg);
 void *acc_deviceptr(void *data_arg);
 void *acc_hostptr(void *data_dev);
 int acc_is_present(void *data_arg, size_t bytes);
+void acc_memcpy_to_device(void *data_dev_dest, void *data_host_src,
+                          size_t bytes);
+void acc_memcpy_from_device(void *data_host_dest, void *data_dev_src,
+                            size_t bytes);
+void acc_memcpy_device(void *data_dev_dest, void *data_dev_src, size_t bytes);
+void acc_memcpy_d2d(void *data_arg_dest, void *data_arg_src, size_t bytes,
+                    int dev_num_dest, int dev_num_src);
 
 #ifdef __cplusplus
 } // extern "C"
