@@ -159,6 +159,10 @@ static acc_prof_info acc_get_prof_info(acc_event_t event_type,
   acc_prof_info ret;
   ret.event_type = event_type;
   ret.version = ACC2OMP_OPENACC_VERSION;
+  // TODO: For consistency with NVIDIA's implementation, we should return, for
+  // example, acc_device_nvidia when offloading to nvptx64.  Will an OpenMP/OMPT
+  // extension be needed to make this information available?  Likewise within
+  // acc_get_api_info.
   ret.device_type = device_number == acc_ompt_initial_device_num
                     ? acc_device_host : acc_device_not_host;
   ret.device_number = device_number;
@@ -288,6 +292,7 @@ static acc_api_info acc_get_api_info(int device_number) {
   // FIXME: We don't support any device-specific APIs yet in remaining fields,
   // so acc_device_api_none seems like the right thing for now.
   ret.device_api = acc_device_api_none;
+  // TODO: See todo for device_type within acc_get_prof_info.
   ret.device_type = device_number == acc_ompt_initial_device_num
                     ? acc_device_host : acc_device_not_host;
   // FIXME: How do we choose our vendor identifier?  Does Clang's OpenMP
