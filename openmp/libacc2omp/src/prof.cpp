@@ -142,7 +142,7 @@ static const char *acc_get_event_name(acc_event_t event) {
 #define EVENT(Event)       \
   case acc_ev_##Event:     \
     return "acc_ev_"#Event;
-  ACC_FOREACH_EVENT(EVENT)
+  ACC2OMP_FOREACH_EVENT(EVENT)
 #undef EVENT
   case acc_ev_last:
     return "acc_ev_last";

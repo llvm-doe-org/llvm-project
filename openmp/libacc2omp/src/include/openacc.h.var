@@ -16,29 +16,29 @@
 // For standard types (e.g., size_t) used in OpenACC spec's declarations.
 #include <stddef.h>
 
-#define ACC_FOREACH_DEVICE(Macro) \
-  Macro(none)                     \
-  Macro(default)                  \
-  Macro(host)                     \
+#define ACC2OMP_FOREACH_DEVICE(Macro)                                          \
+  Macro(none)                                                                  \
+  Macro(default)                                                               \
+  Macro(host)                                                                  \
   Macro(not_host)
 
-typedef enum acc_device_t {
-#define ACC_DEVICE_ENUMERATOR(Device) \
+typedef enum {
+#define ACC2OMP_DEVICE_ENUMERATOR(Device)                                      \
   acc_device_##Device,
-ACC_FOREACH_DEVICE(ACC_DEVICE_ENUMERATOR)
-#undef ACC_DEVICE_ENUMERATOR
+ACC2OMP_FOREACH_DEVICE(ACC2OMP_DEVICE_ENUMERATOR)
+#undef ACC2OMP_DEVICE_ENUMERATOR
 } acc_device_t;
 
-#define ACC_FOREACH_ASYNC(Macro) \
-  Macro(sync,    -1)             \
-  Macro(noval,   -2)             \
+#define ACC2OMP_FOREACH_ASYNC(Macro)                                           \
+  Macro(sync,    -1)                                                           \
+  Macro(noval,   -2)                                                           \
   Macro(default, -3)
 
 enum {
-#define ACC_ASYNC_ENUMERATOR(Async, Val) \
+#define ACC2OMP_ASYNC_ENUMERATOR(Async, Val)                                   \
   acc_async_##Async = Val,
-ACC_FOREACH_ASYNC(ACC_ASYNC_ENUMERATOR)
-#undef ACC_ASYNC_ENUMERATOR
+ACC2OMP_FOREACH_ASYNC(ACC2OMP_ASYNC_ENUMERATOR)
+#undef ACC2OMP_ASYNC_ENUMERATOR
 };
 
 #ifdef __cplusplus

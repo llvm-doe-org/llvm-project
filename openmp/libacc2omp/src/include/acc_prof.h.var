@@ -17,79 +17,79 @@
 
 #include <sys/types.h>
 
-#define ACC_FOREACH_EVENT(Macro) \
-  Macro(device_init_start)       \
-  Macro(device_init_end)         \
-  Macro(device_shutdown_start)   \
-  Macro(device_shutdown_end)     \
-  Macro(runtime_shutdown)        \
-  Macro(create)                  \
-  Macro(delete)                  \
-  Macro(alloc)                   \
-  Macro(free)                    \
-  Macro(enter_data_start)        \
-  Macro(enter_data_end)          \
-  Macro(exit_data_start)         \
-  Macro(exit_data_end)           \
-  Macro(update_start)            \
-  Macro(update_end)              \
-  Macro(compute_construct_start) \
-  Macro(compute_construct_end)   \
-  Macro(enqueue_launch_start)    \
-  Macro(enqueue_launch_end)      \
-  Macro(enqueue_upload_start)    \
-  Macro(enqueue_upload_end)      \
-  Macro(enqueue_download_start)  \
-  Macro(enqueue_download_end)    \
-  Macro(wait_start)              \
+#define ACC2OMP_FOREACH_EVENT(Macro)                                           \
+  Macro(device_init_start)                                                     \
+  Macro(device_init_end)                                                       \
+  Macro(device_shutdown_start)                                                 \
+  Macro(device_shutdown_end)                                                   \
+  Macro(runtime_shutdown)                                                      \
+  Macro(create)                                                                \
+  Macro(delete)                                                                \
+  Macro(alloc)                                                                 \
+  Macro(free)                                                                  \
+  Macro(enter_data_start)                                                      \
+  Macro(enter_data_end)                                                        \
+  Macro(exit_data_start)                                                       \
+  Macro(exit_data_end)                                                         \
+  Macro(update_start)                                                          \
+  Macro(update_end)                                                            \
+  Macro(compute_construct_start)                                               \
+  Macro(compute_construct_end)                                                 \
+  Macro(enqueue_launch_start)                                                  \
+  Macro(enqueue_launch_end)                                                    \
+  Macro(enqueue_upload_start)                                                  \
+  Macro(enqueue_upload_end)                                                    \
+  Macro(enqueue_download_start)                                                \
+  Macro(enqueue_download_end)                                                  \
+  Macro(wait_start)                                                            \
   Macro(wait_end)
 
 typedef enum acc_event_t {
   acc_ev_none = 0,
-#define ACC_EVENT_ENUMERATOR(Event) \
+#define ACC2OMP_EVENT_ENUMERATOR(Event)                                        \
   acc_ev_##Event,
-ACC_FOREACH_EVENT(ACC_EVENT_ENUMERATOR)
-#undef ACC_EVENT_ENUMERATOR
+ACC2OMP_FOREACH_EVENT(ACC2OMP_EVENT_ENUMERATOR)
+#undef ACC2OMP_EVENT_ENUMERATOR
   acc_ev_last
 } acc_event_t;
 
-#define ACC_FOREACH_CONSTRUCT(Macro) \
-  Macro(parallel,     0)             \
-  Macro(kernels,      1)             \
-  Macro(loop,         2)             \
-  Macro(data,         3)             \
-  Macro(enter_data,   4)             \
-  Macro(exit_data,    5)             \
-  Macro(host_data,    6)             \
-  Macro(atomic,       7)             \
-  Macro(declare,      8)             \
-  Macro(init,         9)             \
-  Macro(shutdown,    10)             \
-  Macro(set,         11)             \
-  Macro(update,      12)             \
-  Macro(routine,     13)             \
-  Macro(wait,        14)             \
-  Macro(runtime_api, 15)             \
+#define ACC2OMP_FOREACH_CONSTRUCT(Macro)                                       \
+  Macro(parallel,     0)                                                       \
+  Macro(kernels,      1)                                                       \
+  Macro(loop,         2)                                                       \
+  Macro(data,         3)                                                       \
+  Macro(enter_data,   4)                                                       \
+  Macro(exit_data,    5)                                                       \
+  Macro(host_data,    6)                                                       \
+  Macro(atomic,       7)                                                       \
+  Macro(declare,      8)                                                       \
+  Macro(init,         9)                                                       \
+  Macro(shutdown,    10)                                                       \
+  Macro(set,         11)                                                       \
+  Macro(update,      12)                                                       \
+  Macro(routine,     13)                                                       \
+  Macro(wait,        14)                                                       \
+  Macro(runtime_api, 15)                                                       \
   Macro(serial,      16)
 
 typedef enum acc_construct_t {
-#define ACC_CONSTRUCT_ENUMERATOR(Construct, Val) \
+#define ACC2OMP_CONSTRUCT_ENUMERATOR(Construct, Val)                           \
   acc_construct_##Construct = Val,
-ACC_FOREACH_CONSTRUCT(ACC_CONSTRUCT_ENUMERATOR)
-#undef ACC_CONSTRUCT_ENUMERATOR
+ACC2OMP_FOREACH_CONSTRUCT(ACC2OMP_CONSTRUCT_ENUMERATOR)
+#undef ACC2OMP_CONSTRUCT_ENUMERATOR
 } acc_construct_t;
 
-#define ACC_FOREACH_DEVICE_API(Macro) \
-  Macro(none,   0)                    \
-  Macro(cuda,   1)                    \
-  Macro(opencl, 2)                    \
+#define ACC2OMP_FOREACH_DEVICE_API(Macro)                                      \
+  Macro(none,   0)                                                             \
+  Macro(cuda,   1)                                                             \
+  Macro(opencl, 2)                                                             \
   Macro(other,  4)
 
 typedef enum acc_device_api {
-#define ACC_DEVICE_API_ENUMERATOR(DeviceApi, Val) \
+#define ACC2OMP_DEVICE_API_ENUMERATOR(DeviceApi, Val)                          \
   acc_device_api_##DeviceApi = Val,
-ACC_FOREACH_DEVICE_API(ACC_DEVICE_API_ENUMERATOR)
-#undef ACC_DEVICE_API_ENUMERATOR
+ACC2OMP_FOREACH_DEVICE_API(ACC2OMP_DEVICE_API_ENUMERATOR)
+#undef ACC2OMP_DEVICE_API_ENUMERATOR
   acc_device_implementation_defined = 1000
 } acc_device_api;
 
