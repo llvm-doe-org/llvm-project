@@ -15154,33 +15154,51 @@ public:
   // FIXME: Does this handle declarations that are not definitions?
   Decl *TransformDefinition(SourceLocation Loc, Decl *D,
                             bool DropInit = false) {
+    // Skip previously transformed declarations.
     Decl *T = this->getDerived().TransformDecl(Loc, D);
     if (T != D)
       return T;
-    if (isa<FunctionDecl>(D)) {
-      assert(D->isDefinedOutsideFunctionOrMethod()
-             && "nested FunctionDecl not yet handled");
-      return D;
-    }
-    assert(isa<VarDecl>(D) && "only VarDecl and FunctionDecl handled so far");
-    VarDecl *VDOld = cast<VarDecl>(D);
+
     // Would we have to rebuild the type or anything else in order to change
     // the ASTContext?
-    assert(&VDOld->getASTContext() == &this->getSema().getASTContext()
-           && "changing ASTContext not handled");
-    VarDecl *VDNew = VarDecl::Create(
-        VDOld->getASTContext(), this->getSema().CurContext,
-        VDOld->getBeginLoc(), VDOld->getLocation(), VDOld->getIdentifier(),
-        VDOld->getType(), VDOld->getTypeSourceInfo(),
-        VDOld->getStorageClass());
-    if (!DropInit && VDOld->hasInit()) {
-      ExprResult Init = this->getDerived().TransformInitializer(
-          VDOld->getInit(), /*NotCopyInit*/false);
-      assert(!Init.isInvalid() && "Failed to transform VarDecl initializer");
-      this->getSema().AddInitializerToDecl(VDNew, Init.get(), false);
+    assert(&D->getASTContext() == &this->getSema().getASTContext() &&
+           "changing ASTContext not handled");
+
+    // Handle FunctionDecl at file scope.
+    if (isa<FunctionDecl>(D)) {
+      assert(D->isDefinedOutsideFunctionOrMethod() &&
+             "nested FunctionDecl not yet handled");
+      return D;
     }
-    this->getDerived().transformedLocalDecl(VDOld, VDNew);
-    return VDNew;
+
+    // Handle variable declarations.
+    DeclContext *DCNew = this->getSema().CurContext;
+    if (VarDecl *VDOld = dyn_cast<VarDecl>(D)) {
+      VarDecl *VDNew = VarDecl::Create(
+          VDOld->getASTContext(), DCNew, VDOld->getBeginLoc(),
+          VDOld->getLocation(), VDOld->getIdentifier(), VDOld->getType(),
+          VDOld->getTypeSourceInfo(), VDOld->getStorageClass());
+      if (!DropInit && VDOld->hasInit()) {
+        ExprResult Init = this->getDerived().TransformInitializer(
+            VDOld->getInit(), /*NotCopyInit=*/false);
+        assert(!Init.isInvalid() && "Failed to transform VarDecl initializer");
+        this->getSema().AddInitializerToDecl(VDNew, Init.get(), false);
+      }
+      this->getDerived().transformedLocalDecl(VDOld, VDNew);
+      return VDNew;
+    }
+
+    // Handle type declarations.
+    //
+    // TODO: Unlike VarDecl above, we haven't found a case where it matters
+    // whether we rebuild each Decl kind here with the new DeclContext.
+    // Moreover, rebuilding proves to be tricky to get right.  Trying just
+    // created bugs and didn't apparently fix any.
+    if (isa<TypedefDecl>(D) || isa<EnumDecl>(D) || isa<RecordDecl>(D))
+      return D;
+
+    llvm_unreachable(
+        "unhandled Decl type in TransformContext::TransformDefinition");
   }
 };
 
