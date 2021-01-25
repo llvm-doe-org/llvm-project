@@ -9,7 +9,7 @@ static const char *constructToStr(acc_construct_t v) {
   switch (v) {
 #define CONSTRUCT_ENUMERATOR(Construct, Val) \
   case acc_construct_##Construct: return "acc_construct_"#Construct;
-ACC2OMP_FOREACH_CONSTRUCT(CONSTRUCT_ENUMERATOR)
+  ACC2OMP_FOREACH_CONSTRUCT(CONSTRUCT_ENUMERATOR)
 #undef CONSTRUCT_ENUMERATOR
   }
   assert(!"unexpected acc_construct_t");
@@ -20,7 +20,7 @@ static const char *deviceToStr(acc_device_t v) {
   switch (v) {
 #define DEVICE_ENUMERATOR(Device) \
   case acc_device_##Device: return "acc_device_"#Device;
-ACC2OMP_FOREACH_DEVICE(DEVICE_ENUMERATOR)
+  ACC2OMP_FOREACH_DEVICE(DEVICE_ENUMERATOR)
 #undef DEVICE_ENUMERATOR
   }
   assert(!"unexpected acc_device_t");
@@ -32,7 +32,7 @@ static const char *asyncToStr(ssize_t v) {
   switch (v) {
 #define ASYNC_ENUMERATOR(Async, Val) \
   case acc_async_##Async: return "acc_async_"#Async;
-ACC2OMP_FOREACH_ASYNC(ASYNC_ENUMERATOR)
+  ACC2OMP_FOREACH_ASYNC(ASYNC_ENUMERATOR)
 #undef ASYNC_ENUMERATOR
   default:
     sprintf(buf, "%zd", v);

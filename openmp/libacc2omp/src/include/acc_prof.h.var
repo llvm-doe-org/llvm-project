@@ -48,7 +48,7 @@ typedef enum acc_event_t {
   acc_ev_none = 0,
 #define ACC2OMP_EVENT_ENUMERATOR(Event)                                        \
   acc_ev_##Event,
-ACC2OMP_FOREACH_EVENT(ACC2OMP_EVENT_ENUMERATOR)
+  ACC2OMP_FOREACH_EVENT(ACC2OMP_EVENT_ENUMERATOR)
 #undef ACC2OMP_EVENT_ENUMERATOR
   acc_ev_last
 } acc_event_t;
@@ -75,7 +75,7 @@ ACC2OMP_FOREACH_EVENT(ACC2OMP_EVENT_ENUMERATOR)
 typedef enum acc_construct_t {
 #define ACC2OMP_CONSTRUCT_ENUMERATOR(Construct, Val)                           \
   acc_construct_##Construct = Val,
-ACC2OMP_FOREACH_CONSTRUCT(ACC2OMP_CONSTRUCT_ENUMERATOR)
+  ACC2OMP_FOREACH_CONSTRUCT(ACC2OMP_CONSTRUCT_ENUMERATOR)
 #undef ACC2OMP_CONSTRUCT_ENUMERATOR
 } acc_construct_t;
 
@@ -88,7 +88,7 @@ ACC2OMP_FOREACH_CONSTRUCT(ACC2OMP_CONSTRUCT_ENUMERATOR)
 typedef enum acc_device_api {
 #define ACC2OMP_DEVICE_API_ENUMERATOR(DeviceApi, Val)                          \
   acc_device_api_##DeviceApi = Val,
-ACC2OMP_FOREACH_DEVICE_API(ACC2OMP_DEVICE_API_ENUMERATOR)
+  ACC2OMP_FOREACH_DEVICE_API(ACC2OMP_DEVICE_API_ENUMERATOR)
 #undef ACC2OMP_DEVICE_API_ENUMERATOR
   acc_device_implementation_defined = 1000
 } acc_device_api;
