@@ -309,6 +309,35 @@ OpenACC Runtime Library API and Preprocessor
 --------------------------------------------
 
 * The `_OPENACC` preprocessor macro is supported.
+* `acc_on_device` is supported on the host and on offloading devices:
+    * The result is always false if the argument is `acc_device_none`,
+      `acc_device_default`, or `acc_device_current`.  This behavior
+      appears to follow nvc 20.9-0's behavior.  OpenACC 3.1 is unclear
+      about the cases of `acc_device_none` and `acc_device_current`,
+      but this behavior seems obvious for `acc_device_none`.
+    * `acc_device_nvidia` is supported as recommended in OpenACC 3.1,
+      sec. A.1.1 "NVIDIA GPU Targets".
+    * `acc_device_radeon` is not yet supported but is recommended in
+      OpenACC 3.1, sec. A.1.2 "AMD GPU Targets".
+    * The recommendation of OpenACC 3.1, sec. A.1.3 "Multicore Host
+      CPU Target" for `acc_device_host` is followed except where
+      LLVM's OpenMP implementation treats the host like an offloading
+      device with discrete memory, usually because Clang's
+      `-fopenmp-targets` was specified.  In that case,
+      `acc_device_not_host` produces true instead.
+    * While not specified by OpenACC 3.1, `acc_device_x86_64` and
+      `acc_device_ppc64le` are also supported.  These might produce
+      true when either `acc_device_host` or `acc_device_not_host`
+      produces true because these architectures can act as the host or
+      an offloading device.  In contrast, `acc_device_nvidia` produces
+      true only when `acc_device_not_host` produces true.
+    * `acc_on_device` is defined as a preprocessor function-like macro
+      in Clacc's `openacc.h`.  Thus, it has no function address and
+      cannot be linked.  This implementation facilitates Clacc's
+      source-to-source mode together with OpenACC's requirement that
+      `acc_on_device` evaluate to a constant when its argument is a
+      constant.  See the comments on `acc_on_device` in Clacc's
+      `openacc.h` for related limitations for source-to-source mode.
 * Data and memory management routines supported on the host are:
     * `acc_malloc`, `acc_free`
         * OpenACC 3.1 is unclear about handling of a `bytes` argument
@@ -407,11 +436,15 @@ Source-to-Source Mode Limitations
 =================================
 
 * Calls to the OpenACC Runtime Library API are not translated to
-  OpenMP:
-    * Instead, they are implemented as wrappers around the OpenMP
+  OpenMP at compile time:
+    * `acc_on_device` is implemented in terms of OpenMP fully within
+      Clacc's `openacc.h`.  However, support for an OpenMP 5.1
+      extension, enum variants, is required for full support.  See the
+      comments on `acc_on_device` in Clacc's `openacc.h` for details.
+    * Other routines are implemented as wrappers around the OpenMP
       Runtime Library Routines and require Clacc's OpenACC runtime
-      libraries to be linked.
-    * See the section "Linking" in `../README.md` for details.
+      library to be linked.  See the section "Linking" in
+      `../README.md` for details.
 * Occurrences of the `_OPENACC` preprocessor macro are not translated
   to OpenMP:
     * Instead, the compiler inserts its `_OPENACC` definition at the

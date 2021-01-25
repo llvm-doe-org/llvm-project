@@ -16,11 +16,19 @@
 // For standard types (e.g., size_t) used in OpenACC spec's declarations.
 #include <stddef.h>
 
+//----------------------------------------------------------------------------
+// OpenACC Types.
+//----------------------------------------------------------------------------
+
 #define ACC2OMP_FOREACH_DEVICE(Macro)                                          \
   Macro(none)                                                                  \
   Macro(default)                                                               \
   Macro(host)                                                                  \
-  Macro(not_host)
+  Macro(not_host)                                                              \
+  Macro(current)                                                               \
+  Macro(nvidia)                                                                \
+  Macro(x86_64)                                                                \
+  Macro(ppc64le)
 
 typedef enum {
 #define ACC2OMP_DEVICE_ENUMERATOR(Device)                                      \
@@ -40,6 +48,113 @@ enum {
   ACC2OMP_FOREACH_ASYNC(ACC2OMP_ASYNC_ENUMERATOR)
 #undef ACC2OMP_ASYNC_ENUMERATOR
 };
+
+//----------------------------------------------------------------------------
+// OpenACC device test routine (acc_on_device).
+//
+// Either of the following errors indicates the current architecture isn't yet
+// handled in this file for the sake of acc_on_device.
+//
+// - error: use of undeclared identifier 'acc2omp_device_arch'
+// - Undefined reference to 'acc2omp_unexpected_device_arch'
+//
+// To fix that, add a new enumerator to acc_device_t above, and add a
+// corresponding ACC2OMP_DEVICE_VARIANT invocation to the list at the end of
+// this section.
+//
+// When not using an installed Clang in traditional OpenACC compilation mode,
+// there are several caveats about acc_on_device:
+//
+// - OpenMP must be enabled, or this header leaves acc_on_device undefined:
+//   - The reason is that the definition of acc_on_device below employs OpenMP
+//     variant directives.
+//   - When OpenACC is enabled, Clang enables OpenMP only in system headers.
+//     Fortunately, an installed Clang treats this header as a system header.
+//     However, from Clang's build directory, Clang's -isystem command-line
+//     option might be needed.
+//   - Of course, after using Clang's OpenACC source-to-source mode, OpenMP is
+//     expected to be enabled everywhere anyway to compile the result.
+// - OpenMP enum variant support is required for acc_on_device calls to evaluate
+//   as constant expressions:
+//   - Such constant evaluations are specified by OpenACC 3.1, sec. 3.2.23
+//     "acc_on_device", L3415-3416: "If the acc_on_device routine has a
+//     compile-time constant argument, it evaluates at compile time to a
+//     constant."
+//   - OpenMP 5.1 doesn't specify enum variants.  Currently, Clang supports this
+//     extension as required here.
+//   - If an OpenMP compiler doesn't support enum variants, the preprocessor
+//     macro ACC2OMP_ENUM_VARIANTS_SUPPORTED should be set to 0 before including
+//     this header.  Otherwise, the acc_on_device definition below may fail to
+//     compile or may compile incorrectly.  Passing
+//     -DACC2OMP_ENUM_VARIANTS_SUPPORTED=0 to the OpenMP compiler should be
+//     sufficient.
+//   - A better solution is to extend this header to detect such an OpenMP
+//     compiler via compiler-specific preprocessor definitions and then set
+//     #define ACC2OMP_ENUM_VARIANTS_SUPPORTED 0.
+//   - When ACC2OMP_ENUM_VARIANTS_SUPPORTED is set to 0, strict compilers will
+//     not permit acc_on_device calls in contexts where constant expressions are
+//     required.  Even so, compilers might still be able to optimize
+//     acc_on_device calls as constant expressions in other contexts.
+//----------------------------------------------------------------------------
+
+#ifndef ACC2OMP_ENUM_VARIANTS_SUPPORTED
+# define ACC2OMP_ENUM_VARIANTS_SUPPORTED 1
+#endif
+
+#if _OPENMP
+
+#define ACC2OMP_STR(Arg) #Arg
+
+#if ACC2OMP_ENUM_VARIANTS_SUPPORTED
+
+# define ACC2OMP_DEVICE_VARIANT(TName, TValue, DevType)                        \
+_Pragma(ACC2OMP_STR(omp begin declare variant match(device={TName(TValue)})))  \
+enum {acc2omp_device_##TName = DevType};                                       \
+_Pragma("omp end declare variant")
+
+// To handle compile errors complaining that acc2omp_device_arch is undeclared
+// at acc_on_device calls, see comments at the beginning of this section.
+# define acc2omp_get_device_kind() acc2omp_device_kind
+# define acc2omp_get_device_arch() acc2omp_device_arch
+
+#else // !ACC2OMP_ENUM_VARIANTS_SUPPORTED
+
+# define ACC2OMP_DEVICE_VARIANT(TName, TValue, DevType)                        \
+_Pragma(ACC2OMP_STR(omp begin declare variant match(device={TName(TValue)})))  \
+static inline acc_device_t acc2omp_get_device_##TName() {                      \
+  return DevType;                                                              \
+}                                                                              \
+_Pragma("omp end declare variant")
+
+static inline acc_device_t acc2omp_get_device_kind() {
+  acc_device_t acc2omp_unexpected_device_kind();
+  return acc2omp_unexpected_device_kind();
+}
+static inline acc_device_t acc2omp_get_device_arch() {
+  // To handle link errors for acc2omp_unexpected_device_arch, see comments at
+  // the beginning of this section.
+  acc_device_t acc2omp_unexpected_device_arch();
+  return acc2omp_unexpected_device_arch();
+}
+
+#endif // ACC2OMP_ENUM_VARIANTS_SUPPORTED
+
+ACC2OMP_DEVICE_VARIANT(kind, host,    acc_device_host)
+ACC2OMP_DEVICE_VARIANT(kind, nohost,  acc_device_not_host)
+ACC2OMP_DEVICE_VARIANT(arch, nvptx64, acc_device_nvidia)
+ACC2OMP_DEVICE_VARIANT(arch, x86_64,  acc_device_x86_64)
+ACC2OMP_DEVICE_VARIANT(arch, ppc64le, acc_device_ppc64le)
+#undef ACC2OMP_DEVICE_VARIANT
+#undef ACC2OMP_STR
+
+#define acc_on_device(DevType) ((int)(acc2omp_get_device_kind() == DevType ||  \
+                                      acc2omp_get_device_arch() == DevType))
+
+#endif // _OPENMP
+
+//----------------------------------------------------------------------------
+// OpenACC data and memory management routines.
+//----------------------------------------------------------------------------
 
 #ifdef __cplusplus
 extern "C" {
@@ -76,4 +191,4 @@ void acc_memcpy_d2d(void *data_arg_dest, void *data_arg_src, size_t bytes,
 } // extern "C"
 #endif
 
-#endif /* __OPENACC__ */
+#endif // __OPENACC__

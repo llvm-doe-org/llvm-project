@@ -436,8 +436,11 @@ them.  Nevertheless, Clacc must enable OpenMP support in the front end
 in order to build OpenMP subtrees without failing many assertions in
 the OpenMP implementation, but enabling OpenMP support normally
 prevents OpenMP directives from being discarded.  Moreover, OpenMP
-directives in system headers must be parsed (at least for some
-offloading devices) for correct codegen from the OpenMP translation.
+directives in system headers must be parsed for correct codegen from
+the OpenMP translation.  In particular, OpenMP variant directives are
+used in (1) the `acc_on_device` implementation in Clacc's `openacc.h`,
+and (2) the OpenMP wrappers LLVM provides for some system headers when
+compiling for certain offloading devices.
 
 To implement all this, Clacc extends the front end as follows:
 
@@ -446,6 +449,20 @@ To implement all this, Clacc extends the front end as follows:
 * During parsing, Clacc discards any OpenMP directive if either (1)
   OpenMP support is disabled or (2) OpenACC support is enabled and an
   OpenMP directive does not appear in a system header.
+
+This design is confusing and has at least one bug: when OpenACC is
+enabled, `_OPENMP` is defined everywhere as if OpenMP is enabled
+everywhere.  We are thinking of changing this design in the future.
+First, the front end would fully disable OpenMP everywhere when
+OpenACC is enabled, and we would develop an alternate mechanism to
+disable assertions while building OpenMP subtrees.  Second, we would
+add OpenACC wrappers equivalent to existing OpenMP wrappers for system
+headers, and, in place of the variant directives, they would use
+OpenACC equivalents (perhaps OpenACC extensions) or compiler builtins.
+Third, `acc_on_device` would become a compiler builtin rather than
+being fully defined in `openacc.h`.  The front end would translate
+such OpenACC equivalents and compiler builtins to the OpenMP forms
+used now.
 
 `-fopenmp-*`
 ------------
@@ -1877,6 +1894,16 @@ implemented in Clacc's version of LLVM's OpenMP runtime library:
 * `void omp_target_update_to(void *ptr, size_t size, int device_num);`
 * `void omp_target_update_from(void *ptr, size_t size, int device_num);`
 * `void *omp_get_mapped_hostptr(const void *ptr, int device_num);`
+
+`acc_on_device` is unique in that OpenACC requires it to compile to a
+constant when its argument is constant.  Its implementation appears
+fully within Clacc's `openacc.h`, whose source file is
+`openmp/libacc2omp/src/include/openacc.h.var`.  Documentation of that
+implementation and its reliance on OpenMP extensions appears in
+comments there.  Notes on relevant ambiguities in the OpenACC
+specification and Clacc's OpenACC extensions appear within section
+"OpenACC Runtime Library API and Preprocessor" in
+`README-OpenACC-status.md`.
 
 Support for the OpenACC Profiling Interface appears primarily in the
 source file `openmp/libacc2omp/src/prof.cpp`.  It is documented in the
