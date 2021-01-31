@@ -32,7 +32,6 @@ variables:
   BUILD_DIR: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-$BUILD_ID
   BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
-  CMAKE: cmake3
 
 stages:
   - setup
@@ -55,15 +54,18 @@ stages:
   tags: [shell, leconte]
   variables:
     BUILD_ID: leconte
-    MODULES: gnu/7.5.0 cuda/10.1
-    CMAKE_BUILD_TYPE: Debug
+    MODULES: cmake/3.19.2 gnu/9.2.0 nvhpc/20.11
+    CMAKE: cmake
+    NINJA: ninja
     PYTHON: /usr/bin/python3
+    CMAKE_BUILD_TYPE: Debug
     CMAKE_OFFLOAD_CONFIG_CLANG:
       -DCLANG_OPENMP_NVPTX_DEFAULT_ARCH=sm_70
       -DCLANG_ACC_TEST_EXE_X86_64=False
       -DCLANG_ACC_TEST_EXE_PPC64LE=True
       -DCLANG_ACC_TEST_EXE_NVPTX64=True
     CMAKE_OFFLOAD_CONFIG_OPENMP:
+      -DCUDA_TOOLKIT_ROOT_DIR=$NVHPC/Linux_ppc64le/20.11/cuda/11.0
       -DLIBOMPTARGET_NVPTX_COMPUTE_CAPABILITIES=70
 
 .kold:
@@ -71,8 +73,10 @@ stages:
   variables:
     BUILD_ID: kold
     MODULES: gnu/9.1.0
-    CMAKE_BUILD_TYPE: Debug
+    CMAKE: cmake3
+    NINJA: ninja-build
     PYTHON: /usr/bin/python3
+    CMAKE_BUILD_TYPE: Debug
     CMAKE_OFFLOAD_CONFIG_CLANG:
       -DCLANG_ACC_TEST_EXE_X86_64=True
       -DCLANG_ACC_TEST_EXE_PPC64LE=False
@@ -282,7 +286,9 @@ release (config):
   extends: .non-utility
   stage: build
   script:
-    - time ninja-build -l `nproc` |& tee $CI_PROJECT_DIR/build-log.txt
+    - echo $NINJA
+    - $NINJA --version
+    - time $NINJA -l `nproc` |& tee $CI_PROJECT_DIR/build-log.txt
   artifacts:
     when: always
     paths: [build-log.txt]
@@ -338,8 +344,10 @@ release (build):
                   ../source/openmp
       |& tee $CI_PROJECT_DIR/cmake-log.txt
     - cp CMakeCache.txt $CI_PROJECT_DIR/CMakeCache.txt
-    - time ninja-build -l `nproc` |& tee $CI_PROJECT_DIR/build-log.txt
-    - time ninja-build install |& tee $CI_PROJECT_DIR/install-log.txt
+    - echo $NINJA
+    - $NINJA --version
+    - time $NINJA -l `nproc` |& tee $CI_PROJECT_DIR/build-log.txt
+    - time $NINJA install |& tee $CI_PROJECT_DIR/install-log.txt
     - cp ../install-openmp/lib/* ../build/lib
   artifacts:
     when: always
@@ -384,13 +392,15 @@ release (openmp):
   stage: test
   script:
     - echo $CHECK_TARGETS
+    - echo $NINJA
+    - $NINJA --version
     - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
-           ninja-build -l `nproc` check-all
+           $NINJA -l `nproc` check-all
       |& tee $CI_PROJECT_DIR/check-all-build-log.txt
       | grep '^\[[0-9]\+/[0-9]\+]\|\<error:'
     - time FILECHECK_OPTS='-dump-input-filter=all -vv -color'
            LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/check-all.xml"
-           ninja-build -l `nproc` check-all
+           $NINJA -l `nproc` check-all
       |& tee $CI_PROJECT_DIR/check-all-log.txt;
   artifacts:
     when: always
