@@ -83,18 +83,10 @@ stages:
 # Sometimes bugs cause only release builds to fail.  For example, debugging
 # macros might accidentally be used but not defined in release builds.
 .release:
-  tags: [shell, kold]
+  extends: [.kold]
   variables:
     BUILD_ID: release
-    MODULES: gnu/9.1.0
     CMAKE_BUILD_TYPE: Release
-    PYTHON: /usr/bin/python3
-    CMAKE_OFFLOAD_CONFIG_CLANG:
-      -DCLANG_ACC_TEST_EXE_X86_64=True
-      -DCLANG_ACC_TEST_EXE_PPC64LE=False
-      -DCLANG_ACC_TEST_EXE_NVPTX64=False
-    CMAKE_OFFLOAD_CONFIG_OPENMP:
-      ""
 
 # Not setup or cleanup.
 .non-utility:
