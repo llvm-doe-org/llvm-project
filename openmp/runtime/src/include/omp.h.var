@@ -191,9 +191,9 @@
     //   byte within the specified host memory range and that is mapped to the
     //   specified device, set *buffer_device to the start of the mapped device
     //   buffer, and return the size of that buffer.
-    extern size_t omp_get_accessible_buffer(
-        const void *ptr, size_t size, int device_num, void **buffer_host,
-        void **buffer_device);
+    extern size_t __KAI_KMPC_CONVENTION
+    omp_get_accessible_buffer(const void *ptr, size_t size, int device_num,
+                              void **buffer_host, void **buffer_device);
 
     // Same as an OpenMP "target enter data" construct with:
     // - A device clause for the specified device number.
@@ -201,8 +201,10 @@
     //   - A "to" or "alloc" map type.
     //   - A locator for the specified host memory range.
     // The result is a pointer to the device allocation.
-    extern void *__KAI_KMPC_CONVENTION omp_target_map_to(void *ptr, size_t size, int device_num);
-    extern void *__KAI_KMPC_CONVENTION omp_target_map_alloc(void *ptr, size_t size, int device_num);
+    extern void *__KAI_KMPC_CONVENTION omp_target_map_to(void *ptr, size_t size,
+                                                         int device_num);
+    extern void *__KAI_KMPC_CONVENTION
+    omp_target_map_alloc(void *ptr, size_t size, int device_num);
 
     // Same as an OpenMP "target exit data" construct with:
     // - A device clause for the specified device number.
@@ -212,23 +214,30 @@
     // In the case of "omp_target_map_from_delete", the behavior is that of two
     // map clauses, such that both the transfer and deallocation occurs, except
     // that two map clauses for the same variable isn't supported yet.
-    extern void __KAI_KMPC_CONVENTION omp_target_map_from(void *ptr, size_t size, int device_num);
-    extern void __KAI_KMPC_CONVENTION omp_target_map_from_delete(void *ptr, size_t size, int device_num);
-    extern void __KAI_KMPC_CONVENTION omp_target_map_release(void *ptr, size_t size, int device_num);
-    extern void __KAI_KMPC_CONVENTION omp_target_map_delete(void *ptr, size_t size, int device_num);
+    extern void __KAI_KMPC_CONVENTION
+    omp_target_map_from(void *ptr, size_t size, int device_num);
+    extern void __KAI_KMPC_CONVENTION
+    omp_target_map_from_delete(void *ptr, size_t size, int device_num);
+    extern void __KAI_KMPC_CONVENTION
+    omp_target_map_release(void *ptr, size_t size, int device_num);
+    extern void __KAI_KMPC_CONVENTION
+    omp_target_map_delete(void *ptr, size_t size, int device_num);
 
     // Same as an OpenMP "target update" construct with:
     // - A device clause for the specified device number.
     // - A "to" or "from" clause with:
     //   - A "present" motion modifier.
     //   - A locator for the specified host memory range.
-    extern void __KAI_KMPC_CONVENTION omp_target_update_to(void *ptr, size_t size, int device_num);
-    extern void __KAI_KMPC_CONVENTION omp_target_update_from(void *ptr, size_t size, int device_num);
+    extern void __KAI_KMPC_CONVENTION
+    omp_target_update_to(void *ptr, size_t size, int device_num);
+    extern void __KAI_KMPC_CONVENTION
+    omp_target_update_from(void *ptr, size_t size, int device_num);
 
     // The reverse of omp_get_mapped_ptr.  The implementation is inefficient, so
     // it shouldn't be used in production code, but it might be useful for
     // debugging.
-    extern void *__KAI_KMPC_CONVENTION omp_get_mapped_hostptr(const void *ptr, int device_num);
+    extern void *__KAI_KMPC_CONVENTION omp_get_mapped_hostptr(const void *ptr,
+                                                              int device_num);
 
     // Set or clear user source info to be used by OMPT callbacks and, in the
     // future, perhaps for other purposes, such as debugging facilities.
@@ -246,10 +255,10 @@
     // (there's no source info stack) and re-enables runtime events to set
     // source info.  omp_set_source_info and omp_clear_source_info have no
     // impact on other info retrieved by omp_get_directive_info.
-    void omp_set_source_info(const char *src_file, const char *func_name,
-                             int line_no, int end_line_no, int func_line_no,
-                             int func_end_line_no);
-    void omp_clear_source_info();
+    extern void __KAI_KMPC_CONVENTION omp_set_source_info(
+        const char *src_file, const char *func_name, int line_no,
+        int end_line_no, int func_line_no, int func_end_line_no);
+    extern void __KAI_KMPC_CONVENTION omp_clear_source_info();
 
     /* kmp API functions */
     extern int    __KAI_KMPC_CONVENTION  kmp_get_stacksize          (void);
