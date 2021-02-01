@@ -14,8 +14,9 @@
 #ifndef _OMPTARGET_H_
 #define _OMPTARGET_H_
 
-#include <stdint.h>
+#include <omp.h> // for omp_device_t
 #include <stddef.h>
+#include <stdint.h>
 
 #define OFFLOAD_SUCCESS (0)
 #define OFFLOAD_FAIL (~0)

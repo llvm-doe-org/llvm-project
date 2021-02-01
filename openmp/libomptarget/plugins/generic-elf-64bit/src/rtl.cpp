@@ -32,6 +32,10 @@
 #define TARGET_ELF_ID 0
 #endif
 
+#ifndef TARGET_OMP_DEVICE_T
+#define TARGET_OMP_DEVICE_T omp_device_none
+#endif
+
 #ifdef OMPTARGET_DEBUG
 static int DebugLevel = 0;
 
@@ -132,6 +136,8 @@ static RTLDeviceInfoTy DeviceInfo(NUMBER_OF_DEVICES);
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+int32_t __tgt_rtl_get_device_type() { return TARGET_OMP_DEVICE_T; }
 
 int32_t __tgt_rtl_is_valid_binary(__tgt_device_image *image) {
 // If we don't have a valid ELF ID we can just fail.

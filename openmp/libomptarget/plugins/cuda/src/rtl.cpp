@@ -1094,6 +1094,8 @@ DeviceRTLTy DeviceRTL;
 extern "C" {
 #endif
 
+int32_t __tgt_rtl_get_device_type() { return omp_device_nvptx64; }
+
 int32_t __tgt_rtl_is_valid_binary(__tgt_device_image *image) {
   return elf_check_machine(image, /* EM_CUDA */ 190);
 }

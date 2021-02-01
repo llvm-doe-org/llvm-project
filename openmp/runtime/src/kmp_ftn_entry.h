@@ -1431,6 +1431,73 @@ void FTN_STDCALL FTN_SET_SOURCE_INFO(const char *src_file,
 
 void FTN_STDCALL FTN_CLEAR_SOURCE_INFO() { __kmpc_clear_source_info(); }
 
+int FTN_STDCALL FTN_GET_DEVICE_TYPE(int device_num) KMP_WEAK_ATTRIBUTE_EXTERNAL;
+int FTN_STDCALL FTN_GET_DEVICE_TYPE(int device_num) {
+#if KMP_MIC || KMP_OS_DARWIN || KMP_OS_WINDOWS || defined(KMP_STUB)
+  return 0;
+#else
+  int (*fptr)(int);
+  if ((*(void **)(&fptr) = dlsym(RTLD_NEXT, "omp_get_device_type"))) {
+    return (*fptr)(device_num);
+  } else { // liboffload & libomptarget don't exist
+    if (device_num == KMP_HOST_DEVICE)
+      return /*omp_device_host=*/1;
+    return /*omp_device_none=*/0;
+  }
+#endif // KMP_MIC || KMP_OS_DARWIN || KMP_OS_WINDOWS || defined(KMP_STUB)
+}
+
+int FTN_STDCALL FTN_GET_NUM_DEVICES_OF_TYPE(int device_type)
+    KMP_WEAK_ATTRIBUTE_EXTERNAL;
+int FTN_STDCALL FTN_GET_NUM_DEVICES_OF_TYPE(int device_type) {
+#if KMP_MIC || KMP_OS_DARWIN || KMP_OS_WINDOWS || defined(KMP_STUB)
+  return 0;
+#else
+  int (*fptr)(int);
+  if ((*(void **)(&fptr) = dlsym(RTLD_NEXT, "omp_get_num_devices_of_type"))) {
+    return (*fptr)(device_type);
+  } else { // liboffload & libomptarget don't exist
+    if (device_type == /*omp_device_host=*/1)
+      return 1;
+    return 0;
+  }
+#endif // KMP_MIC || KMP_OS_DARWIN || KMP_OS_WINDOWS || defined(KMP_STUB)
+}
+
+int FTN_STDCALL FTN_GET_TYPED_DEVICE_NUM(int device_num)
+    KMP_WEAK_ATTRIBUTE_EXTERNAL;
+int FTN_STDCALL FTN_GET_TYPED_DEVICE_NUM(int device_num) {
+#if KMP_MIC || KMP_OS_DARWIN || KMP_OS_WINDOWS || defined(KMP_STUB)
+  return -1;
+#else
+  int (*fptr)(int);
+  if ((*(void **)(&fptr) = dlsym(RTLD_NEXT, "omp_get_typed_device_num"))) {
+    return (*fptr)(device_num);
+  } else { // liboffload & libomptarget don't exist
+    if (device_num == KMP_HOST_DEVICE)
+      return 0;
+    return -1;
+  }
+#endif // KMP_MIC || KMP_OS_DARWIN || KMP_OS_WINDOWS || defined(KMP_STUB)
+}
+
+int FTN_STDCALL FTN_GET_DEVICE_OF_TYPE(int device_type, int typed_device_num)
+    KMP_WEAK_ATTRIBUTE_EXTERNAL;
+int FTN_STDCALL FTN_GET_DEVICE_OF_TYPE(int device_type, int typed_device_num) {
+#if KMP_MIC || KMP_OS_DARWIN || KMP_OS_WINDOWS || defined(KMP_STUB)
+  return -1;
+#else
+  int (*fptr)(int, int);
+  if ((*(void **)(&fptr) = dlsym(RTLD_NEXT, "omp_get_device_of_type"))) {
+    return (*fptr)(device_type, typed_device_num);
+  } else { // liboffload & libomptarget don't exist
+    if (device_type == /*omp_device_host=*/1 && typed_device_num == 0)
+      return KMP_HOST_DEVICE;
+    return -1;
+  }
+#endif // KMP_MIC || KMP_OS_DARWIN || KMP_OS_WINDOWS || defined(KMP_STUB)
+}
+
 // GCC compatibility (versioned symbols)
 #ifdef KMP_USE_VERSION_SYMBOLS
 

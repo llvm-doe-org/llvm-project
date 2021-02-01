@@ -28,6 +28,7 @@ struct DeviceTy;
 struct __tgt_bin_desc;
 
 struct RTLInfoTy {
+  typedef int32_t(get_device_type_ty)();
   typedef int32_t(is_valid_binary_ty)(void *);
   typedef int32_t(is_data_exchangable_ty)(int32_t, int32_t);
   typedef int32_t(number_of_devices_ty)();
@@ -66,6 +67,7 @@ struct RTLInfoTy {
   typedef int64_t(init_requires_ty)(int64_t);
   typedef int64_t(synchronize_ty)(int32_t, __tgt_async_info *);
 
+  omp_device_t DeviceType = omp_device_none;
   int32_t Idx = -1;             // RTL index, index is the number of devices
                                 // of other RTLs that were registered before,
                                 // i.e. the OpenMP index of the first device
@@ -79,6 +81,7 @@ struct RTLInfoTy {
 #endif
 
   // Functions implemented in the RTL.
+  get_device_type_ty *get_device_type = nullptr;
   is_valid_binary_ty *is_valid_binary = nullptr;
   is_data_exchangable_ty *is_data_exchangable = nullptr;
   number_of_devices_ty *number_of_devices = nullptr;
@@ -113,11 +116,13 @@ struct RTLInfoTy {
 
   RTLInfoTy(const RTLInfoTy &r) {
     Idx = r.Idx;
+    DeviceType = r.DeviceType;
     NumberOfDevices = r.NumberOfDevices;
     LibraryHandler = r.LibraryHandler;
 #ifdef OMPTARGET_DEBUG
     RTLName = r.RTLName;
 #endif
+    get_device_type = r.get_device_type;
     is_valid_binary = r.is_valid_binary;
     is_data_exchangable = r.is_data_exchangable;
     number_of_devices = r.number_of_devices;
@@ -152,6 +157,14 @@ private:
 public:
   // List of the detected runtime libraries.
   std::list<RTLInfoTy> AllRTLs;
+  // Map from omp_device_t to the detected runtime library for that type.  The
+  // following do not have entries or are mapped to nullptr:
+  // - An omp_device_t enumerator with no detected runtime library.
+  // - A detected runtime library whose get_device_type function is undefined or
+  //   returns omp_device_none.
+  // - omp_device_none.  Otherwise, it would potentially have to map to multiple
+  //   detected runtime libraries.
+  std::map<omp_device_t, RTLInfoTy *> AllRTLMap;
 
   // Array of pointers to the detected runtime libraries that have compatible
   // binaries.

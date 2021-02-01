@@ -260,6 +260,64 @@
         int end_line_no, int func_line_no, int func_end_line_no);
     extern void __KAI_KMPC_CONVENTION omp_clear_source_info();
 
+    // Enumeration of device types available for offloading code or data:
+    // - omp_device_none=0 and omp_device_host=1 must be defined by all
+    //   implementations (and LLVM's host-only implementation in kmp_ftn_entry.h
+    //   currently depends on those exact values).  omp_device_host represents
+    //   the host device and thus disabled offloading.  omp_device_none
+    //   represents an invalid offloading device.
+    // - The remaining enumerators are implementation-specific and represent
+    //   non-host devices, grouped by architecture, that are available for
+    //   offloading code or data.  None of these ever represents the host device
+    //   regardless of its architecture even if a non-host device is physically
+    //   the same device.
+    typedef enum omp_device_t {
+        omp_device_none = 0,
+        omp_device_host = 1,
+        // The rest are for non-host devices.
+        omp_device_x86_64,
+        omp_device_ppc64le,
+        omp_device_nvptx64
+    } omp_device_t;
+
+    // Return the type of the device specified by device_num.  Thus, return
+    // omp_device_host if device_num = omp_get_initial_device().  Otherwise,
+    // return omp_device_none if either device_num < 0, omp_get_num_devices() <=
+    // device_num, or the implementation does not yet represent the device's
+    // type in its omp_device_t (implementations obviously should avoid this
+    // last possibility).
+    extern omp_device_t __KAI_KMPC_CONVENTION
+    omp_get_device_type(int device_num);
+
+    // Return the number of devices that are of the type device_type.  Thus,
+    // return 0 if device_type = omp_device_none, and return 1 if device_type =
+    // omp_device_host.
+    //
+    // When device types for all available non-host devices are representable in
+    // the implementation's omp_device_t, the sum of the results of calling
+    // omp_get_num_devices_of_type for every member of omp_device_t is
+    // omp_get_num_devices() + 1.  Otherwise, omp_get_num_devices() + 1 is
+    // greater.
+    extern int __KAI_KMPC_CONVENTION
+    omp_get_num_devices_of_type(omp_device_t device_type);
+
+    // For the device specified by device_num, return its index in a list of all
+    // devices of type omp_get_device_type(device_num).  Thus, return 0 if
+    // device_num = omp_get_initial_device().  Otherwise, return -1 if either
+    // device_num < 0, omp_get_num_devices() <= device_num, or the
+    // implementation does not yet represent the device's type in its
+    // omp_device_t.  If the result is not -1 for any of those reasons, the
+    // result is guaranteed to be in the interval
+    // [0, omp_get_num_devices_of_type(omp_get_device_type(device_num))).
+    extern int __KAI_KMPC_CONVENTION omp_get_typed_device_num(int device_num);
+
+    // Return the device number for which omp_get_device_type returns
+    // device_type and omp_get_typed_device_num returns typed_device_num.
+    // Return -1 if either device_type = omp_device_none, typed_device_num < 0,
+    // or omp_get_num_devices_of_type(device_type) <= typed_device_num.
+    extern int __KAI_KMPC_CONVENTION
+    omp_get_device_of_type(omp_device_t device_type, int typed_device_num);
+
     /* kmp API functions */
     extern int    __KAI_KMPC_CONVENTION  kmp_get_stacksize          (void);
     extern void   __KAI_KMPC_CONVENTION  kmp_set_stacksize          (int);

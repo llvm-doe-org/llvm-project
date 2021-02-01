@@ -39,6 +39,10 @@ extern int target(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
 
 extern int CheckDeviceAndCtors(int64_t device_id);
 
+#ifdef OMPTARGET_DEBUG
+extern const char *deviceTypeToString(omp_device_t DevType);
+#endif
+
 // enum for OMP_TARGET_OFFLOAD; keep in sync with kmp.h definition
 enum kmp_target_offload_kind {
   tgt_disabled = 0,

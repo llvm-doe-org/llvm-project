@@ -131,6 +131,8 @@ void RTLsTy::LoadRTLs() {
       continue;
 
     // Optional functions
+    *((void **)&R.get_device_type) =
+        dlsym(dynlib_handle, "__tgt_rtl_get_device_type");
     *((void **)&R.init_requires) =
         dlsym(dynlib_handle, "__tgt_rtl_init_requires");
     *((void **)&R.data_submit_async) =
@@ -149,6 +151,11 @@ void RTLsTy::LoadRTLs() {
     *((void **)&R.is_data_exchangable) =
         dlsym(dynlib_handle, "__tgt_rtl_is_data_exchangable");
 
+    R.DeviceType = R.get_device_type ? (omp_device_t)R.get_device_type()
+                                     : omp_device_none;
+    DP("RTL's omp_device_t is %s=%d\n", deviceTypeToString(R.DeviceType),
+       R.DeviceType);
+
     // No devices are supported by this RTL?
     if (!(R.NumberOfDevices = R.number_of_devices())) {
       DP("No devices supported in this RTL\n");
@@ -160,6 +167,8 @@ void RTLsTy::LoadRTLs() {
 
     // The RTL is valid! Will save the information in the RTLs list.
     AllRTLs.push_back(R);
+    if (R.DeviceType != omp_device_none)
+      AllRTLMap[R.DeviceType] = &AllRTLs.back();
   }
 
   DP("RTLs loaded!\n");

@@ -19,6 +19,11 @@ macro(build_generic_elf64 tmachine tmachine_name tmachine_libname tmachine_tripl
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "${tmachine}$")
   if(LIBOMPTARGET_DEP_LIBELF_FOUND)
     if(LIBOMPTARGET_DEP_LIBFFI_FOUND)
+      set(optional_args ${ARGN})
+      list(LENGTH optional_args num_optional_args)
+      if (${num_optional_args} GREATER 0)
+        list(GET optional_args 0 target_omp_device_t)
+      endif()
     
       libomptarget_say("Building ${tmachine_name} offloading plugin.")
     
@@ -30,10 +35,16 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "${tmachine}$")
       
       # Define macro to be used as prefix of the runtime messages for this target.
       add_definitions("-DTARGET_NAME=${tmachine_name}")
-      
+
       # Define macro with the ELF ID for this target.
       add_definitions("-DTARGET_ELF_ID=${elf_machine_id}")
     
+      # Define macro with the omp_device_t for this target, if supplied.  Some
+      # targets don't have omp_device_t entries yet, but eventually all should.
+      if(DEFINED target_omp_device_t)
+        add_definitions("-DTARGET_OMP_DEVICE_T=${target_omp_device_t}")
+      endif()
+
       add_library("omptarget.rtl.${tmachine_libname}" SHARED 
         ${CMAKE_CURRENT_SOURCE_DIR}/../generic-elf-64bit/src/rtl.cpp)
       if(OPENMP_CLANG_LIB_SUBDIR AND NOT OPENMP_STANDALONE_BUILD)

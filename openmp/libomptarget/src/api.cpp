@@ -683,3 +683,122 @@ EXTERN void omp_target_update_from(void *ptr, size_t size, int device_num) {
   __tgt_target_data_update(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
   OMPT_CLEAR_DIRECTIVE_INFO();
 }
+
+EXTERN omp_device_t omp_get_device_type(int device_num) {
+  if (device_num == omp_get_initial_device()) {
+    DP("omp_get_device_type returns omp_device_host\n");
+    return omp_device_host;
+  }
+
+  RTLsMtx->lock();
+  size_t Devices_size = Devices.size();
+  RTLsMtx->unlock();
+
+  if (Devices_size <= (size_t)device_num) {
+    DP("omp_get_device_type returns omp_device_none for invalid device ID %d\n",
+       device_num);
+    return omp_device_none;
+  }
+  omp_device_t DeviceType = Devices[device_num].RTL->DeviceType;
+  DP("omp_get_device_type returns %s=%d for device ID %d\n",
+     deviceTypeToString(DeviceType), DeviceType, device_num);
+  return DeviceType;
+}
+
+EXTERN int omp_get_num_devices_of_type(omp_device_t device_type) {
+  if (device_type == omp_device_none) {
+    DP("omp_get_num_devices_of_type returns 0 for omp_device_none\n");
+    return 0;
+  }
+  if (device_type == omp_device_host) {
+    DP("omp_get_num_devices_of_type returns 1 for omp_device_host\n");
+    return 1;
+  }
+
+  RTLsMtx->lock();
+  RTLInfoTy *RTL = RTLs->AllRTLMap[device_type];
+  RTLsMtx->unlock();
+
+  if (!RTL) {
+    DP("omp_get_num_devices_of_type returns 0 for %s=%d, which has no mapped "
+       "runtime library\n",
+       deviceTypeToString(device_type), device_type);
+    return 0;
+  }
+  if (RTL->Idx == -1) {
+    DP("omp_get_num_devices_of_type returns 0 for %s=%d, whose mapped runtime "
+       "library has no device list\n",
+       deviceTypeToString(device_type), device_type);
+    return 0;
+  }
+  int Size = RTL->NumberOfDevices;
+  DP("omp_get_num_devices_of_type returns %d for %s=%d\n",
+     Size, deviceTypeToString(device_type), device_type);
+  return Size;
+}
+
+EXTERN int omp_get_typed_device_num(int device_num) {
+  if (device_num == omp_get_initial_device()) {
+    DP("omp_get_typed_device_num returns 0 for host device\n");
+    return 0;
+  }
+
+  RTLsMtx->lock();
+  size_t Devices_size = Devices.size();
+  RTLsMtx->unlock();
+
+  if (Devices_size <= (size_t)device_num) {
+    DP("omp_get_typed_device_num returns -1 for invalid device ID %d\n",
+       device_num);
+    return -1;
+  }
+  int TypedDeviceNum = Devices[device_num].RTLDeviceID;
+  DP("omp_get_typed_device_num returns %d for device ID %d\n",
+     TypedDeviceNum, device_num);
+  return TypedDeviceNum;
+}
+
+EXTERN int omp_get_device_of_type(omp_device_t device_type,
+                                  int typed_device_num) {
+  if (device_type == omp_device_none) {
+    DP("omp_get_device_of_type returns -1 for omp_device_none\n");
+    return -1;
+  }
+  if (device_type == omp_device_host) {
+    if (typed_device_num == 0) {
+      DP("omp_get_device_of_type returns host device for omp_device_host with "
+         "typed device ID 0\n");
+      return omp_get_initial_device();
+    }
+    DP("omp_get_device_of_type returns -1 for omp_device_host with invalid "
+       "typed device ID %d\n", typed_device_num);
+    return -1;
+  }
+
+  RTLsMtx->lock();
+  RTLInfoTy *RTL = RTLs->AllRTLMap[device_type];
+  RTLsMtx->unlock();
+
+  if (!RTL) {
+    DP("omp_get_device_of_type returns -1 for %s=%d, which has no mapped "
+       "runtime library\n",
+       deviceTypeToString(device_type), device_type);
+    return -1;
+  }
+  if (RTL->Idx == -1) {
+    DP("omp_get_device_of_type returns -1 for %s=%d, whose mapped runtime "
+       "library has no device list\n",
+       deviceTypeToString(device_type), device_type);
+    return -1;
+  }
+  if (typed_device_num < 0 || RTL->NumberOfDevices <= typed_device_num) {
+    DP("omp_get_device_of_type returns -1 for %s=%d with invalid typed device "
+       "ID %d\n",
+       deviceTypeToString(device_type), device_type, typed_device_num);
+    return -1;
+  }
+  int DeviceNum = RTL->Idx + typed_device_num;
+  DP("omp_get_device_of_type returns %d for %s=%d with typed device ID %d\n",
+     DeviceNum, deviceTypeToString(device_type), device_type, typed_device_num);
+  return DeviceNum;
+}

@@ -27,6 +27,9 @@ extern "C" {
 // target RTL.
 int32_t __tgt_rtl_number_of_devices(void);
 
+// Return the member of omp_device_t for this RTL.
+int32_t __tgt_rtl_get_device_type();
+
 // Return an integer different from zero if the provided device image can be
 // supported by the runtime. The functionality is similar to comparing the
 // result of __tgt__rtl__load__binary to NULL. However, this is meant to be a

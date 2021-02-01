@@ -252,6 +252,23 @@ int CheckDeviceAndCtors(int64_t device_id) {
   return OFFLOAD_SUCCESS;
 }
 
+#ifdef OMPTARGET_DEBUG
+const char *deviceTypeToString(omp_device_t DevType) {
+  switch (DevType) {
+#define MAKE_CASE(Type)                                                        \
+  case Type:                                                                   \
+    return #Type;
+  MAKE_CASE(omp_device_none);
+  MAKE_CASE(omp_device_host);
+  MAKE_CASE(omp_device_x86_64);
+  MAKE_CASE(omp_device_ppc64le);
+  MAKE_CASE(omp_device_nvptx64);
+#undef MAKE_CASE
+  }
+  assert(0 && "unexpected omp_device_t");
+}
+#endif
+
 static int32_t getParentIndex(int64_t type) {
   return ((type & OMP_TGT_MAPTYPE_MEMBER_OF) >> 48) - 1;
 }

@@ -151,6 +151,11 @@
 #define FTN_SET_SOURCE_INFO omp_set_source_info
 #define FTN_CLEAR_SOURCE_INFO omp_clear_source_info
 
+#define FTN_GET_DEVICE_TYPE omp_get_device_type
+#define FTN_GET_NUM_DEVICES_OF_TYPE omp_get_num_devices_of_type
+#define FTN_GET_TYPED_DEVICE_NUM omp_get_typed_device_num
+#define FTN_GET_DEVICE_OF_TYPE omp_get_device_of_type
+
 #endif /* KMP_FTN_PLAIN */
 
 /* ------------------------------------------------------------------------ */
@@ -290,6 +295,11 @@
 #define FTN_SET_SOURCE_INFO omp_set_source_info_
 #define FTN_CLEAR_SOURCE_INFO omp_clear_source_info_
 
+#define FTN_GET_DEVICE_TYPE omp_get_device_type_
+#define FTN_GET_NUM_DEVICES_OF_TYPE omp_get_num_devices_of_type_
+#define FTN_GET_TYPED_DEVICE_NUM omp_get_typed_device_num_
+#define FTN_GET_DEVICE_OF_TYPE omp_get_device_of_type_
+
 #endif /* KMP_FTN_APPEND */
 
 /* ------------------------------------------------------------------------ */
@@ -426,6 +436,11 @@
 
 #define FTN_SET_SOURCE_INFO OMP_SET_SOURCE_INFO
 #define FTN_CLEAR_SOURCE_INFO OMP_CLEAR_SOURCE_INFO
+
+#define FTN_GET_DEVICE_TYPE OMP_GET_DEVICE_TYPE
+#define FTN_GET_NUM_DEVICES_OF_TYPE OMP_GET_NUM_DEVICES_OF_TYPE
+#define FTN_GET_TYPED_DEVICE_NUM OMP_GET_TYPED_DEVICE_NUM
+#define FTN_GET_DEVICE_OF_TYPE OMP_GET_DEVICE_OF_TYPE
 
 #endif /* KMP_FTN_UPPER */
 
@@ -565,6 +580,11 @@
 
 #define FTN_SET_SOURCE_INFO OMP_SET_SOURCE_INFO_
 #define FTN_CLEAR_SOURCE_INFO OMP_CLEAR_SOURCE_INFO_
+
+#define FTN_GET_DEVICE_TYPE OMP_GET_DEVICE_TYPE_
+#define FTN_GET_NUM_DEVICES_OF_TYPE OMP_GET_NUM_DEVICES_OF_TYPE_
+#define FTN_GET_TYPED_DEVICE_NUM OMP_GET_TYPED_DEVICE_NUM_
+#define FTN_GET_DEVICE_OF_TYPE OMP_GET_DEVICE_OF_TYPE_
 
 #endif /* KMP_FTN_UAPPEND */
 
