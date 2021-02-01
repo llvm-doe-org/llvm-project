@@ -310,11 +310,23 @@ OpenACC Runtime Library API and Preprocessor
 
 * The `_OPENACC` preprocessor macro is supported.
 * `acc_on_device` is supported on the host and on offloading devices:
-    * The result is always false if the argument is `acc_device_none`,
-      `acc_device_default`, or `acc_device_current`.  This behavior
+    * The result is always false if the argument is `acc_device_none`.
+      This behavior appears to follow nvc 20.9-0's behavior.  OpenACC
+      3.1 is unclear, but this behavior seems obvious.
+    * The result is always false if the argument is
+      `acc_device_default` or `acc_device_current`.  While this
+      behavior doesn't seem to match the semantics of these
+      enumerators, our rationale is that the current device and
+      current device type cannot be determined at compile time and
+      otherwise are only defined on the host, but `acc_on_device` must
+      be able to expand as a constant when given a constant and must
+      be defined on offloading devices.  Moreover, this behavior
       appears to follow nvc 20.9-0's behavior.  OpenACC 3.1 is unclear
-      about the cases of `acc_device_none` and `acc_device_current`,
-      but this behavior seems obvious for `acc_device_none`.
+      about the case of `acc_device_current`, but sec. 3.2.23
+      "acc_on_device", L3425 states "The result with argument
+      acc_device_default is undefined."  It might be better if these
+      arguments were handled as errors, either at compile time or run
+      time depending on whether the argument is constant.
     * `acc_device_nvidia` is supported as recommended in OpenACC 3.1,
       sec. A.1.1 "NVIDIA GPU Targets".
     * `acc_device_radeon` is not yet supported but is recommended in
@@ -326,11 +338,18 @@ OpenACC Runtime Library API and Preprocessor
       `-fopenmp-targets` was specified.  In that case,
       `acc_device_not_host` produces true instead.
     * While not specified by OpenACC 3.1, `acc_device_x86_64` and
-      `acc_device_ppc64le` are also supported.  These might produce
-      true when either `acc_device_host` or `acc_device_not_host`
-      produces true because these architectures can act as the host or
-      an offloading device.  In contrast, `acc_device_nvidia` produces
-      true only when `acc_device_not_host` produces true.
+      `acc_device_ppc64le` are also supported.  Like
+      `acc_device_nvidia`, these produce true only when
+      `acc_device_not_host` produces true regardless of the host
+      architecture.  That is, they are meant to indicate *offloading*
+      device types not cases where kernel execution is on the host.
+      These semantics seem consistent with the OpenACC 3.1's multicore
+      recommendation cited above and avoids confusion for the behavior
+      of routines like `acc_get_device_type`.  If detection of the
+      host architecture is useful, a compile-time macro that expands
+      to, say, an `acc_host_t` enum could be provided in the future
+      for use with `acc_on_device(acc_device_host)` to determine
+      whether execution is currently on the host.
     * `acc_on_device` is defined as a preprocessor function-like macro
       in Clacc's `openacc.h`.  Thus, it has no function address and
       cannot be linked.  This implementation facilitates Clacc's

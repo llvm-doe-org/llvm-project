@@ -14,14 +14,14 @@
 // RUN:   (context-cflags='-DACC2OMP_ENUM_VARIANTS_SUPPORTED=0 -DSKIP_CONST_EXPRS' const-expr=NO-CONST-EXPR)
 // RUN: }
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                                     tgt-off=NO-OFF tgt-arch=%host-arch)
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  tgt-off=OFF    tgt-arch=x86_64    )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple tgt-off=OFF    tgt-arch=ppc64le   )
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple tgt-off=OFF    tgt-arch=nvptx64   )
+// RUN:   (run-if=                tgt-cflags=                                     tgt-type=host   )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  tgt-type=x86_64 )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple tgt-type=ppc64le)
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple tgt-type=nvptx64)
 // RUN: }
 // RUN: %data run-envs {
-// RUN:   (run-env=                                  off=%[tgt-off] kern-arch=%[tgt-arch])
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' off=NO-OFF     kern-arch=%host-arch )
+// RUN:   (run-env=                                  kern-type=%[tgt-type])
+// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' kern-type=host       )
 // RUN: }
 // RUN: %data exes {
 // RUN:   (exe=%t.exe    )
@@ -39,9 +39,9 @@
 // RUN:       %for exes {
 // RUN:         %[run-if] %[run-env] %[exe] > %t.out 2>&1
 // RUN:         %[run-if] FileCheck -input-file %t.out %s -match-full-lines \
-// RUN:             -check-prefixes=CHECK,CHECK-%[off] \
-// RUN:             -check-prefixes=CHECK-%[const-expr],CHECK-%[const-expr]-%[off] \
-// RUN:             -check-prefixes=CHECK-HOST-%host-arch,CHECK-KERN-%[kern-arch]
+// RUN:             -check-prefixes=CHECK,CHECK-%[kern-type] \
+// RUN:             -check-prefixes=CHECK-%[const-expr] \
+// RUN:             -check-prefixes=CHECK-%[const-expr]-%[kern-type]
 // RUN:       }
 // RUN:     }
 // RUN:   }
@@ -54,50 +54,59 @@
 #include <openacc.h>
 #include <stdio.h>
 
-//                    CHECK-NOT: {{.}}
-//                        CHECK: acc_device_none:
-//                   CHECK-NEXT:   outside kernel: 0
-//                   CHECK-NEXT:   inside kernel:  0
-//                   CHECK-NEXT: acc_device_default:
-//                   CHECK-NEXT:   outside kernel: 0
-//                   CHECK-NEXT:   inside kernel:  0
-//                   CHECK-NEXT: acc_device_host:
-//                   CHECK-NEXT:   outside kernel: 1
-//            CHECK-NO-OFF-NEXT:   inside kernel:  1
-//               CHECK-OFF-NEXT:   inside kernel:  0
-//                   CHECK-NEXT: acc_device_not_host:
-//                   CHECK-NEXT:   outside kernel: 0
-//            CHECK-NO-OFF-NEXT:   inside kernel:  0
-//               CHECK-OFF-NEXT:   inside kernel:  1
-//                   CHECK-NEXT: acc_device_current:
-//                   CHECK-NEXT:   outside kernel: 0
-//                   CHECK-NEXT:   inside kernel:  0
-//                   CHECK-NEXT: acc_device_nvidia:
-//                   CHECK-NEXT:   outside kernel: 0
-//       CHECK-KERN-x86_64-NEXT:   inside kernel:  0
-//      CHECK-KERN-ppc64le-NEXT:   inside kernel:  0
-//      CHECK-KERN-nvptx64-NEXT:   inside kernel:  1
-//                   CHECK-NEXT: acc_device_x86_64:
-//       CHECK-HOST-x86_64-NEXT:   outside kernel: 1
-//      CHECK-HOST-ppc64le-NEXT:   outside kernel: 0
-//       CHECK-KERN-x86_64-NEXT:   inside kernel:  1
-//      CHECK-KERN-ppc64le-NEXT:   inside kernel:  0
-//      CHECK-KERN-nvptx64-NEXT:   inside kernel:  0
-//                   CHECK-NEXT: acc_device_ppc64le:
-//       CHECK-HOST-x86_64-NEXT:   outside kernel: 0
-//      CHECK-HOST-ppc64le-NEXT:   outside kernel: 1
-//       CHECK-KERN-x86_64-NEXT:   inside kernel:  0
-//      CHECK-KERN-ppc64le-NEXT:   inside kernel:  1
-//      CHECK-KERN-nvptx64-NEXT:   inside kernel:  0
-//        CHECK-CONST-EXPR-NEXT: acc_device_host (constant expression):
-//        CHECK-CONST-EXPR-NEXT:   outside kernel: 1
-// CHECK-CONST-EXPR-NO-OFF-NEXT:   inside kernel:  1
-//    CHECK-CONST-EXPR-OFF-NEXT:   inside kernel:  0
-//        CHECK-CONST-EXPR-NEXT: acc_device_not_host (constant expression):
-//        CHECK-CONST-EXPR-NEXT:   outside kernel: 0
-// CHECK-CONST-EXPR-NO-OFF-NEXT:   inside kernel:  0
-//    CHECK-CONST-EXPR-OFF-NEXT:   inside kernel:  1
-//                    CHECK-NOT: {{.}}
+//                     CHECK-NOT: {{.}}
+//                         CHECK: acc_device_none:
+//                    CHECK-NEXT:   outside kernel: 0
+//                    CHECK-NEXT:   inside kernel:  0
+//                    CHECK-NEXT: acc_device_default:
+//                    CHECK-NEXT:   outside kernel: 0
+//                    CHECK-NEXT:   inside kernel:  0
+//                    CHECK-NEXT: acc_device_host:
+//                    CHECK-NEXT:   outside kernel: 1
+//               CHECK-host-NEXT:   inside kernel:  1
+//             CHECK-x86_64-NEXT:   inside kernel:  0
+//            CHECK-ppc64le-NEXT:   inside kernel:  0
+//            CHECK-nvptx64-NEXT:   inside kernel:  0
+//                    CHECK-NEXT: acc_device_not_host:
+//                    CHECK-NEXT:   outside kernel: 0
+//               CHECK-host-NEXT:   inside kernel:  0
+//             CHECK-x86_64-NEXT:   inside kernel:  1
+//            CHECK-ppc64le-NEXT:   inside kernel:  1
+//            CHECK-nvptx64-NEXT:   inside kernel:  1
+//                    CHECK-NEXT: acc_device_current:
+//                    CHECK-NEXT:   outside kernel: 0
+//                    CHECK-NEXT:   inside kernel:  0
+//                    CHECK-NEXT: acc_device_nvidia:
+//                    CHECK-NEXT:   outside kernel: 0
+//               CHECK-host-NEXT:   inside kernel:  0
+//             CHECK-x86_64-NEXT:   inside kernel:  0
+//            CHECK-ppc64le-NEXT:   inside kernel:  0
+//            CHECK-nvptx64-NEXT:   inside kernel:  1
+//                    CHECK-NEXT: acc_device_x86_64:
+//                    CHECK-NEXT:   outside kernel: 0
+//               CHECK-host-NEXT:   inside kernel:  0
+//             CHECK-x86_64-NEXT:   inside kernel:  1
+//            CHECK-ppc64le-NEXT:   inside kernel:  0
+//            CHECK-nvptx64-NEXT:   inside kernel:  0
+//                    CHECK-NEXT: acc_device_ppc64le:
+//                    CHECK-NEXT:   outside kernel: 0
+//               CHECK-host-NEXT:   inside kernel:  0
+//             CHECK-x86_64-NEXT:   inside kernel:  0
+//            CHECK-ppc64le-NEXT:   inside kernel:  1
+//            CHECK-nvptx64-NEXT:   inside kernel:  0
+//         CHECK-CONST-EXPR-NEXT: acc_device_host (constant expression):
+//         CHECK-CONST-EXPR-NEXT:   outside kernel: 1
+//    CHECK-CONST-EXPR-host-NEXT:   inside kernel:  1
+//  CHECK-CONST-EXPR-x86_64-NEXT:   inside kernel:  0
+// CHECK-CONST-EXPR-ppc64le-NEXT:   inside kernel:  0
+// CHECK-CONST-EXPR-nvptx64-NEXT:   inside kernel:  0
+//         CHECK-CONST-EXPR-NEXT: acc_device_not_host (constant expression):
+//         CHECK-CONST-EXPR-NEXT:   outside kernel: 0
+//    CHECK-CONST-EXPR-host-NEXT:   inside kernel:  0
+//  CHECK-CONST-EXPR-x86_64-NEXT:   inside kernel:  1
+// CHECK-CONST-EXPR-ppc64le-NEXT:   inside kernel:  1
+// CHECK-CONST-EXPR-nvptx64-NEXT:   inside kernel:  1
+//                     CHECK-NOT: {{.}}
 
 static int insideKernel(acc_device_t devType) {
   int res;

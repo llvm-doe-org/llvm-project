@@ -147,8 +147,10 @@ ACC2OMP_DEVICE_VARIANT(arch, ppc64le, acc_device_ppc64le)
 #undef ACC2OMP_DEVICE_VARIANT
 #undef ACC2OMP_STR
 
-#define acc_on_device(DevType) ((int)(acc2omp_get_device_kind() == DevType ||  \
-                                      acc2omp_get_device_arch() == DevType))
+#define acc_on_device(DevType)                                                 \
+  ((int)(acc2omp_get_device_kind() == DevType ||                               \
+         (acc2omp_get_device_kind() == acc_device_not_host &&                  \
+          acc2omp_get_device_arch() == DevType)))
 
 #endif // _OPENMP
 
