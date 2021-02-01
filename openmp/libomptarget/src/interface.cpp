@@ -138,6 +138,12 @@ EXTERN void __tgt_target_data_begin_mapper(int64_t device_id, int32_t arg_num,
     DP("Use default device id %" PRId64 "\n", device_id);
   }
 
+  if (device_id == HOST_DEVICE) {
+    DP("Device is host (%" PRId64 "), returning as if offload is disabled\n",
+       device_id);
+    return;
+  }
+
   if (CheckDeviceAndCtors(device_id) != OFFLOAD_SUCCESS) {
     DP("Failed to get device %" PRId64 " ready\n", device_id);
     HandleTargetOutcome(false);
@@ -303,6 +309,12 @@ EXTERN void __tgt_target_data_update_mapper(int64_t device_id, int32_t arg_num,
     device_id = omp_get_default_device();
   }
 
+  if (device_id == HOST_DEVICE) {
+    DP("Device is host (%" PRId64 "), returning as if offload is disabled\n",
+       device_id);
+    return;
+  }
+
   if (CheckDeviceAndCtors(device_id) != OFFLOAD_SUCCESS) {
     DP("Failed to get device %" PRId64 " ready\n", device_id);
     HandleTargetOutcome(false);
@@ -352,6 +364,12 @@ EXTERN int __tgt_target_mapper(int64_t device_id, void *host_ptr,
 
   if (device_id == OFFLOAD_DEVICE_DEFAULT) {
     device_id = omp_get_default_device();
+  }
+
+  if (device_id == HOST_DEVICE) {
+    DP("Device is host (%" PRId64 "), returning OFFLOAD_FAIL as if offload is "
+       "disabled\n", device_id);
+    return OFFLOAD_FAIL;
   }
 
   if (CheckDeviceAndCtors(device_id) != OFFLOAD_SUCCESS) {
@@ -412,6 +430,12 @@ EXTERN int __tgt_target_teams_mapper(int64_t device_id, void *host_ptr,
 
   if (device_id == OFFLOAD_DEVICE_DEFAULT) {
     device_id = omp_get_default_device();
+  }
+
+  if (device_id == HOST_DEVICE) {
+    DP("Device is host (%" PRId64 "), returning OFFLOAD_FAIL as if offload is "
+       "disabled\n", device_id);
+    return OFFLOAD_FAIL;
   }
 
   if (CheckDeviceAndCtors(device_id) != OFFLOAD_SUCCESS) {
@@ -476,6 +500,12 @@ EXTERN void __kmpc_push_target_tripcount(int64_t device_id,
 
   if (device_id == OFFLOAD_DEVICE_DEFAULT) {
     device_id = omp_get_default_device();
+  }
+
+  if (device_id == HOST_DEVICE) {
+    DP("Device is host (%" PRId64 "), returning as if offload is disabled\n",
+       device_id);
+    return;
   }
 
   if (CheckDeviceAndCtors(device_id) != OFFLOAD_SUCCESS) {
