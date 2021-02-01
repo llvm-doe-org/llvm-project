@@ -189,11 +189,11 @@ CASE(caseSetDeviceNumTooLargeNotHost) {
                      acc_device_not_host);
 }
 CASE(caseSetDeviceNumNegOneDefault) {
-  // ERR-caseSetDeviceNumNegOneDefault-NEXT: OMP: Error #[[#]]: acc_set_device_num called with invalid device number -1 for acc_device_{{host|nvidia|x86_64|nvptx64}} (from acc_device_default)
+  // ERR-caseSetDeviceNumNegOneDefault-NEXT: OMP: Error #[[#]]: acc_set_device_num called with invalid device number -1 for acc_device_{{host|nvidia|x86_64|ppc64le}} (from acc_device_default)
   acc_set_device_num(-1, acc_device_default);
 }
 CASE(caseSetDeviceNumTooLargeDefault) {
-  // ERR-caseSetDeviceNumTooLargeDefault-NEXT: OMP: Error #[[#]]: acc_set_device_num called with invalid device number [[#%u,]] for acc_device_{{host|nvidia|x86_64|nvptx64}} (from acc_device_default)
+  // ERR-caseSetDeviceNumTooLargeDefault-NEXT: OMP: Error #[[#]]: acc_set_device_num called with invalid device number [[#%u,]] for acc_device_{{host|nvidia|x86_64|ppc64le}} (from acc_device_default)
   acc_set_device_num(acc_get_num_devices(acc_device_default),
                      acc_device_default);
 }
