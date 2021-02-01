@@ -10,12 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "acc2omp-backend.h"
 #include "kmp.h"
 
 #include <cstdarg>
 #include <cstdlib>
-
-#include "acc2omp-backend.h"
 
 static kmp_i18n_id_t acc2omp_msg_to_llvm(acc2omp_msgid_t MsgId) {
   switch (MsgId) {
@@ -39,6 +38,18 @@ static kmp_i18n_id_t acc2omp_msg_to_llvm(acc2omp_msgid_t MsgId) {
     return kmp_i18n_msg_AccEventUnregisterUnregistered;
   case acc2omp_msg_callback_unregister_unregistered:
     return kmp_i18n_msg_AccCallbackUnregisterUnregistered;
+  case acc2omp_msg_get_num_devices_invalid_type:
+    return kmp_i18n_msg_AccGetNumDevicesInvalidType;
+  case acc2omp_msg_set_device_type_invalid_type:
+    return kmp_i18n_msg_AccSetDeviceTypeInvalidType;
+  case acc2omp_msg_set_device_type_no_devices:
+    return kmp_i18n_msg_AccSetDeviceTypeNoDevices;
+  case acc2omp_msg_set_device_num_invalid_type:
+    return kmp_i18n_msg_AccSetDeviceNumInvalidType;
+  case acc2omp_msg_set_device_num_invalid_num:
+    return kmp_i18n_msg_AccSetDeviceNumInvalidNum;
+  case acc2omp_msg_get_device_num_invalid_type:
+    return kmp_i18n_msg_AccGetDeviceNumInvalidType;
   case acc2omp_msg_map_data_host_pointer_null:
     return kmp_i18n_msg_AccMapDataHostPointerNull;
   case acc2omp_msg_map_data_device_pointer_null:
@@ -114,4 +125,41 @@ void acc2omp_assert(int Cond, const char *Msg, const char *File, int Line) {
   // need not implement a fallback assertion mechanism here as discussed in
   // acc2omp_assert documentation in acc2omp-backend.h
   KMP_ASSERT4(Cond, Msg, File, Line);
+}
+
+omp_device_t acc2omp_get_omp_device_t(acc_device_t DevTypeACC) {
+  switch (DevTypeACC) {
+  case acc_device_none:
+  case acc_device_default:
+  case acc_device_not_host:
+  case acc_device_current:
+    return omp_device_none;
+  case acc_device_host:
+    return omp_device_host;
+  case acc_device_nvidia:
+    return omp_device_nvptx64;
+  case acc_device_x86_64:
+    return omp_device_x86_64;
+  case acc_device_ppc64le:
+    return omp_device_ppc64le;
+  }
+  KMP_ASSERT2(0, "unexpected acc_device_t");
+  return omp_device_none;
+}
+
+acc_device_t acc2omp_get_acc_device_t(omp_device_t DevTypeOMP) {
+  switch (DevTypeOMP) {
+  case omp_device_none:
+    return acc_device_none;
+  case omp_device_host:
+    return acc_device_host;
+  case omp_device_x86_64:
+    return acc_device_x86_64;
+  case omp_device_ppc64le:
+    return acc_device_ppc64le;
+  case omp_device_nvptx64:
+    return acc_device_nvidia;
+  }
+  KMP_ASSERT2(0, "unexpected omp_device_t");
+  return acc_device_none;
 }

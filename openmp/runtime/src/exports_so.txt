@@ -69,6 +69,8 @@ VERSION {
         acc2omp_warn;
         acc2omp_fatal;
         acc2omp_assert;
+        acc2omp_get_omp_device_t;
+        acc2omp_get_acc_device_t;
 
 #if USE_ITT_BUILD
         #

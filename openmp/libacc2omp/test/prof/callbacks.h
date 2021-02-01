@@ -16,7 +16,8 @@ static const char *constructToStr(acc_construct_t v) {
   return 0;
 }
 
-static const char *deviceToStr(acc_device_t v) {
+__attribute__((unused))
+const char *deviceTypeToStr(acc_device_t v) {
   switch (v) {
 #define DEVICE_ENUMERATOR(Device) \
   case acc_device_##Device: return "acc_device_"#Device;
@@ -49,7 +50,7 @@ static void print_prof_info(acc_prof_info *pi) {
          "    line_no=%d, end_line_no=%d,\n"
          "    func_line_no=%d, func_end_line_no=%d\n",
          pi->event_type, pi->valid_bytes, pi->version,
-         deviceToStr(pi->device_type), pi->device_number,
+         deviceTypeToStr(pi->device_type), pi->device_number,
          pi->thread_id, asyncToStr(pi->async), pi->async_queue,
          pi->src_file ? pi->src_file : "(null)",
          pi->func_name ? pi->func_name : "(null)",
@@ -110,7 +111,7 @@ static void print_api_info(acc_api_info *ai) {
   printf("  acc_api_info\n"
          "    device_api=%d, valid_bytes=%d,\n"
          "    device_type=%s\n",
-         ai->device_api, ai->valid_bytes, deviceToStr(ai->device_type));
+         ai->device_api, ai->valid_bytes, deviceTypeToStr(ai->device_type));
 }
 
 static void print_info(acc_prof_info *pi, acc_event_info *ei,

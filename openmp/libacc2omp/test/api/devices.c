@@ -1,0 +1,245 @@
+// Check device management routines without runtime errors.
+
+// RUN: %data tgts {
+// RUN:   (run-if=                cflags=                                     tgt-fc=NO_OFF     )
+// RUN:   (run-if=%run-if-x86_64  cflags=-fopenmp-targets=%run-x86_64-triple  tgt-fc=OFF,X86_64 )
+// RUN:   (run-if=%run-if-ppc64le cflags=-fopenmp-targets=%run-ppc64le-triple tgt-fc=OFF,PPC64LE)
+// RUN:   (run-if=%run-if-nvptx64 cflags=-fopenmp-targets=%run-nvptx64-triple tgt-fc=OFF,NVPTX64)
+// RUN:   (run-if='%run-if-x86_64 %run-if-nvptx64'
+// RUN:    cflags=-fopenmp-targets=%run-x86_64-triple,%run-nvptx64-triple
+// RUN:    tgt-fc=OFF,X86_64,NVPTX64)
+// RUN:   (run-if='%run-if-ppc64le %run-if-nvptx64'
+// RUN:    cflags=-fopenmp-targets=%run-ppc64le-triple,%run-nvptx64-triple
+// RUN:    tgt-fc=OFF,PPC64LE,NVPTX64)
+// RUN: }
+// RUN: %data run-envs {
+// RUN:   (run-env=                                  fc=%[tgt-fc])
+// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' fc=NO_OFF   )
+// RUN: }
+// RUN: %for tgts {
+// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %[cflags] \
+// RUN:                    -o %t.exe %s
+// RUN:   %for run-envs {
+// RUN:     %[run-if] %[run-env] %t.exe > %t.out 2>&1
+// RUN:     %[run-if] FileCheck -input-file %t.out %s \
+// RUN:         -strict-whitespace -match-full-lines -allow-empty \
+// RUN:         -check-prefixes=CHECK,%[fc]
+// RUN:   }
+// RUN: }
+//
+// END.
+
+// expected-no-diagnostics
+
+#include <assert.h>
+#include <openacc.h>
+#include <stdbool.h>
+#include <stdio.h>
+
+//        CHECK:initially:
+//   CHECK-NEXT:    acc_get_device_type() = [[DEV_TYPE_INIT:[a-z0-9_]+]]
+//   CHECK-NEXT:    acc_get_device_num([[DEV_TYPE_INIT]]) = [[#DEV_NUM_INIT:]]
+//   CHECK-NEXT:    acc_get_num_devices([[DEV_TYPE_INIT]]) = [[#ND_DEV_TYPE_INIT:]]
+//   CHECK-NEXT:acc_device_none has 0:
+//   CHECK-NEXT:acc_device_host has 1:
+//   CHECK-NEXT:    0: num=0, type=acc_device_host, on acc_device_host
+//   CHECK-NEXT:acc_device_default has [[#ND_DEV_TYPE_INIT]]:
+//   CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on [a-z0-9_]+)+}}
+//   CHECK-NEXT:acc_device_current has 1:
+//   CHECK-NEXT:    0: num=0, type=[[DEV_TYPE_INIT]], on [[DEV_TYPE_INIT]]
+//   CHECK-NEXT:acc_device_nvidia has [[#ND_NVIDIA:]]:
+// NVPTX64-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on acc_device_nvidia)+}}
+//   CHECK-NEXT:acc_device_x86_64 has [[#ND_X86_64:]]:
+//  X86_64-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on acc_device_x86_64)+}}
+//   CHECK-NEXT:acc_device_ppc64le has [[#ND_PPC64LE:]]:
+// PPC64LE-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on acc_device_ppc64le)+}}
+//   CHECK-NEXT:acc_device_not_host has [[#ND_NOT_HOST:ND_NVIDIA + ND_X86_64 + ND_PPC64LE]]:
+//     OFF-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on [a-z0-9_]+, on acc_device_not_host)+}}
+
+static const char *deviceTypeToStr(acc_device_t DevType) {
+  switch (DevType) {
+#define DEVCASE(DevTypeEnum)                                                   \
+  case acc_device_##DevTypeEnum:                                               \
+    return "acc_device_" #DevTypeEnum;
+  ACC2OMP_FOREACH_DEVICE(DEVCASE)
+#undef DEVCASE
+  }
+  return "<unknown acc_device_t>";
+}
+
+static void checkOtherType(acc_device_t DevTypeSet, int DevNumSet,
+                           acc_device_t DevTypeCur, acc_device_t DevTypeOther) {
+  assert(DevTypeSet != acc_device_none && "expected valid device type was set");
+  assert(DevTypeCur != acc_device_none && "expected valid current device type");
+  int DevNumOther = acc_get_device_num(DevTypeOther);
+  bool Good = false;
+  switch (DevTypeOther) {
+  case acc_device_none:
+    Good = DevNumOther == -1;
+    break;
+  case acc_device_host:
+    if (DevTypeCur == acc_device_host)
+      Good = DevNumOther == 0;
+    else
+      Good = DevNumOther == -1;
+    break;
+  case acc_device_not_host:
+    if (DevTypeCur == acc_device_host)
+      Good = DevNumOther == -1;
+    else if (DevTypeSet == acc_device_not_host)
+      Good = DevNumOther == DevNumSet;
+    else
+      Good = DevNumOther >= 0;
+    break;
+  case acc_device_default:
+    if (DevTypeCur == acc_device_host)
+      Good = DevNumOther == 0;
+    else if (DevTypeSet == acc_device_not_host ||
+             DevTypeSet == acc_device_current)
+      Good = DevNumOther >= 0;
+    else
+      Good = DevNumOther == DevNumSet;
+    break;
+  case acc_device_current:
+    Good = DevNumOther == 0;
+    break;
+  case acc_device_nvidia:
+  case acc_device_x86_64:
+  case acc_device_ppc64le:
+    if (DevTypeOther == DevTypeSet)
+      Good = DevNumOther == DevNumSet;
+    else if (DevTypeOther == DevTypeCur)
+      Good = DevNumOther >= 0;
+    else
+      Good = DevNumOther == -1;
+    break;
+  }
+  if (!Good)
+    printf("    error: acc_get_device_num(%s) = %d\n",
+           deviceTypeToStr(DevTypeOther), DevNumOther);
+}
+
+static void checkType(acc_device_t DevType, acc_device_t DevTypeInit,
+                      int DevNumInit) {
+  // Based on acc_get_num_devices, iterate all devices of the specified type.
+  int NumDevs = acc_get_num_devices(DevType);
+  printf("%s has %d:\n", deviceTypeToStr(DevType), NumDevs);
+  for (int DevNum = 0; DevNum < NumDevs; ++DevNum) {
+    printf("    %d:", DevNum);
+
+    // Switch to that device using acc_set_device_num.
+    acc_set_device_num(DevNum, DevType);
+
+    // Check that acc_get_device_num gives us back what we set.
+    int DN = acc_get_device_num(DevType);
+    printf(" num=%d%s", DN, DN == DevNum ? "" : " (error!)");
+
+    // Check that acc_get_device_type reports a reasonable type given the type
+    // we're iterating.
+    acc_device_t DT = acc_get_device_type();
+    bool DTGood;
+    if (DevType == acc_device_current || DevType == acc_device_default) {
+      // Must be the initial current device type.
+      DTGood = DT == DevTypeInit;
+    } else if (DevType == acc_device_not_host) {
+      // Must be an architecture-specific device type.
+      DTGood = DT != acc_device_none && DT != acc_device_host &&
+               DT != acc_device_not_host && DT != acc_device_default &&
+               DT != acc_device_current;
+    } else {
+      // Must be exactly the device type we're iterating, which is either
+      // acc_device_host or an architecture-specific device type.
+      DTGood = DT == DevType;
+    }
+    // acc_get_device_type should only ever return acc_device_host or an
+    // architecture-specific type.  Actually, it could return
+    // acc_device_not_host, but that would mean we are testing an architecture
+    // we never added to one or both of acc_device_t and omp_device_t, and we
+    // should fix that.
+    if (DT == acc_device_none || DT == acc_device_not_host ||
+        DT == acc_device_default || DT == acc_device_current)
+      DTGood = false;
+    printf(", type=%s%s", deviceTypeToStr(DT), DTGood ? "" : " (error!)");
+
+    // Check that the device is actually of the device type we're iterating and
+    // of the device type returned by acc_get_device_type.  acc_on_device is
+    // tested elsewhere, and here we assume it's correct.
+    #pragma acc parallel num_gangs(1)
+    {
+      printf(", %son %s", acc_on_device(DT) ? "" : "not ", deviceTypeToStr(DT));
+      if (DevType != DT && DevType != acc_device_default &&
+          DevType != acc_device_current)
+        printf(", %son %s", acc_on_device(DevType) ? "" : "not ",
+               deviceTypeToStr(DevType));
+    }
+    printf("\n");
+
+    // Check that acc_get_device_num returns something sane for device types
+    // other than the current device type.
+#define CHECK_TYPE(Type)                                                       \
+    checkOtherType(DevType, DevNum, DT, acc_device_##Type);
+    ACC2OMP_FOREACH_DEVICE(CHECK_TYPE)
+#undef CHECK_TYPE
+
+    // Check that acc_device_default/acc_device_current really are for the
+    // current device even when that's not the initial current device.  And
+    // check that acc_device_current ignores the device number.
+    acc_set_device_num(DevNum + 1, acc_device_current);
+    if (DT != acc_get_device_type() || DevNum != acc_get_device_num(DevType))
+      printf("    error: acc_set_device_num for acc_device_current changed the "
+             "current device\n");
+    acc_set_device_type(acc_device_current);
+    if (DT != acc_get_device_type() || DevNum != acc_get_device_num(DevType))
+      printf("    error: acc_set_device_type for acc_device_current changed "
+             "the current device\n");
+    acc_set_device_num(0, acc_device_default);
+    if (DT != acc_get_device_type())
+      printf("    error: acc_set_device_num for acc_device_default changed the "
+             "current device type \n");
+    acc_set_device_type(acc_device_default);
+    if (DT != acc_get_device_type())
+      printf("    error: acc_set_device_type for acc_device_default changed "
+             "the current device type\n");
+
+    // Switch back to the initial current device.
+    acc_set_device_num(DevNumInit, DevTypeInit);
+
+    // Check that acc_set_device_type(T) behaves like acc_set_device_num(0, T).
+    if (DevNum == 0) {
+      acc_set_device_type(DevType);
+      acc_device_t DT_SDT = acc_get_device_type();
+      if (DT != DT_SDT)
+        printf("    error: acc_set_device_type(%s) sets %s\n",
+               deviceTypeToStr(DevType), deviceTypeToStr(DT_SDT));
+      int DN_SDT = acc_get_device_num(DevType);
+      if (DN != DN_SDT)
+        printf("    error: acc_set_device_type(%s) sets num=%d\n",
+               deviceTypeToStr(DevType), DN_SDT);
+      acc_set_device_num(DevNumInit, DevTypeInit);
+    }
+  }
+}
+
+int main() {
+  acc_device_t DevTypeInit = acc_get_device_type();
+  const char *DevTypeInitStr = deviceTypeToStr(DevTypeInit);
+  int DevNumInit = acc_get_device_num(DevTypeInit);
+  printf("initially:\n"
+         "    acc_get_device_type() = %s\n"
+         "    acc_get_device_num(%s) = %d\n"
+         "    acc_get_num_devices(%s) = %d\n",
+         DevTypeInitStr, DevTypeInitStr, DevNumInit, DevTypeInitStr,
+         acc_get_num_devices(DevTypeInit));
+
+#define CHECK_TYPE(Type)                                                       \
+    checkType(acc_device_##Type, DevTypeInit, DevNumInit);
+#define CHECK_TYPE_SKIP_NOT_HOST(Type)                                         \
+  if (acc_device_##Type != acc_device_not_host)                                \
+    CHECK_TYPE(Type)
+  ACC2OMP_FOREACH_DEVICE(CHECK_TYPE_SKIP_NOT_HOST)
+  CHECK_TYPE(not_host)
+#undef CHECK_TYPE_SKIP_NOT_HOST
+#undef CHECK_TYPE
+
+  return 0;
+}

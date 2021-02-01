@@ -61,15 +61,11 @@
  ****************************************************************************/
 
 static inline int getCurrentDevice() {
-  // TODO: We assume !omp_get_num_devices() is a good test for disabled
-  // offloading.  Is there a better check?
+  // TODO: In a future version of LLVM's OpenMP runtime, the initial default
+  // device is omp_get_initial_device() when offloading is disabled, so this can
+  // just be omp_get_default_device() then.
   return omp_get_num_devices() ? omp_get_default_device()
                                : omp_get_initial_device();
-}
-
-static inline int isValidDevice(int Device) {
-  return Device == omp_get_initial_device() ||
-         (0 <= Device && Device < omp_get_num_devices());
 }
 
 enum Presence {
@@ -100,6 +96,345 @@ static inline Presence checkPresence(void *HostPtr, size_t Bytes, int Device) {
                       /*func_end_line_no=*/0)
 
 #define CLEAR_SOURCE_INFO() omp_clear_source_info()
+
+static const char *deviceTypeToString(acc_device_t DevType,
+                                      bool WasDefault = false) {
+  if (WasDefault) {
+    switch (DevType) {
+#define CASE(DevTypeEnum)                                                      \
+    case acc_device_##DevTypeEnum:                                             \
+      return "acc_device_" #DevTypeEnum " (from acc_device_default)";
+    ACC2OMP_FOREACH_DEVICE(CASE)
+#undef CASE
+    }
+  }
+  switch (DevType) {
+#define CASE(DevTypeEnum)                                                      \
+  case acc_device_##DevTypeEnum:                                               \
+    return "acc_device_" #DevTypeEnum;
+  ACC2OMP_FOREACH_DEVICE(CASE)
+#undef CASE
+  }
+  return "<unknown acc_device_t>";
+}
+
+/*****************************************************************************
+ * Device management routines.
+ *
+ * Interpretation of acc_device_t enumerators:
+ * - OpenACC 3.1 is unclear about the exact semantics of various acc_device_t
+ *   enumerators.  Here, we generally describe the semantics we assume, which
+ *   are mostly based on our experiments with nvc 20.11-0.  Within each
+ *   routine's implementation below appear specific notes about the routine's
+ *   handling of these semantics, including notes about cases where behavior
+ *   does not match nvc in an attempt to follow our assumed semantics more
+ *   consistently.
+ * - Each enumerator refers to an ordered list of devices.  Some lists are
+ *   mutually exclusive, but some are not.
+ * - acc_device_none:
+ *   - Refers to an empty list of devices.
+ * - Architecture-specific enumerators
+ *   - These are enumerators, such as acc_device_nvidia, that name a specific
+ *     architecture.  Each refers to the list of all available non-host devices
+ *     of the architecture it names.
+ *   - Currently, these lists are always mutually exclusive.  It's conceivable
+ *     that, in the future, more than one enumerator might logically describe a
+ *     single device, but that will require some adjustments to our
+ *     implementation of acc_device_default and acc_get_device_type, as noted
+ *     below.
+ * - acc_device_host:
+ *   - Refers to a list containing one device, the host device.
+ *   - The host device is logically distinct from any non-host device even if
+ *     they are the same physical device and thus of the same architecture.
+ *     Thus, the host device never appears in the list referred to by an
+ *     architecture-specific enumerator.
+ * - acc_device_not_host:
+ *   - Refers to the list of all non-host devices.
+ *   - Ideally, the set of devices in this list is exactly the union of the sets
+ *     of devices appearing in lists referred to by architecture-specific
+ *     enumerators.
+ *   - However, there might be times when an OpenMP runtime (including LLVM's)
+ *     supports devices for which our acc_device_t doesn't yet have an
+ *     architecture-specific enumerator, and then the list referred to by
+ *     acc_device_not_host might have additional devices.  Hopefully that
+ *     situation will always be resolved quickly, but we want to handle it
+ *     gracefully until it is resolved.
+ *   - Our experiments seem to show that, if all non-host devices are of the
+ *     same architecture, nvc 20.11-0 handles acc_device_not_host the same as it
+ *     would that architecture-specific enumerator.  So far, that agrees with
+ *     our implementation.  However, we haven't found a system on which to build
+ *     nvc for multiple non-host device architectures, so we're not sure how to
+ *     determine if nvc perhaps implements acc_device_not_host as just the
+ *     current device's architecture-specific enumerator when the current device
+ *     is not host and as acc_device_none when it is.
+ * - The current device type vs. the current device:
+ *   - In OpenACC 3.1's model, the current device type is represented by
+ *     acc-current-device-type-var (which is accessed by acc_get_device_type),
+ *     and the current device is represented by the combination of
+ *     acc-current-device-type-var and acc-current-device-num-var.
+ *   - In this implementation, the current device type is either
+ *     acc_device_host, acc_device_not_host, or an architecture-specific
+ *     enumerator.  Regardless, the referenced list includes the current device.
+ *   - The current device type is acc_device_not_host only when the current
+ *     device is a non-host device that cannot yet be represented by an
+ *     architecture-specific enumerator.
+ *   - If the environment or application has not selected a current device type,
+ *     the implementation selects it based on device availability and
+ *     compilation options.  For example, currently,
+ *     -fopenmp-targets=nvptx64-nvidia-cuda,x86_64-unknown-linux-gnu will
+ *     usually cause acc_device_nvidia to be the initial current device type.
+ *   - If the environment or application has not selected a current device, the
+ *     implementation selects one of the current device type.
+ *   - Because the lists referred to by architecture-specific enumerators are
+ *     always mutually exclusive for now, after the current device has been
+ *     selected, the current device type can be determined uniquely from it.  If
+ *     that mutually exclusive property doesn't remain true in the future, the
+ *     current device type will need to be recorded separately from the current
+ *     device in order for acc_device_default and acc_get_device_type to be
+ *     implemented correctly.
+ * - acc_device_default:
+ *   - Refers to the list of all devices of the current device type.
+ *   - The best hint OpenACC 3.1 gives for acc_device_default semantics is in
+ *     sec. 3.1 "Runtime Library Definitions", L2976-2978: "The value
+ *     acc_device_default will never be returned by any function; its use as an
+ *     argument will tell the runtime library to use the default device type for
+ *     that implementation."  Unfortunately, this is vague and could be
+ *     interpreted as the device type an implementation chooses when the current
+ *     device type has not otherwise been set.  Deciding that acc_device_default
+ *     equals the current device type better matches the behavior we have
+ *     observed in our experiments with nvc.
+ * - acc_device_current:
+ *   - Refers to a list containing one device, the current device.
+ *   - The best hint OpenACC 3.1 gives for acc_device_current semantics is in
+ *     sec. 3.2.6 "acc_get_property", L3091-3093: "If dev_type has the value
+ *     acc_device_current, then dev_num is ignored and the value of the property
+ *     for the current device is returned."  As described below, we extend this
+ *     concept of ignoring the specified dev_num to acc_set_device_num.
+ *
+ * TODO: We haven't implemented ACC_DEVICE_NUM and ACC_DEVICE_TYPE yet.  Under
+ * nvc 20.11-0, they have interesting effects.  ACC_DEVICE_NUM seems to
+ * permanently set the device number that will be chosen when calling
+ * acc_set_device_type for that initial current device's type.  ACC_DEVICE_TYPE
+ * seems to make it impossible to choose acc_device_host (or perhaps any other
+ * non-host device type, but we don't have a system where we know how to try
+ * that).
+ ****************************************************************************/
+
+int acc_get_num_devices(acc_device_t dev_type) {
+  switch (dev_type) {
+  case acc_device_none:
+    return 0;
+  case acc_device_not_host:
+    return omp_get_num_devices();
+  case acc_device_default:
+    return acc_get_num_devices(acc_get_device_type());
+  case acc_device_current:
+    // It seems logical that there's always 1 current device.  However, this
+    // behavior is inconsistent with nvc 20.11-0, which returns 0 instead.
+    return 1;
+  case acc_device_host:
+  case acc_device_nvidia:
+  case acc_device_x86_64:
+  case acc_device_ppc64le:
+    // omp_get_num_devices_of_type returns 0 if either:
+    // - acc2omp_get_omp_device_t returns omp_device_none because omp_device_t
+    //   has no corresponding enumerator, and so our implementation logically
+    //   has no devices known to be of type dev_type.
+    // - There are no devices of the type dev_type as identified by the
+    //   corresponding omp_device_t enumerator.
+    return omp_get_num_devices_of_type(acc2omp_get_omp_device_t(dev_type));
+  }
+  acc2omp_fatal(ACC2OMP_MSG(get_num_devices_invalid_type), dev_type);
+  return -1;
+}
+
+static void fatalInvalidDeviceNumAndType(int dev_num, acc_device_t dev_type,
+                                         bool WasDefault,
+                                         bool ForSetDeviceType) {
+  if (ForSetDeviceType)
+    acc2omp_fatal(ACC2OMP_MSG(set_device_type_no_devices),
+                  deviceTypeToString(dev_type, WasDefault));
+  acc2omp_fatal(ACC2OMP_MSG(set_device_num_invalid_num), dev_num,
+                deviceTypeToString(dev_type, WasDefault));
+}
+
+static void setDeviceNumAndType(int dev_num, acc_device_t dev_type,
+                                bool WasDefault, bool ForSetDeviceType) {
+  // Keep in mind that we implement acc_set_device_type as merely
+  // acc_set_device_num(0, dev_type), so notes below are for both.
+  //
+  // Handling of invalid device numbers:
+  // - Produce a runtime error.
+  // - A runtime error is always produced for acc_device_none, which is defined
+  //   to have no valid dev_num.
+  // - A runtime error is never produced for acc_device_current, which is
+  //   defined to ignore the specified dev_num.
+  // - OpenACC 3.1, sec. 3.2.2 "acc_set_device_type", "Restrictions",
+  //   L3017-3020:
+  //   - "If the device type dev_type is not available, the behavior is
+  //     implementation-defined; in particular, the program may abort."
+  //   - "If some compute regions are compiled to only use one device type,
+  //     calling this routine with a different device type may produce undefined
+  //     behavior."
+  // - OpenACC 3.1, sec. 3.2.4 "acc_set_device_num", "Restrictions", L3061-3062:
+  //   "If the value of dev_num is greater than or equal to the value returned
+  //   by acc_get_num_devices for that device type, the behavior is
+  //   implementation-defined."
+  // - nvc 20.11-0 appears to do nothing instead of producing a runtime error.
+  //   Either behavior appears to be acceptable under OpenACC 3.1, and we feel
+  //   that a runtime error is more helpful.
+  //
+  // Handling of special values:
+  // - OpenACC 3.1, sec. 3.2.4 "acc_set_device_num", L3054-3056: "If the value
+  //   of dev_num is negative, the runtime will revert to its default behavior,
+  //   which is implementation-defined.  If the value of the dev_type is zero,
+  //   the selected device number will be used for all device types."
+  // - We're not sure what either of these statements mean, and, in our
+  //   experiments using nvc 20.11-0, acc_set_device_num does nothing when
+  //   passed one of these special values.
+  // - What behavior is reverted to the implementation default?
+  // - In our experiments using nvc 20.11-0, device numbers don't appear to be
+  //   recorded for all device types except the current one (OpenACC 3.1 only
+  //   talks about one acc-current-device-num-var not one per device type), so
+  //   what does it meant to set the device number for all device types?
+  //
+  // Interestingly, after acc_set_device_num(dev_num, acc_device_not_host),
+  // acc_get_device_type() may not return acc_device_not_host, and so
+  // acc_get_device_num(acc_get_device_type()) may not return dev_num.
+  switch (dev_type) {
+  case acc_device_none:
+    fatalInvalidDeviceNumAndType(dev_num, dev_type, WasDefault,
+                                 ForSetDeviceType);
+    return; // should be unreachable
+  case acc_device_not_host:
+    if (dev_num < 0 || omp_get_num_devices() <= dev_num)
+      fatalInvalidDeviceNumAndType(dev_num, dev_type, WasDefault,
+                                   ForSetDeviceType);
+    omp_set_default_device(dev_num);
+    return;
+  case acc_device_default:
+    setDeviceNumAndType(dev_num, acc_get_device_type(), /*WasDefault=*/true,
+                        /*ForSetDeviceType=*/false);
+    return;
+  case acc_device_current:
+    return;
+  case acc_device_host:
+  case acc_device_nvidia:
+  case acc_device_x86_64:
+  case acc_device_ppc64le: {
+    // omp_get_device_of_type returns -1 if either:
+    // - acc2omp_get_omp_device_t returns omp_device_none because omp_device_t
+    //   has no corresponding enumerator, and so our implementation has no
+    //   devices known to be of type dev_type.
+    // - dev_num is outside the range of devices of the type dev_type as
+    //   identified by the corresponding omp_device_t enumerator.
+    int DevNumOMP =
+        omp_get_device_of_type(acc2omp_get_omp_device_t(dev_type), dev_num);
+    if (DevNumOMP == -1)
+      fatalInvalidDeviceNumAndType(dev_num, dev_type, WasDefault,
+                                   ForSetDeviceType);
+    omp_set_default_device(DevNumOMP);
+    return;
+  }
+  }
+  if (ForSetDeviceType)
+    acc2omp_fatal(ACC2OMP_MSG(set_device_type_invalid_type), dev_type);
+  acc2omp_fatal(ACC2OMP_MSG(set_device_num_invalid_type), dev_type);
+}
+
+// OpenACC 3.1 does not explain whether acc_set_device_type affects
+// acc-current-device-num-var, especially if acc-current-device-num-var is
+// currently out of range for dev_type.  nvc 20.11-0 appears to just set it to
+// 0, as we do here.  Also see comments for acc_get_device_num and its
+// ambiguous use of its dev_type parameter.  See setDeviceNumAndType comments
+// for handling of special or invalid values.
+void acc_set_device_type(acc_device_t dev_type) {
+  setDeviceNumAndType(0, dev_type, /*WasDefault=*/false,
+                      /*ForSetDeviceType=*/true);
+}
+
+acc_device_t acc_get_device_type() {
+  // OpenACC 3.1, sec. 3.2.3 "acc_get_device_type", "Restrictions", L3039:
+  // "If the device type has not yet been selected, the value acc_device_none
+  // may be returned."  We are not sure how this situation can arise.
+  int DevNumOMP = getCurrentDevice();
+  // The omp_device_none or acc_device_none case here occurs when omp_device_t
+  // or acc_device_t doesn't yet have an enumerator for the current device's
+  // type.
+  omp_device_t DevTypeOMP = omp_get_device_type(DevNumOMP);
+  if (DevTypeOMP == omp_device_none)
+    return acc_device_not_host;
+  acc_device_t DevTypeACC = acc2omp_get_acc_device_t(DevTypeOMP);
+  if (DevTypeACC == acc_device_none)
+    return acc_device_not_host;
+  // Must be acc_device_host or an architecture-specific enumerator for which
+  // omp_device_t does have a corresponding architecture-specific enumerator,
+  // DevTypeOMP.
+  return DevTypeACC;
+}
+
+// See setDeviceNumAndType comments for handling of special or invalid values.
+void acc_set_device_num(int dev_num, acc_device_t dev_type) {
+  setDeviceNumAndType(dev_num, dev_type, /*WasDefault=*/false,
+                      /*ForSetDeviceType=*/false);
+}
+
+// acc_get_device_num returns:
+// - The zero-origin index of the current device in the list of all devices of
+//   type dev_type if the current device is a device of that type.
+// - -1 otherwise.  nvc 20.11-0 returns 0 instead, but that's misleading as it
+//   seems to indicate this is the first device of that type.
+//
+// The OpenACC spec is unclear about how the dev_type parameter affects the
+// result:
+// - OpenACC 3.1, sec. 3.2.5 "acc_get_device_num, L3065-3066 and L3074-3075:
+//   "The acc_get_device_num routine returns the value of
+//   acc-current-device-num-var for the current thread."  There is no
+//   description of the significance of the dev_type parameter, and there is no
+//   indication that acc-current-device-num-var is defined per device type.
+// - OpenACC 2.0 (corrected), sec. 3.2.5 "acc_get_device_num":
+//   "The acc_get_device_num routine returns the device number of the specified
+//   device type that will be used to run the next accelerator parallel or
+//   kernels region."  This version refers to the parameter but is still unclear
+//   about device types other than the current device type.  Should the runtime
+//   maintain a table of device numbers for all device types?  Should
+//   acc_set_device_type use that table instead of setting the device number to
+//   0?  Our implementation does not maintain such a table, and nvc 20.11-0 does
+//   not appear to either in our experiments.
+int acc_get_device_num(acc_device_t dev_type) {
+  switch (dev_type) {
+  case acc_device_none:
+    return -1;
+  case acc_device_not_host: {
+    int DevNumOMP = getCurrentDevice();
+    if (DevNumOMP == omp_get_initial_device())
+      return -1;
+    return DevNumOMP;
+  }
+  case acc_device_default:
+    return acc_get_device_num(acc_get_device_type());
+  case acc_device_current:
+    return 0;
+  case acc_device_host:
+  case acc_device_nvidia:
+  case acc_device_x86_64:
+  case acc_device_ppc64le: {
+    // acc_get_device_type returns acc_device_not_host if omp_device_t has
+    // no enumerator corresponding to dev_type, and so our implementation
+    // logically then has no devices known to be of type dev_type.
+    if (dev_type != acc_get_device_type())
+      return -1;
+    int DevNumACC = omp_get_typed_device_num(getCurrentDevice());
+    // acc_get_device_type didn't return acc_device_not_host, and we have a
+    // valid device number, so omp_get_typed_device_num should be able to return
+    // a valid typed device number.
+    ACC2OMP_ASSERT(DevNumACC != -1, "expected valid typed device number");
+    return DevNumACC;
+  }
+  }
+  acc2omp_fatal(ACC2OMP_MSG(get_device_num_invalid_type), dev_type);
+  return -1;
+}
 
 /*****************************************************************************
  * Data and memory management routines.
@@ -767,7 +1102,7 @@ int acc_is_present(void *data_arg, size_t bytes) {
  *   and returns non-zero.
  * - OpenACC 3.1 and OpenMP 5.1 are unclear about the behavior in this case.
  * Handling of null pointer:
- * - Produce a runtime error, even if the pointers are the same, as discussed
+ * - Produce a runtime error, even if pointers are the same, as discussed
  *   below.
  * - In this case, instead of specifically checking for this case, nvc 20.9-0
  *   usually produces generic runtime errors, such as segmentation faults or
@@ -776,19 +1111,10 @@ int acc_is_present(void *data_arg, size_t bytes) {
  *   and returns non-zero.
  * - OpenACC 3.1 and OpenMP 5.1 are unclear about the behavior in this case.
  * Handling of invalid device numbers (for acc_memcpy_d2d):
- * - Even if the device numbers and pointers are the same, as discussed below,
- *   produce a runtime error that is distinct from the runtime error produced
- *   when data isn't present on the device.  Otherwise, the latter runtime error
- *   is confusing.
- * - As an extension relative to the OpenACC quote below, do not produce a
- *   runtime error if a device number is not of the current device type.
- *   Because OpenMP doesn't appear to reuse device numbers across device types,
- *   there seems to be no reason to limit acc_memcpy_d2d in this way.  This
- *   behavior needs to be discussed with the OpenACC technical committee, and
- *   some discussion of the current limitation might make sense in the rationale
- *   doc.  TODO: One problem is that Clacc's behavior quietly encourages OpenACC
- *   developers to write non-portable applications.  An opt-out runtime warning
- *   might be worthwhile.
+ * - Even if the pointers refer to the same memory, as discussed below, produce
+ *   a runtime error that is distinct from the runtime error produced when data
+ *   isn't present on the device.  Otherwise, the latter runtime error is
+ *   confusing.
  * - OpenACC 3.1, sec. 3.2.42 "acc_memcpy_d2d", L3799-3800:
  *   "The acc_memcpy_d2d and acc_memcpy_d2d_async routines are passed the
  *   address of destination and source host pointers as well as integer device
@@ -888,20 +1214,51 @@ void acc_memcpy_device(void *data_dev_dest, void *data_dev_src, size_t bytes) {
 
 void acc_memcpy_d2d(void *data_arg_dest, void *data_arg_src, size_t bytes,
                     int dev_num_dest, int dev_num_src) {
+  // Do nothing if bytes=0.
   if (!bytes)
     return;
+
+  // Validate args except for checking presence, which is check below.
   if (!data_arg_dest)
     acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_dest_pointer_null));
   if (!data_arg_src)
     acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_src_pointer_null));
-  if (!isValidDevice(dev_num_dest))
-    acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_dest_device_invalid));
-  if (!isValidDevice(dev_num_src))
-    acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_src_device_invalid));
+  acc_device_t DevType = acc_get_device_type();
+  int NumDevs = acc_get_num_devices(DevType);
+  if (dev_num_dest < 0 || NumDevs <= dev_num_dest)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_dest_device_invalid), dev_num_dest,
+                  deviceTypeToString(DevType));
+  if (dev_num_src < 0 || NumDevs <= dev_num_src)
+    acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_src_device_invalid), dev_num_src,
+                  deviceTypeToString(DevType));
+
+  // Do nothing if pointers and devices are the same.
   if (dev_num_dest == dev_num_src && data_arg_dest == data_arg_src)
     return;
-  Presence DestPresence = checkPresence(data_arg_dest, bytes, dev_num_dest);
-  Presence SrcPresence = checkPresence(data_arg_src, bytes, dev_num_src);
+
+  // Convert OpenACC device numbers to OpenMP device numbers.
+  int DevNumDestOMP;
+  int DevNumSrcOMP;
+  if (DevType == acc_device_not_host) {
+    DevNumDestOMP = dev_num_dest;
+    DevNumSrcOMP = dev_num_src;
+  } else {
+    omp_device_t DevTypeOMP = acc2omp_get_omp_device_t(DevType);
+    // acc_get_device_type returns only acc_device_host, acc_device_not_host,
+    // or an architecture-specific enum that was representable as omp_device_t.
+    ACC2OMP_ASSERT(DevTypeOMP != omp_device_none,
+                   "expected device type to be representable as omp_device_t");
+    DevNumDestOMP = omp_get_device_of_type(DevTypeOMP, dev_num_dest);
+    DevNumSrcOMP = omp_get_device_of_type(DevTypeOMP, dev_num_src);
+    // omp_get_device_of_type returns -1 if the device numbers are invalid, but
+    // we already checked them.
+    ACC2OMP_ASSERT(DevNumDestOMP != -1, "expected dev_num_dest to be valid");
+    ACC2OMP_ASSERT(DevNumSrcOMP != -1, "expected dev_num_src to be valid");
+  }
+
+  // Do nothing if pointers are the same and data is in shared memory.
+  Presence DestPresence = checkPresence(data_arg_dest, bytes, DevNumDestOMP);
+  Presence SrcPresence = checkPresence(data_arg_src, bytes, DevNumSrcOMP);
   if (DestPresence == PresenceSharedMemory &&
       SrcPresence == PresenceSharedMemory && data_arg_dest == data_arg_src)
     return;
@@ -915,15 +1272,18 @@ void acc_memcpy_d2d(void *data_arg_dest, void *data_arg_src, size_t bytes,
   if (SrcPresence != PresenceFullyMapped && SrcPresence != PresenceSharedMemory)
     acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_src_data_inaccessible));
 
-  void *dataDevDest = DestPresence == PresenceSharedMemory
+  // Convert host pointers to device pointers.
+  void *DataDevDest = DestPresence == PresenceSharedMemory
                           ? data_arg_dest
-                          : omp_get_mapped_ptr(data_arg_dest, dev_num_dest);
-  void *dataDevSrc = SrcPresence == PresenceSharedMemory
+                          : omp_get_mapped_ptr(data_arg_dest, DevNumDestOMP);
+  void *DataDevSrc = SrcPresence == PresenceSharedMemory
                          ? data_arg_src
-                         : omp_get_mapped_ptr(data_arg_src, dev_num_src);
+                         : omp_get_mapped_ptr(data_arg_src, DevNumSrcOMP);
+
+  // Transfer the data.
   SET_SOURCE_INFO();
-  int Err = omp_target_memcpy(dataDevDest, dataDevSrc, bytes, /*dst_offset=*/0,
-                              /*src_offset=*/0, dev_num_dest, dev_num_src);
+  int Err = omp_target_memcpy(DataDevDest, DataDevSrc, bytes, /*dst_offset=*/0,
+                              /*src_offset=*/0, DevNumDestOMP, DevNumSrcOMP);
   CLEAR_SOURCE_INFO();
   if (Err)
     acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_fail));

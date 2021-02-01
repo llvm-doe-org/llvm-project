@@ -187,17 +187,23 @@ void printDevInt(FILE *File, const char *Var, int *DevPtr) {
 #define PRINT_INT_STDERR(Var) printInt(stderr, #Var, &(Var))
 #define PRINT_DEV_INT(Var) printDevInt(stdout, #Var, &(Var))
 
-// FIXME: Switch to OpenACC routines once they're implemented.
-int omp_get_default_device(void);
-int omp_get_initial_device(void);
-int omp_get_num_devices(void);
-static inline int getDevNum() {
-  return omp_get_num_devices() ? omp_get_default_device()
-                               : omp_get_initial_device();
+static inline int getDevNum() { return acc_get_device_num(acc_device_default); }
+static inline int getDevNumInvalid() {
+  return acc_get_num_devices(acc_device_default);
 }
-static inline int getHostNum() { return omp_get_initial_device(); }
-static inline int getDevNumInvalid() { return omp_get_num_devices(); }
 static inline int getDevNumInvalidNeg() { return -1; }
+static const char *deviceTypeToStr(acc_device_t DevType) {
+  switch (DevType) {
+#define DEVCASE(DevTypeEnum)                                                   \
+  case acc_device_##DevTypeEnum:                                               \
+    return "acc_device_" #DevTypeEnum;
+  ACC2OMP_FOREACH_DEVICE(DEVCASE)
+#undef DEVCASE
+  }
+}
+static const char *getDevTypeStr() {
+  return deviceTypeToStr(acc_get_device_type());
+}
 
 // Make each static to ensure we get a compile warning if it's never called.
 #include CASES_HEADER
@@ -2477,9 +2483,31 @@ CASE(caseUnmapAfterAllThree) {
 }
 
 CASE(caseMemcpySuccess) {
-  int devNum = getDevNum();
-  int hostNum = getHostNum();
+  // Put some info about the devices in the output to help with debugging.
+  //
+  // OUT-caseMemcpySuccess-NEXT: devTypeInit = acc_device_{{.*}}
+  // OUT-caseMemcpySuccess-NEXT: numDevsOfTypeInit = [[#]]
+  // OUT-caseMemcpySuccess-NEXT: devNumInit = [[#]]
+  // OUT-caseMemcpySuccess-NEXT: devNumOther = [[#]]
+  // OUT-caseMemcpySuccess-NEXT: devNumInvalid = [[#]]
+  //
+  // The purpose of devNumOther is to enable testing acc_memcpy_d2d with
+  // multiple devices (necessarily of the same type) when we have them.
+  // When devNumInit = devNumOther (always true when not offloading), we
+  // don't, so we just fake the expected results to make FileCheck happy.
+  // TODO: Testing would be cleaner and more careful if we knew how many
+  // devices we have before starting the test.
+  acc_device_t devTypeInit = acc_get_device_type();
+  int numDevsOfTypeInit = acc_get_num_devices(devTypeInit);
+  int devNumInit = acc_get_device_num(devTypeInit);
+  int devNumOther = (devNumInit + 1) % numDevsOfTypeInit;
   int devNumInvalid = getDevNumInvalid();
+  printf("devTypeInit = %s\n", deviceTypeToStr(devTypeInit));
+  printf("numDevsOfTypeInit = %d\n", numDevsOfTypeInit);
+  printf("devNumInit = %d\n", devNumInit);
+  printf("devNumOther = %d\n", devNumOther);
+  printf("devNumInvalid = %d\n", devNumInvalid);
+  fflush(stdout);
 
   // Copy between addresses that are not mapped to anything (unless shared
   // memory).  Unlike update routines, these routines shouldn't have errors.
@@ -2524,7 +2552,9 @@ CASE(caseMemcpySuccess) {
 
     // OUT-caseMemcpySuccess-HOST-NEXT: host[1] present: 0x[[#HOST1]] -> 0x[[#HOST1]], 10 -> 10
     //  OUT-caseMemcpySuccess-OFF-NEXT: host[1]  absent: 0x[[#HOST1]] -> (nil),        10
-    acc_memcpy_d2d(&host[1], &host[0], sizeof host[1], hostNum, hostNum);
+    acc_set_device_type(acc_device_host);
+    acc_memcpy_d2d(&host[1], &host[0], sizeof host[1], 0, 0);
+    acc_set_device_num(devNumInit, devTypeInit);
     PRINT_INT(host[1]);
 
     // No-op.
@@ -2536,7 +2566,9 @@ CASE(caseMemcpySuccess) {
     // No-op.
     // OUT-caseMemcpySuccess-HOST-NEXT: host[1] present: 0x[[#HOST1]] -> 0x[[#HOST1]], 10 -> 10
     //  OUT-caseMemcpySuccess-OFF-NEXT: host[1]  absent: 0x[[#HOST1]] -> (nil),        10
-    acc_memcpy_d2d(&host[1], &host[1], sizeof host[1], hostNum, hostNum);
+    acc_set_device_type(acc_device_host);
+    acc_memcpy_d2d(&host[1], &host[1], sizeof host[1], 0, 0);
+    acc_set_device_num(devNumInit, devTypeInit);
     PRINT_INT(host[1]);
 
     // Check that we didn't disturb neighboring data or source data.
@@ -2552,10 +2584,12 @@ CASE(caseMemcpySuccess) {
     PRINT_INT(host[2]);
     PRINT_DEV_INT(dev[0]);
     PRINT_DEV_INT(dev[2]);
+
+    acc_free(dev);
   }
 
-  // Copy between addresses that are mapped but not to each other and are not
-  // the same.
+  // Copy between addresses that are mapped but not to each other, are not
+  // mapped to the same host address, and are not the same.
   {
     // OUT-caseMemcpySuccess-NEXT: dst[0]: 0x[[#%x,DST0:]] -> 0x[[#%x,DST0_DEV:]]
     // OUT-caseMemcpySuccess-NEXT: dst[1]: 0x[[#%x,DST1:]] -> 0x[[#%x,DST1_DEV:]]
@@ -2581,18 +2615,43 @@ CASE(caseMemcpySuccess) {
     printf("src[0]: %p -> %p\n", &src[0], acc_deviceptr(&src[0]));
     printf("src[1]: %p -> %p\n", &src[1], acc_deviceptr(&src[1]));
     printf("src[2]: %p -> %p\n", &src[2], acc_deviceptr(&src[2]));
+    // OUT-caseMemcpySuccess-OFF-NEXT: dst[0] on other device: 0x[[#%x,DST0_DEV2:]]
+    // OUT-caseMemcpySuccess-OFF-NEXT: dst[1] on other device: 0x[[#%x,DST1_DEV2:]]
+    // OUT-caseMemcpySuccess-OFF-NEXT: dst[2] on other device: 0x[[#%x,DST2_DEV2:]]
+    // OUT-caseMemcpySuccess-OFF-NEXT: src[0] on other device: 0x[[#%x,SRC0_DEV2:]]
+    // OUT-caseMemcpySuccess-OFF-NEXT: src[1] on other device: 0x[[#%x,SRC1_DEV2:]]
+    // OUT-caseMemcpySuccess-OFF-NEXT: src[2] on other device: 0x[[#%x,SRC2_DEV2:]]
+    if (devNumInit != devNumOther) {
+      acc_set_device_num(devNumOther, devTypeInit);
+      #pragma acc enter data create(dst, src)
+      #pragma acc parallel num_gangs(1)
+      {
+        dst[0] = 12;
+        dst[1] = 22;
+        dst[2] = 32;
+        src[0] = 42;
+        src[1] = 52;
+        src[2] = 62;
+      }
+      printf("dst[0] on other device: %p\n", acc_deviceptr(&dst[0]));
+      printf("dst[1] on other device: %p\n", acc_deviceptr(&dst[1]));
+      printf("dst[2] on other device: %p\n", acc_deviceptr(&dst[2]));
+      printf("src[0] on other device: %p\n", acc_deviceptr(&src[0]));
+      printf("src[1] on other device: %p\n", acc_deviceptr(&src[1]));
+      printf("src[2] on other device: %p\n", acc_deviceptr(&src[2]));
+      acc_set_device_num(devNumInit, devTypeInit);
+    } else if (Offloading) {
+      printf("dst[0] on other device: 0x0\n");
+      printf("dst[1] on other device: 0x0\n");
+      printf("dst[2] on other device: 0x0\n");
+      printf("src[0] on other device: 0x0\n");
+      printf("src[1] on other device: 0x0\n");
+      printf("src[2] on other device: 0x0\n");
+    }
 
     // OUT-caseMemcpySuccess-HOST-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1]],     51 -> 51
     //  OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV]], 20 -> 50
     acc_memcpy_to_device(acc_deviceptr(&dst[1]), &src[1], sizeof dst[1]);
-    PRINT_INT(dst[1]);
-    dst[1] = 20;
-    #pragma acc parallel num_gangs(1)
-    dst[1] = 21;
-
-    // OUT-caseMemcpySuccess-HOST-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1]],     51 -> 51
-    //  OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV]], 20 -> 50
-    acc_memcpy_d2d(&dst[1], &src[1], sizeof dst[1], devNum, hostNum);
     PRINT_INT(dst[1]);
     dst[1] = 20;
     #pragma acc parallel num_gangs(1)
@@ -2607,14 +2666,6 @@ CASE(caseMemcpySuccess) {
     dst[1] = 21;
 
     // OUT-caseMemcpySuccess-HOST-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1]],     51 -> 51
-    //  OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV]], 51 -> 21
-    acc_memcpy_d2d(&dst[1], &src[1], sizeof dst[1], hostNum, devNum);
-    PRINT_INT(dst[1]);
-    dst[1] = 20;
-    #pragma acc parallel num_gangs(1)
-    dst[1] = 21;
-
-    // OUT-caseMemcpySuccess-HOST-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1]],     51 -> 51
     //  OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV]], 20 -> 51
     acc_memcpy_device(acc_deviceptr(&dst[1]), acc_deviceptr(&src[1]), sizeof dst[1]);
     PRINT_INT(dst[1]);
@@ -2622,18 +2673,52 @@ CASE(caseMemcpySuccess) {
     #pragma acc parallel num_gangs(1)
     dst[1] = 21;
 
+    // Source and destination are the current device, which is not host.
     // OUT-caseMemcpySuccess-HOST-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1]],     51 -> 51
     //  OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV]], 20 -> 51
-    acc_memcpy_d2d(&dst[1], &src[1], sizeof dst[1], devNum, devNum);
+    acc_memcpy_d2d(&dst[1], &src[1], sizeof dst[1], devNumInit, devNumInit);
     PRINT_INT(dst[1]);
     dst[1] = 20;
     #pragma acc parallel num_gangs(1)
     dst[1] = 21;
 
+    // Source and destination are the current device, which is host.
     // OUT-caseMemcpySuccess-HOST-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1]],     51 -> 51
     //  OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV]], 50 -> 21
-    acc_memcpy_d2d(&dst[1], &src[1], sizeof dst[1], hostNum, hostNum);
+    acc_set_device_type(acc_device_host);
+    acc_memcpy_d2d(&dst[1], &src[1], sizeof dst[1], 0, 0);
+    acc_set_device_num(devNumInit, devTypeInit);
     PRINT_INT(dst[1]);
+    dst[1] = 20;
+    #pragma acc parallel num_gangs(1)
+    dst[1] = 21;
+
+    // Only destination is the current device.
+    // OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV]], 20 -> 52
+    if (devNumInit != devNumOther) {
+      acc_memcpy_d2d(&dst[1], &src[1], sizeof dst[1], devNumInit, devNumOther);
+      PRINT_INT(dst[1]);
+      dst[1] = 20;
+      #pragma acc parallel num_gangs(1)
+      dst[1] = 21;
+    } else if (Offloading) {
+      printf("dst[1] present: %p -> %p, 20 -> 52\n", &dst[1],
+             acc_deviceptr(&dst[1]));
+    }
+
+    // Only source is the current device.
+    // OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV2]], 20 -> 51
+    if (devNumInit != devNumOther) {
+      acc_memcpy_d2d(&dst[1], &src[1], sizeof dst[1], devNumOther, devNumInit);
+      acc_set_device_num(devNumOther, devTypeInit);
+      PRINT_INT(dst[1]);
+      dst[1] = 20;
+      #pragma acc parallel num_gangs(1)
+      dst[1] = 22;
+      acc_set_device_num(devNumInit, devTypeInit);
+    } else if (Offloading) {
+      printf("dst[1] present: %p -> 0x0, 20 -> 51\n", &dst[1]);
+    }
 
     // Check that we didn't disturb neighboring data or source data.
     // OUT-caseMemcpySuccess-HOST-NEXT: dst[0] present: 0x[[#DST0]] -> 0x[[#DST0]],     11 -> 11
@@ -2651,12 +2736,37 @@ CASE(caseMemcpySuccess) {
     PRINT_INT(src[0]);
     PRINT_INT(src[1]);
     PRINT_INT(src[2]);
+    // OUT-caseMemcpySuccess-OFF-NEXT: dst[0] present: 0x[[#DST0]] -> 0x[[#DST0_DEV2]], 10 -> 12
+    // OUT-caseMemcpySuccess-OFF-NEXT: dst[2] present: 0x[[#DST2]] -> 0x[[#DST2_DEV2]], 30 -> 32
+    // OUT-caseMemcpySuccess-OFF-NEXT: src[0] present: 0x[[#SRC0]] -> 0x[[#SRC0_DEV2]], 40 -> 42
+    // OUT-caseMemcpySuccess-OFF-NEXT: src[1] present: 0x[[#SRC1]] -> 0x[[#SRC1_DEV2]], 50 -> 52
+    // OUT-caseMemcpySuccess-OFF-NEXT: src[2] present: 0x[[#SRC2]] -> 0x[[#SRC2_DEV2]], 60 -> 62
+    if (devNumInit != devNumOther) {
+      acc_set_device_num(devNumOther, devTypeInit);
+      PRINT_INT(dst[0]);
+      PRINT_INT(dst[2]);
+      PRINT_INT(src[0]);
+      PRINT_INT(src[1]);
+      PRINT_INT(src[2]);
+      acc_set_device_num(devNumInit, devTypeInit);
+    } else if (Offloading) {
+      printf("dst[0] present: %p -> 0x0, 10 -> 12\n", &dst[0]);
+      printf("dst[2] present: %p -> 0x0, 30 -> 32\n", &dst[2]);
+      printf("src[0] present: %p -> 0x0, 40 -> 42\n", &src[0]);
+      printf("src[1] present: %p -> 0x0, 50 -> 52\n", &src[1]);
+      printf("src[2] present: %p -> 0x0, 60 -> 62\n", &src[2]);
+    }
 
     #pragma acc exit data delete(dst, src)
+    if (devNumInit != devNumOther) {
+      acc_set_device_num(devNumOther, devTypeInit);
+      #pragma acc exit data delete(dst, src)
+      acc_set_device_num(devNumInit, devTypeInit);
+    }
   }
 
-  // Copy between addresses that are mapped to each other or are the same.  All
-  // cases are no-ops if shared memory.
+  // Copy between addresses that are mapped to each other, are mapped to the
+  // same host address, or are the same.  All cases are no-ops if shared memory.
   {
     // OUT-caseMemcpySuccess-NEXT: x[0]: 0x[[#%x,X0:]] -> 0x[[#%x,X0_DEV:]]
     // OUT-caseMemcpySuccess-NEXT: x[1]: 0x[[#%x,X1:]] -> 0x[[#%x,X1_DEV:]]
@@ -2672,18 +2782,31 @@ CASE(caseMemcpySuccess) {
     printf("x[0]: %p -> %p\n", &x[0], acc_deviceptr(&x[0]));
     printf("x[1]: %p -> %p\n", &x[1], acc_deviceptr(&x[1]));
     printf("x[2]: %p -> %p\n", &x[2], acc_deviceptr(&x[2]));
+    // OUT-caseMemcpySuccess-OFF-NEXT: x[0] on other device: 0x[[#%x,X0_DEV2:]]
+    // OUT-caseMemcpySuccess-OFF-NEXT: x[1] on other device: 0x[[#%x,X1_DEV2:]]
+    // OUT-caseMemcpySuccess-OFF-NEXT: x[2] on other device: 0x[[#%x,X2_DEV2:]]
+    if (devNumInit != devNumOther) {
+      acc_set_device_num(devNumOther, devTypeInit);
+      #pragma acc enter data create(x)
+      #pragma acc parallel num_gangs(1)
+      {
+        x[0] = 12;
+        x[1] = 22;
+        x[2] = 32;
+      }
+      printf("x[0] on other device: %p\n", acc_deviceptr(&x[0]));
+      printf("x[1] on other device: %p\n", acc_deviceptr(&x[1]));
+      printf("x[2] on other device: %p\n", acc_deviceptr(&x[2]));
+      acc_set_device_num(devNumInit, devTypeInit);
+    } else if (Offloading) {
+      printf("x[0] on other device: 0x0\n");
+      printf("x[1] on other device: 0x0\n");
+      printf("x[2] on other device: 0x0\n");
+    }
 
     // OUT-caseMemcpySuccess-HOST-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1]],     21 -> 21
     //  OUT-caseMemcpySuccess-OFF-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1_DEV]], 20 -> 20
     acc_memcpy_to_device(acc_deviceptr(&x[1]), &x[1], sizeof x[1]);
-    PRINT_INT(x[1]);
-    x[1] = 20;
-    #pragma acc parallel num_gangs(1)
-    x[1] = 21;
-
-    // OUT-caseMemcpySuccess-HOST-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1]],     21 -> 21
-    //  OUT-caseMemcpySuccess-OFF-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1_DEV]], 20 -> 20
-    acc_memcpy_d2d(&x[1], &x[1], sizeof x[1], devNum, hostNum);
     PRINT_INT(x[1]);
     x[1] = 20;
     #pragma acc parallel num_gangs(1)
@@ -2697,31 +2820,53 @@ CASE(caseMemcpySuccess) {
     #pragma acc parallel num_gangs(1)
     x[1] = 21;
 
-    // OUT-caseMemcpySuccess-HOST-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1]],     21 -> 21
-    //  OUT-caseMemcpySuccess-OFF-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1_DEV]], 21 -> 21
-    acc_memcpy_d2d(&x[1], &x[1], sizeof x[1], hostNum, devNum);
-    PRINT_INT(x[1]);
-    x[1] = 20;
-    #pragma acc parallel num_gangs(1)
-    x[1] = 21;
-
     // Always no-op.
     // OUT-caseMemcpySuccess-HOST-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1]],     21 -> 21
     //  OUT-caseMemcpySuccess-OFF-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1_DEV]], 20 -> 21
     acc_memcpy_device(acc_deviceptr(&x[1]), acc_deviceptr(&x[1]), sizeof x[1]);
     PRINT_INT(x[1]);
 
+    // Source and destination are the current device, which is not host.
     // Always no-op.
     // OUT-caseMemcpySuccess-HOST-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1]],     21 -> 21
     //  OUT-caseMemcpySuccess-OFF-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1_DEV]], 20 -> 21
-    acc_memcpy_d2d(&x[1], &x[1], sizeof x[1], devNum, devNum);
+    acc_memcpy_d2d(&x[1], &x[1], sizeof x[1], devNumInit, devNumInit);
     PRINT_INT(x[1]);
 
+    // Source and destination are the current device, which is host.
     // Always no-op.
     // OUT-caseMemcpySuccess-HOST-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1]],     21 -> 21
     //  OUT-caseMemcpySuccess-OFF-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1_DEV]], 20 -> 21
-    acc_memcpy_d2d(&x[1], &x[1], sizeof x[1], hostNum, hostNum);
+    acc_set_device_type(acc_device_host);
+    acc_memcpy_d2d(&x[1], &x[1], sizeof x[1], 0, 0);
+    acc_set_device_num(devNumInit, devTypeInit);
     PRINT_INT(x[1]);
+
+    // Only destination is the current device.
+    // OUT-caseMemcpySuccess-OFF-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1_DEV]], 20 -> 22
+    if (devNumInit != devNumOther) {
+      acc_memcpy_d2d(&x[1], &x[1], sizeof x[1], devNumInit, devNumOther);
+      PRINT_INT(x[1]);
+      x[1] = 20;
+      #pragma acc parallel num_gangs(1)
+      x[1] = 21;
+    } else if (Offloading) {
+      printf("x[1] present: %p -> %p, 20 -> 22\n", &x[1], acc_deviceptr(&x[1]));
+    }
+
+    // Only source is the current device.
+    // OUT-caseMemcpySuccess-OFF-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1_DEV2]], 20 -> 21
+    if (devNumInit != devNumOther) {
+      acc_memcpy_d2d(&x[1], &x[1], sizeof x[1], devNumOther, devNumInit);
+      acc_set_device_num(devNumOther, devTypeInit);
+      PRINT_INT(x[1]);
+      x[1] = 20;
+      #pragma acc parallel num_gangs(1)
+      x[1] = 22;
+      acc_set_device_num(devNumInit, devTypeInit);
+    } else if (Offloading) {
+      printf("x[1] present: %p -> 0x0, 20 -> 21\n", &x[1]);
+    }
 
     // Check that we didn't disturb neighboring data.
     // OUT-caseMemcpySuccess-HOST-NEXT: x[0] present: 0x[[#X0]] -> 0x[[#X0]],     11 -> 11
@@ -2730,13 +2875,29 @@ CASE(caseMemcpySuccess) {
     //  OUT-caseMemcpySuccess-OFF-NEXT: x[2] present: 0x[[#X2]] -> 0x[[#X2_DEV]], 30 -> 31
     PRINT_INT(x[0]);
     PRINT_INT(x[2]);
+    // OUT-caseMemcpySuccess-OFF-NEXT: x[0] present: 0x[[#X0]] -> 0x[[#X0_DEV2]], 10 -> 12
+    // OUT-caseMemcpySuccess-OFF-NEXT: x[2] present: 0x[[#X2]] -> 0x[[#X2_DEV2]], 30 -> 32
+    if (devNumInit != devNumOther) {
+      acc_set_device_num(devNumOther, devTypeInit);
+      PRINT_INT(x[0]);
+      PRINT_INT(x[2]);
+      acc_set_device_num(devNumInit, devTypeInit);
+    } else if (Offloading) {
+      printf("x[0] present: %p -> 0x0, 10 -> 12\n", &x[0]);
+      printf("x[2] present: %p -> 0x0, 30 -> 32\n", &x[2]);
+    }
 
     #pragma acc exit data delete(x)
+    if (devNumInit != devNumOther) {
+      acc_set_device_num(devNumOther, devTypeInit);
+      #pragma acc exit data delete(x)
+      acc_set_device_num(devNumInit, devTypeInit);
+    }
 
     // Always no-op even though data is inaccessible on the device.
     // OUT-caseMemcpySuccess-HOST-NEXT: x[1] present: 0x[[#X1]] -> 0x[[#X1]], 21 -> 21
     //  OUT-caseMemcpySuccess-OFF-NEXT: x[1]  absent: 0x[[#X1]] -> (nil),     20
-    acc_memcpy_d2d(&x[1], &x[1], sizeof x[1], devNum, devNum);
+    acc_memcpy_d2d(&x[1], &x[1], sizeof x[1], devNumInit, devNumInit);
     PRINT_INT(x[1]);
   }
 
@@ -2761,13 +2922,32 @@ CASE(caseMemcpySuccess) {
     printf("host[1]: %p\n", &host[1]);
     printf("dev[0]: %p\n", &dev[0]);
     printf("dev[1]: %p\n", &dev[1]);
+    // OUT-caseMemcpySuccess-OFF-NEXT: dev2[0]: 0x[[#%x,DEV20:]]
+    // OUT-caseMemcpySuccess-OFF-NEXT: dev2[1]: 0x[[#%x,DEV21:]]
+    int *dev2 = NULL;
+    if (devNumInit != devNumOther) {
+      int valsForDev2[] = {32, 42};
+      acc_set_device_num(devNumOther, devTypeInit);
+      dev2 = acc_malloc(sizeof valsForDev2);
+      acc_map_data(valsForDev2, dev2, sizeof valsForDev2);
+      #pragma acc update device(valsForDev2)
+      acc_unmap_data(valsForDev2);
+      acc_set_device_num(devNumInit, devTypeInit);
+      printf("dev2[0]: %p\n", &dev2[0]);
+      printf("dev2[1]: %p\n", &dev2[1]);
+    } else if (Offloading) {
+      printf("dev2[0]: 0x0\n");
+      printf("dev2[1]: 0x0\n");
+    }
 
     acc_memcpy_to_device(&dev[1], &host[0], 0);
     acc_memcpy_from_device(&host[1], &dev[0], 0);
     acc_memcpy_device(&dev[1], &dev[0], 0);
-    acc_memcpy_d2d(&host[1], &host[0], 0, hostNum, hostNum);
     acc_memcpy_device(&dev[1], &dev[1], 0);
-    acc_memcpy_d2d(&host[1], &host[1], 0, hostNum, hostNum);
+    acc_set_device_type(acc_device_host);
+    acc_memcpy_d2d(&host[1], &host[0], 0, 0, 0);
+    acc_memcpy_d2d(&host[1], &host[1], 0, 0, 0);
+    acc_set_device_num(devNumInit, devTypeInit);
 
     // OUT-caseMemcpySuccess-HOST-NEXT: host[0]  present: 0x[[#HOST0]] -> 0x[[#HOST0]], 10 -> 10
     // OUT-caseMemcpySuccess-HOST-NEXT: host[1]  present: 0x[[#HOST1]] -> 0x[[#HOST1]], 20 -> 20
@@ -2781,10 +2961,26 @@ CASE(caseMemcpySuccess) {
     PRINT_INT(host[1]);
     PRINT_DEV_INT(dev[0]);
     PRINT_DEV_INT(dev[1]);
+    // OUT-caseMemcpySuccess-OFF-NEXT: dev2[0] unmapped: 0x[[#DEV20]] <- (nil), 32
+    // OUT-caseMemcpySuccess-OFF-NEXT: dev2[1] unmapped: 0x[[#DEV21]] <- (nil), 42
+    if (devNumInit != devNumOther) {
+      acc_set_device_num(devNumOther, devTypeInit);
+      PRINT_DEV_INT(dev2[0]);
+      PRINT_DEV_INT(dev2[1]);
+      acc_set_device_num(devNumInit, devTypeInit);
+    } else if (Offloading) {
+      printf("dev2[0] unmapped: 0x0 <- (nil), 32\n");
+      printf("dev2[1] unmapped: 0x0 <- (nil), 42\n");
+    }
+
+    acc_free(dev);
+    acc_set_device_num(devNumOther, devTypeInit);
+    acc_free(dev2);
+    acc_set_device_num(devNumInit, devTypeInit);
   }
 
   // Check that we have a no-op when bytes=0 and addresses are mapped, possibly
-  // to each other, or are the same.
+  // to each other or the same host address, or are the same.
   {
     // OUT-caseMemcpySuccess-NEXT: dst[0]: 0x[[#%x,DST0:]] -> 0x[[#%x,DST0_DEV:]]
     // OUT-caseMemcpySuccess-NEXT: dst[1]: 0x[[#%x,DST1:]] -> 0x[[#%x,DST1_DEV:]]
@@ -2804,26 +3000,55 @@ CASE(caseMemcpySuccess) {
     printf("dst[1]: %p -> %p\n", &dst[1], acc_deviceptr(&dst[1]));
     printf("src[0]: %p -> %p\n", &src[0], acc_deviceptr(&src[0]));
     printf("src[1]: %p -> %p\n", &src[1], acc_deviceptr(&src[1]));
+    // OUT-caseMemcpySuccess-OFF-NEXT: dst[0] on other device: 0x[[#%x,DST0_DEV2:]]
+    // OUT-caseMemcpySuccess-OFF-NEXT: dst[1] on other device: 0x[[#%x,DST1_DEV2:]]
+    // OUT-caseMemcpySuccess-OFF-NEXT: src[0] on other device: 0x[[#%x,SRC0_DEV2:]]
+    // OUT-caseMemcpySuccess-OFF-NEXT: src[1] on other device: 0x[[#%x,SRC1_DEV2:]]
+    if (devNumInit != devNumOther) {
+      acc_set_device_num(devNumOther, devTypeInit);
+      #pragma acc enter data create(dst, src)
+      #pragma acc parallel num_gangs(1)
+      {
+        dst[0] = 12;
+        dst[1] = 22;
+        src[0] = 32;
+        src[1] = 42;
+      }
+      printf("dst[0] on other device: %p\n", acc_deviceptr(&dst[0]));
+      printf("dst[1] on other device: %p\n", acc_deviceptr(&dst[1]));
+      printf("src[0] on other device: %p\n", acc_deviceptr(&src[0]));
+      printf("src[1] on other device: %p\n", acc_deviceptr(&src[1]));
+      acc_set_device_num(devNumInit, devTypeInit);
+    } else if (Offloading) {
+      printf("dst[0] on other device: 0x0\n");
+      printf("dst[1] on other device: 0x0\n");
+      printf("src[0] on other device: 0x0\n");
+      printf("src[1] on other device: 0x0\n");
+    }
 
-    // Mapped but not to each other.
+    // Mapped but not to each other or the same host address.
     acc_memcpy_to_device(acc_deviceptr(&dst[1]), &src[1], 0);
-    acc_memcpy_d2d(&dst[1], &src[1], 0, devNum, hostNum);
     acc_memcpy_from_device(&dst[1], acc_deviceptr(&src[1]), 0);
-    acc_memcpy_d2d(&dst[1], &src[1], 0, hostNum, devNum);
     acc_memcpy_device(acc_deviceptr(&dst[1]), acc_deviceptr(&src[1]), 0);
-    acc_memcpy_d2d(&dst[1], &src[1], 0, devNum, devNum);
-    acc_memcpy_d2d(&dst[1], &src[1], 0, hostNum, hostNum);
+    acc_memcpy_d2d(&dst[1], &src[1], 0, devNumInit, devNumInit);
+    acc_set_device_type(acc_device_host);
+    acc_memcpy_d2d(&dst[1], &src[1], 0, 0, 0);
+    acc_set_device_num(devNumInit, devTypeInit);
+    acc_memcpy_d2d(&dst[1], &src[1], 0, devNumInit, devNumOther);
+    acc_memcpy_d2d(&dst[1], &src[1], 0, devNumOther, devNumInit);
 
-    // Mapped to each other.
+    // Mapped to each other or the same host address.
     acc_memcpy_to_device(acc_deviceptr(&dst[1]), &dst[1], 0);
-    acc_memcpy_d2d(&dst[1], &dst[1], 0, devNum, hostNum);
     acc_memcpy_from_device(&dst[1], acc_deviceptr(&dst[1]), 0);
-    acc_memcpy_d2d(&dst[1], &dst[1], 0, hostNum, devNum);
+    acc_memcpy_d2d(&dst[1], &dst[1], 0, devNumInit, devNumOther);
+    acc_memcpy_d2d(&dst[1], &dst[1], 0, devNumOther, devNumInit);
 
     // The same.
     acc_memcpy_device(acc_deviceptr(&dst[1]), acc_deviceptr(&dst[1]), 0);
-    acc_memcpy_d2d(&dst[1], &dst[1], 0, devNum, devNum);
-    acc_memcpy_d2d(&dst[1], &dst[1], 0, hostNum, hostNum);
+    acc_memcpy_d2d(&dst[1], &dst[1], 0, devNumInit, devNumInit);
+    acc_set_device_type(acc_device_host);
+    acc_memcpy_d2d(&dst[1], &dst[1], 0, 0, 0);
+    acc_set_device_num(devNumInit, devTypeInit);
 
     // OUT-caseMemcpySuccess-HOST-NEXT: dst[0] present: 0x[[#DST0]] -> 0x[[#DST0]],     11 -> 11
     // OUT-caseMemcpySuccess-HOST-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1]],     21 -> 21
@@ -2837,8 +3062,30 @@ CASE(caseMemcpySuccess) {
     PRINT_INT(dst[1]);
     PRINT_INT(src[0]);
     PRINT_INT(src[1]);
+    // OUT-caseMemcpySuccess-OFF-NEXT: dst[0] present: 0x[[#DST0]] -> 0x[[#DST0_DEV2]], 10 -> 12
+    // OUT-caseMemcpySuccess-OFF-NEXT: dst[1] present: 0x[[#DST1]] -> 0x[[#DST1_DEV2]], 20 -> 22
+    // OUT-caseMemcpySuccess-OFF-NEXT: src[0] present: 0x[[#SRC0]] -> 0x[[#SRC0_DEV2]], 30 -> 32
+    // OUT-caseMemcpySuccess-OFF-NEXT: src[1] present: 0x[[#SRC1]] -> 0x[[#SRC1_DEV2]], 40 -> 42
+    if (devNumInit != devNumOther) {
+      acc_set_device_num(devNumOther, devTypeInit);
+      PRINT_INT(dst[0]);
+      PRINT_INT(dst[1]);
+      PRINT_INT(src[0]);
+      PRINT_INT(src[1]);
+      acc_set_device_num(devNumInit, devTypeInit);
+    } else if (Offloading) {
+      printf("dst[0] present: %p -> 0x0, 10 -> 12\n", &dst[0]);
+      printf("dst[1] present: %p -> 0x0, 20 -> 22\n", &dst[1]);
+      printf("src[0] present: %p -> 0x0, 30 -> 32\n", &src[0]);
+      printf("src[1] present: %p -> 0x0, 40 -> 42\n", &src[1]);
+    }
 
     #pragma acc exit data delete(dst, src)
+    if (devNumInit != devNumOther) {
+      acc_set_device_num(devNumOther, devTypeInit);
+      #pragma acc exit data delete(dst, src)
+      acc_set_device_num(devNumInit, devTypeInit);
+    }
   }
 
   // Check that we have a no-op when bytes=0 and either addresses are null,
@@ -2847,11 +3094,13 @@ CASE(caseMemcpySuccess) {
   acc_memcpy_to_device(NULL, NULL, 0);
   acc_memcpy_from_device(NULL, NULL, 0);
   acc_memcpy_device(NULL, NULL, 0);
-  acc_memcpy_d2d(NULL, NULL, 0, devNum, devNum);
+  acc_memcpy_d2d(NULL, NULL, 0, devNumInit, devNumInit);
+  acc_memcpy_d2d(NULL, NULL, 0, devNumInit, devNumOther);
   acc_memcpy_d2d(NULL, NULL, 0, devNumInvalid, devNumInvalid);
   {
     int x, y; // inaccessible
-    acc_memcpy_d2d(&x, &y, 0, devNum, devNum);
+    acc_memcpy_d2d(&x, &y, 0, devNumInit, devNumInit);
+    acc_memcpy_d2d(&x, &y, 0, devNumInit, devNumOther);
     acc_memcpy_d2d(&x, &y, 0, devNumInvalid, devNumInvalid);
     #pragma acc data create(x, y) // now accessible
     acc_memcpy_d2d(&x, &y, 0, devNumInvalid, devNumInvalid);
@@ -2955,43 +3204,55 @@ CASE(caseMemcpyD2dBothNull) {
 
 CASE(caseMemcpyD2dDestDevInvalid) {
   int x, y;
+  // ERR-caseMemcpyD2dDestDevInvalid-NEXT: [[TYPE:[a-z0-9_]+]], [[#%d,INV:]]
+  fprintf(stderr, "%s, %d\n", getDevTypeStr(), getDevNumInvalid());
   #pragma acc data create(x, y)
-  // ERR-caseMemcpyD2dDestDevInvalid-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid destination device
+  // ERR-caseMemcpyD2dDestDevInvalid-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid destination device number [[#INV]] for the current device type [[TYPE]]
   acc_memcpy_d2d(&x, &y, sizeof x, getDevNumInvalid(), getDevNum());
   return 0;
 }
 CASE(caseMemcpyD2dDestDevInvalidNeg) {
   int x, y;
+  // ERR-caseMemcpyD2dDestDevInvalidNeg-NEXT: [[TYPE:[a-z0-9_]+]], [[#%d,INV:]]
+  fprintf(stderr, "%s, %d\n", getDevTypeStr(), getDevNumInvalidNeg());
   #pragma acc data create(x, y)
-  // ERR-caseMemcpyD2dDestDevInvalidNeg-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid destination device
+  // ERR-caseMemcpyD2dDestDevInvalidNeg-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid destination device number [[#INV]] for the current device type [[TYPE]]
   acc_memcpy_d2d(&x, &y, sizeof x, getDevNumInvalidNeg(), getDevNum());
   return 0;
 }
 CASE(caseMemcpyD2dSrcDevInvalid) {
   int x, y;
+  // ERR-caseMemcpyD2dSrcDevInvalid-NEXT: [[TYPE:[a-z0-9_]+]], [[#%d,INV:]]
+  fprintf(stderr, "%s, %d\n", getDevTypeStr(), getDevNumInvalid());
   #pragma acc data create(x, y)
-  // ERR-caseMemcpyD2dSrcDevInvalid-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid source device
+  // ERR-caseMemcpyD2dSrcDevInvalid-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid source device number [[#INV]] for the current device type [[TYPE]]
   acc_memcpy_d2d(&x, &y, sizeof x, getDevNum(), getDevNumInvalid());
   return 0;
 }
 CASE(caseMemcpyD2dSrcDevInvalidNeg) {
   int x, y;
+  // ERR-caseMemcpyD2dSrcDevInvalidNeg-NEXT: [[TYPE:[a-z0-9_]+]], [[#%d,INV:]]
+  fprintf(stderr, "%s, %d\n", getDevTypeStr(), getDevNumInvalidNeg());
   #pragma acc data create(x, y)
-  // ERR-caseMemcpyD2dSrcDevInvalidNeg-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid source device
+  // ERR-caseMemcpyD2dSrcDevInvalidNeg-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid source device number [[#INV]] for the current device type [[TYPE]]
   acc_memcpy_d2d(&x, &y, sizeof x, getDevNum(), getDevNumInvalidNeg());
   return 0;
 }
 CASE(caseMemcpyD2dBothDevInvalid) {
   int x, y;
+  // ERR-caseMemcpyD2dBothDevInvalid-NEXT: [[TYPE:[a-z0-9_]+]], [[#%d,INV:]]
+  fprintf(stderr, "%s, %d\n", getDevTypeStr(), getDevNumInvalid());
   #pragma acc data create(x, y)
-  // ERR-caseMemcpyD2dBothDevInvalid-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid destination device
+  // ERR-caseMemcpyD2dBothDevInvalid-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid destination device number [[#INV]] for the current device type [[TYPE]]
   acc_memcpy_d2d(&x, &y, sizeof x, getDevNumInvalid(), getDevNumInvalid());
   return 0;
 }
 CASE(caseMemcpyD2dSameDevInvalid) {
   int x;
+  // ERR-caseMemcpyD2dSameDevInvalid-NEXT: [[TYPE:[a-z0-9_]+]], [[#%d,INV:]]
+  fprintf(stderr, "%s, %d\n", getDevTypeStr(), getDevNumInvalid());
   #pragma acc data create(x)
-  // ERR-caseMemcpyD2dSameDevInvalid-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid destination device
+  // ERR-caseMemcpyD2dSameDevInvalid-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with invalid destination device number [[#INV]] for the current device type [[TYPE]]
   acc_memcpy_d2d(&x, &x, sizeof x, getDevNumInvalid(), getDevNumInvalid());
   return 0;
 }

@@ -1880,10 +1880,18 @@ version of LLVM's OpenMP runtime.  It is built as the library
 Support for the OpenACC Runtime Library API appears primarily in the
 source file `openmp/libacc2omp/src/api.cpp`.  Clacc's mapping to the
 OpenMP Runtime Library Routines can be found there along with notes on
-relevant ambiguities in the OpenACC and OpenMP specifications.  That
-mapping relies on the following OpenMP extensions, which are
-implemented in Clacc's version of LLVM's OpenMP runtime library:
+relevant ambiguities in the OpenACC and OpenMP specifications.  A
+briefer set of notes tailored more for users can be found in the
+section "OpenACC Runtime Library API and Preprocessor" in
+`README-OpenACC-status.md`.  The mapping relies on the following
+OpenMP extensions, which are implemented in Clacc's version of LLVM's
+OpenMP runtime library:
 
+* `omp_device_t`
+* `omp_device_t omp_get_device_type(int device_num);`
+* `int omp_get_num_devices_of_type(omp_device_t device_type);`
+* `int omp_get_typed_device_num(int device_num);`
+* `int omp_get_device_of_type(omp_device_t device_type, int typed_device_num);`
 * `size_t omp_get_accessible_buffer(const void *ptr, size_t size, int device_num, void **buffer_host, void **buffer_device);`
 * `void *omp_target_map_to(void *ptr, size_t size, int device_num);`
 * `void *omp_target_map_alloc(void *ptr, size_t size, int device_num);`

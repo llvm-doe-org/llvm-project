@@ -22,6 +22,8 @@ acc2omp_msg_t acc2omp_msg(acc2omp_msgid_t MsgId) {
   acc2omp_msg_t Msg = {MsgId, nullptr};
   // Keep this in a switch instead of an array indexed on acc2omp_msg_id_t to
   // help avoid mismatching IDs and formats.
+  //
+  // Keep the messages in sync with openmp/runtime/src/i18n/en_US.txt.
   switch (MsgId) {
   case acc2omp_msg_alloc_fail:
     Msg.DefaultFmt = "memory allocation failed";
@@ -55,6 +57,26 @@ acc2omp_msg_t acc2omp_msg(acc2omp_msgid_t MsgId) {
     break;
   case acc2omp_msg_callback_unregister_unregistered:
     Msg.DefaultFmt = "attempt to unregister wrong callback for event: %s";
+    break;
+  case acc2omp_msg_get_num_devices_invalid_type:
+    Msg.DefaultFmt = "acc_get_num_devices called for invalid device type %d";
+    break;
+  case acc2omp_msg_set_device_type_invalid_type:
+    Msg.DefaultFmt = "acc_set_device_type called for invalid device type %d";
+    break;
+  case acc2omp_msg_set_device_type_no_devices:
+    Msg.DefaultFmt = "acc_set_device_type called for %s, which has no "
+                     "available devices";
+    break;
+  case acc2omp_msg_set_device_num_invalid_type:
+    Msg.DefaultFmt = "acc_set_device_num called for invalid device type %d";
+    break;
+  case acc2omp_msg_set_device_num_invalid_num:
+    Msg.DefaultFmt = "acc_set_device_num called with invalid device number %d "
+                     "for %s";
+    break;
+  case acc2omp_msg_get_device_num_invalid_type:
+    Msg.DefaultFmt = "acc_get_device_num called for invalid device type %d";
     break;
   case acc2omp_msg_map_data_host_pointer_null:
     Msg.DefaultFmt = "acc_map_data called with null host pointer";
@@ -117,10 +139,12 @@ acc2omp_msg_t acc2omp_msg(acc2omp_msgid_t MsgId) {
     Msg.DefaultFmt = "acc_memcpy_d2d called with null source pointer";
     break;
   case acc2omp_msg_memcpy_d2d_dest_device_invalid:
-    Msg.DefaultFmt = "acc_memcpy_d2d called with invalid destination device";
+    Msg.DefaultFmt = "acc_memcpy_d2d called with invalid destination device "
+                     " number %d for the current device type %s";
     break;
   case acc2omp_msg_memcpy_d2d_src_device_invalid:
-    Msg.DefaultFmt = "acc_memcpy_d2d called with invalid source device";
+    Msg.DefaultFmt = "acc_memcpy_d2d called with invalid source device number "
+                     "%d for the current device type %s";
     break;
   case acc2omp_msg_memcpy_d2d_dest_data_inaccessible:
     Msg.DefaultFmt = "acc_memcpy_d2d called with inaccessible destination data";

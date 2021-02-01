@@ -1,4 +1,9 @@
 // Check acc_on_device.
+//
+// It should not be necessary to rely on device management routines (like
+// acc_get_device_type) to test acc_on_device.  Moreover, those are tested in
+// devices.c with the assumption that acc_on_device has been independently
+// tested to be correct.
 
 // Check that our constant expression checks are sane: that they actually call
 // acc_on_device where Clang requires constant expressions.
@@ -58,9 +63,6 @@
 //                         CHECK: acc_device_none:
 //                    CHECK-NEXT:   outside kernel: 0
 //                    CHECK-NEXT:   inside kernel:  0
-//                    CHECK-NEXT: acc_device_default:
-//                    CHECK-NEXT:   outside kernel: 0
-//                    CHECK-NEXT:   inside kernel:  0
 //                    CHECK-NEXT: acc_device_host:
 //                    CHECK-NEXT:   outside kernel: 1
 //               CHECK-host-NEXT:   inside kernel:  1
@@ -73,6 +75,9 @@
 //             CHECK-x86_64-NEXT:   inside kernel:  1
 //            CHECK-ppc64le-NEXT:   inside kernel:  1
 //            CHECK-nvptx64-NEXT:   inside kernel:  1
+//                    CHECK-NEXT: acc_device_default:
+//                    CHECK-NEXT:   outside kernel: 0
+//                    CHECK-NEXT:   inside kernel:  0
 //                    CHECK-NEXT: acc_device_current:
 //                    CHECK-NEXT:   outside kernel: 0
 //                    CHECK-NEXT:   inside kernel:  0

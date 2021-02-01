@@ -309,6 +309,98 @@ OpenACC Runtime Library API and Preprocessor
 --------------------------------------------
 
 * The `_OPENACC` preprocessor macro is supported.
+* `acc_device_t`
+    * All enumerators required by OpenACC 3.1 are supported with the
+      following semantics:
+        * `acc_device_none`: No devices.
+        * `acc_device_host`: The host device.  This includes the case
+          where the host device executes a kernel without offloading
+          data or code.  In this way, Clacc follows the recommendation
+          of OpenACC 3.1, sec. A.1.3 "Multicore Host CPU Target".
+        * `acc_device_not_host`: All devices other than host that are
+          available for offloading code or data.  This includes any
+          device that is physically the same device as the host device
+          but that is logically treated as a separate offloading
+          device with discrete memory.  In particular, this case
+          arises when specfying the host architecture to
+          `-fopenmp-targets`.
+        * `acc_device_default`: All devices of the current device
+          type.  This corresponds to the OpenACC 3.1 ICV
+          `acc-current-device-type-var`, which is retrieved by
+          `acc_get_device_type`.  See `acc_get_device_type` notes
+          below for further details.
+        * `acc_device_current`: The current device.  This corresponds
+          to the combination of the OpenACC 3.1 ICVs
+          `acc-current-device-type-var` and
+          `acc-current-device-num-var`.
+    * Architecture-specific enumerators are also supported and only
+      include devices that `acc_device_not_host` also includes:
+        * `acc_device_nvidia` is supported as recommended in OpenACC
+          3.1, sec. A.1.1 "NVIDIA GPU Targets".
+        * `acc_device_x86_64` and `acc_device_ppc64le` are supported
+          but are not mentioned by OpenACC 3.1
+        * `acc_device_radeon` is not yet supported but is recommended
+          in OpenACC 3.1, sec. A.1.2 "AMD GPU Targets".
+    * `acc_device_not_host` may include devices that no
+      architecture-specific enumerator includes.  This situation is
+      not ideal but can arise when either the OpenMP implementation's
+      `omp_device_t` (a Clacc extension) or Clacc's `acc_device_t` is
+      missing an architecture supported by the OpenMP implementation.
+      Because Clacc is designed to ultimately be compatible with
+      foreign OpenMP implementations, this situation is unavoidable.
+    * The semantics of the above enumerators are not always clear in
+      OpenACC 3.1, and many details need to be discussed with the
+      OpenACC committee.
+* Device management routines supported on the host are:
+    * `acc_get_num_devices(acc_device_t dev_type)`
+        * Returns 1 if `dev_type=acc_device_current` because there's
+          always one current device.  nvc 20.11-0 returns 0 instead.
+          OpenACC 3.1 is unclear about this behavior.
+        * Otherwise, counts the devices included by `dev_type`.
+    * `acc_set_device_type(acc_device_t dev_type)`
+        * Always just calls `acc_set_device_num(0, dev_type)`.
+        * OpenACC 3.1 does not specify how `acc_set_device_type`
+          should affect the device number.  nvc 20.11-0 appears to
+          always set it 0 as Clacc does.
+        * Also see issues discussed below for `acc_set_device_num`.
+    * `acc_get_device_type()`
+        * Retrieves the current device type, which corresponds to the
+          OpenACC 3.1 ICV `acc-current-device-type-var`.
+        * The result is either `acc_device_host`,
+          `acc_device_not_host`, or an architecture-specific
+          enumerator.
+        * The result is `acc_device_not_host` only when the current
+          device is not the host device and no architecture-specific
+          `acc_device_t` is appropriate for it, as described in the
+          `acc_device_not_host` discussion above.
+    * `acc_set_device_num(int dev_num, acc_device_t dev_type)`
+        * Does nothing if `dev_type=acc_device_current`.  This appears
+          to match nvc 20.11-0's behavior, but OpenACC 3.1 does not
+          make this behavior clear.
+        * Produces a runtime error if `dev_num` is invalid for
+          `dev_type` (always the case if `dev_type=acc_device_none`).
+          nvc 20.11-0 appears to do nothing in this case instead.
+          OpenACC 3.1 says the behavior is implementation-defined.
+        * If `dev_type=acc_device_not_host`, `dev_num` is an index
+          into the entire list of available devices other than host.
+        * Clacc does not attempt to implement OpenACC 3.1, sec. 3.2.4
+          "acc\_set\_device\_num", L3054-3056: "If the value of
+          dev\_num is negative, the runtime will revert to its default
+          behavior, which is implementation-defined.  If the value of
+          the dev\_type is zero, the selected device number will be
+          used for all device types."  We don't know what this text
+          means and cannot seem to reproduce it using nvc 20.11-0.
+    * `acc_get_device_num(acc_device_t dev_type)`
+        * Returns the `dev_num` that would have to be specified in
+          `acc_set_device_num(dev_num, dev_type)` in order to specify
+          the current device.  nvc 20.11-0 appears to have the same
+          behavior.
+        * Returns -1 if the current device is not included by
+          `dev_type`.  nvc 20.11-0 returns 0 instead, but that's
+          misleading as it seems to indicate the current device is the
+          first device included by `dev_type`.
+        * OpenACC 3.1 does not mention how `dev_type` affects the
+          result.
 * `acc_on_device` is supported on the host and on offloading devices:
     * The result is always false if the argument is `acc_device_none`.
       This behavior appears to follow nvc 20.9-0's behavior.  OpenACC
@@ -327,29 +419,17 @@ OpenACC Runtime Library API and Preprocessor
       acc_device_default is undefined."  It might be better if these
       arguments were handled as errors, either at compile time or run
       time depending on whether the argument is constant.
-    * `acc_device_nvidia` is supported as recommended in OpenACC 3.1,
-      sec. A.1.1 "NVIDIA GPU Targets".
-    * `acc_device_radeon` is not yet supported but is recommended in
-      OpenACC 3.1, sec. A.1.2 "AMD GPU Targets".
-    * The recommendation of OpenACC 3.1, sec. A.1.3 "Multicore Host
-      CPU Target" for `acc_device_host` is followed except where
-      LLVM's OpenMP implementation treats the host like an offloading
-      device with discrete memory, usually because Clang's
-      `-fopenmp-targets` was specified.  In that case,
-      `acc_device_not_host` produces true instead.
-    * While not specified by OpenACC 3.1, `acc_device_x86_64` and
-      `acc_device_ppc64le` are also supported.  Like
-      `acc_device_nvidia`, these produce true only when
-      `acc_device_not_host` produces true regardless of the host
-      architecture.  That is, they are meant to indicate *offloading*
-      device types not cases where kernel execution is on the host.
-      These semantics seem consistent with the OpenACC 3.1's multicore
-      recommendation cited above and avoids confusion for the behavior
-      of routines like `acc_get_device_type`.  If detection of the
-      host architecture is useful, a compile-time macro that expands
-      to, say, an `acc_host_t` enum could be provided in the future
-      for use with `acc_on_device(acc_device_host)` to determine
-      whether execution is currently on the host.
+    * One potential point of confusion is that, when executing on the
+      host, `acc_on_device` does not return true for any
+      architecture-specific enumerator, such as `acc_device_x86_64`.
+      These semantics seem consistent with OpenACC 3.1's multicore
+      recommendation for `acc_device_host`, as cited above, and they
+      avoid confusion for the behavior of routines like
+      `acc_get_device_type`.  If detection of the host architecture is
+      useful, a compile-time macro that expands to, say, an
+      `acc_host_t` enum could be provided in the future for use after
+      `acc_on_device(acc_device_host)` determines that execution is
+      currently on the host.
     * `acc_on_device` is defined as a preprocessor function-like macro
       in Clacc's `openacc.h`.  Thus, it has no function address and
       cannot be linked.  This implementation facilitates Clacc's
@@ -408,11 +488,6 @@ OpenACC Runtime Library API and Preprocessor
           no-ops.
         * OpenACC 3.1 is unclear about handling of null pointers.
           Clacc produces a runtime error in that case.
-        * `acc_memcpy_d2d` is not yet easily usable because Clacc does
-          not yet support OpenACC routines to retrieve device numbers.
-          As a temporary workaround, OpenMP routines like
-          `omp_get_default_device` and `omp_get_initial_device` can
-          instead be called to retrieve device numbers.
 
 See the section "OpenACC Runtime" in `README-OpenACC-design.md` for
 further design details.

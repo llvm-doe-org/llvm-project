@@ -62,6 +62,13 @@
  * backend, LD_LIBRARY_PATH or LD_PRELOAD can be used, or a new libacc2omp.so
  * can be built.
  *
+ * Once caveat is that, if the alternate OpenMP runtime's omp_device_t is
+ * defined differently than LLVM's (specifically, if they compile as differently
+ * sized integer representations), then it might be necessary to build a new
+ * libacc2omp.so.  Otherwise, OpenACC Runtime Library device management routines
+ * might malfunction.  We have not observed this problem in practice, but, like
+ * acc_device_t, omp_device_t is intended to be implementation-specific.
+ *
  * OMPT's ompt_start_tool for the OpenACC Profiling Interface
  * ----------------------------------------------------------
  *
@@ -109,6 +116,9 @@
 #ifndef ACC2OMP_BACKEND_H
 #define ACC2OMP_BACKEND_H
 
+#include <omp.h>
+#include <openacc.h>
+
 /// Message IDs that libacc2omp passes to backends for optional
 /// internationalization.
 ///
@@ -126,6 +136,12 @@ typedef enum {
   acc2omp_msg_event_unregister_result,
   acc2omp_msg_event_unregister_unregistered,
   acc2omp_msg_callback_unregister_unregistered,
+  acc2omp_msg_get_num_devices_invalid_type,
+  acc2omp_msg_set_device_type_invalid_type,
+  acc2omp_msg_set_device_type_no_devices,
+  acc2omp_msg_set_device_num_invalid_type,
+  acc2omp_msg_set_device_num_invalid_num,
+  acc2omp_msg_get_device_num_invalid_type,
   acc2omp_msg_map_data_host_pointer_null,
   acc2omp_msg_map_data_device_pointer_null,
   acc2omp_msg_map_data_shared_memory,
@@ -197,6 +213,29 @@ void acc2omp_fatal(acc2omp_msg_t Msg, ...);
 /// Notes for usage within libacc2omp: Do not call this directly.  Use
 /// \c ACC2OMP_ASSERT and \c ACC2OMP_UNREACHABLE instead.
 void acc2omp_assert(int Cond, const char *Msg, const char *File, int Line);
+
+/// Return the \c omp_device_t that corresponds to \p DevTypeACC.  Return
+/// \c omp_device_none if \p DevTypeACC is \c acc_device_none,
+/// \c acc_device_default, \c acc_device_not_host, \c acc_device_current, or any
+/// \c acc_device_t architecture-specific enumerator for which the OpenMP
+/// implementation currently defines no corresponding \c omp_device_t
+/// architecture-specific enumerator.
+///
+/// This function belongs in the libacc2omp backend instead of in the OpenMP or
+/// OpenACC specification for two reasons: (1) it inherently involves both
+/// languages and thus will most likely be viewed as out of scope for either
+/// specification, and (2) the architecture-specific members of each of
+/// \c acc_device_t or \c omp_device_t are necessarily not standardized but are
+/// specific to each OpenACC or OpenMP implementation.
+omp_device_t acc2omp_get_omp_device_t(acc_device_t DevTypeACC);
+
+/// Return the \c acc_device_t that corresponds to \p DevTypeOMP.  Return
+/// \c acc_device_none if \p DevTypeOMP is \c omp_device_none or any
+/// \c omp_device_t architecture-specific enumerator for which libacc2omp
+/// currently defines no corresponding \c acc_device_t enumerator.
+///
+/// Also see comments on \c acc2omp_get_omp_device_t.
+acc_device_t acc2omp_get_acc_device_t(omp_device_t DevTypeOMP);
 
 #ifdef __cplusplus
 } // extern "C"

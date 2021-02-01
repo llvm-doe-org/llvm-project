@@ -16,15 +16,19 @@
 // For standard types (e.g., size_t) used in OpenACC spec's declarations.
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 //----------------------------------------------------------------------------
 // OpenACC Types.
 //----------------------------------------------------------------------------
 
 #define ACC2OMP_FOREACH_DEVICE(Macro)                                          \
   Macro(none)                                                                  \
-  Macro(default)                                                               \
   Macro(host)                                                                  \
   Macro(not_host)                                                              \
+  Macro(default)                                                               \
   Macro(current)                                                               \
   Macro(nvidia)                                                                \
   Macro(x86_64)                                                                \
@@ -48,6 +52,16 @@ enum {
   ACC2OMP_FOREACH_ASYNC(ACC2OMP_ASYNC_ENUMERATOR)
 #undef ACC2OMP_ASYNC_ENUMERATOR
 };
+
+//----------------------------------------------------------------------------
+// OpenACC device management routines.
+//----------------------------------------------------------------------------
+
+int acc_get_num_devices(acc_device_t dev_type);
+void acc_set_device_type(acc_device_t dev_type);
+acc_device_t acc_get_device_type();
+void acc_set_device_num(int dev_num, acc_device_t dev_type);
+int acc_get_device_num(acc_device_t dev_type);
 
 //----------------------------------------------------------------------------
 // OpenACC device test routine (acc_on_device).
@@ -157,10 +171,6 @@ ACC2OMP_DEVICE_VARIANT(arch, ppc64le, acc_device_ppc64le)
 //----------------------------------------------------------------------------
 // OpenACC data and memory management routines.
 //----------------------------------------------------------------------------
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 void *acc_malloc(size_t bytes);
 void acc_free(void *data_dev);
