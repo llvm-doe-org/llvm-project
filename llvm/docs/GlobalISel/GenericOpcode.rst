@@ -545,6 +545,45 @@ Concatenate two vectors and shuffle the elements according to the mask operand.
 The mask operand should be an IR Constant which exactly matches the
 corresponding mask for the IR shufflevector instruction.
 
+Vector Reduction Operations
+---------------------------
+
+These operations represent horizontal vector reduction, producing a scalar result.
+
+G_VECREDUCE_SEQ_FADD, G_VECREDUCE_SEQ_FMUL
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The SEQ variants perform reductions in sequential order. The first operand is
+an initial scalar accumulator value, and the second operand is the vector to reduce.
+
+G_VECREDUCE_FADD, G_VECREDUCE_FMUL
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+These reductions are relaxed variants which may reduce the elements in any order.
+
+G_VECREDUCE_FMAX, G_VECREDUCE_FMIN
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+FMIN/FMAX nodes can have flags, for NaN/NoNaN variants.
+
+
+Integer/bitwise reductions
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* G_VECREDUCE_ADD
+* G_VECREDUCE_MUL
+* G_VECREDUCE_AND
+* G_VECREDUCE_OR
+* G_VECREDUCE_XOR
+* G_VECREDUCE_SMAX
+* G_VECREDUCE_SMIN
+* G_VECREDUCE_UMAX
+* G_VECREDUCE_UMIN
+
+Integer reductions may have a result type larger than the vector element type.
+However, the reduction is performed using the vector element type and the value
+in the top bits is unspecified.
+
 Memory Operations
 -----------------
 
@@ -696,3 +735,39 @@ An alignment value of `0` or `1` mean no specific alignment.
 .. code-block:: none
 
   %8:_(p0) = G_DYN_STACKALLOC %7(s64), 32
+
+Optimization Hints
+------------------
+
+These instructions do not correspond to any target instructions. They act as
+hints for various combines.
+
+G_ASSERT_SEXT, G_ASSERT_ZEXT
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Signifies that the contents of a register were previously extended from a
+smaller type.
+
+The smaller type is denoted using an immediate operand. For scalars, this is the
+width of the entire smaller type. For vectors, this is the width of the smaller
+element type.
+
+.. code-block:: none
+
+  %x_was_zexted:_(s32) = G_ASSERT_ZEXT %x(s32), 16
+  %y_was_zexted:_(<2 x s32>) = G_ASSERT_ZEXT %y(<2 x s32>), 16
+
+  %z_was_sexted:_(s32) = G_ASSERT_SEXT %z(s32), 8
+
+G_ASSERT_SEXT and G_ASSERT_ZEXT act like copies, albeit with some restrictions.
+
+The source and destination registers must
+
+- Be virtual
+- Belong to the same register class
+- Belong to the same register bank
+
+It should always be safe to
+
+- Look through the source register
+- Replace the destination register with the source register

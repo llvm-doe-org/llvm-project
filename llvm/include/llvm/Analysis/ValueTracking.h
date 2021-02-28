@@ -45,6 +45,8 @@ class StringRef;
 class TargetLibraryInfo;
 class Value;
 
+constexpr unsigned MaxAnalysisRecursionDepth = 6;
+
   /// Determine which bits of V are known to be either zero or one and return
   /// them in the KnownZero/KnownOne bit sets.
   ///
@@ -411,10 +413,12 @@ class Value;
   bool getUnderlyingObjectsForCodeGen(const Value *V,
                                       SmallVectorImpl<Value *> &Objects);
 
-  /// Finds alloca where the value comes from.
-  AllocaInst *findAllocaForValue(Value *V);
-  inline const AllocaInst *findAllocaForValue(const Value *V) {
-    return findAllocaForValue(const_cast<Value *>(V));
+  /// Returns unique alloca where the value comes from, or nullptr.
+  /// If OffsetZero is true check that V points to the begining of the alloca.
+  AllocaInst *findAllocaForValue(Value *V, bool OffsetZero = false);
+  inline const AllocaInst *findAllocaForValue(const Value *V,
+                                              bool OffsetZero = false) {
+    return findAllocaForValue(const_cast<Value *>(V), OffsetZero);
   }
 
   /// Return true if the only users of this pointer are lifetime markers.
@@ -578,27 +582,36 @@ class Value;
   /// poison.
   /// Formally, given I = `r = op v1 v2 .. vN`, propagatesPoison returns true
   /// if, for all i, r is evaluated to poison or op raises UB if vi = poison.
+  /// If vi is a vector or an aggregate and r is a single value, any poison
+  /// element in vi should make r poison or raise UB.
   /// To filter out operands that raise UB on poison, you can use
   /// getGuaranteedNonPoisonOp.
-  bool propagatesPoison(const Instruction *I);
+  bool propagatesPoison(const Operator *I);
 
-  /// Return either nullptr or an operand of I such that I will trigger
-  /// undefined behavior if I is executed and that operand has a poison
-  /// value.
-  const Value *getGuaranteedNonPoisonOp(const Instruction *I);
+  /// Insert operands of I into Ops such that I will trigger undefined behavior
+  /// if I is executed and that operand has a poison value.
+  void getGuaranteedNonPoisonOps(const Instruction *I,
+                                 SmallPtrSetImpl<const Value *> &Ops);
+  /// Insert operands of I into Ops such that I will trigger undefined behavior
+  /// if I is executed and that operand is not a well-defined value
+  /// (i.e. has undef bits or poison).
+  void getGuaranteedWellDefinedOps(const Instruction *I,
+                                   SmallPtrSetImpl<const Value *> &Ops);
 
-  /// Return true if the given instruction must trigger undefined behavior.
+  /// Return true if the given instruction must trigger undefined behavior
   /// when I is executed with any operands which appear in KnownPoison holding
   /// a poison value at the point of execution.
   bool mustTriggerUB(const Instruction *I,
                      const SmallSet<const Value *, 16>& KnownPoison);
 
-  /// Return true if this function can prove that if PoisonI is executed
-  /// and yields a poison value, then that will trigger undefined behavior.
+  /// Return true if this function can prove that if Inst is executed
+  /// and yields a poison value or undef bits, then that will trigger
+  /// undefined behavior.
   ///
   /// Note that this currently only considers the basic block that is
-  /// the parent of I.
-  bool programUndefinedIfPoison(const Instruction *PoisonI);
+  /// the parent of Inst.
+  bool programUndefinedIfUndefOrPoison(const Instruction *Inst);
+  bool programUndefinedIfPoison(const Instruction *Inst);
 
   /// canCreateUndefOrPoison returns true if Op can create undef or poison from
   /// non-undef & non-poison operands.
@@ -614,9 +627,14 @@ class Value;
   bool canCreateUndefOrPoison(const Operator *Op);
   bool canCreatePoison(const Operator *Op);
 
-  /// Return true if this function can prove that V is never undef value
-  /// or poison value. If V is an aggregate value or vector, check whether all
-  /// elements (except padding) are not undef or poison.
+  /// Return true if V is poison given that ValAssumedPoison is already poison.
+  /// For example, if ValAssumedPoison is `icmp X, 10` and V is `icmp X, 5`,
+  /// impliesPoison returns true.
+  bool impliesPoison(const Value *ValAssumedPoison, const Value *V);
+
+  /// Return true if this function can prove that V does not have undef bits
+  /// and is never poison. If V is an aggregate value or vector, check whether
+  /// all elements (except padding) are not undef or poison.
   /// Note that this is different from canCreateUndefOrPoison because the
   /// function assumes Op's operands are not poison/undef.
   ///
@@ -624,9 +642,14 @@ class Value;
   /// and returns true if it is guaranteed to be never undef or poison
   /// immediately before the CtxI.
   bool isGuaranteedNotToBeUndefOrPoison(const Value *V,
+                                        AssumptionCache *AC = nullptr,
                                         const Instruction *CtxI = nullptr,
                                         const DominatorTree *DT = nullptr,
                                         unsigned Depth = 0);
+  bool isGuaranteedNotToBePoison(const Value *V, AssumptionCache *AC = nullptr,
+                                 const Instruction *CtxI = nullptr,
+                                 const DominatorTree *DT = nullptr,
+                                 unsigned Depth = 0);
 
   /// Specific patterns of select instructions we can match.
   enum SelectPatternFlavor {
@@ -716,6 +739,30 @@ class Value;
   /// Return the canonical inverse comparison predicate for the specified
   /// minimum/maximum flavor.
   CmpInst::Predicate getInverseMinMaxPred(SelectPatternFlavor SPF);
+
+  /// Check if the values in \p VL are select instructions that can be converted
+  /// to a min or max (vector) intrinsic. Returns the intrinsic ID, if such a
+  /// conversion is possible, together with a bool indicating whether all select
+  /// conditions are only used by the selects. Otherwise return
+  /// Intrinsic::not_intrinsic.
+  std::pair<Intrinsic::ID, bool>
+  canConvertToMinOrMaxIntrinsic(ArrayRef<Value *> VL);
+
+  /// Attempt to match a simple first order recurrence cycle of the form:
+  ///   %iv = phi Ty [%Start, %Entry], [%Inc, %backedge]
+  ///   %inc = binop %iv, %step
+  /// OR
+  ///   %iv = phi Ty [%Start, %Entry], [%Inc, %backedge]
+  ///   %inc = binop %step, %iv
+  ///
+  /// WARNING: For non-commutative operators, we will match both forms.  This
+  /// results in some odd recurrence structures.  Callers may wish to filter
+  /// out recurrences where the phi is not the LHS of the returned operator.
+  ///
+  /// NOTE: This is intentional simple.  If you want the ability to analyze
+  /// non-trivial loop conditons, see ScalarEvolution instead.
+  bool matchSimpleRecurrence(const PHINode *P, BinaryOperator *&BO,
+                             Value *&Start, Value *&Step);
 
   /// Return true if RHS is known to be implied true by LHS.  Return false if
   /// RHS is known to be implied false by LHS.  Otherwise, return None if no

@@ -461,12 +461,7 @@ public:
 };
 
 template <class ELFT> class DynamicSection final : public SyntheticSection {
-  using Elf_Dyn = typename ELFT::Dyn;
-  using Elf_Rel = typename ELFT::Rel;
-  using Elf_Rela = typename ELFT::Rela;
-  using Elf_Relr = typename ELFT::Relr;
-  using Elf_Shdr = typename ELFT::Shdr;
-  using Elf_Sym = typename ELFT::Sym;
+  LLVM_ELF_IMPORT_TYPES_ELFT(ELFT)
 
   // finalizeContents() fills this vector with the section contents.
   std::vector<std::pair<int32_t, std::function<uint64_t()>>> entries;
@@ -1200,7 +1195,7 @@ inline Partition &SectionBase::getPartition() const {
 // Linker generated sections which can be used as inputs and are not specific to
 // a partition.
 struct InStruct {
-  InputSection *armAttributes;
+  InputSection *attributes;
   BssSection *bss;
   BssSection *bssRelRo;
   GotSection *got;

@@ -6,6 +6,13 @@
   
 -->
 
+# Fortran Extensions supported by Flang
+
+```eval_rst
+.. contents::
+   :local:
+```
+
 As a general principle, this compiler will accept by default and
 without complaint many legacy features, extensions to the standard
 language, and features that have been deleted from the standard,
@@ -16,8 +23,8 @@ Other non-standard features, which do conflict with the current
 standard specification of the Fortran programming language, are
 accepted if enabled by command-line options.
 
-Intentional violations of the standard
-======================================
+## Intentional violations of the standard
+
 * Scalar `INTEGER` actual argument expressions (not variables!)
   are converted to the kinds of scalar `INTEGER` dummy arguments
   when the interface is explicit and the kinds differ.
@@ -29,8 +36,8 @@ Intentional violations of the standard
   so long as they contain no executable code, no internal subprograms,
   and allocate no storage outside a named `COMMON` block.  (C1415)
 
-Extensions, deletions, and legacy features supported by default
-===============================================================
+## Extensions, deletions, and legacy features supported by default
+
 * Tabs in source
 * `<>` as synonym for `.NE.` and `/=`
 * `$` and `@` as legal characters in names
@@ -45,7 +52,6 @@ Extensions, deletions, and legacy features supported by default
 * `X` prefix/suffix as synonym for `Z` on hexadecimal literals
 * `B`, `O`, `Z`, and `X` accepted as suffixes as well as prefixes
 * Triplets allowed in array constructors
-* Old-style `PARAMETER pi=3.14` statement without parentheses
 * `%LOC`, `%VAL`, and `%REF`
 * Leading comma allowed before I/O item list
 * Empty parentheses allowed in `PROGRAM P()`
@@ -64,6 +70,7 @@ Extensions, deletions, and legacy features supported by default
 * `NAME=` as synonym for `FILE=`
 * Data edit descriptors without width or other details
 * `D` lines in fixed form as comments or debug code
+* `CARRIAGECONTROL=` on the OPEN and INQUIRE statements
 * `CONVERT=` on the OPEN and INQUIRE statements
 * `DISPOSE=` on the OPEN and INQUIRE statements
 * Leading semicolons are ignored before any statement that
@@ -121,9 +128,15 @@ Extensions, deletions, and legacy features supported by default
 * A `RETURN` statement may appear in a main program.
 * DATA statement initialization is allowed for procedure pointers outside
   structure constructors.
+* Nonstandard intrinsic functions: ISNAN, SIZEOF
+* A forward reference to a default INTEGER scalar dummy argument is
+  permitted to appear in a specification expression, such as an array
+  bound, in a scope with IMPLICIT NONE(TYPE) if the name
+  of the dummy argument would have caused it to be implicitly typed
+  as default INTEGER if IMPLICIT NONE(TYPE) were absent.
 
-Extensions supported when enabled by options
---------------------------------------------
+### Extensions supported when enabled by options
+
 * C-style backslash escape sequences in quoted CHARACTER literals
   (but not Hollerith) [-fbackslash]
 * Logical abbreviations `.T.`, `.F.`, `.N.`, `.A.`, `.O.`, and `.X.`
@@ -135,17 +148,20 @@ Extensions supported when enabled by options
   rule imposes an artificially small constraint in some cases
   where Fortran mandates that something have the default `INTEGER`
   type: specifically, the results of references to the intrinsic functions
-  `SIZE`, `LBOUND`, `UBOUND`, `SHAPE`, and the location reductions
+  `SIZE`, `STORAGE_SIZE`,`LBOUND`, `UBOUND`, `SHAPE`, and the location reductions
   `FINDLOC`, `MAXLOC`, and `MINLOC` in the absence of an explicit
   `KIND=` actual argument.  We return `INTEGER(KIND=8)` by default in
   these cases when the `-flarge-sizes` option is enabled.
+  `SIZEOF` and `C_SIZEOF` always return `INTEGER(KIND=8)`.
 * Treat each specification-part like is has `IMPLICIT NONE`
   [-fimplicit-none-type-always]
 * Ignore occurrences of `IMPLICIT NONE` and `IMPLICIT NONE(TYPE)`
   [-fimplicit-none-type-never]
+* Old-style `PARAMETER pi=3.14` statement without parentheses
+  [-falternative-parameter-statement]
 
-Extensions and legacy features deliberately not supported
----------------------------------------------------------
+### Extensions and legacy features deliberately not supported
+
 * `.LG.` as synonym for `.NE.`
 * `REDIMENSION`
 * Allocatable `COMMON`
@@ -188,9 +204,18 @@ Extensions and legacy features deliberately not supported
   PGI, Intel, and XLF support this in ways that are not numerically equivalent.
   PGI converts the arguments while Intel and XLF replace the specific by the related generic.
 
-Preprocessing behavior
-======================
+## Preprocessing behavior
+
 * The preprocessor is always run, whatever the filename extension may be.
 * We respect Fortran comments in macro actual arguments (like GNU, Intel, NAG;
   unlike PGI and XLF) on the principle that macro calls should be treated
   like function references.  Fortran's line continuation methods also work.
+
+## Standard features not silently accepted
+
+* Fortran explicitly ignores type declaration statements when they
+  attempt to type the name of a generic intrinsic function (8.2 p3).
+  One can declare `CHARACTER::COS` and still get a real result
+  from `COS(3.14159)`, for example.  f18 will complain when a
+  generic intrinsic function's inferred result type does not
+  match an explicit declaration.  This message is a warning.

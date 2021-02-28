@@ -133,7 +133,7 @@ static const std::map<std::string, KernelArgMD::ValueKind> ArgValueKind = {
     {"hidden_hostcall_buffer", KernelArgMD::ValueKind::HiddenHostcallBuffer},
 };
 
-// public variables -- TODO(ashwinma) move these to a runtime object?
+// global variables. TODO: Get rid of these
 atmi_machine_t g_atmi_machine;
 ATLMachine g_atl_machine;
 
@@ -163,8 +163,6 @@ int context_init_time_init = 0;
 
 atl_context_t atlc = {.struct_initialized = false};
 atl_context_t *atlc_p = NULL;
-
-hsa_signal_t IdentityCopySignal;
 
 namespace core {
 /* Machine Info */
@@ -212,21 +210,11 @@ atmi_status_t Runtime::Initialize() {
 }
 
 atmi_status_t Runtime::Finalize() {
-  // TODO(ashwinma): Finalize all processors, queues, signals, kernarg memory
-  // regions
   hsa_status_t err;
 
   for (uint32_t i = 0; i < g_executables.size(); i++) {
     err = hsa_executable_destroy(g_executables[i]);
     ErrorCheck(Destroying executable, err);
-  }
-
-  // Finalize queues
-  for (auto &p : g_atl_machine.processors<ATLCPUProcessor>()) {
-    p.destroyQueues();
-  }
-  for (auto &p : g_atl_machine.processors<ATLGPUProcessor>()) {
-    p.destroyQueues();
   }
 
   for (uint32_t i = 0; i < SymbolInfoTable.size(); i++) {
@@ -450,7 +438,6 @@ static hsa_status_t init_compute_and_memory() {
   int proc_index = 0;
   for (int i = cpus_begin; i < cpus_end; i++) {
     all_devices[i].type = cpu_procs[proc_index].type();
-    all_devices[i].core_count = cpu_procs[proc_index].num_cus();
 
     std::vector<ATLMemory> memories = cpu_procs[proc_index].memories();
     int fine_memories_size = 0;
@@ -468,13 +455,11 @@ static hsa_status_t init_compute_and_memory() {
     }
     DEBUG_PRINT("\nFine Memories : %d", fine_memories_size);
     DEBUG_PRINT("\tCoarse Memories : %d\n", coarse_memories_size);
-    all_devices[i].memory_count = memories.size();
     proc_index++;
   }
   proc_index = 0;
   for (int i = gpus_begin; i < gpus_end; i++) {
     all_devices[i].type = gpu_procs[proc_index].type();
-    all_devices[i].core_count = gpu_procs[proc_index].num_cus();
 
     std::vector<ATLMemory> memories = gpu_procs[proc_index].memories();
     int fine_memories_size = 0;
@@ -492,7 +477,6 @@ static hsa_status_t init_compute_and_memory() {
     }
     DEBUG_PRINT("\nFine Memories : %d", fine_memories_size);
     DEBUG_PRINT("\tCoarse Memories : %d\n", coarse_memories_size);
-    all_devices[i].memory_count = memories.size();
     proc_index++;
   }
   proc_index = 0;
@@ -551,8 +535,6 @@ hsa_status_t init_hsa() {
 void init_tasks() {
   if (atlc.g_tasks_initialized != false)
     return;
-  hsa_status_t err;
-  int task_num;
   std::vector<hsa_agent_t> gpu_agents;
   int gpu_count = g_atl_machine.processorCount<ATLGPUProcessor>();
   for (int gpu = 0; gpu < gpu_count; gpu++) {
@@ -560,8 +542,6 @@ void init_tasks() {
     ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
     gpu_agents.push_back(proc.agent());
   }
-  err = hsa_signal_create(0, 0, NULL, &IdentityCopySignal);
-  ErrorCheck(Creating a HSA signal, err);
   atlc.g_tasks_initialized = true;
 }
 
@@ -615,18 +595,6 @@ atmi_status_t atl_init_gpu_context() {
   err = init_hsa();
   if (err != HSA_STATUS_SUCCESS)
     return ATMI_STATUS_ERROR;
-
-  int gpu_count = g_atl_machine.processorCount<ATLGPUProcessor>();
-  for (int gpu = 0; gpu < gpu_count; gpu++) {
-    atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
-    ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
-    int num_gpu_queues = core::Runtime::getInstance().getNumGPUQueues();
-    if (num_gpu_queues == -1) {
-      num_gpu_queues = proc.num_cus();
-      num_gpu_queues = (num_gpu_queues > 8) ? 8 : num_gpu_queues;
-    }
-    proc.createQueues(num_gpu_queues);
-  }
 
   if (context_init_time_init == 0) {
     clock_gettime(CLOCK_MONOTONIC_RAW, &context_init_time);
@@ -854,7 +822,6 @@ static hsa_status_t get_code_object_custom_metadata(void *binary,
   for (size_t i = 0; i < kernelsSize; i++) {
     assert(msgpack_errors == 0);
     std::string kernelName;
-    std::string languageName;
     std::string symbolName;
 
     msgpack::byte_range element;
@@ -862,7 +829,6 @@ static hsa_status_t get_code_object_custom_metadata(void *binary,
     msgpackErrorCheck(element lookup in kernel metadata, msgpack_errors);
 
     msgpack_errors += map_lookup_string(element, ".name", &kernelName);
-    msgpack_errors += map_lookup_string(element, ".language", &languageName);
     msgpack_errors += map_lookup_string(element, ".symbol", &symbolName);
     msgpackErrorCheck(strings lookup in kernel metadata, msgpack_errors);
 
@@ -904,8 +870,6 @@ static hsa_status_t get_code_object_custom_metadata(void *binary,
         msgpackErrorCheck(iterate args map in kernel args metadata,
                           msgpack_errors);
 
-        // TODO(ashwinma): should the below population actions be done only for
-        // non-implicit args?
         // populate info with sizes and offsets
         info.arg_sizes.push_back(lcArg.size_);
         // v3 has offset field and not align field

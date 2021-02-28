@@ -12,7 +12,6 @@
 #include "Object.h"
 #include "Reader.h"
 #include "Writer.h"
-#include "llvm-objcopy.h"
 #include "llvm/Support/Errc.h"
 
 namespace llvm {
@@ -73,10 +72,9 @@ static Error handleArgs(const CopyConfig &Config, Object &Obj) {
     Obj.addSectionWithOwnedContents(Sec, std::move(Buf));
   }
 
-  if (!Config.AddGnuDebugLink.empty() || !Config.BuildIdLinkDir.empty() ||
-      Config.BuildIdLinkInput || Config.BuildIdLinkOutput ||
-      Config.ExtractPartition || !Config.SplitDWO.empty() ||
-      !Config.SymbolsPrefix.empty() || !Config.AllocSectionsPrefix.empty() ||
+  if (!Config.AddGnuDebugLink.empty() || Config.ExtractPartition ||
+      !Config.SplitDWO.empty() || !Config.SymbolsPrefix.empty() ||
+      !Config.AllocSectionsPrefix.empty() ||
       Config.DiscardMode != DiscardType::None || Config.NewSymbolVisibility ||
       !Config.SymbolsToAdd.empty() || !Config.RPathToAdd.empty() ||
       !Config.OnlySection.empty() || !Config.SymbolsToGlobalize.empty() ||

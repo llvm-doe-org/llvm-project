@@ -234,6 +234,12 @@ def err_seh___finally_block : Error<
 // Sema && AST
 def note_invalid_subexpr_in_const_expr : Note<
   "subexpression not valid in a constant expression">;
+def note_constexpr_invalid_template_arg : Note<
+  "%select{pointer|reference}0 to %select{|subobject of }1"
+  "%select{type_info object|string literal|temporary object|"
+  "predefined '%3' variable}2 is not allowed in a template argument">;
+def err_constexpr_invalid_template_arg : Error<
+  note_constexpr_invalid_template_arg.Text>;
 
 // Sema && Frontend
 let CategoryName = "Inline Assembly Issue" in {
@@ -330,6 +336,8 @@ def warn_ignored_hip_only_option : Warning<
 // OpenMP
 def err_omp_more_one_clause : Error<
   "directive '#pragma omp %0' cannot contain more than one '%1' clause%select{| with '%3' name modifier| with 'source' dependence}2">;
+def err_omp_required_clause : Error<
+  "directive '#pragma omp %0' requires the '%1' clause">;
 
 // Static Analyzer Core
 def err_unknown_analyzer_checker_or_package : Error<

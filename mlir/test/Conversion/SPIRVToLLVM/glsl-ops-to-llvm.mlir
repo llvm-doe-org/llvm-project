@@ -5,12 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @ceil
-func @ceil(%arg0: f32, %arg1: vector<3xf16>) {
-  // CHECK: "llvm.intr.ceil"(%{{.*}}) : (!llvm.float) -> !llvm.float
+spv.func @ceil(%arg0: f32, %arg1: vector<3xf16>) "None" {
+  // CHECK: "llvm.intr.ceil"(%{{.*}}) : (f32) -> f32
   %0 = spv.GLSL.Ceil %arg0 : f32
-  // CHECK: "llvm.intr.ceil"(%{{.*}}) : (!llvm.vec<3 x half>) -> !llvm.vec<3 x half>
+  // CHECK: "llvm.intr.ceil"(%{{.*}}) : (vector<3xf16>) -> vector<3xf16>
   %1 = spv.GLSL.Ceil %arg1 : vector<3xf16>
-  return
+  spv.Return
 }
 
 //===----------------------------------------------------------------------===//
@@ -18,12 +18,12 @@ func @ceil(%arg0: f32, %arg1: vector<3xf16>) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @cos
-func @cos(%arg0: f32, %arg1: vector<3xf16>) {
-  // CHECK: "llvm.intr.cos"(%{{.*}}) : (!llvm.float) -> !llvm.float
+spv.func @cos(%arg0: f32, %arg1: vector<3xf16>) "None" {
+  // CHECK: "llvm.intr.cos"(%{{.*}}) : (f32) -> f32
   %0 = spv.GLSL.Cos %arg0 : f32
-  // CHECK: "llvm.intr.cos"(%{{.*}}) : (!llvm.vec<3 x half>) -> !llvm.vec<3 x half>
+  // CHECK: "llvm.intr.cos"(%{{.*}}) : (vector<3xf16>) -> vector<3xf16>
   %1 = spv.GLSL.Cos %arg1 : vector<3xf16>
-  return
+  spv.Return
 }
 
 //===----------------------------------------------------------------------===//
@@ -31,12 +31,12 @@ func @cos(%arg0: f32, %arg1: vector<3xf16>) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @exp
-func @exp(%arg0: f32, %arg1: vector<3xf16>) {
-  // CHECK: "llvm.intr.exp"(%{{.*}}) : (!llvm.float) -> !llvm.float
+spv.func @exp(%arg0: f32, %arg1: vector<3xf16>) "None" {
+  // CHECK: "llvm.intr.exp"(%{{.*}}) : (f32) -> f32
   %0 = spv.GLSL.Exp %arg0 : f32
-  // CHECK: "llvm.intr.exp"(%{{.*}}) : (!llvm.vec<3 x half>) -> !llvm.vec<3 x half>
+  // CHECK: "llvm.intr.exp"(%{{.*}}) : (vector<3xf16>) -> vector<3xf16>
   %1 = spv.GLSL.Exp %arg1 : vector<3xf16>
-  return
+  spv.Return
 }
 
 //===----------------------------------------------------------------------===//
@@ -44,12 +44,12 @@ func @exp(%arg0: f32, %arg1: vector<3xf16>) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @fabs
-func @fabs(%arg0: f32, %arg1: vector<3xf16>) {
-  // CHECK: "llvm.intr.fabs"(%{{.*}}) : (!llvm.float) -> !llvm.float
+spv.func @fabs(%arg0: f32, %arg1: vector<3xf16>) "None" {
+  // CHECK: "llvm.intr.fabs"(%{{.*}}) : (f32) -> f32
   %0 = spv.GLSL.FAbs %arg0 : f32
-  // CHECK: "llvm.intr.fabs"(%{{.*}}) : (!llvm.vec<3 x half>) -> !llvm.vec<3 x half>
+  // CHECK: "llvm.intr.fabs"(%{{.*}}) : (vector<3xf16>) -> vector<3xf16>
   %1 = spv.GLSL.FAbs %arg1 : vector<3xf16>
-  return
+  spv.Return
 }
 
 //===----------------------------------------------------------------------===//
@@ -57,12 +57,12 @@ func @fabs(%arg0: f32, %arg1: vector<3xf16>) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @floor
-func @floor(%arg0: f32, %arg1: vector<3xf16>) {
-  // CHECK: "llvm.intr.floor"(%{{.*}}) : (!llvm.float) -> !llvm.float
+spv.func @floor(%arg0: f32, %arg1: vector<3xf16>) "None" {
+  // CHECK: "llvm.intr.floor"(%{{.*}}) : (f32) -> f32
   %0 = spv.GLSL.Floor %arg0 : f32
-  // CHECK: "llvm.intr.floor"(%{{.*}}) : (!llvm.vec<3 x half>) -> !llvm.vec<3 x half>
+  // CHECK: "llvm.intr.floor"(%{{.*}}) : (vector<3xf16>) -> vector<3xf16>
   %1 = spv.GLSL.Floor %arg1 : vector<3xf16>
-  return
+  spv.Return
 }
 
 //===----------------------------------------------------------------------===//
@@ -70,12 +70,12 @@ func @floor(%arg0: f32, %arg1: vector<3xf16>) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @fmax
-func @fmax(%arg0: f32, %arg1: vector<3xf16>) {
-  // CHECK: "llvm.intr.maxnum"(%{{.*}}, %{{.*}}) : (!llvm.float, !llvm.float) -> !llvm.float
+spv.func @fmax(%arg0: f32, %arg1: vector<3xf16>) "None" {
+  // CHECK: "llvm.intr.maxnum"(%{{.*}}, %{{.*}}) : (f32, f32) -> f32
   %0 = spv.GLSL.FMax %arg0, %arg0 : f32
-  // CHECK: "llvm.intr.maxnum"(%{{.*}}, %{{.*}}) : (!llvm.vec<3 x half>, !llvm.vec<3 x half>) -> !llvm.vec<3 x half>
+  // CHECK: "llvm.intr.maxnum"(%{{.*}}, %{{.*}}) : (vector<3xf16>, vector<3xf16>) -> vector<3xf16>
   %1 = spv.GLSL.FMax %arg1, %arg1 : vector<3xf16>
-  return
+  spv.Return
 }
 
 //===----------------------------------------------------------------------===//
@@ -83,12 +83,12 @@ func @fmax(%arg0: f32, %arg1: vector<3xf16>) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @fmin
-func @fmin(%arg0: f32, %arg1: vector<3xf16>) {
-  // CHECK: "llvm.intr.minnum"(%{{.*}}, %{{.*}}) : (!llvm.float, !llvm.float) -> !llvm.float
+spv.func @fmin(%arg0: f32, %arg1: vector<3xf16>) "None" {
+  // CHECK: "llvm.intr.minnum"(%{{.*}}, %{{.*}}) : (f32, f32) -> f32
   %0 = spv.GLSL.FMin %arg0, %arg0 : f32
-  // CHECK: "llvm.intr.minnum"(%{{.*}}, %{{.*}}) : (!llvm.vec<3 x half>, !llvm.vec<3 x half>) -> !llvm.vec<3 x half>
+  // CHECK: "llvm.intr.minnum"(%{{.*}}, %{{.*}}) : (vector<3xf16>, vector<3xf16>) -> vector<3xf16>
   %1 = spv.GLSL.FMin %arg1, %arg1 : vector<3xf16>
-  return
+  spv.Return
 }
 
 //===----------------------------------------------------------------------===//
@@ -96,12 +96,12 @@ func @fmin(%arg0: f32, %arg1: vector<3xf16>) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @log
-func @log(%arg0: f32, %arg1: vector<3xf16>) {
-  // CHECK: "llvm.intr.log"(%{{.*}}) : (!llvm.float) -> !llvm.float
+spv.func @log(%arg0: f32, %arg1: vector<3xf16>) "None" {
+  // CHECK: "llvm.intr.log"(%{{.*}}) : (f32) -> f32
   %0 = spv.GLSL.Log %arg0 : f32
-  // CHECK: "llvm.intr.log"(%{{.*}}) : (!llvm.vec<3 x half>) -> !llvm.vec<3 x half>
+  // CHECK: "llvm.intr.log"(%{{.*}}) : (vector<3xf16>) -> vector<3xf16>
   %1 = spv.GLSL.Log %arg1 : vector<3xf16>
-  return
+  spv.Return
 }
 
 //===----------------------------------------------------------------------===//
@@ -109,12 +109,12 @@ func @log(%arg0: f32, %arg1: vector<3xf16>) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @sin
-func @sin(%arg0: f32, %arg1: vector<3xf16>) {
-  // CHECK: "llvm.intr.sin"(%{{.*}}) : (!llvm.float) -> !llvm.float
+spv.func @sin(%arg0: f32, %arg1: vector<3xf16>) "None" {
+  // CHECK: "llvm.intr.sin"(%{{.*}}) : (f32) -> f32
   %0 = spv.GLSL.Sin %arg0 : f32
-  // CHECK: "llvm.intr.sin"(%{{.*}}) : (!llvm.vec<3 x half>) -> !llvm.vec<3 x half>
+  // CHECK: "llvm.intr.sin"(%{{.*}}) : (vector<3xf16>) -> vector<3xf16>
   %1 = spv.GLSL.Sin %arg1 : vector<3xf16>
-  return
+  spv.Return
 }
 
 //===----------------------------------------------------------------------===//
@@ -122,12 +122,12 @@ func @sin(%arg0: f32, %arg1: vector<3xf16>) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @smax
-func @smax(%arg0: i16, %arg1: vector<3xi32>) {
-  // CHECK: "llvm.intr.smax"(%{{.*}}, %{{.*}}) : (!llvm.i16, !llvm.i16) -> !llvm.i16
+spv.func @smax(%arg0: i16, %arg1: vector<3xi32>) "None" {
+  // CHECK: "llvm.intr.smax"(%{{.*}}, %{{.*}}) : (i16, i16) -> i16
   %0 = spv.GLSL.SMax %arg0, %arg0 : i16
-  // CHECK: "llvm.intr.smax"(%{{.*}}, %{{.*}}) : (!llvm.vec<3 x i32>, !llvm.vec<3 x i32>) -> !llvm.vec<3 x i32>
+  // CHECK: "llvm.intr.smax"(%{{.*}}, %{{.*}}) : (vector<3xi32>, vector<3xi32>) -> vector<3xi32>
   %1 = spv.GLSL.SMax %arg1, %arg1 : vector<3xi32>
-  return
+  spv.Return
 }
 
 //===----------------------------------------------------------------------===//
@@ -135,12 +135,12 @@ func @smax(%arg0: i16, %arg1: vector<3xi32>) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @smin
-func @smin(%arg0: i16, %arg1: vector<3xi32>) {
-  // CHECK: "llvm.intr.smin"(%{{.*}}, %{{.*}}) : (!llvm.i16, !llvm.i16) -> !llvm.i16
+spv.func @smin(%arg0: i16, %arg1: vector<3xi32>) "None" {
+  // CHECK: "llvm.intr.smin"(%{{.*}}, %{{.*}}) : (i16, i16) -> i16
   %0 = spv.GLSL.SMin %arg0, %arg0 : i16
-  // CHECK: "llvm.intr.smin"(%{{.*}}, %{{.*}}) : (!llvm.vec<3 x i32>, !llvm.vec<3 x i32>) -> !llvm.vec<3 x i32>
+  // CHECK: "llvm.intr.smin"(%{{.*}}, %{{.*}}) : (vector<3xi32>, vector<3xi32>) -> vector<3xi32>
   %1 = spv.GLSL.SMin %arg1, %arg1 : vector<3xi32>
-  return
+  spv.Return
 }
 
 //===----------------------------------------------------------------------===//
@@ -148,12 +148,12 @@ func @smin(%arg0: i16, %arg1: vector<3xi32>) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @sqrt
-func @sqrt(%arg0: f32, %arg1: vector<3xf16>) {
-  // CHECK: "llvm.intr.sqrt"(%{{.*}}) : (!llvm.float) -> !llvm.float
+spv.func @sqrt(%arg0: f32, %arg1: vector<3xf16>) "None" {
+  // CHECK: "llvm.intr.sqrt"(%{{.*}}) : (f32) -> f32
   %0 = spv.GLSL.Sqrt %arg0 : f32
-  // CHECK: "llvm.intr.sqrt"(%{{.*}}) : (!llvm.vec<3 x half>) -> !llvm.vec<3 x half>
+  // CHECK: "llvm.intr.sqrt"(%{{.*}}) : (vector<3xf16>) -> vector<3xf16>
   %1 = spv.GLSL.Sqrt %arg1 : vector<3xf16>
-  return
+  spv.Return
 }
 
 //===----------------------------------------------------------------------===//
@@ -161,12 +161,12 @@ func @sqrt(%arg0: f32, %arg1: vector<3xf16>) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @tan
-func @tan(%arg0: f32) {
-  // CHECK: %[[SIN:.*]] = "llvm.intr.sin"(%{{.*}}) : (!llvm.float) -> !llvm.float
-  // CHECK: %[[COS:.*]] = "llvm.intr.cos"(%{{.*}}) : (!llvm.float) -> !llvm.float
-  // CHECK: llvm.fdiv %[[SIN]], %[[COS]] : !llvm.float
+spv.func @tan(%arg0: f32) "None" {
+  // CHECK: %[[SIN:.*]] = "llvm.intr.sin"(%{{.*}}) : (f32) -> f32
+  // CHECK: %[[COS:.*]] = "llvm.intr.cos"(%{{.*}}) : (f32) -> f32
+  // CHECK: llvm.fdiv %[[SIN]], %[[COS]] : f32
   %0 = spv.GLSL.Tan %arg0 : f32
-  return
+  spv.Return
 }
 
 //===----------------------------------------------------------------------===//
@@ -174,16 +174,16 @@ func @tan(%arg0: f32) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @tanh
-func @tanh(%arg0: f32) {
-  // CHECK: %[[TWO:.*]] = llvm.mlir.constant(2.000000e+00 : f32) : !llvm.float
-  // CHECK: %[[X2:.*]] = llvm.fmul %[[TWO]], %{{.*}} : !llvm.float
-  // CHECK: %[[EXP:.*]] = "llvm.intr.exp"(%[[X2]]) : (!llvm.float) -> !llvm.float
-  // CHECK: %[[ONE:.*]] = llvm.mlir.constant(1.000000e+00 : f32) : !llvm.float
-  // CHECK: %[[T0:.*]] = llvm.fsub %[[EXP]], %[[ONE]] : !llvm.float
-  // CHECK: %[[T1:.*]] = llvm.fadd %[[EXP]], %[[ONE]] : !llvm.float
-  // CHECK: llvm.fdiv %[[T0]], %[[T1]] : !llvm.float
+spv.func @tanh(%arg0: f32) "None" {
+  // CHECK: %[[TWO:.*]] = llvm.mlir.constant(2.000000e+00 : f32) : f32
+  // CHECK: %[[X2:.*]] = llvm.fmul %[[TWO]], %{{.*}} : f32
+  // CHECK: %[[EXP:.*]] = "llvm.intr.exp"(%[[X2]]) : (f32) -> f32
+  // CHECK: %[[ONE:.*]] = llvm.mlir.constant(1.000000e+00 : f32) : f32
+  // CHECK: %[[T0:.*]] = llvm.fsub %[[EXP]], %[[ONE]] : f32
+  // CHECK: %[[T1:.*]] = llvm.fadd %[[EXP]], %[[ONE]] : f32
+  // CHECK: llvm.fdiv %[[T0]], %[[T1]] : f32
   %0 = spv.GLSL.Tanh %arg0 : f32
-  return
+  spv.Return
 }
 
 //===----------------------------------------------------------------------===//
@@ -191,10 +191,10 @@ func @tanh(%arg0: f32) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @inverse_sqrt
-func @inverse_sqrt(%arg0: f32) {
-  // CHECK: %[[ONE:.*]] = llvm.mlir.constant(1.000000e+00 : f32) : !llvm.float
-  // CHECK: %[[SQRT:.*]] = "llvm.intr.sqrt"(%{{.*}}) : (!llvm.float) -> !llvm.float
-  // CHECK: llvm.fdiv %[[ONE]], %[[SQRT]] : !llvm.float
+spv.func @inverse_sqrt(%arg0: f32) "None" {
+  // CHECK: %[[ONE:.*]] = llvm.mlir.constant(1.000000e+00 : f32) : f32
+  // CHECK: %[[SQRT:.*]] = "llvm.intr.sqrt"(%{{.*}}) : (f32) -> f32
+  // CHECK: llvm.fdiv %[[ONE]], %[[SQRT]] : f32
   %0 = spv.GLSL.InverseSqrt %arg0 : f32
-  return
+  spv.Return
 }

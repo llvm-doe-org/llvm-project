@@ -8,6 +8,9 @@
 
 // UNSUPPORTED: c++03
 
+// These tests require locale for non-char paths
+// UNSUPPORTED: libcpp-has-no-localization
+
 // <filesystem>
 
 // class path
@@ -30,7 +33,6 @@
 #include "test_iterators.h"
 #include "count_new.h"
 #include "filesystem_test_helper.h"
-#include "verbose_assert.h"
 
 
 struct AppendOperatorTestcase {
@@ -61,6 +63,54 @@ const AppendOperatorTestcase Cases[] =
       , {S("/p1"), S("/p2/"), S("/p2/")}
       , {S("p1"),   S(""),      S("p1/")}
       , {S("p1/"),  S(""),      S("p1/")}
+
+      , {S("//host"),  S("foo"),      S("//host/foo")}
+      , {S("//host/"), S("foo"),      S("//host/foo")}
+      , {S("//host"),  S(""),         S("//host/")}
+
+#ifdef _WIN32
+      , {S("foo"),     S("C:/bar"),   S("C:/bar")}
+      , {S("foo"),     S("C:"),       S("C:")}
+
+      , {S("C:"),      S(""),         S("C:")}
+      , {S("C:foo"),   S("/bar"),     S("C:/bar")}
+      , {S("C:foo"),   S("bar"),      S("C:foo/bar")}
+      , {S("C:/foo"),  S("bar"),      S("C:/foo/bar")}
+      , {S("C:/foo"),  S("/bar"),     S("C:/bar")}
+
+      , {S("C:foo"),   S("C:/bar"),   S("C:/bar")}
+      , {S("C:foo"),   S("C:bar"),    S("C:foo/bar")}
+      , {S("C:/foo"),  S("C:/bar"),   S("C:/bar")}
+      , {S("C:/foo"),  S("C:bar"),    S("C:/foo/bar")}
+
+      , {S("C:foo"),   S("c:/bar"),   S("c:/bar")}
+      , {S("C:foo"),   S("c:bar"),    S("c:bar")}
+      , {S("C:/foo"),  S("c:/bar"),   S("c:/bar")}
+      , {S("C:/foo"),  S("c:bar"),    S("c:bar")}
+
+      , {S("C:/foo"),  S("D:bar"),    S("D:bar")}
+#else
+      , {S("foo"),     S("C:/bar"),   S("foo/C:/bar")}
+      , {S("foo"),     S("C:"),       S("foo/C:")}
+
+      , {S("C:"),      S(""),         S("C:/")}
+      , {S("C:foo"),   S("/bar"),     S("/bar")}
+      , {S("C:foo"),   S("bar"),      S("C:foo/bar")}
+      , {S("C:/foo"),  S("bar"),      S("C:/foo/bar")}
+      , {S("C:/foo"),  S("/bar"),     S("/bar")}
+
+      , {S("C:foo"),   S("C:/bar"),   S("C:foo/C:/bar")}
+      , {S("C:foo"),   S("C:bar"),    S("C:foo/C:bar")}
+      , {S("C:/foo"),  S("C:/bar"),   S("C:/foo/C:/bar")}
+      , {S("C:/foo"),  S("C:bar"),    S("C:/foo/C:bar")}
+
+      , {S("C:foo"),   S("c:/bar"),   S("C:foo/c:/bar")}
+      , {S("C:foo"),   S("c:bar"),    S("C:foo/c:bar")}
+      , {S("C:/foo"),  S("c:/bar"),   S("C:/foo/c:/bar")}
+      , {S("C:/foo"),  S("c:bar"),    S("C:/foo/c:bar")}
+
+      , {S("C:/foo"),  S("D:bar"),    S("C:/foo/D:bar")}
+#endif
     };
 
 
@@ -108,7 +158,7 @@ void doAppendSourceAllocTest(AppendOperatorTestcase const& TC)
       DisableAllocationGuard g;
       LHS /= RHS;
     }
-    ASSERT_PRED(PathEq, LHS , E);
+    assert(PathEq(LHS, E));
   }
   // basic_string_view
   {
@@ -184,8 +234,7 @@ void doAppendSourceTest(AppendOperatorTestcase const& TC)
     path Result(L);
     Str RHS(R);
     path& Ref = (Result /= RHS);
-    ASSERT_EQ(Result, E)
-        << DISPLAY(L) << DISPLAY(R);
+    assert(Result == E);
     assert(&Ref == &Result);
   }
   {
@@ -229,8 +278,7 @@ void doAppendSourceTest(AppendOperatorTestcase const& TC)
     path LHS(L);
     Ptr RHS(R);
     path& Ref = LHS.append(RHS, StrEnd(RHS));
-    ASSERT_PRED(PathEq, LHS, E)
-        << DISPLAY(L) << DISPLAY(R);
+    assert(PathEq(LHS, E));
     assert(&Ref == &LHS);
   }
   // iterators
@@ -321,8 +369,7 @@ int main(int, char**)
       path LHS(LHS_In);
       path RHS(RHS_In);
       path& Res = (LHS /= RHS);
-      ASSERT_PRED(PathEq, Res, (const char*)TC.expect)
-          << DISPLAY(LHS_In) << DISPLAY(RHS_In);
+      assert(PathEq(Res, (const char*)TC.expect));
       assert(&Res == &LHS);
     }
     doAppendSourceTest<char>    (TC);
@@ -331,8 +378,9 @@ int main(int, char**)
     doAppendSourceTest<char32_t>(TC);
   }
   for (auto const & TC : LongLHSCases) {
-    doAppendSourceAllocTest<char>(TC);
-    doAppendSourceAllocTest<wchar_t>(TC);
+    (void)TC;
+    LIBCPP_ONLY(doAppendSourceAllocTest<char>(TC));
+    LIBCPP_ONLY(doAppendSourceAllocTest<wchar_t>(TC));
   }
   test_sfinae();
 

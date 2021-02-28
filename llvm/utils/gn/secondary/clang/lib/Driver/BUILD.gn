@@ -43,6 +43,7 @@ static_library("Driver") {
     "ToolChain.cpp",
     "ToolChains/AIX.cpp",
     "ToolChains/AMDGPU.cpp",
+    "ToolChains/AMDGPUOpenMP.cpp",
     "ToolChains/AVR.cpp",
     "ToolChains/Ananas.cpp",
     "ToolChains/Arch/AArch64.cpp",
@@ -90,6 +91,7 @@ static_library("Driver") {
     "ToolChains/VEToolchain.cpp",
     "ToolChains/WebAssembly.cpp",
     "ToolChains/XCore.cpp",
+    "ToolChains/ZOS.cpp",
     "Types.cpp",
     "XRayArgs.cpp",
   ]

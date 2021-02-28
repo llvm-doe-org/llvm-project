@@ -17,6 +17,9 @@
 #include "PPCISelLowering.h"
 #include "PPCInstrInfo.h"
 #include "llvm/ADT/Triple.h"
+#include "llvm/CodeGen/GlobalISel/CallLowering.h"
+#include "llvm/CodeGen/GlobalISel/LegalizerInfo.h"
+#include "llvm/CodeGen/GlobalISel/RegisterBankInfo.h"
 #include "llvm/CodeGen/SelectionDAGTargetInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DataLayout.h"
@@ -97,6 +100,7 @@ protected:
   bool HasAltivec;
   bool HasFPU;
   bool HasSPE;
+  bool HasEFPU2;
   bool HasVSX;
   bool NeedsTwoConstNR;
   bool HasP8Vector;
@@ -107,6 +111,8 @@ protected:
   bool HasP10Vector;
   bool HasPrefixInstrs;
   bool HasPCRelativeMemops;
+  bool HasMMA;
+  bool HasROPProtection;
   bool HasFCPSGN;
   bool HasFSQRT;
   bool HasFRE, HasFRES, HasFRSQRTE, HasFRSQRTES;
@@ -136,6 +142,7 @@ protected:
   bool HasHTM;
   bool HasFloat128;
   bool HasFusion;
+  bool HasStoreFusion;
   bool HasAddiLoadFusion;
   bool HasAddisLoadFusion;
   bool IsISA3_0;
@@ -147,6 +154,8 @@ protected:
   bool UsePPCPostRASchedStrategy;
   bool PairedVectorMemops;
   bool PredictableSelectIsExpensive;
+  bool HasModernAIXAs;
+  bool IsAIX;
 
   POPCNTDKind HasPOPCNTD;
 
@@ -155,6 +164,12 @@ protected:
   PPCInstrInfo InstrInfo;
   PPCTargetLowering TLInfo;
   SelectionDAGTargetInfo TSInfo;
+
+  /// GlobalISel related APIs.
+  std::unique_ptr<CallLowering> CallLoweringInfo;
+  std::unique_ptr<LegalizerInfo> Legalizer;
+  std::unique_ptr<RegisterBankInfo> RegBankInfo;
+  std::unique_ptr<InstructionSelector> InstSelector;
 
 public:
   /// This constructor initializes the data members to match that
@@ -171,9 +186,6 @@ public:
   /// stack frame on entry to the function and which must be maintained by every
   /// function for this subtarget.
   Align getStackAlignment() const { return StackAlignment; }
-
-  /// getDarwinDirective - Returns the -m directive specified for the cpu.
-  unsigned getDarwinDirective() const { return CPUDirective; }
 
   /// getCPUDirective - Returns the -m directive specified for the cpu.
   ///
@@ -249,6 +261,7 @@ public:
   bool hasFPCVT() const { return HasFPCVT; }
   bool hasAltivec() const { return HasAltivec; }
   bool hasSPE() const { return HasSPE; }
+  bool hasEFPU2() const { return HasEFPU2; }
   bool hasFPU() const { return HasFPU; }
   bool hasVSX() const { return HasVSX; }
   bool needsTwoConstNR() const { return NeedsTwoConstNR; }
@@ -260,6 +273,8 @@ public:
   bool hasP10Vector() const { return HasP10Vector; }
   bool hasPrefixInstrs() const { return HasPrefixInstrs; }
   bool hasPCRelativeMemops() const { return HasPCRelativeMemops; }
+  bool hasMMA() const { return HasMMA; }
+  bool hasROPProtection() const { return HasROPProtection; }
   bool pairedVectorMemops() const { return PairedVectorMemops; }
   bool hasMFOCRF() const { return HasMFOCRF; }
   bool hasISEL() const { return HasISEL; }
@@ -306,6 +321,7 @@ public:
   bool isISA3_1() const { return IsISA3_1; }
   bool useLongCalls() const { return UseLongCalls; }
   bool hasFusion() const { return HasFusion; }
+  bool hasStoreFusion() const { return HasStoreFusion; }
   bool hasAddiLoadFusion() const { return HasAddiLoadFusion; }
   bool hasAddisLoadFusion() const { return HasAddisLoadFusion; }
   bool needsSwapsForVSXMemOps() const {
@@ -392,6 +408,12 @@ public:
   bool isPredictableSelectIsExpensive() const {
     return PredictableSelectIsExpensive;
   }
+
+  // GlobalISEL
+  const CallLowering *getCallLowering() const override;
+  const RegisterBankInfo *getRegBankInfo() const override;
+  const LegalizerInfo *getLegalizerInfo() const override;
+  InstructionSelector *getInstructionSelector() const override;
 };
 } // End llvm namespace
 

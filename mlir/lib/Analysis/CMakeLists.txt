@@ -1,18 +1,30 @@
 set(LLVM_OPTIONAL_SOURCES
+  AliasAnalysis.cpp
   AffineAnalysis.cpp
   AffineStructures.cpp
+  BufferAliasAnalysis.cpp
   CallGraph.cpp
+  LinearTransform.cpp
   Liveness.cpp
   LoopAnalysis.cpp
   NestedMatcher.cpp
+  NumberOfExecutions.cpp
+  PresburgerSet.cpp
   SliceAnalysis.cpp
   Utils.cpp
+
+  AliasAnalysis/LocalAliasAnalysis.cpp
   )
 
 add_mlir_library(MLIRAnalysis
+  AliasAnalysis.cpp
+  BufferAliasAnalysis.cpp
   CallGraph.cpp
   Liveness.cpp
+  NumberOfExecutions.cpp
   SliceAnalysis.cpp
+
+  AliasAnalysis/LocalAliasAnalysis.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Analysis
@@ -21,19 +33,21 @@ add_mlir_library(MLIRAnalysis
   mlir-headers
 
   LINK_LIBS PUBLIC
-  MLIRAffineOps
+  MLIRAffine
   MLIRCallInterfaces
   MLIRControlFlowInterfaces
   MLIRInferTypeOpInterface
-  MLIRPresburger
+  MLIRLinalg
   MLIRSCF
   )
 
 add_mlir_library(MLIRLoopAnalysis
   AffineAnalysis.cpp
   AffineStructures.cpp
+  LinearTransform.cpp
   LoopAnalysis.cpp
   NestedMatcher.cpp
+  PresburgerSet.cpp
   Utils.cpp
 
   ADDITIONAL_HEADER_DIRS
@@ -43,12 +57,12 @@ add_mlir_library(MLIRLoopAnalysis
   mlir-headers
 
   LINK_LIBS PUBLIC
-  MLIRAffineOps
+  MLIRAffine
   MLIRCallInterfaces
   MLIRControlFlowInterfaces
   MLIRInferTypeOpInterface
   MLIRPresburger
   MLIRSCF
   )
-  
+
 add_subdirectory(Presburger)

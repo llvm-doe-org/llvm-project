@@ -159,36 +159,21 @@ endif ()
 include_directories("${CMAKE_CURRENT_BINARY_DIR}/../clang/include")
 
 # Disable GCC warnings
-check_cxx_compiler_flag("-Wno-deprecated-declarations"
-                        CXX_SUPPORTS_NO_DEPRECATED_DECLARATIONS)
-if (CXX_SUPPORTS_NO_DEPRECATED_DECLARATIONS)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
-endif ()
+check_cxx_compiler_flag("-Wno-deprecated-declarations" CXX_SUPPORTS_NO_DEPRECATED_DECLARATIONS)
+append_if(CXX_SUPPORTS_NO_DEPRECATED_DECLARATIONS "-Wno-deprecated-declarations" CMAKE_CXX_FLAGS)
 
-check_cxx_compiler_flag("-Wno-unknown-pragmas"
-                        CXX_SUPPORTS_NO_UNKNOWN_PRAGMAS)
-if (CXX_SUPPORTS_NO_UNKNOWN_PRAGMAS)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
-endif ()
+check_cxx_compiler_flag("-Wno-unknown-pragmas" CXX_SUPPORTS_NO_UNKNOWN_PRAGMAS)
+append_if(CXX_SUPPORTS_NO_UNKNOWN_PRAGMAS "-Wno-unknown-pragmas" CMAKE_CXX_FLAGS)
 
-check_cxx_compiler_flag("-Wno-strict-aliasing"
-                        CXX_SUPPORTS_NO_STRICT_ALIASING)
-if (CXX_SUPPORTS_NO_STRICT_ALIASING)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-strict-aliasing")
-endif ()
+check_cxx_compiler_flag("-Wno-strict-aliasing" CXX_SUPPORTS_NO_STRICT_ALIASING)
+append_if(CXX_SUPPORTS_NO_STRICT_ALIASING "-Wno-strict-aliasing" CMAKE_CXX_FLAGS)
 
 # Disable Clang warnings
-check_cxx_compiler_flag("-Wno-deprecated-register"
-                        CXX_SUPPORTS_NO_DEPRECATED_REGISTER)
-if (CXX_SUPPORTS_NO_DEPRECATED_REGISTER)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-register")
-endif ()
+check_cxx_compiler_flag("-Wno-deprecated-register" CXX_SUPPORTS_NO_DEPRECATED_REGISTER)
+append_if(CXX_SUPPORTS_NO_DEPRECATED_REGISTER "-Wno-deprecated-register" CMAKE_CXX_FLAGS)
 
-check_cxx_compiler_flag("-Wno-vla-extension"
-                        CXX_SUPPORTS_NO_VLA_EXTENSION)
-if (CXX_SUPPORTS_NO_VLA_EXTENSION)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-vla-extension")
-endif ()
+check_cxx_compiler_flag("-Wno-vla-extension" CXX_SUPPORTS_NO_VLA_EXTENSION)
+append_if(CXX_SUPPORTS_NO_VLA_EXTENSION "-Wno-vla-extension" CMAKE_CXX_FLAGS)
 
 # Disable MSVC warnings
 if( MSVC )
@@ -243,7 +228,6 @@ if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
     DESTINATION include
     FILES_MATCHING
     PATTERN "*.h"
-    PATTERN ".svn" EXCLUDE
     PATTERN ".cmake" EXCLUDE
     )
 
@@ -252,7 +236,6 @@ if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
     DESTINATION include
     FILES_MATCHING
     PATTERN "*.h"
-    PATTERN ".svn" EXCLUDE
     PATTERN ".cmake" EXCLUDE
     )
 
@@ -262,6 +245,30 @@ if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
   if (NOT CMAKE_CONFIGURATION_TYPES)
     add_llvm_install_targets(install-lldb-headers
                              COMPONENT lldb-headers)
+  endif()
+endif()
+
+
+# If LLDB is building against a prebuilt Clang, then the Clang resource
+# directory that LLDB is using for its embedded Clang instance needs to point
+# to the resource directory of the used Clang installation.
+if (NOT TARGET clang-resource-headers)
+  set(LLDB_CLANG_RESOURCE_DIR_NAME "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
+  # Iterate over the possible places where the external resource directory
+  # could be and pick the first that exists.
+  foreach(CANDIDATE "${Clang_DIR}/../.." "${LLVM_DIR}" "${LLVM_LIBRARY_DIRS}"
+                    "${LLVM_BUILD_LIBRARY_DIR}"
+                    "${LLVM_BINARY_DIR}/lib${LLVM_LIBDIR_SUFFIX}")
+    # Build the resource directory path by appending 'clang/<version number>'.
+    set(CANDIDATE_RESOURCE_DIR "${CANDIDATE}/clang/${LLDB_CLANG_RESOURCE_DIR_NAME}")
+    if (IS_DIRECTORY "${CANDIDATE_RESOURCE_DIR}")
+      set(LLDB_EXTERNAL_CLANG_RESOURCE_DIR "${CANDIDATE_RESOURCE_DIR}")
+      break()
+    endif()
+  endforeach()
+
+  if (NOT LLDB_EXTERNAL_CLANG_RESOURCE_DIR)
+    message(FATAL_ERROR "Expected directory for clang-resource headers not found: ${LLDB_EXTERNAL_CLANG_RESOURCE_DIR}")
   endif()
 endif()
 
@@ -307,5 +314,4 @@ if ((CMAKE_SYSTEM_NAME MATCHES "Android") AND LLVM_BUILD_STATIC AND
   add_definitions(-DANDROID_USE_ACCEPT_WORKAROUND)
 endif()
 
-find_package(Backtrace)
 include(LLDBGenerateConfig)

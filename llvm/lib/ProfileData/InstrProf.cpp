@@ -18,6 +18,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Triple.h"
+#include "llvm/Config/config.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
@@ -95,6 +96,10 @@ static std::string getInstrProfErrString(instrprof_error Err) {
     return "Truncated profile data";
   case instrprof_error::malformed:
     return "Malformed instrumentation profile data";
+  case instrprof_error::invalid_prof:
+    return "Invalid profile created. Please file a bug "
+           "at: " BUG_REPORT_URL
+           " and include the profraw files that caused this error.";
   case instrprof_error::unknown_function:
     return "No profile data available for function";
   case instrprof_error::hash_mismatch:
@@ -982,7 +987,8 @@ bool getValueProfDataFromInst(const Instruction &Inst,
                               InstrProfValueKind ValueKind,
                               uint32_t MaxNumValueData,
                               InstrProfValueData ValueData[],
-                              uint32_t &ActualNumValueData, uint64_t &TotalC) {
+                              uint32_t &ActualNumValueData, uint64_t &TotalC,
+                              bool GetZeroCntValue) {
   MDNode *MD = Inst.getMetadata(LLVMContext::MD_prof);
   if (!MD)
     return false;
@@ -1009,7 +1015,7 @@ bool getValueProfDataFromInst(const Instruction &Inst,
 
   // Get total count
   ConstantInt *TotalCInt = mdconst::dyn_extract<ConstantInt>(MD->getOperand(2));
-  if (!TotalCInt)
+  if (!TotalCInt && !GetZeroCntValue)
     return false;
   TotalC = TotalCInt->getZExtValue();
 
@@ -1021,7 +1027,7 @@ bool getValueProfDataFromInst(const Instruction &Inst,
     ConstantInt *Value = mdconst::dyn_extract<ConstantInt>(MD->getOperand(I));
     ConstantInt *Count =
         mdconst::dyn_extract<ConstantInt>(MD->getOperand(I + 1));
-    if (!Value || !Count)
+    if (!Value || (!Count && !GetZeroCntValue))
       return false;
     ValueData[ActualNumValueData].Value = Value->getZExtValue();
     ValueData[ActualNumValueData].Count = Count->getZExtValue();
@@ -1110,29 +1116,6 @@ bool canRenameComdatFunc(const Function &F, bool CheckAddressTaken) {
     return true;
   }
   return true;
-}
-
-// FIXME: This is to be removed after switching to the new memop value
-// profiling.
-// Parse the value profile options.
-void getMemOPSizeRangeFromOption(StringRef MemOPSizeRange, int64_t &RangeStart,
-                                 int64_t &RangeLast) {
-  static const int64_t DefaultMemOPSizeRangeStart = 0;
-  static const int64_t DefaultMemOPSizeRangeLast = 8;
-  RangeStart = DefaultMemOPSizeRangeStart;
-  RangeLast = DefaultMemOPSizeRangeLast;
-
-  if (!MemOPSizeRange.empty()) {
-    auto Pos = MemOPSizeRange.find(':');
-    if (Pos != std::string::npos) {
-      if (Pos > 0)
-        MemOPSizeRange.substr(0, Pos).getAsInteger(10, RangeStart);
-      if (Pos < MemOPSizeRange.size() - 1)
-        MemOPSizeRange.substr(Pos + 1).getAsInteger(10, RangeLast);
-    } else
-      MemOPSizeRange.getAsInteger(10, RangeLast);
-  }
-  assert(RangeLast >= RangeStart);
 }
 
 // Create a COMDAT variable INSTR_PROF_RAW_VERSION_VAR to make the runtime

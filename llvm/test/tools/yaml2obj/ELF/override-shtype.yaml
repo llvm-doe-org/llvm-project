@@ -23,16 +23,14 @@
 
 --- !ELF
 FileHeader:
-  Class:   ELFCLASS64
-  Data:    ELFDATA2LSB
-  Type:    ET_EXEC
-  Machine: EM_X86_64
+  Class: ELFCLASS64
+  Data:  ELFDATA2LSB
+  Type:  ET_EXEC
 Sections:
   - Name:   .gnu.version_r
     Type:   SHT_GNU_verneed
     Flags:  [ SHF_ALLOC ]
     ShType: [[TYPE=SHT_GNU_verneed]]
-    Info:   0
     Dependencies:
       - Version: 1
         File:    dso.so.0

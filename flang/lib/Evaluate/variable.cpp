@@ -14,6 +14,7 @@
 #include "flang/Parser/char-block.h"
 #include "flang/Parser/characters.h"
 #include "flang/Parser/message.h"
+#include "flang/Semantics/scope.h"
 #include "flang/Semantics/symbol.h"
 #include <type_traits>
 
@@ -204,9 +205,11 @@ std::optional<Expr<SomeCharacter>> Substring::Fold(FoldingContext &context) {
       *ubi = *length;
     }
     if (lbi && literal) {
-      CHECK(*ubi >= *lbi);
       auto newStaticData{StaticDataObject::Create()};
-      auto items{*ubi - *lbi + 1};
+      auto items{0}; // If the lower bound is greater, the length is 0
+      if (*ubi >= *lbi) {
+        items = *ubi - *lbi + 1;
+      }
       auto width{(*literal)->itemBytes()};
       auto bytes{items * width};
       auto startByte{(*lbi - 1) * width};
@@ -255,8 +258,13 @@ DescriptorInquiry::DescriptorInquiry(NamedEntity &&base, Field field, int dim)
 }
 
 // LEN()
-static std::optional<Expr<SubscriptInteger>> SymbolLEN(const Symbol &sym) {
-  if (auto dyType{DynamicType::From(sym)}) {
+static std::optional<Expr<SubscriptInteger>> SymbolLEN(const Symbol &symbol) {
+  const Symbol &ultimate{symbol.GetUltimate()};
+  if (const auto *assoc{ultimate.detailsIf<semantics::AssocEntityDetails>()}) {
+    if (const auto *chExpr{UnwrapExpr<Expr<SomeCharacter>>(assoc->expr())}) {
+      return chExpr->LEN();
+    }
+  } else if (auto dyType{DynamicType::From(ultimate)}) {
     if (const semantics::ParamValue * len{dyType->charLength()}) {
       if (len->isExplicit()) {
         if (auto intExpr{len->GetExplicit()}) {
@@ -265,8 +273,10 @@ static std::optional<Expr<SubscriptInteger>> SymbolLEN(const Symbol &sym) {
           }
         }
       }
-      return Expr<SubscriptInteger>{
-          DescriptorInquiry{NamedEntity{sym}, DescriptorInquiry::Field::Len}};
+      if (IsDescriptor(ultimate) && !ultimate.owner().IsDerivedType()) {
+        return Expr<SubscriptInteger>{DescriptorInquiry{
+            NamedEntity{ultimate}, DescriptorInquiry::Field::Len}};
+      }
     }
   }
   return std::nullopt;
@@ -635,9 +645,7 @@ bool NamedEntity::operator==(const NamedEntity &that) const {
     return !that.IsSymbol() && GetComponent() == that.GetComponent();
   }
 }
-template <int KIND>
-bool TypeParamInquiry<KIND>::operator==(
-    const TypeParamInquiry<KIND> &that) const {
+bool TypeParamInquiry::operator==(const TypeParamInquiry &that) const {
   return &*parameter_ == &*that.parameter_ && base_ == that.base_;
 }
 bool Triplet::operator==(const Triplet &that) const {

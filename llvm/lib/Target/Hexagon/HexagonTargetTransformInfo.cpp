@@ -35,6 +35,9 @@ static cl::opt<bool> EmitLookupTables("hexagon-emit-lookup-tables",
   cl::init(true), cl::Hidden,
   cl::desc("Control lookup table emission on Hexagon target"));
 
+static cl::opt<bool> HexagonMaskedVMem("hexagon-masked-vmem", cl::init(true),
+  cl::Hidden, cl::desc("Enable masked loads/stores for HVX"));
+
 // Constant "cost factor" to make floating point operations more expensive
 // in terms of vectorization cost. This isn't the best way, but it should
 // do. Ultimately, the cost should use cycles.
@@ -42,22 +45,6 @@ static const unsigned FloatFactor = 4;
 
 bool HexagonTTIImpl::useHVX() const {
   return ST.useHVXOps() && HexagonAutoHVX;
-}
-
-bool HexagonTTIImpl::isTypeForHVX(Type *VecTy) const {
-  assert(VecTy->isVectorTy());
-  if (isa<ScalableVectorType>(VecTy))
-    return false;
-  // Avoid types like <2 x i32*>.
-  if (!cast<VectorType>(VecTy)->getElementType()->isIntegerTy())
-    return false;
-  EVT VecVT = EVT::getEVT(VecTy);
-  if (!VecVT.isSimple() || VecVT.getSizeInBits() <= 64)
-    return false;
-  if (ST.isHVXVectorType(VecVT.getSimpleVT()))
-    return true;
-  auto Action = TLI.getPreferredVectorAction(VecVT.getSimpleVT());
-  return Action == TargetLoweringBase::TypeWidenVector;
 }
 
 unsigned HexagonTTIImpl::getTypeNumElements(Type *Ty) const {
@@ -85,7 +72,7 @@ void HexagonTTIImpl::getPeelingPreferences(Loop *L, ScalarEvolution &SE,
                                            TTI::PeelingPreferences &PP) {
   BaseT::getPeelingPreferences(L, SE, PP);
   // Only try to peel innermost loops with small runtime trip counts.
-  if (L && L->empty() && canPeel(L) &&
+  if (L && L->isInnermost() && canPeel(L) &&
       SE.getSmallConstantTripCount(L) == 0 &&
       SE.getSmallConstantMaxTripCount(L) > 0 &&
       SE.getSmallConstantMaxTripCount(L) <= 5) {
@@ -93,8 +80,10 @@ void HexagonTTIImpl::getPeelingPreferences(Loop *L, ScalarEvolution &SE,
   }
 }
 
-bool HexagonTTIImpl::shouldFavorPostInc() const {
-  return true;
+TTI::AddressingModeKind
+HexagonTTIImpl::getPreferredAddressingMode(const Loop *L,
+                                           ScalarEvolution *SE) const {
+  return TTI::AMK_PostIndexed;
 }
 
 /// --- Vector TTI begin ---
@@ -106,7 +95,7 @@ unsigned HexagonTTIImpl::getNumberOfRegisters(bool Vector) const {
 }
 
 unsigned HexagonTTIImpl::getMaxInterleaveFactor(unsigned VF) {
-  return useHVX() ? 2 : 0;
+  return useHVX() ? 2 : 1;
 }
 
 unsigned HexagonTTIImpl::getRegisterBitWidth(bool Vector) const {
@@ -117,8 +106,10 @@ unsigned HexagonTTIImpl::getMinVectorRegisterBitWidth() const {
   return useHVX() ? ST.getVectorLength()*8 : 32;
 }
 
-unsigned HexagonTTIImpl::getMinimumVF(unsigned ElemWidth) const {
-  return (8 * ST.getVectorLength()) / ElemWidth;
+ElementCount HexagonTTIImpl::getMinimumVF(unsigned ElemWidth,
+                                          bool IsScalable) const {
+  assert(!IsScalable && "Scalable VFs are not supported for Hexagon");
+  return ElementCount::getFixed((8 * ST.getVectorLength()) / ElemWidth);
 }
 
 unsigned HexagonTTIImpl::getScalarizationOverhead(VectorType *Ty,
@@ -127,9 +118,10 @@ unsigned HexagonTTIImpl::getScalarizationOverhead(VectorType *Ty,
   return BaseT::getScalarizationOverhead(Ty, DemandedElts, Insert, Extract);
 }
 
-unsigned HexagonTTIImpl::getOperandsScalarizationOverhead(
-      ArrayRef<const Value*> Args, unsigned VF) {
-  return BaseT::getOperandsScalarizationOverhead(Args, VF);
+unsigned
+HexagonTTIImpl::getOperandsScalarizationOverhead(ArrayRef<const Value *> Args,
+                                                 ArrayRef<Type *> Tys) {
+  return BaseT::getOperandsScalarizationOverhead(Args, Tys);
 }
 
 unsigned HexagonTTIImpl::getCallInstrCost(Function *F, Type *RetTy,
@@ -169,7 +161,7 @@ unsigned HexagonTTIImpl::getMemoryOpCost(unsigned Opcode, Type *Src,
   if (Src->isVectorTy()) {
     VectorType *VecTy = cast<VectorType>(Src);
     unsigned VecWidth = VecTy->getPrimitiveSizeInBits().getFixedSize();
-    if (useHVX() && isTypeForHVX(VecTy)) {
+    if (useHVX() && ST.isTypeForHVX(VecTy)) {
       unsigned RegWidth = getRegisterBitWidth(true);
       assert(RegWidth && "Non-zero vector register width expected");
       // Cost of HVX loads.
@@ -240,13 +232,16 @@ unsigned HexagonTTIImpl::getInterleavedMemoryOpCost(
 }
 
 unsigned HexagonTTIImpl::getCmpSelInstrCost(unsigned Opcode, Type *ValTy,
-      Type *CondTy, TTI::TargetCostKind CostKind, const Instruction *I) {
+                                            Type *CondTy,
+                                            CmpInst::Predicate VecPred,
+                                            TTI::TargetCostKind CostKind,
+                                            const Instruction *I) {
   if (ValTy->isVectorTy() && CostKind == TTI::TCK_RecipThroughput) {
     std::pair<int, MVT> LT = TLI.getTypeLegalizationCost(DL, ValTy);
     if (Opcode == Instruction::FCmp)
       return LT.first + FloatFactor * getTypeNumElements(ValTy);
   }
-  return BaseT::getCmpSelInstrCost(Opcode, ValTy, CondTy, CostKind, I);
+  return BaseT::getCmpSelInstrCost(Opcode, ValTy, CondTy, VecPred, CostKind, I);
 }
 
 unsigned HexagonTTIImpl::getArithmeticInstrCost(
@@ -306,6 +301,14 @@ unsigned HexagonTTIImpl::getVectorInstrCost(unsigned Opcode, Type *Val,
     return 2;
 
   return 1;
+}
+
+bool HexagonTTIImpl::isLegalMaskedStore(Type *DataType, Align /*Alignment*/) {
+  return HexagonMaskedVMem && ST.isTypeForHVX(DataType);
+}
+
+bool HexagonTTIImpl::isLegalMaskedLoad(Type *DataType, Align /*Alignment*/) {
+  return HexagonMaskedVMem && ST.isTypeForHVX(DataType);
 }
 
 /// --- Vector TTI end ---

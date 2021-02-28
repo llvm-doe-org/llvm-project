@@ -2,6 +2,9 @@ import("//clang/runtimes.gni")
 import("//llvm/utils/gn/build/symlink_or_copy.gni")
 
 declare_args() {
+  # Whether to support libc++ opt-in debug mode via _LIBCPP_DEBUG.
+  libcxx_enable_debug_mode = true
+
   # Build libc++ with definitions for operator new/delete.
   libcxx_enable_new_delete_definitions = true
 
@@ -50,7 +53,10 @@ config("cxx_config") {
     "-Wno-user-defined-literals",
     "-Wno-covered-switch-default",
   ]
-  cflags_cc = [ "-nostdinc++" ]
+  cflags_cc = [
+    "-std=c++20",
+    "-nostdinc++",
+  ]
   defines = [ "_LIBCPP_BUILDING_LIBRARY" ]
   if (target_os == "win") {
     cflags += [ "/Zl" ]
@@ -115,8 +121,8 @@ cxx_sources = [
   "chrono.cpp",
   "condition_variable.cpp",
   "condition_variable_destructor.cpp",
-  "debug.cpp",
   "exception.cpp",
+  "format.cpp",
   "functional.cpp",
   "future.cpp",
   "hash.cpp",
@@ -125,6 +131,7 @@ cxx_sources = [
   "include/config_elast.h",
   "include/refstring.h",
   "ios.cpp",
+  "ios.instantiations.cpp",
   "iostream.cpp",
   "locale.cpp",
   "memory.cpp",
@@ -169,11 +176,15 @@ if (target_os == "win") {
 if (target_os == "solaris") {
   cxx_sources += [ "support/solaris/xlocale.cpp" ]
 }
+if (libcxx_enable_debug_mode) {
+  cxx_sources += [ "debug.cpp" ]
+}
 if (libcxx_enable_filesystem) {
   cxx_sources += [
     "filesystem/directory_iterator.cpp",
     "filesystem/filesystem_common.h",
     "filesystem/operations.cpp",
+    "filesystem/posix_compat.h",
   ]
   if (libcxx_use_compiler_rt) {
     cxx_sources += [ "filesystem/int128_builtins.cpp" ]

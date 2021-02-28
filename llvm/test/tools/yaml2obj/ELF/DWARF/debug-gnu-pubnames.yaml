@@ -38,10 +38,9 @@
 
 --- !ELF
 FileHeader:
-  Class:   ELFCLASS64
-  Data:    [[ENDIAN]]
-  Type:    ET_EXEC
-  Machine: EM_X86_64
+  Class: ELFCLASS64
+  Data:  [[ENDIAN]]
+  Type:  ET_EXEC
 DWARF:
   debug_gnu_pubnames:
     Length:     0x1234
@@ -90,10 +89,9 @@ DWARF:
 
 --- !ELF
 FileHeader:
-  Class:   ELFCLASS64
-  Data:    ELFDATA2LSB
-  Type:    ET_EXEC
-  Machine: EM_X86_64
+  Class: ELFCLASS64
+  Data:  ELFDATA2LSB
+  Type:  ET_EXEC
 Sections:
   - Name:    .debug_gnu_pubnames
     Type:    SHT_PROGBITS
@@ -111,10 +109,9 @@ Sections:
 
 --- !ELF
 FileHeader:
-  Class:   ELFCLASS64
-  Data:    ELFDATA2LSB
-  Type:    ET_EXEC
-  Machine: EM_X86_64
+  Class: ELFCLASS64
+  Data:  ELFDATA2LSB
+  Type:  ET_EXEC
 Sections:
   - Name: .debug_gnu_pubnames
     Type: SHT_PROGBITS
@@ -129,10 +126,9 @@ Sections:
 
 --- !ELF
 FileHeader:
-  Class:   ELFCLASS64
-  Data:    ELFDATA2LSB
-  Type:    ET_EXEC
-  Machine: EM_X86_64
+  Class: ELFCLASS64
+  Data:  ELFDATA2LSB
+  Type:  ET_EXEC
 Sections:
   - Name: .debug_gnu_pubnames
     Type: SHT_PROGBITS
@@ -152,10 +148,9 @@ DWARF:
 
 --- !ELF
 FileHeader:
-  Class:   ELFCLASS64
-  Data:    ELFDATA2LSB
-  Type:    ET_EXEC
-  Machine: EM_X86_64
+  Class: ELFCLASS64
+  Data:  ELFDATA2LSB
+  Type:  ET_EXEC
 Sections:
   - Name:    .debug_gnu_pubnames
     Type:    SHT_PROGBITS
@@ -180,10 +175,9 @@ DWARF:
 
 --- !ELF
 FileHeader:
-  Class:   ELFCLASS64
-  Data:    ELFDATA2LSB
-  Type:    ET_EXEC
-  Machine: EM_X86_64
+  Class: ELFCLASS64
+  Data:  ELFDATA2LSB
+  Type:  ET_EXEC
 Sections:
   - Name:         .debug_gnu_pubnames
     Type:         SHT_STRTAB  ## SHT_PROGBITS by default.
@@ -206,10 +200,9 @@ Sections:
 
 --- !ELF
 FileHeader:
-  Class:   ELFCLASS64
-  Data:    ELFDATA2LSB
-  Type:    ET_EXEC
-  Machine: EM_X86_64
+  Class: ELFCLASS64
+  Data:  ELFDATA2LSB
+  Type:  ET_EXEC
 Sections:
   - Name:         .debug_gnu_pubnames
     Type:         SHT_STRTAB  ## SHT_PROGBITS by default.
@@ -232,19 +225,18 @@ DWARF:
 
 ## h) Test that yaml2obj emits an error if 'Descriptor' is missing.
 
-# RUN: not yaml2obj --docnum=8 %s -o %t8.o 2>&1 | FileCheck %s --check-prefix=MISSING-KEY --ignore-case
+# RUN: not yaml2obj --docnum=8 %s -o %t8.o 2>&1 | FileCheck -DMSG=%errc_EINVAL %s --check-prefix=MISSING-KEY --ignore-case
 
 #      MISSING-KEY: YAML:{{.*}}:9: error: missing required key 'Descriptor'
 # MISSING-KEY-NEXT:       - DieOffset: 0x12345678
 # MISSING-KEY-NEXT:         ^
-# MISSING-KEY-NEXT: yaml2obj: error: failed to parse YAML input: Invalid argument
+# MISSING-KEY-NEXT: yaml2obj: error: failed to parse YAML input: [[MSG]]
 
 --- !ELF
 FileHeader:
-  Class:   ELFCLASS64
-  Data:    ELFDATA2LSB
-  Type:    ET_EXEC
-  Machine: EM_X86_64
+  Class: ELFCLASS64
+  Data:  ELFDATA2LSB
+  Type:  ET_EXEC
 DWARF:
   debug_gnu_pubnames:
     Length:     0x1234

@@ -14,10 +14,37 @@
 #ifndef MLIR_TESTTYPES_H
 #define MLIR_TESTTYPES_H
 
+#include <tuple>
+
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/Dialect.h"
+#include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/Operation.h"
 #include "mlir/IR/Types.h"
 
 namespace mlir {
+namespace test {
+
+/// FieldInfo represents a field in the StructType data type. It is used as a
+/// parameter in TestTypeDefs.td.
+struct FieldInfo {
+  StringRef name;
+  Type type;
+
+  // Custom allocation called from generated constructor code
+  FieldInfo allocateInto(TypeStorageAllocator &alloc) const {
+    return FieldInfo{alloc.copyInto(name), type};
+  }
+};
+
+} // namespace test
+} // namespace mlir
+
+#define GET_TYPEDEF_CLASSES
+#include "TestTypeDefs.h.inc"
+
+namespace mlir {
+namespace test {
 
 #include "TestTypeInterfaces.h.inc"
 
@@ -25,10 +52,6 @@ namespace mlir {
 struct TestType : public Type::TypeBase<TestType, Type, TypeStorage,
                                         TestTypeInterface::Trait> {
   using Base::Base;
-
-  static TestType get(MLIRContext *context) {
-    return Base::get(context, Type::Kind::FIRST_PRIVATE_EXPERIMENTAL_9_TYPE);
-  }
 
   /// Provide a definition for the necessary interface methods.
   void printTypeC(Location loc) const {
@@ -72,9 +95,8 @@ class TestRecursiveType
 public:
   using Base::Base;
 
-  static TestRecursiveType create(MLIRContext *ctx, StringRef name) {
-    return Base::get(ctx, Type::Kind::FIRST_PRIVATE_EXPERIMENTAL_9_TYPE + 1,
-                     name);
+  static TestRecursiveType get(MLIRContext *ctx, StringRef name) {
+    return Base::get(ctx, name);
   }
 
   /// Body getter and setter.
@@ -85,6 +107,7 @@ public:
   StringRef getName() { return getImpl()->name; }
 };
 
-} // end namespace mlir
+} // namespace test
+} // namespace mlir
 
 #endif // MLIR_TESTTYPES_H

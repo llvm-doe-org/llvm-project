@@ -49,13 +49,6 @@ std::string EquivalenceObject::AsFortran() const {
   return ss.str();
 }
 
-bool Scope::IsModule() const {
-  return kind_ == Kind::Module && !symbol_->get<ModuleDetails>().isSubmodule();
-}
-bool Scope::IsSubmodule() const {
-  return kind_ == Kind::Module && symbol_->get<ModuleDetails>().isSubmodule();
-}
-
 Scope &Scope::MakeScope(Kind kind, Symbol *symbol) {
   return children_.emplace_back(*this, kind, symbol);
 }
@@ -114,14 +107,6 @@ Symbol *Scope::FindComponent(SourceName name) const {
   }
 }
 
-std::optional<SourceName> Scope::GetName() const {
-  if (const auto *sym{GetSymbol()}) {
-    return sym->name();
-  } else {
-    return std::nullopt;
-  }
-}
-
 bool Scope::Contains(const Scope &that) const {
   for (const Scope *scope{&that};; scope = &scope->parent()) {
     if (*scope == *this) {
@@ -164,7 +149,7 @@ Symbol &Scope::MakeCommonBlock(const SourceName &name) {
     return symbol;
   }
 }
-Symbol *Scope::FindCommonBlock(const SourceName &name) {
+Symbol *Scope::FindCommonBlock(const SourceName &name) const {
   const auto it{commonBlocks_.find(name)};
   return it != commonBlocks_.end() ? &*it->second : nullptr;
 }
@@ -217,12 +202,47 @@ DeclTypeSpec &Scope::MakeDerivedType(
   return declTypeSpecs_.emplace_back(category, std::move(spec));
 }
 
-void Scope::set_chars(parser::CookedSource &cooked) {
-  CHECK(kind_ == Kind::Module);
-  CHECK(parent_.IsGlobal() || parent_.IsModuleFile());
-  CHECK(DEREF(symbol_).test(Symbol::Flag::ModFile));
-  // TODO: Preserve the CookedSource rather than acquiring its string.
-  chars_ = cooked.AcquireData();
+const DeclTypeSpec *Scope::GetType(const SomeExpr &expr) {
+  if (auto dyType{expr.GetType()}) {
+    if (dyType->IsAssumedType()) {
+      return &MakeTypeStarType();
+    } else if (dyType->IsUnlimitedPolymorphic()) {
+      return &MakeClassStarType();
+    } else {
+      switch (dyType->category()) {
+      case TypeCategory::Integer:
+      case TypeCategory::Real:
+      case TypeCategory::Complex:
+        return &MakeNumericType(dyType->category(), KindExpr{dyType->kind()});
+      case TypeCategory::Character:
+        if (const ParamValue * lenParam{dyType->charLength()}) {
+          return &MakeCharacterType(
+              ParamValue{*lenParam}, KindExpr{dyType->kind()});
+        } else {
+          auto lenExpr{dyType->GetCharLength()};
+          if (!lenExpr) {
+            lenExpr =
+                std::get<evaluate::Expr<evaluate::SomeCharacter>>(expr.u).LEN();
+          }
+          if (lenExpr) {
+            return &MakeCharacterType(
+                ParamValue{SomeIntExpr{std::move(*lenExpr)},
+                    common::TypeParamAttr::Len},
+                KindExpr{dyType->kind()});
+          }
+        }
+        break;
+      case TypeCategory::Logical:
+        return &MakeLogicalType(KindExpr{dyType->kind()});
+      case TypeCategory::Derived:
+        return &MakeDerivedType(dyType->IsPolymorphic()
+                ? DeclTypeSpec::ClassDerived
+                : DeclTypeSpec::TypeDerived,
+            DerivedTypeSpec{dyType->GetDerivedTypeSpec()});
+      }
+    }
+  }
+  return nullptr;
 }
 
 Scope::ImportKind Scope::GetImportKind() const {

@@ -8,6 +8,11 @@
 
 #include "mlir-c/Registration.h"
 
+#include "mlir/CAPI/IR.h"
 #include "mlir/InitAllDialects.h"
 
-void mlirRegisterAllDialects() { mlir::registerAllDialects(); }
+void mlirRegisterAllDialects(MlirContext context) {
+  mlir::registerAllDialects(*unwrap(context));
+  // TODO: we may not want to eagerly load here.
+  unwrap(context)->loadAllAvailableDialects();
+}

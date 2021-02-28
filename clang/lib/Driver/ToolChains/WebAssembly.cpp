@@ -77,6 +77,16 @@ void wasm::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   const char *Crt1 = "crt1.o";
   const char *Entry = NULL;
+
+  // If crt1-command.o exists, it supports new-style commands, so use it.
+  // Otherwise, use the old crt1.o. This is a temporary transition measure.
+  // Once WASI libc no longer needs to support LLVM versions which lack
+  // support for new-style command, it can make crt1.o the same as
+  // crt1-command.o. And once LLVM no longer needs to support WASI libc
+  // versions before that, it can switch to using crt1-command.o.
+  if (ToolChain.GetFilePath("crt1-command.o") != "crt1-command.o")
+    Crt1 = "crt1-command.o";
+
   if (const Arg *A = Args.getLastArg(options::OPT_mexec_model_EQ)) {
     StringRef CM = A->getValue();
     if (CM == "command") {
@@ -114,8 +124,9 @@ void wasm::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   CmdArgs.push_back("-o");
   CmdArgs.push_back(Output.getFilename());
 
-  C.addCommand(std::make_unique<Command>(
-      JA, *this, ResponseFileSupport::AtFileCurCP(), Linker, CmdArgs, Inputs));
+  C.addCommand(std::make_unique<Command>(JA, *this,
+                                         ResponseFileSupport::AtFileCurCP(),
+                                         Linker, CmdArgs, Inputs, Output));
 
   // When optimizing, if wasm-opt is available, run it.
   if (Arg *A = Args.getLastArg(options::OPT_O_Group)) {
@@ -139,7 +150,7 @@ void wasm::Linker::ConstructJob(Compilation &C, const JobAction &JA,
         CmdArgs.push_back(Output.getFilename());
         C.addCommand(std::make_unique<Command>(
             JA, *this, ResponseFileSupport::AtFileCurCP(), WasmOpt, CmdArgs,
-            Inputs));
+            Inputs, Output));
       }
     }
   }
@@ -243,6 +254,27 @@ void WebAssembly::addClangTargetOptions(const ArgList &DriverArgs,
     CC1Args.push_back("+sign-ext");
   }
 
+  if (!DriverArgs.hasFlag(options::OPT_mmutable_globals,
+                          options::OPT_mno_mutable_globals, false)) {
+    // -fPIC implies +mutable-globals because the PIC ABI used by the linker
+    // depends on importing and exporting mutable globals.
+    llvm::Reloc::Model RelocationModel;
+    unsigned PICLevel;
+    bool IsPIE;
+    std::tie(RelocationModel, PICLevel, IsPIE) =
+        ParsePICArgs(*this, DriverArgs);
+    if (RelocationModel == llvm::Reloc::PIC_) {
+      if (DriverArgs.hasFlag(options::OPT_mno_mutable_globals,
+                             options::OPT_mmutable_globals, false)) {
+        getDriver().Diag(diag::err_drv_argument_not_allowed_with)
+            << "-fPIC"
+            << "-mno-mutable-globals";
+      }
+      CC1Args.push_back("-target-feature");
+      CC1Args.push_back("+mutable-globals");
+    }
+  }
+
   if (DriverArgs.getLastArg(options::OPT_fwasm_exceptions)) {
     // '-fwasm-exceptions' is not compatible with '-mno-exception-handling'
     if (DriverArgs.hasFlag(options::OPT_mno_exception_handing,
@@ -250,12 +282,6 @@ void WebAssembly::addClangTargetOptions(const ArgList &DriverArgs,
       getDriver().Diag(diag::err_drv_argument_not_allowed_with)
           << "-fwasm-exceptions"
           << "-mno-exception-handling";
-    // '-fwasm-exceptions' is not compatible with '-mno-reference-types'
-    if (DriverArgs.hasFlag(options::OPT_mno_reference_types,
-                           options::OPT_mexception_handing, false))
-      getDriver().Diag(diag::err_drv_argument_not_allowed_with)
-          << "-fwasm-exceptions"
-          << "-mno-reference-types";
     // '-fwasm-exceptions' is not compatible with
     // '-mllvm -enable-emscripten-cxx-exceptions'
     for (const Arg *A : DriverArgs.filtered(options::OPT_mllvm)) {
@@ -264,11 +290,9 @@ void WebAssembly::addClangTargetOptions(const ArgList &DriverArgs,
             << "-fwasm-exceptions"
             << "-mllvm -enable-emscripten-cxx-exceptions";
     }
-    // '-fwasm-exceptions' implies exception-handling and reference-types
+    // '-fwasm-exceptions' implies exception-handling feature
     CC1Args.push_back("-target-feature");
     CC1Args.push_back("+exception-handling");
-    CC1Args.push_back("-target-feature");
-    CC1Args.push_back("+reference-types");
   }
 }
 

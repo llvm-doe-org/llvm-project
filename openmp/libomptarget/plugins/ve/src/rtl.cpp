@@ -11,8 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "omptargetplugin.h"
-
 #include <algorithm>
 #include <cassert>
 #include <cerrno>
@@ -25,27 +23,20 @@
 #include <vector>
 #include <veosinfo/veosinfo.h>
 
+#include "Debug.h"
+#include "omptargetplugin.h"
+
+#ifndef TARGET_NAME
+#define TARGET_NAME VE
+#endif
+
+#define DEBUG_PREFIX "Target " GETNAME(TARGET_NAME) " RTL"
+
 #ifndef TARGET_ELF_ID
 #define TARGET_ELF_ID 0
 #endif
 
-#ifdef OMPTARGET_DEBUG
-static int DebugLevel = 0;
-
-#define GETNAME2(name) #name
-#define GETNAME(name) GETNAME2(name)
-#define DP(...)                                                                \
-  do {                                                                         \
-    if (DebugLevel > 0) {                                                      \
-      DEBUGP("Target " GETNAME(TARGET_NAME) " RTL", __VA_ARGS__);              \
-    }                                                                          \
-  } while (false)
-#else // OMPTARGET_DEBUG
-#define DP(...)                                                                \
-  {}
-#endif // OMPTARGET_DEBUG
-
-#include "../../common/elf_common.c"
+#include "elf_common.h"
 
 struct DynLibTy {
   char *FileName;
@@ -92,11 +83,8 @@ public:
       } else {
         DP("Found symbol %s successfully in target image (addr: %p)\n",
            SymbolName, reinterpret_cast<void *>(SymbolTargetAddr));
-        Entry = { reinterpret_cast<void *>(SymbolTargetAddr),
-                  i->name,
-                  i->size,
-                  i->flags,
-                  0 };
+        Entry = {reinterpret_cast<void *>(SymbolTargetAddr), i->name, i->size,
+                 i->flags, 0};
       }
 
       T.push_back(Entry);
@@ -111,11 +99,6 @@ public:
   }
 
   RTLDeviceInfoTy() {
-#ifdef OMPTARGET_DEBUG
-    if (char *envStr = getenv("LIBOMPTARGET_DEBUG")) {
-      DebugLevel = std::stoi(envStr);
-    }
-#endif // OMPTARGET_DEBUG
 
     struct ve_nodeinfo node_info;
     ve_node_info(&node_info);
@@ -191,7 +174,6 @@ static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
   }
   return OFFLOAD_SUCCESS;
 }
-
 
 // Return the number of available devices of the type supported by the
 // target RTL.
@@ -367,8 +349,8 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
   DP("Allocate target memory: device=%d, target addr=%p, size=%" PRIu64 "\n",
      ID, reinterpret_cast<void *>(addr), Size);
   if (ret != 0) {
-    DP("veo_alloc_mem(%d, %p, %" PRIu64 ") failed with error code %d\n",
-       ID, reinterpret_cast<void *>(addr), Size, ret);
+    DP("veo_alloc_mem(%d, %p, %" PRIu64 ") failed with error code %d\n", ID,
+       reinterpret_cast<void *>(addr), Size, ret);
     return NULL;
   }
 
@@ -404,7 +386,7 @@ int32_t __tgt_rtl_data_retrieve(int32_t ID, void *HostPtr, void *TargetPtr,
 // De-allocate the data referenced by target ptr on the device. In case of
 // success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_data_delete(int32_t ID, void *TargetPtr) {
-  int ret =  veo_free_mem(DeviceInfo.ProcHandles[ID], (uint64_t)TargetPtr);
+  int ret = veo_free_mem(DeviceInfo.ProcHandles[ID], (uint64_t)TargetPtr);
 
   if (ret != 0) {
     DP("veo_free_mem() failed with error code %d\n", ret);
@@ -436,8 +418,8 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
     ret = veo_args_set_u64(TargetArgs, i, (intptr_t)Args[i]);
 
     if (ret != 0) {
-      DP("veo_args_set_u64() has returned %d for argnum=%d and value %p\n",
-         ret, i, Args[i]);
+      DP("veo_args_set_u64() has returned %d for argnum=%d and value %p\n", ret,
+         i, Args[i]);
       return OFFLOAD_FAIL;
     }
   }
@@ -462,3 +444,5 @@ int32_t __tgt_rtl_run_target_region(int32_t ID, void *Entry, void **Args,
   return __tgt_rtl_run_target_team_region(ID, Entry, Args, Offsets, NumArgs, 1,
                                           1, 0);
 }
+
+int32_t __tgt_rtl_supports_empty_images() { return 1; }

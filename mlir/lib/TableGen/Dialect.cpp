@@ -15,6 +15,12 @@
 
 using namespace mlir;
 using namespace mlir::tblgen;
+Dialect::Dialect(const llvm::Record *def) : def(def) {
+  if (def == nullptr)
+    return;
+  for (StringRef dialect : def->getValueAsListOfStrings("dependentDialects"))
+    dependentDialects.push_back(dialect);
+}
 
 StringRef Dialect::getName() const { return def->getValueAsString("name"); }
 
@@ -32,7 +38,7 @@ std::string Dialect::getCppClassName() const {
 static StringRef getAsStringOrEmpty(const llvm::Record &record,
                                     StringRef fieldName) {
   if (auto valueInit = record.getValueInit(fieldName)) {
-    if (llvm::isa<llvm::CodeInit, llvm::StringInit>(valueInit))
+    if (llvm::isa<llvm::StringInit>(valueInit))
       return record.getValueAsString(fieldName);
   }
   return "";
@@ -44,6 +50,10 @@ StringRef Dialect::getSummary() const {
 
 StringRef Dialect::getDescription() const {
   return getAsStringOrEmpty(*def, "description");
+}
+
+ArrayRef<StringRef> Dialect::getDependentDialects() const {
+  return dependentDialects;
 }
 
 llvm::Optional<StringRef> Dialect::getExtraClassDeclaration() const {

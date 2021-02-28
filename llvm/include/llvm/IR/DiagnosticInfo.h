@@ -21,6 +21,7 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/Support/CBindingWrapping.h"
+#include "llvm/Support/TypeSize.h"
 #include "llvm/Support/YAMLTraits.h"
 #include <algorithm>
 #include <cstdint>
@@ -34,6 +35,7 @@ namespace llvm {
 class DiagnosticPrinter;
 class Function;
 class Instruction;
+class InstructionCost;
 class LLVMContext;
 class Module;
 class SMDiagnostic;
@@ -75,7 +77,6 @@ enum DiagnosticKind {
   DK_LastMachineRemark = DK_MachineOptimizationRemarkAnalysis,
   DK_MIRParser,
   DK_PGOProfile,
-  DK_MisExpect,
   DK_Unsupported,
   DK_FirstPluginKind // Must be last value to work with
                      // getNextAvailablePluginDiagnosticKind
@@ -380,7 +381,7 @@ public:
   /// Return a string with the location information for this diagnostic
   /// in the format "file:line:col". If location information is not available,
   /// it returns "<unknown>:0:0".
-  const std::string getLocationStr() const;
+  std::string getLocationStr() const;
 
   /// Return location information for this diagnostic in three parts:
   /// the relative source file path, line number and column.
@@ -434,8 +435,10 @@ public:
     Argument(StringRef Key, unsigned N);
     Argument(StringRef Key, unsigned long N);
     Argument(StringRef Key, unsigned long long N);
+    Argument(StringRef Key, ElementCount EC);
     Argument(StringRef Key, bool B) : Key(Key), Val(B ? "true" : "false") {}
     Argument(StringRef Key, DebugLoc dl);
+    Argument(StringRef Key, InstructionCost C);
   };
 
   /// \p PassName is the name of the pass emitting this diagnostic. \p
@@ -1010,25 +1013,6 @@ public:
   const Twine &getMessage() const { return Msg; }
 
   void print(DiagnosticPrinter &DP) const override;
-};
-
-/// Diagnostic information for MisExpect analysis.
-class DiagnosticInfoMisExpect : public DiagnosticInfoWithLocationBase {
-public:
-    DiagnosticInfoMisExpect(const Instruction *Inst, Twine &Msg);
-
-  /// \see DiagnosticInfo::print.
-  void print(DiagnosticPrinter &DP) const override;
-
-  static bool classof(const DiagnosticInfo *DI) {
-    return DI->getKind() == DK_MisExpect;
-  }
-
-  const Twine &getMsg() const { return Msg; }
-
-private:
-  /// Message to report.
-  const Twine &Msg;
 };
 
 } // end namespace llvm

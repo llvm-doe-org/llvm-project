@@ -1,10 +1,10 @@
-// RUN: %clang_cc1 -verify -fopenmp -fopenmp-version=50 -DOMP5 -x c++ -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck %s
-// RUN: %clang_cc1 -fopenmp -fopenmp-version=50 -DOMP5 -x c++ -std=c++11 -triple x86_64-apple-darwin10 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp -fopenmp-version=50 -DOMP5 -x c++ -triple x86_64-apple-darwin10 -std=c++11 -include-pch %t -verify %s -emit-llvm -o - | FileCheck %s
+// RUN: %clang_cc1 -verify -fopenmp -DOMP5 -x c++ -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck %s
+// RUN: %clang_cc1 -fopenmp -DOMP5 -x c++ -std=c++11 -triple x86_64-apple-darwin10 -emit-pch -o %t %s
+// RUN: %clang_cc1 -fopenmp -DOMP5 -x c++ -triple x86_64-apple-darwin10 -std=c++11 -include-pch %t -verify %s -emit-llvm -o - | FileCheck %s
 
-// RUN: %clang_cc1 -verify -fopenmp-simd -fopenmp-version=50 -DOMP5 -x c++ -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck --check-prefix SIMD-ONLY0 %s
-// RUN: %clang_cc1 -fopenmp-simd -fopenmp-version=50 -DOMP5 -x c++ -std=c++11 -triple x86_64-apple-darwin10 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp-simd -fopenmp-version=50 -DOMP5 -x c++ -triple x86_64-apple-darwin10 -std=c++11 -include-pch %t -verify %s -emit-llvm -o - | FileCheck --check-prefix SIMD-ONLY0 %s
+// RUN: %clang_cc1 -verify -fopenmp-simd -DOMP5 -x c++ -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck --check-prefix SIMD-ONLY0 %s
+// RUN: %clang_cc1 -fopenmp-simd -DOMP5 -x c++ -std=c++11 -triple x86_64-apple-darwin10 -emit-pch -o %t %s
+// RUN: %clang_cc1 -fopenmp-simd -DOMP5 -x c++ -triple x86_64-apple-darwin10 -std=c++11 -include-pch %t -verify %s -emit-llvm -o - | FileCheck --check-prefix SIMD-ONLY0 %s
 // SIMD-ONLY0-NOT: {{__kmpc|__tgt}}
 // expected-no-diagnostics
 
@@ -45,7 +45,7 @@ int main() {
 // CHECK: br label %[[DONE]]
 // CHECK: [[DONE]]:
 // CHECK: call void @__kmpc_end_critical(%struct.ident_t* @{{.+}}, i32 %{{.+}}, [8 x i32]* @{{.+}})
-// CHECK: atomicrmw add i32*
+// CHECK: atomicrmw add i32* {{.*}}, align 4
 // CHECK: call void @__kmpc_critical(%struct.ident_t* @{{.+}}, i32 %{{.+}}, [8 x i32]* @{{.+}})
 // CHECK: [[LAST_IV_VAL:%.+]] = load i32, i32* [[LAST_IV:@.+]],
 // CHECK: [[RES:%.+]] = icmp sle i32 [[LAST_IV_VAL]], [[IV:%.+]]
@@ -92,10 +92,10 @@ int main() {
 // CHECK: ret void
 
 // CHECK: define internal void [[OUTLINED2]](i32* {{.+}}, i32* {{.+}}, i32* {{.+}}, i32* {{.+}})
-// CHECK: atomicrmw add i32* [[A_SHARED:%.+]], i32 %{{.+}} monotonic
+// CHECK: atomicrmw add i32* [[A_SHARED:%.+]], i32 %{{.+}} monotonic, align 4
 // CHECK: [[BASE:%.+]] = bitcast i32* [[A_SHARED]] to [[STRUCT:%struct[.].+]]*
 // CHECK: [[FIRED:%.+]] = getelementptr inbounds [[STRUCT]], [[STRUCT]]* [[BASE]], i{{.+}} 0, i{{.+}} 1
-// CHECK: store atomic volatile i8 1, i8* [[FIRED]] unordered,
+// CHECK: store atomic volatile i8 1, i8* [[FIRED]] unordered, align 1
 // CHECK: ret void
 
 #endif // HEADER

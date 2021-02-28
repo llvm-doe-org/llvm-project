@@ -87,7 +87,7 @@ struct DriverOptions {
   bool warnOnNonstandardUsage{false}; // -Mstandard
   bool warningsAreErrors{false}; // -Werror
   Fortran::parser::Encoding encoding{Fortran::parser::Encoding::LATIN_1};
-  bool parseOnly{false};
+  bool syntaxOnly{false};
   bool dumpProvenance{false};
   bool dumpCookedChars{false};
   bool dumpUnparse{false};
@@ -160,14 +160,15 @@ std::string CompileFortran(
   }
   options.searchDirectories = driver.searchDirectories;
   Fortran::parser::AllSources allSources;
-  Fortran::parser::Parsing parsing{allSources};
+  Fortran::parser::AllCookedSources allCookedSources{allSources};
+  Fortran::parser::Parsing parsing{allCookedSources};
 
   auto start{CPUseconds()};
   parsing.Prescan(path, options);
   if (!parsing.messages().empty() &&
       (driver.warningsAreErrors || parsing.messages().AnyFatalError())) {
     llvm::errs() << driver.prefix << "could not scan " << path << '\n';
-    parsing.messages().Emit(llvm::errs(), parsing.cooked());
+    parsing.messages().Emit(llvm::errs(), parsing.allCooked());
     exitStatus = EXIT_FAILURE;
     return {};
   }
@@ -191,7 +192,7 @@ std::string CompileFortran(
   }
 
   parsing.ClearLog();
-  parsing.messages().Emit(llvm::errs(), parsing.cooked());
+  parsing.messages().Emit(llvm::errs(), parsing.allCooked());
   if (!parsing.consumedWholeFile()) {
     parsing.EmitMessage(llvm::errs(), parsing.finalRestingPlace(),
         "parser FAIL (final position)");
@@ -216,7 +217,7 @@ std::string CompileFortran(
             Fortran::common::LanguageFeature::BackslashEscapes));
     return {};
   }
-  if (driver.parseOnly) {
+  if (driver.syntaxOnly) {
     return {};
   }
 
@@ -368,8 +369,8 @@ int main(int argc, char *const argv[]) {
       driver.dumpUnparse = true;
     } else if (arg == "-ftime-parse") {
       driver.timeParse = true;
-    } else if (arg == "-fparse-only") {
-      driver.parseOnly = true;
+    } else if (arg == "-fparse-only" || arg == "-fsyntax-only") {
+      driver.syntaxOnly = true;
     } else if (arg == "-c") {
       driver.compileOnly = true;
     } else if (arg == "-o") {
@@ -404,7 +405,7 @@ int main(int argc, char *const argv[]) {
           << "  -ed                  enable fixed form D lines\n"
           << "  -E                   prescan & preprocess only\n"
           << "  -ftime-parse         measure parsing time\n"
-          << "  -fparse-only         parse only, no output except messages\n"
+          << "  -fsyntax-only        parse only, no output except messages\n"
           << "  -funparse            parse & reformat only, no code "
              "generation\n"
           << "  -fdump-provenance    dump the provenance table (no code)\n"

@@ -106,7 +106,7 @@ if(TARGET clang)
     else()
       # We require libcxx for the test suite, so if we aren't building it,
       # try to provide a helpful error about how to resolve the situation.
-      if(NOT TARGET cxx)
+      if(NOT TARGET cxx AND NOT libcxx IN_LIST LLVM_ENABLE_RUNTIMES)
         if(LLVM_ENABLE_PROJECTS STREQUAL "")
           # If `LLVM_ENABLE_PROJECTS` is not being used (implying that we are
           # using the old layout), suggest checking it out.
@@ -118,8 +118,9 @@ if(TARGET clang)
           # If `LLVM_ENABLE_PROJECTS` is being used, suggest adding it.
           message(FATAL_ERROR
             "LLDB test suite requires libc++, but it is currently disabled. "
-            "Please add `libcxx` to `LLVM_ENABLE_PROJECTS` or disable tests "
-            "via `LLDB_INCLUDE_TESTS=OFF`.")
+            "Please add `libcxx` to `LLVM_ENABLE_PROJECTS` or "
+            "`LLVM_ENABLE_RUNTIMES`, or disable tests via "
+            "`LLDB_INCLUDE_TESTS=OFF`.")
         endif()
       endif()
       add_lldb_test_dependency(cxx)
@@ -141,6 +142,7 @@ add_lldb_test_dependency(
   llvm-nm
   llvm-mc
   llvm-objcopy
+  llvm-pdbutil
   llvm-readobj
   )
 
@@ -165,6 +167,7 @@ llvm_canonicalize_cmake_booleans(
   LLDB_ENABLE_LZMA
   LLVM_ENABLE_ZLIB
   LLVM_ENABLE_SHARED_LIBS
+  LLDB_USE_SYSTEM_DEBUGSERVER
   LLDB_IS_64_BITS)
 
 # Configure the individual test suites.
@@ -213,6 +216,29 @@ add_lit_testsuite(check-lldb-reproducers
   EXCLUDE_FROM_CHECK_ALL
   DEPENDS lldb-test-deps)
 add_dependencies(check-lldb-reproducers check-lldb-reproducers-capture)
+
+# Targets for running the test suite on the different Apple simulators.
+add_lit_testsuite(check-lldb-simulator-ios
+  "Running lldb test suite on the iOS simulator"
+  ${CMAKE_CURRENT_BINARY_DIR}/API
+  PARAMS "lldb-run-with-simulator=ios"
+  EXCLUDE_FROM_CHECK_ALL
+  DEPENDS lldb-test-deps)
+
+add_lit_testsuite(check-lldb-simulator-watchos
+  "Running lldb test suite on the watchOS simulator"
+  ${CMAKE_CURRENT_BINARY_DIR}/API
+  PARAMS "lldb-run-with-simulator=watchos"
+  EXCLUDE_FROM_CHECK_ALL
+  DEPENDS lldb-test-deps)
+
+add_lit_testsuite(check-lldb-simulator-tvos
+  "Running lldb test suite on the tvOS simulator"
+  ${CMAKE_CURRENT_BINARY_DIR}/API
+  PARAMS "lldb-run-with-simulator=tvos"
+  EXCLUDE_FROM_CHECK_ALL
+  DEPENDS lldb-test-deps)
+
 
 if(LLDB_BUILT_STANDALONE)
   # This has to happen *AFTER* add_lit_testsuite.

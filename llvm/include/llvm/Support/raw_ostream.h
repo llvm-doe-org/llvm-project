@@ -15,6 +15,7 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/DataTypes.h"
 #include <cassert>
 #include <chrono>
 #include <cstddef>
@@ -47,7 +48,16 @@ class FileLocker;
 /// buffered disciplines etc. It is a simple buffer that outputs
 /// a chunk at a time.
 class raw_ostream {
+public:
+  // Class kinds to support LLVM-style RTTI.
+  enum class OStreamKind {
+    OK_OStream,
+    OK_FDStream,
+  };
+
 private:
+  OStreamKind Kind;
+
   /// The buffer is handled in such a way that the buffer is
   /// uninitialized, unbuffered, or out of space when OutBufCur >=
   /// OutBufEnd. Thus a single comparison suffices to determine if we
@@ -105,9 +115,10 @@ public:
   static constexpr Colors SAVEDCOLOR = Colors::SAVEDCOLOR;
   static constexpr Colors RESET = Colors::RESET;
 
-  explicit raw_ostream(bool unbuffered = false)
-      : BufferMode(unbuffered ? BufferKind::Unbuffered
-                              : BufferKind::InternalBuffer) {
+  explicit raw_ostream(bool unbuffered = false,
+                       OStreamKind K = OStreamKind::OK_OStream)
+      : Kind(K), BufferMode(unbuffered ? BufferKind::Unbuffered
+                                       : BufferKind::InternalBuffer) {
     // Start out ready to flush.
     OutBufStart = OutBufEnd = OutBufCur = nullptr;
   }
@@ -120,9 +131,18 @@ public:
   /// tell - Return the current offset with the file.
   uint64_t tell() const { return current_pos() + GetNumBytesInBuffer(); }
 
+  OStreamKind get_kind() const { return Kind; }
+
   //===--------------------------------------------------------------------===//
   // Configuration Interface
   //===--------------------------------------------------------------------===//
+
+  /// If possible, pre-allocate \p ExtraSize bytes for stream data.
+  /// i.e. it extends internal buffers to keep additional ExtraSize bytes.
+  /// So that the stream could keep at least tell() + ExtraSize bytes
+  /// without re-allocations. reserveExtraSpace() does not change
+  /// the size/data of the stream.
+  virtual void reserveExtraSpace(uint64_t ExtraSize) {}
 
   /// Set the stream to be buffered, with an automatically determined buffer
   /// size.
@@ -388,8 +408,9 @@ class raw_pwrite_stream : public raw_ostream {
   void anchor() override;
 
 public:
-  explicit raw_pwrite_stream(bool Unbuffered = false)
-      : raw_ostream(Unbuffered) {}
+  explicit raw_pwrite_stream(bool Unbuffered = false,
+                             OStreamKind K = OStreamKind::OK_OStream)
+      : raw_ostream(Unbuffered, K) {}
   void pwrite(const char *Ptr, size_t Size, uint64_t Offset) {
 #ifndef NDEBUG
     uint64_t Pos = tell();
@@ -412,6 +433,7 @@ class raw_fd_ostream : public raw_pwrite_stream {
   int FD;
   bool ShouldClose;
   bool SupportsSeeking = false;
+  mutable Optional<bool> HasColors;
 
 #ifdef _WIN32
   /// True if this fd refers to a Windows console device. Mintty and other
@@ -435,10 +457,17 @@ class raw_fd_ostream : public raw_pwrite_stream {
   /// Determine an efficient buffer size.
   size_t preferred_buffer_size() const override;
 
+  void anchor() override;
+
+protected:
   /// Set the flag indicating that an output error has been encountered.
   void error_detected(std::error_code EC) { this->EC = EC; }
 
-  void anchor() override;
+  /// Return the file descriptor.
+  int get_fd() const { return FD; }
+
+  // Update the file position by increasing \p Delta.
+  void inc_pos(uint64_t Delta) { pos += Delta; }
 
 public:
   /// Open the specified file for writing. If an error occurs, information
@@ -463,7 +492,8 @@ public:
   /// FD is the file descriptor that this writes to.  If ShouldClose is true,
   /// this closes the file when the stream is destroyed. If FD is for stdout or
   /// stderr, it will not be closed.
-  raw_fd_ostream(int fd, bool shouldClose, bool unbuffered=false);
+  raw_fd_ostream(int fd, bool shouldClose, bool unbuffered = false,
+                 OStreamKind K = OStreamKind::OK_OStream);
 
   ~raw_fd_ostream() override;
 
@@ -548,6 +578,34 @@ raw_fd_ostream &errs();
 raw_ostream &nulls();
 
 //===----------------------------------------------------------------------===//
+// File Streams
+//===----------------------------------------------------------------------===//
+
+/// A raw_ostream of a file for reading/writing/seeking.
+///
+class raw_fd_stream : public raw_fd_ostream {
+public:
+  /// Open the specified file for reading/writing/seeking. If an error occurs,
+  /// information about the error is put into EC, and the stream should be
+  /// immediately destroyed.
+  raw_fd_stream(StringRef Filename, std::error_code &EC);
+
+  /// This reads the \p Size bytes into a buffer pointed by \p Ptr.
+  ///
+  /// \param Ptr The start of the buffer to hold data to be read.
+  ///
+  /// \param Size The number of bytes to be read.
+  ///
+  /// On success, the number of bytes read is returned, and the file position is
+  /// advanced by this number. On error, -1 is returned, use error() to get the
+  /// error code.
+  ssize_t read(char *Ptr, size_t Size);
+
+  /// Check if \p OS is a pointer of type raw_fd_stream*.
+  static bool classof(const raw_ostream *OS);
+};
+
+//===----------------------------------------------------------------------===//
 // Output Stream Adaptors
 //===----------------------------------------------------------------------===//
 
@@ -574,6 +632,10 @@ public:
   std::string& str() {
     flush();
     return OS;
+  }
+
+  void reserveExtraSpace(uint64_t ExtraSize) override {
+    OS.reserve(tell() + ExtraSize);
   }
 };
 
@@ -608,6 +670,10 @@ public:
 
   /// Return a StringRef for the vector contents.
   StringRef str() const { return StringRef(OS.data(), OS.size()); }
+
+  void reserveExtraSpace(uint64_t ExtraSize) override {
+    OS.reserve(tell() + ExtraSize);
+  }
 };
 
 /// A raw_ostream that discards all output.
@@ -634,6 +700,18 @@ class buffer_ostream : public raw_svector_ostream {
 public:
   buffer_ostream(raw_ostream &OS) : raw_svector_ostream(Buffer), OS(OS) {}
   ~buffer_ostream() override { OS << str(); }
+};
+
+class buffer_unique_ostream : public raw_svector_ostream {
+  std::unique_ptr<raw_ostream> OS;
+  SmallVector<char, 0> Buffer;
+
+  virtual void anchor() override;
+
+public:
+  buffer_unique_ostream(std::unique_ptr<raw_ostream> OS)
+      : raw_svector_ostream(Buffer), OS(std::move(OS)) {}
+  ~buffer_unique_ostream() override { *OS << str(); }
 };
 
 } // end namespace llvm

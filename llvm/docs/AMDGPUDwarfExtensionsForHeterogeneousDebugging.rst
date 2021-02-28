@@ -106,7 +106,7 @@ programming languages used in ML and HPC. The extensions also include improved
 support for optimized code on any architecture. Some of the generalizations may
 also benefit other issues that have been raised.
 
-The extensions have evolved though collaboration with many individuals and
+The extensions have evolved through collaboration with many individuals and
 active prototyping within the GDB debugger and LLVM compiler. Input has also
 been very much appreciated from the developers working on the Perforce TotalView
 HPC Debugger and GCC compiler.
@@ -147,7 +147,7 @@ be generated to describe the CFI as only a single expression is required for
 the whole vector register, rather than a separate expression for each lane's
 dword of the vector register. It also allows the compiler to produce DWARF
 that indexes the vector register if it spills scalar registers into portions
-of a vector registers.
+of a vector register.
 
 Since DWARF stack value entries have a base type and AMDGPU registers are a
 vector of dwords, the ability to specify that a base type is a vector is
@@ -2678,12 +2678,12 @@ architectures.
 
 DWARF address space identifiers are used by:
 
-* The DWARF expession operations: ``DW_OP_LLVM_aspace_bregx``,
+* The DWARF expression operations: ``DW_OP_LLVM_aspace_bregx``,
   ``DW_OP_LLVM_form_aspace_address``, ``DW_OP_LLVM_implicit_aspace_pointer``,
   and ``DW_OP_xderef*``.
 
-* The CFI instructions: ``DW_CFA_def_aspace_cfa`` and
-  ``DW_CFA_def_aspace_cfa_sf``.
+* The CFI instructions: ``DW_CFA_LLVM_def_aspace_cfa`` and
+  ``DW_CFA_LLVM_def_aspace_cfa_sf``.
 
 .. note::
 
@@ -3387,7 +3387,7 @@ Standard Content Descriptions
     provided by the* ``DW_LNCT_path`` *field. When the source field is absent,
     consumers can access the file to get the source text.*
 
-    *This is particularly useful for programing languages that support runtime
+    *This is particularly useful for programming languages that support runtime
     compilation and runtime generation of source text. In these cases, the
     source text does not reside in any permanent file. For example, the OpenCL
     language [:ref:`OpenCL <amdgpu-dwarf-OpenCL>`] supports online compilation.*
@@ -3768,9 +3768,9 @@ CFA Definition Instructions
     *The action is the same as* ``DW_CFA_def_cfa``\ *, except that the second
     operand is signed and factored.*
 
-3.  ``DW_CFA_def_aspace_cfa`` *New*
+3.  ``DW_CFA_LLVM_def_aspace_cfa`` *New*
 
-    The ``DW_CFA_def_aspace_cfa`` instruction takes three unsigned LEB128
+    The ``DW_CFA_LLVM_def_aspace_cfa`` instruction takes three unsigned LEB128
     operands representing a register number R, a (non-factored) byte
     displacement B, and a target architecture specific address space identifier
     AS. The required action is to define the current CFA rule to be the result
@@ -3780,7 +3780,7 @@ CFA Definition Instructions
     If AS is not one of the values defined by the target architecture specific
     ``DW_ASPACE_*`` values then the DWARF expression is ill-formed.
 
-4.  ``DW_CFA_def_aspace_cfa_sf`` *New*
+4.  ``DW_CFA_LLVM_def_aspace_cfa_sf`` *New*
 
     The ``DW_CFA_def_cfa_sf`` instruction takes three operands: an unsigned
     LEB128 value representing a register number R, a signed LEB128 factored byte
@@ -4195,13 +4195,13 @@ instructions.
 .. table:: Call frame instruction encodings
    :name: amdgpu-dwarf-call-frame-instruction-encodings-table
 
-   ======================== ====== ====== ================ ================ ================
-   Instruction              High 2 Low 6  Operand 1        Operand 2        Operand 3
-                            Bits   Bits
-   ======================== ====== ====== ================ ================ ================
-   DW_CFA_def_aspace_cfa    0      0x30   ULEB128 register ULEB128 offset   ULEB128 address space
-   DW_CFA_def_aspace_cfa_sf 0      0x31   ULEB128 register SLEB128 offset   ULEB128 address space
-   ======================== ====== ====== ================ ================ ================
+   ============================= ====== ====== ================ ================ =====================
+   Instruction                   High 2 Low 6  Operand 1        Operand 2        Operand 3
+                                 Bits   Bits
+   ============================= ====== ====== ================ ================ =====================
+   DW_CFA_LLVM_def_aspace_cfa    0      0x30   ULEB128 register ULEB128 offset   ULEB128 address space
+   DW_CFA_LLVM_def_aspace_cfa_sf 0      0x31   ULEB128 register SLEB128 offset   ULEB128 address space
+   ============================= ====== ====== ================ ================ =====================
 
 Attributes by Tag Value (Informative)
 -------------------------------------

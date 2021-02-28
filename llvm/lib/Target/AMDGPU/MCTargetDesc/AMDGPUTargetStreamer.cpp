@@ -11,31 +11,21 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPUTargetStreamer.h"
-#include "AMDGPU.h"
-#include "SIDefines.h"
+#include "AMDGPUPTNote.h"
+#include "AMDKernelCodeT.h"
 #include "Utils/AMDGPUBaseInfo.h"
 #include "Utils/AMDKernelCodeTUtils.h"
-#include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/AMDGPUMetadataVerifier.h"
 #include "llvm/BinaryFormat/ELF.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/Metadata.h"
-#include "llvm/IR/Module.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCELFStreamer.h"
-#include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/MC/MCSectionELF.h"
+#include "llvm/Support/AMDGPUMetadata.h"
+#include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/FormattedStream.h"
-#include "llvm/Support/TargetParser.h"
-
-namespace llvm {
-#include "AMDGPUPTNote.h"
-}
 
 using namespace llvm;
 using namespace llvm::AMDGPU;
-using namespace llvm::AMDGPU::HSAMD;
 
 //===----------------------------------------------------------------------===//
 // AMDGPUTargetStreamer
@@ -43,9 +33,8 @@ using namespace llvm::AMDGPU::HSAMD;
 
 bool AMDGPUTargetStreamer::EmitHSAMetadataV2(StringRef HSAMetadataString) {
   HSAMD::Metadata HSAMetadata;
-  if (HSAMD::fromString(std::string(HSAMetadataString), HSAMetadata))
+  if (HSAMD::fromString(HSAMetadataString, HSAMetadata))
     return false;
-
   return EmitHSAMetadata(HSAMetadata);
 }
 
@@ -79,14 +68,17 @@ StringRef AMDGPUTargetStreamer::getArchNameFromElfMach(unsigned ElfMach) {
   case ELF::EF_AMDGPU_MACH_R600_TURKS:     AK = GK_TURKS;   break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX600:  AK = GK_GFX600;  break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX601:  AK = GK_GFX601;  break;
+  case ELF::EF_AMDGPU_MACH_AMDGCN_GFX602:  AK = GK_GFX602;  break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX700:  AK = GK_GFX700;  break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX701:  AK = GK_GFX701;  break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX702:  AK = GK_GFX702;  break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX703:  AK = GK_GFX703;  break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX704:  AK = GK_GFX704;  break;
+  case ELF::EF_AMDGPU_MACH_AMDGCN_GFX705:  AK = GK_GFX705;  break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX801:  AK = GK_GFX801;  break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX802:  AK = GK_GFX802;  break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX803:  AK = GK_GFX803;  break;
+  case ELF::EF_AMDGPU_MACH_AMDGCN_GFX805:  AK = GK_GFX805;  break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX810:  AK = GK_GFX810;  break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX900:  AK = GK_GFX900;  break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX902:  AK = GK_GFX902;  break;
@@ -94,11 +86,15 @@ StringRef AMDGPUTargetStreamer::getArchNameFromElfMach(unsigned ElfMach) {
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX906:  AK = GK_GFX906;  break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX908:  AK = GK_GFX908;  break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX909:  AK = GK_GFX909;  break;
+  case ELF::EF_AMDGPU_MACH_AMDGCN_GFX90A:  AK = GK_GFX90A;  break;
+  case ELF::EF_AMDGPU_MACH_AMDGCN_GFX90C:  AK = GK_GFX90C;  break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX1010: AK = GK_GFX1010; break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX1011: AK = GK_GFX1011; break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX1012: AK = GK_GFX1012; break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX1030: AK = GK_GFX1030; break;
   case ELF::EF_AMDGPU_MACH_AMDGCN_GFX1031: AK = GK_GFX1031; break;
+  case ELF::EF_AMDGPU_MACH_AMDGCN_GFX1032: AK = GK_GFX1032; break;
+  case ELF::EF_AMDGPU_MACH_AMDGCN_GFX1033: AK = GK_GFX1033; break;
   case ELF::EF_AMDGPU_MACH_NONE:           AK = GK_NONE;    break;
   }
 
@@ -132,14 +128,17 @@ unsigned AMDGPUTargetStreamer::getElfMach(StringRef GPU) {
   case GK_TURKS:   return ELF::EF_AMDGPU_MACH_R600_TURKS;
   case GK_GFX600:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX600;
   case GK_GFX601:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX601;
+  case GK_GFX602:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX602;
   case GK_GFX700:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX700;
   case GK_GFX701:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX701;
   case GK_GFX702:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX702;
   case GK_GFX703:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX703;
   case GK_GFX704:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX704;
+  case GK_GFX705:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX705;
   case GK_GFX801:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX801;
   case GK_GFX802:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX802;
   case GK_GFX803:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX803;
+  case GK_GFX805:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX805;
   case GK_GFX810:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX810;
   case GK_GFX900:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX900;
   case GK_GFX902:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX902;
@@ -147,11 +146,15 @@ unsigned AMDGPUTargetStreamer::getElfMach(StringRef GPU) {
   case GK_GFX906:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX906;
   case GK_GFX908:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX908;
   case GK_GFX909:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX909;
+  case GK_GFX90A:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX90A;
+  case GK_GFX90C:  return ELF::EF_AMDGPU_MACH_AMDGCN_GFX90C;
   case GK_GFX1010: return ELF::EF_AMDGPU_MACH_AMDGCN_GFX1010;
   case GK_GFX1011: return ELF::EF_AMDGPU_MACH_AMDGCN_GFX1011;
   case GK_GFX1012: return ELF::EF_AMDGPU_MACH_AMDGCN_GFX1012;
   case GK_GFX1030: return ELF::EF_AMDGPU_MACH_AMDGCN_GFX1030;
   case GK_GFX1031: return ELF::EF_AMDGPU_MACH_AMDGCN_GFX1031;
+  case GK_GFX1032: return ELF::EF_AMDGPU_MACH_AMDGCN_GFX1032;
+  case GK_GFX1033: return ELF::EF_AMDGPU_MACH_AMDGCN_GFX1033;
   case GK_NONE:    return ELF::EF_AMDGPU_MACH_NONE;
   }
 
@@ -235,15 +238,15 @@ bool AMDGPUTargetAsmStreamer::EmitHSAMetadata(
   if (HSAMD::toString(HSAMetadata, HSAMetadataString))
     return false;
 
-  OS << '\t' << AssemblerDirectiveBegin << '\n';
+  OS << '\t' << HSAMD::AssemblerDirectiveBegin << '\n';
   OS << HSAMetadataString << '\n';
-  OS << '\t' << AssemblerDirectiveEnd << '\n';
+  OS << '\t' << HSAMD::AssemblerDirectiveEnd << '\n';
   return true;
 }
 
 bool AMDGPUTargetAsmStreamer::EmitHSAMetadata(
     msgpack::Document &HSAMetadataDoc, bool Strict) {
-  V3::MetadataVerifier Verifier(Strict);
+  HSAMD::V3::MetadataVerifier Verifier(Strict);
   if (!Verifier.verify(HSAMetadataDoc.getRoot()))
     return false;
 
@@ -251,16 +254,25 @@ bool AMDGPUTargetAsmStreamer::EmitHSAMetadata(
   raw_string_ostream StrOS(HSAMetadataString);
   HSAMetadataDoc.toYAML(StrOS);
 
-  OS << '\t' << V3::AssemblerDirectiveBegin << '\n';
+  OS << '\t' << HSAMD::V3::AssemblerDirectiveBegin << '\n';
   OS << StrOS.str() << '\n';
-  OS << '\t' << V3::AssemblerDirectiveEnd << '\n';
+  OS << '\t' << HSAMD::V3::AssemblerDirectiveEnd << '\n';
   return true;
 }
 
-bool AMDGPUTargetAsmStreamer::EmitCodeEnd() {
+bool AMDGPUTargetAsmStreamer::EmitCodeEnd(const MCSubtargetInfo &STI) {
   const uint32_t Encoded_s_code_end = 0xbf9f0000;
-  OS << "\t.p2alignl 6, " << Encoded_s_code_end << '\n';
-  OS << "\t.fill 48, 4, " << Encoded_s_code_end << '\n';
+  const uint32_t Encoded_s_nop = 0xbf800000;
+  uint32_t Encoded_pad = Encoded_s_code_end;
+  unsigned FillSize = 48;
+
+  if (AMDGPU::isGFX90A(STI)) {
+    Encoded_pad = Encoded_s_nop;
+    FillSize = 256;
+  }
+
+  OS << "\t.p2alignl 6, " << Encoded_pad << '\n';
+  OS << "\t.fill " << FillSize << ", 4, " << Encoded_pad << '\n';
   return true;
 }
 
@@ -309,7 +321,7 @@ void AMDGPUTargetAsmStreamer::EmitAmdhsaKernelDescriptor(
   PRINT_FIELD(
       OS, ".amdhsa_system_sgpr_private_segment_wavefront_offset", KD,
       compute_pgm_rsrc2,
-      amdhsa::COMPUTE_PGM_RSRC2_ENABLE_SGPR_PRIVATE_SEGMENT_WAVEFRONT_OFFSET);
+      amdhsa::COMPUTE_PGM_RSRC2_ENABLE_PRIVATE_SEGMENT);
   PRINT_FIELD(OS, ".amdhsa_system_sgpr_workgroup_id_x", KD,
               compute_pgm_rsrc2,
               amdhsa::COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_ID_X);
@@ -329,6 +341,12 @@ void AMDGPUTargetAsmStreamer::EmitAmdhsaKernelDescriptor(
   // These directives are required.
   OS << "\t\t.amdhsa_next_free_vgpr " << NextVGPR << '\n';
   OS << "\t\t.amdhsa_next_free_sgpr " << NextSGPR << '\n';
+
+  if (AMDGPU::isGFX90A(STI))
+    OS << "\t\t.amdhsa_accum_offset " <<
+      (AMDHSA_BITS_GET(KD.compute_pgm_rsrc3,
+                       amdhsa::COMPUTE_PGM_RSRC3_GFX90A_ACCUM_OFFSET) + 1) * 4
+      << '\n';
 
   if (!ReserveVCC)
     OS << "\t\t.amdhsa_reserve_vcc " << ReserveVCC << '\n';
@@ -359,6 +377,10 @@ void AMDGPUTargetAsmStreamer::EmitAmdhsaKernelDescriptor(
     PRINT_FIELD(OS, ".amdhsa_fp16_overflow", KD,
                 compute_pgm_rsrc1,
                 amdhsa::COMPUTE_PGM_RSRC1_FP16_OVFL);
+  if (AMDGPU::isGFX90A(STI))
+    PRINT_FIELD(OS, ".amdhsa_tg_split", KD,
+                compute_pgm_rsrc3,
+                amdhsa::COMPUTE_PGM_RSRC3_GFX90A_TG_SPLIT);
   if (IVersion.Major >= 10) {
     PRINT_FIELD(OS, ".amdhsa_workgroup_processor_mode", KD,
                 compute_pgm_rsrc1,
@@ -566,7 +588,7 @@ bool AMDGPUTargetELFStreamer::EmitISAVersion(StringRef IsaVersionString) {
 
 bool AMDGPUTargetELFStreamer::EmitHSAMetadata(msgpack::Document &HSAMetadataDoc,
                                               bool Strict) {
-  V3::MetadataVerifier Verifier(Strict);
+  HSAMD::V3::MetadataVerifier Verifier(Strict);
   if (!Verifier.verify(HSAMetadataDoc.getRoot()))
     return false;
 
@@ -615,14 +637,22 @@ bool AMDGPUTargetELFStreamer::EmitHSAMetadata(
   return true;
 }
 
-bool AMDGPUTargetELFStreamer::EmitCodeEnd() {
+bool AMDGPUTargetELFStreamer::EmitCodeEnd(const MCSubtargetInfo &STI) {
   const uint32_t Encoded_s_code_end = 0xbf9f0000;
+  const uint32_t Encoded_s_nop = 0xbf800000;
+  uint32_t Encoded_pad = Encoded_s_code_end;
+  unsigned FillSize = 48;
+
+  if (AMDGPU::isGFX90A(STI)) {
+    Encoded_pad = Encoded_s_nop;
+    FillSize = 256;
+  }
 
   MCStreamer &OS = getStreamer();
   OS.PushSection();
-  OS.emitValueToAlignment(64, Encoded_s_code_end, 4);
-  for (unsigned I = 0; I < 48; ++I)
-    OS.emitInt32(Encoded_s_code_end);
+  OS.emitValueToAlignment(64, Encoded_pad, 4);
+  for (unsigned I = 0; I < FillSize; ++I)
+    OS.emitInt32(Encoded_pad);
   OS.PopSection();
   return true;
 }
@@ -656,9 +686,10 @@ void AMDGPUTargetELFStreamer::EmitAmdhsaKernelDescriptor(
     KernelCodeSymbol->setVisibility(ELF::STV_PROTECTED);
 
   Streamer.emitLabel(KernelDescriptorSymbol);
-  Streamer.emitBytes(StringRef(
-      (const char*)&(KernelDescriptor),
-      offsetof(amdhsa::kernel_descriptor_t, kernel_code_entry_byte_offset)));
+  Streamer.emitInt32(KernelDescriptor.group_segment_fixed_size);
+  Streamer.emitInt32(KernelDescriptor.private_segment_fixed_size);
+  for (uint8_t Res : KernelDescriptor.reserved0)
+    Streamer.emitInt8(Res);
   // FIXME: Remove the use of VK_AMDGPU_REL64 in the expression below. The
   // expression being created is:
   //   (start of kernel code) - (start of kernel descriptor)
@@ -670,11 +701,12 @@ void AMDGPUTargetELFStreamer::EmitAmdhsaKernelDescriptor(
           KernelDescriptorSymbol, MCSymbolRefExpr::VK_None, Context),
       Context),
       sizeof(KernelDescriptor.kernel_code_entry_byte_offset));
-  Streamer.emitBytes(StringRef(
-      (const char*)&(KernelDescriptor) +
-          offsetof(amdhsa::kernel_descriptor_t, kernel_code_entry_byte_offset) +
-          sizeof(KernelDescriptor.kernel_code_entry_byte_offset),
-      sizeof(KernelDescriptor) -
-          offsetof(amdhsa::kernel_descriptor_t, kernel_code_entry_byte_offset) -
-          sizeof(KernelDescriptor.kernel_code_entry_byte_offset)));
+  for (uint8_t Res : KernelDescriptor.reserved1)
+    Streamer.emitInt8(Res);
+  Streamer.emitInt32(KernelDescriptor.compute_pgm_rsrc3);
+  Streamer.emitInt32(KernelDescriptor.compute_pgm_rsrc1);
+  Streamer.emitInt32(KernelDescriptor.compute_pgm_rsrc2);
+  Streamer.emitInt16(KernelDescriptor.kernel_code_properties);
+  for (uint8_t Res : KernelDescriptor.reserved2)
+    Streamer.emitInt8(Res);
 }

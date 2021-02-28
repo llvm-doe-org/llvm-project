@@ -17,6 +17,7 @@
 #include "llvm/IR/IntrinsicsPowerPC.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/KnownBits.h"
 #include "llvm/Transforms/InstCombine/InstCombiner.h"
 #include "llvm/Transforms/Utils/Local.h"
 
@@ -233,9 +234,10 @@ int PPCTTIImpl::getIntImmCostIntrin(Intrinsic::ID IID, unsigned Idx,
 
 int PPCTTIImpl::getIntImmCostInst(unsigned Opcode, unsigned Idx,
                                   const APInt &Imm, Type *Ty,
-                                  TTI::TargetCostKind CostKind) {
+                                  TTI::TargetCostKind CostKind,
+                                  Instruction *Inst) {
   if (DisablePPCConstHoist)
-    return BaseT::getIntImmCostInst(Opcode, Idx, Imm, Ty, CostKind);
+    return BaseT::getIntImmCostInst(Opcode, Idx, Imm, Ty, CostKind, Inst);
 
   assert(Ty->isIntegerTy());
 
@@ -333,6 +335,29 @@ PPCTTIImpl::getUserCost(const User *U, ArrayRef<const Value *> Operands,
   return BaseT::getUserCost(U, Operands, CostKind);
 }
 
+// Determining the address of a TLS variable results in a function call in
+// certain TLS models.
+static bool memAddrUsesCTR(const Value *MemAddr, const PPCTargetMachine &TM,
+                           SmallPtrSetImpl<const Value *> &Visited) {
+  // No need to traverse again if we already checked this operand.
+  if (!Visited.insert(MemAddr).second)
+    return false;
+  const auto *GV = dyn_cast<GlobalValue>(MemAddr);
+  if (!GV) {
+    // Recurse to check for constants that refer to TLS global variables.
+    if (const auto *CV = dyn_cast<Constant>(MemAddr))
+      for (const auto &CO : CV->operands())
+        if (memAddrUsesCTR(CO, TM, Visited))
+          return true;
+    return false;
+  }
+
+  if (!GV->isThreadLocal())
+    return false;
+  TLSModel::Model Model = TM.getTLSModel(GV);
+  return Model == TLSModel::GeneralDynamic || Model == TLSModel::LocalDynamic;
+}
+
 bool PPCTTIImpl::mightUseCTR(BasicBlock *BB, TargetLibraryInfo *LibInfo,
                              SmallPtrSetImpl<const Value *> &Visited) {
   const PPCTargetMachine &TM = ST->getTargetMachine();
@@ -351,31 +376,6 @@ bool PPCTTIImpl::mightUseCTR(BasicBlock *BB, TargetLibraryInfo *LibInfo,
     return false;
   };
 
-  // Determining the address of a TLS variable results in a function call in
-  // certain TLS models.
-  std::function<bool(const Value *)> memAddrUsesCTR =
-      [&memAddrUsesCTR, &TM, &Visited](const Value *MemAddr) -> bool {
-    // No need to traverse again if we already checked this operand.
-    if (!Visited.insert(MemAddr).second)
-      return false;
-    const auto *GV = dyn_cast<GlobalValue>(MemAddr);
-    if (!GV) {
-      // Recurse to check for constants that refer to TLS global variables.
-      if (const auto *CV = dyn_cast<Constant>(MemAddr))
-        for (const auto &CO : CV->operands())
-          if (memAddrUsesCTR(CO))
-            return true;
-
-      return false;
-    }
-
-    if (!GV->isThreadLocal())
-      return false;
-    TLSModel::Model Model = TM.getTLSModel(GV);
-    return Model == TLSModel::GeneralDynamic ||
-      Model == TLSModel::LocalDynamic;
-  };
-
   auto isLargeIntegerTy = [](bool Is32Bit, Type *Ty) {
     if (IntegerType *ITy = dyn_cast<IntegerType>(Ty))
       return ITy->getBitWidth() > (Is32Bit ? 32U : 64U);
@@ -383,8 +383,34 @@ bool PPCTTIImpl::mightUseCTR(BasicBlock *BB, TargetLibraryInfo *LibInfo,
     return false;
   };
 
+  auto supportedHalfPrecisionOp = [](Instruction *Inst) {
+    switch (Inst->getOpcode()) {
+    default:
+      return false;
+    case Instruction::FPTrunc:
+    case Instruction::FPExt:
+    case Instruction::Load:
+    case Instruction::Store:
+    case Instruction::FPToUI:
+    case Instruction::UIToFP:
+    case Instruction::FPToSI:
+    case Instruction::SIToFP:
+      return true;
+    }
+  };
+
   for (BasicBlock::iterator J = BB->begin(), JE = BB->end();
        J != JE; ++J) {
+    // There are no direct operations on half precision so assume that
+    // anything with that type requires a call except for a few select
+    // operations with Power9.
+    if (Instruction *CurrInst = dyn_cast<Instruction>(J)) {
+      for (const auto &Op : CurrInst->operands()) {
+        if (Op->getType()->getScalarType()->isHalfTy() ||
+            CurrInst->getType()->getScalarType()->isHalfTy())
+          return !(ST->isISA3_0() && supportedHalfPrecisionOp(CurrInst));
+      }
+    }
     if (CallInst *CI = dyn_cast<CallInst>(J)) {
       // Inline ASM is okay, unless it clobbers the ctr register.
       if (InlineAsm *IA = dyn_cast<InlineAsm>(CI->getCalledOperand())) {
@@ -406,6 +432,30 @@ bool PPCTTIImpl::mightUseCTR(BasicBlock *BB, TargetLibraryInfo *LibInfo,
           case Intrinsic::loop_decrement:
             return true;
 
+          // Binary operations on 128-bit value will use CTR.
+          case Intrinsic::experimental_constrained_fadd:
+          case Intrinsic::experimental_constrained_fsub:
+          case Intrinsic::experimental_constrained_fmul:
+          case Intrinsic::experimental_constrained_fdiv:
+          case Intrinsic::experimental_constrained_frem:
+            if (F->getType()->getScalarType()->isFP128Ty() ||
+                F->getType()->getScalarType()->isPPC_FP128Ty())
+              return true;
+            break;
+
+          case Intrinsic::experimental_constrained_fptosi:
+          case Intrinsic::experimental_constrained_fptoui:
+          case Intrinsic::experimental_constrained_sitofp:
+          case Intrinsic::experimental_constrained_uitofp: {
+            Type *SrcType = CI->getArgOperand(0)->getType()->getScalarType();
+            Type *DstType = CI->getType()->getScalarType();
+            if (SrcType->isPPC_FP128Ty() || DstType->isPPC_FP128Ty() ||
+                isLargeIntegerTy(!TM.isPPC64(), SrcType) ||
+                isLargeIntegerTy(!TM.isPPC64(), DstType))
+              return true;
+            break;
+          }
+
           // Exclude eh_sjlj_setjmp; we don't need to exclude eh_sjlj_longjmp
           // because, although it does clobber the counter register, the
           // control can't then return to inside the loop unless there is also
@@ -424,6 +474,15 @@ bool PPCTTIImpl::mightUseCTR(BasicBlock *BB, TargetLibraryInfo *LibInfo,
           case Intrinsic::pow:
           case Intrinsic::sin:
           case Intrinsic::cos:
+          case Intrinsic::experimental_constrained_powi:
+          case Intrinsic::experimental_constrained_log:
+          case Intrinsic::experimental_constrained_log2:
+          case Intrinsic::experimental_constrained_log10:
+          case Intrinsic::experimental_constrained_exp:
+          case Intrinsic::experimental_constrained_exp2:
+          case Intrinsic::experimental_constrained_pow:
+          case Intrinsic::experimental_constrained_sin:
+          case Intrinsic::experimental_constrained_cos:
             return true;
           case Intrinsic::copysign:
             if (CI->getArgOperand(0)->getType()->getScalarType()->
@@ -445,6 +504,54 @@ bool PPCTTIImpl::mightUseCTR(BasicBlock *BB, TargetLibraryInfo *LibInfo,
           case Intrinsic::llround:            Opcode = ISD::LLROUND;    break;
           case Intrinsic::minnum:             Opcode = ISD::FMINNUM;    break;
           case Intrinsic::maxnum:             Opcode = ISD::FMAXNUM;    break;
+          case Intrinsic::experimental_constrained_fcmp:
+            Opcode = ISD::STRICT_FSETCC;
+            break;
+          case Intrinsic::experimental_constrained_fcmps:
+            Opcode = ISD::STRICT_FSETCCS;
+            break;
+          case Intrinsic::experimental_constrained_fma:
+            Opcode = ISD::STRICT_FMA;
+            break;
+          case Intrinsic::experimental_constrained_sqrt:
+            Opcode = ISD::STRICT_FSQRT;
+            break;
+          case Intrinsic::experimental_constrained_floor:
+            Opcode = ISD::STRICT_FFLOOR;
+            break;
+          case Intrinsic::experimental_constrained_ceil:
+            Opcode = ISD::STRICT_FCEIL;
+            break;
+          case Intrinsic::experimental_constrained_trunc:
+            Opcode = ISD::STRICT_FTRUNC;
+            break;
+          case Intrinsic::experimental_constrained_rint:
+            Opcode = ISD::STRICT_FRINT;
+            break;
+          case Intrinsic::experimental_constrained_lrint:
+            Opcode = ISD::STRICT_LRINT;
+            break;
+          case Intrinsic::experimental_constrained_llrint:
+            Opcode = ISD::STRICT_LLRINT;
+            break;
+          case Intrinsic::experimental_constrained_nearbyint:
+            Opcode = ISD::STRICT_FNEARBYINT;
+            break;
+          case Intrinsic::experimental_constrained_round:
+            Opcode = ISD::STRICT_FROUND;
+            break;
+          case Intrinsic::experimental_constrained_lround:
+            Opcode = ISD::STRICT_LROUND;
+            break;
+          case Intrinsic::experimental_constrained_llround:
+            Opcode = ISD::STRICT_LLROUND;
+            break;
+          case Intrinsic::experimental_constrained_minnum:
+            Opcode = ISD::STRICT_FMINNUM;
+            break;
+          case Intrinsic::experimental_constrained_maxnum:
+            Opcode = ISD::STRICT_FMAXNUM;
+            break;
           case Intrinsic::umul_with_overflow: Opcode = ISD::UMULO;      break;
           case Intrinsic::smul_with_overflow: Opcode = ISD::SMULO;      break;
           }
@@ -593,7 +700,7 @@ bool PPCTTIImpl::mightUseCTR(BasicBlock *BB, TargetLibraryInfo *LibInfo,
     }
 
     for (Value *Operand : J->operands())
-      if (memAddrUsesCTR(Operand))
+      if (memAddrUsesCTR(Operand, TM, Visited))
         return true;
   }
 
@@ -650,6 +757,24 @@ bool PPCTTIImpl::isHardwareLoopProfitable(Loop *L, ScalarEvolution &SE,
       if (( TrueIsExit && FalseWeight < TrueWeight) ||
           (!TrueIsExit && FalseWeight > TrueWeight))
         return false;
+    }
+  }
+
+  // If an exit block has a PHI that accesses a TLS variable as one of the
+  // incoming values from the loop, we cannot produce a CTR loop because the
+  // address for that value will be computed in the loop.
+  SmallVector<BasicBlock *, 4> ExitBlocks;
+  L->getExitBlocks(ExitBlocks);
+  for (auto &BB : ExitBlocks) {
+    for (auto &PHI : BB->phis()) {
+      for (int Idx = 0, EndIdx = PHI.getNumIncomingValues(); Idx < EndIdx;
+           Idx++) {
+        const BasicBlock *IncomingBB = PHI.getIncomingBlock(Idx);
+        const Value *IncomingValue = PHI.getIncomingValue(Idx);
+        if (L->contains(IncomingBB) &&
+            memAddrUsesCTR(IncomingValue, TM, Visited))
+          return false;
+      }
     }
   }
 
@@ -895,9 +1020,11 @@ int PPCTTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
 }
 
 int PPCTTIImpl::getCmpSelInstrCost(unsigned Opcode, Type *ValTy, Type *CondTy,
+                                   CmpInst::Predicate VecPred,
                                    TTI::TargetCostKind CostKind,
                                    const Instruction *I) {
-  int Cost = BaseT::getCmpSelInstrCost(Opcode, ValTy, CondTy, CostKind, I);
+  int Cost =
+      BaseT::getCmpSelInstrCost(Opcode, ValTy, CondTy, VecPred, CostKind, I);
   // TODO: Handle other cost kinds.
   if (CostKind != TTI::TCK_RecipThroughput)
     return Cost;
@@ -1119,4 +1246,52 @@ bool PPCTTIImpl::isLSRCostLess(TargetTransformInfo::LSRCost &C1,
                     C2.NumBaseAdds, C2.ScaleCost, C2.ImmCost, C2.SetupCost);
   else
     return TargetTransformInfoImplBase::isLSRCostLess(C1, C2);
+}
+
+bool PPCTTIImpl::isNumRegsMajorCostOfLSR() {
+  return false;
+}
+
+bool PPCTTIImpl::getTgtMemIntrinsic(IntrinsicInst *Inst,
+                                    MemIntrinsicInfo &Info) {
+  switch (Inst->getIntrinsicID()) {
+  case Intrinsic::ppc_altivec_lvx:
+  case Intrinsic::ppc_altivec_lvxl:
+  case Intrinsic::ppc_altivec_lvebx:
+  case Intrinsic::ppc_altivec_lvehx:
+  case Intrinsic::ppc_altivec_lvewx:
+  case Intrinsic::ppc_vsx_lxvd2x:
+  case Intrinsic::ppc_vsx_lxvw4x:
+  case Intrinsic::ppc_vsx_lxvd2x_be:
+  case Intrinsic::ppc_vsx_lxvw4x_be:
+  case Intrinsic::ppc_vsx_lxvl:
+  case Intrinsic::ppc_vsx_lxvll:
+  case Intrinsic::ppc_vsx_lxvp: {
+    Info.PtrVal = Inst->getArgOperand(0);
+    Info.ReadMem = true;
+    Info.WriteMem = false;
+    return true;
+  }
+  case Intrinsic::ppc_altivec_stvx:
+  case Intrinsic::ppc_altivec_stvxl:
+  case Intrinsic::ppc_altivec_stvebx:
+  case Intrinsic::ppc_altivec_stvehx:
+  case Intrinsic::ppc_altivec_stvewx:
+  case Intrinsic::ppc_vsx_stxvd2x:
+  case Intrinsic::ppc_vsx_stxvw4x:
+  case Intrinsic::ppc_vsx_stxvd2x_be:
+  case Intrinsic::ppc_vsx_stxvw4x_be:
+  case Intrinsic::ppc_vsx_stxvl:
+  case Intrinsic::ppc_vsx_stxvll:
+  case Intrinsic::ppc_vsx_stxvp: {
+    Info.PtrVal = Inst->getArgOperand(1);
+    Info.ReadMem = false;
+    Info.WriteMem = true;
+    return true;
+  }
+  default:
+    break;
+  }
+
+  return false;
 }

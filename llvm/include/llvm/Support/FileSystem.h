@@ -34,6 +34,7 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ErrorOr.h"
+#include "llvm/Support/FileSystem/UniqueID.h"
 #include "llvm/Support/MD5.h"
 #include <cassert>
 #include <cstdint>
@@ -42,7 +43,6 @@
 #include <stack>
 #include <string>
 #include <system_error>
-#include <tuple>
 #include <vector>
 
 #ifdef HAVE_SYS_STAT_H
@@ -130,26 +130,6 @@ inline perms operator~(perms x) {
   return static_cast<perms>(
       static_cast<unsigned short>(~static_cast<unsigned short>(x)));
 }
-
-class UniqueID {
-  uint64_t Device;
-  uint64_t File;
-
-public:
-  UniqueID() = default;
-  UniqueID(uint64_t Device, uint64_t File) : Device(Device), File(File) {}
-
-  bool operator==(const UniqueID &Other) const {
-    return Device == Other.Device && File == Other.File;
-  }
-  bool operator!=(const UniqueID &Other) const { return !(*this == Other); }
-  bool operator<(const UniqueID &Other) const {
-    return std::tie(Device, File) < std::tie(Other.Device, Other.File);
-  }
-
-  uint64_t getDevice() const { return Device; }
-  uint64_t getFile() const { return File; }
-};
 
 /// Represents the result of a call to directory_iterator::status(). This is a
 /// subset of the information returned by a regular sys::fs::status() call, and
@@ -1178,6 +1158,16 @@ std::error_code unlockFile(int FD);
 /// @returns An error code if closing the file failed. Typically, an error here
 /// means that the filesystem may have failed to perform some buffered writes.
 std::error_code closeFile(file_t &F);
+
+#ifdef LLVM_ON_UNIX
+/// @brief Change ownership of a file.
+///
+/// @param Owner The owner of the file to change to.
+/// @param Group The group of the file to change to.
+/// @returns errc::success if successfully updated file ownership, otherwise an
+///          error code is returned.
+std::error_code changeFileOwnership(int FD, uint32_t Owner, uint32_t Group);
+#endif
 
 /// RAII class that facilitates file locking.
 class FileLocker {

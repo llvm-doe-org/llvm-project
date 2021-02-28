@@ -11,6 +11,7 @@
 ; CHECK-NEXT: explicitKernArgSize: 128
 ; CHECK-NEXT: maxKernArgAlign: 64
 ; CHECK-NEXT: ldsSize: 0
+; CHECK-NEXT: dynLDSAlign: 1
 ; CHECK-NEXT: isEntryFunction: true
 ; CHECK-NEXT: noSignedZerosFPMath: false
 ; CHECK-NEXT: memoryBound: false
@@ -34,6 +35,7 @@
 ; CHECK-NEXT: fp64-fp16-input-denormals: true
 ; CHECK-NEXT: fp64-fp16-output-denormals: true
 ; CHECK-NEXT: highBitsOf32BitAddress: 0
+; CHECK-NEXT: occupancy: 10
 ; CHECK-NEXT: body:
 define amdgpu_kernel void @kernel(i32 %arg0, i64 %arg1, <16 x i32> %arg2) {
   %gep = getelementptr inbounds [512 x float], [512 x float] addrspace(3)* @lds, i32 0, i32 %arg0
@@ -46,6 +48,7 @@ define amdgpu_kernel void @kernel(i32 %arg0, i64 %arg1, <16 x i32> %arg2) {
 ; CHECK-NEXT: explicitKernArgSize: 0
 ; CHECK-NEXT: maxKernArgAlign: 1
 ; CHECK-NEXT: ldsSize: 0
+; CHECK-NEXT: dynLDSAlign: 1
 ; CHECK-NEXT: isEntryFunction: true
 ; CHECK-NEXT: noSignedZerosFPMath: false
 ; CHECK-NEXT: memoryBound: false
@@ -66,6 +69,7 @@ define amdgpu_kernel void @kernel(i32 %arg0, i64 %arg1, <16 x i32> %arg2) {
 ; CHECK-NEXT: fp64-fp16-input-denormals: true
 ; CHECK-NEXT: fp64-fp16-output-denormals: true
 ; CHECK-NEXT: highBitsOf32BitAddress: 0
+; CHECK-NEXT: occupancy: 10
 ; CHECK-NEXT: body:
 define amdgpu_ps void @ps_shader(i32 %arg0, i32 inreg %arg1) {
   ret void
@@ -76,6 +80,7 @@ define amdgpu_ps void @ps_shader(i32 %arg0, i32 inreg %arg1) {
 ; CHECK-NEXT: explicitKernArgSize: 0
 ; CHECK-NEXT: maxKernArgAlign: 1
 ; CHECK-NEXT: ldsSize: 0
+; CHECK-NEXT: dynLDSAlign: 1
 ; CHECK-NEXT: isEntryFunction: false
 ; CHECK-NEXT: noSignedZerosFPMath: false
 ; CHECK-NEXT: memoryBound: false
@@ -95,6 +100,7 @@ define amdgpu_ps void @ps_shader(i32 %arg0, i32 inreg %arg1) {
 ; CHECK-NEXT: fp64-fp16-input-denormals: true
 ; CHECK-NEXT: fp64-fp16-output-denormals: true
 ; CHECK-NEXT: highBitsOf32BitAddress: 0
+; CHECK-NEXT: occupancy: 10
 ; CHECK-NEXT: body:
 define void @function() {
   ret void
@@ -105,6 +111,7 @@ define void @function() {
 ; CHECK-NEXT: explicitKernArgSize: 0
 ; CHECK-NEXT: maxKernArgAlign: 1
 ; CHECK-NEXT: ldsSize: 0
+; CHECK-NEXT: dynLDSAlign: 1
 ; CHECK-NEXT: isEntryFunction: false
 ; CHECK-NEXT: noSignedZerosFPMath: true
 ; CHECK-NEXT: memoryBound: false
@@ -124,6 +131,7 @@ define void @function() {
 ; CHECK-NEXT: fp64-fp16-input-denormals: true
 ; CHECK-NEXT: fp64-fp16-output-denormals: true
 ; CHECK-NEXT: highBitsOf32BitAddress: 0
+; CHECK-NEXT: occupancy: 10
 ; CHECK-NEXT: body:
 define void @function_nsz() #0 {
   ret void

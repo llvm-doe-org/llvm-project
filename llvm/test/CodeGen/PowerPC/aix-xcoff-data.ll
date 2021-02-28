@@ -1,15 +1,15 @@
 ; This file tests the codegen of initialized and common variables in AIX
 ; assembly and XCOFF object files.
 
-; RUN: llc -mtriple powerpc-ibm-aix-xcoff < %s | FileCheck --check-prefixes=CHECK,CHECK32 %s
-; RUN: llc -mtriple powerpc64-ibm-aix-xcoff < %s | FileCheck --check-prefixes=CHECK,CHECK64 %s
+; RUN: llc -mtriple powerpc-ibm-aix-xcoff -data-sections=false < %s | FileCheck --check-prefixes=CHECK,CHECK32 %s
+; RUN: llc -mtriple powerpc64-ibm-aix-xcoff -data-sections=false < %s | FileCheck --check-prefixes=CHECK,CHECK64 %s
 
-; RUN: llc -mtriple powerpc-ibm-aix-xcoff -filetype=obj -o %t.o < %s
+; RUN: llc -mtriple powerpc-ibm-aix-xcoff -data-sections=false -filetype=obj -o %t.o < %s
 ; RUN: llvm-readobj --section-headers --file-header %t.o | \
 ; RUN: FileCheck --check-prefix=OBJ %s
 ; RUN: llvm-readobj --syms %t.o | FileCheck --check-prefix=SYMS %s
 
-; RUN: not --crash llc -mtriple powerpc64-ibm-aix-xcoff -filetype=obj < %s 2>&1 | \
+; RUN: not --crash llc -mtriple powerpc64-ibm-aix-xcoff -data-sections=false -filetype=obj < %s 2>&1 | \
 ; RUN: FileCheck --check-prefix=XCOFF64 %s
 ; XCOFF64: LLVM ERROR: 64-bit XCOFF object files are not supported yet.
 
@@ -86,10 +86,7 @@
 
 ; CHECK:      .globl  chrarray
 ; CHECK-NEXT: chrarray:
-; CHECK-NEXT: .byte   97
-; CHECK-NEXT: .byte   98
-; CHECK-NEXT: .byte   99
-; CHECK-NEXT: .byte   100
+; CHECK-NEXT: .byte   'a,'b,'c,'d
 
 ; CHECK:      .globl  dblarr
 ; CHECK-NEXT: .align  3
@@ -158,7 +155,7 @@
 ; OBJ-NEXT:   NumberOfSections: 3
 ; OBJ-NEXT:   TimeStamp:
 ; OBJ-NEXT:   SymbolTableOffset: 0x10C
-; OBJ-NEXT:   SymbolTableEntries: 44
+; OBJ-NEXT:   SymbolTableEntries: 45
 ; OBJ-NEXT:   OptionalHeaderSize: 0x0
 ; OBJ-NEXT:   Flags: 0x0
 ; OBJ-NEXT: }
@@ -212,7 +209,17 @@
 ; SYMS-NEXT: Arch: powerpc
 ; SYMS-NEXT: AddressSize: 32bit
 ; SYMS:      Symbols [
-; SYMS:        Symbol {
+; SYMS-NEXT:   Symbol {
+; SYMS-NEXT:     Index: 0
+; SYMS-NEXT:     Name: .file
+; SYMS-NEXT:     Value (SymbolTableIndex): 0x0
+; SYMS-NEXT:     Section: N_DEBUG
+; SYMS-NEXT:     Source Language ID: TB_C (0x0)
+; SYMS-NEXT:     CPU Version ID: 0x0
+; SYMS-NEXT:     StorageClass: C_FILE (0x67)
+; SYMS-NEXT:     NumberOfAuxEntries: 0
+; SYMS-NEXT:   }
+; SYMS-NEXT:   Symbol {
 ; SYMS-NEXT:     Index: [[#INDX:]]
 ; SYMS-NEXT:     Name: .text
 ; SYMS-NEXT:     Value (RelocatableAddress): 0x0

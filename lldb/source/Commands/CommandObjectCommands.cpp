@@ -6,15 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/ADT/StringRef.h"
-
 #include "CommandObjectCommands.h"
 #include "CommandObjectHelp.h"
+#include "CommandObjectRegexCommand.h"
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/IOHandler.h"
 #include "lldb/Interpreter/CommandHistory.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
-#include "lldb/Interpreter/CommandObjectRegexCommand.h"
 #include "lldb/Interpreter/CommandReturnObject.h"
 #include "lldb/Interpreter/OptionArgParser.h"
 #include "lldb/Interpreter/OptionValueBoolean.h"
@@ -24,6 +22,7 @@
 #include "lldb/Interpreter/ScriptInterpreter.h"
 #include "lldb/Utility/Args.h"
 #include "lldb/Utility/StringList.h"
+#include "llvm/ADT/StringRef.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -135,15 +134,12 @@ protected:
 
     FileSpec cmd_file(command[0].ref());
     FileSystem::Instance().Resolve(cmd_file);
-    ExecutionContext *exe_ctx = nullptr; // Just use the default context.
 
+    CommandInterpreterRunOptions options;
     // If any options were set, then use them
     if (m_options.m_stop_on_error.OptionWasSet() ||
         m_options.m_silent_run.OptionWasSet() ||
         m_options.m_stop_on_continue.OptionWasSet()) {
-      // Use user set settings
-      CommandInterpreterRunOptions options;
-
       if (m_options.m_stop_on_continue.OptionWasSet())
         options.SetStopOnContinue(
             m_options.m_stop_on_continue.GetCurrentValue());
@@ -160,14 +156,9 @@ protected:
         options.SetEchoCommands(m_interpreter.GetEchoCommands());
         options.SetEchoCommentCommands(m_interpreter.GetEchoCommentCommands());
       }
-
-      m_interpreter.HandleCommandsFromFile(cmd_file, exe_ctx, options, result);
-    } else {
-      // No options were set, inherit any settings from nested "command source"
-      // commands, or set to sane default settings...
-      CommandInterpreterRunOptions options;
-      m_interpreter.HandleCommandsFromFile(cmd_file, exe_ctx, options, result);
     }
+
+    m_interpreter.HandleCommandsFromFile(cmd_file, options, result);
     return result.Succeeded();
   }
 
@@ -465,7 +456,7 @@ protected:
         OptionArgVectorSP(new OptionArgVector);
 
     if (CommandObjectSP cmd_obj_sp =
-            m_interpreter.GetCommandSPExact(cmd_obj.GetCommandName(), false)) {
+            m_interpreter.GetCommandSPExact(cmd_obj.GetCommandName())) {
       if (m_interpreter.AliasExists(alias_command) ||
           m_interpreter.UserCommandExists(alias_command)) {
         result.AppendWarningWithFormat(
@@ -559,10 +550,9 @@ protected:
 
     if (!args.empty()) {
       CommandObjectSP tmp_sp =
-          m_interpreter.GetCommandSPExact(cmd_obj->GetCommandName(), false);
+          m_interpreter.GetCommandSPExact(cmd_obj->GetCommandName());
       if (use_subcommand)
-        tmp_sp = m_interpreter.GetCommandSPExact(sub_cmd_obj->GetCommandName(),
-                                                 false);
+        tmp_sp = m_interpreter.GetCommandSPExact(sub_cmd_obj->GetCommandName());
 
       args.GetCommandString(args_string);
     }
@@ -1273,6 +1263,9 @@ protected:
       case 'r':
         // NO-OP
         break;
+      case 'c':
+        relative_to_command_file = true;
+        break;
       default:
         llvm_unreachable("Unimplemented option");
       }
@@ -1281,11 +1274,13 @@ protected:
     }
 
     void OptionParsingStarting(ExecutionContext *execution_context) override {
+      relative_to_command_file = false;
     }
 
     llvm::ArrayRef<OptionDefinition> GetDefinitions() override {
       return llvm::makeArrayRef(g_script_import_options);
     }
+    bool relative_to_command_file = false;
   };
 
   bool DoExecute(Args &command, CommandReturnObject &result) override {
@@ -1293,6 +1288,17 @@ protected:
       result.AppendError("command script import needs one or more arguments");
       result.SetStatus(eReturnStatusFailed);
       return false;
+    }
+
+    FileSpec source_dir = {};
+    if (m_options.relative_to_command_file) {
+      source_dir = GetDebugger().GetCommandInterpreter().GetCurrentSourceDir();
+      if (!source_dir) {
+        result.AppendError("command script import -c can only be specified "
+                           "from a command file");
+        result.SetStatus(eReturnStatusFailed);
+        return false;
+      }
     }
 
     for (auto &entry : command.entries()) {
@@ -1309,7 +1315,7 @@ protected:
       // more)
       m_exe_ctx.Clear();
       if (GetDebugger().GetScriptInterpreter()->LoadScriptingModule(
-              entry.c_str(), init_session, error)) {
+              entry.c_str(), init_session, error, nullptr, source_dir)) {
         result.SetStatus(eReturnStatusSuccessFinishNoResult);
       } else {
         result.AppendErrorWithFormat("module importing failed: %s",

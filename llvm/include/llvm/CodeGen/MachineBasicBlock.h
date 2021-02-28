@@ -40,6 +40,7 @@ class Printable;
 class SlotIndexes;
 class StringRef;
 class raw_ostream;
+class LiveIntervals;
 class TargetRegisterClass;
 class TargetRegisterInfo;
 
@@ -152,6 +153,9 @@ private:
   /// LLVM IR.
   bool IsEHScopeEntry = false;
 
+  /// Indicates if this is a target block of a catchret.
+  bool IsEHCatchretTarget = false;
+
   /// Indicate that this basic block is the entry block of an EH funclet.
   bool IsEHFuncletEntry = false;
 
@@ -173,6 +177,9 @@ private:
   /// since getSymbol is a relatively heavy-weight operation, the symbol
   /// is only computed once and is cached.
   mutable MCSymbol *CachedMCSymbol = nullptr;
+
+  /// Cached MCSymbol for this block (used if IsEHCatchRetTarget).
+  mutable MCSymbol *CachedEHCatchretMCSymbol = nullptr;
 
   /// Marks the end of the basic block. Used during basic block sections to
   /// calculate the size of the basic block, or the BB section ending with it.
@@ -433,6 +440,9 @@ public:
 
   bool hasEHPadSuccessor() const;
 
+  /// Returns true if this is the entry block of the function.
+  bool isEntryBlock() const;
+
   /// Returns true if this is the entry block of an EH scope, i.e., the block
   /// that used to have a catchpad or cleanuppad instruction in the LLVM IR.
   bool isEHScopeEntry() const { return IsEHScopeEntry; }
@@ -440,6 +450,12 @@ public:
   /// Indicates if this is the entry block of an EH scope, i.e., the block that
   /// that used to have a catchpad or cleanuppad instruction in the LLVM IR.
   void setIsEHScopeEntry(bool V = true) { IsEHScopeEntry = V; }
+
+  /// Returns true if this is a target block of a catchret.
+  bool isEHCatchretTarget() const { return IsEHCatchretTarget; }
+
+  /// Indicates if this is a target block of a catchret.
+  void setIsEHCatchretTarget(bool V = true) { IsEHCatchretTarget = V; }
 
   /// Returns true if this is the entry block of an EH funclet.
   bool isEHFuncletEntry() const { return IsEHFuncletEntry; }
@@ -675,6 +691,17 @@ public:
     return !empty() && back().isEHScopeReturn();
   }
 
+  /// Split a basic block into 2 pieces at \p SplitPoint. A new block will be
+  /// inserted after this block, and all instructions after \p SplitInst moved
+  /// to it (\p SplitInst will be in the original block). If \p LIS is provided,
+  /// LiveIntervals will be appropriately updated. \return the newly inserted
+  /// block.
+  ///
+  /// If \p UpdateLiveIns is true, this will ensure the live ins list is
+  /// accurate, including for physreg uses/defs in the original block.
+  MachineBasicBlock *splitAt(MachineInstr &SplitInst, bool UpdateLiveIns = true,
+                             LiveIntervals *LIS = nullptr);
+
   /// Split the critical edge from this block to the given successor block, and
   /// return the newly created block, or null if splitting is not possible.
   ///
@@ -894,6 +921,9 @@ public:
 
   /// Return the MCSymbol for this basic block.
   MCSymbol *getSymbol() const;
+
+  /// Return the EHCatchret Symbol for this basic block.
+  MCSymbol *getEHCatchretSymbol() const;
 
   Optional<uint64_t> getIrrLoopHeaderWeight() const {
     return IrrLoopHeaderWeight;

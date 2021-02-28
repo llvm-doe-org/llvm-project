@@ -19,7 +19,10 @@
 #include <string>
 #include <unordered_map>
 
-#include "lldb/Core/EmulateInstruction.h"
+#include "NativeThreadLinux.h"
+#include "Plugins/Process/POSIX/ProcessPOSIXLog.h"
+#include "Plugins/Process/Utility/LinuxProcMaps.h"
+#include "Procfs.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/HostProcess.h"
@@ -34,18 +37,13 @@
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/LLDBAssert.h"
-#include "lldb/Utility/RegisterValue.h"
 #include "lldb/Utility/State.h"
 #include "lldb/Utility/Status.h"
 #include "lldb/Utility/StringExtractor.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/Errno.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Threading.h"
-
-#include "NativeThreadLinux.h"
-#include "Plugins/Process/POSIX/ProcessPOSIXLog.h"
-#include "Plugins/Process/Utility/LinuxProcMaps.h"
-#include "Procfs.h"
 
 #include <linux/unistd.h>
 #include <sys/socket.h>
@@ -860,169 +858,6 @@ void NativeProcessLinux::MonitorSignal(const siginfo_t &info,
   StopRunningThreads(thread.GetID());
 }
 
-namespace {
-
-struct EmulatorBaton {
-  NativeProcessLinux &m_process;
-  NativeRegisterContext &m_reg_context;
-
-  // eRegisterKindDWARF -> RegsiterValue
-  std::unordered_map<uint32_t, RegisterValue> m_register_values;
-
-  EmulatorBaton(NativeProcessLinux &process, NativeRegisterContext &reg_context)
-      : m_process(process), m_reg_context(reg_context) {}
-};
-
-} // anonymous namespace
-
-static size_t ReadMemoryCallback(EmulateInstruction *instruction, void *baton,
-                                 const EmulateInstruction::Context &context,
-                                 lldb::addr_t addr, void *dst, size_t length) {
-  EmulatorBaton *emulator_baton = static_cast<EmulatorBaton *>(baton);
-
-  size_t bytes_read;
-  emulator_baton->m_process.ReadMemory(addr, dst, length, bytes_read);
-  return bytes_read;
-}
-
-static bool ReadRegisterCallback(EmulateInstruction *instruction, void *baton,
-                                 const RegisterInfo *reg_info,
-                                 RegisterValue &reg_value) {
-  EmulatorBaton *emulator_baton = static_cast<EmulatorBaton *>(baton);
-
-  auto it = emulator_baton->m_register_values.find(
-      reg_info->kinds[eRegisterKindDWARF]);
-  if (it != emulator_baton->m_register_values.end()) {
-    reg_value = it->second;
-    return true;
-  }
-
-  // The emulator only fill in the dwarf regsiter numbers (and in some case the
-  // generic register numbers). Get the full register info from the register
-  // context based on the dwarf register numbers.
-  const RegisterInfo *full_reg_info =
-      emulator_baton->m_reg_context.GetRegisterInfo(
-          eRegisterKindDWARF, reg_info->kinds[eRegisterKindDWARF]);
-
-  Status error =
-      emulator_baton->m_reg_context.ReadRegister(full_reg_info, reg_value);
-  if (error.Success())
-    return true;
-
-  return false;
-}
-
-static bool WriteRegisterCallback(EmulateInstruction *instruction, void *baton,
-                                  const EmulateInstruction::Context &context,
-                                  const RegisterInfo *reg_info,
-                                  const RegisterValue &reg_value) {
-  EmulatorBaton *emulator_baton = static_cast<EmulatorBaton *>(baton);
-  emulator_baton->m_register_values[reg_info->kinds[eRegisterKindDWARF]] =
-      reg_value;
-  return true;
-}
-
-static size_t WriteMemoryCallback(EmulateInstruction *instruction, void *baton,
-                                  const EmulateInstruction::Context &context,
-                                  lldb::addr_t addr, const void *dst,
-                                  size_t length) {
-  return length;
-}
-
-static lldb::addr_t ReadFlags(NativeRegisterContext &regsiter_context) {
-  const RegisterInfo *flags_info = regsiter_context.GetRegisterInfo(
-      eRegisterKindGeneric, LLDB_REGNUM_GENERIC_FLAGS);
-  return regsiter_context.ReadRegisterAsUnsigned(flags_info,
-                                                 LLDB_INVALID_ADDRESS);
-}
-
-Status
-NativeProcessLinux::SetupSoftwareSingleStepping(NativeThreadLinux &thread) {
-  Status error;
-  NativeRegisterContext& register_context = thread.GetRegisterContext();
-
-  std::unique_ptr<EmulateInstruction> emulator_up(
-      EmulateInstruction::FindPlugin(m_arch, eInstructionTypePCModifying,
-                                     nullptr));
-
-  if (emulator_up == nullptr)
-    return Status("Instruction emulator not found!");
-
-  EmulatorBaton baton(*this, register_context);
-  emulator_up->SetBaton(&baton);
-  emulator_up->SetReadMemCallback(&ReadMemoryCallback);
-  emulator_up->SetReadRegCallback(&ReadRegisterCallback);
-  emulator_up->SetWriteMemCallback(&WriteMemoryCallback);
-  emulator_up->SetWriteRegCallback(&WriteRegisterCallback);
-
-  if (!emulator_up->ReadInstruction())
-    return Status("Read instruction failed!");
-
-  bool emulation_result =
-      emulator_up->EvaluateInstruction(eEmulateInstructionOptionAutoAdvancePC);
-
-  const RegisterInfo *reg_info_pc = register_context.GetRegisterInfo(
-      eRegisterKindGeneric, LLDB_REGNUM_GENERIC_PC);
-  const RegisterInfo *reg_info_flags = register_context.GetRegisterInfo(
-      eRegisterKindGeneric, LLDB_REGNUM_GENERIC_FLAGS);
-
-  auto pc_it =
-      baton.m_register_values.find(reg_info_pc->kinds[eRegisterKindDWARF]);
-  auto flags_it =
-      baton.m_register_values.find(reg_info_flags->kinds[eRegisterKindDWARF]);
-
-  lldb::addr_t next_pc;
-  lldb::addr_t next_flags;
-  if (emulation_result) {
-    assert(pc_it != baton.m_register_values.end() &&
-           "Emulation was successfull but PC wasn't updated");
-    next_pc = pc_it->second.GetAsUInt64();
-
-    if (flags_it != baton.m_register_values.end())
-      next_flags = flags_it->second.GetAsUInt64();
-    else
-      next_flags = ReadFlags(register_context);
-  } else if (pc_it == baton.m_register_values.end()) {
-    // Emulate instruction failed and it haven't changed PC. Advance PC with
-    // the size of the current opcode because the emulation of all
-    // PC modifying instruction should be successful. The failure most
-    // likely caused by a not supported instruction which don't modify PC.
-    next_pc = register_context.GetPC() + emulator_up->GetOpcode().GetByteSize();
-    next_flags = ReadFlags(register_context);
-  } else {
-    // The instruction emulation failed after it modified the PC. It is an
-    // unknown error where we can't continue because the next instruction is
-    // modifying the PC but we don't  know how.
-    return Status("Instruction emulation failed unexpectedly.");
-  }
-
-  if (m_arch.GetMachine() == llvm::Triple::arm) {
-    if (next_flags & 0x20) {
-      // Thumb mode
-      error = SetSoftwareBreakpoint(next_pc, 2);
-    } else {
-      // Arm mode
-      error = SetSoftwareBreakpoint(next_pc, 4);
-    }
-  } else if (m_arch.IsMIPS() || m_arch.GetTriple().isPPC64())
-    error = SetSoftwareBreakpoint(next_pc, 4);
-  else {
-    // No size hint is given for the next breakpoint
-    error = SetSoftwareBreakpoint(next_pc, 0);
-  }
-
-  // If setting the breakpoint fails because next_pc is out of the address
-  // space, ignore it and let the debugee segfault.
-  if (error.GetError() == EIO || error.GetError() == EFAULT) {
-    return Status();
-  } else if (error.Fail())
-    return error;
-
-  m_threads_stepping_with_breakpoint.insert({thread.GetID(), next_pc});
-
-  return Status();
-}
-
 bool NativeProcessLinux::SupportHardwareSingleStepping() const {
   if (m_arch.GetMachine() == llvm::Triple::arm || m_arch.IsMIPS())
     return false;
@@ -1297,26 +1132,36 @@ Status NativeProcessLinux::PopulateMemoryRegionCache() {
     return Status();
   }
 
-  auto BufferOrError = getProcFile(GetID(), "maps");
-  if (!BufferOrError) {
-    m_supports_mem_region = LazyBool::eLazyBoolNo;
-    return BufferOrError.getError();
-  }
   Status Result;
-  ParseLinuxMapRegions(BufferOrError.get()->getBuffer(),
-                       [&](const MemoryRegionInfo &Info, const Status &ST) {
-                         if (ST.Success()) {
-                           FileSpec file_spec(Info.GetName().GetCString());
-                           FileSystem::Instance().Resolve(file_spec);
-                           m_mem_region_cache.emplace_back(Info, file_spec);
-                           return true;
-                         } else {
-                           m_supports_mem_region = LazyBool::eLazyBoolNo;
-                           LLDB_LOG(log, "failed to parse proc maps: {0}", ST);
-                           Result = ST;
-                           return false;
-                         }
-                       });
+  LinuxMapCallback callback = [&](llvm::Expected<MemoryRegionInfo> Info) {
+    if (Info) {
+      FileSpec file_spec(Info->GetName().GetCString());
+      FileSystem::Instance().Resolve(file_spec);
+      m_mem_region_cache.emplace_back(*Info, file_spec);
+      return true;
+    }
+
+    Result = Info.takeError();
+    m_supports_mem_region = LazyBool::eLazyBoolNo;
+    LLDB_LOG(log, "failed to parse proc maps: {0}", Result);
+    return false;
+  };
+
+  // Linux kernel since 2.6.14 has /proc/{pid}/smaps
+  // if CONFIG_PROC_PAGE_MONITOR is enabled
+  auto BufferOrError = getProcFile(GetID(), "smaps");
+  if (BufferOrError)
+    ParseLinuxSMapRegions(BufferOrError.get()->getBuffer(), callback);
+  else {
+    BufferOrError = getProcFile(GetID(), "maps");
+    if (!BufferOrError) {
+      m_supports_mem_region = LazyBool::eLazyBoolNo;
+      return BufferOrError.getError();
+    }
+
+    ParseLinuxMapRegions(BufferOrError.get()->getBuffer(), callback);
+  }
+
   if (Result.Fail())
     return Result;
 
@@ -1347,43 +1192,134 @@ void NativeProcessLinux::DoStopIDBumped(uint32_t newBumpId) {
   m_mem_region_cache.clear();
 }
 
-Status NativeProcessLinux::AllocateMemory(size_t size, uint32_t permissions,
-                                          lldb::addr_t &addr) {
-// FIXME implementing this requires the equivalent of
-// InferiorCallPOSIX::InferiorCallMmap, which depends on functional ThreadPlans
-// working with Native*Protocol.
-#if 1
-  return Status("not implemented yet");
-#else
-  addr = LLDB_INVALID_ADDRESS;
+llvm::Expected<uint64_t>
+NativeProcessLinux::Syscall(llvm::ArrayRef<uint64_t> args) {
+  PopulateMemoryRegionCache();
+  auto region_it = llvm::find_if(m_mem_region_cache, [](const auto &pair) {
+    return pair.first.GetExecutable() == MemoryRegionInfo::eYes;
+  });
+  if (region_it == m_mem_region_cache.end())
+    return llvm::createStringError(llvm::inconvertibleErrorCode(),
+                                   "No executable memory region found!");
 
-  unsigned prot = 0;
-  if (permissions & lldb::ePermissionsReadable)
-    prot |= eMmapProtRead;
-  if (permissions & lldb::ePermissionsWritable)
-    prot |= eMmapProtWrite;
-  if (permissions & lldb::ePermissionsExecutable)
-    prot |= eMmapProtExec;
+  addr_t exe_addr = region_it->first.GetRange().GetRangeBase();
 
-  // TODO implement this directly in NativeProcessLinux
-  // (and lift to NativeProcessPOSIX if/when that class is refactored out).
-  if (InferiorCallMmap(this, addr, 0, size, prot,
-                       eMmapFlagsAnon | eMmapFlagsPrivate, -1, 0)) {
-    m_addr_to_mmap_size[addr] = size;
-    return Status();
-  } else {
-    addr = LLDB_INVALID_ADDRESS;
-    return Status("unable to allocate %" PRIu64
-                  " bytes of memory with permissions %s",
-                  size, GetPermissionsAsCString(permissions));
+  NativeThreadLinux &thread = *GetThreadByID(GetID());
+  assert(thread.GetState() == eStateStopped);
+  NativeRegisterContextLinux &reg_ctx = thread.GetRegisterContext();
+
+  NativeRegisterContextLinux::SyscallData syscall_data =
+      *reg_ctx.GetSyscallData();
+
+  DataBufferSP registers_sp;
+  if (llvm::Error Err = reg_ctx.ReadAllRegisterValues(registers_sp).ToError())
+    return std::move(Err);
+  auto restore_regs = llvm::make_scope_exit(
+      [&] { reg_ctx.WriteAllRegisterValues(registers_sp); });
+
+  llvm::SmallVector<uint8_t, 8> memory(syscall_data.Insn.size());
+  size_t bytes_read;
+  if (llvm::Error Err =
+          ReadMemory(exe_addr, memory.data(), memory.size(), bytes_read)
+              .ToError()) {
+    return std::move(Err);
   }
-#endif
+
+  auto restore_mem = llvm::make_scope_exit(
+      [&] { WriteMemory(exe_addr, memory.data(), memory.size(), bytes_read); });
+
+  if (llvm::Error Err = reg_ctx.SetPC(exe_addr).ToError())
+    return std::move(Err);
+
+  for (const auto &zip : llvm::zip_first(args, syscall_data.Args)) {
+    if (llvm::Error Err =
+            reg_ctx
+                .WriteRegisterFromUnsigned(std::get<1>(zip), std::get<0>(zip))
+                .ToError()) {
+      return std::move(Err);
+    }
+  }
+  if (llvm::Error Err = WriteMemory(exe_addr, syscall_data.Insn.data(),
+                                    syscall_data.Insn.size(), bytes_read)
+                            .ToError())
+    return std::move(Err);
+
+  m_mem_region_cache.clear();
+
+  // With software single stepping the syscall insn buffer must also include a
+  // trap instruction to stop the process.
+  int req = SupportHardwareSingleStepping() ? PTRACE_SINGLESTEP : PTRACE_CONT;
+  if (llvm::Error Err =
+          PtraceWrapper(req, thread.GetID(), nullptr, nullptr).ToError())
+    return std::move(Err);
+
+  int status;
+  ::pid_t wait_pid = llvm::sys::RetryAfterSignal(-1, ::waitpid, thread.GetID(),
+                                                 &status, __WALL);
+  if (wait_pid == -1) {
+    return llvm::errorCodeToError(
+        std::error_code(errno, std::generic_category()));
+  }
+  assert((unsigned)wait_pid == thread.GetID());
+
+  uint64_t result = reg_ctx.ReadRegisterAsUnsigned(syscall_data.Result, -ESRCH);
+
+  // Values larger than this are actually negative errno numbers.
+  uint64_t errno_threshold =
+      (uint64_t(-1) >> (64 - 8 * m_arch.GetAddressByteSize())) - 0x1000;
+  if (result > errno_threshold) {
+    return llvm::errorCodeToError(
+        std::error_code(-result & 0xfff, std::generic_category()));
+  }
+
+  return result;
 }
 
-Status NativeProcessLinux::DeallocateMemory(lldb::addr_t addr) {
-  // FIXME see comments in AllocateMemory - required lower-level
-  // bits not in place yet (ThreadPlans)
-  return Status("not implemented");
+llvm::Expected<addr_t>
+NativeProcessLinux::AllocateMemory(size_t size, uint32_t permissions) {
+
+  llvm::Optional<NativeRegisterContextLinux::MmapData> mmap_data =
+      GetCurrentThread()->GetRegisterContext().GetMmapData();
+  if (!mmap_data)
+    return llvm::make_error<UnimplementedError>();
+
+  unsigned prot = PROT_NONE;
+  assert((permissions & (ePermissionsReadable | ePermissionsWritable |
+                         ePermissionsExecutable)) == permissions &&
+         "Unknown permission!");
+  if (permissions & ePermissionsReadable)
+    prot |= PROT_READ;
+  if (permissions & ePermissionsWritable)
+    prot |= PROT_WRITE;
+  if (permissions & ePermissionsExecutable)
+    prot |= PROT_EXEC;
+
+  llvm::Expected<uint64_t> Result =
+      Syscall({mmap_data->SysMmap, 0, size, prot, MAP_ANONYMOUS | MAP_PRIVATE,
+               uint64_t(-1), 0});
+  if (Result)
+    m_allocated_memory.try_emplace(*Result, size);
+  return Result;
+}
+
+llvm::Error NativeProcessLinux::DeallocateMemory(lldb::addr_t addr) {
+  llvm::Optional<NativeRegisterContextLinux::MmapData> mmap_data =
+      GetCurrentThread()->GetRegisterContext().GetMmapData();
+  if (!mmap_data)
+    return llvm::make_error<UnimplementedError>();
+
+  auto it = m_allocated_memory.find(addr);
+  if (it == m_allocated_memory.end())
+    return llvm::createStringError(llvm::errc::invalid_argument,
+                                   "Memory not allocated by the debugger.");
+
+  llvm::Expected<uint64_t> Result =
+      Syscall({mmap_data->SysMunmap, addr, it->second});
+  if (!Result)
+    return Result.takeError();
+
+  m_allocated_memory.erase(it);
+  return llvm::Error::success();
 }
 
 size_t NativeProcessLinux::UpdateThreads() {
@@ -1652,6 +1588,11 @@ NativeThreadLinux *NativeProcessLinux::GetThreadByID(lldb::tid_t tid) {
       NativeProcessProtocol::GetThreadByID(tid));
 }
 
+NativeThreadLinux *NativeProcessLinux::GetCurrentThread() {
+  return static_cast<NativeThreadLinux *>(
+      NativeProcessProtocol::GetCurrentThread());
+}
+
 Status NativeProcessLinux::ResumeThread(NativeThreadLinux &thread,
                                         lldb::StateType state, int signo) {
   Log *const log = ProcessPOSIXLog::GetLogIfAllCategoriesSet(POSIX_LOG_THREAD);
@@ -1897,6 +1838,12 @@ Status NativeProcessLinux::GetTraceConfig(lldb::user_id_t traceid,
     error = (*perf_monitor).GetTraceConfig(config);
   }
   return error;
+}
+
+llvm::Expected<TraceTypeInfo> NativeProcessLinux::GetSupportedTraceType() {
+  if (ProcessorTraceMonitor::IsSupported())
+    return TraceTypeInfo{"intel-pt", "Intel Processor Trace"};
+  return NativeProcessProtocol::GetSupportedTraceType();
 }
 
 lldb::user_id_t

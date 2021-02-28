@@ -16,21 +16,23 @@
 
 #include "mlir/Conversion/GPUCommon/GPUCommonPass.h"
 #include "mlir/Conversion/GPUToROCDL/GPUToROCDLPass.h"
+#include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/GPU/GPUDialect.h"
 #include "mlir/Dialect/GPU/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/ExecutionEngine/JitRunner.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
-#include "mlir/IR/Function.h"
-#include "mlir/IR/Module.h"
-#include "mlir/InitAllDialects.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
-#include "mlir/Target/ROCDLIR.h"
+#include "mlir/Target/LLVMIR.h"
+#include "mlir/Target/LLVMIR/Dialect/ROCDL/ROCDLToLLVMIRTranslation.h"
+#include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/ErrorOr.h"
@@ -63,6 +65,8 @@
 
 // HIP headers.
 #include "hip/hip_version.h"
+
+#include <mutex>
 
 using namespace mlir;
 using namespace llvm;
@@ -145,6 +149,7 @@ static LogicalResult assembleIsa(const std::string isa, StringRef name,
   return success();
 }
 
+static std::mutex mutex;
 static LogicalResult createHsaco(const Blob &isaBlob, StringRef name,
                                  Blob &hsacoBlob) {
   // Save the ISA binary to a temp file.
@@ -174,6 +179,7 @@ static LogicalResult createHsaco(const Blob &isaBlob, StringRef name,
   }
   FileRemover cleanupHsaco(tempHsacoFilename);
 
+  const std::lock_guard<std::mutex> lock(mutex);
   // Invoke lld. Expect a true return value from lld.
   bool ret = lld::elf::link({"ld.lld", "-shared", tempIsaBinaryFilename.c_str(),
                              "-o", tempHsacoFilename.c_str()},
@@ -302,6 +308,7 @@ static LogicalResult runMLIRPasses(ModuleOp m) {
   configTargetFeatures();
 
   const char gpuBinaryAnnotation[] = "rocdl.hsaco";
+  pm.addPass(createLowerToCFGPass());
   pm.addPass(createGpuKernelOutliningPass());
   auto &kernelPm = pm.nest<gpu::GPUModuleOp>();
   kernelPm.addPass(createStripDebugInfoPass());
@@ -316,7 +323,6 @@ static LogicalResult runMLIRPasses(ModuleOp m) {
 
 int main(int argc, char **argv) {
   registerPassManagerCLOptions();
-  mlir::registerAllDialects();
   llvm::InitLLVM y(argc, argv);
   llvm::InitializeAllTargetInfos();
   llvm::InitializeAllTargetMCs();
@@ -329,5 +335,16 @@ int main(int argc, char **argv) {
   LLVMInitializeAMDGPUAsmPrinter();
 
   mlir::initializeLLVMPasses();
-  return mlir::JitRunnerMain(argc, argv, &runMLIRPasses);
+
+  mlir::JitRunnerConfig jitRunnerConfig;
+  jitRunnerConfig.mlirTransformer = runMLIRPasses;
+
+  mlir::DialectRegistry registry;
+  registry.insert<mlir::LLVM::LLVMDialect, mlir::gpu::GPUDialect,
+                  mlir::ROCDL::ROCDLDialect, mlir::StandardOpsDialect>();
+  registry.addDialectInterface<ROCDL::ROCDLDialect,
+                               ROCDLDialectLLVMIRTranslationInterface>();
+  mlir::registerLLVMDialectTranslation(registry);
+
+  return mlir::JitRunnerMain(argc, argv, registry, jitRunnerConfig);
 }

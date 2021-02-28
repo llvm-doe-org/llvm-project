@@ -1,10 +1,7 @@
-// RUN: llvm-mc -mattr=+code-object-v3 -triple amdgcn-amd-amdhsa -mcpu=gfx1010 -mattr=+xnack < %s | FileCheck --check-prefix=ASM %s
-// RUN: llvm-mc -mattr=+code-object-v3 -triple amdgcn-amd-amdhsa -mcpu=gfx1010 -mattr=+xnack -filetype=obj < %s > %t
+// RUN: llvm-mc -triple amdgcn-amd-amdhsa -mcpu=gfx1010 -mattr=+xnack < %s | FileCheck --check-prefix=ASM %s
+// RUN: llvm-mc -triple amdgcn-amd-amdhsa -mcpu=gfx1010 -mattr=+xnack -filetype=obj < %s > %t
 // RUN: llvm-readobj -elf-output-style=GNU -sections -symbols -relocations %t | FileCheck --check-prefix=READOBJ %s
 // RUN: llvm-objdump -s -j .rodata %t | FileCheck --check-prefix=OBJDUMP %s
-
-// big endian not supported
-// XFAIL: host-byteorder-big-endian
 
 // READOBJ: Section Headers
 // READOBJ: .text   PROGBITS {{[0-9a-f]+}} {{[0-9a-f]+}} {{[0-9a-f]+}} {{[0-9]+}} AX {{[0-9]+}} {{[0-9]+}} 256
@@ -16,12 +13,12 @@
 // READOBJ: 0000000000000090 {{[0-9a-f]+}}00000005 R_AMDGPU_REL64 0000000000000000 .text + 210
 
 // READOBJ: Symbol table '.symtab' contains {{[0-9]+}} entries:
-// READOBJ: {{[0-9]+}}: 0000000000000100  0 FUNC    LOCAL  PROTECTED 2 complete
-// READOBJ: {{[0-9]+}}: 0000000000000040 64 OBJECT  LOCAL  DEFAULT   3 complete.kd
-// READOBJ: {{[0-9]+}}: 0000000000000000  0 FUNC    LOCAL  PROTECTED 2 minimal
-// READOBJ: {{[0-9]+}}: 0000000000000000 64 OBJECT  LOCAL  DEFAULT   3 minimal.kd
-// READOBJ: {{[0-9]+}}: 0000000000000200  0 FUNC    LOCAL  PROTECTED 2 special_sgpr
-// READOBJ: {{[0-9]+}}: 0000000000000080 64 OBJECT  LOCAL  DEFAULT   3 special_sgpr.kd
+// READOBJ:      0000000000000000  0 FUNC    LOCAL  PROTECTED 2 minimal
+// READOBJ-NEXT: 0000000000000100  0 FUNC    LOCAL  PROTECTED 2 complete
+// READOBJ-NEXT: 0000000000000200  0 FUNC    LOCAL  PROTECTED 2 special_sgpr
+// READOBJ-NEXT: 0000000000000000 64 OBJECT  LOCAL  DEFAULT   3 minimal.kd
+// READOBJ-NEXT: 0000000000000040 64 OBJECT  LOCAL  DEFAULT   3 complete.kd
+// READOBJ-NEXT: 0000000000000080 64 OBJECT  LOCAL  DEFAULT   3 special_sgpr.kd
 
 // OBJDUMP: Contents of section .rodata
 // Note, relocation for KERNEL_CODE_ENTRY_BYTE_OFFSET is not resolved here.

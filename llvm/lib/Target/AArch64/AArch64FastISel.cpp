@@ -526,10 +526,7 @@ unsigned AArch64FastISel::fastMaterializeConstant(const Constant *C) {
   MVT VT = CEVT.getSimpleVT();
   // arm64_32 has 32-bit pointers held in 64-bit registers. Because of that,
   // 'null' pointers need to have a somewhat special treatment.
-  if (const auto *CPN = dyn_cast<ConstantPointerNull>(C)) {
-    (void)CPN;
-    assert(CPN->getType()->getPointerAddressSpace() == 0 &&
-           "Unexpected address space");
+  if (isa<ConstantPointerNull>(C)) {
     assert(VT == MVT::i64 && "Expected 64-bit pointers");
     return materializeInt(ConstantInt::get(Type::getInt64Ty(*Context), 0), VT);
   }
@@ -3409,8 +3406,7 @@ bool AArch64FastISel::foldXALUIntrinsic(AArch64CC::CondCode &CC,
   const Value *RHS = II->getArgOperand(1);
 
   // Canonicalize immediate to the RHS.
-  if (isa<ConstantInt>(LHS) && !isa<ConstantInt>(RHS) &&
-      isCommutativeIntrinsic(II))
+  if (isa<ConstantInt>(LHS) && !isa<ConstantInt>(RHS) && II->isCommutative())
     std::swap(LHS, RHS);
 
   // Simplify multiplies.
@@ -3697,8 +3693,7 @@ bool AArch64FastISel::fastLowerIntrinsicCall(const IntrinsicInst *II) {
     const Value *LHS = II->getArgOperand(0);
     const Value *RHS = II->getArgOperand(1);
     // Canonicalize immediate to the RHS.
-    if (isa<ConstantInt>(LHS) && !isa<ConstantInt>(RHS) &&
-        isCommutativeIntrinsic(II))
+    if (isa<ConstantInt>(LHS) && !isa<ConstantInt>(RHS) && II->isCommutative())
       std::swap(LHS, RHS);
 
     // Simplify multiplies.
@@ -3896,7 +3891,7 @@ bool AArch64FastISel::selectRet(const Instruction *I) {
       return false;
 
     // Vectors (of > 1 lane) in big endian need tricky handling.
-    if (RVEVT.isVector() && RVEVT.getVectorNumElements() > 1 &&
+    if (RVEVT.isVector() && RVEVT.getVectorElementCount().isVector() &&
         !Subtarget->isLittleEndian())
       return false;
 

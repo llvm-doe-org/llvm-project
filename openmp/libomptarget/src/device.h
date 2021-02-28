@@ -17,21 +17,35 @@
 #include <cstddef>
 #include <list>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <vector>
+
+#include "omptarget.h"
+#include "rtl.h"
 
 // Forward declarations.
 struct RTLInfoTy;
 struct __tgt_bin_desc;
 struct __tgt_target_table;
-struct __tgt_async_info;
+
+using map_var_info_t = void *;
+
+// enum for OMP_TARGET_OFFLOAD; keep in sync with kmp.h definition
+enum kmp_target_offload_kind {
+  tgt_disabled = 0,
+  tgt_default = 1,
+  tgt_mandatory = 2
+};
+typedef enum kmp_target_offload_kind kmp_target_offload_kind_t;
 
 /// Map between host data and target data.
 struct HostDataToTargetTy {
   uintptr_t HstPtrBase; // host info.
   uintptr_t HstPtrBegin;
-  uintptr_t HstPtrEnd; // non-inclusive.
+  uintptr_t HstPtrEnd;       // non-inclusive.
+  map_var_info_t HstPtrName; // Optional source name of mapped variable.
 
   uintptr_t TgtPtrBegin; // target info.
 
@@ -42,13 +56,11 @@ private:
 
 public:
   HostDataToTargetTy(uintptr_t BP, uintptr_t B, uintptr_t E, uintptr_t TB,
-      bool IsINF = false)
-      : HstPtrBase(BP), HstPtrBegin(B), HstPtrEnd(E),
+                     map_var_info_t Name = nullptr, bool IsINF = false)
+      : HstPtrBase(BP), HstPtrBegin(B), HstPtrEnd(E), HstPtrName(Name),
         TgtPtrBegin(TB), RefCount(IsINF ? INFRefCount : 1) {}
 
-  uint64_t getRefCount() const {
-    return RefCount;
-  }
+  uint64_t getRefCount() const { return RefCount; }
 
   uint64_t resetRefCount() const {
     if (RefCount != INFRefCount)
@@ -75,9 +87,7 @@ public:
     return RefCount;
   }
 
-  bool isRefCountInf() const {
-    return RefCount == INFRefCount;
-  }
+  bool isRefCountInf() const { return RefCount == INFRefCount; }
 };
 
 typedef uintptr_t HstPtrBeginTy;
@@ -96,14 +106,14 @@ typedef std::set<HostDataToTargetTy, std::less<>> HostDataToTargetListTy;
 
 struct LookupResult {
   struct {
-    unsigned IsContained   : 1;
+    unsigned IsContained : 1;
     unsigned ExtendsBefore : 1;
-    unsigned ExtendsAfter  : 1;
+    unsigned ExtendsAfter : 1;
   } Flags;
 
   HostDataToTargetListTy::iterator Entry;
 
-  LookupResult() : Flags({0,0,0}), Entry() {}
+  LookupResult() : Flags({0, 0, 0}), Entry() {}
 };
 
 /// Map for shadow pointers
@@ -142,44 +152,25 @@ struct DeviceTy {
   // moved into the target task in libomp.
   std::map<int32_t, uint64_t> LoopTripCnt;
 
-  DeviceTy(RTLInfoTy *RTL)
-      : DeviceID(-1), RTL(RTL), RTLDeviceID(-1), IsInit(false), InitFlag(),
-        HasPendingGlobals(false), HostDataToTargetMap(), PendingCtorsDtors(),
-        ShadowPtrMap(), DataMapMtx(), PendingGlobalsMtx(), ShadowMtx() {}
+  DeviceTy(RTLInfoTy *RTL);
 
   // The existence of mutexes makes DeviceTy non-copyable. We need to
   // provide a copy constructor and an assignment operator explicitly.
-  DeviceTy(const DeviceTy &d)
-      : DeviceID(d.DeviceID), RTL(d.RTL), RTLDeviceID(d.RTLDeviceID),
-        IsInit(d.IsInit), InitFlag(), HasPendingGlobals(d.HasPendingGlobals),
-        HostDataToTargetMap(d.HostDataToTargetMap),
-        PendingCtorsDtors(d.PendingCtorsDtors), ShadowPtrMap(d.ShadowPtrMap),
-        DataMapMtx(), PendingGlobalsMtx(), ShadowMtx(),
-        LoopTripCnt(d.LoopTripCnt) {}
+  DeviceTy(const DeviceTy &D);
 
-  DeviceTy& operator=(const DeviceTy &d) {
-    DeviceID = d.DeviceID;
-    RTL = d.RTL;
-    RTLDeviceID = d.RTLDeviceID;
-    IsInit = d.IsInit;
-    HasPendingGlobals = d.HasPendingGlobals;
-    HostDataToTargetMap = d.HostDataToTargetMap;
-    PendingCtorsDtors = d.PendingCtorsDtors;
-    ShadowPtrMap = d.ShadowPtrMap;
-    LoopTripCnt = d.LoopTripCnt;
+  DeviceTy &operator=(const DeviceTy &D);
 
-    return *this;
-  }
+  ~DeviceTy();
 
   // Return true if data can be copied to DstDevice directly
-  bool isDataExchangable(const DeviceTy& DstDevice);
+  bool isDataExchangable(const DeviceTy &DstDevice);
 
   uint64_t getMapEntryRefCnt(void *HstPtrBegin);
   LookupResult lookupMapping(void *HstPtrBegin, int64_t Size);
   void *getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, int64_t Size,
-                         bool &IsNew, bool &IsHostPtr, bool IsImplicit,
-                         bool UpdateRefCount, bool HasCloseModifier,
-                         bool HasPresentModifier);
+                         map_var_info_t HstPtrName, bool &IsNew,
+                         bool &IsHostPtr, bool IsImplicit, bool UpdateRefCount,
+                         bool HasCloseModifier, bool HasPresentModifier);
   void *getTgtPtrBegin(void *HstPtrBegin, int64_t Size);
   void *getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
                        bool UpdateRefCount, bool &IsHostPtr,
@@ -209,24 +200,24 @@ struct DeviceTy {
   // synchronous.
   // Copy data from host to device
   int32_t submitData(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
-                     __tgt_async_info *AsyncInfoPtr);
+                     AsyncInfoTy &AsyncInfo);
   // Copy data from device back to host
   int32_t retrieveData(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size,
-                       __tgt_async_info *AsyncInfoPtr);
+                       AsyncInfoTy &AsyncInfo);
   // Copy data from current device to destination device directly
-  int32_t data_exchange(void *SrcPtr, DeviceTy DstDev, void *DstPtr,
-                        int64_t Size, __tgt_async_info *AsyncInfoPtr);
+  int32_t dataExchange(void *SrcPtr, DeviceTy &DstDev, void *DstPtr,
+                       int64_t Size, AsyncInfoTy &AsyncInfo);
 
   int32_t runRegion(void *TgtEntryPtr, void **TgtVarsPtr, ptrdiff_t *TgtOffsets,
-                    int32_t TgtVarsSize, __tgt_async_info *AsyncInfoPtr);
+                    int32_t TgtVarsSize, AsyncInfoTy &AsyncInfo);
   int32_t runTeamRegion(void *TgtEntryPtr, void **TgtVarsPtr,
                         ptrdiff_t *TgtOffsets, int32_t TgtVarsSize,
                         int32_t NumTeams, int32_t ThreadLimit,
-                        uint64_t LoopTripCount, __tgt_async_info *AsyncInfoPtr);
+                        uint64_t LoopTripCount, AsyncInfoTy &AsyncInfo);
 
   /// Synchronize device/queue/event based on \p AsyncInfoPtr and return
   /// OFFLOAD_SUCCESS/OFFLOAD_FAIL when succeeds/fails.
-  int32_t synchronize(__tgt_async_info *AsyncInfoPtr);
+  int32_t synchronize(AsyncInfoTy &AsyncInfo);
 
 private:
   // Call to RTL
@@ -235,8 +226,33 @@ private:
 
 /// Map between Device ID (i.e. openmp device id) and its DeviceTy.
 typedef std::vector<DeviceTy> DevicesTy;
-extern DevicesTy Devices;
 
 extern bool device_is_ready(int device_num);
+
+/// Struct for the data required to handle plugins
+struct PluginManager {
+  /// RTLs identified on the host
+  RTLsTy RTLs;
+
+  /// Devices associated with RTLs
+  DevicesTy Devices;
+  std::mutex RTLsMtx; ///< For RTLs and Devices
+
+  /// Translation table retreived from the binary
+  HostEntriesBeginToTransTableTy HostEntriesBeginToTransTable;
+  std::mutex TrlTblMtx; ///< For Translation Table
+  /// Host offload entries in order of image registration
+  std::vector<__tgt_offload_entry *> HostEntriesBeginRegistrationOrder;
+
+  /// Map from ptrs on the host to an entry in the Translation Table
+  HostPtrToTableMapTy HostPtrToTableMap;
+  std::mutex TblMapMtx; ///< For HostPtrToTableMap
+
+  // Store target policy (disabled, mandatory, default)
+  kmp_target_offload_kind_t TargetOffloadPolicy = tgt_default;
+  std::mutex TargetOffloadMtx; ///< For TargetOffloadPolicy
+};
+
+extern PluginManager *PM;
 
 #endif

@@ -27,6 +27,7 @@
 #define __global__ __attribute__((global))
 #define __shared__ __attribute__((shared))
 #define __constant__ __attribute__((constant))
+#define __managed__ __attribute__((managed))
 
 #if !defined(__cplusplus) || __cplusplus < 201103L
   #define nullptr NULL;
@@ -55,6 +56,7 @@ static inline __device__ void *free(void *__ptr) {
 
 #if !_OPENMP || __HIP_ENABLE_CUDA_WRAPPER_FOR_OPENMP__
 #include <__clang_cuda_math_forward_declares.h>
+#include <__clang_hip_cmath.h>
 #include <__clang_cuda_complex_builtins.h>
 
 #include <algorithm>

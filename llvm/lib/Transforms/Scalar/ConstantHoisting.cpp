@@ -185,13 +185,20 @@ Instruction *ConstantHoistingPass::findMatInsertPt(Instruction *Inst,
   // We can't insert directly before a phi node or an eh pad. Insert before
   // the terminator of the incoming or dominating block.
   assert(Entry != Inst->getParent() && "PHI or landing pad in entry block!");
-  if (Idx != ~0U && isa<PHINode>(Inst))
-    return cast<PHINode>(Inst)->getIncomingBlock(Idx)->getTerminator();
+  BasicBlock *InsertionBlock = nullptr;
+  if (Idx != ~0U && isa<PHINode>(Inst)) {
+    InsertionBlock = cast<PHINode>(Inst)->getIncomingBlock(Idx);
+    if (!InsertionBlock->isEHPad()) {
+      return InsertionBlock->getTerminator();
+    }
+  } else {
+    InsertionBlock = Inst->getParent();
+  }
 
   // This must be an EH pad. Iterate over immediate dominators until we find a
   // non-EH pad. We need to skip over catchswitch blocks, which are both EH pads
   // and terminators.
-  auto IDom = DT->getNode(Inst->getParent())->getIDom();
+  auto *IDom = DT->getNode(InsertionBlock)->getIDom();
   while (IDom->getBlock()->isEHPad()) {
     assert(Entry != IDom->getBlock() && "eh pad in entry block");
     IDom = IDom->getIDom();
@@ -366,9 +373,9 @@ void ConstantHoistingPass::collectConstantCandidates(
                                     ConstInt->getValue(), ConstInt->getType(),
                                     TargetTransformInfo::TCK_SizeAndLatency);
   else
-    Cost = TTI->getIntImmCostInst(Inst->getOpcode(), Idx, ConstInt->getValue(),
-                                  ConstInt->getType(),
-                                  TargetTransformInfo::TCK_SizeAndLatency);
+    Cost = TTI->getIntImmCostInst(
+        Inst->getOpcode(), Idx, ConstInt->getValue(), ConstInt->getType(),
+        TargetTransformInfo::TCK_SizeAndLatency, Inst);
 
   // Ignore cheap integer constants.
   if (Cost > TargetTransformInfo::TCC_Basic) {
@@ -418,8 +425,9 @@ void ConstantHoistingPass::collectConstantCandidates(
   // usually lowered to a load from constant pool. Such operation is unlikely
   // to be cheaper than compute it by <Base + Offset>, which can be lowered to
   // an ADD instruction or folded into Load/Store instruction.
-  int Cost = TTI->getIntImmCostInst(Instruction::Add, 1, Offset, PtrIntTy,
-                                    TargetTransformInfo::TCK_SizeAndLatency);
+  int Cost =
+      TTI->getIntImmCostInst(Instruction::Add, 1, Offset, PtrIntTy,
+                             TargetTransformInfo::TCK_SizeAndLatency, Inst);
   ConstCandVecType &ExprCandVec = ConstGEPCandMap[BaseGV];
   ConstCandMapType::iterator Itr;
   bool Inserted;
@@ -950,7 +958,7 @@ bool ConstantHoistingPass::runImpl(Function &Fn, TargetTransformInfo &TTI,
   // base constant.
   if (!ConstIntCandVec.empty())
     findBaseConstants(nullptr);
-  for (auto &MapEntry : ConstGEPCandMap)
+  for (const auto &MapEntry : ConstGEPCandMap)
     if (!MapEntry.second.empty())
       findBaseConstants(MapEntry.first);
 
@@ -959,7 +967,7 @@ bool ConstantHoistingPass::runImpl(Function &Fn, TargetTransformInfo &TTI,
   bool MadeChange = false;
   if (!ConstIntInfoVec.empty())
     MadeChange = emitBaseConstants(nullptr);
-  for (auto MapEntry : ConstGEPInfoMap)
+  for (const auto &MapEntry : ConstGEPInfoMap)
     if (!MapEntry.second.empty())
       MadeChange |= emitBaseConstants(MapEntry.first);
 

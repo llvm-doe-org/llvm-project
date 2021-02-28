@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Analysis/AliasSetTracker.h"
-#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/GuardUtils.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/MemoryLocation.h"
@@ -21,24 +20,20 @@
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InstIterator.h"
-#include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/PassManager.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/IR/Value.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/AtomicOrdering.h"
-#include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-#include <cassert>
-#include <cstdint>
-#include <vector>
 
 using namespace llvm;
 
@@ -88,7 +83,7 @@ void AliasSet::mergeSetIn(AliasSet &AS, AliasSetTracker &AST) {
       addRef();
     }
   } else if (ASHadUnknownInsts) {
-    UnknownInsts.insert(UnknownInsts.end(), AS.UnknownInsts.begin(), AS.UnknownInsts.end());
+    llvm::append_range(UnknownInsts, AS.UnknownInsts);
     AS.UnknownInsts.clear();
   }
 
@@ -288,9 +283,8 @@ Instruction* AliasSet::getUniqueInstruction() {
 
 void AliasSetTracker::clear() {
   // Delete all the PointerRec entries.
-  for (PointerMapType::iterator I = PointerMap.begin(), E = PointerMap.end();
-       I != E; ++I)
-    I->second->eraseFromList();
+  for (auto &I : PointerMap)
+    I.second->eraseFromList();
 
   PointerMap.clear();
 
@@ -308,12 +302,11 @@ AliasSet *AliasSetTracker::mergeAliasSetsForPointer(const Value *Ptr,
                                                     bool &MustAliasAll) {
   AliasSet *FoundSet = nullptr;
   AliasResult AllAR = MustAlias;
-  for (iterator I = begin(), E = end(); I != E;) {
-    iterator Cur = I++;
-    if (Cur->Forward)
+  for (AliasSet &AS : llvm::make_early_inc_range(*this)) {
+    if (AS.Forward)
       continue;
 
-    AliasResult AR = Cur->aliasesPointer(Ptr, Size, AAInfo, AA);
+    AliasResult AR = AS.aliasesPointer(Ptr, Size, AAInfo, AA);
     if (AR == NoAlias)
       continue;
 
@@ -322,10 +315,10 @@ AliasSet *AliasSetTracker::mergeAliasSetsForPointer(const Value *Ptr,
 
     if (!FoundSet) {
       // If this is the first alias set ptr can go into, remember it.
-      FoundSet = &*Cur;
+      FoundSet = &AS;
     } else {
       // Otherwise, we must merge the sets.
-      FoundSet->mergeSetIn(*Cur, *this);
+      FoundSet->mergeSetIn(AS, *this);
     }
   }
 
@@ -335,16 +328,15 @@ AliasSet *AliasSetTracker::mergeAliasSetsForPointer(const Value *Ptr,
 
 AliasSet *AliasSetTracker::findAliasSetForUnknownInst(Instruction *Inst) {
   AliasSet *FoundSet = nullptr;
-  for (iterator I = begin(), E = end(); I != E;) {
-    iterator Cur = I++;
-    if (Cur->Forward || !Cur->aliasesUnknownInst(Inst, AA))
+  for (AliasSet &AS : llvm::make_early_inc_range(*this)) {
+    if (AS.Forward || !AS.aliasesUnknownInst(Inst, AA))
       continue;
     if (!FoundSet) {
       // If this is the first alias set ptr can go into, remember it.
-      FoundSet = &*Cur;
+      FoundSet = &AS;
     } else {
       // Otherwise, we must merge the sets.
-      FoundSet->mergeSetIn(*Cur, *this);
+      FoundSet->mergeSetIn(AS, *this);
     }
   }
   return FoundSet;
@@ -443,7 +435,9 @@ void AliasSetTracker::addUnknown(Instruction *Inst) {
       break;
       // FIXME: Add lifetime/invariant intrinsics (See: PR30807).
     case Intrinsic::assume:
+    case Intrinsic::experimental_noalias_scope_decl:
     case Intrinsic::sideeffect:
+    case Intrinsic::pseudoprobe:
       return;
     }
   }
@@ -611,8 +605,8 @@ AliasSet &AliasSetTracker::mergeAllAliasSets() {
   // without worrying about iterator invalidation.
   std::vector<AliasSet *> ASVector;
   ASVector.reserve(SaturationThreshold);
-  for (iterator I = begin(), E = end(); I != E; I++)
-    ASVector.push_back(&*I);
+  for (AliasSet &AS : *this)
+    ASVector.push_back(&AS);
 
   // Copy all instructions and pointers into a new set, and forward all other
   // sets to it.
@@ -675,8 +669,10 @@ void AliasSet::print(raw_ostream &OS) const {
     for (iterator I = begin(), E = end(); I != E; ++I) {
       if (I != begin()) OS << ", ";
       I.getPointer()->printAsOperand(OS << "(");
-      if (I.getSize() == LocationSize::unknown())
-        OS << ", unknown)";
+      if (I.getSize() == LocationSize::afterPointer())
+        OS << ", unknown after)";
+      else if (I.getSize() == LocationSize::beforeOrAfterPointer())
+        OS << ", unknown before-or-after)";
       else
         OS << ", " << I.getSize() << ")";
     }
@@ -740,8 +736,6 @@ AliasSetTracker::ASTCallbackVH::operator=(Value *V) {
 namespace {
 
   class AliasSetPrinter : public FunctionPass {
-    AliasSetTracker *Tracker;
-
   public:
     static char ID; // Pass identification, replacement for typeid
 
@@ -756,12 +750,11 @@ namespace {
 
     bool runOnFunction(Function &F) override {
       auto &AAWP = getAnalysis<AAResultsWrapperPass>();
-      Tracker = new AliasSetTracker(AAWP.getAAResults());
+      AliasSetTracker Tracker(AAWP.getAAResults());
       errs() << "Alias sets for function '" << F.getName() << "':\n";
-      for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I)
-        Tracker->add(&*I);
-      Tracker->print(errs());
-      delete Tracker;
+      for (Instruction &I : instructions(F))
+        Tracker.add(&I);
+      Tracker.print(errs());
       return false;
     }
   };
@@ -775,3 +768,16 @@ INITIALIZE_PASS_BEGIN(AliasSetPrinter, "print-alias-sets",
 INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
 INITIALIZE_PASS_END(AliasSetPrinter, "print-alias-sets",
                 "Alias Set Printer", false, true)
+
+AliasSetsPrinterPass::AliasSetsPrinterPass(raw_ostream &OS) : OS(OS) {}
+
+PreservedAnalyses AliasSetsPrinterPass::run(Function &F,
+                                            FunctionAnalysisManager &AM) {
+  auto &AA = AM.getResult<AAManager>(F);
+  AliasSetTracker Tracker(AA);
+  OS << "Alias sets for function '" << F.getName() << "':\n";
+  for (Instruction &I : instructions(F))
+    Tracker.add(&I);
+  Tracker.print(OS);
+  return PreservedAnalyses::all();
+}

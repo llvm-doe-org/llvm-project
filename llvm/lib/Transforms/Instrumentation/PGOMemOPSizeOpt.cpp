@@ -22,6 +22,7 @@
 #include "llvm/Analysis/DomTreeUpdater.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Dominators.h"
@@ -45,6 +46,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/WithColor.h"
 #include "llvm/Transforms/Instrumentation.h"
 #include "llvm/Transforms/Instrumentation/PGOInstrumentation.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
@@ -90,16 +92,6 @@ static cl::opt<bool>
     MemOPScaleCount("pgo-memop-scale-count", cl::init(true), cl::Hidden,
                     cl::desc("Scale the memop size counts using the basic "
                              " block count value"));
-
-// FIXME: These are to be removed after switching to the new memop value
-// profiling.
-// This option sets the rangge of precise profile memop sizes.
-extern cl::opt<std::string> MemOPSizeRange;
-
-// This option sets the value that groups large memop sizes
-extern cl::opt<unsigned> MemOPSizeLarge;
-
-extern cl::opt<bool> UseOldMemOpValueProf;
 
 cl::opt<bool>
     MemOPOptMemcmpBcmp("pgo-memop-optimize-memcmp-bcmp", cl::init(true),
@@ -234,9 +226,6 @@ public:
       : Func(Func), BFI(BFI), ORE(ORE), DT(DT), TLI(TLI), Changed(false) {
     ValueDataArray =
         std::make_unique<InstrProfValueData[]>(MemOPMaxVersion + 2);
-    // Get the MemOPSize range information from option MemOPSizeRange,
-    getMemOPSizeRangeFromOption(MemOPSizeRange, PreciseRangeStart,
-                                PreciseRangeLast);
   }
   bool isChanged() const { return Changed; }
   void perform() {
@@ -257,7 +246,7 @@ public:
   void visitMemIntrinsic(MemIntrinsic &MI) {
     Value *Length = MI.getLength();
     // Not perform on constant length calls.
-    if (dyn_cast<ConstantInt>(Length))
+    if (isa<ConstantInt>(Length))
       return;
     WorkList.push_back(MemOp(&MI));
   }
@@ -266,7 +255,7 @@ public:
     LibFunc Func;
     if (TLI.getLibFunc(CI, Func) &&
         (Func == LibFunc_memcmp || Func == LibFunc_bcmp) &&
-        !dyn_cast<ConstantInt>(CI.getArgOperand(2))) {
+        !isa<ConstantInt>(CI.getArgOperand(2))) {
       WorkList.push_back(MemOp(&CI));
     }
   }
@@ -279,30 +268,9 @@ private:
   TargetLibraryInfo &TLI;
   bool Changed;
   std::vector<MemOp> WorkList;
-  // FIXME: These are to be removed after switching to the new memop value
-  // profiling.
-  // Start of the previse range.
-  int64_t PreciseRangeStart;
-  // Last value of the previse range.
-  int64_t PreciseRangeLast;
   // The space to read the profile annotation.
   std::unique_ptr<InstrProfValueData[]> ValueDataArray;
   bool perform(MemOp MO);
-
-  // FIXME: This is to be removed after switching to the new memop value
-  // profiling.
-  // This kind shows which group the value falls in. For PreciseValue, we have
-  // the profile count for that value. LargeGroup groups the values that are in
-  // range [LargeValue, +inf). NonLargeGroup groups the rest of values.
-  enum MemOPSizeKind { PreciseValue, NonLargeGroup, LargeGroup };
-
-  MemOPSizeKind getMemOPSizeKind(int64_t Value) const {
-    if (Value == MemOPSizeLarge && MemOPSizeLarge != 0)
-      return LargeGroup;
-    if (Value == PreciseRangeLast + 1)
-      return NonLargeGroup;
-    return PreciseValue;
-  }
 };
 
 static bool isProfitable(uint64_t Count, uint64_t TotalCount) {
@@ -371,6 +339,7 @@ bool MemOPSizeOpt::perform(MemOp MO) {
   SmallVector<uint64_t, 16> CaseCounts;
   uint64_t MaxCount = 0;
   unsigned Version = 0;
+  int64_t LastV = -1;
   // Default case is in the front -- save the slot here.
   CaseCounts.push_back(0);
   for (auto &VD : VDs) {
@@ -379,17 +348,22 @@ bool MemOPSizeOpt::perform(MemOp MO) {
     if (MemOPScaleCount)
       C = getScaledCount(C, ActualCount, SavedTotalCount);
 
-    if (UseOldMemOpValueProf) {
-      // Only care precise value here.
-      if (getMemOPSizeKind(V) != PreciseValue)
-        continue;
-    } else if (!InstrProfIsSingleValRange(V) || V > MemOpMaxOptSize)
+    if (!InstrProfIsSingleValRange(V) || V > MemOpMaxOptSize)
       continue;
 
     // ValueCounts are sorted on the count. Break at the first un-profitable
     // value.
     if (!isProfitable(C, RemainCount))
       break;
+
+    if (V == LastV) {
+      LLVM_DEBUG(dbgs() << "Invalid Profile Data in Function " << Func.getName()
+                        << ": Two consecutive, identical values in MemOp value"
+                           "counts.\n");
+      return false;
+    }
+
+    LastV = V;
 
     SizeIds.push_back(V);
     CaseCounts.push_back(C);

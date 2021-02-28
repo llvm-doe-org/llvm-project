@@ -94,7 +94,7 @@ subroutine s6(x)
   x(:3) = [1, 2, 3]
   !ERROR: Assumed-size array 'x' must have explicit final subscript upper bound value
   x(:) = [1, 2, 3]
-  !ERROR: Left-hand side of assignment may not be a whole assumed-size array
+  !ERROR: Whole assumed-size array 'x' may not appear here without subscripts
   x = [1, 2, 3]
 end
 
@@ -106,7 +106,7 @@ contains
   subroutine s7(x)
     type(t) :: x(*)
     x(:3)%i = [1, 2, 3]
-    !ERROR: Left-hand side of assignment may not be a whole assumed-size array
+    !ERROR: Whole assumed-size array 'x' may not appear here without subscripts
     x%i = [1, 2, 3]
   end
 end
@@ -126,7 +126,7 @@ real function f9() result(r)
   f9 = 1.0
 end
 
-!ERROR: No explicit type declared for 'n'
+!ERROR: No explicit type declared for dummy argument 'n'
 subroutine s10(a, n)
   implicit none
   real a(n)

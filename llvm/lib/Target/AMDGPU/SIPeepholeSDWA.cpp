@@ -20,37 +20,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPU.h"
-#include "AMDGPUSubtarget.h"
-#include "SIDefines.h"
-#include "SIInstrInfo.h"
-#include "SIRegisterInfo.h"
+#include "GCNSubtarget.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
-#include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/ADT/MapVector.h"
-#include "llvm/ADT/None.h"
-#include "llvm/ADT/Optional.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/MachineOperand.h"
-#include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/Config/llvm-config.h"
-#include "llvm/MC/LaneBitmask.h"
-#include "llvm/MC/MCInstrDesc.h"
-#include "llvm/Pass.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
-#include <algorithm>
-#include <cassert>
-#include <cstdint>
-#include <memory>
-#include <unordered_map>
 
 using namespace llvm;
 
@@ -570,8 +544,7 @@ SIPeepholeSDWA::matchSDWAOperand(MachineInstr &MI) {
 
     MachineOperand *Src1 = TII->getNamedOperand(MI, AMDGPU::OpName::src1);
     MachineOperand *Dst = TII->getNamedOperand(MI, AMDGPU::OpName::vdst);
-    if (Register::isPhysicalRegister(Src1->getReg()) ||
-        Register::isPhysicalRegister(Dst->getReg()))
+    if (Src1->getReg().isPhysical() || Dst->getReg().isPhysical())
       break;
 
     if (Opcode == AMDGPU::V_LSHLREV_B32_e32 ||
@@ -609,8 +582,7 @@ SIPeepholeSDWA::matchSDWAOperand(MachineInstr &MI) {
     MachineOperand *Src1 = TII->getNamedOperand(MI, AMDGPU::OpName::src1);
     MachineOperand *Dst = TII->getNamedOperand(MI, AMDGPU::OpName::vdst);
 
-    if (Register::isPhysicalRegister(Src1->getReg()) ||
-        Register::isPhysicalRegister(Dst->getReg()))
+    if (Src1->getReg().isPhysical() || Dst->getReg().isPhysical())
       break;
 
     if (Opcode == AMDGPU::V_LSHLREV_B16_e32 ||
@@ -625,8 +597,8 @@ SIPeepholeSDWA::matchSDWAOperand(MachineInstr &MI) {
     break;
   }
 
-  case AMDGPU::V_BFE_I32:
-  case AMDGPU::V_BFE_U32: {
+  case AMDGPU::V_BFE_I32_e64:
+  case AMDGPU::V_BFE_U32_e64: {
     // e.g.:
     // from: v_bfe_u32 v1, v0, 8, 8
     // to SDWA src:v0 src_sel:BYTE_1
@@ -673,12 +645,11 @@ SIPeepholeSDWA::matchSDWAOperand(MachineInstr &MI) {
     MachineOperand *Src0 = TII->getNamedOperand(MI, AMDGPU::OpName::src0);
     MachineOperand *Dst = TII->getNamedOperand(MI, AMDGPU::OpName::vdst);
 
-    if (Register::isPhysicalRegister(Src0->getReg()) ||
-        Register::isPhysicalRegister(Dst->getReg()))
+    if (Src0->getReg().isPhysical() || Dst->getReg().isPhysical())
       break;
 
     return std::make_unique<SDWASrcOperand>(
-          Src0, Dst, SrcSel, false, false, Opcode != AMDGPU::V_BFE_U32);
+          Src0, Dst, SrcSel, false, false, Opcode != AMDGPU::V_BFE_U32_e64);
   }
 
   case AMDGPU::V_AND_B32_e32:
@@ -702,8 +673,7 @@ SIPeepholeSDWA::matchSDWAOperand(MachineInstr &MI) {
 
     MachineOperand *Dst = TII->getNamedOperand(MI, AMDGPU::OpName::vdst);
 
-    if (Register::isPhysicalRegister(ValSrc->getReg()) ||
-        Register::isPhysicalRegister(Dst->getReg()))
+    if (ValSrc->getReg().isPhysical() || Dst->getReg().isPhysical())
       break;
 
     return std::make_unique<SDWASrcOperand>(

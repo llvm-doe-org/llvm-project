@@ -46,8 +46,7 @@ GlobalVariable *createPrivateGlobalForString(Module &M, StringRef Str,
 // Returns F.getComdat() if it exists.
 // Otherwise creates a new comdat, sets F's comdat, and returns it.
 // Returns nullptr on failure.
-Comdat *GetOrCreateFunctionComdat(Function &F, Triple &T,
-                                  const std::string &ModuleId);
+Comdat *getOrCreateFunctionComdat(Function &F, Triple &T);
 
 // Insert GCOV profiling instrumentation
 struct GCOVOptions {
@@ -65,6 +64,9 @@ struct GCOVOptions {
 
   // Add the 'noredzone' attribute to added runtime library calls.
   bool NoRedZone;
+
+  // Use atomic profile counter increments.
+  bool Atomic = false;
 
   // Regexes separated by a semi-colon to filter the files to instrument.
   std::string Filter;

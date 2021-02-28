@@ -14,9 +14,10 @@
 #ifndef MLIR_TUTORIAL_TOY_DIALECT_H_
 #define MLIR_TUTORIAL_TOY_DIALECT_H_
 
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Dialect.h"
-#include "mlir/IR/Function.h"
-#include "mlir/IR/StandardTypes.h"
+#include "mlir/Interfaces/CastInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "toy/ShapeInferenceInterface.h"
 
@@ -50,6 +51,9 @@ public:
   static llvm::StringRef getDialectNamespace() { return "toy"; }
 };
 
+} // end namespace toy
+} // end namespace mlir
+
 //===----------------------------------------------------------------------===//
 // Toy Operations
 //===----------------------------------------------------------------------===//
@@ -59,16 +63,12 @@ public:
 #define GET_OP_CLASSES
 #include "toy/Ops.h.inc"
 
+namespace mlir {
+namespace toy {
+
 //===----------------------------------------------------------------------===//
 // Toy Types
 //===----------------------------------------------------------------------===//
-
-/// Create a local enumeration with all of the types that are defined by Toy.
-namespace ToyTypes {
-enum Types {
-  Struct = mlir::Type::FIRST_TOY_TYPE,
-};
-} // end namespace ToyTypes
 
 /// This class defines the Toy struct type. It represents a collection of
 /// element types. All derived types in MLIR must inherit from the CRTP class

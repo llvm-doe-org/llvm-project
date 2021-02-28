@@ -179,23 +179,35 @@ arguments:
 
 ::
 
-  def breakpoint_function_wrapper(frame, bp_loc, dict):
+  def breakpoint_function_wrapper(frame, bp_loc, internal_dict):
+     # Your code goes here
+
+or:
+
+::
+
+  def breakpoint_function_wrapper(frame, bp_loc, extra_args, internal_dict):
      # Your code goes here
 
 
-+------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------+
-| Argument   | Type                          | Description                                                                                                                               |
-+------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------+
-| **frame**  | **lldb.SBFrame**              | The current stack frame where the breakpoint got hit.                                                                                     |
-|            |                               | The object will always be valid.                                                                                                          |
-|            |                               | This **frame** argument might *not* match the currently selected stack frame found in the **lldb** module global variable **lldb.frame**. |
-+------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------+
-| **bp_loc** | **lldb.SBBreakpointLocation** | The breakpoint location that just got hit. Breakpoints are represented by **lldb.SBBreakpoint**                                           |
-|            |                               | objects. These breakpoint objects can have one or more locations. These locations                                                         |
-|            |                               | are represented by **lldb.SBBreakpointLocation** objects.                                                                                 |
-+------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------+
-| **dict**   | **dict**                      | The python session dictionary as a standard python dictionary object.                                                                     |
-+------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------+
++-------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------+
+| Argument          | Type                          | Description                                                                                                                               |
++-------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------+
+| **frame**         | **lldb.SBFrame**              | The current stack frame where the breakpoint got hit.                                                                                     |
+|                   |                               | The object will always be valid.                                                                                                          |
+|                   |                               | This **frame** argument might *not* match the currently selected stack frame found in the **lldb** module global variable **lldb.frame**. |
++-------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------+
+| **bp_loc**        | **lldb.SBBreakpointLocation** | The breakpoint location that just got hit. Breakpoints are represented by **lldb.SBBreakpoint**                                           |
+|                   |                               | objects. These breakpoint objects can have one or more locations. These locations                                                         |
+|                   |                               | are represented by **lldb.SBBreakpointLocation** objects.                                                                                 |
++-------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------+
+| **extra_args**    | **lldb.SBStructuredData**     | **Optional** If your breakpoint callback function takes this extra parameter, then when the callback gets added to a breakpoint, its      |
+|                   |                               | contents can parametrize this use of the callback.  For instance, instead of writing a callback that stops when the caller is "Foo",      |
+|                   |                               | you could take the function name from a field in the **extra_args**, making the callback more general.  The **-k** and **-v** options     |
+|                   |                               | to **breakpoint command add** will be passed as a Dictionary in the **extra_args** parameter, or you can provide it with the SB API's.    |
++-------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------+
+| **internal_dict** | **dict**                      | The python session dictionary as a standard python dictionary object.                                                                     |
++-------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------+
 
 Optionally, a Python breakpoint command can return a value. Returning False
 tells LLDB that you do not want to stop at the breakpoint. Any other return
@@ -420,11 +432,11 @@ run its operations.
 There is a longer discussion of scripted thread plans and the state machine,
 and several interesting examples of their use in:
 
-https://github.com/llvm/llvm-project/blob/master/lldb/examples/python/scripted_step.py
+https://github.com/llvm/llvm-project/blob/main/lldb/examples/python/scripted_step.py
 
 And for a MUCH fuller discussion of the whole state machine, see:
 
-https://github.com/llvm/llvm-project/blob/master/lldb/include/lldb/Target/ThreadPlan.h
+https://github.com/llvm/llvm-project/blob/main/lldb/include/lldb/Target/ThreadPlan.h
 
 If you are reading those comments it is useful to know that scripted thread
 plans are set to be "MasterPlans", and not "OkayToDiscard".
@@ -534,7 +546,7 @@ which should implement the following interface:
 ::
 
   class CommandObjectType:
-      def __init__(self, debugger, session_dict):
+      def __init__(self, debugger, internal_dict):
           this call should initialize the command with respect to the command interpreter for the passed-in debugger
       def __call__(self, debugger, command, exe_ctx, result):
           this is the actual bulk of the command, akin to Python command functions
@@ -595,7 +607,7 @@ a function that can be used by LLDB's python command code:
 
 ::
 
-  #!/usr/bin/python
+  #!/usr/bin/env python
 
   import lldb
   import commands
@@ -625,7 +637,7 @@ Now we can load the module into LLDB and use it
 A more interesting template has been created in the source repository that can
 help you to create lldb command quickly:
 
-https://github.com/llvm/llvm-project/blob/master/lldb/examples/python/cmdtemplate.py
+https://github.com/llvm/llvm-project/blob/main/lldb/examples/python/cmdtemplate.py
 
 A commonly required facility is being able to create a command that does some
 token substitution, and then runs a different debugger command (usually, it
@@ -703,7 +715,7 @@ print the process, thread and frame objects if the process stopped:
 
 ::
 
-  #!/usr/bin/python
+  #!/usr/bin/env python
 
   import lldb
   import os
@@ -819,3 +831,49 @@ When the program is stopped at the beginning of the 'read' function in libc, we 
       frame #0: 0x00007fff06013ca0 libsystem_kernel.dylib`read
   (lldb) frame variable
   (int) fd = 3
+
+Writing Target Stop-Hooks in Python:
+------------------------------------
+
+Stop hooks fire whenever the process stops just before control is returned to the
+user.  Stop hooks can either be a set of lldb command-line commands, or can
+be implemented by a suitably defined Python class.  The Python based stop-hooks
+can also be passed as set of -key -value pairs when they are added, and those
+will get packaged up into a SBStructuredData Dictionary and passed to the
+constructor of the Python object managing the stop hook.  This allows for
+parametrization of the stop hooks.
+
+To add a Python-based stop hook, first define a class with the following methods:
+
++--------------------+---------------------------------------+------------------------------------------------------------------------------------------------------------------+
+| Name               | Arguments                             | Description                                                                                                      |
++--------------------+---------------------------------------+------------------------------------------------------------------------------------------------------------------+
+| **__init__**       | **target: lldb.SBTarget**             | This is the constructor for the new stop-hook.                                                                   |
+|                    | **extra_args: lldb.SBStructuredData** |                                                                                                                  |
+|                    |                                       |                                                                                                                  |
+|                    |                                       | **target** is the SBTarget to which the stop hook is added.                                                      |
+|                    |                                       |                                                                                                                  |
+|                    |                                       | **extra_args** is an SBStructuredData object that the user can pass in when creating instances of this           |
+|                    |                                       | breakpoint.  It is not required, but allows for reuse of stop-hook classes.                                      |
++--------------------+---------------------------------------+------------------------------------------------------------------------------------------------------------------+
+| **handle_stop**    | **exe_ctx: lldb.SBExecutionContext**  | This is the called when the target stops.                                                                        |
+|                    | **stream: lldb.SBStream**             |                                                                                                                  |
+|                    |                                       | **exe_ctx** argument will be filled with the current stop point for which the stop hook is                       |
+|                    |                                       | being evaluated.                                                                                                 |
+|                    |                                       |                                                                                                                  |
+|                    |                                       | **stream** an lldb.SBStream, anything written to this stream will be written to the debugger console.            |
+|                    |                                       |                                                                                                                  |
+|                    |                                       | The return value is a "Should Stop" vote from this thread.  If the method returns either True or no return       |
+|                    |                                       | this thread votes to stop.  If it returns False, then the thread votes to continue after all the stop-hooks      |
+|                    |                                       | are evaluated.                                                                                                   |
+|                    |                                       | Note, the --auto-continue flag to 'target stop-hook add' overrides a True return value from the method.          |
++--------------------+---------------------------------------+------------------------------------------------------------------------------------------------------------------+
+
+To use this class in lldb, run the command:
+
+::
+
+   (lldb) command script import MyModule.py
+   (lldb) target stop-hook add -P MyModule.MyStopHook -k first -v 1 -k second -v 2
+
+where MyModule.py is the file containing the class definition MyStopHook.

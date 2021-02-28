@@ -26,6 +26,7 @@
 
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/StreamFile.h"
+#include "lldb/Core/ValueObjectUpdater.h"
 #include "lldb/Host/File.h"
 #include "lldb/Utility/Predicate.h"
 #include "lldb/Utility/Status.h"
@@ -1390,8 +1391,6 @@ public:
                 ConstString broadcaster_class(
                     broadcaster->GetBroadcasterClass());
                 if (broadcaster_class == broadcaster_class_process) {
-                  debugger.GetCommandInterpreter().UpdateExecutionContext(
-                      nullptr);
                   m_update_screen = true;
                   continue; // Don't get any key, just update our view
                 }
@@ -1403,7 +1402,6 @@ public:
         HandleCharResult key_result = m_window_sp->HandleChar(ch);
         switch (key_result) {
         case eKeyHandled:
-          debugger.GetCommandInterpreter().UpdateExecutionContext(nullptr);
           m_update_screen = true;
           break;
         case eKeyNotHandled:
@@ -1494,22 +1492,21 @@ protected:
 using namespace curses;
 
 struct Row {
-  ValueObjectManager value;
+  ValueObjectUpdater value;
   Row *parent;
   // The process stop ID when the children were calculated.
-  uint32_t children_stop_id;
-  int row_idx;
-  int x;
-  int y;
+  uint32_t children_stop_id = 0;
+  int row_idx = 0;
+  int x = 1;
+  int y = 1;
   bool might_have_children;
-  bool expanded;
-  bool calculated_children;
+  bool expanded = false;
+  bool calculated_children = false;
   std::vector<Row> children;
 
   Row(const ValueObjectSP &v, Row *p)
-      : value(v, lldb::eDynamicDontRunTarget, true), parent(p), row_idx(0),
-        x(1), y(1), might_have_children(v ? v->MightHaveChildren() : false),
-        expanded(false), calculated_children(false), children() {}
+      : value(v), parent(p),
+        might_have_children(v ? v->MightHaveChildren() : false) {}
 
   size_t GetDepth() const {
     if (parent)

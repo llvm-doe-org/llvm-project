@@ -341,7 +341,9 @@ ParsedDWARFTypeAttributes::ParsedDWARFTypeAttributes(const DWARFDIE &die) {
       break;
 
     case DW_AT_decl_file:
-      decl.SetFile(die.GetCU()->GetFile(form_value.Unsigned()));
+      // die.GetCU() can differ if DW_AT_specification uses DW_FORM_ref_addr.
+      decl.SetFile(
+          attributes.CompileUnitAtIndex(i)->GetFile(form_value.Unsigned()));
       break;
     case DW_AT_decl_line:
       decl.SetLine(form_value.Unsigned());
@@ -556,42 +558,51 @@ DWARFASTParserClang::ParseTypeModifier(const SymbolContext &sc,
   TypeSP type_sp;
   CompilerType clang_type;
 
-  if (tag == DW_TAG_typedef && attrs.type.IsValid()) {
-    // Try to parse a typedef from the (DWARF embedded in the) Clang
-    // module file first as modules can contain typedef'ed
-    // structures that have no names like:
-    //
-    //  typedef struct { int a; } Foo;
-    //
-    // In this case we will have a structure with no name and a
-    // typedef named "Foo" that points to this unnamed
-    // structure. The name in the typedef is the only identifier for
-    // the struct, so always try to get typedefs from Clang modules
-    // if possible.
-    //
-    // The type_sp returned will be empty if the typedef doesn't
-    // exist in a module file, so it is cheap to call this function
-    // just to check.
-    //
-    // If we don't do this we end up creating a TypeSP that says
-    // this is a typedef to type 0x123 (the DW_AT_type value would
-    // be 0x123 in the DW_TAG_typedef), and this is the unnamed
-    // structure type. We will have a hard time tracking down an
-    // unnammed structure type in the module debug info, so we make
-    // sure we don't get into this situation by always resolving
-    // typedefs from the module.
-    const DWARFDIE encoding_die = attrs.type.Reference();
+  if (tag == DW_TAG_typedef) {
+    // DeclContext will be populated when the clang type is materialized in
+    // Type::ResolveCompilerType.
+    PrepareContextToReceiveMembers(
+        m_ast, GetClangASTImporter(),
+        GetClangDeclContextContainingDIE(die, nullptr), die,
+        attrs.name.GetCString());
 
-    // First make sure that the die that this is typedef'ed to _is_
-    // just a declaration (DW_AT_declaration == 1), not a full
-    // definition since template types can't be represented in
-    // modules since only concrete instances of templates are ever
-    // emitted and modules won't contain those
-    if (encoding_die &&
-        encoding_die.GetAttributeValueAsUnsigned(DW_AT_declaration, 0) == 1) {
-      type_sp = ParseTypeFromClangModule(sc, die, log);
-      if (type_sp)
-        return type_sp;
+    if (attrs.type.IsValid()) {
+      // Try to parse a typedef from the (DWARF embedded in the) Clang
+      // module file first as modules can contain typedef'ed
+      // structures that have no names like:
+      //
+      //  typedef struct { int a; } Foo;
+      //
+      // In this case we will have a structure with no name and a
+      // typedef named "Foo" that points to this unnamed
+      // structure. The name in the typedef is the only identifier for
+      // the struct, so always try to get typedefs from Clang modules
+      // if possible.
+      //
+      // The type_sp returned will be empty if the typedef doesn't
+      // exist in a module file, so it is cheap to call this function
+      // just to check.
+      //
+      // If we don't do this we end up creating a TypeSP that says
+      // this is a typedef to type 0x123 (the DW_AT_type value would
+      // be 0x123 in the DW_TAG_typedef), and this is the unnamed
+      // structure type. We will have a hard time tracking down an
+      // unnammed structure type in the module debug info, so we make
+      // sure we don't get into this situation by always resolving
+      // typedefs from the module.
+      const DWARFDIE encoding_die = attrs.type.Reference();
+
+      // First make sure that the die that this is typedef'ed to _is_
+      // just a declaration (DW_AT_declaration == 1), not a full
+      // definition since template types can't be represented in
+      // modules since only concrete instances of templates are ever
+      // emitted and modules won't contain those
+      if (encoding_die &&
+          encoding_die.GetAttributeValueAsUnsigned(DW_AT_declaration, 0) == 1) {
+        type_sp = ParseTypeFromClangModule(sc, die, log);
+        if (type_sp)
+          return type_sp;
+      }
     }
   }
 
@@ -1933,8 +1944,6 @@ bool DWARFASTParserClang::ParseTemplateParameterInfos(
       break;
     }
   }
-  if (template_param_infos.args.empty())
-    return false;
   return template_param_infos.args.size() == template_param_infos.names.size();
 }
 
@@ -2570,7 +2579,11 @@ void DWARFASTParserClang::ParseSingleMember(
           // The ObjC runtime knows the byte offset but we still need to provide
           // the bit-offset in the layout. It just means something different then
           // what it does in C and C++. So we skip this check for ObjC types.
+          //
+          // We also skip this for fields of a union since they will all have a
+          // zero offset.
           if (!TypeSystemClang::IsObjCObjectOrInterfaceType(class_clang_type) &&
+              !(parent_die.Tag() == DW_TAG_union_type && this_field_info.bit_offset == 0) &&
               ((this_field_info.bit_offset >= parent_bit_size) ||
                (last_field_info.IsBitfield() &&
                 !last_field_info.NextBitfieldOffsetIsValid(
@@ -3036,88 +3049,85 @@ DWARFASTParser::ParseChildArrayInfo(const DWARFDIE &parent_die,
   for (DWARFDIE die = parent_die.GetFirstChild(); die.IsValid();
        die = die.GetSibling()) {
     const dw_tag_t tag = die.Tag();
-    switch (tag) {
-    case DW_TAG_subrange_type: {
-      DWARFAttributes attributes;
-      const size_t num_child_attributes = die.GetAttributes(attributes);
-      if (num_child_attributes > 0) {
-        uint64_t num_elements = 0;
-        uint64_t lower_bound = 0;
-        uint64_t upper_bound = 0;
-        bool upper_bound_valid = false;
-        uint32_t i;
-        for (i = 0; i < num_child_attributes; ++i) {
-          const dw_attr_t attr = attributes.AttributeAtIndex(i);
-          DWARFFormValue form_value;
-          if (attributes.ExtractFormValueAtIndex(i, form_value)) {
-            switch (attr) {
-            case DW_AT_name:
-              break;
+    if (tag != DW_TAG_subrange_type)
+      continue;
 
-            case DW_AT_count:
-              if (DWARFDIE var_die = die.GetReferencedDIE(DW_AT_count)) {
-                if (var_die.Tag() == DW_TAG_variable)
-                  if (exe_ctx) {
-                    if (auto frame = exe_ctx->GetFrameSP()) {
-                      Status error;
-                      lldb::VariableSP var_sp;
-                      auto valobj_sp = frame->GetValueForVariableExpressionPath(
-                          var_die.GetName(), eNoDynamicValues, 0, var_sp,
-                          error);
-                      if (valobj_sp) {
-                        num_elements = valobj_sp->GetValueAsUnsigned(0);
-                        break;
-                      }
+    DWARFAttributes attributes;
+    const size_t num_child_attributes = die.GetAttributes(attributes);
+    if (num_child_attributes > 0) {
+      uint64_t num_elements = 0;
+      uint64_t lower_bound = 0;
+      uint64_t upper_bound = 0;
+      bool upper_bound_valid = false;
+      uint32_t i;
+      for (i = 0; i < num_child_attributes; ++i) {
+        const dw_attr_t attr = attributes.AttributeAtIndex(i);
+        DWARFFormValue form_value;
+        if (attributes.ExtractFormValueAtIndex(i, form_value)) {
+          switch (attr) {
+          case DW_AT_name:
+            break;
+
+          case DW_AT_count:
+            if (DWARFDIE var_die = die.GetReferencedDIE(DW_AT_count)) {
+              if (var_die.Tag() == DW_TAG_variable)
+                if (exe_ctx) {
+                  if (auto frame = exe_ctx->GetFrameSP()) {
+                    Status error;
+                    lldb::VariableSP var_sp;
+                    auto valobj_sp = frame->GetValueForVariableExpressionPath(
+                        var_die.GetName(), eNoDynamicValues, 0, var_sp,
+                        error);
+                    if (valobj_sp) {
+                      num_elements = valobj_sp->GetValueAsUnsigned(0);
+                      break;
                     }
                   }
-              } else
-                num_elements = form_value.Unsigned();
-              break;
+                }
+            } else
+              num_elements = form_value.Unsigned();
+            break;
 
-            case DW_AT_bit_stride:
-              array_info.bit_stride = form_value.Unsigned();
-              break;
+          case DW_AT_bit_stride:
+            array_info.bit_stride = form_value.Unsigned();
+            break;
 
-            case DW_AT_byte_stride:
-              array_info.byte_stride = form_value.Unsigned();
-              break;
+          case DW_AT_byte_stride:
+            array_info.byte_stride = form_value.Unsigned();
+            break;
 
-            case DW_AT_lower_bound:
-              lower_bound = form_value.Unsigned();
-              break;
+          case DW_AT_lower_bound:
+            lower_bound = form_value.Unsigned();
+            break;
 
-            case DW_AT_upper_bound:
-              upper_bound_valid = true;
-              upper_bound = form_value.Unsigned();
-              break;
+          case DW_AT_upper_bound:
+            upper_bound_valid = true;
+            upper_bound = form_value.Unsigned();
+            break;
 
-            default:
-            case DW_AT_abstract_origin:
-            case DW_AT_accessibility:
-            case DW_AT_allocated:
-            case DW_AT_associated:
-            case DW_AT_data_location:
-            case DW_AT_declaration:
-            case DW_AT_description:
-            case DW_AT_sibling:
-            case DW_AT_threads_scaled:
-            case DW_AT_type:
-            case DW_AT_visibility:
-              break;
-            }
+          default:
+          case DW_AT_abstract_origin:
+          case DW_AT_accessibility:
+          case DW_AT_allocated:
+          case DW_AT_associated:
+          case DW_AT_data_location:
+          case DW_AT_declaration:
+          case DW_AT_description:
+          case DW_AT_sibling:
+          case DW_AT_threads_scaled:
+          case DW_AT_type:
+          case DW_AT_visibility:
+            break;
           }
         }
-
-        if (num_elements == 0) {
-          if (upper_bound_valid && upper_bound >= lower_bound)
-            num_elements = upper_bound - lower_bound + 1;
-        }
-
-        array_info.element_orders.push_back(num_elements);
       }
-    } break;
-    default:
-      break;
+
+      if (num_elements == 0) {
+        if (upper_bound_valid && upper_bound >= lower_bound)
+          num_elements = upper_bound - lower_bound + 1;
+      }
+
+      array_info.element_orders.push_back(num_elements);
     }
   }
   return array_info;

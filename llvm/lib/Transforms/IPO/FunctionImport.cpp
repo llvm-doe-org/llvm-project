@@ -124,14 +124,8 @@ static cl::opt<bool> ComputeDead("compute-dead", cl::init(true), cl::Hidden,
                                  cl::desc("Compute dead symbols"));
 
 static cl::opt<bool> EnableImportMetadata(
-    "enable-import-metadata", cl::init(
-#if !defined(NDEBUG)
-                                  true /*Enabled with asserts.*/
-#else
-                                  false
-#endif
-                                  ),
-    cl::Hidden, cl::desc("Enable import metadata like 'thinlto_src_module'"));
+    "enable-import-metadata", cl::init(false), cl::Hidden,
+    cl::desc("Enable import metadata like 'thinlto_src_module'"));
 
 /// Summary file to use for function importing when using -function-import from
 /// the command line.
@@ -261,8 +255,8 @@ selectCallee(const ModuleSummaryIndex &Index,
 
 namespace {
 
-using EdgeInfo = std::tuple<const FunctionSummary *, unsigned /* Threshold */,
-                            GlobalValue::GUID>;
+using EdgeInfo =
+    std::tuple<const GlobalValueSummary *, unsigned /* Threshold */>;
 
 } // anonymous namespace
 
@@ -281,13 +275,37 @@ updateValueInfoForIndirectCalls(const ModuleSummaryIndex &Index, ValueInfo VI) {
   return Index.getValueInfo(GUID);
 }
 
+static bool shouldImportGlobal(const ValueInfo &VI,
+                               const GVSummaryMapTy &DefinedGVSummaries) {
+  const auto &GVS = DefinedGVSummaries.find(VI.getGUID());
+  if (GVS == DefinedGVSummaries.end())
+    return true;
+  // We should not skip import if the module contains a definition with
+  // interposable linkage type. This is required for correctness in
+  // the situation with two following conditions:
+  // * the def with interposable linkage is non-prevailing,
+  // * there is a prevailing def available for import and marked read-only.
+  // In this case, the non-prevailing def will be converted to a declaration,
+  // while the prevailing one becomes internal, thus no definitions will be
+  // available for linking. In order to prevent undefined symbol link error,
+  // the prevailing definition must be imported.
+  // FIXME: Consider adding a check that the suitable prevailing definition
+  // exists and marked read-only.
+  if (VI.getSummaryList().size() > 1 &&
+      GlobalValue::isInterposableLinkage(GVS->second->linkage()))
+    return true;
+
+  return false;
+}
+
 static void computeImportForReferencedGlobals(
-    const FunctionSummary &Summary, const ModuleSummaryIndex &Index,
+    const GlobalValueSummary &Summary, const ModuleSummaryIndex &Index,
     const GVSummaryMapTy &DefinedGVSummaries,
+    SmallVectorImpl<EdgeInfo> &Worklist,
     FunctionImporter::ImportMapTy &ImportList,
     StringMap<FunctionImporter::ExportSetTy> *ExportLists) {
   for (auto &VI : Summary.refs()) {
-    if (DefinedGVSummaries.count(VI.getGUID())) {
+    if (!shouldImportGlobal(VI, DefinedGVSummaries)) {
       LLVM_DEBUG(
           dbgs() << "Ref ignored! Target already in destination module.\n");
       continue;
@@ -321,6 +339,11 @@ static void computeImportForReferencedGlobals(
         // which is more efficient than adding them here.
         if (ExportLists)
           (*ExportLists)[RefSummary->modulePath()].insert(VI);
+
+        // If variable is not writeonly we attempt to recursively analyze
+        // its references in order to import referenced constants.
+        if (!Index.isWriteOnly(cast<GlobalVarSummary>(RefSummary.get())))
+          Worklist.emplace_back(RefSummary.get(), 0);
         break;
       }
   }
@@ -360,7 +383,7 @@ static void computeImportForFunction(
     StringMap<FunctionImporter::ExportSetTy> *ExportLists,
     FunctionImporter::ImportThresholdsTy &ImportThresholds) {
   computeImportForReferencedGlobals(Summary, Index, DefinedGVSummaries,
-                                    ImportList, ExportLists);
+                                    Worklist, ImportList, ExportLists);
   static int ImportCount = 0;
   for (auto &Edge : Summary.calls()) {
     ValueInfo VI = Edge.first;
@@ -378,6 +401,9 @@ static void computeImportForFunction(
       continue;
 
     if (DefinedGVSummaries.count(VI.getGUID())) {
+      // FIXME: Consider not skipping import if the module contains
+      // a non-prevailing def with interposable linkage. The prevailing copy
+      // can safely be imported (see shouldImportGlobal()).
       LLVM_DEBUG(dbgs() << "ignored! Target already in destination module.\n");
       continue;
     }
@@ -508,7 +534,7 @@ static void computeImportForFunction(
     ImportCount++;
 
     // Insert the newly imported function to the worklist.
-    Worklist.emplace_back(ResolvedCalleeSummary, AdjThreshold, VI.getGUID());
+    Worklist.emplace_back(ResolvedCalleeSummary, AdjThreshold);
   }
 }
 
@@ -549,13 +575,17 @@ static void ComputeImportForModule(
 
   // Process the newly imported functions and add callees to the worklist.
   while (!Worklist.empty()) {
-    auto FuncInfo = Worklist.pop_back_val();
-    auto *Summary = std::get<0>(FuncInfo);
-    auto Threshold = std::get<1>(FuncInfo);
+    auto GVInfo = Worklist.pop_back_val();
+    auto *Summary = std::get<0>(GVInfo);
+    auto Threshold = std::get<1>(GVInfo);
 
-    computeImportForFunction(*Summary, Index, Threshold, DefinedGVSummaries,
-                             Worklist, ImportList, ExportLists,
-                             ImportThresholds);
+    if (auto *FS = dyn_cast<FunctionSummary>(Summary))
+      computeImportForFunction(*FS, Index, Threshold, DefinedGVSummaries,
+                               Worklist, ImportList, ExportLists,
+                               ImportThresholds);
+    else
+      computeImportForReferencedGlobals(*Summary, Index, DefinedGVSummaries,
+                                        Worklist, ImportList, ExportLists);
   }
 
   // Print stats about functions considered but rejected for importing
@@ -996,7 +1026,6 @@ bool llvm::convertToDeclaration(GlobalValue &GV) {
   return true;
 }
 
-/// Fixup prevailing symbol linkages in \p TheModule based on summary analysis.
 void llvm::thinLTOResolvePrevailingInModule(
     Module &TheModule, const GVSummaryMapTy &DefinedGlobals) {
   auto updateLinkage = [&](GlobalValue &GV) {
@@ -1005,8 +1034,6 @@ void llvm::thinLTOResolvePrevailingInModule(
     if (GS == DefinedGlobals.end())
       return;
     auto NewLinkage = GS->second->linkage();
-    if (NewLinkage == GV.getLinkage())
-      return;
     if (GlobalValue::isLocalLinkage(GV.getLinkage()) ||
         // Don't internalize anything here, because the code below
         // lacks necessary correctness checks. Leave this job to
@@ -1014,6 +1041,16 @@ void llvm::thinLTOResolvePrevailingInModule(
         GlobalValue::isLocalLinkage(NewLinkage) ||
         // In case it was dead and already converted to declaration.
         GV.isDeclaration())
+      return;
+
+    // Set the potentially more constraining visibility computed from summaries.
+    // The DefaultVisibility condition is because older GlobalValueSummary does
+    // not record DefaultVisibility and we don't want to change protected/hidden
+    // to default.
+    if (GS->second->getVisibility() != GlobalValue::DefaultVisibility)
+      GV.setVisibility(GS->second->getVisibility());
+
+    if (NewLinkage == GV.getLinkage())
       return;
 
     // Check for a non-prevailing def that has interposable linkage
@@ -1310,7 +1347,7 @@ static bool doImportingForModule(Module &M) {
 
   // Next we need to promote to global scope and rename any local values that
   // are potentially exported to other modules.
-  if (renameModuleForThinLTO(M, *Index, /*clearDSOOnDeclarations=*/false,
+  if (renameModuleForThinLTO(M, *Index, /*ClearDSOLocalOnDeclarations=*/false,
                              /*GlobalsToImport=*/nullptr)) {
     errs() << "Error renaming module\n";
     return false;

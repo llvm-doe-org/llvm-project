@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "CommandObjectProcess.h"
+#include "CommandOptionsProcessLaunch.h"
 #include "lldb/Breakpoint/Breakpoint.h"
 #include "lldb/Breakpoint/BreakpointLocation.h"
 #include "lldb/Breakpoint/BreakpointSite.h"
@@ -251,7 +252,7 @@ protected:
     return result.Succeeded();
   }
 
-  ProcessLaunchCommandOptions m_options;
+  CommandOptionsProcessLaunch m_options;
 };
 
 #define LLDB_OPTIONS_process_attach
@@ -320,49 +321,6 @@ public:
       return llvm::makeArrayRef(g_process_attach_options);
     }
 
-    void HandleOptionArgumentCompletion(
-        CompletionRequest &request, OptionElementVector &opt_element_vector,
-        int opt_element_index, CommandInterpreter &interpreter) override {
-      int opt_arg_pos = opt_element_vector[opt_element_index].opt_arg_pos;
-      int opt_defs_index = opt_element_vector[opt_element_index].opt_defs_index;
-
-      switch (GetDefinitions()[opt_defs_index].short_option) {
-      case 'n': {
-        // Look to see if there is a -P argument provided, and if so use that
-        // plugin, otherwise use the default plugin.
-
-        const char *partial_name = nullptr;
-        partial_name = request.GetParsedLine().GetArgumentAtIndex(opt_arg_pos);
-
-        PlatformSP platform_sp(interpreter.GetPlatform(true));
-        if (!platform_sp)
-          return;
-        ProcessInstanceInfoList process_infos;
-        ProcessInstanceInfoMatch match_info;
-        if (partial_name) {
-          match_info.GetProcessInfo().GetExecutableFile().SetFile(
-              partial_name, FileSpec::Style::native);
-          match_info.SetNameMatchType(NameMatch::StartsWith);
-        }
-        platform_sp->FindProcesses(match_info, process_infos);
-        const size_t num_matches = process_infos.size();
-        if (num_matches == 0)
-          return;
-        for (size_t i = 0; i < num_matches; ++i) {
-          request.AddCompletion(process_infos[i].GetNameAsStringRef());
-        }
-      } break;
-
-      case 'P':
-        CommandCompletions::InvokeCommonCompletionCallbacks(
-            interpreter, CommandCompletions::eProcessPluginCompletion, request,
-            nullptr);
-        break;
-      }
-    }
-
-    // Instance variables to hold the values for command options.
-
     ProcessAttachInfo attach_info;
   };
 
@@ -407,7 +365,6 @@ protected:
         result.AppendError(error.AsCString("Error creating target"));
         return false;
       }
-      GetDebugger().GetTargetList().SetSelectedTarget(target);
     }
 
     // Record the old executable module, we want to issue a warning if the
@@ -424,7 +381,6 @@ protected:
       return false;
     }
 
-    m_interpreter.UpdateExecutionContext(nullptr);
     StreamString stream;
     const auto error = target->Attach(m_options.attach_info, &stream);
     if (error.Success()) {
@@ -923,6 +879,17 @@ public:
 
   ~CommandObjectProcessLoad() override = default;
 
+  void
+  HandleArgumentCompletion(CompletionRequest &request,
+                           OptionElementVector &opt_element_vector) override {
+    if (!m_exe_ctx.HasProcessScope())
+      return;
+
+    CommandCompletions::InvokeCommonCompletionCallbacks(
+        GetCommandInterpreter(), CommandCompletions::eDiskFileCompletion,
+        request, nullptr);
+  }
+
   Options *GetOptions() override { return &m_options; }
 
 protected:
@@ -987,6 +954,24 @@ public:
                 eCommandProcessMustBeLaunched | eCommandProcessMustBePaused) {}
 
   ~CommandObjectProcessUnload() override = default;
+
+  void
+  HandleArgumentCompletion(CompletionRequest &request,
+                           OptionElementVector &opt_element_vector) override {
+
+    if (request.GetCursorIndex() || !m_exe_ctx.HasProcessScope())
+      return;
+
+    Process *process = m_exe_ctx.GetProcessPtr();
+
+    const std::vector<lldb::addr_t> &tokens = process->GetImageTokens();
+    const size_t token_num = tokens.size();
+    for (size_t i = 0; i < token_num; ++i) {
+      if (tokens[i] == LLDB_INVALID_IMAGE_TOKEN)
+        continue;
+      request.TryCompleteCurrentArg(std::to_string(i));
+    }
+  }
 
 protected:
   bool DoExecute(Args &command, CommandReturnObject &result) override {

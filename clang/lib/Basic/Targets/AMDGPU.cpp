@@ -31,12 +31,12 @@ namespace targets {
 
 static const char *const DataLayoutStringR600 =
     "e-p:32:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128"
-    "-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5";
+    "-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1";
 
 static const char *const DataLayoutStringAMDGCN =
     "e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32"
     "-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128"
-    "-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5"
+    "-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1"
     "-ni:7";
 
 const LangASMap AMDGPUTargetInfo::AMDGPUDefIsGenMap = {
@@ -174,6 +174,8 @@ bool AMDGPUTargetInfo::initFeatureMap(
   // XXX - What does the member GPU mean if device name string passed here?
   if (isAMDGCN(getTriple())) {
     switch (llvm::AMDGPU::parseArchAMDGCN(CPU)) {
+    case GK_GFX1033:
+    case GK_GFX1032:
     case GK_GFX1031:
     case GK_GFX1030:
       Features["ci-insts"] = true;
@@ -208,7 +210,11 @@ bool AMDGPUTargetInfo::initFeatureMap(
       Features["gfx9-insts"] = true;
       Features["gfx10-insts"] = true;
       Features["s-memrealtime"] = true;
+      Features["s-memtime-inst"] = true;
       break;
+    case GK_GFX90A:
+      Features["gfx90a-insts"] = true;
+      LLVM_FALLTHROUGH;
     case GK_GFX908:
       Features["dot3-insts"] = true;
       Features["dot4-insts"] = true;
@@ -221,6 +227,7 @@ bool AMDGPUTargetInfo::initFeatureMap(
       Features["dot1-insts"] = true;
       Features["dot2-insts"] = true;
       LLVM_FALLTHROUGH;
+    case GK_GFX90C:
     case GK_GFX909:
     case GK_GFX904:
     case GK_GFX902:
@@ -228,6 +235,7 @@ bool AMDGPUTargetInfo::initFeatureMap(
       Features["gfx9-insts"] = true;
       LLVM_FALLTHROUGH;
     case GK_GFX810:
+    case GK_GFX805:
     case GK_GFX803:
     case GK_GFX802:
     case GK_GFX801:
@@ -236,6 +244,7 @@ bool AMDGPUTargetInfo::initFeatureMap(
       Features["dpp"] = true;
       Features["s-memrealtime"] = true;
       LLVM_FALLTHROUGH;
+    case GK_GFX705:
     case GK_GFX704:
     case GK_GFX703:
     case GK_GFX702:
@@ -244,8 +253,10 @@ bool AMDGPUTargetInfo::initFeatureMap(
       Features["ci-insts"] = true;
       Features["flat-address-space"] = true;
       LLVM_FALLTHROUGH;
+    case GK_GFX602:
     case GK_GFX601:
     case GK_GFX600:
+      Features["s-memtime-inst"] = true;
       break;
     case GK_NONE:
       break;
@@ -316,6 +327,8 @@ AMDGPUTargetInfo::AMDGPUTargetInfo(const llvm::Triple &Triple,
 
   HasLegalHalfType = true;
   HasFloat16 = true;
+  WavefrontSize = GPUFeatures & llvm::AMDGPU::FEATURE_WAVE32 ? 32 : 64;
+  AllowAMDGPUUnsafeFPAtomics = Opts.AllowAMDGPUUnsafeFPAtomics;
 
   // Set pointer width and alignment for target address space 0.
   PointerWidth = PointerAlign = DataLayout->getPointerSizeInBits();
@@ -357,6 +370,23 @@ void AMDGPUTargetInfo::getTargetDefines(const LangOptions &Opts,
     StringRef CanonName = isAMDGCN(getTriple()) ?
       getArchNameAMDGCN(GPUKind) : getArchNameR600(GPUKind);
     Builder.defineMacro(Twine("__") + Twine(CanonName) + Twine("__"));
+    if (isAMDGCN(getTriple())) {
+      Builder.defineMacro("__amdgcn_processor__",
+                          Twine("\"") + Twine(CanonName) + Twine("\""));
+      Builder.defineMacro("__amdgcn_target_id__",
+                          Twine("\"") + Twine(getTargetID().getValue()) +
+                              Twine("\""));
+      for (auto F : getAllPossibleTargetIDFeatures(getTriple(), CanonName)) {
+        auto Loc = OffloadArchFeatures.find(F);
+        if (Loc != OffloadArchFeatures.end()) {
+          std::string NewF = F.str();
+          std::replace(NewF.begin(), NewF.end(), '-', '_');
+          Builder.defineMacro(Twine("__amdgcn_feature_") + Twine(NewF) +
+                                  Twine("__"),
+                              Loc->second ? "1" : "0");
+        }
+      }
+    }
   }
 
   // TODO: __HAS_FMAF__, __HAS_LDEXPF__, __HAS_FP64__ are deprecated and will be
@@ -371,6 +401,8 @@ void AMDGPUTargetInfo::getTargetDefines(const LangOptions &Opts,
     Builder.defineMacro("__HAS_FP64__");
   if (hasFastFMA())
     Builder.defineMacro("FP_FAST_FMA");
+
+  Builder.defineMacro("__AMDGCN_WAVEFRONT_SIZE", Twine(WavefrontSize));
 }
 
 void AMDGPUTargetInfo::setAuxTarget(const TargetInfo *Aux) {

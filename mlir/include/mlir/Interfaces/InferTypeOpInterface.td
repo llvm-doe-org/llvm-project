@@ -36,21 +36,22 @@ def InferTypeOpInterface : OpInterface<"InferTypeOpInterface"> {
       which an Operation would be created (e.g., as used in Operation::create)
       and the regions of the op.
       }],
-      /*retTy=*/"LogicalResult",
+      /*retTy=*/"::mlir::LogicalResult",
       /*methodName=*/"inferReturnTypes",
-      /*args=*/(ins "MLIRContext*":$context,
-                    "Optional<Location>":$location,
-                    "ValueRange":$operands,
-                    "DictionaryAttr":$attributes,
-                    "RegionRange":$regions,
-                    "SmallVectorImpl<Type>&":$inferredReturnTypes)
+      /*args=*/(ins "::mlir::MLIRContext *":$context,
+                    "::llvm::Optional<::mlir::Location>":$location,
+                    "::mlir::ValueRange":$operands,
+                    "::mlir::DictionaryAttr":$attributes,
+                    "::mlir::RegionRange":$regions,
+                    "::llvm::SmallVectorImpl<::mlir::Type>&":$inferredReturnTypes)
     >,
     StaticInterfaceMethod<
       /*desc=*/"Returns whether two array of types are compatible result types"
                " for an op.",
       /*retTy=*/"bool",
       /*methodName=*/"isCompatibleReturnTypes",
-      /*args=*/(ins "ArrayRef<Type>":$lhs, "ArrayRef<Type>":$rhs),
+      /*args=*/(ins "::llvm::ArrayRef<::mlir::Type>":$lhs,
+                    "::llvm::ArrayRef<::mlir::Type>":$rhs),
       /*methodBody=*/[{
         return ConcreteOp::isCompatibleReturnTypes(lhs, rhs);
       }],
@@ -89,14 +90,14 @@ def InferShapedTypeOpInterface : OpInterface<"InferShapedTypeOpInterface"> {
       may be returned by this function while returning success. E.g., partial
       population of components is not error condition.
       }],
-      /*retTy=*/"LogicalResult",
+      /*retTy=*/"::mlir::LogicalResult",
       /*methodName=*/"inferReturnTypeComponents",
-      /*args=*/(ins "MLIRContext*":$context,
-                    "Optional<Location>":$location,
-                    "ValueRange":$operands,
-                    "DictionaryAttr":$attributes,
-                    "RegionRange":$regions,
-                    "SmallVectorImpl<ShapedTypeComponents>&":
+      /*args=*/(ins "::mlir::MLIRContext*":$context,
+                    "::mlir::Optional<::mlir::Location>":$location,
+                    "::mlir::ValueRange":$operands,
+                    "::mlir::DictionaryAttr":$attributes,
+                    "::mlir::RegionRange":$regions,
+                    "::mlir::SmallVectorImpl<::mlir::ShapedTypeComponents>&":
                       $inferredReturnShapes)
     >,
     InterfaceMethod<
@@ -105,12 +106,12 @@ def InferShapedTypeOpInterface : OpInterface<"InferShapedTypeOpInterface"> {
       Insert operations using the given OpBuilder that computes the result
       shape.
       }],
-      /*retTy=*/"LogicalResult",
+      /*retTy=*/"::mlir::LogicalResult",
       /*methodName=*/"reifyReturnTypeShapes",
-      /*args=*/(ins "OpBuilder&":$builder,
-                    "SmallVectorImpl<Value>&":$reifiedReturnShapes),
+      /*args=*/(ins "::mlir::OpBuilder&":$builder,
+                    "::mlir::SmallVectorImpl<::mlir::Value>&":$reifiedReturnShapes),
       /*methodBody=*/[{}],
-      /*defaultImplementation=*/[{ return failure(); }]
+      /*defaultImplementation=*/[{ return ::mlir::failure(); }]
     >,
   ];
 }

@@ -10,8 +10,8 @@
 /// pass.
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_TRANSFORMS_INSTRPROFILING_H
-#define LLVM_TRANSFORMS_INSTRPROFILING_H
+#ifndef LLVM_TRANSFORMS_INSTRUMENTATION_INSTRPROFILING_H
+#define LLVM_TRANSFORMS_INSTRUMENTATION_INSTRPROFILING_H
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringRef.h"
@@ -67,13 +67,6 @@ private:
 
   // vector of counter load/store pairs to be register promoted.
   std::vector<LoadStorePair> PromotionCandidates;
-
-  // FIXME: These are to be removed after switching to the new memop value
-  // profiling.
-  // The start value of precise value profile range for memory intrinsic sizes.
-  int64_t MemOPSizeRangeStart;
-  // The end value of precise value profile range for memory intrinsic sizes.
-  int64_t MemOPSizeRangeLast;
 
   int64_t TotalCountersPromoted = 0;
 
@@ -131,4 +124,4 @@ private:
 
 } // end namespace llvm
 
-#endif // LLVM_TRANSFORMS_INSTRPROFILING_H
+#endif // LLVM_TRANSFORMS_INSTRUMENTATION_INSTRPROFILING_H
