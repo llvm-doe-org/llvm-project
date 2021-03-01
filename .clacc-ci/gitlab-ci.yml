@@ -33,7 +33,6 @@ variables:
   BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
   XFAIL_COMMON:
-    offloading/bug49334.cpp
     offloading/memory_manager.cpp
     offloading/parallel_offloading_map.cpp
 
@@ -72,7 +71,7 @@ stages:
       -DCUDA_TOOLKIT_ROOT_DIR=/opt/nvidia/hpc_sdk/Linux_ppc64le/20.11/cuda/11.0
       -DLIBOMPTARGET_NVPTX_COMPUTE_CAPABILITIES=70
     XFAIL:
-      ""
+      Driver/openmp-offload-gpu.c
 
 .kold:
   tags: [shell, kold]
@@ -90,6 +89,7 @@ stages:
     CMAKE_OFFLOAD_CONFIG_OPENMP:
       ""
     XFAIL:
+      offloading/bug49334.cpp
       ompt/tasks/task_if0-depend.c
 
 # Sometimes bugs cause only release builds to fail.  For example, debugging
@@ -120,6 +120,7 @@ stages:
       CodeGen/AMDGPU/unstructured-cfg-def-use-issue.ll
       CodeGen/AMDGPU/vgpr-tuple-allocation.ll
       CodeGen/MIR/AMDGPU/machine-function-info-no-ir.mir
+      offloading/bug49334.cpp
 
 # Not setup or cleanup.
 .non-utility:
