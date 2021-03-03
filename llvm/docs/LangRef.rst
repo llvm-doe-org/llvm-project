@@ -2328,19 +2328,6 @@ When lowered, any relocated value will be recorded in the corresponding
 :ref:`stackmap entry <statepoint-stackmap-format>`.  See the intrinsic description
 for further details.
 
-ObjC ARC Attached Call Operand Bundles
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-A ``"clang.arc.attachedcall`` operand bundle on a call indicates the call is
-implicitly followed by a marker instruction and a call to an ObjC runtime
-function that uses the result of the call. If the argument passed to the operand
-bundle is 0, ``@objc_retainAutoreleasedReturnValue`` is called. If 1 is passed,
-``@objc_unsafeClaimAutoreleasedReturnValue`` is called. A call with this bundle
-implicitly uses its return value.
-
-The operand bundle is needed to ensure the call is immediately followed by the
-marker instruction or the ObjC runtime call in the final output.
-
 .. _moduleasm:
 
 Module-Level Inline Assembly
@@ -4329,7 +4316,7 @@ ARM and ARM's Thumb2 mode:
 - ``L``: An immediate integer whose negation is valid for a data-processing
   instruction. (Can be used with template modifier "``n``" to print the negated
   value).
-- ``M``: A power of two or a integer between 0 and 32.
+- ``M``: A power of two or an integer between 0 and 32.
 - ``N``: Invalid immediate constraint.
 - ``O``: Invalid immediate constraint.
 - ``r``: A general-purpose 32-bit integer register (``r0-r15``).
@@ -4723,7 +4710,7 @@ debug information. There are two metadata primitives: strings and nodes.
 Metadata does not have a type, and is not a value. If referenced from a
 ``call`` instruction, it uses the ``metadata`` type.
 
-All metadata are identified in syntax by a exclamation point ('``!``').
+All metadata are identified in syntax by an exclamation point ('``!``').
 
 .. _metadata-string:
 
@@ -12000,7 +11987,7 @@ arrays in C99.
 Semantics:
 """"""""""
 
-This intrinsic returns a opaque pointer value that can be passed to
+This intrinsic returns an opaque pointer value that can be passed to
 :ref:`llvm.stackrestore <int_stackrestore>`. When an
 ``llvm.stackrestore`` intrinsic is executed with a value saved from
 ``llvm.stacksave``, it effectively restores the state of the stack to
@@ -12053,7 +12040,7 @@ Overview:
       The '``llvm.get.dynamic.area.offset.*``' intrinsic family is used to
       get the offset from native stack pointer to the address of the most
       recent dynamic alloca on the caller's stack. These intrinsics are
-      intendend for use in combination with
+      intended for use in combination with
       :ref:`llvm.stacksave <int_stacksave>` to get a
       pointer to the most recent dynamic alloca. This is useful, for example,
       for AddressSanitizer's stack unpoisoning routines.
@@ -12170,7 +12157,7 @@ Semantics:
 """"""""""
 
 When directly supported, reading the cycle counter should not modify any
-memory. Implementations are allowed to either return a application
+memory. Implementations are allowed to either return an application
 specific value or a system wide value. On backends without support, this
 is lowered to a constant 0.
 

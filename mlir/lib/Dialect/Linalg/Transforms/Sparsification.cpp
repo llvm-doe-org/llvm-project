@@ -357,6 +357,14 @@ static void findSparseAnnotations(Merger &merger, linalg::GenericOp op) {
   }
 }
 
+/// Returns true if tensor was set up with sparse storage scheme.
+static bool linkedSparse(linalg::GenericOp op, unsigned tensor) {
+  if (tensor < op.getNumInputs())
+    return isa_and_nonnull<linalg::SparseTensorFromPointerOp>(
+        op.getInput(tensor).getDefiningOp());
+  return false;
+}
+
 /// A DFS helper to compute a topological sort. Note that recursion is
 /// bounded by the number of implicit loops, which is always small.
 /// Returns false when a cycle is detected.
@@ -394,7 +402,7 @@ static bool computeIterationGraph(Merger &merger, linalg::GenericOp op,
     auto map = op.getIndexingMap(t);
     assert(map.getNumDims() == n);
     // Skip dense tensor constraints when sparse only is requested.
-    if (sparseOnly && !merger.isSparseTensor(t))
+    if (sparseOnly && !merger.isSparseTensor(t) && !linkedSparse(op, t))
       continue;
     // At the moment, we take the index variables in the tensor access
     // expression in the order in which they appear (conceptually a
@@ -511,14 +519,6 @@ static Type genIntType(PatternRewriter &rewriter, linalg::SparseIntType tp) {
     return rewriter.getIntegerType(8);
   }
   llvm_unreachable("unexpected SparseIntType");
-}
-
-/// Returns true if tensor was set up with sparse storage scheme.
-static bool linkedSparse(linalg::GenericOp op, unsigned tensor) {
-  if (tensor < op.getNumInputs())
-    return isa_and_nonnull<linalg::SparseTensorFromPointerOp>(
-        op.getInput(tensor).getDefiningOp());
-  return false;
 }
 
 /// Generates buffer for the output tensor.
@@ -693,8 +693,11 @@ static Value genTensorLoad(Merger &merger, CodeGen &codegen,
                            unsigned exp) {
   // Test if the load was hoisted to a higher loop nest.
   Value val = merger.exp(exp).val;
-  if (val)
+  if (val) {
+    if (codegen.curVecLength > 1 && !val.getType().isa<VectorType>())
+      return genVectorInvariantValue(codegen, rewriter, val);
     return val;
+  }
   // Actual load.
   SmallVector<Value, 4> args;
   unsigned tensor = merger.exp(exp).e0;
@@ -1001,7 +1004,7 @@ static Operation *genWhile(Merger &merger, CodeGen &codegen,
   if (needsUniv) {
     types.push_back(indexType);
     assert(codegen.loops[idx].getType().isa<IndexType>() &&
-           "type_mismatch for universal index");
+           "type mismatch for universal index");
     operands.push_back(codegen.loops[idx]);
   }
   Location loc = op.getLoc();
@@ -1186,9 +1189,19 @@ static void genStmt(Merger &merger, CodeGen &codegen, PatternRewriter &rewriter,
   unsigned l0 = merger.set(lts)[0];
   unsigned ldx = at == 0 ? -1u : topSort[at - 1];
   genInvariants(merger, codegen, rewriter, op, exp, ldx, /*hoist=*/true);
-  bool needsUniv = genInit(merger, codegen, rewriter, op, topSort, at,
-                           merger.lat(l0).bits) &&
-                   lsize > 1;
+  bool needsUniv = false;
+  if (genInit(merger, codegen, rewriter, op, topSort, at,
+              merger.lat(l0).bits)) {
+    // Maintain the universal index only if it is actually
+    // consumed by a subsequent lattice point.
+    for (unsigned i = 1; i < lsize; i++) {
+      unsigned li = merger.set(lts)[i];
+      if (!merger.hasAnyDimOf(merger.lat(li).simple, Dim::kSparse)) {
+        needsUniv = true;
+        break;
+      }
+    }
+  }
 
   // Emit a loop for every lattice point L0 >= Li.
   for (unsigned i = 0; i < lsize; i++) {

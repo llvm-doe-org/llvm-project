@@ -27272,7 +27272,7 @@ static SDValue LowerMUL(SDValue Op, const X86Subtarget &Subtarget,
 
     SDValue BLo, BHi;
     if (ISD::isBuildVectorOfConstantSDNodes(B.getNode())) {
-      // If the LHS is a constant, manually unpackl/unpackh.
+      // If the RHS is a constant, manually unpackl/unpackh.
       SmallVector<SDValue, 16> LoOps, HiOps;
       for (unsigned i = 0; i != NumElts; i += 16) {
         for (unsigned j = 0; j != 8; ++j) {
@@ -27515,7 +27515,7 @@ static SDValue LowerMULH(SDValue Op, const X86Subtarget &Subtarget,
 
   SDValue BLo, BHi;
   if (ISD::isBuildVectorOfConstantSDNodes(B.getNode())) {
-    // If the LHS is a constant, manually unpackl/unpackh and extend.
+    // If the RHS is a constant, manually unpackl/unpackh and extend.
     SmallVector<SDValue, 16> LoOps, HiOps;
     for (unsigned i = 0; i != NumElts; i += 16) {
       for (unsigned j = 0; j != 8; ++j) {
@@ -49879,6 +49879,19 @@ static SDValue combineScalarToVector(SDNode *N, SelectionDAG &DAG) {
   if (VT == MVT::v2i64 && Src.getOpcode() == ISD::BITCAST &&
       Src.getOperand(0).getValueType() == MVT::x86mmx)
     return DAG.getNode(X86ISD::MOVQ2DQ, DL, VT, Src.getOperand(0));
+
+  // See if we're broadcasting the scalar value, in which case just reuse that.
+  // Ensure the same SDValue from the SDNode use is being used.
+  for (SDNode *User : Src->uses())
+    if (User->getOpcode() == X86ISD::VBROADCAST && Src == User->getOperand(0)) {
+      unsigned SizeInBits = VT.getFixedSizeInBits();
+      unsigned BroadcastSizeInBits = User->getValueSizeInBits(0).getFixedSize();
+      if (BroadcastSizeInBits == SizeInBits)
+        return SDValue(User, 0);
+      if (BroadcastSizeInBits > SizeInBits)
+        return extractSubVector(SDValue(User, 0), 0, DAG, DL, SizeInBits);
+      // TODO: Handle BroadcastSizeInBits < SizeInBits when we have test coverage.
+    }
 
   return SDValue();
 }

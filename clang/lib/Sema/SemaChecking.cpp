@@ -2626,7 +2626,10 @@ static bool isValidBPFPreserveEnumValueArg(Expr *Arg) {
     return false;
 
   const auto *CE = dyn_cast<CStyleCastExpr>(UO->getSubExpr());
-  if (!CE || CE->getCastKind() != CK_IntegralToPointer)
+  if (!CE)
+    return false;
+  if (CE->getCastKind() != CK_IntegralToPointer &&
+      CE->getCastKind() != CK_NullToPointer)
     return false;
 
   // The integer must be from an EnumConstantDecl.
@@ -3392,7 +3395,7 @@ bool Sema::CheckRISCVBuiltinFunctionCall(const TargetInfo &TI,
   switch (BuiltinID) {
   default:
     break;
-#define BUILTIN(ID, TYPE, ATTRS) case RISCV::BI##ID:
+#define RISCVV_BUILTIN(ID, TYPE, ATTRS) case RISCV::BI##ID:
 #include "clang/Basic/BuiltinsRISCV.def"
     if (!TI.hasFeature("experimental-v"))
       return Diag(TheCall->getBeginLoc(), diag::err_riscvv_builtin_requires_v)

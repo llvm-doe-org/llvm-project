@@ -356,7 +356,8 @@ def SameOperandElementTypeOp : TEST_Op<"same_operand_element_type",
   let results = (outs AnyType);
 }
 
-def SameOperandAndResultElementTypeOp : TEST_Op<"same_operand_and_result_element_type",
+def SameOperandAndResultElementTypeOp :
+    TEST_Op<"same_operand_and_result_element_type",
     [SameOperandsAndResultElementType]> {
   let arguments = (ins Variadic<AnyType>);
   let results = (outs Variadic<AnyType>);
@@ -379,7 +380,7 @@ def SameOperandAndResultTypeOp : TEST_Op<"same_operand_and_result_type",
 }
 
 def ElementwiseMappableOp : TEST_Op<"elementwise_mappable",
-    [ElementwiseMappable]> {
+    ElementwiseMappable.traits> {
   let arguments = (ins Variadic<AnyType>);
   let results = (outs Variadic<AnyType>);
 }
@@ -503,24 +504,10 @@ def OpWithInferTypeInterfaceOp : TEST_Op<"op_with_infer_type_if", [
   let results = (outs AnyTensor);
 }
 
-def InferTensorType : NativeOpTrait<"InferTensorType">;
 def OpWithShapedTypeInferTypeInterfaceOp : TEST_Op<"op_with_shaped_type_infer_type_if",
-  [
-     // Op implements infer type op interface.
-     InferTypeOpInterface,
-     // The op will have methods implementing the ShapedType type infer interface.
-     DeclareOpInterfaceMethods<InferShapedTypeOpInterface>,
-     // The op produces tensors and will use the ShapedType type infer interface
-     // along with knowledge that it is producing Tensors to infer shape.
-     InferTensorType
-   ]> {
+      InferTensorTypeWithReify.traits> {
   let arguments = (ins AnyTensor, AnyTensor);
   let results = (outs AnyTensor);
-
-  let extraClassDeclaration = [{
-    LogicalResult reifyReturnTypeShapes(OpBuilder &builder,
-                                        SmallVectorImpl<Value> &shapes);
-  }];
 }
 
 def IsNotScalar : Constraint<CPred<"$0.getType().getRank() != 0">>;
