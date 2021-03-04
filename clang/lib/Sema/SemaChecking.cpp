@@ -3392,16 +3392,13 @@ bool Sema::CheckAMDGCNBuiltinFunctionCall(unsigned BuiltinID,
 bool Sema::CheckRISCVBuiltinFunctionCall(const TargetInfo &TI,
                                          unsigned BuiltinID,
                                          CallExpr *TheCall) {
-  switch (BuiltinID) {
-  default:
-    break;
-#define RISCVV_BUILTIN(ID, TYPE, ATTRS) case RISCV::BI##ID:
-#include "clang/Basic/BuiltinsRISCV.def"
-    if (!TI.hasFeature("experimental-v"))
-      return Diag(TheCall->getBeginLoc(), diag::err_riscvv_builtin_requires_v)
-             << TheCall->getSourceRange();
-    break;
-  }
+  // CodeGenFunction can also detect this, but this gives a better error
+  // message.
+  StringRef Features = Context.BuiltinInfo.getRequiredFeatures(BuiltinID);
+  if (Features.find("experimental-v") != StringRef::npos &&
+      !TI.hasFeature("experimental-v"))
+    return Diag(TheCall->getBeginLoc(), diag::err_riscvv_builtin_requires_v)
+           << TheCall->getSourceRange();
 
   return false;
 }
@@ -10319,11 +10316,18 @@ void CheckFreeArgumentsCast(Sema &S, const std::string &CalleeName,
                             const CastExpr *Cast) {
   SmallString<128> SizeString;
   llvm::raw_svector_ostream OS(SizeString);
+
+  clang::CastKind Kind = Cast->getCastKind();
+  if (Kind == clang::CK_BitCast &&
+      !Cast->getSubExpr()->getType()->isFunctionPointerType())
+    return;
+  if (Kind == clang::CK_IntegralToPointer &&
+      !isa<IntegerLiteral>(
+          Cast->getSubExpr()->IgnoreParenImpCasts()->IgnoreParens()))
+    return;
+
   switch (Cast->getCastKind()) {
   case clang::CK_BitCast:
-    if (!Cast->getSubExpr()->getType()->isFunctionPointerType())
-      return;
-    LLVM_FALLTHROUGH;
   case clang::CK_IntegralToPointer:
   case clang::CK_FunctionToPointerDecay:
     OS << '\'';
