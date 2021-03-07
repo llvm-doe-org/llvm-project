@@ -4646,6 +4646,12 @@ def : InstAlias<"mftbu $Rx", (MFTB gprc:$Rx, 269)>;
 
 def : InstAlias<"xnop", (XORI R0, R0, 0)>;
 
+def : InstAlias<"mtxer $Rx", (MTSPR 1, gprc:$Rx)>;
+def : InstAlias<"mfxer $Rx", (MFSPR gprc:$Rx, 1)>;
+
+//Disable this alias on AIX for now because as does not support them.
+let Predicates = [ModernAs] in {
+
 foreach BR = 0-7 in {
     def : InstAlias<"mfbr"#BR#" $Rx",
                     (MFDCR gprc:$Rx, !add(BR, 0x80))>,
@@ -4657,15 +4663,8 @@ foreach BR = 0-7 in {
 
 def : InstAlias<"mtmsrd $RS", (MTMSRD gprc:$RS, 0)>;
 def : InstAlias<"mtmsr $RS", (MTMSR gprc:$RS, 0)>;
-
-def : InstAlias<"mtxer $Rx", (MTSPR 1, gprc:$Rx)>;
-def : InstAlias<"mfxer $Rx", (MFSPR gprc:$Rx, 1)>;
-
-//Disable this alias on AIX for now because as does not support them.
-let Predicates = [ModernAs] in {
 def : InstAlias<"mtudscr $Rx", (MTSPR 3, gprc:$Rx)>;
 def : InstAlias<"mfudscr $Rx", (MFSPR gprc:$Rx, 3)>;
-}
 
 def : InstAlias<"mfrtcu $Rx", (MFSPR gprc:$Rx, 4)>;
 def : InstAlias<"mfrtcl $Rx", (MFSPR gprc:$Rx, 5)>;
@@ -4795,6 +4794,7 @@ def : InstAlias<"mfdccr $Rx", (MFSPR gprc:$Rx, 1018)>, Requires<[IsPPC4xx]>;
 def : InstAlias<"mticcr $Rx", (MTSPR 1019, gprc:$Rx)>, Requires<[IsPPC4xx]>;
 def : InstAlias<"mficcr $Rx", (MFSPR gprc:$Rx, 1019)>, Requires<[IsPPC4xx]>;
 
+}
 
 def : InstAlias<"tlbie $RB", (TLBIE R0, gprc:$RB)>;
 
@@ -5156,21 +5156,13 @@ let Predicates = [IsISA3_0] in {
 // We prefix 'CP' to COPY due to name conflict in Target.td. We also prefix to
 // PASTE for naming consistency.
 let mayLoad = 1 in
-def CP_COPY   : X_L1_RA5_RB5<31, 774, "copy"  , gprc, IIC_LdStCOPY, []>;
-
-let mayStore = 1 in
-def CP_PASTE  : X_L1_RA5_RB5<31, 902, "paste" , gprc, IIC_LdStPASTE, []>;
+def CP_COPY   : X_RA5_RB5<31, 774, "copy"  , gprc, IIC_LdStCOPY, []>;
 
 let mayStore = 1, Defs = [CR0] in
 def CP_PASTE_rec : X_L1_RA5_RB5<31, 902, "paste.", gprc, IIC_LdStPASTE, []>, isRecordForm;
 
-def CP_COPYx  : PPCAsmPseudo<"copy $rA, $rB" , (ins gprc:$rA, gprc:$rB)>;
-def CP_PASTEx : PPCAsmPseudo<"paste $rA, $rB", (ins gprc:$rA, gprc:$rB)>;
-def CP_COPY_FIRST : PPCAsmPseudo<"copy_first $rA, $rB",
-                                  (ins gprc:$rA, gprc:$rB)>;
-def CP_PASTE_LAST : PPCAsmPseudo<"paste_last $rA, $rB",
-                                  (ins gprc:$rA, gprc:$rB)>;
-def CP_ABORT : XForm_0<31, 838, (outs), (ins), "cp_abort", IIC_SprABORT, []>;
+def : InstAlias<"paste. $RA, $RB", (CP_PASTE_rec gprc:$RA, gprc:$RB, 1)>;
+def CP_ABORT : XForm_0<31, 838, (outs), (ins), "cpabort", IIC_SprABORT, []>;
 
 // Message Synchronize
 def MSGSYNC : XForm_0<31, 886, (outs), (ins), "msgsync", IIC_SprMSGSYNC, []>;
