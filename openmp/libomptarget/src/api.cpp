@@ -74,6 +74,8 @@ EXTERN int omp_get_initial_device(void) {
 
 #if OMPT_SUPPORT
 // FIXME: Access is not thread-safe.  Does it need to be?
+// FIXME: Does this work if you allocate on multiple devices?  There might be
+// address collisions.  Either key it by device or store it in DeviceTy?
 static std::map<void *, size_t> DeviceAllocSizes;
 #endif
 
