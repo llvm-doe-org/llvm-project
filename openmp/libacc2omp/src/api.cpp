@@ -147,7 +147,9 @@ static const char *deviceTypeToString(acc_device_t DevType,
  *   - The host device is logically distinct from any non-host device even if
  *     they are the same physical device and thus of the same architecture.
  *     Thus, the host device never appears in the list referred to by an
- *     architecture-specific enumerator.
+ *     architecture-specific enumerator.  For how this decision impacts
+ *     acc_on_device, see the acc_on_device notes in Clang's OpenACC status
+ *     document.
  * - acc_device_not_host:
  *   - Refers to the list of all non-host devices.
  *   - Ideally, the set of devices in this list is exactly the union of the sets
@@ -292,11 +294,14 @@ static void setDeviceNumAndType(int dev_num, acc_device_t dev_type,
   // - We're not sure what either of these statements mean, and, in our
   //   experiments using nvc 20.11-0, acc_set_device_num does nothing when
   //   passed one of these special values.
-  // - What behavior is reverted to the implementation default?
+  // - What behavior is reverted to the implementation default?  Does it mean to
+  //   choose an implementation-defined default device number for the specified
+  //   type?  Is that the one used by acc_set_device_type?
   // - In our experiments using nvc 20.11-0, device numbers don't appear to be
   //   recorded for all device types except the current one (OpenACC 3.1 only
   //   talks about one acc-current-device-num-var not one per device type), so
-  //   what does it meant to set the device number for all device types?
+  //   what does it meant to set the device number for all device types?  Is it
+  //   the device number to be used by acc_set_device_type?
   //
   // Interestingly, after acc_set_device_num(dev_num, acc_device_not_host),
   // acc_get_device_type() may not return acc_device_not_host, and so
