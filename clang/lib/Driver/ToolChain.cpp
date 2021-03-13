@@ -1016,20 +1016,21 @@ SanitizerMask ToolChain::getSupportedSanitizers() const {
   // Return sanitizers which don't require runtime support and are not
   // platform dependent.
 
-  SanitizerMask Res = (SanitizerKind::Undefined & ~SanitizerKind::Vptr &
-                       ~SanitizerKind::Function) |
-                      (SanitizerKind::CFI & ~SanitizerKind::CFIICall) |
-                      SanitizerKind::CFICastStrict |
-                      SanitizerKind::FloatDivideByZero |
-                      SanitizerKind::UnsignedIntegerOverflow |
-                      SanitizerKind::ImplicitConversion |
-                      SanitizerKind::Nullability | SanitizerKind::LocalBounds;
+  SanitizerMask Res =
+      (SanitizerKind::Undefined & ~SanitizerKind::Vptr &
+       ~SanitizerKind::Function) |
+      (SanitizerKind::CFI & ~SanitizerKind::CFIICall) |
+      SanitizerKind::CFICastStrict | SanitizerKind::FloatDivideByZero |
+      SanitizerKind::UnsignedIntegerOverflow |
+      SanitizerKind::UnsignedShiftBase | SanitizerKind::ImplicitConversion |
+      SanitizerKind::Nullability | SanitizerKind::LocalBounds;
   if (getTriple().getArch() == llvm::Triple::x86 ||
       getTriple().getArch() == llvm::Triple::x86_64 ||
       getTriple().getArch() == llvm::Triple::arm || getTriple().isWasm() ||
       getTriple().isAArch64())
     Res |= SanitizerKind::CFIICall;
-  if (getTriple().getArch() == llvm::Triple::x86_64 || getTriple().isAArch64())
+  if (getTriple().getArch() == llvm::Triple::x86_64 ||
+      getTriple().isAArch64() || getTriple().isRISCV())
     Res |= SanitizerKind::ShadowCallStack;
   if (getTriple().isAArch64())
     Res |= SanitizerKind::MemTag;

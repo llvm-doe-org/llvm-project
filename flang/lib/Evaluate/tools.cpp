@@ -661,11 +661,6 @@ std::optional<Expr<SomeType>> ConvertToType(
 
 std::optional<Expr<SomeType>> ConvertToType(
     const Symbol &symbol, Expr<SomeType> &&x) {
-  if (int xRank{x.Rank()}; xRank > 0) {
-    if (symbol.Rank() != xRank) {
-      return std::nullopt;
-    }
-  }
   if (auto symType{DynamicType::From(symbol)}) {
     return ConvertToType(*symType, std::move(x));
   }
@@ -818,8 +813,8 @@ parser::Message *AttachDeclaration(
           unhosted->detailsIf<semantics::ProcBindingDetails>()}) {
     if (binding->symbol().name() != symbol.name()) {
       message.Attach(binding->symbol().name(),
-          "Procedure '%s' is bound to '%s'"_en_US, symbol.name(),
-          binding->symbol().name());
+          "Procedure '%s' of type '%s' is bound to '%s'"_en_US, symbol.name(),
+          symbol.owner().GetName().value(), binding->symbol().name());
       return &message;
     }
     unhosted = &binding->symbol();

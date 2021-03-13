@@ -53,7 +53,7 @@ static ArrayRef<uint8_t> getSectionContents(ObjFile<ELFT> &file,
                                             const typename ELFT::Shdr &hdr) {
   if (hdr.sh_type == SHT_NOBITS)
     return makeArrayRef<uint8_t>(nullptr, hdr.sh_size);
-  return check(file.getObj().getSectionContents(&hdr));
+  return check(file.getObj().getSectionContents(hdr));
 }
 
 InputSectionBase::InputSectionBase(InputFile *file, uint64_t flags,
@@ -456,7 +456,7 @@ void InputSection::copyRelocations(uint8_t *buf, ArrayRef<RelTy> rels) {
           Elf_Shdr_Impl<ELFT> sec =
               CHECK(file->getObj().sections(), file)[secIdx];
           warn("relocation refers to a discarded section: " +
-               CHECK(file->getObj().getSectionName(&sec), file) +
+               CHECK(file->getObj().getSectionName(sec), file) +
                "\n>>> referenced by " + getObjMsg(p->r_offset));
         }
         p->setSymbolAndType(0, 0, false);
@@ -1104,7 +1104,7 @@ void InputSectionBase::relocateAlloc(uint8_t *buf, uint8_t *bufEnd) {
   // a jmp insn must be modified to shrink the jmp insn or to flip the jmp
   // insn.  This is primarily used to relax and optimize jumps created with
   // basic block sections.
-  if (auto *sec = dyn_cast<InputSection>(this)) {
+  if (isa<InputSection>(this)) {
     for (const JumpInstrMod &jumpMod : jumpInstrMods) {
       uint64_t offset = jumpMod.offset;
       uint8_t *bufLoc = buf + offset;

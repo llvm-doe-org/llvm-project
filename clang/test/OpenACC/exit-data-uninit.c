@@ -30,10 +30,11 @@
 
 int main() {
   int i;
-  //         EXE-NOT: {{.}}
-  //     EXE-notPASS: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-  //                  # An abort message usually follows.
-  // EXE-notPASS-NOT: Libomptarget
+  //          EXE-NOT: {{.}}
+  //      EXE-notPASS: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
+  // EXE-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+  //                   # An abort message usually follows.
+  //  EXE-notPASS-NOT: Libomptarget
   #pragma acc DIR data CLAUSE(i)
   return 0;
 }

@@ -377,6 +377,15 @@ struct ScalarEnumerationTraits<FormatStyle::BitFieldColonSpacingStyle> {
   }
 };
 
+template <>
+struct ScalarEnumerationTraits<FormatStyle::SortJavaStaticImportOptions> {
+  static void enumeration(IO &IO,
+                          FormatStyle::SortJavaStaticImportOptions &Value) {
+    IO.enumCase(Value, "Before", FormatStyle::SJSIO_Before);
+    IO.enumCase(Value, "After", FormatStyle::SJSIO_After);
+  }
+};
+
 template <> struct MappingTraits<FormatStyle> {
   static void mapping(IO &IO, FormatStyle &Style) {
     // When reading, read the language first, we need it for getPredefinedStyle.
@@ -475,6 +484,7 @@ template <> struct MappingTraits<FormatStyle> {
                    Style.AlwaysBreakBeforeMultilineStrings);
     IO.mapOptional("AlwaysBreakTemplateDeclarations",
                    Style.AlwaysBreakTemplateDeclarations);
+    IO.mapOptional("AttributeMacros", Style.AttributeMacros);
     IO.mapOptional("BinPackArguments", Style.BinPackArguments);
     IO.mapOptional("BinPackParameters", Style.BinPackParameters);
     IO.mapOptional("BraceWrapping", Style.BraceWrapping);
@@ -573,6 +583,7 @@ template <> struct MappingTraits<FormatStyle> {
     IO.mapOptional("RawStringFormats", Style.RawStringFormats);
     IO.mapOptional("ReflowComments", Style.ReflowComments);
     IO.mapOptional("SortIncludes", Style.SortIncludes);
+    IO.mapOptional("SortJavaStaticImport", Style.SortJavaStaticImport);
     IO.mapOptional("SortUsingDeclarations", Style.SortUsingDeclarations);
     IO.mapOptional("SpaceAfterCStyleCast", Style.SpaceAfterCStyleCast);
     IO.mapOptional("SpaceAfterLogicalNot", Style.SpaceAfterLogicalNot);
@@ -842,6 +853,7 @@ FormatStyle getLLVMStyle(FormatStyle::LanguageKind Language) {
   LLVMStyle.AlwaysBreakAfterDefinitionReturnType = FormatStyle::DRTBS_None;
   LLVMStyle.AlwaysBreakBeforeMultilineStrings = false;
   LLVMStyle.AlwaysBreakTemplateDeclarations = FormatStyle::BTDS_MultiLine;
+  LLVMStyle.AttributeMacros.push_back("__capability");
   LLVMStyle.BinPackArguments = true;
   LLVMStyle.BinPackParameters = true;
   LLVMStyle.BreakBeforeBinaryOperators = FormatStyle::BOS_None;
@@ -945,6 +957,7 @@ FormatStyle getLLVMStyle(FormatStyle::LanguageKind Language) {
 
   LLVMStyle.DisableFormat = false;
   LLVMStyle.SortIncludes = true;
+  LLVMStyle.SortJavaStaticImport = FormatStyle::SJSIO_Before;
   LLVMStyle.SortUsingDeclarations = true;
   LLVMStyle.StatementMacros.push_back("Q_UNUSED");
   LLVMStyle.StatementMacros.push_back("QT_REQUIRE_VERSION");
@@ -2310,12 +2323,16 @@ static void sortJavaImports(const FormatStyle &Style,
     JavaImportGroups.push_back(
         findJavaImportGroup(Style, Imports[i].Identifier));
   }
+  bool StaticImportAfterNormalImport =
+      Style.SortJavaStaticImport == FormatStyle::SJSIO_After;
   llvm::sort(Indices, [&](unsigned LHSI, unsigned RHSI) {
     // Negating IsStatic to push static imports above non-static imports.
-    return std::make_tuple(!Imports[LHSI].IsStatic, JavaImportGroups[LHSI],
-                           Imports[LHSI].Identifier) <
-           std::make_tuple(!Imports[RHSI].IsStatic, JavaImportGroups[RHSI],
-                           Imports[RHSI].Identifier);
+    return std::make_tuple(!Imports[LHSI].IsStatic ^
+                               StaticImportAfterNormalImport,
+                           JavaImportGroups[LHSI], Imports[LHSI].Identifier) <
+           std::make_tuple(!Imports[RHSI].IsStatic ^
+                               StaticImportAfterNormalImport,
+                           JavaImportGroups[RHSI], Imports[RHSI].Identifier);
   });
 
   // Deduplicate imports.
@@ -2739,6 +2756,7 @@ LangOptions getFormattingLangOpts(const FormatStyle &Style) {
   LangOpts.ObjC = 1;
   LangOpts.MicrosoftExt = 1;    // To get kw___try, kw___finally.
   LangOpts.DeclSpecKeyword = 1; // To get __declspec.
+  LangOpts.C99 = 1; // To get kw_restrict for non-underscore-prefixed restrict.
   return LangOpts;
 }
 

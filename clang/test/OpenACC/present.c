@@ -58,28 +58,28 @@
 //      # "acc parallel loop" should be about the same as "acc parallel", so a
 //      # few cases are probably sufficient.
 // RUN: %data cases {
-// RUN:   (case=caseDataScalarPresent            not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=caseDataScalarAbsent             not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
-// RUN:   (case=caseDataArrayPresent             not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=caseDataArrayAbsent              not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
-// RUN:   (case=caseDataSubarrayPresent          not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=caseDataSubarrayDisjoint         not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
-// RUN:   (case=caseDataSubarrayOverlapStart     not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
-// RUN:   (case=caseDataSubarrayOverlapEnd       not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
-// RUN:   (case=caseDataSubarrayConcat2          not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
-// RUN:   (case=caseParallelScalarPresent        not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=caseParallelScalarAbsent         not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
-// RUN:   (case=caseParallelArrayPresent         not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=caseParallelArrayAbsent          not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
-// RUN:   (case=caseParallelSubarrayPresent      not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=caseParallelSubarrayDisjoint     not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
-// RUN:   (case=caseParallelSubarrayOverlapStart not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
-// RUN:   (case=caseParallelSubarrayOverlapEnd   not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
-// RUN:   (case=caseParallelSubarrayConcat2      not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off])
-// RUN:   (case=caseParallelLoopScalarPresent    not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=caseParallelLoopScalarAbsent     not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
-// RUN:   (case=caseConstPresent                 not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=             )
-// RUN:   (case=caseConstAbsent                  not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=             )
+// RUN:   (case=caseDataScalarPresent            not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=data    )
+// RUN:   (case=caseDataScalarAbsent             not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=data    )
+// RUN:   (case=caseDataArrayPresent             not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=data    )
+// RUN:   (case=caseDataArrayAbsent              not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=data    )
+// RUN:   (case=caseDataSubarrayPresent          not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=data    )
+// RUN:   (case=caseDataSubarrayDisjoint         not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=data    )
+// RUN:   (case=caseDataSubarrayOverlapStart     not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=data    )
+// RUN:   (case=caseDataSubarrayOverlapEnd       not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=data    )
+// RUN:   (case=caseDataSubarrayConcat2          not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=data    )
+// RUN:   (case=caseParallelScalarPresent        not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=parallel)
+// RUN:   (case=caseParallelScalarAbsent         not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=parallel)
+// RUN:   (case=caseParallelArrayPresent         not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=parallel)
+// RUN:   (case=caseParallelArrayAbsent          not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=parallel)
+// RUN:   (case=caseParallelSubarrayPresent      not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=parallel)
+// RUN:   (case=caseParallelSubarrayDisjoint     not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=parallel)
+// RUN:   (case=caseParallelSubarrayOverlapStart not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=parallel)
+// RUN:   (case=caseParallelSubarrayOverlapEnd   not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=parallel)
+// RUN:   (case=caseParallelSubarrayConcat2      not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=parallel)
+// RUN:   (case=caseParallelLoopScalarPresent    not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=parallel)
+// RUN:   (case=caseParallelLoopScalarAbsent     not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=parallel)
+// RUN:   (case=caseConstPresent                 not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=parallel)
+// RUN:   (case=caseConstAbsent                  not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=parallel)
 // RUN: }
 // RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
 // RUN: %for cases {
@@ -183,8 +183,10 @@
 // RUN:                     > %t.out 2> %t.err
 // RUN:           %[run-if] FileCheck -input-file %t.err -allow-empty %s \
 // RUN:             -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS \
+// RUN:             -check-prefixes=EXE-ERR-%[not-if-fail]PASS-%[construct] \
 // RUN:             -check-prefixes=EXE-ERR-%[not-if-presentError]PRESENT \
-// RUN:             -check-prefixes=EXE-ERR-%[not-if-arrayExtError]ARRAYEXT
+// RUN:             -check-prefixes=EXE-ERR-%[not-if-arrayExtError]ARRAYEXT \
+// RUN:             -check-prefixes=EXE-ERR-%[not-if-presentError]PRESENT-%[not-if-arrayExtError]ARRAYEXT
 // RUN:           %[run-if] FileCheck -input-file %t.out -allow-empty %s \
 // RUN:             -check-prefixes=EXE-OUT,EXE-OUT-%[not-if-fail]PASS
 // RUN:         }
@@ -205,8 +207,10 @@
 // RUN:         %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2> %t.err
 // RUN:         %[run-if] FileCheck -input-file %t.err -allow-empty %s \
 // RUN:           -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS \
+// RUN:           -check-prefixes=EXE-ERR-%[not-if-fail]PASS-%[construct] \
 // RUN:           -check-prefixes=EXE-ERR-%[not-if-presentError]PRESENT \
-// RUN:           -check-prefixes=EXE-ERR-%[not-if-arrayExtError]ARRAYEXT
+// RUN:           -check-prefixes=EXE-ERR-%[not-if-arrayExtError]ARRAYEXT \
+// RUN:           -check-prefixes=EXE-ERR-%[not-if-presentError]PRESENT-%[not-if-arrayExtError]ARRAYEXT
 // RUN:         %[run-if] FileCheck -input-file %t.out -allow-empty %s \
 // RUN:           -check-prefixes=EXE-OUT,EXE-OUT-%[not-if-fail]PASS
 // RUN:       }
@@ -241,15 +245,21 @@
 FOREACH_CASE(AddCase)
 #undef AddCase
 
-//              EXE-ERR-NOT: {{.}}
-//                  EXE-ERR: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
-//             EXE-ERR-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
-// EXE-ERR-notARRAYEXT-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
-//  EXE-ERR-notPRESENT-NEXT: Libomptarget message: device mapping required by 'present' map type modifier does not exist for host address 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes)
-//     EXE-ERR-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-//                           # An abort message usually follows.
-//      EXE-ERR-notPASS-NOT: Libomptarget
-//         EXE-ERR-PASS-NOT: {{.}}
+//                      EXE-ERR-NOT: {{.}}
+//                          EXE-ERR: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+//                     EXE-ERR-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//         EXE-ERR-notARRAYEXT-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
+//          EXE-ERR-notPRESENT-NEXT: Libomptarget message: device mapping required by 'present' map type modifier does not exist for host address 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes)
+//                                   # FIXME: Names like getOrAllocTgtPtr are meaningless to users.
+//          EXE-ERR-notPRESENT-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer ('present' map type modifier).
+// EXE-ERR-PRESENT-notARRAYEXT-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping)
+//    EXE-ERR-notPASS-parallel-NEXT: Libomptarget error: Call to targetDataBegin failed, abort target.
+//    EXE-ERR-notPASS-parallel-NEXT: Libomptarget error: Failed to process data before launching the kernel.
+//             EXE-ERR-notPASS-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
+//             EXE-ERR-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//                                   # An abort message usually follows.
+//              EXE-ERR-notPASS-NOT: Libomptarget
+//                 EXE-ERR-PASS-NOT: {{.}}
 
 //       EXE-OUT-NOT: {{.}}
 //           EXE-OUT: start

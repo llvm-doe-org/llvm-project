@@ -2,7 +2,9 @@
 add_mlir_library(MLIRCAPIIR
   AffineMap.cpp
   IR.cpp
+  StandardAttributes.cpp
   StandardTypes.cpp
+  Support.cpp
 
   EXCLUDE_FROM_LIBMLIR
 

@@ -693,8 +693,6 @@ Value *LibCallSimplifier::optimizeStringLength(CallInst *CI, IRBuilderBase &B,
                            Offset);
       }
     }
-
-    return nullptr;
   }
 
   // strlen(x?"foo":"bars") --> x ? 3 : 4
@@ -1750,6 +1748,8 @@ Value *LibCallSimplifier::optimizePow(CallInst *Pow, IRBuilderBase &B) {
 
         Sqrt = getSqrtCall(Base, Pow->getCalledFunction()->getAttributes(),
                            Pow->doesNotAccessMemory(), M, B, TLI);
+        if (!Sqrt)
+          return nullptr;
       }
 
       // We will memoize intermediate products of the Addition Chain.

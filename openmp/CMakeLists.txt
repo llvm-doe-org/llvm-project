@@ -103,6 +103,9 @@ if (OPENMP_ENABLE_OMPT_TOOLS)
   add_subdirectory(tools)
 endif()
 
+# Build documentation
+add_subdirectory(docs)
+
 # Build OpenACC runtime.
 add_subdirectory(libacc2omp)
 

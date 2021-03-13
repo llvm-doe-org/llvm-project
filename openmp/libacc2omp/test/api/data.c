@@ -1564,6 +1564,9 @@ CASE(caseCopyinExtendsAfter) {
   // ERR-caseCopyinExtendsAfter-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
   // ERR-caseCopyinExtendsAfter-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
   //  ERR-caseCopyinExtendsAfter-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#HOST]] ([[#ELE_SIZE]] bytes)
+  //                                       # FIXME: getOrAllocTgtPtr is meaningless to users.
+  //  ERR-caseCopyinExtendsAfter-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //  ERR-caseCopyinExtendsAfter-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseCopyinExtendsAfter-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -1578,6 +1581,9 @@ CASE(caseCopyinExtendsBefore) {
   // ERR-caseCopyinExtendsBefore-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
   // ERR-caseCopyinExtendsBefore-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
   //  ERR-caseCopyinExtendsBefore-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE]] bytes)
+  //                                        # FIXME: getOrAllocTgtPtr is meaningless to users.
+  //  ERR-caseCopyinExtendsBefore-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //  ERR-caseCopyinExtendsBefore-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseCopyinExtendsBefore-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -1593,6 +1599,9 @@ CASE(caseCopyinSubsumes) {
   // ERR-caseCopyinSubsumes-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
   // ERR-caseCopyinSubsumes-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
   //  ERR-caseCopyinSubsumes-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE]] bytes)
+  //                                   # FIXME: getOrAllocTgtPtr is meaningless to users.
+  //  ERR-caseCopyinSubsumes-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //  ERR-caseCopyinSubsumes-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseCopyinSubsumes-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20, 30};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -1609,6 +1618,9 @@ CASE(caseCopyinConcat2) {
   // ERR-caseCopyinConcat2-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
   // ERR-caseCopyinConcat2-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
   //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST]] ([[#ELE_SIZE]] bytes)
+  //                                  # FIXME: getOrAllocTgtPtr is meaningless to users.
+  //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20, 30};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -1626,6 +1638,9 @@ CASE(caseCreateExtendsAfter) {
   // ERR-caseCreateExtendsAfter-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
   // ERR-caseCreateExtendsAfter-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
   //  ERR-caseCreateExtendsAfter-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#HOST]] ([[#ELE_SIZE]] bytes)
+  //                                       # FIXME: getOrAllocTgtPtr is meaningless to users.
+  //  ERR-caseCreateExtendsAfter-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //  ERR-caseCreateExtendsAfter-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseCreateExtendsAfter-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -1640,6 +1655,9 @@ CASE(caseCreateExtendsBefore) {
   // ERR-caseCreateExtendsBefore-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
   // ERR-caseCreateExtendsBefore-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
   //  ERR-caseCreateExtendsBefore-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE]] bytes)
+  //                                        # FIXME: getOrAllocTgtPtr is meaningless to users.
+  //  ERR-caseCreateExtendsBefore-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //  ERR-caseCreateExtendsBefore-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseCreateExtendsBefore-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -1655,6 +1673,9 @@ CASE(caseCreateSubsumes) {
   // ERR-caseCreateSubsumes-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
   // ERR-caseCreateSubsumes-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
   //  ERR-caseCreateSubsumes-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE]] bytes)
+  //                                   # FIXME: getOrAllocTgtPtr is meaningless to users.
+  //  ERR-caseCreateSubsumes-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //  ERR-caseCreateSubsumes-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseCreateSubsumes-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20, 30};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -1671,6 +1692,9 @@ CASE(caseCreateConcat2) {
   // ERR-caseCreateConcat2-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
   // ERR-caseCreateConcat2-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
   //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST]] ([[#ELE_SIZE]] bytes)
+  //                                  # FIXME: getOrAllocTgtPtr is meaningless to users.
+  //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20, 30};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -1919,6 +1943,7 @@ CASE(caseUpdateDeviceAbsent) {
   //      ERR-caseUpdateDeviceAbsent-NEXT: 0x[[#%x,HOST:]], [[#%u,SIZE:]]
   // ERR-caseUpdateDeviceAbsent-HOST-NEXT: x present: 0x[[#HOST]] -> 0x[[#HOST]], 10 -> 10
   //  ERR-caseUpdateDeviceAbsent-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateDeviceAbsent-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseUpdateDeviceAbsent-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int x = 10;
   fprintf(stderr, "%p, %ld\n", &x, sizeof x);
@@ -1931,6 +1956,7 @@ CASE(caseUpdateDeviceExtendsAfter) {
   // ERR-caseUpdateDeviceExtendsAfter-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
   // ERR-caseUpdateDeviceExtendsAfter-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
   //  ERR-caseUpdateDeviceExtendsAfter-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateDeviceExtendsAfter-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseUpdateDeviceExtendsAfter-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -1945,6 +1971,7 @@ CASE(caseUpdateDeviceExtendsBefore) {
   // ERR-caseUpdateDeviceExtendsBefore-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
   // ERR-caseUpdateDeviceExtendsBefore-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
   //  ERR-caseUpdateDeviceExtendsBefore-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateDeviceExtendsBefore-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseUpdateDeviceExtendsBefore-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -1960,6 +1987,7 @@ CASE(caseUpdateDeviceSubsumes) {
   // ERR-caseUpdateDeviceSubsumes-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
   // ERR-caseUpdateDeviceSubsumes-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
   //  ERR-caseUpdateDeviceSubsumes-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateDeviceSubsumes-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseUpdateDeviceSubsumes-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20, 30};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -1975,6 +2003,7 @@ CASE(caseUpdateDeviceConcat2) {
   // ERR-caseUpdateDeviceConcat2-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
   // ERR-caseUpdateDeviceConcat2-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
   //  ERR-caseUpdateDeviceConcat2-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateDeviceConcat2-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseUpdateDeviceConcat2-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -1990,6 +2019,7 @@ CASE(caseUpdateSelfAbsent) {
   //      ERR-caseUpdateSelfAbsent-NEXT: 0x[[#%x,HOST:]], [[#%u,SIZE:]]
   // ERR-caseUpdateSelfAbsent-HOST-NEXT: x present: 0x[[#HOST]] -> 0x[[#HOST]], 10 -> 10
   //  ERR-caseUpdateSelfAbsent-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateSelfAbsent-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseUpdateSelfAbsent-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int x = 10;
   fprintf(stderr, "%p, %ld\n", &x, sizeof x);
@@ -2002,6 +2032,7 @@ CASE(caseUpdateSelfExtendsAfter) {
   // ERR-caseUpdateSelfExtendsAfter-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
   // ERR-caseUpdateSelfExtendsAfter-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
   //  ERR-caseUpdateSelfExtendsAfter-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateSelfExtendsAfter-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseUpdateSelfExtendsAfter-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -2016,6 +2047,7 @@ CASE(caseUpdateSelfExtendsBefore) {
   // ERR-caseUpdateSelfExtendsBefore-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
   // ERR-caseUpdateSelfExtendsBefore-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
   //  ERR-caseUpdateSelfExtendsBefore-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateSelfExtendsBefore-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseUpdateSelfExtendsBefore-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -2031,6 +2063,7 @@ CASE(caseUpdateSelfSubsumes) {
   // ERR-caseUpdateSelfSubsumes-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
   // ERR-caseUpdateSelfSubsumes-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
   //  ERR-caseUpdateSelfSubsumes-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateSelfSubsumes-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseUpdateSelfSubsumes-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20, 30};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -2046,6 +2079,7 @@ CASE(caseUpdateSelfConcat2) {
   // ERR-caseUpdateSelfConcat2-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
   // ERR-caseUpdateSelfConcat2-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
   //  ERR-caseUpdateSelfConcat2-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
+  //  ERR-caseUpdateSelfConcat2-OFF-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
   //  ERR-caseUpdateSelfConcat2-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
   int arr[] = {10, 20};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
@@ -2428,6 +2462,7 @@ CASE(caseUnmapNull) {
 CASE(caseUnmapUnmapped) {
   int arr[] = {10, 20};
   // ERR-caseUnmapUnmapped-HOST-NEXT: OMP: Error #[[#]]: acc_unmap_data called for shared memory
+  //  ERR-caseUnmapUnmapped-OFF-NEXT: Libomptarget error: Association not found
   //  ERR-caseUnmapUnmapped-OFF-NEXT: OMP: Error #[[#]]: acc_unmap_data failed
   acc_unmap_data(arr);
   return 0;
@@ -2436,6 +2471,7 @@ CASE(caseUnmapAfterOnlyStructured) {
   int arr[] = {10, 20};
   #pragma acc data create(arr)
   // ERR-caseUnmapAfterOnlyStructured-HOST-NEXT: OMP: Error #[[#]]: acc_unmap_data called for shared memory
+  //  ERR-caseUnmapAfterOnlyStructured-OFF-NEXT: Libomptarget error: Trying to disassociate a pointer with a non-zero hold reference count
   //  ERR-caseUnmapAfterOnlyStructured-OFF-NEXT: OMP: Error #[[#]]: acc_unmap_data failed
   acc_unmap_data(arr);
   return 0;
@@ -2444,6 +2480,7 @@ CASE(caseUnmapAfterOnlyDynamic) {
   int arr[] = {10, 20};
   #pragma acc enter data create(arr)
   // ERR-caseUnmapAfterOnlyDynamic-HOST-NEXT: OMP: Error #[[#]]: acc_unmap_data called for shared memory
+  //  ERR-caseUnmapAfterOnlyDynamic-OFF-NEXT: Libomptarget error: Trying to disassociate a pointer which was not mapped via omp_target_associate_ptr
   //  ERR-caseUnmapAfterOnlyDynamic-OFF-NEXT: OMP: Error #[[#]]: acc_unmap_data failed
   acc_unmap_data(arr);
   return 0;
@@ -2462,6 +2499,7 @@ CASE(caseUnmapAfterMapAndStructured) {
   // ERR-caseUnmapAfterMapAndStructured-HOST-NEXT: OMP: Error #[[#]]: acc_map_data called for shared memory
   acc_map_data(arr, arr_dev, sizeof arr);
   #pragma acc data create(arr)
+  // ERR-caseUnmapAfterMapAndStructured-OFF-NEXT: Libomptarget error: Trying to disassociate a pointer with a non-zero hold reference count
   // ERR-caseUnmapAfterMapAndStructured-OFF-NEXT: OMP: Error #[[#]]: acc_unmap_data failed
   acc_unmap_data(arr);
   return 0;
@@ -2477,6 +2515,7 @@ CASE(caseUnmapAfterAllThree) {
   acc_map_data(arr, arr_dev, sizeof arr);
   #pragma acc enter data create(arr)
   #pragma acc data create(arr)
+  // ERR-caseUnmapAfterAllThree-OFF-NEXT: Libomptarget error: Trying to disassociate a pointer with a non-zero hold reference count
   // ERR-caseUnmapAfterAllThree-OFF-NEXT: OMP: Error #[[#]]: acc_unmap_data failed
   acc_unmap_data(arr);
   return 0;

@@ -17,6 +17,7 @@
 #include "Symbols.h"
 #include "SyntheticSections.h"
 #include "Target.h"
+#include "UnwindInfoSection.h"
 
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Memory.h"
@@ -55,20 +56,20 @@ public:
   uint64_t addr = 0;
   uint64_t fileOff = 0;
   MachHeaderSection *header = nullptr;
-  LazyBindingSection *lazyBindingSection = nullptr;
-  ExportSection *exportSection = nullptr;
   StringTableSection *stringTableSection = nullptr;
   SymtabSection *symtabSection = nullptr;
+  UnwindInfoSection *unwindInfoSection = nullptr;
 };
 
 // LC_DYLD_INFO_ONLY stores the offsets of symbol import/export information.
 class LCDyldInfo : public LoadCommand {
 public:
   LCDyldInfo(BindingSection *bindingSection,
+             WeakBindingSection *weakBindingSection,
              LazyBindingSection *lazyBindingSection,
              ExportSection *exportSection)
-      : bindingSection(bindingSection), lazyBindingSection(lazyBindingSection),
-        exportSection(exportSection) {}
+      : bindingSection(bindingSection), weakBindingSection(weakBindingSection),
+        lazyBindingSection(lazyBindingSection), exportSection(exportSection) {}
 
   uint32_t getSize() const override { return sizeof(dyld_info_command); }
 
@@ -79,6 +80,10 @@ public:
     if (bindingSection->isNeeded()) {
       c->bind_off = bindingSection->fileOff;
       c->bind_size = bindingSection->getFileSize();
+    }
+    if (weakBindingSection->isNeeded()) {
+      c->weak_bind_off = weakBindingSection->fileOff;
+      c->weak_bind_size = weakBindingSection->getFileSize();
     }
     if (lazyBindingSection->isNeeded()) {
       c->lazy_bind_off = lazyBindingSection->fileOff;
@@ -91,6 +96,7 @@ public:
   }
 
   BindingSection *bindingSection;
+  WeakBindingSection *weakBindingSection;
   LazyBindingSection *lazyBindingSection;
   ExportSection *exportSection;
 };
@@ -314,7 +320,7 @@ void Writer::scanRelocations() {
           error("undefined symbol " + s->getName() + ", referenced from " +
                 sys::path::filename(isec->file->getName()));
         else
-          target->prepareSymbolRelocation(*s, isec, r);
+          target->prepareSymbolRelocation(s, isec, r);
       }
     }
   }
@@ -322,7 +328,7 @@ void Writer::scanRelocations() {
 
 void Writer::createLoadCommands() {
   in.header->addLoadCommand(
-      make<LCDyldInfo>(in.binding, lazyBindingSection, exportSection));
+      make<LCDyldInfo>(in.binding, in.weakBinding, in.lazyBinding, in.exports));
   in.header->addLoadCommand(make<LCSymtab>(symtabSection, stringTableSection));
   in.header->addLoadCommand(make<LCDysymtab>());
   for (StringRef path : config->runtimePaths)
@@ -410,11 +416,15 @@ static int sectionOrder(OutputSection *osec) {
   StringRef segname = osec->parent->name;
   // Sections are uniquely identified by their segment + section name.
   if (segname == segment_names::text) {
-    if (osec->name == section_names::header)
-      return -1;
+    return StringSwitch<int>(osec->name)
+        .Case(section_names::header, -1)
+        .Case(section_names::unwindInfo, std::numeric_limits<int>::max() - 1)
+        .Case(section_names::ehFrame, std::numeric_limits<int>::max())
+        .Default(0);
   } else if (segname == segment_names::linkEdit) {
     return StringSwitch<int>(osec->name)
-        .Case(section_names::binding, -5)
+        .Case(section_names::binding, -6)
+        .Case(section_names::weakBinding, -5)
         .Case(section_names::lazyBinding, -4)
         .Case(section_names::export_, -3)
         .Case(section_names::symbolTable, -2)
@@ -466,10 +476,9 @@ static void sortSegmentsAndSections() {
 
 void Writer::createOutputSections() {
   // First, create hidden sections
-  lazyBindingSection = make<LazyBindingSection>();
   stringTableSection = make<StringTableSection>();
+  unwindInfoSection = make<UnwindInfoSection>(); // TODO(gkm): only when no -r
   symtabSection = make<SymtabSection>(*stringTableSection);
-  exportSection = make<ExportSection>();
 
   switch (config->outputType) {
   case MH_EXECUTE:
@@ -495,7 +504,11 @@ void Writer::createOutputSections() {
   for (const auto &it : mergedOutputSections) {
     StringRef segname = it.first.first;
     MergedOutputSection *osec = it.second;
-    getOrCreateOutputSegment(segname)->addOutputSection(osec);
+    if (unwindInfoSection && segname == segment_names::ld) {
+      assert(osec->name == section_names::compactUnwind);
+      unwindInfoSection->setCompactUnwindSection(osec);
+    } else
+      getOrCreateOutputSegment(segname)->addOutputSection(osec);
   }
 
   for (SyntheticSection *ssec : syntheticSections) {
@@ -558,6 +571,11 @@ void Writer::run() {
   if (in.stubHelper->isNeeded())
     in.stubHelper->setup();
 
+  for (const macho::Symbol *sym : symtab->getSymbols())
+    if (const auto *defined = dyn_cast<Defined>(sym))
+      if (defined->overridesWeakDef)
+        in.weakBinding->addNonWeakDefinition(defined);
+
   // Sort and assign sections to their respective segments. No more sections nor
   // segments may be created after these methods run.
   createOutputSections();
@@ -577,8 +595,9 @@ void Writer::run() {
 
   // Fill __LINKEDIT contents.
   in.binding->finalizeContents();
-  lazyBindingSection->finalizeContents();
-  exportSection->finalizeContents();
+  in.weakBinding->finalizeContents();
+  in.lazyBinding->finalizeContents();
+  in.exports->finalizeContents();
   symtabSection->finalizeContents();
 
   // Now that __LINKEDIT is filled out, do a proper calculation of its
@@ -600,6 +619,9 @@ void macho::writeResult() { Writer().run(); }
 void macho::createSyntheticSections() {
   in.header = make<MachHeaderSection>();
   in.binding = make<BindingSection>();
+  in.weakBinding = make<WeakBindingSection>();
+  in.lazyBinding = make<LazyBindingSection>();
+  in.exports = make<ExportSection>();
   in.got = make<GotSection>();
   in.tlvPointers = make<TlvPointerSection>();
   in.lazyPointers = make<LazyPointerSection>();

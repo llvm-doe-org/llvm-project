@@ -22,11 +22,13 @@
 #include <string>
 #include <vector>
 
+#include "Debug.h"
 #include "omptargetplugin.h"
 
 #ifndef TARGET_NAME
 #define TARGET_NAME Generic ELF - 64bit
 #endif
+#define DEBUG_PREFIX "TARGET " GETNAME(TARGET_NAME) " RTL"
 
 #ifndef TARGET_ELF_ID
 #define TARGET_ELF_ID 0
@@ -35,21 +37,6 @@
 #ifndef TARGET_OMP_DEVICE_T
 #define TARGET_OMP_DEVICE_T omp_device_none
 #endif
-
-#ifdef OMPTARGET_DEBUG
-static int DebugLevel = 0;
-
-#define GETNAME2(name) #name
-#define GETNAME(name) GETNAME2(name)
-#define DP(...) \
-  do { \
-    if (DebugLevel > 0) { \
-      DEBUGP("Target " GETNAME(TARGET_NAME) " RTL", __VA_ARGS__); \
-    } \
-  } while (false)
-#else // OMPTARGET_DEBUG
-#define DP(...) {}
-#endif // OMPTARGET_DEBUG
 
 #include "../../common/elf_common.c"
 
@@ -111,11 +98,6 @@ public:
   }
 
   RTLDeviceInfoTy(int32_t num_devices) {
-#ifdef OMPTARGET_DEBUG
-    if (char *envStr = getenv("LIBOMPTARGET_DEBUG")) {
-      DebugLevel = std::stoi(envStr);
-    }
-#endif // OMPTARGET_DEBUG
 
     FuncGblEntries.resize(num_devices);
   }

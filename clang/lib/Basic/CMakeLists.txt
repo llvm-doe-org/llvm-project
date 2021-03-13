@@ -48,7 +48,6 @@ add_clang_library(clangBasic
   ExpressionTraits.cpp
   FileManager.cpp
   FileSystemStatCache.cpp
-  FixedPoint.cpp
   IdentifierTable.cpp
   LangOptions.cpp
   LangStandards.cpp
@@ -63,6 +62,7 @@ add_clang_library(clangBasic
   SourceLocation.cpp
   SourceManager.cpp
   Stack.cpp
+  TargetID.cpp
   TargetInfo.cpp
   Targets.cpp
   Targets/AArch64.cpp

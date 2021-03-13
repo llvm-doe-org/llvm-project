@@ -192,8 +192,8 @@ static bool updateOperand(FoldCandidate &Fold,
   if (Fold.isImm()) {
     if (MI->getDesc().TSFlags & SIInstrFlags::IsPacked &&
         !(MI->getDesc().TSFlags & SIInstrFlags::IsMAI) &&
-        AMDGPU::isInlinableLiteralV216(static_cast<uint16_t>(Fold.ImmToFold),
-                                       ST.hasInv2PiInlineImm())) {
+        AMDGPU::isFoldableLiteralV216(Fold.ImmToFold,
+                                      ST.hasInv2PiInlineImm())) {
       // Set op_sel/op_sel_hi on this operand or bail out if op_sel is
       // already set.
       unsigned Opcode = MI->getOpcode();
@@ -209,30 +209,30 @@ static bool updateOperand(FoldCandidate &Fold,
       ModIdx = AMDGPU::getNamedOperandIdx(Opcode, ModIdx);
       MachineOperand &Mod = MI->getOperand(ModIdx);
       unsigned Val = Mod.getImm();
-      if ((Val & SISrcMods::OP_SEL_0) || !(Val & SISrcMods::OP_SEL_1))
-        return false;
-      // Only apply the following transformation if that operand requries
-      // a packed immediate.
-      switch (TII.get(Opcode).OpInfo[OpNo].OperandType) {
-      case AMDGPU::OPERAND_REG_IMM_V2FP16:
-      case AMDGPU::OPERAND_REG_IMM_V2INT16:
-      case AMDGPU::OPERAND_REG_INLINE_C_V2FP16:
-      case AMDGPU::OPERAND_REG_INLINE_C_V2INT16:
-        // If upper part is all zero we do not need op_sel_hi.
-        if (!isUInt<16>(Fold.ImmToFold)) {
-          if (!(Fold.ImmToFold & 0xffff)) {
-            Mod.setImm(Mod.getImm() | SISrcMods::OP_SEL_0);
+      if (!(Val & SISrcMods::OP_SEL_0) && (Val & SISrcMods::OP_SEL_1)) {
+        // Only apply the following transformation if that operand requries
+        // a packed immediate.
+        switch (TII.get(Opcode).OpInfo[OpNo].OperandType) {
+        case AMDGPU::OPERAND_REG_IMM_V2FP16:
+        case AMDGPU::OPERAND_REG_IMM_V2INT16:
+        case AMDGPU::OPERAND_REG_INLINE_C_V2FP16:
+        case AMDGPU::OPERAND_REG_INLINE_C_V2INT16:
+          // If upper part is all zero we do not need op_sel_hi.
+          if (!isUInt<16>(Fold.ImmToFold)) {
+            if (!(Fold.ImmToFold & 0xffff)) {
+              Mod.setImm(Mod.getImm() | SISrcMods::OP_SEL_0);
+              Mod.setImm(Mod.getImm() & ~SISrcMods::OP_SEL_1);
+              Old.ChangeToImmediate((Fold.ImmToFold >> 16) & 0xffff);
+              return true;
+            }
             Mod.setImm(Mod.getImm() & ~SISrcMods::OP_SEL_1);
-            Old.ChangeToImmediate((Fold.ImmToFold >> 16) & 0xffff);
+            Old.ChangeToImmediate(Fold.ImmToFold & 0xffff);
             return true;
           }
-          Mod.setImm(Mod.getImm() & ~SISrcMods::OP_SEL_1);
-          Old.ChangeToImmediate(Fold.ImmToFold & 0xffff);
-          return true;
+          break;
+        default:
+          break;
         }
-        break;
-      default:
-        break;
       }
     }
   }
@@ -282,9 +282,6 @@ static bool updateOperand(FoldCandidate &Fold,
   assert(!Fold.needsShrink() && "not handled");
 
   if (Fold.isImm()) {
-    // FIXME: ChangeToImmediate should probably clear the subreg flags. It's
-    // reinterpreted as TargetFlags.
-    Old.setSubReg(0);
     Old.ChangeToImmediate(Fold.ImmToFold);
     return true;
   }
@@ -358,10 +355,17 @@ static bool tryAddToFoldList(SmallVectorImpl<FoldCandidate> &FoldList,
     }
 
     // Special case for s_setreg_b32
-    if (Opc == AMDGPU::S_SETREG_B32 && OpToFold->isImm()) {
-      MI->setDesc(TII->get(AMDGPU::S_SETREG_IMM32_B32));
-      appendFoldCandidate(FoldList, MI, OpNo, OpToFold);
-      return true;
+    if (OpToFold->isImm()) {
+      unsigned ImmOpc = 0;
+      if (Opc == AMDGPU::S_SETREG_B32)
+        ImmOpc = AMDGPU::S_SETREG_IMM32_B32;
+      else if (Opc == AMDGPU::S_SETREG_B32_mode)
+        ImmOpc = AMDGPU::S_SETREG_IMM32_B32_mode;
+      if (ImmOpc) {
+        MI->setDesc(TII->get(ImmOpc));
+        appendFoldCandidate(FoldList, MI, OpNo, OpToFold);
+        return true;
+      }
     }
 
     // If we are already folding into another operand of MI, then
@@ -539,7 +543,7 @@ static bool tryToFoldACImm(const SIInstrInfo *TII,
     return false;
 
   Register UseReg = OpToFold.getReg();
-  if (!Register::isVirtualRegister(UseReg))
+  if (!UseReg.isVirtual())
     return false;
 
   if (llvm::find_if(FoldList, [UseMI](const FoldCandidate &FC) {
@@ -834,8 +838,6 @@ void SIFoldOperands::foldOperand(
 
         UseMI->setDesc(TII->get(AMDGPU::S_MOV_B32));
 
-        // FIXME: ChangeToImmediate should clear subreg
-        UseMI->getOperand(1).setSubReg(0);
         if (OpToFold.isImm())
           UseMI->getOperand(1).ChangeToImmediate(OpToFold.getImm());
         else
@@ -1006,8 +1008,7 @@ static MachineOperand *getImmOrMaterializedImm(MachineRegisterInfo &MRI,
                                                MachineOperand &Op) {
   if (Op.isReg()) {
     // If this has a subregister, it obviously is a register source.
-    if (Op.getSubReg() != AMDGPU::NoSubRegister ||
-        !Register::isVirtualRegister(Op.getReg()))
+    if (Op.getSubReg() != AMDGPU::NoSubRegister || !Op.getReg().isVirtual())
       return &Op;
 
     MachineInstr *Def = MRI.getVRegDef(Op.getReg());
@@ -1277,7 +1278,7 @@ void SIFoldOperands::foldInstOperand(MachineInstr &MI,
 
   for (FoldCandidate &Fold : FoldList) {
     assert(!Fold.isReg() || Fold.OpToFold);
-    if (Fold.isReg() && Register::isVirtualRegister(Fold.OpToFold->getReg())) {
+    if (Fold.isReg() && Fold.OpToFold->getReg().isVirtual()) {
       Register Reg = Fold.OpToFold->getReg();
       MachineInstr *DefMI = Fold.OpToFold->getParent();
       if (DefMI->readsRegister(AMDGPU::EXEC, TRI) &&
@@ -1572,7 +1573,7 @@ bool SIFoldOperands::runOnMachineFunction(MachineFunction &MF) {
       if (!FoldingImm && !OpToFold.isReg())
         continue;
 
-      if (OpToFold.isReg() && !Register::isVirtualRegister(OpToFold.getReg()))
+      if (OpToFold.isReg() && !OpToFold.getReg().isVirtual())
         continue;
 
       // Prevent folding operands backwards in the function. For example,
@@ -1582,7 +1583,7 @@ bool SIFoldOperands::runOnMachineFunction(MachineFunction &MF) {
       //    ...
       //    %vgpr0 = V_MOV_B32_e32 1, implicit %exec
       MachineOperand &Dst = MI.getOperand(0);
-      if (Dst.isReg() && !Register::isVirtualRegister(Dst.getReg()))
+      if (Dst.isReg() && !Dst.getReg().isVirtual())
         continue;
 
       foldInstOperand(MI, OpToFold);

@@ -91,6 +91,24 @@ using namespace llvm::PatternMatch;
 #define DEBUG_TYPE "local"
 
 STATISTIC(NumRemoved, "Number of unreachable basic blocks removed");
+STATISTIC(NumPHICSEs, "Number of PHI's that got CSE'd");
+
+static cl::opt<bool> PHICSEDebugHash(
+    "phicse-debug-hash",
+#ifdef EXPENSIVE_CHECKS
+    cl::init(true),
+#else
+    cl::init(false),
+#endif
+    cl::Hidden,
+    cl::desc("Perform extra assertion checking to verify that PHINodes's hash "
+             "function is well-behaved w.r.t. its isEqual predicate"));
+
+static cl::opt<unsigned> PHICSENumPHISmallSize(
+    "phicse-num-phi-smallsize", cl::init(32), cl::Hidden,
+    cl::desc(
+        "When the basic block contains not more than this number of PHI nodes, "
+        "perform a (faster!) exhaustive search instead of set-driven one."));
 
 // Max recursion depth for collectBitParts used when detecting bswap and
 // bitreverse idioms
@@ -170,6 +188,8 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
       TheOnlyDest = SI->case_begin()->getCaseSuccessor();
     }
 
+    bool Changed = false;
+
     // Figure out which case it goes to.
     for (auto i = SI->case_begin(), e = SI->case_end(); i != e;) {
       // Found case matching a constant operand?
@@ -208,6 +228,7 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
         DefaultDest->removePredecessor(ParentBB);
         i = SI->removeCase(i);
         e = SI->case_end();
+        Changed = true;
         if (DTU)
           DTU->applyUpdatesPermissive(
               {{DominatorTree::Delete, ParentBB, DefaultDest}});
@@ -296,7 +317,7 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
       SI->eraseFromParent();
       return true;
     }
-    return false;
+    return Changed;
   }
 
   if (auto *IBI = dyn_cast<IndirectBrInst>(T)) {
@@ -1117,7 +1138,39 @@ bool llvm::TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB,
   return true;
 }
 
-bool llvm::EliminateDuplicatePHINodes(BasicBlock *BB) {
+static bool EliminateDuplicatePHINodesNaiveImpl(BasicBlock *BB) {
+  // This implementation doesn't currently consider undef operands
+  // specially. Theoretically, two phis which are identical except for
+  // one having an undef where the other doesn't could be collapsed.
+
+  bool Changed = false;
+
+  // Examine each PHI.
+  // Note that increment of I must *NOT* be in the iteration_expression, since
+  // we don't want to immediately advance when we restart from the beginning.
+  for (auto I = BB->begin(); PHINode *PN = dyn_cast<PHINode>(I);) {
+    ++I;
+    // Is there an identical PHI node in this basic block?
+    // Note that we only look in the upper square's triangle,
+    // we already checked that the lower triangle PHI's aren't identical.
+    for (auto J = I; PHINode *DuplicatePN = dyn_cast<PHINode>(J); ++J) {
+      if (!DuplicatePN->isIdenticalToWhenDefined(PN))
+        continue;
+      // A duplicate. Replace this PHI with the base PHI.
+      ++NumPHICSEs;
+      DuplicatePN->replaceAllUsesWith(PN);
+      DuplicatePN->eraseFromParent();
+      Changed = true;
+
+      // The RAUW can change PHIs that we already visited.
+      I = BB->begin();
+      break; // Start over from the beginning.
+    }
+  }
+  return Changed;
+}
+
+static bool EliminateDuplicatePHINodesSetBasedImpl(BasicBlock *BB) {
   // This implementation doesn't currently consider undef operands
   // specially. Theoretically, two phis which are identical except for
   // one having an undef where the other doesn't could be collapsed.
@@ -1131,7 +1184,13 @@ bool llvm::EliminateDuplicatePHINodes(BasicBlock *BB) {
       return DenseMapInfo<PHINode *>::getTombstoneKey();
     }
 
-    static unsigned getHashValue(PHINode *PN) {
+    static bool isSentinel(PHINode *PN) {
+      return PN == getEmptyKey() || PN == getTombstoneKey();
+    }
+
+    // WARNING: this logic must be kept in sync with
+    //          Instruction::isIdenticalToWhenDefined()!
+    static unsigned getHashValueImpl(PHINode *PN) {
       // Compute a hash value on the operands. Instcombine will likely have
       // sorted them, which helps expose duplicates, but we have to check all
       // the operands to be safe in case instcombine hasn't run.
@@ -1140,16 +1199,37 @@ bool llvm::EliminateDuplicatePHINodes(BasicBlock *BB) {
           hash_combine_range(PN->block_begin(), PN->block_end())));
     }
 
-    static bool isEqual(PHINode *LHS, PHINode *RHS) {
-      if (LHS == getEmptyKey() || LHS == getTombstoneKey() ||
-          RHS == getEmptyKey() || RHS == getTombstoneKey())
+    static unsigned getHashValue(PHINode *PN) {
+#ifndef NDEBUG
+      // If -phicse-debug-hash was specified, return a constant -- this
+      // will force all hashing to collide, so we'll exhaustively search
+      // the table for a match, and the assertion in isEqual will fire if
+      // there's a bug causing equal keys to hash differently.
+      if (PHICSEDebugHash)
+        return 0;
+#endif
+      return getHashValueImpl(PN);
+    }
+
+    static bool isEqualImpl(PHINode *LHS, PHINode *RHS) {
+      if (isSentinel(LHS) || isSentinel(RHS))
         return LHS == RHS;
       return LHS->isIdenticalTo(RHS);
+    }
+
+    static bool isEqual(PHINode *LHS, PHINode *RHS) {
+      // These comparisons are nontrivial, so assert that equality implies
+      // hash equality (DenseMap demands this as an invariant).
+      bool Result = isEqualImpl(LHS, RHS);
+      assert(!Result || (isSentinel(LHS) && LHS == RHS) ||
+             getHashValueImpl(LHS) == getHashValueImpl(RHS));
+      return Result;
     }
   };
 
   // Set of unique PHINodes.
   DenseSet<PHINode *, PHIDenseMapInfo> PHISet;
+  PHISet.reserve(4 * PHICSENumPHISmallSize);
 
   // Examine each PHI.
   bool Changed = false;
@@ -1157,6 +1237,7 @@ bool llvm::EliminateDuplicatePHINodes(BasicBlock *BB) {
     auto Inserted = PHISet.insert(PN);
     if (!Inserted.second) {
       // A duplicate. Replace this PHI with its duplicate.
+      ++NumPHICSEs;
       PN->replaceAllUsesWith(*Inserted.first);
       PN->eraseFromParent();
       Changed = true;
@@ -1169,6 +1250,16 @@ bool llvm::EliminateDuplicatePHINodes(BasicBlock *BB) {
   }
 
   return Changed;
+}
+
+bool llvm::EliminateDuplicatePHINodes(BasicBlock *BB) {
+  if (
+#ifndef NDEBUG
+      !PHICSEDebugHash &&
+#endif
+      hasNItemsOrLess(BB->phis(), PHICSENumPHISmallSize))
+    return EliminateDuplicatePHINodesNaiveImpl(BB);
+  return EliminateDuplicatePHINodesSetBasedImpl(BB);
 }
 
 /// enforceKnownAlignment - If the specified pointer points to an object that
@@ -2753,10 +2844,10 @@ collectBitParts(Value *V, bool MatchBSwaps, bool MatchBitReversals,
   if (Instruction *I = dyn_cast<Instruction>(V)) {
     // If this is an or instruction, it may be an inner node of the bswap.
     if (I->getOpcode() == Instruction::Or) {
-      auto &A = collectBitParts(I->getOperand(0), MatchBSwaps,
-                                MatchBitReversals, BPS, Depth + 1);
-      auto &B = collectBitParts(I->getOperand(1), MatchBSwaps,
-                                MatchBitReversals, BPS, Depth + 1);
+      const auto &A = collectBitParts(I->getOperand(0), MatchBSwaps,
+                                      MatchBitReversals, BPS, Depth + 1);
+      const auto &B = collectBitParts(I->getOperand(1), MatchBSwaps,
+                                      MatchBitReversals, BPS, Depth + 1);
       if (!A || !B)
         return Result;
 
@@ -2788,8 +2879,8 @@ collectBitParts(Value *V, bool MatchBSwaps, bool MatchBitReversals,
       if (BitShift > BitWidth)
         return Result;
 
-      auto &Res = collectBitParts(I->getOperand(0), MatchBSwaps,
-                                  MatchBitReversals, BPS, Depth + 1);
+      const auto &Res = collectBitParts(I->getOperand(0), MatchBSwaps,
+                                        MatchBitReversals, BPS, Depth + 1);
       if (!Res)
         return Result;
       Result = Res;
@@ -2820,8 +2911,8 @@ collectBitParts(Value *V, bool MatchBSwaps, bool MatchBitReversals,
       if (!MatchBitReversals && NumMaskedBits % 8 != 0)
         return Result;
 
-      auto &Res = collectBitParts(I->getOperand(0), MatchBSwaps,
-                                  MatchBitReversals, BPS, Depth + 1);
+      const auto &Res = collectBitParts(I->getOperand(0), MatchBSwaps,
+                                        MatchBitReversals, BPS, Depth + 1);
       if (!Res)
         return Result;
       Result = Res;
@@ -2835,8 +2926,8 @@ collectBitParts(Value *V, bool MatchBSwaps, bool MatchBitReversals,
 
     // If this is a zext instruction zero extend the result.
     if (I->getOpcode() == Instruction::ZExt) {
-      auto &Res = collectBitParts(I->getOperand(0), MatchBSwaps,
-                                  MatchBitReversals, BPS, Depth + 1);
+      const auto &Res = collectBitParts(I->getOperand(0), MatchBSwaps,
+                                        MatchBitReversals, BPS, Depth + 1);
       if (!Res)
         return Result;
 

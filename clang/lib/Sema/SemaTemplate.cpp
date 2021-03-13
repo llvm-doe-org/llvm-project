@@ -6983,9 +6983,9 @@ ExprResult Sema::CheckTemplateArgument(NonTypeTemplateParmDecl *Param,
       public:
         TmplArgICEDiagnoser(QualType T) : T(T) { }
 
-        void diagnoseNotICE(Sema &S, SourceLocation Loc,
-                            SourceRange SR) override {
-          S.Diag(Loc, diag::err_template_arg_not_ice) << T << SR;
+        SemaDiagnosticBuilder diagnoseNotICE(Sema &S,
+                                             SourceLocation Loc) override {
+          return S.Diag(Loc, diag::err_template_arg_not_ice) << T;
         }
       } Diagnoser(ArgType);
 
@@ -7478,7 +7478,7 @@ Sema::BuildExpressionFromIntegralTemplateArgument(const TemplateArgument &Arg,
     // FIXME: This is a hack. We need a better way to handle substituted
     // non-type template parameters.
     E = CStyleCastExpr::Create(Context, OrigT, VK_RValue, CK_IntegralCast, E,
-                               nullptr,
+                               nullptr, CurFPFeatureOverrides(),
                                Context.getTrivialTypeSourceInfo(OrigT, Loc),
                                Loc, Loc);
   }

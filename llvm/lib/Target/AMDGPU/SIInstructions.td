@@ -264,6 +264,7 @@ class WrapTerminatorInst<SOP_Pseudo base_inst> : SPseudoInstSI<
 let WaveSizePredicate = isWave64 in {
 def S_MOV_B64_term : WrapTerminatorInst<S_MOV_B64>;
 def S_XOR_B64_term : WrapTerminatorInst<S_XOR_B64>;
+def S_OR_B64_term : WrapTerminatorInst<S_OR_B64>;
 def S_ANDN2_B64_term : WrapTerminatorInst<S_ANDN2_B64>;
 }
 
@@ -2040,8 +2041,6 @@ def : GCNPat <
                   SRCMODS.NONE, $src2)
 >;
 
-// COPY is workaround tablegen bug from multiple outputs
-// from S_LSHL_B32's multiple outputs from implicit scc def.
 def : GCNPat <
   (v2i16 (build_vector (i16 0), (i16 SReg_32:$src1))),
   (S_LSHL_B32 SReg_32:$src1, (i16 16))
@@ -2435,7 +2434,7 @@ def G_AMDGPU_BUFFER_ATOMIC_OR : BufferAtomicGenericInstruction;
 def G_AMDGPU_BUFFER_ATOMIC_XOR : BufferAtomicGenericInstruction;
 def G_AMDGPU_BUFFER_ATOMIC_INC : BufferAtomicGenericInstruction;
 def G_AMDGPU_BUFFER_ATOMIC_DEC : BufferAtomicGenericInstruction;
-def G_AMDGPU_BUFFER_ATOMIC_FADD : BufferAtomicGenericInstruction<1/*NoRtn*/>;
+def G_AMDGPU_BUFFER_ATOMIC_FADD : BufferAtomicGenericInstruction;
 
 def G_AMDGPU_BUFFER_ATOMIC_CMPSWAP : AMDGPUGenericInstruction {
   let OutOperandList = (outs type0:$dst);

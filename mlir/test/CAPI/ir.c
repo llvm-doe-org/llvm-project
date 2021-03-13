@@ -10,13 +10,17 @@
 /* RUN: mlir-capi-ir-test 2>&1 | FileCheck %s
  */
 
+#include "mlir-c/AffineMap.h"
 #include "mlir-c/IR.h"
 #include "mlir-c/Registration.h"
+#include "mlir-c/StandardAttributes.h"
 #include "mlir-c/StandardTypes.h"
 
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 void populateLoopBody(MlirContext ctx, MlirBlock loopBody,
                       MlirLocation location, MlirBlock funcBody) {
@@ -380,9 +384,334 @@ static int printStandardTypes(MlirContext ctx) {
   return 0;
 }
 
+void callbackSetFixedLengthString(const char *data, intptr_t len,
+                                  void *userData) {
+  strncpy(userData, data, len);
+}
+
+int printStandardAttributes(MlirContext ctx) {
+  MlirAttribute floating =
+      mlirFloatAttrDoubleGet(ctx, mlirF64TypeGet(ctx), 2.0);
+  if (!mlirAttributeIsAFloat(floating) ||
+      fabs(mlirFloatAttrGetValueDouble(floating) - 2.0) > 1E-6)
+    return 1;
+  mlirAttributeDump(floating);
+
+  MlirAttribute integer = mlirIntegerAttrGet(mlirIntegerTypeGet(ctx, 32), 42);
+  if (!mlirAttributeIsAInteger(integer) ||
+      mlirIntegerAttrGetValueInt(integer) != 42)
+    return 2;
+  mlirAttributeDump(integer);
+
+  MlirAttribute boolean = mlirBoolAttrGet(ctx, 1);
+  if (!mlirAttributeIsABool(boolean) || !mlirBoolAttrGetValue(boolean))
+    return 3;
+  mlirAttributeDump(boolean);
+
+  const char data[] = "abcdefghijklmnopqestuvwxyz";
+  MlirAttribute opaque =
+      mlirOpaqueAttrGet(ctx, "std", 3, data, mlirNoneTypeGet(ctx));
+  if (!mlirAttributeIsAOpaque(opaque) ||
+      strcmp("std", mlirOpaqueAttrGetDialectNamespace(opaque)))
+    return 4;
+
+  MlirStringRef opaqueData = mlirOpaqueAttrGetData(opaque);
+  if (opaqueData.length != 3 ||
+      strncmp(data, opaqueData.data, opaqueData.length))
+    return 5;
+  mlirAttributeDump(opaque);
+
+  MlirAttribute string = mlirStringAttrGet(ctx, 2, data + 3);
+  if (!mlirAttributeIsAString(string))
+    return 6;
+
+  MlirStringRef stringValue = mlirStringAttrGetValue(string);
+  if (stringValue.length != 2 ||
+      strncmp(data + 3, stringValue.data, stringValue.length))
+    return 7;
+  mlirAttributeDump(string);
+
+  MlirAttribute flatSymbolRef = mlirFlatSymbolRefAttrGet(ctx, 3, data + 5);
+  if (!mlirAttributeIsAFlatSymbolRef(flatSymbolRef))
+    return 8;
+
+  MlirStringRef flatSymbolRefValue =
+      mlirFlatSymbolRefAttrGetValue(flatSymbolRef);
+  if (flatSymbolRefValue.length != 3 ||
+      strncmp(data + 5, flatSymbolRefValue.data, flatSymbolRefValue.length))
+    return 9;
+  mlirAttributeDump(flatSymbolRef);
+
+  MlirAttribute symbols[] = {flatSymbolRef, flatSymbolRef};
+  MlirAttribute symbolRef = mlirSymbolRefAttrGet(ctx, 2, data + 8, 2, symbols);
+  if (!mlirAttributeIsASymbolRef(symbolRef) ||
+      mlirSymbolRefAttrGetNumNestedReferences(symbolRef) != 2 ||
+      !mlirAttributeEqual(mlirSymbolRefAttrGetNestedReference(symbolRef, 0),
+                          flatSymbolRef) ||
+      !mlirAttributeEqual(mlirSymbolRefAttrGetNestedReference(symbolRef, 1),
+                          flatSymbolRef))
+    return 10;
+
+  MlirStringRef symbolRefLeaf = mlirSymbolRefAttrGetLeafReference(symbolRef);
+  MlirStringRef symbolRefRoot = mlirSymbolRefAttrGetRootReference(symbolRef);
+  if (symbolRefLeaf.length != 3 ||
+      strncmp(data + 5, symbolRefLeaf.data, symbolRefLeaf.length) ||
+      symbolRefRoot.length != 2 ||
+      strncmp(data + 8, symbolRefRoot.data, symbolRefRoot.length))
+    return 11;
+  mlirAttributeDump(symbolRef);
+
+  MlirAttribute type = mlirTypeAttrGet(mlirF32TypeGet(ctx));
+  if (!mlirAttributeIsAType(type) ||
+      !mlirTypeEqual(mlirF32TypeGet(ctx), mlirTypeAttrGetValue(type)))
+    return 12;
+  mlirAttributeDump(type);
+
+  MlirAttribute unit = mlirUnitAttrGet(ctx);
+  if (!mlirAttributeIsAUnit(unit))
+    return 13;
+  mlirAttributeDump(unit);
+
+  int64_t shape[] = {1, 2};
+
+  int bools[] = {0, 1};
+  uint32_t uints32[] = {0u, 1u};
+  int32_t ints32[] = {0, 1};
+  uint64_t uints64[] = {0u, 1u};
+  int64_t ints64[] = {0, 1};
+  float floats[] = {0.0f, 1.0f};
+  double doubles[] = {0.0, 1.0};
+  MlirAttribute boolElements = mlirDenseElementsAttrBoolGet(
+      mlirRankedTensorTypeGet(2, shape, mlirIntegerTypeGet(ctx, 1)), 2, bools);
+  MlirAttribute uint32Elements = mlirDenseElementsAttrUInt32Get(
+      mlirRankedTensorTypeGet(2, shape, mlirIntegerTypeUnsignedGet(ctx, 32)), 2,
+      uints32);
+  MlirAttribute int32Elements = mlirDenseElementsAttrInt32Get(
+      mlirRankedTensorTypeGet(2, shape, mlirIntegerTypeGet(ctx, 32)), 2,
+      ints32);
+  MlirAttribute uint64Elements = mlirDenseElementsAttrUInt64Get(
+      mlirRankedTensorTypeGet(2, shape, mlirIntegerTypeUnsignedGet(ctx, 64)), 2,
+      uints64);
+  MlirAttribute int64Elements = mlirDenseElementsAttrInt64Get(
+      mlirRankedTensorTypeGet(2, shape, mlirIntegerTypeGet(ctx, 64)), 2,
+      ints64);
+  MlirAttribute floatElements = mlirDenseElementsAttrFloatGet(
+      mlirRankedTensorTypeGet(2, shape, mlirF32TypeGet(ctx)), 2, floats);
+  MlirAttribute doubleElements = mlirDenseElementsAttrDoubleGet(
+      mlirRankedTensorTypeGet(2, shape, mlirF64TypeGet(ctx)), 2, doubles);
+
+  if (!mlirAttributeIsADenseElements(boolElements) ||
+      !mlirAttributeIsADenseElements(uint32Elements) ||
+      !mlirAttributeIsADenseElements(int32Elements) ||
+      !mlirAttributeIsADenseElements(uint64Elements) ||
+      !mlirAttributeIsADenseElements(int64Elements) ||
+      !mlirAttributeIsADenseElements(floatElements) ||
+      !mlirAttributeIsADenseElements(doubleElements))
+    return 14;
+
+  if (mlirDenseElementsAttrGetBoolValue(boolElements, 1) != 1 ||
+      mlirDenseElementsAttrGetUInt32Value(uint32Elements, 1) != 1 ||
+      mlirDenseElementsAttrGetInt32Value(int32Elements, 1) != 1 ||
+      mlirDenseElementsAttrGetUInt64Value(uint64Elements, 1) != 1 ||
+      mlirDenseElementsAttrGetInt64Value(int64Elements, 1) != 1 ||
+      fabsf(mlirDenseElementsAttrGetFloatValue(floatElements, 1) - 1.0f) >
+          1E-6f ||
+      fabs(mlirDenseElementsAttrGetDoubleValue(doubleElements, 1) - 1.0) > 1E-6)
+    return 15;
+
+  mlirAttributeDump(boolElements);
+  mlirAttributeDump(uint32Elements);
+  mlirAttributeDump(int32Elements);
+  mlirAttributeDump(uint64Elements);
+  mlirAttributeDump(int64Elements);
+  mlirAttributeDump(floatElements);
+  mlirAttributeDump(doubleElements);
+
+  MlirAttribute splatBool = mlirDenseElementsAttrBoolSplatGet(
+      mlirRankedTensorTypeGet(2, shape, mlirIntegerTypeGet(ctx, 1)), 1);
+  MlirAttribute splatUInt32 = mlirDenseElementsAttrUInt32SplatGet(
+      mlirRankedTensorTypeGet(2, shape, mlirIntegerTypeGet(ctx, 32)), 1);
+  MlirAttribute splatInt32 = mlirDenseElementsAttrInt32SplatGet(
+      mlirRankedTensorTypeGet(2, shape, mlirIntegerTypeGet(ctx, 32)), 1);
+  MlirAttribute splatUInt64 = mlirDenseElementsAttrUInt64SplatGet(
+      mlirRankedTensorTypeGet(2, shape, mlirIntegerTypeGet(ctx, 64)), 1);
+  MlirAttribute splatInt64 = mlirDenseElementsAttrInt64SplatGet(
+      mlirRankedTensorTypeGet(2, shape, mlirIntegerTypeGet(ctx, 64)), 1);
+  MlirAttribute splatFloat = mlirDenseElementsAttrFloatSplatGet(
+      mlirRankedTensorTypeGet(2, shape, mlirF32TypeGet(ctx)), 1.0f);
+  MlirAttribute splatDouble = mlirDenseElementsAttrDoubleSplatGet(
+      mlirRankedTensorTypeGet(2, shape, mlirF64TypeGet(ctx)), 1.0);
+
+  if (!mlirAttributeIsADenseElements(splatBool) ||
+      !mlirDenseElementsAttrIsSplat(splatBool) ||
+      !mlirAttributeIsADenseElements(splatUInt32) ||
+      !mlirDenseElementsAttrIsSplat(splatUInt32) ||
+      !mlirAttributeIsADenseElements(splatInt32) ||
+      !mlirDenseElementsAttrIsSplat(splatInt32) ||
+      !mlirAttributeIsADenseElements(splatUInt64) ||
+      !mlirDenseElementsAttrIsSplat(splatUInt64) ||
+      !mlirAttributeIsADenseElements(splatInt64) ||
+      !mlirDenseElementsAttrIsSplat(splatInt64) ||
+      !mlirAttributeIsADenseElements(splatFloat) ||
+      !mlirDenseElementsAttrIsSplat(splatFloat) ||
+      !mlirAttributeIsADenseElements(splatDouble) ||
+      !mlirDenseElementsAttrIsSplat(splatDouble))
+    return 16;
+
+  if (mlirDenseElementsAttrGetBoolSplatValue(splatBool) != 1 ||
+      mlirDenseElementsAttrGetUInt32SplatValue(splatUInt32) != 1 ||
+      mlirDenseElementsAttrGetInt32SplatValue(splatInt32) != 1 ||
+      mlirDenseElementsAttrGetUInt64SplatValue(splatUInt64) != 1 ||
+      mlirDenseElementsAttrGetInt64SplatValue(splatInt64) != 1 ||
+      fabsf(mlirDenseElementsAttrGetFloatSplatValue(splatFloat) - 1.0f) >
+          1E-6f ||
+      fabs(mlirDenseElementsAttrGetDoubleSplatValue(splatDouble) - 1.0) > 1E-6)
+    return 17;
+
+  mlirAttributeDump(splatBool);
+  mlirAttributeDump(splatUInt32);
+  mlirAttributeDump(splatInt32);
+  mlirAttributeDump(splatUInt64);
+  mlirAttributeDump(splatInt64);
+  mlirAttributeDump(splatFloat);
+  mlirAttributeDump(splatDouble);
+
+  mlirAttributeDump(mlirElementsAttrGetValue(floatElements, 2, uints64));
+  mlirAttributeDump(mlirElementsAttrGetValue(doubleElements, 2, uints64));
+
+  int64_t indices[] = {4, 7};
+  int64_t two = 2;
+  MlirAttribute indicesAttr = mlirDenseElementsAttrInt64Get(
+      mlirRankedTensorTypeGet(1, &two, mlirIntegerTypeGet(ctx, 64)), 2,
+      indices);
+  MlirAttribute valuesAttr = mlirDenseElementsAttrFloatGet(
+      mlirRankedTensorTypeGet(1, &two, mlirF32TypeGet(ctx)), 2, floats);
+  MlirAttribute sparseAttr = mlirSparseElementsAttribute(
+      mlirRankedTensorTypeGet(2, shape, mlirF32TypeGet(ctx)), indicesAttr,
+      valuesAttr);
+  mlirAttributeDump(sparseAttr);
+
+  return 0;
+}
+
+int printAffineMap(MlirContext ctx) {
+  MlirAffineMap emptyAffineMap = mlirAffineMapEmptyGet(ctx);
+  MlirAffineMap affineMap = mlirAffineMapGet(ctx, 3, 2);
+  MlirAffineMap constAffineMap = mlirAffineMapConstantGet(ctx, 2);
+  MlirAffineMap multiDimIdentityAffineMap =
+      mlirAffineMapMultiDimIdentityGet(ctx, 3);
+  MlirAffineMap minorIdentityAffineMap =
+      mlirAffineMapMinorIdentityGet(ctx, 3, 2);
+  unsigned permutation[] = {1, 2, 0};
+  MlirAffineMap permutationAffineMap = mlirAffineMapPermutationGet(
+      ctx, sizeof(permutation) / sizeof(unsigned), permutation);
+
+  mlirAffineMapDump(emptyAffineMap);
+  mlirAffineMapDump(affineMap);
+  mlirAffineMapDump(constAffineMap);
+  mlirAffineMapDump(multiDimIdentityAffineMap);
+  mlirAffineMapDump(minorIdentityAffineMap);
+  mlirAffineMapDump(permutationAffineMap);
+
+  if (!mlirAffineMapIsIdentity(emptyAffineMap) ||
+      mlirAffineMapIsIdentity(affineMap) ||
+      mlirAffineMapIsIdentity(constAffineMap) ||
+      !mlirAffineMapIsIdentity(multiDimIdentityAffineMap) ||
+      mlirAffineMapIsIdentity(minorIdentityAffineMap) ||
+      mlirAffineMapIsIdentity(permutationAffineMap))
+    return 1;
+
+  if (!mlirAffineMapIsMinorIdentity(emptyAffineMap) ||
+      mlirAffineMapIsMinorIdentity(affineMap) ||
+      !mlirAffineMapIsMinorIdentity(multiDimIdentityAffineMap) ||
+      !mlirAffineMapIsMinorIdentity(minorIdentityAffineMap) ||
+      mlirAffineMapIsMinorIdentity(permutationAffineMap))
+    return 2;
+
+  if (!mlirAffineMapIsEmpty(emptyAffineMap) ||
+      mlirAffineMapIsEmpty(affineMap) ||
+      mlirAffineMapIsEmpty(constAffineMap) ||
+      mlirAffineMapIsEmpty(multiDimIdentityAffineMap) ||
+      mlirAffineMapIsEmpty(minorIdentityAffineMap) ||
+      mlirAffineMapIsEmpty(permutationAffineMap))
+    return 3;
+
+  if (mlirAffineMapIsSingleConstant(emptyAffineMap) ||
+      mlirAffineMapIsSingleConstant(affineMap) ||
+      !mlirAffineMapIsSingleConstant(constAffineMap) ||
+      mlirAffineMapIsSingleConstant(multiDimIdentityAffineMap) ||
+      mlirAffineMapIsSingleConstant(minorIdentityAffineMap) ||
+      mlirAffineMapIsSingleConstant(permutationAffineMap))
+    return 4;
+
+  if (mlirAffineMapGetSingleConstantResult(constAffineMap) != 2)
+    return 5;
+
+  if (mlirAffineMapGetNumDims(emptyAffineMap) != 0 ||
+      mlirAffineMapGetNumDims(affineMap) != 3 ||
+      mlirAffineMapGetNumDims(constAffineMap) != 0 ||
+      mlirAffineMapGetNumDims(multiDimIdentityAffineMap) != 3 ||
+      mlirAffineMapGetNumDims(minorIdentityAffineMap) != 3 ||
+      mlirAffineMapGetNumDims(permutationAffineMap) != 3)
+    return 6;
+
+  if (mlirAffineMapGetNumSymbols(emptyAffineMap) != 0 ||
+      mlirAffineMapGetNumSymbols(affineMap) != 2 ||
+      mlirAffineMapGetNumSymbols(constAffineMap) != 0 ||
+      mlirAffineMapGetNumSymbols(multiDimIdentityAffineMap) != 0 ||
+      mlirAffineMapGetNumSymbols(minorIdentityAffineMap) != 0 ||
+      mlirAffineMapGetNumSymbols(permutationAffineMap) != 0)
+    return 7;
+
+  if (mlirAffineMapGetNumResults(emptyAffineMap) != 0 ||
+      mlirAffineMapGetNumResults(affineMap) != 0 ||
+      mlirAffineMapGetNumResults(constAffineMap) != 1 ||
+      mlirAffineMapGetNumResults(multiDimIdentityAffineMap) != 3 ||
+      mlirAffineMapGetNumResults(minorIdentityAffineMap) != 2 ||
+      mlirAffineMapGetNumResults(permutationAffineMap) != 3)
+    return 8;
+
+  if (mlirAffineMapGetNumInputs(emptyAffineMap) != 0 ||
+      mlirAffineMapGetNumInputs(affineMap) != 5 ||
+      mlirAffineMapGetNumInputs(constAffineMap) != 0 ||
+      mlirAffineMapGetNumInputs(multiDimIdentityAffineMap) != 3 ||
+      mlirAffineMapGetNumInputs(minorIdentityAffineMap) != 3 ||
+      mlirAffineMapGetNumInputs(permutationAffineMap) != 3)
+    return 9;
+
+  if (!mlirAffineMapIsProjectedPermutation(emptyAffineMap) ||
+      !mlirAffineMapIsPermutation(emptyAffineMap) ||
+      mlirAffineMapIsProjectedPermutation(affineMap) ||
+      mlirAffineMapIsPermutation(affineMap) ||
+      mlirAffineMapIsProjectedPermutation(constAffineMap) ||
+      mlirAffineMapIsPermutation(constAffineMap) ||
+      !mlirAffineMapIsProjectedPermutation(multiDimIdentityAffineMap) ||
+      !mlirAffineMapIsPermutation(multiDimIdentityAffineMap) ||
+      !mlirAffineMapIsProjectedPermutation(minorIdentityAffineMap) ||
+      mlirAffineMapIsPermutation(minorIdentityAffineMap) ||
+      !mlirAffineMapIsProjectedPermutation(permutationAffineMap) ||
+      !mlirAffineMapIsPermutation(permutationAffineMap))
+    return 10;
+
+  intptr_t sub[] = {1};
+
+  MlirAffineMap subMap = mlirAffineMapGetSubMap(
+      multiDimIdentityAffineMap, sizeof(sub) / sizeof(intptr_t), sub);
+  MlirAffineMap majorSubMap =
+      mlirAffineMapGetMajorSubMap(multiDimIdentityAffineMap, 1);
+  MlirAffineMap minorSubMap =
+      mlirAffineMapGetMinorSubMap(multiDimIdentityAffineMap, 1);
+
+  mlirAffineMapDump(subMap);
+  mlirAffineMapDump(majorSubMap);
+  mlirAffineMapDump(minorSubMap);
+
+  return 0;
+}
+
 int main() {
-  mlirRegisterAllDialects();
   MlirContext ctx = mlirContextCreate();
+  mlirRegisterAllDialects(ctx);
   MlirLocation location = mlirLocationUnknownGet(ctx);
 
   MlirModule moduleOp = makeAdd(ctx, location);
@@ -454,8 +783,58 @@ int main() {
   // CHECK: tuple<memref<*xf32, 4>, f32>
   // CHECK: 0
   // clang-format on
-  fprintf(stderr, "@types");
+  fprintf(stderr, "@types\n");
   int errcode = printStandardTypes(ctx);
+  fprintf(stderr, "%d\n", errcode);
+
+  // clang-format off
+  // CHECK-LABEL: @attrs
+  // CHECK: 2.000000e+00 : f64
+  // CHECK: 42 : i32
+  // CHECK: true
+  // CHECK: #std.abc
+  // CHECK: "de"
+  // CHECK: @fgh
+  // CHECK: @ij::@fgh::@fgh
+  // CHECK: f32
+  // CHECK: unit
+  // CHECK: dense<{{\[}}[false, true]]> : tensor<1x2xi1>
+  // CHECK: dense<{{\[}}[0, 1]]> : tensor<1x2xui32>
+  // CHECK: dense<{{\[}}[0, 1]]> : tensor<1x2xi32>
+  // CHECK: dense<{{\[}}[0, 1]]> : tensor<1x2xui64>
+  // CHECK: dense<{{\[}}[0, 1]]> : tensor<1x2xi64>
+  // CHECK: dense<{{\[}}[0.000000e+00, 1.000000e+00]]> : tensor<1x2xf32>
+  // CHECK: dense<{{\[}}[0.000000e+00, 1.000000e+00]]> : tensor<1x2xf64>
+  // CHECK: dense<true> : tensor<1x2xi1>
+  // CHECK: dense<1> : tensor<1x2xi32>
+  // CHECK: dense<1> : tensor<1x2xi32>
+  // CHECK: dense<1> : tensor<1x2xi64>
+  // CHECK: dense<1> : tensor<1x2xi64>
+  // CHECK: dense<1.000000e+00> : tensor<1x2xf32>
+  // CHECK: dense<1.000000e+00> : tensor<1x2xf64>
+  // CHECK: 1.000000e+00 : f32
+  // CHECK: 1.000000e+00 : f64
+  // CHECK: sparse<[4, 7], [0.000000e+00, 1.000000e+00]> : tensor<1x2xf32>
+  // clang-format on
+  fprintf(stderr, "@attrs\n");
+  errcode = printStandardAttributes(ctx);
+  fprintf(stderr, "%d\n", errcode);
+
+  // clang-format off
+  // CHECK-LABEL: @affineMap
+  // CHECK: () -> ()
+  // CHECK: (d0, d1, d2)[s0, s1] -> ()
+  // CHECK: () -> (2)
+  // CHECK: (d0, d1, d2) -> (d0, d1, d2)
+  // CHECK: (d0, d1, d2) -> (d1, d2)
+  // CHECK: (d0, d1, d2) -> (d1, d2, d0)
+  // CHECK: (d0, d1, d2) -> (d1)
+  // CHECK: (d0, d1, d2) -> (d0)
+  // CHECK: (d0, d1, d2) -> (d2)
+  // CHECK: 0
+  // clang-format on
+  fprintf(stderr, "@affineMap\n");
+  errcode = printAffineMap(ctx);
   fprintf(stderr, "%d\n", errcode);
 
   mlirContextDestroy(ctx);

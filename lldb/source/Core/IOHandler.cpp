@@ -18,6 +18,7 @@
 #include "lldb/Host/Config.h"
 #include "lldb/Host/File.h"
 #include "lldb/Utility/Predicate.h"
+#include "lldb/Utility/ReproducerProvider.h"
 #include "lldb/Utility/Status.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/StringList.h"
@@ -102,11 +103,11 @@ FILE *IOHandler::GetErrorFILE() {
   return (m_error_sp ? m_error_sp->GetFile().GetStream() : nullptr);
 }
 
-FileSP &IOHandler::GetInputFileSP() { return m_input_sp; }
+FileSP IOHandler::GetInputFileSP() { return m_input_sp; }
 
-StreamFileSP &IOHandler::GetOutputStreamFileSP() { return m_output_sp; }
+StreamFileSP IOHandler::GetOutputStreamFileSP() { return m_output_sp; }
 
-StreamFileSP &IOHandler::GetErrorStreamFileSP() { return m_error_sp; }
+StreamFileSP IOHandler::GetErrorStreamFileSP() { return m_error_sp; }
 
 bool IOHandler::GetIsInteractive() {
   return GetInputFileSP() ? GetInputFileSP()->GetIsInteractive() : false;

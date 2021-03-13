@@ -273,20 +273,7 @@ getOrCreateJumpTableInfo(unsigned EntryKind) {
 }
 
 DenormalMode MachineFunction::getDenormalMode(const fltSemantics &FPType) const {
-  if (&FPType == &APFloat::IEEEsingle()) {
-    Attribute Attr = F.getFnAttribute("denormal-fp-math-f32");
-    StringRef Val = Attr.getValueAsString();
-    if (!Val.empty())
-      return parseDenormalFPAttribute(Val);
-
-    // If the f32 variant of the attribute isn't specified, try to use the
-    // generic one.
-  }
-
-  // TODO: Should probably avoid the connection to the IR and store directly
-  // in the MachineFunction.
-  Attribute Attr = F.getFnAttribute("denormal-fp-math");
-  return parseDenormalFPAttribute(Attr.getValueAsString());
+  return F.getDenormalMode(FPType);
 }
 
 /// Should we be emitting segmented stack stuff for the function
@@ -339,33 +326,6 @@ void MachineFunction::RenumberBlocks(MachineBasicBlock *MBB) {
   // numbering, shrink MBBNumbering now.
   assert(BlockNo <= MBBNumbering.size() && "Mismatch!");
   MBBNumbering.resize(BlockNo);
-}
-
-/// This is used with -fbasic-block-sections or -fbasicblock-labels option.
-/// A unary encoding of basic block labels is done to keep ".strtab" sizes
-/// small.
-void MachineFunction::createBBLabels() {
-  const TargetInstrInfo *TII = getSubtarget().getInstrInfo();
-  this->BBSectionsSymbolPrefix.resize(getNumBlockIDs(), 'a');
-  for (auto MBBI = begin(), E = end(); MBBI != E; ++MBBI) {
-    assert(
-        (MBBI->getNumber() >= 0 && MBBI->getNumber() < (int)getNumBlockIDs()) &&
-        "BasicBlock number was out of range!");
-    // 'a' - Normal block.
-    // 'r' - Return block.
-    // 'l' - Landing Pad.
-    // 'L' - Return and landing pad.
-    bool isEHPad = MBBI->isEHPad();
-    bool isRetBlock = MBBI->isReturnBlock() && !TII->isTailCall(MBBI->back());
-    char type = 'a';
-    if (isEHPad && isRetBlock)
-      type = 'L';
-    else if (isEHPad)
-      type = 'l';
-    else if (isRetBlock)
-      type = 'r';
-    BBSectionsSymbolPrefix[MBBI->getNumber()] = type;
-  }
 }
 
 /// This method iterates over the basic blocks and assigns their IsBeginSection
@@ -492,9 +452,11 @@ MachineFunction::getMachineMemOperand(const MachineMemOperand *MMO,
                         ? commonAlignment(MMO->getBaseAlign(), Offset)
                         : MMO->getBaseAlign();
 
+  // Do not preserve ranges, since we don't necessarily know what the high bits
+  // are anymore.
   return new (Allocator)
       MachineMemOperand(PtrInfo.getWithOffset(Offset), MMO->getFlags(), Size,
-                        Alignment, AAMDNodes(), nullptr, MMO->getSyncScopeID(),
+                        Alignment, MMO->getAAInfo(), nullptr, MMO->getSyncScopeID(),
                         MMO->getOrdering(), MMO->getFailureOrdering());
 }
 
