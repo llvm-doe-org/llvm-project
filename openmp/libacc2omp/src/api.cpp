@@ -363,18 +363,15 @@ acc_device_t acc_get_device_type() {
   // "If the device type has not yet been selected, the value acc_device_none
   // may be returned."  We are not sure how this situation can arise.
   int DevNumOMP = getCurrentDevice();
-  // The omp_device_none or acc_device_none case here occurs when omp_device_t
-  // or acc_device_t doesn't yet have an enumerator for the current device's
-  // type.
-  omp_device_t DevTypeOMP = omp_get_device_type(DevNumOMP);
-  if (DevTypeOMP == omp_device_none)
-    return acc_device_not_host;
-  acc_device_t DevTypeACC = acc2omp_get_acc_device_t(DevTypeOMP);
+  // acc2omp_get_acc_device_t returns acc_device_none when acc_device_t or
+  // omp_device_t doesn't yet have an enumerator for the current device's type
+  // (in the latter case, omp_get_device_type returns omp_device_none).
+  acc_device_t DevTypeACC =
+      acc2omp_get_acc_device_t(omp_get_device_type(DevNumOMP));
   if (DevTypeACC == acc_device_none)
     return acc_device_not_host;
   // Must be acc_device_host or an architecture-specific enumerator for which
-  // omp_device_t does have a corresponding architecture-specific enumerator,
-  // DevTypeOMP.
+  // omp_device_t does have a corresponding architecture-specific enumerator.
   return DevTypeACC;
 }
 

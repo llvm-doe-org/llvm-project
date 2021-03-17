@@ -219,6 +219,8 @@ void acc2omp_assert(int Cond, const char *Msg, const char *File, int Line);
 /// \c acc_device_default, \c acc_device_not_host, \c acc_device_current, or any
 /// \c acc_device_t architecture-specific enumerator for which the OpenMP
 /// implementation currently defines no corresponding \c omp_device_t
+/// architecture-specific enumerator.  Return \c omp_device_host if
+/// \p DevTypeACC is \c acc_device_host.  Otherwise, return an \c omp_device_t
 /// architecture-specific enumerator.
 ///
 /// This function belongs in the libacc2omp backend instead of in the OpenMP or
@@ -232,7 +234,9 @@ omp_device_t acc2omp_get_omp_device_t(acc_device_t DevTypeACC);
 /// Return the \c acc_device_t that corresponds to \p DevTypeOMP.  Return
 /// \c acc_device_none if \p DevTypeOMP is \c omp_device_none or any
 /// \c omp_device_t architecture-specific enumerator for which libacc2omp
-/// currently defines no corresponding \c acc_device_t enumerator.
+/// currently defines no corresponding \c acc_device_t enumerator.  Return
+/// \c acc_device_host if \p DevTypeOMP is \c omp_device_host.  Otherwise,
+/// return an \c acc_device_t architecture-specific enumerator.
 ///
 /// Also see comments on \c acc2omp_get_omp_device_t.
 acc_device_t acc2omp_get_acc_device_t(omp_device_t DevTypeOMP);
