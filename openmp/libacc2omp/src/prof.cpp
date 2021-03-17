@@ -151,18 +151,37 @@ static const char *acc_get_event_name(acc_event_t event) {
 #define valid_bytes(Type, Field) \
   (offsetof(Type, Field) + sizeof ((Type*)0)->Field)
 
-static acc_prof_info acc_get_prof_info(acc_event_t event_type,
-                                       int device_number) {
+static acc_prof_info acc_get_prof_info(acc_event_t event_type, int device_num) {
   acc_prof_info ret;
   ret.event_type = event_type;
   ret.version = ACC2OMP_OPENACC_VERSION;
-  // TODO: For consistency with NVIDIA's implementation, we should return, for
-  // example, acc_device_nvidia when offloading to nvptx64.  Will an OpenMP/OMPT
-  // extension be needed to make this information available?  Likewise within
-  // acc_get_api_info.
-  ret.device_type = device_number == omp_get_initial_device()
-                    ? acc_device_host : acc_device_not_host;
-  ret.device_number = device_number;
+  // OpenACC 3.1, sec. 5.2.1 "First Argument: General Information", L4091-4095:
+  // - "acc_device_t device_type - The device type corresponding to this event.
+  //   The datatype is acc_device_t, an enumeration type of all the supported
+  //   device types, defined in openacc.h."
+  // - "int device_number - The device number. Each device is numbered,
+  //   typically starting at device zero. For applications that use more than
+  //   one device type, the device numbers may be unique across all devices or
+  //   may be unique only across all devices of the same device type."
+  //
+  // For consistency with our OpenACC Runtime Library Routines, our
+  // device_number numbers devices uniquely per value of device_type, so
+  // device_number=0 always for device_type=acc_device_host.  nvc 21.1-0 also
+  // appears to follow that approach.
+  //
+  // TODO: For now, the only device_type values we use here are acc_device_host
+  // and acc_device_not_host, so the device number in the latter case is the
+  // OpenMP device number.  For further consistency with NVIDIA's
+  // implementation, we should use, for example, acc_device_nvidia when
+  // offloading to nvptx64.  This will use our OpenMP extension,
+  // omp_get_device_type.  Likewise within acc_get_api_info.
+  if (device_num == omp_get_initial_device()) {
+    ret.device_type = acc_device_host;
+    ret.device_number = 0;
+  } else {
+    ret.device_type = acc_device_not_host;
+    ret.device_number = device_num;
+  }
   // FIXME: We need to find the right way to compute this.
   ret.thread_id = 0;
   // FIXME: We currently don't support the async clause, so this is currently
@@ -284,14 +303,15 @@ static acc_event_info acc_get_launch_event_info(acc_event_t event_type) {
   return ret;
 }
 
-static acc_api_info acc_get_api_info(int device_number) {
+static acc_api_info acc_get_api_info(int device_num) {
   acc_api_info ret;
   // FIXME: We don't support any device-specific APIs yet in remaining fields,
   // so acc_device_api_none seems like the right thing for now.
   ret.device_api = acc_device_api_none;
   // TODO: See todo for device_type within acc_get_prof_info.
-  ret.device_type = device_number == omp_get_initial_device()
-                    ? acc_device_host : acc_device_not_host;
+  ret.device_type = device_num == omp_get_initial_device()
+                        ? acc_device_host
+                        : acc_device_not_host;
   // FIXME: How do we choose our vendor identifier?  Does Clang's OpenMP
   // implementation have something?
   //ret.vendor = 0;

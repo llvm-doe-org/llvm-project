@@ -61,11 +61,6 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  // CHECK:host dev = [[HOST_DEV:[0-9]+]]
-  // CHECK-NOT: {{.}}
-  // FIXME: The host device should always be 0 for OpenACC.
-  printf("host dev = %d\n", acc_get_num_devices(acc_device_not_host));
-
   // Put some info about the devices in the output to help with debugging.
   //
   //      CHECK:devTypeInit = acc_device_{{.*}}
@@ -139,7 +134,7 @@ int main(int argc, char *argv[]) {
   // CHECK-NEXT:acc_ev_alloc
   // CHECK-NEXT:  acc_prof_info
   // CHECK-NEXT:    event_type=8, valid_bytes=72, version=[[VERSION]],
-  //  HOST-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
+  //  HOST-NEXT:    device_type=acc_device_host, device_number=0,
   //   OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // CHECK-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // CHECK-NEXT:    src_file=(null), func_name=acc_malloc,
@@ -401,7 +396,7 @@ int main(int argc, char *argv[]) {
   // CHECK-NEXT:acc_ev_free
   // CHECK-NEXT:  acc_prof_info
   // CHECK-NEXT:    event_type=9, valid_bytes=72, version=[[VERSION]],
-  //  HOST-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
+  //  HOST-NEXT:    device_type=acc_device_host, device_number=0,
   //   OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // CHECK-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // CHECK-NEXT:    src_file=(null), func_name=acc_free,

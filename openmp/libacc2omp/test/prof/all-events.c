@@ -186,11 +186,8 @@ int main() {
   int notPresent0[10];
   int notPresent1[11];
 
-  //      CHECK:host dev = [[HOST_DEV:[0-9]+]]
-  // CHECK-NEXT:arr0 host ptr = [[ARR0_HOST_PTR:0x[a-z0-9]+]]
+  //      CHECK:arr0 host ptr = [[ARR0_HOST_PTR:0x[a-z0-9]+]]
   // CHECK-NEXT:arr1 host ptr = [[ARR1_HOST_PTR:0x[a-z0-9]+]]
-  // FIXME: The host device should always be 0 for OpenACC.
-  printf("host dev = %d\n", acc_get_num_devices(acc_device_not_host));
   printf("arr0 host ptr = %p\n", arr0);
   printf("arr1 host ptr = %p\n", arr1);
 
@@ -235,7 +232,7 @@ int main() {
   // CHECK-PAR-NEXT:acc_ev_compute_construct_start
   // CHECK-PAR-NEXT:  acc_prof_info
   // CHECK-PAR-NEXT:    event_type=16, valid_bytes=72, version=[[VERSION]],
-  //  HOST-PAR-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
+  //  HOST-PAR-NEXT:    device_type=acc_device_host, device_number=0,
   //   OFF-PAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // CHECK-PAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // CHECK-PAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
@@ -466,7 +463,7 @@ int main() {
   // CHECK-DATAPAR-NEXT:acc_ev_compute_construct_start
   // CHECK-DATAPAR-NEXT:  acc_prof_info
   // CHECK-DATAPAR-NEXT:    event_type=16, valid_bytes=72, version=[[VERSION]],
-  //  HOST-DATAPAR-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
+  //  HOST-DATAPAR-NEXT:    device_type=acc_device_host, device_number=0,
   //   OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // CHECK-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // CHECK-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
@@ -516,7 +513,7 @@ int main() {
   // CHECK-HASPAR-NEXT:acc_ev_enqueue_launch_start
   // CHECK-HASPAR-NEXT:  acc_prof_info
   // CHECK-HASPAR-NEXT:    event_type=18, valid_bytes=72, version=[[VERSION]],
-  //  HOST-HASPAR-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
+  //  HOST-HASPAR-NEXT:    device_type=acc_device_host, device_number=0,
   //   OFF-HASPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // CHECK-HASPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // CHECK-HASPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
@@ -534,7 +531,7 @@ int main() {
   // CHECK-HASPAR-NEXT:acc_ev_enqueue_launch_end
   // CHECK-HASPAR-NEXT:  acc_prof_info
   // CHECK-HASPAR-NEXT:    event_type=19, valid_bytes=72, version=[[VERSION]],
-  //  HOST-HASPAR-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
+  //  HOST-HASPAR-NEXT:    device_type=acc_device_host, device_number=0,
   //   OFF-HASPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // CHECK-HASPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // CHECK-HASPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
@@ -647,7 +644,7 @@ int main() {
   // CHECK-DATAPAR-NEXT:acc_ev_compute_construct_end
   // CHECK-DATAPAR-NEXT:  acc_prof_info
   // CHECK-DATAPAR-NEXT:    event_type=17, valid_bytes=72, version=[[VERSION]],
-  //  HOST-DATAPAR-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
+  //  HOST-DATAPAR-NEXT:    device_type=acc_device_host, device_number=0,
   //   OFF-DATAPAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // CHECK-DATAPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // CHECK-DATAPAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
@@ -1189,7 +1186,7 @@ int main() {
   // CHECK-PAR-NEXT:acc_ev_compute_construct_end
   // CHECK-PAR-NEXT:  acc_prof_info
   // CHECK-PAR-NEXT:    event_type=17, valid_bytes=72, version=[[VERSION]],
-  //  HOST-PAR-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
+  //  HOST-PAR-NEXT:    device_type=acc_device_host, device_number=0,
   //   OFF-PAR-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
   // CHECK-PAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // CHECK-PAR-NEXT:    src_file=[[SRC_FILE]], func_name=[[FUNC_NAME]],
@@ -1249,7 +1246,7 @@ int main() {
 // HOST-BEFORE-ENV-HASPAR-NEXT:acc_ev_runtime_shutdown
 // HOST-BEFORE-ENV-HASPAR-NEXT:  acc_prof_info
 // HOST-BEFORE-ENV-HASPAR-NEXT:    event_type=5, valid_bytes=72, version=[[VERSION]],
-// HOST-BEFORE-ENV-HASPAR-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
+// HOST-BEFORE-ENV-HASPAR-NEXT:    device_type=acc_device_host, device_number=0,
 // HOST-BEFORE-ENV-HASPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
 // HOST-BEFORE-ENV-HASPAR-NEXT:    src_file=(null), func_name=(null),
 // HOST-BEFORE-ENV-HASPAR-NEXT:    line_no=0, end_line_no=0,
@@ -1265,7 +1262,7 @@ int main() {
 // OFF-BEFORE-ENV-NEXT:acc_ev_runtime_shutdown
 // OFF-BEFORE-ENV-NEXT:  acc_prof_info
 // OFF-BEFORE-ENV-NEXT:    event_type=5, valid_bytes=72, version=[[VERSION]],
-// OFF-BEFORE-ENV-NEXT:    device_type=acc_device_host, device_number=[[HOST_DEV]],
+// OFF-BEFORE-ENV-NEXT:    device_type=acc_device_host, device_number=0,
 // OFF-BEFORE-ENV-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
 // OFF-BEFORE-ENV-NEXT:    src_file=(null), func_name=(null),
 // OFF-BEFORE-ENV-NEXT:    line_no=0, end_line_no=0,
