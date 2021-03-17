@@ -169,18 +169,16 @@ static acc_prof_info acc_get_prof_info(acc_event_t event_type, int device_num) {
   // device_number=0 always for device_type=acc_device_host.  nvc 21.1-0 also
   // appears to follow that approach.
   //
-  // TODO: For now, the only device_type values we use here are acc_device_host
-  // and acc_device_not_host, so the device number in the latter case is the
-  // OpenMP device number.  For further consistency with NVIDIA's
-  // implementation, we should use, for example, acc_device_nvidia when
-  // offloading to nvptx64.  This will use our OpenMP extension,
-  // omp_get_device_type.  Likewise within acc_get_api_info.
-  if (device_num == omp_get_initial_device()) {
-    ret.device_type = acc_device_host;
-    ret.device_number = 0;
-  } else {
+  // acc2omp_get_acc_device_t returns acc_device_none when acc_device_t or
+  // omp_device_t doesn't yet have an enumerator for the current device's type
+  // (in the latter case, omp_get_device_type returns omp_device_none), so we
+  // then have to number among all non-host devices as OpenMP does.
+  ret.device_type = acc2omp_get_acc_device_t(omp_get_device_type(device_num));
+  if (ret.device_type == acc_device_none) {
     ret.device_type = acc_device_not_host;
     ret.device_number = device_num;
+  } else {
+    ret.device_number = omp_get_typed_device_num(device_num);
   }
   // FIXME: We need to find the right way to compute this.
   ret.thread_id = 0;
@@ -308,10 +306,9 @@ static acc_api_info acc_get_api_info(int device_num) {
   // FIXME: We don't support any device-specific APIs yet in remaining fields,
   // so acc_device_api_none seems like the right thing for now.
   ret.device_api = acc_device_api_none;
-  // TODO: See todo for device_type within acc_get_prof_info.
-  ret.device_type = device_num == omp_get_initial_device()
-                        ? acc_device_host
-                        : acc_device_not_host;
+  ret.device_type = acc2omp_get_acc_device_t(omp_get_device_type(device_num));
+  if (ret.device_type == acc_device_none)
+    ret.device_type = acc_device_not_host;
   // FIXME: How do we choose our vendor identifier?  Does Clang's OpenMP
   // implementation have something?
   //ret.vendor = 0;

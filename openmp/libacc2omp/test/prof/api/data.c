@@ -3,10 +3,10 @@
 // routines.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                cflags=                                     tgt-host-or-off=HOST tgt-copy=COPY-DIRECT )
-// RUN:   (run-if=%run-if-x86_64  cflags=-fopenmp-targets=%run-x86_64-triple  tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
-// RUN:   (run-if=%run-if-ppc64le cflags=-fopenmp-targets=%run-ppc64le-triple tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
-// RUN:   (run-if=%run-if-nvptx64 cflags=-fopenmp-targets=%run-nvptx64-triple tgt-host-or-off=OFF  tgt-copy=COPY-DIRECT )
+// RUN:   (run-if=                cflags=                                     tgt-acc-device=acc_device_host    tgt-host-or-off=HOST tgt-copy=COPY-DIRECT )
+// RUN:   (run-if=%run-if-x86_64  cflags=-fopenmp-targets=%run-x86_64-triple  tgt-acc-device=acc_device_x86_64  tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
+// RUN:   (run-if=%run-if-ppc64le cflags=-fopenmp-targets=%run-ppc64le-triple tgt-acc-device=acc_device_ppc64le tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
+// RUN:   (run-if=%run-if-nvptx64 cflags=-fopenmp-targets=%run-nvptx64-triple tgt-acc-device=acc_device_nvidia  tgt-host-or-off=OFF  tgt-copy=COPY-DIRECT )
 // RUN: }
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  host-or-off=%[tgt-host-or-off] copy=%[tgt-copy])
@@ -23,7 +23,8 @@
 // RUN:         -match-full-lines -strict-whitespace \
 // RUN:         -implicit-check-not=acc_ev_ \
 // RUN:         -check-prefixes=CHECK,%[host-or-off],%[copy] \
-// RUN:         -DVERSION=%acc-version -DTHREAD_ID=0 -DASYNC_QUEUE=-1
+// RUN:         -DACC_DEVICE=%[tgt-acc-device] -DVERSION=%acc-version \
+// RUN:         -DTHREAD_ID=0 -DASYNC_QUEUE=-1
 // RUN:   }
 // RUN: }
 //
@@ -103,7 +104,7 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:acc_ev_device_init_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=1, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_malloc,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -114,11 +115,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_device_init_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=2, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_malloc,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -129,13 +130,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
 
   // CHECK-NEXT:acc_ev_alloc
   // CHECK-NEXT:  acc_prof_info
   // CHECK-NEXT:    event_type=8, valid_bytes=72, version=[[VERSION]],
   //  HOST-NEXT:    device_type=acc_device_host, device_number=0,
-  //   OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  //   OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // CHECK-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // CHECK-NEXT:    src_file=(null), func_name=acc_malloc,
   // CHECK-NEXT:    line_no=0, end_line_no=0,
@@ -150,7 +151,7 @@ int main(int argc, char *argv[]) {
   // CHECK-NEXT:  acc_api_info
   // CHECK-NEXT:    device_api=0, valid_bytes=12,
   //  HOST-NEXT:    device_type=acc_device_host
-  //   OFF-NEXT:    device_type=acc_device_not_host
+  //   OFF-NEXT:    device_type=[[ACC_DEVICE]]
   int *arr_dev = acc_malloc(sizeof arr);
   if (!arr_dev) {
     fprintf(stderr, "acc_malloc failed\n");
@@ -162,7 +163,7 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:acc_ev_create
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=6, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_map_data,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -176,14 +177,14 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEV]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   if (Offloading)
     acc_map_data(arr, arr_dev, sizeof arr);
 
   // OFF-NEXT:acc_ev_enter_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=10, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyin,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -194,11 +195,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enter_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=11, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyin,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -209,13 +210,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_copyin(arr, sizeof arr);
 
   // OFF-NEXT:acc_ev_enter_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=10, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_create,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -226,11 +227,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enter_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=11, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_create,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -241,13 +242,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_create(arr, sizeof arr);
 
   // OFF-NEXT:acc_ev_exit_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -258,11 +259,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_exit_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -273,13 +274,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_copyout(arr, sizeof arr);
 
   // OFF-NEXT:acc_ev_exit_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -290,11 +291,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_exit_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -305,13 +306,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_copyout_finalize(arr, sizeof arr);
 
   // OFF-NEXT:acc_ev_exit_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -322,11 +323,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_exit_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -337,13 +338,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_delete(arr, sizeof arr);
 
   // OFF-NEXT:acc_ev_exit_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -354,11 +355,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_exit_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -369,13 +370,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_delete_finalize(arr, sizeof arr);
 
   // OFF-NEXT:acc_ev_delete
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=7, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_unmap_data,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -389,7 +390,7 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEV]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   if (Offloading)
     acc_unmap_data(arr);
 
@@ -397,7 +398,7 @@ int main(int argc, char *argv[]) {
   // CHECK-NEXT:  acc_prof_info
   // CHECK-NEXT:    event_type=9, valid_bytes=72, version=[[VERSION]],
   //  HOST-NEXT:    device_type=acc_device_host, device_number=0,
-  //   OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  //   OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // CHECK-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // CHECK-NEXT:    src_file=(null), func_name=acc_free,
   // CHECK-NEXT:    line_no=0, end_line_no=0,
@@ -412,7 +413,7 @@ int main(int argc, char *argv[]) {
   // CHECK-NEXT:  acc_api_info
   // CHECK-NEXT:    device_api=0, valid_bytes=12,
   //  HOST-NEXT:    device_type=acc_device_host
-  //   OFF-NEXT:    device_type=acc_device_not_host
+  //   OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_free(arr_dev);
 
   //--------------------------------------------------
@@ -423,7 +424,7 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:acc_ev_exit_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -434,11 +435,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_exit_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -449,13 +450,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_copyout(arr, sizeof arr);
 
   // OFF-NEXT:acc_ev_exit_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -466,11 +467,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_exit_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -481,13 +482,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_copyout_finalize(arr, sizeof arr);
 
   // OFF-NEXT:acc_ev_exit_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -498,11 +499,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_exit_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -513,13 +514,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_delete(arr, sizeof arr);
 
   // OFF-NEXT:acc_ev_exit_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -530,11 +531,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_exit_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -545,7 +546,7 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_delete_finalize(arr, sizeof arr);
 
   //--------------------------------------------------
@@ -557,7 +558,7 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:acc_ev_enter_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=10, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyin,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -568,11 +569,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_alloc
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=8, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyin,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -586,11 +587,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR:]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_create
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=6, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyin,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -604,11 +605,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enqueue_upload_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyin,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -622,11 +623,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enqueue_upload_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyin,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -640,11 +641,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enter_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=11, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyin,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -655,13 +656,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_copyin(arr, sizeof arr);
 
   // OFF-NEXT:acc_ev_exit_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -672,11 +673,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enqueue_download_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -690,11 +691,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enqueue_download_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -708,11 +709,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_delete
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=7, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -726,11 +727,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_free
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=9, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -744,11 +745,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_exit_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -759,13 +760,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_copyout(arr, sizeof arr);
 
   // OFF-NEXT:acc_ev_enter_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=10, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_create,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -776,11 +777,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_alloc
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=8, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_create,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -794,11 +795,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR:]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_create
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=6, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_create,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -812,11 +813,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enter_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=11, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_create,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -827,13 +828,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_create(arr, sizeof arr);
 
   // OFF-NEXT:acc_ev_exit_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -844,11 +845,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_delete
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=7, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -862,11 +863,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_free
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=9, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -880,11 +881,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_exit_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -895,7 +896,7 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_delete(arr, sizeof arr);
 
   // We've already checked acc_create when data is not present, but we need to
@@ -912,7 +913,7 @@ int main(int argc, char *argv[]) {
   //      OFF:acc_ev_exit_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -923,11 +924,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enqueue_download_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -941,11 +942,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enqueue_download_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -959,11 +960,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_delete
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=7, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -977,11 +978,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_free
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=9, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -995,11 +996,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_exit_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_copyout_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1010,7 +1011,7 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_copyout_finalize(arr, sizeof arr);
 
   // We've already checked acc_create when data is not present, but we need to
@@ -1027,7 +1028,7 @@ int main(int argc, char *argv[]) {
   //      OFF:acc_ev_exit_data_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1038,11 +1039,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_delete
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=7, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1056,11 +1057,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_free
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=9, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1074,11 +1075,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_exit_data_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_delete_finalize,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1089,7 +1090,7 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_delete_finalize(arr, sizeof arr);
 
   //--------------------------------------------------
@@ -1110,7 +1111,7 @@ int main(int argc, char *argv[]) {
   //      OFF:acc_ev_update_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=14, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_update_device,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1121,11 +1122,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enqueue_upload_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_update_device,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1139,11 +1140,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enqueue_upload_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_update_device,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1157,11 +1158,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_update_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=15, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_update_device,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1172,13 +1173,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_update_device(arr, sizeof arr);
 
   //      OFF:acc_ev_update_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=14, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_update_self,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1189,11 +1190,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enqueue_download_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_update_self,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1207,11 +1208,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enqueue_download_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_update_self,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1225,11 +1226,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEVICE_PTR]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_update_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=15, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_update_self,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1240,7 +1241,7 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    implicit=0, tool_info=(nil)
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_update_self(arr, sizeof arr);
 
   // We've already checked acc_delete when data is present, but we want to make
@@ -1270,7 +1271,7 @@ int main(int argc, char *argv[]) {
   //      OFF:acc_ev_enqueue_upload_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_memcpy_to_device,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1284,11 +1285,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEV]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enqueue_upload_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_memcpy_to_device,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1302,13 +1303,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEV]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_memcpy_to_device(arr_dev, arr, sizeof arr);
 
   // OFF-NEXT:acc_ev_enqueue_download_start
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_memcpy_from_device,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1322,11 +1323,11 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEV]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   // OFF-NEXT:acc_ev_enqueue_download_end
   // OFF-NEXT:  acc_prof_info
   // OFF-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
-  // OFF-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // OFF-NEXT:    src_file=(null), func_name=acc_memcpy_from_device,
   // OFF-NEXT:    line_no=0, end_line_no=0,
@@ -1340,13 +1341,13 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_ptr=0x[[#ARR_DEV]]
   // OFF-NEXT:  acc_api_info
   // OFF-NEXT:    device_api=0, valid_bytes=12,
-  // OFF-NEXT:    device_type=acc_device_not_host
+  // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_memcpy_from_device(arr, arr_dev, sizeof arr);
 
   // COPY-BY-HOST-NEXT:acc_ev_enqueue_download_start
   // COPY-BY-HOST-NEXT:  acc_prof_info
   // COPY-BY-HOST-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_device,
   // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
@@ -1360,11 +1361,11 @@ int main(int argc, char *argv[]) {
   // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEV + ARR_ELE_SIZE]]
   // COPY-BY-HOST-NEXT:  acc_api_info
   // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
   // COPY-BY-HOST-NEXT:acc_ev_enqueue_download_end
   // COPY-BY-HOST-NEXT:  acc_prof_info
   // COPY-BY-HOST-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_device,
   // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
@@ -1378,11 +1379,11 @@ int main(int argc, char *argv[]) {
   // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEV + ARR_ELE_SIZE]]
   // COPY-BY-HOST-NEXT:  acc_api_info
   // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
   // COPY-BY-HOST-NEXT:acc_ev_enqueue_upload_start
   // COPY-BY-HOST-NEXT:  acc_prof_info
   // COPY-BY-HOST-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_device,
   // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
@@ -1396,11 +1397,11 @@ int main(int argc, char *argv[]) {
   // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEV]]
   // COPY-BY-HOST-NEXT:  acc_api_info
   // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
   // COPY-BY-HOST-NEXT:acc_ev_enqueue_upload_end
   // COPY-BY-HOST-NEXT:  acc_prof_info
   // COPY-BY-HOST-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_device,
   // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
@@ -1414,7 +1415,7 @@ int main(int argc, char *argv[]) {
   // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEV]]
   // COPY-BY-HOST-NEXT:  acc_api_info
   // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
   acc_memcpy_device(&arr_dev[0], &arr_dev[1], sizeof *arr_dev);
 
   // No-ops.  There's not much point in trying no-op cases that are specific to
@@ -1445,11 +1446,11 @@ int main(int argc, char *argv[]) {
   // OFF:acc_ev_enter_data_end
   // OFF:acc_ev_device_init_start
   // OFF:  acc_prof_info
-  // OFF:    device_type=acc_device_not_host, device_number=[[OFF_DEV_OTHER]],
+  // OFF:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV_OTHER]],
   // OFF:    src_file=(null), func_name=acc_create,
   // OFF:acc_ev_device_init_end
   // OFF:  acc_prof_info
-  // OFF:    device_type=acc_device_not_host, device_number=[[OFF_DEV_OTHER]],
+  // OFF:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV_OTHER]],
   // OFF:    src_file=(null), func_name=acc_create,
   // OFF:acc_ev_enter_data_start
   // OFF:acc_ev_alloc
@@ -1465,11 +1466,11 @@ int main(int argc, char *argv[]) {
   } else if (Offloading) {
     printf("acc_ev_device_init_start\n"
            "  acc_prof_info\n"
-           "    device_type=acc_device_not_host, device_number=%d,\n"
+           "    device_type=%s, device_number=%d,\n"
            "    src_file=(null), func_name=acc_create,\n"
            "acc_ev_device_init_end\n"
            "  acc_prof_info\n"
-           "    device_type=acc_device_not_host, device_number=%d,\n"
+           "    device_type=%s, device_number=%d,\n"
            "    src_file=(null), func_name=acc_create,\n"
            "acc_ev_enter_data_start\n"
            "acc_ev_alloc\n"
@@ -1477,13 +1478,14 @@ int main(int argc, char *argv[]) {
            "    device_ptr=%p\n"
            "acc_ev_create\n"
            "acc_ev_enter_data_end\n",
-           devNumOther, devNumOther, acc_deviceptr(arr));
+           deviceTypeToStr(devTypeInit), devNumOther,
+           deviceTypeToStr(devTypeInit), devNumOther, acc_deviceptr(arr));
   }
 
   //      COPY-BY-HOST:acc_ev_enqueue_download_start
   // COPY-BY-HOST-NEXT:  acc_prof_info
   // COPY-BY-HOST-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
   // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
@@ -1497,11 +1499,11 @@ int main(int argc, char *argv[]) {
   // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR + ARR_ELE_SIZE]]
   // COPY-BY-HOST-NEXT:  acc_api_info
   // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
   // COPY-BY-HOST-NEXT:acc_ev_enqueue_download_end
   // COPY-BY-HOST-NEXT:  acc_prof_info
   // COPY-BY-HOST-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
   // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
@@ -1515,11 +1517,11 @@ int main(int argc, char *argv[]) {
   // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR + ARR_ELE_SIZE]]
   // COPY-BY-HOST-NEXT:  acc_api_info
   // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
   // COPY-BY-HOST-NEXT:acc_ev_enqueue_upload_start
   // COPY-BY-HOST-NEXT:  acc_prof_info
   // COPY-BY-HOST-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
   // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
@@ -1533,11 +1535,11 @@ int main(int argc, char *argv[]) {
   // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR]]
   // COPY-BY-HOST-NEXT:  acc_api_info
   // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
   // COPY-BY-HOST-NEXT:acc_ev_enqueue_upload_end
   // COPY-BY-HOST-NEXT:  acc_prof_info
   // COPY-BY-HOST-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
   // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
@@ -1551,7 +1553,7 @@ int main(int argc, char *argv[]) {
   // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR]]
   // COPY-BY-HOST-NEXT:  acc_api_info
   // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
   acc_memcpy_d2d(&arr[0], &arr[1], sizeof *arr, devNumInit, devNumInit);
 
   // There are no device upload/download events for host-to-host copy.
@@ -1562,7 +1564,7 @@ int main(int argc, char *argv[]) {
   //      COPY-BY-HOST:acc_ev_enqueue_download_start
   // COPY-BY-HOST-NEXT:  acc_prof_info
   // COPY-BY-HOST-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV_OTHER]],
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV_OTHER]],
   // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
   // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
@@ -1576,11 +1578,11 @@ int main(int argc, char *argv[]) {
   // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_OTHER_PTR + ARR_ELE_SIZE]]
   // COPY-BY-HOST-NEXT:  acc_api_info
   // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
   // COPY-BY-HOST-NEXT:acc_ev_enqueue_download_end
   // COPY-BY-HOST-NEXT:  acc_prof_info
   // COPY-BY-HOST-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV_OTHER]],
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV_OTHER]],
   // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
   // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
@@ -1594,11 +1596,11 @@ int main(int argc, char *argv[]) {
   // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_OTHER_PTR + ARR_ELE_SIZE]]
   // COPY-BY-HOST-NEXT:  acc_api_info
   // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
   // COPY-BY-HOST-NEXT:acc_ev_enqueue_upload_start
   // COPY-BY-HOST-NEXT:  acc_prof_info
   // COPY-BY-HOST-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
   // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
@@ -1612,11 +1614,11 @@ int main(int argc, char *argv[]) {
   // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR]]
   // COPY-BY-HOST-NEXT:  acc_api_info
   // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
   // COPY-BY-HOST-NEXT:acc_ev_enqueue_upload_end
   // COPY-BY-HOST-NEXT:  acc_prof_info
   // COPY-BY-HOST-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
   // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
@@ -1630,7 +1632,7 @@ int main(int argc, char *argv[]) {
   // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR]]
   // COPY-BY-HOST-NEXT:  acc_api_info
   // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=acc_device_not_host
+  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
   acc_memcpy_d2d(&arr[0], &arr[1], sizeof *arr, devNumInit, devNumOther);
 
   // We've already checked acc_delete when data is present, but we want to make

@@ -866,12 +866,13 @@ translations from OpenACC to OpenMP.  Thus, it is not yet recommended
 for use in hand-written OpenMP code as it might not integrate well
 with some OpenMP features.
 
-OpenACC Runtime Library API
----------------------------
+OpenMP Runtime Library API
+--------------------------
 
-Some OpenACC Runtime Library API routines are implemented in terms of
-extensions to OpenMP's Runtime Library Routines.  See the section
-"OpenACC Runtime" in `README-OpenACC-design.md` for details.
+Some OpenACC Runtime Library API routines and some features of the
+OpenACC Profiling Interface are implemented in terms of extensions to
+OpenMP's Runtime Library Routines.  See the section "OpenACC Runtime"
+in `README-OpenACC-design.md` for details.
 
 OMPT
 ----

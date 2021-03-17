@@ -2,9 +2,9 @@
 // specify the right OpenACC Runtime Library API routine.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=%run-if-x86_64  cflags=-fopenmp-targets=%run-x86_64-triple )
-// RUN:   (run-if=%run-if-ppc64le cflags=-fopenmp-targets=%run-ppc64le-triple)
-// RUN:   (run-if=%run-if-nvptx64 cflags=-fopenmp-targets=%run-nvptx64-triple)
+// RUN:   (run-if=%run-if-x86_64  cflags=-fopenmp-targets=%run-x86_64-triple  tgt-acc-device=acc_device_x86_64 )
+// RUN:   (run-if=%run-if-ppc64le cflags=-fopenmp-targets=%run-ppc64le-triple tgt-acc-device=acc_device_ppc64le)
+// RUN:   (run-if=%run-if-nvptx64 cflags=-fopenmp-targets=%run-nvptx64-triple tgt-acc-device=acc_device_nvidia )
 // RUN: }
 // RUN: %data cases {
 // RUN:   (case=acc_malloc args='size'     )
@@ -25,9 +25,9 @@
 // RUN:         -allow-empty -check-prefixes=ERR
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
 // RUN:         -match-full-lines -strict-whitespace \
-// RUN:         -DVERSION=%acc-version -DHOST_DEV=%acc-host-dev \
-// RUN:         -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
-// RUN:         -DROUTINE=%[case]
+// RUN:         -DACC_DEVICE=%[tgt-acc-device] -DVERSION=%acc-version \
+// RUN:         -DHOST_DEV=%acc-host-dev -DOFF_DEV=0 -DTHREAD_ID=0 \
+// RUN:         -DASYNC_QUEUE=-1 -DROUTINE=%[case]
 // RUN:   }
 // RUN: }
 //
@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
   //      CHECK:acc_ev_device_init_start
   // CHECK-NEXT:  acc_prof_info
   // CHECK-NEXT:    event_type=1, valid_bytes=72, version=[[VERSION]],
-  // CHECK-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // CHECK-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // CHECK-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // CHECK-NEXT:    src_file=(null), func_name=[[ROUTINE]],
   // CHECK-NEXT:    line_no=0, end_line_no=0,
@@ -67,11 +67,11 @@ int main(int argc, char *argv[]) {
   // CHECK-NEXT:    implicit=0, tool_info=(nil)
   // CHECK-NEXT:  acc_api_info
   // CHECK-NEXT:    device_api=0, valid_bytes=12,
-  // CHECK-NEXT:    device_type=acc_device_not_host
+  // CHECK-NEXT:    device_type=[[ACC_DEVICE]]
   // CHECK-NEXT:acc_ev_device_init_end
   // CHECK-NEXT:  acc_prof_info
   // CHECK-NEXT:    event_type=2, valid_bytes=72, version=[[VERSION]],
-  // CHECK-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // CHECK-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // CHECK-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // CHECK-NEXT:    src_file=(null), func_name=[[ROUTINE]],
   // CHECK-NEXT:    line_no=0, end_line_no=0,
@@ -82,7 +82,7 @@ int main(int argc, char *argv[]) {
   // CHECK-NEXT:    implicit=0, tool_info=(nil)
   // CHECK-NEXT:  acc_api_info
   // CHECK-NEXT:    device_api=0, valid_bytes=12,
-  // CHECK-NEXT:    device_type=acc_device_not_host
+  // CHECK-NEXT:    device_type=[[ACC_DEVICE]]
   int arr[5];
   int size = sizeof arr;
   if (argc != 2) {

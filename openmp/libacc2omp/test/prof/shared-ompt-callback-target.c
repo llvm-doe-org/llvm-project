@@ -18,10 +18,10 @@
 //      # offloading has different output and doesn't exercise some callbacks,
 //      # so just skip those cases.
 // RUN: %data tgts {
-// XUN:   (run-if=                tgt-cflags=                                    )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple)
-// XUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
+// XUN:   (run-if=                tgt-cflags=                                     tgt-acc-device=acc_device_host   )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  tgt-acc-device=acc_device_x86_64 )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple tgt-acc-device=acc_device_ppc64le)
+// XUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple tgt-acc-device=acc_device_nvidia )
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %for events {
@@ -33,8 +33,8 @@
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
 // RUN:         -match-full-lines -strict-whitespace \
 // RUN:         -implicit-check-not=acc_ev_ -check-prefixes=%[event] \
-// RUN:         -DVERSION=%acc-version -DOFF_DEV=0 -DTHREAD_ID=0 \
-// RUN:         -DASYNC_QUEUE=-1 -DSRC_FILE=%s \
+// RUN:         -DACC_DEVICE=%[tgt-acc-device] -DVERSION=%acc-version \
+// RUN:         -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 -DSRC_FILE=%s \
 // RUN:         -DLINE_NO=20000 -DEND_LINE_NO=20002 \
 // RUN:         -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=30000
 // RUN:   }
@@ -107,7 +107,7 @@ int main() {
   //      COMPUTE_CONSTRUCT_START:acc_ev_compute_construct_start
   // COMPUTE_CONSTRUCT_START-NEXT:  acc_prof_info
   // COMPUTE_CONSTRUCT_START-NEXT:    event_type=16, valid_bytes=72, version=[[VERSION]],
-  // COMPUTE_CONSTRUCT_START-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // COMPUTE_CONSTRUCT_START-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // COMPUTE_CONSTRUCT_START-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // COMPUTE_CONSTRUCT_START-NEXT:    src_file=[[SRC_FILE]], func_name=main,
   // COMPUTE_CONSTRUCT_START-NEXT:    line_no=[[LINE_NO]], end_line_no=[[END_LINE_NO]],
@@ -118,11 +118,11 @@ int main() {
   // COMPUTE_CONSTRUCT_START-NEXT:    implicit=0, tool_info=(nil)
   // COMPUTE_CONSTRUCT_START-NEXT:  acc_api_info
   // COMPUTE_CONSTRUCT_START-NEXT:    device_api=0, valid_bytes=12,
-  // COMPUTE_CONSTRUCT_START-NEXT:    device_type=acc_device_not_host
+  // COMPUTE_CONSTRUCT_START-NEXT:    device_type=[[ACC_DEVICE]]
   //             ENTER_DATA_START:acc_ev_enter_data_start
   //        ENTER_DATA_START-NEXT:  acc_prof_info
   //        ENTER_DATA_START-NEXT:    event_type=10, valid_bytes=72, version=[[VERSION]],
-  //        ENTER_DATA_START-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  //        ENTER_DATA_START-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   //        ENTER_DATA_START-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   //        ENTER_DATA_START-NEXT:    src_file=[[SRC_FILE]], func_name=main,
   //        ENTER_DATA_START-NEXT:    line_no=[[LINE_NO]], end_line_no=[[END_LINE_NO]],
@@ -133,11 +133,11 @@ int main() {
   //        ENTER_DATA_START-NEXT:    implicit=0, tool_info=(nil)
   //        ENTER_DATA_START-NEXT:  acc_api_info
   //        ENTER_DATA_START-NEXT:    device_api=0, valid_bytes=12,
-  //        ENTER_DATA_START-NEXT:    device_type=acc_device_not_host
+  //        ENTER_DATA_START-NEXT:    device_type=[[ACC_DEVICE]]
   //               ENTER_DATA_END:acc_ev_enter_data_end
   //          ENTER_DATA_END-NEXT:  acc_prof_info
   //          ENTER_DATA_END-NEXT:    event_type=11, valid_bytes=72, version=[[VERSION]],
-  //          ENTER_DATA_END-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  //          ENTER_DATA_END-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   //          ENTER_DATA_END-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   //          ENTER_DATA_END-NEXT:    src_file=[[SRC_FILE]], func_name=main,
   //          ENTER_DATA_END-NEXT:    line_no=[[LINE_NO]], end_line_no=[[END_LINE_NO]],
@@ -148,11 +148,11 @@ int main() {
   //          ENTER_DATA_END-NEXT:    implicit=0, tool_info=(nil)
   //          ENTER_DATA_END-NEXT:  acc_api_info
   //          ENTER_DATA_END-NEXT:    device_api=0, valid_bytes=12,
-  //          ENTER_DATA_END-NEXT:    device_type=acc_device_not_host
+  //          ENTER_DATA_END-NEXT:    device_type=[[ACC_DEVICE]]
   //         ENQUEUE_LAUNCH_START:acc_ev_enqueue_launch_start
   //    ENQUEUE_LAUNCH_START-NEXT:  acc_prof_info
   //    ENQUEUE_LAUNCH_START-NEXT:    event_type=18, valid_bytes=72, version=[[VERSION]],
-  //    ENQUEUE_LAUNCH_START-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  //    ENQUEUE_LAUNCH_START-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   //    ENQUEUE_LAUNCH_START-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   //    ENQUEUE_LAUNCH_START-NEXT:    src_file=[[SRC_FILE]], func_name=main,
   //    ENQUEUE_LAUNCH_START-NEXT:    line_no=[[LINE_NO]], end_line_no=[[END_LINE_NO]],
@@ -164,11 +164,11 @@ int main() {
   //    ENQUEUE_LAUNCH_START-NEXT:    kernel_name=(nil)
   //    ENQUEUE_LAUNCH_START-NEXT:  acc_api_info
   //    ENQUEUE_LAUNCH_START-NEXT:    device_api=0, valid_bytes=12,
-  //    ENQUEUE_LAUNCH_START-NEXT:    device_type=acc_device_not_host
+  //    ENQUEUE_LAUNCH_START-NEXT:    device_type=[[ACC_DEVICE]]
   //           ENQUEUE_LAUNCH_END:acc_ev_enqueue_launch_end
   //      ENQUEUE_LAUNCH_END-NEXT:  acc_prof_info
   //      ENQUEUE_LAUNCH_END-NEXT:    event_type=19, valid_bytes=72, version=[[VERSION]],
-  //      ENQUEUE_LAUNCH_END-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  //      ENQUEUE_LAUNCH_END-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   //      ENQUEUE_LAUNCH_END-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   //      ENQUEUE_LAUNCH_END-NEXT:    src_file=[[SRC_FILE]], func_name=main,
   //      ENQUEUE_LAUNCH_END-NEXT:    line_no=[[LINE_NO]], end_line_no=[[END_LINE_NO]],
@@ -180,7 +180,7 @@ int main() {
   //      ENQUEUE_LAUNCH_END-NEXT:    kernel_name=(nil)
   //      ENQUEUE_LAUNCH_END-NEXT:  acc_api_info
   //      ENQUEUE_LAUNCH_END-NEXT:    device_api=0, valid_bytes=12,
-  //      ENQUEUE_LAUNCH_END-NEXT:    device_type=acc_device_not_host
+  //      ENQUEUE_LAUNCH_END-NEXT:    device_type=[[ACC_DEVICE]]
 #line 20000
   #pragma acc parallel copy(arr) num_gangs(1)
   for (int j = 0; j < 2; ++j)
@@ -188,7 +188,7 @@ int main() {
   //            EXIT_DATA_START:acc_ev_exit_data_start
   //       EXIT_DATA_START-NEXT:  acc_prof_info
   //       EXIT_DATA_START-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],
-  //       EXIT_DATA_START-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  //       EXIT_DATA_START-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   //       EXIT_DATA_START-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   //       EXIT_DATA_START-NEXT:    src_file=[[SRC_FILE]], func_name=main,
   //       EXIT_DATA_START-NEXT:    line_no=[[LINE_NO]], end_line_no=[[END_LINE_NO]],
@@ -199,11 +199,11 @@ int main() {
   //       EXIT_DATA_START-NEXT:    implicit=0, tool_info=(nil)
   //       EXIT_DATA_START-NEXT:  acc_api_info
   //       EXIT_DATA_START-NEXT:    device_api=0, valid_bytes=12,
-  //       EXIT_DATA_START-NEXT:    device_type=acc_device_not_host
+  //       EXIT_DATA_START-NEXT:    device_type=[[ACC_DEVICE]]
   //              EXIT_DATA_END:acc_ev_exit_data_end
   //         EXIT_DATA_END-NEXT:  acc_prof_info
   //         EXIT_DATA_END-NEXT:    event_type=13, valid_bytes=72, version=[[VERSION]],
-  //         EXIT_DATA_END-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  //         EXIT_DATA_END-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   //         EXIT_DATA_END-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   //         EXIT_DATA_END-NEXT:    src_file=[[SRC_FILE]], func_name=main,
   //         EXIT_DATA_END-NEXT:    line_no=[[LINE_NO]], end_line_no=[[END_LINE_NO]],
@@ -214,11 +214,11 @@ int main() {
   //         EXIT_DATA_END-NEXT:    implicit=0, tool_info=(nil)
   //         EXIT_DATA_END-NEXT:  acc_api_info
   //         EXIT_DATA_END-NEXT:    device_api=0, valid_bytes=12,
-  //         EXIT_DATA_END-NEXT:    device_type=acc_device_not_host
+  //         EXIT_DATA_END-NEXT:    device_type=[[ACC_DEVICE]]
   //      COMPUTE_CONSTRUCT_END:acc_ev_compute_construct_end
   // COMPUTE_CONSTRUCT_END-NEXT:  acc_prof_info
   // COMPUTE_CONSTRUCT_END-NEXT:    event_type=17, valid_bytes=72, version=[[VERSION]],
-  // COMPUTE_CONSTRUCT_END-NEXT:    device_type=acc_device_not_host, device_number=[[OFF_DEV]],
+  // COMPUTE_CONSTRUCT_END-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
   // COMPUTE_CONSTRUCT_END-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
   // COMPUTE_CONSTRUCT_END-NEXT:    src_file=[[SRC_FILE]], func_name=main,
   // COMPUTE_CONSTRUCT_END-NEXT:    line_no=[[LINE_NO]], end_line_no=[[END_LINE_NO]],
@@ -229,7 +229,7 @@ int main() {
   // COMPUTE_CONSTRUCT_END-NEXT:    implicit=0, tool_info=(nil)
   // COMPUTE_CONSTRUCT_END-NEXT:  acc_api_info
   // COMPUTE_CONSTRUCT_END-NEXT:    device_api=0, valid_bytes=12,
-  // COMPUTE_CONSTRUCT_END-NEXT:    device_type=acc_device_not_host
+  // COMPUTE_CONSTRUCT_END-NEXT:    device_type=[[ACC_DEVICE]]
   return 0;
 #line 30000
 }

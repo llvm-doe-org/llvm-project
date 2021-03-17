@@ -1916,7 +1916,8 @@ specification and Clacc's OpenACC extensions appear within section
 Support for the OpenACC Profiling Interface appears primarily in the
 source file `openmp/libacc2omp/src/prof.cpp`.  It is documented in the
 next section, including Clacc's mapping to OMPT and required OMPT
-extensions.
+extensions.  It also relies on some of the OpenMP extensions listed
+above.
 
 Further details on how Clacc's OpenACC runtime might one day interact
 with OpenMP runtimes from other OpenMP implementations can currently
@@ -2665,12 +2666,6 @@ support currently include:
     * Fields not mentioned below are expected to be correctly
       implemented.
     * `acc_prof_info`:
-        * `device_type` is always set to either `acc_device_host` or
-          `acc_device_not_host`.  However, nvc 20.9-0 sets it to, for
-          example, `acc_device_nvidia` when offloading to nvptx64.
-          Either behavior appears to be permitted under OpenACC 3.1,
-          but the latter is likely more useful.  `device_type` within
-          `acc_api_info` has the same limitation.
         * `thread_id` is always set to `0` currently.
         * `async` is always set to `acc_async_sync` because the Clacc
           compiler does not yet support the `async` clause.  Thus,
@@ -2762,8 +2757,6 @@ support currently include:
           it's used to indicate the semantics of later fields we do
           not yet support.  Thus, this value appears to be correct
           according to OpenACC.
-        * `device_type` has the same limitation here as it does within
-          `acc_prof_info` (see above).
         * `vendor` is omitted because we do not know the right way to
           choose a vendor number (see "OpenACC Clarifications" above).
         * `device_handle`, `context_handle`, and `async_handle` are
