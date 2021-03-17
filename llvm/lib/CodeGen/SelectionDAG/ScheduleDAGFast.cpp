@@ -150,8 +150,8 @@ void ScheduleDAGFast::ReleasePred(SUnit *SU, SDep *PredEdge) {
   --PredSU->NumSuccsLeft;
 
   // If all the node's successors are scheduled, this node is ready
-  // to be scheduled.
-  if (PredSU->NumSuccsLeft == 0) {
+  // to be scheduled. Ignore the special EntrySU node.
+  if (PredSU->NumSuccsLeft == 0 && PredSU != &EntrySU) {
     PredSU->isAvailable = true;
     AvailableQueue.push(PredSU);
   }
@@ -760,7 +760,7 @@ void ScheduleDAGLinearize::Schedule() {
 
 MachineBasicBlock*
 ScheduleDAGLinearize::EmitSchedule(MachineBasicBlock::iterator &InsertPos) {
-  InstrEmitter Emitter(BB, InsertPos);
+  InstrEmitter Emitter(DAG->getTarget(), BB, InsertPos);
   DenseMap<SDValue, Register> VRBaseMap;
 
   LLVM_DEBUG({ dbgs() << "\n*** Final schedule ***\n"; });

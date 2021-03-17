@@ -20,6 +20,7 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/IntrinsicsARM.h"
 #include "llvm/IR/PatternMatch.h"
@@ -284,8 +285,43 @@ int ARMTTIImpl::getIntImmCodeSizeCost(unsigned Opcode, unsigned Idx,
   return 1;
 }
 
-int ARMTTIImpl::getIntImmCostInst(unsigned Opcode, unsigned Idx, const APInt &Imm,
-                                  Type *Ty, TTI::TargetCostKind CostKind) {
+// Checks whether Inst is part of a min(max()) or max(min()) pattern
+// that will match to an SSAT instruction
+static bool isSSATMinMaxPattern(Instruction *Inst, const APInt &Imm) {
+  Value *LHS, *RHS;
+  ConstantInt *C;
+  SelectPatternFlavor InstSPF = matchSelectPattern(Inst, LHS, RHS).Flavor;
+
+  if (InstSPF == SPF_SMAX &&
+      PatternMatch::match(RHS, PatternMatch::m_ConstantInt(C)) &&
+      C->getValue() == Imm && Imm.isNegative() && (-Imm).isPowerOf2()) {
+
+    auto isSSatMin = [&](Value *MinInst) {
+      if (isa<SelectInst>(MinInst)) {
+        Value *MinLHS, *MinRHS;
+        ConstantInt *MinC;
+        SelectPatternFlavor MinSPF =
+            matchSelectPattern(MinInst, MinLHS, MinRHS).Flavor;
+        if (MinSPF == SPF_SMIN &&
+            PatternMatch::match(MinRHS, PatternMatch::m_ConstantInt(MinC)) &&
+            MinC->getValue() == ((-Imm) - 1))
+          return true;
+      }
+      return false;
+    };
+
+    if (isSSatMin(Inst->getOperand(1)) ||
+        (Inst->hasNUses(2) && (isSSatMin(*Inst->user_begin()) ||
+                               isSSatMin(*(++Inst->user_begin())))))
+      return true;
+  }
+  return false;
+}
+
+int ARMTTIImpl::getIntImmCostInst(unsigned Opcode, unsigned Idx,
+                                  const APInt &Imm, Type *Ty,
+                                  TTI::TargetCostKind CostKind,
+                                  Instruction *Inst) {
   // Division by a constant can be turned into multiplication, but only if we
   // know it's constant. So it's not so much that the immediate is cheap (it's
   // not), but that the alternative is worse.
@@ -323,6 +359,16 @@ int ARMTTIImpl::getIntImmCostInst(unsigned Opcode, unsigned Idx, const APInt &Im
   // xor a, -1 can always be folded to MVN
   if (Opcode == Instruction::Xor && Imm.isAllOnesValue())
     return 0;
+
+  // Ensures negative constant of min(max()) or max(min()) patterns that
+  // match to SSAT instructions don't get hoisted
+  if (Inst && ((ST->hasV6Ops() && !ST->isThumb()) || ST->isThumb2()) &&
+      Ty->getIntegerBitWidth() <= 32) {
+    if (isSSATMinMaxPattern(Inst, Imm) ||
+        (isa<ICmpInst>(Inst) && Inst->hasOneUse() &&
+         isSSATMinMaxPattern(cast<Instruction>(*Inst->user_begin()), Imm)))
+      return 0;
+  }
 
   return getIntImmCost(Imm, Ty, CostKind);
 }
@@ -1255,7 +1301,8 @@ int ARMTTIImpl::getInterleavedMemoryOpCost(
     // promoted differently). The cost of 2 here is then a load and vrev or
     // vmovn.
     if (ST->hasMVEIntegerOps() && Factor == 2 && NumElts / Factor > 2 &&
-        VecTy->isIntOrIntVectorTy() && DL.getTypeSizeInBits(SubVecTy) <= 64)
+        VecTy->isIntOrIntVectorTy() &&
+        DL.getTypeSizeInBits(SubVecTy).getFixedSize() <= 64)
       return 2 * BaseCost;
   }
 
@@ -1361,6 +1408,44 @@ unsigned ARMTTIImpl::getGatherScatterOpCost(unsigned Opcode, Type *DataTy,
     return ScalarCost;
   }
   return ScalarCost;
+}
+
+int ARMTTIImpl::getArithmeticReductionCost(unsigned Opcode, VectorType *ValTy,
+                                           bool IsPairwiseForm,
+                                           TTI::TargetCostKind CostKind) {
+  EVT ValVT = TLI->getValueType(DL, ValTy);
+  int ISD = TLI->InstructionOpcodeToISD(Opcode);
+  if (!ST->hasMVEIntegerOps() || !ValVT.isSimple() || ISD != ISD::ADD)
+    return BaseT::getArithmeticReductionCost(Opcode, ValTy, IsPairwiseForm,
+                                             CostKind);
+
+  std::pair<int, MVT> LT = TLI->getTypeLegalizationCost(DL, ValTy);
+
+  static const CostTblEntry CostTblAdd[]{
+      {ISD::ADD, MVT::v16i8, 1},
+      {ISD::ADD, MVT::v8i16, 1},
+      {ISD::ADD, MVT::v4i32, 1},
+  };
+  if (const auto *Entry = CostTableLookup(CostTblAdd, ISD, LT.second))
+    return Entry->Cost * ST->getMVEVectorCostFactor() * LT.first;
+
+  return BaseT::getArithmeticReductionCost(Opcode, ValTy, IsPairwiseForm,
+                                           CostKind);
+}
+
+int ARMTTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
+                                      TTI::TargetCostKind CostKind) {
+  // Currently we make a somewhat optimistic assumption that active_lane_mask's
+  // are always free. In reality it may be freely folded into a tail predicated
+  // loop, expanded into a VCPT or expanded into a lot of add/icmp code. We
+  // may need to improve this in the future, but being able to detect if it
+  // is free or not involves looking at a lot of other code. We currently assume
+  // that the vectorizer inserted these, and knew what it was doing in adding
+  // one.
+  if (ST->hasMVEIntegerOps() && ICA.getID() == Intrinsic::get_active_lane_mask)
+    return 0;
+
+  return BaseT::getIntrinsicInstrCost(ICA, CostKind);
 }
 
 bool ARMTTIImpl::isLoweredToCall(const Function *F) {
@@ -1743,7 +1828,7 @@ bool ARMTTIImpl::preferPredicateOverEpilogue(Loop *L, LoopInfo *LI,
     return false;
   }
 
-  assert(L->empty() && "preferPredicateOverEpilogue: inner-loop expected");
+  assert(L->isInnermost() && "preferPredicateOverEpilogue: inner-loop expected");
 
   HardwareLoopInfo HWLoopInfo(L);
   if (!HWLoopInfo.canAnalyze(*LI)) {

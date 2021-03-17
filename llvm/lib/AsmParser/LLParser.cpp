@@ -1657,9 +1657,16 @@ bool LLParser::ParseOptionalParamAttrs(AttrBuilder &B) {
     }
     case lltok::kw_byval: {
       Type *Ty;
-      if (ParseByValWithOptionalType(Ty))
+      if (ParseOptionalTypeAttr(Ty, lltok::kw_byval))
         return true;
       B.addByValAttr(Ty);
+      continue;
+    }
+    case lltok::kw_sret: {
+      Type *Ty;
+      if (ParseOptionalTypeAttr(Ty, lltok::kw_sret))
+        return true;
+      B.addStructRetAttr(Ty);
       continue;
     }
     case lltok::kw_preallocated: {
@@ -1704,7 +1711,6 @@ bool LLParser::ParseOptionalParamAttrs(AttrBuilder &B) {
     case lltok::kw_readonly:        B.addAttribute(Attribute::ReadOnly); break;
     case lltok::kw_returned:        B.addAttribute(Attribute::Returned); break;
     case lltok::kw_signext:         B.addAttribute(Attribute::SExt); break;
-    case lltok::kw_sret:            B.addAttribute(Attribute::StructRet); break;
     case lltok::kw_swifterror:      B.addAttribute(Attribute::SwiftError); break;
     case lltok::kw_swiftself:       B.addAttribute(Attribute::SwiftSelf); break;
     case lltok::kw_writeonly:       B.addAttribute(Attribute::WriteOnly); break;
@@ -2571,9 +2577,9 @@ bool LLParser::ParseParameterList(SmallVectorImpl<ParamInfo> &ArgList,
 /// ParseByValWithOptionalType
 ///   ::= byval
 ///   ::= byval(<ty>)
-bool LLParser::ParseByValWithOptionalType(Type *&Result) {
+bool LLParser::ParseOptionalTypeAttr(Type *&Result, lltok::Kind AttrName) {
   Result = nullptr;
-  if (!EatIfPresent(lltok::kw_byval))
+  if (!EatIfPresent(AttrName))
     return true;
   if (!EatIfPresent(lltok::lparen))
     return false;
@@ -4712,9 +4718,17 @@ bool LLParser::ParseDICompositeType(MDNode *&Result, bool IsDistinct) {
   OPTIONAL(discriminator, MDField, );                                          \
   OPTIONAL(dataLocation, MDField, );                                           \
   OPTIONAL(associated, MDField, );                                             \
-  OPTIONAL(allocated, MDField, );
+  OPTIONAL(allocated, MDField, );                                              \
+  OPTIONAL(rank, MDSignedOrMDField, );
   PARSE_MD_FIELDS();
 #undef VISIT_MD_FIELDS
+
+  Metadata *Rank = nullptr;
+  if (rank.isMDSignedField())
+    Rank = ConstantAsMetadata::get(ConstantInt::getSigned(
+        Type::getInt64Ty(Context), rank.getMDSignedValue()));
+  else if (rank.isMDField())
+    Rank = rank.getMDFieldValue();
 
   // If this has an identifier try to build an ODR type.
   if (identifier.Val)
@@ -4722,8 +4736,8 @@ bool LLParser::ParseDICompositeType(MDNode *&Result, bool IsDistinct) {
             Context, *identifier.Val, tag.Val, name.Val, file.Val, line.Val,
             scope.Val, baseType.Val, size.Val, align.Val, offset.Val, flags.Val,
             elements.Val, runtimeLang.Val, vtableHolder.Val, templateParams.Val,
-            discriminator.Val, dataLocation.Val, associated.Val,
-            allocated.Val)) {
+            discriminator.Val, dataLocation.Val, associated.Val, allocated.Val,
+            Rank)) {
       Result = CT;
       return false;
     }
@@ -4735,7 +4749,8 @@ bool LLParser::ParseDICompositeType(MDNode *&Result, bool IsDistinct) {
       (Context, tag.Val, name.Val, file.Val, line.Val, scope.Val, baseType.Val,
        size.Val, align.Val, offset.Val, flags.Val, elements.Val,
        runtimeLang.Val, vtableHolder.Val, templateParams.Val, identifier.Val,
-       discriminator.Val, dataLocation.Val, associated.Val, allocated.Val));
+       discriminator.Val, dataLocation.Val, associated.Val, allocated.Val,
+       Rank));
   return false;
 }
 
@@ -5345,6 +5360,8 @@ bool LLParser::ConvertValIDToValue(Type *Ty, ValID &ID, Value *&V,
     // The lexer has no type info, so builds all half, bfloat, float, and double
     // FP constants as double.  Fix this here.  Long double does not need this.
     if (&ID.APFloatVal.getSemantics() == &APFloat::IEEEdouble()) {
+      // Check for signaling before potentially converting and losing that info.
+      bool IsSNAN = ID.APFloatVal.isSignaling();
       bool Ignored;
       if (Ty->isHalfTy())
         ID.APFloatVal.convert(APFloat::IEEEhalf(), APFloat::rmNearestTiesToEven,
@@ -5355,6 +5372,14 @@ bool LLParser::ConvertValIDToValue(Type *Ty, ValID &ID, Value *&V,
       else if (Ty->isFloatTy())
         ID.APFloatVal.convert(APFloat::IEEEsingle(), APFloat::rmNearestTiesToEven,
                               &Ignored);
+      if (IsSNAN) {
+        // The convert call above may quiet an SNaN, so manufacture another
+        // SNaN. The bitcast works because the payload (significand) parameter
+        // is truncated to fit.
+        APInt Payload = ID.APFloatVal.bitcastToAPInt();
+        ID.APFloatVal = APFloat::getSNaN(ID.APFloatVal.getSemantics(),
+                                         ID.APFloatVal.isNegative(), &Payload);
+      }
     }
     V = ConstantFP::get(Context, ID.APFloatVal);
 

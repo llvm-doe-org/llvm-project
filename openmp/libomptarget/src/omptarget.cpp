@@ -173,10 +173,10 @@ static int InitLibrary(DeviceTy& Device) {
           // for OpenACC support, so we haven't bothered to implement them yet.
           Device.OmptApi.ompt_get_callbacks().ompt_callback(
               ompt_callback_target_data_op)(
-              Device.OmptApi.target_id, /*host_op_id*/ ompt_id_none,
-              ompt_target_data_associate, CurrHostEntry->addr, HOST_DEVICE,
-              CurrDeviceEntry->addr, device_id, CurrHostEntry->size,
-              /*codeptr_ra*/ NULL);
+              Device.OmptApi.target_id, /*host_op_id=*/ompt_id_none,
+              ompt_target_data_associate, CurrHostEntry->addr,
+              omp_get_initial_device(), CurrDeviceEntry->addr, device_id,
+              CurrHostEntry->size, /*codeptr_ra=*/NULL);
         }
 #endif
       }
@@ -457,8 +457,11 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
           HasCloseModifier) {
         if (IsNew || (arg_types[i] & OMP_TGT_MAPTYPE_ALWAYS)) {
           copy = true;
-        } else if (arg_types[i] & OMP_TGT_MAPTYPE_MEMBER_OF) {
+        } else if ((arg_types[i] & OMP_TGT_MAPTYPE_MEMBER_OF) &&
+                   !(arg_types[i] & OMP_TGT_MAPTYPE_PTR_AND_OBJ)) {
           // Copy data only if the "parent" struct has RefCount==1.
+          // If this is a PTR_AND_OBJ entry, the OBJ is not part of the struct,
+          // so exclude it from this check.
           int32_t parent_idx = getParentIndex(arg_types[i]);
           uint64_t parent_rc = Device.getMapEntryRefCnt(args[parent_idx]);
           assert(parent_rc > 0 && "parent struct not found");
@@ -1137,13 +1140,13 @@ public:
         Device.OmptApi.ompt_get_callbacks().ompt_callback(
             ompt_callback_target_data_op)(
             Device.OmptApi.target_id, /*host_op_id=*/ompt_id_none,
-            ompt_target_data_alloc, HstPtr, HOST_DEVICE, TgtPtr,
+            ompt_target_data_alloc, HstPtr, omp_get_initial_device(), TgtPtr,
             Device.DeviceID, ArgSize, /*codeptr_ra=*/NULL);
         Device.OmptApi.ompt_get_callbacks().ompt_callback(
             ompt_callback_target_data_op)(
             Device.OmptApi.target_id, /*host_op_id=*/ompt_id_none,
-            ompt_target_data_associate, HstPtr, HOST_DEVICE, TgtPtr,
-            Device.DeviceID, ArgSize, /*codeptr_ra=*/NULL);
+            ompt_target_data_associate, HstPtr, omp_get_initial_device(),
+            TgtPtr, Device.DeviceID, ArgSize, /*codeptr_ra=*/NULL);
       }
 #endif
 #ifdef OMPTARGET_DEBUG
@@ -1244,15 +1247,15 @@ public:
         Device.OmptApi.ompt_get_callbacks().ompt_callback(
             ompt_callback_target_data_op)(
             Device.OmptApi.target_id, /*host_op_id=*/ompt_id_none,
-            ompt_target_data_alloc, FirstPrivateArgBuffer.data(), HOST_DEVICE,
-            TgtPtr, Device.DeviceID, FirstPrivateArgSize,
-            /*codeptr_ra=*/nullptr);
+            ompt_target_data_alloc, FirstPrivateArgBuffer.data(),
+            omp_get_initial_device(), TgtPtr, Device.DeviceID,
+            FirstPrivateArgSize, /*codeptr_ra=*/nullptr);
         Device.OmptApi.ompt_get_callbacks().ompt_callback(
             ompt_callback_target_data_op)(
             Device.OmptApi.target_id, /*host_op_id=*/ompt_id_none,
             ompt_target_data_associate, FirstPrivateArgBuffer.data(),
-            HOST_DEVICE, TgtPtr, Device.DeviceID, FirstPrivateArgSize,
-            /*codeptr_ra*/ NULL);
+            omp_get_initial_device(), TgtPtr, Device.DeviceID,
+            FirstPrivateArgSize, /*codeptr_ra=*/NULL);
       }
 #endif
       FirstPrivateTgtInfo.push_back({TgtPtr OMPT_SUPPORT_IF(,
@@ -1315,13 +1318,14 @@ public:
         Device.OmptApi.ompt_get_callbacks().ompt_callback(
             ompt_callback_target_data_op)(
             Device.OmptApi.target_id, /*host_op_id=*/ompt_id_none,
-            ompt_target_data_disassociate, Info.HstPtr, HOST_DEVICE,
-            Info.TgtPtr, Device.DeviceID, Info.Size, /*codeptr_ra=*/nullptr);
+            ompt_target_data_disassociate, Info.HstPtr,
+            omp_get_initial_device(), Info.TgtPtr, Device.DeviceID, Info.Size,
+            /*codeptr_ra=*/nullptr);
         Device.OmptApi.ompt_get_callbacks().ompt_callback(
             ompt_callback_target_data_op)(
             Device.OmptApi.target_id, /*host_op_id=*/ompt_id_none,
-            ompt_target_data_delete, Info.HstPtr, HOST_DEVICE, Info.TgtPtr,
-            Device.DeviceID, Info.Size, /*codeptr_ra=*/nullptr);
+            ompt_target_data_delete, Info.HstPtr, omp_get_initial_device(),
+            Info.TgtPtr, Device.DeviceID, Info.Size, /*codeptr_ra=*/nullptr);
       }
       ompt_set_data_expression(nullptr);
 #endif

@@ -361,6 +361,28 @@ let TargetPrefix = "ppc" in {  // All intrinsics start with "llvm.ppc.".
               Intrinsic<[llvm_v16i8_ty], [llvm_v16i8_ty, llvm_v16i8_ty],
                         [IntrNoMem]>;
 
+  def int_ppc_altivec_vcmpequq : GCCBuiltin<"__builtin_altivec_vcmpequq">,
+              Intrinsic<[llvm_v1i128_ty], [llvm_v1i128_ty, llvm_v1i128_ty],
+                        [IntrNoMem]>;
+  def int_ppc_altivec_vcmpgtsq : GCCBuiltin<"__builtin_altivec_vcmpgtsq">,
+              Intrinsic<[llvm_v1i128_ty], [llvm_v1i128_ty, llvm_v1i128_ty],
+                        [IntrNoMem]>;
+  def int_ppc_altivec_vcmpgtuq : GCCBuiltin<"__builtin_altivec_vcmpgtuq">,
+              Intrinsic<[llvm_v1i128_ty], [llvm_v1i128_ty, llvm_v1i128_ty],
+                        [IntrNoMem]>;
+  def int_ppc_altivec_vcmpequq_p : GCCBuiltin<"__builtin_altivec_vcmpequq_p">,
+              Intrinsic<[llvm_i32_ty],
+                        [llvm_i32_ty,llvm_v1i128_ty,llvm_v1i128_ty],
+                        [IntrNoMem]>;
+  def int_ppc_altivec_vcmpgtsq_p : GCCBuiltin<"__builtin_altivec_vcmpgtsq_p">,
+              Intrinsic<[llvm_i32_ty],
+                        [llvm_i32_ty,llvm_v1i128_ty,llvm_v1i128_ty],
+                        [IntrNoMem]>;
+  def int_ppc_altivec_vcmpgtuq_p : GCCBuiltin<"__builtin_altivec_vcmpgtuq_p">,
+              Intrinsic<[llvm_i32_ty],
+                        [llvm_i32_ty,llvm_v1i128_ty,llvm_v1i128_ty],
+                        [IntrNoMem]>;
+
   // Predicate Comparisons.  The first operand specifies interpretation of CR6.
   def int_ppc_altivec_vcmpbfp_p : GCCBuiltin<"__builtin_altivec_vcmpbfp_p">,
               Intrinsic<[llvm_i32_ty],[llvm_i32_ty,llvm_v4f32_ty,llvm_v4f32_ty],
@@ -500,6 +522,25 @@ let TargetPrefix = "ppc" in {  // All intrinsics start with "llvm.ppc.".
   def int_ppc_altivec_vpextd : GCCBuiltin<"__builtin_altivec_vpextd">,
               Intrinsic<[llvm_v2i64_ty], [llvm_v2i64_ty, llvm_v2i64_ty],
                         [IntrNoMem]>;
+
+  // P10 Vector String Isolate Intrinsics.
+  def int_ppc_altivec_vstribr : GCCBuiltin<"__builtin_altivec_vstribr">,
+              Intrinsic<[llvm_v16i8_ty], [llvm_v16i8_ty], [IntrNoMem]>;
+  def int_ppc_altivec_vstribl : GCCBuiltin<"__builtin_altivec_vstribl">,
+              Intrinsic<[llvm_v16i8_ty], [llvm_v16i8_ty], [IntrNoMem]>;
+  def int_ppc_altivec_vstrihr : GCCBuiltin<"__builtin_altivec_vstrihr">,
+              Intrinsic<[llvm_v8i16_ty], [llvm_v8i16_ty], [IntrNoMem]>;
+  def int_ppc_altivec_vstrihl : GCCBuiltin<"__builtin_altivec_vstrihl">,
+              Intrinsic<[llvm_v8i16_ty], [llvm_v8i16_ty], [IntrNoMem]>;
+  // Predicate Intrinsics: The first operand specifies interpretation of CR6.
+  def int_ppc_altivec_vstribr_p : GCCBuiltin<"__builtin_altivec_vstribr_p">,
+              Intrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_v16i8_ty], [IntrNoMem]>;
+  def int_ppc_altivec_vstribl_p : GCCBuiltin<"__builtin_altivec_vstribl_p">,
+              Intrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_v16i8_ty], [IntrNoMem]>;
+  def int_ppc_altivec_vstrihr_p : GCCBuiltin<"__builtin_altivec_vstrihr_p">,
+              Intrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_v8i16_ty], [IntrNoMem]>;
+  def int_ppc_altivec_vstrihl_p : GCCBuiltin<"__builtin_altivec_vstrihl_p">,
+              Intrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_v8i16_ty], [IntrNoMem]>;
 
   // P10 Vector Centrifuge Builtin.
   def int_ppc_altivec_vcfuged : GCCBuiltin<"__builtin_altivec_vcfuged">,
@@ -782,6 +823,20 @@ let TargetPrefix = "ppc" in {  // All PPC intrinsics start with "llvm.ppc.".
             Intrinsic<[llvm_v4i32_ty], [llvm_v16i8_ty, llvm_v4i32_ty],
                       [IntrNoMem]>;
 
+  // Vector Sign Extension Instructions
+  def int_ppc_altivec_vextsb2w : GCCBuiltin<"__builtin_altivec_vextsb2w">,
+            Intrinsic<[llvm_v4i32_ty], [llvm_v16i8_ty], [IntrNoMem]>;
+  def int_ppc_altivec_vextsb2d : GCCBuiltin<"__builtin_altivec_vextsb2d">,
+            Intrinsic<[llvm_v2i64_ty], [llvm_v16i8_ty], [IntrNoMem]>;
+  def int_ppc_altivec_vextsh2w : GCCBuiltin<"__builtin_altivec_vextsh2w">,
+            Intrinsic<[llvm_v4i32_ty], [llvm_v8i16_ty], [IntrNoMem]>;
+  def int_ppc_altivec_vextsh2d : GCCBuiltin<"__builtin_altivec_vextsh2d">,
+            Intrinsic<[llvm_v2i64_ty], [llvm_v8i16_ty], [IntrNoMem]>;
+  def int_ppc_altivec_vextsw2d : GCCBuiltin<"__builtin_altivec_vextsw2d">,
+            Intrinsic<[llvm_v2i64_ty], [llvm_v4i32_ty], [IntrNoMem]>;
+  def int_ppc_altivec_vextsd2q : GCCBuiltin<"__builtin_altivec_vextsd2q">,
+            Intrinsic<[llvm_v1i128_ty], [llvm_v2i64_ty], [IntrNoMem]>;
+
   // Other multiplies.
   def int_ppc_altivec_vmladduhm : GCCBuiltin<"__builtin_altivec_vmladduhm">,
             Intrinsic<[llvm_v8i16_ty], [llvm_v8i16_ty, llvm_v8i16_ty,
@@ -1002,11 +1057,22 @@ def int_ppc_altivec_vrldmi :
                             [llvm_v2i64_ty, llvm_v2i64_ty, llvm_v2i64_ty],
                             [IntrNoMem]>;
 
+def int_ppc_altivec_vrlqnm :
+      PowerPC_Vec_Intrinsic<"vrlqnm", [llvm_v1i128_ty],
+                           [llvm_v1i128_ty, llvm_v1i128_ty],
+                            [IntrNoMem]>;
+def int_ppc_altivec_vrlqmi :
+      PowerPC_Vec_Intrinsic<"vrlqmi", [llvm_v1i128_ty],
+                            [llvm_v1i128_ty, llvm_v1i128_ty, llvm_v1i128_ty],
+                            [IntrNoMem]>;
+
 // Vector Divide Extended Intrinsics.
 def int_ppc_altivec_vdivesw : PowerPC_Vec_WWW_Intrinsic<"vdivesw">;
 def int_ppc_altivec_vdiveuw : PowerPC_Vec_WWW_Intrinsic<"vdiveuw">;
 def int_ppc_altivec_vdivesd : PowerPC_Vec_DDD_Intrinsic<"vdivesd">;
 def int_ppc_altivec_vdiveud : PowerPC_Vec_DDD_Intrinsic<"vdiveud">;
+def int_ppc_altivec_vdivesq : PowerPC_Vec_QQQ_Intrinsic<"vdivesq">;
+def int_ppc_altivec_vdiveuq : PowerPC_Vec_QQQ_Intrinsic<"vdiveuq">;
 
 // Vector Multiply High Intrinsics.
 def int_ppc_altivec_vmulhsw : PowerPC_Vec_WWW_Intrinsic<"vmulhsw">;
@@ -1192,6 +1258,16 @@ def int_ppc_vsx_xxinsertw :
 def int_ppc_vsx_xvtlsbb :
       PowerPC_VSX_Intrinsic<"xvtlsbb", [llvm_i32_ty],
                             [llvm_v16i8_ty, llvm_i32_ty], [IntrNoMem]>;
+def int_ppc_vsx_xvtdivdp :
+      PowerPC_VSX_Intrinsic<"xvtdivdp", [llvm_i32_ty],
+                            [llvm_v2f64_ty, llvm_v2f64_ty], [IntrNoMem]>;
+def int_ppc_vsx_xvtdivsp :
+      PowerPC_VSX_Intrinsic<"xvtdivsp", [llvm_i32_ty],
+                            [llvm_v4f32_ty, llvm_v4f32_ty], [IntrNoMem]>;
+def int_ppc_vsx_xvtsqrtdp :
+      PowerPC_VSX_Intrinsic<"xvtsqrtdp", [llvm_i32_ty], [llvm_v2f64_ty], [IntrNoMem]>;
+def int_ppc_vsx_xvtsqrtsp :
+      PowerPC_VSX_Intrinsic<"xvtsqrtsp", [llvm_i32_ty], [llvm_v4f32_ty], [IntrNoMem]>;
 def int_ppc_vsx_xxeval :
       PowerPC_VSX_Intrinsic<"xxeval", [llvm_v2i64_ty],
                            [llvm_v2i64_ty, llvm_v2i64_ty,
@@ -1297,3 +1373,32 @@ def int_ppc_setrnd : GCCBuiltin<"__builtin_setrnd">,
       Intrinsic<[llvm_double_ty], [llvm_i32_ty], []>;
 
 }
+
+let TargetPrefix = "ppc" in {
+  def int_ppc_mma_assemble_acc :
+        Intrinsic<[llvm_v512i1_ty],
+                  [llvm_v16i8_ty, llvm_v16i8_ty, llvm_v16i8_ty, llvm_v16i8_ty],
+                  [IntrNoMem]>;
+
+  def int_ppc_mma_disassemble_acc :
+        Intrinsic<[llvm_v16i8_ty, llvm_v16i8_ty, llvm_v16i8_ty, llvm_v16i8_ty],
+                  [llvm_v512i1_ty], [IntrNoMem]>;
+
+  def int_ppc_mma_assemble_pair :
+        Intrinsic<[llvm_v256i1_ty],
+                  [llvm_v16i8_ty, llvm_v16i8_ty], [IntrNoMem]>;
+
+  def int_ppc_mma_disassemble_pair :
+        Intrinsic<[llvm_v16i8_ty, llvm_v16i8_ty],
+                  [llvm_v256i1_ty], [IntrNoMem]>;
+
+  def int_ppc_mma_xxmtacc :
+        Intrinsic<[llvm_v512i1_ty], [llvm_v512i1_ty], [IntrNoMem]>;
+
+  def int_ppc_mma_xxmfacc :
+        Intrinsic<[llvm_v512i1_ty], [llvm_v512i1_ty], [IntrNoMem]>;
+
+  def int_ppc_mma_xxsetaccz :
+        Intrinsic<[llvm_v512i1_ty], [], [IntrNoMem]>;
+}
+

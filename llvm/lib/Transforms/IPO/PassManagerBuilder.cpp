@@ -92,6 +92,10 @@ static cl::opt<bool> EnableUnrollAndJam("enable-unroll-and-jam",
                                         cl::init(false), cl::Hidden,
                                         cl::desc("Enable Unroll And Jam Pass"));
 
+static cl::opt<bool> EnableLoopFlatten("enable-loop-flatten", cl::init(false),
+                                       cl::Hidden,
+                                       cl::desc("Enable the LoopFlatten Pass"));
+
 static cl::opt<bool>
     EnablePrepareForThinLTO("prepare-for-thinlto", cl::init(false), cl::Hidden,
                             cl::desc("Enable preparation for ThinLTO."));
@@ -99,9 +103,6 @@ static cl::opt<bool>
 static cl::opt<bool>
     EnablePerformThinLTO("perform-thinlto", cl::init(false), cl::Hidden,
                          cl::desc("Enable performing ThinLTO."));
-
-cl::opt<bool> EnableHotColdSplit("hot-cold-split", cl::init(false),
-    cl::ZeroOrMore, cl::desc("Enable hot-cold splitting pass"));
 
 static cl::opt<bool> UseLoopVersioningLICM(
     "enable-loop-versioning-licm", cl::init(false), cl::Hidden,
@@ -444,12 +445,19 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
 
   if (EnableLoopInterchange)
     MPM.add(createLoopInterchangePass()); // Interchange loops
+  if (EnableLoopFlatten) {
+    MPM.add(createLoopFlattenPass()); // Flatten loops
+    MPM.add(createLoopSimplifyCFGPass());
+  }
 
   // Unroll small loops
   MPM.add(createSimpleLoopUnrollPass(OptLevel, DisableUnrollLoops,
                                      ForgetAllSCEVInLoopUnroll));
   addExtensionsToPM(EP_LoopOptimizerEnd, MPM);
   // This ends the loop pass pipelines.
+
+  // Break up allocas that may now be splittable after loop unrolling.
+  MPM.add(createSROAPass());
 
   if (OptLevel > 1) {
     MPM.add(createMergedLoadStoreMotionPass()); // Merge ld/st in diamonds
@@ -854,7 +862,7 @@ void PassManagerBuilder::populateModulePassManager(
 
   // See comment in the new PM for justification of scheduling splitting at
   // this stage (\ref buildModuleSimplificationPipeline).
-  if (EnableHotColdSplit && !(PrepareForLTO || PrepareForThinLTO))
+  if (!(PrepareForLTO || PrepareForThinLTO))
     MPM.add(createHotColdSplittingPass());
 
   if (MergeFunctions)
@@ -1035,6 +1043,8 @@ void PassManagerBuilder::addLTOOptimizationPasses(legacy::PassManagerBase &PM) {
   PM.add(createLoopDeletionPass());
   if (EnableLoopInterchange)
     PM.add(createLoopInterchangePass());
+  if (EnableLoopFlatten)
+    PM.add(createLoopFlattenPass());
 
   // Unroll small loops
   PM.add(createSimpleLoopUnrollPass(OptLevel, DisableUnrollLoops,
@@ -1076,8 +1086,7 @@ void PassManagerBuilder::addLateLTOOptimizationPasses(
     legacy::PassManagerBase &PM) {
   // See comment in the new PM for justification of scheduling splitting at
   // this stage (\ref buildLTODefaultPipeline).
-  if (EnableHotColdSplit)
-    PM.add(createHotColdSplittingPass());
+  PM.add(createHotColdSplittingPass());
 
   // Delete basic blocks, which optimization passes may have killed.
   PM.add(createCFGSimplificationPass());

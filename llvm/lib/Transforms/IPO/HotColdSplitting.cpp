@@ -72,6 +72,7 @@
 #include <string>
 
 #define DEBUG_TYPE "hotcoldsplit"
+#define PASS_NAME "Hot Cold Splitting"
 
 STATISTIC(NumColdRegionsFound, "Number of cold regions found.");
 STATISTIC(NumColdRegionsOutlined, "Number of cold regions outlined.");
@@ -113,8 +114,7 @@ bool blockEndsInUnreachable(const BasicBlock &BB) {
   return !(isa<ReturnInst>(I) || isa<IndirectBrInst>(I));
 }
 
-bool unlikelyExecuted(BasicBlock &BB, ProfileSummaryInfo *PSI,
-                      BlockFrequencyInfo *BFI) {
+bool unlikelyExecuted(BasicBlock &BB) {
   // Exception handling blocks are unlikely executed.
   if (BB.isEHPad() || isa<ResumeInst>(BB.getTerminator()))
     return true;
@@ -127,19 +127,12 @@ bool unlikelyExecuted(BasicBlock &BB, ProfileSummaryInfo *PSI,
         return true;
 
   // The block is cold if it has an unreachable terminator, unless it's
-  // preceded by a call to a (possibly warm) noreturn call (e.g. longjmp);
-  // in the case of a longjmp, if the block is cold according to
-  // profile information, we mark it as unlikely to be executed as well.
+  // preceded by a call to a (possibly warm) noreturn call (e.g. longjmp).
   if (blockEndsInUnreachable(BB)) {
     if (auto *CI =
             dyn_cast_or_null<CallInst>(BB.getTerminator()->getPrevNode()))
-      if (CI->hasFnAttr(Attribute::NoReturn)) {
-        if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(CI))
-          return (II->getIntrinsicID() != Intrinsic::eh_sjlj_longjmp) ||
-                 (BFI && PSI->isColdBlock(&BB, BFI));
-        return !CI->getCalledFunction()->getName().contains("longjmp") ||
-               (BFI && PSI->isColdBlock(&BB, BFI));
-      }
+      if (CI->hasFnAttr(Attribute::NoReturn))
+        return false;
     return true;
   }
 
@@ -199,6 +192,8 @@ public:
   }
 
   bool runOnModule(Module &M) override;
+
+  StringRef getPassName() const override { return PASS_NAME; }
 };
 
 } // end anonymous namespace
@@ -220,6 +215,9 @@ bool HotColdSplitting::isFunctionCold(const Function &F) const {
 // Returns false if the function should not be considered for hot-cold split
 // optimization.
 bool HotColdSplitting::shouldOutlineFrom(const Function &F) const {
+  if (!F.hasFnAttribute(getHotColdSplittingAttrKind()))
+    return false;
+
   if (F.hasFnAttribute(Attribute::AlwaysInline))
     return false;
 
@@ -599,7 +597,7 @@ bool HotColdSplitting::outlineColdRegions(Function &F, bool HasProfileSummary) {
       continue;
 
     bool Cold = (BFI && PSI->isColdBlock(BB, BFI)) ||
-                (EnableStaticAnalysis && unlikelyExecuted(*BB, PSI, BFI));
+                (EnableStaticAnalysis && unlikelyExecuted(*BB));
     if (!Cold)
       continue;
 
@@ -758,13 +756,17 @@ HotColdSplittingPass::run(Module &M, ModuleAnalysisManager &AM) {
 }
 
 char HotColdSplittingLegacyPass::ID = 0;
-INITIALIZE_PASS_BEGIN(HotColdSplittingLegacyPass, "hotcoldsplit",
-                      "Hot Cold Splitting", false, false)
+INITIALIZE_PASS_BEGIN(HotColdSplittingLegacyPass, "hotcoldsplit", PASS_NAME,
+                      false, false)
 INITIALIZE_PASS_DEPENDENCY(ProfileSummaryInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(BlockFrequencyInfoWrapperPass)
-INITIALIZE_PASS_END(HotColdSplittingLegacyPass, "hotcoldsplit",
-                    "Hot Cold Splitting", false, false)
+INITIALIZE_PASS_END(HotColdSplittingLegacyPass, "hotcoldsplit", PASS_NAME,
+                    false, false)
 
 ModulePass *llvm::createHotColdSplittingPass() {
   return new HotColdSplittingLegacyPass();
+}
+
+StringRef llvm::getHotColdSplittingAttrKind() {
+  return "hot-cold-split";
 }

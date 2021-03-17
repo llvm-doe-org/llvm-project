@@ -140,6 +140,7 @@ void ompt_set_data_expression(const char *) OMPT_LIBOMPTARGET_WEAK;
 extern bool ompt_has_user_source_info;
 extern ompt_directive_info_t ompt_directive_info;
 extern const char * const *ompt_data_expressions;
+int omp_get_initial_device(void) OMPT_LIBOMPTARGET_WEAK;
 
 // This struct is passed into target plugins where they require target_id,
 // global_device_id, or OMPT functions from libomp.so.  Target plugins must call

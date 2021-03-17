@@ -1430,8 +1430,8 @@ static void ompt_dispatch_callback_target(ompt_scope_endpoint_t endpoint,
     // FIXME: We don't yet need the NULL arguments for OpenACC support, so we
     // haven't bothered to implement them yet.
     ompt_get_callbacks().ompt_callback(ompt_callback_target)(
-        ompt_target, endpoint, KMP_HOST_DEVICE, /*task_data*/ NULL,
-        /*target_id*/ target_id, /*codeptr_ra*/ NULL);
+        ompt_target, endpoint, omp_get_initial_device(), /*task_data=*/NULL,
+        /*target_id=*/target_id, /*codeptr_ra=*/NULL);
   }
   if (endpoint == ompt_scope_begin) {
     // There's nothing to actually enqueue as we're about to call the task
@@ -1440,15 +1440,13 @@ static void ompt_dispatch_callback_target(ompt_scope_endpoint_t endpoint,
     // so we haven't bothered to implement it yet.
     if (ompt_enabled.ompt_callback_target_submit) {
       ompt_get_callbacks().ompt_callback(ompt_callback_target_submit)(
-          /*target_id*/ target_id,
-          /*host_op_id*/ ompt_id_none,
-          /*requested_num_teams*/ team_size);
+          /*target_id=*/target_id, /*host_op_id=*/ompt_id_none,
+          /*requested_num_teams=*/team_size);
     }
     if (ompt_enabled.ompt_callback_target_submit_end) {
       ompt_get_callbacks().ompt_callback(ompt_callback_target_submit_end)(
-          /*target_id*/ target_id,
-          /*host_op_id*/ ompt_id_none,
-          /*requested_num_teams*/ team_size);
+          /*target_id=*/target_id, /*host_op_id=*/ompt_id_none,
+          /*requested_num_teams=*/team_size);
     }
   }
 }
@@ -1577,6 +1575,13 @@ int __kmp_fork_call(ident_t *loc, int gtid,
         // AC: we are in serialized parallel
         __kmpc_serialized_parallel(loc, gtid);
         KMP_DEBUG_ASSERT(parent_team->t.t_serialized > 1);
+
+        if (call_context == fork_context_gnu) {
+          // AC: need to decrement t_serialized for enquiry functions to work
+          // correctly, will restore at join time
+          parent_team->t.t_serialized--;
+          return TRUE;
+        }
 
 #if OMPT_SUPPORT
         void *dummy;
@@ -1709,6 +1714,9 @@ int __kmp_fork_call(ident_t *loc, int gtid,
       KF_TRACE(10, ("__kmp_fork_call: after internal fork: root=%p, team=%p, "
                     "master_th=%p, gtid=%d\n",
                     root, parent_team, master_th, gtid));
+
+      if (call_context == fork_context_gnu)
+        return TRUE;
 
       /* Invoke microtask for MASTER thread */
       KA_TRACE(20, ("__kmp_fork_call: T#%d(%d:0) invoke microtask = %p\n", gtid,
@@ -2366,7 +2374,11 @@ void __kmp_join_call(ident_t *loc, int gtid
 
 #if OMPT_SUPPORT
   void *team_microtask = (void *)team->t.t_pkfn;
-  if (ompt_enabled.enabled) {
+  // For GOMP interface with serialized parallel, need the
+  // __kmpc_end_serialized_parallel to call hooks for OMPT end-implicit-task
+  // and end-parallel events.
+  if (ompt_enabled.enabled &&
+      !(team->t.t_serialized && fork_context == fork_context_gnu)) {
     master_th->th.ompt_thread_info.state = ompt_state_overhead;
   }
 #endif

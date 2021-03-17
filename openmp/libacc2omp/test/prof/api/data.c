@@ -23,8 +23,7 @@
 // RUN:         -match-full-lines -strict-whitespace \
 // RUN:         -implicit-check-not=acc_ev_ \
 // RUN:         -check-prefixes=CHECK,%[host-or-off],%[copy] \
-// RUN:         -DVERSION=%acc-version -DHOST_DEV=%acc-host-dev \
-// RUN:         -DTHREAD_ID=0 -DASYNC_QUEUE=-1
+// RUN:         -DVERSION=%acc-version -DTHREAD_ID=0 -DASYNC_QUEUE=-1
 // RUN:   }
 // RUN: }
 //
@@ -61,6 +60,11 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "invalid argument: %s\n", argv[1]);
     return 1;
   }
+
+  // CHECK:host dev = [[HOST_DEV:[0-9]+]]
+  // CHECK-NOT: {{.}}
+  // FIXME: The host device should always be 0 for OpenACC.
+  printf("host dev = %d\n", acc_get_num_devices(acc_device_not_host));
 
   // Put some info about the devices in the output to help with debugging.
   //

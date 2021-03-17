@@ -3963,10 +3963,8 @@ static Value *simplifySelectWithICmpCond(Value *CondVal, Value *TrueVal,
 
     // Test for a bogus zero-shift-guard-op around funnel-shift or rotate.
     Value *ShAmt;
-    auto isFsh = m_CombineOr(m_Intrinsic<Intrinsic::fshl>(m_Value(X), m_Value(),
-                                                          m_Value(ShAmt)),
-                             m_Intrinsic<Intrinsic::fshr>(m_Value(), m_Value(X),
-                                                          m_Value(ShAmt)));
+    auto isFsh = m_CombineOr(m_FShl(m_Value(X), m_Value(), m_Value(ShAmt)),
+                             m_FShr(m_Value(), m_Value(X), m_Value(ShAmt)));
     // (ShAmt == 0) ? fshl(X, *, ShAmt) : X --> X
     // (ShAmt == 0) ? fshr(*, X, ShAmt) : X --> X
     if (match(TrueVal, isFsh) && FalseVal == X && CmpLHS == ShAmt)
@@ -3977,12 +3975,9 @@ static Value *simplifySelectWithICmpCond(Value *CondVal, Value *TrueVal,
     // intrinsics do not have that problem.
     // We do not allow this transform for the general funnel shift case because
     // that would not preserve the poison safety of the original code.
-    auto isRotate = m_CombineOr(m_Intrinsic<Intrinsic::fshl>(m_Value(X),
-                                                             m_Deferred(X),
-                                                             m_Value(ShAmt)),
-                                m_Intrinsic<Intrinsic::fshr>(m_Value(X),
-                                                             m_Deferred(X),
-                                                             m_Value(ShAmt)));
+    auto isRotate =
+        m_CombineOr(m_FShl(m_Value(X), m_Deferred(X), m_Value(ShAmt)),
+                    m_FShr(m_Value(X), m_Deferred(X), m_Value(ShAmt)));
     // (ShAmt == 0) ? X : fshl(X, X, ShAmt) --> fshl(X, X, ShAmt)
     // (ShAmt == 0) ? X : fshr(X, X, ShAmt) --> fshr(X, X, ShAmt)
     if (match(FalseVal, isRotate) && TrueVal == X && CmpLHS == ShAmt &&
@@ -4098,11 +4093,11 @@ static Value *SimplifySelectInst(Value *Cond, Value *TrueVal, Value *FalseVal,
   // long as the other value isn't poison.
   // select ?, undef, X -> X
   if (Q.isUndefValue(TrueVal) &&
-      isGuaranteedNotToBeUndefOrPoison(FalseVal, Q.CxtI, Q.DT))
+      isGuaranteedNotToBeUndefOrPoison(FalseVal, Q.AC, Q.CxtI, Q.DT))
     return FalseVal;
   // select ?, X, undef -> X
   if (Q.isUndefValue(FalseVal) &&
-      isGuaranteedNotToBeUndefOrPoison(TrueVal, Q.CxtI, Q.DT))
+      isGuaranteedNotToBeUndefOrPoison(TrueVal, Q.AC, Q.CxtI, Q.DT))
     return TrueVal;
 
   // Deal with partial undef vector constants: select ?, VecC, VecC' --> VecC''
@@ -5632,7 +5627,7 @@ Value *llvm::SimplifyCall(CallBase *Call, const SimplifyQuery &Q) {
 /// Given operands for a Freeze, see if we can fold the result.
 static Value *SimplifyFreezeInst(Value *Op0, const SimplifyQuery &Q) {
   // Use a utility function defined in ValueTracking.
-  if (llvm::isGuaranteedNotToBeUndefOrPoison(Op0, Q.CxtI, Q.DT))
+  if (llvm::isGuaranteedNotToBeUndefOrPoison(Op0, Q.AC, Q.CxtI, Q.DT))
     return Op0;
   // We have room for improvement.
   return nullptr;

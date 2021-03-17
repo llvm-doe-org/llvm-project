@@ -111,6 +111,13 @@ bool VectorCombine::vectorizeLoadInsert(Instruction &I) {
   // TODO: Extend this to match GEP with constant offsets.
   Value *PtrOp = Load->getPointerOperand()->stripPointerCasts();
   assert(isa<PointerType>(PtrOp->getType()) && "Expected a pointer type");
+  unsigned AS = Load->getPointerAddressSpace();
+
+  // If original AS != Load's AS, we can't bitcast the original pointer and have
+  // to use Load's operand instead. Ideally we would want to strip pointer casts
+  // without changing AS, but there's no API to do that ATM.
+  if (AS != PtrOp->getType()->getPointerAddressSpace())
+    PtrOp = Load->getPointerOperand();
 
   Type *ScalarTy = Scalar->getType();
   uint64_t ScalarSize = ScalarTy->getPrimitiveSizeInBits();
@@ -126,7 +133,6 @@ bool VectorCombine::vectorizeLoadInsert(Instruction &I) {
   if (!isSafeToLoadUnconditionally(PtrOp, MinVecTy, Alignment, DL, Load, &DT))
     return false;
 
-  unsigned AS = Load->getPointerAddressSpace();
 
   // Original pattern: insertelt undef, load [free casts of] ScalarPtr, 0
   int OldCost = TTI.getMemoryOpCost(Instruction::Load, ScalarTy, Alignment, AS);
@@ -154,7 +160,7 @@ bool VectorCombine::vectorizeLoadInsert(Instruction &I) {
     SmallVector<int, 16> Mask(OutputNumElts, UndefMaskElem);
     for (unsigned i = 0; i < OutputNumElts && i < MinVecNumElts; ++i)
       Mask[i] = i;
-    VecLd = Builder.CreateShuffleVector(VecLd, UndefValue::get(MinVecTy), Mask);
+    VecLd = Builder.CreateShuffleVector(VecLd, Mask);
   }
   replaceValue(I, *VecLd);
   ++NumVecLoad;
@@ -304,8 +310,7 @@ static Value *createShiftShuffle(Value *Vec, unsigned OldIndex,
   auto *VecTy = cast<FixedVectorType>(Vec->getType());
   SmallVector<int, 32> ShufMask(VecTy->getNumElements(), UndefMaskElem);
   ShufMask[NewIndex] = OldIndex;
-  Value *Undef = UndefValue::get(VecTy);
-  return Builder.CreateShuffleVector(Vec, Undef, ShufMask, "shift");
+  return Builder.CreateShuffleVector(Vec, ShufMask, "shift");
 }
 
 /// Given an extract element instruction with constant index operand, shuffle
@@ -475,8 +480,7 @@ bool VectorCombine::foldBitcastShuf(Instruction &I) {
   // bitcast (shuf V, MaskC) --> shuf (bitcast V), MaskC'
   ++NumShufOfBitcast;
   Value *CastV = Builder.CreateBitCast(V, DestTy);
-  Value *Shuf =
-      Builder.CreateShuffleVector(CastV, UndefValue::get(DestTy), NewMask);
+  Value *Shuf = Builder.CreateShuffleVector(CastV, NewMask);
   replaceValue(I, *Shuf);
   return true;
 }

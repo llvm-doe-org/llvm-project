@@ -380,13 +380,13 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
       // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
       // OpenACC support, so we haven't bothered to implement them yet.
       OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-          OmptApi.target_id, /*host_op_id*/ ompt_id_none,
-          ompt_target_data_alloc, HstPtrBegin, HOST_DEVICE, (void *)tp,
-          DeviceID, Size, /*codeptr_ra*/ NULL);
+          OmptApi.target_id, /*host_op_id=*/ompt_id_none,
+          ompt_target_data_alloc, HstPtrBegin, omp_get_initial_device(),
+          (void *)tp, DeviceID, Size, /*codeptr_ra=*/NULL);
       OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-          OmptApi.target_id, /*host_op_id*/ ompt_id_none,
-          ompt_target_data_associate, HstPtrBegin, HOST_DEVICE, (void *)tp,
-          DeviceID, Size, /*codeptr_ra*/ NULL);
+          OmptApi.target_id, /*host_op_id=*/ompt_id_none,
+          ompt_target_data_associate, HstPtrBegin, omp_get_initial_device(),
+          (void *)tp, DeviceID, Size, /*codeptr_ra=*/NULL);
     }
 #endif
     DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD ", "
@@ -502,14 +502,15 @@ int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size, bool ForceDelete,
         // OpenACC support, so we haven't bothered to implement them yet.
         OmptApi.ompt_get_callbacks().ompt_callback(
             ompt_callback_target_data_op)(
-            OmptApi.target_id, /*host_op_id*/ ompt_id_none,
-            ompt_target_data_disassociate, HstPtrBegin, HOST_DEVICE,
-            (void *)HT.TgtPtrBegin, DeviceID, Size, /*codeptr_ra*/ NULL);
+            OmptApi.target_id, /*host_op_id=*/ompt_id_none,
+            ompt_target_data_disassociate, HstPtrBegin,
+            omp_get_initial_device(), (void *)HT.TgtPtrBegin, DeviceID, Size,
+            /*codeptr_ra=*/NULL);
         OmptApi.ompt_get_callbacks().ompt_callback(
             ompt_callback_target_data_op)(
-            OmptApi.target_id, /*host_op_id*/ ompt_id_none,
-            ompt_target_data_delete, HstPtrBegin, HOST_DEVICE,
-            (void *)HT.TgtPtrBegin, DeviceID, Size, /*codeptr_ra*/ NULL);
+            OmptApi.target_id, /*host_op_id=*/ompt_id_none,
+            ompt_target_data_delete, HstPtrBegin, omp_get_initial_device(),
+            (void *)HT.TgtPtrBegin, DeviceID, Size, /*codeptr_ra=*/NULL);
       }
 #endif
       deleteData((void *)HT.TgtPtrBegin);

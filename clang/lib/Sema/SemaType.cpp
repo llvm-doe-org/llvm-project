@@ -2196,7 +2196,8 @@ QualType Sema::BuildExtIntType(bool IsUnsigned, Expr *BitWidth,
     return Context.getDependentExtIntType(IsUnsigned, BitWidth);
 
   llvm::APSInt Bits(32);
-  ExprResult ICE = VerifyIntegerConstantExpression(BitWidth, &Bits);
+  ExprResult ICE =
+      VerifyIntegerConstantExpression(BitWidth, &Bits, /*FIXME*/ AllowFold);
 
   if (ICE.isInvalid())
     return QualType();
@@ -2274,7 +2275,7 @@ static ExprResult checkArraySize(Sema &S, Expr *&ArraySize,
 
   ExprResult R = S.VerifyIntegerConstantExpression(
       ArraySize, &SizeVal, Diagnoser,
-      (S.LangOpts.GNUMode || S.LangOpts.OpenCL));
+      S.LangOpts.OpenCL ? Sema::AllowFold : Sema::NoFold);
   if (Diagnoser.IsVLA)
     return ExprResult();
   return R;
@@ -2517,9 +2518,10 @@ QualType Sema::BuildVectorType(QualType CurType, Expr *SizeExpr,
                                SourceLocation AttrLoc) {
   // The base type must be integer (not Boolean or enumeration) or float, and
   // can't already be a vector.
-  if (!CurType->isDependentType() &&
-      (!CurType->isBuiltinType() || CurType->isBooleanType() ||
-       (!CurType->isIntegerType() && !CurType->isRealFloatingType()))) {
+  if ((!CurType->isDependentType() &&
+       (!CurType->isBuiltinType() || CurType->isBooleanType() ||
+        (!CurType->isIntegerType() && !CurType->isRealFloatingType()))) ||
+      CurType->isArrayType()) {
     Diag(AttrLoc, diag::err_attribute_invalid_vector_type) << CurType;
     return QualType();
   }

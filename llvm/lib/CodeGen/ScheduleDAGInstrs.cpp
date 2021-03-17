@@ -241,8 +241,6 @@ void ScheduleDAGInstrs::addPhysRegDataDeps(SUnit *SU, unsigned OperIdx) {
                             !DefMIDesc->hasImplicitDefOfPhysReg(MO.getReg()));
   for (MCRegAliasIterator Alias(MO.getReg(), TRI, true);
        Alias.isValid(); ++Alias) {
-    if (!Uses.contains(*Alias))
-      continue;
     for (Reg2SUnitsMap::iterator I = Uses.find(*Alias); I != Uses.end(); ++I) {
       SUnit *UseSU = I->SU;
       if (UseSU == SU)
@@ -1167,6 +1165,8 @@ void ScheduleDAGInstrs::dumpNode(const SUnit &SU) const {
 
 void ScheduleDAGInstrs::dump() const {
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  if (EntrySU.getInstr() != nullptr)
+    dumpNodeAll(EntrySU);
   for (const SUnit &SU : SUnits)
     dumpNodeAll(SU);
   if (ExitSU.getInstr() != nullptr)
@@ -1177,10 +1177,12 @@ void ScheduleDAGInstrs::dump() const {
 std::string ScheduleDAGInstrs::getGraphNodeLabel(const SUnit *SU) const {
   std::string s;
   raw_string_ostream oss(s);
-  if (SU == &ExitSU)
+  if (SU == &EntrySU)
+    oss << "<entry>";
+  else if (SU == &ExitSU)
     oss << "<exit>";
   else
-    SU->getInstr()->print(oss, /*SkipOpers=*/true);
+    SU->getInstr()->print(oss, /*IsStandalone=*/true);
   return oss.str();
 }
 

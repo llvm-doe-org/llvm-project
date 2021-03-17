@@ -30,9 +30,17 @@
 #define CUDA_ERR_STRING(err)                                                   \
   do {                                                                         \
     if (getDebugLevel() > 0) {                                                 \
-      const char *errStr;                                                      \
-      cuGetErrorString(err, &errStr);                                          \
-      DP("CUDA error is: %s\n", errStr);                                       \
+      const char *errStr = nullptr;                                            \
+      CUresult errStr_status = cuGetErrorString(err, &errStr);                 \
+      if (errStr_status == CUDA_ERROR_INVALID_VALUE)                           \
+        DP("Unrecognized CUDA error code: %d\n", err);                         \
+      else if (errStr_status == CUDA_SUCCESS)                                  \
+        DP("CUDA error is: %s\n", errStr);                                     \
+      else {                                                                   \
+        DP("Unresolved CUDA error code: %d\n", err);                           \
+        DP("Unsuccessful cuGetErrorString return status: %d\n",                \
+           errStr_status);                                                     \
+      }                                                                        \
     }                                                                          \
   } while (false)
 #else // OMPTARGET_DEBUG
@@ -759,9 +767,9 @@ public:
     if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op) {
       ompt_api->ompt_get_callbacks().ompt_callback(
           ompt_callback_target_data_op)(
-          ompt_api->target_id, /*host_op_id*/ ompt_id_none,
-          ompt_target_data_transfer_to_device, HstPtr, HOST_DEVICE, TgtPtr,
-          ompt_api->global_device_id, Size, /*codeptr_ra*/ NULL);
+          ompt_api->target_id, /*host_op_id=*/ompt_id_none,
+          ompt_target_data_transfer_to_device, HstPtr, omp_get_initial_device(),
+          TgtPtr, ompt_api->global_device_id, Size, /*codeptr_ra=*/NULL);
     }
 #endif
     Err = cuMemcpyHtoDAsync((CUdeviceptr)TgtPtr, HstPtr, Size, Stream);
@@ -769,9 +777,10 @@ public:
     if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op) {
       ompt_api->ompt_get_callbacks().ompt_callback(
           ompt_callback_target_data_op)(
-          ompt_api->target_id, /*host_op_id*/ ompt_id_none,
-          ompt_target_data_transfer_to_device_end, HstPtr, HOST_DEVICE, TgtPtr,
-          ompt_api->global_device_id, Size, /*codeptr_ra*/ NULL);
+          ompt_api->target_id, /*host_op_id=*/ompt_id_none,
+          ompt_target_data_transfer_to_device_end, HstPtr,
+          omp_get_initial_device(), TgtPtr, ompt_api->global_device_id, Size,
+          /*codeptr_ra=*/NULL);
     }
 #endif
 
@@ -815,10 +824,10 @@ public:
       // OpenACC support, so we haven't bothered to implement them yet.
       ompt_api->ompt_get_callbacks().ompt_callback(
           ompt_callback_target_data_op)(
-          ompt_api->target_id, /*host_op_id*/ ompt_id_none,
+          ompt_api->target_id, /*host_op_id=*/ompt_id_none,
           ompt_target_data_transfer_from_device, TgtPtr,
-          ompt_api->global_device_id, HstPtr, HOST_DEVICE, Size,
-          /*codeptr_ra*/ NULL);
+          ompt_api->global_device_id, HstPtr, omp_get_initial_device(), Size,
+          /*codeptr_ra=*/NULL);
     }
 #endif
     Err = cuMemcpyDtoHAsync(HstPtr, (CUdeviceptr)TgtPtr, Size, Stream);
@@ -828,10 +837,10 @@ public:
       // OpenACC support, so we haven't bothered to implement them yet.
       ompt_api->ompt_get_callbacks().ompt_callback(
           ompt_callback_target_data_op)(
-          ompt_api->target_id, /*host_op_id*/ ompt_id_none,
+          ompt_api->target_id, /*host_op_id=*/ompt_id_none,
           ompt_target_data_transfer_from_device_end, TgtPtr,
-          ompt_api->global_device_id, HstPtr, HOST_DEVICE, Size,
-          /*codeptr_ra*/ NULL);
+          ompt_api->global_device_id, HstPtr, omp_get_initial_device(), Size,
+          /*codeptr_ra=*/NULL);
     }
 #endif
 

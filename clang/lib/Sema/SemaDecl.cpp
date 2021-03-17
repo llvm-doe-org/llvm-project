@@ -2035,24 +2035,6 @@ Scope *Sema::getNonFieldDeclScope(Scope *S) {
   return S;
 }
 
-/// Looks up the declaration of "struct objc_super" and
-/// saves it for later use in building builtin declaration of
-/// objc_msgSendSuper and objc_msgSendSuper_stret. If no such
-/// pre-existing declaration exists no action takes place.
-static void LookupPredefedObjCSuperType(Sema &ThisSema, Scope *S,
-                                        IdentifierInfo *II) {
-  if (!II->isStr("objc_msgSendSuper"))
-    return;
-  ASTContext &Context = ThisSema.Context;
-
-  LookupResult Result(ThisSema, &Context.Idents.get("objc_super"),
-                      SourceLocation(), Sema::LookupTagName);
-  ThisSema.LookupName(Result, S);
-  if (Result.getResultKind() == LookupResult::Found)
-    if (const TagDecl *TD = Result.getAsSingle<TagDecl>())
-      Context.setObjCSuperType(Context.getTagDeclType(TD));
-}
-
 static StringRef getHeaderName(Builtin::Context &BuiltinInfo, unsigned ID,
                                ASTContext::GetBuiltinTypeError Error) {
   switch (Error) {
@@ -2113,7 +2095,7 @@ FunctionDecl *Sema::CreateBuiltin(IdentifierInfo *II, QualType Type,
 NamedDecl *Sema::LazilyCreateBuiltin(IdentifierInfo *II, unsigned ID,
                                      Scope *S, bool ForRedeclaration,
                                      SourceLocation Loc) {
-  LookupPredefedObjCSuperType(*this, S, II);
+  LookupNecessaryTypesForBuiltin(S, ID);
 
   ASTContext::GetBuiltinTypeError Error;
   QualType R = Context.GetBuiltinType(ID, Error);
@@ -2123,7 +2105,8 @@ NamedDecl *Sema::LazilyCreateBuiltin(IdentifierInfo *II, unsigned ID,
 
     // If we have a builtin without an associated type we should not emit a
     // warning when we were not able to find a type for it.
-    if (Error == ASTContext::GE_Missing_type)
+    if (Error == ASTContext::GE_Missing_type ||
+        Context.BuiltinInfo.allowTypeMismatch(ID))
       return nullptr;
 
     // If we could not find a type for setjmp it is because the jmp_buf type was
@@ -2147,11 +2130,9 @@ NamedDecl *Sema::LazilyCreateBuiltin(IdentifierInfo *II, unsigned ID,
        Context.BuiltinInfo.isHeaderDependentFunction(ID))) {
     Diag(Loc, diag::ext_implicit_lib_function_decl)
         << Context.BuiltinInfo.getName(ID) << R;
-    if (Context.BuiltinInfo.getHeaderName(ID) &&
-        !Diags.isIgnored(diag::ext_implicit_lib_function_decl, Loc))
+    if (const char *Header = Context.BuiltinInfo.getHeaderName(ID))
       Diag(Loc, diag::note_include_header_or_declare)
-          << Context.BuiltinInfo.getHeaderName(ID)
-          << Context.BuiltinInfo.getName(ID);
+          << Header << Context.BuiltinInfo.getName(ID);
   }
 
   if (R.isNull())
@@ -2610,6 +2591,8 @@ static bool mergeDeclAttribute(Sema &S, NamedDecl *D,
     return false;
   } else if (const auto *MA = dyn_cast<MinSizeAttr>(Attr))
     NewAttr = S.mergeMinSizeAttr(D, *MA);
+  else if (const auto *SNA = dyn_cast<SwiftNameAttr>(Attr))
+    NewAttr = S.mergeSwiftNameAttr(D, *SNA, SNA->getName());
   else if (const auto *OA = dyn_cast<OptimizeNoneAttr>(Attr))
     NewAttr = S.mergeOptimizeNoneAttr(D, *OA);
   else if (const auto *InternalLinkageA = dyn_cast<InternalLinkageAttr>(Attr))
@@ -5949,9 +5932,14 @@ static QualType TryToFixInvalidVariablyModifiedType(QualType T,
   const VariableArrayType* VLATy = dyn_cast<VariableArrayType>(T);
   if (!VLATy)
     return QualType();
-  // FIXME: We should probably handle this case
-  if (VLATy->getElementType()->isVariablyModifiedType())
-    return QualType();
+
+  QualType ElemTy = VLATy->getElementType();
+  if (ElemTy->isVariablyModifiedType()) {
+    ElemTy = TryToFixInvalidVariablyModifiedType(ElemTy, Context,
+                                                 SizeIsNegative, Oversized);
+    if (ElemTy.isNull())
+      return QualType();
+  }
 
   Expr::EvalResult Result;
   if (!VLATy->getSizeExpr() ||
@@ -5967,16 +5955,18 @@ static QualType TryToFixInvalidVariablyModifiedType(QualType T,
   }
 
   // Check whether the array is too large to be addressed.
-  unsigned ActiveSizeBits
-    = ConstantArrayType::getNumAddressingBits(Context, VLATy->getElementType(),
-                                              Res);
+  unsigned ActiveSizeBits =
+      (!ElemTy->isDependentType() && !ElemTy->isVariablyModifiedType() &&
+       !ElemTy->isIncompleteType() && !ElemTy->isUndeducedType())
+          ? ConstantArrayType::getNumAddressingBits(Context, ElemTy, Res)
+          : Res.getActiveBits();
   if (ActiveSizeBits > ConstantArrayType::getMaxSizeBits(Context)) {
     Oversized = Res;
     return QualType();
   }
 
-  return Context.getConstantArrayType(
-      VLATy->getElementType(), Res, VLATy->getSizeExpr(), ArrayType::Normal, 0);
+  return Context.getConstantArrayType(ElemTy, Res, VLATy->getSizeExpr(),
+                                      ArrayType::Normal, 0);
 }
 
 static void
@@ -6002,7 +5992,13 @@ FixInvalidVariablyModifiedTypeLoc(TypeLoc SrcTL, TypeLoc DstTL) {
   ArrayTypeLoc DstATL = DstTL.castAs<ArrayTypeLoc>();
   TypeLoc SrcElemTL = SrcATL.getElementLoc();
   TypeLoc DstElemTL = DstATL.getElementLoc();
-  DstElemTL.initializeFullCopy(SrcElemTL);
+  if (VariableArrayTypeLoc SrcElemATL =
+          SrcElemTL.getAs<VariableArrayTypeLoc>()) {
+    ConstantArrayTypeLoc DstElemATL = DstElemTL.castAs<ConstantArrayTypeLoc>();
+    FixInvalidVariablyModifiedTypeLoc(SrcElemATL, DstElemATL);
+  } else {
+    DstElemTL.initializeFullCopy(SrcElemTL);
+  }
   DstATL.setLBracketLoc(SrcATL.getLBracketLoc());
   DstATL.setSizeExpr(SrcATL.getSizeExpr());
   DstATL.setRBracketLoc(SrcATL.getRBracketLoc());
@@ -6132,7 +6128,7 @@ Sema::CheckTypedefForVariablyModifiedType(Scope *S, TypedefNameDecl *NewTD) {
                                                       SizeIsNegative,
                                                       Oversized);
       if (FixedTInfo) {
-        Diag(NewTD->getLocation(), diag::warn_illegal_constant_array_size);
+        Diag(NewTD->getLocation(), diag::ext_vla_folded_to_constant);
         NewTD->setTypeSourceInfo(FixedTInfo);
       } else {
         if (SizeIsNegative)
@@ -6514,7 +6510,9 @@ static void checkDLLAttributeRedeclaration(Sema &S, NamedDecl *OldDecl,
   // special MSVC extension: in the last case, the declaration is treated as if
   // it were marked dllexport.
   bool IsInline = false, IsStaticDataMember = false, IsQualifiedFriend = false;
-  bool IsMicrosoft = S.Context.getTargetInfo().getCXXABI().isMicrosoft();
+  bool IsMicrosoft =
+      S.Context.getTargetInfo().getCXXABI().isMicrosoft() ||
+      S.Context.getTargetInfo().getTriple().isWindowsItaniumEnvironment();
   if (const auto *VD = dyn_cast<VarDecl>(NewDecl)) {
     // Ignore static data because out-of-line definitions are diagnosed
     // separately.
@@ -7999,7 +7997,7 @@ void Sema::CheckVariableDeclarationType(VarDecl *NewVD) {
       return;
     }
 
-    Diag(NewVD->getLocation(), diag::warn_illegal_constant_array_size);
+    Diag(NewVD->getLocation(), diag::ext_vla_folded_to_constant);
     NewVD->setType(FixedT);
     NewVD->setTypeSourceInfo(FixedTInfo);
   }
@@ -9658,20 +9656,20 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
     }
   }
 
-  // In C builtins get merged with implicitly lazily created declarations.
-  // In C++ we need to check if it's a builtin and add the BuiltinAttr here.
-  if (getLangOpts().CPlusPlus) {
+  // If this is the first declaration of a library builtin function, add
+  // attributes as appropriate.
+  if (!D.isRedeclaration() &&
+      NewFD->getDeclContext()->getRedeclContext()->isFileContext()) {
     if (IdentifierInfo *II = Previous.getLookupName().getAsIdentifierInfo()) {
       if (unsigned BuiltinID = II->getBuiltinID()) {
         if (NewFD->getLanguageLinkage() == CLanguageLinkage) {
-          // Declarations for builtins with custom typechecking by definition
-          // don't make sense. Don't attempt typechecking and simply add the
-          // attribute.
-          if (Context.BuiltinInfo.hasCustomTypechecking(BuiltinID)) {
+          // Validate the type matches unless this builtin is specified as
+          // matching regardless of its declared type.
+          if (Context.BuiltinInfo.allowTypeMismatch(BuiltinID)) {
             NewFD->addAttr(BuiltinAttr::CreateImplicit(Context, BuiltinID));
           } else {
             ASTContext::GetBuiltinTypeError Error;
-            LookupPredefedObjCSuperType(*this, S, NewFD->getIdentifier());
+            LookupNecessaryTypesForBuiltin(S, BuiltinID);
             QualType BuiltinType = Context.GetBuiltinType(BuiltinID, Error);
 
             if (!Error && !BuiltinType.isNull() &&
@@ -10880,7 +10878,7 @@ bool Sema::CheckFunctionDeclaration(Scope *S, FunctionDecl *NewFD,
     // declaration against the expected type for the builtin.
     if (unsigned BuiltinID = NewFD->getBuiltinID()) {
       ASTContext::GetBuiltinTypeError Error;
-      LookupPredefedObjCSuperType(*this, S, NewFD->getIdentifier());
+      LookupNecessaryTypesForBuiltin(S, BuiltinID);
       QualType T = Context.GetBuiltinType(BuiltinID, Error);
       // If the type of the builtin differs only in its exception
       // specification, that's OK.
@@ -16433,7 +16431,7 @@ ExprResult Sema::VerifyBitField(SourceLocation FieldLoc,
     return BitWidth;
 
   llvm::APSInt Value;
-  ExprResult ICE = VerifyIntegerConstantExpression(BitWidth, &Value);
+  ExprResult ICE = VerifyIntegerConstantExpression(BitWidth, &Value, AllowFold);
   if (ICE.isInvalid())
     return ICE;
   BitWidth = ICE.get();
@@ -16690,7 +16688,7 @@ FieldDecl *Sema::CheckFieldDecl(DeclarationName Name, QualType T,
                                                     SizeIsNegative,
                                                     Oversized);
     if (FixedTInfo) {
-      Diag(Loc, diag::warn_illegal_constant_array_size);
+      Diag(Loc, diag::ext_vla_folded_to_constant);
       TInfo = FixedTInfo;
       T = FixedTInfo->getType();
     } else {
@@ -16719,14 +16717,6 @@ FieldDecl *Sema::CheckFieldDecl(DeclarationName Name, QualType T,
     BitWidth = VerifyBitField(Loc, II, T, Record->isMsStruct(Context), BitWidth,
                               &ZeroWidth).get();
     if (!BitWidth) {
-      InvalidDecl = true;
-      BitWidth = nullptr;
-      ZeroWidth = false;
-    }
-
-    // Only data members can have in-class initializers.
-    if (BitWidth && !II && InitStyle) {
-      Diag(Loc, diag::err_anon_bitfield_init);
       InvalidDecl = true;
       BitWidth = nullptr;
       ZeroWidth = false;
@@ -17559,6 +17549,8 @@ EnumConstantDecl *Sema::CheckEnumConstant(EnumDecl *Enum,
     if (Enum->isDependentType() || Val->isTypeDependent())
       EltTy = Context.DependentTy;
     else {
+      // FIXME: We don't allow folding in C++11 mode for an enum with a fixed
+      // underlying type, but do allow it in all other contexts.
       if (getLangOpts().CPlusPlus11 && Enum->isFixed()) {
         // C++11 [dcl.enum]p5: If the underlying type is fixed, [...] the
         // constant-expression in the enumerator-definition shall be a converted
@@ -17572,8 +17564,9 @@ EnumConstantDecl *Sema::CheckEnumConstant(EnumDecl *Enum,
         else
           Val = Converted.get();
       } else if (!Val->isValueDependent() &&
-                 !(Val = VerifyIntegerConstantExpression(Val,
-                                                         &EnumVal).get())) {
+                 !(Val =
+                       VerifyIntegerConstantExpression(Val, &EnumVal, AllowFold)
+                           .get())) {
         // C99 6.7.2.2p2: Make sure we have an integer constant expression.
       } else {
         if (Enum->isComplete()) {

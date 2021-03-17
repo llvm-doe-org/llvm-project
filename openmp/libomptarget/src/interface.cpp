@@ -143,7 +143,7 @@ EXTERN void __tgt_target_data_begin_mapper(int64_t device_id, int32_t arg_num,
     DP("Use default device id %" PRId64 "\n", device_id);
   }
 
-  if (device_id == HOST_DEVICE) {
+  if (device_id == omp_get_initial_device()) {
     DP("Device is host (%" PRId64 "), returning as if offload is disabled\n",
        device_id);
     return;
@@ -314,7 +314,7 @@ EXTERN void __tgt_target_data_update_mapper(int64_t device_id, int32_t arg_num,
     device_id = omp_get_default_device();
   }
 
-  if (device_id == HOST_DEVICE) {
+  if (device_id == omp_get_initial_device()) {
     DP("Device is host (%" PRId64 "), returning as if offload is disabled\n",
        device_id);
     return;
@@ -371,7 +371,7 @@ EXTERN int __tgt_target_mapper(int64_t device_id, void *host_ptr,
     device_id = omp_get_default_device();
   }
 
-  if (device_id == HOST_DEVICE) {
+  if (device_id == omp_get_initial_device()) {
     DP("Device is host (%" PRId64 "), returning OFFLOAD_FAIL as if offload is "
        "disabled\n", device_id);
     return OFFLOAD_FAIL;
@@ -437,7 +437,7 @@ EXTERN int __tgt_target_teams_mapper(int64_t device_id, void *host_ptr,
     device_id = omp_get_default_device();
   }
 
-  if (device_id == HOST_DEVICE) {
+  if (device_id == omp_get_initial_device()) {
     DP("Device is host (%" PRId64 "), returning OFFLOAD_FAIL as if offload is "
        "disabled\n", device_id);
     return OFFLOAD_FAIL;
@@ -507,7 +507,7 @@ EXTERN void __kmpc_push_target_tripcount(int64_t device_id,
     device_id = omp_get_default_device();
   }
 
-  if (device_id == HOST_DEVICE) {
+  if (device_id == omp_get_initial_device()) {
     DP("Device is host (%" PRId64 "), returning as if offload is disabled\n",
        device_id);
     return;

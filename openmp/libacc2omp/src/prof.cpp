@@ -64,9 +64,6 @@
  * FIXME: Access is not thread-safe.  Does it need to be?
  ****************************************************************************/
 
-// The initial_device_num passed to the OMPT initialize callback.
-static int acc_ompt_initial_device_num;
-
 // Map from target_id to device_num as passed to ompt_callback_target.  Entries
 // are inserted/erased as target regions begin/end.
 static std::map<ompt_id_t, int> acc_ompt_target_device_map;
@@ -163,7 +160,7 @@ static acc_prof_info acc_get_prof_info(acc_event_t event_type,
   // example, acc_device_nvidia when offloading to nvptx64.  Will an OpenMP/OMPT
   // extension be needed to make this information available?  Likewise within
   // acc_get_api_info.
-  ret.device_type = device_number == acc_ompt_initial_device_num
+  ret.device_type = device_number == omp_get_initial_device()
                     ? acc_device_host : acc_device_not_host;
   ret.device_number = device_number;
   // FIXME: We need to find the right way to compute this.
@@ -293,7 +290,7 @@ static acc_api_info acc_get_api_info(int device_number) {
   // so acc_device_api_none seems like the right thing for now.
   ret.device_api = acc_device_api_none;
   // TODO: See todo for device_type within acc_get_prof_info.
-  ret.device_type = device_number == acc_ompt_initial_device_num
+  ret.device_type = device_number == omp_get_initial_device()
                     ? acc_device_host : acc_device_not_host;
   // FIXME: How do we choose our vendor identifier?  Does Clang's OpenMP
   // implementation have something?
@@ -772,8 +769,7 @@ static void acc_prof_unregister_enqueue(
  ****************************************************************************/
 
 static int acc_ompt_initialize(ompt_function_lookup_t lookup,
-                               int initial_device_num,
-                               ompt_data_t *tool_data) {
+                               int initial_device_num, ompt_data_t *tool_data) {
   acc_ompt_set_callback = (ompt_set_callback_t)lookup("ompt_set_callback");
   acc_ompt_get_directive_info =
       (ompt_get_directive_info_t)lookup("ompt_get_directive_info");
@@ -786,7 +782,6 @@ static int acc_ompt_initialize(ompt_function_lookup_t lookup,
       acc_prof_unregister_ompt(action->event, action->cb, action->info);
     free(action);
   }
-  acc_ompt_initial_device_num = initial_device_num;
   return 1;
 }
 
@@ -794,10 +789,9 @@ static void acc_ompt_finalize(ompt_data_t *tool_data) {
   if (!acc_ev_runtime_shutdown_callback)
     return;
   acc_event_t event_type = acc_ev_runtime_shutdown;
-  acc_prof_info pi = acc_get_prof_info(event_type,
-                                       acc_ompt_initial_device_num);
+  acc_prof_info pi = acc_get_prof_info(event_type, omp_get_initial_device());
   acc_event_info ei = acc_get_other_event_info(event_type);
-  acc_api_info ai = acc_get_api_info(acc_ompt_initial_device_num);
+  acc_api_info ai = acc_get_api_info(omp_get_initial_device());
   acc_ev_runtime_shutdown_callback(&pi, &ei, &ai);
 }
 

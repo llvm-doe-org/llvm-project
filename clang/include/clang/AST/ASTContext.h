@@ -171,6 +171,16 @@ struct TypeInfo {
       : Width(Width), Align(Align), AlignIsRequired(AlignIsRequired) {}
 };
 
+struct TypeInfoChars {
+  CharUnits Width;
+  CharUnits Align;
+  bool AlignIsRequired : 1;
+
+  TypeInfoChars() : AlignIsRequired(false) {}
+  TypeInfoChars(CharUnits Width, CharUnits Align, bool AlignIsRequired)
+      : Width(Width), Align(Align), AlignIsRequired(AlignIsRequired) {}
+};
+
 /// Holds long-lived AST nodes (such as types and decls) that can be
 /// referred to throughout the semantic analysis of a file.
 class ASTContext : public RefCountedBase<ASTContext> {
@@ -664,6 +674,14 @@ public:
   bool AtomicUsesUnsupportedLibcall(const AtomicExpr *E) const;
 
   const LangOptions& getLangOpts() const { return LangOpts; }
+
+  // If this condition is false, typo correction must be performed eagerly
+  // rather than delayed in many places, as it makes use of dependent types.
+  // the condition is false for clang's C-only codepath, as it doesn't support
+  // dependent types yet.
+  bool isDependenceAllowed() const {
+    return LangOpts.CPlusPlus || LangOpts.RecoveryAST;
+  }
 
   const SanitizerBlacklist &getSanitizerBlacklist() const {
     return *SanitizerBL;
@@ -2137,15 +2155,24 @@ public:
   }
   unsigned getTypeUnadjustedAlign(const Type *T) const;
 
-  /// Return the ABI-specified alignment of a type, in bits, or 0 if
+  /// Return the alignment of a type, in bits, or 0 if
   /// the type is incomplete and we cannot determine the alignment (for
-  /// example, from alignment attributes).
-  unsigned getTypeAlignIfKnown(QualType T) const;
+  /// example, from alignment attributes). The returned alignment is the
+  /// Preferred alignment if NeedsPreferredAlignment is true, otherwise is the
+  /// ABI alignment.
+  unsigned getTypeAlignIfKnown(QualType T,
+                               bool NeedsPreferredAlignment = false) const;
 
   /// Return the ABI-specified alignment of a (complete) type \p T, in
   /// characters.
   CharUnits getTypeAlignInChars(QualType T) const;
   CharUnits getTypeAlignInChars(const Type *T) const;
+
+  /// Return the PreferredAlignment of a (complete) type \p T, in
+  /// characters.
+  CharUnits getPreferredTypeAlignInChars(QualType T) const {
+    return toCharUnitsFromBits(getPreferredTypeAlign(T));
+  }
 
   /// getTypeUnadjustedAlignInChars - Return the ABI-specified alignment of a type,
   /// in characters, before alignment adjustments. This method does not work on
@@ -2155,10 +2182,10 @@ public:
 
   // getTypeInfoDataSizeInChars - Return the size of a type, in chars. If the
   // type is a record, its data size is returned.
-  std::pair<CharUnits, CharUnits> getTypeInfoDataSizeInChars(QualType T) const;
+  TypeInfoChars getTypeInfoDataSizeInChars(QualType T) const;
 
-  std::pair<CharUnits, CharUnits> getTypeInfoInChars(const Type *T) const;
-  std::pair<CharUnits, CharUnits> getTypeInfoInChars(QualType T) const;
+  TypeInfoChars getTypeInfoInChars(const Type *T) const;
+  TypeInfoChars getTypeInfoInChars(QualType T) const;
 
   /// Determine if the alignment the type has was required using an
   /// alignment attribute.
@@ -2169,7 +2196,12 @@ public:
   /// the current target, in bits.
   ///
   /// This can be different than the ABI alignment in cases where it is
-  /// beneficial for performance to overalign a data type.
+  /// beneficial for performance or backwards compatibility preserving to
+  /// overalign a data type. (Note: despite the name, the preferred alignment
+  /// is ABI-impacting, and not an optimization.)
+  unsigned getPreferredTypeAlign(QualType T) const {
+    return getPreferredTypeAlign(T.getTypePtr());
+  }
   unsigned getPreferredTypeAlign(const Type *T) const;
 
   /// Return the default alignment for __attribute__((aligned)) on

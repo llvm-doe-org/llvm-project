@@ -93,7 +93,7 @@
 // RUN:       %[run-if] FileCheck -input-file %t.out %s \
 // RUN:           -match-full-lines -strict-whitespace \
 // RUN:           -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2],CHECK-%[dir-fc3],%[env-fc] \
-// RUN:           -DVERSION=%acc-version -DHOST_DEV=%acc-host-dev \
+// RUN:           -DVERSION=%acc-version \
 // RUN:           -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
 // RUN:           -DARR_ENTER_CONSTRUCT='runtime_api' \
 // RUN:           -DARR_EXIT_CONSTRUCT='runtime_api' \
@@ -124,7 +124,7 @@
 // RUN:       %[run-if] FileCheck -input-file %t.out %s \
 // RUN:           -match-full-lines -strict-whitespace \
 // RUN:           -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2],CHECK-%[dir-fc3],%[env-fc] \
-// RUN:           -DVERSION=%acc-version -DHOST_DEV=%acc-host-dev \
+// RUN:           -DVERSION=%acc-version \
 // RUN:           -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
 // RUN:           -DARR_ENTER_CONSTRUCT=%[arr-enter-construct] \
 // RUN:           -DARR_EXIT_CONSTRUCT=%[arr-exit-construct] \
@@ -186,8 +186,11 @@ int main() {
   int notPresent0[10];
   int notPresent1[11];
 
-  //      CHECK:arr0 host ptr = [[ARR0_HOST_PTR:0x[a-z0-9]+]]
+  //      CHECK:host dev = [[HOST_DEV:[0-9]+]]
+  // CHECK-NEXT:arr0 host ptr = [[ARR0_HOST_PTR:0x[a-z0-9]+]]
   // CHECK-NEXT:arr1 host ptr = [[ARR1_HOST_PTR:0x[a-z0-9]+]]
+  // FIXME: The host device should always be 0 for OpenACC.
+  printf("host dev = %d\n", acc_get_num_devices(acc_device_not_host));
   printf("arr0 host ptr = %p\n", arr0);
   printf("arr1 host ptr = %p\n", arr1);
 

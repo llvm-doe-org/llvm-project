@@ -66,8 +66,9 @@ EXTERN int omp_get_num_devices(void) {
 }
 
 EXTERN int omp_get_initial_device(void) {
-  DP("Call to omp_get_initial_device returning %d\n", HOST_DEVICE);
-  return HOST_DEVICE;
+  int hostDevice = omp_get_num_devices();
+  DP("Call to omp_get_initial_device returning %d\n", hostDevice);
+  return hostDevice;
 }
 
 #if OMPT_SUPPORT
@@ -108,7 +109,7 @@ EXTERN void *omp_target_alloc(size_t size, int device_num) {
     // __kmpc_initialize_runtime to call here instead.
     __kmpc_get_target_offload();
     DeviceAllocSizes[rc] = size;
-    OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(alloc, /*SrcPtr=*/NULL, HOST_DEVICE,
+    OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(alloc, /*SrcPtr=*/NULL, device_num,
                                           rc, device_num, size);
 #endif
     DP("omp_target_alloc returns host ptr " DPxMOD "\n", DPxPTR(rc));
@@ -125,7 +126,8 @@ EXTERN void *omp_target_alloc(size_t size, int device_num) {
   rc = Devices[device_num].allocData(size);
 #if OMPT_SUPPORT
   DeviceAllocSizes[rc] = size;
-  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(alloc, /*SrcPtr=*/NULL, HOST_DEVICE, rc,
+  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(alloc, /*SrcPtr=*/NULL,
+                                        omp_get_initial_device(), rc,
                                         device_num, size);
 #endif
   DP("omp_target_alloc returns device ptr " DPxMOD "\n", DPxPTR(rc));
@@ -152,7 +154,7 @@ EXTERN void omp_target_free(void *device_ptr, int device_num) {
   // address is still valid.
 
   if (device_num == omp_get_initial_device()) {
-    OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(delete, /*SrcPtr=*/NULL, HOST_DEVICE,
+    OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(delete, /*SrcPtr=*/NULL, device_num,
                                           device_ptr, device_num,
                                           DeviceAllocSizes[device_ptr]);
     free(device_ptr);
@@ -166,8 +168,9 @@ EXTERN void omp_target_free(void *device_ptr, int device_num) {
   }
 
 #if OMPT_SUPPORT
-  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(delete, /*SrcPtr=*/NULL, HOST_DEVICE,
-                                        device_ptr, device_num,
+  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(delete, /*SrcPtr=*/NULL,
+                                        omp_get_initial_device(), device_ptr,
+                                        device_num,
                                         DeviceAllocSizes[device_ptr]);
   DeviceAllocSizes.erase(device_ptr);
 #endif
@@ -575,8 +578,9 @@ EXTERN int omp_target_associate_ptr(void *host_ptr, void *device_ptr,
   // "A registered ompt_callback_target_data_op callback is dispatched when
   // device memory is allocated or freed, as well as when data is copied to or
   // from a device."
-  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(associate, host_ptr, HOST_DEVICE,
-                                        device_addr, device_num, size);
+  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(associate, host_ptr,
+                                        omp_get_initial_device(), device_addr,
+                                        device_num, size);
   int rc = Device.associatePtr(host_ptr, device_addr, size);
   DP("omp_target_associate_ptr returns %d\n", rc);
   return rc;
@@ -613,8 +617,9 @@ EXTERN int omp_target_disassociate_ptr(void *host_ptr, int device_num) {
   // "A registered ompt_callback_target_data_op callback is dispatched when
   // device memory is allocated or freed, as well as when data is copied to
   // or from a device."
-  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(disassociate, host_ptr, HOST_DEVICE,
-                                        TgtPtrBegin, device_num, Size);
+  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(disassociate, host_ptr,
+                                        omp_get_initial_device(), TgtPtrBegin,
+                                        device_num, Size);
   DP("omp_target_disassociate_ptr returns %d\n", rc);
   return rc;
 }

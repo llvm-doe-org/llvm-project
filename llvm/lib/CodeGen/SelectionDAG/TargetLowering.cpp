@@ -93,7 +93,7 @@ bool TargetLowering::parametersInCSRMatch(const MachineRegisterInfo &MRI,
     SDValue Value = OutVals[I];
     if (Value->getOpcode() != ISD::CopyFromReg)
       return false;
-    MCRegister ArgReg = cast<RegisterSDNode>(Value->getOperand(1))->getReg();
+    Register ArgReg = cast<RegisterSDNode>(Value->getOperand(1))->getReg();
     if (MRI.getLiveInPhysReg(ArgReg) != Reg)
       return false;
   }
@@ -913,6 +913,13 @@ bool TargetLowering::SimplifyDemandedBits(
   if (Op.getOpcode() == ISD::Constant) {
     // We know all of the bits for a constant!
     Known.One = cast<ConstantSDNode>(Op)->getAPIntValue();
+    Known.Zero = ~Known.One;
+    return false;
+  }
+
+  if (Op.getOpcode() == ISD::ConstantFP) {
+    // We know all of the bits for a floating point constant!
+    Known.One = cast<ConstantFPSDNode>(Op)->getValueAPF().bitcastToAPInt();
     Known.Zero = ~Known.One;
     return false;
   }
@@ -2254,9 +2261,13 @@ bool TargetLowering::SimplifyDemandedBits(
         if (C->isOpaque())
           return false;
     }
-    // TODO: Handle float bits as well.
     if (VT.isInteger())
       return TLO.CombineTo(Op, TLO.DAG.getConstant(Known.One, dl, VT));
+    if (VT.isFloatingPoint())
+      return TLO.CombineTo(
+          Op,
+          TLO.DAG.getConstantFP(
+              APFloat(TLO.DAG.EVTToAPFloatSemantics(VT), Known.One), dl, VT));
   }
 
   return false;
@@ -3368,6 +3379,54 @@ SDValue TargetLowering::foldSetCCWithBinOp(EVT VT, SDValue N0, SDValue N1,
   return DAG.getSetCC(DL, VT, X, YShl1, Cond);
 }
 
+static SDValue simplifySetCCWithCTPOP(const TargetLowering &TLI, EVT VT,
+                                      SDValue N0, const APInt &C1,
+                                      ISD::CondCode Cond, const SDLoc &dl,
+                                      SelectionDAG &DAG) {
+  assert(!VT.isVector() && "Vectors are not supported yet!");
+
+  // Look through truncs that don't change the value of a ctpop.
+  SDValue CTPOP = N0;
+  if (N0.getOpcode() == ISD::TRUNCATE && N0.hasOneUse() &&
+      N0.getValueSizeInBits() > Log2_32(N0.getOperand(0).getValueSizeInBits()))
+    CTPOP = N0.getOperand(0);
+
+  if (CTPOP.getOpcode() != ISD::CTPOP || !CTPOP.hasOneUse())
+    return SDValue();
+
+  EVT CTVT = CTPOP.getValueType();
+  SDValue CTOp = CTPOP.getOperand(0);
+
+  // (ctpop x) u< 2 -> (x & x-1) == 0
+  // (ctpop x) u> 1 -> (x & x-1) != 0
+  if ((Cond == ISD::SETULT && C1 == 2) || (Cond == ISD::SETUGT && C1 == 1)) {
+    SDValue NegOne = DAG.getAllOnesConstant(dl, CTVT);
+    SDValue Add = DAG.getNode(ISD::ADD, dl, CTVT, CTOp, NegOne);
+    SDValue And = DAG.getNode(ISD::AND, dl, CTVT, CTOp, Add);
+    ISD::CondCode CC = Cond == ISD::SETULT ? ISD::SETEQ : ISD::SETNE;
+    return DAG.getSetCC(dl, VT, And, DAG.getConstant(0, dl, CTVT), CC);
+  }
+
+  // If ctpop is not supported, expand a power-of-2 comparison based on it.
+  if ((Cond == ISD::SETEQ || Cond == ISD::SETNE) && C1 == 1 &&
+      !TLI.isOperationLegalOrCustom(ISD::CTPOP, CTVT)) {
+    // (ctpop x) == 1 --> (x != 0) && ((x & x-1) == 0)
+    // (ctpop x) != 1 --> (x == 0) || ((x & x-1) != 0)
+    SDValue Zero = DAG.getConstant(0, dl, CTVT);
+    SDValue NegOne = DAG.getAllOnesConstant(dl, CTVT);
+    assert(CTVT.isInteger());
+    ISD::CondCode InvCond = ISD::getSetCCInverse(Cond, CTVT);
+    SDValue Add = DAG.getNode(ISD::ADD, dl, CTVT, CTOp, NegOne);
+    SDValue And = DAG.getNode(ISD::AND, dl, CTVT, CTOp, Add);
+    SDValue LHS = DAG.getSetCC(dl, VT, CTOp, Zero, InvCond);
+    SDValue RHS = DAG.getSetCC(dl, VT, And, Zero, Cond);
+    unsigned LogicOpcode = Cond == ISD::SETEQ ? ISD::AND : ISD::OR;
+    return DAG.getNode(LogicOpcode, dl, VT, LHS, RHS);
+  }
+
+  return SDValue();
+}
+
 /// Try to simplify a setcc built with the specified operands and cc. If it is
 /// unable to simplify it, return a null SDValue.
 SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
@@ -3428,44 +3487,9 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
       }
     }
 
-    SDValue CTPOP = N0;
-    // Look through truncs that don't change the value of a ctpop.
-    if (N0.hasOneUse() && N0.getOpcode() == ISD::TRUNCATE)
-      CTPOP = N0.getOperand(0);
-
-    if (CTPOP.hasOneUse() && CTPOP.getOpcode() == ISD::CTPOP &&
-        (N0 == CTPOP ||
-         N0.getValueSizeInBits() > Log2_32_Ceil(CTPOP.getValueSizeInBits()))) {
-      EVT CTVT = CTPOP.getValueType();
-      SDValue CTOp = CTPOP.getOperand(0);
-
-      // (ctpop x) u< 2 -> (x & x-1) == 0
-      // (ctpop x) u> 1 -> (x & x-1) != 0
-      if ((Cond == ISD::SETULT && C1 == 2) || (Cond == ISD::SETUGT && C1 == 1)){
-        SDValue NegOne = DAG.getAllOnesConstant(dl, CTVT);
-        SDValue Add = DAG.getNode(ISD::ADD, dl, CTVT, CTOp, NegOne);
-        SDValue And = DAG.getNode(ISD::AND, dl, CTVT, CTOp, Add);
-        ISD::CondCode CC = Cond == ISD::SETULT ? ISD::SETEQ : ISD::SETNE;
-        return DAG.getSetCC(dl, VT, And, DAG.getConstant(0, dl, CTVT), CC);
-      }
-
-      // If ctpop is not supported, expand a power-of-2 comparison based on it.
-      if (C1 == 1 && !isOperationLegalOrCustom(ISD::CTPOP, CTVT) &&
-          (Cond == ISD::SETEQ || Cond == ISD::SETNE)) {
-        // (ctpop x) == 1 --> (x != 0) && ((x & x-1) == 0)
-        // (ctpop x) != 1 --> (x == 0) || ((x & x-1) != 0)
-        SDValue Zero = DAG.getConstant(0, dl, CTVT);
-        SDValue NegOne = DAG.getAllOnesConstant(dl, CTVT);
-        assert(CTVT.isInteger());
-        ISD::CondCode InvCond = ISD::getSetCCInverse(Cond, CTVT);
-        SDValue Add = DAG.getNode(ISD::ADD, dl, CTVT, CTOp, NegOne);
-        SDValue And = DAG.getNode(ISD::AND, dl, CTVT, CTOp, Add);
-        SDValue LHS = DAG.getSetCC(dl, VT, CTOp, Zero, InvCond);
-        SDValue RHS = DAG.getSetCC(dl, VT, And, Zero, Cond);
-        unsigned LogicOpcode = Cond == ISD::SETEQ ? ISD::AND : ISD::OR;
-        return DAG.getNode(LogicOpcode, dl, VT, LHS, RHS);
-      }
-    }
+    // Optimize some CTPOP cases.
+    if (SDValue V = simplifySetCCWithCTPOP(*this, VT, N0, C1, Cond, dl, DAG))
+      return V;
 
     // (zext x) == C --> x == (trunc C)
     // (sext x) == C --> x == (trunc C)
@@ -5773,10 +5797,8 @@ SDValue TargetLowering::getNegatedExpression(SDValue Op, SelectionDAG &DAG,
 
     // If we already have the use of the negated floating constant, it is free
     // to negate it even it has multiple uses.
-    if (!Op.hasOneUse() && CFP.use_empty()) {
-      RemoveDeadNode(CFP);
+    if (!Op.hasOneUse() && CFP.use_empty())
       break;
-    }
     Cost = NegatibleCost::Neutral;
     return CFP;
   }
@@ -6428,7 +6450,7 @@ bool TargetLowering::expandFP_TO_UINT(SDNode *Node, SDValue &Result,
   SDValue Sel;
 
   if (Node->isStrictFPOpcode()) {
-    Sel = DAG.getSetCC(dl, SetCCVT, Src, Cst, ISD::SETLT, SDNodeFlags(),
+    Sel = DAG.getSetCC(dl, SetCCVT, Src, Cst, ISD::SETLT,
                        Node->getOperand(0), /*IsSignaling*/ true);
     Chain = Sel.getValue(1);
   } else {
@@ -7204,7 +7226,7 @@ SDValue TargetLowering::expandUnalignedStore(StoreSDNode *ST,
          "Unaligned store of unknown type.");
   // Get the half-size VT
   EVT NewStoredVT = StoreMemVT.getHalfSizedIntegerVT(*DAG.getContext());
-  unsigned NumBits = NewStoredVT.getSizeInBits().getFixedSize();
+  unsigned NumBits = NewStoredVT.getFixedSizeInBits();
   unsigned IncrementSize = NumBits / 8;
 
   // Divide the stored value in two parts.
@@ -7262,7 +7284,7 @@ TargetLowering::IncrementMemoryAddress(SDValue Addr, SDValue Mask,
     Increment = DAG.getNode(ISD::MUL, DL, AddrVT, Increment, Scale);
   } else if (DataVT.isScalableVector()) {
     Increment = DAG.getVScale(DL, AddrVT,
-                              APInt(AddrVT.getSizeInBits().getFixedSize(),
+                              APInt(AddrVT.getFixedSizeInBits(),
                                     DataVT.getStoreSize().getKnownMinSize()));
   } else
     Increment = DAG.getConstant(DataVT.getStoreSize(), DL, AddrVT);
@@ -7281,7 +7303,7 @@ static SDValue clampDynamicVectorIndex(SelectionDAG &DAG,
   unsigned NElts = VecVT.getVectorMinNumElements();
   if (VecVT.isScalableVector()) {
     SDValue VS = DAG.getVScale(dl, IdxVT,
-                               APInt(IdxVT.getSizeInBits().getFixedSize(),
+                               APInt(IdxVT.getFixedSizeInBits(),
                                      NElts));
     SDValue Sub = DAG.getNode(ISD::SUB, dl, IdxVT, VS,
                               DAG.getConstant(1, dl, IdxVT));
@@ -7310,8 +7332,8 @@ SDValue TargetLowering::getVectorElementPointer(SelectionDAG &DAG,
   EVT EltVT = VecVT.getVectorElementType();
 
   // Calculate the element offset and add it to the pointer.
-  unsigned EltSize = EltVT.getSizeInBits().getFixedSize() / 8; // FIXME: should be ABI size.
-  assert(EltSize * 8 == EltVT.getSizeInBits().getFixedSize() &&
+  unsigned EltSize = EltVT.getFixedSizeInBits() / 8; // FIXME: should be ABI size.
+  assert(EltSize * 8 == EltVT.getFixedSizeInBits() &&
          "Converting bits to bytes lost precision");
 
   Index = clampDynamicVectorIndex(DAG, Index, VecVT, dl);

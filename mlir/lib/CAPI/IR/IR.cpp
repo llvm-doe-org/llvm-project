@@ -7,8 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir-c/IR.h"
+#include "mlir-c/Support.h"
 
 #include "mlir/CAPI/IR.h"
+#include "mlir/CAPI/Support.h"
 #include "mlir/CAPI/Utils.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Dialect.h"
@@ -33,6 +35,44 @@ int mlirContextEqual(MlirContext ctx1, MlirContext ctx2) {
 }
 
 void mlirContextDestroy(MlirContext context) { delete unwrap(context); }
+
+void mlirContextSetAllowUnregisteredDialects(MlirContext context, int allow) {
+  unwrap(context)->allowUnregisteredDialects(allow);
+}
+
+int mlirContextGetAllowUnregisteredDialects(MlirContext context) {
+  return unwrap(context)->allowsUnregisteredDialects();
+}
+intptr_t mlirContextGetNumRegisteredDialects(MlirContext context) {
+  return static_cast<intptr_t>(unwrap(context)->getAvailableDialects().size());
+}
+
+// TODO: expose a cheaper way than constructing + sorting a vector only to take
+// its size.
+intptr_t mlirContextGetNumLoadedDialects(MlirContext context) {
+  return static_cast<intptr_t>(unwrap(context)->getLoadedDialects().size());
+}
+
+MlirDialect mlirContextGetOrLoadDialect(MlirContext context,
+                                        MlirStringRef name) {
+  return wrap(unwrap(context)->getOrLoadDialect(unwrap(name)));
+}
+
+/* ========================================================================== */
+/* Dialect API.                                                               */
+/* ========================================================================== */
+
+MlirContext mlirDialectGetContext(MlirDialect dialect) {
+  return wrap(unwrap(dialect)->getContext());
+}
+
+int mlirDialectEqual(MlirDialect dialect1, MlirDialect dialect2) {
+  return unwrap(dialect1) == unwrap(dialect2);
+}
+
+MlirStringRef mlirDialectGetNamespace(MlirDialect dialect) {
+  return wrap(unwrap(dialect)->getNamespace());
+}
 
 /* ========================================================================== */
 /* Location API.                                                              */
@@ -171,8 +211,6 @@ MlirOperation mlirOperationCreate(const MlirOperationState *state) {
 
 void mlirOperationDestroy(MlirOperation op) { unwrap(op)->erase(); }
 
-int mlirOperationIsNull(MlirOperation op) { return unwrap(op) == nullptr; }
-
 intptr_t mlirOperationGetNumRegions(MlirOperation op) {
   return static_cast<intptr_t>(unwrap(op)->getNumRegions());
 }
@@ -223,6 +261,16 @@ MlirAttribute mlirOperationGetAttributeByName(MlirOperation op,
   return wrap(unwrap(op)->getAttr(name));
 }
 
+void mlirOperationSetAttributeByName(MlirOperation op, const char *name,
+                                     MlirAttribute attr) {
+  unwrap(op)->setAttr(name, unwrap(attr));
+}
+
+int mlirOperationRemoveAttributeByName(MlirOperation op, const char *name) {
+  auto removeResult = unwrap(op)->removeAttr(name);
+  return removeResult == MutableDictionaryAttr::RemoveResult::Removed;
+}
+
 void mlirOperationPrint(MlirOperation op, MlirStringCallback callback,
                         void *userData) {
   detail::CallbackOstream stream(callback, userData);
@@ -255,11 +303,34 @@ void mlirRegionInsertOwnedBlock(MlirRegion region, intptr_t pos,
   blockList.insert(std::next(blockList.begin(), pos), unwrap(block));
 }
 
+void mlirRegionInsertOwnedBlockAfter(MlirRegion region, MlirBlock reference,
+                                     MlirBlock block) {
+  Region *cppRegion = unwrap(region);
+  if (mlirBlockIsNull(reference)) {
+    cppRegion->getBlocks().insert(cppRegion->begin(), unwrap(block));
+    return;
+  }
+
+  assert(unwrap(reference)->getParent() == unwrap(region) &&
+         "expected reference block to belong to the region");
+  cppRegion->getBlocks().insertAfter(Region::iterator(unwrap(reference)),
+                                     unwrap(block));
+}
+
+void mlirRegionInsertOwnedBlockBefore(MlirRegion region, MlirBlock reference,
+                                      MlirBlock block) {
+  if (mlirBlockIsNull(reference))
+    return mlirRegionAppendOwnedBlock(region, block);
+
+  assert(unwrap(reference)->getParent() == unwrap(region) &&
+         "expected reference block to belong to the region");
+  unwrap(region)->getBlocks().insert(Region::iterator(unwrap(reference)),
+                                     unwrap(block));
+}
+
 void mlirRegionDestroy(MlirRegion region) {
   delete static_cast<Region *>(region.ptr);
 }
-
-int mlirRegionIsNull(MlirRegion region) { return unwrap(region) == nullptr; }
 
 /* ========================================================================== */
 /* Block API.                                                                 */
@@ -293,9 +364,34 @@ void mlirBlockInsertOwnedOperation(MlirBlock block, intptr_t pos,
   opList.insert(std::next(opList.begin(), pos), unwrap(operation));
 }
 
-void mlirBlockDestroy(MlirBlock block) { delete unwrap(block); }
+void mlirBlockInsertOwnedOperationAfter(MlirBlock block,
+                                        MlirOperation reference,
+                                        MlirOperation operation) {
+  Block *cppBlock = unwrap(block);
+  if (mlirOperationIsNull(reference)) {
+    cppBlock->getOperations().insert(cppBlock->begin(), unwrap(operation));
+    return;
+  }
 
-int mlirBlockIsNull(MlirBlock block) { return unwrap(block) == nullptr; }
+  assert(unwrap(reference)->getBlock() == unwrap(block) &&
+         "expected reference operation to belong to the block");
+  cppBlock->getOperations().insertAfter(Block::iterator(unwrap(reference)),
+                                        unwrap(operation));
+}
+
+void mlirBlockInsertOwnedOperationBefore(MlirBlock block,
+                                         MlirOperation reference,
+                                         MlirOperation operation) {
+  if (mlirOperationIsNull(reference))
+    return mlirBlockAppendOwnedOperation(block, operation);
+
+  assert(unwrap(reference)->getBlock() == unwrap(block) &&
+         "expected reference operation to belong to the block");
+  unwrap(block)->getOperations().insert(Block::iterator(unwrap(reference)),
+                                        unwrap(operation));
+}
+
+void mlirBlockDestroy(MlirBlock block) { delete unwrap(block); }
 
 intptr_t mlirBlockGetNumArguments(MlirBlock block) {
   return static_cast<intptr_t>(unwrap(block)->getNumArguments());
@@ -359,6 +455,10 @@ MlirAttribute mlirAttributeParseGet(MlirContext context, const char *attr) {
 
 MlirContext mlirAttributeGetContext(MlirAttribute attribute) {
   return wrap(unwrap(attribute).getContext());
+}
+
+MlirType mlirAttributeGetType(MlirAttribute attribute) {
+  return wrap(unwrap(attribute).getType());
 }
 
 int mlirAttributeEqual(MlirAttribute a1, MlirAttribute a2) {

@@ -68,10 +68,10 @@ FOREACH_ARCH(DEF_GET_ARCH)
 // NVPTX64-SAME:{{([[:space:]]+[0-9]+: dot=[0-9]+, dt=[0-9]+, tdn=[0-9]+ => nvptx64)+}}
 //   CHECK-NEXT:    {{[0-9]+}}: dot=-1
 //   CHECK-NEXT:omp_get_num_devices() = [[#X86_64 + PPC64LE + NVPTX64]]
+//   CHECK-NEXT:omp_get_num_devices() = [[#HOST]]
 //   CHECK-NEXT:calls for bad device numbers:
 //   CHECK-NEXT:    -97: dt=0, tdn=-1
 //   CHECK-NEXT:    -1: dt=0, tdn=-1
-//   CHECK-NEXT:    omp_get_num_devices(): dt=0, tdn=-1
 //   CHECK-NEXT:    omp_get_num_devices() + 1: dt=0, tdn=-1
 //   CHECK-NEXT:    omp_get_num_devices() + 8: dt=0, tdn=-1
 
@@ -109,6 +109,7 @@ int main() {
   CHECK_ARCH(host)
   FOREACH_ARCH(CHECK_ARCH)
   printf("omp_get_num_devices() = %d\n", omp_get_num_devices());
+  printf("omp_get_num_devices() = %d\n", omp_get_num_devices());
 
   printf("calls for bad device numbers:\n");
 #define CHECK_BAD_DEV_NUM(DevNum)                                              \
@@ -116,9 +117,6 @@ int main() {
          omp_get_typed_device_num(DevNum));
   CHECK_BAD_DEV_NUM(-97);
   CHECK_BAD_DEV_NUM(-1);
-  // OpenMP 5.1 says omp_get_initial_device() = omp_get_num_devices(), so this
-  // won't be a bad device number once that's implemented.
-  CHECK_BAD_DEV_NUM(omp_get_num_devices());
   CHECK_BAD_DEV_NUM(omp_get_num_devices() + 1);
   CHECK_BAD_DEV_NUM(omp_get_num_devices() + 8);
 

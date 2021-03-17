@@ -286,13 +286,14 @@ int32_t __tgt_rtl_data_submit(
   // OpenACC support, so we haven't bothered to implement them yet.
   if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op) {
     ompt_api->ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-        ompt_api->target_id, /*host_op_id*/ ompt_id_none,
-        ompt_target_data_transfer_to_device, hst_ptr, HOST_DEVICE, tgt_ptr,
-        ompt_api->global_device_id, size, /*codeptr_ra*/ NULL);
+        ompt_api->target_id, /*host_op_id=*/ompt_id_none,
+        ompt_target_data_transfer_to_device, hst_ptr, omp_get_initial_device(),
+        tgt_ptr, ompt_api->global_device_id, size, /*codeptr_ra=*/NULL);
     ompt_api->ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-        ompt_api->target_id, /*host_op_id*/ ompt_id_none,
-        ompt_target_data_transfer_to_device_end, hst_ptr, HOST_DEVICE, tgt_ptr,
-        ompt_api->global_device_id, size, /*codeptr_ra*/ NULL);
+        ompt_api->target_id, /*host_op_id=*/ompt_id_none,
+        ompt_target_data_transfer_to_device_end, hst_ptr,
+        omp_get_initial_device(), tgt_ptr, ompt_api->global_device_id, size,
+        /*codeptr_ra=*/NULL);
   }
 #endif
   memcpy(tgt_ptr, hst_ptr, size);
@@ -321,15 +322,15 @@ int32_t __tgt_rtl_data_retrieve(
   // OpenACC support, so we haven't bothered to implement them yet.
   if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op) {
     ompt_api->ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-        ompt_api->target_id, /*host_op_id*/ ompt_id_none,
+        ompt_api->target_id, /*host_op_id=*/ompt_id_none,
         ompt_target_data_transfer_from_device, tgt_ptr,
-        ompt_api->global_device_id, hst_ptr, HOST_DEVICE, size,
-        /*codeptr_ra*/ NULL);
+        ompt_api->global_device_id, hst_ptr, omp_get_initial_device(), size,
+        /*codeptr_ra=*/NULL);
     ompt_api->ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-        ompt_api->target_id, /*host_op_id*/ ompt_id_none,
+        ompt_api->target_id, /*host_op_id=*/ompt_id_none,
         ompt_target_data_transfer_from_device_end, tgt_ptr,
-        ompt_api->global_device_id, hst_ptr, HOST_DEVICE, size,
-        /*codeptr_ra*/ NULL);
+        ompt_api->global_device_id, hst_ptr, omp_get_initial_device(), size,
+        /*codeptr_ra=*/NULL);
   }
 #endif
   memcpy(hst_ptr, tgt_ptr, size);

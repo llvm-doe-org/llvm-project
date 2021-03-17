@@ -696,6 +696,8 @@ void ScheduleDAGSDNodes::dumpNode(const SUnit &SU) const {
 
 void ScheduleDAGSDNodes::dump() const {
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  if (EntrySU.getNode() != nullptr)
+    dumpNodeAll(EntrySU);
   for (const SUnit &SU : SUnits)
     dumpNodeAll(SU);
   if (ExitSU.getNode() != nullptr)
@@ -827,7 +829,7 @@ EmitPhysRegCopy(SUnit *SU, DenseMap<SUnit*, Register> &VRBaseMap,
 /// not necessarily refer to returned BB. The emitter may split blocks.
 MachineBasicBlock *ScheduleDAGSDNodes::
 EmitSchedule(MachineBasicBlock::iterator &InsertPos) {
-  InstrEmitter Emitter(BB, InsertPos);
+  InstrEmitter Emitter(DAG->getTarget(), BB, InsertPos);
   DenseMap<SDValue, Register> VRBaseMap;
   DenseMap<SUnit*, Register> CopyVRBaseMap;
   SmallVector<std::pair<unsigned, MachineInstr*>, 32> Orders;

@@ -41,7 +41,7 @@ int main() {
   // CHECK-NEXT:invalid positive device: (nil)
   fprintf(stderr, "negative device: %p\n", omp_get_mapped_ptr(arr, -1));
   fprintf(stderr, "invalid positive device: %p\n",
-          omp_get_mapped_ptr(arr, omp_get_num_devices()));
+          omp_get_mapped_ptr(arr, omp_get_num_devices() + 1));
 
   // OpenMP 5.1, sec. 3.8.11 "omp_get_mapped_ptr", p. 431, L7-9:
   // "The omp_get_mapped_ptr routine returns the associated device pointer on
