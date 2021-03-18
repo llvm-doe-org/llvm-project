@@ -85,7 +85,7 @@ static VectorType extractVectorTypeFromShapedValue(Value v) {
 }
 
 /// Build a vector.transfer_read from `source` at indices set to all `0`.
-/// If source has rank zero, build an std.load.
+/// If source has rank zero, build an memref.load.
 /// Return the produced value.
 static Value buildVectorRead(OpBuilder &builder, Value source) {
   edsc::ScopedContext scope(builder);
@@ -94,11 +94,11 @@ static Value buildVectorRead(OpBuilder &builder, Value source) {
     SmallVector<Value> indices(shapedType.getRank(), std_constant_index(0));
     return vector_transfer_read(vectorType, source, indices);
   }
-  return std_load(source);
+  return memref_load(source);
 }
 
 /// Build a vector.transfer_write of `value` into `dest` at indices set to all
-/// `0`. If `dest` has null rank, build an std.store.
+/// `0`. If `dest` has null rank, build an memref.store.
 /// Return the produced value or null if no value is produced.
 static Value buildVectorWrite(OpBuilder &builder, Value value, Value dest) {
   edsc::ScopedContext scope(builder);
@@ -110,7 +110,7 @@ static Value buildVectorWrite(OpBuilder &builder, Value value, Value dest) {
       value = vector_broadcast(vectorType, value);
     write = vector_transfer_write(value, dest, indices);
   } else {
-    write = std_store(value, dest);
+    write = memref_store(value, dest);
   }
   LLVM_DEBUG(dbgs() << "\n[" DEBUG_TYPE "]: vectorized op: " << *write);
   if (!write->getResults().empty())
@@ -139,16 +139,16 @@ using CustomVectorizationHook = std::function<VectorizationResult(
     Operation *, const BlockAndValueMapping &)>;
 
 /// Helper function to vectorize the terminator of a `linalgOp`. New result
-/// vector values are appended to `results`.
-/// Return VectorizationStatus::NoReplace to signal the vectorization algorithm
-/// that it should not try to map produced operations: this is the purpose of
-/// the `results` argument to capture such values and make them available for
-/// RAUW to the vectorization algorithm.
-/// This function is meant to be used as a CustomVectorizationHook.
+/// vector values are appended to `newResults`. Return
+/// VectorizationStatus::NoReplace to signal the vectorization algorithm that it
+/// should not try to map produced operations and instead return the results
+/// using the `newResults` vector making them available to the
+/// vectorization algorithm for RAUW. This function is meant to be used as a
+/// CustomVectorizationHook.
 static VectorizationResult
 vectorizeLinalgYield(OpBuilder &builder, Operation *op,
                      const BlockAndValueMapping &bvm, LinalgOp linalgOp,
-                     SmallVectorImpl<Value> &results) {
+                     SmallVectorImpl<Value> &newResults) {
   auto yieldOp = dyn_cast<linalg::YieldOp>(op);
   if (!yieldOp)
     return VectorizationResult{VectorizationStatus::Failure, nullptr};
@@ -156,10 +156,10 @@ vectorizeLinalgYield(OpBuilder &builder, Operation *op,
     // TODO: Scan for an opportunity for reuse.
     // TODO: use a map.
     Value vectorValue = bvm.lookup(outputs.value());
-    Value result = buildVectorWrite(builder, vectorValue,
-                                    linalgOp.getOutput(outputs.index()));
-    if (result)
-      results.push_back(result);
+    Value newResult = buildVectorWrite(builder, vectorValue,
+                                       linalgOp.getOutput(outputs.index()));
+    if (newResult)
+      newResults.push_back(newResult);
   }
   return VectorizationResult{VectorizationStatus::NoReplace, nullptr};
 }
@@ -248,8 +248,8 @@ vectorizeOneOp(OpBuilder &builder, Operation *op,
 ///   TODO: Reuse opportunities for RAR dependencies.
 ///   4. Register CustomVectorizationHook for YieldOp to capture the results.
 ///   5. Iteratively call vectorizeOneOp on the region operations.
-static Optional<VectorizedLinalgOp> vectorizeAsLinalgGeneric(
-    OpBuilder &builder, LinalgOp linalgOp,
+LogicalResult vectorizeAsLinalgGeneric(
+    OpBuilder &builder, LinalgOp linalgOp, SmallVectorImpl<Value> &newResults,
     ArrayRef<CustomVectorizationHook> customVectorizationHooks = {}) {
   // 1. Certain Linalg ops do not have a region but only a region builder.
   // If so, build the region so we can vectorize.
@@ -290,11 +290,10 @@ static Optional<VectorizedLinalgOp> vectorizeAsLinalgGeneric(
   }
 
   // 4. Register CustomVectorizationHook for yieldOp.
-  SmallVector<Value> results;
   CustomVectorizationHook vectorizeYield =
       [&](Operation *op,
           const BlockAndValueMapping &bvm) -> VectorizationResult {
-    return vectorizeLinalgYield(builder, op, bvm, linalgOp, results);
+    return vectorizeLinalgYield(builder, op, bvm, linalgOp, newResults);
   };
   // Append the vectorizeYield hook.
   auto hooks = llvm::to_vector<4>(customVectorizationHooks);
@@ -305,7 +304,7 @@ static Optional<VectorizedLinalgOp> vectorizeAsLinalgGeneric(
     VectorizationResult result = vectorizeOneOp(builder, &op, bvm, hooks);
     if (result.status == VectorizationStatus::Failure) {
       LLVM_DEBUG(dbgs() << "\n[" DEBUG_TYPE "]: failed to vectorize: " << op);
-      return llvm::None;
+      return failure();
     }
     if (result.status == VectorizationStatus::NewOp) {
       LLVM_DEBUG(dbgs() << "\n[" DEBUG_TYPE "]: new vector op: "
@@ -314,7 +313,7 @@ static Optional<VectorizedLinalgOp> vectorizeAsLinalgGeneric(
     }
   }
 
-  return VectorizedLinalgOp{{results}};
+  return success();
 }
 
 /// Detect whether `r` has only ConstantOp, ElementwiseMappable and YieldOp.
@@ -355,8 +354,8 @@ static bool isElementwise(Operation *op) {
   return hasOnlyScalarElementwiseOp(linalgOp->getRegion(0));
 }
 
-static Optional<VectorizedLinalgOp> vectorizeContraction(OpBuilder &builder,
-                                                         LinalgOp linalgOp) {
+static LogicalResult vectorizeContraction(OpBuilder &builder, LinalgOp linalgOp,
+                                          SmallVectorImpl<Value> &newResults) {
   assert(isaContractionOpInterface(linalgOp) &&
          "expected vectorizeContraction preconditions to be met");
   Location loc = linalgOp.getLoc();
@@ -383,7 +382,8 @@ static Optional<VectorizedLinalgOp> vectorizeContraction(OpBuilder &builder,
         linalgOp.indexing_maps(), linalgOp.iterator_types());
     return VectorizationResult{VectorizationStatus::NewOp, contract};
   };
-  return vectorizeAsLinalgGeneric(builder, linalgOp, {vectorizeContraction});
+  return vectorizeAsLinalgGeneric(builder, linalgOp, newResults,
+                                  {vectorizeContraction});
 }
 
 LogicalResult mlir::linalg::vectorizeLinalgOpPrecondition(Operation *op) {
@@ -400,19 +400,20 @@ LogicalResult mlir::linalg::vectorizeLinalgOpPrecondition(Operation *op) {
   return success(isaContractionOpInterface(linalgOp));
 }
 
-Optional<VectorizedLinalgOp> mlir::linalg::vectorizeLinalgOp(OpBuilder &builder,
-                                                             Operation *op) {
+LogicalResult
+mlir::linalg::vectorizeLinalgOp(OpBuilder &builder, Operation *op,
+                                SmallVectorImpl<Value> &newResults) {
   if (failed(vectorizeLinalgOpPrecondition(op)))
-    return llvm::None;
+    return failure();
 
   edsc::ScopedContext scope(builder, op->getLoc());
   if (isElementwise(op)) {
     LLVM_DEBUG(dbgs() << "\n[" DEBUG_TYPE "]: "
                       << "Vectorize linalg op as a generic: " << *op);
-    return vectorizeAsLinalgGeneric(builder, cast<LinalgOp>(op));
+    return vectorizeAsLinalgGeneric(builder, cast<LinalgOp>(op), newResults);
   }
 
-  return vectorizeContraction(builder, cast<LinalgOp>(op));
+  return vectorizeContraction(builder, cast<LinalgOp>(op), newResults);
 }
 
 //----------------------------------------------------------------------------//
@@ -543,7 +544,7 @@ LogicalResult ConvOpVectorization<ConvOp, N>::matchAndRewrite(
       rewriter.getAffineMapArrayAttr(indexingMaps),
       rewriter.getStrArrayAttr(iteratorTypes));
 
-  rewriter.create<StoreOp>(loc, result, output, ValueRange(zeros));
+  rewriter.create<memref::StoreOp>(loc, result, output, ValueRange(zeros));
   rewriter.eraseOp(op);
   return success();
 }
@@ -666,12 +667,12 @@ static bool mayExistInterleavedUses(Operation *firstOp, Operation *secondOp,
 }
 
 /// Return the unique subview use of `v` if it is indeed unique, null otherwise.
-static SubViewOp getSubViewUseIfUnique(Value v) {
-  SubViewOp subViewOp;
+static memref::SubViewOp getSubViewUseIfUnique(Value v) {
+  memref::SubViewOp subViewOp;
   for (auto &u : v.getUses()) {
-    if (auto newSubViewOp = dyn_cast<SubViewOp>(u.getOwner())) {
+    if (auto newSubViewOp = dyn_cast<memref::SubViewOp>(u.getOwner())) {
       if (subViewOp)
-        return SubViewOp();
+        return memref::SubViewOp();
       subViewOp = newSubViewOp;
     }
   }
@@ -685,14 +686,14 @@ LogicalResult LinalgCopyVTRForwardingPattern::matchAndRewrite(
 
   // Transfer into `view`.
   Value viewOrAlloc = xferOp.source();
-  if (!viewOrAlloc.getDefiningOp<ViewOp>() &&
-      !viewOrAlloc.getDefiningOp<AllocOp>())
+  if (!viewOrAlloc.getDefiningOp<memref::ViewOp>() &&
+      !viewOrAlloc.getDefiningOp<memref::AllocOp>())
     return failure();
 
   LLVM_DEBUG(llvm::dbgs() << "\n[" DEBUG_TYPE "]: " << viewOrAlloc);
 
   // Ensure there is exactly one subview of `viewOrAlloc` defining `subView`.
-  SubViewOp subViewOp = getSubViewUseIfUnique(viewOrAlloc);
+  memref::SubViewOp subViewOp = getSubViewUseIfUnique(viewOrAlloc);
   if (!subViewOp)
     return failure();
   Value subView = subViewOp.getResult();
@@ -764,12 +765,12 @@ LogicalResult LinalgCopyVTWForwardingPattern::matchAndRewrite(
     vector::TransferWriteOp xferOp, PatternRewriter &rewriter) const {
   // Transfer into `viewOrAlloc`.
   Value viewOrAlloc = xferOp.source();
-  if (!viewOrAlloc.getDefiningOp<ViewOp>() &&
-      !viewOrAlloc.getDefiningOp<AllocOp>())
+  if (!viewOrAlloc.getDefiningOp<memref::ViewOp>() &&
+      !viewOrAlloc.getDefiningOp<memref::AllocOp>())
     return failure();
 
   // Ensure there is exactly one subview of `viewOrAlloc` defining `subView`.
-  SubViewOp subViewOp = getSubViewUseIfUnique(viewOrAlloc);
+  memref::SubViewOp subViewOp = getSubViewUseIfUnique(viewOrAlloc);
   if (!subViewOp)
     return failure();
   Value subView = subViewOp.getResult();

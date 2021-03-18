@@ -84,6 +84,8 @@ enum NodeType : unsigned {
   FMA_PRED,
   FMAXNM_PRED,
   FMINNM_PRED,
+  FMAX_PRED,
+  FMIN_PRED,
   FMUL_PRED,
   FSUB_PRED,
   MUL_PRED,
@@ -282,6 +284,8 @@ enum NodeType : unsigned {
   /// need to re-interpret the data in SIMD vector registers in big-endian
   /// mode without emitting such REV instructions.
   NVCAST,
+
+  MRS, // MRS, also sets the flags via a glue.
 
   SMULL,
   UMULL,

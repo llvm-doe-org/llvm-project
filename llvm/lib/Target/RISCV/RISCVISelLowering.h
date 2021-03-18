@@ -36,6 +36,7 @@ enum NodeType : unsigned {
   /// The lhs and rhs are XLenVT integers. The true and false values can be
   /// integer or floating point.
   SELECT_CC,
+  BR_CC,
   BuildPairF64,
   SplitF64,
   TAIL,
@@ -120,6 +121,10 @@ enum NodeType : unsigned {
   // and the fifth the VL.
   VSLIDEUP_VL,
   VSLIDEDOWN_VL,
+  // Matches the semantics of vslide1up. The first operand is the source
+  // vector, the second is the XLenVT scalar value. The third and fourth
+  // operands are the mask and VL operands.
+  VSLIDE1UP_VL,
   // Matches the semantics of the vid.v instruction, with a mask and VL
   // operand.
   VID_VL,
@@ -138,16 +143,17 @@ enum NodeType : unsigned {
   //   nxv2i32 = vecreduce_add nxv8i32, nxv2i32
   // The different in types does introduce extra vsetvli instructions but
   // similarly it reduces the number of registers consumed per reduction.
-  VECREDUCE_ADD,
-  VECREDUCE_UMAX,
-  VECREDUCE_SMAX,
-  VECREDUCE_UMIN,
-  VECREDUCE_SMIN,
-  VECREDUCE_AND,
-  VECREDUCE_OR,
-  VECREDUCE_XOR,
-  VECREDUCE_FADD,
-  VECREDUCE_SEQ_FADD,
+  // Also has a mask and VL operand.
+  VECREDUCE_ADD_VL,
+  VECREDUCE_UMAX_VL,
+  VECREDUCE_SMAX_VL,
+  VECREDUCE_UMIN_VL,
+  VECREDUCE_SMIN_VL,
+  VECREDUCE_AND_VL,
+  VECREDUCE_OR_VL,
+  VECREDUCE_XOR_VL,
+  VECREDUCE_FADD_VL,
+  VECREDUCE_SEQ_FADD_VL,
 
   // Vector binary and unary ops with a mask as a third operand, and VL as a
   // fourth operand.
@@ -173,6 +179,7 @@ enum NodeType : unsigned {
   FABS_VL,
   FSQRT_VL,
   FMA_VL,
+  FCOPYSIGN_VL,
   SMIN_VL,
   SMAX_VL,
   UMIN_VL,
@@ -202,8 +209,11 @@ enum NodeType : unsigned {
   VMCLR_VL,
   VMSET_VL,
 
-  // Matches the semantics of vrgather.vx with an extra operand for VL.
+  // Matches the semantics of vrgather.vx and vrgather.vv with an extra operand
+  // for VL.
   VRGATHER_VX_VL,
+  VRGATHER_VV_VL,
+  VRGATHEREI16_VV_VL,
 
   // Vector sign/zero extend with additional mask & VL operands.
   VSEXT_VL,
@@ -244,6 +254,10 @@ public:
   bool isCheapToSpeculateCtlz() const override;
   bool isFPImmLegal(const APFloat &Imm, EVT VT,
                     bool ForCodeSize) const override;
+
+  /// Return true if the given shuffle mask can be codegen'd directly, or if it
+  /// should be stack expanded.
+  bool isShuffleMaskLegal(ArrayRef<int> M, EVT VT) const override;
 
   bool hasBitPreservingFPLogic(EVT VT) const override;
   bool
@@ -393,6 +407,17 @@ public:
       MachineMemOperand::Flags Flags = MachineMemOperand::MONone,
       bool *Fast = nullptr) const override;
 
+  bool splitValueIntoRegisterParts(SelectionDAG &DAG, const SDLoc &DL,
+                                   SDValue Val, SDValue *Parts,
+                                   unsigned NumParts, MVT PartVT,
+                                   Optional<CallingConv::ID> CC) const override;
+
+  SDValue
+  joinRegisterPartsIntoValue(SelectionDAG &DAG, const SDLoc &DL,
+                             const SDValue *Parts, unsigned NumParts,
+                             MVT PartVT, EVT ValueVT,
+                             Optional<CallingConv::ID> CC) const override;
+
   static RISCVVLMUL getLMUL(MVT VT);
   static unsigned getRegClassIDForLMUL(RISCVVLMUL LMul);
   static unsigned getSubregIndexByMVT(MVT VT, unsigned Index);
@@ -401,6 +426,9 @@ public:
   decomposeSubvectorInsertExtractToSubRegs(MVT VecVT, MVT SubVecVT,
                                            unsigned InsertExtractIdx,
                                            const RISCVRegisterInfo *TRI);
+  MVT getContainerForFixedLengthVector(MVT VT) const;
+  static MVT getContainerForFixedLengthVector(const TargetLowering &TLI, MVT VT,
+                                              const RISCVSubtarget &Subtarget);
   static MVT getContainerForFixedLengthVector(SelectionDAG &DAG, MVT VT,
                                               const RISCVSubtarget &Subtarget);
 
@@ -425,12 +453,13 @@ private:
   SDValue lowerJumpTable(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerSELECT(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerBRCOND(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVASTART(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerFRAMEADDR(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerRETURNADDR(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerShiftLeftParts(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerShiftRightParts(SDValue Op, SelectionDAG &DAG, bool IsSRA) const;
-  SDValue lowerSPLATVECTOR(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerSPLAT_VECTOR_PARTS(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVectorMaskExt(SDValue Op, SelectionDAG &DAG,
                              int64_t ExtTrueVal) const;
   SDValue lowerVectorMaskTrunc(SDValue Op, SelectionDAG &DAG) const;
@@ -442,8 +471,16 @@ private:
   SDValue lowerFPVECREDUCE(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerINSERT_SUBVECTOR(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerVECTOR_REVERSE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerABS(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerFixedLengthVectorFCOPYSIGNToRVV(SDValue Op,
+                                               SelectionDAG &DAG) const;
   SDValue lowerFixedLengthVectorLoadToRVV(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerFixedLengthVectorStoreToRVV(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerFixedLengthVectorMaskedLoadToRVV(SDValue Op,
+                                                SelectionDAG &DAG) const;
+  SDValue lowerFixedLengthVectorMaskedStoreToRVV(SDValue Op,
+                                                 SelectionDAG &DAG) const;
   SDValue lowerFixedLengthVectorSetccToRVV(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerFixedLengthVectorLogicOpToRVV(SDValue Op, SelectionDAG &DAG,
                                              unsigned MaskOpc,
@@ -477,7 +514,7 @@ namespace RISCVVIntrinsicsTable {
 
 struct RISCVVIntrinsicInfo {
   unsigned IntrinsicID;
-  uint8_t ExtendedOperand;
+  uint8_t SplatOperand;
 };
 
 using namespace RISCV;

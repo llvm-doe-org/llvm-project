@@ -112,10 +112,16 @@ RecordType verifyDerived(mlir::DialectAsmParser &parser, RecordType derivedTy,
 
 mlir::Type fir::parseFirType(FIROpsDialect *dialect,
                              mlir::DialectAsmParser &parser) {
-  llvm::StringRef typeNameLit;
-  if (mlir::failed(parser.parseKeyword(&typeNameLit)))
+  mlir::StringRef typeTag;
+  if (parser.parseKeyword(&typeTag))
     return {};
-  return generatedTypeParser(dialect->getContext(), parser, typeNameLit);
+  mlir::Type genType;
+  auto parseResult = generatedTypeParser(parser.getBuilder().getContext(),
+                                         parser, typeTag, genType);
+  if (parseResult.hasValue())
+    return genType;
+  parser.emitError(parser.getNameLoc(), "unknown fir type: ") << typeTag;
+  return {};
 }
 
 namespace fir {
@@ -859,4 +865,16 @@ mlir::LogicalResult fir::VectorType::verify(
 
 bool fir::VectorType::isValidElementType(mlir::Type t) {
   return isa_real(t) || isa_integer(t);
+}
+
+//===----------------------------------------------------------------------===//
+// FIROpsDialect
+//===----------------------------------------------------------------------===//
+
+void FIROpsDialect::registerTypes() {
+  addTypes<BoxType, BoxCharType, BoxProcType, CharacterType, fir::ComplexType,
+           FieldType, HeapType, fir::IntegerType, LenType, LogicalType,
+           PointerType, RealType, RecordType, ReferenceType, SequenceType,
+           ShapeType, ShapeShiftType, ShiftType, SliceType, TypeDescType,
+           fir::VectorType>();
 }

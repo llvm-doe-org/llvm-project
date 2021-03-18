@@ -38,6 +38,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <set>
 #include <system_error>
 #include <vector>
 
@@ -577,6 +578,8 @@ std::error_code SampleProfileReaderExtBinaryBase::readOneSection(
       return EC;
     if (hasSecFlag(Entry, SecProfSummaryFlags::SecFlagPartial))
       Summary->setPartialProfile(true);
+    if (hasSecFlag(Entry, SecProfSummaryFlags::SecFlagFullContext))
+      FunctionSamples::ProfileIsCS = ProfileIsCS = true;
     break;
   case SecNameTable: {
     FixedLengthMD5 =
@@ -584,6 +587,8 @@ std::error_code SampleProfileReaderExtBinaryBase::readOneSection(
     bool UseMD5 = hasSecFlag(Entry, SecNameTableFlags::SecFlagMD5Name);
     assert((!FixedLengthMD5 || UseMD5) &&
            "If FixedLengthMD5 is true, UseMD5 has to be true");
+    FunctionSamples::HasUniqSuffix =
+        hasSecFlag(Entry, SecNameTableFlags::SecFlagUniqSuffix);
     if (std::error_code EC = readNameTableSec(UseMD5))
       return EC;
     break;
@@ -615,11 +620,13 @@ std::error_code SampleProfileReaderExtBinaryBase::readOneSection(
   return sampleprof_error::success;
 }
 
-void SampleProfileReaderExtBinaryBase::collectFuncsFrom(const Module &M) {
-  UseAllFuncs = false;
+bool SampleProfileReaderExtBinaryBase::collectFuncsFromModule() {
+  if (!M)
+    return false;
   FuncsToUse.clear();
-  for (auto &F : M)
+  for (auto &F : *M)
     FuncsToUse.insert(FunctionSamples::getCanonicalFnName(F));
+  return true;
 }
 
 std::error_code SampleProfileReaderExtBinaryBase::readFuncOffsetTable() {
@@ -648,14 +655,24 @@ std::error_code SampleProfileReaderExtBinaryBase::readFuncOffsetTable() {
 }
 
 std::error_code SampleProfileReaderExtBinaryBase::readFuncProfiles() {
+  // Collect functions used by current module if the Reader has been
+  // given a module.
+  // collectFuncsFromModule uses FunctionSamples::getCanonicalFnName
+  // which will query FunctionSamples::HasUniqSuffix, so it has to be
+  // called after FunctionSamples::HasUniqSuffix is set, i.e. after
+  // NameTable section is read.
+  bool LoadFuncsToBeUsed = collectFuncsFromModule();
+
+  // When LoadFuncsToBeUsed is false, load all the function profiles.
   const uint8_t *Start = Data;
-  if (UseAllFuncs) {
+  if (!LoadFuncsToBeUsed) {
     while (Data < End) {
       if (std::error_code EC = readFuncProfile(Data))
         return EC;
     }
     assert(Data == End && "More data is read than expected");
   } else {
+    // Load function profiles on demand.
     if (Remapper) {
       for (auto Name : FuncsToUse) {
         Remapper->insert(Name);
@@ -673,6 +690,46 @@ std::error_code SampleProfileReaderExtBinaryBase::readFuncProfiles() {
         if (std::error_code EC = readFuncProfile(FuncProfileAddr))
           return EC;
       }
+    } else if (FunctionSamples::ProfileIsCS) {
+      // Compute the ordered set of names, so we can
+      // get all context profiles under a subtree by
+      // iterating through the ordered names.
+      struct Comparer {
+        // Ignore the closing ']' when ordering context
+        bool operator()(const StringRef &L, const StringRef &R) const {
+          return L.substr(0, L.size() - 1) < R.substr(0, R.size() - 1);
+        }
+      };
+      std::set<StringRef, Comparer> OrderedNames;
+      for (auto Name : FuncOffsetTable) {
+        OrderedNames.insert(Name.first);
+      }
+
+      // For each function in current module, load all
+      // context profiles for the function.
+      for (auto NameOffset : FuncOffsetTable) {
+        StringRef ContextName = NameOffset.first;
+        SampleContext FContext(ContextName);
+        auto FuncName = FContext.getNameWithoutContext();
+        if (!FuncsToUse.count(FuncName) &&
+            (!Remapper || !Remapper->exist(FuncName)))
+          continue;
+
+        // For each context profile we need, try to load
+        // all context profile in the subtree. This can
+        // help profile guided importing for ThinLTO.
+        auto It = OrderedNames.find(ContextName);
+        while (It != OrderedNames.end() &&
+               It->startswith(ContextName.substr(0, ContextName.size() - 1))) {
+          const uint8_t *FuncProfileAddr = Start + FuncOffsetTable[*It];
+          assert(FuncProfileAddr < End && "out of LBRProfile section");
+          if (std::error_code EC = readFuncProfile(FuncProfileAddr))
+            return EC;
+          // Remove loaded context profile so we won't
+          // load it repeatedly.
+          It = OrderedNames.erase(It);
+        }
+      }
     } else {
       for (auto NameOffset : FuncOffsetTable) {
         SampleContext FContext(NameOffset.first);
@@ -688,11 +745,10 @@ std::error_code SampleProfileReaderExtBinaryBase::readFuncProfiles() {
     }
     Data = End;
   }
-
   assert((CSProfileCount == 0 || CSProfileCount == Profiles.size()) &&
          "Cannot have both context-sensitive and regular profile");
-  ProfileIsCS = (CSProfileCount > 0);
-  FunctionSamples::ProfileIsCS = ProfileIsCS;
+  assert(ProfileIsCS == (CSProfileCount > 0) &&
+         "Section flag should be consistent with actual profile");
   return sampleprof_error::success;
 }
 
@@ -783,13 +839,18 @@ std::error_code SampleProfileReaderExtBinaryBase::readImpl() {
 }
 
 std::error_code SampleProfileReaderCompactBinary::readImpl() {
+  // Collect functions used by current module if the Reader has been
+  // given a module.
+  bool LoadFuncsToBeUsed = collectFuncsFromModule();
+
   std::vector<uint64_t> OffsetsToUse;
-  if (UseAllFuncs) {
+  if (!LoadFuncsToBeUsed) {
+    // load all the function profiles.
     for (auto FuncEntry : FuncOffsetTable) {
       OffsetsToUse.push_back(FuncEntry.second);
     }
-  }
-  else {
+  } else {
+    // load function profiles on demand.
     for (auto Name : FuncsToUse) {
       auto GUID = std::to_string(MD5Hash(Name));
       auto iter = FuncOffsetTable.find(StringRef(GUID));
@@ -1010,10 +1071,14 @@ static std::string getSecFlagsStr(const SecHdrTableEntry &Entry) {
       Flags.append("fixlenmd5,");
     else if (hasSecFlag(Entry, SecNameTableFlags::SecFlagMD5Name))
       Flags.append("md5,");
+    if (hasSecFlag(Entry, SecNameTableFlags::SecFlagUniqSuffix))
+      Flags.append("uniq,");
     break;
   case SecProfSummary:
     if (hasSecFlag(Entry, SecProfSummaryFlags::SecFlagPartial))
       Flags.append("partial,");
+    if (hasSecFlag(Entry, SecProfSummaryFlags::SecFlagFullContext))
+      Flags.append("context,");
     break;
   default:
     break;
@@ -1117,11 +1182,13 @@ std::error_code SampleProfileReaderCompactBinary::readFuncOffsetTable() {
   return sampleprof_error::success;
 }
 
-void SampleProfileReaderCompactBinary::collectFuncsFrom(const Module &M) {
-  UseAllFuncs = false;
+bool SampleProfileReaderCompactBinary::collectFuncsFromModule() {
+  if (!M)
+    return false;
   FuncsToUse.clear();
-  for (auto &F : M)
+  for (auto &F : *M)
     FuncsToUse.insert(FunctionSamples::getCanonicalFnName(F));
+  return true;
 }
 
 std::error_code SampleProfileReaderBinary::readSummaryEntry(

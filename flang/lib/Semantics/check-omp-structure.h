@@ -109,10 +109,12 @@ public:
   void Enter(const parser::OpenMPBlockConstruct &);
   void Leave(const parser::OpenMPBlockConstruct &);
   void Enter(const parser::OmpEndBlockDirective &);
+  void Leave(const parser::OmpEndBlockDirective &);
 
   void Enter(const parser::OpenMPSectionsConstruct &);
   void Leave(const parser::OpenMPSectionsConstruct &);
   void Enter(const parser::OmpEndSectionsDirective &);
+  void Leave(const parser::OmpEndSectionsDirective &);
 
   void Enter(const parser::OpenMPDeclareSimdConstruct &);
   void Leave(const parser::OpenMPDeclareSimdConstruct &);
@@ -151,6 +153,13 @@ public:
 #define GEN_FLANG_CLAUSE_CHECK_ENTER
 #include "llvm/Frontend/OpenMP/OMP.inc"
 
+  // Get the OpenMP Clause Kind for the corresponding Parser class
+  template <typename A>
+  llvm::omp::Clause GetClauseKindForParserClass(const A &) {
+#define GEN_FLANG_CLAUSE_PARSER_KIND_MAP
+#include "llvm/Frontend/OpenMP/OMP.inc"
+  }
+
 private:
   bool HasInvalidWorksharingNesting(
       const parser::CharBlock &, const OmpDirectiveSet &);
@@ -184,6 +193,18 @@ private:
   void CheckCycleConstraints(const parser::OpenMPLoopConstruct &x);
   std::int64_t GetOrdCollapseLevel(const parser::OpenMPLoopConstruct &x);
   void CheckIfDoOrderedClause(const parser::OmpBlockDirective &blkDirectiv);
+  bool CheckReductionOperators(const parser::OmpClause::Reduction &);
+  bool CheckIntrinsicOperator(
+      const parser::DefinedOperator::IntrinsicOperator &);
+  void CheckReductionTypeList(const parser::OmpClause::Reduction &);
+  void CheckReductionArraySection(const parser::OmpObjectList &ompObjectList);
+  void CheckIntentInPointerAndDefinable(
+      const parser::OmpObjectList &, const llvm::omp::Clause);
+  void CheckArraySection(const parser::ArrayElement &arrayElement,
+      const parser::Name &name, const llvm::omp::Clause clause);
+  void CheckMultipleAppearanceAcrossContext(
+      const parser::OmpObjectList &ompObjectList);
+  const parser::OmpObjectList *GetOmpObjectList(const parser::OmpClause &);
 };
 } // namespace Fortran::semantics
 #endif // FORTRAN_SEMANTICS_CHECK_OMP_STRUCTURE_H_

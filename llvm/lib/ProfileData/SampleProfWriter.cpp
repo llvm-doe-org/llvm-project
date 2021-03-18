@@ -204,6 +204,17 @@ std::error_code SampleProfileWriterExtBinaryBase::writeNameTableSection(
     addName(I.first());
     addNames(I.second);
   }
+
+  // If NameTable contains ".__uniq." suffix, set SecFlagUniqSuffix flag
+  // so compiler won't strip the suffix during profile matching after
+  // seeing the flag in the profile.
+  for (const auto &I : NameTable) {
+    if (I.first.find(FunctionSamples::UniqSuffix) != StringRef::npos) {
+      addSectionFlag(SecNameTable, SecNameTableFlags::SecFlagUniqSuffix);
+      break;
+    }
+  }
+
   if (auto EC = writeNameTable())
     return EC;
   return sampleprof_error::success;
@@ -226,6 +237,8 @@ std::error_code SampleProfileWriterExtBinaryBase::writeOneSection(
     setToCompressSection(SecProfileSymbolList);
   if (Type == SecFuncMetadata && FunctionSamples::ProfileIsProbeBased)
     addSectionFlag(SecFuncMetadata, SecFuncMetadataFlags::SecFlagIsProbeBased);
+  if (Type == SecProfSummary && FunctionSamples::ProfileIsCS)
+    addSectionFlag(SecProfSummary, SecProfSummaryFlags::SecFlagFullContext);
 
   uint64_t SectionStart = markSectionStart(Type, LayoutIdx);
   switch (Type) {

@@ -254,6 +254,8 @@ static const char *getLDMOption(const llvm::Triple &T, const ArgList &Args) {
   case llvm::Triple::armeb:
   case llvm::Triple::thumbeb:
     return isArmBigEndian(T, Args) ? "armelfb_linux_eabi" : "armelf_linux_eabi";
+  case llvm::Triple::m68k:
+    return "m68kelf";
   case llvm::Triple::ppc:
     if (T.isOSLinux())
       return "elf32ppclinux";
@@ -1932,13 +1934,10 @@ void Generic_GCC::GCCInstallationDetector::init(
       // Typically /usr.
       AddDefaultGCCPrefixes(TargetTriple, Prefixes, D.SysRoot);
     }
-  }
 
-  // Try to respect gcc-config on Gentoo. However, do that only
-  // if --gcc-toolchain is not provided or equal to the Gentoo install
-  // in /usr. This avoids accidentally enforcing the system GCC version
-  // when using a custom toolchain.
-  if (GCCToolchainDir == "" || GCCToolchainDir == D.SysRoot + "/usr") {
+    // Try to respect gcc-config on Gentoo if --gcc-toolchain is not provided.
+    // This avoids accidentally enforcing the system GCC version when using a
+    // custom toolchain.
     SmallVector<StringRef, 16> GentooTestTriples;
     // Try to match an exact triple as target triple first.
     // e.g. crossdev -S x86_64-gentoo-linux-gnu will install gcc libs for
@@ -2113,6 +2112,10 @@ void Generic_GCC::GCCInstallationDetector::AddDefaultGCCPrefixes(
       "i486-slackware-linux", "i686-montavista-linux", "i586-linux-gnu",
       "i686-linux-android",   "i386-gnu",              "i486-gnu",
       "i586-gnu",             "i686-gnu"};
+
+  static const char *const M68kLibDirs[] = {"/lib"};
+  static const char *const M68kTriples[] = {
+      "m68k-linux-gnu", "m68k-unknown-linux-gnu", "m68k-suse-linux"};
 
   static const char *const MIPSLibDirs[] = {"/lib"};
   static const char *const MIPSTriples[] = {
@@ -2352,6 +2355,10 @@ void Generic_GCC::GCCInstallationDetector::AddDefaultGCCPrefixes(
       BiarchLibDirs.append(begin(X86_64LibDirs), end(X86_64LibDirs));
       BiarchTripleAliases.append(begin(X86_64Triples), end(X86_64Triples));
     }
+    break;
+  case llvm::Triple::m68k:
+    LibDirs.append(begin(M68kLibDirs), end(M68kLibDirs));
+    TripleAliases.append(begin(M68kTriples), end(M68kTriples));
     break;
   case llvm::Triple::mips:
     LibDirs.append(begin(MIPSLibDirs), end(MIPSLibDirs));
@@ -2760,6 +2767,7 @@ bool Generic_GCC::IsIntegratedAssemblerDefault() const {
   case llvm::Triple::mips64:
   case llvm::Triple::mips64el:
   case llvm::Triple::msp430:
+  case llvm::Triple::m68k:
     return true;
   case llvm::Triple::sparc:
   case llvm::Triple::sparcel:

@@ -1,4 +1,4 @@
-//===-- dfsan.cpp ---------------------------------------------------------===//
+//===-- dfsan_custom.cpp --------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -37,10 +37,12 @@
 #include <unistd.h>
 
 #include "dfsan/dfsan.h"
+#include "dfsan/dfsan_chained_origin_depot.h"
 #include "dfsan/dfsan_thread.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "sanitizer_common/sanitizer_linux.h"
+#include "sanitizer_common/sanitizer_stackdepot.h"
 
 using namespace __dfsan;
 
@@ -87,6 +89,14 @@ __dfsw_stat(const char *path, struct stat *buf, dfsan_label path_label,
   return ret;
 }
 
+SANITIZER_INTERFACE_ATTRIBUTE int __dfso_stat(
+    const char *path, struct stat *buf, dfsan_label path_label,
+    dfsan_label buf_label, dfsan_label *ret_label, dfsan_origin path_origin,
+    dfsan_origin buf_origin, dfsan_origin *ret_origin) {
+  int ret = __dfsw_stat(path, buf, path_label, buf_label, ret_label);
+  return ret;
+}
+
 SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_fstat(int fd, struct stat *buf,
                                                dfsan_label fd_label,
                                                dfsan_label buf_label,
@@ -98,27 +108,58 @@ SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_fstat(int fd, struct stat *buf,
   return ret;
 }
 
+SANITIZER_INTERFACE_ATTRIBUTE int __dfso_fstat(
+    int fd, struct stat *buf, dfsan_label fd_label, dfsan_label buf_label,
+    dfsan_label *ret_label, dfsan_origin fd_origin, dfsan_origin buf_origin,
+    dfsan_origin *ret_origin) {
+  int ret = __dfsw_fstat(fd, buf, fd_label, buf_label, ret_label);
+  return ret;
+}
+
+static char *dfsan_strchr_with_label(const char *s, int c, size_t *bytes_read,
+                                     dfsan_label s_label, dfsan_label c_label,
+                                     dfsan_label *ret_label) {
+  char *match_pos = nullptr;
+  for (size_t i = 0;; ++i) {
+    if (s[i] == c || s[i] == 0) {
+      // If s[i] is the \0 at the end of the string, and \0 is not the
+      // character we are searching for, then return null.
+      *bytes_read = i + 1;
+      match_pos = s[i] == 0 && c != 0 ? nullptr : const_cast<char *>(s + i);
+      break;
+    }
+  }
+  if (flags().strict_data_dependencies)
+    *ret_label = s_label;
+  else
+    *ret_label = dfsan_union(dfsan_read_label(s, *bytes_read),
+                             dfsan_union(s_label, c_label));
+  return match_pos;
+}
+
 SANITIZER_INTERFACE_ATTRIBUTE char *__dfsw_strchr(const char *s, int c,
                                                   dfsan_label s_label,
                                                   dfsan_label c_label,
                                                   dfsan_label *ret_label) {
-  for (size_t i = 0;; ++i) {
-    if (s[i] == c || s[i] == 0) {
-      if (flags().strict_data_dependencies) {
-        *ret_label = s_label;
-      } else {
-        *ret_label = dfsan_union(dfsan_read_label(s, i + 1),
-                                 dfsan_union(s_label, c_label));
-      }
+  size_t bytes_read;
+  return dfsan_strchr_with_label(s, c, &bytes_read, s_label, c_label,
+                                 ret_label);
+}
 
-      // If s[i] is the \0 at the end of the string, and \0 is not the
-      // character we are searching for, then return null.
-      if (s[i] == 0 && c != 0) {
-        return nullptr;
-      }
-      return const_cast<char *>(s + i);
-    }
+SANITIZER_INTERFACE_ATTRIBUTE char *__dfso_strchr(
+    const char *s, int c, dfsan_label s_label, dfsan_label c_label,
+    dfsan_label *ret_label, dfsan_origin s_origin, dfsan_origin c_origin,
+    dfsan_origin *ret_origin) {
+  size_t bytes_read;
+  char *r =
+      dfsan_strchr_with_label(s, c, &bytes_read, s_label, c_label, ret_label);
+  if (flags().strict_data_dependencies) {
+    *ret_origin = s_origin;
+  } else if (*ret_label) {
+    dfsan_origin o = dfsan_read_origin_of_first_taint(s, bytes_read);
+    *ret_origin = o ? o : (s_label ? s_origin : c_origin);
   }
+  return r;
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE char *__dfsw_strpbrk(const char *s,
@@ -139,35 +180,86 @@ SANITIZER_INTERFACE_ATTRIBUTE char *__dfsw_strpbrk(const char *s,
   return const_cast<char *>(ret);
 }
 
+SANITIZER_INTERFACE_ATTRIBUTE char *__dfso_strpbrk(
+    const char *s, const char *accept, dfsan_label s_label,
+    dfsan_label accept_label, dfsan_label *ret_label, dfsan_origin s_origin,
+    dfsan_origin accept_origin, dfsan_origin *ret_origin) {
+  const char *ret = __dfsw_strpbrk(s, accept, s_label, accept_label, ret_label);
+  if (flags().strict_data_dependencies) {
+    if (ret)
+      *ret_origin = s_origin;
+  } else {
+    if (*ret_label) {
+      size_t s_bytes_read = (ret ? ret - s : strlen(s)) + 1;
+      dfsan_origin o = dfsan_read_origin_of_first_taint(s, s_bytes_read);
+      if (o) {
+        *ret_origin = o;
+      } else {
+        o = dfsan_read_origin_of_first_taint(accept, strlen(accept) + 1);
+        *ret_origin = o ? o : (s_label ? s_origin : accept_origin);
+      }
+    }
+  }
+  return const_cast<char *>(ret);
+}
+
 static int dfsan_memcmp_bcmp(const void *s1, const void *s2, size_t n,
-                             dfsan_label s1_label, dfsan_label s2_label,
-                             dfsan_label n_label, dfsan_label *ret_label) {
+                             size_t *bytes_read) {
   const char *cs1 = (const char *) s1, *cs2 = (const char *) s2;
   for (size_t i = 0; i != n; ++i) {
     if (cs1[i] != cs2[i]) {
-      if (flags().strict_data_dependencies) {
-        *ret_label = 0;
-      } else {
-        *ret_label = dfsan_union(dfsan_read_label(cs1, i + 1),
-                                 dfsan_read_label(cs2, i + 1));
-      }
+      *bytes_read = i + 1;
       return cs1[i] - cs2[i];
     }
   }
-
-  if (flags().strict_data_dependencies) {
-    *ret_label = 0;
-  } else {
-    *ret_label = dfsan_union(dfsan_read_label(cs1, n),
-                             dfsan_read_label(cs2, n));
-  }
+  *bytes_read = n;
   return 0;
+}
+
+static dfsan_label dfsan_get_memcmp_label(const void *s1, const void *s2,
+                                          size_t pos) {
+  if (flags().strict_data_dependencies)
+    return 0;
+  return dfsan_union(dfsan_read_label(s1, pos), dfsan_read_label(s2, pos));
+}
+
+static void dfsan_get_memcmp_origin(const void *s1, const void *s2, size_t pos,
+                                    dfsan_label *ret_label,
+                                    dfsan_origin *ret_origin) {
+  *ret_label = dfsan_get_memcmp_label(s1, s2, pos);
+  if (*ret_label == 0)
+    return;
+  dfsan_origin o = dfsan_read_origin_of_first_taint(s1, pos);
+  *ret_origin = o ? o : dfsan_read_origin_of_first_taint(s2, pos);
+}
+
+static int dfsan_memcmp_bcmp_label(const void *s1, const void *s2, size_t n,
+                                   dfsan_label *ret_label) {
+  size_t bytes_read;
+  int r = dfsan_memcmp_bcmp(s1, s2, n, &bytes_read);
+  *ret_label = dfsan_get_memcmp_label(s1, s2, bytes_read);
+  return r;
+}
+
+static int dfsan_memcmp_bcmp_origin(const void *s1, const void *s2, size_t n,
+                                    dfsan_label *ret_label,
+                                    dfsan_origin *ret_origin) {
+  size_t bytes_read;
+  int r = dfsan_memcmp_bcmp(s1, s2, n, &bytes_read);
+  dfsan_get_memcmp_origin(s1, s2, bytes_read, ret_label, ret_origin);
+  return r;
 }
 
 DECLARE_WEAK_INTERCEPTOR_HOOK(dfsan_weak_hook_memcmp, uptr caller_pc,
                               const void *s1, const void *s2, size_t n,
                               dfsan_label s1_label, dfsan_label s2_label,
                               dfsan_label n_label)
+
+DECLARE_WEAK_INTERCEPTOR_HOOK(dfsan_weak_hook_origin_memcmp, uptr caller_pc,
+                              const void *s1, const void *s2, size_t n,
+                              dfsan_label s1_label, dfsan_label s2_label,
+                              dfsan_label n_label, dfsan_origin s1_origin,
+                              dfsan_origin s2_origin, dfsan_origin n_origin)
 
 SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_memcmp(const void *s1, const void *s2,
                                                 size_t n, dfsan_label s1_label,
@@ -176,7 +268,18 @@ SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_memcmp(const void *s1, const void *s2,
                                                 dfsan_label *ret_label) {
   CALL_WEAK_INTERCEPTOR_HOOK(dfsan_weak_hook_memcmp, GET_CALLER_PC(), s1, s2, n,
                              s1_label, s2_label, n_label);
-  return dfsan_memcmp_bcmp(s1, s2, n, s1_label, s2_label, n_label, ret_label);
+  return dfsan_memcmp_bcmp_label(s1, s2, n, ret_label);
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE int __dfso_memcmp(
+    const void *s1, const void *s2, size_t n, dfsan_label s1_label,
+    dfsan_label s2_label, dfsan_label n_label, dfsan_label *ret_label,
+    dfsan_origin s1_origin, dfsan_origin s2_origin, dfsan_origin n_origin,
+    dfsan_origin *ret_origin) {
+  CALL_WEAK_INTERCEPTOR_HOOK(dfsan_weak_hook_origin_memcmp, GET_CALLER_PC(), s1,
+                             s2, n, s1_label, s2_label, n_label, s1_origin,
+                             s2_origin, n_origin);
+  return dfsan_memcmp_bcmp_origin(s1, s2, n, ret_label, ret_origin);
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_bcmp(const void *s1, const void *s2,
@@ -184,12 +287,37 @@ SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_bcmp(const void *s1, const void *s2,
                                               dfsan_label s2_label,
                                               dfsan_label n_label,
                                               dfsan_label *ret_label) {
-  return dfsan_memcmp_bcmp(s1, s2, n, s1_label, s2_label, n_label, ret_label);
+  return dfsan_memcmp_bcmp_label(s1, s2, n, ret_label);
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE int __dfso_bcmp(
+    const void *s1, const void *s2, size_t n, dfsan_label s1_label,
+    dfsan_label s2_label, dfsan_label n_label, dfsan_label *ret_label,
+    dfsan_origin s1_origin, dfsan_origin s2_origin, dfsan_origin n_origin,
+    dfsan_origin *ret_origin) {
+  return dfsan_memcmp_bcmp_origin(s1, s2, n, ret_label, ret_origin);
+}
+
+// When n == 0, compare strings without byte limit.
+// When n > 0, compare the first (at most) n bytes of s1 and s2.
+static int dfsan_strncmp(const char *s1, const char *s2, size_t n,
+                         size_t *bytes_read) {
+  for (size_t i = 0;; ++i) {
+    if (s1[i] != s2[i] || s1[i] == 0 || s2[i] == 0 || (n > 0 && i == n - 1)) {
+      *bytes_read = i + 1;
+      return s1[i] - s2[i];
+    }
+  }
 }
 
 DECLARE_WEAK_INTERCEPTOR_HOOK(dfsan_weak_hook_strcmp, uptr caller_pc,
                               const char *s1, const char *s2,
                               dfsan_label s1_label, dfsan_label s2_label)
+
+DECLARE_WEAK_INTERCEPTOR_HOOK(dfsan_weak_hook_origin_strcmp, uptr caller_pc,
+                              const char *s1, const char *s2,
+                              dfsan_label s1_label, dfsan_label s2_label,
+                              dfsan_origin s1_origin, dfsan_origin s2_origin)
 
 SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_strcmp(const char *s1, const char *s2,
                                                 dfsan_label s1_label,
@@ -197,44 +325,71 @@ SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_strcmp(const char *s1, const char *s2,
                                                 dfsan_label *ret_label) {
   CALL_WEAK_INTERCEPTOR_HOOK(dfsan_weak_hook_strcmp, GET_CALLER_PC(), s1, s2,
                              s1_label, s2_label);
-  for (size_t i = 0;; ++i) {
-    if (s1[i] != s2[i] || s1[i] == 0 || s2[i] == 0) {
-      if (flags().strict_data_dependencies) {
-        *ret_label = 0;
-      } else {
-        *ret_label = dfsan_union(dfsan_read_label(s1, i + 1),
-                                 dfsan_read_label(s2, i + 1));
-      }
-      return s1[i] - s2[i];
-    }
-  }
-  return 0;
+  size_t bytes_read;
+  int r = dfsan_strncmp(s1, s2, 0, &bytes_read);
+  *ret_label = dfsan_get_memcmp_label(s1, s2, bytes_read);
+  return r;
 }
 
-SANITIZER_INTERFACE_ATTRIBUTE int
-__dfsw_strcasecmp(const char *s1, const char *s2, dfsan_label s1_label,
-                  dfsan_label s2_label, dfsan_label *ret_label) {
+SANITIZER_INTERFACE_ATTRIBUTE int __dfso_strcmp(
+    const char *s1, const char *s2, dfsan_label s1_label, dfsan_label s2_label,
+    dfsan_label *ret_label, dfsan_origin s1_origin, dfsan_origin s2_origin,
+    dfsan_origin *ret_origin) {
+  CALL_WEAK_INTERCEPTOR_HOOK(dfsan_weak_hook_origin_strcmp, GET_CALLER_PC(), s1,
+                             s2, s1_label, s2_label, s1_origin, s2_origin);
+  size_t bytes_read;
+  int r = dfsan_strncmp(s1, s2, 0, &bytes_read);
+  dfsan_get_memcmp_origin(s1, s2, bytes_read, ret_label, ret_origin);
+  return r;
+}
+
+// When n == 0, compare strings without byte limit.
+// When n > 0, compare the first (at most) n bytes of s1 and s2.
+static int dfsan_strncasecmp(const char *s1, const char *s2, size_t n,
+                             size_t *bytes_read) {
   for (size_t i = 0;; ++i) {
     char s1_lower = tolower(s1[i]);
     char s2_lower = tolower(s2[i]);
 
-    if (s1_lower != s2_lower || s1[i] == 0 || s2[i] == 0) {
-      if (flags().strict_data_dependencies) {
-        *ret_label = 0;
-      } else {
-        *ret_label = dfsan_union(dfsan_read_label(s1, i + 1),
-                                 dfsan_read_label(s2, i + 1));
-      }
+    if (s1_lower != s2_lower || s1[i] == 0 || s2[i] == 0 ||
+        (n > 0 && i == n - 1)) {
+      *bytes_read = i + 1;
       return s1_lower - s2_lower;
     }
   }
-  return 0;
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_strcasecmp(const char *s1,
+                                                    const char *s2,
+                                                    dfsan_label s1_label,
+                                                    dfsan_label s2_label,
+                                                    dfsan_label *ret_label) {
+  size_t bytes_read;
+  int r = dfsan_strncasecmp(s1, s2, 0, &bytes_read);
+  *ret_label = dfsan_get_memcmp_label(s1, s2, bytes_read);
+  return r;
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE int __dfso_strcasecmp(
+    const char *s1, const char *s2, dfsan_label s1_label, dfsan_label s2_label,
+    dfsan_label *ret_label, dfsan_origin s1_origin, dfsan_origin s2_origin,
+    dfsan_origin *ret_origin) {
+  size_t bytes_read;
+  int r = dfsan_strncasecmp(s1, s2, 0, &bytes_read);
+  dfsan_get_memcmp_origin(s1, s2, bytes_read, ret_label, ret_origin);
+  return r;
 }
 
 DECLARE_WEAK_INTERCEPTOR_HOOK(dfsan_weak_hook_strncmp, uptr caller_pc,
                               const char *s1, const char *s2, size_t n,
                               dfsan_label s1_label, dfsan_label s2_label,
                               dfsan_label n_label)
+
+DECLARE_WEAK_INTERCEPTOR_HOOK(dfsan_weak_hook_origin_strncmp, uptr caller_pc,
+                              const char *s1, const char *s2, size_t n,
+                              dfsan_label s1_label, dfsan_label s2_label,
+                              dfsan_label n_label, dfsan_origin s1_origin,
+                              dfsan_origin s2_origin, dfsan_origin n_origin)
 
 SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_strncmp(const char *s1, const char *s2,
                                                  size_t n, dfsan_label s1_label,
@@ -249,44 +404,60 @@ SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_strncmp(const char *s1, const char *s2,
   CALL_WEAK_INTERCEPTOR_HOOK(dfsan_weak_hook_strncmp, GET_CALLER_PC(), s1, s2,
                              n, s1_label, s2_label, n_label);
 
-  for (size_t i = 0;; ++i) {
-    if (s1[i] != s2[i] || s1[i] == 0 || s2[i] == 0 || i == n - 1) {
-      if (flags().strict_data_dependencies) {
-        *ret_label = 0;
-      } else {
-        *ret_label = dfsan_union(dfsan_read_label(s1, i + 1),
-                                 dfsan_read_label(s2, i + 1));
-      }
-      return s1[i] - s2[i];
-    }
-  }
-  return 0;
+  size_t bytes_read;
+  int r = dfsan_strncmp(s1, s2, n, &bytes_read);
+  *ret_label = dfsan_get_memcmp_label(s1, s2, bytes_read);
+  return r;
 }
 
-SANITIZER_INTERFACE_ATTRIBUTE int
-__dfsw_strncasecmp(const char *s1, const char *s2, size_t n,
-                   dfsan_label s1_label, dfsan_label s2_label,
-                   dfsan_label n_label, dfsan_label *ret_label) {
+SANITIZER_INTERFACE_ATTRIBUTE int __dfso_strncmp(
+    const char *s1, const char *s2, size_t n, dfsan_label s1_label,
+    dfsan_label s2_label, dfsan_label n_label, dfsan_label *ret_label,
+    dfsan_origin s1_origin, dfsan_origin s2_origin, dfsan_origin n_origin,
+    dfsan_origin *ret_origin) {
   if (n == 0) {
     *ret_label = 0;
     return 0;
   }
 
-  for (size_t i = 0;; ++i) {
-    char s1_lower = tolower(s1[i]);
-    char s2_lower = tolower(s2[i]);
+  CALL_WEAK_INTERCEPTOR_HOOK(dfsan_weak_hook_origin_strncmp, GET_CALLER_PC(),
+                             s1, s2, n, s1_label, s2_label, n_label, s1_origin,
+                             s2_origin, n_origin);
 
-    if (s1_lower != s2_lower || s1[i] == 0 || s2[i] == 0 || i == n - 1) {
-      if (flags().strict_data_dependencies) {
-        *ret_label = 0;
-      } else {
-        *ret_label = dfsan_union(dfsan_read_label(s1, i + 1),
-                                 dfsan_read_label(s2, i + 1));
-      }
-      return s1_lower - s2_lower;
-    }
+  size_t bytes_read;
+  int r = dfsan_strncmp(s1, s2, n, &bytes_read);
+  dfsan_get_memcmp_origin(s1, s2, bytes_read, ret_label, ret_origin);
+  return r;
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_strncasecmp(
+    const char *s1, const char *s2, size_t n, dfsan_label s1_label,
+    dfsan_label s2_label, dfsan_label n_label, dfsan_label *ret_label) {
+  if (n == 0) {
+    *ret_label = 0;
+    return 0;
   }
-  return 0;
+
+  size_t bytes_read;
+  int r = dfsan_strncasecmp(s1, s2, n, &bytes_read);
+  *ret_label = dfsan_get_memcmp_label(s1, s2, bytes_read);
+  return r;
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE int __dfso_strncasecmp(
+    const char *s1, const char *s2, size_t n, dfsan_label s1_label,
+    dfsan_label s2_label, dfsan_label n_label, dfsan_label *ret_label,
+    dfsan_origin s1_origin, dfsan_origin s2_origin, dfsan_origin n_origin,
+    dfsan_origin *ret_origin) {
+  if (n == 0) {
+    *ret_label = 0;
+    return 0;
+  }
+
+  size_t bytes_read;
+  int r = dfsan_strncasecmp(s1, s2, n, &bytes_read);
+  dfsan_get_memcmp_origin(s1, s2, bytes_read, ret_label, ret_origin);
+  return r;
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE void *__dfsw_calloc(size_t nmemb, size_t size,
@@ -307,6 +478,17 @@ __dfsw_strlen(const char *s, dfsan_label s_label, dfsan_label *ret_label) {
   } else {
     *ret_label = dfsan_read_label(s, ret + 1);
   }
+  return ret;
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE size_t __dfso_strlen(const char *s,
+                                                   dfsan_label s_label,
+                                                   dfsan_label *ret_label,
+                                                   dfsan_origin s_origin,
+                                                   dfsan_origin *ret_origin) {
+  size_t ret = __dfsw_strlen(s, s_label, ret_label);
+  if (!flags().strict_data_dependencies)
+    *ret_origin = dfsan_read_origin_of_first_taint(s, ret + 1);
   return ret;
 }
 
@@ -456,7 +638,8 @@ static void *DFsanThreadStartFunc(void *arg) {
 static int dfsan_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
                                 void *start_routine_trampoline,
                                 void *start_routine, void *arg,
-                                dfsan_label *ret_label) {
+                                dfsan_label *ret_label,
+                                bool track_origins = false) {
   pthread_attr_t myattr;
   if (!attr) {
     pthread_attr_init(&myattr);
@@ -466,8 +649,9 @@ static int dfsan_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
   // Ensure that the thread stack is large enough to hold all TLS data.
   AdjustStackSize((void *)(const_cast<pthread_attr_t *>(attr)));
 
-  DFsanThread *t = DFsanThread::Create(start_routine_trampoline,
-                                       (thread_callback_t)start_routine, arg);
+  DFsanThread *t =
+      DFsanThread::Create(start_routine_trampoline,
+                          (thread_callback_t)start_routine, arg, track_origins);
   int res = pthread_create(thread, attr, DFsanThreadStartFunc, t);
 
   if (attr == &myattr)
@@ -487,6 +671,20 @@ SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_pthread_create(
                               start_routine, arg, ret_label);
 }
 
+SANITIZER_INTERFACE_ATTRIBUTE int __dfso_pthread_create(
+    pthread_t *thread, const pthread_attr_t *attr,
+    void *(*start_routine_trampoline)(void *, void *, dfsan_label,
+                                      dfsan_label *, dfsan_origin,
+                                      dfsan_origin *),
+    void *start_routine, void *arg, dfsan_label thread_label,
+    dfsan_label attr_label, dfsan_label start_routine_label,
+    dfsan_label arg_label, dfsan_label *ret_label, dfsan_origin thread_origin,
+    dfsan_origin attr_origin, dfsan_origin start_routine_origin,
+    dfsan_origin arg_origin, dfsan_origin *ret_origin) {
+  return dfsan_pthread_create(thread, attr, (void *)start_routine_trampoline,
+                              start_routine, arg, ret_label, true);
+}
+
 SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_pthread_join(pthread_t thread,
                                                       void **retval,
                                                       dfsan_label thread_label,
@@ -497,6 +695,15 @@ SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_pthread_join(pthread_t thread,
     dfsan_set_label(0, retval, sizeof(*retval));
   *ret_label = 0;
   return ret;
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE int __dfso_pthread_join(
+    pthread_t thread, void **retval, dfsan_label thread_label,
+    dfsan_label retval_label, dfsan_label *ret_label,
+    dfsan_origin thread_origin, dfsan_origin retval_origin,
+    dfsan_origin *ret_origin) {
+  return __dfsw_pthread_join(thread, retval, thread_label, retval_label,
+                             ret_label);
 }
 
 struct dl_iterate_phdr_info {
@@ -872,6 +1079,13 @@ int __dfsw_sigemptyset(sigset_t *set, dfsan_label set_label,
   return ret;
 }
 
+SANITIZER_INTERFACE_ATTRIBUTE
+int __dfso_sigemptyset(sigset_t *set, dfsan_label set_label,
+                       dfsan_label *ret_label, dfsan_origin set_origin,
+                       dfsan_origin *ret_origin) {
+  return __dfsw_sigemptyset(set, set_label, ret_label);
+}
+
 class SignalHandlerScope {
  public:
   SignalHandlerScope() {
@@ -988,11 +1202,18 @@ int __dfsw_sigaction(int signum, const struct sigaction *act,
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE
-sighandler_t __dfsw_signal(int signum,
-                           void *(*handler_trampoline)(void *, int, dfsan_label,
-                                                       dfsan_label *),
-                           sighandler_t handler, dfsan_label signum_label,
-                           dfsan_label handler_label, dfsan_label *ret_label) {
+int __dfso_sigaction(int signum, const struct sigaction *act,
+                     struct sigaction *oldact, dfsan_label signum_label,
+                     dfsan_label act_label, dfsan_label oldact_label,
+                     dfsan_label *ret_label, dfsan_origin signum_origin,
+                     dfsan_origin act_origin, dfsan_origin oldact_origin,
+                     dfsan_origin *ret_origin) {
+  return __dfsw_sigaction(signum, act, oldact, signum_label, act_label,
+                          oldact_label, ret_label);
+}
+
+static sighandler_t dfsan_signal(int signum, sighandler_t handler,
+                                 dfsan_label *ret_label) {
   CHECK_LT(signum, kMaxSignals);
   SignalSpinLocker lock;
   uptr old_cb = atomic_load(&sigactions[signum], memory_order_relaxed);
@@ -1011,6 +1232,26 @@ sighandler_t __dfsw_signal(int signum,
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE
+sighandler_t __dfsw_signal(int signum,
+                           void *(*handler_trampoline)(void *, int, dfsan_label,
+                                                       dfsan_label *),
+                           sighandler_t handler, dfsan_label signum_label,
+                           dfsan_label handler_label, dfsan_label *ret_label) {
+  return dfsan_signal(signum, handler, ret_label);
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE
+sighandler_t __dfso_signal(
+    int signum,
+    void *(*handler_trampoline)(void *, int, dfsan_label, dfsan_label *,
+                                dfsan_origin, dfsan_origin *),
+    sighandler_t handler, dfsan_label signum_label, dfsan_label handler_label,
+    dfsan_label *ret_label, dfsan_origin signum_origin,
+    dfsan_origin handler_origin, dfsan_origin *ret_origin) {
+  return dfsan_signal(signum, handler, ret_label);
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE
 int __dfsw_sigaltstack(const stack_t *ss, stack_t *old_ss, dfsan_label ss_label,
                        dfsan_label old_ss_label, dfsan_label *ret_label) {
   int ret = sigaltstack(ss, old_ss);
@@ -1018,6 +1259,14 @@ int __dfsw_sigaltstack(const stack_t *ss, stack_t *old_ss, dfsan_label ss_label,
     dfsan_set_label(0, old_ss, sizeof(*old_ss));
   *ret_label = 0;
   return ret;
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE
+int __dfso_sigaltstack(const stack_t *ss, stack_t *old_ss, dfsan_label ss_label,
+                       dfsan_label old_ss_label, dfsan_label *ret_label,
+                       dfsan_origin ss_origin, dfsan_origin old_ss_origin,
+                       dfsan_origin *ret_origin) {
+  return __dfsw_sigaltstack(ss, old_ss, ss_label, old_ss_label, ret_label);
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE
@@ -1203,12 +1452,22 @@ typedef void (*write_trampoline_t)(
     int fd, const void *buf, ssize_t count,
     dfsan_label fd_label, dfsan_label buf_label, dfsan_label count_label);
 
+typedef void (*write_origin_trampoline_t)(
+    void *callback, int fd, const void *buf, ssize_t count,
+    dfsan_label fd_label, dfsan_label buf_label, dfsan_label count_label,
+    dfsan_origin fd_origin, dfsan_origin buf_origin, dfsan_origin count_origin);
+
 // Calls to dfsan_set_write_callback() set the values in this struct.
 // Calls to the custom version of write() read (and invoke) them.
 static struct {
   write_trampoline_t write_callback_trampoline = nullptr;
   void *write_callback = nullptr;
 } write_callback_info;
+
+static struct {
+  write_origin_trampoline_t write_callback_trampoline = nullptr;
+  void *write_callback = nullptr;
+} write_origin_callback_info;
 
 SANITIZER_INTERFACE_ATTRIBUTE void
 __dfsw_dfsan_set_write_callback(
@@ -1220,6 +1479,15 @@ __dfsw_dfsan_set_write_callback(
   write_callback_info.write_callback = write_callback;
 }
 
+SANITIZER_INTERFACE_ATTRIBUTE void __dfso_dfsan_set_write_callback(
+    write_origin_trampoline_t write_callback_trampoline, void *write_callback,
+    dfsan_label write_callback_label, dfsan_label *ret_label,
+    dfsan_origin write_callback_origin, dfsan_origin *ret_origin) {
+  write_origin_callback_info.write_callback_trampoline =
+      write_callback_trampoline;
+  write_origin_callback_info.write_callback = write_callback;
+}
+
 SANITIZER_INTERFACE_ATTRIBUTE int
 __dfsw_write(int fd, const void *buf, size_t count,
              dfsan_label fd_label, dfsan_label buf_label,
@@ -1229,6 +1497,21 @@ __dfsw_write(int fd, const void *buf, size_t count,
         write_callback_info.write_callback,
         fd, buf, count,
         fd_label, buf_label, count_label);
+  }
+
+  *ret_label = 0;
+  return write(fd, buf, count);
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE int __dfso_write(
+    int fd, const void *buf, size_t count, dfsan_label fd_label,
+    dfsan_label buf_label, dfsan_label count_label, dfsan_label *ret_label,
+    dfsan_origin fd_origin, dfsan_origin buf_origin, dfsan_origin count_origin,
+    dfsan_origin *ret_origin) {
+  if (write_origin_callback_info.write_callback) {
+    write_origin_callback_info.write_callback_trampoline(
+        write_origin_callback_info.write_callback, fd, buf, count, fd_label,
+        buf_label, count_label, fd_origin, buf_origin, count_origin);
   }
 
   *ret_label = 0;
@@ -1489,6 +1772,31 @@ int __dfsw_snprintf(char *str, size_t size, const char *format,
   int ret = format_buffer(str, size, format, va_labels, ret_label, ap);
   va_end(ap);
   return ret;
+}
+
+static void BeforeFork() {
+  StackDepotLockAll();
+  GetChainedOriginDepot()->LockAll();
+}
+
+static void AfterFork() {
+  GetChainedOriginDepot()->UnlockAll();
+  StackDepotUnlockAll();
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE
+pid_t __dfsw_fork(dfsan_label *ret_label) {
+  pid_t pid = fork();
+  *ret_label = 0;
+  return pid;
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE
+pid_t __dfso_fork(dfsan_label *ret_label, dfsan_origin *ret_origin) {
+  BeforeFork();
+  pid_t pid = __dfsw_fork(ret_label);
+  AfterFork();
+  return pid;
 }
 
 // Default empty implementations (weak). Users should redefine them.

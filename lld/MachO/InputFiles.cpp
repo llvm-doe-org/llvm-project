@@ -67,6 +67,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/TarWriter.h"
 #include "llvm/TextAPI/MachO/Architecture.h"
+#include "llvm/TextAPI/MachO/InterfaceFile.h"
 
 using namespace llvm;
 using namespace llvm::MachO;
@@ -99,8 +100,8 @@ int InputFile::idCount = 0;
 // Open a given file path and return it as a memory-mapped file.
 Optional<MemoryBufferRef> macho::readFile(StringRef path) {
   // Open a file.
-  auto mbOrErr = MemoryBuffer::getFile(path);
-  if (auto ec = mbOrErr.getError()) {
+  ErrorOr<std::unique_ptr<MemoryBuffer>> mbOrErr = MemoryBuffer::getFile(path);
+  if (std::error_code ec = mbOrErr.getError()) {
     error("cannot open " + path + ": " + ec.message());
     return None;
   }
@@ -111,9 +112,9 @@ Optional<MemoryBufferRef> macho::readFile(StringRef path) {
 
   // If this is a regular non-fat file, return it.
   const char *buf = mbref.getBufferStart();
-  auto *hdr = reinterpret_cast<const MachO::fat_header *>(buf);
+  const auto *hdr = reinterpret_cast<const fat_header *>(buf);
   if (mbref.getBufferSize() < sizeof(uint32_t) ||
-      read32be(&hdr->magic) != MachO::FAT_MAGIC) {
+      read32be(&hdr->magic) != FAT_MAGIC) {
     if (tar)
       tar->append(relativeToRoot(path), mbref.getBuffer());
     return mbref;
@@ -123,7 +124,7 @@ Optional<MemoryBufferRef> macho::readFile(StringRef path) {
   // multiple real files for different CPU ISAs. Here, we search for a
   // file that matches with the current link target and returns it as
   // a MemoryBufferRef.
-  auto *arch = reinterpret_cast<const MachO::fat_arch *>(buf + sizeof(*hdr));
+  const auto *arch = reinterpret_cast<const fat_arch *>(buf + sizeof(*hdr));
 
   for (uint32_t i = 0, n = read32be(&hdr->nfat_arch); i < n; ++i) {
     if (reinterpret_cast<const char *>(arch + i + 1) >
@@ -148,6 +149,9 @@ Optional<MemoryBufferRef> macho::readFile(StringRef path) {
   error("unable to find matching architecture in " + path);
   return None;
 }
+
+InputFile::InputFile(Kind kind, const InterfaceFile &interface)
+    : id(idCount++), fileKind(kind), name(saver.save(interface.getPath())) {}
 
 void ObjFile::parseSections(ArrayRef<section_64> sections) {
   subsections.reserve(sections.size());
@@ -199,7 +203,7 @@ static InputSection *findContainingSubsection(SubsectionMap &map,
 
 static bool validateRelocationInfo(InputFile *file, const section_64 &sec,
                                    relocation_info rel) {
-  const TargetInfo::RelocAttrs &relocAttrs = target->getRelocAttrs(rel.r_type);
+  const RelocAttrs &relocAttrs = target->getRelocAttrs(rel.r_type);
   bool valid = true;
   auto message = [relocAttrs, file, sec, rel, &valid](const Twine &diagnostic) {
     valid = false;
@@ -260,7 +264,7 @@ void ObjFile::parseRelocations(const section_64 &sec,
     // and insert them. Storing addends in the instruction stream is
     // possible, but inconvenient and more costly at link time.
 
-    uint64_t pairedAddend = 0;
+    int64_t pairedAddend = 0;
     relocation_info relInfo = relInfos[i];
     if (target->hasAttr(relInfo.r_type, RelocAttrBits::ADDEND)) {
       pairedAddend = SignExtend64<24>(relInfo.r_symbolnum);
@@ -272,19 +276,9 @@ void ObjFile::parseRelocations(const section_64 &sec,
     if (relInfo.r_address & R_SCATTERED)
       fatal("TODO: Scattered relocations not supported");
 
-    Reloc p;
-    if (target->hasAttr(relInfo.r_type, RelocAttrBits::SUBTRAHEND)) {
-      p.type = relInfo.r_type;
-      p.referent = symbols[relInfo.r_symbolnum];
-      relInfo = relInfos[++i];
-      // SUBTRACTOR relocations should always be followed by an UNSIGNED one
-      // indicating the minuend symbol.
-      assert(target->hasAttr(relInfo.r_type, RelocAttrBits::UNSIGNED) &&
-             relInfo.r_extern);
-    }
-    uint64_t embeddedAddend = target->getEmbeddedAddend(mb, sec, relInfo);
+    int64_t embeddedAddend = target->getEmbeddedAddend(mb, sec, relInfo);
     assert(!(embeddedAddend && pairedAddend));
-    uint64_t totalAddend = pairedAddend + embeddedAddend;
+    int64_t totalAddend = pairedAddend + embeddedAddend;
     Reloc r;
     r.type = relInfo.r_type;
     r.pcrel = relInfo.r_pcrel;
@@ -301,6 +295,9 @@ void ObjFile::parseRelocations(const section_64 &sec,
         // The implicit addend for pcrel section relocations is the pcrel offset
         // in terms of the addresses in the input file. Here we adjust it so
         // that it describes the offset from the start of the referent section.
+        // FIXME This logic was written around x86_64 behavior -- ARM64 doesn't
+        // have pcrel section relocations. We may want to factor this out into
+        // the arch-specific .cpp file.
         assert(target->hasAttr(r.type, RelocAttrBits::BYTE4));
         referentOffset =
             sec.addr + relInfo.r_address + 4 + totalAddend - referentSec.addr;
@@ -313,9 +310,19 @@ void ObjFile::parseRelocations(const section_64 &sec,
     }
 
     InputSection *subsec = findContainingSubsection(subsecMap, &r.offset);
-    if (p.type != GENERIC_RELOC_INVALID)
-      subsec->relocs.push_back(p);
     subsec->relocs.push_back(r);
+
+    if (target->hasAttr(r.type, RelocAttrBits::SUBTRAHEND)) {
+      relInfo = relInfos[++i];
+      // SUBTRACTOR relocations should always be followed by an UNSIGNED one
+      // indicating the minuend symbol.
+      assert(target->hasAttr(relInfo.r_type, RelocAttrBits::UNSIGNED) &&
+             relInfo.r_extern);
+      Reloc p;
+      p.type = relInfo.r_type;
+      p.referent = symbols[relInfo.r_symbolnum];
+      subsec->relocs.push_back(p);
+    }
   }
 }
 
@@ -339,10 +346,9 @@ static macho::Symbol *createDefined(const structs::nlist_64 &sym,
 }
 
 // Checks if the version specified in `cmd` is compatible with target
-// version in `config`. IOW, check if cmd's version >= config's version.
+// version. IOW, check if cmd's version >= config's version.
 static bool hasCompatVersion(const InputFile *input,
-                             const build_version_command *cmd,
-                             const Configuration *config) {
+                             const build_version_command *cmd) {
 
   if (config->target.Platform != static_cast<PlatformKind>(cmd->platform)) {
     error(toString(input) + " has platform " +
@@ -501,8 +507,7 @@ ObjFile::ObjFile(MemoryBufferRef mb, uint32_t modTime, StringRef archiveName)
   auto *buf = reinterpret_cast<const uint8_t *>(mb.getBufferStart());
   auto *hdr = reinterpret_cast<const mach_header_64 *>(mb.getBufferStart());
 
-  MachO::Architecture arch =
-      MachO::getArchitectureFromCpuType(hdr->cputype, hdr->cpusubtype);
+  Architecture arch = getArchitectureFromCpuType(hdr->cputype, hdr->cpusubtype);
   if (arch != config->target.Arch) {
     error(toString(this) + " has architecture " + getArchitectureName(arch) +
           " which is incompatible with target architecture " +
@@ -512,7 +517,7 @@ ObjFile::ObjFile(MemoryBufferRef mb, uint32_t modTime, StringRef archiveName)
 
   if (const auto *cmd =
           findCommand<build_version_command>(hdr, LC_BUILD_VERSION)) {
-    if (!hasCompatVersion(this, cmd, config))
+    if (!hasCompatVersion(this, cmd))
       return;
   }
 
@@ -673,7 +678,7 @@ DylibFile::DylibFile(MemoryBufferRef mb, DylibFile *umbrella,
 
   if (const build_version_command *cmd =
           findCommand<build_version_command>(hdr, LC_BUILD_VERSION)) {
-    if (!hasCompatVersion(this, cmd, config))
+    if (!hasCompatVersion(this, cmd))
       return;
   }
 
@@ -750,7 +755,7 @@ DylibFile::DylibFile(const InterfaceFile &interface, DylibFile *umbrella,
   };
   // TODO(compnerd) filter out symbols based on the target platform
   // TODO: handle weak defs, thread locals
-  for (const auto symbol : interface.symbols()) {
+  for (const auto *symbol : interface.symbols()) {
     if (!symbol->getArchitectures().has(config->target.Arch))
       continue;
 
@@ -777,7 +782,7 @@ DylibFile::DylibFile(const InterfaceFile &interface, DylibFile *umbrella,
       interface.getParent() == nullptr ? &interface : interface.getParent();
 
   for (InterfaceFileRef intfRef : interface.reexportedLibraries()) {
-    auto targets = intfRef.targets();
+    InterfaceFile::const_target_range targets = intfRef.targets();
     if (is_contained(targets, config->target))
       loadReexport(intfRef.getInstallName(), exportingFile, topLevel);
   }

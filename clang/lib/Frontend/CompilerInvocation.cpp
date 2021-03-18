@@ -466,6 +466,11 @@ static bool FixupInvocation(CompilerInvocation &Invocation,
     LangOpts.NewAlignOverride = 0;
   }
 
+  // Prevent the user from specifying both -fsycl-is-device and -fsycl-is-host.
+  if (LangOpts.SYCLIsDevice && LangOpts.SYCLIsHost)
+    Diags.Report(diag::err_drv_argument_not_allowed_with) << "-fsycl-is-device"
+                                                          << "-fsycl-is-host";
+
   if (Args.hasArg(OPT_fgnu89_inline) && LangOpts.CPlusPlus)
     Diags.Report(diag::err_drv_argument_not_allowed_with)
         << "-fgnu89-inline" << GetInputKindName(IK);
@@ -663,7 +668,7 @@ static bool RoundTrip(ParseFn Parse, GenerateFn Generate,
   // Generate arguments from the dummy invocation. If Generate is the
   // inverse of Parse, the newly generated arguments must have the same
   // semantics as the original.
-  SmallVector<const char *, 16> GeneratedArgs1;
+  SmallVector<const char *> GeneratedArgs1;
   Generate(DummyInvocation, GeneratedArgs1, SA);
 
   // Run the second parse, now on the generated arguments, and with the real
@@ -683,7 +688,7 @@ static bool RoundTrip(ParseFn Parse, GenerateFn Generate,
 
   // Generate arguments again, this time from the options we will end up using
   // for the rest of the compilation.
-  SmallVector<const char *, 16> GeneratedArgs2;
+  SmallVector<const char *> GeneratedArgs2;
   Generate(RealInvocation, GeneratedArgs2, SA);
 
   // Compares two lists of generated arguments.
@@ -1483,9 +1488,6 @@ void CompilerInvocation::GenerateCodeGenArgs(
     GenerateArg(Args, Opt, SA);
   }
 
-  if (Opts.IgnoreXCOFFVisibility)
-    GenerateArg(Args, OPT_mignore_xcoff_visibility, SA);
-
   if (Opts.EnableAIXExtendedAltivecABI)
     GenerateArg(Args, OPT_mabi_EQ_vec_extabi, SA);
 
@@ -1830,27 +1832,6 @@ bool CompilerInvocation::ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args,
       Opts.setStructReturnConvention(CodeGenOptions::SRCK_InRegs);
     }
   }
-
-  // This is the reason why '-fvisibility' needs to be always generated:
-  // its absence implies '-mignore-xcoff-visibility'.
-  //
-  // Suppose the original cc1 command line does contain '-fvisibility default':
-  // '-mignore-xcoff-visibility' should not be implied.
-  // * If '-fvisibility' is not generated (as most options with default values
-  //   don't), its absence would imply '-mignore-xcoff-visibility'. This changes
-  //   the command line semantics.
-  // * If '-fvisibility' is generated regardless of its presence and value,
-  //   '-mignore-xcoff-visibility' won't be implied and the command line
-  //   semantics are kept intact.
-  //
-  // When the original cc1 command line does **not** contain '-fvisibility',
-  // '-mignore-xcoff-visibility' is implied. The generated command line will
-  // contain both '-fvisibility default' and '-mignore-xcoff-visibility' and
-  // subsequent calls to `CreateFromArgs`/`generateCC1CommandLine` will always
-  // produce the same arguments.
-  if (T.isOSAIX() && (Args.hasArg(OPT_mignore_xcoff_visibility) ||
-                      !Args.hasArg(OPT_fvisibility)))
-    Opts.IgnoreXCOFFVisibility = 1;
 
   if (Arg *A =
           Args.getLastArg(OPT_mabi_EQ_vec_default, OPT_mabi_EQ_vec_extabi)) {
@@ -3342,6 +3323,9 @@ void CompilerInvocation::GenerateLangArgs(const LangOptions &Opts,
                 Twine(Major) + "." + Twine(Minor) + "." + Twine(Patch), SA);
   }
 
+  if (Opts.IgnoreXCOFFVisibility)
+    GenerateArg(Args, OPT_mignore_xcoff_visibility, SA);
+
   if (Opts.SignedOverflowBehavior == LangOptions::SOB_Trapping) {
     GenerateArg(Args, OPT_ftrapv, SA);
     GenerateArg(Args, OPT_ftrapv_handler, Opts.OverflowHandler, SA);
@@ -3648,6 +3632,30 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
     }
     Opts.GNUCVersion = Major * 100 * 100 + Minor * 100 + Patch;
   }
+
+  // In AIX OS, the -mignore-xcoff-visibility is enable by default if there is
+  // no -fvisibility=* option.
+  // This is the reason why '-fvisibility' needs to be always generated:
+  // its absence implies '-mignore-xcoff-visibility'.
+  //
+  // Suppose the original cc1 command line does contain '-fvisibility default':
+  // '-mignore-xcoff-visibility' should not be implied.
+  // * If '-fvisibility' is not generated (as most options with default values
+  //   don't), its absence would imply '-mignore-xcoff-visibility'. This changes
+  //   the command line semantics.
+  // * If '-fvisibility' is generated regardless of its presence and value,
+  //   '-mignore-xcoff-visibility' won't be implied and the command line
+  //   semantics are kept intact.
+  //
+  // When the original cc1 command line does **not** contain '-fvisibility',
+  // '-mignore-xcoff-visibility' is implied. The generated command line will
+  // contain both '-fvisibility default' and '-mignore-xcoff-visibility' and
+  // subsequent calls to `CreateFromArgs`/`generateCC1CommandLine` will always
+  // produce the same arguments. 
+ 
+  if (T.isOSAIX() && (Args.hasArg(OPT_mignore_xcoff_visibility) ||
+                      !Args.hasArg(OPT_fvisibility)))
+    Opts.IgnoreXCOFFVisibility = 1;
 
   if (Args.hasArg(OPT_ftrapv)) {
     Opts.setSignedOverflowBehavior(LangOptions::SOB_Trapping);

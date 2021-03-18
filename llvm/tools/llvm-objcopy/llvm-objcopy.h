@@ -10,6 +10,7 @@
 #define LLVM_TOOLS_OBJCOPY_OBJCOPY_H
 
 #include "llvm/Support/Error.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
 
@@ -25,6 +26,14 @@ namespace objcopy {
 struct CopyConfig;
 Expected<std::vector<NewArchiveMember>>
 createNewArchiveMembers(CopyConfig &Config, const object::Archive &Ar);
+
+/// A writeToFile helper creates an output stream, based on the specified
+/// \p OutputFileName: std::outs for the "-", raw_null_ostream for
+/// the "/dev/null", temporary file in the same directory as the final output
+/// file for other names. The final output file is atomically replaced with
+/// the temporary file after \p Write handler is finished.
+Error writeToFile(StringRef OutputFileName,
+                  std::function<Error(raw_ostream &)> Write);
 
 } // end namespace objcopy
 } // end namespace llvm

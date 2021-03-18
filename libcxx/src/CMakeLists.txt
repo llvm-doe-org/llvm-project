@@ -90,6 +90,12 @@ elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "SunOS")
     support/solaris/wcsnrtombs.inc
     support/solaris/xlocale.cpp
     )
+elseif(ZOS)
+  list(APPEND LIBCXX_SOURCES
+    support/ibm/mbsnrtowcs.inc
+    support/ibm/wcsnrtombs.inc
+    support/ibm/xlocale_zos.cpp
+    )
 endif()
 
 if (LIBCXX_ENABLE_FILESYSTEM)

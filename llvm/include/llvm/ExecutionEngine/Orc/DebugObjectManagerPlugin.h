@@ -20,7 +20,7 @@
 #include "llvm/ExecutionEngine/Orc/TPCDebugObjectRegistrar.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/Memory.h"
-#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/MemoryBufferRef.h"
 
 #include <functional>
 #include <map>
@@ -62,7 +62,8 @@ public:
   void notifyTransferringResources(ResourceKey DstKey,
                                    ResourceKey SrcKey) override;
 
-  void modifyPassConfig(MaterializationResponsibility &MR, const Triple &TT,
+  void modifyPassConfig(MaterializationResponsibility &MR,
+                        jitlink::LinkGraph &LG,
                         jitlink::PassConfiguration &PassConfig) override;
 
 private:

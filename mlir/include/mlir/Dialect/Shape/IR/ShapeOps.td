@@ -89,6 +89,7 @@ def Shape_BroadcastOp : Shape_Op<"broadcast", [Commutative, NoSideEffect]> {
   ];
 
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
   let verifier = [{ return ::verify(*this); }];
 }
 
@@ -277,9 +278,10 @@ def Shape_IsBroadcastableOp : Shape_Op<"is_broadcastable",
     };
   }];
 
-  let assemblyFormat = "$shapes attr-dict `:` type($shapes)";
-  let verifier = [{ return ::verify(*this); }];
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
 
+  let assemblyFormat = "$shapes attr-dict `:` type($shapes)";
 }
 
 def Shape_RankOp : Shape_Op<"rank", [NoSideEffect]> {
@@ -604,7 +606,8 @@ def Shape_SplitAtOp : Shape_Op<"split_at", [NoSideEffect]> {
     If `index` is negative, it is treated as indexing from the back of the
     shape. This negative-handling behavior is important when handling unranked
     shapes, where the positive index is not necessarily knowable due to a
-    dynamic number of leading dimensions.
+    dynamic number of leading dimensions. If the result is in extent tensor form
+    out of bounds indices result in undefined behavior.
 
     Examples:
     - split_at([4,5,6], index=0) -> [], [4,5,6]
@@ -623,7 +626,8 @@ def Shape_SplitAtOp : Shape_Op<"split_at", [NoSideEffect]> {
 
   let arguments = (ins Shape_ShapeOrExtentTensorType:$operand,
                        Shape_SizeOrIndexType:$index);
-  let results = (outs Shape_ShapeType:$head, Shape_ShapeType:$tail);
+  let results = (outs Shape_ShapeOrExtentTensorType:$head,
+                      Shape_ShapeOrExtentTensorType:$tail);
   let hasFolder = 1;
 }
 

@@ -47,7 +47,7 @@ using namespace llvm;
 using namespace object;
 
 namespace {
-enum OutputFormatTy { bsd, sysv, posix, darwin };
+enum OutputFormatTy { bsd, sysv, posix, darwin, just_symbols };
 
 cl::OptionCategory NMCat("llvm-nm Options");
 
@@ -55,7 +55,9 @@ cl::opt<OutputFormatTy> OutputFormat(
     "format", cl::desc("Specify output format"),
     cl::values(clEnumVal(bsd, "BSD format"), clEnumVal(sysv, "System V format"),
                clEnumVal(posix, "POSIX.2 format"),
-               clEnumVal(darwin, "Darwin -m format")),
+               clEnumVal(darwin, "Darwin -m format"),
+               cl::OptionEnumValue{"just-symbols", int(just_symbols),
+                                   "just symbol names"}),
     cl::init(bsd), cl::cat(NMCat));
 cl::alias OutputFormat2("f", cl::desc("Alias for --format"),
                         cl::aliasopt(OutputFormat));
@@ -117,6 +119,9 @@ cl::alias PrintFileNameA("A", cl::desc("Alias for --print-file-name"),
 cl::alias PrintFileNameo("o", cl::desc("Alias for --print-file-name"),
                          cl::aliasopt(PrintFileName), cl::Grouping);
 
+cl::opt<bool> Quiet("quiet", cl::desc("Suppress 'no symbols' diagnostic"),
+                    cl::cat(NMCat));
+
 cl::opt<bool> DebugSyms("debug-syms",
                         cl::desc("Show all symbols, even debugger only"),
                         cl::cat(NMCat));
@@ -177,9 +182,9 @@ cl::alias RadixAlias("t", cl::desc("Alias for --radix"),
                      cl::aliasopt(AddressRadix));
 
 cl::opt<bool> JustSymbolName("just-symbol-name",
-                             cl::desc("Print just the symbol's name"),
+                             cl::desc("Alias for --format=just-symbols"),
                              cl::cat(NMCat));
-cl::alias JustSymbolNames("j", cl::desc("Alias for --just-symbol-name"),
+cl::alias JustSymbolNames("j", cl::desc("Alias for --format-just-symbols"),
                           cl::aliasopt(JustSymbolName), cl::Grouping);
 
 cl::opt<bool>
@@ -769,10 +774,10 @@ static void sortAndPrintSymbolList(SymbolicFile &Obj, bool printName,
   }
 
   if (!PrintFileName) {
-    if (OutputFormat == posix && MultipleFiles && printName) {
+    if ((OutputFormat == bsd || OutputFormat == posix ||
+         OutputFormat == just_symbols) &&
+        MultipleFiles && printName) {
       outs() << '\n' << CurrentFilename << ":\n";
-    } else if (OutputFormat == bsd && MultipleFiles && printName) {
-      outs() << "\n" << CurrentFilename << ":\n";
     } else if (OutputFormat == sysv) {
       outs() << "\n\nSymbols from " << CurrentFilename << ":\n\n";
       if (isSymbolList64Bit(Obj))
@@ -841,7 +846,7 @@ static void sortAndPrintSymbolList(SymbolicFile &Obj, bool printName,
       continue;
     if (PrintFileName)
       writeFileName(outs(), ArchiveName, ArchitectureName);
-    if ((JustSymbolName ||
+    if ((OutputFormat == just_symbols ||
          (UndefinedOnly && MachO && OutputFormat != darwin)) &&
         OutputFormat != posix) {
       outs() << Name << "\n";
@@ -1861,7 +1866,7 @@ static void dumpSymbolNamesFromObject(SymbolicFile &Obj, bool printName,
 
   CurrentFilename = Obj.getFileName();
 
-  if (Symbols.empty() && SymbolList.empty()) {
+  if (Symbols.empty() && SymbolList.empty() && !Quiet) {
     writeFileName(errs(), ArchiveName, ArchitectureName);
     errs() << "no symbols\n";
   }
@@ -2248,6 +2253,8 @@ int main(int argc, char **argv) {
     OutputFormat = posix;
   if (DarwinFormat)
     OutputFormat = darwin;
+  if (JustSymbolName)
+    OutputFormat = just_symbols;
 
   // The relative order of these is important. If you pass --size-sort it should
   // only print out the size. However, if you pass -S --size-sort, it should

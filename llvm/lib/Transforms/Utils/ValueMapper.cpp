@@ -26,8 +26,8 @@
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/GlobalObject.h"
 #include "llvm/IR/GlobalIndirectSymbol.h"
+#include "llvm/IR/GlobalObject.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Instruction.h"
@@ -37,12 +37,15 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/Debug.h"
 #include <cassert>
 #include <limits>
 #include <memory>
 #include <utility>
 
 using namespace llvm;
+
+#define DEBUG_TYPE "value-mapper"
 
 // Out of line method to get vtable etc for class.
 void ValueMapTypeRemapper::anchor() {}
@@ -432,6 +435,20 @@ Value *Mapper::mapValue(const Value *V) {
   if (BlockAddress *BA = dyn_cast<BlockAddress>(C))
     return mapBlockAddress(*BA);
 
+  if (const auto *E = dyn_cast<DSOLocalEquivalent>(C)) {
+    auto *Val = mapValue(E->getGlobalValue());
+    GlobalValue *GV = dyn_cast<GlobalValue>(Val);
+    if (GV)
+      return getVM()[E] = DSOLocalEquivalent::get(GV);
+
+    auto *Func = cast<Function>(Val->stripPointerCastsAndAliases());
+    Type *NewTy = E->getType();
+    if (TypeMapper)
+      NewTy = TypeMapper->remapType(NewTy);
+    return getVM()[E] = llvm::ConstantExpr::getBitCast(
+               DSOLocalEquivalent::get(Func), NewTy);
+  }
+
   auto mapValueOrNull = [this](Value *V) {
     auto Mapped = mapValue(V);
     assert((Mapped || (Flags & RF_NullMapMissingGlobalValues)) &&
@@ -556,10 +573,18 @@ Optional<Metadata *> MDNodeMapper::tryToMapOperand(const Metadata *Op) {
 MDNode *MDNodeMapper::mapDistinctNode(const MDNode &N) {
   assert(N.isDistinct() && "Expected a distinct node");
   assert(!M.getVM().getMappedMD(&N) && "Expected an unmapped node");
-  DistinctWorklist.push_back(cast<MDNode>(
-      (M.Flags & RF_ReuseAndMutateDistinctMDs)
-          ? M.mapToSelf(&N)
-          : M.mapToMetadata(&N, MDNode::replaceWithDistinct(N.clone()))));
+  Metadata *NewM = nullptr;
+
+  if (M.Flags & RF_ReuseAndMutateDistinctMDs) {
+    NewM = M.mapToSelf(&N);
+  } else {
+    NewM = MDNode::replaceWithDistinct(N.clone());
+    LLVM_DEBUG(dbgs() << "\nMap " << N << "\n"
+                      << "To  " << *NewM << "\n\n");
+    M.mapToMetadata(&N, NewM);
+  }
+  DistinctWorklist.push_back(cast<MDNode>(NewM));
+
   return DistinctWorklist.back();
 }
 
@@ -607,6 +632,9 @@ void MDNodeMapper::remapOperands(MDNode &N, OperandMapper mapOperand) {
   for (unsigned I = 0, E = N.getNumOperands(); I != E; ++I) {
     Metadata *Old = N.getOperand(I);
     Metadata *New = mapOperand(Old);
+    if (Old != New)
+      LLVM_DEBUG(dbgs() << "Replacing Op " << Old << " with " << New << " in "
+                        << N << "\n");
 
     if (Old != New)
       N.replaceOperandWith(I, New);
@@ -726,6 +754,11 @@ void MDNodeMapper::mapNodesInPOT(UniquedGraph &G) {
     });
 
     auto *NewN = MDNode::replaceWithUniqued(std::move(ClonedN));
+    if (N && NewN && N != NewN) {
+      LLVM_DEBUG(dbgs() << "\nMap " << *N << "\n"
+                        << "To  " << *NewN << "\n\n");
+    }
+
     M.mapToMetadata(N, NewN);
 
     // Nodes that were referenced out of order in the POT are involved in a

@@ -18,7 +18,7 @@
 #include <functional>
 #include <list>
 #include <optional>
-#include <unordered_set>
+#include <set>
 #include <vector>
 
 namespace llvm {
@@ -595,10 +595,13 @@ public:
 
   bool operator==(const Symbol &that) const { return this == &that; }
   bool operator!=(const Symbol &that) const { return !(*this == that); }
-  bool operator<(const Symbol &that) const {
-    // For maps of symbols: collate them by source location
-    return name_.begin() < that.name_.begin();
-  }
+
+  // Symbol comparison is based on the order of cooked source
+  // stream creation and, when both are from the same cooked source,
+  // their positions in that cooked source stream.
+  // (This function is implemented in Evaluate/tools.cpp to
+  // satisfy complicated shared library interdependency.)
+  bool operator<(const Symbol &) const;
 
   int Rank() const {
     return std::visit(
@@ -650,6 +653,8 @@ public:
   // The Scope * argument defaults to this->scope_ but should be overridden
   // for a parameterized derived type instantiation with the instance's scope.
   const DerivedTypeSpec *GetParentTypeSpec(const Scope * = nullptr) const;
+
+  SemanticsContext &GetSemanticsContext() const;
 
 private:
   const Scope *owner_;
@@ -762,17 +767,13 @@ inline const DeclTypeSpec *Symbol::GetType() const {
       details_);
 }
 
-inline bool operator<(SymbolRef x, SymbolRef y) { return *x < *y; }
-inline bool operator<(MutableSymbolRef x, MutableSymbolRef y) {
-  return *x < *y;
+inline bool operator<(SymbolRef x, SymbolRef y) {
+  return *x < *y; // name source position ordering
 }
-struct SymbolHash {
-  std::size_t operator()(SymbolRef symRef) const {
-    std::hash<std::string> hasher;
-    return hasher(symRef->name().ToString());
-  }
-};
-using SymbolSet = std::unordered_set<SymbolRef, SymbolHash>;
+inline bool operator<(MutableSymbolRef x, MutableSymbolRef y) {
+  return *x < *y; // name source position ordering
+}
+using SymbolSet = std::set<SymbolRef>;
 
 } // namespace Fortran::semantics
 

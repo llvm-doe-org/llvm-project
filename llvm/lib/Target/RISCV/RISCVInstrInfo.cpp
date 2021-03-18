@@ -23,6 +23,7 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/RegisterScavenging.h"
+#include "llvm/MC/MCInstBuilder.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
 
@@ -48,6 +49,15 @@ using namespace RISCV;
 RISCVInstrInfo::RISCVInstrInfo(RISCVSubtarget &STI)
     : RISCVGenInstrInfo(RISCV::ADJCALLSTACKDOWN, RISCV::ADJCALLSTACKUP),
       STI(STI) {}
+
+MCInst RISCVInstrInfo::getNop() const {
+  if (STI.getFeatureBits()[RISCV::FeatureStdExtC])
+    return MCInstBuilder(RISCV::C_NOP);
+  return MCInstBuilder(RISCV::ADDI)
+      .addReg(RISCV::X0)
+      .addReg(RISCV::X0)
+      .addImm(0);
+}
 
 unsigned RISCVInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
                                              int &FrameIndex) const {
@@ -1196,8 +1206,10 @@ Register RISCVInstrInfo::getVLENFactoredAmount(MachineFunction &MF,
     BuildMI(MBB, II, DL, TII->get(RISCV::ADDI), VN)
         .addReg(RISCV::X0)
         .addImm(NumOfVReg);
-    assert(MF.getSubtarget<RISCVSubtarget>().hasStdExtM() &&
-           "M-extension must be enabled to calculate the vscaled size/offset.");
+    if (!MF.getSubtarget<RISCVSubtarget>().hasStdExtM())
+      MF.getFunction().getContext().diagnose(DiagnosticInfoUnsupported{
+          MF.getFunction(),
+          "M-extension must be enabled to calculate the vscaled size/offset."});
     BuildMI(MBB, II, DL, TII->get(RISCV::MUL), FactorRegister)
         .addReg(SizeOfVector, RegState::Kill)
         .addReg(VN, RegState::Kill);

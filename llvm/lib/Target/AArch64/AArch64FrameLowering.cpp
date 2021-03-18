@@ -107,8 +107,14 @@
 // so large that the offset can't be encoded in the immediate fields of loads
 // or stores.
 //
+// Outgoing function arguments must be at the bottom of the stack frame when
+// calling another function. If we do not have variable-sized stack objects, we
+// can allocate a "reserved call frame" area at the bottom of the local
+// variable area, large enough for all outgoing calls. If we do have VLAs, then
+// the stack pointer must be decremented and incremented around each call to
+// make space for the arguments below the VLAs.
+//
 // FIXME: also explain the redzone concept.
-// FIXME: also explain the concept of reserved call frames.
 //
 //===----------------------------------------------------------------------===//
 
@@ -346,7 +352,6 @@ bool AArch64FrameLowering::canUseRedZone(const MachineFunction &MF) const {
 /// pointer register.
 bool AArch64FrameLowering::hasFP(const MachineFunction &MF) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
-  const AArch64FunctionInfo *AFI = MF.getInfo<AArch64FunctionInfo>();
   const TargetRegisterInfo *RegInfo = MF.getSubtarget().getRegisterInfo();
   // Win64 EH requires a frame pointer if funclets are present, as the locals
   // are accessed off the frame pointer in both the parent function and the
@@ -370,14 +375,6 @@ bool AArch64FrameLowering::hasFP(const MachineFunction &MF) const {
   // DefaultSafeSPDisplacement is fine as we only emergency spill GP regs.
   if (!MFI.isMaxCallFrameSizeComputed() ||
       MFI.getMaxCallFrameSize() > DefaultSafeSPDisplacement)
-    return true;
-  // If there are both SVE and non-SVE objects on the stack, make the frame
-  // pointer available since it may be more performant to use it.
-  uint64_t CalleeStackSize = AFI->isCalleeSavedStackSizeComputed()
-                                 ? AFI->getCalleeSavedStackSize()
-                                 : 0;
-  uint64_t NonSVEStackSize = MFI.getStackSize() - CalleeStackSize;
-  if (AFI->getStackSizeSVE() && NonSVEStackSize)
     return true;
 
   return false;
@@ -1974,6 +1971,10 @@ StackOffset AArch64FrameLowering::resolveFrameOffsetReference(
   // right thing for the emergency spill slot.
   bool UseFP = false;
   if (AFI->hasStackFrame() && !isSVE) {
+    // We shouldn't prefer using the FP when there is an SVE area
+    // in between the FP and the non-SVE locals/spills.
+    PreferFP &= !SVEStackSize;
+
     // Note: Keeping the following as multiple 'if' statements rather than
     // merging to a single expression for readability.
     //
@@ -1993,10 +1994,6 @@ StackOffset AArch64FrameLowering::resolveFrameOffsetReference(
       // via the FP and the SP, use whichever is closest.
       bool FPOffsetFits = !ForSimm || FPOffset >= -256;
       PreferFP |= Offset > -FPOffset;
-
-      // The FP offset will not fit if there is an SVE area in the way.
-      if (SVEStackSize && FPOffset < 0)
-        FPOffsetFits = false;
 
       if (MFI.hasVarSizedObjects()) {
         // If we have variable sized objects, we can use either FP or BP, as the
