@@ -24,10 +24,12 @@
 // RUN: %data run-envs {
 // RUN:   (run-env=                                 )
 // RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled')
+// RUN:   (run-env='env ACC_DEVICE_TYPE=host'       )
 // RUN: }
 // RUN: %for opts {
 // RUN:   %for tgts {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %[tgt] %[opt] %s -o %t
+// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %[tgt] \
+// RUN:               %[opt] %s -o %t
 // RUN:     %for run-envs {
 // RUN:       %[run-if] %[run-env] %t > %t.out 2>&1
 // RUN:       %[run-if] FileCheck -match-full-lines -input-file %t.out %s
@@ -39,10 +41,20 @@
 
 // expected-no-diagnostics
 
+#include <openacc.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 // CHECK-NOT: {{.}}
 int main() {
+  // TODO: Once the runtime supports ACC_DEVICE_TYPE, we should be able to drop
+  // this code.  For now, fake support by calling
+  // acc_set_device_type(acc_device_host).
+  const char *accDeviceType = getenv("ACC_DEVICE_TYPE");
+  if (accDeviceType && !strcmp(accDeviceType, "host"))
+    acc_set_device_type(acc_device_host);
+
   // CHECK: before
   printf("before\n");
   #pragma acc parallel

@@ -9,6 +9,7 @@
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  host-or-off=%[tgt-host-or-off] not-if-host=%[tgt-not-if-host] not-if-off=%[tgt-not-if-off])
 // RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off=HOST               not-if-host='%not --crash'     not-if-off=                 )
+// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        host-or-off=HOST               not-if-host='%not --crash'     not-if-off=                 )
 // RUN: }
 // RUN: %data cases {
 // RUN:   (case=caseDeviceptrSuccess           not-if-fail=              )
@@ -236,6 +237,12 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "invalid second argument: %s\n", argv[1]);
     return 1;
   }
+  // TODO: Once the runtime supports ACC_DEVICE_TYPE, we should be able to drop
+  // this code.  For now, fake support by calling
+  // acc_set_device_type(acc_device_host).
+  const char *accDeviceType = getenv("ACC_DEVICE_TYPE");
+  if (accDeviceType && !strcmp(accDeviceType, "host"))
+    acc_set_device_type(acc_device_host);
 
   // OUT: start out
   // ERR: start err

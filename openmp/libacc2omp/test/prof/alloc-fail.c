@@ -9,6 +9,7 @@
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  host-or-off-post-env=%[host-or-off-pre-env] not-if-off-post-env=%[not-if-off-pre-env])
 // RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off-post-env=HOST                   not-if-off-post-env=                     )
+// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        host-or-off-post-env=HOST                   not-if-off-post-env=                     )
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s -o %t \
@@ -31,6 +32,8 @@
 // expected-no-diagnostics
 
 #include "callbacks.h"
+#include <stdlib.h>
+#include <string.h>
 
 void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
                           acc_prof_lookup lookup) {
@@ -42,6 +45,16 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
           Length * sizeof (Arr[0]))
 
 int main() {
+  // TODO: Once the runtime supports ACC_DEVICE_TYPE, we should be able to drop
+  // this code.  For now, fake support by calling
+  // acc_set_device_type(acc_device_host). However, so that we don't have
+  // spurious runtime shutdown events, don't call it for cases where we wouldn't
+  // otherwise startup the runtime (that is, no non-host devices).
+  const char *accDeviceType = getenv("ACC_DEVICE_TYPE");
+  if (accDeviceType && !strcmp(accDeviceType, "host") &&
+      acc_get_num_devices(acc_device_not_host))
+    acc_set_device_type(acc_device_host);
+
   int arr[4] = {0, 1, 2, 3};
   PRINT_SUBARRAY_INFO(arr, 0, 2);
   PRINT_SUBARRAY_INFO(arr, 1, 2);

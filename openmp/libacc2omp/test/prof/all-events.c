@@ -71,10 +71,16 @@
 //      # Check offloading compilation both with and without offloading at run
 //      # time.  This is important because some runtime calls that must be
 //      # instrumented with some callback data are not exercised in both cases.
+//      # Also check the case when host is selected but there are non-host
+//      # devices and offload is not disabled.  That affects the OpenMP device
+//      # number for host and thus might inadvertently affect profiling data if
+//      # the implementation has a bug.
 // RUN: %data run-envs {
 // RUN:   (run-env=
 // RUN:    env-fc=%[tgt-fc],%[tgt-host-or-off]-BEFORE-ENV,%[tgt-host-or-off]-BEFORE-ENV-%[dir-fc2])
 // RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled'
+// RUN:    env-fc=HOST,HOST-%[dir-fc1],HOST-%[dir-fc2],%[tgt-host-or-off]-BEFORE-ENV,%[tgt-host-or-off]-BEFORE-ENV-%[dir-fc2])
+// RUN:   (run-env='env ACC_DEVICE_TYPE=host'
 // RUN:    env-fc=HOST,HOST-%[dir-fc1],HOST-%[dir-fc2],%[tgt-host-or-off]-BEFORE-ENV,%[tgt-host-or-off]-BEFORE-ENV-%[dir-fc2])
 // RUN: }
 //      # Check both traditional compilation mode and source-to-source mode
@@ -180,8 +186,26 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
 #line 10000
 int main() {
   const char *ompTargetOffload = getenv("OMP_TARGET_OFFLOAD");
-  bool offloadDisabled = ompTargetOffload && !strcmp(ompTargetOffload,
-                                                     "disabled");
+  const char *accDeviceType = getenv("ACC_DEVICE_TYPE");
+  bool ompTargetOffloadDisabled = ompTargetOffload && !strcmp(ompTargetOffload,
+                                                              "disabled");
+  bool accDeviceTypeHost = accDeviceType && !strcmp(accDeviceType, "host");
+  bool offloadDisabled = ompTargetOffloadDisabled || accDeviceTypeHost;
+  // TODO: Once the runtime supports ACC_DEVICE_TYPE, we should be able to drop
+  // this code.  For now, fake support by calling
+  // acc_set_device_type(acc_device_host).  However, so that we don't have
+  // spurious runtime shutdown events, don't call it for cases where we wouldn't
+  // otherwise startup the runtime (that is, we only have data directives and no
+  // non-host devices).
+#if DIR == DIR_ENTER_EXIT_DATA || DIR == DIR_DATA
+  if (accDeviceTypeHost && acc_get_num_devices(acc_device_not_host))
+    acc_set_device_type(acc_device_host);
+#elif DIR == DIR_PAR || DIR == DIR_DATAPAR
+  if (accDeviceTypeHost)
+    acc_set_device_type(acc_device_host);
+#else
+# error undefined DIR
+#endif
 
   // CHECK-NOT:{{.}}
 
@@ -1279,4 +1303,4 @@ int main() {
 // OFF-BEFORE-ENV-NEXT:    device_api=0, valid_bytes=12,
 // OFF-BEFORE-ENV-NEXT:    device_type=acc_device_host
 
-// CHECK-NOT: {{.}}
+// CHECK-NOT:{{.}}

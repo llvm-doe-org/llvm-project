@@ -27,6 +27,7 @@
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  kern-type=%[tgt-type])
 // RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' kern-type=host       )
+// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        kern-type=host       )
 // RUN: }
 // RUN: %data exes {
 // RUN:   (exe=%t.exe    )
@@ -39,7 +40,7 @@
 // RUN:     %[run-if] %clang -Xclang -verify -fopenacc %acc-includes \
 // RUN:         %[context-cflags] %[tgt-cflags] -o %t.exe %s
 // RUN:     %[run-if] %clang -Xclang -verify -fopenmp %acc-includes \
-// RUN:         %[context-cflags] %[tgt-cflags] -o %t-s2s.exe %t-omp.c
+// RUN:         %[context-cflags] %[tgt-cflags] %acc-libs -o %t-s2s.exe %t-omp.c
 // RUN:     %for run-envs {
 // RUN:       %for exes {
 // RUN:         %[run-if] %[run-env] %[exe] > %t.out 2>&1
@@ -58,6 +59,8 @@
 
 #include <openacc.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 //                     CHECK-NOT: {{.}}
 //                         CHECK: acc_device_none:
@@ -121,6 +124,13 @@ static int insideKernel(acc_device_t devType) {
 }
 
 int main() {
+  // TODO: Once the runtime supports ACC_DEVICE_TYPE, we should be able to drop
+  // this code.  For now, fake support by calling
+  // acc_set_device_type(acc_device_host).
+  const char *accDeviceType = getenv("ACC_DEVICE_TYPE");
+  if (accDeviceType && !strcmp(accDeviceType, "host"))
+    acc_set_device_type(acc_device_host);
+
 #define DEVICE_ENUMERATOR(DevType)                                             \
   printf("acc_device_" #DevType ":\n");                                        \
   printf("  outside kernel: %d\n", acc_on_device(acc_device_##DevType));       \

@@ -15,6 +15,7 @@
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  fc=%[tgt-fc])
 // RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' fc=NO_OFF   )
+// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        fc=%[tgt-fc])
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %[cflags] \
@@ -35,6 +36,8 @@
 #include <openacc.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 //        CHECK:initially:
 //   CHECK-NEXT:    acc_get_device_type() = [[DEV_TYPE_INIT:[a-z0-9_]+]]
@@ -221,6 +224,13 @@ static void checkType(acc_device_t DevType, acc_device_t DevTypeInit,
 }
 
 int main() {
+  // TODO: Once the runtime supports ACC_DEVICE_TYPE, we should be able to drop
+  // this code.  For now, fake support by calling
+  // acc_set_device_type(acc_device_host).
+  const char *accDeviceType = getenv("ACC_DEVICE_TYPE");
+  if (accDeviceType && !strcmp(accDeviceType, "host"))
+    acc_set_device_type(acc_device_host);
+
   acc_device_t DevTypeInit = acc_get_device_type();
   const char *DevTypeInitStr = deviceTypeToStr(DevTypeInit);
   int DevNumInit = acc_get_device_num(DevTypeInit);

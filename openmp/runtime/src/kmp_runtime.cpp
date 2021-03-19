@@ -1398,16 +1398,18 @@ static ompt_id_t target_id = ompt_id_none;
 // "The endpoint argument indicates that the callback signals the beginning of
 // a scope or the end of a scope."
 //
-// There are three scenarios:
-// - When offloading to a device other than the host, the "target" function in
-//   omptarget.cpp dispatches ompt_callback_target, and
-//   ompt_dispatch_callback_target's callers are never reached.
-// - When offloading to the host as a device, the "target" function still
-//   dispatches ompt_callback_target_callback, but
+// There are several scenarios:
+// - When offloading to some devices (e.g., nvptx64-nvidia-cuda), the "target"
+//   function in omptarget.cpp dispatches ompt_callback_target, and the
+//   following ompt_dispatch_callback_target's callers (e.g., __kmp_fork_call)
+//   are never reached.
+// - When offloading to other devices (e.g., x86_64-unknown-linux-gnu), the
+//   "target" function still dispatches ompt_callback_target, but the following
 //   ompt_dispatch_callback_target's callers are also reached, so the "target"
 //   function sets ompt_in_device_target_region so we know not to make the
 //   callback here.
-// - When offloading is disabled, only ompt_dispatch_callback_target's
+// - When offloading to the host, either because host was selected or because
+//   offloading is disabled, only the following ompt_dispatch_callback_target's
 //   callers are reached, so we dispatch the callback here.
 // FIXME: All this would be simpler if, when offloading is disabled, Clang were
 // to generate runtime calls to indicate entering and exiting the target
