@@ -237,6 +237,12 @@ EXTERN void __tgt_target_data_end_mapper(int64_t device_id, int32_t arg_num,
     device_id = omp_get_default_device();
   }
 
+  if (device_id == omp_get_initial_device()) {
+    DP("Device is host (%" PRId64 "), returning as if offload is disabled\n",
+       device_id);
+    return;
+  }
+
   RTLsMtx->lock();
   size_t Devices_size = Devices.size();
   RTLsMtx->unlock();
