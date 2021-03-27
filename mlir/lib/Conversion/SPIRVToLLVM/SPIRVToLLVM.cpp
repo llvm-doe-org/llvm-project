@@ -1358,7 +1358,7 @@ public:
   matchAndRewrite(spirv::ModuleEndOp moduleEndOp, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
 
-    rewriter.replaceOpWithNewOp<ModuleTerminatorOp>(moduleEndOp);
+    rewriter.eraseOp(moduleEndOp);
     return success();
   }
 };
@@ -1385,9 +1385,8 @@ void mlir::populateSPIRVToLLVMTypeConversion(LLVMTypeConverter &typeConverter) {
 }
 
 void mlir::populateSPIRVToLLVMConversionPatterns(
-    MLIRContext *context, LLVMTypeConverter &typeConverter,
-    OwningRewritePatternList &patterns) {
-  patterns.insert<
+    LLVMTypeConverter &typeConverter, RewritePatternSet &patterns) {
+  patterns.add<
       // Arithmetic ops
       DirectConversionPattern<spirv::IAddOp, LLVM::AddOp>,
       DirectConversionPattern<spirv::IMulOp, LLVM::MulOp>,
@@ -1496,20 +1495,18 @@ void mlir::populateSPIRVToLLVMConversionPatterns(
       ShiftPattern<spirv::ShiftLeftLogicalOp, LLVM::ShlOp>,
 
       // Return ops
-      ReturnPattern, ReturnValuePattern>(context, typeConverter);
+      ReturnPattern, ReturnValuePattern>(patterns.getContext(), typeConverter);
 }
 
 void mlir::populateSPIRVToLLVMFunctionConversionPatterns(
-    MLIRContext *context, LLVMTypeConverter &typeConverter,
-    OwningRewritePatternList &patterns) {
-  patterns.insert<FuncConversionPattern>(context, typeConverter);
+    LLVMTypeConverter &typeConverter, RewritePatternSet &patterns) {
+  patterns.add<FuncConversionPattern>(patterns.getContext(), typeConverter);
 }
 
 void mlir::populateSPIRVToLLVMModuleConversionPatterns(
-    MLIRContext *context, LLVMTypeConverter &typeConverter,
-    OwningRewritePatternList &patterns) {
-  patterns.insert<ModuleConversionPattern, ModuleEndConversionPattern>(
-      context, typeConverter);
+    LLVMTypeConverter &typeConverter, RewritePatternSet &patterns) {
+  patterns.add<ModuleConversionPattern, ModuleEndConversionPattern>(
+      patterns.getContext(), typeConverter);
 }
 
 //===----------------------------------------------------------------------===//

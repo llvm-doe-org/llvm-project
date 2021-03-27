@@ -426,6 +426,10 @@ public:
   /// removes the attribute from the list of attributes.
   void removeParamAttrs(unsigned ArgNo, const AttrBuilder &Attrs);
 
+  /// removes noundef and other attributes that imply undefined behavior if a
+  /// `undef` or `poison` value is passed from the list of attributes.
+  void removeParamUndefImplyingAttrs(unsigned ArgNo);
+
   /// check if an attributes is in the list of attributes.
   bool hasAttribute(unsigned i, Attribute::AttrKind Kind) const {
     return getAttributes().hasAttribute(i, Kind);
@@ -622,6 +626,14 @@ public:
   }
   void setDoesNotFreeMemory() {
     addFnAttr(Attribute::NoFree);
+  }
+
+  /// Determine if the call can synchroize with other threads
+  bool hasNoSync() const {
+    return hasFnAttribute(Attribute::NoSync);
+  }
+  void setNoSync() {
+    addFnAttr(Attribute::NoSync);
   }
 
   /// Determine if the function is known not to recurse, directly or

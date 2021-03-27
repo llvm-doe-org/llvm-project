@@ -70,7 +70,10 @@ add_mlir_python_extension(MLIRCoreBindingsPythonExtension _mlir
     python
   SOURCES
     MainModule.cpp
-    IRModules.cpp
+    IRAffine.cpp
+    IRAttributes.cpp
+    IRCore.cpp
+    IRTypes.cpp
     PybindUtils.cpp
     Pass.cpp
     ExecutionEngine.cpp
@@ -115,3 +118,11 @@ endif()
 
 add_subdirectory(Transforms)
 add_subdirectory(Conversions)
+
+add_mlir_python_extension(MLIRLinalgPassesBindingsPythonExtension _mlirLinalgPasses
+  INSTALL_DIR
+    python
+  SOURCES
+    LinalgPasses.cpp
+)
+add_dependencies(MLIRBindingsPythonExtension MLIRLinalgPassesBindingsPythonExtension)

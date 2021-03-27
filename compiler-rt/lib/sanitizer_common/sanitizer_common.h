@@ -44,7 +44,7 @@ const uptr kMaxPathLength = 4096;
 
 const uptr kMaxThreadStackSize = 1 << 30;  // 1Gb
 
-static const uptr kErrorMessageBufferSize = 1 << 16;
+const uptr kErrorMessageBufferSize = 1 << 16;
 
 // Denotes fake PC values that come from JIT/JAVA/etc.
 // For such PC values __tsan_symbolize_external_ex() will be called.
@@ -134,6 +134,15 @@ void UnmapFromTo(uptr from, uptr to);
 // The high_mem_end may be updated if the original shadow size doesn't fit.
 uptr MapDynamicShadow(uptr shadow_size_bytes, uptr shadow_scale,
                       uptr min_shadow_base_alignment, uptr &high_mem_end);
+
+// Let S = max(shadow_size, num_aliases * alias_size, ring_buffer_size).
+// Reserves 2*S bytes of address space to the right of the returned address and
+// ring_buffer_size bytes to the left.  The returned address is aligned to 2*S.
+// Also creates num_aliases regions of accessible memory starting at offset S
+// from the returned address.  Each region has size alias_size and is backed by
+// the same physical memory.
+uptr MapDynamicShadowAndAliases(uptr shadow_size, uptr alias_size,
+                                uptr num_aliases, uptr ring_buffer_size);
 
 // Reserve memory range [beg, end]. If madvise_shadow is true then apply
 // madvise (e.g. hugepages, core dumping) requested by options.
@@ -275,7 +284,6 @@ void SetSandboxingCallback(void (*f)());
 
 void InitializeCoverage(bool enabled, const char *coverage_dir);
 
-void InitTlsSize();
 uptr GetTlsSize();
 
 // Other
@@ -344,8 +352,6 @@ void ReportDeadlySignal(const SignalContext &sig, u32 tid,
 void SetAlternateSignalStack();
 void UnsetAlternateSignalStack();
 
-// We don't want a summary too long.
-const int kMaxSummaryLength = 1024;
 // Construct a one-line string:
 //   SUMMARY: SanitizerToolName: error_message
 // and pass it to __sanitizer_report_error_summary.
@@ -442,8 +448,14 @@ inline uptr Log2(uptr x) {
 
 // Don't use std::min, std::max or std::swap, to minimize dependency
 // on libstdc++.
-template<class T> T Min(T a, T b) { return a < b ? a : b; }
-template<class T> T Max(T a, T b) { return a > b ? a : b; }
+template <class T>
+constexpr T Min(T a, T b) {
+  return a < b ? a : b;
+}
+template <class T>
+constexpr T Max(T a, T b) {
+  return a > b ? a : b;
+}
 template<class T> void Swap(T& a, T& b) {
   T tmp = a;
   a = b;
@@ -594,14 +606,12 @@ class InternalMmapVector : public InternalMmapVectorNoCtor<T> {
 
 class InternalScopedString {
  public:
-  explicit InternalScopedString(uptr max_length)
-      : buffer_(max_length), length_(0) {
-    buffer_[0] = '\0';
-  }
-  uptr length() const { return length_; }
+  InternalScopedString() : buffer_(1) { buffer_[0] = '\0'; }
+
+  uptr length() const { return buffer_.size() - 1; }
   void clear() {
+    buffer_.resize(1);
     buffer_[0] = '\0';
-    length_ = 0;
   }
   void append(const char *format, ...);
   const char *data() const { return buffer_.data(); }
@@ -609,7 +619,6 @@ class InternalScopedString {
 
  private:
   InternalMmapVector<char> buffer_;
-  uptr length_;
 };
 
 template <class T>

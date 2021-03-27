@@ -10,6 +10,7 @@
 #include "Config.h"
 #include "InputFiles.h"
 #include "InputSection.h"
+#include "MapFile.h"
 #include "MergedOutputSection.h"
 #include "OutputSection.h"
 #include "OutputSegment.h"
@@ -26,6 +27,7 @@
 #include "llvm/Support/LEB128.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/TimeProfiler.h"
 #include "llvm/Support/xxhash.h"
 
 #include <algorithm>
@@ -55,6 +57,7 @@ public:
   void writeSections();
   void writeUuid();
   void writeCodeSignature();
+  void writeOutputFile();
 
   void run();
 
@@ -67,6 +70,8 @@ public:
   IndirectSymtabSection *indirectSymtabSection = nullptr;
   CodeSignatureSection *codeSignatureSection = nullptr;
   UnwindInfoSection *unwindInfoSection = nullptr;
+  FunctionStartsSection *functionStartsSection = nullptr;
+
   LCUuid *uuidCommand = nullptr;
   OutputSegment *linkEditSegment = nullptr;
 };
@@ -119,8 +124,8 @@ public:
 
 class LCFunctionStarts : public LoadCommand {
 public:
-  explicit LCFunctionStarts(FunctionStartsSection *functionStarts)
-      : functionStarts(functionStarts) {}
+  explicit LCFunctionStarts(FunctionStartsSection *functionStartsSection)
+      : functionStartsSection(functionStartsSection) {}
 
   uint32_t getSize() const override { return sizeof(linkedit_data_command); }
 
@@ -128,12 +133,12 @@ public:
     auto *c = reinterpret_cast<linkedit_data_command *>(buf);
     c->cmd = LC_FUNCTION_STARTS;
     c->cmdsize = getSize();
-    c->dataoff = functionStarts->fileOff;
-    c->datasize = functionStarts->getFileSize();
+    c->dataoff = functionStartsSection->fileOff;
+    c->datasize = functionStartsSection->getFileSize();
   }
 
 private:
-  FunctionStartsSection *functionStarts;
+  FunctionStartsSection *functionStartsSection;
 };
 
 class LCDysymtab : public LoadCommand {
@@ -501,6 +506,7 @@ static void prepareSymbolRelocation(lld::macho::Symbol *sym,
 }
 
 void Writer::scanRelocations() {
+  TimeTraceScope timeScope("Scan relocations");
   for (InputSection *isec : inputSections) {
     if (isec->segname == segment_names::ld) {
       prepareCompactUnwind(isec);
@@ -533,6 +539,7 @@ void Writer::scanRelocations() {
 }
 
 void Writer::scanSymbols() {
+  TimeTraceScope timeScope("Scan symbols");
   for (const macho::Symbol *sym : symtab->getSymbols()) {
     if (const auto *defined = dyn_cast<Defined>(sym)) {
       if (defined->overridesWeakDef)
@@ -558,7 +565,8 @@ void Writer::createLoadCommands() {
   in.header->addLoadCommand(make<LCSymtab>(symtabSection, stringTableSection));
   in.header->addLoadCommand(
       make<LCDysymtab>(symtabSection, indirectSymtabSection));
-  in.header->addLoadCommand(make<LCFunctionStarts>(in.functionStarts));
+  if (functionStartsSection)
+    in.header->addLoadCommand(make<LCFunctionStarts>(functionStartsSection));
   for (StringRef path : config->runtimePaths)
     in.header->addLoadCommand(make<LCRPath>(path));
 
@@ -736,6 +744,8 @@ static std::function<bool(T, T)> compareByOrder(F ord) {
 // segments, output sections within each segment, and input sections within each
 // output segment.
 static void sortSegmentsAndSections() {
+  TimeTraceScope timeScope("Sort segments and sections");
+
   llvm::stable_sort(outputSegments,
                     compareByOrder<OutputSegment *>(segmentOrder));
 
@@ -750,7 +760,6 @@ static void sortSegmentsAndSections() {
       // output section indices.
       if (!osec->isHidden())
         osec->index = ++sectionIndex;
-
       if (!firstTLVDataSection && isThreadLocalData(osec->flags))
         firstTLVDataSection = osec;
 
@@ -777,6 +786,7 @@ static NamePair maybeRenameSection(NamePair key) {
 }
 
 void Writer::createOutputSections() {
+  TimeTraceScope timeScope("Create output sections");
   // First, create hidden sections
   stringTableSection = make<StringTableSection>();
   unwindInfoSection = make<UnwindInfoSection>(); // TODO(gkm): only when no -r
@@ -784,6 +794,8 @@ void Writer::createOutputSections() {
   indirectSymtabSection = make<IndirectSymtabSection>();
   if (config->adhocCodesign)
     codeSignatureSection = make<CodeSignatureSection>();
+  if (config->emitFunctionStarts)
+    functionStartsSection = make<FunctionStartsSection>();
 
   switch (config->outputType) {
   case MH_EXECUTE:
@@ -834,6 +846,7 @@ void Writer::createOutputSections() {
 }
 
 void Writer::finalizeAddressses() {
+  TimeTraceScope timeScope("Finalize addresses");
   // Ensure that segments (and the sections they contain) are allocated
   // addresses in ascending order, which dyld requires.
   //
@@ -848,15 +861,18 @@ void Writer::finalizeAddressses() {
 }
 
 void Writer::finalizeLinkEditSegment() {
+  TimeTraceScope timeScope("Finalize __LINKEDIT segment");
   // Fill __LINKEDIT contents.
   in.rebase->finalizeContents();
   in.binding->finalizeContents();
   in.weakBinding->finalizeContents();
   in.lazyBinding->finalizeContents();
   in.exports->finalizeContents();
-  in.functionStarts->finalizeContents();
   symtabSection->finalizeContents();
   indirectSymtabSection->finalizeContents();
+
+  if (functionStartsSection)
+    functionStartsSection->finalizeContents();
 
   // Now that __LINKEDIT is filled out, do a proper calculation of its
   // addresses and offsets.
@@ -904,6 +920,7 @@ void Writer::writeSections() {
 }
 
 void Writer::writeUuid() {
+  TimeTraceScope timeScope("Computing UUID");
   uint64_t digest =
       xxHash64({buffer->getBufferStart(), buffer->getBufferEnd()});
   uuidCommand->writeUuid(digest);
@@ -912,6 +929,19 @@ void Writer::writeUuid() {
 void Writer::writeCodeSignature() {
   if (codeSignatureSection)
     codeSignatureSection->writeHashes(buffer->getBufferStart());
+}
+
+void Writer::writeOutputFile() {
+  TimeTraceScope timeScope("Write output file");
+  openFile();
+  if (errorCount())
+    return;
+  writeSections();
+  writeUuid();
+  writeCodeSignature();
+
+  if (auto e = buffer->commit())
+    error("failed to write to the output file: " + toString(std::move(e)));
 }
 
 void Writer::run() {
@@ -926,15 +956,8 @@ void Writer::run() {
   createLoadCommands();
   finalizeAddressses();
   finalizeLinkEditSegment();
-  openFile();
-  if (errorCount())
-    return;
-  writeSections();
-  writeUuid();
-  writeCodeSignature();
-
-  if (auto e = buffer->commit())
-    error("failed to write to the output file: " + toString(std::move(e)));
+  writeMapFile();
+  writeOutputFile();
 }
 
 void macho::writeResult() { Writer().run(); }
@@ -946,7 +969,6 @@ void macho::createSyntheticSections() {
   in.weakBinding = make<WeakBindingSection>();
   in.lazyBinding = make<LazyBindingSection>();
   in.exports = make<ExportSection>();
-  in.functionStarts = make<FunctionStartsSection>();
   in.got = make<GotSection>();
   in.tlvPointers = make<TlvPointerSection>();
   in.lazyPointers = make<LazyPointerSection>();

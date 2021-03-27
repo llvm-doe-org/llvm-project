@@ -319,10 +319,9 @@ LogicalResult TerminatorOpConversion::matchAndRewrite(
 // Hooks
 //===----------------------------------------------------------------------===//
 
-void mlir::populateSCFToSPIRVPatterns(MLIRContext *context,
-                                      SPIRVTypeConverter &typeConverter,
+void mlir::populateSCFToSPIRVPatterns(SPIRVTypeConverter &typeConverter,
                                       ScfToSPIRVContext &scfToSPIRVContext,
-                                      OwningRewritePatternList &patterns) {
-  patterns.insert<ForOpConversion, IfOpConversion, TerminatorOpConversion>(
-      context, typeConverter, scfToSPIRVContext.getImpl());
+                                      RewritePatternSet &patterns) {
+  patterns.add<ForOpConversion, IfOpConversion, TerminatorOpConversion>(
+      patterns.getContext(), typeConverter, scfToSPIRVContext.getImpl());
 }

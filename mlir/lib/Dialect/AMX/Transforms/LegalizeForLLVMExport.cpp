@@ -191,8 +191,8 @@ struct TileMulIConversion : public ConvertOpToLLVMPattern<TileMulIOp> {
         getTileSizes(rewriter, *getTypeConverter(), bType, op.getLoc());
     // Replace operation with intrinsic.
     Type resType = typeConverter->convertType(cType);
-    bool zexta = op.zext()[0].cast<BoolAttr>().getValue();
-    bool zextb = op.zext()[1].cast<BoolAttr>().getValue();
+    bool zexta = op.isZextLhs();
+    bool zextb = op.isZextRhs();
     if (zexta && zextb)
       rewriter.replaceOpWithNewOp<amx::x86_amx_tdpbuud>(
           op, resType, tsza.first, tszb.second, tsza.second, adaptor.acc(),
@@ -216,9 +216,9 @@ struct TileMulIConversion : public ConvertOpToLLVMPattern<TileMulIOp> {
 } // namespace
 
 void mlir::populateAMXLegalizeForLLVMExportPatterns(
-    LLVMTypeConverter &converter, OwningRewritePatternList &patterns) {
-  patterns.insert<TileZeroConversion, TileLoadConversion, TileStoreConversion,
-                  TileMulFConversion, TileMulIConversion>(converter);
+    LLVMTypeConverter &converter, RewritePatternSet &patterns) {
+  patterns.add<TileZeroConversion, TileLoadConversion, TileStoreConversion,
+               TileMulFConversion, TileMulIConversion>(converter);
 }
 
 void mlir::configureAMXLegalizeForExportTarget(LLVMConversionTarget &target) {

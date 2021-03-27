@@ -488,7 +488,6 @@ struct InStruct {
   WeakBindingSection *weakBinding = nullptr;
   LazyBindingSection *lazyBinding = nullptr;
   ExportSection *exports = nullptr;
-  FunctionStartsSection *functionStarts = nullptr;
   GotSection *got = nullptr;
   TlvPointerSection *tlvPointers = nullptr;
   LazyPointerSection *lazyPointers = nullptr;
@@ -499,6 +498,8 @@ struct InStruct {
 
 extern InStruct in;
 extern std::vector<SyntheticSection *> syntheticSections;
+
+void createSyntheticSymbols();
 
 } // namespace macho
 } // namespace lld

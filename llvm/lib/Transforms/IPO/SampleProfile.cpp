@@ -321,11 +321,16 @@ struct CandidateComparer {
     if (LHS.CallsiteCount != RHS.CallsiteCount)
       return LHS.CallsiteCount < RHS.CallsiteCount;
 
+    const FunctionSamples *LCS = LHS.CalleeSamples;
+    const FunctionSamples *RCS = RHS.CalleeSamples;
+    assert(LCS && RCS && "Expect non-null FunctionSamples");
+
+    // Tie breaker using number of samples try to favor smaller functions first
+    if (LCS->getBodySamples().size() != RCS->getBodySamples().size())
+      return LCS->getBodySamples().size() > RCS->getBodySamples().size();
+
     // Tie breaker using GUID so we have stable/deterministic inlining order
-    assert(LHS.CalleeSamples && RHS.CalleeSamples &&
-           "Expect non-null FunctionSamples");
-    return LHS.CalleeSamples->getGUID(LHS.CalleeSamples->getName()) <
-           RHS.CalleeSamples->getGUID(RHS.CalleeSamples->getName());
+    return LCS->getGUID(LCS->getName()) < RCS->getGUID(RCS->getName());
   }
 };
 
@@ -755,14 +760,8 @@ static void
 updateIDTMetaData(Instruction &Inst,
                   const SmallVectorImpl<InstrProfValueData> &CallTargets,
                   uint64_t Sum) {
-  assert((Sum != 0 || (CallTargets.size() == 1 &&
-                       CallTargets[0].Count == NOMORE_ICP_MAGICNUM)) &&
-         "If sum is 0, assume only one element in CallTargets with count "
-         "being NOMORE_ICP_MAGICNUM");
-
   uint32_t NumVals = 0;
   // OldSum is the existing total count in the value profile data.
-  // It will be replaced by Sum if Sum is not 0.
   uint64_t OldSum = 0;
   std::unique_ptr<InstrProfValueData[]> ValueData =
       std::make_unique<InstrProfValueData[]>(MaxNumPromotions);
@@ -771,34 +770,44 @@ updateIDTMetaData(Instruction &Inst,
                                ValueData.get(), NumVals, OldSum, true);
 
   DenseMap<uint64_t, uint64_t> ValueCountMap;
-  // Initialize ValueCountMap with existing value profile data.
-  if (Valid) {
-    for (uint32_t I = 0; I < NumVals; I++)
-      ValueCountMap[ValueData[I].Value] = ValueData[I].Count;
-  }
-
-  for (const auto &Data : CallTargets) {
-    auto Pair = ValueCountMap.try_emplace(Data.Value, Data.Count);
-    if (Pair.second)
-      continue;
-    // Whenever the count is NOMORE_ICP_MAGICNUM for a value, keep it
-    // in the ValueCountMap. If both the count in CallTargets and the
-    // count in ValueCountMap is not NOMORE_ICP_MAGICNUM, keep the
-    // count in CallTargets.
-    if (Pair.first->second != NOMORE_ICP_MAGICNUM &&
-        Data.Count == NOMORE_ICP_MAGICNUM) {
+  if (Sum == 0) {
+    assert((CallTargets.size() == 1 &&
+            CallTargets[0].Count == NOMORE_ICP_MAGICNUM) &&
+           "If sum is 0, assume only one element in CallTargets "
+           "with count being NOMORE_ICP_MAGICNUM");
+    // Initialize ValueCountMap with existing value profile data.
+    if (Valid) {
+      for (uint32_t I = 0; I < NumVals; I++)
+        ValueCountMap[ValueData[I].Value] = ValueData[I].Count;
+    }
+    auto Pair =
+        ValueCountMap.try_emplace(CallTargets[0].Value, CallTargets[0].Count);
+    // If the target already exists in value profile, decrease the total
+    // count OldSum and reset the target's count to NOMORE_ICP_MAGICNUM.
+    if (!Pair.second) {
       OldSum -= Pair.first->second;
       Pair.first->second = NOMORE_ICP_MAGICNUM;
-    } else if (Pair.first->second == NOMORE_ICP_MAGICNUM &&
-               Data.Count != NOMORE_ICP_MAGICNUM) {
+    }
+    Sum = OldSum;
+  } else {
+    // Initialize ValueCountMap with existing NOMORE_ICP_MAGICNUM
+    // counts in the value profile.
+    if (Valid) {
+      for (uint32_t I = 0; I < NumVals; I++) {
+        if (ValueData[I].Count == NOMORE_ICP_MAGICNUM)
+          ValueCountMap[ValueData[I].Value] = ValueData[I].Count;
+      }
+    }
+
+    for (const auto &Data : CallTargets) {
+      auto Pair = ValueCountMap.try_emplace(Data.Value, Data.Count);
+      if (Pair.second)
+        continue;
+      // The target represented by Data.Value has already been promoted.
+      // Keep the count as NOMORE_ICP_MAGICNUM in the profile and decrease
+      // Sum by Data.Count.
       assert(Sum >= Data.Count && "Sum should never be less than Data.Count");
       Sum -= Data.Count;
-    } else if (Pair.first->second != NOMORE_ICP_MAGICNUM &&
-               Data.Count != NOMORE_ICP_MAGICNUM) {
-      // Sum will be used in this case. Although the existing count
-      // for the current value in value profile will be overriden,
-      // no need to update OldSum.
-      Pair.first->second = Data.Count;
     }
   }
 
@@ -818,8 +827,7 @@ updateIDTMetaData(Instruction &Inst,
   uint32_t MaxMDCount =
       std::min(NewCallTargets.size(), static_cast<size_t>(MaxNumPromotions));
   annotateValueSite(*Inst.getParent()->getParent()->getParent(), Inst,
-                    NewCallTargets, Sum ? Sum : OldSum, IPVK_IndirectCallTarget,
-                    MaxMDCount);
+                    NewCallTargets, Sum, IPVK_IndirectCallTarget, MaxMDCount);
 }
 
 /// Attempt to promote indirect call and also inline the promoted call.

@@ -713,10 +713,10 @@ def Shape_AssumingAllOp : Shape_Op<"assuming_all", [Commutative, NoSideEffect]> 
   let verifier = [{ return ::verify(*this); }];
 }
 
-def Shape_AssumingOp : Shape_Op<"assuming",
-                           [SingleBlockImplicitTerminator<"AssumingYieldOp">,
-                            DeclareOpInterfaceMethods<RegionBranchOpInterface>,
-                            RecursiveSideEffects]> {
+def Shape_AssumingOp : Shape_Op<"assuming", [
+    SingleBlockImplicitTerminator<"AssumingYieldOp">,
+    DeclareOpInterfaceMethods<RegionBranchOpInterface>,
+    RecursiveSideEffects]> {
   let summary = "Execute the region";
   let description = [{
     Executes the region assuming all witnesses are true.
@@ -742,6 +742,11 @@ def Shape_AssumingOp : Shape_Op<"assuming",
     static void inlineRegionIntoParent(AssumingOp &op, PatternRewriter &rewriter);
   }];
 
+  let builders = [
+    OpBuilder<(ins "Value":$witness,
+        CArg<"function_ref<SmallVector<Value, 2>(OpBuilder &, Location)>">)>
+  ];
+
   let hasCanonicalizer = 1;
 }
 
@@ -757,7 +762,9 @@ def Shape_AssumingYieldOp : Shape_Op<"assuming_yield",
 
   let arguments = (ins Variadic<AnyType>:$operands);
 
-  let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
+  let builders = [
+    OpBuilder<(ins), [{ /* nothing to do */ }]>,
+  ];
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
 }
@@ -894,7 +901,7 @@ def Shape_CstrRequireOp : Shape_Op<"cstr_require", []> {
 
 def Shape_FunctionLibraryOp : Shape_Op<"function_library",
     [AffineScope, IsolatedFromAbove, NoRegionArguments, SymbolTable, Symbol,
-     SingleBlockImplicitTerminator<"ShapeFunctionLibraryTerminatorOp">]> {
+     NoTerminator, SingleBlock]> {
   let summary = "Represents shape functions and corresponding ops";
   let description = [{
     Represents a list of shape functions and the ops whose shape transfer
@@ -929,21 +936,6 @@ def Shape_FunctionLibraryOp : Shape_Op<"function_library",
 
   let printer = [{ ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
-}
-
-//===----------------------------------------------------------------------===//
-// ShapeFunctionLibraryTerminatorOp
-//===----------------------------------------------------------------------===//
-
-def ShapeFunctionLibraryTerminatorOp : Shape_Op<"fn_lib_terminator",
-    [Terminator, HasParent<"FunctionLibraryOp">]> {
-  let summary = "A pseudo op that marks the end of a shape function library";
-  let description = [{
-    `shape_fn_lib_terminator` is a special pseudo terminator operation for the
-    shape function library. It has no semantic meaning beyond keeping the body
-    well-formed.
-  }];
-  let assemblyFormat = "attr-dict";
 }
 
 #endif // SHAPE_OPS
