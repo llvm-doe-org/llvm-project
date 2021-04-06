@@ -54,7 +54,7 @@ stages:
   tags: [shell, leconte]
   variables:
     BUILD_ID: leconte
-    MODULES: cmake/3.19.2 gnu/9.2.0 nvhpc/20.11
+    MODULES: cmake/3.19.2 gnu/9.2.0 nvhpc/21.2
     CMAKE: cmake
     NINJA: ninja
     PYTHON: /usr/bin/python3
@@ -65,8 +65,9 @@ stages:
       -DCLANG_ACC_TEST_EXE_PPC64LE=True
       -DCLANG_ACC_TEST_EXE_NVPTX64=True
     CMAKE_OFFLOAD_CONFIG_OPENMP:
-      -DCUDA_TOOLKIT_ROOT_DIR=/opt/nvidia/hpc_sdk/Linux_ppc64le/20.11/cuda/11.0
       -DLIBOMPTARGET_NVPTX_COMPUTE_CAPABILITIES=70
+    PATH_PREPEND:
+      /opt/nvidia/hpc_sdk/Linux_ppc64le/21.2/cuda/11.0/bin
 
 .kold:
   tags: [shell, kold]
@@ -82,6 +83,8 @@ stages:
       -DCLANG_ACC_TEST_EXE_PPC64LE=False
       -DCLANG_ACC_TEST_EXE_NVPTX64=False
     CMAKE_OFFLOAD_CONFIG_OPENMP:
+      ""
+    PATH_PREPEND:
       ""
 
 # Sometimes bugs cause only release builds to fail.  For example, debugging
@@ -100,6 +103,9 @@ stages:
   before_script:
     - echo $MODULES
     - module load $MODULES
+    - echo $PATH_PREPEND
+    - if test x"$PATH_PREPEND" != x; then PATH="$PATH_PREPEND:$PATH"; fi
+    - echo $PATH
     - pwd
     - echo $BUILD_DIR
     - cd $BUILD_DIR/build
