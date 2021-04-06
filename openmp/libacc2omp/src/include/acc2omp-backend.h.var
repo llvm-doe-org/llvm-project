@@ -94,6 +94,10 @@
 /// printf-style format strings in English showing the expected semantics and
 /// arguments.
 typedef enum {
+  acc2omp_msg_env_acc_device_type_invalid,
+  acc2omp_msg_env_acc_device_num_parse_error,
+  acc2omp_msg_env_acc_device_num_default_invalid,
+  acc2omp_msg_env_acc_device_num_invalid,
   acc2omp_msg_alloc_fail,
   acc2omp_msg_acc_proflib_fail,
   acc2omp_msg_unsupported_event_register,

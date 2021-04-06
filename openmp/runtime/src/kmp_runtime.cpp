@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "acc2omp-handlers.h"
 #include "kmp.h"
 #include "kmp_affinity.h"
 #include "kmp_atomic.h"
@@ -75,7 +76,7 @@ static void __kmp_initialize_team(kmp_team_t *team, int new_nproc,
 static void __kmp_partition_places(kmp_team_t *team,
                                    int update_master_only = 0);
 #endif
-static void __kmp_do_serial_initialize(void);
+static void __kmp_do_serial_initialize(bool ForOffload = false);
 void __kmp_fork_barrier(int gtid, int tid);
 void __kmp_join_barrier(int gtid);
 void __kmp_setup_icv_copy(kmp_team_t *team, int new_nproc,
@@ -6581,7 +6582,7 @@ static void __kmp_check_mic_type() {
 
 #endif /* KMP_MIC_SUPPORTED */
 
-static void __kmp_do_serial_initialize(void) {
+static void __kmp_do_serial_initialize(bool ForOffload) {
   int i, gtid;
   int size;
 
@@ -6861,10 +6862,30 @@ static void __kmp_do_serial_initialize(void) {
 
   KMP_MB();
 
+  // Check the default device according to OpenACC environment variables unless
+  // either (1) OMP_DEFAULT_DEVICE overrides them or (2) offloading was built
+  // and so acc2omp_set_omp_default_device will be called later after the device
+  // list has been populated.
+  //
+  // acc2omp_set_omp_default_device should not actually change the default
+  // device as host is the only possibility, but it might produce a runtime
+  // error if host isn't what's specified by OpenACC environment variables.
+  //
+  // This must come after __kmp_init_serial = TRUE, or
+  // acc2omp_set_omp_default_device will deadlock when it calls OpenMP routines
+  // that try to perform runtime initialization.
+  if (!ForOffload && !getenv("OMP_DEFAULT_DEVICE")) {
+    acc2omp_set_omp_default_device_t acc2omp_set_omp_default_device =
+        (acc2omp_set_omp_default_device_t)dlsym(
+            RTLD_DEFAULT, "acc2omp_set_omp_default_device");
+    if (acc2omp_set_omp_default_device)
+      acc2omp_set_omp_default_device();
+  }
+
   KA_TRACE(10, ("__kmp_do_serial_initialize: exit\n"));
 }
 
-void __kmp_serial_initialize(void) {
+void __kmp_serial_initialize(bool ForOffload) {
   if (__kmp_init_serial) {
     return;
   }
@@ -6873,7 +6894,7 @@ void __kmp_serial_initialize(void) {
     __kmp_release_bootstrap_lock(&__kmp_initz_lock);
     return;
   }
-  __kmp_do_serial_initialize();
+  __kmp_do_serial_initialize(ForOffload);
   __kmp_release_bootstrap_lock(&__kmp_initz_lock);
 }
 

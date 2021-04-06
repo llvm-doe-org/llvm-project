@@ -76,9 +76,26 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
 Run-Time Environment Variables
 ------------------------------
 
+* `ACC_DEVICE_TYPE` and `ACC_DEVICE_NUM`
+    * Accepted device types are case-insensitive versions of:
+        * `host` with the same semantics as `acc_device_host`.
+        * `not_host` with the same semantics as `acc_device_not_host`.
+        * All supported `acc_device_t` architecture-specific
+          enumerators without the `acc_device_` prefix.
+    * See `acc_device_t` notes below for a more complete description
+      of the above device types.
+    * `ACC_DEVICE_NUM` must be a non-negative integer less than the
+      number of devices of the type specified by `ACC_DEVICE_TYPE`.
+    * If `OMP_DEFAULT_DEVICE` is set, `ACC_DEVICE_TYPE` and
+      `ACC_DEVICE_NUM` are ignored.
+    * If only `ACC_DEVICE_TYPE` is set, `ACC_DEVICE_NUM` is treated as
+      0.
+    * If only `ACC_DEVICE_NUM` is set, `ACC_DEVICE_TYPE` is treated as
+      the type of the device that the OpenMP implementation would
+      otherwise select by default.
+* `ACC_PROFLIB` for the OpenACC Profiling Interface.
 * `OMP_TARGET_OFFLOAD=disabled` for specifying at run time to target
   the host.
-* `ACC_PROFLIB` for the OpenACC Profiling Interface.
 
 `update` Directive
 ------------------

@@ -431,6 +431,10 @@ GompFeatureNotSupported      "libgomp compatibility layer does not support OpenM
 # --- libacc2omp errors detected at runtime ---
 # Keep messages in sync with openmp/libacc2omp/src/backend-internal.cpp's
 # acc2omp_msg.
+AccEnvAccDeviceTypeInvalid          "ACC_DEVICE_TYPE is invalid: %1$s"
+AccEnvAccDeviceNumParseError        "ACC_DEVICE_NUM is not a non-negative integer: %1$s"
+AccEnvAccDeviceNumDefaultInvalid    "ACC_DEVICE_NUM=%1$d (default device number) is invalid for ACC_DEVICE_TYPE=%2$s"
+AccEnvAccDeviceNumInvalid           "ACC_DEVICE_NUM=%1$d is invalid for ACC_DEVICE_TYPE=%2$s"
 AccProflibFail                      "failure using library from ACC_PROFLIB: %1$s"
 AccUnsupportedEventRegister         "attempt to register event that is not yet supported: %1$s"
 AccUnsupportedEventUnregister       "attempt to unregister event that is not yet supported: %1$s"

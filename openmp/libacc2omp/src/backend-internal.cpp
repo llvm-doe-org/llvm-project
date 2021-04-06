@@ -25,6 +25,19 @@ acc2omp_msg_t acc2omp_msg(acc2omp_msgid_t MsgId) {
   //
   // Keep the messages in sync with openmp/runtime/src/i18n/en_US.txt.
   switch (MsgId) {
+  case acc2omp_msg_env_acc_device_type_invalid:
+    Msg.DefaultFmt = "ACC_DEVICE_TYPE is invalid: %s";
+    break;
+  case acc2omp_msg_env_acc_device_num_parse_error:
+    Msg.DefaultFmt = "ACC_DEVICE_NUM is not a non-negative integer: %s";
+    break;
+  case acc2omp_msg_env_acc_device_num_default_invalid:
+    Msg.DefaultFmt = "ACC_DEVICE_NUM=%d (default device number) is invalid for "
+                     "ACC_DEVICE_TYPE=%s";
+    break;
+  case acc2omp_msg_env_acc_device_num_invalid:
+    Msg.DefaultFmt = "ACC_DEVICE_NUM=%d is invalid for ACC_DEVICE_TYPE=%s";
+    break;
   case acc2omp_msg_alloc_fail:
     Msg.DefaultFmt = "memory allocation failed";
     break;

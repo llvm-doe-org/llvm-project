@@ -191,21 +191,6 @@ int main() {
                                                               "disabled");
   bool accDeviceTypeHost = accDeviceType && !strcmp(accDeviceType, "host");
   bool offloadDisabled = ompTargetOffloadDisabled || accDeviceTypeHost;
-  // TODO: Once the runtime supports ACC_DEVICE_TYPE, we should be able to drop
-  // this code.  For now, fake support by calling
-  // acc_set_device_type(acc_device_host).  However, so that we don't have
-  // spurious runtime shutdown events, don't call it for cases where we wouldn't
-  // otherwise startup the runtime (that is, we only have data directives and no
-  // non-host devices).
-#if DIR == DIR_ENTER_EXIT_DATA || DIR == DIR_DATA
-  if (accDeviceTypeHost && acc_get_num_devices(acc_device_not_host))
-    acc_set_device_type(acc_device_host);
-#elif DIR == DIR_PAR || DIR == DIR_DATAPAR
-  if (accDeviceTypeHost)
-    acc_set_device_type(acc_device_host);
-#else
-# error undefined DIR
-#endif
 
   // CHECK-NOT:{{.}}
 

@@ -3109,7 +3109,7 @@ extern std::atomic<kmp_int32> __kmp_task_counter;
 extern void __kmp_print_storage_map_gtid(int gtid, void *p1, void *p2,
                                          size_t size, char const *format, ...);
 
-extern void __kmp_serial_initialize(void);
+extern void __kmp_serial_initialize(bool ForOffload = false);
 extern void __kmp_middle_initialize(void);
 extern void __kmp_parallel_initialize(void);
 

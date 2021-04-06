@@ -18,6 +18,14 @@
 
 static kmp_i18n_id_t acc2omp_msg_to_llvm(acc2omp_msgid_t MsgId) {
   switch (MsgId) {
+  case acc2omp_msg_env_acc_device_type_invalid:
+    return kmp_i18n_msg_AccEnvAccDeviceTypeInvalid;
+  case acc2omp_msg_env_acc_device_num_parse_error:
+    return kmp_i18n_msg_AccEnvAccDeviceNumParseError;
+  case acc2omp_msg_env_acc_device_num_default_invalid:
+    return kmp_i18n_msg_AccEnvAccDeviceNumDefaultInvalid;
+  case acc2omp_msg_env_acc_device_num_invalid:
+    return kmp_i18n_msg_AccEnvAccDeviceNumInvalid;
   case acc2omp_msg_alloc_fail:
     return kmp_i18n_msg_MemoryAllocFailed;
   case acc2omp_msg_acc_proflib_fail:

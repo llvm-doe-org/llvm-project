@@ -237,12 +237,6 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "invalid second argument: %s\n", argv[1]);
     return 1;
   }
-  // TODO: Once the runtime supports ACC_DEVICE_TYPE, we should be able to drop
-  // this code.  For now, fake support by calling
-  // acc_set_device_type(acc_device_host).
-  const char *accDeviceType = getenv("ACC_DEVICE_TYPE");
-  if (accDeviceType && !strcmp(accDeviceType, "host"))
-    acc_set_device_type(acc_device_host);
 
   // OUT: start out
   // ERR: start err

@@ -19,11 +19,15 @@
 
 /*****************************************************************************
  * System include files.
+ *
+ * Don't include headers like assert.h, stdio.h, or iostream.  Instead, call
+ * functions declared in acc2omp-backend.h.
  ****************************************************************************/
 
-// Don't include headers like assert.h, stdio.h, or iostream.  Instead, call
-// functions declared in acc2omp-backend.h.
-//#include <cstring>
+#include <sstream>
+#include <stdlib.h>
+#include <string.h>
+#include <string>
 
 /*****************************************************************************
  * OpenMP standard include files.
@@ -104,6 +108,27 @@ static const char *deviceTypeToString(acc_device_t DevType,
 #define CASE(DevTypeEnum)                                                      \
   case acc_device_##DevTypeEnum:                                               \
     return "acc_device_" #DevTypeEnum;
+  ACC2OMP_FOREACH_DEVICE(CASE)
+#undef CASE
+  }
+  return "<unknown acc_device_t>";
+}
+
+static const char *deviceTypeToStringEnv(acc_device_t DevType,
+                                         bool WasDefault = false) {
+  if (WasDefault) {
+    switch (DevType) {
+#define CASE(DevTypeEnum)                                                      \
+    case acc_device_##DevTypeEnum:                                             \
+      return #DevTypeEnum " (default device type)";
+    ACC2OMP_FOREACH_DEVICE(CASE)
+#undef CASE
+    }
+  }
+  switch (DevType) {
+#define CASE(DevTypeEnum)                                                      \
+  case acc_device_##DevTypeEnum:                                               \
+    return #DevTypeEnum;
   ACC2OMP_FOREACH_DEVICE(CASE)
 #undef CASE
   }
@@ -242,18 +267,42 @@ int acc_get_num_devices(acc_device_t dev_type) {
   return -1;
 }
 
+enum DeviceNumAndTypeSetter {
+  SetDeviceNum,
+  SetDeviceType,
+  SetOmpDefaultDevice
+};
+
 static void fatalInvalidDeviceNumAndType(int dev_num, acc_device_t dev_type,
-                                         bool WasDefault,
-                                         bool ForSetDeviceType) {
-  if (ForSetDeviceType)
+                                         DeviceNumAndTypeSetter Setter,
+                                         bool NumIsDefault,
+                                         bool TypeIsDefault) {
+  switch (Setter) {
+  case SetDeviceType:
+    ACC2OMP_ASSERT(NumIsDefault, "expected default device number");
     acc2omp_fatal(ACC2OMP_MSG(set_device_type_no_devices),
-                  deviceTypeToString(dev_type, WasDefault));
-  acc2omp_fatal(ACC2OMP_MSG(set_device_num_invalid_num), dev_num,
-                deviceTypeToString(dev_type, WasDefault));
+                  deviceTypeToString(dev_type, TypeIsDefault));
+    break;
+  case SetDeviceNum:
+    ACC2OMP_ASSERT(!NumIsDefault, "unexpected default device number");
+    acc2omp_fatal(ACC2OMP_MSG(set_device_num_invalid_num), dev_num,
+                  deviceTypeToString(dev_type, TypeIsDefault));
+    break;
+  case SetOmpDefaultDevice:
+    // The default device number diagnostic expects it to be 0.
+    ACC2OMP_ASSERT(!NumIsDefault || dev_num == 0,
+                   "expected default device number to be 0");
+    acc2omp_fatal(NumIsDefault ? ACC2OMP_MSG(env_acc_device_num_default_invalid)
+                               : ACC2OMP_MSG(env_acc_device_num_invalid),
+                  dev_num, deviceTypeToStringEnv(dev_type, TypeIsDefault));
+    break;
+  }
+  ACC2OMP_UNREACHABLE("expected valid DeviceNumAndTypeSetter");
 }
 
 static void setDeviceNumAndType(int dev_num, acc_device_t dev_type,
-                                bool WasDefault, bool ForSetDeviceType) {
+                                DeviceNumAndTypeSetter Setter,
+                                bool NumIsDefault, bool TypeIsDefault) {
   // Keep in mind that we implement acc_set_device_type as merely
   // acc_set_device_num(0, dev_type), so notes below are for both.
   //
@@ -300,18 +349,18 @@ static void setDeviceNumAndType(int dev_num, acc_device_t dev_type,
   // acc_get_device_num(acc_get_device_type()) may not return dev_num.
   switch (dev_type) {
   case acc_device_none:
-    fatalInvalidDeviceNumAndType(dev_num, dev_type, WasDefault,
-                                 ForSetDeviceType);
+    fatalInvalidDeviceNumAndType(dev_num, dev_type, Setter, NumIsDefault,
+                                 TypeIsDefault);
     return; // should be unreachable
   case acc_device_not_host:
     if (dev_num < 0 || omp_get_num_devices() <= dev_num)
-      fatalInvalidDeviceNumAndType(dev_num, dev_type, WasDefault,
-                                   ForSetDeviceType);
+      fatalInvalidDeviceNumAndType(dev_num, dev_type, Setter, NumIsDefault,
+                                   TypeIsDefault);
     omp_set_default_device(dev_num);
     return;
   case acc_device_default:
-    setDeviceNumAndType(dev_num, acc_get_device_type(), /*WasDefault=*/true,
-                        /*ForSetDeviceType=*/false);
+    setDeviceNumAndType(dev_num, acc_get_device_type(), Setter, NumIsDefault,
+                        /*TypeIsDefault=*/true);
     return;
   case acc_device_current:
     return;
@@ -328,15 +377,27 @@ static void setDeviceNumAndType(int dev_num, acc_device_t dev_type,
     int DevNumOMP =
         omp_get_device_of_type(acc2omp_get_omp_device_t(dev_type), dev_num);
     if (DevNumOMP == -1)
-      fatalInvalidDeviceNumAndType(dev_num, dev_type, WasDefault,
-                                   ForSetDeviceType);
+      fatalInvalidDeviceNumAndType(dev_num, dev_type, Setter, NumIsDefault,
+                                   TypeIsDefault);
     omp_set_default_device(DevNumOMP);
     return;
   }
   }
-  if (ForSetDeviceType)
+  // acc_set_device_type and acc_set_device_num can receive an invalid device
+  // type, and they pass it along here.  acc2omp_set_omp_default_device checks
+  // for an invalid device type first.
+  switch (Setter) {
+  case SetDeviceType:
     acc2omp_fatal(ACC2OMP_MSG(set_device_type_invalid_type), dev_type);
-  acc2omp_fatal(ACC2OMP_MSG(set_device_num_invalid_type), dev_type);
+    break;
+  case SetDeviceNum:
+    acc2omp_fatal(ACC2OMP_MSG(set_device_num_invalid_type), dev_type);
+    break;
+  case SetOmpDefaultDevice:
+    ACC2OMP_UNREACHABLE(
+        "unexpected device type from acc2omp_set_omp_default_device");
+    break;
+  }
 }
 
 // OpenACC 3.1 does not explain whether acc_set_device_type affects
@@ -346,8 +407,8 @@ static void setDeviceNumAndType(int dev_num, acc_device_t dev_type,
 // ambiguous use of its dev_type parameter.  See setDeviceNumAndType comments
 // for handling of special or invalid values.
 void acc_set_device_type(acc_device_t dev_type) {
-  setDeviceNumAndType(0, dev_type, /*WasDefault=*/false,
-                      /*ForSetDeviceType=*/true);
+  setDeviceNumAndType(0, dev_type, SetDeviceType, /*NumIsDefault=*/true,
+                      /*TypeIsDefault=*/false);
 }
 
 acc_device_t acc_get_device_type() {
@@ -369,8 +430,8 @@ acc_device_t acc_get_device_type() {
 
 // See setDeviceNumAndType comments for handling of special or invalid values.
 void acc_set_device_num(int dev_num, acc_device_t dev_type) {
-  setDeviceNumAndType(dev_num, dev_type, /*WasDefault=*/false,
-                      /*ForSetDeviceType=*/false);
+  setDeviceNumAndType(dev_num, dev_type, SetDeviceNum, /*NumIsDefault=*/false,
+                      /*TypeIsDefault=*/false);
 }
 
 // acc_get_device_num returns:
@@ -1281,4 +1342,71 @@ void acc_memcpy_d2d(void *data_arg_dest, void *data_arg_src, size_t bytes,
   CLEAR_SOURCE_INFO();
   if (Err)
     acc2omp_fatal(ACC2OMP_MSG(memcpy_d2d_fail));
+}
+
+/*****************************************************************************
+ * OpenMP runtime handler for initial selection of the OpenACC current device
+ * based on, for example, the environment variables \c ACC_DEVICE_TYPE and
+ * \c ACC_DEVICE_NUM.  Documentation appears on
+ * \c acc2omp_set_omp_default_device_t in acc2omp-handlers.h.
+ ****************************************************************************/
+
+extern "C" void acc2omp_set_omp_default_device() {
+  // Check that the typedef declaration matches the definition.  Keep the
+  // assignment separate from the declaration to avoid an unused variable
+  // warning.
+  acc2omp_set_omp_default_device_t FnPtr;
+  FnPtr = acc2omp_set_omp_default_device;
+
+  const char *DevTypeEnv = getenv("ACC_DEVICE_TYPE");
+  const char *DevNumEnv = getenv("ACC_DEVICE_NUM");
+  if (DevTypeEnv && !*DevTypeEnv)
+    DevTypeEnv = nullptr;
+  if (DevNumEnv && !*DevNumEnv)
+    DevNumEnv = nullptr;
+  if (!DevTypeEnv && !DevNumEnv)
+    return;
+
+  // Parse ACC_DEVICE_TYPE.
+  acc_device_t DevType = acc_device_none;
+  if (!DevTypeEnv)
+    DevType = acc_get_device_type();
+#define ACC2OMP_DEVICE_ENUMERATOR(Device)                                      \
+  else if (!strcasecmp(DevTypeEnv, #Device))                                   \
+    DevType = acc_device_##Device;
+  ACC2OMP_FOREACH_DEVICE(ACC2OMP_DEVICE_ENUMERATOR)
+#undef ACC2OMP_DEVICE_ENUMERATOR
+  switch (DevType) {
+  case acc_device_none:
+  case acc_device_default:
+  case acc_device_current:
+    ACC2OMP_ASSERT(!!DevTypeEnv, "expected default device type to be valid");
+    acc2omp_fatal(ACC2OMP_MSG(env_acc_device_type_invalid), DevTypeEnv);
+    break;
+  case acc_device_host:
+  case acc_device_not_host:
+  case acc_device_nvidia:
+  case acc_device_x86_64:
+  case acc_device_ppc64le:
+    break;
+  }
+
+  // Parse ACC_DEVICE_NUM.
+  int DevNum;
+  if (!DevNumEnv) {
+    DevNum = 0;
+  } else {
+    for (const char *C = DevNumEnv; *C != '\0'; ++C) {
+      if (*C < '0' || '9' < *C)
+        acc2omp_fatal(ACC2OMP_MSG(env_acc_device_num_parse_error), DevNumEnv);
+    }
+    if (DevNumEnv[0] == '0' && DevNumEnv[1] != '\0')
+      acc2omp_fatal(ACC2OMP_MSG(env_acc_device_num_parse_error), DevNumEnv);
+    DevNum = atoi(DevNumEnv);
+  }
+
+  // Set the device number and type, or complain if the number is invalid for
+  // the type.
+  setDeviceNumAndType(DevNum, DevType, SetOmpDefaultDevice, !DevNumEnv,
+                      !DevTypeEnv);
 }

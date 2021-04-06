@@ -28,6 +28,28 @@
 extern "C" {
 #endif
 
+/// Type for \c acc2omp_set_omp_default_device, which handles initial selection
+/// of the OpenACC current device based on, for example, the environment
+/// variables \c ACC_DEVICE_TYPE and \c ACC_DEVICE_NUM.
+///
+/// The OpenMP runtime should call \c acc2omp_set_omp_default_device during
+/// runtime initialization.  At that point, the OpenMP runtime must be in a
+/// state where \c acc2omp_set_omp_default_device can successfully:
+/// - Examine the full OpenMP device list (e.g., \c omp_get_num_devices and
+///   \c omp_get_device_of_type).
+/// - Examine and later alter the OpenMP default device (e.g.,
+///   \c omp_get_default_device, \c omp_get_device_type, and
+///   \c omp_set_default_device).  The OpenMP default device's type is used
+///   when \c ACC_DEVICE_NUM is specified without \c ACC_DEVICE_TYPE.
+/// - Report a fatal runtime error for invalid OpenACC device types or numbers
+///   (e.g., \c acc2omp_fatal).
+///
+/// LLVM's OpenMP runtime currently chooses to skip calling
+/// \c acc2omp_set_omp_default_device when the \c OMP_DEFAULT_DEVICE environment
+/// variable is set.  In this way, OpenMP mechanisms are treated as lower-level
+/// mechanisms that override OpenACC mechanisms.
+typedef void (*acc2omp_set_omp_default_device_t)(void);
+
 /// Type for \c acc2omp_ompt_start_tool, which handles OpenACC Profiling
 /// Interface callback registration.
 ///

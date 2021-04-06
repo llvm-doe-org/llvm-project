@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "acc2omp-handlers.h"
 #include "device.h"
 #include "private.h"
 #include "rtl.h"
@@ -359,6 +360,16 @@ void RTLsTy::RegisterLib(__tgt_bin_desc *desc) {
 
 
   DP("Done registering entries!\n");
+
+  // Adjust the default device according to OpenACC environment variables unless
+  // OMP_DEFAULT_DEVICE overrides them.
+  if (!getenv("OMP_DEFAULT_DEVICE")) {
+    acc2omp_set_omp_default_device_t acc2omp_set_omp_default_device =
+        (acc2omp_set_omp_default_device_t)dlsym(
+            RTLD_DEFAULT, "acc2omp_set_omp_default_device");
+    if (acc2omp_set_omp_default_device)
+      acc2omp_set_omp_default_device();
+  }
 }
 
 void RTLsTy::UnregisterLib(__tgt_bin_desc *desc) {

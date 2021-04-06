@@ -46,4 +46,7 @@ if(OPENMP_CLANG_LIB_SUBDIR)
 endif()
 
 # Set the -I for headers from the runtime.
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/../../runtime/src)
+include_directories(
+  ${CMAKE_CURRENT_BINARY_DIR}/../../runtime/src
+  ${CMAKE_CURRENT_BINARY_DIR}/../../libacc2omp/src
+)

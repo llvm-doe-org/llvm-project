@@ -45,16 +45,6 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
           Length * sizeof (Arr[0]))
 
 int main() {
-  // TODO: Once the runtime supports ACC_DEVICE_TYPE, we should be able to drop
-  // this code.  For now, fake support by calling
-  // acc_set_device_type(acc_device_host). However, so that we don't have
-  // spurious runtime shutdown events, don't call it for cases where we wouldn't
-  // otherwise startup the runtime (that is, no non-host devices).
-  const char *accDeviceType = getenv("ACC_DEVICE_TYPE");
-  if (accDeviceType && !strcmp(accDeviceType, "host") &&
-      acc_get_num_devices(acc_device_not_host))
-    acc_set_device_type(acc_device_host);
-
   int arr[4] = {0, 1, 2, 3};
   PRINT_SUBARRAY_INFO(arr, 0, 2);
   PRINT_SUBARRAY_INFO(arr, 1, 2);

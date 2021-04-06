@@ -1,4 +1,9 @@
 // Check device management routines without runtime errors.
+//
+// Selection of the initial current device via environment variables (e..g,
+// ACC_DEVICE_TYPE and ACC_DEVICE_NUM) is checked in devices-init.c assuming
+// these routines are correct as checked here, so don't use those environment
+// variables here.
 
 // RUN: %data tgts {
 // RUN:   (run-if=                                  cflags=                                                         tgt-nd-x86_64=0             tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt0=host   )
@@ -11,7 +16,6 @@
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  nd-x86_64=%[tgt-nd-x86_64] nd-ppc64le=%[tgt-nd-ppc64le] nd-nvptx64=%[tgt-nd-nvptx64] dev-type-init=%[tgt0])
 // RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' nd-x86_64=0                nd-ppc64le=0                 nd-nvptx64=0                 dev-type-init=host   )
-// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        nd-x86_64=%[tgt-nd-x86_64] nd-ppc64le=%[tgt-nd-ppc64le] nd-nvptx64=%[tgt-nd-nvptx64] dev-type-init=host   )
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %[cflags] \
@@ -225,13 +229,6 @@ static void checkType(acc_device_t DevType, acc_device_t DevTypeInit,
 }
 
 int main() {
-  // TODO: Once the runtime supports ACC_DEVICE_TYPE, we should be able to drop
-  // this code.  For now, fake support by calling
-  // acc_set_device_type(acc_device_host).
-  const char *accDeviceType = getenv("ACC_DEVICE_TYPE");
-  if (accDeviceType && !strcmp(accDeviceType, "host"))
-    acc_set_device_type(acc_device_host);
-
   acc_device_t DevTypeInit = acc_get_device_type();
   const char *DevTypeInitStr = deviceTypeToStr(DevTypeInit);
   int DevNumInit = acc_get_device_num(DevTypeInit);
