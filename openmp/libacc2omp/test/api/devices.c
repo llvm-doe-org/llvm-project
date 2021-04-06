@@ -1,21 +1,17 @@
 // Check device management routines without runtime errors.
 
 // RUN: %data tgts {
-// RUN:   (run-if=                cflags=                                     tgt-fc=NO_OFF     )
-// RUN:   (run-if=%run-if-x86_64  cflags=-fopenmp-targets=%run-x86_64-triple  tgt-fc=OFF,X86_64 )
-// RUN:   (run-if=%run-if-ppc64le cflags=-fopenmp-targets=%run-ppc64le-triple tgt-fc=OFF,PPC64LE)
-// RUN:   (run-if=%run-if-nvptx64 cflags=-fopenmp-targets=%run-nvptx64-triple tgt-fc=OFF,NVPTX64)
-// RUN:   (run-if='%run-if-x86_64 %run-if-nvptx64'
-// RUN:    cflags=-fopenmp-targets=%run-x86_64-triple,%run-nvptx64-triple
-// RUN:    tgt-fc=OFF,X86_64,NVPTX64)
-// RUN:   (run-if='%run-if-ppc64le %run-if-nvptx64'
-// RUN:    cflags=-fopenmp-targets=%run-ppc64le-triple,%run-nvptx64-triple
-// RUN:    tgt-fc=OFF,PPC64LE,NVPTX64)
+// RUN:   (run-if=                                  cflags=                                                         tgt-nd-x86_64=0             tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt0=host   )
+// RUN:   (run-if=%run-if-x86_64                    cflags=-fopenmp-targets=%run-x86_64-triple                      tgt-nd-x86_64=%x86_64-ndevs tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt0=x86_64 )
+// RUN:   (run-if=%run-if-ppc64le                   cflags=-fopenmp-targets=%run-ppc64le-triple                     tgt-nd-x86_64=0             tgt-nd-ppc64le=%ppc64le-ndevs tgt-nd-nvptx64=0              tgt0=ppc64le)
+// RUN:   (run-if=%run-if-nvptx64                   cflags=-fopenmp-targets=%run-nvptx64-triple                     tgt-nd-x86_64=0             tgt-nd-ppc64le=0              tgt-nd-nvptx64=%nvptx64-ndevs tgt0=nvidia )
+// RUN:   (run-if='%run-if-x86_64 %run-if-nvptx64'  cflags=-fopenmp-targets=%run-x86_64-triple,%run-nvptx64-triple  tgt-nd-x86_64=%x86_64-ndevs tgt-nd-ppc64le=0              tgt-nd-nvptx64=%nvptx64-ndevs tgt0=x86_64 )
+// RUN:   (run-if='%run-if-ppc64le %run-if-nvptx64' cflags=-fopenmp-targets=%run-ppc64le-triple,%run-nvptx64-triple tgt-nd-x86_64=0             tgt-nd-ppc64le=%ppc64le-ndevs tgt-nd-nvptx64=%nvptx64-ndevs tgt0=ppc64le)
 // RUN: }
 // RUN: %data run-envs {
-// RUN:   (run-env=                                  fc=%[tgt-fc])
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' fc=NO_OFF   )
-// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        fc=%[tgt-fc])
+// RUN:   (run-env=                                  nd-x86_64=%[tgt-nd-x86_64] nd-ppc64le=%[tgt-nd-ppc64le] nd-nvptx64=%[tgt-nd-nvptx64] dev-type-init=%[tgt0])
+// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' nd-x86_64=0                nd-ppc64le=0                 nd-nvptx64=0                 dev-type-init=host   )
+// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        nd-x86_64=%[tgt-nd-x86_64] nd-ppc64le=%[tgt-nd-ppc64le] nd-nvptx64=%[tgt-nd-nvptx64] dev-type-init=host   )
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %[cflags] \
@@ -23,8 +19,11 @@
 // RUN:   %for run-envs {
 // RUN:     %[run-if] %[run-env] %t.exe > %t.out 2>&1
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:         -strict-whitespace -match-full-lines -allow-empty \
-// RUN:         -check-prefixes=CHECK,%[fc]
+// RUN:       -strict-whitespace -match-full-lines \
+// RUN:       -DDEV_TYPE_INIT=acc_device_%[dev-type-init] -D#DEV_NUM_INIT=0 \
+// RUN:       -D#ND_DEV_TYPE_INIT=%%[dev-type-init]-ndevs \
+// RUN:       -D#ND_NVIDIA=%[nd-nvptx64] -D#ND_X86_64=%[nd-x86_64] \
+// RUN:       -D#ND_PPC64LE=%[nd-ppc64le]
 // RUN:   }
 // RUN: }
 //
@@ -39,25 +38,27 @@
 #include <stdlib.h>
 #include <string.h>
 
-//        CHECK:initially:
-//   CHECK-NEXT:    acc_get_device_type() = [[DEV_TYPE_INIT:[a-z0-9_]+]]
-//   CHECK-NEXT:    acc_get_device_num([[DEV_TYPE_INIT]]) = [[#DEV_NUM_INIT:]]
-//   CHECK-NEXT:    acc_get_num_devices([[DEV_TYPE_INIT]]) = [[#ND_DEV_TYPE_INIT:]]
-//   CHECK-NEXT:acc_device_none has 0:
-//   CHECK-NEXT:acc_device_host has 1:
-//   CHECK-NEXT:    0: num=0, type=acc_device_host, on acc_device_host
-//   CHECK-NEXT:acc_device_default has [[#ND_DEV_TYPE_INIT]]:
-//   CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on [a-z0-9_]+)+}}
-//   CHECK-NEXT:acc_device_current has 1:
-//   CHECK-NEXT:    0: num=0, type=[[DEV_TYPE_INIT]], on [[DEV_TYPE_INIT]]
-//   CHECK-NEXT:acc_device_nvidia has [[#ND_NVIDIA:]]:
-// NVPTX64-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on acc_device_nvidia)+}}
-//   CHECK-NEXT:acc_device_x86_64 has [[#ND_X86_64:]]:
-//  X86_64-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on acc_device_x86_64)+}}
-//   CHECK-NEXT:acc_device_ppc64le has [[#ND_PPC64LE:]]:
-// PPC64LE-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on acc_device_ppc64le)+}}
-//   CHECK-NEXT:acc_device_not_host has [[#ND_NOT_HOST:ND_NVIDIA + ND_X86_64 + ND_PPC64LE]]:
-//     OFF-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on [a-z0-9_]+, on acc_device_not_host)+}}
+//  CHECK-NOT:{{.}}
+//      CHECK:initially:
+// CHECK-NEXT:    acc_get_device_type() = [[DEV_TYPE_INIT]]
+// CHECK-NEXT:    acc_get_device_num([[DEV_TYPE_INIT]]) = [[#DEV_NUM_INIT]]
+// CHECK-NEXT:    acc_get_num_devices([[DEV_TYPE_INIT]]) = [[#ND_DEV_TYPE_INIT]]
+// CHECK-NEXT:acc_device_none has 0:
+// CHECK-NEXT:acc_device_host has 1:
+// CHECK-NEXT:    0: num=0, type=acc_device_host, on acc_device_host
+// CHECK-NEXT:acc_device_default has [[#ND_DEV_TYPE_INIT]]:
+// CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on [a-z0-9_]+)+}}
+// CHECK-NEXT:acc_device_current has 1:
+// CHECK-NEXT:    0: num=0, type=[[DEV_TYPE_INIT]], on [[DEV_TYPE_INIT]]
+// CHECK-NEXT:acc_device_nvidia has [[#ND_NVIDIA]]:
+// CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=acc_device_nvidia, on acc_device_nvidia)*}}
+// CHECK-NEXT:acc_device_x86_64 has [[#ND_X86_64]]:
+// CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=acc_device_x86_64, on acc_device_x86_64)*}}
+// CHECK-NEXT:acc_device_ppc64le has [[#ND_PPC64LE]]:
+// CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=acc_device_ppc64le, on acc_device_ppc64le)*}}
+// CHECK-NEXT:acc_device_not_host has [[#ND_NOT_HOST:ND_NVIDIA + ND_X86_64 + ND_PPC64LE]]:
+// CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on [a-z0-9_]+, on acc_device_not_host)*}}
+//  CHECK-NOT:{{.}}
 
 static const char *deviceTypeToStr(acc_device_t DevType) {
   switch (DevType) {

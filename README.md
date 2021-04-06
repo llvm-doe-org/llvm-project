@@ -52,10 +52,18 @@ available on your system so that it tests offloading to them as well,
 specify one or more of the following when running `cmake`:
 
 ```
--DCLANG_ACC_TEST_EXE_X86_64=True   # x86_64-unknown-linux-gnu
--DCLANG_ACC_TEST_EXE_PPC64LE=True  # ppc64le-unknown-linux-gnu
--DCLANG_ACC_TEST_EXE_NVPTX64=True  # nvptx64-nvidia-cuda
+-DCLANG_ACC_TEST_EXE_X86_64=4  # x86_64-unknown-linux-gnu
+-DCLANG_ACC_TEST_EXE_PPC64LE=4 # ppc64le-unknown-linux-gnu
+-DCLANG_ACC_TEST_EXE_NVPTX64=6 # nvptx64-nvidia-cuda
 ```
+
+In each case, the value should be `0`, the empty string, or
+unspecified to turn off testing of that device type.  Otherwise, it
+should be the number of devices of that type expected to be available
+on the system.  In the latter case, the value is used to test device
+management functionality, such as `acc_get_num_devices`.  Specifying a
+smaller non-zero value will not significantly affect device resources
+used during testing but will cause some tests to fail.
 
 Test suites checking Clacc's OpenACC support can be run by themselves
 or as part of larger test suites, as follows:
